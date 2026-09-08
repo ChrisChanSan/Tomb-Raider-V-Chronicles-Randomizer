@@ -200,6 +200,7 @@
 #include <string.h>
 
 #include <vector>
+#include <set>
 
 #include "zlib.h"
 
@@ -1185,14 +1186,81 @@ static long g_scissor_box[4] = { 0, 0, 0, 0 };
 
 static std::string g_survey;
 /* FIX ROUND T (T1), -roombox <folder holding the classic .TRC>: hand the
- * renderer the rooms' own boxes, exactly as hd_level.cpp's BuildRoomBoxes
- * does, so that the overhang split the engine draws with is the split this
- * tool draws with. Without it every group is one piece and HD_WINDOW_INSIDE
- * and HD_WINDOW_OVERHANG both draw the whole room - which is also the proof
- * that a level built with no boxes is unchanged. */
+ * renderer the rooms' own boxes AND (fix round T2, T2-2) the list of rooms
+ * that may be holding another room's art, exactly as hd_level.cpp's
+ * BuildRoomBoxes and BuildRoomIntrusions do, so that the split the engine
+ * draws with is the split this tool draws with. Without it every group is one
+ * piece and HD_WINDOW_OPEN and HD_WINDOW_INTRUDING both draw the whole room -
+ * which is also the proof that a level built with no list is unchanged. */
 static std::string g_roombox;
 static std::vector<HDRoomBox> g_boxes_built;
+static std::vector<HDIntrusion> g_intrusions_built;
 static int g_window_mode = HD_WINDOW_ALL;
+
+/* -clipgroup <group> <l,t,r,b> (#123, fix round T2, T2-2): ONE group drawn
+ * inside a scissor rectangle and every other group drawn whole.
+ *
+ * `-scissor` puts the rectangle round the whole scene, which is not what the
+ * engine ever does: the portal window is a property of ONE room, and the bug
+ * of round T is exactly that the wrong room had one. To show that in a
+ * picture the tool has to be able to cut one group and leave its neighbour
+ * alone - which is what this does, with the engine's own HDRenderScissor
+ * round that group's own draw calls. */
+static int g_clip_group = -1;
+static long g_clip_box[4] = { 0, 0, 0, 0 };
+
+/* -tround <group> <l,t,r,b> (#123, fix round T2, T2-2): draw ONE group the way
+ * fix round T drew a room on its overlap list - its INSIDE half inside the
+ * rectangle the portal walk gave it, its OVERHANG over the whole screen - and
+ * every other group whole. It is the "before" picture of this round, and it
+ * is the engine's own code path: HDRenderSplitOverhang puts round T's index
+ * layout back for the build, and the two calls are the two DrawRoomWindowed
+ * made. */
+static int g_tround_group = -1;
+static long g_tround_box[4] = { 0, 0, 0, 0 };
+
+static int CountIntrusionPairs()
+{
+	int n = 0;
+
+	for (size_t i = 0; i < g_intrusions_built.size(); i++)
+		if (HDRenderIntrusionHits((int)i))
+			n++;
+
+	return n;
+}
+
+static void ClipFor(int group)
+{
+	if (g_clip_group >= 0 && group == g_clip_group)
+		HDRenderScissor((int)g_clip_box[0], (int)g_clip_box[1],
+			(int)g_clip_box[2], (int)g_clip_box[3]);
+	else if (g_clip_group >= 0)
+		HDRenderScissorOff();
+}
+
+/* ONE GROUP, DRAWN AS THE ENGINE WOULD DRAW IT. Ordinarily one call with
+ * whatever -window asked for; with -tround naming this group, the two calls
+ * fix round T's DrawRoomWindowed made. */
+static bool DrawOneGroup(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes)
+{
+	if (group == g_tround_group)
+	{
+		HDRenderScissor((int)g_tround_box[0], (int)g_tround_box[1],
+			(int)g_tround_box[2], (int)g_tround_box[3]);
+
+		const bool drew = HDRenderRoomMask(group, world, lighting, passes,
+			HD_WINDOW_INSIDE);
+
+		HDRenderScissorOff();
+		HDRenderRoomMask(group, world, lighting, passes, HD_WINDOW_OVERHANG);
+		return drew;
+	}
+
+	ClipFor(group);
+	return HDRenderRoomMask(group, world, lighting, passes, g_window_mode);
+}
 static unsigned char g_water_table[22][64][4];
 
 /* Fix round E, -with and -oldorder: THE NEIGHBOUR ROOMS OF ONE SCENE.
@@ -1922,6 +1990,10 @@ int main(int argc, char** argv)
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
 		printf("       -scissor <l,t,r,b>\n");
+		printf("       -roombox <folder holding the classic .TRC>\n");
+		printf("       -window all|open|intruding   (needs -roombox)\n");
+		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
+		printf("       -tround <group> <l,t,r,b>      round T's own picture\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		return 1;
@@ -2089,10 +2161,24 @@ int main(int argc, char** argv)
 			g_roombox = argv[at + 1];
 			at += 1;
 		}
+		else if (!strcmp(argv[at], "-tround") && at + 2 < argc)
+		{
+			g_tround_group = atoi(argv[at + 1]);
+			sscanf(argv[at + 2], "%ld,%ld,%ld,%ld", &g_tround_box[0],
+				&g_tround_box[1], &g_tround_box[2], &g_tround_box[3]);
+			at += 2;
+		}
+		else if (!strcmp(argv[at], "-clipgroup") && at + 2 < argc)
+		{
+			g_clip_group = atoi(argv[at + 1]);
+			sscanf(argv[at + 2], "%ld,%ld,%ld,%ld", &g_clip_box[0],
+				&g_clip_box[1], &g_clip_box[2], &g_clip_box[3]);
+			at += 2;
+		}
 		else if (!strcmp(argv[at], "-window") && at + 1 < argc)
 		{
-			g_window_mode = !strcmp(argv[at + 1], "inside") ? HD_WINDOW_INSIDE
-				: !strcmp(argv[at + 1], "overhang") ? HD_WINDOW_OVERHANG
+			g_window_mode = !strcmp(argv[at + 1], "open") ? HD_WINDOW_OPEN
+				: !strcmp(argv[at + 1], "intruding") ? HD_WINDOW_INTRUDING
 				: HD_WINDOW_ALL;
 			at += 1;
 		}
@@ -2343,6 +2429,10 @@ int main(int argc, char** argv)
 	if (g_plane)
 		HDRenderSetWaterMarks(g_plane_marks, 4);
 
+	// T2-2: -tround needs round T's own index layout, and nothing else does.
+	if (g_tround_group >= 0)
+		HDRenderSplitOverhang(1);
+
 	/* T1: the rooms' own boxes out of the classic level, the same three
 	 * lines game\draw.cpp:1977-1981 uses and hd_level.cpp copies. */
 	if (!g_roombox.empty())
@@ -2387,6 +2477,111 @@ int main(int argc, char** argv)
 				(int)g_boxes_built.size());
 			printf("-roombox: %d room boxes handed in from %s\n",
 				(int)g_boxes_built.size(), trc.c_str());
+
+			/* T2-2: and the rooms that may hold another room's art. The rule
+			 * is BuildRoomIntrusions' (specific\hd\hd_level.cpp), read out
+			 * of the same file: not next door by portal or by a vertical
+			 * floor link, not a flipmap twin, boxes touching, and the
+			 * holder's own inside one sector in from its border ring. */
+			{
+				const int n = level.roomCount();
+				std::vector<std::set<int> > nextDoor((size_t)n);
+
+				for (int r = 0; r < n; r++)
+				{
+					const std::vector<int>& ports =
+						level.rooms()[(size_t)r].portalRooms;
+
+					for (size_t p = 0; p < ports.size(); p++)
+						if (ports[p] >= 0 && ports[p] < n)
+						{
+							nextDoor[(size_t)r].insert(ports[p]);
+							nextDoor[(size_t)ports[p]].insert(r);
+						}
+
+					std::vector<Tr5Level::SectorInfo> sect;
+
+					if (!level.sectorInfo(r, sect, error))
+						continue;
+
+					for (size_t q = 0; q < sect.size(); q++)
+					{
+						const int up = sect[q].roomAbove;
+						const int dn = sect[q].roomBelow;
+
+						if (up >= 0 && up < n)
+						{
+							nextDoor[(size_t)r].insert(up);
+							nextDoor[(size_t)up].insert(r);
+						}
+
+						if (dn >= 0 && dn < n)
+						{
+							nextDoor[(size_t)r].insert(dn);
+							nextDoor[(size_t)dn].insert(r);
+						}
+					}
+				}
+
+				for (int a = 0; a < n; a++)
+				{
+					const Tr5Room& ra = level.rooms()[(size_t)a];
+					unsigned aTop = 0, aOrigin = 0;
+
+					level.headerField(a, 24, aOrigin, error);
+					level.headerField(a, 36, aTop, error);
+
+					for (int b = 0; b < n; b++)
+					{
+						if (a == b || nextDoor[(size_t)a].count(b))
+							continue;
+
+						if (ra.altRoom == b ||
+							level.rooms()[(size_t)b].altRoom == a)
+							continue;
+
+						const Tr5Room& rb = level.rooms()[(size_t)b];
+						unsigned bTop = 0, bOrigin = 0;
+
+						level.headerField(b, 24, bOrigin, error);
+						level.headerField(b, 36, bTop, error);
+
+						if (ra.originX + (long)ra.numXSectors * 1024 <= rb.originX ||
+							rb.originX + (long)rb.numXSectors * 1024 <= ra.originX ||
+							ra.originZ + (long)ra.numZSectors * 1024 <= rb.originZ ||
+							rb.originZ + (long)rb.numZSectors * 1024 <= ra.originZ ||
+							ra.yBottom <= (long)(int)bTop ||
+							rb.yBottom <= (long)(int)aTop)
+							continue;
+
+						HDIntrusion box;
+
+						box.group = b;
+						box.holder = a;
+						box.mins[0] = (float)(ra.originX + 2048 - rb.originX);
+						box.maxs[0] = (float)(ra.originX +
+							(long)(ra.numXSectors - 2) * 1024 - rb.originX);
+						box.mins[1] = (float)((long)(int)aTop - (long)(int)bOrigin);
+						box.maxs[1] = (float)(ra.yBottom - (long)(int)bOrigin);
+						box.mins[2] = (float)(ra.originZ + 2048 - rb.originZ);
+						box.maxs[2] = (float)(ra.originZ +
+							(long)(ra.numZSectors - 2) * 1024 - rb.originZ);
+
+						if (box.maxs[0] <= box.mins[0] ||
+							box.maxs[2] <= box.mins[2])
+							continue;
+
+						g_intrusions_built.push_back(box);
+					}
+				}
+
+				if (!g_intrusions_built.empty())
+					HDRenderSetIntrusions(&g_intrusions_built[0],
+						(int)g_intrusions_built.size());
+
+				printf("-roombox: %d intrusion boxes handed in\n",
+					(int)g_intrusions_built.size());
+			}
 		}
 	}
 
@@ -2422,6 +2617,27 @@ int main(int argc, char** argv)
 		stats.ranges, stats.splitRanges ? " (some split by the primitive limit)" : "");
 	printf("biggest range %d triangles, %d triangles on the fallback page\n",
 		stats.biggestRangeTris, stats.fallbackPageTris);
+	/* T2-2: THE OVERLAP LIST OUT OF THE ENGINE'S OWN BUILD, so that it can be
+	 * held line for line against TrgProbe -roomspace, which answers the same
+	 * question out of the two files without a renderer. The two lists have to
+	 * be the same list; that they were not is what round T's log and round
+	 * T's tool disagreed about. */
+	if (!g_intrusions_built.empty())
+	{
+		printf("T2-2: overlap pairs=%d intruding tris=%d in %d groups\n",
+			CountIntrusionPairs(), stats.intrudingTris, stats.intrudingGroups);
+
+		for (size_t i = 0; i < g_intrusions_built.size(); i++)
+		{
+			const int hits = HDRenderIntrusionHits((int)i);
+
+			if (hits)
+				printf("  overlap: room %3d holds the art of room %3d - "
+					"%d triangles, no portal between them\n",
+					g_intrusions_built[i].holder,
+					g_intrusions_built[i].group, hits);
+		}
+	}
 	printf("S6: widest draw call reaches over %d vertices, widest single "
 		"triangle %d (a 16 bit index reaches 65536), device holds textures "
 		"up to %d\n",
@@ -3042,28 +3258,26 @@ int main(int argc, char** argv)
 			/* T1: -window says which half of every group this run
 			 * draws - the whole of it (the default), the inside half or
 			 * the overhang. */
-			drew = HDRenderRoomMask(room, 0, &lighting, HD_PASS_SOLID,
-				g_window_mode);
+			drew = DrawOneGroup(room, 0, &lighting, HD_PASS_SOLID);
 
 			for (int i = 0; i < g_with_count; i++)
-				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_SOLID, g_window_mode);
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_SOLID);
 
 			/* H2: the see-through half of the alpha pass - the glass -
 			 * after everything opaque and before the glows, which is the
 			 * order HDFrameDrawGlow draws them in. */
-			HDRenderRoomMask(room, 0, &lighting, HD_PASS_BLEND, g_window_mode);
+			DrawOneGroup(room, 0, &lighting, HD_PASS_BLEND);
 
 			for (int i = 0; i < g_with_count; i++)
-				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_BLEND, g_window_mode);
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_BLEND);
 
-			HDRenderRoomMask(room, 0, &lighting, HD_PASS_ADDITIVE,
-				g_window_mode);
+			DrawOneGroup(room, 0, &lighting, HD_PASS_ADDITIVE);
 
 			for (int i = 0; i < g_with_count; i++)
-				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_ADDITIVE, g_window_mode);
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_ADDITIVE);
 		}
 	}
 

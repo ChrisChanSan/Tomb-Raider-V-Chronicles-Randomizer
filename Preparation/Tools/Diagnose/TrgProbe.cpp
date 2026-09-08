@@ -989,7 +989,8 @@ namespace
 
 	void dumpRoomSpace(const std::string& root, const std::string& stem,
 		const std::string& folder, int focus, bool quiet, int shareMin,
-		long slack, bool staticList, int staticSlot, long deep)
+		long slack, bool staticList, int staticSlot, long deep,
+		const long* nearAt, long nearRadius)
 	{
 		Tr5Level level;
 		std::string error;
@@ -1181,20 +1182,92 @@ namespace
 			}
 		}
 
-		/* THE TEST ITSELF: does B's art stand INSIDE A's own volume, with no
-		 * portal between the two that would explain it?
+		/* THE TEST ITSELF (#123, fix round T2, T2-2): does a TRIANGLE of room
+		 * b stand inside the inside of room a, with no portal between the two
+		 * that would explain it?
+		 *
+		 * ROUND T ASKED IT OF THE 256-UNIT CELLS, and that is where this tool
+		 * and the engine disagreed on the play test's own log - the engine
+		 * counted a cell that merely TOUCHED the box (`p + 255 < mins` is the
+		 * reject in HDRenderGroupCellsIn), this counted a cell whose own
+		 * corner lay inside it, and one ring of 256 units is 91 cells against
+		 * 45 in ANDREA1's air shaft and four pairs against one over the
+		 * level. The answer is a POINT - the triangle's centroid - and the
+		 * two agree on it exactly. Held here against the same box
+		 * BuildRoomIntrusions (specific\hd\hd_level.cpp) hands the renderer:
+		 * TR5's own inside of a room, one sector further in on every side
+		 * because a room's border ring is one sector thick.
 		 *
 		 * A neighbour's art reaches into A as well - the reveal of its own
-		 * doorway does, a dozen cells of it - and that is not the bug: it is
-		 * seen through the opening it belongs to. What group M exists for is
-		 * a room whose art stands in the middle of another room with no way
-		 * through, and the two are told apart by the portal list and by a
-		 * floor of eight cells, half a floor square's worth of art. */
-		int pairs = 0;
-		std::vector<unsigned char> windowed((size_t)rooms, 0);
+		 * doorway does - and that is not the bug: it is seen through the
+		 * opening it belongs to. The portal list and the floor data's
+		 * vertical links say who is next door.
+		 *
+		 * AND ONLY THE INTRUDER IS WINDOWED. Round T gave the window to both
+		 * partners, which is what put a black band across ANDREA2's
+		 * courtyard: 134 and 203 are both holders and both were scissored to
+		 * rectangles that meet along their shared boundary. */
+		/* ROOM LOCAL AND IN FLOATS, because that is what the engine holds
+		 * them in: hd_render.cpp averages the three .TRG vertices as floats
+		 * and compares them with a float box in the group's own frame. The
+		 * first cut of this loop averaged in world units with an integer
+		 * divide, and the two lists then differed by one triangle in
+		 * ANDREA1's 207/53 and by seven in ANDREA2's 58/175 - a truncation
+		 * against a box edge, and no more than that, but the point of this
+		 * measurement is that the two agree exactly. */
+		std::vector<std::vector<float> > centre(trg.groups.size());
 
-		for (int a = 0; a < rooms && (size_t)a < cells.size(); a++)
-			for (int b = 0; b < rooms && (size_t)b < cells.size(); b++)
+		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
+		{
+			std::vector<float>& out = centre[g];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						long qx = 0, qy = 0, qz = 0;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[first + c]];
+
+							qx += v.x;
+							qy += v.y;
+							qz += v.z;
+						}
+
+						out.push_back((float)qx / 3.0f);
+						out.push_back((float)qy / 3.0f);
+						out.push_back((float)qz / 3.0f);
+					}
+				}
+		}
+
+		int pairs = 0;
+		long long intruding = 0;
+		std::vector<unsigned char> windowed((size_t)rooms, 0);
+		/* ONE FLAG PER TRIANGLE and not a sum over the pairs: a triangle can
+		 * stand inside two holders at once - ANDY2 is full of them - and the
+		 * engine's own counter (HDGroup::intruding) counts the TRIANGLE once
+		 * however many boxes caught it. Summing the per-pair hits instead read
+		 * 70,934 for ANDY2 against the engine's 59,766, and the two lists are
+		 * only the same list if they are counted the same way. */
+		std::vector<std::vector<unsigned char> > tagged(trg.groups.size());
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+			tagged[g].assign(centre[g].size() / 3, 0);
+
+		for (int a = 0; a < rooms; a++)
+			for (int b = 0; b < rooms && (size_t)b < centre.size(); b++)
 			{
 				if (a == b)
 					continue;
@@ -1213,49 +1286,92 @@ namespace
 					!boxOverlap(A.y0, A.y1, box[(size_t)b].y0, box[(size_t)b].y1))
 					continue;
 
-				int inside = 0, insideShell = 0;
+				/* A'S INSIDE, ONE SECTOR IN FROM ITS BORDER RING, and that
+				 * second sector is the whole of the rule's discrimination.
+				 *
+				 * A room's border ring is one sector thick, so two rooms that
+				 * merely share a wall with no door between them reach into
+				 * each other by construction. Asked with the ring counted
+				 * (-deep -1024) ANDREA1 comes out with 158 pairs, among them
+				 * 2 and 197 at the Piazza dell'Opera - the very corner the
+				 * play test of 2026-09-07 complained about. Asked one sector
+				 * further in it has SEVEN.
+				 *
+				 * TRIED AND REJECTED: deciding the PAIR with this box and
+				 * then windowing every triangle of b inside a's plain inside.
+				 * It would have hidden the last 26 % of ANDREA1's 207/53
+				 * bleed (see the renders) - and it windows 7,250 triangles of
+				 * room 103 inside room 65, which is that pair's SHARED WALL
+				 * and is round T's own bug coming back through the other
+				 * door. What is left un-hidden is art of the intruder
+				 * standing within one sector of the holder's wall, and there
+				 * is no way to tell that from a shared wall with a box.
+				 *
+				 * `deep` is an extra shrink for re-measuring the rule and is
+				 * 0 by default. */
+				const RoomSpace& B = box[(size_t)b];
+				const float x0 = (float)(A.ix0 + 1024 + deep - B.ox);
+				const float x1 = (float)(A.ix1 - 1024 - deep - B.ox);
+				const float z0 = (float)(A.iz0 + 1024 + deep - B.oz);
+				const float z1 = (float)(A.iz1 - 1024 - deep - B.oz);
+				const float y0 = (float)(A.y0 - B.oy);
+				const float y1 = (float)(A.y1 - B.oy);
 
-				for (int half = 0; half < 2; half++)
+				if (x1 <= x0 || z1 <= z0)
+					continue;	// a room too small to have an inside
+
+				int hits = 0;
+
+				for (size_t c = 0; c + 2 < centre[(size_t)b].size(); c += 3)
 				{
-					const std::vector<unsigned long long>& src =
-						half ? shell[(size_t)b] : cells[(size_t)b];
+					const float cx = centre[(size_t)b][c];
+					const float cy = centre[(size_t)b][c + 1];
+					const float cz = centre[(size_t)b][c + 2];
 
-					for (size_t c = 0; c < src.size(); c++)
-					{
-						const unsigned long long key = src[c];
-						const long cx = ((long)(key >> 34) - 32768) << 8;
-						const long cy = ((long)((key >> 17) & 0x1FFFF) - 32768) << 8;
-						const long cz = ((long)(key & 0x1FFFF) - 32768) << 8;
-
-						if (cx >= A.ix0 + deep && cx < A.ix1 - deep &&
-							cz >= A.iz0 + deep && cz < A.iz1 - deep &&
-							cy >= A.y0 && cy < A.y1)
-						{
-							if (half) insideShell++; else inside++;
-						}
-					}
+					if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 &&
+						cy >= y0 && cy <= y1)
+						hits++;
 				}
 
-				if (inside < shareMin)
+				if (hits < shareMin)
 					continue;
 
 				pairs++;
-				windowed[(size_t)a] = 1;
-				windowed[(size_t)b] = 1;
+				windowed[(size_t)b] = 1;		// the INTRUDER only
+
+				for (size_t c = 0, t = 0; c + 2 < centre[(size_t)b].size();
+					c += 3, t++)
+				{
+					const float cx = centre[(size_t)b][c];
+					const float cy = centre[(size_t)b][c + 1];
+					const float cz = centre[(size_t)b][c + 2];
+
+					if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 &&
+						cy >= y0 && cy <= y1)
+						tagged[(size_t)b][t] = 1;
+				}
 
 				if (!quiet)
-					std::printf("  overlap: the art of room %3d stands inside "
-						"room %3d - %d interior cells of %d, and %d shell "
-						"cells of %d\n", b, a, inside,
-						(int)cells[(size_t)b].size(), insideShell,
-						(int)shell[(size_t)b].size());
+					std::printf("  overlap: room %3d holds the art of room "
+						"%3d - %d triangles, no portal between them\n", a, b,
+						hits);
 			}
 
 		int windowedRooms = 0;
 
-		for (int r = 0; r < rooms; r++)
-			if (windowed[(size_t)r])
+		for (int r = 0; r < rooms && (size_t)r < tagged.size(); r++)
+		{
+			long long here = 0;
+
+			for (size_t t = 0; t < tagged[(size_t)r].size(); t++)
+				here += tagged[(size_t)r][t];
+
+			if (here)
+			{
 				windowedRooms++;
+				intruding += here;
+			}
+		}
 
 		/* THE OVERHANG. One triangle at a time, its centroid in world units
 		 * against its own room's FULL box; `far` is the largest distance any
@@ -1344,18 +1460,19 @@ namespace
 				}
 		}
 
-		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d rooms in a "
-			"pair=%d  overhang tris=%lld of %lld  worst=%ld (group %d)\n",
-			stem.c_str(), rooms, (int)trg.groups.size(), pairs, windowedRooms,
-			tris_out, tris_total, worst, worst_group);
+		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d intruding "
+			"tris=%lld in %d groups  overhang tris=%lld of %lld  worst=%ld "
+			"(group %d)\n",
+			stem.c_str(), rooms, (int)trg.groups.size(), pairs, intruding,
+			windowedRooms, tris_out, tris_total, worst, worst_group);
 		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
 			"<=256 %lld, <=1024 %lld, >1024 %lld\n",
 			stem.c_str(), hist[0], hist[1], hist[2], hist[3], hist[4]);
 		std::printf("%-9s   overhang by side: -x %lld +x %lld -y %lld +y %lld "
 			"-z %lld +z %lld\n", stem.c_str(), axis[0], axis[1], axis[2],
 			axis[3], axis[4], axis[5]);
-		std::printf("%-9s   slack=%d  in the WINDOWED rooms: %lld of %lld "
-			"triangles draw without a window (%.1f%%)\n", stem.c_str(),
+		std::printf("%-9s   slack=%d  in the WINDOWED groups: %lld of %lld "
+			"triangles stand outside their own room (%.1f%%)\n", stem.c_str(),
 			slack, win_out, win_total,
 			win_total ? 100.0 * (double)win_out / (double)win_total : 0.0);
 
@@ -1417,6 +1534,120 @@ namespace
 					order[i].second, order[i].first,
 					triPerGroup[(size_t)order[i].second],
 					(int)windowed[(size_t)order[i].second]);
+		}
+
+		/* WHOSE ART STANDS AT A GIVEN PLACE IN THE WORLD (#123, fix round T2,
+		 * T2-3), -near <x> <y> <z> <radius>.
+		 *
+		 * The play test photographed a brick tower with a barred window at
+		 * the corner of the Piazza dell'Opera that is not in trview at all -
+		 * pure remaster art, standing far outside whatever room's box it
+		 * belongs to - and that pops into the picture as Lara walks up to it.
+		 * Before anything can be done about it the ROOM has to be named, and
+		 * a room's own box cannot name it: the art is nowhere near the box.
+		 *
+		 * So this asks the triangles. Every group's OVERHANG triangles - the
+		 * ones standing outside their own room - are held against a sphere in
+		 * world units, and what comes back is which room's group has art
+		 * there and how far that art is from its own room. */
+		if (nearAt)
+		{
+			std::printf("%-9s   art within %ld units of %ld/%ld/%ld:\n",
+				stem.c_str(), nearRadius, nearAt[0], nearAt[1], nearAt[2]);
+
+			struct Hit { long long tris; long long out; long dist; int group; };
+			std::vector<Hit> found;
+
+			for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
+			{
+				const RoomSpace& b = box[g];
+				Hit hit;
+
+				hit.tris = 0;
+				hit.out = 0;
+				hit.dist = 0;
+				hit.group = (int)g;
+
+				for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+					for (int pass = 0; pass < 3; pass++)
+					{
+						const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+						for (unsigned at = 0; at + 2 < run.count; at += 3)
+						{
+							const unsigned first = run.start + at;
+
+							if (first + 2 >= trg.indices.size())
+								break;
+
+							long qx = 0, qy = 0, qz = 0;
+
+							for (int c = 0; c < 3; c++)
+							{
+								const trf::remaster::TrgVertex& v =
+									trg.vertices[trg.indices[first + c]];
+
+								qx += v.x;
+								qy += v.y;
+								qz += v.z;
+							}
+
+							const long wx = b.ox + qx / 3;
+							const long wy = b.oy + qy / 3;
+							const long wz = b.oz + qz / 3;
+							// long long, not long: three squared distances
+							// of 37,000 units overflow a 32 bit signed sum and
+							// the sphere then catches the whole level.
+							const long long dx = wx - nearAt[0];
+							const long long dy = wy - nearAt[1];
+							const long long dz = wz - nearAt[2];
+
+							if (dx * dx + dy * dy + dz * dz >
+								(long long)nearRadius * nearRadius)
+								continue;
+
+							hit.tris++;
+
+							// how far this triangle is from its own room box
+							long d = 0;
+
+							if (wx < b.x0) d = b.x0 - wx;
+							if (wx > b.x1 && wx - b.x1 > d) d = wx - b.x1;
+							if (wy < b.y0 && b.y0 - wy > d) d = b.y0 - wy;
+							if (wy > b.y1 && wy - b.y1 > d) d = wy - b.y1;
+							if (wz < b.z0 && b.z0 - wz > d) d = b.z0 - wz;
+							if (wz > b.z1 && wz - b.z1 > d) d = wz - b.z1;
+
+							if (d > 0)
+								hit.out++;
+
+							if (d > hit.dist)
+								hit.dist = d;
+						}
+					}
+
+				if (hit.tris)
+					found.push_back(hit);
+			}
+
+			for (size_t i = 0; i < found.size(); i++)
+				for (size_t j = i + 1; j < found.size(); j++)
+					if (found[j].tris > found[i].tris)
+					{
+						const Hit t = found[i];
+						found[i] = found[j];
+						found[j] = t;
+					}
+
+			for (size_t i = 0; i < found.size() && i < 16; i++)
+				std::printf("    group %3d (room box x %ld..%ld y %ld..%ld "
+					"z %ld..%ld): %lld triangle(s) here, %lld of them outside "
+					"their own room, worst %ld units out\n",
+					found[i].group,
+					box[(size_t)found[i].group].x0, box[(size_t)found[i].group].x1,
+					box[(size_t)found[i].group].y0, box[(size_t)found[i].group].y1,
+					box[(size_t)found[i].group].z0, box[(size_t)found[i].group].z1,
+					found[i].tris, found[i].out, found[i].dist);
 		}
 
 		/* THE STATIC MESHES OF EVERY ROOM, and whether the .TRG draws
@@ -2053,6 +2284,9 @@ int main(int argc, char** argv)
 	long room_deep = 0;
 	bool room_statics = false;
 	int room_slot = -1;
+	long near_at[3] = { 0, 0, 0 };
+	long near_radius = 0;
+	bool near_given = false;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -2064,6 +2298,16 @@ int main(int argc, char** argv)
 			room_slack = std::atol(argv[++i]);
 		else if (!_stricmp(argv[i], "-deep") && i + 1 < argc)
 			room_deep = std::atol(argv[++i]);
+		else if (!_stricmp(argv[i], "-near") && i + 4 < argc)
+		{
+			room_space = true;
+			near_given = true;
+			near_at[0] = std::atol(argv[i + 1]);
+			near_at[1] = std::atol(argv[i + 2]);
+			near_at[2] = std::atol(argv[i + 3]);
+			near_radius = std::atol(argv[i + 4]);
+			i += 4;
+		}
 		else if (!_stricmp(argv[i], "-statics"))
 		{
 			room_space = true;
@@ -2146,7 +2390,8 @@ int main(int argc, char** argv)
 
 		for (const std::string& stem : levels)
 			dumpRoomSpace(root, stem, classic, room_focus, levels.size() > 1,
-				room_share, room_slack, room_statics, room_slot, room_deep);
+				room_share, room_slack, room_statics, room_slot, room_deep,
+				near_given ? near_at : 0, near_radius);
 
 		return 0;
 	}

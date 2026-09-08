@@ -1155,6 +1155,45 @@ float InterpFrameAlpha()
 	return g_alpha;
 }
 
+/* THE ROOM THE BLENDED EYE STANDS IN (#123, fix round T2, T2-1). The long
+ * note is in interpolate.h; what is left to say is here.
+ *
+ * `g_applied` AND NOT `g_tween` IS THE GATE, and it is the same one the pose
+ * and the particles use. g_tween is the CADENCE - it is true on a cutscene
+ * frame and on the first frame after a level start as well, and both of those
+ * are drawn LIVE, with camera.pos untouched. Asking GetFloor about a live
+ * camera would answer with whatever room really holds it, which need not be
+ * camera.pos.room_number - the engine's own camera code walks its way there
+ * over several ticks - and the picture would change at thirty frames a
+ * second too. g_applied is true only where the camera block above really ran,
+ * which is the only place the eye and the room can disagree.
+ *
+ * GetFloor WRITES NOTHING. It walks floor, ceiling and wall portals from the
+ * room it is given until it reaches the one that holds the point, and returns
+ * that room through a caller's own short (game\control.cpp:1228). The one it
+ * is given here is a copy; camera.pos.room_number never sees it. */
+short InterpEyeRoom(short logicRoom)
+{
+	if (!g_applied || !room || logicRoom < 0 || logicRoom >= number_rooms)
+		return logicRoom;
+
+	short at = logicRoom;
+
+	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &at);
+
+	// The walk cannot leave the room array, but a room list it has never seen
+	// is not a thing to hand to draw_room_list on trust.
+	if (at < 0 || at >= number_rooms)
+		return logicRoom;
+
+	return at;
+}
+
+short InterpPrevCamRoom()
+{
+	return g_prevCam.valid ? g_prevCam.room : (short)-1;
+}
+
 bool InterpIsTweenFrame()
 {
 	return g_tween;
@@ -1529,12 +1568,23 @@ void InterpBeginFrame(float alpha)
 	 * it is drawn live from end to end. So here there is nothing left to test
 	 * and the blend is unconditional.
 	 *
-	 * camera.pos.room_number IS NOT INTERPOLATED, ever. DrawRooms is handed
-	 * it (game\draw.cpp) and it drives the whole portal walk and every clip
-	 * window; a half step across a portal would flip the room list and the
-	 * picture with it. The live room with the interpolated eye is a
-	 * mismatch of under a thirtieth of a second of camera travel, and it is
-	 * the same compromise TR1X makes. */
+	 * camera.pos.room_number IS STILL NOT INTERPOLATED - it is the SIMULATION's
+	 * camera room, it steps once per tick, and half a dozen callers outside the
+	 * draw read it. What stood here until fix round T2 was the REASON given for
+	 * that, and the reason was wrong:
+	 *
+	 *     "a half step across a portal would flip the room list and the
+	 *      picture with it. The live room with the interpolated eye is a
+	 *      mismatch of under a thirtieth of a second of camera travel."
+	 *
+	 * The flip IS the right room list once the eye has crossed the portal, and
+	 * the mismatch is not harmless. GetRoomBounds follows a portal only while
+	 * the eye is on the near side of its plane and SetRoomBounds drops one
+	 * whose four corners all fall behind the eye, so a walk seeded with the
+	 * logic room and projected from the blended eye can throw a whole
+	 * neighbouring room away for one frame - the sky flash the play test of
+	 * 2026-09-08 photographed in ANDREA1's alley. The DRAW's walk is therefore
+	 * seeded from InterpEyeRoom (below) and this field is left alone. */
 	{
 		const short roll = CameraRollNow();
 

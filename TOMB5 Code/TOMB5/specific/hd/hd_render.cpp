@@ -908,12 +908,23 @@ namespace
 		 * room itself (#123, fix round R3b). In the sort key, so a piece's
 		 * triangles never share a draw call with the wall behind them. */
 		int destructId = -1;
-		/* WHICH HALF OF THE ROOM THIS DRAW CALL IS (#123, fix round T, T1).
-		 * 1 where the triangles of this range stand outside the room's own
-		 * box - see HDRoomBox in hd_render.h. In the sort key like every
-		 * other per-draw-call property, because the two halves are drawn
-		 * with different scissor states and a triangle cannot have half of
-		 * one. */
+		/* WHICH HALF OF THE ROOM THIS DRAW CALL IS (#123, fix round T, T1;
+		 * replaced in fix round T2, T2-2). 1 where the triangles of this
+		 * range stand inside ANOTHER room - see HDIntrusion in hd_render.h.
+		 * In the sort key like every other per-draw-call property, because
+		 * the two halves are drawn with different scissor states and a
+		 * triangle cannot have half of one.
+		 *
+		 * Round T put the INSIDE/OVERHANG split here instead, which cost
+		 * every group in the game a split it did not need: with the window
+		 * now a property of the triangle rather than of the room, the
+		 * overhang is drawn over the whole screen along with everything else
+		 * and has no reason to keep its own draw calls. It is still counted
+		 * per triangle (HDGroup::overhang) - the hollow-room test of T2 is
+		 * asked of that count and is untouched. */
+		int intruding = 0;
+		// Round T's own half, filled always and in the sort key only while
+		// HDRenderSplitOverhang is on - see the note over it.
 		int overhang = 0;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over (#123, stage S6). With a 32 bit index buffer they are only a
@@ -974,6 +985,14 @@ namespace
 		std::vector<unsigned int> cellsIn;
 		unsigned int triangles[3] = { 0, 0, 0 };
 		unsigned int overhang[3] = { 0, 0, 0 };		// of those, outside the box
+		/* Fix round T2 (T2-2): and of those, the ones standing inside ANOTHER
+		 * room - the only art in the game the scissor test is ever on for.
+		 * A triangle can be overhang and intruding at once; the two counts
+		 * answer different questions and neither is a subset of the other. */
+		unsigned int intruding[3] = { 0, 0, 0 };
+		// The entries of the intrusion list that name this group, worked out
+		// once at the top of the group's own build.
+		std::vector<int> intrusionAt;
 		// The room's own box, room local, or all zeroes when none was handed
 		// in - then nothing is overhang and the group draws as one piece.
 		float roomMins[3] = { 0, 0, 0 };
@@ -1237,6 +1256,17 @@ namespace
 	const HDRoomBox* g_boxes = 0;
 	int g_box_count = 0;
 	#define HD_OVERHANG_SLACK	128.0f
+
+	/* Fix round T2 (T2-2): the rooms that may be holding another room's art,
+	 * and how many triangles each of those boxes really caught. The list is
+	 * borrowed for the length of the build like the boxes above; the hit
+	 * counts outlive it, because the level's own log line is written after
+	 * the build and has to say what the rule found. */
+	const HDIntrusion* g_intrusions = 0;
+	int g_intrusion_count = 0;
+	// The diagnostic split of round T - see HDRenderSplitOverhang.
+	int g_split_overhang = 0;
+	std::vector<int> g_intrusion_hits;
 
 	const void* g_water_table_up = 0;	// what is on the card right now
 	int g_frame_bulbs = 0;
@@ -1685,6 +1715,34 @@ void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count)
 {
 	g_boxes = count > 0 ? boxes : 0;
 	g_box_count = boxes ? count : 0;
+}
+
+void HDRenderSplitOverhang(int on)
+{
+	g_split_overhang = on ? 1 : 0;
+}
+
+void HDRenderSetIntrusions(const HDIntrusion* list, int count)
+{
+	g_intrusions = count > 0 ? list : 0;
+	g_intrusion_count = list ? count : 0;
+	g_intrusion_hits.assign((size_t)(g_intrusion_count > 0 ? g_intrusion_count : 0), 0);
+}
+
+int HDRenderIntrusionHits(int at)
+{
+	return at >= 0 && at < (int)g_intrusion_hits.size()
+		? g_intrusion_hits[(size_t)at] : 0;
+}
+
+int HDRenderGroupIntrudingTriangles(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	const HDGroup& g = g_groups[(size_t)group];
+
+	return (int)(g.intruding[0] + g.intruding[1] + g.intruding[2]);
 }
 
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
@@ -2330,6 +2388,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float blend;			// fix round H (H2), see MaterialBlend
 		int destructId;			// fix round R3b, see HDDestructible
 		int overhang;			// fix round T, see HDRoomBox
+		int intruding;			// fix round T2, see HDIntrusion
 		unsigned int first;
 	};
 
@@ -2356,6 +2415,16 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				group.roomMaxs[axis] = g_boxes[g].maxs[axis];
 			}
 		}
+
+		/* FIX ROUND T2 (T2-2): which rooms this group's art might be standing
+		 * inside. Gathered once per group rather than looked up per triangle
+		 * - the list holds a handful of entries per level and a level draws a
+		 * million triangles. Empty for all but a few groups, and empty for
+		 * every group of every level when no list was handed in, which is
+		 * what the diagnostic tool does unless it is asked for the rule. */
+		for (int k = 0; k < g_intrusion_count; k++)
+			if (g_intrusions[k].group == (int)g)
+				group.intrusionAt.push_back(k);
 
 		/* H1: (height, sector) of every horizontal triangle of this group,
 		 * merged into the group's own table below. */
@@ -2603,31 +2672,71 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					/* FIX ROUND T (T1): inside the room's own box, or
 					 * overhang? The centroid decides, with the slack over
-					 * g_boxes, and the answer is part of the sort key below
-					 * so that a draw call is all of one kind. */
+					 * g_boxes. Counted per triangle, and the hollow-room test
+					 * of T2 - a group with nothing at all inside its own room
+					 * - is the one thing asked of it.
+					 *
+					 * FIX ROUND T2 (T2-2): and the same centroid against the
+					 * INSIDE of every other room this group's art might be
+					 * standing in. That answer IS part of the sort key below,
+					 * so that a draw call is all of one kind: the scissor
+					 * test is on for the intruding triangles and off for
+					 * everything else. */
 					int overhang = 0;
+					int intruding = 0;
+					float centre[3] = { 0.0f, 0.0f, 0.0f };
+					const bool need_centre =
+						group.hasRoomBox || !group.intrusionAt.empty();
 
-					if (group.hasRoomBox)
+					if (need_centre)
 					{
 						const trf::remaster::TrgVertex& ta = trg.vertices[trg.indices[first]];
 						const trf::remaster::TrgVertex& tb = trg.vertices[trg.indices[first + 1]];
 						const trf::remaster::TrgVertex& tc = trg.vertices[trg.indices[first + 2]];
-						const float centre[3] =
-						{
-							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
-							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
-							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f
-						};
 
+						centre[0] = ((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f;
+						centre[1] = ((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f;
+						centre[2] = ((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f;
+					}
+
+					if (group.hasRoomBox)
 						for (int axis = 0; axis < 3; axis++)
 							if (centre[axis] < group.roomMins[axis] - HD_OVERHANG_SLACK ||
 								centre[axis] > group.roomMaxs[axis] + HD_OVERHANG_SLACK)
 								overhang = 1;
+
+					/* NO SLACK HERE, and that is the difference between this
+					 * test and the one above it. The overhang question is
+					 * "did the artist put this face a brick's depth past the
+					 * wall", and it needs a tolerance. This one is "is this
+					 * triangle standing in the middle of a DIFFERENT room",
+					 * and the box has already been pulled a whole sector in
+					 * on every side for exactly that reason - a tolerance on
+					 * top of it would only start letting the wall back in. */
+					for (size_t k = 0; k < group.intrusionAt.size(); k++)
+					{
+						const HDIntrusion& box =
+							g_intrusions[(size_t)group.intrusionAt[k]];
+						bool in = true;
+
+						for (int axis = 0; axis < 3; axis++)
+							if (centre[axis] < box.mins[axis] ||
+								centre[axis] > box.maxs[axis])
+								in = false;
+
+						if (in)
+						{
+							intruding = 1;
+
+							if ((size_t)group.intrusionAt[k] < g_intrusion_hits.size())
+								g_intrusion_hits[(size_t)group.intrusionAt[k]]++;
+						}
 					}
 
 					HDTri tri;
 
 					tri.overhang = overhang;
+					tri.intruding = intruding;
 					tri.slot = slot;
 					tri.scrollU = su;
 					tri.scrollV = sv;
@@ -2690,19 +2799,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (a.blend != b.blend) return a.blend < b.blend;
 					// R3b: a destructible piece keeps its own draw calls.
 					if (a.destructId != b.destructId) return a.destructId < b.destructId;
-					/* T1: and the two halves of the room never share one.
-					 * Last in the key, so a level built with no room boxes -
-					 * every triangle answering 0 - sorts exactly as it did
-					 * before this round. */
-					return a.overhang < b.overhang;
+					/* T2-2: and the art that stands inside another room
+					 * never shares a draw call with the art that does not -
+					 * the scissor test is on for one and off for the other.
+					 * Last in the key, so a level built with no intrusion
+					 * list - every triangle answering 0 - sorts exactly as it
+					 * did before group M. */
+					if (g_split_overhang && a.overhang != b.overhang)
+						return a.overhang < b.overhang;
+
+					return a.intruding < b.intruding;
 				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
 
 			// T1: and how many of them stand outside the room's own box.
+			// T2-2: and how many stand inside another room altogether.
 			for (size_t i = 0; i < tris.size(); i++)
+			{
 				if (tris[i].overhang)
 					group.overhang[pass]++;
+
+				if (tris[i].intruding)
+					group.intruding[pass]++;
+			}
 
 			HDRange range;
 			range.pageSlot = tris[0].slot;
@@ -2723,6 +2843,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.ripple[2] = tris[0].ripple[2];
 			range.blend = tris[0].blend;
 			range.destructId = tris[0].destructId;
+			range.intruding = tris[0].intruding;
 			range.overhang = tris[0].overhang;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
@@ -2747,7 +2868,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].ripple[2] == range.ripple[2] &&
 					tris[i].blend == range.blend &&
 					tris[i].destructId == range.destructId &&
-					tris[i].overhang == range.overhang;
+					tris[i].intruding == range.intruding &&
+					(!g_split_overhang ||
+						tris[i].overhang == range.overhang);
 
 				if (!same || range.count / 3 >= max_tris)
 				{
@@ -2799,6 +2922,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.ripple[2] = tris[i].ripple[2];
 					range.blend = tris[i].blend;
 					range.destructId = tris[i].destructId;
+					range.intruding = tris[i].intruding;
 					range.overhang = tris[i].overhang;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
@@ -3245,6 +3369,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		{
 			unsigned int here = 0;
 			unsigned int out = 0;
+			unsigned int in_other = 0;
 
 			for (int pass = 0; pass < 3; pass++)
 			{
@@ -3252,10 +3377,16 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				here += g_groups[(size_t)g].triangles[pass];
 				out += g_groups[(size_t)g].overhang[pass];
 
-				// T1: the draw calls the overhang half costs.
+				// T2-2: the draw calls the windowed half costs. The
+				// overhang keeps no draw calls of its own since T2-2 - it is
+				// drawn over the whole screen with everything else - so the
+				// only count it still has is per triangle, overhangTris,
+				// which is what the hollow-room test is asked of.
 				for (size_t r = 0; r < g_groups[(size_t)g].pass[pass].size(); r++)
-					if (g_groups[(size_t)g].pass[pass][r].overhang)
-						stats->overhangRanges++;
+					if (g_groups[(size_t)g].pass[pass][r].intruding)
+						stats->intrudingRanges++;
+
+				in_other += g_groups[(size_t)g].intruding[pass];
 			}
 
 			if (!here)
@@ -3263,7 +3394,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			else if (here == out)
 				stats->hollowGroups++;	// T2: nothing at all inside the room
 
+			if (in_other)
+				stats->intrudingGroups++;
+
 			stats->overhangTris += (int)out;
+			stats->intrudingTris += (int)in_other;
 		}
 
 		stats->buildMs = now_ms() - build_started;
@@ -3649,10 +3784,16 @@ namespace
 			if ((range.blend != 0.0f) != blendOnly)
 				continue;
 
-			/* T1: and this call draws the inside half of the room or its
-			 * overhang, never both - the two are drawn with different
-			 * scissor states. HD_WINDOW_ALL draws every range, which is
-			 * what a room that needs no window is drawn with. */
+			/* T2-2: and this call draws the art that stands inside
+			 * another room or the art that does not, never both - the two
+			 * are drawn with different scissor states. HD_WINDOW_ALL draws
+			 * every range, which is what every room but a handful is drawn
+			 * with. */
+			if ((window == HD_WINDOW_OPEN && range.intruding) ||
+				(window == HD_WINDOW_INTRUDING && !range.intruding))
+				continue;
+
+			// And round T's own two halves, for RoomProbe's -tround alone.
 			if ((window == HD_WINDOW_INSIDE && range.overhang) ||
 				(window == HD_WINDOW_OVERHANG && !range.overhang))
 				continue;

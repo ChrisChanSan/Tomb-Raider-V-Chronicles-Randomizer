@@ -7179,7 +7179,7 @@ the room's own box, or outside it - and the two never share a draw call. The
 window is applied to the first and switched off for the second, which is what
 the classic path does with a polygon that straddles the rim.
 
-**The box is the engine's own** (`game\draw.cpp:1977-1981`, the lines that ask
+**The box is the engine's own** (`game\draw.cpp:2248-2253`, the lines that ask
 whether an item fits wholly inside its room): `r->x + 1024 .. r->x +
 (y_size - 1) * 1024`, the same in z out of `x_size`, `maxceiling .. minfloor`.
 **The slack is 128 units and it is measured**: a wall face sits exactly on the
@@ -7339,6 +7339,368 @@ which hands the renderer the same boxes the engine hands it, and `-window
 all|inside|overhang`, which draws one half of a group - which is how "room
 124's art is entirely outside room 124" was turned into a picture and a draw
 call count.
+
+#### Fix round T2 - the rooms again: the room that vanishes for one frame, the window only on the art that intrudes, and the tower that pops in (#123, #148)
+
+The play test of 2026-09-08, at sixty frames a second in third person,
+brought three things back from the same corner of Rome:
+
+* **the sky flashes through for ONE frame.** ANDREA1, the alley off the
+  Piazza dell'Opera, Lara in a jump at the wall: for a single frame the
+  whole lower room is gone and the painted city panorama stands where
+  the pavement and the foot of the brick wall should be, the hole's
+  edges dead straight along the vertical portal line. *"Die Skybox kommt
+  sporadisch fuer ein Frame ins Bild ... der Schnitt verlaeuft an der
+  vertikalen Portallinie."* With two controls of his own: **at frame
+  rate 30 it is gone**, and **in first person at sixty it never
+  happens**.
+* **a horizontal BLACK BAND** across ANDREA2's courtyard at the boundary
+  of rooms 134 and 203, cutting the palm's trunk and the door lintels in
+  half. At 30 "a little better, but still there".
+* **a brick tower with a barred window** at the same corner of ANDREA1
+  that is not in trview at all - pure remaster art - missing from a
+  distance and popping into the picture as she walks up to it.
+
+---
+
+**T2-1 - the portal walk started in the wrong room on every in-between
+frame.** (The whole of it, with the offline proof, is also written out
+in `Preparation\60FPS-Plan.md` under *Order 2, the sixth thing*.)
+
+*What was wrong.* On a tween frame of the sixty hertz cadence the EYE is
+blended and the view matrix rebuilt from it (`game\interpolate.cpp`, the
+camera block), while `DrawRooms` was handed `camera.pos.room_number` -
+the LOGIC camera's room, which steps once per tick. Where the two
+disagree, two pieces of arithmetic in the walk throw a neighbour away:
+
+* `GetRoomBounds` (`game\draw.cpp:2562`): `if (x && (x ^ p->normal[0]) <
+  0) SetRoomBounds(...) else continue;` follows a portal only while the
+  eye is on this room's side of its plane.
+* `SetRoomBounds` (`game\draw.cpp:2415`): `if (tooNear == 4) return;`
+  drops a portal whose four corners all fall behind the eye.
+
+Either one leaves the near room drawn alone with the sky behind the
+hole, and the hole's edge is the portal's own straight line - which is
+the photograph.
+
+*And it explains both of the player's controls, which is what makes it
+the right answer and not a plausible one.* At `fps_mode 0` no frame is
+ever drawn from a blended eye, so the eye and the room can never
+disagree. In first person the eye rides on Lara's head inside her own
+room and hardly ever crosses a portal plane between two ticks; the chase
+camera swings around corners in whole sectors and crosses them
+constantly.
+
+*Measured offline*, on ANDREA1's own portal records read out of the
+shipped level with `TrgProbe -roomspace -room 2` and `-room 57`
+(`InterpTest`, new section `portal walk`, 13 checks, 282 in the tool
+altogether and 0 failed):
+
+| | |
+| --- | --- |
+| room 2's portal to room 57 | world x 48128, normal -1/0/0 |
+| the camera on two ticks | x 48000 (room 2) and x 48400 (room 57) |
+| the blended eye between them | x 48200 |
+| seeded with room 2 | the portal to 57 is **refused** |
+| seeded with room 57 | the portal back to 2 IS followed |
+| over the whole interval | refused from 32 % of the way across, 69 of 101 sampled positions |
+| looking east from the blended eye | `tooNear == 4` - dropped by the second test as well |
+
+*The fix.* `InterpEyeRoom` (`game\interpolate.h`, `interpolate.cpp`): on
+a frame whose camera really was blended, the room that CONTAINS the
+interpolated eye - `GetFloor(x, y, z, &room)` walked from the logic
+room, which is the engine's own answer to that question and the very
+call `game\camera.cpp` makes at every tick (`:1424`, `:2103`, `:2146`,
+`:2296`, `:2654`). `DrawRooms` (`game\draw.cpp:1403`) seeds the walk
+with it. Nothing is written back: `camera.pos.room_number` keeps the
+logic room, because half a dozen callers outside the draw read it.
+
+*What it deliberately does NOT move.* `outside` and `camera_underwater`
+are still read from the LOGIC room. They are the frame's own flags
+rather than a property of the room list, the live frames on either side
+of a tween one read them from the logic room, and a tween frame that
+took them from a room half a step away could put one frame of
+underwater tint or one frame of weather into a run that has neither.
+`outside` is widened by the walk in any case - `GetRoomBounds` sets it
+from every `ROOM_OUTSIDE` room it reaches.
+
+*And `g_applied` is the gate*, not the tween latch. A cutscene frame and
+the first frame after a level start are tween frames of the cadence and
+are drawn LIVE, with `camera.pos` untouched; asking `GetFloor` about a
+live camera would answer with whatever room really holds it, which need
+not be `camera.pos.room_number`, and the picture would change at thirty
+frames a second too. `g_applied` is true only where the camera block
+really ran.
+
+*The note that said otherwise is corrected in place*
+(`game\interpolate.cpp:1571`). It read *"a half step across a portal
+would flip the room list and the picture with it"* - and the flip is the
+RIGHT room list once the eye has crossed.
+
+*The seam, and it stays in the build behind `-log`.* What this repairs
+lasts one frame in sixty, and the per-frame HD log line is throttled to
+one a second on purpose - so the frame that flashes is exactly the frame
+the log does not write, which is why the play test's 41 `INTERPLOG`
+lines from ANDREA1 could not say whether the sky came through.
+`ROOMFLASH` (`game\draw.cpp`, `NoteRoomWalk`) keeps three frames of the
+room list - three notes of 244 bytes - and names any room that is in the
+list on the frame before and the frame after and not on the one in
+between. That
+shape is a hole whatever made it, and it needs no knowledge of portals
+or cameras. Beside it `ROOMWALK` says once a second `corrections=N of M
+tween frames`, so a run in that alley with `corrections=0` would mean
+the fix never fired and the flash came from somewhere else - which is a
+thing worth being able to tell apart.
+
+---
+
+**T2-2 - the window belongs to the intruding TRIANGLES, not to both
+rooms.**
+
+*What round T got half right.* It measured which pairs of rooms really
+stand inside one another and left every other room alone - and then gave
+the portal window to BOTH partners of a pair, and to the whole of each
+partner's art. ANDREA2's courtyard is a stack: room 134 on the ground
+with the palm and the doorways, room 203 with the colonnade above it.
+The play test's own log says both are HOLDERS - `overlap room=134 holds
+the art of room=143` and `overlap room=203 holds the art of room=248` -
+so both were scissored, and their two rectangles meet along the
+courtyard's own room boundary. That is the black band.
+
+*The holder never needed a window at all.* Nothing of ITS art is
+standing anywhere it should not be.
+
+*First, the discrepancy the play test exposed, because it had to be
+explained before the rule could be changed.* The engine counted MORE
+overlapping pairs than the tool did on the same level: ANDREA1 4 pairs /
+8 rooms in the log against `TrgProbe -roomspace -slack 128 -share 16
+-deep 1024`'s ONE, ANDREA2 22/29 against 10/16. Cause, found and then
+confirmed by a control run: **the two asked the cell test differently**.
+`HDRenderGroupCellsIn` rejects a cell only when `p + 255 < mins`, i.e. it
+counts a cell that merely TOUCHES the box; the tool counted a cell whose
+own corner lay inside it. One 256-unit ring of difference. Run with the
+box a ring larger (`-deep 768`) the tool reproduces the engine's four
+ANDREA1 pairs exactly - 65/103, 93/101, 149/209, 207/53 - and 78 cells
+against 45 in room 53's air shaft. Neither reading is wrong; they are
+two different rules, and that is the bug.
+
+*So the question is asked of a POINT, where the two cannot differ.* The
+rule now is one sentence:
+
+> a triangle of room b is windowed when its CENTROID stands inside the
+> inside of some other room a - and nothing else in the game ever is.
+
+`a`'s inside is TR5's own (`game\draw.cpp:2248-2253`, the lines that ask
+whether an item fits wholly inside its room) pulled **one whole sector
+further in** on each side, with `a` not next door to `b` by portal or by
+a vertical floor link, and not its flipmap twin.
+
+*Every part of that measured:*
+
+| how far in the holder's box is pulled | ANDREA1 pairs | ANDREA2 pairs |
+| --- | ---: | ---: |
+| the plain inside (the wall's own sector counted) | 158 | 148 |
+| half a sector further | 25 | 49 |
+| **one sector further - what ships** | **7** | **26** |
+
+At the plain inside, ANDREA1 comes out with `room 2 holds the art of
+room 197` - the Piazza corner the play test of 2026-09-07 complained
+about, two rooms that merely share a wall. A room's border ring is one
+sector thick, so that is by construction, and one sector further in is
+what tells the two apart.
+
+*Tried and rejected, and it is worth writing down because it looks
+right:* deciding the PAIR with the strict box and then windowing every
+triangle of `b` inside `a`'s plain inside. It would have hidden the last
+26 % of ANDREA1's 207/53 bleed - and it windows 7,250 triangles of room
+103 inside room 65, which is that pair's SHARED WALL and is round T's
+own bug coming back through the other door. What is left un-hidden is
+art of the intruder standing within one sector of the holder's wall, and
+there is no way to tell that from a shared wall with a box.
+
+*No count threshold*, unlike round T's sixteen cells. That floor existed
+because the answer was all-or-nothing for a whole room; now the answer
+IS the triangle, so a stray one costs a stray one.
+
+*What the whole game comes to:* **105 pairs, 81,261 triangles in 90
+groups of 2,709** - 0.54 % of the game's 15,052,011 triangles, and the
+only draw calls in it the scissor test is ever on for. ANDREA1 7 pairs /
+1,067 triangles, ANDREA2 26 / 2,571, ANDREA3 11 / 9,989, ANDY1 3 / 789,
+ANDY2 16 / 59,766, ANDY3 2 / 81, JOBY2 4 / 2,037, JOBY3 2 / 36, JOBY4
+5 / 45, JOBY5 2 / 210, RICH1 18 / 3,245, RICH2 9 / 1,425, and nothing at
+all in RICH3, RICHCUT2 and TITLE.
+
+*The tool and the engine now answer with THE SAME LIST, and that is
+checked rather than asserted.* `RoomProbe -roombox <classic folder>`
+builds the intrusion list out of the `.TRC` and hands it to the engine's
+own renderer, which prints what its build made of it; `TrgProbe
+-roomspace` answers the same question out of the two files with no
+renderer at all. Held against each other the two listings are
+**identical, line for line** - ANDREA1's 7 pairs, ANDREA2's 26, ANDY2's
+16 and RICH1's 18 - and the summary line agrees on all fifteen levels,
+pairs, triangles and groups alike.
+
+Getting there took two corrections OF THE TOOL, and both are worth
+naming because either would have left a plausible-looking table that was
+not the engine's:
+
+* it averaged the three vertices in WORLD units with an integer divide
+  where the engine averages them as floats in the group's own frame. The
+  two then differed by one triangle in ANDREA1's 207/53 and seven in
+  ANDREA2's 58/175 - a truncation against a box edge.
+* it SUMMED the per-pair counts per group. A triangle can stand inside
+  two holders at once, and ANDY2 is full of them: the sum read 70,934
+  where the engine's own counter, which counts the triangle once however
+  many boxes caught it, reads 59,766.
+
+*The code.* `HDIntrusion` and `HDRenderSetIntrusions` /
+`HDRenderIntrusionHits` / `HDRenderGroupIntrudingTriangles`
+(`specific\hd\hd_render.h`) hand the boxes in before the build on the
+same contract the room boxes already had. `BuildRoomIntrusions`
+(`hd_level.cpp:1868`) makes the list out of `room[]` alone - boxes,
+portals, floor links - which is why the tool can reproduce it;
+`ReportRoomIntrusions` (`:1985`) reads the counts back afterwards and is
+where `HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups`
+comes from. `hd_render.cpp:2716` tags the triangle and `:925` carries
+the tag in `HDRange`, last in the sort key so that a level built with NO
+list sorts exactly as it did before group M. `DrawRoomWindowed`
+(`hd_level.cpp:563`) draws the open half over the whole screen and the
+intruding half inside the window.
+
+*Three more things fell out of it and are fixed in the same breath:*
+
+1. **The flag is per GROUP now** (`g_group_windowed`), and `HDFrameRoom`
+   asks it of the group that is really drawing the room. Round T kept it
+   per ROOM - so after a flipmap a windowed room's art could be drawn
+   with no window at all and its twin's art cut to a rectangle that was
+   never measured for it.
+2. **An empty window no longer silences a whole room.** Group M skipped
+   a room whose window came out with no width or height, because the
+   window WAS the room; now only the intruding half is silenced, inside
+   `DrawRoomWindowed`.
+3. **The overhang keeps no draw calls of its own.** Round T sorted every
+   group in the game into an inside half and an overhang half so that
+   the two could be scissored differently; with the window a property of
+   the triangle they are both drawn over the whole screen, so the split
+   is gone and the draw calls come back. Measured, whole level, all
+   passes:
+
+   | level | no list at all | round T | **round T2** |
+   | --- | ---: | ---: | ---: |
+   | ANDREA1 | 1,859 | 2,044 | **1,874** |
+   | ANDREA2 | 1,702 | 1,861 | **1,743** |
+   | JOBY2 | 1,553 | 1,763 | **1,563** |
+   | RICH2 | 1,586 | 2,092 | **1,602** |
+
+   Round T cost 10 to 32 %; what is left is 15 to 41 draw calls per
+   LEVEL, which is the intruding split's own cost and nothing else. Per
+   frame, the ANDREA2 courtyard scene draws 29 calls where round T's
+   rule drew 32. The overhang is still counted per triangle, so the
+   hollow-room test of round T's T2 - a group with nothing at all inside
+   its own room, which is what made ANDREA2's room 124 a black hole - is
+   untouched.
+
+*The pictures.* All from `RoomProbe` with the room boxes and the
+intrusion list handed in exactly as the engine hands them, camera inside
+ANDREA2's room 134 in the courtyard, rooms 134, 203, 143 and 248 drawn at
+their own offsets; the "before" is round T's own code path, put back for
+one run by `HDRenderSplitOverhang` and driven by the new `-tround
+<group> <l,t,r,b>` - the two calls round T's `DrawRoomWindowed` made,
+with the rectangle worked out from the ceiling portal's own corners
+through the engine's own `SetRoomBounds` arithmetic.
+
+* `palm_before.png` / `palm_after.png`: the whole upper band of the
+  colonnade is missing along a dead straight horizontal edge, and the
+  palm crown is seen floating through the gap. **58,026 of 518,400
+  pixels** differ (`palm_diff.png` - a band whose bottom edge is exactly
+  the scissor rectangle's top edge).
+* `court_before.png` / `court_after.png`, a second camera: **75,655
+  pixels**, background 51.3 % against 39.9 %.
+* ANDREA1's 207/53, the nesting the window exists for, camera inside
+  room 207: room 53's art drawn whole against room 207 alone differs in
+  **27,694 pixels** - that bleed is real and is what group M was built
+  for. Withhold the tagged triangles alone (`-window open`) and **20,601
+  of those 27,694** go with them; the 7,093 that remain are room 53's
+  own wall standing in room 207's border ring, which is the trade the
+  rejected variant above was measured against.
+* ANDREA1's room 57, the pier at the Piazza corner that started round T:
+  group 57 is not on the list at all and is never windowed, so it draws
+  whole.
+
+Every `RoomProbe` run of this round reports **0 of 59** watched device
+states changed.
+
+---
+
+**T2-3 - the tower: measured, and NOT fixed on a guess.**
+
+*What was asked for* was a fix in one of two shapes: widen the S8 culling
+to the group's own box, or add an HD neighbour rule for groups whose
+overhang stands in the frustum. The measurement says neither applies,
+and says so with numbers:
+
+1. **The HD path has no visibility test of its own.** There is no view
+   frustum anywhere in `specific\hd` - grepped for `frustum`, `cull` and
+   `reject`, and every hit is BACK FACE culling on Lara's model - and the
+   `dropped=` of its per-frame log line counts only the fixed frame
+   array's overflow, which read **0** through the whole play test. So the
+   rooms it draws are exactly the rooms `DrawRooms` hands it. There is
+   nothing to widen.
+2. **There is no remaster art hung far outside a room box at that
+   corner.** `TrgProbe -near <x> <y> <z> <radius>` (new) holds every
+   group's triangles against a sphere in world units and says how far
+   each is from its OWN room's box. Within 8,000 units of the corner
+   where ANDREA1's rooms 2, 57 and 197 meet (world 48128 / -3000 /
+   37888), the worst any group reaches past its own room is **936 units**
+   - under one sector, room 103's facade. Sampled again at 6,000 units
+   around y -8000, -14000 and -20000 - the height a tower would stand at
+   - the answer is 572 units and then nothing at all. The tower is
+   ordinary art of some room, not something hung outside one, so a rule
+   about overhang boxes would not reach it.
+
+*What is left are two ordinary things, and they cannot be told apart
+without the game:* the room the tower belongs to is not in `draw_rooms`
+because the portal chain does not reach it from the alley (vanilla
+behaviour, invisible in vanilla only because vanilla has no tower
+there), or it is past the FAR PLANE, which `InitWindow` sets at 20480
+units - twenty sectors - and which both paths project with
+(`specific\gamemain.cpp:261`).
+
+*So this round adds the line that will name it in one play test rather
+than a change made on a suspicion.* `ROOMPOP` (`game\draw.cpp`,
+`NoteRoomWalk`, `-log`): a room that JOINS the draw list while it is
+more than eight sectors away, with the room number, the distance, the
+eye and the far plane, at most four lines a second. If the tower appears
+on a frame that also joins its room, it is the walk; if the room was
+there all along, it is the far plane. `ROOMWALK`'s per-second line
+carries the count as `far rooms joined=`.
+
+---
+
+**What this round did NOT change, and the one thing it does change
+outside the HD path.** At `fps_mode 0` nothing moves at all, in either
+path: `InterpAlphaNow` hands 1 in, `InterpBeginFrame` returns before it
+writes anything, `g_applied` stays false and `InterpEyeRoom` therefore
+returns its argument, so `DrawRooms` is line for line the function it
+was. T2-2 is the HD path alone - `HDLevelBuild` returns at `HDEnabled()`
+before it reaches `BuildRoomIntrusions`, so with `hd_enable` off no list
+is built and no triangle is tagged. T2-1, on the other hand, is in the
+walk BOTH paths share, so at sixty frames a second it corrects the
+classic picture as well as the HD one - deliberately, because the flash
+is the shared walk's and not the renderer's. The three new log lines are
+all behind `gLogEnabled` and write nothing else. `be.bat` builds with
+**0 errors**.
+
+**The tools.** `InterpTest` gained the `portal walk` section (13 checks,
+282 in all, 0 failed). `TrgProbe -roomspace` now answers the overlap
+question the way the engine does, per triangle and per centroid, and
+gained `-near <x> <y> <z> <radius>`. `RoomProbe -roombox` now hands the
+intrusion list in as well as the room boxes and prints the engine's own
+overlap listing for it, `-window` takes `all|open|intruding`,
+`-clipgroup <g> <l,t,r,b>` puts a scissor round ONE group (which is what
+a portal window really is, and what `-scissor` could not do), and
+`-tround <g> <l,t,r,b>` draws one group the way fix round T drew it,
+which is the "before" of every picture above.
 
 #### Fix round N - the water: the material that was a surface all along, the HD frames on the classic faces, and the six double rooms (#123)
 

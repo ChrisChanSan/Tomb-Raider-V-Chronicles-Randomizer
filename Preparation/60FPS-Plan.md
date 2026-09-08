@@ -542,6 +542,83 @@ first-person and look cameras. Only a late frame (two ticks or more)
 breaks it, for one frame, on a camera and not on game state.
 
 
+### Order 2, the sixth thing (2026-09-08) - the ROOM the interpolated eye is in
+
+The five points above were all about *what* is blended. This one is
+about what the blended eye is then used to LOOK UP, and it was wrong
+from the day order 2 shipped until fix round T2.
+
+**What the play test saw.** ANDREA1, the alley off the Piazza
+dell'Opera, sixty frames a second, third person: for ONE frame the
+whole lower room is gone and the painted city panorama stands where the
+pavement and the foot of the brick wall should be, with the hole's
+edges dead straight along the vertical portal line. Twice reproduced,
+and twice ruled out: at `fps_mode 0` it never happens, and in FIRST
+PERSON at sixty it never happens either.
+
+**What the note in `interpolate.cpp` said, and why it was wrong.** It
+said `camera.pos.room_number` is not interpolated because
+
+> a half step across a portal would flip the room list and the picture
+> with it. The live room with the interpolated eye is a mismatch of
+> under a thirtieth of a second of camera travel.
+
+The flip IS the right room list once the eye has crossed the portal,
+and the mismatch is not harmless. Two pieces of arithmetic in the
+portal walk throw a neighbour away when the eye and the seed room
+disagree (`game\draw.cpp`):
+
+* `GetRoomBounds`: `if (x && (x ^ p->normal[0]) < 0) SetRoomBounds(...)
+  else continue;` - a portal is followed only while the eye is on THIS
+  room's side of its plane. Half a step past it the sign flips and the
+  portal, the room behind it and everything beyond it are skipped for
+  that frame.
+* `SetRoomBounds`: `if (tooNear == 4) return;` - and where the eye is
+  past the plane by more than the portal is wide, all four corners come
+  out at `z <= 0` in view space and the portal is dropped there instead.
+
+What is left is the near room drawn alone with the sky behind the hole,
+and the hole's edge is the portal's own straight line. Both of the
+player's controls follow: at `fps_mode 0` no frame is ever drawn from a
+blended eye, so the two can never disagree; in first person the eye
+rides on Lara's head inside her own room and hardly ever crosses a
+portal plane between two ticks, while the chase camera swings around
+corners in whole sectors and crosses them all the time.
+
+**Proved offline**, on ANDREA1's own portal records (`InterpTest`,
+section `portal walk`, 13 checks): room 2's portal to room 57 stands at
+world x 48128 with normal -1/0/0; a camera at x 48000 on one tick and
+48400 on the next has its blended eye at 48200, and the sign test then
+refuses that portal for 69 of 101 sampled positions between the two
+ticks. Seeded with room 57 instead, the portal back to room 2 IS
+followed - so the eye's own room keeps BOTH rooms, which is the whole
+fix.
+
+**What was done.** `InterpEyeRoom` (`game\interpolate.h/.cpp`): on a
+frame whose camera really was blended, the room that CONTAINS the
+interpolated eye - `GetFloor(x, y, z, &room)` walked from the logic
+room, which is the engine's own answer to that question and the very
+call `camera.cpp` makes at every tick (`:1424`, `:2103`, `:2146`,
+`:2296`, `:2654`). `DrawRooms` seeds the portal walk with it and with
+nothing else: `camera.pos.room_number` keeps the logic room, and
+`outside` and `camera_underwater` are still read from THAT room, so a
+tween frame can never put one frame of underwater tint or one frame of
+weather into a run that has neither. `g_applied` is the gate, so a
+cutscene frame, a camera-cut frame, a level start and every frame at
+`fps_mode 0` return the logic room unchanged and the line is the
+identity.
+
+**And a seam that will say whether it worked**, because the thing it
+repairs lasts one frame in sixty and the throttled per-frame log lines
+are exactly the ones that miss it: `ROOMFLASH` keeps three frames of
+the room list and names any room that is in the list on the frame
+before and the frame after and not on the one in between - a hole,
+whatever made it - while `ROOMWALK` says once a second how many tween
+frames the correction fired on. After this round the first must not
+appear at all and the second must be non-zero wherever the camera
+crosses portals.
+
+
 ## 4. Proofs
 
 1. The logic is still 30 Hz. `GameTimer` (`game\control.cpp:640`) and

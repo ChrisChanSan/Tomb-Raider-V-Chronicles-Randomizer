@@ -1127,6 +1127,254 @@ void StepAfterDeathFade()
 	}
 }
 
+/* ROOMFLASH - A ROOM THAT IS THERE, GONE AND THERE AGAIN (#123, fix round T2,
+ * T2-1). Behind -log, and it stays in the build like every other seam.
+ *
+ * WHY A SEAM AND NOT AN EYE. What T2-1 repairs lasts ONE FRAME out of sixty.
+ * The per-frame HDLOG line is throttled to one a second on purpose, so the
+ * frame that flashes is exactly the frame the log does not write - the play
+ * test of 2026-09-08 has 41 INTERPLOG lines from ANDREA1 and not one of them
+ * can say whether the sky came through. A missing room, on the other hand,
+ * has a shape no throttle can miss: it is in the list on the frame before and
+ * on the frame after and not on the one in between.
+ *
+ * So three frames of the room list are kept - three notes of 244 bytes - and
+ * the MIDDLE one is judged as soon as the third arrives. Rooms in both
+ * neighbours and not in the middle are named. That is the whole test, and it needs no knowledge of
+ * portals, cameras or geometry: a room the walk can see on either side of a
+ * frame and not on it is a hole, whatever made it.
+ *
+ * It is not silenced by the fix. After T2-1 the line must stop appearing, and
+ * the ROOMWALK line beside it says how much work the fix did to make that
+ * true - `corrections=N of M tween frames`. A run with corrections=0 in the
+ * alley would mean the fix never fired and the flash came from somewhere
+ * else, which is a thing worth being able to tell apart.
+ *
+ * AND WHAT A REMAINING LINE WOULD MEAN. The shape is a hole, not a cause: a
+ * portal seen exactly edge-on for one frame, or a door closing, leaves the
+ * same three-frame trace and always has, at thirty as well as at sixty. So a
+ * ROOMFLASH line that survives this round is a hole to be looked at with its
+ * own `tween` and `corrected` columns - the frame it names says whether it
+ * was an in-between frame at all - and not by itself a verdict on T2-1. */
+namespace
+{
+	struct RoomWalkNote
+	{
+		unsigned int serial;
+		int level;
+		int count;
+		short rooms[100];
+		short logic;
+		short eye;
+		short prev;
+		long x, y, z;
+		float alpha;
+		int tween;
+		int corrected;
+	};
+
+	// [0] is the oldest of the three, [2] the one just walked.
+	RoomWalkNote g_walkNote[3];
+	int g_walkHeld = 0;
+	unsigned int g_walkSerial = 0;
+
+	// Per second, for the throttled line.
+	int g_walkTweens = 0;
+	int g_walkCorrections = 0;
+	int g_walkFlashes = 0;
+	int g_walkPops = 0;
+	unsigned short g_walkLineAt = 0;
+	bool g_walkLineEver = false;
+
+	/* ROOMPOP (#123, fix round T2, T2-3): a room that JOINS the draw list
+	 * while it is a long way off. See the note over the report below. Four
+	 * lines a second at most - a walk through Rome joins a room every few
+	 * frames and the ones that matter are the far ones. */
+	const long kPopFar = 8192;		// eight sectors
+	const int kPopLines = 4;
+
+	// How far the camera is from a room's box, 0 inside it.
+	long RoomDistance(const ROOM_INFO* r, long x, long y, long z)
+	{
+		const long x0 = r->x;
+		const long x1 = r->x + (r->y_size << 10);
+		const long z0 = r->z;
+		const long z1 = r->z + (r->x_size << 10);
+		const long dx = x < x0 ? x0 - x : (x > x1 ? x - x1 : 0);
+		const long dz = z < z0 ? z0 - z : (z > z1 ? z - z1 : 0);
+		const long dy = y < r->maxceiling ? r->maxceiling - y
+			: (y > r->minfloor ? y - r->minfloor : 0);
+		const double d = (double)dx * dx + (double)dy * dy + (double)dz * dz;
+
+		return (long)sqrt(d);
+	}
+
+	bool WalkHolds(const RoomWalkNote& note, short which)
+	{
+		for (int i = 0; i < note.count; i++)
+			if (note.rooms[i] == which)
+				return true;
+
+		return false;
+	}
+}
+
+static void NoteRoomWalk(short logicRoom, short walkRoom)
+{
+	if (!gLogEnabled)
+		return;
+
+	if (InterpIsTweenFrame())
+		g_walkTweens++;
+
+	if (walkRoom != logicRoom)
+		g_walkCorrections++;
+
+	RoomWalkNote& note = g_walkNote[2];
+
+	g_walkNote[0] = g_walkNote[1];
+	g_walkNote[1] = g_walkNote[2];
+
+	note.serial = g_walkSerial++;
+	note.level = (int)gfLevelId;
+	note.count = (int)number_draw_rooms;
+
+	if (note.count > (int)(sizeof(note.rooms) / sizeof(note.rooms[0])))
+		note.count = (int)(sizeof(note.rooms) / sizeof(note.rooms[0]));
+
+	for (int i = 0; i < note.count; i++)
+		note.rooms[i] = draw_rooms[i];
+
+	note.logic = logicRoom;
+	note.eye = walkRoom;
+	note.prev = InterpPrevCamRoom();
+	note.x = camera.pos.x;
+	note.y = camera.pos.y;
+	note.z = camera.pos.z;
+	note.alpha = InterpFrameAlpha();
+	note.tween = InterpIsTweenFrame() ? 1 : 0;
+	note.corrected = walkRoom != logicRoom ? 1 : 0;
+
+	if (g_walkHeld < 3)
+		g_walkHeld++;
+
+	/* THE MIDDLE FRAME IS THE ONE ON TRIAL, and only while the three really
+	 * are three consecutive frames of one level - a level change, a savegame
+	 * or a menu leaves a note behind that is no neighbour of anything. */
+	if (g_walkHeld >= 3 &&
+		g_walkNote[0].level == g_walkNote[2].level &&
+		g_walkNote[1].level == g_walkNote[2].level &&
+		g_walkNote[1].serial == g_walkNote[0].serial + 1 &&
+		g_walkNote[2].serial == g_walkNote[1].serial + 1)
+	{
+		char missing[128];
+		int at = 0;
+		int found = 0;
+
+		missing[0] = 0;
+
+		for (int i = 0; i < g_walkNote[0].count; i++)
+		{
+			const short which = g_walkNote[0].rooms[i];
+
+			if (WalkHolds(g_walkNote[1], which) || !WalkHolds(g_walkNote[2], which))
+				continue;
+
+			found++;
+
+			if (at < (int)sizeof(missing) - 8)
+				at += sprintf(&missing[at], at ? ",%d" : "%d", (int)which);
+		}
+
+		if (found)
+		{
+			const RoomWalkNote& bad = g_walkNote[1];
+
+			g_walkFlashes++;
+			Log("ROOMFLASH frame=%u tween=%d alpha=%.2f logic_room=%d "
+				"eye_room=%d prev_cam_room=%d eye=(%d,%d,%d) rooms=%d "
+				"missing=%s corrected=%d",
+				bad.serial, bad.tween, bad.alpha, (int)bad.logic,
+				(int)bad.eye, (int)bad.prev, (int)bad.x, (int)bad.y,
+				(int)bad.z, bad.count, missing, bad.corrected);
+		}
+	}
+
+	/* ROOMPOP - A ROOM THAT TURNS UP FROM A LONG WAY OFF (#123, fix round T2,
+	 * T2-3). Behind -log, and it stays in the build.
+	 *
+	 * WHAT IT IS FOR. The play test of 2026-09-08 photographed a brick tower
+	 * with a barred window at the corner of the Piazza dell'Opera that is not
+	 * in trview at all - pure remaster art - and that is missing from a
+	 * distance and "pops into the picture" as she walks up to it. Two things
+	 * can do that and they need telling apart:
+	 *
+	 *   the ROOM was not in the draw list. The HD path has no visibility
+	 *      test of its own - there is no view frustum anywhere in
+	 *      specific\hd (the only culling in it is BACK FACE culling on
+	 *      Lara's model), and the
+	 *      `dropped=` of its frame line counts only the fixed array's
+	 *      overflow and read 0 through the whole play test - so the rooms it
+	 *      draws are exactly the rooms this walk hands it. A room the portal
+	 *      chain does not reach is not drawn, in the classic path just the
+	 *      same, and that is vanilla behaviour that the remaster's taller art
+	 *      makes visible.
+	 *   the FAR PLANE. InitWindow sets it at 20480 units, twenty sectors
+	 *      (specific\gamemain.cpp:261), and both paths project with the same
+	 *      constants, so art past it is clipped in both.
+	 *
+	 * This line separates the two in one play test: if the tower appears on a
+	 * frame that also joins its room to the list, it is the walk; if the room
+	 * was there all along, it is the far plane. Measured offline first, with
+	 * TrgProbe -near over the whole corner: ANDREA1 has NO remaster art more
+	 * than 936 units outside its own room's box anywhere within 8,000 units
+	 * of that corner, so the tower is ordinary art of some room and not
+	 * something hung far outside one. Which room it is, only the game can
+	 * say, and this is the line that will say it. */
+	if (gLogEnabled && g_walkHeld >= 2 &&
+		g_walkNote[1].level == g_walkNote[2].level &&
+		g_walkNote[2].serial == g_walkNote[1].serial + 1)
+	{
+		const RoomWalkNote& now = g_walkNote[2];
+
+		for (int i = 0; i < now.count && g_walkPops < kPopLines; i++)
+		{
+			const short which = now.rooms[i];
+
+			if (WalkHolds(g_walkNote[1], which))
+				continue;
+
+			const long dist = RoomDistance(&room[which], now.x, now.y, now.z);
+
+			if (dist < kPopFar)
+				continue;
+
+			g_walkPops++;
+			Log("ROOMPOP frame=%u room=%d dist=%d eye=(%d,%d,%d) rooms=%d "
+				"tween=%d far_plane=%d", now.serial, (int)which, (int)dist,
+				(int)now.x, (int)now.y, (int)now.z, now.count, now.tween,
+				(int)phd_zfar);
+		}
+	}
+
+	// One line a second, and only while there is something to say. The
+	// counter ticks thirty times a second at every fps_mode.
+	if ((unsigned short)(GlobalCounter - g_walkLineAt) >= 30 || !g_walkLineEver)
+	{
+		if (g_walkLineEver && (g_walkTweens || g_walkFlashes || g_walkPops))
+			Log("ROOMWALK tween corrections=%d of %d tween frames, "
+				"flashes=%d, far rooms joined=%d", g_walkCorrections,
+				g_walkTweens, g_walkFlashes, g_walkPops);
+
+		g_walkLineAt = GlobalCounter;
+		g_walkLineEver = true;
+		g_walkTweens = 0;
+		g_walkCorrections = 0;
+		g_walkFlashes = 0;
+		g_walkPops = 0;
+	}
+}
+
 void DrawRooms(short current_room)
 {
 	ROOM_INFO* r;
@@ -1134,8 +1382,37 @@ void DrawRooms(short current_room)
 	short lr;
 
 	DoMonitorScreen();
-	CurrentRoom = current_room;
-	r = &room[current_room];
+
+	/* THE WALK STARTS WHERE THE EYE IS (#123, fix round T2, T2-1).
+	 *
+	 * On an in-between frame of the sixty hertz cadence the eye has been
+	 * blended and the view matrix rebuilt from it, while `current_room` is
+	 * still the LOGIC camera's room. Where the two disagree - the chase
+	 * camera swinging around a corner crosses a portal plane between two
+	 * ticks - GetRoomBounds below refuses to follow the portal the eye has
+	 * just stepped through and the whole room behind it is missing for one
+	 * frame. See the note over InterpEyeRoom (game\interpolate.h) for the two
+	 * lines that do it and for the player's own two controls.
+	 *
+	 * InterpEyeRoom returns `current_room` unchanged on every frame that was
+	 * not blended - fps_mode 0, the frame that carries the tick, a cutscene,
+	 * a camera cut, a level start - so at thirty hertz this line is the
+	 * identity and nothing below it moves.
+	 *
+	 * WHAT IT SEEDS AND WHAT IT DOES NOT. The portal walk, and only that.
+	 * `outside` and `camera_underwater` are read from the LOGIC room, exactly
+	 * as they were before this round: they are the frame's own flags rather
+	 * than a property of the room list, the live frames on either side of a
+	 * tween one read them from the logic room, and a tween frame that took
+	 * them from a room half a step away could put one frame of underwater
+	 * tint or one frame of weather into a run that has neither. `outside` is
+	 * widened by the walk itself in any case - GetRoomBounds sets it from
+	 * every ROOM_OUTSIDE room it reaches. */
+	const short walk_room = InterpEyeRoom(current_room);
+	const ROOM_INFO* logic_room = &room[current_room];
+
+	CurrentRoom = walk_room;
+	r = &room[walk_room];
 	r->test_left = 0;
 	r->test_top = 0;
 	phd_left = 0;
@@ -1144,11 +1421,11 @@ void DrawRooms(short current_room)
 	phd_bottom = phd_winymax;
 	r->test_right = phd_winxmax;
 	r->test_bottom = phd_winymax;
-	outside = r->flags & ROOM_OUTSIDE;
+	outside = logic_room->flags & ROOM_OUTSIDE;
 	snow_outside = 0;
-	camera_underwater = r->flags & ROOM_UNDERWATER;
+	camera_underwater = logic_room->flags & ROOM_UNDERWATER;
 	r->bound_active = 2;
-	draw_room_list[0] = current_room;
+	draw_room_list[0] = walk_room;
 	room_list_start = 0;
 	room_list_end = 1;
 	number_draw_rooms = 0;
@@ -1169,6 +1446,7 @@ void DrawRooms(short current_room)
 	}
 
 	GetRoomBounds();
+	NoteRoomWalk(current_room, walk_room);
 	ProcessClosedDoors();
 
 	if (gfLevelId != LVL5_TITLE)

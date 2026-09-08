@@ -188,7 +188,7 @@ struct HDWaterMark
 
 /* THE ROOM'S OWN BOX, ROOM LOCAL (#123, fix round T, T1).
  *
- * The box TR5 itself calls the inside of a room - game\draw.cpp:1977-1981,
+ * The box TR5 itself calls the inside of a room - game\draw.cpp:2248-2253,
  * where an item is asked whether it fits wholly inside the room it is in:
  * `r->x + 1024 .. r->x + (y_size - 1) * 1024` across, the same in z out of
  * `x_size`, and `maxceiling .. minfloor` in height. The border ring of wall
@@ -209,6 +209,43 @@ struct HDRoomBox
 	float maxs[3];
 };
 
+/* ONE ROOM'S INSIDE, ASKED OF ANOTHER ROOM'S ART (#123, fix round T2, T2-2).
+ *
+ * WHAT FIX ROUND T GOT HALF RIGHT. T made the portal window the property of a
+ * ROOM, and gave one to BOTH partners of every overlapping pair - the holder
+ * as well as the intruder. The play test of 2026-09-08 photographed what that
+ * costs in ANDREA2's courtyard: rooms 134 (the ground with the palm and the
+ * doorways) and 203 (the colonnade over it) are both HOLDERS - 134 holds art
+ * of 143, 203 holds art of 248 - and both were therefore scissored to their
+ * own portal rectangles, which meet along the courtyard's horizontal room
+ * boundary. What the player sees is a BLACK BAND straight across the picture
+ * cutting the palm's trunk and the door lintels in half.
+ *
+ * The holder never needed a window. Nothing of ITS art is standing anywhere
+ * it should not be. And the intruder needs one only for the triangles that
+ * really do stand inside the other room - not for its whole group.
+ *
+ * SO THE WINDOW IS A PROPERTY OF A TRIANGLE. One of these says: "the art of
+ * `group`, wherever it falls inside this box, is standing inside room
+ * `holder` and is to be drawn inside `group`'s own portal window." Every
+ * other triangle in the game, the holder's included, draws over the whole
+ * screen exactly as it did before group M.
+ *
+ * The box is the holder's INSIDE - the volume TR5 itself calls the inside of
+ * a room (game\draw.cpp:2248-2253), one sector further in on each side
+ * because a room's border ring is one sector thick and two rooms that merely
+ * share a wall reach into each other by construction. Handed in the GROUP's
+ * own local frame, like the room boxes above, and on the same contract: call
+ * HDRenderSetIntrusions before HDRenderLevelBegin, the pointer is not kept.
+ * Without it nothing is ever tagged and no room is ever windowed. */
+struct HDIntrusion
+{
+	int group;			// whose art is being asked about
+	int holder;			// the room whose inside the box is - for the log
+	float mins[3];
+	float maxs[3];
+};
+
 struct HDRenderStats
 {
 	int trgVersion;
@@ -225,8 +262,13 @@ struct HDRenderStats
 	 * room at all - ten in the whole game, and every one of them a room the
 	 * HD path used to take over and then draw as a black hole. */
 	int overhangTris;
-	int overhangRanges;
 	int hollowGroups;
+	/* Fix round T2 (T2-2): the triangles that stand inside another room, the
+	 * draw calls they cost and the groups that have any at all. These are the
+	 * only draw calls in the game the scissor test is ever on for. */
+	int intrudingTris;
+	int intrudingRanges;
+	int intrudingGroups;
 	int index32;			// 1 = 32 bit index buffer
 	/* The widest span of vertex numbers ONE draw call reaches over (#123,
 	 * stage S6). It is what decides whether a card with no 32 bit index
@@ -391,6 +433,23 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */
 void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count);
+/* The rooms that may be holding another room's art (#123, fix round T2).
+ * Same contract again - before HDRenderLevelBegin, the pointer is only
+ * remembered for the length of that call. After it, HDRenderIntrusionHits
+ * says how many triangles each entry caught, which is what the level's log
+ * line is made of. */
+void HDRenderSetIntrusions(const HDIntrusion* list, int count);
+/* Sort the inside half of every group apart from its overhang while the next
+ * level is built, as fix round T did (#123, fix round T2). 0 by default and
+ * in the engine always: it costs draw calls and buys the engine nothing since
+ * the window became a property of the triangle. RoomProbe turns it on to draw
+ * round T's own picture. Call it before HDRenderLevelBegin. */
+void HDRenderSplitOverhang(int on);
+int HDRenderIntrusionHits(int at);
+// How many of a group's triangles stand inside some OTHER room, all three
+// passes together. Non-zero is the whole of "this room needs a portal
+// window"; zero is every other room in the game.
+int HDRenderGroupIntrudingTriangles(int group);
 void HDRenderLevelEnd();
 
 // --- the frame -------------------------------------------------------------
@@ -474,21 +533,33 @@ void HDRenderScissorOff();
 #define HD_PASS_SOLID		(HD_PASS_OPAQUE | HD_PASS_ALPHA)
 #define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE | HD_PASS_BLEND)
 
-/* WHICH HALF OF A GROUP A CALL IS TO DRAW (#123, fix round T, T1).
+/* WHICH HALF OF A GROUP A CALL IS TO DRAW (#123, fix round T, T1; fix round
+ * T2, T2-2).
  *
- * A group's triangles are sorted into two kinds while the index buffer is
- * filled: those whose centroid stands INSIDE the room's own box (above), and
- * the OVERHANG - the ones the remaster hung outside it. The two never share
- * a draw call, because they are drawn with different scissor states: the
- * inside half inside the portal window the walk gave the room, the overhang
- * half over the whole screen, which is what the classic path does with every
- * polygon that straddles the window's rim.
+ * Round T split a group into the art INSIDE the room's own box and the
+ * OVERHANG outside it, and scissored the first half. Round T2 replaced that
+ * with the question the window is really about: a group's triangles are
+ * sorted into those that stand inside SOME OTHER ROOM - see HDIntrusion above
+ * - and all the rest. The two never share a draw call, because they are drawn
+ * with different scissor states: the intruding ones inside the portal window
+ * the walk gave this room, and everything else over the whole screen, which
+ * is what the classic path does with every polygon that straddles the
+ * window's rim.
  *
- * HD_WINDOW_ALL is one call for the whole group and the state before this
- * round; a room that needs no window is drawn with it and pays nothing. */
+ * HD_WINDOW_ALL is one call for the whole group and the state before group M;
+ * every room but a handful is drawn with it and pays nothing. */
 #define HD_WINDOW_ALL		0
-#define HD_WINDOW_INSIDE	1
-#define HD_WINDOW_OVERHANG	2
+#define HD_WINDOW_OPEN		1
+#define HD_WINDOW_INTRUDING	2
+/* AND ROUND T'S OWN TWO HALVES, FOR THE DIAGNOSTIC TOOL AND NOTHING ELSE.
+ * The engine never asks for these: since T2-2 the overhang is drawn over the
+ * whole screen with everything else and has no draw calls of its own, which
+ * is where the ten per cent of draw calls round T's split cost went back. But
+ * a picture of what round T DREW is what shows the black band across ANDREA2's
+ * courtyard, and that picture needs the old index layout - so the split can
+ * be turned back on for one run with HDRenderSplitOverhang. */
+#define HD_WINDOW_INSIDE	3
+#define HD_WINDOW_OVERHANG	4
 
 // One room, the passes the mask names, world matrix as the classic path would
 // set it (the room's origin translation). False when the group is missing or

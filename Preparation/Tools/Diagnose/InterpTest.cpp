@@ -1996,6 +1996,180 @@ static void particles()
 	}
 }
 
+/* ------------------------------------------- the portal walk and the eye -- */
+
+/* THE ROOM OF THE INTERPOLATED EYE (#123, fix round T2, T2-1).
+ *
+ * WHAT IS BEING PROVEN. On an in-between frame the eye is blended and the
+ * view matrix is rebuilt from it, while the portal walk of game\draw.cpp is
+ * seeded with the LOGIC camera's room. Where the eye has crossed a portal
+ * plane between two ticks, two pieces of arithmetic in GetRoomBounds /
+ * SetRoomBounds throw the room behind that portal away for that one frame.
+ *
+ * The walk itself cannot be linked here - it reads room[], the matrix stack
+ * and a dozen file-static globals of draw.cpp - so what is checked is the
+ * ARITHMETIC of the two tests, copied line for line from the engine and run
+ * on ANDREA1's OWN portal records, read out of the shipped level with
+ * `TrgProbe -roomspace -room 2` and `-room 57`:
+ *
+ *   room 2  origin 45056 / 0 / 33792, portal -> room 57, normal -1/0/0,
+ *           first corner (3072, -1792, 4096) room local = world x 48128
+ *   room 57 origin 47104 / 0 / 36864, portal -> room  2, normal  1/0/0,
+ *           first corner (1023,   256, 1024) room local = world x 48127
+ *
+ * That wall at world x 48128 is the corner of the Piazza dell'Opera the play
+ * test photographed. The camera walks east across it between two logic ticks;
+ * the eye at the halfway point stands 72 units past it. */
+static bool portal_followed(long cornerWorld, long eyeWorld, long normal)
+{
+	/* game\draw.cpp, GetRoomBounds:
+	 *   x = r->x + p->v1[0] - w2v_matrix[M03];
+	 *   if (x && (x ^ p->normal[0]) < 0) SetRoomBounds(...); else continue;
+	 * The XOR is a sign test: it is negative when exactly one of the two is. */
+	const long x = cornerWorld - eyeWorld;
+
+	return x != 0 && ((x ^ normal) < 0);
+}
+
+/* game\draw.cpp, SetRoomBounds: how many of the four corners come out at
+ * z <= 0 in view space. Only the third row of the view matrix matters for
+ * that, and for a camera looking along a horizontal direction that row IS the
+ * direction: v->z = forward . (corner - eye). tooNear == 4 makes the function
+ * return before it writes anything, so the room behind the portal is never
+ * put on the draw list. */
+static int too_near(const long corner[4][3], const long eye[3], const double fwd[3])
+{
+	int tooNear = 0;
+
+	for (int i = 0; i < 4; i++)
+	{
+		const double z =
+			fwd[0] * (double)(corner[i][0] - eye[0]) +
+			fwd[1] * (double)(corner[i][1] - eye[1]) +
+			fwd[2] * (double)(corner[i][2] - eye[2]);
+
+		if (z <= 0.0)
+			tooNear++;
+	}
+
+	return tooNear;
+}
+
+static void portal_walk()
+{
+	printf("portal walk - the room the blended eye stands in (#123, T2-1)\n");
+
+	// The two portal planes of the pair, in world units.
+	const long wall = 48128;		// room 2's portal to room 57
+	const long back = 48127;		// room 57's portal to room 2
+
+	/* The camera's own two ticks, straight off the alley: one on either side
+	 * of the wall, 400 units apart - a quarter of a sector, which is what a
+	 * chase camera swinging around that corner covers in a thirtieth of a
+	 * second. */
+	const long tickA = 48000;
+	const long tickB = 48400;
+	const long eye = (tickA + tickB) / 2;	// the in-between frame: 48200
+
+	ok(eye == 48200, "the blended eye is the midpoint of the two ticks",
+		eye, 48200);
+
+	// The live frames either side of it are drawn from their own tick and
+	// both agree with the room they are in.
+	ok(portal_followed(wall, tickA, -1) == true,
+		"tick A (x 48000, room 2): the portal to 57 IS followed", 1, 1);
+	ok(portal_followed(wall, tickB, -1) == false,
+		"tick B (x 48400, room 57): room 2's portal is behind the eye", 0, 0);
+
+	/* AND THIS IS THE BUG. The tween frame draws from room 2 - the logic
+	 * camera has not stepped yet - with the eye already 72 units east of the
+	 * wall, and the sign test refuses the portal. Room 57, and everything the
+	 * walk would have reached through it, is missing for that one frame. */
+	ok(portal_followed(wall, eye, -1) == false,
+		"the tween frame seeded with room 2 DROPS the portal to 57", 0, 0);
+
+	/* WITH THE EYE'S OWN ROOM AS THE SEED the same frame keeps both rooms:
+	 * from room 57 the portal back to room 2 faces the camera, so the walk
+	 * reaches 2 as well and the picture is whole. */
+	ok(portal_followed(back, eye, 1) == true,
+		"seeded with room 57 the portal back to room 2 IS followed", 1, 1);
+
+	/* THE SECOND WAY THE SAME FRAME LOSES THE ROOM. Even where the sign test
+	 * passes, SetRoomBounds drops a portal whose four corners all fall behind
+	 * the eye. The portal quad is the record's own, in room 2's frame:
+	 * (3072,-1792,4096) (3072,256,4096) (3072,256,5120) (3072,-1792,5120)
+	 * plus the room origin 45056/0/33792. */
+	const long quad[4][3] =
+	{
+		{ 45056 + 3072,     -1792, 33792 + 4096 },
+		{ 45056 + 3072,       256, 33792 + 4096 },
+		{ 45056 + 3072,       256, 33792 + 5120 },
+		{ 45056 + 3072,     -1792, 33792 + 5120 }
+	};
+	const long eyeIn[3] = { 48000, -1024, 38400 };		// tick A
+	const long eyeOut[3] = { eye,  -1024, 38400 };		// the tween frame
+	const double east[3] = { 1.0, 0.0, 0.0 };		// looking along +x
+	const double west[3] = { -1.0, 0.0, 0.0 };
+
+	ok(too_near(quad, eyeIn, east) == 0,
+		"from tick A, looking east, no corner of the portal is behind the eye",
+		too_near(quad, eyeIn, east), 0);
+	ok(too_near(quad, eyeOut, east) == 4,
+		"from the blended eye, looking east, tooNear == 4 - the portal is dropped",
+		too_near(quad, eyeOut, east), 4);
+	ok(too_near(quad, eyeOut, west) == 0,
+		"and looking west from the same point it is not - the sign test is the "
+		"one that fires there",
+		too_near(quad, eyeOut, west), 0);
+
+	/* THE WHOLE INTERVAL, and where in it the answer changes. The eye walks
+	 * from tick A to tick B; the portal is followed while it is west of the
+	 * wall and refused after it. At fps_mode 0 there is no point in between
+	 * to ask about, which is the player's first control - the flash is gone
+	 * at thirty because no frame is ever drawn from a blended eye. */
+	{
+		int refused = 0;
+		int first = -1;
+
+		for (int step = 0; step <= 100; step++)
+		{
+			const long at = tickA + (tickB - tickA) * step / 100;
+
+			if (!portal_followed(wall, at, -1))
+			{
+				refused++;
+
+				if (first < 0)
+					first = step;
+			}
+		}
+
+		ok(first == 32, "the portal is refused from 32 % of the way across",
+			first, 32);
+		ok(refused == 69, "and for the rest of the interval", refused, 69);
+		printf("  the eye crosses the wall at x %ld; %d of 101 sampled "
+			"positions between the two ticks draw room 2 without room 57\n",
+			wall, refused);
+	}
+
+	/* THE SAME PAIR THE OTHER WAY. Walking west, the logic room is 57 while
+	 * the eye is already back in room 2, and it is room 57's own portal that
+	 * is refused - the flash is symmetric and neither room is special. */
+	{
+		const long westA = 48200;
+		const long westB = 47800;
+		const long westEye = (westA + westB) / 2;
+
+		ok(portal_followed(back, westA, 1) == true,
+			"tick A (x 48200, room 57): the portal to room 2 IS followed", 1, 1);
+		ok(portal_followed(back, westEye, 1) == false,
+			"the tween frame seeded with room 57 DROPS the portal to room 2",
+			0, 0);
+		ok(portal_followed(wall, westEye, -1) == true,
+			"seeded with room 2 the portal back to 57 IS followed", 1, 1);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4, 5 and 6)\n");
@@ -2014,6 +2188,7 @@ int main()
 	pose_factor();
 	pose_time();
 	particles();
+	portal_walk();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

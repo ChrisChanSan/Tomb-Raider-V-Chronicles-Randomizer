@@ -150,6 +150,57 @@ void InterpInvalidate(const char* why);
  * the mechanism. */
 float InterpFrameAlpha();
 
+/* THE ROOM THE INTERPOLATED EYE REALLY STANDS IN (#123, fix round T2, T2-1).
+ *
+ * WHAT THE PLAY TEST SAW. ANDREA1, the alley off the Piazza dell'Opera, sixty
+ * frames a second, third person: for ONE frame the whole lower room is gone
+ * and the painted city panorama stands where the pavement and the foot of the
+ * brick wall should be, with the hole's edges dead straight along the
+ * vertical portal line. At thirty it never happens, and in first person at
+ * sixty it never happens either.
+ *
+ * WHY. On an in-between frame the EYE is blended (InterpBeginFrame, the
+ * camera block) and the view matrix is rebuilt from it - but the portal walk
+ * was started from `camera.pos.room_number`, which is the LOGIC camera's
+ * room and steps only once per tick. Two lines of GetRoomBounds
+ * (game\draw.cpp) then throw the neighbour away:
+ *
+ *   `if (x && (x ^ p->normal[0]) < 0) SetRoomBounds(...) else continue;`
+ *       - the portal is only followed while the eye is on THIS room's side of
+ *         its plane. Half a step past it, the sign flips and the portal, the
+ *         room behind it and everything beyond are skipped for that frame.
+ *   `if (tooNear == 4) return;` (SetRoomBounds)
+ *       - and if the eye is past the plane by more than the portal is wide,
+ *         all four corners come out at z <= 0 in view space and the portal is
+ *         dropped there as well.
+ *
+ * What is left is the near room drawn alone, with the sky behind the hole
+ * where the far room was - which is exactly the photograph, and exactly why
+ * the hole's edge is the portal's own straight line.
+ *
+ * BOTH OF THE PLAYER'S CONTROLS FOLLOW FROM THAT. At fps_mode 0 no frame is
+ * ever blended, so the eye and the room can never disagree. In first person
+ * the eye rides on Lara's head inside her own room and hardly ever crosses a
+ * portal plane between two ticks; the chase camera swings around corners in
+ * whole sectors and crosses them all the time.
+ *
+ * WHAT THIS ANSWERS. On a frame whose camera really was blended, the room
+ * that CONTAINS the interpolated eye - `GetFloor(x, y, z, &room)` walked from
+ * the logic room, which is the engine's own answer to that question and the
+ * very call camera.cpp makes at every tick (game\camera.cpp:1424, :2103,
+ * :2146, :2296, :2654). Nothing is written back: camera.pos.room_number keeps
+ * the logic room, and only the DRAW's portal walk is seeded from this one.
+ *
+ * On every other frame - fps_mode 0, the frame that carries the tick, a
+ * cutscene, a camera cut, a level start - it returns `logicRoom` unchanged
+ * and not one byte of the picture moves. */
+short InterpEyeRoom(short logicRoom);
+
+/* Which room the camera stood in at the PREVIOUS logic tick, or -1 while
+ * there is no previous state. For ROOMFLASH's line (game\draw.cpp) and for
+ * nothing else - it is a reading, not a part of the mechanism. */
+short InterpPrevCamRoom();
+
 /* THE ONE CRITERION OF ORDER 3 (#148).
  *
  * True when the frame being drawn carries NO logic tick - the in-between

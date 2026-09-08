@@ -1164,10 +1164,33 @@ namespace
 		int level;
 		int count;
 		short rooms[100];
+
+		/* T3-1: and each of those rooms' own window, as the walk left
+		 * it. PrintObjects wipes all four at the end of the frame
+		 * (:1087), so a frame that is judged one frame later has to have
+		 * kept them. This is `left..bottom`, the UNION of every window a
+		 * room was dequeued with, which is the widest of them - so the
+		 * reason worked out from it below is the conservative one: it can
+		 * say "reached" where the walk said "empty", never the other way
+		 * about. */
+		short win[100][4];
+
 		short logic;
 		short eye;
 		short prev;
-		long x, y, z;
+		long x, y, z;			// the LOGIC camera
+
+		/* T3-1: the eye the walk really used. On a tween frame of the
+		 * sixty hertz cadence this is the BLENDED eye and camera.pos is
+		 * half a step behind it - which is the whole of what T2-1 is
+		 * about, and the old line printed the wrong one of the two. */
+		long wx, wy, wz;
+		float mx[indices_count];	// aW2VMx, for the reason below
+
+		long tx, ty, tz;		// camera.target
+		short troom;
+		int camtype, camold, camfixed, camnumber;
+
 		float alpha;
 		int tween;
 		int corrected;
@@ -1185,6 +1208,29 @@ namespace
 	int g_walkPops = 0;
 	unsigned short g_walkLineAt = 0;
 	bool g_walkLineEver = false;
+
+	/* ROOMLIST (#123, fix round T3, T3-1b): the membership of
+	 * draw_rooms, every time it changes, and the whole of it with each
+	 * room's window and distance every five seconds.
+	 *
+	 * MEASURED FIRST, because a seam that fills a log is a seam that
+	 * gets turned off. RoomProbe -walk was run over a full turn on the
+	 * spot at one degree a frame - a pan of sixty degrees a second at
+	 * sixty frames - from the play test's own eyes in JOBY2 room 130
+	 * and ANDREA2 room 210: 16 % of frames see a change at all, and the
+	 * change is 0.24 and 0.33 rooms added-or-removed per frame. That is
+	 * about ten lines a second while the camera is swinging hard and
+	 * none at all while it is still, so at 110 bytes a line ten minutes
+	 * of hard panning is about 640 KiB. The cap below is the safety
+	 * valve for a case worse than the one that was measured, and it is
+	 * set so that even a frame-by-frame change cannot pass 2 MiB in ten
+	 * minutes: 20 lines a second is 1.3 MiB, and the five second dump
+	 * of a forty room list is another 340 KiB. */
+	const int kListLines = 20;
+	const int kListDumpSeconds = 5;
+	int g_listLines = 0;
+	unsigned short g_listDumpAt = 0;
+	bool g_listEver = false;
 
 	/* ROOMPOP (#123, fix round T2, T2-3): a room that JOINS the draw list
 	 * while it is a long way off. See the note over the report below. Four
@@ -1217,6 +1263,242 @@ namespace
 
 		return false;
 	}
+
+	/* WHAT REFUSED A ROOM (#123, fix round T3, T3-1).
+	 *
+	 * The walk is arithmetic on the level's own portal records, and a
+	 * line that says a room is missing without saying which piece of
+	 * that arithmetic dropped it is a line that costs a play test. So
+	 * the two tests are worked out again HERE, out of the note - the
+	 * eye, the view matrix and every listed room's own window - and the
+	 * walk itself is not touched, not read and not slowed: this runs
+	 * only on the frame a ROOMFLASH is already being written, and only
+	 * under -log.
+	 *
+	 * The four answers this can give are the four places a portal to a
+	 * room that is NOT in the list can have been dropped:
+	 *
+	 *   side     the eye is on the far side of the portal's own plane -
+	 *            `if (x && (x ^ p->normal[0]) < 0)` in GetRoomBounds
+	 *   toonear  all four corners fell behind the eye, `tooNear == 4`
+	 *   empty    the rectangle came out with no width or no height
+	 *            after the clamp against the room it was seen through
+	 *   noportal no portal to it out of ANY listed room. That answer is
+	 *            the interesting one: it is what the remaster's art
+	 *            looks like from the inside when it opens a wall the
+	 *            classic level keeps shut.
+	 *
+	 * SetRoomBounds' fifth exit, the early out at its top where the room's
+	 * window already covers what this portal would give it, cannot be the
+	 * answer here and so is not tested for: it only ever fires for a room
+	 * that is in the list ALREADY, and this runs on missing rooms alone.
+	 * RoomProbe -walk, which judges every portal and not only the missing
+	 * ones, does report it, as `covered`.
+	 *
+	 * It is CONSERVATIVE by construction, and the note over `win` says
+	 * why: the window it clamps against is the union of every window
+	 * the room was dequeued with, so it can answer "reached" where the
+	 * walk answered "empty" and never the other way about. */
+	void WhyRoomMissing(const RoomWalkNote& note, short which,
+		char* out, int room_for)
+	{
+		int at = 0;
+		int found = 0;
+
+		out[0] = 0;
+
+		for (int i = 0; i < note.count && at < room_for - 48; i++)
+		{
+			const short from = note.rooms[i];
+			const ROOM_INFO* r;
+			short* door;
+			float mx[indices_count];
+			long drn;
+
+			if (from < 0 || from >= number_rooms)
+				continue;
+
+			r = &room[from];
+			door = r->door;
+
+			if (!door)
+				continue;
+
+			// aTranslateAbs (specific\3dmath.cpp:281) for this room.
+			{
+				const float fx = (float)r->x - note.mx[M03];
+				const float fy = (float)r->y - note.mx[M13];
+				const float fz = (float)r->z - note.mx[M23];
+
+				for (int k = 0; k < indices_count; k++)
+					mx[k] = note.mx[k];
+
+				mx[M03] = fx * mx[M00] + fy * mx[M01] + fz * mx[M02];
+				mx[M13] = fx * mx[M10] + fy * mx[M11] + fz * mx[M12];
+				mx[M23] = fx * mx[M20] + fy * mx[M21] + fz * mx[M22];
+			}
+
+			/* SIXTEEN, not the fifteen GetRoomBounds writes (:2996): a
+			 * ROOM_PORTAL is sixteen shorts, and the walk's own loop steps
+			 * past `rn` inside its body while this one reads the record
+			 * where it stands. calc_animating_item_clip_window (:2717)
+			 * counts the same way this does, corners at door[4] and all. */
+			for (drn = *door++; drn > 0; drn--, door += 16)
+			{
+				ROOM_PORTAL* p = (ROOM_PORTAL*)door;
+				const short* corner = door + 4;
+				const char* why = 0;
+				double a = 0, b = 0, c = 0, d = 0;
+				float vx[4], vy[4], vz[4];
+				float tooNear = 0, tL, tR, tT, tB;
+
+				if (p->rn != which)
+					continue;
+
+				found++;
+
+				// The side test, all three axes, exactly as the walk asks it.
+				if (p->normal[0])
+				{
+					const long x = r->x + p->v1[0] - note.wx;
+
+					if (!(x && (x ^ p->normal[0]) < 0))
+					{
+						why = "side";
+						a = (double)x;
+						b = p->normal[0];
+					}
+				}
+
+				if (!why && p->normal[1])
+				{
+					const long y = r->y + p->v1[1] - note.wy;
+
+					if (!(y && (y ^ p->normal[1]) < 0))
+					{
+						why = "side";
+						a = (double)y;
+						b = p->normal[1];
+					}
+				}
+
+				if (!why && p->normal[2])
+				{
+					const long z = r->z + p->v1[2] - note.wz;
+
+					if (!(z && (z ^ p->normal[2]) < 0))
+					{
+						why = "side";
+						a = (double)z;
+						b = p->normal[2];
+					}
+				}
+
+				// SetRoomBounds (:2795) on the note's own numbers.
+				if (!why)
+				{
+					tL = (float)note.win[i][2];
+					tR = (float)note.win[i][0];
+					tB = (float)note.win[i][1];
+					tT = (float)note.win[i][3];
+
+					for (int k = 0; k < 4; k++, corner += 3)
+					{
+						float x, y, z;
+
+						vx[k] = mx[M00] * corner[0] + mx[M01] * corner[1] +
+							mx[M02] * corner[2] + mx[M03];
+						vy[k] = mx[M10] * corner[0] + mx[M11] * corner[1] +
+							mx[M12] * corner[2] + mx[M13];
+						vz[k] = mx[M20] * corner[0] + mx[M21] * corner[1] +
+							mx[M22] * corner[2] + mx[M23];
+						x = vx[k];
+						y = vy[k];
+						z = vz[k];
+
+						if (z <= 0)
+							tooNear++;
+						else
+						{
+							z /= f_mpersp;
+
+							if (z)
+							{
+								x = x / z + f_centerx;
+								y = y / z + f_centery;
+							}
+							else
+							{
+								// SetRoomBounds' own degenerate branch (:2839). phd_left
+								// and phd_right are still what DrawRooms set them to when
+								// this note is read - 0 and phd_winxmax (:1859), and
+								// nothing between the walk and here touches them.
+								x = x < 0 ? 0.0f : (float)phd_winxmax;
+								y = y < 0 ? 0.0f : (float)phd_winymax;
+							}
+
+							if (x - 1 < tL) tL = x - 1;
+							if (x + 1 > tR) tR = x + 1;
+							if (y - 1 < tT) tT = y - 1;
+							if (y + 1 > tB) tB = y + 1;
+						}
+					}
+
+					if (tooNear == 4)
+					{
+						why = "toonear";
+					}
+					else
+					{
+						if (tooNear > 0)
+							for (int k = 0, last = 3; k < 4; last = k, k++)
+							{
+								if ((vz[last] <= 0) == (vz[k] <= 0))
+									continue;
+
+								if (vx[k] < 0 && vx[last] < 0)
+									tL = 0;
+								else if (vx[k] > 0 && vx[last] > 0)
+									tR = (float)phd_winxmax;
+								else
+								{
+									tL = 0;
+									tR = (float)phd_winxmax;
+								}
+
+								if (vy[k] < 0 && vy[last] < 0)
+									tT = 0;
+								else if (vy[k] > 0 && vy[last] > 0)
+									tB = (float)phd_winymax;
+								else
+								{
+									tT = 0;
+									tB = (float)phd_winymax;
+								}
+							}
+
+						if (tL < note.win[i][0]) tL = note.win[i][0];
+						if (tR > note.win[i][2]) tR = note.win[i][2];
+						if (tT < note.win[i][1]) tT = note.win[i][1];
+						if (tB > note.win[i][3]) tB = note.win[i][3];
+
+						why = (tL >= tR || tT >= tB) ? "empty" : "reached";
+						a = tL;
+						b = tT;
+						c = tR;
+						d = tB;
+					}
+				}
+
+				at += sprintf(&out[at], "%sfrom=%d %s[%.0f %.0f %.0f %.0f]",
+					at ? " " : "", (int)from, why, a, b, c, d);
+				break;
+			}
+		}
+
+		if (!found)
+			sprintf(out, "noportal");
+	}
 }
 
 static void NoteRoomWalk(short logicRoom, short walkRoom)
@@ -1243,7 +1525,20 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		note.count = (int)(sizeof(note.rooms) / sizeof(note.rooms[0]));
 
 	for (int i = 0; i < note.count; i++)
+	{
 		note.rooms[i] = draw_rooms[i];
+
+		/* T3-1: and the window the walk left that room with, because
+		 * PrintObjects wipes all four before this note is ever read. */
+		{
+			const ROOM_INFO* rr = &room[draw_rooms[i]];
+
+			note.win[i][0] = rr->left;
+			note.win[i][1] = rr->top;
+			note.win[i][2] = rr->right;
+			note.win[i][3] = rr->bottom;
+		}
+	}
 
 	note.logic = logicRoom;
 	note.eye = walkRoom;
@@ -1251,6 +1546,27 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	note.x = camera.pos.x;
 	note.y = camera.pos.y;
 	note.z = camera.pos.z;
+
+	/* T3-1: the eye the walk really used, and the matrix it used it
+	 * with. w2v_matrix M03/M13/M23 are the camera POSITION and not a
+	 * translation term (specific\\3dmath.cpp:725), which is why the
+	 * side test in GetRoomBounds can subtract them straight off a
+	 * portal corner. */
+	note.wx = w2v_matrix[M03];
+	note.wy = w2v_matrix[M13];
+	note.wz = w2v_matrix[M23];
+
+	for (int i = 0; i < indices_count; i++)
+		note.mx[i] = aW2VMx[i];
+
+	note.tx = camera.target.x;
+	note.ty = camera.target.y;
+	note.tz = camera.target.z;
+	note.troom = camera.target.room_number;
+	note.camtype = (int)camera.type;
+	note.camold = (int)camera.old_type;
+	note.camfixed = (int)camera.fixed_camera;
+	note.camnumber = (int)camera.number;
 	note.alpha = InterpFrameAlpha();
 	note.tween = InterpIsTweenFrame() ? 1 : 0;
 	note.corrected = walkRoom != logicRoom ? 1 : 0;
@@ -1291,12 +1607,39 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			const RoomWalkNote& bad = g_walkNote[1];
 
 			g_walkFlashes++;
+
+			/* T3-1: the walk eye beside the logic one, the camera that
+			 * chose it and what it was aimed at. Two of those three are
+			 * new: the old line printed camera.pos, which on a tween frame
+			 * is half a step behind the eye the walk really used, and it
+			 * printed no camera state at all - so a flash under a fixed
+			 * camera or on the frame of a cut looked like any other. */
 			Log("ROOMFLASH frame=%u tween=%d alpha=%.2f logic_room=%d "
-				"eye_room=%d prev_cam_room=%d eye=(%d,%d,%d) rooms=%d "
-				"missing=%s corrected=%d",
+				"eye_room=%d prev_cam_room=%d eye=(%d,%d,%d) "
+				"walk_eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d "
+				"cam=%d/%d fixed=%d number=%d rooms=%d missing=%s "
+				"corrected=%d",
 				bad.serial, bad.tween, bad.alpha, (int)bad.logic,
 				(int)bad.eye, (int)bad.prev, (int)bad.x, (int)bad.y,
-				(int)bad.z, bad.count, missing, bad.corrected);
+				(int)bad.z, (int)bad.wx, (int)bad.wy, (int)bad.wz,
+				(int)bad.tx, (int)bad.ty, (int)bad.tz, (int)bad.troom,
+				bad.camtype, bad.camold, bad.camfixed, bad.camnumber,
+				bad.count, missing, bad.corrected);
+
+			/* And one line per missing room saying what dropped it, worked
+			 * out from the note the walk left behind. */
+			for (int i = 0; i < g_walkNote[0].count; i++)
+			{
+				const short which = g_walkNote[0].rooms[i];
+				char why[192];
+
+				if (WalkHolds(bad, which) || !WalkHolds(g_walkNote[2], which))
+					continue;
+
+				WhyRoomMissing(bad, which, why, (int)sizeof(why));
+				Log("ROOMFLASH frame=%u room=%d why %s", bad.serial,
+					(int)which, why);
+			}
 		}
 	}
 
@@ -1357,6 +1700,103 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		}
 	}
 
+	/* ROOMLIST - WHAT THE WALK HANDS THE PICTURE, AND WHAT IT DOES NOT
+	 * (#123, fix round T3, T3-1b). Behind -log, and it stays.
+	 *
+	 * WHY. The HD path has no visibility test of its own - fix round T2
+	 * measured that and the frame line's dropped= has read 0 through
+	 * every play test since - so the rooms it draws ARE draw_rooms, and
+	 * anything the player sees as black through a hole is a room this
+	 * list has not got. ROOMFLASH names a room that comes and goes
+	 * between two frames; this names the list itself.
+	 *
+	 * THE FIVE SECOND DUMP CARRIES THE ONE LINE THAT WILL NAME THE
+	 * TORN WALL. Beside each drawn room it lists that room's portal
+	 * neighbours that are NOT drawn, with the reason - and "noportal"
+	 * for the rooms whose art stands inside a drawn room with no portal
+	 * to it at all, which is what the remaster's opened-up wall looks
+	 * like from the inside. A player standing at the hole and seeing
+	 * black is standing in a room whose shadow list holds the room he
+	 * cannot see. */
+	if (gLogEnabled && g_walkHeld >= 2 &&
+		g_walkNote[1].level == g_walkNote[2].level &&
+		g_walkNote[2].serial == g_walkNote[1].serial + 1)
+	{
+		const RoomWalkNote& now = g_walkNote[2];
+		const RoomWalkNote& was = g_walkNote[1];
+		char added[160], removed[160];
+		int a = 0, r = 0;
+
+		added[0] = 0;
+		removed[0] = 0;
+
+		for (int i = 0; i < now.count; i++)
+			if (!WalkHolds(was, now.rooms[i]) && a < (int)sizeof(added) - 8)
+				a += sprintf(&added[a], a ? ",%d" : "%d", (int)now.rooms[i]);
+
+		for (int i = 0; i < was.count; i++)
+			if (!WalkHolds(now, was.rooms[i]) && r < (int)sizeof(removed) - 8)
+				r += sprintf(&removed[r], r ? ",%d" : "%d", (int)was.rooms[i]);
+
+		if ((a || r) && g_listLines < kListLines)
+		{
+			g_listLines++;
+			Log("ROOMLIST frame=%u tween=%d cam_room=%d walk_room=%d "
+				"eye=(%d,%d,%d) rooms=%d added=%s removed=%s", now.serial,
+				now.tween, (int)now.logic, (int)now.eye, (int)now.wx,
+				(int)now.wy, (int)now.wz, now.count, a ? added : "-",
+				r ? removed : "-");
+		}
+
+		if ((unsigned short)(GlobalCounter - g_listDumpAt) >=
+			30 * kListDumpSeconds || !g_listEver)
+		{
+			g_listDumpAt = GlobalCounter;
+			g_listEver = true;
+
+			Log("ROOMLIST frame=%u the whole list, %d room(s), eye=(%d,%d,%d)",
+				now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz);
+
+			for (int i = 0; i < now.count; i++)
+			{
+				const short which = now.rooms[i];
+				const ROOM_INFO* rr;
+				char shadow[192];
+				short* door;
+				long drn;
+				int at = 0;
+
+				if (which < 0 || which >= number_rooms)
+					continue;
+
+				rr = &room[which];
+				shadow[0] = 0;
+				door = rr->door;
+
+				if (door)
+					// Sixteen: see the note at the same loop above.
+					for (drn = *door++; drn > 0; drn--, door += 16)
+					{
+						ROOM_PORTAL* p = (ROOM_PORTAL*)door;
+
+						if (WalkHolds(now, p->rn) ||
+							at >= (int)sizeof(shadow) - 8)
+							continue;
+
+						at += sprintf(&shadow[at], at ? ",%d" : "%d",
+							(int)p->rn);
+					}
+
+				Log("ROOMLIST   room=%d window=%d,%d..%d,%d dist=%d "
+					"outside=%d shadow=%s", (int)which, (int)now.win[i][0],
+					(int)now.win[i][1], (int)now.win[i][2],
+					(int)now.win[i][3],
+					(int)RoomDistance(rr, now.wx, now.wy, now.wz),
+					(rr->flags & ROOM_OUTSIDE) ? 1 : 0, at ? shadow : "-");
+			}
+		}
+	}
+
 	// One line a second, and only while there is something to say. The
 	// counter ticks thirty times a second at every fps_mode.
 	if ((unsigned short)(GlobalCounter - g_walkLineAt) >= 30 || !g_walkLineEver)
@@ -1372,6 +1812,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		g_walkCorrections = 0;
 		g_walkFlashes = 0;
 		g_walkPops = 0;
+		g_listLines = 0;
 	}
 }
 

@@ -1219,6 +1219,633 @@ static long g_clip_box[4] = { 0, 0, 0, 0 };
 static int g_tround_group = -1;
 static long g_tround_box[4] = { 0, 0, 0, 0 };
 
+/* -walk (#123, fix round T3, T3-2): THE CLASSIC PORTAL WALK, RUN OFFLINE.
+ *
+ * WHY. The play test's ROOMFLASH lines say a room was in the draw list on the
+ * frame before and on the frame after and not on the one in between. The line
+ * names the eye but not what refused the portal, and the walk is the one part
+ * of the picture no renderer can show: it is arithmetic on the classic level's
+ * own portal records. So this runs that arithmetic here, from the classic
+ * .TRC alone, with no device, no .TRG and no picture - the two functions
+ * copied line for line out of game\draw.cpp (`GetRoomBounds` :2939 and
+ * `SetRoomBounds` :2795) with their own names on the numbers.
+ *
+ * WHAT IT ANSWERS. Given an eye and a seed room it prints the room list, and
+ * for a room named with -walkwant the REASON that room is or is not in it:
+ *
+ *   reached      a portal from a listed room put it in the list
+ *   side         `if (x && (x ^ p->normal[0]) < 0)` - the eye is on the far
+ *                side of the portal's own plane (game\draw.cpp:3010)
+ *   toonear      all four corners fell behind the eye, `tooNear == 4`
+ *                (game\draw.cpp:2863)
+ *   empty        the rectangle came out with no width or no height after the
+ *                clamp against the room it was seen through
+ *   covered      the room's window already covers what this portal would give
+ *                it - the early out at the top of SetRoomBounds; not a
+ *                refusal, the room is in the list already
+ *   not reached  no portal to it out of ANY listed room, on any test
+ *
+ * AND A FAN OVER THE VIEW. The ROOMFLASH line has no camera angle in it -
+ * that is what T3-1 adds to the seam - so the answer is asked at every yaw of
+ * a fan instead, which also says the thing worth knowing: whether a room is
+ * refused at a hair's breadth of one view direction (a portal sliver that
+ * crosses the sub pixel threshold, which is ordinary and always has been) or
+ * over a whole arc (which would be a rule).
+ *
+ * The window is -size, so it must be given the play test's own resolution to
+ * mean anything. */
+namespace walkoff
+{
+	struct Room
+	{
+		long x, y, z;
+		long ceiling, floor;		// world y, the classic room box
+		int xs, zs;
+		unsigned flags;
+		short left, right, top, bottom;
+		short test_left, test_right, test_top, test_bottom;
+		char bound_active;
+		std::vector<Tr5Level::PortalRecord> doors;
+	};
+
+	static std::vector<Room> g_room;
+	static long g_list[128];
+	static long g_start, g_end;
+	static std::vector<short> g_drawn;
+	static short g_winxmax, g_winymax;
+	static float g_persp, g_centerx, g_centery;
+	static float g_view[9];			// the eye's rotation, rows first
+	static long g_eye[3];
+
+	// Every portal the walk looked at this run, with what became of it.
+	struct Verdict
+	{
+		int from, to;
+		char why[16];
+		double n[4];
+	};
+
+	static std::vector<Verdict> g_verdict;
+
+	static void Note(int from, int to, const char* why,
+		double a, double b, double c, double d)
+	{
+		Verdict v;
+
+		v.from = from;
+		v.to = to;
+		strncpy(v.why, why, sizeof(v.why) - 1);
+		v.why[sizeof(v.why) - 1] = 0;
+		v.n[0] = a;
+		v.n[1] = b;
+		v.n[2] = c;
+		v.n[3] = d;
+		g_verdict.push_back(v);
+	}
+
+	/* SetRoomBounds (game\draw.cpp:2795), with `aMXPtr` handed in as the nine
+	 * rotation terms plus the three translation ones that phd_TranslateAbs
+	 * works out for the room the portal is seen FROM. */
+	static void SetRoomBounds(const Tr5Level::PortalRecord& p, int rn,
+		Room& actualRoom, const float* mx, int fromRoom)
+	{
+		Room& r = g_room[(size_t)rn];
+		float vx[4], vy[4], vz[4];
+		float x, y, z, tooNear, tL, tR, tT, tB;
+
+		if (r.left <= actualRoom.test_left && r.right >= actualRoom.test_right &&
+			r.top <= actualRoom.test_top && r.bottom >= actualRoom.test_bottom)
+		{
+			Note(fromRoom, rn, "covered", r.left, r.top, r.right, r.bottom);
+			return;
+		}
+
+		tL = (float)actualRoom.test_right;
+		tR = (float)actualRoom.test_left;
+		tB = (float)actualRoom.test_top;
+		tT = (float)actualRoom.test_bottom;
+		tooNear = 0;
+
+		for (int i = 0; i < 4; i++)
+		{
+			const float dx = (float)p.v[i][0];
+			const float dy = (float)p.v[i][1];
+			const float dz = (float)p.v[i][2];
+
+			vx[i] = mx[0] * dx + mx[1] * dy + mx[2] * dz + mx[3];
+			vy[i] = mx[4] * dx + mx[5] * dy + mx[6] * dz + mx[7];
+			vz[i] = mx[8] * dx + mx[9] * dy + mx[10] * dz + mx[11];
+			x = vx[i];
+			y = vy[i];
+			z = vz[i];
+
+			if (z <= 0)
+				tooNear++;
+			else
+			{
+				z /= g_persp;
+
+				if (z)
+				{
+					x = x / z + g_centerx;
+					y = y / z + g_centery;
+				}
+				else
+				{
+					x = x < 0 ? 0.0f : (float)g_winxmax;
+					y = y < 0 ? 0.0f : (float)g_winymax;
+				}
+
+				if (x - 1 < tL) tL = x - 1;
+				if (x + 1 > tR) tR = x + 1;
+				if (y - 1 < tT) tT = y - 1;
+				if (y + 1 > tB) tB = y + 1;
+			}
+		}
+
+		if (tooNear == 4)
+		{
+			Note(fromRoom, rn, "toonear", 4, 0, 0, 0);
+			return;
+		}
+
+		if (tooNear > 0)
+		{
+			for (int i = 0, last = 3; i < 4; last = i, i++)
+			{
+				if ((vz[last] <= 0) == (vz[i] <= 0))
+					continue;
+
+				if (vx[i] < 0 && vx[last] < 0)
+					tL = 0;
+				else if (vx[i] > 0 && vx[last] > 0)
+					tR = (float)g_winxmax;
+				else
+				{
+					tL = 0;
+					tR = (float)g_winxmax;
+				}
+
+				if (vy[i] < 0 && vy[last] < 0)
+					tT = 0;
+				else if (vy[i] > 0 && vy[last] > 0)
+					tB = (float)g_winymax;
+				else
+				{
+					tT = 0;
+					tB = (float)g_winymax;
+				}
+			}
+		}
+
+		if (tL < actualRoom.test_left) tL = actualRoom.test_left;
+		if (tR > actualRoom.test_right) tR = actualRoom.test_right;
+		if (tT < actualRoom.test_top) tT = actualRoom.test_top;
+		if (tB > actualRoom.test_bottom) tB = actualRoom.test_bottom;
+
+		if (tL >= tR || tT >= tB)
+		{
+			Note(fromRoom, rn, "empty", tL, tT, tR, tB);
+			return;
+		}
+
+		if (r.bound_active & 2)
+		{
+			if (tL < r.test_left) r.test_left = (short)tL;
+			if (tT < r.test_top) r.test_top = (short)tT;
+			if (tR > r.test_right) r.test_right = (short)tR;
+			if (tB > r.test_bottom) r.test_bottom = (short)tB;
+			Note(fromRoom, rn, "widened", tL, tT, tR, tB);
+		}
+		else
+		{
+			g_list[g_end % 128] = rn;
+			g_end++;
+			r.bound_active |= 2;
+			r.test_left = (short)tL;
+			r.test_right = (short)tR;
+			r.test_top = (short)tT;
+			r.test_bottom = (short)tB;
+			Note(fromRoom, rn, "reached", tL, tT, tR, tB);
+		}
+	}
+
+	/* GetRoomBounds (game\draw.cpp:2939). ROOM_OUTSIDE and the snow flag are
+	 * left out - they change no room list. */
+	static void GetRoomBounds()
+	{
+		while (g_start != g_end)
+		{
+			const long rn = g_list[g_start % 128];
+			float mx[12];
+
+			g_start++;
+
+			Room& r = g_room[(size_t)rn];
+			r.bound_active -= 2;
+
+			if (r.test_left < r.left) r.left = r.test_left;
+			if (r.test_top < r.top) r.top = r.test_top;
+			if (r.test_right > r.right) r.right = r.test_right;
+			if (r.test_bottom > r.bottom) r.bottom = r.test_bottom;
+
+			if (!(r.bound_active & 1))
+			{
+				g_drawn.push_back((short)rn);
+				r.bound_active |= 1;
+			}
+
+			// phd_TranslateAbs(r->x, r->y, r->z) on top of the eye's rotation.
+			{
+				const float fx = (float)(r.x - g_eye[0]);
+				const float fy = (float)(r.y - g_eye[1]);
+				const float fz = (float)(r.z - g_eye[2]);
+
+				for (int row = 0; row < 3; row++)
+				{
+					mx[row * 4 + 0] = g_view[row * 3 + 0];
+					mx[row * 4 + 1] = g_view[row * 3 + 1];
+					mx[row * 4 + 2] = g_view[row * 3 + 2];
+					mx[row * 4 + 3] = fx * g_view[row * 3 + 0] +
+						fy * g_view[row * 3 + 1] + fz * g_view[row * 3 + 2];
+				}
+			}
+
+			for (size_t d = 0; d < r.doors.size(); d++)
+			{
+				const Tr5Level::PortalRecord& p = r.doors[d];
+				const int to = p.toRoom;
+
+				if (to < 0 || to >= (int)g_room.size())
+					continue;
+
+				if (p.nx)
+				{
+					const long x = r.x + p.v[0][0] - g_eye[0];
+
+					if (x && (x ^ p.nx) < 0)
+						SetRoomBounds(p, to, r, mx, (int)rn);
+					else
+					{
+						Note((int)rn, to, "side", (double)x, p.nx, 0, 0);
+						continue;
+					}
+				}
+
+				if (p.ny)
+				{
+					const long y = r.y + p.v[0][1] - g_eye[1];
+
+					if (y && (y ^ p.ny) < 0)
+						SetRoomBounds(p, to, r, mx, (int)rn);
+					else
+					{
+						Note((int)rn, to, "side", (double)y, p.ny, 1, 0);
+						continue;
+					}
+				}
+
+				if (p.nz)
+				{
+					const long z = r.z + p.v[0][2] - g_eye[2];
+
+					if (z && (z ^ p.nz) < 0)
+						SetRoomBounds(p, to, r, mx, (int)rn);
+					else
+					{
+						Note((int)rn, to, "side", (double)z, p.nz, 2, 0);
+						continue;
+					}
+				}
+			}
+		}
+	}
+
+	static bool Load(const std::string& folder, const char* stem)
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = folder + "\\" + std::string(stem) + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		if (!level.load(wide, error))
+		{
+			printf("-walk: could not read %s (%s)\n", trc.c_str(), error.c_str());
+			return false;
+		}
+
+		g_room.resize((size_t)level.roomCount());
+
+		for (int i = 0; i < level.roomCount(); i++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)i];
+			Room& r = g_room[(size_t)i];
+			unsigned yOrigin = 0;
+
+			level.headerField(i, 24, yOrigin, error);
+			r.x = rm.originX;
+			r.y = (long)(int)yOrigin;
+			r.z = rm.originZ;
+			r.xs = rm.numXSectors;
+			r.zs = rm.numZSectors;
+
+			{
+				unsigned yTop = 0;
+
+				level.headerField(i, 36, yTop, error);
+				r.ceiling = (long)(int)yTop;
+				r.floor = rm.yBottom;
+			}
+			r.flags = rm.flags;
+			level.portalRecords(i, r.doors, error);
+		}
+
+		printf("-walk: %d rooms out of %s\n", (int)g_room.size(), trc.c_str());
+		return true;
+	}
+
+	// One frame of the walk. Returns the room list.
+	static void One(int seed, long ex, long ey, long ez, double yawDeg,
+		double pitchDeg, long width, long height, double fov)
+	{
+		const double d2r = 3.14159265358979323846 / 180.0;
+		const double sy = sin(yawDeg * d2r), cy = cos(yawDeg * d2r);
+		const double sp = sin(pitchDeg * d2r), cp = cos(pitchDeg * d2r);
+
+		/* The three rows of the eye's rotation, in the sense LookAt uses
+		 * above: yaw 0 looks along +Z and grows towards +X, pitch > 0 looks
+		 * down. Right, up-as-y-grows-downwards, forward. */
+		g_view[0] = (float)cy;          g_view[1] = 0.0f;       g_view[2] = (float)-sy;
+		g_view[3] = (float)(-sy * sp);  g_view[4] = (float)cp;  g_view[5] = (float)(-cy * sp);
+		g_view[6] = (float)(sy * cp);   g_view[7] = (float)sp;  g_view[8] = (float)(cy * cp);
+
+		g_winxmax = (short)(width - 1);
+		g_winymax = (short)(height - 1);
+		g_centerx = (float)(width / 2);
+		g_centery = (float)(height / 2);
+		g_persp = (float)EnginePersp(height, fov);
+		g_eye[0] = ex;
+		g_eye[1] = ey;
+		g_eye[2] = ez;
+
+		for (size_t i = 0; i < g_room.size(); i++)
+		{
+			Room& r = g_room[i];
+
+			// What PrintObjects (game\draw.cpp:1087) leaves behind.
+			r.left = g_winxmax;
+			r.top = g_winymax;
+			r.right = 0;
+			r.bottom = 0;
+			r.bound_active = 0;
+		}
+
+		g_verdict.clear();
+		g_drawn.clear();
+		g_start = 0;
+		g_end = 1;
+		g_list[0] = seed;
+
+		{
+			Room& r = g_room[(size_t)seed];
+
+			r.test_left = 0;
+			r.test_top = 0;
+			r.test_right = g_winxmax;
+			r.test_bottom = g_winymax;
+			r.bound_active = 2;
+		}
+
+		GetRoomBounds();
+	}
+
+	// The distance from a point to a room's box, 0 inside it - the same
+	// arithmetic as RoomDistance in game\draw.cpp, which is what the
+	// ROOMPOP line measures with.
+	static long BoxDistance(const Room& r, long x, long y, long z)
+	{
+		const long x0 = r.x, x1 = r.x + (long)r.xs * 1024;
+		const long z0 = r.z, z1 = r.z + (long)r.zs * 1024;
+		const long dx = x < x0 ? x0 - x : (x > x1 ? x - x1 : 0);
+		const long dz = z < z0 ? z0 - z : (z > z1 ? z - z1 : 0);
+		const long dy = y < r.ceiling ? r.ceiling - y
+			: (y > r.floor ? y - r.floor : 0);
+
+		return (long)sqrt((double)dx * dx + (double)dy * dy + (double)dz * dz);
+	}
+
+	static bool Holds(int which)
+	{
+		for (size_t i = 0; i < g_drawn.size(); i++)
+			if (g_drawn[i] == which)
+				return true;
+
+		return false;
+	}
+
+	static void Why(int want)
+	{
+		if (Holds(want))
+		{
+			for (size_t i = 0; i < g_verdict.size(); i++)
+				if (g_verdict[i].to == want && !strcmp(g_verdict[i].why, "reached"))
+				{
+					printf("      room %d REACHED from room %d, window %.0f,%.0f..%.0f,%.0f\n",
+						want, g_verdict[i].from, g_verdict[i].n[0],
+						g_verdict[i].n[1], g_verdict[i].n[2], g_verdict[i].n[3]);
+					return;
+				}
+
+			printf("      room %d is in the list (seed)\n", want);
+			return;
+		}
+
+		int seen = 0;
+
+		for (size_t i = 0; i < g_verdict.size(); i++)
+			if (g_verdict[i].to == want)
+			{
+				printf("      room %d REFUSED from room %d by %-8s "
+					"[%.0f %.0f %.0f %.0f]\n", want, g_verdict[i].from,
+					g_verdict[i].why, g_verdict[i].n[0], g_verdict[i].n[1],
+					g_verdict[i].n[2], g_verdict[i].n[3]);
+				seen++;
+			}
+
+		if (!seen)
+			printf("      room %d NOT REACHED - no portal to it out of any "
+				"listed room\n", want);
+	}
+}
+
+/* The whole of -walk, from the command line. Returns the process exit code. */
+static int RunWalk(const std::string& folder, const char* stem, int seed,
+	long ex, long ey, long ez, const double* yawFan, const double* pitchFan,
+	int want, long width, long height, double fov, bool verbose)
+{
+	if (!walkoff::Load(folder, stem))
+		return 5;
+
+	if (seed < 0 || seed >= (int)walkoff::g_room.size())
+	{
+		printf("-walk: room %d is not in this level\n", seed);
+		return 5;
+	}
+
+	printf("-walk: rooms whose box holds the eye %ld/%ld/%ld:", ex, ey, ez);
+
+	for (size_t i = 0; i < walkoff::g_room.size(); i++)
+	{
+		const walkoff::Room& r = walkoff::g_room[i];
+
+		if (ex >= r.x && ex <= r.x + (long)r.xs * 1024 &&
+			ez >= r.z && ez <= r.z + (long)r.zs * 1024)
+			printf(" %d", (int)i);
+	}
+
+	printf("\n");
+
+	printf("-walk: %s seed room %d, eye %ld/%ld/%ld, %ldx%ld, fov %.0f\n",
+		stem, seed, ex, ey, ez, width, height, fov);
+
+	std::vector<int> tally((size_t)walkoff::g_room.size(), 0);
+	int frames = 0, wantIn = 0;
+	int mostRooms = 0, fewestRooms = 1 << 30;
+
+	/* T3-2: what became of the wanted room over the whole fan. The
+	 * widest window it ever gets is the number that matters - a room
+	 * that only ever enters the picture as a sliver a few pixels wide
+	 * at the rim is a room whose coming and going costs those pixels
+	 * and nothing else. */
+	int whyCount[6] = { 0, 0, 0, 0, 0, 0 };
+	double widest = 0, tallest = 0, narrowest = 1e9, shortest = 1e9;
+
+	for (double pitch = pitchFan[0]; pitch <= pitchFan[1] + 1e-9;
+		pitch += pitchFan[2] > 0 ? pitchFan[2] : 1.0)
+	for (double yaw = yawFan[0]; yaw <= yawFan[1] + 1e-9; yaw += yawFan[2])
+	{
+		walkoff::One(seed, ex, ey, ez, yaw, pitch, width, height, fov);
+		frames++;
+
+		if ((int)walkoff::g_drawn.size() > mostRooms)
+			mostRooms = (int)walkoff::g_drawn.size();
+
+		if ((int)walkoff::g_drawn.size() < fewestRooms)
+			fewestRooms = (int)walkoff::g_drawn.size();
+
+		for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+			tally[(size_t)walkoff::g_drawn[i]]++;
+
+		if (want >= 0)
+		{
+			if (walkoff::Holds(want))
+				wantIn++;
+
+			for (size_t i = 0; i < walkoff::g_verdict.size(); i++)
+			{
+				const walkoff::Verdict& v = walkoff::g_verdict[i];
+
+				if (v.to != want)
+					continue;
+
+				if (!strcmp(v.why, "reached"))
+				{
+					const double w = v.n[2] - v.n[0];
+					const double h = v.n[3] - v.n[1];
+
+					whyCount[0]++;
+
+					if (w > widest) widest = w;
+					if (h > tallest) tallest = h;
+					if (w < narrowest) narrowest = w;
+					if (h < shortest) shortest = h;
+				}
+				else if (!strcmp(v.why, "side"))     whyCount[1]++;
+				else if (!strcmp(v.why, "toonear"))  whyCount[2]++;
+				else if (!strcmp(v.why, "empty"))    whyCount[3]++;
+				else if (!strcmp(v.why, "covered"))  whyCount[4]++;
+				else                                 whyCount[5]++;
+			}
+		}
+
+		if (verbose)
+		{
+			printf("  yaw %6.1f  rooms=%d:", yaw, (int)walkoff::g_drawn.size());
+
+			for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+				printf(" %d", (int)walkoff::g_drawn[i]);
+
+			printf("\n");
+
+			if (want >= 0)
+				walkoff::Why(want);
+		}
+	}
+
+	printf("-walk: %d view directions, rooms per frame %d..%d\n",
+		frames, fewestRooms, mostRooms);
+
+	if (want >= 0)
+	{
+		printf("-walk: room %d is in the list on %d of %d directions (%.0f%%)\n",
+			want, wantIn, frames, frames ? 100.0 * wantIn / frames : 0.0);
+		printf("-walk: room %d  reached=%d side=%d toonear=%d empty=%d "
+			"covered=%d widened=%d\n", want, whyCount[0], whyCount[1],
+			whyCount[2], whyCount[3], whyCount[4], whyCount[5]);
+
+		if (whyCount[0])
+			printf("-walk: room %d window when it IS reached: width %.0f..%.0f "
+				"of %ld, height %.0f..%.0f of %ld\n", want, narrowest, widest,
+				width, shortest, tallest, height);
+	}
+
+	/* T3-3: the rooms the walk reaches, and the rooms it never reaches -
+	 * with the distance from the eye and the ROOM_OUTSIDE flag beside
+	 * each. The second list is what a "draw the near outside rooms
+	 * anyway" rule would be adding, so its length IS that rule's cost. */
+	int outNear = 0, outAll = 0, neverNear = 0;
+
+	printf("-walk: how often each room is in the list\n");
+
+	for (size_t i = 0; i < tally.size(); i++)
+	{
+		const walkoff::Room& r = walkoff::g_room[i];
+		const long d = walkoff::BoxDistance(r, ex, ey, ez);
+		const bool out = (r.flags & 0x8) != 0;
+
+		if (out)
+			outAll++;
+
+		if (out && d <= 16384)
+			outNear++;
+
+		if (tally[i])
+			printf("    room %3d  %4d of %d   dist %6ld  %s\n", (int)i,
+				tally[i], frames, d, out ? "OUTSIDE" : "");
+		else if (d <= 16384)
+			neverNear++;
+	}
+
+	printf("-walk: rooms never reached on any direction and within 16 sectors: %d\n", neverNear);
+	printf("-walk: ROOM_OUTSIDE rooms: %d of %d in the level, %d of them "
+		"within 16 sectors of this eye\n", outAll, (int)tally.size(), outNear);
+
+	for (size_t i = 0; i < tally.size(); i++)
+	{
+		const walkoff::Room& r = walkoff::g_room[i];
+		const long d = walkoff::BoxDistance(r, ex, ey, ez);
+
+		if (!tally[i] && d <= 16384)
+			printf("    never  room %3d  dist %6ld  %s\n", (int)i, d,
+				(r.flags & 0x8) ? "OUTSIDE" : "");
+	}
+
+	return 0;
+}
+
 static int CountIntrusionPairs()
 {
 	int n = 0;
@@ -1994,6 +2621,11 @@ int main(int argc, char** argv)
 		printf("       -window all|open|intruding   (needs -roombox)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      round T's own picture\n");
+		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
+		printf("                                      offline (needs -roombox)\n");
+		printf("       -walkyaw <from> <to> <step>   default 0 359 15\n");
+		printf("       -walkpitch <deg>  -walkpitchfan <from> <to> <step>\n");
+		printf("       -walkwant <room>  -walkeach\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		return 1;
@@ -2015,6 +2647,14 @@ int main(int argc, char** argv)
 	// them.
 	bool sky = false, skyOnly = false;
 	bool wibbleGiven = false;
+
+	// T3-2: the portal walk offline. A seed of -1 means the switch was
+	// not given and nothing below changes.
+	int walkSeed = -1, walkWant = -1;
+	long walkEye[3] = { 0, 0, 0 };
+	double walkYaw[3] = { 0.0, 359.0, 15.0 };
+	double walkPitch[3] = { 0.0, 0.0, 1.0 };
+	bool walkEach = false;
 	int threads = 8, rooms = 0;
 
 	// Stage S6.
@@ -2161,6 +2801,37 @@ int main(int argc, char** argv)
 			g_roombox = argv[at + 1];
 			at += 1;
 		}
+		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
+		{
+			walkSeed = atoi(argv[at + 1]);
+			walkEye[0] = atol(argv[at + 2]);
+			walkEye[1] = atol(argv[at + 3]);
+			walkEye[2] = atol(argv[at + 4]);
+			at += 4;
+		}
+		else if (!strcmp(argv[at], "-walkyaw") && at + 3 < argc)
+		{
+			walkYaw[0] = atof(argv[at + 1]);
+			walkYaw[1] = atof(argv[at + 2]);
+			walkYaw[2] = atof(argv[at + 3]);
+			at += 3;
+		}
+		else if (!strcmp(argv[at], "-walkpitch") && at + 1 < argc)
+		{
+			walkPitch[0] = walkPitch[1] = atof(argv[++at]);
+			walkPitch[2] = 1.0;
+		}
+		else if (!strcmp(argv[at], "-walkpitchfan") && at + 3 < argc)
+		{
+			walkPitch[0] = atof(argv[at + 1]);
+			walkPitch[1] = atof(argv[at + 2]);
+			walkPitch[2] = atof(argv[at + 3]);
+			at += 3;
+		}
+		else if (!strcmp(argv[at], "-walkwant") && at + 1 < argc)
+			walkWant = atoi(argv[++at]);
+		else if (!strcmp(argv[at], "-walkeach"))
+			walkEach = true;
 		else if (!strcmp(argv[at], "-tround") && at + 2 < argc)
 		{
 			g_tround_group = atoi(argv[at + 1]);
@@ -2332,6 +3003,21 @@ int main(int argc, char** argv)
 		stem, room, managed ? "MANAGED" : "DEFAULT", threads);
 	printf("install: %s\n", root);
 	printf("commit before anything: %.1f MiB\n", CommitMiB());
+
+	/* T3-2: -walk needs no device, no .TRG and no picture - only the
+	 * classic level - so it runs here, before the window exists. */
+	if (walkSeed >= 0)
+	{
+		if (g_roombox.empty())
+		{
+			printf("-walk needs -roombox <folder holding the classic .TRC>\n");
+			return 5;
+		}
+
+		return RunWalk(g_roombox, stem, walkSeed, walkEye[0], walkEye[1],
+			walkEye[2], walkYaw, walkPitch,
+			walkWant, width, height, fov, walkEach);
+	}
 
 	if (!MakeDevice())
 	{

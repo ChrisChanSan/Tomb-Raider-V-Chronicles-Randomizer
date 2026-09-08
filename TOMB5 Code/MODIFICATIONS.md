@@ -7702,6 +7702,250 @@ a portal window really is, and what `-scissor` could not do), and
 `-tround <g> <l,t,r,b>` draws one group the way fix round T drew it,
 which is the "before" of every picture above.
 
+#### Fix round T3 - the rooms a third time: the black room behind the torn wall, the tower of Trajan's Markets, and the seams that name the refused portal (#123, #148)
+
+The play test of 2026-09-08 - the T2 build stamped 19:50:31, sixty frames a
+second, third person - came back with two things and a bisect, and this round
+is almost all measurement. Nothing in it changes a picture: the two engine
+changes are both inside `NoteRoomWalk`, which returns at its first line
+without `-log`.
+
+* **JOBY2, the "broken wall".** An edge that is solid in the classic level is
+  see-through in HD - the remaster's art has a torn-open wall there - and
+  through the hole the room behind is **black**. *"Raeume die weiter als 1 weg
+  sind bekommen ein schwarzes Portal."* Its history: under group M a black
+  STRIPE along the tear, straight, the scissor edge of the room behind; since
+  T2 the whole room behind, from some angles. And the player's own bisect,
+  which is what makes this round possible: *"Der Bug in Joby2 war frueher
+  anders. Mehr wandbasiert als portalbasiert."* - **the wall was see-through
+  before any room fix existed.** This is not a regression of T2 or of group M.
+* **ANDREA2, the tower.** *"Der Turm wird zu spaet geladen und ploppt im
+  Sichtbereich auf."* Bisect: before T2 the tower was never drawn at all
+  (*"Der Turm war nie da. Jetzt ist er erst gekommen"*) - T2-2, which stopped
+  an empty window silencing a whole room, is what made it visible; now its
+  room joins the draw list late.
+* And the log itself: 54 `ROOMFLASH`, 371 `ROOMPOP`, 226 `ROOMWALK`, 265
+  `INTERPLOG` lines over 22,421 lines of JOBY2.
+
+---
+
+**T3-1 - the seams. What refused the portal, and what the list is.**
+
+*The tool first, because everything below is measured with it.* `RoomProbe
+-walk` runs THE CLASSIC PORTAL WALK OFFLINE, out of the classic `.TRC` alone -
+no device, no `.TRG`, no picture - with `GetRoomBounds` (`game\draw.cpp:2939`)
+and `SetRoomBounds` (`:2795`) carried over line for line and every number
+given a name. It takes an eye and a seed room and answers over a fan of view
+directions, because the `ROOMFLASH` line has no camera angle in it. It
+reproduces the play test's own lines: seeded in JOBY2 room 114 at the eye of
+frame 1624, `40024/-3408/24107`, at yaw 272 pitch -10 it draws **114, 123, 124
+and nothing else** - `rooms=3`, which is what the log says - and room 99, which
+the log says went missing, is refused there with `empty [2559 0 2559 687]`. The
+angle has to be named, and that is the whole point: at that one eye the list
+runs from 1 room to 5 as the view turns, and the log line the tool is being
+matched against carries no angle at all. That is what T3-1 adds to the seam.
+
+*And the two engine seams, both behind `-log`, both dead without it.*
+
+`ROOMFLASH` (`game\draw.cpp`, `NoteRoomWalk`) now carries the eye THE WALK
+REALLY USED - `w2v_matrix[M03..M23]`, which on a tween frame is the blended
+eye while `camera.pos` is half a step behind it, so the old line printed the
+wrong one of the two - beside the logic camera, the target and its room, and
+`camera.type / old_type / fixed_camera / number`. Then one line per missing
+room saying WHAT DROPPED IT, worked out from the note itself (`WhyRoomMissing`)
+and not from the walk, which is neither read nor slowed:
+
+| answer | the line of `draw.cpp` it belongs to |
+| --- | --- |
+| `side` | `if (x && (x ^ p->normal[0]) < 0)`, `:3010` - the eye is on the far side of the portal's plane |
+| `toonear` | `tooNear == 4`, `:2863` - all four corners behind the eye |
+| `empty` | the rectangle came out with no width or no height after the clamp |
+| `noportal` | no portal to it out of ANY listed room |
+
+`SetRoomBounds`' fifth exit - the early out at its top, where the room's window
+already covers what this portal would give it - is deliberately not among them:
+it only ever fires for a room that is in the list ALREADY, and this line runs
+on missing rooms alone. `RoomProbe -walk`, which judges every portal and not
+only the missing ones, does report it, as `covered`.
+
+For that the note keeps each listed room's own window as well - `PrintObjects`
+(`:1087`) wipes all four at the end of the frame, so a frame judged one frame
+later has to have kept them. It keeps `left..bottom`, the UNION of every window
+a room was dequeued with, so the answer is the CONSERVATIVE one: it can say
+`reached` where the walk said `empty`, never the other way about.
+
+`ROOMLIST` says what the draw list IS. One line whenever its membership
+changes, with `added=` and `removed=`; and every five seconds the whole list,
+each room with its window rectangle, its distance and its `outside` flag -
+**and its SHADOW: that room's portal neighbours that are NOT drawn.** That
+shadow list is the line this round exists to add. A player standing at the
+torn wall and seeing black is standing in a room whose shadow list holds the
+room he cannot see, and the `ROOMFLASH ... why` line beside it says whether it
+was refused by an empty window or was never reachable at all.
+
+*The size was measured before the line was written, because a seam that fills
+a log is a seam that gets switched off.* `RoomProbe -walk` over a full turn on
+the spot at one degree a frame - a pan of sixty degrees a second at sixty
+frames - from the play test's own eyes:
+
+| | JOBY2 room 130 | ANDREA2 room 210 |
+| --- | ---: | ---: |
+| frames with any membership change | 16 % | 16 % |
+| rooms added-or-removed per frame | 0.24 | 0.33 |
+
+So about ten lines a second while the camera is swinging hard and none at all
+while it is still: at 110 bytes a line, ten minutes of nothing but hard panning
+is about **640 KiB**. The cap of 20 lines a second is the safety valve for a
+case worse than the one measured - it holds ten minutes to 1.3 MiB, and the
+five second dump of a forty room list adds 340 KiB, so **under 2 MiB either
+way**.
+
+---
+
+**T3-2 - JOBY2. Three things it is NOT, and the one thing it is.**
+
+**(a) The one-frame dropouts are not it, and they cost the rim of the
+picture.** All 54 `ROOMFLASH` lines were put back through the offline walk -
+69 (eye, missing room) cases in all, each over 648 view directions:
+
+* **0 of 69** are unreachable. Every room the log calls missing IS reachable
+  from that same eye at some view direction; not one is a structural hole.
+* **17 of 69** enter the picture at their narrowest as a window **one or two
+  pixels wide**. They are slivers at the rim.
+
+And the case the log names twice, room 99 seen from room 114, taken to the
+pixel. Sweeping the view direction at the logged eye, the flip is at yaw 274 of
+a 2560x1440 picture: at 272 the room is refused with `empty [2559 0 2559 687]`
+- a rectangle of **zero width against the right edge** - and at 274 it is
+reached with a window of `2538,0..2559,697`, **21 pixels of 2560**. Drawn and
+not drawn at that exact eye and angle, with rooms 114, 123 and 124 at their own
+offsets, the two pictures differ in **455 of 3,686,400 pixels - 0.012 %** - all
+of them inside a 256 x 761 strip at the right screen edge
+(`flash_with_JOBY2_r114.png` / `flash_without_JOBY2_r114.png`). That is what a
+`ROOMFLASH` costs. It cannot be a black room.
+
+**(b) The window - group M's or T2's - is not it either.** The window only ever
+cuts art of a room that is BEING DRAWN; a room that is not in `draw_rooms` is
+never handed to `HDFrameRoom` at all. JOBY2 has four intrusion pairs (`24`
+holds `31`, `24` holds `33`, `38` holds `71`, `53` holds `54`, 2,037 triangles
+in 4 groups - the engine's own count in the play test's log). From an eye
+inside each holder, over 120 view directions each: the intruder is in the draw
+list **0 times**, and `reached=0 side=0 toonear=0 empty=0` - the walk never
+even looks at a portal to it, which is what "no portal between them" means.
+Whatever the tear shows, no window decided it.
+
+**(c) What is left is the only thing left, and the player's bisect says the
+same.** The HD path has no visibility test of its own - fix round T2 grepped
+`specific\hd` for it and the frame line's `dropped=` has read 0 in every play
+test since, including this one - so the rooms it draws ARE `draw_rooms`. The
+remaster's art opens a wall that the classic level keeps shut; the classic
+portal graph has no portal through that wall; the walk therefore never lists
+the room behind it, and the clear colour stands in the hole. That is a wall
+bug, not a portal bug, which is exactly what the bisect said before this round
+began.
+
+**And so no rule was built.** The shape asked for was a "reveals" list keyed on
+the overhang, and the measurement refuses it twice: a tear is an ABSENCE of art
+and has no overhang of its own to key on, and the one list that does describe
+"b's art stands inside a with no portal between them" is the intrusion list -
+whose whole purpose is to HIDE that art, measured in round T2 as 27,694 pixels
+of bleed in ANDREA1's 207/53. Drawing the intruder full screen would put that
+bleed straight back. The right key is not knowable until the play test names
+the room, and `ROOMLIST`'s shadow line names it in one run. The proposal is in
+this round's report under *open*.
+
+---
+
+**T3-3 - ANDREA2. The tower is room 222, and it is the walk's reach.**
+
+**(a) Which room.** `RoomProbe` from the play test's own eye cluster (world
+about `82000 / -1500 / 41000`, which is the vertical stack of rooms 0, 210, 48
+and 8 at `x 79872..84992, z 38912..45056`), looking at each candidate of the
+`ROOMPOP` list in turn: **room 222** carries it. The picture
+(`a2t_222_ANDREA2_r222.png`) is the photograph - a brick block with a small
+BARRED WINDOW high on its face, standing on a pier, with a Greek-key MEANDER
+frieze along the ledge beneath it. Room 222 is `x 69632..77824, y -4096..-2048,
+z 26624..32768`, **15,221 triangles of which 3,619 stand outside its own
+classic box**, and it is `ROOM_OUTSIDE`.
+
+**(b) Why it is late, with the numbers.** It is **9,246 units** from that eye,
+against a far plane of 20,480 (`InitWindow`, `specific\gamemain.cpp:261`), so
+the far plane has nothing to do with it. Over a fan of 360 view directions at
+the eye - 72 yaws a step of five apart, at the five pitches -30, -15, 0, +15
+and +30 - it is in the draw list on **17** of them, and the refusals are
+`empty` and `side`, never `toonear`. A second, finer fan of 120 yaws a step of
+three apart, taken pitch by pitch, says where those seventeen sit:
+
+| pitch | room 222 in the list |
+| ---: | ---: |
+| -30 deg | 16 of 120 |
+| -25 | 12 of 120 |
+| -20 | 9 of 120 |
+| -15 | 7 of 120 |
+| **-10 to +10** | **0 of 120 at every one of -10, -5, 0, +5, +10** |
+| +15 | 6 of 120 |
+| +20 | 8 of 120 |
+| +25 | 9 of 120 |
+| +30 | 0 of 120 |
+
+**Looking level, straight at where the tower stands, the walk never reaches its
+room at all.** It comes in only when the eye is tilted enough for the chain
+through the intervening rooms to open. That is the popping, and it is the
+portal walk's reach and nothing else.
+
+*The picture of what is lost*: from the eye, yaw 216, pitch -12, the rooms the
+walk does reach drawn at their own offsets, against the same plus room 222 -
+**4,011 of 589,824 pixels, 0.68 %**, in a 49 x 250 strip where the tower's near
+face and the top of its window stand (`tower_before_ANDREA2_r210.png` /
+`tower_after_ANDREA2_r210.png`).
+
+**(c) And the rule was NOT built, because the measurement priced it.** The
+shape asked for was "`ROOM_OUTSIDE` rooms whose group box is in the frustum and
+within N units of the eye, drawn full screen without continuing the walk".
+Measured at that eye:
+
+| | |
+| --- | ---: |
+| rooms the walk reaches over the whole fan | 65 |
+| rooms per frame | 3 to 40 |
+| `ROOM_OUTSIDE` rooms in ANDREA2 | 33 of 252 (13 %) |
+| ... within 16 sectors of this eye | **25** |
+| ... of those, never reached at any direction | 6 |
+| rooms of any kind within 16 sectors and never reached | 68 |
+
+The wide reading adds up to 25 rooms to a list of 3 to 40; the narrow one -
+only the outside rooms the walk never reaches - still adds 6, which on the
+courtyard scene's measured 29 draw calls is over the 20 % the brake allows. And
+both need a VIEW FRUSTUM that the HD path has not got: round T2 grepped
+`specific\hd` for `frustum`, `cull` and `reject` and every hit is back face
+culling on Lara's model. Building one is a round of its own with its own
+correctness burden, not a small rule. So this round measures and reports, and
+the decision is the player's - it is under *open*.
+
+---
+
+**What this round changed, and what it deliberately did not.** Two files.
+`game\draw.cpp`: the walk note grew the fields the reason needs, `WhyRoomMissing`
+is new, and `NoteRoomWalk` writes the two extended lines - every hunk is inside
+the anonymous namespace or inside `NoteRoomWalk`, which returns at its first
+line when `-log` is off, and NOTHING in `DrawRooms`, `GetRoomBounds` or
+`SetRoomBounds` is touched. So `hd_enable=0` and `fps_mode 0` are unchanged by
+construction and not merely by intention. `Preparation\Tools\Diagnose\RoomProbe.cpp`
+gained `-walk` and its four companions. `be.bat` builds with **0 errors**;
+`InterpTest` builds and runs **282 checks, 0 failed**; every `RoomProbe` run of
+this round reports **0 of 59** watched device states changed.
+
+**The tools.** `RoomProbe -walk <seed room> <x y z>` runs the classic portal
+walk offline from the classic `.TRC` handed in with `-roombox`, over a fan of
+view directions (`-walkyaw <from> <to> <step>`, default `0 359 15`;
+`-walkpitch <deg>` or `-walkpitchfan <from> <to> <step>`), and prints the room
+list, how often each room is in it with its distance and `OUTSIDE` flag, and
+the rooms within sixteen sectors it never reaches at all. `-walkwant <room>`
+names one room and prints why it is or is not in the list, with the widest and
+narrowest window it ever gets; `-walkeach` prints every direction separately.
+It also prints which rooms' boxes hold the eye, so a `ROOMFLASH` line can be
+handed to it as it stands.
+
 #### Fix round N - the water: the material that was a surface all along, the HD frames on the classic faces, and the six double rooms (#123)
 
 Three findings and a correction, all of them measured against the fifteen

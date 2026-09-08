@@ -85,3 +85,52 @@ const char* HDScanPagePath(const char* installRoot, int page, char* buffer, int 
 // TrgProbe.
 double HDScanDecodePages(const char* installRoot, const int* pages, int count,
 	int threads, double* texels, int* mips, int* failed);
+
+/* THE .TEX TABLE OF ONE LEVEL (#123, fix round N, N2).
+ *
+ * <install>\DATA\<STEM>.TEX, and it is the one file that says which HD
+ * picture belongs to which CLASSIC TILE:
+ *
+ *     uint16              how many HD pages this level uses
+ *     uint16 * that many  their numbers in <install>\TEX
+ *     uint16 * one per object texture of the level, in the level's own
+ *                         order: which of the pages above paints that tile,
+ *                         or 0xFFFF for a tile the remaster leaves classic
+ *
+ * The format is TRForge's measurement - its trf_remaster/Remaster.h writes it
+ * down, and trf_remaster/HdPages.h writes down what a page IS. NEITHER OF
+ * THOSE TWO FILES IS VENDORED HERE: vendor/trforge holds only what this tree
+ * compiles (trf_core and Trg.cpp/.h), and both of those headers pull in
+ * TRForge's own asset and level libraries, so they were used as a DESCRIPTION
+ * and nothing else - exactly as ItemModels.h was for the .TRM format. See
+ * THIRD-PARTY.md, which says the same. This reader is written from that
+ * description, not copied from it.
+ *
+ * WHAT A PAGE IS, because the number alone is misleading: an HD page is NOT
+ * a repaint of the tile's rectangle. It is a repaint of the whole 64 by 64
+ * CELL the rectangle sits in, at eight times the size - one 512 by 512 file
+ * per cell. TRForge measured that over the shipped games: of 17,164 tiles
+ * with HD art not one crosses a cell boundary, and of 4,335 occupied cells
+ * not one wants two files. So the way from a classic tile to its HD texels
+ * is
+ *
+ *     cell   = (u * 256 / 64, v * 256 / 64)      of the tile's own corner
+ *     the HD coordinate of a classic u is  u * 4 - cell.x
+ *
+ * and that is all the arithmetic there is to it.
+ *
+ * WHAT IT IS GOOD FOR, AND WHAT IT IS NOT. The classic engine never opens
+ * this file at all - nothing in this tree reads it but the function below -
+ * and it names a page for only about a seventh of a level's tiles, so it is
+ * NOT a way to draw a level in HD (the .TRG is, and that is what the room
+ * renderer uses).
+ * It is exactly right for the one question fix round N asks: the classic
+ * water surfaces the .TRG has no geometry for are drawn from the classic
+ * level, with the classic level's own animated texture range - and those
+ * frames are among the tiles the .TEX does name.
+ *
+ * `out` takes one entry per tile, each the .DDS number or 0xFFFF; the return
+ * is how many were written, 0 for a level whose file is missing or short
+ * (which is not an error - the water then keeps the classic tile). */
+int HDScanLevelTextures(const char* installRoot, const char* stem,
+	unsigned short* out, int maxTiles);

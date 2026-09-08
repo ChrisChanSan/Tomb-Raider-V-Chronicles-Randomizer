@@ -891,6 +891,37 @@ glow is always slightly wrong"* — and that turned out to be the whole story.
   surface to be **flat** as well; the colour still shimmers on those points,
   exactly as the original engine does.
 
+- **The Remaster's own still water is water.** One of its materials had been
+  read as a second kind of haze and drawn at a fortieth to a fifth of its
+  strength - nearly invisible. Taken apart part by part over the fifteen
+  levels it is nothing of the kind: it is the **surface of standing water**,
+  28 pieces in six levels - the fountain of Rome, the basins of Trajan's
+  Markets, the pools of the Irish labyrinth, the flooded rooms of the sinking
+  submarine and the two open seas - and where the Remaster builds one, the
+  original level's own water surface was being suppressed in favour of
+  something the player could not see. Twelve rooms had no visible water at all
+  for that reason. They have it now, and over it runs a **ripple**, computed
+  for every pixel out of the three numbers the art gives each piece: they
+  scale with the AREA of the body of water over the whole game - a puddle gets
+  short quick waves, the Deepsea Dive's sea a long slow swell - which is what
+  says they are a wave and not a brightness. In six rooms of the sinking
+  submarine the two surfaces would have stood on the same piece of floor, one
+  to twenty units apart; there the original's face gives way to the Remaster's
+  sheet - but only on the squares the sheet really covers, so the pool keeps
+  its own surface everywhere else and no square is left bare. It stops with
+  `hd_motion`.
+- **And the water the Remaster does NOT build wears its HD frames.** The
+  surfaces the round before restored are the level's own faces, animated the
+  way the original animates water - eight pictures that take turns in the same
+  texture slot every fifth of a second - and the Remaster ships an HD painting
+  of each of those eight. They are found through the level's own texture table
+  and put on the face in the Remaster's order and at the original's pace, so a
+  VCI pool moves exactly as it always did at four times the resolution. Seven
+  levels have such frames (Rome's two, Ireland's Gallows Tree and Old Mill,
+  and three of the four Russian levels — *The Base*, *Deepsea Dive* and
+  *Sinking Submarine*); where a frame has no HD painting the original
+  tile is drawn and nothing is missing.
+
 - **No more seeing one room through another one's wall.** Tomb Raider levels
   are not built like buildings: two rooms can stand in exactly the same place
   in the world, and the game only ever shows you one of them at a time,
@@ -960,8 +991,8 @@ under 65536. Only RICHCUT2 is small enough to draw without one.)
 
 Video memory is the real question, and the answer is measured rather than
 guessed. Kept exactly as the Remaster drew them, one level's pages come to
-between **191 MiB** (JOBY4, the submarine) and **424 MiB** (ANDREA2, the
-Colosseum); the title screen is 397. Of that, the rooms are the bulk — 168 to
+between **191 MiB** (JOBY4, *Deepsea Dive*) and **424 MiB** (ANDREA2,
+*Trajan's Markets*); the title screen is 397. Of that, the rooms are the bulk — 168 to
 376 MiB — the level's models add 5 to 72, and Lara's wardrobe 12 to 28. On top
 of the pages come this level's HD geometry buffers (6 to 62 MiB), the classic
 texture pages, which are still loaded and still drawn (2 to 24 MiB, measured

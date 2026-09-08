@@ -339,6 +339,7 @@ float4 gWaterBox : register(c15);
  * c19         gSpec               per DRAW CALL (#123, fix round R3b; .w is
  *                                 fix round H, H2 - the see-through weight)
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
+ * c36         gRipple             per DRAW CALL (#123, fix round N)
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
  * Deliberately disjoint from the vertex numbers although the two constant
@@ -451,6 +452,47 @@ float4 gSpec : register(c19);
 #define HD_FRESNEL_LIFT    0.6f
 #define HD_FRESNEL_MAX     0.9f
 
+/* THE RIPPLE OF A STILL WATER SURFACE (#123, fix round N, N1).
+ *
+ * x  how tight the waves are, in WAVES per world unit
+ * y  how far the coordinate travels, in page units - 0 for every draw call
+ *    in the game that is not a material 16 water surface, and that zero is
+ *    the switch: the whole of this costs one compare everywhere else
+ * z  how fast, in waves a second
+ *
+ * All three come out of the .TRG part's own three numbers, and where those
+ * numbers come from - our own measurement of the material, not TROne's
+ * reading of the remaster's shaders - is written out over MaterialRipple in
+ * hd_render.cpp.
+ *
+ * THE SHAPE IS THIS FILE'S OWN: two sheets travelling across each other, and
+ * a finer, faster octave over them so that the pattern does not read as one
+ * moving grid. They are written on the WORLD position (roomPos plus
+ * gRoomOrigin) rather than on the UV, so a sheet built out of a handful of
+ * huge triangles ripples as finely as a small basin does and the pattern does
+ * not slide when the camera does - the same reason the caustic below is per
+ * pixel.
+ *
+ * AND THE WAVE IS NOT A SINE, which is worth saying out loud. It is the
+ * smoothstep of a triangle - abs(frac(p) * 2 - 1), then 3f^2 - 2f^3, then
+ * doubled and centred - a periodic curve that agrees with a cosine to within
+ * 6 % of its own amplitude and has the same zero mean, zero derivative at
+ * both turning points and continuous slope everywhere. Why: four sines here
+ * take this shader from 453 instruction slots to 512, which is exactly the
+ * number shader model 3 guarantees and leaves the next round nowhere to
+ * stand. Four of these take it to 476. The difference is not visible on a
+ * texture offset of four texels; the ceiling is.
+ *
+ * NOTHING MOVES IN THE VERTEX. `sway` is 0 on 27 of the material's 28 parts,
+ * so the sheet itself does not bob: a surface that bobbed would tear away
+ * from the stone rim it is let into. This is a texture ripple only.
+ *
+ * The 1/1.5 puts the sum of the two amplitudes back on 1, so gRipple.y IS
+ * the largest offset the sampler can ever be asked for - which is what makes
+ * the tenth-of-a-span cap in hd_render.cpp a cap and not a hope. */
+#define HD_RIPPLE_OCTAVE   2.3f
+#define HD_RIPPLE_NORM     (1.0f / 1.5f)
+
 /* HOW MANY, AND WHY THE TWO LOOPS ARE UNROLLED. ps_3_0 has no relative
  * addressing of constant registers - only vs_3_0 has. Written as a loop over
  * a run time count, fxc emulates gLights[i] with a chain of 32 cmp
@@ -484,6 +526,10 @@ float4 gSpec : register(c19);
 /* Two registers per light: (x, y, z, falloff) room local, then
  * (r, g, b, 1 / falloff). */
 float4 gLights[HD_MAX_LIGHTS * 2] : register(c20);
+
+// See the note over HD_RIPPLE_OCTAVE. (0, 0, 0, 0) for every draw call that
+// is not a water surface, and the .y = 0 there is what switches it off.
+float4 gRipple : register(c36);
 
 /* Two registers per bulb: (x, y, z, radius) in VIEW space, then
  * (r, g, b, density). */
@@ -902,7 +948,31 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 
 float4 RoomPS(VS_OUT input) : COLOR0
 {
-	float4 texel = tex2D(sPage, input.uv);
+	float2 uv = input.uv;
+
+	/* N1: THE RIPPLE OF A STILL WATER SURFACE - see the note over
+	 * HD_RIPPLE_OCTAVE. gRipple.y is 0 for every draw call in the game that
+	 * is not one of material 16's 28 parts, so this is one compare there and
+	 * nothing else. gAdd.y is the game clock in seconds and gAdd.w the
+	 * hd_motion switch, exactly as the ray swing at the end of this function
+	 * reads them, so a paused game and hd_motion 0 both stand still. */
+	if (gRipple.y > 0.0f)
+	{
+		float2 w = (input.roomPos.xz + gRoomOrigin.xz) * gRipple.x;
+		float t = gAdd.y * gRipple.z * gAdd.w;
+
+		// The two sheets, then the finer and faster octave across them.
+		float4 p = float4(w.x + t, w.y + 0.85f * t,
+			(w.x + w.y) * HD_RIPPLE_OCTAVE - 1.7f * t,
+			(w.y - w.x) * HD_RIPPLE_OCTAVE + 1.9f * t);
+		float4 f = abs(frac(p) * 2.0f - 1.0f);
+		float4 s = f * f * (3.0f - 2.0f * f) * 2.0f - 1.0f;
+
+		uv += (gRipple.y * HD_RIPPLE_NORM) *
+			float2(s.x + 0.5f * s.z, s.y + 0.5f * s.w);
+	}
+
+	float4 texel = tex2D(sPage, uv);
 
 	/* THE ALPHA TEST. gPass.x is the reference, and it is zero wherever
 	 * there is no test to run - an alpha is never below zero, so this line

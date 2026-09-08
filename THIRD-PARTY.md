@@ -118,6 +118,24 @@ own `.MAP` calls `DUMMY` is drawn by nobody. The finding is TRForge's; the
 seam, the per-item room test and the measurement that confirmed it over
 ANDREA1's items are ours.
 
+And a third time in fix round N of #123: **the `.TEX` sidecar, and what an HD
+page is.** Two more TRForge files that could **not** be vendored and were used
+as a description instead — both pull in TRForge's own asset and level
+libraries, so neither is in `vendor/trforge`, which holds only what this tree
+compiles. `trf_remaster/Remaster.h` writes down the format of `LEVELn.TEX` - a
+page count, that many `.DDS` numbers, then one `uint16` per object texture of
+the level saying which of them paints that tile - and `trf_remaster/HdPages.h`
+writes down the thing the number really names: not the tile's rectangle but the
+whole 64 x 64 CELL it sits in, repainted at eight times the size, with the
+measurement behind it (of 17,164 tiles with HD art in the shipped games not one
+crosses a cell boundary, and of 4,335 occupied cells not one wants two files).
+`TOMB5/specific/hd/hd_scan.cpp`, `HDScanLevelTextures`, is written against that
+description and not copied from it; the cell rule was measured again here over
+five TR5 levels (0 cells wanting two files in every one) before anything was
+drawn with it. The format and the finding are TRForge's; the reader, the guard
+against a table that does not fit the level, and the use of it - the HD
+pictures of the classic water animation frames - are ours.
+
 ### discord-rpc — shipped in the source tree, not in the binaries
 
 | Library | Licence | Full text in this tree |

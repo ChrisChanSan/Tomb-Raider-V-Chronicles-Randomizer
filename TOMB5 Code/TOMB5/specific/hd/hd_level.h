@@ -103,6 +103,21 @@ struct HDRoomWaterFace
 int HDRoomWaterFaceCount(int roomIndex);
 const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at);
 
+/* AND THE REMASTER'S OWN PICTURE OF THAT WATER (#123, fix round N, N2).
+ *
+ * The faces above are drawn with the classic level's own animated texture
+ * range - a 256-pixel tile that walks along its range every six game steps -
+ * and the remaster ships an HD picture of each of those frames. This says
+ * whether it has one for the tile a texinfo is showing RIGHT NOW: true, and
+ * `out` is the same record with the HD page and the coordinates on it; false,
+ * and the caller draws the classic tile it already has.
+ *
+ * The only caller is InsertRoomWater (specific\drawroom.cpp), inside the HD
+ * branch. With hd_enable off there are no restored water faces at all, so the
+ * table behind this is empty and the first line returns. */
+struct TEXTURESTRUCT;
+bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
+
 /* THE TWO STATIC MESHES OF AN HD ROOM THAT STILL HAVE TO BE DRAWN (#123, fix
  * round R3b). Both answers are worked out once at level load, against the
  * .TRG's own geometry, and DrawStaticObjects (game\draw.cpp) is their only

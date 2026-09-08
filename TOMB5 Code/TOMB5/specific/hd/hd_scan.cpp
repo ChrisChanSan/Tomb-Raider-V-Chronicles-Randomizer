@@ -423,3 +423,60 @@ int HDScanPage(int at)
 		return -1;
 	return scan_pages[(size_t)at];
 }
+
+/* THE .TEX TABLE OF ONE LEVEL (#123, fix round N, N2) - see hd_scan.h for
+ * the format and for what it is good for.
+ *
+ * Refusing rather than half believing: a table whose page indices point past
+ * its own page list is not this level's table, and a file too short to hold
+ * its own header is not one either. Both come back as 0, which the caller
+ * reads as "no HD frames for this level" and draws the classic tiles.
+ *
+ * The tile entries are converted here, so the caller never sees the
+ * indirection: what it gets is the .DDS number itself, or 0xFFFF. */
+int HDScanLevelTextures(const char* installRoot, const char* stem,
+	unsigned short* out, int maxTiles)
+{
+	if (!out || maxTiles <= 0 || !stem || !*stem)
+		return 0;
+
+	const std::string path = join(join(installRoot ? installRoot : "", "DATA"),
+		std::string(stem) + ".TEX");
+	std::vector<unsigned char> bytes;
+
+	if (!read_whole(path, bytes) || bytes.size() < 2)
+		return 0;
+
+	const unsigned int pages = (unsigned int)bytes[0] |
+		((unsigned int)bytes[1] << 8);
+	const size_t head = 2 + (size_t)pages * 2;
+
+	if (!pages || bytes.size() < head)
+		return 0;
+
+	const size_t tiles = (bytes.size() - head) / 2;
+	int written = 0;
+
+	for (size_t i = 0; i < tiles && written < maxTiles; i++)
+	{
+		const size_t at = head + i * 2;
+		const unsigned int slot = (unsigned int)bytes[at] |
+			((unsigned int)bytes[at + 1] << 8);
+
+		if (slot >= pages)
+		{
+			// 0xFFFF is the file's own "no HD art"; anything else in that
+			// range would be a table we have misread, so it is refused.
+			if (slot != 0xFFFFu)
+				return 0;
+
+			out[written++] = 0xFFFFu;
+			continue;
+		}
+
+		out[written++] = (unsigned short)((unsigned int)bytes[2 + slot * 2] |
+			((unsigned int)bytes[3 + slot * 2] << 8));
+	}
+
+	return written;
+}

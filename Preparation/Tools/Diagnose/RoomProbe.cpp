@@ -1542,6 +1542,320 @@ static void PrintPsnr(const char* root, int howMany)
  * measure, build the next. If the free were not happening, the free texture
  * memory after the second level would be lower than after the first by the
  * whole of the first. */
+/* THE HD PAGES OF THE CLASSIC WATER FRAMES (#123, fix round N, N2).
+ *
+ * The classic engine animates a water surface by ROTATING the contents of a
+ * range of texinfos once every six game steps (specific/output.cpp,
+ * S_AnimateTextures): the face keeps its texinfo number and the tile it shows
+ * walks along the range. So the frames of one water surface are the tiles of
+ * the range its texinfo belongs to, and the question this answers is what the
+ * remaster paints each of those tiles with.
+ *
+ * `tiles` is the set of texinfo numbers the restored water faces name. Prints
+ * one block per range that carries one of them and one summary line, which is
+ * the same line the engine writes to HDLOG at level build.
+ *
+ * ONE THING THE ENGINE DOES THAT THIS DOES NOT, and it is named rather than
+ * silently absent: `BuildWaterFrames` skips the first `nAnimUVRanges` ranges
+ * while `gfUVRotate` is non-zero, because those are the level's waterfalls -
+ * the engine scrolls their v instead of rotating them, and a scrolled v walks
+ * out of the cell the HD page paints. This tool has no gameflow and cannot ask
+ * `gfUVRotate`, so it does not skip anything. It cannot bite on the shipped
+ * game: `gfUVRotate` is the script's `UVROT` command, and in both the vanilla
+ * `SCRIPT.DAT` and a randomized one it is 0 for every level with a restored
+ * water face (ANDREA1, ANDREA2, ANDY1, ANDY3, JOBY2, JOBY4, JOBY5) and
+ * non-zero only for TOM (3) and JOBY3 (8), neither of which restores one. On a
+ * level where it were not 0, this tool would list a range the engine drops.
+ */
+static void WaterFrames(const Tr5Level& level, const char* install,
+	const char* stem, const std::vector<int>& tiles)
+{
+	size_t texAt = 0, animAt = 0;
+	int texCount = 0, animShorts = 0;
+
+	if (!level.debugTexinfoBlock(texAt, texCount) ||
+		!level.debugAnimTexBlock(animAt, animShorts))
+	{
+		printf("  no texinfo or animated texture block in %s\n", stem);
+		return;
+	}
+
+	const std::vector<unsigned char>& raw = level.debugBytes();
+	std::vector<unsigned short> hd((size_t)texCount, 0xFFFFu);
+	const int got = HDScanLevelTextures(install, stem, &hd[0], texCount);
+
+	printf("\n-- the water frames (N2) ------------------------------------\n");
+	printf("  %s: %d texinfo(s), the .TEX names %d of them\n",
+		stem, texCount, got);
+
+	/* THE PER-CELL RULE, checked on this level rather than believed. TRForge
+	 * measured over the shipped games that every tile with HD art lies wholly
+	 * inside one 64x64 cell and that no cell ever wants two different files;
+	 * the substitution rests on both, so both are counted here. */
+	{
+		std::vector<int> key, page;
+		int crossing = 0, conflict = 0, withArt = 0;
+
+		for (int t = 0; t < texCount && t < got; t++)
+		{
+			if (hd[(size_t)t] == 0xFFFF)
+				continue;
+
+			const size_t o = texAt + (size_t)t * 40;
+			unsigned short tp = 0;
+			int u[4], v[4];
+
+			memcpy(&tp, &raw[o + 2], 2);
+
+			for (int c = 0; c < 4; c++)
+			{
+				unsigned short a = 0, b = 0;
+
+				memcpy(&a, &raw[o + 6 + (size_t)c * 4], 2);
+				memcpy(&b, &raw[o + 8 + (size_t)c * 4], 2);
+				u[c] = a >> 8;
+				v[c] = b >> 8;
+			}
+
+			/* TRIANGLE OR QUAD, AND WHICH WORD SAYS SO. In the FILE the bit
+			 * sits at the top of the TileAndFlag word (+2, the one this reads
+			 * as `tp`), not at the top of the NewFlags word (+4, `fl`); the
+			 * runtime TEXTURESTRUCT is the other way round, because
+			 * LoadTextureInfos builds its `flag` as the low 15 bits of the
+			 * file's flag word with bit 15 of the file's tpage word on top
+			 * (`tex.tpage ^ (tex.tpage ^ tex.flag) & 0x7FFF`,
+			 * specific/file.cpp), and AdjustUV then tests `flag & 0x8000`. So
+			 * the engine side of this round is right and this line has to
+			 * read `tp`. The two bits disagree often - JOBY2 has 1,052 tiles
+			 * with the one and 400 with the other - and the counts below come
+			 * out the same either way, but a proof tool has no business being
+			 * accidentally right.
+			 *
+			 * A triangle's fourth corner is not a corner at all: AdjustUV
+			 * touches three of them and the draw reads three. Counting the
+			 * fourth turned 127 of JOBY2's 382 tiles into cell crossers that
+			 * are nothing of the kind. */
+			const int corners = (tp & 0x8000) ? 3 : 4;
+			int u0 = u[0], u1 = u[0], v0 = v[0], v1 = v[0];
+
+			for (int c = 1; c < corners; c++)
+			{
+				if (u[c] < u0) u0 = u[c];
+				if (u[c] > u1) u1 = u[c];
+				if (v[c] < v0) v0 = v[c];
+				if (v[c] > v1) v1 = v[c];
+			}
+
+			withArt++;
+
+			if (u0 / 64 != (u1 - 1) / 64 || v0 / 64 != (v1 - 1) / 64)
+			{
+				crossing++;
+				continue;
+			}
+
+			const int k = ((tp & 0x7FFF) << 4) | ((v0 / 64) << 2) | (u0 / 64);
+			bool seen = false;
+
+			for (size_t i = 0; i < key.size(); i++)
+				if (key[i] == k)
+				{
+					seen = true;
+
+					if (page[i] != (int)hd[(size_t)t])
+						conflict++;
+				}
+
+			if (!seen)
+			{
+				key.push_back(k);
+				page.push_back((int)hd[(size_t)t]);
+			}
+		}
+
+		printf("  the cell rule: %d tile(s) with HD art in %d cell(s), "
+			"%d crossing a cell edge, %d cell(s) wanting two files\n",
+			withArt, (int)key.size(), crossing, conflict);
+	}
+
+	if (!got)
+		return;
+
+	// One short: the number of ranges. Then per range one short with the
+	// number of frames MINUS ONE, and that many plus one texinfo numbers.
+	std::vector<short> anim((size_t)animShorts);
+
+	for (int i = 0; i < animShorts; i++)
+	{
+		short v = 0;
+		memcpy(&v, &raw[animAt + (size_t)i * 2], 2);
+		anim[(size_t)i] = v;
+	}
+
+	int at = 0;
+	const int ranges = animShorts ? anim[0] : 0;
+	int waterRanges = 0, waterFrames = 0, missing = 0;
+	std::vector<int> pages;
+
+	at = 1;
+
+	for (int r = 0; r < ranges && at < animShorts; r++)
+	{
+		const int frames = anim[(size_t)at] + 1;	// the count is n - 1
+		const int first = at + 1;
+
+		at = first + frames;
+
+		if (at > animShorts)
+			break;
+
+		bool wanted = false;
+
+		for (int f = 0; f < frames && !wanted; f++)
+			for (size_t w = 0; w < tiles.size(); w++)
+				if (tiles[w] == anim[(size_t)(first + f)])
+				{
+					wanted = true;
+					break;
+				}
+
+		if (!wanted)
+			continue;
+
+		waterRanges++;
+		printf("  range %2d: %d frame(s)\n", r, frames);
+
+		// N2: the HD page of each frame, in the range's own order, for the
+		// rotation below.
+		std::vector<int> framePage((size_t)frames, -1);
+
+		for (int f = 0; f < frames; f++)
+		{
+			const int tile = anim[(size_t)(first + f)];
+
+			if (tile < 0 || tile >= texCount)
+				continue;
+
+			const size_t o = texAt + (size_t)tile * 40;
+			unsigned short tp = 0;
+			int tu[4], tv[4];
+
+			memcpy(&tp, &raw[o + 2], 2);
+
+			for (int c = 0; c < 4; c++)
+			{
+				unsigned short a = 0, b = 0;
+
+				memcpy(&a, &raw[o + 6 + (size_t)c * 4], 2);
+				memcpy(&b, &raw[o + 8 + (size_t)c * 4], 2);
+				tu[c] = a >> 8;
+				tv[c] = b >> 8;
+			}
+
+			// Bit 15 of TileAndFlag (+2), not of NewFlags (+4) - see the note
+			// on the same line in the cell rule above.
+			const int corners = (tp & 0x8000) ? 3 : 4;
+			int ru0 = tu[0], ru1 = tu[0], rv0 = tv[0], rv1 = tv[0];
+
+			for (int c = 1; c < corners; c++)
+			{
+				if (tu[c] < ru0) ru0 = tu[c];
+				if (tu[c] > ru1) ru1 = tu[c];
+				if (tv[c] < rv0) rv0 = tv[c];
+				if (tv[c] > rv1) rv1 = tv[c];
+			}
+
+			const unsigned short u1 = (unsigned short)(ru0 << 8);
+			const unsigned short v1 = (unsigned short)(rv0 << 8);
+
+			const int px = (u1 >> 8), py = (v1 >> 8);
+			const int page = hd[(size_t)tile];
+
+			waterFrames++;
+
+			if (page == 0xFFFF)
+				missing++;
+			else
+			{
+				bool seen = false;
+
+				for (size_t i = 0; i < pages.size(); i++)
+					if (pages[i] == page)
+						seen = true;
+
+				if (!seen)
+					pages.push_back(page);
+			}
+
+			/* The rectangle the tile occupies inside its HD page: the cell
+			 * is painted at eight times the size, so a classic pixel at
+			 * (px % 64) sits at eight times that in the 512 file. This is
+			 * the same arithmetic HDWaterFrameFor does in floats. */
+			printf("    frame %d: tile %4d on page %3d at (%3d,%3d)..(%3d,%3d), "
+				"cell (%d,%d)  ->  %s%d, HD rect (%d,%d) %dx%d\n",
+				f, tile, tp & 0x7FFF, ru0, rv0, ru1, rv1, px / 64, py / 64,
+				page == 0xFFFF ? "no HD page for tile " : "", page,
+				(ru0 % 64) * 8, (rv0 % 64) * 8,
+				(ru1 - ru0 + 1) * 8, (rv1 - rv0 + 1) * 8);
+			framePage[(size_t)f] = page;
+		}
+
+		/* AND THE RUNTIME HALF, run rather than believed. The engine does not
+		 * know which frame a texinfo is showing: it matches the CONTENT that
+		 * is in it right now against the frames it recorded at load
+		 * (hd_level.cpp, HDWaterFrameFor). So the classic rotation is
+		 * simulated here - textinfo[range[0]] = textinfo[range[1]] all the
+		 * way along and the first one round to the end, which is
+		 * S_AnimateTextures' own loop - and after every step the frame that
+		 * the range's FIRST texinfo now holds is read off. It has to walk the
+		 * range in order and come back round after `frames` steps. */
+		{
+			std::vector<int> content((size_t)frames);
+			bool ok = true;
+
+			for (int i = 0; i < frames; i++)
+				content[(size_t)i] = i;
+
+			printf("      the rotation: ");
+
+			for (int step = 0; step < frames * 2 + 1; step++)
+			{
+				const int show = content[0];
+				const int want = step % frames;
+
+				printf("%s%d", step ? " " : "", framePage[(size_t)show]);
+
+				if (show != want)
+					ok = false;
+
+				const int keep = content[0];
+
+				for (int i = 0; i + 1 < frames; i++)
+					content[(size_t)i] = content[(size_t)(i + 1)];
+
+				content[(size_t)(frames - 1)] = keep;
+			}
+
+			printf("  ->  %s\n", ok ? "walks the range and comes back round"
+				: "OUT OF STEP");
+		}
+	}
+
+	std::string list;
+
+	for (size_t i = 0; i < pages.size(); i++)
+	{
+		char one[32];
+
+		sprintf(one, "%s%d", i ? "," : "", pages[i]);
+		list += one;
+	}
+
+	printf("  HDLOG level=%s water ranges=%d frames=%d hd pages=%s missing=%d\n",
+		stem, waterRanges, waterFrames,
+		list.empty() ? "none" : list.c_str(), missing);
+}
+
 static void RunSequence(const char* root, const char* list, int rooms,
 	bool managed, int threads)
 {
@@ -2164,6 +2478,16 @@ int main(int argc, char** argv)
 	printf("H2: %d see-through part(s) in the alpha pass (material 14), "
 		"%d draw call(s)\n", stats.blendParts, stats.blendRanges);
 
+	// N1: the still water surfaces the .TRG builds itself - the same line
+	// the engine writes to HDLOG at level build.
+	if (stats.waterParts)
+		printf("N1: basin parts=%d (%d additive, %d opaque, %d still), "
+			"triangles=%d, sub-rect tiles=%d, smallest UV span=%d/255, "
+			"ripple capped at %.4f page units\n", stats.waterParts,
+			stats.waterAdditiveParts, stats.waterOpaqueParts,
+			stats.waterStillParts, stats.waterTris, stats.waterSubRectParts,
+			stats.waterSmallestSpan, stats.waterRippleCap);
+
 	for (int i = 0; i < g_flat_count; i++)
 	{
 		const int* b = g_flat_box[i];
@@ -2302,6 +2626,11 @@ int main(int argc, char** argv)
 		else
 		{
 			int rooms = 0, faces = 0, covered = 0, restored = 0, restoredRooms = 0;
+			// N1: rooms handed to the .TRG because it builds the water itself.
+			int sheetRooms = 0, sheetFaces = 0;
+			// N2: the texinfos the restored faces name - the way into the
+			// classic animation ranges.
+			std::vector<int> waterTiles;
 
 			for (int r = 0; r < level.roomCount() && r < HDRenderGroupCount(); r++)
 			{
@@ -2317,7 +2646,14 @@ int main(int argc, char** argv)
 				if (!level.roomFaces(r, flat, error))
 					continue;
 
-				int here = 0, hit = 0;
+				/* `inPlane` every classic water face of the room, `hit` how
+				 * many of them the .TRG has any flat art for (fix round H's
+				 * majority, counted over all of them), `sheet` how many carry
+				 * the .TRG's OWN water and are therefore not drawn, `here`
+				 * what is left to restore. The engine's own split,
+				 * BuildWaterSurfaces in hd_level.cpp. */
+				int inPlane = 0, here = 0, hit = 0, sheet = 0;
+				std::vector<int> here_tiles;		// N2
 
 				for (size_t f = 0; f < flat.size(); f++)
 				{
@@ -2344,35 +2680,87 @@ int main(int argc, char** argv)
 						if (z > z1) z1 = z;
 					}
 
-					here++;
+					inPlane++;
 
 					if (HDRenderGroupFlatArt(r, rm.yBottom, x0, z0, x1, z1))
 						hit++;
+
+					/* N1: material 16 here means the remaster lays its own
+					 * water over this piece of ground, so the classic face is
+					 * not drawn. It stays in `hit`/`inPlane` above, because
+					 * the majority is fix round H's and stays fix round H's. */
+					if (HDRenderGroupWaterArt(r, rm.yBottom, x0, z0, x1, z1))
+					{
+						sheet++;
+						continue;
+					}
+
+					here++;
+					here_tiles.push_back(flat[f].texInfo);	// N2
 				}
 
-				if (!here)
+				if (!inPlane)
 					continue;
 
 				rooms++;
-				faces += here;
+				faces += inPlane;
 				covered += hit;
 
-				const bool restore = hit * 2 < here;
+				const bool restore = here && hit * 2 < inPlane;
 
 				if (restore)
 				{
 					restored += here;
 					restoredRooms++;
+
+					// N2: only a face that is really drawn asks for a frame.
+					for (size_t t = 0; t < here_tiles.size(); t++)
+					{
+						bool seen = false;
+
+						for (size_t w = 0; w < waterTiles.size(); w++)
+							if (waterTiles[w] == here_tiles[t])
+								seen = true;
+
+						if (!seen)
+							waterTiles.push_back(here_tiles[t]);
+					}
 				}
 
+				if (sheet)
+				{
+					sheetRooms++;
+					sheetFaces += sheet;
+				}
+
+				char verdict[96];
+
+				if (restore)
+					sprintf(verdict, "RESTORE %d of %d", here, inPlane);
+				else
+					sprintf(verdict, "leave it to the .TRG");
+
 				printf("  room %3d  y %6d  %3d classic face(s), the .TRG covers "
-					"%3d  ->  %s\n", r, rm.yBottom, here, hit,
-					restore ? "RESTORE" : "leave it to the .TRG");
+					"%3d, of them water sheet %3d  ->  %s\n", r, rm.yBottom,
+					inPlane, hit, sheet, verdict);
 			}
 
 			printf("  %s: %d reflecting room(s), %d face(s) in the minfloor "
 				"plane, %d covered by the .TRG, %d face(s) in %d room(s) "
-				"restored\n", stem, rooms, faces, covered, restored, restoredRooms);
+				"restored; %d room(s) with %d face(s) carry the .TRG\'s own "
+				"water sheet\n", stem, rooms, faces, covered, restored,
+				restoredRooms, sheetRooms, sheetFaces);
+			printf("  (the majority is fix round H's, over every face in the "
+				"plane; a face under the .TRG's own sheet is then dropped "
+				"from what a restored room draws)\n");
+
+
+			/* N2: AND WHICH HD PAGES THE RESTORED FACES' OWN ANIMATION
+			 * FRAMES HAVE. The offline twin of the engine's own HDLOG line -
+			 * the classic level's animated texture ranges, the tiles in
+			 * them, the 64x64 cell each tile sits in and the .DDS the .TEX
+			 * names for that cell. */
+			WaterFrames(level, root, stem, waterTiles);
 		}
 
 		HDRenderShutdown();

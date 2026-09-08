@@ -120,11 +120,27 @@ static void InsertRoomWater(ROOM_INFO* r)
 			transformed = entry->roomlet;
 		}
 
+		/* FIX ROUND N (N2): THE REMASTER'S OWN PICTURE OF THIS FRAME. The
+		 * face keeps its texinfo, its light, its shimmer and its place in
+		 * the sort; where the remaster ships an HD picture of the animation
+		 * frame the texinfo is showing right now, `swap` is that same record
+		 * with the HD page and the coordinates on it, and nothing else about
+		 * the draw changes. False for a frame it has none for, and always
+		 * false with hd_enable off - there are no faces here at all then.
+		 * A stack record is safe: both the bucket path and the sort list
+		 * copy the page and the eight coordinates by value, and the classic
+		 * clipping code hands itself a stack copy in the same way
+		 * (polyinsert.cpp, AddQuadClippedZBuffer). */
+		TEXTURESTRUCT swap;
+
 		if (entry->quad)
 		{
 			short* ptr = roomlet->pFac + entry->face * 6;
 			const long double_sided = (ptr[4] >> 15) & 1;
 			TEXTURESTRUCT* tex = &textinfo[ptr[4] & 0x3FFF];
+
+			if (HDWaterFrameFor(tex, &swap))
+				tex = &swap;
 
 			if (tex->drawtype)
 				AddQuadSorted(aVertexBuffer, ptr[0], ptr[1], ptr[2], ptr[3], tex, double_sided);
@@ -136,6 +152,9 @@ static void InsertRoomWater(ROOM_INFO* r)
 			short* ptr = roomlet->pFac + roomlet->nQuad * 6 + entry->face * 5;
 			const long double_sided = (ptr[3] >> 15) & 1;
 			TEXTURESTRUCT* tex = &textinfo[ptr[3] & 0x3FFF];
+
+			if (HDWaterFrameFor(tex, &swap))
+				tex = &swap;
 
 			if (tex->drawtype)
 				AddTriSorted(aVertexBuffer, ptr[0], ptr[1], ptr[2], tex, double_sided);

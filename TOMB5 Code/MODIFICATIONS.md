@@ -2543,7 +2543,8 @@ material 8, 23,040 triangles of it in JOBY4 and 260,756 in ANDY1. Counting
 texels below alpha 128 on the top mip settles it per page rather than per
 material: JOBY4's kelp pages 3198 and 3257 are 52 % and 95 % hole, ANDY1's
 tree pages 3268-3272 are 62-87 %, and every ordinary page - material 0's
-walls, material 16's light shafts, material 2's glow - is 0 %. A page with no
+walls, material 16's sheets (called light shafts here; fix round N found them
+to be still WATER surfaces), material 2's glow - is 0 %. A page with no
 hole cannot lose a pixel to a test it always passes, so the test is switched
 on for the opaque pass exactly on the pages that have something to cut. The
 threshold is the remaster's own: material 6 and material 8 carry 0.5 in
@@ -3150,13 +3151,15 @@ all - is the third thing in this round. **No new source file**: it changes
 **R1 - what the additive pass was doing.** It is blended ONE / ONE with the
 depth write off, so overlapping parts SUM, and the remaster's light shafts and
 lamp cones are fans of dozens of quads that all meet at the lamp. Its caustic
-net over JOBY4's sea bed is one 192 x 192 sheet over the whole floor. Painted
+net over JOBY4's sea bed is one 192 x 192 sheet over the whole floor (fix round
+N: it is not a caustic net at all - it is the sea's own surface, three sheets
+of it 16 units apart, seen from below). Painted
 as texel x baked light with no weight of its own, that saturates. Measured with
 `RoomProbe`, on the additive pass alone, over the pixels it covers:
 
 | scene | what it is | before | after |
 |---|---|---|---|
-| JOBY4 room 19 | the caustic net | 98.1 % mean, 86.9 % of it pure white | 6.9 %, nothing white |
+| JOBY4 room 19 | the caustic net (fix round N: the SEA of Deepsea Dive seen from under it) | 98.1 % mean, 86.9 % of it pure white | 6.9 %, nothing white |
 | ANDY3 room 126 | a window glow | 72.5 %, 22.1 % white | 61.2 %, 19.0 % white (see below) |
 | RICH2 room 25 | two wall lamps | 21.9 %, peak 100 % | 9.1 %, peak 94.9 % |
 | RICH1 room 136 | a ray fan | 22.7 %, peak 100 % | 4.3 %, **peak 27.8 %** |
@@ -3182,7 +3185,7 @@ slot over the distinct (material, param) tuples of all fifteen levels:
 | 2 | shafts, lamp cones, window and candle glows | `p0` in {0.5, 1.0, 1.5} and `p2` in {0, 0.1, 0.4, 0.6, 0.8, 1.0, 2.0} move together and with the page - a preset; `p3` is a time (below) | `p1` |
 | 14 | lit decals and panels | `p2` and `p3` are zero in all sixteen tuples, `p0` is an integer layer number (0, 12, 26, 32, 38, 45, 50, 61, 102, 139) | `p1`, and it never leaves 0..1 |
 | 15 | haze | `p1` is 14 or 30 in every one of eleven tuples - a speed, not a weight | `p2`, 0.025 to 0.1 |
-| 16 | whole-surface sheets, the caustic net among them | `p0` and `p1` pair up with the page | `p2`, 0.035 to 0.2, the same shape as 15's |
+| 16 | whole-surface sheets, the caustic net among them | `p0` and `p1` pair up with the page | `p2`, 0.035 to 0.2, the same shape as 15's - **superseded in fix round N**: material 16 is the remaster's STILL WATER SURFACE and `p2` is a rate, not a weight |
 
 Everything else - materials 0, 1, 6, 7, 8, 13 and the destructible statics'
 high-bit numbers - has no slot that behaves like a weight and draws exactly as
@@ -3221,6 +3224,10 @@ moves. Both die with `hd_motion` 0, exactly as stage S5's scroll and wind do.
 *Not adopted:* material 15's `p1` (14 or 30) and material 16's `p1` (0.25, 0.7,
 1.0) look like speeds as well, but nothing in the data says of WHAT, and
 neither material carries a time slot. They stand still and are named here.
+**Superseded in fix round N for material 16:** what the data says of WHAT is
+the AREA of the body of water each part covers, over the whole game, and `p1`
+is the one of the three numbers that does NOT follow it - it is read as the
+amplitude of a ripple now. Material 15 is untouched.
 
 **R3 - the sky.** Every `.TRG` whose level has a sky ends in one group past the
 last room - two in TITLE, none in JOBY3 and JOBY5 - and until now the HD path
@@ -7332,6 +7339,325 @@ which hands the renderer the same boxes the engine hands it, and `-window
 all|inside|overhang`, which draws one half of a group - which is how "room
 124's art is entirely outside room 124" was turned into a picture and a draw
 call count.
+
+#### Fix round N - the water: the material that was a surface all along, the HD frames on the classic faces, and the six double rooms (#123)
+
+Three findings and a correction, all of them measured against the fifteen
+`.TRG` files, the fifteen classic levels and the remaster's own `TEX` folder
+before a line was changed. The correction is ours: fix round R3a read one of
+the remaster's materials as a kind of light, and it is not.
+
+**N1 - material 16 is the still water surface.** Round R3a put material 16
+beside material 15 and read its `param[2]` as an additive WEIGHT, on the
+grounds that both live in the same narrow range - 0.035 to 0.2. That is a
+coincidence of two numbers, and taking the material apart part by part
+(`TrgProbe -matparts 16 -classic <folder>`) says what it really is:
+
+| | |
+|---|---|
+| how many | **28 parts in 6 levels**, 245,678 triangles - and nine levels have none at all (ANDREA1 1 / 1,460, ANDREA2 1 / 2,048, ANDY2 2 / 2,384, JOBY3 1 / 128, JOBY4 1 / 73,728, JOBY5 22 / 165,930) |
+| where | ANDREA1 59 (the fountain of Rome), ANDREA2 231 (a basin of Trajan's Markets), ANDY2 52 and 57 (pools in the Labyrinth), JOBY3 105, JOBY4 19 (**the sea of Deepsea Dive**, 73,728 triangles), JOBY5 22 parts including 65 and 82 (the open sea) |
+| what shape | **17 of the 28 are a DOUBLE sheet**, two units apart, with opposite normals - the view out of the air and the view out of the water |
+| where in height | 1 to 20 units off the classic `minfloor` of a `ROOM_REFLECT` room, in every one of the basins |
+| its pages | 3255 is a grey noise field (R == G == B, alpha 254.8, **no hole at all**), 3159 a grey field with an alpha ramp |
+| shared vertices | not one of them with any part of another material; `param[3]` is 0 everywhere; `sway` is 0 in 27 of the 28 |
+
+And the three numbers scale with the AREA of the body of water, monotonically,
+over the whole game:
+
+| squares of floor | what it is | `param[0]` | `param[1]` | `param[2]` |
+|---|---|---|---|---|
+| 3,538 | JOBY4's sea | 0.1 | 1.0 | 0.035 |
+| 900 | JOBY5's sea | 0.3 | 1.0 | 0.08 |
+| 36 | a large pool | 0.8 | 0.7 | 0.1 |
+| 1 to 28 | a basin | 0.8 | 0.7 | 0.2 |
+| 4 | a puddle | 5.0 | 0.1 | 0.5 |
+
+A brightness would not do that. A wave would: `param[0]` behaves like a spatial
+frequency and `param[2]` like a rate, and `param[1]` is the one that does not
+follow the area at all. JOBY5's group 115 carries the proof by contrast: two
+parts of identical geometry to JOBY3's 105, one with `(5.0, 0.1, 0.5)` and one
+with the **null tuple** `(0, 0, 0, 0)` - a still puddle beside a rippling one.
+
+*Where the reading comes from, said plainly.* The table above is ours, measured
+over the fifteen `.TRG` files, and it forces `param[1]`: it is the one slot
+that does not follow the area. It does **not** decide which of `param[0]` and
+`param[2]` is the frequency and which the rate - they move together with the
+area, and one measurement cannot separate them. The order this round settled on
+is the same order TROne's prose names, and TROne has that order from the
+remaster's own shaders, which are off limits here at first hand and at second.
+So it is written into the source as an **unproven coin flip with a one-line
+reversal beside it** (`MaterialRipple`, exchange `out[0]` and `out[2]`) rather
+than as a result, and the play test is what decides it. No constant of TROne's
+is used anywhere: every number below is derived from the TR5 measurement above,
+and the wave in `hd_room.hlsl` is a different curve with different terms.
+
+*What follows from it, in the picture.* Twelve rooms had **no water surface at
+all**: fix round H suppressed the classic face because the `.TRG` covers that
+plane, and what covers it was drawn at a fifth or a twenty-eighth of its
+strength and could not be seen (ANDREA2 231; JOBY5 2, 14, 49, 50, 52, 53, 61,
+117, 139, 143, 151). `MaterialAddWeight` now lets material 16 fall through to
+1.0 like every other material, and `MaterialRipple` (`hd_render.cpp`) reads its
+three numbers as what they are.
+
+*The ripple, per pixel, in our own words.* A new per-draw-call constant
+(`gRipple`, pixel register c36) carries three floats and is **(0, 0, 0) for
+every draw call in the game that is not one of those 28 parts**, where the
+shader's one compare on `.y` skips the whole of it. The anchors are ours and
+each is named in the source:
+
+- the **scale** - `param[0]` = 0.8, the commonest value and the basins' own, is
+  one wave per one and a half floor squares (1,536 units); everything else in
+  proportion, with a floor of 0.05 so the null tuple has a finite wavelength.
+- the **rate** - the classic water surface walks one `WaterTable` row per game
+  step (`wibble += 4`, and the row is `(wibble >> 2) & 0x3F`), so its own
+  period is 64 steps of a 30 Hz clock: 2.13 s. `param[2]` = 0.2 is put on that
+  period, which makes 0.5 -> 0.85 s, 0.1 -> 4.3 s and JOBY4's 0.035 -> 12 s, a
+  swell rather than a ripple.
+- the **travel** - `param[1]` = 1 moves the coordinate by a **tenth of the
+  part's own smaller UV span**. 23 of the 28 parts live in a sub-rectangle of
+  their page (the tightest is 40 of 255, JOBY5's group 4) and the sampler is on
+  CLAMP for a still surface, so anything that moves a coordinate has to know
+  how far it may move it. On that tightest part the cap is 4 texels of a 256
+  page - a bound on the travel, not a proof that the sample stays inside the
+  part's own rectangle: a pixel already on its rim can be pushed that tenth
+  over it.
+
+The wave itself is the smoothstep of a triangle rather than a sine -
+`abs(frac(p) * 2 - 1)`, then `3f^2 - 2f^3`, doubled and centred - which agrees
+with a cosine to within 6 % of its own amplitude and has the same zero mean and
+the same continuous slope. The reason is the ceiling: four sines take the room
+pixel shader from **453 to 512** instruction slots, which is exactly what
+shader model 3 guarantees and leaves the next round nowhere to stand; four of
+these take it to **476**. Nothing at all happens in the vertex shader - `sway`
+is 0 on 27 of the 28 parts, and a sheet that bobbed would tear away from the
+stone rim it is let into.
+
+*The brightness, measured before and after, `RoomProbe … -black -all`, the
+additive pass alone, at the tool's default clock (`t = 0`; the ripple moves, so
+a `-time` of its own shifts these by a tenth of a level and a few peaks):*
+
+| room | camera | before | after |
+|---|---|---|---|
+| ANDREA2 231, the basin | `4400 -1200 1600` yaw 0 pitch 30 | mean 1.7/255, peak 120 | mean **4.3**, peak **159** |
+| JOBY4 19, the sea from below | `712 3302 -19490` yaw 0 pitch -55 | mean 4.1/255, peak 13 | mean **120.8**, peak **255**, 20.6 % of it white |
+| JOBY5 49, a flooded room | `3500 2600 1500` yaw 0 pitch 35 | mean 0.4/255, peak 46 | mean **3.2**, peak **107** |
+| ANDREA1 59, the fountain | `5072 -1334 900` yaw 0 pitch 15 | mean 1.7/255, peak 143 | mean **2.6**, peak 143 |
+| ANDY2 52, a pool in the Labyrinth | the room's own frame | mean 0.4/255, peak 43 | mean **2.8**, peak **130** |
+
+Two rooms carry material 16 in a place the water survey never looks, because
+their level has no `ROOM_REFLECT` room at all or the part is opaque, and they
+belong in the play test all the same: **ANDY2's pools (52 and 57)**, one
+additive - the line above - and one that draws nothing from that camera, and
+**JOBY3's 105**, whose part is in the OPAQUE pass, where `MaterialAddWeight` was
+never consulted; it is unchanged in brightness (0.7/255 before and after) and
+gains only the ripple.
+
+The basins are what the round was for: ANDREA2's is a moving water surface in
+the picture where it was a smudge, and JOBY5's flooded rooms have a surface at
+all for the first time. **The sea of JOBY4 is the one open question and it is
+named here rather than tuned away.** Its sheet is THREE planes 16 units apart
+whose normals all face down, and an additive pass sums them, so at full weight
+one grey noise page is added three times over: 47 % of white on average with a
+fifth of the frame clipped. Round R3a measured the same part at the same weight
+from its own camera and got 98.1 % mean with 86.9 % pure white, and dimmed it
+for that reason. Ours is not a grey lid - it reads as a bright rippling sea
+seen from underneath, and the god rays are still drawn - but it is bright, and
+the play test decides. If it has to come down, the honest lever is the sheet's
+own baked light or the three-layer sum, **not** a weight invented for the
+material: the file has none.
+
+*The six double rooms.* With material 16 visible, six rooms would carry TWO
+water surfaces - the classic face fix round H restored and the `.TRG`'s own
+sheet 1 to 20 units beside it. `HDRenderGroupWaterArt` asks the same question
+`HDRenderGroupFlatArt` asks, but over a second table built from the material 16
+triangles alone, and **the face the sheet stands on is not drawn**. Measured
+through the engine's own gate (`RoomProbe -watersurvey`), that is exactly six
+rooms and no more:
+
+| room | classic faces in the plane | the `.TRG` covers | of those, its own water sheet | restored now |
+|---|---|---|---|---|
+| JOBY5 4 | 30 | 13 | 6 | 24 |
+| JOBY5 27 | 6 | 1 | 1 | 5 |
+| JOBY5 28 | 7 | 3 | 3 | 4 |
+| JOBY5 83 | 3 | 1 | 1 | 2 |
+| JOBY5 115 | 6 | 1 | 1 | 5 |
+| JOBY5 184 | 29 | 8 | 2 | 27 |
+
+**Per face, and only the face - which is not where this round started.** The
+first reading handed the WHOLE room to the `.TRG` on one sheet anywhere in its
+plane, and measured that is far too much: room 184's sheet covers 2 of the 29
+sectors the classic surface covers and its baked light there is 5 and 3 of 255,
+so 27 sectors of a flooded galley would have gone bare to save a double over 2.
+Rendered from `3580 -900 6138` pitch 60 the additive pass of that room is black
+but for one patch in the top right corner, mean 0.2 of 255. Room 4 is the same
+shape of case, 6 of 30.
+
+The other end is just as wrong and was tried too: leaving the sheeted faces out
+of the room's MAJORITY as well turns rooms fix round H deliberately handed to
+the `.TRG` back into restored ones - ANDREA2's 231 (26 faces, 14 of them the
+`.TRG`'s and all 14 the sheet) and eight more of JOBY5. So the majority is
+counted exactly as fix round H counted it, sheeted faces and all, and the only
+thing this round changes is that a face under the sheet is not drawn. There is
+no hole where one is dropped, because the `.TRG`'s own water is standing there:
+the pool stays one continuous surface, part of it the level's own and part of
+it the remaster's.
+
+Everything else is untouched: JOBY5's other 15 sheeted rooms and ANDREA2's 231
+were already left to the `.TRG` by the majority rule, and JOBY3's 13 rooms - see
+N3 - are not sheeted at all. Held against the survey room by room over all
+fifteen levels, those six lines are the only ones that move: JOBY5 restores
+**72 faces in 8 rooms**, where fix round H restored 86 in the same 8 and the
+first reading of this round restored 5 in 2.
+
+**N2 - the HD pictures of the classic water frames.** The surfaces fix round H
+restored are the level's own faces, animated the classic way: `S_AnimateTextures`
+(`specific\output.cpp`) rotates the CONTENTS of a range of texinfos once every
+six game steps, so the face keeps its number and the tile it shows walks along
+the range. The player found the other half himself - the remaster ships an HD
+painting of each of those frames.
+
+The way in is the `.TEX` sidecar, and it is the one file that maps a classic
+tile to an HD page: a page count, that many page numbers, then one `uint16` per
+object texture of the level. The format is TRForge's measurement
+(`trf_remaster/Remaster.h` and `HdPages.h`, MIT - two more files that could not
+be vendored and were used as a DESCRIPTION, exactly as `ItemModels.h` was for
+the `.TRM`; `vendor/trforge` holds only what this tree compiles, see
+`THIRD-PARTY.md`); the reader is `HDScanLevelTextures` in `hd_scan.cpp`,
+written from the description. What an HD page is matters more than the number:
+it is a repaint of the whole **64 x 64 cell** the tile sits in, at eight times
+the size, so the classic `u` of 0..1 over a 256 page becomes `u * 4` minus the
+cell's own column.
+
+Measured over the fifteen levels, per level, with `RoomProbe -watersurvey`:
+
+| level | ranges | frames | the HD pages | missing |
+|---|---|---|---|---|
+| ANDREA1 | 1 | 8 | 171..177, 236 | 0 |
+| ANDREA2 | 1 | 8 | 171..177, 281 | 0 |
+| ANDY1 | 1 | 8 | 764, 765, 785..787, 790..792 | 0 |
+| ANDY3 | 5 | 33 | 897, 898, 901, 903..905, 915, 916, 935 | 0 |
+| JOBY2 | 1 | 8 | 503, 515..521 | 0 |
+| JOBY4 | 1 | 8 | the same eight | 0 |
+| JOBY5 | 1 | 8 | the same eight | 0 |
+| the other seven | 0 | 0 | none | 0 |
+
+which is the player's own list of what he found in `TEX`, minus the three
+eighth frames (236, 281, 935) he did not name and plus ANDREA's 149..153 and
+170, which belong to ranges no water face names (ANDREA1's `.TEX` names 145 to
+185 among its 118 pages; only 171..177 and 236 are on a water frame).
+**Not one frame is missing a page.**
+
+Three things were checked rather than believed:
+
+- **the cell rule.** Over all fifteen levels: 217 to 559 tiles with HD art in
+  73 to 117 cells, and **0 cells wanting two different files** in every one of
+  them - which is what makes "the page belongs to the cell" usable. 0 to 47
+  tiles per level DO reach across a cell edge and those are dropped and keep
+  the classic picture; none of them is in a water range. (Counting a triangle's
+  fourth corner - which is not a corner: `AdjustUV` adjusts three and the draw
+  reads three - turned 127 of JOBY2's 382 tiles into false crossers, and that
+  is why the triangle bit is read here. **Which word carries that bit differs
+  between the file and the runtime**, and the tool read the wrong one until the
+  audit of this round: in the `.TRC` it is bit 15 of the `TileAndFlag` word at
+  offset +2, and `LoadTextureInfos` builds the runtime `flag` as the low 15
+  bits of the file's flag word with bit 15 of the file's *tpage* word on top
+  (`tex.tpage ^ (tex.tpage ^ tex.flag) & 0x7FFF`, `specific\file.cpp`), which
+  is what `AdjustUV` then tests. The two bits disagree in 16,202 of the game's
+  35,717 texinfos - 1,222 of JOBY2's 2,820 - so it was worth measuring: every
+  number in this section is identical read either way, and the whole
+  `-watersurvey` water-frame block is byte for byte the same before and after
+  the correction, in all fifteen levels.)
+- **the rectangles.** Every one of the water frames is a 64 x 64 tile filling
+  its cell exactly, so its HD rectangle is `(0,0) 512x512` - the whole page -
+  and no neighbouring tile can be pulled in whatever the filter does.
+- **the rotation.** The engine cannot know which frame a texinfo is showing; it
+  matches the CONTENT that is in it right now (page and uv corner, copied
+  whole by the classic rotation, so the comparison is on the same bits) against
+  the frames recorded at load. The tool simulates the classic rotation on each
+  range and reads the answer off after every step: `503 515 516 517 518 519 520
+  521 503 …` - it walks the range in order and comes back round, in all seven
+  levels.
+
+*How it is drawn.* Through the classic path exactly as before: the face keeps
+its light, its shimmer, its sort, its blend and its double-sidedness, and what
+changes is the page the bucket binds and the four coordinates on it
+(`HDWaterFrameFor`, `hd_level.cpp`; two lines in `InsertRoomWater`,
+`specific\drawroom.cpp`, both inside the HD branch). The pages are appended to
+the level's own page cache - one texture per page for the whole level, the same
+way the models are added - and borrowed into the classic `Textures[]` array
+**above `nTextures`**, never by raising that count: the font is addressed as
+`nTextures - 2`, the sky as `- 1` and the menu pages as `- 4` and `- 5`, and
+every one of them would move. The reference is given back at the next level
+build and when the device goes.
+
+**And it is given back by POINTER, not by slot number** - the one thing the
+first cut of this got wrong. The slots are taken at the CURRENT level's
+`nTextures`, and by the time they are given back the array belongs to another
+level: `FreeLevel` calls `FreeTextures`, which walks `0..nTextures-1` of the
+OLD level (`specific\texture.cpp`) and therefore leaves a slot above it alone;
+then `nTextures` goes back to 1 and `LoadTextures` refills `Textures[1..]` for
+the NEW level (`specific\file.cpp`); only then does the main thread reach
+`HDLevelBuild`. Where the new level has more pages than the old one, the slots
+in the list are by that point the new level's own classic pages - measured from
+the file headers, JOBY4 has 13 pages and borrows `Textures[13..20]` for its
+eight water frames while JOBY5 has 19 and puts its own in `1..18`, so six of
+JOBY5's pages would have been `Release`d and NULLed the moment Sinking
+Submarine was built; TITLE's 22 and ANDY3 -> RICH1 are the same collision, and
+the randomizer permutes the order, so every pairing is reachable. **And in a
+randomized run it is not the exception but the rule**: the randomizer appends
+texture pages, so out of a run those same levels carry 81 to 102 pages instead
+of 19 to 21 (ANDY1 102, JOBY5 99, RICH1 97, ANDREA2 81) while JOBY4 still
+carries 13 and DEL 10 - measured from the `.TRC` headers of a randomized data
+folder beside its vanilla backup. Every borrow made in one of the small levels
+lands inside the next level's own pages. So the
+`AddRef`'d `IDirect3DTexture9*` is kept beside the slot, the reference is
+always given back through that pointer, and the slot is cleared only while
+`Textures[at].tex` is still it. The `HDLOG` line says how many were given back
+and how many slots the next level had taken over.
+
+**N3 - JOBY3's thirteen rooms, measured and left alone.** Fix round H
+suppresses 26 classic water faces in JOBY3's rooms 26, 60, 144, 148, 150, 160,
+161, 164, 166, 180, 184, 191 and 192, and the art that covers those planes is
+not water - it is opaque material 0. Rendered (`RoomProbe`, rooms 26 and 164,
+looking down at the plane in question): the remaster draws a **diamond-plate
+deck** there, with crates standing on it. The submarine's rooms carry
+`ROOM_REFLECT` for the wet sheen on the plating, not for a pool. The
+suppression is right and nothing was changed - no fix on suspicion.
+
+**N4 - and the documentation.** `docs/Engine-Manual.md` named JOBY4 "the
+submarine" and ANDREA2 "the Colosseum", both one level out (JOBY3 is
+`LVL5_SUBMARINE` and JOBY4 `LVL5_DEEPSEA_DIVE`; ANDREA2 is
+`LVL5_TRAJAN_MARKETS` and ANDREA3 `LVL5_COLOSSEUM`, `game/gameflow.h`). Both
+corrected, and the *HD from the Remaster* section gained the two entries this
+round is about.
+
+**The regression.** Sixteen rooms in eight levels - ANDREA1 12, 19 and 59,
+ANDREA2 132 and 231, ANDREA3 20, ANDY1 30, JOBY2 19, JOBY4 19 and 40, JOBY5 49,
+100 and 184, RICH1 13 and 136, RICH2 25 - rendered through the same cameras at
+the same clock before and after: **byte for byte identical**. Eleven of them
+carry no material 16 part at all, which is the point of those: the ripple
+constant is three zeroes there and the shader's one compare skips it. The other
+five are the water rooms of this round, and they are identical because the
+change that follows the round - the water surface rule and the borrowed pages -
+lives in `hd_level.cpp`, which the room renderer does not link. The state
+bracket reports
+**0 of 59 watched device states changed** on every run. `be.bat` builds with no
+error and the four shader stamps match the MD5 of their `.hlsl` to the digit.
+With `hd_enable` off nothing here runs at all: `InsertRoomWater` is only
+reached from the HD branch of `InsertRoom`, and the two tables behind N1 and N2
+are empty.
+
+**The tools.** `RoomProbe -watersurvey` now prints, per room, how much of the
+`.TRG`'s cover is the remaster's own water sheet and how many faces the room
+restores of how many, which is the engine's own answer; and after the survey
+the **water frames** of that level - the
+animated ranges, their tiles, the cell each sits in, the HD page and rectangle,
+the cell-rule count and the rotation simulation. It is the offline twin of
+`BuildWaterFrames`, and both read the `.TEX` through the same
+`HDScanLevelTextures`. `Tr5Level` gained `debugAnimTexBlock`, which is where the
+animated ranges live in a `.TRC`.
+
 
 ---
 

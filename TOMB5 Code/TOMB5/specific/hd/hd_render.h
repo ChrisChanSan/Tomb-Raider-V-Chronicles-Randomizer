@@ -300,6 +300,19 @@ struct HDRenderStats
 	 * and the draw calls they cost. */
 	int blendParts;
 	int blendRanges;
+	/* N1: the still water surfaces - material 16. The parts, counted per
+	 * pass block, how the file splits them between the passes, their
+	 * triangles, how many of them live in a sub-rectangle of their page,
+	 * the smallest such span in 255ths, and the largest UV travel the ripple
+	 * was given, in page units (#123, fix round N; MaterialRipple). */
+	int waterParts;
+	int waterOpaqueParts;
+	int waterAdditiveParts;
+	int waterTris;
+	int waterSubRectParts;
+	int waterStillParts;		// of those, the ones with no ripple at all
+	int waterSmallestSpan;
+	float waterRippleCap;
 	double vertexBytes;
 	double indexBytes;
 	double readMs;			// reading and parsing the .TRG
@@ -555,6 +568,16 @@ int HDRenderGroupOverhangTriangles(int group);
  * it. See hd_level.cpp, BuildWaterSurfaces. */
 bool HDRenderGroupFlatArt(int group, int y, int x0, int z0, int x1, int z1,
 	int slack = 32);
+/* AND DOES IT BUILD THE WATER ITSELF (#123, fix round N)? The same question
+ * over the MATERIAL 16 triangles alone - the remaster's own still water
+ * surface. A yes here is final FOR THAT FACE and needs no majority behind it:
+ * the classic face and the .TRG's sheet would stand one to twenty units apart
+ * and that piece of pool would carry two surfaces. It is not a verdict on the
+ * whole room, though - the room keeps every face the sheet does NOT cover, or
+ * a sheet over two sectors would empty a pool of twenty-nine. See
+ * BuildWaterSurfaces. */
+bool HDRenderGroupWaterArt(int group, int y, int x0, int z0, int x1, int z1,
+	int slack = 32);
 // How many distinct horizontal planes that group's art covers - for the log.
 int HDRenderGroupFlatPlanes(int group);
 int HDRenderDestructibleCount();
@@ -594,6 +617,9 @@ int HDRenderCutoutCalls();
 int HDRenderFlipbookCalls();
 // R3b: and how many of them carried a gloss out of their material.
 int HDRenderGlossCalls();
+// N1: and how many drew a still water surface - a material 16 part with a
+// ripple on it (#123, fix round N).
+int HDRenderWaterCalls();
 
 // The bytes one room vertex takes in the vertex buffer. Named here because the
 // texture budget has to price a level's buffers before they are made.

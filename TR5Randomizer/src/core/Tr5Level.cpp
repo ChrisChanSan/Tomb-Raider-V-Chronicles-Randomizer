@@ -191,7 +191,8 @@ bool Tr5Level::findItems(std::string& error)
         STEP("zones", skipN(numBoxes, 2 * 10));
     }
 
-    STEP("animated textures", i32(n)); STEP("animated textures", skipN(n, 2));
+    STEP("animated textures", i32(n)); mark(m_animtex, n);
+    STEP("animated textures", skipN(n, 2));
     // A single byte: nAnimUVRanges at the end of LoadAnimatedTextures. Easy
     // to miss, because it sits as a ReadChar between whole blocks - and
     // exactly this one byte shifted everything that follows by one position

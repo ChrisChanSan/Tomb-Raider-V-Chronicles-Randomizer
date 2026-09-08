@@ -767,6 +767,15 @@ public:
     const std::vector<uint8_t>& debugBytes() const { return m_bytes; }
     int32_t debugTexinfoCount() const { return m_texinfos.count; }
     bool debugTexinfoBlock(size_t& dataAt, int32_t& n) const { dataAt = m_texinfos.dataAt; n = m_texinfos.count; return m_texinfos.count > 0; }
+    /* The ANIMATED TEXTURE ranges, for the diagnostic tools (#123, fix round
+     * N): where the block lies and how many SHORTS it holds. The layout is
+     * the engine's own `aranges` (specific\output.cpp, S_AnimateTextures):
+     * one short with the number of ranges, then per range one short with the
+     * number of FRAMES MINUS ONE followed by that many plus one texinfo
+     * numbers. Reading it here rather than in the tool keeps the one walk of
+     * the main block the one place that knows where anything is. */
+    bool debugAnimTexBlock(size_t& dataAt, int32_t& shorts) const
+    { dataAt = m_animtex.dataAt; shorts = m_animtex.count; return m_animtex.count > 0; }
     // Anim and command block for diagnostic tools (AnimDump): location and
     // count, record format see SZ_ANIM in Tr5Transfer.cpp (40 bytes).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
@@ -961,7 +970,8 @@ private:
         int32_t count = 0;
     };
     Block m_meshData, m_meshPtrs, m_anims, m_changes, m_ranges, m_commands,
-          m_bones, m_frames, m_objects, m_sprites, m_texinfos, m_cameras;
+          m_bones, m_frames, m_objects, m_sprites, m_texinfos, m_cameras,
+          m_animtex;
 
     // Re-reads header and main block after bytes were inserted.
     // copyMoveableFrom is a member and defined in Tr5Transfer.cpp - the

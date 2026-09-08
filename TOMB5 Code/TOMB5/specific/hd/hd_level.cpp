@@ -36,6 +36,7 @@
 #include "../../game/gameflow.h"		// gfLevelId
 #include "../../game/lara.h"		// GfHdOutfit - data[3] (#123, S7)
 #include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
+#include "../file.h"				// textinfo, aranges, nAnimUVRanges (#123, N2)
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
 #include "hd_light.h"
 
@@ -600,6 +601,9 @@ namespace
 	bool g_matrix_checked = false;
 	// R3a: one line per level about the sky dome, and only one.
 	bool g_sky_logged = false;
+	// N1: the most water surfaces any frame of this level has drawn, which
+	// is what throttles the line about them - see HDFrameDrawWindowed.
+	int g_water_calls_worst = 0;
 
 	// Whether THIS frame's projection has been taken yet - by the first HD
 	// room or by the first HD item, whichever the engine reaches first.
@@ -1035,7 +1039,15 @@ static void BuildWaterSurfaces()
 		if (i >= HD_MAX_ROOMS || !g_group_hd[i])
 			continue;
 
+		/* Every classic water face of the room, and of those how many the
+		 * .TRG has ANY art for (fix round H's majority) and how many it lays
+		 * its OWN water over (N1, a material 16 sheet). See the note below;
+		 * the first two numbers are counted exactly as fix round H counted
+		 * them, sheeted faces and all, so that the majority it takes is the
+		 * same majority. */
+		int inPlane = 0;
 		int covered = 0;
+		int sheeted = 0;
 
 		for (int n = 0; n < r->nRoomlets; n++)
 		{
@@ -1091,10 +1103,25 @@ static void BuildWaterSurfaces()
 				if (!water)
 					continue;
 
+				inPlane++;
+
 				// The .TRG's own answer for that piece of plane.
 				if (HDRenderGroupFlatArt(i, (int)r->minfloor,
 					(int)x0, (int)z0, (int)x1, (int)z1))
 					covered++;
+
+				/* N1: and does the .TRG lay its OWN water over this piece of
+				 * ground? Then the classic face is dropped here and now -
+				 * that ground has a surface already, and a second one one to
+				 * twenty units away from it is the one thing worse than
+				 * none. It is still counted above, because the majority
+				 * below is fix round H's and has to stay fix round H's. */
+				if (HDRenderGroupWaterArt(i, (int)r->minfloor,
+					(int)x0, (int)z0, (int)x1, (int)z1))
+				{
+					sheeted++;
+					continue;
+				}
 
 				HDRoomWaterFace entry;
 
@@ -1112,12 +1139,48 @@ static void BuildWaterSurfaces()
 		 * the pool. So the room decides, by majority - and a room whose
 		 * surface the remaster really did build (ANDREA3, JOBY3, RICH2, and
 		 * twelve of JOBY5's twenty-five) keeps every face out of the way. */
-		if (!g_water_faces[i].empty() &&
-			covered * 2 >= (int)g_water_faces[i].size())
+		/* BUT THE REMASTER'S OWN WATER IS DROPPED PER FACE, AND ONLY THE FACE
+		 * (#123, fix round N, N1, and the audit of that round).
+		 *
+		 * Fix round H asked one question - does the .TRG draw ANY horizontal
+		 * art in this plane - and a stone coping answers it as readily as a
+		 * water surface. That is why the COPING question is a majority: a
+		 * coping is not water, so dropping the faces it touches one by one
+		 * would leave square holes in the middle of a pool.
+		 *
+		 * Material 16 is a different answer: it IS the remaster's still
+		 * water, so where it stands the classic face is not a hole but a
+		 * DOUBLE - a second surface one to twenty units from the first.
+		 * Dropping exactly those faces leaves no hole anywhere; the pool
+		 * stays one continuous surface, part of it the level's own and part
+		 * of it the remaster's.
+		 *
+		 * THE FIRST READING OF THIS ROUND handed the whole room over on one
+		 * sheet anywhere in the plane, and measured that is far too much:
+		 * JOBY5's room 184 has 29 classic faces in the plane and a sheet over
+		 * 2 of them, room 4 has 30 and a sheet over 6 - so 27 and 24 sectors
+		 * of pool would have gone bare to save a double over 2 and 6.
+		 *
+		 * The other end is just as wrong. Leaving the sheeted faces out of
+		 * the majority as well turns rooms fix round H deliberately handed to
+		 * the .TRG back into restored ones - ANDREA2's 231 (26 faces, 14 of
+		 * them the .TRG's, all 14 the sheet) and eight more of JOBY5 - which
+		 * is a change nobody asked for and no measurement supports. So the
+		 * count above is fix round H's count, sheeted faces and all, and the
+		 * ONLY thing this round changes is that a sheeted face is not drawn.
+		 *
+		 * Measured over the fifteen levels that is six rooms and no others:
+		 * JOBY5's 4 (30 -> 24), 27 (6 -> 5), 28 (7 -> 4), 83 (3 -> 2), 115
+		 * (6 -> 5) and 184 (29 -> 27). Every other room in the game restores
+		 * exactly what it restored before. */
+		if (inPlane && covered * 2 >= inPlane)
 		{
-			g_water_face_kept += (int)g_water_faces[i].size();
+			g_water_face_kept += inPlane;
 			g_water_faces[i].clear();
 		}
+		else
+			// A sheeted face is left to the .TRG as surely as a covered one.
+			g_water_face_kept += sheeted;
 
 		if (!g_water_faces[i].empty())
 		{
@@ -1125,15 +1188,504 @@ static void BuildWaterSurfaces()
 			g_water_face_total += (int)g_water_faces[i].size();
 			g_water_faces[i].shrink_to_fit();
 
-			Log("HDLOG room=%d water surface restored=%d face(s) at y=%d, "
-				"the .TRG covers %d of them", i,
-				(int)g_water_faces[i].size(), (int)r->minfloor, covered);
+			Log("HDLOG room=%d water surface restored=%d of %d face(s) at "
+				"y=%d, the .TRG covers %d of them and lays its own water over "
+				"%d", i, (int)g_water_faces[i].size(), inPlane,
+				(int)r->minfloor, covered, sheeted);
 		}
+		else if (sheeted)
+			Log("HDLOG room=%d water surface left to the .TRG, %d of its %d "
+				"face(s) under the .TRG's own sheet", i, sheeted, inPlane);
 	}
 
 	Log("HDLOG level=%s water surfaces restored=%d in %d room(s), "
 		"left to the .TRG=%d", g_stem, g_water_face_total, g_water_face_rooms,
 		g_water_face_kept);
+}
+
+
+/* ------------------------------------- the HD water frames (N2) --------- */
+
+/* THE REMASTER'S OWN PICTURE ON THE CLASSIC WATER SURFACE (#123, fix round
+ * N, N2).
+ *
+ * WHAT FIX ROUND H LEFT. Where the .TRG builds no water, the level's own face
+ * is drawn on top of the HD room by the classic path, with its own texinfo -
+ * and therefore its own animated texture range, its own light and the classic
+ * shimmer. That is right about the geometry and about the motion, and it puts
+ * a 256-pixel classic tile in the middle of a room drawn from 512-pixel HD
+ * pages. The player found the missing half himself: the remaster ships HD
+ * pictures of those very animation frames in its TEX folder.
+ *
+ * MEASURED, over the fifteen levels (RoomProbe -watersurvey, whose
+ * `WaterFrames` is the offline twin of this file):
+ *
+ *     ANDREA1   1 range,  8 frames -> 171..177 and 236
+ *     ANDREA2   1 range,  8 frames -> 171..177 and 281
+ *     ANDY1     1 range,  8 frames -> 764, 765, 785..787, 790..792
+ *     ANDY3     5 ranges, 33 frames -> 897, 898, 901, 903..905, 915, 916, 935
+ *     JOBY2     1 range,  8 frames -> 503, 515..521
+ *     JOBY4     1 range,  8 frames -> the same eight
+ *     JOBY5     1 range,  8 frames -> the same eight
+ *     the other seven levels: no restored water face is in an animated range
+ *
+ * and every one of those pages is in the TEX folder - `missing=0` in all
+ * seven. The player's own list of what he found there is the same list, minus
+ * the three eighth frames (236, 281, 935) and plus ANDREA's 149..153 and 170,
+ * which are on tiles no water face names - ANDREA1's .TEX puts 149..153 on
+ * five tiles and 170 on three, and not one of the eight is in the range the
+ * fountain's own texinfo belongs to (its frames are tiles 2417..2423 and
+ * 2665, which carry 171..177 and 236).
+ *
+ * HOW THE CLASSIC ANIMATION WORKS, because the substitution has to follow it:
+ * S_AnimateTextures (specific\output.cpp) does not change which texinfo a
+ * face names. Every six game steps it ROTATES THE CONTENTS of the texinfos in
+ * a range - textinfo[range[0]] = textinfo[range[1]] all the way along and the
+ * first one round to the end. So the face keeps its number and the TILE it
+ * shows walks along the range. What identifies the tile that is on screen
+ * right now is therefore the CONTENT of its texinfo - its page and its own uv
+ * corner - and that is what is matched below. The values are copied whole by
+ * that rotation, so the comparison is on the same bits that were written at
+ * load time; nothing is recomputed and nothing rounds.
+ *
+ * WHAT AN HD PAGE IS: not a repaint of the tile but of the whole 64 by 64
+ * CELL the tile sits in, at eight times the size (hd_scan.h has the
+ * measurement). So the classic u of 0..1 over a 256 page becomes u * 4 minus
+ * the cell's own column, and the tile lands where it belongs inside the 512
+ * page. A tile that reaches ACROSS a cell edge would land outside it, so
+ * those are dropped and keep the classic picture - 441 tiles in TR4 and TR5
+ * are of that kind and none of them turned up in a water range here.
+ *
+ * HOW IT IS DRAWN: through the classic path exactly as before. The face keeps
+ * its light, its shimmer, its sort and its blend; the only thing that changes
+ * is which texture the bucket binds and the four coordinates on it. The HD
+ * page is borrowed into the classic Textures[] array ABOVE nTextures - never
+ * by raising that count, because the font, the sky and the bar sprites are
+ * addressed as nTextures minus a small number and every one of them would
+ * move (specific\specificfx.cpp says so in the same words) - and the
+ * reference is given back at the next level build, by POINTER and not by slot
+ * number, because the array has been refilled for another level by then
+ * (ReleaseWaterFramePages says how, and why the difference matters).
+ *
+ * Nothing here runs with hd_enable off: the water face list is empty then,
+ * and this function returns at its first line. */
+struct HDWaterFrame
+{
+	unsigned short tile;		// the classic texinfo the frame lives in
+	unsigned short tpage;		// its page, as textinfo carries it
+	float u, v;			// its own uv corner - how the tile is known
+	short page;			// the borrowed entry in Textures[], or -1
+	unsigned char cx, cy;		// the 64 x 64 cell it sits in
+};
+
+// The biggest .TEX table in the game is 3,007 entries (JOBY5); this is the
+// ceiling the reader is given and it is not a limit anything reaches.
+#define HD_TEX_MAX_TILES 8192
+
+/* ONE BORROWED PAGE: the slot in Textures[] and the reference that was put
+ * into it. Both, and not the slot alone - see ReleaseWaterFramePages. */
+struct HDBorrowedPage
+{
+	int at;				// the entry in Textures[]
+	IDirect3DTexture9* tex;		// the reference this code AddRef'd
+};
+
+static std::vector<HDWaterFrame> g_water_frames;
+static std::vector<HDBorrowedPage> g_water_borrowed;
+
+/* Gives the borrowed pages back. On the main thread only: it releases
+ * Direct3D objects, so it belongs beside HDObjectRelease and never in
+ * HDLevelUnload - see the note there.
+ *
+ * AND THE SLOT NUMBER ALONE IS NOT ENOUGH TO GIVE ONE BACK (#123, fix round
+ * N, the audit of that round). The pages are borrowed at the CURRENT level's
+ * nTextures, and by the time this runs the level has changed under them:
+ * FreeLevel calls FreeTextures, which walks 0..nTextures-1 of the OLD level
+ * (specific\texture.cpp) and so does not touch a slot above it; then
+ * nTextures goes back to 1 and LoadTextures fills Textures[1..] for the NEW
+ * level (specific\file.cpp). Where the new level has more pages than the old
+ * one, the slots this list names are by then the NEW level's own classic
+ * pages - measured, JOBY4 has 13 and borrows 13..20 while JOBY5 has 19 and
+ * puts its own pages in 1..18, so six of them would be released and NULLed
+ * the moment the next level is built; and with the randomizer permuting the
+ * order, every such pairing is reachable.
+ *
+ * So the reference is given back by POINTER, which is always ours, and the
+ * slot is cleared only while it still holds that same pointer. A slot the
+ * next level has taken over is left exactly as that level wrote it. */
+static void ReleaseWaterFramePages()
+{
+	int given = 0;
+	int taken = 0;
+
+	for (size_t i = 0; i < g_water_borrowed.size(); i++)
+	{
+		const int at = g_water_borrowed[i].at;
+		IDirect3DTexture9* tex = g_water_borrowed[i].tex;
+
+		// The slot first, and only while it is still the one we wrote - the
+		// comparison happens before the Release so that it is never made
+		// against a pointer whose object has just gone.
+		if (at > 0 && at < 256)
+		{
+			if (Textures[at].tex == tex)
+			{
+				Textures[at].tex = 0;
+				Textures[at].width = 0;
+				Textures[at].height = 0;
+				Textures[at].bump = 0;
+				Textures[at].bumptpage = 0;
+			}
+			else
+				taken++;
+		}
+
+		// The reference then, and unconditionally: it is ours whatever has
+		// happened to the array in the meantime.
+		if (tex)
+		{
+			tex->Release();
+			given++;
+		}
+	}
+
+	if (!g_water_borrowed.empty())
+		Log("HDLOG water frame pages given back=%d of %d, %d slot(s) had "
+			"already been taken over by the next level and were left alone "
+			"(nTextures=%d)", given, (int)g_water_borrowed.size(), taken,
+			(int)nTextures);
+
+	g_water_borrowed.clear();
+	g_water_frames.clear();
+}
+
+static void BuildWaterFrames()
+{
+	g_water_frames.clear();
+
+	if (!g_water_face_total || !aranges || !textinfo)
+		return;
+
+	/* 1. THE TEXINFOS THE RESTORED FACES NAME. The same walk InsertRoomWater
+	 * makes, over the same faces, so a face that is not drawn cannot ask for
+	 * a page. */
+	std::vector<int> want;
+
+	for (int r = 0; r < number_rooms && r < HD_MAX_ROOMS; r++)
+	{
+		ROOM_INFO* room_ptr = &room[r];
+
+		for (size_t f = 0; f < g_water_faces[r].size(); f++)
+		{
+			const HDRoomWaterFace& entry = g_water_faces[r][f];
+
+			if (entry.roomlet < 0 || entry.roomlet >= room_ptr->nRoomlets)
+				continue;
+
+			ROOMLET* roomlet = &room_ptr->pRoomlets[entry.roomlet];
+
+			if (!roomlet->pFac)
+				continue;
+
+			const short* ptr = entry.quad
+				? roomlet->pFac + entry.face * 6
+				: roomlet->pFac + roomlet->nQuad * 6 + entry.face * 5;
+			const int tile = (entry.quad ? ptr[4] : ptr[3]) & 0x3FFF;
+			bool seen = false;
+
+			for (size_t i = 0; i < want.size(); i++)
+				if (want[i] == tile)
+					seen = true;
+
+			if (!seen)
+				want.push_back(tile);
+		}
+	}
+
+	if (want.empty())
+		return;
+
+	/* 2. THE .TEX TABLE. A randomized level carries more texinfos than the
+	 * table has entries - the randomizer only ever APPENDS them, which is
+	 * measured: JOBY2 vanilla has 2,820 texinfos and its table 2,820, and
+	 * the same level out of a run has 4,998 with the first 2,820 unmoved. So
+	 * a tile past the end of the table simply has no HD picture. */
+	std::vector<unsigned short> hd((size_t)HD_TEX_MAX_TILES, (unsigned short)0xFFFF);
+	const int got = HDScanLevelTextures(HDInstallRoot(), g_stem, &hd[0],
+		HD_TEX_MAX_TILES);
+
+	if (!got)
+	{
+		Log("HDLOG level=%s water ranges=0 frames=0 hd pages=none missing=0 "
+			"(no .TEX table)", g_stem);
+		return;
+	}
+
+	/* 3. THE RANGES THAT CARRY ONE OF THOSE TEXINFOS. The walk is
+	 * S_AnimateTextures' own: one short with the range count, then per range
+	 * one short with the number of frames MINUS ONE and that many plus one
+	 * texinfo numbers.
+	 *
+	 * The UV-ROTATE ranges are left out. Those are the level's waterfalls,
+	 * and they do not rotate their contents at all - the engine scrolls
+	 * their v instead, once per frame (S_AnimateTextures again), so the tile
+	 * in such a texinfo stays put while its v walks out of the cell the HD
+	 * page paints. The test is the engine's own expression, gfUVRotate and
+	 * the range's own place in the list. */
+	const int ranges = (int)*aranges;
+	const short* range = aranges + 1;
+	int water_ranges = 0, frames = 0, missing = 0, crossing = 0, uvskipped = 0;
+	std::vector<int> pages;
+
+	for (int i = 0; i < ranges; i++)
+	{
+		const int count = (int)*range++ + 1;	// the file counts n - 1
+		const short* tiles = range;
+
+		range += count;
+
+		if (i < nAnimUVRanges && gfUVRotate)
+		{
+			uvskipped++;
+			continue;
+		}
+
+		bool wanted = false;
+
+		for (int f = 0; f < count && !wanted; f++)
+			for (size_t w = 0; w < want.size(); w++)
+				if (want[w] == (int)tiles[f])
+				{
+					wanted = true;
+					break;
+				}
+
+		if (!wanted)
+			continue;
+
+		water_ranges++;
+
+		for (int f = 0; f < count; f++)
+		{
+			const int tile = (int)tiles[f];
+
+			if (tile < 0 || tile >= got)
+				continue;
+
+			frames++;
+
+			const unsigned short page = hd[(size_t)tile];
+
+			if (page == 0xFFFF)
+			{
+				missing++;
+				continue;
+			}
+
+			const TEXTURESTRUCT* tex = &textinfo[tile];
+			/* The cell of the tile, and the guard that it lies wholly
+			 * inside it: u is 0..1 over the classic page, which is four
+			 * cells across, and the corner that reaches furthest decides.
+			 *
+			 * THREE CORNERS FOR A TRIANGLE. Bit 15 of the flag word says
+			 * triangle, and then the fourth pair is not a corner at all -
+			 * AdjustUV adjusts three of them and the draw reads three
+			 * (specific\file.cpp). Measured with the offline twin: counting
+			 * the fourth turns 127 of JOBY2's 382 tiles into cell crossers
+			 * that are nothing of the kind, and 27 remain, which is the
+			 * order TRForge measured over the two games. */
+			const int corners = (tex->flag & 0x8000) ? 2 : 3;
+			float u0 = tex->u1, u1 = tex->u1, v0 = tex->v1, v1 = tex->v1;
+			const float us[3] = { tex->u2, tex->u3, tex->u4 };
+			const float vs[3] = { tex->v2, tex->v3, tex->v4 };
+
+			for (int c = 0; c < corners; c++)
+			{
+				if (us[c] < u0) u0 = us[c];
+				if (us[c] > u1) u1 = us[c];
+				if (vs[c] < v0) v0 = vs[c];
+				if (vs[c] > v1) v1 = vs[c];
+			}
+
+			const int cx = (int)(u0 * 4.0f);
+			const int cy = (int)(v0 * 4.0f);
+
+			if (cx < 0 || cx > 3 || cy < 0 || cy > 3 ||
+				(int)(u1 * 4.0f - 0.0001f) != cx ||
+				(int)(v1 * 4.0f - 0.0001f) != cy)
+			{
+				crossing++;
+				continue;
+			}
+
+			HDWaterFrame one;
+
+			one.tile = (unsigned short)tile;
+			one.tpage = tex->tpage;
+			one.u = tex->u1;
+			one.v = tex->v1;
+			one.page = -1;
+			one.cx = (unsigned char)cx;
+			one.cy = (unsigned char)cy;
+			g_water_frames.push_back(one);
+
+			bool seen = false;
+
+			for (size_t at = 0; at < pages.size(); at++)
+				if (pages[at] == (int)page)
+					seen = true;
+
+			if (!seen)
+				pages.push_back((int)page);
+		}
+	}
+
+	// The page list as one string for the log. A fixed buffer: the busiest
+	// level in the game names nine pages.
+	char list[256];
+	int wrote = 0;
+
+	list[0] = 0;
+
+	for (size_t i = 0; i < pages.size() && wrote < (int)sizeof(list) - 12; i++)
+		wrote += sprintf(list + wrote, "%s%d", i ? "," : "", pages[i]);
+
+	Log("HDLOG level=%s water ranges=%d frames=%d hd pages=%s missing=%d "
+		"crossing=%d uv_ranges_skipped=%d", g_stem, water_ranges, frames,
+		list[0] ? list : "none", missing, crossing, uvskipped);
+
+	if (g_water_frames.empty() || pages.empty())
+	{
+		g_water_frames.clear();
+		return;
+	}
+
+	/* 4. THE PAGES THEMSELVES, appended to the cache the rooms filled - one
+	 * texture per page for the whole level, exactly as the models are added
+	 * (stage S3-1). */
+	HDPageCacheStats stats;
+	const char* why = "";
+
+	if (!HDPageCacheAppend(App.dx.lpD3DDevice, HDInstallRoot(), &pages[0],
+		(int)pages.size(), false, DecodeThreads(), &stats, &why))
+	{
+		Log("HDLOG level=%s water frames refused reason=%s", g_stem, why);
+		g_water_frames.clear();
+		return;
+	}
+
+	/* 5. AND BORROWED INTO THE CLASSIC TEXTURE ARRAY, above nTextures. The
+	 * count is NOT raised: game\text.cpp reads the font as nTextures - 2,
+	 * drawbars.cpp the sky as nTextures - 1 and specificfx.cpp the menu
+	 * pages as nTextures - 4 and - 5, and every one of them would move.
+	 * Textures[] holds 256 entries; measured from the .TRC headers, a VANILLA
+	 * level uses 10 to 22 of them and a RANDOMIZED one - the randomizer
+	 * appends pages - 10 to 102, the worst being ANDY1 out of a run. So the
+	 * eight or nine pages of a water animation fit with room to spare either
+	 * way, and where they would not, the water keeps its classic tile. */
+	std::vector<int> slot_of_page(pages.size(), -1);
+	int at = nTextures;
+
+	for (size_t i = 0; i < pages.size(); i++)
+	{
+		const int cache = HDPageCacheSlotOf(pages[i]);
+		IDirect3DTexture9* tex = cache >= 0 ? HDPageCacheSlotTexture(cache) : 0;
+
+		if (!tex || at >= 256)
+		{
+			Log("HDLOG level=%s water frame page %d has no texture (or no "
+				"room in Textures[]) - those frames stay classic",
+				g_stem, pages[i]);
+			continue;
+		}
+
+		D3DSURFACE_DESC desc;
+		const bool described = SUCCEEDED(tex->GetLevelDesc(0, &desc));
+
+		tex->AddRef();
+		Textures[at].tex = tex;
+		Textures[at].width = described ? desc.Width : 512;
+		Textures[at].height = described ? desc.Height : 512;
+		Textures[at].bump = 0;
+		Textures[at].bumptpage = 0;
+		Textures[at].xoff = 0;
+		Textures[at].yoff = 0;
+		Textures[at].tpage = at;
+
+		HDBorrowedPage lent;
+
+		lent.at = at;
+		lent.tex = tex;
+		g_water_borrowed.push_back(lent);
+		slot_of_page[i] = at;
+		at++;
+	}
+
+	// 6. every frame gets the entry its page landed in.
+	for (size_t f = 0; f < g_water_frames.size(); f++)
+	{
+		const int tile = (int)g_water_frames[f].tile;
+		const unsigned short page = hd[(size_t)tile];
+
+		for (size_t i = 0; i < pages.size(); i++)
+			if (pages[i] == (int)page)
+			{
+				g_water_frames[f].page = (short)slot_of_page[i];
+				break;
+			}
+	}
+
+	int drawn = 0;
+
+	for (size_t f = 0; f < g_water_frames.size(); f++)
+		if (g_water_frames[f].page >= 0)
+			drawn++;
+
+	Log("HDLOG level=%s water frames in HD=%d of %d, %d page(s) borrowed at "
+		"Textures[%d..%d] (nTextures=%d)", g_stem, drawn,
+		(int)g_water_frames.size(), (int)g_water_borrowed.size(),
+		g_water_borrowed.empty() ? 0 : g_water_borrowed.front().at,
+		g_water_borrowed.empty() ? 0 : g_water_borrowed.back().at,
+		(int)nTextures);
+}
+
+/* THE HD FRAME OF ONE WATER FACE, or false for "draw it classically".
+ *
+ * `tex` is the texinfo the face names, with whatever content the classic
+ * rotation has left in it this moment; `out` comes back as the same record
+ * with the HD page and the coordinates on it. Called once per drawn water
+ * face from InsertRoomWater, inside the HD branch and nowhere else - with
+ * hd_enable off there are no water faces and this list is empty. */
+bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out)
+{
+	if (!tex || !out || g_water_frames.empty())
+		return false;
+
+	for (size_t i = 0; i < g_water_frames.size(); i++)
+	{
+		const HDWaterFrame& f = g_water_frames[i];
+
+		if (f.page < 0 || f.tpage != tex->tpage ||
+			f.u != tex->u1 || f.v != tex->v1)
+			continue;
+
+		const float cx = (float)f.cx;
+		const float cy = (float)f.cy;
+
+		*out = *tex;
+		out->tpage = (unsigned short)f.page;
+		out->u1 = tex->u1 * 4.0f - cx;
+		out->v1 = tex->v1 * 4.0f - cy;
+		out->u2 = tex->u2 * 4.0f - cx;
+		out->v2 = tex->v2 * 4.0f - cy;
+		out->u3 = tex->u3 * 4.0f - cx;
+		out->v3 = tex->v3 * 4.0f - cy;
+		out->u4 = tex->u4 * 4.0f - cx;
+		out->v4 = tex->v4 * 4.0f - cy;
+		return true;
+	}
+
+	return false;
 }
 
 /* ---------------------------------------------- the statics (R3b) ------- */
@@ -1850,6 +2402,7 @@ void HDLevelBuild()
 	g_frame_dropped = 0;
 	g_matrix_checked = false;
 	g_sky_logged = false;
+	g_water_calls_worst = 0;
 	// GROUP M: the per-level window list is written again for this level.
 	g_clip_listed = false;
 	g_clip_line_ever = false;
@@ -1870,12 +2423,19 @@ void HDLevelBuild()
 	LevelDiagnosticsEnd();
 	strcpy(g_fps_level, g_log_stem);
 
-	// The level before this one, released here rather than in HDLevelUnload -
-	// see the comment there. This is the main thread; that one is not.
+	/* The level before this one, released here rather than in HDLevelUnload -
+	 * see the comment there. This is the main thread; that one is not.
+	 *
+	 * The water frames come first and OUTSIDE the group test: the reference
+	 * they hold is on a texture of the cache HDRenderLevelEnd is about to
+	 * empty, so it has to be given back before that, and it has to be given
+	 * back even if the group list has somehow gone without it. The call is a
+	 * no-op when nothing is borrowed. */
+	ReleaseWaterFramePages();
+
 	if (HDRenderGroupCount())
 	{
-		// The models first: their ranges name page slots in the cache
-		// HDRenderLevelEnd is about to empty.
+		// The models next: their ranges name page slots in that same cache.
 		HDObjectRelease();
 		HDRenderLevelEnd();
 		Log("HDLOG the previous level's HD objects are released");
@@ -1955,6 +2515,9 @@ void HDLevelBuild()
 		for (int i = 0; i < HDPageCacheNoteCount(); i++)
 			Log("HDLOG level=%s page note: %s", g_stem, HDPageCacheNote(i));
 
+		// Empty here (the frames are built further down), but the rule is
+		// "never empty the page cache with a borrowed reference still out".
+		ReleaseWaterFramePages();
 		HDRenderLevelEnd();
 		return;
 	}
@@ -2003,6 +2566,24 @@ void HDLevelBuild()
 		stats.flipbookDropped, stats.flipbookRanges, stats.cutoutParts,
 		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts,
 		stats.glossParts, tomb5.hd_reflect ? 1 : 0);
+
+	/* N1: THE STILL WATER SURFACES the .TRG builds itself - material 16.
+	 * Counted per part/pass block, which is how TrgProbe -matparts counts
+	 * them, so the two can be held against each other: ANDREA1 1 part /
+	 * 1,460 triangles, ANDREA2 1 / 2,048, ANDY2 2 / 2,384, JOBY3 1 / 128,
+	 * JOBY4 1 / 73,728 (the sea of Deepsea Dive), JOBY5 22 / 165,930, and
+	 * nothing at all in the other nine levels. `sub_rect` is how many of
+	 * them live in a sub-rectangle of their page rather than filling it -
+	 * the number the ripple's travel is capped against - and `cap` is the
+	 * largest travel any part of this level was given, in page units. */
+	if (stats.waterParts)
+		Log("HDLOG level=%s basin parts=%d (%d additive, %d opaque, %d still), "
+			"triangles=%d, sub-rect tiles=%d, smallest UV span=%d/255, "
+			"ripple capped at %.4f page units",
+			g_stem, stats.waterParts, stats.waterAdditiveParts,
+			stats.waterOpaqueParts, stats.waterStillParts, stats.waterTris,
+			stats.waterSubRectParts, stats.waterSmallestSpan,
+			stats.waterRippleCap);
 
 	g_room_count = number_rooms;
 
@@ -2192,12 +2773,19 @@ void HDLevelBuild()
 	 * asks per room whether that room draws HD at all. */
 	BuildWaterSurfaces();
 
+	/* N2: and the HD pictures of that water's own animation frames. After
+	 * BuildWaterSurfaces, because it asks which faces are really drawn. */
+	BuildWaterFrames();
+
 	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic)",
 		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms);
 
 	if (!g_level_active)
 	{
 		Log("HDLOG level=%s no room draws HD - releasing again", g_stem);
+		// The same rule: the page cache is about to go, so anything borrowed
+		// out of it goes first. BuildWaterFrames has already run above.
+		ReleaseWaterFramePages();
 		HDRenderLevelEnd();
 		return;
 	}
@@ -2242,6 +2830,12 @@ void HDLevelUnload()
 	g_water_face_total = 0;
 	g_water_face_rooms = 0;
 	g_water_face_kept = 0;
+	/* N2: and the frame table with it - it names texinfos of the level being
+	 * freed. The PAGES those frames point at are Direct3D objects and are
+	 * given back on the main thread instead, in HDLevelBuild and in
+	 * HDLevelDeviceLost (ReleaseWaterFramePages); clearing the list here is
+	 * what makes sure nothing looks at them in between. */
+	g_water_frames.clear();
 	HDMarkersFree();	// text, no device - the same rule as the objects
 	HDObjectLevelEnd();
 }
@@ -2258,6 +2852,9 @@ void HDLevelDeviceLost()
 	g_level_active = false;
 	g_frame_count = 0;
 	g_room_count = 0;
+	// N2: the borrowed water frame pages are references on cache textures
+	// that HDRenderShutdown is about to drop.
+	ReleaseWaterFramePages();
 	HDObjectDeviceLost();
 
 	if (!HDRenderReady() && !HDRenderGroupCount())
@@ -2773,13 +3370,27 @@ void HDFrameDrawGlow()
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
-			"gloss_calls=%d",
+			"gloss_calls=%d water_calls=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
 			objects_here, HDObjectDrawCalls(),
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
-			HDRenderFlipbookCalls(), HDRenderGlossCalls());
+			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
+			HDRenderWaterCalls());
+	}
+
+	/* N1: AND HOW MANY WATER SURFACES ONE FRAME DREW. Throttled the way the
+	 * clipped-light line is: only a frame that draws more of them than any
+	 * frame of this level before it writes anything, so a level with no
+	 * water writes nothing at all and the busiest view of a pool writes one
+	 * line. It is the number that says whether a sheet the log counted at
+	 * level build ever reaches the screen. */
+	if (gLogEnabled && HDRenderWaterCalls() > g_water_calls_worst)
+	{
+		g_water_calls_worst = HDRenderWaterCalls();
+		Log("HDLOG frame water surfaces drawn=%d call(s) - the most in this "
+			"level so far", g_water_calls_worst);
 	}
 
 	/* GROUP M, THE PORTAL WINDOWS OF THIS FRAME. Two lines, both behind -log

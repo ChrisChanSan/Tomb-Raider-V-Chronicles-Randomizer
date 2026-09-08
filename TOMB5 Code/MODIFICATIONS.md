@@ -8282,6 +8282,289 @@ crossbow with its scope in her hands, then the grappling gun.
 
 **Classic path.** Untouched - the wardrobe only exists behind the HD guard.
 
+#### Fix round P - the inventory ring in HD (#123)
+
+The ring was the last place in the game that still drew 1999 objects while
+everything around them was the remaster's. It is now the same seam once more,
+and deliberately not a second render path.
+
+**Measured first, three things.**
+
+*The seam is already there.* `game\newinv2.cpp`'s `DrawInventoryItemMe` walks a
+mesh tree exactly as `DrawAnimatingItem` does - a matrix per node,
+`item->mesh_bits` deciding which node draws - and only the last step differs:
+`phd_PutPolygonsPickup` instead of `phd_PutPolygons`, at four call sites. The
+inventory's own loop already calls `S_InitialisePolyList` and
+`S_OutputPolyList` once per present, and those two already call `HDFrameReset`
+and `HDFrameDraw`, so the HD bracket was entered on every inventory frame
+before this round and drew nothing.
+
+*The off-centre projection is the one real problem.* The classic ring projects
+each item about the item's own place on the screen: `phd_PutPolygonsPickup`
+moves `f_centerx` / `f_centery` to the item's x/y for the length of one mesh
+and puts them back afterwards. The HD path builds ONE projection per frame,
+about the screen centre. The difference is two numbers,
+
+    kx = (X - Cx) / persp,   ky = (Y - Cy) / persp
+
+and the only question is where to put them. The projection divides by `vz`, so
+anything added to `vx` in proportion to `vz` survives it as a constant pixel
+offset:
+
+    vx' = vx + kx * vz
+    sx  = vx' * persp / vz + Cx = vx * persp / vz + X
+
+which is the classic answer to the arithmetic and not to a tolerance, with
+`vz` - and therefore the depth - untouched.
+
+*And it goes into the PROJECTION, not into the item's matrix.* The idea of
+folding the ring's centre into the item at all is TROne's
+(`games\tr5\glue\hostglue_2d5.cpp:502-506`), and TROne does it as a SHEAR of
+the item's matrix - row 0 += kx * row 2. The first cut of this round copied
+that road and it was wrong, for a reason the pictures show at once:
+`hd_model.hlsl` skins the vertex **normal** through the very same `gJoints`
+matrices and renormalises the result, so a sheared node matrix tilts and
+rescales every normal of the item and the ring's one sun then lights it by an
+amount that depends on where on the screen it stands. Measured on the shader
+itself, `ModelProbe -ringlight 160` over the object's own pixels
+(`EXTRA_SMALLMEDI_ITEM`, mean brightness): **93.61** with no offset, **67.18**
+in the middle of the inventory row, **64.15** at a side slot, **108.87** on the
+ammo row - two rings that stand on the screen at once and 45 % apart in
+brightness.
+
+So `HDModelOffCentre` (`specific\hd\hd_model.cpp`) writes the two numbers into
+`_31` and `_32` of a copy of the frame's projection for the length of one draw
+call - `_31 = kx * _11`, and `_11` is `persp / Cx`, so the term is exactly the
+`X - Cx` pixels asked for - and the node matrices reach the card as the
+engine's own, untouched. A normal never goes through a projection, so the
+offset cannot reach one. The same measurement afterwards reads **93.61 at all
+four places**, over the identical 3108 object pixels the unsheared render has -
+the same number to the hundredth, not a tolerance. (The four places are
+`kx`/`ky` of 0/0, 0/-0.408477, -0.519208/-0.408477 and 0/+0.305127, which at
+512x512 are whole pixel offsets, so the object lands on the same pixel grid in
+all four; move it by a fraction of a pixel and the grid alone moves the mean by
+a quarter of a percent.)
+The derivation stands in full over `HDInvNode` (`specific\hd\hd_object.cpp`)
+and over `HDModelOffCentre` (`hd_model.h`); `ModelProbe -ringcheck` now
+measures both halves, the place and the light.
+
+*And there is NO scale term*, which is the part that had to be measured rather
+than argued. TROne multiplies the sheared row by `f_mpersp/persp` because its
+host builds a projection out of the window's real width and would otherwise
+draw ring objects four thirds too wide on 16:9 - its own "diary drawn buggy"
+report. TR5 does not have that problem to correct: `AlterFOV`
+(`specific\3dmath.cpp`) computes `f_persp` from `phd_winheight * 320 / 240`, a
+4:3 implied width whatever the window is, and our HD projection is built from
+that very `f_persp` (`HDFrameCaptureProjection` takes it,
+`HDRenderMakeProjection` is fed it). So the factor is exactly one, and the HD
+ring is the same size as the classic ring by construction rather than by
+correction. `ModelProbe -ringcheck` says so in pixels: the model's bounding
+rectangle projected both ways at 24 ring places - the six visible slots of both
+rings, at 640x480 and at 1920x1080 - agrees in position and in **width and
+height** to a worst **0.00013 px**, budget 1 px. The rectangle is 519.33 px
+wide at 4:3 and 1168.50 at 16:9, which is 2.25 = 1080/480 exactly: the ring
+scales with the picture's HEIGHT and gains nothing from the extra width, on
+both paths.
+
+**The seam.** `HDInvBegin` / `HDInvNode` / `HDInvEnd`
+(`specific\hd\hd_object.cpp`, declared in `hd_object.h`) at the four
+`phd_PutPolygonsPickup` call sites. They are `HDObjectBegin/Node/End` with
+three differences, each a property of the ring rather than a choice: the item's
+own screen centre above, which it carries to `HDModelOffCentre` at draw time
+and never into its matrices; the light below; and no animation, because the
+ring stands on frame 0
+and never interpolates, so there is no interpolated branch. An item with no HD
+model, one whose skeleton the model does not fit, and every item with the HD
+path off, answers false and is drawn classically at the same four call sites -
+the ring never has a hole in it. They share the frame list, the bracket and the
+draw with the world's HD objects: no second list, no second projection upload,
+no second state bracket.
+
+**The node mask is exact, and needed no flag.** `INVOBJ::meshbits` reaches
+`HDModelDraw` as `nodeMask` the way `item->mesh_bits` has since stage S3-2, so
+a node the ring deliberately leaves out - the passport's page states, a globe's
+markers - draws nothing. TROne needs `TRONE_LIGHT_EXACT_NODES` for this because
+its default invents a matrix for a node the item bracket never saw; ours takes
+the mask as a mask and has no such default.
+
+**The light is the ring's own and nothing else.** `phd_PutPolygonsPickup`
+throws the level lighting away for an inventory object and puts up two things:
+an ambient of 8/8/8, and ONE sun of the ring's `pcbright` for this item -
+`0x202020` for the objects to the side, up to `0xA0A0A0` for the selected one -
+pointing along `(0, -50, -100)` normalised over `sqrt(12500)`, doubled. That is
+what travels. The classic line reads the direction out of `D3DMView`, which is
+the NODE's matrix at that moment, so what it computes is `R^T d`, and the
+shading term `dot(n_model, R^T d)` is `dot(n_view, d)`: in view space, where
+`HD_OBJLIGHT_SUN` lives, the direction is simply `d` and no per-node work is
+left. The doubling is `sunScale = 2.0`, which is the field `hd_model.h` already
+had for exactly this ("the sun is doubled in the inventory"). No room cube, no
+point lights, no dynamics, and no sheen - an item has none in the level either
+(fix round D, D2), so a pistol on the ring shines as the same pistol shines
+lying on the floor.
+
+That last sentence is only true because the offset lives in the projection. The
+classic term is `dot(M n, d)` with `M` the node's own matrix and no
+renormalisation (`aTransformLightClipMesh`); the shader's is
+`dot(normalize(M n), d)`, and for a matrix that is a rotation the two are the
+same number, because a rotation leaves a unit normal a unit normal. Put an
+offset into `M` and it is no longer a rotation. `ModelProbe -ringcheck` prints
+that as a column: over 26 sample normals at each of the 24 ring places, the
+engine's road differs from the classic term by **4e-9** and the shear road by
+up to **34.6 %**.
+
+**The fog bulbs are taken off a ring frame** (`hd_level.cpp`, `HDFrameDraw`).
+`ActiveFogBulbs` holds positions the game already turned into VIEW space, for
+the view the last played frame had; the ring draws through an identity view
+with the item pushed down +z, so a bulb of the room Lara is standing in would
+sit in front of her medipacks. The distance fog is NOT taken off with them: the
+classic ring keeps it and a ring item stands a few hundred units away, far
+short of the threshold on either path, so both do the same nothing.
+
+**One side effect of the ring having HD objects at all**, named here because
+nothing else in this round covers it: `HDFrameDraw` no longer returns early on
+an inventory frame, so `FillFrameLighting` runs, and with it stage S5's
+`AdvanceClock`. The HD material clock is therefore *sampled* on ring frames,
+which it was not before. It does not RUN: the clock is the difference of
+`GlobalCounter`, `GlobalCounter` is stepped in `ControlPhase`'s tick loop
+(`game\control.cpp:291`), and `S_CallInventory2` blocks inside that loop - so
+every ring frame adds exactly zero. The one real change is that the tick or two
+between the last played frame and the ring opening is added on the first ring
+frame instead of on the first frame after the ring closes. The total is the
+same to the last hundredth of a second either way.
+
+**Depth needed nothing at all, and that was measured rather than assumed.** The
+classic ring's polygons go through the ordinary sort list with the TEXTURE's
+own `drawtype`, which for an opaque pickup is 0 - and `HWR_DrawSortList` case 0
+(`specific\polyinsert.cpp`) draws it with the depth write ON and the depth test
+left on. So the classic ring already sorts by depth, and the HD ring writes the
+same depth values through the same projection (`HDRenderSelfTest`: both paths
+write `a - b/z` for the same point). Two consequences: HD items sort against
+each other correctly, and a classic ring item - the compass, a passport page -
+sorts correctly against an HD one, because `HDFrameDraw` runs before
+`DrawSortList` and leaves its depth behind. The frozen backdrop cannot occlude
+anything either: `S_DrawTile` (`specific\LoadSave.cpp`) puts it at `sz` 0.995,
+which with the engine's `znear` 20 / `zfar` 20480 is the far plane exactly. No
+per-item depth clear, no reordering.
+
+**Sixty frames a second.** `HDObjectFrameReset` runs once per DRAWN ring frame
+and never per logic tick: the ring's own loop calls `S_InitialisePolyList` once
+per present, that calls `HDFrameReset`, and that calls `HDObjectFrameReset`. In
+any case `GameFrameMinTicks()` holds the whole inventory at thirty presents
+(5.8, order 1b), and the menu skip that rule exists to prevent is untouched -
+this round changes no input path and no title code. The ring's own spin stays
+where it always was, in `draw_current_object_list`.
+
+**The pickup display stays classic, on purpose.** `DrawThreeDeeObject2D` has a
+second caller: `S_DrawPickup` (`specific\output.cpp`), the little turning
+object in the corner when Lara picks something up. It is called from INSIDE
+`S_OutputPolyList` (`output.cpp:1860`), after `HDFrameDraw` (`output.cpp:1820`)
+has already drawn this frame's HD list - so an item pushed there would suppress
+its own classic polygons and be drawn by nobody. The list is not emptied until
+the next `S_InitialisePolyList` reaches `HDObjectFrameReset`; it would simply
+sit there and then be thrown away. `HDInvBegin` refuses when `InventoryActive`
+is 0, which is the one line that separates the two callers.
+
+**The title menu has no ring.** `TitleOptions` (`game\gameflow.cpp`) and
+everything it reaches - the level select, the options tree, the load screen -
+is `PrintString` over the title level, and the title level's own objects have
+gone through the world seam since stage S3-2. There is nothing there for this
+round to do, and it touches no title code.
+
+**What stays classic on the ring**, and it is the same three in every campaign
+level: `COMPASS_ITEM` and the two passport pages `PC_LOAD_INV_ITEM` and
+`PC_SAVE_INV_ITEM`. (The enum calls those two `INV_MEMCARD_LOAD/SAVE_INV_ITEM`
+- `game\newinv2.h:162` - but rows 27 and 28 of `inventry_objects_list`
+(`newinv2.cpp:374`) hold the `PC_` slots, so the ring draws two passport
+objects and not four; the `MEMCARD_` slots exist in the level and can never
+reach the ring.) The passport pages have no `.TRM` in either bundle. The
+compass has one - `4\ITEM\EXTRA4_COMPASS_ITEM.TRM`, which fix round O's
+`EXTRA4_` prefix found - but in a campaign level it names node 1 of a mesh tree
+that has 1 node, so the skeleton test refuses it. RICHCUT2 is the exception:
+its own `COMPASS_ITEM` has 2 nodes, the model fits, and it is the one HD ring
+slot that cutscene level has. One more slot stays classic, in RICH1 alone, and
+for a different reason - the remaster ships no model for it at all
+(`ModelProbe`: "asks for `<NAME>.TRM`, which is in no ITEM folder"):
+`PUZZLE_HOLE8`, the keypad. Everything else on the ring is HD. Counted over
+exactly the object slots `inventry_objects_list` can name, with `ModelProbe
+-level <STEM> -classic <vanilla .TRC> -all -nodraw` on all fifteen VANILLA
+levels (the `.TRC` files of the checksum list, not a randomized run):
+
+| Level | HD | classic | Level | HD | classic |
+|---|---|---|---|---|---|
+| ANDREA1 | 17 | 3 | JOBY4 | 15 | 3 |
+| ANDREA2 | 19 | 3 | JOBY5 | 20 | 3 |
+| ANDREA3 | 23 | 3 | RICH1 | 15 | 4 |
+| ANDY1 | 10 | 3 | RICH2 | 14 | 3 |
+| ANDY2 | 6 | 3 | RICH3 | 14 | 3 |
+| ANDY3 | 10 | 3 | RICHCUT2 | 1 | 0 |
+| JOBY2 | 15 | 3 | TITLE | 0 | 0 |
+| JOBY3 | 22 | 3 | | | |
+
+TITLE reads 0 and 0 because the only ring slot it holds at all,
+`PICKUP_ITEM4`, is a DUMMY there and draws nothing on either path.
+
+A RANDOMIZED level carries more, because the randomizer scatters weapons,
+ammunition and keys into levels that never had them: the same count on one
+randomized run reads 21 for ANDREA1, 19 for ANDY2 and 25 for RICH3, and it adds
+one classic slot to JOBY3 - `KEY_ITEM8`, which the randomizer's own key chain
+puts there and which the remaster has no model for either. The classic three
+are the same in both cases; the number that moves is the HD one, and it moves
+with the seed, which is why the table above is the vanilla one.
+
+**One honest deviation, and it is the keypad.** `DrawInventoryItemMe` scales
+the matrix non-uniformly for `PUZZLE_HOLE8` in keypad mode
+(`ScaleCurrentMatrix`, 1.5 / 1.0 / 0.25). RICH2's keypad **is** drawn HD -
+`ModelProbe RICH2`: `map PUZZLE_HOLE8_1`, 25 nodes, cover 25 - so that scale
+really does reach the shader, and it is the one place left where it does.
+Moving the ring's offset into the projection does not help here, because this
+is a different mismatch: the classic path computes `dot(M n, d)` with no
+renormalisation, and with a non-uniform scale in `M` the length of `M n` varies
+from 0.25 to 1.5, while the shader must renormalise (a `.TRM` normal is a byte
+triple that has been through a weighted sum of rotations). So the keypad's
+shading differs slightly from the classic keypad's. One object, one screen, one
+level - RICH1's keypad has no HD model at all. If the play test dislikes it,
+the fix is to hand that one draw a normal scale of its own.
+
+**The log.** With `-log`, opening the ring writes `HDLOG ring items=N hd=N
+classic=N` once per OPENING - not per frame; the ring is thirty frames a second
+of the same six objects - and one line per object: `HDLOG ring slot=<n>
+name=<sym> model=<file> nodes=<n> mask=<hex> z=<view z> via=<rule>`, where
+`via` is fix round O's own bind rule for an HD item and the refusal reason for
+a classic one. `z` is node 0's view depth: the push down +z the ring gives the
+item, which is `INVOBJ::scale1`, plus the item's own root offset out of the
+animation frame. `scale1` is in this tree - the table in `newinv2.cpp` holds
+the built-in value (`0x3E8` for the pistols, `0x898` for a passport page) and
+`init_new_inventry` moves the binoculars in code - but it is not fixed:
+`LoadGameflow` (`game\gameflow.cpp:455`) overwrites it out of `SCRIPT.DAT` for
+every slot a level names, which is every key, puzzle, pickup and examine item.
+So the number is per level, and the line says it rather than the manual
+guessing at it. It is also what decides that a ring item stands in front of the
+backdrop's 0.995.
+
+**The tool.** `ModelProbe` gains three switches
+(`Preparation\Tools\Diagnose\ModelProbe.cpp`, built with `bmodel.bat`):
+`-ringcheck`, the proof above in both halves - the place, and the light against
+the shear road it replaced - which needs no game and no level; `-ring <x> <y>`,
+which draws the model where the ring would put it by the engine's own road (the
+matrices untouched, `HDModelOffCentre` for the offset), so the arithmetic can
+be looked at as well as counted; and `-ringlight <bright>`, which lights the
+model the way the ring lights it and nothing else, so a ring object can be
+photographed offline. `-ring` with `-ringlight` at several places is the
+end-to-end proof that the ring's light does not depend on where the item
+stands.
+
+**Classic path.** Untouched. Every line added to `newinv2.cpp` is behind
+`HDInvBegin`, which returns false on its second test with `hd_enable` or
+`hd_objects` off; `g_ring_frame` is set after that test, so `hd_level.cpp`'s
+bulb line and `hd_object.cpp`'s log block are never reached either. With HD off
+the four call sites run the same four `phd_PutPolygonsPickup` calls in the same
+order with the same arguments. `hd_model.cpp`'s new `HDModelOffCentre` is
+inside the HD bracket by definition, and with `(0, 0)` - which is every object
+in the world, on every frame - it returns before it touches a register, so the
+world path pays nothing for the ring either.
+
+---
+
 ---
 
 ## Building this yourself

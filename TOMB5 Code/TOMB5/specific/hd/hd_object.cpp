@@ -3,7 +3,15 @@
  *
  * The routing rules are carried over from TROne (Copyright 2026 Todesengel,
  * GPLv3) - see hd_object.h for the list, function by function. The seam under
- * them, the skeleton test and the light conversion are new. See THIRD-PARTY.md.
+ * them, the skeleton test and the light conversion are new. So is the
+ * inventory ring at the bottom of this file, except for one idea that is
+ * TROne's: that the ring's OFF-CENTRE projection can be folded into the ITEM
+ * for the length of one draw (games\tr5\glue\hostglue_2d5.cpp:502-506), which
+ * is what lets the HD path keep one projection for the whole frame. TROne
+ * folds it into the item's matrix as a shear; this engine folds it into the
+ * projection, because the shader takes the vertex NORMAL through those
+ * matrices - the whole argument stands over HDInvNode. The arithmetic was
+ * derived from TR5's own projection line. See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -70,6 +78,11 @@ namespace
 		unsigned char baked;	// 1 = the art already has it, draw NOTHING
 		unsigned char head;	// 1 = the slot has its own <NAME>_HEAD.TRM
 		const char* why;	// why not, for the log
+		/* WHICH RULE NAMED THE MODEL (#123, fix round P): the very string the
+		 * HDLOG bind line printed at level build, kept so that the ring's own
+		 * line can say it again without asking the disk a second time. A
+		 * static literal out of via_label() or "donor". */
+		const char* via;
 		int nodes;		// the classic mesh tree's node count
 		int maxBone;		// the highest node the .TRM names
 		float drift;		// the bind drift, mean over the covered nodes
@@ -113,6 +126,17 @@ namespace
 		 * the moment the matrices were taken; see the note over it in
 		 * specific\3dmath.cpp. Read only by the log. */
 		long view;
+		/* THE INVENTORY RING'S OWN SCREEN CENTRE (fix round P, P2), as the
+		 * two numbers HDModelOffCentre wants: (X - centreX) / persp and the
+		 * same in y. Zero for everything in the world, which is every item
+		 * outside the inventory, and then not a register is written.
+		 *
+		 * It rides on the ITEM and not on the matrices on purpose - see the
+		 * note over HDModelOffCentre in hd_model.h. Fix round P put the same
+		 * offset into the node matrices as a shear, which moved the item's
+		 * NORMALS with it and lit the ring by screen position. */
+		float offCentreX;
+		float offCentreY;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -138,6 +162,90 @@ namespace
 	int g_swap_drawn = 0;
 	int g_mask_used = 0;
 	int g_items_baked = 0;
+
+	/* ------------------------------------------- THE INVENTORY RING (P) -- */
+
+	/* The item being walked came out of newinv2.cpp and carries the ring's
+	 * own screen centre. Kept apart from g_open so that an ordinary item can
+	 * never pick up a ring's centre and a ring item can never pick up a
+	 * room. */
+	bool g_ring_open = false;
+	float g_ring_kx = 0.0f;
+	float g_ring_ky = 0.0f;
+	long g_ring_color = 0;
+
+	/* Per FRAME. `g_ring_frame` is read by hd_level.cpp (the fog bulbs); the
+	 * two counters and the little list are the log line, which is written
+	 * once per OPENING of the ring rather than once a frame - the ring is
+	 * thirty frames a second of the same six objects. */
+	bool g_ring_frame = false;
+	int g_ring_open_row = -1;	// the open item's row in g_ring_log
+	int g_ring_hd = 0;
+	int g_ring_classic = 0;
+	bool g_ring_logged = false;
+
+	struct RingLogItem
+	{
+		int slot;
+		unsigned int mask;
+		bool hd;
+		/* THE ITEM'S DEPTH: node 0's view z, which is the push down +z the
+		 * ring gives the item - INVOBJ::scale1, plus the item's own root
+		 * offset out of the animation frame.
+		 *
+		 * scale1 IS in this source tree: the table in game\newinv2.cpp
+		 * (inventry_objects_list) holds the built-in value - 0x3E8 for the
+		 * pistols, 0x898 for the passport pages - and init_new_inventry moves
+		 * the binoculars in code. But it is not fixed: LoadGameflow
+		 * (game\gameflow.cpp) overwrites objname, yoff, scale1 and the three
+		 * rotations out of SCRIPT.DAT for every slot the level names, which
+		 * is every key, puzzle, pickup and examine item. So the number is per
+		 * LEVEL, and the line says it rather than the manual guessing at it.
+		 *
+		 * It also decides whether a ring item stands in front of the frozen
+		 * backdrop, which S_DrawTile puts at sz 0.995 - the far plane, since
+		 * the engine runs with znear 20 and zfar 20480
+		 * (specific\gamemain.cpp, InitWindow) and sz is f_a - f_b/z. */
+		float z;
+	};
+
+	/* Six on the ring, three in the ammo selector, one in the keypad and one
+	 * in the examine screen - and the two rings can stand at once. Sixteen is
+	 * four times what a frame has ever held. */
+	RingLogItem g_ring_log[16];
+	int g_ring_log_count = 0;
+
+	/* THE ENGINE'S 3x4 INTO THE ROW-MAJOR 4x4 THE SHADER WANTS, once per node
+	 * of the item just walked - the same conversion SetD3DMatrix does for the
+	 * fixed-function pipe, and the one stage S1-2 proved for the rooms.
+	 *
+	 * A node the walk never reached keeps the last one that was: TROne's
+	 * fill_unseen_joints (game_renderer.cpp:1391), and the reason is that a
+	 * slightly wrong limb beats a limb collapsed onto the camera. It cannot
+	 * happen from DrawAnimatingItem or DrawInventoryItemMe, both of which walk
+	 * every node - but HDObjectNode and HDInvNode are public calls and a zero
+	 * matrix is not a picture, it is a divide by zero.
+	 *
+	 * In one place because the ring needs it as much as the world does (fix
+	 * round P), and two copies of a matrix convention are one too many. */
+	void store_matrices(FrameItem& entry)
+	{
+		int last = 0;
+
+		for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
+		{
+			if (g_seen & (1u << node))
+				last = node;
+
+			const float* in = g_raw + last * 12;
+			float* out = entry.matrix + node * 16;
+
+			out[0] = in[M00];  out[1] = in[M10];  out[2] = in[M20];  out[3] = 0.0f;
+			out[4] = in[M01];  out[5] = in[M11];  out[6] = in[M21];  out[7] = 0.0f;
+			out[8] = in[M02];  out[9] = in[M12];  out[10] = in[M22]; out[11] = 0.0f;
+			out[12] = in[M03]; out[13] = in[M13]; out[14] = in[M23]; out[15] = 1.0f;
+		}
+	}
 
 	/* THE BAKED SLOTS (#123, fix round B, B1). Set per level and read in
 	 * HDObjectBegin BEFORE the object path's own guard, because an object
@@ -1380,6 +1488,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			}
 
 			bind_total++;
+			verdict.via = viaStr;		// fix round P: for the ring's log line
 
 			const int trmNodes = HDModelHas(slot) ? HDModelMaxBone(slot) + 1 : 0;
 
@@ -1650,6 +1759,60 @@ void HDObjectFrameReset()
 	g_swap_drawn = 0;
 	g_mask_used = 0;
 	g_items_baked = 0;
+
+	/* THE RING (#123, fix round P). Its line is written HERE, of the frame
+	 * that has just ended, and not in HDObjectFrameEnd: that one is reached
+	 * only when HDFrameDraw found something to draw, and "the ring opened and
+	 * not one item of it is HD" is exactly the report worth having. This
+	 * function runs once per DRAWN frame whatever happened in it -
+	 * S_InitialisePolyList calls HDFrameReset, and the ring's own loop
+	 * (game\newinv2.cpp) calls S_InitialisePolyList once per present.
+	 *
+	 * That is also the answer to the sixty hertz question of this round: the
+	 * ring's list is emptied per PICTURE and never per logic tick, and
+	 * GameFrameMinTicks() (specific\output.cpp) holds the whole inventory at
+	 * thirty presents in any case, so nothing here has two rates to keep
+	 * apart. The ring's own spin stays where it always was, in
+	 * draw_current_object_list.
+	 *
+	 * `g_ring_logged` is armed again on every frame that is not a ring frame,
+	 * so the block is written once per OPENING of the inventory rather than
+	 * thirty times a second. */
+	if (gLogEnabled && g_ring_frame && !g_ring_logged)
+	{
+		g_ring_logged = true;
+
+		Log("HDLOG ring items=%d hd=%d classic=%d",
+			g_ring_hd + g_ring_classic, g_ring_hd, g_ring_classic);
+
+		for (int i = 0; i < g_ring_log_count; i++)
+		{
+			const int slot = g_ring_log[i].slot;
+			const bool known = slot >= 0 && slot < NUMBER_OBJECTS;
+
+			Log("HDLOG ring slot=%d name=%s model=%s nodes=%d mask=%X z=%.0f via=%s",
+				slot,
+				(known && HDSlotName(slot)) ? HDSlotName(slot) : "?",
+				g_ring_log[i].hd && HDModelName(slot) ? HDModelName(slot) : "-",
+				known ? g_slot[slot].nodes : 0,
+				g_ring_log[i].mask,
+				(double)g_ring_log[i].z,
+				g_ring_log[i].hd
+					? (known && g_slot[slot].via ? g_slot[slot].via : "?")
+					: (known && g_slot[slot].why ? g_slot[slot].why : "classic"));
+		}
+	}
+
+	if (!InventoryActive)
+		g_ring_logged = false;
+
+	g_ring_open = false;
+	g_ring_open_row = -1;
+	g_ring_frame = false;
+	g_ring_hd = 0;
+	g_ring_classic = 0;
+	g_ring_log_count = 0;
+
 	HDLaraDrawFrameReset();
 }
 
@@ -1802,32 +1965,14 @@ void HDObjectEnd()
 	entry.mask = g_open_mask;
 	entry.room = g_open_room;	// group M
 	entry.view = ViewSerial;	// fix round R
+	// P2: no off-centre projection in the world - only the inventory ring
+	// draws about anything but the screen centre.
+	entry.offCentreX = 0.0f;
+	entry.offCentreY = 0.0f;
 
-	/* The engine's 3x4 into the row-major 4x4 the shader wants - the same
-	 * conversion SetD3DMatrix does for the fixed-function pipe, and the one
-	 * stage S1-2 proved for the rooms.
-	 *
-	 * A node the walk never reached keeps the last one that was: TROne's
-	 * fill_unseen_joints (game_renderer.cpp:1391), and the reason is that a
-	 * slightly wrong limb beats a limb collapsed onto the camera. It cannot
-	 * happen from DrawAnimatingItem, which walks every node - but
-	 * HDObjectNode is a public call and a zero matrix is not a picture, it is
-	 * a divide by zero. */
-	int last = 0;
-
-	for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
-	{
-		if (g_seen & (1u << node))
-			last = node;
-
-		const float* in = g_raw + last * 12;
-		float* out = entry.matrix + node * 16;
-
-		out[0] = in[M00];  out[1] = in[M10];  out[2] = in[M20];  out[3] = 0.0f;
-		out[4] = in[M01];  out[5] = in[M11];  out[6] = in[M21];  out[7] = 0.0f;
-		out[8] = in[M02];  out[9] = in[M12];  out[10] = in[M22]; out[11] = 0.0f;
-		out[12] = in[M03]; out[13] = in[M13]; out[14] = in[M23]; out[15] = 1.0f;
-	}
+	// The engine's 3x4 into the row-major 4x4 the shader wants - the note and
+	// the unseen-node rule are over store_matrices at the top of this file.
+	store_matrices(entry);
 
 	/* THE LIGHT, out of the classic path's own setup.
 	 *
@@ -1881,6 +2026,292 @@ void HDObjectEnd()
 	g_count++;
 }
 
+/* -------------------------------------------- THE INVENTORY RING (P) -- */
+
+bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
+{
+	ProfScope prof(PROF_HD_OBJ);
+
+	if (!item || !obj)
+		return false;
+
+	/* THE RING AND NOTHING ELSE. DrawThreeDeeObject2D has a second caller -
+	 * S_DrawPickup (specific\output.cpp), the little rotating object in the
+	 * corner when Lara picks something up - and it is called from INSIDE
+	 * S_OutputPolyList (output.cpp:1860), after HDFrameDraw (output.cpp:1820)
+	 * has already drawn this frame's HD list. An item pushed there would
+	 * suppress its own classic polygons and be drawn by nobody: the list is
+	 * not emptied until the NEXT S_InitialisePolyList reaches
+	 * HDObjectFrameReset, so it would simply sit there and then be thrown
+	 * away. The pickup display therefore stays classic, and says so here
+	 * rather than in newinv2.cpp, where the same four call sites serve
+	 * both. */
+	if (!InventoryActive)
+		return false;
+
+	if (!g_active || !tomb5.hd_objects)
+		return false;
+
+	const int slot = (int)item->object_number;
+
+	g_ring_frame = true;
+
+	/* One row for the log, taken before the answer is known and corrected
+	 * below if the answer is yes - so an item that falls through any of the
+	 * guards is still named in the line, which is what the line is for. */
+	int logRow = -1;
+
+	if (g_ring_log_count < 16)
+	{
+		logRow = g_ring_log_count++;
+		g_ring_log[logRow].slot = slot;
+		g_ring_log[logRow].mask = (unsigned int)item->mesh_bits;
+		g_ring_log[logRow].hd = false;
+		g_ring_log[logRow].z = 0.0f;
+	}
+
+	g_ring_open_row = logRow;
+
+	if (slot < 0 || slot >= NUMBER_OBJECTS || !g_slot[slot].hd)
+	{
+		g_ring_classic++;
+		g_items_classic++;
+		return false;
+	}
+
+	if (g_count >= HD_OBJ_ITEMS)
+	{
+		g_dropped++;
+		g_ring_classic++;
+		return false;
+	}
+
+	/* The frame's projection, which in a ring frame nothing else has taken:
+	 * there are no rooms in the inventory and no DrawAnimatingItem either. */
+	HDFrameCaptureProjection();
+
+	float persp = 0.0f, cx = 0.0f, cy = 0.0f;
+
+	HDFrameProjectionInfo(&persp, &cx, &cy);
+
+	if (persp <= 0.0f)
+	{
+		g_ring_classic++;
+		return false;
+	}
+
+	/* THE ITEM'S OWN SCREEN CENTRE, worked out once per item and handed to
+	 * HDModelOffCentre at draw time. The derivation is over HDInvNode and the
+	 * arithmetic in hd_model.h.
+	 *
+	 * NO SCALE TERM. TROne multiplies its sheared row by f_mpersp/persp
+	 * (hostglue_2d5.cpp:485-498) because its host builds a projection of its
+	 * own out of the window's real width, while TR5 computes f_persp from a
+	 * 4:3 width whatever the window is (specific\3dmath.cpp, AlterFOV:
+	 * fov_width = phd_winheight * 320 / 240). Our HD projection is built from
+	 * that very f_persp (hd_level.cpp, HDFrameCaptureProjection takes
+	 * f_persp, HDRenderMakeProjection is fed it), so the factor is exactly
+	 * one and the ring is the same size in HD as it is classic - which is the
+	 * requirement, not an accident to be corrected. */
+	g_ring_kx = (x - cx) / persp;
+	g_ring_ky = (y - cy) / persp;
+	g_ring_color = color;
+	g_ring_open = true;
+	g_ring_hd++;
+
+	if (logRow >= 0)
+		g_ring_log[logRow].hd = true;
+
+	g_open = true;
+	g_open_slot = slot;
+	g_open_nodes = g_slot[slot].nodes;
+	/* NO ROOM. A ring item stands in no room at all, and -1 is what the
+	 * frame list already means by that - HDFrameScissorForRoom leaves the
+	 * scissor off for it, which is the whole screen, which is what the ring
+	 * has. */
+	g_open_room = -1;
+	/* THE NODE MASK, EXACTLY (#123, fix round P). item->mesh_bits here is
+	 * INVOBJ::meshbits, which the ring uses on purpose and not by accident:
+	 * the passport's three page states, the compass needle that turns on its
+	 * own, the globe's markers. TROne needed a flag of its own for this
+	 * (TRONE_LIGHT_EXACT_NODES); our object path has taken the mask as a mask
+	 * since stage S3-2, so an unnamed node draws nothing here for the same
+	 * reason it draws nothing in the world. */
+	g_open_mask = (unsigned int)item->mesh_bits;
+	/* NO MESH SWAP, and it is not a decision that could go the other way.
+	 * DrawThreeDeeObject2D (game\newinv2.cpp) builds its ITEM_INFO on the
+	 * STACK and fills in eleven fields; meshswap_meshbits is not one of them,
+	 * so the field holds whatever was on that stack a moment ago. The classic
+	 * ring never reads it either - DrawInventoryItemMe tests mesh_bits alone,
+	 * where DrawAnimatingItem tests both. Forced to "no alternative model"
+	 * here so that nothing downstream can be tempted to look. */
+	g_open_swap = -1;
+	g_seen = 0;
+
+	if (g_open_mask != 0xFFFFFFFFu)
+		g_mask_used++;
+
+	return true;
+}
+
+/* ONE NODE OF A RING ITEM. The engine's matrix stack, straight off, exactly as
+ * HDObjectNode takes it in the world - and that is the point of fix round P2.
+ *
+ * THE OFF-CENTRE PROJECTION IS NOT IN HERE ANY MORE. The classic ring projects
+ * an item about the item's own place on the screen: aTransformLightClipMesh
+ * (specific\output.cpp) puts a vertex at
+ *
+ *     sx = vx * p / vz + f_centerx,   p = f_mpersp
+ *
+ * and phd_PutPolygonsPickup sets f_centerx = X, f_centery = Y for the length of
+ * one mesh. The HD path builds ONE projection for the whole frame, about the
+ * screen centre Cx/Cy, so the difference - kx = (X - Cx) / p - has to be put
+ * somewhere, and there are two places it can go.
+ *
+ * FIX ROUND P PUT IT HERE, as a shear of the node matrix: row 0 += kx * row 2.
+ * That is exact for the POSITION, because the projection divides by vz and
+ * anything added to vx in proportion to vz survives as a constant pixel
+ * offset. It is wrong for the LIGHT, and that is what the round was not
+ * allowed to keep: hd_model.hlsl skins the vertex NORMAL through the very same
+ * matrix and renormalises it (Skin(normal, node), then rsqrt), so a sheared
+ * node matrix tilts and rescales every normal of the item and the ring's one
+ * sun lights it by an amount that depends on where it stands on the screen.
+ * Measured on the shader itself - ModelProbe -ringlight over the object's own
+ * pixels - the middle of the inventory row came out 28 % too dark and the ammo
+ * row 16 % too bright, two rings that stand at once and 45 % apart.
+ *
+ * FIX ROUND P2 PUTS IT IN THE PROJECTION, where the classic path has it: the
+ * item carries kx / ky to HDModelOffCentre (hd_model.h), which writes _31 and
+ * _32 of a copy of the frame's projection for that one draw. A normal never
+ * goes through a projection, so it cannot be touched by one. The node matrix
+ * that reaches the card is now the engine's own, and the ring's light is the
+ * classic ring's light to the bit.
+ *
+ * The idea of folding the ring's centre into the item at all is TROne's
+ * (Copyright 2026 Todesengel, GPLv3, games\tr5\glue\hostglue_2d5.cpp:502-506,
+ * which shears the matrix); the road taken here and the arithmetic in
+ * HDModelOffCentreMatrix were derived from TR5's own projection line.
+ */
+void HDInvNode(int node)
+{
+	ProfScope prof(PROF_HD_OBJ);
+
+	if (!g_open || !g_ring_open || node < 0 || node >= g_open_nodes ||
+		node >= HD_OBJ_NODES)
+		return;
+
+	memcpy(g_raw + node * 12, aMXPtr, 48);
+
+	g_seen |= 1u << node;
+}
+
+void HDInvEnd()
+{
+	ProfScope prof(PROF_HD_OBJ);
+
+	if (!g_open || !g_ring_open)
+		return;
+
+	g_open = false;
+	g_ring_open = false;
+
+	if (!g_seen || g_count >= HD_OBJ_ITEMS)
+		return;
+
+	FrameItem& entry = g_frame[g_count];
+
+	entry.slot = g_open_slot;
+	entry.drawSlot = g_open_slot;
+	entry.head = g_open_slot >= 0 && g_open_slot < NUMBER_OBJECTS &&
+		g_slot[g_open_slot].head != 0;
+	entry.nodes = g_open_nodes;
+	entry.mask = g_open_mask;
+	entry.room = g_open_room;
+	entry.view = ViewSerial;
+	// P2: the ring's own screen centre, carried to the draw and put into the
+	// PROJECTION there - never into these matrices.
+	entry.offCentreX = g_ring_kx;
+	entry.offCentreY = g_ring_ky;
+
+	store_matrices(entry);
+
+	// Node 0's view z, for the log line - see RingLogItem::z.
+	if (g_ring_open_row >= 0 && g_ring_open_row < 16)
+		g_ring_log[g_ring_open_row].z = entry.matrix[14];
+
+	/* THE RING'S LIGHT, which is the classic ring's own and nothing else.
+	 *
+	 * phd_PutPolygonsPickup (specific\output.cpp) throws the whole level
+	 * lighting away for an inventory object and puts up two things: an
+	 * ambient of 8/8/8, and ONE sun whose colour is the ring's pcbright for
+	 * this item and whose direction is the fixed (0, -50, -100) - up and
+	 * towards the camera - normalised over sqrt(12500).
+	 *
+	 * The classic line reads that direction out of D3DMView, which is the
+	 * NODE's matrix at that moment (aSetViewMatrix is called at the top of
+	 * the same function), so what it computes is the direction expressed in
+	 * the node's own space: vec = R^T d. The shading term is then
+	 * dot(n_model, R^T d) = dot(R n_model, d) = dot(n_view, d) - so in VIEW
+	 * space, which is where HD_OBJLIGHT_SUN lives, the direction is simply d
+	 * and no per-node work is left.
+	 *
+	 * The doubling is the same doubling: aTransformLightClipMesh writes
+	 * `val += val` for a sun while InventoryActive, and sunScale carries it
+	 * (hd_model.h says so where the field is declared). fill_lights would
+	 * arrive at the same 2.0 - it is not called here because the ring item's
+	 * il lists are empty by construction (DrawThreeDeeObject2D sets
+	 * nCurrentLights and nPrevLights to zero) and calling it would only be a
+	 * walk over two empty arrays and the level's dynamic lights, which have
+	 * no business in the ring.
+	 *
+	 * No room cube, no point lights, no spots, no dynamics - and no fog
+	 * bulbs, which hd_level.cpp takes off this frame for the ring. The
+	 * distance fog is left exactly as the classic ring has it: the shader
+	 * runs the same subtraction from the same tomb5.distance_fog, and a ring
+	 * item stands a few hundred units from the camera where neither path
+	 * reaches the threshold. */
+	static const float kRingSun[3] =
+	{
+		0.0f,
+		-50.0f / 111.80339887f,		// sqrt(12500)
+		-100.0f / 111.80339887f
+	};
+
+	entry.lights[0].x = kRingSun[0];
+	entry.lights[0].y = kRingSun[1];
+	entry.lights[0].z = kRingSun[2];
+	entry.lights[0].kind = (float)HD_OBJLIGHT_SUN;
+	entry.lights[0].r = (float)CLRR(g_ring_color);
+	entry.lights[0].g = (float)CLRG(g_ring_color);
+	entry.lights[0].b = (float)CLRB(g_ring_color);
+	entry.lights[0].invRange = 0.0f;
+	entry.lightCount = 1;
+	entry.sunScale = 2.0f;
+
+	for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
+	{
+		entry.light[node * 3 + 0] = 8.0f;
+		entry.light[node * 3 + 1] = 8.0f;
+		entry.light[node * 3 + 2] = 8.0f;
+	}
+
+	memset(&entry.cut, 0, sizeof(entry.cut));
+	entry.cull = HD_MODEL_CULL_NONE;
+	/* No sheen, which is what an ITEM has in the level too (fix round D, D2 -
+	 * the specular term is Lara's alone for now). A pistol on the ring
+	 * therefore shines exactly as the same pistol shines lying on the floor,
+	 * which is the answer the round was asked for. */
+	entry.specStrength = 0.0f;
+	entry.specPower = 1.0f;
+
+	g_count++;
+}
+
+bool HDObjectRingFrame()
+{
+	return g_ring_frame;
+}
+
 int HDObjectFrameCount()
 {
 	return g_count;
@@ -1920,6 +2351,15 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		lighting.specStrength = entry.specStrength;
 		lighting.specPower = entry.specPower;
 
+		/* THE INVENTORY RING'S OWN SCREEN CENTRE (fix round P2). Zero for
+		 * every item in the world, and then HDModelOffCentre writes nothing
+		 * at all - it only touches the projection register when the value
+		 * really changes, so a ring frame costs one 4-register upload per
+		 * item and an ordinary frame costs none. Handed over here rather
+		 * than folded into entry.matrix, because the shader takes the vertex
+		 * NORMAL through those matrices as well; see hd_model.h. */
+		HDModelOffCentre(entry.offCentreX, entry.offCentreY);
+
 		/* drawSlot is the SWAPPED model when the item asked for one and it
 		 * arrived (B3), and the item's own slot otherwise. It is the same
 		 * skeleton, the same node count and the same bind pose, so nothing
@@ -1945,7 +2385,10 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 
 	// GROUP M: the objects are done and the window of the last one must not
 	// outlive them - the caller closes the bracket next, and the bracket is
-	// what the classic path gets back.
+	// what the classic path gets back. P2: and neither must the last item's
+	// screen centre, for the same reason - the glow phase opens a second
+	// bracket on the same list and the classic path shares the register file.
+	HDModelOffCentre(0.0f, 0.0f);
 	HDRenderScissorOff();
 
 	/* E6: the phases add up. HDModelFrameBegin zeroes the model file's own
@@ -2068,6 +2511,8 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	 * frame that must never be cut. */
 	entry.room = -1;
 	entry.view = ViewSerial;	// fix round R
+	entry.offCentreX = 0.0f;	// P2: Lara is never on the ring
+	entry.offCentreY = 0.0f;
 
 	g_count++;
 	return true;

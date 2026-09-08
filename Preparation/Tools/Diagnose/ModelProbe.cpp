@@ -222,6 +222,37 @@
  *                         card is handed. The engine runs the same check on
  *                         its own matrix stack and logs HDLOG itemcheck; this
  *                         one runs it without the game.
+ *     -ringcheck          the proof of the INVENTORY RING's off-centre
+ *                         projection (#123, fix round P, P2), in two halves.
+ *                         THE PLACE: the model's bounding rectangle put on the
+ *                         screen twice at every place the ring puts an item -
+ *                         once by the classic off-centre projection
+ *                         (f_centerx/f_centery moved to the item, as
+ *                         phd_PutPolygonsPickup does) and once through the
+ *                         engine's own HDModelOffCentreMatrix, which is what
+ *                         hd_object.cpp hands the card per ring item. Both the
+ *                         place and the SIZE have to agree, at 4:3 and at
+ *                         16:9; the budget is 1 pixel. THE LIGHT: the ring's
+ *                         sun term over 26 sample normals, on the matrix the
+ *                         engine hands the card and on the SHEARED matrix fix
+ *                         round P handed it - the first must not move at all,
+ *                         and the second is the error P2 removed, kept as a
+ *                         number. Needs the camera, so it does not combine
+ *                         with -nodraw - same as -itemcheck and -laracheck.
+ *     -ring <x> <y>       draw the model where the ring would put it, by the
+ *                         engine's own road: the matrices are untouched and
+ *                         the offset goes into the projection. The picture of
+ *                         what -ringcheck counts; with -ringlight it is also
+ *                         the end-to-end proof that the ring's light does not
+ *                         depend on where the item stands. Combines with
+ *                         -ringcheck.
+ *     -ringlight <bright> light it the way the ring lights it and nothing
+ *                         else: an ambient of 8/8/8 and ONE sun of that
+ *                         brightness, direction (0, -50, -100) normalised,
+ *                         DOUBLED - which is all phd_PutPolygonsPickup sets
+ *                         up and all HDInvEnd hands the model. The ring's own
+ *                         numbers are 32 (an item off to the side), 160 (the
+ *                         selected one) and 127 (the pickup display).
  *     -meshbits <mask>    hide nodes exactly as item->mesh_bits does in the
  *                         game; 0xBFFF takes a SWAT's head off. Decimal or
  *                         0x. Default: every node drawn.
@@ -488,6 +519,52 @@ static void MatRotX(double deg, float* m)
 	MatIdentity(m);
 	m[5] = c;  m[6] = s;
 	m[9] = -s; m[10] = c;
+}
+
+/* ------------------------------------------------------- the ring (P) -- */
+
+/* THE ROAD THE ENGINE DID NOT TAKE (#123, fix round P, corrected in P2).
+ *
+ * The classic inventory ring projects each item about the item's own place on
+ * the screen: phd_PutPolygonsPickup (specific\output.cpp) moves f_centerx /
+ * f_centery to X / Y for the length of one mesh. The HD path builds ONE
+ * projection per frame, about the screen centre, so the difference
+ *
+ *     kx = (X - centreX) / persp,  ky = (Y - centreY) / persp
+ *
+ * has to be put somewhere. It can be put into the ITEM'S MATRIX as a shear -
+ * vx' = vx + kx * vz, which survives the projection's division by vz as a
+ * constant pixel offset - and fix round P did exactly that. This function is
+ * that shear, and it is kept for ONE purpose: -ringcheck measures what it does
+ * to the LIGHT, which is why the engine no longer does it. hd_model.hlsl skins
+ * the vertex NORMAL through the same matrix and renormalises, so a sheared
+ * matrix tilts and rescales every normal of the item.
+ *
+ * The engine puts the offset in the PROJECTION instead (hd_model.cpp,
+ * HDModelOffCentreMatrix), where the classic path has it and where a normal
+ * cannot reach it.
+ *
+ * `m` is a row-major 4x4 in the row-vector convention (p * m), where the
+ * engine's own matrix row i is the matrix's COLUMN i - hence the stride of
+ * four. */
+static void RingShear(float* m, double kx, double ky)
+{
+	for (int col = 0; col < 4; col++)
+	{
+		const double z = (double)m[col * 4 + 2];
+
+		m[col * 4 + 0] = (float)((double)m[col * 4 + 0] + kx * z);
+		m[col * 4 + 1] = (float)((double)m[col * 4 + 1] + ky * z);
+	}
+}
+
+/* GetFixedScale (specific\output.cpp) for a window the tool only imagines. */
+static long RingFixedScale(long unit, long w, long h)
+{
+	const long x = (w > 640) ? (long)(((double)w * unit) / 640.0 + 0.5) : unit;
+	const long y = (h > 480) ? (long)(((double)h * unit) / 480.0 + 0.5) : unit;
+
+	return x < y ? x : y;
 }
 
 /* ------------------------------------------------------------------ mem -- */
@@ -6803,6 +6880,13 @@ int main(int argc, char** argv)
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	bool itemcheck = false;
+	/* #123, fix round P: the inventory ring. -ringcheck is the numeric proof
+	 * of the shear, -ring <x> <y> draws the model where the ring would put it
+	 * so that the same shear can be looked at. */
+	bool ringcheck = false;
+	bool ringSet = false;
+	bool ringLight = false;
+	double ringX = 0.0, ringY = 0.0;
 
 	/* Lara's composite - stage S4-1. */
 	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
@@ -7062,6 +7146,14 @@ int main(int argc, char** argv)
 			head = true;
 		else if (!_stricmp(argv[i], "-itemcheck"))
 			itemcheck = true;
+		else if (!_stricmp(argv[i], "-ringcheck"))
+			ringcheck = true;
+		else if (!_stricmp(argv[i], "-ring") && i + 2 < argc)
+		{
+			ringX = atof(argv[++i]);
+			ringY = atof(argv[++i]);
+			ringSet = true;
+		}
 		else if (!_stricmp(argv[i], "-threads") && i + 1 < argc)
 			threads = atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-out") && i + 1 < argc)
@@ -7120,6 +7212,31 @@ int main(int argc, char** argv)
 			const float range = (float)atof(argv[++i]);
 
 			light.invRange = range > 0.0f ? 1.0f / range : 0.0f;
+		}
+		else if (!_stricmp(argv[i], "-ringlight") && i + 1 < argc &&
+			lightCount < HD_MAX_OBJ_LIGHTS)
+		{
+			/* THE INVENTORY RING'S OWN LIGHT (#123, fix round P), which is
+			 * the whole of it: an ambient of 8/8/8 and ONE sun of the ring's
+			 * pcbright, direction (0, -50, -100) normalised, doubled - the
+			 * three lines phd_PutPolygonsPickup sets up (specific\output.cpp)
+			 * and the ones HDInvEnd hands the model. `bright` is the ring's
+			 * own value: 32 for an item off to the side, 160 for the selected
+			 * one, 127 for the pickup display. */
+			const float bright = (float)atof(argv[++i]);
+			HDObjLight& light = lights[lightCount++];
+
+			light.x = 0.0f;
+			light.y = -50.0f / 111.80339887f;	// sqrt(12500)
+			light.z = -100.0f / 111.80339887f;
+			light.kind = (float)HD_OBJLIGHT_SUN;
+			light.r = bright;
+			light.g = bright;
+			light.b = bright;
+			light.invRange = 0.0f;
+
+			shade = 8.0;		// the ring's ambient
+			ringLight = true;	// and its doubled sun
 		}
 		else
 			printf("ModelProbe: ignoring %s\n", argv[i]);
@@ -7752,13 +7869,322 @@ int main(int argc, char** argv)
 			: "FAIL - the projection and the classic transform disagree");
 	}
 
+	/* THE RING PROOF (#123, fix round P, rebuilt in P2), without the game.
+	 * Two measurements, and the second is the one that failed the round.
+	 *
+	 * ONE, THE PLACE. The model's BOUNDING RECTANGLE put on the screen twice
+	 * at every place the ring puts an item:
+	 *
+	 *   classic  the eight corners through node 0's matrix into view space,
+	 *            then sx = vx * persp / vz + X, sy = vy * persp / vz + Y -
+	 *            the line aTransformLightClipMesh runs with f_centerx /
+	 *            f_centery moved to the item's place (specific\output.cpp,
+	 *            phd_PutPolygonsPickup)
+	 *   engine   the SAME, untouched corners through the engine's own
+	 *            off-centre projection - HDModelOffCentreMatrix, called here
+	 *            and not copied - and the viewport, which is what
+	 *            specific\hd\hd_object.cpp hands HDModelOffCentre for every
+	 *            ring item
+	 *
+	 * TWO, THE LIGHT, and it is the measurement that failed fix round P. The
+	 * ring's sun term over a sphere of sample normals, computed the way
+	 * hd_model.hlsl computes it - the normal through the node's 3x3,
+	 * renormalised, dotted with the ring's fixed direction - once on the
+	 * matrix the ENGINE hands the card and once on the SHEARED matrix fix
+	 * round P handed it. The first column cannot move at all, because the
+	 * engine's matrix is the classic one and a rotation leaves a unit normal
+	 * a unit normal. The second is the round's own error kept as a number: it
+	 * is what the ring really looked like until P2 moved the offset into the
+	 * projection, and a regression that put the shear back would make the
+	 * first column read like the second.
+	 *
+	 * Both the position and the SIZE of the rectangle have to agree: the ring
+	 * must not be 4/3 too wide on a 16:9 window, which is the mistake this
+	 * round's own notes name (TROne's "diary drawn buggy"). It cannot happen
+	 * here because TR5 computes f_persp from a 4:3 implied width whatever the
+	 * window is (specific\3dmath.cpp, AlterFOV) and the HD projection is built
+	 * from that very number - and the two aspect ratios below are that
+	 * statement made into a measurement rather than an argument. */
+	if (ringcheck)
+	{
+		struct RingAspect { const char* name; long w, h; };
+
+		const RingAspect aspects[2] = { { "4:3", 640, 480 }, { "16:9", 1920, 1080 } };
+		const float* m0 = &matrices[0];
+		double corner[8][3];
+		int c = 0;
+
+		for (int xi = 0; xi < 2; xi++)
+			for (int yi = 0; yi < 2; yi++)
+				for (int zi = 0; zi < 2; zi++, c++)
+				{
+					const double mx = xi ? maxs[0] : mins[0];
+					const double my = yi ? maxs[1] : mins[1];
+					const double mz = zi ? maxs[2] : mins[2];
+
+					corner[c][0] = mx * m0[0] + my * m0[4] + mz * m0[8] + m0[12];
+					corner[c][1] = mx * m0[1] + my * m0[5] + mz * m0[9] + m0[13];
+					corner[c][2] = mx * m0[2] + my * m0[6] + mz * m0[10] + m0[14];
+				}
+
+		/* THE SAMPLE NORMALS for the light half: the 26 directions of a
+		 * 3x3x3 grid without its centre, normalised. Any spread of unit
+		 * normals does - the point is that the engine's road leaves every
+		 * one of them alone and the shear does not. */
+		double normals[26][3];
+		int normalCount = 0;
+
+		for (int nx = -1; nx <= 1; nx++)
+			for (int ny = -1; ny <= 1; ny++)
+				for (int nz = -1; nz <= 1; nz++)
+				{
+					if (!nx && !ny && !nz)
+						continue;
+
+					const double len = sqrt((double)(nx * nx + ny * ny + nz * nz));
+
+					normals[normalCount][0] = (double)nx / len;
+					normals[normalCount][1] = (double)ny / len;
+					normals[normalCount][2] = (double)nz / len;
+					normalCount++;
+				}
+
+		// The ring's own sun, in view space: (0, -50, -100) over sqrt(12500),
+		// which is what phd_PutPolygonsPickup sets up and HDInvEnd hands over.
+		const double sun[3] = { 0.0, -50.0 / 111.80339887498948,
+			-100.0 / 111.80339887498948 };
+
+		printf("\n-- ringcheck: the ring's own off-centre projection -------------\n");
+		printf("%6s %7s %7s %9s %9s %9s %9s %9s %9s %8s %8s\n", "aspect",
+			"ring x", "ring y", "class w", "ring w", "class h", "ring h",
+			"worst dx", "worst dy", "light", "if shear");
+
+		double worstX = 0.0, worstY = 0.0, worstLight = 0.0, worstShearLight = 0.0;
+		int places = 0, skipped = 0;
+
+		for (int ai = 0; ai < 2; ai++)
+		{
+			const long w = aspects[ai].w;
+			const long h = aspects[ai].h;
+			const double p = EnginePersp(h, fov);
+			const double centreX = (double)(w / 2);
+			const double centreY = (double)(h / 2);
+			/* OBJLIST_SPACING is phd_centerx >> 1 and the six visible slots
+			 * sit at i = -3..2; the inventory row stands at GetFixedScale(84)
+			 * and the ammo row at GetFixedScale(380) (game\newinv2.cpp,
+			 * draw_current_object_list). */
+			const long spacing = (long)(w / 2) >> 1;
+			const long rows[2] = { RingFixedScale(84, w, h), RingFixedScale(380, w, h) };
+
+			double za = 0, zb = 0, zboo = 0;
+			D3DMATRIX ringProj;
+
+			HDRenderZConstants(20.0, 20480.0, &za, &zb, &zboo);
+			HDRenderMakeProjection(p, centreX, centreY, za, zb, &ringProj);
+
+			for (int ri = 0; ri < 2; ri++)
+				for (int i = -3; i <= 2; i++)
+				{
+					const double X = centreX + (double)(i * spacing);
+					const double Y = (double)rows[ri];
+					const double kx = (X - centreX) / p;
+					const double ky = (Y - centreY) / p;
+
+					/* THE ENGINE'S OWN OFF-CENTRE PROJECTION, out of the
+					 * engine's own file - hd_model.cpp is linked into this
+					 * tool, so this is HDModelOffCentre's arithmetic and not
+					 * a copy of it. The node matrices stay untouched, which
+					 * is the whole of fix round P2. */
+					D3DMATRIX offProj;
+
+					HDModelOffCentreMatrix(&ringProj, (float)kx, (float)ky,
+						&offProj);
+
+					const float* om = (const float*)&offProj;
+
+					/* And the matrix fix round P sheared instead, for the
+					 * light column below - never for the geometry. */
+					float sheared[16];
+
+					memcpy(sheared, m0, sizeof(sheared));
+					RingShear(sheared, kx, ky);
+
+					double cl = 1e30, cr = -1e30, ct = 1e30, cb = -1e30;
+					double sl = 1e30, sr = -1e30, st = 1e30, sb = -1e30;
+					bool behind = false;
+
+					for (int k = 0; k < 8; k++)
+					{
+						const double vz = corner[k][2];
+
+						if (vz < 20.0)
+						{
+							behind = true;
+							break;
+						}
+
+						const double zv = p / vz;
+						const double cx2 = corner[k][0] * zv + X;
+						const double cy2 = corner[k][1] * zv + Y;
+
+						if (cx2 < cl) cl = cx2;
+						if (cx2 > cr) cr = cx2;
+						if (cy2 < ct) ct = cy2;
+						if (cy2 > cb) cb = cy2;
+
+						/* The very same view-space corner - the UNTOUCHED
+						 * matrix - through the engine's off-centre
+						 * projection and the viewport. */
+						const double sx = corner[k][0];
+						const double sy = corner[k][1];
+						const double sz = corner[k][2];
+
+						const double px = sx * om[0] + sy * om[4] + sz * om[8] + om[12];
+						const double py = sx * om[1] + sy * om[5] + sz * om[9] + om[13];
+						const double pw = sx * om[3] + sy * om[7] + sz * om[11] + om[15];
+
+						if (pw <= 0.0)
+						{
+							behind = true;
+							break;
+						}
+
+						const double dx2 = (px / pw + 1.0) * 0.5 * (double)w;
+						const double dy2 = (1.0 - py / pw) * 0.5 * (double)h;
+
+						if (dx2 < sl) sl = dx2;
+						if (dx2 > sr) sr = dx2;
+						if (dy2 < st) st = dy2;
+						if (dy2 > sb) sb = dy2;
+					}
+
+					if (behind)
+					{
+						skipped++;
+						continue;
+					}
+
+					const double dl = fabs(sl - cl), dr = fabs(sr - cr);
+					const double dt = fabs(st - ct), db = fabs(sb - cb);
+					const double dxw = dl > dr ? dl : dr;
+					const double dyw = dt > db ? dt : db;
+
+					if (dxw > worstX) worstX = dxw;
+					if (dyw > worstY) worstY = dyw;
+
+					/* THE LIGHT, the way hd_model.hlsl works it out: the
+					 * normal through the node's 3x3, renormalised, dotted
+					 * with the ring's sun and clamped at zero. Once on the
+					 * matrix the engine hands the card (which is the classic
+					 * one, untouched) and once on the sheared matrix fix
+					 * round P handed it. */
+					double plain = 0.0, shear = 0.0, classic = 0.0;
+
+					for (int n = 0; n < normalCount; n++)
+					{
+						const double* nv = normals[n];
+						const float* road[2] = { m0, sheared };
+						double term[2] = { 0.0, 0.0 };
+
+						for (int r = 0; r < 2; r++)
+						{
+							const float* mm = road[r];
+							const double vx = nv[0] * mm[0] + nv[1] * mm[4] + nv[2] * mm[8];
+							const double vy = nv[0] * mm[1] + nv[1] * mm[5] + nv[2] * mm[9];
+							const double vz2 = nv[0] * mm[2] + nv[1] * mm[6] + nv[2] * mm[10];
+							const double len = sqrt(vx * vx + vy * vy + vz2 * vz2);
+							const double inv = len > 1e-12 ? 1.0 / len : 0.0;
+							const double dot = (vx * sun[0] + vy * sun[1] + vz2 * sun[2]) * inv;
+
+							term[r] = dot > 0.0 ? dot : 0.0;
+
+							/* The classic path does NOT renormalise - it
+							 * dots the model normal with the sun turned into
+							 * model space, which is the same number as the
+							 * transformed normal dotted with the sun
+							 * (specific\output.cpp,
+							 * aTransformLightClipMesh). For a rotation the
+							 * two are equal anyway, and that equality is
+							 * what the plain column is being checked
+							 * against. */
+							if (r == 0)
+							{
+								const double raw = vx * sun[0] + vy * sun[1] + vz2 * sun[2];
+
+								classic += raw > 0.0 ? raw : 0.0;
+							}
+						}
+
+						plain += term[0];
+						shear += term[1];
+					}
+
+					plain /= (double)normalCount;
+					shear /= (double)normalCount;
+					classic /= (double)normalCount;
+
+					const double dLight = fabs(plain - classic);
+					const double dShear = classic > 1e-9
+						? fabs(shear - classic) / classic : 0.0;
+
+					if (dLight > worstLight) worstLight = dLight;
+					if (dShear > worstShearLight) worstShearLight = dShear;
+
+					places++;
+
+					printf("%6s %7.0f %7.0f %9.2f %9.2f %9.2f %9.2f %9.5f %9.5f "
+						"%+7.4f %+7.1f%%\n",
+						aspects[ai].name, X, Y, cr - cl, sr - sl, cb - ct,
+						sb - st, dxw, dyw, plain - classic,
+						100.0 * (shear - classic) / (classic > 1e-9 ? classic : 1.0));
+				}
+		}
+
+		printf("\n%d ring places compared, %d skipped behind the near plane; "
+			"worst dx %.5f px, worst dy %.5f px\n", places, skipped,
+			worstX, worstY);
+		printf("the light: worst |engine - classic| %.9f over %d normals a "
+			"place; the shear fix round P used would have been off by up to "
+			"%.1f %%\n", worstLight, normalCount, 100.0 * worstShearLight);
+		printf("%s\n", places && worstX <= 1.0 && worstY <= 1.0
+			&& worstLight <= 1e-6
+			? "PASS - the ring's own projection puts the bounding rectangle "
+			  "where the off-centre projection puts it, at the same size, "
+			  "and leaves the light alone"
+			: "FAIL - the ring's projection and the classic off-centre "
+			  "projection disagree");
+	}
+
+	/* #123, fix round P (P2): -ring <x> <y> draws the model where the
+	 * inventory ring would put it, by the engine's own road - the node
+	 * matrices are left exactly as they are and the OFFSET goes into the
+	 * projection at the draw call below, which is what hd_object.cpp does per
+	 * ring item. So the picture shows what the ring really shows, light
+	 * included: -ringlight 160 at the middle of the ring and at the ammo row
+	 * has to come out at the same brightness as with no -ring at all, and
+	 * before P2 it did not. */
+	double ringKx = 0.0, ringKy = 0.0;
+
+	if (ringSet)
+	{
+		ringKx = (ringX - (double)(width / 2)) / persp;
+		ringKy = (ringY - (double)(height / 2)) / persp;
+
+		printf("\nring    : item at %.0f, %.0f - off-centre kx %.6f, ky %.6f "
+			"(the projection, not the matrices)\n",
+			ringX, ringY, ringKx, ringKy);
+	}
+
 	std::vector<float> light((size_t)here->nodes * 3, (float)shade);
 
 	HDModelLighting lighting;
 
 	lighting.lights = lightCount ? lights : 0;
 	lighting.lightCount = lightCount;
-	lighting.sunScale = 0.75f;
+	/* 0.75 is the factor aTransformLightClipMesh gives a sun in the world and
+	 * 2.0 the one it gives it in the inventory ("fucking shit", says the
+	 * original comment) - so -ringlight sets the second (#123, fix round P). */
+	lighting.sunScale = ringLight ? 2.0f : 0.75f;
 	// #123 fix round D (D2): the sheen is Lara's alone; an object gets none.
 	lighting.specStrength = 0.0f;
 	lighting.specPower = 1.0f;
@@ -7793,6 +8219,11 @@ int main(int argc, char** argv)
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	HDModelFrameBegin(&projection, 0);
+
+	/* #123, fix round P2: the inventory ring's own screen centre, exactly as
+	 * hd_object.cpp hands it over per ring item. Zero without -ring, and then
+	 * the call writes nothing at all. */
+	HDModelOffCentre((float)ringKx, (float)ringKy);
 
 	const bool drew = HDModelDraw(slot, &matrices[0], here->nodes,
 		&light[0], nodeMask, &lighting);

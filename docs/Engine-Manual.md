@@ -1241,6 +1241,61 @@ pixel. `HDLOG lightcheck` runs the classic lighting formula on the engine's
 own light arrays and the HD one on the list that was sent to the card, on the
 same surface normal, and prints both colours side by side.
 
+**The inventory ring draws HD too.** Open the inventory and the pistols, the
+medipacks, the flares, the keys and the puzzle pieces turning on the ring are
+the remaster's models, not the 1999 ones. It is the same seam once more and
+not a second renderer: the ring walks a mesh tree exactly the way the world
+does, and only the last step changes.
+
+Two things about the ring are its own, and both are visible if they go wrong.
+
+The first is *where* an item is drawn. The classic ring projects each object
+about its own place on the screen — it slides the vanishing point sideways for
+the length of one object and puts it back — while the HD path builds one
+projection for the whole picture. So the HD path slides *its* vanishing point
+for the length of one draw call, which is the same move in the same place. The
+result has to land on the same pixel and be the same size as the classic ring,
+and it is: measured over the model's bounding rectangle at every place the ring
+puts an item, at 4:3 and at 16:9, the two disagree by **0.0001 of a pixel**
+(`ModelProbe -ringcheck`). The ring is also *not* four thirds too wide on a
+widescreen monitor, which is the obvious way to get this wrong: TR5 works its
+field of view out from a 4:3 width whatever the window is, and the HD
+projection is built from that very number.
+
+There is a shortcut here that looks equivalent and is not: the same sideways
+slide can be put into the object's own matrix as a lean, and the projection's
+division undoes it just as exactly. The first version of this did that, and the
+ring came out lit wrong — 28 % too dark in the middle of the row and 16 % too
+bright on the ammo row below it, because the shader takes each surface's
+*normal* through that same matrix, and a leaning matrix tilts the normals with
+it. The slide belongs in the projection, where a normal never goes.
+
+The second is the light. A ring object is lit by nothing but the ring: one
+lamp above and in front of it, in the ring's own brightness — dim for the
+objects to the side, bright for the one you have selected — over a near-black
+ambient. That is exactly what the classic ring does, with the same doubling of
+the lamp the original engine gives an inventory object, so an HD pistol is as
+bright as the classic one was. No room light, no torch, no fog bulbs: the
+bulbs of the room Lara is standing in would sit in front of her medipacks.
+
+**What stays classic on the ring**, per level, is three things and always the
+same three: the compass and the two passport pages, load and save. The passport
+pages have no model in the remaster at all. The compass has one, but in a
+campaign level it names a piece of the mesh tree TR5's compass does not have,
+so the skeleton test refuses it — the same test that protects an enemy in a
+randomized level. Both then draw exactly as they always did, needle and all,
+and the ring has no hole in it. Everything else on the ring is HD: in the
+vanilla levels 15 objects in JOBY4, 22 in JOBY3, 17 in ANDREA1
+(`ModelProbe -level <STEM> -all`), and more in a randomized one, which scatters
+weapons and ammunition into levels that never carried them. One place has one
+more classic object, and for a different reason — the remaster ships no model
+for it at all: RICH1's keypad. A randomized JOBY3 has a second such object,
+the eighth key the randomizer's own key chain puts there.
+
+With `-log`, opening the ring writes one `HDLOG ring` line saying how many
+objects were on it and how many of them were HD, and one line per object with
+its slot, its model file, its node mask and how the model was found.
+
 **The actors of a cutscene draw HD as well.** A cutscene does not run the
 ordinary object path: the actors are packed animation nodes played back by a
 routine of their own, with their own frame buffer and their own light. Lara

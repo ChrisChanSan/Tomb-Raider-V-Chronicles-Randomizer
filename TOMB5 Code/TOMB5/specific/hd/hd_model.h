@@ -362,6 +362,47 @@ int HDModelPreload();
 void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 	unsigned int passes = HD_PASS_ALL);
 
+/* ONE OBJECT DRAWN ABOUT A DIFFERENT SCREEN CENTRE (#123, fix round P, P2).
+ *
+ * The inventory ring projects every item about the item's own place on the
+ * screen: phd_PutPolygonsPickup (specific\output.cpp) moves f_centerx /
+ * f_centery to the item's X / Y for the length of one mesh and puts them back
+ * afterwards. This is that move, on the frame's own projection matrix, for the
+ * next HDModelDraw:
+ *
+ *     kx = (X - centreX) / persp,   ky = (Y - centreY) / persp
+ *
+ * and the matrix gets _31 = kx * _11 and _32 = ky * _22, which adds a constant
+ * kx * z to clip x before the w division - a constant PIXEL offset, since
+ * _11 = persp / centreX. Nothing else in the matrix moves, so the depth is
+ * untouched and every item of a ring frame still sorts against every other in
+ * the one depth buffer both paths share.
+ *
+ * WHY HERE AND NOT IN THE ITEM'S MATRIX (P2, and it is the whole of fix round
+ * P2). The same offset can be had by shearing the node matrices instead -
+ * row 0 += kx * row 2 - and fix round P did exactly that. It is right for the
+ * position and wrong for the LIGHT: hd_model.hlsl skins the vertex NORMAL
+ * through the same gJoints and renormalises it, so a sheared node matrix tilts
+ * and rescales the normal, and the ring's one sun then lights an item by an
+ * amount that depends on where the item stands on the screen. Measured on the
+ * shader itself (ModelProbe -ringlight, mean brightness over the object's own
+ * pixels): 93.61 unsheared against 67.18 in the middle of the inventory row and
+ * 108.87 on the ammo row - two rings that stand at once, 45 % apart. In the
+ * projection the offset cannot reach a normal at all, because a normal never
+ * goes through the projection.
+ *
+ * Call it before every HDModelDraw that wants it; (0, 0) is the plain frame
+ * projection and is what every other object passes, so nothing can inherit a
+ * neighbour's offset. Costs one 4-register upload and only when the value
+ * really changes. */
+void HDModelOffCentre(float kx, float ky);
+
+/* The same arithmetic as a pure function, for the diagnostic tool: `out` is
+ * `base` with the two off-centre terms written. ModelProbe -ringcheck measures
+ * the engine's own line rather than a copy of it. */
+void HDModelOffCentreMatrix(const D3DMATRIX* base, float kx, float ky,
+	D3DMATRIX* out);
+
 // One object. `nodeMatrix` is nodeCount row-major 4x4 matrices, model space
 // to VIEW space - the very matrices the classic path has on its stack when it
 // calls phd_PutPolygons for each mesh. `nodeLight` is nodeCount colour

@@ -41,6 +41,7 @@
 #include "spotcam.h"
 #include "../specific/dxshell.h"
 #include "savegame.h"
+#include "../specific/hd/hd_object.h"	// #123, fix round P: the ring in HD
 
 static RINGME* rings[2];
 static RINGME pcring1;
@@ -975,13 +976,44 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 	meshpp = &meshes[object->mesh_index];
 	bone = &bones[object->bone_index];
 
+	/* #123 (fix round P): IS THIS RING ITEM DRAWN BY THE HD PATH?
+	 *
+	 * The same seam DrawAnimatingItem has carried since stage S3-2, in the
+	 * one other place in this engine that walks a mesh tree and hands each
+	 * node's mesh to the renderer. When the answer is true not one classic
+	 * polygon of this item goes into the sort list: the walk below runs
+	 * exactly as it always did - the same frame, the same bones, the same
+	 * mesh bits - and instead of handing each node's mesh to
+	 * phd_PutPolygonsPickup it hands the node's MATRIX to hd_object, which is
+	 * what a skinned model wants.
+	 *
+	 * xoffset/yoffset are the item's place on the ring, which is what the
+	 * classic call passes as the temporary projection centre; pcbright is the
+	 * ring's brightness for this item, which is the classic sun's colour.
+	 * hd_object carries the first to the item's own draw, where it moves the
+	 * PROJECTION, and takes the second as its one light.
+	 *
+	 * False for an item the remaster ships no model for, for a slot whose
+	 * skeleton the model does not fit, with the HD path off, and outside the
+	 * inventory - the pickup display in the corner of the screen goes through
+	 * this same function and stays classic. Then the ring is drawn exactly as
+	 * it was, item by item, and never has a hole in it. */
+	const bool hd = HDInvBegin(item, object, (float)xoffset, (float)yoffset, pcbright);
+
 	if (!shagflag)
 		phd_TranslateRel(frmptr[6], frmptr[7], frmptr[8]);
 
 	rotation1 = &frmptr[9];
 	gar_RotYXZsuperpack(&rotation1, 0);
 
-	if (item->mesh_bits & 1)
+	/* The matrix is recorded whether or not mesh_bits shows the node, because
+	 * a hidden node still carries the ones below it - the mask reaches the
+	 * model as a mask and hides its triangles there. That is the passport's
+	 * pages and the globe's markers, and it is why the ring needs no flag of
+	 * its own where TROne needed TRONE_LIGHT_EXACT_NODES. */
+	if (hd)
+		HDInvNode(0);
+	else if (item->mesh_bits & 1)
 	{
 		if (overlay)
 			phd_PutPolygonsPickup(*meshpp, (float)xoffset, (float)yoffset, pcbright);
@@ -1010,7 +1042,9 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 		gar_RotYXZsuperpack(&rotation1, 0);
 		bit <<= 1;
 
-		if (item->mesh_bits & bit)
+		if (hd)
+			HDInvNode(i + 1);
+		else if (item->mesh_bits & bit)
 		{
 			if (overlay)
 				phd_PutPolygonsPickup(*meshpp, (float)xoffset, (float)yoffset, pcbright);
@@ -1023,6 +1057,13 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 			}
 		}
 	}
+
+	/* The node walk is over. HDInvEnd puts the item on the frame's list - the
+	 * very list the world's HD objects go on, drawn in the same bracket by
+	 * the same HDObjectFrameDraw. Called on the one road out of this
+	 * function, as HDObjectEnd is in game\draw.cpp. */
+	if (hd)
+		HDInvEnd();
 
 	phd_PopMatrix();
 }

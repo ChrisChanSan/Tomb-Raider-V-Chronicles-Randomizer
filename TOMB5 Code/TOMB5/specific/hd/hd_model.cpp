@@ -173,6 +173,21 @@ namespace
 	// HDModelFrameBegin and the HD_PASS_ note in hd_render.h.
 	unsigned int g_pass_mask = HD_PASS_ALL;
 
+	/* THE FRAME'S PROJECTION, KEPT (#123, fix round P2). The inventory ring
+	 * draws each item about a different screen centre, and the road it takes
+	 * is a projection of its own per item (HDModelOffCentre) - so the plain
+	 * one has to be here to build them from and to go back to. `g_off_centre`
+	 * says whether c0 currently holds a moved one, which is what lets the
+	 * ordinary case - every object in the world - upload nothing at all. */
+	float g_frame_proj[16] =
+	{
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	};
+	bool g_off_centre = false;
+
 	/* --------------------------------------------------------- helpers -- */
 
 	std::string join(const std::string& a, const char* b)
@@ -2127,7 +2142,67 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 	g_frame_bulbs = bulbCount < HD_MAX_BULBS ? bulbCount : HD_MAX_BULBS;
 
 	if (projection)
-		set_matrix_constant(0, (const float*)projection);
+	{
+		// Kept, because HDModelOffCentre builds this frame's off-centre
+		// matrices out of it and has to put it back afterwards (P2).
+		std::memcpy(g_frame_proj, projection, sizeof(g_frame_proj));
+		set_matrix_constant(0, g_frame_proj);
+	}
+
+	g_off_centre = false;
+}
+
+void HDModelOffCentreMatrix(const D3DMATRIX* base, float kx, float ky,
+	D3DMATRIX* out)
+{
+	if (!base || !out)
+		return;
+
+	*out = *base;
+
+	/* _31 and _32, the two entries a plain perspective projection leaves at
+	 * zero (hd_render.cpp, HDRenderMakeProjection writes _11, _22, _33, _43
+	 * and _34 and nothing else). clip.x picks up kx * _11 * z, which after
+	 * the division by w = z is a constant kx * _11 in normalised device x,
+	 * and the viewport turns that into kx * _11 * centreX = kx * persp
+	 * pixels - which is X - centreX, the offset asked for. The y row carries
+	 * the same argument through _22, whose sign already holds the screen's
+	 * downward y. */
+	out->_31 = kx * base->_11;
+	out->_32 = ky * base->_22;
+}
+
+void HDModelOffCentre(float kx, float ky)
+{
+	/* `g_in_frame` says a bracket has been opened at least once, which is
+	 * what makes g_frame_proj a matrix rather than the identity it starts
+	 * as - it is NOT cleared when a bracket closes, so it is not a test of
+	 * "am I inside one". That test is not needed: the one caller is
+	 * HDObjectFrameDraw, between its own HDModelFrameBegin and the
+	 * (0, 0) it ends with, so c0 always holds the plain frame projection
+	 * again by the time the bracket closes and neither the room path nor
+	 * the classic path can inherit a moved one. */
+	if (!g_in_frame || !g_device)
+	{
+		g_off_centre = false;
+		return;
+	}
+
+	const bool want = (kx != 0.0f || ky != 0.0f);
+
+	// The common case by far: an ordinary object after another ordinary
+	// object, and not a register touched.
+	if (!want && !g_off_centre)
+		return;
+
+	D3DMATRIX base;
+	D3DMATRIX out;
+
+	std::memcpy(&base, g_frame_proj, sizeof(base));
+	HDModelOffCentreMatrix(&base, kx, ky, &out);
+	set_matrix_constant(0, (const float*)&out);
+
+	g_off_centre = want;
 }
 
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,

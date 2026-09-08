@@ -207,3 +207,17 @@ void HDFramePresented();
 // both, does its work once, and is here because AlterFOV moves f_persp inside
 // a frame while the binoculars are up.
 void HDFrameCaptureProjection();
+
+/* WHAT THAT PROJECTION IS (#123, fix round P). The three numbers
+ * HDRenderMakeProjection is fed with, after HDFrameCaptureProjection has taken
+ * them: `persp` is f_mpersp, `centerX`/`centerY` the screen centre this frame's
+ * ONE projection is built about.
+ *
+ * The inventory ring needs them because it draws every item about a DIFFERENT
+ * centre (specific\output.cpp, phd_PutPolygonsPickup moves f_centerx/f_centery
+ * to the item's place on the ring) and the HD path has one projection for the
+ * whole frame. hd_object.cpp measures the difference against these numbers and
+ * hands it to HDModelOffCentre (hd_model.h), which moves the projection itself
+ * for the length of one draw call.
+ * Zeroes before the frame's projection has been taken. */
+void HDFrameProjectionInfo(float* persp, float* centerX, float* centerY);

@@ -3063,6 +3063,21 @@ void HDFrameCaptureProjection()
 	g_oneopersp = f_moneopersp;
 }
 
+/* #123, fix round P: the three numbers the frame's ONE projection is built
+ * from, for the inventory ring's own screen centre. See the note in
+ * hd_level.h. */
+void HDFrameProjectionInfo(float* persp, float* centerX, float* centerY)
+{
+	if (persp)
+		*persp = g_persp;
+
+	if (centerX)
+		*centerX = g_centerx;
+
+	if (centerY)
+		*centerY = g_centery;
+}
+
 bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	int left, int top, int right, int bottom)
 {
@@ -3282,6 +3297,25 @@ void HDFrameDraw()
 	g_clip_this_frame = false;
 
 	FillFrameLighting(frame, bulbs);
+
+	/* THE RING HAS NO FOG BULBS (#123, fix round P). ActiveFogBulbs holds
+	 * positions the game already turned into VIEW space, for the view the
+	 * last played frame had. The inventory draws through a view of its own -
+	 * an identity matrix with the item pushed a few hundred units down +z
+	 * (game\newinv2.cpp, DrawThreeDeeObject2D) - so those coordinates mean
+	 * nothing here, and a bulb of the room Lara is standing in would sit in
+	 * front of her medipacks and tint them. The classic ring has no bulbs
+	 * either: phd_PutPolygonsPickup runs no bulb pass at all.
+	 *
+	 * The distance fog is NOT taken away with them. The classic ring keeps it
+	 * (aTransformLightClipMesh subtracts from every vertex past
+	 * DistanceFogStart whoever called it) and a ring item stands a few
+	 * hundred units from the camera, far short of the threshold on either
+	 * path - so both paths do the same nothing, and the one that would have
+	 * to be explained is a difference. */
+	if (HDObjectRingFrame())
+		frame.bulbCount = 0;
+
 	// R3b: a destructible piece follows its own static's Flags bit.
 	UpdateDestructibles();
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);

@@ -6,7 +6,13 @@
  * node loses to the model - are carried over from TROne (Copyright 2026
  * Todesengel, GPLv3, host\render\game_renderer.cpp: the item bracket
  * 1440-1520, `model.covered = ~0u` at 1826-1830, the swap-key rule at
- * 3800-3812 and 4170-4180). See THIRD-PARTY.md.
+ * 3800-3812 and 4170-4180). So is the idea of folding the inventory ring's
+ * off-centre projection into the item for the length of one draw
+ * (games\tr5\glue\hostglue_2d5.cpp:502-506) - the idea alone: TROne shears the
+ * item's MATRIX with it and this engine may not, because its shader takes the
+ * vertex normal through that matrix (see HDInvNode). The offset goes into the
+ * projection instead, and the arithmetic was derived from TR5's own projection
+ * line. See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -87,6 +93,52 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj);
 void HDObjectNode(int node, bool interpolated);
 
 void HDObjectEnd();
+
+// --- THE INVENTORY RING (#123, fix round P) --------------------------------
+//
+// The ring is the same seam once more, and deliberately not a second render
+// path: game\newinv2.cpp's DrawInventoryItemMe walks a mesh tree exactly as
+// DrawAnimatingItem does - a matrix per node, item->mesh_bits deciding which
+// node draws - and only the last step differs, phd_PutPolygonsPickup instead of
+// phd_PutPolygons. So the three calls below are HDObjectBegin/Node/End with
+// three differences, and each of them is a property of the ring rather than a
+// choice:
+//
+//   1. THE OFF-CENTRE PROJECTION. The ring draws every item about its own
+//      place on the screen: phd_PutPolygonsPickup moves f_centerx/f_centery to
+//      the item's x/y for the length of one mesh (specific\output.cpp) and puts
+//      it back afterwards. The HD path has ONE projection per frame
+//      (hd_level.cpp, HDRenderMakeProjection out of g_persp/g_centerx/
+//      g_centery), so the item carries the difference as two numbers and
+//      HDModelOffCentre (hd_model.h) moves the PROJECTION for the length of
+//      one draw call - never the item's matrices, which the shader also skins
+//      the normals with. The derivation and the measurement that settled it
+//      stand over HDInvNode in hd_object.cpp. The idea of folding it into the
+//      item at all is TROne's (Copyright 2026 Todesengel, GPLv3,
+//      games\tr5\glue\hostglue_2d5.cpp:502-506); the road and the arithmetic
+//      are ours and were derived from the classic formula, not copied.
+//   2. THE LIGHT. No room, no room cube, no point lights, no dynamics: the
+//      classic ring lights an item with ONE sun of its own and an ambient of
+//      8/8/8 (phd_PutPolygonsPickup again), and that is what travels.
+//   3. NO ANIMATION. The ring stands on frame 0 of the slot's first animation
+//      and never interpolates, so there is no `interpolated` argument.
+//
+// `x`/`y` are the item's place on the ring - newinv2.cpp's own xoffset/yoffset,
+// which is what it hands phd_PutPolygonsPickup - and `color` its pcbright, the
+// ring's own brightness for this item.
+//
+// Answers false for an item with no HD model, for a slot whose skeleton the
+// model does not fit, and outside the inventory: the caller then draws the
+// classic mesh and the ring has no hole in it.
+bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color);
+void HDInvNode(int node);
+void HDInvEnd();
+
+// True when this frame's HD items were collected from the ring. hd_level.cpp
+// asks before it hands the frame its fog bulbs: a bulb is a world position
+// already turned into VIEW space, and the ring's view is the identity, so the
+// bulbs of the room Lara stands in would sit in front of her medipacks.
+bool HDObjectRingFrame();
 
 // How many items are waiting. HDFrameDraw asks before it opens the bracket.
 int HDObjectFrameCount();

@@ -171,7 +171,19 @@ namespace
 	 * The rule this line follows, and the reason it can live in the same
 	 * table: the hand table is only ever asked WHEN THE LEVEL'S .MAP IS
 	 * SILENT. ANDREA2 and ANDREA3 still get their own answer. */
-	struct HandBound { const char* slot; const char* model; };
+	struct HandBound
+	{
+		const char* slot;
+		const char* model;
+		/* WHERE THE LINE HOLDS (#123, fix round O3): 0 for every level, else
+		 * the stems of the levels it is for, space-separated ("RICH1 RICH2
+		 * RICH3"), spelled as the .MAP files are and compared
+		 * without regard to case - the engine hands the stem in as the
+		 * sidecar spells it ("Rich2"), a tool as typed. A line for a level the
+		 * bind is not asked for is skipped, and the search goes on to the next
+		 * line and then to rules 3 and 4 as if the line were not there. */
+		const char* levels;
+	};
 
 	/* THE THREE PREFIXES, in trial order (#123, fix round O). See hd_bind.h. */
 	struct PrefixRule { const char* prefix; HDBindVia via; };
@@ -185,19 +197,19 @@ namespace
 
 	const HandBound hand_table[] =
 	{
-		{ "BLUE_GUARD2",             "BLUE_GUARD_JOBY"          },
-		{ "ROMAN_GOD2",              "ROMAN_GOD_ANDREA_HAMMER"  },
-		{ "CYBORG",                  "HITMAN"                   },
-		{ "MESHSWAP_CROSS_SWAT",     "SWAT"                     },
-		{ "MESHSWAP_CROSS_SWATPLUS", "SWAT_PLUS"                },
-		{ "MESHSWAP_CROSS_TWOGUN",   "TWOGUN"                   },
-		{ "MESHSWAP_CROSS_GUARD",    "BLUE_GUARD"               },
-		{ "MESHSWAP_CROSS_MAFIA",    "MAFIA"                    },
-		{ "MESHSWAP_CROSS_GUARD2",   "BLUE_GUARD_JOBY"          },
-		{ "MESHSWAP_CROSS_HITMAN",   "HITMAN"                   },
-		{ "MESHSWAP_CROSS_CRANEGUY", "CRANE_GUY"                },
+		{ "BLUE_GUARD2",             "BLUE_GUARD_JOBY",         0 },
+		{ "ROMAN_GOD2",              "ROMAN_GOD_ANDREA_HAMMER", 0 },
+		{ "CYBORG",                  "HITMAN",                  0 },
+		{ "MESHSWAP_CROSS_SWAT",     "SWAT",                    0 },
+		{ "MESHSWAP_CROSS_SWATPLUS", "SWAT_PLUS",               0 },
+		{ "MESHSWAP_CROSS_TWOGUN",   "TWOGUN",                  0 },
+		{ "MESHSWAP_CROSS_GUARD",    "BLUE_GUARD",              0 },
+		{ "MESHSWAP_CROSS_MAFIA",    "MAFIA",                   0 },
+		{ "MESHSWAP_CROSS_GUARD2",   "BLUE_GUARD_JOBY",         0 },
+		{ "MESHSWAP_CROSS_HITMAN",   "HITMAN",                  0 },
+		{ "MESHSWAP_CROSS_CRANEGUY", "CRANE_GUY",               0 },
 
-		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD"   },
+		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD",  0 },
 
 		/* THE DESERT EAGLE PICKUP (#123, fix round C, user finding C1). Two
 		 * more slots whose model exists under no plain name: the remaster
@@ -228,9 +240,95 @@ namespace
 		 * EXTRA5_REVOLVER_ITEM (Tomb Raider IV's six-shooter) first and never
 		 * gets to try the _JOBY suffix, and the hand table is asked BEFORE
 		 * the generic rule for exactly that reason (see bind_against). */
-		{ "REVOLVER_ITEM",           "EXTRA5_REVOLVER_ITEM_JOBY" },
-		{ "REVOLVER_AMMO_ITEM",      "EXTRA5_REVOLVER_AMMO_ITEM" }
+		{ "REVOLVER_ITEM",           "EXTRA5_REVOLVER_ITEM_JOBY", 0 },
+		{ "REVOLVER_AMMO_ITEM",      "EXTRA5_REVOLVER_AMMO_ITEM", 0 },
+
+		/* THE VCI LEVELS' OWN PICKUPS (#123, fix round O3; two user findings from
+		 * the fix round P play test: "for the Rich levels he still has to fetch
+		 * the headset instead of the binoculars", and "Rich2 has a special HK -
+		 * here the wrong one was used, it has a strange rotation in that level
+		 * only"). Two slots whose remaster model is not the one rule 3 finds.
+		 *
+		 * BINOCULARS_ITEM is the HEADSET in the VCI levels - the same slot and
+		 * the same classic mesh name, renamed by the inventory alone
+		 * (game/newinv2.cpp, TXT_Headset). Rule 3 finds
+		 * 4/ITEM/EXTRA_BINOCULARS_ITEM.TRM, the binoculars, in every level; the
+		 * remaster keeps the headset one folder up, as
+		 * 5/ITEM/EXTRA5_BINOCULARS_ITEM_RICH.TRM, a name no prefix rule builds.
+		 *
+		 * HK_ITEM in RICH2 is the scripted second HK, a mesh of its own that
+		 * the inventory turns by angles of its own (game/newinv2.cpp rewrites
+		 * INV_HK_ITEM1's xrot/yrot/zrot, flags and yoff for
+		 * LVL5_ESCAPE_WITH_THE_IRIS, and the pickup display lifts it 70 units
+		 * there). Rule 3 finds EXTRA5_HK_ITEM.TRM, every other level's HK,
+		 * modelled in the other levels' frame - which RICH2's ring then turns
+		 * by RICH2's angles: the user's "strange rotation". The remaster ships
+		 * that mesh's own HD twin as EXTRA5_HK_ITEM_RICH2.TRM. (It ships an
+		 * EXTRA5_HK_ITEM_RICH2_CUT.TRM as well, which no line here uses:
+		 * RICHCUT2 carries no HK_ITEM slot at all, only Lara's HK_ANIM, and
+		 * that one is the wardrobe's - measured with ModelProbe -all, which
+		 * lists no BINOCULARS_ITEM there either.)
+		 *
+		 * Hand-table lines rather than a fourth prefix rule, because the
+		 * suffixes follow no one pattern (_RICH for three levels, _RICH2 for
+		 * one) and the .MAP files are silent on both slots in all fifteen
+		 * levels (measured, fix round O3). The lines hold in the named levels
+		 * only; everywhere else both slots take rule 3 as before. */
+		{ "BINOCULARS_ITEM",         "EXTRA5_BINOCULARS_ITEM_RICH", "RICH1 RICH2 RICH3" },
+		{ "HK_ITEM",                 "EXTRA5_HK_ITEM_RICH2",        "RICH2" }
 	};
+
+	/* Does a hand-table line hold for `level`? A line with no level list holds
+	 * everywhere; one with a list holds where a whole token of it equals the
+	 * stem, case aside. No level in hand - a tool asking with no map loaded,
+	 * a donor bind with no donor - makes every listed line miss. */
+	bool hand_applies(const char* levels, const char* level)
+	{
+		if (!levels)
+			return true;
+		if (!level || !*level)
+			return false;
+
+		const size_t want = strlen(level);
+		const char* at = levels;
+
+		while (*at)
+		{
+			while (*at == ' ')
+				at++;
+
+			const char* stop = at;
+
+			while (*stop && *stop != ' ')
+				stop++;
+
+			if ((size_t)(stop - at) == want && _strnicmp(at, level, want) == 0)
+				return true;
+
+			at = stop;
+		}
+
+		return false;
+	}
+
+	/* The level stem a .MAP path names: "...\DATA\RICH2.MAP" -> "RICH2". Empty
+	 * for no path. Only ever asked for the level-bound hand-table lines, so a
+	 * path spelled some other way costs those lines and nothing else. */
+	std::string stem_of_path(const char* mapPath)
+	{
+		if (!mapPath)
+			return std::string();
+
+		const char* name = mapPath;
+
+		for (const char* at = mapPath; *at; at++)
+			if (*at == '\\' || *at == '/')
+				name = at + 1;
+
+		const char* dot = strrchr(name, '.');
+
+		return dot ? std::string(name, dot) : std::string(name);
+	}
 
 	/* THE EXTRA PREFIX EXCLUSIONS (#123, fix round O). Every one of these sits
 	 * in the same block of the object enum as the two shell casings
@@ -416,6 +514,7 @@ namespace
 
 	struct MapEntry { std::string key, value; };
 	std::vector<MapEntry> map_entries;
+	std::string map_level;	// the stem map_entries belong to, "" for none (fix round O3)
 
 	/* THE DONOR MAPS (#123, stage S7-2), kept apart from the level's own -
 	 * the level's is asked for every slot of every frame's worth of building,
@@ -521,10 +620,12 @@ namespace
 	 *
 	 * `installRoot` may be empty - every caller before fix round O passed
 	 * none, and still gets rules 1, 2 and 4 exactly as before; only rule 3
-	 * needs a disk to ask. */
+	 * needs a disk to ask. `level` is the stem `entries` belong to - the
+	 * level's own or the donor's - and may be 0 or empty, in which case every
+	 * level-bound hand-table line misses (fix round O3). */
 	const char* bind_against(const std::vector<MapEntry>& entries,
-		const std::string& installRoot, int slot, HDBindKind* kind,
-		bool* fromMap, HDBindVia* via)
+		const std::string& installRoot, const char* level, int slot,
+		HDBindKind* kind, bool* fromMap, HDBindVia* via)
 	{
 		HDBindKind local_kind = HD_BIND_NONE;
 		bool local_from_map = false;
@@ -563,7 +664,7 @@ namespace
 				bool hand_hit = false;
 
 				for (const HandBound& bound : hand_table)
-					if (_stricmp(bound.slot, name) == 0)
+					if (_stricmp(bound.slot, name) == 0 && hand_applies(bound.levels, level))
 					{
 						result = bound.model;
 						local_via = HD_BIND_VIA_HAND;
@@ -645,6 +746,7 @@ bool HDSlotIsLara(int slot)
 bool HDMapLoad(const char* mapPath)
 {
 	HDMapFree();
+	map_level = stem_of_path(mapPath);
 	return read_map_file(mapPath, map_entries);
 }
 
@@ -654,6 +756,8 @@ bool HDMapLoadForLevel(const char* installRoot, const char* stem)
 
 	if (!installRoot || !*installRoot || !stem || !*stem)
 		return false;
+
+	map_level = stem;
 
 	std::string path = installRoot;
 
@@ -670,6 +774,7 @@ bool HDMapLoadForLevel(const char* installRoot, const char* stem)
 void HDMapFree()
 {
 	map_entries.clear();
+	map_level.clear();
 }
 
 int HDMapCount()
@@ -682,11 +787,16 @@ const char* HDMapValue(const char* key)
 	return value_in(map_entries, key);
 }
 
+const char* HDMapLevel()
+{
+	return map_level.c_str();
+}
+
 const char* HDBindSlot(const char* installRoot, int slot, HDBindKind* kind,
 	bool* fromMap, HDBindVia* via)
 {
-	return bind_against(map_entries, installRoot ? installRoot : "", slot,
-		kind, fromMap, via);
+	return bind_against(map_entries, installRoot ? installRoot : "",
+		map_level.c_str(), slot, kind, fromMap, via);
 }
 
 const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
@@ -696,7 +806,7 @@ const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
 	const std::string root = installRoot ? installRoot : "";
 
 	if (!donorLevel || !*donorLevel)
-		return bind_against(nothing, root, sourceSlot, kind, fromMap, via);
+		return bind_against(nothing, root, "", sourceSlot, kind, fromMap, via);
 
 	DonorMap* have = 0;
 
@@ -736,7 +846,8 @@ const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
 		have = &fresh;
 	}
 
-	return bind_against(have->entries, root, sourceSlot, kind, fromMap, via);
+	return bind_against(have->entries, root, donorLevel, sourceSlot, kind,
+		fromMap, via);
 }
 
 void HDDonorMapsFree()

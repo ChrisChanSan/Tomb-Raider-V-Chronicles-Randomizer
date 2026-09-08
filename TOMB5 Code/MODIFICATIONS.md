@@ -8282,6 +8282,56 @@ crossbow with its scope in her hands, then the grappling gun.
 
 **Classic path.** Untouched - the wardrobe only exists behind the HD guard.
 
+#### Fix round O3 - the headset and Rich2's own HK (#123)
+
+Two user findings from the fix round P play test, both in the VCI levels:
+*"for the Rich levels he still has to fetch the headset instead of the
+binoculars"*, and *"Rich2 has a special HK - here the wrong one was used, it
+has a strange rotation in that level only."*
+
+**Measured.** Neither slot is named in any of the fifteen `.MAP` files, so
+both took fix round O's prefix rule. For `BINOCULARS_ITEM` that rule finds
+`4\ITEM\EXTRA_BINOCULARS_ITEM.TRM`, the binoculars, in every level; the
+headset the VCI levels call the same slot (`game\newinv2.cpp` renames it,
+`TXT_Headset`) sits one folder up as `5\ITEM\EXTRA5_BINOCULARS_ITEM_RICH.TRM`,
+a name no prefix rule can build. For `HK_ITEM` the rule finds
+`EXTRA5_HK_ITEM.TRM`, the HK of every other level; RICH2's HK is the scripted
+second one, a mesh of its own, and the inventory turns it by angles of its own
+(`newinv2.cpp` rewrites `INV_HK_ITEM1`'s `xrot`, `yrot`, `zrot`, `flags` and
+`yoff` for `LVL5_ESCAPE_WITH_THE_IRIS`, and the pickup display lifts it by 70
+units there). The generic HD model, modelled in the other levels' frame and
+turned by RICH2's angles, is the user's "strange rotation". The remaster
+ships the RICH2 mesh's own HD twin as `EXTRA5_HK_ITEM_RICH2.TRM`. It ships an
+`EXTRA5_HK_ITEM_RICH2_CUT.TRM` too, which nothing here uses: RICHCUT2 carries
+no `HK_ITEM` slot at all, only Lara's `HK_ANIM`, which is the wardrobe's.
+
+**Fix.** The hand table in `specific\hd\hd_bind.cpp` can now bind a line to
+named levels: a third field lists the level stems the line holds in, space
+separated and compared without regard to case, 0 meaning every level as
+before. Two lines use it - `BINOCULARS_ITEM -> EXTRA5_BINOCULARS_ITEM_RICH` in
+RICH1, RICH2 and RICH3, and `HK_ITEM -> EXTRA5_HK_ITEM_RICH2` in RICH2. A line
+for another level is skipped and the slot goes on to rule 3 as before. For the
+level to be known, both map loaders now remember the stem (`HDMapLoadForLevel`
+as given, `HDMapLoad` from the file name, whether or not the file exists), a
+donor's bind hands in the donor's stem, and `HDMapFree` forgets it again;
+`HDMapLevel()` reports it.
+
+**Proof.** `ModelProbe <5> -level <LEVEL> -classic <LEVEL.TRC> -all`, before
+and after:
+
+| level | `HK_ITEM` | `BINOCULARS_ITEM` |
+|---|---|---|
+| RICH2 | prefix5 `EXTRA5_HK_ITEM` -> hand `EXTRA5_HK_ITEM_RICH2` | prefix `EXTRA_BINOCULARS_ITEM` -> hand `EXTRA5_BINOCULARS_ITEM_RICH` |
+| RICH1, RICH3 | prefix5 `EXTRA5_HK_ITEM`, unchanged | prefix `EXTRA_BINOCULARS_ITEM` -> hand `EXTRA5_BINOCULARS_ITEM_RICH` |
+| ANDREA1 | no such slot | prefix `EXTRA_BINOCULARS_ITEM`, unchanged |
+| RICHCUT2 | no such slot | no such slot |
+
+Whether the RICH2 ring now turns the HK the way the remaster does is the play
+test's to say: the angles are RICH2's own and the model is the one made for
+them, but that is an expectation, not a measurement.
+
+**Classic path.** Untouched - the table is only asked behind the HD guard.
+
 #### Fix round P - the inventory ring in HD (#123)
 
 The ring was the last place in the game that still drew 1999 objects while

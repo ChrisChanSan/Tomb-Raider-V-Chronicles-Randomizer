@@ -28,7 +28,12 @@
 //      the one vanilla slot whose model exists under no plain name at all -
 //      ROMAN_GOD, for which 5\ITEM ships ROMAN_GOD_ANDREA_SWORD and
 //      ROMAN_GOD_ANDREA_HAMMER and nothing else, while only ANDREA2 and
-//      ANDREA3 say in their .MAP which of the two they mean.
+//      ANDREA3 say in their .MAP which of the two they mean. A hand-table
+//      line may be bound to named levels (fix round O3): the headset,
+//      BINOCULARS_ITEM -> EXTRA5_BINOCULARS_ITEM_RICH, in RICH1, RICH2 and
+//      RICH3, and RICH2's own HK, HK_ITEM -> EXTRA5_HK_ITEM_RICH2 -
+//      remaster names rule 3 cannot build. Elsewhere those lines are
+//      skipped and the slot goes on to rule 3.
 //   3. THE EXTRA PREFIX (#123, fix round O). Every pickup in the remaster's
 //      own bundle sits under a prefixed name rather than its plain slot name
 //      - PISTOLS_ITEM has no PISTOLS_ITEM.TRM anywhere, only
@@ -70,6 +75,9 @@ bool HDSlotIsLara(int slot);
 // is only ever one level. Returns false when the file is not there, which is
 // not an error - JOBY4 has twelve lines and RICHCUT2 five, and a level with
 // none would simply bind everything by slot name.
+// Both loaders also remember the level's stem - from the file name here, as
+// given below - for the level-bound hand-table lines (fix round O3), whether
+// or not the file is there; HDMapFree forgets it again.
 bool HDMapLoad(const char* mapPath);
 // The same, with the path built the way hd_scan.cpp builds it:
 // "<installRoot>\DATA\<stem>.MAP". Every caller that has the install root and
@@ -83,6 +91,8 @@ int HDMapCount();
 // The value for a key, or 0. Case-insensitive, as the files are all upper
 // case anyway.
 const char* HDMapValue(const char* key);
+// The stem the loaded map belongs to ("RICH2"), "" when none (fix round O3).
+const char* HDMapLevel();
 
 // What a slot resolves to.
 enum HDBindKind

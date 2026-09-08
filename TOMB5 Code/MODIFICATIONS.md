@@ -7098,6 +7098,243 @@ own build's and neither the one before it.
 
 ---
 
+#### Fix round T - the rooms: the window only where it is needed, the black courtyard, the sky's hard edge, the palm without its crown (#123)
+
+The play test of 2026-09-07, on the group M portal windows: *"the room fix
+really only had negative consequences. Everything over portals does not go
+over its edges properly any more."* With a photograph: the corner of the
+Piazza dell'Opera in ANDREA1, where the HD pier of room 57 stands out of that
+room's own volume into the alley of room 2, and a **screen-vertical strip of
+sky** runs down the edge of the brick wall where the pier should be. And from
+ANDREA2's courtyard, three more: the doorways are **black rectangles**, the
+sky has a **hard edge** when you look up, and the **palm** is wrong.
+
+Four findings, four fixes, and every one of them a measurement first.
+
+---
+
+**T1 - the window belongs to a handful of rooms, not to all of them.**
+
+*What group M did.* It scissored every HD room to the rectangle the classic
+portal walk left in `r->left .. r->bottom`. Its own note says why that is
+safe, and the note is where the mistake is: the classic clip is COARSER than a
+scissor. `specific\polyinsert.cpp:1213` drops a polygon only when EVERY corner
+of it lies beyond one edge of the window and otherwise draws it **whole**,
+clipped against the screen; a scissor cuts it at the pixel. One pixel of
+margin makes the two agree for a polygon that straddles the rim by a pixel. It
+does nothing at all for a wall that straddles it by two hundred.
+
+*And that is the ordinary case at a doorway.* A room's art in its BORDER RING
+- the wall's own thickness, a reveal, a corner pier - stands on the camera's
+side of the portal plane, and from a shallow angle it projects far outside the
+portal's rectangle. Room 57's pier sits at world x 47104..48128, and the
+portal it is seen through is at x 48127: the pier is in front of the window
+that was computed for it.
+
+*Measured, with `TrgProbe -roomspace` (new), which reads the classic `.TRC`
+and the `.TRG` side by side.* From the camera the play test used, the portal
+window of room 57 comes out as x 328..627 of a 960 pixel picture. Drawn with
+it, room 57 keeps 328..627 and loses everything else - `RoomProbe -scissor`
+draws exactly that, and the two pictures are `r57_pair.png`. Drawn without it,
+the wall and the pier are whole.
+
+*What the window IS for.* Rooms that stand inside one another. ANDREA1's room
+53, an air shaft, has **45 of its 272 art cells more than one sector deep
+inside room 207**, with no portal between the two; from inside 207 that art
+comes through the wall and the depth buffer cannot help, because both rooms
+really are at that distance. Rendered: room 207 alone against room 207 with
+room 53's group drawn at its own offset differ in **35,520 pixels** in the
+upper right corner (`bleed_pair.png`) - that is the bug group M was built for,
+and it is real.
+
+*Telling the two apart, and each step of it measured:*
+
+| asked of | ANDREA1 rooms that come out "overlapping" |
+| --- | ---: |
+| the room boxes | 233 of 242 |
+| the art's own 256-unit cells | 96 |
+| ... and only where no portal explains it | 82 |
+| ... and only past the wall's own sector | **2** |
+
+The last line is the rule. A room's border ring is one sector thick, so two
+rooms that merely share a wall reach one sector into each other by
+construction - ANDREA1's 57 and 197 at the Piazza corner do exactly that, with
+60 cells of wall art - and art that reaches PAST that sector is art that is
+really standing inside the room. Over the fifteen files that leaves **69 rooms
+of 2,709** with a window: ANDREA1 2, ANDREA2 16, ANDREA3 7, ANDY2 10, ANDY3 2,
+JOBY2 3, JOBY3 2, JOBY5 2, RICH1 14, RICH2 11, and none at all in the other
+five. ANDREA1's one pair is room 53's air shaft inside room 207; rooms 39 and
+41 are NOT on the list.
+
+*And inside those rooms, the overhang is still drawn whole.* A group's
+triangles are sorted into two kinds while the index buffer is filled - inside
+the room's own box, or outside it - and the two never share a draw call. The
+window is applied to the first and switched off for the second, which is what
+the classic path does with a polygon that straddles the rim.
+
+**The box is the engine's own** (`game\draw.cpp:1977-1981`, the lines that ask
+whether an item fits wholly inside its room): `r->x + 1024 .. r->x +
+(y_size - 1) * 1024`, the same in z out of `x_size`, `maxceiling .. minfloor`.
+**The slack is 128 units and it is measured**: a wall face sits exactly on the
+box's edge and the remaster's relief a little past it, so with no slack 73 %
+of ANDREA2 is "overhang" and the window means nothing. The distances come in
+two clumps - one below 64 units (a million triangles of ANDREA2 alone: the
+relief) and one past a whole sector (the facades, the piers) - and 128 sits
+between them and takes ANDREA2 from 77.6 % to 4.5 %.
+
+*The code.* `HDRoomBox` and `HDRenderSetRoomBoxes` (`specific\hd\hd_render.h`)
+hand the boxes in before the build, on the same contract the water marks
+already had; `BuildRoomBoxes` (`hd_level.cpp:942`) fills them out of
+`ROOM_INFO`. `hd_render.cpp:2313` tags every triangle and `:712` carries the
+tag in `HDRange`, last in the sort key so that a level built with NO boxes
+sorts exactly as it did before this round. `HDRenderGroupCellsIn` and
+`HDRenderGroupOverhangTriangles` (`hd_render.cpp:3893`, `:3925`) are the two
+new questions. `BuildRoomWindows` (`hd_level.cpp:1262`) makes the list once
+per level; `DrawRoomWindowed` (`hd_level.cpp:551`) draws a listed room in two
+pieces and every other room in one, with the scissor test off.
+
+*The cost.* The split adds draw calls: ANDREA1 1,855 -> 2,044 ranges over the
+whole level (+10 %), ANDREA2 1,687 -> 1,861 (+10 %), JOBY2 1,553 -> 1,763
+(+14 %), RICH2 1,586 -> 2,092 (+32 %). A frame draws about eleven rooms, so
+that is single-figure draw calls per frame. **And it changes no picture**:
+ANDREA1 rooms 39, 19 and 103 rendered with the boxes handed in and without
+them come back **0 differing pixels** - the split regroups triangles, it does
+not add or drop one.
+
+---
+
+**T2 - the black doorways of the ANDREA2 courtyard.**
+
+*Measured.* The courtyard is a stack: room 124 on the ground with two palm
+statics, room 125 with the colonnade above it. Room 124's `.TRG` group holds
+**four triangles, and all four of them stand outside the room**. The engine's
+test for "does the remaster have art for this room" was `tris` non-zero
+(`hd_level.cpp`), so room 124 counted as HD, its classic roomlets were dropped
+- and four triangles outside the room is nothing at all inside it. `RoomProbe`
+draws room 124 in three ways: whole, 1 draw call; the inside half, **0 draw
+calls**; the overhang half, 1. The picture is `mean 0.0 of 255` in every one
+of them, which is the black rectangle of the play test.
+
+*How many rooms are like that.* **Nine** in the whole game under the rule as it
+ships - the one with `HD_OVERHANG_SLACK` in it - and they are named: ANDREA2
+124, JOBY2 19 and 21, RICHCUT2 2, 3 and 4, TITLE 70, 101 and 103. `RoomProbe
+-roombox <classic folder> -window inside` draws all nine at **0 draw calls**.
+A tenth, ANDREA1's room 4, is hollow only with the slack taken away: its 216
+triangles all stand within 128 units of the box edge, so the shipped rule
+leaves that room HD (1 draw call). Nothing else in the fifteen files comes
+close - the next-thinnest rooms have 3 to 31 triangles genuinely inside them.
+
+*The fix.* A fourth reason for a room to stay classic, beside "no group", "an
+empty group" and the randomizer's marker: **a HOLLOW group, one with no
+triangle inside its own room** (`hd_level.cpp:2025`). The classic geometry of
+such a room is the only geometry there is, and it is drawn. `HDLOG` says
+`reason=hollow_group` and carries `overhang=` on every room line.
+
+---
+
+**T3 - the hard edge in the sky.**
+
+*Measured, page by page.* ANDREA2's sky group is three parts: a flat cloud
+sheet in the OPAQUE pass on page 7109, a second sheet in the ALPHA pass on
+page 7101, and the painted dome, material 22, in the alpha pass on page 7003.
+`DdsProbe -alpha` over the three:
+
+| page | drawn in | alpha under 16 | alpha over 240 | mean |
+| --- | --- | ---: | ---: | ---: |
+| 7109 | opaque | 0.0 % | 100.0 % | 254.9 |
+| 7101 | alpha | 42.0 % | 35.9 % | 122.7 |
+| 7003 | alpha | 33.5 % | 59.2 % | 160.5 |
+
+7109 is opaque and is drawn opaque, correctly. The other two carry a **soft
+ramp with every value in between** - and the alpha pass is an alpha TEST at
+0.5 (`hd_render.cpp`, `gPass.x`), made for the cut-out materials where a texel
+is either wholly there or wholly gone. What is left of a feathered cloud after
+a test at 0.5 is a hard-edged silhouette. `RoomProbe -skyonly` draws it:
+jagged cloud outlines and a hard rim across the dome.
+
+*The fix.* The SKY group's alpha pass blends instead of being cut
+(`hd_render.cpp:3245`): source alpha against one minus it, alpha reference 0,
+and **the depth write stays on**, unlike the glass of fix round H2 - the sky
+sorts inside itself in its own depth slice (`HD_SKY_MINZ`), the dome stands in
+front of the sheets at the horizon and behind them overhead, and taking the
+depth write away would lose that order. Nothing outside the sky can be
+touched: every pixel of the world is nearer than the slice. Only a group past
+the last room takes this branch, and `HDRenderRoomMask` is the one place that
+still knows the group's number.
+
+*The picture.* The same camera before and after: **243,897 of 518,400 pixels
+change**, the jagged outlines become feathered cloud, and the dome's rim is
+gone (`sky_pair.png`). The state bracket over the sky call reports **0 of 59**
+changed.
+
+*Not adopted, and why.* TROne's own sky finding is a `CLAMP_TO_EDGE` sampler
+for the painted dome (`game_renderer.cpp:1256-1269`), against a tiling seam.
+We already clamp: `hd_render.cpp` sets `D3DTADDRESS_CLAMP` for every range
+that does not scroll and `WRAP` only for the ones that do, and D3D9's CLAMP is
+GL's `CLAMP_TO_EDGE`. So that part was in place before this round and the edge
+was somewhere else.
+
+---
+
+**T4 - the palm with no crown.**
+
+*Measured.* A TR5 palm is two statics: the trunk (slot 8) in the ground room
+and the crown (slot 9) in the room above. Fix round R3b takes a static away
+when the `.TRG` draws ANYTHING in its box, and over the fifteen files that
+question is answered on very little evidence in a few places:
+
+| art in the static's own box | statics |
+| --- | ---: |
+| nothing at all - drawn classic | 271 |
+| more than nothing, under a twentieth | **44** |
+| a twentieth or more | 2,286 |
+
+ANDREA2's courtyard is in the middle row. Room 125's crowns catch **4 cells of
+768** - the wall behind them, not a palm - and were suppressed with nothing in
+the `.TRG` to put in their place, while room 124's trunks below them catch 0
+and are drawn classic. A trunk with no fronds. The same level's room 162 crown
+catches 313 of 768 and really is in the art. (`TrgProbe -statics` splits the
+group's cells into an interior and a shell list and counts a static's box
+against both, so a cell that both lists hold is counted twice - it reads 380
+for that crown at `-slack 0` and 355 at `-slack 128`. The engine walks ONE
+deduplicated list, which is the 313; the classification of all 2,601 statics
+comes out the same either way.)
+
+*The fix.* The question is now how MUCH, against the static's own box: art
+must cover **a twentieth** of it before the classic draw is suppressed
+(`hd_level.cpp:1462`, `HDRenderGroupCellsIn`). The threshold sits in the gap
+the measurement found rather than through a crowd; the 44 statics of the
+middle row go back to being drawn the classic way and the 2,286 do not move.
+`HDLOG static ... classic cells=%d of %d` now says why for each of them.
+
+*Not adopted.* TROne's `.MAP` `DUMMY` positive family list
+(`docs\PORTING_tr5.md:780-880`) is about MOVEABLES that the remaster baked
+into the room art, not about statics, and nothing measured in this round
+touches it. It stays on the list of things to port with a measurement of its
+own rather than being taken on trust.
+
+---
+
+**What this round did NOT change.** The classic path. The diff is three files
+under `specific\hd` and two diagnostic tools, and `HDLevelBuild` returns at
+`HDEnabled()` before it reaches any of it - with `hd_enable` off no room box
+is built, no overlap list is made and no group is split. `be.bat` builds with
+**0 errors**; `RoomProbe`'s state bracket reports **0 of 59** watched states
+changed in every run of this round, room draws and sky draws alike.
+
+**The tools.** `TrgProbe` gained `-roomspace` (the room boxes, the overlap
+list, the overhang histogram by distance and by side, and the hollow groups),
+`-room <n>` (one room in full: box, portals, vertical links, whose art stands
+inside it), `-statics` / `-slot <n>` (every static mesh with its box and how
+much art is in it), and `-share` / `-slack` / `-deep` to move the three
+thresholds and see what they cost. `RoomProbe` gained `-roombox <folder>`,
+which hands the renderer the same boxes the engine hands it, and `-window
+all|inside|overhang`, which draws one half of a group - which is how "room
+124's art is entirely outside room 124" was turned into a picture and a draw
+call count.
+
+---
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

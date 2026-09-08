@@ -1184,6 +1184,15 @@ static bool g_scissor = false;
 static long g_scissor_box[4] = { 0, 0, 0, 0 };
 
 static std::string g_survey;
+/* FIX ROUND T (T1), -roombox <folder holding the classic .TRC>: hand the
+ * renderer the rooms' own boxes, exactly as hd_level.cpp's BuildRoomBoxes
+ * does, so that the overhang split the engine draws with is the split this
+ * tool draws with. Without it every group is one piece and HD_WINDOW_INSIDE
+ * and HD_WINDOW_OVERHANG both draw the whole room - which is also the proof
+ * that a level built with no boxes is unchanged. */
+static std::string g_roombox;
+static std::vector<HDRoomBox> g_boxes_built;
+static int g_window_mode = HD_WINDOW_ALL;
 static unsigned char g_water_table[22][64][4];
 
 /* Fix round E, -with and -oldorder: THE NEIGHBOUR ROOMS OF ONE SCENE.
@@ -1761,6 +1770,18 @@ int main(int argc, char** argv)
 			g_survey = argv[at + 1];
 			at += 1;
 		}
+		else if (!strcmp(argv[at], "-roombox") && at + 1 < argc)
+		{
+			g_roombox = argv[at + 1];
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-window") && at + 1 < argc)
+		{
+			g_window_mode = !strcmp(argv[at + 1], "inside") ? HD_WINDOW_INSIDE
+				: !strcmp(argv[at + 1], "overhang") ? HD_WINDOW_OVERHANG
+				: HD_WINDOW_ALL;
+			at += 1;
+		}
 		else if (!strcmp(argv[at], "-flatart") && at + 5 < argc)
 		{
 			if (g_flat_count < 8)
@@ -2007,6 +2028,53 @@ int main(int argc, char** argv)
 	// of the build exactly as the engine lends its own.
 	if (g_plane)
 		HDRenderSetWaterMarks(g_plane_marks, 4);
+
+	/* T1: the rooms' own boxes out of the classic level, the same three
+	 * lines game\draw.cpp:1977-1981 uses and hd_level.cpp copies. */
+	if (!g_roombox.empty())
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		if (!level.load(wide, error))
+			printf("RoomProbe: -roombox could not read %s (%s)\n",
+				trc.c_str(), error.c_str());
+		else
+		{
+			g_boxes_built.resize((size_t)level.roomCount());
+
+			for (int i = 0; i < level.roomCount(); i++)
+			{
+				const Tr5Room& rm = level.rooms()[(size_t)i];
+				HDRoomBox& b = g_boxes_built[(size_t)i];
+				unsigned yTop = 0, yOrigin = 0;
+
+				level.headerField(i, 24, yOrigin, error);
+				level.headerField(i, 36, yTop, error);
+
+				b.mins[0] = 1024.0f;
+				b.maxs[0] = (float)((rm.numXSectors - 1) * 1024);
+				b.mins[1] = (float)((int)yTop - (int)yOrigin);
+				b.maxs[1] = (float)(rm.yBottom - (int)yOrigin);
+				b.mins[2] = 1024.0f;
+				b.maxs[2] = (float)((rm.numZSectors - 1) * 1024);
+
+				for (int axis = 0; axis < 3; axis++)
+					if (b.maxs[axis] < b.mins[axis])
+						b.maxs[axis] = b.mins[axis];
+			}
+
+			HDRenderSetRoomBoxes(&g_boxes_built[0],
+				(int)g_boxes_built.size());
+			printf("-roombox: %d room boxes handed in from %s\n",
+				(int)g_boxes_built.size(), trc.c_str());
+		}
+	}
 
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
@@ -2583,26 +2651,31 @@ int main(int argc, char** argv)
 		}
 		else
 		{
-			drew = HDRenderRoomMask(room, 0, &lighting, HD_PASS_SOLID);
+			/* T1: -window says which half of every group this run
+			 * draws - the whole of it (the default), the inside half or
+			 * the overhang. */
+			drew = HDRenderRoomMask(room, 0, &lighting, HD_PASS_SOLID,
+				g_window_mode);
 
 			for (int i = 0; i < g_with_count; i++)
 				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_SOLID);
+					HD_PASS_SOLID, g_window_mode);
 
 			/* H2: the see-through half of the alpha pass - the glass -
 			 * after everything opaque and before the glows, which is the
 			 * order HDFrameDrawGlow draws them in. */
-			HDRenderRoomMask(room, 0, &lighting, HD_PASS_BLEND);
+			HDRenderRoomMask(room, 0, &lighting, HD_PASS_BLEND, g_window_mode);
 
 			for (int i = 0; i < g_with_count; i++)
 				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_BLEND);
+					HD_PASS_BLEND, g_window_mode);
 
-			HDRenderRoomMask(room, 0, &lighting, HD_PASS_ADDITIVE);
+			HDRenderRoomMask(room, 0, &lighting, HD_PASS_ADDITIVE,
+				g_window_mode);
 
 			for (int i = 0; i < g_with_count; i++)
 				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_ADDITIVE);
+					HD_PASS_ADDITIVE, g_window_mode);
 		}
 	}
 

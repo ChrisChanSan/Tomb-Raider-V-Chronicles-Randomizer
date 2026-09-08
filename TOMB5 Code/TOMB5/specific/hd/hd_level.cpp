@@ -107,6 +107,12 @@ namespace
 		int x0, y0, x1, y1;
 		bool full;
 
+		/* FIX ROUND T (T1): whether this room is on the overlap list at all.
+		 * A room that is not draws over the whole screen, which is what
+		 * every room did before group M and what the classic path does with
+		 * a polygon that straddles the window's rim. */
+		bool windowed;
+
 		/* WHICH CAMERA THIS ROOM WAS COLLECTED WITH (fix round R). ViewSerial
 		 * at the InsertRoom that put it here; see the note over it in
 		 * specific\3dmath.cpp. Read only by the log below. */
@@ -160,6 +166,16 @@ namespace
 	 * walks through the very same hook. A level starts with it as the
 	 * identity, which is what an unflipped level is. */
 	unsigned char g_group_hd[HD_MAX_ROOMS];
+	/* FIX ROUND T (T1): which rooms get a portal window at all.
+	 *
+	 * Group M scissored EVERY HD room to the rectangle the portal walk gave
+	 * it, and the play test of 2026-09-07 says what that cost: "everything
+	 * that goes over portals does not go over its edges properly any more."
+	 * The window is only ever NEEDED where two rooms stand inside one
+	 * another - and that is a handful of rooms per level, not all of them.
+	 * BuildRoomWindows below measures which, once per level; every other
+	 * room draws over the whole screen, as it did before group M. */
+	unsigned char g_room_windowed[HD_MAX_ROOMS];
 	short g_room_group[HD_MAX_ROOMS];
 	int g_room_count = 0;
 	int g_flips_done = 0;		// for the log, once per level
@@ -440,6 +456,11 @@ namespace
 	int g_clip_full = 0;
 	int g_clip_scissored = 0;
 	int g_clip_empty = 0;
+	// T1: rooms not on the overlap list, drawn over the whole screen, and the
+	// triangles the windowed rooms drew outside their window because they
+	// stand outside the room.
+	int g_clip_open = 0;
+	int g_clip_overhang_tris = 0;
 	/* Fix round R: HD items whose own room's window is NOT the whole screen,
 	 * i.e. the ones group M used to cut and the classic path never does.
 	 * Counted per frame with -log and reported in the clip line, so that the
@@ -515,14 +536,37 @@ namespace
 		return entry.x1 <= entry.x0 || entry.y1 <= entry.y0;
 	}
 
-	// The window of one collected room, applied to the device. A full window
-	// and a room with no window switch the test off instead.
-	void ApplyClip(const FrameRoom& entry)
+	/* ONE ROOM'S ART, IN AS MANY PIECES AS THE WINDOW NEEDS (#123, fix round
+	 * T, T1).
+	 *
+	 * A room that is not on the overlap list, or whose window is the whole
+	 * screen, is one draw with the scissor test off - which is what every
+	 * room was before group M and what every room but a handful is again.
+	 *
+	 * A room that IS on the list is drawn twice: its inside half inside the
+	 * portal window, and its OVERHANG - the art the remaster hung outside the
+	 * room box - over the whole screen. The overhang is the corner pier and
+	 * the cornice that stand in the neighbour's space by construction; the
+	 * classic path draws those whole, and so does this. */
+	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
 	{
-		if (entry.full || ClipEmpty(entry))
+		if (!entry.windowed || entry.full)
+		{
 			HDRenderScissorOff();
-		else
-			HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+			HDRenderRoomMask(entry.group, &entry.world, &entry.lighting,
+				passes, HD_WINDOW_ALL);
+			return;
+		}
+
+		HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+		HDRenderRoomMask(entry.group, &entry.world, &entry.lighting, passes,
+			HD_WINDOW_INSIDE);
+		HDRenderScissorOff();
+		HDRenderRoomMask(entry.group, &entry.world, &entry.lighting, passes,
+			HD_WINDOW_OVERHANG);
+
+		if (gLogEnabled)
+			g_clip_overhang_tris += HDRenderGroupOverhangTriangles(entry.group);
 	}
 
 	/* E6: WHAT THE GLOW PHASE NEEDS AGAIN. The solid phase fills these and
@@ -876,6 +920,53 @@ static void BuildWaterMarks()
 		(int)g_water_marks.size(), water_rooms);
 }
 
+/* THE ROOMS' OWN BOXES, FOR THE RENDERER (#123, fix round T, T1).
+ *
+ * The box TR5 itself calls the inside of a room, taken from the very lines
+ * that ask whether an item fits inside one (game\draw.cpp:1977-1981):
+ *
+ *     x    r->x + 1024  ..  r->x + (y_size - 1) * 1024
+ *     z    r->z + 1024  ..  r->z + (x_size - 1) * 1024
+ *     y    r->maxceiling ..  r->minfloor
+ *
+ * - and note that x runs on y_size and z on x_size, which is TR5's own
+ * naming and not a slip: `r->floor[z_index + x_size * x_index]` says which
+ * is which.
+ *
+ * Handed over ROOM LOCAL, because that is the frame the .TRG's vertices are
+ * in: x and z relative to the room's origin, y in world units (the file
+ * stores it that way and every TR5 room has y 0 anyway - measured over the
+ * fifteen files). */
+static std::vector<HDRoomBox> g_room_boxes;
+
+static void BuildRoomBoxes()
+{
+	g_room_boxes.clear();
+	g_room_boxes.resize((size_t)number_rooms);
+
+	for (int i = 0; i < number_rooms; i++)
+	{
+		const ROOM_INFO* r = &room[i];
+		HDRoomBox& b = g_room_boxes[(size_t)i];
+
+		b.mins[0] = 1024.0f;
+		b.maxs[0] = (float)((r->y_size - 1) << 10);
+		b.mins[1] = (float)(r->maxceiling - r->y);
+		b.maxs[1] = (float)(r->minfloor - r->y);
+		b.mins[2] = 1024.0f;
+		b.maxs[2] = (float)((r->x_size - 1) << 10);
+
+		for (int axis = 0; axis < 3; axis++)
+			if (b.maxs[axis] < b.mins[axis])
+				b.maxs[axis] = b.mins[axis];
+	}
+
+	if (!g_room_boxes.empty())
+		HDRenderSetRoomBoxes(&g_room_boxes[0], (int)g_room_boxes.size());
+	else
+		HDRenderSetRoomBoxes(0, 0);
+}
+
 /* THE WATER SURFACE THE REMASTER DOES NOT DRAW (#123, fix round H, H1).
  *
  * WHAT WAS MEASURED. The player's picture of a VCI pool shows dark washed-out
@@ -1125,6 +1216,193 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
 	maxs[1] = (float)(mesh->y - r->y + s->y_maxp);
 }
 
+/* WHICH ROOMS NEED A PORTAL WINDOW, AND WHICH DO NOT (#123, fix round T, T1).
+ *
+ * WHAT GROUP M GOT WRONG. It gave a window to every HD room. A window is a
+ * SCISSOR, and a scissor is strictly stricter than the classic clip it was
+ * copied from: the classic path drops a polygon only when EVERY corner of it
+ * lies beyond one edge of the window (specific\polyinsert.cpp:1213) and
+ * otherwise draws it whole, while a scissor cuts it at the pixel. For a room
+ * reached through a doorway that is exactly the wrong rule - the remaster's
+ * art near a portal (a corner pier, a reveal, a moulding) stands between the
+ * camera and the portal plane and projects OUTSIDE the doorway rectangle, and
+ * the play test photographed what that does: a vertical strip of sky down the
+ * edge of a brick wall at the Piazza dell'Opera, where ANDREA1's room 57 has
+ * its pier cut off at its own doorway.
+ *
+ * WHAT THE WINDOW IS ACTUALLY FOR. Rooms that stand INSIDE one another.
+ * ANDREA1's 53 (an air shaft) has 130 of its 272 art cells inside room 207,
+ * with no portal between the two; from inside 207 that art comes through the
+ * wall, and the depth buffer has nothing to say about it because both rooms
+ * really are at that distance. Measured over the fifteen files, that is 5 to
+ * 81 pairs of rooms per level and NOT the rest of them.
+ *
+ * THE TEST, and every part of it was measured before it was written:
+ *
+ *   - the art, not the boxes. Asked of the room boxes, 233 of ANDREA1's 242
+ *     rooms "overlap" - an L-shaped room's box covers whatever stands in the
+ *     notch, and two rooms next door reach one sector into each other by
+ *     construction. Asked of the 256-unit cells the group's own vertices
+ *     fall in, the answer is the geometry that is really drawn.
+ *   - the INSIDE half of the art alone. The overhang is drawn without a
+ *     window whatever this says, so it cannot be a reason to give one.
+ *   - not a neighbour. A room seen through a doorway reaches a dozen cells
+ *     into the room it opens on, and that art is seen through the opening it
+ *     belongs to. The portal list and the floor data's vertical links say
+ *     who is next door.
+ *   - not a flipmap twin, which is the same room at two moments.
+ *   - and at least SIXTEEN cells: 16 cells of 256 units is one floor square
+ *     of TR5, the smallest piece of a room there is. At that floor ANDREA1's
+ *     57 and 2 - the Piazza corner of the play test - fall off the list and
+ *     the ONE pair the level keeps is 53's air shaft inside 207.
+ *
+ * THE COST is one pass per pair of rooms whose boxes touch, over the smaller
+ * room's cell list: a few million box tests once per level, inside the load
+ * that has just decoded a hundred BC7 pages. */
+static void BuildRoomWindows()
+{
+	int pairs = 0;
+	int windowed = 0;
+
+	/* Who is next door: the portal list of both rooms, and the vertical
+	 * links, which have no portal record at all - a stacked pair is joined
+	 * through FLOOR_INFO::pit_room and sky_room. */
+	static std::vector<unsigned char> next_door;
+
+	next_door.assign((size_t)number_rooms * (size_t)number_rooms, 0);
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		short* door = info->door;
+
+		if (door)
+		{
+			const int count = *door++;
+
+			for (int i = 0; i < count; i++, door += 16)
+				if (door[0] >= 0 && door[0] < number_rooms)
+				{
+					next_door[(size_t)r * number_rooms + door[0]] = 1;
+					next_door[(size_t)door[0] * number_rooms + r] = 1;
+				}
+		}
+
+		if (!info->floor)
+			continue;
+
+		const int squares = info->x_size * info->y_size;
+
+		for (int i = 0; i < squares; i++)
+		{
+			const int up = info->floor[i].sky_room;
+			const int down = info->floor[i].pit_room;
+
+			if (up != 255 && up < number_rooms)
+			{
+				next_door[(size_t)r * number_rooms + up] = 1;
+				next_door[(size_t)up * number_rooms + r] = 1;
+			}
+
+			if (down != 255 && down < number_rooms)
+			{
+				next_door[(size_t)r * number_rooms + down] = 1;
+				next_door[(size_t)down * number_rooms + r] = 1;
+			}
+		}
+	}
+
+	for (int a = 0; a < number_rooms; a++)
+	{
+		if (!HDRoomIsHD(a))
+			continue;
+
+		const ROOM_INFO* ra = &room[a];
+
+		for (int b = 0; b < number_rooms; b++)
+		{
+			if (b == a || !HDRoomIsHD(b))
+				continue;
+
+			if (next_door[(size_t)a * number_rooms + b])
+				continue;
+
+			if (ra->flipped_room == b || room[b].flipped_room == a)
+				continue;
+
+			// The boxes have to touch before the cells can be asked.
+			if (ra->x + (ra->y_size << 10) <= room[b].x ||
+				room[b].x + (room[b].y_size << 10) <= ra->x ||
+				ra->z + (ra->x_size << 10) <= room[b].z ||
+				room[b].z + (room[b].x_size << 10) <= ra->z ||
+				ra->minfloor <= room[b].maxceiling ||
+				room[b].minfloor <= ra->maxceiling)
+				continue;
+
+			// a's own box, put into b's frame - the .TRG's vertices are
+			// room local and the two rooms have different origins.
+			const HDRoomBox& box = g_room_boxes[(size_t)a];
+			float mins[3], maxs[3];
+
+			/* AND ONE SECTOR IN FROM THE WALL. Two rooms that merely
+			 * share a wall with no door between them - ANDREA1's 57 and
+			 * 197 at the Piazza dell'Opera, which is exactly the corner the
+			 * play test photographed - each reach a little way into the
+			 * other's box with the art of that wall, and 60 cells of it is
+			 * enough to look like a nesting. A room's border ring is one
+			 * sector thick, so art that reaches PAST it is art that is
+			 * really standing in the room and not art of the wall.
+			 *
+			 * Measured: with the wall's own sector counted, ANDREA1 has 78
+			 * such pairs and 57 is among them; with it discounted it has
+			 * ONE - room 53's air shaft inside room 207 - which is the case
+			 * group M was built for. Over the fifteen files the whole game
+			 * comes to 69 rooms with a window, of 2,709 - ANDREA1 2,
+			 * ANDREA2 16, ANDREA3 7, ANDY2 10, ANDY3 2, JOBY2 3, JOBY3 2,
+			 * JOBY5 2, RICH1 14, RICH2 11, and none at all in the other
+			 * five. */
+			mins[0] = box.mins[0] + 1024.0f + (float)(ra->x - room[b].x);
+			maxs[0] = box.maxs[0] - 1024.0f + (float)(ra->x - room[b].x);
+			mins[1] = box.mins[1] + (float)(ra->y - room[b].y);
+			maxs[1] = box.maxs[1] + (float)(ra->y - room[b].y);
+			mins[2] = box.mins[2] + 1024.0f + (float)(ra->z - room[b].z);
+			maxs[2] = box.maxs[2] - 1024.0f + (float)(ra->z - room[b].z);
+
+			if (maxs[0] <= mins[0] || maxs[2] <= mins[2])
+				continue;	// a room too small to have an inside past its wall
+
+			/* Group b is room b: this runs at level build, before any
+			 * flip has swapped a pair of ROOM_INFO records, which is the
+			 * same argument BuildStaticTables makes for its own query. */
+			const int inside = HDRenderGroupCellsIn(b, mins, maxs, 1);
+
+			if (inside < 16)
+				continue;
+
+			pairs++;
+
+			if (!g_room_windowed[a])
+			{
+				g_room_windowed[a] = 1;
+				windowed++;
+			}
+
+			if (!g_room_windowed[b])
+			{
+				g_room_windowed[b] = 1;
+				windowed++;
+			}
+
+			if (gLogEnabled)
+				Log("HDLOG overlap room=%d holds the art of room=%d - "
+					"%d cells, no portal between them", a, b, inside);
+		}
+	}
+
+	Log("HDLOG level=%s overlap pairs=%d rooms with a window=%d of %d",
+		g_stem, pairs, windowed, number_rooms);
+}
+
 static void BuildStaticTables()
 {
 	g_static_classic.clear();
@@ -1165,16 +1443,45 @@ static void BuildStaticTables()
 
 			StaticBox(mesh, info, mins, maxs);
 
-			/* 1. Is there any HD geometry here at all? */
-			if (!HDRenderGroupHasGeometry(r, mins, maxs))
+			/* 1. Does the art really COVER this static, or does its box
+			 * merely catch a corner of something else?
+			 *
+			 * FIX ROUND T (T4). Round R3b asked "is there any HD geometry
+			 * here at all", and that turned out to be too weak a reason to
+			 * take a static away. ANDREA2's courtyard palm is TWO statics -
+			 * the trunk (slot 8) in the ground room and the crown (slot 9)
+			 * in the room above - and the crown's box catches FOUR cells of
+			 * 768, which is the wall behind it and not a palm: the crown was
+			 * suppressed and the .TRG had nothing to put in its place, so
+			 * the play test saw a trunk with no fronds. The same level's
+			 * room 162 crown catches 380 of 768 and IS in the art.
+			 *
+			 * So the question is how MUCH, against the static's own box.
+			 * Measured over the fifteen files and all 2,601 statics, the
+			 * coverage falls into 271 at nothing at all, 44 between nothing
+			 * and a twentieth, and 2,286 above a twentieth - a gap the
+			 * threshold sits in rather than a line drawn through a crowd.
+			 * The 44 go back to being drawn the classic way. */
+			const int cells = HDRenderGroupCellsIn(r, mins, maxs, 0);
+			int box_cells = 1;
+
+			for (int axis = 0; axis < 3; axis++)
+			{
+				const int lo = (int)mins[axis] >> 8;
+				const int hi = (int)maxs[axis] >> 8;
+
+				box_cells *= (hi - lo) + 1;
+			}
+
+			if (cells * 20 < box_cells)
 			{
 				g_static_classic[(size_t)(g_static_first[(size_t)r] + i)] = 1;
 				orphans++;
 
 				if (gLogEnabled)
 					Log("HDLOG static room=%d mesh=%d slot=%d classic "
-						"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f",
-						r, i, (int)mesh->static_number,
+						"cells=%d of %d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f",
+						r, i, (int)mesh->static_number, cells, box_cells,
 						mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
 
 				continue;
@@ -1547,6 +1854,7 @@ void HDLevelBuild()
 	g_clip_listed = false;
 	g_clip_line_ever = false;
 	memset(g_group_hd, 0, sizeof(g_group_hd));
+	memset(g_room_windowed, 0, sizeof(g_room_windowed));
 	g_room_count = 0;
 	g_flips_done = 0;
 
@@ -1633,6 +1941,7 @@ void HDLevelBuild()
 	g_clock = 0.0;
 	g_clock_started = false;
 	BuildWaterMarks();
+	BuildRoomBoxes();		// T1, before the build like the marks
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms, false,
 		DecodeThreads(), &stats, &why))
@@ -1655,6 +1964,7 @@ void HDLevelBuild()
 	// The marks were only borrowed for the length of that call.
 	HDRenderSetWaterMarks(0, 0);
 	g_water_marks.clear();
+	HDRenderSetRoomBoxes(0, 0);	// T1, the same contract
 
 	/* E2: `flooded` is how many of the two shimmer sets no classic corner
 	 * named and the plane answered for - the number that says whether a
@@ -1702,6 +2012,26 @@ void HDLevelBuild()
 	{
 		const int tris = HDRenderGroupTriangles(r, -1);
 		const bool has_group = r < HDRenderGroupCount();
+		/* THE FOURTH WAY A ROOM STAYS CLASSIC (#123, fix round T, T2).
+		 *
+		 * A group can have triangles and still draw NOTHING INSIDE ITS OWN
+		 * ROOM. ANDREA2's room 124 - the ground floor of the courtyard with
+		 * the palms - has four, and all four of them stand outside the room
+		 * box; the test below it (`tris` non-zero) called that room HD, the
+		 * classic roomlets were dropped, and what the player saw was a black
+		 * hole where the doorways are. NINE rooms in the whole game answer
+		 * this way to the rule as it ships - with HD_OVERHANG_SLACK in it:
+		 * ANDREA2 124, JOBY2 19 and 21, RICHCUT2 2, 3 and 4, TITLE 70, 101
+		 * and 103. (ANDREA1's room 4 is hollow only with the slack taken
+		 * away: all 216 of its triangles stand within 128 units of the box
+		 * edge, so the shipped rule leaves that room HD - verified with
+		 * `RoomProbe -roombox <classic folder> -window inside`, which draws
+		 * the nine at 0 draw calls and room 4 at 1.)
+		 *
+		 * The classic geometry of such a room is the only geometry there
+		 * is, so it is drawn, exactly as for a room the .TRG never had. */
+		const bool hollow = tris > 0 &&
+			HDRenderGroupOverhangTriangles(r) >= tris;
 
 		/* THE THIRD WAY A ROOM STAYS CLASSIC (#123, stage S7-2). The first
 		 * two are the .TRG's own: no group for this room, or a group with no
@@ -1718,7 +2048,8 @@ void HDLevelBuild()
 		const bool marked = HDMarkersRoomTouched(r);
 
 		const char* reason = !has_group ? "no_group"
-			: (!tris ? "empty_group" : (marked ? "marker" : "ok"));
+			: (!tris ? "empty_group"
+			: (hollow ? "hollow_group" : (marked ? "marker" : "ok")));
 
 		if (marked && has_group && tris)
 			marked_rooms++;
@@ -1728,7 +2059,7 @@ void HDLevelBuild()
 		 * that can take a group away is about the ROOM the randomizer
 		 * reshaped. A flipped room's alternate is a room of its own with a
 		 * group of its own, so both halves of a pair are decided here. */
-		g_group_hd[r] = (unsigned char)((has_group && tris && !marked) ? 1 : 0);
+		g_group_hd[r] = (unsigned char)((has_group && tris && !hollow && !marked) ? 1 : 0);
 
 		if (g_group_hd[r])
 		{
@@ -1741,9 +2072,11 @@ void HDLevelBuild()
 			kept_statics += room[r].num_meshes;
 		}
 
-		Log("HDLOG room=%d group=%d tris=%d/%d/%d ranges=%d statics=%d hd=%d reason=%s",
+		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d ranges=%d "
+			"statics=%d hd=%d reason=%s",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
-			HDRenderGroupTriangles(r, 2), HDRenderGroupRanges(r, -1),
+			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
+			HDRenderGroupRanges(r, -1),
 			(int)room[r].num_meshes, (int)g_group_hd[r], reason);
 	}
 
@@ -1790,10 +2123,12 @@ void HDLevelBuild()
 
 	Log("HDLOG level=%s built ms=%d rooms=%d hd=%d classic=%d sky_groups=%d "
 		"verts=%d idx=%d(%dbit) ranges=%d split=%d layer0_tris=%d "
+		"overhang_tris=%d overhang_ranges=%d hollow=%d "
 		"vb_mib=%.1f ib_mib=%.1f read_ms=%d build_ms=%d",
 		g_stem, (int)build_ms, g_room_count, hd_rooms, classic_rooms,
 		stats.skyGroups, stats.vertices, stats.indices, stats.index32 ? 32 : 16,
 		stats.ranges, stats.splitRanges, stats.fallbackPageTris,
+		stats.overhangTris, stats.overhangRanges, stats.hollowGroups,
 		stats.vertexBytes / 1048576.0, stats.indexBytes / 1048576.0,
 		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5));
 
@@ -1847,6 +2182,10 @@ void HDLevelBuild()
 	 * in the baked art. TROne has the same hole; it belongs to the stage that
 	 * draws objects, not to this one. */
 	BuildStaticTables();
+
+	/* T1: which rooms need a portal window at all. After the loop above,
+	 * because it asks per room whether that room draws HD. */
+	BuildRoomWindows();
 
 	/* H1: and the water surface the remaster left out - see the long note
 	 * over BuildWaterSurfaces. It has to run after the loop above, because it
@@ -2086,6 +2425,9 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	 * them at the end of each room's items, which is before S_OutputPolyList
 	 * draws anything HD. */
 	ClipWindow(entry, left, top, right, bottom);
+	// T1: and whether this room is one of the few that needs the window.
+	entry.windowed = roomIndex >= 0 && roomIndex < HD_MAX_ROOMS &&
+		g_room_windowed[roomIndex] != 0;
 
 	return true;
 }
@@ -2274,6 +2616,8 @@ void HDFrameDraw()
 	g_clip_full = 0;
 	g_clip_scissored = 0;
 	g_clip_empty = 0;
+	g_clip_open = 0;
+	g_clip_overhang_tris = 0;
 	g_clip_items_spared = 0;	// fix round R, counted by HDFrameScissorForRoom
 
 	for (int i = 0; i < g_frame_count; i++)
@@ -2281,7 +2625,9 @@ void HDFrameDraw()
 		const FrameRoom& entry = g_frame[i];
 		const bool empty = ClipEmpty(entry);
 
-		if (empty)
+		if (!entry.windowed)
+			g_clip_open++;			// T1: no window at all
+		else if (empty)
 			g_clip_empty++;
 		else if (entry.full)
 			g_clip_full++;
@@ -2290,12 +2636,14 @@ void HDFrameDraw()
 
 		/* GROUP M: the room is drawn inside the window the portal walk gave
 		 * it, and a room with no window is not drawn at all. Without the cap
-		 * ApplyClip does nothing and every room draws whole, which is the
-		 * picture before this group. */
-		if (empty && HDRenderScissorAvailable())
+		 * HDRenderScissor does nothing and every room draws whole, which is
+		 * the picture before that group.
+		 *
+		 * T1: and a room that is NOT on the overlap list is drawn even when
+		 * its window came out empty - it is not being windowed at all, so
+		 * an empty window says nothing about it. */
+		if (empty && entry.windowed && HDRenderScissorAvailable())
 			continue;
-
-		ApplyClip(entry);
 
 		// PROF_HD_LIGHT is the light block alone, inside PROF_HD_DRAW: the
 		// one part of the room draw that is processor work rather than draw
@@ -2304,8 +2652,7 @@ void HDFrameDraw()
 		FillRoomLighting(g_frame[i].room, g_frame[i].group,
 			g_frame[i].lighting, g_frame[i].lights);
 		ProfEnd(PROF_HD_LIGHT);
-		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
-			&g_frame[i].lighting, HD_PASS_SOLID);
+		DrawRoomWindowed(g_frame[i], HD_PASS_SOLID);
 	}
 
 	/* GROUP M: the rooms are done. The objects set their own window per item,
@@ -2395,22 +2742,20 @@ void HDFrameDrawGlow()
 	 * unfilled and must not be drawn here either. */
 	for (int i = 0; i < g_frame_count; i++)
 	{
-		if (ClipEmpty(g_frame[i]) && HDRenderScissorAvailable())
+		if (ClipEmpty(g_frame[i]) && g_frame[i].windowed &&
+			HDRenderScissorAvailable())
 			continue;
 
-		ApplyClip(g_frame[i]);
-		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
-			&g_frame[i].lighting, HD_PASS_BLEND);
+		DrawRoomWindowed(g_frame[i], HD_PASS_BLEND);
 	}
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
-		if (ClipEmpty(g_frame[i]) && HDRenderScissorAvailable())
+		if (ClipEmpty(g_frame[i]) && g_frame[i].windowed &&
+			HDRenderScissorAvailable())
 			continue;
 
-		ApplyClip(g_frame[i]);
-		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
-			&g_frame[i].lighting, HD_PASS_ADDITIVE);
+		DrawRoomWindowed(g_frame[i], HD_PASS_ADDITIVE);
 	}
 
 	// GROUP M: the rooms are done - see the same line in HDFrameDraw.
@@ -2464,7 +2809,8 @@ void HDFrameDrawGlow()
 				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s",
 					g_frame[i].room, g_frame[i].group,
 					g_frame[i].x0, g_frame[i].y0, g_frame[i].x1, g_frame[i].y1,
-					ClipEmpty(g_frame[i]) ? "EMPTY - not drawn"
+					!g_frame[i].windowed ? "(no window - not on the overlap list)"
+						: ClipEmpty(g_frame[i]) ? "EMPTY - not drawn"
 						: g_frame[i].full ? "(the whole screen)" : "");
 		}
 
@@ -2508,10 +2854,11 @@ void HDFrameDrawGlow()
 			else
 				std::sprintf(viewsObj, "%ld..%ld SPLIT", ob_lo, ob_hi);
 
-			Log("HDLOG clip rooms=%d full=%d scissored=%d empty=%d "
-				"items_spared=%d view=%s view_obj=%s",
-				g_frame_count, g_clip_full, g_clip_scissored, g_clip_empty,
-				g_clip_items_spared, views, viewsObj);
+			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
+				"overhang_tris=%d items_spared=%d view=%s view_obj=%s",
+				g_frame_count, g_clip_open, g_clip_full, g_clip_scissored,
+				g_clip_empty, g_clip_overhang_tris, g_clip_items_spared,
+				views, viewsObj);
 		}
 	}
 

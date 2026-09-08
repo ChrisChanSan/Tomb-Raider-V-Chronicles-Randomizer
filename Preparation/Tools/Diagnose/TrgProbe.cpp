@@ -40,6 +40,7 @@
 #include <vector>
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <set>
 
@@ -943,6 +944,714 @@ namespace
 			stem.c_str(), wanted, partCount, total[0], total[1], total[2]);
 	}
 
+	/* WHICH ROOMS STAND INSIDE ONE ANOTHER, AND WHICH ART LEAVES ITS ROOM
+	 * (#123, fix round T, T1).
+	 *
+	 * Group M scissors EVERY HD room to the portal window the classic walk
+	 * gave it. That window is correct for geometry that stays inside the
+	 * room's own volume - which classic geometry always does, because a
+	 * classic room IS its sectors - and wrong for the remaster's, which
+	 * carves reliefs, cornices and pillars that stand out past the room's
+	 * outer wall. This is the measurement the fix rests on, and both halves
+	 * of it are computed from the same two boxes the engine has:
+	 *
+	 *   THE FULL BOX      x .. x + numX * 1024, z .. z + numZ * 1024,
+	 *                     maxceiling .. minfloor - the room including its
+	 *                     border ring of wall sectors.
+	 *   THE INNER BOX     the engine's own, game\draw.cpp:1977-1981:
+	 *                     x + 1024 .. x + (numX - 1) * 1024, likewise z,
+	 *                     the same y. It is the box TR5 itself asks "does
+	 *                     this item fit wholly inside the room" with, and
+	 *                     two rooms that are only NEIGHBOURS never overlap
+	 *                     in it - their border rings are what they share.
+	 *
+	 * The overlap list is asked of the INNER boxes, so a portal neighbour is
+	 * not on it and a room standing bodily inside another one is. The
+	 * overhang count is asked of the FULL box, because a wall's own art
+	 * belongs to its room and only what leaves the room's footprint is
+	 * overhang. */
+	struct RoomSpace
+	{
+		long x0, x1, y0, y1, z0, z1;		// full box, world
+		long ix0, ix1, iz0, iz1;		// inner box, world (y as above)
+		long ox, oy, oz;			// the origin the .TRG rides on
+		int numX, numZ;
+		int meshes;
+	};
+
+	long boxOverlap(long a0, long a1, long b0, long b1)
+	{
+		const long lo = a0 > b0 ? a0 : b0;
+		const long hi = a1 < b1 ? a1 : b1;
+
+		return hi > lo ? hi - lo : 0;
+	}
+
+	void dumpRoomSpace(const std::string& root, const std::string& stem,
+		const std::string& folder, int focus, bool quiet, int shareMin,
+		long slack, bool staticList, int staticSlot, long deep)
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = folder + "\\" + stem + ".TRC";
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+
+		if (!level.load(toW(trc), error))
+		{
+			std::printf("%-9s classic level not loadable: %s\n", stem.c_str(),
+				error.c_str());
+			return;
+		}
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s .TRG FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		const int rooms = level.roomCount();
+		std::vector<RoomSpace> box((size_t)rooms);
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			RoomSpace& b = box[(size_t)r];
+			unsigned yTop = 0, yOrigin = 0, lightsMeshes = 0;
+
+			level.headerField(r, 24, yOrigin, error);
+			level.headerField(r, 36, yTop, error);
+			level.headerField(r, 48, lightsMeshes, error);
+
+			b.numX = rm.numXSectors;
+			b.numZ = rm.numZSectors;
+			b.ox = rm.originX;
+			b.oy = (long)(int)yOrigin;
+			b.oz = rm.originZ;
+			b.meshes = (int)(lightsMeshes >> 16);
+			b.x0 = rm.originX;
+			b.x1 = rm.originX + (long)rm.numXSectors * 1024;
+			b.z0 = rm.originZ;
+			b.z1 = rm.originZ + (long)rm.numZSectors * 1024;
+			b.y0 = (long)(int)yTop;			// maxceiling, the smaller y
+			b.y1 = rm.yBottom;			// minfloor
+			b.ix0 = b.x0 + 1024;
+			b.ix1 = b.x0 + (long)(rm.numXSectors - 1) * 1024;
+			b.iz0 = b.z0 + 1024;
+			b.iz1 = b.z0 + (long)(rm.numZSectors - 1) * 1024;
+		}
+
+		/* THE OVERLAPPING PAIRS, ASKED OF THE ART AND NOT OF THE BOXES.
+		 *
+		 * A box test cannot answer this. Two rooms next door reach one sector
+		 * into each other by construction - the wall ring of each stands in
+		 * the other's footprint, which is how TR5 builds every doorway - and
+		 * an L-shaped room's box covers whatever stands in the notch. Asked
+		 * of the boxes, 233 of ANDREA1's 242 rooms come out "overlapping",
+		 * which is no answer at all.
+		 *
+		 * So the question is asked of the geometry that is actually DRAWN:
+		 * every group's own triangles are dropped into 256-unit world cells -
+		 * a quarter of a floor square on a side, the same grid
+		 * HDRenderGroupHasGeometry already builds per group - and two rooms
+		 * overlap when their art shares cells. Art in the same place is
+		 * exactly the thing the depth buffer cannot sort out and the thing
+		 * the portal window exists to hide.
+		 *
+		 * A flipmap pair is left out: the two are the same room at two
+		 * moments and are never both drawn. */
+		std::vector<std::vector<unsigned long long> > cells(trg.groups.size());
+		std::vector<std::vector<unsigned long long> > shell(trg.groups.size());
+
+		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
+		{
+			const RoomSpace& b = box[g];
+			std::vector<unsigned long long>& out = cells[g];
+			std::vector<unsigned long long>& outShell = shell[g];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						/* THE OVERHANG IS NOT ASKED ABOUT. A triangle whose
+						 * centroid stands outside its own room's box is art
+						 * the remaster hung on the outside - a facade, a
+						 * cornice, a whole street front - and it is DRAWN
+						 * WITHOUT A WINDOW by the fix below. So it must not
+						 * put its room on the overlap list either, or Rome's
+						 * facades would window half the level. */
+						long qx = 0, qy = 0, qz = 0;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[first + c]];
+
+							qx += v.x;
+							qy += v.y;
+							qz += v.z;
+						}
+
+						qx = b.ox + qx / 3;
+						qy = b.oy + qy / 3;
+						qz = b.oz + qz / 3;
+
+						/* The same slack the renderer tags a triangle with
+						 * (hd_render.cpp, HD_OVERHANG_SLACK): a wall face
+						 * sits exactly on the box's edge and its relief a
+						 * little past it, and both belong to the room. */
+						const bool interior =
+							qx >= b.ix0 - slack && qx <= b.ix1 + slack &&
+							qy >= b.y0 - slack && qy <= b.y1 + slack &&
+							qz >= b.iz0 - slack && qz <= b.iz1 + slack;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[first + c]];
+							const unsigned long long cx =
+								(unsigned long long)(((b.ox + v.x) >> 8) + 32768);
+							const unsigned long long cy =
+								(unsigned long long)(((b.oy + v.y) >> 8) + 32768);
+							const unsigned long long cz =
+								(unsigned long long)(((b.oz + v.z) >> 8) + 32768);
+							const unsigned long long key =
+								(cx << 34) | (cy << 17) | cz;
+
+							if (interior)
+								out.push_back(key);
+							else
+								outShell.push_back(key);
+						}
+					}
+				}
+
+			std::sort(out.begin(), out.end());
+			out.erase(std::unique(out.begin(), out.end()), out.end());
+			std::sort(outShell.begin(), outShell.end());
+			outShell.erase(std::unique(outShell.begin(), outShell.end()),
+				outShell.end());
+		}
+
+		/* WHO IS NEXT DOOR. A room's own portal list, plus the vertical links
+		 * out of the floor data - a stacked pair is joined through those and
+		 * has no portal record at all. Both directions, because a portal is
+		 * written on both sides but a floor link need not be. */
+		std::vector<std::set<int> > nextDoor((size_t)rooms);
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const std::vector<int>& ports = level.rooms()[(size_t)r].portalRooms;
+
+			for (size_t p = 0; p < ports.size(); p++)
+				if (ports[p] >= 0 && ports[p] < rooms)
+				{
+					nextDoor[(size_t)r].insert(ports[p]);
+					nextDoor[(size_t)ports[p]].insert(r);
+				}
+
+			std::vector<Tr5Level::SectorInfo> sect;
+
+			if (!level.sectorInfo(r, sect, error))
+				continue;
+
+			for (size_t s = 0; s < sect.size(); s++)
+			{
+				const int up = sect[s].roomAbove, dn = sect[s].roomBelow;
+
+				if (up >= 0 && up < rooms)
+				{
+					nextDoor[(size_t)r].insert(up);
+					nextDoor[(size_t)up].insert(r);
+				}
+
+				if (dn >= 0 && dn < rooms)
+				{
+					nextDoor[(size_t)r].insert(dn);
+					nextDoor[(size_t)dn].insert(r);
+				}
+			}
+		}
+
+		/* THE TEST ITSELF: does B's art stand INSIDE A's own volume, with no
+		 * portal between the two that would explain it?
+		 *
+		 * A neighbour's art reaches into A as well - the reveal of its own
+		 * doorway does, a dozen cells of it - and that is not the bug: it is
+		 * seen through the opening it belongs to. What group M exists for is
+		 * a room whose art stands in the middle of another room with no way
+		 * through, and the two are told apart by the portal list and by a
+		 * floor of eight cells, half a floor square's worth of art. */
+		int pairs = 0;
+		std::vector<unsigned char> windowed((size_t)rooms, 0);
+
+		for (int a = 0; a < rooms && (size_t)a < cells.size(); a++)
+			for (int b = 0; b < rooms && (size_t)b < cells.size(); b++)
+			{
+				if (a == b)
+					continue;
+
+				if (level.rooms()[(size_t)a].altRoom == b ||
+					level.rooms()[(size_t)b].altRoom == a)
+					continue;
+
+				if (nextDoor[(size_t)a].count(b))
+					continue;
+
+				const RoomSpace& A = box[(size_t)a];
+
+				if (!boxOverlap(A.x0, A.x1, box[(size_t)b].x0, box[(size_t)b].x1) ||
+					!boxOverlap(A.z0, A.z1, box[(size_t)b].z0, box[(size_t)b].z1) ||
+					!boxOverlap(A.y0, A.y1, box[(size_t)b].y0, box[(size_t)b].y1))
+					continue;
+
+				int inside = 0, insideShell = 0;
+
+				for (int half = 0; half < 2; half++)
+				{
+					const std::vector<unsigned long long>& src =
+						half ? shell[(size_t)b] : cells[(size_t)b];
+
+					for (size_t c = 0; c < src.size(); c++)
+					{
+						const unsigned long long key = src[c];
+						const long cx = ((long)(key >> 34) - 32768) << 8;
+						const long cy = ((long)((key >> 17) & 0x1FFFF) - 32768) << 8;
+						const long cz = ((long)(key & 0x1FFFF) - 32768) << 8;
+
+						if (cx >= A.ix0 + deep && cx < A.ix1 - deep &&
+							cz >= A.iz0 + deep && cz < A.iz1 - deep &&
+							cy >= A.y0 && cy < A.y1)
+						{
+							if (half) insideShell++; else inside++;
+						}
+					}
+				}
+
+				if (inside < shareMin)
+					continue;
+
+				pairs++;
+				windowed[(size_t)a] = 1;
+				windowed[(size_t)b] = 1;
+
+				if (!quiet)
+					std::printf("  overlap: the art of room %3d stands inside "
+						"room %3d - %d interior cells of %d, and %d shell "
+						"cells of %d\n", b, a, inside,
+						(int)cells[(size_t)b].size(), insideShell,
+						(int)shell[(size_t)b].size());
+			}
+
+		int windowedRooms = 0;
+
+		for (int r = 0; r < rooms; r++)
+			if (windowed[(size_t)r])
+				windowedRooms++;
+
+		/* THE OVERHANG. One triangle at a time, its centroid in world units
+		 * against its own room's FULL box; `far` is the largest distance any
+		 * corner of it reaches past that box. */
+		long long tris_total = 0, tris_out = 0;
+		long long win_total = 0, win_out = 0;	// windowed rooms alone
+		long worst = 0;
+		int worst_group = -1;
+		long long hist[5] = { 0, 0, 0, 0, 0 };
+		long long axis[6] = { 0, 0, 0, 0, 0, 0 };	// -x +x -y +y -z +z
+		std::vector<long long> outPerGroup((size_t)trg.groups.size(), 0);
+		std::vector<long long> outAllPerGroup((size_t)trg.groups.size(), 0);
+		std::vector<long long> triPerGroup((size_t)trg.groups.size(), 0);
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+		{
+			if ((int)g >= rooms)
+				break;			// the sky groups have no room
+
+			const RoomSpace& b = box[g];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						long cx = 0, cy = 0, cz = 0;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[first + c]];
+
+							cx += v.x;
+							cy += v.y;
+							cz += v.z;
+						}
+
+						cx = b.ox + cx / 3;
+						cy = b.oy + cy / 3;
+						cz = b.oz + cz / 3;
+
+						tris_total++;
+						triPerGroup[g]++;
+
+						if (windowed[g])
+							win_total++;
+
+						long d = 0;
+
+						if (cx < b.ix0) { axis[0]++; if (b.ix0 - cx > d) d = b.ix0 - cx; }
+						if (cx > b.ix1) { axis[1]++; if (cx - b.ix1 > d) d = cx - b.ix1; }
+						if (cy < b.y0) { axis[2]++; if (b.y0 - cy > d) d = b.y0 - cy; }
+						if (cy > b.y1) { axis[3]++; if (cy - b.y1 > d) d = cy - b.y1; }
+						if (cz < b.iz0) { axis[4]++; if (b.iz0 - cz > d) d = b.iz0 - cz; }
+						if (cz > b.iz1) { axis[5]++; if (cz - b.iz1 > d) d = cz - b.iz1; }
+
+						if (d)
+							outAllPerGroup[g]++;
+
+						if (d <= slack)
+							continue;
+
+						tris_out++;
+						outPerGroup[g]++;
+
+						if (windowed[g])
+							win_out++;
+
+						hist[d <= 16 ? 0 : d <= 64 ? 1 : d <= 256 ? 2 :
+							d <= 1024 ? 3 : 4]++;
+
+						if (d > worst)
+						{
+							worst = d;
+							worst_group = (int)g;
+						}
+					}
+				}
+		}
+
+		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d rooms in a "
+			"pair=%d  overhang tris=%lld of %lld  worst=%ld (group %d)\n",
+			stem.c_str(), rooms, (int)trg.groups.size(), pairs, windowedRooms,
+			tris_out, tris_total, worst, worst_group);
+		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
+			"<=256 %lld, <=1024 %lld, >1024 %lld\n",
+			stem.c_str(), hist[0], hist[1], hist[2], hist[3], hist[4]);
+		std::printf("%-9s   overhang by side: -x %lld +x %lld -y %lld +y %lld "
+			"-z %lld +z %lld\n", stem.c_str(), axis[0], axis[1], axis[2],
+			axis[3], axis[4], axis[5]);
+		std::printf("%-9s   slack=%d  in the WINDOWED rooms: %lld of %lld "
+			"triangles draw without a window (%.1f%%)\n", stem.c_str(),
+			slack, win_out, win_total,
+			win_total ? 100.0 * (double)win_out / (double)win_total : 0.0);
+
+		/* A GROUP THAT DRAWS NOTHING INSIDE ITS OWN ROOM (#123, fix round T,
+		 * T2). The engine turns a room over to the HD path when its group has
+		 * ANY triangle at all (hd_level.cpp: `tris` non-zero). ANDREA2's room
+		 * 124 - the ground floor of the courtyard with the palm - has FOUR,
+		 * and all four of them stand outside the room. The classic roomlets
+		 * are dropped for it and nothing takes their place, which on the
+		 * screen is a black hole where the doorway should be. */
+		{
+			int hollow = 0, thin = 0;
+
+			for (int r = 0; r < rooms && (size_t)r < triPerGroup.size(); r++)
+			{
+				const long long total = triPerGroup[(size_t)r];
+				const long long inside = total - outAllPerGroup[(size_t)r];
+
+				if (!total)
+					continue;
+
+				if (!inside)
+				{
+					hollow++;
+
+					if (!quiet)
+						std::printf("    HOLLOW room %3d: %lld triangles, "
+							"NONE of them inside the room\n", r, total);
+				}
+				else if (inside < 32)
+				{
+					thin++;
+
+					if (!quiet)
+						std::printf("    thin   room %3d: %lld triangles, "
+							"%lld inside the room\n", r, total, inside);
+				}
+			}
+
+			std::printf("%-9s   groups that draw NOTHING inside their own "
+				"room: %d, fewer than 32: %d\n", stem.c_str(), hollow, thin);
+		}
+
+		if (!quiet)
+		{
+			std::printf("  the ten groups with the most overhang:\n");
+
+			std::vector<std::pair<long long, int> > order;
+
+			for (size_t g = 0; g < outPerGroup.size(); g++)
+				if (outPerGroup[g])
+					order.push_back(std::make_pair(outPerGroup[g], (int)g));
+
+			std::sort(order.begin(), order.end());
+			std::reverse(order.begin(), order.end());
+
+			for (size_t i = 0; i < order.size() && i < 10; i++)
+				std::printf("    group %3d  %6lld of %6lld  windowed=%d\n",
+					order[i].second, order[i].first,
+					triPerGroup[(size_t)order[i].second],
+					(int)windowed[(size_t)order[i].second]);
+		}
+
+		/* THE STATIC MESHES OF EVERY ROOM, and whether the .TRG draws
+		 * anything where each one stands (#123, fix round T, T4). The engine
+		 * asks exactly this question in hd_level.cpp, BuildStaticTables, and
+		 * suppresses the classic draw where the answer is yes; here it is
+		 * asked offline, out of the same two files, so "the palm is baked
+		 * into the room art" is a number rather than a guess.
+		 *
+		 * The room blob IS a ROOM_INFO written out (specificlexstuff.cpp,
+		 * aFixUpRoom), so `mesh` at +16 is the blob-relative offset of the
+		 * MESH_INFO array and `num_meshes` sits at +50. The visibility box of
+		 * a slot comes out of the level's own static block, which follows the
+		 * moveables. */
+		if (staticList)
+		{
+			size_t objAt = 0; int objN = 0, frN = 0; size_t frAt = 0;
+			short vis[70][6];
+			bool have[70] = { false };
+
+			std::memset(vis, 0, sizeof(vis));
+
+			if (level.debugModelBlocks(objAt, objN, frAt, frN))
+			{
+				const std::vector<unsigned char>& raw = level.debugBytes();
+				size_t at = objAt + (size_t)objN * 20;
+				int n = 0;
+
+				std::memcpy(&n, raw.data() + at, 4);
+				at += 4;
+
+				for (int i = 0; i < n; i++, at += 32)
+				{
+					int slot = 0;
+
+					std::memcpy(&slot, raw.data() + at, 4);
+
+					if (slot < 0 || slot >= 70)
+						continue;
+
+					std::memcpy(vis[slot], raw.data() + at + 6, 12);
+					have[slot] = true;
+				}
+			}
+
+			for (int r = 0; r < rooms; r++)
+			{
+				const Tr5Room& rm = level.rooms()[(size_t)r];
+				unsigned meshOfs = 0, lightsMeshes = 0;
+
+				if (!rm.headerOffset ||
+					!level.headerField(r, 16, meshOfs, error) ||
+					!level.headerField(r, 48, lightsMeshes, error))
+					continue;
+
+				const int nMesh = (int)(lightsMeshes >> 16);
+
+				if (!nMesh)
+					continue;
+
+				const std::vector<unsigned char>& raw = level.debugBytes();
+
+				for (int m = 0; m < nMesh; m++)
+				{
+					const size_t at = rm.headerOffset + 208 + meshOfs +
+						(size_t)m * 20;
+
+					if (at + 20 > raw.size())
+						break;
+
+					int mx = 0, my = 0, mz = 0;
+					short rot = 0, shade = 0, flags = 0, slot = 0;
+
+					std::memcpy(&mx, raw.data() + at, 4);
+					std::memcpy(&my, raw.data() + at + 4, 4);
+					std::memcpy(&mz, raw.data() + at + 8, 4);
+					std::memcpy(&rot, raw.data() + at + 12, 2);
+					std::memcpy(&shade, raw.data() + at + 14, 2);
+					std::memcpy(&flags, raw.data() + at + 16, 2);
+					std::memcpy(&slot, raw.data() + at + 18, 2);
+
+					if (staticSlot >= 0 && slot != staticSlot)
+						continue;
+
+					if (focus >= 0 && r != focus)
+						continue;
+
+					/* How much of the group's art stands in the static's own
+					 * visibility box - the engine turns any at all into
+					 * "suppress the classic draw". */
+					int hits = 0;
+					long bx0 = 0, bx1 = 0, bz0 = 0, bz1 = 0, by0 = 0, by1 = 0;
+
+					if (slot >= 0 && slot < 70 && have[slot])
+					{
+						by0 = my + vis[slot][2];
+						by1 = my + vis[slot][3];
+						bx0 = mx + vis[slot][0];
+						bx1 = mx + vis[slot][1];
+						bz0 = mz + vis[slot][4];
+						bz1 = mz + vis[slot][5];
+
+						if ((size_t)r < cells.size())
+							for (int half = 0; half < 2; half++)
+							{
+								const std::vector<unsigned long long>& src =
+									half ? shell[(size_t)r] : cells[(size_t)r];
+
+								for (size_t c = 0; c < src.size(); c++)
+								{
+									const unsigned long long key = src[c];
+									const long qx = ((long)(key >> 34) - 32768) << 8;
+									const long qy = ((long)((key >> 17) & 0x1FFFF) - 32768) << 8;
+									const long qz = ((long)(key & 0x1FFFF) - 32768) << 8;
+
+									if (qx + 255 >= bx0 && qx <= bx1 &&
+										qy + 255 >= by0 && qy <= by1 &&
+										qz + 255 >= bz0 && qz <= bz1)
+										hits++;
+								}
+							}
+					}
+
+					const long boxCells =
+						(((bx1 >> 8) - (bx0 >> 8)) + 1) *
+						(((by1 >> 8) - (by0 >> 8)) + 1) *
+						(((bz1 >> 8) - (bz0 >> 8)) + 1);
+
+					std::printf("  static room=%3d mesh=%2d slot=%2d at "
+						"%ld/%ld/%ld rot=%d flags=%d box x %ld..%ld y %ld..%ld "
+						"z %ld..%ld  art cells in the box=%d of %ld (%.1f%%)%s\n",
+						r, m, (int)slot, (long)mx, (long)my, (long)mz,
+						(int)rot, (int)flags, bx0, bx1, by0, by1, bz0, bz1,
+						hits, boxCells,
+						boxCells ? 100.0 * (double)hits / (double)boxCells : 0.0,
+						hits ? " -> the engine SUPPRESSES it"
+							: " -> the engine keeps the CLASSIC draw");
+				}
+			}
+		}
+
+		if (focus < 0 || focus >= rooms)
+			return;
+
+		const RoomSpace& f = box[(size_t)focus];
+
+		std::printf("\n  ROOM %d of %s: origin %ld/%ld/%ld  sectors %dx%d  "
+			"full box x %ld..%ld  y %ld..%ld  z %ld..%ld  statics=%d\n",
+			focus, stem.c_str(), f.ox, f.oy, f.oz, f.numX, f.numZ,
+			f.x0, f.x1, f.y0, f.y1, f.z0, f.z1, f.meshes);
+		std::printf("  inner box x %ld..%ld  z %ld..%ld   group tris=%lld "
+			"overhang=%lld\n", f.ix0, f.ix1, f.iz0, f.iz1,
+			(size_t)focus < triPerGroup.size() ? triPerGroup[(size_t)focus] : -1,
+			(size_t)focus < outPerGroup.size() ? outPerGroup[(size_t)focus] : -1);
+
+		/* WHOSE ART STANDS INSIDE THIS ROOM. Every other room's cells held
+		 * against this room's INNER box - the volume TR5 itself calls the
+		 * inside of the room (game\draw.cpp:1977). A neighbour's doorway
+		 * reveal reaches a cell or two; a room that really stands inside
+		 * this one fills it. */
+		{
+			std::printf("  art of other rooms inside room %d's inner box:\n", focus);
+
+			for (int b = 0; b < rooms && (size_t)b < cells.size(); b++)
+			{
+				if (b == focus)
+					continue;
+
+				int inside = 0;
+
+				for (size_t c = 0; c < cells[(size_t)b].size(); c++)
+				{
+					const unsigned long long key = cells[(size_t)b][c];
+					const long cx = (long)((key >> 34) - 32768) << 8;
+					const long cy = (long)(((key >> 17) & 0x1FFFF) - 32768) << 8;
+					const long cz = (long)((key & 0x1FFFF) - 32768) << 8;
+
+					if (cx >= f.ix0 && cx < f.ix1 && cz >= f.iz0 && cz < f.iz1 &&
+						cy >= f.y0 && cy < f.y1)
+						inside++;
+				}
+
+				if (inside)
+					std::printf("    room %3d: %4d of %4d cells inside\n", b,
+						inside, (int)cells[(size_t)b].size());
+			}
+		}
+
+		std::vector<Tr5Level::PortalRecord> ports;
+
+		if (level.portalRecords(focus, ports, error))
+			for (size_t p = 0; p < ports.size(); p++)
+			{
+				const Tr5Level::PortalRecord& pr = ports[p];
+				long tris = 0;
+
+				if (pr.toRoom >= 0 && (size_t)pr.toRoom < triPerGroup.size())
+					tris = (long)triPerGroup[(size_t)pr.toRoom];
+
+				std::printf("    portal -> room %3d  normal %d/%d/%d  "
+					"corners (%d %d %d) (%d %d %d) (%d %d %d) (%d %d %d)  "
+					"that room's .TRG tris=%ld\n",
+					pr.toRoom, pr.nx, pr.ny, pr.nz,
+					pr.v[0][0], pr.v[0][1], pr.v[0][2],
+					pr.v[1][0], pr.v[1][1], pr.v[1][2],
+					pr.v[2][0], pr.v[2][1], pr.v[2][2],
+					pr.v[3][0], pr.v[3][1], pr.v[3][2], tris);
+			}
+		else
+			std::printf("    portals: %s\n", error.c_str());
+
+		std::vector<Tr5Level::SectorInfo> sectors;
+
+		if (level.sectorInfo(focus, sectors, error))
+		{
+			std::set<int> above, below;
+
+			for (size_t s = 0; s < sectors.size(); s++)
+			{
+				if (sectors[s].roomAbove >= 0) above.insert(sectors[s].roomAbove);
+				if (sectors[s].roomBelow >= 0) below.insert(sectors[s].roomBelow);
+			}
+
+			std::printf("    room above:");
+			for (std::set<int>::const_iterator i = above.begin(); i != above.end(); ++i)
+				std::printf(" %d", *i);
+			std::printf("   room below:");
+			for (std::set<int>::const_iterator i = below.begin(); i != below.end(); ++i)
+				std::printf(" %d", *i);
+			std::printf("\n");
+		}
+
+		std::printf("\n");
+	}
+
 	/* THE CLASSIC ROOM'S FLAT FACES BESIDE THE .TRG's (#123, fix round H, H1).
 	 *
 	 * The player's finding in trview is that a vanilla water face wears a wave
@@ -1337,10 +2046,41 @@ int main(int argc, char** argv)
 	bool water_gap = false;
 	bool layer_zero = false;
 	int mat_parts = -1;
+	bool room_space = false;
+	int room_focus = -1;
+	int room_share = 1;
+	long room_slack = 0;
+	long room_deep = 0;
+	bool room_statics = false;
+	int room_slot = -1;
 
 	for (int i = 2; i < argc; i++)
 	{
-		if (!_stricmp(argv[i], "-matparts") && i + 1 < argc)
+		if (!_stricmp(argv[i], "-roomspace"))
+			room_space = true;
+		else if (!_stricmp(argv[i], "-share") && i + 1 < argc)
+			room_share = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-slack") && i + 1 < argc)
+			room_slack = std::atol(argv[++i]);
+		else if (!_stricmp(argv[i], "-deep") && i + 1 < argc)
+			room_deep = std::atol(argv[++i]);
+		else if (!_stricmp(argv[i], "-statics"))
+		{
+			room_space = true;
+			room_statics = true;
+		}
+		else if (!_stricmp(argv[i], "-slot") && i + 1 < argc)
+		{
+			room_space = true;
+			room_statics = true;
+			room_slot = std::atoi(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-room") && i + 1 < argc)
+		{
+			room_space = true;
+			room_focus = std::atoi(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-matparts") && i + 1 < argc)
 			mat_parts = std::atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-watergap"))
 			water_gap = true;
@@ -1395,6 +2135,21 @@ int main(int argc, char** argv)
 	const int cores = (int)std::thread::hardware_concurrency();
 	std::printf("install : %s\n", root.c_str());
 	std::printf("cores   : %d\n\n", cores);
+
+	if (room_space)
+	{
+		if (classic.empty())
+		{
+			std::printf("-roomspace needs -classic <folder holding the .TRC>\n");
+			return 1;
+		}
+
+		for (const std::string& stem : levels)
+			dumpRoomSpace(root, stem, classic, room_focus, levels.size() > 1,
+				room_share, room_slack, room_statics, room_slot, room_deep);
+
+		return 0;
+	}
 
 	if (mat_parts >= 0)
 	{

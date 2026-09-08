@@ -703,6 +703,13 @@ namespace
 		 * room itself (#123, fix round R3b). In the sort key, so a piece's
 		 * triangles never share a draw call with the wall behind them. */
 		int destructId = -1;
+		/* WHICH HALF OF THE ROOM THIS DRAW CALL IS (#123, fix round T, T1).
+		 * 1 where the triangles of this range stand outside the room's own
+		 * box - see HDRoomBox in hd_render.h. In the sort key like every
+		 * other per-draw-call property, because the two halves are drawn
+		 * with different scissor states and a triangle cannot have half of
+		 * one. */
+		int overhang = 0;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over (#123, stage S6). With a 32 bit index buffer they are only a
 		 * measurement; with a 16 bit one they ARE the draw call - the indices
@@ -756,7 +763,17 @@ namespace
 		std::vector<HDRange> pass[3];
 		std::vector<HDRenderSample> samples;
 		std::vector<unsigned int> cells;	// sorted, unique - see above
+		/* Fix round T (T1): the same list built from the INSIDE triangles
+		 * alone. The overlap list is asked of this one, because the overhang
+		 * is drawn without a window whatever the answer. */
+		std::vector<unsigned int> cellsIn;
 		unsigned int triangles[3] = { 0, 0, 0 };
+		unsigned int overhang[3] = { 0, 0, 0 };		// of those, outside the box
+		// The room's own box, room local, or all zeroes when none was handed
+		// in - then nothing is overhang and the group draws as one piece.
+		float roomMins[3] = { 0, 0, 0 };
+		float roomMaxs[3] = { 0, 0, 0 };
+		bool hasRoomBox = false;
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
 		bool hasBounds = false;
@@ -981,6 +998,20 @@ namespace
 
 	const HDWaterMark* g_marks = 0;
 	int g_mark_count = 0;
+	/* Fix round T (T1): the rooms' own boxes for the level being built, and
+	 * the slack a triangle is allowed before it counts as overhang.
+	 *
+	 * 128 UNITS, AND MEASURED. A wall face sits exactly on the box's edge, so
+	 * with no slack at all the remaster's own relief - a moulding, a cornice,
+	 * the depth of a brick - would make a wall overhang: over the fifteen
+	 * files that reading calls 73 % of ANDREA2 overhang and the window stops
+	 * meaning anything. The distances come in two clumps, one below 64 units
+	 * (a million triangles of ANDREA2 alone: the relief) and one past a whole
+	 * sector (the facades and the piers). 128 is between them and takes
+	 * ANDREA2 from 77.6 % to 4.5 %. */
+	const HDRoomBox* g_boxes = 0;
+	int g_box_count = 0;
+	#define HD_OVERHANG_SLACK	128.0f
 
 	const void* g_water_table_up = 0;	// what is on the card right now
 	int g_frame_bulbs = 0;
@@ -1422,6 +1453,12 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count)
 {
 	g_marks = count > 0 ? marks : 0;
 	g_mark_count = marks ? count : 0;
+}
+
+void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count)
+{
+	g_boxes = count > 0 ? boxes : 0;
+	g_box_count = boxes ? count : 0;
 }
 
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
@@ -2057,6 +2094,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float gloss, glossPower;	// fix round R3b, see MaterialGloss
 		float blend;			// fix round H (H2), see MaterialBlend
 		int destructId;			// fix round R3b, see HDDestructible
+		int overhang;			// fix round T, see HDRoomBox
 		unsigned int first;
 	};
 
@@ -2068,6 +2106,22 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		HDGroup& group = g_groups[g];
 		const trf::remaster::TrgGroup& source = trg.groups[g];
 		const size_t group_first_index = sorted.size();
+
+		/* FIX ROUND T (T1): the room's own box, if the caller handed one in.
+		 * A sky group has no room and never gets one, so a sky group is one
+		 * piece and is never windowed - which is right: the dome rides on
+		 * the camera and belongs to no room's portal walk. */
+		if (g_boxes && (int)g < g_box_count)
+		{
+			group.hasRoomBox = true;
+
+			for (int axis = 0; axis < 3; axis++)
+			{
+				group.roomMins[axis] = g_boxes[g].mins[axis];
+				group.roomMaxs[axis] = g_boxes[g].maxs[axis];
+			}
+		}
+
 		/* H1: (height, sector) of every horizontal triangle of this group,
 		 * merged into the group's own table below. */
 		std::vector<std::pair<int, unsigned int> > flats;
@@ -2252,8 +2306,33 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
+					/* FIX ROUND T (T1): inside the room's own box, or
+					 * overhang? The centroid decides, with the slack over
+					 * g_boxes, and the answer is part of the sort key below
+					 * so that a draw call is all of one kind. */
+					int overhang = 0;
+
+					if (group.hasRoomBox)
+					{
+						const trf::remaster::TrgVertex& ta = trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& tb = trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& tc = trg.vertices[trg.indices[first + 2]];
+						const float centre[3] =
+						{
+							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f
+						};
+
+						for (int axis = 0; axis < 3; axis++)
+							if (centre[axis] < group.roomMins[axis] - HD_OVERHANG_SLACK ||
+								centre[axis] > group.roomMaxs[axis] + HD_OVERHANG_SLACK)
+								overhang = 1;
+					}
+
 					HDTri tri;
 
+					tri.overhang = overhang;
 					tri.slot = slot;
 					tri.scrollU = su;
 					tri.scrollV = sv;
@@ -2305,10 +2384,20 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * different phases of the frame. */
 					if (a.blend != b.blend) return a.blend < b.blend;
 					// R3b: a destructible piece keeps its own draw calls.
-					return a.destructId < b.destructId;
+					if (a.destructId != b.destructId) return a.destructId < b.destructId;
+					/* T1: and the two halves of the room never share one.
+					 * Last in the key, so a level built with no room boxes -
+					 * every triangle answering 0 - sorts exactly as it did
+					 * before this round. */
+					return a.overhang < b.overhang;
 				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
+
+			// T1: and how many of them stand outside the room's own box.
+			for (size_t i = 0; i < tris.size(); i++)
+				if (tris[i].overhang)
+					group.overhang[pass]++;
 
 			HDRange range;
 			range.pageSlot = tris[0].slot;
@@ -2326,6 +2415,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.glossPower = tris[0].glossPower;
 			range.blend = tris[0].blend;
 			range.destructId = tris[0].destructId;
+			range.overhang = tris[0].overhang;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
 
@@ -2345,7 +2435,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].gloss == range.gloss &&
 					tris[i].glossPower == range.glossPower &&
 					tris[i].blend == range.blend &&
-					tris[i].destructId == range.destructId;
+					tris[i].destructId == range.destructId &&
+					tris[i].overhang == range.overhang;
 
 				if (!same || range.count / 3 >= max_tris)
 				{
@@ -2394,6 +2485,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.glossPower = tris[i].glossPower;
 					range.blend = tris[i].blend;
 					range.destructId = tris[i].destructId;
+					range.overhang = tris[i].overhang;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 				}
@@ -2429,8 +2521,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						/* R3b: the group's occupancy, and the box of the
 						 * destructible piece these triangles belong to. Both
-						 * ride on a walk that was already happening. */
+						 * ride on a walk that was already happening.
+						 *
+						 * T1: and the same list for the INSIDE half alone -
+						 * the overlap list is asked of that one. */
 						group.cells.push_back(CellKey(v.x, v.y, v.z));
+
+						if (!tris[i].overhang)
+							group.cellsIn.push_back(CellKey(v.x, v.y, v.z));
 
 						if (tris[i].destructId >= 0)
 						{
@@ -2505,6 +2603,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		group.cells.erase(std::unique(group.cells.begin(), group.cells.end()),
 			group.cells.end());
 		group.cells.shrink_to_fit();
+
+		std::sort(group.cellsIn.begin(), group.cellsIn.end());
+		group.cellsIn.erase(std::unique(group.cellsIn.begin(),
+			group.cellsIn.end()), group.cellsIn.end());
+		group.cellsIn.shrink_to_fit();
 
 		/* H1: the horizontal planes, one row per height, sorted by it. The
 		 * per-triangle rows are merged here rather than while they are found,
@@ -2795,15 +2898,26 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		for (int g = 0; g < g_room_groups; g++)
 		{
 			unsigned int here = 0;
+			unsigned int out = 0;
 
 			for (int pass = 0; pass < 3; pass++)
 			{
 				stats->ranges += (int)g_groups[(size_t)g].pass[pass].size();
 				here += g_groups[(size_t)g].triangles[pass];
+				out += g_groups[(size_t)g].overhang[pass];
+
+				// T1: the draw calls the overhang half costs.
+				for (size_t r = 0; r < g_groups[(size_t)g].pass[pass].size(); r++)
+					if (g_groups[(size_t)g].pass[pass][r].overhang)
+						stats->overhangRanges++;
 			}
 
 			if (!here)
 				stats->emptyGroups++;
+			else if (here == out)
+				stats->hollowGroups++;	// T2: nothing at all inside the room
+
+			stats->overhangTris += (int)out;
 		}
 
 		stats->buildMs = now_ms() - build_started;
@@ -3053,7 +3167,7 @@ namespace
 	 * see-through ones. Both other passes are called with it false and
 	 * neither has a blended range in it, so nothing of them changes. */
 	void draw_pass(const HDGroup& group, int pass, const float* wvp,
-		bool blendOnly = false)
+		bool blendOnly = false, int window = HD_WINDOW_ALL, bool sky = false)
 	{
 		if (group.pass[pass].empty())
 			return;
@@ -3128,6 +3242,38 @@ namespace
 			g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 		}
+		else if (sky && pass == 1)
+		{
+			/* T3: THE SKY'S ALPHA PASS BLENDS, IT IS NOT CUT.
+			 *
+			 * The sky group's two alpha-pass parts are the painted dome and
+			 * a cloud sheet, and MEASURED over their own pages the alpha of
+			 * both is a soft ramp: 7003, the dome, has 33.5 % of its texels
+			 * under 16 and 59.2 % over 240 with every value in between, and
+			 * 7101, the sheet, 42.0 % under 16 and 35.9 % over 240. The
+			 * alpha pass throws all of that away - it is a TEST at 0.5, made
+			 * for the cut-out materials, where a texel is either wholly
+			 * there or wholly gone - and what is left of a feathered cloud
+			 * after a test at 0.5 is a hard-edged silhouette. That is the
+			 * "hard edge in the sky" of the play test, and it is in the
+			 * picture RoomProbe -skyonly draws.
+			 *
+			 * So the sky's alpha pass is drawn the way the glass is (H2):
+			 * the source's own alpha against one minus it, and no test. The
+			 * DEPTH WRITE STAYS ON, unlike the glass - the sky sorts inside
+			 * itself in its own depth slice (see HDRenderSky), the dome is
+			 * in front of the sheets at the horizon and behind them
+			 * overhead, and taking the depth write away would lose that
+			 * order. Nothing outside the sky can be affected either way:
+			 * every pixel of the world is nearer than HD_SKY_MINZ. */
+			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+			g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+			constants[0] = 0.0f;
+			alpha_ref = 0.0f;
+			g_device->SetVertexShaderConstantF(4, constants, 1);
+			g_device->SetPixelShaderConstantF(4, constants, 1);
+		}
 		else if (blendOnly)
 		{
 			/* H2: THE GLASS. Ordinary translucency - the source's own alpha
@@ -3147,6 +3293,14 @@ namespace
 			// H2: this phase draws the see-through ranges or the solid ones,
 			// never both - see the note on `blendOnly`.
 			if ((range.blend != 0.0f) != blendOnly)
+				continue;
+
+			/* T1: and this call draws the inside half of the room or its
+			 * overhang, never both - the two are drawn with different
+			 * scissor states. HD_WINDOW_ALL draws every range, which is
+			 * what a room that needs no window is drawn with. */
+			if ((window == HD_WINDOW_INSIDE && range.overhang) ||
+				(window == HD_WINDOW_OVERHANG && !range.overhang))
 				continue;
 
 			/* R3b: a destructible piece Lara has shot away. The classic path
@@ -3311,6 +3465,8 @@ namespace
 			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 			g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 		}
+		else if (sky && pass == 1)
+			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 
 		(void)wvp;
 	}
@@ -3374,7 +3530,7 @@ namespace
 }
 
 bool HDRenderRoomMask(int group, const D3DMATRIX* world,
-	const HDRoomLighting* lighting, unsigned int passes)
+	const HDRoomLighting* lighting, unsigned int passes, int window)
 {
 	float wvp[16];
 
@@ -3386,19 +3542,24 @@ bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 	if (!room.triangles[0] && !room.triangles[1] && !room.triangles[2])
 		return false;	// the .TRG has nothing here - that room stays classic
 
+	/* T3: a group past the last room is the sky, and its alpha pass is
+	 * blended rather than cut - see the long note in draw_pass. It is asked
+	 * here because this is where the group NUMBER is still in hand. */
+	const bool sky = group >= g_room_groups;
+
 	/* E6: the passes the caller asked for, in their own order. One prepare
 	 * per call, so a room drawn in two phases pays two matrix multiplies and
 	 * one light upload more than it did - measured against a frame's draw
 	 * calls, nothing. */
 	for (int pass = 0; pass < 3; pass++)
 		if (passes & (1u << pass))
-			draw_pass(room, pass, wvp);
+			draw_pass(room, pass, wvp, false, window, sky);
 
 	/* H2: and the see-through half of the alpha pass, which is a phase of
 	 * its own because it must come after everything opaque - see
 	 * MaterialBlend and the note on draw_pass's `blendOnly`. */
 	if (passes & HD_PASS_BLEND)
-		draw_pass(room, 1, wvp, true);
+		draw_pass(room, 1, wvp, true, window);
 
 	return true;
 }
@@ -3716,6 +3877,59 @@ bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs)
 		}
 
 	return false;
+}
+
+/* HOW MUCH of a group's art stands in a room-local box (#123, fix round T).
+ *
+ * The counting form of the call above. It walks the group's OWN cell list
+ * rather than the box's cells - the boxes this round asks about are whole
+ * rooms, and a room's box holds tens of thousands of cells while a group's
+ * list holds a few hundred - so the cost is the group's art and not the
+ * question's size. No slack here, unlike HDRenderGroupHasGeometry: the caller
+ * compares the count with the box's own size and a cell of slack on every
+ * side would flatter a small box.
+ *
+ * `interiorOnly` asks the list built from the inside triangles alone. */
+int HDRenderGroupCellsIn(int group, const float* mins, const float* maxs,
+	int interiorOnly)
+{
+	if (group < 0 || group >= (int)g_groups.size() || !mins || !maxs)
+		return 0;
+
+	const std::vector<unsigned int>& cells = interiorOnly
+		? g_groups[(size_t)group].cellsIn : g_groups[(size_t)group].cells;
+	int found = 0;
+
+	for (size_t i = 0; i < cells.size(); i++)
+	{
+		const unsigned int key = cells[i];
+		const float p[3] =
+		{
+			(float)((int)((key >> 20) & 0x3FF) - 128) * 256.0f,
+			(float)((int)((key >> 10) & 0x3FF) - 128) * 256.0f,
+			(float)((int)(key & 0x3FF) - 128) * 256.0f
+		};
+		bool in = true;
+
+		for (int axis = 0; axis < 3; axis++)
+			if (p[axis] + 255.0f < mins[axis] || p[axis] > maxs[axis])
+				in = false;
+
+		if (in)
+			found++;
+	}
+
+	return found;
+}
+
+int HDRenderGroupOverhangTriangles(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	const HDGroup& g = g_groups[(size_t)group];
+
+	return (int)(g.overhang[0] + g.overhang[1] + g.overhang[2]);
 }
 
 int HDRenderDestructibleCount()

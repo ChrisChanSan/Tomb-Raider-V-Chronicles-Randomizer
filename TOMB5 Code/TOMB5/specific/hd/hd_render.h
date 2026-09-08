@@ -186,6 +186,29 @@ struct HDWaterMark
 	unsigned char bits;
 };
 
+/* THE ROOM'S OWN BOX, ROOM LOCAL (#123, fix round T, T1).
+ *
+ * The box TR5 itself calls the inside of a room - game\draw.cpp:1977-1981,
+ * where an item is asked whether it fits wholly inside the room it is in:
+ * `r->x + 1024 .. r->x + (y_size - 1) * 1024` across, the same in z out of
+ * `x_size`, and `maxceiling .. minfloor` in height. The border ring of wall
+ * sectors is NOT in it, and that is the point: the art the remaster puts in
+ * that ring - a wall's relief, a corner pier, a doorway's reveal - stands in
+ * the neighbouring room's space by construction, and the portal window that
+ * was worked out for the room's INSIDE cannot hold it.
+ *
+ * Handed in room local (the .TRG's own frame: x and z relative to the room's
+ * origin, y in world units, which is what the file stores) and in classic
+ * units, one entry per room, in room order. Call it before
+ * HDRenderLevelBegin; the pointer is not kept past that call. Without it
+ * every group is drawn as one piece, which is what fix round T's predecessor
+ * did. */
+struct HDRoomBox
+{
+	float mins[3];
+	float maxs[3];
+};
+
 struct HDRenderStats
 {
 	int trgVersion;
@@ -197,6 +220,13 @@ struct HDRenderStats
 	int indices;
 	int ranges;			// draw calls for a whole level, all rooms, all passes
 	int splitRanges;		// ranges the device's primitive limit forced apart
+	/* Fix round T (T1): triangles standing outside their own room's box, the
+	 * draw calls they cost, and the groups that have NOTHING inside their
+	 * room at all - ten in the whole game, and every one of them a room the
+	 * HD path used to take over and then draw as a black hole. */
+	int overhangTris;
+	int overhangRanges;
+	int hollowGroups;
 	int index32;			// 1 = 32 bit index buffer
 	/* The widest span of vertex numbers ONE draw call reaches over (#123,
 	 * stage S6). It is what decides whether a card with no 32 bit index
@@ -344,6 +374,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 // calling it) leaves every HD vertex unmarked, which is what the diagnostic
 // tool does unless it is asked for water.
 void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
+/* The rooms' own boxes for the level about to be built (#123, fix round T).
+ * Same contract as the water marks: call it before HDRenderLevelBegin, the
+ * pointer is only remembered for the length of that call. */
+void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count);
 void HDRenderLevelEnd();
 
 // --- the frame -------------------------------------------------------------
@@ -427,11 +461,28 @@ void HDRenderScissorOff();
 #define HD_PASS_SOLID		(HD_PASS_OPAQUE | HD_PASS_ALPHA)
 #define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE | HD_PASS_BLEND)
 
+/* WHICH HALF OF A GROUP A CALL IS TO DRAW (#123, fix round T, T1).
+ *
+ * A group's triangles are sorted into two kinds while the index buffer is
+ * filled: those whose centroid stands INSIDE the room's own box (above), and
+ * the OVERHANG - the ones the remaster hung outside it. The two never share
+ * a draw call, because they are drawn with different scissor states: the
+ * inside half inside the portal window the walk gave the room, the overhang
+ * half over the whole screen, which is what the classic path does with every
+ * polygon that straddles the window's rim.
+ *
+ * HD_WINDOW_ALL is one call for the whole group and the state before this
+ * round; a room that needs no window is drawn with it and pays nothing. */
+#define HD_WINDOW_ALL		0
+#define HD_WINDOW_INSIDE	1
+#define HD_WINDOW_OVERHANG	2
+
 // One room, the passes the mask names, world matrix as the classic path would
 // set it (the room's origin translation). False when the group is missing or
 // empty - the caller then draws that room the classic way.
 bool HDRenderRoomMask(int group, const D3DMATRIX* world,
-	const HDRoomLighting* lighting, unsigned int passes);
+	const HDRoomLighting* lighting, unsigned int passes,
+	int window = HD_WINDOW_ALL);
 
 // All three passes - HDRenderRoomMask with HD_PASS_ALL.
 bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting = 0);
@@ -468,6 +519,32 @@ bool HDRenderSky(const D3DMATRIX* world);
  * what MESH_INFO::Flags bit 0 turns into once Lara has shot it. See the long
  * note beside HDDestructible in hd_render.cpp for the measurement. */
 bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs);
+
+/* HOW MUCH of the group's art stands in a room-local box (#123, fix round T).
+ *
+ * The counting form of the call above, and it answers two questions this
+ * round asks that a yes/no cannot:
+ *
+ *   T4, the statics. "Is there ANY art in this lantern's box" turned out to
+ *   be too weak a reason to take a static away: ANDREA2's palm has its trunk
+ *   in one room and its crown in the room above, and the crown's box catches
+ *   FOUR cells of 768 - the wall behind it, not the palm - so the crown was
+ *   suppressed and the .TRG had nothing to put in its place. The caller now
+ *   asks how much and compares it with the box's own size.
+ *
+ *   T1, the overlap list. Whose art stands inside whose room. `interiorOnly`
+ *   counts only the cells of triangles that are inside the group's OWN room
+ *   box - the overhang is drawn without a window anyway, so it cannot be the
+ *   reason to give one to a room.
+ *
+ * The box is room local, in the group's own frame. */
+int HDRenderGroupCellsIn(int group, const float* mins, const float* maxs,
+	int interiorOnly);
+// How many triangles of the group stand outside its own room box, all three
+// passes together (#123, fix round T). A group whose whole art is outside is
+// a group that draws nothing in its own room, and the caller keeps that room
+// classic.
+int HDRenderGroupOverhangTriangles(int group);
 
 /* DOES THE GROUP DRAW ANYTHING IN A GIVEN HORIZONTAL PLANE (#123, fix round
  * H, H1)? Room local, classic units, `slack` the height tolerance. It is what

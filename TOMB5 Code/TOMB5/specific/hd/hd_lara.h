@@ -643,8 +643,8 @@ enum HDLaraPart
 	HD_LARA_PART_HAND_HK,
 	HD_LARA_PART_HAND_DEAGLE,	// TR5's "revolver" slot is a Desert Eagle
 	HD_LARA_PART_HAND_DEAGLE_LASER,
-	HD_LARA_PART_HAND_GRAPPLE,	// TR5's "crossbow" slot is the grappling gun
-	HD_LARA_PART_HAND_GRAPPLE_LASER,
+	HD_LARA_PART_HAND_GRAPPLE,	// TR5's "crossbow" slot is the grappling gun, with
+								// or without the sight bit (fix round O2)
 	HD_LARA_PART_HAND_FLARE,	// left hand only
 	HD_LARA_PART_HAND_TORCH,	// left hand only
 	HD_LARA_PART_HAND_CROWBAR,	// right hand only

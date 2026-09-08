@@ -259,8 +259,6 @@ namespace
 		  "the Desert Eagle, sight",  1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_GRAPPLE",        "HAND_GLOVES_GRAPPLE",
 		  "the grappling gun",        1, -1, "9,10,12,13", -1 },
-		{ "HAND_BARE_CROSSBOW_LASER", "HAND_GLOVES_CROSSBOW_LASER",
-		  "the grappling gun, sight", 1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_FLARE",          "HAND_GLOVES_FLARE",
 		  "the flare",                1, -1, "12,13", -1 },
 		{ "HAND_BARE_TORCH",          "HAND_GLOVES_TORCH",
@@ -393,7 +391,6 @@ namespace
 		{ HD_LARA_PART_HAND_DEAGLE,        0.35f, 34.0f },
 		{ HD_LARA_PART_HAND_DEAGLE_LASER,  0.35f, 34.0f },
 		{ HD_LARA_PART_HAND_GRAPPLE,       0.30f, 30.0f },
-		{ HD_LARA_PART_HAND_GRAPPLE_LASER, 0.30f, 30.0f },
 		{ HD_LARA_PART_HAND_FLARE,         0.12f, 10.0f },
 		{ HD_LARA_PART_HAND_TORCH,         0.12f, 10.0f },
 		{ HD_LARA_PART_HAND_CROWBAR,       0.30f, 30.0f },
@@ -431,10 +428,18 @@ namespace
 	 * TR5's CROSSBOW_ANIM is the GRAPPLING GUN, not a crossbow - the slot
 	 * kept its Tomb Raider IV name and the weapon changed. HAND_BARE_GRAPPLE
 	 * and HOLSTER_GRAPPLE are the models the remaster draws there, which is
-	 * also what TROne's TR5 glue picks. The laser-sight variant is the one
-	 * loose end: the wardrobe has HAND_BARE_CROSSBOW_LASER and no grapple
-	 * equivalent, so the slot LARA_CROSSBOW_LASER takes the crossbow's - a
-	 * picture the user has to judge, and the note says so. */
+	 * also what TROne's TR5 glue picks. LARA_CROSSBOW_LASER is the SAME
+	 * gun (#123, fix round O2, user finding): TR5 has no laser sight for
+	 * the grappling gun - the W_LASERSIGHT bit is a Tomb Raider IV leftover
+	 * that the engine forces onto the weapon at pickup in the VCI levels
+	 * (game\newinv2.cpp, CROSSBOW_ITEM: `W_PRESENT | W_LASERSIGHT |
+	 * W_AMMO1`; laramisc.cpp does the same at a level start) and the
+	 * combine that would clear it is never reachable, so in Lara's hand the
+	 * gun is ALWAYS drawn from LARA_CROSSBOW_LASER. Until this round that
+	 * slot wore HAND_BARE_CROSSBOW_LASER, Tomb Raider IV's crossbow with a
+	 * scope, because the wardrobe ships no grapple-with-sight model - the
+	 * play test saw the crossbow in her hand and the grappling gun on her
+	 * back and on the floor. Both slots now wear HAND_BARE_GRAPPLE. */
 	struct SlotRole
 	{
 		const char* slot;
@@ -453,7 +458,7 @@ namespace
 		{ "REVOLVER_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_DEAGLE },
 		{ "LARA_REVOLVER_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_DEAGLE_LASER },
 		{ "CROSSBOW_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE },
-		{ "LARA_CROSSBOW_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE_LASER },
+		{ "LARA_CROSSBOW_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE },	// fix round O2
 		{ "FLARE_ANIM",           HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_FLARE },
 		{ "TORCH_ANIM",           HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_TORCH },
 		{ "CROWBAR_ANIM",         HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_CROWBAR },
@@ -1910,13 +1915,6 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		return false;
 	}
 
-	/* The one loose end worth a line in every log rather than a comment
-	 * nobody reads: the grappling gun with a laser sight wears the crossbow's
-	 * hands, because the wardrobe has no grapple variant of that model. */
-	if (g_has[HD_LARA_PART_HAND_GRAPPLE_LASER])
-		note("the grappling gun with a sight wears HAND_BARE_CROSSBOW_LASER - "
-			"the wardrobe ships no grapple variant");
-
 	g_active = true;
 	return true;
 }
@@ -2189,8 +2187,7 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 			{ HD_LARA_PART_HAND_DEAGLE_LASER,  HD_LARA_PART_HOLSTER_DEAGLE },
 			{ HD_LARA_PART_HAND_SHOTGUN,       HD_LARA_PART_BACK_SHOTGUN },
 			{ HD_LARA_PART_HAND_HK,            HD_LARA_PART_BACK_HK },
-			{ HD_LARA_PART_HAND_GRAPPLE,       HD_LARA_PART_BACK_GRAPPLE },
-			{ HD_LARA_PART_HAND_GRAPPLE_LASER, HD_LARA_PART_BACK_GRAPPLE }
+			{ HD_LARA_PART_HAND_GRAPPLE,       HD_LARA_PART_BACK_GRAPPLE }
 		};
 
 		for (int i = 0; i < (int)(sizeof(kWorn) / sizeof(kWorn[0])); i++)

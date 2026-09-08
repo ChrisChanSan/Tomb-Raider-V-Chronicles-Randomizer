@@ -8247,6 +8247,41 @@ committed; a 20-odd-line program linking `hd_bind.cpp` alone reproduces the
 old bug (kept pointer for one slot silently changes value after a second
 slot's lookup, or after a failing third lookup) and confirms the fix.
 
+#### Fix round O2 - the grappling gun in Lara's hand (#123)
+
+The play test of fix round O: *"the weapon on Lara's back is the HD grappling
+gun, on the floor too, only as the active weapon in her hand it is still the
+Tomb Raider IV crossbow."* And the user's own explanation, which the engine
+confirms line for line: *"TR5 has no laser sight for the grappling gun, that is
+a TR4 leftover - it is standard on the weapon, forced at pickup."*
+
+**Measured.** `game\larafire.cpp` (`WeaponObject`) draws the gun in the hand
+from `LARA_CROSSBOW_LASER` whenever `lara.crossbow_type_carried` carries
+`W_LASERSIGHT`, and from `CROSSBOW_ANIM` otherwise. In TR5 that bit is never
+off: `game\newinv2.cpp`'s pickup of `CROSSBOW_ITEM` in the VCI levels
+(`LVL5_THIRTEENTH_FLOOR..LVL5_RED_ALERT`) writes `W_PRESENT | W_LASERSIGHT |
+W_AMMO1` outright, the weapons cheat does the same, `game\laramisc.cpp` does
+it at a level start, and `combine_crossbow_lasersight`, the one function that
+clears it, is not reachable from TR5's inventory. So the grappling gun in the
+hand is ALWAYS the `LARA_CROSSBOW_LASER` slot - and the wardrobe
+(`specific\hd\hd_lara.cpp`) had that slot on `HAND_BARE_CROSSBOW_LASER` /
+`HAND_GLOVES_CROSSBOW_LASER`, Tomb Raider IV's crossbow with a scope, since fix
+round C, with a note in every level's log that the picture was the user's to
+judge ("the grappling gun with a sight wears HAND_BARE_CROSSBOW_LASER - the
+wardrobe ships no grapple variant"). The remaster ships `HAND_BARE_GRAPPLE`
+and `HAND_GLOVES_GRAPPLE` in `4\ITEM` and no grapple-with-sight model at all.
+
+**Fix.** `LARA_CROSSBOW_LASER` now maps to the same wardrobe part as
+`CROSSBOW_ANIM`, `HD_LARA_PART_HAND_GRAPPLE` (`hd_lara.cpp`, `kSlotRole`);
+the part `HD_LARA_PART_HAND_GRAPPLE_LASER` is gone from the enum
+(`hd_lara.h`), the part table, the rank table, the worn-pairs table and the
+log note. Nothing else changes: the holster on the back, the pickup on the
+floor and the laser dot (an effect of the engine, not a mesh) are as they
+were. `ModelProbe -lara RICH3 -guns grapple_laser` before and after: the
+crossbow with its scope in her hands, then the grappling gun.
+
+**Classic path.** Untouched - the wardrobe only exists behind the HD guard.
+
 ---
 
 ## Building this yourself

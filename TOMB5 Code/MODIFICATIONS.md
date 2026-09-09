@@ -9266,6 +9266,75 @@ test, and only for a caller that used to be turned away one line earlier.
 
 ---
 
+#### Fix round R - the half turn at 60 fps: the roll (#148)
+
+The play test of fix round T2: *"Classic textures at 60 FPS have the problem
+with the roll too. So it really is the interpolation."* Deferred then, by the
+user's decision; taken up now, after he saw the roll run clean in Todesengel's
+TROne, which has carried 60 fps since its stand of 2026-09-06.
+
+**Measured, TROne first.** `host\render\frame_interp.h/.cpp` and
+`frame_record.h` (GPLv3): the logic stays at 30 Hz, the draw list of one tick
+is recorded with its finished VIEW-space matrices per node and replayed twice,
+once blended at t = 0.5 against the previous tick. The camera delta is
+recovered from a static room transform, rotation goes by quaternion slerp on
+the shortest arc, and four thresholds (512 units, 40 degrees for the camera,
+512 units, 120 degrees for an object) keep the blend off jumps. There is no
+rule about the roll at all. The roll is clean there by construction: the
+blend sees the finished node matrix, in which the item's half turn and the
+animation's opposite half have already cancelled, so per node the matrix moves
+only by the body's real motion between two ticks.
+
+**Measured, ours.** The half turn is `turn180_effect` (`game\effects.cpp:142`):
+`x_rot = -x_rot; y_rot -= 0x8000`, fired by an animation command. `AnimCmd`
+over Lara (slot 0) in ANDREA1 names seven animations, six of them in every
+level and one the level's own: 48 (state 45 `AS_ROLL`, rate 4, its last
+frame), 147 (the second half of the roll - `ANIM_ROLL` 146 continues into it;
+rate 1, its first frame), 205 (state 66 `AS_WATERROLL`, rate 1, its second
+frame), 207 and 210 (state 3, rates 4 and 1, last frame), 212 (state 25, rate
+4, last frame) and 451 (state 120, rate 2, last frame, ANDREA1 only). On that
+tick the animation's own root bone turns the other half, so at thirty presents
+a second the picture is continuous.
+
+Our interpolator blends the root and the pose apart. `InterpLerpAngle` takes
+exactly half a turn the arbitrary anticlockwise way - its own comment called
+that "a snap in the animation, not a rotation" and lerped it anyway - and the
+pose blend is refused on that same tick: by rule K6 where the animation changes
+at the flip (five of the seven fire on their last frame), by `InterpPoseFar`'s
+ninety degrees otherwise. So the live pose is drawn under a root that stands
+ninety degrees off, and Lara is sideways for one tween frame. `fps_mode 0` has
+no tween frame, which is why thirty never showed it.
+
+**Fix.** `InterpHalfTurn` (`game\interpolate_math.h`): a y difference of
+exactly 32768 between the two ticks. `ApplyNode` (`game\interpolate.cpp`)
+blends the position as before and, for such a node, leaves the whole rotation
+at the live value - the effect negates `x_rot` in the same breath, so the
+rotation goes as one. The tween frame at the flip shows the new tick's picture:
+a held frame where there was a sideways one, and every other frame of the roll
+blends exactly as before. The `INTERPLOG` line gains `halfturn=N` per second,
+one per roll. The rule is the one `InterpLerpAngle`'s comment argued for and did
+not enforce; TROne needs none, and nothing of its blend was taken
+(`Preparation\60FPS-Plan.md`, 0.5).
+
+**Not done, on purpose.** Two larger ways were priced and set aside: blending
+the composite yaw of item and root bone (one frame of facing smoothness in the
+middle of a somersault, at the price of a gimbal case where the root bone is
+pitched), and blending per-node matrices as TROne does (a rewrite of the pose
+path, and a decision of its own about animation transitions in general, which
+rule K6 today holds at thirty for one frame each).
+
+**Proof.** `InterpTest`, section `angles`: seven new checks - exactly half a
+turn either way, and `turn180_effect` from every angle on the 512-unit lattice,
+is a half turn; one unit short of it is not; 289 checks, 0 failed. `be.bat` 0
+errors. `fps_mode 0` byte-identical: `ApplyNode` runs on tween frames only.
+
+**Play test.** The roll at 60 fps in third person, several times, on flat
+ground and on a slope; the roll in water; the twist of the jump back; first
+person; then 30 fps as the counter-check. `INTERPLOG`'s `halfturn=` reads one
+per roll.
+
+---
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

@@ -338,6 +338,7 @@ namespace
 	int g_snapRoomJump = 0;
 	int g_snapObject = 0;
 	int g_snapInvalid = 0;
+	int g_snapHalfTurn = 0;	// fix round R: rotations that turned half a turn in one tick and kept the live value
 	int g_snapCamCut = 0;
 	int g_snapCutscene = 0;
 
@@ -476,7 +477,8 @@ namespace
 	}
 
 	// Write the halfway state into one live position, remembering what stood
-	// there. Never called for a node that snapped.
+	// there. Never called for a node that snapped as a whole; a rotation that
+	// turned half a turn is held here (fix round R).
 	void ApplyNode(PHD_3DPOS* pos, const InterpNode* n, SavedNode* save, float alpha)
 	{
 		save->x = pos->x_pos;
@@ -489,6 +491,20 @@ namespace
 		pos->x_pos = LerpLong(n->x, save->x, alpha);
 		pos->y_pos = LerpLong(n->y, save->y, alpha);
 		pos->z_pos = LerpLong(n->z, save->z, alpha);
+
+		/* A HALF TURN IS A SNAP (#148, fix round R). turn180_effect turned this
+		 * node exactly half a turn between the two ticks and the animation's
+		 * own root bone turned the other half; blended apart they do not
+		 * cancel, and the body stands sideways for one tween frame - the roll
+		 * at 60 fps, seen with HD off as well. The whole rotation keeps the
+		 * live value (the effect negates x_rot in the same breath) and only
+		 * the position blends. See InterpHalfTurn in interpolate_math.h. */
+		if (InterpHalfTurn(n->yr, save->yr))
+		{
+			g_snapHalfTurn++;
+			return;
+		}
+
 		pos->x_rot = LerpAngle(n->xr, save->xr, alpha);
 		pos->y_rot = LerpAngle(n->yr, save->yr, alpha);
 		pos->z_rot = LerpAngle(n->zr, save->zr, alpha);
@@ -753,6 +769,16 @@ namespace
 	 *                rule, which answers yes to hands that have simply been
 	 *                standing still in a field nobody clears.
 	 *
+	 * FIX ROUND R ADDS ONE (#148):
+	 *
+	 *   halfturn     rotations that turned exactly half a turn between the
+	 *                two ticks and kept the live value instead of a blend -
+	 *                see InterpHalfTurn (game\interpolate_math.h). That is
+	 *                turn180_effect firing, once per roll: a run through a
+	 *                level reads a handful, a still second reads nought, and
+	 *                a large number means something turns half a turn that
+	 *                should not.
+	 *
 	 * AND ORDER 5 ADDS TWO MORE, which are about the small moving things
 	 * rather than about the bodies:
 	 *
@@ -779,7 +805,7 @@ namespace
 			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d "
 				"alpha=%.2f/%.2f/%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
-				"object=%d invalid=%d) camcut=%d (type=%d spot=%d eye=%d aim=%d) "
+				"object=%d invalid=%d) halfturn=%d camcut=%d (type=%d spot=%d eye=%d aim=%d) "
 				"cutscene=%d "
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
@@ -792,7 +818,7 @@ namespace
 				(double)g_secItems / g_secFrames,
 				g_snapTeleport + g_snapRoomJump + g_snapObject + g_snapInvalid,
 				g_snapTeleport, g_snapRoomJump, g_snapObject, g_snapInvalid,
-				g_snapCamCut, g_cutType, g_cutSpot, g_cutEye, g_cutAim,
+				g_snapHalfTurn, g_snapCamCut, g_cutType, g_cutSpot, g_cutEye, g_cutAim,
 				g_snapCutscene,
 				(double)g_secPose / g_secFrames,
 				(double)g_secPoseSkip / g_secFrames,
@@ -842,6 +868,7 @@ namespace
 		g_snapRoomJump = 0;
 		g_snapObject = 0;
 		g_snapInvalid = 0;
+		g_snapHalfTurn = 0;
 		g_snapCamCut = 0;
 		g_cutType = 0;
 		g_cutSpot = 0;

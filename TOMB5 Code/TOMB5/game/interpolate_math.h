@@ -42,12 +42,43 @@
  * Exactly half a turn (a difference of 32768) has no shorter way round and
  * comes out as -32768, i.e. it turns anticlockwise. That is arbitrary and it
  * is deterministic, which is all it has to be - a body that turns 180 degrees
- * in one thirtieth of a second is a snap in the animation, not a rotation. */
+ * in one thirtieth of a second is a snap in the animation, not a rotation.
+ * Fix round R made that literal: InterpHalfTurn below names the case, and
+ * ApplyNode (game\interpolate.cpp) does not blend a rotation that is one. */
 inline short InterpLerpAngle(short a, short b, float alpha)
 {
 	const short d = (short)(b - a);
 
 	return (short)(a + (short)((float)d * alpha));
+}
+
+/* A HALF TURN IN ONE TICK IS A SNAP (#148, fix round R).
+ *
+ * turn180_effect (game\effects.cpp) is the one thing in this engine that
+ * turns an item by exactly 32768 between two ticks: `y_rot -= 0x8000`, and
+ * x_rot negated in the same breath. Seven of Lara's animations fire it from
+ * an animation command (AnimCmd over ANDREA1: 48, 147, 205, 207, 210, 212 and
+ * the level's own 451 - the roll, the roll in water, the twist of the jump
+ * back), most of them on their last frame, and the animation's own root bone
+ * turns the other half so that the picture at thirty presents a second is
+ * continuous.
+ *
+ * Blended apart, the two halves do not cancel. The root took the arbitrary
+ * anticlockwise half of InterpLerpAngle above, while the pose was refused on
+ * that same tick - by rule K6 where the animation changes at the flip, by
+ * InterpPoseFar's ninety degrees where it does not - and so was already the
+ * new one: Lara stood sideways for one tween frame. The play test saw it
+ * with HD off as well, which is what named the blend. TROne has no such rule
+ * because it blends the finished node matrices, in which the two halves have
+ * cancelled before the blend; nothing of that was taken here.
+ *
+ * So a node whose y difference is exactly half a turn is not blended in
+ * rotation at all: the whole rotation keeps the live value and only the
+ * position blends. Nothing turns half a turn in a thirtieth of a second
+ * under its own power; the rule can only ever meet a snap. */
+inline bool InterpHalfTurn(short a, short b)
+{
+	return (short)(b - a) == (short)-32768;
 }
 
 /* Positions are integers in this engine and stay integers: the truncation is

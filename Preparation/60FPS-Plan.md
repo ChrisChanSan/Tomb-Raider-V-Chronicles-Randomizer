@@ -218,6 +218,11 @@ Should the room-transform delta or the sub-unit room precision be adopted
 later, that adoption carries a GPLv3 attribution to TROne. The comparison
 is in `Preparation\TROne-Diff-2026-09-07.md`.
 
+**Addendum 2026-09-09.** Fix round R took the roll's half turn as a snap of
+our own (`InterpHalfTurn`, `game\interpolate_math.h`): TROne needs no such
+rule because it blends the finished node matrices, in which the two halves of
+the turn have already cancelled, and nothing of its blend was used.
+
 ### 0.6 The known pattern (TR1X, OpenLara, the Remasters) - and how it maps onto this tree
 
 The state of the art is: logic stays at 30 Hz, the renderer runs faster

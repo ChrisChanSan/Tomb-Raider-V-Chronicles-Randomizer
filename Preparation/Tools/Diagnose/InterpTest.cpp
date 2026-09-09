@@ -129,6 +129,41 @@ static void angles()
 	ok(InterpLerpAngle(0, -32768, 0.5F) == -16384, "half a turn is anticlockwise",
 		InterpLerpAngle(0, -32768, 0.5F), -16384);
 
+	/* FIX ROUND R (#148): a half turn is a SNAP for a node, not a blend -
+	 * InterpHalfTurn is the question ApplyNode (game\interpolate.cpp) asks
+	 * before it blends a rotation, and turn180_effect (game\effects.cpp) is
+	 * the one thing that makes the answer yes: y_rot -= 0x8000. Exactly half
+	 * a turn either way is one; a unit short of it is a turn like any other. */
+	ok(InterpHalfTurn(0, -32768), "0 -> -32768 is a half turn",
+		InterpHalfTurn(0, -32768), 1);
+	ok(InterpHalfTurn(-32768, 0), "-32768 -> 0 is a half turn",
+		InterpHalfTurn(-32768, 0), 1);
+	ok(InterpHalfTurn(1000, -31768), "1000 -> -31768 is a half turn",
+		InterpHalfTurn(1000, -31768), 1);
+	ok(!InterpHalfTurn(0, 32767), "0 -> 32767 is a turn, not a half turn",
+		InterpHalfTurn(0, 32767), 0);
+	ok(!InterpHalfTurn(0, -32767), "0 -> -32767 is a turn, not a half turn",
+		InterpHalfTurn(0, -32767), 0);
+	ok(!InterpHalfTurn(12345, 12345), "no turn is no half turn",
+		InterpHalfTurn(12345, 12345), 0);
+
+	{
+		// turn180_effect itself, from every angle on the 512-unit lattice.
+		int missed = 0;
+
+		for (int a = -32768; a < 32768; a += 512)
+		{
+			const short from = (short)a;
+			const short to = (short)(from - 0x8000);
+
+			if (!InterpHalfTurn(from, to))
+				missed++;
+		}
+
+		ok(missed == 0, "turn180_effect from every lattice angle is a half turn",
+			missed, 0);
+	}
+
 	/* THE SWEEP. Every pair of angles on a 512-unit lattice - 16,384 pairs -
 	 * blended at a half, asserting three things at once:
 	 *

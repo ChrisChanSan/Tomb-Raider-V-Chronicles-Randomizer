@@ -9311,8 +9311,8 @@ blends the position as before and, for such a node, leaves the whole rotation
 at the live value - the effect negates `x_rot` in the same breath, so the
 rotation goes as one. The tween frame at the flip shows the new tick's picture:
 a held frame where there was a sideways one, and every other frame of the roll
-blends exactly as before. The `INTERPLOG` line gains `halfturn=N` per second,
-one per roll. The rule is the one `InterpLerpAngle`'s comment argued for and did
+blends exactly as before. The `INTERPLOG` line gains `halfturn=N` per second - one per roll, and the
+braid's own flips besides (fix round W's addendum below). The rule is the one `InterpLerpAngle`'s comment argued for and did
 not enforce; TROne needs none, and nothing of its blend was taken
 (`Preparation\60FPS-Plan.md`, 0.5).
 
@@ -9332,6 +9332,88 @@ errors. `fps_mode 0` byte-identical: `ApplyNode` runs on tween frames only.
 ground and on a slope; the roll in water; the twist of the jump back; first
 person; then 30 fps as the counter-check. `INTERPLOG`'s `halfturn=` reads one
 per roll.
+
+---
+
+#### Fix round W - the ninth step of the screen fade: the black tick in every fade-in at 60 fps (#148)
+
+The play test of fix round R, at a 165 Hz panel in `fps_mode 1`: *"when I
+load the game the picture flickers black about three times, level- and
+movement-independent, not at 30 fps"*, then, with three screenshots and a
+video: *"at the fade-in"*, and *"the other flicker looks the same in the
+game"*.
+
+**Measured, the video first.** 670 frames at 60 in 11.17 s, three load
+cycles. In each: the menu's fade to black, the loading picture, the black of
+the load itself, then the level's fade-in begins (mean brightness 4.6 of 255)
+- and 0.22 s into it TWO frames of pure black (mean 0.0), then the fade-in
+goes on (12.1). Two frames at sixty are 33 ms: one logic tick. Not a single
+present, a whole tick's worth of them.
+
+**Measured, the log.** Nothing in the seams: no `ROOMLIST` with `rooms=0`,
+all 13 `ROOMFLASH` lines `empty` (the rim of the picture, T3's finding),
+`TICKLOG fade=16 screenfade=9` at every level start, `Fade()` and
+`DoScreenFade()` drawing the same grey on in-between frames (R1, R2). The
+room walk and the fades' walks were clean. (`Non present sample:N` in the
+same log is `game\sound.cpp`'s line about a missing sound sample, nothing
+to do with presents.)
+
+**Measured, the code.** `SetFade(start, end)` (`specific\specificfx.cpp`)
+sets `FadeStep = (end - start) >> 3` and `DoScreenFade` walks `FadeVal` by
+it once per logic tick, reads `a = FadeVal << 24` BEFORE the step, and on the
+ninth call (`FadeCnt > 8`) puts `FadeEnd` over `a` and sets `DoFade = 2`. For
+the fade-in every level starts with (`SetFade(255, 0)`, `game\gameflow.cpp`
+`DoLevel`; also `DoTitle` and `RenderLoadPic`) the step is -32, and the
+eighth step lands on 255 - 256 = **-1**, which shifted into the colour is
+`0xFF000000`: alpha 255, black. At thirty presents a second that value is
+read exactly once - by the ninth call, which overrides it - so the thirty
+hertz picture never shows it. At sixty and above, every in-between frame
+between the eighth and the ninth tick draws `a = FadeVal << 24` as it stands:
+one tick of full black, Lara included, in the middle of every fade-in. That
+is the video's two frames, the "not at 30", the "level-independent", and the
+"at the fade-in". The fade-out direction (`SetFade(0, 255)`, step 31) lands
+on 248 and never overshoots; `Fade()`'s grey tile clamps inside its own step
+and never did.
+
+**Fix.** `InterpFadeClamp` (`game\interpolate_math.h`): once the walked value
+has passed `end` it IS `end`. `DoScreenFade` applies it right after the step.
+The ninth tick drew `end` anyway, so no thirty hertz picture changes - the
+proof plays the nine ticks through in both directions and compares them with
+what they always drew - and the in-between frames after the eighth tick now
+draw `end` as well. Two lines in the engine.
+
+**Proof.** `InterpTest`, section `fade`: seven new checks - the nine ticks of
+255 -> 0 and 0 -> 255 draw what they always drew, the eighth step of 255 -> 0
+lands on -1 unclamped and the in-between frame after it now draws 0, the
+eighth step of 0 -> 255 lands on 248 and stays 248, and -1 shifted into the
+colour is alpha 255 - 296 checks, 0 failed. `be.bat` 0 errors. `fps_mode 0`
+byte-identical by the same arithmetic.
+
+**Play test.** Load a savegame at 60 (or whatever the panel gives) several
+times: the fade-in must run through without a black tick; the title's start
+and the loading picture the same; 30 as the counter-check. The flickers the
+user saw "randomly in between" and says look the same: after this build, say
+whether they are still there. `SetFade(255, 0)` runs at a level start, the
+title and the loading picture and nowhere else, so a black tick anywhere
+else is NOT this and wants the present seam that fix round V was going to
+build (see below).
+
+**Addendum to fix round R.** The same log shows `halfturn=` five or six a
+second while Lara stands still, and 39 in one second of ANDREA1. That is not
+the roll: it is the BRAID. `HAIRLOG` logs `dyaw 180` on the same seconds -
+when a braid segment hangs straight down its yaw is undefined and flips by
+exactly half a turn from one tick to the next, and R's rule now holds those
+flips at the live value instead of blending them a quarter turn sideways.
+Harmless (a vertical segment turning about its own axis), and if anything an
+improvement; the line "one per roll" in fix round R was corrected to say so.
+
+**Noted, not changed.** `S_DrawLoadBar` (`specific\drawbars.cpp`) draws only
+the bar onto whatever the back buffer holds and presents, with
+`D3DSWAPEFFECT_DISCARD` and one back buffer (`specific\dxshell.cpp`), whose
+content after a present the D3D9 contract calls undefined. It has always
+been so and no play test has shown it; it is on the audit's list, with the
+present seam (a line per present that drew nothing, or nothing but a fade
+tile) as the way to see it if it ever does.
 
 ---
 

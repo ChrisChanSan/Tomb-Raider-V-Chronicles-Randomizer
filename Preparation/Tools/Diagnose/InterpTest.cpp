@@ -226,6 +226,65 @@ static void angles()
 
 /* ---------------------------------------------------------- the positions -- */
 
+/* FIX ROUND W (#148): the ninth step of a screen fade. SetFade's arithmetic
+ * as specific\specificfx.cpp does it - eight steps of (end - start) >> 3, the
+ * ninth call draws `end` - played through in both directions, once as the
+ * thirty hertz ticks see it (the value read BEFORE the step, `end` on the
+ * ninth) and once as an in-between frame between the eighth and the ninth
+ * tick sees it (the value AFTER the eighth step). */
+static void fade()
+{
+	printf("fade - the ninth step of a screen fade\n");
+
+	const long dirs[2][2] = { { 255, 0 }, { 0, 255 } };
+	const long classic[2][9] = {
+		{ 255, 223, 191, 159, 127, 95, 63, 31, 0 },
+		{ 0, 31, 62, 93, 124, 155, 186, 217, 255 } };
+
+	for (int d = 0; d < 2; d++)
+	{
+		const long start = dirs[d][0], end = dirs[d][1];
+		const long step = (end - start) >> 3;
+		long val = start, cnt = 0, rawAfter8 = -1000, tweenAfter8 = -1000;
+		int wrong = 0;
+
+		for (int tick = 1; tick <= 9; tick++)
+		{
+			long drawn = val;		// read before the step, as DoScreenFade does
+			val += step;
+			cnt++;
+			const long raw = val;
+			val = InterpFadeClamp(val, step, end);
+			if (cnt > 8)
+				drawn = end;
+			if (drawn != classic[d][tick - 1])
+				wrong++;
+			if (tick == 8)
+			{
+				rawAfter8 = raw;
+				tweenAfter8 = val;
+			}
+		}
+
+		if (d == 0)
+		{
+			ok(wrong == 0, "255 -> 0: the nine ticks draw what they always drew", wrong, 0);
+			ok(rawAfter8 == -1, "255 -> 0: the eighth step lands on -1 unclamped", rawAfter8, -1);
+			ok(tweenAfter8 == 0, "255 -> 0: the in-between frame after the eighth tick draws 0, not alpha 255", tweenAfter8, 0);
+		}
+		else
+		{
+			ok(wrong == 0, "0 -> 255: the nine ticks draw what they always drew", wrong, 0);
+			ok(rawAfter8 == 248, "0 -> 255: the eighth step lands on 248", rawAfter8, 248);
+			ok(tweenAfter8 == 248, "0 -> 255: the in-between frame after the eighth tick draws 248, unchanged", tweenAfter8, 248);
+		}
+	}
+
+	// The colour the engine builds from the unclamped value: alpha 255, black.
+	const long black = (long)((unsigned long)-1L << 24);
+	ok(black == (long)0xFF000000, "-1 shifted into the colour is alpha 255 - the black tick", black, (long)0xFF000000);
+}
+
 static void positions()
 {
 	printf("positions\n");
@@ -2211,6 +2270,7 @@ int main()
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
 
 	angles();
+	fade();
 	positions();
 	thresholds();
 	camera_aim();

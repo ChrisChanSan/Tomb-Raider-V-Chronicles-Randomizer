@@ -81,6 +81,32 @@ inline bool InterpHalfTurn(short a, short b)
 	return (short)(b - a) == (short)-32768;
 }
 
+/* THE NINTH STEP OF A SCREEN FADE (#148, fix round W).
+ *
+ * SetFade (specific\specificfx.cpp) walks FadeVal from `start` to `end` in
+ * eight steps of (end - start) >> 3, and DoScreenFade calls the ninth call
+ * the end: it reads the value BEFORE it steps, and on the ninth call it puts
+ * `end` over whatever it read. For 255 -> 0 the step is -32 and eight of
+ * them land on -1 - which is alpha 255 once shifted into the colour. At
+ * thirty presents a second that never shows, because the ninth call is the
+ * one that reads it and it overrides. Every in-between frame between the
+ * eighth and the ninth tick read it as it stood: a whole tick of black in
+ * the middle of every level's fade-in - the play test's "flickers black when
+ * I load", the video's two black frames at sixty.
+ *
+ * Clamped to the end once past it. The ninth tick drew `end` anyway, so no
+ * thirty hertz picture changes; the in-between frames draw `end` too. For a
+ * walk that does not overshoot (0 -> 255 lands on 248) nothing changes at
+ * all. */
+inline long InterpFadeClamp(long val, long step, long end)
+{
+	if (step < 0 && val < end)
+		return end;
+	if (step > 0 && val > end)
+		return end;
+	return val;
+}
+
 /* Positions are integers in this engine and stay integers: the truncation is
  * at most one unit, a TR sector is 1024 of them, and handing a float position
  * to a matrix stack that works in longs would only move the rounding

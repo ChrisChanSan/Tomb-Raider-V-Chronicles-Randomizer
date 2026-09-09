@@ -1286,7 +1286,9 @@ void DoScreenFade()
 	 *
 	 * The in-between frame draws the SAME grey - `a` is read before the
 	 * step, so it is what the frame before it drew - and the tile below is
-	 * built and drawn on every frame.
+	 * built and drawn on every frame. Except once: after the eighth step the
+	 * walked value has overshot the end, and until fix round W the
+	 * in-between frames drew THAT - see the clamp below.
 	 *
 	 * RenderLoadPic's loop is also the reason the tween latch has to be put
 	 * down by a thirty hertz present: it is the one loop in the build that
@@ -1296,6 +1298,18 @@ void DoScreenFade()
 		FadeVal += FadeStep;
 		FadeCnt++;
 		InterpNoteStep(INTERP_STEP_SCREENFADE);
+
+		/* THE NINTH STEP (#148, fix round W). Eight steps of (end - start)
+		 * >> 3 overshoot the end: 255 -> 0 walks in -32s and lands on -1,
+		 * which is alpha 255 once shifted into `a`. At thirty this never
+		 * shows - the ninth call reads `a` first and then puts FadeEnd over
+		 * it below - but every in-between frame between the eighth and the
+		 * ninth tick read the overshoot as it stood: a whole tick of black
+		 * in the middle of every level's fade-in, the play test's "flickers
+		 * black when I load" and the video's two black frames. Clamped to
+		 * the end once past it; the ninth tick drew FadeEnd anyway, so no
+		 * thirty hertz picture changes. See InterpFadeClamp. */
+		FadeVal = InterpFadeClamp(FadeVal, FadeStep, FadeEnd);
 	}
 
 	if (FadeCnt > 8)

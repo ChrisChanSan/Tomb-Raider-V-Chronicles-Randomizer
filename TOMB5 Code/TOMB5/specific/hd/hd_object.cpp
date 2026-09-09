@@ -55,11 +55,12 @@
  * shader is 32 registers wide, so 32 is the number everywhere. */
 #define HD_OBJ_NODES	32
 
-/* How many HD items one frame can hold. draw_rooms holds 100 rooms and every
- * one of them can hold items, so this is not a bound anybody can reason about
- * from the level data - it is a fixed array with a counter, and the counter
- * goes into the log if it ever bites. 128 items is 1.1 MiB of static, which
- * is the price of a frame path that cannot fail. */
+/* How many HD items one frame can hold. draw_rooms holds as many rooms as a
+ * level may have (256 since fix round T5) and every one of them can hold
+ * items, so this is not a bound anybody can reason about from the level data
+ * - it is a fixed array with a counter, and the counter goes into the log if
+ * it ever bites. 128 items is 1.1 MiB of static, which is the price of a
+ * frame path that cannot fail. */
 #define HD_OBJ_ITEMS	128
 
 /* PSEUDO SLOTS FOR THE ALTERNATIVE MODELS (#123, fix round B, B3). Chosen

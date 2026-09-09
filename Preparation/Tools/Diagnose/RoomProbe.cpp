@@ -1282,10 +1282,12 @@ namespace walkoff
 	};
 
 	static std::vector<Room> g_room;
-	/* The engine's ring is draw_room_list[128] (game\draw.cpp:114) and its
-	 * list draw_rooms[100] (:111). The tool's is deliberately WIDER, because
-	 * its job is to say how often the engine's own two would have been passed
-	 * - see g_queue_peak and the survey's over60/over100 counters. */
+	/* The engine's ring is draw_room_list[kRoomListRing] and its list
+	 * draw_rooms[kDrawRoomsMax] (game\draw.cpp, the note over both) - 512 and
+	 * 256 since fix round T5, 128 and 100 before it. The tool's is
+	 * deliberately WIDER than either, because its job is to say how often the
+	 * engine's own two would have been passed - see g_queue_peak and the
+	 * survey's over60/over100 counters. */
 	static const long kRing = 4096;
 	static long g_list[kRing];
 	static long g_start, g_end;
@@ -2120,7 +2122,10 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 	 * reach, so every line of the table below is one eye, one direction and
 	 * two rules. */
 	long sumClassic = 0, sumReach = 0;
-	int mostClassic = 0, mostReach = 0, over60 = 0, over100 = 0;
+	/* T5: the two budgets, the old one and the new one, because what a named
+	 * eye is asked for now is what the safety valve does to it. These are the
+	 * WALK's own list sizes, before the engine's no-art trim. */
+	int mostClassic = 0, mostReach = 0, over64 = 0, over128 = 0;
 	int reachOnlyWorst = 0;
 	long queuePeak = 0, worstDequeues = 0;
 	int capped = 0;
@@ -2153,8 +2158,8 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 
 			if (classicRooms > mostClassic) mostClassic = classicRooms;
 			if (now > mostReach) mostReach = now;
-			if (now > 60) over60++;
-			if (now > 100) over100++;
+			if (now > 64) over64++;
+			if (now > 128) over128++;
 
 			if (walkoff::g_reach_only > reachOnlyWorst)
 				reachOnlyWorst = walkoff::g_reach_only;
@@ -2253,12 +2258,13 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			"reach mean %.1f max %d\n", (double)sumClassic / frames,
 			mostClassic, (double)sumReach / frames, mostReach);
 		printf("-reach: most rooms one frame owes to the reach alone: %d; "
-			"deepest queue %ld (the engine's ring holds 128)\n",
+			"deepest queue %ld (the engine's ring holds 512 since T5)\n",
 			reachOnlyWorst, queuePeak);
 		printf("-reach: worst frame took %ld dequeues; %d frame(s) hit the "
 			"cap of %ld\n", worstDequeues, capped, walkoff::kWalkMax);
-		printf("-reach: frames over 60 rooms: %d of %d; over 100 (draw_rooms "
-			"is short[100]): %d\n", over60, frames, over100);
+		printf("-reach: frames over the old budget of 64: %d of %d; over the "
+			"new one of 128: %d (draw_rooms holds 256)\n",
+			over64, frames, over128);
 		printf("-reach: the direction that gains most: yaw %.1f pitch %.1f, "
 			"%d rooms -> %d (+%d)\n", bestYaw, bestPitch, bestClassic,
 			bestReach, bestGain);
@@ -2335,9 +2341,11 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
  * gets its turn either way.
  *
  * What it prints is one line per level: the mean and the worst frame under
- * each rule, how often the reach passes 60 and 100 rooms (draw_rooms is
- * short[100], game\draw.cpp:111), how deep the queue ever got against the
- * engine's ring of 128, and the single room and direction that gains most. */
+ * each rule, how often the reach passes 60 and 100 rooms, how deep the queue
+ * ever got against the engine's ring - 512 places since fix round T5, and
+ * draw_rooms 256 with it - and the single room and direction that gains most.
+ * The second line is the budget distribution the safety valve's number comes
+ * out of, nine columns since T5. */
 static int RunReachSurvey(const std::string& folder, const char* stem,
 	const double* yawFan, const double* pitchFan, long width, long height,
 	double fov, int step)
@@ -2352,9 +2360,11 @@ static int RunReachSurvey(const std::string& folder, const char* stem,
 	int capped = 0;
 	/* T4-4: how many frames a budget of N rooms would trim, for six values
 	 * of N. The safety valve's number comes out of this column and not out
-	 * of a round figure. */
-	static const int kBudget[6] = { 32, 40, 48, 56, 64, 80 };
-	long overBudget[6] = { 0, 0, 0, 0, 0, 0 };
+	 * of a round figure. T5 added the three that matter once draw_rooms
+	 * holds 256 - 96, 112 and 128 - because the T4 table stopped at 80 and
+	 * the play test asked for the valve to be opened further. */
+	static const int kBudget[9] = { 32, 40, 48, 56, 64, 80, 96, 112, 128 };
+	long overBudget[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	int bestGain = -1, bestRoom = -1, bestClassic = 0, bestReach = 0;
 	double bestYaw = 0, bestPitch = 0;
 	long reachOnlySum = 0;
@@ -2399,7 +2409,7 @@ static int RunReachSurvey(const std::string& folder, const char* stem,
 			if (now > 60) over60++;
 			if (now > 100) over100++;
 
-			for (int b = 0; b < 6; b++)
+			for (int b = 0; b < 9; b++)
 				if (now > kBudget[b])
 					overBudget[b]++;
 
@@ -2444,10 +2454,13 @@ static int RunReachSurvey(const std::string& folder, const char* stem,
 		worstDequeuesClassic, capped, bestGain, bestRoom, bestYaw,
 		bestPitch, bestClassic, bestReach);
 	printf("-reachbudget %-9s frames over a budget of "
-		"32/40/48/56/64/80 rooms: %.1f%% %.1f%% %.1f%% %.1f%% %.1f%% %.1f%%\n",
+		"32/40/48/56/64/80/96/112/128 rooms: %.1f%% %.1f%% %.1f%% %.1f%% "
+		"%.1f%% %.1f%% %.1f%% %.1f%% %.1f%%\n",
 		stem, 100.0 * overBudget[0] / frames, 100.0 * overBudget[1] / frames,
 		100.0 * overBudget[2] / frames, 100.0 * overBudget[3] / frames,
-		100.0 * overBudget[4] / frames, 100.0 * overBudget[5] / frames);
+		100.0 * overBudget[4] / frames, 100.0 * overBudget[5] / frames,
+		100.0 * overBudget[6] / frames, 100.0 * overBudget[7] / frames,
+		100.0 * overBudget[8] / frames);
 	return 0;
 }
 

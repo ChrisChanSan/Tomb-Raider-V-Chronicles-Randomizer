@@ -9912,6 +9912,281 @@ untouched, so thirty hertz is byte for byte what it was. Build: 0 errors, 0
 warnings; the game folder was locked at build time, so the executable stayed
 in `release\` (22:55:05, md5 d82d8d88).
 
+#### Fix round T5 - capacity to the engine's room maximum and the valve at 128 (#123, #148)
+
+Fix round T4 shipped three things at once: the reach, two counted capacity
+guards, and a safety valve at 64 rooms. The play test of 2026-09-09 - two runs
+of the T4 build (`PCtomb5 built Sep 9 2026 22:55:03`) on a 165 Hz panel with
+HD on - says the first of the three is right, the second never fired, and the
+third is set too low. The player's decision on the third was one sentence:
+raise the limit straight away, so that there is headroom.
+
+* **The two fixes hold.** The torn wall of JOBY2 and the tower of Trajan's
+  Markets are both closed - *"T4 ist fixed"*.
+* **Neither guard ever fired.** All **107** `ROOMWALK reach` lines of the two
+  logs read `cap hit=0`.
+* **But the valve was open for twenty seconds at a stretch, twice.** In JOBY2
+  (log seconds 49 to 72) and in the courtyard of Trajan's Markets (seconds 113
+  to 119) the per-frame `ROOMLIST` lines sit at **exactly 64 rooms** and never
+  above it, with **up to 30 reach-only rooms dropped in a single frame**;
+  three seconds of ANDREA2 have a mean list of `64.0`, which is every frame of
+  that second at the budget. Over the twenty one-second lines that trimmed
+  anything at all, **23,011 rooms were dropped**, the worst second 3,604 - 22
+  a frame at 165 frames a second.
+* **And that shows in the picture.** `ROOMFLASH` names three rooms of ANDREA2
+  - **230** (frame 15940), **47** (15984) and **229** (16007) - missing with a
+  `reach[...]` of their own, which is precisely the seam's way of saying *the
+  walk reached this room and something downstream dropped it*. Distant art
+  popping, which is what fix round T3 set out to end.
+* **The frame had headroom while it did this.** At 64 rooms and 690 HD draws
+  (the log's highest anywhere is **754**), `FPSLOG` reads `real_fps=165.1
+  avg_ms=6.1 late=0`, and the `PROFLOG` line of the same second says where
+  those 6.1 ms go: `frame=6.06/6.97 work=6.02/6.97 flip=5.35/6.32`. The frame
+  is waiting for the display. The thirteen ANDREA2 seconds are the same -
+  `real_fps=165.0 avg_ms=6.1 late=0` at 63 to 64 rooms.
+
+So the valve is the thing to open, and while it is being opened the two arrays
+under it are worth taking to the engine's own maximum rather than to the next
+round figure.
+
+---
+
+**T5-1 - the two arrays, and why no level can fill them.**
+
+`draw_rooms` goes from `short[100]` to **`short[kDrawRoomsMax]`, 256**, and
+`draw_room_list` from a 128 entry ring to **`long[kRoomListRing]`, 512**
+(`game\draw.cpp`, the note over both). Both sizes are named constants now, and
+the ring's every literal went with it: the two writes (`SetRoomBounds` and
+`SetRoomBoundsReach`), the two `>= 128` guards beside them and the dequeue in
+`GetRoomBounds`, which is the read side and the one a half-done rename would
+have left behind. The wrap is written `& (kRoomListRing - 1)` rather than
+`% 128`; the two agree exactly because `room_list_start` and `room_list_end`
+are reset to 0 at the top of every walk and only ever counted up, so neither
+is ever negative, and the size is a power of two.
+
+Neither number is a guess:
+
+* **256 is the engine's own room maximum.** `BuildOutsideTable`
+  (`game\setup.cpp:2418`) refuses a level with more than 256 rooms outright
+  and says so in a message box. A room enters `draw_rooms` exactly once per
+  frame - that is the `bound_active & 1` test in `GetRoomBounds` - so no
+  loadable level can fill the array.
+* **512 is twice the deepest queue that can exist.** A room is queued only
+  while `bound_active & 2` is clear and queueing sets that bit, which the
+  dequeue clears again: **at most one entry per room is pending at any
+  moment**, so the queue's depth is bounded by the room count, 256. (A room
+  may be queued again after it has been dequeued, which is why one frame can
+  take more dequeues than the level has rooms - 319 is the worst measured -
+  but the DEPTH cannot pass 256.) Measured against that bound, the deepest
+  queue over the fifteen levels is **70**, in JOBY4. That number does not move
+  with the budget and cannot: `ReachTrimRooms` runs after the walk is over, on
+  the list and not on the queue, so what the queue does is the same at 64 as
+  at 128.
+
+The guards of T4-3 stay, and stay counted as `cap hit=` in `ROOMWALK`. They
+are backstops now rather than limits - no level the engine will load can reach
+either of them - and they are kept because "cannot happen" and "is not
+counted" together are how the hole they were built for got there.
+
+**Three tables that had to follow the list, and one that did not.** The
+`ROOMLIST` note (`draw.cpp`, `RoomWalkNote`) copies `draw_rooms` into arrays
+of its own, three frames deep; they were `[100]` with the count clamped to
+them, so a longer list truncated silently and `ROOMFLASH` would have called
+every room past the hundredth missing on every frame in a row. They are
+`[kDrawRoomsMax]` now: three static notes of about 4.7 KiB, copied only while
+`-log` is on. `HD_MAX_FRAME` (`specific\hd\hd_level.cpp`) is the HD path's
+per-frame room table, one entry per listed room from `InsertRoom`; it was 128
+against a list of 100, which was headroom, and against a budget of 128 it
+would have been the exact worst case with none - so it follows to 256, at
+`sizeof(FrameRoom)` = 380 bytes, 47.5 KiB more BSS. The `seen[128]` near
+`draw.cpp:800` does **not** follow: it is CLIPLOG's table of (slot, anim)
+pairs and has nothing to do with the walk, and neither have the `after_death`
+128s or `GetRandomDraw() & 127`.
+
+---
+
+**T5-2 - the ordering finding of the T4 review, answered by arithmetic.**
+
+The review of T4 left this: the capacity guards fire DURING the walk while
+`ReachTrimRooms` runs only after it, so at a full `draw_rooms` a room with a
+classic window - a room the walk has always drawn - could be refused while
+reach-only rooms held places, and no eviction rule existed to prefer the
+classic one.
+
+With 256 places the case cannot arise. It is not that it is unlikely: one
+entry per room and at most 256 rooms means the array cannot be full while any
+room is still unlisted, so the guard cannot refuse anything, classic or reach.
+No eviction rule was added, because there is nothing left for it to arbitrate.
+The same argument closes the ring: depth at most 256 against 512 places.
+
+The survey below is what says the arithmetic is not being leaned on alone. The
+worst list of the whole game is **139 rooms** (ANDREA1) against 256, and the
+deepest queue **70** against 512.
+
+---
+
+**T5-3 - the valve, 64 -> 128, and the column it comes out of.**
+
+`RoomProbe -reachsurvey` again, over all fifteen levels, the same fan as T4 -
+the eye at the middle of every room of the level in turn, yaw every 45 degrees
+and pitch -30 to +30 every 15, 2560x1440, 280 to 10,200 frames a level. **Every
+number of the T4 table came back identical**, which is what makes the three new
+columns comparable with the six old ones:
+
+| level | rooms | frames | classic mean / max | reach mean / max | over 64 | over 128 | deepest queue | tool dequeue cap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ANDREA1 | 242 | 9,680 | 6.6 / 42 | 14.5 / **139** | 4.0 % | **0.1 %** | 19 | 0 |
+| ANDREA2 | 252 | 10,080 | 8.5 / 65 | 15.2 / 111 | 3.5 % | 0 | 20 | 0 |
+| ANDREA3 | 130 | 5,200 | 5.3 / 28 | 7.9 / 46 | 0 | 0 | 11 | 0 |
+| ANDY1 | 243 | 9,720 | 10.1 / 49 | 14.7 / 96 | 1.9 % | 0 | 24 | 0 |
+| ANDY2 | 254 | 10,160 | 4.4 / 16 | 7.2 / 62 | 0 | 0 | 11 | 0 |
+| ANDY3 | 211 | 8,440 | 7.0 / 42 | 10.8 / 67 | 0 | 0 | 18 | 0 |
+| JOBY2 | 169 | 6,760 | 12.2 / 69 | 21.2 / 121 | 7.8 % | 0 | 25 | 0 |
+| JOBY3 | 195 | 7,800 | 4.0 / 16 | 7.7 / 83 | 0.4 % | 0 | 9 | 0 |
+| JOBY4 | 137 | 5,480 | 19.0 / **106** | 23.7 / 128 | 8.2 % | 0 | **70** | 0 |
+| JOBY5 | 191 | 7,640 | 4.8 / 18 | 8.4 / 73 | 0.3 % | 0 | 8 | 0 |
+| RICH1 | 165 | 6,600 | 4.3 / 21 | 7.4 / 58 | 0 | 0 | 11 | 0 |
+| RICH2 | 179 | 7,160 | 3.7 / 18 | 5.7 / 42 | 0 | 0 | 12 | 0 |
+| RICH3 | 218 | 8,720 | 4.5 / 24 | 7.1 / 69 | 0.1 % | 0 | 11 | 0 |
+| RICHCUT2 | 7 | 280 | 3.0 / 6 | 3.0 / 6 | 0 | 0 | 4 | 0 |
+| TITLE | 116 | 4,640 | 8.4 / 48 | 8.8 / 49 | 0 | 0 | 24 | 0 |
+
+**The last column is the TOOL's cap, not the engine's**, and it is named apart
+from `cap hit=` on purpose, because that phrase belongs to the engine's counter
+everywhere else in this section. `RoomProbe` models NEITHER engine array:
+its own ring is 4,096 entries written with no capacity test at all, and its
+draw list is a `std::vector`. What the column counts is the tool's own brake -
+20,000 dequeues in one frame, which is there because a ring of rooms whose
+portals all face the eye once walked the tool out of memory - so a zero means
+only that no frame of the survey ran that long. It cannot say, and no run of
+the tool can say, whether `draw_rooms` or `draw_room_list` would have been
+passed. That is answered instead by the arithmetic of T5-1 and by two numbers
+of this same table: the worst list of the whole survey is **139** against
+`draw_rooms`' 256, and the deepest queue **70** against the ring's 512. The
+engine's own guards keep their counter in `ROOMWALK`, and only the play test
+can move it.
+
+The whole distribution, the six columns of T4 and the three of T5:
+
+| level | 32 | 40 | 48 | 56 | 64 | 80 | **96** | **112** | **128** |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ANDREA1 | 13.7 | 9.6 | 7.0 | 5.3 | 4.0 | 1.8 | 0.7 | 0.4 | **0.1** |
+| ANDREA2 | 13.3 | 9.7 | 7.0 | 5.2 | 3.5 | 1.2 | 0.3 | 0 | **0** |
+| JOBY2 | 24.9 | 18.9 | 13.5 | 10.1 | 7.8 | 3.1 | 0.8 | 0 | **0** |
+| JOBY4 | 25.9 | 18.7 | 13.9 | 10.7 | 8.2 | 4.7 | 2.4 | 0.6 | **0** |
+| ANDY1 | 14.2 | 9.4 | 5.7 | 3.5 | 1.9 | 0.4 | 0 | 0 | **0** |
+| ANDY3 | 7.7 | 3.8 | 1.5 | 0.3 | 0 | 0 | 0 | 0 | **0** |
+| TITLE | 3.9 | 1.5 | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
+| JOBY3 | 3.3 | 1.4 | 1.0 | 0.7 | 0.4 | 0.1 | 0 | 0 | **0** |
+| RICH3 | 2.7 | 1.0 | 0.5 | 0.3 | 0.1 | 0 | 0 | 0 | **0** |
+| JOBY5 | 2.5 | 0.9 | 0.6 | 0.6 | 0.3 | 0 | 0 | 0 | **0** |
+| ANDREA3 | 1.8 | 0.3 | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
+| RICH1 | 1.8 | 0.7 | 0.3 | 0.1 | 0 | 0 | 0 | 0 | **0** |
+| ANDY2 | 1.3 | 0.5 | 0.1 | 0 | 0 | 0 | 0 | 0 | **0** |
+| RICH2, RICHCUT2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **0** % |
+
+At 128 the valve is shut in fourteen levels of fifteen and open in one tenth of
+one percent of ANDREA1's worst-case frames. `kReachBudget` (`game\draw.cpp`)
+is 128.
+
+**And the two places the play test complained about, walked.** Both eyes come
+out of the log's own five-second `ROOMLIST` dumps, which carry the eye and the
+target, so the direction is the player's and not one chosen afterwards - how
+nearly the player's is the paragraph after the table (2560x1440, fov 80, the
+tool's own default, and `-roombox` on the classic levels):
+
+| eye | classic | with the reach | reach's alone | dropped at 64 | dropped at 128 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| JOBY2 room 96, `54410/-5104/43819`, yaw 216.4 pitch 8.0 | 37 | **66** | 29 | 2 | **0** |
+| ANDREA2 room 211, `86922/-1231/43587`, yaw 271.3 pitch 15.9 | 39 | **75** | 36 | 11 | **0** |
+
+The engine's own `ROOMLIST` dump of each of those two frames stands in the log
+beside the eye it was taken from, and the tool does not quite reproduce either
+of them. Both differences below are on the same basis: the rooms the WALK
+ended with, before the valve took anything out.
+
+* **ANDREA2, one room apart, and the no-art trim is the reason.** The dump is
+  64 rooms with `trimmed=10`, and `trimmed` counts the budget drops ALONE -
+  `ReachTrimRooms` counts the rooms it takes out for want of `.TRG` art in a
+  second counter of its own, `no_art` - so the walk ended at **74** against
+  the tool's **75**. The `ROOMWALK` line of that second reads `no_art=172`
+  over its 165 frames, which is one room a frame, and one room a frame is
+  exactly the difference. The tool does not model that trim.
+* **JOBY2, three rooms apart, and that is NOT accounted for.** The dump is
+  **63** rooms with `trimmed=0` against the tool's **66**. The no-art trim
+  cannot be the reason here: both `ROOMWALK` lines bracketing that frame read
+  `no_art=0`, so nothing at all was taken out for want of art anywhere in that
+  second, and `trimmed=0` says the budget took nothing either. Seed room,
+  resolution and field of view are not it either - the dump's first room is 96
+  with a full-screen window, its windows run `0,0..2559,1439`, and the last
+  `ALTERFOV` before it reads `14560 (80 deg)`, all of which the tool was given.
+  The open candidate is the DIRECTION. The dump carries the walk's own eye -
+  `w2v_matrix` M03/M13/M23, which at a tween frame is the BLENDED position the
+  frame was really walked from - but its target is the LOGIC camera's, which is
+  not blended, and 135 of that second's 165 frames were tween frames. A yaw and
+  a pitch reconstructed as `target - eye` are therefore near the direction the
+  frame had rather than equal to it, and three rooms at the rim of a
+  sixty-room list is what a fraction of a degree buys at a portal. Settling it
+  needs a dump that carries the walk's direction and not only its eye. That is
+  a measurement of its own and it is not this round's.
+
+Nothing here rests on the gap: it is the distance between the tool's model and
+the engine at one eye, three rooms in the sixties, and every count on either
+side of it is far below 128. Deepest queue at those two eyes: 17 and 11.
+
+**What is NOT measured, and it is the play test that decides it.** What a
+frame of 128 rooms COSTS. The 6.1 ms above is a frame of 64 with 690 HD draws,
+and the survey is a distribution of room counts, not of milliseconds - which
+is the second thing the review of T4 said about the number 64, and it is still
+true of 128. What the survey does say is that such frames are rare enough to
+be a spike rather than a load: one frame in a thousand, in one level. If they
+turn out not to be affordable, `kReachBudget` is one number in one place.
+
+---
+
+**The classic path.** With `hd_enable` off `HDLevelActive()` is false,
+`g_reach_on` stays false, `FollowPortal` calls the `SetRoomBounds` that
+shipped, `classicHere` is true, nothing is trimmed and no reach rectangle is
+ever taken. The whole of this round's difference in the code the classic path
+runs is **the two array sizes and the shape of the ring's wrap**: `& 511`
+where it was `% 128`, which for counters that start at 0 and only count up is
+the same index. `fps_mode 0` is untouched either way.
+
+That leaves one behavioural difference and it is the point of T5-1: T4's guard
+could refuse a CLASSIC room once the list passed a hundred, and the survey
+found a JOBY4 frame of 106 classic rooms - so under T4 six rooms of that frame
+were not drawn. Under T5 they are. Before T4 they were "drawn" by writing six
+shorts past the end of the array, which is what T4-3 was built to stop; T5 is
+the version of that fix that costs no rooms.
+
+**The proof.** `be.bat`: **0 errors, 0 warnings**. `bit.bat` and `InterpTest`:
+**324 checks, 0 failed** - the eight new ones are the T5 section, and they do
+not restate the constants. They check that the ring's size is a power of two
+and that `& (size - 1)` agrees with `% size` over 5,000 consecutive writes;
+they run the engine's own queue loop, interlock and guard included, over the
+worst graph there is - 256 rooms each with a portal to every other - and
+require that the queue never gets deeper than the room count and that
+`draw_rooms` takes one entry per room; and they require that **the same level
+against a ring of 128 DOES trip the guard**, so that the passing case above is
+not a tautology. `broom.bat` and the survey: the tables above, saved as
+`reachsurvey_T5.txt` and `usereyes_T5.txt`.
+
+**The tools.** `RoomProbe -reachsurvey` prints nine budget columns instead of
+six (96, 112 and 128 added), and `-reach` counts frames over 64 and over 128
+where it counted 60 and 100 - the two numbers a named eye is now asked about.
+Its walk itself is untouched, which is what lets the T4 table be reproduced
+line for line. `InterpTest` gained `walk_capacity`, eight checks.
+
+**What the play test has to show.** At the two places the last one named -
+JOBY2's stairs around log second 49 to 72, and the courtyard of Trajan's
+Markets - `ROOMWALK` must read `trimmed=0` or nearly, `cap hit=0` still, and a
+list above 64; `ROOMFLASH` must stop naming rooms 230, 47 and 229 with a
+`reach[...]`, because nothing is dropping them any more. And `FPSLOG` of those
+same seconds is what says whether 128 rooms fit in the frame: `real_fps` at the
+panel's rate and `late=0` is the answer this round is betting on, and a
+`late` count that climbs with `hd_rooms` is the answer that sends
+`kReachBudget` back down.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

@@ -72,11 +72,23 @@ static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &
 	"data[3] of the level header carries HD_LARA_OUTFIT_* 5..8 by agreement "
 	"with the randomizer (Preparation\\Contract.md) - the enum has moved");
 
-// The engine never has more rooms than this, and draw_rooms (game\draw.cpp)
-// never holds more than 100 of them in one frame. Both are fixed arrays here
-// rather than allocations, so that nothing in the frame path can fail.
+/* The engine never has more rooms than HD_MAX_ROOMS, and one frame never
+ * holds more of them than draw_rooms (game\draw.cpp) does. Both are fixed
+ * arrays here rather than allocations, so that nothing in the frame path can
+ * fail.
+ *
+ * T5: HD_MAX_FRAME follows draw_rooms' own capacity, which is now the
+ * engine's room maximum of 256. It was 128 against a list of 100, which was
+ * headroom; with the reach budget at 128 it would have been the exact worst
+ * case and no headroom at all - the walk's own list is trimmed to 128
+ * reach-wise, but a list of CLASSIC rooms is never trimmed and was measured
+ * at 106 in one JOBY4 frame (RoomProbe -reachsurvey). One entry per listed
+ * room reaches here, from InsertRoom (specific\drawroom.cpp:200), so 256 is
+ * the true bound and this array can no longer be the thing that drops a room
+ * the walk kept. The cost is static and named: sizeof(FrameRoom) is 380
+ * bytes, so the array goes from 47.5 to 95 KiB of BSS. */
 #define HD_MAX_ROOMS	1024
-#define HD_MAX_FRAME	128
+#define HD_MAX_FRAME	256
 
 namespace
 {
@@ -3177,7 +3189,8 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 
 	if (g_frame_count >= HD_MAX_FRAME)
 	{
-		// draw_rooms (game\draw.cpp) holds 100, so this cannot happen - but a
+		// HD_MAX_FRAME is draw_rooms' own capacity (game\draw.cpp) and one
+		// entry lands here per listed room, so this cannot happen - but a
 		// silent overrun of a fixed array is not a thing to leave to a
 		// comment.
 		g_frame_dropped++;

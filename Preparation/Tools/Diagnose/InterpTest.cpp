@@ -2359,6 +2359,156 @@ static void reach_rect()
 	}
 }
 
+/* ------------------------------------- the two capacities (T5) ----------- */
+
+/* THE ARRAYS OF THE WALK, AND WHY NO LEVEL CAN FILL THEM (#123, fix round T5).
+ *
+ * These two mirror game\draw.cpp and have to be kept in step with it by hand -
+ * that is what this section is here to make loud. What it proves is not that
+ * the numbers are large; it is the ARITHMETIC that makes them enough:
+ *
+ *   1. the ring's size is a power of two, because the engine wraps with a
+ *      mask (`room_list_end & (kRoomListRing - 1)`) on both the write side
+ *      and the dequeue side. A size that is not a power of two turns that
+ *      mask into a different index from the modulo it replaced, and a queue
+ *      that writes at one index and reads at another loses rooms silently.
+ *   2. the queue's DEPTH cannot pass the room count, whatever the level's
+ *      portals look like, because a room is queued only while its
+ *      `bound_active & 2` is clear and queueing sets that bit - so at most
+ *      one entry per room is pending at any moment. The model below is the
+ *      engine's own loop with that interlock and a level of 256 rooms all
+ *      joined to all, which is the worst graph there is.
+ *   3. draw_rooms takes one entry per room (`bound_active & 1`), so its
+ *      capacity has only to be the room maximum. */
+static const long kT5DrawRoomsMax = 256;	// game\draw.cpp, draw_rooms
+static const long kT5RoomListRing = 512;	// game\draw.cpp, draw_room_list
+static const long kT5RoomMax = 256;		// game\setup.cpp:2418
+
+/* The engine's queue, run on a level of `rooms` rooms in which every room has
+ * a portal to every other. Returns the deepest the queue ever got, or -1 if
+ * the ring guard refused an entry - which is the failure this is watching
+ * for. `entries` comes back with what draw_rooms would have had to hold.
+ *
+ * The one thing the model has to borrow from geometry is what STOPS the walk.
+ * In the engine a room is re-queued whenever a portal hands it a rectangle
+ * that is not empty, and what ends that is the windows shrinking along the
+ * chain until one of them has no width; a graph with no geometry in it has
+ * nothing that shrinks, so each room here may be queued kVisits times and no
+ * more. That bound has no effect on the thing being measured: the DEPTH is
+ * held down by the pending interlock alone, whatever the walk's length. */
+static long t5_queue_depth(long rooms, long ring, long* entries)
+{
+	static const long kVisits = 3;
+	static char pending[kT5RoomMax];
+	static char listed[kT5RoomMax];
+	static long visits[kT5RoomMax];
+	static long queue[kT5RoomListRing];
+	long start = 0, end = 0, deepest = 0, drawn = 0;
+
+	if (rooms > kT5RoomMax || ring > kT5RoomListRing)
+		return -2;
+
+	for (long i = 0; i < rooms; i++)
+	{
+		pending[i] = listed[i] = 0;
+		visits[i] = 0;
+	}
+
+	queue[0] = 0;
+	pending[0] = 1;
+	end = 1;
+
+	while (start != end)
+	{
+		const long rn = queue[start & (ring - 1)];
+
+		start++;
+		pending[rn] = 0;
+
+		if (!listed[rn])
+		{
+			listed[rn] = 1;
+			drawn++;
+		}
+
+		for (long to = 0; to < rooms; to++)
+		{
+			if (to == rn || pending[to] || visits[to] >= kVisits)
+				continue;
+
+			// The engine's own guard, with the engine's own answer to it.
+			if (end - start >= ring)
+				return -1;
+
+			queue[end & (ring - 1)] = to;
+			end++;
+			pending[to] = 1;
+			visits[to]++;
+
+			if (end - start > deepest)
+				deepest = end - start;
+		}
+	}
+
+	*entries = drawn;
+	return deepest;
+}
+
+static void walk_capacity()
+{
+	printf("the walk's two arrays - capacity to the engine's own maximum "
+		"(#123, T5)\n");
+
+	ok((kT5RoomListRing & (kT5RoomListRing - 1)) == 0,
+		"the queue ring's size is a power of two, so the mask is the modulo",
+		kT5RoomListRing & (kT5RoomListRing - 1), 0);
+
+	// And the mask really is the modulo over a run longer than one lap.
+	{
+		int same = 0;
+
+		for (long i = 0; i < 5000; i++)
+			if ((i & (kT5RoomListRing - 1)) == i % kT5RoomListRing)
+				same++;
+
+		ok(same == 5000, "and it agrees with % over 5,000 consecutive writes",
+			same, 5000);
+	}
+
+	ok(kT5DrawRoomsMax >= kT5RoomMax,
+		"draw_rooms holds every room a level may have", kT5DrawRoomsMax,
+		kT5RoomMax);
+
+	/* THE WORST GRAPH THERE IS, walked. 256 rooms all joined to all is not a
+	 * level anybody could build, and that is the point: if the queue cannot
+	 * pass the room count HERE it cannot pass it anywhere. */
+	{
+		long entries = 0;
+		const long deepest = t5_queue_depth(kT5RoomMax, kT5RoomListRing,
+			&entries);
+
+		ok(deepest > 0, "256 rooms joined to all: the ring guard never fires",
+			deepest, 1);
+		ok(deepest <= kT5RoomMax, "and the queue is never deeper than the "
+			"room count", deepest, kT5RoomMax);
+		ok(deepest < kT5RoomListRing, "which leaves the ring with room to "
+			"spare", deepest, kT5RoomListRing);
+		ok(entries <= kT5DrawRoomsMax, "and draw_rooms takes one entry per "
+			"room, no more", entries, kT5DrawRoomsMax);
+	}
+
+	/* AND THE COUNTER-CASE, so that the check above is not a tautology: a
+	 * ring of 128 - what the engine had before T5 - IS overrun by the same
+	 * level, and the guard is what catches it. */
+	{
+		long entries = 0;
+
+		ok(t5_queue_depth(kT5RoomMax, 128, &entries) == -1,
+			"a ring of 128 against the same level: the guard refuses an "
+			"entry", 1, 1);
+	}
+}
+
 static void portal_walk()
 {
 	printf("portal walk - the room the blended eye stands in (#123, T2-1)\n");
@@ -2496,6 +2646,7 @@ int main()
 	particles();
 	portal_walk();
 	reach_rect();
+	walk_capacity();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

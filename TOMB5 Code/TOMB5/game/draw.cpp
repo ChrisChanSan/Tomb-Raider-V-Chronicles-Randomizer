@@ -107,11 +107,53 @@ static short* skelly_rhandbak;
 static short* skelly_lhandbak;
 static short skelly_backgunbak;
 
+/* T5: THE TWO ARRAYS OF THE PORTAL WALK, AT THE ENGINE'S OWN MAXIMUM (#123).
+ *
+ * They were short[100] and long[128] and fix round T4 put a counted guard on
+ * each of them, because neither had ever been counted at all. The guards did
+ * their job and they stay - but the play test of 2026-09-09 says the numbers
+ * were too small rather than the guards too loose: with the reach on, JOBY2's
+ * stairs and the courtyard of ANDREA2 sat at the budget for twenty seconds at
+ * a stretch, and the walk's own classic list was already measured at 106
+ * rooms in one JOBY4 frame - six past the hundred.
+ *
+ * WHY THESE TWO NUMBERS AND NOT A ROUNDER PAIR.
+ *
+ * kDrawRoomsMax is the engine's own room maximum: BuildOutsideTable
+ * (game\setup.cpp:2418) refuses a level with more than 256 rooms outright, and
+ * a room enters draw_rooms exactly once per frame - the `bound_active & 1`
+ * test in GetRoomBounds is what makes that true. So no loadable level can
+ * fill this array, and a classic room can no longer be refused for want of a
+ * place. That is a property of the arithmetic, not of a measurement.
+ *
+ * kRoomListRing is the queue, and its depth is bounded by the same interlock
+ * one bit over: a room is queued only when `bound_active & 2` is clear and
+ * queueing sets that bit, which the dequeue in GetRoomBounds clears again -
+ * so at most ONE pending entry per room exists at any moment, and the deepest
+ * the queue can ever get is 256. A room may of course be queued again after
+ * it has been dequeued, which is why a frame can take more dequeues than it
+ * has rooms (319 is the worst measured, JOBY4); the DEPTH cannot pass the
+ * room count. 512 is that bound with a factor of two over it, and a power of
+ * two so the wrap below is a mask. Measured against it, the deepest queue
+ * over the fifteen levels is 70 (RoomProbe -reachsurvey).
+ *
+ * THESE TWO SIZES, AND THE SHAPE OF THE WRAP BELOW, ARE THE WHOLE OF WHAT
+ * THIS ROUND CHANGES IN THE CODE THE CLASSIC PATH ALSO RUNS. The wrap is
+ * written `& (kRoomListRing - 1)` where it was `% 128`: room_list_start and
+ * room_list_end are set to 0 at the top of every walk and only ever counted
+ * up, so neither is ever negative and the mask is the modulo. The guards of
+ * fix round T4 are otherwise untouched, and kReachBudget is not in this
+ * paragraph at all - it lives in ReachTrimRooms, which only runs while
+ * g_reach_on. Nothing about the walk itself moves: bigger arrays refuse fewer
+ * rooms and do nothing else. */
+static const int kDrawRoomsMax = 256;
+static const long kRoomListRing = 512;
+
 static long number_draw_rooms;
-static short draw_rooms[100];
+static short draw_rooms[kDrawRoomsMax];
 static long room_list_start = 0;
 static long room_list_end = 0;
-static long draw_room_list[128];
+static long draw_room_list[kRoomListRing];
 static long camera_underwater;
 static short ClipRoomNum;
 
@@ -1187,7 +1229,8 @@ void StepAfterDeathFade()
  * has a shape no throttle can miss: it is in the list on the frame before and
  * on the frame after and not on the one in between.
  *
- * So three frames of the room list are kept - three notes of 244 bytes - and
+ * So three frames of the room list are kept - three notes of about 4.7 KiB
+ * each since T5 widened their room arrays to draw_rooms' own capacity - and
  * the MIDDLE one is judged as soon as the third arrives. Rooms in both
  * neighbours and not in the middle are named. That is the whole test, and it needs no knowledge of
  * portals, cameras or geometry: a room the walk can see on either side of a
@@ -1212,7 +1255,12 @@ namespace
 		unsigned int serial;
 		int level;
 		int count;
-		short rooms[100];
+		/* T5: as wide as draw_rooms itself. It was 100 while the list was,
+		 * and NoteRoomWalk clamped `count` to it - so a list longer than
+		 * the note truncated silently, and ROOMFLASH would have called the
+		 * rooms past the hundred missing on every frame in a row. The three
+		 * notes are static and copied only while -log is on. */
+		short rooms[kDrawRoomsMax];
 
 		/* T3-1: and each of those rooms' own window, as the walk left
 		 * it. PrintObjects wipes all four at the end of the frame
@@ -1222,13 +1270,13 @@ namespace
 		 * reason worked out from it below is the conservative one: it can
 		 * say "reached" where the walk said "empty", never the other way
 		 * about. */
-		short win[100][4];
+		short win[kDrawRoomsMax][4];
 
 		/* T4: and the rectangle the REACH gave each of them, so that a
 		 * ROOMLIST line can say which rooms are in the picture on the
 		 * strength of the reach alone - those are the ones whose window is
 		 * empty and whose reach is not. */
-		short reach[100][4];
+		short reach[kDrawRoomsMax][4];
 		int reach_only;			// how many of them there are
 		int trimmed;			// and how many the budget dropped
 
@@ -1647,33 +1695,68 @@ static void ReachBeginWalk(short seed)
 	}
 }
 
-/* T4-4: THE SAFETY VALVE, AND ITS NUMBER IS MEASURED (#123, fix round T4).
+/* T4-4: THE SAFETY VALVE, AND ITS NUMBER IS MEASURED (#123, fix round T4;
+ * raised from 64 to 128 in fix round T5).
  *
  * A frame that the reach fills with a hundred rooms is a frame of a hundred
  * HD draw calls, and the survey says it happens: with the eye at the middle
  * of every room of a level in turn and a fan of forty directions from each
- * (RoomProbe -reachsurvey, 4,600 to 10,200 frames a level), the reach passes
- * 100 rooms in 0.6 % of ANDREA1's frames, 0.4 % of JOBY2's and 2.0 % of
- * JOBY4's. The whole distribution, as the share of frames over a budget of
- * 32 / 40 / 48 / 56 / 64 / 80 rooms:
+ * (RoomProbe -reachsurvey, 2560x1440, yaw every 45 degrees and pitch -30 to
+ * +30 every 15 - 280 to 10,200 frames a level), the reach passes 100 rooms in
+ * 0.6 % of ANDREA1's frames, 0.4 % of JOBY2's and 2.0 % of JOBY4's. The whole
+ * distribution, as the share of frames over a budget of 32 / 40 / 48 / 56 /
+ * 64 / 80 / 96 / 112 / 128 rooms - the last three measured in T5, the rest
+ * unchanged from T4 and reproduced number for number by the same run:
  *
- *   ANDREA1  13.7  9.6  7.0  5.3  4.0  1.8 %      RICH2   0 0 0 0 0 0 %
- *   ANDREA2  13.3  9.7  7.0  5.2  3.5  1.2 %      ANDY2   1.3 0.5 .1 0 0 0 %
- *   JOBY2    24.9 18.9 13.5 10.1  7.8  3.1 %      RICH1   1.8 .7 .3 .1 0 0 %
- *   JOBY4    25.9 18.7 13.9 10.7  8.2  4.7 %      ANDREA3 1.8 .3 0 0 0 0 %
+ *   ANDREA1  13.7  9.6  7.0  5.3  4.0  1.8  0.7  0.4  0.1 %
+ *   ANDREA2  13.3  9.7  7.0  5.2  3.5  1.2  0.3    0    0 %
+ *   JOBY2    24.9 18.9 13.5 10.1  7.8  3.1  0.8    0    0 %
+ *   JOBY4    25.9 18.7 13.9 10.7  8.2  4.7  2.4  0.6    0 %
+ *   ANDY1    14.2  9.4  5.7  3.5  1.9  0.4    0    0    0 %
+ *   ANDY3     7.7  3.8  1.5  0.3    0    0    0    0    0 %
+ *   TITLE     3.9  1.5    0    0    0    0    0    0    0 %
+ *   JOBY3     3.3  1.4  1.0  0.7  0.4  0.1    0    0    0 %
+ *   RICH3     2.7  1.0  0.5  0.3  0.1    0    0    0    0 %
+ *   JOBY5     2.5  0.9  0.6  0.6  0.3    0    0    0    0 %
+ *   ANDREA3   1.8  0.3    0    0    0    0    0    0    0 %
+ *   RICH1     1.8  0.7  0.3  0.1    0    0    0    0    0 %
+ *   ANDY2     1.3  0.5  0.1    0    0    0    0    0    0 %
+ *   RICH2 and RICHCUT2 are 0 in every column.
  *
- * 64 is where the two families part: the indoor levels never reach it at all
- * and the four open ones cross it in 3.5 to 8.2 % of the worst-case frames -
- * so the valve is shut for ordinary play and open where a street runs away to
- * the horizon. And it only ever drops rooms THE REACH BROUGHT IN, farthest
- * first; a room with a classic window of its own is a room the walk has
- * always drawn and is never trimmed, which is why JOBY4's own classic frames
- * of 72 and 106 rooms are untouched by this.
+ * 64 WAS WHERE THE TWO FAMILIES PART, and it held for one play test. It was
+ * also, as the review of T4 said in as many words, a number out of room-count
+ * distributions and not out of frame times. The play test of 2026-09-09 gave
+ * the frame times: at 64 rooms and up to 754 HD draws, FPSLOG on a 165 Hz
+ * panel reads real_fps 165.0, avg_ms 6.1, late=0 - display-bound, with the
+ * work of the frame at about 6.0 ms of a 6.1 ms budget of which 5.35 is the
+ * flip. And it gave the cost of the valve being shut too far: in JOBY2 (log
+ * seconds 49 to 72) and in the courtyard of Trajan's Markets the list sat at
+ * exactly 64 for twenty seconds at a stretch with up to 30 reach-only rooms
+ * dropped per FRAME, and ROOMFLASH named three rooms of ANDREA2 - 230, 47 and
+ * 229 - missing with a reach of their own, which is distant art popping.
+ *
+ * So 128, and the column says what it buys: the frames that still hit it are
+ * ANDREA1's 0.1 % and nothing else in the game. The two places the play test
+ * complained about are both well under it - JOBY2's eye at 54410/-5104/43819
+ * looking 216.4/8.0 walks 66 rooms (37 classic, 29 the reach's) and ANDREA2's
+ * at 86922/-1231/43587 looking 271.3/15.9 walks 75 (39 and 36), so at 64 the
+ * valve dropped 2 and 11 rooms there and at 128 it drops none.
+ *
+ * WHAT IS NOT MEASURED, and it is the play test that decides it: what a frame
+ * of 128 rooms COSTS. The 6.1 ms above is a frame of 64. The distribution says
+ * such frames are rare and the FPSLOG line of the play test says whether they
+ * are affordable; if they are not, this number is the one place to turn it
+ * back down.
+ *
+ * The valve only ever drops rooms THE REACH BROUGHT IN, farthest first; a room
+ * with a classic window of its own is a room the walk has always drawn and is
+ * never trimmed, which is why JOBY4's own classic frames of 72 and 106 rooms
+ * are untouched by this.
  *
  * The room's bound_active goes back to zero with it, because PrintObjects -
  * which is what clears that byte at the end of a drawn room - will not run
  * for a room that is no longer in the list. */
-static const long kReachBudget = 64;
+static const long kReachBudget = 128;
 
 static void ReachTrimRooms(long ex, long ey, long ez)
 {
@@ -2108,8 +2191,10 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		 * list, classic= the part of it that has a window of its own - the
 		 * list the walk would have had without this round - and reach= the
 		 * rooms the reach alone brought in. cap hit= counts the rooms
-		 * refused because draw_rooms (100) or the queue ring (128) was
-		 * full; trimmed= the ones the budget dropped again, farthest first.
+		 * refused because draw_rooms (kDrawRoomsMax) or the queue ring
+		 * (kRoomListRing) was full - since T5 neither can happen in a
+		 * loadable level, so this column is now a zero that has to stay
+		 * zero; trimmed= the ones the budget dropped again, farthest first.
 		 * What each of those rooms COSTS is on the FPSLOG line of the same
 		 * second, which already carries hd_rooms / hd_items / hd_draws as
 		 * the maxima over it (specific\hd\hd_level.cpp:402). */
@@ -3287,28 +3372,28 @@ void SetRoomBounds(short* door, long rn, ROOM_INFO* actualRoom)
 	}
 	else
 	{
-		/* T4-3: THE RING HAS 128 PLACES AND NOTHING COUNTED THEM.
+		/* T4-3: THE RING HAD 128 PLACES AND NOTHING COUNTED THEM.
 		 *
-		 * draw_room_list is a 128 entry ring and room_list_end has always
-		 * been written into it modulo 128 with no test at all, so a walk that
-		 * ever had more than 128 rooms queued at once would overwrite an
-		 * entry that had not been dequeued and walk a room twice while losing
-		 * another. A level may hold 256 rooms (game\setup.cpp:2418), so it
-		 * was always reachable in principle; with the reach it is reachable
-		 * in practice, and it is measured: the deepest queue over the whole
-		 * game is 70 (JOBY4, RoomProbe -reachsurvey), so this refuses nothing
-		 * that happens today and stops a memory overwrite that could.
+		 * room_list_end has always been written into the ring with no test at
+		 * all, so a walk that ever had more places queued at once than the
+		 * ring holds would overwrite an entry that had not been dequeued and
+		 * walk a room twice while losing another. This guard is what stops
+		 * that, and it is unconditional on purpose - a guard that only ran in
+		 * the HD path would leave the classic path with the hole.
 		 *
-		 * This is the ONE change of this round inside the walk both paths
-		 * share. It is unconditional on purpose - a guard that only runs in
-		 * the HD path would leave the classic path with the hole. */
-		if (room_list_end - room_list_start >= 128)
+		 * T5 made it a backstop rather than a limit: with kRoomListRing at
+		 * 512 against a queue that cannot be deeper than the 256 rooms a
+		 * level may hold - see the note over the two arrays - no loadable
+		 * level can reach this line. It stays counted all the same, because
+		 * "cannot happen" and "is not counted" are how the hole got here. */
+		if (room_list_end - room_list_start >= kRoomListRing)
 		{
 			g_reach_capped++;
 			return;
 		}
 
-		draw_room_list[room_list_end % 128] = rn;
+		// A power of two, so the wrap is a mask - see kRoomListRing.
+		draw_room_list[room_list_end & (kRoomListRing - 1)] = rn;
 		room_list_end++;
 		r->bound_active |= 2;
 		r->test_left = (short)tL;
@@ -3559,13 +3644,13 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
 	}
 
 	// T4-3: the ring, exactly as in the classic function above.
-	if (room_list_end - room_list_start >= 128)
+	if (room_list_end - room_list_start >= kRoomListRing)
 	{
 		g_reach_capped++;
 		return;
 	}
 
-	draw_room_list[room_list_end % 128] = rn;
+	draw_room_list[room_list_end & (kRoomListRing - 1)] = rn;
 	room_list_end++;
 	r->bound_active |= 2;
 
@@ -3605,7 +3690,7 @@ void GetRoomBounds()
 
 	while (room_list_start != room_list_end)
 	{
-		rn = draw_room_list[room_list_start % 128];
+		rn = draw_room_list[room_list_start & (kRoomListRing - 1)];
 		room_list_start++;
 		r = &room[rn];
 		r->bound_active -= 2;
@@ -3642,13 +3727,22 @@ void GetRoomBounds()
 
 		if (!(r->bound_active & 1))
 		{
-			/* T4-3: draw_rooms is short[100] and nothing counted it either.
-			 * The classic walk has never been measured over 106 rooms in a
-			 * frame (JOBY4, RoomProbe -reachsurvey, the eye at a room's own
-			 * centre) - which is already over the hundred - and the reach
-			 * passes it in about half a percent of the surveyed frames. A
-			 * room refused here is not drawn; the alternative is writing
-			 * past the array. */
+			/* T4-3: draw_rooms had a hundred places and nothing counted
+			 * them either, and the classic walk was measured at 106 rooms in
+			 * one JOBY4 frame (RoomProbe -reachsurvey, the eye at a room's
+			 * own centre) - already over the hundred. A room refused here is
+			 * not drawn; the alternative is writing past the array.
+			 *
+			 * T5: and since the array holds kDrawRoomsMax = 256, which is
+			 * the most rooms a level may have and every room enters it once
+			 * (that is the `bound_active & 1` test right below), this line
+			 * can no longer be reached by any level the engine will load. It
+			 * is kept, and kept counted, as the backstop it now is: the
+			 * review of T4 pointed out that this guard fires DURING the walk
+			 * while ReachTrimRooms only runs after it, so at a full array a
+			 * CLASSIC room could have been refused while reach-only rooms
+			 * held places. Widening the array answers that by arithmetic
+			 * instead of by an eviction rule. */
 			if (number_draw_rooms >= (long)(sizeof(draw_rooms) /
 				sizeof(draw_rooms[0])))
 			{

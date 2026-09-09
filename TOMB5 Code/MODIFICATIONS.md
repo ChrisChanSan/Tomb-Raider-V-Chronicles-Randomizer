@@ -8748,15 +8748,21 @@ any case `GameFrameMinTicks()` holds the whole inventory at thirty presents
 this round changes no input path and no title code. The ring's own spin stays
 where it always was, in `draw_current_object_list`.
 
-**The pickup display stays classic, on purpose.** `DrawThreeDeeObject2D` has a
-second caller: `S_DrawPickup` (`specific\output.cpp`), the little turning
-object in the corner when Lara picks something up. It is called from INSIDE
-`S_OutputPolyList` (`output.cpp:1860`), after `HDFrameDraw` (`output.cpp:1820`)
-has already drawn this frame's HD list - so an item pushed there would suppress
-its own classic polygons and be drawn by nobody. The list is not emptied until
-the next `S_InitialisePolyList` reaches `HDObjectFrameReset`; it would simply
-sit there and then be thrown away. `HDInvBegin` refuses when `InventoryActive`
-is 0, which is the one line that separates the two callers.
+**The pickup display stayed classic in this round, and fix round P2 took it
+back.** `DrawThreeDeeObject2D` has a second caller: `S_DrawPickup`
+(`specific\output.cpp`), the little turning object in the corner when Lara picks
+something up. It is called from INSIDE `S_OutputPolyList` (`output.cpp:1860`),
+after `HDFrameDraw` (`output.cpp:1820`) has already drawn this frame's HD list -
+so an item pushed there would suppress its own classic polygons and be drawn by
+nobody. The list is not emptied until the next `S_InitialisePolyList` reaches
+`HDObjectFrameReset`; it would simply sit there and then be thrown away. Round P
+therefore had `HDInvBegin` refuse when `InventoryActive` is 0, which is the one
+line that separates the two callers.
+
+That reasoning about the LIST still stands and is what P2 is built on: P2 does
+not push the item onto the list, it draws it on the spot in a bracket of its
+own. The one line still separates the two callers - it routes now instead of
+refusing. See "Fix round P2" below.
 
 **The title menu has no ring.** `TitleOptions` (`game\gameflow.cpp`) and
 everything it reaches - the level select, the options tree, the load screen -
@@ -9047,6 +9053,216 @@ many glyphs got the whole margin. It stays, like every other seam.
 arithmetic it ran before with the same `tex.tpage = nTextures - 2` - and
 `HWR_DrawSortList`'s new branch tests for a tpage no quad in the engine can
 then carry. `fps_mode` is not touched anywhere in this round.
+
+---
+
+#### Fix round P2 - the pickup display in HD (#123)
+
+The little turning object in the bottom right corner after Lara picks something
+up. Fix round P left it classic and said why; the play test's picture said what
+that costs - Lara in her JOBY outfit, an HD room around her, an HD gun in her
+hand, and the 1999 red ammunition box turning in the corner.
+
+**Measured first, and one of the three answers changed the design.**
+
+*The order in the frame, and it needs nothing.* `S_DrawPickup`
+(`specific\output.cpp:66`) is called from `S_OutputPolyList` at line 1860, and
+the block it sits in is below the frame's SECOND depth clear (`output.cpp:1841`,
+the one fix round #127 kept, which separates the world from the binocular mask,
+the display and the fade) and above `Fade()` at 1874. So the display stands over
+the whole world by construction and under everything the fade block draws - on
+the classic path and on this one alike, because both write depth into a buffer
+that was cleared a few lines earlier and nothing else is drawn into it. The
+classic display goes through the ordinary sort list with the TEXTURE's own
+`drawtype`, which for an opaque pickup is 0, and `HWR_DrawSortList` case 0
+(`specific\polyinsert.cpp:103`) draws it with the depth write on, the alpha test
+off and the alpha blend off. The HD bracket's own state is the same picture:
+`ZENABLE` on, `ZFUNC` LESSEQUAL, `ZWRITEENABLE` on, the alpha test off because
+the shader clips itself. The depth VALUE is the same too, and that was already
+proved: both paths write `a - b/z` for the same point (`HDRenderSelfTest`; the
+classic half is `p->sz = f_a - f_boo * v->rhw` in `polyinsert.cpp` with
+`rhw = f_moneopersp * f_mpersp / z`). No per-item depth clear, no reordering, no
+new rule.
+
+*Which objects can appear there, and every one of them has a model.* The display
+draws `inventry_objects_list[convert_obj_to_invobj(object_number)]`, so the only
+slots it can ever name are the ones that table holds - and of those, four can
+never be picked up (the compass, the passport's two pages, the keypad). What
+fills it is `game\pickup.cpp` (`:253` PUZZLE_ITEM1 at a keyhole, `:412` a
+searched object's contents, `:1013` the burning torch, `:1022`/`:1101`/`:1139`
+the object itself), `game\deltapak.cpp` (`:1785` PICKUP_ITEM1, `:1951`
+KEY_ITEM7), `game\newinv2.cpp`'s secret bonus, and `AddDisplayPickup`'s own
+crane substitution (PUZZLE_ITEM1/3 to CROWBAR_ITEM in JOBY3 and ANDY3). Counted
+with `ModelProbe -level <STEM> -classic <vanilla .TRC> -all -nodraw` over all
+fifteen vanilla levels, restricted to exactly those slots:
+
+| Level | slots | HD | classic | Level | slots | HD | classic |
+|---|---|---|---|---|---|---|---|
+| ANDREA1 | 17 | 17 | 0 | JOBY4 | 15 | 15 | 0 |
+| ANDREA2 | 19 | 19 | 0 | JOBY5 | 20 | 20 | 0 |
+| ANDREA3 | 23 | 23 | 0 | RICH1 | 15 | 15 | 0 |
+| ANDY1 | 10 | 10 | 0 | RICH2 | 13 | 13 | 0 |
+| ANDY2 | 6 | 6 | 0 | RICH3 | 14 | 14 | 0 |
+| ANDY3 | 10 | 10 | 0 | RICHCUT2 | 0 | 0 | 0 |
+| JOBY2 | 15 | 15 | 0 | TITLE | 1 | 0 | 1 |
+| JOBY3 | 22 | 22 | 0 | | | | |
+
+Not one classic object in any playable level - which is the difference from the
+ring, where the compass and the two passport pages stay classic in every level.
+The ring can show three things nobody can pick up; the display cannot. TITLE's
+one slot is `PICKUP_ITEM4` and it is a DUMMY there, drawing nothing on either
+path - and the title has no pickups anyway. RICHCUT2 is a cutscene level and
+holds none of these slots at all. A randomized level moves the HD count up and
+never the classic one, for the same reason the ring's does: the randomizer
+scatters weapons and ammunition into levels that never carried them, and those
+have models.
+
+*And the light is NOT the ring's.* This is the measurement that changed the
+build. `aTransformLightClipMesh` (`specific\output.cpp:150-157`) has one line
+for a sun's strength:
+
+    if (!InventoryActive) val *= 0.75F; else val += val;
+
+("fucking shit", says Core's own comment beside it.) The ring is drawn with
+`InventoryActive` at 1 and the display with it at 0, so the ring's sun is
+DOUBLED and the display's is three quarters of itself - a factor of 2.667
+between them. Everything else about the two lights is identical, because both
+come out of the same `phd_PutPolygonsPickup`: an ambient of 8/8/8 and ONE sun
+along `(0, -50, -100)` normalised over `sqrt(12500)`. The colour is
+`pcbright`, and for the display it is always `0x7F7F7F`:
+`S_DrawPickup` passes `bright` 0 and `DrawThreeDeeObject2D` turns 0 into
+`0x7F7F7F` (`game\newinv2.cpp:916`). Handing the display the ring's `sunScale`
+of 2.0 would have made it visibly brighter than the classic display it
+replaces, and it is exactly the kind of number that gets carried over without
+being asked about.
+
+**The decision: draw it on the spot, not on the list.** Fix round P's argument
+against the display was about the LIST and it is still true - `S_DrawPickup`
+runs after `HDFrameDraw` has drawn this frame's HD list and after
+`HDFrameDrawGlow` has finished with it, so an item pushed there would suppress
+its own classic polygons and be drawn by nobody. P2 does not push it. The node
+walk collects the matrices exactly as the ring's does, through the SAME four
+`phd_PutPolygonsPickup` call sites - the seam does not grow - and `HDInvEnd`
+opens a bracket of its own, draws the one object and closes it again. The
+frame's list is not touched and `g_count` is not incremented, so the list
+`HDObjectFrameReset` empties on the next picture is still the world's alone.
+
+That bracket is not a new one: `HDFramePickupBegin` / `HDFramePickupEnd`
+(`specific\hd\hd_level.cpp`) are `HDRenderFrameBegin` / `HDRenderFrameEnd`, the
+very pair the rooms, the objects and the ring are drawn between, so there is
+one HD path and one list of device states. It is also exactly what `ModelProbe`
+has always done for a single model, which is why the diagnostic tool can
+measure the real bracket rather than a copy of it.
+
+**Two things in that bracket are the display's own, and both were measured
+rather than inherited.**
+
+*The projection is read at the call.* Not `HDFrameProjectionInfo`:
+`HDFrameCaptureProjection` takes the field of view the WORLD was collected
+with, and `AlterFOV` moves `f_persp` inside a frame whenever the binoculars are
+up. The classic display projects with whatever `f_mpersp` holds at the moment
+`S_DrawPickup` runs, and `f_mpersp` is `f_persp` to the bit (`specific\3dmath.cpp`,
+`AlterFOV` sets both from the same line), so `pickup_begin` reads `f_persp`,
+`f_centerx`, `f_centery`, `f_a` and `f_b` there and hands them over.
+
+*The off-centre offset goes into the PROJECTION*, which is fix round P's whole
+lesson and needed no second thought:
+
+    kx = (X - centreX) / persp,   ky = (Y - centreY) / persp
+
+with `X` = `phd_winwidth - GetFixedScale(80) + PickupX` and `Y` =
+`phd_winheight - GetFixedScale(75)` plus `INVOBJ::yoff`, which is exactly what
+the classic path hands `phd_PutPolygonsPickup` as its temporary projection
+centre. `HDModelOffCentre` writes `_31 = kx * _11` and `_32 = ky * _22` for the
+length of one draw call and the node matrices reach the card as the engine's
+own. Putting it into the matrices as a shear instead would tilt every normal
+the shader skins through them; fix round P measured that at 45 % of brightness
+across a screen and this round does not repeat it.
+
+**The slide comes for free, and there is no fade to copy.** `DrawPickups`
+(`game\health.cpp:212`) draws nothing at all despite its name: it is the
+animation - how long the icon stays (`pu->life`, 45), how far it has slid in
+(`PickupX`, from `GetFixedScale(128)` to 0) and which of the eight queued
+pickups is up. `PickupX` moves `X`, `X` moves `kx`, `kx` moves the projection,
+and the object walks out of the picture exactly as it always did. There is no
+alpha ramp anywhere in either path.
+
+**Sixty frames a second changes nothing here either.** The spin is
+`(GnFrameCounter & 0x7F) << 9` and `GnFrameCounter` is stepped once per LOGIC
+TICK since #148 order 3 (`output.cpp:1509`, `if (!InterpIsTweenFrame())`), so
+the display turns at thirty steps a second at either rate - and both paths read
+the same `yrot`, because it is computed in `S_DrawPickup` and travels down the
+matrix stack. `DrawPickups` returns early on a tween frame, so the slide is the
+same fraction of a second at either rate. Not a line of this round reads the
+frame rate.
+
+**What was changed.**
+
+| File | What |
+|---|---|
+| `specific\hd\hd_object.cpp` | `HDInvBegin` routes on `InventoryActive` instead of refusing; `pickup_begin` (the display's half of it, every refusal settled before the answer goes back) and `pickup_draw` (the immediate draw); `HDInvNode` and `HDInvEnd` carry both modes; the sun scale is `pickup ? 0.75f : 2.0f`; the level's own seam at the end of `HDObjectLevelBuild`. |
+| `specific\hd\hd_object.h` | the block over `HDInvBegin` - what round P refused, what P2 does instead, and the three things that are the display's own. |
+| `specific\hd\hd_level.cpp/.h` | `HDFramePickupBegin` / `HDFramePickupEnd`: the bracket, the display's own projection, this frame's lighting with no fog bulbs and with the material clock READ rather than stepped. |
+| `specific\hd\hd_render.cpp/.h` | `HDRenderInFrame()` - `HDRenderFrameBegin` refuses to nest and says nothing about it, and the display has to know before it suppresses its own classic polygons. |
+| `specific\hd\hd_model.cpp` | one comment: `HDModelOffCentre` has two callers now. |
+| `game\newinv2.cpp` | one comment at the seam - the four call sites are unchanged. |
+| `Preparation\Tools\Diagnose\ModelProbe.cpp` | `-pickupcheck`, and `ShotGrab` / the state snapshot it needs. |
+
+**The proof.** `ModelProbe -pickupcheck`, in three halves.
+
+*The place*, arithmetically, as `-ringcheck` does it for the ring: the model's
+bounding rectangle put on the screen twice - once by the classic off-centre
+projection and once through the engine's own `HDModelOffCentreMatrix` and the
+viewport - at 1920x1080 and 2560x1440, at rotation 0 and 90 degrees, and with
+the slide both fully in and fully out. Eight places per object; the two roads
+agree in position AND in width and height to a worst **0.00008 px** (budget 1
+px) on `BIGMEDI_ITEM`, `KEY_ITEM1` and `HK_AMMO_ITEM` alike. The rectangle is
+987.76 px wide at 1920x1080 and 1317.01 at 2560x1440, which is 1.3333 = 1440 /
+1080 exactly: the display scales with the picture's HEIGHT and gains nothing
+from the extra width, on both paths.
+
+*The light*, end to end and by picture: the same object rendered twice at
+1920x1080 with the display's own light - once about the screen centre, once
+about the display's corner (1740, 911) - and then compared where the two
+overlap after the whole known shift of 780, 371 px. The offset is a whole
+number of pixels, so the two must be the SAME picture moved:
+
+| Object | object pixels | only in one | mean centre | mean corner | apart | > 2/255 |
+|---|---|---|---|---|---|---|
+| `BIGMEDI_ITEM` | 5642 | 0 | 37.4751 | 37.4742 | 0.0024 % | 0 of 5642 |
+| `KEY_ITEM1` | 1498 | 0 | 48.2419 | 48.2405 | 0.0028 % | 0 of 1498 |
+| `HK_AMMO_ITEM` | 1486 | 0 | 32.3739 | 32.3724 | 0.0049 % | 5 of 1486 |
+
+Not one pixel of any of the three is in one picture and not the other, and the
+bounding boxes are shifted by exactly 780, 371 with identical sizes (89x70,
+65x93, 75x42). The handful of pixels that differ at all are edge texels: the
+projection reaches the offset through `_31 = kx * _11` in single precision
+rather than through an integer move, so an edge sample can land a hundredth of
+a pixel further along. What is being ruled out is a light that depends on WHERE
+the object stands, which the shear of fix round P had at 45 %.
+
+*The state bracket*: every watched device state, sampler state and texture stage
+state read before and after the corner draw, with the wider list `RoomProbe`
+uses rather than the one `hd_render` saves - **0 of 58 changed**, on all three
+objects. The `DrawSortList` that follows the display in `S_OutputPolyList` runs
+unchanged; with the object drawn HD its own list is empty and `DrawSortList`
+returns at its first line without touching a state (`polyinsert.cpp:236`), and
+`SortPolyList(0, ...)` returns at its own.
+
+**The log.** With `-log`, a level writes one `HDLOG pickupdisplay level=<stem>
+slots=N hd=N classic=<list>` line at build time, naming every slot the display
+can show and every one of them without a model; and one
+`HDLOG pickupdisplay slot=<n>(<name>) hd=<0|1> x=<n> y=<n>` line per object, the
+first time that object is shown in the level - the display can show the same
+medipack two hundred times and the line would be the same line. Both stay,
+behind `-log`, like every other seam.
+
+**Classic path.** Untouched, and at the same line as before: `HDInvBegin` still
+answers false at `if (!g_active || !tomb5.hd_objects)` with the HD path off, so
+`DrawInventoryItemMe` runs the walk it always ran and puts the same classic
+polygons into the same sort list. What changed is only what happens AFTER that
+test, and only for a caller that used to be turned away one line earlier.
+`fps_mode` is not read anywhere in this round.
 
 ---
 

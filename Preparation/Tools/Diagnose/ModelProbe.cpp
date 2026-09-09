@@ -239,6 +239,25 @@
  *                         and the second is the error P2 removed, kept as a
  *                         number. Needs the camera, so it does not combine
  *                         with -nodraw - same as -itemcheck and -laracheck.
+ *     -pickupcheck        the proof of the PICKUP DISPLAY (#123, fix round
+ *                         P2) - the little turning object in the corner
+ *                         after Lara picks something up - in three halves.
+ *                         THE PLACE: the bounding rectangle put on the
+ *                         screen twice at the place S_DrawPickup puts it
+ *                         (x = winwidth - GetFixedScale(80) + PickupX,
+ *                         y = winheight - GetFixedScale(75)), at 1920x1080
+ *                         and 2560x1440, at rotation 0 and 90 degrees, and
+ *                         with the slide-in both fully in and fully out.
+ *                         Budget 1 px, on the place and on the SIZE. THE
+ *                         LIGHT: the same object rendered twice - once
+ *                         about the screen centre, once about the display's
+ *                         corner - and compared where the two overlap after
+ *                         the whole known pixel shift, with the display's
+ *                         own light (ambient 8/8/8, one sun of 0x7F7F7F,
+ *                         sun scale 0.75 and NOT the ring's 2.0). THE
+ *                         BRACKET: every watched device state read before
+ *                         and after the corner draw. Needs the camera, so
+ *                         it does not combine with -nodraw.
  *     -ring <x> <y>       draw the model where the ring would put it, by the
  *                         engine's own road: the matrices are untouched and
  *                         the offset goes into the projection. The picture of
@@ -755,6 +774,196 @@ static bool ShotWrite(Shot& shot, const char* path)
 		printf("ModelProbe: writing %s failed\n", path);
 
 	return ok;
+}
+
+/* THE PICTURE'S PIXELS, with no file written (#123, fix round P2).
+ * ShotWrite measures a mean over the whole target, which answers nothing when
+ * the two pictures being compared have the object in DIFFERENT places;
+ * -pickupcheck compares them pixel by pixel after the whole known shift, so it
+ * needs the pixels themselves. */
+static bool ShotGrab(Shot& shot, std::vector<unsigned long>& out)
+{
+	D3DLOCKED_RECT rect;
+
+	out.clear();
+
+	if (FAILED(g_device->GetRenderTargetData(shot.colour, shot.readback)))
+		return false;
+
+	if (FAILED(shot.readback->LockRect(&rect, 0, D3DLOCK_READONLY)))
+		return false;
+
+	out.resize((size_t)shot.w * (size_t)shot.h);
+
+	for (long y = 0; y < shot.h; y++)
+	{
+		const unsigned long* src = (const unsigned long*)
+			((const unsigned char*)rect.pBits + (size_t)y * rect.Pitch);
+
+		for (long x = 0; x < shot.w; x++)
+			out[(size_t)y * (size_t)shot.w + (size_t)x] = src[x] | 0xFF000000u;
+	}
+
+	shot.readback->UnlockRect();
+	return true;
+}
+
+/* ------------------------------------------------------- state bracket -- */
+/*
+ * THE SAME CHECK RoomProbe MAKES OF THE ROOM PATH'S BRACKET (#123, stage S3-1),
+ * brought here in fix round P2 for a bracket that is new: the pickup display
+ * opens one in the MIDDLE of a classic frame - after the frame's own HD block
+ * has been drawn and closed, between an InitialiseSortList and the DrawSortList
+ * that follows it - so anything it leaves behind is handed straight to the
+ * classic path with no frame boundary in between to hide it.
+ *
+ * The list is deliberately WIDER than the one hd_render saves, so that a state
+ * the HD path changes and forgets to save is caught here rather than in the
+ * game.
+ */
+static const D3DRENDERSTATETYPE kWatchedStates[] =
+{
+	D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC, D3DRS_FILLMODE,
+	D3DRS_SHADEMODE, D3DRS_ALPHATESTENABLE, D3DRS_ALPHAREF, D3DRS_ALPHAFUNC,
+	D3DRS_DITHERENABLE, D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND, D3DRS_DESTBLEND,
+	D3DRS_BLENDOP, D3DRS_CULLMODE, D3DRS_FOGENABLE, D3DRS_SPECULARENABLE,
+	D3DRS_LIGHTING, D3DRS_COLORVERTEX, D3DRS_AMBIENT, D3DRS_CLIPPING,
+	D3DRS_STENCILENABLE, D3DRS_SCISSORTESTENABLE, D3DRS_COLORWRITEENABLE,
+	D3DRS_SEPARATEALPHABLENDENABLE, D3DRS_SRGBWRITEENABLE,
+	D3DRS_MULTISAMPLEANTIALIAS, D3DRS_TEXTUREFACTOR, D3DRS_WRAP0,
+	D3DRS_NORMALIZENORMALS, D3DRS_LOCALVIEWER, D3DRS_DEPTHBIAS,
+	D3DRS_SLOPESCALEDEPTHBIAS
+};
+
+static const D3DSAMPLERSTATETYPE kWatchedSamplers[] =
+{
+	D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_ADDRESSW, D3DSAMP_BORDERCOLOR,
+	D3DSAMP_MAGFILTER, D3DSAMP_MINFILTER, D3DSAMP_MIPFILTER,
+	D3DSAMP_MIPMAPLODBIAS, D3DSAMP_MAXMIPLEVEL, D3DSAMP_MAXANISOTROPY,
+	D3DSAMP_SRGBTEXTURE
+};
+
+static const D3DTEXTURESTAGESTATETYPE kWatchedStages[] =
+{
+	D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_COLORARG2,
+	D3DTSS_ALPHAOP, D3DTSS_ALPHAARG1, D3DTSS_ALPHAARG2, D3DTSS_TEXCOORDINDEX
+};
+
+static const int kWatchedStateCount =
+	(int)(sizeof(kWatchedStates) / sizeof(kWatchedStates[0]));
+static const int kWatchedSamplerCount =
+	(int)(sizeof(kWatchedSamplers) / sizeof(kWatchedSamplers[0]));
+static const int kWatchedStageCount =
+	(int)(sizeof(kWatchedStages) / sizeof(kWatchedStages[0]));
+
+struct StateShot
+{
+	DWORD rs[kWatchedStateCount];
+	DWORD samp[kWatchedSamplerCount];
+	DWORD stage[kWatchedStageCount];
+	RECT scissor;
+	BOOL scissorOk;
+	DWORD fvf;
+	void* vs;
+	void* ps;
+	void* decl;
+	void* stream;
+	void* indices;
+	void* texture;
+	UINT offset, stride;
+};
+
+static void StateTake(StateShot& shot)
+{
+	memset(&shot, 0, sizeof(shot));
+
+	for (int i = 0; i < kWatchedStateCount; i++)
+		g_device->GetRenderState(kWatchedStates[i], &shot.rs[i]);
+	for (int i = 0; i < kWatchedSamplerCount; i++)
+		g_device->GetSamplerState(0, kWatchedSamplers[i], &shot.samp[i]);
+	for (int i = 0; i < kWatchedStageCount; i++)
+		g_device->GetTextureStageState(0, kWatchedStages[i], &shot.stage[i]);
+
+	shot.scissorOk = SUCCEEDED(g_device->GetScissorRect(&shot.scissor));
+	g_device->GetFVF(&shot.fvf);
+
+	// The Get* calls add a reference; the pointer is taken as an identity and
+	// the reference given straight back, so the measurement cannot change what
+	// it measures.
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* indices = 0;
+	IDirect3DBaseTexture9* texture = 0;
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetStreamSource(0, &stream, &shot.offset, &shot.stride);
+	g_device->GetIndices(&indices);
+	g_device->GetTexture(0, &texture);
+
+	shot.vs = vs; shot.ps = ps; shot.decl = decl;
+	shot.stream = stream; shot.indices = indices; shot.texture = texture;
+
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+	if (decl) decl->Release();
+	if (stream) stream->Release();
+	if (indices) indices->Release();
+	if (texture) texture->Release();
+}
+
+static int StateDiff(const StateShot& before, const StateShot& after)
+{
+	int broken = 0;
+
+	for (int i = 0; i < kWatchedStateCount; i++)
+		if (before.rs[i] != after.rs[i])
+		{
+			printf("  BROKEN render state %d: %lu -> %lu\n",
+				(int)kWatchedStates[i], before.rs[i], after.rs[i]);
+			broken++;
+		}
+
+	for (int i = 0; i < kWatchedSamplerCount; i++)
+		if (before.samp[i] != after.samp[i])
+		{
+			printf("  BROKEN sampler state %d: %lu -> %lu\n",
+				(int)kWatchedSamplers[i], before.samp[i], after.samp[i]);
+			broken++;
+		}
+
+	for (int i = 0; i < kWatchedStageCount; i++)
+		if (before.stage[i] != after.stage[i])
+		{
+			printf("  BROKEN texture stage state %d: %lu -> %lu\n",
+				(int)kWatchedStages[i], before.stage[i], after.stage[i]);
+			broken++;
+		}
+
+	if (before.scissorOk != after.scissorOk ||
+		(before.scissorOk && memcmp(&before.scissor, &after.scissor, sizeof(RECT))))
+	{
+		printf("  BROKEN scissor rectangle\n");
+		broken++;
+	}
+
+	if (before.fvf != after.fvf) { printf("  BROKEN FVF\n"); broken++; }
+	if (before.vs != after.vs) { printf("  BROKEN vertex shader\n"); broken++; }
+	if (before.ps != after.ps) { printf("  BROKEN pixel shader\n"); broken++; }
+	if (before.decl != after.decl) { printf("  BROKEN vertex declaration\n"); broken++; }
+	if (before.stream != after.stream) { printf("  BROKEN stream 0\n"); broken++; }
+	if (before.indices != after.indices) { printf("  BROKEN index buffer\n"); broken++; }
+	if (before.texture != after.texture) { printf("  BROKEN texture 0\n"); broken++; }
+	if (before.offset != after.offset) { printf("  BROKEN stream offset\n"); broken++; }
+
+	/* NOT the stride, and RoomProbe's own note says why: after
+	 * SetStreamSource(0, NULL, 0, 0) the runtime still answers the last stride
+	 * it was given and there is no way to put the old one back. The stride of
+	 * an unbound stream is read by nobody. */
+	return broken;
 }
 
 static void ShotEnd(Shot& shot)
@@ -6884,6 +7093,12 @@ int main(int argc, char** argv)
 	 * of the shear, -ring <x> <y> draws the model where the ring would put it
 	 * so that the same shear can be looked at. */
 	bool ringcheck = false;
+	/* #123, fix round P2: the pickup display in the corner. The same two
+	 * halves -ringcheck measures - the place and the light - asked at the one
+	 * place the display stands, and a third one the ring never needed: the
+	 * device state bracket, because the display opens one of its own in the
+	 * middle of a classic frame. */
+	bool pickupcheck = false;
 	bool ringSet = false;
 	bool ringLight = false;
 	double ringX = 0.0, ringY = 0.0;
@@ -7148,6 +7363,8 @@ int main(int argc, char** argv)
 			itemcheck = true;
 		else if (!_stricmp(argv[i], "-ringcheck"))
 			ringcheck = true;
+		else if (!_stricmp(argv[i], "-pickupcheck"))
+			pickupcheck = true;
 		else if (!_stricmp(argv[i], "-ring") && i + 2 < argc)
 		{
 			ringX = atof(argv[++i]);
@@ -8248,6 +8465,425 @@ int main(int argc, char** argv)
 	sprintf(path, "%s_%s.png", out.c_str(), HDModelName(slot));
 	ShotWrite(shot, path);
 	ShotEnd(shot);
+
+	/* THE PICKUP DISPLAY (#123, fix round P2), in three halves.
+	 *
+	 * The little turning object in the corner after Lara picks something up.
+	 * It is the SECOND caller of DrawInventoryItemMe and it goes through the
+	 * very same four call sites as the inventory ring, so the arithmetic under
+	 * it is -ringcheck's - asked at the one place the display stands rather
+	 * than at the ring's twenty-four:
+	 *
+	 *   x = phd_winwidth  - GetFixedScale(80) + PickupX
+	 *   y = phd_winheight - GetFixedScale(75)
+	 *
+	 * (specific\output.cpp, S_DrawPickup; INVOBJ::yoff shifts y a little
+	 * further and is per LEVEL, out of SCRIPT.DAT - the offset arithmetic is
+	 * linear in y, so any y proves the same thing.) PickupX is the slide, from
+	 * GetFixedScale(128) fully out to 0 fully in (game\health.cpp), and both
+	 * ends are measured because the slide is exactly what moves the display
+	 * about the screen.
+	 *
+	 * WHAT IS DIFFERENT FROM THE RING, and it is one number: the sun's scale.
+	 * aTransformLightClipMesh doubles a sun while InventoryActive and takes
+	 * three quarters of it otherwise, and the display is drawn with
+	 * InventoryActive at 0 - so the light half below uses 0.75 where
+	 * -ringlight uses 2.0.
+	 */
+	if (pickupcheck)
+	{
+		struct DisplayWindow { const char* name; long w, h; };
+
+		const DisplayWindow windows[2] =
+		{
+			{ "1920x1080", 1920, 1080 },
+			{ "2560x1440", 2560, 1440 }
+		};
+
+		const double spins[2] = { 0.0, 90.0 };
+
+		printf("\n-- pickupcheck: the place ---------------------------------------\n");
+		printf("%10s %4s %6s %7s %7s %9s %9s %9s %9s %9s %9s\n", "window",
+			"rot", "slide", "x", "y", "class w", "disp w", "class h", "disp h",
+			"worst dx", "worst dy");
+
+		double worstX = 0.0, worstY = 0.0;
+		int places = 0, skipped = 0;
+
+		for (int wi = 0; wi < 2; wi++)
+		{
+			const long w = windows[wi].w;
+			const long h = windows[wi].h;
+			const double pp = EnginePersp(h, fov);
+			const double centreX = (double)(w / 2);
+			const double centreY = (double)(h / 2);
+			const double baseX = (double)(w - RingFixedScale(80, w, h));
+			const double Y = (double)(h - RingFixedScale(75, w, h));
+			const double slides[2] = { 0.0, (double)RingFixedScale(128, w, h) };
+
+			double za = 0, zb = 0, zboo = 0;
+			D3DMATRIX flat;
+
+			HDRenderZConstants(20.0, 20480.0, &za, &zb, &zboo);
+			HDRenderMakeProjection(pp, centreX, centreY, za, zb, &flat);
+
+			for (int si = 0; si < 2; si++)
+				for (int ri = 0; ri < 2; ri++)
+				{
+					/* THE ROTATION IS IN THE MATRICES, not in the offset:
+					 * S_DrawPickup spins the object on
+					 * (GnFrameCounter & 0x7F) << 9, which reaches
+					 * DrawInventoryItemMe as item->pos.y_rot and goes onto
+					 * the matrix stack before the node walk. Both paths get
+					 * the very same matrices out of it - which is the point:
+					 * a turned object must land in the same rectangle on
+					 * both roads, not only a square-on one. */
+					double spun[32][2];
+
+					memcpy(spun, turn, sizeof(spun));
+					spun[0][0] += spins[ri];
+
+					std::vector<float> spunMat((size_t)here->nodes * 16);
+
+					BuildNodeMatrices(*here, view, spun, &spunMat[0]);
+
+					const float* m0 = &spunMat[0];
+					const double X = baseX + slides[si];
+					const double kx = (X - centreX) / pp;
+					const double ky = (Y - centreY) / pp;
+
+					D3DMATRIX offProj;
+
+					HDModelOffCentreMatrix(&flat, (float)kx, (float)ky, &offProj);
+
+					const float* om = (const float*)&offProj;
+
+					double cl = 1e30, cr = -1e30, ct = 1e30, cb = -1e30;
+					double dl = 1e30, dr = -1e30, dt = 1e30, db = -1e30;
+					bool behind = false;
+
+					for (int xi = 0; xi < 2 && !behind; xi++)
+						for (int yi = 0; yi < 2 && !behind; yi++)
+							for (int zi = 0; zi < 2 && !behind; zi++)
+							{
+								const double mx = xi ? maxs[0] : mins[0];
+								const double my = yi ? maxs[1] : mins[1];
+								const double mz = zi ? maxs[2] : mins[2];
+
+								const double vx = mx * m0[0] + my * m0[4] + mz * m0[8] + m0[12];
+								const double vy = mx * m0[1] + my * m0[5] + mz * m0[9] + m0[13];
+								const double vz = mx * m0[2] + my * m0[6] + mz * m0[10] + m0[14];
+
+								if (vz < 20.0)
+								{
+									behind = true;
+									break;
+								}
+
+								/* THE CLASSIC ROAD: aTransformLightClipMesh
+								 * with f_centerx / f_centery moved to the
+								 * display's own x / y for the length of one
+								 * mesh, which is what phd_PutPolygonsPickup
+								 * does (specific\output.cpp). */
+								const double zv = pp / vz;
+								const double cx2 = vx * zv + X;
+								const double cy2 = vy * zv + Y;
+
+								if (cx2 < cl) cl = cx2;
+								if (cx2 > cr) cr = cx2;
+								if (cy2 < ct) ct = cy2;
+								if (cy2 > cb) cb = cy2;
+
+								/* THE ENGINE'S ROAD: the same untouched
+								 * corner through HDModelOffCentreMatrix -
+								 * the engine's own line, linked into this
+								 * tool, not a copy of it - and the viewport.
+								 */
+								const double px = vx * om[0] + vy * om[4] + vz * om[8] + om[12];
+								const double py = vx * om[1] + vy * om[5] + vz * om[9] + om[13];
+								const double pw = vx * om[3] + vy * om[7] + vz * om[11] + om[15];
+
+								if (pw <= 0.0)
+								{
+									behind = true;
+									break;
+								}
+
+								const double dx2 = (px / pw + 1.0) * 0.5 * (double)w;
+								const double dy2 = (1.0 - py / pw) * 0.5 * (double)h;
+
+								if (dx2 < dl) dl = dx2;
+								if (dx2 > dr) dr = dx2;
+								if (dy2 < dt) dt = dy2;
+								if (dy2 > db) db = dy2;
+							}
+
+					if (behind)
+					{
+						skipped++;
+						continue;
+					}
+
+					const double e1 = fabs(dl - cl), e2 = fabs(dr - cr);
+					const double e3 = fabs(dt - ct), e4 = fabs(db - cb);
+					const double ex = e1 > e2 ? e1 : e2;
+					const double ey = e3 > e4 ? e3 : e4;
+
+					if (ex > worstX) worstX = ex;
+					if (ey > worstY) worstY = ey;
+
+					places++;
+
+					printf("%10s %4.0f %6s %7.0f %7.0f %9.2f %9.2f %9.2f %9.2f "
+						"%9.5f %9.5f\n",
+						windows[wi].name, spins[ri], si ? "out" : "in", X, Y,
+						cr - cl, dr - dl, cb - ct, db - dt, ex, ey);
+				}
+		}
+
+		printf("\n%d places compared, %d skipped behind the near plane; "
+			"worst dx %.5f px, worst dy %.5f px\n", places, skipped,
+			worstX, worstY);
+
+		/* --- THE LIGHT, end to end ---------------------------------------
+		 *
+		 * The same object drawn twice at 1920x1080 with the display's own
+		 * light - once about the screen CENTRE and once about the display's
+		 * CORNER - and then compared where they overlap after the whole known
+		 * pixel shift. X, Y and the screen centre are all whole pixels, and
+		 * the off-centre projection is exactly X - centreX pixels, so the two
+		 * pictures must be the SAME picture moved by (dx, dy): not "close in
+		 * mean brightness" but equal pixel for pixel.
+		 *
+		 * The camera is pushed back for this half so that the object fits in
+		 * the corner whole - a model that runs off the edge would have the two
+		 * pictures overlap in only part of itself, and a mean over a subset
+		 * proves less than a mean over the same set. */
+		const long lw = 1920, lh = 1080;
+		const double lp = EnginePersp(lh, fov);
+		const double lcx = (double)(lw / 2), lcy = (double)(lh / 2);
+		const double lx = (double)(lw - RingFixedScale(80, lw, lh));
+		const double ly = (double)(lh - RingFixedScale(75, lw, lh));
+		double ldist = lp * radius / (0.055 * (double)lh);
+
+		float lview[16];
+		D3DMATRIX lproj;
+
+		LookAt(cx - f[0] * ldist, cy - f[1] * ldist, cz - f[2] * ldist,
+			yaw, pitch, lview);
+		HDRenderMakeProjection(lp, lcx, lcy, a, b, &lproj);
+
+		std::vector<float> lmat((size_t)here->nodes * 16);
+
+		BuildNodeMatrices(*here, lview, turn, &lmat[0]);
+
+		/* THE DISPLAY'S OWN LIGHT, which is phd_PutPolygonsPickup's: an
+		 * ambient of 8/8/8, one sun of pcbright - and pcbright is 0x7F7F7F
+		 * here, because S_DrawPickup passes `bright` 0 and
+		 * DrawThreeDeeObject2D turns that into 0x7F7F7F - pointing along
+		 * (0, -50, -100) over sqrt(12500). Scale 0.75 and not the ring's 2.0:
+		 * the display is drawn with InventoryActive at 0. */
+		HDObjLight pickupSun;
+
+		pickupSun.x = 0.0f;
+		pickupSun.y = (float)(-50.0 / sqrt(12500.0));
+		pickupSun.z = (float)(-100.0 / sqrt(12500.0));
+		pickupSun.kind = (float)HD_OBJLIGHT_SUN;
+		pickupSun.r = 127.0f;
+		pickupSun.g = 127.0f;
+		pickupSun.b = 127.0f;
+		pickupSun.invRange = 0.0f;
+
+		HDModelLighting pickupLight;
+
+		pickupLight.lights = &pickupSun;
+		pickupLight.lightCount = 1;
+		pickupLight.sunScale = 0.75f;
+		pickupLight.specStrength = 0.0f;
+		pickupLight.specPower = 1.0f;
+
+		std::vector<float> pickupNodes((size_t)here->nodes * 3, 8.0f);
+
+		HDFrameLighting pframe;
+		float pwibble[32];
+
+		memset(&pframe, 0, sizeof(pframe));
+
+		for (int i = 0; i < 32; i++)
+			pwibble[i] = 0.0f;
+
+		pframe.centerX = (float)lcx;
+		pframe.centerY = (float)lcy;
+		pframe.distanceFogStart = 1.0e9f;
+		pframe.wibbleTable = pwibble;
+
+		std::vector<unsigned long> shots[2];
+		StateShot before, after;
+		int broken = -1;
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			Shot ps;
+
+			if (!ShotBegin(ps, lw, lh))
+			{
+				ShotEnd(ps);
+				break;
+			}
+
+			const double pkx = pass ? (lx - lcx) / lp : 0.0;
+			const double pky = pass ? (ly - lcy) / lp : 0.0;
+
+			g_device->BeginScene();
+
+			if (pass)
+				StateTake(before);
+
+			HDRenderFrameBegin((const D3DMATRIX*)lview, &lproj, &pframe);
+			HDModelFrameBegin(&lproj, 0);
+			HDModelOffCentre((float)pkx, (float)pky);
+			HDModelDraw(slot, &lmat[0], here->nodes, &pickupNodes[0], nodeMask,
+				&pickupLight);
+			HDModelOffCentre(0.0f, 0.0f);
+			HDRenderFrameEnd();
+
+			if (pass)
+			{
+				StateTake(after);
+				broken = StateDiff(before, after);
+			}
+
+			g_device->EndScene();
+			ShotGrab(ps, shots[pass]);
+
+			sprintf(path, "%s_pickup_%s_%s.png", out.c_str(),
+				pass ? "corner" : "centre", HDModelName(slot));
+			ShotWrite(ps, path);
+			ShotEnd(ps);
+		}
+
+		printf("\n-- pickupcheck: the light ---------------------------------------\n");
+
+		double meanCentre = 0.0, meanCorner = 0.0, diffPct = 0.0;
+		long compared = 0, lost = 0, onlyA = 0, onlyB = 0, worstChannel = 0;
+		/* HOW MANY pixels differ at all, and how many by more than a step or
+		 * two - a worst value alone cannot tell one stray texel apart from a
+		 * picture that is lit differently. */
+		long moved = 0, noisy = 0;
+
+		if (shots[0].size() && shots[1].size())
+		{
+			const long dx = (long)(lx - lcx);
+			const long dy = (long)(ly - lcy);
+
+			for (long y = 0; y < lh; y++)
+				for (long x = 0; x < lw; x++)
+				{
+					const unsigned long b2 = shots[1][(size_t)y * lw + x];
+					const bool bObj = (b2 & 0x00FFFFFFu) != 0x00FF00FFu;
+					const long ax = x - dx, ay = y - dy;
+					const bool inA = ax >= 0 && ax < lw && ay >= 0 && ay < lh;
+					const unsigned long a2 = inA
+						? shots[0][(size_t)ay * lw + ax] : 0xFFFF00FFu;
+					const bool aObj = inA && (a2 & 0x00FFFFFFu) != 0x00FF00FFu;
+
+					if (!bObj && !aObj)
+						continue;
+
+					if (bObj != aObj)
+					{
+						if (aObj) onlyA++; else onlyB++;
+
+						if (!inA) lost++;
+						continue;
+					}
+
+					compared++;
+					meanCentre += (double)((a2 >> 16) & 255)
+						+ (double)((a2 >> 8) & 255) + (double)(a2 & 255);
+					meanCorner += (double)((b2 >> 16) & 255)
+						+ (double)((b2 >> 8) & 255) + (double)(b2 & 255);
+
+					long here = 0;
+
+					for (int ch = 0; ch < 3; ch++)
+					{
+						const long d = (long)((a2 >> (ch * 8)) & 255)
+							- (long)((b2 >> (ch * 8)) & 255);
+						const long ad = d < 0 ? -d : d;
+
+						if (ad > here)
+							here = ad;
+					}
+
+					if (here > worstChannel)
+						worstChannel = here;
+
+					if (here)
+						moved++;
+
+					if (here > 2)
+						noisy++;
+				}
+
+			if (compared)
+			{
+				meanCentre /= (double)compared * 3.0;
+				meanCorner /= (double)compared * 3.0;
+			}
+
+			diffPct = meanCentre > 1e-9
+				? 100.0 * fabs(meanCorner - meanCentre) / meanCentre : 0.0;
+
+			printf("centre %.0f,%.0f against corner %.0f,%.0f - the whole shift "
+				"is %ld,%ld px\n", lcx, lcy, lx, ly, dx, dy);
+			printf("object pixels    %ld compared, %ld only in the centre "
+				"picture, %ld only in the corner one (%ld of them off the "
+				"target)\n", compared, onlyA, onlyB, lost);
+			printf("mean brightness  centre %.4f, corner %.4f - %.4f %% apart\n",
+				meanCentre, meanCorner, diffPct);
+			printf("per pixel        %ld of %ld differ at all, %ld by more than "
+				"2 of 255, worst single channel %ld/255\n",
+				moved, compared, noisy, worstChannel);
+		}
+		else
+			printf("the two pictures could not be read back\n");
+
+		printf("\n-- pickupcheck: the state bracket -------------------------------\n");
+
+		if (broken < 0)
+			printf("the corner draw did not run\n");
+		else
+			printf("%d of %d watched states changed across the display's own "
+				"bracket\n", broken,
+				kWatchedStateCount + kWatchedSamplerCount + kWatchedStageCount + 8);
+
+		/* THE BUDGETS, and the light's is not zero on purpose. The place is
+		 * arithmetic and its budget is the same 1 px -ringcheck uses. The
+		 * light is a RASTERISED picture: the two draws put the same triangles
+		 * on the same pixel grid a whole number of pixels apart, but the
+		 * projection reaches that offset through _31 = kx * _11 in single
+		 * precision rather than through an integer move, so an edge texel can
+		 * land a hundredth of a pixel further along and come back one step of
+		 * 255 different. One step is the smallest difference a picture can
+		 * have; what is being ruled out is a light that depends on WHERE the
+		 * object stands, which the shear of fix round P had at 45 %. */
+		const long edges = onlyA + onlyB;
+		const bool pass = places && worstX <= 1.0 && worstY <= 1.0 &&
+			compared > 0 && diffPct < 2.0 && noisy * 200 <= compared &&
+			edges * 100 <= compared && broken == 0;
+
+		printf("\nbudgets: place 1 px; light 2 %% of the mean, and at most "
+			"0.5 %% of the object's pixels more than 2 of 255 apart; edge "
+			"pixels 1 %% of the object; states 0\n");
+		printf("%s\n", pass
+			? "PASS - the display's projection puts the rectangle where the "
+			  "classic off-centre projection puts it, at the same size; the "
+			  "corner picture is the centre picture moved and not a different "
+			  "one; and the bracket hands the classic path back the device it "
+			  "was given"
+			: "FAIL - see the three sections above");
+	}
 
 	printf("\npeak commit of the whole run: %.1f MiB\n", PeakCommitMiB());
 

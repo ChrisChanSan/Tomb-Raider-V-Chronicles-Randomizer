@@ -976,7 +976,7 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 	meshpp = &meshes[object->mesh_index];
 	bone = &bones[object->bone_index];
 
-	/* #123 (fix round P): IS THIS RING ITEM DRAWN BY THE HD PATH?
+	/* #123 (fix round P, P2): IS THIS ITEM DRAWN BY THE HD PATH?
 	 *
 	 * The same seam DrawAnimatingItem has carried since stage S3-2, in the
 	 * one other place in this engine that walks a mesh tree and hands each
@@ -987,17 +987,24 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 	 * phd_PutPolygonsPickup it hands the node's MATRIX to hd_object, which is
 	 * what a skinned model wants.
 	 *
-	 * xoffset/yoffset are the item's place on the ring, which is what the
+	 * xoffset/yoffset are the item's place on the screen, which is what the
 	 * classic call passes as the temporary projection centre; pcbright is the
-	 * ring's brightness for this item, which is the classic sun's colour.
-	 * hd_object carries the first to the item's own draw, where it moves the
-	 * PROJECTION, and takes the second as its one light.
+	 * brightness for this item, which is the classic sun's colour. hd_object
+	 * carries the first to the item's own draw, where it moves the PROJECTION,
+	 * and takes the second as its one light.
+	 *
+	 * BOTH CALLERS OF THIS FUNCTION COME THROUGH HERE. The inventory's four
+	 * (the ring, the ammo selector, the keypad, the examine screen) and
+	 * S_DrawPickup's one - the little turning object in the corner after a
+	 * pickup, which fix round P had to leave classic and fix round P2 draws on
+	 * the spot instead. Which of the two this is, and what hd_object does
+	 * about it, is decided in HDInvBegin and nowhere else: these four call
+	 * sites are one seam and stay one seam.
 	 *
 	 * False for an item the remaster ships no model for, for a slot whose
-	 * skeleton the model does not fit, with the HD path off, and outside the
-	 * inventory - the pickup display in the corner of the screen goes through
-	 * this same function and stays classic. Then the ring is drawn exactly as
-	 * it was, item by item, and never has a hole in it. */
+	 * skeleton the model does not fit, and with the HD path off. Then it is
+	 * drawn exactly as it was, item by item, and the ring never has a hole in
+	 * it. */
 	const bool hd = HDInvBegin(item, object, (float)xoffset, (float)yoffset, pcbright);
 
 	if (!shagflag)
@@ -1058,10 +1065,13 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 		}
 	}
 
-	/* The node walk is over. HDInvEnd puts the item on the frame's list - the
-	 * very list the world's HD objects go on, drawn in the same bracket by
-	 * the same HDObjectFrameDraw. Called on the one road out of this
-	 * function, as HDObjectEnd is in game\draw.cpp. */
+	/* The node walk is over. For a RING item HDInvEnd puts it on the frame's
+	 * list - the very list the world's HD objects go on, drawn in the same
+	 * bracket by the same HDObjectFrameDraw; for the PICKUP DISPLAY (P2) it
+	 * draws the one object on the spot, in a bracket of its own, because the
+	 * frame's list has been drawn and closed by the time S_DrawPickup runs.
+	 * Called on the one road out of this function, as HDObjectEnd is in
+	 * game\draw.cpp. */
 	if (hd)
 		HDInvEnd();
 

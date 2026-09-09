@@ -94,7 +94,7 @@ void HDObjectNode(int node, bool interpolated);
 
 void HDObjectEnd();
 
-// --- THE INVENTORY RING (#123, fix round P) --------------------------------
+// --- THE INVENTORY RING (P) AND THE PICKUP DISPLAY (P2) --------------------
 //
 // The ring is the same seam once more, and deliberately not a second render
 // path: game\newinv2.cpp's DrawInventoryItemMe walks a mesh tree exactly as
@@ -127,9 +127,34 @@ void HDObjectEnd();
 // which is what it hands phd_PutPolygonsPickup - and `color` its pcbright, the
 // ring's own brightness for this item.
 //
-// Answers false for an item with no HD model, for a slot whose skeleton the
-// model does not fit, and outside the inventory: the caller then draws the
-// classic mesh and the ring has no hole in it.
+// Answers false for an item with no HD model and for a slot whose skeleton the
+// model does not fit: the caller then draws the classic mesh and the ring has
+// no hole in it.
+//
+// --- AND THE PICKUP DISPLAY (#123, fix round P2) ---------------------------
+//
+// The same three calls, for the same reason and through the same four call
+// sites: DrawThreeDeeObject2D has a SECOND caller, S_DrawPickup
+// (specific\output.cpp), the little turning object in the corner after Lara
+// picks something up. It walks the identical mesh tree; what differs is WHEN.
+//
+// FIX ROUND P REFUSED IT, and the reason was sound: S_DrawPickup runs inside
+// S_OutputPolyList, after HDFrameDraw has drawn this frame's HD list and after
+// HDFrameDrawGlow has finished with it, so an item pushed onto that list would
+// suppress its own classic polygons and be drawn by nobody. Round P2 does not
+// push it: HDInvEnd DRAWS IT ON THE SPOT, in a bracket of its own
+// (hd_level.cpp, HDFramePickupBegin / HDFramePickupEnd), and the frame's list
+// is never touched. InventoryActive is still the one line that tells the two
+// callers apart, and now it routes instead of refusing.
+//
+// Three things are the display's own rather than the ring's, each measured:
+// the PROJECTION is read at the call out of f_persp / f_centerx / f_centery
+// (the frame's captured one belongs to the view the WORLD was collected with,
+// which a binocular zoom can have moved since); the SUN SCALE is 0.75 and not
+// 2.0, because aTransformLightClipMesh doubles a sun only while
+// InventoryActive and the display is drawn with it at 0; and the DEPTH needs
+// nothing, because S_OutputPolyList clears the buffer before the display's
+// block and the fade comes after it.
 bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color);
 void HDInvNode(int node);
 void HDInvEnd();

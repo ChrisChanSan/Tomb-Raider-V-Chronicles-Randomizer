@@ -170,6 +170,13 @@ namespace
 	 * never pick up a ring's centre and a ring item can never pick up a
 	 * room. */
 	bool g_ring_open = false;
+	/* THE THREE THE PICKUP DISPLAY BORROWS (P2). The off-centre pair and
+	 * the light colour are a property of the CALL rather than of the ring,
+	 * and the two callers cannot overlap: every place that sets
+	 * InventoryActive puts a mono screen up first, and S_OutputPolyList
+	 * blocks the display's whole block while one is up
+	 * (specific\output.cpp). One pair, not two that have to be kept in
+	 * step. */
 	float g_ring_kx = 0.0f;
 	float g_ring_ky = 0.0f;
 	long g_ring_color = 0;
@@ -214,6 +221,47 @@ namespace
 	 * four times what a frame has ever held. */
 	RingLogItem g_ring_log[16];
 	int g_ring_log_count = 0;
+
+	/* ------------------------------------- THE PICKUP DISPLAY (P2) -- */
+
+	/* THE SECOND CALLER OF DrawInventoryItemMe, and the whole of fix round P2.
+	 *
+	 * S_DrawPickup (specific\output.cpp) walks the very same mesh tree through
+	 * the very same four call sites; what is different is WHEN. It runs inside
+	 * S_OutputPolyList, after HDFrameDraw has drawn this frame's HD list and
+	 * after HDFrameDrawGlow has finished with it, so an item pushed onto that
+	 * list would suppress its own classic polygons and be drawn by nobody -
+	 * which is what fix round P measured and why it left the display classic.
+	 *
+	 * P2 draws it on the spot instead: the node walk collects the matrices
+	 * exactly as the ring's does, and HDInvEnd opens a bracket of its own
+	 * (hd_level.cpp, HDFramePickupBegin), draws the one object and closes it
+	 * again. Nothing reaches the frame list and g_count is not touched, so the
+	 * list that HDObjectFrameReset empties on the next picture is still the
+	 * world's alone.
+	 *
+	 * `g_pickup_open` is the mode the walk is in. The four numbers below it are
+	 * the display's OWN projection, read at HDInvBegin out of f_persp /
+	 * f_centerx / f_centery / f_a / f_b - not out of HDFrameCaptureProjection,
+	 * which took the field of view the WORLD was collected with and can be a
+	 * binocular zoom older than the display by a whole frame. */
+	bool g_pickup_open = false;
+	float g_pickup_persp = 0.0f;
+	float g_pickup_centrex = 0.0f;
+	float g_pickup_centrey = 0.0f;
+	float g_pickup_za = 0.0f;
+	float g_pickup_zb = 0.0f;
+
+	/* The item is built here and drawn from here, never on g_frame: it lives
+	 * for the length of one HDInvEnd. One item's worth of matrices, which is
+	 * what the frame list holds a hundred of. */
+	FrameItem g_pickup_item;
+
+	/* ONE LINE PER SLOT PER LEVEL. The display can show the same medipack two
+	 * hundred times in a level and the report is the same line every time, so
+	 * the slot is struck off the first time it is drawn. Cleared where the
+	 * level's own line is written, in HDObjectLevelBuild. */
+	bool g_pickup_logged[NUMBER_OBJECTS];
 
 	/* THE ENGINE'S 3x4 INTO THE ROW-MAJOR 4x4 THE SHADER WANTS, once per node
 	 * of the item just walked - the same conversion SetD3DMatrix does for the
@@ -1676,6 +1724,71 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	g_active = g_hd_slots > 0;
 
+	/* THE PICKUP DISPLAY'S OWN LINE (#123, fix round P2), once per level.
+	 *
+	 * WHICH SLOTS IT COUNTS, and it is not a hand-written list: the display
+	 * draws `inventry_objects_list[convert_obj_to_invobj(object_number)]`
+	 * (specific\output.cpp, S_DrawPickup), so the only object slots it can
+	 * ever name are the ones that table holds - and of those, four can never
+	 * be picked up and are struck out here: the compass, the passport's two
+	 * pages and the keypad. Everything else in the table is a weapon, ammo, a
+	 * medipack, flares, binoculars, the laser sight, the silencer, a key, a
+	 * puzzle piece, a pickup item, one of their combine halves, the crowbar,
+	 * the torch, an examine note, the cloth or the bottle - which is exactly
+	 * the list the callers of AddDisplayPickup (game\pickup.cpp,
+	 * game\deltapak.cpp, game\newinv2.cpp's secret bonus) can produce.
+	 *
+	 * The table is read at BUILD time and it is per level: LoadGameflow
+	 * (game\gameflow.cpp) overwrites its rows out of SCRIPT.DAT, but only the
+	 * name, the offset, the scale and the rotations - never object_number - so
+	 * the slot column is the same before and after. */
+	memset(g_pickup_logged, 0, sizeof(g_pickup_logged));
+
+	if (gLogEnabled)
+	{
+		char classic[512];
+		int used = 0, hd = 0, seen = 0;
+		bool named[NUMBER_OBJECTS];
+
+		classic[0] = 0;
+		memset(named, 0, sizeof(named));
+
+		for (int i = 0; i < NUM_INVOBJ; i++)
+		{
+			const int slot = (int)inventry_objects_list[i].object_number;
+
+			if (slot < 0 || slot >= NUMBER_OBJECTS || named[slot])
+				continue;
+
+			if (slot == COMPASS_ITEM || slot == PC_LOAD_INV_ITEM ||
+				slot == PC_SAVE_INV_ITEM || slot == PUZZLE_HOLE8)
+				continue;		// no caller of AddDisplayPickup can name one
+
+			named[slot] = true;
+			seen++;
+
+			if (g_slot[slot].hd)
+			{
+				hd++;
+				continue;
+			}
+
+			const char* name = HDSlotName(slot);
+
+			used += sprintf(classic + used, "%s%s", used ? "," : "",
+				name ? name : "?");
+
+			if (used > (int)sizeof(classic) - 40)
+			{
+				used += sprintf(classic + used, ",...");
+				break;
+			}
+		}
+
+		Log("HDLOG pickupdisplay level=%s slots=%d hd=%d classic=%s", g_stem,
+			seen, hd, used ? classic : "-");
+	}
+
 	/* LARA'S VERDICT (#123, stage S4-2), after the objects and out of the
 	 * models that were just built: which parts arrived, what they cover, how
 	 * far they drift. It writes its own HDLOG lines. */
@@ -1812,6 +1925,10 @@ void HDObjectFrameReset()
 	g_ring_hd = 0;
 	g_ring_classic = 0;
 	g_ring_log_count = 0;
+	/* P2: the display's walk begins and ends inside one S_OutputPolyList and
+	 * cannot survive a picture - but g_open is cleared here for the same
+	 * belt-and-braces reason and this is its partner. */
+	g_pickup_open = false;
 
 	HDLaraDrawFrameReset();
 }
@@ -2026,7 +2143,145 @@ void HDObjectEnd()
 	g_count++;
 }
 
-/* -------------------------------------------- THE INVENTORY RING (P) -- */
+/* ------------------- THE INVENTORY RING (P) AND THE PICKUP DISPLAY (P2) -- */
+
+/* THE PICKUP DISPLAY'S HALF OF HDInvBegin (#123, fix round P2).
+ *
+ * Every reason this item might NOT be drawn HD has to be settled HERE, before
+ * the answer goes back to DrawInventoryItemMe, because a true means the caller
+ * puts not one classic polygon in. The draw itself must therefore be able to
+ * fail for nothing this function did not already test: the model, the
+ * skeleton, the renderer, an open bracket, a scene to draw in and a projection
+ * to draw through.
+ *
+ * `x`/`y` are the display's place on the screen - S_DrawPickup's
+ * `phd_winwidth - GetFixedScale(80) + PickupX` and `phd_winheight -
+ * GetFixedScale(75)`, plus INVOBJ::yoff in y - which is what the classic path
+ * hands phd_PutPolygonsPickup as its temporary projection centre. So the
+ * slide-in and slide-out are carried for free: PickupX moves x, x moves the
+ * offset, the offset moves the projection, and the object walks out of the
+ * picture exactly as it always did. There is no alpha fade in either path to
+ * copy - DrawPickups (game\health.cpp) draws nothing at all and only moves
+ * PickupX. */
+static bool pickup_begin(ITEM_INFO* item, int slot, float x, float y,
+	long color)
+{
+	const bool known = slot >= 0 && slot < NUMBER_OBJECTS;
+	const bool hd = known && g_slot[slot].hd != 0;
+
+	/* THE SEAM, once per slot per level - see g_pickup_logged. Written before
+	 * the guards below rather than after, so that a slot the renderer refused
+	 * is named too; `hd` is the slot's own verdict, which is the question the
+	 * line exists to answer. */
+	if (gLogEnabled && known && !g_pickup_logged[slot])
+	{
+		g_pickup_logged[slot] = true;
+
+		Log("HDLOG pickupdisplay slot=%d(%s) hd=%d x=%d y=%d", slot,
+			HDSlotName(slot) ? HDSlotName(slot) : "?", hd ? 1 : 0,
+			(int)x, (int)y);
+	}
+
+	if (!hd)
+		return false;
+
+	/* A BRACKET TO DRAW IN. HDRenderFrameBegin refuses to nest and says
+	 * nothing about it, and there is no scene to draw into before
+	 * _BeginScene - so both are asked here, where the answer can still be
+	 * "draw it classically". Neither can happen from S_DrawPickup as the
+	 * engine stands (S_InitialisePolyList opens the scene, and the frame's own
+	 * bracket was closed long before the depth clear), which is why they are
+	 * tested rather than assumed. */
+	if (!HDRenderReady() || HDRenderInFrame() || !App.dx.InScene)
+		return false;
+
+	/* THE DISPLAY'S OWN PROJECTION, read here and now. NOT
+	 * HDFrameProjectionInfo: that is the field of view the WORLD was collected
+	 * with, and AlterFOV moves f_persp inside a frame whenever the binoculars
+	 * are up. The classic display projects with whatever f_mpersp holds at
+	 * this moment (aTransformLightClipMesh, specific\output.cpp) and f_mpersp
+	 * is f_persp to the bit (specific\3dmath.cpp, AlterFOV sets both from the
+	 * same line), so this is that number and not a copy of it. */
+	g_pickup_persp = f_persp;
+	g_pickup_centrex = f_centerx;
+	g_pickup_centrey = f_centery;
+	g_pickup_za = f_a;
+	g_pickup_zb = f_b;
+
+	if (g_pickup_persp <= 0.0f)
+		return false;
+
+	/* THE OFF-CENTRE PROJECTION, the ring's own arithmetic and the same two
+	 * numbers - the derivation stands over HDInvNode and in hd_model.h. */
+	g_ring_kx = (x - g_pickup_centrex) / g_pickup_persp;
+	g_ring_ky = (y - g_pickup_centrey) / g_pickup_persp;
+	g_ring_color = color;
+
+	g_pickup_open = true;
+
+	g_open = true;
+	g_open_slot = slot;
+	g_open_nodes = g_slot[slot].nodes;
+	g_open_room = -1;			// no room, as the ring has none
+	g_open_mask = (unsigned int)item->mesh_bits;
+	g_open_swap = -1;			// as on the ring: the stack ITEM_INFO
+						// never filled meshswap_meshbits
+	g_seen = 0;
+
+	/* NOT ONE OF THE FRAME'S COUNTERS IS TOUCHED HERE - not g_items_classic,
+	 * not g_mask_used, not g_count. They belong to the line HDObjectFrameEnd
+	 * has already written by the time the display is drawn, and a number
+	 * added to a line that is out of the door lands in the NEXT frame's.
+	 * The display has a seam of its own, above. */
+	return true;
+}
+
+/* THE IMMEDIATE DRAW (#123, fix round P2). One object, one bracket, and every
+ * device state back where it was - HDFramePickupBegin is HDRenderStateSave and
+ * HDFramePickupEnd is HDRenderStateRestore, the very pair the rooms and the
+ * ring are drawn between, so there is no second list of states to keep in
+ * step. The classic DrawSortList that follows this in S_OutputPolyList runs
+ * unchanged; with the object drawn here its own list is empty, and
+ * DrawSortList returns at its first line on an empty list without touching a
+ * state. */
+static void pickup_draw(const FrameItem& entry)
+{
+	/* No ProfScope of its own: HDInvEnd's PROF_HD_OBJ is still open around
+	 * this call, and two accumulators over the same microseconds would report
+	 * the frame's object work twice (#148). */
+	if (!HDFramePickupBegin(g_pickup_persp, g_pickup_centrex, g_pickup_centrey,
+		g_pickup_za, g_pickup_zb))
+		return;
+
+	HDModelLighting lighting;
+
+	lighting.lights = entry.lights;
+	lighting.lightCount = entry.lightCount;
+	lighting.sunScale = entry.sunScale;
+	lighting.specStrength = entry.specStrength;
+	lighting.specPower = entry.specPower;
+
+	// The display's place on the screen, in the PROJECTION and never in the
+	// matrices - fix round P2's whole point, ring and display alike.
+	HDModelOffCentre(entry.offCentreX, entry.offCentreY);
+
+	HDModelDraw(entry.drawSlot, entry.matrix, entry.nodes, entry.light,
+		entry.mask, &lighting, &entry.cut, entry.cull);
+
+	if (entry.head)
+		HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
+			entry.mask, &lighting, &entry.cut, entry.cull);
+
+	/* Put back before the bracket closes, exactly as HDObjectFrameDraw does:
+	 * the register file is shared with everything else that draws.
+	 *
+	 * g_draw_calls is NOT touched. It is the frame line's count of what the
+	 * world cost, HDObjectFrameEnd has already written that line by the time
+	 * this runs, and adding a display's one call to yesterday's number would
+	 * only make the line wrong. */
+	HDModelOffCentre(0.0f, 0.0f);
+	HDFramePickupEnd();
+}
 
 bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
 {
@@ -2035,24 +2290,34 @@ bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
 	if (!item || !obj)
 		return false;
 
-	/* THE RING AND NOTHING ELSE. DrawThreeDeeObject2D has a second caller -
-	 * S_DrawPickup (specific\output.cpp), the little rotating object in the
-	 * corner when Lara picks something up - and it is called from INSIDE
-	 * S_OutputPolyList (output.cpp:1860), after HDFrameDraw (output.cpp:1820)
-	 * has already drawn this frame's HD list. An item pushed there would
-	 * suppress its own classic polygons and be drawn by nobody: the list is
-	 * not emptied until the NEXT S_InitialisePolyList reaches
-	 * HDObjectFrameReset, so it would simply sit there and then be thrown
-	 * away. The pickup display therefore stays classic, and says so here
-	 * rather than in newinv2.cpp, where the same four call sites serve
-	 * both. */
-	if (!InventoryActive)
-		return false;
+	/* WHICH OF THE TWO CALLERS THIS IS, and it is still one line.
+	 *
+	 * DrawThreeDeeObject2D is reached from the ring, the ammo selector, the
+	 * keypad and the examine screen - all four inside S_CallInventory2, where
+	 * InventoryActive is 1 - and from S_DrawPickup (specific\output.cpp), the
+	 * little turning object in the corner after a pickup, where it is 0. The
+	 * two never overlap: the inventory calls S_OutputPolyList itself, but it
+	 * has CreateMonoScreen'd first and MonoScreenOn blocks the display's whole
+	 * block there (output.cpp).
+	 *
+	 * FIX ROUND P REFUSED THE SECOND ONE, and named the reason: S_DrawPickup
+	 * runs INSIDE S_OutputPolyList, after HDFrameDraw has drawn this frame's
+	 * HD list and after HDFrameDrawGlow has finished with it, so an item
+	 * pushed onto the list would suppress its own classic polygons and be
+	 * drawn by nobody. That is still true of the LIST. Fix round P2 does not
+	 * put it on the list: it collects the same matrices through the same node
+	 * walk and draws the item on the spot in HDInvEnd, in a bracket of its
+	 * own. Everything below is shared by both roads except where it says
+	 * otherwise. */
+	const bool pickup = !InventoryActive;
 
 	if (!g_active || !tomb5.hd_objects)
 		return false;
 
 	const int slot = (int)item->object_number;
+
+	if (pickup)
+		return pickup_begin(item, slot, x, y, color);
 
 	g_ring_frame = true;
 
@@ -2196,8 +2461,11 @@ void HDInvNode(int node)
 {
 	ProfScope prof(PROF_HD_OBJ);
 
-	if (!g_open || !g_ring_open || node < 0 || node >= g_open_nodes ||
-		node >= HD_OBJ_NODES)
+	// P2: the ring and the pickup display collect a node in exactly the same
+	// way - the engine's matrix stack, straight off. Which of the two is open
+	// only decides what HDInvEnd does with the item afterwards.
+	if (!g_open || (!g_ring_open && !g_pickup_open) || node < 0 ||
+		node >= g_open_nodes || node >= HD_OBJ_NODES)
 		return;
 
 	memcpy(g_raw + node * 12, aMXPtr, 48);
@@ -2209,16 +2477,29 @@ void HDInvEnd()
 {
 	ProfScope prof(PROF_HD_OBJ);
 
-	if (!g_open || !g_ring_open)
+	if (!g_open || (!g_ring_open && !g_pickup_open))
 		return;
+
+	/* P2: WHICH OF THE TWO WAS OPEN, taken before both are cleared. The ring
+	 * puts the item on the frame's list and the display draws it here and
+	 * now; everything between this line and the light below is the same for
+	 * both, because it IS the same item. */
+	const bool pickup = g_pickup_open;
 
 	g_open = false;
 	g_ring_open = false;
+	g_pickup_open = false;
 
-	if (!g_seen || g_count >= HD_OBJ_ITEMS)
+	if (!g_seen)
 		return;
 
-	FrameItem& entry = g_frame[g_count];
+	if (!pickup && g_count >= HD_OBJ_ITEMS)
+		return;
+
+	/* The display's item never goes on the list and never takes a place on it:
+	 * it lives for the length of this function and is drawn at the bottom of
+	 * it. g_count is left exactly where the world left it. */
+	FrameItem& entry = pickup ? g_pickup_item : g_frame[g_count];
 
 	entry.slot = g_open_slot;
 	entry.drawSlot = g_open_slot;
@@ -2236,10 +2517,11 @@ void HDInvEnd()
 	store_matrices(entry);
 
 	// Node 0's view z, for the log line - see RingLogItem::z.
-	if (g_ring_open_row >= 0 && g_ring_open_row < 16)
+	if (!pickup && g_ring_open_row >= 0 && g_ring_open_row < 16)
 		g_ring_log[g_ring_open_row].z = entry.matrix[14];
 
-	/* THE RING'S LIGHT, which is the classic ring's own and nothing else.
+	/* THE RING'S LIGHT - AND THE DISPLAY'S, which is the same light with ONE
+	 * number different. Both are the classic path's own and nothing else.
 	 *
 	 * phd_PutPolygonsPickup (specific\output.cpp) throws the whole level
 	 * lighting away for an inventory object and puts up two things: an
@@ -2255,21 +2537,34 @@ void HDInvEnd()
 	 * space, which is where HD_OBJLIGHT_SUN lives, the direction is simply d
 	 * and no per-node work is left.
 	 *
-	 * The doubling is the same doubling: aTransformLightClipMesh writes
-	 * `val += val` for a sun while InventoryActive, and sunScale carries it
-	 * (hd_model.h says so where the field is declared). fill_lights would
-	 * arrive at the same 2.0 - it is not called here because the ring item's
-	 * il lists are empty by construction (DrawThreeDeeObject2D sets
-	 * nCurrentLights and nPrevLights to zero) and calling it would only be a
-	 * walk over two empty arrays and the level's dynamic lights, which have
-	 * no business in the ring.
+	 * THE ONE NUMBER THAT IS NOT THE SAME FOR BOTH CALLERS (#123, fix round
+	 * P2), and it was measured rather than carried over: the sun's SCALE.
+	 * aTransformLightClipMesh has one line for it -
 	 *
-	 * No room cube, no point lights, no spots, no dynamics - and no fog
-	 * bulbs, which hd_level.cpp takes off this frame for the ring. The
-	 * distance fog is left exactly as the classic ring has it: the shader
-	 * runs the same subtraction from the same tomb5.distance_fog, and a ring
-	 * item stands a few hundred units from the camera where neither path
-	 * reaches the threshold. */
+	 *     if (!InventoryActive) val *= 0.75F; else val += val;
+	 *
+	 * ("fucking shit", says Core's own comment beside it) - and the pickup
+	 * display is drawn with InventoryActive 0. So the ring's sun is DOUBLED
+	 * and the display's is three quarters, a factor of 2.667 between them, and
+	 * a display drawn with the ring's 2.0 would have been visibly brighter
+	 * than the classic one it replaces. It is the same test the same file
+	 * makes for an item in the world (fill_lights, at the top of this file),
+	 * which is the other thing the display shares with the world and the ring
+	 * does not.
+	 *
+	 * fill_lights would arrive at the same numbers - it is not called here
+	 * because the item's il lists are empty by construction
+	 * (DrawThreeDeeObject2D sets nCurrentLights and nPrevLights to zero) and
+	 * calling it would only be a walk over two empty arrays and the level's
+	 * dynamic lights, which have no business in either the ring or the corner
+	 * of the screen.
+	 *
+	 * No room cube, no point lights, no spots, no dynamics - and no fog bulbs,
+	 * which hd_level.cpp takes off a ring frame and never puts into the
+	 * display's own bracket. The distance fog is left exactly as the classic
+	 * path has it: the shader runs the same subtraction from the same
+	 * tomb5.distance_fog, and both stand a few hundred units from the camera
+	 * where neither path reaches the threshold. */
 	static const float kRingSun[3] =
 	{
 		0.0f,
@@ -2286,7 +2581,7 @@ void HDInvEnd()
 	entry.lights[0].b = (float)CLRB(g_ring_color);
 	entry.lights[0].invRange = 0.0f;
 	entry.lightCount = 1;
-	entry.sunScale = 2.0f;
+	entry.sunScale = pickup ? 0.75f : 2.0f;
 
 	for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
 	{
@@ -2303,6 +2598,17 @@ void HDInvEnd()
 	 * which is the answer the round was asked for. */
 	entry.specStrength = 0.0f;
 	entry.specPower = 1.0f;
+
+	/* AND HERE THE TWO PART (#123, fix round P2). The ring's item takes its
+	 * place on the frame's list and waits for HDObjectFrameDraw; the display's
+	 * is drawn on the spot, because by the time it gets here the frame's own
+	 * bracket has been opened, drawn and closed, and the list it would join is
+	 * a list nobody will read again. */
+	if (pickup)
+	{
+		pickup_draw(entry);
+		return;
+	}
 
 	g_count++;
 }

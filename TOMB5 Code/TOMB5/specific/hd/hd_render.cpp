@@ -3641,6 +3641,12 @@ void HDRenderFrameEnd()
 	HDRenderStateRestore();
 }
 
+// #123, fix round P2: see the note in hd_render.h.
+bool HDRenderInFrame()
+{
+	return g_in_frame;
+}
+
 namespace
 {
 	/* `blendOnly` is fix round H (H2): the alpha pass is drawn TWICE in a

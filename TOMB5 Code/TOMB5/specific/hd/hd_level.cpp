@@ -607,6 +607,16 @@ namespace
 	int g_frame_room_calls = 0;
 	bool g_frame_pending = false;
 
+	/* P2: THE PICKUP DISPLAY'S OWN TWO, and they are kept apart from the
+	 * frame's on purpose. The display is drawn in the middle of
+	 * S_OutputPolyList, after the frame's own bracket has been opened, drawn
+	 * and closed; writing its projection over g_frame_projection would take
+	 * the glow phase's copy away from it if the two ever met. They never do
+	 * today - the glow phase runs above the depth clear and the display below
+	 * it - and that is a reason to keep them apart, not to share them. */
+	D3DMATRIX g_pickup_projection;
+	HDFrameLighting g_pickup_light;
+
 	// The projection is taken WHEN THE ROOMS ARE COLLECTED, not when they are
 	// drawn: AlterFOV moves f_persp inside a frame (the sky phase does it
 	// twice while the binoculars are up), and the rooms have to be projected
@@ -3081,6 +3091,68 @@ void HDFrameProjectionInfo(float* persp, float* centerX, float* centerY)
 
 	if (centerY)
 		*centerY = g_centery;
+}
+
+/* THE PICKUP DISPLAY'S OWN BRACKET (#123, fix round P2). The whole argument -
+ * why it is a bracket of its own rather than a place on the frame list, and
+ * which two numbers are its own rather than the frame's - stands in hd_level.h
+ * over the declaration. */
+bool HDFramePickupBegin(float persp, float centreX, float centreY,
+	float za, float zb)
+{
+	if (!HDRenderReady() || HDRenderInFrame() || persp <= 0.0f)
+		return false;
+
+	HDRenderMakeProjection((double)persp, (double)centreX, (double)centreY,
+		(double)za, (double)zb, &g_pickup_projection);
+
+	HDFrameLighting& frame = g_pickup_light;
+
+	memset(&frame, 0, sizeof(frame));
+
+	frame.centerX = centreX;
+	frame.centerY = centreY;
+	frame.wibble = (float)wibble;
+	frame.cameraUnderwater = camera.underwater ? 1 : 0;
+	frame.distanceFogStart = (float)tomb5.distance_fog * 1024.0f;
+	frame.wibbleTable = vert_wibble_table;
+
+	/* NO FOG BULBS, exactly as the ring has none and for the same reason -
+	 * see the block over HDFrameDraw. The distance fog is left in, again as
+	 * the ring leaves it in: the classic display runs the same subtraction
+	 * (aTransformLightClipMesh subtracts from every vertex past
+	 * DistanceFogStart whoever called it) and the object stands at
+	 * INVOBJ::scale1 - a few hundred to a couple of thousand units - where
+	 * neither path reaches the threshold. Both do the same nothing, and the
+	 * thing that would have to be explained is a difference. */
+	frame.bulbs = 0;
+	frame.bulbCount = 0;
+
+	/* THE CLOCK IS READ AND NEVER STEPPED. AdvanceClock is
+	 * FillFrameLighting's, once per frame; this bracket runs INSIDE a frame
+	 * that has already had one, so stepping it here would count the frame
+	 * twice - and a material would run at double speed for as long as a
+	 * pickup icon is on the screen. */
+	frame.clock = (float)g_clock;
+	frame.motion = tomb5.hd_motion ? 1 : 0;
+	frame.reflect = tomb5.hd_reflect ? 1 : 0;		// R3b
+
+	HDRenderFrameBegin(&kIdentity, &g_pickup_projection, &frame);
+
+	/* HD_PASS_ALL and not the frame's two phases (#123, fix round E, E6). The
+	 * two phases exist so that no CLASSIC opaque draw can paint over a glow
+	 * that wrote no depth; here there is nothing else in the section at all -
+	 * the depth buffer was cleared a few lines up and the display is the one
+	 * thing drawn into it - so the solid and the additive pass of the one
+	 * object follow each other in the one bracket, which is what ModelProbe
+	 * draws with too. */
+	HDModelFrameBegin(&g_pickup_projection, 0, HD_PASS_ALL);
+	return true;
+}
+
+void HDFramePickupEnd()
+{
+	HDRenderFrameEnd();
 }
 
 bool HDFrameRoom(int roomIndex, const float* viewWorld,

@@ -1314,6 +1314,20 @@ With `-log`, opening the ring writes one `HDLOG ring` line saying how many
 objects were on it and how many of them were HD, and one line per object with
 its slot, its model file, its node mask and how the model was found.
 
+**And so does the little turning object in the corner** when Lara picks
+something up — the same models, the same size and the same place on the screen
+as before, sliding in and out exactly as it always did. It hangs on *HD
+textures* and on `hd_objects` together, like everything else with a model in
+it, and with either of them off it is the 1999 object again. Every single item
+the display can show has a model in the remaster, in all thirteen playable
+levels, so there is nothing left in the corner that stays classic. It is lit
+the way the classic display lit it and not the way the ring is lit — the
+original engine gives an inventory object twice the lamp and everything else
+three quarters of it, and the display is not the inventory. With `-log` a level
+writes one `HDLOG pickupdisplay level=` line naming every slot the display can
+show and which of them are HD, and one line per object the first time it is
+shown.
+
 **The actors of a cutscene draw HD as well.** A cutscene does not run the
 ordinary object path: the actors are packed animation nodes played back by a
 routine of their own, with their own frame buffer and their own light. Lara

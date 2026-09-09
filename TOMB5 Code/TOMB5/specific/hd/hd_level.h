@@ -221,3 +221,40 @@ void HDFrameCaptureProjection();
  * for the length of one draw call.
  * Zeroes before the frame's projection has been taken. */
 void HDFrameProjectionInfo(float* persp, float* centerX, float* centerY);
+
+/* THE PICKUP DISPLAY'S OWN BRACKET AND ITS OWN PROJECTION (#123, fix round P2).
+ *
+ * The little turning object in the corner after Lara picks something up is
+ * drawn from INSIDE S_OutputPolyList (specific\output.cpp), long after
+ * HDFrameDraw has drawn and emptied this frame's HD list into the picture. So
+ * it cannot go on that list - fix round P said as much and left it classic -
+ * and it does not: it opens a bracket of its own, draws its ONE object and
+ * closes it again, which is exactly what ModelProbe has always done.
+ *
+ * TWO THINGS ARE ITS OWN AND NOT THE FRAME'S, and both are the reason this
+ * takes arguments at all rather than reading what HDFrameCaptureProjection
+ * took:
+ *
+ *   THE FIELD OF VIEW. The frame's projection was taken when the world was
+ *   COLLECTED; the display is drawn at the end of the same frame, and AlterFOV
+ *   moves f_persp in between whenever the binoculars are up. The classic
+ *   display projects with whatever f_mpersp says at that moment
+ *   (aTransformLightClipMesh), so the caller reads f_persp / f_centerx /
+ *   f_centery / f_a / f_b there and hands them over.
+ *
+ *   THE DEPTH BUFFER. S_OutputPolyList clears it before the display's section
+ *   (output.cpp, the #127 clear that separates the world from the mask, the
+ *   display and the fade), so the object stands over the whole world by
+ *   construction - on the classic path and on this one alike - and under
+ *   everything the fade block draws afterwards.
+ *
+ * No fog bulbs, for the ring's own reason: ActiveFogBulbs holds view-space
+ * positions of the view the world had, and the display draws through a view of
+ * its own (phd_LookAt in S_DrawPickup). The material clock is READ here and
+ * never stepped - AdvanceClock belongs to FillFrameLighting, once per frame.
+ *
+ * Begin answers false when the renderer is not up or a bracket is already
+ * open, and then nothing was opened and nothing must be closed. */
+bool HDFramePickupBegin(float persp, float centreX, float centreY,
+	float za, float zb);
+void HDFramePickupEnd();

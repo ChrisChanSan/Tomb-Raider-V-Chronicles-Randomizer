@@ -464,6 +464,17 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	const HDFrameLighting* frame = 0);
 void HDRenderFrameEnd();
 
+/* IS A BRACKET OPEN RIGHT NOW? (#123, fix round P2.)
+ *
+ * HDRenderFrameBegin refuses to nest and returns doing NOTHING when one is
+ * already open - which is the right answer, and a silent one. The pickup
+ * display opens a bracket of its own in the middle of S_OutputPolyList
+ * (specific\hd\hd_object.cpp, the immediate draw), so it has to know the
+ * answer BEFORE it tells DrawInventoryItemMe to leave the classic polygons
+ * out: an object that suppresses its own classic draw and then finds no
+ * bracket to draw in is drawn by nobody. */
+bool HDRenderInFrame();
+
 // The bracket alone, with no room in it (#123, stage S3-1). FrameBegin and
 // FrameEnd are these two plus the room path's own buffers, shaders and
 // constants; hd_model.cpp draws inside the very same bracket, because there

@@ -2177,9 +2177,11 @@ void HDModelOffCentre(float kx, float ky)
 	/* `g_in_frame` says a bracket has been opened at least once, which is
 	 * what makes g_frame_proj a matrix rather than the identity it starts
 	 * as - it is NOT cleared when a bracket closes, so it is not a test of
-	 * "am I inside one". That test is not needed: the one caller is
-	 * HDObjectFrameDraw, between its own HDModelFrameBegin and the
-	 * (0, 0) it ends with, so c0 always holds the plain frame projection
+	 * "am I inside one". That test is not needed: both callers -
+	 * HDObjectFrameDraw for the world and the ring, and hd_object.cpp's
+	 * pickup_draw for the display in the corner (P2) - sit between their
+	 * own HDModelFrameBegin and the (0, 0) they end with, so c0 always
+	 * holds the plain frame projection
 	 * again by the time the bracket closes and neither the room path nor
 	 * the classic path can inherit a moved one. */
 	if (!g_in_frame || !g_device)

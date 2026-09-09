@@ -2979,6 +2979,15 @@ bool HDRoomIsHD(int roomIndex)
 	return GroupOfRoom(roomIndex) >= 0;
 }
 
+/* T4: the one question the room walk asks of the HD path. g_level_active is
+ * false with hd_enable off, before a level is built, after HDLevelUnload and
+ * in a level whose .TRG had no rooms - and in every one of those the walk in
+ * game\draw.cpp carries no reach and is the function it has always been. */
+bool HDLevelActive()
+{
+	return g_level_active && HDEnabled();
+}
+
 /* THE CLASSIC WATER FACES OF ONE HD ROOM (#123, fix round H, H1). Read by
  * drawroom.cpp's InsertRoom the moment the HD path has taken the room over -
  * see BuildWaterSurfaces for what is in the list and why. */

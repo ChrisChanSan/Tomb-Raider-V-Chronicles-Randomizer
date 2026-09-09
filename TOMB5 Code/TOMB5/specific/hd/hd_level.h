@@ -75,6 +75,12 @@ void HDLevelDeviceLost();
 // Nothing else in the engine may read HD data without asking this first.
 bool HDEnabled();
 
+/* Whether an HD level is BUILT and drawing, which is HDEnabled() and a .TRG
+ * that had rooms in it. The portal walk's second rectangle - the reach of fix
+ * round T4 - is carried exactly while this is true, so that a level the
+ * remaster has nothing for walks the way it always did. */
+bool HDLevelActive();
+
 // Whether room `roomIndex` of the level now loaded is drawn by the HD path.
 // Decided once at level load, not per frame. False for every room while HD is
 // off, while no HD level is built, and for every room the .TRG has nothing

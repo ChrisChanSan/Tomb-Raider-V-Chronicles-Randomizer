@@ -2170,6 +2170,195 @@ static int too_near(const long corner[4][3], const long eye[3], const double fwd
 	return tooNear;
 }
 
+
+/* --------------------------------------------------- the reach (T4) ------ */
+
+/* THE SECOND RECTANGLE OF THE PORTAL WALK (#123, fix round T4).
+ *
+ * WHAT IS BEING PROVEN. SetRoomBounds clips a child portal against the window
+ * of the room it is seen through, and drops it when nothing is left. Where
+ * the remaster has torn a wall open, the room behind that wall is seen far
+ * wider than the classic doorway allows, and the child portal falls outside
+ * the parent's window - so the room behind it is not drawn and the player
+ * sees the clear colour through the hole.
+ *
+ * THE NUMBERS ARE JOBY2'S OWN, off the play test's own eye. RoomProbe -walk,
+ * seeded in room 114 at 40024/-3408/24107, yaw 335, pitch -10, 1280x720 -
+ * the eye of the ROOMLIST dumps in the log of 2026-09-08:
+ *
+ *   room 124's window, through the classic doorway of room 123   0,0..535,719
+ *   the portal 124 -> 99, its own projection on the screen     542,116..754,389
+ *   the classic child rectangle, clamped against 124's window  535,116..535,389
+ *
+ * (The walk prints 124's window as 0,0..536,719 - the right edge is 535.5 as
+ * a float and 535 as the short it is kept in, and the child is clamped
+ * against the short.)
+ *
+ * That last one has NO WIDTH, which is the `empty` of the walk and the black
+ * hole of the play test: room 99's doorway begins six pixels to the right of
+ * where room 124's own window ends.
+ *
+ * The rectangle arithmetic of both rules is copied from game\draw.cpp here
+ * (SetRoomBounds and SetRoomBoundsReach), which is all that differs between
+ * them - the projection of the four corners is the same in both. */
+struct T4Rect
+{
+	float l, t, r, b;
+};
+
+static bool t4_empty(const T4Rect& q)
+{
+	return q.l >= q.r || q.t >= q.b;
+}
+
+/* SetRoomBounds: the projection SEEDED with the parent's own window and then
+ * clamped back against it, which is the engine's own two steps and not one
+ * intersection - the seeding is why an empty rectangle comes out sitting ON
+ * the parent's edge rather than beyond it. */
+static T4Rect t4_classic(const T4Rect& raw, const T4Rect& parent)
+{
+	T4Rect q;
+
+	q.l = raw.l < parent.r ? raw.l : parent.r;
+	q.r = raw.r > parent.l ? raw.r : parent.l;
+	q.t = raw.t < parent.b ? raw.t : parent.b;
+	q.b = raw.b > parent.t ? raw.b : parent.t;
+
+	if (q.l < parent.l) q.l = parent.l;
+	if (q.r > parent.r) q.r = parent.r;
+	if (q.t < parent.t) q.t = parent.t;
+	if (q.b > parent.b) q.b = parent.b;
+
+	return q;
+}
+
+// SetRoomBoundsReach: the same projection clamped against the SCREEN.
+static T4Rect t4_reach(const T4Rect& raw, float w, float h)
+{
+	T4Rect q = raw;
+
+	if (q.l < 0) q.l = 0;
+	if (q.r > w) q.r = w;
+	if (q.t < 0) q.t = 0;
+	if (q.b > h) q.b = h;
+
+	return q;
+}
+
+/* AND WHY THE REACH IS A SEEN-MARK. A ring of rooms whose portals all face
+ * the eye can be walked round for ever once the parent stops shrinking the
+ * child's rectangle: each lap widens some room's classic window by a pixel
+ * and earns another queue entry. This is that ring, four rooms round, with
+ * the two brakes: the mark (one reach visit per room) and none at all. */
+static long t4_ring_walk(int rooms, int laps, bool mark)
+{
+	// Every room is visited once per lap; with the mark, a room that has had
+	// its reach visit is only queued again when the classic window grows,
+	// which in this model it does not.
+	long entries = 0;
+	int seen = 0;
+
+	for (int lap = 0; lap < laps; lap++)
+		for (int i = 0; i < rooms; i++)
+		{
+			if (mark && lap > 0)
+				continue;
+
+			entries++;
+			seen++;
+		}
+
+	(void)seen;
+	return entries;
+}
+
+static void reach_rect()
+{
+	printf("the reach - the second rectangle of the portal walk (#123, T4)\n");
+
+	const float w = 1279.0f, h = 719.0f;
+	const T4Rect parent = { 0.0f, 0.0f, 535.0f, 719.0f };	// room 124
+	const T4Rect raw = { 542.0f, 116.0f, 754.0f, 389.0f };	// portal 124 -> 99
+
+	const T4Rect classic = t4_classic(raw, parent);
+	const T4Rect reach = t4_reach(raw, w, h);
+
+	ok(t4_empty(classic) == true,
+		"JOBY2: the classic child rectangle of 124 -> 99 is EMPTY", 1, 1);
+	ok((long)classic.l == 535 && (long)classic.r == 535,
+		"and it is empty because it has no width, at the parent's right edge",
+		(long)classic.l, 535);
+	ok(t4_empty(reach) == false,
+		"the reach's rectangle for the same portal is NOT empty", 0, 0);
+	ok((long)reach.l == 542 && (long)reach.r == 754,
+		"and it is the portal's own projection, untouched by the parent",
+		(long)reach.l, 542);
+	ok((long)(reach.r - reach.l) == 212 && (long)(reach.b - reach.t) == 273,
+		"212 by 273 pixels of room 99 that the classic walk does not draw",
+		(long)(reach.r - reach.l), 212);
+
+	/* THE INVARIANT THE WHOLE ROUND RESTS ON: the classic rectangle is
+	 * inside the reach's, always - it is the same projection with one more
+	 * clamp on it. So a portal the reach refuses is a portal the classic
+	 * rule refuses too, and switching the reach on can only ADD rooms. */
+	{
+		int inside = 0, tried = 0;
+		unsigned seed = 12345;
+
+		for (int i = 0; i < 2000; i++)
+		{
+			T4Rect q, par;
+
+			seed = seed * 1103515245u + 12345u;
+			q.l = (float)((seed >> 8) % 1400) - 60.0f;
+			seed = seed * 1103515245u + 12345u;
+			q.r = q.l + (float)((seed >> 8) % 400);
+			seed = seed * 1103515245u + 12345u;
+			q.t = (float)((seed >> 8) % 800) - 40.0f;
+			seed = seed * 1103515245u + 12345u;
+			q.b = q.t + (float)((seed >> 8) % 300);
+			seed = seed * 1103515245u + 12345u;
+			par.l = (float)((seed >> 8) % 900);
+			seed = seed * 1103515245u + 12345u;
+			par.r = par.l + (float)((seed >> 8) % 500);
+			seed = seed * 1103515245u + 12345u;
+			par.t = (float)((seed >> 8) % 500);
+			seed = seed * 1103515245u + 12345u;
+			par.b = par.t + (float)((seed >> 8) % 400);
+
+			if (par.r > w) par.r = w;
+			if (par.b > h) par.b = h;
+
+			const T4Rect c = t4_classic(q, par);
+			const T4Rect a = t4_reach(q, w, h);
+
+			tried++;
+
+			if (t4_empty(c) || (c.l >= a.l && c.r <= a.r && c.t >= a.t &&
+				c.b <= a.b))
+				inside++;
+		}
+
+		ok(inside == tried, "the classic rectangle is inside the reach's, in "
+			"2,000 random pairs", inside, tried);
+	}
+
+	/* THE RING, AND WHY THE MARK IS THE BRAKE. Measured in the tool before
+	 * it was written this way: with a second rectangle to widen instead of a
+	 * mark, ANDREA3's worst frame took over 20,000 dequeues against the
+	 * classic walk's 33, and ANDY2 and ANDREA3 ran RoomProbe out of memory.
+	 * With the mark the same survey's worst frame over the whole game is 319
+	 * (JOBY4). */
+	{
+		const long marked = t4_ring_walk(4, 500, true);
+		const long loose = t4_ring_walk(4, 500, false);
+
+		ok(marked == 4, "a ring of four rooms costs four queue entries with "
+			"the seen-mark", marked, 4);
+		ok(loose == 2000, "and five hundred laps without it", loose, 2000);
+	}
+}
+
 static void portal_walk()
 {
 	printf("portal walk - the room the blended eye stands in (#123, T2-1)\n");
@@ -2306,6 +2495,7 @@ int main()
 	pose_time();
 	particles();
 	portal_walk();
+	reach_rect();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -115,6 +115,54 @@ static long draw_room_list[128];
 static long camera_underwater;
 static short ClipRoomNum;
 
+/* THE REACH: A SECOND ANSWER PER ROOM IN THE HD PATH (#123, fix round T4).
+ *
+ * WHAT IT IS FOR. The remaster's art opens walls the classic level keeps
+ * shut - JOBY2's torn wall beside the stairs, where room 124 is seen far
+ * wider than the classic doorway of 123 allows - and behind such a hole the
+ * player sees the clear colour, because SetRoomBounds clips the CHILD portal
+ * against the parent's window and drops what falls outside it as `empty`.
+ * The same arithmetic keeps ANDREA2's tower (room 222) out of the list at
+ * every level view direction, which is the popping of fix round T3.
+ *
+ * THE RULE. In the HD path every room carries a second answer beside its
+ * window: whether the walk REACHES it at all. A portal reaches the room
+ * behind it when it faces the eye and lands on the SCREEN - the parent's
+ * window does not enter that question. The classic window is computed beside
+ * it exactly as before and stays the scissor for the intruding triangles of
+ * fix round T2, and it is now allowed to be empty: a room the reach alone
+ * brought in draws all of its art over the whole screen and none of its
+ * intruding art at all, which is T2's bleed guard kept to the letter.
+ *
+ * WHY A SEEN-MARK AND NOT A SECOND RECTANGLE TO WIDEN. The reach rectangle
+ * of a portal does not depend on how the walk got to it, so one visit per
+ * room is the whole of it. Measured, because the first version did keep a
+ * second union: ANDREA3 and ANDY2 then walk rings of rooms round and round -
+ * over 20,000 dequeues in a frame against the classic walk's 33 - because
+ * nothing shrinks along the chain any more. With the mark, the worst frame
+ * of the fifteen levels takes 319 dequeues (RoomProbe -reachsurvey).
+ *
+ * WITH hd_enable OFF, or in a level the .TRG has nothing for, HDLevelActive()
+ * is false, g_reach_on stays false and every line below is the walk that
+ * shipped: the classic SetRoomBounds is the function called, the classic
+ * accumulation is the accumulation done, and no room is trimmed. */
+static bool g_reach_on = false;
+// Per room, and only while g_reach_on: the pending queue entry's classic
+// rectangle exists (bit 0) and the reach has visited this room (bit 1).
+static unsigned char g_reach_state[256];
+static const unsigned char REACH_CLASSIC = 1;
+static const unsigned char REACH_SEEN = 2;
+// The rectangle the reach gave a room, for the ROOMLIST seam alone.
+static short g_reach_box[256][4];
+// Per frame, for the ROOMWALK line: rooms the reach alone put in the list,
+// rooms refused because draw_rooms or the ring was full, rooms the budget
+// dropped again.
+static int g_reach_added = 0;
+static int g_reach_capped = 0;
+static int g_reach_trimmed = 0;
+// And rooms the reach found that the .TRG has no art for - see ReachTrimRooms.
+static int g_reach_noart = 0;
+
 short* GetBoundsAccurate(ITEM_INFO* item)
 {
 	short* frmptr[2];
@@ -1167,13 +1215,21 @@ namespace
 
 		/* T3-1: and each of those rooms' own window, as the walk left
 		 * it. PrintObjects wipes all four at the end of the frame
-		 * (:1087), so a frame that is judged one frame later has to have
+		 * (:1135), so a frame that is judged one frame later has to have
 		 * kept them. This is `left..bottom`, the UNION of every window a
 		 * room was dequeued with, which is the widest of them - so the
 		 * reason worked out from it below is the conservative one: it can
 		 * say "reached" where the walk said "empty", never the other way
 		 * about. */
 		short win[100][4];
+
+		/* T4: and the rectangle the REACH gave each of them, so that a
+		 * ROOMLIST line can say which rooms are in the picture on the
+		 * strength of the reach alone - those are the ones whose window is
+		 * empty and whose reach is not. */
+		short reach[100][4];
+		int reach_only;			// how many of them there are
+		int trimmed;			// and how many the budget dropped
 
 		short logic;
 		short eye;
@@ -1200,6 +1256,19 @@ namespace
 	RoomWalkNote g_walkNote[3];
 	int g_walkHeld = 0;
 	unsigned int g_walkSerial = 0;
+
+	/* T4-4: rooms per frame, classic and reach, over the second the ROOMWALK
+	 * line covers. `classic` here is the count of listed rooms that have a
+	 * window of their own - the list the walk would have had without the
+	 * reach - and `reach` the ones that have none. */
+	long g_walkRoomsSum = 0;
+	long g_walkReachSum = 0;
+	int g_walkRoomsFrames = 0;
+	int g_walkRoomsMax = 0;
+	int g_walkClassicMax = 0;
+	int g_walkReachMax = 0;
+	int g_reach_trimmed_second = 0;
+	int g_reach_noart_second = 0;
 
 	// Per second, for the throttled line.
 	int g_walkTweens = 0;
@@ -1338,10 +1407,10 @@ namespace
 				mx[M23] = fx * mx[M20] + fy * mx[M21] + fz * mx[M22];
 			}
 
-			/* SIXTEEN, not the fifteen GetRoomBounds writes (:2996): a
+			/* SIXTEEN, not the fifteen GetRoomBounds writes (:3679): a
 			 * ROOM_PORTAL is sixteen shorts, and the walk's own loop steps
 			 * past `rn` inside its body while this one reads the record
-			 * where it stands. calc_animating_item_clip_window (:2717)
+			 * where it stands. calc_animating_item_clip_window (:3011)
 			 * counts the same way this does, corners at door[4] and all. */
 			for (drn = *door++; drn > 0; drn--, door += 16)
 			{
@@ -1351,6 +1420,8 @@ namespace
 				double a = 0, b = 0, c = 0, d = 0;
 				float vx[4], vy[4], vz[4];
 				float tooNear = 0, tL, tR, tT, tB;
+				// T4: the portal's own projection, the reach's rectangle.
+				float rawL = 1e30f, rawR = -1e30f, rawT = 1e30f, rawB = -1e30f;
 
 				if (p->rn != which)
 					continue;
@@ -1394,7 +1465,7 @@ namespace
 					}
 				}
 
-				// SetRoomBounds (:2795) on the note's own numbers.
+				// SetRoomBounds (:3147) on the note's own numbers.
 				if (!why)
 				{
 					tL = (float)note.win[i][2];
@@ -1429,9 +1500,9 @@ namespace
 							}
 							else
 							{
-								// SetRoomBounds' own degenerate branch (:2839). phd_left
+								// SetRoomBounds' own degenerate branch (:3191). phd_left
 								// and phd_right are still what DrawRooms set them to when
-								// this note is read - 0 and phd_winxmax (:1859), and
+								// this note is read - 0 and phd_winxmax (:2186), and
 								// nothing between the walk and here touches them.
 								x = x < 0 ? 0.0f : (float)phd_winxmax;
 								y = y < 0 ? 0.0f : (float)phd_winymax;
@@ -1441,6 +1512,12 @@ namespace
 							if (x + 1 > tR) tR = x + 1;
 							if (y - 1 < tT) tT = y - 1;
 							if (y + 1 > tB) tB = y + 1;
+
+							// T4: and the same four without the parent in them.
+							if (x - 1 < rawL) rawL = x - 1;
+							if (x + 1 > rawR) rawR = x + 1;
+							if (y - 1 < rawT) rawT = y - 1;
+							if (y + 1 > rawB) rawB = y + 1;
 						}
 					}
 
@@ -1487,6 +1564,51 @@ namespace
 						b = tT;
 						c = tR;
 						d = tB;
+
+						/* T4: and what the REACH makes of the same portal -
+						 * its own projection against the screen, with the
+						 * parent's window left out. Three answers, and they
+						 * are the three cases of this round:
+						 *
+						 *   offscreen   the portal is not on the screen at
+						 *               all; the reach refuses it too, and
+						 *               the room really is not visible.
+						 *   reach       the classic window came out empty and
+						 *               the reach carries the room - so with
+						 *               the reach on, a room that is missing
+						 *               for THIS reason was dropped by the
+						 *               budget or the cap, not by the walk.
+						 *   reached     both rules have it. */
+						if (g_reach_on)
+						{
+							float aL = rawL, aR = rawR, aT = rawT, aB = rawB;
+
+							if (tooNear > 0)
+							{
+								// The fixup already widened tL..tB to the
+								// screen edges; the reach takes the same.
+								if (tL <= 0) aL = 0;
+								if (tR >= (float)phd_winxmax) aR = (float)phd_winxmax;
+								if (tT <= 0) aT = 0;
+								if (tB >= (float)phd_winymax) aB = (float)phd_winymax;
+							}
+
+							if (aL < 0) aL = 0;
+							if (aR > (float)phd_winxmax) aR = (float)phd_winxmax;
+							if (aT < 0) aT = 0;
+							if (aB > (float)phd_winymax) aB = (float)phd_winymax;
+
+							if (aL >= aR || aT >= aB)
+								why = "offscreen";
+							else if (tL >= tR || tT >= tB)
+							{
+								why = "reach";
+								a = aL;
+								b = aT;
+								c = aR;
+								d = aB;
+							}
+						}
 					}
 				}
 
@@ -1498,6 +1620,139 @@ namespace
 
 		if (!found)
 			sprintf(out, "noportal");
+	}
+}
+
+/* T4-2: THE WALK'S REACH STATE, WIPED AND SEEDED (#123, fix round T4).
+ *
+ * Called from DrawRooms and RenderIt - the two places that start a walk -
+ * and only while g_reach_on. The root gets both answers: the whole screen as
+ * its window, which is what the four lines above this call set, and its one
+ * reach visit, so that no portal can come back and hand it a second. */
+static void ReachBeginWalk(short seed)
+{
+	memset(g_reach_state, 0, sizeof(g_reach_state));
+	g_reach_added = 0;
+	g_reach_trimmed = 0;
+	g_reach_noart = 0;
+
+	if (seed >= 0 && seed < 256)
+	{
+		g_reach_state[seed] = REACH_CLASSIC | REACH_SEEN;
+		g_reach_box[seed][0] = 0;
+		g_reach_box[seed][1] = 0;
+		g_reach_box[seed][2] = (short)phd_winxmax;
+		g_reach_box[seed][3] = (short)phd_winymax;
+	}
+}
+
+/* T4-4: THE SAFETY VALVE, AND ITS NUMBER IS MEASURED (#123, fix round T4).
+ *
+ * A frame that the reach fills with a hundred rooms is a frame of a hundred
+ * HD draw calls, and the survey says it happens: with the eye at the middle
+ * of every room of a level in turn and a fan of forty directions from each
+ * (RoomProbe -reachsurvey, 4,600 to 10,200 frames a level), the reach passes
+ * 100 rooms in 0.6 % of ANDREA1's frames, 0.4 % of JOBY2's and 2.0 % of
+ * JOBY4's. The whole distribution, as the share of frames over a budget of
+ * 32 / 40 / 48 / 56 / 64 / 80 rooms:
+ *
+ *   ANDREA1  13.7  9.6  7.0  5.3  4.0  1.8 %      RICH2   0 0 0 0 0 0 %
+ *   ANDREA2  13.3  9.7  7.0  5.2  3.5  1.2 %      ANDY2   1.3 0.5 .1 0 0 0 %
+ *   JOBY2    24.9 18.9 13.5 10.1  7.8  3.1 %      RICH1   1.8 .7 .3 .1 0 0 %
+ *   JOBY4    25.9 18.7 13.9 10.7  8.2  4.7 %      ANDREA3 1.8 .3 0 0 0 0 %
+ *
+ * 64 is where the two families part: the indoor levels never reach it at all
+ * and the four open ones cross it in 3.5 to 8.2 % of the worst-case frames -
+ * so the valve is shut for ordinary play and open where a street runs away to
+ * the horizon. And it only ever drops rooms THE REACH BROUGHT IN, farthest
+ * first; a room with a classic window of its own is a room the walk has
+ * always drawn and is never trimmed, which is why JOBY4's own classic frames
+ * of 72 and 106 rooms are untouched by this.
+ *
+ * The room's bound_active goes back to zero with it, because PrintObjects -
+ * which is what clears that byte at the end of a drawn room - will not run
+ * for a room that is no longer in the list. */
+static const long kReachBudget = 64;
+
+static void ReachTrimRooms(long ex, long ey, long ez)
+{
+	/* FIRST, THE ROOMS THE REACH CANNOT HELP. What a reach-only room shows
+	 * is its HD art: its classic geometry is clipped away by its own empty
+	 * window - `phd_left = r->left` in DrawStaticObjects (:2830) and
+	 * `clip_left = r->left` in InsertRoom (specific\drawroom.cpp), both of
+	 * which reject everything when left > right - so a room the .TRG has
+	 * nothing for would be in the list with nothing of itself in the
+	 * picture, and only its ITEMS would be drawn (PrintObjects hands every
+	 * item the whole screen). An enemy standing in a room that is not there
+	 * is not a fix; so such a room comes straight back out of the list.
+	 *
+	 * That is also what makes the reach unable to touch the classic picture
+	 * at all: everything it adds is .TRG art. */
+	for (int i = 0; i < number_draw_rooms; )
+	{
+		const short which = draw_rooms[i];
+		const ROOM_INFO* rr = &room[which];
+
+		if ((rr->left >= rr->right || rr->top >= rr->bottom) &&
+			!HDRoomIsHD(which))
+		{
+			room[which].bound_active = 0;
+
+			for (int k = i; k + 1 < number_draw_rooms; k++)
+				draw_rooms[k] = draw_rooms[k + 1];
+
+			number_draw_rooms--;
+			g_reach_noart++;
+			continue;
+		}
+
+		i++;
+	}
+
+	g_reach_added = 0;
+
+	for (int i = 0; i < number_draw_rooms; i++)
+	{
+		const ROOM_INFO* rr = &room[draw_rooms[i]];
+
+		if (rr->left >= rr->right || rr->top >= rr->bottom)
+			g_reach_added++;
+	}
+
+	while (number_draw_rooms > kReachBudget)
+	{
+		int worst = -1;
+		long worstDist = -1;
+
+		for (int i = 0; i < number_draw_rooms; i++)
+		{
+			const ROOM_INFO* rr = &room[draw_rooms[i]];
+			long d;
+
+			// A classic window means the walk has always drawn it.
+			if (rr->left < rr->right && rr->top < rr->bottom)
+				continue;
+
+			d = RoomDistance(rr, ex, ey, ez);
+
+			if (d > worstDist)
+			{
+				worstDist = d;
+				worst = i;
+			}
+		}
+
+		if (worst < 0)
+			break;
+
+		room[draw_rooms[worst]].bound_active = 0;
+
+		for (int i = worst; i + 1 < number_draw_rooms; i++)
+			draw_rooms[i] = draw_rooms[i + 1];
+
+		number_draw_rooms--;
+		g_reach_trimmed++;
+		g_reach_added--;
 	}
 }
 
@@ -1537,6 +1792,10 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			note.win[i][1] = rr->top;
 			note.win[i][2] = rr->right;
 			note.win[i][3] = rr->bottom;
+
+			if (draw_rooms[i] >= 0 && draw_rooms[i] < 256)
+				for (int k = 0; k < 4; k++)
+					note.reach[i][k] = g_reach_box[draw_rooms[i]][k];
 		}
 	}
 
@@ -1570,6 +1829,26 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	note.alpha = InterpFrameAlpha();
 	note.tween = InterpIsTweenFrame() ? 1 : 0;
 	note.corrected = walkRoom != logicRoom ? 1 : 0;
+	note.reach_only = g_reach_added;
+	note.trimmed = g_reach_trimmed;
+
+	/* T4-4: the frame's own cost, for the once-a-second line. The rooms of
+	 * the list are the rooms the HD path draws - it has no visibility test of
+	 * its own, measured in fix round T2 and unchanged since. */
+	g_walkRoomsSum += note.count;
+	g_walkRoomsFrames++;
+	g_walkReachSum += g_reach_added;
+	g_reach_trimmed_second += g_reach_trimmed;
+	g_reach_noart_second += g_reach_noart;
+
+	if (note.count > g_walkRoomsMax)
+		g_walkRoomsMax = note.count;
+
+	if (note.count - g_reach_added > g_walkClassicMax)
+		g_walkClassicMax = note.count - g_reach_added;
+
+	if (g_reach_added > g_walkReachMax)
+		g_walkReachMax = g_reach_added;
 
 	if (g_walkHeld < 3)
 		g_walkHeld++;
@@ -1742,9 +2021,10 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		{
 			g_listLines++;
 			Log("ROOMLIST frame=%u tween=%d cam_room=%d walk_room=%d "
-				"eye=(%d,%d,%d) rooms=%d added=%s removed=%s", now.serial,
-				now.tween, (int)now.logic, (int)now.eye, (int)now.wx,
-				(int)now.wy, (int)now.wz, now.count, a ? added : "-",
+				"eye=(%d,%d,%d) rooms=%d reach_only=%d trimmed=%d added=%s "
+				"removed=%s", now.serial, now.tween, (int)now.logic,
+				(int)now.eye, (int)now.wx, (int)now.wy, (int)now.wz,
+				now.count, now.reach_only, now.trimmed, a ? added : "-",
 				r ? removed : "-");
 		}
 
@@ -1754,8 +2034,16 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			g_listDumpAt = GlobalCounter;
 			g_listEver = true;
 
-			Log("ROOMLIST frame=%u the whole list, %d room(s), eye=(%d,%d,%d)",
-				now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz);
+			/* T4: and the TARGET beside the eye, which T3's dump did not
+			 * carry - a room list without the direction it was walked in
+			 * cannot be handed to RoomProbe -walk as it stands. */
+			Log("ROOMLIST frame=%u the whole list, %d room(s), "
+				"eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d cam=%d/%d "
+				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d",
+				now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz,
+				(int)now.tx, (int)now.ty, (int)now.tz, (int)now.troom,
+				now.camtype, now.camold, now.camfixed, now.camnumber,
+				now.reach_only, now.trimmed, (int)kReachBudget);
 
 			for (int i = 0; i < now.count; i++)
 			{
@@ -1787,10 +2075,19 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 							(int)p->rn);
 					}
 
-				Log("ROOMLIST   room=%d window=%d,%d..%d,%d dist=%d "
-					"outside=%d shadow=%s", (int)which, (int)now.win[i][0],
-					(int)now.win[i][1], (int)now.win[i][2],
-					(int)now.win[i][3],
+				/* T4: window= is the classic rectangle and the scissor
+				 * the intruding triangles get; reach= is what the walk
+				 * carried the room in on. A room whose window is empty and
+				 * whose reach is not is a room of the reach alone: all its
+				 * art over the whole screen, none of its intruding art. */
+				Log("ROOMLIST   room=%d window=%d,%d..%d,%d reach=%d,%d..%d,%d"
+					" %s dist=%d outside=%d shadow=%s", (int)which,
+					(int)now.win[i][0], (int)now.win[i][1],
+					(int)now.win[i][2], (int)now.win[i][3],
+					(int)now.reach[i][0], (int)now.reach[i][1],
+					(int)now.reach[i][2], (int)now.reach[i][3],
+					(now.win[i][0] >= now.win[i][2] ||
+					now.win[i][1] >= now.win[i][3]) ? "REACH" : "window",
 					(int)RoomDistance(rr, now.wx, now.wy, now.wz),
 					(rr->flags & ROOM_OUTSIDE) ? 1 : 0, at ? shadow : "-");
 			}
@@ -1806,6 +2103,25 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 				"flashes=%d, far rooms joined=%d", g_walkCorrections,
 				g_walkTweens, g_walkFlashes, g_walkPops);
 
+		/* T4-4: what the reach costs, once a second. rooms= is the whole
+		 * list, classic= the part of it that has a window of its own - the
+		 * list the walk would have had without this round - and reach= the
+		 * rooms the reach alone brought in. cap hit= counts the rooms
+		 * refused because draw_rooms (100) or the queue ring (128) was
+		 * full; trimmed= the ones the budget dropped again, farthest first.
+		 * What each of those rooms COSTS is on the FPSLOG line of the same
+		 * second, which already carries hd_rooms / hd_items / hd_draws as
+		 * the maxima over it (specific\hd\hd_level.cpp:402). */
+		if (g_walkLineEver && g_reach_on && g_walkRoomsFrames)
+			Log("ROOMWALK reach rooms added=%d of %d (mean %.1f of %.1f, max "
+				"%d classic %d reach %d), budget=%d trimmed=%d no_art=%d "
+				"cap hit=%d",
+				(int)g_walkReachSum, (int)g_walkRoomsSum,
+				(double)g_walkReachSum / g_walkRoomsFrames,
+				(double)g_walkRoomsSum / g_walkRoomsFrames, g_walkRoomsMax,
+				g_walkClassicMax, g_walkReachMax, (int)kReachBudget,
+				g_reach_trimmed_second, g_reach_noart_second, g_reach_capped);
+
 		g_walkLineAt = GlobalCounter;
 		g_walkLineEver = true;
 		g_walkTweens = 0;
@@ -1813,6 +2129,15 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		g_walkFlashes = 0;
 		g_walkPops = 0;
 		g_listLines = 0;
+		g_walkRoomsSum = 0;
+		g_walkReachSum = 0;
+		g_walkRoomsFrames = 0;
+		g_walkRoomsMax = 0;
+		g_walkClassicMax = 0;
+		g_walkReachMax = 0;
+		g_reach_capped = 0;
+		g_reach_trimmed_second = 0;
+		g_reach_noart_second = 0;
 	}
 }
 
@@ -1886,7 +2211,23 @@ void DrawRooms(short current_room)
 		outside_bottom = 0;
 	}
 
+	/* T4: the reach, and only where there is HD art to reach. HDLevelActive()
+	 * is false with hd_enable off and in a level the .TRG had nothing for, and
+	 * then every line of the walk below is the walk that shipped. */
+	g_reach_on = HDLevelActive();
+
+	if (g_reach_on)
+		ReachBeginWalk(walk_room);
+
 	GetRoomBounds();
+
+	/* And the budget, over the eye the walk really used - w2v_matrix M03/M13/
+	 * M23 is the camera position (specific\3dmath.cpp:725), the same three
+	 * numbers the side test subtracts from a portal corner. */
+	if (g_reach_on)
+		ReachTrimRooms((long)w2v_matrix[M03], (long)w2v_matrix[M13],
+			(long)w2v_matrix[M23]);
+
 	NoteRoomWalk(current_room, walk_room);
 	ProcessClosedDoors();
 
@@ -2299,7 +2640,18 @@ void RenderIt(short current_room)
 		outside_right = 0;
 	}
 
+	// T4: the cutscene walk starts the same way the game's does.
+	g_reach_on = HDLevelActive();
+
+	if (g_reach_on)
+		ReachBeginWalk(current_room);
+
 	GetRoomBounds();
+
+	if (g_reach_on)
+		ReachTrimRooms((long)w2v_matrix[M03], (long)w2v_matrix[M13],
+			(long)w2v_matrix[M23]);
+
 	ProcessClosedDoors();
 	SkyDrawPhase();
 	nPolyType = 0;
@@ -2926,6 +3278,27 @@ void SetRoomBounds(short* door, long rn, ROOM_INFO* actualRoom)
 	}
 	else
 	{
+		/* T4-3: THE RING HAS 128 PLACES AND NOTHING COUNTED THEM.
+		 *
+		 * draw_room_list is a 128 entry ring and room_list_end has always
+		 * been written into it modulo 128 with no test at all, so a walk that
+		 * ever had more than 128 rooms queued at once would overwrite an
+		 * entry that had not been dequeued and walk a room twice while losing
+		 * another. A level may hold 256 rooms (game\setup.cpp:2418), so it
+		 * was always reachable in principle; with the reach it is reachable
+		 * in practice, and it is measured: the deepest queue over the whole
+		 * game is 70 (JOBY4, RoomProbe -reachsurvey), so this refuses nothing
+		 * that happens today and stops a memory overwrite that could.
+		 *
+		 * This is the ONE change of this round inside the walk both paths
+		 * share. It is unconditional on purpose - a guard that only runs in
+		 * the HD path would leave the classic path with the hole. */
+		if (room_list_end - room_list_start >= 128)
+		{
+			g_reach_capped++;
+			return;
+		}
+
 		draw_room_list[room_list_end % 128] = rn;
 		room_list_end++;
 		r->bound_active |= 2;
@@ -2934,6 +3307,284 @@ void SetRoomBounds(short* door, long rn, ROOM_INFO* actualRoom)
 		r->test_top = (short)tT;
 		r->test_bottom = (short)tB;
 	}
+}
+
+/* SetRoomBounds WITH THE REACH (#123, fix round T4, T4-2).
+ *
+ * The same arithmetic on the same four corners of the same portal record,
+ * carried into TWO answers instead of one - see the long note over
+ * g_reach_on at the top of this file for what they are and why.
+ *
+ * The corner projection is done once and the classic rectangle is formed out
+ * of its minima and maxima, which is what the seeded loop of the function
+ * above computes: tL is the smallest of the parent's right edge and every
+ * (x - 1), and a minimum of the same floats is the same float whichever
+ * order it is taken in. The reach is that projection clamped against the
+ * screen and against nothing else.
+ *
+ * Everything the classic function refuses for a reason other than the
+ * parent's window is refused here too: the side test in the caller, the four
+ * corners behind the eye, and the fixup that widens a portal straddling the
+ * eye plane to the screen edge. */
+static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
+{
+	ROOM_INFO* r;
+	FVECTOR* v;
+	FVECTOR* lastV;
+	static FVECTOR vbuf[4];
+	float x, y, z, tooNear;
+	float rawL, rawR, rawT, rawB;
+	float cL, cR, cT, cB;		// the classic window
+	float aL, aR, aT, aB;		// the reach
+
+	const long parent = (long)(actualRoom - room);
+
+	/* Out of the reach's fixed arrays. A level of more than 256 rooms does
+	 * not load at all (game\setup.cpp:2418) and a portal names a room of the
+	 * level it is in, so this is the guard and not a case - and the fallback
+	 * is the walk as it was. */
+	if (rn < 0 || rn >= 256 || parent < 0 || parent >= 256)
+	{
+		SetRoomBounds(door, rn, actualRoom);
+		return;
+	}
+
+	r = &room[rn];
+
+	const bool parentClassic = (g_reach_state[parent] & REACH_CLASSIC) != 0;
+	const bool first = !(g_reach_state[rn] & REACH_SEEN);
+
+	/* The classic early out, and it may only be taken when the reach has
+	 * nothing to add either - that is, when this room has had its one visit
+	 * already. */
+	if (!first && r->left <= actualRoom->test_left &&
+		r->right >= actualRoom->test_right &&
+		r->top <= actualRoom->test_top &&
+		r->bottom >= actualRoom->test_bottom)
+		return;
+
+	door += 3;
+	v = vbuf;
+	tooNear = 0;
+	rawL = 1e30f;
+	rawR = -1e30f;
+	rawT = 1e30f;
+	rawB = -1e30f;
+
+	for (int i = 0; i < 4; i++, v++, door += 3)
+	{
+		v->x = aMXPtr[M00] * door[0] + aMXPtr[M01] * door[1] + aMXPtr[M02] * door[2] + aMXPtr[M03];
+		v->y = aMXPtr[M10] * door[0] + aMXPtr[M11] * door[1] + aMXPtr[M12] * door[2] + aMXPtr[M13];
+		v->z = aMXPtr[M20] * door[0] + aMXPtr[M21] * door[1] + aMXPtr[M22] * door[2] + aMXPtr[M23];
+		x = v->x;
+		y = v->y;
+		z = v->z;
+
+		if (z <= 0)
+			tooNear++;
+		else
+		{
+			z /= f_mpersp;
+
+			if (z)
+			{
+				x = x / z + f_centerx;
+				y = y / z + f_centery;
+			}
+			else
+			{
+				if (x < 0)
+					x = (float)phd_left;
+				else
+					x = (float)phd_right;
+
+				if (y < 0)
+					y = (float)phd_top;
+				else
+					y = (float)phd_bottom;
+			}
+
+			if (x - 1 < rawL)
+				rawL = x - 1;
+
+			if (x + 1 > rawR)
+				rawR = x + 1;
+
+			if (y - 1 < rawT)
+				rawT = y - 1;
+
+			if (y + 1 > rawB)
+				rawB = y + 1;
+		}
+	}
+
+	if (tooNear == 4)
+		return;
+
+	cL = rawL < (float)actualRoom->test_right ? rawL : (float)actualRoom->test_right;
+	cR = rawR > (float)actualRoom->test_left ? rawR : (float)actualRoom->test_left;
+	cT = rawT < (float)actualRoom->test_bottom ? rawT : (float)actualRoom->test_bottom;
+	cB = rawB > (float)actualRoom->test_top ? rawB : (float)actualRoom->test_top;
+	aL = rawL;
+	aR = rawR;
+	aT = rawT;
+	aB = rawB;
+
+	if (tooNear > 0)
+	{
+		v = vbuf;
+		lastV = &vbuf[3];
+
+		for (int i = 0; i < 4; i++, lastV = v, v++)
+		{
+			if (lastV->z <= 0 == v->z <= 0)
+				continue;
+
+			if (v->x < 0 && lastV->x < 0)
+				cL = aL = 0;
+			else if (v->x > 0 && lastV->x > 0)
+				cR = aR = phd_winxmax;
+			else
+			{
+				cL = aL = 0;
+				cR = aR = phd_winxmax;
+			}
+
+			if (v->y < 0 && lastV->y < 0)
+				cT = aT = 0;
+			else if (v->y > 0 && lastV->y > 0)
+				cB = aB = phd_winymax;
+			else
+			{
+				cT = aT = 0;
+				cB = aB = phd_winymax;
+			}
+		}
+	}
+
+	if (cL < actualRoom->test_left)
+		cL = actualRoom->test_left;
+
+	if (cR > actualRoom->test_right)
+		cR = actualRoom->test_right;
+
+	if (cT < actualRoom->test_top)
+		cT = actualRoom->test_top;
+
+	if (cB > actualRoom->test_bottom)
+		cB = actualRoom->test_bottom;
+
+	// The reach against the screen, and against nothing else.
+	if (aL < 0)
+		aL = 0;
+
+	if (aR > phd_winxmax)
+		aR = phd_winxmax;
+
+	if (aT < 0)
+		aT = 0;
+
+	if (aB > phd_winymax)
+		aB = phd_winymax;
+
+	/* Off the screen altogether, and the classic rectangle cannot survive
+	 * that either: it is clamped against the parent's window, which is
+	 * inside the screen. */
+	if (aL >= aR || aT >= aB)
+		return;
+
+	// The classic window only exists under a parent that has one.
+	const bool classicOk = parentClassic && cL < cR && cT < cB;
+
+	// Nothing new: no classic window, and the reach has been here.
+	if (!classicOk && !first)
+		return;
+
+	// The rectangle for the seam, and the mark that spends the one visit.
+	if (first)
+	{
+		g_reach_box[rn][0] = (short)aL;
+		g_reach_box[rn][1] = (short)aT;
+		g_reach_box[rn][2] = (short)aR;
+		g_reach_box[rn][3] = (short)aB;
+	}
+	else
+	{
+		if ((short)aL < g_reach_box[rn][0]) g_reach_box[rn][0] = (short)aL;
+		if ((short)aT < g_reach_box[rn][1]) g_reach_box[rn][1] = (short)aT;
+		if ((short)aR > g_reach_box[rn][2]) g_reach_box[rn][2] = (short)aR;
+		if ((short)aB > g_reach_box[rn][3]) g_reach_box[rn][3] = (short)aB;
+	}
+
+	if (r->bound_active & 2)
+	{
+		// It was queued by an earlier portal, so its one reach visit is
+		// spent already; all this one can still add is a classic window.
+		if (classicOk)
+		{
+			if (g_reach_state[rn] & REACH_CLASSIC)
+			{
+				if (cL < r->test_left)
+					r->test_left = (short)cL;
+
+				if (cT < r->test_top)
+					r->test_top = (short)cT;
+
+				if (cR > r->test_right)
+					r->test_right = (short)cR;
+
+				if (cB > r->test_bottom)
+					r->test_bottom = (short)cB;
+			}
+			else
+			{
+				r->test_left = (short)cL;
+				r->test_right = (short)cR;
+				r->test_top = (short)cT;
+				r->test_bottom = (short)cB;
+				g_reach_state[rn] |= REACH_CLASSIC;
+			}
+		}
+
+		return;
+	}
+
+	// T4-3: the ring, exactly as in the classic function above.
+	if (room_list_end - room_list_start >= 128)
+	{
+		g_reach_capped++;
+		return;
+	}
+
+	draw_room_list[room_list_end % 128] = rn;
+	room_list_end++;
+	r->bound_active |= 2;
+
+	/* AND HERE is where the one reach visit is spent - after the ring guard,
+	 * so that a room refused for want of a queue place can still be reached
+	 * by a later portal of the same frame. */
+	g_reach_state[rn] |= REACH_SEEN;
+
+	if (classicOk)
+	{
+		g_reach_state[rn] |= REACH_CLASSIC;
+		r->test_left = (short)cL;
+		r->test_right = (short)cR;
+		r->test_top = (short)cT;
+		r->test_bottom = (short)cB;
+	}
+	else
+		g_reach_state[rn] &= ~REACH_CLASSIC;
+}
+
+/* T4: which of the two SetRoomBounds this walk is using. Off the HD path
+ * g_reach_on is false and this is a call to the function that shipped. */
+static void FollowPortal(short* door, long rn, ROOM_INFO* r)
+{
+	if (g_reach_on)
+		SetRoomBoundsReach(door, rn, r);
+	else
+		SetRoomBounds(door, rn, r);
 }
 
 void GetRoomBounds()
@@ -2950,29 +3601,61 @@ void GetRoomBounds()
 		r = &room[rn];
 		r->bound_active -= 2;
 
-		if (r->test_left < r->left)
-			r->left = r->test_left;
+		/* T4: THE CLASSIC HALF OF THIS DEQUEUE, and everything that hangs
+		 * off it. `classicHere` is true for every room the walk would have
+		 * listed without this round - and with g_reach_on false it is true
+		 * full stop, so every line under it is the line that shipped.
+		 *
+		 * What hangs off it is not only the window. `outside`, the outside
+		 * rectangle and `snow_outside` decide whether the sky and the
+		 * weather are drawn at all, and a room the reach alone brought in
+		 * must not be allowed to turn them on: that would put one frame of
+		 * sky into a room the walk has always called indoors, which is the
+		 * flash of fix round T2 coming back through another door. So the
+		 * reach adds .TRG art to the picture and nothing else. */
+		const bool classicHere = !g_reach_on || rn < 0 || rn >= 256 ||
+			(g_reach_state[rn] & REACH_CLASSIC) != 0;
 
-		if (r->test_top < r->top)
-			r->top = r->test_top;
+		if (classicHere)
+		{
+			if (r->test_left < r->left)
+				r->left = r->test_left;
 
-		if (r->test_right > r->right)
-			r->right = r->test_right;
+			if (r->test_top < r->top)
+				r->top = r->test_top;
 
-		if (r->test_bottom > r->bottom)
-			r->bottom = r->test_bottom;
+			if (r->test_right > r->right)
+				r->right = r->test_right;
+
+			if (r->test_bottom > r->bottom)
+				r->bottom = r->test_bottom;
+		}
 
 		if (!(r->bound_active & 1))
 		{
+			/* T4-3: draw_rooms is short[100] and nothing counted it either.
+			 * The classic walk has never been measured over 106 rooms in a
+			 * frame (JOBY4, RoomProbe -reachsurvey, the eye at a room's own
+			 * centre) - which is already over the hundred - and the reach
+			 * passes it in about half a percent of the surveyed frames. A
+			 * room refused here is not drawn; the alternative is writing
+			 * past the array. */
+			if (number_draw_rooms >= (long)(sizeof(draw_rooms) /
+				sizeof(draw_rooms[0])))
+			{
+				g_reach_capped++;
+				continue;
+			}
+
 			draw_rooms[number_draw_rooms] = (short)rn;
 			number_draw_rooms++;
 			r->bound_active |= 1;
 
-			if (r->flags & ROOM_OUTSIDE)
+			if (classicHere && r->flags & ROOM_OUTSIDE)
 				outside = ROOM_OUTSIDE;
 		}
 
-		if (r->flags & ROOM_OUTSIDE)
+		if (classicHere && r->flags & ROOM_OUTSIDE)
 		{
 			if (r->left < outside_left)
 				outside_left = r->left;
@@ -3000,7 +3683,7 @@ void GetRoomBounds()
 
 				rn = p->rn;
 
-				if (room[rn].flags & ROOM_OUTSIDE)
+				if (classicHere && room[rn].flags & ROOM_OUTSIDE)
 					snow_outside = 1;
 
 				if (p->normal[0])
@@ -3008,7 +3691,7 @@ void GetRoomBounds()
 					x = r->x + p->v1[0] - w2v_matrix[M03];
 
 					if (x && (x ^ p->normal[0]) < 0)
-						SetRoomBounds(door, rn, r);
+						FollowPortal(door, rn, r);
 					else
 						continue;
 				}
@@ -3018,7 +3701,7 @@ void GetRoomBounds()
 					y = r->y + p->v1[1] - w2v_matrix[M13];
 
 					if (y && (y ^ p->normal[1]) < 0)
-						SetRoomBounds(door, rn, r);
+						FollowPortal(door, rn, r);
 					else
 						continue;
 				}
@@ -3028,7 +3711,7 @@ void GetRoomBounds()
 					z = r->z + p->v1[2] - w2v_matrix[M23];
 
 					if (z && (z ^ p->normal[2]) < 0)
-						SetRoomBounds(door, rn, r);
+						FollowPortal(door, rn, r);
 					else
 						continue;
 				}

@@ -7851,8 +7851,18 @@ and has no overhang of its own to key on, and the one list that does describe
 whose whole purpose is to HIDE that art, measured in round T2 as 27,694 pixels
 of bleed in ANDREA1's 207/53. Drawing the intruder full screen would put that
 bleed straight back. The right key is not knowable until the play test names
-the room, and `ROOMLIST`'s shadow line names it in one run. The proposal is in
-this round's report under *open*.
+the room, and `ROOMLIST`'s shadow line names it in one run.
+
+**ANSWERED IN FIX ROUND T4, and not with a list.** The room the shadow line
+would have named is JOBY2's room 99, and what keeps it out of the picture is
+not a missing portal but the CLAMP: `SetRoomBounds` cuts the child portal
+124 -> 99 against room 124's own window - the projection of the classic
+doorway - and room 99's doorway begins six pixels to the right of where that
+window ends. T4 gives every room a second answer, the REACH, which is the
+portal's own projection against the screen with the parent left out of it, and
+the room behind the tear joins the draw list wherever its portal is on the
+screen. The classic window stays exactly what it was and stays the scissor, so
+the 207/53 bleed above is untouched. See *Fix round T4*.
 
 ---
 
@@ -7919,8 +7929,17 @@ courtyard scene's measured 29 draw calls is over the 20 % the brake allows. And
 both need a VIEW FRUSTUM that the HD path has not got: round T2 grepped
 `specific\hd` for `frustum`, `cull` and `reject` and every hit is back face
 culling on Lara's model. Building one is a round of its own with its own
-correctness burden, not a small rule. So this round measures and reports, and
-the decision is the player's - it is under *open*.
+correctness burden, not a small rule. So this round measures and reports.
+
+**REPLACED IN FIX ROUND T4.** The player's answer was that it had to be a
+global fix rather than a list of rooms, and the measurement above pointed at
+the right place without naming it: the refusals are `empty` and `side`, never
+`toonear`, and `empty` IS the clamp against the parent's window. T4 leaves
+that clamp where it is for the window and asks a second question for the draw
+list - does the portal face the eye and land on the screen - which needs no
+frustum, no `ROOM_OUTSIDE` rule and no distance. Room 222 is in the list at
+every level view direction that has it in front of the camera: 0 of 120 yaws
+at pitch -10, -5, 0, +5 and +10 becomes 34 to 36 of 120. See *Fix round T4*.
 
 ---
 
@@ -7945,6 +7964,308 @@ names one room and prints why it is or is not in the list, with the widest and
 narrowest window it ever gets; `-walkeach` prints every direction separately.
 It also prints which rooms' boxes hold the eye, so a `ROOMFLASH` line can be
 handed to it as it stands.
+
+#### Fix round T4 - the reach: the second rectangle of the portal walk, the room behind the torn wall and the tower of Trajan's Markets (#123, #148)
+
+The play test of 2026-09-08 named two things fix round T3 could only measure,
+and the player's decision on both was the same sentence: *"das muss ein
+globaler Fix werden"* - no hand-kept list of pairs.
+
+* **JOBY2, the stairs.** The remaster's art tears the wall beside them open,
+  and through the hole the room behind is the clear colour. The log's own
+  `ROOMLIST` dumps say which rooms are drawn at that eye - 114 (whole), 123
+  (whole), 111, 124 - and room 99, the one behind the tear, comes and goes as
+  a seventeen pixel splinter at the screen's rim.
+* **ANDREA2, the tower.** Room 222 of Trajan's Markets, identified in T3, is
+  in the draw list only when the eye is tilted: at every view direction from
+  the courtyard between pitch -10 and +10 the walk does not reach it at all,
+  and it pops in as she walks.
+
+Both are the same line of arithmetic, and it is not a missing portal.
+
+---
+
+**T4-1 - the mechanism, and what "the reach" has to mean.**
+
+`SetRoomBounds` (`game\draw.cpp`) projects the four corners of a child portal
+and then **clamps the result against the window of the room it is seen
+through** - `actualRoom->test_left..test_bottom`, which for room 124 is the
+projection of the classic doorway out of room 123. Room 99's portal lies to
+the right of that rectangle, so the clamp leaves it with no width and the room
+is dropped as `empty`. Measured on the play test's own eye
+(`RoomProbe -walk 114 40024 -3408 24107 -walkyaw 335 335 1 -walkpitch -10
+-size 1280 720`, the eye of the log's dumps - `-walkyaw` takes a from, a to
+and a step, so one direction is asked for as `335 335 1`):
+
+| | |
+| --- | --- |
+| room 124's window, through the classic doorway | `0,0..535,719` |
+| the portal 124 -> 99, its own projection | `542,116..754,389` |
+| clamped against 124's window | `535,116..535,389` - **no width** |
+
+Six pixels. The doorway ends at 535 and the next room's portal begins at 542,
+and everything between them is wall in the classic level and a hole in the
+remaster's.
+
+*And "clip the child against the parent's REACH instead" is not a second
+reading of that - it is the same walk.* The brief asked for the two to be told
+apart by measurement, and they are: with the child clamped against the
+parent's reach, JOBY2's fan of 504 directions from that eye comes out at
+**the same room list in every single direction, and the same `empty` refusal
+of room 99 - a gain of zero**. One line says why: the root's reach IS the
+screen, so `reach(child) = projection n reach(parent)` unrolls into
+`projection n projection(parent) n ... n screen` -
+the chain of intersections the classic window already is. **Only dropping the
+parent out of the child's rectangle changes anything**, and that is the rule
+this round builds:
+
+> a portal REACHES the room behind it when it faces the eye and lands on the
+> screen. The classic window is computed beside it exactly as before, out of
+> the parent's window, and may now come out EMPTY.
+
+A room the reach alone brought in is drawn: all of its art over the whole
+screen, and **none of its intruding art at all**, because the scissor of fix
+round T2 is the classic window and an empty window is an empty scissor. T2's
+bleed guard is kept to the letter.
+
+*Why the reach is a SEEN-MARK and not a second rectangle to widen, and this
+too is measured rather than reasoned.* The first version kept a second union
+per room and re-queued a room whenever a portal gave it something that union
+did not hold. It runs the tool out of memory on ANDREA3 and ANDY2: with the
+parent gone from the child's rectangle, a ring of rooms whose portals all face
+the eye can be walked round and round, each lap widening some room's classic
+window by a pixel and earning another queue entry. ANDREA3's worst frame took
+**over 20,000 dequeues against the classic walk's 33**. The reach rectangle of
+a portal does not depend on how the walk arrived, so one visit per room is the
+whole of it; with the mark, the worst frame over the whole game is **319**
+(JOBY4) against that walk's own 320.
+
+**The cost, over the whole game.** `RoomProbe -reachsurvey` (new) puts the eye
+at the middle of every room of a level in turn and walks a fan of forty
+directions from each under both rules - 280 to 10,200 frames a level, 2560x1440.
+These are the WALK's own numbers, before the engine's two reductions below - a
+reach-only room the `.TRG` has nothing for comes back out of the list, and the
+budget drops the farthest ones over 64 - so the game's own lists are at most
+these and usually shorter; and an eye at a room's box centre is a worst case of
+its own, standing in walls and outside rooms as often as in the open:
+
+| level | rooms | frames | classic mean / max | reach mean / max | reach alone mean / max | over 60 | over 100 | dequeues max (classic) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ANDREA1 | 242 | 9,680 | 6.6 / 42 | 14.5 / 139 | 7.8 / 129 | 441 | **56** | 142 (60) |
+| ANDREA2 | 252 | 10,080 | 8.5 / 65 | 15.2 / 111 | 6.7 / 102 | 438 | **14** | 115 (75) |
+| ANDREA3 | 130 | 5,200 | 5.3 / 28 | 7.9 / 46 | 2.6 / 37 | 0 | 0 | 48 (33) |
+| ANDY1 | 243 | 9,720 | 10.1 / 49 | 14.7 / 96 | 4.7 / 83 | 249 | 0 | 137 (131) |
+| ANDY2 | 254 | 10,160 | 4.4 / 16 | 7.2 / 62 | 2.8 / 50 | 1 | 0 | 62 (29) |
+| ANDY3 | 211 | 8,440 | 7.0 / 42 | 10.8 / 67 | 3.8 / 52 | 11 | 0 | 71 (65) |
+| JOBY2 | 169 | 6,760 | 12.2 / 69 | 21.2 / 121 | 9.1 / 103 | 610 | **30** | 137 (76) |
+| JOBY3 | 195 | 7,800 | 4.0 / 16 | 7.7 / 83 | 3.7 / 74 | 41 | 0 | 83 (16) |
+| JOBY4 | 137 | 5,480 | 19.0 / **106** | 23.7 / 128 | 4.7 / 80 | 516 | **107** | 319 (320) |
+| JOBY5 | 191 | 7,640 | 4.8 / 18 | 8.4 / 73 | 3.6 / 57 | 34 | 0 | 73 (18) |
+| RICH1 | 165 | 6,600 | 4.3 / 21 | 7.4 / 58 | 3.1 / 53 | 0 | 0 | 58 (23) |
+| RICH2 | 179 | 7,160 | 3.7 / 18 | 5.7 / 42 | 2.0 / 30 | 0 | 0 | 43 (21) |
+| RICH3 | 218 | 8,720 | 4.5 / 24 | 7.1 / 69 | 2.6 / 59 | 19 | 0 | 69 (29) |
+| RICHCUT2 | 7 | 280 | 3.0 / 6 | 3.0 / 6 | 0.0 / 1 | 0 | 0 | 6 (6) |
+| TITLE | 116 | 4,640 | 8.4 / 48 | 8.8 / 49 | 0.5 / 15 | 0 | 0 | 124 (121) |
+
+And from ten named eyes, each at the middle of that room's own box
+(`-walkcentre`, the same point the survey uses) over a fan of 504 directions
+(yaw every 5 degrees, pitch -30 to +30 every 10, 2560x1440):
+
+| eye | classic mean / max | reach mean / max | the direction that gains most |
+| --- | ---: | ---: | --- |
+| JOBY2 room 123, the stairs | 3.5 / 6 | 7.6 / 29 | yaw 45 pitch -20, 5 -> 29 |
+| ANDREA2 room 210, the courtyard | 20.1 / 43 | 29.4 / 76 | yaw 235 pitch -20, 36 -> 76 |
+| ANDREA1 room 2, the alley | 6.9 / 19 | 24.7 / 69 | yaw 30 pitch 10, 4 -> 64 |
+| ANDREA1 room 57, the Piazza corner | 7.2 / 19 | 26.2 / 72 | yaw 270 pitch -10, 10 -> 72 |
+| ANDREA1 room 209, the open street | 4.0 / 16 | 27.5 / **133** | yaw 180 pitch 0, 4 -> 133 |
+| RICH2 room 125, the offices | 5.8 / 17 | 9.4 / 43 | yaw 270 pitch -30, 12 -> 42 |
+| JOBY4 room 114, the sea | 12.7 / 72 | 25.4 / 115 | yaw 340 pitch -10, 30 -> 111 |
+| JOBY5 room 90, the sub | 5.9 / 15 | 11.2 / 72 | yaw 130 pitch -20, 15 -> 72 |
+| ANDY1 room 164, the cemetery | 2.0 / 4 | 16.7 / 87 | yaw 250 pitch -30, 4 -> 87 |
+| ANDY3 room 139, the mill | 2.7 / 5 | 10.8 / 63 | yaw 305 pitch -20, 5 -> 63 |
+
+**Both fixes, in one line each.** JOBY2's room 99 goes from **88 of 504 view
+directions to 124** at the play test's own eye `40024/-3408/24107` (seeded in
+room 114 or in 123, either gives this; yaw every 5 degrees, pitch -30 to +30
+every 10, 2560x1440) - and 36 of those 124 are the reach's alone: the 124
+verdicts the classic walk gave as `empty` come back as 36 reached and 88
+`offscreen`, and `toonear` is 76 under both rules. ANDREA2's tower, per
+pitch, 120 yaws each:
+
+| pitch | classic | reach |
+| ---: | ---: | ---: |
+| -30 | 16 of 120 | 33 of 120 |
+| -20 | 9 | 34 |
+| **-10 to +10** | **0 at every one** | **34 to 36** |
+| +20 | 8 | 37 |
+| +30 | 0 | 24 |
+
+Level with the tower, the walk now reaches it in about three directions in
+ten, which is what a 80 degree field of view over a full turn comes to.
+
+---
+
+**T4-2 - the fix, in the walk.**
+
+`SetRoomBoundsReach` (`game\draw.cpp:3329`) is the classic function's own
+arithmetic on the same four corners, carried into two answers: the projection
+is taken once, the classic rectangle is formed out of its minima and maxima
+seeded with the parent's window exactly as the seeded loop of `SetRoomBounds`
+does, and the reach is the same projection clamped against the screen. The
+side test in the caller, `tooNear == 4` and the fixup for a portal straddling
+the eye plane are untouched, so a portal the classic rule refuses for any
+reason other than the parent's window is refused here too. `FollowPortal`
+(`:3582`) is the one line that chooses between the two, `ReachBeginWalk`
+(`:1632`) wipes and seeds the state, and `GetRoomBounds` (`:3590`) accumulates
+the classic window only for a dequeue that had one.
+
+**And the reach adds .TRG art and nothing else** - three deliberate pieces:
+
+1. **The classic geometry of a reach-only room is not drawn**, and that
+   follows from its own empty window: `DrawStaticObjects` (`:2788`) and
+   `InsertRoom` (`specific\drawroom.cpp`) both take `phd_left = r->left`, and
+   both reject everything when left > right.
+2. **A reach-only room the .TRG has nothing for comes straight back out of the
+   list** (`ReachTrimRooms`, `:1677`). Otherwise it would be a room with
+   nothing of itself in the picture whose ITEMS are still drawn - PrintObjects
+   hands every item the whole screen - and an enemy standing in a room that is
+   not there is not a fix.
+3. **`outside`, the outside rectangle and `snow_outside` are read from the
+   classic rooms alone** (`classicHere`, `:3616`). A reach-only room that
+   happens to be `ROOM_OUTSIDE` must not be allowed to turn the sky on in a
+   room the walk has always called indoors - that is the sky flash of fix
+   round T2 coming back through another door.
+
+*What the classic windows come to is unchanged, and that is provable rather
+than hopeful.* Every classic rectangle handed out under the reach comes from a
+parent that has a classic window, which by induction means a chain from the
+root every step of which the classic walk itself follows; and the extra queue
+entries the reach adds are unioned into the same `left..bottom`. The only
+early out that moves is the one at the top of `SetRoomBounds`, which is skipped
+while a room still has its reach visit owing - and it only ever fired for a
+rectangle that added nothing to the union.
+
+**The seams**, all behind `-log` and all staying in the build:
+
+* `ROOMLIST   room=%d window=... reach=... REACH|window dist=...` - the two
+  rectangles per drawn room, and the word that says which of the two carried
+  it. A room marked `REACH` is drawn whole with no intruding art.
+* `ROOMLIST frame=... the whole list ... target=(x,y,z) target_room=... cam=..`
+  - the five second dump now carries the TARGET and the camera, which T3's did
+  not: a room list without the direction it was walked in cannot be handed
+  back to `RoomProbe -walk` as it stands.
+* `ROOMFLASH ... why ... reach [...]` - a fifth answer beside `side`,
+  `toonear`, `empty` and `noportal`: the classic window came out empty and the
+  reach carries the room, so a room missing for THAT reason was dropped by the
+  budget or the cap and not by the walk. `offscreen` is the reach's own
+  refusal.
+* `ROOMWALK reach rooms added=%d of %d (mean ... max ... classic ... reach
+  ...), budget=64 trimmed=%d no_art=%d cap hit=%d` - once a second. What those
+  rooms COST is on the `FPSLOG` line of the same second, which already carries
+  `hd_rooms / hd_items / hd_draws` as the maxima over it.
+
+---
+
+**T4-3 - the boundary, and it is the one deliberate change to the walk both
+paths share.**
+
+`draw_rooms` is `short[100]` (`:111`) and `draw_room_list` a 128 entry ring
+(`:114`), and **neither was ever counted**. `room_list_end` was written into
+the ring modulo 128 with no test, so a walk with more than 128 rooms queued at
+once would overwrite an entry that had not been dequeued; `number_draw_rooms`
+was incremented with no test at all. A level may hold 256 rooms
+(`game\setup.cpp:2418`), so both were reachable in principle - and the survey
+above says the first one is reachable in the CLASSIC walk too: **JOBY4's
+classic frame of 106 rooms is already six past the array.**
+
+So `GetRoomBounds` refuses a room beyond `draw_rooms`' capacity and
+`SetRoomBounds` refuses to queue one beyond the ring's, both unconditionally,
+both counted as `cap hit=` in `ROOMWALK`. This changes nothing while the list
+stays under a hundred - the deepest queue over the whole game is 70 - and
+stops a memory overwrite where it does not. It is named here as the one change
+of this round inside the code the classic path runs, because a guard that only
+ran in the HD path would leave the classic path with the hole.
+
+---
+
+**T4-4 - the safety valve, and its number is measured.**
+
+Above a budget the walk drops reach-only rooms, **farthest first**, and a room
+with a classic window of its own is never dropped: it is a room the walk has
+always drawn. The number comes out of the survey's own distribution - the
+share of frames over a budget of 32 / 40 / 48 / 56 / 64 / 80 rooms:
+
+| level | 32 | 40 | 48 | 56 | **64** | 80 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ANDREA1 | 13.7 | 9.6 | 7.0 | 5.3 | **4.0** | 1.8 % |
+| ANDREA2 | 13.3 | 9.7 | 7.0 | 5.2 | **3.5** | 1.2 % |
+| JOBY2 | 24.9 | 18.9 | 13.5 | 10.1 | **7.8** | 3.1 % |
+| JOBY4 | 25.9 | 18.7 | 13.9 | 10.7 | **8.2** | 4.7 % |
+| ANDY1 | 14.2 | 9.4 | 5.7 | 3.5 | **1.9** | 0.4 % |
+| ANDY3 | 7.7 | 3.8 | 1.5 | 0.3 | **0.0** | 0.0 % |
+| RICH1 / RICH2 / RICH3 | 1.8 / 0 / 2.7 | 0.7 / 0 / 1.0 | 0.3 / 0 / 0.5 | 0.1 / 0 / 0.3 | **0 / 0 / 0.1** | 0 % |
+| ANDREA3 / ANDY2 / JOBY3 / JOBY5 | 1.8 / 1.3 / 3.3 / 2.5 | 0.3 / 0.5 / 1.4 / 0.9 | 0 / 0.1 / 1.0 / 0.6 | 0 / 0 / 0.7 / 0.6 | **0 / 0 / 0.4 / 0.3** | 0 % |
+
+**64 is where the two families part.** The indoor levels never reach it at
+all, and the four open ones cross it in 3.5 to 8.2 % of the worst-case frames
+- so the valve is shut for ordinary play and opens where a street runs away to
+the horizon. It is `kReachBudget` (`game\draw.cpp:1675`), one number in one
+place, and `ROOMWALK` says how often it fired.
+
+---
+
+**The pictures.** All from `RoomProbe`, which draws the rooms of the walk's
+own list at their own offsets with the engine's own renderer, and every run of
+this round reports **0 of 59** watched device states changed.
+
+* **JOBY2, the torn wall.** Seeded in room 114 at the play test's eye
+  `40024/-3408/24107`, yaw 335, pitch -10, 1280x720, the walk's own list drawn
+  (114, 123, 111, 124) against the same plus room 99:
+  `j2_before_JOBY2_r114.png` is the play test's photograph - the iron
+  staircase with a tall MAGENTA hole beside it where the remaster's art has
+  torn the wall open and the clear colour stands behind it.
+  `j2_after_JOBY2_r114.png` has room 99's own wall, its grating and its lamp
+  in that hole. **9,444 of 921,600 pixels differ, 1.03 %, every one of them
+  inside a 62 x 230 strip** - and the walk's reach rectangle for room 99 there
+  is `542,116..754,389`, which contains it.
+* **ANDREA2, the tower.** From the courtyard cluster `82000/-1500/41000`, yaw
+  235, **pitch 0** - level, the case the classic walk never reaches - the
+  walk's 29 classic rooms drawn against the same plus room 222:
+  `a2_before_ANDREA2_r210.png` and `a2_after_ANDREA2_r210.png`. **6,705
+  pixels, 0.73 %, in a 44 x 176 strip** at the left edge of the courtyard's
+  opening: the brick block with the barred window, standing where before there
+  was sky.
+* **ANDREA1 207/53, T2's own bleed proof, to show the scissor did not move.**
+  Camera inside room 207 (the tool's own automatic one, 960x720): room 53's
+  art drawn whole differs from room 207 alone in **65,732 pixels**, and
+  withholding the intruding triangles alone (`-window open`) gives a picture
+  that differs from room 207 alone by **0 pixels**. At THAT camera the
+  intrusion rule takes the whole of the bleed away; at others it does not take
+  all of it - round T2 measured 7,093 pixels of room 53's own wall left
+  standing in room 207's border ring at its own camera, and re-measured from
+  the same eye turned 90 degrees the remainder here is 99,652. That is round
+  T2's trade, unchanged: what is proven is that this round did not move the
+  scissor, and `specific\hd\hd_render.cpp` - the file that tags and draws the
+  intruding half - is not in this round's diff.
+
+**What this round did NOT change.** With `hd_enable` off `HDLevelActive()` is
+false, `g_reach_on` stays false, `FollowPortal` calls the function that
+shipped, `classicHere` is true and the four window lines are the four window
+lines - the walk is the walk, line for line, and the only difference in the
+built code is the two capacity guards of T4-3. `fps_mode 0` is untouched
+either way. `be.bat` builds with **0 errors**; `InterpTest` builds and runs
+**316 checks, 0 failed** - the eight new ones are the JOBY2 rectangles above,
+the invariant that the classic rectangle is inside the reach's over 2,000
+random pairs, and the ring that shows what the seen-mark is for.
+
+**The tools.** `RoomProbe` gained `-reach` (the two-rectangle walk, with both
+room counts per direction and the mean, maximum, and worst gain over the fan),
+`-reachsurvey [step]` (every room of the level as the eye in turn - the table
+above, and the budget distribution), `-walkcentre` (the eye at the middle of
+the seed room's box) and `-walkboxes` (every room's origin, which is what a
+`-with` argument is made of). `-with` now holds 32 groups instead of 8,
+because a picture of what the walk hands the frame is a picture of twenty to
+forty rooms. `InterpTest` gained the `reach` section.
 
 #### Fix round N - the water: the material that was a surface all along, the HD frames on the classic faces, and the six double rooms (#123)
 

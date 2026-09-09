@@ -1235,9 +1235,9 @@ static long g_tround_box[4] = { 0, 0, 0, 0 };
  *
  *   reached      a portal from a listed room put it in the list
  *   side         `if (x && (x ^ p->normal[0]) < 0)` - the eye is on the far
- *                side of the portal's own plane (game\draw.cpp:3010)
+ *                side of the portal's own plane (game\draw.cpp:3693)
  *   toonear      all four corners fell behind the eye, `tooNear == 4`
- *                (game\draw.cpp:2863)
+ *                (game\draw.cpp:3215)
  *   empty        the rectangle came out with no width or no height after the
  *                clamp against the room it was seen through
  *   covered      the room's window already covers what this portal would give
@@ -1264,18 +1264,56 @@ namespace walkoff
 		unsigned flags;
 		short left, right, top, bottom;
 		short test_left, test_right, test_top, test_bottom;
+		/* -reach (#123, fix round T4): THE SECOND RECTANGLE. `reach_*` is to
+		 * the reach what `left..bottom` is to the classic window - the union
+		 * of every rectangle the room was dequeued with - and `test_reach_*`
+		 * is to it what `test_left..test_bottom` is: the one this dequeue
+		 * carries. `classic_ok` says whether THIS dequeue's classic rectangle
+		 * exists at all, because with the reach a room can be in the list
+		 * with no classic window of any kind. */
+		short reach_left, reach_right, reach_top, reach_bottom;
+		short test_reach_left, test_reach_right;
+		short test_reach_top, test_reach_bottom;
+		bool classic_ok;
+		// True until the reach has visited this room once this frame.
+		bool reach_first;
 		char bound_active;
 		std::vector<Tr5Level::PortalRecord> doors;
 	};
 
 	static std::vector<Room> g_room;
-	static long g_list[128];
+	/* The engine's ring is draw_room_list[128] (game\draw.cpp:114) and its
+	 * list draw_rooms[100] (:111). The tool's is deliberately WIDER, because
+	 * its job is to say how often the engine's own two would have been passed
+	 * - see g_queue_peak and the survey's over60/over100 counters. */
+	static const long kRing = 4096;
+	static long g_list[kRing];
 	static long g_start, g_end;
 	static std::vector<short> g_drawn;
 	static short g_winxmax, g_winymax;
 	static float g_persp, g_centerx, g_centery;
 	static float g_view[9];			// the eye's rotation, rows first
 	static long g_eye[3];
+
+	// -reach: the two-rectangle walk. Off, this file is what T3 shipped.
+	static bool g_reach = false;
+	/* THE WALK'S OWN BRAKE, and it is here because the survey found it.
+	 * ANDREA3 and ANDY2 ran the tool out of memory on the first survey: with
+	 * the parent gone from the child's rectangle, a ring of rooms whose
+	 * portals all face the eye can be walked round and round, each lap
+	 * widening one room's CLASSIC window by a pixel or two and so earning
+	 * another queue entry. It terminates - both unions are bounded by the
+	 * screen - but "terminates" can mean two million dequeues, and the
+	 * verdict list is what died of it first. So: a cap on dequeues per frame,
+	 * counted, and the survey turns the verdict list off. */
+	static const long kWalkMax = 20000;
+	static long g_dequeues = 0;
+	static bool g_capped = false;
+	static bool g_notes = true;
+	// How many rooms of the last walk had NO classic window - the ones only
+	// the reach brought in - and the deepest the queue ever got.
+	static int g_reach_only = 0;
+	static long g_queue_peak = 0;
 
 	// Every portal the walk looked at this run, with what became of it.
 	struct Verdict
@@ -1292,6 +1330,9 @@ namespace walkoff
 	{
 		Verdict v;
 
+		if (!g_notes)
+			return;
+
 		v.from = from;
 		v.to = to;
 		strncpy(v.why, why, sizeof(v.why) - 1);
@@ -1303,7 +1344,7 @@ namespace walkoff
 		g_verdict.push_back(v);
 	}
 
-	/* SetRoomBounds (game\draw.cpp:2795), with `aMXPtr` handed in as the nine
+	/* SetRoomBounds (game\draw.cpp:3147), with `aMXPtr` handed in as the nine
 	 * rotation terms plus the three translation ones that phd_TranslateAbs
 	 * works out for the room the portal is seen FROM. */
 	static void SetRoomBounds(const Tr5Level::PortalRecord& p, int rn,
@@ -1419,8 +1460,12 @@ namespace walkoff
 		}
 		else
 		{
-			g_list[g_end % 128] = rn;
+			g_list[g_end % kRing] = rn;
 			g_end++;
+
+			if (g_end - g_start > g_queue_peak)
+				g_queue_peak = g_end - g_start;
+
 			r.bound_active |= 2;
 			r.test_left = (short)tL;
 			r.test_right = (short)tR;
@@ -1430,24 +1475,298 @@ namespace walkoff
 		}
 	}
 
-	/* GetRoomBounds (game\draw.cpp:2939). ROOM_OUTSIDE and the snow flag are
+	/* SetRoomBounds WITH THE REACH (#123, fix round T4, -reach).
+	 *
+	 * The same arithmetic on the same four corners, carried into TWO answers
+	 * instead of one:
+	 *
+	 *   the REACH says whether the room is DRAWN, and it is the portal's own
+	 *   projection clamped against THE SCREEN - the parent's window does not
+	 *   enter it at all. That is what makes a chain run: as long as each
+	 *   portal faces the eye and lands on the screen, the room behind it is
+	 *   drawn. A room needs this answer ONCE, so it is a plain breadth-first
+	 *   visit with a seen-mark.
+	 *
+	 *   the CLASSIC window is what it always was, the projection clamped
+	 *   against the parent's classic window, unioned over every portal the
+	 *   room is seen through, and it is now allowed not to exist at all. A
+	 *   room the reach alone brought in has no classic window: it is drawn,
+	 *   and its intruding triangles are drawn inside an empty scissor, which
+	 *   is not at all. That is T2's bleed guard, kept exactly.
+	 *
+	 * AND "AGAINST THE PARENT'S REACH" IS NOT A THIRD READING, IT IS THE
+	 * CLASSIC WALK. Measured before this function was written this way: with
+	 * the child clamped against the parent's reach, JOBY2's fan of 504
+	 * directions from the play test's own eye came out at classic mean 1.8 /
+	 * max 3 and reach mean 1.8 / max 3 - gain 0 in every single direction,
+	 * and room 99 refused `empty` on the same 140 of them. One line says why:
+	 * the root's reach IS the screen, so reach(child) = projection n
+	 * reach(parent) unrolls to projection n projection(parent) n ... n screen,
+	 * which is the chain of intersections the classic window already is. Only
+	 * dropping the parent out of the child's rectangle changes anything.
+	 *
+	 * WHY THE REACH IS A SEEN-MARK AND NOT A SECOND RECTANGLE TO WIDEN, and
+	 * this too is measured rather than reasoned. The first version of this
+	 * function kept a second union per room and re-queued a room whenever a
+	 * portal gave it anything that union did not already hold. It runs
+	 * ANDREA3 and ANDY2 out of memory: with the parent gone from the child's
+	 * rectangle a ring of rooms whose portals all face the eye can be walked
+	 * round and round, each lap widening one room's classic window by a pixel
+	 * and earning another queue entry. ANDREA3's worst frame took over 20,000
+	 * dequeues against the classic walk's 33. The reach rectangle of a portal
+	 * does not depend on the parent - it is the same rectangle however the
+	 * walk arrived - so there is nothing to widen and one visit is the whole
+	 * of it. With the mark, the dequeues per frame are the classic walk's own
+	 * plus at most one per room.
+	 *
+	 * Everything else is untouched - the side test in the caller, tooNear ==
+	 * 4, the behind-the-eye fixup - so a portal the classic walk refuses for
+	 * any reason other than its parent's window is refused here too. */
+	static void SetRoomBoundsReach(const Tr5Level::PortalRecord& p, int rn,
+		Room& actualRoom, const float* mx, int fromRoom)
+	{
+		Room& r = g_room[(size_t)rn];
+		float vx[4], vy[4], vz[4];
+		float x, y, z, tooNear;
+		float rawL = 1e30f, rawR = -1e30f, rawT = 1e30f, rawB = -1e30f;
+		float cL, cR, cT, cB;			// the classic window
+		float aL, aR, aT, aB;			// the reach
+
+		/* The classic early out, and it may only be taken when the reach has
+		 * nothing to add either - that is, when this room has been given its
+		 * one reach visit already. */
+		if (!r.reach_first && r.left <= actualRoom.test_left &&
+			r.right >= actualRoom.test_right &&
+			r.top <= actualRoom.test_top &&
+			r.bottom >= actualRoom.test_bottom)
+		{
+			Note(fromRoom, rn, "covered", r.left, r.top, r.right, r.bottom);
+			return;
+		}
+
+		tooNear = 0;
+
+		for (int i = 0; i < 4; i++)
+		{
+			const float dx = (float)p.v[i][0];
+			const float dy = (float)p.v[i][1];
+			const float dz = (float)p.v[i][2];
+
+			vx[i] = mx[0] * dx + mx[1] * dy + mx[2] * dz + mx[3];
+			vy[i] = mx[4] * dx + mx[5] * dy + mx[6] * dz + mx[7];
+			vz[i] = mx[8] * dx + mx[9] * dy + mx[10] * dz + mx[11];
+			x = vx[i];
+			y = vy[i];
+			z = vz[i];
+
+			if (z <= 0)
+				tooNear++;
+			else
+			{
+				z /= g_persp;
+
+				if (z)
+				{
+					x = x / z + g_centerx;
+					y = y / z + g_centery;
+				}
+				else
+				{
+					x = x < 0 ? 0.0f : (float)g_winxmax;
+					y = y < 0 ? 0.0f : (float)g_winymax;
+				}
+
+				if (x - 1 < rawL) rawL = x - 1;
+				if (x + 1 > rawR) rawR = x + 1;
+				if (y - 1 < rawT) rawT = y - 1;
+				if (y + 1 > rawB) rawB = y + 1;
+			}
+		}
+
+		if (tooNear == 4)
+		{
+			Note(fromRoom, rn, "toonear", 4, 0, 0, 0);
+			return;
+		}
+
+		/* The classic rectangle is the seeded loop of the classic function,
+		 * written as the minimum and maximum it really computes: tL is the
+		 * smallest of the parent's right edge and every (x - 1), and a
+		 * minimum of the same floats is the same float in any order. */
+		cL = rawL < (float)actualRoom.test_right ? rawL : (float)actualRoom.test_right;
+		cR = rawR > (float)actualRoom.test_left ? rawR : (float)actualRoom.test_left;
+		cT = rawT < (float)actualRoom.test_bottom ? rawT : (float)actualRoom.test_bottom;
+		cB = rawB > (float)actualRoom.test_top ? rawB : (float)actualRoom.test_top;
+		aL = rawL;
+		aR = rawR;
+		aT = rawT;
+		aB = rawB;
+
+		if (tooNear > 0)
+		{
+			for (int i = 0, last = 3; i < 4; last = i, i++)
+			{
+				if ((vz[last] <= 0) == (vz[i] <= 0))
+					continue;
+
+				if (vx[i] < 0 && vx[last] < 0)
+					cL = aL = 0;
+				else if (vx[i] > 0 && vx[last] > 0)
+					cR = aR = (float)g_winxmax;
+				else
+				{
+					cL = aL = 0;
+					cR = aR = (float)g_winxmax;
+				}
+
+				if (vy[i] < 0 && vy[last] < 0)
+					cT = aT = 0;
+				else if (vy[i] > 0 && vy[last] > 0)
+					cB = aB = (float)g_winymax;
+				else
+				{
+					cT = aT = 0;
+					cB = aB = (float)g_winymax;
+				}
+			}
+		}
+
+		if (cL < actualRoom.test_left) cL = actualRoom.test_left;
+		if (cR > actualRoom.test_right) cR = actualRoom.test_right;
+		if (cT < actualRoom.test_top) cT = actualRoom.test_top;
+		if (cB > actualRoom.test_bottom) cB = actualRoom.test_bottom;
+
+		// The reach against the screen, and against nothing else.
+		if (aL < 0) aL = 0;
+		if (aR > (float)g_winxmax) aR = (float)g_winxmax;
+		if (aT < 0) aT = 0;
+		if (aB > (float)g_winymax) aB = (float)g_winymax;
+
+		/* Off the screen altogether. The classic rectangle cannot survive
+		 * this either: it is clamped against the parent's window, which is
+		 * inside the screen. */
+		if (aL >= aR || aT >= aB)
+		{
+			Note(fromRoom, rn, "offscreen", aL, aT, aR, aB);
+			return;
+		}
+
+		// The classic window only exists under a parent that has one.
+		const bool classicOk = actualRoom.classic_ok && cL < cR && cT < cB;
+
+		if (!classicOk && !r.reach_first)
+		{
+			Note(fromRoom, rn, "covered", aL, aT, aR, aB);
+			return;
+		}
+
+		if (r.bound_active & 2)
+		{
+			if (aL < r.test_reach_left) r.test_reach_left = (short)aL;
+			if (aT < r.test_reach_top) r.test_reach_top = (short)aT;
+			if (aR > r.test_reach_right) r.test_reach_right = (short)aR;
+			if (aB > r.test_reach_bottom) r.test_reach_bottom = (short)aB;
+
+			if (classicOk)
+			{
+				if (r.classic_ok)
+				{
+					if (cL < r.test_left) r.test_left = (short)cL;
+					if (cT < r.test_top) r.test_top = (short)cT;
+					if (cR > r.test_right) r.test_right = (short)cR;
+					if (cB > r.test_bottom) r.test_bottom = (short)cB;
+				}
+				else
+				{
+					r.test_left = (short)cL;
+					r.test_right = (short)cR;
+					r.test_top = (short)cT;
+					r.test_bottom = (short)cB;
+					r.classic_ok = true;
+				}
+			}
+
+			r.reach_first = false;
+			Note(fromRoom, rn, classicOk ? "widened" : "widened_reach",
+				aL, aT, aR, aB);
+			return;
+		}
+
+		g_list[g_end % kRing] = rn;
+		g_end++;
+
+		if (g_end - g_start > g_queue_peak)
+			g_queue_peak = g_end - g_start;
+
+		r.bound_active |= 2;
+		r.reach_first = false;
+		r.test_reach_left = (short)aL;
+		r.test_reach_right = (short)aR;
+		r.test_reach_top = (short)aT;
+		r.test_reach_bottom = (short)aB;
+		r.classic_ok = classicOk;
+
+		if (classicOk)
+		{
+			r.test_left = (short)cL;
+			r.test_right = (short)cR;
+			r.test_top = (short)cT;
+			r.test_bottom = (short)cB;
+		}
+
+		Note(fromRoom, rn, classicOk ? "reached" : "reach", aL, aT, aR, aB);
+	}
+
+	// Which of the two SetRoomBounds this run is walking with.
+	static void Follow(const Tr5Level::PortalRecord& p, int to, Room& r,
+		const float* mx, int fromRoom)
+	{
+		if (g_reach)
+			SetRoomBoundsReach(p, to, r, mx, fromRoom);
+		else
+			SetRoomBounds(p, to, r, mx, fromRoom);
+	}
+
+	/* GetRoomBounds (game\draw.cpp:3590). ROOM_OUTSIDE and the snow flag are
 	 * left out - they change no room list. */
 	static void GetRoomBounds()
 	{
 		while (g_start != g_end)
 		{
-			const long rn = g_list[g_start % 128];
+			const long rn = g_list[g_start % kRing];
 			float mx[12];
 
 			g_start++;
 
+			if (++g_dequeues > kWalkMax)
+			{
+				g_capped = true;
+				break;
+			}
+
 			Room& r = g_room[(size_t)rn];
 			r.bound_active -= 2;
 
-			if (r.test_left < r.left) r.left = r.test_left;
-			if (r.test_top < r.top) r.top = r.test_top;
-			if (r.test_right > r.right) r.right = r.test_right;
-			if (r.test_bottom > r.bottom) r.bottom = r.test_bottom;
+			/* T4: the reach is accumulated exactly as the classic window is,
+			 * and the classic one only when THIS dequeue had one. A room the
+			 * reach alone brought in keeps the wiped window PrintObjects
+			 * leaves behind - left > right - which is the empty scissor the
+			 * HD path reads. */
+			if (g_reach)
+			{
+				if (r.test_reach_left < r.reach_left) r.reach_left = r.test_reach_left;
+				if (r.test_reach_top < r.reach_top) r.reach_top = r.test_reach_top;
+				if (r.test_reach_right > r.reach_right) r.reach_right = r.test_reach_right;
+				if (r.test_reach_bottom > r.reach_bottom) r.reach_bottom = r.test_reach_bottom;
+			}
+
+			if (!g_reach || r.classic_ok)
+			{
+				if (r.test_left < r.left) r.left = r.test_left;
+				if (r.test_top < r.top) r.top = r.test_top;
+				if (r.test_right > r.right) r.right = r.test_right;
+				if (r.test_bottom > r.bottom) r.bottom = r.test_bottom;
+			}
 
 			if (!(r.bound_active & 1))
 			{
@@ -1484,7 +1803,7 @@ namespace walkoff
 					const long x = r.x + p.v[0][0] - g_eye[0];
 
 					if (x && (x ^ p.nx) < 0)
-						SetRoomBounds(p, to, r, mx, (int)rn);
+						Follow(p, to, r, mx, (int)rn);
 					else
 					{
 						Note((int)rn, to, "side", (double)x, p.nx, 0, 0);
@@ -1497,7 +1816,7 @@ namespace walkoff
 					const long y = r.y + p.v[0][1] - g_eye[1];
 
 					if (y && (y ^ p.ny) < 0)
-						SetRoomBounds(p, to, r, mx, (int)rn);
+						Follow(p, to, r, mx, (int)rn);
 					else
 					{
 						Note((int)rn, to, "side", (double)y, p.ny, 1, 0);
@@ -1510,7 +1829,7 @@ namespace walkoff
 					const long z = r.z + p.v[0][2] - g_eye[2];
 
 					if (z && (z ^ p.nz) < 0)
-						SetRoomBounds(p, to, r, mx, (int)rn);
+						Follow(p, to, r, mx, (int)rn);
 					else
 					{
 						Note((int)rn, to, "side", (double)z, p.nz, 2, 0);
@@ -1595,12 +1914,21 @@ namespace walkoff
 		{
 			Room& r = g_room[i];
 
-			// What PrintObjects (game\draw.cpp:1087) leaves behind.
+			// What PrintObjects (game\draw.cpp:1135) leaves behind.
 			r.left = g_winxmax;
 			r.top = g_winymax;
 			r.right = 0;
 			r.bottom = 0;
 			r.bound_active = 0;
+
+			// T4: and the reach, which the engine wipes for itself at the
+			// top of the walk (nothing else in a frame writes it).
+			r.reach_left = g_winxmax;
+			r.reach_top = g_winymax;
+			r.reach_right = 0;
+			r.reach_bottom = 0;
+			r.classic_ok = false;
+			r.reach_first = true;
 		}
 
 		g_verdict.clear();
@@ -1608,6 +1936,10 @@ namespace walkoff
 		g_start = 0;
 		g_end = 1;
 		g_list[0] = seed;
+		g_queue_peak = 1;
+		g_reach_only = 0;
+		g_dequeues = 0;
+		g_capped = false;
 
 		{
 			Room& r = g_room[(size_t)seed];
@@ -1617,9 +1949,27 @@ namespace walkoff
 			r.test_right = g_winxmax;
 			r.test_bottom = g_winymax;
 			r.bound_active = 2;
+			// The root's reach IS the screen, which is the whole of T4: every
+			// chain of portals that faces the eye is followed to its end.
+			r.test_reach_left = 0;
+			r.test_reach_top = 0;
+			r.test_reach_right = g_winxmax;
+			r.test_reach_bottom = g_winymax;
+			r.classic_ok = true;
+			r.reach_first = false;
 		}
 
 		GetRoomBounds();
+
+		// A room with no classic window at all: the reach alone brought it.
+		if (g_reach)
+			for (size_t i = 0; i < g_drawn.size(); i++)
+			{
+				const Room& r = g_room[(size_t)g_drawn[i]];
+
+				if (r.left >= r.right || r.top >= r.bottom)
+					g_reach_only++;
+			}
 	}
 
 	// The distance from a point to a room's box, 0 inside it - the same
@@ -1651,11 +2001,15 @@ namespace walkoff
 		if (Holds(want))
 		{
 			for (size_t i = 0; i < g_verdict.size(); i++)
-				if (g_verdict[i].to == want && !strcmp(g_verdict[i].why, "reached"))
+				if (g_verdict[i].to == want &&
+					(!strcmp(g_verdict[i].why, "reached") ||
+					!strcmp(g_verdict[i].why, "reach")))
 				{
-					printf("      room %d REACHED from room %d, window %.0f,%.0f..%.0f,%.0f\n",
-						want, g_verdict[i].from, g_verdict[i].n[0],
-						g_verdict[i].n[1], g_verdict[i].n[2], g_verdict[i].n[3]);
+					printf("      room %d %s from room %d, window %.0f,%.0f..%.0f,%.0f\n",
+						want, strcmp(g_verdict[i].why, "reach") ? "REACHED"
+						: "REACH ONLY (no classic window)", g_verdict[i].from,
+						g_verdict[i].n[0], g_verdict[i].n[1],
+						g_verdict[i].n[2], g_verdict[i].n[3]);
 					return;
 				}
 
@@ -1684,7 +2038,8 @@ namespace walkoff
 /* The whole of -walk, from the command line. Returns the process exit code. */
 static int RunWalk(const std::string& folder, const char* stem, int seed,
 	long ex, long ey, long ez, const double* yawFan, const double* pitchFan,
-	int want, long width, long height, double fov, bool verbose)
+	int want, long width, long height, double fov, bool verbose, bool reach,
+	bool centre, bool boxes)
 {
 	if (!walkoff::Load(folder, stem))
 		return 5;
@@ -1694,6 +2049,43 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 		printf("-walk: room %d is not in this level\n", seed);
 		return 5;
 	}
+
+	/* -walkcentre (#123, fix round T4): the eye at the middle of the seed
+	 * room's own box. The survey below needs an eye in every room of a level
+	 * and there is no hand-picked one for 2,709 rooms; this is the same
+	 * arithmetic BoxDistance uses, so "distance 0" and "the eye is inside
+	 * this room" mean the same thing. */
+	if (centre)
+	{
+		const walkoff::Room& r = walkoff::g_room[(size_t)seed];
+
+		ex = r.x + (long)r.xs * 512;
+		ez = r.z + (long)r.zs * 512;
+		ey = (r.ceiling + r.floor) / 2;
+		printf("-walkcentre: eye at the middle of room %d's box\n", seed);
+	}
+
+	{
+		const walkoff::Room& r = walkoff::g_room[(size_t)seed];
+
+		printf("-walk: seed room %d box x %ld..%ld  y %ld..%ld  z %ld..%ld\n",
+			seed, r.x, r.x + (long)r.xs * 1024, r.ceiling, r.floor,
+			r.z, r.z + (long)r.zs * 1024);
+	}
+
+	/* -walkboxes: every room's origin, which is what a -with argument is
+	 * made of (the other room's origin less this one's). Printed on request
+	 * because a picture of a whole room list is built out of it. */
+	if (boxes)
+		for (size_t i = 0; i < walkoff::g_room.size(); i++)
+		{
+			const walkoff::Room& r = walkoff::g_room[i];
+
+			printf("-walkboxes room %3d origin %6ld %6ld %6ld  box x %ld..%ld "
+				"y %ld..%ld z %ld..%ld\n", (int)i, r.x, r.y, r.z, r.x,
+				r.x + (long)r.xs * 1024, r.ceiling, r.floor, r.z,
+				r.z + (long)r.zs * 1024);
+		}
 
 	printf("-walk: rooms whose box holds the eye %ld/%ld/%ld:", ex, ey, ez);
 
@@ -1720,15 +2112,71 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 	 * that only ever enters the picture as a sliver a few pixels wide
 	 * at the rim is a room whose coming and going costs those pixels
 	 * and nothing else. */
-	int whyCount[6] = { 0, 0, 0, 0, 0, 0 };
+	int whyCount[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	double widest = 0, tallest = 0, narrowest = 1e9, shortest = 1e9;
+
+	/* T4: the two rules side by side. The classic walk is run first and its
+	 * room count kept, then the same direction is walked again with the
+	 * reach, so every line of the table below is one eye, one direction and
+	 * two rules. */
+	long sumClassic = 0, sumReach = 0;
+	int mostClassic = 0, mostReach = 0, over60 = 0, over100 = 0;
+	int reachOnlyWorst = 0;
+	long queuePeak = 0, worstDequeues = 0;
+	int capped = 0;
+	double bestYaw = 0, bestPitch = 0;
+	int bestGain = -1, bestClassic = 0, bestReach = 0;
 
 	for (double pitch = pitchFan[0]; pitch <= pitchFan[1] + 1e-9;
 		pitch += pitchFan[2] > 0 ? pitchFan[2] : 1.0)
 	for (double yaw = yawFan[0]; yaw <= yawFan[1] + 1e-9; yaw += yawFan[2])
 	{
+		int classicRooms = 0;
+
+		if (reach)
+		{
+			walkoff::g_reach = false;
+			walkoff::One(seed, ex, ey, ez, yaw, pitch, width, height, fov);
+			classicRooms = (int)walkoff::g_drawn.size();
+			walkoff::g_reach = true;
+		}
+
 		walkoff::One(seed, ex, ey, ez, yaw, pitch, width, height, fov);
 		frames++;
+
+		if (reach)
+		{
+			const int now = (int)walkoff::g_drawn.size();
+
+			sumClassic += classicRooms;
+			sumReach += now;
+
+			if (classicRooms > mostClassic) mostClassic = classicRooms;
+			if (now > mostReach) mostReach = now;
+			if (now > 60) over60++;
+			if (now > 100) over100++;
+
+			if (walkoff::g_reach_only > reachOnlyWorst)
+				reachOnlyWorst = walkoff::g_reach_only;
+
+			if (walkoff::g_queue_peak > queuePeak)
+				queuePeak = walkoff::g_queue_peak;
+
+			if (walkoff::g_dequeues > worstDequeues)
+				worstDequeues = walkoff::g_dequeues;
+
+			if (walkoff::g_capped)
+				capped++;
+
+			if (now - classicRooms > bestGain)
+			{
+				bestGain = now - classicRooms;
+				bestYaw = yaw;
+				bestPitch = pitch;
+				bestClassic = classicRooms;
+				bestReach = now;
+			}
+		}
 
 		if ((int)walkoff::g_drawn.size() > mostRooms)
 			mostRooms = (int)walkoff::g_drawn.size();
@@ -1751,7 +2199,7 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 				if (v.to != want)
 					continue;
 
-				if (!strcmp(v.why, "reached"))
+				if (!strcmp(v.why, "reached") || !strcmp(v.why, "reach"))
 				{
 					const double w = v.n[2] - v.n[0];
 					const double h = v.n[3] - v.n[1];
@@ -1767,13 +2215,24 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 				else if (!strcmp(v.why, "toonear"))  whyCount[2]++;
 				else if (!strcmp(v.why, "empty"))    whyCount[3]++;
 				else if (!strcmp(v.why, "covered"))  whyCount[4]++;
+				else if (!strcmp(v.why, "offscreen")) whyCount[6]++;
 				else                                 whyCount[5]++;
+
+				// T4: and how often the ROOM had no classic window of its own.
+				if (!strcmp(v.why, "reach") ||
+					!strcmp(v.why, "widened_reach"))
+					whyCount[7]++;
 			}
 		}
 
 		if (verbose)
 		{
-			printf("  yaw %6.1f  rooms=%d:", yaw, (int)walkoff::g_drawn.size());
+			if (reach)
+				printf("  yaw %6.1f pitch %6.1f  classic=%d reach=%d "
+					"(reach alone %d)  rooms:", yaw, pitch, classicRooms,
+					(int)walkoff::g_drawn.size(), walkoff::g_reach_only);
+			else
+				printf("  yaw %6.1f  rooms=%d:", yaw, (int)walkoff::g_drawn.size());
 
 			for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
 				printf(" %d", (int)walkoff::g_drawn[i]);
@@ -1788,13 +2247,31 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 	printf("-walk: %d view directions, rooms per frame %d..%d\n",
 		frames, fewestRooms, mostRooms);
 
+	if (reach && frames)
+	{
+		printf("-reach: rooms per frame  classic mean %.1f max %d   "
+			"reach mean %.1f max %d\n", (double)sumClassic / frames,
+			mostClassic, (double)sumReach / frames, mostReach);
+		printf("-reach: most rooms one frame owes to the reach alone: %d; "
+			"deepest queue %ld (the engine's ring holds 128)\n",
+			reachOnlyWorst, queuePeak);
+		printf("-reach: worst frame took %ld dequeues; %d frame(s) hit the "
+			"cap of %ld\n", worstDequeues, capped, walkoff::kWalkMax);
+		printf("-reach: frames over 60 rooms: %d of %d; over 100 (draw_rooms "
+			"is short[100]): %d\n", over60, frames, over100);
+		printf("-reach: the direction that gains most: yaw %.1f pitch %.1f, "
+			"%d rooms -> %d (+%d)\n", bestYaw, bestPitch, bestClassic,
+			bestReach, bestGain);
+	}
+
 	if (want >= 0)
 	{
 		printf("-walk: room %d is in the list on %d of %d directions (%.0f%%)\n",
 			want, wantIn, frames, frames ? 100.0 * wantIn / frames : 0.0);
 		printf("-walk: room %d  reached=%d side=%d toonear=%d empty=%d "
-			"covered=%d widened=%d\n", want, whyCount[0], whyCount[1],
-			whyCount[2], whyCount[3], whyCount[4], whyCount[5]);
+			"covered=%d widened=%d offscreen=%d reach_only=%d\n", want,
+			whyCount[0], whyCount[1], whyCount[2], whyCount[3], whyCount[4],
+			whyCount[5], whyCount[6], whyCount[7]);
 
 		if (whyCount[0])
 			printf("-walk: room %d window when it IS reached: width %.0f..%.0f "
@@ -1843,6 +2320,134 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 				(r.flags & 0x8) ? "OUTSIDE" : "");
 	}
 
+	return 0;
+}
+
+/* -reachsurvey (#123, fix round T4, T4-1): THE WHOLE LEVEL, NOT ONE EYE.
+ *
+ * The named eyes below answer "does the reach bring room 99 in"; this answers
+ * the other question, the one the safety valve of T4-4 is set from: how many
+ * rooms a frame holds under each rule, over the WHOLE level. It puts the eye
+ * at the middle of every room's box in turn - the same point -walkcentre
+ * uses - walks a coarse fan from it under both rules and keeps the two
+ * counts. A room whose box centre is inside a wall is still a fair eye for
+ * this: the walk only ever asks where the eye IS, and every room of the level
+ * gets its turn either way.
+ *
+ * What it prints is one line per level: the mean and the worst frame under
+ * each rule, how often the reach passes 60 and 100 rooms (draw_rooms is
+ * short[100], game\draw.cpp:111), how deep the queue ever got against the
+ * engine's ring of 128, and the single room and direction that gains most. */
+static int RunReachSurvey(const std::string& folder, const char* stem,
+	const double* yawFan, const double* pitchFan, long width, long height,
+	double fov, int step)
+{
+	if (!walkoff::Load(folder, stem))
+		return 5;
+
+	long sumClassic = 0, sumReach = 0, frames = 0;
+	int mostClassic = 0, mostReach = 0, over60 = 0, over100 = 0;
+	int worstOnly = 0;
+	long queuePeak = 0, worstDequeues = 0, worstDequeuesClassic = 0;
+	int capped = 0;
+	/* T4-4: how many frames a budget of N rooms would trim, for six values
+	 * of N. The safety valve's number comes out of this column and not out
+	 * of a round figure. */
+	static const int kBudget[6] = { 32, 40, 48, 56, 64, 80 };
+	long overBudget[6] = { 0, 0, 0, 0, 0, 0 };
+	int bestGain = -1, bestRoom = -1, bestClassic = 0, bestReach = 0;
+	double bestYaw = 0, bestPitch = 0;
+	long reachOnlySum = 0;
+
+	if (step < 1)
+		step = 1;
+
+	// Millions of verdicts is what killed the first survey - see kWalkMax.
+	walkoff::g_notes = false;
+
+	for (size_t seed = 0; seed < walkoff::g_room.size(); seed += (size_t)step)
+	{
+		const walkoff::Room& r0 = walkoff::g_room[seed];
+		const long ex = r0.x + (long)r0.xs * 512;
+		const long ez = r0.z + (long)r0.zs * 512;
+		const long ey = (r0.ceiling + r0.floor) / 2;
+
+		for (double pitch = pitchFan[0]; pitch <= pitchFan[1] + 1e-9;
+			pitch += pitchFan[2] > 0 ? pitchFan[2] : 1.0)
+		for (double yaw = yawFan[0]; yaw <= yawFan[1] + 1e-9; yaw += yawFan[2])
+		{
+			int classicRooms, now;
+
+			walkoff::g_reach = false;
+			walkoff::One((int)seed, ex, ey, ez, yaw, pitch, width, height, fov);
+			classicRooms = (int)walkoff::g_drawn.size();
+
+			if (walkoff::g_dequeues > worstDequeuesClassic)
+				worstDequeuesClassic = walkoff::g_dequeues;
+
+			walkoff::g_reach = true;
+			walkoff::One((int)seed, ex, ey, ez, yaw, pitch, width, height, fov);
+			now = (int)walkoff::g_drawn.size();
+
+			frames++;
+			sumClassic += classicRooms;
+			sumReach += now;
+			reachOnlySum += walkoff::g_reach_only;
+
+			if (classicRooms > mostClassic) mostClassic = classicRooms;
+			if (now > mostReach) mostReach = now;
+			if (now > 60) over60++;
+			if (now > 100) over100++;
+
+			for (int b = 0; b < 6; b++)
+				if (now > kBudget[b])
+					overBudget[b]++;
+
+			if (walkoff::g_reach_only > worstOnly)
+				worstOnly = walkoff::g_reach_only;
+
+			if (walkoff::g_queue_peak > queuePeak)
+				queuePeak = walkoff::g_queue_peak;
+
+			if (walkoff::g_dequeues > worstDequeues)
+				worstDequeues = walkoff::g_dequeues;
+
+			if (walkoff::g_capped)
+				capped++;
+
+			if (now - classicRooms > bestGain)
+			{
+				bestGain = now - classicRooms;
+				bestRoom = (int)seed;
+				bestYaw = yaw;
+				bestPitch = pitch;
+				bestClassic = classicRooms;
+				bestReach = now;
+			}
+		}
+	}
+
+	if (!frames)
+	{
+		printf("-reachsurvey: %s has no rooms\n", stem);
+		return 5;
+	}
+
+	printf("-reachsurvey %-9s rooms=%d frames=%ld  classic mean %.1f max %d  "
+		"reach mean %.1f max %d  reach-alone mean %.1f max %d  over60=%ld  "
+		"over100=%ld  queue peak %ld  dequeues max %ld (classic %ld) capped=%d "
+		"best +%d at room %d yaw %.0f pitch %.0f "
+		"(%d -> %d)\n", stem, (int)walkoff::g_room.size(), frames,
+		(double)sumClassic / frames, mostClassic, (double)sumReach / frames,
+		mostReach, (double)reachOnlySum / frames, worstOnly,
+		(long)over60, (long)over100, queuePeak, worstDequeues,
+		worstDequeuesClassic, capped, bestGain, bestRoom, bestYaw,
+		bestPitch, bestClassic, bestReach);
+	printf("-reachbudget %-9s frames over a budget of "
+		"32/40/48/56/64/80 rooms: %.1f%% %.1f%% %.1f%% %.1f%% %.1f%% %.1f%%\n",
+		stem, 100.0 * overBudget[0] / frames, 100.0 * overBudget[1] / frames,
+		100.0 * overBudget[2] / frames, 100.0 * overBudget[3] / frames,
+		100.0 * overBudget[4] / frames, 100.0 * overBudget[5] / frames);
 	return 0;
 }
 
@@ -1903,8 +2508,12 @@ static unsigned char g_water_table[22][64][4];
  * -oldorder puts back the order of stages S1-2 to R3b, room-major: all three
  * passes of the first room, then all three of the second. The two switches
  * out of ONE build are the before and after picture of E6. */
-static int g_with_group[8];
-static float g_with_offset[8][3];
+/* T4: THIRTY-TWO, not eight. A picture of what the walk hands the frame
+ * is a picture of twenty to forty rooms - the reach's own room lists are
+ * that long - and eight was set when the question was one overlapping
+ * pair. Each slot is a group number and a translation. */
+static int g_with_group[32];
+static float g_with_offset[32][3];
 static int g_with_count = 0;
 static bool g_old_order = false;
 
@@ -2625,7 +3234,11 @@ int main(int argc, char** argv)
 		printf("                                      offline (needs -roombox)\n");
 		printf("       -walkyaw <from> <to> <step>   default 0 359 15\n");
 		printf("       -walkpitch <deg>  -walkpitchfan <from> <to> <step>\n");
-		printf("       -walkwant <room>  -walkeach\n");
+		printf("       -walkwant <room>  -walkeach  -walkcentre\n");
+		printf("       -reach   the two-rectangle walk of fix round T4\n");
+		printf("       -walkboxes   every room's origin, for -with\n");
+		printf("       -reachsurvey [step]   every room of the level as the\n");
+		printf("                             eye, both rules, one line\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		return 1;
@@ -2655,6 +3268,10 @@ int main(int argc, char** argv)
 	double walkYaw[3] = { 0.0, 359.0, 15.0 };
 	double walkPitch[3] = { 0.0, 0.0, 1.0 };
 	bool walkEach = false;
+	// T4: the reach, the eye at the seed room's centre, and the level survey.
+	bool walkReach = false, walkCentre = false, reachSurvey = false;
+	bool walkBoxes = false;
+	int reachStep = 1;
 	int threads = 8, rooms = 0;
 
 	// Stage S6.
@@ -2777,7 +3394,7 @@ int main(int argc, char** argv)
 			g_shatter = true;
 		else if (!strcmp(argv[at], "-with") && at + 4 < argc)
 		{
-			if (g_with_count < 8)
+			if (g_with_count < 32)
 			{
 				g_with_group[g_with_count] = atoi(argv[at + 1]);
 
@@ -2832,6 +3449,21 @@ int main(int argc, char** argv)
 			walkWant = atoi(argv[++at]);
 		else if (!strcmp(argv[at], "-walkeach"))
 			walkEach = true;
+		else if (!strcmp(argv[at], "-walkcentre") ||
+			!strcmp(argv[at], "-walkcenter"))
+			walkCentre = true;
+		else if (!strcmp(argv[at], "-reach"))
+			walkReach = true;
+		else if (!strcmp(argv[at], "-walkboxes"))
+			walkBoxes = true;
+		else if (!strcmp(argv[at], "-reachsurvey"))
+		{
+			reachSurvey = true;
+			walkReach = true;
+
+			if (at + 1 < argc && argv[at + 1][0] != '-')
+				reachStep = atoi(argv[++at]);
+		}
 		else if (!strcmp(argv[at], "-tround") && at + 2 < argc)
 		{
 			g_tround_group = atoi(argv[at + 1]);
@@ -3006,6 +3638,19 @@ int main(int argc, char** argv)
 
 	/* T3-2: -walk needs no device, no .TRG and no picture - only the
 	 * classic level - so it runs here, before the window exists. */
+	if (reachSurvey)
+	{
+		if (g_roombox.empty())
+		{
+			printf("-reachsurvey needs -roombox <folder holding the classic "
+				".TRC>\n");
+			return 5;
+		}
+
+		return RunReachSurvey(g_roombox, stem, walkYaw, walkPitch, width,
+			height, fov, reachStep);
+	}
+
 	if (walkSeed >= 0)
 	{
 		if (g_roombox.empty())
@@ -3016,7 +3661,8 @@ int main(int argc, char** argv)
 
 		return RunWalk(g_roombox, stem, walkSeed, walkEye[0], walkEye[1],
 			walkEye[2], walkYaw, walkPitch,
-			walkWant, width, height, fov, walkEach);
+			walkWant, width, height, fov, walkEach, walkReach, walkCentre,
+			walkBoxes);
 	}
 
 	if (!MakeDevice())
@@ -3905,7 +4551,7 @@ int main(int argc, char** argv)
 	 * lighting is the same block, which is right for the picture this proves
 	 * (no dynamic light in it) and would not be for a light one. */
 	bool drew = false;
-	D3DMATRIX withWorld[8];
+	D3DMATRIX withWorld[32];
 
 	/* GROUP M: the portal window, if one was asked for, set with the very
 	 * call the engine makes per room. It goes on AFTER the sky, because the

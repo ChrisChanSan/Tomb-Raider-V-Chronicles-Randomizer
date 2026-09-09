@@ -9417,6 +9417,62 @@ tile) as the way to see it if it ever does.
 
 ---
 
+#### Fix round X - the camera hand-over is not a cut: drawing a weapon at 60 fps (#148)
+
+The play test of fix round W, third person, `fps_mode 1`: *"in any movement,
+when I draw the weapon, I get a very short camera reset - the picture jumps
+irregularly back and forth. In first person this does not happen, there it
+is all smooth."*
+
+**Measured.** The log of that session (JOBY4, JOBY2): 45 camera cuts, every
+one of them of the `type` kind - `camera.type` or `camera.old_type` changed
+- none of the `eye` kind (the eye never moved more than `CAM_SNAP` in a tick)
+and none of the `spot` kind; 22 of the 45 also crossed the aim threshold.
+They come in bursts of five or six a second, exactly the seconds Lara draws
+or holsters. `game\larafire.cpp` sets `COMBAT_CAMERA` while the guns are up
+and `CalculateCamera` (`game\camera.cpp`) resets the type to chase at its
+own end, so `camera.old_type` moves chase -> combat -> chase around every
+draw. The engine hands the view between those cameras SMOOTHLY - the eye
+walks to the new camera's place at `camera.speed`, the target is Lara's
+either way - which is why the eye test never fired. The cut rule of the
+interpolator (`CameraCut`, `game\interpolate.cpp`) took every type change
+for a cut all the same: that tick was drawn live, the next in-between frame
+was blended half a tick back, and the picture went forward, back, forward
+at every draw. First person has one camera and never changes type.
+
+**Fix.** `InterpCamTypeCut` (`game\interpolate_math.h`): a change of
+`camera.type` or `camera.old_type` is a cut only when it LEAVES the smooth
+family - chase, look, combat hand over to each other and never jump - i.e.
+when a fixed, heavy or cinematic camera is on either side; a change of
+`camera.fixed_camera` is a cut on its own as before, and the eye and aim
+tests beside it still catch a real jump whatever the type says. The
+hand-overs it now lets through are counted as `handover=` in the `INTERPLOG`
+line, and `type=` beside it counts only the changes that leave the family.
+`interpolate.cpp` static_asserts the three type values the header mirrors
+against `camera_type`, because the header is built without the engine.
+
+**What stays a cut.** A fixed camera taking over (`FIXED_CAMERA`, or
+`fixed_camera` changing), a heavy camera, a cinematic, a spot camera stepping
+(`spot`), the binoculars (the eye jumps to her head - `eye` and `aim`), any
+eye jump over `CAM_SNAP`, any aim swing over the sphere threshold. The 22
+cuts of this log that were type AND aim stay cuts on the aim: those are
+ticks where the combat camera really swung the view more than the threshold
+in one tick, and vanilla draws that as a step too.
+
+**Proof.** `InterpTest`, section `camera`: twelve checks over the type table
+- the six hand-overs are none, the six leaves are cuts - 308 checks, 0
+failed. `be.bat` 0 errors. `fps_mode 0` byte-identical: `CameraCut` is only
+asked on in-between frames.
+
+**Play test.** Third person at 60: run, walk, jump and draw or holster the
+pistols and the HK in each - no jump back and forth; look around with the
+look key; a fixed camera and a flyby still cut cleanly (the courtyard of
+ANDREA2, the crane of JOBY2); the binoculars up and down; then 30 as the
+counter-check. `INTERPLOG`: `handover=` one or two per draw, `type=` nought
+outside fixed cameras and cutscenes.
+
+---
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

@@ -285,6 +285,27 @@ static void fade()
 	ok(black == (long)0xFF000000, "-1 shifted into the colour is alpha 255 - the black tick", black, (long)0xFF000000);
 }
 
+/* FIX ROUND X (#148): which camera type changes are cuts. The numbers are
+ * camera_type's own (chase 0, fixed 1, look 2, combat 3, cinematic 4,
+ * heavy 5); the engine static_asserts the three the rule names. */
+static void camera()
+{
+	printf("camera - the hand-over that is not a cut\n");
+
+	ok(!InterpCamTypeCut(0, 3, 0, 0), "chase -> combat (drawing a weapon) is a hand-over", InterpCamTypeCut(0, 3, 0, 0), 0);
+	ok(!InterpCamTypeCut(3, 0, 3, 3), "combat -> chase (holstering) is a hand-over", InterpCamTypeCut(3, 0, 3, 3), 0);
+	ok(!InterpCamTypeCut(0, 2, 0, 0), "chase -> look is a hand-over", InterpCamTypeCut(0, 2, 0, 0), 0);
+	ok(!InterpCamTypeCut(2, 3, 2, 3), "look -> combat, both halves, is a hand-over", InterpCamTypeCut(2, 3, 2, 3), 0);
+	ok(!InterpCamTypeCut(0, 0, 3, 0), "old_type combat -> chase alone is a hand-over", InterpCamTypeCut(0, 0, 3, 0), 0);
+	ok(!InterpCamTypeCut(3, 3, 3, 3), "no change is no cut", InterpCamTypeCut(3, 3, 3, 3), 0);
+	ok(InterpCamTypeCut(0, 1, 0, 0), "chase -> fixed is a cut", InterpCamTypeCut(0, 1, 0, 0), 1);
+	ok(InterpCamTypeCut(1, 0, 1, 0), "fixed -> chase is a cut", InterpCamTypeCut(1, 0, 1, 0), 1);
+	ok(InterpCamTypeCut(0, 0, 0, 1), "old_type chase -> fixed alone is a cut", InterpCamTypeCut(0, 0, 0, 1), 1);
+	ok(InterpCamTypeCut(5, 0, 5, 0), "heavy -> chase is a cut", InterpCamTypeCut(5, 0, 5, 0), 1);
+	ok(InterpCamTypeCut(0, 4, 0, 4), "chase -> cinematic is a cut", InterpCamTypeCut(0, 4, 0, 4), 1);
+	ok(InterpCamTypeCut(3, 1, 3, 1), "combat -> fixed is a cut", InterpCamTypeCut(3, 1, 3, 1), 1);
+}
+
 static void positions()
 {
 	printf("positions\n");
@@ -2271,6 +2292,7 @@ int main()
 
 	angles();
 	fade();
+	camera();
 	positions();
 	thresholds();
 	camera_aim();

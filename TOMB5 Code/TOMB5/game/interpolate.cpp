@@ -22,6 +22,11 @@
 #include "gameflow.h"			// gfLevelId, for the log line
 #include "lara.h"			// lara.poisoned - the R10 guard
 #include "tomb4fx.h"			// Gunshells, Bubbles (#148, order 5)
+
+// interpolate_math.h mirrors camera_type by value, so InterpTest can ask the
+// same question without the engine (#148, fix round X).
+static_assert(CHASE_CAMERA == INTERP_CAM_CHASE && LOOK_CAMERA == INTERP_CAM_LOOK &&
+	COMBAT_CAMERA == INTERP_CAM_COMBAT, "camera_type moved - update interpolate_math.h");
 #include "rat.h"			// Rats
 #include "bat.h"			// Bats
 #include "spider.h"			// Spiders
@@ -348,6 +353,7 @@ namespace
 	 * reason that was never a cut. A play test that sees a shudder again has
 	 * to be able to name the term before anybody touches a threshold. */
 	int g_cutType = 0;		// camera.type / old_type / fixed_camera
+	int g_cutHandover = 0;	// fix round X: type changes inside the smooth family - NOT cut
 	int g_cutSpot = 0;		// a flyby beginning or ending
 	int g_cutEye = 0;		// the eye jumped further than CAM_SNAP
 	int g_cutAim = 0;		// the view DIRECTION jumped (see InterpCamAimCut)
@@ -596,6 +602,12 @@ namespace
 	 * actually built as, and is the half of the pair that moves when a fixed
 	 * camera takes over.
 	 *
+	 * Since fix round X a change of that pair is a cut only when it leaves
+	 * the smooth family - chase, look, combat hand over to each other at
+	 * camera.speed and never jump - or when camera.fixed_camera changes: see
+	 * InterpCamTypeCut in game\interpolate_math.h. The hand-overs it lets
+	 * through are counted as `handover=` in the log line.
+	 *
 	 * THE TARGET IS MEASURED AS AN AIM AND NOT AS A PLACE (fix round R). The
 	 * whole argument, the numbers and what it is worth in degrees are at
 	 * InterpCamAimCut in game\interpolate_math.h; the short of it is that the
@@ -610,8 +622,11 @@ namespace
 	{
 		bool cut = false;
 
-		if (g_prevCam.type != (short)camera.type ||
-			g_prevCam.oldType != (short)camera.old_type ||
+		const bool typeMoved = g_prevCam.type != (short)camera.type ||
+			g_prevCam.oldType != (short)camera.old_type;
+
+		if ((typeMoved && InterpCamTypeCut(g_prevCam.type, camera.type,
+				g_prevCam.oldType, camera.old_type)) ||
 			g_prevCam.fixed != (short)camera.fixed_camera)
 		{
 			cut = true;
@@ -619,6 +634,8 @@ namespace
 			if (gLogEnabled)
 				g_cutType++;
 		}
+		else if (typeMoved && gLogEnabled)
+			g_cutHandover++;
 
 		if (g_prevCam.spot != (short)bUseSpotCam)
 		{
@@ -779,6 +796,14 @@ namespace
 	 *                a large number means something turns half a turn that
 	 *                should not.
 	 *
+	 * FIX ROUND X ADDS ONE (#148):
+	 *
+	 *   handover     camera type changes inside the smooth family (chase,
+	 *                look, combat) that were NOT taken for a cut - drawing
+	 *                and holstering a weapon, looking around. One or two per
+	 *                draw is what it looks like; `type=` beside it now counts
+	 *                only the changes that leave the family.
+	 *
 	 * AND ORDER 5 ADDS TWO MORE, which are about the small moving things
 	 * rather than about the bodies:
 	 *
@@ -805,7 +830,7 @@ namespace
 			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d "
 				"alpha=%.2f/%.2f/%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
-				"object=%d invalid=%d) halfturn=%d camcut=%d (type=%d spot=%d eye=%d aim=%d) "
+				"object=%d invalid=%d) halfturn=%d camcut=%d (type=%d spot=%d eye=%d aim=%d handover=%d) "
 				"cutscene=%d "
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
@@ -819,6 +844,7 @@ namespace
 				g_snapTeleport + g_snapRoomJump + g_snapObject + g_snapInvalid,
 				g_snapTeleport, g_snapRoomJump, g_snapObject, g_snapInvalid,
 				g_snapHalfTurn, g_snapCamCut, g_cutType, g_cutSpot, g_cutEye, g_cutAim,
+				g_cutHandover,
 				g_snapCutscene,
 				(double)g_secPose / g_secFrames,
 				(double)g_secPoseSkip / g_secFrames,
@@ -871,6 +897,7 @@ namespace
 		g_snapHalfTurn = 0;
 		g_snapCamCut = 0;
 		g_cutType = 0;
+		g_cutHandover = 0;
 		g_cutSpot = 0;
 		g_cutEye = 0;
 		g_cutAim = 0;

@@ -107,6 +107,48 @@ inline long InterpFadeClamp(long val, long step, long end)
 	return val;
 }
 
+/* THE HAND-OVER THAT IS NOT A CUT (#148, fix round X).
+ *
+ * camera_type by value - game\global\types.h names them CHASE_CAMERA 0,
+ * FIXED_CAMERA 1, LOOK_CAMERA 2, COMBAT_CAMERA 3, CINEMATIC_CAMERA 4,
+ * HEAVY_CAMERA 5, and interpolate.cpp static_asserts the three below against
+ * the enum, because this file is built without the engine for InterpTest.
+ *
+ * Chase, look and combat are the three cameras that hand the view over to
+ * each other SMOOTHLY: the engine moves the eye towards the new camera's
+ * place at camera.speed, the target stays Lara's, and nothing jumps.
+ * Drawing a weapon is one of those hand-overs (chase -> combat,
+ * game\larafire.cpp), and so is looking around. Fix round R's cut rule took
+ * every change of camera.type or camera.old_type for a cut, drew that tick
+ * live, and blended the next one half a tick back: the play test's picture
+ * that "jumps irregularly back and forth" at every draw in third person,
+ * 45 cuts in one log all of the type kind, not one of the eye kind. First
+ * person was smooth because its camera never changes type.
+ *
+ * So a change of type is a cut only when it LEAVES that family - a fixed
+ * camera, a heavy one, a cinematic - and a hand-over inside it is not. The
+ * eye and aim tests beside this still catch a real jump whatever the type
+ * says, and camera.fixed_camera changing is a cut on its own. */
+#define INTERP_CAM_CHASE	0
+#define INTERP_CAM_LOOK		2
+#define INTERP_CAM_COMBAT	3
+
+inline bool InterpCamSmoothType(int type)
+{
+	return type == INTERP_CAM_CHASE || type == INTERP_CAM_LOOK || type == INTERP_CAM_COMBAT;
+}
+
+/* True when the change from `prevType` to `type`, or from `prevOld` to
+ * `oldType`, is a cut. An unchanged pair never is. */
+inline bool InterpCamTypeCut(int prevType, int type, int prevOld, int oldType)
+{
+	if (prevType != type && !(InterpCamSmoothType(prevType) && InterpCamSmoothType(type)))
+		return true;
+	if (prevOld != oldType && !(InterpCamSmoothType(prevOld) && InterpCamSmoothType(oldType)))
+		return true;
+	return false;
+}
+
 /* Positions are integers in this engine and stay integers: the truncation is
  * at most one unit, a TR sector is 1024 of them, and handing a float position
  * to a matrix stack that works in longs would only move the rounding

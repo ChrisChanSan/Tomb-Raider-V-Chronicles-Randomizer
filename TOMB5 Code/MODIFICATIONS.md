@@ -9854,6 +9854,64 @@ reference a 60 run is held against. Build: 0 errors, 0 warnings; the game
 folder was locked at build time, so the executable stayed in `release\`
 (22:43:13, md5 9e0c1c41).
 
+#### Fix round Y2 - the left arm's root: the shake of the rifles at 60 (#148)
+
+The ARMLOG run came back within the hour (build 22:43, md5 9e0c1c41; ANDREA1
+with the shotgun, first at 165 Hz, then at 30, then at 60), with the user's
+verdict alongside: *"60 and 165 both equally broken, only 30 fps good."* What
+the numbers say, the hand taken relative to the hips so that the camera and
+the run fall out:
+
+| frames per tick | ticks measured | left hand: ticks with a sawtooth | right hand: ticks with a sawtooth |
+|---|---|---|---|
+| 5 to 6 (165 Hz) | 115 | 41 (36 %) | 2 (2 %) |
+
+A sawtooth is a hand that travels through the tween frames of one tick and
+jumps the same way back on the first frame of the next. Tick 630, Lara in
+animation 90 (rate 2), the shotgun idle in hand (`wi=699/0`): the LEFT hand
+moves 13 to 16 units on every one of the five tween frames, 41 in all, and on
+the first frame of tick 631 it jumps 80 units back; the right hand moves 5 a
+frame and never jumps. The body's own factor on those frames reads `blend=`
+0.086, 0.165, 0.258, 0.359, 0.438 against `a=` 0.172, 0.331, 0.515, 0.718,
+0.876 - half, because the animation is rate 2. Over the whole run the two
+factors are equal only in animation 0 (the run, rate 1), where nothing shakes;
+in 6, 8, 10, 11, 13, 69, 88, 89, 90 and 103 they differ, and those are the
+animations the videos were made in. So it is not the arm's own blend and not
+the HD body: it is the joint the left arm hangs from.
+
+**The defect (`game\delstuff.cpp`, `Rich_CalcLaraMatrices_Interpolated`, the
+shotgun / HK / crossbow branch).** U3 collapsed the two stacks - `InterpArmStack`
+- INSIDE the right arm's own `phd_PushMatrix_I`, on the pushed copy of the
+torso level, and set the blend factor to the arm's time alpha. The right arm
+was built off that collapsed joint and came out right. Then `phd_PopMatrix_I`,
+and the LEFT arm was pushed off the torso level as it had been: stack one the
+body's key frame A, stack two its key frame B - and blended, from there down,
+at the factor `InterpArmStack` had left behind, the arm's alpha, which nothing
+sets back. For a rate 1 animation the body's factor and the alpha are the same
+number and the error is nought, which is why the run was clean. For every
+other rate the left shoulder sat at `lerp(A, B, alpha)` while the drawn torso
+sat at `lerp(A, B, blend)`: the arm drifted off the body through the tick and
+snapped back on the next. The U7 note over `InterpArmStack` said the collapse
+*"hangs both arm chains off that one joint"*; it did so for one of them.
+
+**The fix.** The collapse moves up: before either arm is pushed, on the torso
+level itself. Both chains then descend from the same root, the torso the
+drawn body has. For the right arm nothing changes - a translation applied to
+both stacks alike commutes with their blend, so collapsing before the shoulder
+translate or after it is the same joint. With the HK in state 0 to 4, where
+the torso collapsed once already and walked the two stacks apart through the
+torso and the head, the call now takes the torso to its midpoint in time and
+both arms hang off that - which is the order U7 described. `InterpArmStack`
+itself is unchanged; its note says where its caller sits now.
+
+**Proof.** The next ARMLOG run: the left hand's sawtooth share has to fall to
+the right hand's, and the 30 Hz run has to read as before. The tick frames
+and `fps_mode 0` never enter this branch's blend at all (`InterpArmPrev`
+answers false there) and the classic build `Rich_CalcLaraMatrices_Normal` is
+untouched, so thirty hertz is byte for byte what it was. Build: 0 errors, 0
+warnings; the game folder was locked at build time, so the executable stayed
+in `release\` (22:55:05, md5 d82d8d88).
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

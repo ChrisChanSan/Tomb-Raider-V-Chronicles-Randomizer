@@ -1120,19 +1120,35 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	case WEAPON_SHOTGUN:
 	case WEAPON_HK:
 	case WEAPON_CROSSBOW:
-		phd_PushMatrix_I();
-		phd_TranslateRel_I(bone[29], bone[30], bone[31]);
-
 		/* BOTH STACKS ARE ALREADY THE WEAPON'S HERE - this branch fed them the
 		 * same frame and blended a pose with itself. Stack one takes the
 		 * PREVIOUS tick's frame instead and the factor becomes the arm's own,
 		 * so the InterpolateMatrix at each node below is the midpoint in TIME
-		 * (#123, fix round U, U3). With the HK the torso collapsed the stacks
-		 * once already and then walked them apart through the torso and the
-		 * head, so this second collapse takes the SHOULDER to its midpoint and
-		 * hangs the arm off that - see the note over InterpArmStack
-		 * (game\draw.cpp), which says why that order is the one wanted
-		 * (corrected in U7). */
+		 * (#123, fix round U, U3).
+		 *
+		 * COLLAPSED ON THE TORSO LEVEL ITSELF, BEFORE EITHER ARM IS PUSHED
+		 * (fix round Y2). U3 collapsed a pushed copy inside the right arm's
+		 * own push, and the pop after that arm handed the LEFT arm the torso
+		 * level as it had been: two stacks holding the body's two key frames,
+		 * from there on blended at the ARM's factor instead of the body's,
+		 * because InterpArmStack had set the factor and nothing sets it back.
+		 * For a rate 1 animation the two factors are one and the same; for
+		 * every other rate the left shoulder drifted off the drawn torso
+		 * through the tick and snapped back on the next. ARMLOG measured it:
+		 * the left hand travelling up to seventy units inside one tick and
+		 * jumping the same way back, in a third of all ticks with the shotgun
+		 * in hand, while the right hand moved five a frame with no jump at
+		 * all - the shake the user saw at 60 and 165 and not at 30.
+		 *
+		 * Collapsing here gives both chains the same root, the torso the
+		 * drawn body has. For the right arm it is the joint it had before: a
+		 * translation applied to both stacks alike commutes with their blend.
+		 * With the HK in state 0 to 4 the torso collapsed once already and
+		 * then walked the two stacks apart through the torso and the head, so
+		 * this takes the TORSO to its midpoint in time and hangs both arms off
+		 * that one joint - the order the note over InterpArmStack
+		 * (game\draw.cpp) describes, which until Y2 the code had for the
+		 * right arm only. */
 		rot2 = &lara.right_arm.frame_base[lara.right_arm.frame_number *
 			(anims[lara.right_arm.anim_number].interpolation >> 8) + 9];
 		rot = rot2;
@@ -1143,6 +1159,8 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 			InterpArmStack(armAlpha[INTERP_ARM_RIGHT]);
 		}
 
+		phd_PushMatrix_I();
+		phd_TranslateRel_I(bone[29], bone[30], bone[31]);
 		gar_RotYXZsuperpack_I(&rot, &rot2, 8);
 		phd_PushMatrix();
 		InterpolateMatrix();

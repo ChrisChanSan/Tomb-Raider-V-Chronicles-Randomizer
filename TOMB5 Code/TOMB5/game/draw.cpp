@@ -2926,6 +2926,14 @@ void InterpolateMatrix()
  * crossbow do not collapse at the torso, so their arm branch collapses the
  * body's two key frames itself, which is what it is for.
  *
+ * WHERE THE SECOND CALL SITS (fix round Y2). On the torso level, before
+ * either arm is pushed - U3 had it inside the right arm's push, on a pushed
+ * copy, and the pop after that arm handed the left arm the uncollapsed
+ * level, blended from there on at the arm's factor this function sets and
+ * nothing sets back. The paragraph above was true of the right arm only
+ * until then; ARMLOG (game\interpolate.cpp) measured the left hand's
+ * sawtooth and MODIFICATIONS.md has the numbers.
+ *
  * The caller reaches it only when InterpArmPrev said yes, which is never at
  * fps_mode 0 and never on a frame that carries a tick. */
 void InterpArmStack(float alpha)

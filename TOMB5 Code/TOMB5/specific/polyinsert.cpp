@@ -23,6 +23,7 @@
 #include "profile.h"			// PROFLOG phases (#148)
 #include "3dmath.h"
 #include "gamemain.h"
+#include "hd/hd_font.h"			// the HD font's own tpage (#123, fix round Q)
 
 SORTLIST* SortList[65536];
 long SortCount;
@@ -36,6 +37,67 @@ D3DTLBUMPVERTEX zClipperBuffer[20];
 
 void HWR_DrawSortList(D3DTLBUMPVERTEX* info, short num_verts, short texture, short type)
 {
+	/* THE ONE TPAGE THAT IS NOT AN INDEX INTO Textures[] (#123, fix round Q).
+	 *
+	 * Every case below reads Textures[texture], so a quad drawn from the HD
+	 * font atlas has to be caught before any of them. It carries
+	 * HD_FONT_TPAGE, which no other quad in the engine can carry: a tpage is
+	 * otherwise always an index into Textures[], LoadTextures refuses a level
+	 * with more than the 256 entries that array has (specific\file.cpp), and
+	 * the three pages addressed from the end - font, sky, the title pages -
+	 * are nTextures minus a small number. 4096 is outside that by two orders
+	 * of magnitude and still fits the short the sort list keeps it in.
+	 *
+	 * Batching needs no thought: the sort list already groups by tpage, so
+	 * every glyph of a frame that comes from the atlas ends up in one call.
+	 *
+	 * THE STATE. Only two things differ from the classic case 1 that draws
+	 * text today, and both of them are measured:
+	 *
+	 *  - LINEAR mip filtering with a LOD bias. At 1920 x 1080 a thirteen
+	 *    texel glyph is drawn 58 pixels high out of 104 atlas texels, so the
+	 *    atlas is MINIFIED by 1.8 (by 2.7 at 1280 x 720, by 1.35 at 2560 x
+	 *    1440). Without mips that is an undersample and thin strokes crawl;
+	 *    with them the bias pulls the level back under one so the picture
+	 *    stays sharp instead of going soft. -0.7 is TROne's number and it
+	 *    lands at level 0.14 at 1080p and at 0 at 1440p.
+	 *  - LINEAR min and mag whatever App.Filtering says. Point sampling an
+	 *    eightfold atlas down to a sixth of its size is not "crisp", it is
+	 *    noise; the HD room path makes the same decision for the same reason
+	 *    (hd_render.cpp).
+	 *
+	 * What is NOT changed is the alpha test, and that is a measurement too:
+	 * this engine sets D3DRS_ALPHAREF 0 with D3DCMP_NOTEQUAL
+	 * (specific\function_table.cpp), so the test throws away only what is
+	 * completely transparent and every antialiased edge texel passes. There
+	 * are no stairs to avoid here - the classic path already blends. */
+	if (texture == HD_FONT_TPAGE)
+	{
+		IDirect3DTexture9* font = HDFontTexture();
+		float bias = -0.7F;
+
+		if (!font)
+			return;		// the texture went with the device
+
+		App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 1);
+		App.dx.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		App.dx.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, *(DWORD*)&bias);
+		DXAttempt(App.dx.lpD3DDevice->SetTexture(0, font));
+		HWDrawPrimitive(D3DPT_TRIANGLELIST, info, num_verts);
+		bias = 0.0F;
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, *(DWORD*)&bias);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER,
+			App.Filtering ? D3DTEXF_LINEAR : D3DTEXF_POINT);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER,
+			App.Filtering ? D3DTEXF_LINEAR : D3DTEXF_POINT);
+		return;
+	}
+
 	switch (type)
 	{
 	case 0:

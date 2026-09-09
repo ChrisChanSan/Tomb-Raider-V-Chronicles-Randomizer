@@ -19,6 +19,7 @@
 #include "hd_scan.h"
 #include "hd_render.h"
 #include "hd_object.h"
+#include "hd_font.h"			// the HD font's texture goes with the device
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases (#148)
 #include "../output.h"			// gPresentMinTicks - the budget follows the present (#148)
@@ -2930,6 +2931,10 @@ void HDLevelDeviceLost()
 	// that HDRenderShutdown is about to drop.
 	ReleaseWaterFramePages();
 	HDObjectDeviceLost();
+
+	// The font atlas was made on this device too (#123, fix round Q). Its
+	// match table survives; only the texture goes.
+	HDFontDeviceLost();
 
 	if (!HDRenderReady() && !HDRenderGroupCount())
 		return;

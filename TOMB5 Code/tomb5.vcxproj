@@ -245,6 +245,22 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_font.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_fontmatch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\hd\hd_pagecache.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -434,6 +450,8 @@
     <ClInclude Include="TOMB5\specific\hd\hd_light.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_level.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_markers.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_font.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_fontmatch.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_lara.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_laradraw.h" />
@@ -442,6 +460,8 @@
     <ClInclude Include="TOMB5\specific\hd\hd_render.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_scan.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_trm.h" />
+    <ClInclude Include="TOMB5\game\chardef.inc" />
+    <ClInclude Include="TOMB5\game\accent.inc" />
     <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_room_ps.inc" />
     <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_room_vs.inc" />
     <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_model_ps.inc" />

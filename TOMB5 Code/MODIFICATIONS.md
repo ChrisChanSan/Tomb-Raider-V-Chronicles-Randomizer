@@ -8861,6 +8861,195 @@ world path pays nothing for the ring either.
 
 ---
 
+#### Fix round Q - the font in HD (#123)
+
+Every line of text the game draws - the title menu, the names under the
+inventory ring, the options pages, the load and save lists with their
+"(quicksave)" line, the statistics, the HUD's ammunition counter, the name of
+a pickup, the subtitles of a cutscene - comes out of ONE 256 x 256 page and
+ONE table of 106 rectangles. So one branch in `DrawChar` covers all of them,
+and there is no second text path anywhere in the engine to forget.
+
+**Measured first, and the order matters, because two of these answers moved
+the design.**
+
+*The font page is the same in every level.* `FontProbe -pages` over all
+sixteen shipped `.TRC` files, vanilla copies: every one of them carries the
+same font page, md5 `191cfc2fdba5b4c54024361c463d7537`, the title included.
+So the match runs ONCE in a session and every further level load is a
+comparison of that md5 (`hd_font.cpp`, `HDFontLevelPage`). It is keyed on the
+page and not on a flag on purpose: a level file that ever carried a different
+font page would be matched again rather than drawn with a table belonging to
+another alphabet.
+
+*The remaster's atlas is not the classic page, and it is not the small
+picture times eight either.* The bundle ships `5\TEX\FONT0_OG.DDS` - 256 x
+256, uncompressed B8G8R8A8, the classic glyph bitmaps re-typeset in ASCII
+order - and `5\TEX\FONT0.DDS` - 2048 x 2048, BC7, six mip levels, the same
+alphabet in the same places at eight times the size. The big one is a NEW
+drawing: shrunk back to 256 with an 8 x 8 box filter it differs from the small
+one in **12.6 %** of the texels of the matched rectangles, its letters reach up
+to three classic texels past the eightfold rectangle, and it carries a dark
+rim and a drop shadow the small one does not have (measured over the 93
+matched glyphs: fully opaque texels have a mean brightness of 224 of 255, the
+half-transparent ones a mean of 44). That is the look the remaster's own
+screens have - white letters with a dark edge - and it is what makes the
+letters readable over a bright wall.
+
+*The ink is WHITE, so `FontShades` still works.* The engine multiplies the
+texture by the vertex colour and adds the specular half
+(`function_table.cpp`, `D3DTOP_MODULATE` with `D3DTA_DIFFUSE`), which is how a
+menu title comes out orange and a locked options row red. White ink takes that
+colour exactly as the classic page's white ink does; the dark rim stays dark
+whatever it is multiplied by, which is the point of a rim. **Nothing about
+`FontShades`, `PrintString`'s flags or the colours changed, and nothing needed
+to.**
+
+*And the alpha test is already harmless.* This engine sets `D3DRS_ALPHAREF` 0
+with `D3DCMP_NOTEQUAL` (`specific\function_table.cpp:112`), so the test throws
+away only what is completely transparent; every antialiased edge texel passes.
+The soft edges of the atlas need no state change to survive - the classic path
+already blends. (TROne had to switch their `alpha < 0.5` discard off for the
+same reason; we have nothing to switch off.)
+
+**How a glyph is found.** The classic rectangle's ink mask is slid over the
+`_OG` atlas and scored intersection over union
+(`specific\hd\hd_fontmatch.cpp`, `HDFontMatchAll`; the idea is TROne's, see
+below). A hit is accepted at 0.94 and above, which is their threshold and
+their reason for it: a similar character is the wrong character.
+
+Result, `FontProbe -match`: **93 of the 106 rectangles found in `FONT0`, 92 of
+them at score 1.000** - the remaster took the glyph bitmaps over texel for
+texel, and the one at 0.975 is the K. The thirteen that are not found are the
+twelve PlayStation pad icons, which the remaster's atlas does not carry at all
+(where they would be it has ammunition and arrow sprites), and the c-cedilla
+at 0.895. Each of those keeps the classic picture on its own, without
+affecting any other letter.
+
+`FONT1` is checked in the same run and comes back with 22 - and the pair
+picture says why: it is a **Cyrillic** alphabet, and its 22 are the letters
+Cyrillic and Latin draw alike - measured, `FontProbe -match`: `H I K N O R S T
+U n o r s t u` and seven punctuation marks. Which of the two is used is
+decided by that count and not by the file's name, so an installation that
+ships them the other way round still works.
+
+**How a glyph is drawn**, `game\text.cpp`, `DrawChar`:74-185. The atlas is
+the classic page at eight times the size, so a NORMALISED coordinate on the
+one is a normalised coordinate on the other and the glyph sits at the same
+place plus a whole number of classic texels. The UV is therefore not
+recomputed but SHIFTED by that number. Nothing else is touched, so nothing can
+move, grow or shrink: `FontProbe -sample` renders a line through the very same
+arithmetic classic and HD and reports the texels a screen pixel walks in both,
+and the two agree to **1.6e-06 relative** - which is float noise and not a
+difference. Position, size, `FontShades` colour and specular are the classic
+ones because they are the classic code.
+
+**The margin, and why it is per glyph.** The classic arithmetic samples the
+rectangle inset by half a texel on each side, which the classic page needs -
+it packs its glyphs with no gap at all. At eight times the size that inset is
+four HD texels and it cuts off exactly the antialiased rim and the drop
+shadow: measured, **12.6 % of a glyph's ink**. So the window is widened AND the
+quad is widened by the same fraction of itself - TROne's rule, and the reason
+it works is that widening both in one ratio changes what is visible and not
+where anything is.
+
+A uniform margin was built first and it was wrong, and the picture said so
+before any number did. The measured trade-off (`FontProbe -atlas`) reads:
+
+| margin | of the glyph's own ink | of its white ink | foreign ink, worst glyph |
+|---|---|---|---|
+| 0.0 texels | 87.4 % | 85.8 % | 1.3 % |
+| 0.5 | 94.5 % | 93.4 % | 1.8 % |
+| 1.0 | 97.8 % | 97.4 % | 1.9 % |
+| 1.5 | 99.1 % | 99.0 % | 3.0 % |
+| 2.0 | 99.6 % | 99.6 % | 7.6 % |
+
+which looks like "1.0 and be done with it" - but the atlas packs the small
+marks close together, and at every margin from half a texel upwards a slice of
+the neighbouring tick appears beside the apostrophe and beside the comma,
+plainly visible in a rendered line at 1920 x 1080. The averages hide it
+because three glyphs out of ninety-three cannot move the average.
+
+So `HDFontMargins` works out per glyph how far the window can be opened before
+it touches another letter, and 1.0 is only the ceiling. Over the shipped
+bundle: **90 of the 93 get the whole texel, three get part of it - the
+apostrophe 0.25, the asterisk and the comma 0.125 - and none gets zero.**
+
+Getting that routine right took three measurements, each of them a wrong
+version first:
+
+- *Not over alpha.* A flood fill over "is there ink here" walks from a letter
+  into its own drop shadow and straight on into the next letter's, and then
+  reports that there is nothing else nearby - for exactly the tightly packed
+  marks that need the care. It fills over WHITE ink instead, which the dark
+  shadow between two letters separates.
+- *Not on the small picture.* There, ink outside the matched rectangle belongs
+  to another letter by construction, which is tempting - but the big picture
+  is a new drawing whose letters are larger, so the room the small one has is
+  not the room the big one has.
+- *Not seeded from the whole rectangle.* Because the big picture's letters are
+  larger, a neighbour can reach a texel or two INTO the matched rectangle -
+  the second tick of the double quote does - and seeding the rectangle floods
+  the neighbour and calls it part of this letter. The seeds come from the
+  classic page: a texel that carries ink THERE is this letter beyond doubt,
+  and the eight by eight block under it on the atlas is this letter's white.
+
+**Accents keep their classic arithmetic.** `PrintString` composes an accented
+letter from two ordinary glyphs - the base at the letter's place and the mark
+at `def->w / 2 + x - 3, y + def->YOffset` over it - and each of the two goes
+through `DrawChar` on its own, so each is relocated on its own and the
+relative position between them is the classic one. The German umlauts and the
+sz are in the sample picture; the dieresis is `CharDef[61]` and it matches at
+1.000 like the rest.
+
+**How the quad reaches the atlas.** `AddQuadClippedSorted` knows a texture
+only as a tpage, and the tpage is an index into `Textures[]` - which must not
+grow, because the font, the sky and the two title pages are addressed as
+`nTextures` minus a small number and every one of them would move
+(MODIFICATIONS.md:265-270, and the same note over the water frame pages in
+`hd_level.cpp`). So the glyph quad carries `HD_FONT_TPAGE` = 4096, which is
+not an index at all, and `HWR_DrawSortList` (`specific\polyinsert.cpp`) turns
+it into the font texture before any of its cases can read `Textures[4096]`.
+Nothing else in the engine can ever write that number: a tpage is otherwise
+always an index into `Textures[]`, and `LoadTextures` refuses a level with
+more than the 256 entries that array has. The sort list already groups by
+tpage, so every glyph of a frame ends up in one draw call without a line of
+batching code.
+
+**Mip levels and a LOD bias, and they are not decoration.** At 1920 x 1080 a
+thirteen-texel glyph is drawn 58 pixels high out of 104 atlas texels, so the
+atlas is MINIFIED by 1.8 - by 2.7 at 1280 x 720 and by 1.35 at 2560 x 1440.
+Without mips that is a bilinear undersample and thin strokes crawl. The whole
+six-level chain out of the `.DDS` is uploaded and the draw sets
+`D3DTEXF_LINEAR` with `D3DSAMP_MIPMAPLODBIAS` -0.7, which lands at level 0.14
+at 1080p and at 0 at 1440p: sharp instead of soft, and the states are put back
+the way the classic path keeps them the moment the call returns.
+
+**Where it lives.**
+
+| | |
+|---|---|
+| `game\chardef.inc` | the 106 rectangles, moved out of `text.cpp` unchanged so that the engine, the HD font and the tool `FontProbe` read the same numbers rather than three copies of them. `game\accent.inc` is the same for the 46 accented letters. |
+| `specific\hd\hd_fontmatch.cpp` | the matcher, the margins, the uncompressed-DDS reader and an MD5. No engine dependency at all, so `FontProbe` compiles this very file - the deal `bc7.cpp` already has with `DdsProbe`. |
+| `specific\hd\hd_font.cpp` | the engine side: finds the atlas, runs the match on the load thread, makes the texture on the main thread, and answers `DrawChar`'s one question. |
+| `game\text.cpp` | `DrawChar`, one branch. |
+| `specific\polyinsert.cpp` | `HWR_DrawSortList`, one branch. |
+| `specific\file.cpp` | two lines: the font page to the matcher at the place it is read, and `HDFontBuild` beside `HDLevelBuild`. |
+
+**The log.** `HDLOG font atlas=FONT0 matched=93/106 below=13 page=<md5>`, one
+line per glyph that did not make it with its score, and one line saying how
+many glyphs got the whole margin. It stays, like every other seam.
+
+**Classic path.** Untouched. `HDFontLevelPage` returns at its first line with
+`hd_enable` off, so no file is opened and not a byte of the page is copied;
+`g_matched` stays false, so `HDFontBuild` returns, so there is no texture, so
+`HDFontGlyphAt` returns 0 on its first test, so `DrawChar` runs the same
+arithmetic it ran before with the same `tex.tpage = nTextures - 2` - and
+`HWR_DrawSortList`'s new branch tests for a tpage no quad in the engine can
+then carry. `fps_mode` is not touched anywhere in this round.
+
+---
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

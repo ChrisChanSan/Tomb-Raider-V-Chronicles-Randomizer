@@ -15,6 +15,7 @@
 #include "hqsfx.h"
 #include "hdscreen.h"
 #include "hd/hd_level.h"
+#include "hd/hd_font.h"			// the HD font (#123, fix round Q)
 #include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up (#148)
 #include "hd/hd_model.h"		// HDModelPreload (#148)
 #include "file.h"
@@ -740,6 +741,16 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 
 	//font
 	ReadBlock(TextureData, 0x40000);
+
+	/* AND THE SAME PAGE TO THE HD FONT (#123, fix round Q). This is the only
+	 * place in the engine where the classic font page is in hand as pixels,
+	 * and the HD path needs it as the TEMPLATE it looks for in the remaster's
+	 * glyph atlas - not as a picture to draw. Load thread, no Direct3D; the
+	 * texture is made later on the main thread by HDFontBuild. With
+	 * hd_enable off the call returns at its first line and not a byte is
+	 * copied. */
+	HDFontLevelPage(TextureData);
+
 	nTex = nTextures++;
 	tSurf = CreateTexturePage(256, 256, 0, (long*)TextureData, 0, 0);
 	Textures[nTex].tex = tSurf;
@@ -2000,6 +2011,12 @@ long S_LoadLevelFile(long num)
 		// hd_enable is 0.
 		HDLevelBuild();
 		Log("S_LoadLevelFile: HD build done");
+
+		// And the HD font's own texture, on the same thread and for the same
+		// reason (#123, fix round Q). It is made once and kept for the whole
+		// session - the atlas does not change from level to level - so after
+		// the first level this is a comparison and a return.
+		HDFontBuild();
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");

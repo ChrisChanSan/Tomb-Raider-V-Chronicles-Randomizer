@@ -935,6 +935,24 @@ glow is always slightly wrong"* — and that turned out to be the whole story.
   window of the room it stands in. Lara is never cut: she is in the camera's
   own room, and that room's window is the whole screen.
 
+- **Every line of text is sharp.** The title menu, the names under the
+  inventory ring, the options pages, the load and save lists with their
+  *(quicksave)* line, the statistics after a level, the ammunition counter,
+  the name of a pickup and the subtitles of a cutscene: all of them used to be
+  one 256-pixel page of glyphs from 1999, blown up four and a half times on a
+  1080p screen and six times on a 1440p one, which is why the letters were
+  soft. The Remaster ships the very same alphabet at eight times the size -
+  the same shapes, redrawn, with a dark edge that keeps them readable over a
+  bright wall - and the engine now finds each letter in it and draws that
+  instead. Nothing about the text changes but its sharpness: the same words in
+  the same places, the same size, the same colours (the orange menu titles,
+  the yellow selected row, the red locked ones), the same line breaks.
+  Ninety-three of the game's 106 characters are in the Remaster's alphabet;
+  the thirteen that are not - the twelve PlayStation pad symbols, which it
+  never had, and one accented letter - are drawn the old way, each on its own,
+  in the middle of a sharp line. Bars, icons and the loading screens are a
+  different matter and are not affected.
+
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
 the classic look, and the log's `HDLOG room=… hd=0` lines name every one), and

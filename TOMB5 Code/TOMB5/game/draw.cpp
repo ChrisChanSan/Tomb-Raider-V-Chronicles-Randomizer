@@ -445,6 +445,7 @@ long DrawPhaseGame()
 
 	ProfBegin(PROF_GATHER);
 	CalcLaraMatrices(0);
+	InterpArmLogFrame();	// ARMLOG: the view set, once per drawn frame (fix round Y)
 	phd_PushUnitMatrix();
 	CalcLaraMatrices(1);
 	phd_PopMatrix();

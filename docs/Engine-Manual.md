@@ -2004,6 +2004,7 @@ wrote it, and each seam answers a different question:
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
+| at *Frame rate 60* an arm or the weapon in her hands shakes | `ARMLOG` — per drawn frame: both arms' animation frames, whether they were blended, and where shoulder, elbow and hand came out |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.
@@ -2200,6 +2201,26 @@ TICKLOG level=3 at=41s fade=0 screenfade=0 weather=30 legend=0 after_death=4
 both settings and put the two lines side by side. A number that is roughly
 double at 60 is a clock that is running twice as fast; that is worth reporting
 with the level and what was happening.
+
+**`ARMLOG`.** One line per *drawn frame* while Lara has a weapon in her
+hands, or is drawing or holstering one — none with empty hands, so a run
+without weapons costs nothing:
+
+```
+ARMLOG f=812 gc=4711 tween=1 a=0.545 path=2 blend=0.545 still=0 hd=1 lara=0/7/1 gun=5/4 wi=3/12/4 armR=3/12/11 armL=3/12/11 ok=1/1 aa=0.545/0.545 aimR=0,0,0 aimL=0,0,0 torso=0,0,0 head=0,0,0 hips=(-88,-412,1530) R=(-201,-661,1522)(-249,-486,1469)(-190,-397,1373) L=(35,-668,1516)(-4,-503,1440)(-92,-397,1369) Rx=(0.912,0.061,-0.406)
+```
+
+It is the arms as the renderer had them on that very frame. `gc` is the game
+step the frame belongs to (frames sharing it are the in-between frames of one
+step at *Frame rate 60*); `path` says whether her body was blended between two
+steps (2), between two key frames (1) or not at all (0); `armR` / `armL` are
+the weapon animation's frame the arm was drawn from beside the previous step's
+frame the blend used; `ok` whether the arms were blended in time; and `hips`,
+`R`, `L` are the positions of the hips and of shoulder, elbow and hand of the
+right and of the left arm, in the camera's own space. Written for a report of
+the right arm shaking with the shotgun and the HK at 60 — a shake too fast for
+any one video frame, which this line turns into numbers: the hand relative to
+the hips going there and back between consecutive frames.
 
 **`WARMUP`.** One line at the end of every level load:
 

@@ -362,6 +362,27 @@ bool InterpArmPrev(int which, InterpArmPose* prev, float* alpha);
  * and a torch are therefore not counted in either column. */
 void InterpNoteArm(bool blended);
 
+/* ARMLOG (#148, fix round Y): ONE LINE PER DRAWN FRAME WITH A WEAPON IN HER
+ * HANDS. The user's play test sees the right arm shake with the shotgun and
+ * the HK at sixty, too fast for any one video frame to show - so the arms
+ * are written down as numbers, frame by frame: the logic tick the frame
+ * belongs to and its alpha, which path built her matrices, the body's blend,
+ * both arms' animation frames beside the previous tick's, whether the arm
+ * blend of fix round U ran, the nine aim angles, and the view-space
+ * positions of the hips and of shoulder, elbow and hand of BOTH arms out of
+ * lara_matrices - the very table the HD body is skinned from.
+ *
+ * Three calls in the draw's own order: CalcLaraMatrices notes the path it
+ * took (flag 0, the view set), Rich_CalcLaraMatrices_Interpolated notes what
+ * it did with the arms, and DrawLara's caller writes the line once both are
+ * known. A frame built by Rich_CalcLaraMatrices_Normal never reaches the
+ * second call, which the line shows as ok=-1/-1. -log only, and nothing
+ * here writes into the game. */
+void InterpArmLogPath(long frac, float blend, bool still, bool hd);
+void InterpArmLogNote(int gun, bool okR, bool okL, float alphaR, float alphaL,
+	short prevR, short prevL);
+void InterpArmLogFrame();
+
 /* HOW MUCH OF A BONE THE POSE BLEND LEAVES (#123, fix round U, U2; #148).
  *
  * WHY THIS SEAM EXISTS. A play test at sixty photographed one frame of a dive

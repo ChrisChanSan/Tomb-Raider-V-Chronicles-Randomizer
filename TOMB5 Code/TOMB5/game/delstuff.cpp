@@ -251,6 +251,10 @@ void CalcLaraMatrices(long flag)
 	 * VIEW set, the joint set, a mirror - and flag 0 is the one whose output
 	 * (lara_matrices) HDLaraDrawFrame reads. Counting the others would
 	 * multiply the number by how many cameras happened to look at her. */
+	// ARMLOG (fix round Y): which path the view set takes this frame.
+	if (flag == 0)
+		InterpArmLogPath(frac, blend, still != 0, HDLaraDrawActive());
+
 	if (frac == 2 && flag == 0 && HDLaraDrawActive())
 		InterpNotePoseHD();
 
@@ -667,7 +671,7 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	 * shape the arm branches below take. False for both at fps_mode 0 and on
 	 * every frame that carries a logic tick, which is what keeps thirty hertz
 	 * byte for byte what it was. */
-	InterpArmPose armPose[2];
+	InterpArmPose armPose[2] = { { 0, 0, 0 }, { 0, 0, 0 } };
 	float armAlpha[2] = { 0.0F, 0.0F };
 	bool armOk[2];
 	float armPrev[36];
@@ -846,6 +850,12 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	 * the flare block below), so there is nothing there to count either. */
 	if (flag == 0 && gun != WEAPON_NONE && gun != WEAPON_FLARE && gun != WEAPON_TORCH)
 		InterpNoteArm(armOk[INTERP_ARM_RIGHT] && armOk[INTERP_ARM_LEFT]);
+
+	// ARMLOG (fix round Y): what this build did with the two arms.
+	if (flag == 0)
+		InterpArmLogNote(gun, armOk[INTERP_ARM_RIGHT], armOk[INTERP_ARM_LEFT],
+			armAlpha[INTERP_ARM_RIGHT], armAlpha[INTERP_ARM_LEFT],
+			armPose[INTERP_ARM_RIGHT].frame_number, armPose[INTERP_ARM_LEFT].frame_number);
 
 	switch (gun)
 	{

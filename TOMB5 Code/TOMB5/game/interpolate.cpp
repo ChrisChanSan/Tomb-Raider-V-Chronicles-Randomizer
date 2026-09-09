@@ -21,6 +21,7 @@
 #include "spotcam.h"			// bUseSpotCam
 #include "gameflow.h"			// gfLevelId, for the log line
 #include "lara.h"			// lara.poisoned - the R10 guard
+#include "delstuff.h"			// lara_matrices - ARMLOG reads the view set (fix round Y)
 #include "tomb4fx.h"			// Gunshells, Bubbles (#148, order 5)
 
 // interpolate_math.h mirrors camera_type by value, so InterpTest can ask the
@@ -2046,6 +2047,128 @@ void InterpNoteArm(bool blended)
 		g_armRefused = true;
 		g_secArmSkip++;
 	}
+}
+
+/* ARMLOG (#148, fix round Y). See interpolate.h. */
+namespace
+{
+	struct ArmLogState
+	{
+		long frac;		// what GetFramesNow answered: 0 none, 1 key pair, 2 in time
+		float blend;		// the body's factor
+		bool still;		// the held first person body (fix round U, U4)
+		bool hd;		// HDLaraDrawActive at the time
+		int gun;		// -1 until the interpolated build ran for flag 0
+		int okR, okL;		// -1 not asked, else InterpArmPrev's answer
+		float alphaR, alphaL;
+		short prevR, prevL;	// the previous tick's arm frame, -1 when refused
+	};
+
+	ArmLogState g_armLog = { 0, 0.0F, false, false, -1, -1, -1, 0.0F, 0.0F, -1, -1 };
+	unsigned int g_armLogSerial = 0;
+}
+
+void InterpArmLogPath(long frac, float blend, bool still, bool hd)
+{
+	if (!gLogEnabled)
+		return;
+
+	g_armLog.frac = frac;
+	g_armLog.blend = blend;
+	g_armLog.still = still;
+	g_armLog.hd = hd;
+	g_armLog.gun = -1;
+	g_armLog.okR = -1;
+	g_armLog.okL = -1;
+	g_armLog.alphaR = 0.0F;
+	g_armLog.alphaL = 0.0F;
+	g_armLog.prevR = -1;
+	g_armLog.prevL = -1;
+}
+
+void InterpArmLogNote(int gun, bool okR, bool okL, float alphaR, float alphaL,
+	short prevR, short prevL)
+{
+	if (!gLogEnabled)
+		return;
+
+	g_armLog.gun = gun;
+	g_armLog.okR = okR ? 1 : 0;
+	g_armLog.okL = okL ? 1 : 0;
+	g_armLog.alphaR = alphaR;
+	g_armLog.alphaL = alphaL;
+	g_armLog.prevR = okR ? prevR : -1;
+	g_armLog.prevL = okL ? prevL : -1;
+}
+
+void InterpArmLogFrame()
+{
+	if (!gLogEnabled)
+		return;
+
+	/* The draw's own test for `gun`: a weapon counts while it is in her
+	 * hands or on the way there or back. Empty hands write nothing, so a
+	 * run without weapons costs no line. */
+	int gun = WEAPON_NONE;
+
+	if (lara.gun_status == LG_READY || lara.gun_status == LG_FLARE ||
+		lara.gun_status == LG_DRAW_GUNS || lara.gun_status == LG_UNDRAW_GUNS)
+		gun = lara.gun_type;
+
+	if (gun == WEAPON_NONE)
+		return;
+
+	const float* m = lara_matrices;
+	const int hips = LMX_HIPS * 12;
+	const int ur = LMX_UARM_R * 12;
+	const int lr = LMX_LARM_R * 12;
+	const int hr = LMX_HAND_R * 12;
+	const int ul = LMX_UARM_L * 12;
+	const int ll = LMX_LARM_L * 12;
+	const int hl = LMX_HAND_L * 12;
+	int wAnim = -1;
+	int wFrame = -1;
+	int wState = -1;
+
+	if (lara.weapon_item != NO_ITEM)
+	{
+		const ITEM_INFO* w = &items[lara.weapon_item];
+
+		wAnim = w->anim_number;
+		wFrame = w->frame_number - anims[w->anim_number].frame_base;
+		wState = w->current_anim_state;
+	}
+
+	Log("ARMLOG f=%u gc=%d tween=%d a=%.3f path=%ld blend=%.3f still=%d hd=%d "
+		"lara=%d/%d/%d gun=%d/%d wi=%d/%d/%d "
+		"armR=%d/%d/%d armL=%d/%d/%d ok=%d/%d aa=%.3f/%.3f "
+		"aimR=%d,%d,%d aimL=%d,%d,%d torso=%d,%d,%d head=%d,%d,%d "
+		"hips=(%.0f,%.0f,%.0f) "
+		"R=(%.0f,%.0f,%.0f)(%.0f,%.0f,%.0f)(%.0f,%.0f,%.0f) "
+		"L=(%.0f,%.0f,%.0f)(%.0f,%.0f,%.0f)(%.0f,%.0f,%.0f) "
+		"Rx=(%.3f,%.3f,%.3f)",
+		g_armLogSerial++, (int)GlobalCounter, InterpIsTweenFrame() ? 1 : 0,
+		InterpFrameAlpha(), g_armLog.frac, g_armLog.blend,
+		g_armLog.still ? 1 : 0, g_armLog.hd ? 1 : 0,
+		(int)lara_item->anim_number,
+		(int)(lara_item->frame_number - anims[lara_item->anim_number].frame_base),
+		(int)lara_item->current_anim_state,
+		gun, (int)lara.gun_status, wAnim, wFrame, wState,
+		(int)lara.right_arm.anim_number, (int)lara.right_arm.frame_number, (int)g_armLog.prevR,
+		(int)lara.left_arm.anim_number, (int)lara.left_arm.frame_number, (int)g_armLog.prevL,
+		g_armLog.okR, g_armLog.okL, g_armLog.alphaR, g_armLog.alphaL,
+		(int)lara.right_arm.y_rot, (int)lara.right_arm.x_rot, (int)lara.right_arm.z_rot,
+		(int)lara.left_arm.y_rot, (int)lara.left_arm.x_rot, (int)lara.left_arm.z_rot,
+		(int)lara.torso_y_rot, (int)lara.torso_x_rot, (int)lara.torso_z_rot,
+		(int)lara.head_y_rot, (int)lara.head_x_rot, (int)lara.head_z_rot,
+		m[hips + M03], m[hips + M13], m[hips + M23],
+		m[ur + M03], m[ur + M13], m[ur + M23],
+		m[lr + M03], m[lr + M13], m[lr + M23],
+		m[hr + M03], m[hr + M13], m[hr + M23],
+		m[ul + M03], m[ul + M13], m[ul + M23],
+		m[ll + M03], m[ll + M13], m[ll + M23],
+		m[hl + M03], m[hl + M13], m[hl + M23],
+		m[hr + M00], m[hr + M10], m[hr + M20]);
 }
 
 void InterpNotePoseHD()

@@ -9794,6 +9794,66 @@ outside fixed cameras and cutscenes.
 
 ---
 
+#### Fix round Y - ARMLOG: both arms, frame by frame (#148)
+
+The T4 play test (build of 21:43, md5 a4ebe715) brought a new fault: *"Lara's
+right arm is buggy with the shotgun and the HK, it shakes massively."* Two
+videos followed, 60 Hz captures of a 165 Hz screen. The first stands still for
+its first 28 frames and those frames are pixel-identical - nothing shakes while
+she stands - and runs from frame 28 on, where a frame-to-frame difference of
+the arm region cannot tell a shake from the run. The second, 425 frames of
+JOBY2 with the HK, shows nothing in any one frame, as the user said it would:
+*"the shake is so fast that every frame looks normal."* So the arms are written
+down as numbers instead, and the fix waits for them.
+
+**The seam.** `ARMLOG`, one line per drawn frame while a weapon is in her
+hands or on the way there or back (`LG_READY`, `LG_DRAW_GUNS`,
+`LG_UNDRAW_GUNS`, `LG_FLARE` - the test `DrawLara` itself makes for `gun`),
+written right after `CalcLaraMatrices(0)` in `game\draw.cpp`, so that it reads
+the VIEW set: `lara_matrices`, the table the HD body is skinned from
+(`specific\hd\hd_laradraw.cpp`) and the classic body is drawn from. Three
+calls in the draw's own order (`game\interpolate.cpp`): `CalcLaraMatrices`
+notes which path built her (`InterpArmLogPath` - `GetFramesNow`'s `frac`, the
+body's blend, the held first person body of U4, whether the HD body is on),
+`Rich_CalcLaraMatrices_Interpolated` notes what it did with the arms
+(`InterpArmLogNote` - `gun`, both answers of `InterpArmPrev`, the arms' alphas
+and the previous tick's frames), and `InterpArmLogFrame` writes the line. A
+frame built by `Rich_CalcLaraMatrices_Normal` never reaches the second call,
+which the line shows as `ok=-1/-1`. Empty hands write nothing.
+
+```
+ARMLOG f=812 gc=4711 tween=1 a=0.545 path=2 blend=0.545 still=0 hd=1 lara=0/7/1 gun=5/4 wi=3/12/4 armR=3/12/11 armL=3/12/11 ok=1/1 aa=0.545/0.545 aimR=0,0,0 aimL=0,0,0 torso=0,0,0 head=0,0,0 hips=(-88,-412,1530) R=(-201,-661,1522)(-249,-486,1469)(-190,-397,1373) L=(35,-668,1516)(-4,-503,1440)(-92,-397,1369) Rx=(0.912,0.061,-0.406)
+```
+
+| field | what it says |
+|---|---|
+| `f` | serial of the line, one per drawn frame with a weapon |
+| `gc` | `GlobalCounter`, the logic tick the frame belongs to - frames sharing it are the tween frames of one tick |
+| `tween`, `a` | `InterpIsTweenFrame`, and what the frame is drawn at |
+| `path`, `blend`, `still`, `hd` | `GetFramesNow`'s answer for the body (0 no pair, 1 key pair, 2 blended in time), the body's factor, the held body of U4, `HDLaraDrawActive` |
+| `lara` | her animation, the frame within it, her state |
+| `gun` | weapon type, `gun_status` |
+| `wi` | the weapon item's animation, frame within it, state (`-1` without one) |
+| `armR`, `armL` | the arm's animation, its frame, and the previous tick's frame the blend used (`-1` when it did not) |
+| `ok`, `aa` | `InterpArmPrev`'s two answers and the arms' alphas |
+| `aimR`, `aimL`, `torso`, `head` | the aim angles the player steers plus the head, y/x/z |
+| `hips`, `R`, `L` | view-space positions of the hips, then shoulder, elbow and hand of the right arm, then of the left |
+| `Rx` | the right hand matrix's first column - its own x axis, for a hand that turns rather than moves |
+
+**Reading it.** The camera and the hips move smoothly, so the hand RELATIVE TO
+THE HIPS is what the arm does. A shake is that vector going there and back
+between consecutive frames - a step that turns against the previous one while
+`gc` and the animation frames stand still - and the line says on which frames
+it happens and what the draw did on them: tick or tween, which path, arm blend
+on or refused, which frames. What the numbers say is the next round's.
+
+**Classic path and 30.** Nothing here writes into the game: without `-log`
+the three functions return at their first line, and with it they only read.
+At `fps_mode 0` the line is still written (`tween=0`, `a=1.000`) and is the
+reference a 60 run is held against. Build: 0 errors, 0 warnings; the game
+folder was locked at build time, so the executable stayed in `release\`
+(22:43:13, md5 9e0c1c41).
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

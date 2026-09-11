@@ -1002,8 +1002,9 @@ static std::wstring cacheDir(const App& a)
         // mark gets the version line alone, so a file left over from an
         // earlier run can never keep talking about rooms this run did not
         // touch.
-        int hdRooms = 0, hdDonors = 0;
-        if (!Patch::writeHdMarkers(lvl, target, err, &hdRooms, &hdDonors)) return false;
+        int hdRooms = 0, hdDonors = 0, hdCuts = 0;
+        if (!Patch::writeHdMarkers(lvl, target, err, &hdRooms, &hdDonors, &hdCuts))
+            return false;
 
         // 320 and not 200: with everything switched on the pieces below
         // already added up to just over 200, and snprintf returns the length
@@ -1042,10 +1043,11 @@ static std::wstring cacheDir(const App& a)
         // the level carries. Only when there is something to say - in a run
         // without secret lists and without a guest outfit that is nothing
         // but donor slots, and those are in the file for whoever wants them.
-        if ((lvl.hdOutfit() > 0 || hdRooms > 0) && len >= 0 && len < static_cast<int>(sizeof(buf)))
+        if ((lvl.hdOutfit() > 0 || hdRooms > 0 || hdCuts > 0) &&
+            len >= 0 && len < static_cast<int>(sizeof(buf)))
             std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
-                          ", HD: outfit %d, %d rooms, %d donors",
-                          lvl.hdOutfit(), hdRooms, hdDonors);
+                          ", HD: outfit %d, %d rooms, %d cuts, %d donors",
+                          lvl.hdOutfit(), hdRooms, hdCuts, hdDonors);
         row.result = buf;
         return true;
     }

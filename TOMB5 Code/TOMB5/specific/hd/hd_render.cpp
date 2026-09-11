@@ -993,6 +993,12 @@ namespace
 		// The entries of the intrusion list that name this group, worked out
 		// once at the top of the group's own build.
 		std::vector<int> intrusionAt;
+		/* Fix round Z: the same for the cut boxes, and how many triangles
+		 * this group lost to them. The count is not per pass - a cut
+		 * triangle never reaches a pass's list, it is left out of the build
+		 * altogether, so there is nothing per pass to hold it against. */
+		std::vector<int> cutAt;
+		unsigned int cutTris = 0;
 		// The room's own box, room local, or all zeroes when none was handed
 		// in - then nothing is overhang and the group draws as one piece.
 		float roomMins[3] = { 0, 0, 0 };
@@ -1267,6 +1273,119 @@ namespace
 	// The diagnostic split of round T - see HDRenderSplitOverhang.
 	int g_split_overhang = 0;
 	std::vector<int> g_intrusion_hits;
+
+	/* Fix round Z: the openings the randomizer cut, and how many triangles
+	 * each of those boxes took away. Borrowed and counted on exactly the same
+	 * terms as the intrusions above. */
+	const HDCut* g_cuts = 0;
+	int g_cut_count = 0;
+	std::vector<int> g_cut_hits;
+
+	/* DOES A TRIANGLE REALLY MEET AN AXIS-ALIGNED BOX (#123, fix round Z)?
+	 *
+	 * The separating axis test, thirteen axes: the box's three face normals,
+	 * the triangle's own plane, and the nine cross products of the box's
+	 * three axes with the triangle's three edges. If any one of them
+	 * separates the two, they do not touch.
+	 *
+	 * WHY NOT THE TWO CHEAPER TESTS. The question this answers is "does the
+	 * doorway come open", and the two obvious shortcuts each get one half of
+	 * it wrong:
+	 *
+	 *   A VERTEX INSIDE THE BOX would leave the doorway SHUT. One big wall
+	 *   triangle can cross the opening with all three of its corners outside
+	 *   the box, and that is exactly the triangle that has to go.
+	 *
+	 *   THE TRIANGLE'S OWN BOX OVERLAPPING would eat MORE than the opening.
+	 *   A slanted triangle passing a doorway by has a bounding box that
+	 *   reaches into it, and a wall would lose art that was never in the way.
+	 *
+	 * The exact test costs a few dozen multiplies per triangle and runs once
+	 * per level build, on the triangles of a level that has any cut at all -
+	 * which is the two or three openings of one secret list. */
+	bool tri_meets_box(const float* a, const float* b, const float* c,
+		const float* mins, const float* maxs)
+	{
+		float centre[3], half[3];
+		float v[3][3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			centre[i] = (mins[i] + maxs[i]) * 0.5f;
+			half[i] = (maxs[i] - mins[i]) * 0.5f;
+			v[0][i] = a[i] - centre[i];
+			v[1][i] = b[i] - centre[i];
+			v[2][i] = c[i] - centre[i];
+		}
+
+		// 1. The box's own three axes: the triangle's box against it.
+		for (int i = 0; i < 3; i++)
+		{
+			float lo = v[0][i], hi = v[0][i];
+
+			for (int k = 1; k < 3; k++)
+			{
+				if (v[k][i] < lo) lo = v[k][i];
+				if (v[k][i] > hi) hi = v[k][i];
+			}
+
+			if (lo > half[i] || hi < -half[i])
+				return false;
+		}
+
+		const float e[3][3] =
+		{
+			{ v[1][0] - v[0][0], v[1][1] - v[0][1], v[1][2] - v[0][2] },
+			{ v[2][0] - v[1][0], v[2][1] - v[1][1], v[2][2] - v[1][2] },
+			{ v[0][0] - v[2][0], v[0][1] - v[2][1], v[0][2] - v[2][2] }
+		};
+
+		// 2. The triangle's plane against the box.
+		{
+			const float n[3] =
+			{
+				e[0][1] * e[1][2] - e[0][2] * e[1][1],
+				e[0][2] * e[1][0] - e[0][0] * e[1][2],
+				e[0][0] * e[1][1] - e[0][1] * e[1][0]
+			};
+			const float d = n[0] * v[0][0] + n[1] * v[0][1] + n[2] * v[0][2];
+			const float r = fabsf(n[0]) * half[0] + fabsf(n[1]) * half[1] +
+				fabsf(n[2]) * half[2];
+
+			if (d > r || d < -r)
+				return false;
+		}
+
+		/* 3. The nine edge-cross axes. `u` is the box axis, `w` the other
+		 * two components of it, and the cross product of a unit axis with an
+		 * edge is written out rather than computed - which is where the
+		 * signs come from. */
+		for (int k = 0; k < 3; k++)
+			for (int u = 0; u < 3; u++)
+			{
+				const int w1 = (u + 1) % 3;
+				const int w2 = (u + 2) % 3;
+				/* axis = box_u x e[k] */
+				const float ax1 = -e[k][w2];
+				const float ax2 = e[k][w1];
+				float lo = 0.0f, hi = 0.0f;
+
+				for (int t = 0; t < 3; t++)
+				{
+					const float p = ax1 * v[t][w1] + ax2 * v[t][w2];
+
+					if (!t || p < lo) lo = p;
+					if (!t || p > hi) hi = p;
+				}
+
+				const float r = fabsf(ax1) * half[w1] + fabsf(ax2) * half[w2];
+
+				if (lo > r || hi < -r)
+					return false;
+			}
+
+		return true;
+	}
 
 	const void* g_water_table_up = 0;	// what is on the card right now
 	int g_frame_bulbs = 0;
@@ -1733,6 +1852,27 @@ int HDRenderIntrusionHits(int at)
 {
 	return at >= 0 && at < (int)g_intrusion_hits.size()
 		? g_intrusion_hits[(size_t)at] : 0;
+}
+
+void HDRenderSetCuts(const HDCut* list, int count)
+{
+	g_cuts = count > 0 ? list : 0;
+	g_cut_count = list ? count : 0;
+	g_cut_hits.assign((size_t)(g_cut_count > 0 ? g_cut_count : 0), 0);
+}
+
+int HDRenderCutHits(int at)
+{
+	return at >= 0 && at < (int)g_cut_hits.size()
+		? g_cut_hits[(size_t)at] : 0;
+}
+
+int HDRenderGroupCutTriangles(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return (int)g_groups[(size_t)group].cutTris;
 }
 
 int HDRenderGroupIntrudingTriangles(int group)
@@ -2426,6 +2566,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			if (g_intrusions[k].group == (int)g)
 				group.intrusionAt.push_back(k);
 
+		/* FIX ROUND Z: and the openings that were cut into this group's
+		 * room. Gathered the same way and for the same reason - a level
+		 * carries a handful of them and draws a million triangles. Empty for
+		 * every group of every vanilla level. */
+		for (int k = 0; k < g_cut_count; k++)
+			if (g_cuts[k].group == (int)g)
+				group.cutAt.push_back(k);
+
 		/* H1: (height, sector) of every horizontal triangle of this group,
 		 * merged into the group's own table below. */
 		std::vector<std::pair<int, unsigned int> > flats;
@@ -2608,6 +2756,54 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					if (first + 2 >= trg.indices.size())
 						break;
+
+					/* FIX ROUND Z: DOES THIS TRIANGLE STAND IN AN OPENING?
+					 *
+					 * FIRST of everything else in the loop, and that is the
+					 * whole of the implementation: a cut triangle never
+					 * reaches the sort list, so it costs no index, no range,
+					 * no horizontal-plane row and no overhang or intrusion
+					 * count. Every number this build prints afterwards is
+					 * the number for the geometry that is really in the
+					 * buffers, and there is no second place where a dropped
+					 * triangle could still be counted in.
+					 *
+					 * Nothing runs here for a level with no cut list, which
+					 * is every vanilla level and every randomized level
+					 * whose run opened no wall: the group's own list is
+					 * empty and the test is one compare. */
+					if (!group.cutAt.empty())
+					{
+						const trf::remaster::TrgVertex& ca =
+							trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& cb =
+							trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& cc =
+							trg.vertices[trg.indices[first + 2]];
+						const float pa[3] = { (float)ca.x, (float)ca.y, (float)ca.z };
+						const float pb[3] = { (float)cb.x, (float)cb.y, (float)cb.z };
+						const float pc[3] = { (float)cc.x, (float)cc.y, (float)cc.z };
+						bool cut = false;
+
+						for (size_t k = 0; k < group.cutAt.size(); k++)
+						{
+							const HDCut& box = g_cuts[(size_t)group.cutAt[k]];
+
+							if (!tri_meets_box(pa, pb, pc, box.mins, box.maxs))
+								continue;
+
+							cut = true;
+
+							if ((size_t)group.cutAt[k] < g_cut_hits.size())
+								g_cut_hits[(size_t)group.cutAt[k]]++;
+						}
+
+						if (cut)
+						{
+							group.cutTris++;
+							continue;
+						}
+					}
 
 					const unsigned int corner = trg.indices[first];
 					int slot = -1;
@@ -3399,6 +3595,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 			stats->overhangTris += (int)out;
 			stats->intrudingTris += (int)in_other;
+
+			// Fix round Z: and what the openings took away before any of
+			// the counts above could see it.
+			if (g_groups[(size_t)g].cutTris)
+			{
+				stats->cutGroups++;
+				stats->cutTris += (int)g_groups[(size_t)g].cutTris;
+			}
 		}
 
 		stats->buildMs = now_ms() - build_started;

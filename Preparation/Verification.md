@@ -60,6 +60,29 @@ commit:
 - The `.hdm` files are part of the reproducibility: the same seed twice must
   give the same sidecar byte for byte, not only the same level.
 
+**The `.hdm` changed shape on 2026-09-11 (#123, fix round Z), and the `.trc`
+did not.** From that commit an OPENING (`Make_Portal`, `Make_Ceiling_Portal`,
+`Make_Floor_Portal`, `@Clear`, a view window) writes a `cut <x0> <y0> <z0>
+<x1> <y1> <z1>` box instead of two `room` lines, and the version line reads
+`hdm 2` whenever such a box is in the file. Only `Move_Room` and
+`Make_Room_Geometry` still write `room`. So comparing across that commit:
+every `.trc` must still be **byte-identical** - it was measured over the eight
+levels whose secret-list lines carry geometry edits at all (ANDREA3, ANDY1,
+JOBY3, JOBY5, RICH1, RICH2, RICH3, ANDY3, seed 380, `mix cross allsanity 8
+weapons`, glitched list) - and the `.hdm` must NOT be, which is the point of
+the round. `HdmDump <level.trc>` prints both kinds of line.
+
+**The box's own numbers changed once more on 2026-09-11 (fix round Z1), and
+the `.trc` again did not.** The step of 128 in the plane of the opening turned
+from an outset into an INSET, so every `cut` line written before that commit
+has its two non-normal axes 256 units wider than the one written after it.
+Comparing across it: the eight `.trc` must be byte-identical again (they were,
+SHA-256 per file, plus ANDY3 with the glitchless list), and every `cut` line
+must have moved by exactly +128 on its two smaller-span axes' lower corner and
+-128 on their upper. The span along the normal, the only one that reads 1024,
+must not have moved at all. That is a two-line check with `HdmDump` and it is
+the whole difference.
+
 `HdmDump <level.trc>` prints `data[3]` with its meaning and the sidecar
 beside it, and says so when the two disagree.
 

@@ -10187,6 +10187,511 @@ panel's rate and `late=0` is the answer this round is betting on, and a
 `late` count that climbs with `hd_rooms` is the answer that sends
 `kReachBudget` back down.
 
+#### Fix round Z - the marker rooms keep their HD art: the portal cut (#123)
+
+**What the play test said.** ANDY3, build T5 of 2026-09-10, with the user's
+own glitchless secret list: *"floors and walls are partly HD and partly not,
+and seams open between them where the void or the skybox shows"* - mostly
+around room 34. His log says the rest: `HDLOG level=ANDY3 rooms=211 hd=198
+classic=13`, and of the thirteen classic rooms **nine are empty groups in the
+.TRG** (26, 28, 88, 95, 103, 118, 122, 138, 210) while **four are MARKER
+rooms** - 34, 36, 117 and 143, the line `markers rooms=4 of them classic
+now=4`. The same seed without the secret list gives `hd=202 classic=9` and no
+seams. So the seam is not the .TRG's: it is what stage S7 does with the
+sidecar the randomizer writes.
+
+**What stage S7 did, and why it was too coarse.** S7 gave the engine one
+sentence per room - *this room's shape changed* - and the engine's only answer
+was to draw the whole room classic. It had to be: the remaster's art still
+shows the wall the run had just cut through, and a closed wall in front of an
+open doorway is worse than a room drawn the old way. But the ANDY3 list opens
+exactly TWO doorways, `(Make_Portal@Room34(x0,z5)->Room36(x4,z5))` and
+`(Make_Portal@Room117(x5,z0)->Room143(x1,z3))`, and for two sectors' worth of
+wall it took four whole rooms - among them room 34, which is 11 x 14 sectors
+and the whole village courtyard - out of the HD picture. Two paths then meet
+along the boundary of those rooms, and where the classic geometry of a
+randomized level has a hole of its own, the void shows through it.
+
+**So the unit is the opening and not the room.** The randomizer records the
+BOX its edit opened; the engine drops every HD triangle that really meets that
+box and keeps the rooms.
+
+---
+
+**Z-1 - the randomizer: a cut box instead of a whole-room mark.**
+
+`makePortal`, `addViewWindow`, `makeVerticalPortal` and `clearWallFaces` no
+longer call `hdMarkRoom`. They record an axis-aligned box in WORLD units,
+derived from the bytes the edit itself wrote:
+
+* **A wall opening** is read back out of the VIEW WINDOW that now stands at
+  that sector - the 32-byte portal record's own four corners. One derivation
+  for both ways into `makePortal` (the window it just built, and the window
+  that was already in the file), so the two cannot disagree; and that record
+  IS the opening as far as the engine is concerned, since `SetRoomBounds`
+  clips the neighbouring room to exactly those four corners.
+* **A vertical opening** (`Make_Ceiling_Portal` / `Make_Floor_Portal`) writes
+  no window at all - one sector byte is the whole connection - so the box is
+  the sector square at the height the link was opened: byte 7 for a ceiling,
+  byte 5 for a floor, `* 256`. A wall carries -127 there and is no height;
+  then the sector's other byte stands in, and if that is a wall too the room's
+  own floor does. All three are planes inside that sector's column.
+* **`@Clear`** takes the box over the faces it really degenerated. It used to
+  mark the room *whether or not a face had been found*, on the argument that
+  the sector had been NAMED as an opening either way; a box has to be the box
+  of something, so where nothing was cleared nothing is recorded. Nothing is
+  lost by that: `@Clear` is reachable from one place only (`Patch::apply`'s
+  `portalAdds` loop) and that loop has just opened the very sector through
+  `makePortal` or `makeVerticalPortal`, both of which record it themselves.
+
+**The padding, and the two reasons for it.** Half a sector, **512**, along the
+opening's own normal, because the remaster builds a wall as a thick solid
+whose faces do not sit on the classic wall plane; **128** along the other two
+axes, so the reveal round the opening goes with it and no rim of the old wall
+is left standing in the doorway. *(The second half of that is wrong and fix
+round Z1 below reverses its sign: the 128 in the plane points INWARD from this
+round on. What it cost while it pointed outward is measured in the proof
+below.)*
+
+**Two details that are worth their lines.** The one-unit inset of a view
+window is undone before the box is taken: a window does not sit ON its plane,
+it sits one unit in FRONT of it where its normal component is +1 (measured off
+vanilla andy1, and written down in `addViewWindow`'s own comment). Without
+undoing it the two sides of ONE opening name two boxes one unit apart and the
+sidecar carries two lines for every doorway in the game. And `clearWallFaces`
+finds the axis its degenerated faces are FLAT in and treats that as the
+normal - `faceOnSectorWall` only ever accepts a face whose corners share their
+x or their z, so such an axis always exists. Measured consequence, ANDREA3
+with the glitched list: the box over the three cleared walls then comes out to
+the same six numbers as the box over the three view windows, and the sidecar
+carries three cut lines where it carried six.
+
+**`moveRoom` with dy and `buildRoomGeometry` keep the whole-room mark**, and
+that is the whole of what `room` means now: a room that was lifted, or that
+had no faces at all and was given some, shares nothing with the art the .TRG
+holds for it. There is nothing to keep.
+
+**The sidecar is version 2.** One new line, `cut <x0> <y0> <z0> <x1> <y1>
+<z1>` - six integers, world units, ascending corners, and Y GROWS DOWNWARD as
+everywhere else in this format, so the first y is the opening's ceiling and
+the second its floor. `room`, `outfit` and `donor` are unchanged. The lines
+ascend by their six numbers (a `std::set`, like the rooms), so the same seed
+writes the same file byte for byte.
+
+**The version is the LOWEST one that can say what is in the file.** A file
+with a `cut` line declares 2; a file without one declares 1 and stays readable
+by an engine older than this round. The user takes intermediate builds out of
+`release\` and runs them beside finished levels; a format number is no reason
+to break the ones that still work. It is deterministic all the same - the same
+seed writes the same lines, so it writes the same version.
+
+---
+
+**Z-2 - the engine: the triangle test at build time.**
+
+`hd_markers.cpp` accepts version **1 and 2** and keeps the boxes
+(`HDMarkersCutCount` / `HDMarkersCut`). Two numbers pass and both are read the
+same way, because 2 only ADDS a line and changes the meaning of nothing that
+was there: a version 1 file is a version 2 file with no cut in it, so levels
+randomized before this round go on working exactly as they did. A line the
+reader has no rule for is still ignored and still counted, so a newer
+randomizer talking to this engine stays visible rather than silent.
+
+`hd_level.cpp`'s `BuildRoomCuts` hands the renderer one entry per **(group,
+box) pair**, in the group's own local frame - the room's origin off x and z,
+`room[].y` off the vertical, the same three lines `BuildRoomBoxes` and
+`BuildRoomIntrusions` use. **Every group is asked about every box.** This
+round argued that from ANDY3, where cut box 0 took **557** triangles out of
+room 34, **176** out of room 36, **575** and **176** out of the flipmap twins
+183 and 208, and **30** out of a third room 35 - and read that spread as proof
+that the art shutting a doorway need not belong to either room of the portal.
+**Fix round Z1 took that reading away**: with the corrected box every one of
+those five rooms drops to zero, because none of that art stood in the doorway
+in the first place. The breadth stays, on fix round T's ground that the
+remaster's rooms reach into each other by construction and on the flipmap
+argument, which nothing has yet tested either way - but it is insurance, not a
+measured need. Over the eight levels whose lists carry geometry edits, every
+corrected box takes art from exactly one room, and that room is always one of
+its own two.
+
+**The intersection test is the exact one** - the separating axis test over
+thirteen axes (the box's three face normals, the triangle's plane, and the
+nine cross products of box axis with triangle edge). The two cheaper tests
+each get one half of the question wrong, and both failures are visible in the
+ANDY3 pictures below:
+
+* **A vertex inside the box** would leave the doorway SHUT. One wall triangle
+  can cross the opening with all three corners outside the box, and that is
+  exactly the triangle that has to go.
+* **The triangle's own box overlapping** would eat MORE than the opening. A
+  slanted triangle that passes a doorway by has a bounding box reaching into
+  it, and a wall would lose art that was never in the way.
+
+The drop is the FIRST thing in the per-triangle loop of `HDRenderLevelBegin`,
+before the page slot, the horizontal-plane row, the overhang test and the
+intrusion test. A cut triangle therefore never reaches the sort list: it costs
+no index, no draw call and no count, every number the build prints afterwards
+is the number for the geometry that is really in the buffers, and there is no
+second place where a dropped triangle could still be counted in. A group with
+an empty cut list pays one compare per triangle, which is every group of every
+vanilla level.
+
+**A room named only by cut boxes stays HD.** The `HDLOG room=` line has a new
+`cut=` field and a new reason word, `cut`, for a room that lost art to an
+opening and is still drawn HD; `marker` now means only the whole-room case.
+One `HDLOG ... cut N x .. y .. z ..` line per box names the rooms it took art
+from and how much, a box that caught nothing says so out loud, and the level
+line carries `cuts=` and `cut_tris=`.
+
+**Nothing of this runs with `hd_enable=0`.** `HDLevelLoad` returns before
+`HDMarkersLoad` and `HDLevelBuild` returns before `BuildRoomCuts`, both on
+`HDEnabled()`. The frame path is not touched at all, so `fps_mode 0` is
+unchanged by construction, and the randomizer's own output for the `.trc` is
+byte-identical - see the regression below.
+
+---
+
+**Z-3 - the tools.**
+
+`HdmDump` and `MapProbe` read version 2 and print the boxes with their spans;
+`MapProbe` still uses the engine's own reader, so what it says is what the
+game reads. `RoomProbe` did not read the sidecar at all - it calls
+`HDRenderLevelBegin` itself and has no `hd_level.cpp` in it - so a picture of
+"the doorway cut open" drawn by it would have been a picture of the doorway
+still shut. It has a `-hdm` switch now, `hd_markers.cpp` is on `broom.bat`'s
+line, and the switch does what `hd_level.cpp` does: the cut boxes go to the
+renderer, and a room the sidecar names WHOLE is not drawn at all - which is
+the hole the engine leaves for the classic path to fill, and the thing that
+had to be photographed.
+
+---
+
+**The proof, in pixels.** One randomized ANDY3, seed 380, the user's
+glitchless list, rendered with `RoomProbe` out of the engine's own sources.
+The sidecar is
+
+```
+hdm 2
+cut 38400 8576 25472 39424 10368 26752
+cut 44928 10624 39424 46208 11648 40448
+```
+
+and both boxes check out against the level file to the unit: room 34's sector
+(x0,z5) has its wall plane at world x 38912 (origin 37888 + one sector), floor
+10240 and ceiling 8704, so the box is 38912 +- 512 across, 8704 - 128 ..
+10240 + 128 high and 25600 - 128 .. 26624 + 128 deep. The second is the same
+arithmetic on room 117's (x5,z0), plane z 39936.
+
+* **The seam is gone.** From the user's own eye point in the room-34 area
+  (46880, 10057, 25454), 2560x1440, rooms 34, 35, 36, 37, 42 and 70 drawn:
+  with the sidecar as it ships today **80.49 %** of the picture has no HD
+  geometry at all - the village is two roofs and a cliff floating in the clear
+  colour. With the cut it is **34.26 %**, all of it sky and rooms that were
+  not in the shot. **1,703,969 pixels of 3,686,400 came back, and not one
+  pixel of the picture became clear.** The second wide shot (46926, 8937,
+  33795) says the same: **1,213,380** pixels back, none lost.
+* **Away from the openings the cut costs nothing.** Between "no cut" and "the
+  cut", the first wide shot differs in **0 of 3,686,400 pixels**; the second
+  in 19,334, and of those **0 became clear** - they are pixels where the
+  doorway opened and the art behind it showed through.
+* **The gate.** From inside room 34 at (41984, 9600, 26112) looking at the
+  doorway, the opening's screen rectangle is x 545..735, y 193..479. Before
+  the cut that rectangle is **0.00 % clear**; after it, **17,836 of its 54,340
+  pixels** have changed, 11,988 of them to the clear colour and 5,848 from one
+  drawn colour to another. This round read the 5,848 as "the corridor of room
+  36 showing through where the gate face used to be". **Fix round Z1 measured
+  that the gate face is not there**: no remaster triangle of any group meets
+  the doorway's own interior, so the dark face in the before picture is the
+  far wall of the passage beyond the arch and not a gate. The archway is
+  already open in the .TRG and the 5,848 are art further in, uncovered along
+  with the lintel. From the far side,
+  standing in room 36's passage and looking back, the courtyard, the hillside
+  and the cliff of room 34 stand in the opening.
+* **One honest qualifier on that pair.** From room 36's side the arch's throat
+  was already open in the remaster's art before the cut - the courtyard is
+  visible in the before picture too - so there the cut takes the soffit and
+  the threshold and reveals nothing new (5,555 pixels of the rectangle became
+  clear, 0 became drawn). This round read that as "the closed face sits on
+  room 34's side"; fix round Z1 measured that there is no closed face on
+  either side, and that both of these two pictures are therefore cost without
+  gain.
+* **From inside room 117** the new doorway is a rectangular hole in the
+  corridor wall that **shows nothing at all**: 31,331 pixels of that picture
+  change between "no cut" and "the cut", **every one of them becomes the clear
+  colour and none becomes drawn**, which is the opposite of what this round
+  set out to produce. The corridor round the hole is not untouched either -
+  group 117 loses 754 of its 1,065 triangles and four of its six horizontal
+  planes of art. (Corrected 2026-09-11 in fix round Z1, which measured this
+  view again; the sentence that stood here called it the best picture of the
+  round.)
+* **And the buffers stay whole.** Per group, `RoomProbe -groups` without and
+  with the sidecar: room 34 **26,307 -> 25,750** opaque triangles with its
+  1,674 additive ones and its 37 draw calls unchanged; room 36 **41,670 ->
+  41,494**, 12 draw calls unchanged; room 143 **162 -> 114**; room 117
+  **1,065 -> 311** with one draw call fewer. Every number moves by exactly
+  what the box's own line says it took, and the groups' bounding boxes shrink
+  with them (room 117's z 946..2048 becomes 1024..2048) - a cut triangle
+  never enters a buffer, so nothing downstream has to be corrected for it.
+* **What the cut also eats, and this round does not hide it.** The padding is
+  applied to all three axes, so a wall opening's box reaches 128 past the
+  opening's own floor and ceiling as well as past its jambs. At ANDY3's gate
+  that costs the threshold, the soffit and a rim of the two piers - 66,631
+  pixels of the 867,260 outside the doorway rectangle, 7.7 %, **and 41,687 of
+  those became the clear colour**, three and a half times the 11,988 inside
+  the doorway. That is the number that says the change outside the doorway is
+  hole and not reveal, and the round as first written left it out. (The
+  sentence that stood here went on to argue the apron was harmless because
+  `FaceCheck ANDY3.TRC 34 0 5` reports *no face covers that sector*. It does
+  not carry that weight: FaceCheck reports floors and ceilings as well as
+  walls, so the answer only says the vanilla WALL sector had no faces of its
+  own - true of every wall sector in the game - and says nothing about the
+  threshold and soffit art, which belongs to the neighbouring sectors and to
+  room 36. Struck in fix round Z1.) At the second
+  doorway it costs more than that: rooms 117 and 143 are water passages
+  **exactly as tall as the opening** - floor 11520, ceiling 10752, and the box
+  runs 10624..11648 - so the 128 takes their floor and their ceiling with the
+  wall. Room 117 loses **754 of its 1,065** triangles that way, room 143
+  **48 of 162**, and from inside room 143 that is **43.5 %** of the picture
+  drawn as the clear colour - 400,950 pixels became clear there and none
+  became drawn. The doorway is open and in the right place; the chamber round
+  it is not. **Named here rather than rounded off: an in-plane INSET instead
+  of the outset would keep the floor and the ceiling and still cut every wall
+  triangle that crosses the opening, and it is the first thing to try if the
+  play test dislikes that passage.**
+
+**The verdict of this round, restated 2026-09-11.** The seam is gone and the
+rooms keep their art - that half held up under review. The openings were not
+yet right: across the six doorway views the cut turned pixels into the clear
+colour and turned **not one** pixel into a drawn one, which is a picture of
+holes and not of doorways. Fix round Z1 below is the correction.
+
+**What the play test has to show.** ANDY3 with the glitchless list: the
+`HDLOG room=` lines for **34, 36, 117 and 143** must read `hd=1` with reason
+`cut` or `ok` and no longer `marker`; the level line must read `cuts=2` with
+`markers rooms=0`; the village around room 34 must be HD all the way to its
+boundaries with no void in the seams; and the two new doorways must be open
+with the room behind them visible. Any other level whose list opens a wall is
+the same test - ANDREA3, ANDY1, JOBY3, JOBY5, RICH1, RICH2 and RICH3 in the
+glitched list, where ANDREA3 is the one that keeps a whole-room `room 74`
+because its list also moves and rebuilds that room.
+
+**The regression.** The randomizer's output for the `.trc` is unchanged. Eight
+levels - ANDREA3, ANDY1, JOBY3, JOBY5, RICH1, RICH2, RICH3 and ANDY3 - built
+with seed 380, `mix cross allsanity 8 weapons` and the glitched secret list,
+against a build of the commit before this round, come out **byte-identical**
+(SHA-256 per file). Those eight are the levels whose lists carry geometry
+edits at all, so every changed path was exercised: `Make_Portal`,
+`Make_Ceiling_Portal`, `Make_Floor_Portal`, `@Clear`, `Move_Room` and
+`Make_Room_Geometry`. ANDY3 with the glitchless list is byte-identical too,
+and running the same seed twice writes the same `.hdm` byte for byte.
+
+#### Fix round Z1 - the cut box steps inward, not outward (#123)
+
+**What the review said, and it was right.** Fix round Z above kept the marker
+rooms HD and cut the opening out of their art, and it measured everything
+except its own central claim. A cut room stays HD (`hd_level.cpp` sets
+`g_group_hd[r] = 1` when only boxes named it) and an HD room never draws its
+classic roomlets (`drawroom.cpp:167`, `InsertRoom`: `if (hd_room) {
+InsertRoomWater(r); return; }`), so **every triangle the box takes is replaced
+by nothing.** The 128 units of padding in the plane of the opening therefore
+did not widen a reveal; it punched a hole. And it always did, because a view
+window runs from its sector's ceiling to its floor by construction, so any
+outward step at all reaches the passage's own floor and ceiling quads, which
+lie exactly in the box's boundary plane.
+
+Measured on the doorway views of round Z's own proof: the cut turned
+**53,675** pixels clear at ANDY3's gate, **400,950** looking at the new water
+passage from room 143 (43.5 % of the frame) and **31,331** from room 117 - and
+turned **not one** pixel from clear into drawn, in any view. In the game those
+pixels are the void or the skybox, word for word what the play test of
+2026-09-11 reported. The round replaced the old HD/classic seam with new holes
+at every opening.
+
+---
+
+**Z1-1 - the randomizer: the step in the plane changes sign.**
+
+`Tr5Level::hdMarkCutBox` is the whole change. The box still grows **512
+outward along the opening's normal** - the remaster builds walls as thick
+solids whose faces do not sit on the classic wall plane, and that half sector
+reaches them on both sides. Along the other two axes it now steps **128
+INWARD**, clamped to half the extent so that an opening narrower than 256
+units collapses to a plane through its own middle instead of turning inside
+out. The two constants are called `HD_CUT_OUT_NORMAL` and `HD_CUT_IN_PLANE`
+now, not `HD_CUT_PAD_*`, so nobody has to read the sign out of the arithmetic.
+
+Nothing else moved: not the derivations (the view window's own four corners,
+the sector square at the height a vertical link was opened, the faces `@Clear`
+degenerated), not the one-unit window inset that makes both sides of an
+opening name one box, not the sidecar's shape, not its version rule, not
+`moveRoom` and `buildRoomGeometry`, which still take the whole room. **The
+engine is untouched by this round** - the reader, the (group, box) pairing and
+the separating-axis test all take the box as it comes.
+
+**Why inward is enough, and why it does not shut the doorway again.** The
+engine's test is a real triangle/box intersection, not a corner-inside test,
+so a wall triangle that merely *crosses* the opening still meets a box inset
+by 128 on every side. A floor or ceiling quad lying in the opening's own
+boundary plane no longer does. ANDY3's water passage is the clean case: floor
+11520, ceiling 10752, so the box's y runs 10880..11392 inside a passage
+10752..11520, and the two quads miss it by 128 units each.
+
+**The price, and it is paid in one place.** A triangle that lives wholly
+inside the outer 128 units of an opening now survives as a rim. Over the eight
+levels whose lists carry geometry edits, no such triangle exists: every
+opening either comes out fully cut or is already open in the .TRG. What does
+survive is the other half of triangle-granular cutting - a triangle that
+crosses the box may reach far outside it and is dropped whole. That is
+measured below on RICH2, where it costs 6,567 pixels of one frame.
+
+---
+
+**What the measurement turned up on the way, and it is the more interesting
+half.** The first of the two openings ANDY3's glitchless list makes - the
+village gate, the one the play test complained about - **was already open in
+the remaster's art all along.** With the corrected box, cut 0 catches nothing
+at all, and `RoomProbe` says so in as many words:
+`cut 0: NOTHING - the remaster drew no triangle in that box`. The picture
+agrees: drawn with no sidecar, with rooms 34, 35 and 36 all in the frame, the
+gatehouse arch stands open and room 36's passage is visible through it. The
+1,514 triangles round Z took out of five rooms there were the threshold, the
+soffit, the lintel band, the piers and room 35's floor above the arch - the
+surround, never the gate.
+
+So the seam the play test photographed was caused by the whole-room marker
+alone, and for ANDY3's gate the right amount to cut is zero. The second
+opening is the other case and the cut earns its keep there: the water passage
+between rooms 117 and 143 really does have remaster art across it - a wooden
+cross-brace - and 305 triangles of it go.
+
+---
+
+**The proof, in pixels.** One randomized ANDY3, seed 380, the user's
+glitchless list, source the classic `Backup\ANDY3.TRC`, rendered with
+`RoomProbe` out of the engine's own sources. The sidecar is now
+
+```
+hdm 2
+cut 38400 8832 25728 39424 10112 26496
+cut 45184 10880 39424 45952 11392 40448
+```
+
+against round Z's `cut 38400 8576 25472 39424 10368 26752` and
+`cut 44928 10624 39424 46208 11648 40448`: the normal axis is untouched (x
+38400..39424 is 38912 +- 512; z 39424..40448 is 39936 +- 512) and the other
+two have come in by 256 each. `HdmDump` prints the spans, and exactly one of
+the three is 1024 in each box - that one is the normal.
+
+**The seven views, "no sidecar" against "the cut", whole frame:**
+
+| view | round Z: became clear / drawn | round Z1: became clear / drawn |
+|---|---|---|
+| room 34 -> 36, 3 sectors back | 53,675 / 0 | **0 / 0** (0 pixels differ) |
+| room 34 -> 36, 6 sectors back | 7,830 / 0 | **0 / 0** (0 pixels differ) |
+| room 36 -> 34 | 26,716 / 0 | **0 / 0** (0 pixels differ) |
+| room 117 -> 143 | 31,331 / 0 | **0 / 0** (2,233 pixels differ) |
+| room 143 -> 117 | 400,950 / 0 | **0 / 0** (54,992 pixels differ) |
+| wide shot 1 (the user's eye point) | 0 / 0 | **0 / 0** |
+| wide shot 2 | 0 / 0 (19,334 differ) | **0 / 0** (0 differ) |
+
+**Not one pixel of any of the seven frames becomes the clear colour.** The two
+frames that change at all are the two that look at the water passage, and they
+change from one drawn colour to another - which is what a doorway opening
+looks like when there is something behind it. From inside room 143 the wooden
+cross-brace that stood in the passage is gone and room 117's chamber, its far
+wall and its floor are visible through the opening, with the passage's own
+floor, ceiling and side walls untouched. That is the picture round Z was after
+and did not get.
+
+**The wide shot still says what it said.** At the user's own eye point
+(46880, 10057, 25454), 2560x1440, the sidecar as it ships today leaves
+**80.49 %** of the picture with no HD geometry - the village floating in the
+clear colour, which is his report - and keeping the rooms HD brings **34.26
+%**, all of it sky and rooms not in the shot. That half of round Z was right
+and is unchanged.
+
+**Per group, ANDY3:** round Z dropped **2,316** triangles in **7** groups (34,
+35, 36, 117, 143, 183, 208); round Z1 drops **305** in **one** - room 117,
+**1,065 -> 760**, with its four draw calls and its bounding box **x
+1024..6144, y 10752..11520, z 946..2048 unchanged**. That box is the shortest
+proof of the round: y still reaches the passage's floor at 11520 and its
+ceiling at 10752, so neither quad went with the wall. Round Z left that group
+at 311 triangles and pulled its z in to 1024..2048. Room 143 keeps all **162**
+of its triangles (round Z took 48), group 117 keeps all **six** of its
+horizontal planes of art (round Z left it two), and the level keeps all
+**1,117** flat-art rows - so fix round H's water-surface question is answered
+out of the same table as before the cut existed.
+
+**The survey over the other seven levels** (glitched list, seed 380, `mix
+cross allsanity 8 weapons`), triangles dropped, round Z -> round Z1:
+
+| level | round Z | round Z1 | rooms that lose art now |
+|---|---|---|---|
+| ANDREA3 | 169 in 1 group | 100 in 1 | 1 |
+| ANDY1 | 0 | 0 | - (both boxes catch nothing) |
+| JOBY3 | 1,239 in 4 | 240 in 1 | 76 |
+| JOBY5 | 1,134 in 3 | 240 in 1 | 10 |
+| RICH1 | 159 in 2 | 0 | - |
+| RICH2 | 2,175 in 7 | 801 in 1 | 120 |
+| RICH3 | 728 in 6 | 258 in 3 | 46, 120, 86 |
+
+Every box now takes art from exactly one room, and that room is always one of
+the two its own portal joins. The neighbours that used to lose art - JOBY3's
+rooms 4, 10 and 13, JOBY5's 4 and 87, RICH2's 2, 26, 28, 45, 125 and 126,
+RICH3's 150, 85 and 87 - lose none.
+
+**Two more pictures, because two levels needed one.**
+
+* **RICH1**, the level whose cut drops to zero. Standing in room 130's
+  corridor looking at the new doorway into 129: round Z's box turns **680,519
+  of 921,600 pixels** clear - 73.8 % of the frame, the corridor gutted, 0
+  pixels drawn - out of **159** triangles, which is how coarsely the remaster
+  tessellates a corridor wall. Round Z1's box changes **0 pixels** against no
+  sidecar at all: no remaster triangle stands inside that opening. What the
+  player will see THROUGH it this picture cannot say - group 129 holds 78
+  triangles in a single sector cube and `RoomProbe` drew the doorway square
+  empty with or without the sidecar, which is a question about the probe's
+  `-with` and not about the cut. It is on the play-test list below.
+* **RICH2**, the level with the largest remaining cut, and the one that shows
+  the mechanism working. Standing in room 120 looking east at the two new
+  doorways into room 28: with no cut the VCI lobby's **wooden double doors are
+  shut**. With the cut they are gone, the room behind is visible through the
+  opening, and the door frame, the lintel, the blinds either side and the
+  marble floor all stand. 256,326 pixels change and **6,567** become clear
+  (0.71 % of the frame) against round Z's **101,640** (11.0 %). Those 6,567
+  are a band above the doorway: room 28 has no geometry above the opening's
+  top plane (its box is y -4352..-2048, the opening's top is -4352), so no
+  neighbour could ever fill that band - it is room 120's own lintel art, taken
+  by a triangle that crossed the box and reached past it. **Named rather than
+  rounded off: triangle-granular cutting cannot do better than this without
+  clipping triangles against the box, which this round did not attempt.**
+
+---
+
+**The classic path.** Nothing in this round runs with `hd_enable=0`: the only
+code that changed is in the randomizer, and on the engine side round Z's own
+gates stand where they stood (`HDLevelLoad` returns before `HDMarkersLoad`,
+`HDLevelBuild` before `BuildRoomCuts`). `fps_mode 0` is untouched by
+construction - there is no frame-path code in this round.
+
+**The regression.** Byte-identical `.trc` over the eight levels whose lists
+carry geometry edits - ANDREA3, ANDY1, JOBY3, JOBY5, RICH1, RICH2, RICH3
+(glitched list) and ANDY3 (glitchless) - against the files round Z produced,
+SHA-256 per file. Only the `.hdm` changes, and only its `cut` lines. The same
+seed twice writes the same `.trc` and the same `.hdm`.
+
+**What the play test has to show.** ANDY3 with the glitchless list, unchanged
+from round Z's list except for one line: rooms **34, 36, 117 and 143** read
+`hd=1` in `HDLOG` with reason `ok` or `cut` and no longer `marker`, the level
+line reads `cuts=2` with `markers rooms=0`, the village around room 34 is HD
+to its boundaries with no void in the seams, and **both doorways are open with
+no hole anywhere near them** - at the gate because the arch was never shut, at
+the water passage because the brace across it is cut away. Two things no
+picture here can settle and the play test can: **RICH2's lintel band** above
+the new double doors, where one triangle reached past the box, and **RICH1's
+doorway between rooms 130 and 129**, where the cut now takes nothing and the
+question is only whether the remaster's art lets one see through.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

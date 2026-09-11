@@ -61,6 +61,7 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
     // touched rooms - and the GUI does reuse level objects.
     m_hdRooms.clear();
     m_hdDonors.clear();
+    m_hdCuts.clear();
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f)
@@ -1664,6 +1665,9 @@ bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::strin
     const long x0 = r.originX + static_cast<long>(sx) * 1024, x1 = x0 + 1024;
     const long z0 = r.originZ + static_cast<long>(sz) * 1024, z1 = z0 + 1024;
 
+    // #123 fix round Z: the box over the faces this call really took away.
+    long lo[3] = { 0, 0, 0 }, hi[3] = { 0, 0, 0 };
+
     for (size_t i = 0; i < faces.size(); ++i)
     {
         const FaceInfo& f = faces[i];
@@ -1672,13 +1676,44 @@ bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::strin
         const uint16_t first = static_cast<uint16_t>(f.index[0]);
         for (int k = 1; k < n; ++k)
             std::memcpy(m_bytes.data() + f.indexAt + static_cast<size_t>(k) * 2, &first, 2);
+        for (int k = 0; k < n; ++k)
+            for (int c = 0; c < 3; ++c)
+            {
+                if (!cleared && !k) { lo[c] = hi[c] = f.v[k][c]; continue; }
+                if (f.v[k][c] < lo[c]) lo[c] = f.v[k][c];
+                if (f.v[k][c] > hi[c]) hi[c] = f.v[k][c];
+            }
         ++cleared;
     }
-    // #123 S7: marked even when nothing was cleared. The sector was NAMED as
-    // an opening either way, and the HD art of that room still shows the
-    // closed wall; whether a classic face happened to stand there says
-    // nothing about what the Remaster draws.
-    hdMarkRoom(room);
+
+    // #123 S7, rewritten for fix round Z. The room used to be marked here
+    // whether or not a face had been found, on the argument that the sector
+    // was NAMED as an opening either way. That argument belonged to a
+    // whole-room mark; a cut box has to be the box of something, and the
+    // only thing this call knows about is the faces it degenerated.
+    //
+    // Nothing is lost by staying quiet when there were none. @Clear is
+    // reachable from one place only (Patch::apply's portalAdds loop), and
+    // that loop has just opened the very sector through makePortal or
+    // makeVerticalPortal - both of which record the opening themselves, out
+    // of geometry that is always there.
+    //
+    // The axis the faces are FLAT in is the wall's normal, and it gets the
+    // half sector like any other opening's - faceOnSectorWall only ever
+    // accepts a face whose corners share their x or their z, so there is
+    // always such an axis and it is found rather than assumed. Measured
+    // consequence, ANDREA3 with the glitched list: the box over the three
+    // cleared walls then comes out to the same six numbers as the box over
+    // the three view windows, and the sidecar carries three cut lines where
+    // it carried six.
+    if (cleared)
+    {
+        int flat = -1;
+        for (int c = 0; c < 3; ++c)
+            if (lo[c] == hi[c]) { flat = c; break; }
+
+        hdMarkCutBox(lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], flat);
+    }
     return true;
 }
 
@@ -2310,10 +2345,14 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
     { error = "after inserting the view window " + std::to_string(m_roomMismatch) +
               " rooms no longer parse - the layout arithmetic is off"; return false; }
 
-    // #123 S7: both rooms now carry a window the Remaster's geometry knows
-    // nothing about.
-    hdMarkRoom(roomA);
-    hdMarkRoom(roomB);
+    // #123 S7, rewritten for fix round Z: both rooms now carry a window the
+    // Remaster's geometry knows nothing about - but only where the window
+    // is. The box is read back out of the two records that were just
+    // written, one per room, so the SAME code answers here and in
+    // makePortal, and the two sides of one opening are two readings of the
+    // two records the engine itself clips against.
+    hdMarkCutFromWindow(roomA, sx, sz, roomB);
+    hdMarkCutFromWindow(roomB, nsxB, nszB, roomA);
     return true;
 }
 
@@ -2544,10 +2583,31 @@ bool Tr5Level::makeVerticalPortal(int room, int sx, int sz, int targetRoom,
     }
 
     m_bytes[at] = static_cast<uint8_t>(targetRoom);
-    // #123 S7: a floor or ceiling one can now pass through. The face that
-    // used to close it is still drawn in the Remaster's geometry.
-    hdMarkRoom(room);
-    hdMarkRoom(targetRoom);
+
+    // #123 S7, rewritten for fix round Z: a floor or ceiling one can now
+    // pass through, and the face that used to close it is still drawn in the
+    // Remaster's geometry - over THIS sector and nowhere else.
+    //
+    // The vertical kind writes no view window and no portal record, so there
+    // is nothing to read the plane back out of. It comes from the sector's
+    // own height byte, which is the plane the link was opened in: byte 7 is
+    // the ceiling, byte 5 the floor, both in units of 256. A wall carries
+    // -127 there and is no height at all; then the sector's other byte
+    // stands in, and if that is a wall too the room's floor does. Each of
+    // the three is a plane inside this sector's column, and half a sector of
+    // padding above and below reaches the art of any of them - which is why
+    // a fallback is honest here and would not be for the window above.
+    const size_t sec = r.sectorsOffset +
+        (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    const int wanted = static_cast<int8_t>(m_bytes[sec + (ceiling ? 7 : 5)]);
+    const int other  = static_cast<int8_t>(m_bytes[sec + (ceiling ? 5 : 7)]);
+    const long planeY = (wanted != -127) ? static_cast<long>(wanted) * 256
+                      : (other != -127) ? static_cast<long>(other) * 256
+                      : static_cast<long>(r.yBottom);
+
+    const long wx = r.originX + static_cast<long>(sx) * 1024;
+    const long wz = r.originZ + static_cast<long>(sz) * 1024;
+    hdMarkCutBox(wx, planeY, wz, wx + 1024, planeY, wz + 1024, 1);
     return true;
 }
 
@@ -2559,14 +2619,14 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
     if (targetRoom < 0 || targetRoom >= static_cast<int>(m_rooms.size()))
     { error = "target room " + std::to_string(targetRoom) + " does not exist"; return false; }
 
-    // #123 S7: marked HERE, at the top, and not at each of the two ways out.
-    // A call to this function is the intent to open a wall between these two
-    // rooms; whether a window had to be built or was already there decides
-    // nothing about what the Remaster's geometry shows, and one mark in one
-    // place cannot fall down a branch. (A failed call aborts the whole run,
-    // so a mark left behind by one is never written out.)
-    hdMarkRoom(room);
-    hdMarkRoom(targetRoom);
+    // #123 S7 used to mark both rooms HERE, at the top. Fix round Z records
+    // the opening instead, and an opening cannot be recorded before it
+    // exists - so the mark moved down, to the line after the window has been
+    // proven to be there. Everything the old comment argued for still holds:
+    // the recording sits on the one path every successful call takes,
+    // whether the window had to be built or was already in the file, and a
+    // failed call aborts the whole run so nothing half-recorded is written
+    // out.
 
     // No view window yet? Then build one, in both directions (#132). This
     // happens FIRST, before any reference into m_rooms is taken: creating a
@@ -2606,6 +2666,14 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
                 std::to_string(targetRoom) + " after building one";
         return false;
     }
+
+    // #123 fix round Z, and the reason the check above is worth its
+    // comparison twice over: the window is there, so the box of the opening
+    // can be read out of it. Only this room's side - the caller opens the
+    // other direction with its own call, and addViewWindow has already
+    // recorded both sides where it built them. All three readings of one
+    // opening give the same box and the set keeps one.
+    hdMarkCutFromWindow(room, sx, sz, targetRoom);
 
     // Find the overlapped sector of the target room: same world area.
     const int worldX = r.originX + sx * 1024;
@@ -3367,13 +3435,162 @@ bool Tr5Level::setHdOutfit(int value)
 }
 
 //----------------------------------------------------------------------------
-// The two marker lists (#123, stage S7). Both are plain recording - the
-// judgement about which of them the engine may use lives in
-// Patch::writeHdMarkers, so that this class keeps saying only what happened.
+// The three marker lists (#123, stage S7; the cut boxes are fix round Z).
+// All three are plain recording - the judgement about which of them the
+// engine may use lives in Patch::writeHdMarkers, so that this class keeps
+// saying only what happened.
 //----------------------------------------------------------------------------
 void Tr5Level::hdMarkRoom(int room)
 {
     if (room >= 0) m_hdRooms.insert(room);
+}
+
+//----------------------------------------------------------------------------
+// ONE OPENING, AS A BOX (#123, fix round Z).
+//
+// The raw box is whatever the edit itself wrote - a view window's four
+// corners, a sector square at the height a link was opened, the corners of
+// the faces that were degenerated. It arrives here in WORLD units, in any
+// corner order, and leaves as an ascending box, grown along ONE axis and
+// shrunk along the other two:
+//
+//   normalAxis    the axis the opening's normal runs along, 0 x, 1 y, 2 z.
+//                 That axis is the one the raw box is FLAT in - a wall
+//                 window's four corners all share their x or their z - and
+//                 it is the one that needs half a sector of reach OUTWARD,
+//                 because the Remaster builds a wall as a solid with
+//                 thickness and its faces are not on the classic wall
+//                 plane. The other two shrink INWARD by
+//                 HD_CUT_IN_PLANE; see the long note in Tr5Level.h for why
+//                 that step has to point inward, and what fix round Z
+//                 measured when it pointed outward.
+//   -1            the raw box is not a plane at all but a volume of art
+//                 that the edit really took away (two walls of a corner
+//                 sector degenerated in one call, say). Then there is no
+//                 normal to grow along and no boundary plane of the opening
+//                 to keep clear of, so the box is used as it stands.
+//
+// Nothing is clamped to the room or to the level. A box that reaches past
+// the level's own extent costs nothing: the engine tests triangles against
+// it, and there are no triangles out there.
+//----------------------------------------------------------------------------
+void Tr5Level::hdMarkCutBox(long x0, long y0, long z0, long x1, long y1, long z1,
+                            int normalAxis)
+{
+    long lo[3] = { x0, y0, z0 };
+    long hi[3] = { x1, y1, z1 };
+
+    HdCut cut;
+    for (int i = 0; i < 3; ++i)
+    {
+        if (lo[i] > hi[i]) { const long t = lo[i]; lo[i] = hi[i]; hi[i] = t; }
+
+        if (normalAxis < 0)
+        {
+            cut.lo[i] = static_cast<int>(lo[i]);
+            cut.hi[i] = static_cast<int>(hi[i]);
+            continue;
+        }
+
+        if (i == normalAxis)
+        {
+            cut.lo[i] = static_cast<int>(lo[i] - HD_CUT_OUT_NORMAL);
+            cut.hi[i] = static_cast<int>(hi[i] + HD_CUT_OUT_NORMAL);
+            continue;
+        }
+
+        // Half the extent at most: an opening narrower than 256 units
+        // collapses to a plane through its own middle, which still catches
+        // everything that crosses it, instead of turning inside out.
+        const long half = (hi[i] - lo[i]) / 2;
+        const long in   = (half < HD_CUT_IN_PLANE) ? half : HD_CUT_IN_PLANE;
+        cut.lo[i] = static_cast<int>(lo[i] + in);
+        cut.hi[i] = static_cast<int>(hi[i] - in);
+    }
+    m_hdCuts.insert(cut);
+}
+
+//----------------------------------------------------------------------------
+// The view window standing at that sector, as a cut box.
+//
+// ONE derivation for both ways into makePortal. A run reaches an opening
+// either through addViewWindow, which has just written the four corners, or
+// past it, because a window was already there - and a box worked out twice
+// in two places is a box that can disagree with itself. So both call this,
+// it reads the record out of the file, and the two answers are the same
+// sixteen bytes by construction.
+//
+// The record's corners are ROOM LOCAL in x and z (the room's origin has to
+// be added) and world in y; its normal names the axis the opening is flat
+// in. Both are read rather than recomputed - that record IS the opening as
+// far as the engine is concerned, since SetRoomBounds clips the neighbouring
+// room to exactly these four corners.
+//
+// A sector with no matching window records nothing and says nothing: that
+// cannot happen on a path that reaches here (makePortal checks for the
+// window right before), and inventing a box out of the sector square would
+// be the guess this whole function exists to avoid.
+//----------------------------------------------------------------------------
+void Tr5Level::hdMarkCutFromWindow(int room, int sx, int sz, int targetRoom)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return;
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+
+    std::vector<PortalRecord> recs;
+    std::string err;
+    if (!portalRecords(room, recs, err)) return;
+
+    // The same square windowAt() tests against, widened by the one unit a
+    // window is inset by.
+    const long x0 = r.originX + static_cast<long>(sx) * 1024 - 1, x1 = x0 + 1026;
+    const long z0 = r.originZ + static_cast<long>(sz) * 1024 - 1, z1 = z0 + 1026;
+
+    for (size_t i = 0; i < recs.size(); ++i)
+    {
+        const PortalRecord& p = recs[i];
+        if (p.toRoom != targetRoom) continue;
+
+        long lo[3] = { 0, 0, 0 }, hi[3] = { 0, 0, 0 };
+        bool inside = true;
+        for (int k = 0; k < 4; ++k)
+        {
+            const long w[3] = { p.v[k][0] + r.originX, p.v[k][1],
+                                p.v[k][2] + r.originZ };
+            if (w[0] < x0 || w[0] > x1 || w[2] < z0 || w[2] > z1)
+            { inside = false; break; }
+            for (int c = 0; c < 3; ++c)
+            {
+                if (!k || w[c] < lo[c]) lo[c] = w[c];
+                if (!k || w[c] > hi[c]) hi[c] = w[c];
+            }
+        }
+        if (!inside) continue;
+
+        // The normal is (+-1, 0, 0) or (0, +-1, 0) or (0, 0, +-1) - built
+        // that way by addViewWindow and by every window Core ever wrote -
+        // and the axis it runs along is the axis the four corners are flat
+        // in.
+        const int axis = p.nx ? 0 : (p.ny ? 1 : (p.nz ? 2 : -1));
+        const int nrm  = p.nx ? p.nx : (p.ny ? p.ny : p.nz);
+
+        // THE ONE UNIT BACK. A window does not sit ON its plane: where its
+        // normal component is +1 it sits one unit in FRONT of it, and where
+        // it is -1 it sits on it - measured off vanilla andy1 and written
+        // down in addViewWindow's own comment, which is the rule this
+        // randomizer builds its windows by.
+        //
+        // Undoing it is not cosmetic. The two sides of ONE opening are two
+        // records with opposite normals, so without this they name two boxes
+        // one unit apart, the set cannot see that they are the same opening,
+        // and the sidecar carries two lines and the engine tests two boxes
+        // for every doorway in the game. With it both sides land on the wall
+        // plane itself and one opening costs one line - which is also what a
+        // person reading the file expects to see.
+        if (axis >= 0 && nrm > 0) { lo[axis] += 1; hi[axis] += 1; }
+
+        hdMarkCutBox(lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], axis);
+        return;
+    }
 }
 
 void Tr5Level::hdMarkDonor(int slot, int fromSlot, const std::string& level)

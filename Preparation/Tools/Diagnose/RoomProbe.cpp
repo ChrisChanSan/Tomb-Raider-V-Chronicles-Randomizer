@@ -125,6 +125,18 @@
  *                     corners of one water quad. Fix round R3b floods the
  *                     plane between them, and the R3b line says how many
  *                     HD vertices the four corners were missing.
+ *     -hdm            apply the .hdm sidecar beside the classic .TRC the way
+ *                     hd_level.cpp does, with the engine's own reader:
+ *                     every opening the randomizer cut (#123, fix round Z)
+ *                     is taken out of EVERY group's art at build time, and
+ *                     what each box caught is printed per room; a room the
+ *                     sidecar names WHOLE is not drawn at all, which is the
+ *                     hole the engine leaves for the classic path to fill.
+ *                     Needs -roombox, because that is the folder the sidecar
+ *                     lives in. Without the switch the very same files draw
+ *                     with every room whole and the doorway still shut,
+ *                     which is the "before" picture of this round out of the
+ *                     same build.
  *     -watersurvey <folder holding the classic .TRC>
  *                     the offline twin of hd_level.cpp's BuildWaterSurfaces:
  *                     per reflecting room of the classic level, the faces in
@@ -214,6 +226,10 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
+/* Z: the .hdm sidecar - the engine's own reader, not a copy of it. The tool
+ * has to answer a version 2 file the way the game does or the pictures of
+ * this round prove nothing. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
 #include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
 /* H1: the randomizer's own reader for the CLASSIC level, so that the water
  * survey can hold the level's own faces against the .TRG's art through the
@@ -1196,6 +1212,24 @@ static std::string g_roombox;
 static std::vector<HDRoomBox> g_boxes_built;
 static std::vector<HDIntrusion> g_intrusions_built;
 static int g_window_mode = HD_WINDOW_ALL;
+
+/* FIX ROUND Z, -hdm: apply the .hdm sidecar beside the classic .TRC, the way
+ * hd_level.cpp's BuildRoomCuts does.
+ *
+ * WITHOUT THIS THE TOOL CANNOT SEE THE ROUND AT ALL. This tool has no
+ * hd_level.cpp in it - it calls HDRenderLevelBegin itself - so the cut boxes
+ * reach the renderer only if something puts them there, and a picture of an
+ * "HD room with the doorway cut open" drawn without them would be a picture
+ * of the room with the doorway still shut. The sidecar is read with the
+ * ENGINE'S OWN reader (hd_markers.cpp is compiled in since this round), so
+ * what the picture shows is what the game will draw.
+ *
+ * It is a switch and not automatic on purpose: the three pictures the round
+ * has to produce are the classic one, the HD one WITHOUT the cut and the HD
+ * one WITH it, and the middle one is a run over the very same files with the
+ * switch left off. */
+static bool g_hdm = false;
+static std::vector<HDCut> g_cuts_built;
 
 /* -clipgroup <group> <l,t,r,b> (#123, fix round T2, T2-2): ONE group drawn
  * inside a scissor rectangle and every other group drawn whole.
@@ -2490,6 +2524,19 @@ static void ClipFor(int group)
 static bool DrawOneGroup(int group, const D3DMATRIX* world,
 	const HDRoomLighting* lighting, unsigned int passes)
 {
+	/* FIX ROUND Z, -hdm: a room the sidecar names WHOLE is drawn classic by
+	 * the engine, which means its group never reaches the HD buffers at all
+	 * (hd_level.cpp sets g_group_hd[r] = 0 and HDFrameRoom then skips it).
+	 * This tool has no classic path to put in its place, so what it draws is
+	 * the HOLE the engine leaves for that path to fill - which is exactly
+	 * what has to be photographed: the user's seam is that hole showing
+	 * where the two paths meet.
+	 *
+	 * A room named only by CUT boxes is not in this list and is drawn, minus
+	 * the triangles the cut took out at build time. */
+	if (g_hdm && HDMarkersRoomTouched(group))
+		return false;
+
 	if (group == g_tround_group)
 	{
 		HDRenderScissor((int)g_tround_box[0], (int)g_tround_box[1],
@@ -3240,6 +3287,8 @@ int main(int argc, char** argv)
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
+		printf("       -hdm                          apply the .hdm sidecar "
+			"beside it (needs -roombox)\n");
 		printf("       -window all|open|intruding   (needs -roombox)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      round T's own picture\n");
@@ -3431,6 +3480,8 @@ int main(int argc, char** argv)
 			g_roombox = argv[at + 1];
 			at += 1;
 		}
+		else if (!strcmp(argv[at], "-hdm"))
+			g_hdm = true;
 		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
 		{
 			walkSeed = atoi(argv[at + 1]);
@@ -3927,8 +3978,75 @@ int main(int argc, char** argv)
 				printf("-roombox: %d intrusion boxes handed in\n",
 					(int)g_intrusions_built.size());
 			}
+
+			/* FIX ROUND Z, -hdm: the openings the randomizer cut, out of the
+			 * sidecar beside that very .TRC, in the shape hd_level.cpp's
+			 * BuildRoomCuts hands them over - one entry per (group, box)
+			 * pair, in the group's own frame, every group asked about every
+			 * box. The room origins come out of the classic level that is
+			 * open here anyway; room[].y is the header's own field 24, the
+			 * same one the room boxes above read. */
+			if (g_hdm)
+			{
+				if (!HDMarkersLoad(trc.c_str()))
+					printf("-hdm: no markers (%s) - nothing is cut\n",
+						HDMarkersError());
+				else
+				{
+					printf("-hdm: %s, version %d, %d rooms, %d cut boxes, "
+						"%d donors\n", HDMarkersPath(), HDMarkersVersion(),
+						HDMarkersRoomCount(), HDMarkersCutCount(),
+						HDMarkersDonorCount());
+
+					for (int i = 0; i < HDMarkersRoomCount(); i++)
+						printf("-hdm: room %d is named whole - the engine "
+							"draws it CLASSIC and this tool cannot\n",
+							HDMarkersRoom(i));
+
+					for (int b = 0; b < HDMarkersCutCount(); b++)
+					{
+						const HDMarkerCut* cut = HDMarkersCut(b);
+
+						if (!cut)
+							continue;
+
+						printf("-hdm: cut %d  x %d..%d  y %d..%d  z %d..%d\n",
+							b, cut->mins[0], cut->maxs[0], cut->mins[1],
+							cut->maxs[1], cut->mins[2], cut->maxs[2]);
+
+						for (int r = 0; r < level.roomCount(); r++)
+						{
+							const Tr5Room& rm = level.rooms()[(size_t)r];
+							unsigned yOrigin = 0;
+							HDCut one;
+
+							level.headerField(r, 24, yOrigin, error);
+
+							one.group = r;
+							one.box = b;
+							one.mins[0] = (float)(cut->mins[0] - rm.originX);
+							one.maxs[0] = (float)(cut->maxs[0] - rm.originX);
+							one.mins[1] = (float)(cut->mins[1] - (int)yOrigin);
+							one.maxs[1] = (float)(cut->maxs[1] - (int)yOrigin);
+							one.mins[2] = (float)(cut->mins[2] - rm.originZ);
+							one.maxs[2] = (float)(cut->maxs[2] - rm.originZ);
+							g_cuts_built.push_back(one);
+						}
+					}
+
+					if (!g_cuts_built.empty())
+						HDRenderSetCuts(&g_cuts_built[0],
+							(int)g_cuts_built.size());
+
+					printf("-hdm: %d (group, box) pairs handed in\n",
+						(int)g_cuts_built.size());
+				}
+			}
 		}
 	}
+	else if (g_hdm)
+		printf("RoomProbe: -hdm needs -roombox <folder holding the classic "
+			".TRC> - that folder is where the sidecar lives\n");
 
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
@@ -3981,6 +4099,44 @@ int main(int argc, char** argv)
 					"%d triangles, no portal between them\n",
 					g_intrusions_built[i].holder,
 					g_intrusions_built[i].group, hits);
+		}
+	}
+	/* FIX ROUND Z: what the openings really took away, per box and per room,
+	 * out of the engine's own build. A box that caught nothing is printed too
+	 * - a doorway the remaster's art never covered and a box in the wrong
+	 * place look exactly alike in a picture, and only this number tells them
+	 * apart. */
+	if (!g_cuts_built.empty())
+	{
+		printf("Z: %d cut box(es), %d triangles dropped in %d groups\n",
+			HDMarkersCutCount(), stats.cutTris, stats.cutGroups);
+
+		for (int b = 0; b < HDMarkersCutCount(); b++)
+		{
+			int tris = 0, groups = 0;
+
+			for (size_t i = 0; i < g_cuts_built.size(); i++)
+			{
+				if (g_cuts_built[i].box != b)
+					continue;
+
+				const int hits = HDRenderCutHits((int)i);
+
+				if (!hits)
+					continue;
+
+				tris += hits;
+				groups++;
+				printf("  cut %d: room %3d loses %d triangles\n",
+					b, g_cuts_built[i].group, hits);
+			}
+
+			if (!tris)
+				printf("  cut %d: NOTHING - the remaster drew no triangle in "
+					"that box\n", b);
+			else
+				printf("  cut %d: %d triangles out of %d rooms\n",
+					b, tris, groups);
 		}
 	}
 	printf("S6: widest draw call reaches over %d vertices, widest single "
@@ -4593,10 +4749,14 @@ int main(int argc, char** argv)
 	{
 		if (g_old_order)
 		{
-			drew = HDRenderRoom(room, 0, &lighting);
+			// Z: a room the sidecar names whole is left out here too - see
+			// DrawOneGroup, which the other order goes through.
+			if (!g_hdm || !HDMarkersRoomTouched(room))
+				drew = HDRenderRoom(room, 0, &lighting);
 
 			for (int i = 0; i < g_with_count; i++)
-				HDRenderRoom(g_with_group[i], &withWorld[i], &lighting);
+				if (!g_hdm || !HDMarkersRoomTouched(g_with_group[i]))
+					HDRenderRoom(g_with_group[i], &withWorld[i], &lighting);
 		}
 		else
 		{

@@ -246,6 +246,41 @@ struct HDIntrusion
 	float maxs[3];
 };
 
+/* AN OPENING THE RANDOMIZER MADE, TAKEN OUT OF THE ART (#123, fix round Z).
+ *
+ * WHAT THE PLAY TEST SAID. Stage S7 gave a room whose shape the run had
+ * changed a `room` line in the .hdm sidecar, and this renderer's caller then
+ * drew that whole room the classic way - the only answer it had, because the
+ * remaster's art still shows the wall the run had just cut through. ANDY3
+ * with the user's glitchless list turns four of 211 rooms classic that way,
+ * and the picture of 2026-09-11 shows what four classic rooms look like in
+ * the middle of an HD level: floors and walls half HD and half not, with the
+ * void or the skybox showing in the seam between them.
+ *
+ * SO THE UNIT IS THE OPENING AND NOT THE ROOM. The sidecar now names the BOX
+ * the opening lives in, and every triangle of every group that really
+ * intersects that box is left out of the buffers at build time. The room
+ * keeps its HD art, the doorway is a hole in it, and nothing is decided per
+ * frame.
+ *
+ * EVERY group, not just the two rooms the doorway joins: fix round T
+ * measured that the remaster's rooms reach into each other by construction,
+ * and a neighbour's overhang standing in a doorway shuts it as surely as the
+ * room's own wall does.
+ *
+ * Handed in the GROUP's own local frame, like the room boxes and the
+ * intrusions above, and on the same contract: call HDRenderSetCuts before
+ * HDRenderLevelBegin, the pointer is not kept. Without it nothing is ever
+ * cut, which is what the game does for a vanilla level and what the
+ * diagnostic tools do unless they are handed a sidecar. */
+struct HDCut
+{
+	int group;			// whose art is being asked about
+	int box;			// which sidecar box this is - for the log
+	float mins[3];
+	float maxs[3];
+};
+
 struct HDRenderStats
 {
 	int trgVersion;
@@ -269,6 +304,12 @@ struct HDRenderStats
 	int intrudingTris;
 	int intrudingRanges;
 	int intrudingGroups;
+	/* Fix round Z: the triangles the sidecar's cut boxes took away before
+	 * they ever reached a buffer, and the groups that lost any. Zero for
+	 * every vanilla level and for every randomized level whose run opened
+	 * nothing. */
+	int cutTris;
+	int cutGroups;
 	int index32;			// 1 = 32 bit index buffer
 	/* The widest span of vertex numbers ONE draw call reaches over (#123,
 	 * stage S6). It is what decides whether a card with no 32 bit index
@@ -439,6 +480,16 @@ void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count);
  * says how many triangles each entry caught, which is what the level's log
  * line is made of. */
 void HDRenderSetIntrusions(const HDIntrusion* list, int count);
+/* The openings the randomizer cut into this level (#123, fix round Z). Same
+ * contract again - before HDRenderLevelBegin, the pointer is only remembered
+ * for the length of that call. After it, HDRenderCutHits says how many
+ * triangles each entry took away, which is what the level's log lines are
+ * made of. */
+void HDRenderSetCuts(const HDCut* list, int count);
+int HDRenderCutHits(int at);
+// How many triangles the cuts took out of that group, all three passes
+// together. Zero for every group of every vanilla level.
+int HDRenderGroupCutTriangles(int group);
 /* Sort the inside half of every group apart from its overhang while the next
  * level is built, as fix round T did (#123, fix round T2). 0 by default and
  * in the engine always: it costs draw calls and buys the engine nothing since

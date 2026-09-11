@@ -8,8 +8,14 @@
 // This tool holds the two against each other in one line each.
 //
 // It doubles as the REFERENCE READER for the engine side (stage S7-2): the
-// parse loop in readHdm() below is the whole grammar, about forty lines, and
+// parse loop in readHdm() below is the whole grammar, about fifty lines, and
 // the engine's own reader has to answer the same way on the same file.
+//
+// Two versions since #123 fix round Z. Version 1 could only name a whole
+// ROOM ("this room's shape changed, draw it classic"); version 2 adds the
+// `cut` line, a box in world units round ONE opening the run made, and the
+// engine drops the HD triangles inside that box out of every room's art and
+// keeps the rooms. Both are read here.
 //
 // What the header block means (specific\file.cpp, LoadLevel):
 //   data[0]  LaraDrawType - 1   (0 NORMAL, 1 YOUNG, 2 BUNHEAD, 3 CATSUIT,
@@ -57,6 +63,11 @@ struct HdMarkers
     int version = 0;
     int outfit = 0;
     std::vector<int> rooms;
+    // #123 fix round Z, version 2: one opening the run made, as a box in
+    // world units with ascending corners. Y grows downward, so mins[1] is
+    // the ceiling of the opening and maxs[1] its floor.
+    struct Cut { int mins[3], maxs[3]; };
+    std::vector<Cut> cuts;
     struct Donor { int slot, fromSlot; std::string level; };
     std::vector<Donor> donors;
     std::vector<std::string> unknown;      // lines a later version may add
@@ -82,6 +93,23 @@ static bool readHdm(const std::string& path, HdMarkers& out, std::string& error)
         if (std::sscanf(line, "hdm %d", &a) == 1) { out.version = a; continue; }
         if (std::sscanf(line, "outfit %d", &a) == 1) { out.outfit = a; continue; }
         if (std::sscanf(line, "room %d", &a) == 1) { out.rooms.push_back(a); continue; }
+        {
+            int box[6] = { 0, 0, 0, 0, 0, 0 };
+            if (std::sscanf(line, "cut %d %d %d %d %d %d",
+                            &box[0], &box[1], &box[2], &box[3], &box[4], &box[5]) == 6)
+            {
+                HdMarkers::Cut c;
+                // Sorted, like the engine's reader: a box the wrong way
+                // round would match no triangle and would do it silently.
+                for (int k = 0; k < 3; ++k)
+                {
+                    c.mins[k] = box[k] < box[k + 3] ? box[k] : box[k + 3];
+                    c.maxs[k] = box[k] < box[k + 3] ? box[k + 3] : box[k];
+                }
+                out.cuts.push_back(c);
+                continue;
+            }
+        }
         if (std::sscanf(line, "donor %d %63s %d", &a, word, &b) == 3)
         {
             HdMarkers::Donor d;
@@ -95,9 +123,15 @@ static bool readHdm(const std::string& path, HdMarkers& out, std::string& error)
     }
     std::fclose(f);
 
-    if (out.version != 1)
+    // Version 2 (#123, fix round Z) only ADDS the `cut` line and changes the
+    // meaning of nothing that was there before, so a version 1 file is a
+    // version 2 file with no cut in it and both are read the same way. The
+    // engine's own reader says the same in the same words - specific\hd\
+    // hd_markers.cpp, and these two have to answer alike on one file.
+    if (out.version != 1 && out.version != 2)
     {
-        error = "version " + std::to_string(out.version) + " is not the 1 this reader knows";
+        error = "version " + std::to_string(out.version) +
+                " is neither the 1 nor the 2 this reader knows";
         return false;
     }
     return true;
@@ -117,8 +151,8 @@ static std::string sidecarPath(const std::string& levelPath)
 
 static void report(const HdMarkers& m)
 {
-    std::printf("  sidecar     version %d, %zu rooms, %zu donor slots\n",
-                m.version, m.rooms.size(), m.donors.size());
+    std::printf("  sidecar     version %d, %zu rooms, %zu cut boxes, %zu donor slots\n",
+                m.version, m.rooms.size(), m.cuts.size(), m.donors.size());
     if (m.outfit) std::printf("  outfit line %d\n", m.outfit);
 
     if (!m.rooms.empty())
@@ -126,7 +160,26 @@ static void report(const HdMarkers& m)
         std::printf("  rooms      ");
         for (size_t i = 0; i < m.rooms.size(); ++i)
             std::printf("%s%d", i ? ", " : " ", m.rooms[i]);
-        std::printf("\n");
+        std::printf("   (drawn CLASSIC - nothing of their HD art is kept)\n");
+    }
+
+    // One line per opening, with the size the box really covers. The spans
+    // are what a reader checks the box against. Exactly one of the three is
+    // 2 * 512 = 1024: that is the opening's normal, and the raw box is flat
+    // there - a window's four corners share their x or their z, @Clear only
+    // accepts such faces, and a vertical link writes a zero-height plane.
+    // The other two are the opening's own size LESS 2 * 128, the inward
+    // step of fix round Z1 that keeps the passage's own floor and ceiling
+    // out of the box.
+    for (size_t i = 0; i < m.cuts.size(); ++i)
+    {
+        const HdMarkers::Cut& c = m.cuts[i];
+        std::printf("  cut %-3zu     x %d..%d  y %d..%d  z %d..%d"
+                    "   (%d x %d x %d, y grows downward)\n",
+                    i, c.mins[0], c.maxs[0], c.mins[1], c.maxs[1],
+                    c.mins[2], c.maxs[2],
+                    c.maxs[0] - c.mins[0], c.maxs[1] - c.mins[1],
+                    c.maxs[2] - c.mins[2]);
     }
     for (size_t i = 0; i < m.donors.size(); ++i)
         std::printf("  donor       slot %d <- %s slot %d\n",

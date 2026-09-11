@@ -178,36 +178,79 @@ namespace Patch
     //
     // The engine can draw a level with the Remaster's own geometry and
     // models. That data describes the VANILLA level, so the randomizer has
-    // to say where it no longer fits. Three things, and exactly three:
+    // to say where it no longer fits. Four things, and exactly four:
     //
     //   1. THE OUTFIT, in data[3] of the level header. Written by apply()
     //      itself, because it is part of the file. See hdOutfitId.
-    //   2. THE TOUCHED ROOMS - every room whose SHAPE changed.
-    //   3. THE DONOR SLOTS - every model that came out of another level
+    //   2. THE TOUCHED ROOMS - every room whose SHAPE changed so far that
+    //      none of its HD art is worth keeping: a room lifted by moveRoom,
+    //      a room that had no faces at all and was given some.
+    //   3. THE CUT BOXES (#123, fix round Z) - every OPENING the run made:
+    //      a wall cut through, a floor or ceiling opened, a wall face taken
+    //      away. Those change one sector's worth of a room and nothing
+    //      else, so the room keeps its HD art and only the box around the
+    //      opening is dropped out of it.
+    //   4. THE DONOR SLOTS - every model that came out of another level
     //      file, because the Remaster resolves a slot by the name THIS
     //      level gives it, and ANIMATING10 means something different in
     //      every level.
     //
-    // 2 and 3 do not fit in the header: a room bit field would need up to
-    // 254 bits and a donor list is unbounded. They go into a sidecar file
-    // `<level>.hdm` beside the .trc - plain text, one fact per line:
+    // 2, 3 and 4 do not fit in the header: a room bit field would need up
+    // to 254 bits, and a cut list and a donor list are both unbounded. They
+    // go into a sidecar file `<level>.hdm` beside the .trc - plain text, one
+    // fact per line:
     //
-    //     hdm 1
+    //     hdm 2
     //     outfit 6
     //     room 34
     //     room 36
+    //     cut 38400 8832 25728 39424 10112 26496
     //     donor 386 Andrea1 386
     //     donor 462 Andrea1 405
     //
-    // The first line is the version. `outfit` repeats data[3] for a reader
-    // that has the sidecar open anyway (both come out of the same value, so
-    // they cannot drift); the engine reads the header byte, which is there
-    // before a room is loaded. `room` lines are ascending, `donor` lines
-    // ascending by slot, so the same seed gives the same file byte for
-    // byte. A donor line names the slot in THIS level, the donor level's
-    // stem (or "TR3" for a guest out of Tomb Raider III), and the slot the
-    // model was taken FROM - which differs whenever a mesh store is copied
-    // into an enemy's own slot.
+    // The first line is the version, and it is the LOWEST one that can say
+    // what the file holds: a file with a `cut` line in it declares 2, a
+    // file without one declares 1 and stays readable by an engine older
+    // than fix round Z. `outfit` repeats data[3] for a reader that has the
+    // sidecar open anyway (both come out of the same value, so they cannot
+    // drift); the engine reads the header byte, which is there before a room
+    // is loaded. `room` lines are ascending, `cut` lines ascending by their
+    // six numbers, `donor` lines ascending by slot, so the same seed gives
+    // the same file byte for byte. A donor line names the slot in THIS
+    // level, the donor level's stem (or "TR3" for a guest out of Tomb
+    // Raider III), and the slot the model was taken FROM - which differs
+    // whenever a mesh store is copied into an enemy's own slot.
+    //
+    // A `cut` line is an axis-aligned box in WORLD units, lower corner then
+    // upper corner, and Y GROWS DOWNWARD as everywhere else in this format
+    // - so the first y is the opening's ceiling and the second its floor.
+    // It is derived from what the edit itself wrote (the view window's four
+    // corners, the sector square at the height a vertical link was opened,
+    // the corners of the faces @Clear degenerated) and then stepped ONE way
+    // out and TWO ways in:
+    //
+    //   - 512 OUTWARD, half a sector, along the opening's own normal. The
+    //     raw box is FLAT in that axis - a window's four corners share
+    //     their x or their z - so the span there comes out at exactly
+    //     2 * 512 = 1024, never more. The Remaster builds walls as thick
+    //     solids whose faces do not sit on the classic wall plane, and half
+    //     a sector reaches them on both sides.
+    //   - 128 INWARD along the other two axes, clamped to half the extent.
+    //     A cut room keeps its HD art and an HD room never draws its
+    //     classic roomlets, so art the box takes is replaced by nothing;
+    //     the box may hold only what stands INSIDE the opening. Stepping
+    //     outward there took the passage's own floor and ceiling quads with
+    //     it and left the void showing - the measurement is in
+    //     MODIFICATIONS.md, fix round Z1.
+    //
+    // So the example above reads: normal axis x (span 1024), an opening
+    // 1280 tall and 768 wide, which is one sector's doorway less the two
+    // inward steps.
+    //
+    // The box belongs to the LEVEL and not to a room: the engine drops
+    // every HD triangle that meets it out of every room's art, because the
+    // neighbour's overhang can block a doorway as surely as the room's own
+    // wall can.
     //
     // WRITTEN ON EVERY RUN FOR EVERY LEVEL, even when there is nothing to
     // say - then it is the version line alone. A missing file means "no
@@ -232,13 +275,14 @@ namespace Patch
     // diagnostic tools that load and save a level would otherwise scatter
     // sidecars they know nothing about.
     //
-    // roomsOut/donorsOut receive what actually went INTO the file, not what
-    // the level recorded - the two differ by the slots filtered out above,
-    // and a status line that prints the larger number would not match the
-    // file the user then opens.
+    // roomsOut/donorsOut/cutsOut receive what actually went INTO the file,
+    // not what the level recorded - the two differ by the slots filtered out
+    // above, and a status line that prints the larger number would not match
+    // the file the user then opens.
     bool writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
                         std::string& error,
-                        int* roomsOut = nullptr, int* donorsOut = nullptr);
+                        int* roomsOut = nullptr, int* donorsOut = nullptr,
+                        int* cutsOut = nullptr);
 
     // The wardrobe id of a Tomb Raider III outfit ("tr3_london") as the
     // engine's HD_LARA_OUTFIT_* number, 0 for anything it has no HD twin

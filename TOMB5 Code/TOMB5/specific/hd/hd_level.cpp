@@ -2048,6 +2048,135 @@ static void ReportRoomIntrusions()
 	g_intrusions.clear();
 }
 
+/* THE OPENINGS THE RUN MADE, FOR THE RENDERER (#123, fix round Z).
+ *
+ * The sidecar names them in WORLD units, one box per opening, and says
+ * nothing about rooms - deliberately, because the art that shuts a doorway is
+ * not always the art of the two rooms it joins. Fix round T measured that the
+ * remaster's rooms reach into each other by construction: a wall's relief, a
+ * corner pier, a doorway's reveal all stand in the neighbour's space, and
+ * ANDREA2's courtyard has whole facades of one room drawn inside another. So
+ * EVERY group is asked about EVERY box, and the triangle test decides.
+ *
+ * One entry per (group, box) pair, in the group's own frame: the .TRG's
+ * vertices are room local in x and z and world in y, so the room's origin
+ * comes off the two horizontal numbers and room[].y off the vertical one -
+ * the same three lines BuildRoomBoxes and BuildRoomIntrusions use, and every
+ * TR5 room has y 0 anyway (measured over the fifteen files).
+ *
+ * No pre-filter by the room's own box, and that is on purpose. A filter is a
+ * second rule to get wrong, it would have to guess how far a group's art may
+ * stand outside its room, and it would buy nothing measurable: the list is
+ * rooms x boxes entries of 32 bytes - ANDY3 with the user's glitchless list
+ * is 211 x 2 - and the triangle test runs once per triangle per box at level
+ * build, never per frame.
+ *
+ * Group i is room i while this runs: no flip has happened yet, which is the
+ * same argument BuildRoomIntrusions and BuildStaticTables make. */
+static std::vector<HDCut> g_cuts;
+
+static void BuildRoomCuts()
+{
+	g_cuts.clear();
+
+	const int boxes = HDMarkersCutCount();
+
+	if (boxes > 0)
+	{
+		g_cuts.reserve((size_t)boxes * (size_t)number_rooms);
+
+		for (int b = 0; b < boxes; b++)
+		{
+			const HDMarkerCut* src = HDMarkersCut(b);
+
+			if (!src)
+				continue;
+
+			for (int r = 0; r < number_rooms; r++)
+			{
+				HDCut one;
+
+				one.group = r;
+				one.box = b;
+				one.mins[0] = (float)(src->mins[0] - room[r].x);
+				one.maxs[0] = (float)(src->maxs[0] - room[r].x);
+				one.mins[1] = (float)(src->mins[1] - room[r].y);
+				one.maxs[1] = (float)(src->maxs[1] - room[r].y);
+				one.mins[2] = (float)(src->mins[2] - room[r].z);
+				one.maxs[2] = (float)(src->maxs[2] - room[r].z);
+				g_cuts.push_back(one);
+			}
+		}
+	}
+
+	if (!g_cuts.empty())
+		HDRenderSetCuts(&g_cuts[0], (int)g_cuts.size());
+	else
+		HDRenderSetCuts(0, 0);
+}
+
+/* AND WHAT THE BUILD MADE OF IT (#123, fix round Z). Run after
+ * HDRenderLevelBegin for the same reason ReportRoomIntrusions is: the
+ * triangles are tested while the index buffer is filled and the counts do not
+ * exist before that.
+ *
+ * ONE LINE PER BOX, naming the rooms whose art it took and how much of it,
+ * and one line for the level. A box that caught nothing gets a line too -
+ * that is the failure this round has to be able to see, an opening the
+ * remaster's art never covered or a box in the wrong place, and a silent
+ * zero would look exactly like a doorway that was already open. */
+static void ReportRoomCuts()
+{
+	const int boxes = HDMarkersCutCount();
+	int caught = 0;
+
+	for (int b = 0; b < boxes; b++)
+	{
+		const HDMarkerCut* src = HDMarkersCut(b);
+		int tris = 0;
+		int groups = 0;
+		char rooms[160];
+		int at = 0;
+
+		rooms[0] = 0;
+
+		for (size_t i = 0; i < g_cuts.size(); i++)
+		{
+			if (g_cuts[i].box != b)
+				continue;
+
+			const int hits = HDRenderCutHits((int)i);
+
+			if (!hits)
+				continue;
+
+			tris += hits;
+			groups++;
+
+			if (at < (int)sizeof(rooms) - 12)
+				at += snprintf(rooms + at, sizeof(rooms) - (size_t)at,
+					"%s%d(%d)", at ? " " : "", g_cuts[i].group, hits);
+		}
+
+		caught += tris;
+
+		Log("HDLOG level=%s cut %d x %d..%d y %d..%d z %d..%d - "
+			"%d triangles out of %d rooms: %s",
+			g_stem, b,
+			src ? src->mins[0] : 0, src ? src->maxs[0] : 0,
+			src ? src->mins[1] : 0, src ? src->maxs[1] : 0,
+			src ? src->mins[2] : 0, src ? src->maxs[2] : 0,
+			tris, groups, at ? rooms : "none - the remaster drew nothing there");
+	}
+
+	if (boxes > 0)
+		Log("HDLOG level=%s cuts=%d triangles dropped=%d", g_stem, boxes, caught);
+
+	// The list was only borrowed for the length of the build.
+	HDRenderSetCuts(0, 0);
+	g_cuts.clear();
+}
+
 static void BuildStaticTables()
 {
 	g_static_classic.clear();
@@ -2422,11 +2551,11 @@ void HDLevelLoad(const char* wadName)
 	 * an unreadable one falls back to the same answer and says so. */
 	const bool markers = HDMarkersLoad(wadName);
 
-	Log("HDLOG level=%s markers file=%s rooms=%d donors=%d outfit=%d "
-		"tr3_install=%s%s%s",
-		g_stem, markers ? HDMarkersPath() : "none",
-		HDMarkersRoomCount(), HDMarkersDonorCount(), HDMarkersOutfit(),
-		HDInstallRootTr3()[0] ? "found" : "absent",
+	Log("HDLOG level=%s markers file=%s version=%d rooms=%d cuts=%d donors=%d "
+		"outfit=%d tr3_install=%s%s%s",
+		g_stem, markers ? HDMarkersPath() : "none", HDMarkersVersion(),
+		HDMarkersRoomCount(), HDMarkersCutCount(), HDMarkersDonorCount(),
+		HDMarkersOutfit(), HDInstallRootTr3()[0] ? "found" : "absent",
 		markers ? "" : " reason=", markers ? "" : HDMarkersError());
 
 	/* data[3] and the sidecar's `outfit` line come out of ONE value in the
@@ -2596,6 +2725,7 @@ void HDLevelBuild()
 	BuildWaterMarks();
 	BuildRoomBoxes();		// T1, before the build like the marks
 	BuildRoomIntrusions();		// T2-2, the same contract
+	BuildRoomCuts();		// Z, the same contract again
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms, false,
 		DecodeThreads(), &stats, &why))
@@ -2627,6 +2757,9 @@ void HDLevelBuild()
 	 * art standing inside another room, and how much. It reads the counts the
 	 * build left behind and gives the borrowed list back. */
 	ReportRoomIntrusions();
+	// Z: and the same for the openings. Before the room lines below, so the
+	// log reads in the order the build ran.
+	ReportRoomCuts();
 
 	/* E2: `flooded` is how many of the two shimmer sets no classic corner
 	 * named and the plane answered for - the number that says whether a
@@ -2713,23 +2846,32 @@ void HDLevelBuild()
 		const bool hollow = tris > 0 &&
 			HDRenderGroupOverhangTriangles(r) >= tris;
 
-		/* THE THIRD WAY A ROOM STAYS CLASSIC (#123, stage S7-2). The first
-		 * two are the .TRG's own: no group for this room, or a group with no
-		 * triangle in it - which is what a Make_Room_Geometry room looks like
-		 * and needs no marker at all. This one is the randomizer's: the run
-		 * cut a wall open, moved a floor, added a window. The Remaster's art
-		 * still shows the room as it was shipped, so drawing it would show a
-		 * closed wall in front of an open doorway - the gravest of the S7
-		 * cases, and the reason the sidecar exists.
+		/* THE THIRD WAY A ROOM STAYS CLASSIC (#123, stage S7-2, narrowed by
+		 * fix round Z). The first two are the .TRG's own: no group for this
+		 * room, or a group with no triangle in it - which is what a
+		 * Make_Room_Geometry room looks like and needs no marker at all.
+		 * This one is the randomizer's, and since fix round Z it is the
+		 * SMALL half of what the randomizer can do to a room: the run lifted
+		 * it with Move_Room, or built it a surface it never had. Neither
+		 * leaves anything of the remaster's art worth keeping, so the room
+		 * is drawn classic and the classic geometry IS the randomized
+		 * geometry - it is read out of the level file the run wrote.
 		 *
-		 * A marked room therefore loses its HD art even when the .TRG has a
-		 * full group for it. The classic geometry IS the randomized geometry:
-		 * it is read out of the level file the run wrote. */
+		 * The big half - a wall cut open, a window added, a floor or ceiling
+		 * opened - used to end up here too, and that is what the play test of
+		 * 2026-09-11 photographed: ANDY3 with the user's glitchless list
+		 * turned FOUR of 211 rooms classic for two doorways, and the seams
+		 * between HD and classic floors showed the void. Those rooms now
+		 * keep their art and lose only the box round the opening; see
+		 * BuildRoomCuts above. */
 		const bool marked = HDMarkersRoomTouched(r);
+		// Fix round Z: and how much art an opening took out of this room.
+		const int cut_tris = HDRenderGroupCutTriangles(r);
 
 		const char* reason = !has_group ? "no_group"
 			: (!tris ? "empty_group"
-			: (hollow ? "hollow_group" : (marked ? "marker" : "ok")));
+			: (hollow ? "hollow_group"
+			: (marked ? "marker" : (cut_tris ? "cut" : "ok"))));
 
 		if (marked && has_group && tris)
 			marked_rooms++;
@@ -2752,11 +2894,11 @@ void HDLevelBuild()
 			kept_statics += room[r].num_meshes;
 		}
 
-		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d ranges=%d "
-			"statics=%d hd=%d reason=%s",
+		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d cut=%d "
+			"ranges=%d statics=%d hd=%d reason=%s",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
-			HDRenderGroupRanges(r, -1),
+			cut_tris, HDRenderGroupRanges(r, -1),
 			(int)room[r].num_meshes, (int)g_group_hd[r], reason);
 	}
 
@@ -2794,23 +2936,28 @@ void HDLevelBuild()
 
 	/* What the sidecar cost this level, in one line: how many rooms it named,
 	 * and how many of those really had HD art to give up. The two differ
-	 * whenever the run reshaped a room the .TRG had nothing for anyway. */
+	 * whenever the run reshaped a room the .TRG had nothing for anyway.
+	 * `cuts` is fix round Z's half of it - openings, which cost a box of
+	 * triangles each and no room at all. */
 	if (HDMarkersPresent())
-		Log("HDLOG level=%s markers rooms=%d of them classic now=%d "
-			"donors=%d outfit=%d",
-			g_stem, HDMarkersRoomCount(), marked_rooms,
+		Log("HDLOG level=%s markers version=%d rooms=%d of them classic now=%d "
+			"cuts=%d cut_tris=%d in %d rooms donors=%d outfit=%d",
+			g_stem, HDMarkersVersion(), HDMarkersRoomCount(), marked_rooms,
+			HDMarkersCutCount(), stats.cutTris, stats.cutGroups,
 			HDMarkersDonorCount(), HDMarkersOutfit());
 
 	Log("HDLOG level=%s built ms=%d rooms=%d hd=%d classic=%d sky_groups=%d "
 		"verts=%d idx=%d(%dbit) ranges=%d split=%d layer0_tris=%d "
 		"overhang_tris=%d hollow=%d "
 		"intruding_tris=%d intruding_ranges=%d intruding_groups=%d "
+		"cut_tris=%d cut_groups=%d "
 		"vb_mib=%.1f ib_mib=%.1f read_ms=%d build_ms=%d",
 		g_stem, (int)build_ms, g_room_count, hd_rooms, classic_rooms,
 		stats.skyGroups, stats.vertices, stats.indices, stats.index32 ? 32 : 16,
 		stats.ranges, stats.splitRanges, stats.fallbackPageTris,
 		stats.overhangTris, stats.hollowGroups,
 		stats.intrudingTris, stats.intrudingRanges, stats.intrudingGroups,
+		stats.cutTris, stats.cutGroups,
 		stats.vertexBytes / 1048576.0, stats.indexBytes / 1048576.0,
 		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5));
 

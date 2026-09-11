@@ -1718,10 +1718,12 @@ int Patch::hdOutfitId(const std::string& wardrobeId)
 }
 
 bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
-                           std::string& error, int* roomsOut, int* donorsOut)
+                           std::string& error, int* roomsOut, int* donorsOut,
+                           int* cutsOut)
 {
     if (roomsOut) *roomsOut = 0;
     if (donorsOut) *donorsOut = 0;
+    if (cutsOut) *cutsOut = 0;
 
     // Lara's own block and the slots this project added past vanilla. Both
     // numbers are the engine's (hd_bind.cpp: lara_block_last = 30, and the
@@ -1745,11 +1747,25 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
         return false;
     }
 
+    // THE VERSION IS THE LOWEST ONE THAT CAN SAY WHAT IS IN THE FILE
+    // (#123, fix round Z). `cut` lines were added in version 2, so a file
+    // that carries one declares 2 and an engine older than fix round Z
+    // refuses the whole of it - which is the right answer, because that
+    // engine would draw a closed HD wall across an opening it cannot cut.
+    // A file with no cut line is a valid version 1 file to the last byte,
+    // so it says 1 and an older engine goes on reading it. The user runs
+    // intermediate builds out of release\ beside finished levels; a format
+    // number is no reason to break the ones that still work.
+    //
+    // Deterministic all the same: the same seed writes the same lines, so
+    // it writes the same version.
+    const std::set<Tr5Level::HdCut>& cuts = level.hdCuts();
+
     // "wb", and every line ended with a single \n: the file has to come out
     // byte for byte the same for the same seed, and text mode would make
     // that depend on the platform's line ending. A reader has to tolerate a
     // stray \r anyway, since a user may have opened it in an editor.
-    std::fprintf(f, "hdm 1\n");
+    std::fprintf(f, "hdm %d\n", cuts.empty() ? 1 : 2);
 
     // Straight out of the level header, not out of a report - so the byte
     // the engine reads and the line a person reads cannot say two different
@@ -1763,6 +1779,17 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
     {
         std::fprintf(f, "room %d\n", room);
         if (roomsOut) ++*roomsOut;
+    }
+
+    // The cut boxes, ascending by their six numbers - a std::set again, and
+    // for the same reason. Written after the `room` lines so that a person
+    // reading the file meets the whole-room facts first; the engine's reader
+    // does not care about the order of any of it.
+    for (const Tr5Level::HdCut& c : cuts)
+    {
+        std::fprintf(f, "cut %d %d %d %d %d %d\n",
+                     c.lo[0], c.lo[1], c.lo[2], c.hi[0], c.hi[1], c.hi[2]);
+        if (cutsOut) ++*cutsOut;
     }
 
     std::vector<Tr5Level::HdDonor> donors = level.hdDonors();

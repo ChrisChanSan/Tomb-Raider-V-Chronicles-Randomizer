@@ -517,11 +517,11 @@ int main(int argc, char** argv)
     // gets the version line alone, so a file left over from an earlier run
     // can never keep talking about rooms this run did not touch.
     {
-        int hdRooms = 0, hdDonors = 0;
-        if (!Patch::writeHdMarkers(lvl, toW(argv[4]), err, &hdRooms, &hdDonors))
+        int hdRooms = 0, hdDonors = 0, hdCuts = 0;
+        if (!Patch::writeHdMarkers(lvl, toW(argv[4]), err, &hdRooms, &hdDonors, &hdCuts))
         { std::printf("HD markers: %s\n", err.c_str()); return 1; }
-        std::printf("  HD markers  outfit %d, %d rooms, %d donor slots\n",
-                    lvl.hdOutfit(), hdRooms, hdDonors);
+        std::printf("  HD markers  outfit %d, %d rooms, %d cut boxes, %d donor slots\n",
+                    lvl.hdOutfit(), hdRooms, hdCuts, hdDonors);
     }
 
     // SecretRewards.txt lies beside the EXECUTABLE, and the target level lies

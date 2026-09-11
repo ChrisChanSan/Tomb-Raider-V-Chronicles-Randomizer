@@ -36,6 +36,7 @@ namespace
 	std::string g_error;
 	std::string g_path;
 	std::vector<int> g_rooms;
+	std::vector<HDMarkerCut> g_cuts;
 	std::vector<Donor> g_donors;
 	std::vector<std::string> g_unknown;
 
@@ -127,6 +128,31 @@ bool HDMarkersLoad(const char* levelPath)
 			continue;
 		}
 
+		/* Fix round Z. Six integers, ascending corners already - but sorted
+		 * here all the same, because a box the wrong way round would match
+		 * no triangle at all and would do it silently, and the one thing
+		 * this reader must never do is turn a marker into nothing. */
+		{
+			int box[6] = { 0, 0, 0, 0, 0, 0 };
+
+			if (std::sscanf(line, "cut %d %d %d %d %d %d",
+				&box[0], &box[1], &box[2], &box[3], &box[4], &box[5]) == 6)
+			{
+				HDMarkerCut cut;
+
+				for (int axis = 0; axis < 3; axis++)
+				{
+					cut.mins[axis] = box[axis] < box[axis + 3]
+						? box[axis] : box[axis + 3];
+					cut.maxs[axis] = box[axis] < box[axis + 3]
+						? box[axis + 3] : box[axis];
+				}
+
+				g_cuts.push_back(cut);
+				continue;
+			}
+		}
+
 		if (std::sscanf(line, "donor %d %63s %d", &a, word, &b) == 3)
 		{
 			Donor one;
@@ -149,15 +175,23 @@ bool HDMarkersLoad(const char* levelPath)
 	 * there, and acting on a room number that no longer means a room number
 	 * would draw the wrong half of the level classic. Refusing the file falls
 	 * back to "no markers", which is exactly what an engine older than the
-	 * run should do. */
-	if (g_version != 1)
+	 * run should do.
+	 *
+	 * TWO NUMBERS PASS SINCE FIX ROUND Z, and both are read the same way: 2
+	 * only adds the `cut` line, it changes the meaning of nothing that was
+	 * there before, so a version 1 file is a version 2 file with no cut in
+	 * it. Levels the user randomized before this fix round therefore go on
+	 * working exactly as they did. */
+	if (g_version != 1 && g_version != 2)
 	{
 		char why[96];
 
 		std::snprintf(why, sizeof(why),
-			"version %d is not the 1 this engine knows", g_version);
+			"version %d is neither the 1 nor the 2 this engine knows",
+			g_version);
 		g_error = why;
 		g_rooms.clear();
+		g_cuts.clear();
 		g_donors.clear();
 		g_unknown.clear();
 		g_outfit = 0;
@@ -177,6 +211,7 @@ void HDMarkersFree()
 	g_error.clear();
 	g_path.clear();
 	g_rooms.clear();
+	g_cuts.clear();
 	g_donors.clear();
 	g_donor_view.clear();
 	g_unknown.clear();
@@ -230,6 +265,19 @@ int HDMarkersRoom(int at)
 		return -1;
 
 	return g_rooms[at];
+}
+
+int HDMarkersCutCount()
+{
+	return g_present ? (int)g_cuts.size() : 0;
+}
+
+const HDMarkerCut* HDMarkersCut(int at)
+{
+	if (!g_present || at < 0 || at >= (int)g_cuts.size())
+		return 0;
+
+	return &g_cuts[(size_t)at];
 }
 
 int HDMarkersDonorCount()

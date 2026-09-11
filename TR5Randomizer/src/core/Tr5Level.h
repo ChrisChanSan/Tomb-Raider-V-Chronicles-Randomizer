@@ -887,6 +887,24 @@ public:
     // NOT counted: moveRoom with dx/dz only (the vertices are room-local
     // and ride along with the origin), room flags (water, climb), items,
     // triggers and floordata - none of them is geometry.
+    //
+    // TWO KINDS OF MARK SINCE FIX ROUND Z (#123), and the difference is
+    // how much of the room's HD art the change makes wrong:
+    //
+    //   THE WHOLE ROOM (hdMarkRoom) - moveRoom with dy and
+    //   buildRoomGeometry. A room that was lifted, or that had no faces at
+    //   all and now has some, shares nothing with the art the .TRG holds
+    //   for it. There is nothing to keep, and the room is drawn classic.
+    //
+    //   ONE OPENING (hdMarkCut) - makePortal, addViewWindow,
+    //   makeVerticalPortal and clearWallFaces. Those change ONE sector's
+    //   worth of wall, floor or ceiling; the rest of the room is exactly
+    //   what the Remaster drew. Marking the whole room for it turned four
+    //   of ANDY3's 211 rooms classic in the middle of an HD level, and the
+    //   play test of 2026-09-11 photographed the result: HD floors running
+    //   into classic ones with the void showing in the seam. So the edit
+    //   records the BOX its opening lives in instead, and the engine drops
+    //   the HD triangles inside that box and keeps the room.
     struct HdDonor
     {
         int         slot;       // the slot in THIS level
@@ -894,10 +912,70 @@ public:
         std::string level;      // donor level stem, or "TR3" for a guest
     };
 
+    // An axis-aligned box in WORLD units, ascending corners, that contains
+    // one opening this run made. Derived from the geometry the edit itself
+    // wrote - the view window's own four corners, the sector square at the
+    // height it opened, the faces it degenerated - never from a guess about
+    // where a wall might be.
+    //
+    // Y GROWS DOWNWARD in this format, so lo[1] is the opening's CEILING
+    // and hi[1] its FLOOR. The box grows along ONE axis and shrinks along
+    // the other two, and fix round Z1 had to be measured before that was
+    // believable:
+    //   - HD_CUT_OUT_NORMAL (512, half a sector) OUTWARD along the
+    //     opening's own normal, both ways. The Remaster's walls are built
+    //     thick and their faces do not sit on the classic wall plane; half
+    //     a sector reaches the art on both sides of it.
+    //   - HD_CUT_IN_PLANE (128) INWARD along the other two axes.
+    //
+    // The inward step is the correction of fix round Z1 and it is not a
+    // nicety. A cut room KEEPS its HD art (that is the whole point of the
+    // round) and an HD room never draws its classic roomlets, so whatever
+    // the box takes out is replaced by NOTHING - it is void, not a repair.
+    // The box may therefore only ever hold art that stands INSIDE the
+    // opening. A view window runs from its sector's ceiling to its floor by
+    // construction, so an outward step of even one unit reaches the floor
+    // and the ceiling of the passage itself, and those are flat quads lying
+    // exactly in the box's boundary plane: round Z measured 400,950 pixels
+    // of ANDY3's room 143 - 43.5 % of the frame - turning into clear colour
+    // for that one reason, and 41,687 more around the village gate outside
+    // the doorway. One step INWARD and the same quads miss the box, while
+    // every wall triangle that crosses the opening still meets it, because
+    // the engine's test is a real triangle/box intersection and not a
+    // corner-inside test.
+    //
+    // The price is honest and small: a triangle that lives wholly inside
+    // the outer 128 units of the opening survives as a rim. Measured on
+    // ANDY3's two doorways, no such triangle exists - see MODIFICATIONS.md.
+    //
+    // The inward step is clamped to half the extent, so a narrow opening
+    // collapses to a plane through its own middle rather than inverting.
+    struct HdCut
+    {
+        int lo[3];
+        int hi[3];
+
+        bool operator<(const HdCut& o) const
+        {
+            for (int i = 0; i < 3; ++i)
+            {
+                if (lo[i] != o.lo[i]) return lo[i] < o.lo[i];
+                if (hi[i] != o.hi[i]) return hi[i] < o.hi[i];
+            }
+            return false;
+        }
+    };
+
+    static const int HD_CUT_OUT_NORMAL = 512;
+    static const int HD_CUT_IN_PLANE   = 128;
+
     void hdMarkRoom(int room);
     void hdMarkDonor(int slot, int fromSlot, const std::string& level);
     const std::set<int>& hdTouchedRooms() const { return m_hdRooms; }
     const std::vector<HdDonor>& hdDonors() const { return m_hdDonors; }
+    // A std::set, so the same seed writes the same lines in the same order
+    // and a second edit over the same opening costs no second line.
+    const std::set<HdCut>& hdCuts() const { return m_hdCuts; }
 
     // --- Texture workshop (#104) ---------------------------------------
     //
@@ -922,6 +1000,22 @@ private:
     // the previous level's marks.
     std::set<int>        m_hdRooms;
     std::vector<HdDonor> m_hdDonors;
+    std::set<HdCut>      m_hdCuts;
+
+    // Record the box around one opening (#123, fix round Z). Both are
+    // private: an opening is recorded by the edit that made it, out of the
+    // bytes that edit wrote, and never by a caller guessing at coordinates.
+    //
+    // hdMarkCutBox takes the raw world box of the opening and the axis its
+    // normal runs along (0 x, 1 y, 2 z, -1 = pad every axis in the plane
+    // way), and applies the padding.
+    void hdMarkCutBox(long x0, long y0, long z0, long x1, long y1, long z1,
+                      int normalAxis);
+    // ... and this one reads the view window that now stands at that sector
+    // and records its four corners. Used by both ways into makePortal - the
+    // window it just built and the window that was already there - so the
+    // box comes out of one derivation whichever way the run got here.
+    void hdMarkCutFromWindow(int room, int sx, int sz, int targetRoom);
 
     bool                 m_texOpen = false;
     bool                 m_texDirty = false;

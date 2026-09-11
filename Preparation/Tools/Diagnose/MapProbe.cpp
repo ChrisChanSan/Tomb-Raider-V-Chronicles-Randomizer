@@ -30,14 +30,17 @@
 // it every slot binds by name alone and the missing count is meaningless.
 //
 // -hdm IS THE PROOF OF STAGE S7-2 without starting the game. The sidecar
-// beside a randomized level says which rooms the run reshaped and which slots
-// hold a model from another level file; this reads it with the ENGINE'S OWN
-// reader (specific\hd\hd_markers.cpp is compiled in) and answers each line
-// the way the engine will answer it - a room classic with the reason
-// "marker", a donor slot through the DONOR'S .MAP, a Tomb Raider III guest
-// through the four-line table and the other bundle. The one thing it cannot
-// answer is the skeleton test, which needs the model on a card; that is
-// ModelProbe's job and it says so per line.
+// beside a randomized level says which rooms the run reshaped, which openings
+// it cut (#123, fix round Z) and which slots hold a model from another level
+// file; this reads it with the ENGINE'S OWN reader (specific\hd\
+// hd_markers.cpp is compiled in) and answers each line the way the engine
+// will answer it - a room classic with the reason "marker", a cut box with
+// the volume it takes out of every room's art, a donor slot through the
+// DONOR'S .MAP, a Tomb Raider III guest through the four-line table and the
+// other bundle. Two things it cannot answer: the skeleton test, which needs
+// the model on a card (ModelProbe's job, and it says so per line), and how
+// many triangles a cut box really catches, which needs the level built
+// (RoomProbe -hdm, and the engine's own "HDLOG ... cut N" line).
 //
 // -tr3 names the game 3 folder of an installed Tomb Raider I-III Remastered,
 // so that a guest's .TRM can be looked for. Without it a guest line says
@@ -140,8 +143,9 @@ namespace
 		}
 
 		std::printf("  sidecar      %s\n", HDMarkersPath());
-		std::printf("  version      %d, %d rooms, %d donors\n",
-			HDMarkersVersion(), HDMarkersRoomCount(), HDMarkersDonorCount());
+		std::printf("  version      %d, %d rooms, %d cut boxes, %d donors\n",
+			HDMarkersVersion(), HDMarkersRoomCount(), HDMarkersCutCount(),
+			HDMarkersDonorCount());
 
 		/* THE OUTFIT. data[3] of the level header is what the engine reads;
 		 * the sidecar repeats it for a person, and a disagreement means one
@@ -166,9 +170,35 @@ namespace
 		}
 
 		for (int i = 0; i < HDMarkersRoomCount(); i++)
-			std::printf("  room %-6d classic, reason=marker (the run changed "
-				"its shape; the Remaster's art is the old one)\n",
+			std::printf("  room %-6d classic, reason=marker (the run lifted "
+				"or rebuilt it; nothing of the Remaster's art is kept)\n",
 				HDMarkersRoom(i));
+
+		/* Fix round Z. A cut box takes no room away - it takes a box of
+		 * triangles out of EVERY room's art, and which rooms lose how much
+		 * is a question only the build can answer (the engine's own log line
+		 * "HDLOG level=... cut N ..." says it, and RoomProbe -hdm draws it).
+		 * What this tool can say is the box, and whether it looks like one
+		 * opening: exactly one of the three spans reads 1024, and that is
+		 * the opening's normal (2 * 512 over a raw box that is flat there).
+		 * The other two are the opening's own size LESS 2 * 128 - the
+		 * inward step of fix round Z1, which keeps the passage's own floor
+		 * and ceiling out of the box. */
+		for (int i = 0; i < HDMarkersCutCount(); i++)
+		{
+			const HDMarkerCut* cut = HDMarkersCut(i);
+
+			if (!cut)
+				continue;
+
+			std::printf("  cut %-7d x %d..%d  y %d..%d  z %d..%d  "
+				"(%d x %d x %d) - the HD art inside it is dropped, "
+				"the rooms stay HD\n", i,
+				cut->mins[0], cut->maxs[0], cut->mins[1], cut->maxs[1],
+				cut->mins[2], cut->maxs[2],
+				cut->maxs[0] - cut->mins[0], cut->maxs[1] - cut->mins[1],
+				cut->maxs[2] - cut->mins[2]);
+		}
 
 		for (int i = 0; i < HDMarkersDonorCount(); i++)
 		{

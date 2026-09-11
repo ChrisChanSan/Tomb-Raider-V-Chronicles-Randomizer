@@ -1348,12 +1348,41 @@ The remaster's art describes the level as Core shipped it. When a run cuts a
 wall open for a secret, adds a window, joins two rooms or lifts a floor, the
 art still shows the wall that is no longer there — and unlike a room the
 remaster never had, nothing in the file gives it away. So the randomizer
-writes those room numbers into a small text file beside the level,
-`data\<LEVEL>.hdm`, and the engine draws each of them the classic way, whose
-geometry is by definition the geometry the run really built. It costs the HD
-look of a handful of rooms per level — six in RICH3 with the glitched secret
-list, two in ANDREA3 — and it is the difference between a level you can play
-and a wall you can walk through but not see through.
+writes what it changed into a small text file beside the level,
+`data\<LEVEL>.hdm`, and the engine acts on it. There are two kinds of entry,
+and the difference is how much of the room's art the change makes wrong.
+
+**An OPENING — a wall cut through, a window added, a floor or ceiling opened
+— costs a box and not a room.** The randomizer records the box the opening
+lives in, in world units, and the engine leaves out every HD triangle that
+really meets that box, in every room's art. The room keeps everything else.
+
+The box is the opening's own cross-section, stepped half a sector outward
+along the opening's normal — the remaster builds walls as thick solids and
+their faces do not sit on the classic wall plane — and 128 units **inward**
+along the other two. Inward, because a cut room keeps its HD art and an HD
+room never draws its classic roomlets, so art the box removes is replaced by
+nothing at all: the box may hold only what stands inside the opening. An
+outward step there takes the passage's own floor and ceiling and leaves the
+void showing, which is what the first version of this did.
+
+Every group is asked about every box rather than just the two rooms the
+doorway joins. That is insurance: the remaster's rooms reach into each other,
+and a flipmap twin is a room of its own. On the eight levels measured so far
+every box in fact takes art from one room only, and always one of its own
+two.
+
+**A room that was LIFTED or BUILT FROM NOTHING still costs the whole room.**
+`Move_Room` moves every vertex of a room and `Make_Room_Geometry` gives a
+room a surface it never had; neither leaves anything of the remaster's art
+worth keeping, so those rooms are drawn the classic way, whose geometry is by
+definition the geometry the run really built.
+
+Before this was split in two, an opening took its whole room as well. ANDY3
+with the glitchless secret list opens two doorways, and that turned four of
+its 211 rooms classic — among them the whole village courtyard — with the
+seam between the HD and the classic half showing the void. The box costs two
+sectors' worth of art instead.
 
 The same file names the object slots whose **model came out of another level
 file**. The remaster resolves a slot by the name *this* level gives it, and
@@ -1419,17 +1448,31 @@ HDLOG itemcheck level=ANDREA1 slot=33(SWAT) nodes=15 used=15
 HDLOG lightcheck level=ANDREA1 slot=33 classic=... hd=... diff=...
 ```
 
-A randomized level adds one more room reason and a block of its own. A room
-the run reshaped reads `hd=0 reason=marker`; the level's `markers` line names
-the sidecar it read, how many rooms and donor slots it held, and whether the
-Tomb Raider I-III bundle was found:
+A randomized level adds two more room reasons and a block of its own. A room
+the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the
+art round an opening reads `hd=1 reason=cut` with the count in `cut=`. The
+level's `markers` line names the sidecar it read, its version, how many rooms,
+cut boxes and donor slots it held, and whether the Tomb Raider I-III bundle
+was found, and there is one line per cut box saying which rooms it took art
+from:
 
 ```
-HDLOG level=RICH3 markers file=data\RICH3.hdm rooms=6 donors=14 outfit=0
-      tr3_install=absent
-HDLOG room=46 group=46 tris=980/0/0 ranges=3 statics=1 hd=0 reason=marker
-HDLOG level=RICH3 markers rooms=6 of them classic now=6 donors=14 outfit=0
+HDLOG level=ANDY3 markers file=data\ANDY3.hdm version=2 rooms=0 cuts=2
+      donors=23 outfit=0 tr3_install=absent
+HDLOG level=ANDY3 cut 0 x 38400..39424 y 8832..10112 z 25728..26496 -
+      0 triangles out of 0 rooms: none - the remaster drew nothing there
+HDLOG level=ANDY3 cut 1 x 45184..45952 y 10880..11392 z 39424..40448 -
+      305 triangles out of 1 rooms: 117(305)
+HDLOG level=ANDY3 cuts=2 triangles dropped=305
+HDLOG room=117 group=117 tris=760/0/0 overhang=0 cut=305 ranges=4
+      statics=... hd=1 reason=cut
+HDLOG level=ANDY3 markers version=2 rooms=0 of them classic now=0 cuts=2
+      cut_tris=305 in 1 rooms donors=23 outfit=0
 ```
+
+A box that caught nothing says so in its own line rather than passing in
+silence — an opening the remaster's art never covered and a box in the wrong
+place look alike in a picture, and only that number tells them apart.
 
 and one `donor` line per named slot says where its name came from and whether
 the model arrived: `donor_map` (the donor level's own `.MAP` named it),

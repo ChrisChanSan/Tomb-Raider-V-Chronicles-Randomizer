@@ -467,11 +467,19 @@ handful of lines each.
 
 They are notes for the engine's **HD mode**, which draws the levels with the
 Remaster's own artwork. That artwork describes the *original* level, so the
-randomizer has to say where it no longer fits: which rooms a secret list
-opened a wall in, which object slots hold a model out of a different level,
-and which Tomb Raider III outfit you rolled. Where the file says so, the
-engine falls back to the classic look for that one room or that one object,
-and everything else stays HD.
+randomizer has to say where it no longer fits: where a secret list opened a
+wall, which rooms it lifted or built from nothing, which object slots hold a
+model out of a different level, and which Tomb Raider III outfit you rolled.
+
+An **opening** — a wall cut through, a window, a floor or ceiling opened — is
+written down as the box it lives in, and the engine leaves out just the HD
+artwork inside that box. The room round it stays HD. Only a room the run
+**lifted** (`Move_Room`) or **built a surface for** (`Make_Room_Geometry`)
+falls back to the classic look entirely, because nothing of the Remaster's
+artwork for it is worth keeping. Up to build 2026-09-10 an opening cost its
+whole room as well, and in ANDY3 two new doorways turned four rooms — the
+whole village courtyard among them — classic in the middle of an HD level,
+with the seam between the two showing the void. That is what the boxes fixed.
 
 You never have to do anything with them:
 

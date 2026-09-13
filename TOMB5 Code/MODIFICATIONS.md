@@ -10915,6 +10915,77 @@ between them, `HDModelPage(slot, j) == page`, because `HDModelPage` returns
 `raw + pageBias` - and that was already on the open list as M2's work. No
 change was made; a helper added for the finding was taken out again.
 
+#### Round M1, the second fix round - the format block is where the file says (#153)
+
+The fix round above said it had removed "the `WAVEFORMATEX` over offset 20".
+It had removed it from `hqsfx.cpp`. The site that decides what is actually
+**played** still had it, and this round is precisely what lets a stranger's
+file reach that site.
+
+**A legal wav need not begin with its format block.** `SfxRiffCheck` *walks*
+the chunks, deliberately, because a `fact` or a `LIST` may stand in front of
+`fmt` - and the shape every digital audio workstation writes is a 28 byte
+`JUNK` block first, room it can later rewrite into `ds64` if the recording
+grows past four gigabytes. Reaper, Pro Tools and libsndfile all emit it. Such
+a file passed the gate, correctly, and then met `LoadSamples()`:
+
+```
+const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(riff + 20);
+if (riffSize > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
+```
+
+In a `JUNK`-first file the two bytes at offset 20 are the middle of that
+block's header - measured on a crafted one, `0x0000`. The test came out false,
+the mod's recording was dropped without a word, the level's own sample was
+decoded instead, and `MODLOG wav 0000 <- mod0 ...` and the load summary both
+went on claiming an overlay nobody would ever hear. A silent wrong result and
+a log that lies, which is worse than a crash because nothing ever reports it.
+
+**The offsets come out of the walk that accepted the file.** `SfxRiffCheck`
+already finds both chunks; it now hands back where they were, as
+`SfxRiffParts`, and `HQSfxPayload` passes that up to its caller. `LoadSamples`
+reads the format block at `parts.fmtAt` and the audio at `parts.dataAt`, and
+takes the PCM branch on `hq` alone rather than on a re-read of the tag:
+everything the payload path returns has been shown to be mono 16 bit PCM with
+a data chunk inside the buffer, so there is nothing left to decide there and
+nothing left to discard behind the counters' back. `HQSfxSubstituted()` and
+`HQSfxOverlaid()` are true by construction now rather than hopeful, and the
+contract that makes them so is written into `hqsfx.h` beside the function.
+
+The level's own samples are untouched: their tag is still read at 20 and their
+data block still found by the walk in `file.cpp`, which is what that code has
+always done and which no mod can reach - the one call that still lays a
+`WAVEFORMATEX` over offset 20, `DXCreateSampleADPCM`, is only ever handed
+`samples_buffer`. A mod's payload no longer goes through that walk at all, so
+the round removed its own reachability rather than hardening a second copy of
+a guard.
+
+**The one semantic difference it carried, and the measurement that discharged
+it.** `file.cpp`'s walk *breaks* at the first `data` chunk; `SfxRiffCheck`'s
+does not, so on a file carrying two of them the gate reports the **last**. For
+a payload out of a bank the offsets now come from the gate, so the two would
+disagree on such a file. Counted rather than assumed, over every sample of all
+three banks the player can reach - his `audio\MAIN.SFX`, the mod's, and the
+installed remaster's, 1409 samples between them - and over the five loose
+`.wav` files: **not one** has a second `data` chunk, a second `fmt`, or a
+`fmt` anywhere but +20. On his own data the two walks cannot part company.
+
+**Measured.** Of the reviewer's six crafted files the gate accepts four, and
+**three of those four** have their format block somewhere other than +20 -
+`+56`, `+48` and `+28`. All three used to be accepted and then thrown away.
+`SfxProbe` prints a `layout` line for every accepted file and `-samples`
+counts the bank's, so the fact is now visible rather than assumed. On the
+user's own data nothing moves: his five loose `.wav` files and both banks -
+473 and 463 samples - all put `fmt` first, so this never bit him; it was
+waiting for the first mod he downloads that was mastered in an editor.
+
+**One finding refuted rather than fixed, one documented.** A mod that ships
+`<NAME>_HEAD.TRM` without the body's `<NAME>.TRM` is silently inert, because
+a face is resolved wherever its body came from so that the two wear pages from
+one source. That is right, and the review agreed; what was wrong was the
+README promising "anything the HD path resolves by name". The README's
+not-supported paragraph says it now. No code changed.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

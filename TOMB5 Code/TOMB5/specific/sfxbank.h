@@ -65,15 +65,37 @@ const char* SfxBankSample(SfxBank* bank, int sample, long* bytes);
 // Its length without reading it.
 long SfxBankSampleBytes(const SfxBank* bank, int sample);
 
+/* WHERE THE TWO CHUNKS LIE (#153, round M1, second fix round).
+ *
+ * The check below WALKS the chunks, because a fact or a LIST block may stand
+ * in front of fmt and a wav out of any editor may well have one - Reaper,
+ * Pro Tools and libsndfile all write a 28 byte JUNK block first, as room to
+ * grow into RF64. A caller that only judges the file needs none of this; a
+ * caller that then hands the format block and the audio to XAudio2 must know
+ * where the walk found them instead of assuming fmt comes first, which is the
+ * assumption this struct exists to retire.
+ *
+ * All offsets are from the first byte of the RIFF and point at a chunk's
+ * BODY, past its eight byte header - fmtAt is the WAVEFORMATEX itself. */
+struct SfxRiffParts
+{
+	long fmtAt;
+	long fmtBytes;
+	long dataAt;
+	long dataBytes;
+	long byteRate;
+};
+
 /* WHAT A PAYLOAD HAS TO BE for this engine to hand it to XAudio2: a RIFF
  * WAVE, uncompressed PCM (tag 1), mono, 16 bit, with a data chunk that lies
  * inside the file. Returns false and sets *why when it is not.
  *
  * *dataBytes gets the data chunk's length and *byteRate the format's bytes
  * per second, which is what the caller needs to compare two recordings of the
- * same sound at two different rates. */
+ * same sound at two different rates. *parts, when asked for, gets the whole
+ * of the above and is only written when the answer is true. */
 bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
-	const char** why);
+	const char** why, SfxRiffParts* parts = 0);
 
 /* A loose <NNNN>.wav from a mod, read whole into a malloc'ed buffer the
  * caller owns (free with std::free). Null and *why on trouble. `cap` is the

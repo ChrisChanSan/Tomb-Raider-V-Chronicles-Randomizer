@@ -1541,7 +1541,8 @@ bool LoadSamples()
 		char* riff = samples_buffer;
 		long riffSize = comp_size;
 		long hqSize = 0;
-		char* hq = HQSfxPayload(i, uncomp_size, &hqSize);
+		SfxRiffParts hqWhere;
+		char* hq = HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
 
 		if (hq)
 		{
@@ -1556,30 +1557,65 @@ bool LoadSamples()
 		// 16 bit. They need no decoder at all, only the direct way into
 		// the XAudio2 buffer that DXCreateSample already offers.
 		//
-		// The tag stands in the fmt block at +20 (RIFF 4 + size 4 + WAVE 4
-		// + "fmt " 4 + block size 4). 1 = PCM, 2 = MS-ADPCM. The same spot
-		// is read by DXCreateSampleADPCM.
-		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(riff + 20);
+		// For a sample out of the LEVEL the tag stands in the fmt block at
+		// +20 (RIFF 4 + size 4 + WAVE 4 + "fmt " 4 + block size 4). 1 = PCM,
+		// 2 = MS-ADPCM. The same spot is read by DXCreateSampleADPCM, and
+		// this line is what those two have always done.
+		//
+		/* FOR A SAMPLE OUT OF A MOD IT IS ASKED FOR, NOT ASSUMED (#153,
+		 * round M1, second fix round). Offset 20 only holds the format tag
+		 * when fmt is the FIRST chunk, and a wav written by an editor often
+		 * is not that file: Reaper, Pro Tools and libsndfile put a 28 byte
+		 * JUNK block in front of fmt as room to grow into RF64, and a LIST
+		 * block with the title in it is just as common. Such a file passes
+		 * the gate in hqsfx.cpp - correctly, it is a legal mono 16 bit PCM
+		 * wav - and then failed HERE, because the two bytes at +20 are the
+		 * middle of that first block's header and are not 1. The sample was
+		 * dropped without a word, the level's own was played instead, and
+		 * the load log still said the mod had supplied it. Measured on a
+		 * crafted JUNK-first file: SfxProbe accepted it, its bytes at +20
+		 * are 0x0000.
+		 *
+		 * So the offsets now come from the walk that accepted the file,
+		 * through SfxRiffParts, and `hq` alone takes the branch: everything
+		 * HQSfxPayload hands back is PCM, mono, 16 bit with a data chunk
+		 * inside the buffer - it checked - so there is nothing left here to
+		 * decide and nothing left to discard behind the counters' back. */
+		long fmtAt = 20;
+		long dataAt = 0, dataLen = 0;
 
-		if (riffSize > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
+		if (hq)
+		{
+			fmtAt = hqWhere.fmtAt;
+			dataAt = hqWhere.dataAt;
+			dataLen = hqWhere.dataBytes;
+		}
+
+		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(riff + fmtAt);
+
+		if (hq || (riffSize > 20 && wf->wFormatTag == WAVE_FORMAT_PCM))
 		{
 			// Search for the data block instead of assuming its position:
 			// further blocks can stand behind the fmt block (fact, LIST).
-			long at = 12;
-			long dataAt = 0, dataLen = 0;
-
-			while (at + 8 <= riffSize)
+			// Only for the level's own sample - a mod's arrived with its
+			// data chunk already found and already bounded by the gate.
+			if (!hq)
 			{
-				const long len = *(const long*)(riff + at + 4);
+				long at = 12;
 
-				if (!memcmp(riff + at, "data", 4))
+				while (at + 8 <= riffSize)
 				{
-					dataAt = at + 8;
-					dataLen = len;
-					break;
-				}
+					const long len = *(const long*)(riff + at + 4);
 
-				at += 8 + len + (len & 1);
+					if (!memcmp(riff + at, "data", 4))
+					{
+						dataAt = at + 8;
+						dataLen = len;
+						break;
+					}
+
+					at += 8 + len + (len & 1);
+				}
 			}
 
 			if (dataAt <= 0 || dataAt + dataLen > riffSize)

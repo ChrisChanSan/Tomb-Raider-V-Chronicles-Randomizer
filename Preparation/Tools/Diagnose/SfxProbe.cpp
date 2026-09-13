@@ -48,7 +48,19 @@
  *                      ruler, when there is one) through SfxRiffCheck - the
  *                      engine's own gate - and count what it refuses. A bank
  *                      the engine would silently fall back from on some of
- *                      its sounds shows up here and nowhere else.
+ *                      its sounds shows up here and nowhere else. It also
+ *                      counts the samples whose format block is not the first
+ *                      chunk; see below.
+ *
+ * WHERE THE FORMAT BLOCK LIES is printed for every accepted file, because it
+ * is not always +20. The gate WALKS the chunks, so a wav with a JUNK block in
+ * front of fmt - the RF64 headroom Reaper, Pro Tools and libsndfile all write
+ * - passes it, and so does one with a LIST holding the title. The engine used
+ * to read the format tag at a flat offset 20, find two bytes of that first
+ * block's header there, and drop the file without a word while its own log
+ * said the mod had supplied the sound. It takes the offset from this same
+ * check now (#153, round M1, second fix round), so a "layout" line that does
+ * not say +20 marks a file that only plays on a build from that round on.
  *
  * Everything goes to stdout, so a run can be pasted into a report as it
  * stands.
@@ -158,6 +170,27 @@ static void RiffLine(const char* riff, long bytes, const char* lead)
 
 	printf("%s%ld bytes, %ld of them audio, %ld B/s -> %.3f s\n", lead, bytes,
 		dataBytes, byteRate, (double)dataBytes / (double)byteRate);
+}
+
+/* WHERE THE ENGINE WILL READ IT (#153, round M1, second fix round).
+ *
+ * The gate walks the chunks, so it accepts a file whose fmt block is not the
+ * first one - a JUNK block for RF64 headroom, or a LIST with the title, both
+ * of which editors write as a matter of course. LoadSamples() used to read
+ * the format tag at a fixed offset 20 and so quietly threw such a file away
+ * after this tool had called it accepted. It takes these offsets now, out of
+ * the same check, which is why they are worth printing: a line that does not
+ * say +20 is a file the old build would have dropped in silence. */
+static void PartsLine(const char* riff, long bytes, const char* lead)
+{
+	SfxRiffParts parts;
+
+	if (!SfxRiffCheck(riff, bytes, 0, 0, 0, &parts))
+		return;
+
+	printf("%sformat block at +%ld (%ld bytes), audio at +%ld%s\n", lead,
+		parts.fmtAt, parts.fmtBytes, parts.dataAt,
+		parts.fmtAt == 20 ? "" : "  <- fmt is not the first chunk");
 }
 
 int main(int argc, char** argv)
@@ -322,6 +355,7 @@ int main(int argc, char** argv)
 	if (samples)
 	{
 		int refused = 0;
+		int notFirst = 0;
 
 		printf("\n-- every sample through SfxRiffCheck, the engine's own gate ---\n");
 
@@ -330,38 +364,61 @@ int main(int argc, char** argv)
 			long bytes = 0;
 			const char* riff = SfxBankSample(bank, s, &bytes);
 			const char* why = "";
+			SfxRiffParts parts;
 
-			if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why))
+			if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why, &parts))
+			{
+				/* And where the gate found the format block. A sample whose
+				 * fmt is not the first chunk is one the build before the
+				 * second fix round would have accepted here and then thrown
+				 * away in LoadSamples(), which read offset 20 flat. */
+				if (parts.fmtAt != 20)
+				{
+					notFirst++;
+					printf("  sample %-5d passes, but its format block is at "
+						"+%ld, not +20\n", s, parts.fmtAt);
+				}
+
 				continue;
+			}
 
 			refused++;
 			printf("  sample %-5d REFUSED: %s\n", s, riff ? why : "could not be read");
 		}
 
-		printf("  %d of %d samples pass, %d refused\n",
-			SfxBankSamples(bank) - refused, SfxBankSamples(bank), refused);
+		printf("  %d of %d samples pass, %d refused, %d with the format block "
+			"somewhere other than +20\n", SfxBankSamples(bank) - refused,
+			SfxBankSamples(bank), refused, notFirst);
 
 		if (ruler)
 		{
 			int rulerRefused = 0;
+			int rulerNotFirst = 0;
 
 			for (int s = 0; s < SfxBankSamples(ruler); s++)
 			{
 				long bytes = 0;
 				const char* riff = SfxBankSample(ruler, s, &bytes);
 				const char* why = "";
+				SfxRiffParts parts;
 
-				if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why))
+				if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why, &parts))
+				{
+					if (parts.fmtAt != 20)
+						rulerNotFirst++;
+
 					continue;
+				}
 
 				rulerRefused++;
 				printf("  ruler sample %-5d REFUSED: %s\n", s,
 					riff ? why : "could not be read");
 			}
 
-			printf("  ruler: %d of %d pass, %d refused\n",
+			printf("  ruler: %d of %d pass, %d refused, %d with the format "
+				"block somewhere other than +20\n",
 				SfxBankSamples(ruler) - rulerRefused, SfxBankSamples(ruler),
-				rulerRefused);
+				rulerRefused, rulerNotFirst);
 		}
 	}
 
@@ -482,6 +539,7 @@ int main(int argc, char** argv)
 
 		printf("    the wav    ");
 		RiffLine(wav, wavBytes, "");
+		PartsLine(wav, wavBytes, "    layout     ");
 
 		long bankBytes = 0, bankData = 0, bankRate = 0;
 		const char* riff = SfxBankSample(bank, number, &bankBytes);

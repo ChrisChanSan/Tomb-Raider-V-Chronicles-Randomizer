@@ -174,7 +174,11 @@ longer has to be copied into `audio\` by hand: without one there, the engine
 reads the installed remaster's own where it lies.
 
 **Not supported.** Outfits from mods (`OUTFIT_*.TRM`) are left alone for now
-and come with the next round. Effect and sprite pages such as
+and come with the next round. A face on its own does nothing either: a mod
+that ships `<NAME>_HEAD.TRM` without the body's `<NAME>.TRM` is passed over,
+because a face is looked for wherever its body came from so that the two wear
+pages out of one source — a lone face would land on the installation's body
+and read its pages under the wrong numbers. Effect and sprite pages such as
 `4\TEX\EFFECT.dds` do nothing — this engine draws no Remaster sprites — and
 so does anything that only exists for Tomb Raider IV, `4\DATA\MAIN.SFX`
 included.

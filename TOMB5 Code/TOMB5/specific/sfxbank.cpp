@@ -338,7 +338,7 @@ const char* SfxBankSample(SfxBank* bank, int sample, long* bytes)
 }
 
 bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
-	const char** why)
+	const char** why, SfxRiffParts* parts)
 {
 	static const char* trouble = "";
 
@@ -352,6 +352,15 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
 
 	if (byteRate)
 		*byteRate = 0;
+
+	if (parts)
+	{
+		parts->fmtAt = 0;
+		parts->fmtBytes = 0;
+		parts->dataAt = 0;
+		parts->dataBytes = 0;
+		parts->byteRate = 0;
+	}
 
 	if (!riff || bytes < 44)
 	{
@@ -371,7 +380,7 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
 	long at = 12;
 	const unsigned char* raw = (const unsigned char*)riff;
 	bool haveFmt = false;
-	long dataLen = 0;
+	long dataLen = 0, fmtAt = 0, fmtLen = 0, dataAt = 0;
 	int tag = 0, channels = 0, bits = 0;
 	long rate = 0;
 
@@ -406,10 +415,15 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
 			channels = read_short(raw + at + 10);
 			rate = read_long(raw + at + 12);
 			bits = read_short(raw + at + 22);
+			fmtAt = at + 8;
+			fmtLen = len;
 			haveFmt = true;
 		}
 		else if (!std::memcmp(riff + at, "data", 4))
+		{
+			dataAt = at + 8;
 			dataLen = len;
+		}
 
 		at += 8 + len + (len & 1);
 	}
@@ -449,6 +463,20 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
 
 	if (byteRate)
 		*byteRate = rate * channels * (bits / 8);
+
+	/* Both offsets are inside the buffer and both chunks end inside it: the
+	 * guard at the head of the loop refused every length that did not, and
+	 * the loop only ever assigned these from an `at` it had already passed
+	 * that guard with. So a caller may hand riff + fmtAt and riff + dataAt
+	 * straight on without checking them again. */
+	if (parts)
+	{
+		parts->fmtAt = fmtAt;
+		parts->fmtBytes = fmtLen;
+		parts->dataAt = dataAt;
+		parts->dataBytes = dataLen;
+		parts->byteRate = rate * channels * (bits / 8);
+	}
 
 	return true;
 }

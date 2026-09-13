@@ -402,13 +402,14 @@ void HQSfxBuildMap(const short* levelLut, long levelLutEntries,
  * 16 bit, with a data chunk inside the file - exactly what the bank's own
  * samples have to be, because that is what DXCreateSample hands to XAudio2.
  * Anything else keeps the bank's sample and says why. */
-static char* HQSfxWavFor(long g, long* riffBytes)
+static char* HQSfxWavFor(long g, long* riffBytes, SfxRiffParts* parts)
 {
 	char path[512];
 	char line[640];
 	const char* why = "";
 	int mod = -1;
 	long dataBytes = 0, byteRate = 0;
+	SfxRiffParts where;
 
 	if (!*HDModsWav((int)g, &mod, path, sizeof(path)))
 		return 0;
@@ -424,7 +425,7 @@ static char* HQSfxWavFor(long g, long* riffBytes)
 		return 0;
 	}
 
-	if (!SfxRiffCheck(hq_wav, hq_wav_bytes, &dataBytes, &byteRate, &why))
+	if (!SfxRiffCheck(hq_wav, hq_wav_bytes, &dataBytes, &byteRate, &why, &where))
 	{
 		snprintf(line, sizeof(line), "MODLOG wav %04ld refused - %s (%s)",
 			g, why, path);
@@ -435,9 +436,16 @@ static char* HQSfxWavFor(long g, long* riffBytes)
 		return 0;
 	}
 
+	/* The format block's offset is part of the answer (#153, round M1, second
+	 * fix round). A wav exported by an editor often carries a JUNK or a LIST
+	 * block in front of fmt, and the caller used to read the format tag at a
+	 * fixed offset 20 - which in such a file is the middle of that first
+	 * block's header. The file was accepted here, discarded there, and the
+	 * line just above was a lie. Now what was found is what is handed on. */
 	snprintf(line, sizeof(line),
-		"MODLOG wav %04ld <- mod%d %s, %ld bytes, %ld of them audio, %ld B/s",
-		g, mod, HDModsName(mod), hq_wav_bytes, dataBytes, byteRate);
+		"MODLOG wav %04ld <- mod%d %s, %ld bytes, %ld of them audio, %ld B/s, "
+		"format block at +%ld",
+		g, mod, HDModsName(mod), hq_wav_bytes, dataBytes, byteRate, where.fmtAt);
 	HQSfxLog(line);
 
 	hq_overlaid++;
@@ -445,17 +453,31 @@ static char* HQSfxWavFor(long g, long* riffBytes)
 	if (riffBytes)
 		*riffBytes = hq_wav_bytes;
 
+	if (parts)
+		*parts = where;
+
 	return hq_wav;
 }
 
-char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes)
+char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
+	SfxRiffParts* parts)
 {
 	long g, dataLen = 0, bankBytes;
 	const char* why = "";
 	char* buffer;
+	SfxRiffParts where;
 
 	if (riffBytes)
 		*riffBytes = 0;
+
+	if (parts)
+	{
+		parts->fmtAt = 0;
+		parts->fmtBytes = 0;
+		parts->dataAt = 0;
+		parts->dataBytes = 0;
+		parts->byteRate = 0;
+	}
 
 	if (!hq_ready || !hq_map || levelSample < 0 || levelSample >= MAX_SAMPLES)
 		return 0;
@@ -488,7 +510,7 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes)
 	 * there), and it already answers the format question and the data length
 	 * together - the same call the loose .wav goes through, so a mod's bank
 	 * and a mod's .wav are now held to one rule rather than two. */
-	if (!SfxRiffCheck(buffer, bankBytes, &dataLen, 0, &why))
+	if (!SfxRiffCheck(buffer, bankBytes, &dataLen, 0, &why, &where))
 	{
 		Log("HQ SFX: sample %d - %s, keeping the level's own", g, why);
 		return 0;
@@ -568,12 +590,16 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes)
 	 * bridge has just been proved by everything above; see HQSfxWavFor. */
 	{
 		long wavBytes = 0;
-		char* wav = HQSfxWavFor(g, &wavBytes);
+		SfxRiffParts wavWhere;
+		char* wav = HQSfxWavFor(g, &wavBytes, &wavWhere);
 
 		if (wav)
 		{
 			if (riffBytes)
 				*riffBytes = wavBytes;
+
+			if (parts)
+				*parts = wavWhere;
 
 			return wav;
 		}
@@ -581,6 +607,13 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes)
 
 	if (riffBytes)
 		*riffBytes = bankBytes;
+
+	/* Where the gate found this one's chunks, so that the caller hands the
+	 * format block and the audio on from where they ARE. Both counters above
+	 * were raised on the strength of this return, and the caller may not
+	 * undo it - see the contract in hqsfx.h. */
+	if (parts)
+		*parts = where;
 
 	return buffer;
 }

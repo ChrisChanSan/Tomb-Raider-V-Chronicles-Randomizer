@@ -12,6 +12,8 @@
  */
 #pragma once
 
+#include "sfxbank.h"		// SfxRiffParts - where HQSfxPayload found the chunks
+
 struct SAMPLE_INFO;
 
 // Optional high quality sound bank: a mod's own, the player's audio\MAIN.SFX,
@@ -34,10 +36,25 @@ void HQSfxBuildMap(const short* levelLut, long levelLutEntries,
 
 void HQSfxDropMap();
 
-// Returns the bank's RIFF for one of this level's samples, or null when the
-// sample has no counterpart. pcmBytes22k is the level sample's own decoded
-// size and is used as a plausibility check - see hqsfx.cpp.
-char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes);
+/* Returns the bank's RIFF for one of this level's samples - or a mod's loose
+ * .wav for it - or null when the sample has no counterpart. pcmBytes22k is
+ * the level sample's own decoded size and is used as a plausibility check;
+ * see hqsfx.cpp.
+ *
+ * *parts, when asked for, says where the format block and the audio lie in
+ * the returned buffer (#153, round M1, second fix round). ASK FOR IT rather
+ * than assuming the format block sits at offset 20: a wav whose fmt chunk is
+ * not the first one passes the gate here - correctly, that is a legal file
+ * an editor may well write - and the caller that read offset 20 found two
+ * bytes of a JUNK header there, silently fell back to the level's own sample,
+ * and left this file's counters claiming a substitution nobody heard.
+ *
+ * THE CONTRACT THAT COSTS: everything this function returns has passed
+ * SfxRiffCheck, so a caller using *parts CANNOT reject it afterwards. That is
+ * what makes HQSfxSubstituted() and HQSfxOverlaid() true rather than hopeful,
+ * and it is why they are counted here. */
+char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
+	SfxRiffParts* parts = 0);
 
 // How many samples of the current level were answered from the bank.
 long HQSfxSubstituted();

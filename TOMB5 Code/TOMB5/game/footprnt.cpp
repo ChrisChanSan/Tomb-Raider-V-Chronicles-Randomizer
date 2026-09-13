@@ -21,6 +21,7 @@
 #include "lara.h"
 #include "../specific/gamemain.h"
 #include "../specific/3dmath.h"
+#include "../specific/hd/hd_feet.h"	// HDFeetSurfaceQuiet - the floor layer (#153, M3)
 #include "../specific/specificfx.h"
 #include "objects.h"
 #include "../specific/function_table.h"
@@ -48,7 +49,18 @@ void AddFootprint(ITEM_INFO* item)
 	room_num = item->room_number;
 	floor = GetFloor(pos.x, pos.y, pos.z, &room_num);
 
-	if (floor->fx != 6 && floor->fx != 5 && floor->fx != 11)
+	/* THE FLOOR LAYER OF A STEP, and the outfit may take it away (#153, round
+	 * M3, the fix round). These recordings are a BOOT on a surface - ANDREA1's
+	 * id 288 is 274 ms where the foot's own id 0 is 41 - and they play on the
+	 * same frame as id 0, because Lara's animations carry FlipEffect 32 beside
+	 * PlaySound 0 (measured with AnimCmd: 121 of this slot's 148 sfx-0 frames,
+	 * and lara.cpp calls AddFootprint straight on three more). Putting a boot
+	 * on the mud under a barefoot recording is the bug the F4 changer would
+	 * otherwise have shipped. HDFeetSurfaceQuiet() is false with hd_enable off,
+	 * with boots on and in a level that has no barefoot set, so this line is
+	 * the one it always was in every other case. */
+	if (floor->fx != 6 && floor->fx != 5 && floor->fx != 11 &&
+		!HDFeetSurfaceQuiet())
 		SoundEffect(footsounds[floor->fx] + SFX_FOOTSTEPS_MUD, &lara_item->pos, 0);
 
 	if (tomb5.footprints && floor->fx < 3 && (gfLevelId == LVL5_BASE || !OnObject))

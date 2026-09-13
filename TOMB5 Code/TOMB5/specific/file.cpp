@@ -437,6 +437,17 @@ void FreeLevel()
 	 * positions in it belong to a level that no longer exists, and the next
 	 * one will fill the same slots with different things. */
 	InterpInvalidate("level freed");
+
+	/* AND THE FOOTSTEP SETS (#153, round M3, the fix round). hd_feet.cpp holds
+	 * this level's sample_lut and sample_infos - both game_malloc's - and the
+	 * next two lines are the moment they stop meaning anything. Its own
+	 * LevelBuild clears them first, but that call is not guaranteed to happen:
+	 * LoadSamples returns before reaching it in seven places (a level with no
+	 * sample infos, none with no samples, a decode that fails) and is skipped
+	 * entirely when the sound is off. The level below would then have found a
+	 * bare set that answers "available" through the dead pointers of the level
+	 * above - the joby3 bug class exactly (see baddie_slots below). */
+	HDFeetLevelEnd();
 	malloc_ptr = malloc_buffer;
 	malloc_free = malloc_size;
 
@@ -1503,11 +1514,19 @@ bool LoadSamples()
 	 * leaves them alone in a level where there is no bare set to have.
 	 *
 	 * Nothing reads past num_infos on its own: sample_lut is what names an
-	 * info, and only HDFeetBare ever writes an index above it. */
-	sample_infos = (SAMPLE_INFO*)game_malloc((num_infos + HD_FEET_SPARE_INFOS) * sizeof(SAMPLE_INFO));
+	 * info, and only HDFeetBare ever writes an index above it.
+	 *
+	 * INSIDE THE HD GATE like the rest of the round (the fix round of M3).
+	 * Sixteen bytes of a bump allocator are not behaviour, but they shift
+	 * every allocation after them, and this round's own rule is that a player
+	 * with hd_enable off gets the build he had. */
+	const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;
+
+	sample_infos = (SAMPLE_INFO*)game_malloc((num_infos + spare) * sizeof(SAMPLE_INFO));
 	ReadBlock(sample_infos, num_infos * sizeof(SAMPLE_INFO));
-	memset(sample_infos + num_infos, 0,
-		HD_FEET_SPARE_INFOS * sizeof(SAMPLE_INFO));
+
+	if (spare)
+		memset(sample_infos + num_infos, 0, spare * sizeof(SAMPLE_INFO));
 
 	// Optional: higher quality versions of these same sounds, out of a mod's
 	// bank, out of audio\MAIN.SFX or out of the installed remaster itself
@@ -1721,8 +1740,7 @@ bool LoadSamples()
 	 * would otherwise raise that line's count by takes which are not this
 	 * level's samples at all; before, because the bridge it reads them
 	 * through is exactly what HQSfxDropMap throws away. */
-	HDFeetLevelBuild(sample_lut, sample_infos, num_infos,
-		HD_FEET_SPARE_INFOS, num_samples);
+	HDFeetLevelBuild(sample_lut, sample_infos, num_infos, spare, num_samples);
 
 	HQSfxDropMap();
 	return 1;

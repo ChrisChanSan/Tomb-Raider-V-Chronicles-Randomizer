@@ -20,12 +20,30 @@
 // owns the level's two sets of footstep recordings and the two entries of the
 // sound map that choose between them.
 //
-// THE TWO IDS, AND NOTHING ELSE. Footsteps reach the mixer through ANIMATION
-// COMMANDS alone in this engine - game\control.cpp reads `num = cmd[1] &
-// 0x3FFF` out of the animation and calls SoundEffect(num, ...); there is no
-// material branch and no second caller anywhere (grepped: SFX_LARA_FEET and
-// SFX_LARA_LAND appear in game\sound.h and nowhere else). So bending sound id
-// 0 and sound id 4 is the WHOLE switch, and it costs two shorts.
+// A STEP IS TWO LAYERS, NOT ONE (corrected in the fix round of M3 - the round
+// first claimed there was no material branch, and the grep it rested on could
+// not have found one, because the branch does not use these names).
+//
+//   THE FOOT   sound id 0 through an ANIMATION COMMAND - game\control.cpp
+//              reads `num = cmd[1] & 0x3FFF` out of the animation and calls
+//              SoundEffect(num, ...). Measured on ANDREA1's LARA slot: 148
+//              frames carry `PlaySound sfx 0`, and they are 33 to 41 ms long.
+//
+//   THE FLOOR  game\footprnt.cpp AddFootprint plays
+//              `footsounds[floor->fx] + SFX_FOOTSTEPS_MUD` - sound ids 288 to
+//              294 - for every sector whose fx is not 5, 6 or 11. It is
+//              effect_routines[32], and Lara's own animations carry
+//              `FlipEffect no 32` on 121 of those same 148 frames (measured
+//              with AnimCmd; three more call it straight out of game\lara.cpp).
+//              Those recordings are the long half of a step: ANDREA1's id 288
+//              is 274 ms where its id 0 is 41.
+//
+// So the switch is the two ids AND the floor layer. Bending sound id 0 and
+// sound id 4 puts the bank's barefoot recording under her foot; leaving the
+// floor layer alone would put a BOOT on the surface under it on the same
+// frame, which is the sound the layer is - a boot on mud, on metal, on wood.
+// While she is barefoot AddFootprint asks HDFeetSurfaceQuiet() and passes it
+// over. The footPRINT itself is a picture and is not touched.
 //
 // THE TWO SETS.
 //
@@ -99,6 +117,13 @@ const char* HDFeetWhyNot();
  * when there is no bare set. Returns what is in force afterwards. */
 bool HDFeetBare(bool bare);
 bool HDFeetIsBare();
+
+/* Whether the FLOOR layer is to be passed over - see the two layers above.
+ * True only while a bare set is in force, so a player with hd_enable off, with
+ * boots on, or in a level that has no second set hears exactly what he heard
+ * before. Says so in the log the first time in each bare spell, which is the
+ * seam a play test reads; the caller is game\footprnt.cpp and nothing else. */
+bool HDFeetSurfaceQuiet();
 
 // What the level's two sets hold, for the log line and for a tool.
 int HDFeetBareTakes();		// recordings behind sound id 0 when bare

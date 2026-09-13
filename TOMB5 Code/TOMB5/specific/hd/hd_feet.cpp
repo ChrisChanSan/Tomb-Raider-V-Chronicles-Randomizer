@@ -42,6 +42,7 @@ namespace
 	int g_takes;
 	int g_landTakes;
 	bool g_bare;
+	bool g_saidQuiet;		// the floor layer's own line, once per bare spell
 	char g_source[160];
 	char g_whyNot[160];
 
@@ -96,6 +97,7 @@ void HDFeetLevelEnd()
 	g_takes = 0;
 	g_landTakes = 0;
 	g_bare = false;
+	g_saidQuiet = false;
 	g_source[0] = 0;
 	g_whyNot[0] = 0;
 }
@@ -169,18 +171,60 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	 *
 	 * 1. What the ORDINARY chain plays for sound id 0 - a mod's bank, or a
 	 *    mod's loose .wav over it - but only when a mod's bank really is the
-	 *    one being played. A sound mod that replaces the footsteps is a
-	 *    BAREFOOT mod; this is where it belongs, and it is the only place it
-	 *    is still heard now that the boots take the unmodded bank.
+	 *    one being played AND that bank REALLY REPLACES sound id 0. A sound
+	 *    mod that replaces the footsteps is a BAREFOOT mod; this is where it
+	 *    belongs, and it is the only place it is still heard now that the
+	 *    boots take the unmodded bank.
 	 *
 	 * 2. Otherwise the remaster's own barefoot set: sound id HQ_SFX_BARE_FEET
 	 *    of the bank, which NO LEVEL carries - so it is reached by bank sample
-	 *    number and not through the level bridge every other sound uses. */
+	 *    number and not through the level bridge every other sound uses.
+	 *
+	 * THE "REALLY REPLACES" IS THE FIX ROUND'S (M3). `HQSfxFromMod()` says
+	 * only that A mod's bank is being played, and most sound mods are not
+	 * about footsteps at all - a door mod, a weapon mod, a voice mod. Such a
+	 * bank carries the install's own id 0 byte for byte, so taking the bare
+	 * set through it handed the BOOTS' four recordings back under the name
+	 * "bare": the toggle did nothing and the log said it had. The two payloads
+	 * are compared here instead. The unmodded bank is the ruler and reading
+	 * both at once is safe - each bank owns its own read buffer
+	 * (specific\sfxbank.cpp, SfxBankSample). */
 	const bool fromMod = HQSfxFromMod();
-	const char* where = fromMod ? HQSfxSource() : HQSfxPlainSource();
-	int pitch = own.pitch;
+	bool useMod = false;
+	const char* modWhy = "";
 
 	if (fromMod)
+	{
+		long modBytes = 0, plainBytes = 0;
+		SfxRiffParts mp, pp;
+		const char* chain = HQSfxPayload(own.number, 0, &modBytes, &mp);
+		const char* plain = HQSfxPayloadBoots(own.number, 0, &plainBytes, &pp);
+
+		if (!chain)
+			modWhy = "the mod's bank has no sound id 0 at all";
+		else if (!plain)
+		{
+			useMod = true;
+			modWhy = "there is no unmodded bank to compare it against";
+		}
+		else if (modBytes != plainBytes ||
+			memcmp(chain, plain, (size_t)modBytes))
+		{
+			useMod = true;
+			modWhy = "its own recordings stand on sound id 0";
+		}
+		else
+			modWhy = "it carries the install's own sound id 0, byte for byte";
+
+		Log("SFXLOG footsteps: %s %s - %s", HQSfxSource(),
+			useMod ? "supplies the bare set" : "is not a footstep mod",
+			modWhy);
+	}
+
+	const char* where = useMod ? HQSfxSource() : HQSfxPlainSource();
+	int pitch = own.pitch;
+
+	if (useMod)
 	{
 		for (int i = 0; i < ownTakes; i++)
 		{
@@ -269,6 +313,15 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 			: "the boots' own landing (none of the five stands out as one)",
 		g_source, next, next + loaded - 1, (int)g_bareSteps, (int)g_bareLand,
 		(int)own.volume, (int)own.radius, (int)own.pitch, pitch);
+
+	/* AND THE FLOOR LAYER, said once where the set is built (#153, round M3,
+	 * the fix round). It is the other half of a step and it is not in this
+	 * level's sound map twice, so it cannot be bent the way ids 0 and 4 are -
+	 * it is passed over instead, at its one caller. */
+	Log("SFXLOG footsteps: the floor layer (this level's own ids %d..%d, played "
+		"by AddFootprint on the same frame as id %d) is passed over while she "
+		"is barefoot - those recordings are a boot on a surface",
+		SFX_FOOTSTEPS_MUD, SFX_FOOTSTEPS_METAL, kStepsId);
 }
 
 bool HDFeetAvailable()
@@ -294,8 +347,27 @@ bool HDFeetBare(bool bare)
 	if (g_bareLand >= 0)
 		g_lut[kLandId] = bare ? g_bareLand : g_ownLand;
 
+	if (g_bare != bare)
+		g_saidQuiet = false;
+
 	g_bare = bare;
 	return g_bare;
+}
+
+bool HDFeetSurfaceQuiet()
+{
+	if (!g_bare)
+		return false;
+
+	if (!g_saidQuiet)
+	{
+		g_saidQuiet = true;
+		Log("SFXLOG footsteps: the floor layer is passed over from here on - "
+			"she is walking barefoot on %d recording%s from %s", g_takes,
+			g_takes == 1 ? "" : "s", g_source);
+	}
+
+	return true;
 }
 
 bool HDFeetIsBare()

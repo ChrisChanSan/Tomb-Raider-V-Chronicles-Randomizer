@@ -64,6 +64,49 @@
 
 void HDLevelLoad(const char* wadName);
 void HDLevelBuild();
+
+/* THE LEVEL'S MODELS BUILT AGAIN, IN THE RUNNING LEVEL (#153, round M3).
+ *
+ * The F4 outfit changer writes the player's key and then has to put the new
+ * body on Lara without leaving the level. This is that: the objects released
+ * and HDObjectLevelBuild run once more, which is exactly what a level change
+ * does to them - the rooms, their page cache and every classic table are
+ * untouched.
+ *
+ * IT IS SAFE ON THE MAIN THREAD BECAUSE THERE IS NO OTHER. The load thread
+ * that builds a level is joined before HDLevelBuild ever runs (specific\
+ * file.cpp, the note at the end of LoadLevel), and the caller has stopped
+ * the world the way the pause menu stops it, so no frame is being drawn and
+ * nothing else is reading the models. HDObjectRelease is the same device
+ * work the next level would do, on the same thread.
+ *
+ * WHAT IT COSTS AND WHY THERE IS A CAP. The page cache never gives a page
+ * back (hd_pagecache.cpp: other models hold slot indexes), so every outfit
+ * worn in one level stays in it. Measured on ANDREA1 with the user's own
+ * wardrobe: one outfit is at most 20.00 MiB of pages, the dearest single
+ * change adds 13.33 MiB, the mean over all 2970 ordered pairs is 2.94 MiB,
+ * and wearing all 55 entries in one level would come to 113.30 MiB. So the
+ * cap is not a count but the BYTES the cache has grown since this level
+ * began, against HD_REDRESS_ALLOWANCE - which is the 64 MiB of slack the
+ * automatic texture budget already holds back for what a driver keeps that
+ * we do not know about (AutoBudgetBytes). At the measured mean that is
+ * about twenty changes and at the measured worst four.
+ *
+ * `why` goes into the log line. Does nothing at all without a built HD
+ * level, and says so. */
+void HDLevelRedress(const char* why);
+
+/* The allowance, in bytes: the 64 MiB of slack the automatic texture budget
+ * already holds back (hd_level.cpp, AutoBudgetBytes). A level that has added
+ * that much in outfit changes stops changing them until the next one. */
+#define HD_REDRESS_ALLOWANCE	(64.0 * 1048576.0)
+
+// Whether another one is allowed - what the F4 menu shows the player when
+// the answer is no, and what HDLevelRedress itself asks.
+bool HDLevelRedressAllowed();
+
+// How many have been done in this level, for the log.
+int HDLevelRedressCount();
 void HDLevelUnload();
 
 // The Direct3D device is about to be released or reset (a resolution change,

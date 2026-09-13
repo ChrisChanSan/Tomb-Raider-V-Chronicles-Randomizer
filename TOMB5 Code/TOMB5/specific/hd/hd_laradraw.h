@@ -93,6 +93,14 @@ void HDLaraDrawEnd();
 // either draws the whole composite or the whole classic body - never a mix.
 bool HDLaraDrawActive();
 
+/* WHICH OUTFIT THIS LEVEL ENDED UP IN (#153, round M3), as the
+ * HD_LARA_OUTFIT_* number outfit_of_level worked out - the registry key
+ * where the player set one, the level's own facts where he did not, and
+ * HD_LARA_OUTFIT_NONE when Lara is drawn classic here. The footsteps ask
+ * it (hd_feet.h): what she walks on follows the body she is wearing, and
+ * only this call knows which body that is. */
+int HDLaraDrawOutfit();
+
 /* THE DRAWN BRAID'S ROLL (#123, fix round G, G1), six angles for
  * hairs[0][0..5] - one per drawn bone, about the bone's own axis, so no
  * position and no direction changes at all. Why there has to be one is at

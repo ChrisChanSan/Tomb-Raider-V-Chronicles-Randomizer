@@ -12,6 +12,7 @@
  */
 #include "../../tomb5/pch.h"
 #include "hd_level.h"
+#include "hd_outfitmenu.h"		// the footsteps follow the outfit (#153, M3)
 #include "hd_install.h"
 #include "hd_bind.h"
 #include "hd_lara.h"			// HD_LARA_OUTFIT_* - the data[3] agreement
@@ -668,6 +669,13 @@ namespace
 	 * is known BEFORE they are made. */
 	int g_scan_vertices = 0;
 	int g_scan_indices = 0;
+
+	/* WHAT THE IN-LEVEL RE-DRESSES HAVE COST SO FAR (#153, round M3). The
+	 * cache's own byte count when this level was built, and how many times
+	 * the player has changed his outfit since. The cap is on the BYTES; the
+	 * count is for the log. Both are reset by the next level build. */
+	double g_redress_bytes0 = 0;
+	int g_redress_count = 0;
 
 	/* THE AUTOMATIC TEXTURE BUDGET (#123, stage S6).
 	 *
@@ -2642,6 +2650,8 @@ void HDLevelBuild()
 	memset(g_group_windowed, 0, sizeof(g_group_windowed));
 	g_room_count = 0;
 	g_flips_done = 0;
+	g_redress_count = 0;
+	g_redress_bytes0 = 0;
 
 	for (int i = 0; i < HD_MAX_ROOMS; i++)
 		g_room_group[i] = (short)i;
@@ -3052,6 +3062,80 @@ void HDLevelBuild()
 	 * or empty has no page cache at all, so it has no HD objects either -
 	 * which is the same answer the rooms give and one line to explain. */
 	HDObjectLevelBuild(HDInstallRoot(), g_stem);
+
+	/* THE MARK THE RE-DRESS ALLOWANCE IS MEASURED FROM (#153, round M3):
+	 * what this level's own build left in the page cache. Everything above
+	 * it is what the player's own outfit changes have added. */
+	g_redress_bytes0 = HDPageCacheBytes();
+
+	/* AND WHAT SHE WALKS ON (#153, round M3). The body is decided by now -
+	 * hd_laradraw has read the player's key and the level's own facts - and
+	 * the footsteps follow the body. The level's samples were loaded long
+	 * before this, on the load thread; all this does is bend two entries of
+	 * the sound map. */
+	HDOutfitMenuFollowFeet();
+}
+
+bool HDLevelRedressAllowed()
+{
+	if (!HDEnabled() || !g_level_active)
+		return false;
+
+	return HDPageCacheBytes() - g_redress_bytes0 < HD_REDRESS_ALLOWANCE;
+}
+
+int HDLevelRedressCount()
+{
+	return g_redress_count;
+}
+
+void HDLevelRedress(const char* why)
+{
+	if (!HDEnabled() || !g_level_active || !g_stem[0])
+	{
+		Log("HDLOG redress refused (%s): no HD level is built here",
+			why ? why : "?");
+		return;
+	}
+
+	if (!HDLevelRedressAllowed())
+	{
+		Log("HDLOG redress deferred to the next level (%s): %d change%s "
+			"in this level have already added %.1f MiB of pages and the "
+			"allowance is %.0f", why ? why : "?", g_redress_count,
+			g_redress_count == 1 ? "" : "s",
+			(HDPageCacheBytes() - g_redress_bytes0) / 1048576.0,
+			HD_REDRESS_ALLOWANCE / 1048576.0);
+		return;
+	}
+
+	const DWORD began = GetTickCount();
+	const int slots0 = HDPageCacheSlots();
+	const double bytes0 = HDPageCacheBytes();
+
+	/* THE SAME TWO CALLS A LEVEL CHANGE MAKES, in the same order and on the
+	 * same thread. HDObjectRelease gives the buffers and the models' share
+	 * of the cache back; HDObjectLevelBuild reads the .MAP again, asks
+	 * hd_laradraw for the wardrobe (which reads the registry key the menu
+	 * has just written) and builds the lot. The ROOMS are not touched: their
+	 * cache is the one the new pages are appended to, exactly as at a level
+	 * build. */
+	HDObjectRelease();
+	HDObjectLevelBuild(HDInstallRoot(), g_stem);
+
+	g_redress_count++;
+
+	Log("HDLOG redress %d (%s) ms=%d pages %d -> %d (+%d), cache %.1f -> "
+		"%.1f MiB (+%.1f), this level has spent %.1f of %.0f MiB",
+		g_redress_count, why ? why : "?", (int)(GetTickCount() - began),
+		slots0, HDPageCacheSlots(), HDPageCacheSlots() - slots0,
+		bytes0 / 1048576.0, HDPageCacheBytes() / 1048576.0,
+		(HDPageCacheBytes() - bytes0) / 1048576.0,
+		(HDPageCacheBytes() - g_redress_bytes0) / 1048576.0,
+		HD_REDRESS_ALLOWANCE / 1048576.0);
+
+	// The new body may walk on something else than the old one did.
+	HDOutfitMenuFollowFeet();
 }
 
 void HDLevelUnload()

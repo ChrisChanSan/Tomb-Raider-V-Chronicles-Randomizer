@@ -14,6 +14,7 @@
 #include "control.h"
 #include "pickup.h"
 #include "../specific/input.h"
+#include "../specific/hd/hd_outfitmenu.h"	// F4, the outfit changer (#153, M3)
 #include "newinv2.h"
 #include "lara_states.h"
 #include "camera.h"
@@ -422,6 +423,24 @@ long ControlPhase(long nframes, long demo_mode)
 
 				if (fromPause == 8)
 					return 1;
+			}
+
+			/* THE OUTFIT CHANGER (#153, round M3), beside the pause menu
+			 * because it IS one: F4 stops the world exactly as S_PauseMenu
+			 * stops it and holds InventoryActive for the whole of it, so the
+			 * press that closes it cannot also roll Lara (#115).
+			 *
+			 * The conditions are the pause menu's - not the title screen, not
+			 * with Lara dead - and one more: not with the binoculars or the
+			 * laser sight up, where the player is looking through a lens and a
+			 * frozen menu over it would be a picture of nothing. The inventory
+			 * and the pause menu themselves cannot be open here at all: both
+			 * run their own frame loop and this line is not in it. */
+			if (!gfGameMode && lara_item->hit_points > 0 && !BinocularRange &&
+				HDOutfitMenuWanted())
+			{
+				HDOutfitMenu();
+				InterpInvalidate("outfit menu");
 			}
 		}
 

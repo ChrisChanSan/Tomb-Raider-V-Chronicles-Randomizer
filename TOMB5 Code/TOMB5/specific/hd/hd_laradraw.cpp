@@ -749,6 +749,11 @@ bool HDLaraDrawActive()
 	return g_active && tomb5.hd_objects && HDLaraActive();
 }
 
+int HDLaraDrawOutfit()
+{
+	return g_level.outfit;
+}
+
 /* THE DRAWN BRAID'S ROLL (#123, fix round G, G1). The reasoning and what was
  * measured are at HD_LARA_BRAID_ROLL_NEAR in hd_lara.h; this is the
  * arithmetic.

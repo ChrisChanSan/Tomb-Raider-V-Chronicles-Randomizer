@@ -18,6 +18,7 @@
 #include "hd/hd_font.h"			// the HD font (#123, fix round Q)
 #include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up (#148)
 #include "hd/hd_model.h"		// HDModelPreload (#148)
+#include "hd/hd_feet.h"		// the two footstep sets (#153, round M3)
 #include "file.h"
 #include "function_stubs.h"
 #include "profile.h"			// ProfileLevel - PROFLOG counts from the load (#148)
@@ -1437,6 +1438,43 @@ bool LoadCinematic()
 	return 1;
 }
 
+/* IS THIS LEVEL SAMPLE ONE OF THE FOOTSTEPS' (#153, round M3)? The two
+ * sound ids own a handful of samples between them - four steps and one
+ * landing in every one of the sixteen classic levels, measured - and those
+ * are the ones whose payload comes from the unmodded bank. Asked of the
+ * level's own sound map, so a level that numbers them differently is
+ * answered right without anything being written down here. */
+static bool feet_sample(long sample)
+{
+	static const int kFeetIds[2] = { SFX_LARA_FEET, SFX_LARA_LAND };
+
+	/* INSIDE THE HD GATE, like everything else this round added. With
+	 * hd_enable off there is no wardrobe, no outfit to ask and no second
+	 * set, so the two ids take the ordinary chain and a sound mod plays
+	 * exactly as it did in round M1 - byte for byte. */
+	if (!HDEnabled() || !sample_lut || !sample_infos)
+		return false;
+
+	for (int k = 0; k < 2; k++)
+	{
+		const int info = sample_lut[kFeetIds[k]];
+
+		if (info < 0)
+			continue;
+
+		int takes = (sample_infos[info].flags >> 2) & 0xF;
+
+		if (takes < 1)
+			takes = 1;
+
+		if (sample >= sample_infos[info].number &&
+			sample < sample_infos[info].number + takes)
+			return true;
+	}
+
+	return false;
+}
+
 bool LoadSamples()
 {
 	long num_infos, num_samples, uncomp_size, comp_size;
@@ -1454,8 +1492,22 @@ bool LoadSamples()
 		return 0;
 	}
 
-	sample_infos = (SAMPLE_INFO*)game_malloc(num_infos * sizeof(SAMPLE_INFO));
+	/* TWO SPARE ENTRIES AT THE END (#153, round M3, the footsteps).
+	 *
+	 * The barefoot recordings are a SECOND set for sound ids 0 and 4, and a
+	 * set needs a SAMPLE_INFO of its own - the number of its first sample
+	 * and how many takes follow it. The level's own table is exactly
+	 * num_infos long, so the two are asked for here, where game_malloc is
+	 * still the level's bump allocator and sixteen bytes cost nothing. The
+	 * level file still fills only its own; hd_feet.cpp fills these two, and
+	 * leaves them alone in a level where there is no bare set to have.
+	 *
+	 * Nothing reads past num_infos on its own: sample_lut is what names an
+	 * info, and only HDFeetBare ever writes an index above it. */
+	sample_infos = (SAMPLE_INFO*)game_malloc((num_infos + HD_FEET_SPARE_INFOS) * sizeof(SAMPLE_INFO));
 	ReadBlock(sample_infos, num_infos * sizeof(SAMPLE_INFO));
+	memset(sample_infos + num_infos, 0,
+		HD_FEET_SPARE_INFOS * sizeof(SAMPLE_INFO));
 
 	// Optional: higher quality versions of these same sounds, out of a mod's
 	// bank, out of audio\MAIN.SFX or out of the installed remaster itself
@@ -1542,7 +1594,15 @@ bool LoadSamples()
 		long riffSize = comp_size;
 		long hqSize = 0;
 		SfxRiffParts hqWhere;
-		char* hq = HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
+		/* THE BOOTS ARE NOT A MOD'S TO TAKE (#153, round M3). The samples
+		 * behind sound ids 0 and 4 are loaded through the first UNMODDED
+		 * bank of the chain, so that a sound mod which replaces the
+		 * footsteps supplies the BAREFOOT set (hd_feet.cpp) instead of
+		 * making every outfit barefoot at once. Every other sample takes
+		 * the ordinary chain, mod and loose .wav included. */
+		char* hq = feet_sample(i)
+			? HQSfxPayloadBoots(i, uncomp_size, &hqSize, &hqWhere)
+			: HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
 
 		if (hq)
 		{
@@ -1642,6 +1702,12 @@ bool LoadSamples()
 	}
 
 	FreeSampleDecompress();
+
+	/* THE BAREFOOT SET (#153, round M3), into the slots after the level's
+	 * own and into the two spare infos asked for above. It writes its own
+	 * log line, including the reason when a level cannot have one. */
+	HDFeetLevelBuild(sample_lut, sample_infos, num_infos,
+		HD_FEET_SPARE_INFOS, num_samples);
 
 	// Which bank it really was (#153, round M1): a mod's, audio\MAIN.SFX or
 	// the installed remaster's. And how many of those samples a mod's own

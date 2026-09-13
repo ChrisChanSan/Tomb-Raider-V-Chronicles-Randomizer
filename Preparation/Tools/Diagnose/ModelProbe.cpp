@@ -7797,7 +7797,7 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-inventory"))
 			inventory = true;
 		/* #153 round M3: the ring's own three angles, so that a picture out
-		  * of this tool is the picture the player sees. */
+		 * of this tool is the picture the player sees. */
 		else if (!_stricmp(argv[i], "-invrot") && i + 3 < argc)
 		{
 			invRot[0] = (short)strtol(argv[++i], 0, 0);
@@ -8613,8 +8613,8 @@ int main(int argc, char** argv)
 		mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
 
 	/* THE CLOUD'S OWN AXES beside the box (#153, round M3). A box says how
-	  * much room the model needs; these say which way its SHAPE runs, which
-	  * is what the ring's fit has to know about a crossed pair of guns. */
+	 * much room the model needs; these say which way its SHAPE runs, which
+	 * is what the ring's fit has to know about a crossed pair of guns. */
 	{
 		float axes[9], extent[3];
 
@@ -9118,11 +9118,11 @@ int main(int argc, char** argv)
 	HDModelOffCentre((float)ringKx, (float)ringKy);
 
 	/* THE RING'S OWN PRESENTATION (#153, round M3, -invrot). The ring puts
-	  * the item's three angles on the matrix stack with phd_RotYXZ - Y, then
-	  * X, then Z, each POST-multiplied into the column-vector stack - so in
-	  * this tool's row-vector matrices the model meets Z first, then X, then
-	  * Y. Without this a picture is the item's OWN frame and says nothing
-	  * about what the player sees. */
+	 * the item's three angles on the matrix stack with phd_RotYXZ - Y, then
+	 * X, then Z, each POST-multiplied into the column-vector stack - so in
+	 * this tool's row-vector matrices the model meets Z first, then X, then
+	 * Y. Without this a picture is the item's OWN frame and says nothing
+	 * about what the player sees. */
 	float ringTurn[16];
 
 	MatIdentity(ringTurn);
@@ -9180,8 +9180,8 @@ int main(int argc, char** argv)
 				outAxis >= 0 && outAxis < 3 ? kAxis[outAxis] : "?");
 
 			/* WHERE THE FIT REALLY PUT IT (#153, round M3): the source's own
-			  * axes and box corners through the fit, so a picture that looks
-			  * wrong can be read as numbers. */
+			 * axes and box corners through the fit, so a picture that looks
+			 * wrong can be read as numbers. */
 			{
 				float sa[9], se[3];
 

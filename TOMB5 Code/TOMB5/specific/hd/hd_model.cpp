@@ -974,16 +974,16 @@ namespace
 				sort_axes(span, order);
 
 				/* AN EIGENVECTOR HAS NO SIGN, AND A GUN HAS TWO ENDS. Without a
-				  * rule for it the same file could come out muzzle-first or
-				  * grip-first from one build to the next, and a fit that pairs two
-				  * models' axes would pair them back to front half the time.
+				 * rule for it the same file could come out muzzle-first or
+				 * grip-first from one build to the next, and a fit that pairs two
+				 * models' axes would pair them back to front half the time.
 				  *
-				  * The rule is the model's own geometry and nothing else: the axis
-				  * points to the side on which the cloud reaches FURTHER from its
-				  * own centre of mass. A gun's barrel is the long end, a magazine
-				  * box's mouth the short one - and a shape that is symmetric about
-				  * that axis has no long end, gets an arbitrary sign, and looks the
-				  * same either way, which is why it does not matter there. */
+				 * The rule is the model's own geometry and nothing else: the axis
+				 * points to the side on which the cloud reaches FURTHER from its
+				 * own centre of mass. A gun's barrel is the long end, a magazine
+				 * box's mouth the short one - and a shape that is symmetric about
+				 * that axis has no long end, gets an arbitrary sign, and looks the
+				 * same either way, which is why it does not matter there. */
 				for (int k = 0; k < 3; k++)
 				{
 					const int a = order[k];
@@ -999,10 +999,10 @@ namespace
 				}
 
 				/* AND THE THIRD IS THE OTHER TWO. Taken as a cross product rather
-				  * than kept from the solver, so the three are right handed BY
-				  * CONSTRUCTION: a frame built from them can rotate a model and can
-				  * never mirror it. The rule above has already settled the two that
-				  * carry the shape. */
+				 * than kept from the solver, so the three are right handed BY
+				 * CONSTRUCTION: a frame built from them can rotate a model and can
+				 * never mirror it. The rule above has already settled the two that
+				 * carry the shape. */
 				model.axis[2][0] = model.axis[0][1] * model.axis[1][2] -
 					model.axis[0][2] * model.axis[1][1];
 				model.axis[2][1] = model.axis[0][2] * model.axis[1][0] -
@@ -3198,8 +3198,8 @@ bool HDModelRingFit(int model, int target, float* out)
 		return false;
 
 	/* THE TURN. Row vectors, as everywhere in this engine's matrices: the
-	  * sum of the three outer products u(k) x v(k) sends every u onto its own
-	  * v, because the u's are orthonormal. */
+	 * sum of the three outer products u(k) x v(k) sends every u onto its own
+	 * v, because the u's are orthonormal. */
 	float turn[3][3];
 
 	for (int r = 0; r < 3; r++)
@@ -3214,9 +3214,9 @@ bool HDModelRingFit(int model, int target, float* out)
 	const float scale = dstExt[0] / srcExt[0];
 
 	/* CENTRED ON THE TWO BOXES and not on the two clouds' centres of mass:
-	  * the ring keeps a place for the item it draws and that place is the
-	  * vanilla model's box, so the middle of the box is where the middle of
-	  * the replacement belongs. */
+	 * the ring keeps a place for the item it draws and that place is the
+	 * vanilla model's box, so the middle of the box is where the middle of
+	 * the replacement belongs. */
 	float srcMid[3], dstMid[3];
 
 	for (int i = 0; i < 3; i++)
@@ -3276,8 +3276,8 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 	for (int k = 0; k < 3; k++)
 	{
 		/* A target axis of no extent is a flat model - anything at all stands
-		  * out of it - and a ratio there would be an infinity. It is skipped
-		  * and the axes that can be measured decide. */
+		 * out of it - and a ratio there would be an infinity. It is skipped
+		 * and the axes that can be measured decide. */
 		if (dstExt[k] <= 0.0f)
 			continue;
 

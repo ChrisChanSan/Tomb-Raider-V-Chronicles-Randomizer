@@ -360,9 +360,9 @@ namespace
 		 * than the sentence around it. */
 		static char said[128];
 		/* THE TARGET'S OWN axes since round M3, longest first, and not x/y/z:
-		  * the fit pairs the two models' SHAPES now, so the axis that is
-		  * overflowed is one of the shape's, and naming it x would be naming a
-		  * direction the rule never used. */
+		 * the fit pairs the two models' SHAPES now, so the axis that is
+		 * overflowed is one of the shape's, and naming it x would be naming a
+		 * direction the rule never used. */
 		static const char* kAxis[3] =
 		{
 			"its longest axis", "its middle axis", "its flattest axis"
@@ -1909,9 +1909,9 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			HDModelBounds(slot, dstMin, dstMax);
 
 			/* THE SHAPE'S OWN EXTENTS BESIDE THE BOX (#153, round M3). The fit
-			  * reads these and not the box, so a picture nobody likes has to be
-			  * traceable to the numbers the rule really used - and the box is
-			  * kept beside them because it is the room the ring keeps. */
+			 * reads these and not the box, so a picture nobody likes has to be
+			 * traceable to the numbers the rule really used - and the box is
+			 * kept beside them because it is the room the ring keeps. */
 			float srcExt[3] = { 0, 0, 0 }, dstExt[3] = { 0, 0, 0 };
 
 			HDModelPrincipalAxes(ring.model, 0, srcExt);

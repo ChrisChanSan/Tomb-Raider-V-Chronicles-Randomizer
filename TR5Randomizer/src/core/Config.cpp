@@ -86,19 +86,6 @@ void Config::load()
         }
         else if (key == "outfits")         optOutfits = (val == "1");
         else if (key == "outfitsTr3")      optOutfitsTr3 = (val == "1");
-        else if (key == "outfitsOn")
-        {
-            // The scanned entries (#153, round M2). Same shape and the same
-            // rule about unknown ids as outfitsOff below.
-            outfitsEnabled.clear();
-            std::string cur;
-            for (size_t i = 0; i <= val.size(); ++i)
-            {
-                if (i == val.size() || val[i] == ',')
-                { if (!cur.empty()) outfitsEnabled.insert(cur); cur.clear(); }
-                else cur.push_back(val[i]);
-            }
-        }
         else if (key == "outfitsOff")
         {
             // Comma separated ids. An unknown id is KEPT rather than dropped:
@@ -190,14 +177,6 @@ bool Config::save() const
              it != outfitsDisabled.end(); ++it)
         { if (!joined.empty()) joined += ","; joined += *it; }
         std::fprintf(f, "outfitsOff=%s\n", joined.c_str());
-    }
-    if (!outfitsEnabled.empty())
-    {
-        std::string joined;
-        for (std::set<std::string>::const_iterator it = outfitsEnabled.begin();
-             it != outfitsEnabled.end(); ++it)
-        { if (!joined.empty()) joined += ","; joined += *it; }
-        std::fprintf(f, "outfitsOn=%s\n", joined.c_str());
     }
     std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);

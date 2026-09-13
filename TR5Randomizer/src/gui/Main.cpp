@@ -43,12 +43,6 @@
 #include "core/SecretReward.h"
 #include "core/Tr5Level.h"
 #include "core/Tr3Source.h"
-// The engine's own two scans (#153, round M2) - see Randomize.cpp.
-#include "../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
-#include "../../TOMB5 Code/TOMB5/specific/hd/hd_wardrobe.h"
-
-char tomb5_hd_install[260];
-char tomb5_hd_install_tr3[260];
 
 #include "Language.h"
 
@@ -455,12 +449,6 @@ namespace
         // the DESELECTION, as with the enemy types - an outfit added later is
         // then automatically on.
         std::set<std::string> optOutfitsOff;
-        /* And the SELECTION for the entries the wardrobe scan found (#153,
-           round M2). Empty by default: which of them exist depends on what
-           is installed and which mods are in the folder, so "on unless said
-           otherwise" would make a run change silently when a mod is added -
-           and an old seed has to go on producing the same game. */
-        std::set<std::string> optOutfitsOn;
         bool wardrobeOpen = false;
         // The full weapon set in every level is STANDARD (user decision, no
         // checkbox): opt.allWeapons is hard-set to true on every run. Hence
@@ -548,20 +536,6 @@ namespace
             // does not depend on the order things were clicked.
             for (std::set<std::string>::const_iterator it = optOutfitsOff.begin();
                  it != optOutfitsOff.end(); ++it)
-                for (size_t k = 0; k < it->size(); ++k)
-                {
-                    h ^= static_cast<unsigned char>((*it)[k]);
-                    h *= 0x100000001B3ull;
-                }
-
-            /* The scan's own selection belongs in it just as much (#153,
-               round M2), and it is the second set rather than more entries in
-               the first because it is held the other way round - see
-               optOutfitsOn. An EMPTY set changes nothing here, which is what
-               makes a seed from before this round come out at the same number
-               as long as nothing new is switched on. */
-            for (std::set<std::string>::const_iterator it = optOutfitsOn.begin();
-                 it != optOutfitsOn.end(); ++it)
                 for (size_t k = 0; k < it->size(); ++k)
                 {
                     h ^= static_cast<unsigned char>((*it)[k]);
@@ -671,30 +645,6 @@ static std::wstring cacheDir(const App& a)
 }
 
 
-
-/* THE MODS FOLDER FOLLOWS THE GAME FOLDER (#153, round M2).
- *
- * The engine looks for Mods beside its own executable; here the user names
- * the game folder, so Mods is beside that. Both scans are once-per-session by
- * design - the engine has no reason to run them twice - and this program lets
- * the user change the folder while it is open, so the two are forgotten when
- * it does. Nothing happens while the folder stays the same, which is every
- * frame but the first.
- *
- * The remasters themselves are hd_install's business and are found the way
- * the engine finds them: the registry value hd_install and Steam. */
-static void wardrobeFollowsGameFolder(App& a)
-{
-    static std::wstring pointedAt;
-    const std::wstring want = a.gameDir();
-
-    if (want == pointedAt) return;
-
-    pointedAt = want;
-    HDModsFolder(PathUtil::narrow(PathUtil::join(want, L"Mods")).c_str());
-    HDModsForget();
-    HDWardrobeForget();
-}
 
     void setStatus(App& a, const std::string& s, bool error = false)
     {
@@ -975,11 +925,6 @@ static void wardrobeFollowsGameFolder(App& a)
         opt.randomOutfits = a.optOutfits;
         opt.tr3Outfits    = a.optOutfitsTr3;
         opt.outfitsOff    = a.optOutfitsOff;
-        opt.outfitsOn     = a.optOutfitsOn;
-        // The scan the roll draws from has to be the one for THIS game
-        // folder (#153, round M2) - the user may have changed it since
-        // the window was last open, or never have opened the window.
-        wardrobeFollowsGameFolder(a);
         opt.allWeapons = true;              // standard, see the App comment
         // Item abundance: the GUI's three tiers as a count. Free placement
         // spots and the item limit cap them anyway.
@@ -1728,12 +1673,9 @@ static void drawPathsWindow(App& a, HWND hwnd)
 // the TR3 switch is off - but its checkbox STATE is kept either way, so a
 // choice made now survives switching the source on later.
 //----------------------------------------------------------------------------
-
 static void drawWardrobeWindow(App& a)
 {
     if (!a.wardrobeOpen) return;
-
-    wardrobeFollowsGameFolder(a);
 
     ImGui::SetNextWindowSize(ImVec2(400, 340), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin((std::string(T("Wardrobe")) + "###wardrobe").c_str(), &a.wardrobeOpen))
@@ -1748,73 +1690,30 @@ static void drawWardrobeWindow(App& a)
         "is drawn simply keeps it - nothing is copied onto itself."));
     ImGui::Spacing();
 
-    /* "All on" and "All off" act on the SEVEN, and on nothing the scan
-       found (#153, round M2). A hundred outfits behind one button is not a
-       choice anybody makes on purpose, and the whole point of the scanned
-       entries being off by default is that they are picked one at a time. */
     if (ImGui::Button(T("All on")))  a.optOutfitsOff.clear();
     ImGui::SameLine();
     if (ImGui::Button(T("All off")))
-        for (size_t k = 0; k < kinds.size(); ++k)
-            if (!outfitIsScanned(kinds[k])) a.optOutfitsOff.insert(kinds[k].id);
+        for (size_t k = 0; k < kinds.size(); ++k) a.optOutfitsOff.insert(kinds[k].id);
     ImGui::SameLine();
-    {
-        int on = 0;
-        for (size_t k = 0; k < kinds.size(); ++k)
-        {
-            if (outfitIsScanned(kinds[k]))
-            {
-                if (a.optOutfitsOn.count(kinds[k].id)) ++on;
-                continue;
-            }
-            if (!a.optOutfitsOff.count(kinds[k].id)) ++on;
-        }
-        ImGui::TextDisabled(T("%d of %d on"), on, static_cast<int>(kinds.size()));
-    }
+    ImGui::TextDisabled(T("%d of %d on"),
+                        static_cast<int>(kinds.size() - a.optOutfitsOff.size()),
+                        static_cast<int>(kinds.size()));
 
     ImGui::Separator();
     ImGui::BeginChild("##outfitlist", ImVec2(0, -70), true);
-    bool divided = false;
     for (size_t k = 0; k < kinds.size(); ++k)
     {
-        /* THE TWO HALVES OF THE LIST (#153, round M2). Above the divider the
-           seven the randomizer copies into the level file, held as a
-           DESELECTION as they always were; below it everything the engine's
-           own wardrobe scan found, held as a SELECTION and therefore off
-           until somebody clicks it. The divider is drawn once, at the first
-           scanned entry, so a machine with no remaster installed sees the
-           window it saw before this round. */
-        const bool scanned = outfitIsScanned(kinds[k]);
-
-        if (scanned && !divided)
-        {
-            divided = true;
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::TextWrapped(T("From the Remasters and from the Mods folder. "
-                "These are drawn by the engine itself - nothing is copied into "
-                "the level file - and they need the HD art switched on."));
-            ImGui::Spacing();
-        }
-
-        const bool guest   = !scanned && kinds[k].source[0] != 0;
-        const bool present = scanned || !guest ||
-                             (a.optOutfitsTr3 && !tr3Folder(a).empty());
+        const bool guest   = kinds[k].source[0] != 0;
+        const bool present = !guest || (a.optOutfitsTr3 && !tr3Folder(a).empty());
 
         ImGui::BeginDisabled(!present);
-        bool on = scanned ? a.optOutfitsOn.count(kinds[k].id) != 0
-                          : (!a.optOutfitsOff.count(kinds[k].id) && present);
-        char label[256];
+        bool on = !a.optOutfitsOff.count(kinds[k].id) && present;
+        char label[96];
         std::snprintf(label, sizeof(label), "%s##outfit%s", T(kinds[k].name), kinds[k].id);
         if (ImGui::Checkbox(label, &on))
         {
-            if (scanned)
-            {
-                if (on) a.optOutfitsOn.insert(kinds[k].id);
-                else    a.optOutfitsOn.erase(kinds[k].id);
-            }
-            else if (on) a.optOutfitsOff.erase(kinds[k].id);
-            else         a.optOutfitsOff.insert(kinds[k].id);
+            if (on) a.optOutfitsOff.erase(kinds[k].id);
+            else    a.optOutfitsOff.insert(kinds[k].id);
         }
         ImGui::EndDisabled();
 
@@ -1823,27 +1722,13 @@ static void drawWardrobeWindow(App& a)
             ImGui::SameLine();
             ImGui::TextDisabled(T("- needs \"TR3 outfits\" and Tomb Raider 3"));
         }
-
-        // The key, so that a run can be repeated from the command line and a
-        // report line can be read back to an entry.
-        if (scanned)
-        {
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", kinds[k].id);
-        }
     }
     ImGui::EndChild();
 
     // Everything off does not mean "no outfits": every level then simply
     // keeps its own. A valid state, but not one anyone wants by accident.
-    {
-        size_t fixed = 0;
-        for (size_t k = 0; k < kinds.size(); ++k)
-            if (!outfitIsScanned(kinds[k])) ++fixed;
-
-        if (a.optOutfitsOff.size() >= fixed && a.optOutfitsOn.empty())
-            ImGui::TextWrapped(T("Everything deselected: every level keeps its own outfit."));
-    }
+    if (a.optOutfitsOff.size() >= kinds.size())
+        ImGui::TextWrapped(T("Everything deselected: every level keeps its own outfit."));
 
     ImGui::End();
 }
@@ -2912,11 +2797,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optOutfits      = app.cfg.optOutfits;
     app.optOutfitsTr3   = app.cfg.optOutfitsTr3;
     app.optOutfitsOff   = app.cfg.outfitsDisabled;
-    app.optOutfitsOn    = app.cfg.outfitsEnabled;
-
-    // Where the Mods folder is, before anything can scan (#153, round M2) -
-    // see wardrobeFollowsGameFolder.
-    wardrobeFollowsGameFolder(app);
     app.optItemAmount   = app.cfg.itemAmount;
     app.optSecrets      = app.cfg.secrets;
     app.optSecretRewards = app.cfg.secretRewards;
@@ -2977,7 +2857,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optOutfits      = app.optOutfits;
         app.cfg.optOutfitsTr3   = app.optOutfitsTr3;
         app.cfg.outfitsDisabled = app.optOutfitsOff;
-        app.cfg.outfitsEnabled  = app.optOutfitsOn;
         app.cfg.itemAmount      = app.optItemAmount;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.secretRewards   = app.optSecretRewards;
@@ -3139,7 +3018,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.optOutfitsTr3   != app.optOutfitsTr3 ||
                  app.cfg.outfitsDisabled != app.optOutfitsOff ||
-                 app.cfg.outfitsEnabled  != app.optOutfitsOn ||
                  app.cfg.itemAmount      != app.optItemAmount ||
                  app.cfg.secrets         != app.optSecrets ||
                  app.cfg.secretRewards   != app.optSecretRewards ||

@@ -43,18 +43,6 @@
 #include "core/LevelFix.h"
 #include "core/Tr5Level.h"
 #include "core/Tr3Source.h"
-// The engine's own two scans (#153, round M2): where the remasters are and
-// what is in the Mods folder. The very same files the game compiles.
-#include "../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
-#include "../../TOMB5 Code/TOMB5/specific/hd/hd_wardrobe.h"
-
-/* hd_install.cpp reads the two registry overrides out of these, which the
-   engine defines in tomb5\tomb5.cpp. A program that links hd_install.cpp has
-   to bring its own pair - the diagnostic tools do the same. Left empty, so
-   the search runs exactly as it does for a player who never set the registry
-   value. */
-char tomb5_hd_install[260];
-char tomb5_hd_install_tr3[260];
 
 #include <cstdio>
 #include <set>
@@ -90,18 +78,7 @@ int main(int argc, char** argv)
         std::printf("  only:     leave items untouched - for enemy/outfit tests\n");
         std::printf("  outfit:   random outfit (Lara_Andrea/Joby/Rich)\n"
                 "  outfit-tr3: as outfit, plus the guest outfits from Tomb Raider 3\n"
-                "  outfits-off=a,b: the wardrobe - ids the roll may NOT draw\n"
-                "  outfits-on=k,k:  the wardrobe entries the ENGINE draws - the\n"
-                "            outfits of the installed Remasters and of the Mods\n"
-                "            folder, named by their key (46/OUTFIT_TR2_HOME,\n"
-                "            13/OUTFIT_TRX_WETSUIT_1, mod/<folder>/OUTFIT_X).\n"
-                "            These are OFF unless named here, so a seed rolled\n"
-                "            without them comes out exactly as it always did.\n"
-                "            A key may hold spaces, so quote the whole switch.\n"
-                "            ModelProbe -wardrobe lists every key this machine\n"
-                "            has. Nothing of such an outfit goes into the .trc:\n"
-                "            the choice travels as one line in the .hdm.\n"
-                "  outfits-list: print the wardrobe scan and stop.\n");
+                "  outfits-off=a,b: the wardrobe - ids the roll may NOT draw\n");
         std::printf("  weapons:  import the full weapon set (donors Andrea3/joby2/rich1)\n");
         std::printf("  mix:      swap the existing enemies among each other\n");
         std::printf("  cross:    extend the enemy pool by up to three foreign types (with mix/number)\n");
@@ -132,10 +109,6 @@ int main(int argc, char** argv)
     bool enemiesOnly = false, outfits = false, weapons = false, mix = false, cross = false, allsanity = false;
     bool outfitsTr3 = false;   // guest outfits from Tomb Raider 3 in the pool
     std::set<std::string> outfitsOff;   // the wardrobe: ids the roll may NOT draw
-    // And the scanned entries, held the other way round (#153, round M2) -
-    // see RandoOptions::outfitsOn for why.
-    std::set<std::string> outfitsOn;
-    bool outfitsList = false;
     bool notes = false;
     std::set<int> enemiesDisabled;         // deselection, see argument enemiesoff=
     // Foreign installations for the guests from TR3 (#92). Without them the
@@ -175,17 +148,6 @@ int main(int argc, char** argv)
                 else cur.push_back(s[i]);
             }
         }
-        else if (s.rfind("outfits-on=", 0) == 0)
-        {
-            std::string cur;
-            for (size_t i = 11; i <= s.size(); ++i)
-            {
-                if (i == s.size() || s[i] == ',')
-                { if (!cur.empty()) outfitsOn.insert(cur); cur.clear(); }
-                else cur.push_back(s[i]);
-            }
-        }
-        else if (s == "outfits-list") outfitsList = true;
         else if (s == "weapons") weapons = true;
         else if (s == "weather") weather = true;
         else if (s == "mix")    mix = true;
@@ -251,46 +213,6 @@ int main(int argc, char** argv)
         else                    enemies = std::atoi(argv[i]);
     }
     const uint64_t seed = SeedText::parse(seedText);
-
-    /* --- THE WARDROBE (#153, round M2) ------------------------------------
-     *
-     * Where the Mods folder is, before anything can scan: the game folder is
-     * the parent of the folder the target level lies in, which is the same
-     * step the rewards file takes a few hundred lines further down, and Mods
-     * sits beside data there. hd_install finds the remasters by itself, the
-     * way the engine does.
-     *
-     * Set even when no outfit is rolled. It costs a directory walk and it is
-     * what makes `outfits-list` say the same thing whatever else is on the
-     * line. */
-    {
-        std::wstring target = toW(argv[4]);
-        const size_t cut = target.find_last_of(L"\\/");
-        const std::wstring dataDir = (cut == std::wstring::npos) ? L"." : target.substr(0, cut);
-        const size_t cut2 = dataDir.find_last_of(L"\\/");
-        const std::wstring gameDir = (cut2 == std::wstring::npos) ? L"." : dataDir.substr(0, cut2);
-
-        HDModsFolder(PathUtil::narrow(PathUtil::join(gameDir, L"Mods")).c_str());
-    }
-
-    if (outfitsList)
-    {
-        const std::vector<OutfitKind> all = Rando::outfitKinds();
-
-        std::printf("The wardrobe, %d entries. The ones with a source are the "
-                    "engine's own;\ngive their key to outfits-on= to let the "
-                    "roll draw them.\n\n", (int)all.size());
-
-        for (size_t k = 0; k < all.size(); ++k)
-            std::printf("  %-6s %-26s %s\n",
-                        all[k].source[0] ? all[k].source : "tr5",
-                        all[k].name, all[k].id);
-
-        for (int i = 0; i < HDWardrobeRefusedCount(); ++i)
-            std::printf("  passed over: %s\n", HDWardrobeRefused(i));
-
-        return 0;
-    }
 
     // --- Treat SCRIPT.DAT along (switch script=) --------------------------
     //
@@ -534,7 +456,6 @@ int main(int argc, char** argv)
     opt.randomOutfits = outfits;
     opt.tr3Outfits    = outfitsTr3;
     opt.outfitsOff    = outfitsOff;
-    opt.outfitsOn     = outfitsOn;
     opt.allWeapons = weapons;
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;

@@ -18,9 +18,6 @@
 #include "Randomizer.h"
 #include "LevelChains.h"
 #include "Tr3Source.h"
-// The engine's own wardrobe scan (#153, round M2) - the same file the game
-// compiles, so the window and the game agree by construction.
-#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_wardrobe.h"
 
 #include <algorithm>
 #include <cctype>
@@ -3420,23 +3417,6 @@ bool Rando::run(const RandoInput& in,
 
         static const char* kDonors[3] = { "Andrea1", "joby2", "rich2" };
 
-        /* THE `wear` LINE IS FOR THE SCANNED ENTRIES AND FOR NOTHING ELSE
-           (#153, round M2).
-
-           The first design wrote it for all eleven kinds, so that a level
-           file would say the same thing in two ways for the seven that also
-           carry a header byte. It is not written for them, and the reason is
-           a measurement rather than a taste: the user's rule for this round
-           is that a seed rolled with nothing new selected produces byte
-           identical .trc AND .hdm files, and a `wear` line for the old seven
-           changes every sidecar of every run. The seven are dressed out of
-           the level's own facts and have been since #123; a second way of
-           saying the same thing is not worth a file that differs.
-
-           So a `wear` line in a sidecar means exactly one thing: the roll
-           chose an outfit this engine can only find by name, and nothing in
-           the level file says which. */
-
         // Candidates, out of the SAME list the wardrobe window shows. A
         // vanilla outfit keeps its index, because the donor level and the
         // LaraType byte hang on it; a guest carries only its id, and
@@ -3445,42 +3425,24 @@ bool Rando::run(const RandoInput& in,
         // Deselected outfits fall out here, and guests fall out entirely
         // while the TR3 switch is off - the wardrobe must not be able to
         // reach into an installation the user has not enabled.
-        struct Cand { int vanilla; bool scanned; std::string id; };
+        struct Cand { int vanilla; std::string id; };
         std::vector<Cand> cand;
         {
             const std::vector<OutfitKind> all = Rando::outfitKinds();
             int vanillaIdx = 0;
             for (size_t k = 0; k < all.size(); ++k)
             {
-                /* THREE KINDS OF ENTRY NOW (#153, round M2), and the test for
-                   each is the one thing that decides what happens to it:
-
-                     vanilla   source ""    - a donor level out of kDonors
-                     guest     source "tr3" - a TR3 import, needs the switch
-                     scanned   46 / 13 / mod - the engine dresses her, and
-                               only the .hdm says so
-
-                   The counter still runs over EVERY vanilla entry, deselected
-                   ones included - it indexes kDonors, and a hole would shift
-                   the rest onto the wrong donor level. */
-                const bool scanned = outfitIsScanned(all[k]);
-                const bool guest = !scanned && all[k].source[0] != 0;
-                const int mine = (guest || scanned) ? -1 : vanillaIdx++;
+                // The counter runs over EVERY vanilla entry, deselected ones
+                // included - it indexes kDonors, and a hole would shift the
+                // rest onto the wrong donor level.
+                const bool guest = all[k].source[0] != 0;
+                const int mine = guest ? -1 : vanillaIdx++;
 
                 if (guest && !opt.tr3Outfits) continue;
-
-                /* A SCANNED ENTRY IS OFF UNLESS THE USER SWITCHED IT ON, and
-                   the others are on unless he switched them off. That is what
-                   keeps an old seed producing the old game: the candidate
-                   list it rolled from is unchanged as long as nothing new is
-                   selected, and rng.below(cand.size()) therefore lands where
-                   it always landed. */
-                if (scanned ? !opt.outfitsOn.count(all[k].id)
-                            : opt.outfitsOff.count(all[k].id) != 0) continue;
+                if (opt.outfitsOff.count(all[k].id)) continue;
 
                 Cand c;
                 c.vanilla = mine;
-                c.scanned = scanned;
                 c.id = all[k].id;
                 cand.push_back(c);
             }
@@ -3494,33 +3456,10 @@ bool Rando::run(const RandoInput& in,
         {
             const Cand picked = cand[static_cast<size_t>(rng.below(cand.size()))];
 
-            /* AN ENTRY OUT OF THE SCAN CHANGES NOTHING IN THE LEVEL FILE
-               (#153, round M2).
-
-               A vanilla outfit copies Lara's slots out of a donor level and a
-               guest imports a body out of Tomb Raider 3; both rewrite the
-               .trc. This one does neither. The body is a .TRM the ENGINE
-               reads at draw time out of the player's own remaster or his Mods
-               folder - nothing of it can travel in a level file, and nothing
-               of it needs to. So the roll's whole effect is one line in the
-               sidecar, and the .trc comes out byte for byte what it would
-               have been with no outfit rolled at all.
-
-               data[3] stays 0 for the same reason: it names one of the eight
-               the engine's enum has, and this is not one of them. The key in
-               the sidecar is the only thing that can say which. */
-            if (picked.scanned)
-            {
-                outfit.set("wear", JsonValue::makeString(picked.id));
-                outfitSet = true;
-                report.notes.push_back(fmt("outfit: %s wears %s - the engine's "
-                                           "own wardrobe, nothing copied into the level.",
-                                           in.level.c_str(), picked.id.c_str()));
-            }
             // A guest outfit: only the skin travels, and even there the head
             // stays the level's own - so no LaraType byte, no holsters, no
             // speech heads. All of that keeps working untouched.
-            else if (picked.vanilla < 0)
+            if (picked.vanilla < 0)
             {
                 // A guest outfit brings only the BODY; head, braid, joints,
                 // holsters and speech heads come from Andrea1, always.
@@ -3776,16 +3715,6 @@ bool Rando::run(const RandoInput& in,
 // follow the pool table kCross further up - whoever adds a row there adds
 // one here. The names are English for the international release; the
 // German UI translates them via the Language table (see gui\Language.cpp).
-bool outfitIsScanned(const OutfitKind& kind)
-{
-    // The three sources the SCAN produces, and nothing else. A vanilla outfit
-    // has "" and a guest has "tr3" - both of those carry a donor level and a
-    // header byte and were here long before the scan was.
-    return std::strcmp(kind.source, "46") == 0 ||
-           std::strcmp(kind.source, "13") == 0 ||
-           std::strcmp(kind.source, "mod") == 0;
-}
-
 std::vector<OutfitKind> Rando::outfitKinds()
 {
     std::vector<OutfitKind> v;
@@ -3801,33 +3730,6 @@ std::vector<OutfitKind> Rando::outfitKinds()
     const std::vector<Tr3Source::OutfitSource> guests = Tr3Source::outfits();
     for (size_t k = 0; k < guests.size(); ++k)
         v.push_back({ guests[k].id, guests[k].name, guests[k].source });
-
-    /* AND EVERY OUTFIT THE ENGINE CAN ACTUALLY DRESS HER IN (#153, round M2).
-
-       The very same scan the engine runs - hd_wardrobe.cpp is compiled into
-       this program, not copied - so what the window offers is what the game
-       will find. That is the whole reason it is one file: a list two programs
-       work out separately is a list that will one day disagree with itself,
-       and here that disagreement would read as "the outfit I picked is not
-       the outfit I got".
-
-       Where the scan looks is hd_install's business (the registry value
-       hd_install and Steam) and hd_mods' (the Mods folder beside the game).
-       Both answer "" or nothing at all on a machine that has neither, and
-       then this loop adds nothing and the wardrobe is what it was before this
-       round.
-
-       They come after a divider in the window and are OFF unless the user
-       turned them on - see RandoOptions::outfitsOn for why. */
-    for (int i = 0; i < HDWardrobeCount(); ++i)
-    {
-        const HDWardrobeEntry* e = HDWardrobeAt(i);
-        if (!e) continue;
-
-        const char* source = e->source == HD_WARDROBE_SOURCE_46 ? "46"
-                           : e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod";
-        v.push_back({ e->key, e->name, source });
-    }
 
     return v;
 }

@@ -566,20 +566,6 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // make sure it is.
     if (patch.has("outfit")) level.setHdOutfit(0);
 
-    /* AND THE WARDROBE KEY BESIDE IT (#153, round M2). The roll writes the
-       key of whatever it chose - a scanned entry, one of the three vanilla
-       outfits or one of the four guests - and it goes into the sidecar as
-       `wear`. For the seven that have a header byte as well, the file then
-       says the same thing twice and the engine reads the two against each
-       other; for an entry out of the scan it is the only place the choice can
-       be written at all.
-
-       Guarded and cleared exactly like the marker above, and for the same
-       reason: apply() runs a second time for the secret list. */
-    if (patch.has("outfit")) level.hdSetWear(std::string());
-
-    if (outfit.has("wear")) level.hdSetWear(outfit["wear"].asString());
-
     if (outfit.has("fromLevel"))
     {
         const std::string from = outfit["fromLevel"].asString();
@@ -1786,19 +1772,6 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
     // things. No line at all means 0, "no Tomb Raider III outfit".
     const int outfit = level.hdOutfit();
     if (outfit > 0) std::fprintf(f, "outfit %d\n", outfit);
-
-    /* THE WARDROBE KEY (#153, round M2), the rest of the line and no quoting:
-       a mod's key holds its folder name and may carry spaces. Written after
-       the number so that the two facts about the same roll stand together,
-       and only when the run rolled an outfit at all - a file with no `wear`
-       line means "the level's own facts decide", which is what every file
-       written before this round means and is read as.
-
-       The version stays 2. An engine older than this round does not know the
-       word, ignores the line and draws what it drew before, which is the
-       whole reason the key went into a line and not into a new version. */
-    if (!level.hdWear().empty())
-        std::fprintf(f, "wear %s\n", level.hdWear().c_str());
 
     // Ascending, because a std::set is. The same seed therefore gives the
     // same file, which is part of the proof that a run is reproducible.

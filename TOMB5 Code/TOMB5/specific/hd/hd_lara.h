@@ -615,8 +615,9 @@ enum HDLaraNode
  * are the outfits HDLaraOutfitFor can reach out of what the level file says,
  * and their numbers are written into level headers (data[3]) and into .hdm
  * files, so they never move. The WARDROBE is bigger than they are and is a
- * scan now (hd_wardrobe.h): any entry of it can be worn, by the .hdm's `wear`
- * line, and such an outfit is named HD_LARA_OUTFIT_WEAR + its scan index. */
+ * scan now (hd_wardrobe.h): any entry of it can be worn, by the player's own
+ * choice in the registry (hd_laradraw.cpp, hd_outfit), and such an outfit is
+ * named HD_LARA_OUTFIT_WEAR + its scan index. */
 enum HDLaraOutfit
 {
 	HD_LARA_OUTFIT_NONE = 0,	// stay classic - and the log says why
@@ -820,8 +821,8 @@ const char* HDLaraOutfitModel(int outfit);
 const char* HDLaraOutfitLabel(int outfit);
 /* The wardrobe key of whatever this number stands for ("46/OUTFIT_VCI"), or
  * "" when this machine's scan has no entry for it (#153, round M2). Never
- * null. The nine have one as well, which is what lets a .hdm `wear` line and
- * a level header's data[3] be read against each other. */
+ * null. The nine have one as well, which is what lets the player's chosen key
+ * and a level header's data[3] be compared as the same kind of thing. */
 const char* HDLaraOutfitKey(int outfit);
 // An outfit from a name: the .TRM stem, the bare tail ("VCI", "TR3_COAST"),
 // the randomizer's own guest id ("tr3_london") or a wardrobe key

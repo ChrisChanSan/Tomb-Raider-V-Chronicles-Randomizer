@@ -66,8 +66,9 @@ namespace
 	 *
 	 * The nine numbers stay because they are written into level headers
 	 * (data[3]) and into .hdm files and because HDLaraOutfitFor reaches them
-	 * out of the level's own facts. Everything past them is worn through the
-	 * .hdm's `wear` line and is named HD_LARA_OUTFIT_WEAR + a scan index. */
+	 * out of the level's own facts. Everything past them is worn because the
+	 * player asked for it (hd_laradraw.cpp, the registry's hd_outfit) and is
+	 * named HD_LARA_OUTFIT_WEAR + a scan index. */
 	struct Outfit
 	{
 		const char* model;
@@ -667,9 +668,10 @@ const char* HDLaraOutfitKey(int outfit)
 	}
 
 	/* One of the nine has a key too - it is a file of the IV-VI install like
-	 * any other - and saying so is what lets a .hdm `wear` line and a level
-	 * header's data[3] be read against each other. Empty when the install is
-	 * not on this machine, in which case nothing was drawn out of it anyway. */
+	 * any other - and saying so is what lets the player's chosen key and a
+	 * level header's data[3] be compared as the same kind of thing. Empty when
+	 * the install is not on this machine, in which case nothing was drawn out
+	 * of it anyway. */
 	const HDWardrobeEntry* e = props_of(outfit);
 
 	return e ? e->key : "";

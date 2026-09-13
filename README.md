@@ -155,14 +155,10 @@ change a page of a model it did not supply** — the vanilla look cannot be
 damaged by installing one.
 
 **Outfits are different: they are ADDED, never swapped in.** An
-`OUTFIT_*.TRM` a mod ships becomes an entry of its own in the randomizer's
-**Wardrobe** window, beside the ones the two Remasters bring — your
-`OUTFIT_CLASSIC` does *not* take the place of the Remaster's Rome outfit, and
-a level that asks for the Rome outfit still gets the Rome outfit. You pick
-the mod's body in the wardrobe, the randomizer writes the choice beside the
-level (`wear <key>` in the `.hdm` sidecar), and the engine dresses her in it.
-Nothing of the mod is copied into the level file, so the same level with and
-without the choice is byte for byte the same file.
+`OUTFIT_*.TRM` a mod ships becomes an entry of its own in **Lara's wardrobe**,
+beside the ones the two Remasters bring — your `OUTFIT_CLASSIC` does *not*
+take the place of the Remaster's Rome outfit, and a level that asks for the
+Rome outfit still gets the Rome outfit.
 
 The wardrobe finds, in this order: the outfits of your **Tomb Raider IV-VI
 Remastered** (24 of them), those of **Tomb Raider I-III Remastered** that the
@@ -171,8 +167,25 @@ and then every mod's. `OUTFIT_YOUNG*` of the two installations is passed over
 — young Lara carries no weapon and a randomized run hands her one in every
 level — but a **mod** in that slot is not, because a mod there is usually a
 grown-up body. Every key the wardrobe knows is printed by
-`Diagnose\ModelProbe <5-folder> -wardrobe -tr3 <3-folder> -mods <Mods>`, and
-`Randomize.exe ... outfits-list` prints the same list.
+`Diagnose\ModelProbe <5-folder> -wardrobe -tr3 <3-folder> -mods <Mods>`.
+
+**The wardrobe belongs to the ENGINE and not to the randomizer.** These
+entries are what the in-game outfit changer will offer (F4, next round); no
+roll ever draws one and nothing about them is written into a level file. The
+reason is reproducibility: a seed and its settings travel from one player to
+another, an installation and a `Mods` folder do not, so a run whose outfit
+list depended on what happens to be installed here could not be played there.
+The randomizer's own **Wardrobe** window is unchanged — the three Tomb Raider
+V outfits and the four Tomb Raider III guests, and nothing else.
+
+The engine reads the choice from one registry value, a string named
+`hd_outfit` beside `hd_install` under
+`HKCU\Software\Core Design\Tomb Raider Chronicles\tomb5`, and re-reads it at
+every level. **The outfit changer writes it**; nothing writes it today, and
+while it is empty or absent every level dresses her exactly as it always did.
+A key your machine no longer has — you took the mod out again — is a line in
+the log and the level's own outfit, not an error. Young Lara stays young
+whatever it says.
 
 **`mod.txt`** is optional and goes in the mod's own folder. One `key=value`
 per line, `#` starts a comment. One key so far:
@@ -225,9 +238,9 @@ so does anything that only exists for Tomb Raider IV, `4\DATA\MAIN.SFX`
 included.
 
 **Coming next.** A key in the game that changes the outfit without leaving
-the level, and barefoot footsteps for the bodies that have no boots — the
-`footsteps=` line above is already read and already in the log, it simply
-does not do anything yet.
+the level — it writes the `hd_outfit` value above, which the engine already
+reads — and barefoot footsteps for the bodies that have no boots, for which
+the `footsteps=` line above is already read and already in the log.
 
 **Mods are yours, not ours.** Nothing of any mod is part of this project and
 nothing of one is ever shipped with it, exactly like the game data and the

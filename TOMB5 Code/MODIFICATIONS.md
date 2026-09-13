@@ -11167,6 +11167,122 @@ one line, `origin=tr1`, in its `mod.txt`. Proved on a copy of the mod rather
 than argued: with that line the boots are black and the buckle is brass. That
 is round M1's own mechanism doing its work, and the README says it.
 
+#### Round M2, the fix round - the choice is the player's, and the load is quick (#153)
+
+The user played the round M2 build and it cost him two things: a level took
+twenty-five seconds to load where it had taken seven-tenths of one, and his
+`.hdm` files came back carrying outfits that only exist on his machine. Both
+are undone here, and the second one is a design decision and not a bug.
+
+**THE RANDOMIZER KNOWS NO SCANNED OUTFITS.** Round M2 let the roll draw from
+the wardrobe scan and wrote the key into the sidecar as a `wear` line. A seed
+and its settings travel from one player to another; an installation and a
+`Mods` folder do not. So a run rolled on this machine could not be played on
+another - the very thing a seed is for - and the fault is not in the
+implementation but in whose choice it is. An extra outfit is the PLAYER'S
+choice, and it belongs to the in-game changer of round M3.
+
+Commit `234df1b` is reverted whole. `TR5Randomizer/` is byte-identical to
+`07cda76` again: the seven old kinds, the wardrobe window, `optOutfitsOff`,
+the seed hash, the command line, `Config` and both build scripts. A settings
+file written by the M2 build still carries an `outfitsOn=` line and loads
+without a word - `Config::load` is an `if`/`else if` chain over the key with
+no final `else`, so a key it has no rule for is passed over and the next save
+drops it. Measured rather than read off the source: a file with `outfitsOn=`
+and `wardrobeFollowsGameFolder=` in it loads with every other key intact and
+comes back out without the two.
+
+**Proved.** The randomizer of `07cda76`, built in a scratch folder, against
+this one: seed 380 and seed 777, thirteen levels each, `mix cross allsanity 8
+weapons outfit-tr3` with the Tomb Raider III installation - **52 files, every
+`.trc` and every `.hdm` byte-identical**, and the risky path was exercised
+(eight of the thirteen levels rolled a Tomb Raider III guest). No `.hdm` the
+new build writes carries a `wear` line at all.
+
+**THE CHOICE IS A REGISTRY KEY.** The engine keeps everything else of round
+M2 - the scan, its four property tiers, `hd_trm`'s 30 byte layout, the page
+merge, the `hd_lara` refactor, `ModelProbe -wardrobe` - and takes its key from
+a `REG_SZ` named **`hd_outfit`** under the settings key where `hd_install` and
+every `tomb5.` option already live. `REG_PeekString` is `REG_PeekLong` for a
+string and for the same reason: read-only, creating nothing, so an absent
+value cannot take `init_tomb5_stuff`'s first run away.
+
+`hd_laradraw` reads it **once per level build**, where the `wear` key used to
+be read, and deliberately not once per session: the changer writes it while
+the game runs and the next level has to see it. Empty or absent is the
+ordinary case and is exactly what the engine did before round M2. A key the
+scan knows **wins over the level facts and over `data[3]`**, because it is the
+only one of the three that a person chose on purpose, and the log line says
+what it overrode. A key the scan has not got falls through with
+`HDLOG wardrobe hd_outfit=<key> not found - level facts`. Young Lara stays
+classic whatever it says - the question is asked before the value is read.
+
+`hd_markers` no longer knows the word `wear`, so a sidecar the M2 build wrote
+reaches the log as `markers line this engine has no rule for`, which is what
+every engine older than round M2 always did with it.
+
+**THE TWENTY-FIVE SECONDS, MEASURED BEFORE ANYTHING WAS CHANGED.** A counter
+in `HDPageCacheKeyOf`, over ANDREA1's models with the user's nine mods:
+**249,702 calls, of which 25,058 reached the mod branch, and those 25,058 cost
+770.8 ms - 30.8 microseconds each.** Without the mods the branch is never
+reached and the cost is zero, which is why the regression only showed with a
+`Mods` folder.
+
+The branch is not cheap by nature. It asks `HDModsFindPage`, which is two
+`std::filesystem` probes - each a UTF-8 to UTF-16 conversion and three string
+joins - and then up to three more probes into the mod's origin bundle, the
+last of which `fopen`s the file. Round M2 put that on the hottest path this
+engine has: **once per CORNER of every triangle of every model a mod
+supplied**. The user's ANDREA1 log says `mod:10`, and ten mod models at that
+rate is where his twenty-five seconds went.
+
+The fix is that the question has far fewer answers than it was asked for. A
+vertex names its page by its LAYER, an index into the model's own texture
+list, so a model has exactly `trm.textures` answers however many triangles
+wear them. `build()` works them out once into a small table and reads the
+table in the loop, and that is not an approximation - `HDTrmPageOf` IS
+`texture[layer-1]`, so the two agree value for value. `HDPageCacheKeyOf`
+remembers its answer per key as well, so no other caller can grow the same
+cost back; the memory is dropped in `HDPageCacheAltRoot`, the one call that
+can change an answer.
+
+ANDREA1, `-all -nodraw` against the classic level, five runs, the median of
+the tool's own `ms building`:
+
+```
+                              without -mods   with -mods
+  07cda76, before round M2        143 ms        313 ms
+  1ef8f9f, round M2's head        136 ms       1295 ms
+  this round                      133 ms        278 ms
+```
+
+and the whole `-all` table - every slot, every page, every range, every note -
+is **identical** between the M2 head and this round, with the mods and
+without. The eight known outfits are byte-identical `.PNG` files against the
+M2 head. The `with -mods` column is now below where it stood before round M2,
+because round M2's own page merge is doing its work with the cost taken off
+it.
+
+**WHAT THE LOG SAYS NOW.** The level's models line only said `models ms=`, so
+the whole hunt was for which half of it had grown. It now carries the phases
+of `build_ms` - `find_ms`, `key_ms`, `page_ms`, `buf_ms` - and three counters
+from the `.TRM` reader, `trm_open`, `trm_load` and `trm_kib`. The wardrobe's
+own scan line gains `ms`, `probed`, `read_kib` and `geometry`.
+
+Those numbers answer the user's own hypothesis - "the renderer tries to load
+every outfit at every level change" - with measurements instead of a promise.
+Measured on this machine: the scan probes **112 headers and reads 28.8 MiB
+ONCE per session** and its `geometry` count is **0**, because it reads headers
+and never a body; and a level build's `trm_load` is **14**, the parts Lara
+actually wears. The wardrobe is not loaded at a level change, and now the log
+says so every time.
+
+The phases also name what is left. `find_ms` - the walk of the ITEM folders
+that turns a slot name into a file - is 210 ms of the 278 with the user's nine
+mods against 60 ms without them. That is round M1's resolver doing its work,
+it was there before round M2, and it is now a number in the log rather than
+something to guess at.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

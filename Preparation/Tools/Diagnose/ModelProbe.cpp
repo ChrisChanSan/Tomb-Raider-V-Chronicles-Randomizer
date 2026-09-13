@@ -270,6 +270,15 @@
  *     -yaw <deg>          camera around the model, default 180 (from the front)
  *     -pitch <deg>        default 10, looking slightly down
  *     -dist <units>       camera distance; default frames the bounding box
+ *     -invrot <x> <y> <z> THE RING'S OWN PRESENTATION (#153, round M3): the
+ *                         three angles the item's row of
+ *                         inventry_objects_list carries, raw engine units
+ *                         (0x4000 is 90 degrees, decimal or 0x), put on the
+ *                         model exactly as DrawThreeDeeObject2D's
+ *                         phd_RotYXZ puts them. Without it a picture shows
+ *                         the item's OWN frame, which is not what the
+ *                         player sees - the Uzi row is 0x4000 0x6000
+ *                         0x4000 and the pistols' 0x4000 0xAD4C 0xBD40.
  *     -inventory          with -slot: draw the mod's own <BASE>_OPTION model
  *                         in the slot's place, turned and scaled onto the box
  *                         of the EXTRA model it replaces, exactly as the
@@ -360,6 +369,16 @@
  *
  *   Everything else:
  *     -nodes              print the node table (also printed by -all)
+ *     -pagelist           EVERY SLOT OF THE PAGE CACHE after the build
+ *                         (#153, round M3): its key as the cache holds it,
+ *                         where the .DDS was read from, the size it was
+ *                         decoded to and its bytes. One line each and a
+ *                         total, so that two runs can be compared with diff
+ *                         - which is how "what does a second outfit cost in
+ *                         the cache" is answered by a set difference instead
+ *                         of by a guess. The cache never frees a page
+ *                         (hd_pagecache.cpp), so the union of two such lists
+ *                         IS what an in-level outfit change leaves behind.
  *     -threads <n>        page decoding threads, default 8
  *     -managed            pages in D3DPOOL_MANAGED instead of D3DPOOL_DEFAULT
  *     -nodraw             load and measure only - no window, no picture
@@ -5879,6 +5898,9 @@ struct LaraOptions
 	bool noSheen;			// #123 fix round D (D2): the BEFORE picture
 	bool check;
 	bool noDraw;
+	// #153 round M3: the ring's own presentation - see -invrot.
+	short invRot[3];
+	bool invRotSet;
 	bool managed;
 	int threads;
 	long width, height;
@@ -5907,6 +5929,90 @@ struct LaraOptions
  * table in hd_lara speaks names, and this is the one place that turns them
  * back into the numbers the game keeps in LHolster, lara.holster and
  * lara.back_gun. */
+/* THE PAGE CACHE, SLOT BY SLOT (#153, round M3) - for -pagelist.
+ *
+ * Written as a sorted list of "key origin size bytes" so that two runs differ
+ * only where the two builds really differ, and `diff` says which pages the
+ * second one added. The size comes off the texture the cache made rather than
+ * off the .DDS, because that is the memory the card holds: the cache decodes
+ * to A8R8G8B8 with its mip chain and a page's cost is that chain, not the
+ * compressed file.
+ *
+ * The cache never frees a page, so the union of the lists of outfit A and
+ * outfit B is exactly what the cache holds after a change from A to B. */
+static bool g_pagelist = false;
+
+static void PrintPageList()
+{
+	struct Row { int key; int origin; int w, h, levels; double bytes; };
+	std::vector<Row> rows;
+	double total = 0.0;
+	char label[32];
+
+	for (int slot = 0; slot < HDPageCacheSlots(); slot++)
+	{
+		IDirect3DTexture9* tex = HDPageCacheSlotTexture(slot);
+		Row row;
+
+		row.key = HDPageCachePageOfSlot(slot);
+		row.origin = HDPageCacheSlotOrigin(slot);
+		row.w = row.h = row.levels = 0;
+		row.bytes = 0.0;
+
+		if (tex)
+		{
+			D3DSURFACE_DESC desc;
+
+			row.levels = (int)tex->GetLevelCount();
+
+			for (int level = 0; level < row.levels; level++)
+				if (tex->GetLevelDesc((UINT)level, &desc) == D3D_OK)
+				{
+					if (!level)
+					{
+						row.w = (int)desc.Width;
+						row.h = (int)desc.Height;
+					}
+
+					row.bytes += (double)desc.Width * desc.Height * 4.0;
+				}
+		}
+
+		total += row.bytes;
+		rows.push_back(row);
+	}
+
+	for (size_t a = 0; a + 1 < rows.size(); a++)
+		for (size_t b = a + 1; b < rows.size(); b++)
+			if (rows[b].key < rows[a].key)
+			{
+				const Row swap = rows[a];
+				rows[a] = rows[b];
+				rows[b] = swap;
+			}
+
+	printf("\n-- the page cache: %d slots, %.2f MiB ---------------------\n",
+		(int)rows.size(), total / 1048576.0);
+
+	for (size_t i = 0; i < rows.size(); i++)
+	{
+		const int mod = HDPageModIndex(rows[i].key);
+
+		if (mod >= 0)
+			sprintf(label, "mod%d:%d", mod, HDPageModNumber(rows[i].key));
+		else if (rows[i].key >= HD_PAGE_ALT_BASE)
+			sprintf(label, "TR3 %d", rows[i].key - HD_PAGE_ALT_BASE);
+		else
+			sprintf(label, "%d", rows[i].key);
+
+		printf("page %-12s %-28s %5dx%-5d mips %2d  %8.3f MiB\n",
+			label, HDPageCacheOriginText(rows[i].origin),
+			rows[i].w, rows[i].h, rows[i].levels, rows[i].bytes / 1048576.0);
+	}
+
+	printf("page total %d slots %.3f MiB\n", (int)rows.size(), total / 1048576.0);
+}
+
 static int SlotByName(const Tr5Level& level, const char* want)
 {
 	const std::vector<int> slots = level.moveableSlots();
@@ -6146,6 +6252,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		(laraStats.vertexBytes + laraStats.indexBytes) / 1024.0);
 	printf("pages              %d distinct in the cache, %.1f MiB, %.0f ms decode\n",
 		stats.pages, stats.pageStats.bytes / 1048576.0, stats.pageStats.decodeMs);
+
+	if (g_pagelist)
+		PrintPageList();
 	/* The phases of `building`, since #153 round M2's fix round - keys is
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
@@ -7365,6 +7474,9 @@ int main(int argc, char** argv)
 	bool wardrobe = false;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
+	// #153 round M3: -invrot, the ring's own x/y/z for this item.
+	short invRot[3] = { 0, 0, 0 };
+	bool invRotSet = false;
 	bool itemcheck = false;
 	bool inventory = false;	// #153 round M2b: a mod's own _OPTION model
 	/* #123, fix round P: the inventory ring. -ringcheck is the numeric proof
@@ -7664,6 +7776,10 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-nodes"))
 			nodes = true;
+		/* #153 round M3: every slot of the page cache, so that the cost of a
+		 * second outfit is a set difference and not a guess. */
+		else if (!_stricmp(argv[i], "-pagelist"))
+			g_pagelist = true;
 		else if (!_stricmp(argv[i], "-nodraw"))
 			noDraw = true;
 		else if (!_stricmp(argv[i], "-managed"))
@@ -7676,6 +7792,15 @@ int main(int argc, char** argv)
 		 * place, exactly as hd_object.cpp puts it there. */
 		else if (!_stricmp(argv[i], "-inventory"))
 			inventory = true;
+		/* #153 round M3: the ring's own three angles, so that a picture out
+		  * of this tool is the picture the player sees. */
+		else if (!_stricmp(argv[i], "-invrot") && i + 3 < argc)
+		{
+			invRot[0] = (short)strtol(argv[++i], 0, 0);
+			invRot[1] = (short)strtol(argv[++i], 0, 0);
+			invRot[2] = (short)strtol(argv[++i], 0, 0);
+			invRotSet = true;
+		}
 		else if (!_stricmp(argv[i], "-itemcheck"))
 			itemcheck = true;
 		else if (!_stricmp(argv[i], "-ringcheck"))
@@ -7979,6 +8104,10 @@ int main(int argc, char** argv)
 		o.braidAnims = laraBraidAnims;
 		o.braidFloor = laraBraidFloor;
 		o.check = laraCheck;
+		o.invRot[0] = invRot[0];
+		o.invRot[1] = invRot[1];
+		o.invRot[2] = invRot[2];
+		o.invRotSet = invRotSet;
 		o.noDraw = noDraw;
 		o.managed = managed;
 		o.threads = threads;
@@ -8113,7 +8242,7 @@ int main(int argc, char** argv)
 	 * hd_object.cpp plans it for the ring: a pseudo slot, ONE node, every
 	 * vertex rigid on it, no bind pose - the file is another game's and stands
 	 * in its own frame. -inventory then draws THIS instead of the slot's model,
-	 * through HDModelBoxFit, which is what the ring does. */
+	 * through HDModelRingFit, which is what the ring does. */
 	std::string optionName;
 	int optionSlot = -1;
 
@@ -8478,6 +8607,23 @@ int main(int argc, char** argv)
 
 	printf("\nbounds  : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f\n",
 		mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
+
+	/* THE CLOUD'S OWN AXES beside the box (#153, round M3). A box says how
+	  * much room the model needs; these say which way its SHAPE runs, which
+	  * is what the ring's fit has to know about a crossed pair of guns. */
+	{
+		float axes[9], extent[3];
+
+		if (HDModelPrincipalAxes(slot, axes, extent))
+		{
+			printf("axes    : the vertex cloud's own, longest first\n");
+
+			for (int k = 0; k < 3; k++)
+				printf("          %d  (%+6.3f %+6.3f %+6.3f)  extent %7.1f\n",
+					k, axes[k * 3 + 0], axes[k * 3 + 1], axes[k * 3 + 2],
+					extent[k]);
+		}
+	}
 
 	if (noDraw)
 	{
@@ -8967,6 +9113,32 @@ int main(int argc, char** argv)
 	 * the call writes nothing at all. */
 	HDModelOffCentre((float)ringKx, (float)ringKy);
 
+	/* THE RING'S OWN PRESENTATION (#153, round M3, -invrot). The ring puts
+	  * the item's three angles on the matrix stack with phd_RotYXZ - Y, then
+	  * X, then Z, each POST-multiplied into the column-vector stack - so in
+	  * this tool's row-vector matrices the model meets Z first, then X, then
+	  * Y. Without this a picture is the item's OWN frame and says nothing
+	  * about what the player sees. */
+	float ringTurn[16];
+
+	MatIdentity(ringTurn);
+
+	if (invRotSet)
+	{
+		float rx[16], ry[16], rz[16], t[16];
+
+		MatRotX(invRot[0] * 360.0 / 65536.0, rx);
+		MatRotY(invRot[1] * 360.0 / 65536.0, ry);
+		MatRotZ(invRot[2] * 360.0 / 65536.0, rz);
+		MatMul(rz, rx, t);
+		MatMul(t, ry, ringTurn);
+
+		printf("ring rot: x %d y %d z %d (%.1f/%.1f/%.1f degrees)\n",
+			invRot[0], invRot[1], invRot[2],
+			invRot[0] * 360.0 / 65536.0, invRot[1] * 360.0 / 65536.0,
+			invRot[2] * 360.0 / 65536.0);
+	}
+
 	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b), drawn the way the ring
 	 * draws it: the correction in front of the item's own node matrix, one
 	 * node, every node drawn. Same two calls hd_object.cpp makes. */
@@ -8976,7 +9148,7 @@ int main(int argc, char** argv)
 	{
 		float fix[16], placed[16];
 
-		if (HDModelBoxFit(optionSlot, slot, fix))
+		if (HDModelRingFit(optionSlot, slot, fix))
 		{
 			float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
 
@@ -8988,7 +9160,7 @@ int main(int argc, char** argv)
 			 * function - the scale matches the LONGEST axes only, so the
 			 * other two land where their proportions put them. */
 			int outAxis = -1;
-			const float over = HDModelBoxFitOverflow(optionSlot, slot,
+			const float over = HDModelRingFitOverflow(optionSlot, slot,
 				&outAxis);
 			static const char* kAxis[3] = { "x", "y", "z" };
 
@@ -9003,7 +9175,67 @@ int main(int argc, char** argv)
 				fix[12], fix[13], fix[14], over,
 				outAxis >= 0 && outAxis < 3 ? kAxis[outAxis] : "?");
 
-			MatMul(fix, &matrices[0], placed);
+			/* WHERE THE FIT REALLY PUT IT (#153, round M3): the source's own
+			  * axes and box corners through the fit, so a picture that looks
+			  * wrong can be read as numbers. */
+			{
+				float sa[9], se[3];
+
+				if (HDModelPrincipalAxes(optionSlot, sa, se))
+				{
+					printf("           the source's axes land at:\n");
+
+					for (int k = 0; k < 3; k++)
+					{
+						float o[3];
+
+						for (int c = 0; c < 3; c++)
+						{
+							o[c] = 0.0f;
+
+							for (int r = 0; r < 3; r++)
+								o[c] += sa[k * 3 + r] * fix[r * 4 + c];
+						}
+
+						const float n = sqrtf(o[0]*o[0] + o[1]*o[1] + o[2]*o[2]);
+
+						printf("             %d ext %6.1f -> (%+6.3f %+6.3f %+6.3f)\n",
+							k, se[k], o[0]/n, o[1]/n, o[2]/n);
+					}
+				}
+
+				float lo[3], hi[3];
+
+				for (int corner = 0; corner < 8; corner++)
+				{
+					const float v[3] =
+					{
+						(corner & 1) ? srcMax[0] : srcMin[0],
+						(corner & 2) ? srcMax[1] : srcMin[1],
+						(corner & 4) ? srcMax[2] : srcMin[2]
+					};
+
+					for (int c = 0; c < 3; c++)
+					{
+						float d = fix[3 * 4 + c];
+
+						for (int r = 0; r < 3; r++)
+							d += v[r] * fix[r * 4 + c];
+
+						if (!corner || d < lo[c]) lo[c] = d;
+						if (!corner || d > hi[c]) hi[c] = d;
+					}
+				}
+
+				printf("           fitted box x %.0f..%.0f y %.0f..%.0f "
+					"z %.0f..%.0f (%.0fx%.0fx%.0f)\n", lo[0], hi[0], lo[1],
+					hi[1], lo[2], hi[2], hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2]);
+			}
+
+			float turned[16];
+
+			MatMul(fix, ringTurn, turned);
+			MatMul(turned, &matrices[0], placed);
 			drew = HDModelDraw(optionSlot, placed, 1, &light[0], ~0u, &lighting);
 		}
 		else
@@ -9012,8 +9244,13 @@ int main(int argc, char** argv)
 	}
 
 	if (!drew)
-		drew = HDModelDraw(slot, &matrices[0], here->nodes,
+	{
+		float own[16];
+
+		MatMul(ringTurn, &matrices[0], own);
+		drew = HDModelDraw(slot, own, here->nodes,
 			&light[0], nodeMask, &lighting);
+	}
 
 	bool drewHead = false;
 

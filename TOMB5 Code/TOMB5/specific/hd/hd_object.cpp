@@ -346,7 +346,7 @@ namespace
 		return 0;
 	}
 
-	/* WHAT HDModelBoxFitOverflow SAYS, IN WORDS (#153, round M2b, the second
+	/* WHAT HDModelRingFitOverflow SAYS, IN WORDS (#153, round M2b, the second
 	 * fix round). One tenth is the resolution worth reporting: below 1.05 the
 	 * model is in the box for any purpose the ring has, and the number itself
 	 * is printed as soon as it is not, so nobody has to take the word for it.
@@ -359,17 +359,25 @@ namespace
 		 * a target axis of a thousandth of a unit would write a number longer
 		 * than the sentence around it. */
 		static char said[128];
-		static const char* kAxis[3] = { "x", "y", "z" };
+		/* THE TARGET'S OWN axes since round M3, longest first, and not x/y/z:
+		  * the fit pairs the two models' SHAPES now, so the axis that is
+		  * overflowed is one of the shape's, and naming it x would be naming a
+		  * direction the rule never used. */
+		static const char* kAxis[3] =
+		{
+			"its longest axis", "its middle axis", "its flattest axis"
+		};
 
 		if (over <= 0.0f)
-			std::snprintf(said, sizeof(said), "how far it leaves that box "
+			std::snprintf(said, sizeof(said), "how far it leaves that room "
 				"could not be measured");
 		else if (over < 1.05f)
 			std::snprintf(said, sizeof(said),
-				"and it stays inside that box (%.2fx)", over);
+				"and it stays inside that room (%.2fx)", over);
 		else
 			std::snprintf(said, sizeof(said), "and it stands %.2fx out of "
-				"that box on %s - which the fit allows, see HDModelBoxFit",
+				"the room the ring keeps for it, on %s - which the fit"
+				" allows, see HDModelRingFit",
 				over, axis >= 0 && axis < 3 ? kAxis[axis] : "an axis");
 
 		return said;
@@ -1521,8 +1529,19 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		char option[128];
 		const int slot = slots[i];
 
+		/* AND IT SAYS SO WHEN IT STOPS (#153, round M3). The table holds
+		 * sixteen and a level's slot list is over a hundred, so a Mods folder
+		 * with seventeen inventory models would have had the seventeenth
+		 * quietly draw the install's own - which reads in a play test as "my
+		 * mod does not work" and has nothing to point at. */
 		if (g_ring_models >= (int)(sizeof(g_ring_model) / sizeof(g_ring_model[0])))
+		{
+			Log("HDLOG level=%s ring plan full at %d models - slot %d (%s) "
+				"and everything after it keep the install's own inventory "
+				"model", g_stem, g_ring_models, slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?");
 			break;
+		}
 
 		ringAsked++;
 
@@ -1874,7 +1893,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
 
 			if (!hd || !HDModelHas(ring.model) ||
-				!HDModelBoxFit(ring.model, slot, ring.fix))
+				!HDModelRingFit(ring.model, slot, ring.fix))
 			{
 				Log("HDLOG level=%s ring slot=%d name=%s model=%s - not drawn: "
 					"%s", g_stem, slot,
@@ -1889,19 +1908,29 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			HDModelBounds(ring.model, srcMin, srcMax);
 			HDModelBounds(slot, dstMin, dstMax);
 
+			/* THE SHAPE'S OWN EXTENTS BESIDE THE BOX (#153, round M3). The fit
+			  * reads these and not the box, so a picture nobody likes has to be
+			  * traceable to the numbers the rule really used - and the box is
+			  * kept beside them because it is the room the ring keeps. */
+			float srcExt[3] = { 0, 0, 0 }, dstExt[3] = { 0, 0, 0 };
+
+			HDModelPrincipalAxes(ring.model, 0, srcExt);
+			HDModelPrincipalAxes(slot, 0, dstExt);
+
 			/* AND WHETHER IT STAYS IN THE BOX (#153, round M2b, the second fix
 			 * round). The scale matches the two LONGEST extents and nothing
 			 * else, so a model built in another game's proportions can stand
 			 * well out of the room the ring keeps for this item - which is the
-			 * intended picture and was argued for at HDModelBoxFit, but it was
+			 * intended picture and was argued for at HDModelRingFit, but it was
 			 * nowhere in this line, and a ring that looks crowded in a play
 			 * test had nothing to point at. */
 			int outAxis = -1;
-			const float over = HDModelBoxFitOverflow(ring.model, slot,
+			const float over = HDModelRingFitOverflow(ring.model, slot,
 				&outAxis);
 
 			Log("HDLOG level=%s ring slot=%d name=%s inventory=%s instead of "
-				"%s - its box %.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale "
+				"%s - its box %.0fx%.0fx%.0f against %.0fx%.0fx%.0f, its shape "
+				"%.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale "
 				"%.2f, centre moved by %.0f/%.0f/%.0f, %s", g_stem, slot,
 				HDSlotName(slot) ? HDSlotName(slot) : "?",
 				HDModelName(ring.model) ? HDModelName(ring.model) : "-",
@@ -1909,6 +1938,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				srcMax[0] - srcMin[0], srcMax[1] - srcMin[1],
 				srcMax[2] - srcMin[2], dstMax[0] - dstMin[0],
 				dstMax[1] - dstMin[1], dstMax[2] - dstMin[2],
+				srcExt[0], srcExt[1], srcExt[2],
+				dstExt[0], dstExt[1], dstExt[2],
 				std::sqrt(ring.fix[0] * ring.fix[0] + ring.fix[1] * ring.fix[1] +
 					ring.fix[2] * ring.fix[2]),
 				ring.fix[12], ring.fix[13], ring.fix[14],

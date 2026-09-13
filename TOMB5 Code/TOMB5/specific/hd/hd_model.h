@@ -690,42 +690,61 @@ int HDModelHeadNode(int slot);			// the node the face rides on, or -1
 bool HDModelBounds(int slot, float* mins, float* maxs);
 bool HDModelHeadBounds(int slot, float* mins, float* maxs);
 
-/* ONE MODEL PUT INTO ANOTHER'S FRAME, out of the two bounding boxes and
- * nothing else (#153, round M2b).
+/* THE VERTEX CLOUD'S PRINCIPAL AXES (#153, round M3), measured while the model
+ * was read. `axes` takes nine floats - three unit ROW vectors in the model's
+ * own frame, longest first and right handed - and `extent` the cloud's span
+ * along each; either may be null. False for a model with fewer than three
+ * drawn vertices.
  *
- * A 4x4 row-major matrix, row-vector convention like every other matrix in this
- * module: it centres `model` on its own box, turns it so that its longest axis
- * lies where `target`'s longest lies and its shortest where the shortest lies,
- * scales it by the ratio of the two longest extents, and puts it on `target`'s
- * centre. False when either model has no box.
+ * An eigenvector has no sign, and a gun has two ends, so the sign is the
+ * model's own geometry: an axis points to the side on which the cloud reaches
+ * further from its own centre of mass. The third is the cross product of the
+ * other two, so the frame can rotate a model and never mirror it.
+ *
+ * A BOX AND A CLOUD ANSWER DIFFERENT QUESTIONS. A box says how much room a
+ * model needs; these say which way it RUNS. For two guns crossed like an X the
+ * two are nothing alike, which is the whole of the round M2b ring fault. */
+bool HDModelPrincipalAxes(int model, float* axes, float* extent);
+
+/* THE FIT THAT PUTS ONE MODEL IN ANOTHER'S PLACE (#153, round M2b; off the
+ * SHAPE and no longer off the box since round M3).
+ *
+ * `out` takes sixteen floats, row-major with the translation in row 3 - the
+ * convention every matrix in this module is written in. It centres the source
+ * on the target's box, turns the source's k-th principal axis onto the
+ * target's k-th (longest first) and scales by the ratio of the two longest
+ * extents. Both frames are right handed by construction, so the map is a pure
+ * rotation and cannot mirror a model. False when either model has no axes.
  *
  * It exists because the inventory ring may be asked to draw a file from a
- * different game, which stands in that game's frame: the Tomb Raider I-III
- * inventory models are built UPRIGHT and IV-VI's lie flat (measured: the
- * install's EXTRA_UZI_ITEM is 266 x 41 x 212 with x longest, a mod's
- * UZI_OPTION 147 x 253 x 159 with y longest). Nothing about which game or
- * which model is written down here - the two files say which way round they
- * are and this reads it off them. */
-bool HDModelBoxFit(int model, int target, float* out);
+ * different game, which stands in that game's frame. Round M2b did it with the
+ * two bounding BOXES and the user's picture of the result is why it does not
+ * any more: a box cannot tell two guns crossed like an X from one gun standing
+ * up, and the mod's crossed Uzis came out lying flat, one above the other with
+ * a gap between them. The vertex cloud's own axes say which way the shape
+ * runs - measured on his files, EXTRA_UZI_ITEM is 256 x 236 x 42 and flat
+ * along -y, UZI_OPTION is 242 x 240 x 132 and flat along -x - so pairing them
+ * lays the mod's cross into the plane the vanilla item's cross lies in, and
+ * the ring's own per-item rotation then presents the two alike. Nothing about
+ * which game or which model is written down here. */
+bool HDModelRingFit(int model, int target, float* out);
 
-/* HOW FAR THAT FIT LEAVES THE TARGET'S BOX (#153, round M2b, the second fix
- * round). The scale above is the ratio of the two LONGEST extents, so the
- * other two axes land wherever their own proportions put them and a model CAN
- * stand well outside the room the ring keeps for the item it replaces - the
- * mod's upright Uzi becomes 154 units thick where the vanilla item is 41.
+/* HOW FAR THAT FIT LEAVES THE ROOM THE RING KEEPS (#153, round M2b, the
+ * second fix round; on the shape's own axes since round M3).
+ *
+ * The scale is the ratio of the two LONGEST extents, so the other two axes
+ * land wherever their own proportions put them and a model CAN stand well
+ * outside the room kept for the item it replaces - the mod's crossed Uzis are
+ * 132 units thick where the vanilla pair is 42.
  *
  * The largest of the three ratios, fitted extent over the target's on the same
- * axis: 1.00 is "inside the box", 3.73 is that Uzi (measured, `-inventory` on
- * ANDREA3's slot 336 with the user's mod); the Uzi AMMO model is 1.25. Rounded
- * box sides make the printed extents disagree with the ratio in the second
- * decimal - the ratio is taken from the unrounded ones. `worstAxis` is
- * optional and takes the TARGET's axis number, 0..2. Zero when either model
- * has no box.
+ * axis: 1.00 is "inside". `worstAxis` is optional and takes 0, 1 or 2 - WHICH
+ * OF THE TARGET'S OWN axes, longest first. Zero when either model has no axes.
  *
  * It is a number for the log and refuses nothing - the reason the fit does not
- * fit-inside is at HDModelBoxFit - but a ring that looks crowded in a play test
- * now has a line pointing at the cause. */
-float HDModelBoxFitOverflow(int model, int target, int* worstAxis);
+ * fit-inside is at HDModelRingFit - but a ring that looks crowded in a play
+ * test now has a line pointing at the cause. */
+float HDModelRingFitOverflow(int model, int target, int* worstAxis);
 
 // Everything that could not be bound, in words, for the caller's log. Valid
 // until the next HDModelLevelBegin or HDModelLevelEnd.

@@ -134,6 +134,21 @@ namespace
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
 
+		/* THE VERTEX CLOUD'S OWN AXES (#153, round M3) - the principal axes of
+		 * the drawn vertices, longest first, with the cloud's extent along each.
+		 * Measured in the same loop the box is, because that is the one place the
+		 * vertices are in hand; a caller that wanted them later would have to read
+		 * the .TRM a second time.
+		 *
+		 * A BOX IS NOT A SHAPE. Two guns crossed like an X and two guns lying side
+		 * by side have the same kind of box and nothing else in common, and the
+		 * ring's fit had only the box to go on - which is how the mod's crossed
+		 * Uzis came to lie flat, one above the other. These say which way the
+		 * SHAPE runs. */
+		float axis[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+		float axisExtent[3] = { 0, 0, 0 };
+		bool hasAxes = false;
+
 		float bind[32][3] = { { 0, 0, 0 } };
 		bool hasBind = false;
 		/* The classic mesh tree, for the head pass (#123, fix round B, B4).
@@ -665,6 +680,27 @@ namespace
 		}
 	};
 
+	/* THE AXES OF ONE SET OF EXTENTS, LONGEST FIRST. One function so that the
+	 * ring's fit, its overflow figure and the cloud's own axes in build() cannot
+	 * come to disagree about which axis is which - the whole rule is "k-th
+	 * longest to k-th longest", and a second copy of it would be a second thing
+	 * to keep in step. */
+	void sort_axes(const float* size, int* order)
+	{
+		order[0] = 0;
+		order[1] = 1;
+		order[2] = 2;
+
+		for (int a = 0; a < 2; a++)
+			for (int b = a + 1; b < 3; b++)
+				if (size[order[b]] > size[order[a]])
+				{
+					const int keep = order[a];
+					order[a] = order[b];
+					order[b] = keep;
+				}
+	}
+
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
 		int pageBias, int* mixedTriangles, const char** why, const PageCut& cut)
 	{
@@ -700,6 +736,11 @@ namespace
 		int single[kJointBudget] = { 0 };
 		double centre[kJointBudget][3] = { { 0, 0, 0 } };
 		double square[kJointBudget] = { 0 };
+
+		// The cloud's first and second moments, for the axes above.
+		double cloudN = 0;
+		double cloudSum[3] = { 0, 0, 0 };
+		double cloudSq[3][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
 
 		for (int i = 0; i < vertices; i++)
 		{
@@ -768,6 +809,20 @@ namespace
 			if (!keep[(size_t)i])
 				continue;
 
+			{
+				const double v[3] = { (double)in.x, (double)in.y, (double)in.z };
+
+				cloudN += 1.0;
+
+				for (int a = 0; a < 3; a++)
+				{
+					cloudSum[a] += v[a];
+
+					for (int b = 0; b < 3; b++)
+						cloudSq[a][b] += v[a] * v[b];
+				}
+			}
+
 			if (model.vertexSeen++ == 0)
 			{
 				model.mins[0] = model.maxs[0] = in.x;
@@ -826,6 +881,136 @@ namespace
 				centre[node][2] += (double)in.z;
 				square[node] += (double)in.x * in.x + (double)in.y * in.y +
 					(double)in.z * in.z;
+			}
+		}
+
+		/* THE CLOUD'S OWN AXES, out of the moments gathered above (#153, round
+		 * M3). The covariance of the drawn vertices, diagonalised by Jacobi
+		 * rotations - three of them are enough for a 3x3 to machine precision and
+		 * eight are taken, so a degenerate cloud costs a few microseconds and not
+		 * a wrong answer.
+		 *
+		 * The EXTENT along each axis is the cloud's real span on it and not the
+		 * eigenvalue: a fit has to know how long the thing is, and a standard
+		 * deviation is not that. It needs the vertices a second time, which is why
+		 * this sits inside build() where they are still in hand. */
+		if (cloudN >= 3.0)
+		{
+			double cov[3][3];
+			double vec[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+
+			for (int a = 0; a < 3; a++)
+				for (int b = 0; b < 3; b++)
+					cov[a][b] = cloudSq[a][b] / cloudN -
+						(cloudSum[a] / cloudN) * (cloudSum[b] / cloudN);
+
+			for (int sweep = 0; sweep < 8; sweep++)
+				for (int a = 0; a < 2; a++)
+					for (int b = a + 1; b < 3; b++)
+					{
+						if (cov[a][b] == 0.0)
+							continue;
+
+						const double theta =
+							(cov[b][b] - cov[a][a]) / (2.0 * cov[a][b]);
+						const double t = (theta >= 0.0 ? 1.0 : -1.0) /
+							(fabs(theta) + sqrt(theta * theta + 1.0));
+						const double c = 1.0 / sqrt(t * t + 1.0);
+						const double sn = t * c;
+
+						for (int k = 0; k < 3; k++)
+						{
+							const double ka = cov[k][a], kb = cov[k][b];
+
+							cov[k][a] = c * ka - sn * kb;
+							cov[k][b] = sn * ka + c * kb;
+						}
+
+						for (int k = 0; k < 3; k++)
+						{
+							const double ak = cov[a][k], bk = cov[b][k];
+
+							cov[a][k] = c * ak - sn * bk;
+							cov[b][k] = sn * ak + c * bk;
+
+							const double av = vec[k][a], bv = vec[k][b];
+
+							vec[k][a] = c * av - sn * bv;
+							vec[k][b] = sn * av + c * bv;
+						}
+					}
+
+			// The cloud's real span on each axis, and then longest first.
+			double lo[3], hi[3];
+			bool first = true;
+
+			for (int i = 0; i < vertices; i++)
+			{
+				if (!keep[(size_t)i])
+					continue;
+
+				const HDTrmVertex& v = trm.vertex[i];
+
+				for (int a = 0; a < 3; a++)
+				{
+					const double d = v.x * vec[0][a] + v.y * vec[1][a] +
+						v.z * vec[2][a];
+
+					if (first || d < lo[a]) lo[a] = d;
+					if (first || d > hi[a]) hi[a] = d;
+				}
+
+				first = false;
+			}
+
+			if (!first)
+			{
+				float span[3];
+				int order[3];
+
+				for (int a = 0; a < 3; a++)
+					span[a] = (float)(hi[a] - lo[a]);
+
+				sort_axes(span, order);
+
+				/* AN EIGENVECTOR HAS NO SIGN, AND A GUN HAS TWO ENDS. Without a
+				  * rule for it the same file could come out muzzle-first or
+				  * grip-first from one build to the next, and a fit that pairs two
+				  * models' axes would pair them back to front half the time.
+				  *
+				  * The rule is the model's own geometry and nothing else: the axis
+				  * points to the side on which the cloud reaches FURTHER from its
+				  * own centre of mass. A gun's barrel is the long end, a magazine
+				  * box's mouth the short one - and a shape that is symmetric about
+				  * that axis has no long end, gets an arbitrary sign, and looks the
+				  * same either way, which is why it does not matter there. */
+				for (int k = 0; k < 3; k++)
+				{
+					const int a = order[k];
+					const double mean = (cloudSum[0] / cloudN) * vec[0][a] +
+						(cloudSum[1] / cloudN) * vec[1][a] +
+						(cloudSum[2] / cloudN) * vec[2][a];
+					const float sign = (hi[a] - mean) >= (mean - lo[a]) ? 1.0f : -1.0f;
+
+					model.axisExtent[k] = span[a];
+
+					for (int r = 0; r < 3; r++)
+						model.axis[k][r] = sign * (float)vec[r][a];
+				}
+
+				/* AND THE THIRD IS THE OTHER TWO. Taken as a cross product rather
+				  * than kept from the solver, so the three are right handed BY
+				  * CONSTRUCTION: a frame built from them can rotate a model and can
+				  * never mirror it. The rule above has already settled the two that
+				  * carry the shape. */
+				model.axis[2][0] = model.axis[0][1] * model.axis[1][2] -
+					model.axis[0][2] * model.axis[1][1];
+				model.axis[2][1] = model.axis[0][2] * model.axis[1][0] -
+					model.axis[0][0] * model.axis[1][2];
+				model.axis[2][2] = model.axis[0][0] * model.axis[1][1] -
+					model.axis[0][1] * model.axis[1][0];
+
+				model.hasAxes = true;
 			}
 		}
 
@@ -2052,10 +2237,19 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				const char* skinTrouble = "";
 				const bool haveTwin = HDModelFindFile(model, false, false,
 					twinPath, sizeof(twinPath), 0);
+				/* THE REST HANDS' OWN READ IS IN read_ms TOO (#153, round M3).
+				 * The twin's read below has been counted since round M2b and
+				 * this one - a whole second .TRM off the disk, per hand part
+				 * with a mod's gun in it - was not, so the one line that says
+				 * how long a level spent reading models was short by exactly
+				 * the work this rule adds. */
+				const double skin_started = now_ms();
 				const bool haveSkin = slots[i].twinSkinOf &&
 					HDModelFindFile(slots[i].twinSkinOf, false, false, skinPath,
 						sizeof(skinPath), 0) &&
 					HDTrmLoad(skinPath, &skin, &skinTrouble);
+
+				read_ms += now_ms() - skin_started;
 
 				if (haveSkin)
 				{
@@ -2920,87 +3114,116 @@ int HDModelPage(int slot, int at)
 	return model->pages[(size_t)at];
 }
 
-/* THE AXES OF ONE BOX, LONGEST FIRST. One function so that the fit below and
- * the overflow figure after it cannot come to disagree about which axis is
- * which - the whole rule is "k-th longest to k-th longest", and a second copy
- * of it would be a second thing to keep in step. */
-static void sort_axes(const float* size, int* order)
+/* THE CLOUD'S OWN AXES (#153, round M3), measured in build() - the note at
+ * Model::axis says why they are taken there and not here. `axes` takes nine
+ * floats, three unit row vectors, longest first and right handed; `extent`
+ * takes the cloud's span along each of them. False for a model that has none
+ * (fewer than three vertices).
+ *
+ * A BOX AND A CLOUD ANSWER DIFFERENT QUESTIONS. A box says how much room a
+ * model needs; these say which way it RUNS. For two guns crossed like an X the
+ * two are nothing alike, which is the whole of the round M2b ring fault. */
+bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
 {
-	order[0] = 0;
-	order[1] = 1;
-	order[2] = 2;
+	const Model* model = find(g_models, slot);
 
-	for (int a = 0; a < 2; a++)
-		for (int b = a + 1; b < 3; b++)
-			if (size[order[b]] > size[order[a]])
-			{
-				const int keep = order[a];
-				order[a] = order[b];
-				order[b] = keep;
-			}
-}
-
-/* THE CORRECTION, out of the two bounding boxes and nothing else.
- *
- * The axes are sorted by extent, longest to shortest, on both sides, and
- * the k-th of the source is sent to the k-th of the target. That is a
- * signed permutation; where the permutation alone would turn the model
- * inside out - a determinant of -1, which would mirror it - one axis is
- * negated, which costs nothing on a box and keeps the model right-handed.
- *
- * The scale is uniform and is the ratio of the two LONGEST extents, so the
- * mod's model is as long in the ring as the model it replaces. Fitting the
- * whole box inside the target's instead was measured and refused: the
- * vanilla Uzi pickup is TWO guns lying side by side and 41 units thick,
- * the mod's is ONE standing upright, and a fit-inside rule would have
- * scaled it to a sixth of its size to match that thinnest axis.
- *
- * THE PRICE OF THAT REFUSAL IS THAT THE FITTED MODEL CAN STAND OUT OF THE
- * BOX IT WAS FITTED TO, on the two axes the scale did not decide - the same
- * Uzi becomes 154 units thick where the vanilla item is 41. That is the
- * intended picture and not a fault, but it is not visible in a matrix, so
- * HDModelBoxFitOverflow below puts a number on it and the ring's log line
- * prints it (#153, round M2b, the second fix round). */
-bool HDModelBoxFit(int model, int target, float* out)
-{
-	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
-
-	if (!HDModelBounds(model, srcMin, srcMax) ||
-		!HDModelBounds(target, dstMin, dstMax))
+	if (!model || !model->hasAxes)
 		return false;
 
-	float srcSize[3], dstSize[3], srcMid[3], dstMid[3];
+	for (int k = 0; k < 3; k++)
+	{
+		if (extent)
+			extent[k] = model->axisExtent[k];
+
+		if (axes)
+			for (int r = 0; r < 3; r++)
+				axes[k * 3 + r] = model->axis[k][r];
+	}
+
+	return true;
+}
+
+/* THE CORRECTION, out of the two models' own SHAPES.
+ *
+ * Round M2b built this out of the two bounding BOXES and the user's picture
+ * of the result is why it does not any more: his Uzi mod's inventory model is
+ * two guns CROSSED like an X, and a box cannot tell that from one tall gun
+ * standing up - 147 x 253 x 159 with y longest, which is what a single
+ * upright gun measures too. So the box rule laid the cross flat, the two guns
+ * one above the other with a gap between them, while the same file in the
+ * Tomb Raider I-III remaster's own ring shows the X facing the camera.
+ *
+ * THE SHAPE SAYS IT AND THE BOX CANNOT. The principal axes of the vertex
+ * cloud (HDModelPrincipalAxes, measured while the model was read) are the
+ * directions the model really runs in: for a crossed pair the two largest
+ * span the plane the cross lies in and the smallest is the way it is flat.
+ * Measured on the user's own files:
+ *
+ *   install EXTRA_UZI_ITEM    cloud 256 x 236 x  42, flat along -y
+ *   mod     UZI_OPTION        cloud 242 x 240 x 132, flat along -x
+ *
+ * - two crossed pairs, each flat along a different axis, and the box said
+ * nothing of the kind. Sending the source's k-th axis onto the target's k-th
+ * therefore lays the mod's cross into the plane the vanilla item's cross lies
+ * in, and the ring's own per-item rotation then presents it exactly as it
+ * presents the vanilla one: the X towards the camera, turning about the
+ * vertical like every other item in the ring. Nothing about either game is
+ * written down - the two files say which way round they are.
+ *
+ * Both frames are right handed by construction (see the axes' own note), so
+ * the map is a pure rotation and can never mirror a model - which the box
+ * rule had to repair with a negated axis.
+ *
+ * The scale is uniform and is the ratio of the two longest extents, so the
+ * mod's model is as long in the ring as the model it replaces. The longest
+ * axis is always one of the two IN the plane, so the scale is decided by the
+ * shape's own reach and never by how thick it is - which is the half of the
+ * old rule that was right and is kept.
+ *
+ * THE PRICE IS THAT THE FITTED MODEL CAN STILL STAND OUT OF THE TARGET'S BOX
+ * on the axes the scale did not decide: the mod's crossed Uzis are 132 units
+ * thick where the vanilla pair is 42, and that is the mod's own geometry and
+ * not a fault of the fit. HDModelRingFitOverflow puts the number on it and
+ * the ring's log line prints it. */
+bool HDModelRingFit(int model, int target, float* out)
+{
+	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+	float srcAxis[9], srcExt[3], dstAxis[9], dstExt[3];
+
+	if (!HDModelBounds(model, srcMin, srcMax) ||
+		!HDModelBounds(target, dstMin, dstMax) ||
+		!HDModelPrincipalAxes(model, srcAxis, srcExt) ||
+		!HDModelPrincipalAxes(target, dstAxis, dstExt) ||
+		srcExt[0] <= 0.0f)
+		return false;
+
+	/* THE TURN. Row vectors, as everywhere in this engine's matrices: the
+	  * sum of the three outer products u(k) x v(k) sends every u onto its own
+	  * v, because the u's are orthonormal. */
+	float turn[3][3];
+
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+		{
+			turn[r][c] = 0.0f;
+
+			for (int k = 0; k < 3; k++)
+				turn[r][c] += srcAxis[k * 3 + r] * dstAxis[k * 3 + c];
+		}
+
+	const float scale = dstExt[0] / srcExt[0];
+
+	/* CENTRED ON THE TWO BOXES and not on the two clouds' centres of mass:
+	  * the ring keeps a place for the item it draws and that place is the
+	  * vanilla model's box, so the middle of the box is where the middle of
+	  * the replacement belongs. */
+	float srcMid[3], dstMid[3];
 
 	for (int i = 0; i < 3; i++)
 	{
-		srcSize[i] = srcMax[i] - srcMin[i];
-		dstSize[i] = dstMax[i] - dstMin[i];
 		srcMid[i] = (srcMax[i] + srcMin[i]) * 0.5f;
 		dstMid[i] = (dstMax[i] + dstMin[i]) * 0.5f;
 	}
-
-	int srcOrder[3], dstOrder[3];
-
-	sort_axes(srcSize, srcOrder);
-	sort_axes(dstSize, dstOrder);
-
-	if (srcSize[srcOrder[0]] <= 0.0f)
-		return false;
-
-	float turn[3][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
-
-	for (int k = 0; k < 3; k++)
-		turn[srcOrder[k]][dstOrder[k]] = 1.0f;
-
-	const float det =
-		turn[0][0] * (turn[1][1] * turn[2][2] - turn[1][2] * turn[2][1]) -
-		turn[0][1] * (turn[1][0] * turn[2][2] - turn[1][2] * turn[2][0]) +
-		turn[0][2] * (turn[1][0] * turn[2][1] - turn[1][1] * turn[2][0]);
-
-	if (det < 0.0f)
-		turn[srcOrder[2]][dstOrder[2]] = -1.0f;
-
-	const float scale = dstSize[dstOrder[0]] / srcSize[srcOrder[0]];
 
 	for (int r = 0; r < 3; r++)
 		for (int c = 0; c < 3; c++)
@@ -3022,66 +3245,50 @@ bool HDModelBoxFit(int model, int target, float* out)
 	return true;
 }
 
-/* HOW FAR THAT FIT LEAVES THE TARGET'S BOX (#153, round M2b, the second fix
- * round).
+/* HOW FAR THAT FIT LEAVES THE TARGET'S ROOM (#153, round M2b, the second fix
+ * round; on the shape's own axes since round M3).
  *
- * The scale is the ratio of the two LONGEST extents, so the longest axis lands
+ * The scale is the ratio of the two longest extents, so the longest axis lands
  * exactly and the other two land wherever their own proportions put them. This
- * is the largest of the three ratios - fitted extent over the target's extent
- * on the same axis - and it is therefore never below 1 on the longest axis, so
- * a value of 1.00 means the model sits inside the box it was fitted to and the
- * 3.73 the user's Uzi mod measures means one of its axes is nearly four times
- * the room the ring keeps for that item.
+ * is the largest of the three ratios - fitted extent over the target's on the
+ * same axis - so 1.00 means the model sits inside the room the ring keeps for
+ * that item and 3.18 means one of its axes is over three times that room.
  *
  * It is a NUMBER FOR THE LOG and not a limit: nothing here refuses a fit, for
- * the reason written at HDModelBoxFit. `worstAxis` is optional and takes 0, 1
- * or 2 - the TARGET's axis that is overflowed. 0 when either box is missing. */
-float HDModelBoxFitOverflow(int model, int target, int* worstAxis)
+ * the reason written at HDModelRingFit. `worstAxis` takes 0, 1 or 2 - WHICH OF
+ * THE TARGET'S OWN axes, longest first, is the one overflowed; 0 when either
+ * model has no axes. */
+float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 {
-	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+	float srcAxis[9], srcExt[3], dstAxis[9], dstExt[3];
 
 	if (worstAxis)
 		*worstAxis = -1;
 
-	if (!HDModelBounds(model, srcMin, srcMax) ||
-		!HDModelBounds(target, dstMin, dstMax))
+	if (!HDModelPrincipalAxes(model, srcAxis, srcExt) ||
+		!HDModelPrincipalAxes(target, dstAxis, dstExt) ||
+		srcExt[0] <= 0.0f || dstExt[0] <= 0.0f)
 		return 0.0f;
 
-	float srcSize[3], dstSize[3];
-
-	for (int i = 0; i < 3; i++)
-	{
-		srcSize[i] = srcMax[i] - srcMin[i];
-		dstSize[i] = dstMax[i] - dstMin[i];
-	}
-
-	int srcOrder[3], dstOrder[3];
-
-	sort_axes(srcSize, srcOrder);
-	sort_axes(dstSize, dstOrder);
-
-	if (srcSize[srcOrder[0]] <= 0.0f || dstSize[dstOrder[0]] <= 0.0f)
-		return 0.0f;
-
-	const float scale = dstSize[dstOrder[0]] / srcSize[srcOrder[0]];
+	const float scale = dstExt[0] / srcExt[0];
 	float worst = 0.0f;
 
 	for (int k = 0; k < 3; k++)
 	{
-		/* A target axis of zero extent is a flat model - anything at all
-		 * stands out of it - and a ratio there would be an infinity. It is
-		 * skipped and the axes that can be measured decide. */
-		if (dstSize[dstOrder[k]] <= 0.0f)
+		/* A target axis of no extent is a flat model - anything at all stands
+		  * out of it - and a ratio there would be an infinity. It is skipped
+		  * and the axes that can be measured decide. */
+		if (dstExt[k] <= 0.0f)
 			continue;
 
-		const float ratio = (srcSize[srcOrder[k]] * scale) / dstSize[dstOrder[k]];
+		const float ratio = (srcExt[k] * scale) / dstExt[k];
 
 		if (ratio > worst)
 		{
 			worst = ratio;
 
 			if (worstAxis)
-				*worstAxis = dstOrder[k];
+				*worstAxis = k;
 		}
 	}
 

@@ -206,17 +206,28 @@ void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs
 	int barPermille, HDTrmFoldCounts* counts);
 
 /* WHAT THIS READER HAS DONE SINCE THE PROCESS STARTED (#153, round M2, the
- * fix round). Three running totals, and a caller that wants "per level build"
- * takes them twice and subtracts:
+ * fix round; both notes corrected in round M2b). Three running totals, and a
+ * caller that wants "per level build" takes them twice and subtracts:
  *
  *     opens   files this module opened - every HDTrmExists and every parse
- *     loads   models parsed WITH their geometry, i.e. HDTrmLoad calls that
- *             got as far as reading the file
+ *     loads   HDTrmLoad CALLS, counted before the file is opened. A call for
+ *             a path that is not there counts here and adds nothing to
+ *             `opens` or `bytes`, which is what makes the three read
+ *             together: loads above opens means somebody asked for files
+ *             that are not on this disk
  *     bytes   bytes read off disk. HDTrmProbe reads the WHOLE file and keeps
  *             the header, so a probe costs the same read a load does
  *
  * They exist to answer one question with a number instead of an opinion: does
  * a level build read the whole wardrobe, or only the outfit that is worn. Any
- * of the three pointers may be null. Counted on the calling thread and not
- * atomic - this reader is called from one thread (hd_model.cpp's pass one). */
+ * of the three pointers may be null.
+ *
+ * TWO THREADS REALLY DO REACH THEM and the counters are still plain doubles,
+ * because the two can never be inside this module at the same time. The load
+ * thread's HDTrmExists (hd_scan.cpp, the level scan) and the main thread's
+ * HDTrmProbe (hd_wardrobe.cpp, the wardrobe scan) are the two callers, and
+ * specific\file.cpp JOINS the load thread before HDLevelBuild runs - so the
+ * scan is finished before the wardrobe's first probe. A caller that breaks
+ * that order has to make these atomic; the join is the guarantee, not the
+ * word "single-threaded". */
 void HDTrmCounters(double* opens, double* loads, double* bytes);

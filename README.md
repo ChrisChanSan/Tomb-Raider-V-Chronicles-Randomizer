@@ -148,11 +148,37 @@ your installation or into the mod: a mod replaces a file by being *looked at
 first*, never on disk.
 
 **What a mod may replace.** Anything the HD path resolves by name: the hands
-`HAND_*`, the holsters `HOLSTER_*`, the pickups `EXTRA_*` and the inventory
-models `*_OPTION`. A page a mod does not ship is taken from your
-installation, so a mod that brings only models works. **A mod can never
-change a page of a model it did not supply** — the vanilla look cannot be
-damaged by installing one.
+`HAND_*`, the holsters `HOLSTER_*` and the pickups `EXTRA_*`. A page a mod does
+not ship is taken from your installation, so a mod that brings only models
+works. **A mod can never change a page of a model it did not supply** — the
+vanilla look cannot be damaged by installing one.
+
+**Inventory models.** A mod written for Tomb Raider I-III carries that game's
+names — `UZI_OPTION` instead of `EXTRA_UZI_ITEM` — and the ring and the pickup
+display in the corner draw it where the slot's own model would stand. It is
+turned and scaled onto that model's own bounding box, because the I-III
+inventory models stand upright and the IV-VI ones lie flat. The pickup lying
+on the floor keeps `EXTRA_*`, and a mod that ships an `EXTRA_*` of its own wins
+everywhere.
+
+**Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
+the outfit or an `outfit.txt` says, so every level and every outfit look alike
+in that one respect. (It is the Russia levels that change: they used to draw
+the gloved set.)
+
+**A mod's hand may keep its gun and give back the hands.** A hand model painted
+with pages of the I-III bundle — `origin=tr1` below — used to give Lara that
+game's skin tone and its glove seams. Those pages are dropped now and your
+installation's own hands are drawn under the mod's gun instead. A mod with no
+`origin=` line is untouched.
+
+**A mirrored hand model is straightened out.** A `HAND_*` file is modelled once
+and mirrored, and an exporter that mirrors the shape without the bone names
+leaves part of one hand hanging on the other — invisible while Lara stands
+still, a sheet of skin stretching between her wrists the moment she aims. The
+engine folds those weights back onto the hand they belong to. Only a real
+mirroring error is touched; the rounding every one of the Remaster's own files
+carries is left alone.
 
 **Outfits are different: they are ADDED, never swapped in.** An
 `OUTFIT_*.TRM` a mod ships becomes an entry of its own in **Lara's wardrobe**,
@@ -161,9 +187,11 @@ take the place of the Remaster's Rome outfit, and a level that asks for the
 Rome outfit still gets the Rome outfit.
 
 The wardrobe finds, in this order: the outfits of your **Tomb Raider IV-VI
-Remastered** (24 of them), those of **Tomb Raider I-III Remastered** that the
-first has not got under the same name (30 more — the `OUTFIT_TRX_*` sets),
-and then every mod's. `OUTFIT_YOUNG*` of the two installations is passed over
+Remastered** (22 of them — the bundle holds 24 `OUTFIT_*` bodies and the two
+`OUTFIT_YOUNG*` are passed over, see below), those of **Tomb Raider I-III
+Remastered** that the first has not got under the same name (30 more — the
+`OUTFIT_TRX_*` sets), and then every mod's. `OUTFIT_YOUNG*` of the two
+installations is passed over
 — young Lara carries no weapon and a randomized run hands her one in every
 level — but a **mod** in that slot is not, because a mod there is usually a
 grown-up body. Every key the wardrobe knows is printed by

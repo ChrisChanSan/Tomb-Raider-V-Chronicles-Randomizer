@@ -726,7 +726,27 @@ namespace
 	 *     of them is an OUTFIT_TRX_*_HD.TRM with its twin beside it - so this
 	 *     rule takes nothing off the list that the list has not got twice.
 	 *     A wide file with NO twin is listed and worn, with the rounding in
-	 *     the log, because a rounded picture beats no picture. */
+	 *     the log, because a rounded picture beats no picture.
+	 *
+	 * AND IT READS THE WHOLE FILE TO LOOK AT THE HEADER, ON PURPOSE (#153,
+	 * round M2b). HDTrmProbe wants only the counts, and the scan puts 29.5 MiB
+	 * through it once a session for the 112 headers it looks at. Reading less
+	 * was considered and refused, with the numbers:
+	 *
+	 *   - what the header needs is everything up to the VERTEX block, and the
+	 *     index list is inside that. For an outfit of 14,000 vertices and
+	 *     70,000 indices the prefix is 140 KiB of a 480 KiB file, so the
+	 *     saving is two thirds of the bytes and not the file.
+	 *   - what it costs is a SECOND length inside hd_trm's parser: every one
+	 *     of its bounds checks tests against the file length, and a prefix
+	 *     read would make "how much is in the buffer" and "how long is the
+	 *     file" two different numbers in the one reader a downloaded mod's
+	 *     .TRM goes through. Round M1's fix round is what that kind of seam
+	 *     costs when it is got wrong.
+	 *   - and what it buys is measured: the whole scan is 24 to 36 ms, once
+	 *     per session, on this machine (HDLOG wardrobe scan, ms=).
+	 *
+	 * A few milliseconds once is not worth a second length in that parser. */
 	bool readable(const std::string& path, const std::string& file,
 		const std::string& folder, std::string& why, int* vertexBytes)
 	{

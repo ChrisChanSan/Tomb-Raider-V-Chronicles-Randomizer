@@ -11086,7 +11086,11 @@ twin is the same Lara without the rounding. A wide file with NO twin - a mod's
 - is worn, with the rounding written into the log, because a rounded picture
 beats no picture.
 
-**How a level says which.** A new `.hdm` line, `wear <key>`, the rest of the
+**How a level says which.** *(Withdrawn in the fix round below: the choice is a
+registry value, `hd_outfit`, and this engine has no `wear` line at all - a
+sidecar that carries one reaches the log as a line it has no rule for. The
+paragraph stands because the reasoning about the version number is still what
+the sidecar format rests on.)* A new `.hdm` line, `wear <key>`, the rest of the
 line taken whole because a mod's key holds its folder name and may carry
 spaces. The version stays **2**: an engine older than this round does not know
 the word, ignores the line and draws what it drew before, which is the whole
@@ -11097,7 +11101,12 @@ found`, and **young Lara stays classic whatever the line says** - the question
 is asked before the line is read, so a sidecar cannot put an adult body on the
 child.
 
-**What the randomizer does with it, and what it deliberately does not.** The
+**What the randomizer does with it, and what it deliberately does not.**
+*(Withdrawn whole in the fix round below: the randomizer knows no scanned
+outfits. Commit `234df1b` was reverted and `TR5Randomizer/` is byte-identical
+to what it was before this round - no divider in the wardrobe window, no
+`outfitsOn`, no `wear` line in any sidecar. What is left of the paragraph is
+the argument, which is why the decision went the other way.)* The
 scanned entries stand under a divider in the wardrobe window, greyed out when
 their source is not there, and are **off unless the user ticks one**. Held is
 therefore the SELECTION and not the deselection, which is the opposite of the
@@ -11282,6 +11291,199 @@ that turns a slot name into a file - is 210 ms of the 278 with the user's nine
 mods against 60 ms without them. That is round M1's resolver doing its work,
 it was there before round M2, and it is now a number in the log rather than
 something to guess at.
+
+#### Round M2b - the hands, and a mod's own inventory model (#153)
+
+Four things the user asked for after playing the round M2 build, and the six
+small findings its review left over. Everything here is the wardrobe and the
+ring; the randomizer is not touched at all.
+
+**THE GLOVES ARE NEVER WORN.** "In every level with every outfit Lara has had
+TR5's bare hands for the weapons; we never used the gloves - force it, then it
+is uniform." `takes_gloves` answers false for every outfit now. The wardrobe's
+`gloves` flag, `outfit.txt`'s `gloves=` line and `kPart`'s gloves column are
+all still parsed, still printed and still logged - a file has to go on saying
+what it says, and a modder who writes the line is owed the reason rather than
+silence - and none of them reaches a model name any more. One line per level
+build when something asked, and a `MODLOG` line when an `outfit.txt` did.
+
+The review's brief said no outfit in the wardrobe asked for gloves. One does:
+`OUTFIT_RUSSIA`'s row says `gloves=true` and has since fix round C, so **JOBY1
+to JOBY5 drew `HAND_GLOVES_*` until this round**. That is the one picture the
+round moves on an unmodded game: of the eight known outfits drawn with pistols
+before and after, seven are byte-identical `.PNG` files and the Russia one is
+not.
+
+**THE MIRRORED HAND WEIGHTS ARE FOLDED BACK.** A `HAND_` file is modelled once
+and mirrored, and an exporter that mirrors the geometry without the bone names
+leaves vertices of one hand carrying weight on the other. In the bind pose the
+two hands sit beside each other and nothing shows; the moment an animation
+moves them apart the far bone drags those vertices into the gap. That is the
+user's RICH2 screenshot - a sheet of skin stretching out of the wrist into
+the air.
+
+`HDTrmFoldMirrored` (hd_trm.cpp) moves the far side's weight onto that bone's
+counterpart on the near side, by the vertex's majority side, and renormalises
+the three weights to 255. A vertex weighted exactly half and half has no
+majority, and the tie is broken by the sign of its own **x**: over every
+crossed vertex of the install's fifteen hand files and the user's four gun
+mods - 1,357 of them - the majority side and the sign of x agree 1,357 times
+and disagree not once, so that is the same rule read off the geometry instead
+of off the weights.
+
+**THE BAR IS A MEASUREMENT AND NOT A TASTE.** Over all of those files a crossed
+vertex's share on the far hand is one of exactly two things:
+
+```
+    3..4 per mille   ONE weight unit out of 255 - the exporter's rounding.
+                     1,311 vertices: every crossed vertex of every file of the
+                     install, and of the Uzi, the Spas-12 and the gloved
+                     pistol mod.
+    371..500         the 46 crossed vertices of the user's HK USP
+                     HAND_BARE_PISTOL, four of them exactly 500 - half the
+                     vertex on the wrong hand.
+```
+
+Nothing at all lies between the two, so the bar is an eighth (125 per mille):
+31 times the largest share the remaster's own files carry and a third of the
+smallest the mod's do.
+
+What the bar buys was measured too, with `ModelProbe -handfold`, which skins
+every vertex twice through the same node matrices the card is given and takes
+the distance between the two answers. Folding the install's own hands at a bar
+of **0** moves them by at most **0.51 units** with both forearms turned 50
+degrees out, **0.97** with both arms straight out sideways, and **2.00** in a
+contortion no animation reaches. Small - and pointless, because one weight unit
+on the far hand cannot make a sliver. With the bar the remaster's own files
+come out of the reader **byte for byte as they went in**, which is a guarantee
+rather than a measurement. The mod's 46 vertices move up to **65.71 units**
+(mean 51.25) in the same pose, which is the sliver, and the two rendered
+pictures of that one hand - `-nofold` and without it - show it and then show it
+gone.
+
+**MOD GUNS ON THE INSTALL'S HANDS.** A mod may ship a weapon hand - a hand and
+the gun in it, on two or three pages of one file - and paint the HAND half with
+pages of the Tomb Raider I-III bundle, which its `mod.txt` reaches with
+`origin=`. The user's IMI Uzis do exactly that: `HAND_BARE_UZI` names 6111 and
+6112, its own, and **8002 and 8010, which are that bundle's skin sheets**. He
+calls it "the Uzis pull on gloves".
+
+`hd_model` asks the page cache's own chain where each of a model's pages really
+resolves (`HDPageCacheOriginOf`, which calls `resolve_page` and loads nothing),
+and when any of them lands in the origin bundle it does two things: the mod's
+triangles on those pages are **dropped**, and the **install's own file of the
+same name** is loaded into a companion slot, cut to the pages it shares with
+`HAND_BARE_REST` - whose every page is skin and nothing else. The two are
+drawn together, with the same matrices, the same node mask and the same light,
+and the user sees TR5's hands holding the mod's guns.
+
+The rule is general over any hand part and any origin, and it fires on nothing
+else: the HK USP and the Spas-12 both wear the install's own 8001 and have no
+`origin=` line, so they are untouched, and so is `HOLSTER_UZI`, which wears the
+gun's own pages alone. Measured on ANDREA3 with the user's nine mods: the mod's
+hand keeps 2 pages and 31,267 vertices on nodes 10 and 13, the install's twin
+brings 1 page, and `HOLSTER_UZI` stays whole at 27,624 vertices on nodes 1 and
+4.
+
+The decision is made inside `hd_model` and not by the caller, because only
+`hd_model` has the file open and the pages resolved; a caller would have to
+read the `.TRM` a second time and keep a copy of `resolve_page`'s chain - the
+very drift round M1 caught in `ModelProbe`'s page rule.
+
+**A MOD'S OWN INVENTORY MODEL, IN THE RING AND IN THE CORNER.** The Tomb Raider
+I-III remaster draws the inventory out of `<BASE>_OPTION` models and IV-VI out
+of `EXTRA_<BASE>_ITEM`. A mod written for I-III carries the OPTION names with
+it - the user's IMI Uzis ship `UZI_OPTION` and `UZI_AMMO_OPTION` - and nothing
+in this engine ever looked for such a name, so the ring went on showing the
+install's own model while the mod's gun was in Lara's hands.
+
+The name is **derived** and not listed: the slot's own name with `_ITEM`
+replaced by `_OPTION`, the way rule 3 derives the EXTRA names
+(`HDBindModOption`). It is taken only when a mod really ships it AND no mod
+ships an `EXTRA_<BASE>_ITEM` of any of the three prefixes - a mod that brings
+the IV-VI name has said which convention it means, and it wins. The pickup
+lying on the floor keeps `EXTRA_*` either way; only the ring and the display in
+the corner read this.
+
+A file out of another game stands in another frame, so `HDModelBoxFit` puts it
+into this slot's: centred on its own bounding box, turned so that its longest
+axis lies where the target's longest lies and its shortest where the shortest
+lies, and scaled by the ratio of the two longest extents. Nothing about either
+game is written down - the two boxes say which way round they are:
+
+```
+  install 4\ITEM\EXTRA_UZI_ITEM        266 x  41 x 212   x longest  (two guns
+                                                          lying flat)
+  mod     UZI_OPTION                   147 x 253 x 159   y longest  (one gun
+                                                          standing up)
+      -> y onto x, z onto z, x onto y; scale 266/253 = 1.05
+
+  install EXTRA_UZI_AMMO_ITEM          147 x  26 x 185   z longest
+  mod     UZI_AMMO_OPTION              162 x  28 x  74   x longest
+      -> x onto z; scale 185/162 = 1.14
+```
+
+Fitting the whole box INSIDE the target's was refused by the same measurement:
+the vanilla Uzi pickup is two guns side by side and 41 units thick, so that
+rule would have scaled the mod's upright gun to a sixth of its size to match
+the thinnest axis.
+
+It is drawn **rigidly on the item's root node**, which is the honest statement
+about a file whose bone numbers are another game's, and the correction goes in
+FRONT of the engine's own matrix rather than into the projection - the ring's
+off-centre term lives in the projection precisely because it must not touch a
+normal (fix round P2), and this one must, because the model is turned.
+
+`-ringcheck` and `-pickupcheck` on ANDREA1 with the mods active: worst place
+error **0.00013 px** and **0.00008 px** against a budget of 1, and the ring's
+light unmoved. Both inventory models were rendered and looked at.
+
+**WITH NO MODS FOLDER NOTHING IN ANY OF THIS HAPPENS**, and that is not an
+argument but a diff: `ModelProbe -all -nodraw` over ANDREA1, the build before
+this round against the build after it, is identical line for line - every slot,
+every model, every page, every range, every verdict - apart from the
+millisecond columns and the peak commit.
+
+**THE SIX SMALL FINDINGS of the round M2 review.**
+
+1. The README said the wardrobe finds 24 IV-VI outfits. It finds **22**: the
+   bundle holds 24 `OUTFIT_*` bodies and the two `OUTFIT_YOUNG*` are passed
+   over. The line says both numbers now.
+2. `hd_mods.cpp`'s refusal of `OUTFIT_*.TRM` still called a foreign outfit
+   "round M2's problem". Round M2 answered it, and the refusal stands for a
+   different reason now - a mod's outfit is an ENTRY in the wardrobe scan and
+   never a replacement - which is what the comment says.
+3. `HDTrmCounters`' note was wrong twice. `loads` counts **calls**, before the
+   file is opened, so a call for a path that is not there adds nothing to
+   `opens` or `bytes`; and the reader really is reached from two threads - the
+   load thread's `HDTrmExists` in the level scan and the main thread's
+   `HDTrmProbe` in the wardrobe scan. There is no race because `file.cpp`
+   JOINS the load thread before `HDLevelBuild` runs, and the note says that
+   rather than "single-threaded".
+4. `props_of` ended in a walk of the whole wardrobe scan with a `std::string`
+   per entry, and `HDLaraPartSheen` calls it once per part per draw. One answer
+   is remembered, keyed by the outfit, dropped in `HDLaraLevelEnd`.
+5. `readable()` reads whole files to look at headers - 29.5 MiB once per
+   session - and goes on doing so. The reason is in the comment with the
+   numbers: the prefix a header needs is two thirds of an outfit file, the
+   whole scan costs 24 to 36 ms once, and reading less would mean two different
+   lengths inside the one `.TRM` parser a downloaded mod's file goes through.
+6. The round M2 entry above presented the `.hdm` `wear` line and the
+   randomizer half as current. Both now say, at the top of their own
+   paragraph, that the fix round withdrew them.
+
+**TOOLS.** `ModelProbe` gained `-handfold` (the fold, its counters and the
+displacement it causes in the pose the command line asks for - the engine's own
+call, not a copy), `-nofold` and `-nohandmix` (the two halves of the picture
+from before the round), and `-inventory` (a mod's `_OPTION` model in the ring's
+place, through the same two calls the engine makes). `hd_model` exports
+`HDModelFindFile`, so a tool asks the engine's own model search instead of
+keeping a copy of it.
+
+**WHAT IS NOT PROVED.** Everything here is `ModelProbe`'s renderer, which is
+the engine's renderer with no game around it. The play test still owes the
+hands in motion, the ring opened in the game with the Uzi mod in the folder,
+and whether a Russia level looks right with bare hands.
 
 ## Building this yourself
 

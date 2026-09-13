@@ -136,9 +136,31 @@ namespace
 		return HDWardrobeFindFile(kOutfit[outfit].model, HD_WARDROBE_SOURCE_46);
 	}
 
+	/* REMEMBERED, BECAUSE IT IS ASKED EVERY FRAME (#153, round M2b).
+	 *
+	 * `wear_index_of` ends in HDWardrobeFindFile, which walks the whole scan -
+	 * 56 entries on this machine, more with mods - and builds a std::string
+	 * per entry to compare with. That is fine once a level; it is not fine
+	 * where it really sits, which is HDLaraPartSheen, called once per PART per
+	 * DRAW, and HDLaraSkinPage, called once per page of the body.
+	 *
+	 * One answer is remembered and it is keyed by the outfit, so a caller
+	 * asking about a different one gets the walk and the right answer. What it
+	 * rests on - the scan's list - is fixed for the session, and the memory is
+	 * dropped in HDLaraLevelEnd, which every level build calls first, so a
+	 * tool that re-scans with another Mods folder between levels is safe too. */
+	int g_props_outfit = HD_LARA_OUTFIT_NONE;
+	const HDWardrobeEntry* g_props = 0;
+
 	const HDWardrobeEntry* props_of(int outfit)
 	{
-		return HDWardrobeAt(wear_index_of(outfit));
+		if (outfit == g_props_outfit)
+			return g_props;
+
+		g_props_outfit = outfit;
+		g_props = HDWardrobeAt(wear_index_of(outfit));
+
+		return g_props;
 	}
 
 	// The file an outfit number wears - the enum's own name, or the scan
@@ -2172,6 +2194,12 @@ void HDLaraLevelEnd()
 	g_outfit = HD_LARA_OUTFIT_NONE;
 	g_active = false;
 	g_notes.clear();
+
+	// #153 round M2b: the wardrobe entry props_of remembers. Dropped here and
+	// not in props_of, so that a re-scan between levels cannot be answered out
+	// of the old list.
+	g_props_outfit = HD_LARA_OUTFIT_NONE;
+	g_props = 0;
 
 	for (int i = 0; i < HD_LARA_PART_COUNT; i++)
 	{

@@ -646,10 +646,16 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 	const std::string upper_name = upper(name);
 
-	/* THE ONE NAME ROUND M1 REFUSES. See the header: Lara's composite is a
-	 * measured table and a foreign outfit is round M2's problem, not this
-	 * round's. Refused here rather than at the scan so that the refusal is
-	 * the same wherever the name comes from - the wardrobe, a slot, a tool. */
+	/* THE ONE NAME THIS RESOLVER REFUSES, and round M2 is why it goes on
+	 * refusing it. A mod's outfit is an ENTRY OF ITS OWN in the wardrobe scan
+	 * (hd_wardrobe.h), which the player picks from; it is never a replacement
+	 * of the install's file of the same name, so a level that asks for
+	 * OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC. The
+	 * scan finds a mod's outfits through HDModsOutfitCount and its two
+	 * neighbours, which is a different door and deliberately so.
+	 *
+	 * Refused here rather than at the scan so that the refusal is the same
+	 * wherever the name comes from - the wardrobe, a slot, a tool. */
 	if (upper_name.compare(0, 7, "OUTFIT_") == 0)
 		return buffer;
 

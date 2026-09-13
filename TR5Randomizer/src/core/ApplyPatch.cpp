@@ -1619,6 +1619,13 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             204,   // ANIM_PICKUPF     - picking one off the floor
             206,   // ANIM_PICKUPF_UW  - the same under water
             312,   // ANIM_DUCKPICKUPF - the same while crouched
+            // Picking an item up UNDER WATER. Found by the user in Andrea1
+            // (2026-09-13) and measured with LaraAnim: ANIM_PICKUP_UW is a
+            // Core stub (FrameSize 0) in Andrea1, joby3, joby5, rich1, rich2,
+            // rich3 and richcut2 - every level whose vanilla layout has no
+            // pickup under water, which the randomizer changes. The flare's
+            // twin (206) was already here; the plain one was not.
+            130,   // ANIM_PICKUP_UW   - picking an item up under water
         };
         std::set<int> needed(std::begin(kAlways), std::end(kAlways));
         for (int i = 0; i < level.itemCount(); ++i)

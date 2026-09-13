@@ -267,8 +267,14 @@ namespace
 			char path[512];
 			int mod = -1;
 
-			if (*HDModsFindModel(name.c_str(), &mod, path, sizeof(path)) &&
-				(modOnly == kModsAny || modOnly == mod))
+			/* The wanted mod goes INTO the search rather than being checked
+			 * on the way out (#153, round M1, fix round). Sifting the answer
+			 * here meant the resolver had already written "model X <- mod0"
+			 * into the log for a file this call then dropped on the floor,
+			 * and its one-line-per-model memory made the correct line for
+			 * the same name unsayable afterwards. */
+			if (*HDModsFindModel(name.c_str(), &mod, path, sizeof(path),
+				modOnly == kModsAny ? -1 : modOnly))
 			{
 				if (origin)
 					*origin = HD_MODEL_ORIGIN_MOD;

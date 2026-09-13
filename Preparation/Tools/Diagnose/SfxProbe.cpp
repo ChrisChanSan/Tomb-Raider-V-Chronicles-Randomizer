@@ -17,6 +17,13 @@
  * parser - specific\sfxbank.cpp, linked here, not copied - and says out loud
  * what the engine would do silently.
  *
+ * THE SAME CHAIN LITERALLY, not the same chain by agreement: the order of the
+ * candidates comes out of SfxBankChainLink in that shared file, which is the
+ * call HQSfxOpen makes as well. The first cut of this tool kept its own copy
+ * of the order, and a tool's copy of a rule is what drifts - ModelProbe's
+ * page rule had drifted exactly that way and this round had to fix it. There
+ * is nothing left here to keep in step by hand.
+ *
  * USAGE
  *
  *   SfxProbe <game folder> [options]
@@ -37,6 +44,11 @@
  *                      printed, which are the two the footstep mods replace.
  *     -all-ids         every sound id the chosen bank names, as a table.
  *     -wavs            the loose .wav overlay alone, without the bank tables.
+ *     -samples         push every sample of the chosen bank (and of the
+ *                      ruler, when there is one) through SfxRiffCheck - the
+ *                      engine's own gate - and count what it refuses. A bank
+ *                      the engine would silently fall back from on some of
+ *                      its sounds shows up here and nowhere else.
  *
  * Everything goes to stdout, so a run can be pasted into a report as it
  * stands.
@@ -153,7 +165,7 @@ int main(int argc, char** argv)
 	if (argc < 2)
 	{
 		printf("usage: SfxProbe <game folder> [-mods <folder>] "
-			"[-install <5-folder>] [-id <n>] [-all-ids] [-wavs]\n"
+			"[-install <5-folder>] [-id <n>] [-all-ids] [-wavs] [-samples]\n"
 			"       see the head of SfxProbe.cpp for the whole list\n");
 		return 2;
 	}
@@ -162,7 +174,7 @@ int main(int argc, char** argv)
 	std::string mods = Join(game, "Mods");
 	std::string install;
 	std::vector<int> ids;
-	bool allIds = false, wavsOnly = false;
+	bool allIds = false, wavsOnly = false, samples = false;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -176,6 +188,8 @@ int main(int argc, char** argv)
 			allIds = true;
 		else if (!_stricmp(argv[i], "-wavs"))
 			wavsOnly = true;
+		else if (!_stricmp(argv[i], "-samples"))
+			samples = true;
 		else
 			printf("SfxProbe: ignoring %s\n", argv[i]);
 	}
@@ -203,48 +217,47 @@ int main(int argc, char** argv)
 	/* --- the chain ------------------------------------------------------ */
 	printf("\n-- the bank chain, in the order HQSfxOpen walks it ------------\n");
 
+	/* The number is the link's POSITION in this machine's chain, not a fixed
+	 * tier: with no mod bank installed, audio\MAIN.SFX is link 1 and not
+	 * link 2. It moved with the shared order (#153, round M1, fix round) and
+	 * it is worth saying, because an older run of this tool printed the tier
+	 * and the two are easy to mistake for a changed chain. */
+	printf("  (numbered by position - the first mod bank, if any, is 1)\n");
+
 	SfxBank* bank = 0;
 	std::string chosen;
+	int chosenMod = -1;		// the mod whose bank answered, or -1
+	std::vector<int> plainLinks;	// the links no mod owns, for the ruler
 
-	for (int i = 0; i < HDModsCount(); i++)
+	/* THE ENGINE'S OWN CHAIN, not a copy of it (#153, round M1, fix round).
+	 * This tool used to hold its own ordering - mods, then audio\, then the
+	 * install - which is exactly the arrangement that let ModelProbe's page
+	 * rule drift out of step with the cache until this round caught it. The
+	 * order now comes from SfxBankChainLink in specific\sfxbank.cpp, the same
+	 * call HQSfxOpen makes, so a later round that reorders the chain reorders
+	 * what this tool prints with it. */
+	for (int link = 0; ; link++)
 	{
-		const char* path = HDModsBank(i);
+		char path[512], label[512], shown[560];
+		int mod = -1;
 
-		if (!path || !*path)
-			continue;
+		if (!SfxBankChainLink(link, game.c_str(),
+			install.empty() ? 0 : install.c_str(),
+			path, sizeof(path), label, sizeof(label), &mod))
+			break;
 
-		char label[64];
+		if (mod < 0)
+			plainLinks.push_back(link);
 
-		snprintf(label, sizeof(label), "1. mod%d %.40s", i, HDModsName(i));
+		snprintf(shown, sizeof(shown), "%d. %.500s", link + 1, label);
 
-		SfxBank* got = Try(path, label, bank == 0, &chosen);
+		SfxBank* got = Try(path, shown, bank == 0, &chosen);
 
 		if (got)
+		{
 			bank = got;
-	}
-
-	{
-		const std::string audio = Join(game, "audio\\MAIN.SFX");
-		SfxBank* got = Try(audio.c_str(), "2. audio\\MAIN.SFX", bank == 0, &chosen);
-
-		if (got)
-			bank = got;
-	}
-
-	{
-		std::string path;
-
-		if (install.empty())
-			install = HDInstallRoot();
-
-		if (!install.empty())
-			path = Join(install, "DATA\\MAIN.SFX");
-
-		SfxBank* got = Try(path.c_str(), "3. the installed remaster",
-			bank == 0, &chosen);
-
-		if (got)
-			bank = got;
+			chosenMod = mod;
+		}
 	}
 
 	if (!bank)
@@ -268,27 +281,88 @@ int main(int argc, char** argv)
 	SfxBank* ruler = 0;
 	std::string rulerName;
 
-	if (chosen.compare(0, 2, "1.") == 0)
+	if (chosenMod >= 0)
 	{
-		const std::string audio = Join(game, "audio\\MAIN.SFX");
-		const char* why = "";
-
-		ruler = SfxBankOpen(audio.c_str(), &why);
-
-		if (ruler)
-			rulerName = "audio\\MAIN.SFX";
-		else if (!install.empty())
+		/* The plain links of the same chain, in the same order - which is
+		 * what the engine walks on for the ruler once a mod's bank has
+		 * answered. Collected above rather than rebuilt here, so this half
+		 * of the tool has no copy of the order either. */
+		for (size_t k = 0; k < plainLinks.size() && !ruler; k++)
 		{
-			const std::string other = Join(install, "DATA\\MAIN.SFX");
+			char path[512], label[512];
+			const char* why = "";
+			int mod = -1;
 
-			ruler = SfxBankOpen(other.c_str(), &why);
+			if (!SfxBankChainLink(plainLinks[k], game.c_str(),
+				install.empty() ? 0 : install.c_str(),
+				path, sizeof(path), label, sizeof(label), &mod))
+				continue;
+
+			ruler = SfxBankOpen(path, &why);
 
 			if (ruler)
-				rulerName = "the installed remaster";
+				rulerName = label;
 		}
 
 		printf("ruler   : %s\n", ruler ? rulerName.c_str()
 			: "none - a sample the mod made longer would keep the level's own");
+	}
+
+	/* --- every sample through the engine's own gate ---------------------- *
+	 *
+	 * WHY THIS EXISTS (#153, round M1, fix round). HQSfxPayload used to judge
+	 * a bank's sample with a hand-rolled walk of the RIFF chunks that had no
+	 * bound on the lengths it read; it asks SfxRiffCheck now, which is the
+	 * same gate a loose .wav goes through and is bounds-checked. That is a
+	 * STRICTER gate than what stood there, so it has to be shown that the
+	 * player's real bank still passes it whole - a sound that quietly falls
+	 * back to Core's sample is exactly the kind of regression nobody hears
+	 * until much later. Every sample, not only the first take of each sound:
+	 * the bridge can land on any of them. */
+	if (samples)
+	{
+		int refused = 0;
+
+		printf("\n-- every sample through SfxRiffCheck, the engine's own gate ---\n");
+
+		for (int s = 0; s < SfxBankSamples(bank); s++)
+		{
+			long bytes = 0;
+			const char* riff = SfxBankSample(bank, s, &bytes);
+			const char* why = "";
+
+			if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why))
+				continue;
+
+			refused++;
+			printf("  sample %-5d REFUSED: %s\n", s, riff ? why : "could not be read");
+		}
+
+		printf("  %d of %d samples pass, %d refused\n",
+			SfxBankSamples(bank) - refused, SfxBankSamples(bank), refused);
+
+		if (ruler)
+		{
+			int rulerRefused = 0;
+
+			for (int s = 0; s < SfxBankSamples(ruler); s++)
+			{
+				long bytes = 0;
+				const char* riff = SfxBankSample(ruler, s, &bytes);
+				const char* why = "";
+
+				if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why))
+					continue;
+
+				rulerRefused++;
+				printf("  ruler sample %-5d REFUSED: %s\n", s,
+					riff ? why : "could not be read");
+			}
+
+			printf("  ruler: %d of %d pass, %d refused\n",
+				SfxBankSamples(ruler) - rulerRefused, SfxBankSamples(ruler),
+				rulerRefused);
+		}
 	}
 
 	/* --- the bridge ----------------------------------------------------- */

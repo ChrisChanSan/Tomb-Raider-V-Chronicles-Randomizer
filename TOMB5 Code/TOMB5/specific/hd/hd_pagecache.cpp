@@ -1309,10 +1309,16 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 				{
 					char line[200];
 
+					/* page_text, not %d (#153, round M1, fix round). This is
+					 * the one line in the file that still printed the cache
+					 * KEY, which for a mod's page reads "page 1342183535" -
+					 * exactly the unreadable line page_text exists to
+					 * prevent, on the one path where a player most needs to
+					 * know which mod filled his card. */
 					std::snprintf(line, sizeof(line),
-						"page %d: the card ran out of video memory after "
+						"page %s: the card ran out of video memory after "
 						"%.0f MiB - the level goes back to classic",
-						page.page, loaded_bytes / 1048576.0);
+						page_text(page.page).c_str(), loaded_bytes / 1048576.0);
 					g_notes.push_back(line);
 
 					if (stats)

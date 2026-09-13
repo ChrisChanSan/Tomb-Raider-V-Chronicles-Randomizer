@@ -79,3 +79,30 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
  * caller owns (free with std::free). Null and *why on trouble. `cap` is the
  * largest file that will be read at all - a guard, not a format rule. */
 char* SfxWavLoad(const char* path, long cap, long* bytes, const char** why);
+
+/* THE CHAIN OF BANKS, ONE CANDIDATE AT A TIME (#153, round M1, fix round).
+ *
+ * `link` counts from 0 and the order is the engine's: every active mod that
+ * ships 5\DATA\MAIN.SFX first, in the scan's own order, then
+ * <gameFolder>\audio\MAIN.SFX, then the installed remaster's own bank read
+ * where it lies. False means `link` is past the end.
+ *
+ * ONE ORDER IN ONE PLACE. The parsing was shared from the start, but the
+ * ORDER was written twice - once in HQSfxOpen and once in SfxProbe - and a
+ * tool holding its own copy of a rule is the drift this very round found and
+ * fixed in ModelProbe's page rule. Both walk this function now, so a later
+ * round that changes the order changes it for the tool as well.
+ *
+ * LAZY ON PURPOSE. The last link is the installed remaster and finding it
+ * walks the registry and every Steam library, so nothing is looked up until
+ * the link that needs it is asked for. A caller that stops early never pays.
+ *
+ * `gameFolder` empty means the current directory, which is what the engine
+ * hands in - its audio\MAIN.SFX is then the relative path it always was.
+ * `install` empty means ask HDInstallRoot(). `modIndex` gets the mod that
+ * owns the link, or -1. A link can come back true with an EMPTY path - "there
+ * is none to look at" - and the caller reports that and goes on.
+ *
+ * Needs the mods scanned; HDModsScan() before the first call. */
+bool SfxBankChainLink(int link, const char* gameFolder, const char* install,
+	char* path, int pathSize, char* label, int labelSize, int* modIndex);

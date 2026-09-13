@@ -68,9 +68,16 @@ namespace
 	size_t notes_flushed = 0;
 	void (*note_sink)(const char*) = 0;
 
-	/* Every model name this session has already reported. The resolver is
-	 * asked once per level and the answer never changes, so the log gets one
-	 * line per replaced model for the whole run rather than one per level. */
+	/* Every model this session has already reported, as "<NAME>/<mod>". The
+	 * resolver is asked once per level and the answer never changes, so the
+	 * log gets one line per replaced model for the whole run rather than one
+	 * per level.
+	 *
+	 * KEYED BY THE PAIR, not by the name alone (#153, round M1, fix round):
+	 * the same name can be answered by two different mods in two different
+	 * calls - once for whoever asks first and once for a caller that wants
+	 * one particular mod's copy - and a key of the name alone would let the
+	 * first line stand for the second one as well. */
 	std::vector<std::string> reported;
 
 	void note(const char* format, ...)
@@ -403,7 +410,13 @@ namespace
 
 		if (!folder_there(folder_used))
 		{
-			note("MODLOG folder=%s present=no - nothing is overlaid",
+			/* mods=0 is written out rather than left to be inferred (#153,
+			 * round M1, fix round): the line above the one below carried the
+			 * field and this one did not, so a reader counting mods= across a
+			 * fleet of logs found no line at all for the machines without a
+			 * Mods folder - the one case he most wants to tell apart from a
+			 * missing log. Same shape in both branches now. */
+			note("MODLOG folder=%s present=no mods=0 - nothing is overlaid",
 				folder_used.c_str());
 			return;
 		}
@@ -524,7 +537,8 @@ void HDModsShipsOf(int index, HDModShips* out)
 	*out = mods[(size_t)index].ships;
 }
 
-const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int size)
+const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int size,
+	int wantMod)
 {
 	if (modIndex)
 		*modIndex = -1;
@@ -553,6 +567,17 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 	for (size_t i = 0; i < mods.size(); i++)
 	{
+		/* ONE PARTICULAR MOD, WHEN THE CALLER WANTS ONE (#153, round M1, fix
+		 * round). A face is looked up with the body's mod named, because a
+		 * head from one mod on a body from another is two namespaces on one
+		 * model; find_model in hd_model.cpp used to throw the answer away
+		 * afterwards when it came from anybody else, and the note below had
+		 * already been written by then - the log claimed a replacement that
+		 * was never drawn, once and permanently. The filter belongs in the
+		 * search, so that what is reported is what is handed back. */
+		if (wantMod >= 0 && (int)i != wantMod)
+			continue;
+
 		for (int game = 5; game >= 4; game--)
 		{
 			const std::string path = join(join(join(mods[i].path,
@@ -568,10 +593,11 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 			// One line per replaced model for the whole session, not one per
 			// level: the answer cannot change while the game runs.
+			const std::string key = upper_name + "/" + std::to_string(i);
 			bool said = false;
 
 			for (size_t r = 0; r < reported.size(); r++)
-				if (reported[r] == upper_name)
+				if (reported[r] == key)
 				{
 					said = true;
 					break;
@@ -579,7 +605,7 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 			if (!said)
 			{
-				reported.push_back(upper_name);
+				reported.push_back(key);
 				note("MODLOG model %s <- mod%d %s (game %d)", upper_name.c_str(),
 					(int)i, mods[i].name.c_str(), game);
 			}

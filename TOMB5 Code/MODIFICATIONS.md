@@ -10846,6 +10846,75 @@ page list now names the folder every page was really read from - which replaced
 a copy of the 5-then-4 rule that had gone out of step with both newer
 namespaces. `SfxProbe` and `bsfx.bat` are new.
 
+#### Round M1, the fix round - a crafted .wav must not end the process (#153)
+
+The round above was reviewed and one thing in it was not merely untidy but
+fatal, and it is worth writing down because the shape of the mistake is a
+common one.
+
+**Never add in order to compare.** `SfxRiffCheck` walks a RIFF's chunks and
+guarded each one with `at + 8 + len > bytes`. `long` is 32 bit in this build,
+so a chunk length near `LONG_MAX` makes that sum **overflow to a negative
+number**; the test comes out false, the chunk the guard exists to catch is
+accepted, `at += 8 + len` drives the cursor negative, and the loop's own
+condition stays true while the next read lands about two gigabytes below the
+buffer. A 60-byte file ended `SfxProbe` with an access violation, and it is a
+**mod's** file that reaches this call, so the crafted length is not a
+theoretical worry. The guard subtracts now - `len > bytes - at - 8`, where the
+loop's invariant `at + 8 <= bytes` makes the difference non-negative by
+construction. The identical idiom in `SfxBankOpen`'s outer chain walk was
+corrected with it; that one ended in "the chain of sounds does not add up to
+the file" rather than in a crash, but it is the same unsafe form at the same
+kind of seam. The brief's rule was *reject with a line, never crash*, and the
+two crafted files are now simply refused: `a chunk runs past the end of the
+file`.
+
+**One gate, not two.** `HQSfxPayload` still judged the *bank's* sample with a
+hand-rolled walk of the same chunks - no bound on the length at all - and a
+`WAVEFORMATEX` laid straight over offset 20 on the assumption that `fmt` comes
+first. That was survivable while the bank could only be a file the player had
+copied out of his own installation. This round put a **downloaded** mod's
+`5\DATA\MAIN.SFX` at the head of the chain, and `SfxBankOpen` validates only
+the outer chain of RIFFs and never the chunks inside one, so a single garbage
+inner length reached an unguarded pointer walk during level load. It calls
+`SfxRiffCheck` now - the same bounds-checked gate a loose `.wav` goes through.
+That gate is *stricter* than what it replaced, so the obligation was to show
+the player's real data still passes it whole: `SfxProbe -samples` (new) pushes
+every sample of the chosen bank and of the ruler through it, and on the user's
+own folder **463 of 463** and **473 of 473** pass with none refused.
+
+**One order, in one place.** `HQSfxOpen` held the chain's order and `SfxProbe`
+held a second copy of it - the very arrangement that had let `ModelProbe`'s
+page rule drift out of step with the cache until this round caught it. The
+order is `SfxBankChainLink` in `sfxbank.cpp` now, lazy so that nothing pays for
+`HDInstallRoot()`'s walk through the registry and every Steam library unless
+the link that needs it is reached, and both the engine and the tool walk it.
+The tool's chain print is numbered by position rather than by tier as a
+consequence, and says so.
+
+**Three smaller things.** The `MODLOG model <NAME> <- mod<i>` note was written
+inside the resolver before `find_model` had accepted the answer, so a face
+looked up for a body that came out of another mod could log a replacement that
+was never drawn - and its one-line-per-model memory then made the correct line
+unsayable. The wanted mod goes into the search now and the note is made where
+the answer is accepted; the memory is keyed by name *and* mod. The
+out-of-video-memory note printed the cache **key** raw, which for a mod's page
+reads `page 1342183535`; it uses `page_text` like every other line in that
+file. And `MODLOG folder=... present=no` now carries `mods=0`, so both branches
+of that line have the same shape.
+
+**One finding refuted rather than fixed.** The review also flagged
+`hd_lara.cpp`'s two wardrobe notes - `page %d is named as her skin ...` and
+`her throat: page %d ...` - as keys printed raw that would become unreadable in
+round M2. They are not keys. The first prints `kOutfit[].skin[i]`, a
+hand-written table of plain page numbers, and the second prints `g_inner_page`,
+which comes from `HDTrmPageOf` and is `model->texture[...]`, the `unsigned
+short` straight out of the `.TRM`. Both stay correct and readable when a mod
+can supply an outfit. What *does* break then is the **comparison** on the line
+between them, `HDModelPage(slot, j) == page`, because `HDModelPage` returns
+`raw + pageBias` - and that was already on the open list as M2's work. No
+change was made; a helper added for the finding was taken out again.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

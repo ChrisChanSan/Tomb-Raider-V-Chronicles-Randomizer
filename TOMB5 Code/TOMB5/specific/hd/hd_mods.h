@@ -94,8 +94,15 @@ void HDModsShipsOf(int index, HDModShips* out);
  * is a broken one. That is round M2's work; until then the vanilla outfit is
  * used and the scan says so in the log.
  *
- * `modIndex` gets the mod that answered, or -1. */
-const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int size);
+ * `modIndex` gets the mod that answered, or -1.
+ *
+ * `wantMod` names one mod and refuses every other, which is what a caller
+ * that has already committed to a namespace needs - a face looked up for a
+ * body that came out of mod 2 may not be answered by mod 0. -1, the default,
+ * asks them all in order. The note in the log is made where the answer is
+ * ACCEPTED, so what the log claims is what the caller got. */
+const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int size,
+	int wantMod = -1);
 
 /* THE PAGE RESOLVER, first tier: mod `modIndex`'s own 5\TEX, then its 4\TEX.
  * Empty when the mod does not ship that page - the caller then tries the

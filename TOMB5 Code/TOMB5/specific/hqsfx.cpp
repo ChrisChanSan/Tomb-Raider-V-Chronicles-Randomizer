@@ -13,7 +13,6 @@
 #include "../tomb5/pch.h"
 #include "hqsfx.h"
 #include "sfxbank.h"
-#include "hd/hd_install.h"
 #include "hd/hd_mods.h"
 #include "function_stubs.h"
 
@@ -49,6 +48,12 @@
 //
 // The third is new and it is what makes the hand copy unnecessary from now
 // on. Nothing is copied anywhere by any of the three.
+//
+// That ORDER is not written here any more: it is SfxBankChainLink in
+// sfxbank.cpp, so that SfxProbe walks the engine's chain instead of a copy
+// of it (#153, round M1, fix round). What this file still owns is what the
+// engine does with each candidate - which one is played from, which one
+// becomes the ruler, and the bridge.
 //
 // AND WHEN THE FIRST ONE ANSWERS, THE SECOND IS STILL OPENED - as a ruler and
 // not as a source. A sound mod is a whole bank with a handful of its samples
@@ -149,28 +154,6 @@ static bool HQSfxTry(const char* path, const char* label, SfxBank** into,
 	return true;
 }
 
-// The two links of the chain that are never a mod's, in their own order.
-static void HQSfxPlainPath(int link, char* path, int size, char* label, int labelSize)
-{
-	path[0] = 0;
-
-	if (link == 0)
-	{
-		snprintf(path, (size_t)size, "audio\\MAIN.SFX");
-		snprintf(label, (size_t)labelSize, "audio\\MAIN.SFX");
-		return;
-	}
-
-	// The installed remaster's own, read where it lies. HDInstallRoot() is
-	// the game 5 folder, so the bank is DATA\MAIN.SFX under it.
-	const char* root = HDInstallRoot();
-
-	snprintf(label, (size_t)labelSize, "the installed remaster");
-
-	if (root && *root)
-		snprintf(path, (size_t)size, "%s\\DATA\\MAIN.SFX", root);
-}
-
 bool HQSfxOpen()
 {
 	char line[512];
@@ -187,42 +170,48 @@ bool HQSfxOpen()
 
 	bool fromMod = false;
 
-	for (int i = 0; i < HDModsCount() && !hq_bank; i++)
+	/* THE WHOLE CHAIN IN ONE LOOP, and the order of it is SfxBankChainLink's
+	 * (#153, round M1, fix round). The mods used to be walked here and the
+	 * two plain candidates in a second loop below, and SfxProbe held a third
+	 * copy of the same order - so the tool could drift from the engine the
+	 * way ModelProbe's page rule had. There is one order now and both walk
+	 * it; what this loop still owns is which of the two banks a link fills.
+	 *
+	 * WHICH OF THE TWO. With no mod bank in hand the link is the bank itself
+	 * and the loop stops at the first that opens; with one, the next plain
+	 * link is the RULER - opened, never played from - and the loop stops at
+	 * the first of those that opens. A player with no mods therefore sees
+	 * exactly the chain of before.
+	 *
+	 * The break stands BEFORE SfxBankChainLink because its last link asks
+	 * HDInstallRoot(), and that is a walk through the registry and every
+	 * Steam library. Nothing may pay for it that does not need the answer. */
+	for (int link = 0; ; link++)
 	{
-		const char* bank = HDModsBank(i);
+		char path[512], label[512];
+		int mod = -1;
 
-		if (!bank || !*bank)
-			continue;
-
-		snprintf(line, sizeof(line), "mod%d %s", i, HDModsName(i));
-
-		if (HQSfxTry(bank, line, &hq_bank, hq_source, sizeof(hq_source)))
-			fromMod = true;
-	}
-
-	for (int link = 0; link < 2; link++)
-	{
-		char path[300], label[64];
-
-		/* WHICH OF THE TWO THIS ONE IS. With no mod bank in hand it is the
-		 * bank itself and the loop stops at the first that opens; with one,
-		 * it is the RULER - opened, never played from, and the loop again
-		 * stops at the first that opens. Same two candidates either way, so
-		 * a player with no mods sees exactly the chain of before.
-		 *
-		 * The break stands BEFORE HQSfxPlainPath because that call asks
-		 * HDInstallRoot() for link 1, and that is a walk through the registry
-		 * and every Steam library. Nothing may pay for it that does not need
-		 * the answer. */
 		if (hq_bank && (!fromMod || hq_ref))
 			break;		// nothing left to want
+
+		if (!SfxBankChainLink(link, 0, 0, path, sizeof(path), label,
+			sizeof(label), &mod))
+			break;		// past the end of the chain
+
+		/* A MOD'S BANK IS NEVER THE RULER. The ruler exists to measure the
+		 * bridge against a recording no mod has touched, so once a mod's
+		 * bank is the one being played the remaining mod links are passed
+		 * over in silence - which is where the old loop's `&& !hq_bank`
+		 * stopped as well. */
+		if (hq_bank && mod >= 0)
+			continue;
 
 		SfxBank** into = hq_bank ? &hq_ref : &hq_bank;
 		char* source = hq_bank ? hq_ref_source : hq_source;
 		const int size = hq_bank ? (int)sizeof(hq_ref_source) : (int)sizeof(hq_source);
 
-		HQSfxPlainPath(link, path, sizeof(path), label, sizeof(label));
-		HQSfxTry(path, label, into, source, size);
+		if (HQSfxTry(path, label, into, source, size) && mod >= 0)
+			fromMod = true;
 	}
 
 	if (fromMod && hq_ref)
@@ -461,8 +450,8 @@ static char* HQSfxWavFor(long g, long* riffBytes)
 
 char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes)
 {
-	long g, at, dataLen, bankBytes;
-	const WAVEFORMATEX* wf;
+	long g, dataLen = 0, bankBytes;
+	const char* why = "";
 	char* buffer;
 
 	if (riffBytes)
@@ -484,37 +473,26 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes)
 		return 0;
 	}
 
-	if (bankBytes < 44 || memcmp(buffer + 8, "WAVE", 4))
-		return 0;
-
-	wf = (const WAVEFORMATEX*)(buffer + 20);
-
-	if (wf->wFormatTag != WAVE_FORMAT_PCM || wf->nChannels != 1 || wf->wBitsPerSample != 16)
+	/* THE BANK'S SAMPLE, CHECKED BY THE SHARED PARSER (#153, round M1, fix
+	 * round). What stood here was this file's own walk of the RIFF chunks -
+	 * `at += 8 + chunk` with no bound on `chunk` at all - plus a WAVEFORMATEX
+	 * laid straight over offset 20 on the assumption that fmt comes first.
+	 * That was survivable while the bank could only ever be a file the player
+	 * had copied out of his own installation; round M1 put a DOWNLOADED mod's
+	 * 5\DATA\MAIN.SFX at the head of the chain, and SfxBankOpen validates
+	 * only the outer chain of RIFFs, never the chunks inside one. So one
+	 * garbage inner length would have walked a pointer off the buffer while
+	 * the level was loading.
+	 *
+	 * SfxRiffCheck is that walk done once, bounds-checked (see the guard
+	 * there), and it already answers the format question and the data length
+	 * together - the same call the loose .wav goes through, so a mod's bank
+	 * and a mod's .wav are now held to one rule rather than two. */
+	if (!SfxRiffCheck(buffer, bankBytes, &dataLen, 0, &why))
 	{
-		Log("HQ SFX: sample %d is not mono 16 bit PCM, keeping the level's own", g);
+		Log("HQ SFX: sample %d - %s, keeping the level's own", g, why);
 		return 0;
 	}
-
-	// Find the data block rather than assuming it follows fmt - fact and LIST
-	// blocks can stand in between.
-	at = 12;
-	dataLen = 0;
-
-	while (at + 8 <= bankBytes)
-	{
-		const long chunk = *(const long*)(buffer + at + 4);
-
-		if (!memcmp(buffer + at, "data", 4))
-		{
-			dataLen = chunk;
-			break;
-		}
-
-		at += 8 + chunk + (chunk & 1);
-	}
-
-	if (dataLen <= 0)
-		return 0;
 
 	// Plausibility. The pairing runs over the sound map, and the randomizer
 	// is free to move sounds around inside a level, so a mismatched pair is

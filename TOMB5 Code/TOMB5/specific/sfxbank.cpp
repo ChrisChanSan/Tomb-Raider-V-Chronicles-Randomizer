@@ -11,10 +11,13 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "sfxbank.h"
+#include "hd/hd_install.h"
+#include "hd/hd_mods.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 // The header says what this is and why. What follows is only how.
 //
@@ -22,6 +25,10 @@
 // engine is read here as the eight bytes it is, so that this file can be
 // linked by a diagnostic tool that has no engine behind it - the same reason
 // hd_install.cpp is written the way it is.
+//
+// hd_install and hd_mods are the two units SfxBankChainLink needs to name the
+// candidates, and both are engine-free for the same reason, so the rule holds
+// for the whole of what this file links.
 
 namespace
 {
@@ -187,7 +194,15 @@ SfxBank* SfxBankOpen(const char* path, const char** why)
 
 		const long riffSize = read_long(head + 4);
 
-		if (riffSize <= 0 || at + 8 + riffSize > fileSize)
+		/* Subtracted rather than added, for the reason written out at the
+		 * same guard in SfxRiffCheck: a length near LONG_MAX would overflow
+		 * the sum and slip past. This one ends in "the chain does not add up
+		 * to the file" rather than in a crash - `at` goes negative, the
+		 * fseek fails and the chain is refused - but it is the same unsafe
+		 * idiom at the same kind of seam, and a bank is now a mod's file.
+		 * The loop condition above is at + 8 <= fileSize, so the difference
+		 * is never negative. */
+		if (riffSize <= 0 || riffSize > fileSize - at - 8)
 			break;
 
 		bank->offset[bank->count] = at;
@@ -364,7 +379,22 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
 	{
 		const long len = read_long(raw + at + 4);
 
-		if (len < 0 || at + 8 + len > bytes)
+		/* NEVER ADD IN ORDER TO COMPARE (#153, round M1, fix round).
+		 *
+		 * This guard was written as `at + 8 + len > bytes`, which is the
+		 * obvious form and is wrong. `long` is 32 bit in this build, so a
+		 * chunk length near LONG_MAX makes that sum overflow to a NEGATIVE
+		 * number, the test comes out false, the very chunk the guard exists
+		 * to catch is accepted, `at += 8 + len` drives `at` negative, and
+		 * the loop's own condition stays true while the next read lands
+		 * about two gigabytes below the buffer. Proven with a 60 byte file
+		 * that ends the process, and it is a MOD'S file that reaches here
+		 * (HQSfxWavFor), so the crafted length is not a theoretical one.
+		 *
+		 * The subtraction cannot overflow: the loop condition above is
+		 * at + 8 <= bytes, so bytes - at - 8 is >= 0 by construction, and
+		 * `len` has already been shown non-negative. */
+		if (len < 0 || len > bytes - at - 8)
 		{
 			*why = "a chunk runs past the end of the file";
 			return false;
@@ -485,4 +515,97 @@ char* SfxWavLoad(const char* path, long cap, long* bytes, const char** why)
 		*bytes = size;
 
 	return buffer;
+}
+
+/* --------------------------------------------------------------------------
+ * THE CHAIN. The header says what it is and why it lives here rather than in
+ * hqsfx.cpp: hqsfx.cpp is the engine's half and a tool cannot link it, and a
+ * second copy of an order is a drift waiting to happen.
+ * ----------------------------------------------------------------------- */
+namespace
+{
+	/* "<folder>\<tail>", or just the tail when there is no folder - which is
+	 * the engine's own case, where the game folder IS the current directory
+	 * and audio\MAIN.SFX is the relative path it has always been. */
+	void chain_join(const char* folder, const char* tail, char* out, int size)
+	{
+		if (!folder || !*folder)
+		{
+			std::snprintf(out, (size_t)size, "%s", tail);
+			return;
+		}
+
+		std::string base = folder;
+
+		while (!base.empty() &&
+			(base[base.size() - 1] == '\\' || base[base.size() - 1] == '/'))
+			base.erase(base.size() - 1);
+
+		std::snprintf(out, (size_t)size, "%s\\%s", base.c_str(), tail);
+	}
+}
+
+bool SfxBankChainLink(int link, const char* gameFolder, const char* install,
+	char* path, int pathSize, char* label, int labelSize, int* modIndex)
+{
+	if (link < 0 || !path || pathSize <= 0 || !label || labelSize <= 0)
+		return false;
+
+	path[0] = 0;
+	label[0] = 0;
+
+	if (modIndex)
+		*modIndex = -1;
+
+	/* THE MODS FIRST, in the scan's order and only those that ship a bank.
+	 * A mod without one is not a candidate and earns no line - the same as
+	 * the loop this replaced. */
+	int seen = 0;
+
+	for (int i = 0; i < HDModsCount(); i++)
+	{
+		const char* bank = HDModsBank(i);
+
+		if (!bank || !*bank)
+			continue;
+
+		if (seen == link)
+		{
+			std::snprintf(path, (size_t)pathSize, "%s", bank);
+			std::snprintf(label, (size_t)labelSize, "mod%d %s", i, HDModsName(i));
+
+			if (modIndex)
+				*modIndex = i;
+
+			return true;
+		}
+
+		seen++;
+	}
+
+	// The hand copy, kept for the players who already made one.
+	if (link == seen)
+	{
+		chain_join(gameFolder, "audio\\MAIN.SFX", path, pathSize);
+		std::snprintf(label, (size_t)labelSize, "audio\\MAIN.SFX");
+		return true;
+	}
+
+	/* The installed remaster's own, read where it lies - which is what makes
+	 * the hand copy unnecessary from this round on. HDInstallRoot() is the
+	 * game 5 folder, so the bank is DATA\MAIN.SFX under it, and asking for it
+	 * is the expensive step this whole function is lazy for. */
+	if (link == seen + 1)
+	{
+		const char* root = (install && *install) ? install : HDInstallRoot();
+
+		std::snprintf(label, (size_t)labelSize, "the installed remaster");
+
+		if (root && *root)
+			chain_join(root, "DATA\\MAIN.SFX", path, pathSize);
+
+		return true;
+	}
+
+	return false;
 }

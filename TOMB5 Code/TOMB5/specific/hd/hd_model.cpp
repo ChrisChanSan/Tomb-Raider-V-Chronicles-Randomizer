@@ -22,6 +22,7 @@
 
 #include "hd_model.h"
 #include "hd_bind.h"
+#include "hd_mods.h"		// a mod's model beats the install's (#153, M1)
 #include "hd_trm.h"
 
 #include <algorithm>
@@ -221,15 +222,63 @@ namespace
 		return HDTrmExists(path.c_str());
 	}
 
+	/* WHICH MODS MAY ANSWER find_model (#153, round M1): kModsAny is every
+	 * active one in their own order, kModsNone is the installs alone, and a
+	 * number is that mod and no other. The third case exists for a separate
+	 * HD face - see find_head_model.
+	 *
+	 * "That mod and no other" is answered by asking for the name and keeping
+	 * the answer only when it came from the mod wanted. An EARLIER mod that
+	 * ships the same name therefore makes the wanted one invisible, and the
+	 * face falls back to the install - which is the safe way round: a face
+	 * under the wrong page namespace would be a wrong picture, and a face
+	 * from the install is only a missing improvement. */
+	const int kModsAny = -1;
+	const int kModsNone = -2;
+
 	/* WHERE A MODEL LIVES. Game 5 first, then the siblings - and the siblings
 	 * are not a courtesy: SAS, FIREROPE, BRIDGE_TILT1, RAISING_BLOCK1 and 2
 	 * and EXPANDING_PLATFORM are in 4\ITEM and in no TR5 folder, because the
 	 * remaster ships one model per NAME across the bundle and TR5 inherited
 	 * those slots from TR4. Every substitution is written into the notes, so
 	 * the log says which model came out of which game. */
-	std::string find_model(const std::string& name, bool fromTr3, HDModelOrigin* origin)
+	std::string find_model(const std::string& name, bool fromTr3,
+		HDModelOrigin* origin, int* modIndex = 0, int modOnly = kModsAny)
 	{
 		const std::string file = name + ".TRM";
+
+		if (modIndex)
+			*modIndex = -1;
+
+		/* A MOD BEFORE EVERYTHING ELSE (#153, round M1). The active mods in
+		 * order, each 5\ITEM then 4\ITEM; the first one that has the name
+		 * wins and the installs are not asked at all. It is a replacement by
+		 * RESOLUTION and never on disk - renaming the mod's folder with a
+		 * leading _ puts the install's own file back with nothing else to
+		 * undo.
+		 *
+		 * Ahead of the fromTr3 branch on purpose: a mod that replaces one of
+		 * the four Tomb Raider III guests is the same kind of wish as one
+		 * that replaces a hand, and a guest whose model a mod supplies gets
+		 * that mod's page namespace like any other. HDModsFindModel refuses
+		 * OUTFIT_*.TRM by itself - the wardrobe is round M2. */
+		if (modOnly != kModsNone)
+		{
+			char path[512];
+			int mod = -1;
+
+			if (*HDModsFindModel(name.c_str(), &mod, path, sizeof(path)) &&
+				(modOnly == kModsAny || modOnly == mod))
+			{
+				if (origin)
+					*origin = HD_MODEL_ORIGIN_MOD;
+
+				if (modIndex)
+					*modIndex = mod;
+
+				return std::string(path);
+			}
+		}
 
 		/* THE OTHER BUNDLE, and only it (#123, stage S7-2). A Tomb Raider III
 		 * guest is looked for in game 3 and its siblings 1 and 2, and NEVER
@@ -392,9 +441,23 @@ namespace
 	/* The face file for a body, and by which of the three rules. `how` is for
 	 * the log and is never null on return; it says "name", "table" or "strip".
 	 * Empty when the model has no face anywhere. */
+	/* `bodyMod` (#153, round M1) is the mod the BODY came out of, or -1. The
+	 * face is looked for in the same place and nowhere else: body and face
+	 * share one page bias, so a face out of a different source than its body
+	 * would ask the cache for its pages under the wrong namespace. Same mod,
+	 * or no mod at all.
+	 *
+	 * The nowhere-else half matters as much as the same-mod half: without it
+	 * a mod that ships FOO_HEAD.TRM and no FOO.TRM would put its face on the
+	 * install's body under page bias 0, and the face's own pages would be
+	 * read out of the install.
+	 */
 	std::string find_head_model(const std::string& model, bool fromTr3,
-		HDModelOrigin* origin, const char** how, std::string* headName)
+		HDModelOrigin* origin, const char** how, std::string* headName,
+		int bodyMod = -1)
 	{
+		const int mods = bodyMod >= 0 ? bodyMod : kModsNone;
+
 		*how = "name";
 
 		/* A FACE HAS NO FACE OF ITS OWN. Lara's wardrobe asks for the part
@@ -410,7 +473,7 @@ namespace
 			return std::string();
 		}
 
-		std::string path = find_model(model + "_HEAD", fromTr3, origin);
+		std::string path = find_model(model + "_HEAD", fromTr3, origin, 0, mods);
 
 		if (!path.empty())
 		{
@@ -427,7 +490,7 @@ namespace
 			if (!same_name(model, g_head_of_model[i].model))
 				continue;
 
-			path = find_model(g_head_of_model[i].head, fromTr3, origin);
+			path = find_model(g_head_of_model[i].head, fromTr3, origin, 0, mods);
 
 			if (!path.empty())
 			{
@@ -445,7 +508,7 @@ namespace
 		while (stem.find('_') != std::string::npos)
 		{
 			stem.erase(stem.find_last_of('_'));
-			path = find_model(stem + "_HEAD", fromTr3, origin);
+			path = find_model(stem + "_HEAD", fromTr3, origin, 0, mods);
 
 			if (!path.empty())
 			{
@@ -1627,7 +1690,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		bool hasHead;
 		std::string name;
 		HDModelOrigin origin;
-		int pageBias;		// 0, or HD_PAGE_ALT_BASE for a TR3 guest
+		int pageBias;		// 0, HD_PAGE_ALT_BASE for a TR3 guest, or
+					// the mod's namespace (#153, round M1)
 		int onlyPage;		// #123 fix round D (D4): -1 = the whole model
 	};
 
@@ -1735,7 +1799,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const bool tr3 = slots[i].fromTr3;
 
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
-		const std::string path = find_model(model, tr3, &origin);
+		int mod = -1;
+		const std::string path = find_model(model, tr3, &origin, &mod);
 
 		if (path.empty())
 		{
@@ -1759,7 +1824,14 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.hasHead = false;
 		here.name = model;
 		here.origin = origin;
-		here.pageBias = tr3 ? HD_PAGE_ALT_BASE : 0;
+		/* WHOSE PAGE NUMBERS THESE ARE (#153, round M1). A mod's model
+		 * names its own mod's pages, and only the ones the mod does not
+		 * ship fall through to the install - see resolve_page. The mod's
+		 * namespace therefore wins over the guest's: a guest a mod
+		 * supplied is that mod's model now, and its origin= line is what
+		 * sends its pages back to the I-III bundle. */
+		here.pageBias = mod >= 0 ? HDPageModBase(mod)
+			: tr3 ? HD_PAGE_ALT_BASE : 0;
 		here.onlyPage = slots[i].onlyPage;
 		std::memset(&here.trm, 0, sizeof(here.trm));
 		std::memset(&here.head, 0, sizeof(here.head));
@@ -1784,7 +1856,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		if (slots[i].measure)
 			slots[i].measure(&here.trm);
 
-		if (origin == HD_MODEL_ORIGIN_TR3)
+		if (origin == HD_MODEL_ORIGIN_MOD)
+			note("MODLOG %s (slot %d): %s.TRM comes from mod%d %s",
+				slot_label(slot, model), slot, model, mod, HDModsName(mod));
+		else if (origin == HD_MODEL_ORIGIN_TR3)
 			note("%s (slot %d): %s.TRM is a guest out of Tomb Raider I-III "
 				"Remastered", slot_label(slot, model), slot, model);
 		else if (origin != HD_MODEL_ORIGIN_5)
@@ -1799,7 +1874,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* head_how = "name";
 		std::string head_name;
 		const std::string head_path = find_head_model(model, tr3, &head_origin,
-			&head_how, &head_name);
+			&head_how, &head_name, mod);
 
 		if (!head_path.empty())
 		{
@@ -1946,7 +2021,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			stats->vertexBytes += (double)model.vertices * sizeof(HDModelVertex);
 			stats->indexBytes += (double)model.indices * 2.0;
 
-			if (here.origin == HD_MODEL_ORIGIN_4)
+			if (here.origin == HD_MODEL_ORIGIN_MOD)
+				stats->fromMod++;
+			else if (here.origin == HD_MODEL_ORIGIN_4)
 				stats->fromGame4++;
 			else if (here.origin == HD_MODEL_ORIGIN_TR3)
 				stats->fromTr3++;

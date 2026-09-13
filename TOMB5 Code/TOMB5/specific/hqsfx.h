@@ -14,13 +14,14 @@
 
 struct SAMPLE_INFO;
 
-// Optional high quality sound bank, read from audio\MAIN.SFX if the player
-// put one there. See hqsfx.cpp for the format and for why nothing of it is
-// ever shipped.
+// Optional high quality sound bank: a mod's own, the player's audio\MAIN.SFX,
+// or the installed remaster's, in that order (#153, round M1). See hqsfx.cpp
+// for the chain, the format and why nothing of it is ever shipped.
 
-// Opens audio\MAIN.SFX and parses its tables. Safe to call repeatedly; the
-// file is opened once and kept open. Returns false when there is no usable
-// bank, in which case every other call here does nothing.
+// Opens the first bank of the chain that parses, and its tables with it. Safe
+// to call repeatedly; the file is opened once and kept open. Returns false
+// when there is no usable bank anywhere, in which case every other call here
+// does nothing.
 bool HQSfxOpen();
 
 void HQSfxClose();
@@ -40,3 +41,18 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes);
 
 // How many samples of the current level were answered from the bank.
 long HQSfxSubstituted();
+
+// Of those, how many a mod's own loose .wav supplied (#153, round M1).
+long HQSfxOverlaid();
+
+/* And how many were samples a mod's BANK had replaced with a recording of a
+ * different length - the ones the plausibility rule would have refused if the
+ * unmodded bank had not confirmed the pairing. See hqsfx.cpp. */
+long HQSfxReplaced();
+
+// Which of the three banks was opened, in words, for the log line that says
+// where this level's samples came from. Empty when none was.
+const char* HQSfxSource();
+
+// Whether there is a bank at all - a loose .wav needs one for its bridge.
+bool HQSfxHaveBank();

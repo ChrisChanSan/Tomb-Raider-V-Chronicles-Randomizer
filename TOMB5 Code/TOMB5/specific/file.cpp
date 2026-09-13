@@ -1457,11 +1457,12 @@ bool LoadSamples()
 	sample_infos = (SAMPLE_INFO*)game_malloc(num_infos * sizeof(SAMPLE_INFO));
 	ReadBlock(sample_infos, num_infos * sizeof(SAMPLE_INFO));
 
-	// Optional: higher quality versions of these same sounds, if the player
-	// put the remaster's MAIN.SFX into audio\. The bridge between this
+	// Optional: higher quality versions of these same sounds, out of a mod's
+	// bank, out of audio\MAIN.SFX or out of the installed remaster itself
+	// (#153, round M1 - the chain is in hqsfx.cpp). The bridge between this
 	// level's sample numbers and that file's global ones runs over the sound
-	// map, so it can only be built now that the map has been read. Without
-	// the file both calls do nothing and the level plays its own samples.
+	// map, so it can only be built now that the map has been read. Without a
+	// bank both calls do nothing and the level plays its own samples.
 	HQSfxOpen();
 	HQSfxBuildMap(sample_lut, MAX_SAMPLES, sample_infos, num_infos);
 
@@ -1606,9 +1607,14 @@ bool LoadSamples()
 
 	FreeSampleDecompress();
 
+	// Which bank it really was (#153, round M1): a mod's, audio\MAIN.SFX or
+	// the installed remaster's. And how many of those samples a mod's own
+	// loose .wav supplied on top of it.
 	if (HQSfxSubstituted())
-		Log("HQ SFX: %d of %d samples came from audio\\MAIN.SFX",
-			HQSfxSubstituted(), num_samples);
+		Log("HQ SFX: %d of %d samples came from %s, %d of them a recording the "
+			"mod's bank replaced, %d of them overlaid by a mod's .wav",
+			HQSfxSubstituted(), num_samples, HQSfxSource(), HQSfxReplaced(),
+			HQSfxOverlaid());
 
 	HQSfxDropMap();
 	return 1;

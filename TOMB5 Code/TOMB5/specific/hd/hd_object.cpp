@@ -29,6 +29,7 @@
 #include "hd_bind.h"
 #include "hd_install.h"
 #include "hd_markers.h"			// the .hdm sidecar - the donor slots (S7-2)
+#include "hd_mods.h"			// HDModsScan - the mods folder (#153, M1)
 #include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
 #include "hd_render.h"
 #include "hd_level.h"
@@ -1166,6 +1167,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	HDModelTr3Root(HDInstallRootTr3());
 	HDPageCacheAltRoot(HDInstallRootTr3());
 
+	/* THE MODS FOLDER (#153, round M1). Scanned once per session and here
+	 * because this is the first HD thing a level does; the sound path asks
+	 * for the same scan when it gets there first, and one cached answer is
+	 * what keeps the two from disagreeing about which mods are active. Its
+	 * notes reach the log through the sink winmain installs. */
+	HDModsScan();
+
 	/* The bind poses first and in one block, because HDModelLevelBegin keeps
 	 * a pointer into it while it runs and a std::vector that grows moves. */
 	std::vector<int> slots;
@@ -1436,10 +1444,10 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	}
 
 	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d) "
-		"heads=%d lara=%d dummy=%d missing=%d refused=%d verts=%d idx=%d "
+		"mod:%d heads=%d lara=%d dummy=%d missing=%d refused=%d verts=%d idx=%d "
 		"ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f read_ms=%d build_ms=%d",
 		g_stem, (int)(GetTickCount() - started), stats.slots, stats.loaded,
-		stats.fromGame5, stats.fromGame4, stats.heads,
+		stats.fromGame5, stats.fromGame4, stats.fromMod, stats.heads,
 		stats.lara, stats.dummy, stats.missing, stats.refused, stats.vertices,
 		stats.indices, stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
 		stats.indexBytes / 1024.0, (int)(stats.readMs + 0.5),
@@ -1452,12 +1460,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * level's model pages are pages its rooms already wear, so `need` is
 	 * usually a fraction of the rooms' and drops are rare. */
 	Log("HDLOG level=%s models budget=%.0f need=%.0f have=%.0f got=%.0f MiB "
-		"pages=%d dropped_mip0=%d levels=%d caps=%d format=%s oom=%d "
+		"pages=%d frommod=%d dropped_mip0=%d levels=%d caps=%d format=%s oom=%d "
 		"cache=%.0f MiB",
 		g_stem, stats.pageStats.budgetBytes / 1048576.0,
 		stats.pageStats.needBytes / 1048576.0,
 		stats.pageStats.haveBytes / 1048576.0,
 		stats.pageStats.bytes / 1048576.0, stats.pageStats.slots,
+		stats.pageStats.fromMod,
 		stats.pageStats.droppedMip0, stats.pageStats.droppedLevels,
 		stats.pageStats.clampedByCaps,
 		stats.pageStats.formatUsed == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",

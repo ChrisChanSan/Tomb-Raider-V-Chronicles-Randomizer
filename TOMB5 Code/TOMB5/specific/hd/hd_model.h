@@ -176,7 +176,8 @@ enum HDModelOrigin
 	HD_MODEL_ORIGIN_NONE = 0,
 	HD_MODEL_ORIGIN_5,
 	HD_MODEL_ORIGIN_4,	// the sibling 4\ITEM - SAS and five others live only there
-	HD_MODEL_ORIGIN_TR3	// the other bundle: 3\ITEM, or its siblings 1 and 2
+	HD_MODEL_ORIGIN_TR3,	// the other bundle: 3\ITEM, or its siblings 1 and 2
+	HD_MODEL_ORIGIN_MOD	// a mod's own ITEM folder (#153, round M1)
 };
 
 struct HDModelStats
@@ -191,6 +192,7 @@ struct HDModelStats
 	int fromGame5;
 	int fromGame4;
 	int fromTr3;		// the other bundle - a Tomb Raider III guest (S7-2)
+	int fromMod;		// a mod's own 5\ITEM or 4\ITEM (#153, round M1)
 	int heads;		// <NAME>_HEAD.TRM built and bound to a node
 
 	int fullSlots;		// every classic node covered by the model

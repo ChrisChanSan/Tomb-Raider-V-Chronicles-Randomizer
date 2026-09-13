@@ -1832,17 +1832,38 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 
 			HDLaraHeldSheen(part, &held, &heldPower);
 
+			/* THE PAGE NUMBER, NOT THE CACHE KEY (#153, round M1). A model a
+			 * mod supplied names its pages in that mod's own namespace
+			 * (hd_pagecache.h), so mod2's 8001 and the install's 8001 are two
+			 * different keys - and this rule would then find NO page in
+			 * common between a modded weapon hand and the vanilla rest hands
+			 * and hand the skin the gunmetal material along with the gun.
+			 *
+			 * The namespace is an allocation and the page number is the
+			 * material's name - which is what hd_model's Range says in so
+			 * many words. So the comparison strips it. A mod that keeps the
+			 * install's numbering (the HK USP and the Spas-12 both wear its
+			 * 8001 for skin) is then read exactly right, and a mod that
+			 * renumbers is read right as soon as it ships its own
+			 * HAND_BARE_REST - the two are then in one namespace again. */
 			for (int i = 0; held > 0.0f && i < HDModelPageCount(slot); i++)
 			{
 				const int page = HDModelPage(slot, i);
+				const int number = HDPageModIndex(page) >= 0
+					? HDPageModNumber(page) : page;
 				bool onHand = false;
 
 				for (int j = 0; j < HDModelPageCount(rest); j++)
-					if (HDModelPage(rest, j) == page)
+				{
+					const int other = HDModelPage(rest, j);
+
+					if ((HDPageModIndex(other) >= 0
+						? HDPageModNumber(other) : other) == number)
 					{
 						onHand = true;
 						break;
 					}
+				}
 
 				if (onHand)
 					continue;

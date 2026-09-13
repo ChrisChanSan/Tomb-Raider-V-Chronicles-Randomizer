@@ -30,6 +30,7 @@
 #include "fmv.h"
 #include "setupdlg.h"
 #include "../tomb5/tomb5.h"	// load_tomb5_present_settings (#148, order 6)
+#include "hd/hd_mods.h"		// the mods folder's log sink (#153, round M1)
 
 WINAPP App;
 long resChangeCounter;
@@ -592,6 +593,14 @@ void WinSetStyle(bool fullscreen, ulong& set)
 		set = style;
 }
 
+// One MODLOG line (#153, round M1). Log() takes a format, so the note goes
+// through %s rather than as the format itself - a mod folder called "100%"
+// would otherwise be read as a conversion.
+static void ModsLogLine(const char* line)
+{
+	Log("%s", line);
+}
+
 int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nShowCmd)
 {
 	DXDISPLAYMODE* dm;
@@ -611,6 +620,13 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// that need them have to print them themselves (#125).
 	if (gLogEnabled)
 		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__);
+
+	/* WHERE THE MODS FOLDER'S NOTES GO (#153, round M1). hd_mods.cpp is
+	 * engine-free - the diagnostic tools link the very same file - so it does
+	 * not know Log() and keeps its notes until somebody says where to put
+	 * them. Installed here, before anything can scan, so that every MODLOG
+	 * line lands in the log in the order it was made. */
+	HDModsLogSink(ModsLogLine);
 
 	start_setup = 0;
 	App.mmx = 0;

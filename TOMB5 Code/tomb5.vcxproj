@@ -171,6 +171,16 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_mods.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\hd\hd_markers.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -292,6 +302,12 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
     </ClCompile>
     <ClCompile Include="TOMB5\specific\hqsfx.cpp" />
+    <ClCompile Include="TOMB5\specific\sfxbank.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\input.cpp" />
     <ClCompile Include="TOMB5\specific\lighting.cpp" />
     <ClCompile Include="TOMB5\specific\LoadSave.cpp" />
@@ -452,6 +468,7 @@
     <ClInclude Include="TOMB5\specific\hd\hd_markers.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_font.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_fontmatch.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_mods.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_lara.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_laradraw.h" />
@@ -470,6 +487,7 @@
     <ClInclude Include="TOMB5\vendor\trforge\src\trf_core\trf_types.h" />
     <ClInclude Include="TOMB5\vendor\trforge\src\trf_remaster\Trg.h" />
     <ClInclude Include="TOMB5\specific\hqsfx.h" />
+    <ClInclude Include="TOMB5\specific\sfxbank.h" />
     <ClInclude Include="TOMB5\specific\input.h" />
     <ClInclude Include="TOMB5\specific\lighting.h" />
     <ClInclude Include="TOMB5\specific\LoadSave.h" />

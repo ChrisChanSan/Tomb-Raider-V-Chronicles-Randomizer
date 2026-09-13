@@ -67,6 +67,63 @@ struct IDirect3DTexture9;
  * is the same answer as any other missing page. */
 #define HD_PAGE_ALT_BASE	0x40000000
 
+/* A PAGE OUT OF A MOD (#153, round M1).
+ *
+ * The same problem one step further on. A mod ships its own <n>.DDS files and
+ * numbers them as it likes: the user's Uzi mod ships 6111 and 6112, and the
+ * install has a 6111 and a 6112 of its own that other models wear. One key
+ * per number would mean the first of the two to be loaded wins the slot and
+ * the other model silently gets the wrong picture - which is exactly the
+ * corruption of the vanilla look this round is not allowed to risk.
+ *
+ * So every mod gets a namespace of its own, one stride wide, and a page is
+ * offered to the cache as
+ *
+ *     key = HD_PAGE_MOD_BASE + modIndex * HD_PAGE_MOD_STRIDE + page
+ *
+ * The stride is 65536, which is the whole page number range the format can
+ * express as a file name anybody would write (the largest measured in the
+ * installs is 23001). The cache keeps the key opaque, exactly as it does for
+ * the alternate bundle, and takes it apart again at the one place a number
+ * becomes a file name.
+ *
+ * THE THREE NAMESPACES MUST NOT MEET. Plain pages are 0..65535, the alternate
+ * bundle is HD_PAGE_ALT_BASE + 0..65535, and the mods start above that and
+ * end below the end of an int. The static_assert below is the proof, not a
+ * hope: change any one of the four numbers and a build that cannot hold them
+ * apart fails to compile instead of drawing the wrong texture. */
+#define HD_PAGE_MOD_BASE	0x50000000
+#define HD_PAGE_MOD_STRIDE	0x00010000	// 65536 - one page number range
+#define HD_PAGE_MOD_MAX		64		// namespaces, i.e. mods
+
+static_assert(HD_PAGE_ALT_BASE + HD_PAGE_MOD_STRIDE <= HD_PAGE_MOD_BASE,
+	"the alternate bundle's namespace runs into the mods'");
+static_assert(HD_PAGE_MOD_BASE > HD_PAGE_MOD_STRIDE,
+	"a plain page number could be read as a mod's");
+static_assert(HD_PAGE_MOD_MAX > 0 &&
+	HD_PAGE_MOD_MAX <= (0x7FFFFFFF - HD_PAGE_MOD_BASE) / HD_PAGE_MOD_STRIDE,
+	"that many mod namespaces do not fit below the end of an int");
+
+// The first key of mod `index`, which is what a model's page bias is.
+inline int HDPageModBase(int index)
+{
+	return HD_PAGE_MOD_BASE + index * HD_PAGE_MOD_STRIDE;
+}
+
+// Which mod a key belongs to, or -1 for a plain or alternate-bundle page.
+inline int HDPageModIndex(int key)
+{
+	return key >= HD_PAGE_MOD_BASE
+		? (key - HD_PAGE_MOD_BASE) / HD_PAGE_MOD_STRIDE : -1;
+}
+
+// The page number inside that namespace. Meaningless unless the key is a
+// mod's - ask HDPageModIndex first.
+inline int HDPageModNumber(int key)
+{
+	return (key - HD_PAGE_MOD_BASE) % HD_PAGE_MOD_STRIDE;
+}
+
 struct HDPageCachePolicy
 {
 	int format;		// HD_PAGE_FORMAT_*
@@ -101,6 +158,7 @@ struct HDPageCacheStats
 	int fromGame4;		// found in the sibling 4\TEX (three RICH3 pages)
 	int fromTr3;		// found in the OTHER bundle, 3\TEX or its siblings
 				// (#123, S7-2 - the Tomb Raider III guests)
+	int fromMod;		// found in a mod's own TEX folder (#153, M1)
 	int fromWhite;		// no file anywhere - WHITE.DDS, the remaster's slot 0
 	int failed;		// not even WHITE.DDS - that slot has no texture
 	int mipLevels;		// mip levels uploaded over all pages
@@ -191,6 +249,15 @@ bool HDPageCacheSlotCutout(int slot);
 int HDPageCacheSlotCutoutPermille(int slot);
 // How many of the cache's slots answered true - for the level's log line.
 int HDPageCacheCutoutPages();
+
+/* WHERE THAT SLOT'S .DDS WAS FOUND (#153, round M1): 0 for the white tile,
+ * 1..3 for a game folder of the Tomb Raider I-III bundle, 4 or 5 for the
+ * IV-VI games, 100 + the mod's index for a mod's own TEX folder, and -1 for a
+ * slot that has no texture. HDPageCacheOriginText turns one into a word for a
+ * log or a tool; the pointer it returns is a static buffer, so print it
+ * before asking again. */
+int HDPageCacheSlotOrigin(int slot);
+const char* HDPageCacheOriginText(int origin);
 
 // Everything that was not found where it should have been, in words, for the
 // caller's log. Valid until the next Create or Destroy.

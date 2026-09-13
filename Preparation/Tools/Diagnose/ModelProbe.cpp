@@ -203,6 +203,20 @@
  *                         is how HairControl derives the positions in the
  *                         first place.
  *
+ *   The mods and the other bundle:
+ *     -mods <folder>      the Mods folder to scan (#153, round M1). The very
+ *                         resolver the engine uses, not a copy of it: a mod's
+ *                         .TRM replaces the install's file of the same name,
+ *                         and the pages that model asks for are looked for in
+ *                         the mod first, then in the bundle its mod.txt names
+ *                         with origin=, then in the install. Without the
+ *                         switch no Mods folder is scanned at all and every
+ *                         answer is the one this tool gave before the round.
+ *     -tr3 <3-folder>     the Tomb Raider I-III Remastered game 3 folder,
+ *                         which is what a mod's origin= reaches into - and
+ *                         what the four Tomb Raider III guests need. Sets it
+ *                         on both modules, as hd_object.cpp does.
+ *
  *   The level:
  *     -level <LEVEL>      stem, e.g. ANDREA1. The classic level is read from
  *                         <5-folder>\DATA\<LEVEL>.TRC and the binding from
@@ -338,6 +352,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
 
 #pragma comment(lib, "d3d9.lib")
@@ -1155,18 +1170,29 @@ static std::string ParentOf(const std::string& path)
 /* Whether a page has a .DDS of its own anywhere in the bundle. The page cache
  * puts WHITE.DDS in its place when it has none, which is a picture and not an
  * error - but for the report the two have to be told apart. */
-static bool PageThere(const std::string& root5, int page)
+/* WHERE A PAGE REALLY CAME FROM, asked of the cache that loaded it rather
+ * than worked out again here (#153, round M1). This used to be a copy of the
+ * 5-then-4 rule with a root and a page number, and a copy of a rule is a rule
+ * that goes out of step: it knew nothing of the other bundle's namespace and
+ * nothing of the mods', so it reported every page of a Tomb Raider III guest
+ * and every page of a mod's model as missing while the engine had them on the
+ * card. The cache answers for the key it was handed, which is the only thing
+ * that can be right for all three namespaces.
+ *
+ * `root5` is no longer needed and the parameter is gone with it. */
+static const char* PageFrom(int page)
 {
-	char name[64];
+	const int slot = HDPageCacheSlotOf(page);
 
-	sprintf(name, "\\TEX\\%d.DDS", page);
+	return slot < 0 ? "-"
+		: HDPageCacheOriginText(HDPageCacheSlotOrigin(slot));
+}
 
-	if (Exists(root5 + name))
-		return true;
+static bool PageThere(int page)
+{
+	const int slot = HDPageCacheSlotOf(page);
 
-	const std::string bundle = ParentOf(root5);
-
-	return Exists(bundle + "\\4" + name) || Exists(bundle + "\\6" + name);
+	return slot >= 0 && HDPageCacheSlotOrigin(slot) > 0;
 }
 
 /* ------------------------------------------------------------------ main -- */
@@ -7069,6 +7095,14 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	return 0;
 }
 
+/* The Mods folder's notes, on stdout (#153, round M1). hd_mods.cpp is
+ * engine-free and keeps its notes until somebody says where they go; the
+ * engine sends them to Log(), this tool prints them. */
+static void ProbeModsLine(const char* line)
+{
+	printf("  %s\n", line);
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 2)
@@ -7086,6 +7120,10 @@ int main(int argc, char** argv)
 	 * model pages are pages its rooms already wear, and appending them to a
 	 * cache that already holds the rooms is exactly what HDLevelBuild does. */
 	std::string withRooms;
+	/* #153, round M1: the Mods folder and the other bundle. Both empty by
+	 * default, which is exactly the behaviour this tool had before the round.
+	 */
+	std::string modsFolder, tr3Root;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	bool itemcheck = false;
@@ -7154,6 +7192,10 @@ int main(int argc, char** argv)
 			levelStem = argv[++i];
 		else if (!_stricmp(argv[i], "-classic") && i + 1 < argc)
 			classicPath = argv[++i];
+		else if (!_stricmp(argv[i], "-mods") && i + 1 < argc)
+			modsFolder = argv[++i];
+		else if (!_stricmp(argv[i], "-tr3") && i + 1 < argc)
+			tr3Root = argv[++i];
 		else if (!_stricmp(argv[i], "-withrooms") && i + 1 < argc)
 			withRooms = argv[++i];
 		else if (!_stricmp(argv[i], "-all"))
@@ -7467,6 +7509,39 @@ int main(int argc, char** argv)
 
 	printf("install : %s\n", root.c_str());
 
+	/* THE OTHER BUNDLE AND THE MODS (#153, round M1), in the same order and
+	 * on the same two modules hd_object.cpp sets them: the alternate root
+	 * before anything can ask for a page, the Mods folder before anything can
+	 * ask for a model. */
+	if (!tr3Root.empty())
+	{
+		HDModelTr3Root(tr3Root.c_str());
+		HDPageCacheAltRoot(tr3Root.c_str());
+		printf("tr1-3   : %s\n", tr3Root.c_str());
+	}
+
+	if (!modsFolder.empty())
+	{
+		HDModsFolder(modsFolder.c_str());
+		HDModsLogSink(ProbeModsLine);
+		HDModsScan();
+
+		printf("mods    : %s, %d active\n", modsFolder.c_str(), HDModsCount());
+
+		for (int m = 0; m < HDModsCount(); m++)
+		{
+			HDModShips ships;
+
+			HDModsShipsOf(m, &ships);
+			printf("  mod%-2d %-46s origin %-4s models %2d (%d outfit) "
+				"pages %2d bank %s wavs %d\n", m, HDModsName(m),
+				HDModsOrigin(m) ? (HDModsOrigin(m) == 1 ? "tr1"
+					: HDModsOrigin(m) == 2 ? "tr2" : "tr3") : "-",
+				ships.models, ships.outfits, ships.pages,
+				ships.bank ? "yes" : "no", ships.wavs);
+		}
+	}
+
 	/* --- the classic level, when there is one -------------------------- */
 	Tr5Level level;
 	bool haveLevel = false;
@@ -7693,8 +7768,9 @@ int main(int argc, char** argv)
 
 	printf("\n-- what was loaded -------------------------------------------\n");
 	printf("slots asked for   %d\n", stats.slots);
-	printf("models on the card %d   (5: %d, 4: %d)   heads %d\n",
-		stats.loaded, stats.fromGame5, stats.fromGame4, stats.heads);
+	printf("models on the card %d   (5: %d, 4: %d, mod: %d)   heads %d\n",
+		stats.loaded, stats.fromGame5, stats.fromGame4, stats.fromMod,
+		stats.heads);
 	printf("not bound          lara %d, dummy %d, no name %d, missing %d, refused %d\n",
 		stats.lara, stats.dummy, stats.noName, stats.missing, stats.refused);
 	printf("nodes              %d over %d slots, %d covered, %d fall back\n",
@@ -7717,10 +7793,29 @@ int main(int argc, char** argv)
 	printf("cut-out pages      %d of %d in the cache carry holes\n",
 		HDPageCacheCutoutPages(), HDPageCacheSlots());
 
+	/* WHERE EACH PAGE CAME FROM (#153, round M1). The key on the left is the
+	 * cache's own - "mod0:6111" is a page out of mod 0's TEX folder and 6111
+	 * on its own is the install's page of that number, two different slots -
+	 * and the word after it is the folder the .DDS was really read from. It
+	 * is the proof that a mod replaced the pages it brought and no others. */
 	for (int s = 0; s < HDPageCacheSlots(); s++)
-		printf("  page %5d  holes %4.1f %%%s\n", HDPageCachePageOfSlot(s),
+	{
+		const int key = HDPageCachePageOfSlot(s);
+		char label[32];
+
+		if (HDPageModIndex(key) >= 0)
+			snprintf(label, sizeof(label), "mod%d:%d", HDPageModIndex(key),
+				HDPageModNumber(key));
+		else if (key >= HD_PAGE_ALT_BASE)
+			snprintf(label, sizeof(label), "TR3 %d", key - HD_PAGE_ALT_BASE);
+		else
+			snprintf(label, sizeof(label), "%d", key);
+
+		printf("  page %-12s from %-7s holes %4.1f %%%s\n", label,
+			HDPageCacheOriginText(HDPageCacheSlotOrigin(s)),
 			HDPageCacheSlotCutoutPermille(s) / 10.0,
 			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "");
+	}
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building\n",
 		stats.readMs, stats.buildMs);
 
@@ -7817,7 +7912,7 @@ int main(int argc, char** argv)
 			int missingPages = 0;
 
 			for (int p = 0; p < HDModelPageCount(here); p++)
-				if (!PageThere(root, HDModelPage(here, p)))
+				if (!PageThere(HDModelPage(here, p)))
 					missingPages++;
 
 			if (covered >= HDModelNodes(here))
@@ -7926,8 +8021,22 @@ int main(int argc, char** argv)
 		HDModelRanges(slot), HDModelPageCount(slot));
 
 	for (int p = 0; p < HDModelPageCount(slot); p++)
-		printf("          page %d%s\n", HDModelPage(slot, p),
-			PageThere(root, HDModelPage(slot, p)) ? "" : "  - no .DDS, WHITE instead");
+	{
+		const int key = HDModelPage(slot, p);
+		const int mod = HDPageModIndex(key);
+
+		if (mod >= 0)
+			printf("          page mod%d:%-6d from %-7s%s\n", mod,
+				HDPageModNumber(key), PageFrom(key),
+				PageThere(key) ? "" : "  - no .DDS, WHITE instead");
+		else if (key >= HD_PAGE_ALT_BASE)
+			printf("          page TR3 %-6d from %-7s%s\n",
+				key - HD_PAGE_ALT_BASE, PageFrom(key),
+				PageThere(key) ? "" : "  - no .DDS, WHITE instead");
+		else
+			printf("          page %-11d from %-7s%s\n", key, PageFrom(key),
+				PageThere(key) ? "" : "  - no .DDS, WHITE instead");
+	}
 
 	if (nodes || !all)
 		PrintNodeTable(slot, here, HDModelName(slot));

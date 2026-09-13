@@ -22,6 +22,7 @@
 
 #include "hd_pagecache.h"
 #include "hd_dxt5.h"
+#include "hd_mods.h"		// where a mod's own page lives (#153, round M1)
 #include "hd_scan.h"
 #include "../bc7.h"
 
@@ -113,6 +114,12 @@ namespace
 	 * sheet - and it is how fix round B established that an ITEM page's
 	 * alpha is not a cut-out mask at all. */
 	std::vector<short> g_cutout_share;
+	/* WHERE EACH SLOT'S FILE WAS FOUND (#153, round M1), in resolve_page's
+	 * own encoding. Kept per slot rather than only in the notes because the
+	 * notes report the odd cases and a tool has to be able to ask about
+	 * EVERY page - which is what proves that a mod replaced the two it
+	 * brought and none of the others. */
+	std::vector<short> g_origin;
 	std::vector<int> g_page_of_slot;
 	std::unordered_map<int, int> g_slot_of_page;
 	std::vector<std::string> g_notes;
@@ -322,11 +329,19 @@ namespace
 	 * looks like untextured geometry; painted black it looks like a hole and
 	 * gets reported as a rendering bug. That choice is TROne's and it is the
 	 * right one. */
-	/* A page number as a note should show it: plain, or "TR3 12" for one out
-	 * of the other bundle. A note that printed 1073741836 would be true and
-	 * unreadable. */
+	/* A page number as a note should show it: plain, "TR3 12" for one out of
+	 * the other bundle, and "mod3:6111" for one out of a mod - the namespace
+	 * and the number the mod's own file is called, so a reader can tell a
+	 * mod's 6111 from the install's at a glance (#153, round M1). A note that
+	 * printed 1342183535 would be true and unreadable. */
 	std::string page_text(int page)
 	{
+		const int mod = HDPageModIndex(page);
+
+		if (mod >= 0)
+			return "mod" + std::to_string(mod) + ":" +
+				std::to_string(HDPageModNumber(page));
+
 		if (page >= HD_PAGE_ALT_BASE)
 			return "TR3 " + std::to_string(page - HD_PAGE_ALT_BASE);
 
@@ -351,12 +366,78 @@ namespace
 		HDScanPagePath(root.c_str(), page, buffer, size);
 	}
 
+	/* WHERE A PAGE CAME FROM, as resolve_page reports it: 0 is the white tile,
+	 * 1..3 a game folder of the I-III bundle, 4 and 5 the IV-VI games, and
+	 * this plus the mod's index is "out of that mod's own TEX folder" (#153,
+	 * round M1). Far enough above 5 that no game number can be mistaken for
+	 * it and the notes below can say which mod without a second field. */
+#define HD_PAGE_ORIGIN_MOD	100
+
 	std::string resolve_page(const std::string& root5, const std::string& bundle,
 		int page, int* origin, bool* white)
 	{
 		char buffer[300];
 
 		*white = false;
+
+		/* A MOD'S OWN PAGE FIRST OF ALL (#153, round M1). The key says which
+		 * mod asked, so the chain is that mod's 5\TEX, its 4\TEX, then - only
+		 * if the mod's mod.txt named one - the game folder of the Tomb Raider
+		 * I-III bundle its models were drawn for and that folder's two
+		 * siblings, and then the ordinary IV-VI chain below with the page
+		 * number as it stands.
+		 *
+		 * The fall-through to the ordinary chain is what lets a mod ship
+		 * models and no art at all: every page it does not bring is the
+		 * install's own, resolved exactly as it always was. And the other way
+		 * round is the rule this round rests on - a page a VANILLA model asks
+		 * for never carries a mod key, so it never enters this branch and
+		 * cannot be replaced by a mod. */
+		const int mod = HDPageModIndex(page);
+
+		if (mod >= 0)
+		{
+			const int real = HDPageModNumber(page);
+
+			*origin = HD_PAGE_ORIGIN_MOD + mod;
+
+			if (*HDModsFindPage(mod, real, buffer, sizeof(buffer)))
+				return buffer;
+
+			/* The mod's origin bundle. Its own game folder first, then the
+			 * other two in number order - the same courtesy the guests get,
+			 * and needed for the same reason: the I-III remaster keeps one
+			 * texture per page number across the bundle and moved art between
+			 * the three games. Lara's skin pages of that bundle are what the
+			 * user's Uzi mod reaches for. */
+			const int from = HDModsOrigin(mod);
+
+			if (from >= 1 && from <= 3 && !g_alt_root.empty())
+			{
+				int order[3] = { from, 0, 0 };
+				int at = 1;
+
+				for (int game = 1; game <= 3; game++)
+					if (game != from)
+						order[at++] = game;
+
+				for (int i = 0; i < 3; i++)
+				{
+					path_of_alt(real, order[i], buffer, sizeof(buffer));
+
+					if (file_there(std::string(buffer)))
+					{
+						*origin = order[i];
+						return buffer;
+					}
+				}
+			}
+
+			// Neither the mod nor its origin bundle has it: on to the
+			// install, with the plain number, exactly as a vanilla page.
+			page = real;
+			*origin = 5;
+		}
 
 		/* THE OTHER BUNDLE FIRST, because a page above the base is not a page
 		 * of this game at all (#123, stage S7-2). Game 3 of the I-III
@@ -776,6 +857,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	// A2. resize, not assign: HDPageCacheAppend keeps the slots that are
 	// already there, and their answer with them.
 	g_cutout.resize(g_textures.size(), 0);
+	g_origin.resize(g_textures.size(), (short)-1);
 	g_cutout_share.resize(g_textures.size(), 0);
 	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
 
@@ -827,6 +909,29 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		{
 			std::snprintf(line, sizeof(line),
 				"page %s is not in any TEX folder - WHITE.DDS instead", page_text(unique[i]).c_str());
+			g_notes.push_back(line);
+		}
+		else if (origin >= HD_PAGE_ORIGIN_MOD)
+		{
+			std::snprintf(line, sizeof(line),
+				"MODLOG page %s comes from mod%d's own TEX folder",
+				page_text(unique[i]).c_str(), origin - HD_PAGE_ORIGIN_MOD);
+			g_notes.push_back(line);
+		}
+		else if (HDPageModIndex(unique[i]) >= 0)
+		{
+			// A mod's page that the mod itself does not ship: it came out of
+			// the bundle its mod.txt named with origin=, or out of the
+			// install. Said apart from the line above so that a reader can
+			// see which of the two answered.
+			std::snprintf(line, sizeof(line),
+				"MODLOG page %s comes from %s", page_text(unique[i]).c_str(),
+				origin >= 1 && origin <= 3
+					? (origin == 1 ? "the origin bundle, game 1"
+						: origin == 2 ? "the origin bundle, game 2"
+						: "the origin bundle, game 3")
+					: origin == 4 ? "the install's game 4"
+					: "the install's game 5");
 			g_notes.push_back(line);
 		}
 		else if (origin != 5)
@@ -1134,6 +1239,9 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			{
 				g_textures[page.slot] = texture;
 
+				if ((size_t)page.slot < g_origin.size())
+					g_origin[(size_t)page.slot] = (short)(page.white ? 0 : page.origin);
+
 				if ((size_t)page.slot < g_cutout.size())
 				{
 					g_cutout[(size_t)page.slot] = page.cutout ? 1 : 0;
@@ -1175,6 +1283,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 					if (page.white)
 						stats->fromWhite++;
+					else if (page.origin >= HD_PAGE_ORIGIN_MOD)
+						stats->fromMod++;	// a mod's own TEX (#153, M1)
 					else if (page.origin == 4)
 						stats->fromGame4++;
 					else if (page.origin >= 1 && page.origin <= 3)
@@ -1306,6 +1416,7 @@ void HDPageCacheDestroy()
 	g_textures.clear();
 	g_cutout.clear();
 	g_cutout_share.clear();
+	g_origin.clear();
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
 	g_notes.clear();
@@ -1402,6 +1513,37 @@ bool HDPageCacheSlotCutout(int slot)
 		return false;
 
 	return g_cutout[(size_t)slot] != 0;
+}
+
+int HDPageCacheSlotOrigin(int slot)
+{
+	if (slot < 0 || slot >= (int)g_origin.size())
+		return -1;
+
+	return g_origin[(size_t)slot];
+}
+
+const char* HDPageCacheOriginText(int origin)
+{
+	static char text[48];
+
+	if (origin >= HD_PAGE_ORIGIN_MOD)
+	{
+		std::snprintf(text, sizeof(text), "mod%d", origin - HD_PAGE_ORIGIN_MOD);
+		return text;
+	}
+
+	switch (origin)
+	{
+	case 0: return "WHITE";
+	case 1: return "TR1";
+	case 2: return "TR2";
+	case 3: return "TR3";
+	case 4: return "game 4";
+	case 5: return "game 5";
+	}
+
+	return "-";
 }
 
 int HDPageCacheSlotCutoutPermille(int slot)

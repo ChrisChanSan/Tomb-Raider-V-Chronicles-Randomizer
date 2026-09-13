@@ -28,6 +28,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "hd_bind.h"
+#include "hd_mods.h"		// the EXTRA prefix rule counts a mod's file (#153)
 
 #include <cstdio>
 #include <cstdlib>
@@ -436,6 +437,20 @@ namespace
 	 * carries its EXTRA5_/EXTRA_/EXTRA4_ prefix. */
 	bool extra_model_exists(const std::string& installRoot, const std::string& name)
 	{
+		/* A MOD COUNTS AS THERE (#153, round M1). This rule picks the prefix
+		 * tier a pickup's model is named under, and it picks by whether the
+		 * file exists - so a mod that brings an EXTRA_ model the install does
+		 * not have would be looked for under the wrong name without this.
+		 * Asked before installRoot is even checked, because a mod's file is
+		 * in the mod and does not need an installation behind it. */
+		{
+			char found[512];
+			int mod = -1;
+
+			if (*HDModsFindModel(name.c_str(), &mod, found, sizeof(found)))
+				return true;
+		}
+
 		if (installRoot.empty())
 			return false;
 

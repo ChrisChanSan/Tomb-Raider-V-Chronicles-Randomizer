@@ -11722,14 +11722,18 @@ the old outfit's pages - was refused for the reason the cache carries: a slot
 index another model holds does not move, and a page given back under one would
 draw white.
 
-**THE FOOTSTEPS ARE TWO SETS, AND THE OUTFIT CHOOSES.** Footsteps reach the
-mixer through ANIMATION COMMANDS alone in this engine - `game\control.cpp`
-reads `num = cmd[1] & 0x3FFF` out of the animation and calls `SoundEffect`;
-there is no material branch and no second caller, which was checked rather than
-assumed (`SFX_LARA_FEET` and `SFX_LARA_LAND` appear in `game\sound.h` and
-nowhere else in the tree). So bending sound id 0 and sound id 4 is the WHOLE
-switch and it costs two shorts, with no reload and no allocation after the
+**THE FOOTSTEPS ARE TWO SETS, AND THE OUTFIT CHOOSES.** Her own foot reaches
+the mixer through an ANIMATION COMMAND - `game\control.cpp` reads `num = cmd[1]
+& 0x3FFF` out of the animation and calls `SoundEffect` - so bending sound id 0
+and sound id 4 costs two shorts, with no reload and no allocation after the
 level is up.
+
+*This paragraph said "and that is the WHOLE switch, there is no material branch
+and no second caller", and that was wrong.* The grep it rested on could not
+have found the second caller, because that caller does not use those names:
+`game\footprnt.cpp` plays the SURFACE under her foot on the same frame, sound
+ids 288 to 294, and it is 4.7 times as long as the foot itself. See the fix
+round below, which measured it and takes it away while she is barefoot.
 
 **BOOTS ARE NOT A MOD'S TO TAKE.** The samples behind those two ids are loaded
 from the first UNMODDED bank of the chain and not from a mod's bank or a mod's
@@ -11957,6 +11961,193 @@ with no game around them. The play test still owes: the menu on the screen and
 under a gamepad, the re-dress in the middle of a level, the barefoot steps
 heard, the boots heard with the sound mod in the folder, and the ring opened in
 the game with the Uzi mod active.
+
+#### Round M3, the fix round - a step is two sounds, and the sidecar is not an HD fact (#153)
+
+The review of round M3 found two places where a claim had been tested with an
+instrument that could not see the fault, and five smaller ones. Both of the two
+are corrected here, and both corrections are measurements rather than guesses.
+
+**A STEP IS TWO SOUNDS ON ONE FRAME, AND THE ROUND ONLY BENT ONE.** Round M3
+wrote, in the header of `specific\hd\hd_feet.h`, that footsteps reach the mixer
+through animation commands alone and that bending sound ids 0 and 4 was
+therefore the whole switch. The grep it rested on could not have found the
+second caller, because that caller does not use those names:
+`game\footprnt.cpp` `AddFootprint` plays `footsounds[floor->fx] +
+SFX_FOOTSTEPS_MUD` - sound ids 288 to 294 - for every sector whose `fx` is not
+5, 6 or 11. It is `effect_routines[32]`, and Lara's own animations carry it
+beside the footstep.
+
+Measured, because the size of it decides what to do about it:
+
+- `AnimCmd` over the `LARA` slot of the vanilla ANDREA1: **148 frames carry
+  `PlaySound sfx 0`, 132 carry `FlipEffect no 32`, and 121 carry both.** Three
+  more call sites need no command at all - `game\lara.cpp` calls `AddFootprint`
+  straight out of `lara_as_walk`, `lara_as_null` and `lara_as_gymnast`.
+- `Tr5Sound` over all sixteen classic levels: **13 of them carry footsteps at
+  all** (TITLE and RICHCUT2 hold four samples between them, `del.trc` has no
+  sound blocks whatever), and every one of those 13 carries at least two of the
+  seven floor ids - ids 292 and 294 are in all thirteen. The foot layer is 52
+  takes of **35 to 43 ms**; the floor layer is 111 takes of **87 to 433 ms,
+  mean 186**. *The floor layer is 4.7 times the foot layer: it is the loud half
+  of a step.*
+
+So with **Bare** chosen, the player would have heard the bank's 22 kHz barefoot
+recording under her foot and, on the very same frame, the level's own BOOT on
+mud, on metal or on wood over it. That is the bug the F4 changer would have
+shipped. The floor layer is now passed over while a bare set is in force -
+`HDFeetSurfaceQuiet()`, asked at the one call site - and the answer is false
+with `hd_enable` off, false with boots on and false in a level that has no
+second set, so the line is the one it always was in every other case. The
+footPRINT is a picture and is untouched. Two log lines: one per level where the
+set is built, naming the ids, and one the first time in each bare spell, which
+is the seam a play test reads.
+
+*Sound id 17 (`SFX_LARA_WET_FEET`) stands beside id 0 on the same frames for
+the water case and is NOT switched.* The bank has one barefoot set and it is a
+dry one; there is nothing to put behind 17, and inventing one would be art.
+
+**THE VULTURE'S REFUSAL WAS INERT IN THE BUILD THE ENGINE SHIPS.** The bridge
+asks `HDMarkersSoundImported()`, and the sidecar that answers it was read in
+exactly one place: inside `HDLevelLoad`, below `if (!HDEnabled()) return;`. The
+bank chain it protects is deliberately NOT gated - round M1's own words, "sound
+does not care whether hd_enable is on". So with `hd_enable` off, which is how
+this engine ships, the list was empty, id 422 paired with RICH1's voice line
+again, and the summary line said "the run declared 0 imported sound ids" with
+nobody the wiser. No tool could show it: a tool calls `HDMarkersLoad`
+unconditionally by construction, which is why `SfxProbe` proved a fix that was
+not in force.
+
+The sidecar is now read ABOVE the gate. It is a level fact, not an HD fact; the
+rooms, the cuts and the donors below the gate are still read by HD code alone,
+and the other half of the bracket - `HDMarkersFree` in `HDLevelUnload` - was
+never gated either. The order is unchanged and is all on the load thread:
+`FreeLevel` -> `HDMarkersFree`, `HDLevelLoad` -> `HDMarkersLoad`, then
+`LoadSamples` -> `HQSfxBuildMap` -> the refusal.
+
+**AND FIVE MORE.**
+
+*A dead `game_malloc` pointer, the joby3 class.* `hd_feet.cpp`'s header
+promised its tables were thrown away with the level and the only caller of
+`HDFeetLevelEnd` was its own `LevelBuild`. `LoadSamples` returns before reaching
+that in seven places and is skipped entirely when the sound is off - and
+`del.trc`, which is in `SCRIPT.DAT`'s level list, has no sound blocks at all.
+The next level would then have found a bare set that answered "available"
+through the previous level's freed `sample_lut`. `HDFeetLevelEnd()` now stands
+in `FreeLevel`, two lines above `malloc_ptr = malloc_buffer`, which is the line
+that makes every such pointer stale and already carries the `baddie_slots` note
+about it.
+
+*A counter that saturated at its own printing cap.* The mask safety net counted
+`(*outside)++` inside the `*outside < 32` that limits the lines, so the summary
+could never report more than 32 however many there were. Counted first, printed
+second, which is the shape the refusal counter beside it always had.
+
+*F4 during a cutscene.* The guard had `!gfGameMode`, Lara alive and
+`!BinocularRange` but not `!cutseq_trig` - which the inventory one screen up
+has carried all along. A player could freeze a running cutscene and re-dress
+over it with the scene's actors bound.
+
+*"Bare" silently becoming "boots" behind any sound mod.* The bare set's source
+was decided by `HQSfxFromMod()` alone - "a mod's bank is being played" - and
+most sound mods are not about footsteps. Measured over the user's own two banks
+by sample hash: of the 390 sound ids his Underworld mod's bank shares with the
+install's, **387 hold byte-identical recordings and three do not** - ids 0, 4
+and 417. So a door mod or a voice mod carries the install's own id 0 byte for
+byte, and the round handed the BOOTS' four recordings back under the name
+"bare" while the log announced a barefoot set. The two payloads for sound id 0
+are now compared - the banks each own their read buffer, so both can be held at
+once - and the mod supplies the bare set only when it really differs. One
+`SFXLOG` line either way.
+
+*The menu's two loose ends.* Left and right used to toggle the footsteps on the
+**Level facts** row, where there is no key to write the choice to: it was heard
+at once, nothing was written, and the next level put it back. That row now says
+*as the outfit says* and does not answer left and right. And when the re-dress
+was deferred because the 64 MiB allowance was spent, the new outfit's footsteps
+were applied anyway - the old body walking with the new one's feet. Both halves
+wait together now; both are still written to the registry, so the next level
+wears both.
+
+**AND THE LOWS.** The two spare `SAMPLE_INFO`s are asked of `game_malloc` only
+with `hd_enable` on, so a player with it off gets the allocation layout he had.
+Three code comments carried the round's first-pass arithmetic for the vulture -
+id 423 at 1.18 times the expected length - where the level's own bytes say id
+**422**, 604 ms against the bank's 624; the round's report and record had the
+right table and only the comments were wrong. The ring's overflow note quoted
+3.18 where the measurement is **3.36**. One block-comment continuation and two
+indentation runs in `SfxProbe` are lined up.
+
+**THE RING, AND THE PICTURE THAT WAS NOT THERE.** Round M3 said the user's Uzi
+mod cannot be turned into the crossed X he asked for, and defended it with a
+face-on render of the model's own plane - a file in the proof folder that is
+100 % magenta and shows nothing. Two things were wrong with the tool, both
+fixed:
+
+- a `-name` model is loaded over 32 nodes with no mesh tree behind it, and
+  `UZI_OPTION`'s 27449 vertices sit on **nodes 1 and 2** (13723 and 13726 - one
+  gun each), not on node 0, so nothing placed them and nothing drew. `-rigid`
+  loads it the way the ring loads it: one node, every vertex rigid on it.
+- `-invrot` turned the model about the ORIGIN while the camera framed the
+  untouched box. This model's middle stands 73 units off the origin, so it
+  swung out of the picture. The camera frames the turned box now.
+
+With those two, the three orthogonal views of the model in its own principal
+frame exist and were looked at: **the two Uzis stand side by side and parallel,
+offset from each other - not a crossed X from any direction.** And the control
+case settles that the switch is not hiding one: the same three words on
+`EXTRA_PISTOLS_ITEM` draw the two vanilla pistols **crossed like an X,
+face-on** - which is the very picture the user wants - so on a file that holds
+a cross it shows a cross. A rigid rotation
+keeps the angle between two parts, so no rotation of this file can cross them,
+and the fit does not pretend to. Where the I-III remaster's own X comes from is
+NOT established here: the `.TRM` carries no node transforms at all (per-vertex
+bone indices and weights, nothing else), and placing those two nodes would mean
+reading the donor game's own mesh tree and frame out of the user's I-III data,
+which is a feature and not a fit - a decision for the project. The vanilla
+`EXTRA_UZI_ITEM` beside it is **one** gun of 1371 vertices, which the round's
+own comments still called a crossed pair; they do not now.
+
+**THE HEADROOM, which the record owed.** The brief asked for the page cost per
+outfit AND the x86 headroom before choosing between releasing pages and capping
+them. The pages were measured in full and the headroom was not written down.
+It is now: `release\PCtomb5.exe` is x86 with `IMAGE_FILE_LARGE_ADDRESS_AWARE`
+set (PE characteristics 0x0122), so the ceiling is 4 GiB, and the heaviest
+offline load of ANDREA1 - 179 room pages and 53 model pages, 350.5 MiB of
+texture on the card, the user's `Mods` folder, every slot - peaks at **209.4
+MiB of private commit**. The 64 MiB allowance is 18 % of that level's own page
+bytes. So the cap is not holding back a ceiling that was about to be hit; it is
+holding back unbounded growth, which is the real risk, because the page cache
+never gives a page back.
+
+**PROVED.**
+
+- *The randomizer's output still does not move.* The fix round's rebuilt
+  `Randomize.exe`, seed 380, five levels, `mix cross allsanity 8 weapons
+  outfit-tr3`: every `.trc` byte-identical to the PRE-round build, the only
+  `.hdm` difference the one `sfximport` line, and every file byte-identical to
+  the round's own outputs. (The only change this round made under
+  `TR5Randomizer/` is a comment.)
+- *Nothing moved.* `ModelProbe -all -nodraw` over ANDREA1 with no `Mods`
+  folder against the stored pre-round run: identical but for the path that was
+  typed. The eight known outfits drawn with pistols: eight byte-identical
+  `.PNG` files.
+- *The floor layer.* `AnimCmd` and `Tr5Sound`, the two tables above.
+- *The bare set's source.* The two banks compared sample by sample by hash.
+- *The vulture.* `SfxProbe -level` over the randomized ANDREA1 again, with and
+  without the `Mods` folder - unchanged, which is the point: the tool never
+  could see the gate.
+- *The ring.* Five renders looked at: the mod's model from all three sides of
+  its own frame, the vanilla item in its own frame, and the fitted pair as the
+  ring shows it.
+
+**WHAT IS STILL NOT PROVED.** The engine's own log with `hd_enable = 0` - no
+tool can stand in for it, which is exactly why the fault was there. The play
+test still owes everything the game has to run for: the menu on the screen and
+under a gamepad, the re-dress in the middle of a level, the barefoot steps
+heard with the floor layer silent, the boots heard with the sound mod in the
+folder, the ring opened with the Uzi mod active, and the vulture's death with
+and without that mod.
 
 ## Building this yourself
 

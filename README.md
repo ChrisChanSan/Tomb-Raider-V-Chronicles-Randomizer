@@ -147,8 +147,14 @@ menu has. Choosing it again clears the setting.
 | select (Enter, or the pad's action button) | wear it and close |
 | deselect (Esc, Backspace, the pad's back button) | close and change nothing |
 
+On the **Level facts** row there is no outfit to hang a footstep choice on, so
+left and right do nothing there and the row says *as the outfit says* instead.
+
 A gamepad works in it because it reads the same input bits the pause menu
-and the options page read.
+and the options page read. F4 does nothing in the title screen, in a cutscene,
+with Lara dead or while you are looking through the binoculars or a laser
+sight; the inventory and the pause menu run their own loop and cannot be open
+at the same time.
 
 **It takes effect at once.** The level's models are built again with the new
 body while the game stands still; the rooms, the inventory, her weapons and
@@ -156,6 +162,8 @@ everything classic are untouched. The page cache never gives a page back, so
 a level may spend **64 MiB** of extra outfit pages and then says *applies at
 the next level* instead — measured, that is about twenty changes in an
 ordinary level and four in the worst case the installed wardrobe can produce.
+When it does wait, the **footsteps wait with it**: the body on the screen is
+still the old one and it keeps the old one's footsteps until the next level.
 
 **It is remembered.** The outfit is the string `hd_outfit` under
 `HKCU\Software\Core Design\Tomb Raider Chronicles\tomb5`, and the
@@ -167,12 +175,22 @@ whatever any of it says.
 
 ### Footsteps
 
+A step in this engine is **two sounds on one frame**: her own foot (sound id
+0, about 40 ms) and the surface under it (sound ids 288 to 294, about 190 ms —
+a boot on mud, on metal, on wood, chosen by the sector). The floor layer is
+the loud half.
+
 **Boots** is the level's own footstep sound, and from now on it is the sound
 the **installed remaster** has for it — a sound mod that replaces the
 footsteps no longer makes every outfit barefoot. **Bare** is a second set of
 recordings the level loads beside its own: the barefoot steps the remaster's
 own bank carries (sound id 417, five recordings that no level uses), or your
-sound mod's own footsteps when a mod's bank is the one being played.
+sound mod's own footsteps when a mod's bank really replaces sound id 0 — most
+sound mods do not, and one that only changes a door or a voice is passed over
+here rather than handing the boots back under the name *bare*. While she walks
+barefoot the **floor layer does not play at all**, because those recordings are
+a boot on a surface and putting one under a barefoot step is exactly the
+double sound this setting exists to avoid.
 
 What an outfit does unless you say otherwise comes from the wardrobe — a
 mod's `outfit.txt` can say `footsteps=bare`, and the built-in table says it
@@ -216,9 +234,10 @@ vanilla look cannot be damaged by installing one.
 **Inventory models.** A mod written for Tomb Raider I-III carries that game's
 names — `UZI_OPTION` instead of `EXTRA_UZI_ITEM` — and the ring and the pickup
 display in the corner draw it where the slot's own model would stand. It is
-turned and scaled onto that model's own bounding box, because the I-III
-inventory models stand upright and the IV-VI ones lie flat. The pickup lying
-on the floor keeps `EXTRA_*`, and a mod that ships an `EXTRA_*` of its own wins
+turned and scaled onto that model's own **shape** — the directions its
+vertices really run in, not its bounding box — because the I-III inventory
+models stand upright and the IV-VI ones lie flat. The pickup lying on the
+floor keeps `EXTRA_*`, and a mod that ships an `EXTRA_*` of its own wins
 everywhere.
 
 **Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
@@ -334,7 +353,13 @@ turning object in the corner take it when a mod ships one and no mod ships an
 `EXTRA_` name for the same slot; a file from another game stands in that
 game's frame, so it is turned onto the vanilla item's own — by the shape of
 its vertices and not by its bounding box, which cannot tell a pair of guns
-from one gun standing up. The **pickup lying on the floor** keeps the vanilla
+from one gun standing up. What it does **not** do is rearrange the file: the
+IMI Uzis mod's `UZI_OPTION` holds its two guns side by side and parallel
+(measured, and rendered from all three sides), so it stands up facing the
+camera in the ring and no turn can cross them into the X that the I-III
+remaster's own display shows — the two guns sit on two nodes there and the
+`.TRM` carries no node transforms for us to read. The **pickup lying on the
+floor** keeps the vanilla
 `EXTRA_` model: measured, a replacement can be three times as thick as the
 item it stands in for, and a pickup is placed by the floor under it — half of
 that thickness would be under the floor.
@@ -343,8 +368,10 @@ that thickness would be under the floor.
 `sfximport` line naming the sound ids the run imported from another game.
 Those are ids the remaster's own bank keeps other recordings on, and without
 the line the engine's HQ bridge could pair one of them: the Tomb Raider III
-vulture died with a scientist's voice line from RICH1. An engine older than
-this build ignores the word and plays what it always played.
+vulture died with a scientist's voice line from RICH1. The engine reads that
+line **whether the HD textures are on or off**, because the bank chain it
+protects is not part of the HD path either. An engine older than this build
+ignores the word and plays what it always played.
 
 **Mods are yours, not ours.** Nothing of any mod is part of this project and
 nothing of one is ever shipped with it, exactly like the game data and the

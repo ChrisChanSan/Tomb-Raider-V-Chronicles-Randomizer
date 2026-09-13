@@ -742,8 +742,8 @@ namespace
 	 *     the log, because a rounded picture beats no picture.
 	 *
 	 * AND IT READS THE WHOLE FILE TO LOOK AT THE HEADER, ON PURPOSE (#153,
-	 * round M2b). HDTrmProbe wants only the counts, and the scan puts 29.5 MiB
-	 * through it once a session for the 112 headers it looks at. Reading less
+	 * round M2b). HDTrmProbe wants only the counts, and the scan puts 28.8 MiB
+	 * (read_kib=29525) through it once a session for the 112 headers it looks at. Reading less
 	 * was considered and refused, with the numbers:
 	 *
 	 *   - what the header needs is everything up to the VERTEX block, and the

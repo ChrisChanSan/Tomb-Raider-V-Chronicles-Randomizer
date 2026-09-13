@@ -11515,9 +11515,11 @@ cannot resolve it.
 4. `props_of` ended in a walk of the whole wardrobe scan with a `std::string`
    per entry, and `HDLaraPartSheen` calls it once per part per draw. One answer
    is remembered, keyed by the outfit, dropped in `HDLaraLevelEnd`.
-5. `readable()` reads whole files to look at headers - 29.5 MiB once per
+5. `readable()` reads whole files to look at headers - 28.8 MiB (read_kib=29525) once per
    session - and goes on doing so. The reason is in the comment with the
-   numbers: the prefix a header needs is two thirds of an outfit file, the
+   numbers: the prefix a header needs is 140 KiB of a 480 KiB outfit file
+   (the index list sits inside it), so the saving would be two thirds of the
+   bytes and not the file; the
    whole scan costs 24 to 36 ms once, and reading less would mean two different
    lengths inside the one `.TRM` parser a downloaded mod's file goes through.
 6. The round M2 entry above presented the `.hdm` `wear` line and the

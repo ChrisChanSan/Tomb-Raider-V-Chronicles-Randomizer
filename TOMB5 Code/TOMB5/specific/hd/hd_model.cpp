@@ -609,9 +609,16 @@ namespace
 	 * triangles of a pass are bucketed by page, so a draw call is one page
 	 * and one SetTexture. That is the same road hd_render takes for a room,
 	 * and the reason is the same - Direct3D 9 has no texture arrays. */
-	// `pageBias` is 0 for everything in this bundle and HD_PAGE_ALT_BASE for a
-	// model out of the other one (#123, S7-2): the .TRM's page numbers are
-	// that game's own, and the cache holds both games at once.
+	/* `pageBias` is what turns this model's raw page numbers into cache keys:
+	 * 0 for everything in this bundle, HD_PAGE_ALT_BASE for a model out of
+	 * the Tomb Raider I-III one (#123, S7-2) and the mod's own namespace for
+	 * a model a mod supplied (#153, round M1) - the .TRM's numbers are its
+	 * own game's, and the cache holds all of them at once.
+	 *
+	 * It is offered rather than applied: HDPageCacheKeyOf takes the biased
+	 * number back down to the plain one where the two would open the same
+	 * file, so a mod that ships a model and no art of its own pays for that
+	 * art once (#153, round M2). */
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
 		int pageBias, int* mixedTriangles, const char** why, int onlyPage = -1)
 	{
@@ -886,9 +893,9 @@ namespace
 			const int rawB = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 1]]);
 			const int rawC = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 2]]);
 
-			const int a = rawA < 0 ? -1 : rawA + pageBias;
-			const int b = rawB < 0 ? -1 : rawB + pageBias;
-			const int c = rawC < 0 ? -1 : rawC + pageBias;
+			const int a = rawA < 0 ? -1 : HDPageCacheKeyOf(rawA + pageBias);
+			const int b = rawB < 0 ? -1 : HDPageCacheKeyOf(rawB + pageBias);
+			const int c = rawC < 0 ? -1 : HDPageCacheKeyOf(rawC + pageBias);
 
 			if (mixedTriangles && (a != b || b != c))
 				(*mixedTriangles)++;
@@ -1806,7 +1813,21 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
 		int mod = -1;
-		const std::string path = find_model(model, tr3, &origin, &mod);
+		std::string path;
+
+		/* A FILE THE CALLER FOUND ITSELF (#153, round M2) - the wardrobe, and
+		 * nothing else today. No search at all, because there is nothing left
+		 * to search for; see HDModelSlot::path for why the wardrobe cannot go
+		 * through find_model. */
+		if (slots[i].path && *slots[i].path)
+		{
+			path = slots[i].path;
+			mod = slots[i].mod;
+			origin = mod >= 0 ? HD_MODEL_ORIGIN_MOD
+				: tr3 ? HD_MODEL_ORIGIN_TR3 : HD_MODEL_ORIGIN_5;
+		}
+		else
+			path = find_model(model, tr3, &origin, &mod);
 
 		if (path.empty())
 		{
@@ -1862,7 +1883,15 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		if (slots[i].measure)
 			slots[i].measure(&here.trm);
 
-		if (origin == HD_MODEL_ORIGIN_MOD)
+		/* A file the caller found itself says WHERE, in the same shape the
+		 * three notes below use (#153, round M2). Without it the wardrobe's
+		 * body would be the one model in a level whose per-part note says
+		 * nothing - it used to say "comes from the sibling game 4", which was
+		 * find_model's answer and is no longer asked for. */
+		if (slots[i].path && *slots[i].path)
+			note("%s (slot %d): %s.TRM comes from the wardrobe scan - %s",
+				slot_label(slot, model), slot, model, path.c_str());
+		else if (origin == HD_MODEL_ORIGIN_MOD)
 			note("MODLOG %s (slot %d): %s.TRM comes from mod%d %s",
 				slot_label(slot, model), slot, model, mod, HDModsName(mod));
 		else if (origin == HD_MODEL_ORIGIN_TR3)
@@ -1902,15 +1931,19 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * the holster cut out of OUTFIT_TR3_CATSUIT wants one of that
 		 * model's ten pages, and loading the other nine for it would cost
 		 * more texture than the whole of Lara. */
+		/* Through HDPageCacheKeyOf, exactly as build() does above (#153, round
+		 * M2), because the list the cache is handed and the keys the ranges
+		 * carry have to be the same numbers - a page asked for under one key
+		 * and drawn under another is the white tile. */
 		if (here.onlyPage >= 0)
-			pages.push_back(here.onlyPage + here.pageBias);
+			pages.push_back(HDPageCacheKeyOf(here.onlyPage + here.pageBias));
 		else
 			for (int t = 0; t < here.trm.textures; t++)
-				pages.push_back((int)here.trm.texture[t] + here.pageBias);
+				pages.push_back(HDPageCacheKeyOf((int)here.trm.texture[t] + here.pageBias));
 
 		if (here.hasHead)
 			for (int t = 0; t < here.head.textures; t++)
-				pages.push_back((int)here.head.texture[t] + here.pageBias);
+				pages.push_back(HDPageCacheKeyOf((int)here.head.texture[t] + here.pageBias));
 
 		pending.push_back(here);
 	}

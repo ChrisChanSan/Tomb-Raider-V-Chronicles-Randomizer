@@ -54,9 +54,21 @@
  *
  *   Lara only:
  *     -outfit <NAME>      wear this one instead of the level's own.
- *                         OUTFIT_VCI, VCI, TR3_COAST or the randomizer's own
+ *                         OUTFIT_VCI, VCI, TR3_COAST, the randomizer's own
  *                         guest id (tr3_london, tr3_jungle, tr3_antarctica,
- *                         tr3_nevada) all work.
+ *                         tr3_nevada) and, since #153 round M2, any WARDROBE
+ *                         KEY - 46/OUTFIT_TR2_HOME, 13/OUTFIT_TRX_WETSUIT_1,
+ *                         mod/outfits/aod wetsuit/OUTFIT_CLASSIC. -wardrobe
+ *                         prints the keys.
+ *     -wardrobe           THE WARDROBE SCAN (#153, round M2), and then stop:
+ *                         every outfit this machine can dress her in, with
+ *                         the key to name it by, where the file came from,
+ *                         the five flags and where each of them was decided,
+ *                         the material and the skin pages - and under it
+ *                         every OUTFIT_ file the scan passed over, with the
+ *                         reason. Wants -tr3 for the second install and -mods
+ *                         for the player's own folder; without them it prints
+ *                         what a machine with only the IV-VI remaster has.
  *     -guns <what>        pistols, uzi, shotgun, hk, revolver,
  *                         revolver_laser, grapple, grapple_laser, crowbar or
  *                         none - which slot the meshes at the hand nodes come
@@ -353,6 +365,15 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_wardrobe.h"
+
+/* hd_install.cpp reads the two registry overrides out of these, which the
+ * engine defines in tomb5\tomb5.cpp. A tool that links hd_install.cpp has to
+ * bring its own pair - SfxProbe and TrgProbe do the same. Left empty, so the
+ * search runs exactly as it does for a player who never set the registry
+ * value; this tool is handed its folders on the command line in any case. */
+char tomb5_hd_install[260];
+char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
 
 #pragma comment(lib, "d3d9.lib")
@@ -7124,6 +7145,8 @@ int main(int argc, char** argv)
 	 * default, which is exactly the behaviour this tool had before the round.
 	 */
 	std::string modsFolder, tr3Root;
+	// #153, round M2: print the wardrobe scan and stop.
+	bool wardrobe = false;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	bool itemcheck = false;
@@ -7192,6 +7215,8 @@ int main(int argc, char** argv)
 			levelStem = argv[++i];
 		else if (!_stricmp(argv[i], "-classic") && i + 1 < argc)
 			classicPath = argv[++i];
+		else if (!_stricmp(argv[i], "-wardrobe"))
+			wardrobe = true;
 		else if (!_stricmp(argv[i], "-mods") && i + 1 < argc)
 			modsFolder = argv[++i];
 		else if (!_stricmp(argv[i], "-tr3") && i + 1 < argc)
@@ -7501,9 +7526,10 @@ int main(int argc, char** argv)
 			printf("ModelProbe: ignoring %s\n", argv[i]);
 	}
 
-	if (name.empty() && slot < 0 && !all && !lara)
+	if (name.empty() && slot < 0 && !all && !lara && !wardrobe)
 	{
-		printf("ModelProbe: nothing to look at - give -name, -slot, -all or -lara\n");
+		printf("ModelProbe: nothing to look at - give -name, -slot, -all, "
+			"-lara or -wardrobe\n");
 		return 2;
 	}
 
@@ -7540,6 +7566,72 @@ int main(int argc, char** argv)
 				ships.models, ships.outfits, ships.pages,
 				ships.bank ? "yes" : "no", ships.wavs);
 		}
+	}
+
+	/* THE WARDROBE (#153, round M2). The folders are the ones on THIS command
+	 * line and not the ones the registry names, so a measurement can be
+	 * repeated on a copy - which is the whole reason this tool takes the
+	 * install as its first argument. Set unconditionally, because -outfit
+	 * takes a wardrobe key as well now. */
+	HDWardrobeFolders(root.c_str(), tr3Root.empty() ? 0 : tr3Root.c_str());
+	HDWardrobeLogSink(ProbeModsLine);
+
+	/* The report itself needs neither the device nor the level: the scan is
+	 * folders and .TRM headers, which is exactly what makes it the same
+	 * answer in the engine, in this tool and in the randomizer. */
+	if (wardrobe)
+	{
+		HDWardrobeScan();
+
+		static const char* const kFrom[] = { "default", "measured", "table", "outfit.txt" };
+
+		printf("\n-- the wardrobe: %d outfits --------------------------------\n",
+			HDWardrobeCount());
+		printf("%-46s %-24s %-6s %-22s %-9s %-9s %s\n",
+			"key", "name", "source", "hands braid hols glov rig", "flags",
+			"sheen", "skin");
+		printf("%-46s %-24s %-6s %-22s %-9s %-9s %s\n",
+			"----------------------------------------------",
+			"------------------------", "------",
+			"----------------------", "---------", "---------",
+			"----------------");
+
+		for (int i = 0; i < HDWardrobeCount(); i++)
+		{
+			const HDWardrobeEntry* e = HDWardrobeAt(i);
+			char flags[32], sheen[32], skin[48];
+
+			if (!e)
+				continue;
+
+			sprintf(flags, "%5d %5d %4d %4d %3d", (int)e->hands, (int)e->braid,
+				(int)e->holsters, (int)e->gloves, (int)e->wearsRig);
+			sprintf(sheen, "%.2f/%.0f", e->sheen, e->sheenPower);
+
+			skin[0] = 0;
+
+			for (int k = 0; k < HD_WARDROBE_SKIN && e->skin[k]; k++)
+				sprintf(skin + strlen(skin), "%s%d", k ? "," : "", e->skin[k]);
+
+			if (!skin[0])
+				strcpy(skin, "-");
+
+			sprintf(skin + strlen(skin), " (%s)", kFrom[e->fromSkin]);
+
+			printf("%-46s %-24s %-6s %-22s %-9s %-9s %s\n", e->key, e->name,
+				e->source == HD_WARDROBE_SOURCE_46 ? "46"
+					: e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod",
+				flags, kFrom[e->fromFlags], sheen, skin);
+		}
+
+		printf("\n-- passed over: %d files -----------------------------------\n",
+			HDWardrobeRefusedCount());
+
+		for (int i = 0; i < HDWardrobeRefusedCount(); i++)
+			printf("  %s\n", HDWardrobeRefused(i));
+
+		if (name.empty() && slot < 0 && !all && !lara)
+			return 0;
 	}
 
 	/* --- the classic level, when there is one -------------------------- */

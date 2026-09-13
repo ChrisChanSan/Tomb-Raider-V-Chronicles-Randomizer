@@ -26,6 +26,7 @@
  */
 #include "hd_lara.h"
 #include "hd_bind.h"
+#include "hd_wardrobe.h"
 
 #include <algorithm>
 #include <cmath>
@@ -39,9 +40,9 @@ namespace
 {
 	/* ------------------------------------------------------- the wardrobe -- */
 
-	/* THE OUTFITS. Every one of these files was read and counted before it was
-	 * written down here (ModelProbe -name <NAME> -nodraw); the node column is
-	 * the measurement, not the plan.
+	/* THE NINE THE LEVEL'S OWN FACTS CAN REACH. Every one of these files was
+	 * read and counted before it was written down here (ModelProbe -name
+	 * <NAME> -nodraw); the node column is the measurement, not the plan.
 	 *
 	 *   model              nodes with geometry                     vertices
 	 *   OUTFIT_CLASSIC     0..14                                     27349
@@ -53,156 +54,154 @@ namespace
 	 *   OUTFIT_TR3_COAST   0..14                                     15327
 	 *   OUTFIT_TR3_CATSUIT 0..14                                     18633
 	 *
-	 * `hands`, `braid` and `holsters` say whether the outfit takes the rest of
-	 * the wardrobe. The diving suit takes none of it: its own nodes 10 and 13
-	 * carry 1352 vertices each - the gauntlets ARE the suit - it wears a
-	 * helmet instead of a braid, and DrawLara__5 draws no holsters at all.
+	 * WHAT THIS TABLE STILL IS, AND WHAT IT IS NOT (#153, round M2). It is the
+	 * enum's two words: which FILE an HD_LARA_OUTFIT_* number stands for and
+	 * what to call it in the log. It is no longer the list - the list is a
+	 * scan (hd_wardrobe.h) that finds a hundred outfits in the two installs
+	 * and whatever a mod brings - and it is no longer the properties either:
+	 * hands, braid, holsters, gloves, the holster rig, the sheen and the skin
+	 * pages moved to hd_wardrobe.cpp's table, with the measurements that
+	 * produced them, so that ONE answer serves the engine, the tools and the
+	 * randomizer. `props_of` below is how this file asks for them.
 	 *
-	 * `gloves` picks the HAND_GLOVES_ file instead of the HAND_BARE_ one
-	 * (#123, fix round C, user finding C2: "OUTFIT_RUSSIA wears gloves"). An
-	 * outfit model covers all fifteen nodes including the two hand nodes, but
-	 * what it carries THERE is the sleeve - the hand itself is the separate
-	 * HAND_ model, which is the whole reason the remaster ships three sets of
-	 * them. The Russia suit's sleeve ends in a glove cuff and a bare hand came
-	 * out of it. Only that one outfit is set: nobody has reported a wrong hand
-	 * on any other, and each is a picture the user has to judge rather than a
-	 * thing this file can measure.
-	 *
-	 * The third set, HAND_XRAY_*, belongs to a remaster feature this engine
-	 * has not got - the x-ray view - and is deliberately unused here. */
+	 * The nine numbers stay because they are written into level headers
+	 * (data[3]) and into .hdm files and because HDLaraOutfitFor reaches them
+	 * out of the level's own facts. Everything past them is worn through the
+	 * .hdm's `wear` line and is named HD_LARA_OUTFIT_WEAR + a scan index. */
 	struct Outfit
 	{
 		const char* model;
 		const char* label;
-		bool hands;
-		bool braid;
-		bool holsters;
-		bool gloves;
-		/* Does this outfit wear the separate HOLSTER RIG - the belt, the two
-		 * pouches and the two thigh straps cut out of the London catsuit by
-		 * page (#123, fix round D, D4; the rule corrected in fix round F,
-		 * F1)?
-		 *
-		 * THE MEASUREMENT ROUND D MADE ITS RULE. Triangles on nodes 1 and 4
-		 * by texture page, over the eight wardrobe bodies - does the body
-		 * carry a rig of its OWN?
-		 *
-		 *   OUTFIT_CLASSIC      8017: 1090/1090   + 8018: 56/56    yes
-		 *   OUTFIT_RUSSIA       8017: 1106/1114   + 8018: 56/56    yes
-		 *   OUTFIT_TR3_COAST    8205:  354/354                     yes
-		 *   OUTFIT_TR3_CATSUIT  8205:  354/354                     yes
-		 *   OUTFIT_VCI          -                                  NO
-		 *   OUTFIT_TR3_ANTARC   -                                  NO
-		 *   OUTFIT_TR3_NEVADA   -                                  NO
-		 *   OUTFIT_SUBSUIT      -                          holsters none anyway
-		 *
-		 * AND THE RULE WAS WRONG ON THE PICTURE. "No rig of its own, so wear
-		 * the London one" put black leather straps over the Antarctica
-		 * parka: the belt disappears inside the padded jacket, the two
-		 * pouches stand off the hip at the width the London catsuit's thin
-		 * thighs want, and the straps cut through the coat (user finding F1
-		 * of the play test of 2026-09-06 - "that may only concern the VCI
-		 * catsuit"). Nevada is the same body shape and the same picture.
-		 *
-		 * A BODY WITHOUT A RIG IS NOT A BODY ASKING FOR ONE. The three are
-		 * without one for two different reasons. OUTFIT_VCI has none because
-		 * vanilla TR5 hangs pistols on that catsuit and the remaster left the
-		 * pouches to the holster file, so its thighs are bare where guns
-		 * belong. Antarctica and Nevada have none because in TR3 those two
-		 * outfits never wore a thigh rig at all: the geometry is finished as
-		 * it stands, and coat and cargo pocket are modelled to sit flush.
-		 * Only the first of the three is a hole; the other two are a design.
-		 *
-		 * So this is a TABLE and not a rule derived from geometry - one
-		 * outfit, the one whose picture the user judged. A wardrobe body
-		 * added later gets a false here, and a true only after somebody has
-		 * looked at the picture. */
-		bool wearsRig;
-
-		/* THE BODY'S SHEEN (#123, fix round D, D2): the Blinn-Phong strength
-		 * and exponent for the OUTFIT model. See kPartSheen below for the
-		 * other parts and for why these are a material table and not a
-		 * measurement. */
-		float sheen;
-		float sheenPower;
-
-		/* WHICH PAGES OF THE BODY ARE LARA'S OWN SKIN (#123, fix round K, K2).
-		 *
-		 * THE USER'S FINDING: "the hands react differently to the room's
-		 * intensity - in five rooms the hand is now brighter, now darker than
-		 * the forearm; a difference in the TEXTURE would be the same
-		 * everywhere, so it is LIGHT."
-		 *
-		 * IT IS THE SHEEN, and everything else at that seam is provably
-		 * identical: hd_laradraw.cpp pushes the body and the hand parts with
-		 * the SAME nodeLight array, the same light list, the same sun factor
-		 * and the same matrices, and HDObjectPush copies all four per draw.
-		 * The one thing that differs is the material - fix round D gives the
-		 * whole body the OUTFIT's, fix round I gives the hand the SKIN's - and
-		 * where the room's own light list is empty (an ordinary room lit by
-		 * its baked vertex colours, which is most of the game) the shader's
-		 * highlight is `light * strength * pow(N.V, power) / 255`. So the
-		 * difference between two materials is MULTIPLIED BY THE ROOM'S
-		 * AMBIENT: bright in a bright room, gone in a dark one, and its sign
-		 * follows the outfit. That is the user's five rooms, and it is why a
-		 * texture difference was ruled out correctly.
-		 *
-		 * MEASURED (ModelProbe -handlight: the body's pages on nodes 8..13
-		 * with the hand's beside them, and what each adds at N.V = 1 in a room
-		 * of 255):
-		 *
-		 *     outfit         the arm wears        the hand wears   difference
-		 *     CLASSIC        8001  25.5 (cloth)   8001  30.6         5.1
-		 *     TR3_NEVADA     8202  20.4           8001  30.6        10.2
-		 *     TR3_COAST      8202  20.4           8001  30.6        10.2
-		 *     TR3_ANTARC     8202  25.5           8001  30.6         5.1
-		 *     TR3_CATSUIT    8202 114.8 (latex)   8001  30.6       -84.2
-		 *     VCI            8027 114.8 (latex)   8001  30.6       -84.2
-		 *     RUSSIA         8041  30.6 (coat)    8001  45.9 (glove) 15.3
-		 *
-		 * and the Rome case is the plainest of all: the forearm and the hand
-		 * are the SAME TEXTURE PAGE, 8001, shaded by two different materials.
-		 *
-		 * WHICH OF THOSE ARE FAULTS AND WHICH ARE THE ART. A catsuit sleeve
-		 * meeting a bare hand IS a material boundary and must keep one; a coat
-		 * sleeve meeting a leather glove likewise. The faults are the rows
-		 * where the surface on both sides is Lara's own SKIN and only the
-		 * material disagrees - CLASSIC and the four Tomb Raider III guests,
-		 * whose arms are bare.
-		 *
-		 * SO IT IS A TABLE, for the reason the sheen itself is one and
-		 * wearsRig above is one: geometry cannot tell skin from latex. Two
-		 * measurements decide each row, both from ModelProbe -handlight and
-		 * -neck: the page the body's ARM geometry wears, and the page its
-		 * THROAT column wears. 8001 is Lara's skin in the three game 5 bodies
-		 * (in OUTFIT_CLASSIC it carries her arms, her midriff and her neck at
-		 * once); the four Tomb Raider III guests carry theirs on 8201, the
-		 * neck, and 8202, the arms - the same two pages in all four, because
-		 * it is the same Lara underneath. 0 ends the list.
-		 *
-		 * OUTFIT_SUBSUIT has none on purpose: the diving suit shows no skin
-		 * anywhere, and its throat page 8047 is the SUIT. Naming it here would
-		 * make the whole suit matt. OUTFIT_RUSSIA and OUTFIT_VCI name 8001
-		 * because their necks and (for the catsuit) chest are bare; neither
-		 * has skin at the ARM, so neither wrist seam moves. */
-		int skin[3];
 	};
 
-	/*                                                    hands  braid holsters
-	 *                                                                  gloves
-	 *                                                                wearsRig */
 	const Outfit kOutfit[HD_LARA_OUTFIT_COUNT] =
 	{
-		{ 0,                    "classic (no HD body)",   false, false, false, false, false, 0.00f,  1.0f, { 0, 0, 0 } },
-		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false, false, 0.10f, 14.0f, { 8001, 0, 0 } },
-		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true,  false, 0.12f, 16.0f, { 8001, 0, 0 } },
-		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false, false, 0.30f, 22.0f, { 0, 0, 0 } },
-		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false, true,  0.45f, 26.0f, { 8001, 0, 0 } },
-		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false, false, 0.10f, 14.0f, { 8201, 8202, 0 } },
-		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f, { 8201, 8202, 0 } },
-		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f, { 8201, 8202, 0 } },
-		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false, false, 0.45f, 26.0f, { 8201, 8202, 0 } }
+		{ 0,                    "classic (no HD body)" },
+		{ "OUTFIT_CLASSIC",     "the Rome outfit" },
+		{ "OUTFIT_RUSSIA",      "the Russia outfit" },
+		{ "OUTFIT_SUBSUIT",     "the diving suit" },
+		{ "OUTFIT_VCI",         "the VCI catsuit" },
+		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)" },
+		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)" },
+		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)" },
+		{ "OUTFIT_TR3_CATSUIT", "London (TR3)" }
 	};
+
+	/* THE PROPERTIES OF WHATEVER IS BEING WORN (#153, round M2).
+	 *
+	 * One scan entry, found two ways: a wear number carries its index, and one
+	 * of the nine is matched to its entry BY FILE NAME out of the IV-VI
+	 * install - which is where all eight bodies live and where their
+	 * measurements were made.
+	 *
+	 * A null answer means the scan has no entry for it, which happens when the
+	 * install is not there at all. Every caller then falls back to what the
+	 * wardrobe's own defaults are, because a body that draws with the right
+	 * geometry and a plain material is a picture and a body that draws nothing
+	 * is a hole. */
+	/* THE PAGE NUMBER BEHIND A CACHE KEY (#153, round M2).
+	 *
+	 * A model's pages are offered to the cache under a key, not under the
+	 * number the .TRM wrote: a model out of the Tomb Raider I-III bundle
+	 * carries HD_PAGE_ALT_BASE (#123, S7-2) and one a mod supplied carries
+	 * that mod's namespace (#153, M1), because two bundles and any number of
+	 * mods each have a page 8001 and they are different pictures.
+	 *
+	 * The namespace is an ALLOCATION; the number is the material's NAME, and
+	 * every rule in this file that asks "is this page her skin" or "is this
+	 * page the gun rather than the hand" is asking about the name. So the
+	 * allocation is stripped here, in one place, rather than in each of them:
+	 * the wardrobe's TRX outfits are the case that proved it - their pages
+	 * are 8415, 8001 and 8002 of THAT bundle, and a comparison against the
+	 * key found none of them. */
+	int page_number_of(int key)
+	{
+		if (HDPageModIndex(key) >= 0)
+			return HDPageModNumber(key);
+
+		return key >= HD_PAGE_ALT_BASE ? key - HD_PAGE_ALT_BASE : key;
+	}
+
+	int wear_index_of(int outfit)
+	{
+		const int wear = HDLaraWearOfOutfit(outfit);
+
+		if (wear >= 0)
+			return wear;
+
+		if (outfit <= HD_LARA_OUTFIT_NONE || outfit >= HD_LARA_OUTFIT_COUNT)
+			return -1;
+
+		return HDWardrobeFindFile(kOutfit[outfit].model, HD_WARDROBE_SOURCE_46);
+	}
+
+	const HDWardrobeEntry* props_of(int outfit)
+	{
+		return HDWardrobeAt(wear_index_of(outfit));
+	}
+
+	// The file an outfit number wears - the enum's own name, or the scan
+	// entry's. Null when neither has one.
+	const char* model_of(int outfit)
+	{
+		const int wear = HDLaraWearOfOutfit(outfit);
+
+		if (wear >= 0)
+		{
+			const HDWardrobeEntry* e = HDWardrobeAt(wear);
+
+			return e ? e->file : 0;
+		}
+
+		return outfit > HD_LARA_OUTFIT_NONE && outfit < HD_LARA_OUTFIT_COUNT
+			? kOutfit[outfit].model : 0;
+	}
+
+	// Is this a number a body can be found for at all?
+	bool outfit_real(int outfit)
+	{
+		return model_of(outfit) != 0;
+	}
+
+	/* THE FIVE FLAGS AND THE TWO MATERIALS, from the scan where there is one
+	 * and from the wardrobe's own defaults where there is not. The defaults
+	 * are repeated here rather than reached for, because this file must go on
+	 * drawing a body when hd_wardrobe has found no install to scan - and they
+	 * are the SAME defaults, which the one-line comment beside each says. */
+	bool takes_hands(int outfit)
+	{
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->hands : true;	// kDefaultHands
+	}
+
+	bool takes_braid(int outfit)
+	{
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->braid : true;	// kDefaultBraid
+	}
+
+	bool takes_holsters(int outfit)
+	{
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->holsters : true;	// kDefaultHolsters
+	}
+
+	bool takes_gloves(int outfit)
+	{
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->gloves : false;	// kDefaultGloves
+	}
+
+	bool takes_rig(int outfit)
+	{
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->wearsRig : false;	// kDefaultRig
+	}
 
 	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
 	 *   0 always, 1 only an outfit with hands, 2 only one with a braid,
@@ -601,7 +600,7 @@ namespace
 
 	bool outfit_takes(int outfit, int part)
 	{
-		if (outfit <= HD_LARA_OUTFIT_NONE || outfit >= HD_LARA_OUTFIT_COUNT)
+		if (!outfit_real(outfit))
 			return false;
 
 		if (part < 0 || part >= HD_LARA_PART_COUNT)
@@ -612,18 +611,19 @@ namespace
 
 		switch (kPart[part].kind)
 		{
-		case 1: return kOutfit[outfit].hands;
-		case 2: return kOutfit[outfit].braid;
-		case 3: return kOutfit[outfit].holsters;
+		case 1: return takes_hands(outfit);
+		case 2: return takes_braid(outfit);
+		case 3: return takes_holsters(outfit);
 		/* The holster rig (#123, fix round D, D4; the rule corrected in fix
-		 * round F, F1): NAMED in the outfit table, not derived from the
+		 * round F, F1): NAMED in the wardrobe's table, not derived from the
 		 * geometry. Round D asked "has this body a rig of its own?" and gave
 		 * the London rig to every body that had not - which put it on the
-		 * Antarctica parka and the Nevada vest, where it clips. See wearsRig
-		 * above for the measurement and for why it is not the rule. The
-		 * holsters test stays in front of it so that a table entry alone can
-		 * never dress an outfit that draws no holsters at all. */
-		case 4: return kOutfit[outfit].holsters && kOutfit[outfit].wearsRig;
+		 * Antarctica parka and the Nevada vest, where it clips. See
+		 * hd_wardrobe.cpp's `wearsRig` for the measurement and for why it is
+		 * not the rule. The holsters test stays in front of it so that a table
+		 * entry alone can never dress an outfit that draws no holsters at
+		 * all. */
+		case 4: return takes_holsters(outfit) && takes_rig(outfit);
 		default: return true;
 		}
 	}
@@ -633,18 +633,46 @@ namespace
 
 const char* HDLaraOutfitModel(int outfit)
 {
-	if (outfit <= HD_LARA_OUTFIT_NONE || outfit >= HD_LARA_OUTFIT_COUNT)
-		return 0;
-
-	return kOutfit[outfit].model;
+	return model_of(outfit);
 }
 
 const char* HDLaraOutfitLabel(int outfit)
 {
+	const int wear = HDLaraWearOfOutfit(outfit);
+
+	if (wear >= 0)
+	{
+		const HDWardrobeEntry* e = HDWardrobeAt(wear);
+
+		// The scan's display name, which is what the player picked it by -
+		// and its key would be the same word twice in the line.
+		return e ? e->name : "?";
+	}
+
 	if (outfit < 0 || outfit >= HD_LARA_OUTFIT_COUNT)
 		return "?";
 
 	return kOutfit[outfit].label;
+}
+
+const char* HDLaraOutfitKey(int outfit)
+{
+	const int wear = HDLaraWearOfOutfit(outfit);
+
+	if (wear >= 0)
+	{
+		const HDWardrobeEntry* e = HDWardrobeAt(wear);
+
+		return e ? e->key : "";
+	}
+
+	/* One of the nine has a key too - it is a file of the IV-VI install like
+	 * any other - and saying so is what lets a .hdm `wear` line and a level
+	 * header's data[3] be read against each other. Empty when the install is
+	 * not on this machine, in which case nothing was drawn out of it anyway. */
+	const HDWardrobeEntry* e = props_of(outfit);
+
+	return e ? e->key : "";
 }
 
 int HDLaraOutfitFromName(const char* name)
@@ -683,6 +711,18 @@ int HDLaraOutfitFromName(const char* name)
 		// The bare tail, so "-outfit VCI" and "-outfit TR3_COAST" work.
 		if (model && same(name, model + 7))
 			return i;
+	}
+
+	/* AND ANY ENTRY OF THE SCAN, BY ITS KEY (#153, round M2) - which is the
+	 * one spelling that can name all hundred of them, because two of the
+	 * installs' files and any number of mods' may share a .TRM stem. Asked
+	 * last, so that the eight names above go on meaning the number the level
+	 * header writes and nothing about the scan can move them. */
+	{
+		const int wear = HDWardrobeFind(name);
+
+		if (wear >= 0)
+			return HDLaraOutfitOfWear(wear);
 	}
 
 	return HD_LARA_OUTFIT_NONE;
@@ -813,14 +853,14 @@ const char* HDLaraPartModel(int outfit, int part)
 		return 0;
 
 	if (part == HD_LARA_PART_BODY)
-		return kOutfit[outfit].model;
+		return model_of(outfit);
 
 	/* THE GLOVED TWIN (#123, fix round C, user finding C2). A gloved outfit
 	 * wears the HAND_GLOVES_ file; a hand part the wardrobe ships no gloved
 	 * twin for falls back to the bare one, which HDLaraLevelBuild writes into
 	 * the log. Nothing but a hand part has a twin, so the test is the field
 	 * and not the kind. */
-	if (kOutfit[outfit].gloves && kPart[part].gloves)
+	if (takes_gloves(outfit) && kPart[part].gloves)
 		return kPart[part].gloves;
 
 	return kPart[part].model;
@@ -1604,8 +1644,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 	if (!level || !out || max <= 0)
 		return 0;
 
-	if (level->outfit <= HD_LARA_OUTFIT_NONE ||
-		level->outfit >= HD_LARA_OUTFIT_COUNT)
+	if (!outfit_real(level->outfit))
 		return 0;
 
 	if (!level->bodyBind || level->bodyNodes < HD_LARA_NODES)
@@ -1653,7 +1692,30 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		 * K1): the inner skin's texel is a place on a page of the outfit, and
 		 * after the build there is no page and no vertex left to ask. */
 		if (part == HD_LARA_PART_BODY)
+		{
 			one.measure = &measure_neck_skin;
+
+			/* AND THE SCAN SAYS WHERE IT IS (#153, round M2). The model
+			 * resolver could only ever have found the eight: an outfit of the
+			 * Tomb Raider I-III bundle sits in its 1\ITEM, which is on no
+			 * search path, and a mod's outfit is refused by the resolver on
+			 * purpose. The wardrobe has the path and the namespace, so it
+			 * hands both over and nothing is searched for twice.
+			 *
+			 * Nothing happens when this machine has no scan entry - the eight
+			 * then resolve by name exactly as they did before this round,
+			 * which is what keeps an installation without the I-III bundle
+			 * drawing the same Lara it always did. */
+			const int at = wear_index_of(level->outfit);
+			const HDWardrobeEntry* e = HDWardrobeAt(at);
+
+			if (e)
+			{
+				one.path = HDWardrobePath(at);
+				one.mod = e->mod;
+				one.fromTr3 = e->source == HD_WARDROBE_SOURCE_13;
+			}
+		}
 
 		/* And the LID is cut out of it (#123, fix round S, S1). It stands
 		 * after the body in this array - the enum puts it there - which is
@@ -1683,8 +1745,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 	if (stats)
 		stats->outfit = level->outfit;
 
-	if (level->outfit <= HD_LARA_OUTFIT_NONE ||
-		level->outfit >= HD_LARA_OUTFIT_COUNT)
+	if (!outfit_real(level->outfit))
 	{
 		note("Lara stays classic - no outfit chosen");
 		return false;
@@ -1712,7 +1773,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		/* A gloved outfit with a hand part the wardrobe has no gloved twin
 		 * for - none today, and the line is here so the day there is one it
 		 * is in the log and not a surprise in a screenshot. */
-		if (kOutfit[level->outfit].gloves && kPart[part].kind == 1 &&
+		if (takes_gloves(level->outfit) && kPart[part].kind == 1 &&
 			!kPart[part].gloves)
 			note("%s: no gloved variant in the wardrobe - %s is worn bare",
 				HDLaraPartLabel(part), model);
@@ -1744,36 +1805,63 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 			 * clothes - so a bare forearm wore the outfit's sheen while the
 			 * hand model over it wore the skin's, and the difference between
 			 * the two was multiplied by the room's ambient. The pages are a
-			 * measured table on the outfit; kOutfit above carries it and the
+			 * measured table on the outfit; hd_wardrobe.cpp carries it and the
 			 * measurement behind it. Nothing happens for an outfit that shows
-			 * no skin. */
+			 * no skin.
+			 *
+			 * AND FOR AN OUTFIT NOBODY HAS LOOKED AT, THE MEASUREMENT ANSWERS
+			 * (#153, round M2). The throat measured two paragraphs down is the
+			 * page that runs the whole height of the neck, and for seven of
+			 * the eight known bodies it IS the first page of the table's row -
+			 * checked one by one, the agreement and the two disagreements are
+			 * written out in hd_wardrobe.cpp. So a scanned entry the table has
+			 * no row for takes it, and one the table does have a row for keeps
+			 * the row: the diving suit's empty list is a decision and the
+			 * measurement would overrule it with the HELMET. */
 			float skinS = 0.0f, skinP = 1.0f;
 			int named = 0;
 
 			HDLaraSkinSheen(&skinS, &skinP);
 
-			for (int i = 0; i < 3 && kOutfit[level->outfit].skin[i]; i++)
+			if (g_inner_page >= 0 &&
+				HDWardrobeSkinMeasured(wear_index_of(level->outfit), g_inner_page))
+				note("HDLOG wardrobe %s: nobody has named her skin, so the "
+					"throat page %d is taken - measured off this file",
+					model, g_inner_page);
+
+			const HDWardrobeEntry* props = props_of(level->outfit);
+
+			for (int i = 0; props && i < HD_WARDROBE_SKIN && props->skin[i]; i++)
 			{
-				const int page = kOutfit[level->outfit].skin[i];
+				const int page = props->skin[i];
 				bool there = false;
 
+				/* THE PAGE NUMBER, NOT THE CACHE KEY (#153, round M2). A model
+				 * a mod supplied names its pages in that mod's own namespace
+				 * (hd_pagecache.h), so HDModelPage gives back raw + pageBias
+				 * and a plain 8001 would match nothing at all - and the skin
+				 * would silently keep the body's material, which is the very
+				 * seam fix round K was about. The namespace is an allocation
+				 * and the page number is the material's name; the held-item
+				 * rule below strips it for the same reason and in the same
+				 * words. */
 				for (int j = 0; j < HDModelPageCount(slot); j++)
-					if (HDModelPage(slot, j) == page)
+				{
+					const int key = HDModelPage(slot, j);
+
+					if (page_number_of(key) == page)
 					{
 						there = true;
+						HDModelSetPageSheen(slot, key, skinS, skinP);
+						named++;
 						break;
 					}
+				}
 
 				if (!there)
-				{
 					note("%s: page %d is named as her skin and the model does "
 						"not wear it - the table and the art disagree", model,
 						page);
-					continue;
-				}
-
-				HDModelSetPageSheen(slot, page, skinS, skinP);
-				named++;
 			}
 
 			if (named)
@@ -1832,38 +1920,30 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 
 			HDLaraHeldSheen(part, &held, &heldPower);
 
-			/* THE PAGE NUMBER, NOT THE CACHE KEY (#153, round M1). A model a
-			 * mod supplied names its pages in that mod's own namespace
+			/* THE PAGE NUMBER, NOT THE CACHE KEY (#153, round M1; the strip
+			 * itself moved into page_number_of in round M2). A model a mod
+			 * supplied names its pages in that mod's own namespace
 			 * (hd_pagecache.h), so mod2's 8001 and the install's 8001 are two
 			 * different keys - and this rule would then find NO page in
 			 * common between a modded weapon hand and the vanilla rest hands
 			 * and hand the skin the gunmetal material along with the gun.
 			 *
-			 * The namespace is an allocation and the page number is the
-			 * material's name - which is what hd_model's Range says in so
-			 * many words. So the comparison strips it. A mod that keeps the
-			 * install's numbering (the HK USP and the Spas-12 both wear its
-			 * 8001 for skin) is then read exactly right, and a mod that
-			 * renumbers is read right as soon as it ships its own
+			 * A mod that keeps the install's numbering (the HK USP and the
+			 * Spas-12 both wear its 8001 for skin) is read exactly right, and
+			 * a mod that renumbers is read right as soon as it ships its own
 			 * HAND_BARE_REST - the two are then in one namespace again. */
 			for (int i = 0; held > 0.0f && i < HDModelPageCount(slot); i++)
 			{
 				const int page = HDModelPage(slot, i);
-				const int number = HDPageModIndex(page) >= 0
-					? HDPageModNumber(page) : page;
+				const int number = page_number_of(page);
 				bool onHand = false;
 
 				for (int j = 0; j < HDModelPageCount(rest); j++)
-				{
-					const int other = HDModelPage(rest, j);
-
-					if ((HDPageModIndex(other) >= 0
-						? HDPageModNumber(other) : other) == number)
+					if (page_number_of(HDModelPage(rest, j)) == number)
 					{
 						onHand = true;
 						break;
 					}
-				}
 
 				if (onHand)
 					continue;
@@ -1932,7 +2012,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 	if (!g_has[HD_LARA_PART_BODY])
 	{
 		note("Lara stays classic - %s.TRM is the body and it is not there",
-			kOutfit[level->outfit].model);
+			model_of(level->outfit));
 		return false;
 	}
 
@@ -1990,14 +2070,16 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	 * next. */
 	if (part == HD_LARA_PART_BODY)
 	{
-		if (g_outfit <= HD_LARA_OUTFIT_NONE || g_outfit >= HD_LARA_OUTFIT_COUNT)
+		const HDWardrobeEntry* props = props_of(g_outfit);
+
+		if (!props)
 			return;
 
 		if (strength)
-			*strength = kOutfit[g_outfit].sheen;
+			*strength = props->sheen;
 
 		if (power)
-			*power = kOutfit[g_outfit].sheenPower;
+			*power = props->sheenPower;
 
 		return;
 	}
@@ -2009,9 +2091,7 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	 * shone like bare skin. */
 	if (kPart[part].kind == 1)
 	{
-		const bool gloved = g_outfit > HD_LARA_OUTFIT_NONE &&
-			g_outfit < HD_LARA_OUTFIT_COUNT && kOutfit[g_outfit].gloves &&
-			kPart[part].gloves;
+		const bool gloved = takes_gloves(g_outfit) && kPart[part].gloves;
 		const float* was = gloved ? kSheenLeather : kSheenSkin;
 
 		if (strength)
@@ -2050,12 +2130,17 @@ void HDLaraSkinSheen(float* strength, float* power)
 
 bool HDLaraSkinPage(int page)
 {
-	if (page < 0 || g_outfit <= HD_LARA_OUTFIT_NONE ||
-		g_outfit >= HD_LARA_OUTFIT_COUNT)
+	const HDWardrobeEntry* props = props_of(g_outfit);
+
+	if (page < 0 || !props)
 		return false;
 
-	for (int i = 0; i < 3; i++)
-		if (kOutfit[g_outfit].skin[i] == page)
+	/* The caller hands a cache key (ModelProbe passes HDModelPage straight
+	 * in), so the namespace comes off first - see page_number_of. */
+	const int number = page_number_of(page);
+
+	for (int i = 0; i < HD_WARDROBE_SKIN; i++)
+		if (props->skin[i] == number)
 			return true;
 
 	return false;

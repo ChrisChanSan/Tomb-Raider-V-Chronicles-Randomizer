@@ -47,6 +47,18 @@ namespace
 		std::string path;
 	};
 
+	/* One OUTFIT_*.TRM a mod ships (#153, round M2). Kept by the scan rather
+	 * than looked for again, because the wardrobe wants the LIST and the
+	 * resolver answers only "where is the file called X" - and a mod's outfit
+	 * is an ADDITIONAL entry in the wardrobe, never a replacement of the
+	 * install's file of the same name, so there is no name to ask about. */
+	struct Outfit
+	{
+		std::string stem;	// "OUTFIT_CLASSIC", upper case
+		std::string path;	// absolute
+		int game;		// 5 or 4 - which of the mod's folders it sat in
+	};
+
 	struct Mod
 	{
 		std::string path;	// absolute, the mod folder itself
@@ -55,6 +67,7 @@ namespace
 		int origin = 0;		// mod.txt origin=tr1|tr2|tr3, 0 = none
 		std::string bank;	// 5\DATA\MAIN.SFX, empty when there is none
 		HDModShips ships = { 0, 0, 0, 0, 0 };
+		std::vector<Outfit> outfits;
 	};
 
 	bool scanned = false;
@@ -168,7 +181,7 @@ namespace
 	// deeper: a mod's ITEM and TEX folders are flat in the remaster's layout,
 	// and the PNGs some modders keep in a subfolder beside their .DDS are not
 	// art this engine can read.
-	int count_files(const std::string& folder, const char* ext, int* outfits)
+	int count_files(const std::string& folder, const char* ext, Mod* mod, int game)
 	{
 		std::error_code ec;
 		fs::directory_iterator it(fs::u8path(folder), ec), end;
@@ -194,8 +207,30 @@ namespace
 
 			count++;
 
-			if (outfits && low.compare(0, 7, "outfit_") == 0)
-				(*outfits)++;
+			/* The outfits by name, not only by count (#153, round M2). The
+			 * 5 folder is walked before the 4 one, so a mod that ships the
+			 * same outfit in both is listed once, out of 5 - the order the
+			 * model resolver uses for everything else. */
+			if (mod && low.compare(0, 7, "outfit_") == 0)
+			{
+				Outfit one;
+
+				one.stem = upper(leaf.substr(0, leaf.size() - std::strlen(ext)));
+				one.path = it->path().string();
+				one.game = game;
+
+				bool twice = false;
+
+				for (size_t k = 0; k < mod->outfits.size(); k++)
+					if (mod->outfits[k].stem == one.stem)
+						twice = true;
+
+				if (!twice)
+				{
+					mod->outfits.push_back(one);
+					mod->ships.outfits++;
+				}
+			}
 		}
 
 		return count;
@@ -452,8 +487,8 @@ namespace
 			{
 				const std::string gf = join(mod.path, game == 5 ? "5" : "4");
 
-				mod.ships.models += count_files(join(gf, "ITEM"), ".trm", &mod.ships.outfits);
-				mod.ships.pages += count_files(join(gf, "TEX"), ".dds", 0);
+				mod.ships.models += count_files(join(gf, "ITEM"), ".trm", &mod, game);
+				mod.ships.pages += count_files(join(gf, "TEX"), ".dds", 0, game);
 			}
 
 			const std::string bank = join(join(join(mod.path, "5"), "DATA"), "MAIN.SFX");
@@ -474,9 +509,15 @@ namespace
 				index, mod.name.c_str(), origin, mod.ships.models,
 				mod.ships.pages, mod.ships.bank ? "yes" : "no", mod.ships.wavs);
 
-			if (mod.ships.outfits)
-				note("MODLOG mod%d %s ships %d OUTFIT_*.TRM - outfit - round M2",
-					index, mod.name.c_str(), mod.ships.outfits);
+			/* The wardrobe takes them from here (#153, round M2). They are
+			 * still refused by HDModsFindModel - a mod's outfit is an extra
+			 * entry in the wardrobe and never a replacement of the install's
+			 * file of the same name - so the line says where they went. */
+			for (size_t k = 0; k < mod.outfits.size(); k++)
+				note("MODLOG mod%d %s ships outfit %s (game %d) - a wardrobe "
+					"entry of its own, not a replacement",
+					index, mod.name.c_str(), mod.outfits[k].stem.c_str(),
+					mod.outfits[k].game);
 		}
 	}
 
@@ -519,6 +560,53 @@ int HDModsOrigin(int index)
 {
 	need_scan();
 	return index >= 0 && index < (int)mods.size() ? mods[(size_t)index].origin : 0;
+}
+
+/* THE OUTFITS A MOD SHIPS (#153, round M2). Not a resolver question - the
+ * wardrobe wants the list and there is no name to ask about, because a mod's
+ * outfit stands beside the install's file of the same name rather than in
+ * place of it. */
+int HDModsOutfitCount(int index)
+{
+	need_scan();
+	return index >= 0 && index < (int)mods.size()
+		? (int)mods[(size_t)index].outfits.size() : 0;
+}
+
+namespace
+{
+	const Outfit* outfit_at(int index, int at)
+	{
+		need_scan();
+
+		if (index < 0 || index >= (int)mods.size())
+			return 0;
+
+		const std::vector<Outfit>& list = mods[(size_t)index].outfits;
+
+		return at >= 0 && at < (int)list.size() ? &list[(size_t)at] : 0;
+	}
+}
+
+const char* HDModsOutfitName(int index, int at)
+{
+	const Outfit* one = outfit_at(index, at);
+
+	return one ? one->stem.c_str() : "";
+}
+
+const char* HDModsOutfitPath(int index, int at)
+{
+	const Outfit* one = outfit_at(index, at);
+
+	return one ? one->path.c_str() : "";
+}
+
+int HDModsOutfitGame(int index, int at)
+{
+	const Outfit* one = outfit_at(index, at);
+
+	return one ? one->game : 0;
 }
 
 void HDModsShipsOf(int index, HDModShips* out)

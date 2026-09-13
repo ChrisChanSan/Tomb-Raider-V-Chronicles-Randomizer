@@ -25,6 +25,63 @@ namespace
 	const size_t TrmPartBytes = 44;
 	const size_t TrmVertexBytes = 24;
 
+	/* THE SECOND VERTEX LAYOUT (#153, round M2). Thirty bytes instead of
+	 * twenty-four, and the difference is the two texture coordinates: they
+	 * leave the gaps in the bone and weight block and stand at the end as
+	 * FLOATS, which closes the block up by three bytes each and adds eight.
+	 *
+	 *     +0   float x, y, z            as in the 24 byte layout
+	 *     +12  u8 nx, ny, nz            ... and biased the same way
+	 *     +15  u8 layer                 ... and counted from one
+	 *     +16  u8 bone0, bone1, bone2
+	 *     +19  u8 weight0, weight1, weight2
+	 *     +22  float u
+	 *     +26  float v
+	 *
+	 * MEASURED over all 2,923 .TRM files of both remasters (six ITEM folders:
+	 * 882 + 566 + 0 in IV-VI, 379 + 476 + 620 in I-III). Exactly THIRTY of
+	 * them are laid out this way and every one is an OUTFIT_TRX_*_HD.TRM in
+	 * the I-III bundle's 1\ITEM; nothing else in either bundle, in any game
+	 * folder, at any name. The proof of the layout is arithmetic and then
+	 * byte comparison: the index block, aligned, plus vertices * 30 ends at
+	 * the last byte of the file in all thirty, and the leading vertices of
+	 * each are byte-identical with their 24 byte twin's in position, normal,
+	 * layer, bone and weight - only the two coordinates have moved.
+	 * OUTFIT_TRX_WETSUIT_1_HD: u of vertex 0 reads 0.33084 where the twin
+	 * carries 84/255 = 0.32941.
+	 *
+	 * THE ENGINE'S OWN VERTEX HOLDS u AND v AS BYTES (hd_model.cpp, the
+	 * UBYTE4 lanes of the declaration), so reading one of these files means
+	 * rounding its coordinates onto the 1/255 grid. That is a real loss and
+	 * it is written down rather than hidden: measured over
+	 * OUTFIT_TRX_WETSUIT_1_HD, 14,208 of its 14,262 coordinates lie off that
+	 * grid - and off every other grid a texture atlas might use, 1/256 up to
+	 * 1/4096, all of them - so the file is genuinely continuous and the
+	 * rounding moves nearly every one by up to half a step. Against its own
+	 * twin's vertices the two disagree by as much as half a step in both
+	 * directions, spread, not by a constant half-texel offset.
+	 *
+	 * So a file of this layout is READ - a mod that ships one and no 24 byte
+	 * twin is better drawn with rounded coordinates than not drawn at all -
+	 * but the wardrobe wears the 24 byte twin wherever there is one, and says
+	 * in the log why (hd_wardrobe.cpp). */
+	const size_t TrmVertexBytesWide = 30;
+
+	// A wide layout's texture coordinate on the byte grid the engine's vertex
+	// holds. Rounded to nearest and clamped - see the note above.
+	unsigned char to_byte(float value)
+	{
+		const float scaled = value * 255.0f + 0.5f;
+
+		if (!(scaled > 0.0f))
+			return 0;
+
+		if (scaled >= 255.0f)
+			return 255;
+
+		return (unsigned char)scaled;
+	}
+
 	struct Reader
 	{
 		const unsigned char* data;
@@ -246,23 +303,33 @@ namespace
 		reader.at += (size_t)indices * 2;
 		reader.align4();
 
-		if (!reader.have((size_t)vertices * TrmVertexBytes))
+		/* WHICH OF THE TWO LAYOUTS (#153, round M2). The file itself says so
+		 * by its length: the vertex block runs to the last byte, so what is
+		 * left over divided by the vertex count IS the stride, and 24 and 30
+		 * are the only two the remasters use. Asked in that order because 24
+		 * is what all but thirty of the 2,923 files carry - and because a
+		 * file that fits neither gets the message it always got. */
+		const size_t rest = size - reader.at;
+		size_t stride = 0;
+
+		if (rest == (size_t)vertices * TrmVertexBytes)
+			stride = TrmVertexBytes;
+		else if (vertices && rest == (size_t)vertices * TrmVertexBytesWide)
+			stride = TrmVertexBytesWide;
+
+		if (!stride)
 		{
-			// Some outfits are laid out with 30 byte vertices and are not
-			// read; TRForge measured the same and refuses them too.
-			*why = "is not long enough for its vertices";
+			if (!reader.have((size_t)vertices * TrmVertexBytes))
+				*why = "is not long enough for its vertices";
+			else
+				*why = "has bytes left over";
+
 			return false;
 		}
 
 		const size_t vertex_at = reader.at;
 
-		reader.at += (size_t)vertices * TrmVertexBytes;
-
-		if (reader.at != size)
-		{
-			*why = "has bytes left over";
-			return false;
-		}
+		reader.at += (size_t)vertices * stride;
 
 		if (info)
 		{
@@ -272,6 +339,7 @@ namespace
 			info->indices = (int)indices;
 			info->vertices = (int)vertices;
 			info->facialRig = facial_rig;
+			info->vertexBytes = (int)stride;
 		}
 
 		if (!model)
@@ -300,6 +368,7 @@ namespace
 		model->indices = (int)indices;
 		model->vertices = (int)vertices;
 		model->facialRig = facial_rig;
+		model->vertexBytes = (int)stride;
 
 		if (parts)
 		{
@@ -325,7 +394,7 @@ namespace
 
 			for (unsigned int i = 0; i < vertices; i++)
 			{
-				const unsigned char* raw = &bytes[vertex_at + (size_t)i * TrmVertexBytes];
+				const unsigned char* raw = &bytes[vertex_at + (size_t)i * stride];
 				HDTrmVertex& out = model->vertex[i];
 
 				std::memcpy(&out.x, raw + 0, 4);
@@ -339,11 +408,36 @@ namespace
 				out.bone[0] = raw[16];
 				out.bone[1] = raw[17];
 				out.bone[2] = raw[18];
-				out.u = raw[19];
-				out.weight[0] = raw[20];
-				out.weight[1] = raw[21];
-				out.weight[2] = raw[22];
-				out.v = raw[23];
+
+				if (stride == TrmVertexBytes)
+				{
+					out.u = raw[19];
+					out.weight[0] = raw[20];
+					out.weight[1] = raw[21];
+					out.weight[2] = raw[22];
+					out.v = raw[23];
+				}
+				else
+				{
+					/* The wide layout (#153, round M2). The weights close the
+					 * two gaps the coordinates left and the coordinates stand
+					 * at the end as floats; rounded onto the byte grid here,
+					 * which is the loss the note at the top of this file
+					 * measures. Clamped, because nothing in the format says a
+					 * coordinate stays inside 0..1 and a wrap would paint the
+					 * far edge of the atlas onto the model. */
+					float u = 0.0f, v = 0.0f;
+
+					out.weight[0] = raw[19];
+					out.weight[1] = raw[20];
+					out.weight[2] = raw[21];
+
+					std::memcpy(&u, raw + 22, 4);
+					std::memcpy(&v, raw + 26, 4);
+
+					out.u = to_byte(u);
+					out.v = to_byte(v);
+				}
 			}
 		}
 

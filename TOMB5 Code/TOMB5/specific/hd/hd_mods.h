@@ -75,7 +75,7 @@ int HDModsOrigin(int index);
 struct HDModShips
 {
 	int models;	// .TRM files under 5\ITEM and 4\ITEM, outfits included
-	int outfits;	// of those, OUTFIT_*.TRM - left alone in M1
+	int outfits;	// of those, OUTFIT_*.TRM - a wardrobe entry each (M2)
 	int pages;	// .DDS files under 5\TEX and 4\TEX
 	int bank;	// 1 = it ships 5\DATA\MAIN.SFX
 	int wavs;	// loose NNNN.wav, at any depth
@@ -83,16 +83,30 @@ struct HDModShips
 
 void HDModsShipsOf(int index, HDModShips* out);
 
+/* THE OUTFITS A MOD SHIPS, BY NAME (#153, round M2). The wardrobe reads this
+ * list; HDModsFindModel still refuses OUTFIT_*.TRM, and deliberately, because
+ * a mod's outfit is an ADDITIONAL wardrobe entry and never a replacement of
+ * the install's file of the same name - the player picks it, the level does
+ * not stumble into it. 5\ITEM before 4\ITEM, and a name that is in both is
+ * listed once, out of 5. */
+int HDModsOutfitCount(int index);
+const char* HDModsOutfitName(int index, int at);	// the .TRM stem, upper case
+const char* HDModsOutfitPath(int index, int at);	// absolute
+int HDModsOutfitGame(int index, int at);		// 5 or 4
+
 /* THE MODEL RESOLVER. The active mods in order, each 5\ITEM then 4\ITEM.
  * Writes the path into `buffer` and returns it; an empty string means no
  * active mod has that name and the caller resolves as it always did.
  *
- * OUTFIT_*.TRM IS REFUSED HERE (round M1). Lara's wardrobe is a composite
- * built out of a measured table in hd_lara.cpp - the holster cut out of one
- * page of an outfit, the head weights, the braid root - and a foreign outfit
- * file that does not carry what the table expects is not a different Lara, it
- * is a broken one. That is round M2's work; until then the vanilla outfit is
- * used and the scan says so in the log.
+ * OUTFIT_*.TRM IS STILL REFUSED HERE, and now for a second reason (round M2).
+ * It was refused in round M1 because Lara's wardrobe was a hand-written table
+ * and a stranger's outfit would have been dressed by somebody else's
+ * measurements. It stays refused because the wardrobe is now a SCAN
+ * (hd_wardrobe.h) in which a mod's outfit is an ENTRY OF ITS OWN beside the
+ * install's file of the same name: the player picks it, and a level that asks
+ * for OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC.
+ * The list of what a mod ships is HDModsOutfitCount and its two neighbours
+ * below.
  *
  * `modIndex` gets the mod that answered, or -1.
  *

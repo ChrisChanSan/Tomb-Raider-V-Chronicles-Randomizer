@@ -109,6 +109,25 @@ struct HDModelSlot
 	int rigidNode = -1;
 	bool fromTr3 = false;
 
+	/* THE FILE, WHEN THE CALLER ALREADY KNOWS IT (#153, round M2).
+	 *
+	 * Normally a slot names a MODEL and this module looks for it - the mods,
+	 * the game folder, the siblings, the other bundle. The wardrobe cannot be
+	 * served that way: an outfit of the Tomb Raider I-III bundle lives in its
+	 * 1\ITEM, which is nobody's search path, and a mod's outfit is refused by
+	 * the model resolver ON PURPOSE, because a mod's outfit is an extra entry
+	 * in the wardrobe and never a replacement of the file it is named after.
+	 * The scan found it and knows exactly where it is, so it says so.
+	 *
+	 * `mod` is whose page numbers the file's are, exactly as a mod's model
+	 * has: -1 for an install's file, the mod's index for a mod's. Set it and
+	 * `fromTr3` cannot both be meaningful - a mod's namespace wins, which is
+	 * the rule round M1 laid down for models the resolver found.
+	 *
+	 * `name` is still given and is still what the log calls the model. */
+	const char* path = 0;
+	int mod = -1;
+
 	/* ONE PAGE OF THE FILE AND NOTHING ELSE (#123, fix round D, D4).
 	 *
 	 * -1 is the whole model, which is what every caller but one asks for. A

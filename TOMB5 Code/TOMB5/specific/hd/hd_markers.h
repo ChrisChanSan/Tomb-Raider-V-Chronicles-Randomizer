@@ -29,6 +29,16 @@
 //                                1 and 2
 //     outfit 6                   repeats data[3] - for a person reading the
 //                                file. The ENGINE reads the header byte
+//     wear 46/OUTFIT_TR2_HOME    the wardrobe entry the run rolled (#153,
+//                                round M2). The REST OF THE LINE is the key,
+//                                spaces and all, because a mod's key carries
+//                                its folder name. Beats the level's own facts
+//                                when this machine's scan has that key, and
+//                                falls through with a line in the log when it
+//                                has not. The version stays 2: an engine
+//                                older than this round does not know the word
+//                                and ignores the line, which leaves it the
+//                                level facts - exactly what it drew before
 //     room 34                    that room's shape changed past keeping ->
 //                                draw it classic
 //     cut x0 y0 z0 x1 y1 z1      an OPENING the run made, as a box in world
@@ -139,6 +149,13 @@ const char* HDMarkersPath();
 // of one value in the randomizer and can only disagree when one of the two
 // halves was written by an older run - which is worth a line and nothing more.
 int HDMarkersOutfit();
+
+/* The `wear` line, or "" (#153, round M2). Never null. This one is NOT for
+ * the log: it is the only place a level file can name an outfit that has no
+ * number in the engine's enum, and the draw reads it. A key this machine's
+ * wardrobe has not got is not an error - the player may have taken a mod out
+ * again - and the level then dresses her by its own facts. */
+const char* HDMarkersWear();
 
 // Whether the run changed the shape of that room past keeping its HD art.
 bool HDMarkersRoomTouched(int room);

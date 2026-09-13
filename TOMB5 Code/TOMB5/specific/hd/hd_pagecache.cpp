@@ -1521,6 +1521,47 @@ bool HDPageCacheSlotCutout(int slot)
 	return g_cutout[(size_t)slot] != 0;
 }
 
+/* The same two questions resolve_page's mod branch asks, and in the same
+ * order - see hd_pagecache.h for why answering them here is a merge and not a
+ * guess. */
+int HDPageCacheKeyOf(int key)
+{
+	const int mod = HDPageModIndex(key);
+
+	if (mod < 0)
+		return key;
+
+	const int real = HDPageModNumber(key);
+	char buffer[300];
+
+	if (*HDModsFindPage(mod, real, buffer, sizeof(buffer)))
+		return key;
+
+	const int from = HDModsOrigin(mod);
+
+	if (from >= 1 && from <= 3 && !g_alt_root.empty())
+	{
+		int order[3] = { from, 0, 0 };
+		int at = 1;
+
+		for (int game = 1; game <= 3; game++)
+			if (game != from)
+				order[at++] = game;
+
+		for (int i = 0; i < 3; i++)
+		{
+			path_of_alt(real, order[i], buffer, sizeof(buffer));
+
+			if (file_there(std::string(buffer)))
+				return key;
+		}
+	}
+
+	// Neither the mod nor its bundle has it: the install's page, under the
+	// install's own key, exactly as any vanilla model would ask for it.
+	return real;
+}
+
 int HDPageCacheSlotOrigin(int slot)
 {
 	if (slot < 0 || slot >= (int)g_origin.size())

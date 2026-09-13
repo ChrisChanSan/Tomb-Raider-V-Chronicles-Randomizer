@@ -33,6 +33,7 @@ namespace
 	bool g_present = false;
 	int g_version = 0;
 	int g_outfit = 0;
+	std::string g_wear;
 	std::string g_error;
 	std::string g_path;
 	std::vector<int> g_rooms;
@@ -122,6 +123,26 @@ bool HDMarkersLoad(const char* levelPath)
 			continue;
 		}
 
+		/* THE REST OF THE LINE, NOT A WORD (#153, round M2). A wardrobe key
+		 * may hold spaces - "mod/outfits/aod wetsuit/OUTFIT_CLASSIC" - so it
+		 * is taken whole and trimmed at both ends rather than scanned. Read
+		 * with std::strncmp and not sscanf for exactly that reason. */
+		if (std::strncmp(line, "wear ", 5) == 0)
+		{
+			const char* at = line + 5;
+
+			while (*at == ' ' || *at == '	')
+				at++;
+
+			g_wear = at;
+
+			while (!g_wear.empty() && (g_wear[g_wear.size() - 1] == ' ' ||
+				g_wear[g_wear.size() - 1] == '	'))
+				g_wear.erase(g_wear.size() - 1);
+
+			continue;
+		}
+
 		if (std::sscanf(line, "room %d", &a) == 1)
 		{
 			g_rooms.push_back(a);
@@ -195,6 +216,7 @@ bool HDMarkersLoad(const char* levelPath)
 		g_donors.clear();
 		g_unknown.clear();
 		g_outfit = 0;
+		g_wear.clear();
 		return false;
 	}
 
@@ -208,6 +230,7 @@ void HDMarkersFree()
 	g_present = false;
 	g_version = 0;
 	g_outfit = 0;
+	g_wear.clear();
 	g_error.clear();
 	g_path.clear();
 	g_rooms.clear();
@@ -240,6 +263,11 @@ const char* HDMarkersPath()
 int HDMarkersOutfit()
 {
 	return g_outfit;
+}
+
+const char* HDMarkersWear()
+{
+	return g_present ? g_wear.c_str() : "";
 }
 
 bool HDMarkersRoomTouched(int room)

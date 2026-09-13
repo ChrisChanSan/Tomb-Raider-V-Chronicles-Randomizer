@@ -21,6 +21,8 @@
 #include "../../tomb5/pch.h"
 #include "hd_laradraw.h"
 #include "hd_lara.h"
+#include "hd_markers.h"		// the .hdm wear line (#153, round M2)
+#include "hd_wardrobe.h"		// the scan that line names (#153, round M2)
 #include "hd_model.h"
 #include "hd_object.h"
 #include "hd_render.h"
@@ -111,6 +113,12 @@ namespace
 	bool g_neck_probe_ever = false;
 	unsigned short g_neck_probe_at = 0;
 
+	/* The reason a wear line hands back (#153, round M2). A literal with the
+	 * lifetime of the program, because HDLaraOutfitFor's `why` is kept by the
+	 * caller and written into the log lines of a whole level. */
+	const char* const g_wear_why =
+		"the wardrobe entry the run rolled (.hdm wear)";
+
 	/* ------------------------------------------------------ the wardrobe -- */
 
 	/* WHICH OUTFIT, out of the engine's own facts and nothing else. Every one
@@ -157,6 +165,44 @@ namespace
 
 		const bool young = (gfLevelFlags & GF_YOUNGLARA) != 0 ||
 			LaraDrawType == LARA_YOUNG;
+
+		/* THE .hdm's `wear` LINE COMES FIRST, AND YOUNG LARA COMES BEFORE IT
+		 * (#153, round M2).
+		 *
+		 * The wardrobe is a hundred outfits now (hd_wardrobe.h) and the level
+		 * header has one byte for it, which can only ever name the nine the
+		 * enum has. So the randomizer writes the KEY into the sidecar and
+		 * that is what the roll really said; data[3] stays what it was, for
+		 * the seven entries that have a number, and the two are read against
+		 * each other in hd_level.cpp.
+		 *
+		 * Young Lara stays classic whatever the sidecar says (plan section 9,
+		 * the user's decision), which is why the question is asked here and
+		 * not left to HDLaraOutfitFor below: a wear line must not be able to
+		 * put an adult body on the child.
+		 *
+		 * A key this machine has not got - the player took the mod out again,
+		 * or the level was randomized on another machine - falls through to
+		 * the level's own facts with a line in the log. That is the same
+		 * answer an engine older than this round gives, which is the point of
+		 * putting the key in a line an old reader ignores. */
+		if (!young)
+		{
+			const char* wear = HDMarkersWear();
+
+			if (wear && *wear)
+			{
+				const int found = HDWardrobeFind(wear);
+
+				if (found >= 0)
+				{
+					*why = g_wear_why;
+					return HDLaraOutfitOfWear(found);
+				}
+
+				Log("HDLOG wardrobe wear=%s not found - level facts", wear);
+			}
+		}
 
 		return HDLaraOutfitFor(LaraDrawType, cap, young, (int)GfHdOutfit, why);
 	}
@@ -569,6 +615,39 @@ void HDLaraDrawBuild(const char* stem)
 		stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
 		stats.indexBytes / 1024.0, stats.driftMean, stats.driftWorst,
 		stats.driftParts, g_why);
+
+	/* WHICH ENTRY OF THE WARDROBE THIS IS, IN ONE LINE (#153, round M2): the
+	 * key, the file, where the file came from, the five flags with the origin
+	 * of each, the material and the skin pages. A picture the user does not
+	 * like is then one grep away from the row or the outfit.txt line that made
+	 * it, which is the same promise the part lines below make. */
+	{
+		const int wear = HDLaraWearOfOutfit(g_level.outfit);
+		const int at = wear >= 0 ? wear
+			: HDWardrobeFindFile(HDLaraOutfitModel(g_level.outfit),
+				HD_WARDROBE_SOURCE_46);
+		const HDWardrobeEntry* e = HDWardrobeAt(at);
+		static const char* const kFrom[] = { "default", "measured", "table", "outfit.txt" };
+
+		if (e)
+			Log("HDLOG level=%s wardrobe key=%s name=%s file=%s source=%s "
+				"mod=%d hands=%d braid=%d holsters=%d gloves=%d rig=%d (%s) "
+				"sheen=%.2f/%.0f (%s) skin=%d,%d,%d (%s) feet=%d (%s) pages=%s",
+				stem, e->key, e->name, e->file,
+				e->source == HD_WARDROBE_SOURCE_46 ? "46"
+					: e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod",
+				e->mod, (int)e->hands, (int)e->braid, (int)e->holsters,
+				(int)e->gloves, (int)e->wearsRig, kFrom[e->fromFlags],
+				e->sheen, e->sheenPower, kFrom[e->fromSheen],
+				e->skin[0], e->skin[1], e->skin[2], kFrom[e->fromSkin],
+				e->feet, kFrom[e->fromFeet],
+				e->mod >= 0 ? "the mod's own namespace" : "the install's");
+		else
+			Log("HDLOG level=%s wardrobe outfit=%s has no scan entry - the "
+				"wardrobe's own defaults are worn", stem,
+				HDLaraOutfitModel(g_level.outfit)
+					? HDLaraOutfitModel(g_level.outfit) : "-");
+	}
 
 	for (int i = 0; i < HDLaraNoteCount(); i++)
 		Log("HDLOG level=%s lara note: %s", stem, HDLaraNote(i));

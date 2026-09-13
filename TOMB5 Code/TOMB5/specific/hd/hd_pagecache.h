@@ -259,6 +259,30 @@ int HDPageCacheCutoutPages();
 int HDPageCacheSlotOrigin(int slot);
 const char* HDPageCacheOriginText(int origin);
 
+/* THE KEY A PAGE REALLY BELONGS UNDER (#153, round M2).
+ *
+ * Round M1 gave every mod a namespace so that a mod's 6111 and the install's
+ * 6111 could not be the same cache slot. The cost it did not remove: a page a
+ * mod's MODEL asks for but the mod does not SHIP falls through to the
+ * install, and the install's file was then decoded a second time under the
+ * mod's key. Measured on ANDREA1's wardrobe with the user's four gun and
+ * outfit mods: 25 slots and 33.3 MiB against 21 and 28.0 without them, and
+ * one of the four extra slots was the install's 8001 held twice.
+ *
+ * This folds exactly that case and no other: a mod key whose mod has no such
+ * .DDS and whose origin bundle has none either becomes the plain number.
+ * THE MERGE IS SAFE BY CONSTRUCTION AND NOT BY CARE - in that case
+ * resolve_page itself does `page = real` and runs the ordinary chain, so the
+ * two keys open THE SAME FILE, byte for byte, and everything the cache
+ * measures on it (the cutout share, the format, the size) is measured on the
+ * same bytes. A mod key whose page the mod or its bundle does have is left
+ * alone, which is the rule round M1 rests on.
+ *
+ * A plain or alternate-bundle key comes back unchanged. Needs the mods
+ * scanned and the alternate root set, which is what every caller has done
+ * before it loads a model. */
+int HDPageCacheKeyOf(int key);
+
 // Everything that was not found where it should have been, in words, for the
 // caller's log. Valid until the next Create or Destroy.
 int HDPageCacheNoteCount();

@@ -16,6 +16,7 @@
 #include "hd_bind.h"
 #include "hd_lara.h"			// HD_LARA_OUTFIT_* - the data[3] agreement
 #include "hd_markers.h"
+#include "hd_wardrobe.h"		// the key the `wear` line names (#153, M2)
 #include "hd_scan.h"
 #include "hd_render.h"
 #include "hd_object.h"
@@ -2552,10 +2553,11 @@ void HDLevelLoad(const char* wadName)
 	const bool markers = HDMarkersLoad(wadName);
 
 	Log("HDLOG level=%s markers file=%s version=%d rooms=%d cuts=%d donors=%d "
-		"outfit=%d tr3_install=%s%s%s",
+		"outfit=%d wear=%s tr3_install=%s%s%s",
 		g_stem, markers ? HDMarkersPath() : "none", HDMarkersVersion(),
 		HDMarkersRoomCount(), HDMarkersCutCount(), HDMarkersDonorCount(),
-		HDMarkersOutfit(), HDInstallRootTr3()[0] ? "found" : "absent",
+		HDMarkersOutfit(), HDMarkersWear()[0] ? HDMarkersWear() : "-",
+		HDInstallRootTr3()[0] ? "found" : "absent",
 		markers ? "" : " reason=", markers ? "" : HDMarkersError());
 
 	/* data[3] and the sidecar's `outfit` line come out of ONE value in the
@@ -2566,6 +2568,31 @@ void HDLevelLoad(const char* wadName)
 	if (markers && HDMarkersOutfit() != (int)GfHdOutfit)
 		Log("HDLOG level=%s markers MISMATCH data[3]=%d, the sidecar says %d "
 			"- data[3] wins", g_stem, (int)GfHdOutfit, HDMarkersOutfit());
+
+	/* THE OTHER WAY A LEVEL CAN NAME AN OUTFIT (#153, round M2): the `wear`
+	 * key. The randomizer writes it for an outfit out of the SCAN and for no
+	 * other, because only such an outfit has no number to be written into
+	 * data[3] - so in a file this project produced the two never both stand
+	 * there, and data[3] is 0 wherever a `wear` line is.
+	 *
+	 * The test below is therefore for a file somebody else wrote, or edited by
+	 * hand. Unlike the line above, the KEY wins where this machine has it: it
+	 * is the only one of the two that can name an outfit the enum has no
+	 * number for. hd_laradraw.cpp is where that happens; this is the line that
+	 * makes a disagreement visible before the draw. */
+	if (markers && HDMarkersWear()[0])
+	{
+		const int at = HDWardrobeFind(HDMarkersWear());
+		const int byByte = HDWardrobeFind(HDLaraOutfitKey((int)GfHdOutfit));
+
+		if (at < 0)
+			Log("HDLOG level=%s wardrobe wear=%s not found - level facts",
+				g_stem, HDMarkersWear());
+		else if (GfHdOutfit && byByte >= 0 && at != byByte)
+			Log("HDLOG level=%s markers wear=%s and data[3]=%d name two "
+				"different outfits - the key wins", g_stem, HDMarkersWear(),
+				(int)GfHdOutfit);
+	}
 
 	for (int i = 0; i < HDMarkersUnknownCount(); i++)
 		Log("HDLOG level=%s markers line this engine has no rule for: %s",

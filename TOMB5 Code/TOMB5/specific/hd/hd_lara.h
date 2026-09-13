@@ -609,7 +609,14 @@ enum HDLaraNode
 	HD_LARA_HEAD_NODE
 };
 
-// Which body Lara wears. The section table that picks one is in the .cpp.
+/* Which body Lara wears. The section table that picks one is in the .cpp.
+ *
+ * THESE NINE ARE THE LEVEL-FACTS PATH AND NOTHING MORE (#153, round M2). They
+ * are the outfits HDLaraOutfitFor can reach out of what the level file says,
+ * and their numbers are written into level headers (data[3]) and into .hdm
+ * files, so they never move. The WARDROBE is bigger than they are and is a
+ * scan now (hd_wardrobe.h): any entry of it can be worn, by the .hdm's `wear`
+ * line, and such an outfit is named HD_LARA_OUTFIT_WEAR + its scan index. */
 enum HDLaraOutfit
 {
 	HD_LARA_OUTFIT_NONE = 0,	// stay classic - and the log says why
@@ -623,6 +630,23 @@ enum HDLaraOutfit
 	HD_LARA_OUTFIT_TR3_CATSUIT,
 	HD_LARA_OUTFIT_COUNT
 };
+
+/* AN OUTFIT OUT OF THE SCAN (#153, round M2): this plus its index in
+ * hd_wardrobe. Far above HD_LARA_OUTFIT_COUNT so that the two kinds cannot be
+ * confused, and far below the end of an int. Every call below that takes an
+ * `outfit` takes one of these as well. */
+#define HD_LARA_OUTFIT_WEAR	1000
+
+inline int HDLaraOutfitOfWear(int wardrobeIndex)
+{
+	return wardrobeIndex >= 0 ? HD_LARA_OUTFIT_WEAR + wardrobeIndex : HD_LARA_OUTFIT_NONE;
+}
+
+// The scan index behind such a number, or -1 for one of the nine above.
+inline int HDLaraWearOfOutfit(int outfit)
+{
+	return outfit >= HD_LARA_OUTFIT_WEAR ? outfit - HD_LARA_OUTFIT_WEAR : -1;
+}
 
 // The parts of the composite. Their order is the order they are drawn in.
 enum HDLaraPart
@@ -791,11 +815,17 @@ struct HDLaraDraw
 
 // The .TRM stem of an outfit ("OUTFIT_VCI"), or 0.
 const char* HDLaraOutfitModel(int outfit);
-// A short human name for the log ("the VCI catsuit"), never 0.
+// A short human name for the log ("the VCI catsuit"), never 0. For a scanned
+// outfit it is the wardrobe's display name ("TR2 Home", "AOD Wetsuit").
 const char* HDLaraOutfitLabel(int outfit);
-// An outfit from a name: the .TRM stem, the bare tail ("VCI", "TR3_COAST") or
-// the randomizer's own guest id ("tr3_london"). HD_LARA_OUTFIT_NONE when the
-// name is none of them.
+/* The wardrobe key of whatever this number stands for ("46/OUTFIT_VCI"), or
+ * "" when this machine's scan has no entry for it (#153, round M2). Never
+ * null. The nine have one as well, which is what lets a .hdm `wear` line and
+ * a level header's data[3] be read against each other. */
+const char* HDLaraOutfitKey(int outfit);
+// An outfit from a name: the .TRM stem, the bare tail ("VCI", "TR3_COAST"),
+// the randomizer's own guest id ("tr3_london") or a wardrobe key
+// ("46/OUTFIT_TR2_HOME"). HD_LARA_OUTFIT_NONE when the name is none of them.
 int HDLaraOutfitFromName(const char* name);
 
 /* WHICH OUTFIT THIS LEVEL WEARS, out of the engine's own facts and nothing

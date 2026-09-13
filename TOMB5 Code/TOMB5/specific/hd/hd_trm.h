@@ -47,6 +47,12 @@
 //         +20  u8 weight0, weight1, weight2
 //         +23  u8 v                        over 255
 //
+// A SECOND VERTEX LAYOUT, thirty bytes wide, carries the two coordinates as
+// FLOATS at the end instead (#153, round M2). The file says which by its
+// length and the reader takes either; the measurement that established the
+// layout, and what rounding its coordinates onto this engine's byte grid
+// costs, are in the .cpp beside TrmVertexBytesWide.
+//
 // WHAT THE MEASUREMENT OVER 5\ITEM SAYS (566 files, 1,260,496 vertices,
 // 1,561,395 triangles), because these are the facts hd_model.cpp builds on:
 //
@@ -82,6 +88,12 @@ struct HDTrmInfo
 	int indices;
 	int vertices;
 	bool facialRig;		// the file carried a rig where the zero belongs
+	/* 24 or 30 - which of the two vertex layouts the file uses (#153, round
+	 * M2). 30 means its two texture coordinates are floats and were rounded
+	 * onto the byte grid to be read; see the measurement in the .cpp. Thirty
+	 * files of the two remasters are laid out that way and all thirty are
+	 * OUTFIT_TRX_*_HD.TRM in the I-III bundle's 1\ITEM. */
+	int vertexBytes;
 };
 
 // One part of a model: a material and its three index runs.
@@ -121,6 +133,7 @@ struct HDTrmModel
 	int indices;
 	int vertices;
 	bool facialRig;
+	int vertexBytes;	// 24 or 30 on disk - see HDTrmInfo
 };
 
 // True when the file exists at all. Cheap - no read.

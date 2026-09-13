@@ -31,6 +31,7 @@
 #include "setupdlg.h"
 #include "../tomb5/tomb5.h"	// load_tomb5_present_settings (#148, order 6)
 #include "hd/hd_mods.h"		// the mods folder's log sink (#153, round M1)
+#include "hd/hd_wardrobe.h"	// and the wardrobe scan's (#153, round M2)
 
 WINAPP App;
 long resChangeCounter;
@@ -627,6 +628,10 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	 * them. Installed here, before anything can scan, so that every MODLOG
 	 * line lands in the log in the order it was made. */
 	HDModsLogSink(ModsLogLine);
+
+	// The wardrobe scan keeps its notes the same way and for the same reason
+	// (#153, round M2). One sink, because both land in the same log.
+	HDWardrobeLogSink(ModsLogLine);
 
 	start_setup = 0;
 	App.mmx = 0;

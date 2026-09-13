@@ -702,8 +702,10 @@ bool HDModelHeadBounds(int slot, float* mins, float* maxs);
  * other two, so the frame can rotate a model and never mirror it.
  *
  * A BOX AND A CLOUD ANSWER DIFFERENT QUESTIONS. A box says how much room a
- * model needs; these say which way it RUNS. For two guns crossed like an X the
- * two are nothing alike, which is the whole of the round M2b ring fault. */
+ * model needs; these say which way it RUNS. For a flat pair of guns the two are
+ * nothing alike - a box cannot tell that pair from one tall gun standing up,
+ * 147 x 253 x 159 being what both measure - which is the whole of the round M2b
+ * ring fault. */
 bool HDModelPrincipalAxes(int model, float* axes, float* extent);
 
 /* THE FIT THAT PUTS ONE MODEL IN ANOTHER'S PLACE (#153, round M2b; off the
@@ -719,14 +721,20 @@ bool HDModelPrincipalAxes(int model, float* axes, float* extent);
  * It exists because the inventory ring may be asked to draw a file from a
  * different game, which stands in that game's frame. Round M2b did it with the
  * two bounding BOXES and the user's picture of the result is why it does not
- * any more: a box cannot tell two guns crossed like an X from one gun standing
- * up, and the mod's crossed Uzis came out lying flat, one above the other with
- * a gap between them. The vertex cloud's own axes say which way the shape
- * runs - measured on his files, EXTRA_UZI_ITEM is 256 x 236 x 42 and flat
- * along -y, UZI_OPTION is 242 x 240 x 132 and flat along -x - so pairing them
- * lays the mod's cross into the plane the vanilla item's cross lies in, and
- * the ring's own per-item rotation then presents the two alike. Nothing about
- * which game or which model is written down here. */
+ * any more: a box cannot tell a flat pair of guns from one tall gun standing
+ * up, and the mod's Uzis came out lying flat, one above the other with a gap
+ * between them. The vertex cloud's own axes say which way the shape runs -
+ * measured on his files, EXTRA_UZI_ITEM is 256 x 236 x 42 and flat along -y,
+ * UZI_OPTION is 242 x 240 x 132 and flat along -x - so pairing them lays the
+ * mod's pair into the plane the vanilla item lies in, and the ring's own
+ * per-item rotation then presents the two alike. Nothing about which game or
+ * which model is written down here.
+ *
+ * WHAT IT DOES NOT DO, looked at and measured in the fix round of M3: it does
+ * not CROSS two guns that stand parallel in the file, and the mod's UZI_OPTION
+ * is such a file. A rigid turn keeps the angle between two parts. The long note
+ * at HDModelRingFit in hd_model.cpp has the renders and the reason, and it also
+ * says what the IN-PLANE angle rests on, which is the weak half of this. */
 bool HDModelRingFit(int model, int target, float* out);
 
 /* HOW FAR THAT FIT LEAVES THE ROOM THE RING KEEPS (#153, round M2b, the
@@ -734,8 +742,8 @@ bool HDModelRingFit(int model, int target, float* out);
  *
  * The scale is the ratio of the two LONGEST extents, so the other two axes
  * land wherever their own proportions put them and a model CAN stand well
- * outside the room kept for the item it replaces - the mod's crossed Uzis are
- * 132 units thick where the vanilla pair is 42.
+ * outside the room kept for the item it replaces - the mod's pair of Uzis is
+ * 132 units thick where the vanilla item is 42.
  *
  * The largest of the three ratios, fitted extent over the target's on the same
  * axis: 1.00 is "inside". `worstAxis` is optional and takes 0, 1 or 2 - WHICH

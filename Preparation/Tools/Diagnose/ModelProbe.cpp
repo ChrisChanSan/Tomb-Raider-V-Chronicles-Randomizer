@@ -9275,12 +9275,22 @@ int main(int argc, char** argv)
 			int outAxis = -1;
 			const float over = HDModelRingFitOverflow(optionSlot, slot,
 				&outAxis);
-			static const char* kAxis[3] = { "x", "y", "z" };
+			/* THE TARGET'S OWN axes and not x/y/z (#153, round M3, the
+			 * review after the fix round). The fit pairs the two models'
+			 * SHAPES, so the axis handed back is one of the TARGET's
+			 * principal axes, longest first - the same three words the
+			 * engine prints (hd_object.cpp, box_verdict). Naming it "z"
+			 * sent a reader to the model's z extent, which is a number
+			 * that cannot produce the ratio printed beside it. */
+			static const char* kAxis[3] =
+			{
+				"its longest axis", "its middle axis", "its flattest axis"
+			};
 
 			printf("\ninventory: %s stands in for %s - its box "
 				"%.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale %.2f, centre "
 				"moved by %.0f/%.0f/%.0f, %.2fx of that box at its worst"
-				" (%s)\n", HDModelName(optionSlot),
+				", on %s\n", HDModelName(optionSlot),
 				HDModelName(slot), srcMax[0] - srcMin[0], srcMax[1] - srcMin[1],
 				srcMax[2] - srcMin[2], dstMax[0] - dstMin[0],
 				dstMax[1] - dstMin[1], dstMax[2] - dstMin[2],

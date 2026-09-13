@@ -11424,7 +11424,9 @@ the IV-VI name has said which convention it means, and it wins. The pickup
 lying on the floor keeps `EXTRA_*` either way; only the ring and the display in
 the corner read this.
 
-A file out of another game stands in another frame, so `HDModelBoxFit` puts it
+A file out of another game stands in another frame, so `HDModelRingFit` (named
+`HDModelBoxFit` when this was written; round M3 took the rule off the box and
+renamed it) puts it
 into this slot's: centred on its own bounding box, turned so that its longest
 axis lies where the target's longest lies and its shortest where the shortest
 lies, and scaled by the ratio of the two longest extents. Nothing about either
@@ -11622,8 +11624,8 @@ species again. Seven findings, listed the same way; one of them does not stand.
    model leaves the box.** The scale matches the two LONGEST extents only, so
    the mod's upright Uzi ends up about 154 units thick where the vanilla item
    is 41 - **3.73x**, measured - which is the intended picture and was argued
-   for at `HDModelBoxFit`, but a ring that looks crowded in a play test had
-   nothing to point at. `HDModelBoxFitOverflow` puts the number on it, out of
+   for at `HDModelRingFit`, but a ring that looks crowded in a play test had
+   nothing to point at. `HDModelRingFitOverflow` puts the number on it, out of
    the same sorted axes the fit uses (one `sort_axes`, so the two cannot
    drift), and the line now ends in "and it stands 3.73x out of that box on y"
    or "and it stays inside that box". The Uzi AMMO model, whose proportions are
@@ -11828,7 +11830,7 @@ mod's pair into the plane the vanilla item lies in, and the ring's own per-item
 rotation then presents the two alike. The overflow figure falls from **3.73x to
 3.36x** for the Uzi and from **1.25x to 1.00x** for its ammo, which now sits
 inside the room the ring keeps for it; what is left of the Uzi's is the mod's
-own geometry, 132 units of thickness where the vanilla pair is 42.
+own geometry, 132 units of thickness where the vanilla item is 42.
 
 **AND THE TOOL CAN NOW SHOW THE RING.** `ModelProbe -inventory` drew the item's
 OWN frame, which is not what the player sees - the ring puts the item's three
@@ -12148,6 +12150,121 @@ under a gamepad, the re-dress in the middle of a level, the barefoot steps
 heard with the floor layer silent, the boots heard with the sound mod in the
 folder, the ring opened with the Uzi mod active, and the vulture's death with
 and without that mod.
+
+#### Round M3, the review after the fix round - both ways of shipping a footstep (#153)
+
+The second review of round M3 found one medium and five lows; the fix round's
+two high findings held. All six are answered here, and the medium is a real
+hole in the round's own rule rather than a wording fault.
+
+**A FOOTSTEP MOD CAN SHIP NO BANK AT ALL, AND THIS ONE FELL THROUGH BOTH SETS.**
+The round's rule is that sound ids 0 and 4 come from the first UNMODDED bank of
+the chain while the outfit wears boots, and that a mod which really replaces
+them supplies the BARE set instead. The bare half asked `HQSfxFromMod()`, which
+answers "is a mod's BANK being played". A mod may also replace a sample with a
+loose `<NNNN>.wav` beside it - round M1's own overlay, `a mod's <NNNN>.wav
+replaces bank sample NNNN` - and for the footsteps those files are exactly
+`0000.wav` to `0003.wav` and `0010.wav`. Such a mod ships no bank, so
+`HQSfxFromMod()` said no, the bare set fell back to the remaster's own id 417,
+and the boots had already stepped round the overlay by design: **the mod's five
+recordings reached neither set, with no log line and nothing in the docs.**
+
+The fix is to ask the question that was always meant. `HQSfxPayload` for sound
+id 0 - the ORDINARY chain, bank and then the loose overlay over it - is compared
+with `HQSfxPayloadBoots` for the same sample, which is the unmodded bank. They
+differ exactly when a mod really replaces the footsteps, whichever way it ships
+them, and they are byte-identical for the door mods and voice mods that are most
+of what exists (387 of the 390 sound ids the user's two banks share are
+byte-identical, measured in the fix round). One rule, both kinds of mod, and no
+list of cases to keep in step. `HQSfxWavSource` names the mod for the log
+without reading any audio, and the bypass line the brief asked for by hand is
+written once per level:
+
+```
+SFXLOG footsteps: <mod> supplies the bare set - its own loose .wav stands on sound id 0
+SFXLOG footsteps: <mod>'s own sound ids 0 and 4 are bypassed while the outfit wears boots -
+                  the boots are <bank>'s, and the mod supplies the bare set instead
+```
+
+Measured, with five files made in a scratch folder out of the bank's own
+exported recordings: `SfxProbe` reports `bank=no wavs=5`, all five ACCEPTED by
+the engine's own `SfxRiffCheck`, claiming bank samples 0000-0003 and 0010 - and
+the bridge on that game folder puts sound id 0 on bank sample 0 (four takes) and
+sound id 4 on bank sample 10. So the five files a footstep mod ships are exactly
+the five the two ids stand on. No tool can walk the rest: `SfxProbe` links
+`sfxbank.cpp` and `hd_mods.cpp`, not `hqsfx.cpp` and not `hd_feet.cpp`, which
+need DirectSound and the engine's `Log`. The two lines above are on the play
+test's list.
+
+**THE FOOTSTEP CHOICE NOW SURVIVES A FAILED HD BUILD.** `HDLevelBuild` has five
+ways to give up - no stem, a bad room count, `HDRenderInit` refusing the card,
+no page cache, no room drawing HD - and the call that applies the player's
+persisted footstep choice sat below all five. The bare set does not: it is built
+by `HDFeetLevelBuild` whenever `hd_enable` is on, in `LoadSamples`, on the load
+thread. So a player whose card cannot do shader model 3 - the session goes
+classic while `hd_enable` stays 1 - had an F4 row that worked inside the level
+and was silently dropped at the next level start. The build's body is now
+`HDLevelBuildHD()` and `HDLevelBuild` is four lines around it, so the question is
+asked on every way out and none of them can skip it.
+
+On those ways out the answer is the LEVEL's own body and not the player's key,
+and that is not a second oversight: `HDLaraDrawBuild` runs inside
+`HDObjectLevelBuild`, which is past all five returns, so there is no HD body to
+follow - `HDLaraDrawOutfit()` reads `HD_LARA_OUTFIT_NONE`, the key is empty, she
+is wearing Core's outfit, and Core's outfit has boots. The fix is that the
+answer is now given and written into the log instead of being left to whatever
+the menu happened to set inside the level.
+
+**AND FOUR SMALLER ONES.**
+
+1. **`ModelProbe` still named the overflow axis `x`/`y`/`z`.** Round M3 changed
+   `HDModelRingFitOverflow`'s contract to hand back WHICH OF THE TARGET'S OWN
+   principal axes is overflowed and updated the engine's wording to "its longest
+   / middle / flattest axis"; the tool's table was left behind. It printed
+   `3.36x ... (z)` where the engine said "its flattest axis", and a reader
+   chasing the number would have looked at a model extent that cannot produce
+   it. The tool now prints the engine's three words.
+2. **The `*` was drawn on wardrobe rows only.** With no registry value - every
+   player who has never opened the menu - the row in force is **Level facts**,
+   and nothing on the screen carried the mark. It does now.
+3. **Three stale symbol names in the round M2b entry**, `HDModelBoxFit` and
+   `HDModelBoxFitOverflow`, renamed this round to `HDModelRingFit` and
+   `HDModelRingFitOverflow`. Corrected in place, which is this record's
+   convention; and the same sweep found `hd_model.h` still calling the mod's
+   parallel Uzis a crossed pair and the vanilla `EXTRA_UZI_ITEM` a pair at all,
+   which the fix round had corrected in `hd_model.cpp` and not in its header.
+4. **The ring's IN-PLANE angle was a known weakness that lived only in a
+   report.** It is in the source now, with the numbers: the PLANE is decided by
+   a wide margin (132.3 against 239.5 on the mod's file, 41.6 against 235.7 on
+   the vanilla one - a factor of nearly six), but the two axes INSIDE it are
+   242.3 against 239.5, a gap of 1.2 %, and `sort_axes` orders them by that gap
+   alone. The roll inside the plane is therefore deterministic and not
+   meaningful: a mod update that moved a few dozen vertices could turn the item
+   a quarter turn. The brief asked for a symmetry test and there is none; a
+   max-extent sweep in the plane is the next step if the user dislikes an angle.
+   Written down so that a quarter turn after a mod update is not read as a new
+   bug.
+
+**PROVED.**
+
+- *The loose wav.* `SfxProbe -wavs` over a scratch mod of five files: `bank=no
+  wavs=5`, all five accepted, claiming bank samples 0000-0003 and 0010; and the
+  bridge putting ids 0 and 4 on exactly those. Plus the call chain with
+  `file:line` for what no tool can reach.
+- *The ring did not move.* `-ringcheck` worst dx 0.00013 px, `-pickupcheck`
+  0.00008 px, both PASS, overflow 3.36x - the same readings as before - and the
+  three ring renders byte-identical to the fix round's. Only the axis wording
+  changed.
+- *Nothing moved.* `ModelProbe -all -nodraw` over ANDREA1 with no `Mods`
+  folder against the stored pre-round run: identical but for the path that was
+  typed; the eight known outfits drawn with pistols, eight byte-identical `.PNG`
+  files.
+- *The vulture.* `SfxProbe -level` over the randomized ANDREA1 again: output
+  identical, line for line, to the fix round's run - 420, 421 and 423 refused as
+  imports, 422 refused where the length would have let it through.
+- *Round M1's own guarantee.* `SfxProbe -samples`: 473 of 473 pass, 0 refused.
+- *Nothing under `TR5Randomizer/`* was touched at all this round, so the
+  regression that round M3 and its fix round both ran still stands.
 
 ## Building this yourself
 

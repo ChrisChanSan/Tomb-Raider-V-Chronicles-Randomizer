@@ -133,12 +133,13 @@ stops it. The list is every outfit this machine can dress Lara in: the 22
 bodies of your **Tomb Raider IV-VI Remastered**, the 30 of **Tomb Raider
 I-III Remastered** the first has not got under the same name, and every one
 your `Mods` folder adds. Each row carries where it came from — `IV-VI`,
-`I-III`, or the mod's own folder name — and the one you are wearing is
-marked with a `*`.
+`I-III`, or the mod's own folder name — and the row in force is marked with
+a `*`.
 
 The first row is **Level facts**, and it means "no choice at all": the level
 and the rolled run decide, which is what a player who has never opened this
-menu has. Choosing it again clears the setting.
+menu has — so on a machine where nothing was ever chosen, that first row is
+the one carrying the `*`. Choosing it again clears the setting.
 
 | key | what it does |
 | --- | --- |
@@ -185,9 +186,17 @@ the **installed remaster** has for it — a sound mod that replaces the
 footsteps no longer makes every outfit barefoot. **Bare** is a second set of
 recordings the level loads beside its own: the barefoot steps the remaster's
 own bank carries (sound id 417, five recordings that no level uses), or your
-sound mod's own footsteps when a mod's bank really replaces sound id 0 — most
-sound mods do not, and one that only changes a door or a voice is passed over
-here rather than handing the boots back under the name *bare*. While she walks
+sound mod's own footsteps when a mod really replaces sound id 0 — most sound
+mods do not, and one that only changes a door or a voice is passed over here
+rather than handing the boots back under the name *bare*.
+
+Both ways of shipping footsteps count: a mod's own `5\DATA\MAIN.SFX`, and
+loose `0000.wav` to `0003.wav` and `0010.wav` beside it with no bank at all.
+The test is not which of the two a mod uses but whether what it puts on sound
+id 0 differs from the installed remaster's, so a mod that ships only the five
+wav files supplies **Bare** exactly as a mod's bank does. Either way the log
+says once per level that the mod's own ids 0 and 4 are bypassed while the
+outfit wears boots — that is what makes the two sets two. While she walks
 barefoot the **floor layer does not play at all**, because those recordings are
 a boot on a surface and putting one under a barefoot step is exactly the
 double sound this setting exists to avoid.
@@ -335,7 +344,12 @@ An unknown key is written to the log and ignored, exactly as in `mod.txt`.
 there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under
 the mod — replaces that numbered sample of the bank. The bank itself no
 longer has to be copied into `audio\` by hand: without one there, the engine
-reads the installed remaster's own where it lies.
+reads the installed remaster's own where it lies. Samples `0000` to `0003`
+and `0010` are the footsteps and the landing, and those five are the one
+exception to "a mod replaces it": they become the **Bare** set of the F4
+outfit changer instead of replacing the boots for every outfit at once — see
+*Footsteps* above. This holds whether the mod ships them in a bank or as five
+loose wav files.
 
 **Not supported.** A face on its own does nothing: a mod
 that ships `<NAME>_HEAD.TRM` without the body's `<NAME>.TRM` is passed over,

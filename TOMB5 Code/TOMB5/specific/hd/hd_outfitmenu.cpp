@@ -311,9 +311,17 @@ void HDOutfitMenu()
 				/* THE FIRST ROW IS NO OUTFIT AT ALL. It is what clears the
 				 * registry value, and with it cleared every level dresses
 				 * her out of its own facts and the randomizer's - which is
-				 * what a player who has never opened this menu has. */
-				PrintString(phd_centerx >> 2, y, colour,
-					(char*)CustomText("Level facts"), 0);
+				 * what a player who has never opened this menu has.
+				 *
+				 * AND IT WEARS THE MARK LIKE ANY OTHER ROW (the review after
+				 * the fix round of M3). It is the row in force for everyone
+				 * who has never opened this menu, which is the commonest
+				 * state there is, and the mark was drawn on wardrobe rows
+				 * alone - so the first thing most players saw was a list with
+				 * nothing marked at all. */
+				snprintf(buffer, sizeof(buffer), "%s%s",
+					CustomText("Level facts"), row == was ? " *" : "");
+				PrintString(phd_centerx >> 2, y, colour, buffer, 0);
 				PrintString(phd_centerx + (phd_centerx >> 2), y,
 					row == selection ? 1 : 6,
 					(char*)CustomText("the level and the run decide"), 0);

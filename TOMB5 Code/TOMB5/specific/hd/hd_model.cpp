@@ -3184,6 +3184,21 @@ bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
  * is a feature and not a fit - a decision for the project, not for this
  * function to take on its own.
  *
+ * THE PLANE IS WELL CONDITIONED AND THE ANGLE IN IT IS NOT (measured; the
+ * review after the fix round of M3). Which axis is the FLATTEST - and so which
+ * plane faces the camera - is decided by a wide margin on both files: 132.3
+ * against 239.5 for the mod's pair, 41.6 against 235.7 for the vanilla item,
+ * which is a factor of nearly six. The two axes INSIDE that plane are decided
+ * by 242.3 against 239.5 on the mod's file, a gap of 1.2 %, and sort_axes
+ * orders them by that gap alone. So the ROLL inside the plane is deterministic
+ * - the same file gives the same answer every time - but it is not meaningful:
+ * a mod update that moved a few dozen vertices could swap the two and turn the
+ * item a quarter turn in the ring. The brief asked for the in-plane angle to
+ * put the pair's SYMMETRY axis where the vanilla item's is, and no symmetry
+ * test is made here; a max-extent sweep in the plane is the next step if the
+ * user dislikes an angle. It is written down rather than guessed at, because a
+ * silent quarter turn after a mod update would otherwise look like a new bug.
+ *
  * Both frames are right handed by construction (see the axes' own note), so
  * the map is a pure rotation and can never mirror a model - which the box
  * rule had to repair with a negated axis.

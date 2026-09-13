@@ -800,6 +800,38 @@ char* HQSfxPayloadBoots(long levelSample, long pcmBytes22k, long* riffBytes,
 	return buffer;
 }
 
+/* WHICH MOD'S LOOSE .wav ANSWERS ONE OF THIS LEVEL'S SAMPLES (#153, round M3,
+ * the review after the fix round).
+ *
+ * The same lookup HQSfxWavFor makes and nothing more: this level's sample
+ * through the bridge to a bank sample number, and that number asked of the
+ * mods' own <NNNN>.wav files. It loads no audio and decides nothing - it is
+ * here so that the barefoot set can NAME the mod that supplied it, because a
+ * mod which ships loose .wav and no bank of its own is a footstep mod exactly
+ * as a mod's bank is and the log may not call it "the install". */
+const char* HQSfxWavSource(long levelSample)
+{
+	static char said[160];
+	char path[512];
+	int mod = -1;
+
+	said[0] = 0;
+
+	if (!hq_ready || !hq_map || levelSample < 0 || levelSample >= MAX_SAMPLES)
+		return said;
+
+	const long g = hq_map[levelSample];
+
+	if (g < 0 || g >= SfxBankSamples(hq_bank))
+		return said;
+
+	if (!*HDModsWav((int)g, &mod, path, sizeof(path)))
+		return said;
+
+	snprintf(said, sizeof(said), "%s", HDModsName(mod));
+	return said;
+}
+
 /* THE UNMODDED BANK'S OWN TAKES FOR ONE SOUND ID (#153, round M3), by bank
  * sample number. This is how the barefoot set is reached: it is sound id
  * HQ_SFX_BARE_FEET of the remaster's own bank and no level has it, so it

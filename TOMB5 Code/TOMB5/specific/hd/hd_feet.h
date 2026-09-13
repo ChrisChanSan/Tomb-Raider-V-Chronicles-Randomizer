@@ -62,6 +62,15 @@
 //          barefoot recordings: sound id HQ_SFX_BARE_FEET of the bank, which
 //          no level carries.
 //
+//          THE ORDINARY CHAIN IS BOTH KINDS OF MOD (the review after the fix
+//          round of M3). A mod's BANK is one way to replace the footsteps and
+//          a loose 0000..0003.wav beside it is the other - "a mod's <NNNN>.wav
+//          replaces bank sample NNNN", which for the footsteps is exactly
+//          those four and 0010. The test here is not "is a mod's bank being
+//          played" but "does the chain's sound id 0 differ from the unmodded
+//          bank's", so both kinds answer it and a mod that is about doors or
+//          voices answers it with no.
+//
 // AND THE LANDING, MEASURED. The boots have four steps of 33 to 41 ms and one
 // landing of 175 ms - a landing is 4.7 times a step and 2.4 times its peak. Of
 // the bank's five barefoot recordings (106 / 86 / 134 / 69 / 113 ms) none

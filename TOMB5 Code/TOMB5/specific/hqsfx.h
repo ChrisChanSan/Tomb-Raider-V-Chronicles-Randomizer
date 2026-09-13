@@ -75,6 +75,14 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
 char* HQSfxPayloadBoots(long levelSample, long pcmBytes22k, long* riffBytes,
 	SfxRiffParts* parts = 0);
 
+/* WHICH MOD'S LOOSE .wav ANSWERS ONE OF THIS LEVEL'S SAMPLES (#153, round M3,
+ * the review after the fix round), by name, for a log line - "" when the bank
+ * itself answers it. It asks the same overlay HQSfxPayload asks, through the
+ * same bridge, and loads nothing; a mod that ships <NNNN>.wav and no bank at
+ * all is a footstep mod exactly as a mod's bank is, and the bare set has to be
+ * able to say so. Valid until the next call. */
+const char* HQSfxWavSource(long levelSample);
+
 /* The unmodded bank's own sample numbers for one sound id, and one of those
  * samples. The barefoot set is reached this way and not through the level
  * bridge, because no level has sound id 417 at all. `samples` takes at most

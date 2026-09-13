@@ -2653,7 +2653,41 @@ void HDLevelLoad(const char* wadName)
 			g_stem, stats.groups, stats.rooms, stats.groups - 1);
 }
 
+static void HDLevelBuildHD();
+
+/* THE LEVEL'S HD BUILD, AND THE ONE THING THAT IS NOT PART OF IT (#153, round
+ * M3, the review after the fix round).
+ *
+ * The footsteps hang off the HD gate and off nothing else: the bare set is
+ * built by HDFeetLevelBuild whenever hd_enable is on - in LoadSamples, on the
+ * load thread, long before this - and the body it follows is decided by
+ * HDLaraLevelBuild on that same thread. The build below has five ways to give
+ * up (no rooms, no device, no page cache, no HD room, no stem), and NONE of
+ * them takes the bare set away or takes the F4 row away. Asking the question
+ * at the end of that build therefore left a player whose card cannot do shader
+ * model 3 - the worst of the five, because it turns the whole session classic
+ * while hd_enable stays 1 - with a footstep choice the menu applied inside the
+ * level and the next level start silently dropped. It is asked here instead,
+ * on every way out of the build and none of them able to skip it.
+ *
+ * WHAT IT ANSWERS ON THOSE WAYS OUT is the level's own body and not the
+ * player's key, because on them there IS no HD body: HDLaraDrawBuild runs
+ * inside HDObjectLevelBuild, which is past all five, so HDLaraDrawOutfit()
+ * reads HD_LARA_OUTFIT_NONE and the key is empty. She is wearing Core's
+ * outfit, Core's outfit has boots, and the line says exactly that. The point
+ * of the fix is that the answer is now GIVEN and written down rather than left
+ * to whatever the menu happened to set inside the level before. */
 void HDLevelBuild()
+{
+	HDLevelBuildHD();
+
+	/* Behind the gate, like everything else this round added: with hd_enable
+	 * off there is no bare set, no wardrobe and nothing to say about either. */
+	if (HDEnabled())
+		HDOutfitMenuFollowFeet();
+}
+
+static void HDLevelBuildHD()
 {
 	HDRenderStats stats;
 	const char* why = "";
@@ -3092,13 +3126,6 @@ void HDLevelBuild()
 	 * what this level's own build left in the page cache. Everything above
 	 * it is what the player's own outfit changes have added. */
 	g_redress_bytes0 = HDPageCacheBytes();
-
-	/* AND WHAT SHE WALKS ON (#153, round M3). The body is decided by now -
-	 * hd_laradraw has read the player's key and the level's own facts - and
-	 * the footsteps follow the body. The level's samples were loaded long
-	 * before this, on the load thread; all this does is bend two entries of
-	 * the sound map. */
-	HDOutfitMenuFollowFeet();
 }
 
 bool HDLevelRedressAllowed()

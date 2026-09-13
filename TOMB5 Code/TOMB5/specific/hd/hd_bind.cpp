@@ -927,21 +927,17 @@ const char* HDBindModOption(int slot, char* buffer, int size)
 	if (length <= tail || _stricmp(name + length - tail, kItem) != 0)
 		return nothing;
 
-	/* A MOD'S OWN EXTRA_ MODEL WINS. It is the IV-VI name, so a mod that
-	 * ships one has said which of the two conventions it is written in, and
-	 * the ordinary resolver already draws it - here and on the floor. */
-	for (const PrefixRule& one : extra_prefixes)
-	{
-		std::string candidate = one.prefix;
-		char found[512];
-		int mod = -1;
-
-		candidate += name;
-
-		if (*HDModsFindModel(candidate.c_str(), &mod, found, sizeof(found)))
-			return nothing;
-	}
-
+	/* THE OPTION MODEL IS ASKED FOR FIRST, and the order is a measurement.
+	 *
+	 * Each of these questions walks every active mod's 5\ITEM and 4\ITEM, and
+	 * this function is asked of every loaded slot at every level build - the
+	 * shape of thing that turned round M2's level build into twenty-five
+	 * seconds. Asking the three EXTRA prefixes first meant four walks for every
+	 * _ITEM slot in the level; asking the one name that decides anything first
+	 * means one walk for all but the handful that really have an OPTION model.
+	 * Measured over ANDREA1's 130 slots with the user's nine mods: 24.6 ms the
+	 * other way round, 7.7 ms this way (the median of five), and 0.11 ms with
+	 * no mods at all. */
 	std::string option(name, length - tail);
 	char found[512];
 	int mod = -1;
@@ -950,6 +946,19 @@ const char* HDBindModOption(int slot, char* buffer, int size)
 
 	if (!*HDModsFindModel(option.c_str(), &mod, found, sizeof(found)))
 		return nothing;
+
+	/* AND A MOD'S OWN EXTRA_ MODEL WINS. It is the IV-VI name, so a mod that
+	 * ships one has said which of the two conventions it is written in, and
+	 * the ordinary resolver already draws it - here and on the floor. */
+	for (const PrefixRule& one : extra_prefixes)
+	{
+		std::string candidate = one.prefix;
+
+		candidate += name;
+
+		if (*HDModsFindModel(candidate.c_str(), &mod, found, sizeof(found)))
+			return nothing;
+	}
 
 	if ((int)option.size() >= size)
 		return nothing;

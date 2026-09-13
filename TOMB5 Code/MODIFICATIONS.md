@@ -11438,6 +11438,19 @@ normal (fix round P2), and this one must, because the model is turned.
 error **0.00013 px** and **0.00008 px** against a budget of 1, and the ring's
 light unmoved. Both inventory models were rendered and looked at.
 
+**AND WHAT THE NEW QUESTION COSTS, because it is asked of every slot.** The
+`_OPTION` lookup runs once per loaded slot at every level build and walks every
+active mod's two ITEM folders - the shape of thing that turned round M2's level
+build into twenty-five seconds - and it stands OUTSIDE the models timer, so
+without a line of its own it would be time nobody could account for. Measured
+with `ModelProbe -inventory`, which asks the engine's own `HDBindModOption`
+over the level's whole slot list: ANDREA1, 130 slots, the user's nine mods,
+**24.6 ms** - because the three EXTRA prefixes were being asked first, for every
+`_ITEM` slot, when only one of the four names decides anything. Asking the
+OPTION name first and the prefixes only after it hits: **7.7 ms**, and 0.11 ms
+with no `Mods` folder. The engine writes those numbers itself now,
+`HDLOG level=<L> ring asked= of= found= ms=`.
+
 **WITH NO MODS FOLDER NOTHING IN ANY OF THIS HAPPENS**, and that is not an
 argument but a diff: `ModelProbe -all -nodraw` over ANDREA1, the build before
 this round against the build after it, is identical line for line - every slot,

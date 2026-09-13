@@ -8064,6 +8064,37 @@ int main(int argc, char** argv)
 			order.push_back((int)i);
 		}
 
+		/* WHAT THE INVENTORY QUESTION COSTS (#153, round M2b). The engine asks
+		 * it of every loaded slot at every level build and it walks the mods
+		 * for a slot whose name ends in _ITEM - four names each - so it is
+		 * exactly the shape of thing that turned round M2's level build into
+		 * twenty-five seconds. The engine's own line says the same number; this
+		 * is how it was measured before it was written down. */
+		if (inventory)
+		{
+			LARGE_INTEGER freq, began, ended;
+			int asked = 0, found = 0;
+			char option[128];
+
+			QueryPerformanceFrequency(&freq);
+			QueryPerformanceCounter(&began);
+
+			for (size_t i = 0; i < slots.size(); i++)
+			{
+				asked++;
+
+				if (*HDBindModOption(slots[i], option, sizeof(option)))
+					found++;
+			}
+
+			QueryPerformanceCounter(&ended);
+
+			printf("inventory: the _OPTION question over %d slots found %d, in "
+				"%.2f ms\n", asked, found,
+				1000.0 * (double)(ended.QuadPart - began.QuadPart) /
+					(double)freq.QuadPart);
+		}
+
 		if (wanted.empty())
 		{
 			printf("ModelProbe: slot %d is not in this level\n", slot);

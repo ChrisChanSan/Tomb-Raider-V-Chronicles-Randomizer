@@ -1482,6 +1482,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * the same reason: the model comes in its own frame and `fix` below is what
 	 * puts it into the ring's. */
 	std::vector<std::string> optionNames;
+	const DWORD ringBegan = GetTickCount();
+	int ringAsked = 0;
 
 	optionNames.reserve(sizeof(g_ring_model) / sizeof(g_ring_model[0]));
 
@@ -1492,6 +1494,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 		if (g_ring_models >= (int)(sizeof(g_ring_model) / sizeof(g_ring_model[0])))
 			break;
+
+		ringAsked++;
 
 		if (!*HDBindModOption(slot, option, sizeof(option)))
 			continue;
@@ -1511,6 +1515,18 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		g_ring_model[g_ring_models].model = one.slot;
 		g_ring_models++;
 	}
+
+	/* WHAT THE QUESTION COST (#153, round M2b). It is asked of every loaded
+	 * slot and it walks the mods for a slot whose name ends in _ITEM - four
+	 * names each, three EXTRA prefixes and the OPTION - so it is exactly the
+	 * shape of thing that turned round M2's level build into twenty-five
+	 * seconds. It stands OUTSIDE the models timer below, so without a line of
+	 * its own it would be time nobody could account for. Measured with
+	 * ModelProbe -inventory over ANDREA1's 130 slots and the user's nine mods:
+	 * 7.7 ms, and 0.11 ms with no Mods folder. */
+	Log("HDLOG level=%s ring asked=%d of %d slots, found=%d, ms=%d", g_stem,
+		ringAsked, (int)slots.size(), g_ring_models,
+		(int)(GetTickCount() - ringBegan));
 
 	/* LARA'S WARDROBE, in the SAME HDModelLevelBegin (#123, stage S4-2). Her
 	 * parts are models like any other - the same page cache, the same

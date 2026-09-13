@@ -331,14 +331,24 @@ void HDOutfitMenu()
 		/* THE FOOTSTEPS ROW belongs to the HIGHLIGHTED outfit and not to the
 		 * menu, so it stands under the list and says whose it is. Left and
 		 * right change it, which is the same gesture every value row in this
-		 * game answers to. */
+		 * game answers to.
+		 *
+		 * ON THE FIRST ROW THERE IS NOTHING TO CHANGE (the fix round of M3).
+		 * "Level facts" is the absence of a choice, so there is no key to hang
+		 * one on: the menu used to let left and right flip the value there, it
+		 * was heard at once, nothing was written, and the next level build put
+		 * it back without a word. The row says what will decide instead. */
 		y = f + kWindow * font_height + (font_height >> 1);
 
 		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Footsteps"), 0);
 
-		if (!HDFeetAvailable())
+		if (!entry_of(selection))
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
+				(char*)CustomText("as the outfit says"), 0);
+		else if (!HDFeetAvailable())
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 3,
-				(char*)CustomText("unavailable in this level"), 0);
+				(char*)CustomText(bare ? "Bare - no second set in this level"
+					: "Boots - no second set in this level"), 0);
 		else
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
 				(char*)CustomText(bare ? "Bare" : "Boots"), 0);
@@ -377,7 +387,7 @@ void HDOutfitMenu()
 					: HD_WARDROBE_FEET_UNKNOWN, 0);
 		}
 
-		if (dbinput & (IN_LEFT | IN_RIGHT))
+		if ((dbinput & (IN_LEFT | IN_RIGHT)) && entry_of(selection))
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			bare = !bare;
@@ -419,21 +429,34 @@ void HDOutfitMenu()
 	 * reader treats empty and absent alike (REG_PeekString returns false for
 	 * both) and an empty value is one a player can see in regedit. */
 	const char* key = key_of(selection);
+	const bool changed = was != selection;
 
 	write_outfit(key);
 
 	if (feetTouched && *key)
 		write_feet(key, bare);
 
-	const bool feetNow = HDFeetBare(bare);
-
-	Log("HDLOG f4 outfit=%s footsteps=%s%s", *key ? key : "(level facts)",
-		HDFeetAvailable() ? (feetNow ? "bare" : "boots") : "unavailable",
-		feetTouched ? " (the player's own choice, remembered)" : "");
-
 	/* AND WORN AT ONCE (#153, round M3). HDLevelRedress is the level's own
 	 * model build run again on the main thread with the game stopped; it says
-	 * in the log what it cost and whether it ran at all. */
-	if (was != selection)
-		HDLevelRedress("the F4 outfit changer");
+	 * in the log what it cost and whether it ran at all, and it ends by asking
+	 * HDOutfitMenuFollowFeet which of the two sets the NEW body walks on - so
+	 * the footsteps are not applied here when a body change is.
+	 *
+	 * AND THEY WAIT WITH IT WHEN IT DEFERS (the fix round of M3). A deferred
+	 * change leaves the OLD body on the screen; giving it the new one's
+	 * footsteps would be one half of a change without the other, and the menu
+	 * had already told the player the body waits. Both halves are written to
+	 * the registry either way, so the next level wears both. */
+	const bool worn = !changed || HDLevelRedress("the F4 outfit changer");
+
+	/* A FOOTSTEP CHANGE ON ITS OWN needs no re-dress: the body it belongs to
+	 * is already on her and this is two shorts in the level's sound map. */
+	if (!changed && feetTouched)
+		HDFeetBare(bare);
+
+	Log("HDLOG f4 outfit=%s (%s) footsteps=%s%s", *key ? key : "(level facts)",
+		!changed ? "unchanged"
+			: worn ? "worn now" : "waiting for the next level",
+		HDFeetAvailable() ? (HDFeetIsBare() ? "bare" : "boots") : "unavailable",
+		feetTouched ? " (the player's own choice, remembered)" : "");
 }

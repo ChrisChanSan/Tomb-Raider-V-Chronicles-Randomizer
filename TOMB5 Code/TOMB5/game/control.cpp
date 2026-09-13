@@ -431,13 +431,19 @@ long ControlPhase(long nframes, long demo_mode)
 			 * press that closes it cannot also roll Lara (#115).
 			 *
 			 * The conditions are the pause menu's - not the title screen, not
-			 * with Lara dead - and one more: not with the binoculars or the
+			 * with Lara dead - and two more: not with the binoculars or the
 			 * laser sight up, where the player is looking through a lens and a
-			 * frozen menu over it would be a picture of nothing. The inventory
-			 * and the pause menu themselves cannot be open here at all: both
-			 * run their own frame loop and this line is not in it. */
-			if (!gfGameMode && lara_item->hit_points > 0 && !BinocularRange &&
-				HDOutfitMenuWanted())
+			 * frozen menu over it would be a picture of nothing, and not
+			 * during a CUTSCENE, which is the engine's own convention one
+			 * screen up (the inventory carries `&& !cutseq_trig` for the same
+			 * reason). A cutscene has its own actors bound and a re-dress in
+			 * the middle of one would release and rebuild them under it - the
+			 * fix round of M3 put that condition in, the round shipped without
+			 * it. The inventory and the pause menu themselves cannot be open
+			 * here at all: both run their own frame loop and this line is not
+			 * in it. */
+			if (!gfGameMode && !cutseq_trig && lara_item->hit_points > 0 &&
+				!BinocularRange && HDOutfitMenuWanted())
 			{
 				HDOutfitMenu();
 				InterpInvalidate("outfit menu");

@@ -602,6 +602,18 @@ struct RandoOptions
     // Tr3Source::outfits()), so a new outfit appearing in the middle of the
     // list cannot shift what an existing config had chosen.
     std::set<std::string> outfitsOff;
+    /* AND THE SCANNED ENTRIES, THE OTHER WAY ROUND (#153, round M2): held
+       is the SELECTION, and it is empty by default.
+
+       The three vanilla outfits and the four guests keep the deselection they
+       have always had, because they are a fixed list that everybody has. The
+       scan is not: it depends on which remasters are installed and which mods
+       are in the folder, so "everything on unless said otherwise" would mean
+       a run that silently changes when a mod is added. And an old seed has to
+       go on producing the same game, which it does exactly as long as the
+       candidate list it rolled from is unchanged - so the new entries have to
+       start off. */
+    std::set<std::string> outfitsOn;
 
     // Guest outfits from Tomb Raider 3 may be drawn at all. Separate from the
     // pool because it also decides whether the user's TR3 installation is
@@ -663,11 +675,33 @@ struct RandoReport
 // in the UI instead of failing during the run.
 struct EnemyKind { int typeId; const char* name; const char* source; };
 
-// One entry of the wardrobe (#122). source is "" for the three outfits TR5
-// brings itself and the installation key ("tr3") for a guest - the window
-// greys out a guest whose game is not there, exactly as it does with the
-// animals.
+/* One entry of the wardrobe (#122; the scanned entries #153, round M2).
+
+   `source` says where it comes from and the window greys out an entry whose
+   source is not on this machine, exactly as it does with the animals:
+
+     ""      one of the three outfits Tomb Raider 5 brings itself
+     "tr3"   a guest, needing a Tomb Raider 3 installation
+     "46"    an outfit of the installed Tomb Raider IV-VI Remastered
+     "13"    ... of the Tomb Raider I-III Remastered
+     "mod"   ... of a mod in the game folder's Mods folder
+
+   The first two carry a donor level, a LaraType byte and a data[3] marker and
+   are copied into the level file; the last three are drawn by the engine
+   alone and travel as one line in the .hdm sidecar. `id` is the key that
+   names the entry everywhere - in the settings file, on the command line, in
+   the report and in that line - and for a scanned entry it IS the wardrobe
+   key ("46/OUTFIT_TR2_HOME").
+
+   `id` and `name` of a scanned entry point into hd_wardrobe's own storage,
+   which lives as long as the process and does not move unless somebody
+   rescans. Nobody does. */
 struct OutfitKind { const char* id; const char* name; const char* source; };
+
+// Is this one of the entries the wardrobe SCAN found (#153, round M2)? Those
+// are the ones that are off unless the user switched them on, and the ones
+// that travel in the .hdm alone.
+bool outfitIsScanned(const OutfitKind& kind);
 
 namespace Rando
 {

@@ -971,6 +971,23 @@ public:
 
     void hdMarkRoom(int room);
     void hdMarkDonor(int slot, int fromSlot, const std::string& level);
+
+    /* WHICH WARDROBE ENTRY THE ROLL CHOSE (#153, round M2).
+
+       The wardrobe is a SCAN now (TOMB5 Code\TOMB5\specific\hd\hd_wardrobe.h)
+       and holds about a hundred outfits on a machine with both remasters
+       installed; data[3] above is one byte and can only name the eight the
+       engine's enum has. So the roll's answer is written as the entry's KEY
+       into the sidecar - `wear 46/OUTFIT_TR2_HOME` - which is the one place
+       that can hold it.
+
+       It is written for EVERY rolled outfit, the seven with a number
+       included, so a level file says the same thing in two ways and the
+       engine can read them against each other. Empty means the run rolled
+       nothing, and the level then dresses her by its own facts exactly as
+       it did before this round. */
+    void hdSetWear(const std::string& key) { m_hdWear = key; }
+    const std::string& hdWear() const { return m_hdWear; }
     const std::set<int>& hdTouchedRooms() const { return m_hdRooms; }
     const std::vector<HdDonor>& hdDonors() const { return m_hdDonors; }
     // A std::set, so the same seed writes the same lines in the same order
@@ -1001,6 +1018,7 @@ private:
     std::set<int>        m_hdRooms;
     std::vector<HdDonor> m_hdDonors;
     std::set<HdCut>      m_hdCuts;
+    std::string          m_hdWear;
 
     // Record the box around one opening (#123, fix round Z). Both are
     // private: an opening is recorded by the edit that made it, out of the

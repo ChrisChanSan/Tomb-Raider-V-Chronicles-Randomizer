@@ -313,6 +313,14 @@ static const std::unordered_map<std::string, const char*>& table()
           "- braucht \"TR3 Outfits\" und Tomb Raider 3" },
         { "Everything deselected: every level keeps its own outfit.",
           "Alles abgewaehlt: jedes Level behaelt sein eigenes Outfit." },
+
+        // --- The wardrobe scan (#153, round M2) --------------------------
+        { "From the Remasters and from the Mods folder. "
+          "These are drawn by the engine itself - nothing is copied into "
+          "the level file - and they need the HD art switched on.",
+          "Aus den Remastern und aus dem Mods-Ordner. Diese zeichnet der "
+          "Motor selbst - in die Leveldatei wird nichts kopiert - und sie "
+          "brauchen eingeschaltete HD-Grafik." },
         { "Lara Andrea", "Lara Andrea" },
         { "Lara Joby", "Lara Joby" },
         { "Lara Rich (catsuit)", "Lara Rich (Catsuit)" },

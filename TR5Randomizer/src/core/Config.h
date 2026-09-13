@@ -73,6 +73,12 @@ struct Config
     // DESELECTION, as with enemiesDisabled - an outfit added later is then
     // automatically on and does not fall through an old settings file.
     std::set<std::string> outfitsDisabled;
+    /* And the SELECTION of the entries the wardrobe scan found (#153, round
+       M2), which is held the other way round because the scan's content
+       depends on what is installed - see RandoOptions::outfitsOn. Same
+       comma-separated shape, same rule about an id nobody recognises: it is
+       kept, because it may name a mod that is out of the folder today. */
+    std::set<std::string> outfitsEnabled;
     int  itemAmount       = 0;     // 0 vanilla, 1 more, 2 a lot more (#36)
     int  secrets         = 0;     // secrets (#53): 0 vanilla, 1 pool, 2/3 list
     bool secretRewards   = false;  // roll SecretRewards.txt beside the game (#53)

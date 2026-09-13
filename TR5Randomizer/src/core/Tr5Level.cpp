@@ -62,6 +62,7 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
     m_hdRooms.clear();
     m_hdDonors.clear();
     m_hdCuts.clear();
+    m_hdWear.clear();
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f)

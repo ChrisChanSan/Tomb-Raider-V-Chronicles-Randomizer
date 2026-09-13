@@ -85,7 +85,7 @@ void HDLevelBuild();
  * worn in one level stays in it. Measured on ANDREA1 with the user's own
  * wardrobe: one outfit is at most 20.00 MiB of pages, the dearest single
  * change adds 13.33 MiB, the mean over all 2970 ordered pairs is 2.94 MiB,
- * and wearing all 55 entries in one level would come to 113.30 MiB. So the
+ * and wearing all 55 entries in one level would come to 106.64 MiB (80 distinct pages). So the
  * cap is not a count but the BYTES the cache has grown since this level
  * began, against HD_REDRESS_ALLOWANCE - which is the 64 MiB of slack the
  * automatic texture budget already holds back for what a driver keeps that
@@ -100,7 +100,9 @@ bool HDLevelRedress(const char* why);
 
 /* The allowance, in bytes: the 64 MiB of slack the automatic texture budget
  * already holds back (hd_level.cpp, AutoBudgetBytes). A level that has added
- * that much in outfit changes stops changing them until the next one. */
+ * that much in outfit changes stops changing them until the next one. The
+ * test is made BEFORE a change, so the ceiling is the allowance plus one
+ * change - measured, at most 20.00 MiB more. */
 #define HD_REDRESS_ALLOWANCE	(64.0 * 1048576.0)
 
 // Whether another one is allowed - what the F4 menu shows the player when

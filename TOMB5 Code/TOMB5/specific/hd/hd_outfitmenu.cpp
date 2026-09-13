@@ -247,6 +247,7 @@ void HDOutfitMenu()
 	int top = 0;
 	bool bare;
 	bool feetTouched = false;
+	bool feetWritten = false;
 	bool done = false;
 	bool cancelled = false;
 
@@ -375,6 +376,17 @@ void HDOutfitMenu()
 		{
 			SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 
+			/* A FLIP BELONGS TO THE ROW IT WAS MADE ON (the third review of
+			 * M3): it is written when that row is left, not when some other
+			 * row is chosen. */
+			if (feetTouched && *key_of(selection))
+			{
+				write_feet(key_of(selection), bare);
+				feetWritten = true;
+			}
+
+			feetTouched = false;
+
 			if (selection > 0)
 				selection--;
 
@@ -386,6 +398,14 @@ void HDOutfitMenu()
 		if (dbinput & IN_BACK)
 		{
 			SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
+
+			if (feetTouched && *key_of(selection))
+			{
+				write_feet(key_of(selection), bare);
+				feetWritten = true;
+			}
+
+			feetTouched = false;
 
 			if (selection < row_count() - 1)
 				selection++;
@@ -402,7 +422,10 @@ void HDOutfitMenu()
 			feetTouched = true;
 		}
 
-		if (dbinput & IN_SELECT)
+		/* NOT ON ALT+ENTER, the fullscreen toggle - the pause menu's own
+		 * guard (LoadSave.cpp), so that toggling the display inside the menu
+		 * does not also choose a row (the third review of M3). */
+		if ((dbinput & IN_SELECT) && !keymap[DIK_LALT])
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_DEFAULT);
 			done = true;
@@ -421,13 +444,18 @@ void HDOutfitMenu()
 
 	} while (!MainThread.ended && !done);
 
-	TIME_Init();
 	FreeMonoScreen();
 	InventoryActive = 0;
 
-	if (cancelled)
+	/* THE WINDOW CLOSING COUNTS AS CANCEL (the third review of M3): the loop
+	 * above ends on MainThread.ended too, and falling through from there
+	 * wrote the highlighted row as a choice and ran a re-dress during
+	 * shutdown. */
+	if (cancelled || MainThread.ended)
 	{
-		Log("HDLOG f4 closed without applying");
+		TIME_Init();
+		Log("HDLOG f4 closed without applying%s",
+			MainThread.ended ? " - the window is closing" : "");
 		return;
 	}
 
@@ -442,7 +470,10 @@ void HDOutfitMenu()
 	write_outfit(key);
 
 	if (feetTouched && *key)
+	{
 		write_feet(key, bare);
+		feetWritten = true;
+	}
 
 	/* AND WORN AT ONCE (#153, round M3). HDLevelRedress is the level's own
 	 * model build run again on the main thread with the game stopped; it says
@@ -459,12 +490,18 @@ void HDOutfitMenu()
 
 	/* A FOOTSTEP CHANGE ON ITS OWN needs no re-dress: the body it belongs to
 	 * is already on her and this is two shorts in the level's sound map. */
-	if (!changed && feetTouched)
+	if (!changed && HDFeetAvailable() && bare != HDFeetIsBare())
 		HDFeetBare(bare);
 
 	Log("HDLOG f4 outfit=%s (%s) footsteps=%s%s", *key ? key : "(level facts)",
 		!changed ? "unchanged"
 			: worn ? "worn now" : "waiting for the next level",
 		HDFeetAvailable() ? (HDFeetIsBare() ? "bare" : "boots") : "unavailable",
-		feetTouched ? " (the player's own choice, remembered)" : "");
+		feetWritten ? " (the player's own choice, remembered)" : "");
+
+	/* THE CLOCK RESTARTS AFTER THE RE-DRESS and not before it (the third
+	 * review of M3): with TIME_Init above the re-dress, its cost went onto
+	 * the game clock and ControlPhase ran up to five catch-up ticks of game
+	 * logic the moment the menu closed. */
+	TIME_Init();
 }

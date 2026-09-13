@@ -11706,12 +11706,12 @@ Measured with the new `ModelProbe -pagelist` over ANDREA1 with the user's own
 wardrobe, all 56 entries, one run each:
 
 ```
-  one outfit's wardrobe        19 to 28 pages, 25.3 to 37.3 MiB
+  one outfit's wardrobe        9 to 28 pages, 12.00 to 37.30 MiB
   its OWN pages (what the rest of the wardrobe has not got)
                                up to 15 pages, 20.00 MiB
   the dearest single change    +10 pages, +13.33 MiB
   the mean over all 2970 ordered pairs      +2.94 MiB
-  every one of the 55 worn in one level     113.30 MiB, 80 pages
+  every one of the 55 worn in one level     106.64 MiB, 80 distinct pages
 ```
 
 So a count would have been a guess and the bytes are not: a level may spend
@@ -11788,6 +11788,33 @@ are not - his are 286 to 302 ms at 48 kHz against 69 to 134 ms at 22.05 kHz -
 and his mod DOES distinguish its landing, at 4.4 times the RMS of its own
 steps, so when that mod is the source its id 4 is the bare landing and the
 second spare info is used.
+
+**CORRECTED THE SAME NIGHT, FROM THE REMASTER ITSELF.** The user recorded the
+remaster with a barefoot outfit - eight standing jumps, then running in a
+circle - and every footfall in the recording was matched against the ten
+recordings above by normalised cross-correlation (pitch variants of +-6 %,
+`scratchpad/round153/video/match.py`). Under each of the eight landings the
+remaster played one of the SAME FIVE (463 / 462 / 462 / 466 / 465 / 462 / 464 /
+464, at 0.65 to 0.93), and the boots' 175 ms landing never rose above 0.32
+anywhere in the clip. So the remaster has no barefoot landing of its own
+either: it draws the landing from the five steps. Ours does the same now - the
+second spare info points at the same takes with the level's own id 4 volume and
+radius - and the log line says "the landing drawn from the same recordings".
+The measurement above stands; only the conclusion drawn from it changed.
+
+**THE FOLLOW-UP OF THE SAME NIGHT** (2026-09-14, after the third review's lows):
+the window closing with the menu open now counts as cancel instead of falling
+through to a write and a re-dress during shutdown; Alt+Enter inside the menu
+toggles the display and chooses nothing, the pause menu's own guard; a footstep
+flip is written for the row it was made on when that row is LEFT, so moving to
+another row and choosing it no longer drops the flip and pins the other row's
+default as a choice; the game clock restarts AFTER the re-dress, so its cost no
+longer becomes catch-up ticks of game logic; and F4's edge is read before the
+other conditions, so a key held through a cutscene does not open the menu the
+moment the cutscene ends. And in the randomizer, ANIM_PICKUP_UW (130) joins the
+always-list: found by the user in Andrea1, it is a Core stub in seven levels
+(Andrea1, joby3, joby5, rich1, rich2, rich3, richcut2) and the randomizer puts
+pickups under water everywhere.
 
 **THE ROOM FOR THEM.** `MAX_SAMPLES` is 450. Measured over all sixteen classic
 levels the sample count runs from 76 (JOBY4) to 148 (RICH2), so five more fit

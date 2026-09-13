@@ -442,8 +442,14 @@ long ControlPhase(long nframes, long demo_mode)
 			 * it. The inventory and the pause menu themselves cannot be open
 			 * here at all: both run their own frame loop and this line is not
 			 * in it. */
-			if (!gfGameMode && !cutseq_trig && lara_item->hit_points > 0 &&
-				!BinocularRange && HDOutfitMenuWanted())
+			/* The key's edge is read FIRST (the third review of M3): as the last
+			 * operand it was short-circuited away during a cutscene or behind the
+			 * lens, its latch never saw the key go down, and F4 held across such
+			 * a spell opened the menu the instant the spell ended. */
+			const bool f4 = HDOutfitMenuWanted();
+
+			if (f4 && !gfGameMode && !cutseq_trig && lara_item->hit_points > 0 &&
+				!BinocularRange)
 			{
 				HDOutfitMenu();
 				InterpInvalidate("outfit menu");

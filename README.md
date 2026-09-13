@@ -160,8 +160,8 @@ at the same time.
 **It takes effect at once.** The level's models are built again with the new
 body while the game stands still; the rooms, the inventory, her weapons and
 everything classic are untouched. The page cache never gives a page back, so
-a level may spend **64 MiB** of extra outfit pages and then says *applies at
-the next level* instead — measured, that is about twenty changes in an
+once a level has spent **64 MiB** of extra outfit pages the next change says
+*applies at the next level* instead (so the ceiling is 64 MiB plus one change) — measured, that is about twenty changes in an
 ordinary level and four in the worst case the installed wardrobe can produce.
 When it does wait, the **footsteps wait with it**: the body on the screen is
 still the old one and it keeps the old one's footsteps until the next level.
@@ -206,9 +206,10 @@ mod's `outfit.txt` can say `footsteps=bare`, and the built-in table says it
 for the bodies that have no boots. Your own choice wins over both and is kept
 per outfit.
 
-Measured, there is no barefoot LANDING among those five recordings — a
-landing is nearly five times the length of a step and none of them is — so a
-barefoot landing is the level's own. A level with no room left for a second
+There is no separate barefoot LANDING among those five recordings, and the
+remaster has none either: measured on a recording of the remaster, its
+barefoot landing is a random one of the same five. So ours draws the landing
+from the same five too. A level with no room left for a second
 set, or with no sound bank to take one from, shows the row as *unavailable*
 and the log says which of the two it was. Every line of it begins with
 `SFXLOG footsteps:`.

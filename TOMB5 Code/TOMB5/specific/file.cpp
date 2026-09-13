@@ -1833,9 +1833,11 @@ unsigned int __stdcall LoadLevel(void* name)
 		// #123: the HD side of the level. Here and not earlier because
 		// this is the first moment the rooms, the meshes and the object
 		// slots are all in memory - and in the RANDOMIZED state, which is
-		// the state the models have to be bound against. Does nothing at
-		// all while the registry setting hd_enable is 0, which is how it
-		// ships (see HDEnabled in specific\hd\hd_level.cpp).
+		// the state the models have to be bound against. With the registry
+		// setting hd_enable at 0, which is how it ships, it reads the
+		// level's .hdm sidecar and nothing else - the sidecar's sound line
+		// serves the bank bridge with HD off (#153, round M3) - see
+		// HDEnabled in specific\hd\hd_level.cpp.
 		HDLevelLoad((const char*)name);
 		S_LoadBar();
 

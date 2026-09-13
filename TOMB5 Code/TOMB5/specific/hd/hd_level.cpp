@@ -2661,7 +2661,8 @@ static void HDLevelBuildHD();
  * The footsteps hang off the HD gate and off nothing else: the bare set is
  * built by HDFeetLevelBuild whenever hd_enable is on - in LoadSamples, on the
  * load thread, long before this - and the body it follows is decided by
- * HDLaraLevelBuild on that same thread. The build below has five ways to give
+ * HDLaraLevelBuild inside this build, on the MAIN thread after file.cpp has
+ * joined the load thread. The build below has five ways to give
  * up (no rooms, no device, no page cache, no HD room, no stem), and NONE of
  * them takes the bare set away or takes the F4 row away. Asking the question
  * at the end of that build therefore left a player whose card cannot do shader
@@ -3166,8 +3167,10 @@ bool HDLevelRedress(const char* why)
 	const double bytes0 = HDPageCacheBytes();
 
 	/* THE SAME TWO CALLS A LEVEL CHANGE MAKES, in the same order and on the
-	 * same thread. HDObjectRelease gives the buffers and the models' share
-	 * of the cache back; HDObjectLevelBuild reads the .MAP again, asks
+	 * same thread. HDObjectRelease gives the models' vertex and index buffers
+	 * back and NOTHING of the page cache - it never shrinks until
+	 * HDPageCacheDestroy, so no slot index another model holds can move,
+	 * which is what makes this safe; HDObjectLevelBuild reads the .MAP again, asks
 	 * hd_laradraw for the wardrobe (which reads the registry key the menu
 	 * has just written) and builds the lot. The ROOMS are not touched: their
 	 * cache is the one the new pages are appended to, exactly as at a level

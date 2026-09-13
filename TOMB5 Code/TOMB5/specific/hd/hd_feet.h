@@ -71,15 +71,19 @@
 //          bank's", so both kinds answer it and a mod that is about doors or
 //          voices answers it with no.
 //
-// AND THE LANDING, MEASURED. The boots have four steps of 33 to 41 ms and one
-// landing of 175 ms - a landing is 4.7 times a step and 2.4 times its peak. Of
-// the bank's five barefoot recordings (106 / 86 / 134 / 69 / 113 ms) none
-// stands out that way: the longest is 1.4 times the mean of the other four and
-// the loudest by RMS is 1.25 times theirs, where the boots' landing is 4.7 and
-// 1.4. So ALL FIVE ARE STEPS, the landing keeps the boots' recording, and the
-// log says so. (The user's Underworld mod does distinguish its landing - 4.4
-// times the RMS of its steps - and when that mod is the source its id 4 is the
-// bare landing.)
+// AND THE LANDING, MEASURED TWICE. The boots have four steps of 33 to 41 ms
+// and one landing of 175 ms - a landing is 4.7 times a step and 2.4 times its
+// peak. Of the bank's five barefoot recordings (106 / 86 / 134 / 69 / 113 ms)
+// none stands out that way, so ALL FIVE ARE STEPS. The round first kept the
+// boots' landing under a bare foot for that reason; the same night the user
+// recorded the remaster itself jumping and running, and the recording settled
+// it: the remaster has no barefoot landing either - under each of eight
+// landings it played one of the same five (matched at 0.65 to 0.93 normalised
+// correlation, the boots' landing never above 0.32). So sound id 4 draws from
+// the same five takes as sound id 0, with the level's own id 4 volume and
+// radius. (The user's Underworld mod does distinguish its landing - 4.4 times
+// the RMS of its steps - and when that mod is the source its id 4 is the bare
+// landing.)
 //
 // THE INFOS. The level's sound map is game_malloc'ed and exactly num_infos
 // long, so file.cpp asks for two more and this fills them: one for the bare
@@ -136,5 +140,5 @@ bool HDFeetSurfaceQuiet();
 
 // What the level's two sets hold, for the log line and for a tool.
 int HDFeetBareTakes();		// recordings behind sound id 0 when bare
-int HDFeetBareLandTakes();	// ... and behind sound id 4; 0 keeps the boots'
+int HDFeetBareLandTakes();	// ... and behind sound id 4; 0 only without an id 4
 const char* HDFeetBareSource();	// where they came from. Never null.

@@ -331,7 +331,6 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	}
 
 	g_takes = loaded - landLoaded;
-	g_landTakes = landLoaded;
 	g_bareSteps = (short)infoCount;
 	fill_info(infos[g_bareSteps], own, next, g_takes, pitch);
 
@@ -341,6 +340,22 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		fill_info(infos[g_bareLand], infos[g_ownLand], next + g_takes, 1,
 			infos[g_ownLand].pitch);
 	}
+	else if (g_ownLand >= 0 && g_ownLand < infoCount)
+	{
+		/* THE LANDING DRAWS FROM THE SAME RECORDINGS (the follow-up to M3,
+		 * measured on the user's own recording of the remaster the same
+		 * night): the remaster has no barefoot landing of its own either.
+		 * Eight standing jumps, and the landing under each matched one of
+		 * the five bank recordings at 0.65 to 0.93 normalised correlation
+		 * (463 / 462 / 462 / 466 / 465 / 462 / 464 / 464), while the boots'
+		 * 175 ms landing never rose above 0.32. So sound id 4 gets the same
+		 * takes as sound id 0, with the level's own id 4 volume and radius;
+		 * the boots' thud under a bare foot is what the user did not want. */
+		g_bareLand = (short)(infoCount + 1);
+		fill_info(infos[g_bareLand], infos[g_ownLand], next, g_takes, pitch);
+	}
+
+	g_landTakes = landLoaded ? 1 : (g_bareLand >= 0 ? g_takes : 0);
 
 	snprintf(g_source, sizeof(g_source), "%s", *where ? where : "the bank");
 
@@ -350,8 +365,9 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		kStepsId, kLandId,
 		*HQSfxPlainSource() ? HQSfxPlainSource() : "the level's own samples",
 		g_takes, g_takes == 1 ? "" : "s",
-		g_landTakes ? "a landing of its own"
-			: "the boots' own landing (none of the five stands out as one)",
+		landLoaded ? "a landing of its own"
+			: g_bareLand >= 0 ? "the landing drawn from the same recordings (the remaster does the same)"
+			: "the boots' own landing (this level has no id 4 entry)",
 		g_source, next, next + loaded - 1, (int)g_bareSteps, (int)g_bareLand,
 		(int)own.volume, (int)own.radius, (int)own.pitch, pitch);
 

@@ -11645,6 +11645,319 @@ the engine's renderer with no game around it. The play test still owes the
 hands in motion, the ring opened in the game with the Uzi mod in the folder,
 and whether a Russia level looks right with bare hands.
 
+#### Round M3 - the outfit is the player's, and the vulture stops talking (#153)
+
+Four things: a key in the game that changes Lara's outfit without leaving the
+level, the footsteps that follow the body she is wearing, the ring's fit read
+off the shape instead of off the bounding box, and a sound the randomizer
+imported that the remaster's bank had other plans for.
+
+**THE MENU IS THE PAUSE MENU'S TWIN, on purpose.** F4 stops the world the way
+`S_PauseMenu` stops it - `CreateMonoScreen` freezes the picture, `S_UpdateInput`
+with `SetDebounce` drives it, `dbinput`'s six bits are the only inputs it reads,
+`SFX_MENU_CHOOSE` and `SFX_MENU_SELECT` are the sounds, `PrintString` and
+`font_height` draw it in the two columns the options page uses, and a literal
+with no string id goes through `CustomText` exactly as the `Language` row does.
+A gamepad works in it because the bits it reads are the ones the pad already
+drives, and `InventoryActive` is held for the whole of it so that the press
+which closes the menu cannot also roll Lara - which is #115, and the reason the
+latch exists. It is not in the title, not with Lara dead, not while the
+binoculars or the laser sight are up; the inventory and the pause menu cannot
+be open under it at all, because both run their own frame loop and the call
+site is not in it.
+
+The list is the round M2 wardrobe scan in its own order, a window of nine rows
+with the selection kept in view, each row carrying the source it came from -
+`IV-VI`, `I-III` or the mod's own folder name - and a `*` on the one being worn.
+The first row is **Level facts**, which is not an outfit: it is what clears the
+setting again, and it is what a player who has never opened this menu has.
+Under the list stands one value row, the highlighted outfit's footsteps, and
+left or right turns it over.
+
+**WHOSE CHOICE IT IS, and where it lives.** Round M2's fix round settled that
+an extra outfit is the PLAYER'S and not the run's - a seed and its settings
+travel between players, an installation and a `Mods` folder do not - and put
+the answer in a registry value that nothing wrote. This writes it. The outfit is
+the `REG_SZ` **`hd_outfit`** the level build already reads; the footsteps are
+one `REG_DWORD` per outfit under **`tomb5\hd_footsteps`**, the wardrobe key as
+the VALUE's name, because a key holds slashes and spaces and a subkey name may
+hold no backslash while a value name may hold almost anything. `OpenRegistry`
+creates the key it is handed, which is safe here and nowhere earlier:
+`init_tomb5_stuff` asks `REG_KeyWasCreated()` once at startup and has long since
+run by the time a level is on the screen.
+
+**AND SHE WEARS IT AT ONCE.** `HDLevelRedress` is the level's own model build
+run a second time with the game stopped: `HDObjectRelease` and
+`HDObjectLevelBuild`, which is exactly the pair a level change makes, while the
+rooms, their page cache and every classic table stay where they are - her
+meshes, her holsters, the weapon in her hand and the inventory are not touched
+at all. It is safe on the main thread because there is no other one: the load
+thread that builds a level is joined before `HDLevelBuild` ever runs
+(`specific\file.cpp`, the note at the end of `LoadLevel`), and the caller has
+stopped the world, so no frame is being drawn and nothing else is reading the
+models.
+
+**THE CAP IS BYTES AND NOT A COUNT, and the measurement is why.** The page
+cache never gives a page back - other models hold slot indexes, which is the
+A2 note in `hd_pagecache.cpp` - so every outfit worn in one level stays in it.
+Measured with the new `ModelProbe -pagelist` over ANDREA1 with the user's own
+wardrobe, all 56 entries, one run each:
+
+```
+  one outfit's wardrobe        19 to 28 pages, 25.3 to 37.3 MiB
+  its OWN pages (what the rest of the wardrobe has not got)
+                               up to 15 pages, 20.00 MiB
+  the dearest single change    +10 pages, +13.33 MiB
+  the mean over all 2970 ordered pairs      +2.94 MiB
+  every one of the 55 worn in one level     113.30 MiB, 80 pages
+```
+
+So a count would have been a guess and the bytes are not: a level may spend
+`HD_REDRESS_ALLOWANCE`, and that number is not invented either - it is the
+**64 MiB of slack `AutoBudgetBytes` already holds back** for what a driver
+keeps that we do not know about. At the measured mean that is about twenty
+changes and at the measured worst four; past it the menu says *applies at the
+next level* and the log says how much has been spent. The alternative - freeing
+the old outfit's pages - was refused for the reason the cache carries: a slot
+index another model holds does not move, and a page given back under one would
+draw white.
+
+**THE FOOTSTEPS ARE TWO SETS, AND THE OUTFIT CHOOSES.** Footsteps reach the
+mixer through ANIMATION COMMANDS alone in this engine - `game\control.cpp`
+reads `num = cmd[1] & 0x3FFF` out of the animation and calls `SoundEffect`;
+there is no material branch and no second caller, which was checked rather than
+assumed (`SFX_LARA_FEET` and `SFX_LARA_LAND` appear in `game\sound.h` and
+nowhere else in the tree). So bending sound id 0 and sound id 4 is the WHOLE
+switch and it costs two shorts, with no reload and no allocation after the
+level is up.
+
+**BOOTS ARE NOT A MOD'S TO TAKE.** The samples behind those two ids are loaded
+from the first UNMODDED bank of the chain and not from a mod's bank or a mod's
+loose `.wav`. That is the user's decision and his own mod is the case: the
+Underworld bare footsteps made Lara barefoot in boots, in a wetsuit and in a
+parka alike, because a sound mod replaces a sound for every outfit at once.
+With the outfit choosing between two sets, the two have to BE two.
+
+**BARE** goes into `DS_Buffers` slots after the level's own, with two spare
+`SAMPLE_INFO` entries `LoadSamples` now asks `game_malloc` for - sixteen bytes,
+in the one place where the level's bump allocator is still open. What goes in
+them is what the ORDINARY chain plays for ids 0 and 4 when a mod's bank is the
+one being played, so a barefoot sound mod is heard exactly where it belongs;
+and otherwise the remaster's own barefoot recordings, **sound id 417 of the
+bank**, which no level carries and which is therefore reached by bank sample
+number rather than through the level bridge every other sound uses.
+
+**THE INFOS' FIELDS, AND THE ONE THAT IS NOT THE LEVEL'S.** Everything about
+how a footstep is PLAYED stays the level's - the volume, the hearing radius,
+the randomness and the play mode - because those describe the game and not the
+recording. Two do not: the sample number and the count are what was really
+loaded, and the PITCH is the bank's. Measured, and both of the user's banks
+agree: id 0 is volume 191, radius 10, randomness 0, **pitch 12**, flags 0x6010,
+and every one of the sixteen classic levels carries exactly those bytes; id 417
+is volume 191, radius 10, randomness 0, **pitch 0**, flags 0x6014. The remaster
+turned the random pitch off for those five recordings and that is a statement
+about them, so it is kept.
+
+**AND THE LANDING, MEASURED RATHER THAN ASSUMED.** The boots are four steps of
+33 to 41 ms and one landing of 175 ms - a landing is **4.7 times** the length
+of a step and **2.4 times** its peak, and it is the only thing that separates
+the two. Of the bank's five barefoot recordings none stands out that way:
+
+```
+  the boots      id 0   38 / 40 / 38 / 33 ms   peak 10690..12563  rms ~1937
+                 id 4   175 ms                 peak 27351         rms 2728
+                        4.7x the steps' length, 2.4x their peak
+
+  bare (id 417)  462..466  106 / 86 / 134 / 69 / 113 ms
+                        the longest is 1.4x the mean of the other four;
+                        the loudest by rms is 1.25x theirs, and it is not
+                        the longest one - 464 is the longest and the
+                        QUIETEST of the five
+```
+
+So **all five are steps**, the landing keeps the boots' recording, and the log
+says so in words rather than leaving it to be worked out. Cross-checked against
+the user's Underworld mod in case the two were the same takes resampled: they
+are not - his are 286 to 302 ms at 48 kHz against 69 to 134 ms at 22.05 kHz -
+and his mod DOES distinguish its landing, at 4.4 times the RMS of its own
+steps, so when that mod is the source its id 4 is the bare landing and the
+second spare info is used.
+
+**THE ROOM FOR THEM.** `MAX_SAMPLES` is 450. Measured over all sixteen classic
+levels the sample count runs from 76 (JOBY4) to 148 (RICH2), so five more fit
+with 297 to spare, and a randomized level carrying all four Tomb Raider III
+guests adds 21 and still fits. The check is made before a single sample is
+decoded; a level that has no room says so and the menu row reads *unavailable*,
+as it does with no bank at all.
+
+**EVERYTHING OF THIS IS INSIDE THE HD GATE**, the F4 key and the boots' bypass
+included. With `hd_enable` off the two ids take the ordinary chain and a sound
+mod plays exactly as round M1 left it - that half of round M1 is independent of
+`hd_enable` and stays so.
+
+**THE RING: A BOX IS NOT A SHAPE.** Round M2b fitted a mod's inventory model by
+matching the two bounding BOXES, and the user's picture of the result is why
+that is over. His `UZI_OPTION` is a PAIR of guns and its box - 147 x 253 x 159,
+y longest - reads exactly like one tall gun standing up; the rule laid the pair
+flat, the two guns one above the other with a gap between them.
+
+The principal axes of the vertex cloud say which way a model really runs, and
+they are taken in `build()`, in the same loop the box is taken in, because that
+is the one place the vertices are in hand. An eigenvector has no sign and a gun
+has two ends, so each axis points to the side on which the cloud reaches
+further from its own centre of mass, and the third is the cross product of the
+other two - the frame can rotate a model and can never mirror it, which the box
+rule had to repair with a negated axis. Measured:
+
+```
+  install EXTRA_UZI_ITEM       box 266 x  41 x 212   cloud 256 x 236 x  42
+                                                     flat along -y
+  mod     UZI_OPTION           box 147 x 253 x 159   cloud 242 x 240 x 132
+                                                     flat along -x
+  install EXTRA_UZI_AMMO_ITEM  box 147 x  26 x 185   cloud 184 x 143 x  26
+  mod     UZI_AMMO_OPTION      box 162 x  28 x  74   cloud 165 x 107 x  22
+```
+
+Two flat things, each flat along a different axis, and the boxes said nothing
+of the kind. Sending the source's k-th axis onto the target's k-th lays the
+mod's pair into the plane the vanilla item lies in, and the ring's own per-item
+rotation then presents the two alike. The overflow figure falls from **3.73x to
+3.36x** for the Uzi and from **1.25x to 1.00x** for its ammo, which now sits
+inside the room the ring keeps for it; what is left of the Uzi's is the mod's
+own geometry, 132 units of thickness where the vanilla pair is 42.
+
+**AND THE TOOL CAN NOW SHOW THE RING.** `ModelProbe -inventory` drew the item's
+OWN frame, which is not what the player sees - the ring puts the item's three
+angles from `inventry_objects_list` on the matrix stack first, and for the Uzi
+those are 90, 135 and 90 degrees. A picture without them says nothing about the
+picture with them, and that is precisely the gap round M2b fell into. `-invrot
+<x> <y> <z>` puts them there the way `phd_RotYXZ` does, and it is calibrated
+against the user's own words: `EXTRA_PISTOLS_ITEM` with its own `0x4000 0xAD4C
+0xBD40` comes out as two crossed pistols facing the camera, which is what he
+described seeing in the ring.
+
+**WHAT THE RING PICTURE SHOWS, AND WHAT IT DOES NOT.** The vanilla
+`EXTRA_UZI_ITEM` is ONE Uzi lying flat (1371 vertices; from above the whole gun,
+from the front its edge). The mod's `UZI_OPTION` is TWO, and they are not a
+crossed X in the file: face-on to their own plane they stand side by side and
+nearly parallel. So no rotation of that file can produce the X the user
+remembers from the Tomb Raider I-III remaster's own display - that X is what
+THAT game's inventory rotation makes of it, and this engine has no access to
+that table without touching a remaster binary. What the round delivers is the
+pair standing upright and facing the camera the way the vanilla item does,
+instead of lying flat one above the other. The pictures are in the round's
+proof folder and the numbers above are the whole of the rule.
+
+**THE FLOOR PICKUP KEEPS THE VANILLA MODEL, measured.** The question was whether
+the fitted OPTION model would also do as the thing lying on the floor. It would
+not: the fit centres the replacement on the vanilla item's box, and the Uzi pair
+is 140 units thick after the fit where the vanilla item is 42 - so half of that
+difference, 49 units, would be under the floor. The ammo model does fit (1.00x),
+but a rule that takes one and refuses the other is a per-file exception, and
+this project does not keep those. The ring and the corner display read the
+OPTION model; the floor pickup keeps `EXTRA_`, which is what round M2b already
+did.
+
+**THE VULTURE DIED SAYING SOMETHING IN ENGLISH.** The user's report: the Tomb
+Raider III vulture the randomizer imports dies with a VCI scientist voice line
+when the installed remaster's bank is the HQ source, and is right when his sound
+mod's bank is in the folder. Both halves are now explained by numbers.
+
+The guests take free slots of the TR5 soundmap - the vulture 420..423, the
+Compy 430..434, the raptor 438..444, the T-Rex 445..449 (`Tr3Source::dinos`).
+**Free means free IN A TR5 LEVEL.** It says nothing about the remaster's bank,
+and there ids 418..423 are six voice lines whose level mask names exactly one
+level file. The HQ bridge pairs by sound id and judges the pairing by LENGTH,
+and a length cannot tell a wrong pairing from a different recording. Measured on
+seed 380's randomized ANDREA1:
+
+```
+  id   the level's own   the bank's         the length rule
+  420  322 ms            624 ms (mask 11)   refused
+  421  425 ms            624 ms (mask 11)   refused
+  422  604 ms            624 ms (mask 11)   ACCEPTED - 1.03x the expected
+  423  406 ms            1037 ms (mask 11)  refused
+```
+
+One of the four, and it is the one the player heard. The mod's bank has 390
+sound ids against the install's 396 and simply has not got 418..423, so nothing
+is paired there at all - which is the second half of the report, with no further
+mechanism needed.
+
+**A LENGTH CANNOT DECIDE THIS AND A NAME CAN.** The run knows exactly which ids
+it wrote, so it writes them: one **`sfximport <id> <id> ...`** line in the
+`.hdm`, ascending out of a `std::set` so the same seed gives the same file, and
+no line at all in a run that imported nothing. The engine's bridge passes those
+ids over with a line each. An engine older than this round has no rule for the
+word and ignores it, which is what the sidecar format was built for. Ids the run
+MOVED between TR5 levels are NOT in that list and keep their pairing - those
+really are the remaster's own sounds, which is exactly why the bank's level mask
+cannot be the rule.
+
+**IT IS THE SAFETY NET ALL THE SAME, and it needed no table.** Which of the
+bank's 64 level bits is the level being loaded is worked out from the level's
+own sound map: the bit whose ids cover this level's and no others, every id the
+level has and the bit claims counting for it and every one it does not counting
+against it. Proven over all sixteen classic levels - each matches exactly ONE
+bit and matches it COMPLETELY while the runner-up covers at most two thirds:
+
+```
+  ANDREA1 bit 1   ANDREA2 2   ANDREA3 3   JOBY2 4   JOBY3 5   JOBY4 6
+  JOBY5 7   ANDY1 8   ANDY2 9   ANDY3 10   RICH1 11   RICH2 12   RICH3 14
+```
+
+Worked out rather than tabulated, because a table of level names is a table a
+randomized level or a level pack would be silently wrong about. A pairing that
+bit excludes now gets a line: on seed 380's ANDREA1 that is 32 sounds, every one
+of them an enemy the run moved here, and it is the line that would have found
+the vulture without anybody having to report it.
+
+Two rules the bridge rests on moved into `sfxbank.cpp` with it - `SfxBankLevelBit`
+and `SfxPairPlausible` - so that `SfxProbe` judges a pairing with the engine's
+own arithmetic and not with a copy of it, which is the drift round M1 found in
+`ModelProbe`'s page rule and fixed. `SfxProbe -level <path.trc>` reads a finished
+level and the sidecar beside it and prints the whole decision table.
+
+**THE THREE DIAGNOSTIC LOWS of the round M2b review, all three closed.** The
+ring plan stopped silently when its table of sixteen was full - a Mods folder
+with seventeen inventory models would have had the seventeenth quietly draw the
+install's own, which reads in a play test as "my mod does not work" and has
+nothing to point at; it says so now. The twin's own fold counters were worked
+out by the reader and thrown away, so the one model on the card whose source a
+reader of the line cannot see was also the one whose fold nobody could check;
+they are in the part line. And the twin rule's SECOND `.TRM` read - the rest
+hands, a whole file off the disk per hand part with a mod's gun in it - was not
+counted into `read_ms`, so the one line that says how long a level spent reading
+models was short by exactly the work that rule adds.
+
+**PROVED.**
+
+- *The randomizer's output does not move.* The build of `bf105b4` against this
+  one, seed 380, thirteen levels, `mix cross allsanity 8 weapons outfit-tr3`
+  with both Tomb Raider III installations: **every `.trc` byte-identical**, and
+  the only difference in any `.hdm` is the one new `sfximport` line. Ten of the
+  thirteen rolled a guest; the three that did not have byte-identical sidecars
+  as well.
+- *Nothing moved that was not meant to.* `ModelProbe -all -nodraw` over ANDREA1
+  with NO `Mods` folder, the build before the round against the build after it:
+  **287 lines identical**, every slot, every model, every page, every range,
+  every verdict. And the eight known outfits drawn with pistols: **eight
+  byte-identical `.PNG` files**.
+- *The vulture.* `SfxProbe -level` over the randomized ANDREA1: with no `Mods`
+  folder the four ids are refused and 422 is named in capitals as the one the
+  length would have let through; with the user's `Mods` folder the mod's bank
+  has none of them and nothing is refused because nothing was ever paired.
+- *The ring.* `ModelProbe -invrot` renders of the vanilla pistols (the user's
+  own reference picture), the vanilla Uzi and the mod's fitted pair, all three
+  looked at.
+
+**WHAT IS NOT PROVED.** Everything here that is not a file comparison is
+`ModelProbe`'s renderer and `SfxProbe`'s reader, which are the engine's own code
+with no game around them. The play test still owes: the menu on the screen and
+under a gamepad, the re-dress in the middle of a level, the barefoot steps
+heard, the boots heard with the sound mod in the folder, and the ring opened in
+the game with the Uzi mod active.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

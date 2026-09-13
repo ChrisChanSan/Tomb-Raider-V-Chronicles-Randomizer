@@ -126,6 +126,66 @@ Credits for everyone whose work is in here.</td>
 
 </details>
 
+## Outfit changer (F4)
+
+Press **F4** in the game and everything stops, exactly as the pause menu
+stops it. The list is every outfit this machine can dress Lara in: the 22
+bodies of your **Tomb Raider IV-VI Remastered**, the 30 of **Tomb Raider
+I-III Remastered** the first has not got under the same name, and every one
+your `Mods` folder adds. Each row carries where it came from — `IV-VI`,
+`I-III`, or the mod's own folder name — and the one you are wearing is
+marked with a `*`.
+
+The first row is **Level facts**, and it means "no choice at all": the level
+and the rolled run decide, which is what a player who has never opened this
+menu has. Choosing it again clears the setting.
+
+| key | what it does |
+| --- | --- |
+| up / down | move through the list |
+| left / right | switch the highlighted outfit between **Boots** and **Bare** |
+| select (Enter, or the pad's action button) | wear it and close |
+| deselect (Esc, Backspace, the pad's back button) | close and change nothing |
+
+A gamepad works in it because it reads the same input bits the pause menu
+and the options page read.
+
+**It takes effect at once.** The level's models are built again with the new
+body while the game stands still; the rooms, the inventory, her weapons and
+everything classic are untouched. The page cache never gives a page back, so
+a level may spend **64 MiB** of extra outfit pages and then says *applies at
+the next level* instead — measured, that is about twenty changes in an
+ordinary level and four in the worst case the installed wardrobe can produce.
+
+**It is remembered.** The outfit is the string `hd_outfit` under
+`HKCU\Software\Core Design\Tomb Raider Chronicles\tomb5`, and the
+footsteps are one DWORD per outfit under `...\tomb5\hd_footsteps` — the
+wardrobe key is the value's name, `1` is bare and `2` is boots. Both are read
+at every level start. An outfit whose mod you have taken out again is a line
+in the log and the level's own body, not an error. Young Lara stays young
+whatever any of it says.
+
+### Footsteps
+
+**Boots** is the level's own footstep sound, and from now on it is the sound
+the **installed remaster** has for it — a sound mod that replaces the
+footsteps no longer makes every outfit barefoot. **Bare** is a second set of
+recordings the level loads beside its own: the barefoot steps the remaster's
+own bank carries (sound id 417, five recordings that no level uses), or your
+sound mod's own footsteps when a mod's bank is the one being played.
+
+What an outfit does unless you say otherwise comes from the wardrobe — a
+mod's `outfit.txt` can say `footsteps=bare`, and the built-in table says it
+for the bodies that have no boots. Your own choice wins over both and is kept
+per outfit.
+
+Measured, there is no barefoot LANDING among those five recordings — a
+landing is nearly five times the length of a step and none of them is — so a
+barefoot landing is the level's own. A level with no room left for a second
+set, or with no sound bank to take one from, shows the row as *unavailable*
+and the log says which of the two it was. Every line of it begins with
+`SFXLOG footsteps:`.
+
 ## Mods
 
 Put a folder called `Mods` next to `PCtomb5.exe` and the engine reads it at
@@ -198,7 +258,7 @@ grown-up body. Every key the wardrobe knows is printed by
 `Diagnose\ModelProbe <5-folder> -wardrobe -tr3 <3-folder> -mods <Mods>`.
 
 **The wardrobe belongs to the ENGINE and not to the randomizer.** These
-entries are what the in-game outfit changer will offer (F4, next round); no
+entries are what the in-game outfit changer offers (F4, above); no
 roll ever draws one and nothing about them is written into a level file. The
 reason is reproducibility: a seed and its settings travel from one player to
 another, an installation and a `Mods` folder do not, so a run whose outfit
@@ -209,8 +269,8 @@ V outfits and the four Tomb Raider III guests, and nothing else.
 The engine reads the choice from one registry value, a string named
 `hd_outfit` beside `hd_install` under
 `HKCU\Software\Core Design\Tomb Raider Chronicles\tomb5`, and re-reads it at
-every level. **The outfit changer writes it**; nothing writes it today, and
-while it is empty or absent every level dresses her exactly as it always did.
+every level. **The F4 outfit changer writes it**, and while it is empty or
+absent every level dresses her exactly as it always did.
 A key your machine no longer has — you took the mod out again — is a line in
 the log and the level's own outfit, not an error. Young Lara stays young
 whatever it says.
@@ -246,7 +306,8 @@ sheen=0.45              # how wet the material looks ...
 exponent=26             # ... and how tight the highlight is
 skin=8001               # which of its pages are Lara's own skin, so that
                         # a bare forearm and the hand on it shine alike
-footsteps=bare          # or boots - read and logged now, used next round
+footsteps=bare          # or boots - what she walks on in this body,
+                        # unless the player says otherwise in F4
 ```
 
 An unknown key is written to the log and ignored, exactly as in `mod.txt`.
@@ -266,10 +327,24 @@ and read its pages under the wrong numbers. Effect and sprite pages such as
 so does anything that only exists for Tomb Raider IV, `4\DATA\MAIN.SFX`
 included.
 
-**Coming next.** A key in the game that changes the outfit without leaving
-the level — it writes the `hd_outfit` value above, which the engine already
-reads — and barefoot footsteps for the bodies that have no boots, for which
-the `footsteps=` line above is already read and already in the log.
+**A mod's own inventory model.** Tomb Raider I-III draws the inventory out of
+`<BASE>_OPTION` models where IV-VI uses `EXTRA_<BASE>_ITEM`, so a mod written
+for I-III brings the OPTION names with it. The **ring** and the little
+turning object in the corner take it when a mod ships one and no mod ships an
+`EXTRA_` name for the same slot; a file from another game stands in that
+game's frame, so it is turned onto the vanilla item's own — by the shape of
+its vertices and not by its bounding box, which cannot tell a pair of guns
+from one gun standing up. The **pickup lying on the floor** keeps the vanilla
+`EXTRA_` model: measured, a replacement can be three times as thick as the
+item it stands in for, and a pickup is placed by the floor under it — half of
+that thickness would be under the floor.
+
+**And one sidecar line.** A randomized level's `<level>.hdm` now carries an
+`sfximport` line naming the sound ids the run imported from another game.
+Those are ids the remaster's own bank keeps other recordings on, and without
+the line the engine's HQ bridge could pair one of them: the Tomb Raider III
+vulture died with a scientist's voice line from RICH1. An engine older than
+this build ignores the word and plays what it always played.
 
 **Mods are yours, not ours.** Nothing of any mod is part of this project and
 nothing of one is ever shipped with it, exactly like the game data and the

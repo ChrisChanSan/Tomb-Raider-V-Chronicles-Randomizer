@@ -126,6 +126,65 @@ Credits for everyone whose work is in here.</td>
 
 </details>
 
+## Mods
+
+Put a folder called `Mods` next to `PCtomb5.exe` and the engine reads it at
+the first level. The layout is the remaster's own drop-in layout, so a mod
+made for the Remaster works here as it lies:
+
+```
+Mods\<Category>\<Mod>\5\ITEM\<NAME>.TRM      models
+                     \5\TEX\<n>.DDS          the pages those models wear
+                     \5\DATA\MAIN.SFX        a whole sound bank
+                     \4\...                  the same, searched after 5
+Mods\<Mod>\...                               a mod without a category works too
+```
+
+**Order and priority.** Alphabetical by the folder path, and the first mod
+that has a file wins. A folder whose name starts with `_` is switched off,
+and everything under it with it — rename `IMI Uzis` to `_IMI Uzis` and the
+original is back, with nothing else to undo. Nothing is ever written into
+your installation or into the mod: a mod replaces a file by being *looked at
+first*, never on disk.
+
+**What a mod may replace.** Anything the HD path resolves by name: the hands
+`HAND_*`, the holsters `HOLSTER_*`, the pickups `EXTRA_*` and the inventory
+models `*_OPTION`. A page a mod does not ship is taken from your
+installation, so a mod that brings only models works. **A mod can never
+change a page of a model it did not supply** — the vanilla look cannot be
+damaged by installing one.
+
+**`mod.txt`** is optional and goes in the mod's own folder. One `key=value`
+per line, `#` starts a comment. One key so far:
+
+```
+origin=tr1        # or tr2, tr3
+```
+
+Say this when the mod's models were drawn against **Tomb Raider I-III
+Remastered** and name its page numbers. Without it those pages are looked
+for in the IV-VI bundle, where the same numbers hold different pictures —
+which is why a hand can come out black. Keys this build does not know are
+written to the log and ignored.
+
+**Sounds.** A mod's `5\DATA\MAIN.SFX` is used instead of `audio\MAIN.SFX` if
+there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under
+the mod — replaces that numbered sample of the bank. The bank itself no
+longer has to be copied into `audio\` by hand: without one there, the engine
+reads the installed remaster's own where it lies.
+
+**Not supported.** Outfits from mods (`OUTFIT_*.TRM`) are left alone for now
+and come with the next round. Effect and sprite pages such as
+`4\TEX\EFFECT.dds` do nothing — this engine draws no Remaster sprites — and
+so does anything that only exists for Tomb Raider IV, `4\DATA\MAIN.SFX`
+included.
+
+**Mods are yours, not ours.** Nothing of any mod is part of this project and
+nothing of one is ever shipped with it, exactly like the game data and the
+HD art. Start the game with `-log` and the log tells you which mods were
+found, what each one replaced and what was refused — every one of those
+lines begins with `MODLOG`.
+
 ## What you need
 
 Your own installation of **Tomb Raider Chronicles**. Game data is

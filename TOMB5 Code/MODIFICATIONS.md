@@ -10692,6 +10692,160 @@ the new double doors, where one triangle reached past the box, and **RICH1's
 doorway between rooms 130 and 129**, where the cut now takes nothing and the
 question is only whether the remaster's art lets one see through.
 
+#### Round M1 - the Mods folder: models, pages and sounds from a mod (#153)
+
+The remaster has a drop-in mod layout of its own - `Mods\<Category>\<Mod>\{4,5}\{ITEM,TEX,DATA}` -
+and people have made things in it: replacement hands, holsters, pickups,
+outfits, whole sound banks. This round gives our engine the same folder, with
+one rule the user set above every other: **a mod may never change a page of a
+model it did not supply.** Vanilla is untouchable, and the mechanism has to
+make that impossible rather than merely unlikely.
+
+**The scanner** is `specific\hd\hd_mods.cpp`, engine-free like `hd_install.cpp`
+so that the diagnostic tools link the same file the engine does. A mod is a
+folder directly under `Mods`, or one level deeper, that has a `4` or a `5`
+subfolder or a `mod.txt`. A name beginning with `_` is switched off at every
+depth - that is the whole "give me vanilla back" mechanism, and it needs no
+uninstall. The order is the relative path compared as lower-case ASCII, and
+that order is the priority. The scan runs once per session; both the HD level
+build and `HQSfxOpen` ask for it, so whichever gets there first, the two see
+one list.
+
+**The model resolver** sits in front of `find_model` (`hd_model.cpp`): the
+active mods in order, each `5\ITEM` then `4\ITEM`, then the installs exactly as
+before. It is a replacement by resolution and never on disk. `OUTFIT_*.TRM` is
+refused here by name - Lara's composite is a measured table (`kOutfit`, the
+head weights, the holster cut out of one page of an outfit) and a foreign
+outfit that does not carry what the table expects is not a different Lara but a
+broken one. That is round M2.
+
+**The page namespace** is the safety rule made into arithmetic
+(`hd_pagecache.h`). A mod's page is offered to the cache as
+`HD_PAGE_MOD_BASE + modIndex * HD_PAGE_MOD_STRIDE + page`, so mod 2's 6111 and
+the install's 6111 are two cache slots holding two different pictures. Three
+`static_assert`s prove the three namespaces - plain, the I-III bundle's
+`HD_PAGE_ALT_BASE`, and the mods' - cannot meet, and a build in which they
+could fails to compile. A page a **vanilla** model asks for never carries a mod
+key, so it never enters the mod branch of `resolve_page` and cannot be replaced
+by a mod: the guarantee is structural.
+
+The chain for a mod's page is the mod's own `5\TEX`, then its `4\TEX`, then -
+only when `mod.txt` says `origin=tr1|tr2|tr3` - that game folder of the Tomb
+Raider I-III bundle and its two siblings, and then the ordinary IV-VI chain
+with the plain number. The fall-through is what lets a mod ship models and no
+art at all.
+
+**Why `origin=` exists, measured.** The user's `IMI Uzis` mod ships
+`HAND_BARE_UZI.TRM` (31267 vertices) which names pages 6111 and 6112 - its own,
+shipped beside it - and **8002 and 8010**, which are Lara's skin sheets of the
+**I-III** bundle. In the IV-VI bundle those same numbers hold other art: `4\TEX\8002.DDS`
+is a cut-out sheet with 14.5 % holes. Without `origin=tr1` the hand is painted
+with it; with it, both pages come from `1\TEX` and read 0.0 % holes. Two
+`ModelProbe` renders of the same file, the same install and the same code show
+the difference and nothing else does. The other two gun mods need no line at
+all: the HK USP and the Spas-12 wear the install's own 8001 for skin and only
+bring their weapon pages.
+
+**The sound half is independent of `hd_enable`** - it is audio, like the HQ
+bank has always been. `HQSfxOpen` now walks three candidates: the first active
+mod that ships `5\DATA\MAIN.SFX`, then `audio\MAIN.SFX`, then the installed
+remaster's own `5\DATA\MAIN.SFX` read where it lies. The third is new and it is
+what makes the hand copy into `audio\` unnecessary. `4\DATA\MAIN.SFX` is
+deliberately not used: that is Tomb Raider IV's bank with its own numbering,
+and pairing a TR5 level's bridge with it would play the wrong recordings.
+
+A loose `<NNNN>.wav` - exactly four digits, any depth under an active mod, so a
+modder's own `GlobeRaider Files\0000.wav` works where it lies - replaces that
+numbered sample of whichever bank was opened. First active mod wins per number.
+The file is checked the way the bank's own samples are: a RIFF WAVE,
+uncompressed PCM, mono, 16 bit, with a `data` chunk inside the file, and a
+4 MiB cap so a mistyped name cannot pull a video into memory. Without any bank
+there is no bridge from a level's sample number to a bank number, and the log
+says so once.
+
+**The plausibility rule needed a ruler, and this is the measurement that
+proved it.** The rule that has guarded the HQ bank since #117 compares the
+bank's sample against the level's own: at twice the rate the same recording
+must be about twice as long, and anything further off than a fifth is a wrong
+pairing and keeps Core's version. It works because both sides hold the same
+sound. **A sound mod breaks that on purpose.** Measured with `SfxProbe` on the
+user's own `Underworld Bare Footsteps`: sound id 0 is bank sample 0 in both
+banks, and it is 3388 bytes of audio at 44100 Hz in the unmodded bank (0.038 s)
+against 28782 bytes at 48000 Hz in the mod's (0.300 s) - **7.81 times longer**.
+Id 4, the landing, is 1.64 times longer. Both are outside the fifth, so the
+rule as it stood would have refused precisely the five samples the mod exists
+to change, and the mod would have done nothing at all while its pairing was
+correct throughout.
+
+So when a mod's bank is the one being played, the engine opens the first
+**unmodded** bank of the chain beside it and measures the pairing against that
+instead. The ruler is never played from. It is walked through its own sound id
+table rather than by sample number, because the two banks have different sample
+counts - 463 against 473 in the user's case - and nothing says a number means
+the same sound in both; the sound id does. If the ruler's sample for this level
+sample is the right length the bridge is right and the mod's recording plays
+whatever its length; if it is not, the level keeps its own sample exactly as
+before. With no mod bank, or with no unmodded bank to be had, none of this runs
+and the rule is what it always was.
+
+**The parser moved out of the engine.** `specific\sfxbank.cpp` and `.h` now
+hold the `MAIN.SFX` layout, the chain walk that tests it and the RIFF check;
+`hqsfx.cpp` keeps the engine's half - the level bridge, the substitution and
+the log. `SfxProbe` links the same file, so what the tool prints is what the
+engine did.
+
+**One consequence of the namespace, measured and left standing.** A page a
+mod's model shares with the install is loaded twice: once under the mod's key
+for the mod's model and once plain for everyone else. On ANDREA1's wardrobe
+with the user's four gun mods active that is **+4 pages and +5.3 MiB** (21 ->
+25 pages, 28.0 -> 33.3 MiB); on the whole level it is nothing at all, because
+the two pistol pickups' mod page displaces the vanilla page nobody else wore
+(53 model pages either way, 350.5 MiB total either way). It would be safe to
+share the slot - the fall-through reads the install's own file, byte for byte
+the same texture - but the saving is 1.5 % of a wardrobe and the rule "a mod's
+model never shares a slot with a vanilla one" is worth more than that while
+this is one round old.
+
+**And one rule that had to learn about the namespace.** `hd_lara.cpp` tells a
+weapon hand's gun from its skin by "every page this model has that
+`HAND_BARE_REST` has not got is the weapon" (fix round I, I4). With a mod hand
+and vanilla rest hands the two are in different namespaces, so *nothing* would
+match and the skin would take the gunmetal material along with the gun. The
+comparison strips the namespace and compares page NUMBERS - which is what
+`hd_model`'s own `Range` says a material is named by. The HK USP and the Spas-12
+are then read exactly right (both wear 8001 for skin), and a mod that renumbers
+is read right as soon as it ships its own `HAND_BARE_REST`.
+
+**Every seam behind `-log`, all of them new lines and none of them thinned.**
+`MODLOG folder=`, one `MODLOG mod<i> path= origin= models= pages= bank= wavs=`
+per mod, `MODLOG disabled <path>`, `MODLOG model <NAME> <- mod<i>` once per
+replaced model per session, `MODLOG page mod<i>:<n> comes from ...` per page,
+`MODLOG bank <label> (<path>) - opened/not opened`, `MODLOG bank ruler:`,
+`MODLOG bridge:`, `MODLOG bank sample <n> is ... - a recording the mod
+replaced`, `MODLOG wav <nnnn> <- mod<i>` and `MODLOG wav <nnnn> refused - <why>`.
+A mod page prints as `mod<i>:<n>` wherever a page number is printed, so a
+reader can always tell it from the install's. `HDLOG models` gained a `mod:`
+column and `HDLOG models budget` a `frommod=`; the `HQ SFX:` summary line now
+names the bank it really used.
+
+**What is proved and what is not.** Proved with `ModelProbe` through the
+engine's own resolver and renderer: the three gun mods' hands, the Uzi's skin
+pages from the I-III bundle with `origin=tr1` and the wrong art without it, and
+that with no `Mods` folder every page key, every model origin and the whole
+wardrobe come out identical to the build before the round. Proved with
+`SfxProbe` on the user's game folder: the chain, which bank wins and why the
+other two are not reached, the bridge for ids 0 and 4 through both banks, and
+all five loose wavs accepted. **Not proved:** anything that needs the game
+running - the play test owes the sound of the footsteps, the look of the hands
+in motion, and whether a level with mods still holds its texture budget on the
+user's card.
+
+**Tools.** `Preparation\Tools\Diagnose\ModelProbe` gained `-mods <folder>` and
+`-tr3 <3-folder>`, prints which mods were found and what each ships, and its
+page list now names the folder every page was really read from - which replaced
+a copy of the 5-then-4 rule that had gone out of step with both newer
+namespaces. `SfxProbe` and `bsfx.bat` are new.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

@@ -154,6 +154,26 @@ installation, so a mod that brings only models works. **A mod can never
 change a page of a model it did not supply** — the vanilla look cannot be
 damaged by installing one.
 
+**Outfits are different: they are ADDED, never swapped in.** An
+`OUTFIT_*.TRM` a mod ships becomes an entry of its own in the randomizer's
+**Wardrobe** window, beside the ones the two Remasters bring — your
+`OUTFIT_CLASSIC` does *not* take the place of the Remaster's Rome outfit, and
+a level that asks for the Rome outfit still gets the Rome outfit. You pick
+the mod's body in the wardrobe, the randomizer writes the choice beside the
+level (`wear <key>` in the `.hdm` sidecar), and the engine dresses her in it.
+Nothing of the mod is copied into the level file, so the same level with and
+without the choice is byte for byte the same file.
+
+The wardrobe finds, in this order: the outfits of your **Tomb Raider IV-VI
+Remastered** (24 of them), those of **Tomb Raider I-III Remastered** that the
+first has not got under the same name (30 more — the `OUTFIT_TRX_*` sets),
+and then every mod's. `OUTFIT_YOUNG*` of the two installations is passed over
+— young Lara carries no weapon and a randomized run hands her one in every
+level — but a **mod** in that slot is not, because a mod there is usually a
+grown-up body. Every key the wardrobe knows is printed by
+`Diagnose\ModelProbe <5-folder> -wardrobe -tr3 <3-folder> -mods <Mods>`, and
+`Randomize.exe ... outfits-list` prints the same list.
+
 **`mod.txt`** is optional and goes in the mod's own folder. One `key=value`
 per line, `#` starts a comment. One key so far:
 
@@ -164,8 +184,30 @@ origin=tr1        # or tr2, tr3
 Say this when the mod's models were drawn against **Tomb Raider I-III
 Remastered** and name its page numbers. Without it those pages are looked
 for in the IV-VI bundle, where the same numbers hold different pictures —
-which is why a hand can come out black. Keys this build does not know are
-written to the log and ignored.
+which is why a hand can come out black, or a boot white. Keys this build does
+not know are written to the log and ignored.
+
+**`outfit.txt`** is optional too, goes beside `mod.txt`, and says what the
+mod's outfit IS. Everything in it is optional; what is not said is measured
+off the file or falls back to the wardrobe's own defaults (hands, braid and
+holsters on, no gloves, a plain cloth sheen).
+
+```
+name=Sola's wetsuit     # what the wardrobe window calls it
+hands=1                 # does she wear the separate HAND_ models
+gloves=0                # ... the gloved ones
+braid=1                 # the TR5 braid
+holsters=1              # thigh holsters
+rig=0                   # the pouches they hang in, cut out of the
+                        # London catsuit - for a body with bare thighs
+sheen=0.45              # how wet the material looks ...
+exponent=26             # ... and how tight the highlight is
+skin=8001               # which of its pages are Lara's own skin, so that
+                        # a bare forearm and the hand on it shine alike
+footsteps=bare          # or boots - read and logged now, used next round
+```
+
+An unknown key is written to the log and ignored, exactly as in `mod.txt`.
 
 **Sounds.** A mod's `5\DATA\MAIN.SFX` is used instead of `audio\MAIN.SFX` if
 there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under
@@ -173,8 +215,7 @@ the mod — replaces that numbered sample of the bank. The bank itself no
 longer has to be copied into `audio\` by hand: without one there, the engine
 reads the installed remaster's own where it lies.
 
-**Not supported.** Outfits from mods (`OUTFIT_*.TRM`) are left alone for now
-and come with the next round. A face on its own does nothing either: a mod
+**Not supported.** A face on its own does nothing: a mod
 that ships `<NAME>_HEAD.TRM` without the body's `<NAME>.TRM` is passed over,
 because a face is looked for wherever its body came from so that the two wear
 pages out of one source — a lone face would land on the installation's body
@@ -182,6 +223,11 @@ and read its pages under the wrong numbers. Effect and sprite pages such as
 `4\TEX\EFFECT.dds` do nothing — this engine draws no Remaster sprites — and
 so does anything that only exists for Tomb Raider IV, `4\DATA\MAIN.SFX`
 included.
+
+**Coming next.** A key in the game that changes the outfit without leaving
+the level, and barefoot footsteps for the bodies that have no boots — the
+`footsteps=` line above is already read and already in the log, it simply
+does not do anything yet.
 
 **Mods are yours, not ours.** Nothing of any mod is part of this project and
 nothing of one is ever shipped with it, exactly like the game data and the

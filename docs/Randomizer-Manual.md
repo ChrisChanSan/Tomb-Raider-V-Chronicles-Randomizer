@@ -228,6 +228,29 @@ the run happens.
 drawn. What is stored is the *deselection*, so an outfit added in a later
 version arrives switched on rather than falling through an old settings file.
 
+**Below a divider in the same window stand the outfits the ENGINE can wear.**
+About a hundred of them on a machine with both Remasters installed — every
+`OUTFIT_*` file of *Tomb Raider IV-VI Remastered* and the `OUTFIT_TRX_*` sets
+of *Tomb Raider I-III Remastered* — plus whatever an outfit mod in your
+`Mods` folder brings. They are **off until you tick one**, and that is not
+tidiness: which of them exist depends on what is installed on your machine, so
+a seed would otherwise change the day you add a mod. With none ticked, a seed
+plays exactly as it did before this list existed.
+
+They work differently from the four above them, and it shows nowhere except
+here. Nothing of such an outfit is copied into the level file — the body is a
+model the engine reads out of your own installation while you play — so the
+level comes out byte for byte the same and the choice travels as a single line
+beside it. That also means they need the **HD art switched on in the engine**;
+with it off, the level looks exactly as it would have without the choice.
+Young Lara stays young whatever is ticked.
+
+A mod's outfit is always an **extra** entry and never a replacement: a mod
+that ships `OUTFIT_CLASSIC` does not take the Rome outfit away from the levels
+that wear it. The engine's README says what a mod may put in its
+`outfit.txt` — a name for this window, whether the body wears the braid and
+the holsters, and how it shines.
+
 Two things that surprise people: **joby4 always keeps the diving suit** and
 never rolls, and the **Ireland levels always draw an adult outfit**, because
 young Lara has none of the three. Independent of this box, every run switches

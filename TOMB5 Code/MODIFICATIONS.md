@@ -10986,6 +10986,187 @@ one source. That is right, and the review agreed; what was wrong was the
 README promising "anything the HD path resolves by name". The README's
 not-supported paragraph says it now. No code changed.
 
+#### Round M2 - the wardrobe is a scan, and a mod may bring an outfit (#153)
+
+Round M1 refused `OUTFIT_*.TRM` from a mod on purpose: Lara's wardrobe was
+eight rows of a hand-written table in `hd_lara.cpp` and a stranger's outfit
+would have been dressed by somebody else's measurements. This round makes the
+LIST a scan and leaves the measurements where they belong.
+
+**What the scan finds, and what it passes over.** One engine-free unit,
+`specific\hd\hd_wardrobe.cpp`, walks three places in order and the order is
+the priority: the IV-VI install's `4\ITEM` and `5\ITEM`, then the I-III
+install's `1\ITEM`, then every active mod's `5\ITEM` and `4\ITEM`. Measured
+over the two installs the user has: **52 entries**, 22 from IV-VI and 30 from
+I-III, with **50 files passed over** - and every refusal says why, in the log
+and in `ModelProbe -wardrobe`. Two are `OUTFIT_YOUNG*` of the install (young
+Lara carries no weapon and a randomized run hands her one in every level - the
+user's decision); four are `OUTFIT_HAIR` and the three `OUTFIT_HANDS_*`, which
+are parts of the composite and not bodies; fourteen are the I-III bundle's
+copies of names the IV-VI bundle already has, because those copies are
+self-contained and better (`OUTFIT_TR1_CLASSIC`: 14,515 vertices in IV-VI
+against 8,382 in I-III, and IV-VI page numbers, so no alternate root is
+needed at all); and thirty are the `_HD` twins, which have a section of their
+own below. The young filter does NOT apply to a mod - three of the four outfit
+mods the user runs are grown-up bodies sitting in the young slot, and refusing
+them would refuse the very thing the round is for.
+
+**The key.** `46/OUTFIT_TR2_HOME`, `13/OUTFIT_TRX_WETSUIT_1`,
+`mod/outfits/aod wetsuit/OUTFIT_CLASSIC` - the source, a slash, the file, and
+for a mod its folder in between, because two mods may ship the same file name
+and both are then in the wardrobe at once. It has to survive a text line, a
+settings file, a command line and a log, so it is forward slashes throughout
+and compared case-insensitively.
+
+**One implementation, four callers.** The engine draws out of it, `ModelProbe`
+prints it, `Randomize.exe` rolls out of it and the GUI shows it - and all four
+compile the same `hd_wardrobe.cpp`, the way the font has one `chardef.inc`. A
+list two programs work out separately is a list that will one day disagree
+with itself, and here that disagreement would read as "the outfit I picked is
+not the outfit I got".
+
+**The properties, and where each one comes from.** The eight measured rows
+moved out of `hd_lara.cpp` into `hd_wardrobe.cpp` with the measurements that
+produced them; what is left in `hd_lara.cpp` is the enum's two words, which
+file an `HD_LARA_OUTFIT_*` number stands for and what to call it in the log.
+An entry's flags are resolved in four tiers - a mod's `outfit.txt`, the table
+keyed by file name, a measurement off the file, the defaults - and **every
+property's origin is in the log line**, so a picture the user does not like
+can be traced to the row or the line that made it without opening the source.
+
+**The measured tier, checked against all eight rows.** Only one property has
+one: which pages are Lara's own skin. The rule is the throat measurement fix
+round K already had - the page whose torso-node vertices inside the neck
+cylinder span the greatest depth down the neck axis - and it was run against
+every row of the table:
+
+```
+  OUTFIT_CLASSIC      8001   the table says 8001            agrees
+  OUTFIT_RUSSIA       8001   the table says 8001            agrees
+  OUTFIT_VCI          8001   the table says 8001            agrees
+  OUTFIT_TR3_ANTARC   8201   the table says 8201 and 8202   the first of two
+  OUTFIT_TR3_NEVADA   8201   the table says 8201 and 8202   the first of two
+  OUTFIT_TR3_COAST    8201   the table says 8201 and 8202   the first of two
+  OUTFIT_TR3_CATSUIT  8201   the table says 8201 and 8202   the first of two
+  OUTFIT_SUBSUIT      8047   the table says NOTHING         disagrees
+```
+
+Seven of eight, the rule finds the table's first page exactly. The two
+disagreements are the same limit twice and both are real: the four Tomb Raider
+III guests carry a SECOND skin page, 8202, which is their bare ARMS, and a
+measurement taken at the neck cannot reach an arm - the same page number is
+bare skin under the Antarctica parka and a latex sleeve under the London
+catsuit, and geometry cannot tell the two apart. And the diving suit HAS a
+throat page, 8047, and it is the HELMET: the rule is right about the file and
+wrong about Lara. So the measured tier gives a new entry exactly one page, its
+throat, and the table keeps the eight it measured - which is what stops the
+measurement from making the whole diving suit matt.
+
+**The `_HD` twins, and why the plain one is worn.** The thirty
+`OUTFIT_TRX_*_HD.TRM` files of the I-III bundle were refused by `hd_trm` with
+"has bytes left over". They have no bytes left over: their **vertex stride is
+30 and not 24**, and the difference is the two texture coordinates, which
+leave the gaps in the bone and weight block and stand at the end as FLOATS.
+The layout is arithmetic and then byte comparison - the index block, aligned,
+plus vertices times 30 ends at the last byte in all thirty, and the leading
+vertices are byte-identical with the twin's in position, normal, layer, bone
+and weight. Measured over all **2,923 `.TRM` files of both remasters**,
+exactly thirty are laid out that way and every one is an `OUTFIT_TRX_*_HD`
+with its plain twin beside it; nothing else in either bundle, at any name.
+
+`hd_trm` reads them now. The wardrobe still wears the **plain twin**, and that
+is a measurement too: this engine's vertex holds `u` and `v` as BYTES
+(`hd_model.cpp`, the `UBYTE4` lanes of the declaration), and over
+`OUTFIT_TRX_WETSUIT_1_HD` **14,208 of its 14,262 coordinates lie off that
+1/255 grid** - and off every other grid a texture atlas might use, 1/256 up to
+1/4096. Against its own twin's vertices they differ by as much as half a step
+in both directions, spread, not by a constant half-texel offset. Wearing the
+wide file would mean drawing a picture the file does not describe, and the
+twin is the same Lara without the rounding. A wide file with NO twin - a mod's
+- is worn, with the rounding written into the log, because a rounded picture
+beats no picture.
+
+**How a level says which.** A new `.hdm` line, `wear <key>`, the rest of the
+line taken whole because a mod's key holds its folder name and may carry
+spaces. The version stays **2**: an engine older than this round does not know
+the word, ignores the line and draws what it drew before, which is the whole
+reason the choice went into a line and not into a new version. At the level
+build the key wins where this machine's scan has it, a key it has not got
+falls through to the level's own facts with `HDLOG wardrobe wear=... not
+found`, and **young Lara stays classic whatever the line says** - the question
+is asked before the line is read, so a sidecar cannot put an adult body on the
+child.
+
+**What the randomizer does with it, and what it deliberately does not.** The
+scanned entries stand under a divider in the wardrobe window, greyed out when
+their source is not there, and are **off unless the user ticks one**. Held is
+therefore the SELECTION and not the deselection, which is the opposite of the
+seven old entries and is not an inconsistency: which scanned entries exist
+depends on what is installed and which mods are in the folder, so "on unless
+said otherwise" would make a run change silently the day a mod is added. An
+entry the roll draws changes **nothing at all** in the level file - the body is
+a `.TRM` the engine reads at draw time out of the player's own installation -
+so `data[3]` stays 0, no donor is copied, and the roll's whole effect is one
+line in the sidecar.
+
+The first design also wrote a `wear` line for the seven old kinds, so that a
+level file would say the same thing in two ways. It does not, and the reason is
+the user's rule for this round: a seed rolled with nothing new selected has to
+produce byte-identical `.trc` **and** `.hdm` files, and a `wear` line for the
+old seven changes every sidecar of every run. So a `wear` line means exactly
+one thing - the roll chose an outfit that nothing in the level file can name.
+
+**Proved rather than argued.** The randomizer from before this round and the
+one after it, seed 380, `mix cross allsanity 8 weapons outfit-tr3` with the
+Tomb Raider III installation, over eleven levels: **every `.trc` and every
+`.hdm` byte-identical**, twenty-two files, and the risky path was exercised -
+five of the eleven rolled a Tomb Raider III guest, two a vanilla donor, two
+kept their own. Then the other half: two runs whose candidate list holds
+exactly ONE entry each, so both consume exactly one draw at the same place -
+one where that entry is the outfit the level already wears and one where it is
+a scanned entry. ANDREA1 and JOBY5, `.trc` byte-identical both times, and the
+only difference in the whole output is the one `wear` line.
+
+**And the picture did not move.** The eight known outfits, drawn through
+`ModelProbe -lara ANDREA1 -outfit <x> -guns pistols` before and after the
+round: the `-nodraw` tables are identical line for line apart from the scan's
+own new note, and **all eight `.PNG` files are byte-identical**.
+
+**The two round M1 leftovers, both closed.** `hd_lara.cpp` compared
+`HDModelPage` - a cache KEY - against a plain page number when it looked for
+Lara's skin. It is one helper now, `page_number_of`, which strips the mod
+namespace AND the alternate-bundle base, and the held-item rule beside it uses
+the same one. The alternate-bundle half was not theory: `OUTFIT_TRX_WETSUIT_1`
+wears 8415, 8001 and 8002 of the I-III bundle and the first picture of it
+reported "page 8415 is named as her skin and the model does not wear it".
+
+And the page a mod's model asks for but the mod does not ship was cached
+TWICE - once under the install's key for the vanilla models and once under the
+mod's for the mod's. `HDPageCacheKeyOf` folds exactly that case and no other:
+a mod key whose mod has no such `.DDS` and whose origin bundle has none either
+becomes the plain number. The merge is safe by construction rather than by
+care - in that case `resolve_page` itself does `page = real` and runs the
+ordinary chain, so the two keys open the same file, byte for byte. Measured on
+ANDREA1's wardrobe with the user's four gun and outfit mods: **25 slots and
+33.3 MiB before, 24 and 32.0 MiB after**, and the rendered picture is
+**byte-identical**. One page folded (the install's 8001, which the HK USP's
+hands ask for and the vanilla wardrobe already held); two more - 8527 and 8528,
+which the Spas-12's holster asks for - moved from the mod's namespace to the
+install's without a saving, because no vanilla model in that level wears them
+any more. The remaining difference to the 21 slots a modless ANDREA1 pays is
+the mods' own art, which is not a duplicate at all.
+
+**What the user's own outfit mods do now.** All four are wardrobe entries and
+all four draw. Three of them sit in the `OUTFIT_YOUNG` slot and are grown-up
+bodies, which is exactly the case the young filter had to be kept away from.
+One finding for the player rather than for the code: the **Mistress** mod's
+model names pages 8009 and 8114, which neither the mod nor the IV-VI install
+has - her boots came out WHITE and her belt buckle with them. Both pages are in
+the I-III bundle's `1\TEX`: the mod was drawn against that numbering and wants
+one line, `origin=tr1`, in its `mod.txt`. Proved on a copy of the mod rather
+than argued: with that line the boots are black and the buckle is brass. That
+is round M1's own mechanism doing its work, and the README says it.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

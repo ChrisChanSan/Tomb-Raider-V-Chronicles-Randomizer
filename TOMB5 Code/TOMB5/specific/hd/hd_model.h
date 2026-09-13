@@ -153,6 +153,51 @@ struct HDModelSlot
 	 * leg in either. */
 	int onlyPage = -1;
 
+	/* THE MIRRORED WEIGHTS OF A TWO-SIDED FILE (#153, round M2b).
+	 *
+	 * Not null makes this module fold the model's bone weights back onto the
+	 * side they belong to before anything is built out of them - the rule, the
+	 * reason and the measurement are in hd_trm.h and in hd_lara.cpp, which is
+	 * the only caller that sets it. `mirrorBar` is the far side's share, in per
+	 * mille, at which a vertex is folded at all.
+	 *
+	 * It changes the vertices the whole build then works from - the coverage,
+	 * the bind drift and the buffers alike - which is right: what is folded
+	 * here is what the card is given, so every number the log prints is a
+	 * number about the model that is drawn. */
+	const HDTrmMirrorPair* mirror = 0;
+	int mirrors = 0;
+	int mirrorBar = 0;
+
+	/* MOD GUNS ON THE INSTALL'S HANDS (#153, round M2b).
+	 *
+	 * A mod may ship a weapon HAND model - a hand and the gun in it, on two or
+	 * three pages of one file - and paint the HAND half with pages of the Tomb
+	 * Raider I-III bundle, which its mod.txt reaches with origin=. The user's
+	 * IMI Uzis do exactly that: 8002 and 8010 come out of 1\TEX, and Lara's
+	 * hands then carry that game's skin tone and its glove seams while the rest
+	 * of her is TR5's. He calls it "the Uzis pull on gloves".
+	 *
+	 * With `twinSlot` set, this module looks at where each of the model's pages
+	 * really resolves - HDPageCacheOriginOf, the cache's own chain - and if any
+	 * of them lands in the origin bundle it does two things: the mod's
+	 * triangles on those pages are DROPPED, and the INSTALL's own file of the
+	 * same name is loaded into `twinSlot`, cut to the pages it shares with
+	 * `twinSkinOf` - which is the rest hands, whose every page is skin and
+	 * nothing else. The caller then draws the two together and sees TR5's hands
+	 * holding the mod's gun.
+	 *
+	 * The decision is made HERE and not by the caller because only this module
+	 * has the file open and the pages resolved; a caller would have to read the
+	 * .TRM a second time and keep a copy of resolve_page's chain.
+	 *
+	 * Nothing happens for a model that came out of an install, for a mod with
+	 * no origin= line, or for one whose pages all resolve to the mod itself or
+	 * to the install - the HK USP and the Spas-12 both wear the install's own
+	 * 8001 and are untouched. */
+	int twinSlot = -1;
+	const char* twinSkinOf = 0;
+
 	/* A LOOK AT THE FILE, WHILE IT IS STILL A FILE (#123, fix round K, K1).
 	 *
 	 * Called once, right after the .TRM is read and before it becomes buffers
@@ -361,6 +406,21 @@ bool HDModelReady();
  * the same path - HDPageCacheAltRoot - and the caller sets both, because one
  * module setting another module's state is how two answers drift apart. */
 void HDModelTr3Root(const char* root);
+
+/* WHERE A MODEL'S FILE IS, by the very search a level build does (#153, round
+ * M2b) - the mods in order, then game 5, then the sibling game 4, or the I-III
+ * bundle for a guest. There is one such search in this engine and this is how a
+ * diagnostic tool asks it instead of keeping a copy that goes out of step (the
+ * mistake round M1 found in ModelProbe's page rule).
+ *
+ * `allowMods` false asks the INSTALLS alone, which is what "the install's own
+ * file of that name" means where a mod has replaced it. `mod` gets the mod that
+ * answered, or -1. Meaningful after HDModelLevelBegin, whose installRoot and
+ * whose I-III root it uses; false and an empty string before that.
+ *
+ * Writes into `out` and returns true when a file was found. */
+bool HDModelFindFile(const char* name, bool fromTr3, bool allowMods, char* out,
+	int size, int* mod);
 
 // Loads every slot's .TRM, builds the buffers and adds the models' pages to
 // the page cache. `installRoot` is the remaster's game 5 folder. The level's
@@ -587,6 +647,11 @@ int HDModelIndices(int slot);
 int HDModelRanges(int slot);
 int HDModelPageCount(int slot);
 int HDModelPage(int slot, int at);		// .DDS number
+
+/* WHAT THE MIRROR FOLD DID TO THIS SLOT'S MODEL (#153, round M2b) - all zero
+ * for a slot that asked for none, and for one whose file had nothing to fold.
+ * False when the slot holds no model at all. */
+bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out);
 
 /* A MATERIAL FOR ONE PAGE OF ONE MODEL (#123, fix round I, I4).
  *

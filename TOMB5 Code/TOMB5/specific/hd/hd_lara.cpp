@@ -190,7 +190,32 @@ namespace
 		return e ? e->holsters : true;	// kDefaultHolsters
 	}
 
-	bool takes_gloves(int outfit)
+	/* THE GLOVES ARE NEVER WORN (#153, round M2b - the user's decision).
+	 *
+	 * "In every level with every outfit Lara has had TR5's bare hands for the
+	 * weapons; we never used the gloves - force it, then it is uniform."
+	 *
+	 * So this answers false for everything and the wardrobe's `gloves` flag is
+	 * a value nothing reads: the table's column, `outfit.txt`'s gloves= line
+	 * and the default all go on being parsed, printed and logged - they are
+	 * what a reader of a wardrobe line sees and taking them out would only
+	 * make the line lie about what the file says - and none of them reaches a
+	 * model name any more. The one thing that changes on the screen is the
+	 * Russia outfit and the mods that inherit its row: JOBY1 to JOBY5 drew
+	 * HAND_GLOVES_ until this round.
+	 *
+	 * The `gloves` column of kPart below is what stops being read, and it
+	 * stays there for the same reason: it is the wardrobe's measurement of
+	 * which file is which hand's twin, and it is true whether or not anything
+	 * asks for it. */
+	bool takes_gloves(int)
+	{
+		return false;
+	}
+
+	// What the wardrobe WOULD have said, for the one log line that reports the
+	// override (#153, round M2b).
+	bool asked_for_gloves(int outfit)
 	{
 		const HDWardrobeEntry* e = props_of(outfit);
 
@@ -213,9 +238,15 @@ namespace
 	 * `nodes` is the coverage measured over 4\ITEM, written down so that the
 	 * masks in HDLaraFrameParts can be read against it.
 	 * `gloves` is the same file for a gloved outfit, or 0 when the wardrobe
-	 * ships no gloved twin - then the bare one is worn and the log says so.
-	 * All twelve hand parts have one; the column is there so that the day a
-	 * thirteenth has not, the picture is a hand and not a hole. */
+	 * ships no gloved twin. All twelve hand parts have one.
+	 *
+	 * NOTHING READS IT SINCE #153, ROUND M2b, and that is the user's decision
+	 * and not an oversight: the wardrobe wears the BARE hands in every level
+	 * with every outfit, so takes_gloves above answers false for everything
+	 * and HDLaraPartModel never reaches this column. It stays because it is a
+	 * measurement - which HAND_GLOVES_ file is which HAND_BARE_ file's twin -
+	 * and a measurement is true whether or not anything asks for it; the day
+	 * the decision is revisited, the column is what it needs. */
 	struct Part
 	{
 		const char* model;
@@ -373,9 +404,12 @@ namespace
 		float power;
 	};
 
-	/* The two hand materials, out of the table above. */
+	/* THE HAND'S MATERIAL, out of the table above. There were two of these
+	 * until #153 round M2b - skin for a bare hand, leather for a gloved one -
+	 * and the gloved one went with the gloves: the wardrobe wears bare hands
+	 * everywhere now, so the leather pair had no reader left. Leather is still
+	 * the holster rig's material and stands in kPartSheen below. */
 	const float kSheenSkin[2] = { 0.12f, 10.0f };
-	const float kSheenLeather[2] = { 0.18f, 20.0f };
 
 	const PartSheen kPartSheen[] =
 	{
@@ -493,8 +527,16 @@ namespace
 
 	int g_outfit = HD_LARA_OUTFIT_NONE;
 	bool g_active = false;
+	// #153 round M2b: the mirror fold's bar, the engine's own unless a
+	// diagnostic tool has asked for the picture from before the round.
+	int g_fold_bar = HD_LARA_HAND_FOLD_BAR;
+	// #153 round M2b: the install's hands under a mod's gun, unless a tool has
+	// asked for the picture from before the round.
+	bool g_hand_twin = true;
 	unsigned int g_coverage[HD_LARA_PART_COUNT] = { 0 };
 	bool g_has[HD_LARA_PART_COUNT] = { false };
+	// #153 round M2b: the install's own hands loaded beside a mod's gun.
+	bool g_twin[HD_LARA_PART_COUNT] = { false };
 	bool g_planned[HD_LARA_PART_COUNT] = { false };
 	std::vector<std::string> g_notes;
 
@@ -847,6 +889,44 @@ int HDLaraPartSlot(int part)
 		return -1;
 
 	return HD_LARA_SLOT_BASE + part;
+}
+
+int HDLaraPartTwinSlot(int part)
+{
+	if (part < 0 || part >= HD_LARA_PART_COUNT || kPart[part].kind != 1)
+		return -1;
+
+	return HD_LARA_TWIN_SLOT_BASE + part;
+}
+
+/* THE TWO SIDES OF A HAND FILE. The right arm's two bones against the left
+ * arm's two, in that order, because hd_trm breaks an exact tie by the sign of
+ * the vertex's x and side `a` is the positive one - measured: the install's
+ * HAND_BARE_REST carries 1,932 vertices on bones 9/10 at x 47..77 and 1,932 on
+ * 12/13 at x -77..-47, and every hand file of both remasters and of the user's
+ * mods is that way round. */
+const HDTrmMirrorPair* HDLaraHandMirror(int* pairs)
+{
+	static const HDTrmMirrorPair kMirror[2] =
+	{
+		{ (unsigned char)HD_LARA_ROUTARM, (unsigned char)HD_LARA_LOUTARM },
+		{ (unsigned char)HD_LARA_RHAND,   (unsigned char)HD_LARA_LHAND }
+	};
+
+	if (pairs)
+		*pairs = 2;
+
+	return kMirror;
+}
+
+void HDLaraHandFoldBar(int perMille)
+{
+	g_fold_bar = perMille;
+}
+
+void HDLaraHandsFromInstall(bool on)
+{
+	g_hand_twin = on;
 }
 
 const char* HDLaraPartModel(int outfit, int part)
@@ -1690,6 +1770,27 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.rigidNode = kPart[part].rigid;
 		one.onlyPage = kPart[part].onlyPage;
 
+		/* THE MIRRORED WEIGHTS OF A HAND FILE (#153, round M2b). Every part
+		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
+		 * 12 and 13, and a file drawn once and mirrored is the only place the
+		 * two sides can be confused. The bar and the measurement behind it are
+		 * in hd_lara.h. */
+		if (kPart[part].kind == 1)
+		{
+			one.mirror = HDLaraHandMirror(&one.mirrors);
+			one.mirrorBar = g_fold_bar;
+
+			/* AND THE INSTALL'S OWN HANDS UNDER A MOD'S GUN (#153, round
+			 * M2b). Offered for every hand part and taken for almost none:
+			 * hd_model loads the twin only when the part's own model came out
+			 * of a mod AND that mod paints the hands with a page of another
+			 * bundle. The rest hands are what say which of the install's own
+			 * pages are skin - every page they have is skin and nothing else,
+			 * which is the measurement the held-item rule below rests on. */
+			one.twinSlot = g_hand_twin ? HDLaraPartTwinSlot(part) : -1;
+			one.twinSkinOf = kPart[HD_LARA_PART_HAND_REST].model;
+		}
+
 		/* The BODY is looked at while it is still a file (#123, fix round K,
 		 * K1): the inner skin's texel is a place on a page of the outfit, and
 		 * after the build there is no page and no vertex left to ask. */
@@ -1753,6 +1854,15 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		return false;
 	}
 
+	/* THE GLOVES, ASKED FOR AND NOT GIVEN (#153, round M2b). One line per
+	 * level build, and only when something really asked - so a log with no
+	 * such line is a log in which nothing wanted gloves, rather than one in
+	 * which the question was never put. */
+	if (asked_for_gloves(level->outfit))
+		note("%s asks for gloves and wears the bare hands anyway - the "
+			"wardrobe wears bare hands everywhere (the user's decision, "
+			"round M2b)", HDLaraOutfitLabel(level->outfit));
+
 	double drift_sum = 0;
 	float drift_worst = 0;
 	int drift_parts = 0;
@@ -1772,14 +1882,6 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		if (stats)
 			stats->wanted++;
 
-		/* A gloved outfit with a hand part the wardrobe has no gloved twin
-		 * for - none today, and the line is here so the day there is one it
-		 * is in the log and not a surprise in a screenshot. */
-		if (takes_gloves(level->outfit) && kPart[part].kind == 1 &&
-			!kPart[part].gloves)
-			note("%s: no gloved variant in the wardrobe - %s is worn bare",
-				HDLaraPartLabel(part), model);
-
 		const int slot = HDLaraPartSlot(part);
 
 		if (!HDModelHas(slot))
@@ -1793,6 +1895,49 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		}
 
 		g_has[part] = true;
+
+		/* THE INSTALL'S OWN HANDS, IF hd_model LOADED THEM (#153, round M2b).
+		 * It decides - see HDModelSlot::twinSlot - and this is where the draw
+		 * finds out. Its own note says which pages went which way. */
+		if (kPart[part].kind == 1 && HDModelHas(HDLaraPartTwinSlot(part)))
+		{
+			g_twin[part] = true;
+
+			if (stats)
+			{
+				stats->loaded++;
+				stats->twins++;
+				stats->vertices += HDModelVertices(HDLaraPartTwinSlot(part));
+				stats->indices += HDModelIndices(HDLaraPartTwinSlot(part));
+			}
+
+			note("%s: the install's own %s is drawn beside it for the hands, "
+				"cut to its %d skin page%s - the mod's file keeps the gun and "
+				"%d page%s of its own", HDLaraPartLabel(part), model,
+				HDModelPageCount(HDLaraPartTwinSlot(part)),
+				HDModelPageCount(HDLaraPartTwinSlot(part)) == 1 ? "" : "s",
+				HDModelPageCount(slot),
+				HDModelPageCount(slot) == 1 ? "" : "s");
+		}
+
+		/* WHAT THE MIRROR FOLD FOUND IN THIS FILE (#153, round M2b). One line
+		 * per hand part that had anything to fold, and silence for one that
+		 * had not - which is every file of the remaster's own wardrobe, whose
+		 * crossed vertices all sit below the bar. */
+		if (kPart[part].kind == 1)
+		{
+			HDTrmFoldCounts fold;
+
+			if (HDModelFoldCounts(slot, &fold) &&
+				(fold.folded || fold.renormed))
+				note("%s: %s crossed=%d folded=%d tied=%d renorm=%d - %d of its "
+					"vertices name both hands, the worst with %d per mille on "
+					"the far one; %d were folded back (bar %d) and %d had "
+					"weights that did not sum to 255",
+					HDLaraPartLabel(part), model, fold.crossed, fold.folded,
+					fold.tied, fold.renormed, fold.crossed, fold.worstPermille,
+					fold.folded, g_fold_bar, fold.renormed);
+		}
 
 		/* THE INNER SKIN'S ONE TEXEL (#123, fix round K, K1). Measured off
 		 * the outfit's own top neck ring while the .TRM was still a file;
@@ -2031,6 +2176,7 @@ void HDLaraLevelEnd()
 	for (int i = 0; i < HD_LARA_PART_COUNT; i++)
 	{
 		g_has[i] = false;
+		g_twin[i] = false;
 		g_planned[i] = false;
 		g_coverage[i] = 0;
 	}
@@ -2049,6 +2195,11 @@ int HDLaraOutfitNow()
 bool HDLaraHasPart(int part)
 {
 	return part >= 0 && part < HD_LARA_PART_COUNT && g_has[part];
+}
+
+bool HDLaraHasPartTwin(int part)
+{
+	return part >= 0 && part < HD_LARA_PART_COUNT && g_twin[part];
 }
 
 bool HDLaraPartPlanned(int part)
@@ -2093,14 +2244,15 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	 * shone like bare skin. */
 	if (kPart[part].kind == 1)
 	{
-		const bool gloved = takes_gloves(g_outfit) && kPart[part].gloves;
-		const float* was = gloved ? kSheenLeather : kSheenSkin;
-
+		/* AND IT IS ALWAYS THE SKIN'S (#153, round M2b). takes_gloves answers
+		 * false for every outfit now, so the leather branch this line used to
+		 * have could never be taken; kSheenLeather is still the holster rig's
+		 * material and is read below. */
 		if (strength)
-			*strength = was[0];
+			*strength = kSheenSkin[0];
 
 		if (power)
-			*power = was[1];
+			*power = kSheenSkin[1];
 
 		return;
 	}

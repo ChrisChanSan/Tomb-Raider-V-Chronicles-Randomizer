@@ -153,6 +153,58 @@ void HDTrmFree(HDTrmModel* model);
 // the wrong page.
 int HDTrmPageOf(const HDTrmModel* model, const HDTrmVertex* vertex);
 
+/* THE MIRRORED WEIGHTS OF A TWO-SIDED FILE (#153, round M2b).
+ *
+ * A model of Lara's two hands is drawn once and mirrored, and an exporter that
+ * mirrors the GEOMETRY without mirroring the bone names leaves vertices of one
+ * hand carrying weight on the other hand's bones. In the bind pose the two
+ * hands sit beside each other and nothing shows; the moment an animation moves
+ * them apart, the far bone drags those vertices into the gap between the hands
+ * and the picture is a sliver of skin hanging in the air. The user's screenshot
+ * of the HK USP mod in RICH2 is exactly that.
+ *
+ * `pair` names the SIDES: pair[i].a is a bone of the side that stands at
+ * POSITIVE x in the model's own frame and pair[i].b the same bone of the other.
+ * A vertex whose weights name bones from both sides is CROSSED, and the side
+ * with the larger weight sum is the side it really belongs to; the far side's
+ * weight is moved onto that bone's counterpart - a.b -> a.a and a.a -> a.b -
+ * and the weights are added where the counterpart is already named. An exact
+ * tie is decided by the sign of the vertex's own x, which is the same rule read
+ * off the geometry instead of off the weights - measured to agree with the
+ * majority on every one of the 1,357 crossed vertices of the install's fifteen
+ * hand files and the user's four gun mods.
+ *
+ * `barPermille` is how big the far side's share must be before a vertex is
+ * folded at all, in thousandths of the vertex's own weight sum; 0 folds every
+ * crossed vertex. The number this engine uses and the measurement behind it
+ * are in hd_lara.cpp.
+ *
+ * The weights are renormalised to sum to 255 - the sum every one of the
+ * 1,260,496 vertices of the remaster's own game 5 has, and the sum the shader
+ * assumes - for every vertex of the model, folded or not. A vertex that
+ * already sums to 255 is not touched, so a file with no crossed vertices and
+ * no odd sums comes out of this byte for byte as it went in.
+ *
+ * Any pointer may be null; `counts` is optional. */
+struct HDTrmMirrorPair
+{
+	unsigned char a;
+	unsigned char b;
+};
+
+struct HDTrmFoldCounts
+{
+	int crossed;		// vertices whose weights named both sides
+	int folded;		// of those, the ones weight was moved on
+	int tied;		// crossed, no majority - left exactly as they were
+	int renormed;		// vertices whose three weights did not sum to 255
+	int worstPermille;	// the largest far-side share met, per mille
+	int foldedPermille;	// the largest share actually folded
+};
+
+void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs,
+	int barPermille, HDTrmFoldCounts* counts);
+
 /* WHAT THIS READER HAS DONE SINCE THE PROCESS STARTED (#153, round M2, the
  * fix round). Three running totals, and a caller that wants "per level build"
  * takes them twice and subtracts:

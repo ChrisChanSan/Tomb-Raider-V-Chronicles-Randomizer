@@ -134,6 +134,34 @@
  *                         how much head weight the worst of them still
  *                         carries. It is the measurement the cut's threshold
  *                         and the lid's shape both come out of.
+ *     -handfold [<permille>]
+ *                         THE MIRRORED HAND WEIGHTS (#153, round M2b), and
+ *                         what folding them back costs. A hand file is drawn
+ *                         once and mirrored, and an exporter that mirrors the
+ *                         geometry without the bone names leaves vertices of
+ *                         one hand weighted on the other - invisible in the
+ *                         bind pose and a sliver of skin hanging in the gap
+ *                         the moment the arms move apart. One row per hand
+ *                         part: how many vertices name both hands, how many
+ *                         the bar folds, how many are weighted exactly half
+ *                         and half, how many do not sum to 255, the worst far
+ *                         share, and the largest and mean DISPLACEMENT the
+ *                         fold causes in the pose -lara-pose asks for - the
+ *                         same vertex skinned twice through the same node
+ *                         matrices the card is given. The fold is the
+ *                         engine's own call, so what this prints is what the
+ *                         game does. Without a number the bar is the engine's
+ *                         HD_LARA_HAND_FOLD_BAR; 0 measures every crossed
+ *                         vertex, which is how the bar was chosen. Needs the
+ *                         camera, so it does not combine with -nodraw - and
+ *                         it wants a pose with the hands APART, e.g.
+ *                         -lara-pose 9 50 40 -lara-pose 12 -50 40.
+ *     -nofold             build the hands from the file exactly as it stands:
+ *                         the picture from BEFORE round M2b, sliver and all.
+ *     -nohandmix          draw a mod's hand model whole, in the mod's own
+ *                         skin, instead of putting the install's hands under
+ *                         its gun (#153, round M2b) - the other half of the
+ *                         BEFORE picture.
  *     -tween60 [<n> ...]  REPLAY those animations at SIXTY (#123, fix round
  *                         U; #148, order 4): every drawn frame, tick and
  *                         tween alike, with every node's origin in her own
@@ -5814,6 +5842,12 @@ struct LaraOptions
 	/* #123 fix round U (U1): the wardrobe measured by BONE WEIGHT rather
 	 * than by position - what carries node 14, and where the rim of that is. */
 	bool headWeight;
+	/* #153 round M2b: the MIRRORED hand weights, and what folding them back
+	 * moves in the pose the command line asks for. -1 is off, otherwise the
+	 * bar in per mille the fold is measured at. */
+	int handFold;
+	bool noFold;			// #153 round M2b: the picture before the round
+	bool noHandMix;			// #153 round M2b: and the other half of it
 	bool poseRisk;			// #148 order 4, fix round S (S2)
 	/* #123 fix round U (U2): the animations to replay at sixty, frame by
 	 * frame, LARA-relative. Empty means the switch was not given. */
@@ -6053,8 +6087,25 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	printf("slots   : %d of Lara's own slots loaded in this level\n",
 		(int)present.size());
 
-	HDModelSlot wanted[HD_LARA_PART_COUNT];
-	const int count = HDLaraPlan(&wardrobe, wanted, HD_LARA_PART_COUNT);
+	/* -nofold: the hands built from the file exactly as it stands, which is
+	 * the picture from before round M2b. Set before the plan, because that is
+	 * where the bar is read. */
+	if (o.noFold)
+	{
+		HDLaraHandFoldBar(1001);
+		printf("handfold: OFF (-nofold) - the mirrored weights are left where "
+			"the file has them, which is the BEFORE picture\n");
+	}
+
+	if (o.noHandMix)
+	{
+		HDLaraHandsFromInstall(false);
+		printf("handmix : OFF (-nohandmix) - a mod's hand model is drawn whole, "
+			"in its own skin, which is the BEFORE picture\n");
+	}
+
+	HDModelSlot wanted[HD_LARA_PART_COUNT * 2];
+	const int count = HDLaraPlan(&wardrobe, wanted, HD_LARA_PART_COUNT * 2);
 
 	printf("wardrobe: %d parts planned\n", count);
 
@@ -6072,8 +6123,15 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	const bool ok = HDLaraLevelBuild(&wardrobe, &laraStats);
 
 	printf("\n-- what was loaded -------------------------------------------\n");
-	printf("parts              %d wanted, %d on the card, %d missing\n",
-		laraStats.wanted, laraStats.loaded, laraStats.missing);
+	printf("parts              %d wanted, %d on the card, %d missing%s",
+		laraStats.wanted, laraStats.loaded, laraStats.missing,
+		laraStats.twins ? "" : "\n");
+
+	// #153 round M2b: the install's own hands beside a mod's gun are on the
+	// card and are not parts, so the two numbers differ and this says why.
+	if (laraStats.twins)
+		printf(" (%d of them the install's own hands under a mod's gun)\n",
+			laraStats.twins);
 	printf("geometry           %d vertices, %d indices, %d draw calls\n",
 		laraStats.vertices, laraStats.indices, laraStats.ranges);
 	printf("buffers            %.1f KiB vertices + %.1f KiB indices = %.1f KiB\n",
@@ -6564,6 +6622,138 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			sqrt(h[12] * h[12] + h[13] * h[13] + h[14] * h[14]),
 			t[12], t[13], t[14],
 			sqrt(t[12] * t[12] + t[13] * t[13] + t[14] * t[14]));
+	}
+
+	/* THE MIRRORED HAND WEIGHTS, AND WHAT FOLDING THEM COSTS (#153, round
+	 * M2b). The rule itself is the engine's - HDTrmFoldMirrored, the very call
+	 * hd_model makes while it loads the same file - so what this prints is what
+	 * the game does. What it adds is the PRICE, which only a pose can say: the
+	 * same vertex skinned twice through the node matrices built above, once
+	 * with the file's own weights and once with the folded ones, and the
+	 * distance between the two answers.
+	 *
+	 * It is the measurement the bar comes out of. In the bind pose the two
+	 * hands sit beside each other and every weighting draws the same picture,
+	 * so the pose has to have the arms APART - which is what
+	 * "-lara-pose 9 50 40 -lara-pose 12 -50 40" is for. */
+	if (o.handFold >= 0)
+	{
+		printf("\n-- the mirrored hand weights, bar %d per mille -------------\n",
+			o.handFold);
+		printf("%-26s %7s %7s %6s %5s %6s %6s %8s %8s\n", "model",
+			"verts", "crossed", "folded", "tied", "renorm", "worst",
+			"moved", "worst mv");
+
+		for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+		{
+			const char* model = HDLaraPartModel(outfit, part);
+
+			if (!model || !HDLaraHasPart(part) ||
+				HDLaraPartTwinSlot(part) < 0)
+				continue;
+
+			char path[512];
+			int mod = -1;
+
+			if (!HDModelFindFile(model, false, true, path, sizeof(path), &mod))
+			{
+				printf("%-26s %s\n", model, "no file - this build did not load it");
+				continue;
+			}
+
+			HDTrmModel raw, folded;
+			const char* trouble = "";
+
+			if (!HDTrmLoad(path, &raw, &trouble))
+			{
+				printf("%-26s %s\n", model, trouble);
+				continue;
+			}
+
+			if (!HDTrmLoad(path, &folded, &trouble))
+			{
+				HDTrmFree(&raw);
+				printf("%-26s %s\n", model, trouble);
+				continue;
+			}
+
+			int pairs = 0;
+			const HDTrmMirrorPair* mirror = HDLaraHandMirror(&pairs);
+			HDTrmFoldCounts counts;
+
+			HDTrmFoldMirrored(&folded, mirror, pairs, o.handFold, &counts);
+
+			/* THE SKINNING, exactly as hd_model.hlsl does it: the weighted sum
+			 * over the three bones of (p - bind[bone]) * M[bone]. The bind
+			 * fold is in set_joint in the engine and written out here. */
+			double moved = 0.0, worstMove = 0.0;
+			int movedCount = 0;
+
+			for (int v = 0; v < raw.vertices; v++)
+			{
+				double before[3] = { 0, 0, 0 }, after[3] = { 0, 0, 0 };
+				bool differs = false;
+
+				for (int b = 0; b < 3; b++)
+					if (raw.vertex[v].bone[b] != folded.vertex[v].bone[b] ||
+						raw.vertex[v].weight[b] != folded.vertex[v].weight[b])
+						differs = true;
+
+				if (!differs)
+					continue;
+
+				for (int which = 0; which < 2; which++)
+				{
+					const HDTrmVertex& in = which ? folded.vertex[v] : raw.vertex[v];
+					double* out = which ? after : before;
+
+					for (int b = 0; b < 3; b++)
+					{
+						const int node = in.bone[b];
+						const double w = (double)in.weight[b] / 255.0;
+
+						if (!in.weight[b] || node >= HD_LARA_NODES)
+							continue;
+
+						const float* m = &matrices[node * 16];
+						const double px = in.x - body.bind[node][0];
+						const double py = in.y - body.bind[node][1];
+						const double pz = in.z - body.bind[node][2];
+
+						for (int c = 0; c < 3; c++)
+							out[c] += w * (px * m[0 * 4 + c] + py * m[1 * 4 + c] +
+								pz * m[2 * 4 + c] + m[3 * 4 + c]);
+					}
+				}
+
+				const double dx = after[0] - before[0];
+				const double dy = after[1] - before[1];
+				const double dz = after[2] - before[2];
+				const double d = sqrt(dx * dx + dy * dy + dz * dz);
+
+				moved += d;
+				movedCount++;
+
+				if (d > worstMove)
+					worstMove = d;
+			}
+
+			printf("%-26s %7d %7d %6d %5d %6d %5d%s %8d %8.2f\n", model,
+				raw.vertices, counts.crossed, counts.folded, counts.tied,
+				counts.renormed, counts.worstPermille, "pm", movedCount,
+				worstMove);
+
+			if (movedCount)
+				printf("%-26s   mean move %.2f units over the %d vertices the "
+					"fold touched%s\n", "", moved / movedCount, movedCount,
+					mod >= 0 ? ", out of a mod" : ", out of the install");
+
+			HDTrmFree(&raw);
+			HDTrmFree(&folded);
+		}
+
+		printf("(the pose is the one -lara-pose asked for; in the bind pose the "
+			"two hands sit beside each other and nothing moves)\n");
 	}
 
 	/* THE BRAID. In the game the six links come from hairs[0][n], which the
@@ -7077,6 +7267,14 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
 			light, list[i].nodeMask & bodyMask, &lighting))
 			drawn++;
+
+		/* The install's own hands under a mod's gun (#153, round M2b), in the
+		 * same place and with the same arguments the engine gives them - see
+		 * hd_laradraw.cpp. */
+		if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part) &&
+			HDModelDraw(HDLaraPartTwinSlot(list[i].part), matrices,
+			HD_LARA_NODES, light, list[i].nodeMask & bodyMask, &lighting))
+			drawn++;
 	}
 
 	if (!o.firstPerson && draws(HD_LARA_PART_BRAID) &&
@@ -7176,6 +7374,9 @@ int main(int argc, char** argv)
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
 	bool laraHeadWeight = false;	// #123 fix round U (U1)
+	int laraHandFold = -1;		// #153 round M2b
+	bool laraNoFold = false;	// #153 round M2b: the BEFORE picture
+	bool laraNoHandMix = false;	// #153 round M2b: and the other half of it
 	bool laraPoseRisk = false;	// #148 order 4, fix round S (S2)
 	std::vector<int> laraTween60;	// #123 fix round U (U2)
 	bool laraHandLight = false;	// #123 fix round K (K2): the wrist seam
@@ -7298,6 +7499,32 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraHeadWeight = true;
+		}
+		/* #153 round M2b: the mirrored hand weights, and what folding them
+		 * back costs in THIS pose. An optional bar in per mille; without one
+		 * the engine's own HD_LARA_HAND_FOLD_BAR. */
+		else if (!_stricmp(argv[i], "-handfold"))
+		{
+			lara = true;
+			laraHandFold = HD_LARA_HAND_FOLD_BAR;
+
+			if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
+				laraHandFold = atoi(argv[++i]);
+		}
+		/* #153 round M2b: build the hands from the file exactly as it stands,
+		 * which is the picture from BEFORE the round. A share of 1001 is one
+		 * no vertex can reach. */
+		else if (!_stricmp(argv[i], "-nofold"))
+		{
+			lara = true;
+			laraNoFold = true;
+		}
+		/* #153 round M2b: a mod's hand model drawn whole, in the mod's own
+		 * skin - the other half of the BEFORE picture. */
+		else if (!_stricmp(argv[i], "-nohandmix"))
+		{
+			lara = true;
+			laraNoHandMix = true;
 		}
 		/* #123 fix round U (U1d): the eye off the head joint, for the frame
 		 * a landing gives - the camera outside the skull, the nape in front
@@ -7724,6 +7951,9 @@ int main(int argc, char** argv)
 		o.noSheen = noSheen;
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
+		o.handFold = laraHandFold;
+		o.noFold = laraNoFold;
+		o.noHandMix = laraNoHandMix;
 		o.poseRisk = laraPoseRisk;
 		o.tween60 = laraTween60;
 		o.handLight = laraHandLight;

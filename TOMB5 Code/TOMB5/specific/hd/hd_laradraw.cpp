@@ -624,14 +624,14 @@ void HDLaraDrawBuild(const char* stem)
 	g_active = HDLaraLevelBuild(&g_level, &stats);
 
 	Log("HDLOG level=%s lara outfit=%s(%s) laratype=%d data3=%d hd=%d "
-		"parts=%d/%d missing=%d "
+		"parts=%d/%d twins=%d missing=%d "
 		"slots=%d hands=%d braid=%d verts=%d idx=%d ranges=%d pages=%d "
 		"vb_kib=%.0f ib_kib=%.0f drift=%.0f/%.0f over %d reason=%s",
 		stem, HDLaraOutfitModel(g_level.outfit)
 			? HDLaraOutfitModel(g_level.outfit) : "-",
 		HDLaraOutfitLabel(g_level.outfit), (int)LaraDrawType, (int)GfHdOutfit,
 		(int)g_active, stats.loaded,
-		stats.wanted, stats.missing, g_laraSlotCount, g_handSlotCount,
+		stats.wanted, stats.twins, stats.missing, g_laraSlotCount, g_handSlotCount,
 		(int)HDLaraHasPart(HD_LARA_PART_BRAID), stats.vertices, stats.indices,
 		stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
 		stats.indexBytes / 1024.0, stats.driftMean, stats.driftWorst,
@@ -1305,6 +1305,19 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		if (HDObjectPush(HDLaraPartSlot(pieces[i].part), matrices,
 			HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
 			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
+			drawn++;
+
+		/* AND THE INSTALL'S OWN HANDS UNDER A MOD'S GUN (#153, round M2b).
+		 *
+		 * Same matrices, same node mask, same light, same sheen: it IS the
+		 * hand of this part, in this pose - the mod's file has had its hands
+		 * cut away and this is what stands in their place. HDLaraHasPartTwin
+		 * is false for every part of an unmodded wardrobe, so this line costs
+		 * a test and nothing else. */
+		if (HDLaraHasPartTwin(pieces[i].part) &&
+			HDObjectPush(HDLaraPartTwinSlot(pieces[i].part), matrices,
+				HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
+				lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
 			drawn++;
 	}
 

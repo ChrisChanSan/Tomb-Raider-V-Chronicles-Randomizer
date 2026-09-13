@@ -146,6 +146,10 @@ namespace
 		 * `neckNode` instead of `rigidNode`, and -1 when there is none. */
 		int neckBone = -1;
 		int neckNode = -1;
+
+		// What the mirror fold moved on this file (#153, round M2b), for the
+		// caller's own log line - all zero for a slot that asked for none.
+		HDTrmFoldCounts fold = { 0, 0, 0, 0, 0, 0 };
 	};
 
 	const int kJointBudget = 32;
@@ -625,14 +629,50 @@ namespace
 	 * number back down to the plain one where the two would open the same
 	 * file, so a mod that ships a model and no art of its own pays for that
 	 * art once (#153, round M2). */
+	/* WHICH PAGES OF A FILE ARE BUILT (#123, fix round D, D4; a SET and either
+	 * polarity since #153, round M2b).
+	 *
+	 * Round D cut ONE page out of a bigger model - the holster rig out of the
+	 * London catsuit. Round M2b needs the other polarity and more than one page
+	 * at a time: a mod's hand keeps its gun and DROPS the pages that resolve
+	 * into another bundle, and the install's own file of the same name KEEPS
+	 * only the pages that are its skin. One mechanism does both, because two
+	 * would be two chances to disagree about what a page number means.
+	 *
+	 * The numbers are the FILE'S own, as the .TRM writes them, and never cache
+	 * keys - see HDModelSlot::cutPage. */
+	struct PageCut
+	{
+		const int* page;
+		int count;
+		bool keeps;
+
+		bool wants(int rawPage) const
+		{
+			if (count <= 0 || !page)
+				return true;
+
+			bool found = false;
+
+			for (int i = 0; i < count; i++)
+				if (page[i] == rawPage)
+				{
+					found = true;
+					break;
+				}
+
+			return found == keeps;
+		}
+	};
+
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
-		int pageBias, int* mixedTriangles, const char** why, int onlyPage = -1)
+		int pageBias, int* mixedTriangles, const char** why, const PageCut& cut)
 	{
 		const int vertices = trm.vertices;
 
 		std::vector<HDModelVertex> buffer((size_t)vertices);
 
-		/* THE PAGE CUT (#123, fix round D, D4). With onlyPage set, a vertex
+		/* THE PAGE CUT (#123, fix round D, D4). With a cut in hand, a vertex
 		 * no kept triangle names takes no part in ANYTHING the loop below
 		 * measures - not the bounds, not the node coverage, not the bind
 		 * drift. Otherwise a holster cut out of an outfit would report that
@@ -640,14 +680,15 @@ namespace
 		 * and the composite would hand it the whole body's work. The vertex
 		 * itself stays in the buffer: the index list is the file's own and
 		 * renumbering it would buy 400 KiB and a new class of bug. */
-		std::vector<bool> keep((size_t)vertices, onlyPage < 0);
+		const bool whole = cut.count <= 0 || !cut.page;
+		std::vector<bool> keep((size_t)vertices, whole);
 
-		if (onlyPage >= 0)
+		if (!whole)
 			for (int i = 0; i + 2 < trm.indices; i += 3)
 			{
 				const int page = HDTrmPageOf(&trm, &trm.vertex[trm.index[i]]);
 
-				if (page != onlyPage)
+				if (!cut.wants(page))
 					continue;
 
 				for (int corner = 0; corner < 3; corner++)
@@ -928,8 +969,8 @@ namespace
 
 			const bool okA = layerA >= 1 && layerA <= trm.textures;
 
-			// The raw page is still wanted for the `onlyPage` test below,
-			// which is about the FILE's numbering and not the cache's.
+			// The raw page is still wanted for the page CUT below, which is
+			// about the FILE's numbering and not the cache's.
 			const int rawA = okA ? (int)trm.texture[layerA - 1] : -1;
 
 			const int a = okA ? key_of_layer[(size_t)(layerA - 1)] : -1;
@@ -943,7 +984,7 @@ namespace
 
 			page_of_triangle.push_back(a);
 
-			if (a >= 0 && (onlyPage < 0 || rawA == onlyPage) &&
+			if (a >= 0 && cut.wants(rawA) &&
 				std::find(model.pages.begin(), model.pages.end(), a) == model.pages.end())
 				model.pages.push_back(a);
 
@@ -1017,8 +1058,8 @@ namespace
 						continue;
 
 					// The page cut (#123, fix round D, D4).
-					if (onlyPage >= 0 &&
-						HDTrmPageOf(&trm, &trm.vertex[trm.index[at]]) != onlyPage)
+					if (!cut.wants(HDTrmPageOf(&trm,
+						&trm.vertex[trm.index[at]])))
 						continue;
 
 					triangles.push_back((int)(at / 3));
@@ -1082,8 +1123,8 @@ namespace
 
 		if (indices.empty())
 		{
-			*why = onlyPage >= 0
-				? "has no triangle on the page that was asked for"
+			*why = cut.count > 0
+				? "has no triangle on the pages that were asked for"
 				: "has no triangle in any pass";
 			return false;
 		}
@@ -1754,7 +1795,17 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		HDModelOrigin origin;
 		int pageBias;		// 0, HD_PAGE_ALT_BASE for a TR3 guest, or
 					// the mod's namespace (#153, round M1)
-		int onlyPage;		// #123 fix round D (D4): -1 = the whole model
+		/* #123 fix round D (D4), a SET since #153 round M2b: which pages of
+		 * the file are built. Empty is the whole model. The numbers live here
+		 * rather than in the caller's slot because round M2b works two of
+		 * them out itself, while the file is open. */
+		std::vector<int> cutPage;
+		bool cutKeeps;
+		/* #153 round M2b: the index in `slots` this entry borrows its skeleton
+		 * from, for a twin this module made up itself; -1 for every entry a
+		 * caller asked for. */
+		int twinOf;
+		HDTrmFoldCounts fold;	// #153 round M2b: what the mirror fold did
 	};
 
 	std::vector<Pending> pending;
@@ -1816,7 +1867,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			made.name = model ? model : "NECK_CAP";
 			made.origin = HD_MODEL_ORIGIN_5;
 			made.pageBias = 0;
-			made.onlyPage = -1;
+			made.cutKeeps = true;
+			made.twinOf = -1;
 			std::memset(&made.trm, 0, sizeof(made.trm));
 			std::memset(&made.head, 0, sizeof(made.head));
 
@@ -1925,7 +1977,12 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * sends its pages back to the I-III bundle. */
 		here.pageBias = mod >= 0 ? HDPageModBase(mod)
 			: tr3 ? HD_PAGE_ALT_BASE : 0;
-		here.onlyPage = slots[i].onlyPage;
+		here.cutKeeps = true;
+		here.twinOf = -1;
+
+		if (slots[i].onlyPage >= 0)
+			here.cutPage.push_back(slots[i].onlyPage);
+		std::memset(&here.fold, 0, sizeof(here.fold));
 		std::memset(&here.trm, 0, sizeof(here.trm));
 		std::memset(&here.head, 0, sizeof(here.head));
 
@@ -1948,6 +2005,172 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * anything here touches it. */
 		if (slots[i].measure)
 			slots[i].measure(&here.trm);
+
+		/* THE MIRRORED WEIGHTS, FOLDED BACK (#153, round M2b) - before the
+		 * measure above?  No: after it, and deliberately. The measure looks at
+		 * the outfit's NECK and reads positions and pages, which this never
+		 * touches; putting the fold first would only mean the one caller with
+		 * a measure could no longer say what the file said. Everything that
+		 * builds out of the weights comes after this line. */
+		if (slots[i].mirror && slots[i].mirrors > 0)
+			HDTrmFoldMirrored(&here.trm, slots[i].mirror, slots[i].mirrors,
+				slots[i].mirrorBar, &here.fold);
+
+		/* MOD GUNS ON THE INSTALL'S HANDS (#153, round M2b). What this is and
+		 * why it is decided here rather than by the caller is written out at
+		 * HDModelSlot::twinSlot; this is the arithmetic.
+		 *
+		 * The question asked of every page the model names is the cache's own -
+		 * where would this page really be read from - so there is no second
+		 * copy of that chain and no way for the two to drift apart. Only a page
+		 * that lands in a game folder of the OTHER bundle counts: a mod's own
+		 * page and one that falls through to the install are both the mod
+		 * saying what it meant. */
+		if (slots[i].twinSlot >= 0 && mod >= 0 && here.trm.textures > 0)
+		{
+			std::vector<int> foreign;
+
+			for (int t = 0; t < here.trm.textures; t++)
+			{
+				const int raw = (int)here.trm.texture[t];
+				const int from = HDPageCacheOriginOf(installRoot,
+					HDPageCacheKeyOf(raw + here.pageBias));
+
+				if (from >= 1 && from <= 3)
+					foreign.push_back(raw);
+			}
+
+			if (!foreign.empty())
+			{
+				/* The install's own file of the same name, and the rest
+				 * hands' pages that say which of its own are skin. Both are
+				 * read from the INSTALLS alone - a mod that replaces the rest
+				 * hands is answering a different question. */
+				char twinPath[512], skinPath[512];
+				HDTrmModel skin;
+				std::vector<int> keep;
+				const char* skinTrouble = "";
+				const bool haveTwin = HDModelFindFile(model, false, false,
+					twinPath, sizeof(twinPath), 0);
+				const bool haveSkin = slots[i].twinSkinOf &&
+					HDModelFindFile(slots[i].twinSkinOf, false, false, skinPath,
+						sizeof(skinPath), 0) &&
+					HDTrmLoad(skinPath, &skin, &skinTrouble);
+
+				if (haveSkin)
+				{
+					for (int t = 0; t < skin.textures; t++)
+						keep.push_back((int)skin.texture[t]);
+
+					HDTrmFree(&skin);
+				}
+
+				if (haveTwin && !keep.empty())
+				{
+					Pending twin;
+
+					twin.slot = slots[i].twinSlot;
+					twin.hasHead = false;
+					twin.name = model;
+					twin.origin = HD_MODEL_ORIGIN_5;
+					twin.pageBias = 0;
+					twin.cutPage = keep;
+					twin.cutKeeps = true;
+					twin.twinOf = i;
+					std::memset(&twin.fold, 0, sizeof(twin.fold));
+					std::memset(&twin.trm, 0, sizeof(twin.trm));
+					std::memset(&twin.head, 0, sizeof(twin.head));
+
+					const double twin_started = now_ms();
+					const char* twinTrouble = "";
+					const bool twinRead = HDTrmLoad(twinPath, &twin.trm,
+						&twinTrouble);
+
+					read_ms += now_ms() - twin_started;
+
+					if (!twinRead)
+						note("MODLOG %s (slot %d): the install's own %s.TRM %s "
+							"- the mod's hands are drawn as they are",
+							slot_label(slot, model), slot, model, twinTrouble);
+					else
+					{
+						/* The twin's hands must be folded like any other hand
+						 * file, and by the same rule: it is the same kind of
+						 * file and the caller asked for the fold on this
+						 * part. */
+						if (slots[i].mirror && slots[i].mirrors > 0)
+							HDTrmFoldMirrored(&twin.trm, slots[i].mirror,
+								slots[i].mirrors, slots[i].mirrorBar,
+								&twin.fold);
+
+						here.cutPage = foreign;
+						here.cutKeeps = false;
+
+						std::string gunList, skinList;
+						int guns = 0;
+
+						for (size_t f = 0; f < foreign.size(); f++)
+						{
+							if (!skinList.empty())
+								skinList += ", ";
+							skinList += std::to_string(foreign[f]);
+						}
+
+						for (int t = 0; t < here.trm.textures; t++)
+						{
+							const int raw = (int)here.trm.texture[t];
+							bool dropped = false;
+
+							for (size_t f = 0; f < foreign.size(); f++)
+								if (foreign[f] == raw)
+									dropped = true;
+
+							if (dropped)
+								continue;
+
+							if (!gunList.empty())
+								gunList += ", ";
+							gunList += std::to_string(raw);
+							guns++;
+						}
+
+						note("MODLOG %s (slot %d): mod%d's %s paints its HANDS "
+							"with page%s %s of the Tomb Raider I-III bundle - "
+							"the hands come from the install's own %s (the %d "
+							"page%s it shares with %s), the gun from mod%d "
+							"(page%s %s)", slot_label(slot, model), slot, mod,
+							model, foreign.size() == 1 ? "" : "s",
+							skinList.c_str(), model, (int)keep.size(),
+							keep.size() == 1 ? "" : "s", slots[i].twinSkinOf,
+							mod, guns == 1 ? "" : "s",
+							guns ? gunList.c_str() : "none");
+
+						/* Only the pages the cut keeps are paid for, the same
+						 * rule the holster rig has had since fix round D. */
+						for (int t = 0; t < twin.trm.textures; t++)
+						{
+							const int raw = (int)twin.trm.texture[t];
+
+							for (size_t f = 0; f < keep.size(); f++)
+								if (keep[f] == raw)
+								{
+									pages.push_back(HDPageCacheKeyOf(raw));
+									break;
+								}
+						}
+
+						pending.push_back(twin);
+					}
+				}
+				else
+					note("MODLOG %s (slot %d): mod%d's %s wears another "
+						"bundle's skin, and %s - the mod's hands are drawn as "
+						"they are", slot_label(slot, model), slot, mod, model,
+						haveTwin ? "the rest hands say nothing about which "
+						"pages are skin" : "the install has no file of that "
+						"name");
+			}
+		}
 
 		/* A file the caller found itself says WHERE, in the same shape the
 		 * three notes below use (#153, round M2). Without it the wardrobe's
@@ -2009,11 +2232,18 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * here as well, which is all this loop ever asked for. */
 		const double keys_began = now_ms();
 
-		if (here.onlyPage >= 0)
-			pages.push_back(HDPageCacheKeyOf(here.onlyPage + here.pageBias));
-		else
+		{
+			const PageCut paid =
+			{
+				here.cutPage.empty() ? 0 : &here.cutPage[0],
+				(int)here.cutPage.size(), here.cutKeeps
+			};
+
 			for (int t = 0; t < here.trm.textures; t++)
-				pages.push_back(HDPageCacheKeyOf((int)here.trm.texture[t] + here.pageBias));
+				if (paid.wants((int)here.trm.texture[t]))
+					pages.push_back(
+						HDPageCacheKeyOf((int)here.trm.texture[t] + here.pageBias));
+		}
 
 		if (here.hasHead)
 			for (int t = 0; t < here.head.textures; t++)
@@ -2080,7 +2310,14 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		model.nodes = 0;
 
 		for (int k = 0; k < count; k++)
-			if (slots[k].slot == here.slot)
+			/* A TWIN TAKES ITS SKELETON FROM THE PART IT STANDS BESIDE (#153,
+			 * round M2b). It is not a slot the caller asked for - this module
+			 * made it - so `slots` has no row of its own for it, and without
+			 * this it would draw with no nodes and no bind fold at all: the
+			 * install's hands in their own bind pose while the mod's gun
+			 * follows the animation. */
+			if (slots[k].slot == here.slot ||
+				(here.twinOf >= 0 && k == here.twinOf))
 			{
 				model.nodes = slots[k].nodes;
 				model.rigidNode = slots[k].rigidNode;
@@ -2115,8 +2352,16 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		const char* trouble = "";
 
+		model.fold = here.fold;
+
+		const PageCut cut =
+		{
+			here.cutPage.empty() ? 0 : &here.cutPage[0],
+			(int)here.cutPage.size(), here.cutKeeps
+		};
+
 		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed,
-			&trouble, here.onlyPage))
+			&trouble, cut))
 		{
 			if (stats)
 				stats->refused++;
@@ -2208,7 +2453,11 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* trouble = "";
 		int ignore = 0;
 
-		if (!build(here.head, head, head.rigidNode, here.pageBias, &ignore, &trouble))
+		// The whole face: a page cut is the BODY's business (fix round D, D4).
+		const PageCut all = { 0, 0, true };
+
+		if (!build(here.head, head, head.rigidNode, here.pageBias, &ignore,
+			&trouble, all))
 		{
 			note("%s_HEAD (slot %d): %s", here.name.c_str(), here.slot, trouble);
 			free_model(head);
@@ -2297,6 +2546,29 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 void HDModelTr3Root(const char* root)
 {
 	g_install_tr3 = root ? root : "";
+}
+
+bool HDModelFindFile(const char* name, bool fromTr3, bool allowMods, char* out,
+	int size, int* mod)
+{
+	if (mod)
+		*mod = -1;
+
+	if (out && size > 0)
+		*out = 0;
+
+	if (!name || !*name || !out || size <= 0)
+		return false;
+
+	HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
+	const std::string path = find_model(name, fromTr3, &origin, mod,
+		allowMods ? kModsAny : kModsNone);
+
+	if (path.empty() || (int)path.size() >= size)
+		return false;
+
+	std::memcpy(out, path.c_str(), path.size() + 1);
+	return true;
 }
 
 void HDModelLevelEnd()
@@ -2581,6 +2853,19 @@ int HDModelPage(int slot, int at)
 		return -1;
 
 	return model->pages[(size_t)at];
+}
+
+bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)
+{
+	const Model* model = find(g_models, slot);
+
+	if (!model)
+		return false;
+
+	if (out)
+		*out = model->fold;
+
+	return true;
 }
 
 /* THE MATERIAL OF ONE PAGE (#123, fix round I, I4). See PageSheen at the top

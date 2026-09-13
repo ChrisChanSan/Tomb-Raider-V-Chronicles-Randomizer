@@ -259,6 +259,18 @@ int HDPageCacheCutoutPages();
 int HDPageCacheSlotOrigin(int slot);
 const char* HDPageCacheOriginText(int origin);
 
+/* THE SAME ANSWER BEFORE THE PAGE IS LOADED (#153, round M2b) - the very chain
+ * the append walks, asked about one key and loading nothing at all. `root5` is
+ * the game 5 folder, as HDPageCacheAppend takes it.
+ *
+ * It exists for a decision that has to be made while a model is still being
+ * READ: whether a mod's hand model wears another bundle's skin, which is what
+ * puts the install's own hands under the mod's gun (hd_model.cpp, the twin).
+ * Asking resolve_page rather than keeping a copy of its chain is the whole
+ * point - a second copy of that order is how ModelProbe's page rule went out of
+ * step with the cache until round M1 caught it. */
+int HDPageCacheOriginOf(const char* root5, int key);
+
 /* THE KEY A PAGE REALLY BELONGS UNDER (#153, round M2).
  *
  * Round M1 gave every mod a namespace so that a mod's 6111 and the install's

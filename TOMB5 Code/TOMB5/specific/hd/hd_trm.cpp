@@ -534,6 +534,161 @@ void HDTrmCounters(double* opens, double* loads, double* bytes)
 		*bytes = g_bytes;
 }
 
+/* THE MIRRORED WEIGHTS, FOLDED BACK (#153, round M2b). What the rule is and
+ * why it exists is in hd_trm.h; this is the arithmetic.
+ *
+ * It works on the three bone and weight bytes alone and never on a position, so
+ * nothing here can move a vertex that is not skinned across the two sides - and
+ * a model with no crossed vertex and no odd sum is not written to at all. */
+void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs,
+	int barPermille, HDTrmFoldCounts* counts)
+{
+	HDTrmFoldCounts local;
+
+	std::memset(&local, 0, sizeof(local));
+
+	if (!model || !model->vertex)
+	{
+		if (counts)
+			*counts = local;
+		return;
+	}
+
+	for (int i = 0; i < model->vertices; i++)
+	{
+		HDTrmVertex& v = model->vertex[i];
+		int sum = (int)v.weight[0] + (int)v.weight[1] + (int)v.weight[2];
+
+		/* WHICH SIDE THIS VERTEX IS ON, in its own weights. `side` is 0 for
+		 * the a-bones and 1 for the b-bones; a bone on neither side belongs
+		 * to neither sum and takes no part in the decision. */
+		int onSide[2] = { 0, 0 };
+
+		for (int b = 0; b < 3 && pair && pairs > 0; b++)
+		{
+			if (!v.weight[b])
+				continue;
+
+			for (int p = 0; p < pairs; p++)
+			{
+				if (v.bone[b] == pair[p].a)
+					onSide[0] += (int)v.weight[b];
+				else if (v.bone[b] == pair[p].b)
+					onSide[1] += (int)v.weight[b];
+			}
+		}
+
+		if (onSide[0] && onSide[1])
+		{
+			const int lesser = onSide[0] < onSide[1] ? onSide[0] : onSide[1];
+			const int share = sum > 0
+				? (lesser * 1000 + sum / 2) / sum : 0;
+
+			local.crossed++;
+
+			if (share > local.worstPermille)
+				local.worstPermille = share;
+
+			/* AN EXACT TIE IS BROKEN BY THE MODEL'S OWN X AXIS, and that is
+			 * not a second rule but the same one read off the geometry: side
+			 * a is the +x side, and over every crossed vertex of all fifteen
+			 * hand files of the install and all four of the user's gun mods -
+			 * 1,357 of them - the majority side and the sign of x agree
+			 * 1,357 times and disagree not once. The user's HK USP mod has
+			 * four vertices weighted exactly 128/128, and without this they
+			 * would be the one piece of the sliver the fold left behind. */
+			if (onSide[0] == onSide[1])
+				local.tied++;
+
+			if (share >= barPermille)
+			{
+				const int far = onSide[0] != onSide[1]
+					? (onSide[0] < onSide[1] ? 0 : 1)
+					: (v.x >= 0.0f ? 1 : 0);
+
+				/* The far side's bones become their counterparts. A slot
+				 * whose new bone another slot already names is merged into
+				 * it and left at weight 0 - the shader adds the three
+				 * anyway, so a zero slot draws nothing, and merging keeps
+				 * the vertex at three bones without renumbering. */
+				for (int b = 0; b < 3; b++)
+				{
+					if (!v.weight[b])
+						continue;
+
+					int onto = -1;
+
+					for (int p = 0; p < pairs; p++)
+					{
+						if (far == 0 && v.bone[b] == pair[p].a)
+							onto = pair[p].b;
+						else if (far == 1 && v.bone[b] == pair[p].b)
+							onto = pair[p].a;
+					}
+
+					if (onto < 0)
+						continue;
+
+					v.bone[b] = (unsigned char)onto;
+
+					for (int other = 0; other < 3; other++)
+						if (other != b && v.weight[other] &&
+							v.bone[other] == v.bone[b])
+						{
+							const int merged = (int)v.weight[other] +
+								(int)v.weight[b];
+
+							v.weight[other] = (unsigned char)
+								(merged > 255 ? 255 : merged);
+							v.weight[b] = 0;
+							break;
+						}
+				}
+
+				local.folded++;
+
+				if (share > local.foldedPermille)
+					local.foldedPermille = share;
+			}
+
+			sum = (int)v.weight[0] + (int)v.weight[1] + (int)v.weight[2];
+		}
+
+		/* AND THE THREE SUM TO 255. The merge above can lose a unit to its
+		 * own clamp, and a file may simply be written that way - the user's
+		 * HK USP mod has 24 vertices summing to 254 or 256. The shader takes
+		 * the weights as they stand, so a sum that is not 255 is a vertex
+		 * drawn slightly off its own skin. */
+		if (sum > 0 && sum != 255)
+		{
+			int most = 0;
+			int total = 0;
+
+			for (int b = 0; b < 3; b++)
+			{
+				const int scaled = ((int)v.weight[b] * 255 + sum / 2) / sum;
+
+				v.weight[b] = (unsigned char)(scaled > 255 ? 255 : scaled);
+				total += (int)v.weight[b];
+
+				if (v.weight[b] > v.weight[most])
+					most = b;
+			}
+
+			// The rounding's remainder goes on the heaviest bone, where it
+			// is the smallest relative change this vertex can be given.
+			const int slack = 255 - total + (int)v.weight[most];
+
+			v.weight[most] = (unsigned char)(slack < 0 ? 0
+				: slack > 255 ? 255 : slack);
+			local.renormed++;
+		}
+	}
+
+	if (counts)
+		*counts = local;
+}
+
 int HDTrmPageOf(const HDTrmModel* model, const HDTrmVertex* vertex)
 {
 	if (!model || !vertex)

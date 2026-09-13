@@ -389,6 +389,71 @@
  * machinery: the same page cache, the same skinning, the same draw call. */
 #define HD_LARA_SLOT_BASE	0x5A00
 
+/* AND THE INSTALL'S OWN HANDS BESIDE A MOD'S GUN (#153, round M2b) - a second
+ * block of the same kind, one slot per part, holding the file of the same name
+ * out of the INSTALL where a mod's hand model wears a foreign bundle's skin.
+ * See HDLaraPartTwinSlot and the round's note in hd_lara.cpp. */
+#define HD_LARA_TWIN_SLOT_BASE	0x5B00
+
+/* THE MIRRORED HAND WEIGHTS, AND WHERE THE BAR SITS (#153, round M2b).
+ *
+ * A hand file is drawn once and mirrored, and an exporter that mirrors the
+ * geometry without the bone names leaves vertices of one hand carrying weight
+ * on the other. hd_trm.h has the rule; this is the one number in it, and it is
+ * a measurement rather than a taste.
+ *
+ * Measured over every hand file of the IV-VI install - the eleven HAND_BARE_
+ * and the four HAND_GLOVES_ - and over the four gun mods the user runs, a
+ * crossed vertex's share on the far hand is one of exactly two things:
+ *
+ *   3..4 per mille ONE weight unit out of 255, and nothing else, in every one
+ *                  of the 1,311 crossed vertices of the install's own files
+ *                  and of the Uzi, Spas-12 and gloved-pistol mods. That is the
+ *                  exporter's rounding and it is not a mirroring error.
+ *   371..500       the 46 crossed vertices of the user's HK USP
+ *                  HAND_BARE_PISTOL, four of them exactly 500 - half of the
+ *                  vertex on the wrong hand. That is the sliver in his RICH2
+ *                  screenshot.
+ *
+ * Nothing at all lies between the two, so the bar is an eighth: 31 times the
+ * largest share the remaster's own files carry and a third of the smallest the
+ * mod's do.
+ *
+ * AND WHAT IT BUYS, measured with ModelProbe -handfold, which skins every
+ * vertex twice through the same node matrices the card is given and takes the
+ * distance between the two answers. Folding the install's own hands at a bar of
+ * 0 moves them by at most 0.51 units with both forearms turned 50 degrees out,
+ * 0.97 with both arms straight out sideways, and 2.00 in a contortion no
+ * animation reaches. Small - and pointless, because one weight unit on the far
+ * hand cannot make a sliver. With the bar the remaster's own files come out of
+ * the reader byte for byte as they went in, which is a guarantee rather than a
+ * measurement, and only a file with the real defect is touched at all. */
+#define HD_LARA_HAND_FOLD_BAR	125
+
+/* THE TWO SIDES, as hd_trm's fold wants them: the RIGHT arm's bones first,
+ * because it is the side at positive x in Lara's own frame and that is what
+ * breaks a vertex weighted exactly half and half. */
+const HDTrmMirrorPair* HDLaraHandMirror(int* pairs);
+
+/* THE BAR ITSELF, so that a BEFORE picture can be made by undoing the round
+ * rather than by describing it (#153, round M2b). ModelProbe -nofold sets it
+ * past a thousand, which no share can reach, and every hand part is then built
+ * from the file exactly as it stands. The engine never calls this; the default
+ * is HD_LARA_HAND_FOLD_BAR and it is read at HDLaraPlan. */
+void HDLaraHandFoldBar(int perMille);
+
+/* AND THE SAME FOR THE TWIN (#153, round M2b). Off makes a hand part ask for
+ * no companion at all, which is the picture from before the round: a mod's
+ * hands in a mod's own skin. The engine never calls this either. */
+void HDLaraHandsFromInstall(bool on);
+
+/* THE INSTALL'S HANDS UNDER A MOD'S GUN (#153, round M2b). The companion slot
+ * of a hand part, or -1 for a part that is not a hand. Nothing is ever loaded
+ * into it unless the part's own model came out of a mod whose skin pages are
+ * another bundle's - hd_model decides that, because only it has the file open
+ * and the pages resolved. */
+int HDLaraPartTwinSlot(int part);
+
 /* THE FIRST PERSON HEAD CUT (#123, stage S8; a sphere then, a cylinder in
  * fix rounds J to L, a plane in fix round S; ONE BONE WEIGHT since fix round
  * U, U1).
@@ -761,6 +826,11 @@ struct HDLaraStats
 	int outfit;			// what was asked for
 	int wanted;			// parts planned
 	int loaded;			// parts on the card
+	/* #153 round M2b: of those, models that are not a part at all - the
+	 * install's own hands loaded beside a mod's gun. Counted in `loaded`,
+	 * `vertices` and `indices` with the rest, and named here so that a line
+	 * saying "19 on the card" out of 18 parts is not a puzzle. */
+	int twins;
 	int missing;			// a name with no .TRM anywhere
 	int vertices;
 	int indices;
@@ -916,6 +986,12 @@ void HDLaraLevelEnd();
 bool HDLaraActive();
 int HDLaraOutfitNow();
 bool HDLaraHasPart(int part);
+/* THE INSTALL'S OWN HANDS BESIDE A MOD'S GUN (#153, round M2b). True when
+ * hd_model really loaded the twin for this part - which it does only for a mod
+ * hand painted with another bundle's skin. The caller draws it with the SAME
+ * matrices, the same node mask and the same light as the part itself; it is
+ * the same hand in the same pose, wearing the install's own skin pages. */
+bool HDLaraHasPartTwin(int part);
 // Whether the level asked for the part at all - see HDLaraLevel::slots. A part
 // that was never planned is not missing; the level simply has no slot for it.
 bool HDLaraPartPlanned(int part);

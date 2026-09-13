@@ -381,7 +381,11 @@ namespace
 	 *
 	 *   name=Sola's wetsuit      what the wardrobe window calls it
 	 *   hands=0|1                does it take the separate HAND_ models
-	 *   gloves=0|1               ... the gloved ones
+	 *   gloves=0|1               ... the gloved ones. READ AND IGNORED since
+	 *                            #153 round M2b: the wardrobe wears bare hands
+	 *                            everywhere (hd_lara.cpp, takes_gloves). The
+	 *                            line is still parsed and still shown, so that
+	 *                            a mod's file goes on saying what it says
 	 *   braid=0|1                does it wear the TR5 braid
 	 *   holsters=0|1             does it wear thigh holsters
 	 *   rig=0|1                  ... and the pouches they hang in
@@ -462,7 +466,16 @@ namespace
 			else if (key == "hands")
 				out.hands = as_bool(low);
 			else if (key == "gloves")
+			{
 				out.gloves = as_bool(low);
+
+				/* #153, round M2b. Said here rather than passed over in
+				 * silence, because a modder who writes the line and sees no
+				 * gloves is owed the reason. */
+				note("MODLOG %s: gloves=%s is ignored - the wardrobe wears "
+					"bare hands everywhere (the user's decision, round M2b)",
+					path.c_str(), value.c_str());
+			}
 			else if (key == "braid")
 				out.braid = as_bool(low);
 			else if (key == "holsters")

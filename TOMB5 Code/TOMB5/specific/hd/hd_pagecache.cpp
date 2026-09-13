@@ -1610,6 +1610,21 @@ int HDPageCacheSlotOrigin(int slot)
 	return g_origin[(size_t)slot];
 }
 
+int HDPageCacheOriginOf(const char* root5, int key)
+{
+	int origin = 5;
+	bool white = false;
+
+	if (!root5 || !*root5)
+		return -1;
+
+	const std::string root = root5;
+
+	resolve_page(root, parent_of(root), key, &origin, &white);
+
+	return white ? 0 : origin;
+}
+
 const char* HDPageCacheOriginText(int origin)
 {
 	static char text[48];

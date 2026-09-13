@@ -1973,13 +1973,29 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				stats->indexBytes += (double)HDModelIndices(twin) * 2.0;
 			}
 
+			/* AND WHAT THE FOLD FOUND IN THE TWIN (#153, round M3). The
+			 * reader folds every file it reads, the twin included, and its
+			 * counters were worked out and thrown away - so the one model on
+			 * the card that a reader of this line cannot see the source of
+			 * was also the one whose fold nobody could check. The install's
+			 * own hands read 0 folded at the shipped bar, which is the
+			 * guarantee round M2b measured; a number here that is not 0 means
+			 * the bar or the file has moved. */
+			HDTrmFoldCounts twinFold;
+
+			if (!HDModelFoldCounts(HDLaraPartTwinSlot(part), &twinFold))
+				std::memset(&twinFold, 0, sizeof(twinFold));
+
 			note("%s: the install's own %s is drawn beside it for the hands, "
 				"cut to its %d skin page%s - the mod's file keeps the gun and "
-				"%d page%s of its own", HDLaraPartLabel(part), model,
+				"%d page%s of its own; the twin's own fold crossed=%d folded=%d "
+				"tied=%d renorm=%d", HDLaraPartLabel(part), model,
 				HDModelPageCount(HDLaraPartTwinSlot(part)),
 				HDModelPageCount(HDLaraPartTwinSlot(part)) == 1 ? "" : "s",
 				HDModelPageCount(slot),
-				HDModelPageCount(slot) == 1 ? "" : "s");
+				HDModelPageCount(slot) == 1 ? "" : "s",
+				twinFold.crossed, twinFold.folded, twinFold.tied,
+				twinFold.renormed);
 		}
 
 		/* WHAT THE MIRROR FOLD FOUND IN THIS FILE (#153, round M2b). One line

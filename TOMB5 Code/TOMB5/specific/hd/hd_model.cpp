@@ -140,11 +140,10 @@ namespace
 		 * vertices are in hand; a caller that wanted them later would have to read
 		 * the .TRM a second time.
 		 *
-		 * A BOX IS NOT A SHAPE. Two guns crossed like an X and two guns lying side
-		 * by side have the same kind of box and nothing else in common, and the
-		 * ring's fit had only the box to go on - which is how the mod's crossed
-		 * Uzis came to lie flat, one above the other. These say which way the
-		 * SHAPE runs. */
+		 * A BOX IS NOT A SHAPE. A pair of guns lying flat and one gun standing up
+		 * have the same kind of box and nothing else in common, and the ring's fit
+		 * had only the box to go on - which is how the mod's two Uzis came to lie
+		 * flat, one above the other. These say which way the SHAPE runs. */
 		float axis[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 		float axisExtent[3] = { 0, 0, 0 };
 		bool hasAxes = false;
@@ -977,7 +976,7 @@ namespace
 				 * rule for it the same file could come out muzzle-first or
 				 * grip-first from one build to the next, and a fit that pairs two
 				 * models' axes would pair them back to front half the time.
-				  *
+				 *
 				 * The rule is the model's own geometry and nothing else: the axis
 				 * points to the side on which the cloud reaches FURTHER from its
 				 * own centre of mass. A gun's barrel is the long end, a magazine
@@ -3121,8 +3120,8 @@ int HDModelPage(int slot, int at)
  * (fewer than three vertices).
  *
  * A BOX AND A CLOUD ANSWER DIFFERENT QUESTIONS. A box says how much room a
- * model needs; these say which way it RUNS. For two guns crossed like an X the
- * two are nothing alike, which is the whole of the round M2b ring fault. */
+ * model needs; these say which way it RUNS. For a flat pair of guns the two
+ * are nothing alike, which is the whole of the round M2b ring fault. */
 bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
 {
 	const Model* model = find(g_models, slot);
@@ -3145,30 +3144,45 @@ bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
 
 /* THE CORRECTION, out of the two models' own SHAPES.
  *
- * Round M2b built this out of the two bounding BOXES and the user's picture
- * of the result is why it does not any more: his Uzi mod's inventory model is
- * two guns CROSSED like an X, and a box cannot tell that from one tall gun
- * standing up - 147 x 253 x 159 with y longest, which is what a single
- * upright gun measures too. So the box rule laid the cross flat, the two guns
- * one above the other with a gap between them, while the same file in the
- * Tomb Raider I-III remaster's own ring shows the X facing the camera.
+ * Round M2b built this out of the two bounding BOXES and the user's picture of
+ * the result is why it does not any more: his Uzi mod's inventory model came
+ * out lying flat, the two guns one above the other with a gap between them,
+ * where the same file in the Tomb Raider I-III remaster's own ring stands up
+ * facing the camera. A box cannot tell a flat pair of guns from one tall gun
+ * standing up - 147 x 253 x 159 with y longest is what both measure.
  *
- * THE SHAPE SAYS IT AND THE BOX CANNOT. The principal axes of the vertex
- * cloud (HDModelPrincipalAxes, measured while the model was read) are the
- * directions the model really runs in: for a crossed pair the two largest
- * span the plane the cross lies in and the smallest is the way it is flat.
- * Measured on the user's own files:
+ * THE SHAPE SAYS IT AND THE BOX CANNOT. The principal axes of the vertex cloud
+ * (HDModelPrincipalAxes, measured while the model was read) are the directions
+ * the model really runs in: the two largest span the plane the shape lies in
+ * and the smallest is the way it is flat. Measured on the user's own files:
  *
- *   install EXTRA_UZI_ITEM    cloud 256 x 236 x  42, flat along -y
- *   mod     UZI_OPTION        cloud 242 x 240 x 132, flat along -x
+ *   install EXTRA_UZI_ITEM    cloud 256 x 236 x  42, flat along y
+ *   mod     UZI_OPTION        cloud 242 x 240 x 132, flat along x
  *
- * - two crossed pairs, each flat along a different axis, and the box said
- * nothing of the kind. Sending the source's k-th axis onto the target's k-th
- * therefore lays the mod's cross into the plane the vanilla item's cross lies
- * in, and the ring's own per-item rotation then presents it exactly as it
- * presents the vanilla one: the X towards the camera, turning about the
- * vertical like every other item in the ring. Nothing about either game is
- * written down - the two files say which way round they are.
+ * - two flat things, each flat along a different axis, which the boxes could
+ * not say. Sending the source's k-th axis onto the target's k-th therefore
+ * lays the mod's pair into the plane the vanilla item lies in, and the ring's
+ * own per-item rotation then presents it as it presents the vanilla one:
+ * face-on to the camera, turning about the vertical like every other item in
+ * the ring. Nothing about either game is written down - the two files say
+ * which way round they are.
+ *
+ * WHAT IT IS NOT, LOOKED AT AND MEASURED (the fix round of M3). The user asked
+ * for the two Uzis CROSSED like an X, which is what the I-III remaster's own
+ * display shows him. THE FILE IS NOT A CROSSED PAIR. Face-on to its own plane
+ * and along both of that plane's axes - three renders, ModelProbe -name
+ * UZI_OPTION -rigid -axisview - the two guns stand PARALLEL, side by side and
+ * offset; the vanilla EXTRA_UZI_ITEM beside them is ONE gun, not two. A rigid
+ * turn keeps the angle between two parts, so no rotation of this file can
+ * cross them, and this fit does not pretend to. Where the remaster's X comes
+ * from is not established here: the .TRM carries no node transforms at all
+ * (specific\hd\hd_trm.h - per-vertex bone indices and weights, nothing else),
+ * its 27449 vertices sit on two nodes of 13723 and 13726, and the ring loads a
+ * mod's _OPTION model RIGIDLY on one node because there is no mesh tree of
+ * ours behind another game's file. Placing those two nodes would mean reading
+ * the donor game's own mesh tree and frame out of the user's I-III data, which
+ * is a feature and not a fit - a decision for the project, not for this
+ * function to take on its own.
  *
  * Both frames are right handed by construction (see the axes' own note), so
  * the map is a pure rotation and can never mirror a model - which the box
@@ -3181,8 +3195,8 @@ bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
  * old rule that was right and is kept.
  *
  * THE PRICE IS THAT THE FITTED MODEL CAN STILL STAND OUT OF THE TARGET'S BOX
- * on the axes the scale did not decide: the mod's crossed Uzis are 132 units
- * thick where the vanilla pair is 42, and that is the mod's own geometry and
+ * on the axes the scale did not decide: the mod's pair of Uzis is 132 units
+ * thick where the vanilla item is 42, and that is the mod's own geometry and
  * not a fault of the fit. HDModelRingFitOverflow puts the number on it and
  * the ring's log line prints it. */
 bool HDModelRingFit(int model, int target, float* out)
@@ -3252,7 +3266,8 @@ bool HDModelRingFit(int model, int target, float* out)
  * exactly and the other two land wherever their own proportions put them. This
  * is the largest of the three ratios - fitted extent over the target's on the
  * same axis - so 1.00 means the model sits inside the room the ring keeps for
- * that item and 3.18 means one of its axes is over three times that room.
+ * that item and the 3.36 the Uzi mod reads means one of its axes is over three
+ * times that room.
  *
  * It is a NUMBER FOR THE LOG and not a limit: nothing here refuses a fit, for
  * the reason written at HDModelRingFit. `worstAxis` takes 0, 1 or 2 - WHICH OF

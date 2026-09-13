@@ -548,10 +548,10 @@ int main(int argc, char** argv)
 
 					if (isImport)
 					{
-					/* AND WHETHER THE LENGTH WOULD HAVE LET IT THROUGH, which is
-					 * the whole point of the round: three of the vulture's four were
-					 * always refused by length, and it is the ONE that was not that
-					 * the player heard. */
+						/* AND WHETHER THE LENGTH WOULD HAVE LET IT THROUGH,
+						 * which is the whole point of the round: three of the
+						 * vulture's four were always refused by length, and it
+						 * is the ONE that was not that the player heard. */
 						verdict = plausible
 							? "REFUSED as a randomizer import - AND THE LENGTH WOULD HAVE LET IT THROUGH"
 							: "refused as a randomizer import (the length would have refused it too)";
@@ -560,7 +560,7 @@ int main(int argc, char** argv)
 						if (plausible)
 							importedHeard++;
 					}
-										else if (!plausible)
+					else if (!plausible)
 					{
 						verdict = "refused by length";
 						byLength++;
@@ -577,8 +577,8 @@ int main(int argc, char** argv)
 						paired++;
 					}
 
-				// Only the interesting lines, or the table is 130 rows of
-				// "paired" and nobody reads the four that matter.
+					// Only the interesting lines, or the table is 130 rows of
+					// "paired" and nobody reads the four that matter.
 					if (isImport || outside || !plausible)
 						printf("  %-6d %-7d %-7d %-9.0f %-9.0f %s\n", s, li, hi,
 							levelMs, bankMs, verdict);

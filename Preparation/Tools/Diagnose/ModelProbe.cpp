@@ -282,7 +282,22 @@
  *                         For an INVENTORY model, which is one node - the
  *                         turn goes in front of the root matrix, and a
  *                         model with a mesh tree would keep its other
- *                         nodes where they were.
+ *                         nodes where they were. The camera frames the
+ *                         TURNED box since the fix round of M3 - before it,
+ *                         a model whose box is off-centre swung out of the
+ *                         picture and the .PNG came out empty.
+ *     -axisview           the model turned so that its own vertex cloud's
+ *                         principal plane faces the camera: axis 0 onto x,
+ *                         axis 1 onto y, the flattest onto z. The picture
+ *                         that answers "what SHAPE is this file", which is
+ *                         the question the ring's fit rests on. Combines
+ *                         with -invrot (this one goes first).
+ *     -rigid              load a -name model the way the ring loads a mod's
+ *                         <BASE>_OPTION: ONE node, every vertex rigid on it.
+ *                         A file whose geometry sits on nodes other than 0
+ *                         draws nothing at all without this, because a bare
+ *                         -name run has no mesh tree to place those nodes -
+ *                         which is what an empty picture of UZI_OPTION means.
  *     -inventory          with -slot: draw the mod's own <BASE>_OPTION model
  *                         in the slot's place, turned and scaled onto the box
  *                         of the EXTRA model it replaces, exactly as the
@@ -7481,6 +7496,10 @@ int main(int argc, char** argv)
 	// #153 round M3: -invrot, the ring's own x/y/z for this item.
 	short invRot[3] = { 0, 0, 0 };
 	bool invRotSet = false;
+	// #153 round M3, fix round: -axisview, the model face-on to its own plane.
+	bool axisView = false;
+	// ... and -rigid, a -name model loaded the way the ring loads a mod's.
+	bool rigid = false;
 	bool itemcheck = false;
 	bool inventory = false;	// #153 round M2b: a mod's own _OPTION model
 	/* #123, fix round P: the inventory ring. -ringcheck is the numeric proof
@@ -7805,6 +7824,13 @@ int main(int argc, char** argv)
 			invRot[2] = (short)strtol(argv[++i], 0, 0);
 			invRotSet = true;
 		}
+		/* #153 round M3, the fix round: the model turned so that its own
+		 * principal plane faces the camera. See the usage block. */
+		else if (!_stricmp(argv[i], "-axisview"))
+			axisView = true;
+		// ... and the same round's -rigid. See the usage block.
+		else if (!_stricmp(argv[i], "-rigid"))
+			rigid = true;
 		else if (!_stricmp(argv[i], "-itemcheck"))
 			itemcheck = true;
 		else if (!_stricmp(argv[i], "-ringcheck"))
@@ -8157,16 +8183,27 @@ int main(int argc, char** argv)
 	if (!name.empty())
 	{
 		/* A bare model, no level: 32 nodes, no bind pose, and the name
-		 * handed straight to hd_model. The picture is the bind pose. */
+		 * handed straight to hd_model. The picture is the bind pose.
+		 *
+		 * OR ONE RIGID NODE, WITH -rigid (#153, round M3, the fix round), which
+		 * is how hd_object.cpp loads a mod's <BASE>_OPTION model for the ring:
+		 * one node, every vertex rigid on it, because the file is another
+		 * game's and stands in its own frame with no mesh tree of ours behind
+		 * it. It is not a nicety - a file whose geometry sits on nodes 1 and 2
+		 * and not on 0 (the IMI Uzis mod's UZI_OPTION is exactly that: 13723
+		 * vertices on node 1 and 13726 on node 2) draws NOTHING at all through
+		 * the 32-node path with no mesh tree to place those nodes, which is why
+		 * a plain -name picture of it comes out empty. */
 		ClassicSlot empty;
 
-		empty.nodes = 32;
+		empty.nodes = rigid ? 1 : 32;
 		classic.push_back(empty);
 
 		HDModelSlot one;
 
 		one.slot = 0;
-		one.nodes = 32;
+		one.nodes = rigid ? 1 : 32;
+		one.rigidNode = rigid ? 0 : -1;
 		one.bind = 0;
 		one.name = name.c_str();
 		one.onlyPage = onlyPage;	// #123 fix round D (D4)
@@ -8635,6 +8672,104 @@ int main(int argc, char** argv)
 		HDRenderShutdown();
 		DropDevice();
 		return 0;
+	}
+
+	/* --- the turn in front of the model, before the camera --------------- */
+
+	/* WHATEVER GOES IN FRONT OF THE MODEL HAS TO GO IN FRONT OF THE CAMERA TOO
+	 * (#153, round M3, the fix round). Both turns below spin the model about
+	 * the ORIGIN, and a model whose box is off-centre - UZI_OPTION's is
+	 * x -131..16, y -82..171, z -87..72, so its middle stands 73 units off -
+	 * then swings clean out of a frame that was computed from its untouched
+	 * box. That is why the round's own face-on render came out 100 % magenta
+	 * and the conclusion drawn from it ("no rotation of this file makes an X")
+	 * had nothing under it. The box corners are carried through the turn here
+	 * and the camera frames what will really be drawn. */
+	float ringTurn[16];
+
+	MatIdentity(ringTurn);
+
+	if (axisView)
+	{
+		/* THE MODEL FACE-ON TO ITS OWN PLANE. The vertex cloud's axes, longest
+		 * first, are sent onto x, y and z - so the plane the shape runs in
+		 * lies in the screen and the direction it is flat in points at the
+		 * camera (yaw 180 looks down -z, so +z is the camera's side). Row
+		 * vectors: out[r][c] is the c-th axis's r-th element, which is the
+		 * transpose of the axis matrix and therefore its inverse. */
+		float axes[9], extent[3];
+
+		if (HDModelPrincipalAxes(slot, axes, extent))
+		{
+			for (int r = 0; r < 3; r++)
+				for (int c = 0; c < 3; c++)
+					ringTurn[r * 4 + c] = axes[c * 3 + r];
+
+			printf("axisview: the cloud's own axes sent onto x, y and z - the "
+				"picture is face-on to the plane of %.1f x %.1f, %.1f thick\n",
+				extent[0], extent[1], extent[2]);
+		}
+		else
+			printf("axisview: this model has no axes to turn onto\n");
+	}
+
+	if (invRotSet)
+	{
+		/* THE RING'S OWN PRESENTATION (-invrot). The ring puts the item's three
+		 * angles on the matrix stack with phd_RotYXZ - Y, then X, then Z, each
+		 * POST-multiplied into the column-vector stack - so in this tool's row
+		 * vector matrices the model meets Z first, then X, then Y. Without this
+		 * a picture is the item's OWN frame and says nothing about what the
+		 * player sees. */
+		float rx[16], ry[16], rz[16], t[16], all[16];
+
+		MatRotX(invRot[0] * 360.0 / 65536.0, rx);
+		MatRotY(invRot[1] * 360.0 / 65536.0, ry);
+		MatRotZ(invRot[2] * 360.0 / 65536.0, rz);
+		MatMul(rz, rx, t);
+		MatMul(t, ry, all);
+		MatMul(ringTurn, all, t);
+		memcpy(ringTurn, t, sizeof(ringTurn));
+
+		printf("ring rot: x %d y %d z %d (%.1f/%.1f/%.1f degrees)\n",
+			invRot[0], invRot[1], invRot[2],
+			invRot[0] * 360.0 / 65536.0, invRot[1] * 360.0 / 65536.0,
+			invRot[2] * 360.0 / 65536.0);
+	}
+
+	if (axisView || invRotSet)
+	{
+		float lo[3], hi[3];
+
+		for (int corner = 0; corner < 8; corner++)
+		{
+			const float v[3] =
+			{
+				(corner & 1) ? maxs[0] : mins[0],
+				(corner & 2) ? maxs[1] : mins[1],
+				(corner & 4) ? maxs[2] : mins[2]
+			};
+
+			for (int c = 0; c < 3; c++)
+			{
+				float d = ringTurn[3 * 4 + c];
+
+				for (int r = 0; r < 3; r++)
+					d += v[r] * ringTurn[r * 4 + c];
+
+				if (!corner || d < lo[c]) lo[c] = d;
+				if (!corner || d > hi[c]) hi[c] = d;
+			}
+		}
+
+		printf("turned  : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f - what the "
+			"camera frames\n", lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
+
+		for (int c = 0; c < 3; c++)
+		{
+			mins[c] = lo[c];
+			maxs[c] = hi[c];
+		}
 	}
 
 	/* --- the camera ----------------------------------------------------- */
@@ -9116,32 +9251,6 @@ int main(int argc, char** argv)
 	 * hd_object.cpp hands it over per ring item. Zero without -ring, and then
 	 * the call writes nothing at all. */
 	HDModelOffCentre((float)ringKx, (float)ringKy);
-
-	/* THE RING'S OWN PRESENTATION (#153, round M3, -invrot). The ring puts
-	 * the item's three angles on the matrix stack with phd_RotYXZ - Y, then
-	 * X, then Z, each POST-multiplied into the column-vector stack - so in
-	 * this tool's row-vector matrices the model meets Z first, then X, then
-	 * Y. Without this a picture is the item's OWN frame and says nothing
-	 * about what the player sees. */
-	float ringTurn[16];
-
-	MatIdentity(ringTurn);
-
-	if (invRotSet)
-	{
-		float rx[16], ry[16], rz[16], t[16];
-
-		MatRotX(invRot[0] * 360.0 / 65536.0, rx);
-		MatRotY(invRot[1] * 360.0 / 65536.0, ry);
-		MatRotZ(invRot[2] * 360.0 / 65536.0, rz);
-		MatMul(rz, rx, t);
-		MatMul(t, ry, ringTurn);
-
-		printf("ring rot: x %d y %d z %d (%.1f/%.1f/%.1f degrees)\n",
-			invRot[0], invRot[1], invRot[2],
-			invRot[0] * 360.0 / 65536.0, invRot[1] * 360.0 / 65536.0,
-			invRot[2] * 360.0 / 65536.0);
-	}
 
 	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b), drawn the way the ring
 	 * draws it: the correction in front of the item's own node matrix, one

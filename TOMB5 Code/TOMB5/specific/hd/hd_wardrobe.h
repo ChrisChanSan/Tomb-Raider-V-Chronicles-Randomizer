@@ -119,6 +119,12 @@ struct HDWardrobeEntry
 	bool hands;
 	bool braid;
 	bool holsters;
+	/* What the wardrobe SAYS about this body's hands - and nothing reads it
+	 * since #153, round M2b: the wardrobe wears the bare hands in every level
+	 * with every outfit (the user's decision), so hd_lara.cpp's takes_gloves
+	 * answers false for everything. Still parsed, still printed, still logged,
+	 * because a line that reports a file has to go on reporting what the file
+	 * says. See the table's own note in hd_wardrobe.cpp. */
 	bool gloves;
 	bool wearsRig;			// the holster rig cut out of the London catsuit
 

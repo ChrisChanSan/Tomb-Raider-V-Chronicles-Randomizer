@@ -2103,7 +2103,66 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 								slots[i].mirrors, slots[i].mirrorBar,
 								&twin.fold);
 
-						here.cutPage = foreign;
+						/* AND IF THE CALLER ALREADY ASKED FOR A CUT, THE TWO
+						 * BECOME ONE (#153, round M2b, the fix round). Only
+						 * one cut reaches build(), so writing this one over
+						 * the caller's would throw its rule away without a
+						 * word - and the two features were merged into one
+						 * mechanism precisely so that they could not disagree
+						 * about what a page number means.
+						 *
+						 * They combine exactly, and as a DROP set: what the
+						 * caller's keep set leaves out is dropped anyway, so
+						 * the union of that and the foreign pages says what
+						 * both asked for. The other direction - a keep set
+						 * minus the foreign pages - says the same thing until
+						 * the two sets cancel, and an EMPTY keep set means
+						 * "the whole file" to build() rather than "nothing".
+						 * Dropping every page of a file is representable;
+						 * keeping none of it is not.
+						 *
+						 * Nothing does both today - the one part with an
+						 * onlyPage is the holster rig, which is kind 4 and
+						 * never gets a twin - so this is the day after
+						 * tomorrow's bug, caught while the mechanism is fresh
+						 * and logged if it ever happens. */
+						if (here.cutKeeps && !here.cutPage.empty())
+						{
+							std::vector<int> drop = foreign;
+
+							for (int t = 0; t < here.trm.textures; t++)
+							{
+								const int raw = (int)here.trm.texture[t];
+								bool wanted = false;
+
+								for (size_t k = 0; k < here.cutPage.size(); k++)
+									if (here.cutPage[k] == raw)
+										wanted = true;
+
+								for (size_t d = 0; d < drop.size(); d++)
+									if (drop[d] == raw)
+										wanted = true;
+
+								if (!wanted)
+									drop.push_back(raw);
+							}
+
+							note("MODLOG %s (slot %d): this part is already cut "
+								"to %d page%s of its own, so the two cuts are "
+								"made one - %d page%s of the file dropped, the "
+								"%d foreign among them",
+								slot_label(slot, model), slot,
+								(int)here.cutPage.size(),
+								here.cutPage.size() == 1 ? "" : "s",
+								(int)drop.size(),
+								drop.size() == 1 ? "" : "s",
+								(int)foreign.size());
+
+							here.cutPage = drop;
+						}
+						else
+							here.cutPage = foreign;
+
 						here.cutKeeps = false;
 
 						std::string gunList, skinList;
@@ -2116,13 +2175,19 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 							skinList += std::to_string(foreign[f]);
 						}
 
+						/* What the mod's file really keeps, asked of the cut
+						 * that reaches the build and not of `foreign` - the
+						 * two are the same list wherever the caller asked for
+						 * no cut of its own, which is every part today, and
+						 * where it did the log has to name what survives both
+						 * (#153, round M2b, the fix round). */
 						for (int t = 0; t < here.trm.textures; t++)
 						{
 							const int raw = (int)here.trm.texture[t];
 							bool dropped = false;
 
-							for (size_t f = 0; f < foreign.size(); f++)
-								if (foreign[f] == raw)
+							for (size_t f = 0; f < here.cutPage.size(); f++)
+								if (here.cutPage[f] == raw)
 									dropped = true;
 
 							if (dropped)

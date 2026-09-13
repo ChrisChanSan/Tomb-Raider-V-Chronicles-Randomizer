@@ -591,12 +591,13 @@ void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs
 
 			/* AN EXACT TIE IS BROKEN BY THE MODEL'S OWN X AXIS, and that is
 			 * not a second rule but the same one read off the geometry: side
-			 * a is the +x side, and over every crossed vertex of all fifteen
-			 * hand files of the install and all four of the user's gun mods -
-			 * 1,357 of them - the majority side and the sign of x agree
-			 * 1,357 times and disagree not once. The user's HK USP mod has
-			 * four vertices weighted exactly 128/128, and without this they
-			 * would be the one piece of the sliver the fold left behind. */
+			 * a is the +x side, and over every crossed vertex of all 94 hand
+			 * files of the install and all seven of the user's three gun
+			 * mods - 6,723 of them - the 6,719 that have a majority agree
+			 * with the sign of x 6,719 times and disagree not once. The four
+			 * that do not have one are the user's HK USP vertices weighted
+			 * exactly 128/128, and without this they would be the one piece
+			 * of the sliver the fold left behind. */
 			if (onSide[0] == onSide[1])
 				local.tied++;
 

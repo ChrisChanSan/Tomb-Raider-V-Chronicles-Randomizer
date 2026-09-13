@@ -10797,7 +10797,7 @@ engine did.
 **One consequence of the namespace, measured and left standing.** A page a
 mod's model shares with the install is loaded twice: once under the mod's key
 for the mod's model and once plain for everyone else. On ANDREA1's wardrobe
-with the user's four gun mods active that is **+4 pages and +5.3 MiB** (21 ->
+with the user's `Mods` folder active that is **+4 pages and +5.3 MiB** (21 ->
 25 pages, 28.0 -> 33.3 MiB); on the whole level it is nothing at all, because
 the two pistol pickups' mod page displaces the vanilla page nobody else wore
 (53 model pages either way, 350.5 MiB total either way). It would be safe to
@@ -11325,23 +11325,27 @@ the air.
 `HDTrmFoldMirrored` (hd_trm.cpp) moves the far side's weight onto that bone's
 counterpart on the near side, by the vertex's majority side, and renormalises
 the three weights to 255. A vertex weighted exactly half and half has no
-majority, and the tie is broken by the sign of its own **x**: over every
-crossed vertex of the install's fifteen hand files and the user's four gun
-mods - 1,357 of them - the majority side and the sign of x agree 1,357 times
-and disagree not once, so that is the same rule read off the geometry instead
-of off the weights.
+majority, and the tie is broken by the sign of its own **x**: over every hand
+file of the install - all 94 of them, and 4\ITEM is the only ITEM folder in
+that bundle that holds one - and all seven hand files of the user's three gun
+mods, there are 6,723 crossed vertices; 6,719 of them have a majority and on
+every one of those the majority side and the sign of x agree, not one
+disagrees, and the four that have no majority are the ties this rule exists
+for. So the tie-break is the same rule read off the geometry instead of off
+the weights.
 
-**THE BAR IS A MEASUREMENT AND NOT A TASTE.** Over all of those files a crossed
-vertex's share on the far hand is one of exactly two things:
+**THE BAR IS A MEASUREMENT AND NOT A TASTE.** Over all 101 of those files a
+crossed vertex's share on the far hand is one of exactly two things:
 
 ```
-    3..4 per mille   ONE weight unit out of 255 - the exporter's rounding.
-                     1,311 vertices: every crossed vertex of every file of the
-                     install, and of the Uzi, the Spas-12 and the gloved
-                     pistol mod.
+    4 per mille      ONE weight unit out of 255 - 3.92, which the share's own
+                     arithmetic rounds to 4 - the exporter's rounding.
+                     6,677 vertices: every crossed vertex of every file of the
+                     install (5,884, out of 485,491 vertices), and of the Uzi,
+                     the Spas-12 and the gloved pistol mod (793).
     371..500         the 46 crossed vertices of the user's HK USP
                      HAND_BARE_PISTOL, four of them exactly 500 - half the
-                     vertex on the wrong hand.
+                     vertex on the wrong hand. The only 46 in the whole set.
 ```
 
 Nothing at all lies between the two, so the bar is an eighth (125 per mille):
@@ -11492,6 +11496,58 @@ from before the round), and `-inventory` (a mod's `_OPTION` model in the ring's
 place, through the same two calls the engine makes). `hd_model` exports
 `HDModelFindFile`, so a tool asks the engine's own model search instead of
 keeping a copy of it.
+
+**THE FIX ROUND.** The round's own review found no defect in what the engine
+does and six in what is written about it. Five are corrected here and one is
+code.
+
+1. **The counts beside the bar were taken over a sample and written down as if
+   they were the whole set.** They said "every hand file of the IV-VI install -
+   the eleven `HAND_BARE_` and the four `HAND_GLOVES_`", 1,311 crossed vertices
+   at the low share and 1,357 at the tie-break. The bundle holds **94** hand
+   files, not fifteen: 4\ITEM has thirty `HAND_BARE_`, thirty `HAND_GLOVES_`,
+   thirty `HAND_XRAY_` and four `HANDS_BARE_`, and games 5 and 6 have none at
+   all; and the user runs **three** gun mods with **seven** hand files between
+   them. Recounted over all 101 files with a reader written from the layout
+   table alone: **6,723 crossed vertices** - 6,677 at one weight unit out of
+   255 (5,884 of them the install's own, out of its 485,491 hand vertices) and
+   **the same 46** at 371 to 500 per mille, all of them in the user's HK USP
+   `HAND_BARE_PISTOL`, with nothing whatever in between. 6,719 have a majority
+   and every one of those agrees with the sign of its own **x**; the four that
+   do not are the HK USP's exact ties. **So the conclusion is unchanged and
+   `HD_LARA_HAND_FOLD_BAR` stays 125** - it still sits in a total gap, 31 times
+   the largest share the remaster's own art carries - and the four places that
+   carried the old numbers (`hd_lara.h`, `hd_trm.h`, `hd_trm.cpp` and this
+   entry) carry the measured ones.
+2. **The dead `gloves` flag was documented as dead in two places and as live in
+   four.** The override table's own header, the `kRow` column legend,
+   `HDWardrobeEntry::gloves` and `HDLaraPartModel` - the one function that
+   still names the column - all read as though it decided something. Each now
+   says what is true: parsed, printed and logged, read by nothing, and
+   `takes_gloves` is the one line to change if the decision is revisited.
+3. `HDLaraPartSheen`'s new comment named `kSheenLeather`, which the same commit
+   removed. Leather is the holster rig's `0.18/20` in `kPartSheen`, and the
+   comment says so - the same words its sibling forty lines up already used.
+4. **The twin was in `verts=` and not in `vb_kib=`.** The install's hands under
+   a mod's gun added to the vertex and index counts but not to the ranges, the
+   pages or either byte count, so one line described two different sets of
+   models - about 155 KiB of buffer, under the user's Uzi mod, that the count
+   saw and the budget did not. It is counted in every column now.
+5. **Two page cuts could have collided in silence.** The twin rule wrote its
+   own cut over whatever the caller had asked for. No part does both today -
+   the only `onlyPage` is the holster rig, which is kind 4 and never gets a
+   twin - but the two were made ONE mechanism so that they could not disagree,
+   and this was that disagreement waiting. They combine now, as a drop set
+   (what a keep set leaves out is dropped anyway), with a line in the log; a
+   drop set is used rather than a keep set because dropping every page of a
+   file is representable and keeping none of it is not.
+6. **An existing log line was deleted rather than given a gate that works.**
+   "`%s: no gloved variant in the wardrobe`" fired when a gloved outfit met a
+   hand part with no gloved twin - a case there is none of today, and the line
+   was written for the day there is. Its gate was `takes_gloves`, which now
+   answers false for everything, so the line was dead; it is back, gated on
+   what the wardrobe ASKED for, which is the same question and one that can
+   still be yes. Diagnostic seams are not thinned.
 
 **WHAT IS NOT PROVED.** Everything here is `ModelProbe`'s renderer, which is
 the engine's renderer with no game around it. The play test still owes the

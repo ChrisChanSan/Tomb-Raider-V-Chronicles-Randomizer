@@ -959,11 +959,16 @@ const char* HDLaraPartModel(int outfit, int part)
 	if (part == HD_LARA_PART_BODY)
 		return model_of(outfit);
 
-	/* THE GLOVED TWIN (#123, fix round C, user finding C2). A gloved outfit
-	 * wears the HAND_GLOVES_ file; a hand part the wardrobe ships no gloved
-	 * twin for falls back to the bare one, which HDLaraLevelBuild writes into
-	 * the log. Nothing but a hand part has a twin, so the test is the field
-	 * and not the kind. */
+	/* THE GLOVED TWIN, AND WHY IT IS NEVER TAKEN (#123, fix round C, user
+	 * finding C2; dead by decision since #153, round M2b). A gloved outfit
+	 * WORE the HAND_GLOVES_ file. It does not any more: takes_gloves answers
+	 * false for every outfit, because the user's decision is that the wardrobe
+	 * wears the bare hands in every level with every outfit, so this branch is
+	 * never taken and the column below it is never read. The test is kept as
+	 * it stands - the field and not the kind, nothing but a hand part has a
+	 * twin - so that revisiting the decision is the one line takes_gloves is
+	 * and not a rebuild of this function. HDLaraLevelBuild writes one note per
+	 * level build when an outfit asked for gloves and got bare hands. */
 	if (takes_gloves(outfit) && kPart[part].gloves)
 		return kPart[part].gloves;
 
@@ -1904,6 +1909,19 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		if (stats)
 			stats->wanted++;
 
+		/* A HAND PART THE WARDROBE HAS NO GLOVED TWIN FOR - none today, and
+		 * the line is here so the day there is one it is in the log and not a
+		 * surprise in a screenshot. ITS GATE IS NOW WHAT WAS ASKED FOR (#153,
+		 * round M2b, the fix round): it used to be takes_gloves, which has
+		 * answered false for every outfit since round M2b, so the line could
+		 * not fire at all any more. asked_for_gloves is the same question the
+		 * line was written to answer - does this body want gloves - and one
+		 * that can still be yes, so the seam goes on saying what it said. */
+		if (asked_for_gloves(level->outfit) && kPart[part].kind == 1 &&
+			!kPart[part].gloves)
+			note("%s: no gloved variant in the wardrobe - %s is worn bare",
+				HDLaraPartLabel(part), model);
+
 		const int slot = HDLaraPartSlot(part);
 
 		if (!HDModelHas(slot))
@@ -1925,12 +1943,26 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		{
 			g_twin[part] = true;
 
+			/* AND IT IS IN EVERY COLUMN OF THE BUDGET, not only in the count
+			 * (#153, round M2b, the fix round). The twin is a second model on
+			 * the card with its own vertex and index buffer and its own page,
+			 * so a line that counted its vertices but not its bytes described
+			 * two different sets of models in one breath - about 155 KiB of
+			 * buffer for the install's HAND_BARE_UZI under the Uzi mod's gun.
+			 * The 24 and the 2 are hd_model's own vertex and index widths,
+			 * the same two numbers the part below is measured with. */
 			if (stats)
 			{
+				const int twin = HDLaraPartTwinSlot(part);
+
 				stats->loaded++;
 				stats->twins++;
-				stats->vertices += HDModelVertices(HDLaraPartTwinSlot(part));
-				stats->indices += HDModelIndices(HDLaraPartTwinSlot(part));
+				stats->vertices += HDModelVertices(twin);
+				stats->indices += HDModelIndices(twin);
+				stats->ranges += HDModelRanges(twin);
+				stats->pages += HDModelPageCount(twin);
+				stats->vertexBytes += (double)HDModelVertices(twin) * 24.0;
+				stats->indexBytes += (double)HDModelIndices(twin) * 2.0;
 			}
 
 			note("%s: the install's own %s is drawn beside it for the hands, "
@@ -2274,8 +2306,9 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	{
 		/* AND IT IS ALWAYS THE SKIN'S (#153, round M2b). takes_gloves answers
 		 * false for every outfit now, so the leather branch this line used to
-		 * have could never be taken; kSheenLeather is still the holster rig's
-		 * material and is read below. */
+		 * have could never be taken, and the pair it read went with it.
+		 * Leather is still the holster rig's material and stands as 0.18/20
+		 * in kPartSheen below. */
 		if (strength)
 			*strength = kSheenSkin[0];
 

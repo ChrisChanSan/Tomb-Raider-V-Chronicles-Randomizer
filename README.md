@@ -236,7 +236,8 @@ holsters on, no gloves, a plain cloth sheen).
 ```
 name=Sola's wetsuit     # what the wardrobe window calls it
 hands=1                 # does she wear the separate HAND_ models
-gloves=0                # ... the gloved ones
+gloves=0                # ... the gloved ones - read, logged, and then
+                        # ignored: see "Lara always has TR5's bare hands"
 braid=1                 # the TR5 braid
 holsters=1              # thigh holsters
 rig=0                   # the pouches they hang in, cut out of the

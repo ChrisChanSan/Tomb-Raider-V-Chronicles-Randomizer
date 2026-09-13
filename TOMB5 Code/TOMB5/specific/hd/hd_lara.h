@@ -402,18 +402,23 @@
  * on the other. hd_trm.h has the rule; this is the one number in it, and it is
  * a measurement rather than a taste.
  *
- * Measured over every hand file of the IV-VI install - the eleven HAND_BARE_
- * and the four HAND_GLOVES_ - and over the four gun mods the user runs, a
+ * Measured over EVERY hand file of the IV-VI install and every hand file of
+ * the user's gun mods. The install's are all in 4\ITEM - games 5 and 6 hold
+ * none at all - and there are 94: thirty HAND_BARE_, thirty HAND_GLOVES_,
+ * thirty HAND_XRAY_ and the four HANDS_BARE_. The mods are three (HK USP, IMI
+ * Uzis, Spas-12) and ship seven hand files between them. Over all 101, a
  * crossed vertex's share on the far hand is one of exactly two things:
  *
- *   3..4 per mille ONE weight unit out of 255, and nothing else, in every one
- *                  of the 1,311 crossed vertices of the install's own files
- *                  and of the Uzi, Spas-12 and gloved-pistol mods. That is the
+ *   4 per mille    ONE weight unit out of 255 - 3.92, which the share's own
+ *                  arithmetic rounds to 4 - and nothing else, in every one of
+ *                  the 6,677 crossed vertices of the install's own files
+ *                  (5,884 of them, out of 485,491 vertices) and of the Uzi,
+ *                  Spas-12 and gloved-pistol mods (793). That is the
  *                  exporter's rounding and it is not a mirroring error.
  *   371..500       the 46 crossed vertices of the user's HK USP
  *                  HAND_BARE_PISTOL, four of them exactly 500 - half of the
  *                  vertex on the wrong hand. That is the sliver in his RICH2
- *                  screenshot.
+ *                  screenshot. They are the only 46 in the whole set.
  *
  * Nothing at all lies between the two, so the bar is an eighth: 31 times the
  * largest share the remaster's own files carry and a third of the smallest the
@@ -426,8 +431,10 @@
  * 0.97 with both arms straight out sideways, and 2.00 in a contortion no
  * animation reaches. Small - and pointless, because one weight unit on the far
  * hand cannot make a sliver. With the bar the remaster's own files come out of
- * the reader byte for byte as they went in, which is a guarantee rather than a
- * measurement, and only a file with the real defect is touched at all. */
+ * the reader byte for byte as they went in - all 94 of them: not one carries a
+ * crossed vertex above the bar and not one carries a vertex whose weights miss
+ * 255 - which is a guarantee rather than a measurement, and only a file with
+ * the real defect is touched at all. */
 #define HD_LARA_HAND_FOLD_BAR	125
 
 /* THE TWO SIDES, as hd_trm's fold wants them: the RIGHT arm's bones first,
@@ -827,9 +834,11 @@ struct HDLaraStats
 	int wanted;			// parts planned
 	int loaded;			// parts on the card
 	/* #153 round M2b: of those, models that are not a part at all - the
-	 * install's own hands loaded beside a mod's gun. Counted in `loaded`,
-	 * `vertices` and `indices` with the rest, and named here so that a line
-	 * saying "19 on the card" out of 18 parts is not a puzzle. */
+	 * install's own hands loaded beside a mod's gun. Counted with the rest in
+	 * EVERY field below - loaded, vertices, indices, ranges, pages and both
+	 * byte counts, because it is a model on the card like any other - and
+	 * named here so that a line saying "19 on the card" out of 18 parts is
+	 * not a puzzle. */
 	int twins;
 	int missing;			// a name with no .TRM anywhere
 	int vertices;

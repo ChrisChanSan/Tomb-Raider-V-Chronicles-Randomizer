@@ -62,12 +62,23 @@ namespace
 	 * carry 1352 vertices each - the gauntlets ARE the suit - it wears a
 	 * helmet instead of a braid, and DrawLara__5 draws no holsters at all.
 	 *
-	 * `gloves` picks the HAND_GLOVES_ file instead of the HAND_BARE_ one
+	 * `gloves` PICKED the HAND_GLOVES_ file instead of the HAND_BARE_ one
 	 * (#123, fix round C, user finding C2: "OUTFIT_RUSSIA wears gloves"). An
 	 * outfit model covers all fifteen nodes including the two hand nodes, but
 	 * what it carries THERE is the sleeve - the hand itself is the separate
 	 * HAND_ model, which is the whole reason the remaster ships three sets of
 	 * them.
+	 *
+	 *   AND NOTHING READS IT SINCE #153, ROUND M2b. The user's decision is
+	 *   that the wardrobe wears the BARE hands in every level with every
+	 *   outfit - "we never used the gloves - force it, then it is uniform" -
+	 *   so hd_lara.cpp's takes_gloves answers false for everything and this
+	 *   column reaches no model name any more. OUTFIT_RUSSIA's row below
+	 *   still says true because that is what the outfit is, and the flag is
+	 *   still parsed, printed and logged for the same reason: a wardrobe line
+	 *   has to go on saying what the wardrobe measured. What it no longer
+	 *   does is decide anything. The ONE line to change if the decision is
+	 *   ever revisited is takes_gloves.
 	 *
 	 * `wearsRig` is the separate HOLSTER RIG - the belt, the two pouches and
 	 * the two thigh straps cut out of the London catsuit by page (#123, fix
@@ -140,6 +151,8 @@ namespace
 	};
 
 	/*                            hands  braid  holst  glove  rig                   */
+	/*                                                 ^ read by nothing since
+	 *                                                   round M2b - see above  */
 	const Row kRow[] =
 	{
 		{ "OUTFIT_CLASSIC",     true,  true,  true,  false, false, 0.10f, 14.0f,

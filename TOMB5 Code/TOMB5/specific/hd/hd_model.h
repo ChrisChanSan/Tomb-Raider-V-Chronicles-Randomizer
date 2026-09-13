@@ -690,6 +690,24 @@ int HDModelHeadNode(int slot);			// the node the face rides on, or -1
 bool HDModelBounds(int slot, float* mins, float* maxs);
 bool HDModelHeadBounds(int slot, float* mins, float* maxs);
 
+/* ONE MODEL PUT INTO ANOTHER'S FRAME, out of the two bounding boxes and
+ * nothing else (#153, round M2b).
+ *
+ * A 4x4 row-major matrix, row-vector convention like every other matrix in this
+ * module: it centres `model` on its own box, turns it so that its longest axis
+ * lies where `target`'s longest lies and its shortest where the shortest lies,
+ * scales it by the ratio of the two longest extents, and puts it on `target`'s
+ * centre. False when either model has no box.
+ *
+ * It exists because the inventory ring may be asked to draw a file from a
+ * different game, which stands in that game's frame: the Tomb Raider I-III
+ * inventory models are built UPRIGHT and IV-VI's lie flat (measured: the
+ * install's EXTRA_UZI_ITEM is 266 x 41 x 212 with x longest, a mod's
+ * UZI_OPTION 147 x 253 x 159 with y longest). Nothing about which game or
+ * which model is written down here - the two files say which way round they
+ * are and this reads it off them. */
+bool HDModelBoxFit(int model, int target, float* out);
+
 // Everything that could not be bound, in words, for the caller's log. Valid
 // until the next HDModelLevelBegin or HDModelLevelEnd.
 int HDModelNoteCount();

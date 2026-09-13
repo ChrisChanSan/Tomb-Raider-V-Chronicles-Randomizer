@@ -902,3 +902,58 @@ const char* HDBindTr3Guest(int tr5Slot)
 
 	return 0;
 }
+
+const char* HDBindModOption(int slot, char* buffer, int size)
+{
+	static const char* nothing = "";
+
+	if (!buffer || size <= 0)
+		return nothing;
+
+	*buffer = 0;
+
+	const char* name = HDSlotName(slot);
+
+	if (!name || HDSlotIsLara(slot))
+		return nothing;
+
+	/* THE ENDING IS THE WHOLE RULE. A slot that does not end in _ITEM is not
+	 * an inventory object at all, and a name that is only "_ITEM" has no base
+	 * to build on. */
+	static const char kItem[] = "_ITEM";
+	const size_t length = strlen(name);
+	const size_t tail = sizeof(kItem) - 1;
+
+	if (length <= tail || _stricmp(name + length - tail, kItem) != 0)
+		return nothing;
+
+	/* A MOD'S OWN EXTRA_ MODEL WINS. It is the IV-VI name, so a mod that
+	 * ships one has said which of the two conventions it is written in, and
+	 * the ordinary resolver already draws it - here and on the floor. */
+	for (const PrefixRule& one : extra_prefixes)
+	{
+		std::string candidate = one.prefix;
+		char found[512];
+		int mod = -1;
+
+		candidate += name;
+
+		if (*HDModsFindModel(candidate.c_str(), &mod, found, sizeof(found)))
+			return nothing;
+	}
+
+	std::string option(name, length - tail);
+	char found[512];
+	int mod = -1;
+
+	option += "_OPTION";
+
+	if (!*HDModsFindModel(option.c_str(), &mod, found, sizeof(found)))
+		return nothing;
+
+	if ((int)option.size() >= size)
+		return nothing;
+
+	memcpy(buffer, option.c_str(), option.size() + 1);
+	return buffer;
+}

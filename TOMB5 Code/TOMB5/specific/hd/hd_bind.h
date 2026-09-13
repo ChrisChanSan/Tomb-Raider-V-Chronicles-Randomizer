@@ -202,3 +202,27 @@ int HDDonorMapEntries();
  * .MAP says otherwise, which is TRForge's measurement over 211 .MAP keys, and
  * the symbols are TRForge's generated TR3 table. */
 const char* HDBindTr3Guest(int tr5Slot);
+
+/* A MOD'S OWN INVENTORY MODEL (#153, round M2b).
+ *
+ * The Tomb Raider I-III remaster draws the inventory out of models named
+ * <BASE>_OPTION, where IV-VI uses EXTRA_<BASE>_ITEM for the pickup and shows
+ * the same model in the ring. A mod written for I-III carries the OPTION names
+ * with it - the user's IMI Uzis ship UZI_OPTION and UZI_AMMO_OPTION, one
+ * upright Uzi each in that game's inventory style - and nothing in this engine
+ * ever looked for such a name, so the ring went on showing the install's own
+ * EXTRA model while the mod's gun was in Lara's hands.
+ *
+ * The name is DERIVED, exactly as rule 3 derives the EXTRA ones: the slot's own
+ * name with the "_ITEM" ending replaced by "_OPTION". No table and no list of
+ * pairs.
+ *
+ * The answer is that name when an active mod really ships it AND no active mod
+ * ships an EXTRA_<BASE>_ITEM of any of the three prefixes - a mod that brings
+ * the IV-VI name has said which of the two it means, and it wins. Empty
+ * otherwise, which is every slot of an unmodded game.
+ *
+ * It says nothing about the pickup lying on the floor: that keeps the EXTRA
+ * model, the install's or a mod's. Only the ring and the display in the corner
+ * read this. */
+const char* HDBindModOption(int slot, char* buffer, int size);

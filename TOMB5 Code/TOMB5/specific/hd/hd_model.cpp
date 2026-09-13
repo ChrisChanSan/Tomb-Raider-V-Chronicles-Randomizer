@@ -2855,6 +2855,96 @@ int HDModelPage(int slot, int at)
 	return model->pages[(size_t)at];
 }
 
+/* THE CORRECTION, out of the two bounding boxes and nothing else.
+ *
+ * The axes are sorted by extent, longest to shortest, on both sides, and
+ * the k-th of the source is sent to the k-th of the target. That is a
+ * signed permutation; where the permutation alone would turn the model
+ * inside out - a determinant of -1, which would mirror it - one axis is
+ * negated, which costs nothing on a box and keeps the model right-handed.
+ *
+ * The scale is uniform and is the ratio of the two LONGEST extents, so the
+ * mod's model is as long in the ring as the model it replaces. Fitting the
+ * whole box inside the target's instead was measured and refused: the
+ * vanilla Uzi pickup is TWO guns lying side by side and 41 units thick,
+ * the mod's is ONE standing upright, and a fit-inside rule would have
+ * scaled it to a sixth of its size to match that thinnest axis. */
+bool HDModelBoxFit(int model, int target, float* out)
+{
+	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+
+	if (!HDModelBounds(model, srcMin, srcMax) ||
+		!HDModelBounds(target, dstMin, dstMax))
+		return false;
+
+	float srcSize[3], dstSize[3], srcMid[3], dstMid[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		srcSize[i] = srcMax[i] - srcMin[i];
+		dstSize[i] = dstMax[i] - dstMin[i];
+		srcMid[i] = (srcMax[i] + srcMin[i]) * 0.5f;
+		dstMid[i] = (dstMax[i] + dstMin[i]) * 0.5f;
+	}
+
+	int srcOrder[3] = { 0, 1, 2 }, dstOrder[3] = { 0, 1, 2 };
+
+	for (int a = 0; a < 2; a++)
+		for (int b = a + 1; b < 3; b++)
+		{
+			if (srcSize[srcOrder[b]] > srcSize[srcOrder[a]])
+			{
+				const int keep = srcOrder[a];
+				srcOrder[a] = srcOrder[b];
+				srcOrder[b] = keep;
+			}
+
+			if (dstSize[dstOrder[b]] > dstSize[dstOrder[a]])
+			{
+				const int keep = dstOrder[a];
+				dstOrder[a] = dstOrder[b];
+				dstOrder[b] = keep;
+			}
+		}
+
+	if (srcSize[srcOrder[0]] <= 0.0f)
+		return false;
+
+	float turn[3][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+
+	for (int k = 0; k < 3; k++)
+		turn[srcOrder[k]][dstOrder[k]] = 1.0f;
+
+	const float det =
+		turn[0][0] * (turn[1][1] * turn[2][2] - turn[1][2] * turn[2][1]) -
+		turn[0][1] * (turn[1][0] * turn[2][2] - turn[1][2] * turn[2][0]) +
+		turn[0][2] * (turn[1][0] * turn[2][1] - turn[1][1] * turn[2][0]);
+
+	if (det < 0.0f)
+		turn[srcOrder[2]][dstOrder[2]] = -1.0f;
+
+	const float scale = dstSize[dstOrder[0]] / srcSize[srcOrder[0]];
+
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+			out[r * 4 + c] = turn[r][c] * scale;
+
+	for (int c = 0; c < 3; c++)
+	{
+		out[3 * 4 + c] = dstMid[c];
+
+		for (int k = 0; k < 3; k++)
+			out[3 * 4 + c] -= srcMid[k] * turn[k][c] * scale;
+	}
+
+	out[0 * 4 + 3] = 0.0f;
+	out[1 * 4 + 3] = 0.0f;
+	out[2 * 4 + 3] = 0.0f;
+	out[3 * 4 + 3] = 1.0f;
+
+	return true;
+}
+
 bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)
 {
 	const Model* model = find(g_models, slot);

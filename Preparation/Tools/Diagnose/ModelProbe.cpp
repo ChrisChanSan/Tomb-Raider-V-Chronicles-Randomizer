@@ -270,6 +270,13 @@
  *     -yaw <deg>          camera around the model, default 180 (from the front)
  *     -pitch <deg>        default 10, looking slightly down
  *     -dist <units>       camera distance; default frames the bounding box
+ *     -inventory          with -slot: draw the mod's own <BASE>_OPTION model
+ *                         in the slot's place, turned and scaled onto the box
+ *                         of the EXTRA model it replaces, exactly as the
+ *                         inventory ring and the pickup display do it (#153,
+ *                         round M2b). Prints both boxes and the scale. Wants
+ *                         -mods; without a mod that ships one it says so and
+ *                         draws the slot's own model.
  *     -itemcheck          the matrix proof of the object path, as a table:
  *                         every node's origin put on the screen twice, once
  *                         by the classic transform and once by the matrix the
@@ -7355,6 +7362,7 @@ int main(int argc, char** argv)
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	bool itemcheck = false;
+	bool inventory = false;	// #153 round M2b: a mod's own _OPTION model
 	/* #123, fix round P: the inventory ring. -ringcheck is the numeric proof
 	 * of the shear, -ring <x> <y> draws the model where the ring would put it
 	 * so that the same shear can be looked at. */
@@ -7660,6 +7668,10 @@ int main(int argc, char** argv)
 			onlyPage = (int)strtol(argv[++i], 0, 0);
 		else if (!_stricmp(argv[i], "-head"))
 			head = true;
+		/* #153 round M2b: a mod's own <BASE>_OPTION model in the ring's
+		 * place, exactly as hd_object.cpp puts it there. */
+		else if (!_stricmp(argv[i], "-inventory"))
+			inventory = true;
 		else if (!_stricmp(argv[i], "-itemcheck"))
 			itemcheck = true;
 		else if (!_stricmp(argv[i], "-ringcheck"))
@@ -8060,6 +8072,39 @@ int main(int argc, char** argv)
 			DropDevice();
 			return 5;
 		}
+	}
+
+	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b), planned exactly as
+	 * hd_object.cpp plans it for the ring: a pseudo slot, ONE node, every
+	 * vertex rigid on it, no bind pose - the file is another game's and stands
+	 * in its own frame. -inventory then draws THIS instead of the slot's model,
+	 * through HDModelBoxFit, which is what the ring does. */
+	std::string optionName;
+	int optionSlot = -1;
+
+	if (inventory && !all && slot >= 0)
+	{
+		char option[128];
+
+		if (*HDBindModOption(slot, option, sizeof(option)))
+		{
+			optionName = option;
+			/* A key for this tool's own model map and nothing else - the
+			 * engine's HD_RING_SLOT_BASE is hd_object.cpp's, which this tool
+			 * does not link. It only has to miss every slot of the level. */
+			optionSlot = 0x7000 + slot;
+
+			HDModelSlot one;
+
+			one.slot = optionSlot;
+			one.nodes = 1;
+			one.name = optionName.c_str();
+			one.rigidNode = 0;
+			wanted.push_back(one);
+		}
+		else
+			printf("inventory: no mod ships an _OPTION model for this slot - "
+				"the ring draws the slot's own\n");
 	}
 
 	/* --- the rooms first, if asked (#123, stage S6) --------------------- */
@@ -8887,12 +8932,46 @@ int main(int argc, char** argv)
 	 * the call writes nothing at all. */
 	HDModelOffCentre((float)ringKx, (float)ringKy);
 
-	const bool drew = HDModelDraw(slot, &matrices[0], here->nodes,
-		&light[0], nodeMask, &lighting);
+	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b), drawn the way the ring
+	 * draws it: the correction in front of the item's own node matrix, one
+	 * node, every node drawn. Same two calls hd_object.cpp makes. */
+	bool drew = false;
+
+	if (optionSlot >= 0 && HDModelHas(optionSlot))
+	{
+		float fix[16], placed[16];
+
+		if (HDModelBoxFit(optionSlot, slot, fix))
+		{
+			float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+
+			HDModelBounds(optionSlot, srcMin, srcMax);
+			HDModelBounds(slot, dstMin, dstMax);
+
+			printf("\ninventory: %s stands in for %s - its box "
+				"%.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale %.2f, centre "
+				"moved by %.0f/%.0f/%.0f\n", HDModelName(optionSlot),
+				HDModelName(slot), srcMax[0] - srcMin[0], srcMax[1] - srcMin[1],
+				srcMax[2] - srcMin[2], dstMax[0] - dstMin[0],
+				dstMax[1] - dstMin[1], dstMax[2] - dstMin[2],
+				sqrt(fix[0] * fix[0] + fix[1] * fix[1] + fix[2] * fix[2]),
+				fix[12], fix[13], fix[14]);
+
+			MatMul(fix, &matrices[0], placed);
+			drew = HDModelDraw(optionSlot, placed, 1, &light[0], ~0u, &lighting);
+		}
+		else
+			printf("\ninventory: %s has no bounding box to fit - the slot's "
+				"own model is drawn\n", HDModelName(optionSlot));
+	}
+
+	if (!drew)
+		drew = HDModelDraw(slot, &matrices[0], here->nodes,
+			&light[0], nodeMask, &lighting);
 
 	bool drewHead = false;
 
-	if (head)
+	if (head && optionSlot < 0)
 		drewHead = HDModelDrawHead(slot, &matrices[0], here->nodes,
 			&light[0], nodeMask, &lighting);
 

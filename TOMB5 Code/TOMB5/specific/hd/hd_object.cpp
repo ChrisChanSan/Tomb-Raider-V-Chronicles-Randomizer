@@ -71,6 +71,12 @@
 #define HD_SWAP_SLOT_BASE	0x6000
 #define HD_SWAP_NODE_BASE	0x8000
 
+/* AND ONE FOR A MOD'S INVENTORY MODEL (#153, round M2b) - the <BASE>_OPTION
+ * file the ring and the pickup display draw instead of the slot's own EXTRA
+ * model. Between the two blocks above and clear of both: the swap block reaches
+ * 0x6000 + 470 and the node block starts at 0x8000. */
+#define HD_RING_SLOT_BASE	0x7000
+
 namespace
 {
 	/* WHAT ONE SLOT IS ALLOWED TO DO, decided once at level build. */
@@ -303,6 +309,58 @@ namespace
 	 * or off - the second copy comes out of the .TRG either way. */
 	bool g_baked_any = false;
 	int g_baked_slots = 0;
+
+	/* ------------------------- A MOD'S INVENTORY MODEL (#153, round M2b) --
+	 *
+	 * The ring and the pickup display draw the <BASE>_OPTION file a mod ships
+	 * instead of the slot's own EXTRA model; hd_bind.h says when and why, and
+	 * the floor pickup is untouched.
+	 *
+	 * THE MODEL IS ANOTHER GAME'S, so it stands in another frame: the I-III
+	 * inventory models are built upright and IV-VI's lie flat, and the origin
+	 * is wherever that artist put it. `fix` is what puts one into the frame
+	 * the ring's matrices are made for - its own bounding box centred and
+	 * turned so that its longest axis lies where the EXTRA model's longest
+	 * lies, then scaled by the two longest axes' ratio. It is MEASURED off the
+	 * two boxes at level build, per slot, and no rotation is written down
+	 * anywhere: the two files say which way round they are.
+	 *
+	 * A short fixed list rather than a per-slot array: a level has one or two
+	 * of these at the outside, and the lookup runs once per ring item. */
+	struct RingModel
+	{
+		int slot;		// the level's own slot, e.g. UZI_ITEM
+		int model;		// the pseudo slot the OPTION file sits in
+		float fix[16];
+	};
+
+	RingModel g_ring_model[16];
+	int g_ring_models = 0;
+
+	const RingModel* ring_model_of(int slot)
+	{
+		for (int i = 0; i < g_ring_models; i++)
+			if (g_ring_model[i].slot == slot)
+				return &g_ring_model[i];
+
+		return 0;
+	}
+
+	// out = a then b, both row-major with the translation in row 3 - the
+	// convention every matrix in this file and in hd_model is written in.
+	void ring_mul(const float* a, const float* b, float* out)
+	{
+		for (int r = 0; r < 4; r++)
+			for (int c = 0; c < 4; c++)
+			{
+				float sum = 0.0f;
+
+				for (int k = 0; k < 4; k++)
+					sum += a[r * 4 + k] * b[k * 4 + c];
+
+				out[r * 4 + c] = sum;
+			}
+	}
 
 	/* ------------------------------------------------ THE MESH SWAPS (B3) --
 	 *
@@ -1145,6 +1203,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * leaves none of the previous level's behind. */
 	g_swap_plans = 0;
 	g_swap_models = 0;
+	g_ring_models = 0;
 
 	if (!tomb5.hd_objects)
 		return;
@@ -1411,6 +1470,46 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		}
 
 		g_swap_plans++;
+	}
+
+	/* A MOD'S INVENTORY MODEL (#153, round M2b), planned in the same list and
+	 * on a pseudo slot like every other extra model in this file.
+	 *
+	 * `nodes` is ONE and `rigidNode` is 0, which is the honest statement about
+	 * a file out of another game: its bone numbers are that game's and mean
+	 * nothing to this slot's mesh tree, so every vertex rides on the item's own
+	 * root - which is what an inventory object does anyway. No bind pose, for
+	 * the same reason: the model comes in its own frame and `fix` below is what
+	 * puts it into the ring's. */
+	std::vector<std::string> optionNames;
+
+	optionNames.reserve(sizeof(g_ring_model) / sizeof(g_ring_model[0]));
+
+	for (size_t i = 0; i < slots.size(); i++)
+	{
+		char option[128];
+		const int slot = slots[i];
+
+		if (g_ring_models >= (int)(sizeof(g_ring_model) / sizeof(g_ring_model[0])))
+			break;
+
+		if (!*HDBindModOption(slot, option, sizeof(option)))
+			continue;
+
+		optionNames.push_back(option);
+
+		HDModelSlot one;
+
+		one.slot = HD_RING_SLOT_BASE + slot;
+		one.nodes = 1;
+		one.name = optionNames.back().c_str();
+		one.rigidNode = 0;
+
+		wanted.push_back(one);
+
+		g_ring_model[g_ring_models].slot = slot;
+		g_ring_model[g_ring_models].model = one.slot;
+		g_ring_models++;
 	}
 
 	/* LARA'S WARDROBE, in the SAME HDModelLevelBegin (#123, stage S4-2). Her
@@ -1710,6 +1809,63 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			swap.kind == SWAP_WHOLE ? "whole" : "hitman_stages", have, lost);
 	}
 
+	/* A MOD'S INVENTORY MODEL, MEASURED (#153, round M2b). After the verdicts,
+	 * because both boxes have to be on the card before either can be measured
+	 * - and because a slot whose own model did not come out HD draws classic in
+	 * the ring too, so there is nothing to put the OPTION model into.
+	 *
+	 * A plan that does not survive this is struck out rather than left half
+	 * made, exactly as a missing swap model is above: the ring then shows what
+	 * it showed before the mod, which is a picture. */
+	{
+		int kept = 0;
+
+		for (int i = 0; i < g_ring_models; i++)
+		{
+			RingModel& ring = g_ring_model[i];
+			const int slot = ring.slot;
+			const bool hd = slot >= 0 && slot < NUMBER_OBJECTS &&
+				g_slot[slot].hd != 0 && HDModelHas(slot);
+			float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+
+			if (!hd || !HDModelHas(ring.model) ||
+				!HDModelBoxFit(ring.model, slot, ring.fix))
+			{
+				Log("HDLOG level=%s ring slot=%d name=%s model=%s - not drawn: "
+					"%s", g_stem, slot,
+					HDSlotName(slot) ? HDSlotName(slot) : "?",
+					HDModelName(ring.model) ? HDModelName(ring.model) : "-",
+					!HDModelHas(ring.model) ? "the .TRM did not load"
+						: !hd ? "the slot itself is classic here"
+						: "one of the two models has no bounding box");
+				continue;
+			}
+
+			HDModelBounds(ring.model, srcMin, srcMax);
+			HDModelBounds(slot, dstMin, dstMax);
+
+			Log("HDLOG level=%s ring slot=%d name=%s inventory=%s instead of "
+				"%s - its box %.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale "
+				"%.2f, centre moved by %.0f/%.0f/%.0f", g_stem, slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?",
+				HDModelName(ring.model) ? HDModelName(ring.model) : "-",
+				HDModelName(slot) ? HDModelName(slot) : "-",
+				srcMax[0] - srcMin[0], srcMax[1] - srcMin[1],
+				srcMax[2] - srcMin[2], dstMax[0] - dstMin[0],
+				dstMax[1] - dstMin[1], dstMax[2] - dstMin[2],
+				std::sqrt(ring.fix[0] * ring.fix[0] + ring.fix[1] * ring.fix[1] +
+					ring.fix[2] * ring.fix[2]),
+				ring.fix[12], ring.fix[13], ring.fix[14]);
+
+			if (kept != i)
+				g_ring_model[kept] = ring;
+
+			kept++;
+		}
+
+		g_ring_models = kept;
+	}
+
 	/* THE DONOR SLOTS, one line each (#123, stage S7-2), after the verdicts
 	 * because `hd` is only known once the model is either on the card or not.
 	 * A slot the sidecar named and that came out HD is the whole point of the
@@ -1854,6 +2010,7 @@ void HDObjectLevelEnd()
 	g_swap_plans = 0;
 	g_swap_models = 0;
 	g_swap_drawn = 0;
+	g_ring_models = 0;	// #153 round M2b: a mod's inventory models
 	g_count = 0;
 	g_dropped = 0;
 	g_open = false;
@@ -1923,16 +2080,27 @@ void HDObjectFrameReset()
 			const int slot = g_ring_log[i].slot;
 			const bool known = slot >= 0 && slot < NUMBER_OBJECTS;
 
-			Log("HDLOG ring slot=%d name=%s model=%s nodes=%d mask=%X z=%.0f via=%s",
+			/* WHICH MODEL REALLY STOOD THERE (#153, round M2b): a mod's own
+			 * <BASE>_OPTION where there is one, and the slot's EXTRA model
+			 * everywhere else. The line used to print the slot's model
+			 * whatever was drawn, which for a modded ring would have been a
+			 * line that quietly lied. */
+			const RingModel* ring = ring_model_of(slot);
+			const int drew = ring ? ring->model : slot;
+
+			Log("HDLOG ring slot=%d name=%s model=%s nodes=%d mask=%X z=%.0f "
+				"via=%s%s",
 				slot,
 				(known && HDSlotName(slot)) ? HDSlotName(slot) : "?",
-				g_ring_log[i].hd && HDModelName(slot) ? HDModelName(slot) : "-",
+				g_ring_log[i].hd && HDModelName(drew) ? HDModelName(drew) : "-",
 				known ? g_slot[slot].nodes : 0,
 				g_ring_log[i].mask,
 				(double)g_ring_log[i].z,
 				g_ring_log[i].hd
 					? (known && g_slot[slot].via ? g_slot[slot].via : "?")
-					: (known && g_slot[slot].why ? g_slot[slot].why : "classic"));
+					: (known && g_slot[slot].why ? g_slot[slot].why : "classic"),
+				ring ? " (a mod's own inventory model, turned and scaled onto "
+					"the box of the one it replaces)" : "");
 		}
 	}
 
@@ -2527,6 +2695,29 @@ void HDInvEnd()
 		g_slot[g_open_slot].head != 0;
 	entry.nodes = g_open_nodes;
 	entry.mask = g_open_mask;
+
+	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b) - the ring and the display
+	 * in the corner, and nothing else in the game. It is a file out of another
+	 * game's conventions, so it is drawn RIGIDLY on the item's root node and
+	 * put into this slot's frame by the correction measured at level build.
+	 *
+	 * The node mask goes with it. The mask the ring hands in is INVOBJ's own -
+	 * the passport's pages, the compass needle - and it names nodes of the
+	 * CLASSIC model, which this file has none of. Drawing the one node it does
+	 * have is the only reading that is not nonsense; a mod that wants a
+	 * moving part in the ring is not a thing this engine can serve yet, and
+	 * the objects that have one (the passport, the compass, the globe) have no
+	 * _OPTION model in the mods folder to begin with. */
+	const RingModel* ring = ring_model_of(g_open_slot);
+
+	if (ring)
+	{
+		entry.drawSlot = ring->model;
+		entry.head = false;
+		entry.nodes = 1;
+		entry.mask = ~0u;
+	}
+
 	entry.room = g_open_room;
 	entry.view = ViewSerial;
 	// P2: the ring's own screen centre, carried to the draw and put into the
@@ -2535,6 +2726,20 @@ void HDInvEnd()
 	entry.offCentreY = g_ring_ky;
 
 	store_matrices(entry);
+
+	/* AND THE CORRECTION GOES IN FRONT OF THE ITEM'S OWN MATRIX (#153, round
+	 * M2b): the model is moved into this slot's frame first and the engine's
+	 * matrix then does with it exactly what it does with the EXTRA model. It
+	 * is not folded into the projection like the ring's off-centre term - that
+	 * one must not touch a normal and this one must, because the model is
+	 * turned. */
+	if (ring)
+	{
+		float placed[16];
+
+		ring_mul(ring->fix, entry.matrix, placed);
+		memcpy(entry.matrix, placed, sizeof(placed));
+	}
 
 	// Node 0's view z, for the log line - see RingLogItem::z.
 	if (!pickup && g_ring_open_row >= 0 && g_ring_open_row < 16)

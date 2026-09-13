@@ -56,6 +56,39 @@ void HQSfxDropMap();
 char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
 	SfxRiffParts* parts = 0);
 
+/* ----------------------------------------------- the footsteps -- */
+
+/* THE REMASTER'S BAREFOOT SET (#153, round M3) is sound id 417 of the bank
+ * and of no level: five recordings at 22050 Hz, 69 to 134 ms, which the user
+ * listened to and identified. The bank's own entry for them is the footstep
+ * entry with the random pitch turned off - measured, id 0 is volume 191,
+ * radius 10, pitch 12, and id 417 is volume 191, radius 10, pitch 0.
+ *
+ * Not an enum: it is a number in a FILE, like every other id in this bridge. */
+#define HQ_SFX_BARE_FEET	417
+
+/* The boots' payload for one of the LEVEL's samples: the first UNMODDED bank
+ * of the chain and no loose .wav overlay, so that a sound mod which replaces
+ * the footsteps cannot take the BOOTS away from every outfit at once. Only
+ * ever called for the samples behind sound ids 0 and 4. Null means "keep the
+ * level's own", which is Core's boots and already right. */
+char* HQSfxPayloadBoots(long levelSample, long pcmBytes22k, long* riffBytes,
+	SfxRiffParts* parts = 0);
+
+/* The unmodded bank's own sample numbers for one sound id, and one of those
+ * samples. The barefoot set is reached this way and not through the level
+ * bridge, because no level has sound id 417 at all. `samples` takes at most
+ * `max`; the return is how many were written. The buffer HQSfxBankSample
+ * hands back is the bank's own and lives until the next call on it. */
+int HQSfxBankTakes(int soundId, long* samples, int max);
+char* HQSfxBankSample(long sample, long* riffBytes, SfxRiffParts* parts = 0);
+
+// Whether the bank being PLAYED came out of a mod - see hd_feet.cpp.
+bool HQSfxFromMod();
+
+// Which bank that is, for the log. Never null; "" when there is none.
+const char* HQSfxPlainSource();
+
 // How many samples of the current level were answered from the bank.
 long HQSfxSubstituted();
 

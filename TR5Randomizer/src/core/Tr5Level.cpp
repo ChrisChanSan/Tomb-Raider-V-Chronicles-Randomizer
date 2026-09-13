@@ -61,6 +61,7 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
     // touched rooms - and the GUI does reuse level objects.
     m_hdRooms.clear();
     m_hdDonors.clear();
+    m_hdSoundImports.clear();
     m_hdCuts.clear();
 
     FILE* f = nullptr;
@@ -3591,6 +3592,13 @@ void Tr5Level::hdMarkCutFromWindow(int room, int sx, int sz, int targetRoom)
         hdMarkCutBox(lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], axis);
         return;
     }
+}
+
+void Tr5Level::hdMarkSoundImport(int soundId)
+{
+    if (soundId < 0 || soundId >= SAMPLE_LUT_SIZE) return;
+
+    m_hdSoundImports.insert(soundId);
 }
 
 void Tr5Level::hdMarkDonor(int slot, int fromSlot, const std::string& level)

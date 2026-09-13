@@ -971,6 +971,30 @@ public:
 
     void hdMarkRoom(int room);
     void hdMarkDonor(int slot, int fromSlot, const std::string& level);
+    // A SOUND ID THIS RUN IMPORTED FROM ANOTHER GAME (#153, round M3).
+    //
+    // The Tomb Raider III guests bring their own recordings and those go
+    // into free slots of the TR5 soundmap - the vulture on 420..423, the
+    // Compy on 430..434, the raptor on 438..444, the T-Rex on 445..449
+    // (core\Tr3Source.cpp, dinos()). "Free" means free IN A TR5 LEVEL. It
+    // does not mean free in the REMASTER'S BANK, and four of the vulture's
+    // four are RICH1's VCI scientist voice lines there.
+    //
+    // The engine's HQ bridge pairs a level sample with a bank sample BY
+    // SOUND ID, and a plausibility rule on the length is all that stands
+    // between it and a wrong pairing. Measured: the vulture's id 423 is a
+    // 879 ms screech and the bank's id 423 is a 1037 ms voice line, which is
+    // 1.18 times the expected length - inside the fifth the rule allows - so
+    // the bird died saying something in English. The other three are refused
+    // by length and the bug looked like a one-off.
+    //
+    // A LENGTH CANNOT DECIDE THIS AND A NAME CAN. The run knows exactly
+    // which ids it wrote; the engine cannot know. So the run says so, in
+    // one line of the sidecar, and the engine's bridge passes those ids
+    // over. Ids the run MOVED between TR5 levels are not imports and are
+    // not listed: those really are the remaster's own sounds.
+    void hdMarkSoundImport(int soundId);
+    const std::set<int>& hdSoundImports() const { return m_hdSoundImports; }
     const std::set<int>& hdTouchedRooms() const { return m_hdRooms; }
     const std::vector<HdDonor>& hdDonors() const { return m_hdDonors; }
     // A std::set, so the same seed writes the same lines in the same order
@@ -1001,6 +1025,8 @@ private:
     std::set<int>        m_hdRooms;
     std::vector<HdDonor> m_hdDonors;
     std::set<HdCut>      m_hdCuts;
+    // A std::set again, so the same seed writes the same line.
+    std::set<int>        m_hdSoundImports;
 
     // Record the box around one opening (#123, fix round Z). Both are
     // private: an opening is recorded by the edit that made it, out of the

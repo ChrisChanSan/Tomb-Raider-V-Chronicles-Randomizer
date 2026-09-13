@@ -39,6 +39,8 @@ namespace
 	std::vector<HDMarkerCut> g_cuts;
 	std::vector<Donor> g_donors;
 	std::vector<std::string> g_unknown;
+	// The sound ids this run imported from another game (#153, round M3).
+	std::vector<int> g_sfx_imports;
 
 	// Exported through HDMarkersDonor as a plain struct, so the strings the
 	// caller sees stay owned by this file and alive until HDMarkersFree.
@@ -153,6 +155,37 @@ bool HDMarkersLoad(const char* levelPath)
 			}
 		}
 
+		/* THE SOUND IDS THIS RUN IMPORTED (#153, round M3), all on one line
+		 * because they belong to one fact - "these numbers are not the
+		 * remaster's sounds" - and a line per id would say the same thing
+		 * twenty-one times in a run with all four guests. The count is not
+		 * written down anywhere: the line is read until it stops holding
+		 * numbers, which is what lets a later round add a fifth guest
+		 * without this reader knowing about it. */
+		if (!std::strncmp(line, "sfximport ", 10))
+		{
+			const char* at = line + 10;
+
+			while (*at)
+			{
+				char* end = 0;
+				const long id = std::strtol(at, &end, 10);
+
+				if (end == at)
+					break;
+
+				if (id >= 0 && id < 0x7FFF)
+					g_sfx_imports.push_back((int)id);
+
+				at = end;
+
+				while (*at == ' ' || *at == '\t')
+					at++;
+			}
+
+			continue;
+		}
+
 		if (std::sscanf(line, "donor %d %63s %d", &a, word, &b) == 3)
 		{
 			Donor one;
@@ -194,6 +227,7 @@ bool HDMarkersLoad(const char* levelPath)
 		g_cuts.clear();
 		g_donors.clear();
 		g_unknown.clear();
+		g_sfx_imports.clear();
 		g_outfit = 0;
 		return false;
 	}
@@ -215,6 +249,7 @@ void HDMarkersFree()
 	g_donors.clear();
 	g_donor_view.clear();
 	g_unknown.clear();
+	g_sfx_imports.clear();
 }
 
 bool HDMarkersPresent()
@@ -303,6 +338,28 @@ const HDMarkerDonor* HDMarkersDonorOfSlot(int slot)
 			return &g_donor_view[i];
 
 	return 0;
+}
+
+int HDMarkersSoundImportCount()
+{
+	return (int)g_sfx_imports.size();
+}
+
+int HDMarkersSoundImport(int at)
+{
+	if (at < 0 || at >= (int)g_sfx_imports.size())
+		return -1;
+
+	return g_sfx_imports[at];
+}
+
+bool HDMarkersSoundImported(int soundId)
+{
+	for (size_t i = 0; i < g_sfx_imports.size(); i++)
+		if (g_sfx_imports[i] == soundId)
+			return true;
+
+	return false;
 }
 
 int HDMarkersUnknownCount()

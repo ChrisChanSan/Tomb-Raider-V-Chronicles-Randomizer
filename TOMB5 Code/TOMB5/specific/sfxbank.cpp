@@ -58,6 +58,11 @@ struct SfxBank
 {
 	std::FILE* file;
 	short lut[SFX_LUT_ENTRIES];
+	/* WHICH LEVELS EACH SOUND ID BELONGS TO (#153, round M3), one bit per
+	 * level file. The block was skipped over until this round; the bridge
+	 * reads it now to say when a pairing names a sound no level of ours
+	 * uses - see SfxBankMask in the header. */
+	long long mask[SFX_LUT_ENTRIES];
 	unsigned char* infos;		// kInfoBytes each
 	int infoCount;
 	long* offset;			// file position of each RIFF
@@ -143,6 +148,30 @@ SfxBank* SfxBankOpen(const char* path, const char** why)
 		*why = "sound infos could not be read";
 		SfxBankClose(bank);
 		return 0;
+	}
+
+	/* AND THE LEVEL MASKS, which lie directly behind the infos. Read rather
+	 * than skipped since round M3; a bank too short to hold them was refused
+	 * above, and headerEnd below is the same arithmetic this uses. */
+	{
+		unsigned char masks[kLevelMaskBytes];
+
+		if (std::fread(masks, sizeof(masks), 1, file) != 1)
+		{
+			*why = "the level masks could not be read";
+			SfxBankClose(bank);
+			return 0;
+		}
+
+		for (int i = 0; i < SFX_LUT_ENTRIES; i++)
+		{
+			long long value = 0;
+
+			for (int b = 7; b >= 0; b--)
+				value = (value << 8) | masks[i * 8 + b];
+
+			bank->mask[i] = value;
+		}
 	}
 
 	// Where the RIFFs have to start if the file really is built the way the
@@ -289,6 +318,58 @@ int SfxBankLut(const SfxBank* bank, int soundId)
 	const int info = bank->lut[soundId];
 
 	return info >= 0 && info < bank->infoCount ? info : -1;
+}
+
+long long SfxBankMask(const SfxBank* bank, int soundId)
+{
+	if (!bank || soundId < 0 || soundId >= SFX_LUT_ENTRIES)
+		return 0;
+
+	return bank->mask[soundId];
+}
+
+int SfxBankLevelBit(const SfxBank* bank, const short* levelLut, long entries)
+{
+	int best = -1;
+	long bestScore = 0;
+
+	if (!bank || !levelLut)
+		return -1;
+
+	if (entries > SFX_LUT_ENTRIES)
+		entries = SFX_LUT_ENTRIES;
+
+	for (int bit = 0; bit < 64; bit++)
+	{
+		long score = 0;
+
+		for (long sfx = 0; sfx < entries; sfx++)
+		{
+			if (levelLut[sfx] < 0 || bank->lut[sfx] < 0)
+				continue;
+
+			score += (bank->mask[sfx] >> bit) & 1 ? 1 : -1;
+		}
+
+		if (score > bestScore)
+		{
+			bestScore = score;
+			best = bit;
+		}
+	}
+
+	return best;
+}
+
+bool SfxPairPlausible(long bankDataBytes, long pcmBytes22k)
+{
+	if (pcmBytes22k <= 0)
+		return true;
+
+	const long expected = pcmBytes22k * 2;
+
+	return bankDataBytes >= expected - expected / 5 &&
+		bankDataBytes <= expected + expected / 5;
 }
 
 int SfxBankInfoNumber(const SfxBank* bank, int info)

@@ -42,6 +42,16 @@
  *     -id <n>          print the bridge for that sound id as well. Repeatable.
  *                      Without any, 0 (LARA_FEET) and 4 (the landing) are
  *                      printed, which are the two the footstep mods replace.
+ *     -level <.trc>    THE BRIDGE'S OWN DECISION TABLE FOR A REAL LEVEL
+ *                      (#153, round M3): the level's sound map read out of
+ *                      the file, its <level>.hdm read beside it, and one
+ *                      line per sound id saying what the engine would do -
+ *                      paired, refused by length, refused as a randomizer
+ *                      import, or paired while the bank's level mask says
+ *                      no level of ours uses that sound. The three rules
+ *                      are the engine's own functions and not a copy:
+ *                      SfxBankLevelBit, SfxPairPlausible and
+ *                      HDMarkersSoundImported.
  *     -all-ids         every sound id the chosen bank names, as a table.
  *     -wavs            the loose .wav overlay alone, without the bank tables.
  *     -samples         push every sample of the chosen bank (and of the
@@ -78,6 +88,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/sfxbank.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_install.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
+#include "core/Tr5Level.h"
 
 /* hd_install.cpp reads the two registry overrides out of these, which the
  * engine defines in tomb5\tomb5.cpp. A tool that links hd_install.cpp has to
@@ -207,6 +219,7 @@ int main(int argc, char** argv)
 	std::string mods = Join(game, "Mods");
 	std::string install;
 	std::vector<int> ids;
+	std::string level;
 	bool allIds = false, wavsOnly = false, samples = false;
 
 	for (int i = 2; i < argc; i++)
@@ -217,6 +230,8 @@ int main(int argc, char** argv)
 			install = argv[++i];
 		else if (!_stricmp(argv[i], "-id") && i + 1 < argc)
 			ids.push_back(atoi(argv[++i]));
+		else if (!_stricmp(argv[i], "-level") && i + 1 < argc)
+			level = argv[++i];
 		else if (!_stricmp(argv[i], "-all-ids"))
 			allIds = true;
 		else if (!_stricmp(argv[i], "-wavs"))
@@ -420,6 +435,163 @@ int main(int argc, char** argv)
 				SfxBankSamples(ruler) - rulerRefused, SfxBankSamples(ruler),
 				rulerRefused, rulerNotFirst);
 		}
+	}
+
+	/* --- THE BRIDGE'S OWN DECISION FOR A REAL LEVEL (#153, round M3) ---- */
+	if (!level.empty() && bank)
+	{
+		Tr5Level lvl;
+		std::string error;
+
+		printf("\n-- the bridge over %s ---------------------------\n",
+			level.c_str());
+
+		std::wstring wide;
+
+		for (const char* p = level.c_str(); *p; p++)
+			wide.push_back((wchar_t)(unsigned char)*p);
+
+		if (!lvl.load(wide, error))
+			printf("  not loadable: %s\n", error.c_str());
+		else
+		{
+			size_t lutAt = 0, infosAt = 0, numSamplesAt = 0;
+			int nInfos = 0, nSamples = 0;
+
+			if (!lvl.debugSoundBlocks(lutAt, infosAt, nInfos, nSamples))
+				printf("  the level has no sound blocks\n");
+			else
+			{
+				const std::vector<unsigned char>& raw = lvl.debugBytes();
+				std::vector<short> levelLut(500, -1);
+
+				for (int s = 0; s < 500; s++)
+				{
+					short v = -1;
+
+					if (lutAt + (size_t)s * 2 + 2 <= raw.size())
+						memcpy(&v, raw.data() + lutAt + (size_t)s * 2, 2);
+
+					levelLut[s] = v;
+				}
+
+			/* THE LEVEL'S OWN SAMPLE CHAIN, so that a pairing can be
+			 * judged by length the way the engine judges it: uncomp_size
+			 * of each sample is what HQSfxPayload is handed. */
+				std::vector<long> uncomp;
+
+				lvl.debugSampleArray(numSamplesAt, nSamples);
+
+				{
+					size_t p = numSamplesAt + 4;
+
+					for (int s = 0; s < nSamples && p + 8 <= raw.size(); s++)
+					{
+						long u = 0, c = 0;
+
+						memcpy(&u, raw.data() + p, 4);
+						memcpy(&c, raw.data() + p + 4, 4);
+						uncomp.push_back(u);
+						p += 8 + (size_t)c;
+					}
+				}
+
+			/* AND THE SIDECAR BESIDE IT - the same file the engine reads,
+			 * through the same reader (hd_markers.cpp). */
+				const bool haveHdm = HDMarkersLoad(level.c_str());
+
+				printf("  sidecar : %s%s\n", HDMarkersPath(),
+					haveHdm ? "" : " - not read");
+				printf("  the run declared %d imported sound id%s\n",
+					HDMarkersSoundImportCount(),
+					HDMarkersSoundImportCount() == 1 ? "" : "s");
+
+				const int bit = SfxBankLevelBit(bank, &levelLut[0], 500);
+
+				printf("  the bank's level bit for this file: %d\n", bit);
+				printf("\n  %-6s %-7s %-7s %-9s %-9s %s\n", "id", "level",
+					"bank", "level ms", "bank ms", "what the engine does");
+
+				int paired = 0, byLength = 0, imported = 0, masked = 0;
+				int importedHeard = 0;
+
+				for (int s = 0; s < 500; s++)
+				{
+					const int li = levelLut[s];
+					const int hi = SfxBankLut(bank, s);
+
+					if (li < 0 || li >= nInfos || hi < 0)
+						continue;
+
+					short number = 0, flags = 0;
+
+					memcpy(&number, raw.data() + infosAt + (size_t)li * 8, 2);
+					memcpy(&flags, raw.data() + infosAt + (size_t)li * 8 + 6, 2);
+
+					const long levelBytes = number >= 0 && number < (int)uncomp.size()
+						? uncomp[number] : 0;
+					long bankBytes = 0, bankData = 0, bankRate = 0;
+					const char* riff = SfxBankSample(bank,
+						SfxBankInfoNumber(bank, hi), &bankBytes);
+
+					if (!riff || !SfxRiffCheck(riff, bankBytes, &bankData, &bankRate, 0))
+						continue;
+
+					const double levelMs = levelBytes * 1000.0 / 44100.0;
+					const double bankMs = bankRate > 0
+						? bankData * 1000.0 / bankRate : 0.0;
+					const bool isImport = HDMarkersSoundImported(s);
+					const bool plausible = SfxPairPlausible(bankData, levelBytes);
+					const bool outside = bit >= 0 &&
+						!((SfxBankMask(bank, s) >> bit) & 1);
+					const char* verdict;
+
+					if (isImport)
+					{
+					/* AND WHETHER THE LENGTH WOULD HAVE LET IT THROUGH, which is
+					 * the whole point of the round: three of the vulture's four were
+					 * always refused by length, and it is the ONE that was not that
+					 * the player heard. */
+						verdict = plausible
+							? "REFUSED as a randomizer import - AND THE LENGTH WOULD HAVE LET IT THROUGH"
+							: "refused as a randomizer import (the length would have refused it too)";
+						imported++;
+
+						if (plausible)
+							importedHeard++;
+					}
+										else if (!plausible)
+					{
+						verdict = "refused by length";
+						byLength++;
+					}
+					else if (outside)
+					{
+						verdict = "paired, but no level of ours claims it";
+						masked++;
+						paired++;
+					}
+					else
+					{
+						verdict = "paired";
+						paired++;
+					}
+
+				// Only the interesting lines, or the table is 130 rows of
+				// "paired" and nobody reads the four that matter.
+					if (isImport || outside || !plausible)
+						printf("  %-6d %-7d %-7d %-9.0f %-9.0f %s\n", s, li, hi,
+							levelMs, bankMs, verdict);
+				}
+
+				printf("\n  %d paired, %d refused by length, %d refused as "
+					"randomizer imports (%d of them the length would have let "
+					"through), %d paired that no level of ours claims\n",
+					paired, byLength, imported, importedHeard, masked);
+			}
+		}
+
+		HDMarkersFree();
 	}
 
 	/* --- the bridge ----------------------------------------------------- */

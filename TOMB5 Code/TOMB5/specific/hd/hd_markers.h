@@ -160,6 +160,28 @@ int HDMarkersRoom(int at);
 int HDMarkersCutCount();
 const HDMarkerCut* HDMarkersCut(int at);
 
+/* THE SOUND IDS THIS RUN IMPORTED FROM ANOTHER GAME (#153, round M3).
+ *
+ * The randomizer's Tomb Raider III guests bring their own recordings into
+ * free slots of the TR5 soundmap - the vulture on 420..423, the Compy on
+ * 430..434, the raptor on 438..444, the T-Rex on 445..449. "Free" means free
+ * in a TR5 LEVEL; it says nothing about the remaster's own bank, where four
+ * of the vulture's four are RICH1's VCI scientist voice lines.
+ *
+ * The HQ bridge pairs a level sample with a bank sample BY SOUND ID and
+ * judges the pairing by length. Measured: the vulture's id 423 is a 879 ms
+ * screech, the bank's id 423 a 1037 ms voice line, and 1.18 times the
+ * expected length is inside the fifth the rule allows - so the bird died
+ * saying something in English, which is what the user heard and reported.
+ *
+ * A length cannot decide this and a NAME can. The run knows which ids it
+ * wrote and says so here; hqsfx.cpp refuses to pair them. An id the run
+ * MOVED between TR5 levels is not an import and is not in this list - that
+ * one really is the remaster's own sound and keeps its HQ pairing. */
+int HDMarkersSoundImportCount();
+int HDMarkersSoundImport(int at);
+bool HDMarkersSoundImported(int soundId);
+
 int HDMarkersDonorCount();
 const HDMarkerDonor* HDMarkersDonor(int at);
 // The donor line for a slot of this level, or 0.

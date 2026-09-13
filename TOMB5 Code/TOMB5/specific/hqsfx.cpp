@@ -14,6 +14,7 @@
 #include "hqsfx.h"
 #include "sfxbank.h"
 #include "hd/hd_mods.h"
+#include "hd/hd_markers.h"	// the run's own imported ids (#153, round M3)
 #include "function_stubs.h"
 
 // Optional high quality sounds.
@@ -102,6 +103,13 @@ static char hq_source[300];	// what was opened, for the log and file.cpp
 static SfxBank* hq_ref;
 static char hq_ref_source[300];
 
+/* WHETHER THE BANK BEING PLAYED CAME OUT OF A MOD (#153, round M3).
+ * HQSfxOpen knew it and threw it away; the footsteps need it, because
+ * "the boots keep the install's own recordings" means "the first
+ * UNMODDED bank of the chain" and that is hq_ref when this is true and
+ * hq_bank itself when it is not. */
+static bool hq_from_mod;
+
 static long* hq_map;		// level sample number -> bank sample number
 static long* hq_ref_map;	// the same through the unmodded bank's own LUT
 static long hq_substituted;
@@ -170,6 +178,8 @@ bool HQSfxOpen()
 
 	bool fromMod = false;
 
+	hq_from_mod = false;
+
 	/* THE WHOLE CHAIN IN ONE LOOP, and the order of it is SfxBankChainLink's
 	 * (#153, round M1, fix round). The mods used to be walked here and the
 	 * two plain candidates in a second loop below, and SfxProbe held a third
@@ -211,7 +221,10 @@ bool HQSfxOpen()
 		const int size = hq_bank ? (int)sizeof(hq_ref_source) : (int)sizeof(hq_source);
 
 		if (HQSfxTry(path, label, into, source, size) && mod >= 0)
+		{
 			fromMod = true;
+			hq_from_mod = true;
+		}
 	}
 
 	if (fromMod && hq_ref)
@@ -267,6 +280,7 @@ void HQSfxClose()
 	hq_ref = 0;
 	hq_source[0] = 0;
 	hq_ref_source[0] = 0;
+	hq_from_mod = false;
 	hq_ready = false;
 	HQSfxDropMap();
 }
@@ -294,7 +308,7 @@ void HQSfxDropMap()
  * says a number means the same sound in both. The sound id does. */
 static long* HQSfxMapThrough(SfxBank* bank, const short* levelLut,
 	long levelLutEntries, const SAMPLE_INFO* levelInfos, long levelInfoCount,
-	long* paired)
+	long* paired, int bit = -1, long* refused = 0, long* outside = 0)
 {
 	long sfx, li, v, n, lvar;
 	long* map;
@@ -320,6 +334,59 @@ static long* HQSfxMapThrough(SfxBank* bank, const short* levelLut,
 
 		if (li < 0 || li >= levelInfoCount || hi < 0)
 			continue;
+
+		/* AN ID THE RUN IMPORTED IS NOT THE REMASTER'S SOUND (#153, round
+		 * M3). The randomizer's Tomb Raider III guests take over free slots
+		 * of the TR5 soundmap, and free in a LEVEL is not free in the BANK:
+		 * the vulture's 420..423 are RICH1's VCI scientist voice lines
+		 * there, and the length rule let 423 through at 1.18 times the
+		 * expected length - so the bird died saying something in English.
+		 *
+		 * A length cannot tell a wrong pairing from a different recording
+		 * and a NAME can, so the run writes the ids it imported into its own
+		 * sidecar and they are passed over here. Ids the run MOVED between
+		 * TR5 levels are not in that list and keep their pairing: those
+		 * really are the remaster's own sounds. */
+		if (HDMarkersSoundImported((int)sfx))
+		{
+			if (refused && *refused < 32)
+			{
+				char line[160];
+
+				snprintf(line, sizeof(line),
+					"SFXLOG bridge: id %d is a randomizer import - the level's "
+					"own sample plays", (int)sfx);
+				HQSfxLog(line);
+			}
+
+			if (refused)
+				(*refused)++;
+
+			continue;
+		}
+
+		/* AND THE SAFETY NET (#153, round M3). The bank says which level
+		 * files use each sound; a pairing the mask excludes is either a
+		 * sound the run moved here - which is real and keeps its pairing -
+		 * or an id nobody has declared. Either way it is worth a line, and
+		 * it is the line that would have found the vulture without anybody
+		 * reporting it. */
+		if (bit >= 0 && !((SfxBankMask(bank, (int)sfx) >> bit) & 1) &&
+			outside && *outside < 32)
+		{
+			char line[192];
+
+			snprintf(line, sizeof(line),
+				"SFXLOG bridge: id %d is paired, but the bank says no level of "
+				"ours uses it (mask 0x%08x%08x, this level is bit %d) - a sound "
+				"the run moved here, or one nobody has declared",
+				(int)sfx,
+				(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) >> 32),
+				(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) & 0xFFFFFFFFu),
+				bit);
+			HQSfxLog(line);
+			(*outside)++;
+		}
 
 		// The variation count sits in bits 2..5 of flags, the same place
 		// sound.cpp reads it from when it rolls which of a sound's takes to
@@ -362,8 +429,14 @@ void HQSfxBuildMap(const short* levelLut, long levelLutEntries,
 	if (levelLutEntries > SFX_LUT_ENTRIES)
 		levelLutEntries = SFX_LUT_ENTRIES;
 
+	/* WHICH LEVEL THE BANK THINKS WE ARE, for the safety net below. Asked of
+	 * the bank that is PLAYED, because that is the one whose pairings are
+	 * being made. */
+	const int bit = SfxBankLevelBit(hq_bank, levelLut, levelLutEntries);
+	long refused = 0, outside = 0;
+
 	hq_map = HQSfxMapThrough(hq_bank, levelLut, levelLutEntries, levelInfos,
-		levelInfoCount, &paired);
+		levelInfoCount, &paired, bit, &refused, &outside);
 
 	if (!hq_map)
 		return;
@@ -372,6 +445,11 @@ void HQSfxBuildMap(const short* levelLut, long levelLutEntries,
 		levelInfoCount, &refPaired);
 
 	Log("HQ SFX: %d of this level's samples have a counterpart in the bank", paired);
+
+	if (HDMarkersSoundImportCount() || outside || bit < 0)
+		Log("SFXLOG bridge: this level is the bank's level bit %d; the run declared %d imported sound id%s, %ld pairing%s refused, %ld more that no level of ours claims", bit, HDMarkersSoundImportCount(),
+			HDMarkersSoundImportCount() == 1 ? "" : "s", refused,
+			refused == 1 ? "" : "s", outside);
 
 	if (hq_ref_map)
 	{
@@ -521,11 +599,13 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
 	// not impossible. Both sides hold the same recording, so at twice the
 	// rate the bank's sample must be about twice as long; anything further
 	// off than a fifth is not the same sound and keeps Core's version.
+	// The arithmetic is SfxPairPlausible since round M3, so that SfxProbe
+	// judges a pairing with this rule and not with a copy of it.
 	if (pcmBytes22k > 0)
 	{
 		const long expected = pcmBytes22k * 2;
 
-		if (dataLen < expected - expected / 5 || dataLen > expected + expected / 5)
+		if (!SfxPairPlausible(dataLen, pcmBytes22k))
 		{
 			/* UNLESS A MOD PUT A DIFFERENT RECORDING THERE (#153, round M1).
 			 *
@@ -612,6 +692,164 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
 	 * format block and the audio on from where they ARE. Both counters above
 	 * were raised on the strength of this return, and the caller may not
 	 * undo it - see the contract in hqsfx.h. */
+	if (parts)
+		*parts = where;
+
+	return buffer;
+}
+
+/* ------------------------------------------------ the footsteps -- */
+
+/* THE FIRST UNMODDED BANK OF THE CHAIN (#153, round M3), which is the
+ * ruler when a mod's bank is played and the played bank itself when none
+ * is. Null when there is no bank at all. */
+static SfxBank* HQSfxPlain()
+{
+	if (!hq_ready)
+		return 0;
+
+	return hq_from_mod ? hq_ref : hq_bank;
+}
+
+static long* HQSfxPlainMap()
+{
+	return hq_from_mod ? hq_ref_map : hq_map;
+}
+
+/* Whether the bank being PLAYED came out of a mod (#153, round M3) - which
+ * is what decides where the barefoot set comes from, see hd_feet.cpp. */
+bool HQSfxFromMod()
+{
+	return hq_ready && hq_from_mod;
+}
+
+const char* HQSfxPlainSource()
+{
+	if (!HQSfxPlain())
+		return "";
+
+	return hq_from_mod ? hq_ref_source : hq_source;
+}
+
+/* THE BOOTS' PAYLOAD FOR ONE OF THE LEVEL'S SAMPLES (#153, round M3).
+ *
+ * HQSfxPayload with the mod taken out of it, for sound ids 0 and 4 alone:
+ * the first unmodded bank of the chain, and no loose .wav overlay. It is
+ * the user's decision, and the reason is that a sound mod which replaces
+ * the footsteps replaces them for EVERY outfit - his Underworld bare
+ * footsteps made Lara barefoot in boots, in a wetsuit and in a parka alike.
+ * With the outfit deciding which of two sets plays, the two have to BE two,
+ * and the boots' half may not be the half a mod has swapped.
+ *
+ * The plausibility rule is the one HQSfxPayload has always had: the unmodded
+ * bank holds the same recording as the level, so at twice the rate it must
+ * be about twice as long. No ruler is needed here - this IS the ruler.
+ *
+ * Null means "keep the level's own sample", which is Core's boots and
+ * therefore already the right answer. */
+char* HQSfxPayloadBoots(long levelSample, long pcmBytes22k, long* riffBytes,
+	SfxRiffParts* parts)
+{
+	SfxBank* bank = HQSfxPlain();
+	long* map = HQSfxPlainMap();
+	long dataLen = 0, bankBytes = 0;
+	const char* why = "";
+	SfxRiffParts where;
+
+	if (riffBytes)
+		*riffBytes = 0;
+
+	if (!bank || !map || levelSample < 0 || levelSample >= MAX_SAMPLES)
+		return 0;
+
+	const long g = map[levelSample];
+
+	if (g < 0 || g >= SfxBankSamples(bank))
+		return 0;
+
+	char* buffer = (char*)SfxBankSample(bank, (int)g, &bankBytes);
+
+	if (!buffer || !SfxRiffCheck(buffer, bankBytes, &dataLen, 0, &why, &where))
+		return 0;
+
+	if (!SfxPairPlausible(dataLen, pcmBytes22k))
+		return 0;
+
+	hq_substituted++;
+
+	if (riffBytes)
+		*riffBytes = bankBytes;
+
+	if (parts)
+		*parts = where;
+
+	return buffer;
+}
+
+/* THE UNMODDED BANK'S OWN TAKES FOR ONE SOUND ID (#153, round M3), by bank
+ * sample number. This is how the barefoot set is reached: it is sound id
+ * HQ_SFX_BARE_FEET of the remaster's own bank and no level has it, so it
+ * cannot be found through the level bridge the way every other sound is.
+ * Returns how many were written, 0 when this bank has no such id. */
+int HQSfxBankTakes(int soundId, long* samples, int max)
+{
+	SfxBank* bank = HQSfxPlain();
+
+	if (!bank || !samples || max <= 0)
+		return 0;
+
+	const int info = SfxBankLut(bank, soundId);
+
+	if (info < 0)
+		return 0;
+
+	const int first = SfxBankInfoNumber(bank, info);
+	int takes = SfxBankInfoVariations(bank, info);
+	int written = 0;
+
+	if (takes < 1)
+		takes = 1;
+
+	for (int i = 0; i < takes && written < max; i++)
+	{
+		const long s = first + i;
+
+		if (s < 0 || s >= SfxBankSamples(bank))
+			continue;
+
+		samples[written++] = s;
+	}
+
+	return written;
+}
+
+/* One of those samples, checked by the same gate every payload goes through
+ * (#153, round M3). The buffer is the bank's own and is valid until the
+ * next call on that bank, exactly as HQSfxPayload's is. */
+char* HQSfxBankSample(long sample, long* riffBytes, SfxRiffParts* parts)
+{
+	SfxBank* bank = HQSfxPlain();
+	long bytes = 0, dataLen = 0;
+	const char* why = "";
+	SfxRiffParts where;
+
+	if (riffBytes)
+		*riffBytes = 0;
+
+	if (!bank || sample < 0 || sample >= SfxBankSamples(bank))
+		return 0;
+
+	char* buffer = (char*)SfxBankSample(bank, (int)sample, &bytes);
+
+	if (!buffer || !SfxRiffCheck(buffer, bytes, &dataLen, 0, &why, &where))
+	{
+		Log("HQ SFX: bank sample %d - %s", (int)sample, why);
+		return 0;
+	}
+
+	if (riffBytes)
+		*riffBytes = bytes;
+
 	if (parts)
 		*parts = where;
 

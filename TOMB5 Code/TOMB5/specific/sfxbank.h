@@ -58,6 +58,50 @@ int SfxBankLut(const SfxBank* bank, int soundId);
 int SfxBankInfoNumber(const SfxBank* bank, int info);
 int SfxBankInfoVariations(const SfxBank* bank, int info);
 
+/* WHICH LEVELS THE BANK SAYS THIS SOUND BELONGS TO (#153, round M3): the
+ * 64 bit field the format keeps for every sound id, one bit per level FILE.
+ * 0 for an id the bank does not name.
+ *
+ * WHICH BIT IS WHICH LEVEL IS NOWHERE IN THE FILE and is not written down
+ * here either - hqsfx.cpp works it out for the level it is loading, by
+ * asking which bit's set of ids covers the level's own soundmap. Proven on
+ * the sixteen classic levels: every one of them matches exactly one bit and
+ * matches it completely (ANDREA1 bit 1, ANDREA2 2, ANDREA3 3, JOBY2 4,
+ * JOBY3 5, JOBY4 6, JOBY5 7, ANDY1 8, ANDY2 9, ANDY3 10, RICH1 11, RICH2 12,
+ * RICH3 14), with the runner-up covering at most two thirds. */
+long long SfxBankMask(const SfxBank* bank, int soundId);
+
+/* WHICH OF THOSE SIXTY-FOUR BITS IS THE LEVEL WHOSE SOUND MAP THIS IS
+ * (#153, round M3), or -1 when none of them fits.
+ *
+ * Nothing in the file says which bit is which level and nothing here writes
+ * it down: a level's own sound map IS the answer. Every id the level has and
+ * the bit claims counts for that bit, every id the level has and the bit does
+ * not claim counts against it, and the best score wins - which stops a
+ * neighbour's bit from winning on the sounds every level shares.
+ *
+ * Proven over the sixteen classic levels: each matches exactly one bit and
+ * matches it COMPLETELY - all of its own ids, none missing - while the
+ * runner-up covers at most two thirds. ANDREA1 is bit 1, ANDREA2 2, ANDREA3
+ * 3, JOBY2 4, JOBY3 5, JOBY4 6, JOBY5 7, ANDY1 8, ANDY2 9, ANDY3 10, RICH1
+ * 11, RICH2 12, RICH3 14. Worked out rather than tabulated, because a table
+ * of level names is a table a randomized level or a level pack would be
+ * silently wrong about.
+ *
+ * `levelLut` is the level's own sound map, `entries` its length. Both the
+ * engine's bridge and SfxProbe ask this one function. */
+int SfxBankLevelBit(const SfxBank* bank, const short* levelLut, long entries);
+
+/* IS A PAIRING PLAUSIBLE BY LENGTH (#153, round M3 - the rule itself is as
+ * old as #117)? Both sides hold the same recording, so at twice the rate the
+ * bank's sample must be about twice as long; further off than a fifth is not
+ * the same sound. `pcmBytes22k` of 0 means "do not judge", which is what the
+ * barefoot set uses - a different recording on purpose.
+ *
+ * Here rather than in hqsfx.cpp so that SfxProbe judges a pairing with the
+ * engine's own arithmetic instead of a copy of it. */
+bool SfxPairPlausible(long bankDataBytes, long pcmBytes22k);
+
 /* One sample's RIFF, read into the bank's own buffer - valid until the next
  * call on this bank. Null when the number is out of range or the read failed.
  * *bytes gets its length including the 8 byte RIFF header. */

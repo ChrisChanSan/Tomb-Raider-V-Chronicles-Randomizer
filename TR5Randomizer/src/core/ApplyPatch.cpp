@@ -826,6 +826,13 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (!lvl.addSoundsFromTr3(sounds, d->soundBase, mapping, f, &d->volumes))
         { err = std::string(d->name) + " (installing sounds): " + f; return false; }
 
+        // #153 round M3: every id this guest just took over is written into
+        // the sidecar, so that the engine's HQ bridge does not pair it with
+        // whatever the remaster's own bank keeps on that number. The reason
+        // in full is at Tr5Level::hdMarkSoundImport.
+        for (const std::pair<int,int>& m : mapping)
+            lvl.hdMarkSoundImport(m.second);
+
         // 2. Rewrite the SFX numbers of the anim commands. If a number
         //    remains unresolved, ABORT - it would hit a foreign vanilla
         //    sound in the target (with the Compy, 243 turned into a hefty
@@ -1790,6 +1797,21 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
         std::fprintf(f, "cut %d %d %d %d %d %d\n",
                      c.lo[0], c.lo[1], c.lo[2], c.hi[0], c.hi[1], c.hi[2]);
         if (cutsOut) ++*cutsOut;
+    }
+
+    /* THE SOUND IDS THIS RUN IMPORTED FROM ANOTHER GAME (#153, round M3),
+     * one line, ascending because a std::set is - so the same seed writes the
+     * same file. An engine older than round M3 has no rule for the word and
+     * ignores the line, which is exactly what the format was built for; a run
+     * that imported nothing writes no line at all, so every sidecar of every
+     * older run stays byte for byte what it was. */
+    const std::set<int>& imports = level.hdSoundImports();
+
+    if (!imports.empty())
+    {
+        std::fprintf(f, "sfximport");
+        for (int id : imports) std::fprintf(f, " %d", id);
+        std::fprintf(f, "\n");
     }
 
     std::vector<Tr5Level::HdDonor> donors = level.hdDonors();

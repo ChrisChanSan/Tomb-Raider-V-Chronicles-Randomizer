@@ -3051,8 +3051,11 @@ bare set for everything and a bare hand came out of the Russia suit's glove
 cuff. The outfit table gains a `gloves` column and the part table a gloved twin
 per hand part; all twelve exist and load with a bind drift of 0
 (`HAND_GLOVES_REST` 5008 vertices against the bare 3864, `HAND_GLOVES_HK` 7507
-against 6363). Only `OUTFIT_RUSSIA` is set — nobody has reported a wrong hand
-on any other, and each is a picture the user has to judge. A hand part with no
+against 6363). (The table holds **eleven** hand parts, not twelve - counted and
+corrected in #153's round M2b, second fix round, below. All eleven do have a
+gloved twin, and since that round none of them is worn: the wardrobe wears the
+bare hands in every level.) Only `OUTFIT_RUSSIA` is set — nobody has reported a
+wrong hand on any other, and each is a picture the user has to judge. A hand part with no
 gloved twin falls back to the bare one and says so in the log; none does today.
 `HAND_XRAY_*` belongs to a remaster feature this engine has not got and is
 deliberately unused.
@@ -11354,16 +11357,28 @@ smallest the mod's do.
 
 What the bar buys was measured too, with `ModelProbe -handfold`, which skins
 every vertex twice through the same node matrices the card is given and takes
-the distance between the two answers. Folding the install's own hands at a bar
-of **0** moves them by at most **0.51 units** with both forearms turned 50
-degrees out, **0.97** with both arms straight out sideways, and **2.00** in a
-contortion no animation reaches. Small - and pointless, because one weight unit
-on the far hand cannot make a sliver. With the bar the remaster's own files
-come out of the reader **byte for byte as they went in**, which is a guarantee
-rather than a measurement. The mod's 46 vertices move up to **65.71 units**
-(mean 51.25) in the same pose, which is the sliver, and the two rendered
-pictures of that one hand - `-nofold` and without it - show it and then show it
-gone.
+the distance between the two answers. Which hand parts a run loads is decided by
+the LEVEL's weapon slots, so the sweep walks all thirteen classic levels and
+covers all **eleven** hand parts of the table in `hd_lara.cpp`; four of them -
+REST, FLARE, TORCH, CROWBAR - carry no crossed vertex at all and never move.
+Folding the other seven at a bar of **0** moves them, largest of the seven:
+
+```
+    0.56 units    both forearms turned 50 degrees out - the pose the round
+                  was asked to measure in. DEAGLE and DEAGLE_LASER; PISTOL
+                  0.51, UZI 0.52, SHOTGUN, HK and GRAPPLE 0.53.
+    0.84          both upper arms straight out sideways; the others 0.80-0.81.
+    0.97          upper arms out 90 AND forearms folded 90 on top of that -
+                  all seven, to the hundredth.
+    2.00          UZI, in a contortion no animation reaches.
+```
+
+Small - and pointless, because one weight unit on the far hand cannot make a
+sliver. With the bar the remaster's own files come out of the reader **byte for
+byte as they went in**, which is a guarantee rather than a measurement. The
+mod's 46 vertices move up to **65.49 units** (mean 51.27) in the brief's pose,
+which is the sliver, and the two rendered pictures of that one hand - `-nofold`
+and without it - show it and then show it gone.
 
 **MOD GUNS ON THE INSTALL'S HANDS.** A mod may ship a weapon hand - a hand and
 the gun in it, on two or three pages of one file - and paint the HAND half with
@@ -11461,6 +11476,26 @@ this round against the build after it, is identical line for line - every slot,
 every model, every page, every range, every verdict - apart from the
 millisecond columns and the peak commit.
 
+**AND THE PEAK COMMIT IS NOT A LINE TO READ THREE TIMES.** It is a memory
+number - `PeakPagefileUsage`, the process's high-water commit charge - and the
+round M2 review read a 10 MiB step out of three runs of each build. Measured
+properly (`fix/round2/peak_20pairs.txt`, `peak_control.txt`, `bisect_peak.txt`):
+the number's own run-to-run spread for ONE unchanged binary is about 12 MiB, min
+to max, and its values are bimodal, clustering near 89 and near 95 MiB with
+occasional excursions past 100. Over 20 interleaved pairs the means are 95.3 MiB
+after the round against 91.6 before it; reversing which build runs first leaves
+that unchanged (95.4 against 91.7), so it is not an order effect, and the same
+binary against itself gives 96.2 against 97.2. A ModelProbe built at each of the
+round's five commits and swept ten times gives means of 91.1, 93.4, 92.2, 91.5,
+92.6 and 92.2 MiB - within 2.3 MiB of each other, with **no step at any
+commit**, and the pre-round baseline itself reached 100.2 MiB in that sweep.
+Every run creates a Direct3D 9 device (`-nodraw` skips the drawing, not the
+device) and decodes 45 MiB of pages, and the driver's own commit is in this
+figure. The single pair kept as this entry's own diff makes the point by
+itself: there the build **before** the round measures 96.7 MiB and the build
+after it 88.8. So: a real memory number, no measurable step, and three samples
+cannot resolve it.
+
 **THE SIX SMALL FINDINGS of the round M2 review.**
 
 1. The README said the wardrobe finds 24 IV-VI outfits. It finds **22**: the
@@ -11548,6 +11583,60 @@ code.
    answers false for everything, so the line was dead; it is back, gated on
    what the wardrobe ASKED for, which is the same question and one that can
    still be yes. Diagnostic seams are not thinned.
+
+**THE SECOND FIX ROUND.** The next review found no defect in the engine either,
+and three more numbers in the record that the build does not print - the same
+species again. Seven findings, listed the same way; one of them does not stand.
+
+1. **The mod's displacement was the draft's number, not the build's.** The entry
+   said the mod's 46 vertices move up to 65.71 units, mean 51.25. The tree as
+   committed prints **65.49**, mean **51.27** - re-measured here
+   (`fix/round2/fold_numbers.txt`) and corrected above. No code line in the fold
+   or in `-handfold` changed after the figure was taken; the draft simply
+   survived into the entry.
+2. **"At most 0.51 units" was one part's number written as the set's, and the
+   0.97 named the wrong pose.** In the pose the round was asked to measure in,
+   `HAND_BARE_DEAGLE` and `HAND_BARE_DEAGLE_LASER` move **0.56**, two lines
+   under the 0.51 in the round's own sweep; and "both arms straight out
+   sideways" is **0.84**, while 0.97 is the pose with the forearms folded 90 as
+   well. Re-measured over **all eleven** hand parts by walking every classic
+   level - which hand parts load is the LEVEL's weapon list, not `-guns` -
+   and both `hd_lara.h` and this entry now carry the whole table
+   (`fix/round2/sweep_install.txt`). The argument for the bar is untouched by
+   either correction.
+3. **`HDTrmFoldCounts::tied` said the opposite of what the code does.**
+   "crossed, no majority - left exactly as they were". `HDTrmFoldMirrored`
+   counts a tie and then folds it like any other vertex above the bar, taking
+   the far side from the sign of the vertex's own x - which is the rule the
+   same header explains eight lines higher, and the reason it exists. Anyone
+   reading `crossed=46 folded=46 tied=4` against that comment concluded four
+   vertices were skipped, when those four are the user's exactly-128/128
+   vertices the tie-break was written for. The comment says what happens now,
+   and both the HDLOG line and `-handfold`'s table footer spell it out in words
+   rather than leaving `tied=` to be guessed at.
+4. **The peak commit was filed under "timing".** It is a memory number and it
+   has no measurable step - both halves are measured above.
+5. **The ring's log line printed both boxes and the scale and never said the
+   model leaves the box.** The scale matches the two LONGEST extents only, so
+   the mod's upright Uzi ends up about 154 units thick where the vanilla item
+   is 41 - **3.73x**, measured - which is the intended picture and was argued
+   for at `HDModelBoxFit`, but a ring that looks crowded in a play test had
+   nothing to point at. `HDModelBoxFitOverflow` puts the number on it, out of
+   the same sorted axes the fit uses (one `sort_axes`, so the two cannot
+   drift), and the line now ends in "and it stands 3.73x out of that box on y"
+   or "and it stays inside that box". The Uzi AMMO model, whose proportions are
+   closer, comes out at 1.25x.
+6. **`props_of`'s memo comment was called wrong, and is not.** The review read
+   "dropped in `HDLaraLevelEnd`, which every level build calls first", grepped
+   for callers, found `HDLaraDrawEnd`'s and concluded no level build drops the
+   memory. `HDLaraLevelBuild`'s own first statement is `HDLaraLevelEnd();`
+   (`hd_lara.cpp`) - the sentence was right. It now names that line so the
+   search does not have to be repeated.
+7. **Eleven hand parts, not twelve.** Counted in `kPart`: REST, PISTOL, UZI,
+   SHOTGUN, HK, DEAGLE, DEAGLE_LASER, GRAPPLE, FLARE, TORCH, CROWBAR. "Twelve"
+   has stood in that comment since #123 (and in the C2 paragraph of section 4)
+   and was never the number of rows. All eleven do have a `HAND_GLOVES_` twin
+   in `4\ITEM`, which was the claim that rested on it.
 
 **WHAT IS NOT PROVED.** Everything here is `ModelProbe`'s renderer, which is
 the engine's renderer with no game around it. The play test still owes the

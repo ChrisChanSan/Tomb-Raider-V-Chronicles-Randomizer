@@ -147,8 +147,12 @@ namespace
 	 * One answer is remembered and it is keyed by the outfit, so a caller
 	 * asking about a different one gets the walk and the right answer. What it
 	 * rests on - the scan's list - is fixed for the session, and the memory is
-	 * dropped in HDLaraLevelEnd, which every level build calls first, so a
-	 * tool that re-scans with another Mods folder between levels is safe too. */
+	 * dropped in HDLaraLevelEnd, which is the FIRST STATEMENT of
+	 * HDLaraLevelBuild below and is also what hd_laradraw's HDLaraDrawEnd
+	 * calls; so a tool that re-scans with another Mods folder between levels
+	 * is safe either way round. (Named that closely because the round M2b
+	 * review read this sentence, grepped for the call, found only the
+	 * hd_laradraw one and concluded no level build drops the memory.) */
 	int g_props_outfit = HD_LARA_OUTFIT_NONE;
 	const HDWardrobeEntry* g_props = 0;
 
@@ -260,7 +264,11 @@ namespace
 	 * `nodes` is the coverage measured over 4\ITEM, written down so that the
 	 * masks in HDLaraFrameParts can be read against it.
 	 * `gloves` is the same file for a gloved outfit, or 0 when the wardrobe
-	 * ships no gloved twin. All twelve hand parts have one.
+	 * ships no gloved twin. There are ELEVEN hand parts below - REST, PISTOL,
+	 * UZI, SHOTGUN, HK, DEAGLE, DEAGLE_LASER, GRAPPLE, FLARE, TORCH, CROWBAR -
+	 * and the install ships a HAND_GLOVES_ file for every one of them, counted
+	 * in 4\ITEM. ("Twelve" stood here from #123 until round M2b and was never
+	 * the number of rows in this table.)
 	 *
 	 * NOTHING READS IT SINCE #153, ROUND M2b, and that is the user's decision
 	 * and not an oversight: the wardrobe wears the BARE hands in every level
@@ -1986,11 +1994,12 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				(fold.folded || fold.renormed))
 				note("%s: %s crossed=%d folded=%d tied=%d renorm=%d - %d of its "
 					"vertices name both hands, the worst with %d per mille on "
-					"the far one; %d were folded back (bar %d) and %d had "
-					"weights that did not sum to 255",
+					"the far one; %d were folded back (bar %d), %d of those by "
+					"the sign of their own x because the two sides weighed the "
+					"same, and %d had weights that did not sum to 255",
 					HDLaraPartLabel(part), model, fold.crossed, fold.folded,
 					fold.tied, fold.renormed, fold.crossed, fold.worstPermille,
-					fold.folded, g_fold_bar, fold.renormed);
+					fold.folded, g_fold_bar, fold.tied, fold.renormed);
 		}
 
 		/* THE INNER SKIN'S ONE TEXEL (#123, fix round K, K1). Measured off

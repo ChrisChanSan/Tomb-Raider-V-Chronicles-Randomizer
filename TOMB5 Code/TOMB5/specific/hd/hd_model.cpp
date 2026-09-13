@@ -2920,6 +2920,26 @@ int HDModelPage(int slot, int at)
 	return model->pages[(size_t)at];
 }
 
+/* THE AXES OF ONE BOX, LONGEST FIRST. One function so that the fit below and
+ * the overflow figure after it cannot come to disagree about which axis is
+ * which - the whole rule is "k-th longest to k-th longest", and a second copy
+ * of it would be a second thing to keep in step. */
+static void sort_axes(const float* size, int* order)
+{
+	order[0] = 0;
+	order[1] = 1;
+	order[2] = 2;
+
+	for (int a = 0; a < 2; a++)
+		for (int b = a + 1; b < 3; b++)
+			if (size[order[b]] > size[order[a]])
+			{
+				const int keep = order[a];
+				order[a] = order[b];
+				order[b] = keep;
+			}
+}
+
 /* THE CORRECTION, out of the two bounding boxes and nothing else.
  *
  * The axes are sorted by extent, longest to shortest, on both sides, and
@@ -2933,7 +2953,14 @@ int HDModelPage(int slot, int at)
  * whole box inside the target's instead was measured and refused: the
  * vanilla Uzi pickup is TWO guns lying side by side and 41 units thick,
  * the mod's is ONE standing upright, and a fit-inside rule would have
- * scaled it to a sixth of its size to match that thinnest axis. */
+ * scaled it to a sixth of its size to match that thinnest axis.
+ *
+ * THE PRICE OF THAT REFUSAL IS THAT THE FITTED MODEL CAN STAND OUT OF THE
+ * BOX IT WAS FITTED TO, on the two axes the scale did not decide - the same
+ * Uzi becomes 154 units thick where the vanilla item is 41. That is the
+ * intended picture and not a fault, but it is not visible in a matrix, so
+ * HDModelBoxFitOverflow below puts a number on it and the ring's log line
+ * prints it (#153, round M2b, the second fix round). */
 bool HDModelBoxFit(int model, int target, float* out)
 {
 	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
@@ -2952,25 +2979,10 @@ bool HDModelBoxFit(int model, int target, float* out)
 		dstMid[i] = (dstMax[i] + dstMin[i]) * 0.5f;
 	}
 
-	int srcOrder[3] = { 0, 1, 2 }, dstOrder[3] = { 0, 1, 2 };
+	int srcOrder[3], dstOrder[3];
 
-	for (int a = 0; a < 2; a++)
-		for (int b = a + 1; b < 3; b++)
-		{
-			if (srcSize[srcOrder[b]] > srcSize[srcOrder[a]])
-			{
-				const int keep = srcOrder[a];
-				srcOrder[a] = srcOrder[b];
-				srcOrder[b] = keep;
-			}
-
-			if (dstSize[dstOrder[b]] > dstSize[dstOrder[a]])
-			{
-				const int keep = dstOrder[a];
-				dstOrder[a] = dstOrder[b];
-				dstOrder[b] = keep;
-			}
-		}
+	sort_axes(srcSize, srcOrder);
+	sort_axes(dstSize, dstOrder);
 
 	if (srcSize[srcOrder[0]] <= 0.0f)
 		return false;
@@ -3008,6 +3020,72 @@ bool HDModelBoxFit(int model, int target, float* out)
 	out[3 * 4 + 3] = 1.0f;
 
 	return true;
+}
+
+/* HOW FAR THAT FIT LEAVES THE TARGET'S BOX (#153, round M2b, the second fix
+ * round).
+ *
+ * The scale is the ratio of the two LONGEST extents, so the longest axis lands
+ * exactly and the other two land wherever their own proportions put them. This
+ * is the largest of the three ratios - fitted extent over the target's extent
+ * on the same axis - and it is therefore never below 1 on the longest axis, so
+ * a value of 1.00 means the model sits inside the box it was fitted to and the
+ * 3.73 the user's Uzi mod measures means one of its axes is nearly four times
+ * the room the ring keeps for that item.
+ *
+ * It is a NUMBER FOR THE LOG and not a limit: nothing here refuses a fit, for
+ * the reason written at HDModelBoxFit. `worstAxis` is optional and takes 0, 1
+ * or 2 - the TARGET's axis that is overflowed. 0 when either box is missing. */
+float HDModelBoxFitOverflow(int model, int target, int* worstAxis)
+{
+	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+
+	if (worstAxis)
+		*worstAxis = -1;
+
+	if (!HDModelBounds(model, srcMin, srcMax) ||
+		!HDModelBounds(target, dstMin, dstMax))
+		return 0.0f;
+
+	float srcSize[3], dstSize[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		srcSize[i] = srcMax[i] - srcMin[i];
+		dstSize[i] = dstMax[i] - dstMin[i];
+	}
+
+	int srcOrder[3], dstOrder[3];
+
+	sort_axes(srcSize, srcOrder);
+	sort_axes(dstSize, dstOrder);
+
+	if (srcSize[srcOrder[0]] <= 0.0f || dstSize[dstOrder[0]] <= 0.0f)
+		return 0.0f;
+
+	const float scale = dstSize[dstOrder[0]] / srcSize[srcOrder[0]];
+	float worst = 0.0f;
+
+	for (int k = 0; k < 3; k++)
+	{
+		/* A target axis of zero extent is a flat model - anything at all
+		 * stands out of it - and a ratio there would be an infinity. It is
+		 * skipped and the axes that can be measured decide. */
+		if (dstSize[dstOrder[k]] <= 0.0f)
+			continue;
+
+		const float ratio = (srcSize[srcOrder[k]] * scale) / dstSize[dstOrder[k]];
+
+		if (ratio > worst)
+		{
+			worst = ratio;
+
+			if (worstAxis)
+				*worstAxis = dstOrder[k];
+		}
+	}
+
+	return worst;
 }
 
 bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)

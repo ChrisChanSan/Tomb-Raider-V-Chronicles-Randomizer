@@ -708,6 +708,25 @@ bool HDModelHeadBounds(int slot, float* mins, float* maxs);
  * are and this reads it off them. */
 bool HDModelBoxFit(int model, int target, float* out);
 
+/* HOW FAR THAT FIT LEAVES THE TARGET'S BOX (#153, round M2b, the second fix
+ * round). The scale above is the ratio of the two LONGEST extents, so the
+ * other two axes land wherever their own proportions put them and a model CAN
+ * stand well outside the room the ring keeps for the item it replaces - the
+ * mod's upright Uzi becomes 154 units thick where the vanilla item is 41.
+ *
+ * The largest of the three ratios, fitted extent over the target's on the same
+ * axis: 1.00 is "inside the box", 3.73 is that Uzi (measured, `-inventory` on
+ * ANDREA3's slot 336 with the user's mod); the Uzi AMMO model is 1.25. Rounded
+ * box sides make the printed extents disagree with the ratio in the second
+ * decimal - the ratio is taken from the unrounded ones. `worstAxis` is
+ * optional and takes the TARGET's axis number, 0..2. Zero when either model
+ * has no box.
+ *
+ * It is a number for the log and refuses nothing - the reason the fit does not
+ * fit-inside is at HDModelBoxFit - but a ring that looks crowded in a play test
+ * now has a line pointing at the cause. */
+float HDModelBoxFitOverflow(int model, int target, int* worstAxis);
+
 // Everything that could not be bound, in words, for the caller's log. Valid
 // until the next HDModelLevelBegin or HDModelLevelEnd.
 int HDModelNoteCount();

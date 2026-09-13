@@ -346,6 +346,35 @@ namespace
 		return 0;
 	}
 
+	/* WHAT HDModelBoxFitOverflow SAYS, IN WORDS (#153, round M2b, the second
+	 * fix round). One tenth is the resolution worth reporting: below 1.05 the
+	 * model is in the box for any purpose the ring has, and the number itself
+	 * is printed as soon as it is not, so nobody has to take the word for it.
+	 * The buffer is consumed by the Log call on the next line and nowhere
+	 * else. */
+	const char* box_verdict(float over, int axis)
+	{
+		/* snprintf and not sprintf: `over` is a ratio of two measured extents
+		 * and its printed width is not bounded by anything this file knows -
+		 * a target axis of a thousandth of a unit would write a number longer
+		 * than the sentence around it. */
+		static char said[128];
+		static const char* kAxis[3] = { "x", "y", "z" };
+
+		if (over <= 0.0f)
+			std::snprintf(said, sizeof(said), "how far it leaves that box "
+				"could not be measured");
+		else if (over < 1.05f)
+			std::snprintf(said, sizeof(said),
+				"and it stays inside that box (%.2fx)", over);
+		else
+			std::snprintf(said, sizeof(said), "and it stands %.2fx out of "
+				"that box on %s - which the fit allows, see HDModelBoxFit",
+				over, axis >= 0 && axis < 3 ? kAxis[axis] : "an axis");
+
+		return said;
+	}
+
 	// out = a then b, both row-major with the translation in row 3 - the
 	// convention every matrix in this file and in hd_model is written in.
 	void ring_mul(const float* a, const float* b, float* out)
@@ -1860,9 +1889,20 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			HDModelBounds(ring.model, srcMin, srcMax);
 			HDModelBounds(slot, dstMin, dstMax);
 
+			/* AND WHETHER IT STAYS IN THE BOX (#153, round M2b, the second fix
+			 * round). The scale matches the two LONGEST extents and nothing
+			 * else, so a model built in another game's proportions can stand
+			 * well out of the room the ring keeps for this item - which is the
+			 * intended picture and was argued for at HDModelBoxFit, but it was
+			 * nowhere in this line, and a ring that looks crowded in a play
+			 * test had nothing to point at. */
+			int outAxis = -1;
+			const float over = HDModelBoxFitOverflow(ring.model, slot,
+				&outAxis);
+
 			Log("HDLOG level=%s ring slot=%d name=%s inventory=%s instead of "
 				"%s - its box %.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale "
-				"%.2f, centre moved by %.0f/%.0f/%.0f", g_stem, slot,
+				"%.2f, centre moved by %.0f/%.0f/%.0f, %s", g_stem, slot,
 				HDSlotName(slot) ? HDSlotName(slot) : "?",
 				HDModelName(ring.model) ? HDModelName(ring.model) : "-",
 				HDModelName(slot) ? HDModelName(slot) : "-",
@@ -1871,7 +1911,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				dstMax[1] - dstMin[1], dstMax[2] - dstMin[2],
 				std::sqrt(ring.fix[0] * ring.fix[0] + ring.fix[1] * ring.fix[1] +
 					ring.fix[2] * ring.fix[2]),
-				ring.fix[12], ring.fix[13], ring.fix[14]);
+				ring.fix[12], ring.fix[13], ring.fix[14],
+				box_verdict(over, outAxis));
 
 			if (kept != i)
 				g_ring_model[kept] = ring;

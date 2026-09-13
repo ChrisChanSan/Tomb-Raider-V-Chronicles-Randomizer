@@ -6760,7 +6760,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		}
 
 		printf("(the pose is the one -lara-pose asked for; in the bind pose the "
-			"two hands sit beside each other and nothing moves)\n");
+			"two hands sit beside each other and nothing moves. `tied` is the "
+			"crossed vertices whose two sides weigh exactly the same - they "
+			"are part of `folded`, not an exception to it, and the only "
+			"difference is that their far side is picked by the sign of their "
+			"own x)\n");
 	}
 
 	/* THE BRAID. In the game the six links come from hairs[0][n], which the
@@ -8979,14 +8983,25 @@ int main(int argc, char** argv)
 			HDModelBounds(optionSlot, srcMin, srcMax);
 			HDModelBounds(slot, dstMin, dstMax);
 
+			/* AND HOW FAR IT LEAVES THAT BOX (#153, round M2b, the second
+			 * fix round). The engine's own figure, from the engine's own
+			 * function - the scale matches the LONGEST axes only, so the
+			 * other two land where their proportions put them. */
+			int outAxis = -1;
+			const float over = HDModelBoxFitOverflow(optionSlot, slot,
+				&outAxis);
+			static const char* kAxis[3] = { "x", "y", "z" };
+
 			printf("\ninventory: %s stands in for %s - its box "
 				"%.0fx%.0fx%.0f against %.0fx%.0fx%.0f, scale %.2f, centre "
-				"moved by %.0f/%.0f/%.0f\n", HDModelName(optionSlot),
+				"moved by %.0f/%.0f/%.0f, %.2fx of that box at its worst"
+				" (%s)\n", HDModelName(optionSlot),
 				HDModelName(slot), srcMax[0] - srcMin[0], srcMax[1] - srcMin[1],
 				srcMax[2] - srcMin[2], dstMax[0] - dstMin[0],
 				dstMax[1] - dstMin[1], dstMax[2] - dstMin[2],
 				sqrt(fix[0] * fix[0] + fix[1] * fix[1] + fix[2] * fix[2]),
-				fix[12], fix[13], fix[14]);
+				fix[12], fix[13], fix[14], over,
+				outAxis >= 0 && outAxis < 3 ? kAxis[outAxis] : "?");
 
 			MatMul(fix, &matrices[0], placed);
 			drew = HDModelDraw(optionSlot, placed, 1, &light[0], ~0u, &lighting);

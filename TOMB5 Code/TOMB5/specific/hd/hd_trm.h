@@ -198,7 +198,15 @@ struct HDTrmFoldCounts
 {
 	int crossed;		// vertices whose weights named both sides
 	int folded;		// of those, the ones weight was moved on
-	int tied;		// crossed, no majority - left exactly as they were
+	/* Crossed with the two sides weighted EXACTLY the same. They are not a
+	 * fourth thing that happens to a vertex: a tie above the bar is folded
+	 * like any other - `folded` counts it too - and the only difference is
+	 * that its far side is picked by the sign of its own x rather than by the
+	 * smaller weight. This is the count of the vertices that rule decided,
+	 * and it is here because they are the ones a reader of a surprising
+	 * picture would want to find. (#153, round M2b: this said "left exactly
+	 * as they were", which is what the code does NOT do.) */
+	int tied;
 	int renormed;		// vertices whose three weights did not sum to 255
 	int worstPermille;	// the largest far-side share met, per mille
 	int foldedPermille;	// the largest share actually folded

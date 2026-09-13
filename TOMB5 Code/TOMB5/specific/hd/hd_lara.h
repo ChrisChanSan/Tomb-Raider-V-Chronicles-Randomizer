@@ -426,15 +426,34 @@
  *
  * AND WHAT IT BUYS, measured with ModelProbe -handfold, which skins every
  * vertex twice through the same node matrices the card is given and takes the
- * distance between the two answers. Folding the install's own hands at a bar of
- * 0 moves them by at most 0.51 units with both forearms turned 50 degrees out,
- * 0.97 with both arms straight out sideways, and 2.00 in a contortion no
- * animation reaches. Small - and pointless, because one weight unit on the far
- * hand cannot make a sliver. With the bar the remaster's own files come out of
- * the reader byte for byte as they went in - all 94 of them: not one carries a
- * crossed vertex above the bar and not one carries a vertex whose weights miss
- * 255 - which is a guarantee rather than a measurement, and only a file with
- * the real defect is touched at all. */
+ * distance between the two answers.
+ *
+ * Which hand parts a run loads is decided by the LEVEL's weapon slots, so the
+ * sweep walks all thirteen classic levels and covers all ELEVEN hand parts of
+ * the table in hd_lara.cpp. Four of them - REST, FLARE, TORCH, CROWBAR - have
+ * no crossed vertex at all and never move. Folding the other seven at a bar of
+ * 0 moves them, LARGEST OF THE SEVEN:
+ *
+ *   0.56 units   with both forearms turned 50 degrees out, which is the pose
+ *                the round was asked to measure in. DEAGLE and DEAGLE_LASER;
+ *                PISTOL is 0.51, UZI 0.52, SHOTGUN, HK and GRAPPLE 0.53.
+ *   0.84         with both upper arms straight out sideways (8 90 0, 11 -90 0),
+ *                again DEAGLE and DEAGLE_LASER; the others 0.80 to 0.81.
+ *   0.97         with the upper arms out 90 AND the forearms folded 90 on top
+ *                of that - every one of the seven, to the hundredth.
+ *   2.00         UZI, in a contortion no animation reaches (8 120 60,
+ *                9 120 0 and their mirrors).
+ *
+ * Small - and pointless, because one weight unit on the far hand cannot make a
+ * sliver. (Round M2b's second fix round: this said "at most 0.51", which is one
+ * part's number written as the set's, and gave 0.97 to the sideways pose, which
+ * is 0.84. The argument survives both; the numbers did not.)
+ *
+ * With the bar the remaster's own files come out of the reader byte for byte as
+ * they went in - all 94 of them: not one carries a crossed vertex above the bar
+ * and not one carries a vertex whose weights miss 255 - which is a guarantee
+ * rather than a measurement, and only a file with the real defect is touched at
+ * all. */
 #define HD_LARA_HAND_FOLD_BAR	125
 
 /* THE TWO SIDES, as hd_trm's fold wants them: the RIGHT arm's bones first,

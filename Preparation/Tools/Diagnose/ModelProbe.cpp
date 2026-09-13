@@ -279,6 +279,10 @@
  *                         the item's OWN frame, which is not what the
  *                         player sees - the Uzi row is 0x4000 0x6000
  *                         0x4000 and the pistols' 0x4000 0xAD4C 0xBD40.
+ *                         For an INVENTORY model, which is one node - the
+ *                         turn goes in front of the root matrix, and a
+ *                         model with a mesh tree would keep its other
+ *                         nodes where they were.
  *     -inventory          with -slot: draw the mod's own <BASE>_OPTION model
  *                         in the slot's place, turned and scaled onto the box
  *                         of the EXTRA model it replaces, exactly as the

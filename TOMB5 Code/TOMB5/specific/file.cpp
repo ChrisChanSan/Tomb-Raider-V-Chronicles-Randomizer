@@ -1703,12 +1703,6 @@ bool LoadSamples()
 
 	FreeSampleDecompress();
 
-	/* THE BAREFOOT SET (#153, round M3), into the slots after the level's
-	 * own and into the two spare infos asked for above. It writes its own
-	 * log line, including the reason when a level cannot have one. */
-	HDFeetLevelBuild(sample_lut, sample_infos, num_infos,
-		HD_FEET_SPARE_INFOS, num_samples);
-
 	// Which bank it really was (#153, round M1): a mod's, audio\MAIN.SFX or
 	// the installed remaster's. And how many of those samples a mod's own
 	// loose .wav supplied on top of it.
@@ -1717,6 +1711,18 @@ bool LoadSamples()
 			"mod's bank replaced, %d of them overlaid by a mod's .wav",
 			HQSfxSubstituted(), num_samples, HQSfxSource(), HQSfxReplaced(),
 			HQSfxOverlaid());
+
+	/* THE BAREFOOT SET (#153, round M3), into the slots after the level's
+	 * own and into the two spare infos asked for above. It writes its own
+	 * log line, including the reason when a level cannot have one.
+	 *
+	 * AFTER the summary above and before the map is dropped. After, because
+	 * it takes its recordings through the same HQSfxPayload the loop does and
+	 * would otherwise raise that line's count by takes which are not this
+	 * level's samples at all; before, because the bridge it reads them
+	 * through is exactly what HQSfxDropMap throws away. */
+	HDFeetLevelBuild(sample_lut, sample_infos, num_infos,
+		HD_FEET_SPARE_INFOS, num_samples);
 
 	HQSfxDropMap();
 	return 1;

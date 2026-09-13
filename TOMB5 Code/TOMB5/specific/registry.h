@@ -22,6 +22,13 @@ bool REG_KeyWasCreated();
  * is needed before the options are read. The long note over the definition
  * says why it may not go through OpenRegistry. */
 bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value);
+/* The same for one REG_SZ, and for the same reason (#153, round M2, the fix
+ * round). `value` always comes back terminated, "" on a miss. Used for
+ * hd_outfit, which the in-game outfit changer writes and every level build
+ * reads - so it may not go through OpenRegistry either, and it may not write
+ * a default: a value that is not there means "the level decides", and that is
+ * not a setting to put into a player's registry unasked. */
+bool REG_PeekString(LPCSTR SubKeyName, LPCSTR ValueName, char* value, ulong size);
 void REG_WriteLong(char* SubKeyName, ulong value);
 void REG_WriteBool(char* SubKeyName, bool value);
 bool REG_ReadLong(char* SubKeyName, ulong& value, ulong defaultValue);

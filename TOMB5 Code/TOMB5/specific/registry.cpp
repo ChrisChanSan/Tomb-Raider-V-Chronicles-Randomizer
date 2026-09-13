@@ -88,6 +88,61 @@ bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value)
 	return got;
 }
 
+/* THE SAME DOOR, FOR ONE REG_SZ (#153, round M2, the fix round).
+ *
+ * REG_ReadString is the ordinary reader and writes its default into the key
+ * on a miss, which is right for a setting the options menu owns. hd_outfit is
+ * not one: it is written by the in-game outfit changer and read at every
+ * level build, an absent value means "dress her by the level's own facts",
+ * and writing an empty string there on the first level of a fresh install
+ * would take away init_tomb5_stuff's first run exactly as REG_PeekLong's note
+ * describes. So this one opens read-only, creates nothing, touches neither
+ * phkResult nor dwDisposition, and hands back "" when there is nothing there.
+ *
+ * Only a REG_SZ counts. A value of another type is a value somebody put there
+ * by hand for another purpose, and reading its bytes as a string is how a
+ * registry reader ends up printing a page of rubbish into a log. */
+bool REG_PeekString(LPCSTR SubKeyName, LPCSTR ValueName, char* value, ulong size)
+{
+	char buffer[256];
+	HKEY key;
+	ulong type, cbData;
+	bool got;
+
+	if (!value || !size)
+		return false;
+
+	value[0] = 0;
+
+	if (SubKeyName)
+		sprintf(buffer, "%s\\%s", "Software\\Core Design\\Tomb Raider Chronicles", SubKeyName);
+	else
+		strcpy(buffer, "Software\\Core Design\\Tomb Raider Chronicles");
+
+	if (RegOpenKeyEx(HKEY_CURRENT_USER, buffer, 0, KEY_READ, &key) != ERROR_SUCCESS)
+		return false;
+
+	cbData = size;
+	got = RegQueryValueEx(key, ValueName, 0, &type, (LPBYTE)value, &cbData) == ERROR_SUCCESS &&
+		type == REG_SZ;
+	RegCloseKey(key);
+
+	if (!got)
+	{
+		value[0] = 0;
+		return false;
+	}
+
+	// RegQueryValueEx does not promise a terminator: it hands back the bytes
+	// that were written, and a string written without one comes back without
+	// one. cbData is what it wrote, capped at the buffer.
+	if (cbData >= size)
+		cbData = size - 1;
+
+	value[cbData] = 0;
+	return value[0] != 0;
+}
+
 void REG_WriteLong(char* SubKeyName, ulong value)
 {
 	RegSetValueEx(phkResult, SubKeyName, 0, REG_DWORD, (CONST BYTE*) & value, sizeof(ulong));

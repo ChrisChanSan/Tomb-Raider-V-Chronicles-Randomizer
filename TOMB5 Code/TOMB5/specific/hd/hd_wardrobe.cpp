@@ -21,6 +21,7 @@
 #include "hd_trm.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -34,6 +35,14 @@ namespace fs = std::filesystem;
 
 namespace
 {
+	// Wall clock, for the one measurement this file makes about itself
+	// (#153, round M2, the fix round - the scan's own line).
+	double clock_ms()
+	{
+		return std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+
 	/* ------------------------------------------------- the override table -- */
 
 	/* WHAT A PARTICULAR FILE IS, where somebody has looked at the picture.
@@ -892,6 +901,21 @@ namespace
 
 	void scan()
 	{
+		/* WHAT THE SCAN COSTS, IN NUMBERS (#153, round M2, the fix round).
+		 * The user's question was whether the engine "tries to load every
+		 * outfit at every level change", and the honest answer is a counter
+		 * and not a promise: this reports the files it opened, the bytes it
+		 * read and the models it loaded WITH geometry - and that last number
+		 * is zero, because the scan probes headers and the geometry of the
+		 * one outfit that is worn is read by hd_model's own pass one. The
+		 * whole thing runs once per session; a second level build finds
+		 * `scanned` set and adds none of it. */
+		double opens0 = 0, loads0 = 0, bytes0 = 0;
+
+		HDTrmCounters(&opens0, &loads0, &bytes0);
+
+		const double begun = clock_ms();
+
 		scanned = true;
 		entries.clear();
 		refused.clear();
@@ -934,9 +958,16 @@ namespace
 			default: modded++; break;
 			}
 
+		double opens1 = 0, loads1 = 0, bytes1 = 0;
+
+		HDTrmCounters(&opens1, &loads1, &bytes1);
+
 		note("HDLOG wardrobe scan: %d entries - %d from the IV-VI install, "
-			"%d from the I-III install, %d from mods; %d files passed over",
-			(int)entries.size(), mine, guest, modded, (int)refused.size());
+			"%d from the I-III install, %d from mods; %d files passed over; "
+			"ms=%d probed=%d read_kib=%.0f geometry=%d",
+			(int)entries.size(), mine, guest, modded, (int)refused.size(),
+			(int)(clock_ms() - begun + 0.5), (int)(opens1 - opens0),
+			(bytes1 - bytes0) / 1024.0, (int)(loads1 - loads0));
 	}
 
 	void need_scan()

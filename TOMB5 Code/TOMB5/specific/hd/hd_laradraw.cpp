@@ -21,8 +21,8 @@
 #include "../../tomb5/pch.h"
 #include "hd_laradraw.h"
 #include "hd_lara.h"
-#include "hd_markers.h"		// the .hdm wear line (#153, round M2)
-#include "hd_wardrobe.h"		// the scan that line names (#153, round M2)
+#include "hd_wardrobe.h"		// the outfit scan (#153, round M2)
+#include "../registry.h"		// hd_outfit, the player's own choice (M2 fix)
 #include "hd_model.h"
 #include "hd_object.h"
 #include "hd_render.h"
@@ -113,11 +113,12 @@ namespace
 	bool g_neck_probe_ever = false;
 	unsigned short g_neck_probe_at = 0;
 
-	/* The reason a wear line hands back (#153, round M2). A literal with the
-	 * lifetime of the program, because HDLaraOutfitFor's `why` is kept by the
-	 * caller and written into the log lines of a whole level. */
-	const char* const g_wear_why =
-		"the wardrobe entry the run rolled (.hdm wear)";
+	/* The reason the registry choice hands back (#153, round M2, the fix
+	 * round). A literal with the lifetime of the program, because
+	 * HDLaraOutfitFor's `why` is kept by the caller and written into the log
+	 * lines of a whole level. */
+	const char* const g_chosen_why =
+		"the outfit the player chose (registry hd_outfit)";
 
 	/* ------------------------------------------------------ the wardrobe -- */
 
@@ -166,41 +167,61 @@ namespace
 		const bool young = (gfLevelFlags & GF_YOUNGLARA) != 0 ||
 			LaraDrawType == LARA_YOUNG;
 
-		/* THE .hdm's `wear` LINE COMES FIRST, AND YOUNG LARA COMES BEFORE IT
-		 * (#153, round M2).
+		/* THE PLAYER'S OWN CHOICE COMES FIRST, AND YOUNG LARA COMES BEFORE IT
+		 * (#153, round M2, the fix round).
 		 *
 		 * The wardrobe is a hundred outfits now (hd_wardrobe.h) and the level
 		 * header has one byte for it, which can only ever name the nine the
-		 * enum has. So the randomizer writes the KEY into the sidecar and
-		 * that is what the roll really said; data[3] stays what it was, for
-		 * the seven entries that have a number, and the two are read against
-		 * each other in hd_level.cpp.
+		 * enum has. The first design put the key into the .hdm sidecar and
+		 * had the randomizer roll it - and that was wrong twice over: a seed
+		 * and its settings travel between players while an installation and a
+		 * Mods folder do not, so a run would not reproduce; and the choice is
+		 * not the run's to make. It is the PLAYER'S, and it belongs where a
+		 * player's settings live.
 		 *
-		 * Young Lara stays classic whatever the sidecar says (plan section 9,
-		 * the user's decision), which is why the question is asked here and
-		 * not left to HDLaraOutfitFor below: a wear line must not be able to
-		 * put an adult body on the child.
+		 * So the key is a REG_SZ named hd_outfit under the game's own settings
+		 * key - the one hd_install and every tomb5. option live in - and this
+		 * is the only thing that reads it. Read once per level build, not
+		 * once per session, because the in-game changer of round M3 writes it
+		 * while the game is running and the next level has to see it. Empty
+		 * or absent is the ordinary case and costs one read-only registry
+		 * open: the level's own facts, exactly as before this round.
 		 *
-		 * A key this machine has not got - the player took the mod out again,
-		 * or the level was randomized on another machine - falls through to
-		 * the level's own facts with a line in the log. That is the same
-		 * answer an engine older than this round gives, which is the point of
-		 * putting the key in a line an old reader ignores. */
+		 * WHERE IT WINS. Over the level facts and over data[3] both, and that
+		 * is deliberate - it is the only one of the three a person chose on
+		 * purpose. The log line says what it overrode, so a picture nobody
+		 * asked for is one grep from its cause.
+		 *
+		 * Young Lara stays classic whatever the registry says (plan section
+		 * 9, the user's decision), which is why the question is asked here
+		 * and not left to HDLaraOutfitFor below: a setting must not be able to
+		 * put an adult body on the child. And a key this machine's scan has
+		 * not got - the player took the mod out again, or moved the setting
+		 * from another machine - falls through to the level's facts with a
+		 * line in the log. */
 		if (!young)
 		{
-			const char* wear = HDMarkersWear();
+			char chosen[HD_WARDROBE_KEY];
 
-			if (wear && *wear)
+			if (REG_PeekString("tomb5", "hd_outfit", chosen, sizeof(chosen)))
 			{
-				const int found = HDWardrobeFind(wear);
+				const int found = HDWardrobeFind(chosen);
 
 				if (found >= 0)
 				{
-					*why = g_wear_why;
+					const char* factsWhy = "";
+					const int facts = HDLaraOutfitFor(LaraDrawType, cap, young,
+						(int)GfHdOutfit, &factsWhy);
+
+					Log("HDLOG wardrobe hd_outfit=%s wins over the level facts "
+						"(outfit=%d data[3]=%d - %s)", chosen, facts,
+						(int)GfHdOutfit, factsWhy);
+
+					*why = g_chosen_why;
 					return HDLaraOutfitOfWear(found);
 				}
 
-				Log("HDLOG wardrobe wear=%s not found - level facts", wear);
+				Log("HDLOG wardrobe hd_outfit=%s not found - level facts", chosen);
 			}
 		}
 

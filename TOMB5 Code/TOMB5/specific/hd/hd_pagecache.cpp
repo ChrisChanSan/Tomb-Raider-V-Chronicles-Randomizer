@@ -146,6 +146,23 @@ namespace
 	 * does: it is a property of the installation, not of a level. */
 	std::string g_alt_root;
 
+	/* WHAT HDPageCacheKeyOf ANSWERED LAST TIME (#153, round M2, the fix
+	 * round). Its answer costs up to five file system probes - two into the
+	 * mod's own TEX folder and three into its origin bundle - and round M2
+	 * put it on the hottest path this module has: once per CORNER of every
+	 * triangle of every model a mod supplied. Measured on the user's Mods
+	 * folder, 30.8 microseconds a call over 25,058 calls.
+	 *
+	 * The answer depends on the mods scan, which happens once per session,
+	 * and on g_alt_root, which is set once per level - so it is a pure
+	 * function of the key between two of those events, and this is the
+	 * memory of it. Cleared where either can change: HDPageCacheAltRoot and
+	 * HDPageCacheDestroy. The real fix is in hd_model.cpp, which now asks
+	 * once per texture slot instead of once per corner; this makes the
+	 * question cheap for every OTHER caller as well, which is what stops the
+	 * same cost from growing back somewhere else. */
+	std::unordered_map<int, int> g_key_of;
+
 	double now_ms()
 	{
 		return std::chrono::duration<double, std::milli>(
@@ -1426,6 +1443,11 @@ void HDPageCacheDestroy()
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
 	g_notes.clear();
+	// #153, round M2, the fix round: the remembered answers of
+	// HDPageCacheKeyOf. Nothing behind them changes at a level end, so this
+	// is housekeeping and not correctness - the AltRoot call below is the one
+	// that has to clear them.
+	g_key_of.clear();
 
 	if (g_staging)
 	{
@@ -1477,6 +1499,11 @@ void HDPageCachePolicyNow(HDPageCachePolicy* out)
 void HDPageCacheAltRoot(const char* root)
 {
 	g_alt_root = root ? root : "";
+	/* HDPageCacheKeyOf asks the other bundle whether it has a page, so every
+	 * answer it remembered was given under the OLD root (#153, round M2, the
+	 * fix round). Forget them here rather than in Destroy, because this is
+	 * the call that can change one. */
+	g_key_of.clear();
 }
 
 double HDPageCacheBytes()
@@ -1531,35 +1558,48 @@ int HDPageCacheKeyOf(int key)
 	if (mod < 0)
 		return key;
 
+	const std::unordered_map<int, int>::const_iterator seen = g_key_of.find(key);
+
+	if (seen != g_key_of.end())
+		return seen->second;
+
 	const int real = HDPageModNumber(key);
 	char buffer[300];
+	// Neither the mod nor its bundle has it: the install's page, under the
+	// install's own key, exactly as any vanilla model would ask for it. That
+	// is the answer unless one of the two questions below says otherwise.
+	int answer = real;
 
 	if (*HDModsFindPage(mod, real, buffer, sizeof(buffer)))
-		return key;
-
-	const int from = HDModsOrigin(mod);
-
-	if (from >= 1 && from <= 3 && !g_alt_root.empty())
+		answer = key;
+	else
 	{
-		int order[3] = { from, 0, 0 };
-		int at = 1;
+		const int from = HDModsOrigin(mod);
 
-		for (int game = 1; game <= 3; game++)
-			if (game != from)
-				order[at++] = game;
-
-		for (int i = 0; i < 3; i++)
+		if (from >= 1 && from <= 3 && !g_alt_root.empty())
 		{
-			path_of_alt(real, order[i], buffer, sizeof(buffer));
+			int order[3] = { from, 0, 0 };
+			int at = 1;
 
-			if (file_there(std::string(buffer)))
-				return key;
+			for (int game = 1; game <= 3; game++)
+				if (game != from)
+					order[at++] = game;
+
+			for (int i = 0; i < 3; i++)
+			{
+				path_of_alt(real, order[i], buffer, sizeof(buffer));
+
+				if (file_there(std::string(buffer)))
+				{
+					answer = key;
+					break;
+				}
+			}
 		}
 	}
 
-	// Neither the mod nor its bundle has it: the install's page, under the
-	// install's own key, exactly as any vanilla model would ask for it.
-	return real;
+	g_key_of[key] = answer;
+	return answer;
 }
 
 int HDPageCacheSlotOrigin(int slot)

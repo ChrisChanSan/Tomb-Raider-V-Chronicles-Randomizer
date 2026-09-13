@@ -1443,15 +1443,25 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		return;
 	}
 
+	/* The phases at the end of the line are round M2's fix round: a level
+	 * build that took 672 ms before that round and 25,656 ms after it said
+	 * only "models ms=", and the whole hunt was for which half of it had
+	 * grown. key_ms is the one that had - see HDPageCacheKeyOf - and the
+	 * three .TRM counters beside it answer the other question that was asked
+	 * by guessing: how much of the wardrobe a level change reads. */
 	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d) "
 		"mod:%d heads=%d lara=%d dummy=%d missing=%d refused=%d verts=%d idx=%d "
-		"ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f read_ms=%d build_ms=%d",
+		"ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f read_ms=%d build_ms=%d "
+		"find_ms=%d key_ms=%d page_ms=%d buf_ms=%d trm_open=%d trm_load=%d trm_kib=%.0f",
 		g_stem, (int)(GetTickCount() - started), stats.slots, stats.loaded,
 		stats.fromGame5, stats.fromGame4, stats.fromMod, stats.heads,
 		stats.lara, stats.dummy, stats.missing, stats.refused, stats.vertices,
 		stats.indices, stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
 		stats.indexBytes / 1024.0, (int)(stats.readMs + 0.5),
-		(int)(stats.buildMs + 0.5));
+		(int)(stats.buildMs + 0.5), (int)(stats.findMs + 0.5),
+		(int)(stats.keyMs + 0.5),
+		(int)(stats.pageMs + 0.5), (int)(stats.bufferMs + 0.5),
+		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 
 	/* The models' half of the texture budget (#123, stage S6). They arrive
 	 * after the rooms and into the same cache, so `have` is what the rooms

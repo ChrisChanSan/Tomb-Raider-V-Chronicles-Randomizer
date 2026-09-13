@@ -229,7 +229,31 @@ struct HDModelStats
 	double vertexBytes;
 	double indexBytes;
 	double readMs;		// reading and parsing the .TRM files
-	double buildMs;		// sorting, buffers, upload
+	double buildMs;		// everything that is not readMs - the three below
+				// and the bookkeeping between them
+
+	/* THE PHASES OF buildMs (#153, round M2, the fix round). Round M2 made
+	 * one of them twenty-five seconds long and the level line said only
+	 * "models ms=25656", so the next such regression is a number and not a
+	 * hunt: findMs is the walk of the ITEM folders that turns a slot
+	 * name into a file - the phase every active mod makes longer - keyMs
+	 * is resolving the cache key of every page a model names,
+	 * pageMs is the append to the page cache - the .DDS reads and the BC7
+	 * decode - and bufferMs is pass two, the sort into draw calls and the
+	 * vertex and index buffers. */
+	double findMs;
+	double keyMs;
+	double pageMs;
+	double bufferMs;
+
+	/* WHAT THE .TRM READER DID FOR THIS LEVEL BUILD (#153, round M2, the fix
+	 * round): files opened, models read with their geometry, bytes off disk.
+	 * The one number that answers "does a level change load the whole
+	 * wardrobe" - see HDTrmCounters. */
+	double trmOpens;
+	double trmLoads;
+	double trmBytes;
+
 	HDPageCacheStats pageStats;	// what the append to the page cache did
 };
 

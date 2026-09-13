@@ -152,3 +152,19 @@ void HDTrmFree(HDTrmModel* model);
 // counted from ONE, which is the single most common way to paint a model with
 // the wrong page.
 int HDTrmPageOf(const HDTrmModel* model, const HDTrmVertex* vertex);
+
+/* WHAT THIS READER HAS DONE SINCE THE PROCESS STARTED (#153, round M2, the
+ * fix round). Three running totals, and a caller that wants "per level build"
+ * takes them twice and subtracts:
+ *
+ *     opens   files this module opened - every HDTrmExists and every parse
+ *     loads   models parsed WITH their geometry, i.e. HDTrmLoad calls that
+ *             got as far as reading the file
+ *     bytes   bytes read off disk. HDTrmProbe reads the WHOLE file and keeps
+ *             the header, so a probe costs the same read a load does
+ *
+ * They exist to answer one question with a number instead of an opinion: does
+ * a level build read the whole wardrobe, or only the outfit that is worn. Any
+ * of the three pointers may be null. Counted on the calling thread and not
+ * atomic - this reader is called from one thread (hd_model.cpp's pass one). */
+void HDTrmCounters(double* opens, double* loads, double* bytes);

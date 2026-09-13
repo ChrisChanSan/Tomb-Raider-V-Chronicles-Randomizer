@@ -167,6 +167,12 @@ namespace
 	// that hands *why out. Never cleared by HDModelLevelEnd.
 	std::string g_error;
 
+	/* What the cache keys of this level build cost (#153, round M2, the fix
+	 * round). Accumulated here rather than passed down because build() is
+	 * called once per model and the number belongs to the level; reset by
+	 * HDModelLevelBegin and read out of it into HDModelStats::keyMs. */
+	double g_key_ms = 0;
+
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
 	int g_frame_bulbs = 0;
@@ -887,15 +893,50 @@ namespace
 		page_of_triangle.reserve((size_t)(trm.indices / 3));
 		node_of_triangle.reserve((size_t)(trm.indices / 3));
 
+		/* THE CACHE KEY OF EVERY PAGE THIS MODEL NAMES, WORKED OUT ONCE
+		 * (#153, round M2, the fix round).
+		 *
+		 * A vertex names a page by its LAYER, which is an index into the
+		 * model's own short texture list - eight entries at the outside - so
+		 * there are exactly `trm.textures` different answers to give, however
+		 * many triangles wear them. Round M2 asked HDPageCacheKeyOf per
+		 * triangle CORNER instead, and for a model a mod supplied that
+		 * question opens files: measured at 30.8 microseconds a call, which
+		 * turned ANDREA1's model build from 672 ms into 25,656.
+		 *
+		 * The table below is the same question asked per texture slot. It is
+		 * not an approximation of the old loop: HDTrmPageOf IS
+		 * texture[layer-1], so a corner's key is this table at its layer, and
+		 * the two agree value for value. */
+		std::vector<int> key_of_layer((size_t)(trm.textures > 0 ? trm.textures : 0));
+
+		{
+			const double keys_began = now_ms();
+
+			for (int t = 0; t < trm.textures; t++)
+				key_of_layer[(size_t)t] =
+					HDPageCacheKeyOf((int)trm.texture[t] + pageBias);
+
+			g_key_ms += now_ms() - keys_began;
+		}
+
 		for (int i = 0; i + 2 < trm.indices; i += 3)
 		{
-			const int rawA = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 0]]);
-			const int rawB = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 1]]);
-			const int rawC = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 2]]);
+			const int layerA = (int)trm.vertex[trm.index[i + 0]].layer;
+			const int layerB = (int)trm.vertex[trm.index[i + 1]].layer;
+			const int layerC = (int)trm.vertex[trm.index[i + 2]].layer;
 
-			const int a = rawA < 0 ? -1 : HDPageCacheKeyOf(rawA + pageBias);
-			const int b = rawB < 0 ? -1 : HDPageCacheKeyOf(rawB + pageBias);
-			const int c = rawC < 0 ? -1 : HDPageCacheKeyOf(rawC + pageBias);
+			const bool okA = layerA >= 1 && layerA <= trm.textures;
+
+			// The raw page is still wanted for the `onlyPage` test below,
+			// which is about the FILE's numbering and not the cache's.
+			const int rawA = okA ? (int)trm.texture[layerA - 1] : -1;
+
+			const int a = okA ? key_of_layer[(size_t)(layerA - 1)] : -1;
+			const int b = layerB >= 1 && layerB <= trm.textures
+				? key_of_layer[(size_t)(layerB - 1)] : -1;
+			const int c = layerC >= 1 && layerC <= trm.textures
+				? key_of_layer[(size_t)(layerC - 1)] : -1;
 
 			if (mixedTriangles && (a != b || b != c))
 				(*mixedTriangles)++;
@@ -1688,6 +1729,14 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 	const double started = now_ms();
 	double read_ms = 0;
+	double page_ms = 0;
+	double find_ms = 0;
+	// #153, round M2, the fix round - the phases of buildMs, and what the
+	// .TRM reader did between these two readings.
+	double trm_opens0 = 0, trm_loads0 = 0, trm_bytes0 = 0;
+
+	g_key_ms = 0;
+	HDTrmCounters(&trm_opens0, &trm_loads0, &trm_bytes0);
 
 	if (stats)
 		stats->slots = count;
@@ -1722,7 +1771,15 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		// for Lara, whose composite is stage S4 but whose parts a diagnostic
 		// tool may well want to look at one at a time.
 		if (!model && !slots[i].synth)
+		{
+			// Counted into find_ms: asking which file a slot means is the
+			// same walk of the same folders the search below does, and a
+			// mod adds two more places to walk (#153, round M2, fix round).
+			const double bind_began = now_ms();
+
 			model = HDBindSlot(installRoot, slot, &kind, &fromMap, 0);
+			find_ms += now_ms() - bind_began;
+		}
 
 		/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3; back in
 		 * fix round S for the lid that closes the neck). It has no file, no
@@ -1827,7 +1884,16 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				: tr3 ? HD_MODEL_ORIGIN_TR3 : HD_MODEL_ORIGIN_5;
 		}
 		else
+		{
+			// Timed because it is the largest phase of a level build that is
+			// not reading or decoding anything (#153, round M2, the fix
+			// round): every slot with no .TRM costs a walk of the ITEM
+			// folders, and every active mod adds two more places to walk.
+			const double find_began = now_ms();
+
 			path = find_model(model, tr3, &origin, &mod);
+			find_ms += now_ms() - find_began;
+		}
 
 		if (path.empty())
 		{
@@ -1908,8 +1974,13 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		HDModelOrigin head_origin = HD_MODEL_ORIGIN_NONE;
 		const char* head_how = "name";
 		std::string head_name;
+		const double head_find_began = now_ms();
 		const std::string head_path = find_head_model(model, tr3, &head_origin,
 			&head_how, &head_name, mod);
+
+		// The face is a second walk of the same folders, so it belongs in
+		// the same phase (#153, round M2, the fix round).
+		find_ms += now_ms() - head_find_began;
 
 		if (!head_path.empty())
 		{
@@ -1934,7 +2005,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		/* Through HDPageCacheKeyOf, exactly as build() does above (#153, round
 		 * M2), because the list the cache is handed and the keys the ranges
 		 * carry have to be the same numbers - a page asked for under one key
-		 * and drawn under another is the white tile. */
+		 * and drawn under another is the white tile. Once per texture slot
+		 * here as well, which is all this loop ever asked for. */
+		const double keys_began = now_ms();
+
 		if (here.onlyPage >= 0)
 			pages.push_back(HDPageCacheKeyOf(here.onlyPage + here.pageBias));
 		else
@@ -1945,11 +2019,15 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			for (int t = 0; t < here.head.textures; t++)
 				pages.push_back(HDPageCacheKeyOf((int)here.head.texture[t] + here.pageBias));
 
+		g_key_ms += now_ms() - keys_began;
+
 		pending.push_back(here);
 	}
 
 	/* The pages, ADDED to what the rooms already loaded: a page a room and a
 	 * model both wear keeps one texture and one slot number. */
+	const double pages_began = now_ms();
+
 	std::sort(pages.begin(), pages.end());
 	pages.erase(std::unique(pages.begin(), pages.end()), pages.end());
 
@@ -1983,10 +2061,13 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		}
 	}
 
+	page_ms = now_ms() - pages_began;
+
 	for (int i = 0; i < HDPageCacheNoteCount(); i++)
 		note("%s", HDPageCacheNote(i));
 
 	/* PASS TWO: the buffers. */
+	const double buffers_began = now_ms();
 	int mixed = 0;
 
 	for (size_t i = 0; i < pending.size(); i++)
@@ -2186,9 +2267,26 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				stats->partialSlots++;
 		}
 
+		double trm_opens1 = 0, trm_loads1 = 0, trm_bytes1 = 0;
+
+		HDTrmCounters(&trm_opens1, &trm_loads1, &trm_bytes1);
+
 		stats->nodesFallback = stats->nodesTotal - stats->nodesCovered;
 		stats->readMs = read_ms;
 		stats->buildMs = now_ms() - started - read_ms;
+
+		/* The phases of buildMs (#153, round M2, the fix round). They do not
+		 * add up to it and are not meant to - what is left over is the
+		 * bookkeeping between them - but a phase that has run away shows up
+		 * here as the number it is. bufferMs is taken last because pass two
+		 * is where this block stands. */
+		stats->findMs = find_ms;
+		stats->keyMs = g_key_ms;
+		stats->pageMs = page_ms;
+		stats->bufferMs = now_ms() - buffers_began;
+		stats->trmOpens = trm_opens1 - trm_opens0;
+		stats->trmLoads = trm_loads1 - trm_loads0;
+		stats->trmBytes = trm_bytes1 - trm_bytes0;
 	}
 
 	return true;

@@ -106,8 +106,16 @@ namespace
 		void align4() { at = (at + 3) & ~(size_t)3; }
 	};
 
+	/* THE READING THIS MODULE HAS DONE (#153, round M2, the fix round) - see
+	 * HDTrmCounters in the header for what each one answers. Doubles rather
+	 * than counters of a fixed width because `bytes` runs into the hundreds
+	 * of millions over a session and the three are printed together. */
+	double g_opens = 0, g_loads = 0, g_bytes = 0;
+
 	bool read_whole(const char* path, std::vector<unsigned char>& out)
 	{
+		g_opens++;
+
 		std::FILE* file = std::fopen(path, "rb");
 		if (!file)
 			return false;
@@ -120,6 +128,7 @@ namespace
 		out.resize((size_t)length);
 		const size_t got = length ? std::fread(&out[0], 1, (size_t)length, file) : 0;
 		std::fclose(file);
+		g_bytes += (double)got;
 		return got == (size_t)length;
 	}
 
@@ -450,6 +459,8 @@ bool HDTrmExists(const char* path)
 	if (!path || !*path)
 		return false;
 
+	g_opens++;
+
 	std::FILE* file = std::fopen(path, "rb");
 	if (!file)
 		return false;
@@ -477,6 +488,8 @@ bool HDTrmLoad(const char* path, HDTrmModel* out, const char** why)
 	}
 
 	HDTrmInfo info;
+
+	g_loads++;
 
 	if (!parse(path, &info, out, why))
 	{
@@ -509,6 +522,16 @@ void HDTrmFree(HDTrmModel* model)
 	delete[] model->vertex;
 
 	std::memset(model, 0, sizeof(*model));
+}
+
+void HDTrmCounters(double* opens, double* loads, double* bytes)
+{
+	if (opens)
+		*opens = g_opens;
+	if (loads)
+		*loads = g_loads;
+	if (bytes)
+		*bytes = g_bytes;
 }
 
 int HDTrmPageOf(const HDTrmModel* model, const HDTrmVertex* vertex)

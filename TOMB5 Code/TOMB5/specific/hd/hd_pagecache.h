@@ -280,7 +280,15 @@ const char* HDPageCacheOriginText(int origin);
  *
  * A plain or alternate-bundle key comes back unchanged. Needs the mods
  * scanned and the alternate root set, which is what every caller has done
- * before it loads a model. */
+ * before it loads a model.
+ *
+ * THE ANSWER IS REMEMBERED per key (#153, round M2, the fix round), because
+ * working it out costs up to five file system probes and a caller on a hot
+ * path would otherwise pay them again for every triangle. What it rests on -
+ * the mods scan and the alternate root - is fixed for a level, and the memory
+ * is dropped in HDPageCacheAltRoot and HDPageCacheDestroy. A caller that
+ * re-scans the mods (HDModsForget) mid-session has to call HDPageCacheAltRoot
+ * again before it asks; nothing in the engine does either. */
 int HDPageCacheKeyOf(int key);
 
 // Everything that was not found where it should have been, in words, for the

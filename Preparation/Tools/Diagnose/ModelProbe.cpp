@@ -6081,8 +6081,15 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		(laraStats.vertexBytes + laraStats.indexBytes) / 1024.0);
 	printf("pages              %d distinct in the cache, %.1f MiB, %.0f ms decode\n",
 		stats.pages, stats.pageStats.bytes / 1048576.0, stats.pageStats.decodeMs);
-	printf("time               %.0f ms reading the .TRM files, %.0f ms building\n",
-		stats.readMs, stats.buildMs);
+	/* The phases of `building`, since #153 round M2's fix round - keys is
+	 * the one that grew to twenty-five seconds in the game, and the three
+	 * .TRM numbers say how much of the wardrobe a build really reads. */
+	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
+		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f)\n",
+		stats.readMs, stats.buildMs, stats.findMs, stats.keyMs,
+		stats.pageMs, stats.bufferMs);
+	printf("trm reads          %d files opened, %d loaded with geometry, %.0f KiB read\n",
+		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 	printf("skeleton drift     %.0f mean over %d skinned parts, worst %.0f "
 		"(the limit for an object is %.0f)\n",
 		laraStats.driftMean, laraStats.driftParts, laraStats.driftWorst,
@@ -7908,8 +7915,15 @@ int main(int argc, char** argv)
 			HDPageCacheSlotCutoutPermille(s) / 10.0,
 			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "");
 	}
-	printf("time               %.0f ms reading the .TRM files, %.0f ms building\n",
-		stats.readMs, stats.buildMs);
+	/* The phases of `building`, since #153 round M2's fix round - keys is
+	 * the one that grew to twenty-five seconds in the game, and the three
+	 * .TRM numbers say how much of the wardrobe a build really reads. */
+	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
+		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f)\n",
+		stats.readMs, stats.buildMs, stats.findMs, stats.keyMs,
+		stats.pageMs, stats.bufferMs);
+	printf("trm reads          %d files opened, %d loaded with geometry, %.0f KiB read\n",
+		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 
 	if (!withRooms.empty())
 		printf("level total        %.1f MiB of pages on the card "

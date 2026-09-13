@@ -339,8 +339,13 @@ static long* HQSfxMapThrough(SfxBank* bank, const short* levelLut,
 		 * M3). The randomizer's Tomb Raider III guests take over free slots
 		 * of the TR5 soundmap, and free in a LEVEL is not free in the BANK:
 		 * the vulture's 420..423 are RICH1's VCI scientist voice lines
-		 * there, and the length rule let 423 through at 1.18 times the
-		 * expected length - so the bird died saying something in English.
+		 * there, and the length rule let 422 through - the level's 604 ms
+		 * against the bank's 624, well inside the fifth the rule allows - so
+		 * the bird died saying something in English. (The other three are
+		 * refused by length as well: 322, 425 and 406 ms against 624, 624
+		 * and 1037. Measured on the randomized ANDREA1 of seed 380 with
+		 * SfxProbe -level; the round's first pass named 423 off a wave
+		 * numbering one position out.)
 		 *
 		 * A length cannot tell a wrong pairing from a different recording
 		 * and a NAME can, so the run writes the ids it imported into its own
@@ -371,21 +376,30 @@ static long* HQSfxMapThrough(SfxBank* bank, const short* levelLut,
 		 * or an id nobody has declared. Either way it is worth a line, and
 		 * it is the line that would have found the vulture without anybody
 		 * reporting it. */
-		if (bit >= 0 && !((SfxBankMask(bank, (int)sfx) >> bit) & 1) &&
-			outside && *outside < 32)
+		if (bit >= 0 && outside && !((SfxBankMask(bank, (int)sfx) >> bit) & 1))
 		{
-			char line[192];
-
-			snprintf(line, sizeof(line),
-				"SFXLOG bridge: id %d is paired, but the bank says no level of "
-				"ours uses it (mask 0x%08x%08x, this level is bit %d) - a sound "
-				"the run moved here, or one nobody has declared",
-				(int)sfx,
-				(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) >> 32),
-				(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) & 0xFFFFFFFFu),
-				bit);
-			HQSfxLog(line);
+			/* COUNTED FIRST AND PRINTED SECOND (the fix round of M3). The
+			 * increment used to stand inside the cap on the printing, so the
+			 * total the summary line reports saturated at 32 and a reader
+			 * could not tell 32 from 200 - which is the one thing a safety net
+			 * is for. The refusal counter below has always been outside its
+			 * own cap and that is the shape both have now. */
 			(*outside)++;
+
+			if (*outside <= 32)
+			{
+				char line[192];
+
+				snprintf(line, sizeof(line),
+					"SFXLOG bridge: id %d is paired, but the bank says no level "
+					"of ours uses it (mask 0x%08x%08x, this level is bit %d) - a "
+					"sound the run moved here, or one nobody has declared",
+					(int)sfx,
+					(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) >> 32),
+					(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) & 0xFFFFFFFFu),
+					bit);
+				HQSfxLog(line);
+			}
 		}
 
 		// The variation count sits in bits 2..5 of flags, the same place

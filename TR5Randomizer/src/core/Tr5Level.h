@@ -982,11 +982,12 @@ public:
     //
     // The engine's HQ bridge pairs a level sample with a bank sample BY
     // SOUND ID, and a plausibility rule on the length is all that stands
-    // between it and a wrong pairing. Measured: the vulture's id 423 is a
-    // 879 ms screech and the bank's id 423 is a 1037 ms voice line, which is
-    // 1.18 times the expected length - inside the fifth the rule allows - so
-    // the bird died saying something in English. The other three are refused
-    // by length and the bug looked like a one-off.
+    // between it and a wrong pairing. Measured on the randomized ANDREA1 of
+    // seed 380: the vulture's id 422 is a 604 ms screech and the bank's id 422
+    // is a 624 ms voice line - well inside the fifth the rule allows - so the
+    // bird died saying something in English. The other three (322, 425 and
+    // 406 ms against 624, 624 and 1037) are refused by length and the bug
+    // looked like a one-off.
     //
     // A LENGTH CANNOT DECIDE THIS AND A NAME CAN. The run knows exactly
     // which ids it wrote; the engine cannot know. So the run says so, in

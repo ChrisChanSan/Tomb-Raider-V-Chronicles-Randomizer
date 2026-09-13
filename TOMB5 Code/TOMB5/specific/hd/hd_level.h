@@ -93,8 +93,10 @@ void HDLevelBuild();
  * about twenty changes and at the measured worst four.
  *
  * `why` goes into the log line. Does nothing at all without a built HD
- * level, and says so. */
-void HDLevelRedress(const char* why);
+ * level, and says so. TRUE when the new body is really on her NOW: false
+ * means it waits for the next level, and the caller's other half of the
+ * change - the footsteps - has to wait with it (#153, round M3, fix round). */
+bool HDLevelRedress(const char* why);
 
 /* The allowance, in bytes: the 64 MiB of slack the automatic texture budget
  * already holds back (hd_level.cpp, AutoBudgetBytes). A level that has added

@@ -169,10 +169,12 @@ const HDMarkerCut* HDMarkersCut(int at);
  * of the vulture's four are RICH1's VCI scientist voice lines.
  *
  * The HQ bridge pairs a level sample with a bank sample BY SOUND ID and
- * judges the pairing by length. Measured: the vulture's id 423 is a 879 ms
- * screech, the bank's id 423 a 1037 ms voice line, and 1.18 times the
- * expected length is inside the fifth the rule allows - so the bird died
- * saying something in English, which is what the user heard and reported.
+ * judges the pairing by length. Measured on the randomized ANDREA1 of seed
+ * 380: the vulture's id 422 is a 604 ms screech and the bank's id 422 a 624 ms
+ * voice line, which is well inside the fifth the rule allows - so the bird
+ * died saying something in English, which is what the user heard and reported.
+ * (Its other three ids are refused by length anyway: 322, 425 and 406 ms
+ * against 624, 624 and 1037.)
  *
  * A length cannot decide this and a NAME can. The run knows which ids it
  * wrote and says so here; hqsfx.cpp refuses to pair them. An id the run

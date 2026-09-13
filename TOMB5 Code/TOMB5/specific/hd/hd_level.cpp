@@ -2540,8 +2540,34 @@ void HDLevelLoad(const char* wadName)
 	 * joined (specific\file.cpp, S_LoadLevelFile). */
 	LevelStem(wadName, g_log_stem, sizeof(g_log_stem));
 
+	/* THE SIDECAR IS READ BEFORE THE HD GATE (#153, round M3, the fix round),
+	 * because one of its lines is not an HD fact at all.
+	 *
+	 * `sfximport` names the sound ids the run imported from another game, and
+	 * the thing that acts on it is the HQ bank bridge - which is deliberately
+	 * OUTSIDE this gate (round M1: "sound does not care whether hd_enable is
+	 * on", specific\hqsfx.cpp). With the load below the gate the refusal was
+	 * inert in exactly the build the engine ships, hd_enable off, and the
+	 * vulture went on dying in English there while every tool said it was
+	 * fixed - tools call HDMarkersLoad unconditionally and could not see it.
+	 *
+	 * Reading it here costs one small text file and changes nothing else: the
+	 * rooms, the cuts and the donors below are read by HD code alone, and
+	 * HDMarkersFree is in HDLevelUnload, which is not gated either. The load
+	 * thread runs this before LoadSamples calls HQSfxBuildMap (specific
+	 * \file.cpp, LoadLevel), so the list is there when the bridge is built. */
+	const bool markers = HDMarkersLoad(wadName);
+
 	if (!HDEnabled())
+	{
+		if (HDMarkersSoundImportCount())
+			Log("HDLOG level=%s markers file=%s: %d imported sound id%s, read "
+				"with the HD path off because the sound bridge needs them",
+				g_log_stem, HDMarkersPath(), HDMarkersSoundImportCount(),
+				HDMarkersSoundImportCount() == 1 ? "" : "s");
+
 		return;
+	}
 
 	LevelStem(wadName, g_stem, sizeof(g_stem));
 
@@ -2556,9 +2582,8 @@ void HDLevelLoad(const char* wadName)
 	 * The path is the .TRC's own with .hdm in its place, so the file is found
 	 * wherever the level is - a folder the user moved, a data folder beside a
 	 * second installation. A missing file is the normal case and not a fault;
-	 * an unreadable one falls back to the same answer and says so. */
-	const bool markers = HDMarkersLoad(wadName);
-
+	 * an unreadable one falls back to the same answer and says so. It has
+	 * already been read, above the gate - see the note there. */
 	Log("HDLOG level=%s markers file=%s version=%d rooms=%d cuts=%d donors=%d "
 		"outfit=%d tr3_install=%s%s%s",
 		g_stem, markers ? HDMarkersPath() : "none", HDMarkersVersion(),
@@ -3089,13 +3114,13 @@ int HDLevelRedressCount()
 	return g_redress_count;
 }
 
-void HDLevelRedress(const char* why)
+bool HDLevelRedress(const char* why)
 {
 	if (!HDEnabled() || !g_level_active || !g_stem[0])
 	{
 		Log("HDLOG redress refused (%s): no HD level is built here",
 			why ? why : "?");
-		return;
+		return false;
 	}
 
 	if (!HDLevelRedressAllowed())
@@ -3106,7 +3131,7 @@ void HDLevelRedress(const char* why)
 			g_redress_count == 1 ? "" : "s",
 			(HDPageCacheBytes() - g_redress_bytes0) / 1048576.0,
 			HD_REDRESS_ALLOWANCE / 1048576.0);
-		return;
+		return false;
 	}
 
 	const DWORD began = GetTickCount();
@@ -3136,6 +3161,7 @@ void HDLevelRedress(const char* why)
 
 	// The new body may walk on something else than the old one did.
 	HDOutfitMenuFollowFeet();
+	return true;
 }
 
 void HDLevelUnload()

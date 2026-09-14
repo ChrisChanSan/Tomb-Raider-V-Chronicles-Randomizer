@@ -1454,7 +1454,25 @@ static void NoteDisplayBoundPresent()
  * input at all outside ControlPhase, and every other menu in the build - the
  * pause menu, the death menu, the load/save screen, the special features -
  * runs its own modal loop with its own S_UpdateInput at the default two
- * ticks. */
+ * ticks.
+ *
+ * ROUND 154 TOOK THE TITLE OUT OF THIS TEST (#154), and it is worth saying
+ * exactly what changed and what did not. The DOUBLE READ above is real and is
+ * still the whole of the problem; what 1b had not got to was that the cure
+ * need not cost the title its frame rate. A menu drawn once per present and
+ * walked with an input written once per tick only has to be told which of its
+ * calls is reading an edge for the second time - and on that call its input
+ * is shadowed to zero for the duration (game\gameflow.cpp, TitleInputShadow).
+ * The debounce formula in specific\input.cpp keeps dbinput's own previous
+ * value, because the shadow is put back byte for byte the moment TitleOptions
+ * returns; one tap moves one row; and the title's flyby is drawn at sixty or
+ * at the panel's rate with order 2 underneath it, which it always could have
+ * been - DoTitle goes through DrawPhaseGame like the game does.
+ *
+ * `InventoryActive` stays. The ring still never reaches DrawPhaseGame; it
+ * paces its own present now (InvFrameMinTicks, game\inventory_interp.cpp) and
+ * this test remains what it has been since 1b - the guard for a future path
+ * into DrawPhaseGame from a menu. */
 long GameFrameMinTicks()
 {
 	const long mode = ActiveFpsMode();
@@ -1462,7 +1480,7 @@ long GameFrameMinTicks()
 	if (mode == 0)
 		return 2;
 
-	if (gfLevelId == LVL5_TITLE || InventoryActive)
+	if (InventoryActive)
 		return 2;
 
 	/* ZERO IS NOT "AS FAST AS POSSIBLE" (#148, order 6). It is "do not wait

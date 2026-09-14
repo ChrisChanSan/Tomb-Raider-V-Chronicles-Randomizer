@@ -775,6 +775,61 @@ long TitleOptions()
 	return ret;
 }
 
+/* THE TITLE MENU'S INPUT, ON A FRAME WHOSE CONTROLPHASE RAN NO TICK (#154).
+ *
+ * WHAT ORDER 1b FOUND AND WHAT IT COST. DoTitle's loop is `TitleOptions();
+ * DrawPhaseGame(); ControlPhase(nframes);` - the menu is walked once per
+ * PRESENT while the debounced input it walks with, dbinput, is written once
+ * per TICK, inside ControlPhase's `for (framecount += nframes; framecount > 0;
+ * framecount -= 2)` loop and nowhere else (specific\input.cpp). At two ticks a
+ * present the two rates are the same and every edge is read exactly once. At
+ * one, every second ControlPhase runs no tick, dbinput keeps standing, and the
+ * next TitleOptions reads the same press again: one tap of Down moved the
+ * cursor two rows. Order 1b's answer was to hold the title at thirty
+ * (GameFrameMinTicks); this round's is to tell the menu which of its calls is
+ * reading an edge for the second time, and to shadow its input for the length
+ * of that one call.
+ *
+ * THE QUESTION IS ASKED OF THE ENGINE'S OWN TICK COUNTER and not of a clock of
+ * its own. g_tickSerial steps once per logic tick at every frame rate
+ * (game\interpolate.cpp, InterpCapturePrev), so "has a tick run since I last
+ * read dbinput" is one comparison and it is right at fps_mode 1, at fps_mode 2
+ * where four or five frames fall inside one tick, on the first iteration after
+ * DoTitle's own priming ControlPhase, and through a hitch that runs several
+ * ticks in one call.
+ *
+ * AND IT IS A SHADOW, NOT A CLEARING - for a reason that had to be MEASURED
+ * rather than assumed. The debounce is two statements in specific\input.cpp
+ * with the frame's own read between them: `if (debounce) dbinput = inputBusy;`
+ * (:821, the PREVIOUS frame's), `inputBusy = linput;` (:869), then `if
+ * (debounce) dbinput = inputBusy & (dbinput ^ inputBusy);` (:881). So what
+ * comes out is the rising edge against the previous frame's input, and
+ * dbinput's own incoming value is thrown away by the first line - a dbinput
+ * left at zero would NOT turn a held key into a press, which is what this
+ * round was briefed to expect.
+ *
+ * What the restore really buys is the hitch. SetDebounce is cleared inside the
+ * FIRST tick of a ControlPhase call (game\control.cpp:314), so a call that
+ * runs several ticks writes dbinput on that one tick only; a zero left behind
+ * by an unrestored shadow would then stand through the rest of the hitch and
+ * swallow the edge that tick found. InterpTest runs both builds side by side.
+ * `input` is restored for a plainer reason: nothing rewrites it on a frame
+ * with no tick at all.
+ *
+ * At fps_mode 0 it returns false on every frame - one tick per present, the
+ * serial always moved - and the title runs the sequence it always ran. */
+static bool TitleInputShadow()
+{
+	static unsigned long seen = 0;
+
+	const unsigned long now = InterpTickSerial();
+	const bool repeat = now == seen;
+
+	seen = now;
+
+	return repeat && ActiveFpsMode() != 0;
+}
+
 void DoTitle(uchar name, uchar audio)
 {
 	gfLevelId = LVL5_TITLE;
@@ -852,7 +907,30 @@ void DoTitle(uchar name, uchar audio)
 	{
 		S_InitialisePolyList();
 		SkyDrawPhase();
-		gfStatus = TitleOptions();
+
+		/* #154: the menu is walked on every present, as it always was, but
+		 * the call that would read an edge for the second time is handed a
+		 * zeroed input and gets its own back the moment it returns. The note
+		 * is over TitleInputShadow above. */
+		{
+			const bool shadow = TitleInputShadow();
+			const long savedInput = input;
+			const long savedDbInput = dbinput;
+
+			if (shadow)
+			{
+				input = 0;
+				dbinput = 0;
+			}
+
+			gfStatus = TitleOptions();
+
+			if (shadow)
+			{
+				input = savedInput;
+				dbinput = savedDbInput;
+			}
+		}
 
 		if (gfStatus)
 			break;

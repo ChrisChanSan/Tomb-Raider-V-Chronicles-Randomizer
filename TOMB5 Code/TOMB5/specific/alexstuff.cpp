@@ -28,6 +28,7 @@
 #include "../game/control.h"
 #include "3dmath.h"
 #include "gamemain.h"
+#include "../game/interpolate.h"		// the tween latch (#148, order 3; #154)
 
 const char* CreditNames[] =
 {
@@ -424,7 +425,15 @@ long DoCredits()
 		y += font_height;
 	}
 
-	StartPos--;
+	/* #154: THE ROLL IS A PER-PRESENT COUNTER AND THE TITLE IS NO LONGER AT
+	 * THIRTY. One pixel a call was one pixel a thirtieth of a second for as
+	 * long as DoTitle presented at two ticks; since round 154 it presents at
+	 * the frame rate, and unguarded the credits would scroll at twice the
+	 * speed at fps_mode 1 and five times at a 165 Hz panel. The criterion is
+	 * the build's one criterion, and at fps_mode 0 it is false on every frame
+	 * and this is vanilla's own line. */
+	if (!InterpIsTweenFrame())
+		StartPos--;
 
 	if (!num_drawn)
 		init = 0;

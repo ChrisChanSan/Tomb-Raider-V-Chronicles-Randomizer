@@ -6217,6 +6217,219 @@ identity over the whole range, which is what keeps `fps_mode 0`
 byte-identical, and a particle born on the last tick is drawn between its
 birthplace and where that tick left it - never ahead of it.
 
+#### 5.14 Round 154 (#154) - the ring and the title at the frame rate
+
+"Sehr merklich, wenn das Spiel 60 hat und das Inventar 30" - the user, 13
+September 2026. His whole-game log says it in numbers: `FPSLOG` reads
+`frames=165 real_fps=165 budget=6.1 late=0` while he plays and
+`frames=30 logic_ticks=0 budget=33.3` for every second the inventory is up,
+and `level=TITLE frames=30 logic_ticks=30 real_fps=30.0` for the menu he
+starts from. Order 1b put both of them there on purpose (5.8) and this round
+takes them off it.
+
+**Both now present at the rate the option asks for, and both keep their logic
+at thirty.** Nothing else moved: the pause screen, the load and save screens,
+the death menu, the F4 outfit screen and the loading fade still wait their two
+ticks, `fps_mode 0` runs the instruction sequence it ran before, and the
+randomizer is untouched.
+
+##### The title: one tap, one row
+
+The fault order 1b found is real and is still the whole of the problem.
+`DoTitle`'s loop is `TitleOptions(); DrawPhaseGame(); ControlPhase(nframes);`,
+so the menu is walked once per PRESENT while `dbinput` is written once per
+TICK - at one tick a present every second `ControlPhase` runs no tick, the
+edge keeps standing, and the next `TitleOptions` reads the same press again.
+
+What 1b had not got to is that the cure need not cost the title its frame
+rate. A menu only has to be told which of its calls is reading an edge for the
+second time, and on that call its input is **shadowed**: `input` and `dbinput`
+are put aside, zeroed for the length of the one call, and put back byte for
+byte the moment it returns (`TitleInputShadow`, `game/gameflow.cpp`). The
+question is asked of the engine's own tick counter and not of a clock of its
+own - `g_tickSerial` steps once per logic tick at every frame rate and is now
+readable as `InterpTickSerial()` - so it is right at `fps_mode 1`, at
+`fps_mode 2` where four or five frames fall inside one tick, on the first
+iteration after `DoTitle`'s priming `ControlPhase`, and through a hitch.
+`GameFrameMinTicks()` then gives the title what it gives a played frame, and
+the fly-by is drawn through `DrawPhaseGame` with order 2 underneath it, which
+it always could have been.
+
+**One counter behind the title needed the guard the rest of the build already
+has**: `DoCredits`' roll (`StartPos--`, `specific/alexstuff.cpp`) is one pixel
+a present and would have scrolled five times too fast on a 165 Hz panel. It
+asks `InterpIsTweenFrame()` now, like every other counter of order 3. Nothing
+else `TitleOptions` reaches is per-present: the level select, the whole
+options tree and the Tomb5 pages all step on `dbinput`, which the shadow
+covers, `JoyMenuStep` has a latch of its own, and the two direct `keymap`
+reads in the key-mapping screen are idempotent.
+
+**And the rule the round was briefed with was wrong, which is worth writing
+down.** The brief said `dbinput`'s previous value is part of the next tick's
+answer, so that zeroing it between ticks would make a held key a fresh press
+every tick. `specific/input.cpp` says otherwise: the debounce is **two**
+statements with the frame's own read between them - `if (debounce) dbinput =
+inputBusy;` (`:821`, the PREVIOUS frame's), `inputBusy = linput;` (`:869`),
+`if (debounce) dbinput = inputBusy & (dbinput ^ inputBusy);` (`:881`) - so
+what comes out is the rising edge against the previous frame's INPUT and
+`dbinput`'s own incoming value is discarded by the first line. The shadow is
+restored all the same, and for a reason the code really has: `SetDebounce` is
+cleared inside the FIRST tick of a `ControlPhase` call (`game/control.cpp`),
+so a call that runs three ticks writes `dbinput` on one of them and a zero
+left behind would swallow the edge for the other two. `InterpTest` runs both
+builds side by side - three reads against one.
+
+##### The ring: the frame rate outside, thirty inside
+
+`S_CallInventory2` (`game/newinv2.cpp`) keeps its own modal loop and its own
+present, and that present now asks for what a played frame asks for
+(`InvFrameMinTicks()`; `gPresentMinTicks` is raised around THAT present only
+and put straight back to two, exactly as `DrawPhaseGame` does it, so
+`FPSLOG`'s `budget=` reads the ring's own slot). The loop body then runs its
+LOGIC once per two ticks, through an accumulator of exactly `ControlPhase`'s
+shape:
+
+```c
+const bool invStep = InvInterpBeginFrame();	// acc += ticks; step while acc > 0, acc -= 2
+```
+
+with one difference from `ControlPhase` and it is written out where it lives:
+the ring's body DRAWS as it steps, so the step can run at most once per frame,
+and the accumulator is clamped to one step's worth of credit. A hitch that
+banks four steps would otherwise make the ring step on every frame until the
+debt was paid - the ring running at the frame rate, which is the one thing
+this round exists to stop.
+
+On a frame with no step, nothing of the loop's state moves. The input is
+shadowed (the same shadow as the title's, plus the six `go_` flags, which
+`do_debounced_joystick_poo` rebuilds from `input` on every step frame and
+which would otherwise still be standing from the step before), and every
+stepping site inside the ring's reach asks the build's one criterion,
+`InterpIsTweenFrame()` - which the ring raises for itself now that its present
+no longer comes through `InterpNoteClassicPresent` (`InterpNoteMenuFrame`,
+`game/interpolate.cpp`).
+
+**What moves on a tween frame is the picture, and it is handed to the draw at
+the READ rather than written into the ring.** Order 2 writes its blended
+values into `items[]` and puts the bytes back afterwards, because in the game
+the whole tick is over before `DrawPhaseGame` is entered. The ring is not
+built that way: `draw_current_object_list` steps and draws in one pass - the
+spin and the brightness ramp sit inside the very loop that draws each icon,
+and the slide is stepped at the bottom of the same function, after the draw.
+A value written before that body is stepped over by the body itself, and one
+written after it is too late for the picture. So `game/inventory_interp.cpp`
+keeps the snapshot and eight accessors answer it, each returning the live
+value whenever there is nothing to blend.
+
+**And it is the STEP frame that is blended, which reads backwards until the
+order of the loop is written out.** In the game the draw comes before the
+tick, so the drawn states are `T1, mid(T1,T2), T2` - the live frame first. In
+the ring the step comes before the draw, and the same arrangement draws `C1,
+mid(C0,C1), C2, mid(C1,C2)`: a picture walking backwards on every second
+frame. The even, monotone half steps are the other way round. That is not a
+preference - it is what `InterpRefreshAlpha`, order 6's own derivation,
+returns for the ring's accumulator: 0.5 on the frame whose step ran, 1.0 on
+the next. `InterpTest` runs the two arrangements on the same simulated spin:
+**the briefed one walks backwards on 200 of 400 frames, the engine's on
+none.**
+
+**The table.** Every per-present counter and every moving field in the ring's
+reach, and what happens to it on a frame that carries no step:
+
+| what | where | on a tween frame |
+|---|---|---|
+| `S_UpdateInput`, `input`, `dbinput` | the loop body | not called; input shadowed to zero and restored |
+| `go_left/right/up/down/select/deselect`, the `*_debounce` and `left/right_repeat` | `do_debounced_joystick_poo` | not called; the six flags shadowed and restored |
+| `GameTimer++` | the loop body | held - it is the stats page's clock, `GameTimer / 30` |
+| `UpdatePulseColour` (`PulseCnt`) | `game/text.cpp` | held |
+| the four keymap cheats | the loop body | not run |
+| `GnFrameCounter` | `S_DumpScreen` | held by the latch - the keypad's flash and the blinking text read it |
+| the selected icon's spin (`yrot += 1022`), `spinback` | `draw_current_object_list` | **blended**, the short way round 65536 |
+| the brightness ramp (`bright += 16` / `-= 16`) | `draw_current_object_list` | **blended** |
+| the slide (`objlistmovement += 8192`), `curobjinlist`, the turn's sound | `draw_current_object_list`, bottom | held; the slide **blended** from the two previous generations, and a step in which `curobjinlist` changed is a JUMP and draws live. The row's LAYOUT takes `curobjinlist` from the same generation as the offset - see below |
+| `combine_ring_fade_val`, `normal_ring_fade_val` and the hand-overs at their ends | `step_ring_fades` | held; the two fades **blended** |
+| `ammo_selector_fade_val` | `fade_ammo_selector` | held; **blended** from the two previous generations |
+| the ammo selector's own spin | `draw_ammo_selector` | **blended** |
+| `examine_mode += 8` | `do_examine_mode` | held; **blended** (it is the zoom's own shade) |
+| `stats_mode += 8` | `do_stats_mode` | held, not blended - nothing reads it as a value |
+| `keypadpause--` and its six tones | `do_keypad_mode` | held, both halves inside one guard |
+| `current_selected_option`, `menu_active`, `ringactive`, `ammo_active`, the keypad digits, every text and count | everywhere | held - discrete state is never blended |
+| `Fade`, `FlashFader`, `DoScreenFade`, the F12 debounce, `resChangeCounter` | `S_OutputPolyList` | already guarded by order 3; the latch now comes from the ring |
+| `LookCnt`, `med_hotkey_timer` | `S_UpdateInput` | step once per logic step, which is the rate they had |
+
+**Two generations for what vanilla steps after its draw.** The spin, the
+brightness, the two ring fades and the examine zoom are stepped BEFORE the
+icon is drawn, so the value this frame draws is the new one and the pair is
+(previous, live). The slide and the ammo selector's fade are stepped AFTER
+their draw, so the value this frame draws is the one the last step produced
+and their pair is the two previous generations - which keeps each of them
+exactly one step behind the spin, the relation they already have at thirty.
+
+**The slot and the offset are one pair, and getting that wrong was a real bug
+in this round before the arithmetic caught it.** `curobjinlist` is discrete and
+is never blended - but the step that puts `objlistmovement` back to 0 moves it
+in the same breath, so a frame that drew the NEW slot with the OLD offset put
+the whole row seven eighths of a slot to the side for one frame, at every turn
+of the ring. The layout therefore takes both from one generation
+(`InvDrawCur` / `InterpRingSlot`), and a slot left over from a list that has
+since been rebuilt falls back to the live one. The option list under the row
+keeps the live slot, which is not an oversight: at thirty
+`draw_current_object_list` has already run its stepping block by the time
+`handle_inventry_menu` reads `curobjinlist`, so the option text is one step
+ahead of the row there too, and this keeps that relation rather than inventing
+a new one.
+
+**Cuts.** Opening or closing a mode, the ammo ring taking over, the combine
+ring being built, the list being rebuilt by a combine, a separate or a weapon
+hot key, the load/save screen, and opening and closing the ring itself: the snapshot is dropped and the next step frame draws live
+(`InvInterpCut`, one word each into the log). A rebuilt list needs no call
+site of its own - each slot's `invitem` travels in the snapshot, so a slot
+that changed hands draws live by itself, which is the same job
+`object_number` does in order 2's.
+
+##### The log
+
+`INVLOG`, new, `-log` only and behind `gLogEnabled` like every other seam:
+
+```
+INVLOG open level=0 why=open fps_mode=2 min_ticks=0 budget=6.1
+INVLOG level=3 at=0s frames=165 steps=30 tween=135 alpha=0.09/0.95 budget=6.1 blend=spin,bright,slide cuts=0
+INVLOG cut level=3 at=2s why=menu steps=64
+INVLOG close level=3 frames=812 steps=148
+```
+
+The second is a LOGIC second - thirty ring steps - because the ring stops
+`GlobalCounter` and there is no other clock in it. `blend=` is the same kind
+of field as `INTERPLOG`'s `particle_kinds=`: a motion that is plainly on
+screen and missing from the list is an accessor whose guard never fires, and
+there is no other way to see that from the picture, because a field that never
+blends simply looks like thirty. The counters run at `fps_mode 0` as well -
+that run is the comparison, `frames=30 steps=30 tween=0` - and `INTERPLOG`
+needs no new word for the title: its `level=` is `gfLevelId`, and the title
+has one of its own.
+
+##### The proof
+
+`InterpTest` (`bit.bat`) grew `ring_cadence` and `title_shadow`; the arithmetic
+they run is the engine's own, because `InterpRingStep`, `InterpRingAlpha`,
+`InterpRingSlide` and `InterpRingSlot` live in `game/interpolate_math.h` beside
+the rest of it.
+**361 checks, 0 failed.** 600 frames at sixty run 300 steps with the clock
+agreeing with the parity shortcut on every one; ten seconds at the user's own
+165 Hz run 300 steps against 1650 frames with the factor never clamped and the
+drawn instant never walking backwards; a 333 ms hitch does not leave the ring
+stepping on every frame afterwards; the spin crosses the 65536 wrap four times
+with no long-way frame; three whole turns of the ring never blend the slide's
+reset halfway back and never draw the slot and the offset from two different
+generations; and at `fps_mode 0` not one ring frame is ever blended.
+
+**What only a play test can show.** That an inventory second really reads
+`frames=165 logic_ticks=0 budget=6.1` with `INVLOG steps=30` beside it; that
+the title's fly-by is blended through the normal path (`INTERPLOG` at the
+title with `tween=` half the frames and no run of `camcut=`); that one tap of
+Down still moves one row on every page of the options tree; and that the ring
+looks right rather than merely measures right.
+
 #### Fix round R - what the night's chain broke in first person (#123, #148)
 
 Orders 1b to 6 and fix rounds K, L and M were written and committed in one

@@ -2624,6 +2624,613 @@ static void portal_walk()
 	}
 }
 
+/* ------------------------------------------------------------ the ring -- */
+
+/* ROUND 154 - THE INVENTORY RING AT THE FRAME RATE, AND ITS LOGIC AT THIRTY.
+ *
+ * The ring is a modal loop that never reaches ControlPhase, so it keeps an
+ * accumulator of its own - InterpRingStep - and works its blend factor out of
+ * it with InterpRingAlpha. Both live in the engine's own header, so what runs
+ * below is the engine's arithmetic and not a transcription of it.
+ *
+ * WHAT THIS SECTION IS REALLY FOR. The order of the ring's loop is the other
+ * way round from the game's: the game DRAWS and then ticks, the ring STEPS and
+ * then draws. The design note handed down for the round said the in-between
+ * frame should carry the blend, as it does in the game - and run that way
+ * round, the picture walks BACKWARDS on every second frame. That is not
+ * something a play test can be asked to judge, because 8.3 ms of backwards
+ * spin looks exactly like a rendering glitch. So both arrangements are run
+ * here on the same simulated ring, and the one that is even and monotone is
+ * the one the engine implements. */
+static void ring_cadence()
+{
+	printf("the ring's cadence (#154)\n");
+
+	/* ---- the accumulator at fps_mode 1: one tick per present ---- */
+	{
+		long acc = 0;
+		int steps = 0, frames = 0, tween = 0, runOfTween = 0, worstRun = 0;
+		int wrongStep = 0, wrongTween = 0, clockDisagreed = 0;
+
+		for (int i = 0; i < 600; i++)
+		{
+			const bool step = InterpRingStep(&acc, 1);
+			const float alpha = InterpRingAlpha(1, acc, 1.0, step);
+
+			frames++;
+
+			if (step)
+			{
+				steps++;
+				runOfTween = 0;
+
+				if (alpha != 0.5F)
+					wrongStep++;
+			}
+			else
+			{
+				tween++;
+				runOfTween++;
+
+				if (runOfTween > worstRun)
+					worstRun = runOfTween;
+
+				if (alpha != 1.0F)
+					wrongTween++;
+			}
+
+			// the clock says the same thing, which is the check that the
+			// parity shortcut is the same rule and not a second one
+			if (InterpRefreshAlpha(acc, 1.0) != alpha)
+				clockDisagreed++;
+		}
+
+		ok(steps == 300, "600 ring frames at sixty run 300 logic steps", steps, 300);
+		ok(tween == 300, "and 300 of them carry no step", tween, 300);
+		ok(worstRun == 1, "never two frames in a row without a step", worstRun, 1);
+		ok(wrongStep == 0, "fps_mode 1: every step frame is drawn at a half", wrongStep, 0);
+		ok(wrongTween == 0, "fps_mode 1: every frame between is drawn live", wrongTween, 0);
+		ok(clockDisagreed == 0, "fps_mode 1: the clock and the parity agree on all 600",
+			clockDisagreed, 0);
+
+		printf("  fps_mode 1: frames=%d steps=%d tween=%d, the clock agrees on every one\n",
+			frames, steps, tween);
+	}
+
+	/* ---- the accumulator at 165 Hz, the user's own panel ----
+	 *
+	 * The frames are paced by the display and the whole ticks come back from
+	 * Sync() on their own grid, so the returned counts are 0 and 1 in the
+	 * pattern a 60 Hz counter makes under 165 presents a second. It is
+	 * modelled the way the engine really gets them: the clock is read after
+	 * the present, and what has crossed a tick boundary since the last read is
+	 * what S_DumpScreen returns. */
+	{
+		const double hz = 165.0;
+		const double frameTicks = 60.0 / hz;	// 1/60 s ticks per frame
+		long acc = 0;
+		double clock = 0.0;			// in ticks, since the ring opened
+		long handed = 0;			// whole ticks Sync() has given away
+		int steps = 0, frames = 0, clamped = 0;
+		float last = 0.0F;
+		int backwards = 0;
+		bool first = true;
+
+		for (int i = 0; i < 1650; i++)	// ten seconds
+		{
+			clock += frameTicks;
+
+			const long whole = (long)clock;
+			const long ticks = whole - handed;
+
+			handed = whole;
+
+			const bool step = InterpRingStep(&acc, ticks);
+			const double subTick = clock - (double)handed;
+			const float alpha = InterpRingAlpha(2, acc, subTick, step);
+
+			frames++;
+
+			if (step)
+				steps++;
+
+			if (alpha >= 1.0F)
+				clamped++;
+
+			/* The drawn instant is (step count) + alpha, in half-steps of a
+			 * logic step. It must never go backwards - a backwards frame is
+			 * exactly the fault this section exists to catch. */
+			const float now = (float)steps + alpha;
+
+			if (!first && now < last)
+				backwards++;
+
+			last = now;
+			first = false;
+		}
+
+		ok(steps == 300, "ten seconds at 165 Hz run 300 ring steps", steps, 300);
+		ok(frames == 1650, "against 1650 frames", frames, 1650);
+		ok(backwards == 0, "and the drawn instant never walks backwards", backwards, 0);
+		ok(clamped == 0, "the factor is never clamped to the newest state", clamped, 0);
+
+		printf("  fps_mode 2 at 165 Hz: frames=%d steps=%d, never clamped, never backwards\n",
+			frames, steps);
+	}
+
+	/* ---- a hitch does not make the ring run at the frame rate ---- */
+	{
+		long acc = 0;
+		int steps = 0;
+
+		// twenty ticks arrive in one frame (a 333 ms hitch), then sixty hertz
+		InterpRingStep(&acc, 20);
+
+		for (int i = 0; i < 60; i++)
+		{
+			if (InterpRingStep(&acc, 1))
+				steps++;
+		}
+
+		ok(steps == 30, "after a hitch the ring is back to one step per two ticks",
+			steps, 30);
+		ok(acc >= -1 && acc <= 2, "and the accumulator is bounded", acc, 0);
+	}
+
+	/* ---- the two arrangements, on the same simulated spin ----
+	 *
+	 * The ring's own motion: the selected icon turns 1022 a logic step. What
+	 * is compared is the sequence of DRAWN angles under the engine's rule (the
+	 * step frame at a half, the frame between live) and under the one the
+	 * design note asked for (the step frame live, the frame between at a
+	 * half). Both are run off the same steps.
+	 */
+	{
+		long acc = 0;
+		long yrot = 0;			// the live field
+		long prev = 0;			// the generation the step frame captured
+		long lastMine = 0, lastTheirs = 0;
+		int backMine = 0, backTheirs = 0;
+		int unevenMine = 0;
+		bool first = true;
+
+		for (int i = 0; i < 400; i++)
+		{
+			const bool step = InterpRingStep(&acc, 1);
+			const float alpha = InterpRingAlpha(1, acc, 1.0, step);
+
+			if (step)
+			{
+				prev = yrot;		// captured before the body moves it
+				yrot += 1022;		// and the body moves it
+			}
+
+			// what the engine draws: blend(prev, live, alpha)
+			const long mine = (long)InterpLerpAngle((short)prev, (short)yrot, alpha);
+
+			// what the note asked for: live on the step frame, the midpoint
+			// on the frame between
+			const long theirs = step ? yrot : (prev + yrot) / 2;
+
+			/* Taken as a SHORT, so that the wrap at 65536 - which 1022 a
+			 * step reaches after 64 steps - is the shorter way round and not
+			 * a jump of a whole turn. That is the very property the blend is
+			 * asserted on. */
+			if (!first)
+			{
+				const short dMine = (short)((unsigned short)mine - (unsigned short)lastMine);
+				const short dTheirs = (short)((unsigned short)theirs - (unsigned short)lastTheirs);
+
+				if (dMine < 0)
+					backMine++;
+
+				if (dTheirs < 0)
+					backTheirs++;
+
+				if (dMine != 511)
+					unevenMine++;
+			}
+
+			lastMine = mine;
+			lastTheirs = theirs;
+			first = false;
+		}
+
+		ok(backMine == 0, "the engine's arrangement never draws the spin backwards",
+			backMine, 0);
+		ok(unevenMine == 0, "and every drawn step is exactly half of 1022", unevenMine, 0);
+		ok(backTheirs > 0, "the other arrangement walks backwards - which is why it is not the one",
+			backTheirs > 0 ? 1 : 0, 1);
+
+		printf("  the spin over 400 frames: the engine's arrangement %d backward frames, "
+			"the note's %d\n", backMine, backTheirs);
+	}
+
+	/* ---- the spin over the wrap ----
+	 *
+	 * 1022 a step crosses 65536 every 64 steps. Blended the long way round the
+	 * icon would spin a whole turn backwards for one frame, and that is the
+	 * fault this whole file was written for. Walked far enough to cross the
+	 * wrap four times.
+	 */
+	{
+		long acc = 0;
+		unsigned short yrot = 0;
+		unsigned short prev = 0;
+		int backwards = 0;
+		int crossings = 0;
+		long lastDrawn = 0;
+		bool first = true;
+
+		for (int i = 0; i < 600; i++)
+		{
+			const bool step = InterpRingStep(&acc, 1);
+			const float alpha = InterpRingAlpha(1, acc, 1.0, step);
+
+			if (step)
+			{
+				prev = yrot;
+				yrot = (unsigned short)(yrot + 1022);
+
+				if (yrot < prev)
+					crossings++;
+			}
+
+			const unsigned short drawn =
+				(unsigned short)InterpLerpAngle((short)prev, (short)yrot, alpha);
+
+			/* the step between two drawn angles, taken as a short, is the
+			 * shorter way round by construction - what is asserted is that it
+			 * is always FORWARD and never more than a step */
+			if (!first)
+			{
+				const short d = (short)(drawn - (unsigned short)lastDrawn);
+
+				if (d < 0 || d > 1022)
+					backwards++;
+			}
+
+			lastDrawn = drawn;
+			first = false;
+		}
+
+		// 300 steps of 1022 is 306600, which is four whole turns and a bit
+		ok(crossings == 4, "the spin crossed the wrap four times in 600 frames",
+			crossings, 4);
+		ok(backwards == 0, "and not one drawn frame turned the long way round",
+			backwards, 0);
+	}
+
+	/* ---- the slide, and the jump in it ----
+	 *
+	 * objlistmovement walks 0 -> 65536 in eight steps of 8192 and is then set
+	 * back to 0 with curobjinlist moved on. The pair that straddles the reset
+	 * must not be blended: 57344 and 0 blend to 28672, which is the whole row
+	 * sliding halfway back for one frame.
+	 */
+	{
+		long acc = 0;
+		long move = 0;			// the live field
+		long cur = 0;			// curobjinlist
+		long gen[2] = { 0, 0 };		// the two previous generations
+		long genCur[2] = { 0, 0 };
+		int gens = 0;
+		int resets = 0, halfway = 0, backwards = 0, uneven = 0, unpaired = 0;
+		long lastDrawn = 0;
+		bool first = true;
+
+		// three whole turns of the ring, one press at a time
+		for (int turn = 0; turn < 3; turn++)
+		{
+			for (int i = 0; i < 20; i++)
+			{
+				const bool step = InterpRingStep(&acc, 1);
+				const float alpha = InterpRingAlpha(1, acc, 1.0, step);
+
+				if (step)
+				{
+					gen[1] = gen[0];
+					genCur[1] = genCur[0];
+					gen[0] = move;
+					genCur[0] = cur;
+
+					if (gens < 2)
+						gens++;
+				}
+
+				const bool jumped = genCur[1] != genCur[0];
+				const long drawn = gens >= 2
+					? InterpRingSlide(gen[1], gen[0], jumped, alpha)
+					: move;
+
+				/* THE PAIR. The slot the row is laid out from has to belong to
+				 * the same generation the offset came from - the reset moves
+				 * both in one breath, and a frame that took the new slot with
+				 * the old offset put the whole row seven eighths of a slot to
+				 * the side. */
+				const long drawnCur = gens >= 2
+					? InterpRingSlot(genCur[0], cur, 100)
+					: cur;
+
+				if (gens >= 2 && drawnCur != genCur[0])
+					unpaired++;
+
+				if (jumped && drawn == 28672)
+					halfway++;
+
+				if (!first && gens >= 2)
+				{
+					const long d = drawn - lastDrawn;
+
+					// forward, and never more than one whole step; the two
+					// frames of the jump stand still and are the only zeros
+					if (d < 0 && !jumped)
+						backwards++;
+
+					if (d != 0 && d != 4096 && !jumped)
+						uneven++;
+				}
+
+				// Not before the second generation stands: until then the
+				// accessor hands back the live field and the two are a
+				// different sequence.
+				if (gens >= 2)
+				{
+					lastDrawn = drawn;
+					first = false;
+				}
+
+				// the step the bottom of draw_current_object_list takes
+				if (step)
+				{
+					if (move > 0)
+						move += 8192;
+
+					if (!move && i == 0)
+						move += 8192;	// the press
+
+					if (move >= 65536)
+					{
+						move = 0;
+						cur++;
+						resets++;
+					}
+				}
+			}
+		}
+
+		ok(resets == 3, "three presses turned the ring three slots", resets, 3);
+		ok(halfway == 0, "and the reset was never blended halfway back", halfway, 0);
+		ok(backwards == 0, "the drawn slide never walks backwards", backwards, 0);
+		ok(uneven == 0, "and moves in exact half steps of 4096", uneven, 0);
+		ok(unpaired == 0, "the slot and the offset always come from one generation",
+			unpaired, 0);
+		ok(InterpRingSlot(7, 2, 5) == 2, "a slot past the end of a rebuilt list falls back to the live one",
+			InterpRingSlot(7, 2, 5), 2);
+		ok(InterpRingSlot(3, 2, 5) == 3, "and one inside it does not", InterpRingSlot(3, 2, 5), 3);
+
+		printf("  the slide: %d turns of the ring, %d frames blended halfway across the reset\n",
+			resets, halfway);
+	}
+
+	/* ---- fps_mode 0 takes every branch out ---- */
+	{
+		long acc = 0;
+		int steps = 0, frames = 0, blended = 0;
+
+		for (int i = 0; i < 300; i++)
+		{
+			// the ring's present waits its two ticks, so two come back
+			const bool step = InterpRingStep(&acc, 2);
+			const float alpha = InterpRingAlpha(0, acc, 1.0, step);
+
+			frames++;
+
+			if (step)
+				steps++;
+
+			if (alpha != 1.0F)
+				blended++;
+		}
+
+		ok(steps == frames, "fps_mode 0: every ring frame carries its step",
+			steps, frames);
+		ok(blended == 0, "fps_mode 0: and not one of them is ever blended", blended, 0);
+	}
+}
+
+/* ----------------------------------------------------- the title shadow -- */
+
+/* ROUND 154 - ONE TAP, ONE ROW.
+ *
+ * Order 1b's finding, as arithmetic. TitleOptions is called once per PRESENT
+ * and reads dbinput, which ControlPhase writes once per TICK - and the write
+ * is TWO statements in specific\input.cpp with the frame's own input read
+ * between them:
+ *
+ *     if (debounce) dbinput = inputBusy;                    // :821, the
+ *                                                           // PREVIOUS frame's
+ *     inputBusy = linput;                                   // :869, this one's
+ *     if (debounce) dbinput = inputBusy & (dbinput ^ inputBusy);   // :881
+ *
+ * so what comes out is the RISING EDGE against the previous frame's input, and
+ * dbinput's own incoming value is overwritten by the first line before the
+ * second ever reads it. A held key is one edge and then nothing. At two ticks
+ * a present that edge is read exactly once. At one, every second ControlPhase
+ * runs no tick, dbinput keeps standing, and the next call reads the same edge
+ * a second time: one tap of Down moves two rows.
+ *
+ * WHICH CORRECTS THE RULE THIS ROUND WAS BRIEFED WITH. The brief said
+ * dbinput's previous value is part of the next tick's answer, so that zeroing
+ * it between ticks would make a held key a fresh press every tick. Measured
+ * against the source, it is not: line 821 discards it. The shadow is still
+ * restored, and for a reason the code really has - SetDebounce is cleared
+ * inside the first tick of a ControlPhase call (game\control.cpp:314), so a
+ * call that runs SEVERAL ticks rewrites dbinput on the first of them only, and
+ * a zero left behind would then stand through the rest of the hitch. Both
+ * halves are asserted below.
+ */
+static void title_shadow()
+{
+	printf("the title's input shadow (#154)\n");
+
+	const long DOWN = 0x0002;		// IN_BACK, as a bit
+
+	for (int mode = 0; mode <= 1; mode++)
+	{
+		// mode 0: two ticks a present. mode 1: one tick a present.
+		const long perPresent = mode ? 1 : 2;
+		long framecount = 0;
+		long dbinput = 0;
+		long inputBusyPrev = 0;		// what line 821 hands the edge test
+		unsigned long serial = 0;	// g_tickSerial
+		unsigned long seen = 0;		// the menu's own latch
+		int actedRaw = 0, actedShadow = 0, restored = 0, mismatched = 0;
+
+		for (int frame = 0; frame < 40; frame++)
+		{
+			// the key is held from frame 4 to frame 24
+			const long inputBusy = (frame >= 4 && frame < 24) ? DOWN : 0;
+
+			/* TitleOptions, as DoTitle calls it: the shadow first, then the
+			 * menu's read, then the restore. */
+			const bool repeat = serial == seen;
+
+			seen = serial;
+
+			const bool shadow = repeat && mode != 0;
+			const long before = dbinput;
+
+			// what the unshadowed build - order 1b's bug - would have acted on
+			if (dbinput & DOWN)
+				actedRaw++;
+
+			// the shadow goes ON, exactly as DoTitle writes it
+			if (shadow)
+				dbinput = 0;
+
+			// TitleOptions' own read, inside the window
+			if (dbinput & DOWN)
+				actedShadow++;
+
+			// and OFF again
+			if (shadow)
+				dbinput = before;
+
+			if (dbinput == before)
+				restored++;
+			else
+				mismatched++;
+
+			/* DrawPhaseGame, then ControlPhase - and S_UpdateInput's two
+			 * writes in their own order, with SetDebounce true only for the
+			 * first tick of the call (game\control.cpp:259 and :314). */
+			bool debounce = true;
+
+			for (framecount += perPresent; framecount > 0; framecount -= 2)
+			{
+				serial++;
+
+				if (debounce)
+				{
+					dbinput = inputBusyPrev;
+					dbinput = inputBusy & (dbinput ^ inputBusy);
+				}
+
+				inputBusyPrev = inputBusy;
+				debounce = false;
+			}
+		}
+
+		if (mode == 0)
+		{
+			ok(actedRaw == 1, "at two ticks a present the menu reads one tap once",
+				actedRaw, 1);
+			ok(actedShadow == 1, "and the shadow changes nothing there",
+				actedShadow, 1);
+		}
+		else
+		{
+			ok(actedRaw == 2, "at one tick a present the unshadowed menu reads it twice",
+				actedRaw, 2);
+			ok(actedShadow == 1, "and the shadow brings it back to one",
+				actedShadow, 1);
+		}
+
+		ok(mismatched == 0, "dbinput is restored bit for bit on every frame",
+			mismatched, 0);
+		ok(restored == 40, "on all forty of them", restored, 40);
+	}
+
+	/* AND THE HELD KEY STAYS HELD. The whole reason the shadow is a shadow: a
+	 * dbinput zeroed for good would put the edge back on every single tick,
+	 * because the formula reads its own previous value. */
+	{
+		const long DOWN2 = 0x0002;
+		long dbinput = 0;
+		long prev = 0;
+		int edges = 0;
+
+		for (int tick = 0; tick < 20; tick++)
+		{
+			const long inputBusy = DOWN2;	// held for the whole run
+
+			dbinput = prev;			// :821
+			dbinput = inputBusy & (dbinput ^ inputBusy);	// :881
+			prev = inputBusy;
+
+			if (dbinput & DOWN2)
+				edges++;
+		}
+
+		ok(edges == 1, "a held key is one edge and then nothing", edges, 1);
+	}
+
+	/* AND WHAT THE RESTORE REALLY BUYS. A ControlPhase that runs SEVERAL ticks
+	 * refreshes dbinput on the first of them only - SetDebounce is cleared
+	 * inside the tick body - so a zero left behind by an unrestored shadow
+	 * stands through the rest of that hitch and swallows the edge the first
+	 * tick found. Run here as the two builds side by side. */
+	{
+		const long SELECT = 0x0001;
+		long dbKept = 0, dbLost = 0;
+		long prev = 0;
+		int seenKept = 0, seenLost = 0;
+
+		// one present that runs three ticks; the key goes down on the first
+		for (int tick = 0; tick < 3; tick++)
+		{
+			const long inputBusy = SELECT;
+			const bool debounce = tick == 0;
+
+			if (debounce)
+			{
+				dbKept = prev;
+				dbKept = inputBusy & (dbKept ^ inputBusy);
+				dbLost = prev;
+				dbLost = inputBusy & (dbLost ^ inputBusy);
+			}
+
+			prev = inputBusy;
+
+			// the menu reads between the ticks, and the unrestored build
+			// leaves its zero behind
+			if (dbKept & SELECT)
+				seenKept++;
+
+			if (dbLost & SELECT)
+				seenLost++;
+
+			dbLost = 0;
+		}
+
+		ok(seenKept == 3, "the restored shadow keeps the edge through a three-tick call",
+			seenKept, 3);
+		ok(seenLost == 1, "an unrestored one loses it after the first tick",
+			seenLost, 1);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4, 5 and 6)\n");
@@ -2647,6 +3254,8 @@ int main()
 	portal_walk();
 	reach_rect();
 	walk_capacity();
+	ring_cadence();
+	title_shadow();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

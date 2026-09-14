@@ -321,14 +321,28 @@ Two ways to check it yourself:
 - The stopwatch: a timed section (the countdown in the Submarine, the
   Escape With The Iris timer) runs for exactly as many real seconds in both.
 
-**Where the sixty applies.** In the level, and only there. The title screen,
-its menus, the inventory ring, the pause screen, the load and save screens and
-the death menu all stay at thirty at either setting, on purpose: each of them
-walks its menu once per *picture* while the button presses it walks with are
-read once per *game step*, so at sixty each press counted twice and the
-cursor jumped two rows at a time. Nothing about them looks different at
-thirty — they were written for it — and the game frame behind the title is not
-the frame anybody is watching.
+**Where the sixty applies.** In the level, on the **title screen** and in the
+**inventory ring**. The pause screen, the load and save screens, the death
+menu, the outfit screen and the loading fade still run at thirty, on purpose:
+each of them walks its menu once per *picture* while the button presses it
+walks with are read once per *game step*, so at sixty each press would count
+twice and the cursor would jump two rows at a time. Nothing about them looks
+different at thirty — they were written for it.
+
+The title and the ring used to be on that list and came off it in September
+2026. Both now present at the rate this row asks for while their own logic —
+the menu, the input, the cursor, every counter they own — still runs thirty
+times a second, exactly as the game does. The ring's icons spin and the row
+slides in half steps between two of those, the title's fly-by is drawn the
+same way the level is, and a tap of Down still moves one row: the frame that
+would have read the same button press a second time is handed a blank input
+for the length of that one call and gets its own back immediately after.
+
+With `-log` the ring writes an `INVLOG` line a second — `frames=` what was
+presented, `steps=` its logic, and which of its motions were really drawn
+in between. A healthy second at *Display* on a 165 Hz panel reads
+`frames=165 steps=30`, and the `FPSLOG` line beside it reads
+`frames=165 budget=6.1` where it used to read `frames=30 budget=33.3`.
 
 **What you get, and what it costs.** Twice as many pictures of the same
 motion, and the in-between one is a real new position rather than a repeat.

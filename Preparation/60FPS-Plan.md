@@ -86,7 +86,7 @@ tick if the frame is drawn twice.
 | R10 | the poison filter inside the view matrix | `specific\3dmath.cpp:650-656` inside `phd_GenerateW2V` | `lara.poisoned += (dpoisoned - poisoned) >> 4` runs once per `phd_LookAt`. Camera interpolation means one `phd_LookAt` per drawn frame -> the poison ramp doubles. The engine already knows this hazard: `specific\output.cpp:726-728, 763` saves and zeroes `lara.poisoned` around its fade loop. | medium |
 | R11 | `S_DrawSparks` detaches sparks from their item | `specific\specificfx.cpp:2003-2009` and `:2044-2050` | a random-timed one-shot fires twice as often; harmless but not free | low |
 | R12 | `GnFrameCounter++` | `specific\output.cpp:1289, 1308`; read at `game\text.cpp:342` (blink), `specific\output.cpp:73` (pickup spin), `game\newinv2.cpp:3062` | text blink and pickup spin double | low |
-| R13 | the modal loops that present themselves | inventory `game\newinv2.cpp:663-664`; load/save `specific\LoadSave.cpp:1404-1405, 1879-1880, 2067-2068`; death menu `game\control.cpp:235-236`; load fade `specific\output.cpp:748-749, 760-761` | every one of these steps its own animation once per present. They must stay at 2 ticks | high, but trivially fixed (1.4) |
+| R13 | the modal loops that present themselves | inventory `game\newinv2.cpp:663-664`; load/save `specific\LoadSave.cpp:1404-1405, 1879-1880, 2067-2068`; death menu `game\control.cpp:235-236`; load fade `specific\output.cpp:748-749, 760-761` | every one of these steps its own animation once per present. They must stay at 2 ticks | high, but trivially fixed (1.4) **Lifted for the INVENTORY by round 154 (#154)**, 2026-09-15: it presents at the frame rate and runs its logic body once per two ticks through an accumulator of `ControlPhase`'s shape, with every field that moves continuously blended at the read. The other three stay at 2 ticks. |
 | R14 | `RegeneratePickups()` | `game\control.cpp:251` (outside the tick loop) | runs per `ControlPhase` call, i.e. twice per tick - idempotent re-check | low |
 | R15 | `resChangeCounter -= long(30 / App.fps)` | `specific\output.cpp:1473` | already frame-rate aware; would need `60 /` in 60 Hz mode | trivial |
 | R16 | `gfLegendTime--` | `game\gameflow.cpp`, inside `DoLevel`'s loop, beside the `PrintString` that draws the caption | the level-name caption stands for half as long | low, cosmetic |
@@ -324,6 +324,15 @@ makes.
 - Everything at R13 keeps 2 without touching a line: the inventory, the
   load/save screen, the death menu and the load fade stay at 30 Hz, so
   their per-present animation counters keep their timing.
+
+**Round 154 correction (2026-09-15):** the inventory and the title do not keep
+their two ticks any more. Both present at the rate the option asks for and
+both keep their logic at thirty - the ring through an accumulator of its own
+(`game\inventory_interp.cpp`) and the title through `DrawPhaseGame` as it
+always did, with `TitleOptions`' input shadowed on the one call that would
+read an edge for the second time. The load/save screen, the pause menu, the
+death menu, the loading fade and the F4 outfit screen are what is left of
+R13, and they stay at two. `MODIFICATIONS.md` 5.14 is the record.
 
 **Order 1b correction (2026-09-07):** the second bullet is not the whole list.
 The TITLE also has to keep two ticks, and it is not a modal loop - it draws

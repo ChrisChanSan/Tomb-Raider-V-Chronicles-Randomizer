@@ -173,7 +173,6 @@ namespace
 			return v;
 		}
 
-		short i16() { return (short)u16(); }
 
 		unsigned int u32()
 		{

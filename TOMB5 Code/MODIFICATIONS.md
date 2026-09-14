@@ -12460,6 +12460,16 @@ refusal is a measurement anybody can re-read rather than this round's word.
 quantity as the 80.6 above; the corner measurement assumes neither a centred
 fit nor a symmetric model, and the posed pair is neither.)
 
+**WHAT IT COSTS, because a level build opens files now.** The walk seeks past
+the texture pages rather than loading them and stops at the first level file
+that holds the object, and the answer is kept for the session - a ring that
+asks in every level of a play session reads a level file once. Measured over
+three runs each of `ModelProbe -classicpose`, whole process, against the same
+command on a name the table does not know (which reads nothing at all): 85 ms
+against 90, 93 and 87 for games 1, 2 and 3. Single-digit milliseconds, once,
+and game 1 is the slow case - `CUT1..CUT4.PHD` sort before `GYM.PHD` and have
+no weapons in them.
+
 **THE TOOL.** `ModelProbe -classicpose <game> <MODEL_NAME>` prints the object,
 the level it came from, the bones, frame 0 and the 4x4 each node gets, through
 the very reader the engine uses. `-noclassicpose` runs `-inventory` without the

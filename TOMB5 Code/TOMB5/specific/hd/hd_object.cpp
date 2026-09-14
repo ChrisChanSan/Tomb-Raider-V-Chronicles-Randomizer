@@ -27,6 +27,7 @@
 #include "hd_model.h"
 #include "hd_laradraw.h"
 #include "hd_bind.h"
+#include "hd_classic.h"			// the donor game's frame 0 (#155)
 #include "hd_install.h"
 #include "hd_markers.h"			// the .hdm sidecar - the donor slots (S7-2)
 #include "hd_mods.h"			// HDModsScan - the mods folder (#153, M1)
@@ -1556,6 +1557,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		one.nodes = 1;
 		one.name = optionNames.back().c_str();
 		one.rigidNode = 0;
+		/* AND POSED WITH THE DONOR GAME'S OWN FRAME 0 (#155). The
+		 * file is stored in the classic bind pose, which is not a pose at all:
+		 * the user's pair of Uzis stands side by side and parallel in it, and
+		 * the CROSS he sees in the game the file came from is frame 0 of that
+		 * game's own object. hd_classic.h reads it; HDModelSlot::classicPose
+		 * says what it needs and what happens when it has not got it. */
+		one.classicPose = true;
 
 		wanted.push_back(one);
 
@@ -1892,6 +1900,75 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				g_slot[slot].hd != 0 && HDModelHas(slot);
 			float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
 
+			/* THE DONOR GAME'S OWN FRAME 0 (#155), two lines and
+			 * BEFORE the verdict below - a plan that is struck out here was
+			 * still posed or refused a pose while the file was open, and the
+			 * reader of a log that says nothing about it has no way to tell
+			 * the two apart.
+			 *
+			 * The classic object is printed out of what the LOADER read, not
+			 * out of a second look at the disk (HDClassicCached), so the line
+			 * can only ever describe the frame that was really used. */
+			{
+				HDModelClassicPose pose;
+
+				if (HDModelClassicPoseOf(ring.model, &pose))
+				{
+					HDClassicObject object;
+
+					if (pose.object && HDClassicCached(pose.game, pose.object, &object))
+					{
+						char bones[192] = "", rots[192] = "";
+						int atBone = 0, atRot = 0;
+
+						/* Eight nodes of numbers is the whole of every
+						 * inventory object the table knows - the deepest is
+						 * three - and it keeps one log line one log line. */
+						for (int n = 0; n < object.meshes && n < 8; n++)
+						{
+							if (n && atBone < (int)sizeof(bones) - 1)
+								atBone += std::snprintf(bones + atBone,
+									sizeof(bones) - atBone, " %d:%d/%d/%d/%d", n,
+									object.bone[n].flags, object.bone[n].x,
+									object.bone[n].y, object.bone[n].z);
+
+							if (atRot < (int)sizeof(rots) - 1)
+								atRot += std::snprintf(rots + atRot,
+									sizeof(rots) - atRot, " %d:%d/%d/%d", n,
+									object.rot[n][0], object.rot[n][1],
+									object.rot[n][2]);
+						}
+
+						Log("HDLOG classic %d/%s object %d meshes=%d bones=%s"
+							" frame0 offset=%d/%d/%d bounds=%d..%d/%d..%d/%d..%d"
+							" rot=%s (1024ths of a turn)",
+							object.game, object.level, object.id, object.meshes,
+							*bones ? bones : " none", object.offset[0],
+							object.offset[1], object.offset[2], object.bounds[0],
+							object.bounds[1], object.bounds[2], object.bounds[3],
+							object.bounds[4], object.bounds[5], rots);
+					}
+					else if (pose.game && pose.object)
+						Log("HDLOG classic %d object %d: %s", pose.game,
+							pose.object, pose.why);
+
+					if (pose.applied)
+						Log("HDLOG level=%s ring pose slot=%d model=%s classic="
+							"%d/%s#%d nodes=%d applied (box %.0fx%.0fx%.0f -> "
+							"%.0fx%.0fx%.0f)", g_stem, slot,
+							HDModelName(ring.model) ? HDModelName(ring.model) : "-",
+							pose.game, pose.level, pose.object, pose.nodes,
+							pose.before[0], pose.before[1], pose.before[2],
+							pose.after[0], pose.after[1], pose.after[2]);
+					else
+						Log("HDLOG level=%s ring pose slot=%d model=%s not "
+							"posed: %s - it is drawn as the file stands",
+							g_stem, slot,
+							HDModelName(ring.model) ? HDModelName(ring.model) : "-",
+							pose.why);
+				}
+			}
+
 			if (!hd || !HDModelHas(ring.model) ||
 				!HDModelRingFit(ring.model, slot, ring.fix))
 			{
@@ -1944,6 +2021,33 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 					ring.fix[2] * ring.fix[2]),
 				ring.fix[12], ring.fix[13], ring.fix[14],
 				box_verdict(over, outAxis));
+
+			/* AND WHY THE THING ON THE FLOOR IS STILL THE VANILLA ONE (#155).
+			 * The user would have the mod's pair lying on the
+			 * ground as well, and the answer is a measurement rather than a
+			 * preference: the fit centres the replacement on the item's own
+			 * box, and a replacement thicker than the item it stands in for
+			 * reaches below the item's lowest point - which for a pickup IS
+			 * the floor. Round M3 measured 49 units on the unposed pair; the
+			 * pose brings it down without bringing it to zero, and a gun half
+			 * sunk into the ground is not the picture he asked for.
+			 *
+			 * The number is printed either way, per slot, so that a mod whose
+			 * OPTION model DOES lie flat can be seen to be the case it is - and
+			 * so that nobody has to take this round's word for the refusal. */
+			{
+				const float under = HDModelRingFitUnderFloor(ring.model, slot,
+					ring.fix);
+
+				Log("HDLOG level=%s ring floor slot=%d name=%s keeps the "
+					"level's own %s: the fitted %s reaches %.0f units %s the "
+					"item's lowest point, and that point is the floor",
+					g_stem, slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
+					HDModelName(slot) ? HDModelName(slot) : "-",
+					HDModelName(ring.model) ? HDModelName(ring.model) : "-",
+					under < 0.0f ? -under : under,
+					under > 0.5f ? "under" : "above");
+			}
 
 			if (kept != i)
 				g_ring_model[kept] = ring;

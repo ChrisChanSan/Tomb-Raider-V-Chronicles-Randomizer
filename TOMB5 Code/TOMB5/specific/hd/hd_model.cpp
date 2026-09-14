@@ -22,6 +22,7 @@
 
 #include "hd_model.h"
 #include "hd_bind.h"
+#include "hd_classic.h"		// the donor game's own frame 0 (#155)
 #include "hd_mods.h"		// a mod's model beats the install's (#153, M1)
 #include "hd_trm.h"
 
@@ -176,6 +177,11 @@ namespace
 	std::map<int, Model> g_models;		// slot -> body
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
 	std::vector<std::string> g_notes;
+	/* What the classic pose decided, per slot that asked for one (#153, round
+	 * 155). The decision is taken while the file is open and the log line is
+	 * written by the caller, a level build later - so it is kept, not printed.
+	 * Cleared with everything else by HDModelLevelBegin. */
+	std::map<int, HDModelClassicPose> g_pose;
 	std::string g_install;
 	/* The other bundle's game 3 folder, for the four Tomb Raider III guests
 	 * (#123, stage S7-2). Empty unless the caller set it, and then no slot
@@ -579,6 +585,140 @@ namespace
 		return frequency.QuadPart
 			? 1000.0 * (double)counter.QuadPart / (double)frequency.QuadPart
 			: 0.0;
+	}
+
+	/* --------------------------------- THE CLASSIC POSE (#155) --
+	 *
+	 * A remaster inventory model is stored in the classic BIND POSE - node n's
+	 * vertices carry the mesh tree's offsets and no rotation at all - and the
+	 * game it came from puts the pose on when it draws. For the user's IMI
+	 * Uzis that is the difference between two guns standing side by side and
+	 * PARALLEL, which is what round M3 measured in our ring, and the two of
+	 * them CROSSED like an X, which is what he sees in the game the file came
+	 * from and what he asked for. hd_classic.h reads the frame; this puts it
+	 * on the vertices.
+	 *
+	 * BEFORE ANYTHING IS MEASURED OUT OF THEM. build() takes the box and the
+	 * principal axes in one pass over the vertices, and HDModelRingFit fits
+	 * the SHAPE those axes describe - so a pose applied afterwards would be a
+	 * pose the fit never saw. This runs where HDTrmFoldMirrored runs and for
+	 * the same reason: what is changed here is what the card is given, so
+	 * every number the log prints is a number about the model that is drawn.
+	 *
+	 * IT IS SKINNING AND NOT A RIGID TURN, although every file this has met so
+	 * far is rigid: a vertex names three nodes with three weights, and posing
+	 * it on only the first would tear any file whose two parts share a seam. */
+	int trm_nodes(const HDTrmModel& trm)
+	{
+		int highest = -1;
+
+		for (int i = 0; i < trm.vertices; i++)
+			for (int b = 0; b < 3; b++)
+				if (trm.vertex[i].weight[b] && (int)trm.vertex[i].bone[b] > highest)
+					highest = (int)trm.vertex[i].bone[b];
+
+		return highest + 1;
+	}
+
+	void trm_box(const HDTrmModel& trm, float* size)
+	{
+		float mins[3] = { 0, 0, 0 }, maxs[3] = { 0, 0, 0 };
+
+		for (int i = 0; i < trm.vertices; i++)
+		{
+			const float v[3] =
+			{
+				trm.vertex[i].x, trm.vertex[i].y, trm.vertex[i].z
+			};
+
+			for (int k = 0; k < 3; k++)
+			{
+				if (!i || v[k] < mins[k]) mins[k] = v[k];
+				if (!i || v[k] > maxs[k]) maxs[k] = v[k];
+			}
+		}
+
+		for (int k = 0; k < 3; k++)
+			size[k] = maxs[k] - mins[k];
+	}
+
+	// The .TRM's normals are BIASED BYTES - (n - 127) / 128, see hd_trm.h -
+	// and a turned model needs turned normals, so they go back the same way.
+	unsigned char pack_normal(float v)
+	{
+		const float scaled = v * 128.0f + 127.0f;
+
+		return (unsigned char)(scaled < 0.0f ? 0 : scaled > 255.0f ? 255
+			: (int)(scaled + 0.5f));
+	}
+
+	bool pose_classic(HDTrmModel& trm, const HDClassicObject& object)
+	{
+		float matrix[HD_CLASSIC_NODES][16];
+
+		for (int n = 0; n < object.meshes; n++)
+			if (!HDClassicNodeMatrix(&object, n, matrix[n]))
+				return false;
+
+		for (int i = 0; i < trm.vertices; i++)
+		{
+			HDTrmVertex& v = trm.vertex[i];
+			const float in[3] = { v.x, v.y, v.z };
+			const float normal[3] =
+			{
+				((float)v.nx - 127.0f) / 128.0f,
+				((float)v.ny - 127.0f) / 128.0f,
+				((float)v.nz - 127.0f) / 128.0f
+			};
+			float out[3] = { 0, 0, 0 }, turned[3] = { 0, 0, 0 };
+			int share = 0;
+
+			for (int b = 0; b < 3; b++)
+			{
+				const int node = (int)v.bone[b];
+				const int weight = (int)v.weight[b];
+
+				if (!weight || node >= object.meshes)
+					continue;
+
+				const float* m = matrix[node];
+				const float part = (float)weight / 255.0f;
+
+				share += weight;
+
+				for (int k = 0; k < 3; k++)
+				{
+					out[k] += part * (in[0] * m[0 * 4 + k] + in[1] * m[1 * 4 + k] +
+						in[2] * m[2 * 4 + k] + m[3 * 4 + k]);
+					turned[k] += part * (normal[0] * m[0 * 4 + k] +
+						normal[1] * m[1 * 4 + k] + normal[2] * m[2 * 4 + k]);
+				}
+			}
+
+			/* A VERTEX THE POSE CANNOT REACH STAYS WHERE IT IS. It names only
+			 * nodes the classic object has not got, which the mesh-count guard
+			 * makes impossible for the files this runs on - but a caller is
+			 * not a proof, and a vertex quietly collapsed onto the origin is a
+			 * hole in the model nobody would trace back to here. */
+			if (!share)
+				continue;
+
+			v.x = out[0];
+			v.y = out[1];
+			v.z = out[2];
+
+			const float length = std::sqrt(turned[0] * turned[0] +
+				turned[1] * turned[1] + turned[2] * turned[2]);
+
+			if (length > 1e-6f)
+			{
+				v.nx = pack_normal(turned[0] / length);
+				v.ny = pack_normal(turned[1] / length);
+				v.nz = pack_normal(turned[2] / length);
+			}
+		}
+
+		return true;
 	}
 
 	/* A shader constant register holds a COLUMN (fxc packs column major by
@@ -2200,6 +2340,71 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			HDTrmFoldMirrored(&here.trm, slots[i].mirror, slots[i].mirrors,
 				slots[i].mirrorBar, &here.fold);
 
+		/* THE DONOR GAME'S OWN FRAME 0 (#155). What this is and
+		 * what it needs is written out at HDModelSlot::classicPose; this is
+		 * where it happens, in the same place and for the same reason the
+		 * fold above does - before anything measures the vertices.
+		 *
+		 * The three things it needs are asked for in the order that makes the
+		 * cheapest refusal first: whose file this is, then whether the name is
+		 * in the table at all, and only then a walk of the donor game's level
+		 * files. */
+		if (slots[i].classicPose)
+		{
+			HDModelClassicPose said;
+			const char* trouble = "";
+
+			std::memset(&said, 0, sizeof(said));
+			trm_box(here.trm, said.before);
+			said.after[0] = said.before[0];
+			said.after[1] = said.before[1];
+			said.after[2] = said.before[2];
+			said.nodes = trm_nodes(here.trm);
+			said.game = mod >= 0 ? HDModsOrigin(mod) : 0;
+			said.object = said.game ? HDClassicObjectId(model, said.game) : 0;
+
+			HDClassicObject object;
+
+			if (mod < 0)
+				std::snprintf(said.why, sizeof(said.why),
+					"the model did not come from a mod");
+			else if (!said.game)
+				std::snprintf(said.why, sizeof(said.why),
+					"the mod's mod.txt names no origin= game");
+			else if (!said.object)
+				std::snprintf(said.why, sizeof(said.why),
+					"%s is no inventory model of game %d", model, said.game);
+			else if (!HDClassicRead(parent_of(g_install_tr3).c_str(), said.game,
+				said.object, &object, &trouble))
+				std::snprintf(said.why, sizeof(said.why),
+					"game %d object %d: %s", said.game, said.object, trouble);
+			else
+			{
+				said.meshes = object.meshes;
+				std::snprintf(said.level, sizeof(said.level), "%s", object.level);
+
+				/* THE MESH COUNT IS THE PROOF THAT THE TWO BELONG TOGETHER.
+				 * A .TRM's bone numbers ARE the classic mesh numbers, so an
+				 * object with a different count is a different object and its
+				 * frame would put this model's parts anywhere at all. */
+				if (said.nodes != object.meshes)
+					std::snprintf(said.why, sizeof(said.why),
+						"%d nodes against game %d object %d's %d meshes",
+						said.nodes, said.game, said.object, object.meshes);
+				else if (!pose_classic(here.trm, object))
+					std::snprintf(said.why, sizeof(said.why),
+						"game %d object %d has no frame this could use",
+						said.game, said.object);
+				else
+				{
+					said.applied = true;
+					trm_box(here.trm, said.after);
+				}
+			}
+
+			g_pose[slot] = said;
+		}
+
 		/* MOD GUNS ON THE INSTALL'S HANDS (#153, round M2b). What this is and
 		 * why it is decided here rather than by the caller is written out at
 		 * HDModelSlot::twinSlot; this is the arithmetic.
@@ -2840,6 +3045,7 @@ void HDModelLevelEnd()
 	g_models.clear();
 	g_heads.clear();
 	g_notes.clear();
+	g_pose.clear();
 }
 
 /* THE WARM-UP (#148, order 1). A model's vertex and index buffer are
@@ -3325,6 +3531,45 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 	return worst;
 }
 
+/* HOW FAR THE FITTED MODEL WOULD REACH UNDER THE FLOOR (#155).
+ *
+ * Round M3 answered this by halving the difference of two THICKNESSES, which
+ * assumes the fit is centred and the model symmetric; neither has to be true
+ * of a mod's file, and the second one is not true of the user's posed pair.
+ * So the eight corners of the source's box really go through the fit and the
+ * deepest of them is compared with the target's own deepest point. y is down
+ * in this engine, so deepest is the largest y - and a floor pickup's model
+ * rests its box on the floor, which is what makes the difference the answer. */
+float HDModelRingFitUnderFloor(int model, int target, const float* fix)
+{
+	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+
+	if (!fix || !HDModelBounds(model, srcMin, srcMax) ||
+		!HDModelBounds(target, dstMin, dstMax))
+		return 0.0f;
+
+	float deepest = 0.0f;
+
+	for (int corner = 0; corner < 8; corner++)
+	{
+		const float point[3] =
+		{
+			(corner & 1) ? srcMax[0] : srcMin[0],
+			(corner & 2) ? srcMax[1] : srcMin[1],
+			(corner & 4) ? srcMax[2] : srcMin[2]
+		};
+		float y = fix[3 * 4 + 1];
+
+		for (int k = 0; k < 3; k++)
+			y += point[k] * fix[k * 4 + 1];
+
+		if (!corner || y > deepest)
+			deepest = y;
+	}
+
+	return deepest - dstMax[1];
+}
+
 bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)
 {
 	const Model* model = find(g_models, slot);
@@ -3416,6 +3661,19 @@ bool HDModelBounds(int slot, float* mins, float* maxs)
 		std::memcpy(mins, model->mins, sizeof(model->mins));
 	if (maxs)
 		std::memcpy(maxs, model->maxs, sizeof(model->maxs));
+
+	return true;
+}
+
+bool HDModelClassicPoseOf(int slot, HDModelClassicPose* out)
+{
+	const std::map<int, HDModelClassicPose>::const_iterator at = g_pose.find(slot);
+
+	if (at == g_pose.end())
+		return false;
+
+	if (out)
+		*out = at->second;
 
 	return true;
 }

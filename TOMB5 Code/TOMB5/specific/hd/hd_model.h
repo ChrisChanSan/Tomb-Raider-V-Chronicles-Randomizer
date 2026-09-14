@@ -232,6 +232,39 @@ struct HDModelSlot
 	int synthFrom = -1;
 	bool (*synth)(const HDTrmModel* source, HDTrmModel* out,
 		const char** why) = 0;
+
+	/* THE CLASSIC POSE (#155).
+	 *
+	 * Set on a mod's <BASE>_OPTION model - the ring's, and nothing else today.
+	 * A remaster inventory model is stored in the classic BIND POSE, which for
+	 * a pair of guns means the two of them side by side and parallel; the
+	 * CROSS the donor game shows is frame 0 of the classic object the file
+	 * stands for. With this set, the file's vertices are posed with that frame
+	 * before anything is measured out of them - the box, the principal axes,
+	 * the ring's fit and the buffers alike, exactly as `mirror` above changes
+	 * what the whole build then works from.
+	 *
+	 * It needs three things and says which one it missed otherwise: the model
+	 * came from a mod whose mod.txt names an origin, that game's classic
+	 * object is in hd_classic.h's table, and the object's mesh count is the
+	 * .TRM's own node count. HDModelClassicPoseOf hands the caller the whole
+	 * decision for its log line. */
+	bool classicPose = false;
+};
+
+/* WHAT THE CLASSIC POSE DID TO ONE SLOT (#155), for the caller's
+ * log line - the engine's and ModelProbe's, out of the one measurement. */
+struct HDModelClassicPose
+{
+	bool applied;
+	int game;		// the mod's origin: 1, 2 or 3; 0 when it has none
+	int object;		// the classic object id; 0 when the name is unknown
+	int meshes;		// the classic object's mesh count
+	int nodes;		// the .TRM's own - its highest weighted bone plus one
+	char level[64];		// the level file the object was read from
+	float before[3];	// the model's box before the pose
+	float after[3];		// and after it
+	char why[128];		// empty when it was applied
 };
 
 // Where a model's file was found.
@@ -753,6 +786,28 @@ bool HDModelRingFit(int model, int target, float* out);
  * fit-inside is at HDModelRingFit - but a ring that looks crowded in a play
  * test now has a line pointing at the cause. */
 float HDModelRingFitOverflow(int model, int target, int* worstAxis);
+
+/* WOULD THE FITTED MODEL LIE ON THE FLOOR? (#155)
+ *
+ * The ring and the corner display draw a mod's <BASE>_OPTION model; the thing
+ * lying on the floor of the level does not, and round M3's reason was a
+ * number: the fit centres the replacement on the vanilla item's box, so a
+ * replacement that is THICKER than the item it stands in for reaches below the
+ * item's lowest point - and the item's lowest point is the floor.
+ *
+ * This is that number, in world units, measured off the two models rather than
+ * argued from their sizes: the eight corners of the source's box through `fix`,
+ * the deepest of them against the target's own deepest. Positive is UNDER the
+ * floor (y is down in this engine); zero or less is a model that lies on it.
+ * Zero when either model has no box.
+ *
+ * `fix` is what HDModelRingFit wrote. */
+float HDModelRingFitUnderFloor(int model, int target, const float* fix);
+
+/* THE CLASSIC POSE'S OWN DECISION, per model slot (#155). True for
+ * a slot that ASKED for one - whether or not it got it; `applied` and `why`
+ * say which. Valid until the next HDModelLevelBegin. */
+bool HDModelClassicPoseOf(int slot, HDModelClassicPose* out);
 
 // Everything that could not be bound, in words, for the caller's log. Valid
 // until the next HDModelLevelBegin or HDModelLevelEnd.

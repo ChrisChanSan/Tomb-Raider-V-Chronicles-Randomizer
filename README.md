@@ -248,7 +248,10 @@ turned and scaled onto that model's own **shape** — the directions its
 vertices really run in, not its bounding box — because the I-III inventory
 models stand upright and the IV-VI ones lie flat. The pickup lying on the
 floor keeps `EXTRA_*`, and a mod that ships an `EXTRA_*` of its own wins
-everywhere.
+everywhere. A mod whose `mod.txt` names an `origin=` game is **posed** with
+that game's own first frame as well, so a pair of guns comes out crossed
+instead of parallel; the long version is under *A mod's own inventory model*
+below.
 
 **Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
 the outfit or an `outfit.txt` says, so every level and every outfit look alike
@@ -368,16 +371,34 @@ turning object in the corner take it when a mod ships one and no mod ships an
 `EXTRA_` name for the same slot; a file from another game stands in that
 game's frame, so it is turned onto the vanilla item's own — by the shape of
 its vertices and not by its bounding box, which cannot tell a pair of guns
-from one gun standing up. What it does **not** do is rearrange the file: the
-IMI Uzis mod's `UZI_OPTION` holds its two guns side by side and parallel
-(measured, and rendered from all three sides), so it stands up facing the
-camera in the ring and no turn can cross them into the X that the I-III
-remaster's own display shows — the two guns sit on two nodes there and the
-`.TRM` carries no node transforms for us to read. The **pickup lying on the
-floor** keeps the vanilla
-`EXTRA_` model: measured, a replacement can be three times as thick as the
-item it stands in for, and a pickup is placed by the floor under it — half of
-that thickness would be under the floor.
+from one gun standing up.
+
+**And it is POSED first, out of your own I-III installation.** A remaster
+inventory model is stored in the classic *bind pose*: each part carries the
+mesh tree's offsets and no rotation at all, which for the IMI Uzis mod means
+its two guns lie side by side and parallel. The cross that the I-III remaster
+shows is that game's own **frame 0**, and the engine reads it now — the mesh
+tree and the first frame of the classic object, out of the level files of your
+`Tomb Raider I-III Remastered` folder (`1\DATA\*.PHD`, `2\DATA\*.TR2`,
+`3\DATA\*.TR2`), the first level in name order that holds it. The pair comes
+out crossed, as it is in the game the file came from.
+
+It needs three things and does nothing at all without them, with a line in the
+log saying which one was missing: the model has to come from a **mod whose
+`mod.txt` names an `origin=`**; its name has to be one the classic games know
+(`GUN_OPTION` or `PISTOLS_OPTION`, `SHOTGUN_OPTION`, `MAGNUM_OPTION` or
+`REVOLVER_OPTION`, `UZI_OPTION`, and the ammunition boxes `MAG_AMMO_OPTION`,
+`SG_AMMO_OPTION`, `UZI_AMMO_OPTION`, `PISTOLS_AMMO_OPTION`,
+`SHOTGUN_AMMO1_OPTION` and `SHOTGUN_AMMO2_OPTION`); and the file's parts have
+to match that object's. Without an I-III installation, without an `origin=`
+line, or under a name the table does not know, the file is drawn exactly as it
+stands — which is what the ring did before.
+
+The **pickup lying on the floor** still keeps the vanilla `EXTRA_` model, and
+that was measured again with the pose on: a pickup is placed by the floor
+under it, and the fitted pair would reach **32 units below** the item's own
+lowest point (80 without the pose). One rule for every one of them, the
+ammunition included, and the number is in the log per slot.
 
 **And one sidecar line.** A randomized level's `<level>.hdm` now carries an
 `sfximport` line naming the sound ids the run imported from another game.

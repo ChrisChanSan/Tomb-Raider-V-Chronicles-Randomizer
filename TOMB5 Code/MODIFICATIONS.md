@@ -12293,6 +12293,216 @@ the menu happened to set inside the level.
 - *Nothing under `TR5Randomizer/`* was touched at all this round, so the
   regression that round M3 and its fix round both ran still stands.
 
+#### Round 155 (#155) - the cross is in the donor game's first frame, not in the file
+
+The fifth round of the Mods overlay (#153, rounds M1, M2, M2b and M3), and a
+task of its own. The user's report, with pictures: in our ring his IMI Uzis
+mod stands as two guns SIDE BY SIDE and parallel, and in the Tomb Raider I-III
+remaster's own inventory the very same `UZI_OPTION.TRM` shows them CROSSED like
+an X, facing the camera, seen slightly from below. Round M3 measured the
+parallel pair from all three sides, said no rotation of a rigid file can cross
+two parts, and left the question where it belongs: the cross is not IN the file.
+
+**IT IS IN THE BIND POSE, and the bind pose is only half a pose.** A remaster
+`.TRM` stores each node's vertices with the classic mesh tree's offsets applied
+and NO rotation at all; the game it came from puts the rotation on when it
+draws, out of the classic object's own frame. So the two guns of `UZI_OPTION`
+really do lie parallel in the file - round M3's measurement stands - and the
+game that ships it shows them crossed all the same. What was missing was the
+frame, and the frame is in the user's own level files.
+
+**THE READER, `specific\hd\hd_classic.cpp`.** Engine-free like `hd_wardrobe`
+and `hd_install` beside it - no engine global, no `Log`, plain C on the outside
+- it walks `<I-III bundle>\<game>\DATA` in name order until a level holds the
+object with at least one mesh, and hands back the mesh count, the bones, frame
+0 and the level file it used. The three level layouts are the published
+TR1/TR2/TR3 formats; every count read out of a file is checked against the
+bytes that are left, and the walk streams past the texture pages rather than
+loading them. One parse per (game, id) per session, refusals cached too.
+Nothing of any remaster binary is in it: the `.TRM` says which node a vertex
+rides on and the classic level files say where the mesh tree puts that node -
+both are the user's own data files, read where they lie.
+
+**THE WORD ORDER OF A TR1 FRAME, SETTLED BY MEASUREMENT.** Readers disagree
+about which of a TR1 frame's two rotation words is the high half, and the
+question is not one to settle by picking a reader to believe. A frame carries
+the bounding box of the pose it describes, so the walk has the file's own
+answer to check itself against. Over the eight weapon and ammunition objects of
+`1\DATA\GYM.PHD`:
+
+```
+  object   99  100  101  102  103  104  105  106     worst corner, units
+  w2 high  1.0  1.0  1.0  2.1  0.8  0.6  0.7  0.5    <- the rounding of a
+  w1 high 50.3 58.5 57.5 106.7 58.1 63.9 101.6 79.4     1024 step angle table
+```
+
+**The second word is the high half.** The cross-check is independent and
+complete: read that way, Tomb Raider 1's object 102 gives the same three
+rotations, the same two bones and the same frame bounds as Tomb Raider 2's
+object 160 and Tomb Raider 3's object 188, whose packing is not in doubt.
+
+**THE ROTATION CONVENTION, ALSO MEASURED.** `phd_RotYXZ` is y, then x, then z,
+the classic matrix takes a point as a column and the frame's offset is part of
+the pose. That is four choices, and all four were put to the same test rather
+than asserted: over eleven weapon objects of all three games, every one of the
+ninety-six combinations of composition order, multiplication side, angle sign
+and vector convention was run against the frames' own bounding boxes. The
+winner reproduces them to **2.1 units at worst**; the next family misses by
+40.8, and the worst by 184.7. Including the frame offset is what separates 2.1
+from 40.8.
+
+**WHAT THE CLASSIC OBJECT SAYS,** the same out of all three games (`ModelProbe
+-classicpose 1|2|3 UZI_OPTION`):
+
+```
+  UZI_OPTION      game 1 object 102 in 1\DATA\GYM.PHD     3 meshes
+                  game 2 object 160 in 2\DATA\BOAT.TR2    3 meshes
+                  game 3 object 188 in 3\DATA\ANTARC.TR2  3 meshes
+    bone 1  flags 2 (push)  offset  54  -2  61
+    bone 2  flags 1 (pop)   offset  36  22 -69
+    frame 0 offset -2 0 0, bounds x -83..87 y -24..30 z -82..140
+    mesh 0  rot 1001 333 1006 of 1024     mesh 1  239 563 712
+    mesh 2   814 901  270
+  UZI_AMMO_OPTION game 1 object 106, game 2 167, game 3 196   2 meshes
+    bone 1  flags 0  offset -5 -7 -47
+    frame 0 offset -15 0 -14, bounds x -73..53 y -29..21 z -90..90
+    mesh 0  rot 13 672 20      mesh 1  0 119 14
+```
+
+**MESH 0 IS A THREE-VERTEX STUB.** TR3's `UZI_OPTION` has three meshes where
+the mod has two nodes of geometry, and the third is not a third gun: mesh 0 is
+3 vertices with a collision radius of 6, a root the two guns hang off, and the
+remaster's file simply has no vertices on node 0 (13723 on node 1 and 13726 on
+node 2). Meshes 1 and 2 are 56 vertices each, centres -90/35/10 and -94/37/8,
+radius 109 - one gun apiece.
+
+**AND THE MOD'S FILE REALLY IS IN THAT BIND POSE.** The claim was checked on
+the user's own file before a line of it was believed: the two node clouds of
+`UZI_OPTION.TRM` stand **-22.1 / +28.3 / -134.8** apart, where the difference
+of TR1's two bone offsets is **-18 / +24 / -130** and the remaining four units
+are the two meshes' own centroids. The ammunition model is the same story on
+nodes 0 and 1.
+
+**THE POSE IS APPLIED WHERE THE MIRROR FOLD IS APPLIED** - in `hd_model.cpp`,
+right after the `.TRM` is read and before `build()` takes the box and the
+principal axes. It has to be: `HDModelRingFit` fits the SHAPE those axes
+describe, so a pose applied afterwards would be a pose the fit never saw. It is
+real skinning and not a rigid turn - three nodes, three weights, normals turned
+and re-normalised - although every file this has met so far is rigid.
+
+It needs three things and refuses with a line for each: the model came from a
+**mod with an `origin=` game**, its name is in the table, and the classic
+object's mesh count IS the `.TRM`'s node count. That last one is the proof that
+the two belong together, because a `.TRM`'s bone numbers ARE classic mesh
+numbers.
+
+**THE TABLE, AND WHERE ITS NUMBERS COME FROM.** Thirteen rows: the four weapons
+and the ammunition boxes, under the donor games' own names (`GUN_OPTION`,
+`MAGNUM_OPTION`, `SG_AMMO_OPTION` ...) and under this engine's, where a mod
+names its file after the TR5 slot it replaces (`PISTOLS_OPTION`,
+`REVOLVER_OPTION`, `SHOTGUN_AMMO1_OPTION` ...). TR3's ids are counted out of
+the user's copy of the GPL **tomb3** sources, `game/objects.h`; TR1's and TR2's
+out of the GPL project **TRX** (LostArtefacts), `catalog_objects.csv`, whose
+TR3 column agrees with tomb3 on every id in the table. Each one was then found
+in the user's own installation. A name that is in neither column gets no pose
+and says so.
+
+**"THE FIRST LEVEL IN NAME ORDER" IS A RULE AND WAS CHECKED AS ONE.** Over the
+eight option objects of game 1 and of game 2, every level file that holds the
+object holds exactly the same mesh count, bones and frame 0 - 16 and 17 levels.
+Game 3 agrees on 17 of its 20; the three that differ are `TITLE.TR2` and
+`AREA51.TR2` carrying a stub or a left-over of the game before, and name order
+lands on `ANTARC.TR2`, which agrees with every other real level of that game.
+A table of level names would have been silently wrong about a level pack.
+
+**WHAT IT DOES TO THE PICTURE.** The angle between the two guns' own long axes
+goes from **0.0 degrees to 65.5**, and the pair from 132 units thick to 60:
+
+```
+                          box              cloud            two parts
+  UZI_OPTION      before  147x253x159   242 x 240 x 132     0.0 deg apart
+                  after   198x 55x231   222 x 217 x  60    65.5 deg apart
+  UZI_AMMO_OPTION before  162x 28x 74   165 x 107 x  22     0.2 deg apart
+                  after   121x 53x174   174 x 121 x  32    42.1 deg apart
+  (the vanilla EXTRA_UZI_ITEM, for scale: box 266x41x212, cloud 256x236x42)
+```
+
+The flat direction of the posed pair is now the vanilla item's own, so the ring
+fit of round M3 needs no change at all and the **overflow falls from 3.36x to
+1.65x**. The pictures were looked at: the mod's two Uzis come out CROSSED,
+face-on to the camera, beside the vanilla pistols' own crossed pair that the
+user named as his reference.
+
+**THE AMMUNITION GOT BULKIER AND THAT IS THE RIGHT ANSWER.** Its overflow goes
+the other way, 1.00x to 1.31x, because the classic frame CROSSES the two
+magazines where the file ships them flat and parallel. That is what Tomb Raider
+1 shows and what the round is for; a rule that posed the guns and left the
+ammunition flat because the number was prettier would be a per-file exception.
+
+**THE FLOOR PICKUP KEEPS THE VANILLA MODEL, measured again.** Round M3 refused
+the fitted `_OPTION` model for the thing lying on the ground because half the
+difference in thickness - 49 units - would be under the floor. The question was
+asked again with the pose on, and with a better measurement: the eight corners
+of the source's box really through the fit, the deepest of them against the
+target's own deepest point (`HDModelRingFitUnderFloor`, one implementation,
+engine and tool). The pose HELPS and does not settle it:
+
+```
+                  under the item's lowest point, which is the floor
+  UZI_OPTION       80.6 units unposed   ->   32.2 posed
+  UZI_AMMO_OPTION   9.6 units unposed   ->   29.5 posed
+```
+
+Both still sink, so the level pickup keeps `EXTRA_` for every slot - one rule,
+the ammunition included - and the number is now in the log per slot, so the
+refusal is a measurement anybody can re-read rather than this round's word.
+(Round M3's "49" was half a difference of cloud extents and is not the same
+quantity as the 80.6 above; the corner measurement assumes neither a centred
+fit nor a symmetric model, and the posed pair is neither.)
+
+**THE TOOL.** `ModelProbe -classicpose <game> <MODEL_NAME>` prints the object,
+the level it came from, the bones, frame 0 and the 4x4 each node gets, through
+the very reader the engine uses. `-noclassicpose` runs `-inventory` without the
+pose, which is what keeps this round's gain a measurement instead of a memory,
+and `-inventory` now prints the pose's own verdict and the floor figure.
+
+**THE LOG.** Four new lines behind `-log`, none of them thinning anything:
+`HDLOG classic <game>/<level> object <id> meshes=.. bones=.. frame0 offset=..
+bounds=.. rot=..`, its refusal `HDLOG classic <game> object <id>: <why>`,
+`HDLOG level=.. ring pose slot=.. model=.. classic=<game>/<level>#<id>
+nodes=.. applied (box .. -> ..)` or `... not posed: <why>`, and `HDLOG level=..
+ring floor slot=.. name=.. keeps the level's own <model>: the fitted <model>
+reaches N units under the item's lowest point`.
+
+**PROVED.**
+
+- *The cross.* `ModelProbe -slot 336 -inventory -invrot 0x4000 0x6000 0x4000`
+  over ANDREA3 with the user's `Mods` folder, looked at: two Uzis crossed,
+  facing the camera, where round M3's picture of the same command has them side
+  by side and parallel. The ammunition the same, two magazines crossed. The
+  vanilla pistols rendered beside them as the control.
+- *The reader.* The same three angles, bones and bounds for `UZI_OPTION` out of
+  Tomb Raider 1, 2 and 3 - three different level layouts, one of them read with
+  a word order this round had to measure. And the walk against the frames' own
+  bounding boxes: 2.1 units at worst over eleven objects.
+- *Nothing moved.* `ModelProbe -all -nodraw` over ANDREA1 with no `Mods`
+  folder, the build before the round against the build after it: **287 lines
+  identical**. The eight known outfits drawn with pistols: **eight
+  byte-identical `.PNG` files**. And the ring itself with `-noclassicpose`
+  against the pre-round build: **byte-identical renders and identical fit
+  lines** for both of the mod's models - so what changed on that path is the
+  pose and nothing else.
+- *The budgets.* `-ringcheck` and `-pickupcheck` both PASS on the posed model.
+- *Nothing under `TR5Randomizer/`* was touched.
+
+**WHAT IS NOT PROVED.** The engine's own log, and the ring opened in the game
+with the mod active - no tool stands in for either, which is exactly the gap
+round M3's fix round was about. And the roll INSIDE the plane is still decided
+by a 2.3 % gap between the posed pair's two in-plane extents (222.2 against
+217.1), so the cross faces the camera but the angle it stands at in that plane
+is not chosen by anything that knows what a gun is; round M3 wrote that down
+and it is still true.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

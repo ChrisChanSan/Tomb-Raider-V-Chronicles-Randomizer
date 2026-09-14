@@ -256,6 +256,24 @@
  *                         which is what a mod's origin= reaches into - and
  *                         what the four Tomb Raider III guests need. Sets it
  *                         on both modules, as hd_object.cpp does.
+ *     -classicpose <game> <MODEL_NAME>
+ *                         THE POSE THE ENGINE WILL APPLY (#155),
+ *                         and then stop. Reads the classic object that model
+ *                         name stands for in Tomb Raider <game> - 1, 2 or 3 -
+ *                         out of the level files of the I-III install, and
+ *                         prints the level it came from, the mesh count, the
+ *                         bones, frame 0 and the matrix each node gets. Wants
+ *                         -tr3 for the root (its parent is the bundle). The
+ *                         same reader the engine uses, not a copy of it.
+ *                         What the pose does to a particular .TRM is printed
+ *                         by -slot <n> -inventory, which is the path that
+ *                         really applies it.
+ *     -noclassicpose      -inventory WITHOUT that pose - the file as it lies
+ *                         in the mod, which is what the ring drew before
+ *                         #155. The switch exists so that what the pose
+ *                         buys stays a measurement: the box, the fit, the
+ *                         overflow and the floor figure can be had both ways
+ *                         out of the same build.
  *
  *   The level:
  *     -level <LEVEL>      stem, e.g. ANDREA1. The classic level is read from
@@ -439,6 +457,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_wardrobe.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_classic.h"
 
 /* hd_install.cpp reads the two registry overrides out of these, which the
  * engine defines in tomb5\tomb5.cpp. A tool that links hd_install.cpp has to
@@ -7491,6 +7510,12 @@ int main(int argc, char** argv)
 	std::string modsFolder, tr3Root;
 	// #153, round M2: print the wardrobe scan and stop.
 	bool wardrobe = false;
+	/* #155: print the classic pose of one model name and stop.
+	 * Zero game means the switch was not on the line. */
+	int poseGame = 0;
+	std::string poseName;
+	// ... and -noclassicpose: the ring as it was before that round.
+	bool noClassicPose = false;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	// #153 round M3: -invrot, the ring's own x/y/z for this item.
@@ -7576,6 +7601,14 @@ int main(int argc, char** argv)
 			modsFolder = argv[++i];
 		else if (!_stricmp(argv[i], "-tr3") && i + 1 < argc)
 			tr3Root = argv[++i];
+		// #155: the pose the ring will apply, out of hd_classic.
+		else if (!_stricmp(argv[i], "-classicpose") && i + 2 < argc)
+		{
+			poseGame = atoi(argv[++i]);
+			poseName = argv[++i];
+		}
+		else if (!_stricmp(argv[i], "-noclassicpose"))
+			noClassicPose = true;
 		else if (!_stricmp(argv[i], "-withrooms") && i + 1 < argc)
 			withRooms = argv[++i];
 		else if (!_stricmp(argv[i], "-all"))
@@ -7931,10 +7964,10 @@ int main(int argc, char** argv)
 			printf("ModelProbe: ignoring %s\n", argv[i]);
 	}
 
-	if (name.empty() && slot < 0 && !all && !lara && !wardrobe)
+	if (name.empty() && slot < 0 && !all && !lara && !wardrobe && !poseGame)
 	{
 		printf("ModelProbe: nothing to look at - give -name, -slot, -all, "
-			"-lara or -wardrobe\n");
+			"-lara, -wardrobe or -classicpose\n");
 		return 2;
 	}
 
@@ -7971,6 +8004,96 @@ int main(int argc, char** argv)
 				ships.models, ships.outfits, ships.pages,
 				ships.bank ? "yes" : "no", ships.wavs);
 		}
+	}
+
+	/* THE CLASSIC POSE (#155), and then stop. Needs neither the
+	 * device nor a level: a mesh tree and a frame are level-file facts, which
+	 * is what lets the engine, this tool and anything else say the same thing
+	 * about the same object. -tr3 names the game 3 folder, so the BUNDLE is
+	 * its parent - the same step hd_model.cpp takes. */
+	if (poseGame)
+	{
+		std::string bundle = tr3Root;
+
+		while (!bundle.empty() && (bundle[bundle.size() - 1] == '\\' ||
+			bundle[bundle.size() - 1] == '/'))
+			bundle.erase(bundle.size() - 1);
+
+		const size_t cut = bundle.find_last_of("\\/");
+
+		bundle = cut == std::string::npos ? std::string(".") : bundle.substr(0, cut);
+
+		const int id = HDClassicObjectId(poseName.c_str(), poseGame);
+		HDClassicObject object;
+		const char* why = "";
+
+		printf("\n-- the classic pose: %s in game %d ----------------------\n",
+			poseName.c_str(), poseGame);
+		printf("bundle  : %s\n", bundle.c_str());
+
+		if (!id)
+		{
+			printf("%s is no inventory model of game %d - the table in "
+				"hd_classic.cpp has no row for it, so the ring would draw the "
+				"file as it stands\n", poseName.c_str(), poseGame);
+			return 1;
+		}
+
+		printf("object  : %d\n", id);
+
+		if (!HDClassicRead(bundle.c_str(), poseGame, id, &object, &why))
+		{
+			printf("not read: %s\n", why);
+			return 1;
+		}
+
+		printf("level   : %d\\DATA\\%s   (the first in name order that holds "
+			"it)\n", object.game, object.level);
+		printf("meshes  : %d\n", object.meshes);
+
+		for (int n = 1; n < object.meshes; n++)
+			printf("  bone %d: flags %d (%s%s) offset %d %d %d\n", n,
+				object.bone[n].flags, (object.bone[n].flags & 1) ? "pop " : "",
+				(object.bone[n].flags & 2) ? "push" : "", object.bone[n].x,
+				object.bone[n].y, object.bone[n].z);
+
+		printf("frame 0 : offset %d %d %d, bounds x %d..%d y %d..%d z %d..%d"
+			"  = the posed box, %d x %d x %d\n",
+			object.offset[0], object.offset[1], object.offset[2],
+			object.bounds[0], object.bounds[1], object.bounds[2],
+			object.bounds[3], object.bounds[4], object.bounds[5],
+			object.bounds[1] - object.bounds[0],
+			object.bounds[3] - object.bounds[2],
+			object.bounds[5] - object.bounds[4]);
+
+		for (int n = 0; n < object.meshes; n++)
+		{
+			float pivot[3], matrix[16];
+
+			printf("  mesh %d: rot %4d %4d %4d of 1024 = %6.1f %6.1f %6.1f deg",
+				n, object.rot[n][0], object.rot[n][1], object.rot[n][2],
+				object.rot[n][0] * 360.0 / 1024.0,
+				object.rot[n][1] * 360.0 / 1024.0,
+				object.rot[n][2] * 360.0 / 1024.0);
+
+			if (HDClassicBindPivot(&object, n, pivot))
+				printf("   bind pivot %.0f %.0f %.0f", pivot[0], pivot[1], pivot[2]);
+
+			printf("\n");
+
+			if (!HDClassicNodeMatrix(&object, n, matrix))
+				continue;
+
+			for (int r = 0; r < 4; r++)
+				printf("          %s %8.4f %8.4f %8.4f %8.4f\n",
+					r == 3 ? "move" : "turn", matrix[r * 4 + 0],
+					matrix[r * 4 + 1], matrix[r * 4 + 2], matrix[r * 4 + 3]);
+		}
+
+		printf("\nThe .TRM's vertices for node n are stored around that node's "
+			"bind pivot;\nthe matrix is what the ring applies to them, before "
+			"the box, the axes and the fit.\n");
+		return 0;
 	}
 
 	/* THE WARDROBE (#153, round M2). The folders are the ones on THIS command
@@ -8305,6 +8428,10 @@ int main(int argc, char** argv)
 			one.nodes = 1;
 			one.name = optionName.c_str();
 			one.rigidNode = 0;
+			// ... and posed with the donor game's own frame 0 (#153, round
+			// 155), exactly as hd_object.cpp asks for it - unless the run
+			// asked to see the file as it lies.
+			one.classicPose = !noClassicPose;
 			wanted.push_back(one);
 		}
 		else
@@ -9261,6 +9388,30 @@ int main(int argc, char** argv)
 	{
 		float fix[16], placed[16];
 
+		/* THE DONOR GAME'S FRAME 0, FIRST (#155). The fit below
+		 * measures the model the pose left behind, so the pose's own verdict
+		 * belongs above it - and a run where it did not happen has to say so,
+		 * or a box that looks like round M3's is a box nobody can explain. */
+		{
+			HDModelClassicPose pose;
+
+			if (HDModelClassicPoseOf(optionSlot, &pose))
+			{
+				if (pose.applied)
+					printf("\nclassic pose: %s posed with frame 0 of game %d "
+						"object %d, out of %d\\DATA\\%s - %d nodes, box "
+						"%.0fx%.0fx%.0f -> %.0fx%.0fx%.0f\n",
+						HDModelName(optionSlot), pose.game, pose.object,
+						pose.game, pose.level, pose.nodes, pose.before[0],
+						pose.before[1], pose.before[2], pose.after[0],
+						pose.after[1], pose.after[2]);
+				else
+					printf("\nclassic pose: NOT applied to %s - %s. It is drawn "
+						"as the file stands.\n", HDModelName(optionSlot),
+						pose.why);
+			}
+		}
+
 		if (HDModelRingFit(optionSlot, slot, fix))
 		{
 			float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
@@ -9297,6 +9448,23 @@ int main(int argc, char** argv)
 				sqrt(fix[0] * fix[0] + fix[1] * fix[1] + fix[2] * fix[2]),
 				fix[12], fix[13], fix[14], over,
 				outAxis >= 0 && outAxis < 3 ? kAxis[outAxis] : "?");
+
+			/* AND WHETHER IT WOULD LIE ON THE FLOOR (#155) - the
+			 * engine's own arithmetic, not a copy of it: the question the
+			 * level pickup turns on, in units, per slot. */
+			{
+				float dMin[3], dMax[3];
+				const float under = HDModelRingFitUnderFloor(optionSlot, slot,
+					fix);
+
+				HDModelBounds(slot, dMin, dMax);
+				printf("           the floor: the fitted model reaches %.1f "
+					"units %s the item's lowest point (y %.0f), so the level "
+					"pickup %s\n", under < 0 ? -under : under,
+					under > 0.5f ? "UNDER" : "above", dMax[1],
+					under > 0.5f ? "keeps the vanilla EXTRA_ model"
+						: "could draw this one");
+			}
 
 			/* WHERE THE FIT REALLY PUT IT (#153, round M3): the source's own
 			 * axes and box corners through the fit, so a picture that looks

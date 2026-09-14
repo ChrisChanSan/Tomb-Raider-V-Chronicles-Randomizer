@@ -42,6 +42,8 @@
 #include "../specific/dxshell.h"
 #include "savegame.h"
 #include "../specific/hd/hd_object.h"	// #123, fix round P: the ring in HD
+#include "inventory_interp.h"		// #154: the ring at the frame rate
+#include "interpolate.h"		// #154: InterpIsTweenFrame - the one latch
 
 static RINGME* rings[2];
 static RINGME pcring1;
@@ -485,6 +487,73 @@ COMBINELIST dels_handy_combine_table[24] =
 	{combine_clothbottle, INV_CLOTH, INV_BOTTLE, INV_WET_CLOTH}
 };
 
+/* THE RING'S INPUT ON A FRAME THAT CARRIES NO LOGIC STEP (#154).
+ *
+ * The same shadow the title menu puts over TitleOptions, for the same reason
+ * and with the same rule: the input is put aside, zeroed for the length of the
+ * frame and put back byte for byte. Nothing the body reaches can then act on
+ * a press twice, and nothing downstream sees a cleared debounce.
+ *
+ * WHY IT IS A SHADOW AND NOT A CLEARING. The measurement is written out over
+ * TitleInputShadow (game\gameflow.cpp): the debounce throws dbinput's own
+ * incoming value away, so a clearing would not turn a held key into a press -
+ * but SetDebounce is cleared inside the first tick of a ControlPhase call, so
+ * a zero left behind would stand through a hitch that runs several ticks and
+ * swallow the edge the first of them found. The six go_ flags are in the
+ * shadow as well: do_debounced_joystick_poo rebuilds all six from `input` at
+ * the top of every step frame and does not run on a tween frame at all, so on
+ * such a frame they would otherwise still be standing from the step before and
+ * the ring would act on one press twice.
+ *
+ * `input` is in it too for one test at the bottom of the loop: `use_the_bitch
+ * && !input` waits for the button that used an item to be RELEASED, and a
+ * zeroed input is a released one. */
+struct InvInputShadow
+{
+	long input;
+	long dbinput;
+	uchar left, right, up, down, select, deselect;
+	bool down_now;
+};
+
+static void ShadowRingInput(InvInputShadow* s)
+{
+	s->input = input;
+	s->dbinput = dbinput;
+	s->left = go_left;
+	s->right = go_right;
+	s->up = go_up;
+	s->down = go_down;
+	s->select = go_select;
+	s->deselect = go_deselect;
+	s->down_now = true;
+
+	input = 0;
+	dbinput = 0;
+	go_left = 0;
+	go_right = 0;
+	go_up = 0;
+	go_down = 0;
+	go_select = 0;
+	go_deselect = 0;
+}
+
+static void RestoreRingInput(InvInputShadow* s)
+{
+	if (!s->down_now)
+		return;
+
+	input = s->input;
+	dbinput = s->dbinput;
+	go_left = s->left;
+	go_right = s->right;
+	go_up = s->up;
+	go_down = s->down;
+	go_select = s->select;
+	go_deselect = s->deselect;
+	s->down_now = false;
+}
+
 long S_CallInventory2()
 {
 	FLOOR_INFO* floor;
@@ -564,15 +633,51 @@ long S_CallInventory2()
 	return_value = 0;
 	val = 0;
 
+	/* #154: THE RING FOLLOWS THE FRAME RATE FROM HERE ON. The wiring is one
+	 * call because game\inventory_interp.cpp owns the snapshot and the
+	 * accumulator but not one of the ring's own fields - every one of them is
+	 * a static of this file, and they stay that way. */
+	{
+		InvInterpSource src;
+
+		src.ring[RING_INVENTORY] = rings[RING_INVENTORY];
+		src.ring[RING_AMMO] = rings[RING_AMMO];
+		src.ammo = ammo_object_list;
+		src.ammoFade = &ammo_selector_fade_val;
+		src.combineFade = &combine_ring_fade_val;
+		src.normalFade = &normal_ring_fade_val;
+		src.examine = &examine_mode;
+		InvInterpOpen(&src, "open");
+	}
+
 	while (!reset_flag && !val)
 	{
+		/* THE RING'S OWN CADENCE (#154), and it is the first statement of the
+		 * body for the same reason InterpCapturePrev is the first statement
+		 * of ControlPhase's tick body: what the snapshot has to remember is
+		 * the state this frame's step is about to leave behind.
+		 *
+		 * `invStep` is true on every frame at fps_mode 0 and on every second
+		 * one at fps_mode 1, so the whole body below reads as the body it has
+		 * always been, with the logic behind one test. */
+		const bool invStep = InvInterpBeginFrame();
+		InvInputShadow shadow;
+
+		shadow.down_now = false;
+
 		OBJLIST_SPACING = phd_centerx >> 1;
 		S_InitialisePolyList();
-		SetDebounce = 1;
-		S_UpdateInput();
-		input = inputBusy;
-		UpdatePulseColour();
-		GameTimer++;
+
+		if (invStep)
+		{
+			SetDebounce = 1;
+			S_UpdateInput();
+			input = inputBusy;
+			UpdatePulseColour();
+			GameTimer++;
+		}
+		else
+			ShadowRingInput(&shadow);
 
 		if (dbinput & IN_OPTION)
 		{
@@ -583,7 +688,11 @@ long S_CallInventory2()
 		return_value = MainThread.ended;
 
 		if (return_value)
+		{
+			RestoreRingInput(&shadow);
+			InvInterpClose();
 			return return_value;
+		}
 
 		S_DisplayMonoScreen();
 
@@ -593,33 +702,41 @@ long S_CallInventory2()
 			val = 1;
 		}
 
-		do_debounced_joystick_poo();
+		if (invStep)
+			do_debounced_joystick_poo();
 
 		item = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 
-		if (item == INV_COMPASS_ITEM && keymap[DIK_G] && keymap[DIK_U] && keymap[DIK_N] && keymap[DIK_S])//GUNS
-			dels_give_lara_guns_cheat();
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_B] && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_S])//BITS
+		/* The four cheats read keymap directly rather than through `input`,
+		 * so the shadow above does not reach them and they would fire at the
+		 * frame rate. They are on the logic step with everything else (#154);
+		 * three of the four are idempotent and the fourth plays a sound. */
+		if (invStep)
 		{
-			savegame.CampaignSecrets[0] = 9;
-			savegame.CampaignSecrets[1] = 9;
-			savegame.CampaignSecrets[2] = 9;
-			savegame.CampaignSecrets[3] = 9;
+			if (item == INV_COMPASS_ITEM && keymap[DIK_G] && keymap[DIK_U] && keymap[DIK_N] && keymap[DIK_S])//GUNS
+				dels_give_lara_guns_cheat();
+
+			if (item == INV_COMPASS_ITEM && keymap[DIK_B] && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_S])//BITS
+			{
+				savegame.CampaignSecrets[0] = 9;
+				savegame.CampaignSecrets[1] = 9;
+				savegame.CampaignSecrets[2] = 9;
+				savegame.CampaignSecrets[3] = 9;
+			}
+
+			if (item == INV_COMPASS_ITEM && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_E] && keymap[DIK_M])	//ITEM
+				dels_give_lara_items_cheat();
+
+			if (item == INV_COMPASS_ITEM && keymap[DIK_S] && keymap[DIK_K] && keymap[DIK_I] && keymap[DIK_P])	//SKIP
+			{
+				gfLevelComplete = gfCurrentLevel + 1;
+				SCNoDrawLara = 0;
+				bDisableLaraControl = 0;
+			}
+
+			if (item == INV_COMPASS_ITEM && keymap[DIK_H] && keymap[DIK_E] && keymap[DIK_A] && keymap[DIK_L])	//heal
+				lara_item->hit_points = 1000;
 		}
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_E] && keymap[DIK_M])	//ITEM
-			dels_give_lara_items_cheat();
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_S] && keymap[DIK_K] && keymap[DIK_I] && keymap[DIK_P])	//SKIP
-		{
-			gfLevelComplete = gfCurrentLevel + 1;
-			SCNoDrawLara = 0;
-			bDisableLaraControl = 0;
-		}
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_H] && keymap[DIK_E] && keymap[DIK_A] && keymap[DIK_L])	//heal
-			lara_item->hit_points = 1000;
 
 		if (GLOBAL_invkeypadmode)
 			do_keypad_mode();
@@ -658,14 +775,35 @@ long S_CallInventory2()
 			val = 1;
 		}
 
-		if (use_the_bitch && !input)
+		if (invStep && use_the_bitch && !input)
 			val = 1;
 
 		S_OutputPolyList();
+
+		/* THE RING'S PRESENT (#154), and it is DrawPhaseGame's own pattern to
+		 * the line (game\draw.cpp): raise the rate around THIS present only,
+		 * put the default two back straight afterwards, and let the frame be
+		 * judged against the slot it really asked for - HDFramePresented
+		 * reads gPresentMinTicks from inside DXShowFrame, so FPSLOG's
+		 * `budget=` is the ring's own 6.1 ms at fps_mode 2 and not the 33.3
+		 * of the default. */
+		RestoreRingInput(&shadow);
+		gPresentMinTicks = InvFrameMinTicks();
 		camera.number_frames = S_DumpScreen();
+		gPresentMinTicks = 2;
+		InvInterpPresent(camera.number_frames);
 
 		if (loading_or_saving)
 		{
+			/* The load/save screen is a modal loop of its own at two ticks,
+			 * and what comes back from it is minutes of wall-clock time away
+			 * from the frame that went in (#154). The latch goes down with
+			 * the same movement: that loop's counters step once per present
+			 * and always have, and its first iteration runs before its first
+			 * S_DumpScreen puts the latch down for itself. */
+			InvInterpCut("loadsave");
+			InterpNoteMenuFrame(false);
+
 			while (1)
 			{
 				flag = 0;
@@ -702,6 +840,7 @@ long S_CallInventory2()
 		}
 	}
 
+	InvInterpClose();	// #154
 	InitialisePickUpDisplay();
 	GLOBAL_lastinvitem = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 	update_laras_weapons_status();
@@ -1164,6 +1303,13 @@ void insert_object_into_list_v2(long num)
 
 void construct_object_list()
 {
+	/* #154: the list is being rebuilt, so every slot in the ring's snapshot
+	 * may mean a different object a line from now. Called from init_new_inventry
+	 * before the ring is even open (where it does nothing but clear a counter
+	 * that is already clear), from a combine and a separate, and from the
+	 * weapon hot keys. */
+	InvInterpCut("rebuild");
+
 	rings[RING_INVENTORY]->numobjectsinlist = 0;
 
 	for (int i = 0; i < NUM_INVOBJ; i++)
@@ -1362,15 +1508,14 @@ void insert_object_into_list(long num)
 	rings[RING_INVENTORY]->numobjectsinlist++;
 }
 
-void draw_current_object_list(long ringnum)
+/* THE TWO RING FADES, LIFTED OUT OF draw_current_object_list WORD FOR WORD
+ * (#154). Not one line of it changed; it moved so that the ring's logic step
+ * can gate the whole of it with one test instead of a brace around forty
+ * lines. It steps the combine ring's fade in and out and the inventory
+ * ring's, and hands the ring over when one of them reaches its end - which is
+ * state, and state moves on the logic step and on no other frame. */
+static void step_ring_fades(long ringnum)
 {
-	long n, maxobj, xoff, shade, minobj, objmeup, nummeup, activenum, ymeup, x, y;
-	short yrot;
-	char textbufme[128];
-
-	if (rings[ringnum]->numobjectsinlist <= 0)
-		return;
-
 	if (ringnum == RING_AMMO)
 	{
 		ammo_selector_fade_val = 0;
@@ -1444,6 +1589,52 @@ void draw_current_object_list(long ringnum)
 			handle_object_changeover(RING_INVENTORY);
 		}
 	}
+}
+
+void draw_current_object_list(long ringnum)
+{
+	long n, maxobj, xoff, shade, minobj, objmeup, nummeup, activenum, ymeup, x, y;
+	short yrot;
+	char textbufme[128];
+
+	if (rings[ringnum]->numobjectsinlist <= 0)
+		return;
+
+	/* #154: EVERY STEP IN THIS FUNCTION IS ON THE RING'S LOGIC FRAME. The
+	 * criterion is the build's one criterion - the tween latch, which the
+	 * ring raises for itself (game\inventory_interp.cpp) now that its present
+	 * no longer waits two ticks. At fps_mode 0 it is false on every frame,
+	 * step_ring_fades below is called from exactly where its code used to
+	 * stand, and this function runs as it always has. */
+	const bool invStep = !InterpIsTweenFrame();
+
+	if (invStep)
+		step_ring_fades(ringnum);
+
+	/* WHERE THE ROW STANDS IN THIS PICTURE (#154). objlistmovement is the
+	 * slide, 0 to 65536 in eight steps of 8192, and it is the one field of
+	 * the ring that vanilla steps AFTER it has drawn with it - the block at
+	 * the bottom of this function. So the value the picture wants is not the
+	 * live one but the blend of the two the last two steps produced, and it
+	 * is read once, here, rather than at each of the eight places below that
+	 * used to reach for the field. The stepping block at the bottom keeps the
+	 * live field, which is the logic; this is the picture.
+	 *
+	 * AND THE TWO SMALL DECISIONS THAT HANG OFF IT FOLLOW THE PICTURE. Which
+	 * icon spins rather than spins back, and which one the brightness ramp
+	 * walks towards, are read from `move` and not from the field. At fps_mode
+	 * 0 they are the same number. At fps_mode 1 they are the same ANSWER: the
+	 * step frame's factor is a half, and half of a pair whose newer half is
+	 * the live value keeps its sign and keeps being zero or not. At fps_mode 2
+	 * the factor starts near nothing, so `move` can lag the field by up to one
+	 * step when a turn begins - and then the icon that is centred in the
+	 * PICTURE is the one that spins and brightens, which is the answer the eye
+	 * is asking for. Nothing of the ring's own state is read from it: the
+	 * slide, the selected slot and the sound of a turn are all below, off the
+	 * live field. */
+	const long move = InvDrawMove(ringnum, rings[ringnum]->objlistmovement);
+	const long curDrawn = InvDrawCur(ringnum, rings[ringnum]->curobjinlist,
+		rings[ringnum]->numobjectsinlist);
 
 	minobj = 0;
 	maxobj = 0;
@@ -1451,65 +1642,67 @@ void draw_current_object_list(long ringnum)
 	n = 0;
 
 	if (rings[ringnum]->numobjectsinlist != 1)
-		xoff = (OBJLIST_SPACING * rings[ringnum]->objlistmovement) >> 16;
+		xoff = (OBJLIST_SPACING * move) >> 16;
 
 	if (rings[ringnum]->numobjectsinlist == 2)
 	{
 		minobj = -1;
 		maxobj = 0;
-		n = rings[ringnum]->curobjinlist - 1;
+		n = curDrawn - 1;
 	}
 
 	if (rings[ringnum]->numobjectsinlist == 3 || rings[ringnum]->numobjectsinlist == 4)
 	{
 		minobj = -2;
 		maxobj = 1;
-		n = rings[ringnum]->curobjinlist - 2;
+		n = curDrawn - 2;
 	}
 
 	if (rings[ringnum]->numobjectsinlist >= 5)
 	{
 		minobj = -3;
 		maxobj = 2;
-		n = rings[ringnum]->curobjinlist - 3;
+		n = curDrawn - 3;
 	}
 
 	if (n < 0)
 		n += rings[ringnum]->numobjectsinlist;
 
-	if (rings[ringnum]->objlistmovement < 0)
+	if (move < 0)
 		maxobj++;
 
 	for (int i = minobj; i <= maxobj; i++)
 	{
 		if (i == minobj)
 		{
-			if (rings[ringnum]->objlistmovement < 0)
+			if (move < 0)
 				shade = 0;
 			else
-				shade = rings[ringnum]->objlistmovement >> 9;
+				shade = move >> 9;
 		}
 		else if (i == minobj + 1 && maxobj != minobj + 1)
 		{
-			if (rings[ringnum]->objlistmovement < 0)
-				shade = 128 - ((-128 * rings[ringnum]->objlistmovement) >> 16);
+			if (move < 0)
+				shade = 128 - ((-128 * move) >> 16);
 			else
 				shade = 128;
 		}
 		else if (i != maxobj)
 			shade = 128;
-		else if (rings[ringnum]->objlistmovement < 0)
-			shade = (-128 * rings[ringnum]->objlistmovement) >> 16;
+		else if (move < 0)
+			shade = (-128 * move) >> 16;
 		else
-			shade = 128 - short(rings[ringnum]->objlistmovement >> 9);
+			shade = 128 - short(move >> 9);
 
 		if (!minobj && !maxobj)
 			shade = 128;
 
+		// The two ring fades are stepped before the icon is drawn, so their
+		// pair is (previous, live) and the blend is asked for here (#154).
 		if (ringnum == RING_AMMO && combine_ring_fade_val < 128 && shade)
-			shade = combine_ring_fade_val;
+			shade = InvDrawCombineFade(combine_ring_fade_val);
 		else if (ringnum == RING_INVENTORY && normal_ring_fade_val < 128 && shade)
-			shade = normal_ring_fade_val;
+			shade = InvDrawNormalFade(normal_ring_fade_val);
 
 		if (!i)
 		{
@@ -1577,43 +1770,54 @@ void draw_current_object_list(long ringnum)
 			PrintString(phd_centerx, ymeup, 8, textbufme, FF_CENTER);
 		}
 
-		if (!i && !rings[ringnum]->objlistmovement)
+		// The spin and the brightness are stepped on the logic frame and
+		// drawn from the blend on every frame (#154).
+		if (invStep)
 		{
-			if (inventry_objects_list[rings[ringnum]->current_object_list[n].invitem].flags & 2)
-				rings[ringnum]->current_object_list[n].yrot += 1022;
+			if (!i && !move)
+			{
+				if (inventry_objects_list[rings[ringnum]->current_object_list[n].invitem].flags & 2)
+					rings[ringnum]->current_object_list[n].yrot += 1022;
+			}
+			else
+				spinback(&rings[ringnum]->current_object_list[n].yrot);
 		}
-		else
-			spinback(&rings[ringnum]->current_object_list[n].yrot);
 
-		yrot = rings[ringnum]->current_object_list[n].yrot;
+		yrot = (short)InvDrawSpin(ringnum, n, rings[ringnum]->current_object_list[n].invitem,
+			rings[ringnum]->current_object_list[n].yrot);
 
-		if (!rings[ringnum]->objlistmovement)
+		if (!move)
 			activenum = 0;
-		else if (rings[ringnum]->objlistmovement > 0)
+		else if (move > 0)
 			activenum = -1;
 		else
 			activenum = 1;
 
-		if (i == activenum)
+		if (invStep)
 		{
-			if (rings[ringnum]->current_object_list[n].bright < 160)
-				rings[ringnum]->current_object_list[n].bright += 16;
+			if (i == activenum)
+			{
+				if (rings[ringnum]->current_object_list[n].bright < 160)
+					rings[ringnum]->current_object_list[n].bright += 16;
 
-			if (rings[ringnum]->current_object_list[n].bright > 160)
-				rings[ringnum]->current_object_list[n].bright = 160;
-		}
-		else
-		{
-			if (rings[ringnum]->current_object_list[n].bright > 32)
-				rings[ringnum]->current_object_list[n].bright -= 16;
+				if (rings[ringnum]->current_object_list[n].bright > 160)
+					rings[ringnum]->current_object_list[n].bright = 160;
+			}
+			else
+			{
+				if (rings[ringnum]->current_object_list[n].bright > 32)
+					rings[ringnum]->current_object_list[n].bright -= 16;
 
-			if (rings[ringnum]->current_object_list[n].bright < 32)
-				rings[ringnum]->current_object_list[n].bright = 32;
+				if (rings[ringnum]->current_object_list[n].bright < 32)
+					rings[ringnum]->current_object_list[n].bright = 32;
+			}
 		}
 
 		x = xoff + phd_centerx + i * OBJLIST_SPACING;
 		y = ringnum == RING_INVENTORY ? GetFixedScale(84) : GetFixedScale(380);
-		DrawThreeDeeObject2D(x, y, rings[ringnum]->current_object_list[n].invitem, shade, 0, yrot, 0, rings[ringnum]->current_object_list[n].bright, 0);
+		DrawThreeDeeObject2D(x, y, rings[ringnum]->current_object_list[n].invitem, shade, 0, yrot, 0,
+			InvDrawBright(ringnum, n, rings[ringnum]->current_object_list[n].invitem,
+				rings[ringnum]->current_object_list[n].bright), 0);
 
 		n++;
 
@@ -1621,7 +1825,12 @@ void draw_current_object_list(long ringnum)
 			n = 0;
 	}
 
-	if (rings[ringnum]->ringactive)
+	/* AND THE SLIDE IS STEPPED LAST, WHICH IS WHERE VANILLA STEPS IT. It is
+	 * the ring's own state - the row's place, the selected slot, the sound of
+	 * a turn - so it moves on the logic frame and on no other (#154). What
+	 * the picture above drew with is `move`, the blend of the two steps
+	 * before this one, for the reason written out over it. */
+	if (rings[ringnum]->ringactive && invStep)
 	{
 		if (rings[ringnum]->numobjectsinlist != 1 && (ringnum != 1 || combine_ring_fade_val == 128))
 		{
@@ -1872,6 +2081,16 @@ void handle_inventry_menu()
 			if (current_options[current_selected_option].type != ITYPE_EQUIP && current_options[current_selected_option].type != ITYPE_USE)
 				SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 
+			/* #154: EVERY ONE OF THESE IS A CUT. A mode opening, the ammo
+			 * ring taking over, the combine ring being built, the load or
+			 * save screen: what is on screen after one of them is not a
+			 * neighbour of what was on screen before it, so the ring's
+			 * snapshot is dropped and the next step frame draws live. One
+			 * call at the head of the switch covers all of them, which is why
+			 * there is no per-case hack in it. */
+			if (current_options[current_selected_option].type != ITYPE_EMPTY)
+				InvInterpCut("menu");
+
 			switch (current_options[current_selected_option].type)
 			{
 			case ITYPE_CHOOSEAMMO:
@@ -1934,6 +2153,7 @@ void handle_inventry_menu()
 		if (go_deselect && ammo_active)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			InvInterpCut("ammo_close");	// #154
 			go_deselect = 0;
 			ammo_active = 0;
 			rings[RING_INVENTORY]->ringactive = 1;
@@ -2037,6 +2257,12 @@ void setup_ammo_selector()
 
 void fade_ammo_selector()
 {
+	/* #154: the ammo selector's fade is stepped HERE, after draw_ammo_selector
+	 * has already drawn with it - so its pair is the two previous generations
+	 * and the step is on the logic frame. */
+	if (InterpIsTweenFrame())
+		return;
+
 	if (rings[RING_INVENTORY]->ringactive && (right_repeat >= 8 || left_repeat >= 8))
 		ammo_selector_fade_val = 0;
 	else if (ammo_selector_fade_dir == 1)
@@ -2080,20 +2306,27 @@ void draw_ammo_selector()
 	else if (num_ammo_slots == 3)
 		xpos -= OBJLIST_SPACING;
 
+	// #154: stepped on the logic frame, drawn from the blend on every frame.
+	const bool invStep = !InterpIsTweenFrame();
+	const long fade = InvDrawAmmoFade(ammo_selector_fade_val);
+
 	for (int i = 0; i < num_ammo_slots; i++)
 	{
 		invitem = ammo_object_list[i].invitem;
 		objme = &inventry_objects_list[invitem];
 
-		if (i == current_ammo_type[0])
+		if (invStep)
 		{
-			if (objme->flags & 2)
-				ammo_object_list[i].yrot += 1022;
+			if (i == current_ammo_type[0])
+			{
+				if (objme->flags & 2)
+					ammo_object_list[i].yrot += 1022;
+			}
+			else
+				spinback(&ammo_object_list[i].yrot);
 		}
-		else
-			spinback(&ammo_object_list[i].yrot);
 
-		yrot = ammo_object_list[i].yrot;
+		yrot = (short)InvDrawAmmoSpin(i, invitem, ammo_object_list[i].yrot);
 
 		if (i == current_ammo_type[0])
 		{
@@ -2105,10 +2338,10 @@ void draw_ammo_selector()
 			if (ammo_selector_fade_val)
 				PrintString(phd_centerx, phd_centery + 3 * font_height - 9, 8, cunter, FF_CENTER);
 		}
-		
+
 		x = xpos + GetFixedScale(80);
 		y = GetFixedScale(380);
-		DrawThreeDeeObject2D(x, y, invitem, ammo_selector_fade_val, 0, yrot, 0, (i == current_ammo_type[0]) ? 0 : 1, 0);
+		DrawThreeDeeObject2D(x, y, invitem, fade, 0, yrot, 0, (i == current_ammo_type[0]) ? 0 : 1, 0);
 		xpos += OBJLIST_SPACING;
 	}
 }
@@ -3141,22 +3374,31 @@ void do_keypad_mode()
 
 	if (keypadpause)
 	{
-		x = keypadinputs[0] * 1000 + keypadinputs[1] * 100 + keypadinputs[2] * 10 + keypadinputs[3];
-
-		if (GLOBAL_invkeypadcombination == x)
+		/* #154: keypadpause is a one-second countdown in PRESENTS - thirty of
+		 * them - and the values it is tested against below are the moments it
+		 * plays a tone on. Both halves are inside the ring's logic frame: the
+		 * countdown so that the second stays a second at any frame rate, and
+		 * the tones so that one of them is not played again on every frame of
+		 * the step it belongs to. */
+		if (!InterpIsTweenFrame())
 		{
-			if (keypadpause == 30 || keypadpause == 20 || keypadpause == 10)
-				SoundEffect(SFX_KEYPAD_ENTRY_YES, 0, SFX_ALWAYS);
-		}
-		else if (keypadpause == 30 || keypadpause == 25 || keypadpause == 20 || keypadpause == 15 || keypadpause == 10 || keypadpause == 5)
-			SoundEffect(SFX_KEYPAD_ENTRY_NO, 0, SFX_ALWAYS | SFX_SETVOL | 0x1000);
+			x = keypadinputs[0] * 1000 + keypadinputs[1] * 100 + keypadinputs[2] * 10 + keypadinputs[3];
 
-		keypadpause--;
+			if (GLOBAL_invkeypadcombination == x)
+			{
+				if (keypadpause == 30 || keypadpause == 20 || keypadpause == 10)
+					SoundEffect(SFX_KEYPAD_ENTRY_YES, 0, SFX_ALWAYS);
+			}
+			else if (keypadpause == 30 || keypadpause == 25 || keypadpause == 20 || keypadpause == 15 || keypadpause == 10 || keypadpause == 5)
+				SoundEffect(SFX_KEYPAD_ENTRY_NO, 0, SFX_ALWAYS | SFX_SETVOL | 0x1000);
 
-		if (!keypadpause)
-		{
-			menu_active = 0;
-			use_the_bitch = 1;
+			keypadpause--;
+
+			if (!keypadpause)
+			{
+				menu_active = 0;
+				use_the_bitch = 1;
+			}
 		}
 
 		return;
@@ -3223,15 +3465,20 @@ void do_examine_mode()
 	invitem = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 	objme = &inventry_objects_list[invitem];
 	scale = objme->scale1;
-	examine_mode += 8;
 
-	if (examine_mode > 128)
-		examine_mode = 128;
+	// #154: the zoom steps on the logic frame and is drawn from the blend.
+	if (!InterpIsTweenFrame())
+	{
+		examine_mode += 8;
+
+		if (examine_mode > 128)
+			examine_mode = 128;
+	}
 
 	objme->scale1 = 300;
 	x = phd_centerx;
 	y = GetFixedScale(256);
-	DrawThreeDeeObject2D(x, y, invitem, examine_mode, 0x8000, 0x4000, 0x4000, 96, 0);
+	DrawThreeDeeObject2D(x, y, invitem, InvDrawExamine(examine_mode), 0x8000, 0x4000, 0x4000, 96, 0);
 	objme->scale1 = scale;
 
 	if (go_deselect)
@@ -3239,15 +3486,23 @@ void do_examine_mode()
 		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 		go_deselect = 0;
 		examine_mode = 0;
+		InvInterpCut("examine_close");	// #154
 	}
 }
 
 void do_stats_mode()
 {
-	stats_mode += 8;
+	/* #154: stats_mode is a counter and nothing reads it as a value - the
+	 * stats page is drawn from the savegame, not from a fade - so it is held
+	 * on a tween frame rather than blended. It steps once per logic frame,
+	 * which is the rate it was written for. */
+	if (!InterpIsTweenFrame())
+	{
+		stats_mode += 8;
 
-	if (stats_mode > 128)
-		stats_mode = 128;
+		if (stats_mode > 128)
+			stats_mode = 128;
+	}
 
 	DisplayStatsUCunt();
 
@@ -3256,6 +3511,7 @@ void do_stats_mode()
 		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 		go_deselect = 0;
 		stats_mode = 0;
+		InvInterpCut("stats_close");	// #154
 	}
 }
 

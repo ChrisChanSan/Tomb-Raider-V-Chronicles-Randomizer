@@ -241,6 +241,35 @@ bool InterpIsTweenFrame();
  * S_DumpScreen and S_DumpScreenFrame - see the note above. */
 void InterpNoteClassicPresent();
 
+/* A MODAL LOOP THAT PRESENTS AT THE FRAME RATE (#154).
+ *
+ * Round 154 took the inventory ring off its two ticks a present, so its
+ * frames no longer come through InterpNoteClassicPresent above and nothing
+ * else would ever raise the latch for them: every counter order 3 guards
+ * would run at the present rate again, inside the one loop the guards were
+ * written to protect.
+ *
+ * So the ring says for itself which of its frames carries its logic step,
+ * once per frame and before it draws anything - the same door DrawPhaseGame
+ * uses, which is the assignment to g_tween at the top of InterpBeginFrame,
+ * given a name so that a second caller cannot drift from the first.
+ *
+ * It is called only at fps_mode 1 and 2. At fps_mode 0 the ring keeps its two
+ * ticks, comes through InterpNoteClassicPresent exactly as it always did, and
+ * this is not reached. */
+void InterpNoteMenuFrame(bool tween);
+
+/* THE LOGIC TICK COUNTER, AS A READING (#148, order 6; #154).
+ *
+ * g_tickSerial steps once per logic tick, in InterpCapturePrev, at every
+ * frame rate - the note over it in game\interpolate.cpp says why the display-
+ * bound mode needs it. It is exported for the title menu (game\gameflow.cpp),
+ * which asks a question of the same shape and must not answer it with a clock
+ * of its own: "has a tick run since the last time I read the debounced
+ * input?" A menu walked once per present while dbinput is written once per
+ * tick reads every other press twice, which is what order 1b found. */
+unsigned long InterpTickSerial();
+
 /* ORDER 4 - THE POSE (#148).
  *
  * Order 2 moves where a thing STANDS between two logic ticks. This is the

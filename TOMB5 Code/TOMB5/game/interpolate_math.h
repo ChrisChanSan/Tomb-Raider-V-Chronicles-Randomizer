@@ -249,6 +249,122 @@ inline float InterpRefreshAlpha(long framecount, double subTick)
 }
 
 /* ==========================================================================
+ * THE INVENTORY RING'S OWN CADENCE (#154).
+ *
+ * The ring is a modal loop with a present of its own and never reaches
+ * ControlPhase, so it keeps an accumulator of its own - of exactly
+ * ControlPhase's shape, in the same 1/60 s ticks, spending two of them on a
+ * logic step. The three functions below are the whole of that arithmetic and
+ * they live here, with the rest of the arithmetic, so that InterpTest can run
+ * them without a game. game\inventory_interp.cpp is the rest of the round -
+ * the snapshot, the wiring and the log.
+ * ======================================================================== */
+
+/* SPEND THE TICKS THE LAST PRESENT RETURNED AND SAY WHETHER THIS FRAME
+ * CARRIES THE RING'S LOGIC STEP.
+ *
+ * `for (framecount += nframes; framecount > 0; framecount -= 2)`
+ * (game\control.cpp) with the body run AT MOST ONCE, because the ring's body
+ * draws as it steps and a second pass in one frame would draw twice into one
+ * poly list. A frame slower than a logic step therefore steps the ring once,
+ * which is what thirty hertz does with a long frame too.
+ *
+ * THE CLAMP IS THE ONE LINE CONTROLPHASE HAS NOT GOT. ControlPhase pays a
+ * hitch off by running several ticks in one call; this loop cannot, so an
+ * unclamped accumulator would keep it stepping on EVERY frame until the debt
+ * was gone - the ring running at the frame rate, which is the one thing this
+ * round exists to stop. One step's worth of credit is kept and the rest of a
+ * hitch is dropped. */
+inline bool InterpRingStep(long* acc, long ticks)
+{
+	*acc += ticks;
+
+	if (*acc > 2)
+		*acc = 2;
+
+	if (*acc > 0)
+	{
+		*acc -= 2;
+		return true;
+	}
+
+	return false;
+}
+
+/* WHAT A RING FRAME IS DRAWN AT.
+ *
+ * At fps_mode 2 it is the clock, through InterpRefreshAlpha above and with
+ * the ring's accumulator in place of ControlPhase's - the derivation is the
+ * same one and the phase is the same, because the last Sync() was inside the
+ * previous present in both loops.
+ *
+ * At fps_mode 1 the frames land on the ticks and that formula returns exactly
+ * a half on the frame whose step ran (acc -1, subTick 1) and exactly one on
+ * the frame between (acc 0, subTick 1), so the parity is used directly and no
+ * clock is read. InterpTest asserts that the two agree.
+ *
+ * AND THE HALF IS ON THE STEP FRAME, which reads backwards until the order of
+ * the loop is written out. In the game the DRAW comes before the tick, so the
+ * drawn states are T1, mid(T1,T2), T2 - the live frame first. In the ring the
+ * STEP comes before the draw, and the same arrangement would draw C1,
+ * mid(C0,C1), C2, mid(C1,C2): a picture walking backwards on every second
+ * frame. Even, monotone half steps are the other way round - mid(C0,C1), C1,
+ * mid(C1,C2), C2 - and that is what this returns. */
+inline float InterpRingAlpha(long mode, long acc, double subTick, bool step)
+{
+	// fps_mode 0 is the ring as it was: every frame carries its step and is
+	// drawn live. InvInterpBeginFrame returns before it ever gets here, and
+	// the line is in anyway so that the rule is whole where it is written.
+	if (mode == 0)
+		return 1.0F;
+
+	if (mode == 2)
+		return InterpRefreshAlpha(acc, subTick);
+
+	return step ? 0.5F : 1.0F;
+}
+
+/* THE SLIDE, AND THE ONE JUMP IN IT.
+ *
+ * objlistmovement walks to 65536 in eight steps of 8192 and is then set
+ * straight back to 0 with curobjinlist moved on by one. That is a reset and
+ * not a motion: blended, the whole row would slide halfway back for one
+ * frame. A pair that straddles it draws the newer of the two - the value the
+ * step frame itself shows - so the picture stands for the two frames the jump
+ * takes and moves again on the next pair.
+ *
+ * `older` and `newer` are the two previous generations and not the live
+ * field, because this is the one field vanilla steps AFTER it has drawn with
+ * it (game\inventory_interp.h). */
+inline long InterpRingSlide(long older, long newer, bool jumped, float alpha)
+{
+	if (jumped)
+		return newer;
+
+	return InterpLerpLong(older, newer, alpha);
+}
+
+/* AND THE SLOT THE SLIDE BELONGS TO.
+ *
+ * curobjinlist is discrete and is never blended - but it is HALF OF A PAIR
+ * with the slide, and the two have to be drawn from the same generation. The
+ * reset makes that literal: the step that puts objlistmovement back to 0 moves
+ * curobjinlist in the same breath, so a frame drawing the NEW slot with the
+ * OLD offset puts the whole row seven eighths of a slot to the side for one
+ * frame. That is a bug this round had and the arithmetic below is its fix.
+ *
+ * `count` is numobjectsinlist as it stands now: a slot from before a list was
+ * rebuilt can be past the end of the new one, and then the live slot is the
+ * only safe answer. */
+inline long InterpRingSlot(long snapCur, long liveCur, long count)
+{
+	if (snapCur < 0 || snapCur >= count)
+		return liveCur;
+
+	return snapCur;
+}
+
+/* ==========================================================================
  * ORDER 4 - THE POSE.
  *
  * Order 2 moved where a thing STANDS. This is where its limbs stand, and it

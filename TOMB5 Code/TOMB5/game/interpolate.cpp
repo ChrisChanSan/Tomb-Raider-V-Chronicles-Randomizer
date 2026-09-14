@@ -1110,10 +1110,12 @@ float InterpAlphaNow()
 	 * cannot be reached by a build that would then run uncapped.
 	 *
 	 * GameFrameMinTicks decides per FRAME rather than per mode, and the frame
-	 * that is not a display-bound one is drawn live: the title menu and the
-	 * inventory keep their two ticks per present at every setting (order 1b),
-	 * and a frame drawn at a factor taken from a clock that is pacing
-	 * something else would judder the title's own flyby. */
+	 * that is not a display-bound one is drawn live, because a frame drawn at
+	 * a factor taken from a clock that is pacing something else would judder.
+	 * Order 1b put the title and the inventory in that class; round 154 took
+	 * the title out of it - it is display-bound like a played frame now and
+	 * its flyby is blended with it - and left the inventory's test standing as
+	 * the guard it has been since 1b (specific\output.cpp). */
 	const long mode = ActiveFpsMode();
 
 	if (mode == 2)
@@ -1131,10 +1133,11 @@ float InterpAlphaNow()
 	/* AND THE FRAME THAT IS NOT A SIXTY HERTZ ONE (#123/#148, fix round R).
 	 *
 	 * The same test the display-bound branch above has already made, and it
-	 * was missing here: the title menu and the inventory keep their TWO
-	 * ticks per present at every setting (order 1b, GameFrameMinTicks), so
-	 * their frames land on the logic ticks and there is nothing between two
-	 * of them to draw.
+	 * was missing here: a frame whose present waits two ticks lands on the
+	 * logic ticks and there is nothing between two of them to draw. Order 1b
+	 * put the title menu and the inventory in that class; round 154 took the
+	 * title out of it, so what is left in it here is the inventory's guard
+	 * (specific\output.cpp, GameFrameMinTicks).
 	 *
 	 * WHAT IT COST. framecount is an accumulator that survives a level
 	 * change, and the sixty hertz game loop leaves it at 0 or at -1 by turns.
@@ -1257,15 +1260,37 @@ bool InterpIsTweenFrame()
 void InterpNoteClassicPresent()
 {
 	/* A present that waited its full two ticks is a thirty hertz one - the
-	 * inventory, the load/save screen, the death menu, the loading bar, the
-	 * load screen's fade loop, and DrawPhaseGame itself at the title. Their
-	 * counters step once per present and always did, so the latch has to be
-	 * down while they run. Above all: RenderLoadPic's loop is `do { ...
-	 * S_OutputPolyList(); S_DumpScreen(); } while (DoFade != 2)`, and
-	 * DoScreenFade is the only thing that ever sets DoFade to 2. A latch
-	 * left standing from the last game frame would stop it and the loading
-	 * screen would never end. */
+	 * load/save screen, the pause menu, the death menu, the loading bar, the
+	 * load screen's fade loop and the F4 outfit menu. Their counters step once
+	 * per present and always did, so the latch has to be down while they run.
+	 * Above all: RenderLoadPic's loop is `do { ... S_OutputPolyList();
+	 * S_DumpScreen(); } while (DoFade != 2)`, and DoScreenFade is the only
+	 * thing that ever sets DoFade to 2. A latch left standing from the last
+	 * game frame would stop it and the loading screen would never end.
+	 *
+	 * TWO OF THAT LIST LEFT IT IN ROUND 154 (#154) - the inventory ring and
+	 * the title menu, both of which now present at the frame rate like a
+	 * played frame. They raise the latch themselves instead: the title
+	 * through DrawPhaseGame, which it always went through, and the ring
+	 * through InterpNoteMenuFrame below. At fps_mode 0 both are back in the
+	 * list above, because both keep their two ticks there. */
 	g_tween = false;
+}
+
+/* THE RING'S OWN FRAMES (#154). The note is in the header; what is left to
+ * say is that this is the SAME assignment InterpBeginFrame makes and not a
+ * second rule. The ring works its cadence out from an accumulator of its own
+ * (game\inventory_interp.cpp) because its loop never reaches ControlPhase,
+ * but what that cadence MEANS for the counters is decided here, in the one
+ * place the whole build asks. */
+void InterpNoteMenuFrame(bool tween)
+{
+	g_tween = tween;
+}
+
+unsigned long InterpTickSerial()
+{
+	return g_tickSerial;
 }
 
 void InterpNoteStep(int kind)
@@ -1364,7 +1389,13 @@ void InterpBeginFrame(float alpha)
 	 * nothing at all - not the snapshot, not a phd_LookAt, not one byte:
 	 *
 	 *   alpha >= 1   fps_mode 0, or the frame that lands on a logic tick.
-	 *   !items       before a level is loaded, and the title's own frames.
+	 *   !items       before a level is loaded. NOT the title, which loads a
+	 *                level of its own with a Lara item in it - LoadItems
+	 *                returns before InitialiseLaraLoad when a level has none,
+	 *                and DoTitle's own `lara_item->mesh_bits = 0` would then
+	 *                write through a null pointer on the first title of the
+	 *                session. Since round 154 the title's frames really are
+	 *                blended and this is the line that says why they can be.
 	 *   !valid       the first frame after a level start, a savegame or a
 	 *                menu - there is no previous state to blend from.
 	 *   cutscene     the cutscene camera is decoded from a frame index

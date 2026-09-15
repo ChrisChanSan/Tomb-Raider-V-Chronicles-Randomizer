@@ -409,6 +409,9 @@ rig=0                   # the pouches they hang in, cut out of the
                         # London catsuit - for a body with bare thighs
 sheen=0.45              # how wet the material looks ...
 exponent=26             # ... and how tight the highlight is
+skin_sheen=0.12         # and how her own SKIN shines - her face, the
+skin_exponent=10        # lid on her neck, her bare hands and the pages
+                        # named by skin= below. 0 to 2 and 1 to 128
 skin=8001               # which of its pages are Lara's own skin, so that
                         # a bare forearm and the hand on it shine alike
 footsteps=bare          # or boots - what she walks on in this body,
@@ -419,7 +422,72 @@ head=tr5                # or hair, or outfit - whose head this body wears.
                         # I-III wears TR5's head" above
 ```
 
-An unknown key is written to the log and ignored, exactly as in `mod.txt`.
+An unknown key is written to the log and ignored, exactly as in `mod.txt`, and
+so is a `skin_sheen=` or `skin_exponent=` outside its range — the value the
+engine had stands and the log says why.
+
+**`sheen` is the clothes, `skin_sheen` is her.** The first is what the outfit
+is made of — latex shines, a parka does not — and the second what Lara is made
+of while she wears it, which is not the same question: a wetsuit wants wet skin
+and a desert body does not. Without the two skin lines she is `0.12/10`, the
+soft wide sheen every build before this one drew, so a mod written earlier
+looks exactly as it did.
+
+### A list file, for the outfits that have no folder
+
+A mod is a folder and can carry an `outfit.txt`. The **52 outfits of your two
+Remaster installations** have no folder of their own, and a mod that ships
+seventeen bodies under one `outfit.txt` cannot say anything about *one* of
+them. So a `.txt` file lying **beside** the mod folders — directly in `Mods`,
+or directly in a category folder such as `Mods\Outfits` — is read as a list of
+blocks, one per outfit:
+
+```
+# Lines starting with # are comments and close nothing.
+
+Outfit: TR2_Swim
+sheen=1
+exponent=50
+skin=8001
+
+Outfit: 13/TRX_Wetsuit_1
+head=hair
+skin_sheen=0.6
+```
+
+Any file name, and any number of them; they are read in name order. A block
+opens at `Outfit:` and closes at the next one or at an empty line, and every
+key an `outfit.txt` takes is a key of a block.
+
+**The name** is matched against the outfit's file name without regard to case,
+to the `OUTFIT_` prefix, or to `_` against a space — `TR2_Swim`, `tr2 swim` and
+`OUTFIT_TR2_SWIM` are one name. Without a prefix it reaches **every** outfit of
+that name, your installation's and a mod's reskin of it alike; put a key prefix
+in front — `13/`, `46/`, `mod/outfits/legend/` — to mean one of them only. The
+keys are the ones `ModelProbe … -wardrobe` prints and the F4 window uses.
+
+**What wins.** A list block beats a mod's `outfit.txt`, which beats the
+engine's own table of measured outfits, which beats what the engine measures
+off the file, which beats the defaults. **Per key**, and that is the whole
+point: a block that says only `exponent=` changes only the exponent and leaves
+the sheen where the tier below it had it. Two blocks for one outfit, in one
+file or in two, are both applied and the later one wins for the keys it sets.
+
+Nothing in a list file can break anything. A name that matches no outfit on
+this machine, a key this build does not know, a line without `=`, a value out
+of range — each is a line in the log and the rest of the file is read on. A
+file whose name begins with `_` is switched off, exactly like a mod folder.
+With `-log`, the scan says what it did:
+
+```
+HDLOG wardrobe list outfit_1-5.txt: Outfit TR2_Swim -> 46/OUTFIT_TR2_SWIM:
+      sheen exponent skin
+HDLOG wardrobe list outfit_1-5.txt: 52 blocks, 52 matched, 0 unmatched
+```
+
+and the F4 window shows every body's **Shine** and **Skin glow** with the tier
+that decided each, so a line you wrote can be checked in the game: it says
+`(list)` when it arrived.
 
 **Sounds.** A mod's `5\DATA\MAIN.SFX` is used instead of `audio\MAIN.SFX` if
 there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under

@@ -13438,6 +13438,164 @@ is the key that folder had when the picture was taken. Nothing in the rule
 depends on a name, which is the point of deciding it by `origin=`: the same
 bodies came out `tr5` under all three spellings.
 
+#### Round 159 (#159, #158) - an outfit without a folder can be told what it is, and her skin has its own glow
+
+Two wishes of the user, both of 2026-09-14. The first is a file he had already
+written: `Mods\Outfits\outfit_1-5.txt`, 52 blocks naming every outfit of his two
+Remaster installations, with a header line saying *NOT READ BY THE ENGINE YET*.
+The second is one key more - "shine" is the outfit, and he wants a "glow" for
+Lara's own skin.
+
+**WHY HALF THE WARDROBE COULD NOT BE DESCRIBED AT ALL.** A mod is a FOLDER and
+may carry an `outfit.txt`; that is how round M2 gave a mod's outfit its hands,
+its braid, its material and its skin pages. The 52 outfits of the two installs
+have no folder, and a mod that ships seventeen bodies under one `outfit.txt` -
+the Legend mod does - cannot say anything about ONE of them. So of the 103
+entries this machine scans, 52 had only the built-in table of eight measured
+rows and the defaults, and 51 had one file for all of them.
+
+**THE LIST FILE.** A `.txt` lying BESIDE the mod folders - directly in `Mods`,
+or directly in a category folder such as `Mods\Outfits` - is read as blocks:
+
+```
+Outfit: TRX_Wetsuit_3
+sheen=0.10
+exponent=14
+```
+
+Any name, any number of them, read in name order. `#` is a comment and closes
+nothing (his own file puts one under every `Outfit:` line, which is the one
+parsing trap here: cut the comment off first and test for empty, and the
+comment closes the block it belongs to). A block opens at `Outfit:` and closes
+at the next one or at an empty line.
+
+**FOUND BY THE ONE WALK THAT KNOWS WHAT A MOD IS.** `hd_mods.cpp`'s `gather`
+never steps into a mod folder, so collecting the loose `.txt` files there -
+`HDModsListCount` / `HDModsListPath` - is what makes it impossible to mistake a
+mod's own `mod.txt` or `outfit.txt` for a list. A leading `_` switches a list
+off exactly as it switches a mod off. The mods line says `lists=` and each file
+gets a `MODLOG list<n>` line, so a player whose file does nothing can see
+whether it was seen at all - and that holds with the HD path off, where the
+mods scan still runs for the sound bank.
+
+**THE NAME RULE.** Matched against the outfit's file stem without regard to
+case, to the `OUTFIT_` prefix, or to `_` against a space: `TR2_Swim`, `tr2 swim`
+and `OUTFIT_TR2_SWIM` are one name. Without a prefix a block reaches EVERY entry
+of that stem - his `Outfit: Classic` reaches `46/OUTFIT_CLASSIC` and the 4-5
+Barefoot mod's `OUTFIT_CLASSIC` both, which is what a player who writes one line
+about the Rome body means. A key prefix pins one source: `13/TRX_Wetsuit_3`,
+`46/Classic`, `mod/outfits/legend/Black_1`.
+
+**THE RANK, AND IT IS PER KEY.**
+
+| tier | |
+| --- | --- |
+| a list block | `HD_WARDROBE_FROM_LIST` |
+| the mod's `outfit.txt` | `HD_WARDROBE_FROM_MOD_TXT` |
+| the built-in table of eight measured rows | `HD_WARDROBE_FROM_TABLE` |
+| measured out of the `.TRM` | `HD_WARDROBE_FROM_MEASURED` |
+| the defaults | `HD_WARDROBE_FROM_DEFAULT` |
+
+A block sets only the keys it has. Proved against the table, with no other list
+present: `OUTFIT_TR3_CATSUIT` is `0.45/26` in the table, a block saying
+`sheen=0.10` alone makes it **0.10/26** - the exponent stays; `OUTFIT_TR3_COAST`
+is `0.08/12`, a block saying `exponent=30` alone makes it **0.08/30** - the
+sheen stays. And against a mod's own file: his `TRX_Wetsuit_1` block sets the
+material of the Wetsuit Green mod's body while that mod's `outfit.txt` keeps
+naming its skin page, so one row reads `0.10/14 (list)` and `8001 (outfit.txt)`
+at once. (The tier word is per PROPERTY GROUP and not per key - `fromSheen`
+covers the pair, as `fromFlags` has covered five flags since round M2 - so a
+pair one block half-set reads `list`.)
+
+**ONE READER FOR BOTH KINDS OF FILE.** An `outfit.txt` and a block take the same
+keys, so `take_key` and `apply_txt` are one implementation with a `where` string
+and a tier number: two readers of one format are two readers that will one day
+disagree about it, and the rank is only real if every tier writes the same
+fields in the same order. The `MODLOG` notes of `outfit.txt` therefore read
+`MODLOG mod3 Outfits\Legend outfit.txt: ...` where they used to read
+`MODLOG mod3 Outfits\Legend: outfit.txt ...` - the same words, one clause
+earlier.
+
+**NOTHING IN A LIST CAN BREAK ANYTHING.** A scratch file with a key before any
+block, a block with no name, a line without `=`, a name that matches nothing, a
+key prefix no source has, two values out of range and two words neither `head=`
+nor `footsteps=` knows: **5 blocks, 3 matched, 2 unmatched**, nine fault lines,
+no crash, and the one good line in the same block as two bad ones still applied.
+
+**#158, AND WHAT WAS MEASURED FIRST.** `kSheenSkin` - `{0.12f, 10.0f}` - was
+read by the eleven hand parts (`kPart[].kind == 1`: REST, PISTOL, UZI, SHOTGUN,
+HK, DEAGLE, DEAGLE_LASER, GRAPPLE, FLARE, TORCH, CROWBAR) through
+`HDLaraPartSheen`, and by the pages of the BODY the wardrobe names as her skin
+through `HDLaraSkinSheen`. Her FACE and the lid on her neck did **not**: they
+came out of `kPartSheen`'s own two rows, which carry the identical pair. Two
+constants and two table rows saying one thing about thirteen draws.
+
+They are one answer now - `skin_sheen()`, out of the wardrobe entry - so
+`skin_sheen=` / `skin_exponent=` (0..2 and 1..128; out of range is a note and
+the tier below stands) moves all thirteen at once. The table has no column for
+it, because none of the eight measured rows ever separated her skin from her
+clothes, so the tier under a list block or an `outfit.txt` is the material
+table's own `skin` pair and nothing in between. The two `kPartSheen` rows stay
+and say so: they are what that table says skin is, and the default is taken from
+them.
+
+**WHERE IT CHANGES THE PICTURE, IN PIXELS.** `ModelProbe -lara ANDREA1 -outfit
+46/OUTFIT_CLASSIC` with `skin_sheen=1.0 skin_exponent=8` against the same render
+with no list file, counting pixels that moved by more than 8 levels:
+
+```
+  her face      4574 of  9000   worst 111      the teal top    10 of 11700
+  her right arm 2846 of  5950   worst 110      the shorts       1 of  2800
+  her left arm  3001 of  5100   worst 101      the holster      0 of  5850
+  her thigh     1321 of  3900   worst  39      the boots        0 of 15400
+  her hand       124 of  2450   worst  85      her hair         0 of  2400
+```
+
+The handful inside the two cloth boxes is the skin at the neckline and the waist
+that those boxes also contain; looked at side by side the top is the same
+picture and the face is visibly wet. The whole change is bounded by
+`y 39..779` - nothing at or below the boots moved at all.
+
+**BYTE IDENTITY.** With no `.txt` anywhere in the Mods copy, all **32** renders
+of round 156 come out **byte for byte identical**, and all **103** rows of
+`-wardrobe` say exactly what they said in round 156 - the new column and the new
+word aside. The user's own file, on a copy of his Mods folder: **52 blocks, 52
+matched, 0 unmatched**, reaching 54 entries, `46/OUTFIT_TR2_SWIM` reading
+`1.00/50` with skin `8001` as he wrote it. Its cost is inside the noise: the
+whole scan is 34-36 ms with the file and 32-38 ms without it.
+
+**AND THE HEAD RULE IS A LIST KEY TOO.** `head=hair` written in a list for
+`13/TRX_Wetsuit_1` draws the picture round 156's `-lara-head hair` drew, **byte
+for byte** - the diving goggles kept with TR5's hair through them - so a rule
+that needed a mod folder in that round needs a line now.
+
+**THE WORDS.** `HDWardrobeFromTag` is the one-word form of a tier, and a SWITCH
+rather than an array: two callers kept their own array of those words and
+indexed it with the entry's own from-number, and after #156 `hd_laradraw`'s
+still had four rows against five tiers. Both are gone. The level build line
+gains `skinsheen=` and the `head=` it never carried; the F4 window gains a
+**Shine** and a **Skin glow** row under the Head row, each with the tier that
+decided it, so a line a player wrote can be checked in the game - it reads
+`(list)` when it arrived; `ModelProbe -wardrobe` gains a `skin glow` column and
+a tier for its `sheen` column.
+
+```
+HDLOG wardrobe list outfit_1-5.txt: Outfit TR2_Swim -> 46/OUTFIT_TR2_SWIM: sheen exponent skin
+HDLOG wardrobe list outfit_1-5.txt: 52 blocks, 52 matched, 0 unmatched
+HDLOG wardrobe scan: 103 entries - ...; lists=1 blocks=52 matched=52 unmatched=0; heads ...
+HDLOG wardrobe 46/OUTFIT_CLASSIC: skin sheen=1.00/8 (from the list)
+HDLOG level=ANDREA1 wardrobe key=46/OUTFIT_CLASSIC ... sheen=0.10/14 (list)
+                 skinsheen=1.00/8 (list) skin=8001,0,0 (list) feet=0 (default)
+                 head=outfit (default) pages=the install's
+```
+
+**NOT IN THIS ROUND.** The head rule itself (#156), the neck lid disc (#156c),
+the OperaDress hand rule, #160, #162, the randomizer, the ring, the floor rule.
+Nothing of the round is inside the 60 fps files or outside the HD gate, except
+the two `MODLOG` lines the mods scan writes about the list files it found -
+which is log and not behaviour, and is the one thing a player with the HD path
+off can read to see that his file exists.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

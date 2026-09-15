@@ -153,6 +153,36 @@ struct HDModelSlot
 	 * leg in either. */
 	int onlyPage = -1;
 
+	/* ONE NODE OF THE FILE AND NOTHING ELSE (#156).
+	 *
+	 * A node MASK - bit n for classic node n - and 0 is the whole model,
+	 * which is what every caller but one asks for. With a mask here only the
+	 * triangles whose DOMINANT node is in it are built, and only the pages
+	 * those triangles wear are loaded; everything else of the file is read,
+	 * measured and dropped, exactly as `onlyPage` does with a page.
+	 *
+	 * It is the page cut's twin and it exists for the same kind of reason: a
+	 * piece of Lara's kit can be PART OF AN OUTFIT MODEL rather than a file
+	 * of its own. The holster rig is one page of the London catsuit; her HEAD
+	 * is node 14 of OUTFIT_CLASSIC - hair, skull and the two triangles of
+	 * neck under it - and there is no file in either remaster that holds it
+	 * alone. A body of the Tomb Raider I-III bundle has no hair of its own,
+	 * so it borrows that node (#156; the measurement is in hd_wardrobe.h).
+	 *
+	 * BY NODE AND NOT BY PAGE, although for OUTFIT_CLASSIC the two would
+	 * almost agree (9,483 of the head node's 9,485 triangles wear page 8002,
+	 * and 14 triangles of that page belong to other nodes). A head is a NODE:
+	 * cutting it that way is what makes the part's coverage exactly bit 14,
+	 * so the first person mask that takes the body's head off takes this with
+	 * it and nothing else, and so that a donor whose artist put the hair on
+	 * two pages would still come out whole.
+	 *
+	 * The dominant node is the one that carries the most weight over the
+	 * triangle's three corners - the same rule the ranges are bucketed by, so
+	 * what this cut keeps is exactly the ranges the node mask would have
+	 * drawn. */
+	unsigned int onlyNode = 0;
+
 	/* THE MIRRORED WEIGHTS OF A TWO-SIDED FILE (#153, round M2b).
 	 *
 	 * Not null makes this module fold the model's bone weights back onto the

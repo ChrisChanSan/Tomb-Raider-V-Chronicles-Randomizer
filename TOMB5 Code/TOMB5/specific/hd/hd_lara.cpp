@@ -255,6 +255,36 @@ namespace
 		return e ? e->wearsRig : false;	// kDefaultRig
 	}
 
+	// #156: -1 is "the wardrobe decides", which is what the engine always
+	// leaves it at. See HDLaraHeadForce.
+	int g_head_force = -1;
+
+	/* WHOSE HEAD THIS BODY WEARS (#156). The wardrobe decided it - out of the
+	 * bundle the file was drawn for, or out of the mod's own outfit.txt - and
+	 * this file only asks. A body with no scan entry keeps its own head,
+	 * which is what every wardrobe this engine had before the round did. */
+	int head_mode(int outfit)
+	{
+		// #156: a diagnostic tool asking for one particular picture - the
+		// engine never sets it. Exactly the shape g_fold_bar and g_hand_twin
+		// have, and for the same reason: the BEFORE picture has to be made by
+		// undoing the round rather than by describing it.
+		if (g_head_force >= 0)
+			return g_head_force;
+
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->head : HD_WARDROBE_HEAD_OUTFIT;
+	}
+
+	/* And where that answer came from, for the one log line that reports it. */
+	int head_from(int outfit)
+	{
+		const HDWardrobeEntry* e = props_of(outfit);
+
+		return e ? e->fromHead : HD_WARDROBE_FROM_DEFAULT;
+	}
+
 	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
 	 *   0 always, 1 only an outfit with hands, 2 only one with a braid,
 	 *   3 only one with holsters, 4 only the outfits the table names.
@@ -288,51 +318,61 @@ namespace
 		// #123 fix round D (D4): -1 is the whole file, a .DDS number cuts the
 		// part out of a bigger model. See HDModelSlot::onlyPage.
 		int onlyPage;
+		// #156: 0 is the whole file, a node mask cuts one node out of it -
+		// TR5's head out of OUTFIT_CLASSIC. See HDModelSlot::onlyNode.
+		unsigned int onlyNode;
 	};
 
 	const Part kPart[HD_LARA_PART_COUNT] =
 	{
 		{ 0,                          0,
-		  "the body",                 0, -1, "0..14", -1 },
+		  "the body",                 0, -1, "0..14", -1, 0 },
+
+		/* TR5's own head, cut out of the install's Rome body by node (#156).
+		 * kind 5 is "worn when the head rule says so" - see head_mode below
+		 * and hd_wardrobe.h for the rule and the measurement. */
+		{ "OUTFIT_CLASSIC",           0,
+		  "the head",                 5, -1, "14", -1, 1u << HD_LARA_HEAD_NODE },
+
 		{ "LARA_HEAD",                0,
-		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)", -1 },
+		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)", -1, 0 },
 		{ "HAIR_OG",                  0,
-		  "the braid",                2, -1, "0..5 of its own chain", -1 },
+		  "the braid",                2, -1, "0..5 of its own chain", -1, 0 },
 
 		/* Not a file: a disc built in the neck cut's own plane (#123, fix
 		 * round S, S1). The name is what the log and the plan call it. */
 		{ "NECK_CAP",                 0,
-		  "the neck lid",             0, -1, "14 (rigid)", -1 },
+		  "the neck lid",             0, -1, "14 (rigid)", -1, 0 },
 
 		{ "HAND_BARE_REST",           "HAND_GLOVES_REST",
-		  "empty hands",              1, -1, "8,9,10,11,12,13", -1 },
+		  "empty hands",              1, -1, "8,9,10,11,12,13", -1, 0 },
 		{ "HAND_BARE_PISTOL",         "HAND_GLOVES_PISTOL",
-		  "the pistols",              1, -1, "9,10,12,13", -1 },
+		  "the pistols",              1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_UZI",            "HAND_GLOVES_UZI",
-		  "the uzis",                 1, -1, "9,10,12,13", -1 },
+		  "the uzis",                 1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_SHOTGUN",        "HAND_GLOVES_SHOTGUN",
-		  "the shotgun",              1, -1, "9,10,12,13", -1 },
+		  "the shotgun",              1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_HK",             "HAND_GLOVES_HK",
-		  "the HK",                   1, -1, "9,10,12,13", -1 },
+		  "the HK",                   1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_DEAGLE",         "HAND_GLOVES_DEAGLE",
-		  "the Desert Eagle",         1, -1, "9,10,12,13", -1 },
+		  "the Desert Eagle",         1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_DEAGLE_LASER",   "HAND_GLOVES_DEAGLE_LASER",
-		  "the Desert Eagle, sight",  1, -1, "9,10,12,13", -1 },
+		  "the Desert Eagle, sight",  1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_GRAPPLE",        "HAND_GLOVES_GRAPPLE",
-		  "the grappling gun",        1, -1, "9,10,12,13", -1 },
+		  "the grappling gun",        1, -1, "9,10,12,13", -1, 0 },
 		{ "HAND_BARE_FLARE",          "HAND_GLOVES_FLARE",
-		  "the flare",                1, -1, "12,13", -1 },
+		  "the flare",                1, -1, "12,13", -1, 0 },
 		{ "HAND_BARE_TORCH",          "HAND_GLOVES_TORCH",
-		  "the torch",                1, -1, "12,13", -1 },
+		  "the torch",                1, -1, "12,13", -1, 0 },
 		{ "HAND_BARE_CROWBAR",        "HAND_GLOVES_CROWBAR",
-		  "the crowbar",              1, -1, "9,10", -1 },
+		  "the crowbar",              1, -1, "9,10", -1, 0 },
 
 		{ "HOLSTER_PISTOL",           0,
-		  "the pistol holsters",      3, -1, "1,4", -1 },
+		  "the pistol holsters",      3, -1, "1,4", -1, 0 },
 		{ "HOLSTER_UZI",              0,
-		  "the uzi holsters",         3, -1, "1,4", -1 },
+		  "the uzi holsters",         3, -1, "1,4", -1, 0 },
 		{ "HOLSTER_DEAGLE",           0,
-		  "the Desert Eagle holster", 3, -1, "4", -1 },
+		  "the Desert Eagle holster", 3, -1, "4", -1, 0 },
 
 		/* The pouches themselves, cut out of the London catsuit by page (D4).
 		 * kind 4 is "worn by the outfits the table names" - today OUTFIT_VCI
@@ -347,14 +387,14 @@ namespace
 		 * down here so that a reader of the HDLOG part line does not go
 		 * looking for a piece of London on Lara's head. */
 		{ "OUTFIT_TR3_CATSUIT",       0,
-		  "the holster rig",          4, -1, "0,1,4", 8205 },
+		  "the holster rig",          4, -1, "0,1,4", 8205, 0 },
 
 		{ "HOLSTER_SHOTGUN",          0,
-		  "the shotgun on the back",  3, -1, "7", -1 },
+		  "the shotgun on the back",  3, -1, "7", -1, 0 },
 		{ "HOLSTER_HK",               0,
-		  "the HK on the back",       3, -1, "7", -1 },
+		  "the HK on the back",       3, -1, "7", -1, 0 },
 		{ "HOLSTER_GRAPPLE",          0,
-		  "the grapple on the back",  3, -1, "7", -1 }
+		  "the grapple on the back",  3, -1, "7", -1, 0 }
 	};
 
 	/* THE SHEEN OF EVERY PART THAT IS NOT THE BODY (#123, fix round D, D2).
@@ -444,6 +484,9 @@ namespace
 	const PartSheen kPartSheen[] =
 	{
 		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
+		/* TR5's own head is 9,483 triangles of HAIR out of 9,485 (#156), so
+		 * it takes the braid's material and not the face's. */
+		{ HD_LARA_PART_HEAD,               0.14f, 18.0f },	// hair
 		{ HD_LARA_PART_BRAID,              0.14f, 18.0f },	// hair
 		{ HD_LARA_PART_NECK_CAP,           0.12f, 10.0f },	// skin (S1)
 
@@ -563,6 +606,10 @@ namespace
 	// #153 round M2b: the install's hands under a mod's gun, unless a tool has
 	// asked for the picture from before the round.
 	bool g_hand_twin = true;
+	/* #156: which nodes of the BODY are drawn - every one of them, or every
+	 * one but the head node for a body that has borrowed TR5's. Settled at
+	 * level build, because nothing about it can change inside a level. */
+	unsigned int g_body_mask = ~0u;
 	unsigned int g_coverage[HD_LARA_PART_COUNT] = { 0 };
 	bool g_has[HD_LARA_PART_COUNT] = { false };
 	// #153 round M2b: the install's own hands loaded beside a mod's gun.
@@ -641,6 +688,11 @@ namespace
 			useful[i] = all;
 
 		useful[HD_LARA_PART_BODY] = true;
+		/* TR5's head hangs off no slot either (#156): it is a node of a file
+		 * of the install, wanted wherever the head rule asks for it -
+		 * outfit_takes is what decides that, and HDLaraPartModel answers 0
+		 * for a body that keeps its own. */
+		useful[HD_LARA_PART_HEAD] = true;
 		useful[HD_LARA_PART_FACE] = true;
 		useful[HD_LARA_PART_BRAID] = true;
 		useful[HD_LARA_PART_HAND_REST] = true;	// LARA is always loaded
@@ -697,6 +749,13 @@ namespace
 		 * entry alone can never dress an outfit that draws no holsters at
 		 * all. */
 		case 4: return takes_holsters(outfit) && takes_rig(outfit);
+		/* TR5's own head (#156): worn by a body the head rule says has none
+		 * of its own, and by one that keeps its own and wants the hair over
+		 * it. Never by a body in mode `outfit`, which is every body of the
+		 * IV-VI bundle and is exactly the picture this engine drew before
+		 * the round. */
+		case 5: return head_mode(outfit) == HD_WARDROBE_HEAD_TR5 ||
+			head_mode(outfit) == HD_WARDROBE_HEAD_HAIR;
 		default: return true;
 		}
 	}
@@ -957,6 +1016,11 @@ void HDLaraHandFoldBar(int perMille)
 void HDLaraHandsFromInstall(bool on)
 {
 	g_hand_twin = on;
+}
+
+void HDLaraHeadForce(int head)
+{
+	g_head_force = head;
 }
 
 const char* HDLaraPartModel(int outfit, int part)
@@ -1804,6 +1868,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.name = model;
 		one.rigidNode = kPart[part].rigid;
 		one.onlyPage = kPart[part].onlyPage;
+		one.onlyNode = kPart[part].onlyNode;	// #156
 
 		/* THE MIRRORED WEIGHTS OF A HAND FILE (#153, round M2b). Every part
 		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
@@ -2242,6 +2307,30 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		return false;
 	}
 
+	/* THE HEAD RULE, SETTLED (#156). One line per level build, and the node
+	 * mask the body draws with settled with it - so the draw asks this file
+	 * two questions it has already answered and the wardrobe none at all.
+	 *
+	 * THE FALLBACK. A body told to drop its own head and given no donor -
+	 * the IV-VI install missing, or its OUTFIT_CLASSIC unreadable - would
+	 * come out with no head whatever, which is worse than the bald one the
+	 * round is about. So the mask stays whole and the line says so. */
+	{
+		const int mode = head_mode(level->outfit);
+		const bool donor = g_has[HD_LARA_PART_HEAD];
+		const bool drop = mode == HD_WARDROBE_HEAD_TR5 && donor;
+
+		g_body_mask = drop ? ~(1u << HD_LARA_HEAD_NODE) : ~0u;
+
+		note("HDLOG wardrobe %s: head=%s (from %s) donor=%s",
+			HDLaraOutfitKey(level->outfit) && *HDLaraOutfitKey(level->outfit)
+				? HDLaraOutfitKey(level->outfit) : model_of(level->outfit),
+			HDWardrobeHeadWord(mode), HDWardrobeFromWord(head_from(level->outfit)),
+			donor ? "OUTFIT_CLASSIC#14"
+				: mode == HD_WARDROBE_HEAD_OUTFIT ? "none - it wears its own"
+				: "none - TR5's head did not load, so its own head stays");
+	}
+
 	g_active = true;
 	return true;
 }
@@ -2257,6 +2346,7 @@ void HDLaraLevelEnd()
 	// of the old list.
 	g_props_outfit = HD_LARA_OUTFIT_NONE;
 	g_props = 0;
+	g_body_mask = ~0u;	// #156
 
 	for (int i = 0; i < HD_LARA_PART_COUNT; i++)
 	{
@@ -2275,6 +2365,16 @@ bool HDLaraActive()
 int HDLaraOutfitNow()
 {
 	return g_outfit;
+}
+
+int HDLaraHeadMode()
+{
+	return head_mode(g_outfit);
+}
+
+unsigned int HDLaraBodyMask()
+{
+	return g_body_mask;
 }
 
 bool HDLaraHasPart(int part)

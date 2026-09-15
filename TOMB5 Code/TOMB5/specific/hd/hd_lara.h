@@ -473,6 +473,15 @@ void HDLaraHandFoldBar(int perMille);
  * hands in a mod's own skin. The engine never calls this either. */
 void HDLaraHandsFromInstall(bool on);
 
+/* AND THE SAME FOR THE HEAD RULE (#156). One of the HD_WARDROBE_HEAD_* makes
+ * every outfit wear that rule whatever the wardrobe decided, and -1 - the
+ * default, and what the engine always leaves it at - gives the wardrobe back
+ * its say. ModelProbe -head drives it, so that the picture from before the
+ * round and the picture of a rule nobody has written into an outfit.txt yet
+ * both come out of the very build the game runs. Read at HDLaraPlan and at
+ * every draw, so it has to be set before the level build it is meant for. */
+void HDLaraHeadForce(int head);
+
 /* THE INSTALL'S HANDS UNDER A MOD'S GUN (#153, round M2b). The companion slot
  * of a hand part, or -1 for a part that is not a hand. Nothing is ever loaded
  * into it unless the part's own model came out of a mod whose skin pages are
@@ -744,6 +753,23 @@ inline int HDLaraWearOfOutfit(int outfit)
 enum HDLaraPart
 {
 	HD_LARA_PART_BODY = 0,		// the OUTFIT_ model, nodes 0..14
+
+	/* TR5'S OWN HEAD, borrowed for a body that has none (#156): node 14 of
+	 * the install's OUTFIT_CLASSIC, cut out by node (HDModelSlot::onlyNode)
+	 * and skinned to node 14 exactly as the body's own head node is.
+	 *
+	 * WHAT IT IS, measured: 6,860 vertices and 9,485 triangles, 9,483 of them
+	 * on page 8002 - which is HAIR. Two triangles of skin at the nape and
+	 * nothing else. The head node of a IV-VI outfit IS her hair, and the
+	 * separate LARA_HEAD that rides on the same node is the face and the
+	 * front of the skull, whose back is open; the two are each other's halves.
+	 *
+	 * A body of the Tomb Raider I-III bundle carries headgear on that node
+	 * and no hair at all, so its Lara comes out with the open back of
+	 * LARA_HEAD in the picture - a bald skull with a face on it. This part is
+	 * the missing half, and hd_wardrobe.h's head rule says who wears it. */
+	HD_LARA_PART_HEAD,
+
 	HD_LARA_PART_FACE,		// LARA_HEAD, rigid on node 14
 	HD_LARA_PART_BRAID,		// HAIR_OG, its own six node chain
 
@@ -1013,6 +1039,20 @@ void HDLaraLevelEnd();
 
 bool HDLaraActive();
 int HDLaraOutfitNow();
+
+/* WHOSE HEAD THE OUTFIT THAT IS ON WEARS (#156): one of the
+ * HD_WARDROBE_HEAD_* of hd_wardrobe.h. Settled at level build out of the
+ * wardrobe entry and asked for by the draw, which turns it into two bits and
+ * nothing more - whether the body's own head node is drawn, and whether
+ * HD_LARA_PART_HEAD is. */
+int HDLaraHeadMode();
+
+/* AND THE NODE MASK THE BODY DRAWS WITH, which is every node but the head
+ * node when that mode is `tr5`, and every node otherwise (#156). The caller
+ * ANDs it into the frame's own mask. Settled at level build, so the draw does
+ * not ask the wardrobe anything. */
+unsigned int HDLaraBodyMask();
+
 bool HDLaraHasPart(int part);
 /* THE INSTALL'S OWN HANDS BESIDE A MOD'S GUN (#153, round M2b). True when
  * hd_model really loaded the twin for this part - which it does only for a mod

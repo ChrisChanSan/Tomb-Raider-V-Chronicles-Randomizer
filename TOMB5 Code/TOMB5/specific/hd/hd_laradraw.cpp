@@ -1001,6 +1001,22 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (firstPerson)
 		mask &= ~(1u << HD_LARA_HEAD_NODE);
 
+	/* AND A BODY THAT HAS BORROWED TR5'S HEAD DRAWS NONE OF ITS OWN (#156).
+	 *
+	 * The same bit, taken for a different reason and settled at level build:
+	 * an outfit of the Tomb Raider I-III bundle carries headgear on the head
+	 * node and no hair, so the head rule drops that node and puts node 14 of
+	 * OUTFIT_CLASSIC in its place (HD_LARA_PART_HEAD below). It is ~0u for
+	 * every body that keeps its own - which is every body of the IV-VI bundle,
+	 * so the picture there is the one this engine drew before the round, to
+	 * the bit.
+	 *
+	 * It is its OWN mask and not part of `mask`, because `mask` is what the
+	 * FRAME says - mesh_bits and first person - and every other part of the
+	 * composite is entitled to that. The borrowed head is drawn with `mask`
+	 * like the rest of them, so a head shot away by mesh_bits takes it too. */
+	const unsigned int bodyMask = mask & HDLaraBodyMask();
+
 	/* AND THE NECK UNDER IT (stage S8, user finding F3). Masking the head
 	 * node is where the classic path stops, and for a classic body that is
 	 * enough: LM_HEAD is head AND neck in one mesh. An HD body is one skinned
@@ -1164,7 +1180,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	HDLaraPartSheen(HD_LARA_PART_BODY, &sheen, &sheenPower);
 
 	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
-		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
+		HD_LARA_NODES, nodeLight, bodyMask, lights, lightCount, sunScale,
 		cutting ? &neckCut : 0, cull, sheen, sheenPower))
 	{
 		g_dropped++;
@@ -1172,6 +1188,38 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	}
 
 	drawn++;
+
+	/* TR5'S OWN HEAD, FOR A BODY THAT HAS NONE (#156).
+	 *
+	 * Node 14 of the install's OUTFIT_CLASSIC - her hair, and two triangles
+	 * of neck under it - drawn here and not with the pieces, because it
+	 * belongs to the BODY: it stands where the body's own head node would
+	 * have stood, wears the same node mask, the same light and the same
+	 * matrices, and the face goes over it exactly as it goes over a IV-VI
+	 * body's own head.
+	 *
+	 * BEFORE THE FACE, which is where the body's head node is drawn, so that
+	 * the hair's see-through pass reaches the card in the order it reaches it
+	 * when the head is part of the body. The wardrobe's only alpha is this.
+	 *
+	 * THE SAME CUT AS THE BODY, so a first person frame takes it away with
+	 * the body's head - and `mask` has that node clear there anyway, so this
+	 * draws nothing at all in first person and the neck lid is untouched.
+	 *
+	 * HDLaraHasPart is the whole guard: the part exists only for a body the
+	 * head rule dressed, and for anybody else HDLaraPartSlot names a slot no
+	 * model was built for, which HDObjectPush turns down at its first line. */
+	if (HDLaraHasPart(HD_LARA_PART_HEAD))
+	{
+		float headSheen = 0.0f, headPower = 1.0f;
+
+		HDLaraPartSheen(HD_LARA_PART_HEAD, &headSheen, &headPower);
+
+		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
+			HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
+			cutting ? &neckCut : 0, cull, headSheen, headPower))
+			drawn++;
+	}
 
 	/* THE INNER SKIN OF FIX ROUND K STOOD HERE (#123, fix round K, K1).
 	 *
@@ -1370,7 +1418,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		// the HD path was not touched for it and follows off the engine's
 		// own matrix stack.
 		Log("HDLOG frame lara parts=%d(%d this frame) interp=%.2f outfit=%s right=%s left=%s "
-			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
+			"holsters=%s/%s back=%s braid=%d head=%s/%d mask=%08x body=%08x mirror=%d "
 			"firstperson=%d headcut=%d lights=%d dropped=%d speechhead=%s",
 			drawn, g_frame_parts, InterpFrameAlpha(), HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
@@ -1379,7 +1427,14 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			HDSlotName(now.leftHolsterSlot) ? HDSlotName(now.leftHolsterSlot) : "-",
 			HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-",
 			HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "-",
-			(int)HDLaraHasPart(HD_LARA_PART_BRAID), mask, (int)mirror,
+			(int)HDLaraHasPart(HD_LARA_PART_BRAID),
+			/* #156: the head rule in force and whether TR5's head is really
+			 * on the card for it - "tr5/0" is a body told to drop its own
+			 * head and given no donor, which is the one case where the line
+			 * and the picture would otherwise be a puzzle. */
+			HDWardrobeHeadWord(HDLaraHeadMode()),
+			(int)HDLaraHasPart(HD_LARA_PART_HEAD),
+			mask, bodyMask, (int)mirror,
 			(int)firstPerson, (int)cutting, lightCount, g_dropped,
 			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-");
 	}

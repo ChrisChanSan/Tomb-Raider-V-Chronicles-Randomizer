@@ -849,6 +849,69 @@ namespace
 		}
 	};
 
+	/* AND THE SAME THING BY NODE (#156) - see HDModelSlot::onlyNode. A mask
+	 * of 0 is the whole model and costs one test per triangle. */
+	struct NodeCut
+	{
+		unsigned int nodes;
+
+		bool wants(int node) const
+		{
+			return !nodes || (nodes & (1u << (node & 31))) != 0;
+		}
+	};
+
+	/* WHICH NODE A TRIANGLE BELONGS TO: the node that carries the most weight
+	 * over its three corners. A triangle that straddles a joint has to fall on
+	 * one side of it, and the heavier side is the side it moves with - the
+	 * same rule the eye applies when it decides whether a polygon "is" the
+	 * upper arm or the forearm.
+	 *
+	 * The rigid case reads the vertex as it was WRITTEN, not as it arrived:
+	 * since fix round B a facial-rig file's neck bone lands on the head node's
+	 * parent, and a neck triangle belongs to that node when mesh_bits hides
+	 * one of the two.
+	 *
+	 * It was one block inside build()'s triangle loop until #156, which needs
+	 * the same answer in two more places - the vertex keep pass and the page
+	 * list - because a NODE cut has to drop exactly the triangles a node mask
+	 * would have hidden. One function, so the cut and the ranges cannot come
+	 * to disagree about which node a triangle is on. */
+	int dominant_node_of(const HDTrmModel& trm, int at, int rigidNode,
+		int neckBone, int neckNode)
+	{
+		double weight[kJointBudget] = { 0 };
+		int best = 0;
+		double heaviest = -1;
+
+		for (int corner = 0; corner < 3; corner++)
+		{
+			const HDTrmVertex& v = trm.vertex[trm.index[at + corner]];
+
+			for (int b = 0; b < 3; b++)
+			{
+				const int node = rigidNode >= 0
+					? (neckBone >= 0 && (int)v.bone[b] == neckBone
+						? neckNode : rigidNode)
+					: (int)(v.bone[b] < kJointBudget ? v.bone[b] : kJointBudget - 1);
+				const int w = rigidNode >= 0
+					? (neckBone >= 0 ? (int)v.weight[b] : (b == 0 ? 255 : 0))
+					: (int)v.weight[b];
+
+				weight[node] += (double)w;
+			}
+		}
+
+		for (int node = 0; node < kJointBudget; node++)
+			if (weight[node] > heaviest)
+			{
+				heaviest = weight[node];
+				best = node;
+			}
+
+		return best;
+	}
+
 	/* THE AXES OF ONE SET OF EXTENTS, LONGEST FIRST. One function so that the
 	 * ring's fit, its overflow figure and the cloud's own axes in build() cannot
 	 * come to disagree about which axis is which - the whole rule is "k-th
@@ -871,7 +934,8 @@ namespace
 	}
 
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
-		int pageBias, int* mixedTriangles, const char** why, const PageCut& cut)
+		int pageBias, int* mixedTriangles, const char** why, const PageCut& cut,
+		const NodeCut& nodeCut)
 	{
 		const int vertices = trm.vertices;
 
@@ -885,7 +949,8 @@ namespace
 		 * and the composite would hand it the whole body's work. The vertex
 		 * itself stays in the buffer: the index list is the file's own and
 		 * renumbering it would buy 400 KiB and a new class of bug. */
-		const bool whole = cut.count <= 0 || !cut.page;
+		// #156: and the same for a NODE cut, which drops vertices the same way.
+		const bool whole = (cut.count <= 0 || !cut.page) && !nodeCut.nodes;
 		std::vector<bool> keep((size_t)vertices, whole);
 
 		// #155b: one allocation and not a ladder of them - the cut can only
@@ -902,6 +967,10 @@ namespace
 				const int page = HDTrmPageOf(&trm, &trm.vertex[trm.index[i]]);
 
 				if (!cut.wants(page))
+					continue;
+
+				if (!nodeCut.wants(dominant_node_of(trm, i, rigidNode,
+					model.neckBone, model.neckNode)))
 					continue;
 
 				for (int corner = 0; corner < 3; corner++)
@@ -1366,50 +1435,19 @@ namespace
 
 			page_of_triangle.push_back(a);
 
-			if (a >= 0 && cut.wants(rawA) &&
+			/* WHICH NODE A TRIANGLE BELONGS TO - dominant_node_of above, and
+			 * it is worked out for every triangle whether or not anything
+			 * cuts by it. Only used to hide a node, so a wrong answer at a
+			 * seam costs at most one triangle at the cut edge of a blown-off
+			 * limb. */
+			const int best = dominant_node_of(trm, i, rigidNode, model.neckBone,
+				model.neckNode);
+
+			// #156: the page list is the pages of the triangles that SURVIVE,
+			// so a node cut pays for its own pages and not for the file's.
+			if (a >= 0 && cut.wants(rawA) && nodeCut.wants(best) &&
 				std::find(model.pages.begin(), model.pages.end(), a) == model.pages.end())
 				model.pages.push_back(a);
-
-			/* WHICH NODE A TRIANGLE BELONGS TO: the node that carries the
-			 * most weight over its three corners. A triangle that straddles a
-			 * joint has to fall on one side of it, and the heavier side is
-			 * the side it moves with - the same rule the eye applies when it
-			 * decides whether a polygon "is" the upper arm or the forearm.
-			 * Only used to hide a node, so a wrong answer at a seam costs at
-			 * most one triangle at the cut edge of a blown-off limb. */
-			double weight[kJointBudget] = { 0 };
-			int best = 0;
-			double heaviest = -1;
-
-			for (int corner = 0; corner < 3; corner++)
-			{
-				const HDTrmVertex& v = trm.vertex[trm.index[i + corner]];
-
-				for (int b2 = 0; b2 < 3; b2++)
-				{
-					/* The rigid case reads the vertex as it was WRITTEN, not
-					 * as it arrived: since fix round B a facial-rig file's
-					 * neck bone lands on the head node's parent, and a neck
-					 * triangle belongs to that node when mesh_bits hides one
-					 * of the two. */
-					const int node = rigidNode >= 0
-						? (model.neckBone >= 0 && (int)v.bone[b2] == model.neckBone
-							? model.neckNode : rigidNode)
-						: (int)(v.bone[b2] < kJointBudget ? v.bone[b2] : kJointBudget - 1);
-					const int w = rigidNode >= 0
-						? (model.neckBone >= 0 ? (int)v.weight[b2] : (b2 == 0 ? 255 : 0))
-						: (int)v.weight[b2];
-
-					weight[node] += (double)w;
-				}
-			}
-
-			for (int node = 0; node < kJointBudget; node++)
-				if (weight[node] > heaviest)
-				{
-					heaviest = weight[node];
-					best = node;
-				}
 
 			node_of_triangle.push_back(best);
 		}
@@ -1442,6 +1480,11 @@ namespace
 					// The page cut (#123, fix round D, D4).
 					if (!cut.wants(HDTrmPageOf(&trm,
 						&trm.vertex[trm.index[at]])))
+						continue;
+
+					// And the node cut (#156), out of the answer the loop
+					// above has already worked out for this triangle.
+					if (!nodeCut.wants(node_of_triangle[(size_t)(at / 3)]))
 						continue;
 
 					triangles.push_back((int)(at / 3));
@@ -2183,6 +2226,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * them out itself, while the file is open. */
 		std::vector<int> cutPage;
 		bool cutKeeps;
+		// #156: which NODES of the file are built, as a mask; 0 is all of
+		// them. See HDModelSlot::onlyNode.
+		unsigned int cutNode;
 		/* #153 round M2b: the index in `slots` this entry borrows its skeleton
 		 * from, for a twin this module made up itself; -1 for every entry a
 		 * caller asked for. */
@@ -2250,6 +2296,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			made.origin = HD_MODEL_ORIGIN_5;
 			made.pageBias = 0;
 			made.cutKeeps = true;
+			// #156: a made model is whole. Pending is a plain struct with no
+			// constructor, so every field of it has to be written here.
+			made.cutNode = 0;
 			made.twinOf = -1;
 			std::memset(&made.trm, 0, sizeof(made.trm));
 			std::memset(&made.head, 0, sizeof(made.head));
@@ -2360,6 +2409,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.pageBias = mod >= 0 ? HDPageModBase(mod)
 			: tr3 ? HD_PAGE_ALT_BASE : 0;
 		here.cutKeeps = true;
+		here.cutNode = slots[i].onlyNode;	// #156
 		here.twinOf = -1;
 
 		if (slots[i].onlyPage >= 0)
@@ -2546,6 +2596,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					twin.pageBias = 0;
 					twin.cutPage = keep;
 					twin.cutKeeps = true;
+					// #156: a hand twin is a whole model, never a node of one.
+					twin.cutNode = 0;
 					twin.twinOf = i;
 					std::memset(&twin.fold, 0, sizeof(twin.fold));
 					std::memset(&twin.trm, 0, sizeof(twin.trm));
@@ -2774,8 +2826,44 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				(int)here.cutPage.size(), here.cutKeeps
 			};
 
+			/* AND THE NODE CUT PAYS FOR ITS OWN PAGES TOO (#156). A page cut
+			 * can be answered out of the texture list alone; a node cut
+			 * cannot - which pages a node wears is a fact about its
+			 * TRIANGLES. So they are walked once, here, where the .TRM is
+			 * open and the build has not run yet. Only a slot that asked for
+			 * a node cut pays for that walk, and what it buys is the whole
+			 * point of the cut: Lara's head out of OUTFIT_CLASSIC is two of
+			 * that model's seven pages, 2.7 MiB instead of 9.3. */
+			bool wornByNode[256];
+			/* A SKINNED model only: dominant_node_of's answer for a facial rig
+			 * depends on the neck bone, and that is measured in pass two,
+			 * where there is a Model to keep it in. A rigid file with a node
+			 * cut would therefore be paid for whole - which is the safe way
+			 * round, since a page short is a white tile and a page over is
+			 * memory. Nothing asks for that combination today. */
+			const bool byNode = here.cutNode != 0 && slots[i].rigidNode < 0;
+
+			if (byNode)
+			{
+				const NodeCut nodeCut = { here.cutNode };
+
+				std::memset(wornByNode, 0, sizeof(wornByNode));
+
+				for (int tri = 0; tri + 2 < here.trm.indices; tri += 3)
+				{
+					const int layer = (int)here.trm.vertex[here.trm.index[tri]].layer;
+
+					if (layer < 1 || layer > here.trm.textures || layer > 256)
+						continue;
+
+					if (nodeCut.wants(dominant_node_of(here.trm, tri, -1, -1, -1)))
+						wornByNode[layer - 1] = true;
+				}
+			}
+
 			for (int t = 0; t < here.trm.textures; t++)
-				if (paid.wants((int)here.trm.texture[t]))
+				if (paid.wants((int)here.trm.texture[t]) &&
+					(!byNode || (t < 256 && wornByNode[t])))
 					pages.push_back(
 						HDPageCacheKeyOf((int)here.trm.texture[t] + here.pageBias));
 		}
@@ -2898,8 +2986,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			(int)here.cutPage.size(), here.cutKeeps
 		};
 
+		const NodeCut nodeCut = { here.cutNode };	// #156
+
 		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed,
-			&trouble, cut))
+			&trouble, cut, nodeCut))
 		{
 			if (stats)
 				stats->refused++;
@@ -2991,11 +3081,13 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* trouble = "";
 		int ignore = 0;
 
-		// The whole face: a page cut is the BODY's business (fix round D, D4).
+		// The whole face: a page cut is the BODY's business (fix round D, D4),
+		// and so is a node cut (#156).
 		const PageCut all = { 0, 0, true };
+		const NodeCut everyNode = { 0 };
 
 		if (!build(here.head, head, head.rigidNode, here.pageBias, &ignore,
-			&trouble, all))
+			&trouble, all, everyNode))
 		{
 			note("%s_HEAD (slot %d): %s", here.name.c_str(), here.slot, trouble);
 			free_model(head);

@@ -162,6 +162,20 @@
  *                         skin, instead of putting the install's hands under
  *                         its gun (#153, round M2b) - the other half of the
  *                         BEFORE picture.
+ *     -head tr5|hair|outfit
+ *                         WHOSE HEAD THIS BODY WEARS (#156), whatever the
+ *                         wardrobe decided for it. tr5 = its own head node is
+ *                         not drawn and node 14 of the install's
+ *                         OUTFIT_CLASSIC - Lara's hair - stands in its place;
+ *                         hair = its own head AND that hair over it, for a
+ *                         body whose hat or hood is worth keeping; outfit =
+ *                         its own head alone, which is the picture from
+ *                         before the round. Without the switch the wardrobe
+ *                         answers, exactly as it does in the game: tr5 for
+ *                         every outfit of the Tomb Raider I-III install and
+ *                         for every mod whose mod.txt says origin=, outfit
+ *                         for the rest, and a mod's own outfit.txt head= over
+ *                         either. -wardrobe prints the column.
  *     -tween60 [<n> ...]  REPLAY those animations at SIXTY (#123, fix round
  *                         U; #148, order 4): every drawn frame, tick and
  *                         tween alike, with every node's origin in her own
@@ -6276,6 +6290,10 @@ struct LaraOptions
 	int handFold;
 	bool noFold;			// #153 round M2b: the picture before the round
 	bool noHandMix;			// #153 round M2b: and the other half of it
+	/* #156: the head rule forced for this picture - one of the
+	 * HD_WARDROBE_HEAD_*, or -1 to let the wardrobe decide, which is what
+	 * the engine always does. */
+	int head;
 	bool poseRisk;			// #148 order 4, fix round S (S2)
 	/* #123 fix round U (U2): the animations to replay at sixty, frame by
 	 * frame, LARA-relative. Empty means the switch was not given. */
@@ -6617,6 +6635,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDLaraHandsFromInstall(false);
 		printf("handmix : OFF (-nohandmix) - a mod's hand model is drawn whole, "
 			"in its own skin, which is the BEFORE picture\n");
+	}
+
+	/* -head: the head rule this picture is drawn with (#156). Before the plan
+	 * as well, because that is where the parts are chosen - the engine's own
+	 * switch, so "outfit" really is the picture from before the round. */
+	if (o.head >= 0)
+	{
+		HDLaraHeadForce(o.head);
+		printf("head    : forced to %s (-head) - the wardrobe's own answer is "
+			"overruled for this picture\n", HDWardrobeHeadWord(o.head));
 	}
 
 	HDModelSlot wanted[HD_LARA_PART_COUNT * 2];
@@ -7668,6 +7696,17 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("meshbits: %08x - the composite is masked to those nodes\n",
 			o.nodeMask);
 
+	/* AND THE BODY'S OWN NODES (#156), which are every one of them unless the
+	 * head rule has taken TR5's head instead of this body's - the engine's own
+	 * HDLaraBodyMask, so this picture is the game's picture. Every other part
+	 * keeps the frame's mask, exactly as specific\hd\hd_laradraw.cpp has it. */
+	const unsigned int ownBody = bodyMask & HDLaraBodyMask();
+
+	printf("head    : %s, %s; the body draws nodes %08x\n",
+		HDWardrobeHeadWord(HDLaraHeadMode()),
+		HDLaraHasPart(HD_LARA_PART_HEAD) ? "TR5's head is on the card"
+			: "TR5's head is not loaded", ownBody);
+
 	/* THE HEAD CUT (stage S8 a sphere, fix round J a cylinder, fix round S a
 	 * plane, fix round U ONE BONE WEIGHT). The BODY carries it and nothing
 	 * else, exactly as specific/hd/hd_laradraw.cpp pushes it: the hands, the
@@ -7743,8 +7782,21 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
 
 	if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-		light, bodyMask, &lighting, cutting ? &neckCut : 0, o.cull))
+		light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull))
 		drawn++;
+
+	/* TR5's OWN HEAD (#156), in the same place and with the same rules the
+	 * seam has: after the body and before the face, the frame's mask, the
+	 * body's cut and the body's cull - see specific\hd\hd_laradraw.cpp. */
+	if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
+	{
+		SetSheen(lighting, HD_LARA_PART_HEAD, sheenOn);
+
+		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
+			HD_LARA_NODES, light, bodyMask, &lighting,
+			cutting ? &neckCut : 0, o.cull))
+			drawn++;
+	}
 
 	/* THE LID (#123, fix round S, S1; the RIM's own since fix round U), in the
 	 * same place and with the same rules the seam has: no cut of its own (its
@@ -7926,6 +7978,7 @@ int main(int argc, char** argv)
 	int laraHandFold = -1;		// #153 round M2b
 	bool laraNoFold = false;	// #153 round M2b: the BEFORE picture
 	bool laraNoHandMix = false;	// #153 round M2b: and the other half of it
+	int laraHead = -1;		// #156: -1 = the wardrobe's own answer
 	bool laraPoseRisk = false;	// #148 order 4, fix round S (S2)
 	std::vector<int> laraTween60;	// #123 fix round U (U2)
 	bool laraHandLight = false;	// #123 fix round K (K2): the wrist seam
@@ -8082,6 +8135,23 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraNoHandMix = true;
+		}
+		/* #156: the head rule this picture is drawn with, whatever the
+		 * wardrobe says - "outfit" is the picture from before the round. */
+		else if (!_stricmp(argv[i], "-head") && i + 1 < argc)
+		{
+			lara = true;
+			i++;
+
+			if (!_stricmp(argv[i], "tr5"))
+				laraHead = HD_WARDROBE_HEAD_TR5;
+			else if (!_stricmp(argv[i], "hair"))
+				laraHead = HD_WARDROBE_HEAD_HAIR;
+			else if (!_stricmp(argv[i], "outfit") || !_stricmp(argv[i], "own"))
+				laraHead = HD_WARDROBE_HEAD_OUTFIT;
+			else
+				printf("ModelProbe: -head %s is none of tr5, hair or outfit - "
+					"ignored\n", argv[i]);
 		}
 		/* #123 fix round U (U1d): the eye off the head joint, for the frame
 		 * a landing gives - the camera outside the skull, the nape in front
@@ -8497,23 +8567,24 @@ int main(int argc, char** argv)
 	{
 		HDWardrobeScan();
 
-		static const char* const kFrom[] = { "default", "measured", "table", "outfit.txt" };
+		static const char* const kFrom[] = { "default", "measured", "table",
+			"outfit.txt", "origin" };
 
 		printf("\n-- the wardrobe: %d outfits --------------------------------\n",
 			HDWardrobeCount());
-		printf("%-46s %-24s %-6s %-22s %-9s %-9s %s\n",
+		printf("%-46s %-24s %-6s %-22s %-9s %-9s %-16s %s\n",
 			"key", "name", "source", "hands braid hols glov rig", "flags",
-			"sheen", "skin");
-		printf("%-46s %-24s %-6s %-22s %-9s %-9s %s\n",
+			"sheen", "skin", "head");
+		printf("%-46s %-24s %-6s %-22s %-9s %-9s %-16s %s\n",
 			"----------------------------------------------",
 			"------------------------", "------",
 			"----------------------", "---------", "---------",
-			"----------------");
+			"----------------", "-------------------");
 
 		for (int i = 0; i < HDWardrobeCount(); i++)
 		{
 			const HDWardrobeEntry* e = HDWardrobeAt(i);
-			char flags[32], sheen[32], skin[48];
+			char flags[32], sheen[32], skin[48], head[48];
 
 			if (!e)
 				continue;
@@ -8532,10 +8603,14 @@ int main(int argc, char** argv)
 
 			sprintf(skin + strlen(skin), " (%s)", kFrom[e->fromSkin]);
 
-			printf("%-46s %-24s %-6s %-22s %-9s %-9s %s\n", e->key, e->name,
+			// #156: whose head this body wears, and who decided that.
+			sprintf(head, "%s (%s)", HDWardrobeHeadWord(e->head),
+				kFrom[e->fromHead]);
+
+			printf("%-46s %-24s %-6s %-22s %-9s %-9s %-16s %s\n", e->key, e->name,
 				e->source == HD_WARDROBE_SOURCE_46 ? "46"
 					: e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod",
-				flags, kFrom[e->fromFlags], sheen, skin);
+				flags, kFrom[e->fromFlags], sheen, skin, head);
 		}
 
 		printf("\n-- passed over: %d files -----------------------------------\n",
@@ -8634,6 +8709,7 @@ int main(int argc, char** argv)
 		o.handFold = laraHandFold;
 		o.noFold = laraNoFold;
 		o.noHandMix = laraNoHandMix;
+		o.head = laraHead;
 		o.poseRisk = laraPoseRisk;
 		o.tween60 = laraTween60;
 		o.handLight = laraHandLight;

@@ -427,24 +427,44 @@
  *                         model where there is one, fitted onto the item's
  *                         box, and the slot's own EXTRA model otherwise -
  *                         with the floor rule applied, and put the CLASSIC
- *                         MESH's own lowest plane over the picture as a green
- *                         strip. The three numbers are printed beside it: the
- *                         classic mesh's deepest point, the model's, and the
- *                         lift that brings the second onto the first. Take it
- *                         with a low camera (-pitch 4 reads well); the strip
- *                         is deliberately narrow, see OverlayPlane.
+ *                         MESH's own lowest plane over the picture: a green
+ *                         outline of the model's own footprint, and a small
+ *                         square of that plane right under the model's
+ *                         DEEPEST point, which is the one place the model can
+ *                         touch it and the one the eye can read (the big
+ *                         outline's near edge stands well in front of that
+ *                         point at a low camera, so a model resting exactly
+ *                         on the plane still shows a gap there). The three
+ *                         numbers are printed beside it: the classic mesh's
+ *                         deepest point, the model's, and the lift that
+ *                         brings the second onto the first. Take it with a
+ *                         low camera (-pitch 4 reads well; -pitch 55 shows a
+ *                         crossed pair from above).
+ *                         IN THE ITEM'S OWN ANIMATION FRAME since #155b fix
+ *                         round 1, which is what "the way the LEVEL draws it"
+ *                         means: the frame's rotations are read out of the
+ *                         .TRC and put on every node, so a slot whose frame
+ *                         stands the model on its head is drawn standing on
+ *                         its head. The item's own world rotation is a yaw
+ *                         and is left out; -pose, -invrot and -axisview are
+ *                         left out of a floor picture too - the item's frame
+ *                         is not a presentation, it is where the thing lies.
+ *                         Every other switch's picture is the bind pose.
  *     -nofloorlift        the same picture with the lift LEFT OFF - what the
  *                         floor showed before this round, so that what the
  *                         rule buys is a comparison and not a memory. Implies
  *                         -floor.
  *     -floorcheck         every pickup slot of the level as a table, and then
  *                         stop: the classic mesh's deepest point, the HD
- *                         model's, the sink and the lift, with the fitted
- *                         <BASE>_OPTION models measured BOTH ways - on the
- *                         vertices, which is the rule, and on the eight box
- *                         corners, which is what round #155 did. Loads every
- *                         slot the way -all does; add -all for -all's table
- *                         as well. Wants -mods to see a mod's models.
+ *                         model's, the sink and the lift, each of them in the
+ *                         frame the level DRAWS the item in - and under every
+ *                         row the same three in the BIND pose, with the node
+ *                         0 axis that says how far apart the two frames are.
+ *                         The fitted <BASE>_OPTION models come with round
+ *                         #155's own answer as well, the eight box corners
+ *                         through the fit. Loads every slot the way -all
+ *                         does; add -all for -all's table as well. Wants
+ *                         -mods to see a mod's models.
  *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
@@ -1350,7 +1370,7 @@ static bool ReadClassicSlot(const Tr5Level& level, int slot, ClassicSlot& out)
  * same reading as the engine's loader and as the randomizer's own walker,
  * which agree with each other. */
 static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
-	float* out, int* meshesSeen)
+	const float* pose, float* out, int* meshesSeen)
 {
 	Tr5Level::MoveableInfo info;
 
@@ -1381,13 +1401,25 @@ static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
 		if (!verts || at + 12 + (size_t)verts * 6 > bytes.size())
 			continue;
 
+		/* THROUGH THE FRAME THE LEVEL DRAWS THIS NODE IN (fix round 1), which
+		 * is why all three coordinates are read and not the y alone: a frame
+		 * that turns node 0 - six of ANDREA3's eighteen pickup slots do, and
+		 * UZI_ITEM's turns it upside down - sends a mesh's lowest point
+		 * somewhere its own y cannot say. Without a pose the frame turns
+		 * nothing and the node's bind offset is the whole of its placement,
+		 * which is the number this tool printed before. */
+		const float* m = pose ? pose + (size_t)node * 12 : 0;
+
 		for (int v = 0; v < verts; v++)
 		{
-			int16_t y = 0;
+			int16_t xyz[3] = { 0, 0, 0 };
 
-			memcpy(&y, &bytes[at + 12 + (size_t)v * 6 + 2], 2);
+			memcpy(xyz, &bytes[at + 12 + (size_t)v * 6], 6);
 
-			const float inSlot = (float)y + here.bind[node][1];
+			const float inSlot = m
+				? m[4] * (float)xyz[0] + m[5] * (float)xyz[1] +
+					m[6] * (float)xyz[2] + m[7]
+				: (float)xyz[1] + here.bind[node][1];
 
 			if (!any || inSlot > deepest)
 				deepest = inSlot;
@@ -1405,19 +1437,130 @@ static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
 	return any;
 }
 
+/* THE FRAME THE LEVEL DRAWS A SLOT IN (#155b, fix round 1), out of the .TRC.
+ *
+ * The engine's own walk is HDFramePose, which this tool links - so the frame a
+ * -floor picture is drawn in is the frame the engine measured in, and not a
+ * copy of the rule. All this does is hand it the two things it wants out of
+ * the level file: the object's first frame as words (frameOffset is a BYTE
+ * offset into the frame block, so it halves into a short index, the same
+ * reading -braidanim does) and the mesh tree as the engine's four longs a
+ * node.
+ *
+ * The answer is twelve floats a node - the engine's 3x4, a point is R * p + t
+ * - relative to the item's origin, the frame's own offset left out. Empty when
+ * the level has no such moveable, and a caller with an empty pose measures and
+ * draws the BIND pose, which is what this tool did until this fix round. */
+static int ReadFramePose(const Tr5Level& level, const ClassicSlot& here,
+	std::vector<float>& out)
+{
+	Tr5Level::MoveableInfo info;
+
+	out.clear();
+
+	if (here.slot < 0 || here.nodes < 1 || !level.moveableInfo(here.slot, info))
+		return 0;
+
+	/* THE WORDS THE WALK CAN READ AT MOST: nine of box and offset, then two
+	 * per node - a single-axis rotation takes one word and a three-axis one
+	 * takes two, so twice the node count is the bound. */
+	std::vector<short> frame((size_t)(9 + 2 * here.nodes), 0);
+
+	for (size_t i = 0; i < frame.size(); i++)
+		frame[i] = level.debugReadFrameShort(
+			(long long)(info.frameOffset / 2) + (long long)i);
+
+	std::vector<long> tree((size_t)(here.nodes > 1 ? (here.nodes - 1) * 4 : 1), 0);
+
+	for (int node = 1; node < here.nodes; node++)
+	{
+		tree[(size_t)(node - 1) * 4 + 0] = here.flags[node];
+		tree[(size_t)(node - 1) * 4 + 1] = here.delta[node][0];
+		tree[(size_t)(node - 1) * 4 + 2] = here.delta[node][1];
+		tree[(size_t)(node - 1) * 4 + 3] = here.delta[node][2];
+	}
+
+	out.assign((size_t)here.nodes * 12, 0.0f);
+
+	return HDFramePose(&frame[0], here.nodes > 1 ? &tree[0] : 0, here.nodes,
+		&out[0]);
+}
+
+/* The engine's 3x4 into the row-major 4x4 this tool multiplies with - the very
+ * transposition store_matrices does in hd_object.cpp, because the engine's
+ * matrix takes a point as a COLUMN and everything past the shader takes it as
+ * a row. */
+static void PoseToRowMajor(const float* pose, float* out)
+{
+	out[0] = pose[0];  out[1] = pose[4];  out[2] = pose[8];  out[3] = 0.0f;
+	out[4] = pose[1];  out[5] = pose[5];  out[6] = pose[9];  out[7] = 0.0f;
+	out[8] = pose[2];  out[9] = pose[6];  out[10] = pose[10]; out[11] = 0.0f;
+	out[12] = pose[3]; out[13] = pose[7]; out[14] = pose[11]; out[15] = 1.0f;
+}
+
+/* THE LIFT, STRAIGHT UP IN THE WORLD (#155b, fix round 1) - the engine's own
+ * move, on the same matrices and in the same space.
+ *
+ * The node matrices are model space to VIEW space, so a displacement in the
+ * world has to be turned into view space first; world up is (0, -1, 0)
+ * because y is DOWN, and the view matrix's row 1 is the image of world y, so
+ * that is minus that row. The 3x3 is untouched - nothing is scaled, nothing
+ * turned, nothing moved sideways.
+ *
+ * AT THE VIEW END OF THE CHAIN, which is what makes it "up" in the picture
+ * whatever is prepended in front of the model afterwards. The first build of
+ * this round wrote it onto the fit's own translation row in one branch and
+ * onto the node matrix's y row in the other, so -invrot displaced the model
+ * in the TURNED frame and a slot whose animation frame stands the model on
+ * its head was pushed further into the ground. */
+static void LiftNodes(float* matrices, int nodes, float lift, const float* view)
+{
+	const float up[3] = { -view[4], -view[5], -view[6] };
+
+	for (int node = 0; node < nodes; node++)
+	{
+		float* m = matrices + (size_t)node * 16;
+
+		m[12] += lift * up[0];
+		m[13] += lift * up[1];
+		m[14] += lift * up[2];
+	}
+}
+
 /* The node matrices, model space to VIEW space - what the engine's matrix
  * stack holds when it calls phd_PutPolygons for each mesh, and what
  * HDModelDraw wants. `turn` is one rotation per node in degrees (yaw, pitch),
  * applied where -pose asked for it; a node's rotation reaches every node
- * below it because the stack carries it down. */
+ * below it because the stack carries it down.
+ *
+ * `pose` (#155b, fix round 1) is ReadFramePose's answer, and with it the walk
+ * below is not done at all: the frame's own matrices already carry every
+ * translation AND every rotation of the item's animation frame, which is the
+ * whole of what -floor has to draw. -pose's turns are a presentation of the
+ * model and are left out of that picture on purpose; null is the bind pose,
+ * which is every other switch's picture and unchanged. */
 static void BuildNodeMatrices(const ClassicSlot& classic, const float* view,
-	const double turn[32][2], float* out /* nodes * 16 */)
+	const double turn[32][2], float* out /* nodes * 16 */,
+	const float* pose = 0)
 {
 	float stack[32][16];
 	float current[16];
 	int top = 0;
 
 	float rotation[16], tmp[16], step[16];
+
+	if (pose)
+	{
+		for (int node = 0; node < classic.nodes; node++)
+		{
+			float own[16];
+
+			PoseToRowMajor(pose + (size_t)node * 12, own);
+			MatMul(own, view, out + (size_t)node * 16);
+		}
+
+		return;
+	}
 
 	MatIdentity(rotation);
 
@@ -8561,6 +8704,10 @@ int main(int argc, char** argv)
 		one.bind = 0;
 		one.name = name.c_str();
 		one.onlyPage = onlyPage;	// #123 fix round D (D4)
+		// #155b fix round 1: the floor rule sweeps the kept vertices, every
+		// model and not only the fitted ones - the reason is at
+		// HDModelSlot::keepPoints.
+		one.keepPoints = floorDraw;
 		wanted.push_back(one);
 		order.push_back(0);
 		slot = 0;
@@ -8583,6 +8730,10 @@ int main(int argc, char** argv)
 			one.slot = slots[i];
 			one.nodes = classic[i].nodes;
 			one.bind = &classic[i].bind[0][0];
+			/* #155b fix round 1: a pickup's vertex positions, kept until the
+			 * floor rule has swept them. The engine asks for exactly this
+			 * list, by exactly this rule (hd_object.cpp's slot plan). */
+			one.keepPoints = HDSlotIsPickup(slots[i]);
 			/* The mesh TREE as well since #123 fix round B (B4): a separate
 			 * HD face's neck bone follows the head node's PARENT, and this
 			 * tool has walked the tree for its own node table anyway. */
@@ -9021,6 +9172,7 @@ int main(int argc, char** argv)
 		LARGE_INTEGER freq, began, ended;
 		double sweptUs = 0;
 		int sweptVertices = 0;
+		int sweptBlended = 0;
 
 		QueryPerformanceFrequency(&freq);
 
@@ -9037,9 +9189,20 @@ int main(int argc, char** argv)
 				if (wanted[k].slot == at)
 					shape = &classic[(size_t)order[k]];
 
-			float classicLowest = 0.0f;
+			/* THE FRAME THE LEVEL DRAWS THIS SLOT IN (fix round 1) - the
+			 * rule's own frame. The BIND numbers are printed beside it,
+			 * because the difference between the two is the whole of what
+			 * this fix round changed and a table that showed only one of
+			 * them could not be checked against the other. */
+			std::vector<float> framePose;
+			const float* poseAt = 0;
 
-			if (!shape || !ClassicMeshLowest(level, *shape, &classicLowest, 0))
+			if (shape && ReadFramePose(level, *shape, framePose) > 0)
+				poseAt = &framePose[0];
+
+			float classicLowest = 0.0f, classicBind = 0.0f;
+
+			if (!shape || !ClassicMeshLowest(level, *shape, poseAt, &classicLowest, 0))
 			{
 				printf("%-5d %-20s %-26s %8s %8s %8s %7s %s\n", at,
 					HDSlotName(at) ? HDSlotName(at) : "?", HDModelName(at),
@@ -9058,15 +9221,22 @@ int main(int argc, char** argv)
 				if (floorOptions[k].slot == at && HDModelHas(floorOptions[k].model))
 					option = floorOptions[k].model;
 
-			float lowest = 0.0f, lift = 0.0f;
+			ClassicMeshLowest(level, *shape, 0, &classicBind, 0);
+
+			float lowest = 0.0f, lift = 0.0f, lowestBind = 0.0f;
 			float fix[16];
+			char frame[64];
+
+			snprintf(frame, sizeof(frame), "node 0 y -> (%.2f %.2f %.2f)",
+				poseAt ? poseAt[1] : 0.0f, poseAt ? poseAt[5] : 1.0f,
+				poseAt ? poseAt[9] : 0.0f);
 
 			if (option >= 0 && HDModelRingFit(option, at, fix))
 			{
 				QueryPerformanceCounter(&began);
 
-				const bool ok = HDModelFloorLift(option, fix, classicLowest,
-					&lowest, &lift);
+				const bool ok = HDModelFloorLift(option, fix, poseAt,
+					shape->nodes, classicLowest, &lowest, &lift);
 
 				QueryPerformanceCounter(&ended);
 
@@ -9075,7 +9245,15 @@ int main(int argc, char** argv)
 
 				sweptUs += 1.0e6 * (double)(ended.QuadPart - began.QuadPart) /
 					(double)freq.QuadPart;
-				sweptVertices += HDModelVertices(option);
+
+				int kept = 0, blended = 0;
+
+				HDModelPointsInfo(option, &kept, &blended);
+				sweptVertices += kept;
+				sweptBlended += blended;
+
+				HDModelFloorLift(option, fix, 0, shape->nodes, classicBind,
+					&lowestBind, 0);
 
 				/* AND ROUND #155'S OWN ANSWER BESIDE IT: the eight corners of
 				 * the source's box through the same fit. It is here to be
@@ -9109,15 +9287,44 @@ int main(int argc, char** argv)
 					HDSlotName(at) ? HDSlotName(at) : "?",
 					HDModelName(option), classicLowest, lowest,
 					lowest - classicLowest, lift, "fitted");
+				printf("%-5s %-20s %-26s %8.1f %8.1f %8.1f %7s %s\n", "", "",
+					"  (bind pose, not drawn)", classicBind, lowestBind,
+					lowestBind - classicBind, "", frame);
 				printf("%-5s %-20s %-26s %8s %8.1f %8.1f %7s %s\n", "", "",
 					"  (round #155, by corners)", "", corners,
-					corners - classicLowest, "",
-					"the bound, not the model");
+					corners - classicBind, "",
+					"the bound, not the model, in the bind pose");
 				continue;
 			}
 
-			if (!HDModelFloorLift(at, 0, classicLowest, &lowest, &lift))
+			QueryPerformanceCounter(&began);
+
+			const bool ok = HDModelFloorLift(at, 0, poseAt, shape->nodes,
+				classicLowest, &lowest, &lift);
+
+			QueryPerformanceCounter(&ended);
+
+			if (!ok)
+			{
+				printf("%-5d %-20s %-26s %8.1f %8s %8s %7s %s\n", at,
+					HDSlotName(at) ? HDSlotName(at) : "?", HDModelName(at),
+					classicLowest, "-", "-", "-",
+					"the model kept no vertices to measure");
 				continue;
+			}
+
+			sweptUs += 1.0e6 * (double)(ended.QuadPart - began.QuadPart) /
+				(double)freq.QuadPart;
+
+			{
+				int kept = 0, blended = 0;
+
+				HDModelPointsInfo(at, &kept, &blended);
+				sweptVertices += kept;
+				sweptBlended += blended;
+			}
+
+			HDModelFloorLift(at, 0, 0, shape->nodes, classicBind, &lowestBind, 0);
 
 			measured++;
 
@@ -9128,6 +9335,9 @@ int main(int argc, char** argv)
 				HDSlotName(at) ? HDSlotName(at) : "?", HDModelName(at),
 				classicLowest, lowest, lowest - classicLowest, lift,
 				"as it stands");
+			printf("%-5s %-20s %-26s %8.1f %8.1f %8.1f %7s %s\n", "", "",
+				"  (bind pose, not drawn)", classicBind, lowestBind,
+				lowestBind - classicBind, "", frame);
 		}
 
 		printf("\n%d pickup model(s) measured, %d lifted - y is DOWN, so a "
@@ -9135,8 +9345,9 @@ int main(int argc, char** argv)
 			measured, lifted);
 
 		if (sweptVertices)
-			printf("the vertex sweep: %d vertices through the fit in %.1f us, "
-				"once per slot at level build\n", sweptVertices, sweptUs);
+			printf("the vertex sweep: %d vertices through the frame in %.1f us,"
+				" once per slot at level build - %d of them blended over more "
+				"than one node\n", sweptVertices, sweptUs, sweptBlended);
 	}
 
 	if (all)
@@ -9228,6 +9439,72 @@ int main(int argc, char** argv)
 		}
 	}
 
+	/* --- THE FRAME THE LEVEL DRAWS IN, BEFORE THE CAMERA (#155b, fix round
+	 * 1) ---------------------------------------------------------------------
+	 *
+	 * Every other switch's picture is the BIND pose, which is the frame a
+	 * .TRM's vertices are measured against and the right frame to look at a
+	 * model in. -floor is the one that claims to show what the LEVEL puts on
+	 * the ground, and until this fix round it showed the bind pose too - which
+	 * is why the round's seventeen renders could not see that the engine's
+	 * lift went the wrong way for six of ANDREA3's eighteen pickup slots.
+	 *
+	 * IT GOES IN FRONT OF THE CAMERA AS WELL, for the reason the ring turn
+	 * does below: the frame moves the model about the item's origin, and a
+	 * camera framed on the untouched box then looks at the wrong place - the
+	 * first picture taken of this had the model well above the floor plane and
+	 * the plane itself half out of the frame. The box is the DRAWN vertices'
+	 * own, through the fit and the frame, which is the same sweep the rule
+	 * measures its lowest point with. */
+	std::vector<float> framePose;
+	const float* floorPose = 0;
+	float floorFit[16];
+	float floorDeepest[3] = { 0.0f, 0.0f, 0.0f };
+	bool floorFitted = false;
+
+	/* THE POSE IS READ WHEREVER A FLOOR NUMBER IS PRINTED and not only for
+	 * -floor: -inventory prints the floor line too, and a number in the wrong
+	 * frame is what this fix round is about. Only the PICTURE - the node
+	 * matrices, the camera and the plane - waits for -floor, so every other
+	 * switch's render is the bind pose it always was. */
+	if (here->slot >= 0 && ReadFramePose(level, *here, framePose) > 0)
+		floorPose = &framePose[0];
+
+	if (floorDraw && floorPose)
+	{
+		float lo[3], hi[3];
+
+		floorFitted = optionSlot >= 0 && HDModelHas(optionSlot) &&
+			HDModelRingFit(optionSlot, slot, floorFit);
+
+		printf("\nthe drawn frame: node 0's y axis points (%.3f %.3f %.3f) in "
+			"the item's frame - (0 1 0) is a frame that turns nothing or turns "
+			"only about y\n", floorPose[1], floorPose[5], floorPose[9]);
+
+		if (HDModelFramedBox(floorFitted ? optionSlot : slot,
+			floorFitted ? floorFit : 0, floorPose, here->nodes, lo, hi,
+			floorDeepest))
+		{
+			printf("drawn   : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f - what "
+				"the camera frames; its deepest point is at x %.0f z %.0f, "
+				"where the floor plane is drawn\n",
+				lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], floorDeepest[0],
+				floorDeepest[2]);
+
+			for (int c = 0; c < 3; c++)
+			{
+				mins[c] = lo[c];
+				maxs[c] = hi[c];
+			}
+		}
+		else
+			printf("drawn   : the model kept no vertices - the camera frames "
+				"the bind box and the picture is not the level's\n");
+	}
+	else if (floorDraw && here->slot >= 0)
+		printf("\nthe drawn frame: the level has no frame for this slot - the "
+			"picture and the numbers are the bind pose\n");
+
 	if (noDraw)
 	{
 		HDModelShutdown();
@@ -9299,7 +9576,23 @@ int main(int argc, char** argv)
 			invRot[2] * 360.0 / 65536.0);
 	}
 
-	if (axisView || invRotSet)
+	/* AND NO PRESENTATION TURN IN A FLOOR PICTURE (#155b, fix round 1).
+	 *
+	 * -axisview and -invrot exist to look at a model from an angle a person
+	 * chooses; the item's own frame is not a choice, it is where the thing
+	 * lies. Mixing the two produced the one bug of this kind the reviewer
+	 * found: the lift went onto a matrix with the ring turn in front of it, so
+	 * with -invrot it displaced the model in the TURNED frame. With the turn
+	 * forced out of a floor picture there is no such frame to be in. */
+	if (floorDraw && floorPose && (axisView || invRotSet))
+	{
+		MatIdentity(ringTurn);
+
+		printf("the drawn frame: -axisview / -invrot are left OUT of a -floor "
+			"picture - the item's own frame is what it shows\n");
+	}
+
+	if ((axisView || invRotSet) && !(floorDraw && floorPose))
 	{
 		float lo[3], hi[3];
 
@@ -9385,7 +9678,13 @@ int main(int argc, char** argv)
 
 	std::vector<float> matrices((size_t)here->nodes * 16);
 
-	BuildNodeMatrices(*here, view, turn, &matrices[0]);
+	/* THE FRAME THE LEVEL DRAWS IN, where -floor asked for it: the frame's own
+	 * matrices carry every translation AND every rotation of the item's
+	 * animation frame, so the bind-pose walk is not done at all (#155b, fix
+	 * round 1). The pose itself was read before the camera, which had to frame
+	 * it. */
+	BuildNodeMatrices(*here, view, turn, &matrices[0],
+		floorDraw ? floorPose : 0);
 
 	/* THE MATRIX PROOF OF THE OBJECT PATH (#123, stage S3-2), without the
 	 * game. A node matrix carries the node's ORIGIN into view space all by
@@ -9917,9 +10216,9 @@ int main(int argc, char** argv)
 			{
 				float classicLowest = 0.0f, lowest = 0.0f, lift = 0.0f;
 
-				if (ClassicMeshLowest(level, *here, &classicLowest, 0) &&
-					HDModelFloorLift(optionSlot, fix, classicLowest, &lowest,
-						&lift))
+				if (ClassicMeshLowest(level, *here, floorPose, &classicLowest, 0) &&
+					HDModelFloorLift(optionSlot, fix, floorPose, here->nodes,
+						classicLowest, &lowest, &lift))
 				{
 					printf("           the floor: the classic mesh reaches y "
 						"%.1f, the fitted model y %.1f - %.1f units %s it, "
@@ -9935,12 +10234,16 @@ int main(int argc, char** argv)
 
 					if (floorDraw)
 					{
-						/* THE LIFT GOES ON THE FIT'S TRANSLATION ROW, which
-						 * is the item's own frame - the same one line the
-						 * engine writes into RingModel::floorFix. y is down,
-						 * so lifting subtracts. */
+						/* THE LIFT GOES STRAIGHT UP IN THE WORLD, at the view
+						 * end of the chain - LiftNodes, the same move the
+						 * engine makes and in the same space. It was on the
+						 * fit's own translation row until fix round 1, which
+						 * is the ITEM's frame: with -invrot that displaced the
+						 * model in the turned frame, and for a slot whose
+						 * animation frame stands the model on its head it was
+						 * the wrong direction altogether. */
 						if (!noFloorLift)
-							fix[13] -= lift;
+							LiftNodes(&matrices[0], here->nodes, lift, view);
 
 						floorPlaneAt = classicLowest;
 						floorPlaneKnown = true;
@@ -10022,15 +10325,17 @@ int main(int argc, char** argv)
 
 	/* AND THE SLOT'S OWN MODEL ON THE FLOOR (#155b), which is the other half
 	 * of the rule: no fit, no OPTION file, just the model the slot is bound to
-	 * against the classic mesh it replaces. The lift goes on every node
-	 * matrix, in that node's own frame - the same three lines hd_object.cpp
-	 * writes into HDObjectEnd, and the same reason for the frame. */
+	 * against the classic mesh it replaces. Both lowest points are taken in
+	 * the frame the level draws the item in and the lift goes straight up in
+	 * the world - the same two decisions hd_object.cpp makes, through the same
+	 * function for the first and the same arithmetic for the second. */
 	if (floorDraw && !drew && here && here->slot >= 0)
 	{
 		float classicLowest = 0.0f, lowest = 0.0f, lift = 0.0f;
 
-		if (ClassicMeshLowest(level, *here, &classicLowest, 0) &&
-			HDModelFloorLift(slot, 0, classicLowest, &lowest, &lift))
+		if (ClassicMeshLowest(level, *here, floorPose, &classicLowest, 0) &&
+			HDModelFloorLift(slot, 0, floorPose, here->nodes, classicLowest,
+				&lowest, &lift))
 		{
 			printf("\nthe floor: the classic mesh reaches y %.1f, %s y %.1f - "
 				"%.1f units %s it\n", classicLowest, HDModelName(slot), lowest,
@@ -10045,14 +10350,8 @@ int main(int argc, char** argv)
 			floorPlaneAt = classicLowest;
 			floorPlaneKnown = true;
 
-			for (int node = 0; !noFloorLift && node < here->nodes; node++)
-			{
-				float* m = &matrices[(size_t)node * 16];
-
-				m[12] -= lift * m[4];
-				m[13] -= lift * m[5];
-				m[14] -= lift * m[6];
-			}
+			if (!noFloorLift)
+				LiftNodes(&matrices[0], here->nodes, lift, view);
 		}
 		else
 			printf("\nthe floor: not measured - the slot has no classic mesh "
@@ -10087,6 +10386,27 @@ int main(int argc, char** argv)
 			halfX > 8.0 ? halfX : 8.0, halfZ > 8.0 ? halfZ : 8.0, 0x0000FF00u);
 		OverlayPlane(view, persp, width, height, cxm, czm, floorPlaneAt,
 			halfX > 8.0 ? halfX : 8.0, 0.0, 0x0000C000u);
+
+		/* AND A PATCH UNDER THE DEEPEST POINT (#155b, fix round 1), which is
+		 * the one place on that plane where the model can touch it.
+		 *
+		 * The quad above spans the model's whole footprint, and at a low
+		 * camera its near edge stands well in front of the point the rule is
+		 * about - so a model resting exactly on the plane still shows a gap
+		 * there, and the first pictures of this fix round read as "floating"
+		 * when the numbers said the contact was exact.
+		 *
+		 * WHAT IT CAN AND CANNOT SHOW. Where the deepest point is also the
+		 * lowest thing on the screen - the crowbar's tip, the fitted pair of
+		 * Uzis - the model's outline meets the patch and the contact is
+		 * plain. Where it is not - a box whose far bottom corner is the
+		 * deepest and whose near face projects lower - the patch crosses the
+		 * silhouette, because the overlay is drawn into the pixels AFTER the
+		 * model and takes no part in the depth test. The picture is there to
+		 * show the FRAME the item is drawn in and how far the lift moved it;
+		 * that the lift lands exactly on the mesh is the numbers' work. */
+		OverlayPlane(view, persp, width, height, floorDeepest[0],
+			floorDeepest[2], floorPlaneAt, 24.0, 24.0, 0x0000FF00u);
 	}
 
 	if (!drew)

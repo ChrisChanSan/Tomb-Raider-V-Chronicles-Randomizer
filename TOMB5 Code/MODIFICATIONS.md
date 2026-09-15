@@ -12766,83 +12766,104 @@ are named by the hand table and lie on the floor exactly like the rest.
 `<BASE>_OPTION` model and no `EXTRA_` name from any mod draws that model on the
 ground as well, through the ring's own fit, plus the lift measured on the
 FITTED vertices. The ring and the corner display are not touched by a line of
-it: the lift lives in a second copy of the fit (`RingModel::floorFix`, the fit
-with the lift already in its translation row), and the two paths that have no
-floor go on using `fix`.
+it: the lift is added where the item is DRAWN, in the object path, and the two
+paths that have no floor go on multiplying through `fix` exactly as they did.
 
 **THE NUMBERS, ANDREA3 WITH THE USER'S `Mods` FOLDER AND WITHOUT**
-(`ModelProbe -floorcheck`; y is DOWN, so a positive sink stands IN the ground):
+(`ModelProbe -floorcheck`; y is DOWN, so a positive sink stands IN the ground.
+Every row is measured in the frame the LEVEL draws the item in; the bind-pose
+figure is beside it where the two differ, and the whole of fix round 1 is that
+difference):
 
 ```
   slot                model                        classic  lowest   sink  lift
-  UZI_ITEM            UZI_OPTION fitted (mod)         19.0    30.5   11.5  11.5
-                        the same by round 155's corners 52.9   33.9
-  UZI_ITEM            EXTRA_UZI_ITEM (install)        19.0    20.7    1.7   1.7
+  UZI_ITEM            UZI_OPTION fitted (mod)         19.5    38.7   19.2  19.2
+                        in the bind pose               19.0    30.5   11.5
+                        by round 155's box corners             52.9   33.9
+  UZI_ITEM            EXTRA_UZI_ITEM (install)        19.5    21.1    1.6   1.6
   UZI_AMMO_ITEM       UZI_AMMO_OPTION fitted (mod)    26.0    32.8    6.8   6.8
-                        the same by round 155's corners 57.0   31.0
+                        by round 155's box corners             57.0   31.0
   UZI_AMMO_ITEM       EXTRA_UZI_AMMO_ITEM (install)   26.0    27.5    1.5   1.5
   PISTOLS_ITEM        EXTRA_PISTOLS_ITEM (HK USP)     59.0    53.4   -5.6   0.0
   PISTOLS_ITEM        the install's own               59.0    52.3   -6.7   0.0
-  PISTOLS_AMMO_ITEM   EXTRA_PISTOLS_AMMO (HK USP)      0.0     6.1    6.1   6.1
-  PISTOLS_AMMO_ITEM   the install's own                0.0     3.2    3.2   3.2
+  PISTOLS_AMMO_ITEM   EXTRA_PISTOLS_AMMO (HK USP)     33.1    35.9    2.9   2.9
+                        in the bind pose                0.0     6.1    6.1
+  PISTOLS_AMMO_ITEM   the install's own               33.1    29.8   -3.3   0.0
+                        in the bind pose                0.0     3.2    3.2
   SHOTGUN_ITEM        EXTRA_SHOTGUN_ITEM (Spas-12)     8.0     5.5   -2.5   0.0
   SHOTGUN_ITEM        the install's own                8.0     8.4    0.4   0.0
-  HK_ITEM   (RICH1)   EXTRA5_HK_ITEM (MP5)            23.0    25.0    2.0   2.0
-  HK_ITEM   (RICH1)   the install's own               23.0    21.9   -1.1   0.0
+  HK_ITEM   (RICH1)   EXTRA5_HK_ITEM (MP5)            15.2    11.1   -4.1   0.0
+                        in the bind pose               23.0    25.0    2.0
+  HK_ITEM   (RICH1)   the install's own               15.2    11.1   -4.1   0.0
+                        in the bind pose               23.0    21.9   -1.1
   CROWBAR_ITEM        EXTRA_CROWBAR_ITEM              -1.0     5.2    6.2   6.2
   LASERSIGHT_ITEM     EXTRA_LASERSIGHT_ITEM           30.0    34.2    4.2   4.2
   FLARE_ITEM          EXTRA_FLARE_ITEM                12.0    13.0    1.0   1.0
-  COMPASS_ITEM        EXTRA4_COMPASS_ITEM             30.0   174.8  144.8 144.8
+  COMPASS_ITEM        EXTRA4_COMPASS_ITEM            143.1   150.0    6.9   6.9
+                        in the bind pose               30.0   174.8  144.8
   BIGMEDI / SMALLMEDI / SHOTGUN_AMMO1 / SHOTGUN_AMMO2 / BINOCULARS /
   HK_AMMO / REVOLVER / REVOLVER_AMMO / FLARE_INV: not lifted
 ```
 
-**THE INSTALL'S OWN FILES ARE NOT ALL AT ZERO, AND THAT IS A FINDING.** Seven of
-the eighteen pickup models ANDREA3 loads reach below the classic mesh they
-replace, the remaster's own among them: the crowbar by 6.2 units, the laser
-sight by 4.2, the pistol ammunition by 3.2, the Uzi and its ammunition by 1.7
-and 1.5, the flare by 1.0. At 1024 units to a metre that is one to six
-millimetres of gun in the ground - under what a player will see, and now zero.
-The rule is applied to them like everything else; a per-source exception would
-be the kind of hand-kept list this project does not keep, and a tolerance
-chosen to make the install's files come out inert would be the same thing
-spelled as a number. Half a unit is the tolerance, and it is there for float
-rounding on a mesh whose own coordinates are SHORTs, not for a policy.
+The two HK rows reading the same 11.1 is not a copy: the two files really do
+reach the same depth in that frame to within 0.03 units (11.0703 for the
+install's, 11.0982 for the MP5), which an independent reader of the `.TRC` and
+the two `.TRM` files confirms.
 
-**`COMPASS_ITEM` IS THE ONE BIG NUMBER AND IT NEVER DRAWS.** 144.8 units, which
-is what the remaster's inventory compass measures against the tiny classic one
-- and there is no `COMPASS_ITEM` item in any of the fifteen shipped levels
-(`ItemCheck <level>.trc 356`, all fifteen: 0 items). The lift is computed, kept
-and never used. `FLARE_INV_ITEM` DOES stand in levels - ANDREA1 has three - and
-reads 0.2, inside the slack.
+**THE INSTALL'S OWN FILES ARE NOT ALL AT ZERO, AND THAT IS A FINDING.** Six of
+the eighteen pickup models ANDREA3 loads reach below the classic mesh they
+replace, the remaster's own among them: the crowbar by 6.2 units, the compass
+by 6.9, the laser sight by 4.2, the Uzi and its ammunition by 1.6 and 1.5, the
+flare by 1.0. At 1024 units to a metre that is one to seven millimetres of gun
+in the ground - under what a player will see, and now zero. The rule is applied
+to them like everything else; a per-source exception would be the kind of
+hand-kept list this project does not keep, and a tolerance chosen to make the
+install's files come out inert would be the same thing spelled as a number.
+Half a unit is the tolerance, and it is there for float rounding on a mesh
+whose own coordinates are SHORTs, not for a policy.
+
+**`COMPASS_ITEM` AND THE 144.8 THAT WAS NOT THERE.** In the bind pose the
+remaster's inventory compass reads 144.8 units below the tiny classic one, and
+the first build of this round computed a lift that large. The frame ANDREA3
+draws that slot in turns the model's y onto the world's z, and the real figure
+is **6.9**. It is still a number nobody sees: there is no `COMPASS_ITEM` item
+in any of the fifteen shipped levels (`ItemCheck <level>.trc 356`, all fifteen:
+0 items). `FLARE_INV_ITEM` DOES stand in levels - ANDREA1 has three - and reads
+0.2, inside the slack. The save and load crystals (`DC_LOAD_INV_ITEM` and its
+five siblings) end in `_ITEM` as well and would be measured like any other
+pickup if a level ever drew one HD; none does, and a rule about "objects that
+are only ever in the inventory" has no engine fact to hang on today.
 
 **WHAT ROUND 155'S CORNERS COST.** That round pushed the eight corners of the
-source's BOX through the fit; this one pushes every kept vertex. Measured
-against round 155's own reference (the `EXTRA_` model's lowest point, so the
-figures are comparable line for line): the posed pair reads **32.2 by the
-corners and 9.8 by the vertices**, the ammunition **29.5 against 5.3** - the
-corner answers are exactly the 32.2 and 29.5 round 155 printed, which is the
-two measurements checking each other on the same fit. A box corner of a pair
-of crossed guns is empty space, and a rule that lifted by the corner number
-would have hung the model in the air.
+source's BOX through the fit; this one pushes every kept vertex. Measured in
+round 155's own frame, the bind pose, so that the figures are comparable to its
+line for line: the posed pair reads **52.9 by the corners and 30.5 by the
+vertices** against a classic mesh at 19.0, a sink of 33.9 against 11.5, and the
+ammunition **57.0 against 32.8**, 31.0 against 6.8. The corner answers are
+exactly the ones round 155 printed, which is the two measurements checking each
+other on the same fit. A box corner of a pair of crossed guns is empty space,
+and a rule that lifted by the corner number would have hung the model in the
+air.
 
-**WHAT THE SWEEP COSTS.** 30,969 vertices through the fit - the posed pair's
-27,449 and the ammunition box's 3,520 - in **31 to 34 microseconds** over three
-runs, once per slot at a level build. The positions are kept beside the model
-only while the plan runs (`HDModelSlot::keepPoints`, set on the ring's models
-alone) and `HDModelReleasePoints` gives them back before the first frame; a
-model drawn as it stands needs none of it, because the box the build already
-took IS a box of the drawn vertices. Nothing of this is in a frame: the draw
-adds one translation to a matrix it already has, and for the fitted case not
-even that - the lift is folded into the fit at level build.
+**WHAT THE SWEEP COSTS.** ANDREA3's eighteen pickup models with the user's
+`Mods` folder are **57,378 vertices through the frame in 185 microseconds**,
+once per slot at a level build; without the folder, 18,526 in 51. The largest
+single model is the posed pair of Uzis at 27,449. The positions are kept beside
+the model only while the plan runs (`HDModelSlot::keepPoints`, set on every
+model of the pickup family) and `HDModelReleasePoints` gives them back before
+the first frame. Nothing of this is in a frame: the draw adds one translation
+to a matrix it already has, and the direction it adds is worked out once per
+CAMERA and not per item.
 
 **THE MP5, WHICH IS NOT THIS ROUND'S FAULT AND IS NOT ITS FIX.** The user's
 report was "it is actually TR5 but lies invisible on the floor", with no log.
 Measured: `5\ITEM\EXTRA5_HK_ITEM.TRM` is found by `HDModsFindModel` in the
 mod's game 5 folder and bound to slot 345 under the `EXTRA5_` prefix, it loads
 (5478 vertices, 17046 indices), and its two pages 8558 and 8559 come out of the
-mod's own `TEX`. It sinks 2.0 units, which this round's rule lifts. And it is
-still invisible, because **all 5478 of its vertices name classic mesh 1** -
+mod's own `TEX`. In RICH1's own frame for that slot it stands 4.1 units clear
+of the classic mesh and is not lifted at all (2.0 units UNDER it in the bind
+pose, which is not the frame the level draws it in). And it is invisible,
+because **all 5478 of its vertices name classic mesh 1** -
 bones (1, 0, 0), weights (255, 0, 0), not one vertex on node 0 - while
 `game\items.cpp:222` initialises `HK_ITEM`, `HK_AMMO_ITEM`, `CROSSBOW_ITEM` and
 `REVOLVER_ITEM` with `mesh_bits = 1`, so this game never shows their mesh 1.
@@ -12874,20 +12895,31 @@ picture. Fixed, and the `-invrot` note that described the old behaviour as if
 it were a decision is corrected with it.
 
 **THE TOOL, otherwise.** `-floor` draws a slot the way the LEVEL draws it on
-the ground - the mod's fitted `_OPTION` model where there is one - with the
-lift applied and the classic mesh's own lowest plane over the picture as a
-narrow green strip, and the three numbers beside it. Narrow on purpose: a
-square as wide as the model is deep puts its near edge far down the picture and
-its far edge through the model, and the eye then reads the model against
-whichever line it meets. `-nofloorlift` is the same picture with the lift left
-off - the BEFORE half of every pair below - and `-floorcheck` is the table,
-with the fitted models measured both ways and the sweep's cost under it.
+the ground - in the item's own animation frame, the mod's fitted `_OPTION`
+model where there is one - with the lift applied, the classic mesh's own lowest
+plane over the picture as a narrow green outline, and a small square of it
+right under the model's deepest point, which is the one place the model can
+touch that plane. The three numbers stand beside the picture. The small square
+is there because the big one cannot be read: at a low camera its near edge is
+well in front of the point the rule is about, so a model resting exactly on the
+plane still shows a gap there. Where the deepest point is also the lowest thing
+on the screen the outline meets the patch and the contact is plain; where it is
+not, the patch crosses the silhouette, because the overlay goes into the pixels
+after the model and takes no part in the depth test. The picture shows the
+FRAME and the MOVE; that the lift lands exactly on the mesh is the numbers'
+work, and they are read by three independent readers below. `-nofloorlift` is the same picture with the lift
+left off - the BEFORE half of every pair below - and `-floorcheck` is the
+table, every row in the drawn frame with the bind-pose row under it and the
+sweep's cost at the end.
 
-**THE LOG.** Three lines behind `-log`, none of them thinning anything:
-`HDLOG level=.. pickup floor slot=.. name=.. model=.. lowest point N above|under
-the classic mesh's - lifted by N units|not lifted`, its fitted twin `HDLOG
+**THE LOG.** Five lines behind `-log`, none of them thinning anything: `HDLOG
+level=.. pickup floor slot=.. name=.. model=.. lowest point N above|under the
+classic mesh's - lifted by N units|not lifted`, its fitted twin `HDLOG
 level=.. ring floor slot=.. name=.. takes the fitted <model> on the floor,
-lifted by N units (its lowest point stood N under|above the item's)`, and the
+lifted by N units (its lowest point stood N under|above the classic mesh's)`,
+the frame line `HDLOG level=.. pickup floor slot=.. name=.. drawn frame: node
+0's y axis points (x y z) in the item's frame, N vertices swept, N of them
+blended`, a `not measured: ..` line for a slot the rule could not read, and the
 `item slot=.. draws nothing` line above. Round 155's unconditional "keeps the
 level's own" line is gone with the refusal it described.
 
@@ -12923,12 +12955,18 @@ level's own" line is gone with the refusal it described.
 **PROVED.**
 
 - *The floor, in pictures.* `ModelProbe -floor -pitch 4`, looked at: the mod's
-  two Uzis lie CROSSED and FLAT on the classic mesh's own plane, where the
-  `-nofloorlift` twin of the same command has that plane cutting through the
-  lower gun. The Uzi ammunition the same. The HK USP's pistols float 5.6 units
-  clear and are not lifted, exactly as expected of an install-shaped file; the
-  Spas-12 stands 2.5 clear and is not lifted either. Fourteen renders with the
-  numbers printed beside each.
+  two Uzis lie CROSSED and FLAT on the classic mesh's own plane - seen from
+  above in `uzi_mod_top`, where the cross is plain - and the `-nofloorlift`
+  twin of the same command has that plane cutting through the guns. The
+  crowbar, the largest lift of an install file, rests its tip on the plane
+  where its twin has it through it. The HK USP's pistols float 5.6 units clear
+  and are not lifted, exactly as expected of an install-shaped file; the
+  Spas-12 stands 2.5 clear and is not lifted either. Every lifted model's
+  silhouette stands HIGHER in its picture than in its `-nofloorlift` twin, by
+  the pixels the lift is worth - 41 for the fitted pair's 19.2 units, 25 for
+  the crowbar's 6.2, 20 for the pistol ammunition's 2.9, 6 for the install
+  Uzi's 1.6 - which is the one thing about the lift a picture can carry on its
+  own. Twenty-three renders with the numbers printed beside each.
 - *The MP5.* The full mask against `-meshbits 1`, the second one 100.0 %
   background at a mean brightness of 170.0.
 - *Nothing moved.* `ModelProbe -all -nodraw` over ANDREA1 with no `Mods`
@@ -12941,10 +12979,84 @@ level's own" line is gone with the refusal it described.
   gate.
 
 **WHAT IS NOT PROVED.** The engine's own log and the pickup seen in the game -
-no tool stands in for either, and the play test is the user's. The seven
-install models that now move by one to six millimetres are the part of this
-round a play test could still argue with; the numbers are above and the switch
-that draws them either way is in the tool.
+no tool stands in for either, and the play test is the user's. The six install
+models that now move by one to six millimetres are the part of this round a
+play test could still argue with; the numbers are above and the switch that
+draws them either way is in the tool.
+
+**FIX ROUND 1 (the review) - THE LIFT WENT THE WRONG WAY, AND THE PICTURES
+COULD NOT SEE IT.**
+
+The rule above was measured and applied in the slot's BIND pose. An item is not
+drawn in its bind pose: `DrawAnimatingItem` calls `gar_RotYXZsuperpack` for node
+0 before the first mesh is drawn (`game\draw.cpp:955-960`) and once more for
+every node below it, so node 0's matrix carries the animation frame's own turn.
+**Six of ANDREA3's eighteen pickup slots carry a turn that is not a plain yaw**,
+and `UZI_ITEM`'s is 180 degrees about z: the model stands on its head. The first
+build wrote the lift onto the node matrix's y ROW - the image of the MODEL's y
+axis - so for that slot it pushed the mod's fitted pair **11.5 units DEEPER into
+the ground**, with a log line saying it had been lifted onto the classic mesh's
+lowest point. `PISTOLS_AMMO_ITEM`'s install model, which as drawn stands 3.3
+units ABOVE the mesh and needs nothing, was moved 3.2 units in a direction that
+is 96 % down and 24 % sideways. Neither could be seen in the round's seventeen
+renders, because `ModelProbe`'s `-floor` drew the bind pose while its usage
+block promised "the way the LEVEL draws it".
+
+**WHAT CHANGED.**
+
+- `HDFramePose` (`hd_model.cpp`) is `DrawAnimatingItem`'s walk with the frame's
+  rotations in, once per slot at level build: twelve floats a node, the engine's
+  own 3x4. It is written once and linked by both the engine and the tool, like
+  the fit. The frame's OFFSET and the item's own rotation are left out, and the
+  second of those is measured and not assumed: `InitialiseItem` zeroes `x_rot`
+  and `z_rot` (`game\items.cpp:201-202`), the level file gives an item one
+  angle, and the one place that tilts a pickup puts all three back before
+  anything is drawn (`PickUpCollision`, `game\pickup.cpp:789-793, 1124-1126`).
+- Both lowest points go through it. The classic side is no longer
+  `MESH_DATA::bbox[4]` but the mesh's own vertices (`aVtx`, which
+  `ProcessMeshData` already filled), because a box under rotation is a bound and
+  not a mesh - the very fault round 155 had on the HD side.
+- The HD side keeps the node each vertex rides on, so the bind fold `set_joint`
+  does per node can be undone per point. Every pickup model keeps its vertices
+  now, not only the fitted ones: with a rotation on a node, the box the build
+  took is no longer a box of the DRAWN vertices.
+- The lift is added **straight up in the world**, in one place for both cases:
+  the node matrices are model-to-VIEW, so it is world up expressed in view
+  space, worked out once per CAMERA. `RingModel::floorFix` - the fit with the
+  lift folded into its translation row - is gone; that row is the ITEM's frame,
+  which is exactly the frame that is not up.
+- `ModelProbe -floor` draws the item's own animation frame, frames the camera on
+  the box of the DRAWN vertices, puts the floor patch under the model's deepest
+  point, and leaves `-invrot` / `-axisview` out of a floor picture altogether.
+  `-floorcheck` prints the drawn frame and the bind pose side by side.
+
+**THE PROOF THAT IT IS RIGHT THIS TIME.** The reviewer wrote an independent
+decoder of the frame block and the mesh block and printed six of ANDREA3's
+slots in the drawn frame. This build reproduces all six exactly - slot 240
+-1.0/5.2/6.2, slot 335 33.1/29.8/-3.3, slot 336 19.5/21.1/1.6, slot 337
+26.0/27.5/1.5, slot 351 30.0/34.2/4.2, slot 352 49.0/45.6/-3.4 - and a third
+reader written for this fix round (`drawnlowest.py`: its own walk of the level,
+its own matrix code, its own `.TRM` reader) reproduces RICH1's `HK_ITEM` for
+both the install's file and the MP5's, node chain and bind fold included.
+
+**AND THE LOW ONES.** The slack comment said half a unit was "a twentieth of a
+millimetre"; 0.5 of 1024 units to a metre is half a millimetre, and the comment
+says so. The fitted log line said "under the item's" where it had measured the
+classic mesh. `ModelProbe`'s `-floor` with `-invrot` applied the lift in the
+turned frame - there is no turned frame in a floor picture any more. The save
+and load crystals that `HDSlotIsPickup` also catches are named in the
+`COMPASS_ITEM` paragraph above. `ring_model_of` no longer walks its list per
+item per frame: the plan pointer is a field of the slot's verdict, set after
+the plan is compacted.
+
+**PROVED AGAIN.** Round 155's three ring commands: **seven byte-identical
+renders**, the same pose and fit lines, `-ringcheck` and `-pickupcheck` PASS -
+the ring is untouched, and that is the check that caught a first attempt at
+this fix which had changed how the camera frames an `-invrot` picture.
+`ModelProbe -all -nodraw` over ANDREA1 with no `Mods` folder against the build
+before the round: **287 lines identical**; the eight known outfits with
+pistols: **eight byte-identical `.PNG` files**. Twenty-three floor renders with
+their numbers, looked at one by one.
 
 ## Building this yourself
 

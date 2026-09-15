@@ -175,6 +175,24 @@ namespace
 		 * The box cannot answer the fitted question: a rotation sends the box
 		 * corners somewhere no vertex of the model is. */
 		std::vector<float> points;
+		/* AND WHICH NODE EACH OF THEM RIDES ON (#155b, fix round 1). The box
+		 * needed no such thing: with every node's matrix a pure translation
+		 * equal to its own bind offset, (p - bind) * M is p again whatever
+		 * the weights are, so a vertex's position in the bind pose IS its
+		 * drawn position. The moment a node's matrix carries a ROTATION -
+		 * which the item's own animation frame puts there, and which is the
+		 * whole of this fix round - the two part company and the point has to
+		 * know which matrix to go through.
+		 *
+		 * The vertex's HEAVIEST bone, one byte each. A vertex that rides on
+		 * two nodes at once is really drawn at the blend of both, and
+		 * `pointsBlended` counts them so that the log says how many of a
+		 * model's points this reads as rigid rather than leaving it to be
+		 * assumed. Every pickup file measured - the remaster's own and all
+		 * four of the user's mods - is rigid per node: weight (255, 0, 0) on
+		 * every vertex. */
+		std::vector<unsigned char> pointNode;
+		int pointsBlended = 0;
 		bool keepPoints = false;
 	};
 
@@ -873,7 +891,10 @@ namespace
 		// #155b: one allocation and not a ladder of them - the cut can only
 		// take vertices away, so the file's own count is the upper bound.
 		if (model.keepPoints)
+		{
 			model.points.reserve((size_t)vertices * 3);
+			model.pointNode.reserve((size_t)vertices);
+		}
 
 		if (!whole)
 			for (int i = 0; i + 2 < trm.indices; i += 3)
@@ -989,6 +1010,14 @@ namespace
 				model.points.push_back(in.x);
 				model.points.push_back(in.y);
 				model.points.push_back(in.z);
+				/* AND THE NODE IT RIDES ON (fix round 1), out of the bones
+				 * this loop has just written - `out` and not `in`, because a
+				 * rigid face's neck rule has already moved a bone of the file
+				 * onto another node of the object above. */
+				model.pointNode.push_back(out.bone0);
+
+				if (out.weight0 != 255)
+					model.pointsBlended++;
 			}
 
 			if (model.vertexSeen++ == 0)
@@ -3577,6 +3606,230 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 	return worst;
 }
 
+/* ------------------------------ THE FRAME THE LEVEL DRAWS A SLOT IN (#155b,
+ *
+ * fix round 1) ---------------------------------------------------------------
+ *
+ * THE BIND POSE IS NOT THE POSE. A moveable's meshes are placed by its mesh
+ * tree AND turned by its animation frame: DrawAnimatingItem translates by the
+ * frame's own offset, calls gar_RotYXZsuperpack for node 0 and then walks the
+ * tree with a translation and a rotation per node (game\draw.cpp:955-1000).
+ * Six of ANDREA3's eighteen pickup slots carry a turn on node 0 that is not a
+ * yaw - the Uzi item's is 180 degrees about z, which stands the model on its
+ * head - so a rule that measures two models in the bind pose measures neither
+ * of them where the level puts them.
+ *
+ * This is that walk with nothing but the rotations added, once per slot at
+ * level build. `frame` is the object's own first frame (six shorts of box,
+ * three of offset, then one rotation a node in gar_RotYXZsuperpack's own
+ * packing) and `tree` the engine's bone array from the object's bone_index -
+ * four longs a node after the first, flags, x, y, z. Either may be null: a
+ * slot with no frame gets identity, which is what the bind pose was.
+ *
+ * TWO THINGS ARE LEFT OUT ON PURPOSE.
+ *
+ * The frame's OFFSET, because it is one translation in front of the whole
+ * walk: it moves every node of both models by the same vector, so it cancels
+ * in the difference the floor rule is about, and leaving it out keeps node 0
+ * at the origin where the bind numbers were.
+ *
+ * The ITEM's own rotation, because a pickup carries a yaw and a yaw does not
+ * tilt the up axis - measured, not assumed: InitialiseItem zeroes x_rot and
+ * z_rot (game\items.cpp:201-202), the level file gives an item one angle, and
+ * the one place that tilts a pickup puts the three angles back before
+ * anything is drawn (PickUpCollision, game\pickup.cpp:789-793 and 1124-1126).
+ *
+ * The arithmetic is aRotX/aRotY/aRotZ's, line for line, on a local 3x4 in the
+ * engine's own M00..M23 order - not the global matrix stack, which is
+ * phd_GenerateW2V's to set and is still null on the first level build. The
+ * engine's table lookup is sin(i * 2pi / 65536) and this calls sinf on the
+ * same angle, so the two agree to a float's last digits; the rule's slack is
+ * half a unit. */
+namespace
+{
+	/* The engine's own indices, so that the three rotations below can be read
+	 * against aRotX/aRotY/aRotZ (specific\3dmath.cpp:307-440) a line at a
+	 * time. This module is linked into ModelProbe, which has no engine
+	 * headers, so they are named here rather than included. */
+	enum
+	{
+		P00 = 0, P01 = 1, P02 = 2, P03 = 3,
+		P10 = 4, P11 = 5, P12 = 6, P13 = 7,
+		P20 = 8, P21 = 9, P22 = 10, P23 = 11
+	};
+
+	const double kAngleToRad = 6.283185307179586476925286766559 / 65536.0;
+
+	void pose_identity(float* m)
+	{
+		for (int i = 0; i < 12; i++)
+			m[i] = 0.0f;
+
+		m[P00] = m[P11] = m[P22] = 1.0f;
+	}
+
+	// phd_TranslateRel: the 3x3 is untouched and the translation moves by the
+	// offset THROUGH it.
+	void pose_translate(float* m, float x, float y, float z)
+	{
+		m[P03] += m[P00] * x + m[P01] * y + m[P02] * z;
+		m[P13] += m[P10] * x + m[P11] * y + m[P12] * z;
+		m[P23] += m[P20] * x + m[P21] * y + m[P22] * z;
+	}
+
+	void pose_rot_x(float* m, short angle)
+	{
+		if (!angle)
+			return;
+
+		const float s = (float)sin((double)angle * kAngleToRad);
+		const float c = (float)cos((double)angle * kAngleToRad);
+
+		for (int row = 0; row < 3; row++)
+		{
+			float* r = m + row * 4;
+			const float a = c * r[1] + s * r[2];
+			const float b = c * r[2] - s * r[1];
+
+			r[1] = a;
+			r[2] = b;
+		}
+	}
+
+	void pose_rot_y(float* m, short angle)
+	{
+		if (!angle)
+			return;
+
+		const float s = (float)sin((double)angle * kAngleToRad);
+		const float c = (float)cos((double)angle * kAngleToRad);
+
+		for (int row = 0; row < 3; row++)
+		{
+			float* r = m + row * 4;
+			const float a = c * r[0] - s * r[2];
+			const float b = c * r[2] + s * r[0];
+
+			r[0] = a;
+			r[2] = b;
+		}
+	}
+
+	void pose_rot_z(float* m, short angle)
+	{
+		if (!angle)
+			return;
+
+		const float s = (float)sin((double)angle * kAngleToRad);
+		const float c = (float)cos((double)angle * kAngleToRad);
+
+		for (int row = 0; row < 3; row++)
+		{
+			float* r = m + row * 4;
+			const float a = c * r[0] + s * r[1];
+			const float b = c * r[1] - s * r[0];
+
+			r[0] = a;
+			r[1] = b;
+		}
+	}
+
+	/* gar_RotYXZsuperpack with skip 0 (game\draw.cpp:398-439): either two
+	 * words holding three ten-bit angles - Y, then X, then Z, each shifted up
+	 * by six - or one word with the axis in its top two bits and twelve bits
+	 * of angle shifted up by four. The stream pointer is advanced by exactly
+	 * what was read, which is why the caller hands it over. */
+	void pose_superpack(float* m, const short** stream)
+	{
+		const unsigned short* prot = (const unsigned short*)*stream;
+
+		switch (*prot >> 14)
+		{
+		case 0:
+		{
+			const long packed = ((long)*prot << 16) + (long)*(prot + 1);
+
+			pose_rot_y(m, (short)(((packed >> 10) & 0x3FF) << 6));
+			pose_rot_x(m, (short)(((packed >> 20) & 0x3FF) << 6));
+			pose_rot_z(m, (short)((packed & 0x3FF) << 6));
+			*stream += 2;
+			break;
+		}
+
+		case 1:
+			pose_rot_x(m, (short)((*prot & 0xFFF) << 4));
+			*stream += 1;
+			break;
+
+		case 2:
+			pose_rot_y(m, (short)((*prot & 0xFFF) << 4));
+			*stream += 1;
+			break;
+
+		default:
+			pose_rot_z(m, (short)((*prot & 0xFFF) << 4));
+			*stream += 1;
+			break;
+		}
+	}
+}
+
+int HDFramePose(const short* frame, const long* tree, int nodes, float* out)
+{
+	float current[12];
+	float stack[kJointBudget][12];
+	int top = 0;
+
+	if (nodes > kJointBudget)
+		nodes = kJointBudget;
+
+	if (nodes < 1 || !out)
+		return 0;
+
+	pose_identity(current);
+
+	const short* rot = frame ? frame + 9 : 0;
+
+	if (rot)
+		pose_superpack(current, &rot);
+
+	memcpy(out, current, sizeof(current));
+
+	for (int node = 1; node < nodes; node++)
+	{
+		const long* bone = tree ? tree + (node - 1) * 4 : 0;
+		const long flags = bone ? bone[0] : 0;
+
+		if ((flags & 1) && top > 0)
+			memcpy(current, stack[--top], sizeof(current));
+
+		if (flags & 2)
+		{
+			memcpy(stack[top], current, sizeof(current));
+
+			if (top < kJointBudget - 1)
+				++top;
+		}
+
+		if (bone)
+			pose_translate(current, (float)bone[1], (float)bone[2],
+				(float)bone[3]);
+
+		if (rot)
+			pose_superpack(current, &rot);
+
+		/* THE THREE EXTRA ROTATIONS A BONE CAN ASK FOR (flags 0x1C) are read
+		 * out of item->data, which is a CREATURE's head and torso stream. A
+		 * pickup has no data and the draw hands the walk `no_rotation`, all
+		 * zeroes, so they are identity here - and phd_RotY(0) is identity in
+		 * the draw too, which is why nothing has to be skipped. */
+
+		memcpy(out + node * 12, current, sizeof(current));
+	}
+
+	return nodes;
+}
+
 /* HOW DEEP A PICKUP MODEL REACHES, AND WHAT LIFTS IT OUT (#155b). The header
  * carries the rule; this is the arithmetic.
  *
@@ -3591,50 +3844,141 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
  * y is DOWN in this engine, so the deepest point is the LARGEST y, and the
  * lift is that minus the classic mesh's own deepest - clamped at zero, so a
  * model that lies on the floor or above it is never touched. */
-bool HDModelFloorLift(int model, const float* fix, float classicLowest,
-	float* lowest, float* lift)
+bool HDModelFramedBox(int model, const float* fix, const float* pose,
+	int nodes, float* mins, float* maxs, float* deepest)
 {
 	const Model* one = find(g_models, model);
+
+	if (!one || !one->vertexSeen)
+		return false;
+
+	/* THE POINTS OR NOTHING (fix round 1 made this the only way). Until the
+	 * frame's own turn came into the measurement, a model drawn as it stands
+	 * could be measured off the box: with every node's matrix a pure
+	 * translation equal to its own bind offset, a vertex is drawn exactly
+	 * where the bind pose has it, so the box of the bind positions IS the box
+	 * of the drawn ones. A ROTATION breaks that, and an answer off the box
+	 * would then be a bound and not the model - quietly, in a number that
+	 * looks like the others. */
+	if (one->points.empty() || one->points.size() / 3 != one->pointNode.size())
+		return false;
+
+	const size_t count = one->points.size() / 3;
+	const float* p = &one->points[0];
+	float lo[3] = { 0, 0, 0 }, hi[3] = { 0, 0, 0 };
+	float low[3] = { 0, 0, 0 };
+
+	if (nodes > kJointBudget)
+		nodes = kJointBudget;
+
+	if (nodes < 1)
+		nodes = 1;
+
+	for (size_t i = 0; i < count; i++, p += 3)
+	{
+		float q[3], out[3];
+		int node;
+
+		if (fix)
+		{
+			/* THE FITTED CASE is the ring's <BASE>_OPTION model, which stands
+			 * on ONE node and whose fit already puts it in the item's own
+			 * frame - so the fold has nothing to take off and the node is 0.
+			 * Row-major, row-vector, exactly as HDModelRingFit wrote it and
+			 * as the draw multiplies it. */
+			for (int c = 0; c < 3; c++)
+				q[c] = fix[3 * 4 + c] + p[0] * fix[0 * 4 + c] +
+					p[1] * fix[1 * 4 + c] + p[2] * fix[2 * 4 + c];
+
+			node = 0;
+		}
+		else
+		{
+			/* AND THE SLOT'S OWN MODEL THROUGH THE BIND FOLD, which is what
+			 * the draw does to every vertex: the node's bind offset comes off
+			 * before the node's matrix goes on (set_joint above). */
+			node = (int)one->pointNode[i];
+
+			if (node >= nodes)
+				node = nodes - 1;
+
+			const float* bind = one->hasBind ? one->bind[node] : 0;
+
+			q[0] = bind ? p[0] - bind[0] : p[0];
+			q[1] = bind ? p[1] - bind[1] : p[1];
+			q[2] = bind ? p[2] - bind[2] : p[2];
+		}
+
+		/* AND THROUGH THE FRAME THE LEVEL DRAWS THAT NODE IN - HDFramePose's
+		 * 3x4, a point as a COLUMN. Without a pose the frame turns nothing
+		 * and the answer is the bind position, which is the number every
+		 * bind-pose measurement of this round printed. */
+		const float* m = pose ? pose + (size_t)node * 12 : 0;
+
+		if (m)
+			for (int r = 0; r < 3; r++)
+				out[r] = m[r * 4 + 0] * q[0] + m[r * 4 + 1] * q[1] +
+					m[r * 4 + 2] * q[2] + m[r * 4 + 3];
+		else
+			for (int r = 0; r < 3; r++)
+				out[r] = q[r];
+
+		/* AND WHERE THE DEEPEST POINT ITSELF IS (fix round 1), not only how
+		 * deep it reaches: a picture of the rule has to put the floor plane
+		 * UNDER that point, and a plane drawn under the box's middle is a
+		 * plane the eye cannot check the contact against. */
+		if (!i || out[1] > hi[1])
+		{
+			low[0] = out[0];
+			low[1] = out[1];
+			low[2] = out[2];
+		}
+
+		for (int c = 0; c < 3; c++)
+		{
+			if (!i || out[c] < lo[c]) lo[c] = out[c];
+			if (!i || out[c] > hi[c]) hi[c] = out[c];
+		}
+	}
+
+	if (mins)
+		for (int c = 0; c < 3; c++)
+			mins[c] = lo[c];
+
+	if (maxs)
+		for (int c = 0; c < 3; c++)
+			maxs[c] = hi[c];
+
+	if (deepest)
+		for (int c = 0; c < 3; c++)
+			deepest[c] = low[c];
+
+	return true;
+}
+
+bool HDModelFloorLift(int model, const float* fix, const float* pose,
+	int nodes, float classicLowest, float* lowest, float* lift)
+{
+	float lo[3], hi[3];
 
 	if (lowest)
 		*lowest = 0.0f;
 	if (lift)
 		*lift = 0.0f;
 
-	if (!one || !one->vertexSeen)
+	/* ONE SWEEP FOR BOTH ANSWERS (fix round 1): the deepest point IS the
+	 * drawn box's largest y, and the tool needs the whole box to frame a
+	 * picture of the same thing. Two sweeps of the same points with two
+	 * copies of the same fold is one copy too many. */
+	if (!HDModelFramedBox(model, fix, pose, nodes, lo, hi))
 		return false;
 
-	float deepest;
+	const float deepest = hi[1];
 
-	if (!fix)
-		deepest = one->maxs[1];		// the box IS the drawn vertices
-	else
-	{
-		/* THE POINTS OR NOTHING. A fitted answer off the box would be the
-		 * round before this one, and quietly: the caller would get a number
-		 * that looks like the others and is not the same quantity. */
-		if (one->points.empty())
-			return false;
-
-		const size_t count = one->points.size() / 3;
-		const float* p = &one->points[0];
-
-		deepest = fix[3 * 4 + 1];
-
-		for (size_t i = 0; i < count; i++, p += 3)
-		{
-			const float y = fix[3 * 4 + 1] + p[0] * fix[0 * 4 + 1] +
-				p[1] * fix[1 * 4 + 1] + p[2] * fix[2 * 4 + 1];
-
-			if (!i || y > deepest)
-				deepest = y;
-		}
-	}
-
-	/* THE SLACK. Half a unit, which is a twentieth of a millimetre at this
-	 * engine's scale of 1024 units to a metre and well under the rounding of
-	 * the classic mesh's own SHORT coordinates. It keeps the rule from writing
-	 * a lift for a model that is modelled ON the classic mesh and misses it by
+	/* THE SLACK. Half a unit, which is half a millimetre at this engine's
+	 * scale of 1024 units to a metre and well under the rounding of the
+	 * classic mesh's own SHORT coordinates. It keeps the rule from writing a
+	 * lift for a model that is modelled ON the classic mesh and misses it by
 	 * a float's last digit - which is every one of the remaster's own pickup
 	 * files, and a matrix touched for nothing is a matrix nobody can rule out
 	 * later. */
@@ -3657,10 +4001,38 @@ void HDModelReleasePoints()
 		at != g_models.end(); ++at)
 	{
 		std::vector<float> empty;
+		std::vector<unsigned char> emptyNodes;
 
 		at->second.points.swap(empty);	// and the capacity with it
+		at->second.pointNode.swap(emptyNodes);
 		at->second.keepPoints = false;
 	}
+}
+
+/* WHAT THE FLOOR RULE HAD TO MEASURE ON, for the caller's log (#155b, fix
+ * round 1). `kept` is how many vertex positions are beside the model and
+ * `blended` how many of them ride on more than one node - a pickup file is
+ * rigid per node in every file measured, and a number here other than zero
+ * says that this one is not and that its deepest point is read off its
+ * heaviest bone alone. */
+bool HDModelPointsInfo(int model, int* kept, int* blended)
+{
+	const Model* one = find(g_models, model);
+
+	if (kept)
+		*kept = 0;
+	if (blended)
+		*blended = 0;
+
+	if (!one)
+		return false;
+
+	if (kept)
+		*kept = (int)(one->points.size() / 3);
+	if (blended)
+		*blended = one->pointsBlended;
+
+	return !one->points.empty();
 }
 
 bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)

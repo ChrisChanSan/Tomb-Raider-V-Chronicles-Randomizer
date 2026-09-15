@@ -260,14 +260,20 @@ struct HDModelSlot
 	 * in for, and the fit is only known once both of them are on the card.
 	 *
 	 * With this set the drawn vertices' positions are kept beside the model,
-	 * in the model's own frame, so that HDModelFloorLift can push them all
-	 * through that fit later in the same level build. HDModelReleasePoints
-	 * gives them back - the caller calls it as soon as it has measured, and
-	 * nothing holds a point list into the first frame.
+	 * in the model's own frame, and with each of them the node it rides on, so
+	 * that HDModelFloorLift can push them all through that fit later in the
+	 * same level build. HDModelReleasePoints gives them back - the caller
+	 * calls it as soon as it has measured, and nothing holds a point list into
+	 * the first frame.
 	 *
-	 * Only a model that is FITTED needs it: a model drawn as it stands has its
-	 * deepest point in the box the build already measured, and
-	 * HDModelFloorLift reads that instead. */
+	 * EVERY MODEL OF THE PICKUP FAMILY needs it since fix round 1, and not
+	 * only the fitted ones. Until the item's own animation frame came into
+	 * the measurement, a model drawn as it stands had its deepest point in the
+	 * box the build already had: with no rotation on any node, a vertex is
+	 * drawn exactly where the bind pose puts it. A frame that TURNS node 0 -
+	 * six of ANDREA3's eighteen pickup slots do - sends the box corners where
+	 * no vertex of the model is, and the rule would lift a model by the
+	 * corner's number. */
 	bool keepPoints = false;
 };
 
@@ -806,6 +812,45 @@ bool HDModelRingFit(int model, int target, float* out);
  * test now has a line pointing at the cause. */
 float HDModelRingFitOverflow(int model, int target, int* worstAxis);
 
+/* THE FRAME THE LEVEL REALLY DRAWS A SLOT IN (#155b, fix round 1).
+ *
+ * A moveable's meshes are placed by its mesh tree AND TURNED BY ITS ANIMATION
+ * FRAME - DrawAnimatingItem calls gar_RotYXZsuperpack for node 0 before the
+ * first mesh is drawn and once more for every node below it. The bind pose,
+ * which is that walk with the rotations left out, is the frame a .TRM's
+ * vertices are measured against; it is NOT the frame the item stands in on
+ * the floor. Six of ANDREA3's eighteen pickup slots carry a turn on node 0
+ * that is not a yaw, and the Uzi item's stands the model on its head.
+ *
+ * This is the walk WITH them, once per slot at level build: `out` takes twelve
+ * floats a node - the engine's own 3x4, M00..M23, so a point is R * p + t -
+ * and the return value is how many nodes were filled.
+ *
+ * `frame` is the object's own first frame: six shorts of bounding box, three
+ * of offset, then one rotation a node in gar_RotYXZsuperpack's packing.
+ * `tree` is the engine's bone array from the object's bone_index, four longs a
+ * node after the first (flags, x, y, z). Either may be null and a null frame
+ * gives identity for every node, which is the bind pose again.
+ *
+ * The frame's OFFSET and the item's own rotation are left out, and the
+ * function says why - both of them cancel in the difference the floor rule is
+ * about. */
+int HDFramePose(const short* frame, const long* tree, int nodes,
+	float* out /* nodes * 12 */);
+
+/* THE BOX OF A MODEL AS IT IS REALLY DRAWN (#155b, fix round 1) - every kept
+ * vertex through the fit, the bind fold and the node's own frame, in the
+ * item's frame. The same sweep HDModelFloorLift is: the deepest point is this
+ * box's largest y, and a tool that has to FRAME a picture of the drawn model
+ * needs the other five numbers as well. `fix` and `pose` mean exactly what
+ * they mean there, and it needs the same kept vertices.
+ *
+ * `deepest` is optional and takes the three coordinates of the deepest vertex
+ * ITSELF - where the model touches the ground and not only how far down that
+ * is. A picture of the rule has to draw the floor plane under that point. */
+bool HDModelFramedBox(int model, const float* fix, const float* pose,
+	int nodes, float* mins, float* maxs, float* deepest = 0);
+
 /* HOW FAR A PICKUP MODEL SINKS, AND WHAT LIFTS IT OUT (#155b).
  *
  * A pickup is drawn at its animation frame's own offset, so where the ground
@@ -822,14 +867,21 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis);
  * engine, so "deepest" is the LARGEST y and a model sinks when its deepest
  * point is larger than `classicLowest`.
  *
- * `fix` is optional. Without it the model is measured AS IT STANDS and the
- * answer is the box the build already took - which is a box of the drawn
- * VERTICES, so it is the geometry and not a hull. With it (the ring's fit,
- * what HDModelRingFit wrote) every kept vertex really goes through the matrix;
- * that needs HDModelSlot::keepPoints on the model, and without it the call
- * says so by returning false rather than by quietly measuring the wrong thing.
- * Round #155 measured the eight BOX CORNERS through the fit instead, which
- * overstates a crossed pair of guns by about a factor of two.
+ * `fix` is optional. Without it the model is measured AS IT STANDS, node by
+ * node through the bind fold the draw does. With it (the ring's fit, what
+ * HDModelRingFit wrote) the model is the one-node <BASE>_OPTION file and every
+ * kept vertex goes through that matrix first. Either way it is EVERY KEPT
+ * VERTEX and never a box: that needs HDModelSlot::keepPoints on the model, and
+ * without it the call says so by returning false rather than by quietly
+ * measuring the wrong thing. Round #155 measured the eight BOX CORNERS through
+ * the fit instead, which overstates a crossed pair of guns by about a factor
+ * of two.
+ *
+ * `pose` is HDFramePose's answer for the slot the model is drawn in - twelve
+ * floats a node - and `nodes` how many of them there are. It is what makes
+ * the answer the frame the LEVEL draws in rather than the bind pose (fix round
+ * 1); null means the frame turns nothing, which is the bind pose, and then the
+ * numbers are the ones this round's first build printed.
  *
  * `lowest` takes the model's own deepest point and `lift` how far it has to
  * come up so as not to reach below `classicLowest` - zero for a model that
@@ -839,8 +891,16 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis);
  * function.
  *
  * One implementation, engine and tool, for the same reason the fit is. */
-bool HDModelFloorLift(int model, const float* fix, float classicLowest,
-	float* lowest, float* lift);
+bool HDModelFloorLift(int model, const float* fix, const float* pose,
+	int nodes, float classicLowest, float* lowest, float* lift);
+
+/* WHAT THAT MEASUREMENT HAD IN HAND (#155b, fix round 1). `kept` is how many
+ * vertex positions are beside the model - zero for one that never asked to
+ * keep them - and `blended` how many of those ride on more than one node,
+ * which is the one thing the sweep reads off the heaviest bone alone. Every
+ * pickup file measured, the remaster's own and the user's four mods, is rigid
+ * per node and reads zero. */
+bool HDModelPointsInfo(int model, int* kept, int* blended);
 
 /* AND THE POINT LISTS BACK (#155b). Drops every kept vertex list of this
  * level; the models themselves are untouched and go on drawing. Call it once

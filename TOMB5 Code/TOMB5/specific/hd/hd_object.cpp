@@ -81,6 +81,10 @@
 
 namespace
 {
+	// A mod's inventory model for one slot (#153, round M2b) - the plan is
+	// below, next to the ring; the verdict only carries a pointer to it.
+	struct RingModel;
+
 	/* WHAT ONE SLOT IS ALLOWED TO DO, decided once at level build. */
 	struct Verdict
 	{
@@ -106,6 +110,10 @@ namespace
 		 * level build and applied in the object path - see the floor rule at
 		 * the plan loop. */
 		float lift;
+		/* AND THE RING PLAN OF THIS SLOT, or null (#155b, fix round 1). The
+		 * plan is a short array and the walk over it cost nothing, but it was
+		 * a walk per HD item per FRAME for an answer that is level data. */
+		const RingModel* ring;
 	};
 
 	Verdict g_slot[NUMBER_OBJECTS];
@@ -351,22 +359,29 @@ namespace
 		 * deepest point; zero for a model that already lies on it.
 		 *
 		 * It is applied on the FLOOR and nowhere else: the ring and the
-		 * corner display have no floor and draw `fix` exactly as they did. */
+		 * corner display have no floor and draw `fix` exactly as they did.
+		 *
+		 * It is NOT folded into a second copy of the fit, which is what the
+		 * first build of this round did: a lift is a move in the WORLD and
+		 * the fit's translation row is the item's frame - see the lift in
+		 * HDObjectEnd for the turn that showed the difference. */
 		float lift;
 		float sank;		// what it stood at before the lift, for the log
-		/* `fix` WITH THE LIFT ALREADY IN IT, which is the matrix the floor
-		 * draws through. The lift belongs between the fit and the item's own
-		 * matrix - it is a move in the ITEM's frame - and the fit's
-		 * translation row is exactly where that lands, so the whole of it is
-		 * one subtraction at level build and not a line in the frame path. */
-		float floorFix[16];
 	};
 
 	RingModel g_ring_model[16];
 	int g_ring_models = 0;
 
+	/* THE LIST IS AT MOST SIXTEEN LONG AND USUALLY EMPTY, so this walk costs
+	 * nothing - but the FRAME path asked it of every HD item, and the answer
+	 * is level data like everything else here. g_slot[].ring holds it (fix
+	 * round 1, the reviewer's own note): set where the plan is built, read
+	 * where an item is drawn. */
 	const RingModel* ring_model_of(int slot)
 	{
+		if (slot >= 0 && slot < NUMBER_OBJECTS)
+			return g_slot[slot].ring;
+
 		for (int i = 0; i < g_ring_models; i++)
 			if (g_ring_model[i].slot == slot)
 				return &g_ring_model[i];
@@ -388,10 +403,17 @@ namespace
 	 * case of its own, because those move the item and take both meshes with
 	 * them.
 	 *
-	 * The engine measured the mesh already: ProcessMeshData walks every mesh's
-	 * vertices at level load and keeps the box in MESH_DATA::bbox, so this
-	 * reads the level's own answer instead of parsing the mesh a second time.
-	 * bbox[4] is the largest y, and y is DOWN.
+	 * IN THE FRAME THE LEVEL DRAWS IT IN (fix round 1), which is `pose` -
+	 * HDFramePose's twelve floats a node. The animation frame turns node 0
+	 * before the first mesh is drawn, and a rule measured in the bind pose is
+	 * a rule about a picture nobody sees. The bbox ProcessMeshData took at
+	 * level load cannot answer that: a box under rotation is a bound and not a
+	 * mesh, which is the very fault round #155 had on the HD side. So this
+	 * walks the mesh's own VERTICES - the engine kept them, ACMESHVERTEX by
+	 * ACMESHVERTEX, in MESH_DATA::aVtx (specific\drawroom.cpp:1017-1030) - and
+	 * with an identity pose it comes out at bbox[4] again, which is how the
+	 * two builds of this round can be compared line for line. y is DOWN, so
+	 * the deepest point is the LARGEST y.
 	 *
 	 * OVER THE WHOLE OBJECT AND NOT NODE 0 ALONE, each node's mesh at the
 	 * place the mesh tree puts it: a two-mesh pickup (HK_ITEM carries the
@@ -399,9 +421,14 @@ namespace
 	 * itself. `mesh_index` counts in the DOUBLED array LoadObjects builds -
 	 * node n is at mesh_index + 2n, the odd entry beside it being the mesh
 	 * swap - which is exactly how DrawAnimatingItem walks it. */
-	bool classic_lowest_of(int slot, const float* bind, int nodes, float* out)
+	bool classic_lowest_of(int slot, const float* pose, int nodes, float* out)
 	{
-		if (!mesh_vtxbuf || slot < 0 || slot >= NUMBER_OBJECTS ||
+		/* THE POSE IS NOT OPTIONAL. Its translation is where the mesh tree
+		 * and the frame together put the node, so without it a node past the
+		 * first would be measured in its own frame and not the item's. Both
+		 * callers hand one over; this is here so that a third cannot quietly
+		 * not. */
+		if (!pose || !mesh_vtxbuf || slot < 0 || slot >= NUMBER_OBJECTS ||
 			!objects[slot].loaded)
 			return false;
 
@@ -419,23 +446,96 @@ namespace
 
 			const MESH_DATA* mesh = mesh_vtxbuf[at];
 
-			// A mesh with no vertices at all has no box: ProcessMeshData
-			// leaves bbox zeroed and skips the walk that would fill it.
-			if (!mesh || !mesh->nVerts)
+			// A mesh with no vertices at all has nothing to measure:
+			// ProcessMeshData allocates no points for it.
+			if (!mesh || !mesh->nVerts || !mesh->aVtx)
 				continue;
 
-			const float y = mesh->bbox[4] + (bind ? bind[node * 3 + 1] : 0.0f);
+			const float* m = pose + (size_t)node * 12;
 
-			if (!any || y > deepest)
-				deepest = y;
+			for (int v = 0; v < mesh->nVerts; v++)
+			{
+				const ACMESHVERTEX& one = mesh->aVtx[v];
+				const float y = m[4] * one.x + m[5] * one.y +
+					m[6] * one.z + m[7];
 
-			any = true;
+				if (!any || y > deepest)
+					deepest = y;
+
+				any = true;
+			}
 		}
 
 		if (any && out)
 			*out = deepest;
 
 		return any;
+	}
+
+	/* AND THE FRAME ITSELF, per slot (#155b, fix round 1). HDFramePose does
+	 * the walk; this is where the engine's own three pieces of it are - the
+	 * object's first frame, its slice of the bone array, and its node count.
+	 *
+	 * THE OBJECT'S FIRST FRAME IS THE ONE A PICKUP IS DRAWN AT: the item is
+	 * initialised at anims[obj->anim_index].frame_base and nothing advances it
+	 * (a pickup has no control routine that animates), so GetFrames hands the
+	 * draw the anim's own first frame. The two pointers are checked against
+	 * each other below rather than assumed equal. */
+	const short* first_frame_of(int slot)
+	{
+		const OBJECT_INFO& object = objects[slot];
+
+		if (anims && object.anim_index >= 0)
+		{
+			const short* animFrame = anims[object.anim_index].frame_ptr;
+
+			if (animFrame && animFrame != object.frame_base)
+			{
+				/* A FINDING AND NOT A CHOICE. It has never fired on the
+				 * fifteen shipped levels; if it ever does, the line says
+				 * which slot and the rule below is measuring the object's
+				 * rest pose while the level draws another frame. */
+				Log("HDLOG level=%s pickup floor slot=%d name=%s the object's "
+					"own first frame and anim %d's differ - the rule measures "
+					"the object's", g_stem, slot,
+					HDSlotName(slot) ? HDSlotName(slot) : "?",
+					(int)object.anim_index);
+			}
+		}
+
+		return object.frame_base;
+	}
+
+	int frame_pose_of(int slot, float* out /* nodes * 12 */, int nodes)
+	{
+		return HDFramePose(first_frame_of(slot),
+			bones ? &bones[objects[slot].bone_index] : 0, nodes, out);
+	}
+
+	/* WHICH WAY UP THE LEVEL DRAWS THIS PICKUP, one line per measured slot
+	 * (#155b, fix round 1). The floor rule's own two lines print numbers that
+	 * only mean anything in a stated frame, and this is the frame: where node
+	 * 0's own y axis points once the item's animation frame has turned it,
+	 * in the item's frame, taken out of the very matrix the rule measured
+	 * through. (0 1 0) is a frame that turns nothing or turns only about y,
+	 * and then this round's numbers are the bind pose's; (0 -1 0) is a model
+	 * standing on its head, which is what ANDREA3's UZI_ITEM does and what
+	 * made the first build of this round lift the wrong way.
+	 *
+	 * `blended` counts the model's vertices that ride on more than one node -
+	 * zero on every pickup file measured, and a number here says the sweep
+	 * read that model off its heaviest bone alone. */
+	void frame_turn_line(int slot, const float* pose, int model)
+	{
+		int kept = 0, blended = 0;
+
+		HDModelPointsInfo(model, &kept, &blended);
+
+		Log("HDLOG level=%s pickup floor slot=%d name=%s drawn frame: node 0's "
+			"y axis points (%.3f %.3f %.3f) in the item's frame, %d vertices "
+			"swept, %d of them blended", g_stem, slot,
+			HDSlotName(slot) ? HDSlotName(slot) : "?",
+			pose[1], pose[5], pose[9], kept, blended);
 	}
 
 	/* WHAT HDModelRingFitOverflow SAYS, IN WORDS (#153, round M2b, the second
@@ -726,6 +826,37 @@ namespace
 		out[0] = aW2VMx[M00] * x + aW2VMx[M01] * y + aW2VMx[M02] * z;
 		out[1] = aW2VMx[M10] * x + aW2VMx[M11] * y + aW2VMx[M12] * z;
 		out[2] = aW2VMx[M20] * x + aW2VMx[M21] * y + aW2VMx[M22] * z;
+	}
+
+	/* WORLD UP, IN VIEW SPACE (#155b, fix round 1) - the direction a lifted
+	 * pickup moves in, and the whole of what the first build of this round got
+	 * wrong. It wrote -lift onto the node matrix's own y ROW, which is the
+	 * image of the MODEL's y axis: for a slot whose frame turns node 0 upside
+	 * down - UZI_ITEM's turns it 180 degrees about z, measured - that pushes
+	 * the model further INTO the floor by exactly the amount it was meant to
+	 * come out of it.
+	 *
+	 * The node matrices are model space to VIEW space, so the displacement has
+	 * to be a view-space vector, and world up is (0, -1, 0) because y is DOWN.
+	 * One vector per CAMERA: the same answer for every node of every item, so
+	 * the frame path adds three mul-adds a node and nothing else.
+	 *
+	 * It is the one direction this rule ever moves anything in, whatever the
+	 * item's rotation or its frame's - so "straight up and nothing else" is
+	 * true by construction and not by an argument about which frame the lift
+	 * is written in. */
+	long g_up_view_serial = -1;
+	float g_up_view[3] = { 0.0f, -1.0f, 0.0f };
+
+	const float* world_up_in_view()
+	{
+		if (g_up_view_serial != ViewSerial)
+		{
+			world_to_view(0.0f, -1.0f, 0.0f, true, g_up_view);
+			g_up_view_serial = ViewSerial;
+		}
+
+		return g_up_view;
 	}
 
 	/* WHERE THE LIGHTS GO. A sink rather than the FrameItem itself, so that
@@ -1480,6 +1611,15 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		one.bind = &binds[i * HD_OBJ_NODES * 3];
 		one.parent = &trees[i * HD_OBJ_NODES];
 		one.name = 0;
+		/* AND A PICKUP'S VERTICES KEPT UNTIL THE FLOOR RULE HAS MEASURED
+		 * (#155b, fix round 1). Until the item's own animation frame came
+		 * into that measurement the box was enough for a model drawn as it
+		 * stands; a frame that TURNS node 0 sends the box corners where no
+		 * vertex is, so the sweep needs the points. It is the pickup family
+		 * and not every slot - HDSlotIsPickup is the rule - and
+		 * HDModelReleasePoints gives the lists back at the end of the plan,
+		 * before the first frame. */
+		one.keepPoints = HDSlotIsPickup(slot);
 
 		/* A donor slot that resolved to a name gets it; one that did not is
 		 * LEFT OUT of the list entirely rather than bound by its own name.
@@ -1656,10 +1796,9 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		 * says what it needs and what happens when it has not got it. */
 		one.classicPose = true;
 		/* AND ITS VERTICES KEPT (#155b) until the floor rule has pushed them
-		 * through the fit. Only a FITTED model needs them: every other pickup
-		 * is measured off the box the build already took, which is a box of
-		 * the same vertices. HDModelReleasePoints gives them back at the end
-		 * of the plan. */
+		 * through the fit - as every pickup model's are since fix round 1,
+		 * for the reason at the slot plan above. HDModelReleasePoints gives
+		 * them back at the end of the plan. */
 		one.keepPoints = true;
 
 		wanted.push_back(one);
@@ -2082,13 +2221,6 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				continue;
 			}
 
-			/* THE FLOOR'S OWN COPY OF THE FIT (#155b), before the floor rule
-			 * has measured anything: a plan that survives to the frame path
-			 * must have a matrix to draw through even if the measurement
-			 * below cannot be made, and the fit without a lift is the honest
-			 * answer in that case. */
-			memcpy(ring.floorFix, ring.fix, sizeof(ring.floorFix));
-
 			HDModelBounds(ring.model, srcMin, srcMax);
 			HDModelBounds(slot, dstMin, dstMax);
 
@@ -2141,6 +2273,19 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		}
 
 		g_ring_models = kept;
+
+		/* AND THE FRAME PATH'S OWN POINTER TO THE PLAN (fix round 1), set
+		 * HERE and not where the plan was written down: the loop above
+		 * compacts the array, so a pointer taken before it could name another
+		 * slot's entry. It is what ring_model_of hands out - the same answer
+		 * as the walk it replaces, without a walk per item per frame. */
+		for (int i = 0; i < g_ring_models; i++)
+		{
+			const int slot = g_ring_model[i].slot;
+
+			if (slot >= 0 && slot < NUMBER_OBJECTS)
+				g_slot[slot].ring = &g_ring_model[i];
+		}
 	}
 
 	/* ------------------------------------- THE FLOOR RULE (#155b) --------
@@ -2151,9 +2296,9 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * ground where the level's own picture does not, and it is round #155's
 	 * reason for refusing the fitted OPTION model - the same quantity twice,
 	 * so it is measured once, here, and the model is lifted by exactly the
-	 * difference along the item's own up axis. Never scaled, never turned,
-	 * never moved sideways; a model that already lies on the mesh or above it
-	 * is not touched at all.
+	 * difference, STRAIGHT UP IN THE WORLD. Never scaled, never turned, never
+	 * moved sideways; a model that already lies on the mesh or above it is not
+	 * touched at all.
 	 *
 	 * WHY IT IS RIGHT TO LIFT AND NOT TO REFUSE. The alternative round #155
 	 * took - keep the vanilla model when the replacement sinks - hides a mod
@@ -2166,11 +2311,21 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * the box through the fit, which is a bound and not the model - see
 	 * HDModelFloorLift, which does it on the vertices.
 	 *
-	 * ONCE, HERE. The lift is a property of two models and of the mesh tree,
-	 * all three of them level data, so nothing of this is left for a frame to
-	 * work out; the draw adds one translation to a matrix it already has. */
+	 * AND IN THE FRAME THE LEVEL DRAWS THE ITEM IN (fix round 1). The item's
+	 * animation frame turns node 0 before the first mesh is drawn, so both
+	 * lowest points are taken through HDFramePose's matrices; the first build
+	 * of this round took them in the BIND pose, which for the six of
+	 * ANDREA3's eighteen pickup slots whose frame carries a real turn is not
+	 * the picture the player sees. The lift itself goes straight up in the
+	 * WORLD - see world_up_in_view - so the rule is one measurement and one
+	 * direction and neither of them depends on where the camera is.
+	 *
+	 * ONCE, HERE. The lift is a property of two models, of the mesh tree and
+	 * of one animation frame, all of them level data, so nothing of this is
+	 * left for a frame to work out; the draw adds one translation to a matrix
+	 * it already has. */
 	{
-		float bind[HD_OBJ_NODES * 3];
+		float pose[HD_OBJ_NODES * 12];
 
 		for (int i = 0; i < g_ring_models; i++)
 		{
@@ -2181,12 +2336,14 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				? objects[slot].nmeshes : HD_OBJ_NODES;
 			float classic = 0.0f, lowest = 0.0f, lift = 0.0f;
 
-			bind_pose_of(slot, bind, nodes);
+			frame_pose_of(slot, pose, nodes);
+			frame_turn_line(slot, pose, ring.model);
 
-			const bool haveMesh = classic_lowest_of(slot, bind, nodes, &classic);
+			const bool haveMesh = classic_lowest_of(slot, pose, nodes, &classic);
 
 			if (!haveMesh ||
-				!HDModelFloorLift(ring.model, ring.fix, classic, &lowest, &lift))
+				!HDModelFloorLift(ring.model, ring.fix, pose, nodes, classic,
+					&lowest, &lift))
 			{
 				Log("HDLOG level=%s ring floor slot=%d name=%s not measured: "
 					"%s - it is drawn where the fit puts it", g_stem, slot,
@@ -2199,14 +2356,9 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			ring.lift = lift;
 			ring.sank = lowest - classic;
 
-			/* y is DOWN, so lifting is a SUBTRACTION - and it goes on the
-			 * fit's own translation row, which is the item's frame. */
-			memcpy(ring.floorFix, ring.fix, sizeof(ring.floorFix));
-			ring.floorFix[3 * 4 + 1] -= lift;
-
 			Log("HDLOG level=%s ring floor slot=%d name=%s takes the fitted "
 				"%s on the floor, lifted by %.1f units (its lowest point "
-				"stood %.1f %s the item's)", g_stem, slot,
+				"stood %.1f %s the classic mesh's)", g_stem, slot,
 				HDSlotName(slot) ? HDSlotName(slot) : "?",
 				HDModelName(ring.model) ? HDModelName(ring.model) : "-",
 				lift, ring.sank < 0.0f ? -ring.sank : ring.sank,
@@ -2228,11 +2380,26 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				? objects[slot].nmeshes : HD_OBJ_NODES;
 			float classic = 0.0f, lowest = 0.0f, lift = 0.0f;
 
-			bind_pose_of(slot, bind, nodes);
+			frame_pose_of(slot, pose, nodes);
+			frame_turn_line(slot, pose, slot);
 
-			if (!classic_lowest_of(slot, bind, nodes, &classic) ||
-				!HDModelFloorLift(slot, 0, classic, &lowest, &lift))
+			const bool haveMesh = classic_lowest_of(slot, pose, nodes, &classic);
+
+			if (!haveMesh ||
+				!HDModelFloorLift(slot, 0, pose, nodes, classic, &lowest, &lift))
+			{
+				/* A PICKUP THE RULE COULD NOT MEASURE says so (fix round 1).
+				 * It used to fall out of the loop without a word, and since
+				 * the measurement needs the model's kept vertices there is
+				 * now a way for it to happen that is worth seeing. */
+				Log("HDLOG level=%s pickup floor slot=%d name=%s model=%s not "
+					"measured: %s", g_stem, slot,
+					HDSlotName(slot) ? HDSlotName(slot) : "?",
+					HDModelName(slot) ? HDModelName(slot) : "-",
+					haveMesh ? "the model kept no vertices to measure"
+						: "the slot has no classic mesh with vertices in it");
 				continue;
+			}
 
 			g_slot[slot].lift = lift;
 
@@ -2406,6 +2573,10 @@ void HDObjectLevelEnd()
 	g_swap_models = 0;
 	g_swap_drawn = 0;
 	g_ring_models = 0;	// #153 round M2b: a mod's inventory models
+	/* AND THE CACHED UP DIRECTION (#155b, fix round 1). ViewSerial only ever
+	 * counts up, so this cannot go stale on its own - it is cleared here so
+	 * that it could not if the serial were ever reset with a level. */
+	g_up_view_serial = -1;
 	g_count = 0;
 	g_dropped = 0;
 	g_open = false;
@@ -2728,42 +2899,51 @@ void HDObjectEnd()
 	// the unseen-node rule are over store_matrices at the top of this file.
 	store_matrices(entry);
 
-	/* THE FIT AND THE LIFT, IN FRONT OF THE ITEM'S OWN MATRIX (#155b), which
-	 * is where the ring puts the fit for the reason given there: the model is
-	 * moved into this slot's frame first and the engine's matrix then does
-	 * with it what it does with the EXTRA model.
-	 *
-	 * `floorFix` is the fit with the lift already in its translation row, so
-	 * this is the ring's own multiply and not a line more. */
+	/* THE FIT, IN FRONT OF THE ITEM'S OWN MATRIX (#155b), which is where the
+	 * ring puts it for the reason given there: the model is moved into this
+	 * slot's frame first and the engine's matrix then does with it what it
+	 * does with the EXTRA model. */
 	if (floorRing)
 	{
 		float placed[16];
 
-		ring_mul(floorRing->floorFix, entry.matrix, placed);
+		ring_mul(floorRing->fix, entry.matrix, placed);
 		memcpy(entry.matrix, placed, sizeof(placed));
 	}
-	else if (g_open_slot >= 0 && g_open_slot < NUMBER_OBJECTS &&
-		g_slot[g_open_slot].lift > 0.0f)
+
+	/* AND THE LIFT, STRAIGHT UP IN THE WORLD (#155b, and the whole of fix
+	 * round 1). One site for both cases - the fitted OPTION model and a
+	 * slot's own - because it is one rule and the direction has nothing to do
+	 * with which of the two is being drawn.
+	 *
+	 * THE FIRST BUILD OF THIS ROUND WROTE IT ALONG THE MODEL'S OWN y AXIS,
+	 * on the node matrix's row 1, and that is wrong wherever the item's
+	 * animation frame turns the model: ANDREA3's UZI_ITEM frame turns node 0
+	 * by 180 degrees about z, so the model's y axis points at the sky and the
+	 * lift drove the mod's pair of Uzis 11.5 units DEEPER into the ground -
+	 * the opposite of the rule's whole purpose, with a log line saying it had
+	 * been lifted onto the classic mesh's own lowest point.
+	 *
+	 * The matrices are model space to VIEW space, so this adds the world's up
+	 * direction expressed in view space (world_up_in_view, one vector per
+	 * camera) to each node's translation row. The 3x3 is untouched: nothing
+	 * is scaled, nothing is turned, and nothing moves sideways whatever the
+	 * item's rotation or its frame's. */
+	const float lift = floorRing ? floorRing->lift
+		: (g_open_slot >= 0 && g_open_slot < NUMBER_OBJECTS
+			? g_slot[g_open_slot].lift : 0.0f);
+
+	if (lift > 0.0f)
 	{
-		/* AND A PICKUP WHOSE OWN HD MODEL SINKS IS LIFTED THE SAME WAY, node
-		 * by node (#155b). A translation of (0, -lift, 0) in the NODE's own
-		 * frame, which is the frame the classic mesh it is measured against
-		 * lives in - so the two meet whatever the item's rotation does, and
-		 * for a thing lying on a floor that frame's up IS the world's.
-		 *
-		 * Written straight onto the translation row: prepending T to M leaves
-		 * the 3x3 alone and moves the row by -lift times the image of the
-		 * model's y axis, which is row 1. Nothing is scaled and nothing is
-		 * turned. */
-		const float lift = g_slot[g_open_slot].lift;
+		const float* up = world_up_in_view();
 
 		for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
 		{
 			float* m = entry.matrix + node * 16;
 
-			m[12] -= lift * m[4];
-			m[13] -= lift * m[5];
-			m[14] -= lift * m[6];
+			m[12] += lift * up[0];
+			m[13] += lift * up[1];
+			m[14] += lift * up[2];
 		}
 	}
 

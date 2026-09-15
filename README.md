@@ -255,15 +255,21 @@ long version is under *A mod's own inventory model* below.
 **A pickup never sinks into the floor.** Every pickup model that comes out HD
 is measured against the classic mesh it replaces, once when the level is
 built: if its lowest point reaches deeper than that mesh's, it is lifted by
-exactly the difference, straight up and nothing else — never scaled, never
-turned, never moved sideways. A model that already lies on that point or above
-it is not touched at all. The log says which it was, per slot, so a mod author
-whose gun stood in the ground can read the number he has to move it by:
+exactly the difference, straight up in the world and nothing else — never
+scaled, never turned, never moved sideways. A model that already lies on that
+point or above it is not touched at all.
+
+Both lowest points are taken **in the frame the level really draws the item
+in**. A pickup is not drawn in the pose its file is modelled in: the item's
+animation frame turns it first, and six of ANDREA3's eighteen pickups carry a
+turn that is not a plain yaw — the Uzi item's stands the model on its head. So
+the number a mod author reads is the one his model really reaches down to on
+the ground. The log says which it was, per slot:
 
 ```
-HDLOG level=ANDREA3 pickup floor slot=335 name=PISTOLS_AMMO_ITEM
-      model=EXTRA_PISTOLS_AMMO_ITEM lowest point 6.1 under the classic
-      mesh's - lifted by 6.1 units
+HDLOG level=ANDREA3 pickup floor slot=240 name=CROWBAR_ITEM
+      model=EXTRA_CROWBAR_ITEM lowest point 6.2 under the classic
+      mesh's - lifted by 6.2 units
 ```
 
 **Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
@@ -412,16 +418,17 @@ before.
 vanilla item's box, so one thicker than the item it stands in for reaches
 below that item's lowest point — into the ground, for a thing lying on it.
 Until now that was a reason to leave the floor vanilla; it is now a
-measurement and a lift. The fitted pair of Uzis stands **11.5 units** below
-the classic mesh's own lowest point and its ammunition box **6.8**, measured
-on the model's own vertices through the fit, and each is lifted by exactly
-that much before it is drawn. One rule for every pickup model, a mod's and
-your installation's alike, and the number is in the log per slot:
+measurement and a lift. In the frame ANDREA3 draws the item in, the fitted
+pair of Uzis stands **19.2 units** below the classic mesh's own lowest point
+and its ammunition box **6.8**, measured on the model's own vertices through
+the fit, and each is lifted by exactly that much before it is drawn. One rule
+for every pickup model, a mod's and your installation's alike, and the number
+is in the log per slot:
 
 ```
 HDLOG level=ANDREA3 ring floor slot=336 name=UZI_ITEM takes the fitted
-      UZI_OPTION on the floor, lifted by 11.5 units (its lowest point
-      stood 11.5 under the item's)
+      UZI_OPTION on the floor, lifted by 19.2 units (its lowest point
+      stood 19.2 under the classic mesh's)
 ```
 
 The ring and the corner display have no floor and are not touched by any of

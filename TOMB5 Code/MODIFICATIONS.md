@@ -13215,7 +13215,11 @@ for line to the reviewer's own pre-change runs, all fifteen levels
 their numbers, every one looked at, including RICH3's quiver before and after
 (`fix2/floor`). The lift in pixels, each pair on its shared camera:
 126.6 units = 255 px, 19.2 = 44, 6.8 = 47, 6.9 = 25, 6.2 = 30, 2.9 = 17,
-1.6 = 7, 1.1 = 8 (`fix2/pixels_out.txt`). The independent `.TRC`/`.TRM` reader
+1.6 = 7, 1.1 = 8 (`fix2/pixels_out.txt`). And the camera change reaches only
+the slots that are lifted: six renders of NOT-lifted slots come out **byte for
+byte identical** to the reviewer's own runs on the build before it, while the
+four lifted ones differ, which is the change doing exactly its own job and
+nothing beside it (`fix2/camera_scope.txt`). The independent `.TRC`/`.TRM` reader
 on RICH3's quiver, on the four masked slots and on the MP5
 (`fix2/drawnfloor.py`, `fix2/meshbits_out.txt`, `fix2/mp5_out.txt`). The frame
 pointer over 1,791 objects (`fix2/framepointer_out.txt`). The frame box against

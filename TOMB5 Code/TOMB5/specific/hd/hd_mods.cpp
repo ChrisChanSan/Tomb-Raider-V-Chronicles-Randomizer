@@ -77,6 +77,11 @@ namespace
 	std::vector<Mod> mods;
 	std::vector<Wav> wavs;
 
+	/* THE LOOSE LISTS (#159), absolute paths in the same order the mods are
+	 * in. A .txt that lies BESIDE the mod folders and not inside one; what is
+	 * in it is the wardrobe's business and none of this file's. */
+	std::vector<std::string> lists;
+
 	std::vector<std::string> notes;
 	size_t notes_flushed = 0;
 	void (*note_sink)(const char*) = 0;
@@ -406,10 +411,31 @@ namespace
 			if (ec)
 				break;
 
+			const std::string leaf = it->path().filename().string();
+
+			/* A LOOSE .txt IS A LIST, NOT A MOD (#159). It lies beside the mod
+			 * folders - Mods\outfit.txt, Mods\Outfits\outfit_1-5.txt - and the
+			 * wardrobe reads it for the outfits that have no mod folder of
+			 * their own and therefore no outfit.txt to be named in.
+			 *
+			 * COLLECTED HERE because this is the one walk that knows which
+			 * folder is a mod: it never steps INTO one, so a mod's own mod.txt
+			 * or outfit.txt can never be picked up as a list. The leading "_"
+			 * switches a list off exactly as it switches a mod off. */
+			if (it->is_regular_file(ec) && !ec)
+			{
+				const std::string low = lower(leaf);
+
+				if (low.size() > 4 && low.compare(low.size() - 4, 4, ".txt") == 0 &&
+					!disabled(leaf))
+					lists.push_back(it->path().string());
+
+				continue;
+			}
+
 			if (!it->is_directory(ec) || ec)
 				continue;
 
-			const std::string leaf = it->path().filename().string();
 			const std::string here = rel.empty() ? leaf : join(rel, leaf);
 
 			if (disabled(leaf))
@@ -451,17 +477,24 @@ namespace
 			 * fleet of logs found no line at all for the machines without a
 			 * Mods folder - the one case he most wants to tell apart from a
 			 * missing log. Same shape in both branches now. */
-			note("MODLOG folder=%s present=no mods=0 - nothing is overlaid",
+			note("MODLOG folder=%s present=no mods=0 lists=0 - nothing is overlaid",
 				folder_used.c_str());
 			return;
 		}
 
 		std::vector<Mod> found;
 
+		lists.clear();
 		gather(folder_used, std::string(), 0, found);
 
 		std::sort(found.begin(), found.end(),
 			[](const Mod& a, const Mod& b) { return a.sort < b.sort; });
+
+		// The file system's own order is not a promise and a list that
+		// overrides another has to do it in a written-down order (#159).
+		std::sort(lists.begin(), lists.end(),
+			[](const std::string& a, const std::string& b)
+			{ return lower(a) < lower(b); });
 
 		if ((int)found.size() > HD_PAGE_MOD_MAX)
 		{
@@ -471,8 +504,15 @@ namespace
 			found.resize((size_t)HD_PAGE_MOD_MAX);
 		}
 
-		note("MODLOG folder=%s present=yes mods=%d", folder_used.c_str(),
-			(int)found.size());
+		/* `lists=` is the loose .txt count (#159): a file the wardrobe may read
+		 * and this file may not, so the one line that says the folder was
+		 * walked says whether it was seen at all. */
+		note("MODLOG folder=%s present=yes mods=%d lists=%d", folder_used.c_str(),
+			(int)found.size(), (int)lists.size());
+
+		for (size_t i = 0; i < lists.size(); i++)
+			note("MODLOG list%d %s - beside the mod folders, so the wardrobe "
+				"reads it", (int)i, lists[i].c_str());
 
 		mods = found;
 
@@ -796,11 +836,25 @@ const char* HDModsNote(int at)
 	return at >= 0 && at < (int)notes.size() ? notes[(size_t)at].c_str() : "";
 }
 
+int HDModsListCount()
+{
+	need_scan();
+	return (int)lists.size();
+}
+
+const char* HDModsListPath(int at)
+{
+	need_scan();
+
+	return at >= 0 && at < (int)lists.size() ? lists[(size_t)at].c_str() : "";
+}
+
 void HDModsForget()
 {
 	scanned = false;
 	mods.clear();
 	wavs.clear();
+	lists.clear();
 	notes.clear();
 	reported.clear();
 	notes_flushed = 0;

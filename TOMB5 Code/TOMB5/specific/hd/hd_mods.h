@@ -36,7 +36,10 @@
 //
 // plus the two sound answers, which are independent of the HD path because
 // they are audio: the bank a mod ships (HDModsBank) and a loose NNNN.wav
-// anywhere under it (HDModsWav).
+// anywhere under it (HDModsWav) - and, since #159, the loose .txt files that
+// lie BESIDE the mod folders rather than inside one (HDModsListCount). This
+// walk is the only one that knows which folder is a mod, so it is the only
+// one that can tell a list from a mod's own outfit.txt.
 //
 // A MOD NEVER TOUCHES A PAGE OF A MODEL IT DID NOT SUPPLY. That is the whole
 // safety rule of this round and it is the user's: a page asked for by a
@@ -93,6 +96,19 @@ int HDModsOutfitCount(int index);
 const char* HDModsOutfitName(int index, int at);	// the .TRM stem, upper case
 const char* HDModsOutfitPath(int index, int at);	// absolute
 int HDModsOutfitGame(int index, int at);		// 5 or 4
+
+/* THE LOOSE LISTS (#159). A .txt file that lies BESIDE the mod folders -
+ * directly in Mods, or directly in a category folder - and not INSIDE a mod.
+ * The wardrobe reads them (hd_wardrobe.h): they are where an outfit that has
+ * no mod folder, and therefore no outfit.txt of its own, is given the same
+ * properties a mod's outfit.txt gives one.
+ *
+ * This file only finds them and says nothing about what is in them. The order
+ * is the mods' own - the lower-cased path - because a later list overrides an
+ * earlier one and that order has to be written down rather than the file
+ * system's. A name beginning with "_" is switched off here too. */
+int HDModsListCount();
+const char* HDModsListPath(int at);	// absolute
 
 /* THE MODEL RESOLVER. The active mods in order, each 5\ITEM then 4\ITEM.
  * Writes the path into `buffer` and returns it; an empty string means no

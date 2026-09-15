@@ -187,6 +187,18 @@ namespace
 	const float kDefaultSheen = 0.10f;
 	const float kDefaultSheenPower = 14.0f;
 
+	/* AND HER SKIN'S OWN (#158): the `skin` row of the material table in
+	 * hd_lara.cpp - a soft wide sheen, never a point - which that file carries
+	 * as kSheenSkin and falls back to when there is no scan entry at all. The
+	 * two numbers are written in both places on purpose and the same way every
+	 * other default here is: this file has to answer without the engine and
+	 * that one has to draw without a scan. The table above has no column for
+	 * it, because none of the eight rows ever measured her skin separately
+	 * from her clothes - so the tier under a list block or an outfit.txt is
+	 * this pair and nothing in between. */
+	const float kDefaultSkinSheen = 0.12f;
+	const float kDefaultSkinSheenPower = 10.0f;
+
 	/* ------------------------------------------------------------ state -- */
 
 	struct Entry
@@ -194,6 +206,9 @@ namespace
 		HDWardrobeEntry out;
 		std::string path;
 		std::string sort;	// the key, lower cased
+		// How many list blocks have named this entry (#159), so that the
+		// second one can say in its own line that it is overriding a first.
+		int named = 0;
 	};
 
 	bool scanned = false;
@@ -404,6 +419,10 @@ namespace
 	 *   rig=0|1                  ... and the pouches they hang in
 	 *   sheen=0.45               the body's specular strength ...
 	 *   exponent=26              ... and its Blinn-Phong exponent
+	 *   skin_sheen=0.12          and LARA'S OWN skin's (#158) - her face, the
+	 *   skin_exponent=10         lid on her neck, her bare hands and the pages
+	 *                            named by skin= below. 0..2 and 1..128; a value
+	 *                            outside that is a note and the default stands
 	 *   skin=8001,8201           which of its pages are Lara's own skin
 	 *   footsteps=bare|boots     round M3's business; read and logged now
 	 *   head=tr5|hair|outfit     whose head this body wears (#156) - see
@@ -415,17 +434,24 @@ namespace
 	 *
 	 * An unknown key is a note and never a fault, for the same reason mod.txt
 	 * does it that way: a mod written for a later round has to stay loadable
-	 * by this one. */
+	 * by this one.
+	 *
+	 * AND A LIST FILE'S BLOCK IS THE SAME KEYS (#159), which is why this
+	 * struct and take_key below are shared by both readers: two readers of one
+	 * format are two readers that will one day disagree about it. */
 	struct ModTxt
 	{
 		bool has = false;
 		std::string name;
 		int hands = -1, gloves = -1, braid = -1, holsters = -1, rig = -1;
 		float sheen = -1.0f, exponent = -1.0f;
+		float skinSheen = -1.0f, skinExponent = -1.0f;	// #158
 		bool hasSkin = false;
 		int skin[HD_WARDROBE_SKIN] = { 0, 0, 0 };
 		int feet = HD_WARDROBE_FEET_UNKNOWN;
 		int head = -1;		// #156: -1 is "the file did not say"
+		// The keys this one really took, for the line a list block logs (#159).
+		std::string said;
 	};
 
 	int as_bool(const std::string& value)
@@ -439,6 +465,170 @@ namespace
 		return -1;
 	}
 
+	// The keys a file really took, so that a list block's own log line can say
+	// what it changed rather than leaving it to be diffed (#159).
+	void took(ModTxt& out, const char* key)
+	{
+		if (!out.said.empty())
+			out.said += " ";
+
+		out.said += key;
+	}
+
+	/* ONE KEY OF ONE LINE, and there is exactly one reader of it (#159).
+	 *
+	 * A mod's outfit.txt and a block of a list file take the same keys - the
+	 * list file exists so that an outfit WITHOUT a mod folder can be given
+	 * them - so they are parsed here and nowhere else. `where` is the clause
+	 * the notes put after MODLOG: "mod3 Outfits\Legend outfit.txt", or
+	 * "outfit_1-5.txt, Outfit TR2_Swim". */
+	void take_key(const std::string& key, const std::string& value,
+		const std::string& where, ModTxt& out)
+	{
+		const std::string low = lower(value);
+
+		if (key == "name")
+		{
+			out.name = value;
+			took(out, "name");
+		}
+		else if (key == "hands")
+		{
+			out.hands = as_bool(low);
+			took(out, "hands");
+		}
+		else if (key == "gloves")
+		{
+			out.gloves = as_bool(low);
+			took(out, "gloves");
+
+			/* #153, round M2b. Said here rather than passed over in silence,
+			 * because a modder who writes the line and sees no gloves is owed
+			 * the reason. */
+			note("MODLOG %s: gloves=%s is ignored - the wardrobe wears "
+				"bare hands everywhere (the user's decision, round M2b)",
+				where.c_str(), value.c_str());
+		}
+		else if (key == "braid")
+		{
+			out.braid = as_bool(low);
+			took(out, "braid");
+		}
+		else if (key == "holsters")
+		{
+			out.holsters = as_bool(low);
+			took(out, "holsters");
+		}
+		else if (key == "rig")
+		{
+			out.rig = as_bool(low);
+			took(out, "rig");
+		}
+		else if (key == "sheen")
+		{
+			out.sheen = (float)std::atof(value.c_str());
+			took(out, "sheen");
+		}
+		else if (key == "exponent")
+		{
+			out.exponent = (float)std::atof(value.c_str());
+			took(out, "exponent");
+		}
+		/* THE SKIN'S OWN GLOW (#158), and the two ranges are the ones a
+		 * picture survives: a strength above 2 washes her face white in any
+		 * light and an exponent below 1 is not a highlight at all. Out of
+		 * range is a NOTE and the tier below stands - the same rule head= and
+		 * footsteps= get for a word they do not know. */
+		else if (key == "skin_sheen")
+		{
+			const float f = (float)std::atof(value.c_str());
+
+			if (f >= 0.0f && f <= 2.0f)
+			{
+				out.skinSheen = f;
+				took(out, "skin_sheen");
+			}
+			else
+				note("MODLOG %s: skin_sheen=%s is outside 0..2 - ignored, her "
+					"skin keeps the glow it had", where.c_str(), value.c_str());
+		}
+		else if (key == "skin_exponent")
+		{
+			const float f = (float)std::atof(value.c_str());
+
+			if (f >= 1.0f && f <= 128.0f)
+			{
+				out.skinExponent = f;
+				took(out, "skin_exponent");
+			}
+			else
+				note("MODLOG %s: skin_exponent=%s is outside 1..128 - ignored, "
+					"her skin keeps the glow it had", where.c_str(),
+					value.c_str());
+		}
+		else if (key == "head")
+		{
+			/* #156. An unknown value is a NOTE and the default stands - the
+			 * same rule an unknown key gets, and for the same reason: a mod
+			 * written for a later round has to stay loadable by this one. */
+			if (low == "tr5")
+				out.head = HD_WARDROBE_HEAD_TR5;
+			else if (low == "hair")
+				out.head = HD_WARDROBE_HEAD_HAIR;
+			else if (low == "outfit" || low == "own")
+				out.head = HD_WARDROBE_HEAD_OUTFIT;
+			else
+			{
+				note("MODLOG %s: head=%s is none of tr5, hair or outfit - "
+					"ignored", where.c_str(), value.c_str());
+				return;
+			}
+
+			took(out, "head");
+		}
+		else if (key == "footsteps")
+		{
+			if (low == "bare")
+				out.feet = HD_WARDROBE_FEET_BARE;
+			else if (low == "boots")
+				out.feet = HD_WARDROBE_FEET_BOOTS;
+			else
+			{
+				note("MODLOG %s: footsteps=%s is neither bare nor boots - "
+					"ignored", where.c_str(), value.c_str());
+				return;
+			}
+
+			took(out, "footsteps");
+		}
+		else if (key == "skin")
+		{
+			int at = 0;
+			std::string one;
+
+			out.hasSkin = true;
+			took(out, "skin");
+
+			for (size_t i = 0; i <= value.size(); i++)
+			{
+				if (i == value.size() || value[i] == ',')
+				{
+					one = trim(one);
+
+					if (!one.empty() && at < HD_WARDROBE_SKIN)
+						out.skin[at++] = std::atoi(one.c_str());
+
+					one.clear();
+				}
+				else
+					one.push_back(value[i]);
+			}
+		}
+		else
+			note("MODLOG %s: key \"%s\" is not one this build knows - ignored",
+				where.c_str(), key.c_str());
+	}
+
 	void read_outfit_txt(int mod, ModTxt& out)
 	{
 		const std::string path = join(HDModsPath(mod), "outfit.txt");
@@ -446,6 +636,15 @@ namespace
 
 		if (!file)
 			return;
+
+		/* The clause every note of this file carries. It used to be spelled
+		 * out at each note ("mod%d %s: outfit.txt ..."); it is one string now
+		 * because take_key serves two kinds of file and only the caller knows
+		 * which one it is reading (#159). */
+		char where[256];
+
+		std::snprintf(where, sizeof(where), "mod%d %s outfit.txt", mod,
+			HDModsName(mod));
 
 		out.has = true;
 
@@ -472,93 +671,13 @@ namespace
 
 			if (eq == std::string::npos)
 			{
-				note("MODLOG mod%d %s: outfit.txt line \"%s\" has no = - ignored",
-					mod, HDModsName(mod), line.c_str());
+				note("MODLOG %s: line \"%s\" has no = - ignored", where,
+					line.c_str());
 				continue;
 			}
 
-			const std::string key = lower(trim(line.substr(0, eq)));
-			const std::string value = trim(line.substr(eq + 1));
-			const std::string low = lower(value);
-
-			if (key == "name")
-				out.name = value;
-			else if (key == "hands")
-				out.hands = as_bool(low);
-			else if (key == "gloves")
-			{
-				out.gloves = as_bool(low);
-
-				/* #153, round M2b. Said here rather than passed over in
-				 * silence, because a modder who writes the line and sees no
-				 * gloves is owed the reason. */
-				note("MODLOG %s: gloves=%s is ignored - the wardrobe wears "
-					"bare hands everywhere (the user's decision, round M2b)",
-					path.c_str(), value.c_str());
-			}
-			else if (key == "braid")
-				out.braid = as_bool(low);
-			else if (key == "holsters")
-				out.holsters = as_bool(low);
-			else if (key == "rig")
-				out.rig = as_bool(low);
-			else if (key == "sheen")
-				out.sheen = (float)std::atof(value.c_str());
-			else if (key == "exponent")
-				out.exponent = (float)std::atof(value.c_str());
-			else if (key == "head")
-			{
-				/* #156. An unknown value is a NOTE and the default stands -
-				 * the same rule an unknown key gets, and for the same reason:
-				 * a mod written for a later round has to stay loadable by
-				 * this one. */
-				if (low == "tr5")
-					out.head = HD_WARDROBE_HEAD_TR5;
-				else if (low == "hair")
-					out.head = HD_WARDROBE_HEAD_HAIR;
-				else if (low == "outfit" || low == "own")
-					out.head = HD_WARDROBE_HEAD_OUTFIT;
-				else
-					note("MODLOG mod%d %s: outfit.txt head=%s is none of tr5, "
-						"hair or outfit - ignored", mod, HDModsName(mod),
-						value.c_str());
-			}
-			else if (key == "footsteps")
-			{
-				if (low == "bare")
-					out.feet = HD_WARDROBE_FEET_BARE;
-				else if (low == "boots")
-					out.feet = HD_WARDROBE_FEET_BOOTS;
-				else
-					note("MODLOG mod%d %s: outfit.txt footsteps=%s is neither "
-						"bare nor boots - ignored", mod, HDModsName(mod),
-						value.c_str());
-			}
-			else if (key == "skin")
-			{
-				int at = 0;
-				std::string one;
-
-				out.hasSkin = true;
-
-				for (size_t i = 0; i <= value.size(); i++)
-				{
-					if (i == value.size() || value[i] == ',')
-					{
-						one = trim(one);
-
-						if (!one.empty() && at < HD_WARDROBE_SKIN)
-							out.skin[at++] = std::atoi(one.c_str());
-
-						one.clear();
-					}
-					else
-						one.push_back(value[i]);
-				}
-			}
-			else
-				note("MODLOG mod%d %s: outfit.txt key \"%s\" is not one this "
-					"build knows - ignored", mod, HDModsName(mod), key.c_str());
+			take_key(lower(trim(line.substr(0, eq))), trim(line.substr(eq + 1)),
+				where, out);
 		}
 
 		std::fclose(file);
@@ -575,6 +694,56 @@ namespace
 				return &kRow[i];
 
 		return 0;
+	}
+
+	/* A FILE'S OWN ANSWERS, LAID OVER WHAT THE TIERS BELOW HAD (#159).
+	 *
+	 * `from` says which tier this is - a mod's outfit.txt or a block of a list
+	 * file - and the rule is the same either way: a key the file does not have
+	 * changes NOTHING, so a block of two lines is two lines and not a new
+	 * outfit. That is what lets a list say "this one shines a little less" and
+	 * leave the other twenty answers where the scan, the table and the
+	 * measurement put them.
+	 *
+	 * And it is why this is one function rather than one per caller: the rank
+	 * is only real if every tier writes the same fields in the same order. */
+	void apply_txt(HDWardrobeEntry& o, const ModTxt& txt, int from)
+	{
+		if (!txt.has)
+			return;
+
+		if (txt.hands >= 0) { o.hands = txt.hands != 0; o.fromFlags = from; }
+		if (txt.braid >= 0) { o.braid = txt.braid != 0; o.fromFlags = from; }
+		if (txt.holsters >= 0) { o.holsters = txt.holsters != 0; o.fromFlags = from; }
+		if (txt.gloves >= 0) { o.gloves = txt.gloves != 0; o.fromFlags = from; }
+		if (txt.rig >= 0) { o.wearsRig = txt.rig != 0; o.fromFlags = from; }
+
+		if (txt.sheen >= 0.0f) { o.sheen = txt.sheen; o.fromSheen = from; }
+		if (txt.exponent > 0.0f) { o.sheenPower = txt.exponent; o.fromSheen = from; }
+
+		// #158
+		if (txt.skinSheen >= 0.0f) { o.skinSheen = txt.skinSheen; o.fromSkinSheen = from; }
+		if (txt.skinExponent > 0.0f) { o.skinSheenPower = txt.skinExponent; o.fromSkinSheen = from; }
+
+		if (txt.hasSkin)
+		{
+			for (int i = 0; i < HD_WARDROBE_SKIN; i++)
+				o.skin[i] = txt.skin[i];
+
+			o.fromSkin = from;
+		}
+
+		if (txt.feet != HD_WARDROBE_FEET_UNKNOWN)
+		{
+			o.feet = txt.feet;
+			o.fromFeet = from;
+		}
+
+		if (txt.head >= 0)
+		{
+			o.head = txt.head;
+			o.fromHead = from;
+		}
 	}
 
 	/* THE FOUR TIERS, and the one thing they cannot do.
@@ -631,11 +800,14 @@ namespace
 		o.wearsRig = kDefaultRig;
 		o.sheen = kDefaultSheen;
 		o.sheenPower = kDefaultSheenPower;
+		o.skinSheen = kDefaultSkinSheen;
+		o.skinSheenPower = kDefaultSkinSheenPower;
 		o.skin[0] = o.skin[1] = o.skin[2] = 0;
 		o.feet = HD_WARDROBE_FEET_UNKNOWN;
 
 		o.fromFlags = HD_WARDROBE_FROM_DEFAULT;
 		o.fromSheen = HD_WARDROBE_FROM_DEFAULT;
+		o.fromSkinSheen = HD_WARDROBE_FROM_DEFAULT;
 		o.fromSkin = HD_WARDROBE_FROM_DEFAULT;
 		o.fromFeet = HD_WARDROBE_FROM_DEFAULT;
 
@@ -690,37 +862,7 @@ namespace
 			o.fromSkin = HD_WARDROBE_FROM_TABLE;
 		}
 
-		if (!txt.has)
-			return;
-
-		if (txt.hands >= 0) { o.hands = txt.hands != 0; o.fromFlags = HD_WARDROBE_FROM_MOD_TXT; }
-		if (txt.braid >= 0) { o.braid = txt.braid != 0; o.fromFlags = HD_WARDROBE_FROM_MOD_TXT; }
-		if (txt.holsters >= 0) { o.holsters = txt.holsters != 0; o.fromFlags = HD_WARDROBE_FROM_MOD_TXT; }
-		if (txt.gloves >= 0) { o.gloves = txt.gloves != 0; o.fromFlags = HD_WARDROBE_FROM_MOD_TXT; }
-		if (txt.rig >= 0) { o.wearsRig = txt.rig != 0; o.fromFlags = HD_WARDROBE_FROM_MOD_TXT; }
-
-		if (txt.sheen >= 0.0f) { o.sheen = txt.sheen; o.fromSheen = HD_WARDROBE_FROM_MOD_TXT; }
-		if (txt.exponent > 0.0f) { o.sheenPower = txt.exponent; o.fromSheen = HD_WARDROBE_FROM_MOD_TXT; }
-
-		if (txt.hasSkin)
-		{
-			for (int i = 0; i < HD_WARDROBE_SKIN; i++)
-				o.skin[i] = txt.skin[i];
-
-			o.fromSkin = HD_WARDROBE_FROM_MOD_TXT;
-		}
-
-		if (txt.feet != HD_WARDROBE_FEET_UNKNOWN)
-		{
-			o.feet = txt.feet;
-			o.fromFeet = HD_WARDROBE_FROM_MOD_TXT;
-		}
-
-		if (txt.head >= 0)
-		{
-			o.head = txt.head;
-			o.fromHead = HD_WARDROBE_FROM_MOD_TXT;
-		}
+		apply_txt(o, txt, HD_WARDROBE_FROM_MOD_TXT);
 	}
 
 	/* ------------------------------------------------------- the folders -- */
@@ -1001,6 +1143,261 @@ namespace
 		}
 	}
 
+	/* ------------------------------------------------------- the lists -- */
+
+	/* THE NAME A BLOCK NAMES, split into what has to match (#159).
+	 *
+	 * A name may carry a KEY PREFIX to pin one source - "13/TRX_Wetsuit_3",
+	 * "46/Classic", "mod/outfits/legend/Black_1" - because the same .TRM stem
+	 * is in the wardrobe more than once: the 4-5 Barefoot mod ships an
+	 * OUTFIT_CLASSIC beside the install's. Without a prefix the block applies
+	 * to EVERY entry with that stem, install and mods alike, which is what a
+	 * player who writes "Outfit: Classic" means and what makes one line about
+	 * a body cover the mod that reskinned it.
+	 *
+	 * The stem itself is matched the way a player writes it and not the way
+	 * the file system spells it: case does not count, "OUTFIT_" may be left
+	 * off, and a space is an underscore. So "TR2_Swim", "tr2 swim" and
+	 * "OUTFIT_TR2_SWIM" are one name. */
+	void split_name(const std::string& name, std::string& prefix, std::string& stem)
+	{
+		// lower() turns "\" into "/" as well, so a key typed with backslashes
+		// lands on the same entry as one typed with forward ones.
+		const std::string low = lower(name);
+		const size_t cut = low.find_last_of('/');
+		std::string rest = name;
+
+		prefix.clear();
+
+		if (cut != std::string::npos)
+		{
+			prefix = low.substr(0, cut + 1);
+			rest = name.substr(cut + 1);
+		}
+
+		std::string up = upper(trim(rest));
+
+		for (size_t i = 0; i < up.size(); i++)
+			if (up[i] == ' ')
+				up[i] = '_';
+
+		if (up.compare(0, 7, "OUTFIT_") != 0)
+			up = "OUTFIT_" + up;
+
+		stem = up;
+	}
+
+	/* ONE BLOCK, APPLIED (#159). Every entry the name reaches takes it, and
+	 * the line says which they were and what the block set on them - so a
+	 * picture the user does not like is one grep away from the line that made
+	 * it, which is the promise every other wardrobe line makes.
+	 *
+	 * A BLOCK THAT REACHES NOTHING IS A LINE AND NOT A FAULT: a list written
+	 * on a machine with both bundles installed is read on one with a single
+	 * bundle, and the twenty-odd names that are not there have to be a note
+	 * rather than a refusal of the whole file. */
+	void apply_block(const std::string& leaf, const std::string& name,
+		const std::string& prefix, const std::string& stem, const ModTxt& txt)
+	{
+		std::string hit;
+		int matched = 0;
+		int again = 0;
+
+		for (size_t i = 0; i < entries.size(); i++)
+		{
+			if (stem != entries[i].out.file)
+				continue;
+
+			if (!prefix.empty() &&
+				entries[i].sort.compare(0, prefix.size(), prefix) != 0)
+				continue;
+
+			apply_txt(entries[i].out, txt, HD_WARDROBE_FROM_LIST);
+			matched++;
+
+			if (entries[i].named++)
+				again++;
+
+			// The key list is bounded like every other note in this file; the
+			// count stands whether or not the names fit.
+			if (hit.size() < 300)
+				hit += std::string(hit.empty() ? "" : ", ") + entries[i].out.key;
+			else if (hit[hit.size() - 1] != '.')
+				hit += ", ...";
+		}
+
+		if (!matched)
+		{
+			note("HDLOG wardrobe list %s: Outfit %s -> no such outfit",
+				leaf.c_str(), name.c_str());
+			return;
+		}
+
+		note("HDLOG wardrobe list %s: Outfit %s -> %s: %s%s", leaf.c_str(),
+			name.c_str(), hit.c_str(),
+			txt.said.empty() ? "nothing - the block has no key this build knows"
+				: txt.said.c_str(),
+			again ? " (an earlier block named it too, and this one wins for "
+				"these keys)" : "");
+	}
+
+	/* A LIST FILE (#159). Read line by line, and the SHAPE is the whole of it:
+	 *
+	 *   "#..."            a comment, and it closes nothing - the user's own
+	 *                     file puts one under every "Outfit:" line
+	 *   "Outfit: <name>"  opens a block and closes the one before it
+	 *   "key=value"       belongs to the open block
+	 *   an empty line     closes the block
+	 *
+	 * A key outside a block, a block with no name and a line with no "=" are
+	 * each a note and the file goes on being read: one bad line in a file of
+	 * fifty-two blocks may not cost the other fifty-one. */
+	void read_list(const std::string& path, int* blocks)
+	{
+		std::FILE* file = std::fopen(path.c_str(), "rb");
+		const std::string leaf = leaf_of(path);
+
+		if (!file)
+		{
+			note("HDLOG wardrobe list %s: cannot be opened - ignored",
+				path.c_str());
+			return;
+		}
+
+		ModTxt open;
+		std::string name, prefix, stem;
+		char raw[512];
+		char where[256];
+
+		while (std::fgets(raw, sizeof(raw), file))
+		{
+			std::string line = raw;
+
+			while (!line.empty() && (line[line.size() - 1] == '\n' ||
+				line[line.size() - 1] == '\r'))
+				line.erase(line.size() - 1);
+
+			const size_t hash = line.find('#');
+			/* A WHOLE-LINE COMMENT IS NOT AN EMPTY LINE. Cutting the comment
+			 * off first and then testing for empty would let the comment under
+			 * every "Outfit:" line of the user's own file close the block it
+			 * belongs to, and every key after it would stand outside one. */
+			const bool comment = hash != std::string::npos &&
+				trim(line.substr(0, hash)).empty();
+
+			if (hash != std::string::npos)
+				line.erase(hash);
+
+			line = trim(line);
+
+			if (comment)
+				continue;
+
+			if (line.empty())
+			{
+				if (open.has)
+					apply_block(leaf, name, prefix, stem, open);
+
+				open = ModTxt();
+				continue;
+			}
+
+			if (line.size() >= 7 && lower(line).compare(0, 7, "outfit:") == 0)
+			{
+				if (open.has)
+					apply_block(leaf, name, prefix, stem, open);
+
+				open = ModTxt();
+				name = trim(line.substr(7));
+
+				if (name.empty())
+				{
+					note("HDLOG wardrobe list %s: an \"Outfit:\" line with no "
+						"name - the block under it is ignored", leaf.c_str());
+					continue;
+				}
+
+				split_name(name, prefix, stem);
+				open.has = true;
+				(*blocks)++;
+				std::snprintf(where, sizeof(where), "%s, Outfit %s",
+					leaf.c_str(), name.c_str());
+				continue;
+			}
+
+			const size_t eq = line.find('=');
+
+			if (eq == std::string::npos)
+			{
+				note("HDLOG wardrobe list %s: line \"%s\" has no = - ignored",
+					leaf.c_str(), line.c_str());
+				continue;
+			}
+
+			if (!open.has)
+			{
+				note("HDLOG wardrobe list %s: \"%s\" stands outside a block - "
+					"ignored; a key belongs under an \"Outfit:\" line",
+					leaf.c_str(), line.c_str());
+				continue;
+			}
+
+			take_key(lower(trim(line.substr(0, eq))), trim(line.substr(eq + 1)),
+				where, open);
+		}
+
+		if (open.has)
+			apply_block(leaf, name, prefix, stem, open);
+
+		std::fclose(file);
+	}
+
+	/* EVERY LIST, IN NAME ORDER, AFTER EVERYTHING ELSE (#159). After, because
+	 * this is the top tier: an entry has to have its mod's outfit.txt, its
+	 * table row and its defaults on it before a block may overwrite any of
+	 * them. In name order, because two files may name one outfit and the
+	 * later one wins - which is only a rule if the order is written down. */
+	void apply_lists(int* files, int* blocks, int* matched, int* missed)
+	{
+		*files = HDModsListCount();
+		*blocks = 0;
+		*matched = 0;
+		*missed = 0;
+
+		for (int i = 0; i < *files; i++)
+		{
+			const std::string path = HDModsListPath(i);
+			const size_t before = notes.size();
+			int mine = 0, hit = 0, gone = 0;
+
+			read_list(path, &mine);
+
+			/* WHAT THE FILE'S OWN LINE COUNTS. The blocks it opened, and of
+			 * those the ones that reached an entry - read off the lines the
+			 * blocks themselves wrote, so the summary cannot claim something
+			 * the detail does not say. */
+			for (size_t n = before; n < notes.size(); n++)
+			{
+				const std::string& one = notes[n];
+
+				if (one.find(": Outfit ") == std::string::npos)
+					continue;
+
+				if (one.find("-> no such outfit") != std::string::npos)
+					gone++;
+				else
+					hit++;
+			}
+
+			note("HDLOG wardrobe list %s: %d blocks, %d matched, %d unmatched",
+				leaf_of(path).c_str(), mine, hit, gone);
+
+			*blocks += mine;
+			*matched += hit;
+			*missed += gone;
+		}
+	}
+
 	void scan()
 	{
 		/* WHAT THE SCAN COSTS, IN NUMBERS (#153, round M2, the fix round).
@@ -1050,6 +1447,13 @@ namespace
 
 		add_from_mods();
 
+		/* AND THE LISTS LAST (#159), because they are the top tier: a block
+		 * may only overwrite what the scan, a mod's outfit.txt, the table and
+		 * the defaults have already put on an entry. */
+		int listFiles = 0, listBlocks = 0, listHit = 0, listMissed = 0;
+
+		apply_lists(&listFiles, &listBlocks, &listHit, &listMissed);
+
 		int mine = 0, guest = 0, modded = 0;
 		int tr5Head = 0, hairHead = 0, ownHead = 0;
 
@@ -1078,9 +1482,11 @@ namespace
 
 		note("HDLOG wardrobe scan: %d entries - %d from the IV-VI install, "
 			"%d from the I-III install, %d from mods; %d files passed over; "
+			"lists=%d blocks=%d matched=%d unmatched=%d; "
 			"heads tr5=%d hair=%d outfit=%d; "
 			"ms=%d probed=%d read_kib=%.0f geometry=%d",
 			(int)entries.size(), mine, guest, modded, (int)refused.size(),
+			listFiles, listBlocks, listHit, listMissed,
 			tr5Head, hairHead, ownHead,
 			(int)(clock_ms() - begun + 0.5), (int)(opens1 - opens0),
 			(bytes1 - bytes0) / 1024.0, (int)(loads1 - loads0));
@@ -1111,6 +1517,8 @@ void HDWardrobeForget()
 	scanned = false;
 	entries.clear();
 	refused.clear();
+	// The lists are hd_mods' own list and are dropped with its scan; nothing
+	// of them is kept here past the entries they were applied to (#159).
 	notes.clear();
 	notes_flushed = 0;
 }
@@ -1172,7 +1580,29 @@ const char* HDWardrobeFromWord(int from)
 	case HD_WARDROBE_FROM_TABLE: return "the table";
 	case HD_WARDROBE_FROM_MOD_TXT: return "outfit.txt";
 	case HD_WARDROBE_FROM_ORIGIN: return "origin";
+	case HD_WARDROBE_FROM_LIST: return "the list";
 	default: return "the default";
+	}
+}
+
+/* THE ONE-WORD FORM, for a column of a table or a field of a log line (#159).
+ *
+ * It is a SWITCH and not an array on purpose. Two callers kept an array of
+ * these words and indexed it with the entry's own from-number; round 156 added
+ * a fifth tier and one of those arrays still had four rows, so the head column
+ * of the level build line would have read whatever lay after it. A tier added
+ * here is a word here, and a caller that asks gets one or gets "?". */
+const char* HDWardrobeFromTag(int from)
+{
+	switch (from)
+	{
+	case HD_WARDROBE_FROM_DEFAULT: return "default";
+	case HD_WARDROBE_FROM_MEASURED: return "measured";
+	case HD_WARDROBE_FROM_TABLE: return "table";
+	case HD_WARDROBE_FROM_MOD_TXT: return "outfit.txt";
+	case HD_WARDROBE_FROM_ORIGIN: return "origin";
+	case HD_WARDROBE_FROM_LIST: return "list";
+	default: return "?";
 	}
 }
 

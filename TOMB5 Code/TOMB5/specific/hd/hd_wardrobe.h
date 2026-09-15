@@ -63,14 +63,34 @@
 // and on a command line. It is compared case-insensitively.
 //
 // THE PROPERTIES of an entry - does it take the hands, the braid, the
-// holsters, the holster rig, is it gloved, how does it shine, which of its
-// pages are Lara's own skin - come from four places, in this order, and every
-// one of them is recorded so the log can say WHERE each answer came from:
+// holsters, the holster rig, is it gloved, how does it shine, how does her
+// skin shine, which of its pages are Lara's own skin - come from five places,
+// in this order, and every one of them is recorded so the log can say WHERE
+// each answer came from:
 //
-//   1. the mod's outfit.txt, if it has one          HD_WARDROBE_FROM_MOD_TXT
-//   2. the built-in table, keyed by FILE NAME       HD_WARDROBE_FROM_TABLE
-//   3. measured out of the .TRM itself              HD_WARDROBE_FROM_MEASURED
-//   4. the defaults                                 HD_WARDROBE_FROM_DEFAULT
+//   1. a list file's block, Mods\...\*.txt          HD_WARDROBE_FROM_LIST
+//   2. the mod's outfit.txt, if it has one          HD_WARDROBE_FROM_MOD_TXT
+//   3. the built-in table, keyed by FILE NAME       HD_WARDROBE_FROM_TABLE
+//   4. measured out of the .TRM itself              HD_WARDROBE_FROM_MEASURED
+//   5. the defaults                                 HD_WARDROBE_FROM_DEFAULT
+//
+// THE LIST FILE (#159) is what an outfit of an INSTALL has instead of an
+// outfit.txt. A mod is a folder and can carry one; the 52 outfits of the two
+// bundles have no folder of their own, and a mod that ships seventeen bodies
+// under one outfit.txt has no way to say anything about ONE of them. So a
+// .txt beside the mod folders - hd_mods' HDModsListCount finds them - holds
+// blocks of the shape
+//
+//     Outfit: TRX_Wetsuit_3
+//     sheen=0.10
+//     exponent=14
+//
+// and every key an outfit.txt takes is a key of a block. The name is matched
+// against the entry's FILE stem without regard to case, to the OUTFIT_ prefix
+// or to "_" against " ", and may carry a key prefix - "13/", "46/",
+// "mod/outfits/legend/" - to pin one source where the same stem is in the
+// wardrobe twice. A block sets only the keys it has; everything else keeps
+// the value of the tier below.
 //
 // Only the skin pages have a measured tier; everything else is a judgement
 // about a picture, which is exactly why the table exists (hd_lara.cpp's own
@@ -105,6 +125,10 @@
  * mod.txt names that bundle with origin=, wears no hair. Only the head rule
  * below has it. */
 #define HD_WARDROBE_FROM_ORIGIN		4
+/* A BLOCK OF A LIST FILE (#159). The top tier: a player who writes a line
+ * about one particular outfit has said the last word about it, over a mod's
+ * own outfit.txt and over this file's table alike. */
+#define HD_WARDROBE_FROM_LIST		5
 
 /* WHOSE HEAD THIS BODY WEARS (#156).
  *
@@ -170,6 +194,19 @@ struct HDWardrobeEntry
 	float sheen;			// the body's Blinn-Phong strength ...
 	float sheenPower;		// ... and exponent
 
+	/* AND LARA'S OWN SKIN'S (#158). The body's sheen is what the CLOTHES are
+	 * made of; this is what SHE is made of - her face, the lid on her neck,
+	 * her bare hands and the pages of the body named in `skin` below, which
+	 * are drawn with one material so that the wrist seam is not two. It is a
+	 * property of the outfit because an outfit decides how much of her is
+	 * showing and in what light: a wetsuit wants a wet skin and a parka does
+	 * not. Nothing but a list block or an outfit.txt sets it - the eight
+	 * measured rows of the table never had the column - so without a line it
+	 * is the material table's own `skin` pair, which hd_lara.cpp carries as
+	 * kSheenSkin. */
+	float skinSheen;
+	float skinSheenPower;
+
 	int skin[HD_WARDROBE_SKIN];	// pages that are Lara's own skin; 0 ends
 	int feet;			// HD_WARDROBE_FEET_*
 	int head;			// HD_WARDROBE_HEAD_* (#156)
@@ -177,6 +214,7 @@ struct HDWardrobeEntry
 	// Where each of those came from, one HD_WARDROBE_FROM_* each.
 	int fromFlags;			// hands / braid / holsters / gloves / rig
 	int fromSheen;
+	int fromSkinSheen;		// #158
 	int fromSkin;
 	int fromFeet;
 	int fromHead;
@@ -193,6 +231,13 @@ const char* HDWardrobeHeadPhrase(int head);
 // Where that answer came from, as a clause for a log line ("its mod.txt says
 // origin=tr1", "outfit.txt", "the default"). Never null.
 const char* HDWardrobeFromWord(int from);
+
+/* The same answer as ONE WORD for a column of a table or a field of a log
+ * line - "default", "measured", "table", "outfit.txt", "origin", "list".
+ * Never null, and never an index into a caller's own array: two of those
+ * existed until #159 and one of them was already a row short of the tiers
+ * this header defines. Add a tier here and every reader says its name. */
+const char* HDWardrobeFromTag(int from);
 
 /* WHERE TO LOOK. Null or "" means "ask hd_install", which is what the engine
  * wants; the diagnostic tools pass the folders on the command line so that a

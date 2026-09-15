@@ -675,7 +675,8 @@ void HDLaraDrawBuild(const char* stem)
 
 	/* Part by part, so that a wrong picture in the game can be looked up
 	 * rather than guessed at - the same reason the objects get a line each.
-	 * At most twenty-one lines and only with -log. */
+	 * One line per part the plan asked for, at most HD_LARA_PART_COUNT of
+	 * them - twenty-three since #156 added the head - and only with -log. */
 	if (!gLogEnabled)
 		return;
 

@@ -117,6 +117,15 @@ namespace
 			std::fseek(file, 0, SEEK_SET);
 			at = 0;
 			bad = size <= 0;
+
+			/* AND AN EMPTY FILE IS CLOSED HERE (#155b). The caller's rule is
+			 * "open failed, nothing to close" - every one of them returns on
+			 * false without a close() - so a handle left standing on a
+			 * zero-byte file was leaked for the length of the session, once
+			 * per such file in the walk. */
+			if (bad)
+				close();
+
 			return !bad;
 		}
 

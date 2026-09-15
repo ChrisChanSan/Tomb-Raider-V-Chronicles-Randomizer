@@ -483,6 +483,13 @@ namespace
 
 	const PartSheen kPartSheen[] =
 	{
+		/* HER FACE AND THE LID ON HER NECK ARE READ OUT OF THE WARDROBE SINCE
+		 * #158, not out of these two rows: skin_sheen= / skin_exponent= of an
+		 * outfit.txt or of a list block name what SHE is made of in that
+		 * outfit, and without a line the wardrobe's own default is this same
+		 * pair. The rows stay because they are what the material table says
+		 * skin is, and the table is the thing the default is taken from - see
+		 * skin_sheen() below and HDLaraPartSheen. */
 		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
 		/* TR5's own head is 9,483 triangles of HAIR out of 9,485 (#156), so
 		 * it takes the braid's material and not the face's. */
@@ -511,6 +518,7 @@ namespace
 		{ HD_LARA_PART_BACK_HK,            0.30f, 30.0f },
 		{ HD_LARA_PART_BACK_GRAPPLE,       0.30f, 30.0f }
 	};
+
 
 	/* WHICH CLASSIC SLOT STANDS FOR WHICH PART. By NAME, out of hd_bind's
 	 * table, because a slot is a hand slot for being called PISTOLS_ANIM and
@@ -616,6 +624,32 @@ namespace
 	bool g_twin[HD_LARA_PART_COUNT] = { false };
 	bool g_planned[HD_LARA_PART_COUNT] = { false };
 	std::vector<std::string> g_notes;
+
+	/* WHAT LARA HERSELF IS MADE OF, AND THE OUTFIT SAYS SO (#158).
+	 *
+	 * The BODY's sheen has belonged to the outfit since #123 fix round D,
+	 * because the same HD_LARA_PART_BODY is a Rome top in one level and a
+	 * catsuit in the next. Her SKIN was a constant - kSheenSkin - and the
+	 * user's wish of 2026-09-14 is the other half of the same thought: the
+	 * shine is her clothes, the glow is her, and an outfit decides how much of
+	 * her is showing and in what light. So the wardrobe carries the pair now
+	 * (skin_sheen= / skin_exponent= in an outfit.txt or in a list block) and
+	 * this is the one place that reads it back.
+	 *
+	 * WITHOUT A SCAN ENTRY IT IS kSheenSkin, which is the pair the wardrobe
+	 * itself defaults to. The default is repeated in this file rather than
+	 * reached for, exactly as takes_hands and its neighbours repeat theirs and
+	 * for the same reason: this file has to go on drawing a body when there is
+	 * no install to scan at all. */
+	void skin_sheen(float* strength, float* power)
+	{
+		const HDWardrobeEntry* e = props_of(g_outfit);
+
+		if (strength)
+			*strength = e ? e->skinSheen : kSheenSkin[0];	// kDefaultSkinSheen
+		if (power)
+			*power = e ? e->skinSheenPower : kSheenSkin[1];	// ... SheenPower
+	}
 
 	void note(const char* format, ...)
 	{
@@ -2336,6 +2370,24 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				: "none - TR5's head did not load, so its own head stays");
 	}
 
+	/* HER SKIN'S OWN MATERIAL, IN ONE LINE (#158). Its neighbour above says
+	 * whose head she wears; this one says what she is made of under it, and
+	 * where that answer came from - so a face that has come out wet in a play
+	 * test is one grep away from the skin_sheen= line that made it, which is
+	 * the promise the wardrobe line and the part lines already make. */
+	{
+		float strength = 0.0f, power = 1.0f;
+		const HDWardrobeEntry* e = props_of(level->outfit);
+
+		skin_sheen(&strength, &power);
+
+		note("HDLOG wardrobe %s: skin sheen=%.2f/%.0f (from %s)",
+			HDLaraOutfitKey(level->outfit) && *HDLaraOutfitKey(level->outfit)
+				? HDLaraOutfitKey(level->outfit) : model_of(level->outfit),
+			strength, power,
+			HDWardrobeFromWord(e ? e->fromSkinSheen : HD_WARDROBE_FROM_DEFAULT));
+	}
+
 	g_active = true;
 	return true;
 }
@@ -2430,21 +2482,28 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	/* AND A HAND PART'S SHEEN IS THE HAND'S, WHICH ALSO BELONGS TO THE OUTFIT
 	 * (#123, fix round I, I4). What is in the hand is a page of the same file
 	 * and gets its own material through HDModelSetPageSheen; this is the skin
-	 * or the glove around it, and until this round a gloved Lara's leather
-	 * shone like bare skin. */
-	if (kPart[part].kind == 1)
+	 * or the glove around it, and until that round a gloved Lara's leather
+	 * shone like bare skin.
+	 *
+	 * AND IT IS ALWAYS THE SKIN'S (#153, round M2b). takes_gloves answers
+	 * false for every outfit now, so the leather branch this test used to have
+	 * could never be taken and the pair it read went with it. Leather is still
+	 * the holster rig's material and stands as 0.18/20 in kPartSheen.
+	 *
+	 * THE THREE PARTS THAT ARE LARA AND NOT HER CLOTHES (#158): her face, the
+	 * lid on her neck and her bare hands. They were two constants and one
+	 * table row saying the same numbers - kSheenSkin for the eleven hand
+	 * parts, kPartSheen's own rows for the face and the lid - and they are one
+	 * answer now, out of the wardrobe entry, so that skin_sheen= moves all of
+	 * her at once. Without a line in a list or an outfit.txt that answer is
+	 * the same 0.12/10 those three places carried, which is what makes this
+	 * change nothing at all until somebody writes one. (The pages of the BODY
+	 * that are her skin take it too - HDLaraSkinSheen, below, hangs it on them
+	 * at level build.) */
+	if (part == HD_LARA_PART_FACE || part == HD_LARA_PART_NECK_CAP ||
+		kPart[part].kind == 1)
 	{
-		/* AND IT IS ALWAYS THE SKIN'S (#153, round M2b). takes_gloves answers
-		 * false for every outfit now, so the leather branch this line used to
-		 * have could never be taken, and the pair it read went with it.
-		 * Leather is still the holster rig's material and stands as 0.18/20
-		 * in kPartSheen below. */
-		if (strength)
-			*strength = kSheenSkin[0];
-
-		if (power)
-			*power = kSheenSkin[1];
-
+		skin_sheen(strength, power);
 		return;
 	}
 
@@ -2461,16 +2520,15 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 		}
 }
 
-/* LARA'S SKIN (#123, fix round K, K1), straight out of the material table at
- * the top of this file. The inner skin draw is her own throat's colour, so it
- * shines like skin whatever the outfit over it is made of. */
+/* LARA'S SKIN (#123, fix round K, K1), out of the material table at the top of
+ * this file - and out of the OUTFIT since #158, which is the same answer until
+ * an outfit.txt or a list block writes skin_sheen=. The pages of the body that
+ * are her own skin shine like skin whatever the clothes over them are made of,
+ * and they shine like the hands beside them, which is what makes the wrist
+ * seam one material instead of two. */
 void HDLaraSkinSheen(float* strength, float* power)
 {
-	if (strength)
-		*strength = kSheenSkin[0];
-
-	if (power)
-		*power = kSheenSkin[1];
+	skin_sheen(strength, power);
 }
 
 bool HDLaraSkinPage(int page)

@@ -13228,6 +13228,208 @@ the classic mesh over two levels (`fix2/frameboxes_*.txt`). The ring again:
 -nodraw` over ANDREA1 against the pre-round build: **287 lines identical**,
 eight byte-identical outfit renders.
 
+
+#### Round 156 (#156) - an outfit of Tomb Raider I-III has no hair, so it borrows TR5's head
+
+The user's report of 2026-09-15, with three photographs: "the outfits that come
+from TR1-3 all have no hair. They all still need the TR5 head, or another
+treatment, as a GLOBAL rule. For me, on the Mistress outfit the head from the
+outfit has to go - it overlays the TR5 head, now she is blond." His pictures:
+a bald skull with a face and eyes and the braid hanging off it, the same skull
+from the side, and a blond head where the TR5 one should be.
+
+**WHAT WAS MEASURED FIRST.** Node by node, over the file, with the engine's own
+reader. A `.TRM` vertex names three bones and those are classic mesh tree nodes,
+so "what is on Lara's head node" is a count and not an opinion. The triangle
+column is the DOMINANT node - the node carrying the most weight over the
+triangle's three corners, which is the rule `hd_model.cpp` buckets its draw
+ranges by, so it is also the count of what a node mask would hide.
+
+```
+  file                        node 14      of which      triangles   pages on
+                              vertices     weight 255    on node 14  node 14
+  OUTFIT_CLASSIC      (IV-VI)     6,860         6,486        9,485   8001, 8002
+  OUTFIT_TR2_HOME     (IV-VI)     6,830         6,241        9,481   8330, 8332,
+                                                                     8201, 8002
+  OUTFIT_TRX_WETSUIT_1 (I-III)    1,987         1,918          998   8415
+  OUTFIT_TRX_WETSUIT_3 (I-III)    1,987         1,918          998   8417
+  OUTFIT_TRX_ICE_1     (I-III)      461           461          784   8406
+  OUTFIT_TRX_BIKER_1   (I-III)       10             0            0   8409
+  OUTFIT_Mistress        (mod)   26,370        19,066       30,811   8002, 8110,
+                                                                     8111, 8112,
+                                                                     8001, 8003
+  OUTFIT_CLASSIC_1       (mod)      932            31           94   8010, 8011,
+                                                                     8005, 8002,
+                                                                     8001
+  OUTFIT_Legend_19       (mod)      863             0            0   -
+  LARA_HEAD           (IV-VI)   a FACIAL RIG: 5,913 vertices over bones 0..31,
+                                which are not mesh tree nodes; rigid on node 14
+  OUTFIT_HAIR         (I-III)   3,542 vertices over FIVE nodes at z 0..242 -
+                                a BRAID, not a cap; see below
+```
+
+Read across, the whole round is in that table.
+
+**A IV-VI BODY CARRIES LARA'S WHOLE HEAD, AND IT IS HAIR.** `OUTFIT_CLASSIC`'s
+node 14 is 9,485 triangles, of which **9,483 wear page 8002** and 2 wear 8001 -
+the head node of a IV-VI outfit is her hair cap and two triangles of nape. The
+separate `LARA_HEAD.TRM` that rides rigidly on the same node is the face and
+the front of the skull, and its back is **open**: a picture of it alone from
+behind looks through the missing back of the skull at the inside of her own
+face. The two are halves of one head by the remaster's own design.
+
+**AN I-III BODY CARRIES HEADGEAR THERE, AND NO HAIR.** All thirty
+`OUTFIT_TRX_*` of the I-III bundle - which are exactly the thirty entries of
+that install the wardrobe lists, because every `OUTFIT_TR1/2/3_*` name is
+refused in favour of the IV-VI bundle's own copy - carry a hood, a hat, a
+helmet or a headband on node 14 and nothing else: the wetsuits' diving hood and
+goggles (1,987 vertices, all on the suit's own page), the ice hood (461), the
+Greek headband (1,127), and six of the thirty carry near enough nothing at all
+(`BIKER`: 10 vertices, 0 triangles; `DRAGON`: 29, 0). **Not one of the thirty
+wears page 8002.** So the hair is not in the file, `LARA_HEAD`'s open skull
+stands in the picture, and what the player sees is the bald head of his
+photographs. A mod converted from such a file inherits it, and so does a mod
+whose own head IS complete but wrong for TR5 - the Mistress body carries a full
+26,370-vertex head with its own blond pages over 8002.
+
+**`OUTFIT_HAIR` IS NOT A HAIR CAP - THE ROUND'S ONE REFUTED ASSUMPTION.** The
+round was planned on "the I-III bundle keeps Lara's hair in a separate
+`OUTFIT_HAIR.TRM` the wardrobe never loads". Measured, that file is a **braid**:
+3,542 vertices over five nodes whose boxes run 0..53, 47..107, 93..161,
+93..208 and 205..242 along z, which is a chain hanging back out of the skull -
+the I-III bundle's own `HAIR_OG`, whose six links measure 0..55, 50..117,
+108..175, 165..232, 223..322, 274..326 the same way. The Legend mod's own
+`OUTFIT_HAIR.TRM` is the same thing with six links. The wardrobe has always
+passed both over as "a braid and not a body" and was right to. Nothing of this
+round loads either, and the mode that was to have drawn one is re-aimed on the
+measurement (below).
+
+**THE NECK, and whether dropping node 14 opens a hole.** Measured per file:
+with node 14's triangles hidden, what is left of the body reaches up to
+y -240 .. -250 on every one of the seven bodies - the collar, which belongs to
+the TORSO node - while `OUTFIT_CLASSIC`'s head node reaches DOWN to y -238.7.
+So the donor overlaps the neck it is put on by 1 to 11 units on these bodies
+and there is no hole to open. (y is down; the top of the skull is -340.)
+
+**THE RULE - THREE MODES, ONE BIT AND ONE PART.**
+
+| mode | the body's node 14 | `LARA_HEAD` | TR5's head node |
+| --- | --- | --- | --- |
+| `outfit` | drawn | drawn | not drawn |
+| `tr5` | **not** drawn | drawn | drawn |
+| `hair` | drawn | drawn | drawn |
+
+`outfit` is the picture this engine drew before the round and is what every
+IV-VI body gets. `tr5` is the global rule the user asked for. `hair` keeps a
+hood or a hat that is worth keeping and puts TR5's hair over it - measured on
+the diving suit, the goggles stay and the hair comes through, which is a better
+picture than either half.
+
+**`hair` IS THE RE-AIMED THIRD MODE.** As planned it was "the outfit's own head
+is drawn, `LARA_HEAD` is NOT (the I-III head brings its own face), and
+`OUTFIT_HAIR` is drawn on top". Both halves are refuted by the measurement
+above: the I-III head is a HAT and brings no face - the face comes from
+`LARA_HEAD` in both bundles - and `OUTFIT_HAIR` is a braid. What survives is
+the intention, "its own head and hair over it", with the donor corrected to
+what the hair really is.
+
+**THE DEFAULT IS THE BUNDLE AND NOTHING ELSE.** `tr5` for every entry of the
+I-III install and for every mod whose `mod.txt` says `origin=tr1|tr2|tr3`;
+`outfit` for everything else. A mod's `outfit.txt` overrides with
+`head=tr5|hair|outfit`, an unknown value is a note and the default stands. On
+this machine: 104 entries, 63 `tr5` and all 63 by origin, 41 keeping their own
+head.
+
+**AND THERE IS NO RULE BY NAME AND NONE BY GEOMETRY, ON PURPOSE.**
+`OUTFIT_TR2_HOME` is the name of a IV-VI body with a full head AND the name a
+mod gives an I-III conversion; counting vertices to tell a bald head from a
+hooded one would put `OUTFIT_TRX_BIKER_1` (10 vertices) and
+`OUTFIT_CLASSIC_1` (932) on one side of a line with the ice hood (461) and
+would still have to guess about the Mistress body's 26,370. A mod without a
+`mod.txt` therefore keeps its own head until its author writes `origin=` or
+`head=`, and the log, the F4 window and `ModelProbe -wardrobe` all say which it
+is.
+
+**WHERE IT LIVES.** The mode is a field of the wardrobe entry
+(`HDWardrobeEntry::head`, with `fromHead` saying who decided), settled once at
+scan. `hd_lara.cpp` turns it into two answers at LEVEL BUILD and the draw asks
+nothing else per frame: `HDLaraBodyMask()` is the node mask the body draws with
+- `~0u`, or every node but 14 - and `HD_LARA_PART_HEAD` is the new part.
+
+**THE NEW PART AND THE NODE CUT.** `HD_LARA_PART_HEAD` is node 14 of the
+install's own `OUTFIT_CLASSIC`. No file in either remaster holds that node
+alone, so `hd_model` learned to cut one out: `HDModelSlot::onlyNode`, a node
+mask, the page cut's twin. Only triangles whose dominant node is in the mask
+are built, and only the pages those triangles wear are loaded - which needs a
+walk of the index list at page-gathering time, because "which pages does this
+node wear" is a fact about triangles and not about the texture list. Only a
+slot that asks for a node cut pays for that walk.
+
+**BY NODE AND NOT BY PAGE**, although for this donor the two would almost agree
+(9,483 of 9,485 triangles are page 8002, and 14 triangles of that page belong
+to other nodes). A head is a node: cutting it that way makes the part's drawn
+coverage exactly node 14, so the first person mask that takes the body's own
+head off takes the borrowed one with it and nothing else, and a donor whose
+artist had put the hair on two pages would still come out whole.
+
+**THE DRAW** puts it after the body and before the face - where the body's own
+head node is drawn - with the FRAME's mask (so `mesh_bits` and first person
+reach it), the body's cut and the body's cull. That order matters for one
+reason: the hair is the wardrobe's only see-through pass, and this keeps it
+reaching the card in the order it reaches it when the head is part of the body.
+
+**WHAT IT COSTS**, ANDREA1 with the wetsuit, measured against the same run
+without the rule: +27,349 vertices (641 KiB - the index list is the file's own
+and is not renumbered, exactly as the page cut leaves it), +28,455 indices
+(55.6 KiB), +3 draw calls and **one** new texture page, because 8001 is already
+in the cache for the hands and 8002 is not. A body in mode `outfit` pays none
+of it.
+
+**THE FALLBACK.** A body told to drop its own head and given no donor - no
+IV-VI install, or its `OUTFIT_CLASSIC` unreadable - keeps its own head and the
+log says so. No head at all is worse than a bald one.
+
+**THE F4 WINDOW** gains a `Head` row under `Footsteps`, saying the mode and who
+decided it. It is the footsteps row's opposite: that one is a choice and left
+and right change it, this one is a fact. The page keeps its height - eight
+outfit rows plus two value rows plus the hint is the same eleven lines nine
+plus one plus one was.
+
+**THE LOG**, behind `-log`:
+
+```
+HDLOG wardrobe scan: 104 entries - ... ; heads tr5=63 hair=0 outfit=41; ms=...
+HDLOG wardrobe 13/OUTFIT_TRX_WETSUIT_1: head=tr5 (from origin) donor=OUTFIT_CLASSIC#14
+HDLOG level=ANDREA1 lara part=the head model=OUTFIT_CLASSIC hd=1 cover=4(000041a0)
+                 verts=27349 drift=0/0 sheen=0.14/18 held=0.00/1 pagesheen=0
+HDLOG frame lara ... braid=1 head=tr5/1 mask=ffffffff body=ffffbfff mirror=0 ...
+```
+
+`head=<mode>/<1 if TR5's head is on the card>` on the frame line, and `body=`
+beside `mask=` so that the one bit the rule changes can be read off a frame.
+
+**THE TOOL.** `ModelProbe -lara-head tr5|hair|outfit` forces the rule for one
+picture through the engine's own switch, so `outfit` IS the picture from before
+the round rather than a description of it. It is not called `-head`, which the
+round's brief asked for: that name has meant "draw the separate
+`<NAME>_HEAD.TRM` as well" since #123, and a second meaning that swallows the
+next argument would have broken it silently. `-wardrobe` gains a `head` column.
+
+**PROVED.** `ModelProbe -lara ANDREA1` on the build of this round against the
+build before it, the user's own `Mods` folder and both installs, 25 renders
+each: **16 byte for byte identical** - the eleven IV-VI bodies front and side,
+a mod with no `origin=` line, and all four first person pictures, at both eye
+positions the game uses, on a IV-VI body AND on the wetsuit whose head node is
+now dropped in third person, so the neck lid of fix round U is untouched - and
+**9 different**, which are exactly the nine bodies of Tomb Raider I-III origin
+the round is for. Then the other way round: `-lara-head outfit` on the new
+build reproduces the OLD build's picture **byte for byte** on all four I-III
+bodies, so what changed is the rule and not the draw. Every picture was looked
+at: the diving suit with TR5's hair and no bald skull, the same body in `hair`
+mode with its goggles kept and the hair through them, the Mistress head brown
+instead of blond, the headless Legend body and the near-headless barefoot TR1
+body both whole.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

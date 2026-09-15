@@ -162,7 +162,7 @@
  *                         skin, instead of putting the install's hands under
  *                         its gun (#153, round M2b) - the other half of the
  *                         BEFORE picture.
- *     -head tr5|hair|outfit
+ *     -lara-head tr5|hair|outfit
  *                         WHOSE HEAD THIS BODY WEARS (#156), whatever the
  *                         wardrobe decided for it. tr5 = its own head node is
  *                         not drawn and node 14 of the install's
@@ -175,7 +175,9 @@
  *                         every outfit of the Tomb Raider I-III install and
  *                         for every mod whose mod.txt says origin=, outfit
  *                         for the rest, and a mod's own outfit.txt head= over
- *                         either. -wardrobe prints the column.
+ *                         either. -wardrobe prints the column. (The plain
+ *                         -head is a different switch and older: it draws a
+ *                         separate <NAME>_HEAD.TRM beside a -name model.)
  *     -tween60 [<n> ...]  REPLAY those animations at SIXTY (#123, fix round
  *                         U; #148, order 4): every drawn frame, tick and
  *                         tween alike, with every node's origin in her own
@@ -6637,14 +6639,14 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			"in its own skin, which is the BEFORE picture\n");
 	}
 
-	/* -head: the head rule this picture is drawn with (#156). Before the plan
-	 * as well, because that is where the parts are chosen - the engine's own
-	 * switch, so "outfit" really is the picture from before the round. */
+	/* -lara-head: the head rule this picture is drawn with (#156). Before the
+	 * plan as well, because that is where the parts are chosen - the engine's
+	 * own switch, so "outfit" really is the picture from before the round. */
 	if (o.head >= 0)
 	{
 		HDLaraHeadForce(o.head);
-		printf("head    : forced to %s (-head) - the wardrobe's own answer is "
-			"overruled for this picture\n", HDWardrobeHeadWord(o.head));
+		printf("head    : forced to %s (-lara-head) - the wardrobe's own answer "
+			"is overruled for this picture\n", HDWardrobeHeadWord(o.head));
 	}
 
 	HDModelSlot wanted[HD_LARA_PART_COUNT * 2];
@@ -8137,8 +8139,13 @@ int main(int argc, char** argv)
 			laraNoHandMix = true;
 		}
 		/* #156: the head rule this picture is drawn with, whatever the
-		 * wardrobe says - "outfit" is the picture from before the round. */
-		else if (!_stricmp(argv[i], "-head") && i + 1 < argc)
+		 * wardrobe says - "outfit" is the picture from before the round.
+		 *
+		 * NOT "-head", although that is what the round's brief called it:
+		 * this tool has had a -head since #123 and it means "draw the
+		 * separate <NAME>_HEAD.TRM as well". So it takes the name its
+		 * neighbours in the composite block have - -lara-nodes, -lara-pose. */
+		else if (!_stricmp(argv[i], "-lara-head") && i + 1 < argc)
 		{
 			lara = true;
 			i++;
@@ -8150,8 +8157,8 @@ int main(int argc, char** argv)
 			else if (!_stricmp(argv[i], "outfit") || !_stricmp(argv[i], "own"))
 				laraHead = HD_WARDROBE_HEAD_OUTFIT;
 			else
-				printf("ModelProbe: -head %s is none of tr5, hair or outfit - "
-					"ignored\n", argv[i]);
+				printf("ModelProbe: -lara-head %s is none of tr5, hair or "
+					"outfit - ignored\n", argv[i]);
 		}
 		/* #123 fix round U (U1d): the eye off the head joint, for the frame
 		 * a landing gives - the camera outside the skull, the nape in front

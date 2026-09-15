@@ -151,6 +151,12 @@ the one carrying the `*`. Choosing it again clears the setting.
 On the **Level facts** row there is no outfit to hang a footstep choice on, so
 left and right do nothing there and the row says *as the outfit says* instead.
 
+Under it stands **Head**, and that one is not a choice: it says whose head the
+highlighted body wears — *own head*, *TR5 head* or *TR5 hair* — and in
+brackets who decided, so a body that comes out of Tomb Raider I-III and loses
+its hood to TR5's hair says so before you pick it. What the three mean, and how
+a mod says which it wants, is under *Mods* below.
+
 A gamepad works in it because it reads the same input bits the pause menu
 and the options page read. F4 does nothing in the title screen, in a cutscene,
 with Lara dead or while you are looking through the binoculars or a laser
@@ -309,6 +315,42 @@ beside the ones the two Remasters bring — your `OUTFIT_CLASSIC` does *not*
 take the place of the Remaster's Rome outfit, and a level that asks for the
 Rome outfit still gets the Rome outfit.
 
+**An outfit from Tomb Raider I-III wears TR5's head.** The two bundles build
+Lara's head differently. A IV-VI body carries her whole head — skull and hair —
+on its head node, and the separate face model that rides on it supplies the
+face and nothing else: the two are halves of one head. An I-III body carries
+**headgear** on that node instead — the wetsuits' diving hood and goggles, the
+ice hood, the Greek headband — and six of the thirty carry nothing there at
+all. Drawn as it lies, the face model's open skull is what you see: a bald head
+with a face on it and the braid hanging off it.
+
+So every outfit of the I-III installation, and every mod whose `mod.txt` says
+`origin=tr1`, `tr2` or `tr3`, wears **TR5's head** instead of its own — the
+Rome outfit's head node, hair and all. Everything else keeps its own head,
+which is every IV-VI body and every mod that does not name an origin, so
+nothing that looked right before this changes at all.
+
+Three rules exist and `outfit.txt` can name one with `head=`:
+
+| `head=` | what is drawn |
+| --- | --- |
+| `tr5` | its own head node is **not** drawn; TR5's head stands there instead |
+| `hair` | its own head **and** TR5's hair over it — for a hood or a hat worth keeping |
+| `outfit` | its own head alone, which is what every IV-VI body does |
+
+**A mod without a `mod.txt` keeps its own head**, whatever its files are
+called. There is no rule by name and none by geometry: `OUTFIT_TR2_HOME` is
+the name of a IV-VI body with a full head *and* the name a mod gives an I-III
+conversion, and counting vertices to tell a bald head from a hooded one is a
+guess. Add `origin=tr1` to the mod, or `head=tr5` to its `outfit.txt`, and it
+is dressed. Which rule each body got, and who decided it, stands in the F4
+window, in the log, and in the `head` column of
+`ModelProbe … -wardrobe`.
+
+(`OUTFIT_HAIR.TRM`, which the I-III bundle and some mods ship, is **not** a
+head of hair: it is that bundle's name for the braid, a six-link chain, and the
+wardrobe passes it over the same way it passes over `OUTFIT_HANDS_*`.)
+
 The wardrobe finds, in this order: the outfits of your **Tomb Raider IV-VI
 Remastered** (22 of them — the bundle holds 24 `OUTFIT_*` bodies and the two
 `OUTFIT_YOUNG*` are passed over, see below), those of **Tomb Raider I-III
@@ -371,6 +413,10 @@ skin=8001               # which of its pages are Lara's own skin, so that
                         # a bare forearm and the hand on it shine alike
 footsteps=bare          # or boots - what she walks on in this body,
                         # unless the player says otherwise in F4
+head=tr5                # or hair, or outfit - whose head this body wears.
+                        # Without the line: tr5 when mod.txt says origin=,
+                        # outfit otherwise. See "An outfit from Tomb Raider
+                        # I-III wears TR5's head" above
 ```
 
 An unknown key is written to the log and ignored, exactly as in `mod.txt`.

@@ -519,7 +519,6 @@ namespace
 		{ HD_LARA_PART_BACK_GRAPPLE,       0.30f, 30.0f }
 	};
 
-
 	/* WHICH CLASSIC SLOT STANDS FOR WHICH PART. By NAME, out of hd_bind's
 	 * table, because a slot is a hand slot for being called PISTOLS_ANIM and
 	 * not for being number 1 - and because the tools have no engine enum.
@@ -2490,16 +2489,16 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	 * could never be taken and the pair it read went with it. Leather is still
 	 * the holster rig's material and stands as 0.18/20 in kPartSheen.
 	 *
-	 * THE THREE PARTS THAT ARE LARA AND NOT HER CLOTHES (#158): her face, the
-	 * lid on her neck and her bare hands. They were two constants and one
-	 * table row saying the same numbers - kSheenSkin for the eleven hand
-	 * parts, kPartSheen's own rows for the face and the lid - and they are one
-	 * answer now, out of the wardrobe entry, so that skin_sheen= moves all of
-	 * her at once. Without a line in a list or an outfit.txt that answer is
-	 * the same 0.12/10 those three places carried, which is what makes this
-	 * change nothing at all until somebody writes one. (The pages of the BODY
-	 * that are her skin take it too - HDLaraSkinSheen, below, hangs it on them
-	 * at level build.) */
+	 * THE THREE KINDS OF PART THAT ARE LARA AND NOT HER CLOTHES (#158): her
+	 * face, the lid on her neck and her eleven bare hands. They were one
+	 * constant and two table rows saying the same numbers - kSheenSkin for the
+	 * hand parts, kPartSheen's own FACE and NECK_CAP rows for the other two -
+	 * and they are one answer now, out of the wardrobe entry, so that
+	 * skin_sheen= moves all of her at once. Without a line in a list or an
+	 * outfit.txt that answer is the same 0.12/10 all three places carried,
+	 * which is what makes this change nothing at all until somebody writes
+	 * one. (The pages of the BODY that are her skin take it too -
+	 * HDLaraSkinSheen, below, hangs it on them at level build.) */
 	if (part == HD_LARA_PART_FACE || part == HD_LARA_PART_NECK_CAP ||
 		kPart[part].kind == 1)
 	{

@@ -1268,10 +1268,25 @@ namespace
 		std::string name, prefix, stem;
 		char raw[512];
 		char where[256];
+		bool first = true;
 
 		while (std::fgets(raw, sizeof(raw), file))
 		{
 			std::string line = raw;
+
+			/* A BYTE ORDER MARK OFF THE FRONT OF THE FIRST LINE. This is a
+			 * file a player writes in an editor, and Windows Notepad's "UTF-8"
+			 * puts three bytes there; on an "Outfit:" line they would cost him
+			 * the block and the reason would be invisible in the file. Only
+			 * the first line can carry one. */
+			if (first)
+			{
+				first = false;
+
+				if (line.size() >= 3 && (unsigned char)line[0] == 0xEF &&
+					(unsigned char)line[1] == 0xBB && (unsigned char)line[2] == 0xBF)
+					line.erase(0, 3);
+			}
 
 			while (!line.empty() && (line[line.size() - 1] == '\n' ||
 				line[line.size() - 1] == '\r'))

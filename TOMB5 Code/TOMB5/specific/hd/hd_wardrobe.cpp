@@ -406,6 +406,12 @@ namespace
 	 *   exponent=26              ... and its Blinn-Phong exponent
 	 *   skin=8001,8201           which of its pages are Lara's own skin
 	 *   footsteps=bare|boots     round M3's business; read and logged now
+	 *   head=tr5|hair|outfit     whose head this body wears (#156) - see
+	 *                            HD_WARDROBE_HEAD_* in the header. It is the
+	 *                            ONE override of the origin rule, and it is
+	 *                            what a mod built out of a Tomb Raider I-III
+	 *                            body writes when its own head is finished
+	 *                            and wants keeping
 	 *
 	 * An unknown key is a note and never a fault, for the same reason mod.txt
 	 * does it that way: a mod written for a later round has to stay loadable
@@ -419,6 +425,7 @@ namespace
 		bool hasSkin = false;
 		int skin[HD_WARDROBE_SKIN] = { 0, 0, 0 };
 		int feet = HD_WARDROBE_FEET_UNKNOWN;
+		int head = -1;		// #156: -1 is "the file did not say"
 	};
 
 	int as_bool(const std::string& value)
@@ -499,6 +506,23 @@ namespace
 				out.sheen = (float)std::atof(value.c_str());
 			else if (key == "exponent")
 				out.exponent = (float)std::atof(value.c_str());
+			else if (key == "head")
+			{
+				/* #156. An unknown value is a NOTE and the default stands -
+				 * the same rule an unknown key gets, and for the same reason:
+				 * a mod written for a later round has to stay loadable by
+				 * this one. */
+				if (low == "tr5")
+					out.head = HD_WARDROBE_HEAD_TR5;
+				else if (low == "hair")
+					out.head = HD_WARDROBE_HEAD_HAIR;
+				else if (low == "outfit" || low == "own")
+					out.head = HD_WARDROBE_HEAD_OUTFIT;
+				else
+					note("MODLOG mod%d %s: outfit.txt head=%s is none of tr5, "
+						"hair or outfit - ignored", mod, HDModsName(mod),
+						value.c_str());
+			}
 			else if (key == "footsteps")
 			{
 				if (low == "bare")
@@ -615,6 +639,32 @@ namespace
 		o.fromSkin = HD_WARDROBE_FROM_DEFAULT;
 		o.fromFeet = HD_WARDROBE_FROM_DEFAULT;
 
+		/* THE HEAD RULE (#156), and it is a RULE and not a table.
+		 *
+		 * It asks ONE question - which bundle was this body drawn for - and
+		 * it asks it of the two things that answer it without anybody looking
+		 * at a picture: the source of an entry of an install, and mod.txt's
+		 * own origin= line for a mod. A body of the Tomb Raider I-III bundle
+		 * carries no hair on its head node (the measurement is in the header)
+		 * and therefore takes TR5's head; everything else keeps its own.
+		 *
+		 * A MOD WITHOUT A mod.txt KEEPS ITS OWN HEAD, whatever its file is
+		 * called. There is no name rule and no geometry rule here on purpose:
+		 * "OUTFIT_TR2_HOME" is the name of a IV-VI body with a full head AND
+		 * the name a mod gives a I-III conversion, and counting vertices to
+		 * tell a bald head from a hooded one is the kind of guess that comes
+		 * back as a picture nobody can explain. The mod says origin= or it
+		 * says head=, and until it does the log says which it is. */
+		o.head = HD_WARDROBE_HEAD_OUTFIT;
+		o.fromHead = HD_WARDROBE_FROM_DEFAULT;
+
+		if (o.source == HD_WARDROBE_SOURCE_13 ||
+			(o.source == HD_WARDROBE_SOURCE_MOD && HDModsOrigin(o.mod) > 0))
+		{
+			o.head = HD_WARDROBE_HEAD_TR5;
+			o.fromHead = HD_WARDROBE_FROM_ORIGIN;
+		}
+
 		if (row)
 		{
 			o.hands = row->hands;
@@ -664,6 +714,12 @@ namespace
 		{
 			o.feet = txt.feet;
 			o.fromFeet = HD_WARDROBE_FROM_MOD_TXT;
+		}
+
+		if (txt.head >= 0)
+		{
+			o.head = txt.head;
+			o.fromHead = HD_WARDROBE_FROM_MOD_TXT;
 		}
 	}
 
@@ -995,8 +1051,10 @@ namespace
 		add_from_mods();
 
 		int mine = 0, guest = 0, modded = 0;
+		int tr5Head = 0, hairHead = 0, ownHead = 0;
 
 		for (size_t i = 0; i < entries.size(); i++)
+		{
 			switch (entries[i].out.source)
 			{
 			case HD_WARDROBE_SOURCE_46: mine++; break;
@@ -1004,14 +1062,26 @@ namespace
 			default: modded++; break;
 			}
 
+			// #156: the head rule over the whole list, so that "they are all
+			// still bald" and "one of them is" are different lines.
+			switch (entries[i].out.head)
+			{
+			case HD_WARDROBE_HEAD_TR5: tr5Head++; break;
+			case HD_WARDROBE_HEAD_HAIR: hairHead++; break;
+			default: ownHead++; break;
+			}
+		}
+
 		double opens1 = 0, loads1 = 0, bytes1 = 0;
 
 		HDTrmCounters(&opens1, &loads1, &bytes1);
 
 		note("HDLOG wardrobe scan: %d entries - %d from the IV-VI install, "
 			"%d from the I-III install, %d from mods; %d files passed over; "
+			"heads tr5=%d hair=%d outfit=%d; "
 			"ms=%d probed=%d read_kib=%.0f geometry=%d",
 			(int)entries.size(), mine, guest, modded, (int)refused.size(),
+			tr5Head, hairHead, ownHead,
 			(int)(clock_ms() - begun + 0.5), (int)(opens1 - opens0),
 			(bytes1 - bytes0) / 1024.0, (int)(loads1 - loads0));
 	}
@@ -1072,6 +1142,38 @@ int HDWardrobeFind(const char* key)
 			return (int)i;
 
 	return -1;
+}
+
+const char* HDWardrobeHeadWord(int head)
+{
+	switch (head)
+	{
+	case HD_WARDROBE_HEAD_TR5: return "tr5";
+	case HD_WARDROBE_HEAD_HAIR: return "hair";
+	default: return "outfit";
+	}
+}
+
+const char* HDWardrobeHeadPhrase(int head)
+{
+	switch (head)
+	{
+	case HD_WARDROBE_HEAD_TR5: return "TR5 head";
+	case HD_WARDROBE_HEAD_HAIR: return "TR5 hair";
+	default: return "own head";
+	}
+}
+
+const char* HDWardrobeFromWord(int from)
+{
+	switch (from)
+	{
+	case HD_WARDROBE_FROM_MEASURED: return "measured";
+	case HD_WARDROBE_FROM_TABLE: return "the table";
+	case HD_WARDROBE_FROM_MOD_TXT: return "outfit.txt";
+	case HD_WARDROBE_FROM_ORIGIN: return "origin";
+	default: return "the default";
+	}
 }
 
 int HDWardrobeFindFile(const char* file, int source)

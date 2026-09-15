@@ -98,6 +98,45 @@
 #define HD_WARDROBE_FROM_MEASURED	1
 #define HD_WARDROBE_FROM_TABLE		2
 #define HD_WARDROBE_FROM_MOD_TXT	3
+/* THE BUNDLE THE BODY CAME OUT OF (#156). A fifth tier, and it sits between
+ * the default and the table: it is not a measurement of the file and not a
+ * judgement about a picture, it is the one thing the SOURCE of an entry says
+ * about it - a body of the Tomb Raider I-III bundle, or of a mod whose
+ * mod.txt names that bundle with origin=, wears no hair. Only the head rule
+ * below has it. */
+#define HD_WARDROBE_FROM_ORIGIN		4
+
+/* WHOSE HEAD THIS BODY WEARS (#156).
+ *
+ * WHAT WAS MEASURED, because the rule is nothing but the measurement. Every
+ * outfit of the IV-VI bundle carries LARA'S WHOLE HEAD on its head node -
+ * OUTFIT_CLASSIC 6,860 vertices and 9,485 triangles there, 9,483 of them on
+ * page 8002, which is the HAIR; OUTFIT_TR2_HOME 6,830 the same way. The
+ * separate LARA_HEAD.TRM that rides rigidly on that node is the FACE and the
+ * front of the skull, and its back is open (a picture of it alone looks
+ * through the back of her head at the inside of her own face): the two are
+ * each other's halves by the remaster's own design.
+ *
+ * A body of the Tomb Raider I-III bundle is not built that way. Its head node
+ * carries HEADGEAR and nothing else - the diving hood and goggles of
+ * OUTFIT_TRX_WETSUIT_* (1,987 vertices, 998 triangles, all on the suit's own
+ * page), the ice hood, the Greek headband - or, in six of the thirty, near
+ * enough nothing at all (OUTFIT_TRX_BIKER_*: 10 vertices, 0 triangles). Not
+ * one of the thirty wears page 8002. So the hair is simply not in the file,
+ * the open back of LARA_HEAD stands in the picture, and what the player sees
+ * is a bald skull with a face on it and the braid hanging off it. That is the
+ * user's report of 2026-09-15 and his three photographs.
+ *
+ * A mod built out of such a file inherits it, and the whole outfit folder the
+ * user runs is built out of them.
+ *
+ * THE RULE IS THEREFORE ONE BIT AND ONE PART: whether the body's own head
+ * node is drawn, and whether TR5's head - node 14 of the install's own
+ * OUTFIT_CLASSIC - is drawn over it. Three combinations are worth having and
+ * they are these three. */
+#define HD_WARDROBE_HEAD_OUTFIT		0	// its own head, as the file has it
+#define HD_WARDROBE_HEAD_TR5		1	// its own head dropped, TR5's instead
+#define HD_WARDROBE_HEAD_HAIR		2	// its own head AND TR5's hair over it
 
 /* THE FOOTSTEPS an outfit walks on (#153, round M2). Parsed and logged now,
  * acted on in round M3 - the barefoot sample set is that round's work. A
@@ -133,13 +172,27 @@ struct HDWardrobeEntry
 
 	int skin[HD_WARDROBE_SKIN];	// pages that are Lara's own skin; 0 ends
 	int feet;			// HD_WARDROBE_FEET_*
+	int head;			// HD_WARDROBE_HEAD_* (#156)
 
 	// Where each of those came from, one HD_WARDROBE_FROM_* each.
 	int fromFlags;			// hands / braid / holsters / gloves / rig
 	int fromSheen;
 	int fromSkin;
 	int fromFeet;
+	int fromHead;
 };
+
+/* The word outfit.txt writes for a head rule, and the word the log prints:
+ * "tr5", "hair" or "outfit". Never null. */
+const char* HDWardrobeHeadWord(int head);
+
+/* And the short phrase the wardrobe window shows in a row: "TR5 head",
+ * "TR5 hair" or "own head". Never null. */
+const char* HDWardrobeHeadPhrase(int head);
+
+// Where that answer came from, as a clause for a log line ("its mod.txt says
+// origin=tr1", "outfit.txt", "the default"). Never null.
+const char* HDWardrobeFromWord(int from);
 
 /* WHERE TO LOOK. Null or "" means "ask hd_install", which is what the engine
  * wants; the diagnostic tools pass the folders on the command line so that a

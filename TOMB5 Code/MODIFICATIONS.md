@@ -13083,10 +13083,12 @@ than anything the record admitted to: **RICH3's `CROSSBOW_AMMO1_ITEM` is lifted
 seven millimetres of gun in the ground"). The rule is not wrong; the round's
 coverage was.
 
-**WHAT RICH3 LOOKS LIKE.** The slot holds the grappling gun's ammunition in
-that level and the install has no TR5 model for it, so the binder's last resort
-finds the TR4 one: `4\ITEM\EXTRA4_CROSSBOW_AMMO1_ITEM.TRM`, an upright quiver
-of bolts. Drawn as the file stands it reaches **153.6** where the level's own
+**WHAT RICH3 LOOKS LIKE.** The slot is the grappling gun's ammunition - the
+engine's own inventory table gives it the text `TXT_GRAP2`
+(`game\newinv2.cpp:455`) - and the installation has no Tomb Raider V model for
+it, so the binder's last resort finds the Tomb Raider IV one:
+`4\ITEM\EXTRA4_CROSSBOW_AMMO1_ITEM.TRM`, an upright quiver of bolts (the tool's
+`-all` table says `via prefix4`). Drawn as the file stands it reaches **153.6** where the level's own
 mesh ends at **27.0** - the quiver is 203 units tall and **126.6 of them, 62%
 of it, are below the ground line**, which is a stub of leather sticking out of
 the floor. Three real items carry it (`ItemCheck RICH3.TRC 342`: items 10, 82
@@ -13150,10 +13152,11 @@ at `frame_number == frame_base`, so frame zero of that animation). The first
 build logged a line when the two differed and then deliberately measured the
 one the engine does not draw. It now measures the animation's and logs the
 difference. **On the shipped levels this changes nothing, and that is measured
-rather than assumed**: walking the fifteen `.TRC` files, all **1,791 objects**
-carry their animation's own frame offset as their object frame offset - 1,748
-of them have an animation at all, and the 43 that do not (slots 25, 28, 127,
-369 and 370, none of them a pickup) take the rest-pose fallback. Every
+rather than assumed**: walking the fifteen `.TRC` files, of **1,791 objects**
+the **1,748 that have an animation at all carry that animation's own frame
+offset** as their object frame offset, every one of them, and the 43 that have
+none (slots 25, 28, 127, 369 and 370, no pickup among them) take the rest-pose
+fallback. Every
 `-floorcheck` table of this round comes out line for line identical to the
 reviewer's own runs from before the change.
 

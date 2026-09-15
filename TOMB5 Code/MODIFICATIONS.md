@@ -13521,6 +13521,12 @@ block, a block with no name, a line without `=`, a name that matches nothing, a
 key prefix no source has, two values out of range and two words neither `head=`
 nor `footsteps=` knows: **5 blocks, 3 matched, 2 unmatched**, nine fault lines,
 no crash, and the one good line in the same block as two bad ones still applied.
+The one fault that is not a note is the byte order mark Windows Notepad's
+"UTF-8" writes in front of the first line: on a comment line it is one harmless
+note, on an `Outfit:` line it silently cost the block, so it is taken off (and
+only off the first line, which is the only one that can carry one). Measured
+with a mark in front of `Outfit: TR2_Tibet`: the block is read and the row says
+`0.66/14 (list)`.
 
 **#158, AND WHAT WAS MEASURED FIRST.** `kSheenSkin` - `{0.12f, 10.0f}` - was
 read by the eleven hand parts (`kPart[].kind == 1`: REST, PISTOL, UZI, SHOTGUN,

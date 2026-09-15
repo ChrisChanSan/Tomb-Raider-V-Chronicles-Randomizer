@@ -475,8 +475,10 @@ file or in two, are both applied and the later one wins for the keys it sets.
 
 Nothing in a list file can break anything. A name that matches no outfit on
 this machine, a key this build does not know, a line without `=`, a value out
-of range — each is a line in the log and the rest of the file is read on. A
-file whose name begins with `_` is switched off, exactly like a mod folder.
+of range — each is a line in the log and the rest of the file is read on. Save
+it as UTF-8 if you like: the byte order mark some editors write in front of the
+first line is taken off. A file whose name begins with `_` is switched off,
+exactly like a mod folder.
 With `-log`, the scan says what it did:
 
 ```

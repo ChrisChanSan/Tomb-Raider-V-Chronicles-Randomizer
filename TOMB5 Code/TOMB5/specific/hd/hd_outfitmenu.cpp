@@ -36,10 +36,17 @@
 
 namespace
 {
-	// The scrolling window. Nine rows plus the title, the footsteps row and
-	// the hint line is what fits between font_height*3 and the bottom of a
-	// 4:3 screen at the default font - the same room the options page uses.
-	const int kWindow = 9;
+	/* The scrolling window. Nine rows plus the title, the footsteps row and
+	 * the hint line is what fits between font_height*3 and the bottom of a
+	 * 4:3 screen at the default font - the same room the options page uses.
+	 *
+	 * EIGHT SINCE #156, because the HEAD row came in under the footsteps one
+	 * and the page has to stay the same height: eight rows plus two value
+	 * rows plus the hint is the same eleven lines nine plus one plus one was.
+	 * One outfit fewer per page out of a hundred-odd is what it costs, and
+	 * what it buys is the answer to "why is this body's head like that"
+	 * standing beside the body itself. */
+	const int kWindow = 8;
 
 	// The registry: the outfit is one REG_SZ under the game's own settings
 	// key, and the footsteps are one REG_DWORD per wardrobe key under a
@@ -361,6 +368,34 @@ void HDOutfitMenu()
 		else
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
 				(char*)CustomText(bare ? "Bare" : "Boots"), 0);
+
+		/* AND WHOSE HEAD THE HIGHLIGHTED BODY WEARS (#156).
+		 *
+		 * The footsteps row's neighbour and its opposite: that one is a
+		 * CHOICE and left and right change it, this one is a FACT and nothing
+		 * in this menu can change it - it is decided by the bundle the body
+		 * was drawn for, or by the mod's own outfit.txt. It stands here all
+		 * the same, because the question it answers is asked of the picture
+		 * on the screen: an outfit of Tomb Raider I-III carries headgear on
+		 * its head node and no hair, so it wears TR5's head instead, and a
+		 * player who does not know that sees a body change more than he
+		 * chose. The clause after it says WHO decided, which is also how a
+		 * mod without a mod.txt is told from one with an origin= line. */
+		y += font_height;
+
+		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Head"), 0);
+
+		if (!entry_of(selection))
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
+				(char*)CustomText("as the outfit says"), 0);
+		else
+		{
+			const HDWardrobeEntry* e = entry_of(selection);
+
+			snprintf(buffer, sizeof(buffer), "%s (%s)",
+				HDWardrobeHeadPhrase(e->head), HDWardrobeFromWord(e->fromHead));
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
+		}
 
 		/* AND WHAT PRESSING SELECT WILL DO, because the answer is not always
 		 * "now": the page cache never gives a page back, so a level in which

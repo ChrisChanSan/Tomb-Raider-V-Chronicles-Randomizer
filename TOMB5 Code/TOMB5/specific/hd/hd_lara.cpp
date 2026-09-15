@@ -2325,7 +2325,12 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		note("HDLOG wardrobe %s: head=%s (from %s) donor=%s",
 			HDLaraOutfitKey(level->outfit) && *HDLaraOutfitKey(level->outfit)
 				? HDLaraOutfitKey(level->outfit) : model_of(level->outfit),
-			HDWardrobeHeadWord(mode), HDWardrobeFromWord(head_from(level->outfit)),
+			HDWardrobeHeadWord(mode),
+			/* A diagnostic tool may have overruled the wardrobe for one
+			 * picture, and then the entry's own provenance is not what this
+			 * line is about (#156). The engine never sets it. */
+			g_head_force >= 0 ? "a diagnostic override"
+				: HDWardrobeFromWord(head_from(level->outfit)),
 			donor ? "OUTFIT_CLASSIC#14"
 				: mode == HD_WARDROBE_HEAD_OUTFIT ? "none - it wears its own"
 				: "none - TR5's head did not load, so its own head stays");

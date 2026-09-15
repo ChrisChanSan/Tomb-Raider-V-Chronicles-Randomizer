@@ -639,29 +639,38 @@ void HDLaraDrawBuild(const char* stem)
 
 	/* WHICH ENTRY OF THE WARDROBE THIS IS, IN ONE LINE (#153, round M2): the
 	 * key, the file, where the file came from, the five flags with the origin
-	 * of each, the material and the skin pages. A picture the user does not
-	 * like is then one grep away from the row or the outfit.txt line that made
-	 * it, which is the same promise the part lines below make. */
+	 * of each, the two materials, the skin pages, the footsteps and whose head
+	 * it wears - each with the tier that decided it. A picture the user does
+	 * not like is then one grep away from the row, the outfit.txt line or the
+	 * list block that made it, which is the same promise the part lines below
+	 * make. `skinsheen` and the `head` column are #158 and #159. */
 	{
 		const int wear = HDLaraWearOfOutfit(g_level.outfit);
 		const int at = wear >= 0 ? wear
 			: HDWardrobeFindFile(HDLaraOutfitModel(g_level.outfit),
 				HD_WARDROBE_SOURCE_46);
 		const HDWardrobeEntry* e = HDWardrobeAt(at);
-		static const char* const kFrom[] = { "default", "measured", "table", "outfit.txt" };
 
+		/* THE FROM-WORDS COME OUT OF hd_wardrobe SINCE #159. A local array of
+		 * four stood here, indexed by the entry's own from-number, and #156
+		 * had already made a fifth tier that would have read past the end of
+		 * it - so the words a tier is named by live where the tiers are
+		 * defined, and a new one cannot be forgotten here. */
 		if (e)
 			Log("HDLOG level=%s wardrobe key=%s name=%s file=%s source=%s "
 				"mod=%d hands=%d braid=%d holsters=%d gloves=%d rig=%d (%s) "
-				"sheen=%.2f/%.0f (%s) skin=%d,%d,%d (%s) feet=%d (%s) pages=%s",
+				"sheen=%.2f/%.0f (%s) skinsheen=%.2f/%.0f (%s) "
+				"skin=%d,%d,%d (%s) feet=%d (%s) head=%s (%s) pages=%s",
 				stem, e->key, e->name, e->file,
 				e->source == HD_WARDROBE_SOURCE_46 ? "46"
 					: e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod",
 				e->mod, (int)e->hands, (int)e->braid, (int)e->holsters,
-				(int)e->gloves, (int)e->wearsRig, kFrom[e->fromFlags],
-				e->sheen, e->sheenPower, kFrom[e->fromSheen],
-				e->skin[0], e->skin[1], e->skin[2], kFrom[e->fromSkin],
-				e->feet, kFrom[e->fromFeet],
+				(int)e->gloves, (int)e->wearsRig, HDWardrobeFromTag(e->fromFlags),
+				e->sheen, e->sheenPower, HDWardrobeFromTag(e->fromSheen),
+				e->skinSheen, e->skinSheenPower, HDWardrobeFromTag(e->fromSkinSheen),
+				e->skin[0], e->skin[1], e->skin[2], HDWardrobeFromTag(e->fromSkin),
+				e->feet, HDWardrobeFromTag(e->fromFeet),
+				HDWardrobeHeadWord(e->head), HDWardrobeFromTag(e->fromHead),
 				e->mod >= 0 ? "the mod's own namespace" : "the install's");
 		else
 			Log("HDLOG level=%s wardrobe outfit=%s has no scan entry - the "

@@ -397,6 +397,46 @@ void HDOutfitMenu()
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
+		/* AND WHAT IT IS MADE OF (#158, #159). Two more facts of the
+		 * highlighted body and its neighbours' opposite in the same way the
+		 * head row is: nothing in this menu changes them. They stand here
+		 * because they are the two the player can now change HIMSELF, in a
+		 * list file, and a value he has written is worth nothing if the game
+		 * will not say whether it arrived - so the clause after each says
+		 * which tier answered, and "list" is the one that means his own line
+		 * was read. Shine is the clothes, glow is her skin. */
+		y += font_height;
+
+		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Shine"), 0);
+
+		if (!entry_of(selection))
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
+				(char*)CustomText("as the outfit says"), 0);
+		else
+		{
+			const HDWardrobeEntry* e = entry_of(selection);
+
+			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->sheen,
+				e->sheenPower, HDWardrobeFromTag(e->fromSheen));
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
+		}
+
+		y += font_height;
+
+		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Skin glow"), 0);
+
+		if (!entry_of(selection))
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
+				(char*)CustomText("as the outfit says"), 0);
+		else
+		{
+			const HDWardrobeEntry* e = entry_of(selection);
+
+			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->skinSheen,
+				e->skinSheenPower, HDWardrobeFromTag(e->fromSkinSheen));
+			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
+		}
+
 		/* AND WHAT PRESSING SELECT WILL DO, because the answer is not always
 		 * "now": the page cache never gives a page back, so a level in which
 		 * the player has already changed his mind a great many times says so

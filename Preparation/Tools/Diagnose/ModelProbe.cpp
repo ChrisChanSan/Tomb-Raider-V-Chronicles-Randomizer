@@ -8574,31 +8574,39 @@ int main(int argc, char** argv)
 	{
 		HDWardrobeScan();
 
-		static const char* const kFrom[] = { "default", "measured", "table",
-			"outfit.txt", "origin" };
-
+		/* The from-words are hd_wardrobe's own since #159 - HDWardrobeFromTag.
+		 * A local array of them stood here and it was one row short of the
+		 * tiers the header defines from #156 on, which is exactly the kind of
+		 * drift a table of words in the caller invites. */
 		printf("\n-- the wardrobe: %d outfits --------------------------------\n",
 			HDWardrobeCount());
-		printf("%-46s %-24s %-6s %-22s %-9s %-9s %-16s %s\n",
+		printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n",
 			"key", "name", "source", "hands braid hols glov rig", "flags",
-			"sheen", "skin", "head");
-		printf("%-46s %-24s %-6s %-22s %-9s %-9s %-16s %s\n",
+			"sheen", "skin glow", "skin", "head");
+		printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n",
 			"----------------------------------------------",
 			"------------------------", "------",
-			"----------------------", "---------", "---------",
-			"----------------", "-------------------");
+			"----------------------", "---------", "--------------------",
+			"--------------------", "------------------", "-------------------");
 
 		for (int i = 0; i < HDWardrobeCount(); i++)
 		{
 			const HDWardrobeEntry* e = HDWardrobeAt(i);
-			char flags[32], sheen[32], skin[48], head[48];
+			char flags[32], sheen[48], glow[48], skin[48], head[48];
 
 			if (!e)
 				continue;
 
 			sprintf(flags, "%5d %5d %4d %4d %3d", (int)e->hands, (int)e->braid,
 				(int)e->holsters, (int)e->gloves, (int)e->wearsRig);
-			sprintf(sheen, "%.2f/%.0f", e->sheen, e->sheenPower);
+			/* The tier goes in the sheen column as well since #159: a list
+			 * file may now set it, and "0.10/14" alone cannot say whether the
+			 * player's own line was read. */
+			sprintf(sheen, "%.2f/%.0f (%s)", e->sheen, e->sheenPower,
+				HDWardrobeFromTag(e->fromSheen));
+			// #158: what her own skin is made of in this outfit.
+			sprintf(glow, "%.2f/%.0f (%s)", e->skinSheen, e->skinSheenPower,
+				HDWardrobeFromTag(e->fromSkinSheen));
 
 			skin[0] = 0;
 
@@ -8608,16 +8616,17 @@ int main(int argc, char** argv)
 			if (!skin[0])
 				strcpy(skin, "-");
 
-			sprintf(skin + strlen(skin), " (%s)", kFrom[e->fromSkin]);
+			sprintf(skin + strlen(skin), " (%s)", HDWardrobeFromTag(e->fromSkin));
 
 			// #156: whose head this body wears, and who decided that.
 			sprintf(head, "%s (%s)", HDWardrobeHeadWord(e->head),
-				kFrom[e->fromHead]);
+				HDWardrobeFromTag(e->fromHead));
 
-			printf("%-46s %-24s %-6s %-22s %-9s %-9s %-16s %s\n", e->key, e->name,
+			printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n", e->key,
+				e->name,
 				e->source == HD_WARDROBE_SOURCE_46 ? "46"
 					: e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod",
-				flags, kFrom[e->fromFlags], sheen, skin, head);
+				flags, HDWardrobeFromTag(e->fromFlags), sheen, glow, skin, head);
 		}
 
 		printf("\n-- passed over: %d files -----------------------------------\n",

@@ -9927,7 +9927,9 @@ int main(int argc, char** argv)
 						lowest, fabs(lowest - classicLowest),
 						lowest > classicLowest ? "UNDER" : "above",
 						lift > 0.0f ? "lifted" : "where the fit puts it");
-					printf("           lifted by %.1f units%s\n", lift,
+					printf("           lowest point before %.1f, lift %.1f, "
+						"lowest point after %.1f (the classic mesh's own is "
+						"%.1f)%s\n", lowest, lift, lowest - lift, classicLowest,
 						noFloorLift ? " - NOT APPLIED (-nofloorlift), this is "
 							"the picture from before the rule" : "");
 
@@ -10031,9 +10033,12 @@ int main(int argc, char** argv)
 			HDModelFloorLift(slot, 0, classicLowest, &lowest, &lift))
 		{
 			printf("\nthe floor: the classic mesh reaches y %.1f, %s y %.1f - "
-				"%.1f units %s it, lifted by %.1f%s\n", classicLowest,
-				HDModelName(slot), lowest, fabs(lowest - classicLowest),
-				lowest > classicLowest ? "UNDER" : "above", lift,
+				"%.1f units %s it\n", classicLowest, HDModelName(slot), lowest,
+				fabs(lowest - classicLowest),
+				lowest > classicLowest ? "UNDER" : "above");
+			printf("           lowest point before %.1f, lift %.1f, lowest "
+				"point after %.1f (the classic mesh's own is %.1f)%s\n",
+				lowest, lift, lowest - lift, classicLowest,
 				noFloorLift ? " - NOT APPLIED (-nofloorlift), this is the "
 					"picture from before the rule" : "");
 
@@ -10060,16 +10065,28 @@ int main(int argc, char** argv)
 	 * see OverlayPlane - and never counted into the background percentage. */
 	if (floorDraw && floorPlaneKnown)
 	{
+		/* THE MODEL'S OWN FOOTPRINT, and not a bigger square (#155b).
+		 *
+		 * A plane seen from a low camera is not a line: a point ON it but
+		 * nearer the eye projects further down the picture than one at the
+		 * same height further away, and the gap grows with the depth. So a
+		 * square wider than the model puts edges where no part of the model
+		 * can reach them, and the eye then reads "sunk" off perspective
+		 * alone. Drawn at the model's own box, the near edge stands where the
+		 * model's near face does and the far edge where its far face does, so
+		 * the silhouette's lowest point meets the outline where it should.
+		 * The two diagonals are there so that the quad reads as a surface. */
 		OverlayClear();
 
-		const double wide = 0.6 * ((maxs[0] - mins[0]) > (maxs[2] - mins[2])
-			? (maxs[0] - mins[0]) : (maxs[2] - mins[2]));
-		const double deep = 0.08 * wide;
+		const double halfX = 0.5 * (maxs[0] - mins[0]);
+		const double halfZ = 0.5 * (maxs[2] - mins[2]);
+		const double cxm = 0.5 * (mins[0] + maxs[0]);
+		const double czm = 0.5 * (mins[2] + maxs[2]);
 
-		OverlayPlane(view, persp, width, height,
-			0.5 * (mins[0] + maxs[0]), 0.5 * (mins[2] + maxs[2]),
-			floorPlaneAt, wide > 32.0 ? wide : 32.0,
-			deep > 4.0 ? deep : 4.0, 0x0000FF00u);
+		OverlayPlane(view, persp, width, height, cxm, czm, floorPlaneAt,
+			halfX > 8.0 ? halfX : 8.0, halfZ > 8.0 ? halfZ : 8.0, 0x0000FF00u);
+		OverlayPlane(view, persp, width, height, cxm, czm, floorPlaneAt,
+			halfX > 8.0 ? halfX : 8.0, 0.0, 0x0000C000u);
 	}
 
 	if (!drew)

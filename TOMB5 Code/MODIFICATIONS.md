@@ -13261,7 +13261,7 @@ ranges by, so it is also the count of what a node mask would hide.
   OUTFIT_CLASSIC_1       (mod)      932            31           94   8010, 8011,
                                                                      8005, 8002,
                                                                      8001
-  OUTFIT_Legend_19       (mod)      863             0            0   -
+  OUTFIT_Black_1         (mod)      203             0            0   -
   LARA_HEAD           (IV-VI)   a FACIAL RIG: 5,913 vertices over bones 0..31,
                                 which are not mesh tree nodes; rigid on node 14
   OUTFIT_HAIR         (I-III)   3,542 vertices over FIVE nodes at z 0..242 -
@@ -13289,8 +13289,9 @@ Greek headband (1,127), and six of the thirty carry near enough nothing at all
 wears page 8002.** So the hair is not in the file, `LARA_HEAD`'s open skull
 stands in the picture, and what the player sees is the bald head of his
 photographs. A mod converted from such a file inherits it, and so does a mod
-whose own head IS complete but wrong for TR5 - the Mistress body carries a full
-26,370-vertex head with its own blond pages over 8002.
+whose own head IS complete but wrong for TR5 - the Mistress body carries a
+full 26,370-vertex head whose 30,811 triangles are 9,497 of TR5's own page
+8002 with 20,680 of the mod's 8112 laid over them, which is why she is blond.
 
 **`OUTFIT_HAIR` IS NOT A HAIR CAP - THE ROUND'S ONE REFUTED ASSUMPTION.** The
 round was planned on "the I-III bundle keeps Lara's hair in a separate
@@ -13429,6 +13430,13 @@ at: the diving suit with TR5's hair and no bald skull, the same body in `hair`
 mode with its goggles kept and the hair through them, the Mistress head brown
 instead of blond, the headless Legend body and the near-headless barefoot TR1
 body both whole.
+
+**A NOTE ON THE MOD NAMES IN THIS ENTRY.** The user was rearranging his
+`Mods\Outfits` folder while the round ran - folders and files were renamed
+twice between two proof runs - so a key here (`mod/outfits/legend/OUTFIT_BLACK_1`)
+is the key that folder had when the picture was taken. Nothing in the rule
+depends on a name, which is the point of deciding it by `origin=`: the same
+bodies came out `tr5` under all three spellings.
 
 ## Building this yourself
 

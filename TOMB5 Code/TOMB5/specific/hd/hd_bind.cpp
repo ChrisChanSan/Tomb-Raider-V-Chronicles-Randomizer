@@ -758,6 +758,23 @@ bool HDSlotIsLara(int slot)
 	return slot >= 0 && slot <= lara_block_last;
 }
 
+/* #155b. The test HDBindModOption made inline until now; hd_bind.h carries the
+ * rule. A name that is only "_ITEM" has no base to build an OPTION name on and
+ * is no slot of this engine either, so it is refused here as it was there. */
+bool HDSlotIsPickup(int slot)
+{
+	const char* name = HDSlotName(slot);
+
+	if (!name || HDSlotIsLara(slot))
+		return false;
+
+	static const char kItem[] = "_ITEM";
+	const size_t length = strlen(name);
+	const size_t tail = sizeof(kItem) - 1;
+
+	return length > tail && _stricmp(name + length - tail, kItem) == 0;
+}
+
 bool HDMapLoad(const char* mapPath)
 {
 	HDMapFree();
@@ -912,20 +929,16 @@ const char* HDBindModOption(int slot, char* buffer, int size)
 
 	*buffer = 0;
 
-	const char* name = HDSlotName(slot);
-
-	if (!name || HDSlotIsLara(slot))
+	/* THE ENDING IS THE WHOLE RULE - HDSlotIsPickup, which is where it is
+	 * written down since #155b, because the floor rule asks the same question
+	 * of the same slots and two spellings of one rule are one too many. */
+	if (!HDSlotIsPickup(slot))
 		return nothing;
 
-	/* THE ENDING IS THE WHOLE RULE. A slot that does not end in _ITEM is not
-	 * an inventory object at all, and a name that is only "_ITEM" has no base
-	 * to build on. */
+	const char* name = HDSlotName(slot);
 	static const char kItem[] = "_ITEM";
 	const size_t length = strlen(name);
 	const size_t tail = sizeof(kItem) - 1;
-
-	if (length <= tail || _stricmp(name + length - tail, kItem) != 0)
-		return nothing;
 
 	/* THE OPTION MODEL IS ASKED FOR FIRST, and the order is a measurement.
 	 *

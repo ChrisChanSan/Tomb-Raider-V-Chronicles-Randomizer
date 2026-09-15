@@ -250,6 +250,25 @@ struct HDModelSlot
 	 * .TRM's own node count. HDModelClassicPoseOf hands the caller the whole
 	 * decision for its log line. */
 	bool classicPose = false;
+
+	/* KEEP THE VERTEX POSITIONS (#155b).
+	 *
+	 * A model is read once and becomes a vertex buffer nobody can read back,
+	 * which is right for every measurement this module makes ITSELF - they all
+	 * happen while the file is open. The floor rule cannot: how deep a fitted
+	 * model reaches is a question about the model AND about the item it stands
+	 * in for, and the fit is only known once both of them are on the card.
+	 *
+	 * With this set the drawn vertices' positions are kept beside the model,
+	 * in the model's own frame, so that HDModelFloorLift can push them all
+	 * through that fit later in the same level build. HDModelReleasePoints
+	 * gives them back - the caller calls it as soon as it has measured, and
+	 * nothing holds a point list into the first frame.
+	 *
+	 * Only a model that is FITTED needs it: a model drawn as it stands has its
+	 * deepest point in the box the build already measured, and
+	 * HDModelFloorLift reads that instead. */
+	bool keepPoints = false;
 };
 
 /* WHAT THE CLASSIC POSE DID TO ONE SLOT (#155), for the caller's
@@ -787,22 +806,47 @@ bool HDModelRingFit(int model, int target, float* out);
  * test now has a line pointing at the cause. */
 float HDModelRingFitOverflow(int model, int target, int* worstAxis);
 
-/* WOULD THE FITTED MODEL LIE ON THE FLOOR? (#155)
+/* HOW FAR A PICKUP MODEL SINKS, AND WHAT LIFTS IT OUT (#155b).
  *
- * The ring and the corner display draw a mod's <BASE>_OPTION model; the thing
- * lying on the floor of the level does not, and round M3's reason was a
- * number: the fit centres the replacement on the vanilla item's box, so a
- * replacement that is THICKER than the item it stands in for reaches below the
- * item's lowest point - and the item's lowest point is the floor.
+ * A pickup is drawn at its animation frame's own offset, so where the ground
+ * meets it is wherever the level's CLASSIC MESH ends - measured, not assumed:
+ * ANDREA3's classic PISTOLS_ITEM mesh has its deepest point 59 units below its
+ * node and its CROWBAR_ITEM one unit above. An HD model that reaches deeper
+ * than that mesh stands in the ground where the level's own picture does not,
+ * which is what "the gun lies in the floor" and round #155's refusal of the
+ * fitted model both are, the same quantity twice.
  *
- * This is that number, in world units, measured off the two models rather than
- * argued from their sizes: the eight corners of the source's box through `fix`,
- * the deepest of them against the target's own deepest. Positive is UNDER the
- * floor (y is down in this engine); zero or less is a model that lies on it.
- * Zero when either model has no box.
+ * `classicLowest` is that reference, in the slot's own frame, and it comes
+ * from the caller because only the caller has the level: the engine reads
+ * mesh_vtxbuf's own bbox, ModelProbe walks the .TRC's mesh. y is DOWN in this
+ * engine, so "deepest" is the LARGEST y and a model sinks when its deepest
+ * point is larger than `classicLowest`.
  *
- * `fix` is what HDModelRingFit wrote. */
-float HDModelRingFitUnderFloor(int model, int target, const float* fix);
+ * `fix` is optional. Without it the model is measured AS IT STANDS and the
+ * answer is the box the build already took - which is a box of the drawn
+ * VERTICES, so it is the geometry and not a hull. With it (the ring's fit,
+ * what HDModelRingFit wrote) every kept vertex really goes through the matrix;
+ * that needs HDModelSlot::keepPoints on the model, and without it the call
+ * says so by returning false rather than by quietly measuring the wrong thing.
+ * Round #155 measured the eight BOX CORNERS through the fit instead, which
+ * overstates a crossed pair of guns by about a factor of two.
+ *
+ * `lowest` takes the model's own deepest point and `lift` how far it has to
+ * come up so as not to reach below `classicLowest` - zero for a model that
+ * already lies on it or above it, and never negative: a model that floats is
+ * the artist's business and not this rule's. Both are optional. A sink inside
+ * HALF A UNIT reads as zero as well; the slack and its reason are at the
+ * function.
+ *
+ * One implementation, engine and tool, for the same reason the fit is. */
+bool HDModelFloorLift(int model, const float* fix, float classicLowest,
+	float* lowest, float* lift);
+
+/* AND THE POINT LISTS BACK (#155b). Drops every kept vertex list of this
+ * level; the models themselves are untouched and go on drawing. Call it once
+ * the floor rule has measured - a level build keeps the points for the length
+ * of the plan and not a frame longer. */
+void HDModelReleasePoints();
 
 /* THE CLASSIC POSE'S OWN DECISION, per model slot (#155). True for
  * a slot that ASKED for one - whether or not it got it; `applied` and `why`

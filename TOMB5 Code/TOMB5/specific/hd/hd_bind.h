@@ -71,6 +71,21 @@ const char* HDSlotName(int slot);
 // True while `slot` belongs to Lara's composite (LARA .. HAIR, 0..30).
 bool HDSlotIsLara(int slot);
 
+/* IS THIS SLOT A PICKUP? (#155b, and HDBindModOption's own test since round
+ * M2b - stated once now that two rules ask it.)
+ *
+ * THE ENDING IS THE WHOLE RULE: a slot whose name ends in `_ITEM` is one of
+ * the engine's inventory objects, and every one of those is a thing that can
+ * lie on the floor to be picked up - the four weapons and their ammunition,
+ * the medipacks, the flares, the sight, the binoculars, the crowbar, the
+ * torch. Lara's own block is never one.
+ *
+ * It is a rule about the SLOT and not about how its model was found, which
+ * matters: the generic EXTRA prefix finds most of these, but REVOLVER_ITEM's
+ * Desert Eagle, REVOLVER_AMMO_ITEM and the two VCI pickups are named by the
+ * hand table instead, and they lie on the floor exactly like the rest. */
+bool HDSlotIsPickup(int slot);
+
 // One level's LEVELn.MAP. Reading it twice replaces the first reading; there
 // is only ever one level. Returns false when the file is not there, which is
 // not an error - JOBY4 has twelve lines and RICHCUT2 five, and a level with

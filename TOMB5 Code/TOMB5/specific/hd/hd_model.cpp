@@ -165,6 +165,17 @@ namespace
 		// What the mirror fold moved on this file (#153, round M2b), for the
 		// caller's own log line - all zero for a slot that asked for none.
 		HDTrmFoldCounts fold = { 0, 0, 0, 0, 0, 0 };
+
+		/* THE DRAWN VERTICES' POSITIONS, for a model that asked to keep them
+		 * (#155b) - three floats each, in the model's own frame, and the same
+		 * vertices the box above was taken over. Empty for everything else,
+		 * and emptied for everything by HDModelReleasePoints the moment the
+		 * level build has measured its floor rule.
+		 *
+		 * The box cannot answer the fitted question: a rotation sends the box
+		 * corners somewhere no vertex of the model is. */
+		std::vector<float> points;
+		bool keepPoints = false;
 	};
 
 	const int kJointBudget = 32;
@@ -177,9 +188,9 @@ namespace
 	std::map<int, Model> g_models;		// slot -> body
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
 	std::vector<std::string> g_notes;
-	/* What the classic pose decided, per slot that asked for one (#153, round
-	 * 155). The decision is taken while the file is open and the log line is
-	 * written by the caller, a level build later - so it is kept, not printed.
+	/* What the classic pose decided, per slot that asked for one (#155). The
+	 * decision is taken while the file is open and the log line is written by
+	 * the caller, a level build later - so it is kept, not printed.
 	 * Cleared with everything else by HDModelLevelBegin. */
 	std::map<int, HDModelClassicPose> g_pose;
 	std::string g_install;
@@ -748,6 +759,7 @@ namespace
 		model.pass[1].clear();
 		model.pass[2].clear();
 		model.pages.clear();
+		model.points.clear();		// #155b
 	}
 
 	/* The three index runs of one part, in pass order. Measured over all 566
@@ -858,6 +870,11 @@ namespace
 		const bool whole = cut.count <= 0 || !cut.page;
 		std::vector<bool> keep((size_t)vertices, whole);
 
+		// #155b: one allocation and not a ladder of them - the cut can only
+		// take vertices away, so the file's own count is the upper bound.
+		if (model.keepPoints)
+			model.points.reserve((size_t)vertices * 3);
+
 		if (!whole)
 			for (int i = 0; i + 2 < trm.indices; i += 3)
 			{
@@ -960,6 +977,18 @@ namespace
 					for (int b = 0; b < 3; b++)
 						cloudSq[a][b] += v[a] * v[b];
 				}
+			}
+
+			/* AND THE POSITION ITSELF, for a model that asked (#155b). Here
+			 * and not in a second walk of the file: this is the one loop that
+			 * has the kept vertices in hand, and the floor rule has to see
+			 * exactly the vertices the box above was taken over or the two
+			 * numbers it compares are not about the same model. */
+			if (model.keepPoints)
+			{
+				model.points.push_back(in.x);
+				model.points.push_back(in.y);
+				model.points.push_back(in.z);
 			}
 
 			if (model.vertexSeen++ == 0)
@@ -2374,10 +2403,25 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			else if (!said.object)
 				std::snprintf(said.why, sizeof(said.why),
 					"%s is no inventory model of game %d", model, said.game);
+			/* AND NO INSTALL IS NO INSTALL (#155b). `g_install_tr3` is the
+			 * I-III bundle's game 3 folder and the reader wants the bundle,
+			 * which is its parent - but parent_of("") is ".", so a machine
+			 * with only the IV-VI remaster sent the walk into <cwd>\1\DATA
+			 * and reported whatever it found or did not find there. A path
+			 * this module never had is a refusal and says so. */
+			else if (g_install_tr3.empty())
+				std::snprintf(said.why, sizeof(said.why),
+					"there is no Tomb Raider I-III installation to read game "
+					"%d's levels from", said.game);
+			/* THE REASON ALONE, AND NOT THE OBJECT IT IS ABOUT (#155b). Every
+			 * caller of this field names the game and the object itself, and
+			 * naming them here as well printed "classic 1 object 102: game 1
+			 * object 102: ..." - one fact twice in one line. The one case that
+			 * still says "game %d" above is the one where the OBJECT is not
+			 * known, so nobody else can name it. */
 			else if (!HDClassicRead(parent_of(g_install_tr3).c_str(), said.game,
 				said.object, &object, &trouble))
-				std::snprintf(said.why, sizeof(said.why),
-					"game %d object %d: %s", said.game, said.object, trouble);
+				std::snprintf(said.why, sizeof(said.why), "%s", trouble);
 			else
 			{
 				said.meshes = object.meshes;
@@ -2389,12 +2433,11 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				 * frame would put this model's parts anywhere at all. */
 				if (said.nodes != object.meshes)
 					std::snprintf(said.why, sizeof(said.why),
-						"%d nodes against game %d object %d's %d meshes",
-						said.nodes, said.game, said.object, object.meshes);
+						"%d nodes against the object's %d meshes",
+						said.nodes, object.meshes);
 				else if (!pose_classic(here.trm, object))
 					std::snprintf(said.why, sizeof(said.why),
-						"game %d object %d has no frame this could use",
-						said.game, said.object);
+						"the object has no frame this could use");
 				else
 				{
 					said.applied = true;
@@ -2784,6 +2827,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			{
 				model.nodes = slots[k].nodes;
 				model.rigidNode = slots[k].rigidNode;
+				// #155b: a twin inherits it with the rest of the row, which
+				// is right - it is drawn beside the model that asked.
+				model.keepPoints = slots[k].keepPoints;
 
 				if (slots[k].bind)
 				{
@@ -3531,43 +3577,90 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 	return worst;
 }
 
-/* HOW FAR THE FITTED MODEL WOULD REACH UNDER THE FLOOR (#155).
+/* HOW DEEP A PICKUP MODEL REACHES, AND WHAT LIFTS IT OUT (#155b). The header
+ * carries the rule; this is the arithmetic.
  *
- * Round M3 answered this by halving the difference of two THICKNESSES, which
- * assumes the fit is centred and the model symmetric; neither has to be true
- * of a mod's file, and the second one is not true of the user's posed pair.
- * So the eight corners of the source's box really go through the fit and the
- * deepest of them is compared with the target's own deepest point. y is down
- * in this engine, so deepest is the largest y - and a floor pickup's model
- * rests its box on the floor, which is what makes the difference the answer. */
-float HDModelRingFitUnderFloor(int model, int target, const float* fix)
+ * Round #155 pushed the eight CORNERS OF THE BOX through the fit and took the
+ * deepest of them, which is a bound on the model and not the model: a box
+ * corner of a pair of crossed guns is empty space. Measured on the user's own
+ * posed `UZI_OPTION` against the classic mesh it stands in for: 33.9 units by
+ * the corners, 11.5 by the vertices - a factor of three. A rule that lifted a
+ * model by the corner number would hang it in the air, which is the same fault
+ * the other way round.
+ *
+ * y is DOWN in this engine, so the deepest point is the LARGEST y, and the
+ * lift is that minus the classic mesh's own deepest - clamped at zero, so a
+ * model that lies on the floor or above it is never touched. */
+bool HDModelFloorLift(int model, const float* fix, float classicLowest,
+	float* lowest, float* lift)
 {
-	float srcMin[3], srcMax[3], dstMin[3], dstMax[3];
+	const Model* one = find(g_models, model);
 
-	if (!fix || !HDModelBounds(model, srcMin, srcMax) ||
-		!HDModelBounds(target, dstMin, dstMax))
-		return 0.0f;
+	if (lowest)
+		*lowest = 0.0f;
+	if (lift)
+		*lift = 0.0f;
 
-	float deepest = 0.0f;
+	if (!one || !one->vertexSeen)
+		return false;
 
-	for (int corner = 0; corner < 8; corner++)
+	float deepest;
+
+	if (!fix)
+		deepest = one->maxs[1];		// the box IS the drawn vertices
+	else
 	{
-		const float point[3] =
+		/* THE POINTS OR NOTHING. A fitted answer off the box would be the
+		 * round before this one, and quietly: the caller would get a number
+		 * that looks like the others and is not the same quantity. */
+		if (one->points.empty())
+			return false;
+
+		const size_t count = one->points.size() / 3;
+		const float* p = &one->points[0];
+
+		deepest = fix[3 * 4 + 1];
+
+		for (size_t i = 0; i < count; i++, p += 3)
 		{
-			(corner & 1) ? srcMax[0] : srcMin[0],
-			(corner & 2) ? srcMax[1] : srcMin[1],
-			(corner & 4) ? srcMax[2] : srcMin[2]
-		};
-		float y = fix[3 * 4 + 1];
+			const float y = fix[3 * 4 + 1] + p[0] * fix[0 * 4 + 1] +
+				p[1] * fix[1 * 4 + 1] + p[2] * fix[2 * 4 + 1];
 
-		for (int k = 0; k < 3; k++)
-			y += point[k] * fix[k * 4 + 1];
-
-		if (!corner || y > deepest)
-			deepest = y;
+			if (!i || y > deepest)
+				deepest = y;
+		}
 	}
 
-	return deepest - dstMax[1];
+	/* THE SLACK. Half a unit, which is a twentieth of a millimetre at this
+	 * engine's scale of 1024 units to a metre and well under the rounding of
+	 * the classic mesh's own SHORT coordinates. It keeps the rule from writing
+	 * a lift for a model that is modelled ON the classic mesh and misses it by
+	 * a float's last digit - which is every one of the remaster's own pickup
+	 * files, and a matrix touched for nothing is a matrix nobody can rule out
+	 * later. */
+	const float slack = 0.5f;
+
+	if (lowest)
+		*lowest = deepest;
+	if (lift)
+		*lift = deepest - classicLowest > slack ? deepest - classicLowest : 0.0f;
+
+	return true;
+}
+
+/* AND THE POINT LISTS BACK (#155b). Every model of the level at once, because
+ * the caller measures every slot of the family in one loop and there is no
+ * case where one of them is kept and another dropped. */
+void HDModelReleasePoints()
+{
+	for (std::map<int, Model>::iterator at = g_models.begin();
+		at != g_models.end(); ++at)
+	{
+		std::vector<float> empty;
+
+		at->second.points.swap(empty);	// and the capacity with it
+		at->second.keepPoints = false;
+	}
 }
 
 bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)

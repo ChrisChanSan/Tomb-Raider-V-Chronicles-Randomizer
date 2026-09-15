@@ -47,6 +47,7 @@
 #include "../../game/effect2.h"		// dynamics
 #include "../../game/hitman.h"		// hitman_nodes - the cyborg's panel order
 #include "../../game/newinv2.h"		// InventoryActive - the sun is doubled in there
+#include "../drawroom.h"		// mesh_vtxbuf - the classic mesh's own box (#155b)
 
 #include <math.h>
 #include <stdio.h>
@@ -97,6 +98,14 @@ namespace
 		float drift;		// the bind drift, mean over the covered nodes
 		float worst;
 		unsigned int covered;
+		/* SAID ALREADY (#155b): the "this item shows nothing" line is written
+		 * once per slot per level and not thirty times a second. */
+		unsigned char maskSaid;
+		/* THE FLOOR LIFT (#155b), in world units, and zero for every slot
+		 * that is not a pickup or whose model does not sink. Measured once at
+		 * level build and applied in the object path - see the floor rule at
+		 * the plan loop. */
+		float lift;
 	};
 
 	Verdict g_slot[NUMBER_OBJECTS];
@@ -314,8 +323,9 @@ namespace
 	/* ------------------------- A MOD'S INVENTORY MODEL (#153, round M2b) --
 	 *
 	 * The ring and the pickup display draw the <BASE>_OPTION file a mod ships
-	 * instead of the slot's own EXTRA model; hd_bind.h says when and why, and
-	 * the floor pickup is untouched.
+	 * instead of the slot's own EXTRA model; hd_bind.h says when and why. Since
+	 * #155b the PICKUP ON THE FLOOR draws it too - see the floor rule at the
+	 * plan loop for what that took and what it costs.
 	 *
 	 * THE MODEL IS ANOTHER GAME'S, so it stands in another frame: the I-III
 	 * inventory models are built upright and IV-VI's lie flat, and the origin
@@ -333,6 +343,23 @@ namespace
 		int slot;		// the level's own slot, e.g. UZI_ITEM
 		int model;		// the pseudo slot the OPTION file sits in
 		float fix[16];
+		/* AND WHAT THE FLOOR COSTS IT (#155b). The fit centres the model on
+		 * the item's box, which puts part of a model thicker than the item
+		 * below the item's own lowest point - under the floor, for a thing
+		 * lying on the ground. This is how far it has to come back up,
+		 * measured on the fitted VERTICES against the classic mesh's own
+		 * deepest point; zero for a model that already lies on it.
+		 *
+		 * It is applied on the FLOOR and nowhere else: the ring and the
+		 * corner display have no floor and draw `fix` exactly as they did. */
+		float lift;
+		float sank;		// what it stood at before the lift, for the log
+		/* `fix` WITH THE LIFT ALREADY IN IT, which is the matrix the floor
+		 * draws through. The lift belongs between the fit and the item's own
+		 * matrix - it is a move in the ITEM's frame - and the fit's
+		 * translation row is exactly where that lands, so the whole of it is
+		 * one subtraction at level build and not a line in the frame path. */
+		float floorFix[16];
 	};
 
 	RingModel g_ring_model[16];
@@ -345,6 +372,70 @@ namespace
 				return &g_ring_model[i];
 
 		return 0;
+	}
+
+	/* --------------------------------- THE FLOOR A PICKUP LIES ON (#155b) --
+	 *
+	 * THE REFERENCE IS THE CLASSIC MESH AND NOT "THE FLOOR", and that is a
+	 * measurement rather than a nicety: a pickup is drawn at its frame's own
+	 * offset, not at the item origin, and the offsets are large - ANDREA3's
+	 * classic PISTOLS_ITEM mesh has its deepest point 59 units below its node
+	 * and its CROWBAR_ITEM one unit above. So where the ground is, is
+	 * wherever the level's own picture ends, and that is what an HD model has
+	 * to meet. The frame offset reaches both meshes through the same matrix,
+	 * so the DIFFERENCE below is free of it - and a rule stated on that
+	 * difference holds for a pedestal and for a wall place (OCB 2/9) with no
+	 * case of its own, because those move the item and take both meshes with
+	 * them.
+	 *
+	 * The engine measured the mesh already: ProcessMeshData walks every mesh's
+	 * vertices at level load and keeps the box in MESH_DATA::bbox, so this
+	 * reads the level's own answer instead of parsing the mesh a second time.
+	 * bbox[4] is the largest y, and y is DOWN.
+	 *
+	 * OVER THE WHOLE OBJECT AND NOT NODE 0 ALONE, each node's mesh at the
+	 * place the mesh tree puts it: a two-mesh pickup (HK_ITEM carries the
+	 * laser sight on node 1) would otherwise be measured against half of
+	 * itself. `mesh_index` counts in the DOUBLED array LoadObjects builds -
+	 * node n is at mesh_index + 2n, the odd entry beside it being the mesh
+	 * swap - which is exactly how DrawAnimatingItem walks it. */
+	bool classic_lowest_of(int slot, const float* bind, int nodes, float* out)
+	{
+		if (!mesh_vtxbuf || slot < 0 || slot >= NUMBER_OBJECTS ||
+			!objects[slot].loaded)
+			return false;
+
+		const OBJECT_INFO& object = objects[slot];
+		const int count = nodes < object.nmeshes ? nodes : object.nmeshes;
+		bool any = false;
+		float deepest = 0.0f;
+
+		for (int node = 0; node < count; node++)
+		{
+			const int at = object.mesh_index + node * 2;
+
+			if (at < 0 || at >= num_level_meshes)
+				continue;
+
+			const MESH_DATA* mesh = mesh_vtxbuf[at];
+
+			// A mesh with no vertices at all has no box: ProcessMeshData
+			// leaves bbox zeroed and skips the walk that would fill it.
+			if (!mesh || !mesh->nVerts)
+				continue;
+
+			const float y = mesh->bbox[4] + (bind ? bind[node * 3 + 1] : 0.0f);
+
+			if (!any || y > deepest)
+				deepest = y;
+
+			any = true;
+		}
+
+		if (any && out)
+			*out = deepest;
+
+		return any;
 	}
 
 	/* WHAT HDModelRingFitOverflow SAYS, IN WORDS (#153, round M2b, the second
@@ -1564,11 +1655,19 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		 * game's own object. hd_classic.h reads it; HDModelSlot::classicPose
 		 * says what it needs and what happens when it has not got it. */
 		one.classicPose = true;
+		/* AND ITS VERTICES KEPT (#155b) until the floor rule has pushed them
+		 * through the fit. Only a FITTED model needs them: every other pickup
+		 * is measured off the box the build already took, which is a box of
+		 * the same vertices. HDModelReleasePoints gives them back at the end
+		 * of the plan. */
+		one.keepPoints = true;
 
 		wanted.push_back(one);
 
 		g_ring_model[g_ring_models].slot = slot;
 		g_ring_model[g_ring_models].model = one.slot;
+		g_ring_model[g_ring_models].lift = 0.0f;
+		g_ring_model[g_ring_models].sank = 0.0f;
 		g_ring_models++;
 	}
 
@@ -1742,6 +1841,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		verdict.covered = 0;
 		verdict.drift = 0;
 		verdict.worst = 0;
+		verdict.lift = 0;	// #155b: the floor rule below fills it
 		verdict.hd = 0;
 		verdict.why = verdict.baked ? "baked" : "no_model";
 
@@ -1982,6 +2082,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				continue;
 			}
 
+			/* THE FLOOR'S OWN COPY OF THE FIT (#155b), before the floor rule
+			 * has measured anything: a plan that survives to the frame path
+			 * must have a matrix to draw through even if the measurement
+			 * below cannot be made, and the fit without a lift is the honest
+			 * answer in that case. */
+			memcpy(ring.floorFix, ring.fix, sizeof(ring.floorFix));
+
 			HDModelBounds(ring.model, srcMin, srcMax);
 			HDModelBounds(slot, dstMin, dstMax);
 
@@ -2022,32 +2129,10 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 				ring.fix[12], ring.fix[13], ring.fix[14],
 				box_verdict(over, outAxis));
 
-			/* AND WHY THE THING ON THE FLOOR IS STILL THE VANILLA ONE (#155).
-			 * The user would have the mod's pair lying on the
-			 * ground as well, and the answer is a measurement rather than a
-			 * preference: the fit centres the replacement on the item's own
-			 * box, and a replacement thicker than the item it stands in for
-			 * reaches below the item's lowest point - which for a pickup IS
-			 * the floor. Round M3 measured 49 units on the unposed pair; the
-			 * pose brings it down without bringing it to zero, and a gun half
-			 * sunk into the ground is not the picture he asked for.
-			 *
-			 * The number is printed either way, per slot, so that a mod whose
-			 * OPTION model DOES lie flat can be seen to be the case it is - and
-			 * so that nobody has to take this round's word for the refusal. */
-			{
-				const float under = HDModelRingFitUnderFloor(ring.model, slot,
-					ring.fix);
-
-				Log("HDLOG level=%s ring floor slot=%d name=%s keeps the "
-					"level's own %s: the fitted %s reaches %.0f units %s the "
-					"item's lowest point, and that point is the floor",
-					g_stem, slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
-					HDModelName(slot) ? HDModelName(slot) : "-",
-					HDModelName(ring.model) ? HDModelName(ring.model) : "-",
-					under < 0.0f ? -under : under,
-					under > 0.5f ? "under" : "above");
-			}
+			/* AND THE FLOOR IS MEASURED BELOW, not here (#155b): the pickup
+			 * lying on the ground now takes this very model, and how far it
+			 * has to be lifted to lie ON the floor rather than IN it is the
+			 * same rule every other pickup model goes through. */
 
 			if (kept != i)
 				g_ring_model[kept] = ring;
@@ -2056,6 +2141,124 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		}
 
 		g_ring_models = kept;
+	}
+
+	/* ------------------------------------- THE FLOOR RULE (#155b) --------
+	 *
+	 * ONE RULE FOR EVERY PICKUP MODEL, and the thing it is measured against is
+	 * the CLASSIC MESH the model replaces - the reason is at classic_lowest_of
+	 * above. An HD model that reaches DEEPER than that mesh stands in the
+	 * ground where the level's own picture does not, and it is round #155's
+	 * reason for refusing the fitted OPTION model - the same quantity twice,
+	 * so it is measured once, here, and the model is lifted by exactly the
+	 * difference along the item's own up axis. Never scaled, never turned,
+	 * never moved sideways; a model that already lies on the mesh or above it
+	 * is not touched at all.
+	 *
+	 * WHY IT IS RIGHT TO LIFT AND NOT TO REFUSE. The alternative round #155
+	 * took - keep the vanilla model when the replacement sinks - hides a mod
+	 * the player installed, and refuses it by a number he cannot see or fix.
+	 * The lift shows it, in the place the item really lies, and puts the
+	 * whole of the difference where the eye can check it: the model's lowest
+	 * point ends up exactly where the classic mesh's was.
+	 *
+	 * IT IS MEASURED ON THE GEOMETRY. Round #155 pushed the eight corners of
+	 * the box through the fit, which is a bound and not the model - see
+	 * HDModelFloorLift, which does it on the vertices.
+	 *
+	 * ONCE, HERE. The lift is a property of two models and of the mesh tree,
+	 * all three of them level data, so nothing of this is left for a frame to
+	 * work out; the draw adds one translation to a matrix it already has. */
+	{
+		float bind[HD_OBJ_NODES * 3];
+
+		for (int i = 0; i < g_ring_models; i++)
+		{
+			RingModel& ring = g_ring_model[i];
+			const int slot = ring.slot;
+			const int nodes = slot >= 0 && slot < NUMBER_OBJECTS &&
+				objects[slot].nmeshes < HD_OBJ_NODES
+				? objects[slot].nmeshes : HD_OBJ_NODES;
+			float classic = 0.0f, lowest = 0.0f, lift = 0.0f;
+
+			bind_pose_of(slot, bind, nodes);
+
+			const bool haveMesh = classic_lowest_of(slot, bind, nodes, &classic);
+
+			if (!haveMesh ||
+				!HDModelFloorLift(ring.model, ring.fix, classic, &lowest, &lift))
+			{
+				Log("HDLOG level=%s ring floor slot=%d name=%s not measured: "
+					"%s - it is drawn where the fit puts it", g_stem, slot,
+					HDSlotName(slot) ? HDSlotName(slot) : "?",
+					haveMesh ? "the fitted model kept no vertices to measure"
+						: "the slot has no classic mesh with vertices in it");
+				continue;
+			}
+
+			ring.lift = lift;
+			ring.sank = lowest - classic;
+
+			/* y is DOWN, so lifting is a SUBTRACTION - and it goes on the
+			 * fit's own translation row, which is the item's frame. */
+			memcpy(ring.floorFix, ring.fix, sizeof(ring.floorFix));
+			ring.floorFix[3 * 4 + 1] -= lift;
+
+			Log("HDLOG level=%s ring floor slot=%d name=%s takes the fitted "
+				"%s on the floor, lifted by %.1f units (its lowest point "
+				"stood %.1f %s the item's)", g_stem, slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?",
+				HDModelName(ring.model) ? HDModelName(ring.model) : "-",
+				lift, ring.sank < 0.0f ? -ring.sank : ring.sank,
+				ring.sank > 0.0f ? "under" : "above");
+		}
+
+		/* AND EVERY OTHER PICKUP THE LEVEL DREW HD, the install's own files
+		 * included. They are expected to read zero - the remaster modelled
+		 * them over the classic mesh - and a line that says otherwise is a
+		 * finding about the remaster's file and not about this rule, which is
+		 * exactly why it is printed for all of them and not only for the ones
+		 * that move. */
+		for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
+		{
+			if (!g_slot[slot].hd || !HDSlotIsPickup(slot) || ring_model_of(slot))
+				continue;
+
+			const int nodes = objects[slot].nmeshes < HD_OBJ_NODES
+				? objects[slot].nmeshes : HD_OBJ_NODES;
+			float classic = 0.0f, lowest = 0.0f, lift = 0.0f;
+
+			bind_pose_of(slot, bind, nodes);
+
+			if (!classic_lowest_of(slot, bind, nodes, &classic) ||
+				!HDModelFloorLift(slot, 0, classic, &lowest, &lift))
+				continue;
+
+			g_slot[slot].lift = lift;
+
+			const float sank = lowest - classic;
+			char verdict[64];
+
+			if (lift > 0.0f)
+				std::snprintf(verdict, sizeof(verdict),
+					"lifted by %.1f units", lift);
+			else
+				std::snprintf(verdict, sizeof(verdict), "not lifted%s",
+					sank > 0.0f ? ", which is inside the slack the rule leaves"
+						: "");
+
+			Log("HDLOG level=%s pickup floor slot=%d name=%s model=%s lowest "
+				"point %.1f %s the classic mesh's - %s", g_stem, slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?",
+				HDModelName(slot) ? HDModelName(slot) : "-",
+				sank < 0.0f ? -sank : sank, sank > 0.0f ? "under" : "above",
+				verdict);
+		}
+
+		/* AND THE VERTEX LISTS BACK. They were kept for this one measurement
+		 * and nothing after this line reads them - a level build does not
+		 * carry a third of a megabyte of points into its first frame. */
+		HDModelReleasePoints();
 	}
 
 	/* THE DONOR SLOTS, one line each (#123, stage S7-2), after the verdicts
@@ -2412,6 +2615,38 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	if (g_open_mask != 0xFFFFFFFFu)
 		g_mask_used++;
 
+	/* AND WHEN THE MASK HIDES THE WHOLE MODEL, SAY SO (#155b).
+	 *
+	 * An item's mesh_bits names CLASSIC MESHES, and a .TRM's bone numbers are
+	 * classic mesh numbers too, so the mask reaches the model as a node mask
+	 * and a node it hides is a node whose triangles are not drawn. That is
+	 * right and it is what vanilla does - HK_ITEM, HK_AMMO_ITEM, CROSSBOW_ITEM
+	 * and REVOLVER_ITEM are initialised with mesh_bits 1 (game\items.cpp), so
+	 * only mesh 0 is ever shown and what sits on mesh 1 is not.
+	 *
+	 * A model whose geometry sits ENTIRELY on hidden nodes therefore draws
+	 * nothing at all, and until this line nothing said so: the user's MP5 mod
+	 * puts all 5478 of its vertices on node 1 of HK_ITEM and is invisible on
+	 * the floor, out of a level build that reports it bound, loaded and
+	 * textured. The fault is the file's - the remaster's own EXTRA5_HK_ITEM
+	 * has 2426 vertices on node 0 and 73 on node 1 - and this is the line that
+	 * tells a mod author which node his geometry has to be on.
+	 *
+	 * Once per slot per level, behind -log, and never for a slot the ring plan
+	 * draws through its own one-node model: that one is given the full mask in
+	 * HDObjectEnd and the classic numbering does not apply to it. */
+	if (gLogEnabled && !g_slot[slot].maskSaid && !ring_model_of(slot) &&
+		!(g_slot[slot].covered & g_open_mask))
+	{
+		g_slot[slot].maskSaid = 1;
+		Log("HDLOG level=%s item slot=%d name=%s model=%s draws nothing: its "
+			"geometry sits on node mask %X and this item shows %X - the "
+			"model's vertices name a classic mesh this slot never draws",
+			g_stem, slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
+			HDModelName(slot) ? HDModelName(slot) : "-",
+			g_slot[slot].covered, g_open_mask);
+	}
+
 	return true;
 }
 
@@ -2467,9 +2702,70 @@ void HDObjectEnd()
 	entry.offCentreX = 0.0f;
 	entry.offCentreY = 0.0f;
 
+	/* AND THE PICKUP ON THE FLOOR TAKES THE MOD'S OWN INVENTORY MODEL (#155b).
+	 *
+	 * Round #155 left the thing on the ground vanilla and printed the reason:
+	 * the fitted <BASE>_OPTION model reached below the item's lowest point,
+	 * and a gun half sunk in the floor is not a picture. The floor rule at the
+	 * plan loop measures that sinking on the geometry and lifts the model out
+	 * of it, so the reason is gone and the player's Uzis lie on the ground as
+	 * his Uzis - one model in the ring, in the corner and on the floor.
+	 *
+	 * The same three lines the ring's own path writes (HDInvEnd): the file is
+	 * another game's and stands on ONE node, so the item's node mask - which
+	 * names nodes of the classic model - cannot be applied to it. */
+	const RingModel* floorRing = ring_model_of(g_open_slot);
+
+	if (floorRing)
+	{
+		entry.drawSlot = floorRing->model;
+		entry.head = false;
+		entry.nodes = 1;
+		entry.mask = ~0u;
+	}
+
 	// The engine's 3x4 into the row-major 4x4 the shader wants - the note and
 	// the unseen-node rule are over store_matrices at the top of this file.
 	store_matrices(entry);
+
+	/* THE FIT AND THE LIFT, IN FRONT OF THE ITEM'S OWN MATRIX (#155b), which
+	 * is where the ring puts the fit for the reason given there: the model is
+	 * moved into this slot's frame first and the engine's matrix then does
+	 * with it what it does with the EXTRA model.
+	 *
+	 * `floorFix` is the fit with the lift already in its translation row, so
+	 * this is the ring's own multiply and not a line more. */
+	if (floorRing)
+	{
+		float placed[16];
+
+		ring_mul(floorRing->floorFix, entry.matrix, placed);
+		memcpy(entry.matrix, placed, sizeof(placed));
+	}
+	else if (g_open_slot >= 0 && g_open_slot < NUMBER_OBJECTS &&
+		g_slot[g_open_slot].lift > 0.0f)
+	{
+		/* AND A PICKUP WHOSE OWN HD MODEL SINKS IS LIFTED THE SAME WAY, node
+		 * by node (#155b). A translation of (0, -lift, 0) in the NODE's own
+		 * frame, which is the frame the classic mesh it is measured against
+		 * lives in - so the two meet whatever the item's rotation does, and
+		 * for a thing lying on a floor that frame's up IS the world's.
+		 *
+		 * Written straight onto the translation row: prepending T to M leaves
+		 * the 3x3 alone and moves the row by -lift times the image of the
+		 * model's y axis, which is row 1. Nothing is scaled and nothing is
+		 * turned. */
+		const float lift = g_slot[g_open_slot].lift;
+
+		for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
+		{
+			float* m = entry.matrix + node * 16;
+
+			m[12] -= lift * m[4];
+			m[13] -= lift * m[5];
+			m[14] -= lift * m[6];
+		}
+	}
 
 	/* THE LIGHT, out of the classic path's own setup.
 	 *

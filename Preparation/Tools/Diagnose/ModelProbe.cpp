@@ -297,10 +297,11 @@
  *                         the item's OWN frame, which is not what the
  *                         player sees - the Uzi row is 0x4000 0x6000
  *                         0x4000 and the pistols' 0x4000 0xAD4C 0xBD40.
- *                         For an INVENTORY model, which is one node - the
- *                         turn goes in front of the root matrix, and a
- *                         model with a mesh tree would keep its other
- *                         nodes where they were. The camera frames the
+ *                         The turn goes in front of EVERY node's matrix,
+ *                         so the whole object turns about the model
+ *                         origin; for an inventory model, which is one
+ *                         node, that is the root and nothing else. The
+ *                         camera frames the
  *                         TURNED box since the fix round of M3 - before it,
  *                         a model whose box is off-centre swung out of the
  *                         picture and the .PNG came out empty.
@@ -420,6 +421,31 @@
  *     -managed            pages in D3DPOOL_MANAGED instead of D3DPOOL_DEFAULT
  *     -nodraw             load and measure only - no window, no picture
  *
+ *   THE FLOOR A PICKUP LIES ON (#155b):
+ *     -floor              with -slot: draw the slot the way the LEVEL draws
+ *                         it on the ground - the mod's own <BASE>_OPTION
+ *                         model where there is one, fitted onto the item's
+ *                         box, and the slot's own EXTRA model otherwise -
+ *                         with the floor rule applied, and put the CLASSIC
+ *                         MESH's own lowest plane over the picture as a green
+ *                         strip. The three numbers are printed beside it: the
+ *                         classic mesh's deepest point, the model's, and the
+ *                         lift that brings the second onto the first. Take it
+ *                         with a low camera (-pitch 4 reads well); the strip
+ *                         is deliberately narrow, see OverlayPlane.
+ *     -nofloorlift        the same picture with the lift LEFT OFF - what the
+ *                         floor showed before this round, so that what the
+ *                         rule buys is a comparison and not a memory. Implies
+ *                         -floor.
+ *     -floorcheck         every pickup slot of the level as a table, and then
+ *                         stop: the classic mesh's deepest point, the HD
+ *                         model's, the sink and the lift, with the fitted
+ *                         <BASE>_OPTION models measured BOTH ways - on the
+ *                         vertices, which is the rule, and on the eight box
+ *                         corners, which is what round #155 did. Loads every
+ *                         slot the way -all does; add -all for -all's table
+ *                         as well. Wants -mods to see a mod's models.
+ *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
  */
@@ -502,6 +528,110 @@ static void PngChunk(FILE* f, const char* tag, const unsigned char* data, unsign
 
 	PutBE(head, crc);
 	fwrite(head, 1, 4, f);
+}
+
+/* ------------------------------------------ WHAT IS DRAWN OVER THE PICTURE --
+ *
+ * THE FLOOR A PICKUP LIES ON (#155b). A render of a gun lying on the ground is
+ * not a proof of the floor rule on its own: the eye cannot see where the floor
+ * IS. So the classic mesh's own lowest point is drawn into the picture as a
+ * square in that plane, projected with the same arithmetic the renderer uses -
+ * the classic persp * x / z, which -ringcheck holds to one pixel against the
+ * projection matrix the card is given.
+ *
+ * Into the PIXELS and not through the device: a line list would want a shader,
+ * a vertex declaration and a state bracket of its own, all of which this tool
+ * would then have to prove it puts back. Lines drawn into the readback buffer
+ * touch nothing the model's own draw used.
+ *
+ * The list is filled by the run and emptied by ShotWrite. */
+struct OverlayLine
+{
+	double x0, y0, x1, y1;
+	unsigned long colour;
+};
+
+static std::vector<OverlayLine> g_overlay;
+
+static void OverlayClear()
+{
+	g_overlay.clear();
+}
+
+/* One point of the model's own frame onto the screen, through `view` (the
+ * model-to-view matrix, row vectors with the translation in row 3) and the
+ * classic projection. false for a point behind the camera. */
+static bool OverlayProject(const float* view, double persp, long w, long h,
+	double x, double y, double z, double* sx, double* sy)
+{
+	const double vx = x * view[0] + y * view[4] + z * view[8] + view[12];
+	const double vy = x * view[1] + y * view[5] + z * view[9] + view[13];
+	const double vz = x * view[2] + y * view[6] + z * view[10] + view[14];
+
+	if (vz < 20.0)
+		return false;
+
+	*sx = vx * persp / vz + (double)w * 0.5;
+	*sy = vy * persp / vz + (double)h * 0.5;
+	return true;
+}
+
+/* A rectangle in the plane y = `at`, centred on (cx, cz), as four projected
+ * edges.
+ *
+ * A NARROW STRIP AND NOT A BIG SQUARE. A square as wide as the model is deep
+ * puts its near edge a long way down the picture and its far edge through the
+ * model, and the eye then reads the model against whichever line it happens to
+ * meet - which says nothing at all. Keeping the depth small puts the two edges
+ * within a few pixels of each other at a low camera, and the strip reads as
+ * what it is: the height the classic mesh ends at. */
+static void OverlayPlane(const float* view, double persp, long w, long h,
+	double cx, double cz, double at, double halfX, double halfZ,
+	unsigned long colour)
+{
+	double px[4], py[4];
+	const double corner[4][2] =
+	{
+		{ cx - halfX, cz - halfZ }, { cx + halfX, cz - halfZ },
+		{ cx + halfX, cz + halfZ }, { cx - halfX, cz + halfZ }
+	};
+
+	for (int i = 0; i < 4; i++)
+		if (!OverlayProject(view, persp, w, h, corner[i][0], at, corner[i][1],
+			&px[i], &py[i]))
+			return;
+
+	for (int i = 0; i < 4; i++)
+	{
+		OverlayLine line;
+
+		line.x0 = px[i];
+		line.y0 = py[i];
+		line.x1 = px[(i + 1) & 3];
+		line.y1 = py[(i + 1) & 3];
+		line.colour = colour;
+		g_overlay.push_back(line);
+	}
+}
+
+// A straight run of pixels, clipped, one sample per longest-axis step.
+static void OverlayStroke(unsigned long* px, long w, long h,
+	const OverlayLine& line)
+{
+	const double dx = line.x1 - line.x0;
+	const double dy = line.y1 - line.y0;
+	const double span = fabs(dx) > fabs(dy) ? fabs(dx) : fabs(dy);
+	const long steps = (long)(span + 0.5);
+
+	for (long i = 0; i <= steps; i++)
+	{
+		const double t = steps ? (double)i / (double)steps : 0.0;
+		const long x = (long)(line.x0 + dx * t + 0.5);
+		const long y = (long)(line.y0 + dy * t + 0.5);
+
+		if (x >= 0 && x < w && y >= 0 && y < h)
+			px[y * w + x] = line.colour | 0xFF000000u;
+	}
 }
 
 static bool WritePng(const char* path, const unsigned long* px, long w, long h)
@@ -890,6 +1020,13 @@ static bool ShotWrite(Shot& shot, const char* path)
 
 	shot.readback->UnlockRect();
 
+	/* AND THE FLOOR OVER IT (#155b). After the background count above and
+	 * before the file: the percentages beside every picture this tool writes
+	 * are about what the RENDERER drew, and lines counted into them would
+	 * change a number two rounds of proofs already compare. */
+	for (size_t i = 0; i < g_overlay.size(); i++)
+		OverlayStroke(pixels, shot.w, shot.h, g_overlay[i]);
+
 	const double texels = (double)shot.w * (double)shot.h;
 	const bool ok = WritePng(path, pixels, shot.w, shot.h);
 
@@ -1194,6 +1331,78 @@ static bool ReadClassicSlot(const Tr5Level& level, int slot, ClassicSlot& out)
 
 	out.ok = true;
 	return true;
+}
+
+/* THE CLASSIC MESH'S OWN DEEPEST POINT (#155b), in the slot's frame.
+ *
+ * The reference the floor rule measures an HD pickup model against: a pickup
+ * is drawn at its animation frame's own offset, so where the ground meets it
+ * is wherever the level's own mesh ends. y is DOWN, so deepest is the LARGEST
+ * y, and each node's mesh is taken where the mesh tree puts it - a two-mesh
+ * pickup measured on node 0 alone would be measured against half of itself.
+ * The frame offset is left out on purpose: it reaches the HD model through the
+ * same matrix, so it cancels in the difference the rule is about.
+ *
+ * The engine reads the very same quantity out of the box ProcessMeshData took
+ * at level load (MESH_DATA::bbox[4]); this walks the .TRC because a tool has
+ * no engine behind it. The TR5 mesh is x, y, z, radius, flags, a vertex-count
+ * word whose LOW BYTE is the count, and then three shorts per vertex - the
+ * same reading as the engine's loader and as the randomizer's own walker,
+ * which agree with each other. */
+static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
+	float* out, int* meshesSeen)
+{
+	Tr5Level::MoveableInfo info;
+
+	if (meshesSeen)
+		*meshesSeen = 0;
+
+	if (!level.moveableInfo(here.slot, info))
+		return false;
+
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	bool any = false;
+	float deepest = 0.0f;
+
+	for (int node = 0; node < here.nodes; node++)
+	{
+		size_t at = 0;
+
+		if (!level.debugMeshAt(info.meshIndex + node, at) ||
+			at + 12 > bytes.size())
+			continue;
+
+		int16_t vertsWord = 0;
+
+		memcpy(&vertsWord, &bytes[at + 10], 2);
+
+		const int verts = vertsWord & 0xFF;
+
+		if (!verts || at + 12 + (size_t)verts * 6 > bytes.size())
+			continue;
+
+		for (int v = 0; v < verts; v++)
+		{
+			int16_t y = 0;
+
+			memcpy(&y, &bytes[at + 12 + (size_t)v * 6 + 2], 2);
+
+			const float inSlot = (float)y + here.bind[node][1];
+
+			if (!any || inSlot > deepest)
+				deepest = inSlot;
+
+			any = true;
+		}
+
+		if (meshesSeen)
+			(*meshesSeen)++;
+	}
+
+	if (any && out)
+		*out = deepest;
+
+	return any;
 }
 
 /* The node matrices, model space to VIEW space - what the engine's matrix
@@ -7518,6 +7727,9 @@ int main(int argc, char** argv)
 	bool noClassicPose = false;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
+	// #155b: -all's own table is printed only for a line that asked for -all;
+	// -floorcheck turns `all` on for the LOAD and prints a table of its own.
+	bool allAsked = false;
 	// #153 round M3: -invrot, the ring's own x/y/z for this item.
 	short invRot[3] = { 0, 0, 0 };
 	bool invRotSet = false;
@@ -7527,6 +7739,16 @@ int main(int argc, char** argv)
 	bool rigid = false;
 	bool itemcheck = false;
 	bool inventory = false;	// #153 round M2b: a mod's own _OPTION model
+	/* #155b: the floor rule. -floor draws the slot the way the LEVEL draws it
+	 * on the ground, lift and all, with the classic mesh's own lowest plane
+	 * over the picture; -floorcheck prints the numbers for every pickup slot
+	 * of the level and draws nothing. */
+	bool floorDraw = false;
+	bool floorCheck = false;
+	/* ... and the BEFORE picture: the same draw with the lift left off, which
+	 * is what the floor showed until this round. The switch exists so that
+	 * what the rule buys stays a measurement instead of a memory. */
+	bool noFloorLift = false;
 	/* #123, fix round P: the inventory ring. -ringcheck is the numeric proof
 	 * of the shear, -ring <x> <y> draws the model where the ring would put it
 	 * so that the same shear can be looked at. */
@@ -7612,7 +7834,7 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-withrooms") && i + 1 < argc)
 			withRooms = argv[++i];
 		else if (!_stricmp(argv[i], "-all"))
-			all = true;
+			all = allAsked = true;
 		else if (!_stricmp(argv[i], "-lara") && i + 1 < argc)
 		{
 			lara = true;
@@ -7848,6 +8070,15 @@ int main(int argc, char** argv)
 		 * place, exactly as hd_object.cpp puts it there. */
 		else if (!_stricmp(argv[i], "-inventory"))
 			inventory = true;
+		/* #155b: the floor rule, as a picture and as a table. -floorcheck
+		 * wants every slot of the level loaded, which is what -all does - but
+		 * not -all's own table, unless the line asked for that too. */
+		else if (!_stricmp(argv[i], "-floor"))
+			floorDraw = true;
+		else if (!_stricmp(argv[i], "-floorcheck"))
+			floorCheck = all = true;
+		else if (!_stricmp(argv[i], "-nofloorlift"))
+			noFloorLift = floorDraw = true;
 		/* #153 round M3: the ring's own three angles, so that a picture out
 		 * of this tool is the picture the player sees. */
 		else if (!_stricmp(argv[i], "-invrot") && i + 3 < argc)
@@ -8410,7 +8641,11 @@ int main(int argc, char** argv)
 	std::string optionName;
 	int optionSlot = -1;
 
-	if (inventory && !all && slot >= 0)
+	/* -floor ASKS FOR IT TOO (#155b): since this round the pickup lying on the
+	 * ground draws a mod's <BASE>_OPTION model where there is one, so a
+	 * picture of the floor has to have the same model on the card that the
+	 * level would put there. */
+	if ((inventory || floorDraw) && !all && slot >= 0)
 	{
 		char option[128];
 
@@ -8428,15 +8663,63 @@ int main(int argc, char** argv)
 			one.nodes = 1;
 			one.name = optionName.c_str();
 			one.rigidNode = 0;
-			// ... and posed with the donor game's own frame 0 (#153, round
-			// 155), exactly as hd_object.cpp asks for it - unless the run
-			// asked to see the file as it lies.
+			// ... and posed with the donor game's own frame 0 (#155), exactly
+			// as hd_object.cpp asks for it - unless the run asked to see the
+			// file as it lies.
 			one.classicPose = !noClassicPose;
+			// #155b: and its vertices kept, because the floor rule measures
+			// the FITTED model and a fit is only known once both are built.
+			one.keepPoints = true;
 			wanted.push_back(one);
 		}
 		else
 			printf("inventory: no mod ships an _OPTION model for this slot - "
-				"the ring draws the slot's own\n");
+				"the ring and the floor draw the slot's own\n");
+	}
+
+	/* AND THE SAME PLAN FOR EVERY PICKUP SLOT OF THE LEVEL (#155b), which is
+	 * what -floorcheck needs: the floor draws a mod's <BASE>_OPTION model
+	 * where there is one, so a table about the floor has to have those models
+	 * on the card as well. Exactly hd_object.cpp's ring plan, slot for slot. */
+	struct FloorOption { int slot; int model; };
+	std::vector<FloorOption> floorOptions;
+	std::vector<std::string> floorOptionNames;
+
+	if (floorCheck)
+	{
+		// Reserved, because every `name` below points into this vector and a
+		// reallocation would leave hd_model holding a dead pointer.
+		floorOptionNames.reserve(wanted.size());
+
+		const size_t asked = wanted.size();
+
+		for (size_t i = 0; i < asked; i++)
+		{
+			char option[128];
+			const int at = wanted[i].slot;
+
+			if (!HDSlotIsPickup(at) ||
+				!*HDBindModOption(at, option, sizeof(option)))
+				continue;
+
+			floorOptionNames.push_back(option);
+
+			FloorOption plan;
+
+			plan.slot = at;
+			plan.model = 0x7000 + at;
+			floorOptions.push_back(plan);
+
+			HDModelSlot one;
+
+			one.slot = plan.model;
+			one.nodes = 1;
+			one.name = floorOptionNames.back().c_str();
+			one.rigidNode = 0;
+			one.classicPose = !noClassicPose;
+			one.keepPoints = true;
+			wanted.push_back(one);
+		}
 	}
 
 	/* --- the rooms first, if asked (#123, stage S6) --------------------- */
@@ -8542,7 +8825,7 @@ int main(int argc, char** argv)
 		printf("  note: %s\n", HDModelNote(i));
 
 	/* --- the table ------------------------------------------------------ */
-	if (all)
+	if (allAsked)
 	{
 		/* THE SKELETON COLUMNS (#123, stage S3-2). `maxb` is the highest node
 		 * a weighted vertex of the .TRM names and `drift` is how far the
@@ -8705,7 +8988,159 @@ int main(int argc, char** argv)
 		if (bestBad < 1e8f)
 			printf("          the smallest drift among the refused is %.0f\n",
 				bestBad);
+	}
 
+	/* --- THE FLOOR RULE, SLOT BY SLOT (#155b) ---------------------------- */
+	if (floorCheck)
+	{
+		/* THE ENGINE'S OWN ARITHMETIC, not a copy of it: HDModelFloorLift is
+		 * the function hd_object.cpp calls at level build, and the reference
+		 * it is handed - the classic mesh's deepest point - is read here out
+		 * of the .TRC that the engine reads out of mesh_vtxbuf.
+		 *
+		 * EVERY PICKUP SLOT of the level, not the ones that move: an install
+		 * file that reads zero is the proof that the rule is inert on vanilla
+		 * data, and it is only a proof if it is printed.
+		 *
+		 * The fitted column is the OPTION case - a mod's <BASE>_OPTION model
+		 * turned onto the item's box - and it is measured twice on purpose:
+		 * on the box CORNERS through the fit, which is what round #155 did,
+		 * and on the VERTICES, which is what the rule does now. */
+		printf("\n-- the floor rule --------------------------------------------\n");
+		printf("%-5s %-20s %-26s %8s %8s %8s %7s %s\n", "slot", "slot name",
+			"model on the floor", "classic", "lowest", "sink", "lift",
+			"how");
+		printf("----- -------------------- -------------------------- "
+			"-------- -------- -------- ------- -------------\n");
+
+		int measured = 0, lifted = 0;
+		/* WHAT THE SWEEP COSTS. The fitted case walks every kept vertex of
+		 * the model - 27,449 of them on the user's posed pair of Uzis - and
+		 * it happens once per slot at level build, so the number worth having
+		 * is microseconds per model and not per frame. */
+		LARGE_INTEGER freq, began, ended;
+		double sweptUs = 0;
+		int sweptVertices = 0;
+
+		QueryPerformanceFrequency(&freq);
+
+		for (size_t i = 0; i < wanted.size(); i++)
+		{
+			const int at = wanted[i].slot;
+
+			if (!HDSlotIsPickup(at) || !HDModelHas(at))
+				continue;
+
+			const ClassicSlot* shape = 0;
+
+			for (size_t k = 0; k < order.size(); k++)
+				if (wanted[k].slot == at)
+					shape = &classic[(size_t)order[k]];
+
+			float classicLowest = 0.0f;
+
+			if (!shape || !ClassicMeshLowest(level, *shape, &classicLowest, 0))
+			{
+				printf("%-5d %-20s %-26s %8s %8s %8s %7s %s\n", at,
+					HDSlotName(at) ? HDSlotName(at) : "?", HDModelName(at),
+					"-", "-", "-", "-", "no classic mesh with vertices");
+				continue;
+			}
+
+			/* THE MODEL THE FLOOR REALLY DRAWS. A mod that ships a
+			 * <BASE>_OPTION model and no EXTRA_ name for the slot puts THAT
+			 * on the ground since #155b, fitted onto the item's box - so the
+			 * question is asked of the model that is drawn and not of the one
+			 * the slot happens to be bound to. */
+			int option = -1;
+
+			for (size_t k = 0; k < floorOptions.size(); k++)
+				if (floorOptions[k].slot == at && HDModelHas(floorOptions[k].model))
+					option = floorOptions[k].model;
+
+			float lowest = 0.0f, lift = 0.0f;
+			float fix[16];
+
+			if (option >= 0 && HDModelRingFit(option, at, fix))
+			{
+				QueryPerformanceCounter(&began);
+
+				const bool ok = HDModelFloorLift(option, fix, classicLowest,
+					&lowest, &lift);
+
+				QueryPerformanceCounter(&ended);
+
+				if (!ok)
+					continue;
+
+				sweptUs += 1.0e6 * (double)(ended.QuadPart - began.QuadPart) /
+					(double)freq.QuadPart;
+				sweptVertices += HDModelVertices(option);
+
+				/* AND ROUND #155'S OWN ANSWER BESIDE IT: the eight corners of
+				 * the source's box through the same fit. It is here to be
+				 * compared, because the whole of what this round changed
+				 * about the measurement is the difference between the two. */
+				float srcMin[3], srcMax[3], corners = 0.0f;
+
+				HDModelBounds(option, srcMin, srcMax);
+
+				for (int c = 0; c < 8; c++)
+				{
+					const float p[3] =
+					{
+						(c & 1) ? srcMax[0] : srcMin[0],
+						(c & 2) ? srcMax[1] : srcMin[1],
+						(c & 4) ? srcMax[2] : srcMin[2]
+					};
+					const float y = fix[13] + p[0] * fix[1] + p[1] * fix[5] +
+						p[2] * fix[9];
+
+					if (!c || y > corners)
+						corners = y;
+				}
+
+				measured++;
+
+				if (lift > 0.0f)
+					lifted++;
+
+				printf("%-5d %-20s %-26s %8.1f %8.1f %8.1f %7.1f %s\n", at,
+					HDSlotName(at) ? HDSlotName(at) : "?",
+					HDModelName(option), classicLowest, lowest,
+					lowest - classicLowest, lift, "fitted");
+				printf("%-5s %-20s %-26s %8s %8.1f %8.1f %7s %s\n", "", "",
+					"  (round #155, by corners)", "", corners,
+					corners - classicLowest, "",
+					"the bound, not the model");
+				continue;
+			}
+
+			if (!HDModelFloorLift(at, 0, classicLowest, &lowest, &lift))
+				continue;
+
+			measured++;
+
+			if (lift > 0.0f)
+				lifted++;
+
+			printf("%-5d %-20s %-26s %8.1f %8.1f %8.1f %7.1f %s\n", at,
+				HDSlotName(at) ? HDSlotName(at) : "?", HDModelName(at),
+				classicLowest, lowest, lowest - classicLowest, lift,
+				"as it stands");
+		}
+
+		printf("\n%d pickup model(s) measured, %d lifted - y is DOWN, so a "
+			"positive sink is a model standing IN the floor\n",
+			measured, lifted);
+
+		if (sweptVertices)
+			printf("the vertex sweep: %d vertices through the fit in %.1f us, "
+				"once per slot at level build\n", sweptVertices, sweptUs);
+	}
+
+	if (all)
+	{
 		HDModelShutdown();
 		HDRenderShutdown();
 		DropDevice();
@@ -9384,6 +9819,12 @@ int main(int argc, char** argv)
 	 * node, every node drawn. Same two calls hd_object.cpp makes. */
 	bool drew = false;
 
+	/* THE FLOOR PLANE THE PICTURE GETS (#155b), in the slot's own frame, and
+	 * whether it is known at all - a -name run has no level and so no classic
+	 * mesh to stand on. */
+	double floorPlaneAt = 0.0;
+	bool floorPlaneKnown = false;
+
 	if (optionSlot >= 0 && HDModelHas(optionSlot))
 	{
 		float fix[16], placed[16];
@@ -9405,11 +9846,29 @@ int main(int argc, char** argv)
 						pose.game, pose.level, pose.nodes, pose.before[0],
 						pose.before[1], pose.before[2], pose.after[0],
 						pose.after[1], pose.after[2]);
+				/* AND WHICH OBJECT IT WAS ABOUT (#155b). The reason no longer
+				 * names the game and the object - it named them twice in the
+				 * engine's own line - so the printer names them, here as
+				 * there, and only where they are known. */
+				else if (pose.game && pose.object)
+					printf("\nclassic pose: NOT applied to %s - game %d object "
+						"%d: %s. It is drawn as the file stands.\n",
+						HDModelName(optionSlot), pose.game, pose.object,
+						pose.why);
 				else
 					printf("\nclassic pose: NOT applied to %s - %s. It is drawn "
 						"as the file stands.\n", HDModelName(optionSlot),
 						pose.why);
 			}
+			/* AND A RUN THAT TOOK THE POSE OFF SAYS SO (#155b). -noclassicpose
+			 * asks for no pose at all, so hd_model keeps no decision for this
+			 * slot and the block above printed nothing - which left the two
+			 * runs the switch exists to compare telling apart only by a box
+			 * measurement further down. */
+			else if (noClassicPose)
+				printf("\nclassic pose: not asked for (-noclassicpose) - %s is "
+					"drawn exactly as the file stands, which is what the ring "
+					"did before #155.\n", HDModelName(optionSlot));
 		}
 
 		if (HDModelRingFit(optionSlot, slot, fix))
@@ -9449,21 +9908,46 @@ int main(int argc, char** argv)
 				fix[12], fix[13], fix[14], over,
 				outAxis >= 0 && outAxis < 3 ? kAxis[outAxis] : "?");
 
-			/* AND WHETHER IT WOULD LIE ON THE FLOOR (#155) - the
-			 * engine's own arithmetic, not a copy of it: the question the
-			 * level pickup turns on, in units, per slot. */
+			/* AND WHERE IT LIES ON THE FLOOR (#155b) - the engine's own
+			 * arithmetic, not a copy of it. Round #155 printed a refusal
+			 * here; the level pickup takes this model now and the number is
+			 * what it is LIFTED by, measured on the vertices through the fit
+			 * against the classic mesh's own deepest point. */
+			if (here && here->slot >= 0)
 			{
-				float dMin[3], dMax[3];
-				const float under = HDModelRingFitUnderFloor(optionSlot, slot,
-					fix);
+				float classicLowest = 0.0f, lowest = 0.0f, lift = 0.0f;
 
-				HDModelBounds(slot, dMin, dMax);
-				printf("           the floor: the fitted model reaches %.1f "
-					"units %s the item's lowest point (y %.0f), so the level "
-					"pickup %s\n", under < 0 ? -under : under,
-					under > 0.5f ? "UNDER" : "above", dMax[1],
-					under > 0.5f ? "keeps the vanilla EXTRA_ model"
-						: "could draw this one");
+				if (ClassicMeshLowest(level, *here, &classicLowest, 0) &&
+					HDModelFloorLift(optionSlot, fix, classicLowest, &lowest,
+						&lift))
+				{
+					printf("           the floor: the classic mesh reaches y "
+						"%.1f, the fitted model y %.1f - %.1f units %s it, "
+						"so the level pickup draws it %s\n", classicLowest,
+						lowest, fabs(lowest - classicLowest),
+						lowest > classicLowest ? "UNDER" : "above",
+						lift > 0.0f ? "lifted" : "where the fit puts it");
+					printf("           lifted by %.1f units%s\n", lift,
+						noFloorLift ? " - NOT APPLIED (-nofloorlift), this is "
+							"the picture from before the rule" : "");
+
+					if (floorDraw)
+					{
+						/* THE LIFT GOES ON THE FIT'S TRANSLATION ROW, which
+						 * is the item's own frame - the same one line the
+						 * engine writes into RingModel::floorFix. y is down,
+						 * so lifting subtracts. */
+						if (!noFloorLift)
+							fix[13] -= lift;
+
+						floorPlaneAt = classicLowest;
+						floorPlaneKnown = true;
+					}
+				}
+				else
+					printf("           the floor: not measured - the slot has "
+						"no classic mesh with vertices, or the fitted model "
+						"kept no points\n");
 			}
 
 			/* WHERE THE FIT REALLY PUT IT (#153, round M3): the source's own
@@ -9534,12 +10018,82 @@ int main(int argc, char** argv)
 				"own model is drawn\n", HDModelName(optionSlot));
 	}
 
+	/* AND THE SLOT'S OWN MODEL ON THE FLOOR (#155b), which is the other half
+	 * of the rule: no fit, no OPTION file, just the model the slot is bound to
+	 * against the classic mesh it replaces. The lift goes on every node
+	 * matrix, in that node's own frame - the same three lines hd_object.cpp
+	 * writes into HDObjectEnd, and the same reason for the frame. */
+	if (floorDraw && !drew && here && here->slot >= 0)
+	{
+		float classicLowest = 0.0f, lowest = 0.0f, lift = 0.0f;
+
+		if (ClassicMeshLowest(level, *here, &classicLowest, 0) &&
+			HDModelFloorLift(slot, 0, classicLowest, &lowest, &lift))
+		{
+			printf("\nthe floor: the classic mesh reaches y %.1f, %s y %.1f - "
+				"%.1f units %s it, lifted by %.1f%s\n", classicLowest,
+				HDModelName(slot), lowest, fabs(lowest - classicLowest),
+				lowest > classicLowest ? "UNDER" : "above", lift,
+				noFloorLift ? " - NOT APPLIED (-nofloorlift), this is the "
+					"picture from before the rule" : "");
+
+			floorPlaneAt = classicLowest;
+			floorPlaneKnown = true;
+
+			for (int node = 0; !noFloorLift && node < here->nodes; node++)
+			{
+				float* m = &matrices[(size_t)node * 16];
+
+				m[12] -= lift * m[4];
+				m[13] -= lift * m[5];
+				m[14] -= lift * m[6];
+			}
+		}
+		else
+			printf("\nthe floor: not measured - the slot has no classic mesh "
+				"with vertices in it\n");
+	}
+
+	/* THE PLANE ITSELF, over the picture (#155b): a square in the floor plane,
+	 * as wide as the model's own box, so that a gun lying on the ground can be
+	 * SEEN to be lying on it. It is drawn into the pixels after the render -
+	 * see OverlayPlane - and never counted into the background percentage. */
+	if (floorDraw && floorPlaneKnown)
+	{
+		OverlayClear();
+
+		const double wide = 0.6 * ((maxs[0] - mins[0]) > (maxs[2] - mins[2])
+			? (maxs[0] - mins[0]) : (maxs[2] - mins[2]));
+		const double deep = 0.08 * wide;
+
+		OverlayPlane(view, persp, width, height,
+			0.5 * (mins[0] + maxs[0]), 0.5 * (mins[2] + maxs[2]),
+			floorPlaneAt, wide > 32.0 ? wide : 32.0,
+			deep > 4.0 ? deep : 4.0, 0x0000FF00u);
+	}
+
 	if (!drew)
 	{
-		float own[16];
+		/* EVERY NODE'S MATRIX AND NOT ONE (#155b). This handed HDModelDraw a
+		 * SINGLE float[16] with the slot's node COUNT beside it, so the draw
+		 * read past the end of a stack array for every node but the root and
+		 * skinned that node's vertices with whatever was there. A model whose
+		 * geometry sits on node 0 drew correctly and everything else vanished
+		 * - which is how this round came within one measurement of reporting
+		 * the user's MP5 mod (5478 vertices, all on node 1) as an invisible
+		 * FILE. It is the tool that was blind, since #153 round M3 put the
+		 * turn in front of the matrix.
+		 *
+		 * The turn goes in front of EVERY node, so it turns the whole object
+		 * about the model origin. A one-node inventory model gets exactly what
+		 * it got before. */
+		std::vector<float> own((size_t)here->nodes * 16);
 
-		MatMul(ringTurn, &matrices[0], own);
-		drew = HDModelDraw(slot, own, here->nodes,
+		for (int node = 0; node < here->nodes; node++)
+			MatMul(ringTurn, &matrices[(size_t)node * 16],
+				&own[(size_t)node * 16]);
+
+		drew = HDModelDraw(slot, &own[0], here->nodes,
 			&light[0], nodeMask, &lighting);
 	}
 

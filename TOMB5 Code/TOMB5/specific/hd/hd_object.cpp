@@ -420,7 +420,34 @@ namespace
 	 * laser sight on node 1) would otherwise be measured against half of
 	 * itself. `mesh_index` counts in the DOUBLED array LoadObjects builds -
 	 * node n is at mesh_index + 2n, the odd entry beside it being the mesh
-	 * swap - which is exactly how DrawAnimatingItem walks it. */
+	 * swap - which is exactly how DrawAnimatingItem walks it.
+	 *
+	 * AND OVER NODES THE ITEM MAY NOT SHOW, which is a gap and is written
+	 * down as one (fix round 2, the reviewer's finding). InitialiseItem gives
+	 * HK_ITEM, HK_AMMO_ITEM, CROSSBOW_ITEM and REVOLVER_ITEM mesh_bits = 1
+	 * (game\items.cpp:222-225), so the level draws node 0 of those four and
+	 * nothing else - and both sides of this rule sweep every node anyway. The
+	 * two sides are at least consistent, and the rule is a DIFFERENCE, so a
+	 * node hidden on both only matters where the hidden nodes of the one
+	 * reach deeper than those of the other.
+	 *
+	 * MEASURED over the fifteen shipped levels, node 0 alone against the whole
+	 * object: HK_ITEM -4.1 either way, HK_AMMO_ITEM -2.7 either way,
+	 * CROSSBOW_ITEM -0.9 (one node, nothing to hide), REVOLVER_ITEM in
+	 * ANDREA3 -10.4 either way - and ONE row that does change, REVOLVER_ITEM
+	 * in JOBY2 and JOBY5: the whole object reaches 15.3 against the classic
+	 * mesh's 14.3 and is lifted 1.1 units, while node 0 alone reaches 12.5 and
+	 * would not be lifted at all. The deepest 1.1 units of that model are on
+	 * nodes 1 and 2, which the item does not draw. One millimetre at 1024
+	 * units to a metre, on a model that is not moved in any other level.
+	 *
+	 * It is not free to close either: the mask is the ITEM's and this rule is
+	 * per SLOT, so an item with a mask of its own would want a lift of its
+	 * own, and the only other place in TR5 that touches a pickup's mask sets
+	 * it to ZERO (InitialisePickup, for an item whose trigger_flags carry
+	 * 0x100, game\init.cpp:510-511), which draws nothing at all and so has no
+	 * floor to meet. The day that millimetre is worth more than a per-item
+	 * lift costs, this is the paragraph that says what it buys. */
 	bool classic_lowest_of(int slot, const float* pose, int nodes, float* out)
 	{
 		/* THE POSE IS NOT OPTIONAL. Its translation is where the mesh tree
@@ -474,36 +501,53 @@ namespace
 
 	/* AND THE FRAME ITSELF, per slot (#155b, fix round 1). HDFramePose does
 	 * the walk; this is where the engine's own three pieces of it are - the
-	 * object's first frame, its slice of the bone array, and its node count.
+	 * frame the draw reads, the object's slice of the bone array, and its
+	 * node count.
 	 *
-	 * THE OBJECT'S FIRST FRAME IS THE ONE A PICKUP IS DRAWN AT: the item is
-	 * initialised at anims[obj->anim_index].frame_base and nothing advances it
-	 * (a pickup has no control routine that animates), so GetFrames hands the
-	 * draw the anim's own first frame. The two pointers are checked against
-	 * each other below rather than assumed equal. */
+	 * THE ANIMATION'S FIRST FRAME IS THE ONE A PICKUP IS DRAWN AT, and that
+	 * is the ANIM's pointer and not the object's (fix round 2). The chain is
+	 * three lines of the engine's own: InitialiseItem sets anim_number =
+	 * objects[slot].anim_index and frame_number = anims[anim_number].
+	 * frame_base (game\items.cpp:195-196); no pickup has a control routine
+	 * that advances its frame; GetFrames then starts at anims[anim_number].
+	 * frame_ptr and adds size * ((frame_number - frame_base) / rate), which is
+	 * zero frames (game\draw.cpp:2512-2524). So frame_ptr IS the pointer
+	 * DrawAnimatingItem unpacks its rotations from.
+	 *
+	 * OBJECT_INFO::frame_base is the same pointer on all fifteen shipped
+	 * levels - the line below has never fired - but where the two differ, the
+	 * first build of this round logged the difference and then deliberately
+	 * measured the one the engine does NOT draw. Now it logs the difference
+	 * and measures the one it does. */
 	const short* first_frame_of(int slot)
 	{
 		const OBJECT_INFO& object = objects[slot];
 
-		if (anims && object.anim_index >= 0)
-		{
-			const short* animFrame = anims[object.anim_index].frame_ptr;
+		/* A slot with no animation has nothing but its rest pose, and that is
+		 * what the bind walk was: HDFramePose takes a null frame as identity
+		 * either way. */
+		if (!anims || object.anim_index < 0)
+			return object.frame_base;
 
-			if (animFrame && animFrame != object.frame_base)
-			{
-				/* A FINDING AND NOT A CHOICE. It has never fired on the
-				 * fifteen shipped levels; if it ever does, the line says
-				 * which slot and the rule below is measuring the object's
-				 * rest pose while the level draws another frame. */
-				Log("HDLOG level=%s pickup floor slot=%d name=%s the object's "
-					"own first frame and anim %d's differ - the rule measures "
-					"the object's", g_stem, slot,
-					HDSlotName(slot) ? HDSlotName(slot) : "?",
-					(int)object.anim_index);
-			}
+		const short* animFrame = anims[object.anim_index].frame_ptr;
+
+		if (!animFrame)
+			return object.frame_base;
+
+		if (animFrame != object.frame_base)
+		{
+			/* A FINDING AND NOT A CHOICE. It has never fired on the fifteen
+			 * shipped levels; if it ever does, the line says which slot, and
+			 * the numbers under it are the animation's frame - the level's
+			 * picture - while the object's rest pose is another one. */
+			Log("HDLOG level=%s pickup floor slot=%d name=%s the object's own "
+				"first frame and anim %d's differ - the rule measures the "
+				"anim's, which is the one the draw reads", g_stem, slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?",
+				(int)object.anim_index);
 		}
 
-		return object.frame_base;
+		return animFrame;
 	}
 
 	int frame_pose_of(int slot, float* out /* nodes * 12 */, int nodes)
@@ -2424,7 +2468,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 		/* AND THE VERTEX LISTS BACK. They were kept for this one measurement
 		 * and nothing after this line reads them - a level build does not
-		 * carry a third of a megabyte of points into its first frame. */
+		 * carry three quarters of a megabyte of points into its first frame.
+		 * THIRTEEN BYTES A VERTEX and not twelve (fix round 2): three floats
+		 * of position and the one byte that says which node the point rides
+		 * on. ANDREA3 with the user's four mods in the folder keeps 57,378 of
+		 * them, which is 746 KB; the install's own eighteen models are 18,526
+		 * points and 241 KB. The earlier figure here counted the positions of
+		 * the smaller case and called it the larger. */
 		HDModelReleasePoints();
 	}
 

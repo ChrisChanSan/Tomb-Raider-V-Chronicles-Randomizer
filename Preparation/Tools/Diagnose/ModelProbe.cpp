@@ -450,10 +450,18 @@
  *                         left out of a floor picture too - the item's frame
  *                         is not a presentation, it is where the thing lies.
  *                         Every other switch's picture is the bind pose.
+ *                         THE CAMERA FRAMES THE LIFT AS WELL since fix round
+ *                         2: the box it is built from is stretched upward by
+ *                         the lift, because a model that comes up 126 units
+ *                         (RICH3's crossbow ammunition) otherwise walks out of
+ *                         the top of the very picture that wants it. It is
+ *                         stretched by the same amount with -nofloorlift, so
+ *                         the two pictures share one camera.
  *     -nofloorlift        the same picture with the lift LEFT OFF - what the
  *                         floor showed before this round, so that what the
  *                         rule buys is a comparison and not a memory. Implies
- *                         -floor.
+ *                         -floor. Same camera as the picture with it, so the
+ *                         two can be measured against each other in pixels.
  *     -floorcheck         every pickup slot of the level as a table, and then
  *                         stop: the classic mesh's deepest point, the HD
  *                         model's, the sink and the lift, each of them in the
@@ -464,7 +472,11 @@
  *                         #155's own answer as well, the eight box corners
  *                         through the fit. Loads every slot the way -all
  *                         does; add -all for -all's table as well. Wants
- *                         -mods to see a mod's models.
+ *                         -mods to see a mod's models, and WANTS -level:
+ *                         without the level's own .MAP the table describes
+ *                         generic-prefix bindings and not the ones the engine
+ *                         builds (RICH1's BINOCULARS_ITEM is one row that
+ *                         differs).
  *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
@@ -9485,11 +9497,47 @@ int main(int argc, char** argv)
 			floorFitted ? floorFit : 0, floorPose, here->nodes, lo, hi,
 			floorDeepest))
 		{
-			printf("drawn   : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f - what "
-				"the camera frames; its deepest point is at x %.0f z %.0f, "
-				"where the floor plane is drawn\n",
+			printf("drawn   : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f - the "
+				"model's own box where the frame puts it; its deepest point is "
+				"at x %.0f z %.0f, where the floor plane is drawn\n",
 				lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], floorDeepest[0],
 				floorDeepest[2]);
+
+			/* AND THE LIFT IS PART OF WHAT THE CAMERA HAS TO SEE (fix round 2,
+			 * the reviewer's finding). The box above is the model BEFORE the
+			 * rule moves it and the camera is built from it further down, so a
+			 * model that is lifted far walks out of the top of the picture:
+			 * RICH3's crossbow ammunition comes up 126.6 units and the first
+			 * render of it showed the bottom third of a quiver with the whole
+			 * top cut off - the one case where a picture is most wanted.
+			 *
+			 * The box is stretched UPWARD by the lift, which is the smaller y
+			 * here, so that the camera frames the union of the two positions:
+			 * the plane stays at the classic mesh's own depth, the lifted
+			 * model stands on it, and both are in the picture.
+			 *
+			 * ALSO WHEN THE LIFT IS LEFT OFF, because -floor and -nofloorlift
+			 * are a PAIR and a pair is only readable on one camera: the pixel
+			 * proof of this round measures how much higher the silhouette
+			 * stands in the one than in the other, and two different framings
+			 * would make that difference meaningless.
+			 *
+			 * The lift is the same two calls the printer makes further down -
+			 * one reads the classic mesh out of the .TRC, the other is the
+			 * engine's own HDModelFloorLift - with the same arguments, and
+			 * both are pure functions of the model, the fit and the pose. */
+			float floorClassic = 0.0f, lowest = 0.0f, lift = 0.0f;
+
+			if (ClassicMeshLowest(level, *here, floorPose, &floorClassic, 0) &&
+				HDModelFloorLift(floorFitted ? optionSlot : slot,
+					floorFitted ? floorFit : 0, floorPose, here->nodes,
+					floorClassic, &lowest, &lift) && lift > 0.0f)
+			{
+				printf("          and %.0f units of room above it, which is "
+					"where the lift puts the model - the camera frames both "
+					"positions, so -floor and -nofloorlift share it\n", lift);
+				lo[1] -= lift;
+			}
 
 			for (int c = 0; c < 3; c++)
 			{

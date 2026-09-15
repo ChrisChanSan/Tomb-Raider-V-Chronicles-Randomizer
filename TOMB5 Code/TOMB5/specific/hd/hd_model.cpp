@@ -3633,11 +3633,27 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
  * in the difference the floor rule is about, and leaving it out keeps node 0
  * at the origin where the bind numbers were.
  *
- * The ITEM's own rotation, because a pickup carries a yaw and a yaw does not
- * tilt the up axis - measured, not assumed: InitialiseItem zeroes x_rot and
- * z_rot (game\items.cpp:201-202), the level file gives an item one angle, and
- * the one place that tilts a pickup puts the three angles back before
- * anything is drawn (PickUpCollision, game\pickup.cpp:789-793 and 1124-1126).
+ * The ITEM's own rotation, because a pickup LYING THERE carries a yaw and a
+ * yaw does not tilt the up axis - measured, not assumed: InitialiseItem
+ * zeroes x_rot and z_rot (game\items.cpp:201-202), the level file gives an
+ * item one angle, and the one place that tilts a pickup Lara is standing over
+ * puts the three angles back before anything is drawn (PickUpCollision,
+ * game\pickup.cpp:789-793 and 1124-1126).
+ *
+ * TWO OF THE FAMILY DO TILT, and the claim above is not exhaustive without
+ * them (fix round 2, the reviewer's finding): a THROWN one. FlareControl
+ * turns a flare in flight by 546 about x and 910 about z every frame
+ * (game\laraflar.cpp:31-37) and FlameTorchControl a falling torch by 910
+ * about z (game\flmtorch.cpp:286-287), both outside PickUpCollision's
+ * save-and-restore, and both zero the two angles again the moment the thing
+ * comes to rest. So the frame this rule measures in is the frame those two
+ * are drawn in for as long as they lie on the ground, which is when a floor
+ * rule is about them at all, and their sink is small either way -
+ * FLARE_ITEM 1.0 units and BURNING_TORCH_ITEM 2.9. A tumbling flare is
+ * lifted by that same amount STRAIGHT UP IN THE WORLD, because that is where
+ * the lift is applied (hd_object.cpp, world_up_in_view) and not along the
+ * model's own axis: a tilt changes what the number would have been, never
+ * which way it goes.
  *
  * The arithmetic is aRotX/aRotY/aRotZ's, line for line, on a local 3x4 in the
  * engine's own M00..M23 order - not the global matrix stack, which is

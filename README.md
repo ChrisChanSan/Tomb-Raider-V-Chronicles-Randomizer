@@ -272,6 +272,18 @@ HDLOG level=ANDREA3 pickup floor slot=240 name=CROWBAR_ITEM
       mesh's - lifted by 6.2 units
 ```
 
+**How far that can go.** Most of these numbers are millimetres: over the
+fifteen levels of the campaign, eleven pickups are lifted at all and nine of
+them by 7 units or less — a crowbar 6.2, a laser sight 4.2, a flare 1.0. Two
+are not. A mod's fitted pair of Uzis comes up 19.2, and the largest in the game
+is your own installation's: RICH3's crossbow ammunition, where the remaster has
+no Tomb Raider V model for the slot and the engine falls back to the Tomb
+Raider IV quiver. That model is drawn at TR5's item origin and reaches **126.6
+units** below the level's own mesh — nearly two thirds of it used to stand in
+the floor, and now it stands on it. A big number always means the same thing:
+the model was modelled over a different item's origin. A model authored over
+this game's own reads zero.
+
 **Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
 the outfit or an `outfit.txt` says, so every level and every outfit look alike
 in that one respect. (It is the Russia levels that change: they used to draw

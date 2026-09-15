@@ -12822,6 +12822,13 @@ install's files come out inert would be the same thing spelled as a number.
 Half a unit is the tolerance, and it is there for float rounding on a mesh
 whose own coordinates are SHORTs, not for a policy.
 
+> **This paragraph was true of ANDREA3 and wrong about the campaign, and fix
+> round 2 corrects it.** The round measured two levels. Over all fifteen the
+> largest lift is not seven millimetres but **126.6 units - RICH3's
+> `CROSSBOW_AMMO1_ITEM`**, the install's own TR4 quiver on a TR5 slot, on three
+> real items. The complete table, the picture and what it means are in FIX
+> ROUND 2 at the end of this entry.
+
 **`COMPASS_ITEM` AND THE 144.8 THAT WAS NOT THERE.** In the bind pose the
 remaster's inventory compass reads 144.8 units below the tiny classic one, and
 the first build of this round computed a lift that large. The frame ANDREA3
@@ -12846,14 +12853,23 @@ and a rule that lifted by the corner number would have hung the model in the
 air.
 
 **WHAT THE SWEEP COSTS.** ANDREA3's eighteen pickup models with the user's
-`Mods` folder are **57,378 vertices through the frame in 185 microseconds**,
-once per slot at a level build; without the folder, 18,526 in 51. The largest
-single model is the posed pair of Uzis at 27,449. The positions are kept beside
-the model only while the plan runs (`HDModelSlot::keepPoints`, set on every
-model of the pickup family) and `HDModelReleasePoints` gives them back before
-the first frame. Nothing of this is in a frame: the draw adds one translation
-to a matrix it already has, and the direction it adds is worked out once per
-CAMERA and not per item.
+`Mods` folder are **57,378 vertices through the frame in 360 to 397
+microseconds** over five runs, once per slot at a level build; without the
+folder, 18,526 in 115 to 121 over three. That is 6.3 to 6.9 nanoseconds a
+vertex on this machine - an Intel Core i9-9900K at 3.6 GHz - and the per-vertex
+figure is the one to compare a different machine against. The largest single
+model is the posed pair of Uzis at 27,449. The positions are kept beside the
+model only while the plan runs (`HDModelSlot::keepPoints`, set on every model
+of the pickup family) and `HDModelReleasePoints` gives them back before the
+first frame. Nothing of this is in a frame: the draw adds one translation to a
+matrix it already has, and the direction it adds is worked out once per CAMERA
+and not per item.
+
+> Fix round 2: this paragraph read "185 microseconds ... 18,526 in 51" and
+> those two numbers do not reproduce - the reviewer measured about 2.3x that
+> and so do five fresh runs here, on the same machine and the same build. The
+> figures above are the measured spread rather than one run of it, and the
+> per-vertex cost is stated because it is the part that travels.
 
 **THE MP5, WHICH IS NOT THIS ROUND'S FAULT AND IS NOT ITS FIX.** The user's
 report was "it is actually TR5 but lies invisible on the floor", with no log.
@@ -13057,6 +13073,153 @@ this fix which had changed how the camera frames an `-invrot` picture.
 before the round: **287 lines identical**; the eight known outfits with
 pistols: **eight byte-identical `.PNG` files**. Twenty-three floor renders with
 their numbers, looked at one by one.
+
+**FIX ROUND 2 (the second review) - THE ROUND HAD MEASURED TWO LEVELS OUT OF
+FIFTEEN, AND THE BIGGEST LIFT IN THE GAME WAS IN NEITHER.** Everything above
+was measured on ANDREA3 and RICH1. Run over all fifteen shipped levels with
+each level's own `.MAP` in hand, the rule moves one pickup twenty times further
+than anything the record admitted to: **RICH3's `CROSSBOW_AMMO1_ITEM` is lifted
+126.6 units**, and the paragraph above told the reader the opposite ("one to
+seven millimetres of gun in the ground"). The rule is not wrong; the round's
+coverage was.
+
+**WHAT RICH3 LOOKS LIKE.** The slot holds the grappling gun's ammunition in
+that level and the install has no TR5 model for it, so the binder's last resort
+finds the TR4 one: `4\ITEM\EXTRA4_CROSSBOW_AMMO1_ITEM.TRM`, an upright quiver
+of bolts. Drawn as the file stands it reaches **153.6** where the level's own
+mesh ends at **27.0** - the quiver is 203 units tall and **126.6 of them, 62%
+of it, are below the ground line**, which is a stub of leather sticking out of
+the floor. Three real items carry it (`ItemCheck RICH3.TRC 342`: items 10, 82
+and 209, OCB 0, 4 and 0). The two renders are in the proofs: before, the floor
+plane cuts the quiver a third of the way down; after, it stands on the plane.
+
+**AND THE RULE'S PREMISE, CHECKED AGAINST THE ENGINE'S OWN PLACEMENT.**
+`InitialisePickup` puts a pickup down with `item->pos.y_pos -= bounds[3]`
+(`game\init.cpp:489-490`) for OCB 0, 3, 4, 7, 8 and 11, and `GetBoundsAccurate`
+hands it the animation frame's own six box shorts - so **`bounds[3]`, the box's
+deepest point, is placed exactly ON the floor**. Walking the `.TRC` for every
+object between slots 240 and 360 of ANDREA3 and RICH3, that stored box bottom
+equals the classic mesh's own deepest point plus the frame's y offset, row for
+row (two exceptions, neither a pickup this rule moves: RICH3's slot 284, whose
+stored box is 16 units off its mesh, and ANDREA3's `PISTOLS_AMMO_ITEM`, 1.1 off
+because Core rounded the box of a TURNED mesh into shorts). So "as deep as the
+classic mesh" IS "on the floor" for these items, and the lift puts the quiver
+where the engine already promised the ground was.
+
+**THE WHOLE CAMPAIGN, EVERY LIFT IT PRODUCES** (`ModelProbe -floorcheck` with
+`-level`, fifteen levels, once with the user's `Mods` folder and once without;
+rows that are not lifted are left out - there are sixteen of them and they are
+the same in both passes):
+
+```
+  lift  slot                 model                        levels
+ 126.6  CROSSBOW_AMMO1_ITEM  EXTRA4_CROSSBOW_AMMO1_ITEM   RICH3          install
+  19.2  UZI_ITEM             UZI_OPTION, fitted           ANDREA3 JOBY2-5    mod
+   6.9  COMPASS_ITEM         EXTRA4_COMPASS_ITEM          13 levels      install
+   6.8  UZI_AMMO_ITEM        UZI_AMMO_OPTION, fitted      ANDREA1-3 JOBY2-5  mod
+   6.2  CROWBAR_ITEM         EXTRA_CROWBAR_ITEM           ANDREA3 ANDY3  install
+                             CROWBAR_ITEM_ANDREA2         ANDREA2 JOBY3-5
+   4.2  LASERSIGHT_ITEM      EXTRA_LASERSIGHT_ITEM        ANDREA1-3 JOBY2 ins
+   2.9  BURNING_TORCH_ITEM   EXTRA_BURNING_TORCH_ITEM     ANDY1 ANDY3    install
+   2.9  PISTOLS_AMMO_ITEM    EXTRA_PISTOLS_AMMO_ITEM      ANDREA1-3 JOBY2-5
+                             (the HK USP mod's file; the install's own is 3.3
+                              ABOVE the mesh and is not lifted)                mod
+   1.6  UZI_ITEM             EXTRA_UZI_ITEM               ANDREA3 JOBY2-5 ins
+   1.5  UZI_AMMO_ITEM        EXTRA_UZI_AMMO_ITEM          ANDREA1-3 JOBY2-5 ins
+   1.1  REVOLVER_ITEM        EXTRA5_REVOLVER_ITEM_JOBY    JOBY2 JOBY5    install
+                             (the same file in ANDREA1-3 stands 10.4 ABOVE the
+                              mesh - a different frame, not a different file)
+   1.0  FLARE_ITEM           EXTRA_FLARE_ITEM             10 levels      install
+```
+
+`BURNING_TORCH_ITEM` and `REVOLVER_ITEM` were not named anywhere in this record
+before; neither was RICH3. The `UZI_ITEM` row is 19.2 with the mod and 1.6
+without it, because with the mod the floor takes the fitted `UZI_OPTION`.
+
+**THE ONE THING THIS ROUND CANNOT DECIDE.** 126.6 units is 12 centimetres of
+vanilla pickup moving up in a level the user has played a hundred times. It is
+the rule doing exactly what it was built to do, and the picture before it is
+worse than the picture after it - but it is his call, and `-nofloorlift` draws
+it both ways for him. Nothing else in the fifteen levels moves by more than 7
+units without a mod installed.
+
+**THE RULE MEASURED THE FRAME THE ENGINE DOES NOT DRAW** (`hd_object.cpp`,
+`first_frame_of`). It took `objects[slot].frame_base`; the draw reads
+`anims[item->anim_number].frame_ptr` (`GetFrames`, `game\draw.cpp:2512-2524`,
+at `frame_number == frame_base`, so frame zero of that animation). The first
+build logged a line when the two differed and then deliberately measured the
+one the engine does not draw. It now measures the animation's and logs the
+difference. **On the shipped levels this changes nothing, and that is measured
+rather than assumed**: walking the fifteen `.TRC` files, all **1,791 objects**
+carry their animation's own frame offset as their object frame offset - 1,748
+of them have an animation at all, and the 43 that do not (slots 25, 28, 127,
+369 and 370, none of them a pickup) take the rest-pose fallback. Every
+`-floorcheck` table of this round comes out line for line identical to the
+reviewer's own runs from before the change.
+
+**A LARGE LIFT USED TO WALK OUT OF ITS OWN PICTURE** (`ModelProbe`, `-floor`).
+The camera was framed on the box of the model BEFORE the rule moved it, so
+RICH3's quiver was rendered with its top cut off - the one case where the
+picture is most wanted. The box is stretched upward by the lift now, and by the
+same amount **whether or not the lift is applied**, because `-floor` and
+`-nofloorlift` are a pair and a pair that does not share a camera cannot be
+compared in pixels. The tool says so in a line of its own: *"and 127 units of
+room above it, which is where the lift puts the model"*.
+
+**THE "A PICKUP ONLY EVER CARRIES A YAW" CLAIM WAS NOT EXHAUSTIVE**
+(`hd_model.cpp`, the frame walk). Two of the family tilt while they FLY:
+`FlareControl` turns a thrown flare by 546 about x and 910 about z every frame
+(`game\laraflar.cpp:31-37`) and `FlameTorchControl` a falling torch by 910
+about z (`game\flmtorch.cpp:286-287`), both outside `PickUpCollision`'s
+save-and-restore - and both zero the two angles the moment the thing comes to
+rest, which is when a floor rule is about it at all. Their lifts are 1.0 and
+2.9 units, and the lift goes straight up in the world in any case: a tilt
+changes what the number would have been, never which way it goes. The comment
+and this record say so now instead of citing `items.cpp` as if it settled it.
+
+**THE `mesh_bits` GAP, WRITTEN DOWN - AND ONE ROW OF IT MEASURED THE OTHER
+WAY.** `InitialiseItem` gives `HK_ITEM`, `HK_AMMO_ITEM`, `CROSSBOW_ITEM` and
+`REVOLVER_ITEM` `mesh_bits = 1` (`game\items.cpp:222-225`), so those four draw
+node 0 and nothing else, while both sides of this rule sweep every node. The
+review reported that no verdict changes because of it. Measured here with an
+independent reader, node 0 alone against the whole object: `HK_ITEM` -4.1 and
+`HK_AMMO_ITEM` -2.7 either way, `CROSSBOW_ITEM` -0.9 (one node), `REVOLVER_ITEM`
+in ANDREA3 -10.4 either way - **and one row that does change: `REVOLVER_ITEM`
+in JOBY2 and JOBY5**, where the whole object reaches 15.3 and is lifted 1.1
+units while node 0 alone reaches 12.5 and would not be lifted at all. The
+deepest millimetre of that model is on nodes 1 and 2, which the item never
+shows. It stays as it is: the mask is the ITEM's and the lift is per SLOT, so
+closing the gap means a lift per item, and the only other place in TR5 that
+touches a pickup's mask sets it to zero (`InitialisePickup`, `trigger_flags`
+0x100), which draws nothing at all. One millimetre against that is not a trade
+worth making today, and the paragraph in the code says what it would buy.
+
+**AND THE SMALL ONES.** The comment at `HDModelReleasePoints` said a level
+build does not carry "a third of a megabyte" of points into its first frame;
+the kept lists are 13 bytes a vertex - 12 of position and 1 for the node - so
+ANDREA3 with the user's four mods keeps **746 KB** and the install's own case
+241 KB, and the comment said the smaller number about the larger case. The
+round's four `-floorcheck` proof runs had been taken WITHOUT `-level`, so they
+described generic-prefix bindings rather than the ones the engine builds (one
+row differed: RICH1's `BINOCULARS_ITEM` is `EXTRA5_BINOCULARS_ITEM_RICH` at
+-6.4 with the map and `EXTRA_BINOCULARS_ITEM` at -247.0 without it, neither of
+them lifted); every table in this round was re-taken with `-level`.
+
+**PROVED, FIX ROUND 2.** The fifteen-level tables with `-level`, twice
+(`fix2/allfloor`, `fix2/table_out.txt`). The `-floorcheck` rows identical line
+for line to the reviewer's own pre-change runs, all fifteen levels
+(`fix2/allfloor` against `review2/allfloor`). Twenty-four floor renders with
+their numbers, every one looked at, including RICH3's quiver before and after
+(`fix2/floor`). The lift in pixels, each pair on its shared camera:
+126.6 units = 255 px, 19.2 = 44, 6.8 = 47, 6.9 = 25, 6.2 = 30, 2.9 = 17,
+1.6 = 7, 1.1 = 8 (`fix2/pixels_out.txt`). The independent `.TRC`/`.TRM` reader
+on RICH3's quiver, on the four masked slots and on the MP5
+(`fix2/drawnfloor.py`, `fix2/meshbits_out.txt`, `fix2/mp5_out.txt`). The frame
+pointer over 1,791 objects (`fix2/framepointer_out.txt`). The frame box against
+the classic mesh over two levels (`fix2/frameboxes_*.txt`). The ring again:
+**seven byte-identical renders**, same pose, same fit, PASS. `ModelProbe -all
+-nodraw` over ANDREA1 against the pre-round build: **287 lines identical**,
+eight byte-identical outfit renders.
 
 ## Building this yourself
 

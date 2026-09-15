@@ -242,16 +242,29 @@ works. **A mod can never change a page of a model it did not supply** — the
 vanilla look cannot be damaged by installing one.
 
 **Inventory models.** A mod written for Tomb Raider I-III carries that game's
-names — `UZI_OPTION` instead of `EXTRA_UZI_ITEM` — and the ring and the pickup
-display in the corner draw it where the slot's own model would stand. It is
-turned and scaled onto that model's own **shape** — the directions its
-vertices really run in, not its bounding box — because the I-III inventory
-models stand upright and the IV-VI ones lie flat. The pickup lying on the
-floor keeps `EXTRA_*`, and a mod that ships an `EXTRA_*` of its own wins
-everywhere. A mod whose `mod.txt` names an `origin=` game is **posed** with
-that game's own first frame as well, so a pair of guns comes out crossed
-instead of parallel; the long version is under *A mod's own inventory model*
-below.
+names — `UZI_OPTION` instead of `EXTRA_UZI_ITEM` — and the ring, the pickup
+display in the corner **and the thing lying on the floor** draw it where the
+slot's own model would stand. It is turned and scaled onto that model's own
+**shape** — the directions its vertices really run in, not its bounding box —
+because the I-III inventory models stand upright and the IV-VI ones lie flat.
+A mod that ships an `EXTRA_*` of its own wins everywhere. A mod whose
+`mod.txt` names an `origin=` game is **posed** with that game's own first
+frame as well, so a pair of guns comes out crossed instead of parallel; the
+long version is under *A mod's own inventory model* below.
+
+**A pickup never sinks into the floor.** Every pickup model that comes out HD
+is measured against the classic mesh it replaces, once when the level is
+built: if its lowest point reaches deeper than that mesh's, it is lifted by
+exactly the difference, straight up and nothing else — never scaled, never
+turned, never moved sideways. A model that already lies on that point or above
+it is not touched at all. The log says which it was, per slot, so a mod author
+whose gun stood in the ground can read the number he has to move it by:
+
+```
+HDLOG level=ANDREA3 pickup floor slot=335 name=PISTOLS_AMMO_ITEM
+      model=EXTRA_PISTOLS_AMMO_ITEM lowest point 6.1 under the classic
+      mesh's - lifted by 6.1 units
+```
 
 **Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
 the outfit or an `outfit.txt` says, so every level and every outfit look alike
@@ -366,12 +379,12 @@ included.
 
 **A mod's own inventory model.** Tomb Raider I-III draws the inventory out of
 `<BASE>_OPTION` models where IV-VI uses `EXTRA_<BASE>_ITEM`, so a mod written
-for I-III brings the OPTION names with it. The **ring** and the little
-turning object in the corner take it when a mod ships one and no mod ships an
-`EXTRA_` name for the same slot; a file from another game stands in that
-game's frame, so it is turned onto the vanilla item's own — by the shape of
-its vertices and not by its bounding box, which cannot tell a pair of guns
-from one gun standing up.
+for I-III brings the OPTION names with it. The **ring**, the little turning
+object in the corner **and the pickup lying on the floor** take it when a mod
+ships one and no mod ships an `EXTRA_` name for the same slot; a file from
+another game stands in that game's frame, so it is turned onto the vanilla
+item's own — by the shape of its vertices and not by its bounding box, which
+cannot tell a pair of guns from one gun standing up.
 
 **And it is POSED first, out of your own I-III installation.** A remaster
 inventory model is stored in the classic *bind pose*: each part carries the
@@ -389,16 +402,47 @@ log saying which one was missing: the model has to come from a **mod whose
 (`GUN_OPTION` or `PISTOLS_OPTION`, `SHOTGUN_OPTION`, `MAGNUM_OPTION` or
 `REVOLVER_OPTION`, `UZI_OPTION`, and the ammunition boxes `MAG_AMMO_OPTION`,
 `SG_AMMO_OPTION`, `UZI_AMMO_OPTION`, `PISTOLS_AMMO_OPTION`,
-`SHOTGUN_AMMO1_OPTION` and `SHOTGUN_AMMO2_OPTION`); and the file's parts have
-to match that object's. Without an I-III installation, without an `origin=`
-line, or under a name the table does not know, the file is drawn exactly as it
-stands — which is what the ring did before.
+`REVOLVER_AMMO_OPTION`, `SHOTGUN_AMMO1_OPTION` and `SHOTGUN_AMMO2_OPTION`);
+and the file's parts have to match that object's. Without an I-III
+installation, without an `origin=` line, or under a name the table does not
+know, the file is drawn exactly as it stands — which is what the ring did
+before.
 
-The **pickup lying on the floor** still keeps the vanilla `EXTRA_` model, and
-that was measured again with the pose on: a pickup is placed by the floor
-under it, and the fitted pair would reach **32 units below** the item's own
-lowest point (80 without the pose). One rule for every one of them, the
-ammunition included, and the number is in the log per slot.
+**And the pickup on the floor takes it too.** A fitted model is centred on the
+vanilla item's box, so one thicker than the item it stands in for reaches
+below that item's lowest point — into the ground, for a thing lying on it.
+Until now that was a reason to leave the floor vanilla; it is now a
+measurement and a lift. The fitted pair of Uzis stands **11.5 units** below
+the classic mesh's own lowest point and its ammunition box **6.8**, measured
+on the model's own vertices through the fit, and each is lifted by exactly
+that much before it is drawn. One rule for every pickup model, a mod's and
+your installation's alike, and the number is in the log per slot:
+
+```
+HDLOG level=ANDREA3 ring floor slot=336 name=UZI_ITEM takes the fitted
+      UZI_OPTION on the floor, lifted by 11.5 units (its lowest point
+      stood 11.5 under the item's)
+```
+
+The ring and the corner display have no floor and are not touched by any of
+this: they draw the fit exactly as they did.
+
+**One thing a mod author has to get right, and the engine cannot.** A `.TRM`
+vertex names the **classic mesh** it rides on, and four of this game's pickups
+are initialised so that only mesh 0 is ever shown — `HK_ITEM`, `HK_AMMO_ITEM`,
+`CROSSBOW_ITEM` and `REVOLVER_ITEM`, whose second mesh is the laser sight.
+A model whose geometry sits on mesh 1 of one of those is therefore invisible on
+the floor, however well it loads. The log says so the first time such an item
+is drawn:
+
+```
+HDLOG level=RICH1 item slot=345 name=HK_ITEM model=EXTRA5_HK_ITEM draws
+      nothing: its geometry sits on node mask 2 and this item shows 1 -
+      the model's vertices name a classic mesh this slot never draws
+```
+
+Put the geometry on node 0. The remaster's own `EXTRA5_HK_ITEM` has 2426 of
+its 2499 vertices there and the 73 that are not are the sight.
 
 **And one sidecar line.** A randomized level's `<level>.hdm` now carries an
 `sfximport` line naming the sound ids the run imported from another game.

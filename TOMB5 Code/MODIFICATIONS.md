@@ -14075,6 +14075,165 @@ uses and not a typed word.
 automatic level rebuild, x64 (#143), the randomizer, the ring, the wardrobe, and
 the F4 window's own layout.
 
+#### Round 157 (#157) - K6 refuses the pose, never the root: the half rung a ladder loses at sixty
+
+The user's play test of 2026-09-16, JOBY5, the ladder in the submarine shaft,
+60 fps on a 165 Hz panel, in his own words: *in der Kletteranimation schiebt
+sich immer fuer 1 Frame eine Fremdanimation ein*, and with three consecutive
+frames of his recording beside it, *an der Leiter kannst du sehen, dass die
+fuer 1 Frame viel tiefer ist im Uebergang*. The middle frame has Lara about
+half a rung below the two either side of it, same pose family, same camera.
+At 30 fps the same ladder is faultless.
+
+**IT IS NOT AN ANIMATION AT ALL, AND THE FILE SAYS SO.** Every stored frame
+carries a bounding box and then the ROOT OFFSET - `frm[6]`, `frm[7]`, `frm[8]`
+- and the draw applies it AFTER the item's own rotation (`DrawAnimatingItem`,
+`Rich_CalcLaraMatrices_*`). A climb carries its whole vertical travel in those
+offsets and moves `item->pos` only once, at the wrap, with the animation
+command `TranslateItem`. `RootProbe` (new this round,
+`Preparation/Tools/Diagnose`) read it straight out of JOBY5 and out of
+ANDREA1, which stores the same numbers:
+
+```
+anim 161 (ANIM_CLIMBING, state 57)  rate 4  frames 3113..3171  wraps to 3113
+  TranslateItem at the wrap: (0, -512, 0)
+  key  0 (f3113)  root y  -375        key 12 (f3161)  root y  -889
+  key  6 (f3137)  root y  -624        key 14 (f3169)  root y  -877
+anim 168 (ANIM_CLIMBDOWN, state 61) rate 4  frames 3316..3374  wraps to 3316
+  TranslateItem at the wrap: (0, +512, 0)
+anim 169 -> 168   TranslateItem (0, +256, 0)     the entry into a climb down
+anim 172 -> 173   TranslateItem (0, -190, 0)     the one frame the grab passes
+anim 164, 165, 173, 96                           no TranslateItem at all
+```
+
+So the drawn root - `pos` plus the offset - is continuous at thirty hertz, and
+one line of arithmetic says by how much sixty misses it. `pos.y` is written
+relative to the tick before the wrap:
+
+```
+                        anim  frame   pos.y   off.y   drawn y   step
+  tick                   161   3171       0    -879      -879     -1
+  tween, as drawn today  161   3113    -256    -375      -631   +248   <-- the picture
+  tween, with the fix    161   3113    -256    -627      -883     -4
+  tick (after the wrap)  161   3113    -512    -375      -887     -8
+```
+
+Order 2 has blended `pos` half way across the wrap - 512 units is not a
+teleport and `INTERP_ITEM_SNAP` is 512, so it must not snap - while rule K6
+refuses the POSE, because the frame stepped back to the animation's own start
+and there is no neighbouring pose to blend with, and the draw falls back to
+the CURRENT frame, whose offset is the first frame's. Half of `pos`'s step is
+in the picture and none of the offset's. 248 units, one frame, once per climb
+cycle; on a 165 Hz panel the same tween state is presented four or five times
+in a row, which is what the player photographed.
+
+**THE RULE: K6 refuses the POSE, never the ROOT.** On a tween frame whose pose
+was refused, the draw still blends the root offset in TIME, between what the
+previous tick drew and what this one draws. The two halves then add up to the
+whole step - `pos` contributes D/2 and the offset the other D/2 - so the frame
+lands exactly between its neighbours. The pose, the limbs, the rotations are
+the current tick's, untouched, exactly as before.
+
+The other side of the ladder measures the same way, and the ladder GRAB is in
+the same family rather than a second problem:
+
+```
+  anim 168, the wrap:        today  -248   fixed    +4      climbing down
+  anim 169 -> 168, entering: today  -111   fixed    +8      (tick step 17)
+  anim 172 -> 173, the grab: today   +86   fixed    -5      (tick step -9)
+  anim 165 -> 161, entering: today   -12   fixed    -6      real smoothing
+  anim 164, 173, 96:         today  0..1   fixed  0..1      nothing to fix
+```
+
+**WHAT THE USER'S OWN RECORDING SAYS.** His 20 s capture is nothing but this
+ladder. Tracking the vertical centroid of her silhouette frame by frame
+(`scratchpad`, `track_y.py`, over the 900x900 box she is in):
+
+```
+  frame 106  y 600.40   +1.94      frame 246  y 655.63   -0.29
+  frame 107  y 650.70  +50.30  <-- frame 247  y 621.96  -33.67  <--
+  frame 108  y 596.06  -54.64      frame 248  y 655.04  +33.08
+  frame 109  y 596.29   +0.23      frame 249  y 654.69   -0.35
+```
+
+One frame, fifty pixels, and the neighbours agree with each other to four -
+three times over in twenty seconds (107, 247, 365), and the SIGN follows the
+direction of travel: down while she climbs up (animation 161, whose
+`TranslateItem` is -512) and up while she climbs down (168, +512), which is
+what the table above predicts and is not something a wrong animation frame
+would do.
+
+**HOW THE TWO SIDES TALK.** `GetFramesNow` still returns 0 both for "this
+frame sits on a stored pose" and for "K6 refused": the call sites branch on
+that value and a third one would send a refused frame down the interpolated
+path with a pair it has no factor for. The refusal travels beside it, in the
+array `InterpBeginFrame` already clears for every slot at the top of every
+drawn frame - `g_poseOk[]` carries a third value now, "refused, and the
+previous tick's offset is in `g_rootPrev[]`". That makes the latch per item
+and per frame with no counter, no serial and no new per-frame work, and a
+slot that snapped, a frame that carries the tick and every frame at
+`fps_mode 0` all read 0 there and never reach a line of this round.
+
+The previous tick's offset is `GetRootAt` (`draw.cpp`, beside `GetFramesAt`
+because that is where the animation table is): the key index and remainder
+from the animation's own rate, the last interval shortened exactly as
+`GetFrames` shortens it, `InterpKeyAlpha`'s factor over the pair. It is that
+tick's own arithmetic, so what comes back is bit for bit what the player saw
+one thirtieth of a second ago. The blend itself is `InterpRootKey` and
+`InterpRootLerp` in `interpolate_math.h`, in integers and in eighths like
+every other blend in that header - and `RootProbe` links the same header, so
+the table above and the engine put the same numbers through the same
+function.
+
+**WHAT DOES NOT CHANGE.** `fps_mode 0` draws the frame it drew before:
+`InterpPoseTime` returns 0 without a snapshot, so the refused branch is never
+entered, and both `InterpRootRefused` and `InterpRootNow` return at their
+first statement on `!g_applied`. A frame that carries the logic tick is the
+same. A tween frame whose pose K6 ACCEPTED is the same - the latch is put down
+at the top of that path and the accepted branch returns before it is raised.
+A tween frame that was refused but whose two offsets are equal comes out at
+that offset, which is nearly every animation in the game. Two draws of Lara's
+keep their own frame's root on purpose and say so in `CalcLaraMatrices`: the
+hit reaction, which wears a frame picked by hand out of a spaz animation, and
+the first person still body of fix round U. The HD path needs no line: it
+takes the matrices the classic walk builds, so it follows the root wherever
+the root goes. The randomizer is not touched, and `hd_enable` is not touched.
+
+**TRONE, FOR THE RECORD.** TROne records every draw call of a tick and replays
+it at t = 0.5 with quaternion-slerp-blended node MATRICES against the previous
+tick (`host/render/frame_record.h`, `frame_interp.h`), so there the root and
+the pose are one matrix and cannot disagree - and there is no K6 at all.
+Nothing of it is copied here: we keep our two orders, which cost no second
+draw call, and this round is the rule that makes them agree.
+
+**THE LOG.** `INTERPLOG`'s per-second line gains `root_fix=N`, a COUNT of the
+refused tween frames whose root was blended - a subset of `pose_skips`, about
+one per climb cycle on a ladder and nought in a room with nothing animated in
+it. Beside it, at most four lines a second and for Lara alone:
+
+```
+INTERPLOG root lara anim 161->161 frame 3171->3113 offset_prev=(-12,-879,-101)
+    offset_cur=(-13,-375,-100) drawn=(-12,-627,-100) pos_y=...
+```
+
+which is the table of this entry in the game's own words: `pos_y + drawn.y`
+has to sit between the two ticks either side of it, to the unit.
+
+**WHAT ONLY THE PLAY TEST CAN SHOW.** That the ladder now reads as one motion
+at 60 and at 165 Hz - the fix cannot be seen in a still, because the frame it
+repairs is one frame. And the SECOND half of his report, *sie ist fuer 1 Frame
+unsichtbar im Uebergang* when she jumps at the ladder, is only partly
+answered: the 86 units of `anim 172 -> 173` are now gone, but the hand-written
+change from the reach loop (animation 95) to `ANIM_GRABLEDGE` moves `item->pos`
+by the collision code - `item->pos.y_pos = edge - bounds[2]`,
+`SnapLaraToEdgeOfBlock` in x and z - with no offset change to compensate, and
+this rule changes that frame by at most seven units. If a frame of her is
+really missing there, it is that pos move being blended below the 512 snap
+threshold and not the root offset, and the next log will say so: `root_fix`
+counts the frame, the `root lara` line names the two animations and the
+position, and `snaps=` beside them says whether order 2 blended the grab or
+refused it.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

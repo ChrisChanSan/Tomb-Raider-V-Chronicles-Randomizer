@@ -407,7 +407,9 @@ namespace
 	 * applies to every OUTFIT_*.TRM that mod ships, which is one in all four
 	 * of the outfit mods the user runs.
 	 *
-	 *   name=Sola's wetsuit      what the wardrobe window calls it
+	 *   name=Sola's wetsuit      what the wardrobe window calls it - and a
+	 *                            list block's name= sets it over this one
+	 *                            (#159, pass 4), as it does every other key
 	 *   hands=0|1                does it take the separate HAND_ models
 	 *   gloves=0|1               ... the gloved ones. READ AND IGNORED since
 	 *                            #153 round M2b: the wardrobe wears bare hands
@@ -571,6 +573,43 @@ namespace
 
 		if (key == "name")
 		{
+			/* WHAT THE WARDROBE WINDOW CALLS THIS BODY - and until the third
+			 * review of #159 this was the one key a LIST BLOCK could not set.
+			 * apply_txt had no name field at all: the display name was decided
+			 * once, as a mod was added, out of that mod's own outfit.txt. So a
+			 * block's name= was read, named as taken in the block's own log
+			 * line, and thrown away without a word. Measured: `name=My Own
+			 * Home` on 46/OUTFIT_TR2_HOME logged "-> 46/OUTFIT_TR2_HOME: name"
+			 * and the row went on reading "TR2 Home", while the same line in a
+			 * mod's outfit.txt renamed that mod's row. It is applied in
+			 * apply_txt now, where every other key of both files is applied.
+			 *
+			 * AN EMPTY NAME IS A NOTE AND NOT A NAME, for the reason the three
+			 * findings before it were fixed: `name=` with nothing after it, or
+			 * with nothing but spaces, would blank the row and leave a player
+			 * with a line in the window that has no title, while the block's
+			 * own line named a value that never arrived. The name it had
+			 * stands. */
+			if (value.empty())
+			{
+				note("MODLOG %s: name= says nothing - ignored, the row keeps "
+					"the name it had", where.c_str());
+				return;
+			}
+
+			/* The field is bounded, so a longer name is cut - and it is said
+			 * out loud, because a player who reads the window may not have to
+			 * guess where the rest of his line went. It quotes what it KEPT
+			 * and not what it was given: note() cuts at 512 bytes, and a note
+			 * that echoes a 900 character name in full is a note whose own
+			 * reason is the part that gets cut off (measured, with exactly
+			 * such a name). */
+			if (value.size() >= HD_WARDROBE_NAME)
+				note("MODLOG %s: name= is %d characters - the window shows the "
+					"first %d, \"%s\"", where.c_str(), (int)value.size(),
+					HD_WARDROBE_NAME - 1,
+					value.substr(0, HD_WARDROBE_NAME - 1).c_str());
+
 			out.name = value;
 			took(out, "name");
 		}
@@ -877,6 +916,24 @@ namespace
 	{
 		if (!txt.has)
 			return;
+
+		/* THE ROW'S OWN TITLE (#159, pass 4), applied here for the reason
+		 * every other key is applied here: the rank is only real if every tier
+		 * writes the same fields, and this was the one field only the mod-add
+		 * path could write - so a list block's name= did nothing at all while
+		 * its own log line said it had. An empty one never reaches this point;
+		 * take_key refuses it, so no file can blank a row.
+		 *
+		 * IT CARRIES NO TIER WORD, and that is a decision. Every from-field of
+		 * this struct has a place where its word is shown - a row of the F4
+		 * window, a column of ModelProbe's table, a field of the level build
+		 * line - and the name has none of its own: it IS the label of the F4
+		 * row and the second column of that table, so a "(list)" after it
+		 * would displace something a player reads to make room for a word
+		 * nothing asked for. The block's own log line already names `name`
+		 * among the keys it set. */
+		if (!txt.name.empty())
+			put(o.name, HD_WARDROBE_NAME, txt.name);
 
 		if (txt.hands >= 0) { o.hands = txt.hands != 0; o.fromFlags = from; }
 		if (txt.braid >= 0) { o.braid = txt.braid != 0; o.fromFlags = from; }
@@ -1291,15 +1348,22 @@ namespace
 				if (have_key(key))
 					continue;
 
-				/* The mod's own folder is the name a player knows it by;
-				 * outfit.txt's name= overrides it, and a mod that ships more
-				 * than one outfit gets the file's name after the folder's so
-				 * that its two entries can be told apart in the window. */
+				/* The mod's own folder is the name a player knows it by, and a
+				 * mod that ships more than one outfit gets the file's name
+				 * after the folder's so that its two entries can be told apart
+				 * in the window.
+				 *
+				 * ITS outfit.txt's OWN name= LANDS IN apply_txt (#159, pass
+				 * 4), with every other key that file sets, and a list block's
+				 * name= lands over it. It used to be taken here instead, which
+				 * is precisely why a block's name= did nothing: the name was
+				 * the one property the tiers did not carry. The answer is the
+				 * same one either way round - a mod that names itself is
+				 * called what it says, whether it ships one body or
+				 * seventeen. */
 				std::string display = leaf_of(HDModsName(mod));
 
-				if (!txt.name.empty())
-					display = txt.name;
-				else if (count > 1)
+				if (count > 1)
 					display += " - " + display_of(file);
 
 				const size_t before = entries.size();

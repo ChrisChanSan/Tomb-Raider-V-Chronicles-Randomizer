@@ -8580,13 +8580,13 @@ int main(int argc, char** argv)
 		 * drift a table of words in the caller invites. */
 		printf("\n-- the wardrobe: %d outfits --------------------------------\n",
 			HDWardrobeCount());
-		printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n",
+		printf("%-46s %-24s %-6s %-25s %-9s %-20s %-20s %-18s %s\n",
 			"key", "name", "source", "hands braid hols glov rig", "flags",
 			"sheen", "skin glow", "skin", "head");
-		printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n",
+		printf("%-46s %-24s %-6s %-25s %-9s %-20s %-20s %-18s %s\n",
 			"----------------------------------------------",
 			"------------------------", "------",
-			"----------------------", "---------", "--------------------",
+			"-------------------------", "---------", "--------------------",
 			"--------------------", "------------------", "-------------------");
 
 		for (int i = 0; i < HDWardrobeCount(); i++)
@@ -8632,7 +8632,7 @@ int main(int argc, char** argv)
 			snprintf(head, sizeof(head), "%s (%s)", HDWardrobeHeadWord(e->head),
 				HDWardrobeFromTag(e->fromHead));
 
-			printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n", e->key,
+			printf("%-46s %-24s %-6s %-25s %-9s %-20s %-20s %-18s %s\n", e->key,
 				e->name,
 				e->source == HD_WARDROBE_SOURCE_46 ? "46"
 					: e->source == HD_WARDROBE_SOURCE_13 ? "13" : "mod",

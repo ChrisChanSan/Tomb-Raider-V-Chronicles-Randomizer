@@ -13976,6 +13976,21 @@ spent 0, so round M3 says yes to every row):
 | **85** | 85.33 | **no** | fragmentation |
 | 8 | 85.33 | no | fragmentation |
 
+**AND IF THE CARD SIDE IS TOO GENEROUS, IT COSTS MIP LEVELS AND NOT A
+TEXTURE.** The budget is not a refusal anywhere in the loader: when a
+level's pages do not fit, `hd_pagecache.cpp` takes the top level off the
+biggest page, and then off the next biggest, until they do - `droppedMip0`
+and `droppedLevels` in the stats, and a note in the log reading
+*budget %.0f MiB: %.0f MiB already on the card and %.0f MiB asked for - %d
+page(s) gave up %d level(s), %.0f MiB left to load*. At the floor it says
+*budget %.0f MiB is smaller than the smallest the pages go (%.0f MiB) -
+loading them anyway rather than leaving holes*. So the worst a re-dress too
+many can do on the card's account is a slightly softer texture on the
+biggest pages of the NEXT thing loaded, which is the same degradation a
+small card has always had - not a missing page and not a refusal. That is
+what makes the card condition safe to loosen; it is also why the condition
+is still there, because the degradation is not free.
+
 **WITH NOTHING MEASURED it is round M3's rule and only that.** If
 `GlobalMemoryStatusEx` refuses, `known` stays 0, the walk is not even made, and
 `allowed` is `spent < 64 MiB` - the whole grid over again, identical to the old

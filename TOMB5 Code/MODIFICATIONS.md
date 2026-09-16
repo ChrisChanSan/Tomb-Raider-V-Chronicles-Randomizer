@@ -13766,6 +13766,73 @@ nothing on this machine wants one, and a `skin=` line that names nothing is
 now a note rather than a silent wipe, which is the whole of what was wrong
 with it.
 
+**THE THIRD REVIEW, AND THE ONE KEY THE TIERS DID NOT CARRY.** The two fix
+rounds above closed the same fault twice - a value named as taken and thrown
+away - and a tenth key was still doing it, the oldest one in the format.
+`take_key` read `name=` into the shared `ModTxt` and named it; `apply_txt` had
+no name field at all. The display name was decided in ONE place, at the moment
+a mod was added, out of that mod's own `outfit.txt` - so a block's `name=` was
+read, logged and dropped in silence, while both documents promised the
+opposite (`README.md`: "every key an `outfit.txt` takes is a key of a block";
+this record: "An `outfit.txt` and a block take the same keys"). Measured before
+anything was touched: a file of two blocks, `name=My Own Home` on
+`46/OUTFIT_TR2_HOME` and `name=Renamed Mistress` on the Mistress mod's body,
+logs `-> 46/OUTFIT_TR2_HOME: name` and, on the mod,
+`-> mod/outfits/mistress/OUTFIT_MISTRESS: name` - and both rows still
+read `TR2 Home` and `Mistress`, byte for byte the table with no list at all.
+
+The name is applied in `apply_txt` now, in the same shape as the twelve keys
+beside it, and the mod-add path no longer sets it: a mod's own `outfit.txt`
+name arrives through the very same call, one tier lower, which is what makes a
+list block's name beat it. Measured, with a `name=` put into the copy's
+Mistress `outfit.txt` for the experiment: the mod names itself **Mistress By
+Her Own File**, a block saying `name=` over it makes the row **Renamed By The
+List**, and a block WITHOUT a name leaves that name standing while its
+`sheen=0.20` lands - the rank, per key, on the name as on everything else. The
+thirteen-key block of the review now moves all thirteen: `name hands braid
+holsters rig gloves sheen exponent skin_sheen skin_exponent skin footsteps
+head`, where it moved twelve and named thirteen.
+
+**AND AN EMPTY NAME IS NOT A NAME.** `name=` with nothing after it, or with
+nothing but spaces, would blank a row and leave a line in the window with no
+title - the wipe `skin=` used to do, one key along - so it is a note and the
+name the row had stands, and the key is NOT named as taken (`nothing - the
+block has no key this build knows`). The field is 64 bytes: a longer name is
+cut to 63 and the note says so, quoting **what it kept** and not what it was
+given, because `note()` cuts at 512 bytes and a note that echoes a 900
+character name in full is a note whose own reason is the part that gets cut
+off. Measured, one block each: 900 characters -> the first 63 and the note;
+`name=` and `name=<spaces>` -> the note, `TR2 Tibet` and `TR2 Vegas` standing;
+a NUL in the middle of the value -> `Before`, the tail dropped by `read_line`
+exactly as it is dropped for every other key; 63 characters -> kept whole, no
+note.
+
+**IT CARRIES NO TIER WORD, AND THAT IS A DECISION.** Every other from-field has
+somewhere its word is shown - a row of the F4 window, a column of ModelProbe's
+table, a field of the level build line. The name has none of its own: it IS the
+label of the F4 row and the second column of that table, so a `(list)` after it
+would have to displace something a player reads to make room for a word nobody
+asked for. The block's own log line already names `name` among the keys it set,
+which is where a player checks whether his line arrived.
+
+**AND THE DASH RULE UNDER ONE COLUMN WAS THREE SHORT.** `ModelProbe -wardrobe`
+prints its flags column with `%-22s`, and both the header (`hands braid hols
+glov rig`) and every row (`%5d %5d %4d %4d %3d`) are exactly 25 characters
+wide - so the two agreed with each other and the rule of dashes under them, 22
+long, stood three columns to the left of everything from `flags` rightwards.
+The field is 25 now in all three `printf`s and the rule is 25 dashes: nothing a
+row prints moves by a character, which is why the whole report is identical
+line for line to the run before it.
+
+**THE PROOFS.** With no `.txt` in the Mods copy the `-wardrobe` table says what
+round 156's said on all **103** rows, and the whole report is line for line
+what the second fix round's was (`ms=` and the rule aside); with the user's own
+`outfit_1-5.txt` in the copy, **52 blocks, 52 matched, 0 unmatched** and again
+line for line the run before it - his file carries no `name=`, so nothing may
+move, and nothing does. `mods=14` in every run. And **32 of 32** round-156
+renders byte for byte identical: a name changes no pixel, which is the whole
+of what it is allowed to change.
+
 **NOT IN THIS ROUND.** The head rule itself (#156), the neck lid disc (#156c),
 the OperaDress hand rule, #160, #162, the randomizer, the ring, the floor rule.
 Nothing of the round is inside the 60 fps files or outside the HD gate, except

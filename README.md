@@ -399,7 +399,8 @@ off the file or falls back to the wardrobe's own defaults (hands, braid and
 holsters on, no gloves, a plain cloth sheen).
 
 ```
-name=Sola's wetsuit     # what the wardrobe window calls it
+name=Sola's wetsuit     # what the wardrobe window calls it - a list
+                        # block's name= sets it over this one
 hands=1                 # does she wear the separate HAND_ models
 gloves=0                # ... the gloved ones - read, logged, and then
                         # ignored: see "Lara always has TR5's bare hands"
@@ -459,6 +460,7 @@ blocks, one per outfit:
 # Lines starting with # are comments and close nothing.
 
 Outfit: TR2_Swim
+name=Sola's swimsuit
 sheen=1
 exponent=50
 skin=8001
@@ -474,7 +476,12 @@ and a file in `Mods` is not automatically read before one in `Mods\Outfits`.
 Where two files set the same key, the later one wins, and the `MODLOG list0`,
 `list1` … lines of the log say the order they were read in. A block opens at
 `Outfit:` and closes at the next one or at an empty line, and every key an
-`outfit.txt` takes is a key of a block.
+`outfit.txt` takes is a key of a block — `name=` included, which is what the
+F4 window and `ModelProbe … -wardrobe` call that row, so a block renames the
+outfits of your installation as well, which until now only a mod folder could
+do for its own. A `name=` with nothing after it, or nothing but spaces, is a
+line in the log and the row keeps the name it had; a name longer than 63
+characters is cut to 63, and the log says so and quotes what it kept.
 
 **The name** is matched against the outfit's file name without regard to case,
 to the `OUTFIT_` prefix, or to `_` against a space — `TR2_Swim`, `tr2 swim` and
@@ -493,13 +500,13 @@ file or in two, are both applied and the later one wins for the keys it sets.
 Nothing in a list file can break anything. A name that matches no outfit on
 this machine, a key this build does not know, a line without `=`, a value out
 of range, one that is not a number, a yes-or-no that is neither, a `skin` line
-naming no page — each is a line in the log, the value the engine had stands,
-and the rest of the file is read on. A block's own line names only the keys
-that really arrived; a block whose every line was refused says so. Save it as
-UTF-8 if you like: the byte order mark some editors write in front of the first
-line is taken off. A line may be as long as you please — it is read whole, not
-in pieces. A file whose name begins with `_` is switched off, exactly like a
-mod folder.
+naming no page, an empty `name=` — each is a line in the log, the value the
+engine had stands, and the rest of the file is read on. A block's own line
+names only the keys that really arrived; a block whose every line was refused
+says so. Save it as UTF-8 if you like: the byte order mark some editors write
+in front of the first line is taken off. A line may be as long as you please —
+it is read whole, not in pieces. A file whose name begins with `_` is switched
+off, exactly like a mod folder.
 
 With `-log`, the scan says what it did:
 

@@ -403,8 +403,14 @@ void HDOutfitMenu()
 		 * because they are the two the player can now change HIMSELF, in a
 		 * list file, and a value he has written is worth nothing if the game
 		 * will not say whether it arrived - so the clause after each says
-		 * which tier answered, and "list" is the one that means his own line
-		 * was read. Shine is the clothes, glow is her skin. */
+		 * which tier answered, and "the list" is the one that means his own
+		 * line was read. Shine is the clothes, glow is her skin.
+		 *
+		 * THE PHRASE FORM, HDWardrobeFromWord, and not the one-word tag - the
+		 * same the Head row above uses. Two spellings of one tier in three
+		 * rows of one window ("the table" over "table") is a player being
+		 * asked whether they mean the same thing. The tag belongs where a
+		 * column or a log field is counted in characters. */
 		y += font_height;
 
 		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Shine"), 0);
@@ -417,7 +423,7 @@ void HDOutfitMenu()
 			const HDWardrobeEntry* e = entry_of(selection);
 
 			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->sheen,
-				e->sheenPower, HDWardrobeFromTag(e->fromSheen));
+				e->sheenPower, HDWardrobeFromWord(e->fromSheen));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
@@ -433,7 +439,7 @@ void HDOutfitMenu()
 			const HDWardrobeEntry* e = entry_of(selection);
 
 			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->skinSheen,
-				e->skinSheenPower, HDWardrobeFromTag(e->fromSkinSheen));
+				e->skinSheenPower, HDWardrobeFromWord(e->fromSkinSheen));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 

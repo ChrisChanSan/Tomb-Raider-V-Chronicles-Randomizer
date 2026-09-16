@@ -8592,34 +8592,44 @@ int main(int argc, char** argv)
 		for (int i = 0; i < HDWardrobeCount(); i++)
 		{
 			const HDWardrobeEntry* e = HDWardrobeAt(i);
-			char flags[32], sheen[48], glow[48], skin[48], head[48];
+			/* SNPRINTF AND NOT SPRINTF, and the buffers are wide enough for a
+			 * number no file should hold. A sheen of 3e38 - a float's largest
+			 * - is 42 characters before the "/14 (list)" is added, and the
+			 * round that wrote this printed it into 48 bytes with sprintf:
+			 * a table visibly corrupted and a write past the end of a stack
+			 * array. The engine refuses such a value since the fix round of
+			 * #159, so nothing can hand it one any more; a tool that prints
+			 * what it is given may not depend on that. */
+			char flags[32], sheen[96], glow[96], skin[64], head[64];
 
 			if (!e)
 				continue;
 
-			sprintf(flags, "%5d %5d %4d %4d %3d", (int)e->hands, (int)e->braid,
-				(int)e->holsters, (int)e->gloves, (int)e->wearsRig);
+			snprintf(flags, sizeof(flags), "%5d %5d %4d %4d %3d", (int)e->hands,
+				(int)e->braid, (int)e->holsters, (int)e->gloves, (int)e->wearsRig);
 			/* The tier goes in the sheen column as well since #159: a list
 			 * file may now set it, and "0.10/14" alone cannot say whether the
 			 * player's own line was read. */
-			sprintf(sheen, "%.2f/%.0f (%s)", e->sheen, e->sheenPower,
-				HDWardrobeFromTag(e->fromSheen));
+			snprintf(sheen, sizeof(sheen), "%.2f/%.0f (%s)", e->sheen,
+				e->sheenPower, HDWardrobeFromTag(e->fromSheen));
 			// #158: what her own skin is made of in this outfit.
-			sprintf(glow, "%.2f/%.0f (%s)", e->skinSheen, e->skinSheenPower,
-				HDWardrobeFromTag(e->fromSkinSheen));
+			snprintf(glow, sizeof(glow), "%.2f/%.0f (%s)", e->skinSheen,
+				e->skinSheenPower, HDWardrobeFromTag(e->fromSkinSheen));
 
 			skin[0] = 0;
 
 			for (int k = 0; k < HD_WARDROBE_SKIN && e->skin[k]; k++)
-				sprintf(skin + strlen(skin), "%s%d", k ? "," : "", e->skin[k]);
+				snprintf(skin + strlen(skin), sizeof(skin) - strlen(skin),
+					"%s%d", k ? "," : "", e->skin[k]);
 
 			if (!skin[0])
 				strcpy(skin, "-");
 
-			sprintf(skin + strlen(skin), " (%s)", HDWardrobeFromTag(e->fromSkin));
+			snprintf(skin + strlen(skin), sizeof(skin) - strlen(skin), " (%s)",
+				HDWardrobeFromTag(e->fromSkin));
 
 			// #156: whose head this body wears, and who decided that.
-			sprintf(head, "%s (%s)", HDWardrobeHeadWord(e->head),
+			snprintf(head, sizeof(head), "%s (%s)", HDWardrobeHeadWord(e->head),
 				HDWardrobeFromTag(e->fromHead));
 
 			printf("%-46s %-24s %-6s %-22s %-9s %-20s %-20s %-18s %s\n", e->key,

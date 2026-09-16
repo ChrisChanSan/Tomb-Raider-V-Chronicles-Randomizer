@@ -475,6 +475,56 @@ namespace
 		out.said += key;
 	}
 
+	/* A NUMBER A PLAYER WROTE, AND THE RANGE A PICTURE SURVIVES (#159, the fix
+	 * round). Four keys are numbers - sheen, exponent, skin_sheen,
+	 * skin_exponent - and all four come through here, because a rule that
+	 * holds for two of them and not for the other two is not a rule; it is the
+	 * half of the file the log tells the truth about.
+	 *
+	 * WHAT LEAVING IT OUT COST, measured before this was written:
+	 * `sheen=14 / exponent=0.10` - the user's own two lines transposed, which
+	 * is the typo this format invites - draws her top, her shorts, her
+	 * holsters and her hair PURE WHITE, and `sheen=1e40` draws them SOLID
+	 * BLACK. Neither said a word. The other way round, `sheen=-1` and
+	 * `exponent=0` were dropped by apply_txt in silence while the block's own
+	 * line named both keys as set.
+	 *
+	 * 0..2 and 1..128 hold every value any file on this machine writes: the
+	 * built-in table tops out at 0.45/26, every one of the user's nine outfit
+	 * mods writes 1/50, and his own list writes 0.10/14 and 1/50.
+	 *
+	 * OUT OF RANGE IS A NOTE AND THE TIER BELOW STANDS - and it is NOT taken,
+	 * because a block's line may not name a key whose value never arrived. So
+	 * is a value that is no number at all: `sheen=shiny` used to be a silent
+	 * 0.0, which is matt cloth and nobody's intention. */
+	bool take_number(const char* key, const std::string& value, float lo,
+		float hi, const char* range, const char* keeps,
+		const std::string& where, float* out)
+	{
+		const char* text = value.c_str();
+		char* end = 0;
+		const float f = (float)std::strtod(text, &end);
+
+		if (end == text || *end)
+		{
+			note("MODLOG %s: %s=%s is not a number - ignored, %s",
+				where.c_str(), key, text, keeps);
+			return false;
+		}
+
+		// Written as a refusal rather than as `f < lo || f > hi` so that a
+		// value that is neither - a NaN out of "nan" - is refused as well.
+		if (!(f >= lo && f <= hi))
+		{
+			note("MODLOG %s: %s=%s is outside %s - ignored, %s",
+				where.c_str(), key, text, range, keeps);
+			return false;
+		}
+
+		*out = f;
+		return true;
+	}
+
 	/* ONE KEY OF ONE LINE, and there is exactly one reader of it (#159).
 	 *
 	 * A mod's outfit.txt and a block of a list file take the same keys - the
@@ -524,47 +574,35 @@ namespace
 			out.rig = as_bool(low);
 			took(out, "rig");
 		}
+		/* WHAT THE CLOTH IS MADE OF, in the same two ranges her skin gets
+		 * below: a strength above 2 washes the material white in any light and
+		 * an exponent below 1 is not a highlight at all. */
 		else if (key == "sheen")
 		{
-			out.sheen = (float)std::atof(value.c_str());
-			took(out, "sheen");
+			if (take_number("sheen", value, 0.0f, 2.0f, "0..2",
+				"her clothes keep the shine they had", where, &out.sheen))
+				took(out, "sheen");
 		}
 		else if (key == "exponent")
 		{
-			out.exponent = (float)std::atof(value.c_str());
-			took(out, "exponent");
+			if (take_number("exponent", value, 1.0f, 128.0f, "1..128",
+				"her clothes keep the shine they had", where, &out.exponent))
+				took(out, "exponent");
 		}
-		/* THE SKIN'S OWN GLOW (#158), and the two ranges are the ones a
-		 * picture survives: a strength above 2 washes her face white in any
-		 * light and an exponent below 1 is not a highlight at all. Out of
-		 * range is a NOTE and the tier below stands - the same rule head= and
-		 * footsteps= get for a word they do not know. */
+		/* THE SKIN'S OWN GLOW (#158). Out of range is a NOTE and the tier
+		 * below stands - the same rule head= and footsteps= get for a word
+		 * they do not know. */
 		else if (key == "skin_sheen")
 		{
-			const float f = (float)std::atof(value.c_str());
-
-			if (f >= 0.0f && f <= 2.0f)
-			{
-				out.skinSheen = f;
+			if (take_number("skin_sheen", value, 0.0f, 2.0f, "0..2",
+				"her skin keeps the glow it had", where, &out.skinSheen))
 				took(out, "skin_sheen");
-			}
-			else
-				note("MODLOG %s: skin_sheen=%s is outside 0..2 - ignored, her "
-					"skin keeps the glow it had", where.c_str(), value.c_str());
 		}
 		else if (key == "skin_exponent")
 		{
-			const float f = (float)std::atof(value.c_str());
-
-			if (f >= 1.0f && f <= 128.0f)
-			{
-				out.skinExponent = f;
+			if (take_number("skin_exponent", value, 1.0f, 128.0f, "1..128",
+				"her skin keeps the glow it had", where, &out.skinExponent))
 				took(out, "skin_exponent");
-			}
-			else
-				note("MODLOG %s: skin_exponent=%s is outside 1..128 - ignored, "
-					"her skin keeps the glow it had", where.c_str(),
-					value.c_str());
 		}
 		else if (key == "head")
 		{
@@ -718,6 +756,12 @@ namespace
 		if (txt.gloves >= 0) { o.gloves = txt.gloves != 0; o.fromFlags = from; }
 		if (txt.rig >= 0) { o.wearsRig = txt.rig != 0; o.fromFlags = from; }
 
+		/* THE FOUR NUMBERS, and every test here is "did the file say it" and
+		 * nothing else: the sentinel is -1, and since the fix round of #159 a
+		 * value that reaches this point has already passed take_number's
+		 * range, so no test below can drop a value the block's own log line
+		 * named as taken. That is exactly what they used to do - `sheen=-1`
+		 * and `exponent=0` were logged as set and thrown away here. */
 		if (txt.sheen >= 0.0f) { o.sheen = txt.sheen; o.fromSheen = from; }
 		if (txt.exponent > 0.0f) { o.sheenPower = txt.exponent; o.fromSheen = from; }
 
@@ -1196,7 +1240,7 @@ namespace
 	 * on a machine with both bundles installed is read on one with a single
 	 * bundle, and the twenty-odd names that are not there have to be a note
 	 * rather than a refusal of the whole file. */
-	void apply_block(const std::string& leaf, const std::string& name,
+	bool apply_block(const std::string& leaf, const std::string& name,
 		const std::string& prefix, const std::string& stem, const ModTxt& txt)
 	{
 		std::string hit;
@@ -1230,7 +1274,7 @@ namespace
 		{
 			note("HDLOG wardrobe list %s: Outfit %s -> no such outfit",
 				leaf.c_str(), name.c_str());
-			return;
+			return false;
 		}
 
 		note("HDLOG wardrobe list %s: Outfit %s -> %s: %s%s", leaf.c_str(),
@@ -1239,6 +1283,35 @@ namespace
 				: txt.said.c_str(),
 			again ? " (an earlier block named it too, and this one wins for "
 				"these keys)" : "");
+		return true;
+	}
+
+	/* A BLOCK ENDS, AND THE FILE'S OWN TALLY MOVES WITH IT (#159, the fix
+	 * round). Three things close a block - an empty line, the next "Outfit:"
+	 * line and the end of the file - so the counting sits here and not at
+	 * three call sites.
+	 *
+	 * It counts what apply_block RETURNED. It used to count by reading the
+	 * notes apply_block had just written back, looking for "-> no such
+	 * outfit" in the text - and note() cuts at 512 bytes. Measured: a block
+	 * named with 912 characters writes a note of exactly 512, ending in the
+	 * middle of the name, with no tail to find, so it counted as MATCHED. On
+	 * a file of six blocks the old summary read "4 matched, 2 unmatched"
+	 * where the lines under it said three and three. A number, and not a grep
+	 * of one's own prose. */
+	void close_block(const std::string& leaf, const std::string& name,
+		const std::string& prefix, const std::string& stem, ModTxt& open,
+		int* hit, int* gone)
+	{
+		if (!open.has)
+			return;
+
+		if (apply_block(leaf, name, prefix, stem, open))
+			(*hit)++;
+		else
+			(*gone)++;
+
+		open = ModTxt();
 	}
 
 	/* A LIST FILE (#159). Read line by line, and the SHAPE is the whole of it:
@@ -1252,7 +1325,7 @@ namespace
 	 * A key outside a block, a block with no name and a line with no "=" are
 	 * each a note and the file goes on being read: one bad line in a file of
 	 * fifty-two blocks may not cost the other fifty-one. */
-	void read_list(const std::string& path, int* blocks)
+	void read_list(const std::string& path, int* blocks, int* hit, int* gone)
 	{
 		std::FILE* file = std::fopen(path.c_str(), "rb");
 		const std::string leaf = leaf_of(path);
@@ -1310,19 +1383,13 @@ namespace
 
 			if (line.empty())
 			{
-				if (open.has)
-					apply_block(leaf, name, prefix, stem, open);
-
-				open = ModTxt();
+				close_block(leaf, name, prefix, stem, open, hit, gone);
 				continue;
 			}
 
 			if (line.size() >= 7 && lower(line).compare(0, 7, "outfit:") == 0)
 			{
-				if (open.has)
-					apply_block(leaf, name, prefix, stem, open);
-
-				open = ModTxt();
+				close_block(leaf, name, prefix, stem, open, hit, gone);
 				name = trim(line.substr(7));
 
 				if (name.empty())
@@ -1361,17 +1428,17 @@ namespace
 				where, open);
 		}
 
-		if (open.has)
-			apply_block(leaf, name, prefix, stem, open);
-
+		close_block(leaf, name, prefix, stem, open, hit, gone);
 		std::fclose(file);
 	}
 
-	/* EVERY LIST, IN NAME ORDER, AFTER EVERYTHING ELSE (#159). After, because
+	/* EVERY LIST, IN PATH ORDER, AFTER EVERYTHING ELSE (#159). After, because
 	 * this is the top tier: an entry has to have its mod's outfit.txt, its
 	 * table row and its defaults on it before a block may overwrite any of
-	 * them. In name order, because two files may name one outfit and the
-	 * later one wins - which is only a rule if the order is written down. */
+	 * them. In path order - hd_mods sorts them by their lower-cased full path,
+	 * so the folder decides before the file name does - because two files may
+	 * name one outfit and the later one wins, which is only a rule if the
+	 * order is written down. */
 	void apply_lists(int* files, int* blocks, int* matched, int* missed)
 	{
 		*files = HDModsListCount();
@@ -1382,27 +1449,13 @@ namespace
 		for (int i = 0; i < *files; i++)
 		{
 			const std::string path = HDModsListPath(i);
-			const size_t before = notes.size();
 			int mine = 0, hit = 0, gone = 0;
 
-			read_list(path, &mine);
-
-			/* WHAT THE FILE'S OWN LINE COUNTS. The blocks it opened, and of
-			 * those the ones that reached an entry - read off the lines the
-			 * blocks themselves wrote, so the summary cannot claim something
-			 * the detail does not say. */
-			for (size_t n = before; n < notes.size(); n++)
-			{
-				const std::string& one = notes[n];
-
-				if (one.find(": Outfit ") == std::string::npos)
-					continue;
-
-				if (one.find("-> no such outfit") != std::string::npos)
-					gone++;
-				else
-					hit++;
-			}
+			/* WHAT THE FILE'S OWN LINE COUNTS: the blocks it opened, and of
+			 * those the ones that reached an entry - counted by close_block
+			 * from what apply_block returned, so the summary cannot claim
+			 * something the lines under it do not say. */
+			read_list(path, &mine, &hit, &gone);
 
 			note("HDLOG wardrobe list %s: %d blocks, %d matched, %d unmatched",
 				leaf_of(path).c_str(), mine, hit, gone);

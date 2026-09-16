@@ -228,15 +228,24 @@ const char* HDWardrobeHeadWord(int head);
  * "TR5 hair" or "own head". Never null. */
 const char* HDWardrobeHeadPhrase(int head);
 
-// Where that answer came from, as a clause for a log line ("its mod.txt says
-// origin=tr1", "outfit.txt", "the default"). Never null.
+/* Where that answer came from, as a clause for a log line ("its mod.txt says
+ * origin=tr1", "outfit.txt", "the default"). Never null.
+ *
+ * THE PHRASE FORM, and it is the one that belongs in PROSE: a sentence of the
+ * log and every row of the F4 wardrobe window. */
 const char* HDWardrobeFromWord(int from);
 
 /* The same answer as ONE WORD for a column of a table or a field of a log
  * line - "default", "measured", "table", "outfit.txt", "origin", "list".
  * Never null, and never an index into a caller's own array: two of those
  * existed until #159 and one of them was already a row short of the tiers
- * this header defines. Add a tier here and every reader says its name. */
+ * this header defines. Add a tier here and every reader says its name.
+ *
+ * THE FIELD FORM, and it belongs where the characters are counted: the
+ * `key=value (tag)` fields of the level build line and the columns of
+ * ModelProbe's tables. One window, one form - the F4 rows all use the phrase
+ * above, because a player reading "the table" over "table" in two rows of one
+ * window has to ask whether they mean the same tier. */
 const char* HDWardrobeFromTag(int from);
 
 /* WHERE TO LOOK. Null or "" means "ask hd_install", which is what the engine

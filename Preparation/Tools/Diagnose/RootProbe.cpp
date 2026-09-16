@@ -1,0 +1,567 @@
+/*
+ * RootProbe - the ROOT OFFSET of an animation, and what the sixty hertz
+ * in-between frame draws it as (#157).
+ *
+ * Modified 2026 by ChrisChanSan.
+ *
+ * WHY IT EXISTS. Every stored frame of a TR5 animation carries a bounding box
+ * (six shorts) and then the ROOT OFFSET (three shorts, frm[6..8]) which the
+ * draw applies AFTER the item's own rotation - game\draw.cpp,
+ * DrawAnimatingItem, and game\delstuff.cpp for Lara. The vertical travel of a
+ * ladder climb is carried INSIDE those offsets, and the engine moves
+ * item->pos by the same amount at the moment the animation wraps (the
+ * animation command TranslateItem, game\laramisc.cpp AnimateLara), so that at
+ * thirty hertz the DRAWN root - pos plus the rotated offset - is continuous
+ * across the wrap.
+ *
+ * At sixty hertz the two halves of the interpolation disagree on exactly that
+ * one frame: order 2 has blended item->pos half way across the wrap while
+ * rule K6 refuses the pose blend (the frame stepped back to the animation's
+ * own start) and the draw falls back to the CURRENT frame, whose offset is
+ * the first frame's rather than the last frame's. Half the step is then
+ * missing from the picture for one frame.
+ *
+ * This tool is the measurement that round 157 starts from, and the proof its
+ * fix is checked against. It prints, for every animation named on the line:
+ *
+ *   - the animation table row: rate, frame size, the frame window, where it
+ *     continues (anim and FRAME - the field AnimCmd does not read), velocity,
+ *     and every animation command including type 1, TranslateItem, which is
+ *     the one that moves the root at the wrap;
+ *   - every KEY frame's root offset;
+ *   - and the WRAP REPLAY: three logic ticks before and after the wrap, the
+ *     drawn root at thirty hertz, and the in-between frames of a sixty hertz
+ *     run both as the engine draws them today and as InterpRootKey /
+ *     InterpRootLerp (game\interpolate_math.h - the engine's own header, not
+ *     a copy) make them.
+ *
+ * Usage:
+ *   RootProbe <level.trc> [anim ...]        default: 96 161 164 165 168 169 173
+ *   RootProbe <level.trc> -grab <a> <b>     the drawn root across a change
+ *                                           from animation a to animation b
+ *
+ * Build (64 bit): broot.bat next to this file. See Preparation/Tools/README.md.
+ */
+#include "core/Tr5Level.h"
+
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+#include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
+
+static std::wstring toW(const char* s)
+{
+	std::wstring w;
+
+	while (*s)
+		w += (wchar_t)(unsigned char)*s++;
+
+	return w;
+}
+
+/* The 40 byte animation entry of a TR4/TR5 level file, which is ANIM_STRUCT
+ * (TOMB5\global\types.h) with the frame POINTER still a byte offset. */
+struct AnimRow
+{
+	uint32_t frameOffset = 0;
+	int rate = 1, size = 0;
+	int state = 0;
+	long velocity = 0, acceleration = 0;
+	int frameStart = 0, frameEnd = 0;
+	int nextAnim = 0, nextFrame = 0;
+	int numChanges = 0, changeIndex = 0;
+	int numCommands = 0, commandIndex = 0;
+};
+
+static bool readAnim(const Tr5Level& l, int index, AnimRow& z)
+{
+	size_t at = 0;
+	int32_t n = 0;
+
+	if (!l.debugAnimBlock(at, n) || index < 0 || index >= n)
+		return false;
+
+	const std::vector<uint8_t>& b = l.debugBytes();
+
+	if (at + (size_t)(index + 1) * 40 > b.size())
+		return false;
+
+	const uint8_t* e = b.data() + at + (size_t)index * 40;
+	int16_t s = 0;
+	uint16_t u = 0;
+	int32_t v = 0;
+
+	std::memcpy(&z.frameOffset, e + 0, 4);
+	z.rate = e[4];
+	z.size = e[5];
+	std::memcpy(&u, e + 6, 2);	z.state = u;
+	std::memcpy(&v, e + 8, 4);	z.velocity = v;
+	std::memcpy(&v, e + 12, 4);	z.acceleration = v;
+	std::memcpy(&s, e + 24, 2);	z.frameStart = s;
+	std::memcpy(&s, e + 26, 2);	z.frameEnd = s;
+	std::memcpy(&u, e + 28, 2);	z.nextAnim = u;
+	std::memcpy(&u, e + 30, 2);	z.nextFrame = u;
+	std::memcpy(&u, e + 32, 2);	z.numChanges = u;
+	std::memcpy(&u, e + 34, 2);	z.changeIndex = u;
+	std::memcpy(&u, e + 36, 2);	z.numCommands = u;
+	std::memcpy(&u, e + 38, 2);	z.commandIndex = u;
+
+	return true;
+}
+
+/* The head of one key frame - six shorts of bounding box and then the three
+ * of the root offset - at exactly the address GetFrames computes:
+ * frame_ptr + size * key. The engine's own InterpRootKey indexes [6..8] of
+ * this, so it is handed the frame and not the offset. */
+static void keyFrame(const Tr5Level& l, const AnimRow& a, int key, short out[9])
+{
+	const long long at = (long long)(a.frameOffset / 2) + (long long)key * a.size;
+
+	for (int i = 0; i < 9; i++)
+		out[i] = l.debugReadFrameShort(at + i);
+}
+
+/* THE OFFSET ONE GAME FRAME IS DRAWN WITH, by the engine's own arithmetic:
+ * GetFrames picks the key pair and shortens the rate on the last interval,
+ * InterpKeyAlpha turns (frac, rate) into vanilla's factor, and InterpRootKey
+ * blends the pair with it. game\draw.cpp GetRootAt is this function with the
+ * level file replaced by anims[]. */
+static bool frameRoot(const Tr5Level& l, const AnimRow& a, int frameNumber, long out[3])
+{
+	if (a.rate < 1 || a.size < 9)
+		return false;
+
+	const long f = (long)frameNumber - (long)a.frameStart;
+
+	if (f < 0)
+		return false;
+
+	const long key = f / a.rate;
+	const long frac = f % a.rate;
+	const long rate = InterpKeyRate(a.rate, key, a.frameEnd);
+	short frm0[9], frm1[9];
+
+	keyFrame(l, a, (int)key, frm0);
+
+	if (frac)
+		keyFrame(l, a, (int)key + 1, frm1);
+	else
+		std::memcpy(frm1, frm0, sizeof(frm0));
+
+	/* InterpKeyAlpha over the shortened rate is exactly the `blend`
+	 * GetFramesNow hands the draw, so the engine and this tool put the same
+	 * number into the same function. */
+	InterpRootKey(frm0, frm1, frac, InterpKeyAlpha(frac, rate), out);
+
+	return true;
+}
+
+static void printCommands(const Tr5Level& l, const AnimRow& a, long trans[3], bool& haveTrans)
+{
+	size_t cmdAt = 0;
+	int32_t nCmd = 0;
+
+	haveTrans = false;
+	trans[0] = trans[1] = trans[2] = 0;
+
+	if (!a.numCommands || !l.debugCommandBlock(cmdAt, nCmd))
+		return;
+
+	const std::vector<uint8_t>& b = l.debugBytes();
+	size_t p = cmdAt + (size_t)a.commandIndex * 2;
+
+	auto r16 = [&](size_t at) -> int16_t
+	{
+		int16_t v = 0;
+		std::memcpy(&v, b.data() + at, 2);
+		return v;
+	};
+
+	for (int k = 0; k < a.numCommands; k++)
+	{
+		if (p + 2 > cmdAt + (size_t)nCmd * 2)
+		{
+			std::printf("    commands run out of the block\n");
+			return;
+		}
+
+		const int typ = (int)(uint16_t)r16(p);
+		p += 2;
+
+		switch (typ)
+		{
+		case 1:
+			std::printf("    cmd 1 TranslateItem  x %d  y %d  z %d   [at the wrap]\n",
+				r16(p), r16(p + 2), r16(p + 4));
+			trans[0] = r16(p);
+			trans[1] = r16(p + 2);
+			trans[2] = r16(p + 4);
+			haveTrans = true;
+			p += 6;
+			break;
+
+		case 2:
+			std::printf("    cmd 2 JumpVelocity   fall %d  speed %d\n", r16(p), r16(p + 2));
+			p += 4;
+			break;
+
+		case 3:
+			std::printf("    cmd 3 EmptyHands\n");
+			break;
+
+		case 4:
+			std::printf("    cmd 4 KillItem\n");
+			break;
+
+		case 5:
+			std::printf("    cmd 5 PlaySound      frame %d  sfx %d\n", r16(p), r16(p + 2) & 0x3FFF);
+			p += 4;
+			break;
+
+		case 6:
+			std::printf("    cmd 6 FlipEffect     frame %d  no %d\n", r16(p), r16(p + 2) & 0x3FFF);
+			p += 4;
+			break;
+
+		default:
+			std::printf("    unknown command type %d - rest skipped\n", typ);
+			return;
+		}
+	}
+}
+
+/* WHERE A STATE CHANGE REALLY GOES. The change block is three shorts per
+ * entry - the goal state, how many ranges, the first range - and the range
+ * block four: the frame window it is allowed in, and the animation and FRAME
+ * it jumps to (game\control.cpp, GetChange). Without this, "the grab goes to
+ * the climb stance" is a guess about which animation number that is. */
+static void printChanges(const Tr5Level& l, const AnimRow& a)
+{
+	size_t chAt = 0, rgAt = 0;
+	int32_t nCh = 0, nRg = 0;
+
+	if (!a.numChanges || !l.debugChangeBlock(chAt, nCh) || !l.debugRangeBlock(rgAt, nRg))
+		return;
+
+	const std::vector<uint8_t>& b = l.debugBytes();
+
+	auto r16 = [&](size_t at) -> int16_t
+	{
+		int16_t v = 0;
+		std::memcpy(&v, b.data() + at, 2);
+		return v;
+	};
+
+	std::printf("  state changes:\n");
+
+	for (int c = 0; c < a.numChanges; c++)
+	{
+		const size_t p = chAt + (size_t)(a.changeIndex + c) * 6;
+
+		if (a.changeIndex + c >= nCh)
+			return;
+
+		const int goal = r16(p);
+		const int ranges = r16(p + 2);
+		const int first = r16(p + 4);
+
+		for (int r = 0; r < ranges; r++)
+		{
+			const size_t q = rgAt + (size_t)(first + r) * 8;
+
+			if (first + r >= nRg)
+				return;
+
+			std::printf("    -> state %-4d frames %d..%d  becomes anim %d frame %d\n",
+				goal, r16(q), r16(q + 2), r16(q + 4), r16(q + 6));
+		}
+	}
+}
+
+static void printAnim(const Tr5Level& l, int index, long trans[3], bool& haveTrans)
+{
+	AnimRow a;
+
+	haveTrans = false;
+
+	if (!readAnim(l, index, a))
+	{
+		std::printf("\nanim %d: not in this level's table.\n", index);
+		return;
+	}
+
+	const int frames = a.frameEnd - a.frameStart + 1;
+	int keys = (a.frameEnd - a.frameStart) / a.rate + 1;
+
+	if ((a.frameEnd - a.frameStart) % a.rate)
+		keys++;
+
+	std::printf("\n=== anim %d ===\n", index);
+	std::printf("  state %d  rate %d  size %d shorts  frames %d..%d (%d)  keys %d\n",
+		a.state, a.rate, a.size, a.frameStart, a.frameEnd, frames, keys);
+	std::printf("  continues with anim %d at frame %d   velocity %ld accel %ld\n",
+		a.nextAnim, a.nextFrame, a.velocity, a.acceleration);
+	std::printf("  changes %d@%d  commands %d@%d\n",
+		a.numChanges, a.changeIndex, a.numCommands, a.commandIndex);
+
+	printCommands(l, a, trans, haveTrans);
+	printChanges(l, a);
+
+	std::printf("  key   frame   root offset x/y/z\n");
+
+	for (int k = 0; k < keys; k++)
+	{
+		short r[9];
+
+		keyFrame(l, a, k, r);
+		std::printf("  %-4d  %-6d  %6d %6d %6d\n",
+			k, a.frameStart + k * a.rate, r[6], r[7], r[8]);
+	}
+}
+
+/* THE WRAP, TICK BY TICK AND FRAME BY FRAME.
+ *
+ * `posY` is a model of item->pos.y_pos: it does not move while the animation
+ * runs (lara_col_climbing puts back what it took out on the continuing path)
+ * and it takes the TranslateItem command's y at the wrap, which is what
+ * AnimateLara does. The drawn root is pos plus the frame's own offset, and
+ * the question this table answers is whether it is continuous. */
+static void printWrap(const Tr5Level& l, int index, int before, int after)
+{
+	AnimRow a;
+
+	if (!readAnim(l, index, a))
+		return;
+
+	AnimRow nxt;
+
+	if (!readAnim(l, a.nextAnim, nxt))
+		return;
+
+	long trans[3] = { 0, 0, 0 };
+	bool haveTrans = false;
+	size_t cmdAt = 0;
+	int32_t nCmd = 0;
+
+	if (a.numCommands && l.debugCommandBlock(cmdAt, nCmd))
+	{
+		/* Read the commands again, silently, for the translate alone. */
+		const std::vector<uint8_t>& b = l.debugBytes();
+		size_t p = cmdAt + (size_t)a.commandIndex * 2;
+
+		auto r16 = [&](size_t at) -> int16_t
+		{
+			int16_t v = 0;
+			std::memcpy(&v, b.data() + at, 2);
+			return v;
+		};
+
+		for (int k = 0; k < a.numCommands && p + 2 <= cmdAt + (size_t)nCmd * 2; k++)
+		{
+			const int typ = (int)(uint16_t)r16(p);
+			p += 2;
+
+			if (typ == 1)
+			{
+				trans[0] = r16(p);
+				trans[1] = r16(p + 2);
+				trans[2] = r16(p + 4);
+				haveTrans = true;
+				p += 6;
+			}
+			else if (typ == 2 || typ == 5 || typ == 6)
+				p += 4;
+			else if (typ != 3 && typ != 4)
+				break;
+		}
+	}
+
+	/* A one frame animation has no three ticks before its wrap - anim 172,
+	 * the single frame the ladder grab passes through, is one of them. */
+	if (before > a.frameEnd - a.frameStart + 1)
+		before = a.frameEnd - a.frameStart + 1;
+
+	if (after > nxt.frameEnd - a.nextFrame + 1)
+		after = nxt.frameEnd - a.nextFrame + 1;
+
+	std::printf("\n--- the wrap of anim %d -> anim %d frame %d ---\n",
+		index, a.nextAnim, a.nextFrame);
+	std::printf("TranslateItem at the wrap: %s(%ld, %ld, %ld)\n",
+		haveTrans ? "" : "none ", trans[0], trans[1], trans[2]);
+
+	struct Tick { int anim; int frame; long pos; long off[3]; long drawn; };
+	std::vector<Tick> ticks;
+
+	long posY = 0;
+
+	for (int i = before; i >= 1; i--)
+	{
+		Tick t;
+
+		t.anim = index;
+		t.frame = a.frameEnd - i + 1;
+		t.pos = posY;
+
+		if (!frameRoot(l, a, t.frame, t.off))
+			return;
+
+		t.drawn = t.pos + t.off[1];
+		ticks.push_back(t);
+	}
+
+	/* The wrap itself: AnimateLara runs the command, then takes the next
+	 * animation and its frame. */
+	if (haveTrans)
+		posY += trans[1];
+
+	for (int i = 0; i < after; i++)
+	{
+		Tick t;
+
+		t.anim = a.nextAnim;
+		t.frame = a.nextFrame + i;
+		t.pos = posY;
+
+		if (!frameRoot(l, nxt, t.frame, t.off))
+			return;
+
+		t.drawn = t.pos + t.off[1];
+		ticks.push_back(t);
+	}
+
+	std::printf("\n  what           anim  frame   pos.y   off.y   drawn y   step\n");
+
+	long lastDrawn = 0;
+	bool have = false;
+
+	for (size_t i = 0; i < ticks.size(); i++)
+	{
+		const Tick& t = ticks[i];
+
+		if (i)
+		{
+			/* The in-between frame, at a half. */
+			const Tick& p = ticks[i - 1];
+			const long posT = InterpLerpLong(p.pos, t.pos, 0.5F);
+			long fix[3];
+
+			InterpRootLerp(p.off, t.off, 0.5F, fix);
+
+			std::printf("  tween  today   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld\n",
+				t.anim, t.frame, posT, t.off[1], posT + t.off[1],
+				posT + t.off[1] - lastDrawn);
+			std::printf("  tween  fixed   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld\n",
+				t.anim, t.frame, posT, fix[1], posT + fix[1],
+				posT + fix[1] - lastDrawn);
+		}
+
+		std::printf("  tick  %s  %-4d  %-6d  %6ld  %6ld  %8ld  %s%ld\n",
+			(i && ticks[i - 1].anim != t.anim) ? "(wrap)" : "        ",
+			t.anim, t.frame, t.pos, t.off[1], t.drawn,
+			have ? "" : " ", have ? t.drawn - lastDrawn : 0);
+
+		lastDrawn = t.drawn;
+		have = true;
+	}
+}
+
+/* THE SAME TABLE FOR A CHANGE FROM ONE ANIMATION TO ANOTHER - the ladder
+ * grab. There is no TranslateItem here; whatever moves item->pos is the
+ * collision code, and that amount is the caller's to supply. */
+static void printChange(const Tr5Level& l, int from, int to, long posStep)
+{
+	AnimRow a, b;
+
+	if (!readAnim(l, from, a) || !readAnim(l, to, b))
+		return;
+
+	long off0[3], off1[3];
+
+	if (!frameRoot(l, a, a.frameEnd, off0) || !frameRoot(l, b, b.frameStart, off1))
+		return;
+
+	std::printf("\n--- the change anim %d (frame %d, its last) -> anim %d (frame %d) ---\n",
+		from, a.frameEnd, to, b.frameStart);
+	std::printf("  assumed pos.y step of the change: %ld\n", posStep);
+
+	const long drawn0 = off0[1];
+	const long drawn1 = posStep + off1[1];
+	const long posT = InterpLerpLong(0, posStep, 0.5F);
+	long fix[3];
+
+	InterpRootLerp(off0, off1, 0.5F, fix);
+
+	std::printf("  tick  N     pos.y %6d  off.y %6ld  drawn %8ld\n", 0, off0[1], drawn0);
+	std::printf("  tween today pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, off1[1], posT + off1[1]);
+	std::printf("  tween fixed pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, fix[1], posT + fix[1]);
+	std::printf("  tick  N+1   pos.y %6ld  off.y %6ld  drawn %8ld\n", posStep, off1[1], drawn1);
+	std::printf("  offsets x/z: last (%ld,%ld) -> first (%ld,%ld)\n",
+		off0[0], off0[2], off1[0], off1[2]);
+}
+
+int main(int argc, char** argv)
+{
+	if (argc < 2)
+	{
+		std::printf("usage: RootProbe <level.trc> [anim ...]\n"
+			"       RootProbe <level.trc> -grab <from> <to> [posStep]\n");
+		return 2;
+	}
+
+	Tr5Level l;
+	std::string e;
+
+	if (!l.load(toW(argv[1]), e))
+	{
+		std::printf("not loadable: %s\n", e.c_str());
+		return 1;
+	}
+
+	size_t at = 0;
+	int32_t n = 0;
+
+	l.debugAnimBlock(at, n);
+	std::printf("%s: %d animations\n", argv[1], (int)n);
+
+	if (argc >= 4 && !_stricmp(argv[2], "-grab"))
+	{
+		const int from = std::atoi(argv[3]);
+		const int to = argc >= 5 ? std::atoi(argv[4]) : 0;
+		const long step = argc >= 6 ? std::atol(argv[5]) : 0;
+		long trans[3];
+		bool haveTrans = false;
+
+		printAnim(l, from, trans, haveTrans);
+		printAnim(l, to, trans, haveTrans);
+		printChange(l, from, to, step);
+
+		return 0;
+	}
+
+	std::vector<int> anims;
+
+	for (int i = 2; i < argc; i++)
+		anims.push_back(std::atoi(argv[i]));
+
+	if (anims.empty())
+	{
+		static const int kClimb[] = { 96, 161, 164, 165, 168, 169, 173 };
+
+		for (int i = 0; i < (int)(sizeof(kClimb) / sizeof(kClimb[0])); i++)
+			anims.push_back(kClimb[i]);
+	}
+
+	for (size_t i = 0; i < anims.size(); i++)
+	{
+		long trans[3];
+		bool haveTrans = false;
+
+		printAnim(l, anims[i], trans, haveTrans);
+		printWrap(l, anims[i], 3, 3);
+	}
+
+	return 0;
+}

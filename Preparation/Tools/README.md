@@ -2,9 +2,10 @@
 
 Written 2026-08-30 from the folder itself, four tools added 2026-09-03, two
 more 2026-09-05, `SaveDiff` and `InterpTest` on 2026-09-07, `FontProbe` on
-2026-09-09. Forty-three diagnostic tools sit in `Diagnose\`, thirty-four of
-them with a build script beside them, and until now there was no index at
-all - so the way to find the right one was to already know it existed.
+2026-09-09, `RootProbe` on 2026-09-16. Forty-four diagnostic tools sit in
+`Diagnose\`, thirty-five of them with a build script beside them, and until
+now there was no index at all - so the way to find the right one was to
+already know it existed.
 
 Every tool prints its own usage when started without arguments, and every
 one carries a header comment saying why it was written. That header is the
@@ -56,6 +57,7 @@ else - with their own name substituted.
 | `SlotAnims` | bsa | an object slot's anim slice - the first stop when an import reaches past its own animations. |
 | `AnimMap` | bam | all slots sorted by anim_index, with overlaps and gaps in the appended area. |
 | `AnimCmd` | bak | a slot's anim commands, above all which sound hangs on which frame. |
+| `RootProbe` | broot | the ROOT OFFSET of an animation - `frm[6..8]`, the three shorts the draw translates by after the item's own rotation - and what the 60 FPS in-between frame draws it as (#157). Prints the animation table row with the fields `AnimCmd` does not read (where it continues, and at which FRAME), every animation command including type 1 `TranslateItem`, where each state change really goes, every key frame's offset, and then the WRAP REPLAY: three logic ticks either side of the wrap with the drawn root at thirty hertz, and the tween frames both as the engine drew them before round 157 and as it draws them now.<br><br>It exists because a ladder carries its whole vertical travel inside those offsets and moves `item->pos` only once, at the wrap, so "the picture is continuous at thirty" is a statement about two numbers ADDING UP - and nothing else in the toolbox could read either of them. It **includes the engine's own `TOMB5 Code\TOMB5\game\interpolate_math.h`**, like `InterpTest`, so the table it prints is the arithmetic the engine really runs and cannot drift from it. `-grab <from> <to> [posStep]` does the same for a change from one animation to another, which is what the ladder grab is. |
 | `AnimProbe` | bap | cross-check of `Tr5Level::laraAnimUsable`. |
 | `LaraAnim` | bla | which of Lara's animations a level REALLY carries. Levels stub the ones they do not need, and a stub is not a missing entry - it looks present. |
 | `BoneCheck` | - | a slot's bone tree, or two compared. |

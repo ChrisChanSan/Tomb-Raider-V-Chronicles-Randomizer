@@ -458,8 +458,12 @@ inline long InterpKeyRate(long rate, long key, long frameEnd)
  *                                           number written by hand. There is
  *                                           no neighbouring pose to blend
  *                                           with, so the current one is drawn
- *                                           and the picture is what thirty
+ *                                           and the LIMBS are what thirty
  *                                           hertz shows for that one frame.
+ *                                           The ROOT under them is not - order
+ *                                           2 has already blended it - and
+ *                                           #157 is what makes the two agree
+ *                                           again; see InterpRootKey below.
  *   the animation has no rate at all        nothing to walk.
  *   the current frame is the animation's    the previous pose belongs to
  *   first                                   another animation.
@@ -551,6 +555,83 @@ inline long InterpBlendLong(long a, long b, long alpha8)
 	const long d = b - a;
 
 	return alpha8 <= 4 ? a + ((d * alpha8) >> 3) : b - ((d * (8 - alpha8)) >> 3);
+}
+
+
+/* ==========================================================================
+ * ORDER 4'S ROOT - WHAT K6 REFUSES AND WHAT IT MUST NOT (#157)
+ * ==========================================================================
+ *
+ * THE PLAY TEST. JOBY5, a ladder, sixty frames a second: three consecutive
+ * captures of the same climb show Lara in the same pose family from the same
+ * camera, and the MIDDLE one has her half a rung lower than the two either
+ * side of it. The same ladder at thirty is faultless.
+ *
+ * WHERE THE HALF RUNG COMES FROM. Every stored frame carries a bounding box
+ * and then the ROOT OFFSET - frm[6], frm[7], frm[8] - which the draw applies
+ * after the item's own rotation (game\draw.cpp, DrawAnimatingItem;
+ * game\delstuff.cpp for Lara). A climb carries its whole vertical travel in
+ * those offsets, and the engine puts item->pos where the offsets had taken
+ * her at the moment the animation wraps - the TranslateItem animation command
+ * of game\laramisc.cpp, AnimateLara. So at thirty hertz the DRAWN root, pos
+ * plus the rotated offset, is the same number on both sides of the wrap.
+ *
+ * Sixty hertz breaks that agreement on exactly one frame, and it takes both
+ * halves of the interpolation to do it:
+ *
+ *   order 2 has blended item->pos HALF WAY across the wrap - it is a move of
+ *   at most 512 units, which is not a teleport and must not snap;
+ *   rule K6 refuses the POSE - the frame stepped back to the animation's own
+ *   start, so there is no neighbouring pose to blend with - and the draw
+ *   falls back to the current tick's frame, whose offset is the FIRST
+ *   frame's, near nothing, rather than the last frame's.
+ *
+ * Half the step is then missing from the picture: drawn = Y + D/2 where both
+ * neighbours drew Y + D. At sixty that is one frame; on a 165 Hz panel the
+ * same tween state is presented four or five times in a row, which is what
+ * the player photographed.
+ *
+ * THE RULE, AND IT IS ONE SENTENCE: K6 refuses the POSE, never the ROOT. On a
+ * refused tween frame the offset is blended in TIME between what the previous
+ * tick drew and what this one draws, and the two halves then add up to the
+ * whole step - pos contributes D/2 and the offset the other D/2 - so the
+ * in-between frame lands exactly where both of its neighbours are. Where the
+ * two ticks' offsets are equal, which is every animation that does not carry
+ * its own travel, the blend returns that offset and the picture does not
+ * move at all.
+ *
+ * THE PAIR THE CURRENT TICK DRAWS is vanilla's own: frm[0] alone when the
+ * frame sits on a stored one, and otherwise the key pair at InterpKeyAlpha's
+ * factor, which is the `keyAlpha` handed in - GetFramesNow has already chosen
+ * it and it is not classified a second time here. It is taken in INTEGERS,
+ * where the draw takes it in floats through two matrix stacks: the two differ
+ * by at most one unit, against the 256 this is repairing, and an integer
+ * offset is the one thing both call sites can be handed.
+ *
+ * frm1 IS NOT READ AT frac ZERO. A frame that sits on a stored one has no
+ * second key - `frm[1] = frm[0] + size` is then one frame size past it, which
+ * for the last animation in a level is past the frame block altogether, and
+ * vanilla never dereferences it either. */
+inline void InterpRootKey(const short* frm0, const short* frm1, long frac, float keyAlpha,
+	long out[3])
+{
+	const long alpha8 = InterpEighths(keyAlpha);
+
+	for (int i = 0; i < 3; i++)
+		out[i] = frac
+			? InterpBlendLong(frm0[6 + i], frm1[6 + i], alpha8)
+			: (long)frm0[6 + i];
+}
+
+/* And the two ticks' offsets at the time `t` the frame stands at. Eighths,
+ * for the reason written over InterpEighths: the integer form is exact and
+ * has no float in it, and a tween frame's t is a half. */
+inline void InterpRootLerp(const long prev[3], const long cur[3], float t, long out[3])
+{
+	const long t8 = InterpEighths(t);
+
+	for (int i = 0; i < 3; i++)
+		out[i] = InterpBlendLong(prev[i], cur[i], t8);
 }
 
 

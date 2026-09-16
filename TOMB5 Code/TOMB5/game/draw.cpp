@@ -883,10 +883,24 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		meshpp = &meshes[obj->mesh_index];
 		bone = &bones[obj->bone_index];
 
+		/* #157: THE ROOT ON A FRAME WHOSE POSE K6 REFUSED. False on every
+		 * other frame - a frame that carries the tick, an accepted blend, the
+		 * whole of fps_mode 0 - and then `root` is not written and the two
+		 * branches below are the lines that have always stood there. Asked
+		 * inside `clip` because an item that is not drawn has no root to fix
+		 * and must not be counted as one. */
+		long root[3];
+		const bool rootFix = InterpRootNow(item, frm, frac, blend, root);
+
 		if (frac)
 		{
 			InitInterpolateAlpha(blend);
-			phd_TranslateRel_ID(frm[0][6], frm[0][7], frm[0][8], frm[1][6], frm[1][7], frm[1][8]);
+
+			if (rootFix)
+				phd_TranslateRel_ID(root[0], root[1], root[2], root[0], root[1], root[2]);
+			else
+				phd_TranslateRel_ID(frm[0][6], frm[0][7], frm[0][8], frm[1][6], frm[1][7], frm[1][8]);
+
 			rot = frm[0] + 9;
 			rot2 = frm[1] + 9;
 			gar_RotYXZsuperpack_I(&rot, &rot2, 0);
@@ -952,7 +966,11 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 		else
 		{
-			phd_TranslateRel(frm[0][6], frm[0][7], frm[0][8]);
+			if (rootFix)
+				phd_TranslateRel(root[0], root[1], root[2]);
+			else
+				phd_TranslateRel(frm[0][6], frm[0][7], frm[0][8]);
+
 			rot = frm[0] + 9;
 			gar_RotYXZsuperpack(&rot, 0);
 
@@ -2546,10 +2564,18 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate)
  * a midpoint and not a freshly computed "correct" fraction.
  *
  * Returns 0 when there is nothing to blend, and then nothing has been
- * written: the caller falls back to GetFrames and the frame is drawn exactly
- * as thirty hertz draws it. That is rule K6 of the plan and it covers the
- * animation NUMBER changing, which is tested here because only the caller's
- * side knows it, as well as every frame-number case InterpPoseAt names. */
+ * written: the caller falls back to GetFrames and the POSE is the one thirty
+ * hertz draws. That is rule K6 of the plan and it covers the animation NUMBER
+ * changing, which is tested here because only the caller's side knows it, as
+ * well as every frame-number case InterpPoseAt names.
+ *
+ * THE POSE, AND NOT THE PLACE (#157). "Drawn exactly as thirty hertz draws
+ * it" is what this note used to claim, and it was not true of the ROOT: the
+ * position under the pose has already been blended by order 2, so a refused
+ * frame of an animation that carries its own travel - a ladder climb - drew
+ * half of pos's step and none of the offset's. The root is now blended in
+ * time on the refused frame as well, in InterpRootNow; here nothing about the
+ * pose has changed. */
 long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	short* frm[], float* blend)
 {
@@ -2599,6 +2625,53 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	return 1;
 }
 
+/* THE ROOT OFFSET THE PREVIOUS TICK DREW (#157).
+ *
+ * The same six lines GetFrames spends on the key pair, run on an animation
+ * and a frame that are no longer the item's - which is why it is a function
+ * of its own and not a second path through GetFrames: nothing here may write
+ * into frm[] or into anything the caller is about to draw from.
+ *
+ * It is exactly the arithmetic that tick used on itself, so what comes back
+ * is bit for bit the offset the player saw one thirtieth of a second ago:
+ * the key index and the remainder from the animation's own rate, the last
+ * interval shortened by InterpKeyRate the way GetFrames shortens it, and
+ * InterpKeyAlpha's factor over the pair.
+ *
+ * Returns 0 - and then the caller blends no root at all and the frame is
+ * drawn exactly as it is today - for an animation number that cannot be an
+ * index, an animation with no frames behind it, and a frame that is not
+ * inside the animation it is claimed to be in. The previous state is a
+ * snapshot of a live item and is as trustworthy as item->anim_number itself,
+ * but a root offset read through a bad pointer would be a crash rather than a
+ * wrong picture, so it is guarded. */
+static long GetRootAt(short animNumber, short frameNumber, long out[3])
+{
+	if (!anims || animNumber < 0)
+		return 0;
+
+	const ANIM_STRUCT* anim = &anims[animNumber];
+	const long rate = anim->interpolation & 0xFF;
+	const long size = anim->interpolation >> 8;
+
+	if (rate < 1 || size < 9 || !anim->frame_ptr)
+		return 0;
+
+	const long frame = (long)frameNumber - (long)anim->frame_base;
+
+	if (frame < 0)
+		return 0;
+
+	const long key = frame / rate;
+	const long frac = frame % rate;
+	const short* frm0 = anim->frame_ptr + size * key;
+
+	InterpRootKey(frm0, frm0 + size, frac,
+		InterpKeyAlpha(frac, InterpKeyRate(rate, key, anim->frame_end)), out);
+
+	return 1;
+}
+
 /* WHAT THE THREE DRAW SITES ASK FOR (#148, order 4): the pose, whatever frame
  * rate the game is running at.
  *
@@ -2620,6 +2693,13 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 
 	if (t > 0.0F)
 	{
+		/* #157: the root latch is put DOWN first and raised only by the
+		 * refusal below, so its whole life is from here to the draw two
+		 * statements away. An item whose pose is blended, or whose pose was
+		 * refused for a reason that leaves no previous offset, is drawn with
+		 * its own frame's offset exactly as before. */
+		InterpRootRefused(item, 0);
+
 		if (GetFramesAt(item, prevAnim, prevFrame, t, frm, blend))
 		{
 			InterpNotePose(item);
@@ -2631,8 +2711,21 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 		 * pose of the CURRENT tick is drawn, which is one frame of thirty
 		 * hertz inside a sixty hertz run and is invisible - but it is counted,
 		 * because a skip count that is not tiny means the snapshot and the
-		 * animation clock have fallen out of step with each other. */
+		 * animation clock have fallen out of step with each other.
+		 *
+		 * INVISIBLE ONLY IF THE ROOT AGREES, which is what round 157 found on
+		 * a ladder and what the lines below are for: K6 refuses the POSE and
+		 * never the ROOT, so the offset the previous tick drew is handed to
+		 * the draw and blended in time with this tick's. Where the two are
+		 * equal - which is nearly every animation there is - the blend gives
+		 * that offset back and the picture is the one this comment promises.
+		 * See the note over InterpRootRefused in game\interpolate.h. */
 		InterpNotePoseSkip();
+
+		long prevRoot[3];
+
+		if (GetRootAt(prevAnim, prevFrame, prevRoot))
+			InterpRootRefused(item, prevRoot);
 	}
 
 	long rate;

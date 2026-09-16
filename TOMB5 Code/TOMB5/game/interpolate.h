@@ -312,6 +312,83 @@ void InterpNotePoseHD();
  * too far apart for an element-wise matrix blend to survive. */
 void InterpNotePoseFar();
 
+/* ORDER 4'S ROOT - K6 REFUSES THE POSE, NEVER THE ROOT (#157).
+ *
+ * WHAT THE PLAY TEST PHOTOGRAPHED. JOBY5, a ladder, sixty frames a second,
+ * three consecutive captures: the same pose family from the same camera, and
+ * the MIDDLE frame has Lara a quarter of a sector lower than the two either
+ * side of it. Measured off the level file (Preparation\Tools\Diagnose,
+ * RootProbe): 248 units, once per climb cycle, and the same thing with the
+ * sign reversed climbing down.
+ *
+ * WHY. A stored frame carries the ROOT OFFSET in frm[6..8] and the draw
+ * applies it after the item's own rotation. A climb carries its whole
+ * vertical travel in those offsets - animation 161 walks from -375 to -879
+ * over its 59 frames - and the engine puts item->pos where the offsets had
+ * taken her at the wrap, with the animation command TranslateItem(0, -512, 0).
+ * At thirty hertz the DRAWN root, pos plus the offset, is therefore the same
+ * number on both sides of the wrap: -879 before it, -887 after.
+ *
+ * Sixty hertz breaks that agreement on one frame, and it takes both halves of
+ * the interpolation to do it. Order 2 has blended item->pos half way across
+ * the wrap - 512 units is not a teleport and must not snap - while rule K6
+ * refuses the POSE, because the frame stepped back to the animation's own
+ * start and there is no neighbouring pose to blend with, so the draw falls
+ * back to the CURRENT frame, whose offset is the first frame's. Half of
+ * pos's step is there and none of the offset's: -631 where both neighbours
+ * drew -879 and -887.
+ *
+ * THE RULE IS THE TITLE OF THIS NOTE. On a tween frame whose pose K6 refused,
+ * the draw still blends the ROOT OFFSET in TIME - between what the previous
+ * tick drew and what this one draws - and the two halves then add up to the
+ * whole step. The pose stays the current tick's exactly as before, which is
+ * the one frame of thirty hertz K6 was always allowed to keep; with the root
+ * blended it is finally the invisible one its own comment promises.
+ *
+ * WHERE IT FIRES AND WHERE IT CANNOT. Only where the two ticks' offsets
+ * DIFFER, so only where the picture was already wrong: the climb wrap (248
+ * units), the entry into a climb down (111), the ladder grab's one frame
+ * animation 172 with its TranslateItem(0, -190, 0) (86), and one or two units
+ * anywhere an animation changes. Where the offsets agree - which is nearly
+ * every animation in the game, because nearly none of them carry their own
+ * travel - the blend returns that offset and not one pixel moves.
+ *
+ * HOW THE TWO SIDES TALK. GetFramesNow (game\draw.cpp) returns 0 both for
+ * "this frame sits on a stored pose" and for "K6 refused", and it must keep
+ * doing so: the call sites branch on that value and a third one would send a
+ * refused frame down the interpolated path with a pair it has no factor for.
+ * So the refusal is a SIDE CHANNEL, and the channel is g_poseOk[] - the array
+ * InterpBeginFrame already clears for every slot at the top of every drawn
+ * frame. It carries a third value now, "refused, and the previous tick's
+ * offset is in g_rootPrev[]", which makes the latch per item and per frame
+ * with no counter, no serial and no new per-frame work. A slot that snapped,
+ * a frame that carries the tick and every frame at fps_mode 0 all read 0
+ * there and never reach a line of this.
+ *
+ * `prev` is the offset the PREVIOUS tick drew - anims[prevAnim] at prevFrame,
+ * by that tick's own key pair and factor - or null for "nothing was refused
+ * for this item", which is what the two draws that must keep their own
+ * frame's offset say: Lara's hit reaction, which wears a frame picked by hand
+ * out of a spaz animation, and the first person still body of fix round U. */
+void InterpRootRefused(const ITEM_INFO* item, const long prev[3]);
+
+/* THE OFFSET THIS DRAW SHOULD TRANSLATE BY, or false and `out` untouched -
+ * which is every frame that is not a refused tween frame for this item, and
+ * therefore every frame at fps_mode 0.
+ *
+ * `frm` is the pair GetFramesNow left, `frac` what it returned and `blend`
+ * the factor it set, so that the current tick's own offset is worked out
+ * exactly as the draw would have drawn it: frm[0] alone when frac is zero -
+ * and frm[1] is not read then, because at frac zero it may point past the
+ * last frame of the level - and the key pair at `blend` otherwise.
+ *
+ * On true the caller translates by `out` on BOTH matrix stacks. The two
+ * stacks carry the same translation and differ only in the node rotations
+ * hung off it, so InterpolateMatrix gives back exactly `out` and the pose is
+ * the one this tick wears, untouched. */
+bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float blend,
+	long out[3]);
+
 /* ORDER 4'S OTHER HALF - THE ARM'S OWN ANIMATION FRAME (#148; #123, fix round U)
  *
  * WHAT THIS ORDER LEFT OUT, AND WHAT IT COST. Lara's body pose is blended by

@@ -237,6 +237,24 @@ void CalcLaraMatrices(long flag)
 		}
 	}
 
+	/* AND THE TWO DRAWS OF HERS THAT KEEP THEIR OWN FRAME'S ROOT (#157).
+	 *
+	 * Round 157 lets the draw blend the ROOT OFFSET in time on a frame whose
+	 * POSE rule K6 refused, which is what takes the half rung out of a ladder
+	 * climb at sixty. Both of these wear a frame that is not the one the item
+	 * is walking, so there is no previous tick of theirs to blend with:
+	 *
+	 *   the HIT REACTION is a frame index picked by hand out of a spaz
+	 *   animation below, and it already keeps thirty hertz's own picture;
+	 *   the STILL BODY of fix round U is a frame the player asked to be held,
+	 *   and blending it towards the live animation's last offset would be
+	 *   exactly the breathing that option exists to stop.
+	 *
+	 * The latch is a byte per slot and standing it down is one write; the
+	 * whole of the rest of this function then draws as it did. */
+	if (still || lara.hit_direction >= 0)
+		InterpRootRefused(lara_item, 0);
+
 	/* AND LARA'S OWN HD BODY IS COUNTED (#148, order 4; added in fix round R).
 	 *
 	 * INTERPLOG's pose_hd used to count HD ITEMS alone (game\draw.cpp,
@@ -334,7 +352,25 @@ void Rich_CalcLaraMatrices_Normal(short* frame, long* bone, long flag)
 
 	phd_PushMatrix();
 	rot = &frame[9];
-	phd_TranslateRel(frame[6], frame[7], frame[8]);
+
+	/* #157: THE ROOT ON A FRAME WHOSE POSE K6 REFUSED, and this is the branch
+	 * the ladder really comes through: the frame after a climb animation
+	 * wraps is the animation's FIRST, so GetFrames finds no remainder, `frac`
+	 * is zero and Lara is built here rather than in the interpolated half.
+	 * False on every frame that is not a refused tween frame of hers - the
+	 * cutscene decoder's own call to this function among them, where the
+	 * snapshot was never applied - and then the line below it is the one that
+	 * has always stood here. */
+	{
+		short* pair[2] = { frame, frame };
+		long root[3];
+
+		if (InterpRootNow(lara_item, pair, 0, 0.0F, root))
+			phd_TranslateRel(root[0], root[1], root[2]);
+		else
+			phd_TranslateRel(frame[6], frame[7], frame[8]);
+	}
+
 	gar_RotYXZsuperpack(&rot, 0);
 	memcpy(mx, aMXPtr, 48);
 	mx += 12;
@@ -717,7 +753,22 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	rot = frame1 + 9;
 	rot2 = frame2 + 9;
 	InitInterpolateAlpha(alpha);
-	phd_TranslateRel_ID(frame1[6], frame1[7], frame1[8], frame2[6], frame2[7], frame2[8]);
+
+	/* #157, and the same rule as in the branch above: on a frame whose POSE
+	 * K6 refused, the root offset is blended in TIME instead. The one value
+	 * goes to BOTH stacks - they carry the same translation and differ only
+	 * in the rotations hung off it, so InterpolateMatrix gives it back
+	 * unchanged and the pose stays this tick's. */
+	{
+		short* pair[2] = { frame1, frame2 };
+		long root[3];
+
+		if (InterpRootNow(lara_item, pair, 1, alpha, root))
+			phd_TranslateRel_ID(root[0], root[1], root[2], root[0], root[1], root[2]);
+		else
+			phd_TranslateRel_ID(frame1[6], frame1[7], frame1[8], frame2[6], frame2[7], frame2[8]);
+	}
+
 	gar_RotYXZsuperpack_I(&rot, &rot2, 0);
 
 	phd_PushMatrix();

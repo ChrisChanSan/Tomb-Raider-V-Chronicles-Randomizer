@@ -47,7 +47,15 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate);
  *
  * GetFramesNow is what the draw sites call: GetFrames on a tick frame and at
  * fps_mode 0, the midpoint on a tween frame. 0 = one frame, 1 = vanilla's
- * key frame blend, 2 = a blend in time. */
+ * key frame blend, 2 = a blend in time.
+ *
+ * IT STILL RETURNS 0 FOR BOTH REASONS (#157). "This frame sits on a stored
+ * pose" and "K6 refused the blend" come back as the same number on purpose -
+ * the call sites branch on it and a third value would send a refused frame
+ * down the interpolated path with a pair it has no factor for. What round 157
+ * added travels beside it instead: on the refused frame GetFramesNow leaves
+ * the previous tick's ROOT OFFSET in the slot's own byte of g_poseOk, and the
+ * draw picks it up through InterpRootNow (game\interpolate.h). */
 /* THE ARM CHAIN'S OWN BLEND (#123, fix round U, U3): collapse the two matrix
  * stacks to the body's blended joint and carry on with the ARM's own factor.
  * The note at the definition says why an arm needs a second factor at all. */

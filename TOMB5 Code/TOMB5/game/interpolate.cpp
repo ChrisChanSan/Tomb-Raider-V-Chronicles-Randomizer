@@ -208,8 +208,22 @@ namespace
 	/* ORDER 4. May this slot's POSE be blended in time? Worked out in
 	 * InterpBeginFrame's own walk, BEFORE the blended position is written
 	 * over the live one - after that the snap test would measure half the
-	 * distance it should and a teleport could slip through it. */
+	 * distance it should and a teleport could slip through it.
+	 *
+	 * AND THE THIRD VALUE IS ROUND 157's SIDE CHANNEL. GetFramesNow raises
+	 * POSE_ROOT on the slot whose pose rule K6 has just refused, and the draw
+	 * two statements later reads it back and blends the slot's ROOT OFFSET in
+	 * time instead. The array is the latch because it is already exactly the
+	 * right shape: one byte per slot, cleared for every slot at the top of
+	 * every drawn frame, and zero for a slot that snapped, for a frame that
+	 * carries the tick and for the whole of fps_mode 0. See interpolate.h. */
+	enum { POSE_NO = 0, POSE_OK = 1, POSE_ROOT = 2 };
+
 	unsigned char g_poseOk[MAX_ITEMS];
+
+	// The offset the PREVIOUS tick drew, for the slots at POSE_ROOT. Never
+	// read without it, so it needs no clearing of its own.
+	long g_rootPrev[MAX_ITEMS][3];
 
 	// Lara's pose is built two or three times a frame and counted once.
 	bool g_laraPosed = false;
@@ -363,6 +377,11 @@ namespace
 	int g_secPoseFar = 0;		// ... refused because the pair is too far (S2)
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
+	/* #157: refused tween frames whose ROOT OFFSET was blended in time
+	 * anyway. A COUNT and not a mean per frame, because one per climb cycle
+	 * is what the ladder really reads and a mean of that rounds to 0.0. */
+	int g_secRootFix = 0;
+	int g_secRootLines = 0;		// ... and how many of them wrote Lara's line
 	/* Fix round U (U2): the worst a bone was shortened by the pose blend
 	 * this second, in hundredths, with the node, the animation and the frame
 	 * it was on. 100 is a rigid pose and is what a second with no tween frame
@@ -762,6 +781,16 @@ namespace
 	 *                blended, against the tween frame count beside it. It
 	 *                should be nearly all of them while she is moving and it
 	 *                drops by one on each frame where she changes animation.
+	 *   root_fix     #157: how many of those refused frames had their ROOT
+	 *                OFFSET blended in time instead - a COUNT over the second,
+	 *                not a mean per frame. K6 refuses the pose and never the
+	 *                root, so a refusal on an animation that carries its own
+	 *                travel does not have to lose half of the travel with it.
+	 *                It is a SUBSET of pose_skips and it is normally far
+	 *                smaller: the blend is only asked for where the two ticks'
+	 *                offsets differ. On a ladder at sixty it reads about one
+	 *                per climb cycle, which is the frame the play test
+	 *                photographed; in a room with nothing animated in it, nought.
 	 *   stretch      fix round U: the worst a BONE was shortened by the pose
 	 *                blend this second, over its own length in the skeleton,
 	 *                with the node, the animation and the frame it happened
@@ -834,6 +863,7 @@ namespace
 				"object=%d invalid=%d) halfturn=%d camcut=%d (type=%d spot=%d eye=%d aim=%d handover=%d) "
 				"cutscene=%d "
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
+				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
 				"particles=%.1f particle_kinds=%04lx",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
@@ -852,6 +882,7 @@ namespace
 				(double)g_secPoseFar / g_secFrames,
 				(double)g_secPoseHD / g_secFrames,
 				g_secLaraPose, g_secTween,
+				g_secRootFix,
 				g_secArm, g_secArmSkip, g_secTween,
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
@@ -908,6 +939,8 @@ namespace
 		g_secPoseFar = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
+		g_secRootFix = 0;
+		g_secRootLines = 0;
 		g_secArm = 0;
 		g_secArmSkip = 0;
 		g_secStretch = 100;
@@ -1956,6 +1989,92 @@ void InterpNotePoseFar()
 {
 	if (gLogEnabled)
 		g_secPoseFar++;
+}
+
+/* ORDER 4'S ROOT (#157) - THE SIDE CHANNEL, AND WHY IT IS THIS ARRAY.
+ *
+ * The long note in interpolate.h says what the rule is and what the ladder
+ * measured. What belongs here is only the lifetime: the latch is raised by
+ * GetFramesNow on the slot it has just refused and read back by the draw two
+ * statements later, and the whole of its scope is between those two points.
+ *
+ * NOTHING KEEPS IT ALIVE LONGER AND NOTHING CAN. InterpBeginFrame clears
+ * g_poseOk for every slot at the top of every drawn frame, before a byte of
+ * the snapshot is written, and every early return out of that function leaves
+ * the array at zero - a cutscene, a camera cut, a level start, a frame that
+ * carries the tick, and the whole of fps_mode 0. A slot that snapped is left
+ * at zero by the walk itself. So a stale byte cannot survive one frame, let
+ * alone reach a picture. */
+void InterpRootRefused(const ITEM_INFO* item, const long prev[3])
+{
+	if (!g_applied || !items || !item)
+		return;
+
+	const long i = (long)(item - items);
+
+	if (i < 0 || i >= MAX_ITEMS || !g_poseOk[i])
+		return;
+
+	if (!prev)
+	{
+		g_poseOk[i] = POSE_OK;
+		return;
+	}
+
+	g_rootPrev[i][0] = prev[0];
+	g_rootPrev[i][1] = prev[1];
+	g_rootPrev[i][2] = prev[2];
+	g_poseOk[i] = POSE_ROOT;
+}
+
+bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float blend,
+	long out[3])
+{
+	if (!g_applied || !items || !item || !frm || !frm[0])
+		return false;
+
+	const long i = (long)(item - items);
+
+	if (i < 0 || i >= MAX_ITEMS || g_poseOk[i] != POSE_ROOT)
+		return false;
+
+	/* WHAT THIS TICK'S OWN FRAME IS DRAWN WITH, by vanilla's arithmetic and
+	 * from the pair GetFramesNow left behind, and then the two ticks blended
+	 * in TIME at the factor everything else on this frame is drawn at. */
+	long cur[3];
+
+	InterpRootKey(frm[0], frm[1], frac, blend, cur);
+	InterpRootLerp(g_rootPrev[i], cur, g_alpha, out);
+
+	if (gLogEnabled)
+	{
+		g_secRootFix++;
+
+		/* ONE LINE FOR LARA, AND AT MOST FOUR A SECOND. The counter above
+		 * says how often the rule fired; this says what it did with the
+		 * numbers, so that the user's next log can be held against the table
+		 * RootProbe prints from the level file - the two must agree to the
+		 * unit. Any item would be worth reading and Lara is the one the play
+		 * test is about, so the throttle is her alone.
+		 *
+		 * pos_y is the BLENDED position, which is what this frame is drawn
+		 * at: pos_y + drawn.y is the number that has to sit between the two
+		 * ticks either side of it. */
+		if (item == lara_item && g_secRootLines < 4)
+		{
+			g_secRootLines++;
+			Log("INTERPLOG root lara anim %d->%d frame %d->%d "
+				"offset_prev=(%d,%d,%d) offset_cur=(%d,%d,%d) drawn=(%d,%d,%d) pos_y=%d",
+				(int)g_prevItem[i].anim, (int)item->anim_number,
+				(int)g_prevItem[i].frame, (int)item->frame_number,
+				(int)g_rootPrev[i][0], (int)g_rootPrev[i][1], (int)g_rootPrev[i][2],
+				(int)cur[0], (int)cur[1], (int)cur[2],
+				(int)out[0], (int)out[1], (int)out[2],
+				(int)item->pos.y_pos);
+		}
+	}
+
+	return true;
 }
 
 /* THE BONES OF ONE DRAWN POSE, AGAINST THEIR OWN LENGTHS (#123, fix round

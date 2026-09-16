@@ -228,6 +228,9 @@ namespace
 	// Lara's pose is built two or three times a frame and counted once.
 	bool g_laraPosed = false;
 
+	// And her ROOT with it (#157) - same frame, same reason, same latch.
+	bool g_laraRooted = false;
+
 	/* ORDER 4, FIX ROUND U: THE ARM'S OWN ANIMATION FRAME.
 	 *
 	 * The nine aim angles above come from the player and are blended into the
@@ -1415,6 +1418,7 @@ void InterpBeginFrame(float alpha)
 	 * teleported enemy with half of the pose it wore at its old place. */
 	memset(g_poseOk, 0, sizeof(g_poseOk));
 	g_laraPosed = false;
+	g_laraRooted = false;
 	g_armBlended = false;
 	g_armRefused = false;
 
@@ -2048,6 +2052,20 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 
 	if (gLogEnabled)
 	{
+		/* LARA IS BUILT TWO OR THREE TIMES PER DRAWN FRAME - the view set,
+		 * the joint set, a mirror - and every one of them applies the same
+		 * root, so she is counted once and the frame is what she is counted
+		 * per. Exactly what InterpNotePose does with her pose, and for
+		 * exactly the same reason: otherwise `root_fix=1 per climb cycle`
+		 * would read two or three and mean nothing. */
+		if (item == lara_item)
+		{
+			if (g_laraRooted)
+				return true;
+
+			g_laraRooted = true;
+		}
+
 		g_secRootFix++;
 
 		/* ONE LINE FOR LARA, AND AT MOST FOUR A SECOND. The counter above

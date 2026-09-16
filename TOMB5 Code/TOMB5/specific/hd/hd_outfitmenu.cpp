@@ -36,16 +36,37 @@
 
 namespace
 {
-	/* The scrolling window. Nine rows plus the title, the footsteps row and
-	 * the hint line is what fits between font_height*3 and the bottom of a
-	 * 4:3 screen at the default font - the same room the options page uses.
+	/* The scrolling window: how many outfits one page of the F4 list holds.
+	 * Nine of them plus the title, the footsteps row and the hint line was
+	 * what fitted between font_height*3 and the bottom of a 4:3 screen at the
+	 * default font - the same room the options page uses.
 	 *
 	 * EIGHT SINCE #156, because the HEAD row came in under the footsteps one
-	 * and the page has to stay the same height: eight rows plus two value
-	 * rows plus the hint is the same eleven lines nine plus one plus one was.
-	 * One outfit fewer per page out of a hundred-odd is what it costs, and
-	 * what it buys is the answer to "why is this body's head like that"
-	 * standing beside the body itself. */
+	 * and the page was held to the eleven lines it had.
+	 *
+	 * AND THE PAGE IS THIRTEEN LINES SINCE #159 (the second fix round, which
+	 * is where this comment was caught still claiming eleven): the Shine and
+	 * the Skin glow rows came in under the Head one and kWindow was NOT cut
+	 * again. So the count below is no longer "whatever keeps the page eleven
+	 * lines" and the arithmetic has to be written out instead:
+	 *
+	 *     title        1.0 * font_height
+	 *     the window   3.0 .. 3.0 + (kWindow - 1) = 10.0
+	 *     footsteps   11.5   (3 + kWindow + a half line of air)
+	 *     head        12.5
+	 *     shine       13.5
+	 *     skin glow   14.5
+	 *     hint        15.5, so the page ends at 16.5
+	 *
+	 * and the screen holds 480 / 28 = 17.1 of them, because font_height is
+	 * GetFixedScale(28) against a 640x480 reference (game\text.cpp) and that
+	 * ratio is the same at every resolution 4:3 or wider. Two lines of room
+	 * are left. A THIRD value row is one line too many, and the next one that
+	 * comes in pays for itself out of kWindow: 7 rows, 12.5 lines of page.
+	 *
+	 * NOBODY HAS SEEN THIS PAGE since #156 - the rules of these rounds forbid
+	 * starting the game - so the arithmetic above is the whole of what is
+	 * known about it. */
 	const int kWindow = 8;
 
 	// The registry: the outfit is one REG_SZ under the game's own settings

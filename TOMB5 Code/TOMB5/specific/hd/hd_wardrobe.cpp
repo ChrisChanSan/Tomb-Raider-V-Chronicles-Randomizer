@@ -475,6 +475,38 @@ namespace
 		out.said += key;
 	}
 
+	/* A YES OR A NO A PLAYER WROTE (the second fix round of #159), and the
+	 * same rule the four numbers got in the first one: a value this build
+	 * cannot read is a NOTE and the tier below stands, and the key is not
+	 * taken, because a block's own line may not name a key whose value never
+	 * arrived.
+	 *
+	 * MEASURED before this was written: `braid=maybe holsters=ja hands=2
+	 * rig=nonsense` in one block logged "braid holsters hands rig" as taken,
+	 * wrote no note of any kind, and drew a body byte for byte the one with no
+	 * list file at all - as_bool answered -1, apply_txt skipped on `>= 0`, and
+	 * nothing anywhere said so. The vocabulary is narrow on purpose (this is
+	 * a config file, not a language), so the note SPELLS IT OUT: a player who
+	 * writes `ja` or `y` learns the words from the log rather than by
+	 * guessing. */
+	bool take_flag(const char* key, const std::string& value,
+		const std::string& low, const char* keeps, const std::string& where,
+		int* out)
+	{
+		const int f = as_bool(low);
+
+		if (f < 0)
+		{
+			note("MODLOG %s: %s=%s is neither yes nor no (1, yes, true, on / "
+				"0, no, false, off) - ignored, %s", where.c_str(), key,
+				value.c_str(), keeps);
+			return false;
+		}
+
+		*out = f;
+		return true;
+	}
+
 	/* A NUMBER A PLAYER WROTE, AND THE RANGE A PICTURE SURVIVES (#159, the fix
 	 * round). Four keys are numbers - sheen, exponent, skin_sheen,
 	 * skin_exponent - and all four come through here, because a rule that
@@ -544,35 +576,42 @@ namespace
 		}
 		else if (key == "hands")
 		{
-			out.hands = as_bool(low);
-			took(out, "hands");
+			if (take_flag("hands", value, low, "she keeps the hands she had",
+				where, &out.hands))
+				took(out, "hands");
 		}
 		else if (key == "gloves")
 		{
-			out.gloves = as_bool(low);
-			took(out, "gloves");
+			if (take_flag("gloves", value, low, "and it changes nothing here "
+				"either", where, &out.gloves))
+				took(out, "gloves");
 
 			/* #153, round M2b. Said here rather than passed over in silence,
 			 * because a modder who writes the line and sees no gloves is owed
-			 * the reason. */
+			 * the reason. It stands whatever the value was - a line that used
+			 * to write it may not stop writing it because the second fix
+			 * round of #159 taught the key to read its value. */
 			note("MODLOG %s: gloves=%s is ignored - the wardrobe wears "
 				"bare hands everywhere (the user's decision, round M2b)",
 				where.c_str(), value.c_str());
 		}
 		else if (key == "braid")
 		{
-			out.braid = as_bool(low);
-			took(out, "braid");
+			if (take_flag("braid", value, low, "she keeps the hair she had",
+				where, &out.braid))
+				took(out, "braid");
 		}
 		else if (key == "holsters")
 		{
-			out.holsters = as_bool(low);
-			took(out, "holsters");
+			if (take_flag("holsters", value, low,
+				"she keeps the holsters she had", where, &out.holsters))
+				took(out, "holsters");
 		}
 		else if (key == "rig")
 		{
-			out.rig = as_bool(low);
-			took(out, "rig");
+			if (take_flag("rig", value, low, "she keeps the rig she had",
+				where, &out.rig))
+				took(out, "rig");
 		}
 		/* WHAT THE CLOTH IS MADE OF, in the same two ranges her skin gets
 		 * below: a strength above 2 washes the material white in any light and
@@ -641,30 +680,120 @@ namespace
 		}
 		else if (key == "skin")
 		{
+			/* WHICH PAGES ARE HER OWN SKIN - PARSED FIRST, TAKEN AFTER (the
+			 * second fix round of #159).
+			 *
+			 * WHAT DOING IT THE OTHER WAY ROUND COST, measured: `skin=` with
+			 * nothing after it set hasSkin and named the key as taken before a
+			 * single character was read, and apply_txt then copied the empty
+			 * array over the tier below - so ONE keystroke wiped an outfit's
+			 * skin pages, in silence, with the block's own line saying "skin".
+			 * The user's own outfit_1-5.txt carries `# skin=` ready-written in
+			 * 44 of its 52 blocks, so that keystroke is uncommenting a line he
+			 * was invited to uncomment: 46/OUTFIT_TR3_CATSUIT lost 8201,8202
+			 * and took the catsuit's own material at her neckline, which is
+			 * round K's seam fix undone on that body.
+			 *
+			 * `std::atoi` was the other half of it: it answers 0 for "abc" and
+			 * 0 is the terminator of this array, so `skin=8001,oops` quietly
+			 * became 8001 alone and `skin=abc,def` became nothing at all.
+			 * strtol, and a piece that is not a whole page number above zero
+			 * is a note. If NO page survives, the line is refused entirely and
+			 * the pages the entry had stand - there is no way to write "this
+			 * body has no skin pages", because no file on this machine wants
+			 * one and inventing a spelling for it is not this round's work. */
+			int page[HD_WARDROBE_SKIN] = { 0, 0, 0 };
 			int at = 0;
 			std::string one;
 
-			out.hasSkin = true;
-			took(out, "skin");
-
 			for (size_t i = 0; i <= value.size(); i++)
 			{
-				if (i == value.size() || value[i] == ',')
+				if (i != value.size() && value[i] != ',')
 				{
-					one = trim(one);
-
-					if (!one.empty() && at < HD_WARDROBE_SKIN)
-						out.skin[at++] = std::atoi(one.c_str());
-
-					one.clear();
-				}
-				else
 					one.push_back(value[i]);
+					continue;
+				}
+
+				one = trim(one);
+
+				if (!one.empty())
+				{
+					const char* text = one.c_str();
+					char* end = 0;
+					const long n = std::strtol(text, &end, 10);
+
+					if (end == text || *end || n <= 0)
+						note("MODLOG %s: skin=%s names \"%s\", which is no "
+							"page number - ignored", where.c_str(),
+							value.c_str(), one.c_str());
+					else if (at < HD_WARDROBE_SKIN)
+						page[at++] = (int)n;
+					else
+						note("MODLOG %s: skin=%s names more than %d pages - "
+							"\"%s\" and what follows are ignored",
+							where.c_str(), value.c_str(), HD_WARDROBE_SKIN,
+							one.c_str());
+				}
+
+				one.clear();
 			}
+
+			if (!at)
+			{
+				note("MODLOG %s: skin=%s names no page number - ignored, her "
+					"skin pages stay as they were", where.c_str(),
+					value.c_str());
+				return;
+			}
+
+			for (int i = 0; i < HD_WARDROBE_SKIN; i++)
+				out.skin[i] = page[i];
+
+			out.hasSkin = true;
+			took(out, "skin");
 		}
 		else
 			note("MODLOG %s: key \"%s\" is not one this build knows - ignored",
 				where.c_str(), key.c_str());
+	}
+
+	/* ONE WHOLE LINE, HOWEVER LONG THE PLAYER MADE IT (the second fix round of
+	 * #159). Both readers below use it, because both hand what they read to
+	 * take_key and a key is worth nothing if its value arrived in halves.
+	 *
+	 * WHAT THE FIXED BUFFER COST, measured: `char raw[512]` + fgets cuts a
+	 * longer line in two and the HEAD of it was parsed as a whole key=value -
+	 * a `sheen=` line of 900 zeros and then `.25` was read as `sheen=000...0`,
+	 * which is 0.0, which is in range, which is accepted: a wholly matt body
+	 * out of a line that asked for 0.25, with the tail logged after it as a
+	 * line with no "=". A note would have been an improvement on silence; a
+	 * reader that does not cut the line is the answer.
+	 *
+	 * A NUL BYTE ends the line's text and the rest of that line is skipped -
+	 * which is exactly what the old reader did (std::string from a char* stops
+	 * at the NUL), kept deliberately so that a file saved as UTF-16 goes on
+	 * being the pile of unreadable lines it was rather than becoming
+	 * half-readable in a way nobody has looked at. Returns false only when
+	 * there was nothing left at all. */
+	bool read_line(std::FILE* file, std::string& line)
+	{
+		bool nul = false;
+		int c;
+
+		line.clear();
+
+		while ((c = std::fgetc(file)) != EOF)
+		{
+			if (c == '\n')
+				return true;
+
+			if (!c)
+				nul = true;
+			else if (!nul)
+				line.push_back((char)c);
+		}
+
+		return !line.empty();
 	}
 
 	void read_outfit_txt(int mod, ModTxt& out)
@@ -686,11 +815,10 @@ namespace
 
 		out.has = true;
 
-		char raw[512];
+		std::string line;
 
-		while (std::fgets(raw, sizeof(raw), file))
+		while (read_line(file, line))
 		{
-			std::string line = raw;
 			const size_t hash = line.find('#');
 
 			if (hash != std::string::npos)
@@ -1338,15 +1466,12 @@ namespace
 		}
 
 		ModTxt open;
-		std::string name, prefix, stem;
-		char raw[512];
+		std::string name, prefix, stem, line;
 		char where[256];
 		bool first = true;
 
-		while (std::fgets(raw, sizeof(raw), file))
+		while (read_line(file, line))
 		{
-			std::string line = raw;
-
 			/* A BYTE ORDER MARK OFF THE FRONT OF THE FIRST LINE. This is a
 			 * file a player writes in an editor, and Windows Notepad's "UTF-8"
 			 * puts three bytes there; on an "Outfit:" line they would cost him

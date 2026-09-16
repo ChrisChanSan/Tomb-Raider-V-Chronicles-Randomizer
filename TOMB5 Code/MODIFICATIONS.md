@@ -13840,6 +13840,226 @@ the two `MODLOG` lines the mods scan writes about the list files it found -
 which is log and not behaviour, and is the one thing a player with the HD path
 off can read to see that his file exists.
 
+#### Round 164 (#164) - the outfit changer asks the two rooms that exist, and the one it was afraid of turns out to be free
+
+The user's wish of 2026-09-15, in his own words: *can we raise the budget?* -
+and, on being shown that his card holds 16 GiB and his machine 96 GiB of RAM,
+*the 32 bit limit is what bites*. His log of that day is the case:
+
+```
+  HDLOG level=ANDREA1 budget=3878 MiB (worked out) ... cache 465 -> 517 MiB
+  six changes of +4 to +10 pages, +4 to +13 MiB each
+  HDLOG redress deferred ... this level has spent 52 of 64 MiB
+```
+
+Three gigabytes of his own texture budget untouched, and the sixth change of
+outfit refused by a constant.
+
+**WHAT ROUND M3 ACTUALLY CAPPED.** The page cache never gives a page back inside
+a level - other models hold slot indexes (`hd_pagecache.cpp`, the A2 note) - so
+every outfit worn in one level stays in it, and round M3 (#153) capped that
+growth at `HD_REDRESS_ALLOWANCE`, 64 MiB, which is the slack `AutoBudgetBytes`
+already holds back on the card. That number was never a measurement of the
+player's machine. It was the one number in reach.
+
+**MEASURED FIRST, AND THE MEASUREMENT MOVED THE ROUND'S OWN PREMISE.** The round
+was ordered on the assumption that the wall is the ADDRESS SPACE of a 32 bit
+process - the managed system-memory copies, the level, the heaps, the driver.
+`PoolProbe -pool` (new, below) makes real pages of the cache's own shapes in all
+three pools and measures what each takes out of the address space, out of the
+card and out of the process's commit. Eight pages a row, on the user's machine:
+
+| pool | format | side | address space a page | card a page | one page's biggest reserve | given back |
+| --- | --- | --- | --- | --- | --- | --- |
+| `D3DPOOL_DEFAULT` | A8R8G8B8 | 4096 | **0.04 MiB** | 85.25 MiB | 0.21 MiB in 6 regions | nothing was taken |
+| `D3DPOOL_MANAGED` | A8R8G8B8 | 4096 | **85.37 MiB** | 0.00 MiB | 85.34 MiB in 1 of 3 | 682.96 of 682.96 |
+| `D3DPOOL_SYSTEMMEM` | A8R8G8B8 | 4096 | 85.38 MiB | 0.00 MiB | 85.34 MiB in 1 of 3 | 683.03 |
+| `D3DPOOL_DEFAULT` | DXT5 | 4096 | **0.00 MiB** | 21.25 MiB | no new region at all | nothing was taken |
+| `D3DPOOL_MANAGED` | DXT5 | 4096 | 21.36 MiB | 0.00 MiB | 21.34 MiB | 170.89 |
+| `D3DPOOL_DEFAULT` | A8R8G8B8 | 2048 | 0.00 MiB | 21.25 MiB | no new region at all | nothing was taken |
+| `D3DPOOL_MANAGED` | A8R8G8B8 | 2048 | 21.37 MiB | 0.00 MiB | 21.34 MiB | 171.00 |
+
+**The engine's pages are `D3DPOOL_DEFAULT`** - all three callers pass
+`managed = false` and there is no setting for it: the rooms
+(`hd_level.cpp`, `HDRenderLevelBegin`), the water frames (`hd_level.cpp`,
+`BuildWaterFrames`) and the models and the wardrobe (`hd_object.cpp`,
+`HDModelLevelBegin`). So a page costs this process **four hundredths of a
+megabyte** and puts its 85.25 MiB on the card, where the budget is already
+watching it. The address space is NOT the wall the pages run into. Only a
+managed page would cost the process its own size, and the engine makes none.
+
+That is said here loudly because it is the opposite of what the round set out
+from, and because it decides which condition does the work: **the card's budget
+is what really lifts the cap, from 64 MiB to the 3477 MiB his own level has.**
+
+**AND THE ADDRESS SPACE IS STILL WORTH ASKING, for a reason the measurement
+handed over.** A `D3DPOOL_DEFAULT` texture cannot be locked, so every mip of
+every page goes through ONE reused `D3DPOOL_SYSTEMMEM` staging texture of the
+page's whole size (`hd_pagecache.cpp`, `ensure_staging`) - and that is a single
+block of 85.34 MiB, measured. A process with 900 MiB free in ten thousand crumbs
+cannot make it. That is the fragmentation condition, and it is the one part of
+the address side that is not merely a guard.
+
+**THE RULE.** `hd_memory.cpp`, pure, with every input handed in:
+
+```
+  spent      = cache - this level's mark                     (as in round M3)
+  card room  = budget + HD_REDRESS_ALLOWANCE - cache
+  addr room  = ullAvailVirtual - HD_REDRESS_ADDRESS_RESERVE
+
+  allowed = (card room >= worst || spent < allowance)    the card, with round
+                                                         M3 as its FLOOR
+         && addr room >= worst                           the address space
+         && largest free block >= one page               fragmentation
+```
+
+`worst` is `HD_REDRESS_WORST`, 20.00 MiB - round M3's own measurement of the
+dearest outfit's own pages over the user's whole wardrobe. **The exact bytes of
+the chosen outfit were weighed against it and refused**, and not for tidiness:
+the hint under the F4 list is drawn for the HIGHLIGHTED row on every frame and
+the highlight moves as the player scrolls, so an exact answer would mean reading
+that outfit's `.TRM` parts per row per frame. Round M2's own numbers say what
+that costs - a model build is 278 ms with the user's nine mods, `find_ms` alone
+210 of them - and this project's fifth rule says what may not be computed per
+frame. A measured worst case that is read from nothing is the cheaper truth.
+
+**THE RESERVE, AND IT IS A FIRST SETTING.** `HD_REDRESS_ADDRESS_RESERVE` is 512
+MiB: what a level load, a Bink film, the save screenshot and the driver's own
+transient allocations have to find after a re-dress has taken its share. It is
+not measured, because the measurement it wants is a play test with the log on,
+and it is printed in every level build line for exactly that reason. It is the
+one number in this round that is meant to be argued with.
+
+**THE RULE'S OWN ANSWERS.** `PoolProbe -grid` calls `HDRedressDecide` itself -
+the function the engine calls - so this is not a description of the rule. The
+user's own numbers: budget 3878 MiB, cache 465 MiB + what the changes added.
+
+| spent | card room | addr room | round M3 said | the rule says | refused by | room for |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 3477 | 2488 | yes | yes | nothing | 124 changes |
+| 52 | 3425 | 2488 | yes | yes | nothing | 124 |
+| 63 | 3414 | 2488 | yes | yes | nothing | 124 |
+| **64** | 3413 | 2488 | **no** | **yes** | nothing | 124 |
+| 200 | 3277 | 2488 | no | yes | nothing | 124 |
+
+His sixth change was the one round M3 refused. The new rule refuses the
+hundred and twenty fifth.
+
+**NEVER STRICTER THAN ROUND M3 ON THE CARD SIDE**, and the rows that prove it
+are the ones where the card room is smaller than one change and the old rule
+still says yes (cache 465 + spent, address space fine):
+
+| budget | spent | card room | round M3 | the rule | refused by |
+| --- | --- | --- | --- | --- | --- |
+| 500 | 70 | 29 | no | yes | nothing |
+| 480 | 70 | 9 | no | **no** | the card |
+| 455 | 40 | **14** | yes | **yes** | nothing |
+| 400 | 40 | **-41** | yes | **yes** | nothing |
+| 400 | 70 | -71 | no | no | the card |
+
+**AND IT REFUSES EXACTLY WHERE THE ROOM RUNS OUT** (budget 3878, cache 465,
+spent 0, so round M3 says yes to every row):
+
+| avail_virtual | addr room | the rule | refused by | room for |
+| --- | --- | --- | --- | --- |
+| 3000 | 2488 | yes | nothing | 124 |
+| 1000 | 488 | yes | nothing | 24 |
+| 600 | 88 | yes | nothing | 4 |
+| 532 | 20 | yes | nothing | 1 |
+| **531** | 19 | **no** | the address space | 0 |
+| 300 | -212 | no | the address space | 0 |
+
+| largest free block | one page needs | the rule | refused by |
+| --- | --- | --- | --- |
+| 1000 | 85.33 | yes | nothing |
+| 86 | 85.33 | yes | nothing |
+| **85** | 85.33 | **no** | fragmentation |
+| 8 | 85.33 | no | fragmentation |
+
+**WITH NOTHING MEASURED it is round M3's rule and only that.** If
+`GlobalMemoryStatusEx` refuses, `known` stays 0, the walk is not even made, and
+`allowed` is `spent < 64 MiB` - the whole grid over again, identical to the old
+column, with a line of its own in the log. A rule may not spend an answer it did
+not get.
+
+**WHERE IT IS ASKED, AND WHY NOT WHERE IT WAS.** `HDLevelRedressAllowed` used to
+work the answer out on the spot, and the F4 window asks it on **every drawn
+frame** it is open (the row that says *applies at the next level*). The new
+answer stands on a `GlobalMemoryStatusEx` and a walk of the whole address space:
+**203 microseconds over 262 regions**, measured with `PoolProbe -walk` - nothing
+once, and a system call storm sixty times a second. So it is worked out where
+something CHANGES it - at the end of the level build, before and after every
+change, and once as the F4 window opens - and `HDLevelRedressAllowed` hands out
+what was stored. Nothing else can grow the cache inside a level: the only
+callers of `HDPageCacheAppend` are the level build and `HDObjectLevelBuild`,
+which runs in a level build or in a re-dress.
+
+**THE LOG, and every word that was there is still there.**
+
+```
+HDLOG level=%s budget=... classic_pages=%d framebuffer=%dx%d
+      pool=default avail_virtual=%.0f MiB largest_free=%.0f MiB
+      reserve=%.0f MiB walk_ms=%d
+
+HDLOG redress room (the level build): another change is allowed, refused by
+      nothing, card=%.0f addr=%.0f largest_free=%.0f MiB (avail_virtual=%.0f
+      reserve=%.0f page=%.0f MiB, %d regions, walk_ms=%d), this level has
+      spent %.1f of %.0f MiB and has room for %d more
+
+HDLOG redress %d (%s) ms=%d pages ... this level has spent %.1f of %.0f MiB,
+      room card=%.0f addr=%.0f largest_free=%.0f MiB, avail_virtual %.0f ->
+      %.0f MiB (-%.1f for +%.1f MiB of pages)
+
+HDLOG redress deferred to the next level (%s): ... and the allowance is %.0f -
+      refused by %s, room card=%.0f addr=%.0f largest_free=%.0f MiB and one
+      change needs %.0f MiB (a page needs %.0f)
+
+HDLOG redress: GlobalMemoryStatusEx refused - the address space is unknown, so
+      the allowance is the 64 MiB of round M3 and nothing more
+```
+
+`this level has spent %.1f of %.0f MiB` keeps printing the 64 MiB, because the
+64 MiB is still the floor of the card condition - a reader of an old log is not
+misled into thinking the line means something else now. The `room (%s)` line is
+the new one, and it is where the user's next log will settle the reserve: the
+`avail_virtual %.0f -> %.0f (-%.1f for +%.1f MiB of pages)` clause on a real
+change is the measurement of this round repeated on his machine at run time. If
+that drop ever tracks the MiB of pages instead of staying a rounding error
+beside them, the pages are not in the pool this rule was measured for.
+
+**THE F4 WINDOW IS UNCHANGED.** The hint still reads *applies at the next
+level*, in the same place, with the same words; the only new line in
+`hd_outfitmenu.cpp` is one call as the window opens, so that the frames which
+follow read a fresh answer instead of measuring one each. (A second row showing
+the room in MiB would fit there - it is not in this round, because the window is
+the player's and the numbers belong in the log.)
+
+**WHAT IT CANNOT DO, and did not try.** No eviction and no shrinking cache: a
+slot index another model holds does not move, which is the reason round M3 gave
+and it has not changed. No change of pool - the measurement above says
+`D3DPOOL_DEFAULT` is the right one and a managed cache would cost the process
+85 MiB a page for nothing. No automatic rebuild when the room does run out; a
+Save and Load already starts a fresh cache. And x64 (#143) would end the
+question altogether, which is why `PoolProbe` is built x86 and
+`/LARGEADDRESSAWARE` like the engine: without that switch the same process reads
+1995 MiB of free address space instead of 3986, and a tool that measures the
+wrong wall is worse than no tool.
+
+**THE GATE.** Everything new sits inside `HDEnabled()`: the budget line and the
+first answer are inside `HDLevelBuildHD`, past its own `HDEnabled()` test;
+`HDLevelRedressAllowed`, `HDLevelRedressRefresh` and `HDLevelRedress` each test
+`HDEnabled() && g_level_active` in their first line; and the F4 window cannot
+open at all without `HDEnabled()` (`HDOutfitMenuWanted`). Nothing of this round
+is on a drawn frame's path, nothing of it is in the 60 fps files, and
+`hd_enable=0` and `fps_mode 0` draw the frame they drew before. The three
+literal `false` arguments in `hd_level.cpp` became one named `kPagesManaged`
+with the same value, so the `pool=` the log prints is the pool the call really
+uses and not a typed word.
+
+**NOT IN THIS ROUND.** Page eviction, a shrinking cache, `D3DPOOL` changes, an
+automatic level rebuild, x64 (#143), the randomizer, the ring, the wardrobe, and
+the F4 window's own layout.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

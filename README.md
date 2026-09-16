@@ -165,10 +165,33 @@ at the same time.
 
 **It takes effect at once.** The level's models are built again with the new
 body while the game stands still; the rooms, the inventory, her weapons and
-everything classic are untouched. The page cache never gives a page back, so
-once a level has spent **64 MiB** of extra outfit pages the next change says
-*applies at the next level* instead (so the ceiling is 64 MiB plus one change) — measured, that is about twenty changes in an
-ordinary level and four in the worst case the installed wardrobe can produce.
+everything classic are untouched. The page cache never gives a page back
+inside a level, so there is a limit on what one level may spend on outfits —
+and since #164 that limit is what your machine really has instead of one flat
+number. Before every change the game asks three questions: is there room in
+the **texture budget** this level was given, is there room in the **address
+space** of the program, and is there a single free **block** big enough for
+one page. All three have to say yes; otherwise the row under the list says
+*applies at the next level*, exactly as it did before. The old **64 MiB** is
+still the floor of the first question, so nothing is refused earlier than it
+used to be: a level that has spent less than that is never stopped on the
+card's account.
+
+**Why the address space, on a machine with 16 GiB of video memory?** Because
+`PCtomb5.exe` is a 32 bit program: four gigabytes of address space and no
+more, whatever the card and the RAM hold. Measured with `PoolProbe`, the
+pages themselves live on the CARD and cost the program almost nothing of it —
+0.04 MiB for a page of 85.25 — so in practice it is the texture budget that
+decides, and on a big card's automatic budget a level has room for well over
+a hundred changes where it used to have three or four. A **Save and Load**
+starts a fresh page cache and gives all of it back, and so does the next
+level.
+
+With `-log` the log says the whole of it: every level build prints the budget,
+the free address space, the largest free block and the reserve that is held
+back; every change prints what it cost and how much room is left; and a change
+that waits names which of the three questions said no.
+
 When it does wait, the **footsteps wait with it**: the body on the screen is
 still the old one and it keeps the old one's footsteps until the next level.
 

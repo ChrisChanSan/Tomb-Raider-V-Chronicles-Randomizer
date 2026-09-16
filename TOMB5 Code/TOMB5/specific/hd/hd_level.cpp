@@ -12,6 +12,7 @@
  */
 #include "../../tomb5/pch.h"
 #include "hd_level.h"
+#include "hd_memory.h"			// the address space, and the rule that spends it (#164)
 #include "hd_outfitmenu.h"		// the footsteps follow the outfit (#153, M3)
 #include "hd_install.h"
 #include "hd_bind.h"
@@ -677,6 +678,48 @@ namespace
 	double g_redress_bytes0 = 0;
 	int g_redress_count = 0;
 
+	/* AND WHAT THE RULE ANSWERED WHEN IT WAS LAST ASKED (#164). The F4 window
+	 * asks whether another change is allowed on EVERY drawn frame it is open,
+	 * and the answer now costs a GlobalMemoryStatusEx and a walk of the whole
+	 * address space - 203 microseconds over 262 regions, measured with
+	 * PoolProbe -walk, which is nothing once and a great deal sixty times a
+	 * second. So it is worked out when something has CHANGED it: at the end
+	 * of the level build, after every completed change, and once when the
+	 * window opens. HDLevelRedressAllowed hands out what is stored here.
+	 *
+	 * NOTHING ELSE CAN CHANGE IT INSIDE A LEVEL. The only callers of
+	 * HDPageCacheAppend are this level build - the rooms and the water frames
+	 * - and HDObjectLevelBuild, which runs in a level build or in a re-dress,
+	 * so the cache cannot grow behind the stored answer's back. */
+	HDRedressVerdict g_redress_verdict;
+	HDMemoryRoom g_redress_room;
+	bool g_redress_said_unknown = false;
+
+	/* THE BIGGEST SINGLE ALLOCATION ONE PAGE OF THIS LEVEL MAKES, worked out
+	 * at the end of the level build, when the format and the device's own cap
+	 * are both settled. It is what the fragmentation condition asks the
+	 * largest free block against, and it is not a guess: the pages themselves
+	 * are D3DPOOL_DEFAULT and cost the process almost nothing (0.04 MiB
+	 * apiece, measured), but every mip of every one of them goes through ONE
+	 * reused D3DPOOL_SYSTEMMEM staging texture of the page's whole size
+	 * (hd_pagecache.cpp, ensure_staging) - and that is an 85.33 MiB block for
+	 * a 4096 page in A8R8G8B8, measured at 85.34 in a single reserve. */
+	double g_redress_page_block = 0;
+
+	/* WHICH POOL THE PAGES LIVE IN, in one place instead of a literal at each
+	 * call (#164). D3DPOOL_DEFAULT: the texture is on the card and the
+	 * process keeps no copy of it, which is what makes the address space the
+	 * cheap side of the rule and the card the expensive one. hd_object.cpp
+	 * hands the models' pages the same answer, and there is no setting for it
+	 * anywhere - it is a property of the loader, not a taste. */
+	const bool kPagesManaged = false;
+
+	/* THE WIDEST PAGE THE REMASTER HAS. Eleven of them are 4096x4096 and
+	 * nothing is wider (hd_render.cpp, where the device's own cap enters the
+	 * policy); a card that stops at 2048 clamps them, and the policy says so,
+	 * which is why the block below is worked out from both. */
+	const int kWidestPage = 4096;
+
 	/* THE AUTOMATIC TEXTURE BUDGET (#123, stage S6).
 	 *
 	 * hd_texture_budget_mb = 0 means "work it out", and this is the working
@@ -731,6 +774,66 @@ namespace
 			budget = 16.0 * 1048576.0;
 
 		return budget;
+	}
+
+	/* THE RULE, ASKED AND STORED (#164). Everything it reads is a fact the
+	 * level already has - the cache's bytes, this level's mark, the policy's
+	 * budget - and one measurement of the process itself; HDRedressDecide
+	 * does the arithmetic and hd_memory.h carries the reasoning.
+	 *
+	 * `say` writes the room into the log. The level build and the F4 window
+	 * do, because those are the two moments at which a reader of the log
+	 * wants the numbers; the refresh after a change does not, because that
+	 * change's own line already carries them. */
+	void RefreshRedress(const char* why, bool say)
+	{
+		HDPageCachePolicy policy;
+		HDRedressAsk ask;
+
+		HDPageCachePolicyNow(&policy);
+		HDMemoryMeasure(&g_redress_room);
+
+		ask.cacheBytes = HDPageCacheBytes();
+		ask.bytes0 = g_redress_bytes0;
+		ask.budgetBytes = policy.budgetBytes;
+		ask.allowanceBytes = HD_REDRESS_ALLOWANCE;
+		ask.worstBytes = HD_REDRESS_WORST;
+		ask.reserveBytes = HD_REDRESS_ADDRESS_RESERVE;
+		ask.pageBytes = g_redress_page_block;
+		ask.room = g_redress_room;
+
+		HDRedressDecide(&ask, &g_redress_verdict);
+
+		/* THE MEASURE ITSELF FAILING is a line of its own, because the rule
+		 * then falls back to the 64 MiB of round M3 and a log that did not
+		 * say so would read like a rule that had never been lifted. Once per
+		 * level: this is asked three times and more. */
+		if (!g_redress_room.known && !g_redress_said_unknown)
+		{
+			g_redress_said_unknown = true;
+			Log("HDLOG redress: GlobalMemoryStatusEx refused - the address "
+				"space is unknown, so the allowance is the %.0f MiB of round "
+				"M3 and nothing more", HD_REDRESS_ALLOWANCE / 1048576.0);
+		}
+
+		if (!say)
+			return;
+
+		Log("HDLOG redress room (%s): another change is %s, refused by %s, "
+			"card=%.0f addr=%.0f largest_free=%.0f MiB (avail_virtual=%.0f "
+			"reserve=%.0f page=%.0f MiB, %d regions, walk_ms=%d), this level "
+			"has spent %.1f of %.0f MiB and has room for %d more",
+			why ? why : "?",
+			g_redress_verdict.allowed ? "allowed" : "not allowed",
+			HDRedressRefusalText(g_redress_verdict.refused),
+			g_redress_verdict.cardRoom / 1048576.0,
+			g_redress_verdict.addrRoom / 1048576.0,
+			g_redress_room.largestFree / 1048576.0,
+			g_redress_room.availVirtual / 1048576.0,
+			HD_REDRESS_ADDRESS_RESERVE / 1048576.0,
+			g_redress_page_block / 1048576.0, g_redress_room.regions,
+			g_redress_room.walkMs, g_redress_verdict.spent / 1048576.0,
+			HD_REDRESS_ALLOWANCE / 1048576.0, g_redress_verdict.fits);
 	}
 
 	int DecodeThreads()
@@ -1620,7 +1723,7 @@ static void BuildWaterFrames()
 	const char* why = "";
 
 	if (!HDPageCacheAppend(App.dx.lpD3DDevice, HDInstallRoot(), &pages[0],
-		(int)pages.size(), false, DecodeThreads(), &stats, &why))
+		(int)pages.size(), kPagesManaged, DecodeThreads(), &stats, &why))
 	{
 		Log("HDLOG level=%s water frames refused reason=%s", g_stem, why);
 		g_water_frames.clear();
@@ -2786,14 +2889,28 @@ static void HDLevelBuildHD()
 
 		HDPageCacheConfigure(&policy);
 
+		/* AND WHAT THIS PROCESS HAS LEFT (#164), which the card's own number
+		 * above says nothing about: the pages are about to be made, and the
+		 * room they and the level's outfit changes are measured against is
+		 * the room a 32 bit process has. Once per level build, on the load
+		 * path, where 203 microseconds do not show. */
+		HDMemoryRoom room;
+
+		HDMemoryMeasure(&room);
+
 		Log("HDLOG level=%s budget=%.0f MiB (%s) format=%s card=%.0f MiB "
-			"classic_pages=%d framebuffer=%dx%d",
+			"classic_pages=%d framebuffer=%dx%d pool=%s avail_virtual=%.0f "
+			"MiB largest_free=%.0f MiB reserve=%.0f MiB walk_ms=%d",
 			g_stem, policy.budgetBytes / 1048576.0,
 			tomb5.hd_texture_budget_mb ? "hd_texture_budget_mb" : "worked out",
 			policy.format == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",
 			(double)DXTextureMemoryAtStart / 1048576.0, (int)nTextures,
 			(int)App.dx.PresentParams.BackBufferWidth,
-			(int)App.dx.PresentParams.BackBufferHeight);
+			(int)App.dx.PresentParams.BackBufferHeight,
+			kPagesManaged ? "managed" : "default",
+			room.known ? room.availVirtual / 1048576.0 : 0.0,
+			room.known ? room.largestFree / 1048576.0 : 0.0,
+			HD_REDRESS_ADDRESS_RESERVE / 1048576.0, room.walkMs);
 	}
 
 	const DWORD started = GetTickCount();
@@ -2807,8 +2924,8 @@ static void HDLevelBuildHD()
 	BuildRoomIntrusions();		// T2-2, the same contract
 	BuildRoomCuts();		// Z, the same contract again
 
-	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms, false,
-		DecodeThreads(), &stats, &why))
+	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms,
+		kPagesManaged, DecodeThreads(), &stats, &why))
 	{
 		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
 
@@ -3127,6 +3244,27 @@ static void HDLevelBuildHD()
 	 * what this level's own build left in the page cache. Everything above
 	 * it is what the player's own outfit changes have added. */
 	g_redress_bytes0 = HDPageCacheBytes();
+
+	/* AND THE FIRST ANSWER OF THE RULE (#164), after the mark and after every
+	 * page this level is going to have of its own. The page block is worked
+	 * out here and not per question: the format is the policy's and the side
+	 * is the widest page there is, clamped by what the device said it can
+	 * hold - both settled by now and neither of them changing again inside
+	 * this level. */
+	{
+		HDPageCachePolicy policy;
+
+		HDPageCachePolicyNow(&policy);
+
+		const int side = policy.maxSide > 0 && policy.maxSide < kWidestPage
+			? policy.maxSide : kWidestPage;
+
+		g_redress_page_block =
+			HDRedressPageBlock(policy.format == HD_PAGE_FORMAT_DXT5, side);
+	}
+
+	g_redress_said_unknown = false;
+	RefreshRedress("the level build", true);
 }
 
 bool HDLevelRedressAllowed()
@@ -3134,7 +3272,18 @@ bool HDLevelRedressAllowed()
 	if (!HDEnabled() || !g_level_active)
 		return false;
 
-	return HDPageCacheBytes() - g_redress_bytes0 < HD_REDRESS_ALLOWANCE;
+	/* THE STORED ANSWER (#164) and not a fresh one: this is asked on every
+	 * drawn frame the F4 window is open. What changes it - a level build, a
+	 * completed change, the window opening - asks RefreshRedress itself. */
+	return g_redress_verdict.allowed != 0;
+}
+
+void HDLevelRedressRefresh(const char* why)
+{
+	if (!HDEnabled() || !g_level_active)
+		return;
+
+	RefreshRedress(why, true);
 }
 
 int HDLevelRedressCount()
@@ -3151,20 +3300,33 @@ bool HDLevelRedress(const char* why)
 		return false;
 	}
 
-	if (!HDLevelRedressAllowed())
+	/* MEASURED AFRESH, AND THIS MEASUREMENT IS THE DECISION (#164). The
+	 * stored answer is what the window has been showing the player; what the
+	 * change itself is allowed by is the room at the moment it is asked for. */
+	RefreshRedress(why, false);
+
+	if (!g_redress_verdict.allowed)
 	{
 		Log("HDLOG redress deferred to the next level (%s): %d change%s "
 			"in this level have already added %.1f MiB of pages and the "
-			"allowance is %.0f", why ? why : "?", g_redress_count,
+			"allowance is %.0f - refused by %s, room card=%.0f addr=%.0f "
+			"largest_free=%.0f MiB and one change needs %.0f MiB (a page "
+			"needs %.0f)", why ? why : "?", g_redress_count,
 			g_redress_count == 1 ? "" : "s",
 			(HDPageCacheBytes() - g_redress_bytes0) / 1048576.0,
-			HD_REDRESS_ALLOWANCE / 1048576.0);
+			HD_REDRESS_ALLOWANCE / 1048576.0,
+			HDRedressRefusalText(g_redress_verdict.refused),
+			g_redress_verdict.cardRoom / 1048576.0,
+			g_redress_verdict.addrRoom / 1048576.0,
+			g_redress_room.largestFree / 1048576.0,
+			HD_REDRESS_WORST / 1048576.0, g_redress_page_block / 1048576.0);
 		return false;
 	}
 
 	const DWORD began = GetTickCount();
 	const int slots0 = HDPageCacheSlots();
 	const double bytes0 = HDPageCacheBytes();
+	const double avail0 = g_redress_room.availVirtual;
 
 	/* THE SAME TWO CALLS A LEVEL CHANGE MAKES, in the same order and on the
 	 * same thread. HDObjectRelease gives the models' vertex and index buffers
@@ -3180,14 +3342,31 @@ bool HDLevelRedress(const char* why)
 
 	g_redress_count++;
 
+	/* WHAT THIS CHANGE COST THE PROCESS, measured the same way and now
+	 * (#164). The drop in avail_virtual against the pages added is the pool's
+	 * real price in address space, and it is the number that says whether the
+	 * measurement this rule rests on still holds on the user's machine: with
+	 * D3DPOOL_DEFAULT pages it should be a rounding error beside the MiB of
+	 * pages, and if his log ever shows it tracking them, the pages are not in
+	 * the pool this rule was measured for. */
+	RefreshRedress(why, false);
+
 	Log("HDLOG redress %d (%s) ms=%d pages %d -> %d (+%d), cache %.1f -> "
-		"%.1f MiB (+%.1f), this level has spent %.1f of %.0f MiB",
+		"%.1f MiB (+%.1f), this level has spent %.1f of %.0f MiB, room "
+		"card=%.0f addr=%.0f largest_free=%.0f MiB, avail_virtual %.0f -> "
+		"%.0f MiB (-%.1f for +%.1f MiB of pages)",
 		g_redress_count, why ? why : "?", (int)(GetTickCount() - began),
 		slots0, HDPageCacheSlots(), HDPageCacheSlots() - slots0,
 		bytes0 / 1048576.0, HDPageCacheBytes() / 1048576.0,
 		(HDPageCacheBytes() - bytes0) / 1048576.0,
 		(HDPageCacheBytes() - g_redress_bytes0) / 1048576.0,
-		HD_REDRESS_ALLOWANCE / 1048576.0);
+		HD_REDRESS_ALLOWANCE / 1048576.0,
+		g_redress_verdict.cardRoom / 1048576.0,
+		g_redress_verdict.addrRoom / 1048576.0,
+		g_redress_room.largestFree / 1048576.0, avail0 / 1048576.0,
+		g_redress_room.availVirtual / 1048576.0,
+		(avail0 - g_redress_room.availVirtual) / 1048576.0,
+		(HDPageCacheBytes() - bytes0) / 1048576.0);
 
 	// The new body may walk on something else than the old one did.
 	HDOutfitMenuFollowFeet();

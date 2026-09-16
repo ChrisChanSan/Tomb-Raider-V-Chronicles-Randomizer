@@ -294,6 +294,13 @@ void HDOutfitMenu()
 		row_count(), *chosen ? chosen : "what the level says",
 		HDLaraOutfitLabel(HDLaraDrawOutfit()));
 
+	/* AND HOW MUCH ROOM THERE IS FOR ANOTHER CHANGE, worked out ONCE, here
+	 * (#164). The row below the list asks HDLevelRedressAllowed on every
+	 * drawn frame this window is up, and that answer now stands on a walk of
+	 * the address space - so it is measured as the window opens and the
+	 * frames read what it left. */
+	HDLevelRedressRefresh("the F4 window opened");
+
 	CreateMonoScreen();
 	InventoryActive = 1;
 

@@ -12,6 +12,11 @@
  */
 #pragma once
 
+// HD_REDRESS_ALLOWANCE and the rest of the re-dress rule live with the
+// measure they are made of (#164). Included here so that every reader of this
+// header still finds them where round M3 put them.
+#include "hd_memory.h"
+
 // THE SEAM BETWEEN THE ENGINE AND THE HD PATH (#123).
 //
 // Everything behind these calls is switched off unless the registry setting
@@ -87,10 +92,7 @@ void HDLevelBuild();
  * change adds 13.33 MiB, the mean over all 2970 ordered pairs is 2.94 MiB,
  * and wearing all 55 entries in one level would come to 106.64 MiB (80 distinct pages). So the
  * cap is not a count but the BYTES the cache has grown since this level
- * began, against HD_REDRESS_ALLOWANCE - which is the 64 MiB of slack the
- * automatic texture budget already holds back for what a driver keeps that
- * we do not know about (AutoBudgetBytes). At the measured mean that is
- * about twenty changes and at the measured worst four.
+ * began - and what those bytes are measured against is the note below.
  *
  * `why` goes into the log line. Does nothing at all without a built HD
  * level, and says so. TRUE when the new body is really on her NOW: false
@@ -98,16 +100,60 @@ void HDLevelBuild();
  * change - the footsteps - has to wait with it (#153, round M3, fix round). */
 bool HDLevelRedress(const char* why);
 
-/* The allowance, in bytes: the 64 MiB of slack the automatic texture budget
- * already holds back (hd_level.cpp, AutoBudgetBytes). A level that has added
- * that much in outfit changes stops changing them until the next one. The
- * test is made BEFORE a change, so the ceiling is the allowance plus one
- * change - measured, at most 20.00 MiB more. */
-#define HD_REDRESS_ALLOWANCE	(64.0 * 1048576.0)
+/* WHAT THE BYTES ARE MEASURED AGAINST, AND WHY IT IS NO LONGER ONE NUMBER
+ * (#164).
+ *
+ * Round M3 gave a level a flat allowance of 64 MiB of outfit pages -
+ * HD_REDRESS_ALLOWANCE, which is the slack AutoBudgetBytes holds back on the
+ * card. The user's log of 2026-09-15 is what that costs him: a budget of 3878
+ * MiB, a cache of 465 to 517 MiB, six changes of 4 to 13 MiB each - and the
+ * menu stopping him at "spent 52 of 64 MiB" with three gigabytes of that
+ * budget untouched, on a card that holds 16 GiB.
+ *
+ * So the rule asks the two rooms that really exist. The constants and the
+ * arithmetic are in hd_memory.h, beside the measure they are made of:
+ *
+ *   the card       budgetBytes + HD_REDRESS_ALLOWANCE - the cache's bytes.
+ *                  The old test stays as the FLOOR of this one, so a level
+ *                  that has not spent the 64 MiB is never stopped for the
+ *                  card's sake and nobody is worse off than in round M3.
+ *   the address    ullAvailVirtual - HD_REDRESS_ADDRESS_RESERVE. This is a
+ *                  32 bit process: four gigabytes, whatever the card holds.
+ *   one block      the largest free block against one page's own size,
+ *                  because an allocation is not made out of a sum.
+ *
+ * MEASURED FIRST, AND IT TURNED THE ROUND ON ITS HEAD (PoolProbe -pool, round
+ * 164, on the user's own machine). The cache's pages are D3DPOOL_DEFAULT and
+ * cost the PROCESS 0.00 to 0.04 MiB of address space each: the 85.25 MiB a
+ * 4096 page in A8R8G8B8 takes goes on the card and nowhere else. Only a
+ * D3DPOOL_MANAGED page would cost the process its own size - 85.37 MiB
+ * measured, in one reserve - and the engine makes none. So the address space
+ * is NOT the wall the pages run into; the card's budget is. The address side
+ * stays as a guard, for the one big block a page load really does take out of
+ * the process (the D3DPOOL_SYSTEMMEM staging texture, one page's whole size,
+ * hd_pagecache.cpp ensure_staging) and for everything else a level does with
+ * its four gigabytes.
+ *
+ * WHAT IT COMES TO, on his own numbers and by the rule's own arithmetic
+ * (PoolProbe -grid): a card room of 3477 MiB and, with 3000 MiB of address
+ * space free, an address room of 2488 MiB - room for 124 changes of the
+ * measured worst, where round M3 allowed three. The ceiling is still the room
+ * plus one change, because the test is made BEFORE a change: at most
+ * HD_REDRESS_WORST more, measured at 20.00 MiB. */
 
 // Whether another one is allowed - what the F4 menu shows the player when
-// the answer is no, and what HDLevelRedress itself asks.
+// the answer is no, and what HDLevelRedress itself asks. It is the answer
+// worked out when something last CHANGED it (#164) and not a fresh
+// measurement: the F4 window asks this on every drawn frame it is open, and a
+// walk of the address space per frame is the very thing this project's fifth
+// rule forbids.
 bool HDLevelRedressAllowed();
+
+/* Work it out again and store it. The level build and every completed change
+ * do that themselves; this is for the caller that CHANGES NOTHING and only
+ * wants the answer fresh - the F4 window, once, as it opens. `why` goes into
+ * the log line. Does nothing without a built HD level. */
+void HDLevelRedressRefresh(const char* why);
 
 // How many have been done in this level, for the log.
 int HDLevelRedressCount();

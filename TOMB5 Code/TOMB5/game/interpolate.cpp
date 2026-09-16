@@ -789,10 +789,15 @@ namespace
 	 *                not a mean per frame. K6 refuses the pose and never the
 	 *                root, so a refusal on an animation that carries its own
 	 *                travel does not have to lose half of the travel with it.
-	 *                It is a SUBSET of pose_skips and it is normally far
-	 *                smaller: the blend is only asked for where the two ticks'
-	 *                offsets differ. On a ladder at sixty it reads about one
-	 *                per climb cycle, which is the frame the play test
+	 *                It counts the frames the blend really MOVED: the offset
+	 *                handed to the draw has to come out somewhere other than
+	 *                the one that frame carries, which needs the two ticks'
+	 *                offsets to differ in the first place. So it is a small
+	 *                subset of pose_skips and not a fraction of it - a door at
+	 *                rest, a machine standing still, an animation change that
+	 *                does not move the root are all refused and none of them
+	 *                counted. On a ladder at sixty it reads about one per
+	 *                climb cycle, which is the frame the play test
 	 *                photographed; in a room with nothing animated in it, nought.
 	 *   stretch      fix round U: the worst a BONE was shortened by the pose
 	 *                blend this second, over its own length in the skeleton,
@@ -2045,10 +2050,37 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 	/* WHAT THIS TICK'S OWN FRAME IS DRAWN WITH, by vanilla's arithmetic and
 	 * from the pair GetFramesNow left behind, and then the two ticks blended
 	 * in TIME at the factor everything else on this frame is drawn at. */
-	long cur[3];
+	long cur[3], blended[3];
 
 	InterpRootKey(frm[0], frm[1], frac, blend, cur);
-	InterpRootLerp(g_rootPrev[i], cur, g_alpha, out);
+	InterpRootLerp(g_rootPrev[i], cur, g_alpha, blended);
+
+	/* AND THE DRAW IS ONLY TOLD WHERE THE BLEND LANDS SOMEWHERE ELSE (#157,
+	 * fix round).
+	 *
+	 * GetFramesNow raises the latch on every frame K6 refuses, because at
+	 * that point this frame's own offset has not been read yet - and a
+	 * refusal is not a rare thing. "The frame did not step by one" is the
+	 * commonest of them: every item standing still is refused on every tween
+	 * frame it is drawn on, which in the user's own log is twenty-odd of them
+	 * a frame against the one that moved. Nearly all blend to the offset they
+	 * already carry - prev and cur are the same function of the same
+	 * (animation, frame) pair, so an item that did not step cannot come out
+	 * anywhere else - and those frames are handed back to the line that has
+	 * always stood at the draw site. At frac != 0 that line is the float
+	 * blend of the key pair, so they do not move by even the one unit the
+	 * integer form would cost them.
+	 *
+	 * What is left is the frames this rule really changed, and that is what
+	 * root_fix counts and what the line below prints. A counter that ticked
+	 * on every refusal would read a thousand a second in a still room and
+	 * would tell the play test nothing. */
+	if (blended[0] == cur[0] && blended[1] == cur[1] && blended[2] == cur[2])
+		return false;
+
+	out[0] = blended[0];
+	out[1] = blended[1];
+	out[2] = blended[2];
 
 	if (gLogEnabled)
 	{

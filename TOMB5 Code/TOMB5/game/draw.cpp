@@ -2639,12 +2639,21 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
  * InterpKeyAlpha's factor over the pair.
  *
  * Returns 0 - and then the caller blends no root at all and the frame is
- * drawn exactly as it is today - for an animation number that cannot be an
- * index, an animation with no frames behind it, and a frame that is not
- * inside the animation it is claimed to be in. The previous state is a
- * snapshot of a live item and is as trustworthy as item->anim_number itself,
- * but a root offset read through a bad pointer would be a crash rather than a
- * wrong picture, so it is guarded. */
+ * drawn exactly as it is today - for an animation with no frames behind it, a
+ * rate or a frame size that cannot index one, and a frame OUTSIDE the
+ * animation it is claimed to be in. That last one is not hypothetical: a
+ * level's transition table can name a frame that belongs to another
+ * animation's numbering, and the key index off such a frame walks out of the
+ * animation's own block of frames.
+ *
+ * THE ANIMATION NUMBER IS NOT BOUNDED ABOVE, and this is the one guard that
+ * is not here rather than one the reader should look for. The level's
+ * animation count is a local of the loader (specific\file.cpp) and no global
+ * keeps it, so there is nothing to compare against; the number itself comes
+ * out of a snapshot of THIS item, is the same short item->anim_number carries,
+ * and every GetFrames in the engine dereferences it unguarded. A slot whose
+ * object changed under it is stopped by SNAP_OBJECT before a tween frame of
+ * it is ever drawn. */
 static long GetRootAt(short animNumber, short frameNumber, long out[3])
 {
 	if (!anims || animNumber < 0)
@@ -2659,7 +2668,7 @@ static long GetRootAt(short animNumber, short frameNumber, long out[3])
 
 	const long frame = (long)frameNumber - (long)anim->frame_base;
 
-	if (frame < 0)
+	if (frame < 0 || frameNumber > anim->frame_end)
 		return 0;
 
 	const long key = frame / rate;
@@ -2717,8 +2726,10 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 		 * a ladder and what the lines below are for: K6 refuses the POSE and
 		 * never the ROOT, so the offset the previous tick drew is handed to
 		 * the draw and blended in time with this tick's. Where the two are
-		 * equal - which is nearly every animation there is - the blend gives
-		 * that offset back and the picture is the one this comment promises.
+		 * equal - which is nearly every refusal there is, because an item that
+		 * did not step its frame has not changed its offset either -
+		 * InterpRootNow says so, hands the draw nothing and is not counted,
+		 * and the picture is the one this comment promises.
 		 * See the note over InterpRootRefused in game\interpolate.h. */
 		InterpNotePoseSkip();
 

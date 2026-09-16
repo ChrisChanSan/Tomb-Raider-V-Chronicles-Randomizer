@@ -597,8 +597,10 @@ inline long InterpBlendLong(long a, long b, long alpha8)
  * whole step - pos contributes D/2 and the offset the other D/2 - so the
  * in-between frame lands exactly where both of its neighbours are. Where the
  * two ticks' offsets are equal, which is every animation that does not carry
- * its own travel, the blend returns that offset and the picture does not
- * move at all.
+ * its own travel and every item standing still, the blend comes out at that
+ * same offset - and InterpRootNow then says so and hands the draw NOTHING, so
+ * the line that has always stood at the draw site runs and the picture is the
+ * one thirty hertz shows, to the bit.
  *
  * THE PAIR THE CURRENT TICK DRAWS is vanilla's own: frm[0] alone when the
  * frame sits on a stored one, and otherwise the key pair at InterpKeyAlpha's
@@ -607,6 +609,15 @@ inline long InterpBlendLong(long a, long b, long alpha8)
  * where the draw takes it in floats through two matrix stacks: the two differ
  * by at most one unit, against the 256 this is repairing, and an integer
  * offset is the one thing both call sites can be handed.
+ *
+ * THAT ONE UNIT REACHES ONLY THE FRAMES THIS RULE REPAIRS, which is worth
+ * saying because a refused tween frame is not rare - a door at rest, a
+ * machine standing still and every other item whose frame did not step is
+ * refused on every tween frame there is. InterpRootNow hands the draw a
+ * blended offset only where that offset is NOT the one the frame carries;
+ * everywhere else it returns false and vanilla's own float translate runs
+ * untouched. So the integer form is what a repaired ladder frame is drawn
+ * with, and nothing else in the game changes by even that unit.
  *
  * frm1 IS NOT READ AT frac ZERO. A frame that sits on a stored one has no
  * second key - `frm[1] = frm[0] + size` is then one frame size past it, which
@@ -623,15 +634,33 @@ inline void InterpRootKey(const short* frm0, const short* frm1, long frac, float
 			: (long)frm0[6 + i];
 }
 
-/* And the two ticks' offsets at the time `t` the frame stands at. Eighths,
- * for the reason written over InterpEighths: the integer form is exact and
- * has no float in it, and a tween frame's t is a half. */
+/* And the two ticks' offsets at the time `t` the frame stands at - at that
+ * alpha itself, through InterpLerpLong, and NOT rounded to an eighth.
+ *
+ * THE OFFSET HAS TO CANCEL AGAINST ORDER 2'S POSITION, and that is the whole
+ * arithmetic of this rule. The drawn root is pos plus the offset; order 2 has
+ * already blended pos with InterpLerpLong at this frame's alpha
+ * (game\interpolate.cpp, ApplyNode); and only if the offset is blended by the
+ * same primitive at the same alpha do the two halves add up to the lerp of
+ * the two ticks' drawn roots. Rounding a real alpha to the nearest eighth
+ * leaves up to a sixteenth of the offset's step behind - and the ladder's
+ * step is 504 units, so 31 of them.
+ *
+ * MEASURED (fix round, scratchpad alphacheck.cpp, which links this header):
+ * sweeping alpha in 1/256 steps over the wrap of animation 161, the worst
+ * distance between the drawn root and the point the two ticks put it at is
+ * 504 units as the picture stands today, 31 with the eighths, and 1 - the two
+ * integer truncations - at the alpha itself. At fps_mode 1 alpha is a half,
+ * where all three agree to the unit; fps_mode 2 is display-bound and its
+ * alpha is whatever the panel's clock makes it, which is the case this
+ * exactness is for.
+ *
+ * The KEY pair blend above keeps its eighths and loses nothing by it:
+ * InterpKeyAlpha's factors are quarters, and a quarter IS two eighths. */
 inline void InterpRootLerp(const long prev[3], const long cur[3], float t, long out[3])
 {
-	const long t8 = InterpEighths(t);
-
 	for (int i = 0; i < 3; i++)
-		out[i] = InterpBlendLong(prev[i], cur[i], t8);
+		out[i] = InterpLerpLong(prev[i], cur[i], t);
 }
 
 

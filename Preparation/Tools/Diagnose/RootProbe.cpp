@@ -33,7 +33,16 @@
  *     drawn root at thirty hertz, and the in-between frames of a sixty hertz
  *     run both as the engine draws them today and as InterpRootKey /
  *     InterpRootLerp (game\interpolate_math.h - the engine's own header, not
- *     a copy) make them.
+ *     a copy) make them. The tween frame the rule really reaches is marked
+ *     `<-- refused`, and it is only reached where the blend lands somewhere
+ *     other than that frame's own offset - the test the engine makes in
+ *     InterpRootNow and the thing root_fix counts;
+ *   - and for that frame, THE -log LINE THE ENGINE WILL PRINT, in all three
+ *     axes. A line written out by hand from the key table beside it is how
+ *     the x and z of this round's first record came out wrong: the previous
+ *     tick usually sits BETWEEN two keys, so its offset is a blend of the
+ *     pair and not either key. The tool does that arithmetic here so that the
+ *     record and the play test's log can be compared to the unit.
  *
  * Usage:
  *   RootProbe <level.trc> [anim ...]        default: 96 161 164 165 168 169 173
@@ -433,6 +442,9 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 	}
 
 	std::printf("\n  what           anim  frame   pos.y   off.y   drawn y   step\n");
+	std::printf("  (a tween frame whose frame steps by one is ACCEPTED by rule K6 and its\n"
+		"   root is already blended in time by the pose pair; the today/fixed rows are\n"
+		"   what the REFUSED frame - marked <-- below - draws before and after #157)\n");
 
 	long lastDrawn = 0;
 	bool have = false;
@@ -446,16 +458,41 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 			/* The in-between frame, at a half. */
 			const Tick& p = ticks[i - 1];
 			const long posT = InterpLerpLong(p.pos, t.pos, 0.5F);
+			const bool refused = p.anim != t.anim || t.frame != p.frame + 1;
 			long fix[3];
 
 			InterpRootLerp(p.off, t.off, 0.5F, fix);
 
-			std::printf("  tween  today   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld\n",
+			/* The rule only reaches the draw where the blend lands somewhere
+			 * other than the frame's own offset - the engine tests exactly
+			 * this in InterpRootNow, and root_fix counts exactly these. */
+			const bool fires = refused &&
+				(fix[0] != t.off[0] || fix[1] != t.off[1] || fix[2] != t.off[2]);
+
+			std::printf("  tween  today   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
 				t.anim, t.frame, posT, t.off[1], posT + t.off[1],
-				posT + t.off[1] - lastDrawn);
-			std::printf("  tween  fixed   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld\n",
+				posT + t.off[1] - lastDrawn, refused ? "   <-- refused" : "");
+			std::printf("  tween  fixed   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
 				t.anim, t.frame, posT, fix[1], posT + fix[1],
-				posT + fix[1] - lastDrawn);
+				posT + fix[1] - lastDrawn,
+				fires ? "" : "   (rule does not fire)");
+
+			if (fires)
+			{
+				/* AND THE LINE THE ENGINE PRINTS FOR THIS FRAME, in full and
+				 * in all three axes, so that the record and the play test's
+				 * log can be held against the same numbers. pos_y is absolute
+				 * in the level, so only its step from the tick before the
+				 * wrap is knowable here; Y below stands for that tick's y. */
+				std::printf("  the -log line this frame produces (Y = pos.y of the tick above):\n"
+					"  INTERPLOG root lara anim %d->%d frame %d->%d"
+					" offset_prev=(%ld,%ld,%ld) offset_cur=(%ld,%ld,%ld)"
+					" drawn=(%ld,%ld,%ld) pos_y=Y%+ld\n",
+					p.anim, t.anim, p.frame, t.frame,
+					p.off[0], p.off[1], p.off[2],
+					t.off[0], t.off[1], t.off[2],
+					fix[0], fix[1], fix[2], posT);
+			}
 		}
 
 		std::printf("  tick  %s  %-4d  %-6d  %6ld  %6ld  %8ld  %s%ld\n",
@@ -500,6 +537,17 @@ static void printChange(const Tr5Level& l, int from, int to, long posStep)
 	std::printf("  tick  N+1   pos.y %6ld  off.y %6ld  drawn %8ld\n", posStep, off1[1], drawn1);
 	std::printf("  offsets x/z: last (%ld,%ld) -> first (%ld,%ld)\n",
 		off0[0], off0[2], off1[0], off1[2]);
+
+	if (fix[0] != off1[0] || fix[1] != off1[1] || fix[2] != off1[2])
+		std::printf("  the -log line this frame produces (Y = pos.y of tick N):\n"
+			"  INTERPLOG root lara anim %d->%d frame %d->%d"
+			" offset_prev=(%ld,%ld,%ld) offset_cur=(%ld,%ld,%ld)"
+			" drawn=(%ld,%ld,%ld) pos_y=Y%+ld\n",
+			from, to, a.frameEnd, b.frameStart,
+			off0[0], off0[1], off0[2], off1[0], off1[1], off1[2],
+			fix[0], fix[1], fix[2], posT);
+	else
+		std::printf("  the rule does not fire here: the blend is the frame's own offset\n");
 }
 
 int main(int argc, char** argv)

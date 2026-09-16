@@ -14139,7 +14139,7 @@ the same family rather than a second problem:
 
 ```
   anim 168, the wrap:        today  -248   fixed    +4      climbing down
-  anim 169 -> 168, entering: today  -111   fixed    +8      (tick step 17)
+  anim 169 -> 168, entering: today  -111   fixed    +9      (tick step 17)
   anim 172 -> 173, the grab: today   +86   fixed    -5      (tick step -9)
   anim 165 -> 161, entering: today   -12   fixed    -6      real smoothing
   anim 164, 173, 96:         today  0..1   fixed  0..1      nothing to fix
@@ -14179,11 +14179,25 @@ because that is where the animation table is): the key index and remainder
 from the animation's own rate, the last interval shortened exactly as
 `GetFrames` shortens it, `InterpKeyAlpha`'s factor over the pair. It is that
 tick's own arithmetic, so what comes back is bit for bit what the player saw
-one thirtieth of a second ago. The blend itself is `InterpRootKey` and
-`InterpRootLerp` in `interpolate_math.h`, in integers and in eighths like
-every other blend in that header - and `RootProbe` links the same header, so
-the table above and the engine put the same numbers through the same
-function.
+one thirtieth of a second ago. It refuses a frame that is not inside the
+animation it is claimed to be in - JOBY5's own transition table names 62 of
+those, and 49 of them index past the animation's stored keys - and then the
+frame is drawn exactly as it is today.
+
+The blend itself is `InterpRootKey` and `InterpRootLerp` in
+`interpolate_math.h`, and `RootProbe` links the same header, so this entry and
+the engine put the same numbers through the same function. The KEY pair is
+blended in eighths, which costs nothing because `InterpKeyAlpha`'s factors are
+quarters and a quarter is two eighths. The TIME blend is at the frame's alpha
+itself, through the same `InterpLerpLong` order 2 blends `item->pos` with, and
+that is not a detail: the drawn root is pos plus the offset, so only the same
+primitive at the same alpha makes the two halves add up. Sweeping alpha in
+1/256 steps over the wrap of animation 161, the worst distance between the
+drawn root and the point the two ticks put it at is 504 units as the picture
+stands today, 31 with the alpha rounded to an eighth, and 1 - the two integer
+truncations - at the alpha itself. At `fps_mode 1` alpha is a half and all
+three agree; `fps_mode 2` is display-bound and its alpha is whatever the
+panel's clock makes it, which is what the exactness is for.
 
 **WHAT DOES NOT CHANGE.** `fps_mode 0` draws the frame it drew before:
 `InterpPoseTime` returns 0 without a snapshot, so the refused branch is never
@@ -14191,9 +14205,13 @@ entered, and both `InterpRootRefused` and `InterpRootNow` return at their
 first statement on `!g_applied`. A frame that carries the logic tick is the
 same. A tween frame whose pose K6 ACCEPTED is the same - the latch is put down
 at the top of that path and the accepted branch returns before it is raised.
-A tween frame that was refused but whose two offsets are equal comes out at
-that offset, which is nearly every animation in the game. Two draws of Lara's
-keep their own frame's root on purpose and say so in `CalcLaraMatrices`: the
+A tween frame that was refused but whose two offsets are equal is handed back
+to the line that has always stood at the draw site - the rule tests for that
+and does not merely arrive at the same answer - so it does not move by even
+the one unit an integer blend of a key pair could cost it against the matrix
+stack's float one. That unit reaches the frames this round repairs and nothing
+else in the game. Two draws of Lara's keep their own frame's root on purpose
+and say so in `CalcLaraMatrices`: the
 hit reaction, which wears a frame picked by hand out of a spaz animation, and
 the first person still body of fix round U. The HD path needs no line: it
 takes the matrices the classic walk builds, so it follows the root wherever
@@ -14206,18 +14224,40 @@ the pose are one matrix and cannot disagree - and there is no K6 at all.
 Nothing of it is copied here: we keep our two orders, which cost no second
 draw call, and this round is the rule that makes them agree.
 
-**THE LOG.** `INTERPLOG`'s per-second line gains `root_fix=N`, a COUNT of the
-refused tween frames whose root was blended - a subset of `pose_skips`, about
-one per climb cycle on a ladder and nought in a room with nothing animated in
-it. Beside it, at most four lines a second and for Lara alone:
+**THE LOG.** `INTERPLOG`'s per-second line gains `root_fix=N`: a COUNT over the
+second of the refused tween frames whose drawn root this rule really MOVED -
+which is not the same as the frames it was asked about. A refusal is the
+common case rather than a rare one, because an item standing still has not
+stepped its frame either, and the user's own log carries twenty-odd refusals
+per drawn frame in an ordinary room. All of those blend to the offset they
+already carry - the two ticks name the same animation and the same frame -
+`InterpRootNow` tests for it, hands the draw nothing and does not count them.
+
+What is left is animation changes that move the root, and `RootProbe` says how
+often that is: over all 813 animations of JOBY5 and every source frame each
+transition is allowed on, 86.5 % of them move the drawn root at all, 30 % of
+those by two units or less and 81 % by fifty or less. The largest readable one
+in the level is 516 units, an animation whose own `TranslateItem` is
+(0, 1024, 768) - the same family as the ladder. So on a ladder at sixty
+`root_fix` reads about one per climb cycle plus whatever else in the room
+changed animation; in a room with nothing animated in it, nought.
+
+Beside it, at most four lines a second and for Lara alone, the line the tool
+prints out of the level file so that the log and this entry can be held
+against each other to the unit:
 
 ```
-INTERPLOG root lara anim 161->161 frame 3171->3113 offset_prev=(-12,-879,-101)
-    offset_cur=(-13,-375,-100) drawn=(-12,-627,-100) pos_y=...
+INTERPLOG root lara anim 161->161 frame 3171->3113 offset_prev=(-9,-879,-103)
+    offset_cur=(-13,-375,-100) drawn=(-11,-627,-102) pos_y=Y-256
 ```
 
-which is the table of this entry in the game's own words: `pos_y + drawn.y`
-has to sit between the two ticks either side of it, to the unit.
+`pos_y + drawn.y` has to sit between the two ticks either side of it: -879
+before the wrap, -887 after it, -883 on this frame. The first version of this
+entry wrote that line out by hand from the key table beside it and had its x
+and z wrong, which is why `RootProbe` now prints the whole line itself and
+this one is its output: frame 3171 of an animation of rate 4 sits BETWEEN two
+stored keys, so the previous tick's offset is the k14/k15 pair blended at a
+half - (-9,-879,-103) - and not either key.
 
 **WHAT ONLY THE PLAY TEST CAN SHOW.** That the ladder now reads as one motion
 at 60 and at 165 Hz - the fix cannot be seen in a still, because the frame it
@@ -14225,9 +14265,16 @@ repairs is one frame. And the SECOND half of his report, *sie ist fuer 1 Frame
 unsichtbar im Uebergang* when she jumps at the ladder, is only partly
 answered: the 86 units of `anim 172 -> 173` are now gone, but the hand-written
 change from the reach loop (animation 95) to `ANIM_GRABLEDGE` moves `item->pos`
-by the collision code - `item->pos.y_pos = edge - bounds[2]`,
-`SnapLaraToEdgeOfBlock` in x and z - with no offset change to compensate, and
-this rule changes that frame by at most seven units. If a frame of her is
+by the collision code - `lara_col_reach`, `lara.cpp`: the animation and its
+first frame are written straight into the item and then
+`item->pos.y_pos = edge - bounds[2] - 22`, with an x/z alignment per facing
+direction - and nothing in the offsets compensates it. The two offsets either
+side of that frame are (-9,-416,-156) and (-9,-403,-139), so this rule moves
+the picture there by 7 units in y and 9 in z and no more. (The other way into
+`ANIM_GRABLEDGE`, at `frame_base + 21`, is a different move again:
+`LaraHangTest` uses it for the hang on a climbable wall, with
+`SnapLaraToEdgeOfBlock` and `pos.y = coll->old.y`, and `SetCornerAnim` for the
+corner shimmy.) If a frame of her is
 really missing there, it is that pos move being blended below the 512 snap
 threshold and not the root offset, and the next log will say so: `root_fix`
 counts the frame, the `root lara` line names the two animations and the

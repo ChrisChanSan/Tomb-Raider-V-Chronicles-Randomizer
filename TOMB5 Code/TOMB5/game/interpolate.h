@@ -345,13 +345,21 @@ void InterpNotePoseFar();
  * the one frame of thirty hertz K6 was always allowed to keep; with the root
  * blended it is finally the invisible one its own comment promises.
  *
- * WHERE IT FIRES AND WHERE IT CANNOT. Only where the two ticks' offsets
- * DIFFER, so only where the picture was already wrong: the climb wrap (248
- * units), the entry into a climb down (111), the ladder grab's one frame
- * animation 172 with its TranslateItem(0, -190, 0) (86), and one or two units
- * anywhere an animation changes. Where the offsets agree - which is nearly
- * every animation in the game, because nearly none of them carry their own
- * travel - the blend returns that offset and not one pixel moves.
+ * WHERE IT FIRES AND WHERE IT CANNOT, and this is TESTED and not assumed:
+ * InterpRootNow blends, and then hands the draw the result only where it is
+ * not the offset the frame already carries. So the rule reaches only the
+ * frames whose picture was already wrong - the climb wrap (248 units), the
+ * entry into a climb down (111), the ladder grab's one frame animation 172
+ * with its TranslateItem(0, -190, 0) (86), and a handful of units wherever an
+ * animation change moves the root. Every other refused frame - and refusals
+ * are the common case, because an item that is standing still has not
+ * stepped its frame either - is handed straight back to the line that has
+ * always stood at the draw site.
+ *
+ * THAT IS ALSO WHAT root_fix COUNTS in the INTERPLOG second: frames this rule
+ * moved, not frames it was asked about. The two differ by three orders of
+ * magnitude - the user's own log carries twenty-odd refusals per drawn frame
+ * in an ordinary room - and it is the first number his play test will read.
  *
  * HOW THE TWO SIDES TALK. GetFramesNow (game\draw.cpp) returns 0 both for
  * "this frame sits on a stored pose" and for "K6 refused", and it must keep
@@ -374,7 +382,10 @@ void InterpRootRefused(const ITEM_INFO* item, const long prev[3]);
 
 /* THE OFFSET THIS DRAW SHOULD TRANSLATE BY, or false and `out` untouched -
  * which is every frame that is not a refused tween frame for this item, and
- * therefore every frame at fps_mode 0.
+ * therefore every frame at fps_mode 0, and also every refused frame whose
+ * blend comes out at the offset that frame already carries. The caller then
+ * draws the line it has always drawn, and nothing of this round is in the
+ * picture.
  *
  * `frm` is the pair GetFramesNow left, `frac` what it returned and `blend`
  * the factor it set, so that the current tick's own offset is worked out

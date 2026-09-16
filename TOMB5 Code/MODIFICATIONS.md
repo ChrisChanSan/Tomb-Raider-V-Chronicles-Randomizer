@@ -13463,7 +13463,11 @@ sheen=0.10
 exponent=14
 ```
 
-Any name, any number of them, read in name order. `#` is a comment and closes
+Any name, any number of them, read in PATH order - `hd_mods` sorts the files by
+their lower-cased full path, so the folder decides before the name does, and
+`Mods\n_top.txt` is read before `Mods\Outfits\a_first.txt` although its name
+sorts after it (measured: `a_first`'s `exponent=11` beats `n_top`'s `99`).
+`#` is a comment and closes
 nothing (his own file puts one under every `Outfit:` line, which is the one
 parsing trap here: cut the comment off first and test for empty, and the
 comment closes the block it belongs to). A block opens at `Outfit:` and closes
@@ -13537,8 +13541,9 @@ came out of `kPartSheen`'s own two rows, which carry the identical pair. Two
 constants and two table rows saying one thing about thirteen draws.
 
 They are one answer now - `skin_sheen()`, out of the wardrobe entry - so
-`skin_sheen=` / `skin_exponent=` (0..2 and 1..128; out of range is a note and
-the tier below stands) moves all thirteen at once. The table has no column for
+`skin_sheen=` / `skin_exponent=` (0..2 and 1..128, the ranges all four numbers
+of the format take since the fix round below; out of range is a note and the
+tier below stands) moves all thirteen at once. The table has no column for
 it, because none of the eight measured rows ever separated her skin from her
 clothes, so the tier under a list block or an `outfit.txt` is the material
 table's own `skin` pair and nothing in between. The two `kPartSheen` rows stay
@@ -13582,8 +13587,11 @@ still had four rows against five tiers. Both are gone. The level build line
 gains `skinsheen=` and the `head=` it never carried; the F4 window gains a
 **Shine** and a **Skin glow** row under the Head row, each with the tier that
 decided it, so a line a player wrote can be checked in the game - it reads
-`(list)` when it arrived; `ModelProbe -wardrobe` gains a `skin glow` column and
-a tier for its `sheen` column.
+`(the list)` when it arrived; `ModelProbe -wardrobe` gains a `skin glow` column
+and a tier for its `sheen` column. The window uses the PHRASE form,
+`HDWardrobeFromWord`, in all three rows: the tag is for a column and a log
+field, and two spellings of one tier in three rows of one window ("the table"
+over "table") is a player being asked whether they mean the same thing.
 
 ```
 HDLOG wardrobe list outfit_1-5.txt: Outfit TR2_Swim -> 46/OUTFIT_TR2_SWIM: sheen exponent skin
@@ -13594,6 +13602,67 @@ HDLOG level=ANDREA1 wardrobe key=46/OUTFIT_CLASSIC ... sheen=0.10/14 (list)
                  skinsheen=1.00/8 (list) skin=8001,0,0 (list) feet=0 (default)
                  head=outfit (default) pages=the install's
 ```
+
+**THE FIX ROUND: THE TWO NUMBERS THAT WERE NOT RANGED.** The round above gave
+its two NEW keys a range and left the two OLD ones taking any value at all,
+while this record and the README promised in capitals that nothing in a list
+file can break anything. Measured on a copy of the user's Mods folder:
+
+| written in a block | what it drew | what it said |
+| --- | --- | --- |
+| `sheen=14` + `exponent=0.10` | her top, shorts, holsters, boots and hair **pure white** | nothing |
+| `sheen=1e40` | the same, **solid black** | nothing |
+| `sheen=-1`, `exponent=0` | nothing - dropped by `apply_txt` | "Outfit … : exponent sheen", both named as taken |
+
+The first line is the user's own two lines transposed, which is the typo a
+format of `key=value` invites. All four numbers now go through one reader,
+`take_number`: **0..2** for `sheen` and `skin_sheen`, **1..128** for `exponent`
+and `skin_exponent`, and a value that is no number at all is refused as well -
+`sheen=shiny` used to be a silent `0.0`, which is matt cloth and nobody's
+intention. Out of range is a note, the tier below stands, and the key is **not**
+named as taken, so a block's own line can no longer claim a value that never
+arrived. The ranges hold every value any file on this machine writes: the
+built-in table tops out at `0.45/26`, all nine of the user's outfit mods write
+`1/50`, his own list writes `0.10/14` and `1/50`. Measured afterwards on a file
+holding every one of those mistakes: **eight notes**, `46/OUTFIT_CLASSIC` still
+`0.10/14 (table)`, the render **byte for byte** the one drawn with no list file
+at all - and the one good value in the same file (`sheen=0.55` on
+`OUTFIT_TR3_COAST`) still applied, reading `0.55/12 (list)`: the exponent from
+the table, the sheen from the list, in one row.
+
+**AND THE SUMMARY COUNTED ITS OWN PROSE.** `apply_lists` read `matched` and
+`unmatched` back out of the notes the blocks had just written, looking for
+`-> no such outfit` in them - and `note()` cuts at 512 bytes. Measured: a block
+named with 912 characters writes a note of exactly 512 bytes that ends in the
+middle of the name, with no tail to find, so it counted as **matched**; on a
+file of six blocks the old summary read "4 matched, 2 unmatched" where the
+lines under it said three and three. `close_block` counts what `apply_block`
+returned, and the same kind of file now reads **3 blocks, 1 matched, 2
+unmatched** with the over-long note still cut. `ModelProbe
+-wardrobe` had the same class of fault in its table: `sprintf` into `sheen[48]`,
+where `3e38` alone is 42 characters before the tier word is added. `snprintf`
+and 96 bytes. The engine refuses such a value now, but a tool that prints what
+it is handed may not depend on that.
+
+**WHAT HIS OWN FILE DOES TO TWO OF HIS MODS.** Dropping `outfit_1-5.txt` in
+takes the wet shine off two mod bodies, because two of his names carry no key
+prefix and a list is the top tier:
+
+```
+  mod/outfits/4-5 barefoot/OUTFIT_CLASSIC        1.00/50 (outfit.txt) -> 0.10/14 (list)
+  mod/outfits/wetsuit green/OUTFIT_TRX_WETSUIT_1 1.00/50 (outfit.txt) -> 0.10/14 (list)
+```
+
+That is the no-prefix rule doing exactly what it says, and 100 of the 103 rows
+are untouched (the third is his own `TR2_Swim`), but it is a decision to make
+with the numbers in front of you: `46/Classic` and `13/TRX_Wetsuit_1` in those
+two blocks keep the two mods as they were.
+
+**RE-TAKEN AFTER THE FIXES.** 32 of 32 round-156 renders byte for byte
+identical with no list present; the whole `-wardrobe` report identical to this
+round's own, the `ms=` field aside, both with his file and without it; his file
+untouched on disk (`004a4633…`), and nothing written anywhere in his Mods
+folder or his game folder.
 
 **NOT IN THIS ROUND.** The head rule itself (#156), the neck lid disc (#156c),
 the OperaDress hand rule, #160, #162, the randomizer, the ring, the floor rule.

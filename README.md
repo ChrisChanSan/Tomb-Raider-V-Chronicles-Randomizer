@@ -407,8 +407,8 @@ braid=1                 # the TR5 braid
 holsters=1              # thigh holsters
 rig=0                   # the pouches they hang in, cut out of the
                         # London catsuit - for a body with bare thighs
-sheen=0.45              # how wet the material looks ...
-exponent=26             # ... and how tight the highlight is
+sheen=0.45              # how wet the material looks, 0 to 2 ...
+exponent=26             # ... and how tight the highlight is, 1 to 128
 skin_sheen=0.12         # and how her own SKIN shines - her face, the
 skin_exponent=10        # lid on her neck, her bare hands and the pages
                         # named by skin= below. 0 to 2 and 1 to 128
@@ -422,9 +422,13 @@ head=tr5                # or hair, or outfit - whose head this body wears.
                         # I-III wears TR5's head" above
 ```
 
-An unknown key is written to the log and ignored, exactly as in `mod.txt`, and
-so is a `skin_sheen=` or `skin_exponent=` outside its range — the value the
-engine had stands and the log says why.
+An unknown key is written to the log and ignored, exactly as in `mod.txt`. So is
+a number outside its range, and so is a value that is no number at all:
+`sheen` and `skin_sheen` take **0 to 2**, `exponent` and `skin_exponent` take
+**1 to 128**. A refused line changes nothing — the value the engine had stands,
+and the log names the line and the reason. (A `sheen` of 14 would draw her
+clothes pure white and one of `1e40` solid black, which is why the range is
+kept rather than trusted.)
 
 **`sheen` is the clothes, `skin_sheen` is her.** The first is what the outfit
 is made of — latex shines, a parka does not — and the second what Lara is made
@@ -455,9 +459,13 @@ head=hair
 skin_sheen=0.6
 ```
 
-Any file name, and any number of them; they are read in name order. A block
-opens at `Outfit:` and closes at the next one or at an empty line, and every
-key an `outfit.txt` takes is a key of a block.
+Any file name, and any number of them; they are read in **path order** — the
+whole path compared as text, so the folder decides before the file name does,
+and a file in `Mods` is not automatically read before one in `Mods\Outfits`.
+Where two files set the same key, the later one wins, and the `MODLOG list0`,
+`list1` … lines of the log say the order they were read in. A block opens at
+`Outfit:` and closes at the next one or at an empty line, and every key an
+`outfit.txt` takes is a key of a block.
 
 **The name** is matched against the outfit's file name without regard to case,
 to the `OUTFIT_` prefix, or to `_` against a space — `TR2_Swim`, `tr2 swim` and
@@ -475,10 +483,12 @@ file or in two, are both applied and the later one wins for the keys it sets.
 
 Nothing in a list file can break anything. A name that matches no outfit on
 this machine, a key this build does not know, a line without `=`, a value out
-of range — each is a line in the log and the rest of the file is read on. Save
-it as UTF-8 if you like: the byte order mark some editors write in front of the
-first line is taken off. A file whose name begins with `_` is switched off,
-exactly like a mod folder.
+of range or one that is not a number — each is a line in the log, the value the
+engine had stands, and the rest of the file is read on. A block's own line
+names only the keys that really arrived. Save it as UTF-8 if you like: the byte
+order mark some editors write in front of the first line is taken off. A file
+whose name begins with `_` is switched off, exactly like a mod folder.
+
 With `-log`, the scan says what it did:
 
 ```
@@ -489,7 +499,14 @@ HDLOG wardrobe list outfit_1-5.txt: 52 blocks, 52 matched, 0 unmatched
 
 and the F4 window shows every body's **Shine** and **Skin glow** with the tier
 that decided each, so a line you wrote can be checked in the game: it says
-`(list)` when it arrived.
+`(the list)` when it arrived.
+
+One thing worth knowing before you copy a list from somebody else: a block
+without a key prefix reaches **every** outfit of that name, a mod's included.
+`Outfit: Classic` with `sheen=0.10` in it also takes the shine off the
+`OUTFIT_CLASSIC` of a mod that had set `sheen=1` in its own `outfit.txt`, since
+the list is the higher tier. Write `46/Classic` to mean the installed one
+alone.
 
 **Sounds.** A mod's `5\DATA\MAIN.SFX` is used instead of `audio\MAIN.SFX` if
 there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under

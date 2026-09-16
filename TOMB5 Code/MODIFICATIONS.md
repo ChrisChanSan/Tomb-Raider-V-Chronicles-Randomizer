@@ -13660,9 +13660,111 @@ two blocks keep the two mods as they were.
 
 **RE-TAKEN AFTER THE FIXES.** 32 of 32 round-156 renders byte for byte
 identical with no list present; the whole `-wardrobe` report identical to this
-round's own, the `ms=` field aside, both with his file and without it; his file
-untouched on disk (`004a4633…`), and nothing written anywhere in his Mods
-folder or his game folder.
+round's own, the `ms=` field aside, both with his file and without it; and
+nothing written anywhere in his Mods folder or his game folder.
+
+**HIS OWN FILE CHANGED DURING THE ROUND, AND NOT BY US.** The paragraph above
+used to end "his file untouched on disk (`004a4633…`)". That hash was the
+file's when the round began and not the one it has: at **2026-09-16 01:52:23**,
+while the round was running, three `head=hair` lines appeared in the
+`TRX_Wetsuit_1/2/3` blocks of
+`Tomb5 Steam Version\Mods\Outfits\outfit_1-5.txt` and its md5 became
+`eb4b3016fe7d72562e42ada61c02116d`. It is his file and his edit - the lines
+stand in the file's own house style and carry no key prefix, where every test
+file this round wrote used prefixed names - and it was left exactly as found.
+The sentence is corrected rather than deleted because it invited the one check
+a reader would run: `md5sum` on that file today does **not** give `004a4633…`,
+and a hash in a record is worthless the moment it reads as a broken promise.
+What is true, and is all that was ever meant, is that nothing of this project
+wrote into his Mods folder or his game folder. His edit works, which is its own
+proof that the round did what it says: those three blocks log `sheen exponent
+head`, their rows read `hair (list)`, the head census moves `tr5=62 hair=0` to
+`tr5=58 hair=4`, and the body renders byte for byte round 156's forced-hair
+picture. His file's own header still says "NOT READ BY THE ENGINE YET" and does
+not mention `skin_sheen=`/`skin_exponent=`; refreshing it is his or the project
+manager's (the generator is `scratchpad/round155/outfit_list.py`).
+
+**THE SECOND REVIEW: A VALUE THAT NEVER ARRIVED, TWICE MORE.** The fix round
+above says it closed this - "`took()` runs only on a value `take_number` kept,
+so the block's own line and the picture can no longer disagree" - and it had,
+for the four numbers. Two other kinds of value were still being dropped in
+silence while the block's line named them, which is the same fault wearing
+different clothes:
+
+- **`skin=` WIPED AN OUTFIT'S SKIN PAGES WITHOUT SAYING SO.** `take_key` set
+  `hasSkin` and called `took()` *before* it read a character, so a `skin=` line
+  with nothing after it copied an empty array over the tier below.
+  `46/OUTFIT_TR3_CATSUIT` went from `8201,8202 (table)` to `- (list)` and the
+  log said `-> 46/OUTFIT_TR3_CATSUIT: skin`, as though something had arrived.
+  It is one keystroke away from a player, because his own `outfit_1-5.txt`
+  carries `# skin=` ready-written in **44 of its 52 blocks**: uncommenting the
+  line he was invited to uncomment, without filling in a number, took round K's
+  neck seam fix off that body. LOOKED AT, 4x on the neckline: her throat and
+  sternum carried the catsuit's own tight `0.45/26` streak instead of skin's
+  wide `0.12/10`; **6543 px** differ, worst channel 37, the box `x 419..602
+  y 184..435` - her chest and forearms and nothing else. `std::atoi` was the
+  other half of it: it answers 0 for `abc` and 0 terminates this array, so
+  `skin=8001,oops` quietly became `8001` alone. `strtol` now, each piece that
+  is not a whole page number above zero is a note, and if none survives the
+  line is refused entirely. The render of the bare `skin=` block is now byte
+  for byte (`2ee14cf7…`) the render with no list file at all.
+- **THE FIVE FLAG KEYS DROPPED AN UNKNOWN VALUE IN COMPLETE SILENCE.** `hands`,
+  `gloves`, `braid`, `holsters`, `rig`: `as_bool` answered -1, `apply_txt`
+  skipped on `>= 0`, and nothing anywhere said a word. Measured:
+  `braid=maybe holsters=ja hands=2 rig=nonsense` in one block logged "braid
+  holsters hands rig" as taken, wrote no note, and drew a body byte for byte
+  the one with no list. `take_flag` now, one note per key naming the value and
+  **spelling out the vocabulary** (`1, yes, true, on / 0, no, false, off`),
+  because a player who wrote `ja` learns the words from the log or not at all;
+  the block then logs "nothing - the block has no key this build knows" and the
+  picture agrees with the line. The `gloves` note of round M2b still prints
+  word for word in every case it printed before.
+
+**AND A LINE LONGER THAN THE READ BUFFER WAS APPLIED IN HALVES.** Both readers
+used `char raw[512]` and `fgets`, which cuts a longer line in two - and the
+HEAD of it was parsed as a whole `key=value`. Measured: a `sheen=` line of 900
+zeros and then `.25` was read as `sheen=000…0`, which is `0.0`, which is in
+range, which is accepted - `46/OUTFIT_TR2_VEGAS` at `0.00/14 (list)`, a wholly
+matt body out of a line that asked for `0.25`, with the tail logged after it as
+a line with no `=`. One `read_line` for both files now, which reads until the
+line ends however long it is: the same file gives `0.25/14 (list)`, and
+`exponent=` + 900 spaces + `20` gives `0.10/20 (list)` instead of a refusal and
+a stray line. A NUL byte still ends the line's text exactly as before, so the
+hostile files of the review - NUL inside a line, CR-only endings, a 912-
+character name, 20001 blocks in 969 KB - all answer byte for byte what they
+answered before (the 969 KB file costs 405 ms instead of 331).
+
+**THE F4 PAGE IS THIRTEEN LINES AND ITS COMMENT STILL SAID ELEVEN.** #156 cut
+`kWindow` from 9 to 8 to keep the page eleven lines; #159 added the Shine and
+Skin glow rows and did not cut it again. No behaviour finding - the page ends
+at 16.5 font heights and the screen holds 480/28 = 17.1 of them at every
+resolution 4:3 or wider - but the invariant the comment recorded had been
+broken silently, so the comment now carries the arithmetic line by line and
+says where the next row has to come from (`kWindow` 7, and the page is 12.5
+lines). Nobody has SEEN this page since #156: the rules of these rounds forbid
+starting the game.
+
+**RE-TAKEN AFTER THE SECOND FIX ROUND.** 32 of 32 round-156 renders byte for
+byte identical with no list present; the whole `-wardrobe` report identical to
+this round's own accepted run (`ms=` aside) both with no list and with his file
+as it now stands (`lists=1 blocks=52 matched=52 unmatched=0`); every hostile
+file, the range file and the read-order file identical to the runs the review
+took, the one `rv_long` row that the buffer fix corrects excepted; the mod scan
+`mods=14` and no mod's own `outfit.txt` value refused by any of the new
+readers. The two `-wardrobe` columns of the round's own features are unmoved:
+`skin_sheen=1.0 skin_exponent=8` on `46/OUTFIT_CLASSIC` renders `0b8e43f7…`
+and `head=hair` asked for by a list renders `a7114937…`, both byte for byte
+what the review measured.
+
+**WHAT WAS LEFT ALONE, AND WHY.** The tier word is still per property group -
+`fromSheen` covers `sheen` and `exponent`, so a pair a block half-sets reads
+"the list" for both halves. The VALUES are per key and proved so (`0.55/12` =
+the list's sheen over the table's exponent); splitting the word would mean a
+from-field per key, the review asked for no change, and inventing one here is
+not this round's work. Nor is a spelling for "this body has no skin pages":
+nothing on this machine wants one, and a `skin=` line that names nothing is
+now a note rather than a silent wipe, which is the whole of what was wrong
+with it.
 
 **NOT IN THIS ROUND.** The head rule itself (#156), the neck lid disc (#156c),
 the OperaDress hand rule, #160, #162, the randomizer, the ring, the floor rule.

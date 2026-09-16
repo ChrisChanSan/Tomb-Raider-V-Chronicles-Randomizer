@@ -430,6 +430,15 @@ and the log names the line and the reason. (A `sheen` of 14 would draw her
 clothes pure white and one of `1e40` solid black, which is why the range is
 kept rather than trusted.)
 
+The same holds for the keys that are not numbers. `hands`, `gloves`, `braid`,
+`holsters` and `rig` take **`1`, `yes`, `true`, `on`** or **`0`, `no`,
+`false`, `off`** and nothing else — a `ja`, a `y` or a `2` is a line in the log
+and the answer the engine had stands. `skin` wants **one to three page
+numbers** separated by commas; a piece that is not a page number is named in
+the log and passed over, and a `skin=` line with no page number in it at all
+changes nothing. There is deliberately no way to say *no* skin pages: leave the
+line out and the engine measures her throat off the file itself.
+
 **`sheen` is the clothes, `skin_sheen` is her.** The first is what the outfit
 is made of — latex shines, a parka does not — and the second what Lara is made
 of while she wears it, which is not the same question: a wetsuit wants wet skin
@@ -483,11 +492,14 @@ file or in two, are both applied and the later one wins for the keys it sets.
 
 Nothing in a list file can break anything. A name that matches no outfit on
 this machine, a key this build does not know, a line without `=`, a value out
-of range or one that is not a number — each is a line in the log, the value the
-engine had stands, and the rest of the file is read on. A block's own line
-names only the keys that really arrived. Save it as UTF-8 if you like: the byte
-order mark some editors write in front of the first line is taken off. A file
-whose name begins with `_` is switched off, exactly like a mod folder.
+of range, one that is not a number, a yes-or-no that is neither, a `skin` line
+naming no page — each is a line in the log, the value the engine had stands,
+and the rest of the file is read on. A block's own line names only the keys
+that really arrived; a block whose every line was refused says so. Save it as
+UTF-8 if you like: the byte order mark some editors write in front of the first
+line is taken off. A line may be as long as you please — it is read whole, not
+in pieces. A file whose name begins with `_` is switched off, exactly like a
+mod folder.
 
 With `-log`, the scan says what it did:
 

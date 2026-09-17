@@ -286,3 +286,4 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	long rs_x, long rs_y, long lara_moving, long wall_push_yaw,
 	short* out_yaw_offset, short* out_pitch);
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance);
+short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch);

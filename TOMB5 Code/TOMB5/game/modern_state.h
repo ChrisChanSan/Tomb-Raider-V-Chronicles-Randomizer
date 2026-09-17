@@ -16,9 +16,11 @@
  *
  * game\modern_move.cpp is the arithmetic and has no engine in it at all. This
  * is the other half: it owns the one state the scheme remembers, it measures
- * the two things the arithmetic cannot work out for itself - the camera's
- * heading and whether Lara is getting anywhere - and it is the only place in
- * the tree that writes Lara's heading from the input function.
+ * the three things the arithmetic cannot work out for itself - the camera's
+ * heading, where the orbit is pointing and whether Lara is getting anywhere -
+ * and it is the only place in the tree that writes Lara's own angles from the
+ * input function (her heading everywhere, and in the water her attitude and
+ * her bank as well - round 161a2 step 4).
  *
  * The tick below is called from ONE place, the seam in specific\input.cpp
  * between the block that puts the stick on the four direction bits and the

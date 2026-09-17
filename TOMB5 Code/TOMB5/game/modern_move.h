@@ -45,7 +45,10 @@
  * ModernDirectTurn, step 4), because a rule that decides how far Lara turns
  * has to be a number a test can check, and only this file is testable; the
  * one line that actually writes lara_item->pos.y_rot is over there, because
- * that is the engine. */
+ * that is the engine. THE WATER is split on exactly the same seam (round
+ * 161a2 step 4): ModernWaterMove here decides the turn, the attitude and the
+ * stroke as three numbers, and the three lines that write y_rot, x_rot and
+ * z_rot are over there. */
 
 /* THE INPUT BITS, MIRRORED BY VALUE.
  *
@@ -61,6 +64,7 @@ enum modern_input_bits
 	MODERN_IN_BACK =	0x2,	// IN_BACK
 	MODERN_IN_LEFT =	0x4,	// IN_LEFT
 	MODERN_IN_RIGHT =	0x8,	// IN_RIGHT
+	MODERN_IN_JUMP =	0x10,	// IN_JUMP - under water it is the stroke (step 4)
 	MODERN_IN_DRAW =	0x20,	// IN_DRAW - the weapon half below, nothing else
 	MODERN_IN_WALK =	0x80,	// IN_WALK
 	MODERN_IN_LSTEP =	0x400,	// IN_LSTEP
@@ -271,6 +275,59 @@ enum modern_constants
 	 * and does not care. */
 	MODERN_STICK_FULL = 128,
 
+	/* THE WATER (round 161a2, step 4), and every rate in it is the ENGINE'S
+	 * OWN - measured out of game\laraswim.cpp and game\larasurf.cpp before a
+	 * line of this was written, because the user's rule for the water is that
+	 * it must feel like the land and not that it must feel like something new:
+	 * "Die Steuerung unter Wasser ist genau gleich wie ausserhalb, da ist kein
+	 * Unterschied." So the SCHEME changes and the SPEEDS do not.
+	 *
+	 * Turning. Under water the classic never writes y_rot directly: SwimTurn
+	 * (laraswim.cpp:196) ramps lara.turn_rate by 409 a tick and LaraUnderWater
+	 * (:581) adds it to y_rot and decays it by 364 - but both of them stop at
+	 * +-1092, so 1092 units a tick, 6 degrees, is the fastest TR5 has ever
+	 * turned her under water and it is what the direct turn is given here. On
+	 * the surface the states write y_rot themselves: 728 in lara_as_surftread
+	 * and lara_as_surfswim (larasurf.cpp:207, :315), 364 in the three side and
+	 * back strokes (:234, :258, :282). Each state therefore gets its own
+	 * number rather than an average of them - ModernWaterTurnRate is the
+	 * table. */
+	MODERN_SWIM_TURN_RATE = 1092,	// LaraUnderWater's own ceiling on lara.turn_rate
+	MODERN_SURF_TURN_RATE = 728,	// lara_as_surftread / lara_as_surfswim
+	MODERN_SURF_SIDE_RATE = 364,	// lara_as_surfback / surfleft / surfright
+
+	/* The pitch. SwimTurn's own step for IN_FORWARD/IN_BACK is 364 a tick, 2
+	 * degrees, which is also the look camera's rate - so following the orbit
+	 * costs exactly as long as pitching by hand used to. The limits are
+	 * LaraUnderWater's own clamp on x_rot (laraswim.cpp:593-596), the same
+	 * +-15470 the chase camera clamps its elevation to, which is why the
+	 * camera can never point anywhere her body cannot follow. */
+	MODERN_SWIM_PITCH_RATE = 364,
+	MODERN_SWIM_PITCH_MIN = -15470,
+	MODERN_SWIM_PITCH_MAX = 15470,
+
+	/* The roll into the turn. SwimTurn banks her by 546 a tick while a turn
+	 * bit is held and LaraUnderWater decays it by 364 and clamps at +-4004, so
+	 * a held turn settles at the clamp and a released one unwinds. The direct
+	 * turn takes the turn BITS away, so it owes the bank they would have made:
+	 * this is that same 546, written on the ticks the modern turn really
+	 * turns her, and the decay and the clamp are still the engine's. */
+	MODERN_SWIM_ROLL_RATE = 546,
+
+	/* THE ONE NUMBER IN THE WATER THAT IS NOT MEASURED BUT DECIDED, and it is
+	 * the user's own decision rather than a feel constant of ours: "Unter
+	 * Wasser ist der linke Stick wie ein D-Pad, was in alle Richtungen 360
+	 * Grad auf einem flachen Kreis Lara in die Richtung BEWEGT." A stick that
+	 * moves her cannot also need the jump key held to make her move, so with
+	 * this on the stroke is held for exactly as long as the stick is out.
+	 * 0 restores the classic "jump = stroke" with the modern course still
+	 * steering, which is the one-line answer if the play test dislikes it -
+	 * and the reason it is a switch and not a rewrite. The surface is not
+	 * affected either way: there the stroke IS the forward bit the course
+	 * already produces (lara_as_surftread -> AS_SURFSWIM), and IN_JUMP means
+	 * "dive" instead (larasurf.cpp:329 counts ten ticks of it). */
+	MODERN_WATER_AUTO_STROKE = 1,
+
 	/* The five switches of the scheme. They are constants and not settings:
 	 * the user's decision is that Modern is one thing you turn on, not a page
 	 * of sliders. They exist because each of them turns off exactly one rule
@@ -312,6 +369,14 @@ struct MODERN_CFG
 	long snap_delta;	// step 4: error above which the turn is taken at once
 	long snap_forward;	// step 4: error under which IN_FORWARD comes back
 	long stick_full;	// full deflection in our units
+	long swim_turn_rate;// step 4: the direct turn under water, units per tick
+	long surf_turn_rate;// step 4: the same on the surface, treading and swimming
+	long surf_side_rate;// step 4: and in the back and side strokes
+	long swim_pitch_rate;// step 4: how fast x_rot follows the orbit's elevation
+	long swim_pitch_min;// step 4: the engine's own clamp on x_rot
+	long swim_pitch_max;
+	long swim_roll_rate;// step 4: the bank the turn bits would have made
+	long water_auto_stroke;// step 4: the stroke is held while the stick is out
 	long hold_course;	// hold a world course instead of following the camera
 	long back_turns;	// back on the stick turns her around
 	long aim_strafe;	// strafe instead of turning while aiming
@@ -367,6 +432,10 @@ void ModernResetState(MODERN_STATE* state);
 short ModernWrap(long angle);
 short ModernAngle(long x, long z);
 long ModernStateIsClassic(short anim_state);
+long ModernStateIsSwim(short anim_state);
+long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state);
+long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_RESULT* out,
+	long target_pitch, long x_rot, long* yaw_delta, long* new_x_rot, long* stroke);
 long ModernStateIsGroundIdle(short anim_state);
 long ModernStateIsStanding(short anim_state);
 long ModernStateAllowsDirectTurn(short anim_state);

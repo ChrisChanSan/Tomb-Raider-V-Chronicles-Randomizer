@@ -1132,17 +1132,24 @@ static void classic_states()
 	 * instead of typing that sentence in as a test, and what it measured is
 	 * what is asserted below. Reported in the step 3 record. */
 	{
-		const short is_classic[] = { 10, 17, 25, 26, 27, 36, 57, 76 };
-		const short is_modern[] = { 2, 3, 81 };
+		/* AND ONE NUMBER HAS MOVED SIDES, DELIBERATELY: 17 AS_SWIM. TROne's
+		 * expectation puts it with the classic states and round 161a agreed,
+		 * because A1 had no camera pitch to swim by. Round 161a2 step 4 built
+		 * one, so the swim is translated now like anything else and 17 is
+		 * asserted on the modern side here. A divergence from a ported
+		 * expectation, named rather than quietly dropped; the rest of that
+		 * expectation stands unchanged. */
+		const short is_classic[] = { 10, 25, 26, 27, 36, 57, 76 };
+		const short is_modern[] = { 2, 3, 17, 81 };
 
 		for (i = 0; i < (int)(sizeof(is_classic) / sizeof(is_classic[0])); i++)
 			ok(ModernStateIsClassic(is_classic[i]) == 1,
-				"shared_state_numbers: classic 10/17/25/26/27/36/57/76",
+				"shared_state_numbers: classic 10/25/26/27/36/57/76",
 				ModernStateIsClassic(is_classic[i]), 1);
 
 		for (i = 0; i < (int)(sizeof(is_modern) / sizeof(is_modern[0])); i++)
 			ok(ModernStateIsClassic(is_modern[i]) == 0,
-				"shared_state_numbers: not 2/3/81",
+				"shared_state_numbers: not 2/3/81, and not 17 since step 4",
 				ModernStateIsClassic(is_modern[i]), 0);
 	}
 
@@ -1167,30 +1174,63 @@ static void classic_states()
 
 	/* TROne: modern.water_and_inventory_leave_pose_and_original_input_alone,
 	 * the state half (the caller's-veto half is above, under "the veto also
-	 * forgets the held course"): 17 AS_SWIM asks for classic by its own
-	 * anim_state, with no help from sit.classic. */
+	 * forgets the held course"). The INVENTORY half is what still holds
+	 * unchanged - it arrives as the caller's veto, tested above. The WATER
+	 * half is the one round 161a2 step 4 turned over: 17 AS_SWIM now asks for
+	 * the translation by its own anim_state, and the pose it leaves alone is
+	 * the one the seam still does not touch (the automaton's animation - the
+	 * scheme writes angles, never a frame). */
 	sit.anim_state = 17;
 	sit.classic = 0;
 	state.have_ref = 0;
 	tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
-	ok(out.active == 0, "water_and_inventory: AS_SWIM(17) is classic by itself",
-		out.active, 0);
+	ok(out.active == 1, "step 4: AS_SWIM(17) is the translation's now",
+		out.active, 1);
+	ok(out.mode == MODERN_MODE_RUN, "...and it is the ordinary run branch",
+		out.mode, MODERN_MODE_RUN);
 
-	/* The water group in full - design section 6's decision and the brief's
-	 * exact list. A2's job, not A1's, so every one comes back inactive; the
-	 * mode is never AIM/JUMP/BACK/RUN because the state veto fires first. */
+	/* THE WATER GROUP, SPLIT THE WAY STEP 4 SPLIT IT. The eight states the
+	 * player really steers in the water are translated like anything on foot
+	 * - the same held course, the same run branch - and what makes them the
+	 * water is ModernWaterMove afterwards, not a different translation. */
 	{
-		const short water[] = { 13, 17, 18, 33, 34, 35, 44, 47, 48, 49, 52, 53, 55 };
+		const short steered[] = { 13, 17, 18, 33, 34, 47, 48, 49 };
 
-		for (i = 0; i < (int)(sizeof(water) / sizeof(water[0])); i++)
+		for (i = 0; i < (int)(sizeof(steered) / sizeof(steered[0])); i++)
 		{
-			sit.anim_state = water[i];
+			sit.anim_state = steered[i];
 			sit.classic = 0;
 			state.have_ref = 0;
 			tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
-			ok(out.active == 0, "water state is classic (modern in A2)", out.active, 0);
+			ok(out.active == 1, "a water state the player steers is ours",
+				out.active, 1);
+			ok(out.mode == MODERN_MODE_RUN, "...the ordinary run branch",
+				out.mode, MODERN_MODE_RUN);
+			ok(ModernWaterTurnRate(&cfg, steered[i]) > 0,
+				"...and the water's table knows its rate",
+				ModernWaterTurnRate(&cfg, steered[i]), 1);
+		}
+	}
+
+	/* And the four that look like water and are not steered like it: the two
+	 * dives and the climb-out are the handover, the roll is a fixed maneuver,
+	 * the death is nobody's. 118 (DOZY's flight) is with the rest of TR5's own
+	 * states in the full sweep below. */
+	{
+		const short handover[] = { 35, 44, 52, 53, 55, 66 };
+
+		for (i = 0; i < (int)(sizeof(handover) / sizeof(handover[0])); i++)
+		{
+			sit.anim_state = handover[i];
+			sit.classic = 0;
+			state.have_ref = 0;
+			tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+			ok(out.active == 0, "a water handover stays classic", out.active, 0);
 			ok(out.mode == MODERN_MODE_OFF, "...mode off, not just inactive",
 				out.mode, MODERN_MODE_OFF);
+			ok(ModernWaterTurnRate(&cfg, handover[i]) == 0,
+				"...and the water's table does not claim it",
+				ModernWaterTurnRate(&cfg, handover[i]), 0);
 		}
 	}
 
@@ -1210,12 +1250,16 @@ static void classic_states()
 	 * 0..138 against a frozen array built from the same two design sections
 	 * the switch in modern_move.cpp was built from, so a slip in either one
 	 * shows up as a mismatch here rather than as the same mistake made twice
-	 * and agreeing with itself. */
+	 * and agreeing with itself.
+	 *
+	 * ROUND 161a2 STEP 4 TOOK EIGHT OUT OF IT: 13/17/18 under the water and
+	 * 33/34/47/48/49 on it. 35, 44, 52, 53, 55 and 66 stayed (see the two
+	 * groups above), so the count moves from 95 to 87. */
 	{
 		const short classic[] =
 		{
-			10, 13, 17, 18, 25, 26, 27, 30, 31, 33, 34, 35, 36, 37, 38, 39, 40,
-			41, 42, 43, 44, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60,
+			10, 25, 26, 27, 30, 31, 35, 36, 37, 38, 39, 40,
+			41, 42, 43, 44, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60,
 			61, 66, 67, 70, 75, 76, 77, 78, 79, 82, 83, 87, 88, 89, 90, 91, 92,
 			93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 107, 108, 109,
 			110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
@@ -1235,10 +1279,357 @@ static void classic_states()
 				"all 139 states classified: matches the reference table",
 				ModernStateIsClassic((short)i), want[i]);
 
-		ok((int)(sizeof(classic) / sizeof(classic[0])) == 95,
-			"...95 of 139 are classic, 44 are modern",
-			(int)(sizeof(classic) / sizeof(classic[0])), 95);
+		ok((int)(sizeof(classic) / sizeof(classic[0])) == 87,
+			"...87 of 139 are classic, 52 are modern",
+			(int)(sizeof(classic) / sizeof(classic[0])), 87);
 	}
+}
+
+/* ------------------------------------------------------------- the water -- */
+
+/* A result as ModernTranslate would have left it, so that ModernWaterMove can
+ * be driven at an exact error without a camera and a stick behind it. Every
+ * field is filled, because the water reads three of them and rewrites a
+ * fourth. */
+static void water_out(MODERN_RESULT* out, long delta, long bits)
+{
+	out->bits = bits;
+	out->active = 1;
+	out->target = 0;
+	out->delta = (short)delta;
+	out->mag = MODERN_STICK_FULL;
+	out->reference = 0;
+	out->mode = MODERN_MODE_RUN;
+	out->blocked = 0;
+	out->turning = 0;
+}
+
+/* THE WATER (round 161a2 step 4). TROne have no expectation here at all -
+ * their water is the classic input - so every number below is OUR measurement
+ * of game\laraswim.cpp and game\larasurf.cpp, and the point of the group is
+ * that the modern swimmer moves at TR5's own speeds and only the SCHEME
+ * changes. The user's rule: "Die Steuerung unter Wasser ist genau gleich wie
+ * ausserhalb, da ist kein Unterschied." */
+static void water_move()
+{
+	MODERN_CFG cfg;
+	MODERN_CAMERA_CFG ccfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	long yaw, xrot, stroke;
+	long rem;
+	int ticks;
+	int under;
+	int surf;
+	int i;
+
+	printf("the water: the flat circle, the 3D pointer and the stroke\n");
+
+	ModernDefaults(&cfg);
+	ModernCameraDefaults(&ccfg);
+	ModernResetState(&state);
+	sit.anim_state = 17;
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	/* THE TABLE, against the three rates measured out of the engine: 1092 is
+	 * LaraUnderWater's own ceiling on lara.turn_rate, 728 is what
+	 * lara_as_surftread and lara_as_surfswim write into y_rot themselves, 364
+	 * is what the three side and back strokes write. */
+	{
+		const short swim[] = { 13, 17, 18 };
+		const short surface[] = { 33, 34 };
+		const short side[] = { 47, 48, 49 };
+		const short dry[] = { 0, 1, 2, 15, 35, 44, 52, 53, 55, 66, 118 };
+
+		for (i = 0; i < (int)(sizeof(swim) / sizeof(swim[0])); i++)
+		{
+			ok(ModernWaterTurnRate(&cfg, swim[i]) == 1092,
+				"under water she turns at LaraUnderWater's own 1092",
+				ModernWaterTurnRate(&cfg, swim[i]), 1092);
+			ok(ModernStateIsSwim(swim[i]) == 1, "...and counts as swimming",
+				ModernStateIsSwim(swim[i]), 1);
+		}
+
+		for (i = 0; i < (int)(sizeof(surface) / sizeof(surface[0])); i++)
+		{
+			ok(ModernWaterTurnRate(&cfg, surface[i]) == 728,
+				"treading and swimming on the surface turn at 728",
+				ModernWaterTurnRate(&cfg, surface[i]), 728);
+			ok(ModernStateIsSwim(surface[i]) == 0, "...and are not swimming",
+				ModernStateIsSwim(surface[i]), 0);
+		}
+
+		for (i = 0; i < (int)(sizeof(side) / sizeof(side[0])); i++)
+			ok(ModernWaterTurnRate(&cfg, side[i]) == 364,
+				"the back and side strokes turn at 364",
+				ModernWaterTurnRate(&cfg, side[i]), 364);
+
+		for (i = 0; i < (int)(sizeof(dry) / sizeof(dry[0])); i++)
+		{
+			ok(ModernWaterTurnRate(&cfg, dry[i]) == 0,
+				"and nothing else is the water's",
+				ModernWaterTurnRate(&cfg, dry[i]), 0);
+			ok(ModernStateIsSwim(dry[i]) == 0, "...nor swimming",
+				ModernStateIsSwim(dry[i]), 0);
+		}
+	}
+
+	/* A STATE THE WATER DOES NOT OWN IS NOT TOUCHED. The seam branches on the
+	 * same table, so this can only ever be reached by a caller that has not,
+	 * and then the honest answer is "not mine". */
+	sit.anim_state = 1;		// AS_RUN
+	water_out(&out, 0x4000, MODERN_IN_FORWARD);
+	ok(ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke) == 0,
+		"a land state is not the water's", 0, 0);
+	ok(out.bits == MODERN_IN_FORWARD, "...and its bits stand", out.bits, MODERN_IN_FORWARD);
+	ok(yaw == 0, "...no turn", yaw, 0);
+
+	/* THE STICK AT REST IS NOT A COURSE. She keeps heading, attitude and
+	 * speed, and the classic bits of specific\input.cpp stand - the same
+	 * answer the translation gives on land when it is not responsible. */
+	sit.anim_state = 17;
+	water_out(&out, 0x4000, MODERN_IN_BACK);
+	out.active = 0;
+	ok(ModernWaterMove(&cfg, &sit, &out, 8000, 3000, &yaw, &xrot, &stroke) == 0,
+		"the stick at rest: not the water's tick either", 0, 0);
+	ok(xrot == 3000, "...her attitude is left where it was", xrot, 3000);
+	ok(stroke == 0, "...and no stroke is held", stroke, 0);
+	ok(out.bits == MODERN_IN_BACK, "...and not one bit written", out.bits, MODERN_IN_BACK);
+
+	/* THE TURN. Clamped to the state's rate, exact under it, and the sign is
+	 * the error's - the same ModernStepToward the land's turn uses. */
+	water_out(&out, 0x4000, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(yaw == 1092, "90 degrees to go: one tick is the swim rate", yaw, 1092);
+
+	water_out(&out, -0x4000, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(yaw == -1092, "...and the other way round", yaw, -1092);
+
+	water_out(&out, 500, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(yaw == 500, "under the rate the whole error is taken", yaw, 500);
+	ok(out.turning == 0, "...and nothing is left to turn", out.turning, 0);
+
+	water_out(&out, 0x4000, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(out.turning == 1, "with 90 degrees to go she is still turning",
+		out.turning, 1);
+
+	/* NO INSTANT ABOUT-TURN IN THE WATER, which is the one rule of the land's
+	 * turn that is deliberately not here: past 90 degrees the land takes the
+	 * whole error in one tick, and under water a one-tick half turn is the
+	 * AS_WATERROLL animation's job and looks wrong without it. */
+	water_out(&out, 0x7FFF, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(yaw == 1092, "half a turn away: still only one tick's worth", yaw, 1092);
+
+	/* THE BITS. Under water IN_FORWARD is SwimTurn's PITCH (x_rot -= 364), so
+	 * it may never go out down there however well she is aligned; on the
+	 * surface it really is forward and it is also the stroke. IN_WALK is
+	 * untouched in both, exactly as on land. */
+	sit.anim_state = 17;
+	water_out(&out, 0, MODERN_IN_FORWARD | MODERN_IN_LEFT | MODERN_IN_WALK);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(out.bits == MODERN_IN_WALK, "under water: no direction bit survives, walk does",
+		out.bits, MODERN_IN_WALK);
+
+	sit.anim_state = 33;
+	water_out(&out, 0, MODERN_IN_BACK | MODERN_IN_RSTEP | MODERN_IN_WALK);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(out.bits == (MODERN_IN_FORWARD | MODERN_IN_WALK),
+		"on the surface: forward is forward again",
+		out.bits, MODERN_IN_FORWARD | MODERN_IN_WALK);
+
+	water_out(&out, 0x4000, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(out.bits == 0, "...but not while she is still turning onto the course",
+		out.bits, 0);
+	ok(yaw == 728, "...and the surface rate is 728", yaw, 728);
+
+	water_out(&out, 0x2000 + 728, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(out.bits == MODERN_IN_FORWARD, "...it comes back at the last 45 degrees",
+		out.bits, MODERN_IN_FORWARD);
+
+	/* THE STROKE, the user's own decision 7: "der linke Stick BEWEGT Lara in
+	 * die Richtung", so the stroke is held for as long as the stick is out.
+	 * Under water only - on the surface the stroke IS the forward bit, and
+	 * IN_JUMP there means "dive" (ten ticks of it, larasurf.cpp). */
+	sit.anim_state = 18;	// AS_GLIDE
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(stroke == 1, "under water the stroke is held while the stick is out",
+		stroke, 1);
+
+	sit.anim_state = 33;
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(stroke == 0, "on the surface it is not - IN_JUMP there is the dive",
+		stroke, 0);
+
+	cfg.water_auto_stroke = 0;
+	sit.anim_state = 18;
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+	ok(stroke == 0, "switched off, the jump key is the stroke again", stroke, 0);
+	ok(yaw == 0, "...and nothing else about the tick changes", yaw, 0);
+	ModernDefaults(&cfg);
+
+	/* THE 3D POINTER. The orbit's elevation, turned into a body attitude by
+	 * the camera's own ModernCameraSwimPitch, and walked towards at SwimTurn's
+	 * own 364 a tick. The conversion is the INVERSE OF THE ENGINE'S OWN LINE:
+	 * ChaseCamera shows elevation = pitch_home + x_rot, so the attitude that
+	 * belongs to an elevation is elevation - pitch_home, and a camera nobody
+	 * has touched points at level swimming. */
+	ok(ModernCameraSwimPitch(&ccfg, ccfg.pitch_home) == 0,
+		"a camera left alone points at level swimming",
+		ModernCameraSwimPitch(&ccfg, ccfg.pitch_home), 0);
+
+	for (i = -15000; i <= 15000; i += 1000)
+		ok(ModernCameraSwimPitch(&ccfg, ccfg.pitch_home + i) == i,
+			"the conversion inverts ChaseCamera's own elevation line",
+			ModernCameraSwimPitch(&ccfg, ccfg.pitch_home + i), i);
+
+	sit.anim_state = 17;
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, ModernCameraSwimPitch(&ccfg, ccfg.pitch_home + 4000),
+		4000, &yaw, &xrot, &stroke);
+	ok(xrot == 4000, "a camera sitting where the classic would put it asks for nothing",
+		xrot, 4000);
+
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, 5000, 0, &yaw, &xrot, &stroke);
+	ok(xrot == 364, "one tick towards the pointer is SwimTurn's own 364", xrot, 364);
+
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, -5000, 0, &yaw, &xrot, &stroke);
+	ok(xrot == -364, "...and the same nose down", xrot, -364);
+
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, 100, 0, &yaw, &xrot, &stroke);
+	ok(xrot == 100, "under the rate she arrives in one tick", xrot, 100);
+
+	/* THE LIMITS ARE LaraUnderWater's OWN (+-15470), and the target is clamped
+	 * BEFORE the step, so the clamp is a place she can sit rather than a wall
+	 * the step stops at. It bites at the top by exactly pitch_home: the orbit
+	 * may ask for 17290 and her body stops at 15470. */
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, ModernCameraSwimPitch(&ccfg, MODERN_CAMERA_PITCH_MAX),
+		15470, &yaw, &xrot, &stroke);
+	ok(xrot == 15470, "the camera at its own top: her body stops at the clamp",
+		xrot, 15470);
+
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, 20000, 15470, &yaw, &xrot, &stroke);
+	ok(xrot == 15470, "...and nothing beyond it moves her further", xrot, 15470);
+
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, -20000, -15470, &yaw, &xrot, &stroke);
+	ok(xrot == -15470, "...nor the other way", xrot, -15470);
+
+	/* THE SURFACE IS FLAT. "Auf der Oberflaeche ist der Kurs flach" - so
+	 * nothing there writes x_rot at all, whatever the orbit is pointing at,
+	 * and the engine keeps her level anyway. */
+	sit.anim_state = 33;
+	water_out(&out, 0, 0);
+	ModernWaterMove(&cfg, &sit, &out, -12000, 4000, &yaw, &xrot, &stroke);
+	ok(xrot == 4000, "the surface does not follow the pointer", xrot, 4000);
+
+	/* THE TWO THINGS THE TRANSLATION ITSELF HAD TO BE TOLD ABOUT THE WATER.
+	 * A flare is held at LG_READY, so sit.drawn can be 1 down there and the
+	 * aim branch would have strafed her around nothing; and with back_turns
+	 * switched off the back branch would have sent IN_BACK, which under water
+	 * is "pitch her nose up". Both are refused by the state, and the land
+	 * cases beside them prove the refusal is the water's and not a change of
+	 * the rule. */
+	sit.anim_state = 17;
+	sit.drawn = 1;
+	sit.action = 1;
+	state.have_ref = 0;
+	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_RUN, "a flare and the action key: still the run branch",
+		out.mode, MODERN_MODE_RUN);
+
+	sit.anim_state = 2;		// AS_STOP, the same situation on land
+	state.have_ref = 0;
+	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_AIM, "...and on land it is still aiming",
+		out.mode, MODERN_MODE_AIM);
+
+	sit.drawn = 0;
+	sit.action = 0;
+	cfg.back_turns = 0;
+	sit.anim_state = 17;
+	state.have_ref = 0;
+	tick(&cfg, &state, 0, S(30000), 0, 0, &sit, &out);	// stick pulled back
+	ok(out.mode == MODERN_MODE_RUN, "back on the stick under water is not a step back",
+		out.mode, MODERN_MODE_RUN);
+
+	sit.anim_state = 2;
+	state.have_ref = 0;
+	tick(&cfg, &state, 0, S(30000), 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_BACK, "...and on land, with the switch off, it is",
+		out.mode, MODERN_MODE_BACK);
+	ModernDefaults(&cfg);
+
+	/* WHAT IT COSTS, MEASURED BY RUNNING IT. A half turn under water and the
+	 * same on the surface, tick by tick through the function itself rather
+	 * than by dividing two numbers. */
+	sit.anim_state = 17;
+	rem = 0x7FFF;
+	ticks = 0;
+
+	while (rem > 0 && ticks < 1000)
+	{
+		water_out(&out, rem, 0);
+		ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+		rem -= absl(yaw);
+		ticks++;
+	}
+
+	under = ticks;
+	ok(under == 31, "a half turn under water takes 31 ticks", under, 31);
+
+	sit.anim_state = 33;
+	rem = 0x7FFF;
+	ticks = 0;
+
+	while (rem > 0 && ticks < 1000)
+	{
+		water_out(&out, rem, 0);
+		ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
+		rem -= absl(yaw);
+		ticks++;
+	}
+
+	surf = ticks;
+	ok(surf == 46, "and on the surface 46", surf, 46);
+
+	printf("  measured: half a turn costs %d ticks under water (%.2f s) and %d on"
+		" the surface (%.2f s)\n", under, under / 30.0, surf, surf / 30.0);
+
+	sit.anim_state = 17;
+	xrot = 0;
+	ticks = 0;
+
+	while (xrot < 15470 && ticks < 1000)
+	{
+		const long from = xrot;
+
+		water_out(&out, 0, 0);
+		ModernWaterMove(&cfg, &sit, &out, 20000, from, &yaw, &xrot, &stroke);
+		ticks++;
+	}
+
+	ok(ticks == 43, "level to straight up is 43 ticks", ticks, 43);
+	printf("  measured: level to the pitch limit is %d ticks (%.2f s) at %ld a tick\n",
+		ticks, ticks / 30.0, cfg.swim_pitch_rate);
 }
 
 /* ------------------------------------------------------ back on the stick -- */
@@ -2763,6 +3154,7 @@ int main()
 	aiming();
 	jumping();
 	classic_states();
+	water_move();
 	back_input();
 	chatter();
 	blocked();

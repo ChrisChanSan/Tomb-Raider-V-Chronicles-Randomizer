@@ -26,7 +26,8 @@
 static_assert(IN_FORWARD == MODERN_IN_FORWARD && IN_BACK == MODERN_IN_BACK &&
 	IN_LEFT == MODERN_IN_LEFT && IN_RIGHT == MODERN_IN_RIGHT &&
 	IN_DRAW == MODERN_IN_DRAW && IN_WALK == MODERN_IN_WALK &&
-	IN_LSTEP == MODERN_IN_LSTEP && IN_RSTEP == MODERN_IN_RSTEP,
+	IN_LSTEP == MODERN_IN_LSTEP && IN_RSTEP == MODERN_IN_RSTEP &&
+	IN_JUMP == MODERN_IN_JUMP,
 	"input_buttons moved - update game\\modern_move.h");
 
 /* THE ONE STATE. There is exactly one Lara and one stick, so this is a file
@@ -106,6 +107,9 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	long dx, dz;
 	long moved;
 	long yaw;
+	long water;		// round 161a2 step 4: the state's own swim turn rate, 0 on land
+	long xrot;		// her attitude after the pointer has had its say
+	long stroke;		// 1 = hold the stroke key this tick (water_auto_stroke)
 
 	if (!lara_item)
 		return bits;
@@ -254,14 +258,23 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	sit.anim_state = lara_item->current_anim_state;
 
-	/* WATER IS CLASSIC IN A1, and so is a dead Lara. The state table already
-	 * names every swimming and surface state; the water STATUS catches the
-	 * ticks in between - wading, going under, coming up - in one test.
-	 * Workflow A2 takes this line out when it gives the water a camera pitch
-	 * to swim by. The hit points are the death case the brief asks for: the
-	 * automaton stops answering there, and her last pose is the animation's
-	 * to keep. */
-	sit.classic = (lara.water_status != LW_ABOVE_WATER || lara_item->hit_points <= 0) ? 1 : 0;
+	/* WADING IS CLASSIC, AND SO IS A DEAD LARA - and the water itself is not,
+	 * any more (round 161a2 step 4). A1 wrote this line as "anything but
+	 * LW_ABOVE_WATER", because it had no camera pitch to swim by; the orbit is
+	 * there now, so LW_UNDERWATER and LW_SURFACE fall through to the state
+	 * table, which names the eight states the water really steers and the four
+	 * handovers it does not (game\modern_move.cpp).
+	 *
+	 * LW_WADE stays exactly as A1 left it and is named rather than implied:
+	 * there LaraAboveWater runs and the states are the ordinary ground ones,
+	 * so letting it through would change the feel of walking in shin-deep
+	 * water - a change nobody asked for, in a round that is about the water
+	 * she swims in. LW_FLYCHEAT needs no term at all: DOZY forces
+	 * AS_SWIMCHEAT (118) and the state table already calls that classic.
+	 *
+	 * The hit points are the death case the brief asks for: the automaton
+	 * stops answering there, and her last pose is the animation's to keep. */
+	sit.classic = (lara.water_status == LW_WADE || lara_item->hit_points <= 0) ? 1 : 0;
 
 	/* A weapon out and shootable. A torch is held in the same hand and is not
 	 * a weapon - aiming with it would strafe her around nothing. */
@@ -270,6 +283,17 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	sit.jump = jump ? 1 : 0;
 	sit.blocked = (modern_cfg.block_frames > 0 &&
 		modern_state.blocked_count >= modern_cfg.block_frames) ? 1 : 0;
+
+	/* IS THIS TICK THE WATER'S, and at what rate (round 161a2 step 4)? Asked
+	 * once, here, from the state alone, and answered by the same table the
+	 * translation asks - so the branch below and the two rules the water
+	 * switches off inside ModernTranslate cannot drift apart. The other two
+	 * start as "nothing happened": the water is the only thing that writes
+	 * them, and the log line at the foot of this function reads them whether
+	 * it ran or not. */
+	water = ModernWaterTurnRate(&modern_cfg, sit.anim_state);
+	xrot = lara_item->pos.x_rot;
+	stroke = 0;
 
 	lara_yaw = lara_item->pos.y_rot;
 
@@ -286,8 +310,47 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * heading she animates and collides with this tick, not next. The picture
 	 * glides on its own - game\interpolate.cpp snapshots her position BEFORE
 	 * the input runs and blends y_rot with LerpAngle, so nothing had to be
-	 * added there for 60 or 165 Hz. */
-	if (ModernDirectTurn(&modern_cfg, &modern_state, &sit, &out, &yaw))
+	 * added there for 60 or 165 Hz.
+	 *
+	 * IN THE WATER IT IS THE WATER'S OWN MOVE INSTEAD, and the two are an
+	 * either/or rather than one calling the other (round 161a2 step 4): the
+	 * water turns at the rate the state it is in turns at, takes no instant
+	 * about-turn, sends out no IN_FORWARD under water - down there that bit is
+	 * SwimTurn's pitch - and answers two things the land has no notion of, the
+	 * attitude and the stroke. `water` is the state's rate and the question
+	 * "is this the water?" in one, so the branch cannot drift from the table.
+	 *
+	 * THE POINTER IS ONLY A POINTER WHILE THE ORBIT IS STEERING THE VIEW. Where
+	 * it is not - first person, and nowhere else the seam is reachable from -
+	 * her own attitude goes in as the target, which asks for no change at all
+	 * and leaves the third axis hers. The flat circle and the stroke still
+	 * work there, because those two read the camera's HEADING, which first
+	 * person has as much as the orbit does. */
+	if (water)
+	{
+		if (ModernWaterMove(&modern_cfg, &sit, &out,
+			ModernCameraActive() ? ModernCameraSwimTarget() : lara_item->pos.x_rot,
+			lara_item->pos.x_rot, &yaw, &xrot, &stroke))
+		{
+			lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + yaw);
+			lara.turn_rate = 0;
+			lara_item->pos.x_rot = (short)xrot;
+
+			/* THE BANK THE TURN BITS WOULD HAVE MADE. SwimTurn rolls her by
+			 * this much on every tick a turn bit is held (game\laraswim.cpp),
+			 * and we have just taken those bits away - so the roll is owed,
+			 * not optional, or the modern swimmer would corner flat where the
+			 * classic one leans. The decay and the +-4004 clamp are still
+			 * LaraUnderWater's own, a few lines later in the same tick, so a
+			 * held turn settles exactly where the classic one settles. The
+			 * surface has no bank to owe: LaraSurface zeroes z_rot every tick
+			 * whatever anybody writes. */
+			if (yaw && ModernStateIsSwim(sit.anim_state))
+				lara_item->pos.z_rot = (short)(lara_item->pos.z_rot +
+					((yaw > 0) ? modern_cfg.swim_roll_rate : -modern_cfg.swim_roll_rate));
+		}
+	}
+	else if (ModernDirectTurn(&modern_cfg, &modern_state, &sit, &out, &yaw))
 	{
 		lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + yaw);
 		lara.turn_rate = 0;
@@ -296,11 +359,21 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	/* THE ONLY WRITE TO THE INPUT WORD. When the translation says it is not
 	 * responsible - a classic state, the stick at rest - the bits the stick
 	 * and the keyboard wrote simply stand, which is why the pad still moves
-	 * her in the water and on a ladder without a line of code for it. */
+	 * her on a ladder and up a rope without a line of code for it. (The water
+	 * used to be in that list; round 161a2 step 4 gave it its own.) */
 	if (out.active)
 		bits = (bits & ~(long)MODERN_MOVE_MASK) | out.bits;
 	else
 		modern_state.blocked_count = 0;
+
+	/* THE STROKE IS ADDED AND NEVER TAKEN AWAY (round 161a2 step 4). It is
+	 * IN_JUMP, which is not in MODERN_MOVE_MASK and so was not cleared by the
+	 * line above - deliberately: the player's own jump key must keep working
+	 * as the stroke it has always been, with water_auto_stroke on or off, and
+	 * a mask that swallowed it would have made the switch a trap. So this can
+	 * only ever turn the bit ON, on the ticks the stick is out under water. */
+	if (stroke)
+		bits |= MODERN_IN_JUMP;
 
 	/* For the next tick's blocked counter. Note that with the direct turn on,
 	 * forward and a turn bit never go out together - the direct turn takes

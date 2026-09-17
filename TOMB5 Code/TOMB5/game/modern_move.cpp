@@ -129,6 +129,14 @@ void ModernDefaults(MODERN_CFG* cfg)
 	cfg->snap_delta = MODERN_SNAP_DELTA;
 	cfg->snap_forward = MODERN_SNAP_FORWARD;
 	cfg->stick_full = MODERN_STICK_FULL;
+	cfg->swim_turn_rate = MODERN_SWIM_TURN_RATE;
+	cfg->surf_turn_rate = MODERN_SURF_TURN_RATE;
+	cfg->surf_side_rate = MODERN_SURF_SIDE_RATE;
+	cfg->swim_pitch_rate = MODERN_SWIM_PITCH_RATE;
+	cfg->swim_pitch_min = MODERN_SWIM_PITCH_MIN;
+	cfg->swim_pitch_max = MODERN_SWIM_PITCH_MAX;
+	cfg->swim_roll_rate = MODERN_SWIM_ROLL_RATE;
+	cfg->water_auto_stroke = MODERN_WATER_AUTO_STROKE;
 	cfg->hold_course = MODERN_HOLD_COURSE;
 	cfg->back_turns = MODERN_BACK_TURNS;
 	cfg->aim_strafe = MODERN_AIM_STRAFE;
@@ -165,9 +173,17 @@ void ModernResetState(MODERN_STATE* state)
  * gets the translation, which is why the switch below lists the classic
  * states one by one and lets `default` answer modern for the rest.
  *
- * THE WATER STATES carry "modern in A2 (camera pitch)" instead of a routine
- * name: A1 has no camera pitch to swim by, so they wait for the flat-circle
- * move and the swim pitch that A2 builds.
+ * THE WATER STATES USED TO STAND HERE WITH "modern in A2 (camera pitch)"
+ * AGAINST THEM, AND ROUND 161a2 STEP 4 TOOK THEM OUT. A1 had no camera pitch
+ * to swim by; the orbit is there now, so the eight states the player really
+ * steers in the water - 13/17/18 under it and 33/34/47/48/49 on it - are
+ * translated like any other, and ModernWaterMove below is what they get
+ * instead of ModernDirectTurn. The six that LOOK like water and are still
+ * listed as classic are named where they sit: the three dives and the
+ * climb-out are the handover and not the swim, the underwater roll is a fixed
+ * maneuver and the underwater death is not steered at all. DOZY's flight
+ * (118) makes seven and sits with TR5's own later states, where it reads the
+ * direction bits as a direction to fly.
  *
  * ONE DIVERGENCE FROM THIS ROUND'S OWN BUILD BRIEF, MEASURED AND REPORTED IN
  * THE STEP 3 RECORD: the brief's step 3 paragraph lists 25-29 as modern, but
@@ -188,38 +204,32 @@ long ModernStateIsClassic(short anim_state)
 {
 	switch (anim_state)
 	{
-	/* Water: the flat-circle move and the swim pitch are A2's right stick,
-	 * not a translation A1 can do with a fixed chase camera. */
-	case 13:	// AS_TREAD, lara_as_tread - modern in A2 (camera pitch)
-	case 17:	// AS_SWIM, lara_as_swim - modern in A2 (camera pitch)
-	case 18:	// AS_GLIDE, lara_as_glide - modern in A2 (camera pitch)
-	case 33:	// AS_SURFTREAD, lara_as_surftread - modern in A2 (camera pitch)
-	case 34:	// AS_SURFSWIM, lara_as_surfswim - modern in A2 (camera pitch)
-	case 35:	// AS_DIVE, lara_as_dive - modern in A2 (camera pitch)
-	case 44:	// AS_UWDEATH, lara_as_uwdeath - modern in A2 (camera pitch)
-	case 47:	// AS_SURFBACK, lara_as_surfback - modern in A2 (camera pitch)
-	case 48:	// AS_SURFLEFT, lara_as_surfleft - modern in A2 (camera pitch)
-	case 49:	// AS_SURFRIGHT, lara_as_surfright - modern in A2 (camera pitch)
-	/* The three that stand in the water list without swimming in it: two
-	 * dives in the air and the climb out onto the bank. They are classic
-	 * because THIS ROUND'S OWN BUILD BRIEF names them in its water list -
-	 * NOT because TROne do, which is what this comment said until the second
-	 * review pass measured it: their trone_modern_state_is_classic has 52,
-	 * 53 and 55 in neither the list nor the prose above it. The reason is
-	 * sound either way - a dive is how she gets INTO the water and the climb-
-	 * out is how she leaves it, so both belong to the same handover - but it
-	 * is not the camera pitch, so the line above must not be read as
-	 * promising them one, and it is not TROne's, so they must not be quoted
-	 * for it. */
+	/* THE WATER'S OWN HANDOVERS, which look like swimming and are not
+	 * steered like it. Round 161a2 step 4 took 13/17/18 and 33/34/47/48/49
+	 * out of this list; these four and the two below them stayed, and each
+	 * one has a reason of its own.
+	 *
+	 * 52/53/55 are the entry and the way out: a dive is how she gets INTO
+	 * the water and the climb-out is how she leaves it, so both belong to
+	 * the handover rather than to the swim. (They are OUR reason and not
+	 * TROne's - the second review pass of round 161a measured that their
+	 * trone_modern_state_is_classic has 52, 53 and 55 in neither the list
+	 * nor the prose above it.) 35 joins them for the same reason and for a
+	 * measured one on top: lara_as_dive reads IN_FORWARD as "steepen the
+	 * dive" (laraswim.cpp:468), which is a pitch and not a direction, and
+	 * the animation is over in a handful of ticks. */
+	case 35:	// AS_DIVE, lara_as_dive - the entry, not the swim
 	case 52:	// AS_SWANDIVE, lara_as_swandive - the entry, not the swim
 	case 53:	// AS_FASTDIVE, lara_as_fastdive - the entry, not the swim
 	case 55:	// AS_WATEROUT, lara_as_waterout - the way out, not the swim
 		return 1;
 
-	/* The underwater 180: classic like the water states above (the routine
-	 * is next to lara_as_swim/glide in game\laraswim.cpp), but not tagged
-	 * for A2 - it is a short fixed maneuver, not the held swim/glide loop
-	 * the camera pitch is for. */
+	/* The underwater 180 and the underwater death. The roll is a short fixed
+	 * maneuver on its own animation, not the held swim/glide loop the orbit
+	 * steers; the death is not steered by anybody (the seam's own
+	 * hit_points test in game\modern_state.cpp says the same thing a tick
+	 * earlier, and this is the state's half of it). */
+	case 44:	// AS_UWDEATH, lara_as_uwdeath - her last pose is the animation's
 	case 66:	// AS_WATERROLL, lara_as_waterroll
 		return 1;
 
@@ -350,6 +360,56 @@ long ModernStateIsClassic(short anim_state)
 	}
 }
 
+/* UNDER THE WATER OR ON IT (round 161a2 step 4). The three states in which
+ * she is really swimming: 13 AS_TREAD, 17 AS_SWIM, 18 AS_GLIDE, all three
+ * running SwimTurn out of game\laraswim.cpp. They are the ones where the
+ * direction bits mean a PITCH and a turn rather than a direction, which is
+ * why the water's own move clears them and drives x_rot instead - and they
+ * are the ones where the stroke is the jump key. The five surface states are
+ * the other half of the water and behave like the land: forward is forward.
+ */
+long ModernStateIsSwim(short anim_state)
+{
+	return (anim_state == 13 || anim_state == 17 || anim_state == 18) ? 1 : 0;
+}
+
+/* THE WATER'S TURN TABLE, and the predicate that says "this tick is the
+ * water's" at the same time: 0 means no water state, anything else is the
+ * rate that state turns at in TR5 itself (see the constants in the header for
+ * where each number was read out of). One function rather than a bool and a
+ * rate, because the seam asks both questions on the same tick and a state
+ * that can be steered without a rate does not exist. */
+long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state)
+{
+	MODERN_CFG spare_cfg;
+
+	if (!cfg)
+	{
+		ModernDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	switch (anim_state)
+	{
+	case 13:	// AS_TREAD, lara_as_tread
+	case 17:	// AS_SWIM, lara_as_swim
+	case 18:	// AS_GLIDE, lara_as_glide
+		return cfg->swim_turn_rate;
+
+	case 33:	// AS_SURFTREAD, lara_as_surftread
+	case 34:	// AS_SURFSWIM, lara_as_surfswim
+		return cfg->surf_turn_rate;
+
+	case 47:	// AS_SURFBACK, lara_as_surfback
+	case 48:	// AS_SURFLEFT, lara_as_surfleft
+	case 49:	// AS_SURFRIGHT, lara_as_surfright
+		return cfg->surf_side_rate;
+
+	default:
+		return 0;
+	}
+}
+
 /* Standing still, or turning on the spot. Here a turn is ONLY reachable
  * without IN_FORWARD (game\lara.cpp - lara_as_stop makes AS_TURN_L/AS_TURN_R
  * out of IN_LEFT/IN_RIGHT and a simultaneous IN_FORWARD overwrites the goal
@@ -434,20 +494,18 @@ long ModernStateAllowsDirectTurn(short anim_state)
 	}
 }
 
-/* How far she may turn this tick: the error, clamped to the rate, and zero
- * wherever the write is not allowed. `rate` 0 gives 0 everywhere, which is
- * the whole feature switched off and the turn bits back in charge - that is
- * what MODERN_DIRECT_TURN is for and why the rate is a parameter and not a
- * constant read in here.
+/* HOW FAR AN ANGLE MAY MOVE THIS TICK: the error, folded the short way round
+ * and clamped to the rate. Both turns in this file are that one sentence -
+ * the land's ModernGroundTurn just below and the water's ModernWaterMove
+ * further down - so it is written once here and they differ only in which
+ * states they allow and which rate they hand it (round 161a2 step 4; the
+ * arithmetic is A1's, moved and not changed).
  *
  * The rate is clamped to half a turn as well. Nothing sets it that high, but
  * a rate over 0x8000 would make "clamp the error to the rate" meaningless
  * and the clamp costs one comparison. */
-long ModernGroundTurn(short anim_state, long delta, long rate)
+static long ModernStepToward(long delta, long rate)
 {
-	if (rate <= 0 || !ModernStateAllowsDirectTurn(anim_state))
-		return 0;
-
 	delta = ModernWrap(delta);
 
 	if (rate > 0x4000L)
@@ -460,6 +518,19 @@ long ModernGroundTurn(short anim_state, long delta, long rate)
 		return -rate;
 
 	return delta;
+}
+
+/* How far she may turn this tick: the step above, and zero wherever the write
+ * is not allowed. `rate` 0 gives 0 everywhere, which is the whole feature
+ * switched off and the turn bits back in charge - that is what
+ * MODERN_DIRECT_TURN is for and why the rate is a parameter and not a
+ * constant read in here. */
+long ModernGroundTurn(short anim_state, long delta, long rate)
+{
+	if (rate <= 0 || !ModernStateAllowsDirectTurn(anim_state))
+		return 0;
+
+	return ModernStepToward(delta, rate);
 }
 
 /* THE DIRECT TURN'S WHOLE DECISION, in one place so that a test can drive it
@@ -539,6 +610,156 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	 * IN_FORWARD off for ticks after the turn is done. */
 	if (state)
 		state->spin = 0;
+
+	if (yaw_delta)
+		*yaw_delta = yaw;
+
+	return 1;
+}
+
+/* THE WATER'S OWN MOVE (round 161a2 step 4, the user's observation 7).
+ *
+ * "Unter Wasser ist der linke Stick wie ein D-Pad, was in alle Richtungen 360
+ * Grad auf einem flachen Kreis Lara in die Richtung bewegt. Die Aenderungen im
+ * dreidimensionalen Raum gehen ueber den rechten Stick, der ist wie ein
+ * 3D-Pointer in eine Richtung, der Lara dann folgt. Beide zusammen ergeben
+ * eine fluessige Bewegung durch den Raum."
+ *
+ * So the water is two independent halves, and this is both of them:
+ *   the flat circle	ModernTranslate has already turned the left stick into
+ *						a WORLD course, exactly as it does on land, and
+ *						out->delta is how far she is from it. This turns her
+ *						onto it at the rate TR5 turns at in that state.
+ *   the 3D pointer		`target_pitch` is where the orbit is pointing,
+ *						converted to a body attitude by the camera's own
+ *						ModernCameraSwimPitch. x_rot walks towards it at the
+ *						classic rate while the stick is out, and stops where
+ *						she is when it is let go - she keeps her attitude and
+ *						glides, which is observation 2's rule applied to the
+ *						third axis.
+ *
+ * IT IS ModernDirectTurn's COUNTERPART AND NOT AN EXTENSION OF IT, because
+ * the two differ in every line that matters: no instant about-turn (a one-tick
+ * half turn under water is the AS_WATERROLL animation's job and looks wrong
+ * without it), no IN_FORWARD under water (down there that bit is the PITCH -
+ * SwimTurn reads it as x_rot -= 364 - and the pitch is the orbit's now), and
+ * a stroke that the land has no notion of. What they share is the one line
+ * both of them turn her with, ModernStepToward above.
+ *
+ * THE SURFACE IS THE LAND WITH A DIFFERENT RATE. There IN_FORWARD really is
+ * forward - lara_as_surftread turns it into AS_SURFSWIM - so the bits come
+ * out exactly as they do on foot, the stroke is that same bit, and nothing
+ * touches x_rot: "auf der Oberflaeche ist der Kurs flach", and the engine
+ * keeps her there anyway (larasurf.cpp never writes x_rot except to dive).
+ *
+ * WHAT IT DOES NOT TAKE: the MODERN_STATE. The land's turn clears state->spin
+ * on its way out because the automaton's own turn-on-the-spot would otherwise
+ * keep IN_FORWARD off for ticks afterwards; here the bits are rewritten in
+ * full every tick and nothing reads spin in the water at all, and rule 6
+ * recomputes it from the error on the next tick either way.
+ *
+ * Returns 1 when it has taken the tick - then `yaw_delta` is what the caller
+ * adds to y_rot (and lara.turn_rate goes to zero, exactly as on land),
+ * `new_x_rot` is her new attitude, `stroke` says whether to hold the stroke
+ * key, and `out->bits` has been rewritten. Returns 0 with everything left as
+ * it was found otherwise, and then this is not a water tick at all. */
+long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_RESULT* out,
+	long target_pitch, long x_rot, long* yaw_delta, long* new_x_rot, long* stroke)
+{
+	MODERN_CFG spare_cfg;
+	long rate;
+	long yaw;
+	long remaining;
+	long pitch;
+	long step;
+
+	if (yaw_delta)
+		*yaw_delta = 0;
+
+	if (new_x_rot)
+		*new_x_rot = x_rot;
+
+	if (stroke)
+		*stroke = 0;
+
+	if (!cfg)
+	{
+		ModernDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	/* No state number, no water: ModernWaterTurnRate above is the only thing
+	 * that knows whether a direction bit down here means a direction at all. */
+	if (!sit)
+		return 0;
+
+	rate = ModernWaterTurnRate(cfg, sit->anim_state);
+
+	if (!rate)
+		return 0;
+
+	/* The stick at rest is not a course. She keeps the heading, the attitude
+	 * and the speed she had - which under water is a glide and on the surface
+	 * is treading - and the classic bits of specific\input.cpp stand, exactly
+	 * as they do when the translation steps aside on land. */
+	if (!out || !out->active)
+		return 0;
+
+	yaw = ModernStepToward(out->delta, rate);
+	remaining = ModernAbs((long)out->delta - yaw);
+
+	/* The turn bits go for the same reason they go on land - we are turning
+	 * her ourselves and a bit would turn her twice - and under water they
+	 * would do a second wrong thing as well: IN_FORWARD and IN_BACK are
+	 * SwimTurn's pitch. IN_WALK is left alone in both, as it is on land. */
+	out->bits &= ~(long)MODERN_DIR_MASK;
+
+	if (ModernStateIsSwim(sit->anim_state))
+	{
+		/* THE STROKE. Held for as long as the stick is out, so that "der
+		 * linke Stick bewegt Lara" is true without a second key: AS_TREAD and
+		 * AS_GLIDE both take IN_JUMP into AS_SWIM and AS_SWIM stays there
+		 * while it is held (game\laraswim.cpp:393, :420, :456). With
+		 * water_auto_stroke off nothing is held and the player's own jump key
+		 * is the stroke again, which is what TR5 has always done. */
+		if (cfg->water_auto_stroke)
+		{
+			if (stroke)
+				*stroke = 1;
+		}
+
+		/* THE POINTER. The target is clamped first and the step taken
+		 * afterwards, so that the clamp is a place she can be rather than a
+		 * wall the step stops at - and so that the difference below can never
+		 * approach half a turn, which is what would make a wrap necessary. An
+		 * attitude is not a heading: it is bounded by construction (the
+		 * engine's own +-15470) and must never be folded. */
+		pitch = target_pitch;
+
+		if (pitch < cfg->swim_pitch_min)
+			pitch = cfg->swim_pitch_min;
+		else if (pitch > cfg->swim_pitch_max)
+			pitch = cfg->swim_pitch_max;
+
+		step = pitch - x_rot;
+
+		if (step > cfg->swim_pitch_rate)
+			step = cfg->swim_pitch_rate;
+		else if (step < -cfg->swim_pitch_rate)
+			step = -cfg->swim_pitch_rate;
+
+		if (new_x_rot)
+			*new_x_rot = x_rot + step;
+	}
+	else if (remaining <= cfg->snap_forward)
+	{
+		/* The surface, and the same 45 degrees the land uses: she swims once
+		 * she is nearly facing the way she is going, so a half turn on the
+		 * spot does not carry her the wrong way first. */
+		out->bits |= MODERN_IN_FORWARD;
+	}
+
+	out->turning = (remaining > 0) ? 1 : 0;
 
 	if (yaw_delta)
 		*yaw_delta = yaw;
@@ -627,6 +848,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	long enter;
 	long leave;
 	long bits;
+	long water;
 
 	if (!out)
 		return;
@@ -669,8 +891,16 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 
 	out->mag = ModernMagnitude(cfg, stick_x, stick_y);
 
-	/* 0. Swimming, hanging, the ladder, the monkey swing, a block, a vehicle,
-	 * the object states: there a direction bit does not mean "where do I go",
+	/* IS THIS A TICK IN THE WATER (round 161a2 step 4)? Zero on land, and the
+	 * state's own turn rate in the eight states the water steers. Two of the
+	 * rules below ask, because each of them would otherwise send out a bit
+	 * that means something else in the water; the rest of the translation is
+	 * the same function it is on foot, which is the whole point of the user's
+	 * "die Steuerung unter Wasser ist genau gleich wie ausserhalb". */
+	water = ModernWaterTurnRate(cfg, sit->anim_state);
+
+	/* 0. Hanging, the ladder, the monkey swing, a block, a vehicle, the
+	 * object states: there a direction bit does not mean "where do I go",
 	 * so the classic input stays and we report that we did nothing. The seam
 	 * leaves the base bits standing when active is 0. */
 	if (sit->classic || ModernStateIsClassic(sit->anim_state))
@@ -751,8 +981,17 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	 * a rule the translation can simply state. A tap is enough: the direction
 	 * lara_as_compress writes into goal_anim_state on this tick is never taken
 	 * back by a later one, so the flip survives the ticks in which she is back
-	 * to aiming. */
-	state->aiming = (cfg->aim_strafe && sit->drawn && sit->action && !sit->jump) ? 1 : 0;
+	 * to aiming.
+	 *
+	 * AND NEVER IN THE WATER (round 161a2 step 4). There is no aiming down
+	 * there - she cannot draw a weapon in the water at all - but sit->drawn
+	 * can still be 1, because a FLARE is held at LG_READY and the seam's own
+	 * test only excludes the torch. The branch's whole reason ("the game
+	 * turns her onto her target itself") has no counterpart in the water
+	 * either, and the side step it produces is nothing at all under water.
+	 * So the question is asked here, once, rather than left to surprise the
+	 * water's own move with a mode it cannot take. */
+	state->aiming = (cfg->aim_strafe && sit->drawn && sit->action && !sit->jump && !water) ? 1 : 0;
 
 	if (state->aiming)
 	{
@@ -824,8 +1063,12 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	}
 
 	/* 5. Back on the stick as a step backwards instead of an about-turn -
-	 * only when back_turns is switched off. */
-	if (!cfg->back_turns && adelta >= 0x8000L - cfg->aim_sector)
+	 * only when back_turns is switched off, and never in the water: IN_BACK
+	 * there is SwimTurn's "pitch her nose up" and not a step at all (round
+	 * 161a2 step 4). Nothing ships with back_turns off, so this term changes
+	 * no shipping behaviour - it keeps the switch honest for the play test
+	 * and for the tests that drive it explicitly. */
+	if (!cfg->back_turns && !water && adelta >= 0x8000L - cfg->aim_sector)
 	{
 		bits = MODERN_IN_BACK;
 

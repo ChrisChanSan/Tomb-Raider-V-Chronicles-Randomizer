@@ -266,3 +266,33 @@ long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance)
 
 	return (distance < cfg->hide_dist) ? 1 : 0;
 }
+
+/* WHAT ATTITUDE IS THE ORBIT POINTING AT (round 161a2 step 4, the water)?
+ *
+ * The user's observation 7 calls the right stick a 3D pointer "der Lara dann
+ * folgt", so the water needs the orbit's pitch as a BODY pitch, and the two
+ * are not the same number: the chase camera has always sat pitch_home above
+ * her own axis. ChaseCamera's own line is the proof and the arithmetic -
+ * "camera.target_elevation = -1820 + item->pos.x_rot" (game\camera.cpp), so
+ * the elevation that belongs to an attitude is home + x_rot, and the attitude
+ * that belongs to an elevation is elevation - home. Inverting the engine's own
+ * line rather than picking a number means a camera left alone points exactly
+ * at level swimming, which is where TR5 has pointed it since 1999.
+ *
+ * It is NOT clamped here. The orbit's own limits are the chase camera's
+ * (+-15470) and the water's are LaraUnderWater's (the same +-15470), but they
+ * are offset from one another by home, so the top of the range really is out
+ * of her reach by 1820 units and the water's own move is where that is
+ * answered - with its own constants, in the file the play test would tune. */
+short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch)
+{
+	MODERN_CAMERA_CFG spare_cfg;
+
+	if (!cfg)
+	{
+		ModernCameraDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	return (short)(pitch - cfg->pitch_home);
+}

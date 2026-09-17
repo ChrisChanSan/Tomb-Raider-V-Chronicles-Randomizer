@@ -220,7 +220,7 @@ static char CameraSnaps = 0;
  *
  * The orbit itself is game\modern_camera.cpp: two remembered angles and three
  * rules, no engine in it at all, checked number by number by
- * Preparation\Tools\Diagnose\ModernTest.cpp. What lives here is the six
+ * Preparation\Tools\Diagnose\ModernTest.cpp. What lives here is the seven
  * places the engine touches it, and deliberately nothing else - because the
  * modern camera is not a new camera, it is OUR chase camera with its angle
  * taken from a state instead of from Lara alone:
@@ -240,9 +240,12 @@ static char CameraSnaps = 0;
  *   the wall    ModernCameraNoteWall, after the collision has had its say;
  *               the collision itself is not touched by a line
  *   the draw    ModernLaraHidden, asked once per frame in game\draw.cpp
+ *   the water   ModernCameraSwimTarget, asked by game\modern_state.cpp once
+ *               per tick while she swims: down there the orbit is the pointer
+ *               her body follows, not only the view (step 4)
  *
  * WITH tomb5.control_modern OFF, ModernCameraActive() is false at its first
- * term and every one of those six is the line it was: the orbit is not
+ * term and every one of those seven is the line it was: the orbit is not
  * ticked, both slots keep the values vanilla puts in them, and the draw
  * predicate returns false before it measures anything.
  *
@@ -462,6 +465,24 @@ long ModernLaraEyeDistance()
 	const long dz = camera.pos.z - camera.target.z;
 
 	return (long)phd_sqrt((ulong)(SQUARE(dx) + SQUARE(dy) + SQUARE(dz)));
+}
+
+/* WHERE THE POINTER IS POINTING, for the water (round 161a2 step 4). The
+ * orbit's elevation, turned into the body attitude it belongs to by
+ * game\modern_camera.cpp - the camera owns both the number and the conversion,
+ * so game\modern_state.cpp asks one question and keeps no second copy of
+ * either.
+ *
+ * It is the value the LAST tick's camera left, exactly as the camera HEADING
+ * that file already reads is: game\control.cpp runs the input before
+ * CalculateCamera, so the orbit of this tick has not run yet when the water
+ * asks. A thirtieth of a second behind the thumb, on the same axis and for
+ * the same reason as the yaw. */
+short ModernCameraSwimTarget()
+{
+	ModernCameraArm();
+
+	return ModernCameraSwimPitch(&modern_cam_cfg, modern_cam_state.offset_pitch);
 }
 
 bool ModernLaraHidden()

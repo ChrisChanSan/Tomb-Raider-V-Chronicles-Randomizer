@@ -20,9 +20,11 @@
  * heading and whether Lara is getting anywhere - and it is the only place in
  * the tree that writes Lara's heading from the input function.
  *
- * It is called from ONE place, the seam in specific\input.cpp between the
- * block that puts the stick on the four direction bits and the block that
- * reads the key roles, and only inside that seam's guard. With
+ * The tick below is called from ONE place, the seam in specific\input.cpp
+ * between the block that puts the stick on the four direction bits and the
+ * block that reads the key roles, and only inside that seam's guard; the reset
+ * below it is called from two more, both of them under the same option (the
+ * Controls page when the scheme is switched, and the level start). With
  * tomb5.control_modern off nothing here runs at all, which is how the engine
  * stays what it was at the default (Tank). */
 
@@ -41,8 +43,17 @@
 long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump);
 
 /* Forget everything remembered: the held course, the spin, the blocked
- * counter and the position the counter measures against. Called from here
- * whenever the tick chain breaks (a level start, a savegame, the inventory,
- * first person, the look key), and meant to be called from the options page
- * as well when the scheme is switched - round 161a step 6/7. */
+ * counter and the position the counter measures against.
+ *
+ * Three callers, and the split between them is the point. This file calls it
+ * whenever the tick chain visibly breaks - first person, a cutscene, the look
+ * key, the title - which it can tell from the game's own tick counter.
+ * game\gameflow.cpp calls it at a level start, because a level change stops
+ * that counter and so cannot be told from an ordinary tick (the guard in the
+ * .cpp says so at length); that call takes every savegame restore with it.
+ * And specific\LoadSave.cpp calls it when the scheme is switched on the
+ * Controls page, because a course seated under Tank is no course at all.
+ *
+ * It touches nothing but this file's own statics, so it is safe to call
+ * before a level exists and with no Lara in the world. */
 void ModernResetControls();

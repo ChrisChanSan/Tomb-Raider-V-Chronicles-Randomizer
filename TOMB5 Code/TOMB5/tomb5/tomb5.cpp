@@ -419,10 +419,12 @@ void init_tomb5_stuff()
 		// call of its own: game\modern_state.cpp's statics start zeroed by
 		// the loader exactly as tomb5.control_modern does, and its own tick
 		// guard treats the very first tick as a break in the chain (see its
-		// comment) and resets itself. The call this value's COMMENT in
-		// tomb5_options (global\types.h) promises is for the Controls page
-		// (round 161a step 7): switching the row at RUNTIME, with a level
-		// already loaded, is the case that actually needs it.
+		// comment) and resets itself. The calls that ARE needed are elsewhere
+		// and both have a level in front of them: the Controls page, where the
+		// row is switched at runtime with a level already loaded (round 161a
+		// step 7), and the level start itself (game\gameflow.cpp - added in
+		// that round's second review pass, where the tick guard turned out not
+		// to be able to see a level change at all).
 		sprintf(buf, "ctrl_modern");
 		REG_ReadBool(buf, tomb5.control_modern, 0);
 

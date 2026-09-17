@@ -1455,6 +1455,97 @@ static void direct_turn()
 	ok((out.bits & MODERN_IN_WALK) != 0, "a gentle stick still walks while the turn is ours",
 		out.bits & MODERN_IN_WALK, MODERN_IN_WALK);
 	ok(absl(yaw) == 0x8000, "...and the reversal still happens", absl(yaw), 0x8000);
+
+	/* THE LEVEL BOUNDARY - what the reset at the level start is worth (#161,
+	 * the one high finding of the second review pass).
+	 *
+	 * The held course is a WORLD heading and a level change throws that world
+	 * away. game\modern_state.cpp's tick guard cannot notice: no tick runs at
+	 * all between two levels, so the boundary reaches it as an ordinary step
+	 * of one. The reset is therefore hung at the level start itself, in
+	 * game\gameflow.cpp beside InterpInvalidate("level start"). Nothing in
+	 * this tool can reach that call - it links the arithmetic and no engine -
+	 * so what is asserted here is what the call BUYS, which is the same thing
+	 * measured from the other end: anybody who deletes the call has to delete
+	 * these checks with it.
+	 *
+	 * Level A: the camera on 0x2000, the stick held forward, three ticks seat
+	 * the course. Level B: she stands on -0x4000 with the chase camera behind
+	 * her, and the player never let go of the stick. The camera is then held
+	 * still on purpose - the course is HELD, so nothing the camera does can
+	 * re-seat it, which is exactly the finding. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 1;					/* AS_RUN - she was running in level A */
+	sit.jump = 0;
+
+	{
+		MODERN_STATE carried;
+		const short lara = -0x4000;
+		short heading;
+		long forward_at = 0;
+		long arrived_at = 0;
+		int tk;
+
+		for (tk = 0; tk < 3; tk++)
+			tick_turn(&cfg, &state, 0, -S(32000), (short)0x2000, (short)0x2000, &sit, &out, &yaw);
+
+		ok(state.course == 0x2000, "level A seats a world course", state.course, 0x2000);
+
+		/* A level start is a standing pose, and standing keeps the bounded
+		 * rate (the snap is only for a real run), so this is the slow,
+		 * visible version of the cost. */
+		carried = state;
+		sit.anim_state = 2;				/* AS_STOP */
+		tick_turn(&cfg, &carried, 0, -S(32000), lara, lara, &sit, &out, &yaw);
+		ok(out.target == 0x2000, "the next level's first tick answers the OLD course",
+			out.target, 0x2000);
+		ok(out.delta == 24576, "...135 degrees of error out of nowhere", out.delta, 24576);
+		ok(out.bits == 0, "...she does not run at all", out.bits, 0);
+		ok(yaw == MODERN_TURN_RATE, "...and turns away from the camera at the full rate",
+			yaw, MODERN_TURN_RATE);
+
+		/* Her heading follows the yaw the direct turn really returned, the way
+		 * game\modern_state.cpp writes it - not the rate times the tick
+		 * number, because the last tick of a turn is clamped to whatever error
+		 * is left and a rate times a count would overshoot it. */
+		heading = ModernWrap((long)lara + yaw);
+
+		for (tk = 2; tk <= 12; tk++)
+		{
+			tick_turn(&cfg, &carried, 0, -S(32000), lara, heading, &sit, &out, &yaw);
+			heading = ModernWrap((long)heading + yaw);
+
+			if (!forward_at && (out.bits & MODERN_IN_FORWARD))
+				forward_at = tk;
+
+			if (!arrived_at && out.delta == 0)
+				arrived_at = tk - 1;
+		}
+
+		ok(forward_at == 5, "...no forward for five ticks of it", forward_at, 5);
+		ok(arrived_at == 8, "...and eight ticks to finish the turn nobody asked for",
+			arrived_at, 8);
+
+		/* The same tick after the reset: the stick means what the player's
+		 * camera says it means, and she runs. */
+		ModernResetState(&carried);
+		tick_turn(&cfg, &carried, 0, -S(32000), lara, lara, &sit, &out, &yaw);
+		ok(out.target == lara, "after the reset the same stick answers THIS level's camera",
+			out.target, lara);
+		ok(out.delta == 0, "...with no error to work off", out.delta, 0);
+		ok(out.bits == MODERN_IN_FORWARD, "...so she simply runs", out.bits, MODERN_IN_FORWARD);
+		ok(yaw == 0, "...and nothing writes her heading", yaw, 0);
+
+		/* And if the boundary catches her running instead of standing, the
+		 * snap past 90 degrees takes the whole wrong turn in one tick - the
+		 * same defect, worn the other way round. */
+		carried = state;
+		sit.anim_state = 1;				/* AS_RUN */
+		tick_turn(&cfg, &carried, 0, -S(32000), lara, lara, &sit, &out, &yaw);
+		ok(yaw == 24576, "caught running, the snap whips all 135 degrees in one tick",
+			yaw, 24576);
+	}
 }
 
 /* ---------------------------------------------------------- the weapons ---- */

@@ -34,6 +34,7 @@
 #include "../specific/function_stubs.h"
 #include "../specific/profile.h"		// PROFLOG's logic phase (#148)
 #include "interpolate.h"			// the interpolator's level boundary (#148, order 2)
+#include "modern_state.h"			// the modern control's level boundary (#161)
 #include "../specific/audio.h"
 #include "../specific/fmv.h"
 #include "../specific/polyinsert.h"
@@ -1100,6 +1101,31 @@ void DoLevel(uchar Name, uchar Audio)
 	nframes = 2;
 	framecount = 0;
 	InterpInvalidate("level start");	// nothing before this tick belongs to this level (#148, order 2)
+
+	/* AND THE MODERN CONTROL'S HELD COURSE IS NOT A COURSE IN THIS WORLD
+	 * EITHER (#161, round 161a, second review pass).
+	 *
+	 * What it holds is a WORLD heading, kept across ticks so that the camera
+	 * swinging does not bend her path; the world that heading was measured in
+	 * has just been thrown away. Its own guard cannot notice that, and the
+	 * reason is worth writing down because it is the same reason the line
+	 * above exists: the only clock the guard has is GlobalCounter, and
+	 * GlobalCounter stops with the game. Between two levels not one tick runs
+	 * - the loop below leaves at `gfLevelComplete`, and the priming
+	 * ControlPhase two lines down is the next tick there is - so a level
+	 * boundary reaches the guard as an ordinary step of one and reads as
+	 * "game time flowed". So it is hung here, where the level really starts,
+	 * rather than inferred from a counter.
+	 *
+	 * This one line also takes every savegame restore with it: sgRestoreGame
+	 * has exactly one caller and it is sixty lines above this one, in this
+	 * same function, whether the player loaded from the title or out of the
+	 * ring. Under the option because at Tank nothing has written that state
+	 * and nothing will read it - and the Controls page resets it itself the
+	 * moment the scheme is switched. */
+	if (tomb5.control_modern)
+		ModernResetControls();
+
 	gfStatus = ControlPhase(2, 0);
 	Log("DoLevel: first logic phase done");
 	dbinput = 0;

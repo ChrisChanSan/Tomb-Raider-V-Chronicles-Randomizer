@@ -141,10 +141,32 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * S_UpdateInput, and nothing else in the tree touches it. So a call that
 	 * does not follow a fresh count is not the game's tick and is left alone.
 	 *
-	 * A BREAK IN THE CHAIN IS A RESET, and it is also the level start, the
-	 * savegame, the death menu, the inventory, first person, a cutscene and
-	 * the look key - each of them stops the seam for more than one tick. The
-	 * tick after the break is skipped as well (a thirtieth of a second), so
+	 * A BREAK IN THE CHAIN IS A RESET - BUT ONLY THE BREAKS THIS COUNTER CAN
+	 * SEE, AND IT CANNOT SEE ALL OF THEM (corrected in the second review pass
+	 * of this round, where the claim that stood here was measured and found
+	 * false). It sees every break in which ticks really ran while the seam
+	 * stood aside: the title screen, first person, a cutscene, a spotcam, the
+	 * look key. There the counter runs away from modern_tick while this
+	 * function is not being called, and the difference on the way back is more
+	 * than one.
+	 *
+	 * IT CANNOT SEE A LEVEL CHANGE OR A SAVEGAME RESTORE, because between two
+	 * levels not one tick runs - game\gameflow.cpp leaves its loop at
+	 * gfLevelComplete and the next level's priming ControlPhase is the next
+	 * tick there is - so the counter stands still and the boundary arrives
+	 * here as an ordinary step of one. That reset is hung where the level
+	 * really starts instead, in game\gameflow.cpp beside
+	 * InterpInvalidate("level start"), which is the other thing in the engine
+	 * that holds state from the previous tick and has to be told the same
+	 * news.
+	 *
+	 * AND THE INVENTORY IS DELIBERATELY NOT A RESET. The ring has no clock of
+	 * its own either, so the tick after it is also a step of one - but the
+	 * world did not move while it was open and her held course is still the
+	 * course she was on, so carrying on is the right answer here rather than a
+	 * hole in the guard.
+	 *
+	 * The tick after a break is skipped as well (a thirtieth of a second), so
 	 * that the first tick back is measured against a position from this level
 	 * and not against wherever she stood before. */
 	if (modern_seen && GlobalCounter == modern_tick)
@@ -155,9 +177,12 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		ModernResetControls();
 
 		/* MODERNLOG INIT (step 5), once per break in the chain. A level start
-		 * is the common, named case, but the guard above is "the chain
-		 * broke", which the inventory, first person and the look key all
-		 * trip too (see ModernResetControls' own comment) - a config worth
+		 * reaches this branch too, and through the front door rather than by
+		 * luck: game\gameflow.cpp calls ModernResetControls() before the
+		 * level's priming tick, which puts modern_seen back to 0, and the
+		 * first test above is then the one that answers. The other breaks -
+		 * first person, a cutscene, the look key - trip the second test
+		 * instead (see the guard's own comment) - a config worth
 		 * naming once rather than folding into every tick line below.
 		 * `scheme=modern` is written out rather than left implied: this line
 		 * only ever runs from inside the seam's tomb5.control_modern guard,
@@ -298,10 +323,13 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 *
 	 * NEVER MORE - BUT IT CAN BE FEWER, AND A LINE COUNT HAS TO EXPECT THAT.
 	 * The reset branch above returns before this line, so the first tick back
-	 * from a level start, a savegame, the inventory, first person, a cutscene
-	 * or the look key shows its `init` line and no tick line; and while the
-	 * look key is down, or the ring is open, or a cutscene is playing, the
-	 * seam is not called at all and neither line appears. So a gap in `f=` is
+	 * from a level start, a savegame, first person, a cutscene or the look key
+	 * shows its `init` line and no tick line. The inventory is the one break
+	 * that is NOT in that list, because nothing resets for it (the guard's own
+	 * comment says why): the tick after the ring closes is an ordinary tick
+	 * line. And while the look key is down, or the ring is open, or a cutscene
+	 * is playing, the seam is not called at all and neither line appears. So a
+	 * gap in `f=` is
 	 * the scheme standing aside, not a dropped line - count against the `f=`
 	 * numbers, which are GlobalCounter and never lie, rather than against the
 	 * wall clock.

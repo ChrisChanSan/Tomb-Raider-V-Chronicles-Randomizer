@@ -32,11 +32,13 @@ bool FirstPersonActive();		// is first person running right now? (head and braid
 short GetFirstPersonRoll();		// the head bone's roll, for the interpolator (#148, order 2)
 
 /* THE MODERN CAMERA (#161, round 161a2). The orbit's arithmetic is
- * game\modern_camera.h; these are the engine's side of it, and the long
+ * game\modern_camera.h; these five are the engine's side of it, and the long
  * comment above their definitions in game\camera.cpp says which is which. */
 bool ModernCameraActive();		// is the orbit steering the view this tick?
 void ModernCameraResetOrbit();		// level start, savegame load, scheme change
 void ModernCameraStick(long rs_x, long rs_y);	// the right stick, from specific\input.cpp
+long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points
+bool ModernLaraHidden();		// too close to draw her at all (observation 4)
 
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;

@@ -2342,7 +2342,28 @@ void DrawRooms(short current_room)
 	{
 		nPolyType = 4;
 
-		if (lara_item->mesh_bits && !SCNoDrawLara)
+		/* TOO CLOSE TO DRAW HER AT ALL (#161, round 161a2, step 2, the user's
+		 * observation 4: "ist Lara zu nah, wird sie komplett ausgeblendet").
+		 *
+		 * ONE TERM, AND IT IS THE WHOLE OF THE HIDE. This block is every path
+		 * that draws her: the classic composite and its braid and her shadow
+		 * (specific\drawlara.cpp - S_PrintShadow and DrawHair are inside the
+		 * four variants), the remaster's wardrobe (HDLaraDrawFrame, called
+		 * from those same variants) and the muzzle flash's matrices below.
+		 * objects[LARA].draw_routine is 0 (game\setup.cpp:1024), so the room's
+		 * item loop never draws her either, and the binoculars have been
+		 * proving the whole arrangement since 1999: they set mesh_bits = 0 and
+		 * she disappears completely, shadow and all, through this same
+		 * condition.
+		 *
+		 * Her MIRROR image stays, which is why the term is here and not
+		 * inside DrawLara: Draw_Mirror_Lara is below this block, and the
+		 * reflection of a camera stuck inside her is not stuck inside
+		 * anything - it is a Lara at twice the distance to the glass.
+		 *
+		 * The predicate itself measures the camera's own two points once per
+		 * frame and refuses first person outright (game\camera.cpp). */
+		if (lara_item->mesh_bits && !SCNoDrawLara && !ModernLaraHidden())
 		{
 			if (lara.skelebob)
 				SetupSkelebobMeshswaps();

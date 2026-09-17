@@ -437,6 +437,49 @@ static void ModernCameraNoteWall(const GAME_VECTOR* ideal, long distance)
 	modern_cam_push = phd_atan(dz, dx) - (long)camera.actual_angle;
 }
 
+/* HOW FAR THE EYE IS FROM HER, MEASURED WITH THE CAMERA'S OWN TWO POINTS.
+ *
+ * camera.target is the point the camera looks at, and for both orbit cameras
+ * that point is Lara: her chest for the chase camera (ConfirmCameraTargetPos),
+ * her own position for the combat one. So the distance from camera.pos to it
+ * is the camera's own idea of how far away she is - it wants to be 1536, and
+ * it goes to nothing exactly when geometry has pushed the eye into her.
+ * Nothing new is measured and no second notion of "where Lara is" is
+ * invented, which is what makes MODERN_CAMERA_HIDE_DIST's origin hold: the
+ * near plane is 20 units and her body a cylinder of radius 102, so 122 is the
+ * eye-to-centre distance at which that plane stops being in front of her.
+ *
+ * IT IS THE SIMULATION PAIR AND NOT THE DRAWN ONE, deliberately. The answer
+ * is a hard cut - the user measured the Remaster cutting her within a twelfth
+ * of a second, not fading - so at 60 or 165 Hz the interpolated frames either
+ * side of the threshold can only ever show her one frame longer. A per-frame
+ * eye would buy that one frame and would have to answer what the target does
+ * between two ticks. */
+long ModernLaraEyeDistance()
+{
+	const long dx = camera.pos.x - camera.target.x;
+	const long dy = camera.pos.y - camera.target.y;
+	const long dz = camera.pos.z - camera.target.z;
+
+	return (long)phd_sqrt((ulong)(SQUARE(dx) + SQUARE(dy) + SQUARE(dz)));
+}
+
+bool ModernLaraHidden()
+{
+	ModernCameraArm();
+
+	/* First person asks the opposite question and asks it first: there the eye
+	 * really IS inside her head, and her arms are what the player aims with.
+	 * It hides her head itself and draws the rest (specific\drawlara.cpp), so
+	 * this predicate must not answer at all while it runs. ModernCameraActive
+	 * already refuses first person on the CAMERA's side; FirstPersonActive is
+	 * the DRAW's own question, and this is a draw, so both are asked. */
+	if (!ModernCameraActive() || FirstPersonActive())
+		return false;
+
+	return ModernCameraHidesLara(&modern_cam_cfg, ModernLaraEyeDistance()) != 0;
+}
+
 void InitialiseCamera()
 {
 	// EVERYTHING the first person camera remembers is forgotten here.

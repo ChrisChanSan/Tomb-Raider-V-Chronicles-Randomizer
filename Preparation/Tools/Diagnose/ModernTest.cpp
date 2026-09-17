@@ -2516,6 +2516,8 @@ static void camera_hide()
 		ModernCameraHidesLara(&cfg, cfg.hide_dist), 0);
 	ok(ModernCameraHidesLara(&cfg, 1536) == 0,
 		"at the chase camera's own distance: drawn", ModernCameraHidesLara(&cfg, 1536), 0);
+	ok(ModernCameraHidesLara(&cfg, 384) == 0,
+		"at the camera collision's own push: drawn", ModernCameraHidesLara(&cfg, 384), 0);
 }
 
 /* THE SEAM'S OWN ARITHMETIC (#161, round 161a2, step 2). Everything the engine

@@ -191,10 +191,21 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * the two numbers the user's play test picks between (decision 5) -
 		 * control_modern is the gate on the whole scheme, MODERN_DIRECT_TURN
 		 * the second gate on this one mechanism inside it, and direct is the
-		 * one of the two that can change without a rebuild. */
+		 * one of the two that can change without a rebuild.
+		 * `walk_below`, `recenter` and `jump_dir` (round 161a-fix, #161 item
+		 * 4) are the first play test's own numbers: walk_below and recenter
+		 * are the two the test's log moved off their TROne defaults at all
+		 * (game\modern_move.h), so a later log is worth reading back rather
+		 * than trusted from memory, and jump_dir is worth the same read now
+		 * that it also decides whether AS_COMPRESS can reach mode RUN (item
+		 * 3) and therefore whether ModernStateAllowsDirectTurn's tenth state
+		 * ever answers - a play test that asks "why did she not turn in the
+		 * crouch" has the switch on the same line as the rate that would have
+		 * turned her. */
 		if (gLogEnabled)
-			Log("MODERNLOG init scheme=modern rate=%d direct=%d",
-				modern_cfg.turn_rate, modern_cfg.direct_turn);
+			Log("MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d jump_dir=%d",
+				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
+				modern_cfg.recenter, modern_cfg.jump_dir);
 
 		modern_tick = GlobalCounter;
 		modern_seen = 1;

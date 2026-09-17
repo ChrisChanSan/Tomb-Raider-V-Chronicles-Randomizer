@@ -14741,6 +14741,85 @@ sent the measurer after a band of stick readings (1..8) that no joystick path
 in the engine can produce, so it now names what the measurement is really
 for: the magnitude deciding walking from running.
 
+**FIX ROUND AFTER THE FIRST PLAY TEST (2026-09-17).** Round 161a shipped,
+the user played it (build `582d5e3e`), and the MODERNLOG of that session -
+3,076 ticks, `Preparation/Tools/Diagnose/playtest1/log_a1_test1.txt`, read
+with the two scripts beside it - answered the two numbers design section 3
+had marked "measure", plus one behaviour only a Remaster recording could
+settle.
+
+*Item 1, the stick set IN_WALK it should never have set.* Of 32 stick
+pushes from rest, the FIRST tick read 20-60 of 128 in 19 of them - the stick
+is still travelling toward the speed the player asked for, not yet there -
+and the SECOND was already 100 or more in 25 of the same 32. A single low
+tick in between crossed `walk_below` (62) and latched the automaton into
+`AS_WALK` for several ticks although every tick around it said run: 24
+one-tick and 2 two-tick walk episodes, seen by the user as "Lara sneaks on
+every direction change". His decision: *"das Gehbit darf gar nicht durch den
+Stick ausgelöst werden, der hat ja eine eigene Schleichen-Taste"* - the pad
+already has a dedicated walk key (R1 in our layout), so the stick's own
+magnitude must never be able to produce `IN_WALK` at all. `MODERN_WALK_BELOW`
+is now 0; the constant and `cfg->walk_below` stay, because the capability
+TROne measured is still real and still provable with an explicit cfg
+(`ModernTest`'s `walk_threshold()`, and the D-pad and direct-turn sub-tests
+that used to lean on the shipped 62, now ask for it by name). Read at the
+seam (`specific/input.cpp`) rather than assumed: the translation clears the
+stick's bits before the dedicated walk key (`Key(6)`, the pad's `jLayout[2]`)
+is read, so the key's own `IN_WALK` was never at risk - the order was already
+right, and that finding is now a comment at the seam instead of something
+the next reader has to re-derive.
+
+*Item 2, recenter re-seated the course mid-turn.* 325 re-seats of the held
+course happened while the stick was held, and in the great majority of them
+the stick's own angle had moved 20-40 degrees since the previous tick alone -
+above the old `MODERN_RECENTER` (`0x1000`, TROne's 22.5 degrees) every time -
+because the user steers circles by turning the stick through a full rotation
+in 0.3-0.6 seconds. Every one of those ticks re-seated the course on whatever
+the chase camera had swung to in the meantime: course jumps of 0-40 degrees,
+sometimes over 100, seen as "circles break off at a certain angle". His
+decision: widen the window rather than drop the rule. A deliberate flick to a
+new direction is still >= 90 degrees in one tick in the same log, so
+`MODERN_RECENTER` is now `0x2000` (45 degrees) - wide enough to clear a fast
+circling rotation, still narrow enough to catch a flick well before it.
+
+*Item 3, the standing jump flipped sideways even unarmed.* Not from the
+MODERNLOG - from the user's own Remaster recording (`Base Profile
+2026.09.17 - 21.48.32.01.mp4`, jumps with and without a weapon): *"Wenn Lara
+die Waffen in der Hand hat (Kampfmodus) ist das jetzige Verhalten richtig.
+Wenn sie nicht im Kampfmodus ist, macht sie egal wie ich sie drehe den
+normalen Sprung aus dem Stand in die angegebene Richtung."* Armed, the
+tank-parity side/back flip by stick quadrant (rule 4) is correct and
+untouched. Unarmed, rule 4 now steps aside for rule 6: she turns onto the
+held course and runs, and the jump key gets whatever the classic automaton
+makes of `IN_FORWARD` plus `IN_JUMP` - the ordinary standing jump in the
+direction she is facing, which also lets the player circle her on the stick
+and break out of the circle with a jump rather than only ever flipping
+sideways. `ModernStateAllowsDirectTurn` gains a tenth state, 15
+`AS_COMPRESS` - TROne's own nine stop there because their design never lets
+the crouch reach a turning state, but unarmed ours now can, so the direct
+turn keeps aligning her into the takeoff instead of freezing her heading for
+the two or three ticks the crouch lasts; `ModernDirectTurn`'s own mode check
+means this can never fire during an armed flip. `jump_dir` stays the
+separate switch it was, in case the unarmed flip is wanted back later.
+
+**THE NEW DEFAULTS.** `MODERN_WALK_BELOW` 62 -> 0. `MODERN_RECENTER`
+`0x1000` -> `0x2000`. The directional jump (rule 4) additionally requires
+`sit->drawn`. `MODERNLOG init` gains `walk_below=%d recenter=%d jump_dir=%d`
+so a later log carries these three numbers instead of asking the reader to
+trust the source tree.
+
+**WHAT THE NEXT PLAY TEST SHOULD TELL.** Whether circling on the spot no
+longer breaks off at a certain angle (item 2), whether the standing jump out
+of a circle behaves the way the user described - unarmed, a forward hop in
+whatever direction the circling left her facing; armed, the flip unchanged
+(item 3) - and whether direction changes no longer make her sneak (item 1).
+One more thing from this same log is written down here rather than changed:
+holding the stick sideways at a constant angle runs Lara in a straight WORLD
+line rather than an arc around the camera. That is the held course (section
+1.2) doing exactly its job under a chase camera that does not orbit her -
+not a defect, and not this round's to fix. The orbiting the eye expects is
+the free camera on the right stick, which is workflow A2's, not A1's.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

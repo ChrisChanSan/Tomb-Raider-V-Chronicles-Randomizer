@@ -7,9 +7,10 @@ rem the engine is a Win32 build. The translation is `short` and `long`
 rem arithmetic, both the same width in either target on Windows, so this is
 rem belt and braces - but the tool exists to say what the ENGINE does.
 rem
-rem The second source is the whole trick of this test: nothing is duplicated,
-rem so nothing can drift. modern_move.cpp includes no engine header at all,
-rem which is why it links here with a compiler and nothing else.
+rem The engine sources on the command line are the whole trick of this test:
+rem nothing is duplicated, so nothing can drift. Neither modern_move.cpp nor
+rem modern_camera.cpp (round 161a2, the orbit) includes an engine header at
+rem all, which is why they link here with a compiler and nothing else.
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul 2>&1
 cd /d "%~dp0"
-cl /nologo /EHsc /O2 /std:c++17 /W4 /Fe:ModernTest.exe ModernTest.cpp "..\..\..\TOMB5 Code\TOMB5\game\modern_move.cpp"
+cl /nologo /EHsc /O2 /std:c++17 /W4 /Fe:ModernTest.exe ModernTest.cpp "..\..\..\TOMB5 Code\TOMB5\game\modern_move.cpp" "..\..\..\TOMB5 Code\TOMB5\game\modern_camera.cpp"

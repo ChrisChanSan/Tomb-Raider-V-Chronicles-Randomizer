@@ -12,7 +12,8 @@
  */
 
 /* ModernTest - the arithmetic of the modern control, checked without a game
- * (#161, round 161a, step 2). Build with bmt.bat, run with no arguments.
+ * (#161, round 161a step 2; the camera's orbit added in round 161a2 step 1).
+ * Build with bmt.bat, run with no arguments.
  *
  * WHAT IT CHECKS, and why it exists at all. The modern control is a pure
  * function: stick direction plus a remembered world heading in, the 1996
@@ -21,9 +22,10 @@
  * wall - is one of about a dozen decisions in that function, and every one of
  * them is a threshold that a play test can only reach by accident. So the
  * function is COMPILED INTO THIS TOOL, not copied into it: bmt.bat hands the
- * engine's own game\modern_move.cpp to the compiler beside this file, exactly
- * as InterpTest is built against game\interpolate_math.h. There is no twin to
- * keep in step, and a change to the tree is a change this test sees.
+ * engine's own game\modern_move.cpp and game\modern_camera.cpp to the compiler
+ * beside this file, exactly as InterpTest is built against
+ * game\interpolate_math.h. There is no twin to keep in step, and a change to
+ * the tree is a change this test sees.
  *
  * WHERE THE EXPECTATIONS COME FROM. The design is TROne's, re-derived in our
  * own voice (see game\modern_move.h). The EXPECTATIONS below are the one part
@@ -48,7 +50,8 @@
  * ported here and the comment says which half it is; where it does not, the
  * case is listed by name at the end of the run under "not ours yet" with the
  * step that owes it: the state table is round 161a step 3, the state machine
- * and the direct turn are step 4, the camera is workflow A2, the pointer
+ * and the direct turn are step 4, the camera's orbit is round 161a2 step 1 and
+ * is checked here now (its engine seam is step 2), the pointer
  * profile's draw edge is workflow B. Nothing goes missing between steps that
  * way - the list is printed on every run, not buried in a comment.
  */
@@ -58,6 +61,7 @@
 #include <math.h>
 
 #include "../../../TOMB5 Code/TOMB5/game/modern_move.h"
+#include "../../../TOMB5 Code/TOMB5/game/modern_camera.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -2152,6 +2156,359 @@ static void sweeps()
 	}
 }
 
+/* ----------------------------------------------------- the modern camera --- */
+
+/* THE ORBIT (#161, round 161a2, step 1): game\modern_camera.cpp, compiled
+ * beside this file exactly the way the translation is, for exactly the same
+ * reason - a feel number nobody can re-measure is a number nobody can change.
+ *
+ * NONE of the expectations below comes from TROne. Their orbit holds a WORLD
+ * angle and never returns behind the player at all; ours holds an offset from
+ * LARA'S OWN heading and lets it fall back. The numbers here come from two
+ * places and the comments say which: the user's four sentences, quoted in full
+ * in game\modern_camera.h, and the classic camera's own limits, measured out
+ * of game\camera.cpp before a line of the orbit was written. */
+
+static void camera_orbit()
+{
+	MODERN_CAMERA_CFG cfg;
+	MODERN_CAMERA_STATE st;
+	short yaw;
+	short pitch;
+	long lp;
+	long ticks;
+
+	printf("the orbit - the stick moves it, standing keeps it, running brings it back\n");
+
+	ModernCameraDefaults(&cfg);
+
+	/* The constants, held to the origins the header claims for them. A test
+	 * that only checks behaviour lets a number drift away from its own
+	 * reason; these six are the reasons. */
+	ok(cfg.dead == 0, "the right stick's dead zone is the left one's: the hardware's",
+		cfg.dead, 0);
+	ok(cfg.stick_full == MODERN_STICK_FULL, "one scale for both sticks",
+		cfg.stick_full, MODERN_STICK_FULL);
+	ok(60 * cfg.yaw_rate >= 65000 && 60 * cfg.yaw_rate <= 66100,
+		"full deflection takes the camera once round in about 2 s", 60 * cfg.yaw_rate, 65536);
+	ok(60 * cfg.pitch_rate >= 32400 && 60 * cfg.pitch_rate <= 33100,
+		"...and half a turn of pitch in the same 2 s", 60 * cfg.pitch_rate, 32768);
+	ok(cfg.pitch_max == 15470 && cfg.pitch_min == -15470,
+		"the pitch clamp is ChaseCamera's own (camera.cpp:1012)", cfg.pitch_max, 15470);
+	ok(cfg.pitch_home == -1820,
+		"the resting elevation is ChaseCamera's own (camera.cpp:1006)", cfg.pitch_home, -1820);
+	ok(cfg.hide_dist == 20 + 102,
+		"hiding starts at the near plane (20) plus her own radius (102)", cfg.hide_dist, 122);
+
+	/* 1. THE STICK MOVES THE OFFSET BY THE RATE. "Es ist, als waere die Kamera
+	 * eine Kugel um Lara herum" - the axis IS the rate, so half a push is half
+	 * the speed and a diagonal cannot buy more than a full one. */
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 128, 0, 0, 0, &yaw, &pitch);
+	ok(yaw == (short)cfg.yaw_rate, "full right: one rate's worth of yaw", yaw, cfg.yaw_rate);
+	ok(st.steering == 1, "...and the orbit knows the player is steering", st.steering, 1);
+
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, -128, 0, 0, 0, &yaw, &pitch);
+	ok(yaw == (short)-cfg.yaw_rate, "full left: the other way, the same rate", yaw, -cfg.yaw_rate);
+
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 64, 0, 0, 0, &yaw, &pitch);
+	ok(yaw == (short)(cfg.yaw_rate / 2), "half deflection is half the rate",
+		yaw, cfg.yaw_rate / 2);
+
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 181, 0, 0, 0, &yaw, &pitch);	/* a diagonal reads 181 */
+	ok(yaw == (short)cfg.yaw_rate, "a diagonal cannot buy more than full deflection",
+		yaw, cfg.yaw_rate);
+
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0, &yaw, &pitch);
+	ok(yaw == 0, "a stick at rest moves nothing", yaw, 0);
+	ok(st.steering == 0, "...and is not steering", st.steering, 0);
+
+	/* 360 degrees on the sphere: the yaw wraps, it does not clamp. */
+	ModernCameraReset(&st);
+
+	for (lp = 0; lp < 60; lp++)
+		ModernCameraUpdate(&cfg, &st, 128, 0, 0, 0, &yaw, &pitch);
+
+	ok(absl(yaw) <= 32, "60 ticks of full right is one whole turn, back behind her", yaw, 0);
+
+	/* 2. STANDING, THE OFFSET IS KEPT. "sie behaelt immer ihre Position, an der
+	 * ich sie auf der Kugel verschoben habe". */
+	ModernCameraReset(&st);
+
+	for (lp = 0; lp < 15; lp++)
+		ModernCameraUpdate(&cfg, &st, 128, 0, 0, 0, &yaw, &pitch);
+
+	ok(yaw == (short)(15 * cfg.yaw_rate), "a quarter turn to the right",
+		yaw, 15 * cfg.yaw_rate);
+
+	for (lp = 0; lp < 300; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0, &yaw, &pitch);
+
+	ok(yaw == (short)(15 * cfg.yaw_rate), "ten seconds of standing: exactly where he left it",
+		yaw, 15 * cfg.yaw_rate);
+	ok(st.ret == 0, "...and the return never ran", st.ret, 0);
+
+	/* 3. RUNNING, IT FALLS BACK - "ganz leicht und super smooth", 377 parts of
+	 * 65536 of what is left, every tick. */
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+	ok(st.ret == -94, "running: a 90 degree offset falls by 377/65536 of itself", st.ret, -94);
+	ok(yaw == 0x4000 - 94, "...towards zero, the short way round", yaw, 0x4000 - 94);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = (short)-0x4000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+	ok(st.ret == 94, "an offset to the left falls the same way, mirrored", st.ret, 94);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+
+	for (ticks = 0; ticks < 1000 && absl(st.offset_yaw) > 0x2000; ticks++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+
+	printf("  measured: 90 degrees of offset halve in %ld ticks of running (%.2f s)\n",
+		ticks, (double)ticks / 30.0);
+	ok(ticks >= 115 && ticks <= 128, "the documented half life, about 4 s of running",
+		ticks, 120);
+
+	for (lp = 0; lp < 3000 && st.offset_yaw; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+
+	printf("  measured: and reach her back %ld ticks later (%.2f s)\n", lp, (double)lp / 30.0);
+	ok(st.offset_yaw == 0, "it really arrives behind her - that is what the floor of the step is for",
+		st.offset_yaw, 0);
+
+	/* The return stands still while the player is steering: he turned the
+	 * camera and THEN ran, which is the case the user described; a camera that
+	 * pulls against the thumb holding it is a camera fighting the player. */
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+	ModernCameraUpdate(&cfg, &st, 1, 0, 1, 0, &yaw, &pitch);
+	ok(st.ret == 0, "one unit of stick freezes the return", st.ret, 0);
+	ok(yaw == 0x4000 + 8, "...and only the stick moves the camera then", yaw, 0x4000 + 8);
+
+	/* The reset, and what "zeroed" means for each of the two angles. */
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x1234;
+	st.offset_pitch = 4321;
+	st.wall_push = 99;
+	st.wall = 1;
+	st.ret = 5;
+	st.steering = 1;
+	ModernCameraReset(&st);
+	ok(st.offset_yaw == 0, "the reset puts her camera behind her back", st.offset_yaw, 0);
+	ok(st.offset_pitch == -1820,
+		"...at the classic resting elevation, not at dead level", st.offset_pitch, -1820);
+	ok(!st.wall_push && !st.wall && !st.ret && !st.steering, "...and forgets the wall",
+		st.wall_push + st.wall + st.ret + st.steering, 0);
+}
+
+static void camera_pitch()
+{
+	MODERN_CAMERA_CFG cfg;
+	MODERN_CAMERA_STATE st;
+	short yaw;
+	short pitch;
+	long lp;
+
+	printf("the pitch - which way is up, and the limits the camera already had\n");
+
+	ModernCameraDefaults(&cfg);
+
+	/* WHICH WAY IS UP is not taste here: the classic look camera answered it
+	 * once and for all. LookUpDown (game\lara.cpp) turns IN_FORWARD into
+	 * head_x_rot -= 364, and a negative x_rot is looking up; looking up from an
+	 * orbit means the camera sits BELOW her, which is a positive elevation. */
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 0, -128, 0, 0, &yaw, &pitch);
+	ok(pitch == (short)(cfg.pitch_home + cfg.pitch_rate),
+		"stick forward looks up, the way the look camera does",
+		pitch, cfg.pitch_home + cfg.pitch_rate);
+
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 0, 128, 0, 0, &yaw, &pitch);
+	ok(pitch == (short)(cfg.pitch_home - cfg.pitch_rate), "pulling back looks down",
+		pitch, cfg.pitch_home - cfg.pitch_rate);
+
+	cfg.invert_pitch = 1;
+	ModernCameraReset(&st);
+	ModernCameraUpdate(&cfg, &st, 0, -128, 0, 0, &yaw, &pitch);
+	ok(pitch == (short)(cfg.pitch_home - cfg.pitch_rate),
+		"the switch turns that axis round and nothing else",
+		pitch, cfg.pitch_home - cfg.pitch_rate);
+	cfg.invert_pitch = 0;
+
+	/* The clamp, both ends, and the point of it: never over the pole. */
+	ModernCameraReset(&st);
+
+	for (lp = 0; lp < 200; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, -128, 0, 0, &yaw, &pitch);
+
+	ok(pitch == (short)cfg.pitch_max, "200 ticks up: it stops at the camera's own 84.98 degrees",
+		pitch, cfg.pitch_max);
+
+	ModernCameraUpdate(&cfg, &st, 0, -128, 0, 0, &yaw, &pitch);
+	ok(pitch == (short)cfg.pitch_max, "...and stays there instead of wrapping over the pole",
+		pitch, cfg.pitch_max);
+
+	ModernCameraReset(&st);
+
+	for (lp = 0; lp < 200; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 128, 0, 0, &yaw, &pitch);
+
+	ok(pitch == (short)cfg.pitch_min, "200 ticks down: the same, under her",
+		pitch, cfg.pitch_min);
+
+	ModernCameraUpdate(&cfg, &st, 0, 128, 0, 0, &yaw, &pitch);
+	ok(pitch == (short)cfg.pitch_min, "...and no wrap there either", pitch, cfg.pitch_min);
+
+	/* The height does NOT come back on its own. He described the yaw
+	 * returning and said nothing about the height, and observation 2 says what
+	 * he did not ask for stays where he put it. The capability exists and is
+	 * proved here under an explicit cfg; it is simply not what ships. */
+	ModernCameraReset(&st);
+	st.offset_pitch = (short)cfg.pitch_max;
+
+	for (lp = 0; lp < 300; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+
+	ok(pitch == (short)cfg.pitch_max, "running does not bring the height back",
+		pitch, cfg.pitch_max);
+
+	cfg.pitch_return = 1;
+	ModernCameraReset(&st);
+	st.offset_pitch = (short)cfg.pitch_max;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+	ok(pitch == 15371, "pitch_return 1: it falls towards the resting elevation at the same rate",
+		pitch, 15371);
+
+	for (lp = 0; lp < 3000 && st.offset_pitch != (short)cfg.pitch_home; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+
+	ok(st.offset_pitch == (short)cfg.pitch_home, "...and arrives at it, not near it",
+		st.offset_pitch, cfg.pitch_home);
+}
+
+static void camera_wall()
+{
+	MODERN_CAMERA_CFG cfg;
+	MODERN_CAMERA_STATE st;
+	short yaw;
+	short pitch;
+	long free_ret;
+	long wall_ret;
+	long free_left;
+	long wall_left;
+	long lp;
+
+	printf("the wall - the offset takes its angle, and falls home faster while it lasts\n");
+
+	ModernCameraDefaults(&cfg);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x2000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0x0100, &yaw, &pitch);
+	ok(st.wall == 0, "a displacement at the noise floor is arithmetic, not a wall", st.wall, 0);
+	ok(yaw == 0x2000, "...and moves nothing", yaw, 0x2000);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x2000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0x1000, &yaw, &pitch);
+	ok(st.wall == 1, "a real displacement is a wall", st.wall, 1);
+	ok(yaw == 0x3000, "...and the offset takes the wall's angle", yaw, 0x3000);
+	ok(st.wall_push == 0x1000, "...which the log can read back afterwards", st.wall_push, 0x1000);
+
+	/* Standing, a wall is the ONE thing that may move the camera - the
+	 * exception written into observation 2 itself. */
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x2000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, -0x2000, &yaw, &pitch);
+	ok(yaw == 0, "standing at a wall: moved by exactly the push, and by nothing else", yaw, 0);
+
+	/* THE RATE, ISOLATED. follow_wall off, so that the two runs below start
+	 * from the same offset and differ in one thing only: whether a wall is
+	 * pushing. With it on, the push would move the offset first and the two
+	 * steps would no longer be comparable. */
+	cfg.follow_wall = 0;
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x2000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0x1000, &yaw, &pitch);
+	ok(yaw == 0x2000, "follow_wall 0: the offset ignores the displacement", yaw, 0x2000);
+	ok(st.wall == 1, "...but the wall is still seen", st.wall, 1);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+	free_ret = st.ret;
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0x1000, &yaw, &pitch);
+	wall_ret = st.ret;
+
+	ok(wall_ret == -754, "at a wall the same offset falls eight times as far in one tick",
+		wall_ret, -754);
+	ok(absl(wall_ret) > absl(free_ret) * 7,
+		"...eight being the factor, not two numbers that happen to differ",
+		absl(wall_ret), absl(free_ret) * 7);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+
+	for (lp = 0; lp < 30; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0, &yaw, &pitch);
+
+	free_left = absl(st.offset_yaw);
+
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+
+	for (lp = 0; lp < 30; lp++)
+		ModernCameraUpdate(&cfg, &st, 0, 0, 1, 0x1000, &yaw, &pitch);
+
+	wall_left = absl(st.offset_yaw);
+	printf("  measured: one second of running from 90 degrees leaves %ld units in the open, "
+		"%ld at a wall\n", free_left, wall_left);
+	ok(wall_left * 2 < free_left,
+		"a second at a wall is most of the way home; a second in the open is a nudge",
+		wall_left, free_left);
+
+	cfg.follow_wall = 1;
+
+	/* And the two together, which is what the user actually sees: the wall
+	 * takes the camera to its own angle AND she comes home from there fast. */
+	ModernCameraReset(&st);
+	st.offset_yaw = 0x4000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 1, -0x1000, &yaw, &pitch);
+	ok(yaw == 0x3000 - 565, "wall and run together: the wall's angle first, then the fast fall",
+		yaw, 0x3000 - 565);
+}
+
+static void camera_hide()
+{
+	MODERN_CAMERA_CFG cfg;
+
+	printf("too close to draw - the hard cut of observation 4\n");
+
+	ModernCameraDefaults(&cfg);
+
+	ok(ModernCameraHidesLara(&cfg, 0) == 1, "the eye inside her: she is not drawn",
+		ModernCameraHidesLara(&cfg, 0), 1);
+	ok(ModernCameraHidesLara(&cfg, cfg.hide_dist - 1) == 1, "one unit under the edge: hidden",
+		ModernCameraHidesLara(&cfg, cfg.hide_dist - 1), 1);
+	ok(ModernCameraHidesLara(&cfg, cfg.hide_dist) == 0,
+		"at the edge: drawn - a hard answer, not a fade",
+		ModernCameraHidesLara(&cfg, cfg.hide_dist), 0);
+	ok(ModernCameraHidesLara(&cfg, 1536) == 0,
+		"at the chase camera's own distance: drawn", ModernCameraHidesLara(&cfg, 1536), 0);
+}
+
 /* ------------------------------------------------------ what is not ours --- */
 
 static void deferred()
@@ -2161,7 +2518,13 @@ static void deferred()
 	printf("  none    modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
 	printf("          - the degenerate camera falls back to Lara's yaw in game\\modern_state.cpp,\n");
 	printf("            which needs the engine's own camera and cannot be linked here\n");
-	printf("  A2      modern.orbit_stays_in_world_space_and_accepts_mouse_while_running\n");
+	printf("  A2/2    modern.orbit_stays_in_world_space_and_accepts_mouse_while_running\n");
+	printf("          - the half that IS ours is checked above (the orbit): the stick moves the\n");
+	printf("            camera while she runs. The world-space half is not our model and will\n");
+	printf("            not become it - the user's camera holds an offset from HER heading and\n");
+	printf("            lets it fall back behind her (game\\modern_camera.h, observation 3),\n");
+	printf("            where TROne's holds a world angle that never returns. What round 161a2\n");
+	printf("            step 2 still owes is the engine side: the offset reaching camera.cpp.\n");
 	printf("  B       combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
 	printf("  B       modern.held_equip_draws_once_and_interaction_does_not_fire (IN_ACTION2)\n");
 }
@@ -2170,6 +2533,7 @@ int main()
 {
 	printf("ModernTest - the arithmetic of the modern control (#161, round 161a)\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "modern_move.cpp\n");
+	printf("                  and TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "modern_camera.cpp\n");
 	printf("expectations ported from TROne (GPLv3) by Todesengel1931\n\n");
 
 	angles();
@@ -2187,6 +2551,10 @@ int main()
 	direct_turn();
 	weapons();
 	sweeps();
+	camera_orbit();
+	camera_pitch();
+	camera_wall();
+	camera_hide();
 	deferred();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

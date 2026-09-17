@@ -14323,7 +14323,7 @@ keyboard scheme, the mouse, the second pad table for Separate mode,
 `IN_ACTION2` and combat mode Hold. What each of those adds is named again at
 the end of this entry.
 
-**THE FILES**, twelve of them, 3,910 insertions and 24 deletions against base
+**THE FILES**, twelve of them, 3,915 insertions and 24 deletions against base
 `8253932` (this record and the two README pages are the other three files of
 the change set, and are left out of that count so it stays a count of the
 work rather than of the writing about it). Eight commits built the round and
@@ -14343,7 +14343,7 @@ is needed - which it was, twice, while this paragraph was being corrected.
   units (0.03 degrees, at x=-181 z=-73), against a smallest threshold
   (`steer_step`) of 384 - re-verified against this tree while writing this
   record.
-- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,946 + 15
+- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,951 + 15
   lines) - compiles the engine's own `modern_move.cpp` beside itself rather
   than a copy, so a change to the decision tree is a change the test sees.
   **513 checks, 0 failed**, rebuilt and rerun for this record.

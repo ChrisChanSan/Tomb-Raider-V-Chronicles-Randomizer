@@ -14323,11 +14323,14 @@ keyboard scheme, the mouse, the second pad table for Separate mode,
 `IN_ACTION2` and combat mode Hold. What each of those adds is named again at
 the end of this entry.
 
-**THE FILES**, thirteen of them, 3,642 insertions and 23 deletions against
-base `8253932`, across the seven commits that built it (this record is the
-eighth):
+**THE FILES**, twelve of them, 3,739 insertions and 24 deletions against base
+`8253932` (this record and the two README pages are the other three files of
+the change set, and are left out of that count so it stays a count of the
+work rather than of the writing about it). Eight commits built the round and
+two more answered the skeptical review; `git log --oneline 8253932..HEAD` is
+the list.
 
-- `game/modern_move.h` / `.cpp` (new, 312 + 839 lines) - the pure translation.
+- `game/modern_move.h` / `.cpp` (new, 312 + 868 lines) - the pure translation.
   No engine header and no engine global: it takes eight numbers (stick x/y,
   camera yaw, Lara's yaw, a situation struct) and fills a result struct. Its
   own arc tangent cannot call the engine's `phd_atan` (that would drag the
@@ -14338,11 +14341,11 @@ eighth):
   units (0.03 degrees, at x=-181 z=-73), against a smallest threshold
   (`steer_step`) of 384 - re-verified against this tree while writing this
   record.
-- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,836 + 15
+- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,855 + 15
   lines) - compiles the engine's own `modern_move.cpp` beside itself rather
   than a copy, so a change to the decision tree is a change the test sees.
-  **498 checks, 0 failed**, rebuilt and rerun for this record.
-- `game/modern_state.h` / `.cpp` (new, 48 + 322 lines) - the one file that
+  **501 checks, 0 failed**, rebuilt and rerun for this record.
+- `game/modern_state.h` / `.cpp` (new, 48 + 333 lines) - the one file that
   knows the engine: the per-tick state, the reset on every break in the tick
   chain, the blocked-wall counter (measured from Lara's own position, never a
   collision internal, so a wall, a crate and a corner all read the same), the
@@ -14357,9 +14360,11 @@ eighth):
 - `tomb5/tomb5.cpp` (+45 lines) - their registry names (`ctrl_modern`,
   `combat_hold`, `action_split`), read and written beside every other
   `tomb5.*` value.
-- `specific/LoadSave.cpp` (+135/-22 lines) - the "Controls" page: three new
+- `specific/LoadSave.cpp` (+157/-24 lines) - the "Controls" page: three new
   rows (Control type, Combat mode, Action) above the Method row and the key
-  list, which move down with it.
+  list, which move down with it - including the two shifts that turn the
+  selected row's bit back into an array index, which had to move with the
+  rows and did not until the review (see the last paragraph of this entry).
 - `game/gameflow.cpp` (+16 lines) - the ten new `CustomText` words.
 - `TOMB5 Code/tomb5.vcxproj` (+9 lines) - the four new source files, added
   the way `interpolate.cpp` and `bc7.cpp` already are.
@@ -14367,10 +14372,17 @@ eighth):
 **BYTE IDENTITY AT THE DEFAULTS (Tank, Toggle, One key).** Every statement
 added to an existing engine file sits inside one of three shapes: a call into
 a new file nothing reaches without the option, the seam's own guard, or
-menu/settings code, which the round's own byte-identity rule exempts
-outright. `tomb5_options tomb5;` is a global, so `control_modern` reads 0
-before any registry is opened at all - Tank is what a fresh install gets, not
-only what the shipped registry sets it to.
+menu/settings code, which the round's own byte-identity rule exempts from
+needing a guard. `tomb5_options tomb5;` is a global, so `control_modern`
+reads 0 before any registry is opened at all - Tank is what a fresh install
+gets, not only what the shipped registry sets it to.
+
+That exemption is about the GUARD and nothing else, which is worth saying
+plainly because this round learned it the hard way: menu code still has to
+do what it did before, and the round's own worst defect was there rather
+than in the scheme (the last paragraph of this entry). "No branch outside
+the option" is not the same statement as "nothing outside the option
+changed", and only the second one is what a player notices.
 
 **EVERY CONSTANT THE MOVEMENT HALF NEEDS, AND WHERE IT COMES FROM** (row
 numbers are `MODERN-CONTROLS-DESIGN.md` section 3's taboo table, the same
@@ -14486,8 +14498,17 @@ across a ledge while the turn is still finishing.
 
 **MODERNLOG**, behind `-log` (`gLogEnabled`) permanently like every other
 diagnostic seam: one `init` line per break in the tick chain, one line per
-real logic tick - 30 lines a second at every `fps_mode`, `mode=off` earning a
-line exactly as much as a running one does:
+real logic tick - 30 lines a second at every `fps_mode`, because it hangs on
+the logic tick and not on a drawn frame, and `mode=off` earning a line
+exactly as much as a running one does. Never more than one a tick, but it
+CAN be fewer, and whoever counts them has to know it: the reset branch
+returns before the tick line, so the first tick back from a level start, a
+savegame, the inventory, first person, a cutscene or the look key shows its
+`init` line alone; and while the look key is down, or the ring is open, or a
+cutscene is playing, the seam is not called at all and neither line appears.
+A gap in `f=` is therefore the scheme standing aside, not a dropped line -
+`f=` is `GlobalCounter` and never lies, so count against that rather than
+against the wall clock:
 
 ```
 MODERNLOG init scheme=modern rate=%d direct=%d
@@ -14497,7 +14518,7 @@ MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d
 
 **THE TESTS.** `ModernTest` (`bmt.bat`) links no game, no level and no pad -
 only the engine's own `modern_move.cpp`, so a change to the decision tree is
-a change the test sees. Rebuilt and rerun for this record: **498 checks, 0
+a change the test sees. Rebuilt and rerun for this record: **501 checks, 0
 failed.** All 32 ported TROne expectations (in whole, or in the arithmetic
 half of them where the rest needs an engine ModernTest has none of); four
 sweeps of our own that a play test cannot reach on purpose - 16,384 blocked
@@ -14509,8 +14530,8 @@ pairs inside a raised dead zone, silent; 10,240 ticks after a 180-degree
 camera cut, the held course unmoved in every one; and the D-pad synthesis
 checked both ways, as a full stick push and against the raw +-20 it
 replaces. And a mutation pass the brief did not ask for: across the round's
-four verification passes, 28 single-edit mutations of the scheme were tried
-against the finished tests and all 28 were caught - none of the mutants ever
+five verification passes, 31 single-edit mutations of the scheme were tried
+against the finished tests and all 31 were caught - none of the mutants ever
 reached the repository - including one the first pass of tests missed
 outright (deleting the steer-step noise floor changed no answer anywhere in
 the file, because nothing in it had ever moved the stick by a small angle;
@@ -14527,11 +14548,26 @@ gives them an effect. Control type calls `ModernResetControls()` on every
 change, so a stale held course or blocked counter never survives a scheme
 switch. The whole page now shares one row height, `GetFixedScale(23)` in
 place of the Method row's former `GetFixedScale(27)`, because 20 rows no
-longer fit the taller one: at 640x480 (`GetFixedScale` returns its argument
-unchanged there) the last row lands at 460 of 479 available, one pixel more
-than before this round's 459; at 1920x1080 it lands at 1040 of 1079, more
-headroom than before (1037 of 1079), because the tighter of the two axis
-scales is height's own 2.25x. The "Options" row itself is renamed from
+longer fit the taller one - and 23 is not a comfortable choice among several,
+it is the largest pitch that fits twenty rows at all. Two numbers decide the
+page and they are measured in different units, which is why the round's first
+pass only found the easy one. The easy one: at 640x480 (`GetFixedScale`
+returns its argument unchanged there, and `phd_winymax` is 479) the last row
+is anchored at 460 and the bottom of its glyph cell falls at 464; twenty rows
+at 24 would end at 484, past the edge. The one that costs something: the
+glyph cells no longer clear each other. `InitFont` (`game/text.cpp`) rescales
+the glyph table by `phd_winymax / 240`, so an ordinary capital
+(`game/chardef.inc`: `h = 13`, `YOffset = -11`) is a 25-pixel cell at
+640x480 - 21 above the row's anchor, 4 below - and 58 pixels at 1920x1080
+against a pitch of 52. At the old 27 the cells cleared each other by 2 pixels
+(3 at 1920x1080; the game's own default 28 leaves 3), at 23 they OVERLAP by 2
+(6 at 1920x1080). The overlap sits exactly where one row's descender would be
+and the next row's ascender begins, so whether anything shows depends on the
+transparent padding inside the cell, which the glyph table does not record -
+the rows to look at are the ones with a descender ("Jump", "Step Left",
+"Large Medipack"), and only the play test can see it. The alternative is a
+second column or a scrolling list, which is a page redesign rather than a
+constant. The "Options" row itself is renamed from
 "Configure controls" to "Controls" (German "Steuerung"); ten words go into
 `CustomText` (`game/gameflow.cpp`), German translated, the other three
 languages repeating the English literal on purpose - a matched row returns
@@ -14564,25 +14600,82 @@ own heading needs the engine's real camera, which nothing linked here has.
 **WHAT ONLY THE PLAY TEST CAN TELL.** The turn rate - 1456, 2184 or 3277,
 `MODERNLOG`'s `rate=` names whichever is live and the user freezes one after
 trying all three in a session. Whether the dead zone (0) needs raising on
-his own pad; `mag=` is there for exactly that report. Two things that only
-show with `MODERN_DIRECT_TURN` set to 0 for comparison: `IN_WALK` plus a lone
-turn bit becomes a sidestep rather than a turn on the spot
-(`specific/input.cpp`'s own older rule, not this round's), and the
-blocked-wall rule itself sleeps while the direct turn is on, because the
-direct turn never asks for `IN_FORWARD` and a turn bit together - it wakes up
-the moment direct turn is switched off, which is exactly when it is needed.
+his own pad; `mag=` is there for exactly that report.
+
+**A GENTLE STICK BEHIND HER SIDESTEPS INSTEAD OF TURNING, AND IT DOES NOT
+NEED THE DIRECT TURN SWITCHED OFF.** The round's first pass filed this under
+"only shows with `MODERN_DIRECT_TURN` set to 0" and the review measured it:
+it happens at the shipped defaults, in 34 of the 44 modern states. The chain
+is short. A stick under `walk_below` (62 of 128) pushed more than
+`spin_enter` off her heading makes the RUN branch emit `IN_WALK` and a lone
+turn bit with no `IN_FORWARD`, and `specific/input.cpp`'s own older rule -
+`IN_WALK` plus a turn and no forward - rewrites that into `IN_LSTEP`/
+`IN_RSTEP`. The direct turn would take the turn bits away before that could
+happen, but it is only allowed in nine states; in the other 35 the RUN
+branch's own bits stand. So crouched, crawling, wading, on all fours or
+backing up (71, 81, 105/106, 65, 80, 84/85, 16 among them) a gentle stick
+cannot turn her at all - the same shape of "the control stopped answering"
+that `stand_spin` and the blocked counter exist to prevent. With the direct
+turn switched off it is 43 of 44. The tree is NOT changed for it: the
+behaviour is inherited rather than ours (TROne's seam sits in the same place
+and their translation emits the same bits), so this round's target - their
+parity - is met, and reordering a committed tree on a hunch is what "no wild
+fixes" forbids. It is written down here so the play test knows to push the
+stick gently while crouched instead of discovering it by accident.
+
 Whether a DirectInput pad axis ever parks at exactly 20 and reads a tick of
 running instead of walking. Whether the tick skipped after every break in
-the chain is felt at a level start. And the one case the design brief
-already named and this round does not change: a standing jump with a weapon
-ready and the action key held comes out `IN_RSTEP` rather than a directional
-side flip, because Modern's AIM branch runs before its JUMP branch in the
-decision tree design section 1.3 fixed the order of, and `lara_as_compress`
-reads only the four direction bits - so the flip becomes a straight-up jump
-instead. Left as built, because reordering a committed decision tree on a
-hunch is exactly what "no wild fixes" forbids; the one-line change it would
-take is named in `ModernTest.cpp`'s own `jumping()` section if the user
-decides he wants the Remaster's behaviour instead.
+the chain is felt at a level start. Whether the Controls page's own 2 pixels
+of glyph overlap show at either resolution (see the page's paragraph above).
+
+**WHAT THE SKEPTICAL REVIEW CHANGED, AND WHY IT IS HERE RATHER THAN ONLY IN
+THE COMMITS.** Two of the round's own claims did not survive being checked,
+and one of them was a real defect in code the round had touched.
+
+The defect was in the menu, not in the modern control, and it bit in the
+DEFAULT Tank configuration: moving every key-binding row three selection
+bits up left the two blocks that turn the selected bit back into an array
+index (`specific/LoadSave.cpp`, the keyboard capture and the joystick
+capture) at their old shift of 2. Shift-then-count yields
+`i = log2(sel >> shift) + 1`, so the shift has to be one more than the first
+bindable row's bit - 2 when that bit was 1, 5 now that it is 4. Left at 2,
+every binding wrote three slots too far ("Up" into "Right", "Duck" into
+"Jump", "Inventory" into "Load"), the last keyboard row wrote `layout[1][18]`
+one past the end of `short layout[2][18]`, and the three last pad rows landed
+outside the `k < 15` duplicate-unbind loop. Both shifts are 5 now, which puts
+`i` back in range and makes that loop's bound right again without touching
+it; a scratch harness reproduced all 31 rows' indices before and after, and
+the old arithmetic checks out for the old bits, which is what says the shift
+and not the row layout was the mistake.
+
+The misreading was the firing-plus-jump case. The round recorded that a
+standing jump with a weapon ready and the action key held must come out as a
+side STEP for us, because TROne's own expectation supposedly passes on their
+Remaster profile forcing `aim_strafe` off. It does not: the line that
+disarms aiming on a jump is in their glue OUTSIDE that profile block, and
+their own test builds a plain glue that never sets the profile. So the
+expectation is theirs unconditionally, and it is ours now too - the
+translation stops aiming on the tick she jumps, so the side flip and the back
+flip both survive firing. Since `IN_RSTEP` is no direction at all to
+`lara_as_compress`, the old answer really did turn a flip into a jump
+straight up. The rule is stated at the one place the config's `aim_strafe` is
+read rather than by copying their config before the call: our seam keeps one
+config and never copies it, so a copy per tick would be work outside the
+translation for a rule the translation can simply say. Five checks in
+`ModernTest`'s `jumping()` section hold it, and the mutant that removes the
+rule fails exactly the two that name it.
+
+Beside those: five routine and state names in the two state tables' comments
+were wrong (87/88 run `lara_as_null` and not `lara_void_func`, 14 the other
+way round, and TR5 calls the sprint `AS_DASH`/`lara_as_dash`), which matters
+because those comments ARE the evidence that the states were checked against
+`lara_control_routines[]` one by one; the three states in the water group
+that are a dive or a climb-out rather than a swim now carry their own reason
+instead of the group's "modern in A2 (camera pitch)"; and `MODERNLOG`'s
+"never more, never fewer" and this page's row-fit arithmetic are corrected
+above. None of the name fixes moved a classification - a script that parses
+`lara.cpp` and `lara_states.h` and checks all 104 `case` comments now reports
+no disagreement at all.
 
 ## Building this yourself
 

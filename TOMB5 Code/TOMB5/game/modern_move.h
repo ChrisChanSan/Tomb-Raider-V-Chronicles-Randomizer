@@ -110,10 +110,18 @@ enum modern_constants
 	 * DirectInput fallback applies 150 of 1000 there. A second dead zone on
 	 * top of the hardware one would only eat travel.
 	 * The plan if the user reports drift: MODERNLOG prints mag, raise this in
-	 * steps of 4 (3 per cent of full deflection) and read the log again. Note
-	 * for that measurement: the classic path ignores anything up to +-8
-	 * (specific\input.cpp), so 1..8 is the band where Modern reacts and Tank
-	 * does not. */
+	 * steps of 4 (3 per cent of full deflection) and read the log again.
+	 * WHAT THAT MEASUREMENT IS NOT LOOKING FOR, corrected in the second review
+	 * pass of this round: a band where Modern moves her and Tank does not.
+	 * There is none. The classic path ignores anything up to +-8
+	 * (specific\input.cpp), and no joystick path can deliver a reading in
+	 * 1..8 at all - XInput zeroes an axis under 7849 and then divides by 256,
+	 * so its smallest non-zero reading is 30, and the DirectInput fallback
+	 * zeroes under 150 and divides by 8, so its smallest is 18
+	 * (specific\dxshell.cpp, both paths). Every reading either scheme ever
+	 * sees is one both react to; what Modern adds is that the MAGNITUDE now
+	 * decides walking from running (see walk_below below), which is the thing
+	 * to read mag= against. */
 	MODERN_DEAD = 0,
 
 	/* Row 5. The RULE is TROne's and comes from play - under half deflection

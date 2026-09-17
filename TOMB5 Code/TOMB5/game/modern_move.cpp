@@ -202,10 +202,15 @@ long ModernStateIsClassic(short anim_state)
 	case 49:	// AS_SURFRIGHT, lara_as_surfright - modern in A2 (camera pitch)
 	/* The three that stand in the water list without swimming in it: two
 	 * dives in the air and the climb out onto the bank. They are classic
-	 * because TROne's own water list names them - a dive is how she gets
-	 * INTO the water and the climb-out is how she leaves it, so both belong
-	 * to the same handover - but their reason is not the camera pitch, and
-	 * the line above must not be read as promising them one. */
+	 * because THIS ROUND'S OWN BUILD BRIEF names them in its water list -
+	 * NOT because TROne do, which is what this comment said until the second
+	 * review pass measured it: their trone_modern_state_is_classic has 52,
+	 * 53 and 55 in neither the list nor the prose above it. The reason is
+	 * sound either way - a dive is how she gets INTO the water and the climb-
+	 * out is how she leaves it, so both belong to the same handover - but it
+	 * is not the camera pitch, so the line above must not be read as
+	 * promising them one, and it is not TROne's, so they must not be quoted
+	 * for it. */
 	case 52:	// AS_SWANDIVE, lara_as_swandive - the entry, not the swim
 	case 53:	// AS_FASTDIVE, lara_as_fastdive - the entry, not the swim
 	case 55:	// AS_WATEROUT, lara_as_waterout - the way out, not the swim

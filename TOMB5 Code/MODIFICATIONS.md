@@ -14323,16 +14323,16 @@ keyboard scheme, the mouse, the second pad table for Separate mode,
 `IN_ACTION2` and combat mode Hold. What each of those adds is named again at
 the end of this entry.
 
-**THE FILES**, twelve of them, 3,739 insertions and 24 deletions against base
+**THE FILES**, twelve of them, 3,910 insertions and 24 deletions against base
 `8253932` (this record and the two README pages are the other three files of
 the change set, and are left out of that count so it stays a count of the
 work rather than of the writing about it). Eight commits built the round and
-the ones after them answer the skeptical review;
+the ones after them answer the two skeptical review passes;
 `git log --oneline 8253932..HEAD` is the list, and is written that way rather
 than as a number because a count of commits goes stale the moment one more
 is needed - which it was, twice, while this paragraph was being corrected.
 
-- `game/modern_move.h` / `.cpp` (new, 312 + 868 lines) - the pure translation.
+- `game/modern_move.h` / `.cpp` (new, 320 + 873 lines) - the pure translation.
   No engine header and no engine global: it takes eight numbers (stick x/y,
   camera yaw, Lara's yaw, a situation struct) and fills a result struct. Its
   own arc tangent cannot call the engine's `phd_atan` (that would drag the
@@ -14343,23 +14343,23 @@ is needed - which it was, twice, while this paragraph was being corrected.
   units (0.03 degrees, at x=-181 z=-73), against a smallest threshold
   (`steer_step`) of 384 - re-verified against this tree while writing this
   record.
-- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,855 + 15
+- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,946 + 15
   lines) - compiles the engine's own `modern_move.cpp` beside itself rather
   than a copy, so a change to the decision tree is a change the test sees.
-  **501 checks, 0 failed**, rebuilt and rerun for this record.
-- `game/modern_state.h` / `.cpp` (new, 48 + 333 lines) - the one file that
+  **513 checks, 0 failed**, rebuilt and rerun for this record.
+- `game/modern_state.h` / `.cpp` (new, 59 + 361 lines) - the one file that
   knows the engine: the per-tick state, the reset on every break in the tick
-  chain, the blocked-wall counter (measured from Lara's own position, never a
-  collision internal, so a wall, a crate and a corner all read the same), the
-  camera yaw of the tick from the camera's own two points, the direct turn's
-  one write to `pos.y_rot`, and `MODERNLOG`.
+  chain it can see, the blocked-wall counter (measured from Lara's own
+  position, never a collision internal, so a wall, a crate and a corner all
+  read the same), the camera yaw of the tick from the camera's own two points,
+  the direct turn's one write to `pos.y_rot`, and `MODERNLOG`.
 - `specific/input.cpp` (+47 lines) - one seam, between the block that puts
   the stick on the four direction bits and the block that reads the key
   roles.
 - `global/types.h` (+34 lines) - three new `bool` settings on
   `tomb5_options`: `control_modern`, `combat_hold`, `action_split`, all
   default 0.
-- `tomb5/tomb5.cpp` (+45 lines) - their registry names (`ctrl_modern`,
+- `tomb5/tomb5.cpp` (+47 lines) - their registry names (`ctrl_modern`,
   `combat_hold`, `action_split`), read and written beside every other
   `tomb5.*` value.
 - `specific/LoadSave.cpp` (+157/-24 lines) - the "Controls" page: three new
@@ -14367,15 +14367,18 @@ is needed - which it was, twice, while this paragraph was being corrected.
   list, which move down with it - including the two shifts that turn the
   selected row's bit back into an array index, which had to move with the
   rows and did not until the review (see the last paragraph of this entry).
-- `game/gameflow.cpp` (+16 lines) - the ten new `CustomText` words.
+- `game/gameflow.cpp` (+42 lines) - the ten new `CustomText` words, and the
+  one line that makes a level start forget the held course, beside
+  `InterpInvalidate("level start")` for the same reason that line is there.
 - `TOMB5 Code/tomb5.vcxproj` (+9 lines) - the four new source files, added
   the way `interpolate.cpp` and `bc7.cpp` already are.
 
 **BYTE IDENTITY AT THE DEFAULTS (Tank, Toggle, One key).** Every statement
-added to an existing engine file sits inside one of three shapes: a call into
-a new file nothing reaches without the option, the seam's own guard, or
-menu/settings code, which the round's own byte-identity rule exempts from
-needing a guard. `tomb5_options tomb5;` is a global, so `control_modern`
+added to an existing engine file sits inside one of three shapes: a test on
+`tomb5.control_modern` itself (the seam in `specific/input.cpp`, and the one
+line at the level start in `game/gameflow.cpp`), a new file nothing reaches
+without one of those two, or menu/settings code, which the round's own
+byte-identity rule exempts from needing a guard. `tomb5_options tomb5;` is a global, so `control_modern`
 reads 0 before any registry is opened at all - Tank is what a fresh install
 gets, not only what the shipped registry sets it to.
 
@@ -14392,7 +14395,7 @@ numbers `game/modern_move.h`'s own comments cite):
 
 | row | constant | value | origin |
 |---|---|---|---|
-| 2 | dead zone | 0 | XInput's own 24% dead zone is already applied in `specific/dxshell.cpp` before the stick reaches us; TROne's 8000/32767 would be a second one on top. **Play-test number** - raise in steps of 4 (3%) if drift is reported. |
+| 2 | dead zone | 0 | XInput's own 24% dead zone is already applied in `specific/dxshell.cpp` before the stick reaches us; TROne's 8000/32767 would be a second one on top. **Play-test number** - raise in steps of 4 (3%) if drift is reported. There is no band in which Modern reacts and Tank does not: the classic path ignores anything up to +-8, and the smallest non-zero reading either joystick path can produce is 18 (DirectInput: zeroed under 150, divided by 8) or 30 (XInput: zeroed under 7849, divided by 256). |
 | 5 | walk threshold | 62 of 128 | TROne's rule (half deflection walks) and TROne's own number, 16000/32767, rescaled. **Play-test number.** |
 | 6, 7 | aim window, hysteresis | 0x0400, x2 aligned | TROne's own anti-chatter window and its widening once aligned. |
 | 8, 9 | spin enter / exit | 0x5000 / 0x2800 | TROne's own: turning on the spot above 112.5 degrees of error, running again below 56.25. |
@@ -14458,10 +14461,29 @@ options/save screens, the wardrobe), where the direction bits steer a menu
 rather than Lara. The honest test is `GlobalCounter`, which
 `game/control.cpp` raises exactly once, immediately before its own call, and
 nothing else in the tree touches - so a call that does not follow a fresh
-count leaves the word untouched, and the tick right after any break in the
-chain (a level start, a savegame, the inventory, first person, a cutscene,
-the look key) is skipped as well, so the blocked-wall counter is never
-measured against a position from another level or another menu.
+count leaves the word untouched, and the tick right after a break in the
+chain is skipped as well, so the blocked-wall counter is never measured
+against a position from before the break.
+
+**AND THAT COUNTER CANNOT SEE EVERY BREAK - which is where the round's second
+defect was.** It sees the breaks in which ticks really ran while the seam
+stood aside: the title screen, first person, a cutscene, a spotcam, the look
+key. It cannot see a level change or a savegame restore, because between two
+levels not one tick runs at all - `game/gameflow.cpp` leaves its game loop at
+`gfLevelComplete` and the next level's priming `ControlPhase` is the next tick
+there is - so the boundary arrives as an ordinary step of one. Held stick
+through a level transition, and the new level's first tick answered the
+PREVIOUS level's world course: standing, she turned 135 degrees away from the
+camera over eight ticks with no `IN_FORWARD` for five of them; caught running,
+the snap took the whole wrong turn in a single tick. The reset is therefore
+hung where the level really starts, one line in `game/gameflow.cpp` next to
+`InterpInvalidate("level start")` - the other thing in this engine that holds
+state from the previous tick and has to be told the same news - and that one
+line covers every savegame restore too, because `sgRestoreGame` has exactly
+one caller and it is in the same function, sixty lines above it. The inventory
+is deliberately still not a reset: the ring has no clock either, so the tick
+after it is also a step of one, but the world did not move while it was open
+and her held course is still the course she was on.
 
 **THE D-PAD STILL WORKS (the user's decision 3).** `specific/dxshell.cpp`
 ORs its own +-20 onto the same two axes the stick uses for a D-pad press,
@@ -14505,9 +14527,10 @@ the logic tick and not on a drawn frame, and `mode=off` earning a line
 exactly as much as a running one does. Never more than one a tick, but it
 CAN be fewer, and whoever counts them has to know it: the reset branch
 returns before the tick line, so the first tick back from a level start, a
-savegame, the inventory, first person, a cutscene or the look key shows its
-`init` line alone; and while the look key is down, or the ring is open, or a
-cutscene is playing, the seam is not called at all and neither line appears.
+savegame, first person, a cutscene or the look key shows its `init` line
+alone - the inventory being the one break that is not in that list, because
+nothing resets for it; and while the look key is down, or the ring is open, or
+a cutscene is playing, the seam is not called at all and neither line appears.
 A gap in `f=` is therefore the scheme standing aside, not a dropped line -
 `f=` is `GlobalCounter` and never lies, so count against that rather than
 against the wall clock:
@@ -14520,7 +14543,7 @@ MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d
 
 **THE TESTS.** `ModernTest` (`bmt.bat`) links no game, no level and no pad -
 only the engine's own `modern_move.cpp`, so a change to the decision tree is
-a change the test sees. Rebuilt and rerun for this record: **501 checks, 0
+a change the test sees. Rebuilt and rerun for this record: **513 checks, 0
 failed.** All 32 ported TROne expectations (in whole, or in the arithmetic
 half of them where the rest needs an engine ModernTest has none of); four
 sweeps of our own that a play test cannot reach on purpose - 16,384 blocked
@@ -14531,10 +14554,14 @@ in 1,208 of 2,048 cases, so the first sweep is not a tautology); 2,997 stick
 pairs inside a raised dead zone, silent; 10,240 ticks after a 180-degree
 camera cut, the held course unmoved in every one; and the D-pad synthesis
 checked both ways, as a full stick push and against the raw +-20 it
-replaces. And a mutation pass the brief did not ask for: across the round's
-five verification passes, 31 single-edit mutations of the scheme were tried
-against the finished tests and all 31 were caught - none of the mutants ever
-reached the repository - including one the first pass of tests missed
+replaces. Eleven more checks hold what the level-start reset is worth, from
+the other end: nothing here can reach `game/gameflow.cpp`, so what is
+asserted is the answer a carried-over course gives against the answer a fresh
+one gives, which means anybody who deletes that call has to delete these
+checks with it. And a mutation pass the brief did not ask for: across the
+round's six verification passes, 34 single-edit mutations of the scheme were
+tried against the finished tests and all 34 were caught - none of the mutants
+ever reached the repository - including one the first pass of tests missed
 outright (deleting the steer-step noise floor changed no answer anywhere in
 the file, because nothing in it had ever moved the stick by a small angle;
 three checks closed the gap).
@@ -14630,15 +14657,35 @@ stick gently while crouched instead of discovering it by accident.
 
 Whether a DirectInput pad axis ever parks at exactly 20 and reads a tick of
 running instead of walking. Whether the tick skipped after every break in
-the chain is felt at a level start. Whether the Controls page's own 2 pixels
-of glyph overlap show at either resolution (see the page's paragraph above).
+the chain is felt at a level start. And whether the Controls page's own 2
+pixels of glyph overlap show at either resolution (see the page's paragraph
+above): the rows to look at are the ones with a descender - Jump, Step Left,
+Large Medipack. If they do show, the answer is a redesign of the page and not
+a smaller number, because 23 is already the largest pitch that fits twenty
+rows at 640x480.
 
 **WHAT THE SKEPTICAL REVIEW CHANGED, AND WHY IT IS HERE RATHER THAN ONLY IN
-THE COMMITS.** Two of the round's own claims did not survive being checked,
-and one of them was a real defect in code the round had touched.
+THE COMMITS.** Two passes, and each of them found one thing that was really
+wrong plus a handful of comments that pointed at the wrong evidence. Nothing
+was fixed on suspicion and nothing was refuted: every finding of both passes
+held up when it was measured.
 
-The defect was in the menu, not in the modern control, and it bit in the
-DEFAULT Tank configuration: moving every key-binding row three selection
+The second pass's defect is the level boundary, and it has its own paragraph
+above ("AND THAT COUNTER CANNOT SEE EVERY BREAK"). What is worth keeping here
+is the shape of the mistake rather than the fix, because it is a shape that
+will come again: the state machine inferred "something interrupted us" from a
+counter instead of being told, and the one event that mattered most was
+exactly the event that stops the counter. The engine already had the honest
+answer in plain sight - `InterpInvalidate` is called at the level start, at a
+level being freed, at a savegame restore and on the way out of every menu that
+stops the world, by name, from the places where those things happen - and the
+fix is one line beside it. Three comments and two passages of this record had
+meanwhile asserted the reset as fact; they now say which breaks the counter
+can see and which it cannot.
+
+The first pass's defect was in the menu, not in the modern control at all, and
+unlike the second one it bit in the DEFAULT Tank configuration: moving every
+key-binding row three selection
 bits up left the two blocks that turn the selected bit back into an array
 index (`specific/LoadSave.cpp`, the keyboard capture and the joystick
 capture) at their old shift of 2. Shift-then-count yields
@@ -14653,34 +14700,46 @@ it; a scratch harness reproduced all 31 rows' indices before and after, and
 the old arithmetic checks out for the old bits, which is what says the shift
 and not the row layout was the mistake.
 
-The misreading was the firing-plus-jump case. The round recorded that a
-standing jump with a weapon ready and the action key held must come out as a
-side STEP for us, because TROne's own expectation supposedly passes on their
-Remaster profile forcing `aim_strafe` off. It does not: the line that
-disarms aiming on a jump is in their glue OUTSIDE that profile block, and
-their own test builds a plain glue that never sets the profile. So the
-expectation is theirs unconditionally, and it is ours now too - the
-translation stops aiming on the tick she jumps, so the side flip and the back
-flip both survive firing. Since `IN_RSTEP` is no direction at all to
-`lara_as_compress`, the old answer really did turn a flip into a jump
-straight up. The rule is stated at the one place the config's `aim_strafe` is
-read rather than by copying their config before the call: our seam keeps one
-config and never copies it, so a copy per tick would be work outside the
-translation for a rule the translation can simply say. Five checks in
-`ModernTest`'s `jumping()` section hold it, and the mutant that removes the
-rule fails exactly the two that name it.
+The first pass's misreading was the firing-plus-jump case. The round
+recorded that a standing jump with a weapon ready and the action key held
+must come out as a side STEP for us, because TROne's own expectation
+supposedly passes on their Remaster profile forcing `aim_strafe` off. It
+does not: the line that disarms aiming on a jump is in their glue OUTSIDE
+that profile block, and their own test builds a plain glue that never sets
+the profile. So the expectation is theirs unconditionally, and it is ours
+now too - the translation stops aiming on the tick she jumps, so the side
+flip and the back flip both survive firing. Since `IN_RSTEP` is no direction
+at all to `lara_as_compress`, the old answer really did turn a flip into a
+jump straight up. The rule is stated at the one place the config's
+`aim_strafe` is read rather than by copying their config before the call:
+our seam keeps one config and never copies it, so a copy per tick would be
+work outside the translation for a rule the translation can simply say. Five
+checks in `ModernTest`'s `jumping()` section hold it, and the mutant that
+removes the rule fails exactly the two that name it.
 
-Beside those: five routine and state names in the two state tables' comments
-were wrong (87/88 run `lara_as_null` and not `lara_void_func`, 14 the other
-way round, and TR5 calls the sprint `AS_DASH`/`lara_as_dash`), which matters
-because those comments ARE the evidence that the states were checked against
-`lara_control_routines[]` one by one; the three states in the water group
-that are a dive or a climb-out rather than a swim now carry their own reason
-instead of the group's "modern in A2 (camera pitch)"; and `MODERNLOG`'s
-"never more, never fewer" and this page's row-fit arithmetic are corrected
-above. None of the name fixes moved a classification - a script that parses
-`lara.cpp` and `lara_states.h` and checks all 104 `case` comments now reports
-no disagreement at all.
+Beside those, in that same pass: five routine and state names in the two
+state tables' comments were wrong (87/88 run `lara_as_null` and not
+`lara_void_func`, 14 the other way round, and TR5 calls the sprint
+`AS_DASH`/`lara_as_dash`), which matters because those comments ARE the
+evidence that the states were checked against `lara_control_routines[]` one
+by one; the three states in the water group that are a dive or a climb-out
+rather than a swim now carry their own reason instead of the group's "modern
+in A2 (camera pitch)"; and `MODERNLOG`'s "never more, never fewer" and this
+page's row-fit arithmetic are corrected above. None of the name fixes moved
+a classification - a script that parses `lara.cpp` and `lara_states.h` and
+checks all 104 `case` comments now reports no disagreement at all.
+
+The second pass's two smaller findings are of the same family, and both are
+about a comment naming the wrong source - which is the whole reason this round
+puts the source in the comment. The reason written for states 52, 53 and 55
+credited TROne's own water list, and their
+`trone_modern_state_is_classic` has those three in neither its cases nor the
+prose above it; they are classic because this round's build brief names them
+in its water list, which is what the comment says now. And the dead zone's
+measurement plan - one of the two numbers the play test is meant to settle -
+sent the measurer after a band of stick readings (1..8) that no joystick path
+in the engine can produce, so it now names what the measurement is really
+for: the magnitude deciding walking from running.
 
 ## Building this yourself
 

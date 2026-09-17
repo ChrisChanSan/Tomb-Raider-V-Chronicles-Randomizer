@@ -248,6 +248,22 @@ void init_tomb5_stuff()
 		tomb5.hd_texture_budget_mb = 0;					//work it out (#123, S6)
 		REG_WriteLong(buf, tomb5.hd_texture_budget_mb);
 
+		// The three Controls-page rows (#161, round 161a step 6): Tank,
+		// Toggle, One key. All three are 0 and all three keep the engine
+		// exactly as it was before this round - see their comments in
+		// tomb5_options (global\types.h).
+		sprintf(buf, "ctrl_modern");
+		tomb5.control_modern = 0;						//off, Tank
+		REG_WriteBool(buf, tomb5.control_modern);
+
+		sprintf(buf, "combat_hold");
+		tomb5.combat_hold = 0;							//off, Toggle
+		REG_WriteBool(buf, tomb5.combat_hold);
+
+		sprintf(buf, "action_split");
+		tomb5.action_split = 0;							//off, One key
+		REG_WriteBool(buf, tomb5.action_split);
+
 		// Empty: the Steam discovery looks for the Remaster by itself. A
 		// path here overrides it - one of the two settings that is not a
 		// number.
@@ -397,6 +413,25 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_texture_budget_mb");
 		REG_ReadLong(buf, tomb5.hd_texture_budget_mb, 0);
 
+		// #161, round 161a step 6 - same three, same defaults as the
+		// first-run branch above. This runs once at process startup, before
+		// there is a Lara to steer, so it needs no ModernResetControls()
+		// call of its own: game\modern_state.cpp's statics start zeroed by
+		// the loader exactly as tomb5.control_modern does, and its own tick
+		// guard treats the very first tick as a break in the chain (see its
+		// comment) and resets itself. The call this value's COMMENT in
+		// tomb5_options (global\types.h) promises is for the Controls page
+		// (round 161a step 7): switching the row at RUNTIME, with a level
+		// already loaded, is the case that actually needs it.
+		sprintf(buf, "ctrl_modern");
+		REG_ReadBool(buf, tomb5.control_modern, 0);
+
+		sprintf(buf, "combat_hold");
+		REG_ReadBool(buf, tomb5.combat_hold, 0);
+
+		sprintf(buf, "action_split");
+		REG_ReadBool(buf, tomb5.action_split, 0);
+
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
 
@@ -533,6 +568,16 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "vsync");
 	REG_WriteLong(buf, tomb5.vsync);
+
+	// #161, round 161a step 6 - the three Controls-page rows.
+	sprintf(buf, "ctrl_modern");
+	REG_WriteBool(buf, tomb5.control_modern);
+
+	sprintf(buf, "combat_hold");
+	REG_WriteBool(buf, tomb5.combat_hold);
+
+	sprintf(buf, "action_split");
+	REG_WriteBool(buf, tomb5.action_split);
 
 	CloseRegistry();
 }

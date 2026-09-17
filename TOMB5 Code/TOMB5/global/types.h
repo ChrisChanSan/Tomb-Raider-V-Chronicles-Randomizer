@@ -2726,5 +2726,25 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * registry name beside it, and the two rows that go with it on the
 	 * Controls page (combat mode, action) come with that step. */
 	bool control_modern;
+
+	/* COMBAT MODE (#161). Off = Toggle, the engine's own behaviour today: one
+	 * press of the draw key brings the weapon out, another puts it away. On =
+	 * Hold: the weapon comes out while the key is held and goes back the
+	 * moment it is released (design section 1.5). `game\modern_move.cpp`'s
+	 * `ModernWeaponBits` already takes this bit as its first argument and
+	 * returns the classic bits untouched at 0 - so Toggle needs nothing more
+	 * from this round. Drawn and saved on the Controls page from round 161a
+	 * step 7 (decision 1), but nothing calls `ModernWeaponBits` with this bit
+	 * set to 1 yet; workflow B wires Hold itself. */
+	bool combat_hold;
+
+	/* ACTION KEY (#161). Off = One key, the engine's own behaviour today: the
+	 * one `IN_ACTION` button both interacts with the world and fires. On =
+	 * Separate: a second button/key would read its own bit for the 41
+	 * "interact with a world object" sites of design section 5.8, freeing
+	 * `IN_ACTION` for firing alone. Drawn and saved on the Controls page from
+	 * round 161a step 7 (decision 1); the second bit and the split itself do
+	 * not exist yet - workflow B adds them. */
+	bool action_split;
 };
 #pragma pack(pop)

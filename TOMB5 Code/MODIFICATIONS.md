@@ -14281,6 +14281,309 @@ counts the frame, the `root lara` line names the two animations and the
 position, and `snaps=` beside them says whether order 2 blended the grab or
 refused it.
 
+#### Round 161a (#161) - modern controls, the movement half
+
+The user's order, in his own words: *Moderne Steuerung implementieren.
+Todesengel hat es geschafft, die moderne Steuerung aus dem Remaster
+nachzubauen. Das ist der letzte Meilenstein, der uns noch fehlt.* And on being
+shown that even TROne's own scheme is not flawless: *Die ist noch nicht
+perfekt, ich wuerde sagen 90 % gut. Den Rest tweaken wir.*
+
+**WHAT MODERN CONTROL IS.** It is not a new way of moving Lara. It is a pure
+function that turns "stick direction plus a remembered world heading" into
+exactly the same `IN_FORWARD` / `IN_BACK` / `IN_LEFT` / `IN_RIGHT` / `IN_WALK`
+/ `IN_LSTEP` / `IN_RSTEP` bits the keyboard has produced since 1996. The turn
+RATE stays the classic automaton's own everywhere but one deliberate
+exception (the direct turn, below) - the translation only sets the turn BIT
+and `game/lara.cpp` does the turning. That is the whole reason the idea
+survives a 1:1 engine, and it is why it transfers to us: our `input` word
+carries the same bits at the same values, and our Lara state numbers are the
+numbers the design was measured against.
+
+**THE SOURCE.** TROne (GPLv3) by Todesengel1931 -
+https://github.com/todesengel1931 - solved this first and measured why the
+obvious way round does not work: read the camera fresh every tick instead of
+holding a world course, and TROne measured her spinning in circles. The
+DESIGN is theirs, re-derived here in our own units - our stick arrives as
+about +-128 where theirs is +-32767, our state list is TR5's own and runs to
+138 where theirs stops at 104 - and in our own voice; nothing of their code
+is in this tree. What IS taken across verbatim, and named as such in
+`Preparation/Tools/Diagnose/ModernTest.cpp`'s own header, are 32 test
+expectations (28 `modern.*` and 4 `combatmode.*` cases of their
+`tests/test_controller.cpp`) - somebody else's five games' worth of play
+testing, written down as numbers.
+
+**SCOPE - ONE OF THREE WORKFLOWS.** This entry is workflow A1: the movement
+half, at TROne's own turn-rate parity, on the pad, with the classic chase
+camera untouched. It does not read the right stick, does not change a pad or
+keyboard default table, and leaves every water state classic (see below).
+Workflow **A2** (next) builds the free orbit camera and gives the water its
+swim pitch; workflow **B** (after the user's weekly reset) builds the
+keyboard scheme, the mouse, the second pad table for Separate mode,
+`IN_ACTION2` and combat mode Hold. What each of those adds is named again at
+the end of this entry.
+
+**THE FILES**, thirteen of them, 3,642 insertions and 23 deletions against
+base `8253932`, across the seven commits that built it (this record is the
+eighth):
+
+- `game/modern_move.h` / `.cpp` (new, 312 + 839 lines) - the pure translation.
+  No engine header and no engine global: it takes eight numbers (stick x/y,
+  camera yaw, Lara's yaw, a situation struct) and fills a result struct. Its
+  own arc tangent cannot call the engine's `phd_atan` (that would drag the
+  whole Direct3D type set into a file that has to compile alone), so it uses
+  the C library's `atan2` scaled to our 16-bit convention instead, measured
+  against the real `phd_atan` rather than assumed: over all 131,768 integer
+  stick pairs a controller can produce, the worst disagreement is 5 of 65,536
+  units (0.03 degrees, at x=-181 z=-73), against a smallest threshold
+  (`steer_step`) of 384 - re-verified against this tree while writing this
+  record.
+- `Preparation/Tools/Diagnose/ModernTest.cpp` + `bmt.bat` (new, 1,836 + 15
+  lines) - compiles the engine's own `modern_move.cpp` beside itself rather
+  than a copy, so a change to the decision tree is a change the test sees.
+  **498 checks, 0 failed**, rebuilt and rerun for this record.
+- `game/modern_state.h` / `.cpp` (new, 48 + 322 lines) - the one file that
+  knows the engine: the per-tick state, the reset on every break in the tick
+  chain, the blocked-wall counter (measured from Lara's own position, never a
+  collision internal, so a wall, a crate and a corner all read the same), the
+  camera yaw of the tick from the camera's own two points, the direct turn's
+  one write to `pos.y_rot`, and `MODERNLOG`.
+- `specific/input.cpp` (+47 lines) - one seam, between the block that puts
+  the stick on the four direction bits and the block that reads the key
+  roles.
+- `global/types.h` (+34 lines) - three new `bool` settings on
+  `tomb5_options`: `control_modern`, `combat_hold`, `action_split`, all
+  default 0.
+- `tomb5/tomb5.cpp` (+45 lines) - their registry names (`ctrl_modern`,
+  `combat_hold`, `action_split`), read and written beside every other
+  `tomb5.*` value.
+- `specific/LoadSave.cpp` (+135/-22 lines) - the "Controls" page: three new
+  rows (Control type, Combat mode, Action) above the Method row and the key
+  list, which move down with it.
+- `game/gameflow.cpp` (+16 lines) - the ten new `CustomText` words.
+- `TOMB5 Code/tomb5.vcxproj` (+9 lines) - the four new source files, added
+  the way `interpolate.cpp` and `bc7.cpp` already are.
+
+**BYTE IDENTITY AT THE DEFAULTS (Tank, Toggle, One key).** Every statement
+added to an existing engine file sits inside one of three shapes: a call into
+a new file nothing reaches without the option, the seam's own guard, or
+menu/settings code, which the round's own byte-identity rule exempts
+outright. `tomb5_options tomb5;` is a global, so `control_modern` reads 0
+before any registry is opened at all - Tank is what a fresh install gets, not
+only what the shipped registry sets it to.
+
+**EVERY CONSTANT THE MOVEMENT HALF NEEDS, AND WHERE IT COMES FROM** (row
+numbers are `MODERN-CONTROLS-DESIGN.md` section 3's taboo table, the same
+numbers `game/modern_move.h`'s own comments cite):
+
+| row | constant | value | origin |
+|---|---|---|---|
+| 2 | dead zone | 0 | XInput's own 24% dead zone is already applied in `specific/dxshell.cpp` before the stick reaches us; TROne's 8000/32767 would be a second one on top. **Play-test number** - raise in steps of 4 (3%) if drift is reported. |
+| 5 | walk threshold | 62 of 128 | TROne's rule (half deflection walks) and TROne's own number, 16000/32767, rescaled. **Play-test number.** |
+| 6, 7 | aim window, hysteresis | 0x0400, x2 aligned | TROne's own anti-chatter window and its widening once aligned. |
+| 8, 9 | spin enter / exit | 0x5000 / 0x2800 | TROne's own: turning on the spot above 112.5 degrees of error, running again below 56.25. |
+| 10 | stand spin | 0x3000 | TROne's own measurement of a failed acceptance of theirs - standing still, `lara_as_stop` can only express "turn" WITHOUT `IN_FORWARD` - confirmed present in our own `game/lara.cpp` line for line. |
+| 11, 12 | steer step / recenter | 0x0180 / 0x1000 | TROne's own noise floor and re-seat threshold for the held world course. |
+| 13 | aim sector | 0x2000 | the geometric forward/back quadrant boundary. |
+| 14, 15 | block frames / eps | 6 / 4 | TROne's own: 6 ticks (a fifth of a second) of moving under 4 world units while asking to go forward and turn at once. |
+| 16 | turn rate | 3277 (shipped), 1456 and 2184 beside it | **the number the user picks.** Measured in `game/lara.cpp`: vanilla's fastest is 1456 (8 degrees a tick, `AS_FASTTURN`); TROne's 3277 is 18 degrees, 2.25x anything vanilla does. A half turn on the spot costs 10 ticks at 3277, 16 at 2184, 23 at 1456. |
+| - | the direct turn's own gate | 1 (on) | the user's decision 5 - a second, named gate behind `control_modern`, so a play test can ask "is Modern wrong, or only the direct turn" without a rebuild. |
+| 17, 18 | instant reversal / forward returns | 0x4000 / 0x2000 | TROne's own: past 90 degrees, while really running, the whole turn is taken in one tick; `IN_FORWARD` returns once 45 degrees or less remain. |
+| - | stick full deflection | 128 | our own - `specific/dxshell.cpp`'s XInput `/256` scaling. |
+| - | the five switches | all 1 (on) | `hold_course`, `back_turns`, `aim_strafe`, `jump_dir`, `block_turn` - each one a piece of TROne's own design the user chose to keep as a build-time constant rather than a page of sliders, because each switches off exactly one rule and lets a play test bisect a complaint. |
+
+Nothing in the set is derived from a Remaster binary - the design document's
+own taboo table traces every one of TROne's numbers to a stated origin, and
+the two rows marked "play-test number" carry their own measurement plan in
+`game/modern_move.h`, not only here.
+
+**THE EXEMPT-STATE TABLE.** `ModernStateIsClassic` (`game/modern_move.cpp`)
+answers state by state, 0 to 138, counted fresh from the switch itself for
+this record: **95 classic, 44 modern.** A direction bit stays classic
+wherever its state's own routine (`game/lara.cpp:40-181`,
+`lara_control_routines[]`) reads it as something other than "where do I want
+to go" - which way to shimmy, whether to let go of a rope, which way to push
+a block - covering the water (13 states, left classic here and marked
+"modern in A2 (camera pitch)" - A1 has no camera pitch to swim by), the hangs
+and shimmies, the ladder, block push/pull, the poses TROne's own document
+groups as "89-104", and TR5's own extension past TROne's 104 (design section
+6.1, states 107-138). Everything else - standing, running, walking, ducking,
+crawling, stepping, the jumps other than three named below - gets the
+translation.
+
+**ONE DIVERGENCE FROM THIS ROUND'S OWN BUILD BRIEF, MEASURED AND REPORTED
+RATHER THAN QUIETLY RESOLVED.** The brief's own step 3 paragraph lists states
+25-29 as modern; design section 1.7 and a second, independent TROne test
+expectation both say 25/26/27 (the back flip and the two side flips) are
+classic. Rather than trust either text, the routines were read:
+`lara_as_leftjump` (`lara.cpp:765`) sets `AS_TWIST` on `IN_RIGHT`,
+`lara_as_rightjump` (:781) the mirror on `IN_LEFT`, and `lara_as_backjump`
+(:799) reads `IN_FORWARD | IN_ROLL` to end the flip early - precisely the
+mid-flip redirect TROne's own document says 25/26/27 were added to their
+classic list to stop. So 25/26/27 are classic here, matching TROne and not
+the brief's summary sentence; 28 and 29 (`lara_as_upjump`,
+`lara_as_fallback`) read no direction bit at all and stay modern, as the
+brief says. It is a one-line change either way (moving the three `case`
+labels) if the reviewer or the user wants the brief's literal reading
+instead.
+
+**THE SEAM AND THE STATE MACHINE.** One call, `ModernUpdateInput`, sits in
+`specific/input.cpp` between the block that puts the stick on the four
+direction bits and the block that reads the key roles, guarded by
+
+```
+tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() &&
+!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
+!InventoryActive && gfLevelId != LVL5_TITLE && !(input & IN_LOOK)
+```
+
+- the last term is the user's decision 4, below. It answers only to the
+game's own logic tick and no other: `S_UpdateInput` is also called from
+eight menu loops (the game-over menu, the inventory, FMV, three
+options/save screens, the wardrobe), where the direction bits steer a menu
+rather than Lara. The honest test is `GlobalCounter`, which
+`game/control.cpp` raises exactly once, immediately before its own call, and
+nothing else in the tree touches - so a call that does not follow a fresh
+count leaves the word untouched, and the tick right after any break in the
+chain (a level start, a savegame, the inventory, first person, a cutscene,
+the look key) is skipped as well, so the blocked-wall counter is never
+measured against a position from another level or another menu.
+
+**THE D-PAD STILL WORKS (the user's decision 3).** `specific/dxshell.cpp`
+ORs its own +-20 onto the same two axes the stick uses for a D-pad press,
+and 20 of 128 is under the walk threshold (62) - left alone, the cross would
+only ever make her walk under Modern. `ModernDPadToStick` raises a vector
+that can only be the cross (both axes in `{-20, 0, +20}`) to full deflection
+before the translation ever sees it; on the XInput path this is exact,
+because the hardware dead zone is applied before the `/256` and a real stick
+axis can never read exactly 20.
+
+**THE LOOK KEY BYPASSES THE SCHEME ENTIRELY (the user's decision 4, from his
+own Remaster video at 00:19:47): "For movements where Lara must position
+exactly; the normal modern control is far too coarse."** While the key is
+held, the classic stick bits apply and the direct turn is off, so she turns
+finely on the spot exactly as she does under Tank; the camera does what the
+look key has always done. No new constant - the user measured "vanilla's own
+turn-on-the-spot rate" from his video and that is what standing under Tank
+already gives.
+
+**THE DIRECT TURN.** TROne write `y_rot` themselves rather than only setting
+a turn bit, because the automaton's own fastest rate (1456, about 8 degrees a
+tick) makes a half turn on the spot cost roughly 23 ticks even once
+`AS_FASTTURN` is reached, which does not feel like the Remaster. The write
+sits behind two gates - `tomb5.control_modern` and the named
+`MODERN_DIRECT_TURN` - and is allowed in exactly nine states: standing,
+walking, running, the three turns-on-the-spot, the wall-splat, the landing
+and the sprint (0/1/2/6/7/12/14/20/73) - never airborne, on a ladder, in the
+water or in an interaction pose, because there `y_rot` belongs to the
+animation and an outside hand on it is how a pose goes crooked. Past 90
+degrees of error, and only while she is really running, the whole turn is
+taken in one tick - TROne's own finding: standing, an instant reversal would
+spend the one frame the player needs to hold BACK and JUMP together for the
+back flip, so standing keeps the bounded rate instead. `IN_FORWARD` returns
+only once 45 degrees or less remain, so she never takes a step sideways
+across a ledge while the turn is still finishing.
+
+**MODERNLOG**, behind `-log` (`gLogEnabled`) permanently like every other
+diagnostic seam: one `init` line per break in the tick chain, one line per
+real logic tick - 30 lines a second at every `fps_mode`, `mode=off` earning a
+line exactly as much as a running one does:
+
+```
+MODERNLOG init scheme=modern rate=%d direct=%d
+MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d
+    err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d yawd=%d bits=%08lX
+```
+
+**THE TESTS.** `ModernTest` (`bmt.bat`) links no game, no level and no pad -
+only the engine's own `modern_move.cpp`, so a change to the decision tree is
+a change the test sees. Rebuilt and rerun for this record: **498 checks, 0
+failed.** All 32 ported TROne expectations (in whole, or in the arithmetic
+half of them where the rest needs an engine ModernTest has none of); four
+sweeps of our own that a play test cannot reach on purpose - 16,384 blocked
+stick-direction/camera-heading/Lara-state combinations with zero violations
+of "forward and a turn bit never go out together while she is blocked" (and
+the counter-proof beside it, the same sweep unblocked running while turning
+in 1,208 of 2,048 cases, so the first sweep is not a tautology); 2,997 stick
+pairs inside a raised dead zone, silent; 10,240 ticks after a 180-degree
+camera cut, the held course unmoved in every one; and the D-pad synthesis
+checked both ways, as a full stick push and against the raw +-20 it
+replaces. And a mutation pass the brief did not ask for: across the round's
+four verification passes, 28 single-edit mutations of the scheme were tried
+against the finished tests and all 28 were caught - none of the mutants ever
+reached the repository - including one the first pass of tests missed
+outright (deleting the steer-step noise floor changed no answer anywhere in
+the file, because nothing in it had ever moved the stick by a small angle;
+three checks closed the gap).
+
+**THE "CONTROLS" PAGE.** `specific/LoadSave.cpp`'s `menu == 1` gains three
+rows - Control type (Tank/Modern), Combat mode (Toggle/Hold), Action (One
+key/Separate) - above the existing Method row and key-binding list, which
+both move down with it (selection bits 1/16/17 become 4/19/20, a uniform +3,
+because the three new rows take the bits the Method row used to hold). Combat
+mode and Action are drawn, toggled and saved but read by nobody yet - one
+comment says so at both the row and its LEFT/RIGHT handling - workflow B
+gives them an effect. Control type calls `ModernResetControls()` on every
+change, so a stale held course or blocked counter never survives a scheme
+switch. The whole page now shares one row height, `GetFixedScale(23)` in
+place of the Method row's former `GetFixedScale(27)`, because 20 rows no
+longer fit the taller one: at 640x480 (`GetFixedScale` returns its argument
+unchanged there) the last row lands at 460 of 479 available, one pixel more
+than before this round's 459; at 1920x1080 it lands at 1040 of 1079, more
+headroom than before (1037 of 1079), because the tighter of the two axis
+scales is height's own 2.25x. The "Options" row itself is renamed from
+"Configure controls" to "Controls" (German "Steuerung"); ten words go into
+`CustomText` (`game/gameflow.cpp`), German translated, the other three
+languages repeating the English literal on purpose - a matched row returns
+its column unconditionally, so an empty cell would print blank rather than
+fall back to English.
+
+**WHAT A2 ADDS.** The free orbit camera on the right stick (a sphere around
+Lara, wall collision, no auto-return, Lara hidden below a distance
+threshold, fixed cameras discarded except the Rich2 sniper camera), the pad
+default table for Modern (right stick to the camera, medipacks to the
+D-pad), and water: the left stick moves her on a flat circle relative to the
+camera and her swim pitch follows the camera's own - which is exactly why
+A1 leaves every water state classic rather than half-building the pitch it
+needs.
+
+**WHAT B ADDS.** The keyboard scheme (the Remaster's own defaults), the
+mouse path (raw input, orbit, bindable buttons, sensitivity and invert),
+the second pad table for Separate mode, `IN_ACTION2` at the 41 interaction
+sites the design document counted, and combat mode Hold. `ModernWeaponBits`
+(`game/modern_move.cpp`) already takes `combat_hold` as its first argument
+and hands the bits back untouched at 0 - proven over all 32 combinations its
+own test sweeps, not only TROne's four - so Toggle needs nothing further
+from this round; B only has to wire Hold and give the toggle its per-press
+edge. `ModernTest` itself prints what is left by name, every run: the
+back-input profile and the toggle edge and the held-weapon interact/shoot
+split (all three B's), the orbit camera (A2's), and one case that can never
+be asserted by this tool at all - the degenerate camera's fallback to Lara's
+own heading needs the engine's real camera, which nothing linked here has.
+
+**WHAT ONLY THE PLAY TEST CAN TELL.** The turn rate - 1456, 2184 or 3277,
+`MODERNLOG`'s `rate=` names whichever is live and the user freezes one after
+trying all three in a session. Whether the dead zone (0) needs raising on
+his own pad; `mag=` is there for exactly that report. Two things that only
+show with `MODERN_DIRECT_TURN` set to 0 for comparison: `IN_WALK` plus a lone
+turn bit becomes a sidestep rather than a turn on the spot
+(`specific/input.cpp`'s own older rule, not this round's), and the
+blocked-wall rule itself sleeps while the direct turn is on, because the
+direct turn never asks for `IN_FORWARD` and a turn bit together - it wakes up
+the moment direct turn is switched off, which is exactly when it is needed.
+Whether a DirectInput pad axis ever parks at exactly 20 and reads a tick of
+running instead of walking. Whether the tick skipped after every break in
+the chain is felt at a level start. And the one case the design brief
+already named and this round does not change: a standing jump with a weapon
+ready and the action key held comes out `IN_RSTEP` rather than a directional
+side flip, because Modern's AIM branch runs before its JUMP branch in the
+decision tree design section 1.3 fixed the order of, and `lara_as_compress`
+reads only the four direction bits - so the flip becomes a straight-up jump
+instead. Left as built, because reordering a committed decision tree on a
+hunch is exactly what "no wild fixes" forbids; the one-line change it would
+take is named in `ModernTest.cpp`'s own `jumping()` section if the user
+decides he wants the Remaster's behaviour instead.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

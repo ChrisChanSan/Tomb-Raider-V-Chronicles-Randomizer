@@ -33,7 +33,7 @@ GPLv3.
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
 | **Weather** | Rolled per level — the rainy Ireland levels can come up dry, the Russian base can get rain instead of snow |
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
-| **Engine** | Native Direct3D 9 and XAudio2, controller support, a first-person view, and a long list of fixed original bugs |
+| **Engine** | Native Direct3D 9 and XAudio2, controller support with an optional modern (analog-stick) control scheme, a first-person view, and a long list of fixed original bugs |
 
 The same **seed** produces the same game on any machine. The randomizer
 window shows the version and the build id, and every run writes
@@ -684,6 +684,12 @@ original levels' geometry, which it needs to place anything legally —
   from there (GPLv3, taken over directly rather than rewritten, so its
   origin stays visible). Their models and sounds are not shipped; the
   randomizer reads them from your own Tomb Raider III installation.
+- **[TROne](https://github.com/todesengel1931)** by Todesengel1931 (GPLv3) —
+  the design of the modern (analog-stick) control scheme on the Controls
+  page, re-derived here in our own units and our own voice; nothing of
+  TROne's code is in this tree. The one thing taken across verbatim is the
+  ported test suite's expectations, credited by name in
+  `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header.
 - **[trview](https://github.com/chreden/trview)** by chreden — the tool
   every single zone boundary of this randomizer was verified with.
 - **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut (MIT) —

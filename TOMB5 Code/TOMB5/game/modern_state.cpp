@@ -59,42 +59,26 @@ void ModernResetControls()
 	modern_want_move = 0;
 }
 
-/* THE D-PAD, MADE FULL (the user's decision 3).
+/* THE D-PAD, RETIRED (the user's decision 3, superseded by decision 8:
+ * "das D-Pad wird [...] fuer die Binds frei", round 161a2 step 3).
  *
- * The pad's cross keeps moving Lara in Modern, and it reaches us as the same
- * two axes the stick does: specific\dxshell.cpp writes +-20 into
- * joystick_read_x/y for an XInput D-pad direction and for a DirectInput POV
- * hat, OVER whatever the stick said. Twenty of a hundred and twenty-eight is
- * under MODERN_WALK_BELOW (62), so left alone a D-pad push would make her
- * walk and never run. So a vector that can only be the cross is taken as full
- * deflection in the same direction.
+ * A1's `ModernDPadToStick` used to live here: the pad's cross reached this
+ * function as the same two axes the stick does (specific\dxshell.cpp writes
+ * +-20 into joystick_read_x/y for an XInput D-pad direction or a DirectInput
+ * POV hat, OVER whatever the stick said), and since 20 of 128 is under
+ * MODERN_WALK_BELOW (62), it boosted a vector that could only be the cross
+ * to full deflection so a D-pad push ran rather than walked.
  *
- * "Can only be the cross" is exact on the XInput path: the hardware dead zone
- * (7849 of 32768) is applied before the division by 256, so a real stick axis
- * reads 0 or at least 30 - never 20. On the DirectInput fallback the axis is
- * ranged to +-1000, zeroed under 150 and divided by 8, so a stick parked at
- * exactly 20 (a hair above its own dead zone) on one axis with the other at 0
- * or 20 is possible and would be read as a cross press for that tick: she
- * runs instead of walking until the thumb moves a unit. That is the whole
- * cost, it is named here rather than hidden, and the alternative - a new
- * "this came from the cross" flag out of dxshell - would change a file the
- * byte-identity rule of this round keeps shut. */
-static void ModernDPadToStick(long* x, long* y)
-{
-	const long dpad = 20;	// specific\dxshell.cpp, both joystick paths
-
-	if ((*x != 0 && *x != dpad && *x != -dpad) || (*y != 0 && *y != dpad && *y != -dpad))
-		return;
-
-	if (!*x && !*y)
-		return;
-
-	if (*x)
-		*x = (*x > 0) ? modern_cfg.stick_full : -modern_cfg.stick_full;
-
-	if (*y)
-		*y = (*y > 0) ? modern_cfg.stick_full : -modern_cfg.stick_full;
-}
+ * Once the medipacks default onto the d-pad and its four directions become
+ * bindable buttons (specific\input.cpp, specific\dxshell.cpp), the cross
+ * must not ALSO still read as a movement stick, boosted or not - the user's
+ * own words are "free for the binds", not "free for the binds AND still
+ * walks her". The fix is upstream of this file rather than in it:
+ * specific\input.cpp's own seam now erases the same +-20 signature from its
+ * local copy of the stick before either the classic assembly or
+ * ModernUpdateInput below ever sees it, so nothing reaches here for this
+ * function to boost in the first place, and the boost itself is gone with
+ * it rather than left dead behind a call that no longer exists. */
 
 /* THE MODE NAME FOR MODERNLOG's `mode=` (step 5). Nothing else in the tree
  * ever turns a modern_mode into text - the tests compare the number (design
@@ -214,7 +198,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	modern_tick = GlobalCounter;
 
-	ModernDPadToStick(&stick_x, &stick_y);
+	// ModernDPadToStick used to sit here (round 161a, decision 3) - see the
+	// retirement note above this function for why it is gone rather than
+	// merely unused: specific\input.cpp already erases the d-pad's own
+	// +-20 signature from stick_x/stick_y before this call, so it would
+	// never have fired again anyway.
 
 	/* THE CAMERA HEADING OF THIS TICK (design section 5.3).
 	 *

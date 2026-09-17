@@ -879,6 +879,8 @@ static long DXUpdateJoystickDirectInput()
 	joystick_read_x = lx / 8;
 	joystick_read_y = ly / 8;	// DirectInput joystick Y is already "up = negative", matching S_UpdateInput()'s joy_y<0=forward - no invert needed here (unlike the XInput thumbstick above)
 
+	long fire = 0;	// moved up from below the POV block (#161, round 161a2, step 3) - the new d-pad button bits inside that block need it to already exist
+
 	if (LOWORD(js.rgdwPOV[0]) != 0xFFFF)	// POV hat centered reports as -1/0xFFFFFFFF
 	{
 		// hundredths of a degree, 0 = up, clockwise (4500 = up-right, 9000 = right, ...).
@@ -892,9 +894,15 @@ static long DXUpdateJoystickDirectInput()
 		if (pov >= 4500 && pov <= 13500) joystick_read_x = 20;
 		if (pov >= 13500 && pov <= 22500) joystick_read_y = 20;
 		if (pov >= 22500 && pov <= 31500) joystick_read_x = -20;
-	}
 
-	long fire = 0;
+		// The d-pad as 4 more digital buttons too (bits 20-23) - same bands,
+		// same idea as the XInput path's own twin block below (see its
+		// comment for why: the user's decision 8, round 161a2 step 3).
+		if (pov <= 4500 || pov >= 31500) fire |= 1 << 20;	// D-Pad Up
+		if (pov >= 13500 && pov <= 22500) fire |= 1 << 21;	// D-Pad Down
+		if (pov >= 22500 && pov <= 31500) fire |= 1 << 22;	// D-Pad Left
+		if (pov >= 4500 && pov <= 13500) fire |= 1 << 23;	// D-Pad Right
+	}
 
 	for (int i = 0; i < 16; i++)
 		if (js.rgbButtons[i] & 0x80)
@@ -966,12 +974,25 @@ long DXUpdateJoystick()
 	joystick_read_x = lx / 256;	// -32768..32767 -> ~-128..127
 	joystick_read_y = -ly / 256;	// inverted: stick pushed up (ly>0) means forward, which S_UpdateInput() reads as joy_y<0
 
+	long fire = 0;	// moved up from below the d-pad block (#161, round 161a2, step 3) - the new d-pad button bits right after it need it to already exist
+
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)  joystick_read_x = -20;
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) joystick_read_x = 20;
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP)    joystick_read_y = -20;
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN)  joystick_read_y = 20;
 
-	long fire = 0;
+	// The d-pad as 4 more digital buttons too (bits 20-23, past the right
+	// stick's own 16-19 below), same idea as that block and written the
+	// same unconditional way - so it can be bound to anything once Modern
+	// frees it from moving her (the user's decision 8: "das D-Pad wird
+	// [...] fuer die Binds frei", round 161a2 step 3). Tank's own default
+	// tables never point at these bits, so nothing here changes what Tank
+	// does by default; a player is free to bind onto them in either
+	// scheme, same as the right stick's own bits already are.
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP)    fire |= 1 << 20;	// D-Pad Up
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN)  fire |= 1 << 21;	// D-Pad Down
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)  fire |= 1 << 22;	// D-Pad Left
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) fire |= 1 << 23;	// D-Pad Right
 
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_A)             fire |= 1 << 0;	// Joy 1
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_B)             fire |= 1 << 1;	// Joy 2

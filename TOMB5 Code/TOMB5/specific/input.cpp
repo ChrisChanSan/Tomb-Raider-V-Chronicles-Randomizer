@@ -97,38 +97,47 @@ const char* GermanKeyboard[272] =
 // Bits 16-19 are on both paths the right stick's four tilt directions
 // (dxshell.cpp), so it can be bound like the d-pad.
 //
+// Bits 20-23 (#161, round 161a2, step 3) are the d-pad's own four
+// directions, the same idea the other way round - so IT can be bound like
+// the right stick already was, once Modern frees it from moving her (the
+// user's decision 8). Path- and style-independent for the same reason
+// JOYNAME_STICK is: dxshell.cpp writes them from the D-PAD, which is a
+// fixed physical control on every supported pad, not something that moves
+// between HID bit positions the way an ordinary face button does.
+//
 // The control-method page (JoyStyle) only picks the VOCABULARY; which bit
 // order applies, the engine knows itself (joystick_is_xinput). That way
 // the names are right even for a DualSense behind DS4Windows: PS5 page
 // plus XInput bit order.
 #define JOYNAME_STICK "Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
+#define JOYNAME_DPAD "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right"
 
-static const char* JoyNamesPS5DInput[20] =
+static const char* JoyNamesPS5DInput[24] =
 {
 	"Square", "Cross", "Circle", "Triangle", "L1", "R1", "L2", "R2",
 	"Share", "Options", "L3", "R3", "PS Button", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-static const char* JoyNamesPS5XInput[20] =
+static const char* JoyNamesPS5XInput[24] =
 {
 	"Cross", "Circle", "Square", "Triangle", "L1", "R1", "Share", "Options",
 	"L3", "R3", "L2", "R2", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-static const char* JoyNamesXbox[20] =
+static const char* JoyNamesXbox[24] =
 {
 	"A", "B", "X", "Y", "LB", "RB", "View", "Menu",
 	"L3", "R3", "LT", "RT", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-static const char* JoyNamesGeneric[20] =
+static const char* JoyNamesGeneric[24] =
 {
 	"Joy 1", "Joy 2", "Joy 3", "Joy 4", "Joy 5", "Joy 6", "Joy 7", "Joy 8",
 	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
 // -1 = automatic (XInput device -> Xbox page, else PS5 page); from the
@@ -145,7 +154,7 @@ long ActiveJoyStyle()
 
 const char* JoyButtonName(long idx)
 {
-	if (idx < 0 || idx > 19)
+	if (idx < 0 || idx > 23)	// 20-23 added (#161, round 161a2, step 3) - the d-pad's own bits
 		return "---";
 
 	switch (ActiveJoyStyle())
@@ -192,6 +201,40 @@ void ApplyJoyDefaults()
 
 	for (int i = 15; i < 32; i++)
 		jLayout[i] = 0;
+
+	/* THE MODERN PAD SET (#161, round 161a2, step 3) - jLayout[16..30],
+	 * allocated and left unused above until now (A1's decision 3 said
+	 * nothing on the pad changed yet). Duck..Load (roles 0-12) are the
+	 * SAME choice as the page above and stay sourced from it, unchanged,
+	 * for both schemes at once - the user's own layout is the default in
+	 * either one, and a second hand-written table per controller style
+	 * would only be a second place for the two to drift apart. Only the
+	 * medipacks (roles 13-14) differ: the button they used to default to
+	 * (the right stick, bits 18/19 on an XInput-style page) is the camera
+	 * now, so they move to the d-pad's own new bits instead
+	 * (specific\dxshell.cpp) - the user's decision 8. Left/Right (bits
+	 * 22/23) default to nothing: freed for the player's own binds, as the
+	 * decision asked, not pre-spent on a guess.
+	 *
+	 * Written out as its own 15-role record rather than only as a silent
+	 * [13]/[14] override on top of `source`, so the modern set is
+	 * something this function's own caller - or this step's own proof -
+	 * can read back whole without recomputing it. Reset (the one call site
+	 * of this function, specific\LoadSave.cpp) is the ONE place either
+	 * table is ever produced, so "Reset restores the active scheme's set"
+	 * falls out of the two loops above and this one without a second
+	 * mechanism. */
+	if (tomb5.control_modern)
+	{
+		for (int i = 0; i < 13; i++)
+			jLayout[16 + i] = source[i];
+
+		jLayout[16 + 13] = 20;	// D-Pad Up   -> Small Medipack, specific\dxshell.cpp
+		jLayout[16 + 14] = 21;	// D-Pad Down -> Large Medipack
+
+		for (int i = 0; i < 15; i++)
+			jLayout[i] = jLayout[16 + i];
+	}
 }
 
 // Confirm (Cross/A) and back (Circle/B) as the active path's bit.
@@ -460,7 +503,8 @@ long Key(long number)
 		// so the caller's "+256" offset landed on 255 instead of a real >=256
 		// joystick-button value. 255 is never a real keyboard role index (those
 		// only go 0-17) or a real encoded joystick value (real button indices are
-		// 0-19, i.e. 256-275), so it's safe to use as this sentinel.
+		// 0-23 since the d-pad's own bits joined the right stick's, #161 round
+		// 161a2 step 3, i.e. 256-279), so it's safe to use as this sentinel.
 		return 0;
 
 	if (number >= 256)
@@ -580,18 +624,53 @@ long S_UpdateInput()
 		joy_fire &= ~rstick_bits;
 	}
 
+	/* THE D-PAD NO LONGER MOVES HER IN MODERN (the user's decision 8: "das
+	 * D-Pad wird [...] fuer die Binds frei", round 161a2 step 3) - a LOCAL
+	 * shadow of the stick, not a change to joy_x/joy_y themselves. Those
+	 * two statics are also what JoyMenuStep/JoyMenuDeflected read (above)
+	 * for the controls SCREEN's own menu navigation, in either scheme, and
+	 * the d-pad has to keep steering a menu even once it has stopped
+	 * steering her - zeroing the shared statics here would take that away
+	 * too, on whichever tick the menu's own loop happens to call this
+	 * function.
+	 *
+	 * The +-20 test is exactly the signature game\modern_state.cpp's
+	 * ModernDPadToStick used to look for before this step retired it (both
+	 * joystick paths write it, specific\dxshell.cpp, never a real stick
+	 * reading - see that function's own former comment on the DirectInput
+	 * path's one-tick cost). Repeated here rather than shared, because the
+	 * two sites wanted opposite answers: that one turned the signature
+	 * into a full stick push; this one erases it before either the classic
+	 * assembly below or ModernUpdateInput's own call further down ever
+	 * sees it as one. */
+	long move_x = joy_x;
+	long move_y = joy_y;
+
+	if (tomb5.control_modern && ControlMethod == 1)
+	{
+		const long dpad = 20;	// specific\dxshell.cpp, both joystick paths
+
+		if (!((move_x != 0 && move_x != dpad && move_x != -dpad) ||
+			(move_y != 0 && move_y != dpad && move_y != -dpad)) &&
+			(move_x || move_y))
+		{
+			move_x = 0;
+			move_y = 0;
+		}
+	}
+
 	linput = 0;
 
 	if (ControlMethod == 1)
 	{
-		if (joy_x < -8)
+		if (move_x < -8)
 			linput = IN_LEFT;
-		else if (joy_x > 8)
+		else if (move_x > 8)
 			linput = IN_RIGHT;
 
-		if (joy_y > 8)
+		if (move_y > 8)
 			linput |= IN_BACK;
-		else if (joy_y < -8)
+		else if (move_y < -8)
 			linput |= IN_FORWARD;
 	}
 
@@ -649,7 +728,10 @@ long S_UpdateInput()
 		const long mAction = Key(8) || Key(jLayout[4] + 256);
 		const long mJump = Key(7) || Key(jLayout[3] + 256);
 
-		linput = ModernUpdateInput(linput, joy_x, joy_y, mAction, mJump);
+		// move_x/move_y, not joy_x/joy_y - the d-pad's own +-20 signature was
+		// already erased above (round 161a2 step 3) so it reaches neither
+		// this call nor the classic assembly above as a movement stick.
+		linput = ModernUpdateInput(linput, move_x, move_y, mAction, mJump);
 	}
 
 	/* THE WALK KEY SURVIVES THE SEAM (round 161a-fix, #161 item 1 - verified

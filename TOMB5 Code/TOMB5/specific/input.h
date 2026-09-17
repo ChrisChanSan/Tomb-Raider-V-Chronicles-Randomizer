@@ -43,6 +43,8 @@ extern long inputBusy;
 extern long joystick_read;
 extern long joystick_read_x;
 extern long joystick_read_y;
+extern long joystick_read_rx;	// the RIGHT stick's axes, same scale (#161, round 161a2)
+extern long joystick_read_ry;
 extern long joystick_read_fire;
 extern long joystick_is_xinput;
 extern short ammo_change_timer;

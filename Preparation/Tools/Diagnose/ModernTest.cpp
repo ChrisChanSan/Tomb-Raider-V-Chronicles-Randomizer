@@ -12,7 +12,8 @@
  */
 
 /* ModernTest - the arithmetic of the modern control, checked without a game
- * (#161, round 161a step 2; the camera's orbit added in round 161a2 step 1).
+ * (#161, round 161a step 2; the camera's orbit added in round 161a2 step 1 and
+ * its seam's own angle arithmetic in step 2).
  * Build with bmt.bat, run with no arguments.
  *
  * WHAT IT CHECKS, and why it exists at all. The modern control is a pure
@@ -51,7 +52,9 @@
  * case is listed by name at the end of the run under "not ours yet" with the
  * step that owes it: the state table is round 161a step 3, the state machine
  * and the direct turn are step 4, the camera's orbit is round 161a2 step 1 and
- * is checked here now (its engine seam is step 2), the pointer
+ * is checked here now - with the two angle lines its engine seam adds around
+ * it, step 2, which is as much of game\camera.cpp as can be linked without a
+ * level - the pointer
  * profile's draw edge is workflow B. Nothing goes missing between steps that
  * way - the list is printed on every run, not buried in a comment.
  */
@@ -62,6 +65,12 @@
 
 #include "../../../TOMB5 Code/TOMB5/game/modern_move.h"
 #include "../../../TOMB5 Code/TOMB5/game/modern_camera.h"
+/* The 60 fps cut detection's own thresholds and its own rule, so that
+ * camera_camcut() measures the orbit against the tree rather than against a
+ * number copied out of it (#161, round 161a2, step 2). It costs nothing: this
+ * header includes stdlib.h and math.h and no engine at all, which is why
+ * InterpTest is built against it the same way. */
+#include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -2509,6 +2518,212 @@ static void camera_hide()
 		"at the chase camera's own distance: drawn", ModernCameraHidesLara(&cfg, 1536), 0);
 }
 
+/* THE SEAM'S OWN ARITHMETIC (#161, round 161a2, step 2). Everything the engine
+ * side does that is not a call into the engine, checked here so that the two
+ * identities the seam RESTS on are numbers and not paragraphs.
+ *
+ * The seam itself is game\camera.cpp and cannot be linked into this tool - it
+ * needs a camera, a Lara and a level. What it computes, though, is two lines
+ * of angle arithmetic, and both of them can go wrong quietly:
+ *
+ *   camera.actual_angle = lara_item->pos.y_rot + camera.target_angle
+ *                                          (UpdateCameraElevation, :855)
+ *   modern_cam_push     = phd_atan(dz, dx) - camera.actual_angle
+ *                                          (ModernCameraNoteWall)
+ *
+ * The first adds two shorts into an int and assigns it back to a short; the
+ * second subtracts a short from phd_atan's return, which is 0..65535 and not
+ * a short at all. Both are handed to the orbit, which folds them with
+ * ModernWrap - and THAT is the claim under test. */
+static void camera_seam()
+{
+	MODERN_CAMERA_CFG cfg;
+	MODERN_CAMERA_STATE st;
+	short yaw;
+	short pitch;
+	long heading;
+	long offset;
+	long resolved;
+	long push;
+	long absolute;
+
+	printf("the seam - the two angle lines game\\camera.cpp adds around the orbit\n");
+
+	ModernCameraDefaults(&cfg);
+
+	/* 1. THE ABSOLUTE ANGLE IS THE OFFSET'S OWN WRAP. The engine writes the
+	 * offset into camera.target_angle and lets UpdateCameraElevation add her
+	 * heading to it in a short. If that truncation were not ModernWrap, an
+	 * offset behind a heading near half a turn would point the camera
+	 * somewhere else entirely - and this is the compiler the engine is built
+	 * with, so the answer here is the answer there. */
+	for (heading = -32768; heading < 32768; heading += 997)
+	{
+		for (offset = -32768; offset < 32768; offset += 4093)
+		{
+			absolute = (short)(heading + offset);
+			ok(absolute == ModernWrap(heading + offset),
+				"her heading plus the offset is the orbit's own wrap",
+				absolute, ModernWrap(heading + offset));
+		}
+	}
+
+	/* 2. THE WALL ABSORPTION REALLY NAMES WHERE THE CAMERA IS, which is the
+	 * whole reason the displacement can be taken into the offset without a
+	 * feedback loop: after it, the absolute angle IS the angle geometry left
+	 * the camera at, so the next tick asks for an angle nothing blocks and the
+	 * displacement comes back as zero.
+	 *
+	 * `resolved` is phd_atan's own range, 0..65535, and `push` is the raw
+	 * difference the seam stores - up to 98303 or down to -32768, which is
+	 * exactly the value no cast to short may touch on the way. Standing, so
+	 * that nothing but the wall moves the offset. */
+	for (heading = -32768; heading < 32768; heading += 4093)
+	{
+		for (resolved = 0; resolved < 65536; resolved += 2731)
+		{
+			ModernCameraReset(&st);
+			st.offset_yaw = (short)0x2000;
+			offset = st.offset_yaw;
+			push = resolved - (long)(short)(heading + offset);
+
+			ModernCameraUpdate(&cfg, &st, 0, 0, 0, push, &yaw, &pitch);
+
+			absolute = (short)(heading + yaw);
+
+			/* Under the wall's noise floor the orbit is right to ignore it
+			 * and the camera stays where the stick left it - the one case
+			 * this identity does not claim, and 1.4 degrees of it. */
+			if (absl(ModernWrap(push)) <= cfg.wall_dead)
+				ok(yaw == (short)offset, "a displacement at the noise floor moves nothing",
+					yaw, offset);
+			else
+				ok(absolute == ModernWrap(resolved),
+					"after the wall the offset names the angle the camera is really at",
+					absolute, ModernWrap(resolved));
+		}
+	}
+
+	/* 3. AND THEN THE WALL IS QUIET. The second tick of the same wall: the
+	 * seam hands in 0 because the angle it asked for is the angle it got, and
+	 * the offset stands still (standing - running is where the fast return
+	 * takes over, which camera_wall above measures). */
+	ModernCameraReset(&st);
+	st.offset_yaw = (short)0x2000;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0x1000, &yaw, &pitch);
+	ok(yaw == (short)0x3000, "the wall's tick: the offset takes its angle", yaw, 0x3000);
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0, &yaw, &pitch);
+	ok(yaw == (short)0x3000, "the next tick: nothing is in the way any more", yaw, 0x3000);
+	ok(st.wall == 0, "...and the orbit says so", st.wall, 0);
+}
+
+/* THE 60 FPS CUT DETECTION MUST NOT FIRE ON THE ORBIT'S OWN STEPS - the
+ * round's own rule, and the reason this group includes game\interpolate_math.h
+ * rather than quoting a threshold out of it. Both sides of the comparison are
+ * therefore the tree's: the orbit's rates come from ModernCameraDefaults and
+ * the rule comes from InterpCamAimCut and INTERP_CAM_SNAP.
+ *
+ * WHAT IS BEING MEASURED. The chase camera's ideal eye sits at
+ *
+ *     x = target.x - 1536 * cos(elevation) * sin(angle)
+ *     y = target.y + 1536 * sin(elevation)
+ *     z = target.z - 1536 * cos(elevation) * cos(angle)
+ *
+ * (ChaseCamera, camera.cpp:1017-1052; 1536 is camera.target_distance,
+ * camera.cpp:258). One tick of a FULLY deflected right stick moves `angle` by
+ * yaw_rate and `elevation` by pitch_rate, so the worst case is the largest
+ * step that pair can make anywhere on the sphere, and it is swept rather than
+ * argued.
+ *
+ * THE REAL EYE MOVES THIS MUCH AND NOT LESS, and that corrects step 1's own
+ * note, which said MoveCamera's damping makes it smaller: `pos += (ideal -
+ * pos) / speed` is a first order lag, and a lag filter fed a constant
+ * VELOCITY settles at that same velocity. It is smaller for the first few
+ * ticks of a push and equal for as long as the push lasts. The margin below
+ * is therefore the whole margin. */
+static void camera_camcut()
+{
+	MODERN_CAMERA_CFG cfg;
+	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
+	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
+	long worst_eye = 0;
+	long worst_aim = 0;
+	long cuts = 0;
+	long elev;
+	long ang;
+
+	printf("the camera cut - the orbit's step against the interpolator's own threshold\n");
+
+	ModernCameraDefaults(&cfg);
+
+	for (elev = cfg.pitch_min; elev <= cfg.pitch_max; elev += 128)
+	{
+		long elev2 = elev + cfg.pitch_rate;
+
+		if (elev2 > cfg.pitch_max)
+			elev2 = cfg.pitch_max;
+
+		for (ang = 0; ang < 65536; ang += 128)
+		{
+			const long ang2 = ang + cfg.yaw_rate;
+			const double r1 = radius * cos((double)elev * turn);
+			const double r2 = radius * cos((double)elev2 * turn);
+			const long x1 = roundl2(-r1 * sin((double)ang * turn));
+			const long z1 = roundl2(-r1 * cos((double)ang * turn));
+			const long y1 = roundl2(radius * sin((double)elev * turn));
+			const long x2 = roundl2(-r2 * sin((double)ang2 * turn));
+			const long z2 = roundl2(-r2 * cos((double)ang2 * turn));
+			const long y2 = roundl2(radius * sin((double)elev2 * turn));
+			const long eye = InterpManhattan(x2 - x1, y2 - y1, z2 - z1);
+
+			if (eye > worst_eye)
+				worst_eye = eye;
+
+			/* And the view DIRECTION, by the interpolator's own rule. The
+			 * target is Lara and the orbit does not move her, so it stands at
+			 * the origin on both sides: what is left is the eye's own travel
+			 * measured as an aim, and at a radius of 1536 - under
+			 * INTERP_CAM_FAR_TARGET - that rule is the absolute one. */
+			if (InterpCamAimCut(x1, y1, z1, 0, 0, 0, x2, y2, z2, 0, 0, 0, INTERP_CAM_SNAP))
+				cuts++;
+
+			if (eye > worst_aim)
+				worst_aim = eye;
+		}
+	}
+
+	printf("  measured: the worst tick of a fully pushed right stick moves the ideal eye\n");
+	printf("            %ld units (Manhattan) against INTERP_CAM_SNAP %ld - a margin of %.1f\n",
+		worst_eye, (long)INTERP_CAM_SNAP, (double)INTERP_CAM_SNAP / (double)worst_eye);
+
+	ok(worst_eye < INTERP_CAM_SNAP,
+		"the orbit's own step never trips the eye test", worst_eye, INTERP_CAM_SNAP);
+	ok(worst_eye * 2 < INTERP_CAM_SNAP,
+		"...and not by a hair: twice the step is still under it", worst_eye * 2,
+		INTERP_CAM_SNAP);
+	ok(cuts == 0, "nor the view direction test, anywhere on the sphere", cuts, 0);
+
+	/* THE ONE THING THAT STILL CUTS AT A WALL IS VANILLA'S, and it is worth a
+	 * number so that nobody hunts for it in the orbit: the five candidate
+	 * positions of ChaseCamera are the wanted angle and the four world
+	 * cardinals, so the ideal can jump a whole quadrant in one tick. That is
+	 * the classic camera's behaviour, it is there at Tank today, and the orbit
+	 * does not add to it - it ABSORBS it, which is what camera_seam's second
+	 * identity is about. */
+	{
+		const long x1 = roundl2(-radius * sin(0.0));
+		const long z1 = roundl2(-radius * cos(0.0));
+		const long x2 = roundl2(-radius * sin(16384.0 * turn));
+		const long z2 = roundl2(-radius * cos(16384.0 * turn));
+		const long jump = InterpManhattan(x2 - x1, 0, z2 - z1);
+
+		printf("  measured: the classic quadrant snap moves it %ld - vanilla's own cut,\n", jump);
+		printf("            and the orbit takes that angle instead of fighting it\n");
+		ok(jump > INTERP_CAM_SNAP, "which is why it is a cut and ours is not",
+			jump, INTERP_CAM_SNAP);
+	}
+}
+
 /* ------------------------------------------------------ what is not ours --- */
 
 static void deferred()
@@ -2518,13 +2733,14 @@ static void deferred()
 	printf("  none    modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
 	printf("          - the degenerate camera falls back to Lara's yaw in game\\modern_state.cpp,\n");
 	printf("            which needs the engine's own camera and cannot be linked here\n");
-	printf("  A2/2    modern.orbit_stays_in_world_space_and_accepts_mouse_while_running\n");
+	printf("  none    modern.orbit_stays_in_world_space_and_accepts_mouse_while_running\n");
 	printf("          - the half that IS ours is checked above (the orbit): the stick moves the\n");
 	printf("            camera while she runs. The world-space half is not our model and will\n");
 	printf("            not become it - the user's camera holds an offset from HER heading and\n");
 	printf("            lets it fall back behind her (game\\modern_camera.h, observation 3),\n");
-	printf("            where TROne's holds a world angle that never returns. What round 161a2\n");
-	printf("            step 2 still owes is the engine side: the offset reaching camera.cpp.\n");
+	printf("            where TROne's holds a world angle that never returns. The engine side\n");
+	printf("            landed in round 161a2 step 2 (game\\camera.cpp); what can be linked of\n");
+	printf("            it without a level is checked above as `the seam'.\n");
 	printf("  B       combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
 	printf("  B       modern.held_equip_draws_once_and_interaction_does_not_fire (IN_ACTION2)\n");
 }
@@ -2555,6 +2771,8 @@ int main()
 	camera_pitch();
 	camera_wall();
 	camera_hide();
+	camera_seam();
+	camera_camcut();
 	deferred();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

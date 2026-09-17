@@ -224,6 +224,8 @@ long inputBusy;
 long joystick_read;
 long joystick_read_x;
 long joystick_read_y;
+long joystick_read_rx;		// the right stick as two axes (#161, round 161a2) - the modern camera
+long joystick_read_ry;
 long joystick_read_fire;
 long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/Steam), 0 = DirectInput fallback; set anew on every poll (dxshell.cpp)
 
@@ -541,6 +543,42 @@ long S_UpdateInput()
 	// the values current for JoyMenuStep, which the controls screen needs
 	// precisely when ControlMethod says keyboard.
 	joy_fire = ReadJoystick(joy_x, joy_y);
+
+	/* THE RIGHT STICK IS THE CAMERA IN MODERN, AND IT IS NOT FOUR BUTTONS AS
+	 * WELL (#161, round 161a2, step 2).
+	 *
+	 * HOW THE SECOND STICK REACHES US TODAY, measured before this was
+	 * written: specific\dxshell.cpp turns its four directions into four extra
+	 * digital buttons, bits 16..19 of joy_fire past the sixteen physical
+	 * ones - and the default XInput pages BIND them. jDefPS5XInput[13] and
+	 * [14] are 18 and 19, and so are jDefXbox's: on an Xbox or a DualSense in
+	 * Xbox mode, pushing the right stick left or right EATS A MEDIPACK. That
+	 * is fine while the stick is a spare four-way input and impossible the
+	 * moment it becomes the camera, so the four bits are taken away here, in
+	 * Modern only. Round 161a2 step 3 is what gives them a new home (the
+	 * user's decision 8 moves the medipacks to the D-pad); this is only the
+	 * half that must not wait for it.
+	 *
+	 * AND THE AXES GO TO THE ORBIT instead - stored, not acted on, because
+	 * this function is also the menus', the inventory's and the FMV player's
+	 * and the orbit may only move once per logic tick (game\camera.cpp).
+	 * ControlMethod == 1 for the same reason the movement seam below tests it:
+	 * a controller resting on the desk must not steer a keyboard player's
+	 * camera. Zeroed rather than skipped in that case, so that a stick that
+	 * was out when the player switched to the keyboard cannot leave the orbit
+	 * turning for ever.
+	 *
+	 * The binding SCREEN still sees the whole word: specific\LoadSave.cpp
+	 * calls ReadJoystick itself, so the four directions can still be bound and
+	 * displayed there. */
+	if (tomb5.control_modern)
+	{
+		const long rstick_bits = 0xF0000;	// bits 16..19, specific\dxshell.cpp
+
+		ModernCameraStick(ControlMethod == 1 ? joystick_read_rx : 0,
+			ControlMethod == 1 ? joystick_read_ry : 0);
+		joy_fire &= ~rstick_bits;
+	}
 
 	linput = 0;
 

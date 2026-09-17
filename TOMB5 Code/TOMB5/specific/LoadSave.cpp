@@ -35,6 +35,7 @@
 #include "../game/newinv2.h"
 #include "../game/control.h"
 #include "../game/modern_state.h"	// #161: ModernResetControls, called from the Controls page's Control type row
+#include "../game/camera.h"		// #161: ModernCameraResetOrbit, from the same row (round 161a2)
 #include "3dmath.h"
 #include "../tomb5/troyestuff.h"
 #include "../tomb5/tomb5.h"
@@ -725,6 +726,7 @@ void DoOptions()
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 				tomb5.control_modern = !tomb5.control_modern;
 				ModernResetControls();	// a stale held course/spin/blocked-counter must not survive a scheme change (game/modern_state.h)
+				ModernCameraResetOrbit();	// nor a camera offset seated under the other scheme (#161, round 161a2)
 				save_new_tomb5_settings();
 			}
 		}

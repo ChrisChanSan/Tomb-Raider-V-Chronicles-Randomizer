@@ -918,6 +918,20 @@ static long DXUpdateJoystickDirectInput()
 	if (rrx < 0) fire |= 1 << 18;	// Stick R Left
 	if (rrx > 0) fire |= 1 << 19;	// Stick R Right
 
+	// And as axes for the modern camera (#161, round 161a2, step 2), divided
+	// by 8 like this path's left stick and with no invert, because Rz is
+	// already up-negative here - which is what the four bits above say too.
+	//
+	// THE DEAD ZONE ON THIS PATH IS HALF THE TRAVEL, and that is this
+	// controller's off-centre rest position and not a choice: rdeadzone is
+	// 500 of 1000, so the axis reads 0 or at least 62 of 128. The camera
+	// therefore starts at half rate on a DirectInput pad instead of easing in.
+	// Named rather than papered over; the alternative is a resting stick that
+	// turns the camera on its own, which is worse. XInput, where the zone is
+	// 8689 of 32767, eases in from 34.
+	joystick_read_rx = rrx / 8;
+	joystick_read_ry = rry / 8;
+
 	joystick_read_fire = fire;
 
 	return 1;
@@ -931,6 +945,8 @@ long DXUpdateJoystick()
 	joystick_read_x = 0;
 	joystick_read_y = 0;
 	joystick_read_fire = 0;
+	joystick_read_rx = 0;	// the right stick's axes (#161, round 161a2) - see below
+	joystick_read_ry = 0;
 
 	if (XInputGetState(0, &state) != ERROR_SUCCESS)
 		return DXUpdateJoystickDirectInput();	// no XInput device (e.g. a PS4/PS5 controller with no Steam Input/DS4Windows wrapper active) - fall back to raw DirectInput
@@ -986,6 +1002,20 @@ long DXUpdateJoystick()
 	if (ry < 0) fire |= 1 << 17;	// Stick R Down
 	if (rx < 0) fire |= 1 << 18;	// Stick R Left
 	if (rx > 0) fire |= 1 << 19;	// Stick R Right
+
+	// AND THE SAME TWO AXES AS AXES (#161, round 161a2, step 2): the modern
+	// camera is a rate and not four directions, so it needs the deflection
+	// and not the bits above. Scaled exactly like the left stick a few lines
+	// up - divided by 256 into roughly -128..127, y inverted so that forward
+	// is negative, which is the convention every reader in this tree already
+	// uses (S_UpdateInput's joy_y, game\modern_move.h's stick_y).
+	//
+	// Written unconditionally and read by nobody at Tank: only the modern
+	// camera's seam in specific\input.cpp touches them, and only under
+	// tomb5.control_modern. The hardware dead zone above has already been
+	// applied to rx/ry, which is why MODERN_CAMERA_DEAD is 0.
+	joystick_read_rx = rx / 256;
+	joystick_read_ry = -ry / 256;
 
 	joystick_read_fire = fire;
 

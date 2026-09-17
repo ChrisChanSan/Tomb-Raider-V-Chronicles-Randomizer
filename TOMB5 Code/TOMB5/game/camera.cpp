@@ -29,6 +29,7 @@
 #include "larafire.h"
 #include "../specific/input.h"
 #include "../specific/audio.h"
+#include "modern_camera.h"		// the orbit's arithmetic (#161, round 161a2)
 #include "lara.h"
 #include "tomb4fx.h"
 #include "savegame.h"
@@ -214,6 +215,228 @@ static GAME_VECTOR static_lookcamt;
 static char TargetSnaps = 0;
 static char CameraSnaps = 0;
 
+/* ==========================================================================
+ * THE MODERN CAMERA'S SEAM (#161, round 161a2, step 2).
+ *
+ * The orbit itself is game\modern_camera.cpp: two remembered angles and three
+ * rules, no engine in it at all, checked number by number by
+ * Preparation\Tools\Diagnose\ModernTest.cpp. What lives here is the six
+ * places the engine touches it, and deliberately nothing else - because the
+ * modern camera is not a new camera, it is OUR chase camera with its angle
+ * taken from a state instead of from Lara alone:
+ *
+ *   the axes    specific\input.cpp hands the right stick over on every
+ *               S_UpdateInput (ModernCameraStick); the orbit reads them once
+ *               per LOGIC tick, which is not the same thing - the menus and
+ *               the FMV loop call that function in loops of their own
+ *   the tick    ModernCameraOrbit, from ChaseCamera and from CombatCamera,
+ *               exactly one of which runs per tick
+ *   the angle   camera.target_angle = offset_yaw, which UpdateCameraElevation
+ *               already adds to her heading (camera.cpp:855) - the brief's
+ *               "yaw = lara.y_rot + offset_yaw" written into the engine's own
+ *               slot rather than beside it
+ *   the height  camera.target_elevation = offset_pitch, REPLACING the two
+ *               lines ChaseCamera opens with (ModernCameraOrbit says why)
+ *   the wall    ModernCameraNoteWall, after the collision has had its say;
+ *               the collision itself is not touched by a line
+ *   the draw    ModernLaraHidden, asked once per frame in game\draw.cpp
+ *
+ * WITH tomb5.control_modern OFF, ModernCameraActive() is false at its first
+ * term and every one of those six is the line it was: the orbit is not
+ * ticked, both slots keep the values vanilla puts in them, and the draw
+ * predicate returns false before it measures anything.
+ *
+ * The level cameras: discarded exactly as first person discards them, sniper
+ * excepted (CalculateCamera). Flybys and cutscenes are untouched in every
+ * mode - CalculateCamera is not even called during a flyby. */
+
+/* The radius under which a sideways displacement of the eye stops being a
+ * DIRECTION at all - see ModernCameraNoteWall, which is the only reader. */
+#define MODERN_CAM_ANGLE_RADIUS	768
+
+static MODERN_CAMERA_CFG modern_cam_cfg;
+static MODERN_CAMERA_STATE modern_cam_state;
+static long modern_cam_armed;		// has the cfg above been filled yet?
+static long modern_cam_rs_x;		// the right stick, as input.cpp last read it
+static long modern_cam_rs_y;
+static long modern_cam_push;		// what the LAST tick's geometry did to the angle
+static long modern_cam_have_pos;	// is the position below this level's?
+static long modern_cam_x, modern_cam_y, modern_cam_z;
+
+static void ModernCameraArm()
+{
+	if (modern_cam_armed)
+		return;
+
+	ModernCameraDefaults(&modern_cam_cfg);
+	ModernCameraReset(&modern_cam_state);
+	modern_cam_armed = 1;
+}
+
+/* FORGET THE ORBIT. Called from InitialiseCamera below - once per level, and
+ * that one call takes every savegame restore with it, because a restore is a
+ * level start in this engine (game\gameflow.cpp) - and from
+ * specific\LoadSave.cpp when the scheme is switched, because an offset seated
+ * under Tank is no offset at all.
+ *
+ * IT IS DELIBERATELY NOT HUNG ON ModernResetControls(), although the brief
+ * names that function: the modern control resets itself on every break in its
+ * own tick chain (game\modern_state.cpp), and one of those breaks is the LOOK
+ * KEY. Releasing look would then fling the camera back behind her, which is
+ * the one thing observation 2 says must not happen. The three resets the
+ * brief actually lists - level start, savegame load, scheme change - are the
+ * two call sites above. */
+void ModernCameraResetOrbit()
+{
+	modern_cam_armed = 0;
+	ModernCameraArm();
+	modern_cam_push = 0;
+	modern_cam_have_pos = 0;
+	modern_cam_x = 0;
+	modern_cam_y = 0;
+	modern_cam_z = 0;
+}
+
+/* The right stick, from the one place that knows what a stick is. Stored and
+ * not acted on: this is called from S_UpdateInput, which the menus, the
+ * inventory and the FMV player also call, and the orbit may only move once
+ * per logic tick. The latest reading is the right one to keep - a tick is a
+ * thirtieth of a second behind the thumb either way. */
+void ModernCameraStick(long rs_x, long rs_y)
+{
+	modern_cam_rs_x = rs_x;
+	modern_cam_rs_y = rs_y;
+}
+
+bool ModernCameraActive()
+{
+	if (!tomb5.control_modern)
+		return false;
+
+	if (!lara_item)
+		return false;
+
+	/* The same three FirstPersonEnabled() refuses, for the same reasons it
+	 * found them (#126, fix round R): the title's camera runs one whole pass
+	 * out of InitialiseCamera before the flyby is armed, and a flyby or a
+	 * cutscene is not the player's view to steer. */
+	if (gfLevelId == LVL5_TITLE || bUseSpotCam || GLOBAL_playing_cutseq)
+		return false;
+
+	/* And where both views are on, first person wins - it replaces the chase
+	 * camera outright, so an orbit under it would be a state nobody reads,
+	 * and its hide predicate would take her arms away at a distance of
+	 * nothing. */
+	if (FirstPersonEnabled())
+		return false;
+
+	return true;
+}
+
+/* IS SHE GETTING ANYWHERE? The one thing the orbit cannot work out for
+ * itself, and the whole of the difference between observation 2 (standing,
+ * the offset is kept) and observation 3 (moving, it falls back behind her).
+ *
+ * Measured from her position and from nothing else, so that running, sliding,
+ * falling, climbing and being pushed all count the same and no collision
+ * internals are involved. FOUR UNITS, which is the camera code's own answer
+ * to "has this moved": CalculateCamera treats a target within 4 of the last
+ * one as the same target (camera.cpp:495). Her idle animations move meshes
+ * and not the item, so standing still reads exactly zero. */
+static long ModernCameraLaraMoving()
+{
+	long dx, dy, dz, moving;
+
+	dx = abs(lara_item->pos.x_pos - modern_cam_x);
+	dy = abs(lara_item->pos.y_pos - modern_cam_y);
+	dz = abs(lara_item->pos.z_pos - modern_cam_z);
+	moving = (modern_cam_have_pos && (dx >= 4 || dy >= 4 || dz >= 4)) ? 1 : 0;
+
+	modern_cam_x = lara_item->pos.x_pos;
+	modern_cam_y = lara_item->pos.y_pos;
+	modern_cam_z = lara_item->pos.z_pos;
+	modern_cam_have_pos = 1;
+
+	return moving;
+}
+
+/* ONE TICK OF THE ORBIT, AND THE TWO SLOTS IT WRITES. */
+static void ModernCameraOrbit()
+{
+	short yaw;
+	short pitch;
+
+	ModernCameraArm();
+
+	ModernCameraUpdate(&modern_cam_cfg, &modern_cam_state, modern_cam_rs_x,
+		modern_cam_rs_y, ModernCameraLaraMoving(), modern_cam_push, &yaw, &pitch);
+	modern_cam_push = 0;		// answered; the next wall writes its own
+
+	/* target_angle is 0 all game unless a trigger camera has just written one,
+	 * and CalculateCamera takes that back at its own end (camera.cpp:601). So
+	 * the offset goes in there rather than into a second angle path nobody
+	 * else would read - and every reader of the camera's heading, this file's
+	 * own and game\modern_state.cpp's, keeps reading the one it reads today.
+	 * A camera hint an animation wrote for the classic camera (game\lara.cpp)
+	 * is simply overwritten: in Modern the view is the player's.
+	 *
+	 * THE ELEVATION IS REPLACED AND NOT ADDED TO, and that is the one thing
+	 * here that has to be said out loud. ChaseCamera seats -1820 into
+	 * target_elevation whenever it reads 0 and then ADDS item->pos.x_rot on
+	 * every single tick (camera.cpp:1006-1009), so in vanilla it accumulates
+	 * her own pitch while she is on a slope - absorbed there by the >> 3
+	 * damping and the +-15470 clamp. In Modern the height of the camera is
+	 * the player's and her slope may not push it about. The orbit's pitch is
+	 * also never 0, which is the value that line reads as "nobody has set
+	 * this" (game\modern_camera.cpp seats it at -1820 instead). */
+	camera.target_angle = yaw;
+	camera.target_elevation = pitch;
+}
+
+/* WHAT THE GEOMETRY DID TO THE ANGLE WE ASKED FOR - observation 3's "ausser
+ * eine Wand kommt, dann geht sie mit dem Winkel der Wand schneller zum
+ * Ursprung hinter Lara".
+ *
+ * Both orbit cameras resolve a wall the same way and neither is touched for
+ * it: five candidate eye positions - the angle we asked for, then the four
+ * world cardinals at (lp - 1) * 0x4000 - each tested with mgLOS at a push of
+ * 200, and the winner run through CameraCollisionBounds at 384
+ * (camera.cpp:1038-1115). The angle the camera really ended up at is
+ * therefore in no variable at all; it is in the ideal POSITION, and this
+ * reads it back out - phd_atan of the vector from the eye to the target,
+ * which is the inverse of the two lines that built the candidate.
+ *
+ * WHAT THE ORBIT IS HANDED IS THE DISPLACEMENT and not that angle, because
+ * with an absolute angle there is no value that means "nothing was in the
+ * way"; game\modern_camera.cpp carries the rest of that argument. It is
+ * answered on the NEXT tick, which is why it is stored rather than applied -
+ * and it is a raw difference of two 16-bit angles that ModernWrap folds the
+ * short way round, so no cast of a value over 32767 to short happens on the
+ * way.
+ *
+ * AND ONLY WHILE THE RADIUS STILL MAKES AN ANGLE. `distance` is the
+ * HORIZONTAL radius, target_distance * cos(elevation), so at the pitch limit
+ * it is 134 units - and there CameraCollisionBounds' own 384-unit push would
+ * read as a seventy degree "displacement" that means nothing, because the
+ * camera is directly above her and there is no direction to it. Half a sector
+ * is the radius at which that push is still under 30 degrees, and it is
+ * reached at 60 degrees of pitch. */
+static void ModernCameraNoteWall(const GAME_VECTOR* ideal, long distance)
+{
+	long dx, dz;
+
+	if (distance < MODERN_CAM_ANGLE_RADIUS)
+		return;
+
+	dx = camera.target.x - ideal->x;
+	dz = camera.target.z - ideal->z;
+
+	if (!dx && !dz)
+		return;
+
+	modern_cam_push = phd_atan(dz, dx) - (long)camera.actual_angle;
+}
+
 void InitialiseCamera()
 {
 	// EVERYTHING the first person camera remembers is forgotten here.
@@ -239,6 +462,18 @@ void InitialiseCamera()
 	fpVel[0] = fpVel[1] = fpVel[2] = 0;
 	fpSpd = 0;
 	fpRoll = 0;
+
+	// And the modern camera's orbit with them (#161, round 161a2): an offset
+	// seated in the level just left is no offset at all, and the position the
+	// "is she moving" test measures against is a position in a world that has
+	// been thrown away.
+	//
+	// Unconditional, like the eight lines above it and for the same reason:
+	// these are one module's own statics, nothing at Tank reads them
+	// (ModernCameraActive is false at its first term), and a reset that
+	// depends on the option would leave a stale orbit behind for a player who
+	// switches the scheme on in the middle of a level.
+	ModernCameraResetOrbit();
 
 	last_target.x = lara_item->pos.x_pos;
 	last_target.y = lara_item->pos.y_pos - 1024;
@@ -267,6 +502,29 @@ void InitialiseCamera()
 	AlterFOV(GAME_FOV);
 	UseForcedFixedCamera = 0;
 	CalculateCamera();
+}
+
+// FixedCamera's own countdown, verbatim and only where it would have run.
+// It has to keep ticking whenever a view of ours has passed that camera over
+// in silence: the reset at the end of CalculateCamera leaves a HEAVY_CAMERA
+// alone while its timer is not -1, so a heavy trigger camera skipped in
+// silence would stay nailed for good - invisible while our view lasts, and
+// waiting to spring the moment it ends.
+//
+// One function since #161 round 161a2, because there are now two views that
+// pass those cameras over - first person and the modern camera - and one
+// countdown they both owe. The lines are the first person hunk's own, moved
+// and not changed; both callers reach them on exactly the frames the single
+// copy reached them on.
+static void DiscardedFixedCameraTimer(long wouldFix)
+{
+	if (wouldFix && camera.timer)
+	{
+		camera.timer--;
+
+		if (!camera.timer)
+			camera.timer = -1;
+	}
 }
 
 void CalculateCamera()
@@ -534,20 +792,26 @@ void CalculateCamera()
 		if (FirstPersonEnabled() && !sniperCam)
 		{
 			FirstPersonCamera(item);
-
-			// FixedCamera's own countdown, verbatim and only where it would
-			// have run. It has to keep ticking: the reset at the end of this
-			// function leaves a HEAVY_CAMERA alone while its timer is not -1,
-			// so a heavy trigger camera passed over in silence would stay
-			// nailed for good - invisible while first person lasts, and
-			// waiting to spring the moment it ends.
-			if (wouldFix && camera.timer)
-			{
-				camera.timer--;
-
-				if (!camera.timer)
-					camera.timer = -1;
-			}
+			DiscardedFixedCameraTimer(wouldFix);
+		}
+		else if (ModernCameraActive() && wouldFix && !sniperCam)
+		{
+			// THE MODERN CAMERA DISCARDS THEM TOO, AND FOR THE SAME REASON
+			// (#161, round 161a2, the user's observation 5: "wie in unserer
+			// Ego werden alle anderen verworfen bis auf der Sniper in Rich2,
+			// wie bei uns").
+			//
+			// A trigger's Camera command yanks the view to a camera placed in
+			// the level, and in Modern that takes the orbit out of the
+			// player's hands mid-stride - the same complaint first person
+			// already answered two paragraphs up, with the same sniper
+			// exception (bit 1 alone, four cameras in the whole game).
+			//
+			// The chase camera is what runs instead, which is the orbit:
+			// ChaseCamera reads camera.target_angle and target_elevation, and
+			// ModernCameraOrbit has just written both.
+			ChaseCamera(item);
+			DiscardedFixedCameraTimer(wouldFix);
 		}
 		else if (wouldFix)
 			FixedCamera();      // the level's direction
@@ -1003,10 +1267,22 @@ void ChaseCamera(ITEM_INFO* item)
 	long distance, dx, dz, farthest, farthestnum, h, c, wx, wy, wz, angle, lp;
 	short room_number;
 
-	if (!camera.target_elevation)
-		camera.target_elevation = -1820;
+	// THE ORBIT, OR THE CAMERA'S OWN TWO LINES (#161, round 161a2). Under the
+	// option the height of the camera is the player's and comes out of the
+	// orbit's state; the two lines below are what the classic camera does
+	// instead, and they are REPLACED rather than added to - see
+	// ModernCameraOrbit for why that matters (the second of them accumulates
+	// her slope pitch, the first reads 0 as "unset").
+	if (ModernCameraActive())
+		ModernCameraOrbit();
+	else
+	{
+		if (!camera.target_elevation)
+			camera.target_elevation = -1820;
 
-	camera.target_elevation += item->pos.x_rot;
+		camera.target_elevation += item->pos.x_rot;
+	}
+
 	UpdateCameraElevation();
 
 	if (camera.actual_elevation > 15470)
@@ -1114,6 +1390,13 @@ void ChaseCamera(ITEM_INFO* item)
 	ideal.room_number = ideals[farthestnum].room_number;
 	CameraCollisionBounds(&ideal, 384, 1);
 
+	// What the five candidates and the collision above made of the angle we
+	// asked for, read back out of the position they left (#161, round 161a2).
+	// After them, so that nothing of the resolution itself is changed, and
+	// before MoveCamera, which only damps the eye towards this ideal.
+	if (ModernCameraActive())
+		ModernCameraNoteWall(&ideal, distance);
+
 	if (camera.old_type == FIXED_CAMERA)
 		camera.speed = 1;
 
@@ -1132,7 +1415,26 @@ void CombatCamera(ITEM_INFO* item)
 	camera.target.x = item->pos.x_pos;
 	camera.target.z = item->pos.z_pos;
 
-	if (lara.target)
+	/* THE ORBIT HAS TO BE HERE TOO, and that is a measurement and not a
+	 * preference (#161, round 161a2, step 2). The brief names the chase
+	 * camera; reading game\larafire.cpp shows that the chase camera is not
+	 * what runs with a weapon out. LG_READY sets camera.type = COMBAT_CAMERA
+	 * on EVERY tick a gun is ready, and LG_DRAW_GUNS does it while she draws
+	 * (larafire.cpp:352, :362, :410), so an orbit built into ChaseCamera alone
+	 * would die the moment the player armed himself - the right stick would
+	 * stop moving the camera and the two lines below would aim it down her
+	 * gun barrel instead. First person overrides this same camera for the same
+	 * reason (CalculateCamera's else branch calls FirstPersonCamera where this
+	 * one would have run).
+	 *
+	 * Only the two angles change. Everything else about this function - her
+	 * own position as the target instead of the shifted bounds centre, the
+	 * ceiling squeeze that may still zero the elevation below, camera.speed 8
+	 * - is the combat camera's own and stays, which is why a weapon out still
+	 * feels a little closer and quicker than a weapon away. */
+	if (ModernCameraActive())
+		ModernCameraOrbit();
+	else if (lara.target)
 	{
 		camera.target_angle = lara.target_angles[0];
 		camera.target_elevation = lara.target_angles[1] + item->pos.x_rot;
@@ -1268,6 +1570,12 @@ void CombatCamera(ITEM_INFO* item)
 	ideal.z = ideals[farthestnum].z;
 	ideal.room_number = ideals[farthestnum].room_number;
 	CameraCollisionBounds(&ideal, 384, 1);
+
+	// The same wall, read the same way (#161, round 161a2): this function's
+	// resolution loop and ChaseCamera's are the same five candidates and the
+	// same collision, so they owe the orbit the same answer.
+	if (ModernCameraActive())
+		ModernCameraNoteWall(&ideal, distance);
 
 	if (camera.old_type == FIXED_CAMERA)
 		camera.speed = 1;

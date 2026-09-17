@@ -882,23 +882,131 @@ static void classic_states()
 	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
 	ok(state.have_ref == 0, "the veto forgets it again", state.have_ref, 0);
 
-	/* THE STATE TABLE ITSELF IS ROUND 161a STEP 3. ModernStateIsClassic()
-	 * answers "modern" for every state today - which is the classic case
-	 * switched off, and harmless, because nothing in the engine calls the
-	 * translation until step 4's seam and step 3 comes first. The expectations
-	 * waiting for it, from TROne's modern.classic_states_keep_the_original_input
-	 * and modern.shared_state_numbers, checked against our own lara_states.h:
-	 *   classic: 10 13 17 18 25 26 27 30 33 36 37 56 57 75 76 82 87 95
-	 *   modern:  0 1 2 3 6 7 9 14 15 16 20 25-29 45 71 80 81 105 106
-	 * Step 3 writes them here, all 139 of them, with the water ones marked
-	 * "modern in A2 (camera pitch)". Until then this file asserts only what is
-	 * true of the tree above the table. */
-	ok(ModernStateIsClassic(2) == 0, "AS_STOP is modern (and stays so after step 3)",
-		ModernStateIsClassic(2), 0);
-	ok(ModernStateIsClassic(3) == 0, "AS_FORWARDJUMP is modern (and stays so)",
-		ModernStateIsClassic(3), 0);
-	ok(ModernStateIsClassic(81) == 0, "AS_CRAWL is modern (and stays so)",
-		ModernStateIsClassic(81), 0);
+	/* THE STATE TABLE ITSELF, ROUND 161a STEP 3: an explicit switch in
+	 * game\modern_move.cpp, every classic entry named after design sections
+	 * 1.7 and 6.1 and the routine it runs in game\lara.cpp:40-181. Checked
+	 * here by name against the TROne expectations this file was waiting on,
+	 * and then as a full sweep against a reference table of our own, so "all
+	 * 139 states classified" is a swept fact and not a sample. */
+
+	/* TROne: modern.shared_state_numbers. Standing (2/15) is already
+	 * ModernStateIsStanding's job from step 1; this is the classic/modern
+	 * half. NOTE ON 25/26/27: TROne's own list (design section 1.7) and this
+	 * very expectation both call them classic - the back flip and the two
+	 * side flips read a direction bit as "end the flip", not "where to go"
+	 * (game\lara.cpp:765 AS_TWIST on IN_RIGHT, :781 the mirror on IN_LEFT,
+	 * :799 IN_FORWARD|IN_ROLL). This round's own build brief says "25-29 are
+	 * modern" in its step 3 paragraph; the switch measures the routines
+	 * instead of typing that sentence in as a test, and what it measured is
+	 * what is asserted below. Reported in the step 3 record. */
+	{
+		const short is_classic[] = { 10, 17, 25, 26, 27, 36, 57, 76 };
+		const short is_modern[] = { 2, 3, 81 };
+
+		for (i = 0; i < (int)(sizeof(is_classic) / sizeof(is_classic[0])); i++)
+			ok(ModernStateIsClassic(is_classic[i]) == 1,
+				"shared_state_numbers: classic 10/17/25/26/27/36/57/76",
+				ModernStateIsClassic(is_classic[i]), 1);
+
+		for (i = 0; i < (int)(sizeof(is_modern) / sizeof(is_modern[0])); i++)
+			ok(ModernStateIsClassic(is_modern[i]) == 0,
+				"shared_state_numbers: not 2/3/81",
+				ModernStateIsClassic(is_modern[i]), 0);
+	}
+
+	/* TROne: modern.classic_situations_report_inactive_so_the_host_can_fill_in,
+	 * the two state numbers this file owed until now: 57 the ladder, 95 the
+	 * turn switch - both must come back active = 0 by their OWN anim_state,
+	 * not only through the caller's sit.classic veto tested above. */
+	{
+		const short states[] = { 57, 95 };
+
+		for (i = 0; i < (int)(sizeof(states) / sizeof(states[0])); i++)
+		{
+			sit.anim_state = states[i];
+			sit.classic = 0;
+			state.have_ref = 0;
+			tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+			ok(out.active == 0, "classic_situations_report_inactive: state 57/95",
+				out.active, 0);
+			ok(out.bits == 0, "...and not one bit written (57/95)", out.bits, 0);
+		}
+	}
+
+	/* TROne: modern.water_and_inventory_leave_pose_and_original_input_alone,
+	 * the state half (the caller's-veto half is above, under "the veto also
+	 * forgets the held course"): 17 AS_SWIM asks for classic by its own
+	 * anim_state, with no help from sit.classic. */
+	sit.anim_state = 17;
+	sit.classic = 0;
+	state.have_ref = 0;
+	tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	ok(out.active == 0, "water_and_inventory: AS_SWIM(17) is classic by itself",
+		out.active, 0);
+
+	/* The water group in full - design section 6's decision and the brief's
+	 * exact list. A2's job, not A1's, so every one comes back inactive; the
+	 * mode is never AIM/JUMP/BACK/RUN because the state veto fires first. */
+	{
+		const short water[] = { 13, 17, 18, 33, 34, 35, 44, 47, 48, 49, 52, 53, 55 };
+
+		for (i = 0; i < (int)(sizeof(water) / sizeof(water[0])); i++)
+		{
+			sit.anim_state = water[i];
+			sit.classic = 0;
+			state.have_ref = 0;
+			tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+			ok(out.active == 0, "water state is classic (modern in A2)", out.active, 0);
+			ok(out.mode == MODERN_MODE_OFF, "...mode off, not just inactive",
+				out.mode, MODERN_MODE_OFF);
+		}
+	}
+
+	/* Design section 6.1's "harmless but listed": Busy states where the input
+	 * mask already strips everything but the four direction bits, so this is
+	 * measured to be inconsequential either way and named so nobody removes
+	 * it later thinking it was missed. 98 shares AS_PICKUP's own routine. */
+	{
+		const short busy[] = { 39, 40, 41, 42, 43, 50, 51, 67, 70, 98 };
+
+		for (i = 0; i < (int)(sizeof(busy) / sizeof(busy[0])); i++)
+			ok(ModernStateIsClassic(busy[i]) == 1, "harmless-but-listed Busy state",
+				ModernStateIsClassic(busy[i]), 1);
+	}
+
+	/* ALL 139, AGAINST A REFERENCE OF OUR OWN. Not a sample: every index
+	 * 0..138 against a frozen array built from the same two design sections
+	 * the switch in modern_move.cpp was built from, so a slip in either one
+	 * shows up as a mismatch here rather than as the same mistake made twice
+	 * and agreeing with itself. */
+	{
+		const short classic[] =
+		{
+			10, 13, 17, 18, 25, 26, 27, 30, 31, 33, 34, 35, 36, 37, 38, 39, 40,
+			41, 42, 43, 44, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60,
+			61, 66, 67, 70, 75, 76, 77, 78, 79, 82, 83, 87, 88, 89, 90, 91, 92,
+			93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 107, 108, 109,
+			110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
+			123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135,
+			136, 137, 138
+		};
+		unsigned char want[139];
+
+		for (i = 0; i < 139; i++)
+			want[i] = 0;
+
+		for (i = 0; i < (int)(sizeof(classic) / sizeof(classic[0])); i++)
+			want[classic[i]] = 1;
+
+		for (i = 0; i <= 138; i++)
+			ok(ModernStateIsClassic((short)i) == want[i],
+				"all 139 states classified: matches the reference table",
+				ModernStateIsClassic((short)i), want[i]);
+
+		ok((int)(sizeof(classic) / sizeof(classic[0])) == 95,
+			"...95 of 139 are classic, 44 are modern",
+			(int)(sizeof(classic) / sizeof(classic[0])), 95);
+	}
 }
 
 /* ------------------------------------------------------ back on the stick -- */
@@ -1410,10 +1518,6 @@ static void sweeps()
 static void deferred()
 {
 	printf("\nnot ours yet - TROne expectations a later step owes, by name:\n");
-	printf("  step 3  modern.classic_states_keep_the_original_input (the 18 classic numbers)\n");
-	printf("  step 3  modern.shared_state_numbers (is_classic 10/17/25/26/27/36/57/76)\n");
-	printf("  step 3  modern.classic_situations_report_inactive... (states 57 and 95)\n");
-	printf("  step 3  modern.water_and_inventory_leave_pose_and_original_input_alone (17)\n");
 	printf("  step 4  modern.direct_ground_turn_is_bounded_and_never_changes_airborne_poses\n");
 	printf("  step 4  modern.the_instant_reversal_stays_in_the_run_and_leaves_the_stand\n");
 	printf("  step 4  modern.ground_reversal_turns_without_a_step_in_the_wrong_direction (the ticks)\n");

@@ -152,24 +152,191 @@ void ModernResetState(MODERN_STATE* state)
 	state->last_mode = MODERN_MODE_OFF;
 }
 
-/* THE STATES THAT STAY CLASSIC - ROUND 161a STEP 3 WRITES THIS TABLE.
+/* THE STATES THAT STAY CLASSIC (round 161a step 3).
  *
- * It belongs in this file and it is declared in the header because the tree
- * below asks it first, but its content is a measurement of its own: an
- * explicit switch over 0..138, every classic entry carrying the routine name
- * from game\lara.cpp's lara_control_routines[] as its reason, the water
- * states marked classic with "modern in A2 (camera pitch)", and the harmless
- * ones named so that nobody removes them later. Design sections 1.7 and 6.1.
+ * Design sections 1.7 and 6.1 of MODERN-CONTROLS-DESIGN.md, checked state by
+ * state against game\lara_states.h and against the routine each one runs in
+ * game\lara.cpp:40-181 (lara_control_routines[]). TROne's own list stops at
+ * 104; TR5 runs to 138, and section 6.1 measured what the extra 34 states do.
+ * The rule in one line: a direction bit stays classic wherever the routine
+ * reads it as something other than "where do I want to go" - which way to
+ * shimmy, whether to let go of a rope, which way to push a block - and
+ * everything else (standing, running, walking, the jumps, ducking, crawling)
+ * gets the translation, which is why the switch below lists the classic
+ * states one by one and lets `default` answer modern for the rest.
  *
- * Until then it answers "modern" for every state - which is the classic case
- * switched off, not a wrong answer waiting to be found in the game: nothing
- * in the engine calls ModernTranslate at all until step 4 puts the seam in,
- * and step 3 comes before step 4. */
+ * THE WATER STATES carry "modern in A2 (camera pitch)" instead of a routine
+ * name: A1 has no camera pitch to swim by, so they wait for the flat-circle
+ * move and the swim pitch that A2 builds.
+ *
+ * ONE DIVERGENCE FROM THIS ROUND'S OWN BUILD BRIEF, MEASURED AND REPORTED IN
+ * THE STEP 3 RECORD: the brief's step 3 paragraph lists 25-29 as modern, but
+ * design section 1.7 lists TROne's 25/26/27 ("back flip and side flips",
+ * added after THEY measured the translation turning Lara onto the stick
+ * heading mid-flip) as classic, and ModernTest.cpp already carried a second,
+ * independent TROne expectation saying the same thing
+ * (modern.shared_state_numbers: "is_classic 10/17/25/26/27/36/57/76"). Rather
+ * than trust either text over the other, I read the routines themselves:
+ * lara_as_leftjump (:765) sets AS_TWIST when IN_RIGHT is held, lara_as_
+ * rightjump (:781) sets it the same way on IN_LEFT, and lara_as_backjump
+ * (:799) reads IN_FORWARD | IN_ROLL to end the flip early - exactly the
+ * mid-flip redirect TROne's own document says 25/26/27 were added to stop.
+ * So 25/26/27 are classic here, matching TROne and not the brief's summary
+ * sentence. 28 and 29 (lara_as_upjump, lara_as_fallback) read no direction
+ * bit at all and stay modern as the brief says. */
 long ModernStateIsClassic(short anim_state)
 {
-	(void)anim_state;
+	switch (anim_state)
+	{
+	/* Water: the flat-circle move and the swim pitch are A2's right stick,
+	 * not a translation A1 can do with a fixed chase camera. */
+	case 13:	// AS_TREAD, lara_as_tread - modern in A2 (camera pitch)
+	case 17:	// AS_SWIM, lara_as_swim - modern in A2 (camera pitch)
+	case 18:	// AS_GLIDE, lara_as_glide - modern in A2 (camera pitch)
+	case 33:	// AS_SURFTREAD, lara_as_surftread - modern in A2 (camera pitch)
+	case 34:	// AS_SURFSWIM, lara_as_surfswim - modern in A2 (camera pitch)
+	case 35:	// AS_DIVE, lara_as_dive - modern in A2 (camera pitch)
+	case 44:	// AS_UWDEATH, lara_as_uwdeath - modern in A2 (camera pitch)
+	case 47:	// AS_SURFBACK, lara_as_surfback - modern in A2 (camera pitch)
+	case 48:	// AS_SURFLEFT, lara_as_surfleft - modern in A2 (camera pitch)
+	case 49:	// AS_SURFRIGHT, lara_as_surfright - modern in A2 (camera pitch)
+	case 52:	// AS_SWANDIVE, lara_as_swandive - modern in A2 (camera pitch)
+	case 53:	// AS_FASTDIVE, lara_as_fastdive - modern in A2 (camera pitch)
+	case 55:	// AS_WATEROUT, lara_as_waterout - modern in A2 (camera pitch)
+		return 1;
 
-	return 0;
+	/* The underwater 180: classic like the water states above (the routine
+	 * is next to lara_as_swim/glide in game\laraswim.cpp), but not tagged
+	 * for A2 - it is a short fixed maneuver, not the held swim/glide loop
+	 * the camera pitch is for. */
+	case 66:	// AS_WATERROLL, lara_as_waterroll
+		return 1;
+
+	/* Hang and shimmy: the direction bits pick which way along the ledge,
+	 * not where to run. 87/88 are the transitions into and out of it. */
+	case 10:	// AS_HANG, lara_as_hang
+	case 30:	// AS_HANGLEFT, lara_as_hangleft
+	case 31:	// AS_HANGRIGHT, lara_as_hangright
+	case 82:	// AS_HANGTURNL, lara_as_hangturnl
+	case 83:	// AS_HANGTURNR, lara_as_hangturnr
+	case 87:	// AS_HANG2DUCK, lara_void_func - hang-to-duck transition
+	case 88:	// AS_CRAWL2HANG, lara_void_func - crawl-to-hang transition
+		return 1;
+
+	/* The overhead hang and the monkey swing (1.7's "75-79") - the same
+	 * family as the one above, at arm's reach instead of chest height. */
+	case 75:	// AS_HANG2, lara_as_hang2
+	case 76:	// AS_MONKEYSWING, lara_as_monkeyswing
+	case 77:	// AS_MONKEYL, lara_as_monkeyl
+	case 78:	// AS_MONKEYR, lara_as_monkeyr
+	case 79:	// AS_MONKEY180, lara_as_monkey180
+		return 1;
+
+	/* The back flip and the two side flips out of a standing jump. See the
+	 * divergence note above the function. */
+	case 25:	// AS_BACKJUMP, lara_as_backjump - reads IN_FORWARD | IN_ROLL
+	case 26:	// AS_RIGHTJUMP, lara_as_rightjump - reads IN_LEFT into AS_TWIST
+	case 27:	// AS_LEFTJUMP, lara_as_leftjump - reads IN_RIGHT into AS_TWIST
+		return 1;
+
+	/* Pushing and pulling a block, and the ready stance before a pole: the
+	 * bits mean push/pull or which side to mount, not where to run. */
+	case 36:	// AS_PUSHBLOCK, lara_as_pushblock
+	case 37:	// AS_PULLBLOCK, lara_as_pullblock
+	case 38:	// AS_PPREADY, lara_as_ppready
+		return 1;
+
+	/* The ladder. */
+	case 56:	// AS_CLIMBSTNC, lara_as_climbstnc
+	case 57:	// AS_CLIMBING, lara_as_climbing
+	case 58:	// AS_CLIMBLEFT, lara_as_climbleft
+	case 59:	// AS_CLIMBEND, lara_as_climbend
+	case 60:	// AS_CLIMBRIGHT, lara_as_climbright
+	case 61:	// AS_CLIMBDOWN, lara_as_climbdown
+		return 1;
+
+	/* Section 6.1: during these Lara is Busy and the input mask already
+	 * strips everything but the four direction bits, so the choice is
+	 * harmless either way - named here so nobody "fixes" a gap that was
+	 * never a bug. 98 shares AS_PICKUP's own routine. */
+	case 39:	// AS_PICKUP, lara_as_pickup - Busy
+	case 40:	// AS_SWITCHON, lara_as_switchon - Busy
+	case 41:	// AS_SWITCHOFF, lara_as_switchoff - Busy
+	case 42:	// AS_USEKEY, lara_as_usekey - Busy
+	case 43:	// AS_USEPUZZLE, lara_as_usepuzzle - Busy
+	case 50:	// AS_USEMIDAS, lara_void_func - Busy
+	case 51:	// AS_DIEMIDAS, lara_void_func - Busy
+	case 67:	// AS_FLAREPICKUP, lara_as_pickupflare - Busy
+	case 70:	// AS_DEATHSLIDE, lara_as_deathslide - reads IN_ACTION only, Busy
+		return 1;
+
+	/* TROne's "89-104": rope-swing entry, the trap and switch objects a
+	 * scripted anim drives, and the pole - the same reasoning as the two
+	 * groups above it. */
+	case 89:	// AS_CONTROLLED, lara_as_controlled
+	case 90:	// AS_ROPELEFT, lara_as_ropel
+	case 91:	// AS_ROPERIGHT, lara_as_roper
+	case 92:	// AS_BLOCKSWITCH, lara_as_controlled
+	case 93:	// AS_LIFTTRAP, lara_as_controlled
+	case 94:	// AS_PULLTRAP, lara_as_controlled
+	case 95:	// AS_TURNSWITCH, lara_as_controlledl
+	case 96:	// AS_COGSWITCH, lara_as_controlledl
+	case 97:	// AS_RAILSWITCH, lara_as_controlled
+	case 98:	// AS_HIDDENPICKUP, lara_as_pickup - Busy, same routine as 39
+	case 99:	// AS_POLESTAT, lara_as_null
+	case 100:	// AS_POLEUP, lara_as_null
+	case 101:	// AS_POLEDOWN, lara_as_null
+	case 102:	// AS_POLELEFT, lara_as_poleleft
+	case 103:	// AS_POLERIGHT, lara_as_poleright
+	case 104:	// AS_PULLEY, lara_as_pulley
+		return 1;
+
+	/* Section 6.1 - everything TR5 added past TROne's own 104, measured one
+	 * by one. 105/106 are the exception, not listed here: a crouch turn,
+	 * where the direction bits mean "which way" exactly as they do standing,
+	 * so they fall through to `default` and come out modern. */
+	case 107:	// AS_CORNEREXTL, lara_as_extcornerl - corner shimmy, family of 30/31/82/83
+	case 108:	// AS_CORNEREXTR, lara_as_extcornerr
+	case 109:	// AS_CORNERINTL, lara_as_intcornerl
+	case 110:	// AS_CORNERINTR, lara_as_intcornerr
+	case 111:	// AS_ROPE, lara_as_rope - rope swing
+	case 112:	// AS_CLIMBROPE, lara_as_climbrope
+	case 113:	// AS_SLIDEROPE, lara_as_climbroped
+	case 114:	// AS_ROPEFWD, lara_as_rope
+	case 115:	// AS_ROPEBACK, lara_as_rope
+	case 116:	// AS_MOVE, lara_void_func - scripted
+	case 117:	// AS_TWODOOR, lara_as_controlled - scripted
+	case 118:	// AS_SWIMCHEAT, lara_as_swimcheat - DOZY flight reads the bits as a direction to fly
+	case 119:	// AS_TROPEPOSE, lara_as_trpose - tightrope
+	case 120:	// AS_TROPETURN, lara_as_null
+	case 121:	// AS_TROPEWALK, lara_as_trwalk
+	case 122:	// AS_TROPEFALL_L, lara_as_trfall
+	case 123:	// AS_TROPEFALL_R, lara_as_trfall
+	case 124:	// AS_TROPEGETON, lara_as_null
+	case 125:	// AS_TROPEGETOFF, lara_as_null
+	case 126:	// AS_CROWDOVE, lara_as_switchon - tightrope family (6.1's "119-127")
+	case 127:	// AS_TROPEUNDOFALL, lara_as_null
+	case 128:	// AS_PBSPIN, lara_as_parallelbars - horizontal bar
+	case 129:	// AS_PBLEAP, lara_as_pbleapoff
+	case 130:	// AS_INTO_ZIP, lara_as_null - zip line
+	case 131:	// AS_ZIP, lara_as_null
+	case 132:	// AS_OUT_ZIP, lara_as_null
+	case 133:	// AS_USECARD, lara_as_null - scripted object states
+	case 134:	// AS_LIFT_S, lara_as_null
+	case 135:	// AS_AIR, lara_as_null
+	case 136:	// AS_SUB_CROW, lara_as_null
+	case 137:	// AS_BOX_UP, lara_as_null
+	case 138:	// AS_CLIMB2DUCK, lara_as_null - ladder to crouch
+		return 1;
+
+	/* Everything else gets the translation: standing, running, walking, the
+	 * jumps other than the three flips above (3, 28, 29), turning, falling,
+	 * ducking (71/72/105/106), crawling (80/81/84-86), stepping (21/22) and a
+	 * handful of void/unused slots (4, 8, 19, 23, 46, 54, 62-64, 68, 69)
+	 * whose routines read no input either way. */
+	default:
+		return 0;
+	}
 }
 
 /* Standing still, or turning on the spot. Here a turn is ONLY reachable

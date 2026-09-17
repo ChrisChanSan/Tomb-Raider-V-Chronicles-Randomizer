@@ -293,7 +293,18 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * is itself the answer to "why did nothing happen here" and earns a line
 	 * exactly as much as a running one does, which is also why this sits
 	 * after every early return above rather than being reachable from one of
-	 * them: 30 lines a second at every fps_mode, never more, never fewer.
+	 * them: 30 a second while the seam runs, at every fps_mode, because it
+	 * hangs on the logic tick and not on a drawn frame.
+	 *
+	 * NEVER MORE - BUT IT CAN BE FEWER, AND A LINE COUNT HAS TO EXPECT THAT.
+	 * The reset branch above returns before this line, so the first tick back
+	 * from a level start, a savegame, the inventory, first person, a cutscene
+	 * or the look key shows its `init` line and no tick line; and while the
+	 * look key is down, or the ring is open, or a cutscene is playing, the
+	 * seam is not called at all and neither line appears. So a gap in `f=` is
+	 * the scheme standing aside, not a dropped line - count against the `f=`
+	 * numbers, which are GlobalCounter and never lie, rather than against the
+	 * wall clock.
 	 *
 	 * `src` says which half produced the bits this tick (design section 5.9):
 	 * "pad" is the stick driving `out`, "keys" is `out` stepping aside and

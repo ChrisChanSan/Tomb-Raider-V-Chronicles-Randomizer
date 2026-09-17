@@ -200,9 +200,15 @@ long ModernStateIsClassic(short anim_state)
 	case 47:	// AS_SURFBACK, lara_as_surfback - modern in A2 (camera pitch)
 	case 48:	// AS_SURFLEFT, lara_as_surfleft - modern in A2 (camera pitch)
 	case 49:	// AS_SURFRIGHT, lara_as_surfright - modern in A2 (camera pitch)
-	case 52:	// AS_SWANDIVE, lara_as_swandive - modern in A2 (camera pitch)
-	case 53:	// AS_FASTDIVE, lara_as_fastdive - modern in A2 (camera pitch)
-	case 55:	// AS_WATEROUT, lara_as_waterout - modern in A2 (camera pitch)
+	/* The three that stand in the water list without swimming in it: two
+	 * dives in the air and the climb out onto the bank. They are classic
+	 * because TROne's own water list names them - a dive is how she gets
+	 * INTO the water and the climb-out is how she leaves it, so both belong
+	 * to the same handover - but their reason is not the camera pitch, and
+	 * the line above must not be read as promising them one. */
+	case 52:	// AS_SWANDIVE, lara_as_swandive - the entry, not the swim
+	case 53:	// AS_FASTDIVE, lara_as_fastdive - the entry, not the swim
+	case 55:	// AS_WATEROUT, lara_as_waterout - the way out, not the swim
 		return 1;
 
 	/* The underwater 180: classic like the water states above (the routine
@@ -219,8 +225,8 @@ long ModernStateIsClassic(short anim_state)
 	case 31:	// AS_HANGRIGHT, lara_as_hangright
 	case 82:	// AS_HANGTURNL, lara_as_hangturnl
 	case 83:	// AS_HANGTURNR, lara_as_hangturnr
-	case 87:	// AS_HANG2DUCK, lara_void_func - hang-to-duck transition
-	case 88:	// AS_CRAWL2HANG, lara_void_func - crawl-to-hang transition
+	case 87:	// AS_HANG2DUCK, lara_as_null - hang-to-duck transition
+	case 88:	// AS_CRAWL2HANG, lara_as_null - crawl-to-hang transition
 		return 1;
 
 	/* The overhead hang and the monkey swing (1.7's "75-79") - the same
@@ -381,7 +387,13 @@ long ModernStateIsStanding(short anim_state)
  * pose goes crooked. The numbers below are OUR state list's, checked one by
  * one against game\lara_states.h and the routine each runs:
  *   0 AS_WALK   1 AS_RUN   2 AS_STOP   6 AS_TURN_R   7 AS_TURN_L
- *  12 AS_SPLAT  14 AS_LAND 20 AS_FASTTURN          73 AS_SPRINT */
+ *  12 AS_SPLAT  14 AS_LAND 20 AS_FASTTURN          73 AS_DASH
+ * (The first pass of this round wrote 73 as "AS_SPRINT, lara_as_sprint" and
+ * 14 as "lara_as_land"; the review's own parse of the two files caught both.
+ * TR5 calls the sprint AS_DASH / lara_as_dash, and AS_LAND has no routine of
+ * its own at all - lara_control_routines[14] is lara_void_func. Neither
+ * changed a classification, and the names are right here now because the
+ * comment IS the evidence that the nine were checked.) */
 long ModernStateAllowsDirectTurn(short anim_state)
 {
 	switch (anim_state)
@@ -392,9 +404,9 @@ long ModernStateAllowsDirectTurn(short anim_state)
 	case 6:		// AS_TURN_R, lara_as_turn_r
 	case 7:		// AS_TURN_L, lara_as_turn_l
 	case 12:	// AS_SPLAT, lara_as_splat - she walked into a wall and is still on her feet
-	case 14:	// AS_LAND, lara_as_land
+	case 14:	// AS_LAND, lara_void_func - the landing pose has no routine of its own
 	case 20:	// AS_FASTTURN, lara_as_fastturn
-	case 73:	// AS_SPRINT, lara_as_sprint
+	case 73:	// AS_DASH, lara_as_dash - the sprint
 		return 1;
 
 	default:
@@ -702,8 +714,25 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 
 	/* 3. Aiming: a weapon ready AND the action key down. Letting go gives the
 	 * turn back at once, so a shot in passing does not lock the movement for
-	 * longer than the shot. */
-	state->aiming = (cfg->aim_strafe && sit->drawn && sit->action) ? 1 : 0;
+	 * longer than the shot.
+	 *
+	 * ... BUT NOT ON THE TICK SHE JUMPS. Aiming comes before the directional
+	 * jump below, so with a gun ready and the action held a side flip or a
+	 * back flip would come out as a side STEP: game\lara.cpp's lara_as_compress
+	 * reads only IN_FORWARD/IN_BACK/IN_LEFT/IN_RIGHT, so IN_LSTEP/IN_RSTEP is
+	 * no direction at all and the flip while firing becomes a jump straight up.
+	 * TROne answer this one tick before the translation, by clearing aim_strafe
+	 * in their glue whenever the situation is a jump (trone_modern_glue.h:473,
+	 * OUTSIDE the Remaster profile block above it - which is why their own
+	 * expectation passes on a plain glue). aim_strafe is read exactly here and
+	 * nowhere else, so clearing it for the call and asking for it here are the
+	 * same rule; it is asked here because our seam keeps ONE config and never
+	 * copies it, and a copy per tick would be work outside the translation for
+	 * a rule the translation can simply state. A tap is enough: the direction
+	 * lara_as_compress writes into goal_anim_state on this tick is never taken
+	 * back by a later one, so the flip survives the ticks in which she is back
+	 * to aiming. */
+	state->aiming = (cfg->aim_strafe && sit->drawn && sit->action && !sit->jump) ? 1 : 0;
 
 	if (state->aiming)
 	{

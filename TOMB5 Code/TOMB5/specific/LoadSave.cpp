@@ -368,19 +368,38 @@ void DoOptions()
 		// #161 (decision 1): the whole page now shares one row height -
 		// the Method row's own (default_font_height) was too tall to fit
 		// three more rows in the 640x480 budget the key-binding list below
-		// was already close to. Both fonts scale the same way
-		// (GetFixedScale), so the fit only has to be checked once, at the
-		// tightest resolution: 640x480 gives GetFixedScale(unit) = unit
-		// unchanged, and phd_winymax is 479 there. The keyboard path's
-		// last row (20, four rows above the list plus 16 keys) was
-		// 17 * 27 = 459 before this step; at 23 it is 20 * 23 = 460 - one
-		// pixel more, still 19 clear of 479. At 1920x1080 GetFixedScale
-		// scales both by ~2.25x (MulDiv rounding): 1037 before this step,
-		// 1040 now, against 1079 - even more headroom than at 640x480,
-		// because the tighter of the two axis scales is height's, and
-		// 1080/480 (2.25x) already exceeds 640x480's own 1x. Moved up here
-		// (from just after the Method row) so it covers the Method row and
-		// the three new rows too, not only the key-binding list.
+		// was already close to. Moved up here (from just after the Method
+		// row) so it covers the Method row and the three new rows too, not
+		// only the key-binding list.
+		//
+		// 23 IS FORCED, AND IT IS NOT FREE. Two numbers decide the page and
+		// they are measured in different units, which is why the first pass
+		// of this round only found the easy one.
+		//
+		// The easy one - does the last row fit on the screen? 640x480 is the
+		// tightest case (GetFixedScale returns the unit unchanged there,
+		// and phd_winymax is 479). Twenty rows at 23 put the last anchor at
+		// 460 and the bottom of its glyph cell at 464, inside 479. Twenty
+		// at 24 would end at 484, past the edge - so 23 is the LARGEST
+		// pitch that fits twenty rows at all, not a comfortable choice
+		// among several.
+		//
+		// The one that costs something - do two rows' glyph cells still
+		// clear each other? They do not, and that is the price. InitFont
+		// (game\text.cpp:518-525) rescales the glyph table by
+		// phd_winymax / 240, so an ordinary capital (game\chardef.inc:
+		// h = 13, YOffset = -11) becomes a 25-pixel cell at 640x480 -
+		// 21 above the row's anchor and 4 below it - and 58 pixels at
+		// 1920x1080 against a pitch of 52. At the old 27 the cells cleared
+		// each other by 2 pixels (3 at 1920x1080, and the game's own
+		// default 28 leaves 3); at 23 they OVERLAP by 2 (6 at 1920x1080).
+		// The overlap sits exactly where one row's descender would be and
+		// the next row's ascender begins, so whether anything is visible
+		// depends on the transparent padding inside the cell, which the
+		// glyph table does not record. Rows with a descender are the ones
+		// to look at ("Jump", "Step Left", "Large Medipack"). Only a play
+		// test can settle it, and the alternative - a second column, or a
+		// scrolling list - is a page redesign, not a constant.
 		font_height = GetFixedScale(23);	// was 27
 
 		// The three Controls-page rows plus the Method row, one shared y/i
@@ -555,7 +574,21 @@ void DoOptions()
 						{
 							waiting_for_key = 0;
 
-							sel2 >>= 2;
+							// #161: was `sel2 >>= 2`. This shift plus the
+							// bit count below is the ONLY place the selected
+							// row's bit becomes an array index again, and it
+							// is calibrated on where the first bindable row
+							// sits: shift-then-count yields
+							// i = log2(sel2 >> shift) + 1, so the shift has
+							// to be (first bindable bit) + 1. That bit moved
+							// from 1 to 4 when the three Controls rows went
+							// in above the Method row, so the shift moves
+							// from 2 to 5 with it. Left at 2 every binding
+							// wrote three slots too far - "Up" into "Right" -
+							// and the last row wrote layout[1][18], one past
+							// the end of short layout[2][18]
+							// (specific/input.cpp:211).
+							sel2 >>= 5;
 
 							while (sel2)
 							{
@@ -589,7 +622,16 @@ void DoOptions()
 
 				if (jread)
 				{
-					lp = sel >> 2;
+					// #161: was `sel >> 2`, and wrong for the same reason
+					// as the keyboard block's own shift above - the first
+					// bindable row's bit moved from 1 to 4, so the shift
+					// moves from 2 to 5. Left at 2, binding "Duck" wrote
+					// jLayout[3] (Jump) and "Inventory" wrote jLayout[12]
+					// (Load), and the three last rows landed outside the
+					// k < 15 unbind loop below. With the shift right, i is
+					// back in 0..14 and that loop's bound is right again
+					// without touching it.
+					lp = sel >> 5;
 					lp2 = 0;
 					i = 0;
 

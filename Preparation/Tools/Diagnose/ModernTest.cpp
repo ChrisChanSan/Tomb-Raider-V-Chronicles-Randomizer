@@ -774,13 +774,16 @@ static void jumping()
 		MODERN_IN_BACK);
 
 	/* TROne: modern.standing_jump_is_a_side_flip_with_and_without_a_drawn_gun.
-	 * Theirs runs through the glue in the Remaster profile, where aim_strafe is
-	 * forced OFF - so the aim branch cannot reach it. OURS KEEPS aim_strafe ON
-	 * (the user's decision: one switch, not a page of them), and the aim branch
-	 * comes BEFORE the jump branch in the design's own order. So the honest
-	 * statement of this expectation for us is in two halves, and the second is
-	 * a real difference, named here and in the round's record rather than
-	 * quietly passed over. */
+	 *
+	 * The round's first pass read theirs as passing on the Remaster profile
+	 * forcing aim_strafe off, and froze OUR answer (a side STEP while firing)
+	 * as a difference. That reading was wrong and the review caught it: the
+	 * line that disarms aiming on a jump is trone_modern_glue.h:473, OUTSIDE
+	 * the profile block above it, and their own test builds a plain
+	 * modern_test_glue() that never sets remaster_profile. So the expectation
+	 * is theirs unconditionally, and it is ours now too - the translation
+	 * itself stops aiming on the tick she jumps (game\modern_move.cpp, rule 3).
+	 * Asserted here for all four combinations of gun and trigger. */
 	ModernResetState(&state);
 	sit.anim_state = 2;
 	sit.jump = 1;
@@ -798,19 +801,35 @@ static void jumping()
 		}
 	}
 
-	/* The half that differs: gun out AND the action held (she is firing) turns
-	 * the side flip into a side STEP, because aiming wins. TROne never see it
-	 * because their profile has aim_strafe off; we do, and the play test is
-	 * the place to decide whether the jump should be pulled in front of the
-	 * aim. Asserted as it IS, so the day it changes, it changes here too. */
+	/* The case the first pass got wrong: gun out AND the action held, i.e. she
+	 * is firing, and she jumps anyway. The flip has to stay a flip - IN_RSTEP
+	 * is not a direction to game\lara.cpp's lara_as_compress, so a side STEP
+	 * here is a jump straight up. Both the side flip and the back flip. */
 	sit.drawn = 1;
 	sit.action = 1;
 	state.have_ref = 0;
 	tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
-	ok(out.mode == MODERN_MODE_AIM, "firing + jump: aiming wins over the flip today",
-		out.mode, MODERN_MODE_AIM);
-	ok(out.bits == MODERN_IN_RSTEP, "...so the bit is the side STEP, not the side flip",
-		out.bits, MODERN_IN_RSTEP);
+	ok(out.mode == MODERN_MODE_JUMP, "firing + jump: the flip wins over the aim",
+		out.mode, MODERN_MODE_JUMP);
+	ok(out.bits == MODERN_IN_RIGHT, "...so the bit is the side FLIP, not the side step",
+		out.bits, MODERN_IN_RIGHT);
+
+	state.have_ref = 0;
+	tick(&cfg, &state, 0, S(32000), 0, 0, &sit, &out);
+	ok(out.bits == MODERN_IN_BACK, "...and the back flip survives firing too", out.bits,
+		MODERN_IN_BACK);
+
+	/* And the aim comes straight back the moment the jump key is not the
+	 * question any more - the disarm is one tick's rule, not a mode. */
+	sit.jump = 0;
+	sit.anim_state = 2;
+	state.have_ref = 0;
+	tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_AIM, "firing without the jump key aims again", out.mode,
+		MODERN_MODE_AIM);
+	ok(out.bits == MODERN_IN_RSTEP, "...and that IS the side step", out.bits,
+		MODERN_IN_RSTEP);
+	sit.jump = 1;
 
 	/* jump_dir = 0 takes the directional jump out altogether. */
 	cfg.jump_dir = 0;

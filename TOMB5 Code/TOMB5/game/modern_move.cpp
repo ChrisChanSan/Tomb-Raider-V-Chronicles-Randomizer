@@ -398,7 +398,21 @@ long ModernStateIsStanding(short anim_state)
  * TR5 calls the sprint AS_DASH / lara_as_dash, and AS_LAND has no routine of
  * its own at all - lara_control_routines[14] is lara_void_func. Neither
  * changed a classification, and the names are right here now because the
- * comment IS the evidence that the nine were checked.) */
+ * comment IS the evidence that the nine were checked.)
+ *
+ * THE TENTH, ADDED IN ROUND 161a-fix (#161 item 3). TROne's own list stops at
+ * these nine ground states and never reaches 15 AS_COMPRESS - in their design
+ * the crouch before a standing jump always resolves as a jump, never as
+ * running, so there was nothing there for the direct turn to do. Ours can now
+ * reach AS_COMPRESS with mode RUN as well: unarmed, ModernTranslate's rule 4
+ * above steps aside for rule 6 (the user's decision - no weapon, no flip,
+ * just the ordinary turn-and-run), so she can still be turning when the
+ * crouch begins, and letting the write continue through it keeps her
+ * aligning to the stick into the takeoff instead of freezing her heading for
+ * the two or three ticks the crouch lasts. This does NOT reopen the door for
+ * an armed flip: ModernDirectTurn below already refuses anything whose mode
+ * is not MODERN_MODE_RUN, and AS_COMPRESS is mode JUMP whenever a weapon is
+ * drawn (rule 4), so the two cases never overlap. */
 long ModernStateAllowsDirectTurn(short anim_state)
 {
 	switch (anim_state)
@@ -410,6 +424,7 @@ long ModernStateAllowsDirectTurn(short anim_state)
 	case 7:		// AS_TURN_L, lara_as_turn_l
 	case 12:	// AS_SPLAT, lara_as_splat - she walked into a wall and is still on her feet
 	case 14:	// AS_LAND, lara_void_func - the landing pose has no routine of its own
+	case 15:	// AS_COMPRESS, lara_as_compress - only reached with mode RUN, i.e. unarmed
 	case 20:	// AS_FASTTURN, lara_as_fastturn
 	case 73:	// AS_DASH, lara_as_dash - the sprint
 		return 1;
@@ -770,14 +785,30 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	delta = ModernWrap((long)target - lara_yaw);
 	adelta = ModernAbs(delta);
 
-	/* 4. The directional jump out of a stand. In AS_COMPRESS the direction
-	 * bits choose the jump - forward, the back flip, a side flip - and
-	 * nothing turns at all. The jump key may already be let go by then:
-	 * AS_COMPRESS lasts several ticks and a tap is only in the first of them,
-	 * so the state alone is enough to keep this branch. Without that, the
-	 * ticks after the tap would fall into the run case, set IN_FORWARD, and
-	 * turn every back flip into a forward jump. */
-	if (cfg->jump_dir && (sit->jump || sit->anim_state == 15) &&
+	/* 4. The directional jump out of a stand - BUT ONLY WITH A WEAPON DRAWN
+	 * (round 161a-fix, #161 item 3, the user's own decision from his
+	 * Remaster recording, jumps with and without weapons):
+	 * "Wenn Lara die Waffen in der Hand hat (Kampfmodus) ist das jetzige
+	 * Verhalten richtig. Wenn sie nicht im Kampfmodus ist, macht sie egal wie
+	 * ich sie drehe den normalen Sprung aus dem Stand in die angegebene
+	 * Richtung." Armed, AS_COMPRESS reads the direction bits as the jump -
+	 * forward, the back flip, a side flip - and nothing turns at all.
+	 * Unarmed, sit->drawn is 0 and this whole branch steps aside for rule 6
+	 * below: she turns onto the held course and runs, so the jump key gets
+	 * whatever the classic automaton makes of IN_FORWARD together with
+	 * IN_JUMP - the "normal standing jump in the indicated direction" the
+	 * user asked for, and it is also what lets him circle her on the stick
+	 * and break out of the circle with a jump instead of only ever flipping
+	 * sideways.
+	 *
+	 * The jump key may already be let go by then: AS_COMPRESS lasts several
+	 * ticks and a tap is only in the first of them, so the state alone is
+	 * enough to keep this branch once she is in it - still behind sit->drawn,
+	 * so holstering mid-crouch falls through to rule 6 exactly as it would
+	 * have if the trigger had never been pulled. Without the state in the
+	 * condition, the ticks after the tap would fall into the run case, set
+	 * IN_FORWARD, and turn every back flip into a forward jump. */
+	if (cfg->jump_dir && sit->drawn && (sit->jump || sit->anim_state == 15) &&
 		ModernStateIsStanding(sit->anim_state))
 	{
 		bits = ModernRelativeBits(delta, cfg->aim_sector, 0);

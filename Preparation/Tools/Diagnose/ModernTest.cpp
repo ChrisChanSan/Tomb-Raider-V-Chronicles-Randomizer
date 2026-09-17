@@ -851,12 +851,18 @@ static void jumping()
 
 	/* TROne: modern.standing_jump_picks_a_direction. In AS_COMPRESS the
 	 * classic automaton reads the direction bits as "which jump": forward, the
-	 * back flip, a side flip. Exactly ONE bit, and nothing turns. */
+	 * back flip, a side flip. Exactly ONE bit, and nothing turns.
+	 * ARMED (round 161a-fix, #161 item 3): this whole mechanism is now the
+	 * user's Kampfmodus case - a weapon has to be in her hand for AS_COMPRESS
+	 * to read a flip at all, see rule 4's own comment in modern_move.cpp - so
+	 * every TROne-ported case below sets sit.drawn = 1 to stay inside that
+	 * case; jumping()'s own two-case split for the unarmed answer is further
+	 * down, where TROne's side-flip expectation used to be the only one. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
 	sit.anim_state = 2;					/* AS_STOP */
 	sit.classic = 0;
-	sit.drawn = 0;
+	sit.drawn = 1;
 	sit.action = 0;
 	sit.jump = 1;
 	sit.blocked = 0;
@@ -910,25 +916,46 @@ static void jumping()
 	 * line that disarms aiming on a jump is trone_modern_glue.h:473, OUTSIDE
 	 * the profile block above it, and their own test builds a plain
 	 * modern_test_glue() that never sets remaster_profile. So the expectation
-	 * is theirs unconditionally, and it is ours now too - the translation
-	 * itself stops aiming on the tick she jumps (game\modern_move.cpp, rule 3).
-	 * Asserted here for all four combinations of gun and trigger. */
+	 * was theirs unconditionally - UNTIL the first play test measured it
+	 * against a Remaster recording of jumps with and without weapons and the
+	 * user overruled the "without" half of it (round 161a-fix, #161 item 3,
+	 * MODIFICATIONS.md): "Wenn Lara die Waffen in der Hand hat (Kampfmodus)
+	 * ist das jetzige Verhalten richtig. Wenn sie nicht im Kampfmodus ist,
+	 * macht sie egal wie ich sie drehe den normalen Sprung aus dem Stand in
+	 * die angegebene Richtung." Armed, TROne's side flip stands unchanged;
+	 * unarmed, it is rule 6 (the run branch) instead - turn onto the course,
+	 * IN_FORWARD, and a forward jump rather than a flip. So TROne's one case
+	 * is now two of ours. */
 	ModernResetState(&state);
 	sit.anim_state = 2;
 	sit.jump = 1;
 	sit.action = 0;
-	{
-		int drawn;
+	sit.drawn = 1;
+	state.have_ref = 0;
+	tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_JUMP, "armed: still TROne's side flip", out.mode,
+		MODERN_MODE_JUMP);
+	ok(out.bits == MODERN_IN_RIGHT, "...exactly one direction bit and nothing else",
+		out.bits, MODERN_IN_RIGHT);
 
-		for (drawn = 0; drawn < 2; drawn++)
-		{
-			sit.drawn = drawn;
-			state.have_ref = 0;
-			tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
-			ok(out.bits == MODERN_IN_RIGHT, "the side flip works with and without a gun out",
-				out.bits, MODERN_IN_RIGHT);
-		}
-	}
+	/* Unarmed: a moderate offset so the one tick can show both halves of the
+	 * user's sentence at once - turning AND the forward jump together -
+	 * rather than only the first few ticks of a wide turn, where stand_spin
+	 * (0x3000, design row 10, unchanged by this round) would still suppress
+	 * IN_FORWARD on its own merits. That hysteresis is not what this test is
+	 * about; it only has to stay clear of it to show rule 6's ordinary
+	 * answer. */
+	ModernResetState(&state);
+	sit.drawn = 0;
+	state.have_ref = 0;
+	tick(&cfg, &state, 20, -120, 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_RUN, "unarmed: rule 6 answers, not a flip", out.mode,
+		MODERN_MODE_RUN);
+	ok(out.bits == (MODERN_IN_FORWARD | MODERN_IN_RIGHT),
+		"...she turns toward the stick and jumps forward, not sideways",
+		out.bits, MODERN_IN_FORWARD | MODERN_IN_RIGHT);
+	ok(out.target == state.course, "...on the held course, the way rule 6 always steers",
+		out.target, state.course);
 
 	/* The case the first pass got wrong: gun out AND the action held, i.e. she
 	 * is firing, and she jumps anyway. The flip has to stay a flip - IN_RSTEP
@@ -1327,8 +1354,8 @@ static void direct_turn()
 	MODERN_STATE state;
 	MODERN_SITUATION sit;
 	MODERN_RESULT out;
-	const short allowed[] = { 0, 1, 2, 6, 7, 12, 14, 20, 73 };
-	const short airborne[] = { 3, 9, 10, 15, 17, 25, 26, 27, 36, 57, 76, 81 };
+	const short allowed[] = { 0, 1, 2, 6, 7, 12, 14, 15, 20, 73 };
+	const short airborne[] = { 3, 9, 10, 17, 25, 26, 27, 36, 57, 76, 81 };
 	long yaw;
 	long total;
 	long count;
@@ -1355,9 +1382,11 @@ static void direct_turn()
 	ok(ModernGroundTurn(1, 0x7000, 0x7000) == 0x4000, "a rate over half a turn is clamped too",
 		ModernGroundTurn(1, 0x7000, 0x7000), 0x4000);
 
-	/* Their twelve states: airborne, hanging, climbing, swimming, in an
-	 * interaction pose. There y_rot is the animation's and nothing outside
-	 * may touch it. */
+	/* Their twelve states less one: airborne, hanging, climbing, swimming, in
+	 * an interaction pose. There y_rot is the animation's and nothing outside
+	 * may touch it. 15 AS_COMPRESS used to be the twelfth - round 161a-fix
+	 * (#161 item 3) moves it to `allowed` below, because ours can now reach
+	 * it with mode RUN (unarmed) where TROne's design never could. */
 	for (i = 0; i < (int)(sizeof(airborne) / sizeof(airborne[0])); i++)
 		ok(ModernGroundTurn(airborne[i], 0x4000, 3277) == 0,
 			"no write in an airborne, climbing or object pose",
@@ -1374,19 +1403,48 @@ static void direct_turn()
 	ok(ModernWrap(yaw) == -32768, "ten ticks for 180 degrees at 3277", ModernWrap(yaw), -32768);
 
 	/* Ours, because the state list is ours and not theirs (TR5 runs to 138
-	 * where TROne stop at 104): exactly nine states allow the write, and the
-	 * nine are the nine. */
+	 * where TROne stop at 104): TROne's nine ground states allow the write,
+	 * PLUS 15 AS_COMPRESS since round 161a-fix (#161 item 3, see
+	 * ModernStateAllowsDirectTurn's own comment in modern_move.cpp for why) -
+	 * ten in all, and the ten are the ten. */
 	count = 0;
 
 	for (i = 0; i < 139; i++)
 		if (ModernStateAllowsDirectTurn((short)i))
 			count++;
 
-	ok(count == 9, "nine of the 139 states allow the write", count, 9);
+	ok(count == 10, "ten of the 139 states allow the write", count, 10);
 
 	for (i = 0; i < (int)(sizeof(allowed) / sizeof(allowed[0])); i++)
-		ok(ModernStateAllowsDirectTurn(allowed[i]) == 1, "...and these are the nine",
+		ok(ModernStateAllowsDirectTurn(allowed[i]) == 1, "...and these are the ten",
 			ModernStateAllowsDirectTurn(allowed[i]), 1);
+
+	/* ROUND 161a-fix (#161 item 3): AS_COMPRESS keeps the write too, but only
+	 * when she is unarmed and rule 6 is answering - never during an armed
+	 * flip, because ModernDirectTurn's own mode check just below already
+	 * refuses anything that is not MODERN_MODE_RUN. Both halves through the
+	 * seam's own two calls (tick_turn), not just the state-list membership
+	 * asserted above, so the interaction with rule 4's new sit->drawn gate is
+	 * proven end to end. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 15;			/* AS_COMPRESS */
+	sit.classic = 0;
+	sit.drawn = 0;					/* unarmed: rule 4 steps aside, rule 6 answers */
+	sit.action = 0;
+	sit.jump = 1;
+	sit.blocked = 0;
+	ok(tick_turn(&cfg, &state, 20, -120, 0, 0, &sit, &out, &yaw) == 1,
+		"AS_COMPRESS, unarmed: the direct turn takes charge too", 1, 1);
+	ok(out.mode == MODERN_MODE_RUN, "...because unarmed it is rule 6 answering",
+		out.mode, MODERN_MODE_RUN);
+
+	ModernResetState(&state);
+	sit.drawn = 1;					/* armed: rule 4 owns the tick instead */
+	ok(tick_turn(&cfg, &state, 20, -120, 0, 0, &sit, &out, &yaw) == 0,
+		"AS_COMPRESS, armed: still a flip, so no direct turn", 0, 0);
+	ok(out.mode == MODERN_MODE_JUMP, "...the jump mode owns the heading instead",
+		out.mode, MODERN_MODE_JUMP);
 
 	/* And the two candidate rates the play test may pick instead still turn
 	 * a half circle in a sensible number of ticks - this IS the number the
@@ -1547,6 +1605,7 @@ static void direct_turn()
 	ModernResetState(&state);
 	sit.classic = 0;
 	sit.anim_state = 2;
+	sit.drawn = 1;			/* armed (round 161a-fix, #161 item 3): a flip needs it now */
 	sit.jump = 1;
 	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 0,
 		"the back flip is not turned into an about-turn", 0, 0);

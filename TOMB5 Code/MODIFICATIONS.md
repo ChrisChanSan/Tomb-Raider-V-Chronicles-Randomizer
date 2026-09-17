@@ -14327,8 +14327,10 @@ the end of this entry.
 `8253932` (this record and the two README pages are the other three files of
 the change set, and are left out of that count so it stays a count of the
 work rather than of the writing about it). Eight commits built the round and
-two more answered the skeptical review; `git log --oneline 8253932..HEAD` is
-the list.
+the ones after them answer the skeptical review;
+`git log --oneline 8253932..HEAD` is the list, and is written that way rather
+than as a number because a count of commits goes stale the moment one more
+is needed - which it was, twice, while this paragraph was being corrected.
 
 - `game/modern_move.h` / `.cpp` (new, 312 + 868 lines) - the pure translation.
   No engine header and no engine global: it takes eight numbers (stick x/y,

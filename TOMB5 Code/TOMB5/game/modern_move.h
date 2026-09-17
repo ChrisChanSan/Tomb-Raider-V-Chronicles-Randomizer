@@ -119,17 +119,32 @@ enum modern_constants
 	 * so its smallest non-zero reading is 30, and the DirectInput fallback
 	 * zeroes under 150 and divides by 8, so its smallest is 18
 	 * (specific\dxshell.cpp, both paths). Every reading either scheme ever
-	 * sees is one both react to; what Modern adds is that the MAGNITUDE now
-	 * decides walking from running (see walk_below below), which is the thing
-	 * to read mag= against. */
+	 * sees is one both react to; what Modern USED TO add was the MAGNITUDE
+	 * deciding walking from running - round 161a-fix (#161 item 1) took that
+	 * back out (see walk_below below), so mag= is read only as a drift/dead-
+	 * zone diagnostic now, the way this row always meant it. */
 	MODERN_DEAD = 0,
 
-	/* Row 5. The RULE is TROne's and comes from play - under half deflection
-	 * Lara walks - and the number is theirs too: 16000 of 32767. Scaled to
-	 * our full deflection that is 16000 * 128 / 32767 = 62.5, so 62. The
-	 * verdict on the number is "measure": only the play test says whether
-	 * half a stick is where walking should start. */
-	MODERN_WALK_BELOW = 62,
+	/* Row 5, MEASURE - ANSWERED BY THE FIRST PLAY TEST (2026-09-17). The RULE
+	 * was TROne's and came from play - under half deflection Lara walks -
+	 * and the number was theirs too: 16000 of 32767, scaled to our full
+	 * deflection as 16000 * 128 / 32767 = 62.5, so 62, which is what this
+	 * constant shipped with before this round.
+	 * THE LOG (MODIFICATIONS.md, round 161a-fix) measured why a magnitude
+	 * threshold cannot answer "is the walk key down" at all from a real
+	 * stick: of 32 pushes from rest the FIRST tick read 20-60 of 128 in 19 of
+	 * them - the stick is still travelling, not yet at the speed the player
+	 * asked for - and the SECOND read 100 or more in 25 of them, so a single
+	 * low tick in between latched the automaton into AS_WALK for several
+	 * ticks while every tick around it said run: 24 one-tick and 2 two-tick
+	 * walk episodes, seen by the player as "Lara sneaks on every direction
+	 * change". THE USER'S DECISION: the pad already has its own walk key (R1
+	 * in our layout), so the STICK must never be able to set IN_WALK at all -
+	 * not a smaller number, zero. The constant and cfg->walk_below both stay,
+	 * because TROne's capability is still real and still testable with an
+	 * explicit cfg (ModernTest's walk_threshold() does exactly that); it is
+	 * simply not what ships. */
+	MODERN_WALK_BELOW = 0,
 
 	/* Row 6. TROne's anti-chatter window: inside 2.8 degrees of her course
 	 * Lara counts as aligned and no turn bit goes out. */

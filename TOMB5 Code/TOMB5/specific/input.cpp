@@ -614,6 +614,21 @@ long S_UpdateInput()
 		linput = ModernUpdateInput(linput, joy_x, joy_y, mAction, mJump);
 	}
 
+	/* THE WALK KEY SURVIVES THE SEAM (round 161a-fix, #161 item 1 - verified
+	 * by reading this function rather than assumed). MODERN_MOVE_MASK
+	 * includes IN_WALK, so the rewrite inside ModernUpdateInput clears
+	 * whatever the stick wrote for it - but the dedicated walk key, Key(6)
+	 * and the pad's jLayout[2] below, is read further down this same
+	 * function, AFTER the block above has already run. So it only ever ORs
+	 * its own bit into what the seam decided; it can never be cleared by it.
+	 * A player holding the walk key therefore gets IN_WALK in Modern exactly
+	 * as in Tank, independent of whatever the stick's own magnitude does or
+	 * does not decide (see MODERN_WALK_BELOW, game\modern_move.h - round
+	 * 161a-fix sets it to 0, so the magnitude alone no longer can). Had the
+	 * order been the other way round - the walk key read BEFORE the seam -
+	 * this would have been a real defect: the seam would wipe the key's own
+	 * bit out from under it on every Modern tick. It is not; this paragraph
+	 * is the record of having checked. */
 	if (Key(4))
 		linput |= IN_DUCK;
 

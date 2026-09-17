@@ -234,8 +234,13 @@ static void bit_values()
 		ModernDefaults(&cfg);
 		ok(cfg.dead == 0, "dead zone starts at nothing (the hardware one is applied)",
 			cfg.dead, 0);
-		ok(cfg.walk_below == 62, "walk below 62 of 128 (TROne 16000 of 32767)",
-			cfg.walk_below, 62);
+		/* Round 161a-fix (#161 item 1): the first play test's log moved this
+		 * off TROne's 62 (16000 of 32767) to 0 - the stick must never be able
+		 * to set IN_WALK, only the pad's own walk key can (MODIFICATIONS.md).
+		 * walk_threshold() below still proves the TROne mechanism works,
+		 * under an explicit cfg that asks for it by name. */
+		ok(cfg.walk_below == 0, "walk below is 0: the stick alone never walks her",
+			cfg.walk_below, 0);
 		ok(cfg.aim_window == 0x0400, "aligned window 2.8 degrees", cfg.aim_window, 0x0400);
 		ok(cfg.aligned_factor == 2, "and twice that once aligned", cfg.aligned_factor, 2);
 		ok(cfg.spin_enter == 0x5000, "spin above 112.5 degrees", cfg.spin_enter, 0x5000);
@@ -597,9 +602,14 @@ static void walk_threshold()
 	printf("walk below half a stick\n");
 
 	/* TROne: modern.walk_below_threshold. Their cfg.walk_below is set to 16000
-	 * of 32767; ours is 62 of 128, which is the same half deflection - and it
-	 * is the default, so nothing is set here. */
+	 * of 32767; ours is 62 of 128, the same half deflection - CAPABILITY ONLY
+	 * after round 161a-fix (#161 item 1): the shipped default is 0 (checked
+	 * in bit_values()), so this whole block sets walk_below back to 62 by
+	 * hand to prove the mechanism itself still works, exactly as a play test
+	 * could with an explicit cfg. It is simply not what a player gets without
+	 * asking any more. */
 	ModernDefaults(&cfg);
+	cfg.walk_below = 62;		/* explicit: the shipped default is 0 */
 	ModernResetState(&state);
 
 	tick(&cfg, &state, 0, -S(12000), 0, 0, 0, &out);	/* TROne 0/-12000 */
@@ -628,6 +638,46 @@ static void walk_threshold()
 	release(&cfg, &state);
 	tick(&cfg, &state, 128, -128, 0, 0, 0, &out);
 	ok(out.mag == 128, "a full diagonal reads as full deflection, not 181", out.mag, 128);
+
+	/* ROUND 161a-fix (#161 item 1), AT THE SHIPPED DEFAULTS. The play test's
+	 * log measured why a magnitude threshold cannot tell "still travelling"
+	 * from "meant to walk" on a real stick at all (MODIFICATIONS.md: of 32
+	 * pushes from rest, 19 read 20-60 of 128 on their very first tick and 25
+	 * of the same 32 were already >= 100 on the second), so the user's
+	 * decision was that the stick must never set IN_WALK - not a smaller
+	 * number, zero. This sweeps every direction and every magnitude the
+	 * stick can produce and asserts the bit never once appears. */
+	{
+		long bad = 0;
+		long cases = 0;
+		long a, m;
+
+		ModernDefaults(&cfg);		/* walk_below back to the shipped 0 */
+
+		for (a = 0; a < 64; a++)
+		{
+			const double rad = 6.283185307179586 * (double)a / 64.0;
+
+			for (m = 1; m <= 181; m++)
+			{
+				const long sx = roundl2((double)m * sin(rad));
+				const long sy = -roundl2((double)m * cos(rad));
+
+				if (!sx && !sy)
+					continue;
+
+				ModernResetState(&state);
+				tick(&cfg, &state, sx, sy, 0, 0, 0, &out);
+				cases++;
+
+				if (out.bits & MODERN_IN_WALK)
+					bad++;
+			}
+		}
+
+		printf("  %ld stick magnitude/direction pairs at the shipped defaults\n", cases);
+		ok(bad == 0, "at the defaults the stick can never set IN_WALK", bad, 0);
+	}
 }
 
 /* ----------------------------------------------------------- the aiming ---- */
@@ -1447,8 +1497,13 @@ static void direct_turn()
 		out.bits & MODERN_IN_FORWARD, MODERN_IN_FORWARD);
 
 	/* And walking survives the rewrite: the direct turn takes the direction
-	 * bits, never IN_WALK. Half a stick, a half turn of error, running. */
+	 * bits, never IN_WALK. Half a stick, a half turn of error, running.
+	 * EXPLICIT cfg.walk_below (round 161a-fix, #161 item 1): the shipped
+	 * default is 0 now, which would make this tautological - the point here
+	 * is that IN_WALK, WHEN THE CAPABILITY IS ASKED FOR, is not among the
+	 * bits the direct turn clears, not that IN_WALK never appears at all. */
 	ModernResetState(&state);
+	cfg.walk_below = 62;		/* explicit: the shipped default is 0 */
 	sit.jump = 0;
 	sit.anim_state = 1;
 	tick_turn(&cfg, &state, 0, S(12000), 0, 0, &sit, &out, &yaw);
@@ -1861,18 +1916,25 @@ static void sweeps()
 	/* (d) THE D-PAD. specific\dxshell.cpp ORs the D-pad into the very same
 	 * axes as the stick, but at +-20 of 128 - a quarter of the way. Under Tank
 	 * that is only a direction bit and the size does not matter; under Modern
-	 * the size IS the speed, and 20 is under walk_below (62), so a D-pad-only
-	 * push would make Lara WALK. Decision 3 of the brief therefore has step 4
-	 * replace the +-20 with +-MODERN_STICK_FULL before the translation runs.
-	 * Both halves are asserted: that the synthesis gives the same answer as a
-	 * full stick push, and that the raw +-20 does NOT - because the second is
-	 * the whole reason for the first. */
+	 * the size IS the speed, and 20 is under TROne's walk_below (62), so a
+	 * D-pad-only push would make Lara WALK if walk_below were ever that
+	 * capability's own 62 - which round 161a-fix (#161 item 1) took out of
+	 * the shipped default, but not out of the mechanism this proves.
+	 * cfg.walk_below is therefore set explicitly here, the same way
+	 * walk_threshold() does, so this sub-test keeps proving what it always
+	 * proved rather than turning into a tautology at the new default (0, from
+	 * the ModernDefaults() call at the top of this function). Decision 3 of
+	 * the brief has step 4 replace the +-20 with +-MODERN_STICK_FULL before
+	 * the translation runs; both halves are asserted: that the synthesis
+	 * gives the same answer as a full stick push, and that the raw +-20 does
+	 * NOT - because the second is the whole reason for the first. */
 	{
 		static const long dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 		static const long dz[8] = { 1, 1, 0, -1, -1, -1, 0, 1 };
 		long same = 0;
 		long walked = 0;
 
+		cfg.walk_below = 62;	/* explicit: the shipped default is 0 */
 		sit.anim_state = 2;
 
 		for (i = 0; i < 8; i++)

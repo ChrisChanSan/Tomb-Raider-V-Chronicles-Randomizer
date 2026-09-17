@@ -1473,8 +1473,14 @@ static void direct_turn()
 	 * the course. Level B: she stands on -0x4000 with the chase camera behind
 	 * her, and the player never let go of the stick. The camera is then held
 	 * still on purpose - the course is HELD, so nothing the camera does can
-	 * re-seat it, which is exactly the finding. */
+	 * re-seat it, which is exactly the finding.
+	 *
+	 * The rate is pinned at 3277 here, the way the ten-ticks-for-a-half-turn
+	 * check above pins it: two of these numbers are a count of ticks, and the
+	 * play test is expected to change MODERN_TURN_RATE, which must not make
+	 * this block fail for a reason that has nothing to do with the boundary. */
 	ModernDefaults(&cfg);
+	cfg.turn_rate = 3277;
 	ModernResetState(&state);
 	sit.anim_state = 1;					/* AS_RUN - she was running in level A */
 	sit.jump = 0;
@@ -1502,8 +1508,7 @@ static void direct_turn()
 			out.target, 0x2000);
 		ok(out.delta == 24576, "...135 degrees of error out of nowhere", out.delta, 24576);
 		ok(out.bits == 0, "...she does not run at all", out.bits, 0);
-		ok(yaw == MODERN_TURN_RATE, "...and turns away from the camera at the full rate",
-			yaw, MODERN_TURN_RATE);
+		ok(yaw == 3277, "...and turns away from the camera at the full rate", yaw, 3277);
 
 		/* Her heading follows the yaw the direct turn really returned, the way
 		 * game\modern_state.cpp writes it - not the rate times the tick

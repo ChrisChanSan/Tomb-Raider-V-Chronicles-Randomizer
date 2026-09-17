@@ -14611,8 +14611,11 @@ is short. A stick under `walk_below` (62 of 128) pushed more than
 turn bit with no `IN_FORWARD`, and `specific/input.cpp`'s own older rule -
 `IN_WALK` plus a turn and no forward - rewrites that into `IN_LSTEP`/
 `IN_RSTEP`. The direct turn would take the turn bits away before that could
-happen, but it is only allowed in nine states; in the other 35 the RUN
-branch's own bits stand. So crouched, crawling, wading, on all fours or
+happen, but it is only allowed in nine states; in the other 35 whatever
+branch answered keeps its bits, and for 34 of them that branch is RUN (the
+thirty-fifth is `AS_COMPRESS`, which the directional jump answers instead -
+which is how 44 modern states, nine of them turned directly, come to 34).
+So crouched, crawling, wading, on all fours or
 backing up (71, 81, 105/106, 65, 80, 84/85, 16 among them) a gentle stick
 cannot turn her at all - the same shape of "the control stopped answering"
 that `stand_spin` and the blocked counter exist to prevent. With the direct

@@ -34,6 +34,7 @@
 #include "fmv.h"
 #include "../game/newinv2.h"
 #include "../game/control.h"
+#include "../game/modern_state.h"	// #161: ModernResetControls, called from the Controls page's Control type row
 #include "3dmath.h"
 #include "../tomb5/troyestuff.h"
 #include "../tomb5/tomb5.h"
@@ -358,20 +359,60 @@ void DoOptions()
 			keyboard_buttons = KeyboardButtons;
 
 		if (reset_row)
-			nMask = 1;	// only the Method row itself can be selected
+			nMask = 4;	// #161: was 1 - the Method row moved to bit 8 (three new rows now sit above it, see below), so the "only the Method row itself can be selected" bound has to move with it, or the clamp two screens down would yank sel back to bit 1 the moment reset_row is entered
 		else if (ControlMethod == 1)
-			nMask = 16;	// 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
+			nMask = 19;	// #161: was 16, +3 for Control type/Combat mode/Action drawn above the Method row - 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
 		else
-			nMask = 17;
+			nMask = 20;	// #161: was 17, same +3
 
-		PrintString(phd_centerx >> 2, font_height, sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Method), 0);
+		// #161 (decision 1): the whole page now shares one row height -
+		// the Method row's own (default_font_height) was too tall to fit
+		// three more rows in the 640x480 budget the key-binding list below
+		// was already close to. Both fonts scale the same way
+		// (GetFixedScale), so the fit only has to be checked once, at the
+		// tightest resolution: 640x480 gives GetFixedScale(unit) = unit
+		// unchanged, and phd_winymax is 479 there. The keyboard path's
+		// last row (20, four rows above the list plus 16 keys) was
+		// 17 * 27 = 459 before this step; at 23 it is 20 * 23 = 460 - one
+		// pixel more, still 19 clear of 479. At 1920x1080 GetFixedScale
+		// scales both by ~2.25x (MulDiv rounding): 1037 before this step,
+		// 1040 now, against 1079 - even more headroom than at 640x480,
+		// because the tighter of the two axis scales is height's, and
+		// 1080/480 (2.25x) already exceeds 640x480's own 1x. Moved up here
+		// (from just after the Method row) so it covers the Method row and
+		// the three new rows too, not only the key-binding list.
+		font_height = GetFixedScale(23);	// was 27
 
-		font_height = GetFixedScale(27);
+		// The three Controls-page rows plus the Method row, one shared y/i
+		// pair - the same shape PageDisplay uses (tomb5/troyestuff.cpp).
+		// Method used to be its own un-indexed row at bit 1; it is the
+		// fourth of this group now; bit 1/2/4 go to the three rows above
+		// it. Combat mode and Action are drawn and saved here but read by
+		// nobody yet: workflow B gives them an effect (combat_hold into
+		// ModernWeaponBits, game/modern_move.cpp; action_split into the
+		// Separate-mode IN_ACTION2 split, design section 5.8).
+		y = 1;
+		i = 0;
+
+		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Control type"), 0);
+		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Combat mode"), 0);
+		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Action"), 0);
+		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Control_Method), 0);
+
+		y = 1;
+		i = 0;
+
+		PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, sel & (1 << i++) ? 1 : 6, (char*)CustomText(tomb5.control_modern ? "Modern" : "Tank"), 0);
+		PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, sel & (1 << i++) ? 1 : 6, (char*)CustomText(tomb5.combat_hold ? "Hold" : "Toggle"), 0);
+		PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, sel & (1 << i++) ? 1 : 6, (char*)CustomText(tomb5.action_split ? "Separate" : "One key"), 0);
+		// The Method row's own value (Reset/Keyboard/PS5/Xbox/Joystick) is
+		// the more involved switch already below (reset_row/ControlMethod)
+		// - it is printed there, at 4 * font_height to match this row.
 
 		if (!ControlMethod)
 		{
-			y = 2;
-			i = 1;
+			y = 5;	// #161: was 2, +3 for the three rows now above (Method itself moved into that group too - see the nMask comment above)
+			i = 4;	// #161: was 1, same +3 - bits 1/2/4/8 belong to Control type/Combat mode/Action/Method now
 
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x18", 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x1A", 0);
@@ -390,8 +431,8 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Step_Left), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Step_Right), 0);
 
-			y = 2;
-			i = 1;
+			y = 5;	// #161: was 2, +3 - see the label loop above
+			i = 4;	// #161: was 1, +3
 
 			for (lp = 0; lp < 16; lp++)
 			{
@@ -402,8 +443,8 @@ void DoOptions()
 
 		if (ControlMethod == 1)
 		{
-			y = 3;
-			i = 1;
+			y = 6;	// #161: was 3, +3 for the three rows now above (Method itself moved into that group too - see the nMask comment above)
+			i = 4;	// #161: was 1, same +3
 
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Duck), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Dash), 0);
@@ -428,8 +469,8 @@ void DoOptions()
 			// is specifically for joystick bindings, so a keyboard hint isn't
 			// actually useful here.
 
-			y = 3;
-			i = 1;
+			y = 6;	// #161: was 3, +3 - see the label loop above
+			i = 4;	// #161: was 1, +3
 
 			for (lp = 0; lp < 15; lp++)
 			{
@@ -443,12 +484,15 @@ void DoOptions()
 			}
 		}
 
-		font_height = default_font_height;
+		// #161: font_height stays at the page-wide size set above through
+		// this value text, so it lines up with the Method row (now row 4,
+		// printed above) - only restored to default_font_height once this
+		// whole page is done with it, below.
 
 		if (reset_row)
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Reset), 0);
+			PrintString(phd_centerx + (phd_centerx >> 2), 4 * font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Reset), 0);
 		else if (!ControlMethod)
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Keyboard), 0);
+			PrintString(phd_centerx + (phd_centerx >> 2), 4 * font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Keyboard), 0);
 		else if (ControlMethod == 1)
 		{
 			// The joystick row carries the chosen page's name. The page
@@ -468,8 +512,10 @@ void DoOptions()
 				break;
 			}
 
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, text, 0);
+			PrintString(phd_centerx + (phd_centerx >> 2), 4 * font_height, sel2 & 1 ? 1 : 6, text, 0);
 		}
+
+		font_height = default_font_height;	// #161: moved here (from just before the value text above) now that the page-wide size covers the Method row too
 
 		if (!reset_row && !waiting_for_key)
 		{
@@ -595,7 +641,7 @@ void DoOptions()
 			dbinput = 0;
 		}
 
-		if (dbinput & IN_SELECT && sel > 1 && !reset_row)
+		if (dbinput & IN_SELECT && sel > 8 && !reset_row)	// #161: was sel > 1 - bits 1/2/4/8 are Control type/Combat mode/Action/Method now, none of which capture a key
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			sel2 = sel;
@@ -610,7 +656,7 @@ void DoOptions()
 			memset(keymap, 0, sizeof(keymap));
 		}
 
-		if (dbinput & IN_SELECT && (sel & 1) && reset_row)
+		if (dbinput & IN_SELECT && (sel & 8) && reset_row)	// #161: was sel & 1 - Method is bit 8 now
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, 2);
 			memcpy(layout[1], layout, 72);
@@ -621,7 +667,52 @@ void DoOptions()
 			reset_row = 0;
 		}
 
+		// #161: the three Controls-page rows' own LEFT/RIGHT handling -
+		// plain two-value toggles, the same shape as PageDisplay's rows
+		// (tomb5/troyestuff.cpp). None of the three can be reached while
+		// reset_row or waiting_for_key is set: reset_row pins sel to bit 8
+		// (Method, see the nMask comment above) and waiting_for_key can
+		// only be entered from sel > 8 (see the IN_SELECT guard above), so
+		// neither needs to be checked again here - the same reasoning the
+		// existing Method-row block below already relies on for bit 1.
 		if (sel & 1)
+		{
+			// Control type: Tank / Modern.
+			if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+			{
+				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+				tomb5.control_modern = !tomb5.control_modern;
+				ModernResetControls();	// a stale held course/spin/blocked-counter must not survive a scheme change (game/modern_state.h)
+				save_new_tomb5_settings();
+			}
+		}
+
+		if (sel & 2)
+		{
+			// Combat mode: Toggle / Hold. Drawn and saved only - see the
+			// comment where this row is printed above; nothing reads
+			// tomb5.combat_hold yet.
+			if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+			{
+				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+				tomb5.combat_hold = !tomb5.combat_hold;
+				save_new_tomb5_settings();
+			}
+		}
+
+		if (sel & 4)
+		{
+			// Action: One key / Separate. Same as Combat mode above -
+			// drawn and saved, no reader yet.
+			if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+			{
+				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+				tomb5.action_split = !tomb5.action_split;
+				save_new_tomb5_settings();
+			}
+		}
+
+		if (sel & 8)	// #161: was sel & 1 - Method is the fourth row of the group now (Control type/Combat mode/Action are 1/2/4)
 		{
 			// Five visible positions: keyboard, PS5 controller, Xbox
 			// controller, joystick (generic), reset. Internally
@@ -765,7 +856,7 @@ void DoOptions()
 		f= 3 * font_height;
 		nMask = 8;	// + Language row + Credits
 		PrintString(phd_centerx, 3 * font_height, 6, SCRIPT_TEXT(TXT_Options), FF_CENTER);
-		PrintString(phd_centerx, f + font_height + (font_height >> 1), sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Configuration), FF_CENTER);
+		PrintString(phd_centerx, f + font_height + (font_height >> 1), sel & 1 ? 1 : 2, (char*)CustomText("Controls"), FF_CENTER);	// #161: was SCRIPT_TEXT(TXT_Control_Configuration) (decision 1) - the three new rows live one page in, at menu == 1
 		PrintString(phd_centerx >> 2, f + 3 * font_height, sel & 2 ? 1 : 2, SCRIPT_TEXT(TXT_Music_Volume), 0);
 		PrintString(phd_centerx >> 2, f + 4 * font_height, sel & 4 ? 1 : 2, SCRIPT_TEXT(TXT_SFX_Volume), 0);
 		PrintString(phd_centerx >> 2, f + 5 * font_height, sel & 8 ? 1 : 2, SCRIPT_TEXT(TXT_Sound_Quality), 0);

@@ -1291,6 +1291,22 @@ const char* CustomText(const char* engl)
 		{ "Gallery",         "Galerie",         "Galerie",        "Galleria",           "Galeria" },
 		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opzioni tomb5",      "Opciones tomb5" },
 		{ "Credits",         "Credits",         "Credits",        "Crediti",            "Creditos" },
+		// #161, round 161a step 7 - the Controls page (decision 1). Only the
+		// German column carries a real translation (the brief's own words);
+		// French/Italian/Spanish repeat the English literal on purpose -
+		// the function only returns table[i][column] once engl has matched
+		// a row at all, so an empty string here would print blank, not
+		// fall back to English the way an absent row does.
+		{ "Controls",        "Controls",        "Steuerung",      "Controls",           "Controls" },
+		{ "Control type",    "Control type",    "Steuerungsart",  "Control type",       "Control type" },
+		{ "Tank",            "Tank",            "Panzer",         "Tank",               "Tank" },
+		{ "Modern",          "Modern",          "Modern",         "Modern",             "Modern" },
+		{ "Combat mode",     "Combat mode",     "Kampfmodus",     "Combat mode",        "Combat mode" },
+		{ "Toggle",          "Toggle",          "Umschalten",     "Toggle",             "Toggle" },
+		{ "Hold",            "Hold",            "Halten",         "Hold",               "Hold" },
+		{ "Action",          "Action",          "Aktion",         "Action",             "Action" },
+		{ "One key",         "One key",         "Eine Taste",     "One key",            "One key" },
+		{ "Separate",        "Separate",        "Getrennt",       "Separate",           "Separate" },
 	};
 
 	long column;

@@ -17,6 +17,7 @@
 #include "camera.h"			// camera.pos / camera.target - the heading of the tick
 #include "lara.h"			// lara, lara_item
 #include "../specific/3dmath.h"		// phd_atan - the engine's own angle
+#include "../specific/function_stubs.h"	// Log, gLogEnabled - MODERNLOG (step 5)
 
 /* game\modern_move.h mirrors input_buttons by value, because it must compile
  * without the Direct3D type set behind global\types.h. This is the first file
@@ -95,11 +96,28 @@ static void ModernDPadToStick(long* x, long* y)
 		*y = (*y > 0) ? modern_cfg.stick_full : -modern_cfg.stick_full;
 }
 
+/* THE MODE NAME FOR MODERNLOG's `mode=` (step 5). Nothing else in the tree
+ * ever turns a modern_mode into text - the tests compare the number (design
+ * section 1.9) - so the mapping lives here, beside the one place that
+ * prints it. */
+static const char* ModernModeName(long mode)
+{
+	switch (mode)
+	{
+	case MODERN_MODE_RUN:	return "run";
+	case MODERN_MODE_AIM:	return "aim";
+	case MODERN_MODE_JUMP:	return "jump";
+	case MODERN_MODE_BACK:	return "back";
+	default:				return "off";	// MODERN_MODE_OFF, or a number nothing named yet
+	}
+}
+
 long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump)
 {
 	MODERN_SITUATION sit;
 	MODERN_RESULT out;
 	short camera_yaw;
+	short lara_yaw;		// her heading before the direct turn can change it - MODERNLOG's `lara=`
 	long cam_dx, cam_dz;
 	long dx, dz;
 	long moved;
@@ -135,6 +153,24 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	if (!modern_seen || (ushort)(GlobalCounter - modern_tick) != 1)
 	{
 		ModernResetControls();
+
+		/* MODERNLOG INIT (step 5), once per break in the chain. A level start
+		 * is the common, named case, but the guard above is "the chain
+		 * broke", which the inventory, first person and the look key all
+		 * trip too (see ModernResetControls' own comment) - a config worth
+		 * naming once rather than folding into every tick line below.
+		 * `scheme=modern` is written out rather than left implied: this line
+		 * only ever runs from inside the seam's tomb5.control_modern guard,
+		 * so it could only ever say "modern", but a log read without the
+		 * source open should not have to know that. `rate` and `direct` are
+		 * the two numbers the user's play test picks between (decision 5) -
+		 * control_modern is the gate on the whole scheme, MODERN_DIRECT_TURN
+		 * the second gate on this one mechanism inside it, and direct is the
+		 * one of the two that can change without a rebuild. */
+		if (gLogEnabled)
+			Log("MODERNLOG init scheme=modern rate=%d direct=%d",
+				modern_cfg.turn_rate, modern_cfg.direct_turn);
+
 		modern_tick = GlobalCounter;
 		modern_seen = 1;
 		return bits;
@@ -211,8 +247,10 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	sit.blocked = (modern_cfg.block_frames > 0 &&
 		modern_state.blocked_count >= modern_cfg.block_frames) ? 1 : 0;
 
+	lara_yaw = lara_item->pos.y_rot;
+
 	ModernTranslate(&modern_cfg, &modern_state, stick_x, stick_y, camera_yaw,
-		lara_item->pos.y_rot, &sit, &out);
+		lara_yaw, &sit, &out);
 
 	/* THE DIRECT TURN (the user's decision 5). The decision is arithmetic and
 	 * lives with the rest of it; this is the one line of engine it needs.
@@ -249,6 +287,36 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * the loop. Set MODERN_DIRECT_TURN to 0 and the rule wakes up again. */
 	modern_want_move = (out.active && (out.bits & MODERN_IN_FORWARD) != 0 &&
 		(out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT)) != 0) ? 1 : 0;
+
+	/* MODERNLOG (step 5, design section 7 step 5). One line per real tick,
+	 * whether or not the translation ended up responsible for it - `mode=off`
+	 * is itself the answer to "why did nothing happen here" and earns a line
+	 * exactly as much as a running one does, which is also why this sits
+	 * after every early return above rather than being reachable from one of
+	 * them: 30 lines a second at every fps_mode, never more, never fewer.
+	 *
+	 * `src` says which half produced the bits this tick (design section 5.9):
+	 * "pad" is the stick driving `out`, "keys" is `out` stepping aside and
+	 * the base assembly's bits - the classic stick scaling, the keyboard, or
+	 * Steam Input's own synthetic arrow keys - standing untouched, so a
+	 * Steam report is one grep away.
+	 *
+	 * `bits` is `out.bits`, the translation's OWN contribution (0 whenever
+	 * `mode=off`) - not the merged word this function returns. A classic
+	 * tick or a dead stick can still show movement in the game from the
+	 * untouched base bits, and that is finding B (section 1.3), not a
+	 * contradiction of this line. `lara` reads the local captured above the
+	 * direct turn, because by the time this line runs the direct turn may
+	 * already have written a new heading. */
+	if (gLogEnabled)
+		Log("MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d "
+			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
+			"yawd=%d bits=%08lX",
+			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
+			camera_yaw, out.reference, modern_state.course, lara_yaw,
+			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
+			modern_state.aligned, modern_state.blocked_count, out.blocked,
+			yaw, out.bits);
 
 	return bits;
 }

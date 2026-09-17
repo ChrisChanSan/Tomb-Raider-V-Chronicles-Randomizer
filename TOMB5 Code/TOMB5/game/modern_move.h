@@ -172,13 +172,27 @@ enum modern_constants
 
 	/* Rows 11 and 12, the two numbers that make the held course work. Under
 	 * 2.1 degrees of stick movement nothing happens at all - that is the
-	 * noise floor of a real thumb. Between that and 22.5 degrees the held
-	 * course turns by exactly as much as the stick did, and the camera is not
+	 * noise floor of a real thumb. Between that and recenter the held course
+	 * turns by exactly as much as the stick did, and the camera is not
 	 * consulted, which is what stops a camera cut from bending her path. At
-	 * 22.5 degrees and more the player meant a new direction, so the course
-	 * is seated on the camera of THIS tick again. */
+	 * recenter and more the player meant a new direction, so the course is
+	 * seated on the camera of THIS tick again.
+	 *
+	 * RECENTER WAS 0x1000 (22.5 degrees, TROne's own number) - ANSWERED BY
+	 * THE FIRST PLAY TEST (2026-09-17). The log measured 325 re-seats while
+	 * the stick was held, and in the great majority of them the stick's own
+	 * angle had moved 20-40 degrees since the previous tick alone - above
+	 * 22.5 every time - because the user steers circles by turning the stick
+	 * through a full rotation in 0.3-0.6 seconds. Every one of those ticks
+	 * re-seated the course on whatever the chase camera had swung to in the
+	 * meantime, a course jump of 0-40 degrees and sometimes over 100, seen by
+	 * the player as "circles break off at a certain angle". THE USER'S
+	 * DECISION (MODIFICATIONS.md, round 161a-fix): widen the window rather
+	 * than drop the rule - a deliberate flick to a new direction is still
+	 * >= 90 degrees in one tick in the same log, so 45 degrees leaves a flick
+	 * easily caught while a fast circling rotation no longer trips it. */
 	MODERN_STEER_STEP = 0x0180,
-	MODERN_RECENTER = 0x1000,
+	MODERN_RECENTER = 0x2000,
 
 	/* Row 13. The quadrant boundary: within 45 degrees of her nose the
 	 * direction is "forward", within 45 of her back it is "back", and the

@@ -247,7 +247,12 @@ static void bit_values()
 		ok(cfg.spin_exit == 0x2800, "run again below 56.25", cfg.spin_exit, 0x2800);
 		ok(cfg.stand_spin == 0x3000, "standing, spin above 67.5", cfg.stand_spin, 0x3000);
 		ok(cfg.steer_step == 0x0180, "the thumb's noise floor", cfg.steer_step, 0x0180);
-		ok(cfg.recenter == 0x1000, "re-seat at 22.5 degrees of stick", cfg.recenter, 0x1000);
+		/* Round 161a-fix (#161 item 2): moved off TROne's 0x1000 (22.5
+		 * degrees) to 0x2000 (45) - the log's 325 re-seats were mostly a fast
+		 * rotation, not a new direction (MODIFICATIONS.md). held_course()
+		 * pins 0x1000 explicitly for the TROne-derived checks that came with
+		 * that number, and adds its own two at the new default. */
+		ok(cfg.recenter == 0x2000, "re-seat at 45 degrees of stick", cfg.recenter, 0x2000);
 		ok(cfg.aim_sector == 0x2000, "the quadrant boundary", cfg.aim_sector, 0x2000);
 		ok(cfg.block_frames == 6, "six ticks make a block", cfg.block_frames, 6);
 		ok(cfg.block_eps == 4, "four world units still count as not moving",
@@ -380,6 +385,14 @@ static void held_course()
 	 * circles. TROne measured 600 frames of exactly that. The reference is
 	 * therefore latched at the push and the error has to SHRINK. */
 	ModernDefaults(&cfg);
+	/* Round 161a-fix (#161 item 2) moved the shipped default off TROne's
+	 * 0x1000 to 0x2000 (bit_values() checks that number, and the new sweeps
+	 * at the end of this function check the new one). Every check in THIS
+	 * function is otherwise a TROne-ported statement about the held course
+	 * itself, unaffected by which number recenter has - but it is pinned
+	 * explicitly anyway so a future default change cannot silently make it
+	 * mean less than TROne measured. */
+	cfg.recenter = 0x1000;
 	ModernResetState(&state);
 
 	tick(&cfg, &state, S(30000), 0, 0, 0, 0, &out);
@@ -484,6 +497,72 @@ static void held_course()
 		ok(moved == 0, "19 ticks of a swinging chase camera move the course not at all",
 			moved, 0);
 	}
+
+	/* ROUND 161a-fix (#161 item 2), AT THE SHIPPED DEFAULTS: the measured fix
+	 * itself. The play test found 325 re-seats while the stick was held, the
+	 * great majority of them a fast ROTATION - the stick's own angle moving
+	 * 20-40 degrees tick to tick, a full circle run in 0.3-0.6 seconds -
+	 * rather than a new direction; the old recenter (0x1000, 22.5 degrees)
+	 * could not tell the two apart, so every one of those ticks re-seated the
+	 * course on whatever the chase camera had swung to meanwhile, seen by the
+	 * player as "circles break off at a certain angle". This replays that
+	 * measurement at the new default (0x2000, 45 degrees): twelve ticks, the
+	 * stick rotating a full circle at about 30 degrees a tick - comfortably
+	 * under 45, the way the log says the user actually plays - while the
+	 * chase camera swings about 25 degrees a tick behind her, because a chase
+	 * camera is not fixed, it follows. The expected course at every tick is
+	 * computed with ModernAngle itself, the same function the translation
+	 * uses, so this is not a second, independent guess at the arithmetic - it
+	 * is the fix's own two promises: the reference never moves, and the
+	 * course only ever advances by the stick's OWN rotation, never the
+	 * camera's. */
+	{
+		short cam = 0;
+		short prev_off;
+		int t;
+
+		ModernDefaults(&cfg);
+		ModernResetState(&state);
+		tick(&cfg, &state, 0, -127, cam, 0, 0, &out);	/* seat straight ahead */
+		prev_off = ModernAngle(0, 127);
+
+		for (t = 1; t <= 12; t++)
+		{
+			const double rad = 6.283185307179586 * (30.0 * (double)t) / 360.0;
+			const long sx = roundl2(127.0 * sin(rad));
+			const long sy = -roundl2(127.0 * cos(rad));
+			const short offset = ModernAngle(sx, -sy);
+			const short want_course = ModernWrap((long)state.course +
+				ModernWrap((long)offset - prev_off));
+
+			cam = ModernWrap((long)cam - roundl2(65536.0 * 25.0 / 360.0));
+
+			tick(&cfg, &state, sx, sy, cam, 0, 0, &out);
+
+			ok(out.reference == 0, "fine steering while circling: the reference never moves",
+				out.reference, 0);
+			ok(state.course == want_course,
+				"...the course advances by exactly the stick's own rotation",
+				state.course, want_course);
+
+			prev_off = offset;
+		}
+	}
+
+	/* And a genuine flick still re-seats: 45 degrees is a wider window, not a
+	 * switched-off one. The play test's own log has these too (course jumps
+	 * of 100+ degrees are still in it after the fix, at the same 325
+	 * re-seats counted above), so this is not a new claim, only the new
+	 * threshold checked against it. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	tick(&cfg, &state, 0, -127, 0, 0, 0, &out);				/* seated straight ahead */
+	tick(&cfg, &state, 127, 0, (short)0x6000, 0, 0, &out);		/* a 90-degree flick */
+	ok(out.reference == 0x6000, "a 90-degree flick still re-seats on the new camera",
+		out.reference, 0x6000);
+	ok(out.target == ModernWrap((long)0x6000 + 0x4000),
+		"...and the course is seated fresh, not fine-steered",
+		out.target, ModernWrap((long)0x6000 + 0x4000));
 }
 
 /* ------------------------------------------------- turning on the spot ----- */

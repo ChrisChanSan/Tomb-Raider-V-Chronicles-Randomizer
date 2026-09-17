@@ -14769,18 +14769,46 @@ is read, so the key's own `IN_WALK` was never at risk - the order was already
 right, and that finding is now a comment at the seam instead of something
 the next reader has to re-derive.
 
-*Item 2, recenter re-seated the course mid-turn.* 325 re-seats of the held
-course happened while the stick was held, and in the great majority of them
-the stick's own angle had moved 20-40 degrees since the previous tick alone -
-above the old `MODERN_RECENTER` (`0x1000`, TROne's 22.5 degrees) every time -
-because the user steers circles by turning the stick through a full rotation
-in 0.3-0.6 seconds. Every one of those ticks re-seated the course on whatever
-the chase camera had swung to in the meantime: course jumps of 0-40 degrees,
-sometimes over 100, seen as "circles break off at a certain angle". His
-decision: widen the window rather than drop the rule. A deliberate flick to a
-new direction is still >= 90 degrees in one tick in the same log, so
-`MODERN_RECENTER` is now `0x2000` (45 degrees) - wide enough to clear a fast
-circling rotation, still narrow enough to catch a flick well before it.
+*Item 2, recenter re-seated the course mid-turn - answered twice, the second
+answer superseding the first.* 325 re-seats of the held course happened
+while the stick was held, and in the great majority of them the stick's own
+angle had moved 20-40 degrees since the previous tick alone - above the old
+`MODERN_RECENTER` (`0x1000`, TROne's 22.5 degrees) every time - because the
+user steers circles by turning the stick through a full rotation in 0.3-0.6
+seconds. Every one of those ticks re-seated the course on whatever the chase
+camera had swung to in the meantime: course jumps of 0-40 degrees, sometimes
+over 100, seen as "circles break off at a certain angle". The first answer
+widened the window to `0x2000` (45 degrees): a deliberate flick is still
+>= 90 degrees in one tick in the same log, so 45 degrees looked wide enough
+to clear a circling rotation while still catching a flick, and that is what
+round 161a-fix originally shipped.
+
+A SECOND MEASUREMENT OF THE SAME LOG, one play session later, showed the
+wider window does not hold either. Ticks 470-508 (t=53.0s): the stick
+turning slowly from right (125/0) to back-right (85/105) over 39 ticks - 51
+degrees of stick rotation, every single per-tick step small enough to stay
+under EITHER window - while the chase camera swung 120 degrees behind her.
+The course only ever fine-steered: it followed the stick's 51 degrees and
+finished 50 degrees short of what the player meant, because he was reading
+the stick against the camera he could see at that instant, not against a
+course seeded once and nudged since: *"solche Bewegungen schräg nach hinten
+sind bei uns unmöglich."* His Remaster recordings read the stick against the
+CURRENT camera every tick and get away with it, because that camera does not
+swing to stay behind Lara on its own - ours does, and reading the camera on
+every tick regardless of the stick is exactly the feedback TROne measured
+and built the held course to stop (a held stick would spin her forever,
+because turning her swings the camera, which re-reads as a new target).
+
+So the fix is not a wider window, it is no window at all: `MODERN_RECENTER`
+now equals `MODERN_STEER_STEP` (`0x0180`) - any stick change above the
+2.1-degree noise floor re-seats on the camera of that tick, which reads like
+the Remaster for exactly as long as the thumb keeps moving, while a stick
+that is NOT changing still keeps its held course untouched no matter how the
+camera swings under it - the property the FIRST measurement (and TROne's own
+circling finding) demands, and this change does not touch it. The
+fine-steering band this leaves empty is not deleted: `recenter` and
+`steer_step` stay two separate `cfg` fields, so TROne's own three-band number
+(`0x1000`) stays provable under an explicit cfg.
 
 *Item 3, the standing jump flipped sideways even unarmed.* Not from the
 MODERNLOG - from the user's own Remaster recording (`Base Profile
@@ -14803,14 +14831,18 @@ means this can never fire during an armed flip. `jump_dir` stays the
 separate switch it was, in case the unarmed flip is wanted back later.
 
 **THE NEW DEFAULTS.** `MODERN_WALK_BELOW` 62 -> 0. `MODERN_RECENTER`
-`0x1000` -> `0x2000`. The directional jump (rule 4) additionally requires
-`sit->drawn`. `MODERNLOG init` gains `walk_below=%d recenter=%d jump_dir=%d`
-so a later log carries these three numbers instead of asking the reader to
-trust the source tree.
+`0x1000` -> `0x0180` (equal to `MODERN_STEER_STEP` - `0x2000` was tried in
+between, on the first measurement alone, and superseded by the second before
+it reached a second play test). The directional jump (rule 4) additionally
+requires `sit->drawn`. `MODERNLOG init` gains `walk_below=%d recenter=%d
+jump_dir=%d` so a later log carries these three numbers instead of asking
+the reader to trust the source tree.
 
 **WHAT THE NEXT PLAY TEST SHOULD TELL.** Whether circling on the spot no
-longer breaks off at a certain angle (item 2), whether the standing jump out
-of a circle behaves the way the user described - unarmed, a forward hop in
+longer breaks off at a certain angle, and whether a slow diagonal stick
+movement now tracks a swinging camera the way the Remaster does instead of
+running a straight line past it (item 2); whether the standing jump out of a
+circle behaves the way the user described - unarmed, a forward hop in
 whatever direction the circling left her facing; armed, the flip unchanged
 (item 3) - and whether direction changes no longer make her sneak (item 1).
 One more thing from this same log is written down here rather than changed:

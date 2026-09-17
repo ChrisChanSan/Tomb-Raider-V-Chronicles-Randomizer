@@ -170,29 +170,58 @@ enum modern_constants
 	 * which is why this is not optional. 67.5 degrees, half that to leave. */
 	MODERN_STAND_SPIN = 0x3000,
 
-	/* Rows 11 and 12, the two numbers that make the held course work. Under
-	 * 2.1 degrees of stick movement nothing happens at all - that is the
-	 * noise floor of a real thumb. Between that and recenter the held course
-	 * turns by exactly as much as the stick did, and the camera is not
-	 * consulted, which is what stops a camera cut from bending her path. At
-	 * recenter and more the player meant a new direction, so the course is
-	 * seated on the camera of THIS tick again.
+	/* Rows 11 and 12, the two numbers that make the held course work - AND
+	 * ROW 12's OWN STORY, changed twice by two measurements of the same log
+	 * (round 161a-fix, #161 item 2; the first change shipped and is now
+	 * superseded, not amended - see MODIFICATIONS.md). Under steer_step (2.1
+	 * degrees) nothing happens at all - that is the noise floor of a real
+	 * thumb, and it has not moved.
 	 *
-	 * RECENTER WAS 0x1000 (22.5 degrees, TROne's own number) - ANSWERED BY
-	 * THE FIRST PLAY TEST (2026-09-17). The log measured 325 re-seats while
-	 * the stick was held, and in the great majority of them the stick's own
-	 * angle had moved 20-40 degrees since the previous tick alone - above
-	 * 22.5 every time - because the user steers circles by turning the stick
-	 * through a full rotation in 0.3-0.6 seconds. Every one of those ticks
-	 * re-seated the course on whatever the chase camera had swung to in the
-	 * meantime, a course jump of 0-40 degrees and sometimes over 100, seen by
-	 * the player as "circles break off at a certain angle". THE USER'S
-	 * DECISION (MODIFICATIONS.md, round 161a-fix): widen the window rather
-	 * than drop the rule - a deliberate flick to a new direction is still
-	 * >= 90 degrees in one tick in the same log, so 45 degrees leaves a flick
-	 * easily caught while a fast circling rotation no longer trips it. */
+	 * WHAT RECENTER USED TO BE: TROne's own 0x1000 (22.5 degrees). Under it, a
+	 * stick change re-steers the held course by exactly that much and the
+	 * camera is not consulted; at or over it, a new direction was meant and
+	 * the course re-seats on the camera of THIS tick. The first play test's
+	 * log (2026-09-17) measured this window catching ordinary circling - the
+	 * user turns the stick through a full rotation in 0.3-0.6 seconds, 20-40
+	 * degrees a tick, so nearly every tick of a circle re-seated on a camera
+	 * that had meanwhile swung behind her, "circles break off at a certain
+	 * angle" - and the first answer tried was to widen the window to 0x2000
+	 * (45 degrees).
+	 *
+	 * A SECOND MEASUREMENT OF THE SAME LOG, one play session later, showed
+	 * why widening the window is not the answer either: ticks 470-508
+	 * (t=53.0s), the stick turning slowly from right (125/0) to back-right
+	 * (85/105) over 39 ticks - 51 degrees of stick rotation, every single
+	 * per-tick step small enough to stay under EITHER window - while the
+	 * chase camera swung 120 degrees behind her. The course followed only the
+	 * STICK's 51 degrees (fine steering never re-seats, no matter how wide
+	 * the window catching it is), ending up 50 degrees short of where the
+	 * player meant it, because he was reading the stick against the camera he
+	 * could see at that instant, not against a course seeded once and merely
+	 * nudged since: "solche Bewegungen schräg nach hinten sind bei uns
+	 * unmöglich."
+	 *
+	 * THE REMASTER READS THE STICK AGAINST THE CURRENT CAMERA EVERY TICK, AND
+	 * GETS AWAY WITH IT, because its camera does not swing to stay behind Lara
+	 * on its own. Ours does - and reading the camera on every tick regardless
+	 * of the stick is exactly the feedback TROne measured and built the held
+	 * course to stop (section 1.2): a HELD stick would spin her forever,
+	 * because turning her swings the camera, which re-reads as a new target,
+	 * which turns her further.
+	 *
+	 * THE COMPROMISE, AND WHAT SHIPS NOW: recenter equals steer_step. Any
+	 * stick change at all above the noise floor re-seats on the camera of
+	 * that tick - which reads like the Remaster for exactly as long as the
+	 * thumb is actually moving, the case the second measurement is about -
+	 * and a stick that is NOT changing keeps its held course untouched no
+	 * matter how the camera swings under it, the one property the first
+	 * measurement (and TROne's own circling finding) demands and that this
+	 * change does not touch. The fine-steering band this leaves empty is not
+	 * deleted: recenter and steer_step stay two separate cfg fields, so
+	 * TROne's own three-band number (0x1000) stays provable under an explicit
+	 * cfg (ModernTest's held_course()). */
 	MODERN_STEER_STEP = 0x0180,
-	MODERN_RECENTER = 0x2000,
+	MODERN_RECENTER = MODERN_STEER_STEP,
 
 	/* Row 13. The quadrant boundary: within 45 degrees of her nose the
 	 * direction is "forward", within 45 of her back it is "back", and the

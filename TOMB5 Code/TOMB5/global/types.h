@@ -2712,5 +2712,19 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 								//give up their largest mip level - never a whole page.
 								//The FORMAT is a string and therefore not in here - see
 								//tomb5_hd_texture_format.
+
+	/* THE MODERN CONTROL (#161). Off = Tank, the scheme this engine has
+	 * always had, and the default: with it off the translation in
+	 * game\modern_move.cpp is not called at all and the input word is
+	 * assembled exactly as it was. On, the left stick's direction is read
+	 * against the camera and becomes the same four direction bits.
+	 *
+	 * Zero before anything reads it whatever the registry does, because
+	 * `tomb5_options tomb5` is a global and a global starts zeroed - which is
+	 * what keeps the default Tank even on a machine with no key yet. Round
+	 * 161a step 4 added the field because the seam needs it; step 6 adds the
+	 * registry name beside it, and the two rows that go with it on the
+	 * Controls page (combat mode, action) come with that step. */
+	bool control_modern;
 };
 #pragma pack(pop)

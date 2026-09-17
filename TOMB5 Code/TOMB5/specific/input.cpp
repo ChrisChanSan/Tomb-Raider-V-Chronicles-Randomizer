@@ -26,6 +26,8 @@
 #include "../game/savegame.h"
 #include "../game/gameflow.h"
 #include "../game/newinv2.h"
+#include "../game/deltapak.h"		// GLOBAL_playing_cutseq - the modern seam's guard
+#include "../game/modern_state.h"	// the modern control's one tick (#161)
 #include "../tomb5/tomb5.h"
 
 const char* KeyboardButtons[272] =
@@ -566,6 +568,51 @@ long S_UpdateInput()
 
 	if (Key(3))
 		linput |= IN_RIGHT;
+
+	/* THE MODERN CONTROL'S SEAM (#161, round 161a, design section 5.1).
+	 *
+	 * Here and nowhere else. Above, the stick and the four direction keys
+	 * have written their bits; below, the key ROLES are read. So the whole of
+	 * the modern scheme is "take those four bits away and put four of my own
+	 * in", and when it decides it is not responsible - the stick at rest, a
+	 * state where a direction bit does not mean a direction - the bits above
+	 * simply stand and the pad behaves exactly as it does today. That is the
+	 * reason this scheme needs no second input path anywhere in the tree.
+	 *
+	 * THE GUARD, term by term. tomb5.control_modern is first because it is
+	 * the one that matters: at the default (Tank, 0) nothing below is
+	 * reached, nothing new is called, and the engine is what it was.
+	 * ControlMethod == 1 because the stick is only an input at all when the
+	 * player has chosen the pad - otherwise a controller resting on the desk
+	 * would take the keyboard's direction keys away from him. First person is
+	 * skipped because there the camera IS Lara's head and a camera-relative
+	 * heading means nothing; spotcams, cutscenes and bDisableLaraControl
+	 * because she is not the player's to steer then (the last one is also a
+	 * pickup, a switch and a lift, which the other two do not cover); the
+	 * inventory and the title because there the direction bits steer a menu.
+	 *
+	 * AND THE LOOK KEY (the user's decision 4): while it is held the
+	 * translation is bypassed altogether, so the stick turns her finely on
+	 * the spot as it does in Tank, for the movements where she has to be
+	 * placed exactly. `input` is the word of the PREVIOUS tick - IN_LOOK is
+	 * read further down this same function - so the bypass starts a
+	 * thirtieth of a second after the key and ends the same way, which is
+	 * under the frame a player can see. With a weapon ready the look key is
+	 * swallowed for six ticks further down (it becomes IN_TARGET), so there
+	 * the bypass begins when the hold becomes a real look. */
+	if (tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() && !bUseSpotCam &&
+		!GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item && !InventoryActive &&
+		gfLevelId != LVL5_TITLE && !(input & IN_LOOK))
+	{
+		// The two key roles the scheme has to know about before they are read
+		// into the word below - aiming asks for the action key, the
+		// directional jump for the jump key. Same keys, same pad buttons, read
+		// in the same order as the blocks that follow.
+		const long mAction = Key(8) || Key(jLayout[4] + 256);
+		const long mJump = Key(7) || Key(jLayout[3] + 256);
+
+		linput = ModernUpdateInput(linput, joy_x, joy_y, mAction, mJump);
+	}
 
 	if (Key(4))
 		linput |= IN_DUCK;

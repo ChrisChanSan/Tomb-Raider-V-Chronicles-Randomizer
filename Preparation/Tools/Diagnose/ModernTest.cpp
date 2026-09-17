@@ -1158,6 +1158,286 @@ static void blocked()
 		out.bits & MODERN_IN_RIGHT, MODERN_IN_RIGHT);
 }
 
+/* ------------------------------------------------------- the direct turn --- */
+
+/* One tick exactly as the seam takes it (game\modern_state.cpp): translate,
+ * then offer the result to the direct turn. Returns the direct turn's own
+ * answer - 1 when it took charge of the turning - and writes the yaw change
+ * this tick into *yaw. Nothing here re-implements the seam; these are the two
+ * calls it makes, in its order. */
+static long tick_turn(const MODERN_CFG* cfg, MODERN_STATE* state, long x, long y,
+	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out, long* yaw)
+{
+	ModernTranslate(cfg, state, x, y, camera_yaw, lara_yaw, sit, out);
+
+	return ModernDirectTurn(cfg, state, sit, out, yaw);
+}
+
+static void direct_turn()
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	const short allowed[] = { 0, 1, 2, 6, 7, 12, 14, 20, 73 };
+	const short airborne[] = { 3, 9, 10, 15, 17, 25, 26, 27, 36, 57, 76, 81 };
+	long yaw;
+	long total;
+	long count;
+	int i;
+	int t;
+
+	printf("the direct turn - the one place the engine writes her heading\n");
+
+	/* TROne: modern.direct_ground_turn_is_bounded_and_never_changes_airborne_
+	 * poses. Their four numbers, unchanged: our angles are their angles and
+	 * the rate is the same 3277. */
+	ok(ModernGroundTurn(2, 0x4000, 3277) == 3277, "standing, 90 degrees: the rate and no more",
+		ModernGroundTurn(2, 0x4000, 3277), 3277);
+	ok(ModernGroundTurn(1, -0x4000, 3277) == -3277, "running, the other way: the rate again",
+		ModernGroundTurn(1, -0x4000, 3277), -3277);
+	ok(ModernGroundTurn(1, 17, 3277) == 17, "under the rate the whole error is taken",
+		ModernGroundTurn(1, 17, 3277), 17);
+	ok(ModernGroundTurn(1, 0x4000, 0) == 0, "rate 0 is the feature switched off",
+		ModernGroundTurn(1, 0x4000, 0), 0);
+
+	/* Ours: a rate over half a turn would make "clamp the error to the rate"
+	 * mean nothing, so the rate is clamped as well. Nothing sets it that
+	 * high - this is the guard, asked for by name. */
+	ok(ModernGroundTurn(1, 0x7000, 0x7000) == 0x4000, "a rate over half a turn is clamped too",
+		ModernGroundTurn(1, 0x7000, 0x7000), 0x4000);
+
+	/* Their twelve states: airborne, hanging, climbing, swimming, in an
+	 * interaction pose. There y_rot is the animation's and nothing outside
+	 * may touch it. */
+	for (i = 0; i < (int)(sizeof(airborne) / sizeof(airborne[0])); i++)
+		ok(ModernGroundTurn(airborne[i], 0x4000, 3277) == 0,
+			"no write in an airborne, climbing or object pose",
+			ModernGroundTurn(airborne[i], 0x4000, 3277), 0);
+
+	/* Their ten ticks for a half turn - the number the play test will judge
+	 * the rate by. 32768 / 3277 is 10.0009, so the tenth tick lands exactly
+	 * on it rather than overshooting. */
+	yaw = 0;
+
+	for (t = 0; t < 10; t++)
+		yaw = ModernWrap(yaw + ModernGroundTurn(2, 0x8000L - yaw, 3277));
+
+	ok(ModernWrap(yaw) == -32768, "ten ticks for 180 degrees at 3277", ModernWrap(yaw), -32768);
+
+	/* Ours, because the state list is ours and not theirs (TR5 runs to 138
+	 * where TROne stop at 104): exactly nine states allow the write, and the
+	 * nine are the nine. */
+	count = 0;
+
+	for (i = 0; i < 139; i++)
+		if (ModernStateAllowsDirectTurn((short)i))
+			count++;
+
+	ok(count == 9, "nine of the 139 states allow the write", count, 9);
+
+	for (i = 0; i < (int)(sizeof(allowed) / sizeof(allowed[0])); i++)
+		ok(ModernStateAllowsDirectTurn(allowed[i]) == 1, "...and these are the nine",
+			ModernStateAllowsDirectTurn(allowed[i]), 1);
+
+	/* And the two candidate rates the play test may pick instead still turn
+	 * a half circle in a sensible number of ticks - this IS the number the
+	 * user is choosing between, so it is written down rather than reasoned
+	 * about. 32768/1456 = 22.5, so 22 whole rates and a 23rd tick for the
+	 * remaining 736; 32768/2184 = 15.003, so 15 whole rates and a 16th tick
+	 * for the remaining 8. Ten ticks, sixteen ticks, twenty-three ticks: at
+	 * 30 Hz that is a third of a second, half a second and three quarters. */
+	yaw = 0;
+	total = 0;
+
+	while (ModernWrap(yaw) != -32768 && total < 200)
+	{
+		yaw = ModernWrap(yaw + ModernGroundTurn(2, 0x8000L - yaw, MODERN_TURN_RATE_VANILLA));
+		total++;
+	}
+
+	ok(total == 23, "at 1456 (vanilla's fastest) a half turn costs 23 ticks", total, 23);
+
+	yaw = 0;
+	total = 0;
+
+	while (ModernWrap(yaw) != -32768 && total < 200)
+	{
+		yaw = ModernWrap(yaw + ModernGroundTurn(2, 0x8000L - yaw, MODERN_TURN_RATE_MIDDLE));
+		total++;
+	}
+
+	ok(total == 16, "at 2184 it costs 16", total, 16);
+
+	/* TROne: modern.the_instant_reversal_stays_in_the_run_and_leaves_the_
+	 * stand. Full stick back, camera and Lara both on 0, so the error is
+	 * exactly half a turn.
+	 *
+	 * Running, the whole of it is taken in one tick - that is the Remaster's
+	 * about-turn. Standing, it is NOT, and TROne measured why: a one-tick
+	 * reversal out of a stand is spent before the player has BACK and JUMP
+	 * down together, so the back flip becomes unreachable. Their third case
+	 * switches the stand back to the snap with turn_snap_stand; we did not
+	 * build that switch, because the case it restores is the bug. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 1;					/* AS_RUN - she is really running */
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+		"running: the direct turn takes charge", 1, 1);
+	ok(absl(yaw) == 0x8000, "...and the whole half turn in one tick", absl(yaw), 0x8000);
+
+	ModernResetState(&state);
+	sit.anim_state = 2;					/* AS_STOP */
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+		"standing: it takes charge as well", 1, 1);
+	ok(absl(yaw) == MODERN_TURN_RATE, "...but only one rate, so BACK and JUMP still meet",
+		absl(yaw), MODERN_TURN_RATE);
+	ok((out.bits & MODERN_IN_FORWARD) == 0, "...and no step forward while she turns",
+		out.bits & MODERN_IN_FORWARD, 0);
+
+	/* TROne: modern.ground_reversal_turns_without_a_step_in_the_wrong_
+	 * direction, all twelve ticks. Step 2 already asserted the first tick's
+	 * "no step"; this is the rest of it - she arrives, and only then does
+	 * forward come back.
+	 *
+	 * The mask is MODERN_DIR_MASK and not MODERN_MOVE_MASK on purpose: ours
+	 * carries IN_WALK and TROne's does not, and the direct turn deliberately
+	 * leaves walking alone (the stick's deflection still decides it). */
+	ModernResetState(&state);
+	sit.anim_state = 2;					/* AS_STOP for every one of the twelve */
+	yaw = 0;
+	total = 0;
+
+	for (t = 0; t < 12; t++)
+	{
+		long step = 0;
+
+		tick_turn(&cfg, &state, 0, S(32000), 0, (short)total, &sit, &out, &step);
+		total = ModernWrap(total + step);
+
+		if (!t)
+		{
+			ok(step == -MODERN_TURN_RATE, "the first tick turns by one rate",
+				step, -MODERN_TURN_RATE);
+			ok((out.bits & MODERN_DIR_MASK) == 0, "...and sends no direction bit at all",
+				out.bits & MODERN_DIR_MASK, 0);
+		}
+	}
+
+	ok(total == -32768, "after twelve ticks she is round", total, -32768);
+	ok((out.bits & MODERN_DIR_MASK) == MODERN_IN_FORWARD, "...and forward comes back",
+		out.bits & MODERN_DIR_MASK, MODERN_IN_FORWARD);
+
+	/* TROne: modern.held_back_keeps_its_course_when_the_chase_camera_turns -
+	 * the turn half (step 2 asserted the course half over a swinging camera).
+	 * Tick 0 is the stand and turns by one rate; from tick 1 she is running,
+	 * the camera has CUT by 180 degrees, and the held course does not care:
+	 * the reversal finishes in that one tick and stays finished for the rest
+	 * of the twenty. */
+	ModernResetState(&state);
+	yaw = 0;
+
+	for (t = 0; t < 20; t++)
+	{
+		long step = 0;
+		const short cam = (short)(t ? -32768 : 0);
+
+		sit.anim_state = (short)(t ? 1 : 2);
+		tick_turn(&cfg, &state, 0, S(32000), cam, (short)yaw, &sit, &out, &step);
+		yaw = ModernWrap(yaw + step);
+
+		if (!t)
+			continue;
+
+		ok(yaw == -32768, "held back through a camera cut: she is round and stays round",
+			yaw, -32768);
+		ok((out.bits & MODERN_DIR_MASK) == MODERN_IN_FORWARD,
+			"...running forward on the held course", out.bits & MODERN_DIR_MASK,
+			MODERN_IN_FORWARD);
+	}
+
+	/* OURS, the four cases that say the write cannot happen where it must
+	 * not. The second gate first: MODERN_DIRECT_TURN off leaves the turn bit
+	 * in the word and the automaton in charge, which is how a play test can
+	 * ask "is Modern wrong, or is only the direct turn wrong?". */
+	ModernDefaults(&cfg);
+	cfg.direct_turn = 0;
+	ModernResetState(&state);
+	sit.anim_state = 1;
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 0,
+		"direct_turn 0: no write", 0, 0);
+	ok(yaw == 0, "...and no angle", yaw, 0);
+	ok((out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT)) != 0, "...the turn bit stands instead",
+		out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT), MODERN_IN_LEFT);
+
+	/* Aiming: with aim_strafe switched off the mode is RUN and the game is
+	 * already turning her onto her target - two hands on one heading. */
+	ModernDefaults(&cfg);
+	cfg.aim_strafe = 0;
+	ModernResetState(&state);
+	sit.drawn = 1;
+	sit.action = 1;
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 0,
+		"weapon up and action held: the game turns her, not us", 0, 0);
+
+	/* A classic state, and the standing jump. Neither is mode RUN, and the
+	 * jump is the case that would cost the back flip if it were. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.classic = 1;
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 0,
+		"a classic tick never writes her heading", 0, 0);
+
+	ModernResetState(&state);
+	sit.classic = 0;
+	sit.anim_state = 2;
+	sit.jump = 1;
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 0,
+		"the back flip is not turned into an about-turn", 0, 0);
+	ok(out.bits == MODERN_IN_BACK, "...the back bit goes out untouched", out.bits,
+		MODERN_IN_BACK);
+
+	/* The spin has to be put down when the direct turn picks the turning up,
+	 * and the reason only shows a tick later: the flag is the automaton's way
+	 * of turning on the spot, and while the direct turn is in charge it
+	 * changes nothing at all - the bits are rewritten from `remaining`
+	 * anyway. It bites when the direct turn STOPS, in the air or under a
+	 * weapon, and a spin left standing keeps IN_FORWARD off for as long as
+	 * the error stays over spin_exit. So: one tick standing with 0x3800 of
+	 * error, then the same course with her in a forward jump, where the write
+	 * is not allowed. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 2;					/* AS_STOP - stand_spin 0x3000, so the spin is set */
+	sit.jump = 0;
+	tick_turn(&cfg, &state, 0, -S(32000), (short)0x3800, 0, &sit, &out, &yaw);
+	ok(state.spin == 0, "the direct turn puts the spin down", state.spin, 0);
+
+	sit.anim_state = 3;					/* AS_FORWARDJUMP - modern, but no write in the air */
+	ok(tick_turn(&cfg, &state, 0, -S(32000), (short)0x3800, (short)MODERN_TURN_RATE,
+		&sit, &out, &yaw) == 0, "...and in the air the automaton has it back", 0, 0);
+	ok((out.bits & MODERN_IN_FORWARD) != 0, "...running on, not stuck in a spin nobody asked for",
+		out.bits & MODERN_IN_FORWARD, MODERN_IN_FORWARD);
+
+	/* And walking survives the rewrite: the direct turn takes the direction
+	 * bits, never IN_WALK. Half a stick, a half turn of error, running. */
+	ModernResetState(&state);
+	sit.jump = 0;
+	sit.anim_state = 1;
+	tick_turn(&cfg, &state, 0, S(12000), 0, 0, &sit, &out, &yaw);
+	ok((out.bits & MODERN_IN_WALK) != 0, "a gentle stick still walks while the turn is ours",
+		out.bits & MODERN_IN_WALK, MODERN_IN_WALK);
+	ok(absl(yaw) == 0x8000, "...and the reversal still happens", absl(yaw), 0x8000);
+}
+
 /* ---------------------------------------------------------- the weapons ---- */
 
 static void weapons()
@@ -1518,12 +1798,10 @@ static void sweeps()
 static void deferred()
 {
 	printf("\nnot ours yet - TROne expectations a later step owes, by name:\n");
-	printf("  step 4  modern.direct_ground_turn_is_bounded_and_never_changes_airborne_poses\n");
-	printf("  step 4  modern.the_instant_reversal_stays_in_the_run_and_leaves_the_stand\n");
-	printf("  step 4  modern.ground_reversal_turns_without_a_step_in_the_wrong_direction (the ticks)\n");
-	printf("  step 4  modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
-	printf("  step 4  modern.held_back_keeps_its_course_when_the_chase_camera_turns (the turn)\n");
-	printf("  step 4  modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
+	printf("  B       modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
+	printf("  none    modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
+	printf("          - the degenerate camera falls back to Lara's yaw in game\\modern_state.cpp,\n");
+	printf("            which needs the engine's own camera and cannot be linked here\n");
 	printf("  A2      modern.orbit_stays_in_world_space_and_accepts_mouse_while_running\n");
 	printf("  B       combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
 	printf("  B       modern.held_equip_draws_once_and_interaction_does_not_fire (IN_ACTION2)\n");
@@ -1547,6 +1825,7 @@ int main()
 	back_input();
 	chatter();
 	blocked();
+	direct_turn();
 	weapons();
 	sweeps();
 	deferred();

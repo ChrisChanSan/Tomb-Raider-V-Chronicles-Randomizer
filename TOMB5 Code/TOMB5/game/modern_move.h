@@ -39,10 +39,13 @@
  * ANGLES are the engine's own 16-bit units: 65536 is a full turn, 0 is +Z,
  * 0x4000 is +X - the convention of item->pos.y_rot and of phd_atan(z, x).
  *
- * WHAT IS NOT HERE. The per-tick state machine, the blocked counter, the
- * direct turn, the log and the seam in specific\input.cpp are
- * game\modern_state.cpp. The table of states that stay classic is below as a
- * declaration only; round 161a step 3 writes it out state by state. */
+ * WHAT IS NOT HERE. The per-tick state machine, the blocked counter, the log
+ * and the seam in specific\input.cpp are game\modern_state.cpp. The DIRECT
+ * TURN is split between the two: its arithmetic is here (ModernGroundTurn and
+ * ModernDirectTurn, step 4), because a rule that decides how far Lara turns
+ * has to be a number a test can check, and only this file is testable; the
+ * one line that actually writes lara_item->pos.y_rot is over there, because
+ * that is the engine. */
 
 /* THE INPUT BITS, MIRRORED BY VALUE.
  *
@@ -63,13 +66,19 @@ enum modern_input_bits
 	MODERN_IN_LSTEP =	0x400,	// IN_LSTEP
 	MODERN_IN_RSTEP =	0x800,	// IN_RSTEP
 
+	/* The six bits that say WHERE she goes. This is what the direct turn
+	 * replaces when it takes the turning into its own hand (step 4): it
+	 * turns her by writing y_rot, so it must take the turn bits away, but
+	 * IN_WALK is deliberately not in here - how far the stick is out still
+	 * decides whether she walks, turn or no turn. */
+	MODERN_DIR_MASK =	MODERN_IN_FORWARD | MODERN_IN_BACK | MODERN_IN_LEFT |
+						MODERN_IN_RIGHT | MODERN_IN_LSTEP | MODERN_IN_RSTEP,
+
 	/* Exactly the bits ModernTranslate can write, and therefore exactly the
 	 * bits the seam clears before it puts a result in (step 4). IN_DRAW is
 	 * NOT in it: the weapon half hands its bits back rather than replacing
 	 * them, and the movement half never touches the draw key. */
-	MODERN_MOVE_MASK =	MODERN_IN_FORWARD | MODERN_IN_BACK | MODERN_IN_LEFT |
-						MODERN_IN_RIGHT | MODERN_IN_WALK | MODERN_IN_LSTEP |
-						MODERN_IN_RSTEP
+	MODERN_MOVE_MASK =	MODERN_DIR_MASK | MODERN_IN_WALK
 };
 
 /* What came out, for the log and for the tests. The translation itself makes
@@ -294,6 +303,10 @@ short ModernAngle(long x, long z);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsGroundIdle(short anim_state);
 long ModernStateIsStanding(short anim_state);
+long ModernStateAllowsDirectTurn(short anim_state);
+long ModernGroundTurn(short anim_state, long delta, long rate);
+long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
+	MODERN_RESULT* out, long* yaw_delta);
 long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, long bits);
 void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, long stick_y,
 	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out);

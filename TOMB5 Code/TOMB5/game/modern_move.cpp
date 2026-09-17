@@ -362,6 +362,158 @@ long ModernStateIsStanding(short anim_state)
 	return (anim_state == 2 || anim_state == 14 || anim_state == 15) ? 1 : 0;
 }
 
+/* THE DIRECT TURN, THE ARITHMETIC HALF (design section 1.4 step 6, and the
+ * user's decision 5). Everything below is numbers; the one line that writes
+ * lara_item->pos.y_rot is game\modern_state.cpp.
+ *
+ * WHY IT EXISTS AT ALL. The rest of the scheme sets a turn BIT and lets the
+ * automaton turn her, which is what makes the whole idea survive a 1:1
+ * engine. The automaton's fastest rate is 1456 units a tick, and a half turn
+ * on the spot therefore costs about 23 ticks even once AS_FASTTURN is
+ * reached. That is the one place where "set the bit and wait" does not feel
+ * like the Remaster, so here - and only here - we turn her ourselves.
+ *
+ * WHICH STATES. TROne allow the write in 0/1/2/6/7/12/14/20/73 and nowhere
+ * else: standing, walking, running, the three turns on the spot, the walk
+ * into a wall, the landing and the sprint. Never airborne, never on a ladder
+ * or a rope, never in the water, never in an interaction pose - in all of
+ * those y_rot is the animation's to own, and an outside hand on it is how a
+ * pose goes crooked. The numbers below are OUR state list's, checked one by
+ * one against game\lara_states.h and the routine each runs:
+ *   0 AS_WALK   1 AS_RUN   2 AS_STOP   6 AS_TURN_R   7 AS_TURN_L
+ *  12 AS_SPLAT  14 AS_LAND 20 AS_FASTTURN          73 AS_SPRINT */
+long ModernStateAllowsDirectTurn(short anim_state)
+{
+	switch (anim_state)
+	{
+	case 0:		// AS_WALK, lara_as_walk
+	case 1:		// AS_RUN, lara_as_run
+	case 2:		// AS_STOP, lara_as_stop
+	case 6:		// AS_TURN_R, lara_as_turn_r
+	case 7:		// AS_TURN_L, lara_as_turn_l
+	case 12:	// AS_SPLAT, lara_as_splat - she walked into a wall and is still on her feet
+	case 14:	// AS_LAND, lara_as_land
+	case 20:	// AS_FASTTURN, lara_as_fastturn
+	case 73:	// AS_SPRINT, lara_as_sprint
+		return 1;
+
+	default:
+		return 0;
+	}
+}
+
+/* How far she may turn this tick: the error, clamped to the rate, and zero
+ * wherever the write is not allowed. `rate` 0 gives 0 everywhere, which is
+ * the whole feature switched off and the turn bits back in charge - that is
+ * what MODERN_DIRECT_TURN is for and why the rate is a parameter and not a
+ * constant read in here.
+ *
+ * The rate is clamped to half a turn as well. Nothing sets it that high, but
+ * a rate over 0x8000 would make "clamp the error to the rate" meaningless
+ * and the clamp costs one comparison. */
+long ModernGroundTurn(short anim_state, long delta, long rate)
+{
+	if (rate <= 0 || !ModernStateAllowsDirectTurn(anim_state))
+		return 0;
+
+	delta = ModernWrap(delta);
+
+	if (rate > 0x4000L)
+		rate = 0x4000L;
+
+	if (delta > rate)
+		return rate;
+
+	if (delta < -rate)
+		return -rate;
+
+	return delta;
+}
+
+/* THE DIRECT TURN'S WHOLE DECISION, in one place so that a test can drive it
+ * exactly as the seam does. Returns 1 when it has taken charge of the turning
+ * this tick - then `yaw_delta` is what the caller adds to y_rot, the caller
+ * zeroes lara.turn_rate so the automaton does not turn her a second time, and
+ * `out->bits` has been rewritten below. Returns 0 and a yaw_delta of 0
+ * otherwise, and then `out` is untouched and the turn bits stand.
+ *
+ * WHY THE BITS ARE REWRITTEN. Once we turn her ourselves, a turn bit would
+ * turn her twice and would also put her in AS_TURN_L/AS_TURN_R instead of
+ * running. So all six direction bits go (IN_WALK stays - the stick still says
+ * how fast she is going) and IN_FORWARD comes back only when 45 degrees or
+ * less of the turn are left. That last part is not tidiness: with IN_FORWARD
+ * set through the whole of a half turn she would take real steps sideways
+ * across a ledge before the turn finished.
+ *
+ * THE INSTANT ABOUT-TURN. Past 90 degrees of error the whole turn is taken in
+ * ONE tick - but only while she is REALLY running. TROne measured why:
+ * standing still, a one-tick reversal is spent before the player has both
+ * BACK and JUMP down, so the back flip becomes unreachable and every jump
+ * goes forward. Standing, the bounded rate therefore stands, and a half turn
+ * takes ten ticks - time enough to press the two together. */
+long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
+	MODERN_RESULT* out, long* yaw_delta)
+{
+	MODERN_CFG spare_cfg;
+	long yaw;
+	long remaining;
+
+	if (yaw_delta)
+		*yaw_delta = 0;
+
+	if (!out || !out->active || out->mode != MODERN_MODE_RUN)
+		return 0;
+
+	if (!cfg)
+	{
+		ModernDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	/* No state number, no write: the state list above is the only thing
+	 * standing between this and a crooked pose, so a caller that cannot say
+	 * where Lara is does not get the direct turn. */
+	if (!sit || sit->classic)
+		return 0;
+
+	/* Aiming with the strafe switched off comes out as mode RUN, and there
+	 * the game is already turning her onto her target - two hands on the
+	 * same heading. Mode AIM never reaches this line at all. */
+	if (sit->drawn && sit->action)
+		return 0;
+
+	if (!cfg->direct_turn || cfg->turn_rate <= 0)
+		return 0;
+
+	if (!ModernStateAllowsDirectTurn(sit->anim_state))
+		return 0;
+
+	yaw = ModernGroundTurn(sit->anim_state, out->delta, cfg->turn_rate);
+
+	if (ModernAbs(out->delta) > cfg->snap_delta && !ModernStateIsStanding(sit->anim_state))
+		yaw = out->delta;
+
+	remaining = ModernAbs((long)out->delta - yaw);
+
+	out->bits &= ~(long)MODERN_DIR_MASK;
+
+	if (remaining <= cfg->snap_forward)
+		out->bits |= MODERN_IN_FORWARD;
+
+	out->turning = (remaining > 0) ? 1 : 0;
+
+	/* The spin is the automaton's way of turning on the spot and we have
+	 * just taken the turning away from it. Leaving the flag set would keep
+	 * IN_FORWARD off for ticks after the turn is done. */
+	if (state)
+		state->spin = 0;
+
+	if (yaw_delta)
+		*yaw_delta = yaw;
+
+	return 1;
+}
+
 /* THE WEAPON HALF (combat mode), design section 1.5. A1 only ADDS it -
  * nothing calls it yet. Workflow B wires it at the second seam of
  * specific\input.cpp and puts tomb5.combat_hold on its first argument.

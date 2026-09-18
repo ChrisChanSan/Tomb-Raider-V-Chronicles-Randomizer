@@ -15473,6 +15473,364 @@ mattered. The comment says that now.
 failed** (the retargeted D-pad block trades three checks for four). `be.bat`
 clean, the seven pre-existing warnings and nothing else.
 
+#### Round 161a2b (#161) - the orbit camera after its first play test
+
+Continuing directly from round 161a2's own accepted head, `04aa78a`, on the
+same branch. Round 161a2 built the free orbit camera from the user's Remaster
+recordings; this round answers his FIRST PLAY TEST of it (2026-09-17, a PS5
+pad over the DirectInput path - `src=pad`, both stick axes starting at
+19/62). Two logs, a sketch and three videos, measured by the project manager
+rather than assumed and quoted here in his own words:
+
+1. *"Der rechte Stick muss noch schneller werden, der ist viel zu langsam. Am
+   besten ein Slider wie die SFX und Musik."*
+2. *"Auch die Kamera an den Waenden ist noch zu starr, das Video ist aus dem
+   Remaster, ich habe den Stick in eine Richtung gehalten, dann schmiegt sich
+   die Kamera an der Wand entlang und ich kann dynamisch weiter um Lara
+   drehen, bei uns ist die Kamera in so einem Fall nicht zu bewegen."*
+3. *"Wir muessen unsere Kugel auch noch ein bisschen einschraenken. Wenn ich
+   direkt ueber Lara bin ist es sehr buggy, sie aendert sehr schnell ihre
+   Richtung."* (his sketch: the sphere around Lara, its top cap crossed out)
+4. Asked whether the camera should stay where it is in the WORLD when Lara
+   turns and come back behind her only slowly: *"Ja, hoert sich gut an."* -
+   correcting round 161a2's own mis-translation of his first description of
+   the Remaster, *"Die Kamera richtet sich auch nicht selbstaendig wieder
+   hinter Lara"* and *"richtet sie sich ganz langsam nach. Das ist fast nicht
+   zu merken."*
+5. *"Das D-Pad im Inventar und im Titel waere auch cool zu behalten, das ist
+   viel besser als der Stick. Wir koennen ja beides zulassen sprich Stick &
+   Pad."*
+6. *"Kannst du in dem Workflow auch gleich das mit dem Laufen beim Schiessen
+   implementieren? Das ist schon echt doof im Kampf, wenn sie nur schleichen
+   kann."* (earlier: *"Wenn Lara schiesst, kann sie nicht mehr laufen, dann
+   ist dauerhaft der Schleichmodus an."*)
+7. *"Auch unser Winkel beim Drehen auf der Stelle ist noch nicht perfekt. Im
+   Remaster kann ich mich auf der Stelle perfekt drehen. Bei uns regelt die
+   Kamera sehr schnell rein und sie bricht auch zwischendurch oft ab, sie
+   macht ihre Stumble-Anim, als wuerde ich den Stick nur einmal fuer einen
+   Schritt von Lara nach vorne druecken, und dreht sich ohne Animation. Das
+   kann auch teilweise ein Deadzone-Problem sein."*
+
+**WHAT WAS MEASURED, NOT ASSUMED.** Six findings, each a number rather than a
+feeling:
+
+- **M1 - the eye lagged the orbit by most of a second.** The orbit itself
+  already turned at 1066 units/tick at his full deflection (176 deg/s); `cam=`
+  needed about 25 ticks to reach that rate (47% at tick 10, 81% at tick 20),
+  because `MoveCamera` walks `pos += (ideal - pos) / speed` at speed 10 and
+  the angle itself had no damping of its own. On screen he got 418 units/tick
+  (69 deg/s) in the mean, against the Remaster's own 125 deg/s from the first
+  frame.
+- **M2 - half the right stick's travel was dead.** DirectInput's own per-axis
+  zone was 500 of 1000 on the right stick (62 of 128) and 150 of 1000 on the
+  left (18 of 128); 18% of pushed ticks in test 2 had one axis exactly zero,
+  and the direction histogram piled onto the four cardinals (0:68, 90:41,
+  180:48, 270:43 ticks) and emptied just beside them (80:1, 170:2, 260:6,
+  350:4 against about 30 everywhere else).
+- **M3 - the wall swallowed the stick.** In 290 of 855 ticks with the stick
+  fully pushed against a wall (34%) the offset did not advance or ran AGAINST
+  the stick (177 at -400 or worse; 14 episodes of 8-37 ticks) - the classic
+  quadrant snap, absorbed into the offset by round 161a2's own wall feedback,
+  feeding itself back tick after tick.
+- **M4 - the movement reference ran wild whenever the eye was close to her.**
+  At the pitch limit the ideal eye's own horizontal radius was 134 units
+  while the eye trailed her run by about 450; the measured yaw became her own
+  running direction and she turned 3277 units a tick for as long as the stick
+  was off centre. The same happened at any pitch when a wall pulled the eye
+  in: 57 jumps of more than 45 degrees in one tick, her course jumping 3154
+  -> 17126 -> 26721 -> -22504 with them.
+- **M5 - the camera swung behind her whenever she turned**, because the
+  built offset was FROM her heading: a 62 degree turn was followed inside 20
+  ticks (overshooting to 80), where the Remaster's own camera does not move
+  at all while she spins under it.
+- **M6 - the spin on the spot stumbled and whipped.** `ModernDirectTurn`
+  withheld `IN_FORWARD` past 45 degrees of turn left, dropping her to
+  `AS_STOP` for single ticks while RUNNING (203 of 937 run ticks, 25 stumble
+  episodes); and past 90 degrees of ACCUMULATED error the whole turn snapped
+  in one tick (`yawd=` -17220, -16431, -17970, -16955) - a jerk the
+  Remaster's own smooth ~0.75 s revolution does not have.
+
+**WHAT WAS REMOVED AS REFUTED** (rule 5: reverted, not left in). Round
+161a2's wall feedback - `ModernCameraNoteWall`, `modern_cam_push`/`_push_at`,
+`wall_push`, `MODERN_CAMERA_FOLLOW_WALL`, `MODERN_CAMERA_WALL_DEAD`,
+`MODERN_CAM_ANGLE_RADIUS` (768, half a sector) and the
+`angle_radius`/`cam_angle_radius` fields that logged it - took the wall's
+DISPLACEMENT into the yaw offset on the theory that the next tick would then
+ask for an angle nothing blocked. M3 measured what it actually wrote into the
+state: the classic QUADRANT SNAP, `ChaseCamera`'s own answer to a blocked
+angle (one of four world cardinals), so the offset took the cardinal, the
+next tick asked for the cardinal plus one stick step, was blocked again, and
+the stick was swallowed for episodes of up to 37 ticks - *"bei uns ist die
+Kamera in so einem Fall nicht zu bewegen."* Step 1 removed the mechanism from
+`game/modern_camera.*`; step 2 removed its last piece from `game/camera.cpp`
+(`ModernCameraNoteWall` itself, and the `MODERN_CAM_CLIP_DEAD` stopgap step 1
+had left standing for one commit) once the candidate loop could answer `clip`
+on its own. Nothing of it survives: `wall`/`clip` is now simply "the eye was
+clipped this tick," read straight from the candidate loop's own `mgLOS`
+answer.
+
+**THE NINE ITEMS**, each measured before it was built, by step:
+
+1. **The orbit is fixed in the WORLD** (step 1). `MODERN_CAMERA_STATE::world_yaw`
+   replaces the offset-from-heading design; the engine's `camera.target_angle`
+   slot still gets `world_yaw - lara.y_rot` every tick, so nothing downstream
+   had to change, but her own turning no longer moves the camera at all -
+   only the return does, at the unchanged `MODERN_CAMERA_RETURN` half-life
+   (122 ticks, 4.07 s) and eight times as fast while the eye is clipped.
+   Chosen as a WORLD angle rather than an offset that subtracts a per-tick
+   heading delta because the latter drifts on every rounding and loses any
+   tick the orbit does not run (a flyby, a cutscene, the look key, the four
+   sniper cameras); a world yaw minus this tick's own heading is exact
+   regardless.
+2. **The stick reaches the eye in the same tick** (step 2). `ModernCameraLeadEye`
+   turns `camera.pos` about `camera.target` by exactly this tick's own stick
+   step, measured as a DIFFERENCE against the orbit's own return step so the
+   two can never double-count, before `MoveCamera`'s damping sees it; the
+   elevation's own step goes straight into `camera.actual_elevation` past
+   `UpdateCameraElevation`'s `>> 3`. Measured: the eye's first-tick response
+   rose from 9.5%/12.0% of the orbit's own step (speed 10/8) to 99.9% at
+   both, and at both ends of the new speed slider (item 5).
+3. **At a wall the angle stays and the distance shrinks** (steps 1-2). Under
+   the option, both orbit cameras keep exactly ONE candidate - the angle the
+   player dialled - clipped by `mgLOS` at any distance, no cardinal
+   candidates, no 768-unit threshold; `CameraCollisionBounds` is untouched.
+   The camcut proof was redone for it: the classic quadrant snap (3072
+   Manhattan) no longer fires in Modern at all.
+4. **The sphere loses its top cap, and the movement reads the orbit**
+   (steps 1-2). `MODERN_CAMERA_PITCH_MIN` moves from -15470 (85 deg) to
+   -10923 (60 deg above her), where the ideal eye's own horizontal radius is
+   still 768 - half a sector, the same number round 161a2 had already picked
+   for the wall radius it no longer needs. `game/modern_state.cpp` now seats
+   its movement reference on `ModernCameraWorldYaw()` (what the player
+   dialled) rather than the measured eye-to-target vector whenever the orbit
+   is active, which is what makes item 3 safe to ship: the eye sitting close
+   to her no longer means her course reads as her own running direction.
+5. **A "Camera speed" slider** (step 5, this entry - detailed below).
+6. **Radial dead zones for the modern sticks** (step 4). `ModernStickDeadZone`,
+   a pure radial zone with RESCALING, replaces the hardware's own per-axis
+   zones for both pad paths in Modern: left 31 (24%, XInput's own 7849 of
+   32767), right 34 on XInput, 62 on the DirectInput fallback this user's own
+   pad needs (its right stick rests off centre; the true rest position is
+   still unmeasured, so 62 - not 34 - is the honest, conservative answer, and
+   this step's own new MODERNLOG pad line exists to let a later play test
+   bring it down). Old axis-snap on this user's own pad (the DirectInput
+   right stick, its widest per-axis zone): 244 of 360 sampled directions
+   (68%) landed exactly on a cardinal; new, on any of the three zones: 4 of
+   360 (unavoidable, since the four cardinals themselves are directions).
+7. **The spin on the spot** (step 3). While she is RUNNING, the direct turn
+   keeps `IN_FORWARD` regardless of how much turn is left (the 45-degree
+   withholding stays only for a STANDING start); the instant about-turn now
+   fires on a FLICK - the course itself jumping more than `MODERN_SNAP_DELTA`
+   since the previous tick, via the new `MODERN_STATE::last_course`/
+   `have_course` and `MODERN_RESULT::course_step` - rather than on error that
+   piled up because the stick circled faster than she could turn. Measured
+   over a sweep at the user's own 21 deg/tick: round 161a2's rule produced 53
+   of 86 ticks with no forward in 2 stumble episodes; item 7a alone (keep
+   running) produced 0 stumbles but 3 one-tick whips; both together, 0 of
+   either.
+8. **Running while she shoots** (step 3). `MODERN_AIM_STRAFE` ships 0:
+   measured first that nothing in this engine writes `lara_item->pos.y_rot`
+   while she aims (only her arms and torso do, in `larafire.cpp`/
+   `lara1gun.cpp`/`lara2gun.cpp`), so the direct turn's old refusal to run
+   while `sit->drawn && sit->action` was a guard against a collision that
+   does not exist here, and is removed with it.
+9. **The D-pad keeps the inventory and the title** (step 4).
+   `ModernMenuReadsPad()` mirrors the seam's own "is this a menu" predicate
+   (`InventoryActive`, `gfLevelId == LVL5_TITLE`) and feeds the classic
+   assembly the left stick WITH the d-pad while it holds, so both work
+   together in every menu the pad already reached; a medipack bound to a
+   d-pad bit (20-23) is declined for the one tick that predicate holds, so
+   one press cannot mean two things.
+
+**BYTE IDENTITY AT TANK, EVERY STEP.** Each of the four builder steps proved
+this on its own and none of the four found an exception: every new branch
+sits behind `tomb5.control_modern` (directly, or through
+`ModernCameraActive()`, whose own first term it is) or inside a file nothing
+reaches without it. The few unconditional writes at Tank -
+`specific/dxshell.cpp`'s raw stick globals, `ModernCameraResetOrbit()`'s own
+statics - are read by nobody at Tank, the same shape round 161a2 itself
+already established and this round did not have to invent again.
+
+**A CORRECTION CARRIED ACROSS FROM STEP 1 TO STEP 2.** Step 1 measured
+`MoveCamera`'s own recursion and reasoned that the REAL eye, damped, would
+move less than the ideal one the camcut sweep checks - counting that as
+reserve on top of the swept margin. Step 2 measured it properly: a
+first-order lag fed a constant velocity settles AT that velocity, smaller
+only for the first few ticks of a push and equal for as long as it lasts -
+which is exactly the case the camcut proof is about, so there was no reserve
+to spend. The claim is corrected here rather than edited away, per this
+project's own rule for a refuted assumption.
+
+**ITEM 5, THIS STEP'S OWN: THE SPEED SLIDER, THE LOG, THE RECORD.** *"Der
+rechte Stick muss noch schneller werden, der ist viel zu langsam. Am besten
+ein Slider wie die SFX und Musik."* A fifth row on the Controls page
+(`specific/LoadSave.cpp`, `menu == 1`), placed AFTER the Method row rather
+than above it - Method's own bit (8) and its `reset_row` machinery did not
+have to move a second time, only the bindable key-binding lists below it
+shift down by the one row this adds. Drawn and driven exactly like the
+Music/SFX rows of the options page: `DoSlider` for the bar, continuous
+`input & IN_LEFT/IN_RIGHT` (not the debounced `dbinput&` the three toggles
+above it use) for a feel meant to be held rather than tapped. Stored as a new
+`ulong tomb5.camera_speed` (`global/types.h`), registry key `cam_speed`,
+default 40, clamped 0..100 on load like every other numeric setting in
+`tomb5/tomb5.cpp`; `save_new_tomb5_settings()` is called only when the value
+actually changes, since a held direction moves this row every frame where
+the three toggles above it only ever fire once a press. CustomText rows
+carry the German column: "Camera speed" / "Kamerageschwindigkeit"
+(`game/gameflow.cpp`), the same table round 161a's own step 7 started.
+
+The mapping - what the NUMBER means - was already built in step 1
+(`ModernCameraSpeedRates`, `game/modern_camera.cpp`) and this step only had
+to WIRE it: `game/camera.cpp`'s `ModernCameraArm()` now calls it on every
+single tick, not only while arming, reading `tomb5.camera_speed` fresh each
+time, so a row moved on the pause menu mid-level is felt the very next tick -
+matching Music and SFX - rather than waiting for a level start or a scheme
+switch to re-seat the cfg.
+
+| speed | yaw units/tick | deg/s | pitch units/tick |
+|---|---|---|---|
+| 0 | 364 | 60.0 | 182 |
+| 40 (default) | 1092 | 180.0 | 546 |
+| 100 | 2184 | 359.9 | 1092 |
+
+Linear between the two ends (measured, `ModernTest`'s `camera_speed` group,
+built in step 1): every one of the 101 settings is worth 18 or 19 units,
+pitch is always half the yaw, and the default seats at exactly round 161a2's
+own shipped rate (364 + 40*1820/100 = 1092), so a player who never touches
+the row keeps the camera he already had.
+
+**THE PAGE HAD TO BE RECOMPUTED TO FIT IT**, a cost the brief could not have
+named because it depends on a constraint only the tree has. Round 161a2's own
+Controls page was already calibrated to the pixel for twenty rows at
+640x480, its OWN tightest case (`font_height = GetFixedScale(23)`, the
+LARGEST pitch that fit twenty rows there at all); a twenty-first row -
+Camera speed - pushed the last row of either the keyboard or the joystick
+binding list from y=20 to y=21, past the edge (21*23+4 = 487 against
+`phd_winymax` 479). `font_height` moves to `GetFixedScale(22)` - the largest
+pitch that fits twenty-one rows (21*22+4 = 466) - which costs one more pixel
+of glyph-cell overlap than round 161a2 already spent (3 at 640x480 against
+its own 2, 8 at 1920x1080 against its own 6); the two bit-index shifts the
+waiting-for-key capture uses to turn a selected row back into an array index
+(`sel2 >>= 5` and `lp = sel >> 5`, calibrated on where the first bindable row
+sits) move to `6` with it, for the same reason round 161a's own three rows
+moved them from `2` to `5`.
+
+**MODERNLOG.** The init line gains, after `cam_pitch_return=` in the order
+the brief named them: `cam_speed=` (the row's own raw 0..100), `cam_yaw_rate=`
+(what `ModernCameraArm`'s own call to `ModernCameraSpeedRates` just seated
+from it - the derived rate, not the setting, so a play test can tell "the
+slider is wrong" from "the mapping came out wrong"), `cam_pitch_min=` and
+`cam_pitch_max=` (the sphere's own two poles, worth a field now that item 4a
+moved one of them), `aim_strafe=` (item 8's own switch - it prints 0, and
+`mode=aim` accordingly cannot appear in a default log any more; the field and
+the enum value both stay, named here so nobody reads the absence as a
+dropped field), `dead_l=` and `dead_r=` (item 6's own two dead zones -
+`dead_r` prints the ONE actually in force this session, `MODERN_DEAD_RIGHT`
+on XInput or `MODERN_DEAD_RIGHT_DINPUT` on the DirectInput fallback, chosen
+by `joystick_is_xinput`). `cam_angle_radius=` is NOT re-added: it went out
+with `MODERN_CAM_ANGLE_RADIUS` in step 2, and this step's own obligation
+("say which") is discharged here rather than by undoing that removal.
+
+A new line, `MODERNLOG pad`, prints beside the init line for the reason the
+play test needs it: item 6's DirectInput right-stick zone (62) was sized
+from a comment's CLAIM that 500 of 1000 was "wide enough," never from a
+measurement of where this user's own axis actually rests. `lx=`/`ly=`/`rx=`/
+`ry=` are the four raw resting axes (`specific/input.h`'s own
+`joystick_raw_lx/ly/rx/ry`, item 6's own globals) and `xinput=` says which
+pair of units they are in, so the next play test's log answers the one
+question this round's own dead-zone table left open rather than guessed.
+
+The tick line gains, after `cstep=` and not before it (`cstep` already sat
+at the line's own end when this step started): `cam_world=` (the orbit's own
+remembered angle - item 1's "what her turning does not move" - 0 before its
+first seating, exactly as a fresh `MODERN_CAMERA_STATE` reads) and `clip=`
+(`state->wall`, the SAME flag the return's own `wall_factor` already reads
+while it is set - "the eye was clipped this tick," not a second measurement
+of a wall). Both are read through the existing `ModernCameraLogState`
+accessor, widened by two parameters rather than given accessors of their
+own, one tick behind exactly as `cam_off`/`cam_pitch`/`cam_ret` already are
+and for the identical reason (this line runs before `CalculateCamera`).
+
+Two accessors were WIDENED rather than given siblings, keeping
+`game/camera.h`'s own nine-function count for the modern camera unchanged:
+`ModernCameraLogState` gained `world_yaw`/`wall`, `ModernCameraLogConfig`
+gained `speed`/`yaw_rate`/`pitch_min`/`pitch_max`. Quoted exactly as the
+source now reads them:
+
+```
+MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d
+    jump_dir=%d cam_return=%d cam_return_min=%d cam_wall_factor=%d
+    cam_hide_dist=%d cam_invert=%d cam_pitch_return=%d
+    cam_speed=%d cam_yaw_rate=%d cam_pitch_min=%d cam_pitch_max=%d
+    aim_strafe=%d dead_l=%d dead_r=%d
+MODERNLOG pad lx=%ld ly=%ld rx=%ld ry=%ld xinput=%ld
+MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d
+    err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d yawd=%d
+    bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d
+    water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d
+```
+
+**THE TESTS.** `ModernTest` holds no pure arithmetic this step added - the
+mapping it wires in was already checked by step 1, and a menu row, a
+registry key and a log line are not things a game-less, level-less,
+pad-less test can reach. **4,410 checks, 0 failed**, unchanged from step 4:
+base `04aa78a` (round 161a2 accepted) 2,297; 4,282 after step 1; 4,299 after
+step 2; 4,367 after step 3; 4,410 after step 4 and unaffected here - the same
+shape round 161a2's own step 5 left the count in.
+
+**WHAT ONLY THE PLAY TEST CAN TELL**, gathered from all five steps' own
+reports. Whether the camera lag is really gone and not merely relocated -
+item 2's own honesty, that the fix is a lead and not a faster damping, means
+the speed slider (item 5) is the only knob left if it still feels off.
+Whether the DirectInput right stick's dead zone (62) can come down once
+`MODERNLOG pad` reports this pad's real rest position. Whether a very tight
+corner ever puts the eye exactly on her for one tick (the 768-unit threshold
+that used to prevent it is gone with the cardinal candidates) -
+`ModernLaraHidden` already hides her there, so at worst it is one tick of an
+arbitrary heading, not a crash. Whether the lead's own 100% (not a partial
+90%) reads as twitchy - the honest answer there is the speed slider and not
+a partial lead, which would only be the old lag under a new name. Whether
+uninterrupted circling faster than her own turn rate (item 7) still runs the
+error past half a turn after about 1.8 seconds and starts closing the other
+way - the fix there is `MODERN_TURN_RATE`, not another rule. Whether the
+water's dive, capped shallower now that item 4a moved the sphere's own pole
+(75 to 50 degrees), still feels deep enough - `game/modern_move.h` is where
+that is answered, not the camera. Whether firing while running (item 8)
+reads oddly the first time her arm limits drop her aim mid-turn - vanilla
+behaviour, just newly reachable while she runs. And step 1's own open item
+about `camera.lara_node` (her own animations briefly steering the classic
+camera's hints) was answered in step 2 by having the engine feed the orbit
+her real heading in Modern rather than a joint's own swing, named here
+rather than left as a defect a reader has to chase across four reports to
+close.
+
+**THE FILES**, round 161a2b's own fifteen against base `04aa78a`, **2,827
+insertions, 619 deletions** (this record and the two README sentences are
+outside that count, the same convention round 161a2's own entry used). Five
+commits, `Round 161a2b (#161): <what>`, one per step:
+
+- `game/modern_camera.h` / `.cpp` (step 1) - the world yaw, the speed
+  slider's mapping, the refuted wall feedback removed.
+- `game/camera.cpp` / `.h` (steps 1, 2, 5), `game/modern_state.cpp`
+  (steps 2, 5) - the seam: the heading fed in for real, the lead eye, the
+  candidate loops reduced to one clipped candidate, the movement reference
+  switched to the world yaw, and this step's own speed wiring and
+  `MODERNLOG` widening.
+- `game/modern_move.h` (steps 1, 3, 4) / `.cpp` (steps 3, 4) - the running
+  turn, the flick detection, the radial dead zone, and step 1's own comment
+  on what the pitch cap costs the water's dive.
+- `specific/dxshell.cpp`, `specific/input.cpp` / `.h` (step 4) - the raw
+  stick globals renamed and read before the per-axis zone, the D-pad's
+  return to the menus, the medipack collision guard.
+- `specific/LoadSave.cpp` (step 5) - the Camera speed row, its slider, and
+  the page's own pitch recomputed to fit it.
+- `global/types.h`, `tomb5/tomb5.cpp`, `game/gameflow.cpp` (step 5) - the
+  new setting, its registry key and its CustomText rows.
+- `Preparation/Tools/Diagnose/ModernTest.cpp` (steps 1-4) - `camera_orbit`,
+  `camera_speed`, `camera_pitch`, `camera_wall`, `camera_seam`, `camera_lead`,
+  `camera_camcut`, `circling`, `firing_run` and `deadzone`; unchanged by step
+  5, which added no pure arithmetic for it to hold.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

@@ -264,6 +264,14 @@ void init_tomb5_stuff()
 		tomb5.action_split = 0;							//off, One key
 		REG_WriteBool(buf, tomb5.action_split);
 
+		// #161, round 161a2b step 5: the fourth Controls-page row, a slider
+		// rather than a toggle - 40, MODERN_CAMERA_SPEED_DEFAULT
+		// (game/modern_camera.h), the rate round 161a2 already shipped
+		// before this row could change it.
+		sprintf(buf, "cam_speed");
+		tomb5.camera_speed = 40;
+		REG_WriteLong(buf, tomb5.camera_speed);
+
 		// Empty: the Steam discovery looks for the Remaster by itself. A
 		// path here overrides it - one of the two settings that is not a
 		// number.
@@ -434,6 +442,15 @@ void init_tomb5_stuff()
 		sprintf(buf, "action_split");
 		REG_ReadBool(buf, tomb5.action_split, 0);
 
+		// #161, round 161a2b step 5. Same clamp discipline as ego_fov/fps_mode
+		// above: a value from an older build (there was none before this
+		// round) or a hand-edited one must not hand the orbit a rate past
+		// what the slider itself can ask for.
+		sprintf(buf, "cam_speed");
+		REG_ReadLong(buf, tomb5.camera_speed, 40);
+		if (tomb5.camera_speed > 100)
+			tomb5.camera_speed = 100;
+
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
 
@@ -580,6 +597,10 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "action_split");
 	REG_WriteBool(buf, tomb5.action_split);
+
+	// #161, round 161a2b step 5 - the fourth Controls-page row.
+	sprintf(buf, "cam_speed");
+	REG_WriteLong(buf, tomb5.camera_speed);
 
 	CloseRegistry();
 }

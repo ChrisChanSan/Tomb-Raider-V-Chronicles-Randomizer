@@ -321,6 +321,7 @@ void DoOptions()
 	static ulong sel2;		//selection for when mapping keys
 	static long mSliderCol = 0x3F3F3F;
 	static long sSliderCol = 0x3F3F3F;
+	static long camSliderCol = 0x3F3F3F;	// #161, round 161a2b, item 5: the Camera speed row's own slider, Controls page
 	static long sfx_bak;
 	static long sfx_quality_bak;
 	static long sfx_breath_db = -1;
@@ -360,11 +361,11 @@ void DoOptions()
 			keyboard_buttons = KeyboardButtons;
 
 		if (reset_row)
-			nMask = 4;	// #161: was 1 - the Method row moved to bit 8 (three new rows now sit above it, see below), so the "only the Method row itself can be selected" bound has to move with it, or the clamp two screens down would yank sel back to bit 1 the moment reset_row is entered
+			nMask = 4;	// #161: was 1 - the Method row moved to bit 8 (three new rows now sit above it, see below), so the "only the Method row itself can be selected" bound has to move with it, or the clamp two screens down would yank sel back to bit 1 the moment reset_row is entered. Round 161a2b's Camera speed sits AFTER Method (bit 16), so this bound did not have to move a second time.
 		else if (ControlMethod == 1)
-			nMask = 19;	// #161: was 16, +3 for Control type/Combat mode/Action drawn above the Method row - 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
+			nMask = 20;	// #161: was 16, +3 for Control type/Combat mode/Action drawn above the Method row, +1 more (round 161a2b) for Camera speed drawn below it - 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
 		else
-			nMask = 20;	// #161: was 17, same +3
+			nMask = 21;	// #161: was 17, same +3, +1 more (round 161a2b)
 
 		// #161 (decision 1): the whole page now shares one row height -
 		// the Method row's own (default_font_height) was too tall to fit
@@ -373,35 +374,46 @@ void DoOptions()
 		// row) so it covers the Method row and the three new rows too, not
 		// only the key-binding list.
 		//
-		// 23 IS FORCED, AND IT IS NOT FREE. Two numbers decide the page and
-		// they are measured in different units, which is why the first pass
-		// of this round only found the easy one.
+		// 22 IS FORCED NOW (round 161a2b: was 23), AND IT IS NOT FREE. Two
+		// numbers decide the page and they are measured in different units,
+		// which is why the first pass of round 161a found only the easy one
+		// - and why the pitch had to be recomputed rather than reused when
+		// this round's Camera speed row (item 5) added a fifth row above
+		// both bindable lists (see the label loop above): each list's own
+		// starting y moved down by one with it, so the LAST row of either
+		// one is 21 now, not 20 - both lists still end on the same row,
+		// which is why the +1 gap between their two starting points (a
+		// quirk from before round 161a touched this page at all) did not
+		// have to be touched to keep that true.
 		//
 		// The easy one - does the last row fit on the screen? 640x480 is the
 		// tightest case (GetFixedScale returns the unit unchanged there,
-		// and phd_winymax is 479). Twenty rows at 23 put the last anchor at
-		// 460 and the bottom of its glyph cell at 464, inside 479. Twenty
-		// at 24 would end at 484, past the edge - so 23 is the LARGEST
-		// pitch that fits twenty rows at all, not a comfortable choice
-		// among several.
+		// and phd_winymax is 479). Twenty-one rows at 23 - what round 161a2
+		// shipped - put the last anchor at 483 and the bottom of its glyph
+		// cell at 487, past the edge. Twenty-one at 22 ends at 462, bottom
+		// 466, inside 479 - so 22 is the LARGEST pitch that fits twenty-one
+		// rows at all, not a comfortable choice among several, exactly as
+		// 23 was forced for twenty.
 		//
 		// The one that costs something - do two rows' glyph cells still
-		// clear each other? They do not, and that is the price. InitFont
-		// (game\text.cpp:518-525) rescales the glyph table by
-		// phd_winymax / 240, so an ordinary capital (game\chardef.inc:
-		// h = 13, YOffset = -11) becomes a 25-pixel cell at 640x480 -
-		// 21 above the row's anchor and 4 below it - and 58 pixels at
-		// 1920x1080 against a pitch of 52. At the old 27 the cells cleared
-		// each other by 2 pixels (3 at 1920x1080, and the game's own
-		// default 28 leaves 3); at 23 they OVERLAP by 2 (6 at 1920x1080).
-		// The overlap sits exactly where one row's descender would be and
+		// clear each other? They do not, and it costs one pixel more than
+		// round 161a2 already spent. InitFont (game\text.cpp:518-525)
+		// rescales the glyph table by phd_winymax / 240, so an ordinary
+		// capital (game\chardef.inc: h = 13, YOffset = -11) becomes a
+		// 25-pixel cell at 640x480 - 21 above the row's anchor and 4 below
+		// it, UNCHANGED by the pitch chosen here - and 58 pixels at
+		// 1920x1080. At the old 27 the cells cleared each other by 2 pixels
+		// (3 at 1920x1080, and the game's own default 28 leaves 3); at 23
+		// they overlapped by 2 (6 at 1920x1080, pitch scaled to 52); at 22
+		// they overlap by 3 (8 at 1920x1080, pitch scaled to 50). The
+		// overlap sits exactly where one row's descender would be and
 		// the next row's ascender begins, so whether anything is visible
 		// depends on the transparent padding inside the cell, which the
 		// glyph table does not record. Rows with a descender are the ones
 		// to look at ("Jump", "Step Left", "Large Medipack"). Only a play
 		// test can settle it, and the alternative - a second column, or a
 		// scrolling list - is a page redesign, not a constant.
-		font_height = GetFixedScale(23);	// was 27
+		font_height = GetFixedScale(22);	// was 27, then 23 (round 161a2)
 
 		// The three Controls-page rows plus the Method row, one shared y/i
 		// pair - the same shape PageDisplay uses (tomb5/troyestuff.cpp).
@@ -411,6 +423,16 @@ void DoOptions()
 		// nobody yet: workflow B gives them an effect (combat_hold into
 		// ModernWeaponBits, game/modern_move.cpp; action_split into the
 		// Separate-mode IN_ACTION2 split, design section 5.8).
+		//
+		// CAMERA SPEED (#161, round 161a2b, item 5) IS THE FIFTH, AFTER
+		// METHOD RATHER THAN ABOVE IT - deliberately, so that Method's own
+		// bit (8) and its reset_row machinery do not have to move a second
+		// time: only the bindable list below Method shifts down by the one
+		// row this adds. It is a slider and not a two-value toggle, so it
+		// gets its own DoSlider call below rather than a line in either of
+		// the two PrintString loops - the same split Method's own row
+		// already keeps between its label (in the loop) and its value (its
+		// own switch, further down).
 		y = 1;
 		i = 0;
 
@@ -418,6 +440,7 @@ void DoOptions()
 		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Combat mode"), 0);
 		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Action"), 0);
 		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Control_Method), 0);
+		PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Camera speed"), 0);
 
 		y = 1;
 		i = 0;
@@ -429,10 +452,20 @@ void DoOptions()
 		// the more involved switch already below (reset_row/ControlMethod)
 		// - it is printed there, at 4 * font_height to match this row.
 
+		// Camera speed's own value: a slider, drawn and driven exactly like
+		// the Music/SFX rows of the options page (menu == 0, DoSlider at
+		// x=400 there too - the same value column this page's toggles use
+		// at phd_centerx + (phd_centerx >> 2)). Row 5, so 5 * font_height;
+		// "+4 - (font_height >> 1)" is the options page's own centring term
+		// for a slider bar inside a taller text row, copied rather than
+		// re-derived.
+		DoSlider(400, 5 * font_height + 4 - (font_height >> 1), 200, 16, tomb5.camera_speed,
+			0x1F1F1F, 0x3F3FFF, camSliderCol);
+
 		if (!ControlMethod)
 		{
-			y = 5;	// #161: was 2, +3 for the three rows now above (Method itself moved into that group too - see the nMask comment above)
-			i = 4;	// #161: was 1, same +3 - bits 1/2/4/8 belong to Control type/Combat mode/Action/Method now
+			y = 6;	// #161: was 2, +3 for round 161a's own three rows, +1 more for round 161a2b's Camera speed (see the nMask comment above)
+			i = 5;	// #161: was 1, same +4 total - bits 1/2/4/8/16 belong to Control type/Combat mode/Action/Method/Camera speed now
 
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x18", 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x1A", 0);
@@ -451,8 +484,8 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Step_Left), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Step_Right), 0);
 
-			y = 5;	// #161: was 2, +3 - see the label loop above
-			i = 4;	// #161: was 1, +3
+			y = 6;	// #161: was 2, +4 total - see the label loop above
+			i = 5;	// #161: was 1, +4 total
 
 			for (lp = 0; lp < 16; lp++)
 			{
@@ -463,8 +496,8 @@ void DoOptions()
 
 		if (ControlMethod == 1)
 		{
-			y = 6;	// #161: was 3, +3 for the three rows now above (Method itself moved into that group too - see the nMask comment above)
-			i = 4;	// #161: was 1, same +3
+			y = 7;	// #161: was 3, +3 for round 161a's own three rows, +1 more for round 161a2b's Camera speed (see the nMask comment above)
+			i = 5;	// #161: was 1, same +4 total
 
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Duck), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Dash), 0);
@@ -489,8 +522,8 @@ void DoOptions()
 			// is specifically for joystick bindings, so a keyboard hint isn't
 			// actually useful here.
 
-			y = 6;	// #161: was 3, +3 - see the label loop above
-			i = 4;	// #161: was 1, +3
+			y = 7;	// #161: was 3, +4 total - see the label loop above
+			i = 5;	// #161: was 1, +4 total
 
 			for (lp = 0; lp < 15; lp++)
 			{
@@ -583,13 +616,13 @@ void DoOptions()
 							// i = log2(sel2 >> shift) + 1, so the shift has
 							// to be (first bindable bit) + 1. That bit moved
 							// from 1 to 4 when the three Controls rows went
-							// in above the Method row, so the shift moves
-							// from 2 to 5 with it. Left at 2 every binding
-							// wrote three slots too far - "Up" into "Right" -
-							// and the last row wrote layout[1][18], one past
-							// the end of short layout[2][18]
-							// (specific/input.cpp:211).
-							sel2 >>= 5;
+							// in above the Method row (round 161a2, shift
+							// 2 -> 5), then from 4 to 5 when round 161a2b's
+							// Camera speed went in AFTER Method (shift
+							// 5 -> 6). Left at the old shift every row would
+							// write one index too far - "Up" into "Down"'s
+							// slot and so on down the list.
+							sel2 >>= 6;
 
 							while (sel2)
 							{
@@ -626,13 +659,17 @@ void DoOptions()
 					// #161: was `sel >> 2`, and wrong for the same reason
 					// as the keyboard block's own shift above - the first
 					// bindable row's bit moved from 1 to 4, so the shift
-					// moves from 2 to 5. Left at 2, binding "Duck" wrote
-					// jLayout[3] (Jump) and "Inventory" wrote jLayout[12]
-					// (Load), and the three last rows landed outside the
-					// k < 15 unbind loop below. With the shift right, i is
-					// back in 0..14 and that loop's bound is right again
-					// without touching it.
-					lp = sel >> 5;
+					// moved from 2 to 5 (round 161a2). Left at 2 there,
+					// binding "Duck" wrote jLayout[3] (Jump) and
+					// "Inventory" wrote jLayout[12] (Load), and the three
+					// last rows landed outside the k < 15 unbind loop
+					// below. Round 161a2b's Camera speed then moved the
+					// first bindable bit from 4 to 5, so the shift moves
+					// from 5 to 6 with it - the same reasoning, one row
+					// further. With the shift right, i is back in 0..14
+					// and that loop's bound is right again without
+					// touching it.
+					lp = sel >> 6;
 					lp2 = 0;
 					i = 0;
 
@@ -684,7 +721,7 @@ void DoOptions()
 			dbinput = 0;
 		}
 
-		if (dbinput & IN_SELECT && sel > 8 && !reset_row)	// #161: was sel > 1 - bits 1/2/4/8 are Control type/Combat mode/Action/Method now, none of which capture a key
+		if (dbinput & IN_SELECT && sel > 16 && !reset_row)	// #161: was sel > 1, then sel > 8 (round 161a2) - bits 1/2/4/8/16 are Control type/Combat mode/Action/Method/Camera speed now (round 161a2b), none of which capture a key
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			sel2 = sel;
@@ -715,9 +752,10 @@ void DoOptions()
 		// (tomb5/troyestuff.cpp). None of the three can be reached while
 		// reset_row or waiting_for_key is set: reset_row pins sel to bit 8
 		// (Method, see the nMask comment above) and waiting_for_key can
-		// only be entered from sel > 8 (see the IN_SELECT guard above), so
-		// neither needs to be checked again here - the same reasoning the
-		// existing Method-row block below already relies on for bit 1.
+		// only be entered from sel > 16 (round 161a2b - see the IN_SELECT
+		// guard above), so neither needs to be checked again here - the
+		// same reasoning the existing Method-row block below already
+		// relies on for bit 1.
 		if (sel & 1)
 		{
 			// Control type: Tank / Modern.
@@ -833,6 +871,38 @@ void DoOptions()
 				JoyStyle = pos - 1;	// an explicit choice from now on, not automatic
 			}
 		}
+
+		if (sel & 16)
+		{
+			// Camera speed (#161, round 161a2b, item 5): "Der rechte Stick
+			// muss noch schneller werden, der ist viel zu langsam. Am
+			// besten ein Slider wie die SFX und Musik." - continuous like
+			// those two (input&, not the debounced dbinput& the three
+			// toggles above use), because a feel slider is meant to be
+			// held down, not tapped once. The NUMBER only ever means
+			// anything through game\modern_camera.cpp's own
+			// ModernCameraSpeedRates (game\camera.cpp's ModernCameraArm
+			// calls it every tick) - this row just stores and clamps it.
+			ulong old_speed = tomb5.camera_speed;
+
+			if ((input & IN_LEFT || keymap[DIK_LEFT]) && tomb5.camera_speed > 0)
+				tomb5.camera_speed--;
+
+			if ((input & IN_RIGHT || keymap[DIK_RIGHT]) && tomb5.camera_speed < 100)
+				tomb5.camera_speed++;
+
+			// Written only on a real change, unlike the three toggles above
+			// (whose own writes are already debounced by dbinput& - once a
+			// press, not once a frame): a held direction moves this row
+			// every frame, and a registry write every frame of a hold is
+			// nothing the three toggles ever had to avoid.
+			if (tomb5.camera_speed != old_speed)
+				save_new_tomb5_settings();
+
+			camSliderCol = 0x7F7F7F;
+		}
+		else
+			camSliderCol = 0x3F3F3F;
 
 		if (!sel)
 			sel = 1;

@@ -1333,6 +1333,10 @@ const char* CustomText(const char* engl)
 		{ "Action",          "Action",          "Aktion",         "Action",             "Action" },
 		{ "One key",         "One key",         "Eine Taste",     "One key",            "One key" },
 		{ "Separate",        "Separate",        "Getrennt",       "Separate",           "Separate" },
+		// #161, round 161a2b step 5 - the Camera speed row (item 5). Same
+		// rule as the block above: only German is a real translation, the
+		// other three repeat the English literal on purpose.
+		{ "Camera speed",    "Camera speed",    "Kamerageschwindigkeit", "Camera speed", "Camera speed" },
 	};
 
 	long column;

@@ -288,12 +288,23 @@ static long modern_cam_x, modern_cam_y, modern_cam_z;
 
 static void ModernCameraArm()
 {
-	if (modern_cam_armed)
-		return;
+	if (!modern_cam_armed)
+	{
+		ModernCameraDefaults(&modern_cam_cfg);
+		ModernCameraReset(&modern_cam_state);
+		modern_cam_armed = 1;
+	}
 
-	ModernCameraDefaults(&modern_cam_cfg);
-	ModernCameraReset(&modern_cam_state);
-	modern_cam_armed = 1;
+	/* THE SPEED SLIDER TAKES HOLD EVERY TIME THIS RUNS, NOT ONLY WHILE ARMING
+	 * (#161, round 161a2b, item 5). Every accessor below calls this function
+	 * first, so a row on the Controls page moved from the pause menu, with a
+	 * level already loaded, is felt on the very next tick - the way Music and
+	 * SFX already are - rather than waiting for a level start or a scheme
+	 * switch to re-arm the cfg. tomb5.camera_speed is the row's own stored
+	 * 0..100 and ModernCameraSpeedRates (game\modern_camera.cpp) is the one
+	 * place that number means anything; this is the only place that hands it
+	 * in, and it touches nothing else of the cfg the four calls above seat. */
+	ModernCameraSpeedRates(tomb5.camera_speed, &modern_cam_cfg.yaw_rate, &modern_cam_cfg.pitch_rate);
 }
 
 /* FORGET THE ORBIT. Called from InitialiseCamera below - once per level, and
@@ -672,21 +683,29 @@ bool ModernLaraHidden()
 	return ModernCameraHidesLara(&modern_cam_cfg, ModernLaraEyeDistance()) != 0;
 }
 
-/* WHAT MODERNLOG'S TICK LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5).
- * Five raw reads of this file's own statics and nothing computed from them,
- * so a play test can watch the curve MODERN_CAMERA_RETURN and
- * MODERN_CAMERA_WALL_FACTOR promise instead of taking the header's own
- * arithmetic on faith.
+/* WHAT MODERNLOG'S TICK LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5;
+ * widened round 161a2b, step 5). Raw reads of this file's own statics and
+ * nothing computed from them, so a play test can watch the curve
+ * MODERN_CAMERA_RETURN and MODERN_CAMERA_WALL_FACTOR promise instead of
+ * taking the header's own arithmetic on faith.
  *
  * ONE TICK BEHIND FOR THE STATE, LIKE camera_yaw ABOVE IT AND FOR THE SAME
  * REASON: game\modern_state.cpp's own tick line runs before CalculateCamera
- * (game\control.cpp calls the input first), so offset_yaw, offset_pitch and
- * ret are still what the orbit's LAST tick left, not this one's - the reset
- * values (0, MODERN_CAMERA_PITCH_HOME, 0) on the first line after a cut.
- * rs_x/rs_y are the one exception and are already this tick's own:
- * specific\input.cpp calls ModernCameraStick() earlier in the same
- * S_UpdateInput, before ModernUpdateInput runs. */
-void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y)
+ * (game\control.cpp calls the input first), so offset_yaw, offset_pitch,
+ * ret, world_yaw and wall are still what the orbit's LAST tick left, not
+ * this one's - the reset values (0, MODERN_CAMERA_PITCH_HOME, 0, 0, 0) on
+ * the first line after a cut. rs_x/rs_y are the one exception and are
+ * already this tick's own: specific\input.cpp calls ModernCameraStick()
+ * earlier in the same S_UpdateInput, before ModernUpdateInput runs.
+ *
+ * world_yaw AND wall ARE THE TWO NEW READS (round 161a2b, items 1 and 3):
+ * MODERNLOG's cam_world= is this file's own world_yaw exactly, 0 before the
+ * first seating exactly as a fresh MODERN_CAMERA_STATE reads (ModernCameraReset);
+ * clip= is state->wall, the SAME flag the return rate itself multiplies by
+ * MODERN_CAMERA_WALL_FACTOR while it is set - "the eye was clipped this
+ * tick", not a second measurement of it. */
+void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
+	short* world_yaw, long* wall)
 {
 	ModernCameraArm();
 
@@ -704,20 +723,29 @@ void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_
 
 	if (rs_y)
 		*rs_y = modern_cam_rs_y;
+
+	if (world_yaw)
+		*world_yaw = modern_cam_state.world_yaw;
+
+	if (wall)
+		*wall = modern_cam_state.wall;
 }
 
-/* WHAT MODERNLOG'S INIT LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5).
- * The live cfg this file actually seats, not the raw enum in
- * game\modern_camera.h - the same discipline game\modern_state.cpp already
- * keeps for its own five init fields, because a number nobody can read back
- * is a number nobody can confirm was really running. All six are
- * the constants steps 1, 2 and 4's own reports named BY NAME as the play
- * test's to move (MODERN_CAMERA_RETURN and _RETURN_MIN, _WALL_FACTOR,
- * _HIDE_DIST, _INVERT_PITCH, _PITCH_RETURN). Left OUT on purpose, for want of
- * the same kind of naming: the yaw/pitch rate (the brief's own fixed number,
- * not a knob any report asked to turn) and the three the camera code hands
- * the orbit outright, the pitch clamp and its resting elevation - no report
- * of the four ever asked a later log to hold one of those to account.
+/* WHAT MODERNLOG'S INIT LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5;
+ * widened round 161a2b, step 5). The live cfg this file actually seats, not
+ * the raw enum in game\modern_camera.h - the same discipline
+ * game\modern_state.cpp already keeps for its own five init fields, because
+ * a number nobody can read back is a number nobody can confirm was really
+ * running. The first six are the constants steps 1, 2 and 4's own reports
+ * named BY NAME as the play test's to move (MODERN_CAMERA_RETURN and
+ * _RETURN_MIN, _WALL_FACTOR, _HIDE_DIST, _INVERT_PITCH, _PITCH_RETURN).
+ * pitch_min and pitch_max were left out for want of the same kind of naming
+ * (no report asked a log to hold the camera's own clamp to account) - until
+ * round 161a2b cut the sphere's top cap (item 4a) and gave the bottom one a
+ * new neighbour worth reading back beside it; yaw_rate stays a genuine
+ * omission (cam_speed already answers "why", so printing the same number
+ * twice under two names would only invite them to disagree after a hand
+ * edit of the registry).
  *
  * A SEVENTH WENT OUT WITH THE MECHANISM IT DESCRIBED (round 161a2b, item 3):
  * cam_angle_radius printed MODERN_CAM_ANGLE_RADIUS, the radius under which
@@ -725,9 +753,20 @@ void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_
  * displacement - and that whole way of reading a wall is what this round removed
  * as refuted. A log field for a constant nothing computes any more is worse than
  * no field at all, so it goes with it, here and in game\modern_state.cpp's init
- * line. */
+ * line.
+ *
+ * speed, yaw_rate, pitch_min AND pitch_max ARE THE FOUR NEW READS (round
+ * 161a2b, item 5). speed is tomb5.camera_speed itself - the row's raw
+ * 0..100, read here rather than by game\modern_state.cpp reaching into
+ * tomb5 directly, so every camera number MODERNLOG prints still comes
+ * through this one file. yaw_rate is what ModernCameraArm's own call to
+ * ModernCameraSpeedRates just seated from it, i.e. the derived rate rather
+ * than the setting - the two together are what let a play test tell "the
+ * slider is at the wrong number" from "the mapping came out wrong" without
+ * running the arithmetic by hand. */
 void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
-	long* hide_dist, long* invert_pitch, long* pitch_return)
+	long* hide_dist, long* invert_pitch, long* pitch_return,
+	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max)
 {
 	ModernCameraArm();
 
@@ -748,6 +787,18 @@ void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_facto
 
 	if (pitch_return)
 		*pitch_return = modern_cam_cfg.pitch_return;
+
+	if (speed)
+		*speed = tomb5.camera_speed;
+
+	if (yaw_rate)
+		*yaw_rate = modern_cam_cfg.yaw_rate;
+
+	if (pitch_min)
+		*pitch_min = modern_cam_cfg.pitch_min;
+
+	if (pitch_max)
+		*pitch_max = modern_cam_cfg.pitch_max;
 }
 
 void InitialiseCamera()

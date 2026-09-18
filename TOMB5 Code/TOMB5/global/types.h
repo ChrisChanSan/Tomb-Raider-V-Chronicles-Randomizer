@@ -2746,5 +2746,22 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * round 161a step 7 (decision 1); the second bit and the split itself do
 	 * not exist yet - workflow B adds them. */
 	bool action_split;
+
+	/* THE CAMERA SPEED SLIDER (#161, round 161a2b, item 5). "Der rechte Stick
+	 * muss noch schneller werden, der ist viel zu langsam. Am besten ein
+	 * Slider wie die SFX und Musik." - so this is a row on the Controls page,
+	 * 0..100, drawn and driven exactly like those two (specific\LoadSave.cpp).
+	 * The NUMBER means nothing by itself; game\modern_camera.cpp's
+	 * ModernCameraSpeedRates(speed, &yaw_rate, &pitch_rate) is the one place
+	 * that turns it into the orbit's actual yaw and pitch rates, so this
+	 * field only ever has to be stored and clamped, never interpreted.
+	 *
+	 * Zero before anything reads it, like every field above - which would
+	 * read as "60 deg/s", the slider's own bottom end, on a machine with no
+	 * key yet. That is why init_tomb5_stuff() seats it at
+	 * MODERN_CAMERA_SPEED_DEFAULT (40) on a first run rather than leaving the
+	 * zero default stand, exactly as the three bools above it do not leave
+	 * their own zero unexamined either. Registry: cam_speed. */
+	ulong camera_speed;
 };
 #pragma pack(pop)

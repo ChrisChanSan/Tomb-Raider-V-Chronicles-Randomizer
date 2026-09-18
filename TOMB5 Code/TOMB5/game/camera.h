@@ -35,7 +35,11 @@ short GetFirstPersonRoll();		// the head bone's roll, for the interpolator (#148
  * game\modern_camera.h; these nine are the engine's side of it, and the long
  * comment above their definitions in game\camera.cpp says which is which. The
  * last two are MODERNLOG's own (step 5) and read nothing the other seven do
- * not already keep. */
+ * not already keep - round 161a2b's own step 5 widened both of their
+ * parameter lists (the world yaw and the clip flag on the tick line, the
+ * speed slider and the pitch clamp on the init line) rather than adding an
+ * eighth and ninth accessor, for the same reason: nothing they read is new
+ * to this file, only new to what a play test gets told about it. */
 bool ModernCameraActive();		// is the orbit steering the view this tick?
 void ModernCameraResetOrbit();		// level start, savegame load, scheme change
 void ModernCameraStick(long rs_x, long rs_y);	// the right stick, from specific\input.cpp
@@ -43,9 +47,11 @@ short ModernCameraSwimTarget();		// the attitude the orbit points at (step 4, th
 long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world - 0 = not seated yet (161a2b, item 4b)
 long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points
 bool ModernLaraHidden();		// too close to draw her at all (observation 4)
-void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y);	// MODERNLOG tick line (step 5)
+void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
+	short* world_yaw, long* wall);	// MODERNLOG tick line (step 5; world_yaw/wall added 161a2b step 5)
 void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
-	long* hide_dist, long* invert_pitch, long* pitch_return);	// MODERNLOG init line (step 5)
+	long* hide_dist, long* invert_pitch, long* pitch_return,
+	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max);	// MODERNLOG init line (step 5; last four added 161a2b step 5)
 
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;

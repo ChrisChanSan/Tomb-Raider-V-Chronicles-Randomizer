@@ -14,8 +14,9 @@
 /* ModernTest - the arithmetic of the modern control, checked without a game
  * (#161, round 161a step 2; the camera's orbit added in round 161a2 step 1, its
  * seam's own angle arithmetic in step 2 and the water's turn and pitch table in
- * step 4 - step 3, the pad table, has no pure function to check and the review
- * of the round retargeted the D-pad block it retired).
+ * step 4 - step 3, the pad table, has no pure function to check, and the two
+ * review passes of the round retargeted the D-pad block it retired, the second
+ * one to measure the defect its own first answer left behind).
  * Build with bmt.bat, run with no arguments.
  *
  * WHAT IT CHECKS, and why it exists at all. The modern control is a pure
@@ -2502,70 +2503,129 @@ static void sweeps()
 	}
 	ok(bad == 0, "(c) a camera cut of 180 degrees never bends the held course", bad, 0);
 
-	/* (d) THE D-PAD, AND WHAT ROUND 161a2 STEP 3 DID WITH IT.
+	/* (d) THE D-PAD, AND WHAT THE MEDIPACKS ON IT COST UNTIL THE SECOND FIX
+	 * ROUND OF 161a2.
 	 *
-	 * specific\dxshell.cpp ORs the D-pad into the very same axes as the stick,
-	 * but at +-20 of 128 - a quarter of the way. Under Tank that is only a
-	 * direction bit and the size does not matter; under Modern the size IS the
-	 * speed, and 20 is under TROne's walk_below (62), so a D-pad-only push
-	 * would make Lara WALK. Round 161a answered that by BOOSTING the signature
-	 * to a full push (ModernDPadToStick), and this block asserted the boost.
+	 * specific\dxshell.cpp does not OR the D-pad into the stick's two axes, it
+	 * ASSIGNS: a direction press REPLACES whatever the stick was saying with
+	 * +-20 of 128, a quarter of the way. Under Tank that is right and is
+	 * Core's own idea - a direction bit has no size, so a quarter push and a
+	 * full one mean the same thing. Under Modern the size IS the speed (20 is
+	 * under TROne's walk_below, 62) and the direction IS a course.
 	 *
-	 * ROUND 161a2 STEP 3 RETIRED IT. The user's decision 8 frees the D-pad for
-	 * bindings instead ("das D-Pad wird dann in der modernen Steuerung fuer die
-	 * Binds frei"), so the seam now ERASES the signature before either consumer
-	 * sees it: specific\input.cpp shadows joy_x/joy_y and zeroes the pair when
-	 * both axes are in {0, +20, -20} and not both zero. This block asserts THAT
-	 * rule now - the old text survived the change by three weeks, which is the
-	 * whole reason the review caught it here and not in the game.
+	 * Round 161a answered that by BOOSTING the signature to a full push
+	 * (ModernDPadToStick) and this block asserted the boost. Step 3 retired
+	 * the boost, freed the cross for bindings (the user's decision 8: "das
+	 * D-Pad wird dann in der modernen Steuerung fuer die Binds frei") and put
+	 * the medipacks on it - and ERASED the +-20 signature in
+	 * specific\input.cpp. That was the wrong file, and this block asserted
+	 * that too. By the time the pair reaches input.cpp the stick's own reading
+	 * is already overwritten, so the erasure could only ever turn "she walks
+	 * at a quarter push" into "she stops dead", and only on the readings that
+	 * matched the signature exactly; the rest came through as a course that
+	 * was not hers. With a medipack on the cross, that is something a player
+	 * does WHILE RUNNING. The second fix round keeps the left stick's own two
+	 * axes beside the overwritten pair (joystick_read_lx/ly) and the movement
+	 * seam reads those, so the cross costs the movement nothing at all.
 	 *
-	 * The erasure itself lives in the engine and nothing linked here can run
-	 * it, so its condition is transcribed below, named as a transcription, and
-	 * held to two things a copy can be wrong about: that it catches every
-	 * D-pad reading, and that it catches nothing else in the whole square of
-	 * stick values. The DirectInput path really can deliver a genuine +-20 -
-	 * the one-tick cost round 161a named and step 3 inherited - and the sweep
-	 * below is what says that this is the ONLY reading it takes.
+	 * NOTHING LINKED HERE CAN RUN ANY OF THAT - it is engine code, in two
+	 * files this test cannot see. So the block does what a pure test honestly
+	 * can: it MEASURES the defect the fix removes, on the translation itself,
+	 * with dxshell's own overwrite and input.cpp's own former condition
+	 * transcribed and named as transcriptions; and it holds the two statements
+	 * about the cross that survive the change.
 	 *
 	 * cfg.walk_below is set explicitly, the same way walk_threshold() does, so
-	 * the counter-proof (what the raw +-20 would still do if it got through)
-	 * keeps proving what it always proved rather than turning into a tautology
-	 * at the shipped default of 0. */
+	 * the counter-proof (what a +-20 reading does to the translation) keeps
+	 * proving what it always proved rather than turning into a tautology at
+	 * the shipped default of 0. */
 	{
 		static const long dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 		static const long dz[8] = { 1, 1, 0, -1, -1, -1, 0, 1 };
 		const long dpad = 20;		/* specific\dxshell.cpp, both joystick paths */
-		long erased = 0;
 		long silent = 0;
 		long walked = 0;
+		long killed = 0;
+		long veered = 0;
+		long worst = 0;
 		long sx, sy;
 
 		cfg.walk_below = 62;	/* explicit: the shipped default is 0 */
 		sit.anim_state = 2;
 
-		/* The seam's own condition, transcribed from specific\input.cpp. */
+		/* THE SIZE OF THE DEFECT, over the whole square of stick positions
+		 * with D-Pad Up held. dxshell assigns joystick_read_y = -20 and leaves
+		 * x alone; the old seam then erased the pair when both axes were in
+		 * {0, +20, -20} and not both zero. What the player asked for is the
+		 * stick itself, which is what the seam hands over now. */
 		for (sx = -MODERN_STICK_FULL; sx <= MODERN_STICK_FULL; sx++)
 		{
 			for (sy = -MODERN_STICK_FULL; sy <= MODERN_STICK_FULL; sy++)
 			{
-				const long hit = (!((sx != 0 && sx != dpad && sx != -dpad) ||
-					(sy != 0 && sy != dpad && sy != -dpad)) && (sx || sy)) ? 1 : 0;
+				MODERN_RESULT mine;		/* the stick, which is what she asked for */
+				MODERN_RESULT then;		/* what the press used to leave of it */
+				long ox = sx;			/* dxshell's own assignment, transcribed */
+				long oy = -dpad;
 
-				if (hit)
-					erased++;
+				if (!((ox != 0 && ox != dpad && ox != -dpad) ||
+					(oy != 0 && oy != dpad && oy != -dpad)) && (ox || oy))
+				{
+					ox = 0;				/* the old seam's condition, transcribed */
+					oy = 0;
+				}
+
+				ModernResetState(&state);
+				tick(&cfg, &state, sx, sy, 0x1000, 0, &sit, &mine);
+
+				ModernResetState(&state);
+				tick(&cfg, &state, ox, oy, 0x1000, 0, &sit, &then);
+
+				if (!mine.active)
+					continue;			/* she was not moving; nothing to lose */
+
+				if (!then.active)
+				{
+					killed++;			/* a tap on the medipack stopped her */
+					continue;
+				}
+
+				if (then.target != mine.target)
+				{
+					const long off = absl(ModernWrap((long)then.target - (long)mine.target));
+
+					veered++;
+
+					if (off > worst)
+						worst = off;
+				}
 			}
 		}
 
-		ok(erased == 8, "(d) the seam's erasure catches the eight D-pad readings and no other stick value",
-			erased, 8);
+		/* 770 is not a guess: the overwrite leaves y at -20, so the old
+		 * condition fired at exactly the three columns x = -20, 0, +20 (257
+		 * rows each) minus the one position where the stick was at rest
+		 * anyway. Every one of them is a tick of running turned into a tick of
+		 * standing still. */
+		ok(killed == 770, "(d) the overwrite plus the old erasure stopped her dead at 770 stick positions",
+			killed, 770);
+
+		/* And a quarter circle is a floor, not the number: running backwards
+		 * and tapping the medipack turned her a half circle round. */
+		ok(worst > 0x4000, "(d) ...and turned the course by more than a quarter circle at the rest",
+			worst, 0x4000);
+
+		printf("  measured: one D-Pad Up press cost her %ld of the %ld stick positions outright\n",
+			killed, (long)(2 * MODERN_STICK_FULL + 1) * (2 * MODERN_STICK_FULL + 1));
+		printf("  measured: and bent the course at %ld more, by up to %.1f degrees\n",
+			veered, (double)worst * 360.0 / 65536.0);
 
 		for (i = 0; i < 8; i++)
 		{
 			MODERN_RESULT gone;
 			MODERN_RESULT raw;
 
-			/* What the translation is really handed in Modern once the seam
-			 * has erased the pair: nothing at all. */
+			/* What the translation is handed in Modern when the cross is the
+			 * only thing pressed: the stick, which is at rest. */
 			ModernResetState(&state);
 			tick(&cfg, &state, 0, 0, 0x1000, 0, &sit, &gone);
 
@@ -2575,15 +2635,18 @@ static void sweeps()
 			if (!gone.active && !gone.bits && gone.mode == MODERN_MODE_OFF)
 				silent++;
 
-			/* And why it has to be erased rather than only left alone: the raw
-			 * reading IS a course and IS a walk, on every one of the eight. */
+			/* And what a +-20 reading itself still is, so the two halves above
+			 * cannot quietly become the same statement: a course and a walk.
+			 * The DirectInput path can really deliver it - its smallest
+			 * non-zero reading is 18 - which is the other reason the fix is
+			 * "keep the stick" rather than "erase this value". */
 			if (raw.active && (raw.bits & MODERN_IN_WALK) && raw.mag < cfg.walk_below)
 				walked++;
 		}
 
-		ok(silent == 8, "(d) ...so a D-pad press produces no course, no bits and no mode in Modern",
+		ok(silent == 8, "(d) ...while a D-pad press alone is still no course, no bits and no mode",
 			silent, 8);
-		ok(walked == 8, "(d) ...while the raw +-20 of dxshell would have made her walk",
+		ok(walked == 8, "(d) ...and a genuine +-20 of the stick is a course and a walk, not nothing",
 			walked, 8);
 	}
 }

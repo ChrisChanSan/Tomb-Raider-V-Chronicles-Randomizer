@@ -879,6 +879,9 @@ static long DXUpdateJoystickDirectInput()
 	joystick_read_x = lx / 8;
 	joystick_read_y = ly / 8;	// DirectInput joystick Y is already "up = negative", matching S_UpdateInput()'s joy_y<0=forward - no invert needed here (unlike the XInput thumbstick above)
 
+	joystick_read_lx = joystick_read_x;	// the stick ALONE, kept beside the pair the POV block below writes over (#161, round 161a2, fix round 2) - see the twin lines on the XInput path for why
+	joystick_read_ly = joystick_read_y;
+
 	long fire = 0;	// moved up from below the POV block (#161, round 161a2, step 3) - the new d-pad button bits inside that block need it to already exist
 
 	if (LOWORD(js.rgdwPOV[0]) != 0xFFFF)	// POV hat centered reports as -1/0xFFFFFFFF
@@ -955,6 +958,8 @@ long DXUpdateJoystick()
 	joystick_read_fire = 0;
 	joystick_read_rx = 0;	// the right stick's axes (#161, round 161a2) - see below
 	joystick_read_ry = 0;
+	joystick_read_lx = 0;	// the left stick's own axes, without the d-pad - see below
+	joystick_read_ly = 0;
 
 	if (XInputGetState(0, &state) != ERROR_SUCCESS)
 		return DXUpdateJoystickDirectInput();	// no XInput device (e.g. a PS4/PS5 controller with no Steam Input/DS4Windows wrapper active) - fall back to raw DirectInput
@@ -973,6 +978,24 @@ long DXUpdateJoystick()
 
 	joystick_read_x = lx / 256;	// -32768..32767 -> ~-128..127
 	joystick_read_y = -ly / 256;	// inverted: stick pushed up (ly>0) means forward, which S_UpdateInput() reads as joy_y<0
+
+	// THE STICK ALONE, BESIDE THE PAIR THE D-PAD WRITES OVER (#161, round
+	// 161a2, fix round 2 - the skeptical review's first finding). The four
+	// lines below do not OR the d-pad into these axes, they ASSIGN: a
+	// direction press replaces whatever the stick was saying with +-20. Under
+	// Tank that is right and is Core's own idea - the d-pad is a second way to
+	// push the same stick, and a direction bit has no size. Under Modern the
+	// size IS the speed and the direction IS a course, and step 3 has just put
+	// the medipacks on the d-pad: tapping one while running overwrote the
+	// stick with a quarter-push, which stopped her outright when she ran
+	// straight and veered her course when she did not. No erasure downstream
+	// can undo that, because the stick's own value is already gone by then -
+	// so it is KEPT here instead, and the movement seam reads this pair
+	// (specific\input.cpp). Written on every poll and read only under the
+	// option, exactly like the right stick's own axes below; nothing in this
+	// file needs to know which scheme is running.
+	joystick_read_lx = joystick_read_x;
+	joystick_read_ly = joystick_read_y;
 
 	long fire = 0;	// moved up from below the d-pad block (#161, round 161a2, step 3) - the new d-pad button bits right after it need it to already exist
 

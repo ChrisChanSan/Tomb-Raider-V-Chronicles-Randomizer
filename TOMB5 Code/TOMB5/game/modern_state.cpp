@@ -75,11 +75,20 @@ void ModernResetControls()
  * must not ALSO still read as a movement stick, boosted or not - the user's
  * own words are "free for the binds", not "free for the binds AND still
  * walks her". The fix is upstream of this file rather than in it:
- * specific\input.cpp's own seam now erases the same +-20 signature from its
- * local copy of the stick before either the classic assembly or
- * ModernUpdateInput below ever sees it, so nothing reaches here for this
- * function to boost in the first place, and the boost itself is gone with
- * it rather than left dead behind a call that no longer exists. */
+ * specific\dxshell.cpp keeps the left stick's OWN two axes beside the pair
+ * the d-pad writes over, and specific\input.cpp's seam hands those to the
+ * classic assembly and to ModernUpdateInput below, so nothing of the cross
+ * reaches here for this function to boost in the first place, and the boost
+ * itself is gone with it rather than left dead behind a call that no longer
+ * exists.
+ *
+ * Step 3 put that upstream fix in the wrong file (it erased the +-20
+ * signature in specific\input.cpp instead of keeping the stick), and the
+ * second fix round moved it: the d-pad OVERWRITES the axes rather than
+ * adding to them, so an erasure downstream stopped her outright when the
+ * press happened to match the signature and veered her course when it did
+ * not - which the medipacks on the d-pad made a thing a player does while
+ * running. */
 
 /* THE MODE NAME FOR MODERNLOG's `mode=` (step 5). Nothing else in the tree
  * ever turns a modern_mode into text - the tests compare the number (design
@@ -224,9 +233,10 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	// ModernDPadToStick used to sit here (round 161a, decision 3) - see the
 	// retirement note above this function for why it is gone rather than
-	// merely unused: specific\input.cpp already erases the d-pad's own
-	// +-20 signature from stick_x/stick_y before this call, so it would
-	// never have fired again anyway.
+	// merely unused: stick_x/stick_y are the left stick's own axes in
+	// Modern (specific\dxshell.cpp keeps them beside the pair the d-pad
+	// writes over, specific\input.cpp hands them here), so the cross never
+	// reaches this call at all and it would never have fired again anyway.
 
 	/* THE CAMERA HEADING OF THIS TICK (design section 5.3).
 	 *

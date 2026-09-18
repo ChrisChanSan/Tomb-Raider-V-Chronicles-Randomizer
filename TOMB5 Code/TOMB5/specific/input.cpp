@@ -360,6 +360,8 @@ long joystick_read_x;
 long joystick_read_y;
 long joystick_read_rx;		// the right stick as two axes (#161, round 161a2) - the modern camera
 long joystick_read_ry;
+long joystick_read_lx;		// the left stick alone (#161, round 161a2, fix round 2) - the modern movement, see S_UpdateInput
+long joystick_read_ly;
 long joystick_read_fire;
 long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/Steam), 0 = DirectInput fallback; set anew on every poll (dxshell.cpp)
 
@@ -740,31 +742,31 @@ long S_UpdateInput()
 	 * the d-pad has to keep steering a menu even once it has stopped
 	 * steering her - zeroing the shared statics here would take that away
 	 * too, on whichever tick the menu's own loop happens to call this
-	 * function.
+	 * function. So the shadow stays; only its SOURCE changed.
 	 *
-	 * The +-20 test is exactly the signature game\modern_state.cpp's
-	 * ModernDPadToStick used to look for before this step retired it (both
-	 * joystick paths write it, specific\dxshell.cpp, never a real stick
-	 * reading - see that function's own former comment on the DirectInput
-	 * path's one-tick cost). Repeated here rather than shared, because the
-	 * two sites wanted opposite answers: that one turned the signature
-	 * into a full stick push; this one erases it before either the classic
-	 * assembly below or ModernUpdateInput's own call further down ever
-	 * sees it as one. */
+	 * IT USED TO ERASE THE D-PAD'S +-20 SIGNATURE HERE AND THAT WAS WRONG
+	 * (the second fix round of this round, the review's first finding).
+	 * specific\dxshell.cpp does not OR the d-pad into the axes, it ASSIGNS:
+	 * the press overwrites the stick. By the time the pair arrives here the
+	 * stick's own reading is already gone, so erasing the signature could
+	 * only ever turn "she walks at a quarter push" into "she stops dead" -
+	 * and once step 3 put the medipacks on the d-pad, tapping one while
+	 * running did exactly that, or veered her course when the other axis
+	 * was out and the pair did not match the signature at all.
+	 *
+	 * So the movement reads the stick's OWN axes, which that file now keeps
+	 * beside the overwritten pair and no d-pad press ever touches. joy_x /
+	 * joy_y still carry the d-pad for the menus, joy_fire still carries its
+	 * four bits for the bindings, and a medipack on the d-pad costs her
+	 * nothing. The joystick_read test is ReadJoystick's own: no pad
+	 * answering means no axes, not last poll's. */
 	long move_x = joy_x;
 	long move_y = joy_y;
 
 	if (tomb5.control_modern && ControlMethod == 1)
 	{
-		const long dpad = 20;	// specific\dxshell.cpp, both joystick paths
-
-		if (!((move_x != 0 && move_x != dpad && move_x != -dpad) ||
-			(move_y != 0 && move_y != dpad && move_y != -dpad)) &&
-			(move_x || move_y))
-		{
-			move_x = 0;
-			move_y = 0;
-		}
+		move_x = joystick_read ? joystick_read_lx : 0;
+		move_y = joystick_read ? joystick_read_ly : 0;
 	}
 
 	linput = 0;
@@ -836,9 +838,10 @@ long S_UpdateInput()
 		const long mAction = Key(8) || Key(jLayout[4] + 256);
 		const long mJump = Key(7) || Key(jLayout[3] + 256);
 
-		// move_x/move_y, not joy_x/joy_y - the d-pad's own +-20 signature was
-		// already erased above (round 161a2 step 3) so it reaches neither
-		// this call nor the classic assembly above as a movement stick.
+		// move_x/move_y, not joy_x/joy_y - in Modern that pair is the left
+		// stick's own reading, which the d-pad never writes over (see above),
+		// so a d-pad press reaches neither this call nor the classic assembly
+		// above as a movement stick.
 		linput = ModernUpdateInput(linput, move_x, move_y, mAction, mJump);
 	}
 

@@ -46,6 +46,8 @@ extern long joystick_read_x;
 extern long joystick_read_y;
 extern long joystick_read_rx;	// the RIGHT stick's axes, same scale (#161, round 161a2)
 extern long joystick_read_ry;
+extern long joystick_read_lx;	// the LEFT stick ALONE - joystick_read_x/y without the d-pad written over them (#161, round 161a2, fix round 2)
+extern long joystick_read_ly;
 extern long joystick_read_fire;
 extern long joystick_is_xinput;
 extern short ammo_change_timer;

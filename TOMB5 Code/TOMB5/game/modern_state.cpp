@@ -487,7 +487,15 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * untouched base bits, and that is finding B (section 1.3), not a
 	 * contradiction of this line. `lara` reads the local captured above the
 	 * direct turn, because by the time this line runs the direct turn may
-	 * already have written a new heading. */
+	 * already have written a new heading.
+	 *
+	 * `cstep` IS THE NEW BEHAVIOUR'S OWN FIELD (round 161a2b, #161 item 7b):
+	 * how far the COURSE itself moved this tick, which is what the instant
+	 * about-turn now needs to see over snap_delta before it fires. It is the
+	 * one number that separates a flick of the thumb from error that piled up
+	 * while the stick outran her turn, so a next play test can grep the spin
+	 * complaint straight out of it: a smooth circle holds `cstep` near the
+	 * stick's own step a tick, and only a flick shows a figure over 16384. */
 	if (gLogEnabled)
 	{
 		/* THE ORBIT'S OWN FIVE (round 161a2, step 5), read back rather than
@@ -512,13 +520,13 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		Log("MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d "
 			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
-			"water=%d xrot=%d stroke=%d",
+			"water=%d xrot=%d stroke=%d cstep=%d",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
 			modern_state.aligned, modern_state.blocked_count, out.blocked,
 			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
-			ModernLaraEyeDistance(), water, xrot, stroke);
+			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step);
 	}
 
 	return bits;

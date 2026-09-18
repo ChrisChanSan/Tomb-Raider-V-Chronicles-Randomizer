@@ -287,10 +287,15 @@ static void bit_values()
 		ok(cfg.snap_forward == 0x2000, "forward returns at 45 degrees left",
 			cfg.snap_forward, 0x2000);
 		ok(cfg.stick_full == 128, "full deflection in our units", cfg.stick_full, 128);
-		ok(cfg.hold_course == 1 && cfg.back_turns == 1 && cfg.aim_strafe == 1 &&
-			cfg.jump_dir == 1 && cfg.block_turn == 1, "all five rules on",
+		/* FOUR OF THE FIVE, SINCE ROUND 161a2b (#161 item 8). aim_strafe ships
+		 * OFF on the user's "Das ist schon echt doof im Kampf, wenn sie nur
+		 * schleichen kann" - firing no longer puts her in the strafing walk.
+		 * The rule is still built and still tested, behind an explicit cfg;
+		 * this line is what it ships as. */
+		ok(cfg.hold_course == 1 && cfg.back_turns == 1 && cfg.aim_strafe == 0 &&
+			cfg.jump_dir == 1 && cfg.block_turn == 1, "four rules on, the strafe off",
 			cfg.hold_course + cfg.back_turns + cfg.aim_strafe + cfg.jump_dir +
-			cfg.block_turn, 5);
+			cfg.block_turn, 4);
 
 		/* The two candidates the play test will be offered beside 3277. They
 		 * are named constants and not comments so that swapping one in is a
@@ -837,8 +842,16 @@ static void aiming()
 	/* TROne: modern.aiming_strafes_instead_of_turning. Weapon ready AND the
 	 * action key down: the game turns her onto her target itself, so the stick
 	 * becomes a side step and no turn bit goes out at all. Letting the action
-	 * go gives the turn back in the same tick. */
+	 * go gives the turn back in the same tick.
+	 *
+	 * EVERY CASE IN THIS GROUP NOW SETS cfg.aim_strafe EXPLICITLY (round
+	 * 161a2b, #161 item 8). The rule ships OFF - she runs while she fires -
+	 * so TROne's expectations below are the expectations OF THE RULE and not
+	 * of the default any more. What the default does instead is firing_run()
+	 * further down. The capability is unchanged: every assertion here passed
+	 * before this round and passes now, one cfg field later. */
 	ModernDefaults(&cfg);
+	cfg.aim_strafe = 1;					/* explicit: the shipped default is 0 */
 	ModernResetState(&state);
 	sit.anim_state = 0;
 	sit.classic = 0;
@@ -891,8 +904,11 @@ static void aiming()
 	ok(out.mode == MODERN_MODE_RUN, "the action key on its own does not strafe either",
 		out.mode, MODERN_MODE_RUN);
 
-	/* aim_strafe = 0 takes the whole rule out, which is how a play test can
-	 * bisect a complaint about it without a rebuild of the scheme. */
+	/* aim_strafe = 0 takes the whole rule out - and since round 161a2b that is
+	 * the SHIPPED setting rather than the play test's bisection switch, so this
+	 * case is asserted twice on purpose: once with the field set by hand, and
+	 * once from ModernDefaults with nothing touched at all. The second is the
+	 * one that would catch the default drifting back. */
 	cfg.aim_strafe = 0;
 	sit.drawn = 1;
 	sit.action = 1;
@@ -900,6 +916,12 @@ static void aiming()
 	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
 	ok(out.mode == MODERN_MODE_RUN, "aim_strafe 0 switches the strafe off",
 		out.mode, MODERN_MODE_RUN);
+
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_RUN, "...and that IS the default now", out.mode,
+		MODERN_MODE_RUN);
 }
 
 /* ------------------------------------------------------------ the jumps ---- */
@@ -921,8 +943,14 @@ static void jumping()
 	 * to read a flip at all, see rule 4's own comment in modern_move.cpp - so
 	 * every TROne-ported case below sets sit.drawn = 1 to stay inside that
 	 * case; jumping()'s own two-case split for the unarmed answer is further
-	 * down, where TROne's side-flip expectation used to be the only one. */
+	 * down, where TROne's side-flip expectation used to be the only one.
+	 * AND aim_strafe IS SET BY HAND (round 161a2b, #161 item 8): one case in
+	 * this group - "firing without the jump key aims again" - is about the aim
+	 * coming BACK after the flip, which has no meaning unless the rule is on.
+	 * The flips themselves do not care either way, which the same case proves
+	 * by still coming out as flips with it on. */
 	ModernDefaults(&cfg);
+	cfg.aim_strafe = 1;					/* explicit: the shipped default is 0 */
 	ModernResetState(&state);
 	sit.anim_state = 2;					/* AS_STOP */
 	sit.classic = 0;
@@ -1554,10 +1582,17 @@ static void water_move()
 	 * switched off the back branch would have sent IN_BACK, which under water
 	 * is "pitch her nose up". Both are refused by the state, and the land
 	 * cases beside them prove the refusal is the water's and not a change of
-	 * the rule. */
+	 * the rule.
+	 *
+	 * aim_strafe IS FORCED ON FOR THIS PAIR (round 161a2b, #161 item 8). With
+	 * the shipped default the land case would answer RUN as well and the
+	 * contrast would prove nothing; with the rule ON, the water still refuses
+	 * it, which is the claim - the water's refusal is the STATE's and not the
+	 * switch's. */
 	sit.anim_state = 17;
 	sit.drawn = 1;
 	sit.action = 1;
+	cfg.aim_strafe = 1;					/* explicit: the shipped default is 0 */
 	state.have_ref = 0;
 	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
 	ok(out.mode == MODERN_MODE_RUN, "a flare and the action key: still the run branch",
@@ -1571,6 +1606,7 @@ static void water_move()
 
 	sit.drawn = 0;
 	sit.action = 0;
+	cfg.aim_strafe = 0;					/* back to the shipped default */
 	cfg.back_turns = 0;
 	sit.anim_state = 17;
 	state.have_ref = 0;
@@ -1949,9 +1985,46 @@ static void direct_turn()
 	sit.jump = 0;
 	sit.blocked = 0;
 
-	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+	/* ROUND 161a2b (#161 item 7b) PUT A SECOND CONDITION ON THE SNAP: the
+	 * COURSE has to have jumped, not just the error. So TROne's case is now
+	 * built as the flick it always described - one tick of the stick forward
+	 * to seat a course, then the stick thrown fully back - instead of relying
+	 * on a fresh state, where there is no previous course to have jumped from
+	 * and the rule (rightly) declines. */
+	ok(tick_turn(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"running: the direct turn takes charge", 1, 1);
+	ok(yaw == 0, "...with nothing to do while the stick points where she runs", yaw, 0);
+
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+		"the stick thrown from forward to back: still the direct turn", 1, 1);
+	ok(absl(out.course_step) == 0x8000, "...the course itself jumped a half turn",
+		absl(out.course_step), 0x8000);
 	ok(absl(yaw) == 0x8000, "...and the whole half turn in one tick", absl(yaw), 0x8000);
+
+	/* OURS, and the one behaviour item 7b deliberately gives up: with no
+	 * previous course in the state - a level start, a death, the scheme just
+	 * switched - the very first push has nothing to be a flick against, so it
+	 * turns at the bounded rate. In the engine that first push always meets a
+	 * standing Lara, where the rate was the answer anyway; the case is written
+	 * down because a test is the only place it can be seen. */
+	ModernResetState(&state);
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+		"a first push with no course behind it: the turn is still ours", 1, 1);
+	ok(absl(yaw) == MODERN_TURN_RATE, "...but bounded, because nothing flicked",
+		absl(yaw), MODERN_TURN_RATE);
+
+	/* AND A REAL FLICK GOES THROUGH THE CENTRE OF THE STICK, which is why the
+	 * course memory outlives a release (MODERN_STATE::last_course). Forward,
+	 * one tick of nothing at all as the thumb crosses over, then fully back:
+	 * the flick still reads as a flick. */
+	ModernResetState(&state);
+	tick_turn(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out, &yaw);
+	tick_turn(&cfg, &state, 0, 0, 0, 0, &sit, &out, &yaw);
+	ok(out.mode == MODERN_MODE_OFF, "the stick crosses the centre: one dead tick",
+		out.mode, MODERN_MODE_OFF);
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+		"...and the push out the other side is the direct turn again", 1, 1);
+	ok(absl(yaw) == 0x8000, "...the flick survived the dead tick", absl(yaw), 0x8000);
 
 	ModernResetState(&state);
 	sit.anim_state = 2;					/* AS_STOP */
@@ -1998,9 +2071,20 @@ static void direct_turn()
 	/* TROne: modern.held_back_keeps_its_course_when_the_chase_camera_turns -
 	 * the turn half (step 2 asserted the course half over a swinging camera).
 	 * Tick 0 is the stand and turns by one rate; from tick 1 she is running,
-	 * the camera has CUT by 180 degrees, and the held course does not care:
-	 * the reversal finishes in that one tick and stays finished for the rest
-	 * of the twenty. */
+	 * the camera has CUT by 180 degrees, and the held course does not care.
+	 *
+	 * ROUND 161a2b (#161 items 7a and 7b) CHANGED WHAT "does not care" LOOKS
+	 * LIKE HERE, and both halves of the change show in this one loop. The
+	 * course is HELD through the cut, so it does not jump - and a snap now
+	 * needs a jump, so the reversal is walked at the bounded rate over ten
+	 * ticks instead of being taken whole on tick 1. That is the accumulated-
+	 * error snap the user played as a jerk, gone. What has NOT changed is the
+	 * claim TROne's expectation is about: the camera cut never reaches the
+	 * course, so she turns the short way to the SAME heading and stays there.
+	 * And IN_FORWARD is set on every running tick of it now - item 7a - where
+	 * before it would have been withheld for the ticks with more than 45
+	 * degrees left. Ten ticks: 3277 nine times is 29493, and the tenth is
+	 * clamped to the 3275 that are left. */
 	ModernResetState(&state);
 	yaw = 0;
 
@@ -2016,11 +2100,17 @@ static void direct_turn()
 		if (!t)
 			continue;
 
-		ok(yaw == -32768, "held back through a camera cut: she is round and stays round",
-			yaw, -32768);
+		ok(out.course_step == 0, "held back through a camera cut: the course does not move",
+			out.course_step, 0);
+		ok(absl(step) <= MODERN_TURN_RATE, "...so nothing is ever taken in one tick",
+			absl(step), MODERN_TURN_RATE);
 		ok((out.bits & MODERN_DIR_MASK) == MODERN_IN_FORWARD,
 			"...running forward on the held course", out.bits & MODERN_DIR_MASK,
 			MODERN_IN_FORWARD);
+
+		if (t >= 9)
+			ok(yaw == -32768, "...and by the tenth tick she is round, and stays round",
+				yaw, -32768);
 	}
 
 	/* OURS, the four cases that say the write cannot happen where it must
@@ -2037,15 +2127,23 @@ static void direct_turn()
 	ok((out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT)) != 0, "...the turn bit stands instead",
 		out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT), MODERN_IN_LEFT);
 
-	/* Aiming: with aim_strafe switched off the mode is RUN and the game is
-	 * already turning her onto her target - two hands on one heading. */
+	/* THE CASE THIS ROUND TURNED ROUND (#161 item 8). It used to assert that a
+	 * weapon up and the action held made the direct turn stand aside, "because
+	 * the game is already turning her onto her target". The brief asked for
+	 * that to be measured, and it is not true of our engine: game\larafire.cpp,
+	 * game\lara1gun.cpp and game\lara2gun.cpp write lara.left_arm.y_rot,
+	 * lara.right_arm.y_rot, lara.torso_y_rot and lara.head_y_rot and never
+	 * lara_item->pos.y_rot. Nothing was turning her but the turn bits, which
+	 * the direct turn replaces armed or not - so the guard went, and firing
+	 * steers like empty hands. */
 	ModernDefaults(&cfg);
-	cfg.aim_strafe = 0;
 	ModernResetState(&state);
 	sit.drawn = 1;
 	sit.action = 1;
-	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 0,
-		"weapon up and action held: the game turns her, not us", 0, 0);
+	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
+		"weapon up and action held: we turn her, the guns only aim", 1, 1);
+	ok(out.mode == MODERN_MODE_RUN, "...in the running mode, not the strafe",
+		out.mode, MODERN_MODE_RUN);
 
 	/* A classic state, and the standing jump. Neither is mode RUN, and the
 	 * jump is the case that would cost the back flip if it were. */
@@ -2099,6 +2197,7 @@ static void direct_turn()
 	cfg.walk_below = 62;		/* explicit: the shipped default is 0 */
 	sit.jump = 0;
 	sit.anim_state = 1;
+	tick_turn(&cfg, &state, 0, -S(12000), 0, 0, &sit, &out, &yaw);	/* seat a course first */
 	tick_turn(&cfg, &state, 0, S(12000), 0, 0, &sit, &out, &yaw);
 	ok((out.bits & MODERN_IN_WALK) != 0, "a gentle stick still walks while the turn is ours",
 		out.bits & MODERN_IN_WALK, MODERN_IN_WALK);
@@ -2191,14 +2290,333 @@ static void direct_turn()
 		ok(yaw == 0, "...and nothing writes her heading", yaw, 0);
 
 		/* And if the boundary catches her running instead of standing, the
-		 * snap past 90 degrees takes the whole wrong turn in one tick - the
-		 * same defect, worn the other way round. */
+		 * defect is the same one worn the other way round - but it is quieter
+		 * since round 161a2b (#161 item 7b). The carried course does not JUMP
+		 * across the boundary, it is simply carried, so the snap declines and
+		 * she turns away at the bounded rate rather than whipping 135 degrees
+		 * in one tick. The wrong heading is still wrong, which is what the
+		 * reset in game\gameflow.cpp is for; only the violence of it is gone. */
 		carried = state;
 		sit.anim_state = 1;				/* AS_RUN */
 		tick_turn(&cfg, &carried, 0, -S(32000), lara, lara, &sit, &out, &yaw);
-		ok(yaw == 24576, "caught running, the snap whips all 135 degrees in one tick",
-			yaw, 24576);
+		ok(out.delta == 24576, "caught running, the carried course is still 135 degrees out",
+			out.delta, 24576);
+		ok(out.course_step == 0, "...but it did not jump, so no whip", out.course_step, 0);
+		ok(yaw == 3277, "...she turns away at the bounded rate instead", yaw, 3277);
 	}
+}
+
+/* ------------------------------------------------- the spin on the spot ---- */
+
+/* THE RULE ROUND 161a2b REPLACED (#161 item 7), written in the pieces the
+ * header still exports so that the sweep below can be run against BOTH and the
+ * difference is a number rather than an argument. Two lines are the whole of
+ * it: the instant about-turn fired on the ERROR alone, and IN_FORWARD was
+ * withheld until snap_forward of the turn was left, whatever Lara was doing.
+ * Nothing in the engine calls this. It is here because a claim about a removed
+ * rule is only honest while the rule can still be run against the new one -
+ * and because the user played the removed one and described what it did:
+ * "sie macht ihre Stumble-Anim ... und dreht sich ohne Animation".
+ *
+ * The gates ModernDirectTurn asks before these two lines (mode RUN, the state
+ * list, the two switches) are left out because the sweep never fails one of
+ * them; every tick of it is an active, running, unarmed MODE RUN tick. */
+static long old_direct_turn(const MODERN_CFG* cfg, const MODERN_RESULT* out, short anim_state,
+	long* forward)
+{
+	long yaw = ModernGroundTurn(anim_state, out->delta, cfg->turn_rate);
+
+	if (absl(out->delta) > cfg->snap_delta && !ModernStateIsStanding(anim_state))
+		yaw = out->delta;
+
+	*forward = (absl((long)out->delta - yaw) <= cfg->snap_forward) ? 1 : 0;
+
+	return yaw;
+}
+
+/* What one run of a circling stick left behind. */
+struct SPIN_RUN
+{
+	long no_forward;	/* ticks that sent no IN_FORWARD */
+	long drops;			/* episodes of that - the stumbles the user counted */
+	long jerks;			/* ticks that turned by more than the rate */
+	long not_run;		/* ticks whose mode was not MODERN_MODE_RUN */
+	long worst_error;	/* the biggest |delta| the run reached */
+	long worst_cstep;	/* the biggest |course_step| the run reached */
+};
+
+/* ONE RUN OF A STICK CIRCLING AT A FIXED RATE, from a run, with the automaton
+ * modelled exactly as far as M6 measured it and no further: IN_FORWARD keeps
+ * her in AS_RUN, and a tick without it drops her to AS_STOP for that tick
+ * (game\lara.cpp, lara_as_run - a run with no forward goal is a stop). The
+ * camera is held still, which is what item 1 made true of a real one.
+ *
+ * THE MODEL IS A UNIFORM CIRCLE AND A REAL THUMB IS NOT, and that matters for
+ * reading the `rule` runs rather than the shipped one: a stick that turns
+ * faster than Lara can, without ever slowing, gives each rule its own worst
+ * case, where the play test's thumb kept handing them chances to recover. The
+ * NEW numbers do not depend on the model at all - they are zeroes.
+ *
+ * `rule` picks which of the three to run:
+ *   0  what ships - item 7a and item 7b together
+ *   1  what round 161a2 shipped - the error-only snap, forward withheld
+ *   2  item 7a WITHOUT item 7b, which is the reason the two are one item: keep
+ *      her running and the error-only snap starts firing, because she is no
+ *      longer stuttering into a standing state where it was disabled */
+static void spin_run(long step_units, long ticks, int rule, long rate, SPIN_RUN* r)
+{
+	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	short heading = 0;
+	short anim = 1;						/* AS_RUN - she is already running */
+	long last_forward = 1;
+	long t;
+
+	ModernDefaults(&cfg);
+
+	if (rate > 0)
+		cfg.turn_rate = rate;			/* 0 = whatever ships */
+
+	ModernResetState(&state);
+	sit.anim_state = anim;
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	r->no_forward = 0;
+	r->drops = 0;
+	r->jerks = 0;
+	r->not_run = 0;
+	r->worst_error = 0;
+	r->worst_cstep = 0;
+
+	for (t = 0; t < ticks; t++)
+	{
+		const double ang = (double)(t * step_units) * turn;
+		const long x = roundl2(sin(ang) * 120.0);	/* 120 of 128: a stick pushed over */
+		const long z = roundl2(cos(ang) * 120.0);
+		long yaw = 0;
+		long forward = 0;
+
+		sit.anim_state = anim;
+		ModernTranslate(&cfg, &state, x, -z, 0, heading, &sit, &out);
+
+		if (rule)
+		{
+			yaw = old_direct_turn(&cfg, &out, anim, &forward);
+
+			if (rule == 2 && ModernStateIsRunning(anim))
+				forward = 1;				/* item 7a, without item 7b beside it */
+		}
+		else
+		{
+			ModernDirectTurn(&cfg, &state, &sit, &out, &yaw);
+			forward = (out.bits & MODERN_IN_FORWARD) ? 1 : 0;
+		}
+
+		if (out.mode != MODERN_MODE_RUN)
+			r->not_run++;
+
+		if (!forward)
+		{
+			r->no_forward++;
+
+			if (last_forward)
+				r->drops++;
+		}
+
+		if (absl(yaw) > cfg.turn_rate)
+			r->jerks++;
+
+		if (absl(out.delta) > r->worst_error)
+			r->worst_error = absl(out.delta);
+
+		if (absl(out.course_step) > r->worst_cstep)
+			r->worst_cstep = absl(out.course_step);
+
+		heading = (short)ModernWrap((long)heading + yaw);
+		anim = (short)(forward ? 1 : 2);
+		last_forward = forward;
+	}
+}
+
+static void circling()
+{
+	MODERN_CFG cfg;
+	SPIN_RUN now;
+	SPIN_RUN was;
+	SPIN_RUN half;
+
+	printf("the spin on the spot - a circling stick must not stutter (#161 item 7)\n");
+
+	ModernDefaults(&cfg);
+
+	/* THE USER'S OWN SPEED, measured out of play test 2: the stick circling at
+	 * about 21 degrees a tick, which is 3822 of our units and a sixth faster
+	 * than the direct turn's own 3277. Five revolutions of it, 86 ticks, out
+	 * of a run. This is the sweep the brief asks for. */
+	spin_run(3822, 86, 0, 0, &now);
+	spin_run(3822, 86, 1, 0, &was);
+	spin_run(3822, 86, 2, 0, &half);
+
+	printf("  a stick circling at 21 deg/tick, five revolutions of 86 ticks, from a run:\n");
+	printf("    round 161a2's rule:  %ld ticks with no forward in %ld stumbles,"
+		" %ld one-tick whips\n", was.no_forward, was.drops, was.jerks);
+	printf("    item 7a on its own:  %ld / %ld / %ld  <- the whips the stutter was hiding\n",
+		half.no_forward, half.drops, half.jerks);
+	printf("    ours (7a and 7b):    %ld / %ld / %ld, worst error %ld,"
+		" worst course step %ld\n", now.no_forward, now.drops, now.jerks,
+		now.worst_error, now.worst_cstep);
+
+	ok(now.no_forward == 0, "circling: IN_FORWARD on every single tick", now.no_forward, 0);
+	ok(now.drops == 0, "...so not one stumble into AS_STOP", now.drops, 0);
+	ok(now.jerks == 0, "...and no tick turns more than the rate", now.jerks, 0);
+	ok(now.not_run == 0, "...she never leaves MODE RUN", now.not_run, 0);
+
+	/* The course's own step is the number the new rule reads, and a circle
+	 * never comes near the flick threshold. It is not exactly the stick's 3822
+	 * because a stick is a pair of whole numbers: 120 units of deflection
+	 * quantise the angle by up to half a degree a tick. */
+	ok(absl(now.worst_cstep - 3822) <= 128, "...the course steps with the stick and no further",
+		now.worst_cstep, 3822);
+	ok(now.worst_cstep < cfg.snap_delta, "...which is a long way under a flick",
+		now.worst_cstep, cfg.snap_delta);
+
+	/* WHAT THE TWO HALVES OF ITEM 7 ARE WORTH SEPARATELY, and it is the answer
+	 * to "why is this one item". Round 161a2's rule stuttered: the withheld
+	 * forward put her in AS_STOP, and AS_STOP is a standing state, where the
+	 * error-only snap is disabled - so the stutter was HIDING the whip. Keep
+	 * her running (item 7a) and leave the snap on the error (no item 7b) and
+	 * the whips come straight out: the user met both in the same session
+	 * because his thumb kept letting her recover between them. */
+	ok(was.no_forward > 0, "round 161a2's rule dropped forward on this same stick",
+		was.no_forward, 1);
+	ok(was.jerks == 0, "...and never whipped here, because the stutter disabled the snap",
+		was.jerks, 0);
+	ok(half.no_forward == 0, "item 7a alone keeps her running", half.no_forward, 0);
+	ok(half.jerks > 0, "...and then the error-only snap whips her, which is item 7b's case",
+		half.jerks, 1);
+
+	/* WHAT ITEM 7b COSTS, MEASURED AND NOT ARGUED AWAY. The error-only snap was
+	 * also a ceiling on how far she could fall behind: it fired at 90 degrees
+	 * and put the error back to nought. Without it she simply lags, by the
+	 * difference between the thumb and her rate - 3902 against 3277, so 625 a
+	 * tick - and after 53 ticks, 1.8 seconds of UNINTERRUPTED circling at this
+	 * speed, the lag reaches half a turn and she starts closing it the other
+	 * way round. The sweep above walked into exactly that: worst error 32721.
+	 *
+	 * That is not a bug this item can fix with another rule; it is the turn
+	 * RATE being slower than the user's thumb, which design row 16 already
+	 * names as the one number the play test is expected to change
+	 * (MODERN_TURN_RATE, candidates 1456 / 2184 / 3277). So it is measured
+	 * here instead: give the direct turn a rate that keeps up and the lag is
+	 * gone without a line of new logic. */
+	spin_run(3822, 86, 0, 3902, &was);
+	printf("    the same circle at a rate that keeps up (3902): worst error %ld\n",
+		was.worst_error);
+	ok(was.worst_error <= 3902, "a rate at the thumb's own speed leaves no lag at all",
+		was.worst_error, 3902);
+	ok(was.jerks == 0 && was.no_forward == 0, "...and still no whip and no stumble",
+		was.jerks + was.no_forward, 0);
+
+	/* A CIRCLE SHE CAN KEEP UP WITH changes nothing either way - 15 degrees a
+	 * tick, inside the direct turn's 18. That is the honest limit of the
+	 * claim: item 7 only ever bites where the thumb outruns her. */
+	spin_run(2730, 86, 0, 0, &now);
+	spin_run(2730, 86, 1, 0, &was);
+
+	ok(now.no_forward == 0 && was.no_forward == 0,
+		"a circle inside her turn rate: neither rule ever drops forward",
+		now.no_forward + was.no_forward, 0);
+	ok(now.jerks == 0 && was.jerks == 0, "...and neither one whips",
+		now.jerks + was.jerks, 0);
+	ok(now.worst_error < cfg.snap_forward, "...the error never even reaches 45 degrees",
+		now.worst_error, cfg.snap_forward);
+}
+
+/* ------------------------------------------------------ running and firing -- */
+
+static void firing_run()
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	long yaw;
+
+	printf("running while she fires - the strafe is off by default (#161 item 8)\n");
+
+	/* THE USER'S COMPLAINT, in one tick: a weapon ready, the action key held,
+	 * and she is running. "Das ist schon echt doof im Kampf, wenn sie nur
+	 * schleichen kann." With the strafe on she came out of here in MODE AIM
+	 * with a side step; the default now answers MODE RUN, a turn of her own,
+	 * and IN_FORWARD. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 1;					/* AS_RUN */
+	sit.classic = 0;
+	sit.drawn = 1;
+	sit.action = 1;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	tick_turn(&cfg, &state, S(30000), 0, 0, 0, &sit, &out, &yaw);
+	ok(out.mode == MODERN_MODE_RUN, "firing: the running mode", out.mode, MODERN_MODE_RUN);
+	ok((out.bits & MODERN_IN_FORWARD) != 0, "...she runs", out.bits & MODERN_IN_FORWARD,
+		MODERN_IN_FORWARD);
+	ok((out.bits & (MODERN_IN_LSTEP | MODERN_IN_RSTEP)) == 0, "...and does not side-step",
+		out.bits & (MODERN_IN_LSTEP | MODERN_IN_RSTEP), 0);
+	ok(yaw == MODERN_TURN_RATE, "...the direct turn turns her while she fires", yaw,
+		MODERN_TURN_RATE);
+	ok((out.bits & MODERN_IN_WALK) == 0, "...and nothing puts the walk key down",
+		out.bits & MODERN_IN_WALK, 0);
+
+	/* The same tick, empty-handed, is the same tick. That is the whole of item
+	 * 8: firing changes nothing about how she moves. */
+	{
+		MODERN_STATE bare;
+		MODERN_RESULT unarmed;
+		long bare_yaw;
+
+		ModernResetState(&bare);
+		sit.drawn = 0;
+		sit.action = 0;
+		tick_turn(&cfg, &bare, S(30000), 0, 0, 0, &sit, &unarmed, &bare_yaw);
+		ok(unarmed.bits == out.bits && unarmed.mode == out.mode && bare_yaw == yaw,
+			"empty hands answer exactly the same", unarmed.bits, out.bits);
+	}
+
+	/* AND THE RULE IS STILL THERE, one cfg field away, with TROne's own
+	 * answer - which is what makes this a default and not a deletion. */
+	cfg.aim_strafe = 1;
+	ModernResetState(&state);
+	sit.drawn = 1;
+	sit.action = 1;
+	tick_turn(&cfg, &state, S(30000), 0, 0, 0, &sit, &out, &yaw);
+	ok(out.mode == MODERN_MODE_AIM, "aim_strafe 1: the strafe is back", out.mode,
+		MODERN_MODE_AIM);
+	ok((out.bits & MODERN_IN_RSTEP) != 0, "...the side step with it",
+		out.bits & MODERN_IN_RSTEP, MODERN_IN_RSTEP);
+	ok(yaw == 0, "...and the direct turn stands aside, because MODE AIM is not MODE RUN",
+		yaw, 0);
+
+	/* The flips with a weapon drawn are a different rule (jump_dir) and item 8
+	 * does not touch them - asserted here at the shipped default, where
+	 * jumping() above asserts them with the strafe forced on. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 2;					/* AS_STOP */
+	sit.jump = 1;
+	tick(&cfg, &state, 0, S(32000), 0, 0, &sit, &out);
+	ok(out.mode == MODERN_MODE_JUMP, "armed and jumping: still the flip", out.mode,
+		MODERN_MODE_JUMP);
+	ok(out.bits == MODERN_IN_BACK, "...the back flip, at the shipped default", out.bits,
+		MODERN_IN_BACK);
 }
 
 /* ---------------------------------------------------------- the weapons ---- */
@@ -3737,6 +4155,8 @@ int main()
 	chatter();
 	blocked();
 	direct_turn();
+	circling();
+	firing_run();
 	weapons();
 	sweeps();
 	camera_orbit();

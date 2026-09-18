@@ -356,10 +356,23 @@ enum modern_constants
 	 *					backwards)
 	 *   aim_strafe		weapon up and action held strafes instead of turning
 	 *   jump_dir		the standing jump and the flips pick a direction
-	 *   block_turn		a blocked forward becomes a pure turn */
+	 *   block_turn		a blocked forward becomes a pure turn
+	 *
+	 * AIM_STRAFE SHIPS OFF SINCE ROUND 161a2b (#161 item 8), on the user's own
+	 * words after the first play test: "Kannst du in dem Workflow auch gleich
+	 * das mit dem Laufen beim Schiessen implementieren? Das ist schon echt doof
+	 * im Kampf, wenn sie nur schleichen kann." With it on, a weapon ready and
+	 * the action key down put her in MODE AIM - side steps and a walk - for as
+	 * long as she fires, which is TROne's rule and which he played as "dann ist
+	 * dauerhaft der Schleichmodus an". Off, firing steers exactly as empty
+	 * hands do: she runs, she turns, and only her arms and torso aim. The rule
+	 * itself is not deleted, because it is still the whole of TROne's aiming
+	 * design and ModernTest drives it with an explicit cfg (aiming(), and the
+	 * AIM half of firing_run()); it is simply not what ships. The flips with a
+	 * weapon drawn are a different rule (jump_dir) and are untouched. */
 	MODERN_HOLD_COURSE = 1,
 	MODERN_BACK_TURNS = 1,
-	MODERN_AIM_STRAFE = 1,
+	MODERN_AIM_STRAFE = 0,
 	MODERN_JUMP_DIR = 1,
 	MODERN_BLOCK_TURN = 1
 };
@@ -415,6 +428,22 @@ struct MODERN_STATE
 	long aiming;		// the strafe mode held last tick
 	long blocked_count;	// step 4's counter of ticks she did not get anywhere
 	long last_mode;		// the mode the last tick ended in, for the log
+
+	/* THE COURSE THE LAST ACTIVE TICK ENDED ON, and whether there was one
+	 * (round 161a2b, #161 item 7b). The instant about-turn reads the two as
+	 * one number - how far the course itself JUMPED - so that it fires on a
+	 * flick of the thumb and not on error that piled up because the stick
+	 * circles faster than Lara can turn.
+	 *
+	 * IT SURVIVES A RELEASE OF THE STICK ON PURPOSE, which is why it is not in
+	 * ModernRelease with have_ref and the rest: a real flick from forward to
+	 * back sweeps the stick THROUGH the centre, so one or two ticks of it read
+	 * as no push at all, and a memory that forgot there would forget exactly
+	 * the case the rule is for. Only ModernResetState clears it - a level
+	 * start, a death, the scheme switched - and there `have_course` 0 simply
+	 * means the first push has nothing to be a flick against. */
+	short last_course;
+	long have_course;
 };
 
 /* What the caller knows about Lara this tick. A struct of zeroes gives plain
@@ -442,6 +471,7 @@ struct MODERN_RESULT
 	long mode;			// modern_mode, for the log and the tests
 	long blocked;		// the blocked rule took IN_FORWARD away this tick
 	long turning;		// a turn bit is in `bits`
+	short course_step;	// how far the course itself moved this tick - MODERNLOG's `cstep=`
 };
 
 void ModernDefaults(MODERN_CFG* cfg);
@@ -455,6 +485,7 @@ long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_
 	long target_pitch, long x_rot, long* yaw_delta, long* new_x_rot, long* stroke);
 long ModernStateIsGroundIdle(short anim_state);
 long ModernStateIsStanding(short anim_state);
+long ModernStateIsRunning(short anim_state);
 long ModernStateAllowsDirectTurn(short anim_state);
 long ModernGroundTurn(short anim_state, long delta, long rate);
 long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,

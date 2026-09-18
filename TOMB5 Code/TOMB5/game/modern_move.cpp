@@ -158,6 +158,8 @@ void ModernResetState(MODERN_STATE* state)
 	state->aiming = 0;
 	state->blocked_count = 0;
 	state->last_mode = MODERN_MODE_OFF;
+	state->last_course = 0;
+	state->have_course = 0;
 }
 
 /* THE STATES THAT STAY CLASSIC (round 161a step 3).
@@ -433,6 +435,28 @@ long ModernStateIsStanding(short anim_state)
 	return (anim_state == 2 || anim_state == 14 || anim_state == 15) ? 1 : 0;
 }
 
+/* IS SHE ALREADY RUNNING (round 161a2b, #161 item 7a)? Two states and no more:
+ * 1 AS_RUN and 73 AS_DASH, the sprint - the two the direct turn is allowed in
+ * where her feet are already carrying her forward at speed.
+ *
+ * It exists for one rule and one only: there, the direct turn stops withholding
+ * IN_FORWARD while the turn finishes. The user played the withholding as a
+ * stutter - "sie macht ihre Stumble-Anim, als wuerde ich den Stick nur einmal
+ * fuer einen Schritt von Lara nach vorne druecken" - and the log said why: with
+ * the stick circling faster than she turns, the error stands over snap_forward
+ * for single ticks, the bit drops out, and game\lara.cpp's lara_as_run sees no
+ * forward and goes to AS_STOP for that one tick (203 of 937 running ticks in
+ * play test 2, 25 visible drops). While she is RUNNING the argument the
+ * withholding was built on does not hold anyway: the step it is trying to
+ * prevent is a step she is taking regardless, and the turn happens under it.
+ * 0 AS_WALK is deliberately NOT here - a walk is slow enough to place a foot
+ * wrong - and neither is any standing state, where the withholding is exactly
+ * right and keeps its own comment in ModernDirectTurn. */
+long ModernStateIsRunning(short anim_state)
+{
+	return (anim_state == 1 || anim_state == 73) ? 1 : 0;
+}
+
 /* THE DIRECT TURN, THE ARITHMETIC HALF (design section 1.4 step 6, and the
  * user's decision 5). Everything below is numbers; the one line that writes
  * lara_item->pos.y_rot is game\modern_state.cpp.
@@ -548,12 +572,30 @@ long ModernGroundTurn(short anim_state, long delta, long rate)
  * set through the whole of a half turn she would take real steps sideways
  * across a ledge before the turn finished.
  *
+ * ...AND SINCE ROUND 161a2b (#161 item 7a) NOT WHILE SHE IS RUNNING. See
+ * ModernStateIsRunning above for the measurement: there the withheld bit was
+ * costing her a one-tick AS_STOP every time the stick outran her turn, which
+ * the player sees as a stumble. Every other allowed state keeps the rule.
+ *
  * THE INSTANT ABOUT-TURN. Past 90 degrees of error the whole turn is taken in
  * ONE tick - but only while she is REALLY running. TROne measured why:
  * standing still, a one-tick reversal is spent before the player has both
  * BACK and JUMP down, so the back flip becomes unreachable and every jump
  * goes forward. Standing, the bounded rate therefore stands, and a half turn
- * takes ten ticks - time enough to press the two together. */
+ * takes ten ticks - time enough to press the two together.
+ *
+ * AND IT NEEDS A FLICK, NOT JUST AN ERROR (round 161a2b, #161 item 7b). The
+ * error alone was the wrong question: while the stick circles at 21 degrees a
+ * tick and she turns at 18, the error grows by 3 a tick whatever the player
+ * does, so after seven seconds of circling it crosses 90 and the whole of it
+ * is taken in one tick - a jerk in the middle of a smooth spin, measured four
+ * times in play test 2 (yawd -17220, -16431, -17970, -16955). So the error
+ * keeps its say and the COURSE's own step gets a veto: the about-turn fires
+ * only when the course JUMPED by more than snap_delta since the last active
+ * tick, which is a thumb flicking the stick across and never an accumulation.
+ * The two conditions together are a strict subset of the old one - no tick
+ * snaps now that would not have snapped before - so the rule can only have
+ * taken jerks away and cannot have added one. */
 long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
 	MODERN_RESULT* out, long* yaw_delta)
 {
@@ -579,11 +621,21 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	if (!sit || sit->classic)
 		return 0;
 
-	/* Aiming with the strafe switched off comes out as mode RUN, and there
-	 * the game is already turning her onto her target - two hands on the
-	 * same heading. Mode AIM never reaches this line at all. */
-	if (sit->drawn && sit->action)
-		return 0;
+	/* THE AIMING GUARD THAT USED TO BE HERE IS GONE (round 161a2b, #161 item
+	 * 8), and it is gone because it was wrong rather than because the user
+	 * wanted it gone. It refused the write whenever `sit->drawn && sit->action`
+	 * on the stated ground that "the game is already turning her onto her
+	 * target - two hands on the same heading". The brief asked for that to be
+	 * measured before anything moved, and the measurement says nothing of the
+	 * sort happens: game\larafire.cpp, game\lara1gun.cpp and game\lara2gun.cpp
+	 * never write lara_item->pos.y_rot at all. What aiming writes is
+	 * lara.left_arm.y_rot, lara.right_arm.y_rot, lara.torso_y_rot and
+	 * lara.head_y_rot - her arms, her chest and her head. Her HEADING moves
+	 * only through lara.turn_rate, added in game\lara.cpp's LaraAboveWater, and
+	 * that is the turn BITS' own path, which the direct turn replaces in
+	 * exactly the same way armed or not. So there was never a second hand on
+	 * the heading, and with aim_strafe now off (item 8) this guard would have
+	 * left her unable to turn at all while the trigger is held. */
 
 	if (!cfg->direct_turn || cfg->turn_rate <= 0)
 		return 0;
@@ -593,14 +645,16 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 
 	yaw = ModernGroundTurn(sit->anim_state, out->delta, cfg->turn_rate);
 
-	if (ModernAbs(out->delta) > cfg->snap_delta && !ModernStateIsStanding(sit->anim_state))
+	if (ModernAbs(out->delta) > cfg->snap_delta &&
+		ModernAbs(out->course_step) > cfg->snap_delta &&
+		!ModernStateIsStanding(sit->anim_state))
 		yaw = out->delta;
 
 	remaining = ModernAbs((long)out->delta - yaw);
 
 	out->bits &= ~(long)MODERN_DIR_MASK;
 
-	if (remaining <= cfg->snap_forward)
+	if (remaining <= cfg->snap_forward || ModernStateIsRunning(sit->anim_state))
 		out->bits |= MODERN_IN_FORWARD;
 
 	out->turning = (remaining > 0) ? 1 : 0;
@@ -799,6 +853,28 @@ long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, l
 	return bits;
 }
 
+/* WHAT AN ACTIVE TICK LEAVES BEHIND (round 161a2b, #161 item 7b). Four of the
+ * translation's branches below end with a course in hand - aiming, the
+ * directional jump, the step back and the ordinary run - and all four have to
+ * leave the same two traces: the mode, for the log, which they each wrote for
+ * themselves before, and now the COURSE, so that the next tick can say how far
+ * it jumped. One place, because a branch that forgot would look to the direct
+ * turn like a thumb holding perfectly still.
+ *
+ * The two branches that do NOT come through here are rule 0 (a classic state)
+ * and rule 1 (the stick at rest). Neither has a course of its own, and neither
+ * may wipe the one that is remembered - see MODERN_STATE::last_course for why
+ * the memory has to outlive a release. */
+static void ModernFinish(MODERN_STATE* state, MODERN_RESULT* out)
+{
+	out->course_step = state->have_course ?
+		ModernWrap((long)out->target - state->last_course) : 0;
+
+	state->last_course = out->target;
+	state->have_course = 1;
+	state->last_mode = out->mode;
+}
+
 /* THE TRANSLATION (design sections 1.1 to 1.3).
  *
  * stick_x is right-positive and stick_y is FORWARD-NEGATIVE - that is how
@@ -862,6 +938,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	out->mode = MODERN_MODE_OFF;
 	out->blocked = 0;
 	out->turning = 0;
+	out->course_step = 0;
 
 	/* All three may be left out. A caller that hands in nothing gets the
 	 * defaults, a scratch state and plain running on land - which is what the
@@ -1017,7 +1094,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		out->delta = delta;
 		out->reference = state->ref;
 		out->mode = MODERN_MODE_AIM;
-		state->last_mode = out->mode;
+		ModernFinish(state, out);
 		return;
 	}
 
@@ -1058,7 +1135,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		out->target = target;
 		out->delta = delta;
 		out->mode = MODERN_MODE_JUMP;
-		state->last_mode = out->mode;
+		ModernFinish(state, out);
 		return;
 	}
 
@@ -1081,7 +1158,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		out->target = target;
 		out->delta = delta;
 		out->mode = MODERN_MODE_BACK;
-		state->last_mode = out->mode;
+		ModernFinish(state, out);
 		return;
 	}
 
@@ -1143,5 +1220,5 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	out->target = target;
 	out->delta = delta;
 	out->mode = MODERN_MODE_RUN;
-	state->last_mode = out->mode;
+	ModernFinish(state, out);
 }

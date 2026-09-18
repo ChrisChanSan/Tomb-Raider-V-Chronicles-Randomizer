@@ -15804,10 +15804,68 @@ her real heading in Modern rather than a joint's own swing, named here
 rather than left as a defect a reader has to chase across four reports to
 close.
 
+**THE SKEPTICAL REVIEW, AND THE THREE THINGS IT FOUND.** The five steps above
+were reviewed before they were accepted, and the review did not accept them.
+All three findings were real and all three are fixed; none of them changed what
+the round is for, and none of them touched Tank.
+
+The first was a **regression in item 6's own dead zone**, and the worst of the
+three because it broke the one promise that item names as unacceptable. The
+per-axis zone in `specific/dxshell.cpp` judges each component on its own, so it
+zeroes the PAIR over the whole SQUARE of its half-width; the radial zone that
+replaced it only covers the DISC inside that square. Every rest position in the
+square's corners - out to 1.41 times the half-width - therefore stopped being
+dead, and a pad lying on the desk could turn the camera by itself. It was not
+hypothetical on this user's own pad: a DirectInput right stick resting at
+(450, -450) of 1000 has a radius of 79 against a zone of 62, and the seam handed
+the camera a live 33 of 128 - a quarter of full rate, untouched. The fix asks
+BOTH zones and the stick is dead in either: `ModernStickDeadZone` gained an
+`axis_zone` argument and four constants carry each path's own per-axis width
+(`MODERN_DEAD_AXIS_LEFT` 30, `_RIGHT` 33, `_LEFT_DINPUT` 18, `_RIGHT_DINPUT`
+62, each the hardware's own number divided the way that path divides its axes,
+floored so the gate covers every reading the hardware zone could swallow). It
+costs the axis snap nothing, and that is measured rather than argued: a push the
+per-axis zone SNAPPED is by definition one it let through, so it always has a
+component outside the square and never meets the new gate. `ModernTest`'s
+`deadzone` group now sweeps the whole 257 x 257 domain for all four pairs and
+answers **0 points that were dead before and are alive now**, while the sweep of
+360 directions still lands on a cardinal exactly four times and still keeps the
+direction to within a third of a degree.
+
+The second was **the lead outrunning the ideal at a large radius**. Turning the
+eye about her moves it along a chord that grows with the radius, and every
+promise this round makes to the 60 fps interpolator was measured at the orbit's
+own 1536 and nowhere else. The eye does not always sit there: after a flyby, a
+cutscene, a room change or a released fixed camera it walks in from thousands of
+units away, and a player already holding the right stick had those ticks led at
+that radius. Unscaled, the lead alone reaches **2,856 units in one tick against
+`INTERP_CAM_SNAP` 1024**, first passing the threshold with the eye about 3,072
+units out - the interpolator would have cut in exactly the ticks the round
+promises it cannot. `ModernCameraLeadEye` now scales the step down by the same
+ratio the radius is up whenever the eye is further out than
+`camera.target_distance`, which leaves the arc exactly what it is at the orbit's
+own radius and changes nothing at all inside it (which is where a wall keeps the
+eye). `camera_camcut` was reswept at each of the three distances the engine
+actually sets - 1536 behind her, 1024 in the puzzle states, 2048 on the rope
+(`game/lara.cpp`) - out to the distance `MODERN_CAM_LEAD_MAX` stops the lead at
+altogether: **407, 609 and 812 against 1024**, each at or under the ideal's own
+step at that same distance (411, 616, 820), and no aim cut anywhere. That last
+sweep also answered a question nobody had asked: the orbit's own step is under
+the threshold at 1024 and 2048 as well, not only at 1536.
+
+The third, and the cheap one, was the **Camera speed row writing the registry on
+every frame**. The row is driven by `input &` on purpose - a feel slider is held
+down, not tapped - so a held direction was opening the key and rewriting all of
+the settings up to sixty times a second. It now notes the change and writes when
+the value stops moving, when the cursor leaves the row, or when the page is left,
+whichever comes first: once per adjustment however long the hold. The three
+toggles above it are debounced by `dbinput &` and never had this to avoid.
+
 **THE FILES**, round 161a2b's own fifteen against base `04aa78a`, **2,827
-insertions, 619 deletions** (this record and the two README sentences are
-outside that count, the same convention round 161a2's own entry used). Five
-commits, `Round 161a2b (#161): <what>`, one per step:
+insertions, 619 deletions** at the end of step 5 (this record and the two README
+sentences are outside that count, the same convention round 161a2's own entry
+used). Six commits, `Round 161a2b (#161): <what>` - one per step, and one for
+the review's three findings:
 
 - `game/modern_camera.h` / `.cpp` (step 1) - the world yaw, the speed
   slider's mapping, the refuted wall feedback removed.
@@ -15830,6 +15888,13 @@ commits, `Round 161a2b (#161): <what>`, one per step:
   `camera_speed`, `camera_pitch`, `camera_wall`, `camera_seam`, `camera_lead`,
   `camera_camcut`, `circling`, `firing_run` and `deadzone`; unchanged by step
   5, which added no pure arithmetic for it to hold.
+- and the fix round, in the four files the three findings live in:
+  `game/modern_move.h` / `.cpp` and `specific/input.cpp` (the per-axis square
+  beside the radial zone), `game/camera.cpp` (the lead scaled by the eye's own
+  radius), `specific/LoadSave.cpp` (the Camera speed row's write deferred to
+  the end of the hold), and `ModernTest.cpp`, whose `deadzone` and
+  `camera_camcut` groups carry the proofs. **4,437 checks, 0 failed** - 2,297
+  at base `04aa78a`, 4,410 at the end of step 5.
 
 ## Building this yourself
 

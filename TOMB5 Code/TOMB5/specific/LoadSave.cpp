@@ -322,6 +322,14 @@ void DoOptions()
 	static long mSliderCol = 0x3F3F3F;
 	static long sSliderCol = 0x3F3F3F;
 	static long camSliderCol = 0x3F3F3F;	// #161, round 161a2b, item 5: the Camera speed row's own slider, Controls page
+	// AND THE ROW'S OWN "NOT WRITTEN YET" (#161, round 161a2b, fix round). The
+	// three toggles above it are debounced by dbinput& and pay one registry
+	// write a press; a slider is held down on purpose, so writing on every
+	// frame of a hold meant up to sixty openings of the key a second, each one
+	// rewriting all forty settings. It is written when the value stops moving,
+	// when the cursor leaves the row and when the page is left - whichever
+	// comes first - which is once per adjustment however long the hold was.
+	static long camSpeedUnsaved = 0;
 	static long sfx_bak;
 	static long sfx_quality_bak;
 	static long sfx_breath_db = -1;
@@ -891,18 +899,32 @@ void DoOptions()
 			if ((input & IN_RIGHT || keymap[DIK_RIGHT]) && tomb5.camera_speed < 100)
 				tomb5.camera_speed++;
 
-			// Written only on a real change, unlike the three toggles above
-			// (whose own writes are already debounced by dbinput& - once a
-			// press, not once a frame): a held direction moves this row
-			// every frame, and a registry write every frame of a hold is
-			// nothing the three toggles ever had to avoid.
+			// NOTED ON A CHANGE AND WRITTEN WHEN THE HOLD ENDS (the fix
+			// round; camSpeedUnsaved above says why). A frame that moved the
+			// value only marks it; the first frame that does not - the thumb
+			// off the direction, or an end of the range reached - is the one
+			// that writes. The two flushes below catch the player who leaves
+			// the row or the page with the direction still down.
 			if (tomb5.camera_speed != old_speed)
+				camSpeedUnsaved = 1;
+			else if (camSpeedUnsaved)
+			{
 				save_new_tomb5_settings();
+				camSpeedUnsaved = 0;
+			}
 
 			camSliderCol = 0x7F7F7F;
 		}
 		else
+		{
+			if (camSpeedUnsaved)
+			{
+				save_new_tomb5_settings();
+				camSpeedUnsaved = 0;
+			}
+
 			camSliderCol = 0x3F3F3F;
+		}
 
 		if (!sel)
 			sel = 1;
@@ -913,6 +935,16 @@ void DoOptions()
 		if (dbinput & IN_DESELECT)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+
+			// The page's only way out, so it is the last chance the Camera
+			// speed row has to reach the registry (the fix round): a player
+			// can leave with the direction still held, and then neither of
+			// the two flushes above has run.
+			if (camSpeedUnsaved)
+			{
+				save_new_tomb5_settings();
+				camSpeedUnsaved = 0;
+			}
 
 			if (reset_row)
 				reset_row = 0;	// back from the reset position: onto the method first, not straight out of the menu

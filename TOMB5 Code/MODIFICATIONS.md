@@ -15280,11 +15280,23 @@ registry; switch back to Tank, where `specific/dxshell.cpp` still writes the
 d-pad as a +-20 stick reading, and **every D-pad Up tapped forward AND ate a
 small medipack**. `jLayout[16..30]` could not help: it was written and read by
 nobody, and only `[0..14]` is persisted. The fix is `ApplyJoyScheme()`
-(`specific/input.cpp`) and one sentence of rule: *a role bound to a bit the
-active scheme has taken for something else is put back on that scheme's own
-default for that role, and every other binding is the player's and is kept.*
-Modern cannot honour bits 16..19 (the camera), Tank cannot honour 20..23 (they
-still move her). It is idempotent, it is deliberately not `ApplyJoyDefaults()`
+(`specific/input.cpp`) and two sentences of rule: *a role bound to a bit the
+active scheme has taken for something else - or still sitting on the OTHER
+scheme's own default for itself - goes to this scheme's default for that role,
+and every other binding is the player's and is kept.* Modern cannot honour bits
+16..19 (the camera), Tank cannot honour 20..23 (they still move her). The
+second sentence was bought with a measurement rather than guessed: the fix
+round's own table proof printed all four controller styles through both
+directions of the switch and showed two of them - `jDefPS5DInput` and
+`jDefGeneric`, which put the medipacks on ordinary face buttons 13/14 that
+Modern masks nothing of - reaching Modern with the medipacks still off the
+d-pad, which is decision 8 not arriving. That second clause can only ever move
+a role the two records disagree about, and today that is the two medipacks and
+nothing else: roles 0-12 are one and the same choice in both schemes by
+construction, so their two defaults are equal and the test never fires. With
+both clauses, all four styles reach Modern's own table and come back to Tank's
+own table, roles 0-12 never move, and no d-pad bit is left bound after a
+switch to Tank. It is idempotent, it is deliberately not `ApplyJoyDefaults()`
 - a player who customised his pad must not lose it for trying the other scheme,
 which is why switching the JoyStyle page has never applied defaults either -
 and where freeing a bit collides with a role that already holds it, it unbinds

@@ -270,29 +270,46 @@ void ApplyJoyDefaults()
  * and into the registry, so switching back to Tank left the d-pad eating a
  * medipack on every step forward.
  *
- * The rule is one sentence: a role bound to a bit the active scheme has taken
- * for something else is put back on that scheme's own default for that role,
- * and every other binding is the player's and is kept. It is idempotent, so
- * running it twice costs nothing, and it says nothing about roles the player
- * moved himself onto buttons both schemes leave alone.
+ * THE RULE IS TWO SENTENCES, AND THE SECOND ONE WAS BOUGHT WITH A
+ * MEASUREMENT. A role bound to a bit the active scheme has taken for something
+ * else goes back to that scheme's own default for that role - that is the
+ * broken case, and on its own it repairs only the two XInput-style pages,
+ * because jDefPS5DInput and jDefGeneric put the medipacks on ordinary face
+ * buttons (13/14) that Modern masks nothing of. The table proof of this fix
+ * printed exactly that: two of the four styles switched to Modern and kept
+ * their medipacks off the d-pad, which is decision 8 not arriving. So a role
+ * still sitting on the OTHER scheme's default for itself follows the switch as
+ * well. Everything else is the player's own choice and is kept.
  *
- * Freeing a bit can collide with a role that already holds it. That case has
- * an answer in the tree already - the binding page unbinds the older role
+ * The second sentence can only ever move a role the two records DISAGREE
+ * about, which today is the two medipacks and nothing else - roles 0-12 are
+ * one and the same choice in both schemes by construction (JoyDefaultRecord),
+ * so their two defaults are equal and the test never fires on them.
+ *
+ * It is idempotent, so running it twice costs nothing. Freeing a bit can
+ * collide with a role that already holds it; that case has an answer in the
+ * tree already - the binding page unbinds the older role
  * (specific\LoadSave.cpp) rather than letting one button mean two things - and
  * this uses the same one rather than inventing a second. */
 void ApplyJoyScheme()
 {
 	long want[15];
+	long other[15];
 	const long modern = tomb5.control_modern ? 1 : 0;
 	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
 
 	JoyDefaultRecord(modern, want);
+	JoyDefaultRecord(modern ? 0 : 1, other);
 
 	for (int i = 0; i < 15; i++)
 	{
 		// 23 is the highest bit either joystick path writes (specific\dxshell.cpp);
 		// the bound is here because the value comes out of the registry.
-		if (jLayout[i] < 0 || jLayout[i] > 23 || !((1L << jLayout[i]) & blocked))
+		const long broken = jLayout[i] >= 0 && jLayout[i] <= 23 &&
+			((1L << jLayout[i]) & blocked) != 0;
+		const long theirs = other[i] != want[i] && jLayout[i] == other[i];
+
+		if (!broken && !theirs)
 			continue;
 
 		jLayout[i] = want[i];
@@ -305,7 +322,9 @@ void ApplyJoyScheme()
 		}
 	}
 
-	JoyDefaultRecord(modern ? 0 : 1, &jLayout[16]);
+	for (int i = 0; i < 15; i++)
+		jLayout[16 + i] = other[i];
+
 	joy_scheme_seated = modern;
 }
 

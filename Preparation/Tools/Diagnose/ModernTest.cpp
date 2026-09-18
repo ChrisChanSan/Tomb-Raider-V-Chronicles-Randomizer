@@ -3269,6 +3269,257 @@ static void camera_seam()
 		ok(absolute == ModernWrap(heading), "a fresh orbit seats itself behind her back",
 			absolute, ModernWrap(heading));
 	}
+
+	/* 4. AND GEOMETRY CANNOT MOVE IT, which is what makes it safe for her
+	 * MOVEMENT to be steered by it (round 161a2b, item 4b). game\modern_state.cpp
+	 * used to seat her course on the measured vector eye -> target, and a wall
+	 * that pulls the eye in turns that vector into anything at all - 57 jumps of
+	 * more than 45 degrees in one tick on the play test, her course jumping with
+	 * them (M4). It reads the world yaw under the orbit now. The whole point of
+	 * it is the two ticks below: a clipped eye is an input to this function and
+	 * it leaves the angle exactly where the player put it, standing or running. */
+	ModernCameraReset(&st);
+	st.world_yaw = 0x2000;
+	st.seated = 1;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0, 1, &yaw, &pitch);
+	ok(st.world_yaw == 0x2000, "a clipped eye does not move the angle her course is seated on",
+		st.world_yaw, 0x2000);
+
+	ModernCameraReset(&st);
+	st.world_yaw = 0x2000;
+	st.seated = 1;
+	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 1, 1, &yaw, &pitch);
+	ok(st.world_yaw == (short)(0x2000 + st.ret),
+		"...and while she runs it moves by the return and by nothing else",
+		st.world_yaw, 0x2000 + st.ret);
+	ok(st.ret == -377, "the clipped eye's only effect being to hurry that return",
+		st.ret, -377);
+}
+
+/* ------------------------------------------ the stick reaches the eye ------ */
+
+/* MoveCamera IS A FIRST ORDER LAG, AND THAT IS ITEM 2 (round 161a2b).
+ *
+ * "Der rechte Stick muss noch schneller werden, der ist viel zu langsam." Half
+ * of that is the rate, which the speed slider answers; the other half is that
+ * the rate the orbit turns at is not the rate the PICTURE turns at. The play
+ * test measured the gap: the orbit was already moving 1066 units a tick and the
+ * eye-to-target yaw needed about 25 ticks to reach it, 47 per cent at tick 10
+ * and 81 at tick 20 (M1 of the round's brief). No rate cures that - a lag costs
+ * the same fraction of a fast push as of a slow one.
+ *
+ * WHAT IS MODELLED HERE is the engine's own four lines and nothing else:
+ *
+ *     target_elevation  = the orbit's pitch                      ModernCameraOrbit
+ *     actual_elevation += (target - actual) >> 3                 UpdateCameraElevation
+ *     ideal.x = target.x - 1536 * cos(actual_elevation) * sin(angle)   ChaseCamera
+ *     ideal.y = target.y + 1536 * sin(actual_elevation)
+ *     ideal.z = target.z - 1536 * cos(actual_elevation) * cos(angle)
+ *     pos    += (ideal - pos) / speed                            MoveCamera
+ *
+ * with her standing still at the origin, the eye in longs because the engine's
+ * is, and the division left to C because the engine's truncates the same way.
+ * `speed` is 10 behind her (CalculateCamera's own reset, camera.cpp:1124) and 8
+ * with a weapon out (camera.cpp:1105).
+ *
+ * `lead` IS THE CHANGE: game\camera.cpp turns the eye about her by this tick's
+ * stick step before MoveCamera sees it, and adds the same step to
+ * actual_elevation before the >> 3 sees it (ModernCameraLeadEye and
+ * ModernCameraOrbit). Both spellings are in here, so the test states the size of
+ * the defect as well as the size of the cure. */
+struct LEAD_RUN
+{
+	double first_yaw;	// the eye's yaw step on the FIRST tick, in angle units
+	double first_pitch;	// and its elevation step
+	double last_yaw;	// the yaw step once the lag has settled
+	long to_90;		// ticks until the yaw step is nine tenths of the orbit's
+	long worst_eye;		// the largest step the eye itself took, Manhattan
+};
+
+static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
+	long ticks, LEAD_RUN* r)
+{
+	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
+	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
+	MODERN_CAMERA_CFG cfg;
+	long ang = 0;
+	long tgt_elev = MODERN_CAMERA_PITCH_HOME;
+	long act_elev = MODERN_CAMERA_PITCH_HOME;
+	long px, py, pz;
+	long lp;
+	double prev_yaw, prev_pitch;
+
+	ModernCameraDefaults(&cfg);
+
+	r->first_yaw = 0.0;
+	r->first_pitch = 0.0;
+	r->last_yaw = 0.0;
+	r->to_90 = 0;
+	r->worst_eye = 0;
+
+	/* A settled camera stands on its own ideal, which is where a push starts. */
+	px = roundl2(-radius * cos((double)act_elev * turn) * sin((double)ang * turn));
+	py = roundl2(radius * sin((double)act_elev * turn));
+	pz = roundl2(-radius * cos((double)act_elev * turn) * cos((double)ang * turn));
+	prev_yaw = atan2((double)-px, (double)-pz) / turn;
+	prev_pitch = atan2((double)py, sqrt((double)px * px + (double)pz * pz)) / turn;
+
+	for (lp = 0; lp < ticks; lp++)
+	{
+		long step_pitch = pitch_rate;
+		long ix, iy, iz, ox, oy, oz, moved;
+		double now_yaw, now_pitch, dy;
+
+		/* one tick of the orbit at full deflection, with its own clamp */
+		if (tgt_elev + step_pitch > cfg.pitch_max)
+			step_pitch = cfg.pitch_max - tgt_elev;
+
+		ang += yaw_rate;
+		tgt_elev += step_pitch;
+
+		if (lead)
+			act_elev += step_pitch;
+
+		act_elev += (tgt_elev - act_elev) >> 3;
+
+		ix = roundl2(-radius * cos((double)act_elev * turn) * sin((double)ang * turn));
+		iy = roundl2(radius * sin((double)act_elev * turn));
+		iz = roundl2(-radius * cos((double)act_elev * turn) * cos((double)ang * turn));
+
+		ox = px;
+		oy = py;
+		oz = pz;
+
+		if (lead)
+		{
+			/* ModernCameraLeadEye, in the same order: the pitch about the
+			 * horizontal axis through her, then the yaw about the vertical. */
+			const double h = sqrt((double)px * px + (double)pz * pz);
+
+			if (step_pitch && h > 0.0)
+			{
+				const double c = cos((double)step_pitch * turn);
+				const double s = sin((double)step_pitch * turn);
+				const double nh = h * c - (double)py * s;
+
+				py = roundl2((double)py * c + h * s);
+				px = roundl2((double)px * (nh < 0.0 ? 0.0 : nh) / h);
+				pz = roundl2((double)pz * (nh < 0.0 ? 0.0 : nh) / h);
+			}
+
+			if (yaw_rate)
+			{
+				const double c = cos((double)yaw_rate * turn);
+				const double s = sin((double)yaw_rate * turn);
+				const long nx = roundl2((double)px * c + (double)pz * s);
+
+				pz = roundl2((double)pz * c - (double)px * s);
+				px = nx;
+			}
+		}
+
+		px += (ix - px) / speed;
+		py += (iy - py) / speed;
+		pz += (iz - pz) / speed;
+
+		moved = InterpManhattan(px - ox, py - oy, pz - oz);
+
+		if (moved > r->worst_eye)
+			r->worst_eye = moved;
+
+		now_yaw = atan2((double)-px, (double)-pz) / turn;
+		now_pitch = atan2((double)py, sqrt((double)px * px + (double)pz * pz)) / turn;
+		dy = now_yaw - prev_yaw;
+
+		while (dy < -32768.0)
+			dy += 65536.0;
+
+		while (dy > 32768.0)
+			dy -= 65536.0;
+
+		if (!lp)
+		{
+			r->first_yaw = dy;
+			r->first_pitch = now_pitch - prev_pitch;
+		}
+
+		if (!r->to_90 && yaw_rate && dy >= 0.9 * (double)yaw_rate)
+			r->to_90 = lp + 1;
+
+		r->last_yaw = dy;
+		prev_yaw = now_yaw;
+		prev_pitch = now_pitch;
+	}
+}
+
+static void camera_lead()
+{
+	MODERN_CAMERA_CFG cfg;
+	LEAD_RUN slow, fast;
+	long yaw_max, pitch_max;
+	long speed;
+
+	printf("the lead - the stick's own step reaches the eye in the tick it was made\n");
+
+	ModernCameraDefaults(&cfg);
+	ModernCameraSpeedRates(MODERN_CAMERA_SPEED_FULL, &yaw_max, &pitch_max);
+
+	/* THE YAW, AT BOTH DAMPINGS AND AT BOTH ENDS OF THE SLIDER. The first run of
+	 * each pair is what shipped, and it is here to be printed rather than
+	 * asserted: a test that only proves the cure cannot say how large the defect
+	 * was. */
+	for (speed = 10; speed >= 8; speed -= 2)
+	{
+		lead_run(speed, cfg.yaw_rate, 0, 0, 60, &slow);
+		lead_run(speed, cfg.yaw_rate, 0, 1, 60, &fast);
+
+		printf("  measured: speed %ld, the default rate %ld - the eye moved %.0f units on the\n",
+			speed, cfg.yaw_rate, slow.first_yaw);
+		printf("            first tick (%.1f%% of the orbit's step, %ld ticks to nine tenths);"
+			" it moves %.0f now (%.1f%%)\n",
+			100.0 * slow.first_yaw / (double)cfg.yaw_rate, slow.to_90, fast.first_yaw,
+			100.0 * fast.first_yaw / (double)cfg.yaw_rate);
+
+		ok(fast.first_yaw >= 0.9 * (double)cfg.yaw_rate,
+			"the first tick of a push is at least nine tenths of the orbit's step",
+			roundl2(fast.first_yaw), roundl2(0.9 * (double)cfg.yaw_rate));
+		ok(fast.to_90 == 1, "...which is to say it arrives on the first tick and not the 18th",
+			fast.to_90, 1);
+		ok(slow.first_yaw < 0.2 * (double)cfg.yaw_rate,
+			"and the damping really did hold nine tenths of it back before",
+			roundl2(slow.first_yaw), roundl2(0.2 * (double)cfg.yaw_rate));
+
+		/* The lag is not removed, only led past: what it settles at is what it
+		 * always settled at, the orbit's own rate. */
+		ok(absl(roundl2(fast.last_yaw) - cfg.yaw_rate) < cfg.yaw_rate / 32,
+			"a held push still settles at exactly the orbit's rate",
+			roundl2(fast.last_yaw), cfg.yaw_rate);
+
+		lead_run(speed, yaw_max, 0, 1, 60, &fast);
+		ok(fast.first_yaw >= 0.9 * (double)yaw_max,
+			"at the top of the speed slider too", roundl2(fast.first_yaw),
+			roundl2(0.9 * (double)yaw_max));
+	}
+
+	/* THE PITCH HAS TWO DAMPINGS IN SERIES, the elevation's own >> 3 and then
+	 * MoveCamera's, so it was the worse of the two: an eighth of a tenth. Both
+	 * are led past - the elevation in ModernCameraOrbit, the eye in
+	 * ModernCameraLeadEye - and the check is the same shape as the yaw's. */
+	lead_run(10, 0, cfg.pitch_rate, 0, 60, &slow);
+	lead_run(10, 0, cfg.pitch_rate, 1, 60, &fast);
+
+	printf("  measured: the pitch moved %.1f units on the first tick of a push"
+		" (%.1f%% of %ld); it moves %.0f now (%.1f%%)\n",
+		slow.first_pitch, 100.0 * slow.first_pitch / (double)cfg.pitch_rate,
+		cfg.pitch_rate, fast.first_pitch,
+		100.0 * fast.first_pitch / (double)cfg.pitch_rate);
+
+	ok(fast.first_pitch >= 0.9 * (double)cfg.pitch_rate,
+		"the pitch step arrives on the first tick as well",
+		roundl2(fast.first_pitch), roundl2(0.9 * (double)cfg.pitch_rate));
+	ok(slow.first_pitch < 0.1 * (double)cfg.pitch_rate,
+		"...where an eighth of a tenth of it used to",
+		roundl2(slow.first_pitch), roundl2(0.1 * (double)cfg.pitch_rate));
 }
 
 /* THE 60 FPS CUT DETECTION MUST NOT FIRE ON THE ORBIT'S OWN STEPS - the
@@ -3386,17 +3637,51 @@ static void camera_camcut()
 		worst_eye, INTERP_CAM_SNAP);
 	ok(cuts == 0, "nor the view direction test at that speed", cuts, 0);
 
-	/* THE ONE THING THAT STILL CUTS AT A WALL IS VANILLA'S, and it is worth a
+	/* AND THE EYE ITSELF, NOW THAT IT IS LED (round 161a2b, item 2 and step 2).
+	 * The sweep above is the IDEAL's step, and while MoveCamera damped
+	 * everything that was the honest upper bound for the real eye as well. The
+	 * lead changes what has to be proved: the eye is turned about her by the
+	 * stick's own step before the damping sees it, so on the first tick of a push
+	 * it moves by the whole step rather than a tenth of it. The step is the same
+	 * rotation through the same angles - what differs is the RADIUS it is applied
+	 * at, and the eye's is at most camera.target_distance, which is the radius
+	 * the sweep above already uses. The run below measures it instead of arguing
+	 * it, at the slider's maximum and at both dampings. */
+	{
+		LEAD_RUN led;
+		long led_worst = 0;
+		long speed;
+
+		for (speed = 10; speed >= 8; speed -= 2)
+		{
+			lead_run(speed, yaw_rate, pitch_rate, 1, 400, &led);
+
+			if (led.worst_eye > led_worst)
+				led_worst = led.worst_eye;
+		}
+
+		printf("  measured: the LED eye's worst tick at speed 100 is %ld"
+			" - a margin of %.1f\n", led_worst, (double)INTERP_CAM_SNAP / (double)led_worst);
+
+		ok(led_worst < INTERP_CAM_SNAP,
+			"the eye the stick leads does not trip the cut detection either",
+			led_worst, INTERP_CAM_SNAP);
+		ok(led_worst <= worst_eye + 64,
+			"...and it is the ideal's own step, at the eye's own radius",
+			led_worst, worst_eye + 64);
+	}
+
+	/* THE ONE THING THAT USED TO CUT AT A WALL WAS VANILLA'S, and it is worth a
 	 * number so that nobody hunts for it in the orbit: the five candidate
 	 * positions of ChaseCamera are the wanted angle and the four world
 	 * cardinals, so the ideal can jump a whole quadrant in one tick. That is
 	 * the classic camera's behaviour and it is there at Tank today. Round 161a2
 	 * tried to ABSORB it into the offset and made it worse - the stick was
-	 * swallowed (M3, camera_wall above) - so round 161a2b's step 2 stops
-	 * PRODUCING it in Modern instead: only the angle the player asked for,
-	 * clipped by mgLOS, which shrinks the distance rather than jumping the
-	 * angle. Until that lands this jump is still what a modern wall can do, and
-	 * it is vanilla's either way. */
+	 * swallowed (M3, camera_wall above) - so round 161a2b's step 2 stopped
+	 * PRODUCING it in Modern: the candidate loop keeps only the angle the player
+	 * asked for, clipped by mgLOS, which shrinks the distance rather than jumping
+	 * the angle. The jump below is therefore Tank's alone now, and it is measured
+	 * here so that the thing Modern no longer does has a size. */
 	{
 		const long x1 = roundl2(-radius * sin(0.0));
 		const long z1 = roundl2(-radius * cos(0.0));
@@ -3460,6 +3745,7 @@ int main()
 	camera_wall();
 	camera_hide();
 	camera_seam();
+	camera_lead();
 	camera_camcut();
 	deferred();
 

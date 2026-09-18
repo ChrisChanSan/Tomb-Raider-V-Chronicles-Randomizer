@@ -110,7 +110,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 {
 	MODERN_SITUATION sit;
 	MODERN_RESULT out;
-	short camera_yaw;
+	short camera_yaw;	// the measured eye -> target vector - MODERNLOG's `cam=`
+	short ref_yaw;		// and what the course is really seated on (161a2b, item 4b) - `ref=`
 	short lara_yaw;		// her heading before the direct turn can change it - MODERNLOG's `lara=`
 	long cam_dx, cam_dz;
 	long dx, dz;
@@ -201,27 +202,33 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * turned her. */
 		if (gLogEnabled)
 		{
-			/* THE ORBIT'S OWN SEVEN (round 161a2, step 5), the same discipline
+			/* THE ORBIT'S OWN SIX (round 161a2, step 5), the same discipline
 			 * as the five above: the live cfg game\camera.cpp seats, not the
 			 * raw enum in game\modern_camera.h, and only the numbers steps 1,
 			 * 2 and 4's own reports named as the play test's to move -
 			 * cam_return / cam_return_min, cam_wall_factor, cam_hide_dist,
-			 * cam_invert, cam_pitch_return - plus cam_angle_radius, which
-			 * step 2's own report named as owing a field and had none until
-			 * now. game\camera.h says which of MODERN_CAMERA_CFG's other
-			 * eight fields were left out and why. */
+			 * cam_invert, cam_pitch_return. game\camera.h says which of
+			 * MODERN_CAMERA_CFG's other eight fields were left out and why.
+			 *
+			 * A SEVENTH WENT OUT WITH ITS MECHANISM (round 161a2b, item 3):
+			 * cam_angle_radius printed MODERN_CAM_ANGLE_RADIUS, which only ever
+			 * existed to tell a real displacement of the eye from the noise of a
+			 * camera standing over her head - and reading a wall as a
+			 * displacement at all is what this round removed as refuted. The
+			 * field goes with the constant rather than printing a number nothing
+			 * computes any more. */
 			long cam_return, cam_return_min, cam_wall_factor, cam_hide_dist;
-			long cam_invert, cam_pitch_return, cam_angle_radius;
+			long cam_invert, cam_pitch_return;
 
 			ModernCameraLogConfig(&cam_return, &cam_return_min, &cam_wall_factor,
-				&cam_hide_dist, &cam_invert, &cam_pitch_return, &cam_angle_radius);
+				&cam_hide_dist, &cam_invert, &cam_pitch_return);
 
 			Log("MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d "
 				"jump_dir=%d cam_return=%d cam_return_min=%d cam_wall_factor=%d "
-				"cam_hide_dist=%d cam_invert=%d cam_pitch_return=%d cam_angle_radius=%d",
+				"cam_hide_dist=%d cam_invert=%d cam_pitch_return=%d",
 				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
 				modern_cfg.recenter, modern_cfg.jump_dir, cam_return, cam_return_min,
-				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return, cam_angle_radius);
+				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return);
 		}
 
 		modern_tick = GlobalCounter;
@@ -258,6 +265,38 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	cam_dx = camera.target.x - camera.pos.x;
 	cam_dz = camera.target.z - camera.pos.z;
 	camera_yaw = (cam_dx || cam_dz) ? (short)phd_atan(cam_dz, cam_dx) : lara_item->pos.y_rot;
+
+	/* AND UNDER THE ORBIT THE REFERENCE IS WHAT THE PLAYER DIALLED, not what
+	 * the eye happens to have been pushed to (round 161a2b, item 4b).
+	 *
+	 * The two lines above are the honest reading for a camera nobody steers, and
+	 * they stay the fallback. They stop being honest as soon as the eye is CLOSE
+	 * to her, and the play test measured it twice over: at a steep pitch the
+	 * horizontal radius is a few dozen units while the eye trails her run by
+	 * hundreds, so "eye -> target" becomes her own running direction, the course
+	 * runs away from her and she turns 3277 units every tick the stick is off
+	 * centre; and a wall that pulls the eye in does the same at any pitch - 57
+	 * jumps of more than 45 degrees in a single tick, her course after them
+	 * reading 3154, 17126, 26721, -22504 (M4 of the round's brief). Item 3 of
+	 * this round brings the eye close far more often, by design, so this is not a
+	 * refinement - it is what makes item 3 safe.
+	 *
+	 * The world yaw has neither failure: it is the angle the ideal is built from,
+	 * it is exact at every pitch, and geometry cannot move it. It is one tick
+	 * behind, exactly as camera_yaw is and for the same reason (game\control.cpp
+	 * runs the input before CalculateCamera).
+	 *
+	 * WITHOUT THE ORBIT NOTHING CHANGES: the rich2 sniper camera, a flyby, a
+	 * cutscene, first person, the title - ModernCameraActive() is false in every
+	 * one of them and the measured vector is the reference, as it has been since
+	 * A1. So is the one tick before the orbit's first, where it is not seated yet
+	 * and has no world angle to give.
+	 *
+	 * MODERNLOG keeps printing BOTH: `cam=` is the measured vector above and
+	 * `ref=` is what the translation really used (out.reference), so a play test
+	 * can see the two part company at a wall instead of having to believe it. */
+	if (!(ModernCameraActive() && ModernCameraWorldYaw(&ref_yaw)))
+		ref_yaw = camera_yaw;
 
 	/* IS FORWARD GETTING HER ANYWHERE (design section 1.3, finding A).
 	 *
@@ -327,7 +366,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	lara_yaw = lara_item->pos.y_rot;
 
-	ModernTranslate(&modern_cfg, &modern_state, stick_x, stick_y, camera_yaw,
+	ModernTranslate(&modern_cfg, &modern_state, stick_x, stick_y, ref_yaw,
 		lara_yaw, &sit, &out);
 
 	/* THE DIRECT TURN (the user's decision 5). The decision is arithmetic and

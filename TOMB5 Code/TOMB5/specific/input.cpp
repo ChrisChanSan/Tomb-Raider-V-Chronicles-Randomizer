@@ -813,11 +813,19 @@ long S_UpdateInput()
 		 * keeps a resting stick from turning the camera by itself
 		 * (game\modern_move.h carries both numbers and why).
 		 *
+		 * AND BESIDE IT THE SQUARE THAT ZONE HELD (the second argument, this
+		 * round's fix round). A disc reaches less far than the square of the
+		 * same half-width does in its corners, so a pad resting in one of
+		 * those corners was silent before the radial zone and would have
+		 * started turning the camera by itself after it. Both are asked; the
+		 * stick is dead in either.
+		 *
 		 * ControlMethod == 1 as before, and ZEROED rather than skipped in the
 		 * other case, so that a stick which was out when the player switched
 		 * to the keyboard cannot leave the orbit turning for ever. */
 		if (ControlMethod == 1)
 			ModernStickDeadZone(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
+				joystick_is_xinput ? MODERN_DEAD_AXIS_RIGHT : MODERN_DEAD_AXIS_RIGHT_DINPUT,
 				joystick_raw_rx, joystick_raw_ry, &cam_x, &cam_y);
 
 		ModernCameraStick(cam_x, cam_y);
@@ -863,9 +871,12 @@ long S_UpdateInput()
 	 *
 	 * AND THROUGH THE RADIAL ZONE WHEN IT IS NOT (item 6): the raw left stick
 	 * at XInput's own 7849 of 32767, so that a circling thumb stops snapping
-	 * onto the four cardinals and the course stops moving in jumps. The
-	 * menus keep the per-axis pair, which is all a four-way cursor needs and
-	 * is what they have always had. */
+	 * onto the four cardinals and the course stops moving in jumps - with
+	 * the path's own per-axis SQUARE beside it (this round's fix round), so
+	 * that a stick resting in that square's corners cannot start walking her
+	 * where the hardware zone used to hold it still. The menus keep the
+	 * per-axis pair, which is all a four-way cursor needs and is what they
+	 * have always had. */
 	long move_x = joy_x;
 	long move_y = joy_y;
 
@@ -875,7 +886,9 @@ long S_UpdateInput()
 		move_y = 0;
 
 		if (joystick_read)
-			ModernStickDeadZone(MODERN_DEAD_LEFT, joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
+			ModernStickDeadZone(MODERN_DEAD_LEFT,
+				joystick_is_xinput ? MODERN_DEAD_AXIS_LEFT : MODERN_DEAD_AXIS_LEFT_DINPUT,
+				joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
 	}
 
 	linput = 0;

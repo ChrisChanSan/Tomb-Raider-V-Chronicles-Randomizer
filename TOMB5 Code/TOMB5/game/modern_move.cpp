@@ -92,7 +92,11 @@ static long ModernRound(double v)
  * test can read an angle off a screen, so the promise is kept in ModernTest's
  * `deadzone` group instead.
  *
- * Three rules, in the order the code takes them:
+ * Four rules, in the order the code takes them:
+ *   inside the SQUARE the hardware's own per-axis zone held, nothing at all
+ *                     (`axis_zone`, round 161a2b's fix round - the header
+ *                     beside MODERN_DEAD_AXIS_LEFT says why a disc alone let a
+ *                     resting pad through in that square's corners);
  *   inside the zone   nothing at all, so a stick at rest cannot creep;
  *   past its rim      the length starts again at nothing and eases up to full
  *                     at the stick's own rim, so crossing it is not a step;
@@ -106,8 +110,11 @@ static long ModernRound(double v)
  * the LENGTH and keeping the direction makes the stick round, which is what
  * every caller already takes it to be.
  *
+ * `axis_zone` 0 is no square at all: what a caller with no per-axis hardware
+ * zone behind it passes, and what the tests of the radial rules alone pass.
+ *
  * Returns that length, 0..MODERN_STICK_FULL. */
-long ModernStickDeadZone(long zone, long in_x, long in_y, long* out_x, long* out_y)
+long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* out_x, long* out_y)
 {
 	const double full = (double)MODERN_STICK_FULL;
 	double mag, want;
@@ -117,6 +124,15 @@ long ModernStickDeadZone(long zone, long in_x, long in_y, long* out_x, long* out
 
 	if (zone < 0)
 		zone = 0;
+
+	/* THE HARDWARE'S OWN SQUARE, AND IT IS ASKED FIRST because in the corners it
+	 * reaches further than the disc does: both components inside it is exactly
+	 * the pair specific\dxshell.cpp used to zero outright, and nothing that was
+	 * dead at rest before this round may come alive now. It costs the axis snap
+	 * nothing - a snapped push is one the per-axis zone let THROUGH, so it
+	 * always has a component outside the square and never meets this gate. */
+	if (axis_zone > 0 && ModernAbs(in_x) <= axis_zone && ModernAbs(in_y) <= axis_zone)
+		return 0;
 
 	// A zone at or past the rim is a dead stick and would divide by nothing:
 	// answered here rather than by the arithmetic below.

@@ -356,7 +356,7 @@ static double dirdeg(long x, long y)
 /* How many of a full sweep land EXACTLY on one of the four cardinals - the
  * measurement that says whether a zone snaps directions onto axes. A round
  * stick answers 4, one per cardinal; a per-axis zone answers far more. */
-static long cardinal_hits(long zone, long radius, long old_zone)
+static long cardinal_hits(long zone, long axis_zone, long radius, long old_zone)
 {
 	long deg, x, y, ox, oy, hits = 0;
 
@@ -370,7 +370,7 @@ static long cardinal_hits(long zone, long radius, long old_zone)
 		if (old_zone)
 			old_axis_zone(zone, x, y, &ox, &oy);
 		else
-			ModernStickDeadZone(zone, x, y, &ox, &oy);
+			ModernStickDeadZone(zone, axis_zone, x, y, &ox, &oy);
 
 		if ((ox || oy) && (!ox || !oy))
 			hits++;
@@ -380,7 +380,7 @@ static long cardinal_hits(long zone, long radius, long old_zone)
 }
 
 /* The worst direction error of a full sweep at one radius, in degrees. */
-static double worst_dir(long zone, long radius, long* smallest_mag)
+static double worst_dir(long zone, long axis_zone, long radius, long* smallest_mag)
 {
 	double worst = 0.0;
 	long deg;
@@ -395,7 +395,7 @@ static double worst_dir(long zone, long radius, long* smallest_mag)
 		long ox, oy, m;
 		double err;
 
-		m = ModernStickDeadZone(zone, x, y, &ox, &oy);
+		m = ModernStickDeadZone(zone, axis_zone, x, y, &ox, &oy);
 
 		if (!ox && !oy)
 			continue;
@@ -449,7 +449,7 @@ static void deadzone()
 				if (x * x + y * y > zones[z] * zones[z])
 					continue;	// the integer grid rounded this one OUT of the zone
 
-				m = ModernStickDeadZone(zones[z], x, y, &ox, &oy);
+				m = ModernStickDeadZone(zones[z], 0, x, y, &ox, &oy);
 
 				if (ox || oy || m)
 					bad++;
@@ -477,7 +477,7 @@ static void deadzone()
 
 			x = roundl2(cos(r) * (double)MODERN_STICK_FULL);
 			y = roundl2(sin(r) * (double)MODERN_STICK_FULL);
-			m = ModernStickDeadZone(zones[z], x, y, &ox, &oy);
+			m = ModernStickDeadZone(zones[z], 0, x, y, &ox, &oy);
 
 			if (m < worst_m)
 				worst_m = m;
@@ -493,10 +493,10 @@ static void deadzone()
 		printf("  %s: shortest of the 360 rim pushes %ld of %d\n",
 			names[z], worst_m, (int)MODERN_STICK_FULL);
 
-		m = ModernStickDeadZone(zones[z], MODERN_STICK_FULL, 0, &ox, &oy);
+		m = ModernStickDeadZone(zones[z], 0, MODERN_STICK_FULL, 0, &ox, &oy);
 		ok(m == MODERN_STICK_FULL && ox == MODERN_STICK_FULL && !oy,
 			"a push right at the rim is exactly full", m, MODERN_STICK_FULL);
-		m = ModernStickDeadZone(zones[z], 0, -MODERN_STICK_FULL, &ox, &oy);
+		m = ModernStickDeadZone(zones[z], 0, 0, -MODERN_STICK_FULL, &ox, &oy);
 		ok(m == MODERN_STICK_FULL && !ox && oy == -MODERN_STICK_FULL,
 			"...in the other axis too, and forward is still negative", oy, -MODERN_STICK_FULL);
 	}
@@ -504,7 +504,7 @@ static void deadzone()
 	/* 3. AND THE DIAGONAL IS NOT 181. The two axes are gated as a square, so a
 	 * corner push reads 181 raw; an unclamped rate would be 1.4 times the one
 	 * the header promises for a push the player cannot tell from any other. */
-	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, MODERN_STICK_FULL, MODERN_STICK_FULL, &ox, &oy);
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, 0, MODERN_STICK_FULL, MODERN_STICK_FULL, &ox, &oy);
 	ok(m == MODERN_STICK_FULL, "a full diagonal is clamped to full and not to 181", m, MODERN_STICK_FULL);
 	ok(ox == oy, "...and the clamp keeps the diagonal diagonal", ox, oy);
 	printf("  corner push (128,128) -> (%ld,%ld), length %ld\n", ox, oy, m);
@@ -525,7 +525,7 @@ static void deadzone()
 			{
 				x = roundl2(cos(r) * (double)mag);
 				y = roundl2(sin(r) * (double)mag);
-				m = ModernStickDeadZone(zones[z], x, y, &ox, &oy);
+				m = ModernStickDeadZone(zones[z], 0, x, y, &ox, &oy);
 
 				if (m < prev)
 					bad++;
@@ -540,11 +540,11 @@ static void deadzone()
 	/* 5. IT EASES IN. Crossing the rim is not a step - which is what the old
 	 * per-axis zone could not do on the DirectInput right stick, where the
 	 * first live reading was 62 of 128, half the travel at once (M2). */
-	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, MODERN_DEAD_RIGHT_DINPUT + 1, 0, &ox, &oy);
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, 0, MODERN_DEAD_RIGHT_DINPUT + 1, 0, &ox, &oy);
 	ok(m <= 3, "one unit past the DirectInput zone the camera barely moves", m, 0);
 	printf("  DirectInput right: raw 63 -> %ld (the old zone's first reading was 62)\n", m);
 
-	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, MODERN_DEAD_RIGHT + 1, 0, &ox, &oy);
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, 0, MODERN_DEAD_RIGHT + 1, 0, &ox, &oy);
 	ok(m <= 3, "and the same one unit past the XInput zone", m, 0);
 
 	/* 6. THE DEFECT ITSELF, in the units the play test measured it in. A stick
@@ -557,7 +557,7 @@ static void deadzone()
 	printf("  raw (%ld,%ld) = %.1f deg -> old (%ld,%ld) = %.1f deg\n",
 		x, y, dirdeg(x, y), ox, oy, dirdeg(ox, oy));
 
-	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, x, y, &ox, &oy);
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, 0, x, y, &ox, &oy);
 	ok(absl((long)roundl2(dirdeg(ox, oy) - dirdeg(x, y))) <= 1,
 		"the radial zone keeps it", (long)roundl2(dirdeg(ox, oy)), (long)roundl2(dirdeg(x, y)));
 	printf("                          -> new (%ld,%ld) = %.1f deg, length %ld\n",
@@ -571,8 +571,8 @@ static void deadzone()
 
 	for (z = 0; z < 3; z++)
 	{
-		const long old_hits = cardinal_hits(zones[z], 120, 1);
-		const long new_hits = cardinal_hits(zones[z], 120, 0);
+		const long old_hits = cardinal_hits(zones[z], 0, 120, 1);
+		const long new_hits = cardinal_hits(zones[z], 0, 120, 0);
 
 		printf("    %-12s old %3ld   new %3ld\n", names[z], old_hits, new_hits);
 		ok(new_hits == 4, "the radial zone snaps nothing onto an axis", new_hits, 4);
@@ -593,7 +593,7 @@ static void deadzone()
 
 		for (k = 0; k < 3; k++)
 		{
-			worst = worst_dir(zones[z], radii[k], &smallest);
+			worst = worst_dir(zones[z], 0, radii[k], &smallest);
 			printf("    %-12s radius %3ld: %.2f deg (shortest output %ld)\n",
 				names[z], radii[k], worst, smallest);
 
@@ -620,8 +620,8 @@ static void deadzone()
 		x = roundl2(cos(r) * 100.0);
 		y = roundl2(sin(r) * 100.0);
 
-		ModernStickDeadZone(MODERN_DEAD_LEFT, x, y, &ox, &oy);
-		ModernStickDeadZone(MODERN_DEAD_LEFT, -x, -y, &bx, &by);
+		ModernStickDeadZone(MODERN_DEAD_LEFT, 0, x, y, &ox, &oy);
+		ModernStickDeadZone(MODERN_DEAD_LEFT, 0, -x, -y, &bx, &by);
 
 		if (bx != -ox || by != -oy)
 			bad++;
@@ -632,15 +632,15 @@ static void deadzone()
 	/* 10. THE TWO ENDS A REGISTRY KEY COULD ONE DAY HAND IT. A zone of nothing
 	 * passes the stick through; a zone at or past the rim is a dead stick and
 	 * not a divide by nothing. */
-	m = ModernStickDeadZone(0, 100, 0, &ox, &oy);
+	m = ModernStickDeadZone(0, 0, 100, 0, &ox, &oy);
 	ok(m == 100 && ox == 100 && oy == 0, "a zone of nothing changes nothing", ox, 100);
-	m = ModernStickDeadZone(-5, 100, 0, &ox, &oy);
+	m = ModernStickDeadZone(-5, 0, 100, 0, &ox, &oy);
 	ok(m == 100 && ox == 100, "and a negative one is the same as nothing", ox, 100);
-	m = ModernStickDeadZone(MODERN_STICK_FULL, 127, 0, &ox, &oy);
+	m = ModernStickDeadZone(MODERN_STICK_FULL, 0, 127, 0, &ox, &oy);
 	ok(m == 0 && !ox && !oy, "a zone at the rim is a dead stick, not a crash", m, 0);
-	m = ModernStickDeadZone(5000, 127, 0, &ox, &oy);
+	m = ModernStickDeadZone(5000, 0, 127, 0, &ox, &oy);
 	ok(m == 0 && !ox && !oy, "and so is one past it", m, 0);
-	m = ModernStickDeadZone(MODERN_DEAD_LEFT, 0, 0, &ox, &oy);
+	m = ModernStickDeadZone(MODERN_DEAD_LEFT, 0, 0, 0, &ox, &oy);
 	ok(m == 0 && !ox && !oy, "a stick at dead centre is dead centre", m, 0);
 
 	/* 11. NOTHING LEAVES THE DOMAIN the whole tree carries axes in. */
@@ -649,7 +649,7 @@ static void deadzone()
 	for (x = -MODERN_STICK_FULL; x <= MODERN_STICK_FULL; x += 1)
 		for (y = -MODERN_STICK_FULL; y <= MODERN_STICK_FULL; y += 7)
 		{
-			m = ModernStickDeadZone(MODERN_DEAD_RIGHT, x, y, &ox, &oy);
+			m = ModernStickDeadZone(MODERN_DEAD_RIGHT, 0, x, y, &ox, &oy);
 
 			if (absl(ox) > MODERN_STICK_FULL || absl(oy) > MODERN_STICK_FULL ||
 				m < 0 || m > MODERN_STICK_FULL)
@@ -657,6 +657,91 @@ static void deadzone()
 		}
 
 	ok(bad == 0, "no push of any kind leaves +-128", bad, 0);
+
+	/* 12. AND THE SQUARE THE HARDWARE HELD, which the first version of item 6
+	 * dropped and the skeptical review found (round 161a2b, fix round). A
+	 * per-axis zone of half-width A zeroes the PAIR over the whole SQUARE of
+	 * that half-width; a radial zone of radius A only covers the disc inside
+	 * it, so every rest position in the square's corners - out to A * 1.41 -
+	 * stopped being dead. The four pairs below are the four the seam actually
+	 * uses (specific\input.cpp), zone and square together. */
+	{
+		const long zone2[4] = { MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT,
+			MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT_DINPUT };
+		const long axis2[4] = { MODERN_DEAD_AXIS_LEFT, MODERN_DEAD_AXIS_RIGHT,
+			MODERN_DEAD_AXIS_LEFT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT };
+		const char* name2[4] = { "left XInput", "right XInput",
+			"left DInput", "right DInput" };
+		long k;
+
+		/* THE ONE THE REVIEW NAMED, in this user's own pad's units: a
+		 * DirectInput right stick resting at (450, -450) of 1000 is (56, -56)
+		 * by the time the seam sees it. Both axes inside 500, so dxshell handed
+		 * the classic pair a dead stick. Its RADIUS is 79, past a bare radial
+		 * 62, so that zone lets it through - and what it hands on is the
+		 * RESCALED length, 33 of 128, a quarter of the camera's full rate with
+		 * the pad lying on the desk. The check is that it lives at all; 33 is
+		 * printed beside it because that is the size of the failure. */
+		m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, 0, 56, -56, &ox, &oy);
+		ok(m > 0, "a rest in the square's corner DID read past a bare radial zone", m, 0);
+		printf("  a DirectInput right stick resting at (450,-450) of 1000 = (56,-56),"
+			" radius 79:\n");
+		printf("    radial 62 alone -> length %ld of %d (the camera turns by itself)\n",
+			m, (int)MODERN_STICK_FULL);
+
+		m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT,
+			56, -56, &ox, &oy);
+		ok(m == 0 && !ox && !oy, "and the square holds it, as the hardware zone did",
+			m, 0);
+		printf("    with the square  -> length %ld\n", m);
+
+		/* EVERY POINT THE HARDWARE ZEROED IS STILL ZERO - the whole claim, swept
+		 * over the domain rather than argued, for each of the four pairs. */
+		for (k = 0; k < 4; k++)
+		{
+			long leaked = 0;
+			long lost = 0;
+
+			for (x = -MODERN_STICK_FULL; x <= MODERN_STICK_FULL; x++)
+				for (y = -MODERN_STICK_FULL; y <= MODERN_STICK_FULL; y++)
+				{
+					long px, py;
+
+					old_axis_zone(axis2[k], x, y, &px, &py);
+					ModernStickDeadZone(zone2[k], axis2[k], x, y, &ox, &oy);
+
+					if (!px && !py && (ox || oy))
+						leaked++;
+					else if ((px || py) && !ox && !oy)
+						lost++;
+				}
+
+			/* `lost` is the OTHER side of the exchange and is printed rather
+			 * than asserted away: it is the thin band between the square and
+			 * the radial rim, where a push the per-axis zone let through as a
+			 * cardinal is now judged too short. It is a push of under 34 of
+			 * 128 in one component and nothing in the other. */
+			ok(leaked == 0, "nothing the per-axis zone zeroed comes alive", leaked, 0);
+			printf("    %-13s dead->live %ld, live->dead %ld (the radial rim's own band)\n",
+				name2[k], leaked, lost);
+		}
+
+		/* AND THE SNAP IS STILL CURED, which is what the square must not cost:
+		 * with both gates in place a 360-direction sweep still lands on a
+		 * cardinal four times and nowhere else, and the direction still
+		 * survives to the integer grid's own limit. */
+		for (k = 0; k < 4; k++)
+		{
+			const long hits = cardinal_hits(zone2[k], axis2[k], 120, 0);
+
+			worst = worst_dir(zone2[k], axis2[k], 120, &smallest);
+			ok(hits == 4, "with the square too, nothing is snapped onto an axis", hits, 4);
+			ok(worst <= 1.0, "...and the direction still survives to within a degree",
+				(long)roundl2(worst * 100.0), 100);
+			printf("    %-13s cardinal hits %ld, worst direction error %.2f deg\n",
+				name2[k], hits, worst);
+		}
+	}
 }
 
 /* ------------------------------------------------- the stick becomes bits -- */
@@ -4075,7 +4160,15 @@ static void camera_seam()
  * stick step before MoveCamera sees it, and adds the same step to
  * actual_elevation before the >> 3 sees it (ModernCameraLeadEye and
  * ModernCameraOrbit). Both spellings are in here, so the test states the size of
- * the defect as well as the size of the cure. */
+ * the defect as well as the size of the cure.
+ *
+ * `radius` IS camera.target_distance, which is 1536 behind her and 1024 or 2048
+ * in the states that ask for it (game\lara.cpp), and `start` is how far out the
+ * eye begins as a multiple of it - 1 is a settled camera, more is one arriving
+ * from a cut or a released fixed camera, which is the case the fix round had to
+ * measure. Both of ModernCameraLeadEye's bounds are modelled with them: the
+ * outer one that refuses to turn an eye eight sectors away at all, and the
+ * scale that keeps the eye's own step down to the ideal's wherever it is. */
 struct LEAD_RUN
 {
 	double first_yaw;	// the eye's yaw step on the FIRST tick, in angle units
@@ -4083,13 +4176,17 @@ struct LEAD_RUN
 	double last_yaw;	// the yaw step once the lag has settled
 	long to_90;		// ticks until the yaw step is nine tenths of the orbit's
 	long worst_eye;		// the largest step the eye itself took, Manhattan
+	long worst_lead;	// and the largest the LEAD alone took, before MoveCamera
 };
 
 static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
-	long ticks, LEAD_RUN* r)
+	long ticks, double radius, double start, LEAD_RUN* r)
 {
 	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
-	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
+	// The outer bound is camera.cpp's own MODERN_CAM_LEAD_MAX, which lives in
+	// that file and is mirrored here because a .cpp has no header to lend it.
+	const long lead_max = 8192;
+	const long lim = (long)radius;
 	MODERN_CAMERA_CFG cfg;
 	long ang = 0;
 	long tgt_elev = MODERN_CAMERA_PITCH_HOME;
@@ -4105,11 +4202,13 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 	r->last_yaw = 0.0;
 	r->to_90 = 0;
 	r->worst_eye = 0;
+	r->worst_lead = 0;
 
-	/* A settled camera stands on its own ideal, which is where a push starts. */
-	px = roundl2(-radius * cos((double)act_elev * turn) * sin((double)ang * turn));
-	py = roundl2(radius * sin((double)act_elev * turn));
-	pz = roundl2(-radius * cos((double)act_elev * turn) * cos((double)ang * turn));
+	/* A settled camera stands on its own ideal, which is where a push starts;
+	 * `start` past 1 is the eye that is still walking in from somewhere else. */
+	px = roundl2(-start * radius * cos((double)act_elev * turn) * sin((double)ang * turn));
+	py = roundl2(start * radius * sin((double)act_elev * turn));
+	pz = roundl2(-start * radius * cos((double)act_elev * turn) * cos((double)ang * turn));
 	prev_yaw = atan2((double)-px, (double)-pz) / turn;
 	prev_pitch = atan2((double)py, sqrt((double)px * px + (double)pz * pz)) / turn;
 
@@ -4139,16 +4238,37 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 		oy = py;
 		oz = pz;
 
-		if (lead)
+		/* ModernCameraLeadEye, and BOTH of its bounds (the fix round). The outer
+		 * one refuses an eye that is not orbiting her at all; the scale keeps the
+		 * eye's own arc down to the one it would have made at the orbit's own
+		 * radius, which is the radius every promise in this file was measured at.
+		 * `lead` 2 is the same rotation WITHOUT that scale - what step 2 shipped
+		 * and what the skeptical review found - so the run can state the size of
+		 * the defect as well as the size of the cure. */
+		if (lead && absl(px) <= lead_max && absl(py) <= lead_max && absl(pz) <= lead_max)
 		{
-			/* ModernCameraLeadEye, in the same order: the pitch about the
-			 * horizontal axis through her, then the yaw about the vertical. */
 			const double h = sqrt((double)px * px + (double)pz * pz);
+			const long lx = px, ly = py, lz = pz;
+			long eye_pitch = step_pitch;
+			long eye_yaw = yaw_rate;
+			long moved_lead;
 
-			if (step_pitch && h > 0.0)
+			if (lead == 1 && lim > 0)
 			{
-				const double c = cos((double)step_pitch * turn);
-				const double s = sin((double)step_pitch * turn);
+				/* r, lim and the truncating division are camera.cpp's own. */
+				const long rr = (long)sqrt(h * h + (double)py * py);
+
+				if (rr > lim)
+				{
+					eye_pitch = eye_pitch * lim / rr;
+					eye_yaw = eye_yaw * lim / rr;
+				}
+			}
+
+			if (eye_pitch && h > 0.0)
+			{
+				const double c = cos((double)eye_pitch * turn);
+				const double s = sin((double)eye_pitch * turn);
 				const double nh = h * c - (double)py * s;
 
 				py = roundl2((double)py * c + h * s);
@@ -4156,15 +4276,20 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 				pz = roundl2((double)pz * (nh < 0.0 ? 0.0 : nh) / h);
 			}
 
-			if (yaw_rate)
+			if (eye_yaw)
 			{
-				const double c = cos((double)yaw_rate * turn);
-				const double s = sin((double)yaw_rate * turn);
+				const double c = cos((double)eye_yaw * turn);
+				const double s = sin((double)eye_yaw * turn);
 				const long nx = roundl2((double)px * c + (double)pz * s);
 
 				pz = roundl2((double)pz * c - (double)px * s);
 				px = nx;
 			}
+
+			moved_lead = InterpManhattan(px - lx, py - ly, pz - lz);
+
+			if (moved_lead > r->worst_lead)
+				r->worst_lead = moved_lead;
 		}
 
 		px += (ix - px) / speed;
@@ -4204,6 +4329,7 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 static void camera_lead()
 {
 	MODERN_CAMERA_CFG cfg;
+	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
 	LEAD_RUN slow, fast;
 	long yaw_max, pitch_max;
 	long speed;
@@ -4219,8 +4345,8 @@ static void camera_lead()
 	 * was. */
 	for (speed = 10; speed >= 8; speed -= 2)
 	{
-		lead_run(speed, cfg.yaw_rate, 0, 0, 60, &slow);
-		lead_run(speed, cfg.yaw_rate, 0, 1, 60, &fast);
+		lead_run(speed, cfg.yaw_rate, 0, 0, 60, radius, 1.0, &slow);
+		lead_run(speed, cfg.yaw_rate, 0, 1, 60, radius, 1.0, &fast);
 
 		printf("  measured: speed %ld, the default rate %ld - the eye moved %.0f units on the\n",
 			speed, cfg.yaw_rate, slow.first_yaw);
@@ -4244,7 +4370,7 @@ static void camera_lead()
 			"a held push still settles at exactly the orbit's rate",
 			roundl2(fast.last_yaw), cfg.yaw_rate);
 
-		lead_run(speed, yaw_max, 0, 1, 60, &fast);
+		lead_run(speed, yaw_max, 0, 1, 60, radius, 1.0, &fast);
 		ok(fast.first_yaw >= 0.9 * (double)yaw_max,
 			"at the top of the speed slider too", roundl2(fast.first_yaw),
 			roundl2(0.9 * (double)yaw_max));
@@ -4254,8 +4380,8 @@ static void camera_lead()
 	 * MoveCamera's, so it was the worse of the two: an eighth of a tenth. Both
 	 * are led past - the elevation in ModernCameraOrbit, the eye in
 	 * ModernCameraLeadEye - and the check is the same shape as the yaw's. */
-	lead_run(10, 0, cfg.pitch_rate, 0, 60, &slow);
-	lead_run(10, 0, cfg.pitch_rate, 1, 60, &fast);
+	lead_run(10, 0, cfg.pitch_rate, 0, 60, radius, 1.0, &slow);
+	lead_run(10, 0, cfg.pitch_rate, 1, 60, radius, 1.0, &fast);
 
 	printf("  measured: the pitch moved %.1f units on the first tick of a push"
 		" (%.1f%% of %ld); it moves %.0f now (%.1f%%)\n",
@@ -4296,10 +4422,9 @@ static void camera_lead()
  * ticks of a push and equal for as long as the push lasts. The margin below
  * is therefore the whole margin. */
 static long camcut_worst(long yaw_rate, long pitch_rate, long pitch_min, long pitch_max,
-	long* cuts)
+	double radius, long* cuts)
 {
 	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
-	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
 	long worst = 0;
 	long elev;
 	long ang;
@@ -4356,7 +4481,8 @@ static void camera_camcut()
 
 	ModernCameraDefaults(&cfg);
 
-	worst_eye = camcut_worst(cfg.yaw_rate, cfg.pitch_rate, cfg.pitch_min, cfg.pitch_max, &cuts);
+	worst_eye = camcut_worst(cfg.yaw_rate, cfg.pitch_rate, cfg.pitch_min, cfg.pitch_max,
+		radius, &cuts);
 
 	printf("  measured: at the DEFAULT speed the worst tick of a fully pushed right stick\n");
 	printf("            moves the ideal eye %ld units (Manhattan) against INTERP_CAM_SNAP %ld"
@@ -4375,7 +4501,8 @@ static void camera_camcut()
 	 * the orbit shipped with, and a promise that held at 1092 units a tick is
 	 * not a promise about 2184. */
 	ModernCameraSpeedRates(MODERN_CAMERA_SPEED_FULL, &yaw_rate, &pitch_rate);
-	worst_eye = camcut_worst(yaw_rate, pitch_rate, cfg.pitch_min, cfg.pitch_max, &cuts);
+	worst_eye = camcut_worst(yaw_rate, pitch_rate, cfg.pitch_min, cfg.pitch_max,
+		radius, &cuts);
 
 	printf("  measured: at speed 100 (%ld units a tick, %ld of pitch) it moves %ld"
 		" - a margin of %.1f\n",
@@ -4403,7 +4530,7 @@ static void camera_camcut()
 
 		for (speed = 10; speed >= 8; speed -= 2)
 		{
-			lead_run(speed, yaw_rate, pitch_rate, 1, 400, &led);
+			lead_run(speed, yaw_rate, pitch_rate, 1, 400, radius, 1.0, &led);
 
 			if (led.worst_eye > led_worst)
 				led_worst = led.worst_eye;
@@ -4418,6 +4545,97 @@ static void camera_camcut()
 		ok(led_worst <= worst_eye + 64,
 			"...and it is the ideal's own step, at the eye's own radius",
 			led_worst, worst_eye + 64);
+	}
+
+	/* AND THE EYE THAT IS STILL WALKING IN (the fix round, and the skeptical
+	 * review's second finding). Everything above is measured with the eye AT the
+	 * orbit's own radius, which is where it lives once it has settled. It does
+	 * not start there: after a flyby, a cutscene, a room change or a released
+	 * fixed camera it walks in from thousands of units away with camera.speed
+	 * 10, and a player already holding the right stick has those ticks LED.
+	 * A rotation moves the eye along a chord that grows with the radius, so the
+	 * lead step at four sectors out is four times the one this file measured -
+	 * and the promise that the orbit never makes the interpolator cut was never
+	 * measured there at all.
+	 *
+	 * SO BOTH SPELLINGS ARE SWEPT, out to the distance MODERN_CAM_LEAD_MAX stops
+	 * the lead at, and at each of the three distances the engine can set
+	 * (camera.target_distance is 1536 behind her, 1024 in the puzzle states and
+	 * 2048 on the rope - game\lara.cpp). `lead` 2 is what step 2 shipped and 1 is
+	 * what the fix scales; the defect gets a number and the cure gets a bound. */
+	{
+		const double dists[3] = { 1024.0, 1536.0, 2048.0 };
+		long worst_broken = 0;
+		double broken_from = 0.0;
+		long d;
+
+		printf("  measured: the eye that is still walking in, at each target_distance\n");
+		printf("            (the ideal's own worst step at that distance is the bound the\n");
+		printf("             lead promises to stay inside; the threshold is %ld)\n",
+			(long)INTERP_CAM_SNAP);
+
+		for (d = 0; d < 3; d++)
+		{
+			long dist_fixed = 0;
+			long dist_broken = 0;
+			long dist_cuts = 0;
+			long ideal;
+			long speed;
+			double start;
+
+			/* The ideal's own step at THIS distance - the promise's right hand
+			 * side, swept the same way the two above it are. */
+			ideal = camcut_worst(yaw_rate, pitch_rate, cfg.pitch_min, cfg.pitch_max,
+				dists[d], &dist_cuts);
+
+			for (speed = 10; speed >= 8; speed -= 2)
+				for (start = 1.0; start <= 8.0; start += 0.25)
+				{
+					LEAD_RUN fixed_run, broken_run;
+
+					lead_run(speed, yaw_rate, pitch_rate, 1, 120, dists[d], start, &fixed_run);
+					lead_run(speed, yaw_rate, pitch_rate, 2, 120, dists[d], start, &broken_run);
+
+					if (fixed_run.worst_lead > dist_fixed)
+						dist_fixed = fixed_run.worst_lead;
+
+					if (broken_run.worst_lead > dist_broken)
+						dist_broken = broken_run.worst_lead;
+
+					/* Where the unscaled lead first passes the threshold, which is
+					 * the number the review's finding is really about. */
+					if (broken_run.worst_lead > INTERP_CAM_SNAP &&
+						(broken_from == 0.0 || start * dists[d] < broken_from))
+						broken_from = start * dists[d];
+				}
+
+			printf("    distance %4ld: ideal %4ld, led %4ld (margin %.1f), unscaled %5ld\n",
+				(long)dists[d], ideal, dist_fixed,
+				(double)INTERP_CAM_SNAP / (double)dist_fixed, dist_broken);
+
+			ok(dist_fixed < INTERP_CAM_SNAP,
+				"the led eye never outruns the interpolator, however far out it starts",
+				dist_fixed, INTERP_CAM_SNAP);
+			ok(dist_fixed <= ideal + 64,
+				"...because the scale holds it to the ideal's own step at that distance",
+				dist_fixed, ideal + 64);
+			ok(ideal < INTERP_CAM_SNAP,
+				"and the ideal itself is under the threshold at that distance too",
+				ideal, INTERP_CAM_SNAP);
+			ok(dist_cuts == 0, "no aim cut at that distance either", dist_cuts, 0);
+
+			if (dist_broken > worst_broken)
+				worst_broken = dist_broken;
+		}
+
+		printf("    the defect: unscaled, the lead alone reaches %ld - %.1f times the"
+			" threshold -\n", worst_broken, (double)worst_broken / (double)INTERP_CAM_SNAP);
+		printf("            and it first passes it with the eye about %ld units out\n",
+			(long)broken_from);
+
+		ok(worst_broken > INTERP_CAM_SNAP,
+			"and the defect was real: unscaled, the lead alone trips the threshold",
+			worst_broken, INTERP_CAM_SNAP);
 	}
 
 	/* THE ONE THING THAT USED TO CUT AT A WALL WAS VANILLA'S, and it is worth a

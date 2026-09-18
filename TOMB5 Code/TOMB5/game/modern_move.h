@@ -158,8 +158,8 @@ enum modern_constants
 	 * was never MEASURED - that comment only claims 500 was wide enough - so
 	 * all this tree knows is that each axis rests inside 500, which in the
 	 * worst case is a radius of 707. 500/8 = 62 is the smallest radius that
-	 * certainly holds a rest ON an axis, the case the comment describes, and
-	 * it is what the play test log shows as that stick's first live reading.
+	 * holds a rest ON an axis, the case the comment describes, and it is what
+	 * the play test log shows as that stick's first live reading.
 	 * It stays until MODERNLOG's pad line prints the real rest position; a
 	 * resting stick that turns the camera on its own is the one failure this
 	 * zone exists to prevent, and it is worse than a wide zone.
@@ -170,6 +170,33 @@ enum modern_constants
 	MODERN_DEAD_LEFT = 31,			// XInput's own 7849 of 32767, in this tree's /256 units
 	MODERN_DEAD_RIGHT = 34,			// XInput's own 8689 of 32767, same units
 	MODERN_DEAD_RIGHT_DINPUT = 62,	// this pad's off-centre rest: 500 of 1000, in the /8 units of that path
+
+	/* AND THE SQUARE THE HARDWARE ALREADY HELD, KEPT (round 161a2b, fix round;
+	 * the first version of item 6 shipped without it and that was a regression).
+	 * A per-axis zone of half-width A zeroes the PAIR over the whole SQUARE
+	 * |x| <= A and |y| <= A. A radial zone of radius A only covers the disc
+	 * inside that square, so every rest position in its corners - up to A * 1.41
+	 * away - stopped being dead when the radial zone replaced it, and a pad
+	 * resting there would turn the camera by itself with nobody touching it.
+	 * That is the one failure the item names as unacceptable, and it is not
+	 * hypothetical on this user's pad: a DirectInput right stick resting at
+	 * (450, -450) of 1000 was silent before and reads 71 of 128 through a bare
+	 * radial 62.
+	 * SO BOTH ZONES ARE ASKED and the stick is dead in either: the square is
+	 * exactly what the hardware held, the disc is what the rescaling needs. The
+	 * axis snap item 6 exists to cure is untouched by the square, because a
+	 * snapped push is one the per-axis zone let THROUGH - it always has a
+	 * component outside the square, so it never meets this gate at all.
+	 * THE NUMBERS ARE THE PATHS' OWN, divided the way that path divides its
+	 * axes before this seam sees them (specific\dxshell.cpp) and floored, so the
+	 * gate covers every reading the hardware zone could swallow. Flooring can
+	 * cost a hair on the other side - an XInput axis one unit past its own zone
+	 * still reads 30 after the /256 - which is a unit of 128 in the corners
+	 * only, and it errs towards dead, which is the safe side of this one. */
+	MODERN_DEAD_AXIS_LEFT = 30,				// XInput left, 7849 of 32767 in /256 units
+	MODERN_DEAD_AXIS_RIGHT = 33,			// XInput right, 8689 of 32767, same
+	MODERN_DEAD_AXIS_LEFT_DINPUT = 18,		// DirectInput left, 150 of 1000 in /8 units
+	MODERN_DEAD_AXIS_RIGHT_DINPUT = 62,		// DirectInput right, 500 of 1000, same
 
 	/* Row 5, MEASURE - ANSWERED BY THE FIRST PLAY TEST (2026-09-17). The RULE
 	 * was TROne's and came from play - under half deflection Lara walks -
@@ -520,7 +547,7 @@ void ModernDefaults(MODERN_CFG* cfg);
 void ModernResetState(MODERN_STATE* state);
 short ModernWrap(long angle);
 short ModernAngle(long x, long z);
-long ModernStickDeadZone(long zone, long in_x, long in_y, long* out_x, long* out_y);
+long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* out_x, long* out_y);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsSwim(short anim_state);
 long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state);

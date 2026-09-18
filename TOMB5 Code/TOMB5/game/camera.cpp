@@ -266,12 +266,20 @@ static char CameraSnaps = 0;
  * excepted (CalculateCamera). Flybys and cutscenes are untouched in every
  * mode - CalculateCamera is not even called during a flyby. */
 
-/* HOW FAR THE EYE MAY BE FROM HER AND STILL BE ORBITING HER, the one bound
- * ModernCameraLeadEye needs. Eight sectors is five times the orbit's own radius
- * of 1536: past that the eye is not circling her at all, it is arriving from
+/* HOW FAR THE EYE MAY BE FROM HER AND STILL BE ORBITING HER AT ALL, the outer
+ * bound ModernCameraLeadEye needs. Eight sectors is five times the orbit's own
+ * radius of 1536: past that the eye is not circling her, it is arriving from
  * somewhere - a fixed camera just released, a cut, a room change - and turning
  * it about her by a stick step would be turning the wrong thing. It also keeps
- * the squares in that function inside a long with room to spare. */
+ * the squares in that function inside a long with room to spare.
+ *
+ * IT IS NOT THE BOUND THE CUT DETECTION NEEDS, and this round's fix round says
+ * so where the first version of item 2 left it unsaid: a rotation moves the eye
+ * by a chord that grows with the RADIUS, so an eye walking in from three or
+ * four sectors away would have been turned further in one tick than
+ * INTERP_CAM_SNAP allows, in exactly the ticks the player is steering. That
+ * bound is camera.target_distance and it lives in the function, because it is
+ * the radius the ideal itself is built at in the same breath. */
 #define MODERN_CAM_LEAD_MAX	8192
 
 static MODERN_CAMERA_CFG modern_cam_cfg;
@@ -541,12 +549,31 @@ static void ModernCameraOrbit()
  * WHAT IT IS NOT ALLOWED TO TOUCH is an eye that is not orbiting her at all
  * (MODERN_CAM_LEAD_MAX), and a horizontal radius of nothing: a camera standing
  * on her own axis has no direction to turn, which is the same degeneracy
- * MODERN_CAMERA_PITCH_MIN cut out of the sphere. */
+ * MODERN_CAMERA_PITCH_MIN cut out of the sphere.
+ *
+ * AND WHAT IT MAY NOT DO IS OUTRUN THE IDEAL (this round's fix round). Turning
+ * by an angle moves the eye along a chord of 2 * r * sin(step / 2), so the same
+ * stick step moves a far eye further than a near one - and the whole promise
+ * this lead makes to the 60 fps interpolator is that it never moves the eye
+ * further than the orbit's own step, which was measured at the orbit's own
+ * radius and nowhere else. An eye arriving from a cut or a released fixed
+ * camera walks in with camera.speed 10 from thousands of units away, and a
+ * player already holding the stick would have had those ticks turned at that
+ * radius: past 3460 units the chord alone passes INTERP_CAM_SNAP and the
+ * interpolator would cut instead of interpolating.
+ * So past camera.target_distance the STEP is scaled down by the same ratio the
+ * radius is up, which leaves the arc exactly what it is at the orbit's own
+ * radius - the one the sweep in Preparation\Tools\Diagnose\ModernTest
+ * (camera_camcut) measures. Inside that radius, which is where the eye lives
+ * whenever a wall has pulled it in, nothing changes at all. */
 static void ModernCameraLeadEye()
 {
-	long dx, dy, dz, h, nh, c, s;
+	long dx, dy, dz, h, nh, c, s, r, lim, lead_yaw, lead_pitch;
 
-	if (!modern_cam_lead_yaw && !modern_cam_lead_pitch)
+	lead_yaw = modern_cam_lead_yaw;
+	lead_pitch = modern_cam_lead_pitch;
+
+	if (!lead_yaw && !lead_pitch)
 		return;
 
 	dx = camera.pos.x - camera.target.x;
@@ -559,14 +586,28 @@ static void ModernCameraLeadEye()
 
 	h = (long)phd_sqrt((ulong)(SQUARE(dx) + SQUARE(dz)));
 
+	/* NEVER FURTHER THAN THE IDEAL ITSELF MOVED. r is the whole radius because
+	 * the pitch turns about her in the vertical plane and the yaw in the
+	 * horizontal one, and r bounds both; the truncation of the two divisions
+	 * falls on the safe side of the threshold. lim guards a target_distance of
+	 * nothing, which no state sets but which would be a divide by nothing. */
+	r = (long)phd_sqrt((ulong)(SQUARE(h) + SQUARE(dy)));
+	lim = camera.target_distance;
+
+	if (lim > 0 && r > lim)
+	{
+		lead_yaw = lead_yaw * lim / r;
+		lead_pitch = lead_pitch * lim / r;
+	}
+
 	/* THE PITCH, and it is the engine's own arithmetic read backwards: the
 	 * candidates are built as y = target.y + R * sin(elevation) and a radius of
 	 * R * cos(elevation), so raising the elevation by a step turns (h, dy)
 	 * through that step and the horizontal pair follows its own length. */
-	if (modern_cam_lead_pitch && h)
+	if (lead_pitch && h)
 	{
-		c = phd_cos(modern_cam_lead_pitch);
-		s = phd_sin(modern_cam_lead_pitch);
+		c = phd_cos(lead_pitch);
+		s = phd_sin(lead_pitch);
 		nh = (h * c - dy * s) >> W2V_SHIFT;
 		dy = (dy * c + h * s) >> W2V_SHIFT;
 
@@ -577,10 +618,10 @@ static void ModernCameraLeadEye()
 		dz = dz * nh / h;
 	}
 
-	if (modern_cam_lead_yaw)
+	if (lead_yaw)
 	{
-		c = phd_cos(modern_cam_lead_yaw);
-		s = phd_sin(modern_cam_lead_yaw);
+		c = phd_cos(lead_yaw);
+		s = phd_sin(lead_yaw);
 		nh = (dx * c + dz * s) >> W2V_SHIFT;
 		dz = (dz * c - dx * s) >> W2V_SHIFT;
 		dx = nh;

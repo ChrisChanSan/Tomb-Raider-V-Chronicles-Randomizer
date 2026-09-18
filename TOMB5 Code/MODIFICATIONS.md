@@ -15083,7 +15083,7 @@ the land and not like something new:
 | surface turn rate | 728/tick | `lara_as_surftread` / `lara_as_surfswim`'s own direct write to `y_rot` |
 | surface side rate | 364/tick | `lara_as_surfback` / `surfleft` / `surfright`'s own |
 | swim pitch rate | 364/tick (2 deg) | `SwimTurn`'s own step for `IN_FORWARD`/`IN_BACK` - also the look camera's own rate |
-| swim pitch limits | -15470 / +15470 | `LaraUnderWater`'s own clamp on `x_rot` - the same number the chase camera clamps its elevation to |
+| swim pitch limits | -15470 / +15470 | `LaraUnderWater`'s own clamp on `x_rot`. The chase camera clamps its elevation to the same NUMBER but not to the same RANGE: the pointer is that elevation with `pitch_home` taken out, so it asks for -13650 .. +17290 and this clamp cuts the top - the review's fifth finding, written out in `game/modern_move.h` and in the fix round below |
 | swim roll rate | 546/tick | `SwimTurn`'s own bank while a turn bit is held; owed back because the direct turn takes the bits away |
 | auto stroke | 1 (on) | the user's own decision, not a measurement - a stick that moves her cannot also need the jump key held to make her move. 0 restores "jump = stroke" with the course still steering. |
 
@@ -15229,6 +15229,133 @@ stroke still work there because both read the camera's HEADING, which first
 person has as much as the orbit does. That is the one place in this
 workflow where two different sources feed the same parameter depending on
 mode, and it is named here as well as at the call site.
+
+**WHAT THE SKEPTICAL REVIEW CHANGED (the fix round after step 5).** Six
+findings - one high, three medium, two low. Every one of them held up when it
+was measured; nothing was refuted and nothing was changed on suspicion. Three
+commits, `Round 161a2 (#161): <what>` like the five before them.
+
+*The high one: the discard orbited the door.* A trigger that carries a Camera
+AND a Target command makes `game/control.cpp` set `camera.item` (`:2707`,
+`:2836`), and `CalculateCamera` then builds the whole shot around THAT item -
+its bounds, its height, its heading, and `ConfirmCameraTargetPos` skipped
+because it is not Lara. `ChaseCamera` reads `camera.target` and nothing else,
+so the modern discard, which took its decision two hundred lines further down,
+handed the orbit a target that was the DOOR: a hard cut to an orbit around the
+trigger's object at 1536 units with Lara out of the picture, and a hard cut
+back. That is exactly the cutaway observation 5 asks to be discarded, wearing
+the orbit's clothes. Measured rather than feared: **twenty floor triggers in
+the shipped campaign carry both commands on one tile** - Andrea1 4, Andrea2 1,
+joby2 1, rich1 4, rich2 3, rich3 7 - counted over the user's own `.trc` files
+by the review's `CamTargetPairs` and again by this round with the `TO_CAMERA`
+continuation word skipped as well (`game/control.cpp:2561` consumes one, just
+as `TO_FLYBY:2662` does); both walks agree on all six levels. The fix moves the
+decision to the top of `CalculateCamera`, where "discarded" can mean what it
+says: `item` is Lara, `fixed_camera` stays 0 - so no `SniperCount`, no
+`camera.speed` of 1 and no `fixed_camera` flip for the interpolator to read as
+a cut - and the target block below is the ordinary one. The two tests the
+branch used to compute for itself (`wouldFix`, `sniperCam`) are hoisted
+unchanged; they read `camera.type`, `camera.flags`, `camera.number` and
+`camera.fixed[]`, and the only assignment to any of those in between is
+`camera.type = LOOK_CAMERA` in the target-item block, which makes the branch
+unreachable - so the two values are the same two values, computed earlier. That
+block is skipped under the discard as well, because letting it run would hand
+the view to `LookCamera` through the same door: the same cutaway by another
+name.
+
+*A defect the fix round found beside it and deliberately did NOT fix.*
+`FirstPersonCamera(item)` has the same non-Lara item: it reads `item->pos` and
+`item->room_number` for the eye (`game/camera.cpp:2006`, `:2033`, `:2060`,
+`:2146`). That is #126's own, it is in base `22827e1`, and first person runs at
+Tank - so repairing it here would break the round's own rule that Tank behaves
+exactly as base. It is written down for a round of its own.
+
+*The medipacks fell off the pad, and then poisoned Tank.* Modern masks the
+right stick's four bits out of `joy_fire`, and the XInput-style default tables
+put the medipacks there (`jDefXbox[13]/[14]` and `jDefPS5XInput`'s are 18/19) -
+so a player who switched to Modern had **no medipack buttons at all** until he
+happened to find the Reset row, and decision 8's own medipacks-on-the-d-pad
+never arrived. Press Reset in Modern and 20/21 went into the table and into the
+registry; switch back to Tank, where `specific/dxshell.cpp` still writes the
+d-pad as a +-20 stick reading, and **every D-pad Up tapped forward AND ate a
+small medipack**. `jLayout[16..30]` could not help: it was written and read by
+nobody, and only `[0..14]` is persisted. The fix is `ApplyJoyScheme()`
+(`specific/input.cpp`) and one sentence of rule: *a role bound to a bit the
+active scheme has taken for something else is put back on that scheme's own
+default for that role, and every other binding is the player's and is kept.*
+Modern cannot honour bits 16..19 (the camera), Tank cannot honour 20..23 (they
+still move her). It is idempotent, it is deliberately not `ApplyJoyDefaults()`
+- a player who customised his pad must not lose it for trying the other scheme,
+which is why switching the JoyStyle page has never applied defaults either -
+and where freeing a bit collides with a role that already holds it, it unbinds
+the older role exactly as the binding page does. It runs from two places: the
+Control-type row (menu code, both directions, so the page shows the new binding
+on the same frame) and once inside `S_UpdateInput`'s existing
+`if (tomb5.control_modern)` block, for the session that STARTS in Modern with a
+table written by Tank or by an older build. That second call waits for a pad to
+really answer, because `joystick_is_xinput` - and with it which of the four
+default tables is the right one - is set by the poll and not by the init. The
+one case it cannot reach is a table poisoned by an intermediate build of this
+very round and then saved under Tank; one toggle or one Reset repairs it, and
+adding a Tank-side branch for it would break the round's own rule for a window
+that only exists on this machine. `ApplyJoyDefaults` was refactored around the
+same one-place-per-record rule (`JoyDefaultRecord`), so the thirteen roles
+neither scheme ever asked to change cannot drift apart, and `jLayout[16..30]`
+now means something a reader can check: the OTHER scheme's record, refreshed
+wherever the scheme changes.
+
+*A wall push survived a flyby.* `modern_cam_push` is measured at the end of one
+orbit tick and answered at the start of the next, which is right while the
+orbit ticks every tick - and it does not: it stands still through a flyby, a
+cutscene, first person, a held look key and the four rich2 sniper cameras. The
+displacement measured on the tick before such a break was applied on the tick
+after it, against a camera angle and a world that were no longer there - and
+the quadrant snap writes the big ones, so that is up to half a turn arriving
+out of nowhere with a four-second half-life to undo it. The push now carries
+the tick that measured it: `game/control.cpp` steps `GlobalCounter` once per
+logic tick (`:292`) and calls `CalculateCamera` once in the same tick body
+(`:677`), so two consecutive orbit ticks are exactly one apart and anything
+else is a gap. The subtraction is done in the counter's own unsigned width, so
+the wrap at 65536 costs nothing.
+
+*The test and the tools README still described a mechanism step 3 deleted.*
+`ModernTest`'s D-pad block and `Preparation/Tools/README.md`'s row both still
+said that the seam BOOSTS the d-pad's +-20 reading to a full stick push - round
+161a's `ModernDPadToStick`, which step 3 retired three weeks ago in favour of
+the user's decision 8. What the block actually compared was a +-128 push
+against a +-127 one. Both now assert what step 3 really built: the seam's own
+erasure condition, transcribed and named as a transcription, catching all eight
+D-pad readings and **nothing else in the whole square of stick values** (a
+sweep of 66,049 pairs - the DirectInput path really can deliver a genuine
++-20, and this is what says that is the only reading it takes); that what the
+translation is then handed produces no course, no bits and no mode; and, as the
+counter-proof and the reason the erasure exists, that the raw +-20 would still
+have made her walk.
+
+*Two low ones, both wording.* `game/modern_move.h` said the swim pitch limits
+are "the same +-15470 the chase camera clamps its elevation to, which is why
+the camera can never point anywhere her body cannot follow" - the same number,
+but 1820 apart, because `ModernCameraSwimPitch` takes `pitch_home` out of the
+elevation. The pointer really asks for -13650 .. +17290, so the steepest dive a
+modern swimmer reaches is 75 degrees where Tank's own `IN_FORWARD` reaches 85,
+and the last 1820 of the camera's upward travel move the view alone. Stated now
+rather than claimed away, in the header and in the water's constant table above:
+seating the orbit's clamp at `pitch_home` +-15470 instead would make the two
+coincide and would cost camera range at the bottom, which `ChaseCamera`'s own
++-15470 on `actual_elevation` would then cut straight back off. And
+`MODERNLOG`'s `hide=` is one tick behind with `cam_off`/`cam_pitch`/`cam_ret` -
+it is `camera.pos` against `camera.target`, the points the LAST
+`CalculateCamera` left - where the comment above the line named only the other
+three.
+
+*The numbers after the fix round.* `ModernTest` **2,296 checks, 0 failed** (the
+retargeted D-pad block trades two checks for three). `be.bat` clean, the seven
+pre-existing warnings and nothing else. One more diagnostic finding written
+down rather than acted on: `Preparation/Tools/Diagnose/TriggerCommands.cpp`'s
+floordata walk skips the continuation word for `TO_FLYBY` but not for
+`TO_CAMERA`, although `game/control.cpp` consumes one for both. It happens not
+to change the count above - both walks agree - but it will change some other
+count some other day.
 
 ## Building this yourself
 

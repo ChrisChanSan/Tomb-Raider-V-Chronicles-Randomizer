@@ -12,8 +12,10 @@
  */
 
 /* ModernTest - the arithmetic of the modern control, checked without a game
- * (#161, round 161a step 2; the camera's orbit added in round 161a2 step 1 and
- * its seam's own angle arithmetic in step 2).
+ * (#161, round 161a step 2; the camera's orbit added in round 161a2 step 1, its
+ * seam's own angle arithmetic in step 2 and the water's turn and pitch table in
+ * step 4 - step 3, the pad table, has no pure function to check and the review
+ * of the round retargeted the D-pad block it retired).
  * Build with bmt.bat, run with no arguments.
  *
  * WHAT IT CHECKS, and why it exists at all. The modern control is a pure
@@ -146,7 +148,8 @@ static void angles()
 		absl(ModernAngle(0, -1000)), 0x8000);
 
 	/* TROne: modern.diagonal_is_45_degrees. A diagonal has to be EXACTLY 45
-	 * degrees or a synthetic stick - the D-pad below, and workflow B's WASD -
+	 * degrees or a synthetic stick - workflow B's WASD, and the D-pad until
+	 * round 161a2 step 3 retired it (see the block at the end of sweeps) -
 	 * sends Lara slightly askew on every diagonal. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
@@ -2499,59 +2502,88 @@ static void sweeps()
 	}
 	ok(bad == 0, "(c) a camera cut of 180 degrees never bends the held course", bad, 0);
 
-	/* (d) THE D-PAD. specific\dxshell.cpp ORs the D-pad into the very same
-	 * axes as the stick, but at +-20 of 128 - a quarter of the way. Under Tank
-	 * that is only a direction bit and the size does not matter; under Modern
-	 * the size IS the speed, and 20 is under TROne's walk_below (62), so a
-	 * D-pad-only push would make Lara WALK if walk_below were ever that
-	 * capability's own 62 - which round 161a-fix (#161 item 1) took out of
-	 * the shipped default, but not out of the mechanism this proves.
-	 * cfg.walk_below is therefore set explicitly here, the same way
-	 * walk_threshold() does, so this sub-test keeps proving what it always
-	 * proved rather than turning into a tautology at the new default (0, from
-	 * the ModernDefaults() call at the top of this function). Decision 3 of
-	 * the brief has step 4 replace the +-20 with +-MODERN_STICK_FULL before
-	 * the translation runs; both halves are asserted: that the synthesis
-	 * gives the same answer as a full stick push, and that the raw +-20 does
-	 * NOT - because the second is the whole reason for the first. */
+	/* (d) THE D-PAD, AND WHAT ROUND 161a2 STEP 3 DID WITH IT.
+	 *
+	 * specific\dxshell.cpp ORs the D-pad into the very same axes as the stick,
+	 * but at +-20 of 128 - a quarter of the way. Under Tank that is only a
+	 * direction bit and the size does not matter; under Modern the size IS the
+	 * speed, and 20 is under TROne's walk_below (62), so a D-pad-only push
+	 * would make Lara WALK. Round 161a answered that by BOOSTING the signature
+	 * to a full push (ModernDPadToStick), and this block asserted the boost.
+	 *
+	 * ROUND 161a2 STEP 3 RETIRED IT. The user's decision 8 frees the D-pad for
+	 * bindings instead ("das D-Pad wird dann in der modernen Steuerung fuer die
+	 * Binds frei"), so the seam now ERASES the signature before either consumer
+	 * sees it: specific\input.cpp shadows joy_x/joy_y and zeroes the pair when
+	 * both axes are in {0, +20, -20} and not both zero. This block asserts THAT
+	 * rule now - the old text survived the change by three weeks, which is the
+	 * whole reason the review caught it here and not in the game.
+	 *
+	 * The erasure itself lives in the engine and nothing linked here can run
+	 * it, so its condition is transcribed below, named as a transcription, and
+	 * held to two things a copy can be wrong about: that it catches every
+	 * D-pad reading, and that it catches nothing else in the whole square of
+	 * stick values. The DirectInput path really can deliver a genuine +-20 -
+	 * the one-tick cost round 161a named and step 3 inherited - and the sweep
+	 * below is what says that this is the ONLY reading it takes.
+	 *
+	 * cfg.walk_below is set explicitly, the same way walk_threshold() does, so
+	 * the counter-proof (what the raw +-20 would still do if it got through)
+	 * keeps proving what it always proved rather than turning into a tautology
+	 * at the shipped default of 0. */
 	{
 		static const long dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 		static const long dz[8] = { 1, 1, 0, -1, -1, -1, 0, 1 };
-		long same = 0;
+		const long dpad = 20;		/* specific\dxshell.cpp, both joystick paths */
+		long erased = 0;
+		long silent = 0;
 		long walked = 0;
+		long sx, sy;
 
 		cfg.walk_below = 62;	/* explicit: the shipped default is 0 */
 		sit.anim_state = 2;
 
+		/* The seam's own condition, transcribed from specific\input.cpp. */
+		for (sx = -MODERN_STICK_FULL; sx <= MODERN_STICK_FULL; sx++)
+		{
+			for (sy = -MODERN_STICK_FULL; sy <= MODERN_STICK_FULL; sy++)
+			{
+				const long hit = (!((sx != 0 && sx != dpad && sx != -dpad) ||
+					(sy != 0 && sy != dpad && sy != -dpad)) && (sx || sy)) ? 1 : 0;
+
+				if (hit)
+					erased++;
+			}
+		}
+
+		ok(erased == 8, "(d) the seam's erasure catches the eight D-pad readings and no other stick value",
+			erased, 8);
+
 		for (i = 0; i < 8; i++)
 		{
-			MODERN_RESULT syn;
-			MODERN_RESULT full;
+			MODERN_RESULT gone;
 			MODERN_RESULT raw;
-			const long fx = dx[i] * MODERN_STICK_FULL;
-			const long fy = -dz[i] * MODERN_STICK_FULL;	/* forward is -y in our axes */
+
+			/* What the translation is really handed in Modern once the seam
+			 * has erased the pair: nothing at all. */
+			ModernResetState(&state);
+			tick(&cfg, &state, 0, 0, 0x1000, 0, &sit, &gone);
 
 			ModernResetState(&state);
-			tick(&cfg, &state, fx, fy, 0x1000, 0, &sit, &syn);
+			tick(&cfg, &state, dx[i] * dpad, -dz[i] * dpad, 0x1000, 0, &sit, &raw);
 
-			ModernResetState(&state);
-			tick(&cfg, &state, dx[i] * 127, -dz[i] * 127, 0x1000, 0, &sit, &full);
+			if (!gone.active && !gone.bits && gone.mode == MODERN_MODE_OFF)
+				silent++;
 
-			ModernResetState(&state);
-			tick(&cfg, &state, dx[i] * 20, -dz[i] * 20, 0x1000, 0, &sit, &raw);
-
-			if (syn.bits == full.bits && syn.target == full.target &&
-				syn.mode == full.mode && syn.active == full.active)
-				same++;
-
-			if ((raw.bits & MODERN_IN_WALK) && !(syn.bits & MODERN_IN_WALK) &&
-				(raw.bits & ~(long)MODERN_IN_WALK) == syn.bits)
+			/* And why it has to be erased rather than only left alone: the raw
+			 * reading IS a course and IS a walk, on every one of the eight. */
+			if (raw.active && (raw.bits & MODERN_IN_WALK) && raw.mag < cfg.walk_below)
 				walked++;
 		}
 
-		ok(same == 8, "(d) the synthesised D-pad reads exactly like a full stick push",
-			same, 8);
-		ok(walked == 8, "(d) ...and the raw +-20 of dxshell would make her walk instead",
+		ok(silent == 8, "(d) ...so a D-pad press produces no course, no bits and no mode in Modern",
+			silent, 8);
+		ok(walked == 8, "(d) ...while the raw +-20 of dxshell would have made her walk",
 			walked, 8);
 	}
 }

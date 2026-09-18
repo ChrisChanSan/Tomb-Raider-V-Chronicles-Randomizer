@@ -450,7 +450,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * this tick's own (game\camera.cpp's own comment on
 		 * ModernCameraLogState says why). `hide` is the raw measured
 		 * distance and not a flag, so a play test can watch it close on
-		 * MODERN_CAMERA_HIDE_DIST rather than only learn that it crossed. */
+		 * MODERN_CAMERA_HIDE_DIST rather than only learn that it crossed -
+		 * and it is one tick behind WITH the other three (round 161a2's fix
+		 * round says so here because the first version of this comment
+		 * named only three): it is camera.pos against camera.target, which
+		 * are the points the LAST CalculateCamera left. */
 		short cam_off, cam_pitch;
 		long cam_ret, cam_rs_x, cam_rs_y;
 

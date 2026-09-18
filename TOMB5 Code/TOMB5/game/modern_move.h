@@ -299,9 +299,21 @@ enum modern_constants
 	/* The pitch. SwimTurn's own step for IN_FORWARD/IN_BACK is 364 a tick, 2
 	 * degrees, which is also the look camera's rate - so following the orbit
 	 * costs exactly as long as pitching by hand used to. The limits are
-	 * LaraUnderWater's own clamp on x_rot (laraswim.cpp:593-596), the same
-	 * +-15470 the chase camera clamps its elevation to, which is why the
-	 * camera can never point anywhere her body cannot follow. */
+	 * LaraUnderWater's own clamp on x_rot (laraswim.cpp:593-596).
+	 *
+	 * THE TWO CLAMPS ARE THE SAME NUMBER AND NOT THE SAME RANGE, and the first
+	 * version of this comment said otherwise (#161, round 161a2, fix round -
+	 * the review's fifth finding). The chase camera clamps its ELEVATION to
+	 * +-15470 and her body is clamped here, but the two axes are 1820 apart:
+	 * ModernCameraSwimPitch takes pitch_home out of the elevation, so the
+	 * pointer really asks for -13650 .. +17290. What that costs, stated rather
+	 * than claimed away: the steepest dive a modern swimmer can reach is 13650
+	 * (75 degrees) where Tank's own IN_FORWARD reaches 15470 (85), and the last
+	 * 1820 of the camera's upward travel move the view alone, because her nose
+	 * is already at its own limit. Seating the orbit's clamp at pitch_home
+	 * +-15470 instead would make them coincide and would cost camera range at
+	 * the bottom, where ChaseCamera's own +-15470 on actual_elevation would cut
+	 * it straight back off - so the arithmetic is named and left alone. */
 	MODERN_SWIM_PITCH_RATE = 364,
 	MODERN_SWIM_PITCH_MIN = -15470,
 	MODERN_SWIM_PITCH_MAX = 15470,

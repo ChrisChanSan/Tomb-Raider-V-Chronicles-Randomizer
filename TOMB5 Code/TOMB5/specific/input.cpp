@@ -249,12 +249,22 @@ void ApplyJoyDefaults()
 
 	/* jLayout[16..30] - allocated and unused before round 161a2 - is the OTHER
 	 * scheme's record: what the set would be if the player switched. It is the
-	 * span A1's decision 4 named, it is written whole rather than as a silent
-	 * two-role override so that either table can be read back without
-	 * recomputing it, and since this round's fix it is refreshed wherever the
-	 * scheme changes (ApplyJoyScheme) instead of only here. Reset - the call
-	 * site of this function, specific\LoadSave.cpp - therefore still restores
-	 * the ACTIVE scheme's set and leaves the other one describing the truth. */
+	 * span A1's decision 4 named, and it is kept true wherever the scheme
+	 * changes (ApplyJoyScheme) rather than only here, so Reset - the call site
+	 * of this function, specific\LoadSave.cpp - restores the ACTIVE scheme's
+	 * set and leaves the other one describing the truth.
+	 *
+	 * IT IS A RECORD AND NOT A SOURCE, which the second fix round had to say
+	 * out loud (the review's fifth finding: the span is written twice and read
+	 * nowhere, under a comment that promised a reader). Nothing reads it back,
+	 * and ApplyJoyScheme deliberately recomputes the other record instead of
+	 * taking this one: JoyDefaultRecord answers for the style the pad is
+	 * ACTUALLY on, and both ActiveJoyStyle() and joystick_is_xinput can change
+	 * between the two calls - the player pages JoyStyle, or the pad answers on
+	 * the other path after a reconnect - so a stored copy would be the stale
+	 * one exactly when it mattered. What lives here is a snapshot for the
+	 * binding page and for a later round to show, never an input to the
+	 * repair. */
 	JoyDefaultRecord(tomb5.control_modern ? 0 : 1, &jLayout[16]);
 	joy_scheme_seated = tomb5.control_modern ? 1 : 0;
 }
@@ -290,7 +300,32 @@ void ApplyJoyDefaults()
  * collide with a role that already holds it; that case has an answer in the
  * tree already - the binding page unbinds the older role
  * (specific\LoadSave.cpp) rather than letting one button mean two things - and
- * this uses the same one rather than inventing a second. */
+ * this uses the same one rather than inventing a second. With ONE addition the
+ * second fix round had to make (the review's sixth finding): a role WE displace
+ * is not a role the player just rebound, so it gets this scheme's own default
+ * for itself if that button is free, and only falls to nothing if it is not.
+ * Without it, a player who had put a medipack on the d-pad by hand under Tank
+ * lost it altogether on the way into Modern - the switch took the button for
+ * the other medipack and left his behind with nothing.
+ *
+ * THE ONE COST OF THE SECOND SENTENCE, NAMED RATHER THAN HIDDEN. A binding the
+ * player chose himself that happens to EQUAL the other scheme's default for
+ * that same role is indistinguishable from one nobody ever repaired, so it
+ * follows the switch too - and because the registry keeps the table but not
+ * which scheme wrote it (specific\registry.cpp), the one-time seat in
+ * S_UpdateInput repeats that on every launch. It can only ever reach the two
+ * medipacks, since roles 0-12 have the same default in both records. Curing it
+ * would mean persisting the seated scheme, which is a new stored setting for a
+ * case the play test has not reported. */
+static long JoyBitTaken(long bit, long except)
+{
+	for (int i = 0; i < 15; i++)
+		if (i != except && jLayout[i] == bit)
+			return 1;
+
+	return 0;
+}
+
 void ApplyJoyScheme()
 {
 	long want[15];
@@ -318,7 +353,7 @@ void ApplyJoyScheme()
 		{
 			for (int k = 0; k < 15; k++)
 				if (k != i && jLayout[k] == want[i])
-					jLayout[k] = -1;
+					jLayout[k] = (want[k] >= 0 && !JoyBitTaken(want[k], k)) ? want[k] : -1;
 		}
 	}
 
@@ -745,14 +780,14 @@ long S_UpdateInput()
 	 * function. So the shadow stays; only its SOURCE changed.
 	 *
 	 * IT USED TO ERASE THE D-PAD'S +-20 SIGNATURE HERE AND THAT WAS WRONG
-	 * (the second fix round of this round, the review's first finding).
-	 * specific\dxshell.cpp does not OR the d-pad into the axes, it ASSIGNS:
-	 * the press overwrites the stick. By the time the pair arrives here the
-	 * stick's own reading is already gone, so erasing the signature could
-	 * only ever turn "she walks at a quarter push" into "she stops dead" -
-	 * and once step 3 put the medipacks on the d-pad, tapping one while
-	 * running did exactly that, or veered her course when the other axis
-	 * was out and the pair did not match the signature at all.
+	 * (the fix round's own first finding). specific\dxshell.cpp does not OR
+	 * the d-pad into the axes, it ASSIGNS: the press overwrites the stick.
+	 * By the time the pair arrives here the stick's own reading is already
+	 * gone, so erasing the signature could only ever turn "she walks at a
+	 * quarter push" into "she stops dead" - and once step 3 put the
+	 * medipacks on the d-pad, tapping one while running did exactly that,
+	 * or veered her course when the other axis was out and the pair did not
+	 * match the signature at all.
 	 *
 	 * So the movement reads the stick's OWN axes, which that file now keeps
 	 * beside the overwritten pair and no d-pad press ever touches. joy_x /

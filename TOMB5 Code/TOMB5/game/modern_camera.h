@@ -94,12 +94,22 @@
  * 2 * 1512 * sin(3 deg) = 158 units, at worst 224 measured the Manhattan way.
  * The pitch moves 3 degrees, which lifts the ideal by at most 1536 * sin(3
  * deg) = 80 units, and the engine's own >> 3 damping turns that into 10. The
- * two together are 304 against a threshold of 1024 - a margin of 3.4 - and the
- * real eye moves less again, because MoveCamera only ever walks a fraction of
- * the way to the ideal. The one thing that CAN trip the detection at the wall
- * is the classic quadrant snap, which jumps the ideal by a whole 90 degrees;
- * that is vanilla's, it is there at Tank today, and the orbit does not add to
- * it. */
+ * two together are 304 against a threshold of 1024 - a margin of 3.4.
+ *
+ * AND THAT MARGIN IS THE WHOLE OF IT. This paragraph used to add "and the real
+ * eye moves less again, because MoveCamera only ever walks a fraction of the
+ * way to the ideal", counting the damping as reserve on top. Step 2 measured
+ * that and it is wrong: "pos += (ideal - pos) / speed" is a first order lag,
+ * and a lag fed a constant VELOCITY settles at that same velocity. It is
+ * smaller for the first few ticks of a push and equal for as long as the push
+ * lasts, which is exactly the case this row is about. The sentence is struck
+ * rather than softened (the round's rule for a refuted assumption), and step
+ * 2's own swept test in ModernTest.cpp answers the same question the honest
+ * way: 309 Manhattan over the whole sphere, against INTERP_CAM_SNAP's 1024.
+ *
+ * The one thing that CAN trip the detection at the wall is the classic
+ * quadrant snap, which jumps the ideal by a whole 90 degrees; that is
+ * vanilla's, it is there at Tank today, and the orbit does not add to it. */
 
 /* EVERY CONSTANT OF THE ORBIT, WITH WHERE IT COMES FROM.
  *

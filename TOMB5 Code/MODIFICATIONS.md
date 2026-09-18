@@ -14929,13 +14929,17 @@ thing by name on every run:
 printed under "none" - not ours, and will not become it, with the reason
 written out beside it.
 
-**THE FILES**, sixteen of them against base `22827e1`, **2,823 insertions,
-168 deletions** (this record and the two README sentences are outside that
-count, the same convention workflow A1's own entry used). Five commits built
-the round's five steps in order; `git log --oneline 22827e1..HEAD` is the
-list, each one named `Round 161a2 (#161): <what>`.
+**THE FILES**, sixteen of them against base `22827e1`, **3,255 insertions,
+209 deletions** (this record and the two README sentences are outside that
+count, the same convention workflow A1's own entry used). Thirteen commits:
+six built the round's five steps in order (step 2 landed in two, the seam and
+the hide), four are its first fix round and three its second - both fix rounds
+are at the end of this entry. `git log --oneline 22827e1..HEAD` is the list,
+each one named `Round 161a2 (#161): <what>`. The counts above and below are
+the whole round's, fix rounds included: they were the five steps' own until
+the second review found them describing a tree that was three commits old.
 
-- `game/modern_camera.h` / `.cpp` (new, 289 + 298 lines) - the orbit's own
+- `game/modern_camera.h` / `.cpp` (new, 299 + 298 lines) - the orbit's own
   arithmetic, and nothing else: the state (`offset_yaw`, `offset_pitch`, the
   last wall push, the last return step), the fifteen-field config with an
   origin comment on every one, `ModernCameraUpdate` (the wall, then the
@@ -14945,32 +14949,35 @@ list, each one named `Round 161a2 (#161): <what>`.
   (step 4's inversion of the classic camera's own elevation line, for the
   water). No engine header, the same discipline `game/modern_move.h` keeps,
   so `ModernTest.cpp` compiles this file itself rather than a copy of it.
-- `game/camera.cpp` / `.h` (+473/-18, +15/-0 lines) - the seam: eight places
+- `game/camera.cpp` / `.h` (+555/-23, +15/-0 lines) - the seam: eight places
   the engine touches the orbit (below), all of them either behind
   `ModernCameraActive()` (whose own first term is `tomb5.control_modern`) or
   reached only from behind it.
 - `game/draw.cpp` (+22/-1 lines) - one added term,
   `!ModernLaraHidden()`, on the single condition step 2 measured is every
   path that draws her, classic and HD, the braid and the shadow included.
-- `specific/dxshell.cpp` (+54/-3 lines) - the right stick handed over as
-  AXES rather than only the four buttons Tank reads it as, and the d-pad
-  exposed as four more digital buttons for the pad table.
-- `specific/input.cpp` / `.h` (+135/-15, +2/-0 lines) - `ModernCameraStick`
-  fed from the right stick every poll; the modern pad set derived into
-  `jLayout[16..30]`; the d-pad's own +-20 signature erased from the
-  movement stick's local copy before either the classic direction-bit
-  assembly or `ModernUpdateInput` ever sees it.
-- `specific/LoadSave.cpp` (+2/-0 lines) - `ModernCameraResetOrbit()` beside
-  the existing `ModernResetControls()` on the Control-type row.
-- `game/modern_move.h` / `.cpp` (+70/-1, +288/-45 lines) - the water's own
+- `specific/dxshell.cpp` (+77/-3 lines) - the right stick handed over as
+  AXES rather than only the four buttons Tank reads it as, the d-pad
+  exposed as four more digital buttons for the pad table, and the left
+  stick's own two axes kept beside the pair the d-pad writes over.
+- `specific/input.cpp` / `.h` (+283/-17, +5/-0 lines) - `ModernCameraStick`
+  fed from the right stick every poll; the modern pad set derived, and the
+  repair that carries it across a scheme switch (`ApplyJoyScheme`); the
+  movement stick's local copy taken from the left stick's own axes in
+  Modern, so the d-pad reaches neither the classic direction-bit assembly
+  nor `ModernUpdateInput` as a movement stick.
+- `specific/LoadSave.cpp` (+13/-0 lines) - `ModernCameraResetOrbit()` and
+  `ApplyJoyScheme()` beside the existing `ModernResetControls()` on the
+  Control-type row.
+- `game/modern_move.h` / `.cpp` (+82/-1, +288/-45 lines) - the water's own
   turn table (`ModernStateIsSwim`, `ModernWaterTurnRate`,
   `ModernWaterMove`), eight states retired out of `ModernStateIsClassic`
   into it, and `ModernGroundTurn`'s clamp lifted into a shared
   `ModernStepToward` both turns now call.
-- `game/modern_state.h` / `.cpp` (+5/-3, +151/-51 lines) - the water's one
+- `game/modern_state.h` / `.cpp` (+5/-3, +165/-51 lines) - the water's one
   write to the engine (the turn, the attitude, the bank, the stroke), and
   this entry's own `MODERNLOG` fields (step 5, below).
-- `Preparation/Tools/Diagnose/ModernTest.cpp` / `bmt.bat` (+1,007/-27,
+- `Preparation/Tools/Diagnose/ModernTest.cpp` / `bmt.bat` (+1,136/-61,
   +5/-4 lines) - `camera_orbit`, `camera_pitch`, `camera_wall`,
   `camera_hide`, `camera_seam`, `camera_camcut` and `water_move`; compiles
   `game/modern_camera.cpp` beside `game/modern_move.cpp`, both engine files
@@ -15119,11 +15126,12 @@ reported rather than quietly fixed.
 button roles (bits 16-19) are masked rather than raised in Modern; the
 medipacks move to the d-pad (bit 20 up, bit 21 down); the d-pad's own
 movement synthesis (A1's `ModernDPadToStick`) is retired - not merely its
-one call site, but the +-20 signature it depended on, erased upstream in
-`specific/input.cpp` before either the classic assembly or
-`ModernUpdateInput` can read it, because deleting only the function left an
-unboosted d-pad still reaching `IN_LEFT/RIGHT/FORWARD/BACK` through the
-"bits stand as the stick wrote them" fallback. The modern set is DERIVED,
+one call site, because deleting only the function left an unboosted d-pad
+still reaching `IN_LEFT/RIGHT/FORWARD/BACK` through the "bits stand as the
+stick wrote them" fallback. Step 3 answered that by erasing the +-20
+signature in `specific/input.cpp`; the second fix round moved the answer one
+file upstream, where the stick's own reading is still whole (below). The
+modern set is DERIVED,
 not a fifth hand-written table: `jLayout[16..30]` copies roles 0-12 straight
 from the SAME per-controller-style source Tank's own `ApplyJoyDefaults()`
 already resolves, and overrides only the two medipack roles - so it cannot
@@ -15131,11 +15139,15 @@ drift from Tank's own thirteen choices on any future edit to those tables.
 Measured side by side for all four controller styles (`PS5-DInput`,
 `PS5-XInput`, `Xbox`, `Generic`): roles 0-12 identical in every style
 between Tank and Modern, roles 13/14 the only ones that differ, in every
-style alike (0 unexpected mismatches, checked programmatically). Toggling
-Control type does not itself re-apply the pad defaults - matching the
-existing precedent that switching `JoyStyle` does not either, only the
-explicit "Reset" row does for either kind of switch - so a player who
-switches to Modern without pressing Reset keeps whatever was bound before.
+style alike (0 unexpected mismatches, checked programmatically). As step 3
+left it, toggling Control type did not itself touch the pad table at all -
+matching the existing precedent that switching `JoyStyle` does not either,
+only the explicit "Reset" row - so a player who switched to Modern without
+pressing Reset kept whatever was bound before, including the medipacks on
+the two bits Modern had just masked. The first fix round replaced that with
+`ApplyJoyScheme()`, which repairs what the new scheme cannot honour and
+keeps every other binding; **the two paragraphs at the end of this entry are
+what the tree does**, and this one is what it did until then.
 
 **MODERNLOG**, extended rather than replaced, per the project's own rule
 that an existing diagnostic line is never thinned: the init line gains the
@@ -15335,14 +15347,16 @@ the wrap at 65536 costs nothing.
 said that the seam BOOSTS the d-pad's +-20 reading to a full stick push - round
 161a's `ModernDPadToStick`, which step 3 retired three weeks ago in favour of
 the user's decision 8. What the block actually compared was a +-128 push
-against a +-127 one. Both now assert what step 3 really built: the seam's own
-erasure condition, transcribed and named as a transcription, catching all eight
-D-pad readings and **nothing else in the whole square of stick values** (a
-sweep of 66,049 pairs - the DirectInput path really can deliver a genuine
-+-20, and this is what says that is the only reading it takes); that what the
-translation is then handed produces no course, no bits and no mode; and, as the
-counter-proof and the reason the erasure exists, that the raw +-20 would still
-have made her walk.
+against a +-127 one. Both were retargeted onto what step 3 really built: the
+seam's own erasure condition, transcribed and named as a transcription,
+catching all eight D-pad readings and **nothing else in the whole square of
+stick values** (a sweep of 66,049 pairs - the DirectInput path really can
+deliver a genuine +-20, and this is what says that is the only reading it
+takes); that what the translation is then handed produces no course, no bits
+and no mode; and, as the counter-proof, that the raw +-20 would still have made
+her walk. The second review pass then found that the erasure itself was in the
+wrong file, so the block was retargeted once more - see the last section of
+this entry.
 
 *Two low ones, both wording.* `game/modern_move.h` said the swim pitch limits
 are "the same +-15470 the chase camera clamps its elevation to, which is why
@@ -15360,7 +15374,7 @@ it is `camera.pos` against `camera.target`, the points the LAST
 `CalculateCamera` left - where the comment above the line named only the other
 three.
 
-*The numbers after the fix round.* `ModernTest` **2,296 checks, 0 failed** (the
+*The numbers after this fix round.* `ModernTest` **2,296 checks, 0 failed** (the
 retargeted D-pad block trades two checks for three). `be.bat` clean, the seven
 pre-existing warnings and nothing else. One more diagnostic finding written
 down rather than acted on: `Preparation/Tools/Diagnose/TriggerCommands.cpp`'s
@@ -15368,6 +15382,96 @@ floordata walk skips the continuation word for `TO_FLYBY` but not for
 `TO_CAMERA`, although `game/control.cpp` consumes one for both. It happens not
 to change the count above - both walks agree - but it will change some other
 count some other day.
+
+**WHAT THE SECOND REVIEW PASS CHANGED.** Six more findings, no high, two
+medium. Both mediums were in what the first fix round itself had written or
+left standing, which is the argument for reading a round twice.
+
+*The D-pad ate the movement stick, and step 3 had just put the medipacks on
+it.* `specific/dxshell.cpp` does not OR the d-pad into the stick's two axes, it
+**assigns**: a direction press replaces whatever the stick was saying with
++-20 of 128. Under Tank that is right and is Core's own idea, because a
+direction bit has no size. Under Modern the size IS the speed and the direction
+IS a course - and step 3's answer, erasing the +-20 signature in
+`specific/input.cpp`, was one file too late. By the time the pair arrives there
+the stick's own reading is already gone, so the erasure could only ever turn
+"she walks at a quarter push" into "she stops dead", and only on the readings
+that matched the signature exactly; every other one came through as a course
+that was not hers. With a medipack on the cross, that is something a player
+does **while running**. `ModernTest` measures the size of it over the whole
+square of stick positions with D-Pad Up held: **770 of the 66,049 stopped her
+outright and 65,024 more had their course bent, by up to 176.7 degrees** -
+running backwards and tapping the medipack turned her right round. The fix sits
+where the value is still whole: `dxshell.cpp` keeps the left stick's own two
+axes beside the pair the d-pad writes over (`joystick_read_lx` /
+`joystick_read_ly`, written on every poll and read only under the option,
+exactly like the right stick's own axes), and the movement seam reads those.
+`joy_x`/`joy_y` still carry the d-pad, so it still steers the menus and the
+binding page in either scheme; `joy_fire` still carries its four bits, so it is
+still bindable; and a medipack on the cross now costs her nothing. Tank is
+untouched by construction: `dxshell.cpp` only gains assignments no existing
+line reads.
+
+*A binding the scheme switch displaced was left for dead.* `ApplyJoyScheme()`
+unbinds whoever already holds a bit it moves a role onto - the binding page's
+own rule, one button one role - but the displaced role then stayed at -1,
+because the loop had already passed it or its own test no longer matched. A
+player who had put Large Medipack on D-Pad Up by hand under Tank lost it
+altogether on the way into Modern, since the switch takes that button for Small
+Medipack. A role WE displace now gets this scheme's own default for itself when
+that button is free, and only falls to nothing when it is not. The table proof
+printed all four controller styles: with the old rule Large Medipack came out
+unbound on every one, with the new rule it comes out on D-Pad Down, where this
+scheme's own record puts it - and the sweep beside it holds the three things
+the rule may never break (idempotent, no two roles sharing a button afterwards,
+no role left on a bit the scheme cannot honour) over both directions, all four
+styles and four starting tables. The one cost of the rule's second clause is
+named in the code rather than left to be found: a binding the player chose that
+happens to EQUAL the other scheme's default for that same role cannot be told
+apart from one nobody ever repaired, so it follows the switch too, and because
+the registry keeps the table but not which scheme wrote it, the one-time seat
+repeats that on every launch. It can only ever reach the two medipacks. Curing
+it means persisting the seated scheme, a new stored setting for a case no play
+test has reported.
+
+*This record described a tree three commits old.* The file list above still
+carried the counts of `b4c3bb9` - 2,823 insertions against the real 3,255, and
+every per-file row with it - and called the round "five commits" where the log
+shows twelve. Recomputed with `git diff --numstat 22827e1..HEAD`, by the
+entry's own convention of leaving this record and the two README sentences out.
+
+*And it stated a pad rule its own fix round had replaced.* The pad-set
+paragraph said that toggling Control type does not re-apply the defaults and
+that a player keeps whatever was bound before - which was step 3's truth and
+stopped being the tree's when `ApplyJoyScheme()` landed on that row two
+sections further down. Both now say which is which, in the tense that says it.
+
+*The header still carried the claim step 2 refuted.* `game/modern_camera.h`
+counted `MoveCamera`'s damping as reserve on top of the camcut margin ("the
+real eye moves less again, because MoveCamera only ever walks a fraction of the
+way to the ideal"). Step 2 measured that and it is wrong: `pos += (ideal -
+pos) / speed` is a first order lag, and a lag fed a constant VELOCITY settles at
+that same velocity - smaller for the first few ticks of a push and equal for as
+long as the push lasts, which is exactly the case the row is about. The
+correction was reported in step 2's own commit and in this entry but left
+standing in the file that owns the constant, which is where anyone retuning the
+yaw rate reads it first. The sentence is struck there now, with the measurement
+that answers the question honestly (309 Manhattan over the whole sphere,
+against `INTERP_CAM_SNAP`'s 1024) named in its place.
+
+*And `jLayout[16..30]` promised a reader it does not have.* The span is written
+by two places and read by none, under a comment saying it was written whole "so
+that either table can be read back without recomputing it". It is the right
+home for the other scheme's record and the brief named it, but it is a RECORD
+and not a SOURCE - and `ApplyJoyScheme` is right to recompute instead of
+reading it, because `JoyDefaultRecord` answers for the style the pad is
+ACTUALLY on and both `ActiveJoyStyle()` and `joystick_is_xinput` can change
+between the two calls, so a stored copy would be the stale one exactly when it
+mattered. The comment says that now.
+
+*The numbers after the second fix round.* `ModernTest` **2,297 checks, 0
+failed** (the retargeted D-pad block trades three checks for four). `be.bat`
+clean, the seven pre-existing warnings and nothing else.
 
 ## Building this yourself
 

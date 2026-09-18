@@ -27,6 +27,7 @@ long JoyMenuStep();
 long JoyMenuDeflected();
 const char* JoyButtonName(long idx);
 void ApplyJoyDefaults();
+void ApplyJoyScheme();	// #161, round 161a2: the active scheme repairs the bindings it cannot honour
 long JoyBitConfirm();
 long JoyBitBack();
 

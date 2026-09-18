@@ -727,6 +727,17 @@ void DoOptions()
 				tomb5.control_modern = !tomb5.control_modern;
 				ModernResetControls();	// a stale held course/spin/blocked-counter must not survive a scheme change (game/modern_state.h)
 				ModernCameraResetOrbit();	// nor a camera offset seated under the other scheme (#161, round 161a2)
+				// AND NOR MAY A BINDING THE NEW SCHEME CANNOT HONOUR (#161,
+				// round 161a2, fix round). Modern takes the right stick for
+				// the camera and Tank keeps the d-pad moving her, so the two
+				// roles the schemes disagree about - the medipacks - have to
+				// move with the switch. Only those; every other binding is
+				// the player's and specific\input.cpp leaves it alone. This
+				// is deliberately NOT ApplyJoyDefaults(): a player who
+				// customised his pad must not lose it for trying the other
+				// scheme, which is also why switching the JoyStyle page has
+				// never applied defaults either.
+				ApplyJoyScheme();
 				save_new_tomb5_settings();
 			}
 		}

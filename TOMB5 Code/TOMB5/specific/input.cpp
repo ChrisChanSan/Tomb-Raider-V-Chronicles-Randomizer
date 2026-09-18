@@ -179,7 +179,33 @@ static const long jDefPS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1
 static const long jDefXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };
 static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
 
-void ApplyJoyDefaults()
+/* THE BITS A SCHEME CANNOT HONOUR (#161, round 161a2, fix round - the
+ * skeptical review's second finding). Each scheme takes one group of four
+ * digital bits away from the bindings and gives it another job, so a role
+ * sitting on the wrong group is not a preference, it is broken:
+ *
+ *   Modern   bits 16..19, the right stick. It is the camera now, and
+ *            S_UpdateInput masks the four bits out of joy_fire, so the role
+ *            bound there can never fire again.
+ *   Tank     bits 20..23, the d-pad. It still MOVES her there
+ *            (specific\dxshell.cpp writes the same four directions as a +-20
+ *            stick reading unconditionally), so the role bound there fires
+ *            alongside the movement - one press doing two things. */
+#define JOY_RSTICK_BITS		0x000F0000L
+#define JOY_DPAD_BITS		0x00F00000L
+
+/* Which set has been seated for which scheme: -1 nothing yet, then 0 Tank /
+ * 1 Modern. The registry keeps ONE table (specific\registry.cpp writes
+ * jLayout[0..14] and nothing else), so the table on disk belongs to whichever
+ * scheme was active when it was written - and a table written by Tank, or by a
+ * build older than this round, can reach a Modern player with the medipacks
+ * still on the right stick. This is what notices. */
+static long joy_scheme_seated = -1;
+
+/* ONE PLACE THAT PRODUCES A 15-ROLE RECORD, for either scheme. The active
+ * style's own table is the source in both, so the thirteen roles neither
+ * decision ever asked to change cannot drift apart. */
+static void JoyDefaultRecord(long modern, long* out)
 {
 	const long* source;
 
@@ -197,44 +223,90 @@ void ApplyJoyDefaults()
 	}
 
 	for (int i = 0; i < 15; i++)
-		jLayout[i] = source[i];
+		out[i] = source[i];
+
+	/* THE MODERN PAD SET (#161, round 161a2, step 3). Duck..Load (roles 0-12)
+	 * are the SAME choice as Tank's and stay sourced from it, unchanged - the
+	 * user's own layout is the default in either scheme. Only the medipacks
+	 * (roles 13-14) differ: the button they used to default to (the right
+	 * stick, bits 18/19 on an XInput-style page) is the camera now, so they
+	 * move to the d-pad's own new bits instead (specific\dxshell.cpp) - the
+	 * user's decision 8. Left/Right (bits 22/23) default to nothing: freed for
+	 * the player's own binds, as the decision asked, not pre-spent on a guess. */
+	if (modern)
+	{
+		out[13] = 20;	// D-Pad Up   -> Small Medipack, specific\dxshell.cpp
+		out[14] = 21;	// D-Pad Down -> Large Medipack
+	}
+}
+
+void ApplyJoyDefaults()
+{
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, jLayout);
 
 	for (int i = 15; i < 32; i++)
 		jLayout[i] = 0;
 
-	/* THE MODERN PAD SET (#161, round 161a2, step 3) - jLayout[16..30],
-	 * allocated and left unused above until now (A1's decision 3 said
-	 * nothing on the pad changed yet). Duck..Load (roles 0-12) are the
-	 * SAME choice as the page above and stay sourced from it, unchanged,
-	 * for both schemes at once - the user's own layout is the default in
-	 * either one, and a second hand-written table per controller style
-	 * would only be a second place for the two to drift apart. Only the
-	 * medipacks (roles 13-14) differ: the button they used to default to
-	 * (the right stick, bits 18/19 on an XInput-style page) is the camera
-	 * now, so they move to the d-pad's own new bits instead
-	 * (specific\dxshell.cpp) - the user's decision 8. Left/Right (bits
-	 * 22/23) default to nothing: freed for the player's own binds, as the
-	 * decision asked, not pre-spent on a guess.
-	 *
-	 * Written out as its own 15-role record rather than only as a silent
-	 * [13]/[14] override on top of `source`, so the modern set is
-	 * something this function's own caller - or this step's own proof -
-	 * can read back whole without recomputing it. Reset (the one call site
-	 * of this function, specific\LoadSave.cpp) is the ONE place either
-	 * table is ever produced, so "Reset restores the active scheme's set"
-	 * falls out of the two loops above and this one without a second
-	 * mechanism. */
-	if (tomb5.control_modern)
+	/* jLayout[16..30] - allocated and unused before round 161a2 - is the OTHER
+	 * scheme's record: what the set would be if the player switched. It is the
+	 * span A1's decision 4 named, it is written whole rather than as a silent
+	 * two-role override so that either table can be read back without
+	 * recomputing it, and since this round's fix it is refreshed wherever the
+	 * scheme changes (ApplyJoyScheme) instead of only here. Reset - the call
+	 * site of this function, specific\LoadSave.cpp - therefore still restores
+	 * the ACTIVE scheme's set and leaves the other one describing the truth. */
+	JoyDefaultRecord(tomb5.control_modern ? 0 : 1, &jLayout[16]);
+	joy_scheme_seated = tomb5.control_modern ? 1 : 0;
+}
+
+/* THE ACTIVE SCHEME REPAIRS WHAT IT CANNOT HONOUR, AND TOUCHES NOTHING ELSE
+ * (#161, round 161a2, fix round).
+ *
+ * The review found the two halves of the same hole. Switching to Modern left
+ * the medipacks on the right stick, which Modern masks - so on an Xbox or
+ * PS5-in-XInput page, where jDefXbox[13]/[14] are 18/19, decision 8's own
+ * medipacks-on-the-d-pad simply never arrived unless the player happened to
+ * find the Reset row. And pressing Reset in Modern wrote 20/21 into the table
+ * and into the registry, so switching back to Tank left the d-pad eating a
+ * medipack on every step forward.
+ *
+ * The rule is one sentence: a role bound to a bit the active scheme has taken
+ * for something else is put back on that scheme's own default for that role,
+ * and every other binding is the player's and is kept. It is idempotent, so
+ * running it twice costs nothing, and it says nothing about roles the player
+ * moved himself onto buttons both schemes leave alone.
+ *
+ * Freeing a bit can collide with a role that already holds it. That case has
+ * an answer in the tree already - the binding page unbinds the older role
+ * (specific\LoadSave.cpp) rather than letting one button mean two things - and
+ * this uses the same one rather than inventing a second. */
+void ApplyJoyScheme()
+{
+	long want[15];
+	const long modern = tomb5.control_modern ? 1 : 0;
+	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
+
+	JoyDefaultRecord(modern, want);
+
+	for (int i = 0; i < 15; i++)
 	{
-		for (int i = 0; i < 13; i++)
-			jLayout[16 + i] = source[i];
+		// 23 is the highest bit either joystick path writes (specific\dxshell.cpp);
+		// the bound is here because the value comes out of the registry.
+		if (jLayout[i] < 0 || jLayout[i] > 23 || !((1L << jLayout[i]) & blocked))
+			continue;
 
-		jLayout[16 + 13] = 20;	// D-Pad Up   -> Small Medipack, specific\dxshell.cpp
-		jLayout[16 + 14] = 21;	// D-Pad Down -> Large Medipack
+		jLayout[i] = want[i];
 
-		for (int i = 0; i < 15; i++)
-			jLayout[i] = jLayout[16 + i];
+		if (want[i] >= 0)
+		{
+			for (int k = 0; k < 15; k++)
+				if (k != i && jLayout[k] == want[i])
+					jLayout[k] = -1;
+		}
 	}
+
+	JoyDefaultRecord(modern ? 0 : 1, &jLayout[16]);
+	joy_scheme_seated = modern;
 }
 
 // Confirm (Cross/A) and back (Circle/B) as the active path's bit.
@@ -617,7 +689,24 @@ long S_UpdateInput()
 	 * displayed there. */
 	if (tomb5.control_modern)
 	{
-		const long rstick_bits = 0xF0000;	// bits 16..19, specific\dxshell.cpp
+		/* AND THE TABLE HAS TO MATCH THE SCHEME BEFORE THE MASK BELOW CAN BE
+		 * HONEST (#161, round 161a2, fix round). The registry keeps one set of
+		 * bindings, so the table this session starts with may have been written
+		 * by Tank or by a build older than this round - with the medipacks
+		 * still on the two bits the next line takes away. The scheme switch
+		 * itself repairs the table where the player asks for it
+		 * (specific\LoadSave.cpp); this is the same repair for the session that
+		 * starts in Modern without being asked, and it is inside this block, so
+		 * Tank never reaches it.
+		 *
+		 * Once, and only with a pad really answering: joystick_is_xinput - and
+		 * with it which of the four default tables is the right one - is set by
+		 * the poll and not by the init, and the DirectInput half of that init
+		 * runs in a thread of its own (specific\dxshell.cpp). */
+		if (joy_scheme_seated != 1 && ControlMethod == 1 && joystick_read)
+			ApplyJoyScheme();
+
+		const long rstick_bits = JOY_RSTICK_BITS;	// bits 16..19, specific\dxshell.cpp
 
 		ModernCameraStick(ControlMethod == 1 ? joystick_read_rx : 0,
 			ControlMethod == 1 ? joystick_read_ry : 0);

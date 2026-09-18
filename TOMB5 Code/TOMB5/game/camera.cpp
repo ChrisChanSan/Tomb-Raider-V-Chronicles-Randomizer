@@ -270,6 +270,7 @@ static long modern_cam_armed;		// has the cfg above been filled yet?
 static long modern_cam_rs_x;		// the right stick, as input.cpp last read it
 static long modern_cam_rs_y;
 static long modern_cam_push;		// what the LAST tick's geometry did to the angle
+static ushort modern_cam_push_at;	// the tick that measured it - see ModernCameraOrbit
 static long modern_cam_have_pos;	// is the position below this level's?
 static long modern_cam_x, modern_cam_y, modern_cam_z;
 
@@ -301,6 +302,7 @@ void ModernCameraResetOrbit()
 	modern_cam_armed = 0;
 	ModernCameraArm();
 	modern_cam_push = 0;
+	modern_cam_push_at = 0;		// harmless either way: a push of 0 turns any tick it is accepted on into no push at all
 	modern_cam_have_pos = 0;
 	modern_cam_x = 0;
 	modern_cam_y = 0;
@@ -375,11 +377,30 @@ static void ModernCameraOrbit()
 {
 	short yaw;
 	short pitch;
+	long push;
 
 	ModernCameraArm();
 
+	/* A WALL DISPLACEMENT IS WORTH ONE TICK AND NOT ONE INTERRUPTION (#161,
+	 * round 161a2, fix round - the review's third finding). It is measured at
+	 * the end of one orbit tick and answered at the start of the next, which is
+	 * exactly right while the orbit ticks every tick - and the orbit does not.
+	 * It stands still through a flyby, a cutscene, first person, the look key
+	 * and the four rich2 sniper cameras, and the displacement measured on the
+	 * tick before such a break would otherwise be applied on the tick after it,
+	 * against a camera angle and a world that are no longer there. The quadrant
+	 * snap is what writes the big ones, so that is up to half a turn arriving
+	 * out of nowhere, with a four second half life to undo it.
+	 *
+	 * GlobalCounter is the honest stamp: game\control.cpp steps it once per
+	 * logic tick (:292) and calls CalculateCamera once in the same tick body
+	 * (:677), so two consecutive orbit ticks are exactly one apart and anything
+	 * else is a gap. The subtraction is done in the counter's own unsigned
+	 * width, so the wrap at 65536 costs nothing. */
+	push = ((ushort)(GlobalCounter - modern_cam_push_at) == 1) ? modern_cam_push : 0;
+
 	ModernCameraUpdate(&modern_cam_cfg, &modern_cam_state, modern_cam_rs_x,
-		modern_cam_rs_y, ModernCameraLaraMoving(), modern_cam_push, &yaw, &pitch);
+		modern_cam_rs_y, ModernCameraLaraMoving(), push, &yaw, &pitch);
 	modern_cam_push = 0;		// answered; the next wall writes its own
 
 	/* target_angle is 0 all game unless a trigger camera has just written one,
@@ -422,7 +443,9 @@ static void ModernCameraOrbit()
  * answered on the NEXT tick, which is why it is stored rather than applied -
  * and it is a raw difference of two 16-bit angles that ModernWrap folds the
  * short way round, so no cast of a value over 32767 to short happens on the
- * way.
+ * way. It carries the tick that measured it, because "the next tick" and "the
+ * next tick the orbit runs" are not the same thing: ModernCameraOrbit says
+ * what that costs and how it is checked.
  *
  * AND ONLY WHILE THE RADIUS STILL MAKES AN ANGLE. `distance` is the
  * HORIZONTAL radius, target_distance * cos(elevation), so at the pitch limit
@@ -445,6 +468,7 @@ static void ModernCameraNoteWall(const GAME_VECTOR* ideal, long distance)
 		return;
 
 	modern_cam_push = phd_atan(dz, dx) - (long)camera.actual_angle;
+	modern_cam_push_at = GlobalCounter;	// so the next orbit tick can tell "one tick ago" from "before the flyby"
 }
 
 /* HOW FAR THE EYE IS FROM HER, MEASURED WITH THE CAMERA'S OWN TWO POINTS.
@@ -786,7 +810,44 @@ void CalculateCamera()
 		return;
 	}
 
-	if (camera.item && (camera.type == FIXED_CAMERA || camera.type == HEAVY_CAMERA))
+	// THE MODERN DISCARD IS DECIDED HERE, AND THAT IS THE WHOLE POINT OF IT
+	// (#161, round 161a2, fix round - the skeptical review's first finding).
+	//
+	// A trigger that carries a Camera AND a Target command makes control.cpp
+	// set camera.item (:2707, :2836), and the three lines below then build the
+	// whole shot around THAT item: its bounds, its height, its heading, and
+	// ConfirmCameraTargetPos skipped because it is not Lara. ChaseCamera reads
+	// camera.target and nothing else, so the first version of this discard -
+	// which took its decision two hundred lines further down, after the target
+	// was already the door's - orbited the DOOR at 1536 units and left Lara out
+	// of the picture entirely. That is the cutaway observation 5 asks to be
+	// discarded, wearing the orbit's clothes.
+	//
+	// MEASURED, not feared: twenty floor triggers in the shipped campaign carry
+	// both commands on one tile - Andrea1 4, Andrea2 1, joby2 1, rich1 4, rich2
+	// 3, rich3 7 (CamTargetPairs over the user's own .trc files, the review's
+	// count and this round's own re-run of it with the TO_CAMERA continuation
+	// word skipped as well; both walks agree).
+	//
+	// So the decision moves up here, where "discarded" can mean what it says:
+	// the camera is built as if the trigger had never fired at all. item is
+	// Lara, fixed_camera stays 0 (no SniperCount, no camera.speed of 1, no
+	// fixed_camera flip for the interpolator to read as a cut), and the target
+	// block below is the ordinary one, ConfirmCameraTargetPos included.
+	//
+	// wouldFix and sniperCam are the two tests the branch further down used to
+	// compute for itself, hoisted unchanged. They read camera.type, camera.flags,
+	// camera.number and camera.fixed[], and not one of those is written between
+	// here and there: the only assignment in between is camera.type = LOOK_CAMERA
+	// in the target-item block below, and that assignment makes the branch
+	// unreachable (it sits inside "camera.type != LOOK_CAMERA"). The values are
+	// therefore the same two values, computed earlier.
+	const long wouldFix = (camera.type != CHASE_CAMERA && camera.flags != 3);
+	const long sniperCam = wouldFix && camera.number >= 0 &&
+							   (camera.fixed[camera.number].flags & 2);
+	const long modernDiscard = ModernCameraActive() && wouldFix && !sniperCam;
+
+	if (camera.item && (camera.type == FIXED_CAMERA || camera.type == HEAVY_CAMERA) && !modernDiscard)
 	{
 		item = camera.item;
 		fixed_camera = 1;
@@ -800,7 +861,17 @@ void CalculateCamera()
 	bounds = GetBoundsAccurate(item);
 	y = ((bounds[2] + bounds[3]) >> 1) + item->pos.y_pos - 256;
 
-	if (camera.item && !fixed_camera)
+	// AND THE HEAD TURN THAT COMES WITH IT IS DISCARDED TOO (#161, round 161a2,
+	// fix round). This block is vanilla's answer to a Target command WITHOUT a
+	// Camera command: turn her head at the thing and, if it is in front of her,
+	// hand the view to LOOK_CAMERA. With the discard above clearing
+	// fixed_camera, a trigger that carries both commands would now fall in here
+	// for the first time and take the view away through that door instead of
+	// through the fixed camera - the same cutaway by another name, and the one
+	// thing the discard exists to prevent. A trigger carrying only a Target is
+	// untouched: modernDiscard needs wouldFix, and a Target alone leaves the
+	// camera CHASE.
+	if (camera.item && !fixed_camera && !modernDiscard)
 	{
 		shift = phd_sqrt(SQUARE(camera.item->pos.z_pos - item->pos.z_pos) + SQUARE(camera.item->pos.x_pos - item->pos.x_pos));
 		gotit = (phd_atan(camera.item->pos.z_pos - item->pos.z_pos, camera.item->pos.x_pos - item->pos.x_pos) - item->pos.y_rot) >> 1;
@@ -932,16 +1003,19 @@ void CalculateCamera()
 		// triggers that look identical in trview, camera 4 (0x0000) behaving
 		// and camera 1 (0x0001) not. SniperCamActive keeps its own job either
 		// way - it is assigned further up and the locks stay.
-		const long wouldFix = (camera.type != CHASE_CAMERA && camera.flags != 3);
-		const long sniperCam = wouldFix && camera.number >= 0 &&
-								   (camera.fixed[camera.number].flags & 2);
+		//
+		// wouldFix and sniperCam are computed at the TOP of this function since
+		// round 161a2's fix round: the modern discard needs them before the
+		// target is built, and there is only one copy of each. The same two
+		// expressions, and the comment up there says why they cannot have
+		// changed on the way down.
 
 		if (FirstPersonEnabled() && !sniperCam)
 		{
 			FirstPersonCamera(item);
 			DiscardedFixedCameraTimer(wouldFix);
 		}
-		else if (ModernCameraActive() && wouldFix && !sniperCam)
+		else if (modernDiscard)
 		{
 			// THE MODERN CAMERA DISCARDS THEM TOO, AND FOR THE SAME REASON
 			// (#161, round 161a2, the user's observation 5: "wie in unserer
@@ -956,7 +1030,10 @@ void CalculateCamera()
 			//
 			// The chase camera is what runs instead, which is the orbit:
 			// ChaseCamera reads camera.target_angle and target_elevation, and
-			// ModernCameraOrbit has just written both.
+			// ModernCameraOrbit has just written both. `item` is lara_item here
+			// by construction - the discard was taken at the top of this
+			// function precisely so that it would be, and the call is written
+			// the same way as the plain chase branch below to say so.
 			ChaseCamera(item);
 			DiscardedFixedCameraTimer(wouldFix);
 		}

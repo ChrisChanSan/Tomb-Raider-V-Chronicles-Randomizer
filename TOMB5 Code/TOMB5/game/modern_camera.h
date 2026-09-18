@@ -156,13 +156,20 @@
 enum modern_camera_constants
 {
 	/* MEASURE, and the same answer as the left stick's MODERN_DEAD: nothing.
-	 * The hardware zone is already applied before the axes reach us - XInput
-	 * zeroes an axis under 7849 of 32767 and then divides by 256, the
-	 * DirectInput fallback zeroes under 150 of 1000 and divides by 8
-	 * (specific\dxshell.cpp, both paths) - so a second dead zone on top would
-	 * only eat travel. The plan if the user reports the camera drifting on
-	 * its own: MODERNLOG prints rs=, raise this in steps of 4 (3 per cent of
-	 * full deflection) and read the log again. */
+	 * The zone is applied before the axes reach us and it is the round's own
+	 * now, not the hardware's: specific\input.cpp puts the RAW right stick
+	 * through ModernStickDeadZone (game\modern_move.h, item 6) at
+	 * MODERN_DEAD_RIGHT, or at MODERN_DEAD_RIGHT_DINPUT on the DirectInput
+	 * path, where this user's stick rests off centre. A second zone on top of
+	 * that would only eat travel.
+	 * THIS ROW WAS WRONG UNTIL ROUND 161a2b AND THE CORRECTION IS THE POINT:
+	 * it used to cite the hardware's LEFT stick zones (7849 of 32767, 150 of
+	 * 1000) while the right stick's own DirectInput zone was 500 of 1000 -
+	 * half the travel - which is what the play test then measured (M2).
+	 * The plan if the user reports the camera drifting on its own: MODERNLOG
+	 * prints rs=, and the number to raise is the radial zone in
+	 * game\modern_move.h, not this one - this one is a second chance nobody
+	 * needs while that one is honest. */
 	MODERN_CAMERA_DEAD = 0,
 
 	/* THE SPEED SLIDER'S TWO ENDS (round 161a2b, item 5), and the number the

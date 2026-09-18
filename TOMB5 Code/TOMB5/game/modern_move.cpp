@@ -75,6 +75,70 @@ static long ModernMagnitude(const MODERN_CFG* cfg, long x, long y)
 	return (m > (double)cfg->stick_full) ? cfg->stick_full : (long)m;
 }
 
+/* To the nearest, away from zero at a half - so the scaling below is ODD, and
+ * a stick pushed the other way reads the same distance the other way instead
+ * of picking up a bias from the sign of its own components. */
+static long ModernRound(double v)
+{
+	return (v < 0.0) ? -(long)floor(-v + 0.5) : (long)floor(v + 0.5);
+}
+
+/* THE RADIAL DEAD ZONE - the one piece of stick arithmetic both sticks share
+ * (#161, round 161a2b, item 6; the numbers and what they are for are in
+ * game\modern_move.h beside MODERN_DEAD_LEFT).
+ *
+ * Pure on purpose. What it has to promise is a promise about ANGLES - the
+ * direction the thumb holds is the direction that comes out - and no play
+ * test can read an angle off a screen, so the promise is kept in ModernTest's
+ * `deadzone` group instead.
+ *
+ * Three rules, in the order the code takes them:
+ *   inside the zone   nothing at all, so a stick at rest cannot creep;
+ *   past its rim      the length starts again at nothing and eases up to full
+ *                     at the stick's own rim, so crossing it is not a step;
+ *   in every case     the output is the INPUT VECTOR scaled, so the angle
+ *                     survives to whatever the integer grid can hold.
+ *
+ * The clamp at the end is the one ModernMagnitude already makes and for the
+ * same reason: a diagonal push reads about 181 in our units, because the two
+ * axes are gated as a square and not as a circle, and a rate 1.4 times bigger
+ * on the diagonal is a camera that turns faster while it also tilts. Clamping
+ * the LENGTH and keeping the direction makes the stick round, which is what
+ * every caller already takes it to be.
+ *
+ * Returns that length, 0..MODERN_STICK_FULL. */
+long ModernStickDeadZone(long zone, long in_x, long in_y, long* out_x, long* out_y)
+{
+	const double full = (double)MODERN_STICK_FULL;
+	double mag, want;
+
+	*out_x = 0;
+	*out_y = 0;
+
+	if (zone < 0)
+		zone = 0;
+
+	// A zone at or past the rim is a dead stick and would divide by nothing:
+	// answered here rather than by the arithmetic below.
+	if (zone >= MODERN_STICK_FULL)
+		return 0;
+
+	mag = sqrt((double)(in_x * in_x + in_y * in_y));
+
+	if (mag <= (double)zone)
+		return 0;
+
+	want = full * (mag - (double)zone) / (full - (double)zone);
+
+	if (want > full)
+		want = full;
+
+	*out_x = ModernRound((double)in_x * want / mag);
+	*out_y = ModernRound((double)in_y * want / mag);
+
+	return ModernRound(want);
+}
+
 /* A world course, in LARA'S OWN frame, as one direction bit. Four sectors:
  * forward, back, and the two sides. `sector` is the boundary to the front and
  * to the back; `step_bits` picks the side step instead of the turn, which is

@@ -19,7 +19,9 @@
  * one to measure the defect its own first answer left behind. Round 161a2b
  * step 1 turned the orbit into a WORLD angle her turning does not move, cut the
  * sphere's top cap, added the speed slider's mapping and took the wall feedback
- * out again - the round's refuted assumption, and its checks went with it).
+ * out again - the round's refuted assumption, and its checks went with it, and
+ * its step 4 gave the PAD a pure function at last, the radial dead zone, which
+ * is what the note about step 3 having none had been waiting for).
  * Build with bmt.bat, run with no arguments.
  *
  * WHAT IT CHECKS, and why it exists at all. The modern control is a pure
@@ -121,8 +123,9 @@ static void tick(const MODERN_CFG* cfg, MODERN_STATE* state, long x, long y,
 }
 
 /* The stick back at rest. TROne write this as "a value inside the dead zone";
- * ours is the rest position itself, because our dead zone starts at 0 (the
- * hardware one is already applied - see MODERN_DEAD). */
+ * ours is the rest position itself, because MODERN_DEAD is 0 - the zone is
+ * applied one step earlier, by ModernStickDeadZone at the pad seam, and
+ * deadzone() below is where it is checked. */
 static void release(const MODERN_CFG* cfg, MODERN_STATE* state)
 {
 	MODERN_RESULT out;
@@ -328,6 +331,332 @@ static void bit_values()
 			state.have_ref + state.ref + state.course + state.last_off + state.spin +
 			state.aligned + state.aiming + state.blocked_count + state.last_mode, 0);
 	}
+}
+
+/* --------------------------------------------------- the stick's own zone -- */
+
+/* The zone the two pad paths applied before round 161a2b, so that the new one
+ * can be MEASURED against it rather than only asserted about: each component
+ * judged on its own, which is the whole defect. */
+static void old_axis_zone(long zone, long in_x, long in_y, long* out_x, long* out_y)
+{
+	*out_x = (in_x > -zone && in_x < zone) ? 0 : in_x;
+	*out_y = (in_y > -zone && in_y < zone) ? 0 : in_y;
+}
+
+/* A pair's direction in degrees, 0..360 - the units the play test's own
+ * histogram was counted in (M2). */
+static double dirdeg(long x, long y)
+{
+	const double a = atan2((double)y, (double)x) * 180.0 / 3.14159265358979323846;
+
+	return (a < 0.0) ? a + 360.0 : a;
+}
+
+/* How many of a full sweep land EXACTLY on one of the four cardinals - the
+ * measurement that says whether a zone snaps directions onto axes. A round
+ * stick answers 4, one per cardinal; a per-axis zone answers far more. */
+static long cardinal_hits(long zone, long radius, long old_zone)
+{
+	long deg, x, y, ox, oy, hits = 0;
+
+	for (deg = 0; deg < 360; deg++)
+	{
+		const double r = (double)deg * 3.14159265358979323846 / 180.0;
+
+		x = roundl2(cos(r) * (double)radius);
+		y = roundl2(sin(r) * (double)radius);
+
+		if (old_zone)
+			old_axis_zone(zone, x, y, &ox, &oy);
+		else
+			ModernStickDeadZone(zone, x, y, &ox, &oy);
+
+		if ((ox || oy) && (!ox || !oy))
+			hits++;
+	}
+
+	return hits;
+}
+
+/* The worst direction error of a full sweep at one radius, in degrees. */
+static double worst_dir(long zone, long radius, long* smallest_mag)
+{
+	double worst = 0.0;
+	long deg;
+
+	*smallest_mag = 1000;
+
+	for (deg = 0; deg < 360; deg++)
+	{
+		const double r = (double)deg * 3.14159265358979323846 / 180.0;
+		const long x = roundl2(cos(r) * (double)radius);
+		const long y = roundl2(sin(r) * (double)radius);
+		long ox, oy, m;
+		double err;
+
+		m = ModernStickDeadZone(zone, x, y, &ox, &oy);
+
+		if (!ox && !oy)
+			continue;
+
+		if (m < *smallest_mag)
+			*smallest_mag = m;
+
+		err = dirdeg(ox, oy) - dirdeg(x, y);
+
+		while (err > 180.0)
+			err -= 360.0;
+
+		while (err < -180.0)
+			err += 360.0;
+
+		if (err < 0.0)
+			err = -err;
+
+		if (err > worst)
+			worst = err;
+	}
+
+	return worst;
+}
+
+static void deadzone()
+{
+	const long zones[3] = { MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT, MODERN_DEAD_RIGHT_DINPUT };
+	const char* names[3] = { "left 31", "right 34", "right DI 62" };
+	long z, deg, mag, x, y, ox, oy, m, prev, bad, smallest;
+	double worst;
+
+	printf("the radial dead zone - the direction the thumb holds is the direction that comes out\n");
+
+	/* 1. NOTHING INSIDE THE ZONE. A resting stick that turns the camera is the
+	 * one failure this exists to prevent, so the whole disc is swept, not the
+	 * two axes. */
+	for (z = 0; z < 3; z++)
+	{
+		bad = 0;
+
+		for (deg = 0; deg < 360; deg++)
+		{
+			const double r = (double)deg * 3.14159265358979323846 / 180.0;
+
+			for (mag = 0; mag <= zones[z]; mag++)
+			{
+				x = roundl2(cos(r) * (double)mag);
+				y = roundl2(sin(r) * (double)mag);
+
+				if (x * x + y * y > zones[z] * zones[z])
+					continue;	// the integer grid rounded this one OUT of the zone
+
+				m = ModernStickDeadZone(zones[z], x, y, &ox, &oy);
+
+				if (ox || oy || m)
+					bad++;
+			}
+		}
+
+		ok(bad == 0, "inside the zone nothing comes out at all", bad, 0);
+		printf("  %s: %ld of the disc's points moved anything\n", names[z], bad);
+	}
+
+	/* 2. FULL AT THE RIM, in every direction - a round stick, not a square one.
+	 * A degree of the sweep is itself two rounded integers, so a point asked
+	 * for at radius 128 can land at 127.5 and answer 127: the promise is
+	 * "within one of full in every direction", and the exact 128 is asserted
+	 * where the input really is at or past the rim. */
+	for (z = 0; z < 3; z++)
+	{
+		long worst_m = MODERN_STICK_FULL;
+
+		bad = 0;
+
+		for (deg = 0; deg < 360; deg++)
+		{
+			const double r = (double)deg * 3.14159265358979323846 / 180.0;
+
+			x = roundl2(cos(r) * (double)MODERN_STICK_FULL);
+			y = roundl2(sin(r) * (double)MODERN_STICK_FULL);
+			m = ModernStickDeadZone(zones[z], x, y, &ox, &oy);
+
+			if (m < worst_m)
+				worst_m = m;
+
+			if (m < MODERN_STICK_FULL - 1)
+				bad++;
+
+			if (absl((long)roundl2(sqrt((double)(ox * ox + oy * oy))) - MODERN_STICK_FULL) > 1)
+				bad++;
+		}
+
+		ok(bad == 0, "at the stick's own rim the length is full in every direction", bad, 0);
+		printf("  %s: shortest of the 360 rim pushes %ld of %d\n",
+			names[z], worst_m, (int)MODERN_STICK_FULL);
+
+		m = ModernStickDeadZone(zones[z], MODERN_STICK_FULL, 0, &ox, &oy);
+		ok(m == MODERN_STICK_FULL && ox == MODERN_STICK_FULL && !oy,
+			"a push right at the rim is exactly full", m, MODERN_STICK_FULL);
+		m = ModernStickDeadZone(zones[z], 0, -MODERN_STICK_FULL, &ox, &oy);
+		ok(m == MODERN_STICK_FULL && !ox && oy == -MODERN_STICK_FULL,
+			"...in the other axis too, and forward is still negative", oy, -MODERN_STICK_FULL);
+	}
+
+	/* 3. AND THE DIAGONAL IS NOT 181. The two axes are gated as a square, so a
+	 * corner push reads 181 raw; an unclamped rate would be 1.4 times the one
+	 * the header promises for a push the player cannot tell from any other. */
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, MODERN_STICK_FULL, MODERN_STICK_FULL, &ox, &oy);
+	ok(m == MODERN_STICK_FULL, "a full diagonal is clamped to full and not to 181", m, MODERN_STICK_FULL);
+	ok(ox == oy, "...and the clamp keeps the diagonal diagonal", ox, oy);
+	printf("  corner push (128,128) -> (%ld,%ld), length %ld\n", ox, oy, m);
+
+	/* 4. MONOTONIC along a ray: the length never falls while the thumb pushes
+	 * further, so there is no place where pushing harder does less. */
+	for (z = 0; z < 3; z++)
+	{
+		bad = 0;
+
+		for (deg = 0; deg < 360; deg += 3)
+		{
+			const double r = (double)deg * 3.14159265358979323846 / 180.0;
+
+			prev = -1;
+
+			for (mag = 0; mag <= MODERN_STICK_FULL; mag++)
+			{
+				x = roundl2(cos(r) * (double)mag);
+				y = roundl2(sin(r) * (double)mag);
+				m = ModernStickDeadZone(zones[z], x, y, &ox, &oy);
+
+				if (m < prev)
+					bad++;
+
+				prev = m;
+			}
+		}
+
+		ok(bad == 0, "pushing further never gives less", bad, 0);
+	}
+
+	/* 5. IT EASES IN. Crossing the rim is not a step - which is what the old
+	 * per-axis zone could not do on the DirectInput right stick, where the
+	 * first live reading was 62 of 128, half the travel at once (M2). */
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, MODERN_DEAD_RIGHT_DINPUT + 1, 0, &ox, &oy);
+	ok(m <= 3, "one unit past the DirectInput zone the camera barely moves", m, 0);
+	printf("  DirectInput right: raw 63 -> %ld (the old zone's first reading was 62)\n", m);
+
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, MODERN_DEAD_RIGHT + 1, 0, &ox, &oy);
+	ok(m <= 3, "and the same one unit past the XInput zone", m, 0);
+
+	/* 6. THE DEFECT ITSELF, in the units the play test measured it in. A stick
+	 * nine degrees off the axis: the old zone throws the small component away
+	 * and hands on a cardinal, the new one hands on the direction held. */
+	x = roundl2(cos(81.0 * 3.14159265358979323846 / 180.0) * 120.0);	// 19
+	y = roundl2(sin(81.0 * 3.14159265358979323846 / 180.0) * 120.0);	// 119
+	old_axis_zone(MODERN_DEAD_RIGHT_DINPUT, x, y, &ox, &oy);
+	ok(ox == 0, "the old per-axis zone snapped a 9-degree-off push onto the axis", ox, 0);
+	printf("  raw (%ld,%ld) = %.1f deg -> old (%ld,%ld) = %.1f deg\n",
+		x, y, dirdeg(x, y), ox, oy, dirdeg(ox, oy));
+
+	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, x, y, &ox, &oy);
+	ok(absl((long)roundl2(dirdeg(ox, oy) - dirdeg(x, y))) <= 1,
+		"the radial zone keeps it", (long)roundl2(dirdeg(ox, oy)), (long)roundl2(dirdeg(x, y)));
+	printf("                          -> new (%ld,%ld) = %.1f deg, length %ld\n",
+		ox, oy, dirdeg(ox, oy), m);
+
+	/* 7. AND THE HISTOGRAM THAT FOUND IT. His 855 pushed ticks piled up on the
+	 * four cardinals (68/41/48/43) and were all but empty beside them
+	 * (1/2/6/4). Sweeping 360 even directions through each zone counts the
+	 * same thing: how many of them come out with one axis thrown away. */
+	printf("  a 360-direction sweep, how many come out ON an axis (4 is the honest answer):\n");
+
+	for (z = 0; z < 3; z++)
+	{
+		const long old_hits = cardinal_hits(zones[z], 120, 1);
+		const long new_hits = cardinal_hits(zones[z], 120, 0);
+
+		printf("    %-12s old %3ld   new %3ld\n", names[z], old_hits, new_hits);
+		ok(new_hits == 4, "the radial zone snaps nothing onto an axis", new_hits, 4);
+		ok(old_hits > 4, "...where the per-axis zone snapped a whole band of them", old_hits, 5);
+	}
+
+	/* 8. THE DIRECTION SURVIVES, to within a degree wherever the integer grid
+	 * can hold a degree at all. Two integers of +-128 cannot do better than
+	 * atan(0.5/m) at length m, so the promise is asserted where m allows it
+	 * and PRINTED everywhere - a number nobody can read is a number nobody can
+	 * check. */
+	printf("  worst direction error of a 360-direction sweep:\n");
+
+	for (z = 0; z < 3; z++)
+	{
+		const long radii[3] = { MODERN_STICK_FULL, 96, 64 };
+		long k;
+
+		for (k = 0; k < 3; k++)
+		{
+			worst = worst_dir(zones[z], radii[k], &smallest);
+			printf("    %-12s radius %3ld: %.2f deg (shortest output %ld)\n",
+				names[z], radii[k], worst, smallest);
+
+			if (smallest >= 29)
+				ok(worst <= 1.0, "the direction survives the zone to within a degree",
+					(long)roundl2(worst * 100.0), 100);
+			else
+				ok(worst <= atan(0.5 / (double)smallest) * 180.0 / 3.14159265358979323846 + 0.01,
+					"the direction survives to the integer grid's own limit",
+					(long)roundl2(worst * 100.0),
+					(long)roundl2(atan(0.5 / (double)smallest) * 18000.0 / 3.14159265358979323846));
+		}
+	}
+
+	/* 9. ODD. The stick pushed the other way reads the same distance the other
+	 * way, so no direction is quietly favoured by the sign of its components. */
+	bad = 0;
+
+	for (deg = 0; deg < 360; deg++)
+	{
+		const double r = (double)deg * 3.14159265358979323846 / 180.0;
+		long bx, by;
+
+		x = roundl2(cos(r) * 100.0);
+		y = roundl2(sin(r) * 100.0);
+
+		ModernStickDeadZone(MODERN_DEAD_LEFT, x, y, &ox, &oy);
+		ModernStickDeadZone(MODERN_DEAD_LEFT, -x, -y, &bx, &by);
+
+		if (bx != -ox || by != -oy)
+			bad++;
+	}
+
+	ok(bad == 0, "the zone is odd: the other way round reads the same", bad, 0);
+
+	/* 10. THE TWO ENDS A REGISTRY KEY COULD ONE DAY HAND IT. A zone of nothing
+	 * passes the stick through; a zone at or past the rim is a dead stick and
+	 * not a divide by nothing. */
+	m = ModernStickDeadZone(0, 100, 0, &ox, &oy);
+	ok(m == 100 && ox == 100 && oy == 0, "a zone of nothing changes nothing", ox, 100);
+	m = ModernStickDeadZone(-5, 100, 0, &ox, &oy);
+	ok(m == 100 && ox == 100, "and a negative one is the same as nothing", ox, 100);
+	m = ModernStickDeadZone(MODERN_STICK_FULL, 127, 0, &ox, &oy);
+	ok(m == 0 && !ox && !oy, "a zone at the rim is a dead stick, not a crash", m, 0);
+	m = ModernStickDeadZone(5000, 127, 0, &ox, &oy);
+	ok(m == 0 && !ox && !oy, "and so is one past it", m, 0);
+	m = ModernStickDeadZone(MODERN_DEAD_LEFT, 0, 0, &ox, &oy);
+	ok(m == 0 && !ox && !oy, "a stick at dead centre is dead centre", m, 0);
+
+	/* 11. NOTHING LEAVES THE DOMAIN the whole tree carries axes in. */
+	bad = 0;
+
+	for (x = -MODERN_STICK_FULL; x <= MODERN_STICK_FULL; x += 1)
+		for (y = -MODERN_STICK_FULL; y <= MODERN_STICK_FULL; y += 7)
+		{
+			m = ModernStickDeadZone(MODERN_DEAD_RIGHT, x, y, &ox, &oy);
+
+			if (absl(ox) > MODERN_STICK_FULL || absl(oy) > MODERN_STICK_FULL ||
+				m < 0 || m > MODERN_STICK_FULL)
+				bad++;
+		}
+
+	ok(bad == 0, "no push of any kind leaves +-128", bad, 0);
 }
 
 /* ------------------------------------------------- the stick becomes bits -- */
@@ -2946,8 +3275,10 @@ static void sweeps()
 	 * matched the signature exactly; the rest came through as a course that
 	 * was not hers. With a medipack on the cross, that is something a player
 	 * does WHILE RUNNING. The second fix round keeps the left stick's own two
-	 * axes beside the overwritten pair (joystick_read_lx/ly) and the movement
-	 * seam reads those, so the cross costs the movement nothing at all.
+	 * axes beside the overwritten pair (joystick_raw_lx/ly - round 161a2b's
+	 * item 6 renamed them when it moved them in front of the per-axis zone as
+	 * well) and the movement seam reads those, so the cross costs the movement
+	 * nothing at all.
 	 *
 	 * NOTHING LINKED HERE CAN RUN ANY OF THAT - it is engine code, in two
 	 * files this test cannot see. So the block does what a pure test honestly
@@ -4143,6 +4474,7 @@ int main()
 
 	angles();
 	bit_values();
+	deadzone();
 	stick_to_tank();
 	held_course();
 	spin_hysteresis();

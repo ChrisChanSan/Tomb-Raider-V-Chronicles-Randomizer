@@ -107,27 +107,69 @@ enum modern_mode
  * ModernDefaults() below is the only thing that reads them. */
 enum modern_constants
 {
-	/* Row 2, MEASURE. TROne's dead zone is 8000 of 32767, 24 per cent. Ours
-	 * starts at nothing, because XInput's own XINPUT_GAMEPAD_LEFT_THUMB_
-	 * DEADZONE (7849 of 32767 - the same 24 per cent) is already applied in
-	 * specific\dxshell.cpp before ReadJoystick hands the axes over, and the
-	 * DirectInput fallback applies 150 of 1000 there. A second dead zone on
-	 * top of the hardware one would only eat travel.
+	/* Row 2, MEASURE - AND ROUND 161a2b MOVED WHERE IT IS ANSWERED. TROne's
+	 * dead zone is 8000 of 32767, 24 per cent. Ours still starts at nothing,
+	 * but the reason changed with item 6: the modern path no longer reads the
+	 * axes through the hardware's PER-AXIS zone at all. It reads the raw pair
+	 * and puts it through the RADIAL zone below (ModernStickDeadZone), which
+	 * is the dead zone of the scheme now - so a second one here would only eat
+	 * travel, exactly as a second one on top of the hardware's used to.
 	 * The plan if the user reports drift: MODERNLOG prints mag, raise this in
 	 * steps of 4 (3 per cent of full deflection) and read the log again.
 	 * WHAT THAT MEASUREMENT IS NOT LOOKING FOR, corrected in the second review
-	 * pass of this round: a band where Modern moves her and Tank does not.
-	 * There is none. The classic path ignores anything up to +-8
-	 * (specific\input.cpp), and no joystick path can deliver a reading in
-	 * 1..8 at all - XInput zeroes an axis under 7849 and then divides by 256,
-	 * so its smallest non-zero reading is 30, and the DirectInput fallback
-	 * zeroes under 150 and divides by 8, so its smallest is 18
-	 * (specific\dxshell.cpp, both paths). Every reading either scheme ever
-	 * sees is one both react to; what Modern USED TO add was the MAGNITUDE
-	 * deciding walking from running - round 161a-fix (#161 item 1) took that
-	 * back out (see walk_below below), so mag= is read only as a drift/dead-
-	 * zone diagnostic now, the way this row always meant it. */
+	 * pass of round 161a2: a band where Modern moves her and Tank does not.
+	 * There is none - the direction bits are digital and walk_below is 0, so
+	 * every reading past the radial zone runs her, whatever its size.
+	 * WHAT IS NEW AND IS NOT THAT, named here rather than found later: the
+	 * radial zone RESCALES, so the smallest reading it can hand out is 1 and
+	 * not the hardware's 18 or 30. Where the seam steps aside and the CLASSIC
+	 * assembly steers her from the same pair instead - first person, the look
+	 * key, a cutscene (specific\input.cpp) - anything under +-8 is ignored
+	 * there as it always was, so those states gained a few units of dead band
+	 * just past the rim. Modern's own path never sees it. */
 	MODERN_DEAD = 0,
+
+	/* THE RADIAL DEAD ZONES (round 161a2b, item 6) - half of the answer to
+	 * "Das kann auch teilweise ein Deadzone-Problem sein".
+	 *
+	 * WHAT WAS WRONG, measured in the play test (M2 of the round's brief):
+	 * both pad paths zero each axis ON ITS OWN, so a stick held nine degrees
+	 * off an axis arrives ON that axis - the smaller component falls inside
+	 * its own zone and is thrown away while the larger one is kept whole. His
+	 * direction histogram is the proof: 68 / 41 / 48 / 43 ticks on the four
+	 * cardinals against about 30 everywhere else, and all but empty just
+	 * beside them (1 / 2 / 6 / 4). A stick circling evenly therefore moves the
+	 * course in JUMPS, which is one half of the spin he filmed. A radial zone
+	 * cannot do that: it judges the LENGTH of the pair and never a component,
+	 * so the direction it hands on is the direction the thumb is holding.
+	 *
+	 * THE FIRST TWO NUMBERS ARE THE HARDWARE'S OWN and are not invented here.
+	 * XInput publishes 7849 of 32767 for the left stick and 8689 for the right
+	 * - 24 and 27 per cent - and those two are exactly what the per-axis zones
+	 * on that path already used. In the units this tree carries axes in (about
+	 * +-128, see MODERN_STICK_FULL) they are 7849/256 = 30.7 and 8689/256 =
+	 * 33.9, rounded UP so that the radial zone is never narrower than the
+	 * hardware's own. Both pad paths use them, so the two feel the same.
+	 *
+	 * AND THE THIRD IS THIS USER'S PAD, which is why it is not 34. The
+	 * DirectInput right stick (lZ/lRz) rests OFF CENTRE on it, and that is the
+	 * whole reason its per-axis zone was 500 of 1000 where the left stick's is
+	 * 150 (specific\dxshell.cpp, whose comment says so). How far off it rests
+	 * was never MEASURED - that comment only claims 500 was wide enough - so
+	 * all this tree knows is that each axis rests inside 500, which in the
+	 * worst case is a radius of 707. 500/8 = 62 is the smallest radius that
+	 * certainly holds a rest ON an axis, the case the comment describes, and
+	 * it is what the play test log shows as that stick's first live reading.
+	 * It stays until MODERNLOG's pad line prints the real rest position; a
+	 * resting stick that turns the camera on its own is the one failure this
+	 * zone exists to prevent, and it is worse than a wide zone.
+	 * EVEN AT 62 THE STICK GAINS: the old zone threw away every push whose
+	 * SMALLER component was under 500 - most of the travel in every direction
+	 * but the four cardinals - where this one throws away only pushes shorter
+	 * than 62 in any direction at all, and rescales what is left. */
+	MODERN_DEAD_LEFT = 31,			// XInput's own 7849 of 32767, in this tree's /256 units
+	MODERN_DEAD_RIGHT = 34,			// XInput's own 8689 of 32767, same units
+	MODERN_DEAD_RIGHT_DINPUT = 62,	// this pad's off-centre rest: 500 of 1000, in the /8 units of that path
 
 	/* Row 5, MEASURE - ANSWERED BY THE FIRST PLAY TEST (2026-09-17). The RULE
 	 * was TROne's and came from play - under half deflection Lara walks -
@@ -478,6 +520,7 @@ void ModernDefaults(MODERN_CFG* cfg);
 void ModernResetState(MODERN_STATE* state);
 short ModernWrap(long angle);
 short ModernAngle(long x, long z);
+long ModernStickDeadZone(long zone, long in_x, long in_y, long* out_x, long* out_y);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsSwim(short anim_state);
 long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state);

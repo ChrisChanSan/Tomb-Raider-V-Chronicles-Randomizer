@@ -871,6 +871,18 @@ static long DXUpdateJoystickDirectInput()
 	// scales to roughly the same -128..127 ballpark XInput's path produces above.
 	long lx = js.lX;
 	long ly = js.lY;
+
+	// THE STICK ALONE AND BEFORE ITS PER-AXIS ZONE (#161, round 161a2b, item
+	// 6; the "alone" half is round 161a2's fix round 2 - see the twin lines on
+	// the XInput path for why the POV block below makes it necessary). Modern
+	// reads THIS pair and applies its own RADIAL zone to it
+	// (ModernStickDeadZone, specific\input.cpp), because the per-axis zeroing
+	// two lines down snaps a nearly-axial push onto the axis and loses the
+	// direction the thumb was holding. Written on every poll, read only under
+	// tomb5.control_modern.
+	joystick_raw_lx = lx / 8;
+	joystick_raw_ly = ly / 8;	// DirectInput joystick Y is already "up = negative", like the read pair below
+
 	const long deadzone = 150;
 
 	if (lx > -deadzone && lx < deadzone) lx = 0;
@@ -878,9 +890,6 @@ static long DXUpdateJoystickDirectInput()
 
 	joystick_read_x = lx / 8;
 	joystick_read_y = ly / 8;	// DirectInput joystick Y is already "up = negative", matching S_UpdateInput()'s joy_y<0=forward - no invert needed here (unlike the XInput thumbstick above)
-
-	joystick_read_lx = joystick_read_x;	// the stick ALONE, kept beside the pair the POV block below writes over (#161, round 161a2, fix round 2) - see the twin lines on the XInput path for why
-	joystick_read_ly = joystick_read_y;
 
 	long fire = 0;	// moved up from below the POV block (#161, round 161a2, step 3) - the new d-pad button bits inside that block need it to already exist
 
@@ -919,6 +928,23 @@ static long DXUpdateJoystickDirectInput()
 	// near 0, matching a stick rather than a trigger axis (X/Y is the left stick).
 	long rrx = js.lZ;
 	long rry = js.lRz;
+
+	// And as axes for the modern camera (#161, round 161a2, step 2), divided
+	// by 8 like this path's left stick and with no invert, because Rz is
+	// already up-negative here - which is what the four bits below say too.
+	//
+	// BEFORE THE ZONE, since round 161a2b's item 6: the camera's zone is
+	// radial and lives at the seam (ModernStickDeadZone, specific\input.cpp).
+	// The per-axis 500 below stays exactly where it was and keeps meaning what
+	// it meant - it is the four BINDABLE BITS' threshold, and item 6 does not
+	// touch those. What the camera loses by leaving it behind is the axis
+	// snap; what it must not lose is the reason the number is 500 and not 150,
+	// namely that this controller's Z/Rz rest OFF CENTRE, so the modern zone
+	// on this path is 62 of 128 - the same radius - and not the 34 XInput
+	// gets. MODERN_DEAD_RIGHT_DINPUT in game\modern_move.h carries that.
+	joystick_raw_rx = rrx / 8;
+	joystick_raw_ry = rry / 8;
+
 	const long rdeadzone = 500;	// wide enough to absorb this axis's off-center rest position after DIPROP_RANGE remapping
 
 	if (rrx > -rdeadzone && rrx < rdeadzone) rrx = 0;
@@ -928,20 +954,6 @@ static long DXUpdateJoystickDirectInput()
 	if (rry > 0) fire |= 1 << 17;	// Stick R Down
 	if (rrx < 0) fire |= 1 << 18;	// Stick R Left
 	if (rrx > 0) fire |= 1 << 19;	// Stick R Right
-
-	// And as axes for the modern camera (#161, round 161a2, step 2), divided
-	// by 8 like this path's left stick and with no invert, because Rz is
-	// already up-negative here - which is what the four bits above say too.
-	//
-	// THE DEAD ZONE ON THIS PATH IS HALF THE TRAVEL, and that is this
-	// controller's off-centre rest position and not a choice: rdeadzone is
-	// 500 of 1000, so the axis reads 0 or at least 62 of 128. The camera
-	// therefore starts at half rate on a DirectInput pad instead of easing in.
-	// Named rather than papered over; the alternative is a resting stick that
-	// turns the camera on its own, which is worse. XInput, where the zone is
-	// 8689 of 32767, eases in from 34.
-	joystick_read_rx = rrx / 8;
-	joystick_read_ry = rry / 8;
 
 	joystick_read_fire = fire;
 
@@ -956,10 +968,10 @@ long DXUpdateJoystick()
 	joystick_read_x = 0;
 	joystick_read_y = 0;
 	joystick_read_fire = 0;
-	joystick_read_rx = 0;	// the right stick's axes (#161, round 161a2) - see below
-	joystick_read_ry = 0;
-	joystick_read_lx = 0;	// the left stick's own axes, without the d-pad - see below
-	joystick_read_ly = 0;
+	joystick_raw_rx = 0;	// the right stick's axes, raw (#161, round 161a2, 161a2b) - see below
+	joystick_raw_ry = 0;
+	joystick_raw_lx = 0;	// the left stick's own axes, without the d-pad and raw - see below
+	joystick_raw_ly = 0;
 
 	if (XInputGetState(0, &state) != ERROR_SUCCESS)
 		return DXUpdateJoystickDirectInput();	// no XInput device (e.g. a PS4/PS5 controller with no Steam Input/DS4Windows wrapper active) - fall back to raw DirectInput
@@ -970,18 +982,9 @@ long DXUpdateJoystick()
 	long lx = state.Gamepad.sThumbLX;
 	long ly = state.Gamepad.sThumbLY;
 
-	if (lx > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE && lx < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-		lx = 0;
-
-	if (ly > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE && ly < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-		ly = 0;
-
-	joystick_read_x = lx / 256;	// -32768..32767 -> ~-128..127
-	joystick_read_y = -ly / 256;	// inverted: stick pushed up (ly>0) means forward, which S_UpdateInput() reads as joy_y<0
-
 	// THE STICK ALONE, BESIDE THE PAIR THE D-PAD WRITES OVER (#161, round
 	// 161a2, fix round 2 - the skeptical review's first finding). The four
-	// lines below do not OR the d-pad into these axes, they ASSIGN: a
+	// d-pad lines below do not OR the d-pad into these axes, they ASSIGN: a
 	// direction press replaces whatever the stick was saying with +-20. Under
 	// Tank that is right and is Core's own idea - the d-pad is a second way to
 	// push the same stick, and a direction bit has no size. Under Modern the
@@ -994,8 +997,25 @@ long DXUpdateJoystick()
 	// (specific\input.cpp). Written on every poll and read only under the
 	// option, exactly like the right stick's own axes below; nothing in this
 	// file needs to know which scheme is running.
-	joystick_read_lx = joystick_read_x;
-	joystick_read_ly = joystick_read_y;
+	//
+	// AND BEFORE THE PER-AXIS ZONE, since round 161a2b's item 6: that zeroing
+	// snaps a nearly-axial push onto the axis, because it judges each
+	// component on its own. Modern puts this raw pair through a RADIAL zone
+	// instead (ModernStickDeadZone), at the same 7849 of 32767 XInput asks
+	// for, so the zone is as wide as it ever was and the direction survives
+	// it. joystick_read_x/y below keep the per-axis zone unchanged - they are
+	// what Tank, the menus and the binding screen read.
+	joystick_raw_lx = lx / 256;
+	joystick_raw_ly = -ly / 256;	// inverted for the same reason as the read pair below
+
+	if (lx > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE && lx < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+		lx = 0;
+
+	if (ly > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE && ly < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+		ly = 0;
+
+	joystick_read_x = lx / 256;	// -32768..32767 -> ~-128..127
+	joystick_read_y = -ly / 256;	// inverted: stick pushed up (ly>0) means forward, which S_UpdateInput() reads as joy_y<0
 
 	long fire = 0;	// moved up from below the d-pad block (#161, round 161a2, step 3) - the new d-pad button bits right after it need it to already exist
 
@@ -1036,6 +1056,23 @@ long DXUpdateJoystick()
 	long rx = state.Gamepad.sThumbRX;
 	long ry = state.Gamepad.sThumbRY;
 
+	// AND THE SAME TWO AXES AS AXES (#161, round 161a2, step 2): the modern
+	// camera is a rate and not four directions, so it needs the deflection
+	// and not the bits below. Scaled exactly like the left stick a few lines
+	// up - divided by 256 into roughly -128..127, y inverted so that forward
+	// is negative, which is the convention every reader in this tree already
+	// uses (S_UpdateInput's joy_y, game\modern_move.h's stick_y).
+	//
+	// Written unconditionally and read by nobody at Tank: only the modern
+	// camera's seam in specific\input.cpp touches them, and only under
+	// tomb5.control_modern. Taken BEFORE the per-axis zone since round
+	// 161a2b's item 6 - the seam applies XInput's own 8689 of 32767 radially
+	// instead (MODERN_DEAD_RIGHT), which is the same width without the axis
+	// snap. The zeroing below is left exactly as it was: it belongs to the
+	// four bindable bits, which item 6 does not touch.
+	joystick_raw_rx = rx / 256;
+	joystick_raw_ry = -ry / 256;
+
 	if (rx > -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE && rx < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)
 		rx = 0;
 
@@ -1046,20 +1083,6 @@ long DXUpdateJoystick()
 	if (ry < 0) fire |= 1 << 17;	// Stick R Down
 	if (rx < 0) fire |= 1 << 18;	// Stick R Left
 	if (rx > 0) fire |= 1 << 19;	// Stick R Right
-
-	// AND THE SAME TWO AXES AS AXES (#161, round 161a2, step 2): the modern
-	// camera is a rate and not four directions, so it needs the deflection
-	// and not the bits above. Scaled exactly like the left stick a few lines
-	// up - divided by 256 into roughly -128..127, y inverted so that forward
-	// is negative, which is the convention every reader in this tree already
-	// uses (S_UpdateInput's joy_y, game\modern_move.h's stick_y).
-	//
-	// Written unconditionally and read by nobody at Tank: only the modern
-	// camera's seam in specific\input.cpp touches them, and only under
-	// tomb5.control_modern. The hardware dead zone above has already been
-	// applied to rx/ry, which is why MODERN_CAMERA_DEAD is 0.
-	joystick_read_rx = rx / 256;
-	joystick_read_ry = -ry / 256;
 
 	joystick_read_fire = fire;
 

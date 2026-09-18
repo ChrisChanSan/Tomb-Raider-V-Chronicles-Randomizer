@@ -44,10 +44,10 @@ extern long inputBusy;
 extern long joystick_read;
 extern long joystick_read_x;
 extern long joystick_read_y;
-extern long joystick_read_rx;	// the RIGHT stick's axes, same scale (#161, round 161a2)
-extern long joystick_read_ry;
-extern long joystick_read_lx;	// the LEFT stick ALONE - joystick_read_x/y without the d-pad written over them (#161, round 161a2, fix round 2)
-extern long joystick_read_ly;
+extern long joystick_raw_rx;	// the RIGHT stick's axes, same scale, before its per-axis zone (#161, rounds 161a2 and 161a2b)
+extern long joystick_raw_ry;
+extern long joystick_raw_lx;	// the LEFT stick ALONE and raw - joystick_read_x/y without the d-pad over them and without the per-axis zone (#161, same two rounds)
+extern long joystick_raw_ly;
 extern long joystick_read_fire;
 extern long joystick_is_xinput;
 extern short ammo_change_timer;

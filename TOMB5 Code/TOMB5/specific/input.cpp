@@ -28,6 +28,7 @@
 #include "../game/newinv2.h"
 #include "../game/deltapak.h"		// GLOBAL_playing_cutseq - the modern seam's guard
 #include "../game/modern_state.h"	// the modern control's one tick (#161)
+#include "../game/modern_move.h"	// the radial dead zone and its two widths (#161, round 161a2b, item 6)
 #include "../tomb5/tomb5.h"
 
 const char* KeyboardButtons[272] =
@@ -375,6 +376,42 @@ long JoyBitBack()
 	return joystick_is_xinput ? 1 : 2;
 }
 
+/* THE D-PAD KEEPS THE INVENTORY AND THE TITLE (#161, round 161a2b, item 9):
+ * "Das D-Pad im Inventar und im Titel waere auch cool zu behalten, das ist
+ * viel besser als der Stick. Wir koennen ja beides zulassen sprich Stick &
+ * Pad."
+ *
+ * IS A MENU READING THE DIRECTION BITS? That is the honest question, and the
+ * honest answer is the two terms the movement seam in S_UpdateInput already
+ * carries for the same reason with the sign the other way round - this is its
+ * mirror image, and the two must never disagree. InventoryActive is not only
+ * the ring: the pause menu sets it (specific\LoadSave.cpp), the load and save
+ * screens set it, and so does the outfit window (specific\hd). The title has
+ * no Lara to steer at all, so it is named by its level id instead. Everything
+ * else in the seam's guard - first person, a spotcam, a cutscene,
+ * bDisableLaraControl, the look key - is a state of the GAME and not a menu,
+ * and none of them reads a direction bit as a cursor step.
+ *
+ * WHAT IT IS FOR. In Modern the movement pair is the left stick's own axes,
+ * which the d-pad never writes over (round 161a2 step 3, the user's decision
+ * 8), and that took the d-pad away from the menus as well - they read the
+ * same bits. While this is true the pair goes back to being joy_x/joy_y, the
+ * one the d-pad ASSIGNS into: stick and pad both, exactly as at Tank. */
+static long ModernMenuReadsPad()
+{
+	return (InventoryActive || gfLevelId == LVL5_TITLE) ? 1 : 0;
+}
+
+// Is this binding one of the d-pad's own four bits (20..23,
+// specific\dxshell.cpp)? -1, the unbound row, and every other binding answer
+// no - which is also what keeps the shift below off a negative count. The
+// bound is ApplyJoyScheme's own, and for the same reason: the value comes out
+// of the registry.
+static long JoyBitIsDpad(long bit)
+{
+	return (bit >= 0 && bit <= 23 && ((1L << bit) & JOY_DPAD_BITS) != 0) ? 1 : 0;
+}
+
 long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 short layout[2][18] =
@@ -393,10 +430,10 @@ long inputBusy;
 long joystick_read;
 long joystick_read_x;
 long joystick_read_y;
-long joystick_read_rx;		// the right stick as two axes (#161, round 161a2) - the modern camera
-long joystick_read_ry;
-long joystick_read_lx;		// the left stick alone (#161, round 161a2, fix round 2) - the modern movement, see S_UpdateInput
-long joystick_read_ly;
+long joystick_raw_rx;		// the right stick as two axes, before its per-axis zone (#161, rounds 161a2 and 161a2b) - the modern camera
+long joystick_raw_ry;
+long joystick_raw_lx;		// the left stick alone and raw (#161, same two rounds) - the modern movement, see S_UpdateInput
+long joystick_raw_ly;
 long joystick_read_fire;
 long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/Steam), 0 = DirectInput fallback; set anew on every poll (dxshell.cpp)
 
@@ -763,9 +800,27 @@ long S_UpdateInput()
 			ApplyJoyScheme();
 
 		const long rstick_bits = JOY_RSTICK_BITS;	// bits 16..19, specific\dxshell.cpp
+		long cam_x = 0;
+		long cam_y = 0;
 
-		ModernCameraStick(ControlMethod == 1 ? joystick_read_rx : 0,
-			ControlMethod == 1 ? joystick_read_ry : 0);
+		/* AND THROUGH ITS OWN RADIAL ZONE (#161, round 161a2b, item 6). The
+		 * RAW pair, because the per-axis zeroing in specific\dxshell.cpp
+		 * judges each component on its own and so snaps a nearly-axial push
+		 * onto the axis - which is the "Deadzone-Problem" the user suspected
+		 * and the play test's direction histogram measured. The width is
+		 * XInput's own 8689 of 32767, except on the DirectInput path, where
+		 * this controller's Z/Rz rest off centre and only the wider zone
+		 * keeps a resting stick from turning the camera by itself
+		 * (game\modern_move.h carries both numbers and why).
+		 *
+		 * ControlMethod == 1 as before, and ZEROED rather than skipped in the
+		 * other case, so that a stick which was out when the player switched
+		 * to the keyboard cannot leave the orbit turning for ever. */
+		if (ControlMethod == 1)
+			ModernStickDeadZone(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
+				joystick_raw_rx, joystick_raw_ry, &cam_x, &cam_y);
+
+		ModernCameraStick(cam_x, cam_y);
 		joy_fire &= ~rstick_bits;
 	}
 
@@ -794,14 +849,33 @@ long S_UpdateInput()
 	 * joy_y still carry the d-pad for the menus, joy_fire still carries its
 	 * four bits for the bindings, and a medipack on the d-pad costs her
 	 * nothing. The joystick_read test is ReadJoystick's own: no pad
-	 * answering means no axes, not last poll's. */
+	 * answering means no axes, not last poll's.
+	 *
+	 * EXCEPT WHERE A MENU IS READING THE BITS (#161, round 161a2b, item 9):
+	 * "Das D-Pad im Inventar und im Titel waere auch cool zu behalten [...]
+	 * Wir koennen ja beides zulassen sprich Stick & Pad." A menu reads the
+	 * very same four direction bits as a cursor step, so the shadow above
+	 * took the d-pad out of the menus along with the movement - which is not
+	 * what decision 8 asked for and is not what he wants. There the pair goes
+	 * back to being joy_x/joy_y, the one the d-pad assigns into: stick AND
+	 * pad, exactly as at Tank. ModernMenuReadsPad() is the predicate, and it
+	 * is the mirror image of the movement seam's own two menu terms below.
+	 *
+	 * AND THROUGH THE RADIAL ZONE WHEN IT IS NOT (item 6): the raw left stick
+	 * at XInput's own 7849 of 32767, so that a circling thumb stops snapping
+	 * onto the four cardinals and the course stops moving in jumps. The
+	 * menus keep the per-axis pair, which is all a four-way cursor needs and
+	 * is what they have always had. */
 	long move_x = joy_x;
 	long move_y = joy_y;
 
-	if (tomb5.control_modern && ControlMethod == 1)
+	if (tomb5.control_modern && ControlMethod == 1 && !ModernMenuReadsPad())
 	{
-		move_x = joystick_read ? joystick_read_lx : 0;
-		move_y = joystick_read ? joystick_read_ly : 0;
+		move_x = 0;
+		move_y = 0;
+
+		if (joystick_read)
+			ModernStickDeadZone(MODERN_DEAD_LEFT, joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
 	}
 
 	linput = 0;
@@ -1037,7 +1111,22 @@ long S_UpdateInput()
 
 	DoWeaponHotkey();
 
-	if (keymap[DIK_0] || (ControlMethod == 1 && Key(jLayout[13] + 256)))
+	/* ONE PRESS MUST NOT MEAN TWO THINGS (#161, round 161a2b, item 9 - the
+	 * same class as the Circle latch further down and as the FMV skip in
+	 * #78). Decision 8 put the medipacks on the d-pad's own new bits, and
+	 * item 9 has just given the d-pad the menus back: in the inventory a
+	 * press of Up would now step the cursor AND swallow a small medipack.
+	 * So while a menu is reading the d-pad, a medipack bound to one of its
+	 * four bits does not fire.
+	 *
+	 * ONLY THOSE FOUR BITS, and only in Modern. The keyboard's 0 and 9 keep
+	 * working in the inventory as they always have, and so does a medipack a
+	 * player has put on a face button - neither of them is steering anything.
+	 * At Tank the flag is 0 at its first term, so JoyBitIsDpad is not even
+	 * reached and the two conditions below are the expressions they were. */
+	const long medi_dpad = tomb5.control_modern && ModernMenuReadsPad();
+
+	if (keymap[DIK_0] || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[13])) && Key(jLayout[13] + 256)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -1067,7 +1156,7 @@ long S_UpdateInput()
 			}
 		}
 	}
-	else if (keymap[DIK_9] || (ControlMethod == 1 && Key(jLayout[14] + 256)))
+	else if (keymap[DIK_9] || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[14])) && Key(jLayout[14] + 256)))
 	{
 		if (!med_hotkey_timer)
 		{

@@ -301,19 +301,24 @@ enum modern_constants
 	 * costs exactly as long as pitching by hand used to. The limits are
 	 * LaraUnderWater's own clamp on x_rot (laraswim.cpp:593-596).
 	 *
-	 * THE TWO CLAMPS ARE THE SAME NUMBER AND NOT THE SAME RANGE, and the first
-	 * version of this comment said otherwise (#161, round 161a2, fix round -
-	 * the review's fifth finding). The chase camera clamps its ELEVATION to
-	 * +-15470 and her body is clamped here, but the two axes are 1820 apart:
-	 * ModernCameraSwimPitch takes pitch_home out of the elevation, so the
-	 * pointer really asks for -13650 .. +17290. What that costs, stated rather
-	 * than claimed away: the steepest dive a modern swimmer can reach is 13650
-	 * (75 degrees) where Tank's own IN_FORWARD reaches 15470 (85), and the last
-	 * 1820 of the camera's upward travel move the view alone, because her nose
-	 * is already at its own limit. Seating the orbit's clamp at pitch_home
-	 * +-15470 instead would make them coincide and would cost camera range at
-	 * the bottom, where ChaseCamera's own +-15470 on actual_elevation would cut
-	 * it straight back off - so the arithmetic is named and left alone. */
+	 * THE TWO CLAMPS ARE NOT THE SAME RANGE, and the first version of this
+	 * comment said otherwise (#161, round 161a2, fix round - the review's fifth
+	 * finding). Her body is clamped here at +-15470. The CAMERA is clamped at
+	 * -10923 .. +15470 since round 161a2b cut the sphere's top cap for the
+	 * user's "Wenn ich direkt ueber Lara bin ist es sehr buggy"
+	 * (MODERN_CAMERA_PITCH_MIN, item 4a), and ModernCameraSwimPitch takes
+	 * pitch_home out of the elevation on top of that - so the pointer really
+	 * asks for -9103 .. +17290.
+	 *
+	 * WHAT THAT COSTS, stated rather than claimed away. Upwards, the last 1820
+	 * units of the camera's travel move the view alone, because her nose is
+	 * already at its own limit. Downwards, the steepest DIVE a modern swimmer
+	 * can ask for is 9103 (50 degrees), where round 161a2 reached 13650 (75)
+	 * and Tank's own IN_FORWARD still reaches 15470 (85): the cap was cut for
+	 * the LAND camera's sake, and the water pays for it because it borrows that
+	 * same elevation as a pointer. If the play test finds diving shallow, HERE
+	 * is where it is answered - the water can map its own range out of the
+	 * camera's - and not by giving the sphere its cap back. */
 	MODERN_SWIM_PITCH_RATE = 364,
 	MODERN_SWIM_PITCH_MIN = -15470,
 	MODERN_SWIM_PITCH_MAX = 15470,

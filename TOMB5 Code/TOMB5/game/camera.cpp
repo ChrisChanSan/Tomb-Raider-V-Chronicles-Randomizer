@@ -237,8 +237,12 @@ static char CameraSnaps = 0;
  *               slot rather than beside it
  *   the height  camera.target_elevation = offset_pitch, REPLACING the two
  *               lines ChaseCamera opens with (ModernCameraOrbit says why)
- *   the wall    ModernCameraNoteWall, after the collision has had its say;
- *               the collision itself is not touched by a line
+ *   the wall    ModernCameraNoteWall, after the collision has had its say -
+ *               a FLAG since round 161a2b ("the eye was clipped this tick")
+ *               where it used to be the angle geometry forced on us, and step
+ *               2 replaces even the measurement below with the candidate
+ *               loop's own answer; the collision itself is not touched by a
+ *               line
  *   the draw    ModernLaraHidden, asked once per frame in game\draw.cpp
  *   the water   ModernCameraSwimTarget, asked by game\modern_state.cpp once
  *               per tick while she swims: down there the orbit is the pointer
@@ -264,13 +268,25 @@ static char CameraSnaps = 0;
  * DIRECTION at all - see ModernCameraNoteWall, which is the only reader. */
 #define MODERN_CAM_ANGLE_RADIUS	768
 
+/* WHAT COUNTS AS THE EYE BEING CLIPPED, until step 2 asks the candidate loop
+ * itself (#161, round 161a2b, step 1). The orbit no longer absorbs the angle
+ * geometry forces on it - that was this round's refuted assumption, and
+ * game\modern_camera.h carries the measurement that refuted it - but it still
+ * wants to know that a wall was there, because that is the one signal that
+ * makes the return run fast. Step 1 owns the pure function only, so the flag is
+ * derived here from what round 161a2 was already measuring, at the same 1.4
+ * degrees its noise floor used: the flag therefore fires on exactly the ticks
+ * the old `wall` fired on, and nothing else about the tree moves in this step.
+ * Step 2 deletes this function and the define with it. */
+#define MODERN_CAM_CLIP_DEAD	0x0100	// 256 units = 1.4 deg, round 161a2's own floor
+
 static MODERN_CAMERA_CFG modern_cam_cfg;
 static MODERN_CAMERA_STATE modern_cam_state;
 static long modern_cam_armed;		// has the cfg above been filled yet?
 static long modern_cam_rs_x;		// the right stick, as input.cpp last read it
 static long modern_cam_rs_y;
-static long modern_cam_push;		// what the LAST tick's geometry did to the angle
-static ushort modern_cam_push_at;	// the tick that measured it - see ModernCameraOrbit
+static long modern_cam_clipped;		// did geometry take the eye off the ideal LAST tick?
+static ushort modern_cam_clipped_at;	// the tick that measured it - see ModernCameraOrbit
 static long modern_cam_have_pos;	// is the position below this level's?
 static long modern_cam_x, modern_cam_y, modern_cam_z;
 
@@ -301,8 +317,8 @@ void ModernCameraResetOrbit()
 {
 	modern_cam_armed = 0;
 	ModernCameraArm();
-	modern_cam_push = 0;
-	modern_cam_push_at = 0;		// harmless either way: a push of 0 turns any tick it is accepted on into no push at all
+	modern_cam_clipped = 0;
+	modern_cam_clipped_at = 0;	// harmless either way: a flag of 0 turns any tick it is accepted on into no wall at all
 	modern_cam_have_pos = 0;
 	modern_cam_x = 0;
 	modern_cam_y = 0;
@@ -377,31 +393,37 @@ static void ModernCameraOrbit()
 {
 	short yaw;
 	short pitch;
-	long push;
+	long clipped;
 
 	ModernCameraArm();
 
-	/* A WALL DISPLACEMENT IS WORTH ONE TICK AND NOT ONE INTERRUPTION (#161,
-	 * round 161a2, fix round - the review's third finding). It is measured at
-	 * the end of one orbit tick and answered at the start of the next, which is
-	 * exactly right while the orbit ticks every tick - and the orbit does not.
-	 * It stands still through a flyby, a cutscene, first person, the look key
-	 * and the four rich2 sniper cameras, and the displacement measured on the
-	 * tick before such a break would otherwise be applied on the tick after it,
-	 * against a camera angle and a world that are no longer there. The quadrant
-	 * snap is what writes the big ones, so that is up to half a turn arriving
-	 * out of nowhere, with a four second half life to undo it.
+	/* A WALL IS WORTH ONE TICK AND NOT ONE INTERRUPTION (#161, round 161a2, fix
+	 * round - the review's third finding). It is measured at the end of one
+	 * orbit tick and answered at the start of the next, which is exactly right
+	 * while the orbit ticks every tick - and the orbit does not. It stands still
+	 * through a flyby, a cutscene, first person, the look key and the four
+	 * rich2 sniper cameras, and a wall seen on the tick before such a break
+	 * would otherwise be answered on the tick after it, against a camera and a
+	 * world that are no longer there. Since round 161a2b that costs one fast
+	 * return step rather than an angle out of nowhere, and the discipline is
+	 * kept anyway: what it guards against has not changed.
 	 *
 	 * GlobalCounter is the honest stamp: game\control.cpp steps it once per
 	 * logic tick (:292) and calls CalculateCamera once in the same tick body
 	 * (:677), so two consecutive orbit ticks are exactly one apart and anything
 	 * else is a gap. The subtraction is done in the counter's own unsigned
 	 * width, so the wrap at 65536 costs nothing. */
-	push = ((ushort)(GlobalCounter - modern_cam_push_at) == 1) ? modern_cam_push : 0;
+	clipped = ((ushort)(GlobalCounter - modern_cam_clipped_at) == 1) ? modern_cam_clipped : 0;
 
+	/* HER HEADING IS HANDED IN, and it is what makes the orbit a WORLD angle
+	 * (round 161a2b, item 1): the state holds where the eye stands in the
+	 * world, and the offset this writes into camera.target_angle is that angle
+	 * measured against her y_rot of this tick. ModernCameraActive() has already
+	 * refused a missing lara_item, so the read is safe here. */
 	ModernCameraUpdate(&modern_cam_cfg, &modern_cam_state, modern_cam_rs_x,
-		modern_cam_rs_y, ModernCameraLaraMoving(), push, &yaw, &pitch);
-	modern_cam_push = 0;		// answered; the next wall writes its own
+		modern_cam_rs_y, lara_item->pos.y_rot, ModernCameraLaraMoving(), clipped,
+		&yaw, &pitch);
+	modern_cam_clipped = 0;		// answered; the next wall writes its own
 
 	/* target_angle is 0 all game unless a trigger camera has just written one,
 	 * and CalculateCamera takes that back at its own end (camera.cpp:601). So
@@ -424,39 +446,46 @@ static void ModernCameraOrbit()
 	camera.target_elevation = pitch;
 }
 
-/* WHAT THE GEOMETRY DID TO THE ANGLE WE ASKED FOR - observation 3's "ausser
- * eine Wand kommt, dann geht sie mit dem Winkel der Wand schneller zum
- * Ursprung hinter Lara".
+/* WAS THE EYE CLIPPED THIS TICK - observation 3's "ausser eine Wand kommt,
+ * dann geht sie mit dem Winkel der Wand schneller zum Ursprung hinter Lara",
+ * and nothing more than that since round 161a2b.
  *
- * Both orbit cameras resolve a wall the same way and neither is touched for
- * it: five candidate eye positions - the angle we asked for, then the four
- * world cardinals at (lp - 1) * 0x4000 - each tested with mgLOS at a push of
- * 200, and the winner run through CameraCollisionBounds at 384
- * (camera.cpp:1038-1115). The angle the camera really ended up at is
- * therefore in no variable at all; it is in the ideal POSITION, and this
- * reads it back out - phd_atan of the vector from the eye to the target,
- * which is the inverse of the two lines that built the candidate.
+ * Both orbit cameras resolve a wall the same way and neither is touched for it
+ * in THIS step: five candidate eye positions - the angle we asked for, then the
+ * four world cardinals at (lp - 1) * 0x4000 - each tested with mgLOS at a push
+ * of 200, and the winner run through CameraCollisionBounds at 384
+ * (camera.cpp:1038-1115). The angle the camera really ended up at is therefore
+ * in no variable at all; it is in the ideal POSITION, and this reads it back
+ * out - phd_atan of the vector from the eye to the target, which is the inverse
+ * of the two lines that built the candidate.
  *
- * WHAT THE ORBIT IS HANDED IS THE DISPLACEMENT and not that angle, because
- * with an absolute angle there is no value that means "nothing was in the
- * way"; game\modern_camera.cpp carries the rest of that argument. It is
- * answered on the NEXT tick, which is why it is stored rather than applied -
- * and it is a raw difference of two 16-bit angles that ModernWrap folds the
- * short way round, so no cast of a value over 32767 to short happens on the
- * way. It carries the tick that measured it, because "the next tick" and "the
- * next tick the orbit runs" are not the same thing: ModernCameraOrbit says
- * what that costs and how it is checked.
+ * WHAT THE ORBIT IS HANDED IS A FLAG, and that is the whole of round 161a2b's
+ * item 3 on this side: the displacement used to be taken INTO the offset, which
+ * wrote the classic quadrant snap into the state and swallowed the stick
+ * (game\modern_camera.h carries the measurement). Nothing is absorbed now; the
+ * flag only makes the return run fast while the wall lasts. It is answered on
+ * the NEXT tick, which is why it is stored rather than applied, and it carries
+ * the tick that measured it, because "the next tick" and "the next tick the
+ * orbit runs" are not the same thing: ModernCameraOrbit says what that costs.
  *
- * AND ONLY WHILE THE RADIUS STILL MAKES AN ANGLE. `distance` is the
- * HORIZONTAL radius, target_distance * cos(elevation), so at the pitch limit
- * it is 134 units - and there CameraCollisionBounds' own 384-unit push would
- * read as a seventy degree "displacement" that means nothing, because the
- * camera is directly above her and there is no direction to it. Half a sector
- * is the radius at which that push is still under 30 degrees, and it is
- * reached at 60 degrees of pitch. */
+ * THIS MEASUREMENT IS A STOPGAP and step 2 removes it: when the candidate loop
+ * keeps the angle and shrinks the distance instead, "clipped" is what mgLOS
+ * itself answers, with no angle arithmetic anywhere. Until then the old
+ * measurement is kept exactly, at MODERN_CAM_CLIP_DEAD, so that the flag fires
+ * on the ticks it already fired on.
+ *
+ * AND ONLY WHILE THE RADIUS STILL MAKES AN ANGLE. `distance` is the HORIZONTAL
+ * radius, target_distance * cos(elevation), so at the pitch limit it is 134
+ * units - and there CameraCollisionBounds' own 384-unit push would read as a
+ * seventy degree "displacement" that means nothing, because the camera is
+ * directly above her and there is no direction to it. Half a sector is the
+ * radius at which that push is still under 30 degrees, and it is reached at 60
+ * degrees of pitch - which is exactly where round 161a2b's own cap now stops
+ * the orbit (MODERN_CAMERA_PITCH_MIN), so this guard has become the floor of
+ * the sphere rather than a slice out of it. */
 static void ModernCameraNoteWall(const GAME_VECTOR* ideal, long distance)
 {
-	long dx, dz;
+	long dx, dz, push;
 
 	if (distance < MODERN_CAM_ANGLE_RADIUS)
 		return;
@@ -467,8 +496,19 @@ static void ModernCameraNoteWall(const GAME_VECTOR* ideal, long distance)
 	if (!dx && !dz)
 		return;
 
-	modern_cam_push = phd_atan(dz, dx) - (long)camera.actual_angle;
-	modern_cam_push_at = GlobalCounter;	// so the next orbit tick can tell "one tick ago" from "before the flyby"
+	/* The fold into the shorter way round, by hand and in the angle's own
+	 * unsigned width: this file does not see game\modern_move.h's ModernWrap,
+	 * and a stopgap step 2 deletes is no reason to include a header. */
+	push = (long)(ushort)(phd_atan(dz, dx) - (long)camera.actual_angle);
+
+	if (push > 32768)
+		push -= 65536;
+
+	if (push > MODERN_CAM_CLIP_DEAD || push < -MODERN_CAM_CLIP_DEAD)
+	{
+		modern_cam_clipped = 1;
+		modern_cam_clipped_at = GlobalCounter;	// so the next orbit tick can tell "one tick ago" from "before the flyby"
+	}
 }
 
 /* HOW FAR THE EYE IS FROM HER, MEASURED WITH THE CAMERA'S OWN TWO POINTS.

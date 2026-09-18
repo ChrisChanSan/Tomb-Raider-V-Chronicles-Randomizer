@@ -107,6 +107,41 @@ static long ModernCameraFall(long* value, long home, long rate, long min_step)
 	return step;
 }
 
+/* THE SPEED SLIDER, AS ONE MULTIPLY (round 161a2b, item 5). "Der rechte Stick
+ * muss noch schneller werden, der ist viel zu langsam. Am besten ein Slider wie
+ * die SFX und Musik." The ROW is specific\LoadSave.cpp's and the stored value
+ * is tomb5's (step 5); what lives here is the whole of what the number MEANS,
+ * so that the options page, the registry and the test all ask one function.
+ *
+ * Linear between the two ends, in the orbit's own units, and the division is by
+ * the slider's own top so that the arithmetic comes out exact at the default:
+ * 364 + 40 * 1820 / 100 = 1092, the rate round 161a2 shipped. The pitch is half
+ * the yaw, as it has been since the orbit was written.
+ *
+ * THE CLAMP IS NOT DECORATION. The value arrives from the registry, and a
+ * registry key a user can edit is a key that can hold 5000; an unclamped
+ * multiply would hand the orbit a rate that trips the 60 fps cut detection on
+ * its own steps, which is the one thing the header promises it cannot do. */
+void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate)
+{
+	long yaw;
+
+	if (speed < 0)
+		speed = 0;
+	else if (speed > MODERN_CAMERA_SPEED_FULL)
+		speed = MODERN_CAMERA_SPEED_FULL;
+
+	yaw = MODERN_CAMERA_YAW_RATE_MIN +
+		speed * (MODERN_CAMERA_YAW_RATE_MAX - MODERN_CAMERA_YAW_RATE_MIN) /
+		MODERN_CAMERA_SPEED_FULL;
+
+	if (yaw_rate)
+		*yaw_rate = yaw;
+
+	if (pitch_rate)
+		*pitch_rate = yaw / 2;
+}
+
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
 {
 	if (!cfg)
@@ -114,8 +149,7 @@ void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
 
 	cfg->dead = MODERN_CAMERA_DEAD;
 	cfg->stick_full = MODERN_STICK_FULL;	// the left stick's own scale, one fact
-	cfg->yaw_rate = MODERN_CAMERA_YAW_RATE;
-	cfg->pitch_rate = MODERN_CAMERA_PITCH_RATE;
+	ModernCameraSpeedRates(MODERN_CAMERA_SPEED_DEFAULT, &cfg->yaw_rate, &cfg->pitch_rate);
 	cfg->pitch_min = MODERN_CAMERA_PITCH_MIN;
 	cfg->pitch_max = MODERN_CAMERA_PITCH_MAX;
 	cfg->pitch_home = MODERN_CAMERA_PITCH_HOME;
@@ -124,30 +158,31 @@ void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
 	cfg->return_min = MODERN_CAMERA_RETURN_MIN;
 	cfg->pitch_return = MODERN_CAMERA_PITCH_RETURN;
 	cfg->wall_factor = MODERN_CAMERA_WALL_FACTOR;
-	cfg->wall_dead = MODERN_CAMERA_WALL_DEAD;
-	cfg->follow_wall = MODERN_CAMERA_FOLLOW_WALL;
 	cfg->hide_dist = MODERN_CAMERA_HIDE_DIST;
 }
 
 /* BEHIND HER BACK, AND AT THE HEIGHT THE GAME HAS ALWAYS USED.
  *
- * The yaw goes to zero because zero IS behind her - the offset is measured
- * from her heading, which is what makes it survive her turning. The pitch does
- * not go to zero, and that is not an oversight: the pitch is the elevation
- * itself, so zero would be dead level, ten degrees below where ChaseCamera
- * puts an untouched camera, and it would land on the very value that function
- * reads as "nobody has set this" (camera.cpp:1006). MODERN_CAMERA_PITCH_HOME
- * is that resting elevation, and a cfg that moves pitch_home somewhere else
- * has to seat the state itself - the same division of labour as A1's
- * ModernResetState, which is a state function and takes no cfg either. */
+ * The OFFSET goes to zero because zero is behind her, and the world yaw goes
+ * with it unseated: this function has no Lara to ask, so "behind her" is a
+ * promise the first update keeps, on the heading it is handed (round 161a2b,
+ * item 1). The pitch does not go to zero, and that is not an oversight: the
+ * pitch is the elevation itself, so zero would be dead level, ten degrees
+ * below where ChaseCamera puts an untouched camera, and it would land on the
+ * very value that function reads as "nobody has set this" (camera.cpp:1006).
+ * MODERN_CAMERA_PITCH_HOME is that resting elevation, and a cfg that moves
+ * pitch_home somewhere else has to seat the state itself - the same division
+ * of labour as A1's ModernResetState, which is a state function and takes no
+ * cfg either. */
 void ModernCameraReset(MODERN_CAMERA_STATE* state)
 {
 	if (!state)
 		return;
 
+	state->world_yaw = 0;
 	state->offset_yaw = 0;
 	state->offset_pitch = MODERN_CAMERA_PITCH_HOME;
-	state->wall_push = 0;
+	state->seated = 0;
 	state->wall = 0;
 	state->ret = 0;
 	state->steering = 0;
@@ -155,71 +190,76 @@ void ModernCameraReset(MODERN_CAMERA_STATE* state)
 
 /* THE WHOLE ORBIT, IN THE ORDER THE THREE RULES HAPPEN AND FOR A REASON.
  *
- * `wall_push_yaw` is the displacement geometry forced on the camera: the yaw
- * it really ended up at minus the yaw the orbit asked for, zero when nothing
- * was in the way. It is LAST tick's news - step 2 hands in what ChaseCamera
- * resolved after the previous update - which is why it is answered first,
- * before this tick's stick can be laid on top of it.
+ * `lara_heading` is her y_rot, and it is the only thing that turns this file's
+ * world yaw into the offset the engine's slot wants. It is handed in on every
+ * tick rather than remembered, because a state that keeps its own copy of her
+ * heading is a state that can quietly disagree with her.
  *
- * Taking it INTO the offset is what observation 3's "mit dem Winkel der Wand"
- * means, and it is stable rather than a feedback loop: once the offset names
- * the angle the camera is really at, the next tick asks for an angle nothing
- * blocks, the displacement comes back as zero and the orbit is quiet. While
- * she RUNS along the wall it does not go quiet - her heading moves under the
- * offset every tick, so the absolute angle is blocked again every tick - and
- * that is exactly the case the user described, and the reason the fast return
- * needs no memory of its own to last as long as the wall does.
+ * HER TURNING MOVES NOTHING HERE, and that is item 1 of round 161a2b: the
+ * world yaw is not touched by the heading at all, so a quarter turn under a
+ * resting stick leaves the camera standing exactly where it stood, and only
+ * the DERIVED offset changes - by minus her turn, which is precisely what
+ * keeps the view still while she spins. "Die Kamera richtet sich auch nicht
+ * selbstaendig wieder hinter Lara."
+ *
+ * `wall_clipped` is the engine's word for "geometry took the eye off the ideal
+ * this tick". It is a FLAG and no longer an angle (item 3): the camera keeps
+ * the angle the player dialled and loses DISTANCE instead, so there is nothing
+ * left to absorb - only the return to speed up while it lasts, which is
+ * observation 3's "dann geht sie mit dem Winkel der Wand schneller zum
+ * Ursprung hinter Lara".
  *
  * `lara_moving` is the caller's word for "she is going somewhere", and the
- * return is the only thing that reads it: standing, the offset is kept (2);
+ * return is the only thing that reads it: standing, the camera is kept (2);
  * moving, it falls back behind her (3). The return also stands still while
  * the player is STEERING, which is the one thing neither sentence covers - he
  * turned the camera and THEN ran - and the honest reading of both: a camera
  * that pulls against the thumb holding it is a camera fighting the player for
  * nine per cent of his own input. */
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
-	long rs_x, long rs_y, long lara_moving, long wall_push_yaw,
+	long rs_x, long rs_y, long lara_heading, long lara_moving, long wall_clipped,
 	short* out_yaw_offset, short* out_pitch)
 {
-	long yaw;
+	long heading;
+	long world;
 	long pitch;
-	long push;
 	long rate;
 
 	if (!cfg || !state)
 		return;
 
-	yaw = state->offset_yaw;
-	pitch = state->offset_pitch;
-	state->wall = 0;
-	state->ret = 0;
+	heading = ModernWrap(lara_heading);
 
-	/* 1. THE WALL. */
-	push = ModernWrap(wall_push_yaw);
-
-	if (ModernCameraAbs(push) > cfg->wall_dead)
+	/* THE SEATING, and it happens here rather than in the reset because the
+	 * reset has no Lara to ask: whatever offset the state is holding becomes
+	 * an offset from THIS heading, once. After that the world yaw is the state
+	 * and the offset is only ever an output of it. */
+	if (!state->seated)
 	{
-		state->wall = 1;
-		state->wall_push = (short)push;
-
-		if (cfg->follow_wall)
-			yaw = ModernWrap(yaw + push);
+		state->world_yaw = ModernWrap(heading + state->offset_yaw);
+		state->seated = 1;
 	}
 
-	/* 2. THE STICK. The yaw wraps - it is 360 degrees either way, observation
-	 * 1 - and the pitch clamps, because over the pole the camera would hang
-	 * upside down behind her and the classic camera would take the angle back
-	 * off us anyway (MODERN_CAMERA_PITCH_MIN). */
+	world = state->world_yaw;
+	pitch = state->offset_pitch;
+	state->wall = wall_clipped ? 1 : 0;
+	state->ret = 0;
+
+	/* 1. THE STICK. The yaw wraps - it is 360 degrees either way, observation
+	 * 1 - and the pitch clamps, because over the cap the camera sits on her
+	 * own axis, where nothing measured from the eye has a direction left
+	 * (MODERN_CAMERA_PITCH_MIN). */
 	state->steering = (ModernCameraAxisOut(cfg, rs_x) || ModernCameraAxisOut(cfg, rs_y)) ? 1 : 0;
 
-	yaw = ModernWrap(yaw + ModernCameraRate(cfg, rs_x, cfg->yaw_rate));
+	world = ModernWrap(world + ModernCameraRate(cfg, rs_x, cfg->yaw_rate));
 
 	if (cfg->invert_pitch)
 		pitch += ModernCameraRate(cfg, rs_y, cfg->pitch_rate);
 	else
 		pitch -= ModernCameraRate(cfg, rs_y, cfg->pitch_rate);
 
-	/* 3. THE RETURN. */
+	/* 2. THE RETURN, whose home is HER HEADING now and no longer an offset of
+	 * zero: the same fall, written where the state really lives. */
 	if (lara_moving && !state->steering)
 	{
 		rate = cfg->return_rate;
@@ -227,7 +267,7 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 		if (state->wall)
 			rate *= cfg->wall_factor;
 
-		state->ret = ModernCameraFall(&yaw, 0, rate, cfg->return_min);
+		state->ret = ModernCameraFall(&world, heading, rate, cfg->return_min);
 
 		if (cfg->pitch_return)
 			ModernCameraFall(&pitch, cfg->pitch_home, rate, cfg->return_min);
@@ -242,7 +282,10 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	else if (pitch < cfg->pitch_min)
 		pitch = cfg->pitch_min;
 
-	state->offset_yaw = ModernWrap(yaw);
+	/* And the derivation, once, at the end: the offset the engine's slot wants
+	 * is this tick's world yaw measured against this tick's heading. */
+	state->world_yaw = ModernWrap(world);
+	state->offset_yaw = ModernWrap((long)state->world_yaw - heading);
 	state->offset_pitch = (short)pitch;
 
 	if (out_yaw_offset)

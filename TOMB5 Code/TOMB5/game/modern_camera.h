@@ -13,19 +13,21 @@
 #pragma once
 
 /* THE MODERN CAMERA - THE ORBIT, AND NOTHING BUT ARITHMETIC (#161, round
- * 161a2, step 1).
+ * 161a2, step 1; the WORLD orbit, the speed slider's mapping and the wall's
+ * new meaning, round 161a2b step 1).
  *
  * The modern camera is not a new camera. It is our own chase camera with its
  * angle taken from a state instead of from Lara alone:
  *
- *     yaw       = lara_item->pos.y_rot + offset_yaw
+ *     yaw       = world_yaw - a direction in the WORLD, which her turning does
+ *                 not move; the engine's slot gets world_yaw - lara.y_rot
  *     elevation = offset_pitch
  *     distance  = camera.target_distance, exactly as today
  *
  * so every wall, every room change, every damping step and every snap of
  * game\camera.cpp stays what it was. What this file owns is the two angles
  * the orbit remembers between ticks and the three rules that move them; the
- * hunks that read them are game\camera.cpp, and they are step 2.
+ * hunks that read them are game\camera.cpp.
  *
  * THE MODEL IS THE USER'S, from his own recordings of 2026-09-17, and it is
  * quoted here in his words because every number below is answerable to one of
@@ -43,13 +45,32 @@
  *                                                              (moving)
  *   4 "ist Lara zu nah, wird sie komplett ausgeblendet"         (at a wall)
  *
- * So: the stick moves the offset (1), a stick at rest keeps it (2), running
- * lets it fall back towards zero so slowly that it is hard to notice (3), and
- * geometry that displaces the camera is taken INTO the offset and makes that
- * fall faster while it lasts (3 again). TROne's orbit is NOT the model - it
- * holds a world angle that never returns at all - and nothing of it is copied
- * here; the only thing this file has in common with it is the idea that a
- * camera angle is a state and not a derivation.
+ * So: the stick moves the camera (1), a stick at rest keeps it (2), running
+ * lets it fall back behind her so slowly that it is hard to notice (3), and a
+ * wall that clips the eye makes that fall faster while it lasts (3 again).
+ *
+ * ROUND 161a2b CORRECTS WHAT "KEEPS IT" MEANS, and the correction is the
+ * user's own. Asked whether the camera should stay where it is in the WORLD
+ * when Lara turns, and come back behind her only slowly, he answered "Ja,
+ * hoert sich gut an" - and his first description of the Remaster, which the
+ * round 161a2 brief mis-translated, reads "Die Kamera richtet sich auch nicht
+ * selbstaendig wieder hinter Lara" and "richtet sie sich ganz langsam nach.
+ * Das ist fast nicht zu merken."
+ *
+ * Round 161a2 remembered an OFFSET from her heading, so every degree she
+ * turned turned the view with her. The play test measured it: a turn of 62
+ * degrees was followed by the eye inside 20 ticks and overshot to 80 (M5 of
+ * the round's brief), and his spin video shows the whole view wheeling round
+ * with her where the Remaster's stands still. The state is therefore a WORLD
+ * yaw now, and the offset the engine wants is derived from it on every tick.
+ * The return is unchanged, and it is the only thing that brings the camera
+ * home.
+ *
+ * TROne's orbit holds a world angle too, and that is where the resemblance
+ * stops: theirs never returns behind the player at all, ours falls home at
+ * MODERN_CAMERA_RETURN whenever she is moving and the thumb is off the stick.
+ * Nothing of theirs is copied here; the only thing this file has in common
+ * with it is the idea that a camera angle is a state and not a derivation.
  *
  * IT INCLUDES NO ENGINE HEADER, for the same reason game\modern_move.h does
  * not: Preparation\Tools\Diagnose\ModernTest.cpp compiles THIS FILE - not a
@@ -61,9 +82,12 @@
  * a TICK is one logic step, 1/30 s (game\control.cpp:261 counts the loop down
  * in halves of a 60th).
  *
- * WHAT IS NOT HERE. The seam in game\camera.cpp and the predicate that hides
- * her are step 2; the pad table that frees the right stick is step 3; the
- * water is step 4; MODERNLOG and the record are step 5. */
+ * WHAT IS NOT HERE. The seam is game\camera.cpp and always was - round 161a2's
+ * steps 2 to 5 built it. Round 161a2b's step 2 changes how a wall is resolved
+ * there (only the angle we asked for, clipped by mgLOS at any distance, so the
+ * DISTANCE shrinks instead of the angle jumping), and hands this file her
+ * heading; step 5 wires the speed slider below to the options page, to the
+ * registry and to MODERNLOG. */
 
 /* THE CAMERA CODE'S OWN NUMBERS, MEASURED BEFORE ANYTHING WAS WRITTEN, because
  * an orbit that invents limits the classic camera already has is an orbit that
@@ -89,12 +113,18 @@
  *
  * THE LAST ROW IS A CONSTRAINT ON THIS FILE and it was checked, not hoped
  * (the round's rule: the 60 fps cut detection must not fire on the orbit's own
- * steps). At full deflection the yaw moves 1092 units, 6 degrees, in one tick;
- * the ideal eye sits at 1536 * cos(10 deg) = 1512 units, so it travels
+ * steps). At the DEFAULT speed the yaw moves 1092 units, 6 degrees, in one
+ * tick; the ideal eye sits at 1536 * cos(10 deg) = 1512 units, so it travels
  * 2 * 1512 * sin(3 deg) = 158 units, at worst 224 measured the Manhattan way.
  * The pitch moves 3 degrees, which lifts the ideal by at most 1536 * sin(3
  * deg) = 80 units, and the engine's own >> 3 damping turns that into 10. The
  * two together are 304 against a threshold of 1024 - a margin of 3.4.
+ *
+ * ROUND 161a2b'S SPEED SLIDER DOUBLES THAT STEP at its top end, so the margin
+ * stops being an argument and becomes a measurement: at speed 100 the yaw
+ * moves 2184 units a tick, 12 degrees, and the pitch 6, and
+ * Preparation\Tools\Diagnose\ModernTest.cpp sweeps the whole sphere at BOTH
+ * ends of the slider (camera_camcut) against INTERP_CAM_SNAP itself.
  *
  * AND THAT MARGIN IS THE WHOLE OF IT. This paragraph used to add "and the real
  * eye moves less again, because MoveCamera only ever walks a fraction of the
@@ -109,7 +139,9 @@
  *
  * The one thing that CAN trip the detection at the wall is the classic
  * quadrant snap, which jumps the ideal by a whole 90 degrees; that is
- * vanilla's, it is there at Tank today, and the orbit does not add to it. */
+ * vanilla's and it is there at Tank today. Round 161a2 absorbed it into the
+ * offset and made it worse; round 161a2b's step 2 stops PRODUCING it in Modern
+ * instead (item 3), and the orbit never added to it either way. */
 
 /* EVERY CONSTANT OF THE ORBIT, WITH WHERE IT COMES FROM.
  *
@@ -133,27 +165,72 @@ enum modern_camera_constants
 	 * full deflection) and read the log again. */
 	MODERN_CAMERA_DEAD = 0,
 
-	/* The brief's, and the one number the whole feel of the orbit hangs on:
-	 * a fully pushed stick takes the camera once round Lara in about two
-	 * seconds. 65536 units of turn in 60 ticks is 1092.27, so 1092 - and the
-	 * pitch at half of it, a half turn in the same two seconds, which is the
-	 * whole travel the clamp below allows and a little over. Between rest and
-	 * full deflection the rate is proportional: the axis IS the rate, which is
-	 * how every camera stick since about 2005 has read, and it keeps the
-	 * arithmetic one multiply the test can check. */
-	MODERN_CAMERA_YAW_RATE = 0x0444,	// 1092 = 360 deg in 2 s at 30 Hz
-	MODERN_CAMERA_PITCH_RATE = 0x0222,	// 546 = 180 deg in 2 s
+	/* THE SPEED SLIDER'S TWO ENDS (round 161a2b, item 5), and the number the
+	 * whole feel of the orbit hangs on. "Der rechte Stick muss noch schneller
+	 * werden, der ist viel zu langsam. Am besten ein Slider wie die SFX und
+	 * Musik." - so the rate is not one constant any more but a row on the
+	 * Controls page, 0 to 100, and these four numbers are its ends, its top
+	 * and its default.
+	 *
+	 * EACH END ANSWERS ONE DIRECTION OF THAT SENTENCE. 60 degrees a second is
+	 * a third of what round 161a2 shipped, so somebody who finds the camera
+	 * too quick has somewhere to go; 360 a second is twice it, a full turn in
+	 * one second, and it is deliberately PAST what he asked for rather than
+	 * short of it - his own Remaster video turns a full circle in 2.85 to
+	 * 2.95 s, about 125 deg/s (M1), and a slider whose top is the reference is
+	 * a slider with no room in it. In our units at 30 ticks a second, 60 deg/s
+	 * is 364.09 units a tick and 360 deg/s is 2184.53, so 364 and 2184.
+	 *
+	 * THE MAPPING IS LINEAR BETWEEN THEM, which is what puts the default of 40
+	 * at exactly 364 + 40 * 1820 / 100 = 1092: the rate round 161a2 shipped,
+	 * so a player who never touches the row keeps the camera he already has.
+	 * The pitch is half the yaw at every setting, as it always was - half a
+	 * turn of elevation while the yaw goes round once, which is the whole
+	 * travel the clamp below allows and a little over.
+	 *
+	 * Between rest and full deflection the STICK is proportional whatever the
+	 * slider says: the axis IS the rate, which is how every camera stick since
+	 * about 2005 has read, and it keeps the arithmetic one multiply the test
+	 * can check. ModernCameraSpeedRates() is the only thing that reads these
+	 * four, and it is checked at 0, 40 and 100. */
+	MODERN_CAMERA_YAW_RATE_MIN = 364,	// speed 0:   60 deg/s (364.09 at 30 Hz)
+	MODERN_CAMERA_YAW_RATE_MAX = 2184,	// speed 100: 360 deg/s (2184.53)
+	MODERN_CAMERA_SPEED_FULL = 100,		// the slider's own top, like SFX and Music
+	MODERN_CAMERA_SPEED_DEFAULT = 40,	// = 1092, round 161a2's own rate exactly
 
-	/* THE CAMERA CODE'S OWN, and the answer to the brief's "find the classic
-	 * camera's own elevation limits and use them, or +-85 degrees if it has
-	 * none". It has them: ChaseCamera clamps camera.actual_elevation to
-	 * +-15470 on every tick (camera.cpp:1012-1015), which is 84.98 degrees -
-	 * the brief's own guess to two decimal places, and not a coincidence:
-	 * that is what "as far as you like, but never over the pole" costs. Using
-	 * the engine's number rather than 85 degrees of our own means the orbit
-	 * asks for nothing the camera would silently take back from it. */
-	MODERN_CAMERA_PITCH_MIN = -15470,
-	MODERN_CAMERA_PITCH_MAX = 15470,
+	/* THE CAMERA CODE'S OWN AT THE BOTTOM, THE USER'S OWN AT THE TOP.
+	 *
+	 * ChaseCamera clamps camera.actual_elevation to +-15470 on every tick
+	 * (camera.cpp:1012-1015), which is 84.98 degrees - "as far as you like,
+	 * but never over the pole". That is what the camera BELOW her still uses,
+	 * and asking for the engine's own number means the orbit asks for nothing
+	 * the camera would silently take back from it. 478 ticks of the play test
+	 * were spent down there and showed nothing, so nothing is taken away.
+	 *
+	 * THE TOP CAP IS CUT (round 161a2b, item 4a), and his drawing cuts it:
+	 * "Wir muessen unsere Kugel auch noch ein bisschen einschraenken. Wenn ich
+	 * direkt ueber Lara bin ist es sehr buggy, sie aendert sehr schnell ihre
+	 * Richtung" - with a sketch of the sphere whose top cap is crossed out.
+	 * -10923 is 60 degrees above her, where the ideal eye's HORIZONTAL radius
+	 * is still 1536 * cos(60) = 768, half a sector. Over that cap the radius
+	 * collapses towards nothing, the eye ends up nearly on her own axis, and
+	 * everything measured from the vector eye -> target loses its direction
+	 * with it - her movement reference above all, which then read her own
+	 * running direction and turned her 3277 units every tick for as long as
+	 * the stick was off centre (M3 of the round's brief). The real cure is
+	 * item 4b, which takes that reference from the orbit instead; this cap is
+	 * the second half of it, and 768 is the same half sector game\camera.cpp
+	 * had already picked for MODERN_CAM_ANGLE_RADIUS when it asked the same
+	 * question about the same radius.
+	 *
+	 * WHAT THE CAP COSTS, named here rather than discovered later: the water's
+	 * pointer is this elevation minus pitch_home (ModernCameraSwimPitch), so
+	 * the steepest DIVE a modern swimmer can ask for falls from 13650 (75
+	 * degrees) to 9103 (50). game\modern_move.h carries that arithmetic and
+	 * now says so; if the play test finds diving shallow, the water is where
+	 * that is answered and not the camera. */
+	MODERN_CAMERA_PITCH_MIN = -10923,	// 60 deg above her: radius 1536*cos(60) = 768
+	MODERN_CAMERA_PITCH_MAX = 15470,	// below her: ChaseCamera's own clamp, camera.cpp:1012
 
 	/* THE CAMERA CODE'S OWN as well: where the chase camera sits when nobody
 	 * has touched it. ChaseCamera opens with "if (!camera.target_elevation)
@@ -196,17 +273,15 @@ enum modern_camera_constants
 	 * relation rather than compare two numbers that happen to differ. Eight
 	 * times 377 is a half life of 14.7 ticks, half a second: fast enough to
 	 * read as the wall taking the camera, slow enough to still be a movement
-	 * and not a cut. */
+	 * and not a cut.
+	 *
+	 * WHAT A WALL IS HAS CHANGED UNDER IT (round 161a2b, item 3) and the
+	 * factor has not. `wall` used to mean "geometry turned the angle we asked
+	 * for"; it now means "the eye was CLIPPED this tick" - the camera keeps
+	 * the angle the player dialled and loses DISTANCE instead, which is what
+	 * the user's own Remaster video shows. It is still the one signal that
+	 * makes the return run fast, and it is still a wall that sets it. */
 	MODERN_CAMERA_WALL_FACTOR = 8,
-
-	/* What counts as a wall at all. The ideal eye is an integer position at a
-	 * radius of about 1500 units, so one unit of rounding is 0.04 degrees;
-	 * the smallest displacement the camera code can really produce is
-	 * CameraCollisionBounds' own 384 units of push, which at that radius is
-	 * atan(384/1512) = 14 degrees, and the quadrant snap is 45 degrees or
-	 * more. 1.4 degrees therefore sits in the empty middle: everything under
-	 * it is arithmetic, everything over it is geometry. */
-	MODERN_CAMERA_WALL_DEAD = 0x0100,	// 256 units = 1.4 deg
 
 	/* MEASURE, observation 4: "ist Lara zu nah, wird sie komplett
 	 * ausgeblendet" - and the brief's origin for it is "the distance at which
@@ -235,21 +310,32 @@ enum modern_camera_constants
 	 */
 	MODERN_CAMERA_INVERT_PITCH = 0,
 
-	/* The two switches of the orbit, and they are switches for the same
-	 * reason A1's five are: each one turns off exactly one rule, which is how
-	 * a play test bisects a complaint instead of describing it.
-	 *   follow_wall   the displacement geometry forces on the camera is taken
-	 *                 INTO the offset, so the offset follows the wall
-	 *                 (observation 3's "mit dem Winkel der Wand"); off, the
-	 *                 camera fights the wall back to where the stick left it
+	/* THE ONE SWITCH LEFT, and it is a switch for the same reason A1's five
+	 * are: it turns off exactly one rule, which is how a play test bisects a
+	 * complaint instead of describing it.
 	 *   pitch_return  the pitch falls back to the resting elevation the way
 	 *                 the yaw falls back behind her. It ships OFF: the user
 	 *                 described the yaw returning and said nothing at all
 	 *                 about the height, and observation 2 says what he did not
 	 *                 ask for stays where he put it. The capability is real
 	 *                 and testable with an explicit cfg; it is simply not what
-	 *                 ships until he asks for it. */
-	MODERN_CAMERA_FOLLOW_WALL = 1,
+	 *                 ships until he asks for it.
+	 *
+	 * MODERN_CAMERA_FOLLOW_WALL AND MODERN_CAMERA_WALL_DEAD ARE GONE, and they
+	 * are this round's refuted assumption (rule 5: reverted, not left in).
+	 * Round 161a2 took the displacement geometry forced on the camera INTO the
+	 * offset, reasoning that the next tick would then ask for an angle nothing
+	 * blocks. What it really wrote into the state was the classic QUADRANT
+	 * SNAP: ChaseCamera answers a blocked angle with one of the four world
+	 * cardinals, so the offset took that cardinal, the next tick asked for the
+	 * cardinal plus one stick step, was blocked again, and the stick was
+	 * swallowed. Measured in the play test (M3): in 290 of 855 ticks with the
+	 * right stick fully pushed the angle did not advance or ran AGAINST the
+	 * stick, 177 of them at -400 units or worse, in 14 episodes of 8 to 37
+	 * ticks. "bei uns ist die Kamera in so einem Fall nicht zu bewegen." The
+	 * cure is to stop producing the snap at all - only the angle we asked for,
+	 * clipped by mgLOS at any distance, which is item 3 in game\camera.cpp -
+	 * and not to absorb it here. */
 	MODERN_CAMERA_PITCH_RETURN = 0
 };
 
@@ -267,33 +353,48 @@ struct MODERN_CAMERA_CFG
 	long pitch_max;
 	long pitch_home;	// the elevation a reset seats her camera at
 	long invert_pitch;	// 0 = stick forward looks up, as the look camera does
-	long return_rate;	// per MODERN_CAMERA_RETURN_ONE of the offset per tick
+	long return_rate;	// per MODERN_CAMERA_RETURN_ONE of what is left, per tick
 	long return_min;	// the smallest step, so the return really arrives
 	long pitch_return;	// 1 = the pitch falls back to pitch_home as well
-	long wall_factor;	// how much faster the return runs while a wall pushes
-	long wall_dead;		// a displacement under this is arithmetic, not a wall
-	long follow_wall;	// 1 = the wall's displacement is taken into the offset
+	long wall_factor;	// how much faster the return runs while a wall clips the eye
 	long hide_dist;		// eye-to-Lara distance under which she is not drawn
 };
 
-/* Where the camera sits on the sphere, and what the last tick did to it.
- * game\camera.cpp (step 2) owns the one instance and resets it wherever
- * ModernResetControls() is called, because a camera offset seated in the last
- * level is no offset at all. */
+/* Where the camera stands and what the last tick did to it. game\camera.cpp
+ * owns the one instance and forgets it at a level start, a savegame load and a
+ * scheme change, because a camera angle seated in the last level is no angle
+ * at all.
+ *
+ * THE STATE IS THE WORLD YAW AND THE OFFSET IS DERIVED (round 161a2b, item 1),
+ * rather than the state being the offset and her heading being subtracted from
+ * it as it was in round 161a2. Both spellings of the same rule exist and this
+ * one was chosen because it cannot DRIFT: subtracting a per-tick heading delta
+ * accumulates every rounding and loses any tick the orbit does not run (a
+ * flyby, a cutscene, the look key, the sniper cameras), where a world yaw minus
+ * this tick's heading is exact on every tick whatever happened before it. It
+ * also prints straight to MODERNLOG's cam_world (step 5) without arithmetic.
+ *
+ * SEATING. A reset leaves world_yaw at 0 and `seated` at 0, because a pure
+ * function has no Lara to ask; the first update ties the world yaw to the
+ * heading it is handed, keeping whatever offset_yaw holds at that moment (0
+ * after a reset - behind her back). That is what lets a caller, and a test,
+ * seat an OFFSET before the first tick and get a world angle out of it. */
 struct MODERN_CAMERA_STATE
 {
-	short offset_yaw;	// around her: 0 is behind her back, full 360 either way
+	short world_yaw;	// where the eye stands IN THE WORLD - the state proper
+	short offset_yaw;	// derived: world_yaw - her heading, what the engine's slot wants
 	short offset_pitch;	// and how high: the camera elevation itself, clamped
-	short wall_push;	// the last displacement geometry forced on the camera
-	long wall;			// 1 = that happened THIS tick, so the return ran fast
+	long seated;		// 0 = world_yaw is not tied to a heading yet
+	long wall;			// 1 = the eye was CLIPPED this tick, so the return ran fast
 	long ret;			// the return step this tick, signed - MODERNLOG cam_ret
 	long steering;		// 1 = the stick was out, so the return stood still
 };
 
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg);
+void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate);
 void ModernCameraReset(MODERN_CAMERA_STATE* state);
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
-	long rs_x, long rs_y, long lara_moving, long wall_push_yaw,
+	long rs_x, long rs_y, long lara_heading, long lara_moving, long wall_clipped,
 	short* out_yaw_offset, short* out_pitch);
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance);
 short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch);

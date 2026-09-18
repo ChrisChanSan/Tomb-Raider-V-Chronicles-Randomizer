@@ -216,11 +216,11 @@ static char TargetSnaps = 0;
 static char CameraSnaps = 0;
 
 /* ==========================================================================
- * THE MODERN CAMERA'S SEAM (#161, round 161a2, step 2).
+ * THE MODERN CAMERA'S SEAM (#161, round 161a2, step 2; the log added step 5).
  *
  * The orbit itself is game\modern_camera.cpp: two remembered angles and three
  * rules, no engine in it at all, checked number by number by
- * Preparation\Tools\Diagnose\ModernTest.cpp. What lives here is the seven
+ * Preparation\Tools\Diagnose\ModernTest.cpp. What lives here is the eight
  * places the engine touches it, and deliberately nothing else - because the
  * modern camera is not a new camera, it is OUR chase camera with its angle
  * taken from a state instead of from Lara alone:
@@ -243,11 +243,18 @@ static char CameraSnaps = 0;
  *   the water   ModernCameraSwimTarget, asked by game\modern_state.cpp once
  *               per tick while she swims: down there the orbit is the pointer
  *               her body follows, not only the view (step 4)
+ *   the log     ModernCameraLogState / ModernCameraLogConfig, asked by
+ *               game\modern_state.cpp's own MODERNLOG (step 5) - read-only,
+ *               and reached only from behind that file's own gLogEnabled, so
+ *               they add no per-tick cost when nobody is watching the seam
  *
  * WITH tomb5.control_modern OFF, ModernCameraActive() is false at its first
- * term and every one of those seven is the line it was: the orbit is not
+ * term and every one of the first seven is the line it was: the orbit is not
  * ticked, both slots keep the values vanilla puts in them, and the draw
- * predicate returns false before it measures anything.
+ * predicate returns false before it measures anything. The eighth needs no
+ * term of its own here - MODERNLOG's lines never run without the option on,
+ * so game\modern_state.cpp's own guard keeps the log out of Tank the same
+ * way it always kept the other seven out before this file existed.
  *
  * The level cameras: discarded exactly as first person discards them, sniper
  * excepted (CalculateCamera). Flybys and cutscenes are untouched in every
@@ -499,6 +506,82 @@ bool ModernLaraHidden()
 		return false;
 
 	return ModernCameraHidesLara(&modern_cam_cfg, ModernLaraEyeDistance()) != 0;
+}
+
+/* WHAT MODERNLOG'S TICK LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5).
+ * Five raw reads of this file's own statics and nothing computed from them,
+ * so a play test can watch the curve MODERN_CAMERA_RETURN and
+ * MODERN_CAMERA_WALL_FACTOR promise instead of taking the header's own
+ * arithmetic on faith.
+ *
+ * ONE TICK BEHIND FOR THE STATE, LIKE camera_yaw ABOVE IT AND FOR THE SAME
+ * REASON: game\modern_state.cpp's own tick line runs before CalculateCamera
+ * (game\control.cpp calls the input first), so offset_yaw, offset_pitch and
+ * ret are still what the orbit's LAST tick left, not this one's - the reset
+ * values (0, MODERN_CAMERA_PITCH_HOME, 0) on the first line after a cut.
+ * rs_x/rs_y are the one exception and are already this tick's own:
+ * specific\input.cpp calls ModernCameraStick() earlier in the same
+ * S_UpdateInput, before ModernUpdateInput runs. */
+void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y)
+{
+	ModernCameraArm();
+
+	if (off_yaw)
+		*off_yaw = modern_cam_state.offset_yaw;
+
+	if (off_pitch)
+		*off_pitch = modern_cam_state.offset_pitch;
+
+	if (ret)
+		*ret = modern_cam_state.ret;
+
+	if (rs_x)
+		*rs_x = modern_cam_rs_x;
+
+	if (rs_y)
+		*rs_y = modern_cam_rs_y;
+}
+
+/* WHAT MODERNLOG'S INIT LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5).
+ * The live cfg this file actually seats, not the raw enum in
+ * game\modern_camera.h - the same discipline game\modern_state.cpp already
+ * keeps for its own five init fields, because a number nobody can read back
+ * is a number nobody can confirm was really running. Six of the seven are
+ * the constants steps 1, 2 and 4's own reports named BY NAME as the play
+ * test's to move (MODERN_CAMERA_RETURN and _RETURN_MIN, _WALL_FACTOR,
+ * _HIDE_DIST, _INVERT_PITCH, _PITCH_RETURN); the seventh,
+ * MODERN_CAM_ANGLE_RADIUS above, is this file's own, and step 2's own report
+ * named it "step 2's own new feel-adjacent number and it has no log field
+ * yet" - closed here instead of left open. Left OUT on purpose, for want of
+ * the same kind of naming: the yaw/pitch rate (the brief's own fixed number,
+ * not a knob any report asked to turn) and the three the camera code hands
+ * the orbit outright, the pitch clamp and its resting elevation - no report
+ * of the four ever asked a later log to hold one of those to account. */
+void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
+	long* hide_dist, long* invert_pitch, long* pitch_return, long* angle_radius)
+{
+	ModernCameraArm();
+
+	if (return_rate)
+		*return_rate = modern_cam_cfg.return_rate;
+
+	if (return_min)
+		*return_min = modern_cam_cfg.return_min;
+
+	if (wall_factor)
+		*wall_factor = modern_cam_cfg.wall_factor;
+
+	if (hide_dist)
+		*hide_dist = modern_cam_cfg.hide_dist;
+
+	if (invert_pitch)
+		*invert_pitch = modern_cam_cfg.invert_pitch;
+
+	if (pitch_return)
+		*pitch_return = modern_cam_cfg.pitch_return;
+
+	if (angle_radius)
+		*angle_radius = MODERN_CAM_ANGLE_RADIUS;
 }
 
 void InitialiseCamera()

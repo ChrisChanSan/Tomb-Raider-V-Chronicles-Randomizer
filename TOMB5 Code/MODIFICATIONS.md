@@ -14852,6 +14852,384 @@ line rather than an arc around the camera. That is the held course (section
 not a defect, and not this round's to fix. The orbiting the eye expects is
 the free camera on the right stick, which is workflow A2's, not A1's.
 
+#### Round 161a2 (#161) - modern controls, the camera half, the pad table, the water
+
+Workflow A2 of three, continuing directly from workflow A1 (`#### Round
+161a`, above) on top of its own accepted head `22827e1`. Where A1 built the
+translation from stick to direction bits, this workflow builds everything the
+user's own Remaster recordings (2026-09-17) describe as the CAMERA: a free
+orbit on the right stick, the pad table it needs, and the water, which the
+user was explicit has no camera of its own to be different from - *"die
+Steuerung unter Wasser ist genau gleich wie ausserhalb."* His words are the
+model built here, not TROne's own camera design, a distinction he drew
+himself and that every one of this workflow's five steps measured against
+rather than assumed:
+
+1. *"Es ist, als waere die Kamera eine Kugel um Lara herum, auf der ich sie
+   mit dem rechten Stick vollstaendig um Lara herum bewegen kann, auf allen
+   Achsen 360 Grad. Lara ist immer im Zentrum der Kugel."*
+2. *"Die Kamera richtet sich auch nicht selbstaendig wieder hinter Lara, sie
+   behaelt immer ihre Position, an der ich sie auf der Kugel verschoben
+   habe - ausser sie wird durch eine Wand beeinflusst."* (standing)
+3. *"Die Kamera bewegt sich ganz leicht und super smooth wieder hinter Lara.
+   Wenn ich die Kamera auf der Kugel nach rechts drehe und dann nach links
+   laufe, richtet sie sich ganz langsam nach. Das ist fast nicht zu merken.
+   Ausser eine Wand kommt, dann geht sie mit dem Winkel der Wand schneller
+   zum Ursprung hinter Lara."* (moving, and circling a fountain on the left
+   stick alone while the camera comes round with her)
+4. At walls: *"die Kamera hat eine Kollisionsabfrage von Geometrie, damit sie
+   nicht im Void landen kann"*; *"ist Lara zu nah, wird sie komplett
+   ausgeblendet"* - measured from his recording at a hard cut within a
+   twelfth of a second, not a fade.
+5. Fixed level cameras: *"Nein, wie in unserer Ego werden alle anderen
+   verworfen bis auf der Sniper in Rich2, wie bei uns."*
+6. Tank mode keeps no orbit at all - *"das fuehlt sich sowieso sehr
+   merkwuerdig an."*
+7. The water: *"Unter Wasser ist der linke Stick wie ein D-Pad, was in alle
+   Richtungen 360 Grad auf einem flachen Kreis Lara in die Richtung bewegt.
+   Die Aenderungen im dreidimensionalen Raum gehen ueber den rechten Stick,
+   der ist wie ein 3D-Pointer in eine Richtung, der Lara dann folgt. [...]
+   Schwenken und Drehen ist auch komplett gleich."*
+8. The pad: *"Medipacks aufs D-Pad, das D-Pad wird dann in der modernen
+   Steuerung fuer die Binds frei."*
+
+His item 9 - *"wenn Lara schiesst, kann sie nicht mehr laufen, dann ist
+dauerhaft der Schleichmodus an"* - is workflow B's `aim_strafe` and nothing
+in this workflow touches it.
+
+**WHAT THE MODERN CAMERA IS.** Not a new camera: our own chase camera
+(`ChaseCamera`) and combat camera (`CombatCamera`, `game/camera.cpp`), with
+their angle taken from a remembered state instead of from Lara alone -
+`yaw = lara.y_rot + offset_yaw`, `elevation = offset_pitch`, the distance
+unchanged. The right stick moves the two offsets on a sphere, full 360 in
+yaw; standing, they are kept (observation 2); running, they fall back toward
+zero so slowly it reads as *"fast nicht zu merken"* (3); a wall that
+displaces the eye is fed back into the yaw offset and makes that fall run
+faster for as long as the wall lasts (3, second half). Fixed level cameras
+are discarded exactly as first person already discards them, sniper
+exception included (5); flybys and cutscenes are untouched in every mode.
+Below a measured eye-to-target distance Lara is not drawn at all (4). Under
+water, the same orbit's elevation becomes the attitude her body swims
+toward, at the classic swim pitch rate, while the horizontal course is the
+left stick against the camera exactly as it is on land (7).
+
+**THE SOURCE, AND WHAT IS DELIBERATELY NOT TROne'S.** TROne (GPLv3) by
+Todesengel1931 - <https://github.com/todesengel1931> - solved the movement
+half first, and workflow A1 re-derived that design in our own units (see
+above). Its camera is explicitly **not** re-derived here: TROne holds a
+WORLD angle that never returns at all, where the user's camera holds an
+OFFSET from Lara's own heading and lets it fall back behind her on its own -
+two different designs, and `game/modern_camera.h`'s own header says so
+before a line of arithmetic in it. Nothing of TROne's camera - code, data or
+behaviour, first-hand or second-hand - is in this tree; the one place TROne
+is mentioned in the new files is to name the difference.
+`Preparation/Tools/Diagnose/ModernTest.cpp`'s own deferred list says the same
+thing by name on every run:
+`modern.orbit_stays_in_world_space_and_accepts_mouse_while_running` is
+printed under "none" - not ours, and will not become it, with the reason
+written out beside it.
+
+**THE FILES**, sixteen of them against base `22827e1`, **2,823 insertions,
+168 deletions** (this record and the two README sentences are outside that
+count, the same convention workflow A1's own entry used). Five commits built
+the round's five steps in order; `git log --oneline 22827e1..HEAD` is the
+list, each one named `Round 161a2 (#161): <what>`.
+
+- `game/modern_camera.h` / `.cpp` (new, 289 + 298 lines) - the orbit's own
+  arithmetic, and nothing else: the state (`offset_yaw`, `offset_pitch`, the
+  last wall push, the last return step), the fifteen-field config with an
+  origin comment on every one, `ModernCameraUpdate` (the wall, then the
+  stick, then the return, in that order - never the other way, because the
+  wall must be answered before this tick's stick is laid on top of it),
+  `ModernCameraReset`, `ModernCameraHidesLara`, and `ModernCameraSwimPitch`
+  (step 4's inversion of the classic camera's own elevation line, for the
+  water). No engine header, the same discipline `game/modern_move.h` keeps,
+  so `ModernTest.cpp` compiles this file itself rather than a copy of it.
+- `game/camera.cpp` / `.h` (+473/-18, +15/-0 lines) - the seam: eight places
+  the engine touches the orbit (below), all of them either behind
+  `ModernCameraActive()` (whose own first term is `tomb5.control_modern`) or
+  reached only from behind it.
+- `game/draw.cpp` (+22/-1 lines) - one added term,
+  `!ModernLaraHidden()`, on the single condition step 2 measured is every
+  path that draws her, classic and HD, the braid and the shadow included.
+- `specific/dxshell.cpp` (+54/-3 lines) - the right stick handed over as
+  AXES rather than only the four buttons Tank reads it as, and the d-pad
+  exposed as four more digital buttons for the pad table.
+- `specific/input.cpp` / `.h` (+135/-15, +2/-0 lines) - `ModernCameraStick`
+  fed from the right stick every poll; the modern pad set derived into
+  `jLayout[16..30]`; the d-pad's own +-20 signature erased from the
+  movement stick's local copy before either the classic direction-bit
+  assembly or `ModernUpdateInput` ever sees it.
+- `specific/LoadSave.cpp` (+2/-0 lines) - `ModernCameraResetOrbit()` beside
+  the existing `ModernResetControls()` on the Control-type row.
+- `game/modern_move.h` / `.cpp` (+70/-1, +288/-45 lines) - the water's own
+  turn table (`ModernStateIsSwim`, `ModernWaterTurnRate`,
+  `ModernWaterMove`), eight states retired out of `ModernStateIsClassic`
+  into it, and `ModernGroundTurn`'s clamp lifted into a shared
+  `ModernStepToward` both turns now call.
+- `game/modern_state.h` / `.cpp` (+5/-3, +151/-51 lines) - the water's one
+  write to the engine (the turn, the attitude, the bank, the stroke), and
+  this entry's own `MODERNLOG` fields (step 5, below).
+- `Preparation/Tools/Diagnose/ModernTest.cpp` / `bmt.bat` (+1,007/-27,
+  +5/-4 lines) - `camera_orbit`, `camera_pitch`, `camera_wall`,
+  `camera_hide`, `camera_seam`, `camera_camcut` and `water_move`; compiles
+  `game/modern_camera.cpp` beside `game/modern_move.cpp`, both engine files
+  linked whole and neither a copy of either.
+- `TOMB5 Code/tomb5.vcxproj` (+7/-0 lines) - `modern_camera.cpp` added the
+  way `modern_move.cpp` already was.
+
+**BYTE IDENTITY AT TANK.** Every statement this workflow adds to an existing
+engine file sits inside one of four shapes: a test on `ModernCameraActive()`
+(whose own first term is `tomb5.control_modern`) or on `tomb5.control_modern`
+directly; a new file nothing reaches without one of those two; menu/settings
+code, which the round's own rule exempts from needing a guard; or an
+unconditional write to a value nothing at Tank ever reads, named
+individually here rather than folded into the first three because that is
+the shape a careless read would miss:
+
+- `specific/dxshell.cpp`'s two new stick globals (`joystick_read_rx/ry`) and
+  its four new d-pad bits are written on every poll, unconditionally - there
+  is no other way to get the right stick's raw AXES out of the hardware
+  layer - but nothing at Tank reads any of them (grep-confirmed by step 2
+  and step 3's own reports).
+- `ModernCameraResetOrbit()` in `InitialiseCamera` runs on every level start
+  regardless of scheme, the same way the seven first-person reset lines
+  immediately above it already do; it touches only `game/camera.cpp`'s own
+  statics, so a player who never turns Modern on never has anything read
+  back out of them.
+- `DiscardedFixedCameraTimer()` (step 2) is the first-person hunk's own
+  three lines lifted into a function so the Modern branch beside it can
+  share them; the code path at Tank is the same lines in the same order,
+  merely under a name now.
+- The two step-5 log accessors (`ModernCameraLogState`,
+  `ModernCameraLogConfig`) are defined unconditionally, like every other
+  function in the file, but are called from nowhere except
+  `game/modern_state.cpp`'s own two `MODERNLOG` lines - which themselves
+  never run at Tank, because `ModernUpdateInput` is never called without
+  `tomb5.control_modern` on (the seam's own guard in `specific/input.cpp`,
+  unchanged since workflow A1). `gLogEnabled` gates them a second time on
+  top of that, so even under Modern they cost nothing when `-log` is off.
+
+**THE SEAM - EIGHT PLACES, AND DELIBERATELY NOTHING ELSE.** The orbit is not
+a new camera; it is `ChaseCamera` / `CombatCamera` with two of their own
+values sourced from a state. `game/camera.cpp` touches it in exactly eight
+places: the AXES (`ModernCameraStick`, fed from `specific/input.cpp` every
+poll, read by the orbit once per LOGIC tick - not the same thing, since the
+menus and the FMV loop call the input function in loops of their own); the
+TICK (`ModernCameraOrbit`, from whichever of `ChaseCamera`/`CombatCamera`
+runs); the ANGLE (`camera.target_angle = offset_yaw`, which
+`UpdateCameraElevation` already adds to her heading - the brief's own
+`yaw = lara.y_rot + offset_yaw` written into the engine's existing slot
+rather than beside it); the HEIGHT (`camera.target_elevation = offset_pitch`,
+REPLACING the two lines `ChaseCamera` opens with rather than adding to them,
+because those lines accumulate her slope pitch tick after tick and the
+orbit's own height must not); the WALL (`ModernCameraNoteWall`, after the
+collision has had its say - the collision mechanics themselves are not
+touched by a line); the DRAW (`ModernLaraHidden`, one predicate, one call
+site); the WATER (`ModernCameraSwimTarget`, step 4); and the LOG
+(`ModernCameraLogState` / `ModernCameraLogConfig`, step 5, this entry).
+
+**THE COMBAT CAMERA GETS THE ORBIT TOO, WHICH THE BRIEF DID NOT NAME AND
+MEASUREMENT DEMANDED.** `game/larafire.cpp` sets
+`camera.type = COMBAT_CAMERA` on every tick a weapon is ready and while one
+is being drawn, so with a gun out the CHASE camera simply does not run - an
+orbit built only
+into `ChaseCamera` would have stopped answering the right stick the instant
+the player armed himself, and the two lines it replaces would have aimed
+down her gun barrel instead. Both cameras get the identical two-line
+substitution and nothing else of either is touched; first person overrides
+both for the same reason.
+
+**THE WALL FEEDBACK SLEEPS UNDER A RADIUS OF 768**
+(`MODERN_CAM_ANGLE_RADIUS`, `game/camera.cpp`, half a sector) - a number the
+brief could not
+have named because it depends on a fact only the tree has: the horizontal
+radius `ModernCameraNoteWall` measures is `target_distance * cos(elevation)`,
+so at the pitch limit it shrinks to 134 units, where `CameraCollisionBounds`'
+own 384-unit push would read as a seventy-degree "displacement" of an angle
+that no longer means anything, because the camera is directly above her. 768
+is the radius at which that push is still under thirty degrees, reached at
+sixty degrees of pitch; below it the wall term is simply not asked.
+
+**EVERY CAMERA CONSTANT, WITH WHERE IT COMES FROM** (`game/modern_camera.h`
+carries the same table at greater length; row numbers are that file's own
+enum, not the design document's):
+
+| constant | value | origin |
+|---|---|---|
+| dead zone | 0 | the hardware hands us an already-zoned axis (XInput's own 7849/32767, DirectInput's own 150/1000), the same reasoning as A1's `MODERN_DEAD`. Play-test number - `rs=` is its diagnostic. |
+| yaw rate | 0x0444 = 1092 | **the brief's**: a full turn in 2 s at 30 Hz is exactly 65536/60. |
+| pitch rate | 0x0222 = 546 | the brief's, half the yaw rate: a half turn (the whole clamp) in the same 2 s. |
+| pitch clamp | -15470 / +15470 | **the camera's own** - `ChaseCamera`'s existing elevation clamp, 84.98 degrees, matching the brief's fallback guess of 85 to two decimal places. |
+| pitch home | -1820 | **the camera's own** resting elevation - `ChaseCamera`'s "if (!target_elevation) target_elevation = -1820", ten degrees above her, where TR5 has put the camera since 1999. Never 0, which that same line reads as "unset". |
+| return rate | 377 of 65536 | **measured**: a 90-degree offset is to halve in about 4 s of running; `1 - 2^(-1/120) = 0.0057595`, times 65536. Measured half-life: **122 ticks, 4.07 s**. Play-test number, moves in halves/doubles - `cam_off`/`cam_ret`/`cam_return` are its diagnostics. |
+| return floor | 4 | so the fall really arrives: under 174 units of offset the fraction floors to 0 and the camera would sit one degree off her back forever. Play-test number if the tail (below) is too long - `cam_return_min`. |
+| wall factor | 8 | **measured**: a FACTOR on the return rather than a second rate, so "faster than the return" survives any retuning of the return itself. Eight times 377 is a 14.7-tick (0.5 s) half-life. Play-test number - `cam_wall_factor`. |
+| wall dead zone | 0x0100 = 256 | the empty middle between arithmetic noise (about 0.04 deg/unit of rounding) and the smallest real displacement `CameraCollisionBounds` can produce (384 units, about 14 degrees). |
+| hide distance | 122 | **measured, from the brief's own origin**: the near clip plane (20 world units) plus her own standing radius (102) - the exact distance at which the plane stops being in front of her and starts being inside her. Play-test number, rises toward 384 in steps of 64 - `hide=` prints the live distance every tick, not only a flag. |
+| invert pitch | 0 (off) | **the camera's own**, not taste: the classic look camera already turns stick-forward into "look up" (`LookUpDown`), and looking up from an orbit is a POSITIVE elevation on a forward-negative stick - so the default subtracts. One line to flip if a play test reads it backwards - `cam_invert`. |
+| follow wall | 1 (on) | the wall's displacement is taken INTO the offset (observation 3); off, the camera fights the wall back to where the stick left it. |
+| pitch return | 0 (off) | the user described the YAW falling back and said nothing about the height; observation 2's rule for the unmentioned case is "stays where he put it". Real and testable with an explicit cfg; not what ships until asked for - `cam_pitch_return`. |
+| angle radius | 768 | **measured**, this file's own (above): half a sector, the radius at which the wall's own smallest push is still under 30 degrees. `cam_angle_radius`. |
+
+**THE WATER'S OWN CONSTANTS**, every one the ENGINE'S, measured out of
+`game/laraswim.cpp` and `game/larasurf.cpp` before a line of the translation
+was written, because the user's rule for the water is that it must feel like
+the land and not like something new:
+
+| constant | value | measured from |
+|---|---|---|
+| swim turn rate | 1092/tick (6 deg) | `LaraUnderWater`'s own ceiling on `lara.turn_rate`, the fastest TR5 has ever turned her under water |
+| surface turn rate | 728/tick | `lara_as_surftread` / `lara_as_surfswim`'s own direct write to `y_rot` |
+| surface side rate | 364/tick | `lara_as_surfback` / `surfleft` / `surfright`'s own |
+| swim pitch rate | 364/tick (2 deg) | `SwimTurn`'s own step for `IN_FORWARD`/`IN_BACK` - also the look camera's own rate |
+| swim pitch limits | -15470 / +15470 | `LaraUnderWater`'s own clamp on `x_rot` - the same number the chase camera clamps its elevation to |
+| swim roll rate | 546/tick | `SwimTurn`'s own bank while a turn bit is held; owed back because the direct turn takes the bits away |
+| auto stroke | 1 (on) | the user's own decision, not a measurement - a stick that moves her cannot also need the jump key held to make her move. 0 restores "jump = stroke" with the course still steering. |
+
+**THE CAMCUT PROOF, MEASURED AGAINST THE TREE AND NOT ASSERTED.** The
+round's own rule is that the orbit's per-tick step must not trip the 60 fps
+camera-cut detection. `camera_camcut()` sweeps the whole sphere (elevation
+`pitch_min..pitch_max`, angle 0..65535, both in steps of 128 - about 128,000
+sample pairs) at the chase radius, rebuilt and rerun for this record:
+
+```
+the worst tick of a fully pushed right stick moves the ideal eye
+  309 units (Manhattan) against INTERP_CAM_SNAP 1024 - a margin of 3.3
+the view-direction test (InterpCamAimCut) fires on 0 of the swept pairs
+the classic quadrant snap (vanilla's own, unrelated to the orbit) moves it 3072
+```
+
+The one thing that CAN still trip the interpolator's cut is vanilla's own
+quadrant snap - `ChaseCamera`'s five wall candidates include the four world
+cardinals, so the ideal can jump a whole 90 degrees in one tick if the
+nearest candidate changes. That is present at Tank today; the orbit does not
+add to it, it ABSORBS it (`ModernCameraNoteWall` feeds the displacement back
+into the offset rather than fighting it). One correction on the record:
+workflow A2 step 1 reasoned that the REAL eye moves less than the ideal
+because `MoveCamera` only damps a fraction of the way there each tick, and
+counted that as extra margin; step 2 measured that a first-order lag fed a
+constant velocity settles at that same velocity after the first few ticks,
+so the margin is the swept 3.3 and not larger. The refuted claim is not
+edited out of step 1's own file - it is corrected here and in the commit
+that found it, per this project's own rule that a wrong assumption is
+reported rather than quietly fixed.
+
+**THE MODERN PAD SET.** The right stick becomes the camera, so its four
+button roles (bits 16-19) are masked rather than raised in Modern; the
+medipacks move to the d-pad (bit 20 up, bit 21 down); the d-pad's own
+movement synthesis (A1's `ModernDPadToStick`) is retired - not merely its
+one call site, but the +-20 signature it depended on, erased upstream in
+`specific/input.cpp` before either the classic assembly or
+`ModernUpdateInput` can read it, because deleting only the function left an
+unboosted d-pad still reaching `IN_LEFT/RIGHT/FORWARD/BACK` through the
+"bits stand as the stick wrote them" fallback. The modern set is DERIVED,
+not a fifth hand-written table: `jLayout[16..30]` copies roles 0-12 straight
+from the SAME per-controller-style source Tank's own `ApplyJoyDefaults()`
+already resolves, and overrides only the two medipack roles - so it cannot
+drift from Tank's own thirteen choices on any future edit to those tables.
+Measured side by side for all four controller styles (`PS5-DInput`,
+`PS5-XInput`, `Xbox`, `Generic`): roles 0-12 identical in every style
+between Tank and Modern, roles 13/14 the only ones that differ, in every
+style alike (0 unexpected mismatches, checked programmatically). Toggling
+Control type does not itself re-apply the pad defaults - matching the
+existing precedent that switching `JoyStyle` does not either, only the
+explicit "Reset" row does for either kind of switch - so a player who
+switches to Modern without pressing Reset keeps whatever was bound before.
+
+**MODERNLOG**, extended rather than replaced, per the project's own rule
+that an existing diagnostic line is never thinned: the init line gains the
+seven camera constants a later play test is most likely to need read back
+rather than trusted from memory (the six named "measure" or a switch above,
+plus the wall's own angle radius); the tick line gains the orbit's own five
+state values, the measured hide distance, and the three the water writes.
+Both quoted exactly as the source now reads them (wrapped here for the
+page, not in the code):
+
+```
+MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d
+    jump_dir=%d cam_return=%d cam_return_min=%d cam_wall_factor=%d
+    cam_hide_dist=%d cam_invert=%d cam_pitch_return=%d cam_angle_radius=%d
+MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d
+    err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d yawd=%d
+    bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d
+    water=%d xrot=%d stroke=%d
+```
+
+`cam_off` / `cam_pitch` / `cam_ret` read ONE TICK BEHIND, exactly as `cam=`
+(the camera yaw) already does and for the identical reason: this line runs
+before `CalculateCamera`, so it reads what the orbit's LAST tick left, not
+this one's - the reset values on the first line after a cut. `rs=` is
+already this tick's own, because `specific/input.cpp` calls
+`ModernCameraStick()` earlier in the same `S_UpdateInput`. `hide=` is the
+RAW measured eye-to-target distance and not a flag, so a play test can watch
+it close on `cam_hide_dist` rather than only learn after the fact that it
+crossed - the same reasoning the header gave this constant its own
+measurement plan for. `water=`/`xrot=`/`stroke=` are step 4's locals, read
+back rather than recomputed: `water` is zero on land and the state's own
+swim turn rate under it, `xrot` is her attitude after the pointer has had
+its say, `stroke` is whether this tick held the jump key for her. Two new
+read-only accessors carry the numbers across the file boundary
+(`ModernCameraLogState`, `ModernCameraLogConfig`, `game/camera.cpp`) rather
+than exposing the orbit's statics directly - the same division of labour
+`ModernCameraSwimTarget` already keeps for step 4's one question.
+
+**THE TESTS.** `ModernTest` (`bmt.bat`) links no game, no level and no pad -
+only the engine's own `game/modern_move.cpp` and `game/modern_camera.cpp`,
+so a change to either decision tree is a change the test sees. Rebuilt and
+rerun for this record: **2,295 checks, 0 failed** (582 at base `22827e1` -
+workflow A1's own entry above stops at 513, and the nine commits of its fix
+round between that point and `22827e1` are what carry it to 582, confirmed
+by `git log`; then 636 after step 1's orbit, 2,174 after step 2's seam
+arithmetic, unchanged by step 3's pad table, 2,295 after step 4's water - and
+unchanged again by this step, which adds no pure arithmetic for a test to
+hold, only a record of what the engine already computed). Six new camera
+groups: `camera_orbit` (the stick moves the offset, standing keeps it,
+running brings it back at the measured half-life), `camera_pitch` (the
+limits, and that they never wrap), `camera_wall` (the offset takes a wall's
+angle and falls home faster while it lasts), `camera_hide` (the hard cut of
+observation 4), `camera_seam` (the two angle lines `game/camera.cpp` adds
+around the orbit) and `camera_camcut` (above) - plus step 4's own
+`water_move` (the course, the pitch mapping, the turn rates, all swept),
+already counted in the running total above. Of the five TROne expectations
+still not ours by name at the end of every run, this workflow closes none
+outright (they were
+always workflow B's, or - the world-space orbit and the degenerate camera's
+Lara-heading fallback - not closable by a tool with no engine linked); what
+it does close is the state-table and the direct-turn deferrals workflow A1
+still owed, plus its own two new deferrals (world-space orbit: not our
+model at all, named so nobody looks for it again).
+
+**WHAT ONLY THE PLAY TEST CAN TELL.** Whether `MODERN_CAMERA_RETURN` (the
+4.07 s half-life) feels right, or needs a halving/doubling either way -
+`cam_off`/`cam_ret`/the new `cam_return` init field are exactly for that.
+Whether `MODERN_CAMERA_WALL_FACTOR` (8) reads as the wall taking the camera
+rather than only a faster drift. Whether `MODERN_CAMERA_HIDE_DIST` (122)
+cuts cleanly or slices her open first, in which case it rises toward 384 in
+steps of 64. Whether `MODERN_CAMERA_INVERT_PITCH` (0) is backwards for this
+player - one line. Whether the pitch should return to level while running
+the way the yaw does (`MODERN_CAMERA_PITCH_RETURN`, ships off). Whether the
+exponential tail is a problem: a 90-degree offset halves in 4.07 s but only
+reaches exactly zero 622 ticks later (20.7 s more, 744 ticks / 24.8 s total) -
+if that never-quite-arriving last degree is noticed, the knob is
+`MODERN_CAMERA_RETURN_MIN`, not the rate. Whether `MODERN_WATER_AUTO_STROKE`
+(on) should give the jump key back as the stroke instead. Whether coming
+back out of a held look key - where the orbit is frozen rather than reset -
+feels like a jump. And whether the combat camera's own ceiling squeeze
+(vanilla's own protection in a crawlspace) is ever felt as one tick of a
+level camera while a gun is out; the orbit rewrites the pitch on the very
+next tick either way.
+
+**ONE THING NAMED FOR THE REVIEW RATHER THAN LEFT FOR IT TO FIND.** The
+water's `ModernWaterMove` asks `ModernCameraActive() ? ModernCameraSwimTarget()
+: lara_item->pos.x_rot` for its pointer target - in first person, where the
+orbit does not run, her own current attitude goes in, which asks for no
+change at all and leaves that one axis hers, while the flat course and the
+stroke still work there because both read the camera's HEADING, which first
+person has as much as the orbit does. That is the one place in this
+workflow where two different sources feed the same parameter depending on
+mode, and it is named here as well as at the call site.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

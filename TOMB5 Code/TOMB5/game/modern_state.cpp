@@ -191,9 +191,29 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * crouch" has the switch on the same line as the rate that would have
 		 * turned her. */
 		if (gLogEnabled)
-			Log("MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d jump_dir=%d",
+		{
+			/* THE ORBIT'S OWN SEVEN (round 161a2, step 5), the same discipline
+			 * as the five above: the live cfg game\camera.cpp seats, not the
+			 * raw enum in game\modern_camera.h, and only the numbers steps 1,
+			 * 2 and 4's own reports named as the play test's to move -
+			 * cam_return / cam_return_min, cam_wall_factor, cam_hide_dist,
+			 * cam_invert, cam_pitch_return - plus cam_angle_radius, which
+			 * step 2's own report named as owing a field and had none until
+			 * now. game\camera.h says which of MODERN_CAMERA_CFG's other
+			 * eight fields were left out and why. */
+			long cam_return, cam_return_min, cam_wall_factor, cam_hide_dist;
+			long cam_invert, cam_pitch_return, cam_angle_radius;
+
+			ModernCameraLogConfig(&cam_return, &cam_return_min, &cam_wall_factor,
+				&cam_hide_dist, &cam_invert, &cam_pitch_return, &cam_angle_radius);
+
+			Log("MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d "
+				"jump_dir=%d cam_return=%d cam_return_min=%d cam_wall_factor=%d "
+				"cam_hide_dist=%d cam_invert=%d cam_pitch_return=%d cam_angle_radius=%d",
 				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
-				modern_cfg.recenter, modern_cfg.jump_dir);
+				modern_cfg.recenter, modern_cfg.jump_dir, cam_return, cam_return_min,
+				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return, cam_angle_radius);
+		}
 
 		modern_tick = GlobalCounter;
 		modern_seen = 1;
@@ -420,14 +440,33 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * direct turn, because by the time this line runs the direct turn may
 	 * already have written a new heading. */
 	if (gLogEnabled)
+	{
+		/* THE ORBIT'S OWN FIVE (round 161a2, step 5), read back rather than
+		 * kept in a local of this function's own: game\camera.cpp owns the
+		 * one instance of both, the same division of labour camera_yaw above
+		 * already keeps with that file. cam_off/cam_pitch/cam_ret are one
+		 * tick behind, exactly as camera_yaw is and for the same reason
+		 * (this line runs before CalculateCamera); rs_x/rs_y are already
+		 * this tick's own (game\camera.cpp's own comment on
+		 * ModernCameraLogState says why). `hide` is the raw measured
+		 * distance and not a flag, so a play test can watch it close on
+		 * MODERN_CAMERA_HIDE_DIST rather than only learn that it crossed. */
+		short cam_off, cam_pitch;
+		long cam_ret, cam_rs_x, cam_rs_y;
+
+		ModernCameraLogState(&cam_off, &cam_pitch, &cam_ret, &cam_rs_x, &cam_rs_y);
+
 		Log("MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d "
 			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
-			"yawd=%d bits=%08lX",
+			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
+			"water=%d xrot=%d stroke=%d",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
 			modern_state.aligned, modern_state.blocked_count, out.blocked,
-			yaw, out.bits);
+			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
+			ModernLaraEyeDistance(), water, xrot, stroke);
+	}
 
 	return bits;
 }

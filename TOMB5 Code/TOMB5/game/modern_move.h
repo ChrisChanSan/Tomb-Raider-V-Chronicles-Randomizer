@@ -151,25 +151,30 @@ enum modern_constants
 	 * 33.9, rounded UP so that the radial zone is never narrower than the
 	 * hardware's own. Both pad paths use them, so the two feel the same.
 	 *
-	 * AND THE THIRD IS THIS USER'S PAD, which is why it is not 34. The
-	 * DirectInput right stick (lZ/lRz) rests OFF CENTRE on it, and that is the
-	 * whole reason its per-axis zone was 500 of 1000 where the left stick's is
-	 * 150 (specific\dxshell.cpp, whose comment says so). How far off it rests
-	 * was never MEASURED - that comment only claims 500 was wide enough - so
-	 * all this tree knows is that each axis rests inside 500, which in the
-	 * worst case is a radius of 707. 500/8 = 62 is the smallest radius that
-	 * holds a rest ON an axis, the case the comment describes, and it is what
-	 * the play test log shows as that stick's first live reading.
-	 * It stays until MODERNLOG's pad line prints the real rest position; a
-	 * resting stick that turns the camera on its own is the one failure this
-	 * zone exists to prevent, and it is worse than a wide zone.
-	 * EVEN AT 62 THE STICK GAINS: the old zone threw away every push whose
-	 * SMALLER component was under 500 - most of the travel in every direction
-	 * but the four cardinals - where this one throws away only pushes shorter
-	 * than 62 in any direction at all, and rescales what is left. */
+	 * AND THE THIRD USED TO BE A GUESS ABOUT THIS USER'S PAD, AND IS NOW THE
+	 * PAD ITSELF (round 161a3, item 7 - M9). The DirectInput right stick
+	 * (lZ/lRz) was believed to rest far OFF CENTRE, which is why its per-axis
+	 * zone is 500 of 1000 where the left stick's is 150 (specific\dxshell.cpp).
+	 * How far off it really rests had never been measured, so round 161a2b took
+	 * the widest rest that zone could be hiding - 500/8 = 62 - and said so.
+	 * MODERNLOG's pad line has now measured it over eight sessions: lx 0..2,
+	 * ly -9..10, rx 2..5, ry -6..2, all of 128. The stick rests within TEN
+	 * units of centre, not sixty-two, so the wide zone was eating a third of
+	 * the travel for a drift that is not there. 24 keeps twice the measured
+	 * worst rest as headroom and is still above the axis gate below.
+	 * The plan if the user ever reports drift: MODERNLOG prints rs= and pad=;
+	 * these three move back up in steps of 8, not straight to 62.
+	 *
+	 * AND THE LEFT STICK ON THAT PATH GETS ITS OWN (same measurement). The
+	 * DirectInput left stick rests inside 10 as well and its axis gate is 18,
+	 * so the shared radial 31 was throwing away every real push between 18 and
+	 * 31 - travel the hardware had already let through. 24 is above the gate
+	 * (nothing that was dead comes alive) and below the old 31. XInput keeps 31
+	 * and 34, which are that hardware's own published zones and not a guess. */
 	MODERN_DEAD_LEFT = 31,			// XInput's own 7849 of 32767, in this tree's /256 units
 	MODERN_DEAD_RIGHT = 34,			// XInput's own 8689 of 32767, same units
-	MODERN_DEAD_RIGHT_DINPUT = 62,	// this pad's off-centre rest: 500 of 1000, in the /8 units of that path
+	MODERN_DEAD_LEFT_DINPUT = 24,	// measured rest <= 10 of 128 (MODERNLOG pad), twice that as headroom
+	MODERN_DEAD_RIGHT_DINPUT = 24,	// the same pad, the same measurement (was 62, a worst case that never happened)
 
 	/* AND THE SQUARE THE HARDWARE ALREADY HELD, KEPT (round 161a2b, fix round;
 	 * the first version of item 6 shipped without it and that was a regression).
@@ -178,10 +183,12 @@ enum modern_constants
 	 * inside that square, so every rest position in its corners - up to A * 1.41
 	 * away - stopped being dead when the radial zone replaced it, and a pad
 	 * resting there would turn the camera by itself with nobody touching it.
-	 * That is the one failure the item names as unacceptable, and it is not
-	 * hypothetical on this user's pad: a DirectInput right stick resting at
-	 * (450, -450) of 1000 was silent before and reads 71 of 128 through a bare
-	 * radial 62.
+	 * That is the one failure the item names as unacceptable. (The worked
+	 * example that used to stand here - a right stick resting at (450, -450) of
+	 * 1000, silent before and 71 of 128 through a bare radial 62 - was the worst
+	 * case that zone was sized for, and round 161a3's M9 measured that it never
+	 * happens on this pad. The GATE is still right for the reason above; only
+	 * its width moved, below.)
 	 * SO BOTH ZONES ARE ASKED and the stick is dead in either: the square is
 	 * exactly what the hardware held, the disc is what the rescaling needs. The
 	 * axis snap item 6 exists to cure is untouched by the square, because a
@@ -192,11 +199,20 @@ enum modern_constants
 	 * gate covers every reading the hardware zone could swallow. Flooring can
 	 * cost a hair on the other side - an XInput axis one unit past its own zone
 	 * still reads 30 after the /256 - which is a unit of 128 in the corners
-	 * only, and it errs towards dead, which is the safe side of this one. */
+	 * only, and it errs towards dead, which is the safe side of this one.
+	 *
+	 * THE DIRECTINPUT RIGHT ONE IS NO LONGER THAT PATH'S 500 (round 161a3,
+	 * item 7), and the reason is a measurement of the read itself: since round
+	 * 161a2b specific\dxshell.cpp writes joystick_raw_rx/ry BEFORE its per-axis
+	 * 500 and the modern seam reads THAT pair (specific\input.cpp:827), so the
+	 * 500 never reaches the camera at all - it survives only for the four
+	 * bindable stick bits. Mirroring it here therefore held a square nothing
+	 * else holds any more, 62 wide on a stick that rests inside 10. 20 is the
+	 * same headroom as the radial 24 beside it, rounded to the axis. */
 	MODERN_DEAD_AXIS_LEFT = 30,				// XInput left, 7849 of 32767 in /256 units
 	MODERN_DEAD_AXIS_RIGHT = 33,			// XInput right, 8689 of 32767, same
-	MODERN_DEAD_AXIS_LEFT_DINPUT = 18,		// DirectInput left, 150 of 1000 in /8 units
-	MODERN_DEAD_AXIS_RIGHT_DINPUT = 62,		// DirectInput right, 500 of 1000, same
+	MODERN_DEAD_AXIS_LEFT_DINPUT = 18,		// DirectInput left, 150 of 1000 in /8 units - the hardware really holds this one
+	MODERN_DEAD_AXIS_RIGHT_DINPUT = 20,		// measured rest <= 10 of 128; that path's own 500 no longer reaches the seam
 
 	/* Row 5, MEASURE - ANSWERED BY THE FIRST PLAY TEST (2026-09-17). The RULE
 	 * was TROne's and came from play - under half deflection Lara walks -
@@ -309,18 +325,40 @@ enum modern_constants
 	MODERN_BLOCK_FRAMES = 6,
 	MODERN_BLOCK_EPS = 4,
 
-	/* Row 16, MEASURE, and the one number the user will want to change.
-	 * TROne write y_rot themselves at 3277 per tick, 18 degrees, because the
-	 * game's own fastest rate is not fast enough for the feel they were
-	 * after. Ours, measured in game\lara.cpp: run 1456 (8 degrees), walk 728,
-	 * turn on the spot 728 rising to 1456 in AS_FASTTURN, back 728, fast back
-	 * 1092, jump 546. So 3277 is 2.25 times anything vanilla does.
-	 * The other two candidates are written out below on purpose: the play
-	 * test picks one of the three and then it is frozen. MODERNLOG prints the
-	 * rate in its init line and the turn of each tick in yawd. */
-	MODERN_TURN_RATE = 3277,	// candidates: 1456 = vanilla's fastest, 2184, 3277 = TROne
+	/* Row 16, MEASURED - AND THE PLAY TEST HAS NOW PICKED IT (round 161a3,
+	 * item 2a). TROne write y_rot themselves at 3277 per tick, 18 degrees,
+	 * because the game's own fastest rate is not fast enough for the feel they
+	 * were after. Ours, measured in game\lara.cpp: run 1456 (8 degrees), walk
+	 * 728, turn on the spot 728 rising to 1456 in AS_FASTTURN, back 728, fast
+	 * back 1092, jump 546. So 3277 was already 2.25 times anything vanilla
+	 * does - and the second play test measured it as a LID THE THUMB RUNS PAST.
+	 *
+	 * WHAT THE LOG SAID (M2, M3 of the round's brief). His stick circles at 15
+	 * to 30 degrees a tick; her heading stepped at exactly 18.0 on 297 of 395
+	 * running ticks, so the error grew every tick the circle was faster than
+	 * she was, reached -150..-160 degrees, crossed 180 - and the shortest way
+	 * flipped: four windows of the log show her turning the OTHER way at 6 to 9
+	 * degrees a tick, twice ending in AS_SPLAT against a wall. "Wenn ich
+	 * anfange, den Stick schneller im Kreis zu drehen, bricht sie aus der
+	 * Rotation aus und laeuft random in eine Richtung oder bleibt stehen."
+	 *
+	 * AND WHAT THE REMASTER DOES, counted in the frames of his own video and
+	 * from no other source: one revolution on the spot in about 0.42 s, which
+	 * at 30 ticks a second is about 28 degrees a tick, and a half turn while
+	 * running in about 12 frames of 60 = 6 ticks, which is 30. ONE number
+	 * answers both, and it is this one: 65536/12 = 5461.33, so 5461.
+	 *
+	 * WHAT IT COSTS, named rather than discovered: 32768/5461 = 6.0004, so a
+	 * half turn is six ticks and a seventh tick of two units. 5462 would land
+	 * it in six exactly; 5461 is kept because 30.000 degrees is the number the
+	 * video was counted in and two units is a fiftieth of a degree.
+	 * The three older candidates stay named below so that swapping one back in
+	 * is a one-word edit, and MODERNLOG still prints the rate in its init line
+	 * and the turn of each tick in yawd. */
+	MODERN_TURN_RATE = 5461,	// 30 deg/tick, the Remaster's measured rate (M2/M3)
 	MODERN_TURN_RATE_VANILLA = 1456,
 	MODERN_TURN_RATE_MIDDLE = 2184,
+	MODERN_TURN_RATE_TRONE = 3277,	// 18 deg/tick - what rounds 161a to 161a2b shipped
 
 	/* The second gate of the direct turn, the user's decision 5: the write to
 	 * y_rot sits behind tomb5.control_modern AND behind this. One is the
@@ -329,13 +367,67 @@ enum modern_constants
 	 * rebuild of the scheme. Step 4 is the only reader. */
 	MODERN_DIRECT_TURN = 1,
 
-	/* Rows 17 and 18, read by step 4 as well. Past 90 degrees of error, and
-	 * only while she is really running, the whole turn is taken in one tick -
-	 * that is the instant about-turn, and it is deliberate. IN_FORWARD only
-	 * comes back when 45 degrees or less are left, so she never takes a step
-	 * in the wrong direction while the turn finishes. */
-	MODERN_SNAP_DELTA = 0x4000,
+	/* Rows 17 and 18, read by step 4 as well - AND ROW 17 IS GONE (round 161a3,
+	 * item 2b). MODERN_SNAP_DELTA used to be the instant about-turn: past 90
+	 * degrees of error, on a tick where the COURSE itself had jumped that far,
+	 * the whole turn was taken in ONE tick. The user played it and it is the
+	 * complaint: "Unsere Drehung ist noch sehr 'direkt', ich kann mich direkt
+	 * 180 Grad drehen. Im Remaster ist das ein fluessiger Turn. Das muessen wir
+	 * noch tweaken, weil es A unnatuerlich ist und B selbst das Interpolating
+	 * nicht hinterherkommt." M3 counted 36 one-tick steps over 30 degrees in
+	 * one session, 24 of them over 90, in AS_RUN and AS_DASH alike; his video
+	 * of the Remaster turns the same half circle over six ticks with the run
+	 * animation still playing. So a reversal is now turned at the rate like
+	 * everything else, and the constant is deleted rather than set to something
+	 * unreachable - a gate nobody can open is a gate nobody can read.
+	 *
+	 * ROW 18 STAYS AND GREW A TWIN. IN_FORWARD comes back when this much or
+	 * less of the turn is left, so she never takes a step in a direction the
+	 * stick points away from. While she is really RUNNING it is not asked at
+	 * all (round 161a2b, item 7a - the withheld bit was costing her a one-tick
+	 * AS_STOP), and standing it is now the wider of the two:
+	 *
+	 * WHY 90 DEGREES STANDING (round 161a3, item 2c). M4 measured 232 ticks in
+	 * AS_STOP where she stepped 18 degrees a tick with no direction bit at all
+	 * and never left the state - a standing pose spinning on the spot, because
+	 * a circling stick kept more than 45 degrees of error standing between her
+	 * and the IN_FORWARD that would have started the run. 90 is the safety line
+	 * and not a feel number: she still never starts a step toward a direction
+	 * the stick points AWAY from, so a ledge behind her stays safe when he
+	 * pushes away from it, and at 5461 a full about-turn now spends at most
+	 * three ticks over it. MODERNLOG's bits= is where that is read back. */
 	MODERN_SNAP_FORWARD = 0x2000,
+	MODERN_SNAP_FORWARD_STAND = 0x4000,
+
+	/* SHE STEERS IN THE AIR (round 161a3, item 4), MEASURE. "Im Remaster kann
+	 * sie auch nach dem Sprung in der Luft weiterhin nach links und rechts
+	 * lenken. Bei uns ist das noch wie in der Panzersteuerung sehr starr. ...
+	 * Lara kann dadurch einen viel weiteren Radius um eine Kante springen."
+	 *
+	 * WHAT THE CLASSIC HAS, measured routine by routine in game\lara.cpp before
+	 * this number was picked: lara_as_forwardjump (:851) is the ONLY airborne
+	 * state that reads a turn bit at all - it ramps lara.turn_rate by 409 a
+	 * tick against a cap of 546, and LaraAboveWater decays it by 364 in the
+	 * same tick, so what survives is 182 units, 1.0 degree a tick. M5 counted
+	 * it: seven jumps of 40 ticks turned between 1 and 36 degrees in total.
+	 * lara_as_reach (:2423), lara_as_swandive (:3186), lara_as_fastdive
+	 * (:3215), lara_as_upjump (:2881), lara_as_fastfall (:2159) and
+	 * lara_as_fallback (:703) read no direction bit whatsoever.
+	 *
+	 * SO ONLY STATE 3 GETS IT, and that is a decision per state and not an
+	 * oversight (ModernStateAllowsAirTurn carries the list): the reach is the
+	 * grab, and where her nose points decides which ledge lara_col_reach tests
+	 * against - turning her inside it would move the grab itself, which the
+	 * user did not ask for and the Remaster videos do not show. The dives and
+	 * the falls have no classic steering to widen either. The twist, the swan
+	 * dive and the grab keep reading their own bits untouched.
+	 *
+	 * 728 is 4 degrees a tick, four times what the classic manages, so a 40
+	 * tick jump can turn 160 degrees where it turned 36 - "ein viel weiterer
+	 * Radius um eine Kante" without her being able to spin in mid air. It is a
+	 * "measure ourselves" number: MODERNLOG's `air=` prints the step of every
+	 * tick it is applied, and `lara=` the heading it built. */
+	MODERN_AIR_TURN_RATE = 728,		// 4 deg/tick; the classic forward jump manages 182 (1 deg)
 
 	/* Full deflection in OUR units. specific\dxshell.cpp scales XInput's
 	 * -32768..32767 down by 256, so a fully pushed stick reads about 128; the
@@ -360,15 +452,46 @@ enum modern_constants
 	 * and lara_as_surfswim (larasurf.cpp:207, :315), 364 in the three side and
 	 * back strokes (:234, :258, :282). Each state therefore gets its own
 	 * number rather than an average of them - ModernWaterTurnRate is the
-	 * table. */
-	MODERN_SWIM_TURN_RATE = 1092,	// LaraUnderWater's own ceiling on lara.turn_rate
-	MODERN_SURF_TURN_RATE = 728,	// lara_as_surftread / lara_as_surfswim
+	 * table.
+	 *
+	 * AND UNDER WATER THAT ENGINE NUMBER WAS A LID, NOT A SPEED (round 161a3,
+	 * item 6). "Der Wendekreis unter Wasser ist noch zu hoch, der ist im
+	 * Remaster auch auf der Stelle. Auch die allgemeine Dynamik: es fuehlt sich
+	 * noch ein bisschen sluggish an." M7 measured 319 of 452 water ticks
+	 * stepping at exactly 6 degrees, with the error while pushed at a median of
+	 * 44 and a p90 of 133 degrees - up to 59 ticks in a row over 45. 1092 is
+	 * where SwimTurn's RAMP stops (409 a tick into lara.turn_rate, clamped at
+	 * +-1092, decayed 364 by LaraUnderWater): the ceiling of an accumulator the
+	 * modern path does not use at all, because game\modern_state.cpp writes
+	 * y_rot itself and zeroes lara.turn_rate. Nothing else in the water holds
+	 * the heading down - measured: LaraUnderWater's only other clamps are on
+	 * x_rot (+-15470) and z_rot (+-4004), and neither touches y_rot - so a new
+	 * rate really arrives in `lara=`. 2730 is 15 degrees a tick, half the
+	 * land's 30 because she is swimming and not running, and it settles a half
+	 * turn in 13 ticks where the lid took 31.
+	 *
+	 * THE SURFACE KEEPS ITS OWN, and that is a measurement too: there the
+	 * states write y_rot directly (728 per tick in lara_as_surftread and
+	 * lara_as_surfswim, 364 in the three side and back strokes, larasurf.cpp),
+	 * with no accumulator and no clamp anywhere. 728 is therefore a RATE and
+	 * not a lid, so there is nothing there to lift, and the user's sentence is
+	 * about "unter Wasser". If the play test finds treading sluggish too, these
+	 * two are where it is answered.
+	 *
+	 * THE BANK IS UNCHANGED AND STAYS PLAUSIBLE: the roll is 546 a tick while
+	 * the turn runs against LaraUnderWater's 364 of decay, so she leans by 182
+	 * a tick whatever the rate is, and a faster turn simply finishes before the
+	 * +-4004 clamp is reached - 13 ticks of 182 is 2366, a shallower lean and
+	 * no snap of z_rot. */
+	MODERN_SWIM_TURN_RATE = 2730,	// 15 deg/tick; the old 1092 was SwimTurn's accumulator ceiling
+	MODERN_SURF_TURN_RATE = 728,	// lara_as_surftread / lara_as_surfswim - a real rate, not a lid
 	MODERN_SURF_SIDE_RATE = 364,	// lara_as_surfback / surfleft / surfright
 
 	/* The pitch. SwimTurn's own step for IN_FORWARD/IN_BACK is 364 a tick, 2
 	 * degrees, which is also the look camera's rate - so following the orbit
-	 * costs exactly as long as pitching by hand used to. The limits are
-	 * LaraUnderWater's own clamp on x_rot (laraswim.cpp:593-596).
+	 * used to cost exactly as long as pitching by hand does (see the doubling
+	 * at the foot of this block). The limits are LaraUnderWater's own clamp on
+	 * x_rot (laraswim.cpp:593-596).
 	 *
 	 * THE TWO CLAMPS ARE NOT THE SAME RANGE, and the first version of this
 	 * comment said otherwise (#161, round 161a2, fix round - the review's fifth
@@ -387,8 +510,17 @@ enum modern_constants
 	 * the LAND camera's sake, and the water pays for it because it borrows that
 	 * same elevation as a pointer. If the play test finds diving shallow, HERE
 	 * is where it is answered - the water can map its own range out of the
-	 * camera's - and not by giving the sphere its cap back. */
-	MODERN_SWIM_PITCH_RATE = 364,
+	 * camera's - and not by giving the sphere its cap back.
+	 *
+	 * AND THE PITCH IS DOUBLED WITH THE TURN (round 161a3, item 6, the second
+	 * half of "es fuehlt sich noch ein bisschen sluggish an"). 364 was SwimTurn's
+	 * own step for IN_FORWARD/IN_BACK, and it is a real engine rate rather than a
+	 * lid - but it is the rate of a bit being HELD, where ours is a pointer the
+	 * body chases, and at 364 the body needs 43 ticks to follow the stick from
+	 * level to straight up while the stick gets there in three. 728 is 4 degrees
+	 * a tick and halves that to 22; it is a "measure ourselves" number, and
+	 * MODERNLOG's own x_rot in `lara=` together with cam_pitch is what shows it. */
+	MODERN_SWIM_PITCH_RATE = 728,	// 4 deg/tick; SwimTurn's own held-bit step was 364
 	MODERN_SWIM_PITCH_MIN = -15470,
 	MODERN_SWIM_PITCH_MAX = 15470,
 
@@ -465,8 +597,9 @@ struct MODERN_CFG
 	long block_eps;		// step 4: world units that still count as not moving
 	long turn_rate;		// step 4: the direct turn, units per tick
 	long direct_turn;	// step 4: the direct turn's own gate
-	long snap_delta;	// step 4: error above which the turn is taken at once
 	long snap_forward;	// step 4: error under which IN_FORWARD comes back
+	long snap_forward_stand;// step 4: the same, in the four turn-on-the-spot states
+	long air_turn_rate;	// the forward jump's own turn, units per tick; 0 switches it off
 	long stick_full;	// full deflection in our units
 	long swim_turn_rate;// step 4: the direct turn under water, units per tick
 	long surf_turn_rate;// step 4: the same on the surface, treading and swimming
@@ -513,6 +646,19 @@ struct MODERN_STATE
 	 * means the first push has nothing to be a flick against. */
 	short last_course;
 	long have_course;
+
+	/* WHICH WAY THE MODERN TURN LAST MOVED HER, -1, 0 or 1 (round 161a3, #161
+	 * item 2b). Exactly half a turn is the same angle to the left and to the
+	 * right, and the wrap of a 16-bit angle answers -32768 for both - so
+	 * without a memory every exact reversal would go left by arithmetic
+	 * accident, and a reversal that arrived at 180 again on the next tick could
+	 * change its mind halfway and stand still. This is the tie-break, and it is
+	 * the turn's own last direction rather than the stick's for a measured
+	 * reason: on the tick a flick crosses the centre BOTH the course step and
+	 * the stick step wrap to -32768 as well, so there is nothing in the stick
+	 * left to read. It also keeps the swing monotone across a takeoff, because
+	 * the air turn reads and writes the same field. */
+	long last_turn;
 };
 
 /* What the caller knows about Lara this tick. A struct of zeroes gives plain
@@ -556,9 +702,14 @@ long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_
 long ModernStateIsGroundIdle(short anim_state);
 long ModernStateIsStanding(short anim_state);
 long ModernStateIsRunning(short anim_state);
+long ModernStateIsSpotTurn(short anim_state);
 long ModernStateAllowsDirectTurn(short anim_state);
+long ModernStateAllowsAirTurn(short anim_state);
 long ModernGroundTurn(short anim_state, long delta, long rate);
+long ModernGroundTurnBiased(short anim_state, long delta, long rate, long bias);
 long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
+	MODERN_RESULT* out, long* yaw_delta);
+long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
 	MODERN_RESULT* out, long* yaw_delta);
 long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, long bits);
 void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, long stick_y,

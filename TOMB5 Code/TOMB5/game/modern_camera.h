@@ -345,6 +345,49 @@ enum modern_camera_constants
 	 * and not to absorb it here. */
 	MODERN_CAMERA_PITCH_RETURN = 0,
 
+	/* AN ANIMATION ABOUT-TURN TAKES THE CAMERA WITH IT (round 161a3, item 5,
+	 * the user's observation 6). "Im Remaster dreht sich die Kamera automatisch
+	 * mit Lara mit und richtet sich hinter ihr wieder aus. Das ist nicht immer
+	 * die gleiche Richtung und auch nicht immer der gleiche Winkel, das ist
+	 * mehr dynamisch als statisch. Bei uns bleibt die Kamera in jedem Fall
+	 * immer da, wo sie war. Das wird immer dann ein Problem, wenn Lara nach
+	 * einer Drehung springen will: dann ist der relative Winkel zu Lara
+	 * invertiert und sie springt in eine falsche Richtung."
+	 *
+	 * IT IS ITEM 1's OWN RULE THAT PRODUCES IT, and that is why the answer is
+	 * here and not a retreat from item 1: the world yaw does not move when she
+	 * turns, which is exactly right while the STICK is steering her - and an
+	 * ANIMATION that flips her 180 degrees in one tick is not steering at all.
+	 * M6 counted 25 such flips in one session, every one with the modern turn
+	 * innocent (`yawd=0`): the ground roll (state 45 -> 23), the jump twist
+	 * (3 -> 3) and the underwater roll (66 -> 66). After each, cam_off went from
+	 * about 0 to about 180 - the camera in front of her face - and the slow
+	 * return took it back by under 30 degrees in 40 ticks.
+	 *
+	 * THE THRESHOLD IS 150 DEGREES IN ONE TICK. The three flips are all 180;
+	 * the modern turn's own biggest step is 30 (MODERN_TURN_RATE) and the
+	 * classic automaton's is 8, so anything over 150 in a single tick is an
+	 * animation and nothing else. 65536 * 150 / 360 = 27306.67, so 27307.
+	 *
+	 * AND IT IS PAID OUT OVER 20 TICKS, 0.67 s, which is the middle of the
+	 * 0.6 to 0.75 s his own Remaster videos take to sit behind her again
+	 * (anim_rem_roll.png, anim_rem_saltos.png). It is a "measure ourselves"
+	 * number: MODERNLOG's `carry=` prints what is still pending every tick, so
+	 * the curve can be read back and this moved in fives.
+	 *
+	 * THE PROFILE IS EASED and not linear, for the reason the eye can see: a
+	 * linear swing starts and stops at full speed, which reads as two cuts with
+	 * a pan between them. 3u^2 - 2u^3 starts and ends at nothing, and its
+	 * steepest tick is 1.5 times the average - 2456 units at the half turn,
+	 * which at the orbit's own radius moves the eye by about 360 units, a third
+	 * of INTERP_CAM_SNAP, so the interpolator never reads the swing as a cut.
+	 * MODERN_CAMERA_CARRY_ONE is the fixed point the profile is computed in:
+	 * 4096ths, small enough that total * profile stays inside a long at any
+	 * carry_ticks a setting could hold, exact at both ends. */
+	MODERN_CAMERA_CARRY_FLIP = 27307,	// 150 deg in one tick: an animation, never a turn
+	MODERN_CAMERA_CARRY_TICKS = 20,		// 0.67 s at 30 Hz - the Remaster's own 0.6 to 0.75
+	MODERN_CAMERA_CARRY_ONE = 4096,		// the eased profile's fixed point
+
 	/* HOW FAR THE EYE MAY BE FROM HER AND STILL BE ORBITING HER AT ALL, the
 	 * outer bound game\camera.cpp's ModernCameraLeadEye needs. Eight sectors is
 	 * five times the orbit's own radius of 1536: past that the eye is not
@@ -389,6 +432,8 @@ struct MODERN_CAMERA_CFG
 	long pitch_return;	// 1 = the pitch falls back to pitch_home as well
 	long wall_factor;	// how much faster the return runs while a wall clips the eye
 	long hide_dist;		// eye-to-Lara distance under which she is not drawn
+	long carry_flip;	// heading change in one tick that counts as an animation about-turn
+	long carry_ticks;	// how many ticks the swing that follows it is paid out over; 0 = off
 };
 
 /* Where the camera stands and what the last tick did to it. game\camera.cpp
@@ -419,9 +464,19 @@ struct MODERN_CAMERA_STATE
 	long wall;			// 1 = the eye was CLIPPED this tick, so the return ran fast
 	long ret;			// the return step this tick, signed - MODERNLOG cam_ret
 	long steering;		// 1 = the stick was out, so the return stood still
+
+	/* THE SWING AN ANIMATION ABOUT-TURN OWES (round 161a3, item 5). `carry` is
+	 * what is still pending, signed, and is MODERNLOG's `carry=`; the other two
+	 * are how the eased profile knows where it is. All three are cleared
+	 * together, by the last tick of the swing or by the stick cancelling it. */
+	long carry;			// units of world yaw still to be paid out
+	long carry_total;	// the whole swing, so the profile is measured from its start
+	long carry_tick;	// how many of carry_ticks have been paid
 };
 
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg);
+void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state, long flip);
+long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick);
 void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate);
 void ModernCameraReset(MODERN_CAMERA_STATE* state);
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,

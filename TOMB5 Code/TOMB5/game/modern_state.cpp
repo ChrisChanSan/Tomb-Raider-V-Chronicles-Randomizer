@@ -537,13 +537,13 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * direct turn, because by the time this line runs the direct turn may
 	 * already have written a new heading.
 	 *
-	 * `cstep` IS THE NEW BEHAVIOUR'S OWN FIELD (round 161a2b, #161 item 7b):
-	 * how far the COURSE itself moved this tick, which is what the instant
-	 * about-turn now needs to see over snap_delta before it fires. It is the
-	 * one number that separates a flick of the thumb from error that piled up
-	 * while the stick outran her turn, so a next play test can grep the spin
-	 * complaint straight out of it: a smooth circle holds `cstep` near the
-	 * stick's own step a tick, and only a flick shows a figure over 16384.
+	 * `cstep` is how far the COURSE itself moved this tick (round 161a2b, #161
+	 * item 7b). It was the instant about-turn's second condition until round
+	 * 161a3 deleted that rule (item 2b - a reversal is turned at the rate like
+	 * everything else now), and it stays as a LOG FIELD, because it is still
+	 * the one number that separates a flick of the thumb from error that piled
+	 * up while the stick outran her turn: a smooth circle holds `cstep` near
+	 * the stick's own step a tick, and only a flick shows a figure over 16384.
 	 *
 	 * `cam_world` AND `clip` ARE THE LINE'S LAST TWO, AFTER `cstep` AND NOT
 	 * BEFORE IT (round 161a2b, items 1 and 3): cstep already sat at the tick

@@ -206,8 +206,9 @@ void ModernDefaults(MODERN_CFG* cfg)
 	cfg->block_eps = MODERN_BLOCK_EPS;
 	cfg->turn_rate = MODERN_TURN_RATE;
 	cfg->direct_turn = MODERN_DIRECT_TURN;
-	cfg->snap_delta = MODERN_SNAP_DELTA;
 	cfg->snap_forward = MODERN_SNAP_FORWARD;
+	cfg->snap_forward_stand = MODERN_SNAP_FORWARD_STAND;
+	cfg->air_turn_rate = MODERN_AIR_TURN_RATE;
 	cfg->stick_full = MODERN_STICK_FULL;
 	cfg->swim_turn_rate = MODERN_SWIM_TURN_RATE;
 	cfg->surf_turn_rate = MODERN_SURF_TURN_RATE;
@@ -240,6 +241,7 @@ void ModernResetState(MODERN_STATE* state)
 	state->last_mode = MODERN_MODE_OFF;
 	state->last_course = 0;
 	state->have_course = 0;
+	state->last_turn = 0;
 }
 
 /* THE STATES THAT STAY CLASSIC (round 161a step 3).
@@ -537,6 +539,42 @@ long ModernStateIsRunning(short anim_state)
 	return (anim_state == 1 || anim_state == 73) ? 1 : 0;
 }
 
+/* IS SHE TURNING ON THE SPOT (round 161a3, #161 item 2c)? The four states in
+ * which the classic automaton's own turn-on-the-spot lives and nothing is
+ * carrying her anywhere: 2 AS_STOP, 6 AS_TURN_R, 7 AS_TURN_L, 20 AS_FASTTURN.
+ *
+ * They are the four that get the WIDER IN_FORWARD gate (snap_forward_stand).
+ * M4 measured why: 232 ticks in AS_STOP stepping 18 degrees a tick with no
+ * direction bit at all, because a circling stick kept more than 45 degrees
+ * between her and the bit that starts the run - "dreht sie sich zwar 360 Grad
+ * im Kreis, aber ohne ihre echte Animation". With 90 degrees she is running
+ * within a few ticks of any reversal, and the run animation is what turns.
+ *
+ * IT IS NOT ModernStateIsGroundIdle, which also holds 12 AS_SPLAT and 14
+ * AS_LAND: those two are a wall and a landing, one or two ticks each with her
+ * weight still being caught, and the narrow 45 degrees is right there - the
+ * step she would take is a step out of a pose she has not finished. Nor is it
+ * ModernStateIsStanding (2/14/15), which answers a different question, "can
+ * she jump from here". Three predicates, three questions. */
+long ModernStateIsSpotTurn(short anim_state)
+{
+	return (anim_state == 2 || anim_state == 6 || anim_state == 7 ||
+		anim_state == 20) ? 1 : 0;
+}
+
+/* WHICH AIRBORNE STATE SHE MAY STEER IN (round 161a3, #161 item 4). One: 3
+ * AS_FORWARDJUMP, because it is the one the classic engine itself steers -
+ * lara_as_forwardjump is the only routine in game\lara.cpp that reads IN_LEFT
+ * or IN_RIGHT while she is off the ground (see MODERN_AIR_TURN_RATE in the
+ * header for the measurement, routine by routine, and for why the reach, the
+ * dives and the falls are deliberately not here). Widening what the engine
+ * already does is item 4; giving her a new ability in a state that never had
+ * one is not. */
+long ModernStateAllowsAirTurn(short anim_state)
+{
+	return (anim_state == 3) ? 1 : 0;	// AS_FORWARDJUMP, lara_as_forwardjump
+}
+
 /* THE DIRECT TURN, THE ARITHMETIC HALF (design section 1.4 step 6, and the
  * user's decision 5). Everything below is numbers; the one line that writes
  * lara_item->pos.y_rot is game\modern_state.cpp.
@@ -608,12 +646,23 @@ long ModernStateAllowsDirectTurn(short anim_state)
  * The rate is clamped to half a turn as well. Nothing sets it that high, but
  * a rate over 0x8000 would make "clamp the error to the rate" meaningless
  * and the clamp costs one comparison. */
-static long ModernStepToward(long delta, long rate)
+static long ModernStepTowardBiased(long delta, long rate, long bias)
 {
 	delta = ModernWrap(delta);
 
 	if (rate > 0x4000L)
 		rate = 0x4000L;
+
+	/* EXACTLY HALF A TURN IS THE SAME ANGLE EITHER WAY ROUND (round 161a3,
+	 * item 2b), and ModernWrap has to answer one of them: it answers -32768,
+	 * because that is the only one a short can hold. Left is therefore what
+	 * every exact reversal would take by arithmetic accident rather than by a
+	 * decision - so the caller's bias, which is the turn's own last direction
+	 * (MODERN_STATE::last_turn), gets the casting vote here and the reversal
+	 * stays monotone. With no bias at all the arithmetic keeps its answer,
+	 * which is a fixed side and is all a tie needs. */
+	if (delta == -0x8000L && bias > 0)
+		return rate;
 
 	if (delta > rate)
 		return rate;
@@ -624,6 +673,11 @@ static long ModernStepToward(long delta, long rate)
 	return delta;
 }
 
+static long ModernStepToward(long delta, long rate)
+{
+	return ModernStepTowardBiased(delta, rate, 0);
+}
+
 /* How far she may turn this tick: the step above, and zero wherever the write
  * is not allowed. `rate` 0 gives 0 everywhere, which is the whole feature
  * switched off and the turn bits back in charge - that is what
@@ -631,10 +685,21 @@ static long ModernStepToward(long delta, long rate)
  * constant read in here. */
 long ModernGroundTurn(short anim_state, long delta, long rate)
 {
+	return ModernGroundTurnBiased(anim_state, delta, rate, 0);
+}
+
+/* The same, with the tie at exactly half a turn handed to a side (round 161a3,
+ * item 2b - see ModernStepTowardBiased for why a tie exists at all). It is a
+ * second function rather than a fourth argument on the first because
+ * ModernGroundTurn is the shape TROne's own expectations are written in, and a
+ * test that has to pass a bias it does not care about is a test about the
+ * wrong thing. */
+long ModernGroundTurnBiased(short anim_state, long delta, long rate, long bias)
+{
 	if (rate <= 0 || !ModernStateAllowsDirectTurn(anim_state))
 		return 0;
 
-	return ModernStepToward(delta, rate);
+	return ModernStepTowardBiased(delta, rate, bias);
 }
 
 /* THE DIRECT TURN'S WHOLE DECISION, in one place so that a test can drive it
@@ -655,27 +720,29 @@ long ModernGroundTurn(short anim_state, long delta, long rate)
  * ...AND SINCE ROUND 161a2b (#161 item 7a) NOT WHILE SHE IS RUNNING. See
  * ModernStateIsRunning above for the measurement: there the withheld bit was
  * costing her a one-tick AS_STOP every time the stick outran her turn, which
- * the player sees as a stumble. Every other allowed state keeps the rule.
+ * the player sees as a stumble. Every other allowed state keeps the rule, and
+ * the four turn-on-the-spot states keep it at twice the width
+ * (ModernStateIsSpotTurn, round 161a3 item 2c).
  *
- * THE INSTANT ABOUT-TURN. Past 90 degrees of error the whole turn is taken in
- * ONE tick - but only while she is REALLY running. TROne measured why:
- * standing still, a one-tick reversal is spent before the player has both
- * BACK and JUMP down, so the back flip becomes unreachable and every jump
- * goes forward. Standing, the bounded rate therefore stands, and a half turn
- * takes ten ticks - time enough to press the two together.
+ * THE INSTANT ABOUT-TURN IS GONE (round 161a3, #161 item 2b), and this is
+ * where it used to be: past 90 degrees of error, on a tick where the course
+ * itself had jumped that far, the whole turn was taken in ONE tick. TROne
+ * built it, round 161a2b put the course's own step in front of it so that a
+ * circling stick could not trigger it by accumulation, and the second play
+ * test then measured what was left and it was still the user's complaint - 36
+ * one-tick steps over 30 degrees, 24 of them over 90, "es ist A unnatuerlich
+ * und B selbst das Interpolating kommt nicht hinterher". His Remaster video
+ * turns the same half circle over six ticks with the run animation playing.
  *
- * AND IT NEEDS A FLICK, NOT JUST AN ERROR (round 161a2b, #161 item 7b). The
- * error alone was the wrong question: while the stick circles at 21 degrees a
- * tick and she turns at 18, the error grows by 3 a tick whatever the player
- * does, so after seven seconds of circling it crosses 90 and the whole of it
- * is taken in one tick - a jerk in the middle of a smooth spin, measured four
- * times in play test 2 (yawd -17220, -16431, -17970, -16955). So the error
- * keeps its say and the COURSE's own step gets a veto: the about-turn fires
- * only when the course JUMPED by more than snap_delta since the last active
- * tick, which is a thumb flicking the stick across and never an accumulation.
- * The two conditions together are a strict subset of the old one - no tick
- * snaps now that would not have snapped before - so the rule can only have
- * taken jerks away and cannot have added one. */
+ * SO A REVERSAL IS NOW TURNED AT THE RATE LIKE EVERYTHING ELSE, which needed
+ * exactly two things beside deleting the branch: the rate is the Remaster's
+ * own 5461 (item 2a), so a half turn costs six ticks and not eighteen, and the
+ * tie at exactly 180 degrees is decided rather than left to the wrap
+ * (ModernStepTowardBiased and MODERN_STATE::last_turn). What the deletion
+ * cannot take away is that a turn now takes TIME: the back flip out of a stand
+ * is easier to reach than it was, not harder, because she no longer arrives
+ * before the player has BACK and JUMP down - which is the case TROne built the
+ * whole rule for in the first place. */
 long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
 	MODERN_RESULT* out, long* yaw_delta)
 {
@@ -723,18 +790,21 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	if (!ModernStateAllowsDirectTurn(sit->anim_state))
 		return 0;
 
-	yaw = ModernGroundTurn(sit->anim_state, out->delta, cfg->turn_rate);
+	yaw = ModernGroundTurnBiased(sit->anim_state, out->delta, cfg->turn_rate,
+		state ? state->last_turn : 0);
 
-	if (ModernAbs(out->delta) > cfg->snap_delta &&
-		ModernAbs(out->course_step) > cfg->snap_delta &&
-		!ModernStateIsStanding(sit->anim_state))
-		yaw = out->delta;
-
-	remaining = ModernAbs((long)out->delta - yaw);
+	/* WRAPPED, and it has to be since the tie-break exists: with a delta of
+	 * exactly -32768 taken to the RIGHT, delta minus yaw is 38229, which is
+	 * not 150 degrees of anything - it is 210 degrees measured the long way
+	 * round. Every other tick has yaw on delta's own side and the wrap costs
+	 * nothing. */
+	remaining = ModernAbs(ModernWrap((long)out->delta - yaw));
 
 	out->bits &= ~(long)MODERN_DIR_MASK;
 
-	if (remaining <= cfg->snap_forward || ModernStateIsRunning(sit->anim_state))
+	if (remaining <= (ModernStateIsSpotTurn(sit->anim_state) ?
+			cfg->snap_forward_stand : cfg->snap_forward) ||
+		ModernStateIsRunning(sit->anim_state))
 		out->bits |= MODERN_IN_FORWARD;
 
 	out->turning = (remaining > 0) ? 1 : 0;
@@ -743,7 +813,81 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	 * just taken the turning away from it. Leaving the flag set would keep
 	 * IN_FORWARD off for ticks after the turn is done. */
 	if (state)
+	{
 		state->spin = 0;
+		state->last_turn = (yaw > 0) ? 1 : ((yaw < 0) ? -1 : 0);
+	}
+
+	if (yaw_delta)
+		*yaw_delta = yaw;
+
+	return 1;
+}
+
+/* THE SAME THING IN THE AIR (round 161a3, #161 item 4, the user's word 5).
+ *
+ * "Im Remaster kann sie auch nach dem Sprung in der Luft weiterhin nach links
+ * und rechts lenken. Bei uns ist das noch wie in der Panzersteuerung sehr
+ * starr. ... Lara kann dadurch einen viel weiteren Radius um eine Kante
+ * springen."
+ *
+ * It is ModernDirectTurn's shape with three differences, and each of them is a
+ * measurement rather than a taste:
+ *   THE STATE LIST is one state long (ModernStateAllowsAirTurn), because the
+ *					classic steers exactly one airborne state and item 4 widens
+ *					what the engine does rather than inventing a new ability.
+ *   THE BITS		only IN_LEFT and IN_RIGHT go. In the air the rest of the
+ *					word is not a direction at all: lara_as_forwardjump reads
+ *					IN_BACK as the twist, IN_WALK as the swan dive and
+ *					IN_ACTION as the grab, and the user asked for none of them
+ *					to change. IN_FORWARD it does not read at all, so leaving
+ *					it costs nothing and keeps the bits the same shape the
+ *					ground tick before the jump had.
+ *   NO FORWARD		there is no step to withhold and nothing to withhold it
+ *		GATE		from - her feet are not on anything.
+ *
+ * The gate is the rate: air_turn_rate 0 is the feature switched off and the
+ * classic 1 degree a tick back in charge, which is how a play test bisects
+ * "is the jump wrong, or is the steering wrong". Returns 1 when it has taken
+ * the tick; then the caller adds `yaw_delta` to y_rot and zeroes
+ * lara.turn_rate, exactly as it does on the ground. */
+long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
+	MODERN_RESULT* out, long* yaw_delta)
+{
+	MODERN_CFG spare_cfg;
+	long yaw;
+	long remaining;
+
+	if (yaw_delta)
+		*yaw_delta = 0;
+
+	if (!out || !out->active || out->mode != MODERN_MODE_RUN)
+		return 0;
+
+	if (!cfg)
+	{
+		ModernDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	if (!sit || sit->classic)
+		return 0;
+
+	if (cfg->air_turn_rate <= 0)
+		return 0;
+
+	if (!ModernStateAllowsAirTurn(sit->anim_state))
+		return 0;
+
+	yaw = ModernStepTowardBiased(out->delta, cfg->air_turn_rate,
+		state ? state->last_turn : 0);
+	remaining = ModernAbs(ModernWrap((long)out->delta - yaw));
+
+	out->bits &= ~(long)(MODERN_IN_LEFT | MODERN_IN_RIGHT);
+	out->turning = (remaining > 0) ? 1 : 0;
+
+	if (state)
+		state->last_turn = (yaw > 0) ? 1 : ((yaw < 0) ? -1 : 0);
 
 	if (yaw_delta)
 		*yaw_delta = yaw;

@@ -287,12 +287,24 @@ static void bit_values()
 		ok(cfg.block_frames == 6, "six ticks make a block", cfg.block_frames, 6);
 		ok(cfg.block_eps == 4, "four world units still count as not moving",
 			cfg.block_eps, 4);
-		ok(cfg.turn_rate == 3277, "the direct turn's rate (TROne parity)", cfg.turn_rate, 3277);
+		/* ROUND 161a3 (#161 item 2a): 3277 was TROne's own 18 degrees a tick and
+		 * the play test measured it as a lid the thumb runs past (M2/M3). 5461
+		 * is 30 degrees, counted out of the user's own Remaster videos - a spin
+		 * on the spot in 0.42 s and a running half turn in six ticks. */
+		ok(cfg.turn_rate == 5461, "the direct turn's rate, the Remaster's own 30 deg/tick",
+			cfg.turn_rate, 5461);
 		ok(cfg.direct_turn == 1, "the direct turn's own gate is on", cfg.direct_turn, 1);
-		ok(cfg.snap_delta == 0x4000, "past 90 degrees the turn is taken at once",
-			cfg.snap_delta, 0x4000);
+		/* AND MODERN_SNAP_DELTA IS GONE WITH THE ONE-TICK ABOUT-TURN (item 2b).
+		 * There is no successor field: a reversal is turned at the rate like
+		 * everything else now, which reversal() below measures tick by tick. */
 		ok(cfg.snap_forward == 0x2000, "forward returns at 45 degrees left",
 			cfg.snap_forward, 0x2000);
+		/* Item 2c: standing it is twice as wide, because M4 measured a standing
+		 * pose spinning on the spot for 232 ticks behind the narrow one. */
+		ok(cfg.snap_forward_stand == 0x4000, "...and at 90 while she turns on the spot",
+			cfg.snap_forward_stand, 0x4000);
+		/* Item 4: the forward jump's own rate, four times the classic's 182. */
+		ok(cfg.air_turn_rate == 728, "the air turn is 4 degrees a tick", cfg.air_turn_rate, 728);
 		ok(cfg.stick_full == 128, "full deflection in our units", cfg.stick_full, 128);
 		/* FOUR OF THE FIVE, SINCE ROUND 161a2b (#161 item 8). aim_strafe ships
 		 * OFF on the user's "Das ist schon echt doof im Kampf, wenn sie nur
@@ -304,13 +316,16 @@ static void bit_values()
 			cfg.hold_course + cfg.back_turns + cfg.aim_strafe + cfg.jump_dir +
 			cfg.block_turn, 4);
 
-		/* The two candidates the play test will be offered beside 3277. They
-		 * are named constants and not comments so that swapping one in is a
-		 * one-word edit (design section 3.1, row 16). */
+		/* The candidates the play test was offered, all three still named so
+		 * that swapping one back in is a one-word edit (design section 3.1,
+		 * row 16). 3277 joined them in round 161a3, because it is what rounds
+		 * 161a to 161a2b shipped and what the second play test judged. */
 		ok(MODERN_TURN_RATE_VANILLA == 1456, "vanilla's fastest turn, for the play test",
 			MODERN_TURN_RATE_VANILLA, 1456);
 		ok(MODERN_TURN_RATE_MIDDLE == 2184, "and the one in between",
 			MODERN_TURN_RATE_MIDDLE, 2184);
+		ok(MODERN_TURN_RATE_TRONE == 3277, "and TROne's own 18 degrees, which we shipped once",
+			MODERN_TURN_RATE_TRONE, 3277);
 	}
 
 	/* ModernResetState is what step 4 calls on a level start, on a death and
@@ -328,12 +343,18 @@ static void bit_values()
 		state.aiming = 1;
 		state.blocked_count = 5;
 		state.last_mode = MODERN_MODE_RUN;
+		state.last_course = 777;
+		state.have_course = 1;
+		state.last_turn = -1;		/* round 161a3, item 2b: the tie-break's memory */
 		ModernResetState(&state);
 		ok(!state.have_ref && !state.ref && !state.course && !state.last_off &&
 			!state.spin && !state.aligned && !state.aiming && !state.blocked_count &&
 			state.last_mode == MODERN_MODE_OFF, "the reset really clears every field",
 			state.have_ref + state.ref + state.course + state.last_off + state.spin +
 			state.aligned + state.aiming + state.blocked_count + state.last_mode, 0);
+		ok(!state.last_course && !state.have_course && !state.last_turn,
+			"...the course memory and the turn's own side with them",
+			state.last_course + state.have_course + state.last_turn, 0);
 	}
 }
 
@@ -428,7 +449,7 @@ static double worst_dir(long zone, long axis_zone, long radius, long* smallest_m
 static void deadzone()
 {
 	const long zones[3] = { MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT, MODERN_DEAD_RIGHT_DINPUT };
-	const char* names[3] = { "left 31", "right 34", "right DI 62" };
+	const char* names[3] = { "left 31", "right 34", "right DI 24" };
 	long z, deg, mag, x, y, ox, oy, m, prev, bad, smallest;
 	double worst;
 
@@ -546,7 +567,8 @@ static void deadzone()
 	 * first live reading was 62 of 128, half the travel at once (M2). */
 	m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, 0, MODERN_DEAD_RIGHT_DINPUT + 1, 0, &ox, &oy);
 	ok(m <= 3, "one unit past the DirectInput zone the camera barely moves", m, 0);
-	printf("  DirectInput right: raw 63 -> %ld (the old zone's first reading was 62)\n", m);
+	printf("  DirectInput right: raw %ld -> %ld (the per-axis zone's first reading was 62)\n",
+		(long)MODERN_DEAD_RIGHT_DINPUT + 1, m);
 
 	m = ModernStickDeadZone(MODERN_DEAD_RIGHT, 0, MODERN_DEAD_RIGHT + 1, 0, &ox, &oy);
 	ok(m <= 3, "and the same one unit past the XInput zone", m, 0);
@@ -671,33 +693,47 @@ static void deadzone()
 	 * uses (specific\input.cpp), zone and square together. */
 	{
 		const long zone2[4] = { MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT,
-			MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT_DINPUT };
+			MODERN_DEAD_LEFT_DINPUT, MODERN_DEAD_RIGHT_DINPUT };
 		const long axis2[4] = { MODERN_DEAD_AXIS_LEFT, MODERN_DEAD_AXIS_RIGHT,
 			MODERN_DEAD_AXIS_LEFT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT };
 		const char* name2[4] = { "left XInput", "right XInput",
 			"left DInput", "right DInput" };
 		long k;
 
-		/* THE ONE THE REVIEW NAMED, in this user's own pad's units: a
-		 * DirectInput right stick resting at (450, -450) of 1000 is (56, -56)
-		 * by the time the seam sees it. Both axes inside 500, so dxshell handed
-		 * the classic pair a dead stick. Its RADIUS is 79, past a bare radial
-		 * 62, so that zone lets it through - and what it hands on is the
-		 * RESCALED length, 33 of 128, a quarter of the camera's full rate with
-		 * the pad lying on the desk. The check is that it lives at all; 33 is
-		 * printed beside it because that is the size of the failure. */
-		m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, 0, 56, -56, &ox, &oy);
-		ok(m > 0, "a rest in the square's corner DID read past a bare radial zone", m, 0);
-		printf("  a DirectInput right stick resting at (450,-450) of 1000 = (56,-56),"
-			" radius 79:\n");
-		printf("    radial 62 alone -> length %ld of %d (the camera turns by itself)\n",
-			m, (int)MODERN_STICK_FULL);
+		/* THE REST THAT WAS FEARED AND THE REST THAT WAS MEASURED (round 161a3,
+		 * item 7). Round 161a2b sized the DirectInput zones for a stick resting
+		 * at (450,-450) of 1000 - (56,-56) at the seam, radius 79 - because
+		 * nobody had measured where that stick really rests; the numbers were
+		 * the widest rest the hardware's own 500 could be hiding. M9 has now
+		 * measured it over eight sessions of MODERNLOG's pad line: lx 0..2,
+		 * ly -9..10, rx 2..5, ry -6..2, all of 128. So the worst rest this pad
+		 * has ever shown sits inside (10,10), and that is what the zones are
+		 * sized for now.
+		 *
+		 * BOTH ARE HERE, and only one of them is asserted. The measured rest is
+		 * dead under every pair the seam uses, which is the promise. The feared
+		 * one is PRINTED, because at 24 and 20 it is alive - that is exactly
+		 * what item 7 trades away, and it is only safe because the rest
+		 * position is a measurement now and not a worst case. */
+		{
+			const long rest[3][2] = { { 10, 10 }, { -10, -10 }, { 10, -10 } };
+			long k2, r2;
+
+			for (k2 = 0; k2 < 4; k2++)
+				for (r2 = 0; r2 < 3; r2++)
+				{
+					m = ModernStickDeadZone(zone2[k2], axis2[k2],
+						rest[r2][0], rest[r2][1], &ox, &oy);
+					ok(m == 0 && !ox && !oy,
+						"the pad's own measured rest is dead on every path", m, 0);
+				}
+		}
 
 		m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT,
 			56, -56, &ox, &oy);
-		ok(m == 0 && !ox && !oy, "and the square holds it, as the hardware zone did",
-			m, 0);
-		printf("    with the square  -> length %ld\n", m);
+		printf("  the rest round 161a2b feared, (450,-450) of 1000 = (56,-56), radius 79:\n");
+		printf("    through the new 24/20 -> length %ld of %d; M9 measured the real rest"
+			" inside (10,10)\n", m, (int)MODERN_STICK_FULL);
 
 		/* EVERY POINT THE HARDWARE ZEROED IS STILL ZERO - the whole claim, swept
 		 * over the domain rather than argued, for each of the four pairs. */
@@ -1789,10 +1825,18 @@ static void water_move()
 	sit.jump = 0;
 	sit.blocked = 0;
 
-	/* THE TABLE, against the three rates measured out of the engine: 1092 is
-	 * LaraUnderWater's own ceiling on lara.turn_rate, 728 is what
-	 * lara_as_surftread and lara_as_surfswim write into y_rot themselves, 364
-	 * is what the three side and back strokes write. */
+	/* THE TABLE. Two of the three rates are still the engine's own - 728 is
+	 * what lara_as_surftread and lara_as_surfswim write into y_rot themselves
+	 * and 364 is what the three side and back strokes write - and the third is
+	 * not any more (round 161a3, item 6). 1092 was LaraUnderWater's ceiling on
+	 * lara.turn_rate, which is an ACCUMULATOR the modern path never uses: it
+	 * writes y_rot itself and zeroes turn_rate. M7 measured the cost of
+	 * mirroring a lid nothing holds - 319 of 452 water ticks at exactly 6
+	 * degrees, the error while pushed at a median of 44 degrees - and the user
+	 * played it as "der Wendekreis unter Wasser ist noch zu hoch". 2730 is 15
+	 * degrees a tick, half the land's new 30. The surface keeps its two,
+	 * because there the numbers are rates and not lids (the states write y_rot
+	 * directly, with no accumulator and no clamp). */
 	{
 		const short swim[] = { 13, 17, 18 };
 		const short surface[] = { 33, 34 };
@@ -1801,9 +1845,9 @@ static void water_move()
 
 		for (i = 0; i < (int)(sizeof(swim) / sizeof(swim[0])); i++)
 		{
-			ok(ModernWaterTurnRate(&cfg, swim[i]) == 1092,
-				"under water she turns at LaraUnderWater's own 1092",
-				ModernWaterTurnRate(&cfg, swim[i]), 1092);
+			ok(ModernWaterTurnRate(&cfg, swim[i]) == 2730,
+				"under water she turns at the modern 2730, 15 degrees a tick",
+				ModernWaterTurnRate(&cfg, swim[i]), 2730);
 			ok(ModernStateIsSwim(swim[i]) == 1, "...and counts as swimming",
 				ModernStateIsSwim(swim[i]), 1);
 		}
@@ -1858,11 +1902,11 @@ static void water_move()
 	 * the error's - the same ModernStepToward the land's turn uses. */
 	water_out(&out, 0x4000, 0);
 	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
-	ok(yaw == 1092, "90 degrees to go: one tick is the swim rate", yaw, 1092);
+	ok(yaw == 2730, "90 degrees to go: one tick is the swim rate", yaw, 2730);
 
 	water_out(&out, -0x4000, 0);
 	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
-	ok(yaw == -1092, "...and the other way round", yaw, -1092);
+	ok(yaw == -2730, "...and the other way round", yaw, -2730);
 
 	water_out(&out, 500, 0);
 	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
@@ -1880,7 +1924,7 @@ static void water_move()
 	 * AS_WATERROLL animation's job and looks wrong without it. */
 	water_out(&out, 0x7FFF, 0);
 	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
-	ok(yaw == 1092, "half a turn away: still only one tick's worth", yaw, 1092);
+	ok(yaw == 2730, "half a turn away: still only one tick's worth", yaw, 2730);
 
 	/* THE BITS. Under water IN_FORWARD is SwimTurn's PITCH (x_rot -= 364), so
 	 * it may never go out down there however well she is aligned; on the
@@ -1935,8 +1979,10 @@ static void water_move()
 	ModernDefaults(&cfg);
 
 	/* THE 3D POINTER. The orbit's elevation, turned into a body attitude by
-	 * the camera's own ModernCameraSwimPitch, and walked towards at SwimTurn's
-	 * own 364 a tick. The conversion is the INVERSE OF THE ENGINE'S OWN LINE:
+	 * the camera's own ModernCameraSwimPitch, and walked towards at the modern
+	 * pitch rate - SwimTurn's own 364 until round 161a3 doubled it to 728
+	 * (item 6: 364 is the rate of a HELD BIT, and ours is a pointer the body
+	 * chases). The conversion is the INVERSE OF THE ENGINE'S OWN LINE:
 	 * ChaseCamera shows elevation = pitch_home + x_rot, so the attitude that
 	 * belongs to an elevation is elevation - pitch_home, and a camera nobody
 	 * has touched points at level swimming. */
@@ -1958,11 +2004,11 @@ static void water_move()
 
 	water_out(&out, 0, 0);
 	ModernWaterMove(&cfg, &sit, &out, 5000, 0, &yaw, &xrot, &stroke);
-	ok(xrot == 364, "one tick towards the pointer is SwimTurn's own 364", xrot, 364);
+	ok(xrot == 728, "one tick towards the pointer is the modern pitch rate", xrot, 728);
 
 	water_out(&out, 0, 0);
 	ModernWaterMove(&cfg, &sit, &out, -5000, 0, &yaw, &xrot, &stroke);
-	ok(xrot == -364, "...and the same nose down", xrot, -364);
+	ok(xrot == -728, "...and the same nose down", xrot, -728);
 
 	water_out(&out, 0, 0);
 	ModernWaterMove(&cfg, &sit, &out, 100, 0, &yaw, &xrot, &stroke);
@@ -2055,7 +2101,10 @@ static void water_move()
 	}
 
 	under = ticks;
-	ok(under == 31, "a half turn under water takes 31 ticks", under, 31);
+	/* Round 161a3, item 6: the brief asks for at most 13, and 32767/2730 is
+	 * 12.005 - twelve whole rates and a thirteenth tick for the seven units
+	 * that are left. It was 31 at the old 1092. */
+	ok(under == 13, "a half turn under water takes 13 ticks", under, 13);
 
 	sit.anim_state = 33;
 	rem = 0x7FFF;
@@ -2088,7 +2137,7 @@ static void water_move()
 		ticks++;
 	}
 
-	ok(ticks == 43, "level to straight up is 43 ticks", ticks, 43);
+	ok(ticks == 22, "level to straight up is 22 ticks", ticks, 22);
 	printf("  measured: level to the pitch limit is %d ticks (%.2f s) at %ld a tick\n",
 		ticks, ticks / 30.0, cfg.swim_pitch_rate);
 }
@@ -2274,8 +2323,10 @@ static void direct_turn()
 	printf("the direct turn - the one place the engine writes her heading\n");
 
 	/* TROne: modern.direct_ground_turn_is_bounded_and_never_changes_airborne_
-	 * poses. Their four numbers, unchanged: our angles are their angles and
-	 * the rate is the same 3277. */
+	 * poses. Their four numbers, still driven with THEIR rate (3277) although
+	 * ours is 5461 now: the expectation is about the bounding and the state
+	 * list, not about the number, and pinning it here keeps it readable as
+	 * theirs. What our own rate does is measured in reversal() below. */
 	ok(ModernGroundTurn(2, 0x4000, 3277) == 3277, "standing, 90 degrees: the rate and no more",
 		ModernGroundTurn(2, 0x4000, 3277), 3277);
 	ok(ModernGroundTurn(1, -0x4000, 3277) == -3277, "running, the other way: the rate again",
@@ -2385,15 +2436,27 @@ static void direct_turn()
 	ok(total == 16, "at 2184 it costs 16", total, 16);
 
 	/* TROne: modern.the_instant_reversal_stays_in_the_run_and_leaves_the_
-	 * stand. Full stick back, camera and Lara both on 0, so the error is
+	 * stand - AND ROUND 161a3 (#161 item 2b) TURNED THE WHOLE EXPECTATION
+	 * ROUND. Full stick back, camera and Lara both on 0, so the error is
 	 * exactly half a turn.
 	 *
-	 * Running, the whole of it is taken in one tick - that is the Remaster's
-	 * about-turn. Standing, it is NOT, and TROne measured why: a one-tick
-	 * reversal out of a stand is spent before the player has BACK and JUMP
-	 * down together, so the back flip becomes unreachable. Their third case
-	 * switches the stand back to the snap with turn_snap_stand; we did not
-	 * build that switch, because the case it restores is the bug. */
+	 * TROne took the whole of it in ONE tick while she was running and refused
+	 * to standing, because a one-tick reversal out of a stand is spent before
+	 * the player has BACK and JUMP down together and the back flip becomes
+	 * unreachable. Round 161a2b put a second condition in front of it - the
+	 * course itself had to have JUMPED - so that a circling stick could not
+	 * trigger it by accumulation. The second play test then measured what was
+	 * left, and it was still the user's own complaint: "Unsere Drehung ist noch
+	 * sehr 'direkt', ich kann mich direkt 180 Grad drehen. Im Remaster ist das
+	 * ein fluessiger Turn ... es ist A unnatuerlich und B selbst das
+	 * Interpolating kommt nicht hinterher." M3 counted 36 one-tick steps over
+	 * 30 degrees in one session, 24 of them over 90.
+	 *
+	 * SO THE SNAP IS GONE AND THE THREE CASES BELOW ARE THE SAME THREE, read
+	 * the other way: running, a flick, and a flick through the stick's centre
+	 * all turn at the RATE, and the state list and the course memory they were
+	 * written to prove are proven by exactly the same ticks. Nothing here is
+	 * deleted; every line has its successor. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
 	sit.anim_state = 1;					/* AS_RUN - she is really running */
@@ -2403,12 +2466,6 @@ static void direct_turn()
 	sit.jump = 0;
 	sit.blocked = 0;
 
-	/* ROUND 161a2b (#161 item 7b) PUT A SECOND CONDITION ON THE SNAP: the
-	 * COURSE has to have jumped, not just the error. So TROne's case is now
-	 * built as the flick it always described - one tick of the stick forward
-	 * to seat a course, then the stick thrown fully back - instead of relying
-	 * on a fresh state, where there is no previous course to have jumped from
-	 * and the rule (rightly) declines. */
 	ok(tick_turn(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"running: the direct turn takes charge", 1, 1);
 	ok(yaw == 0, "...with nothing to do while the stick points where she runs", yaw, 0);
@@ -2417,24 +2474,27 @@ static void direct_turn()
 		"the stick thrown from forward to back: still the direct turn", 1, 1);
 	ok(absl(out.course_step) == 0x8000, "...the course itself jumped a half turn",
 		absl(out.course_step), 0x8000);
-	ok(absl(yaw) == 0x8000, "...and the whole half turn in one tick", absl(yaw), 0x8000);
+	ok(absl(yaw) == MODERN_TURN_RATE,
+		"...and even a flick is turned at the rate now - no one-tick about-turn",
+		absl(yaw), MODERN_TURN_RATE);
 
-	/* OURS, and the one behaviour item 7b deliberately gives up: with no
-	 * previous course in the state - a level start, a death, the scheme just
-	 * switched - the very first push has nothing to be a flick against, so it
-	 * turns at the bounded rate. In the engine that first push always meets a
-	 * standing Lara, where the rate was the answer anyway; the case is written
-	 * down because a test is the only place it can be seen. */
+	/* THE COURSE MEMORY IS STILL WORTH ITS FIELD, although nothing decides on
+	 * it any more: it is MODERNLOG's cstep=, which is how the next play test
+	 * tells a flick of the thumb from error that piled up. So it is still
+	 * asserted - from a fresh state there is nothing to have jumped from. */
 	ModernResetState(&state);
 	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"a first push with no course behind it: the turn is still ours", 1, 1);
-	ok(absl(yaw) == MODERN_TURN_RATE, "...but bounded, because nothing flicked",
+	ok(out.course_step == 0, "...and the course had nothing to jump from",
+		out.course_step, 0);
+	ok(absl(yaw) == MODERN_TURN_RATE, "...bounded, as every tick is now",
 		absl(yaw), MODERN_TURN_RATE);
 
 	/* AND A REAL FLICK GOES THROUGH THE CENTRE OF THE STICK, which is why the
 	 * course memory outlives a release (MODERN_STATE::last_course). Forward,
 	 * one tick of nothing at all as the thumb crosses over, then fully back:
-	 * the flick still reads as a flick. */
+	 * the flick is still SEEN as a flick, and is now turned like anything
+	 * else. */
 	ModernResetState(&state);
 	tick_turn(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out, &yaw);
 	tick_turn(&cfg, &state, 0, 0, 0, 0, &sit, &out, &yaw);
@@ -2442,13 +2502,16 @@ static void direct_turn()
 		out.mode, MODERN_MODE_OFF);
 	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"...and the push out the other side is the direct turn again", 1, 1);
-	ok(absl(yaw) == 0x8000, "...the flick survived the dead tick", absl(yaw), 0x8000);
+	ok(absl(out.course_step) == 0x8000, "...the flick survived the dead tick",
+		absl(out.course_step), 0x8000);
+	ok(absl(yaw) == MODERN_TURN_RATE, "...and is turned at the rate", absl(yaw),
+		MODERN_TURN_RATE);
 
 	ModernResetState(&state);
 	sit.anim_state = 2;					/* AS_STOP */
 	ok(tick_turn(&cfg, &state, 0, S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"standing: it takes charge as well", 1, 1);
-	ok(absl(yaw) == MODERN_TURN_RATE, "...but only one rate, so BACK and JUMP still meet",
+	ok(absl(yaw) == MODERN_TURN_RATE, "...at the same one rate, standing or running",
 		absl(yaw), MODERN_TURN_RATE);
 	ok((out.bits & MODERN_IN_FORWARD) == 0, "...and no step forward while she turns",
 		out.bits & MODERN_IN_FORWARD, 0);
@@ -2456,7 +2519,9 @@ static void direct_turn()
 	/* TROne: modern.ground_reversal_turns_without_a_step_in_the_wrong_
 	 * direction, all twelve ticks. Step 2 already asserted the first tick's
 	 * "no step"; this is the rest of it - she arrives, and only then does
-	 * forward come back.
+	 * forward come back. (At 5461 she is round after seven of the twelve and
+	 * the last five turn nothing, which is what "and stays there" is worth;
+	 * the loop keeps TROne's own count so that the expectation stays theirs.)
 	 *
 	 * The mask is MODERN_DIR_MASK and not MODERN_MOVE_MASK on purpose: ours
 	 * carries IN_WALK and TROne's does not, and the direct turn deliberately
@@ -2501,8 +2566,9 @@ static void direct_turn()
 	 * course, so she turns the short way to the SAME heading and stays there.
 	 * And IN_FORWARD is set on every running tick of it now - item 7a - where
 	 * before it would have been withheld for the ticks with more than 45
-	 * degrees left. Ten ticks: 3277 nine times is 29493, and the tenth is
-	 * clamped to the 3275 that are left. */
+	 * degrees left. SEVEN ticks at round 161a3's rate (it was ten at 3277):
+	 * 5461 six times is 32766, and the seventh is clamped to the two units
+	 * that are left. */
 	ModernResetState(&state);
 	yaw = 0;
 
@@ -2526,8 +2592,8 @@ static void direct_turn()
 			"...running forward on the held course", out.bits & MODERN_DIR_MASK,
 			MODERN_IN_FORWARD);
 
-		if (t >= 9)
-			ok(yaw == -32768, "...and by the tenth tick she is round, and stays round",
+		if (t >= 6)
+			ok(yaw == -32768, "...and by the seventh tick she is round, and stays round",
 				yaw, -32768);
 	}
 
@@ -2619,7 +2685,11 @@ static void direct_turn()
 	tick_turn(&cfg, &state, 0, S(12000), 0, 0, &sit, &out, &yaw);
 	ok((out.bits & MODERN_IN_WALK) != 0, "a gentle stick still walks while the turn is ours",
 		out.bits & MODERN_IN_WALK, MODERN_IN_WALK);
-	ok(absl(yaw) == 0x8000, "...and the reversal still happens", absl(yaw), 0x8000);
+	/* Round 161a3, item 2b: the reversal still happens, at the rate now and not
+	 * in one tick. What this block is about - IN_WALK surviving the rewrite of
+	 * the bits - is the same either way. */
+	ok(absl(yaw) == MODERN_TURN_RATE, "...and the reversal still happens, at the rate",
+		absl(yaw), MODERN_TURN_RATE);
 
 	/* THE LEVEL BOUNDARY - what the reset at the level start is worth (#161,
 	 * the one high finding of the second review pass).
@@ -2693,7 +2763,12 @@ static void direct_turn()
 				arrived_at = tk - 1;
 		}
 
-		ok(forward_at == 5, "...no forward for five ticks of it", forward_at, 5);
+		/* ROUND 161a3 (#161 item 2c) MOVED THIS ONE: standing, IN_FORWARD is
+		 * withheld only over 90 degrees now and not over 45, so the same 135
+		 * degrees of carried error start her running on the third tick instead
+		 * of the fifth. The turn itself is unchanged - eight ticks at the
+		 * pinned 3277 - which is what the boundary check is about. */
+		ok(forward_at == 3, "...no forward for three ticks of it", forward_at, 3);
 		ok(arrived_at == 8, "...and eight ticks to finish the turn nobody asked for",
 			arrived_at, 8);
 
@@ -2742,9 +2817,14 @@ static void direct_turn()
 static long old_direct_turn(const MODERN_CFG* cfg, const MODERN_RESULT* out, short anim_state,
 	long* forward)
 {
+	/* MODERN_SNAP_DELTA's own value, and this is now the only place it exists
+	 * (round 161a3, #161 item 2b deleted the constant with the rule it gated).
+	 * It stays here because a claim about a removed rule is only honest while
+	 * the rule can still be RUN against the new one. */
+	const long old_snap_delta = 0x4000;
 	long yaw = ModernGroundTurn(anim_state, out->delta, cfg->turn_rate);
 
-	if (absl(out->delta) > cfg->snap_delta && !ModernStateIsStanding(anim_state))
+	if (absl(out->delta) > old_snap_delta && !ModernStateIsStanding(anim_state))
 		yaw = out->delta;
 
 	*forward = (absl((long)out->delta - yaw) <= cfg->snap_forward) ? 1 : 0;
@@ -2875,19 +2955,25 @@ static void circling()
 	ModernDefaults(&cfg);
 
 	/* THE USER'S OWN SPEED, measured out of play test 2: the stick circling at
-	 * about 21 degrees a tick, which is 3822 of our units and a sixth faster
-	 * than the direct turn's own 3277. Five revolutions of it, 86 ticks, out
-	 * of a run. This is the sweep the brief asks for. */
+	 * about 21 degrees a tick, which is 3822 of our units. Five revolutions of
+	 * it, 86 ticks, out of a run. This is the sweep round 161a2b's brief asked
+	 * for; round 161a3's own is reversal() and spin_sweep() below.
+	 *
+	 * THE TWO OLD RULES ARE NOW RUN AT THE RATE THEY SHIPPED WITH (3277,
+	 * MODERN_TURN_RATE_TRONE), which round 161a3 moved to 5461 underneath them.
+	 * They have to be: "round 161a2's rule" is a rule AND a rate - the stutter
+	 * it produced came from the stick outrunning 3277 - so driving it with the
+	 * new rate would measure neither. */
 	spin_run(3822, 86, 0, 0, &now);
-	spin_run(3822, 86, 1, 0, &was);
-	spin_run(3822, 86, 2, 0, &half);
+	spin_run(3822, 86, 1, MODERN_TURN_RATE_TRONE, &was);
+	spin_run(3822, 86, 2, MODERN_TURN_RATE_TRONE, &half);
 
 	printf("  a stick circling at 21 deg/tick, five revolutions of 86 ticks, from a run:\n");
-	printf("    round 161a2's rule:  %ld ticks with no forward in %ld stumbles,"
+	printf("    round 161a2's rule at 3277:  %ld ticks with no forward in %ld stumbles,"
 		" %ld one-tick whips\n", was.no_forward, was.drops, was.jerks);
-	printf("    item 7a on its own:  %ld / %ld / %ld  <- the whips the stutter was hiding\n",
+	printf("    item 7a on its own at 3277:  %ld / %ld / %ld  <- the whips the stutter hid\n",
 		half.no_forward, half.drops, half.jerks);
-	printf("    ours (7a and 7b):    %ld / %ld / %ld, worst error %ld,"
+	printf("    ours at 5461:                %ld / %ld / %ld, worst error %ld,"
 		" worst course step %ld\n", now.no_forward, now.drops, now.jerks,
 		now.worst_error, now.worst_cstep);
 
@@ -2896,14 +2982,14 @@ static void circling()
 	ok(now.jerks == 0, "...and no tick turns more than the rate", now.jerks, 0);
 	ok(now.not_run == 0, "...she never leaves MODE RUN", now.not_run, 0);
 
-	/* The course's own step is the number the new rule reads, and a circle
-	 * never comes near the flick threshold. It is not exactly the stick's 3822
-	 * because a stick is a pair of whole numbers: 120 units of deflection
-	 * quantise the angle by up to half a degree a tick. */
+	/* The course's own step is what MODERNLOG's cstep= prints, and a circle
+	 * never comes near what used to be the flick threshold. It is not exactly
+	 * the stick's 3822 because a stick is a pair of whole numbers: 120 units of
+	 * deflection quantise the angle by up to half a degree a tick. */
 	ok(absl(now.worst_cstep - 3822) <= 128, "...the course steps with the stick and no further",
 		now.worst_cstep, 3822);
-	ok(now.worst_cstep < cfg.snap_delta, "...which is a long way under a flick",
-		now.worst_cstep, cfg.snap_delta);
+	ok(now.worst_cstep < 0x4000, "...a long way under what a flick used to need",
+		now.worst_cstep, 0x4000);
 
 	/* WHAT THE TWO HALVES OF ITEM 7 ARE WORTH SEPARATELY, and it is the answer
 	 * to "why is this one item". Round 161a2's rule stuttered: the withheld
@@ -2920,33 +3006,29 @@ static void circling()
 	ok(half.jerks > 0, "...and then the error-only snap whips her, which is item 7b's case",
 		half.jerks, 1);
 
-	/* WHAT ITEM 7b COSTS, MEASURED AND NOT ARGUED AWAY. The error-only snap was
-	 * also a ceiling on how far she could fall behind: it fired at 90 degrees
-	 * and put the error back to nought. Without it she simply lags, by the
-	 * difference between the thumb and her rate - 3902 against 3277, so 625 a
-	 * tick - and after 53 ticks, 1.8 seconds of UNINTERRUPTED circling at this
-	 * speed, the lag reaches half a turn and she starts closing it the other
-	 * way round. The sweep above walked into exactly that: worst error 32721.
-	 *
-	 * That is not a bug this item can fix with another rule; it is the turn
-	 * RATE being slower than the user's thumb, which design row 16 already
-	 * names as the one number the play test is expected to change
-	 * (MODERN_TURN_RATE, candidates 1456 / 2184 / 3277). So it is measured
-	 * here instead: give the direct turn a rate that keeps up and the lag is
-	 * gone without a line of new logic. */
-	spin_run(3822, 86, 0, 3902, &was);
-	printf("    the same circle at a rate that keeps up (3902): worst error %ld\n",
-		was.worst_error);
-	ok(was.worst_error <= 3902, "a rate at the thumb's own speed leaves no lag at all",
-		was.worst_error, 3902);
-	ok(was.jerks == 0 && was.no_forward == 0, "...and still no whip and no stumble",
-		was.jerks + was.no_forward, 0);
+	/* WHAT ITEM 7b COST, AND WHAT ROUND 161a3 PAID IT WITH. The error-only snap
+	 * was also a ceiling on how far she could fall behind: it fired at 90
+	 * degrees and put the error back to nought. Without it she simply lagged,
+	 * by the difference between the thumb and her rate - 3902 against 3277, so
+	 * 625 a tick - and after 53 ticks of UNINTERRUPTED circling the lag reached
+	 * half a turn and she started closing it the other way round. Round 161a2b
+	 * measured that and named the cure: the turn RATE, design row 16's one
+	 * "measure" number. M2 then measured the same thing in the user's own play
+	 * ("bricht aus der Rotation aus", four windows of it, twice into a wall),
+	 * and item 2a raised the rate to 5461. So this is no longer a probe at a
+	 * hypothetical rate - it is the shipped one, on his own circle. */
+	ok(now.worst_error <= 3822 + 128, "the shipped rate leaves no lag on his own circle",
+		now.worst_error, 3822);
 
-	/* A CIRCLE SHE CAN KEEP UP WITH changes nothing either way - 15 degrees a
-	 * tick, inside the direct turn's 18. That is the honest limit of the
-	 * claim: item 7 only ever bites where the thumb outruns her. */
+	spin_run(3822, 86, 1, MODERN_TURN_RATE_TRONE, &was);
+	printf("    the same circle at the old 3277: worst error %ld; at 5461: %ld\n",
+		was.worst_error, now.worst_error);
+
+	/* A CIRCLE THE OLD RATE COULD KEEP UP WITH changes nothing either way - 15
+	 * degrees a tick, inside 3277's own 18. That is the honest limit of the
+	 * claim: item 7 only ever bit where the thumb outran her. */
 	spin_run(2730, 86, 0, 0, &now);
-	spin_run(2730, 86, 1, 0, &was);
+	spin_run(2730, 86, 1, MODERN_TURN_RATE_TRONE, &was);
 
 	ok(now.no_forward == 0 && was.no_forward == 0,
 		"a circle inside her turn rate: neither rule ever drops forward",
@@ -2955,6 +3037,869 @@ static void circling()
 		now.jerks + was.jerks, 0);
 	ok(now.worst_error < cfg.snap_forward, "...the error never even reaches 45 degrees",
 		now.worst_error, cfg.snap_forward);
+}
+
+/* --------------------------------------------- the reversal, tick by tick -- */
+
+/* ONE REVERSAL, DRIVEN THROUGH THE SEAM'S OWN TWO CALLS (round 161a3, #161
+ * item 2b). She stands on `heading`, the camera sits on her back, the stick is
+ * thrown fully back and HELD - so the course is seated exactly half a turn from
+ * her and never moves again (item 1: the camera does not follow her, and a
+ * stick that is not moving does not re-seat). What comes back is how the turn
+ * was really taken.
+ *
+ * `run` is the state she is in: 1 AS_RUN or 2 AS_STOP. The automaton is not
+ * modelled beyond that, because a reversal is over in seven ticks and she is in
+ * one state for all of them. */
+struct REVERSAL
+{
+	long ticks;			/* until the error is gone */
+	long worst_step;	/* the biggest single turn of it */
+	long flips;			/* ticks that turned against the tick before */
+	long overshoot;	/* ticks that went past the course and had to come back */
+	long forward_at;	/* the first tick with IN_FORWARD, 0 if never */
+	long left_at_six;	/* what was still to turn after six ticks */
+};
+
+static void reversal_run(short heading, short anim, long rate, REVERSAL* r)
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	long last_sign = 0;
+	long prev_left = 0x8000;
+	long yaw;
+	long t;
+
+	ModernDefaults(&cfg);
+
+	if (rate > 0)
+		cfg.turn_rate = rate;
+
+	ModernResetState(&state);
+	sit.anim_state = anim;
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	r->ticks = 0;
+	r->worst_step = 0;
+	r->flips = 0;
+	r->overshoot = 0;
+	r->forward_at = 0;
+	r->left_at_six = 0;
+
+	for (t = 1; t <= 40; t++)
+	{
+		long left;
+
+		yaw = 0;
+		tick_turn(&cfg, &state, 0, S(32000), heading, heading, &sit, &out, &yaw);
+
+		if (absl(yaw) > r->worst_step)
+			r->worst_step = absl(yaw);
+
+		if (yaw && last_sign && ((yaw > 0) != (last_sign > 0)))
+			r->flips++;
+
+		if (yaw)
+			last_sign = yaw;
+
+		if (!r->forward_at && (out.bits & MODERN_IN_FORWARD))
+			r->forward_at = t;
+
+		heading = (short)ModernWrap((long)heading + yaw);
+		left = absl(ModernWrap((long)state.course - heading));
+
+		/* An overshoot shows as the error GROWING on a tick that turned: the
+		 * short way round never gets longer while she is walking down it. */
+		if (yaw && left > prev_left)
+			r->overshoot++;
+
+		prev_left = left;
+
+		if (t == 6)
+			r->left_at_six = left;
+
+		if (!r->ticks && !left)
+			r->ticks = t;
+	}
+}
+
+static void reversal()
+{
+	MODERN_CFG cfg;
+	MODERN_RESULT out;
+	REVERSAL r;
+	REVERSAL worst;
+	long h;
+	long yaw;
+
+	printf("the reversal - a half turn is a turn now, not a jump (#161 item 2b)\n");
+
+	ModernDefaults(&cfg);
+
+	/* 1. FROM EVERY HEADING, STANDING AND RUNNING. The brief's own acceptance:
+	 * settled in at most seven ticks, no step above the rate, and monotone -
+	 * never a tick that turns back against the one before, never an overshoot
+	 * she has to come back from. 64 headings is every 5.6 degrees of the
+	 * circle, which is finer than the stick's own quantisation. */
+	worst.ticks = 0;
+	worst.worst_step = 0;
+	worst.flips = 0;
+	worst.overshoot = 0;
+
+	for (h = -32768; h < 32768; h += 1024)
+	{
+		int s;
+
+		for (s = 0; s < 2; s++)
+		{
+			reversal_run((short)h, (short)(s ? 1 : 2), 0, &r);
+
+			if (r.ticks > worst.ticks)
+				worst.ticks = r.ticks;
+
+			if (r.worst_step > worst.worst_step)
+				worst.worst_step = r.worst_step;
+
+			worst.flips += r.flips;
+			worst.overshoot += r.overshoot;
+		}
+	}
+
+	printf("  a half turn from each of 64 headings, standing and running:\n");
+	printf("    worst %ld ticks, biggest step %ld, %ld direction flips, %ld overshoots\n",
+		worst.ticks, worst.worst_step, worst.flips, worst.overshoot);
+
+	ok(worst.ticks <= 7, "a reversal settles in at most seven ticks", worst.ticks, 7);
+	ok(worst.worst_step <= MODERN_TURN_RATE, "...with no step above the rate",
+		worst.worst_step, MODERN_TURN_RATE);
+	ok(worst.flips == 0, "...monotone: never a tick against the one before", worst.flips, 0);
+	ok(worst.overshoot == 0, "...and never past the course", worst.overshoot, 0);
+
+	/* 2. SIX TICKS AND A REMAINDER, which is the number the brief asks for and
+	 * the number the arithmetic gives: 32768 / 5461 = 6.0004, so six whole
+	 * rates leave two units and a seventh tick takes them. Two units is a
+	 * fiftieth of a degree - the half turn IS six ticks to anything an eye can
+	 * see, and the seventh is written down rather than rounded away. */
+	reversal_run(0, 2, 0, &r);
+	ok(r.left_at_six == 2, "after six ticks two units of the half turn are left",
+		r.left_at_six, 2);
+	ok(r.ticks == 7, "...and the seventh tick takes them", r.ticks, 7);
+	printf("  180 degrees at %d: six ticks (0.20 s) leave %ld units, gone on the seventh\n",
+		(int)MODERN_TURN_RATE, r.left_at_six);
+
+	/* 3. WHAT IT WAS, RUN AGAINST WHAT IT IS. The old rule took the whole half
+	 * turn in ONE tick while she was running - 24 steps over 90 degrees in the
+	 * user's own session (M3) - and that is what "es ist A unnatuerlich und B
+	 * selbst das Interpolating kommt nicht hinterher" is about. The model of it
+	 * is old_direct_turn above, driven at the rate it shipped with. */
+	{
+		MODERN_STATE state;
+		MODERN_SITUATION sit;
+		long forward = 0;
+		long old_yaw;
+
+		ModernDefaults(&cfg);
+		cfg.turn_rate = MODERN_TURN_RATE_TRONE;
+		ModernResetState(&state);
+		sit.anim_state = 1;
+		sit.classic = 0;
+		sit.drawn = 0;
+		sit.action = 0;
+		sit.jump = 0;
+		sit.blocked = 0;
+
+		tick(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out);
+		tick(&cfg, &state, 0, S(32000), 0, 0, &sit, &out);
+		old_yaw = old_direct_turn(&cfg, &out, 1, &forward);
+		ok(absl(old_yaw) == 0x8000, "round 161a2b's rule took the same half turn in ONE tick",
+			absl(old_yaw), 0x8000);
+		printf("  the rule this replaces: one tick of %ld units; ours: %d of %d\n",
+			absl(old_yaw), (int)r.ticks, (int)MODERN_TURN_RATE);
+	}
+
+	/* 4. THE TIE AT EXACTLY HALF A TURN, which is the one thing the deletion
+	 * needed building rather than removing. Both sides are the same angle and
+	 * ModernWrap can only answer one of them, so without a decision every exact
+	 * reversal would go left by accident - and a reversal that met 180 again on
+	 * its second tick could change its mind and stand still. The bias is the
+	 * turn's own last direction. */
+	ModernDefaults(&cfg);
+	ok(ModernGroundTurnBiased(2, -0x8000L, cfg.turn_rate, 0) == -cfg.turn_rate,
+		"a tie with nothing behind it goes to the fixed side",
+		ModernGroundTurnBiased(2, -0x8000L, cfg.turn_rate, 0), -cfg.turn_rate);
+	ok(ModernGroundTurnBiased(2, -0x8000L, cfg.turn_rate, 1) == cfg.turn_rate,
+		"...and a turn already going right keeps going right",
+		ModernGroundTurnBiased(2, -0x8000L, cfg.turn_rate, 1), cfg.turn_rate);
+	ok(ModernGroundTurnBiased(2, -0x8000L, cfg.turn_rate, -1) == -cfg.turn_rate,
+		"...one already going left, left", ModernGroundTurnBiased(2, -0x8000L, cfg.turn_rate, -1),
+		-cfg.turn_rate);
+	ok(ModernGroundTurn(2, -0x8000L, cfg.turn_rate) == -cfg.turn_rate,
+		"and the unbiased door TROne's own expectations come through is unchanged",
+		ModernGroundTurn(2, -0x8000L, cfg.turn_rate), -cfg.turn_rate);
+
+	/* Every other angle is decided by the angle and not by the bias, which is
+	 * what makes this a tie-break and not a thumb on the scale. */
+	{
+		long bad = 0;
+
+		for (h = -32767; h < 32768; h += 97)
+		{
+			const long a = ModernGroundTurnBiased(2, h, cfg.turn_rate, 1);
+			const long b = ModernGroundTurnBiased(2, h, cfg.turn_rate, -1);
+
+			if (a != b)
+				bad++;
+		}
+
+		ok(bad == 0, "nothing but the exact half turn reads the bias at all", bad, 0);
+	}
+
+	/* 5. AND THE TIE THROUGH THE SEAM, where the bias comes from the state: a
+	 * first tick that turns her right leaves last_turn at 1, so a second tick
+	 * that lands on exactly 180 carries on right instead of reversing. */
+	{
+		MODERN_STATE state;
+		MODERN_SITUATION sit;
+
+		ModernResetState(&state);
+		sit.anim_state = 2;
+		sit.classic = 0;
+		sit.drawn = 0;
+		sit.action = 0;
+		sit.jump = 0;
+		sit.blocked = 0;
+
+		tick_turn(&cfg, &state, S(32000), 0, 0, 0, &sit, &out, &yaw);
+		ok(yaw > 0, "a stick to the right turns her right", (yaw > 0) ? 1 : 0, 1);
+		ok(state.last_turn == 1, "...and the state remembers which way", state.last_turn, 1);
+
+		/* Now exactly half a turn of error, from a stick thrown to the back: the
+		 * camera stands on her new heading, so course = heading + 180. */
+		tick_turn(&cfg, &state, 0, S(32000), (short)yaw, (short)yaw, &sit, &out, &yaw);
+		ok(out.delta == -32768, "the next tick is the exact tie", out.delta, -32768);
+		ok(yaw > 0, "...and she carries on the way she was going", (yaw > 0) ? 1 : 0, 1);
+	}
+}
+
+/* ------------------------------------------- a circling stick, 10 to 35 ----- */
+
+/* WHAT ONE CIRCLE OF THE STICK LEAVES BEHIND, from a STAND and with the
+ * standing automaton modelled exactly as far as M4 measured it: no IN_FORWARD
+ * and she stays in AS_STOP, IN_FORWARD and she is running (round 161a3, #161
+ * items 2c and 2d). `start` is where on the circle the thumb begins, because
+ * that is the error she starts with - the course is seated on the first push. */
+struct CIRCLE
+{
+	long worst_error;	/* the biggest |delta| after the first tick */
+	long flips;			/* ticks that turned against the tick before */
+	long forward_at;	/* the first tick with IN_FORWARD, 0 if never in the run */
+	long spun;			/* ticks in AS_STOP with a turn and no forward - M4's own count */
+};
+
+static void circle_run(long step_units, long start_units, long ticks, long rate,
+	long stand_gate, CIRCLE* c)
+{
+	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	short heading = 0;
+	short anim = 2;						/* AS_STOP - she is standing when he starts */
+	long last_sign = 0;
+	long t;
+
+	ModernDefaults(&cfg);
+
+	if (rate > 0)
+		cfg.turn_rate = rate;
+
+	if (stand_gate > 0)
+		cfg.snap_forward_stand = stand_gate;
+
+	ModernResetState(&state);
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	c->worst_error = 0;
+	c->flips = 0;
+	c->forward_at = 0;
+	c->spun = 0;
+
+	for (t = 0; t < ticks; t++)
+	{
+		const double ang = (double)(start_units + t * step_units) * turn;
+		const long x = roundl2(sin(ang) * 120.0);
+		const long z = roundl2(cos(ang) * 120.0);
+		long yaw = 0;
+		long forward;
+
+		sit.anim_state = anim;
+		tick_turn(&cfg, &state, x, -z, 0, heading, &sit, &out, &yaw);
+		forward = (out.bits & MODERN_IN_FORWARD) ? 1 : 0;
+
+		if (t && absl(out.delta) > c->worst_error)
+			c->worst_error = absl(out.delta);
+
+		if (yaw && last_sign && ((yaw > 0) != (last_sign > 0)))
+			c->flips++;
+
+		if (yaw)
+			last_sign = yaw;
+
+		if (!c->forward_at && forward)
+			c->forward_at = t + 1;
+
+		if (anim == 2 && yaw && !forward)
+			c->spun++;
+
+		heading = (short)ModernWrap((long)heading + yaw);
+		anim = (short)(forward ? 1 : 2);
+	}
+}
+
+static void spin_sweep()
+{
+	const long speeds[6] = { 1820, 2730, 3641, 4551, 5461, 6371 };	/* 10..35 deg/tick */
+	const char* names[6] = { "10", "15", "20", "25", "30", "35" };
+	CIRCLE c;
+	long worst_new = 0;
+	long worst_old = 0;
+	long never_new = 0;
+	long never_old = 0;
+	long spun_new = 0;
+	long spun_old = 0;
+	int i;
+
+	printf("a circling stick at 10 to 35 deg/tick (#161 items 2c and 2d)\n");
+
+	/* 1. THE BRIEF'S OWN SWEEP: 300 ticks of an even circle from the direction
+	 * she is already facing, which is a thumb that starts where she stands.
+	 * The error stays bounded and the turn never changes its mind. */
+	printf("  300 ticks, the circle starting where she faces:\n");
+
+	for (i = 0; i < 6; i++)
+	{
+		circle_run(speeds[i], 0, 300, 0, 0, &c);
+		printf("    %s deg/tick: worst error %5ld (%3ld deg), %ld direction flips,"
+			" forward on tick %ld\n", names[i], c.worst_error,
+			c.worst_error * 360 / 65536, c.flips, c.forward_at);
+
+		if (i <= 4)
+		{
+			ok(c.worst_error < 0x4000, "the error stays under 90 degrees up to 30 deg/tick",
+				c.worst_error, 0x4000);
+			ok(c.flips == 0, "...and the turn never flips direction", c.flips, 0);
+		}
+	}
+
+	/* AND THE ONE THAT DOES NOT HOLD, MEASURED RATHER THAN HIDDEN: at 35
+	 * degrees a tick the thumb is faster than she can turn, so the lag grows by
+	 * the difference every tick, crosses half a turn and the shortest way round
+	 * changes side. That is the arithmetic of "turn toward the stick at a fixed
+	 * rate" and not a rule that can be added; the cure would be a rate over
+	 * 6371, and 5461 is what his own Remaster video was counted at. It is the
+	 * same shape as the defect M2 measured at 3277 - only the speed it starts
+	 * at has moved from 18 to 30 degrees a tick. */
+	circle_run(6371, 0, 300, 0, 0, &c);
+	ok(c.flips > 0, "at 35 deg/tick the thumb outruns her and the side does change",
+		c.flips, 1);
+	printf("    - and that is the honest limit: past 30 deg/tick she lags by the"
+		" difference\n");
+
+	/* 2. ITEM 2c's OWN SWEEP, over every start angle: how long a STANDING Lara
+	 * spins before the run begins. M4 measured 232 ticks of exactly that in the
+	 * play test - "sie dreht sich zwar 360 Grad im Kreis, aber ohne ihre echte
+	 * Animation" - at 3277 with the 45 degree gate. Both are run here. */
+	printf("  from a stand, 36 start angles x six speeds, 300 ticks each:\n");
+
+	for (i = 0; i < 6; i++)
+	{
+		long start;
+		long new_worst = 0;
+		long old_worst = 0;
+		long new_never = 0;
+		long old_never = 0;
+
+		for (start = 0; start < 65536; start += 1820)
+		{
+			circle_run(speeds[i], start, 300, 0, 0, &c);
+
+			if (!c.forward_at)
+				new_never++;
+			else
+			{
+				if (c.forward_at > new_worst)
+					new_worst = c.forward_at;
+
+				/* Only the starts that DO reach the run are counted here: a
+				 * locked start spins for all 300 ticks of the sweep and would
+				 * bury the number this line is about. The lock is counted on
+				 * its own, below. */
+				spun_new += c.spun;
+			}
+
+			circle_run(speeds[i], start, 300, MODERN_TURN_RATE_TRONE, 0x2000, &c);
+
+			if (!c.forward_at)
+				old_never++;
+			else
+			{
+				if (c.forward_at > old_worst)
+					old_worst = c.forward_at;
+
+				spun_old += c.spun;
+			}
+		}
+
+		printf("    %s deg/tick: running by tick %3ld, %ld of 36 starts never"
+			"   (3277 and 45 deg: %3ld, %ld never)\n",
+			names[i], new_worst, new_never, old_worst, old_never);
+
+		if (i <= 3)
+		{
+			ok(new_never == 0, "up to 25 deg/tick every start reaches the run", new_never, 0);
+			ok(new_worst <= 20, "...within 20 ticks of the first push", new_worst, 20);
+		}
+
+		if (new_worst > worst_new)
+			worst_new = new_worst;
+
+		if (old_worst > worst_old)
+			worst_old = old_worst;
+
+		never_new += new_never;
+		never_old += old_never;
+	}
+
+	printf("  standing ticks spun with no animation, over the 211 starts that reach the"
+		" run: %ld now, %ld then\n", spun_new, spun_old);
+	printf("  (M4 counted 232 such ticks in one play session, 140 of them stepping"
+		" 18 deg with no bit at all)\n");
+	ok(spun_new * 4 < spun_old, "the standing spin M4 measured is a quarter of what it was",
+		spun_new, spun_old / 4);
+
+	/* AND THE ONE THING THIS ITEM CANNOT FIX, MEASURED INSTEAD OF SMOOTHED
+	 * OVER. A stick circling at EXACTLY her turn rate moves the course by as
+	 * much as she turns, so whatever error the first push seated is the error
+	 * she keeps - for ever, if the thumb is that steady. It is not a rule that
+	 * can be added or taken away; it is what "turn toward the course at a fixed
+	 * rate" means, and the old rate had it too, twelve degrees a tick lower
+	 * down where the user's own thumb lived (M2 measured him at 15 to 30). The
+	 * count above is the lock: those starts are the ones over 90 degrees off at
+	 * 30 deg/tick. */
+	circle_run(MODERN_TURN_RATE, 0x6000, 300, 0, 0, &c);
+	ok(c.forward_at == 0, "a stick at exactly her rate holds the error it started with",
+		c.forward_at, 0);
+	printf("  the lock: a circle at exactly %d units a tick, started 135 degrees off,"
+		" holds %ld deg\n", (int)MODERN_TURN_RATE, c.worst_error * 360 / 65536);
+
+	circle_run(MODERN_TURN_RATE_TRONE, 0x6000, 300, MODERN_TURN_RATE_TRONE, 0x2000, &c);
+	ok(c.forward_at == 0, "...and the old rate had the same lock at 18 deg/tick",
+		c.forward_at, 0);
+	printf("            the same at the old 3277 - the lock moved UP 12 deg/tick,"
+		" out of his measured range\n");
+	printf("  starts that never reach the run: %ld of 216 now, %ld then"
+		" (the six speeds are not the old lock's own)\n", never_new, never_old);
+}
+
+/* ------------------------------------------------- she steers in the air --- */
+
+static void air_turn()
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	long yaw;
+	long total;
+	long ticks;
+	long i;
+
+	printf("the air turn - a wider radius round a ledge (#161 item 4)\n");
+
+	/* 1. ONE STATE, AND IT IS THE ONE THE CLASSIC ITSELF STEERS. 3
+	 * AS_FORWARDJUMP is the only routine in game\lara.cpp that reads IN_LEFT or
+	 * IN_RIGHT off the ground (lara_as_forwardjump:851, turn_rate capped at
+	 * 546 against LaraAboveWater's decay of 364 = 182 a tick, 1.0 degree).
+	 * 11 AS_REACH, 28 AS_UPJUMP, 9 AS_FASTFALL, 52 AS_SWANDIVE, 53 AS_FASTDIVE
+	 * and 10 AS_FALLBACK read no direction bit at all, and the reach is the
+	 * grab - where her nose points is which ledge lara_col_reach tests. */
+	total = 0;
+
+	for (i = 0; i < 139; i++)
+		if (ModernStateAllowsAirTurn((short)i))
+			total++;
+
+	ok(total == 1, "one of the 139 states steers in the air", total, 1);
+	ok(ModernStateAllowsAirTurn(3) == 1, "...and it is the forward jump",
+		ModernStateAllowsAirTurn(3), 1);
+
+	{
+		const short airborne[6] = { 9, 10, 11, 28, 52, 53 };
+
+		for (i = 0; i < 6; i++)
+			ok(ModernStateAllowsAirTurn(airborne[i]) == 0,
+				"the reach, the dives and the falls keep their own heading",
+				ModernStateAllowsAirTurn(airborne[i]), 0);
+	}
+
+	/* 2. NINETY DEGREES OFF, AND SHE ARRIVES WITHOUT OVERSHOOTING. 0x4000 /
+	 * 728 = 22.5, so twenty-two whole rates and a twenty-third tick clamped to
+	 * the 368 units that are left. */
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 3;					/* AS_FORWARDJUMP */
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+
+	{
+		short heading = 0;
+		long worst = 0;
+		long over = 0;
+
+		ticks = 0;
+
+		for (i = 0; i < 40; i++)
+		{
+			yaw = 0;
+			ModernTranslate(&cfg, &state, S(32000), 0, 0, heading, &sit, &out);
+			ModernAirTurn(&cfg, &state, &sit, &out, &yaw);
+
+			if (absl(yaw) > worst)
+				worst = absl(yaw);
+
+			if (absl(yaw) > absl(out.delta))
+				over++;
+
+			heading = (short)ModernWrap((long)heading + yaw);
+
+			if (!ticks && out.delta == 0)
+				ticks = i;
+		}
+
+		ok(worst == 728, "the air turn steps at its own rate and no faster", worst, 728);
+		ok(over == 0, "...and never past the course", over, 0);
+		ok(ticks == 23, "90 degrees off, she is on the course after 23 ticks", ticks, 23);
+		ok(heading == 0x4000, "...on the course exactly, not past it", heading, 0x4000);
+		printf("  90 degrees off: %ld ticks of %ld units, ending on %d\n",
+			ticks, worst, heading);
+	}
+
+	/* 3. WHAT A WHOLE JUMP IS WORTH, which is the user's own sentence: "Lara
+	 * kann dadurch einen viel weiteren Radius um eine Kante springen." A
+	 * forward jump lasts about 40 ticks. The classic manages 182 a tick and M5
+	 * measured seven real jumps turning 1 to 36 degrees in total; ours turns
+	 * four times that. The stick is thrown to the BACK and held, which is the
+	 * furthest a course can ever be from her: 32768 / 728 is 45 ticks, so she
+	 * is still turning when she lands and 160 degrees is the whole of what a
+	 * jump can buy - the "at most" of the header, measured rather than argued.
+	 * A held stick nearer than that arrives at the course and stops there,
+	 * because the course is HELD (item 1) and does not run away from her. */
+	ModernResetState(&state);
+	{
+		short heading = 0;
+
+		for (i = 0; i < 40; i++)
+		{
+			yaw = 0;
+			ModernTranslate(&cfg, &state, 0, S(32000), 0, heading, &sit, &out);
+			ModernAirTurn(&cfg, &state, &sit, &out, &yaw);
+			heading = (short)ModernWrap((long)heading + yaw);
+		}
+
+		total = absl(ModernWrap(heading));
+		ok(total == 40 * 728, "40 ticks of jump turn 160 degrees at most", total, 40 * 728);
+		printf("  a 40-tick jump: %ld units = %ld degrees, where the classic's own 182"
+			" makes %ld\n", total, total * 360 / 65536, 40L * 182 * 360 / 65536);
+	}
+
+	/* 4. THE BITS. The two turn bits go, because we are turning her ourselves
+	 * and a bit would turn her twice - and NOTHING else does, because in the
+	 * air the rest of the word is not a direction: IN_BACK is the twist,
+	 * IN_WALK the swan dive, IN_ACTION the grab. */
+	ModernResetState(&state);
+	ModernTranslate(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	out.bits = MODERN_IN_LEFT | MODERN_IN_RIGHT | MODERN_IN_FORWARD | MODERN_IN_WALK |
+		MODERN_IN_BACK;
+	ok(ModernAirTurn(&cfg, &state, &sit, &out, &yaw) == 1, "in the jump the air turn takes charge",
+		1, 1);
+	ok((out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT)) == 0, "...the turn bits go",
+		out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT), 0);
+	ok((out.bits & (MODERN_IN_FORWARD | MODERN_IN_WALK | MODERN_IN_BACK)) ==
+		(MODERN_IN_FORWARD | MODERN_IN_WALK | MODERN_IN_BACK),
+		"...and the twist, the swan dive and the forward bit stand",
+		out.bits & (MODERN_IN_FORWARD | MODERN_IN_WALK | MODERN_IN_BACK),
+		MODERN_IN_FORWARD | MODERN_IN_WALK | MODERN_IN_BACK);
+
+	/* 5. THE GATES. Rate 0 is the feature switched off and the classic 1 degree
+	 * a tick back in charge; a state that is not the forward jump, a classic
+	 * tick and a stick at rest are all "not mine". */
+	ModernResetState(&state);
+	ModernTranslate(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	cfg.air_turn_rate = 0;
+	ok(ModernAirTurn(&cfg, &state, &sit, &out, &yaw) == 0, "air_turn_rate 0: no write", 0, 0);
+	ok(yaw == 0, "...and no angle", yaw, 0);
+	ok((out.bits & MODERN_IN_RIGHT) != 0, "...the classic turn bit stands instead",
+		out.bits & MODERN_IN_RIGHT, MODERN_IN_RIGHT);
+
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 11;				/* AS_REACH */
+	ModernTranslate(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	ok(ModernAirTurn(&cfg, &state, &sit, &out, &yaw) == 0, "the reach is not steered", 0, 0);
+
+	sit.anim_state = 3;
+	sit.classic = 1;
+	ModernTranslate(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
+	ok(ModernAirTurn(&cfg, &state, &sit, &out, &yaw) == 0, "a classic tick is not steered", 0, 0);
+	sit.classic = 0;
+
+	ModernResetState(&state);
+	ModernTranslate(&cfg, &state, 0, 0, 0, 0, &sit, &out);
+	ok(ModernAirTurn(&cfg, &state, &sit, &out, &yaw) == 0, "and a stick at rest turns nothing",
+		0, 0);
+
+	/* 6. AND THE GROUND TURN STILL REFUSES THE AIR, which is what keeps the two
+	 * from ever running in the same tick: the state lists do not overlap. */
+	ok(ModernStateAllowsDirectTurn(3) == 0, "the ground turn has never touched the jump",
+		ModernStateAllowsDirectTurn(3), 0);
+	ok(ModernStateAllowsAirTurn(1) == 0, "...and the air turn does not touch the run",
+		ModernStateAllowsAirTurn(1), 0);
+}
+
+/* -------------------------------------------- the camera follows a flip ----- */
+
+static void camera_carry()
+{
+	MODERN_CAMERA_CFG cfg;
+	MODERN_CAMERA_STATE state;
+	short off, pitch;
+	long t;
+
+	printf("the camera follows an animation about-turn (#161 item 5)\n");
+
+	ModernCameraDefaults(&cfg);
+	ok(cfg.carry_flip == 27307, "150 degrees in one tick is an animation", cfg.carry_flip,
+		27307);
+	ok(cfg.carry_ticks == 20, "...and the swing takes 20 ticks, 0.67 s", cfg.carry_ticks, 20);
+
+	/* 1. THE SWING IS THE FLIP, AND IT PUTS THE OFFSET BACK. She is running
+	 * with the camera on her back; she rolls, which turns her 180 degrees in
+	 * one tick. Without item 5 the camera is left standing in front of her face
+	 * - M6 measured cam_off going from about 0 to about 180 and staying there
+	 * (under 30 degrees of the slow return in 40 ticks), which is what makes
+	 * her jump the wrong way afterwards. */
+	ModernCameraReset(&state);
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0x2000, 1, 0, &off, &pitch);
+	ok(off == 0, "seated behind her back", off, 0);
+
+	ModernCameraCarry(&cfg, &state, 0x8000);		/* the roll: +180 degrees */
+	ok(absl(state.carry) == 32768, "the roll owes the camera a half turn",
+		absl(state.carry), 32768);
+
+	{
+		long worst = 0;
+		long first = 0;
+		long middle = 0;
+		long last = 0;
+		long wrong = 0;
+		long sum = 0;
+		short before = state.world_yaw;
+
+		for (t = 0; t < 20; t++)
+		{
+			const short was = state.world_yaw;
+			long step;
+
+			ModernCameraUpdate(&cfg, &state, 0, 0, (short)ModernWrap(0x2000 + 0x8000), 1, 0, &off, &pitch);
+			step = ModernWrap((long)state.world_yaw - was);
+			sum += step;
+
+			if (step < 0)
+				wrong++;
+
+			if (absl(step) > worst)
+				worst = absl(step);
+
+			if (!t)
+				first = step;
+
+			if (t == 9)
+				middle = step;
+
+			if (t == 19)
+				last = step;
+		}
+
+		ok(off == 0, "after the swing her offset is what it was before the flip", off, 0);
+		ok(state.carry == 0, "...and nothing is left pending", state.carry, 0);
+		ok(sum == 32768, "...the swing added up to the flip itself", sum, 32768);
+		ok(wrong == 0, "...every tick of it went the same way", wrong, 0);
+		ok(first < middle && last < middle, "...eased: it starts and ends slower than it runs",
+			middle, first);
+		printf("  the swing: first tick %ld, middle %ld, last %ld, biggest %ld units\n",
+			first, middle, last, worst);
+
+		/* AND IT IS NOT A CUT. The eye rides a circle of camera.target_distance
+		 * around her, so the biggest one-tick step of the swing has to stay
+		 * under the interpolator's own threshold or the picture jumps instead
+		 * of swinging (game\interpolate_math.h, INTERP_CAM_SNAP). */
+		{
+			const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
+			const double radius = 1536.0;
+			const long chord = InterpManhattan(
+				roundl2(radius * sin((double)worst * turn)),
+				0,
+				roundl2(radius * (1.0 - cos((double)worst * turn))));
+
+			ok(chord < INTERP_CAM_SNAP, "the swing's fastest tick is not a camera cut",
+				chord, INTERP_CAM_SNAP);
+			printf("  its fastest tick moves the eye %ld of the %ld the interpolator"
+				" calls a cut\n", chord, (long)INTERP_CAM_SNAP);
+		}
+
+		(void)before;
+	}
+
+	/* 2. THE SIDE IS THE ONE THE CAMERA ALREADY LEANS TO. Both ways round end
+	 * on the same world angle, so the choice is free and it goes the way the
+	 * picture is already looking - a camera hanging to her right swings right.
+	 * Dead behind her (offset 0) there is no lean and it takes the right, a
+	 * fixed side rather than an accident of the wrap. */
+	ModernCameraReset(&state);
+	state.offset_yaw = 0x1000;						/* leaning right */
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 0, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, -0x8000);		/* a flip the other way */
+	ok(state.carry > 0, "leaning right, the swing goes right whatever the flip's sign",
+		(state.carry > 0) ? 1 : 0, 1);
+
+	ModernCameraReset(&state);
+	state.offset_yaw = -0x1000;						/* leaning left */
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 0, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, 0x8000);
+	ok(state.carry < 0, "...and leaning left, left", (state.carry < 0) ? 1 : 0, 1);
+
+	ModernCameraReset(&state);
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 0, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, -0x8000);
+	ok(state.carry > 0, "dead behind her, the tie goes to the fixed side",
+		(state.carry > 0) ? 1 : 0, 1);
+
+	/* 3. UNDER THE THRESHOLD NOTHING HAPPENS AT ALL. The modern turn's own
+	 * biggest step is 30 degrees and the classic automaton's is 8, so 150 in
+	 * one tick can only be an animation - but the engine half is what decides
+	 * to call this, and a caller that calls it too often costs one comparison
+	 * and no swing. */
+	ModernCameraReset(&state);
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 0, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, 27306);
+	ok(state.carry == 0, "just under 150 degrees is a turn, not a flip", state.carry, 0);
+	ModernCameraCarry(&cfg, &state, MODERN_TURN_RATE);
+	ok(state.carry == 0, "...and the modern turn's own fastest tick is nowhere near",
+		state.carry, 0);
+	ModernCameraCarry(&cfg, &state, 27307);
+	ok(state.carry != 0, "at 150 exactly it is a flip", (state.carry != 0) ? 1 : 0, 1);
+
+	/* 4. THE STICK CANCELS WHAT IS LEFT, the moment it is pushed: the right
+	 * stick is the player's camera, and a swing still paying out under his
+	 * thumb is the camera fighting him. */
+	ModernCameraReset(&state);
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 1, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, 0x8000);
+
+	for (t = 0; t < 5; t++)
+		ModernCameraUpdate(&cfg, &state, 0, 0, (short)ModernWrap(0x8000), 1, 0, &off, &pitch);
+
+	ok(state.carry != 0, "five ticks in, the swing is still running",
+		(state.carry != 0) ? 1 : 0, 1);
+
+	{
+		const short held = state.world_yaw;
+
+		ModernCameraUpdate(&cfg, &state, MODERN_STICK_FULL, 0, (short)ModernWrap(0x8000),
+			1, 0, &off, &pitch);
+		ok(state.carry == 0, "the stick cancels what is left of it", state.carry, 0);
+		ok(state.carry_total == 0, "...all of it", state.carry_total, 0);
+		ok(ModernWrap((long)state.world_yaw - held) == cfg.yaw_rate,
+			"...and that tick is the stick's own step and nothing else",
+			ModernWrap((long)state.world_yaw - held), cfg.yaw_rate);
+	}
+
+	/* 5. THE RETURN STANDS STILL WHILE THE SWING RUNS, for the same reason it
+	 * stands still while he steers: two hands on the same angle would leave the
+	 * swing somewhere other than where it promised. It is the fast one anyway -
+	 * 0.67 s against the return's four-second half life. */
+	ModernCameraReset(&state);
+	state.offset_yaw = 0x2000;
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 1, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, 0x8000);
+	ModernCameraUpdate(&cfg, &state, 0, 0, (short)ModernWrap(0x8000), 1, 0, &off, &pitch);
+	ok(state.ret == 0, "no return step while the swing is paying out", state.ret, 0);
+
+	for (t = 0; t < 25; t++)
+		ModernCameraUpdate(&cfg, &state, 0, 0, (short)ModernWrap(0x8000), 1, 0, &off, &pitch);
+
+	ok(state.ret != 0, "...and it is running again once the swing is done",
+		(state.ret != 0) ? 1 : 0, 1);
+
+	/* 6. A SECOND FLIP WHILE THE FIRST IS RUNNING - the user's "Saltos", two
+	 * twists in a row. What is left RIDES ALONG with the new swing rather than
+	 * queueing behind it, so the camera is behind her 0.67 s after the LAST
+	 * twist and not after the first.
+	 *
+	 * AND THE ARITHMETIC OF IT IS WORTH READING, because it is not "twice as
+	 * much to swing": two twists put her heading back where it started, so the
+	 * camera owes nothing at the end - what is pending after the second flip is
+	 * the UNWINDING of the little the first one had already paid. The sum is
+	 * what makes that come out right on its own, without a case for it. */
+	ModernCameraReset(&state);
+	ModernCameraUpdate(&cfg, &state, 0, 0, 0, 1, 0, &off, &pitch);
+	ModernCameraCarry(&cfg, &state, 0x8000);
+
+	for (t = 0; t < 5; t++)
+		ModernCameraUpdate(&cfg, &state, 0, 0, (short)ModernWrap(0x8000), 1, 0, &off, &pitch);
+
+	{
+		const long left = state.carry;
+
+		ModernCameraCarry(&cfg, &state, 0x8000);
+		ok(state.carry_tick == 0, "a second twist starts the profile again", state.carry_tick, 0);
+		ok(absl(state.carry) == 32768 - absl(left),
+			"...and what was left of the first rides along with it, sign and all",
+			absl(state.carry), 32768 - absl(left));
+		printf("  a second twist five ticks in: %ld was pending, %ld is now\n",
+			left, state.carry);
+
+		for (t = 0; t < 20; t++)
+			ModernCameraUpdate(&cfg, &state, 0, 0, 0, 1, 0, &off, &pitch);
+
+		ok(off == 0, "...and after it she has her camera behind her again", off, 0);
+	}
+
+	/* 7. CARRY_TICKS 0 IS THE FEATURE SWITCHED OFF, which is how a play test
+	 * asks "is the swing wrong, or is the flip wrong?". */
+	{
+		MODERN_CAMERA_CFG off_cfg = cfg;
+
+		off_cfg.carry_ticks = 0;
+		ModernCameraReset(&state);
+		ModernCameraUpdate(&off_cfg, &state, 0, 0, 0, 1, 0, &off, &pitch);
+		ModernCameraCarry(&off_cfg, &state, 0x8000);
+		ok(state.carry == 0, "carry_ticks 0: the camera stays where it was", state.carry, 0);
+	}
 }
 
 /* ------------------------------------------------------ running and firing -- */
@@ -4804,6 +5749,9 @@ int main()
 	blocked();
 	direct_turn();
 	circling();
+	reversal();
+	spin_sweep();
+	air_turn();
 	firing_run();
 	weapons();
 	sweeps();
@@ -4816,6 +5764,7 @@ int main()
 	camera_stamp();
 	camera_lead();
 	camera_camcut();
+	camera_carry();
 	deferred();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

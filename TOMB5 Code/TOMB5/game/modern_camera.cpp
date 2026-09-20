@@ -159,6 +159,92 @@ void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
 	cfg->pitch_return = MODERN_CAMERA_PITCH_RETURN;
 	cfg->wall_factor = MODERN_CAMERA_WALL_FACTOR;
 	cfg->hide_dist = MODERN_CAMERA_HIDE_DIST;
+	cfg->carry_flip = MODERN_CAMERA_CARRY_FLIP;
+	cfg->carry_ticks = MODERN_CAMERA_CARRY_TICKS;
+}
+
+/* HOW MUCH OF A SWING HAS BEEN PAID AFTER `tick` OF cfg->carry_ticks (round
+ * 161a3, item 5), by the eased profile 3u^2 - 2u^3: nothing at 0, the whole of
+ * it at the last tick, and its steepest in the middle. It is the CUMULATIVE
+ * figure and not a step, because a sum of rounded steps is not the total it
+ * was meant to add up to - the caller takes the difference of two of these and
+ * the rounding cancels itself.
+ *
+ * The profile is computed in 4096ths first and the total scaled by it second,
+ * so nothing here can leave a long: the profile is at most one whole
+ * (4096) whatever carry_ticks is, and a swing is at most a full turn. */
+long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick)
+{
+	MODERN_CAMERA_CFG spare_cfg;
+	long n, u;
+
+	if (!cfg)
+	{
+		ModernCameraDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	n = cfg->carry_ticks;
+
+	if (n <= 0 || tick <= 0)
+		return 0;
+
+	if (tick >= n)
+		return total;
+
+	u = ((3 * tick * tick * n - 2 * tick * tick * tick) * MODERN_CAMERA_CARRY_ONE) / (n * n * n);
+
+	return total * u / MODERN_CAMERA_CARRY_ONE;
+}
+
+/* HER HEADING FLIPPED AND THE CAMERA OWES HER A SWING (round 161a3, item 5).
+ * The engine calls this with the heading change of the tick whenever an
+ * ANIMATION made it - a roll, a jump twist, an underwater roll - and never for
+ * a turn the stick asked for. Under the threshold nothing happens at all, so
+ * an over-eager caller costs nothing but the comparison.
+ *
+ * THE SWING IS THE FLIP ITSELF, which is what puts her offset back where it
+ * was: the offset is world yaw minus her heading, so a heading that moved by
+ * f needs a world yaw that moves by f as well. WHICH WAY ROUND it goes is a
+ * free choice - both ways end on the same world angle - and it goes to the
+ * side the camera is already leaning, because that is the shorter way for the
+ * PICTURE even when it is the longer way for the arithmetic. A camera sitting
+ * dead behind her (offset 0) has no lean and takes the right, a fixed side.
+ *
+ * A SECOND FLIP WHILE ONE IS STILL RUNNING adds what is left to the new swing
+ * and starts the profile again - the user's "Saltos" are two twists in a row,
+ * and the alternative, letting the second one queue behind the first, would
+ * leave the camera arriving behind her a second after she landed. */
+void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state, long flip)
+{
+	MODERN_CAMERA_CFG spare_cfg;
+	long s, want;
+
+	if (!state)
+		return;
+
+	if (!cfg)
+	{
+		ModernCameraDefaults(&spare_cfg);
+		cfg = &spare_cfg;
+	}
+
+	if (cfg->carry_ticks <= 0)
+		return;
+
+	s = ModernWrap(flip);
+
+	if (ModernCameraAbs(s) < cfg->carry_flip)
+		return;
+
+	if (state->offset_yaw >= 0)
+		want = (s >= 0) ? s : s + 65536;
+	else
+		want = (s <= 0) ? s : s - 65536;
+
+	state->carry_total = state->carry + want;
+	state->carry = state->carry_total;
+	state->carry_tick = 0;
 }
 
 /* BEHIND HER BACK, AND AT THE HEIGHT THE GAME HAS ALWAYS USED.
@@ -186,6 +272,9 @@ void ModernCameraReset(MODERN_CAMERA_STATE* state)
 	state->wall = 0;
 	state->ret = 0;
 	state->steering = 0;
+	state->carry = 0;
+	state->carry_total = 0;
+	state->carry_tick = 0;
 }
 
 /* THE WHOLE ORBIT, IN THE ORDER THE THREE RULES HAPPEN AND FOR A REASON.
@@ -224,6 +313,7 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	long world;
 	long pitch;
 	long rate;
+	long swinging = 0;
 
 	if (!cfg || !state)
 		return;
@@ -258,9 +348,51 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	else
 		pitch -= ModernCameraRate(cfg, rs_y, cfg->pitch_rate);
 
+	/* 1b. THE SWING AN ANIMATION ABOUT-TURN OWED (round 161a3, item 5), paid
+	 * out here because ModernCameraCarry only seats it - the world yaw is this
+	 * function's to move, whoever asked.
+	 *
+	 * THE STICK CANCELS IT, the moment it is pushed and not at the end of the
+	 * tick: "Der rechte Stick ist die Kamera des Spielers" is item 1's whole
+	 * rule, and a swing still paying out under a thumb that has taken the
+	 * camera back is the camera fighting him, which is the complaint this
+	 * round exists to answer in its other half. What is left is dropped, not
+	 * remembered - she is where she is, and the offset he is dialling now is
+	 * the one he wants.
+	 *
+	 * AND THE RETURN STANDS STILL WHILE IT RUNS, for the same reason it stands
+	 * still while he steers: two hands moving the same angle at once would make
+	 * the swing end somewhere other than where it promised, and the swing is
+	 * the fast one of the two anyway. It resumes on the tick after the last. */
+	if (state->steering)
+	{
+		state->carry = 0;
+		state->carry_total = 0;
+		state->carry_tick = 0;
+	}
+	else if (state->carry_total && cfg->carry_ticks > 0)
+	{
+		const long paid = ModernCameraCarryStep(cfg, state->carry_total, state->carry_tick);
+
+		swinging = 1;
+
+		state->carry_tick++;
+		world = ModernWrap(world +
+			(ModernCameraCarryStep(cfg, state->carry_total, state->carry_tick) - paid));
+		state->carry = state->carry_total -
+			ModernCameraCarryStep(cfg, state->carry_total, state->carry_tick);
+
+		if (state->carry_tick >= cfg->carry_ticks)
+		{
+			state->carry = 0;
+			state->carry_total = 0;
+			state->carry_tick = 0;
+		}
+	}
+
 	/* 2. THE RETURN, whose home is HER HEADING now and no longer an offset of
 	 * zero: the same fall, written where the state really lives. */
-	if (lara_moving && !state->steering)
+	if (lara_moving && !state->steering && !swinging)
 	{
 		rate = cfg->return_rate;
 

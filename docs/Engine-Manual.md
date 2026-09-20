@@ -109,20 +109,26 @@ worth knowing by name:
 
 ## Controls
 
-**Options → "Control Configuration".** The top row is *Control Method* with
-five positions: *Keyboard*, *PS5 Controller*, *Xbox Controller*, *Joystick*
-and *Reset*.
+**Options → *Controls*.** The top row is *Control layout* (the old *Control
+Method*, renamed since round 161b1 to tell it apart from the newer *Control
+type* row) with four positions: *Keyboard*, *PS5 Controller*, *Xbox
+Controller* and *Joystick*.
 
 The three controller positions mostly mean the same thing to the game — they
 choose the **vocabulary** the buttons are named with, and with it the default
-layout that *Reset* writes back. The engine works out by
-itself whether your pad reports as XInput or DirectInput, so a DualSense
-behind Steam still gets PS5 names.
+layout the *Key bindings* page's own *Reset to defaults* row writes back
+(round 161b1 moved *Reset* off *Control layout*'s own value list and onto that
+page, as a centred row of its own — it does exactly what the old value did).
+The engine works out by itself whether your pad reports as XInput or
+DirectInput, so a DualSense behind Steam still gets PS5 names.
 
-With a controller page selected the list changes to fifteen bindable rows,
-including *Pause*, *Save*, *Load* and the two medipacks — vanilla had no
-joystick binding screen at all. The four right-stick tilts can be bound like
-buttons.
+Open *Key bindings* with a controller layout selected and the list holds
+fifteen bindable rows, including *Pause*, *Save*, *Load* and the two
+medipacks — vanilla had no joystick binding screen at all. The four
+right-stick tilts can be bound like buttons. Round 161b1 also put the list on
+its own page rather than folding it into *Controls* itself, so it can page
+left and right with the arrows when the sixteen keyboard rows (or fifteen pad
+roles) do not fit one screen — the same paging *tomb5 options* already used.
 
 A few things worth knowing:
 
@@ -148,27 +154,36 @@ A few things worth knowing:
 
 Reached from the title screen row *Options*, or from the pause screen while
 playing. The two are identical except for one row: **Special Features** only
-appears from the title screen.
+appears from the title screen (or, while playing, once you have found nine
+secrets in the matching quarter of the campaign).
 
-| Row | What it does | Default |
+Since round 161b1 the page is one sorted tree instead of a single flat list:
+a title, then rows that either open another page (drawn centred, like the
+Remaster's own) or are settings of their own (left-aligned, value on the
+right). The seven tabs:
+
+| Tab | Holds | Default |
 |---|---|---|
-| Control Configuration | see above | — |
-| Music Volume | 0–100, applied live | 80 |
-| SFX Volume | 0–100; Lara's breath plays back as you drag | 90 |
-| Sound Quality | Low / Medium / High = 11 / 22 / 44 kHz, switched live | Medium |
-| Targeting | Automatic or Manual | Automatic |
-| Language | switches all game text, no restart | automatic |
+| Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
+| Controls | *Key bindings*, *View*, Control type, Combat mode, Action, Control layout, Camera speed, Dead zone, Targeting, Ammotype hotkeys | see below |
+| Graphics | *Display*, HD textures, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints | see **tomb5 options** |
+| HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, TR4 loadscreens, Loadbar style, Loading text | see **tomb5 options** |
+| tomb5 options | Cutscene skipper, Cheats, Level select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
-| tomb5 options | the engine's own pages, below | — |
 | Credits | who this is built on | — |
 
-A Special Features page unlocks when you have found nine secrets in the
-matching quarter of the campaign.
+Nothing about any one setting's variable, range, default or effect moved with
+it — only which tab it sits on. *Targeting* is the one row that changed tab
+outright, from the Options page itself onto *Controls*; every other row kept
+the page it already had (*tomb5 options*, *Graphics* or *HUD*), just under a
+tab now instead of a numbered page. See **tomb5 options** below for the six
+settings that keep that name, and the sections after it for where the rest
+of the old pages 1 and 2 went.
 
-**Credits** is a screen of its own, not one of the tomb5 pages — as a page it
-kept turning up unasked while paging through settings, with the paging arrows
-drawn across the names. It lists names only; the web addresses live in
-`README.txt`, because the game font cannot draw every character.
+**Credits** is a screen of its own, not one of the framework's pages — as a
+page it kept turning up unasked while paging through settings, with the
+paging arrows drawn across the names. It lists names only; the web addresses
+live in `README.txt`, because the game font cannot draw every character.
 
 ---
 
@@ -176,36 +191,39 @@ drawn across the names. It lists names only; the web addresses live in
 
 <p align="center"><img src="features-1.jpg" alt="The tomb5 options page" width="700"></p>
 
-Three pages the original never had, plus a fourth when first person is on.
-The row of two arrows at the bottom steps forward; there is no going back a
-page, you cycle round.
+Six settings the original never had. Before round 161b1 these sat across two
+numbered pages together with most of the *Graphics* and *HUD* rows below;
+sorting the tree moved the graphics and HUD rows off this tab onto their own
+(see **The options menu** above) and left *tomb5 options* with the six that
+belong to neither:
 
-**Page 1** — *Footprints* (on), *Shadow mode* (Original blob / Circle / Faded
-circle / PSX — default Faded circle), *Fix climb up delay* (on — removes the
-pause before Lara pulls herself up), *Flexible crawling* (on), *Cutscene
-skipper* (off), *Cheats* (off), *Bar mode* (Original / TR4 / PSX — default
-PSX), *Bar positions* (Original), *Enemy bars* (off), *Ammo counter* (off),
-*Gameover menu* (on), *Fog* (on), *HD textures* (off).
+*Cutscene skipper* (off), *Cheats* (off), *Level select* (off), *Fix climb up
+delay* (on — removes the pause before Lara pulls herself up), *Flexible
+crawling* (on), *Crawl Tilting* (on).
 
-**Page 2** — *Crawl Tilting* (on), *PSX skies* (on), *TR4 loadscreens* (on),
-*Loadbar style* (TR4), *Mono screen style* (Original), *Loading text* (on),
-*Shimmer* (on), *Distance fog* (12 — how many blocks away the world fades,
-3–30), *Ammotype hotkeys* (on), *Look transparency* (off), *Static lighting*
-(on), *UW Effect* (Original), *First person view* (off), *Level select* (off).
-
-**Page 3, *Display*** — *Frame rate* (60 / 30 / Display) and *VSync* (on).
-Their own page since they are one subject; both have a section of their own
-below.
+Everything else the screenshot above still shows — *Footprints*, *Shadow
+mode*, *Fog*, *HD textures*, *Bar mode*, *Bar positions*, *Enemy bars*, *Ammo
+counter*, *Gameover menu*, *PSX skies*, *TR4 loadscreens*, *Loadbar style*,
+*Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*, *Ammotype
+hotkeys*, *Look transparency*, *Static lighting*, *UW Effect* — kept its
+variable, range, default and effect exactly as it always had; only the tab
+changed. *Graphics* holds the picture rows (plus *Display*, its own sub-page
+for *Frame rate* and *VSync* — see below), *HUD* the rest. *First person
+view* moved from this page onto *Controls*' own *View* tab, and its six rows
+are shown there always now, not just while the switch is on (see **First
+person view** below); *Ammotype hotkeys* moved onto *Controls*; *Targeting*
+moved onto *Controls* from the Options page itself.
 
 Worth spelling out:
 
-- **Frame rate** and **VSync** have a page of their own — *Display*, the
-  third page of the cycle. *Frame rate* is *60* by default, *30* is the
-  original and *Display* follows the monitor. It changes how often the
-  picture is drawn and **nothing else**: the game itself still steps thirty
-  times a second, exactly as Core wrote it, so every animation, every timer,
-  every trigger and every enemy behaves identically in all three. A savegame
-  written in one is the savegame written in the others.
+- **Frame rate** and **VSync** live on *Graphics → Display*, a page of its
+  own since they are one subject; both have a section of their own below.
+  *Frame rate* is *60* by default, *30* is the original and *Display* follows
+  the monitor. It changes how often the picture is drawn and **nothing
+  else**: the game itself still steps thirty times a second, exactly as Core
+  wrote it, so every animation, every timer, every trigger and every enemy
+  behaves identically in all three. A savegame written in one is the
+  savegame written in the others.
 
   See *Frame rate* further down for what the settings really do and how to
   check them.
@@ -237,8 +255,9 @@ Worth spelling out:
 
 <p align="center"><img src="ingame-08.jpg" alt="First person, aiming the HK" width="700"></p>
 
-Switch it on under *tomb5 options*, page 2. A **fourth page** then appears,
-after *Display*, with five rows of its own:
+Switch it on under *Controls → View* — the switch itself moved there in
+round 161b1, from its old home on *tomb5 options*. The same tab holds five
+rows of its own:
 
 | Row | What it does | Default |
 |---|---|---|
@@ -248,9 +267,10 @@ after *Display*, with five rows of its own:
 | Camera damping | off / Light / Medium / Strong | Light |
 | Body | **animated** as always, or **still** while she is standing still | animated |
 
-The page only exists while the view is on, so a settings page for something
-switched off cannot turn up unasked. Turning the view off while standing on
-that page drops you back to page 1.
+Unlike the old page, the five rows are always shown, whether *First person
+view* itself is on or off — round 161b1 dropped the gating that used to make
+a settings page for something switched off appear and disappear on its own;
+the switch and its five settings are simply one tab now.
 
 While first person is on, Lara's head and braid are not drawn, close sounds
 are centred instead of panned, and the camera stays behind her eyes where
@@ -289,8 +309,8 @@ in the 13th Floor. That is not the option failing.
 
 ## Frame rate
 
-*tomb5 options*, the **Display** page — the third page of the cycle, reached
-with Left/Right from page 2. Two rows:
+*Graphics → Display*, its own page since round 161b1 sorted the tree (before
+that, the third of the *tomb5 options* pages). Two rows:
 
 | row | positions | takes effect |
 |---|---|---|
@@ -976,11 +996,12 @@ point in space the two sides of a doorway differ by up to a third of full
 brightness in its own art. Nothing here widens it and nothing here can close it
 without repainting the art.
 
-**Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
-the last row of the first page. Like every row on that page it is remembered at
-once; unlike most of them it takes effect **at the start of the next level**,
-because the art is read and unpacked while the level loads. Switch it on, then
-load a save or start a level.
+**Switching it on.** Options → *Graphics* → **HD textures** (moved there in
+round 161b1 from its old home as the last row of *tomb5 options*' first
+page). Like every row on that tab it is remembered at once; unlike most of
+them it takes effect **at the start of the next level**, because the art is
+read and unpacked while the level loads. Switch it on, then load a save or
+start a level.
 
 There is no options row for the *path*, and normally there does not need to be:
 the engine reads Steam's own folder out of the registry, walks every library in

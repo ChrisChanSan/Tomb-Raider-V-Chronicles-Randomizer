@@ -16408,6 +16408,236 @@ with step 2a disabled the same runs fail eight checks and show 14 impulses per
 run, biggest 15.0 degrees in the water and 30.0 on land, which is M2's own
 shape reproduced by the harness.
 
+#### Round 161b1 (#161) - the options menu, sorted
+
+Continuing directly from round 161a3b's own accepted head, `a6ecbb5`, on the
+same branch. He had looked at the Remaster's own menu and put his own next to
+it, and wanted the shape without the binary:
+
+1. *"Das Remaster ist viel cleaner, unser sehr durcheinander."*
+2. *"Ich wuerde die Hauptreiter gerne wie im Remaster haben; wir haben bis
+   jetzt nur 'Steuerung' mittig als Hauptreiter."*
+3. *"In den Menues wird alles, was da definiert wird, linksbuendig wie es
+   jetzt ist; Hauptreiter wie Keybinds in Steuerung werden aber weiterhin
+   mittig angeboten, dann haben wir eine Abhebung, was sind Untermenues und
+   was sind Funktions-Toggle-Switche."*
+4. Keybinds: *"Wenn nicht alle Keybinds auf eine Seite passen, machen wir das
+   wie in den Tomb-Optionen mit mehreren Seiten nach links und rechts mit den
+   Pfeilen am unteren Bildschirmrand."*
+5. Ansicht: *"Der Umschalter ist momentan noch in den Tomb-Optionen, der kann
+   hier rein. Wenn der Switch auf on ist, kommt ja eine extra Seite in den
+   Tomb-Optionen mit den Einstellungen fuer die FPV; die koennen alle mit in
+   den Reiter, ohne den Switch mit on oder off."*
+6. Steuerungslayout: *"heisst bei uns momentan 'Art der Steuerung', das ist
+   fuer Keyboard/Controller. Schlecht zu differenzieren wegen der neuen
+   modernen Steuerung."*
+7. Deadzone: *"Das ist bei uns momentan noch ein fester Wert, den wie im
+   Remaster toggelbar fuer den User hier einbinden."*
+
+What his screenshots of the Remaster's menu showed - layout only, the taboo
+on its binaries untouched by looking at a screen the same way a competitor's
+box art is untouched by looking at the shelf - was a page title at the top;
+pages that open another page offered as CENTRED rows; settings as
+LEFT-aligned labels with the value right-aligned; the key-binding page a
+centred "restore defaults" row above a left-aligned list of roles. **TROne
+(GPLv3, Todesengel1931) was read for the same reason it always is - its
+design re-derived, nothing of its code taken - and gave nothing new here: the
+Remaster's own screen was the only source for the tree's shape.**
+
+**THE TREE.** Seven tabs off one Options page: Audio (Music volume, SFX
+volume, Sound quality, Language); Controls (its own two centred sub-tabs Key
+bindings and View, then Control type, Combat mode, Action, Control layout,
+Camera speed, Dead zone, Targeting, Ammotype hotkeys); Graphics (its own
+Display sub-tab, then HD textures, Fog, Distance fog, Shimmer, Mono screen
+style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency,
+Footprints); HUD (Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover
+menu, TR4 loadscreens, Loadbar style, Loading text); tomb5 options (Cutscene
+skipper, Cheats, Level select, Fix climb up delay, Flexible crawling, Crawl
+Tilting); Special Features (untouched inside, title-only as before); Credits
+(untouched inside). Every one of the row ledger's 46 moved settings, plus the
+new Dead zone, exists exactly once - same variable, range, default, registry
+name, side effect as at base, carried over verbatim rather than re-invented.
+Three deliberate choices the project manager made and is naming here rather
+than leaving silent: the three load-screen rows sit under HUD and not
+Graphics, so Graphics keeps headroom for the HD rows that have no menu row
+yet; "Control layout" is the old Method row renamed, without its fifth value
+"Reset" - the reset is now the centred ACTION on Key bindings and does
+exactly what the value did; Targeting moved from the Options page itself onto
+Controls. The title main menu and the pause top menu are untouched.
+
+**THE FRAME, ONE TABLE PER PAGE INSTEAD OF FIVE FUNCTIONS WITH THEIR OWN BIT
+MASK.** `game/menu_nav.h` is pure arithmetic with no engine include at all -
+`MenuCursorStep`, `MenuFirstEnabled`, `MenuClampCursor`, `MenuPageCount`,
+`MenuRowsPerPage`, `MenuPageFirstRow`, `MenuRowsOnPage`, `MenuPageStep` - and
+is checked by a new harness, `Preparation/Tools/Diagnose/MenuTest.cpp`, built
+by `bmenu.bat` on the model of `bmt.bat`. `game/menu_frame.h` is the contract:
+`menu_row_kind` (TAB / ACTION / VALUE / SLIDER / BINDING), `menu_page_id`, the
+three `MENU_SAVE_*` targets, the five callback types, `struct menu_row` and
+`struct menu_page`, the four geometry constants and `MenuFrameRun()`.
+`game/menu_frame.cpp` is every row's EXISTING logic carried over into one
+table per page, the draw-and-drive loop, the key capture and the `MENULOG`
+seam. `specific/LoadSave.cpp`'s `DoOptions()` is three lines now - it calls
+`MenuFrameRun()` - down from 944 lines removed against 79 added; the Special
+Features page kept its own function, `SpecialFeaturesPageRun()`, because it
+is still legacy-dispatched rather than a table (its logic did not move, only
+its calling convention). `tomb5/troyestuff.cpp` lost `TroyeMenu`,
+`TroyeMenuPage`, `Page0`, `Page1`, `Page2`, `PageDisplay` and the page-number
+constants outright - 905 lines removed - once their rows were tables of the
+frame; only `CreditsScreen` remains, byte for byte.
+
+Geometry is one rule for every page now, recomputed rather than assumed: at
+`font_height = GetFixedScale(28)`, which scales with the window so the row
+count is the same at every resolution, the last usable line is row 16 (the
+arrow row) - title at row 2, twelve rows from 4 to 15, which is exactly what
+the fullest page (Graphics, Display tab plus eleven settings) needs. The
+Controls page's own R7 (`font_height` forced down to `GetFixedScale(22)`,
+overlapping glyph cells by 3px at 640x480 and 8px at 1920x1080) is cured by
+construction: no page writes `font_height` any more, and Controls itself has
+seven rows now that Key bindings carries its own paged list. Key bindings
+splits balanced (`pages = ceil(n / max)`, `rows per page = ceil(n / pages)`)
+with the arrow row pinned to the bottom line and a centred "Reset to
+defaults" above the list on every page, LEFT/RIGHT paging with wrap, the
+tomb5-style arrow glyphs reused. Sixteen keyboard rows or fifteen pad roles
+against the frame's true maximum of eleven (twelve rows less the one fixed
+Reset row, not the brief's own worked example of thirteen - the brief's
+number does not match what the finished frame offers, and `MenuTest` asserts
+BOTH and gets the same 8+8 / 8+7 split from either) split the same way
+either side of that correction.
+
+**TWO FIXES ON THE WAY, EACH ITS OWN COMMIT.** R3, the key-binding reset
+writing past its array: `memcpy(layout[1], layout, 72)` wrote 36 bytes past
+`layout` and overlapped its source; now `sizeof(layout[0])` copied from
+`layout[0]`. R4, the "Game" registry block living only in memory until a
+clean exit: `SaveSettings()` was read in full first (it writes only live
+values - keys, `jLayout`, `ControlMethod`, `JoyStyle`, `Language`, the
+volumes, `SoundQuality`, `AutoTarget`, `WindowX/Y`, then `System/VMode` and
+`System/Window` - nothing else, so a mid-session write is exactly what a
+clean exit would have written at that moment); it is now called through a
+dirty flag when a page holding a changed "Game" value is left, `MENU_SAVE_GAME`
+beside the existing `MENU_SAVE_TOMB5` (writes at once, as base did) and
+`MENU_SAVE_NONE`.
+
+**THE RIGHT HALF, AND THE WORDS.** Graphics, Display, HUD, View and tomb5
+options became tables of the frame, each row's logic carried over verbatim
+from `Page0` / `Page1` / `PageDisplay` / `Page2`; Ammotype hotkeys moved onto
+Controls, the View tab was added there. Every label, value and title of every
+framework page goes through `CustomText` with an English and a German
+column - French, Italian and Spanish repeat the English literal, as the whole
+table already did. The lookup key is the exact English literal throughout, so
+"Level Select" (the title-screen row, already existing) and "Level select"
+(this round's option row) stayed two different strings on purpose rather than
+colliding. German umlauts are written the way `GermanKeyboard[]` in
+`specific/input.cpp` already does - `~u`, `~o`, `~a`, a literal tilde before
+the plain vowel, checked against the accent path in `game/text.cpp` first:
+there is no other umlaut path in this renderer to use instead. `CustomText`
+grew from **18** rows at base `a6ecbb5` to **76** - measured per commit with
+`grep -c '{ "' game/gameflow.cpp` rather than carried over from an earlier
+report (which is how this entry catches its own predecessors' rounding: step
+2's own report named its own baseline as 24, one commit too late; the true
+run is 18 -> 24 after step 1's six page titles -> 75 after step 2's 51
+label/title/value pairs -> 76 after step 3's one, `Dead zone` / `Deadzone` -
+58 new rows over the whole round, not 52).
+
+**THE DEAD ZONE BECOMES HIS VALUE.** New `tomb5.dead_zone` (`ulong`, the
+last field of `tomb5_options` so no existing offset moves), 0..100, default
+50, registry value `dead_zone` (clamped to 50 when missing or out of range,
+not clamped to 100 - an out-of-range value says nothing about which end was
+meant). `ModernDeadZoneUser(base, user) = (base*user+25)/50` in
+`game/modern_move.*`, pure, both arguments guarded, applied to all eight of
+the existing `MODERN_DEAD_*` constants at their two `ModernStickDeadZone`
+calls in `specific/input.cpp` - at 50 it reproduces every one of the eight
+base constants EXACTLY (integer division drops no remainder there), at 0
+there is no zone, at 100 twice the tuned one. The brief's own suspicion -
+that `specific/dxshell.cpp`'s per-axis 150-of-1000 DirectInput zone, or
+XInput's own thumb-zone constants, might sit as a hidden floor under the
+slider - was MEASURED and refuted rather than assumed away: all four raw
+axis assignments (`joystick_raw_lx/ly/rx/ry`) were already written BEFORE
+every classic gate, on both paths, both sticks, by rounds 161a2 and 161a2b's
+own earlier work; nothing needed to move. **The smallest effective zone is a
+true zero, on every path and every stick, and no line of `dxshell.cpp` was
+touched.** The Controls row "Dead zone" is a slider like Camera speed - same
+geometry, same settle-then-save - and both are disabled at Tank
+(`MenuEnabledModern`). `MODERNLOG`'s `dead_l`/`dead_r` now print the
+EFFECTIVE widths rather than the raw constants, with `dead_user=%d` appended
+at the very end of the init line - a log from before this round reads the
+same numbers only at `dead_user=50`.
+
+**MENULOG** gains the seam the brief asked for, behind `-log` only:
+`MENULOG enter page=<name>` when a page opens, `MENULOG set page=<name>
+row=<english label> value=<text>` when a value changes - sliders once when
+the value settles, never per frame. `row=` is always the English label, even
+in a German menu, the same convention every earlier round's own log fields
+have kept.
+
+**BYTE IDENTITY AT TANK**, the dead zone's own part of it enumerated
+statement by statement, because that is the one gameplay-side change the
+brief allowed. Every statement of the diff that touches movement or the
+camera sits behind `if (tomb5.control_modern)` (`specific/input.cpp:819` and
+`:919`) or behind the `modern_seam` gate that already starts with that same
+flag (`input.cpp:980`, reached only from `modern_state.cpp`'s logging under
+`gLogEnabled`) - none of it runs at Tank. What DOES run at Tank touches
+nothing but the new field: the three registry read/write sites in
+`tomb5/tomb5.cpp`, the menu's own value and step functions (reachable only
+while the Controls page is drawn, and `MenuStepDeadZone` is unreachable at
+Tank at all - the drive loop cannot put the cursor on a row whose predicate
+is false), and the one new `CustomText` row. `tomb5_options` is
+registry-only - no `sizeof(tomb5)` write anywhere - so the new field changes
+no file format and no savegame. `game/interpolate.*`, `TR5Randomizer/` and
+the Tank key/pad default tables were not touched anywhere in the round.
+
+**THE FILES**, round 161b1's own against base `a6ecbb5`:
+
+- `game/menu_nav.h` (new) - the pure cursor/paging arithmetic.
+- `game/menu_frame.h` / `.cpp` (new) - the row/page contract and every page's
+  table, ~1100 lines carrying every row's base logic over verbatim.
+- `specific/LoadSave.cpp` / `.h` - `DoOptions()` reduced to `MenuFrameRun()`;
+  `SpecialFeaturesPageRun()` split out.
+- `game/gameflow.cpp` - 58 new `CustomText` rows over the round (six page
+  titles from step 1, 51 label/title/value pairs from step 2's right half,
+  one more from step 3, `Dead zone`/`Deadzone`).
+- `TOMB5 Code/tomb5.vcxproj` - the three new menu files added alphabetically.
+- `tomb5/troyestuff.cpp` / `.h` - the old page functions and their constants
+  deleted; `CreditsScreen` untouched.
+- `global/types.h` - `tomb5_options` gains `dead_zone` at its end.
+- `tomb5/tomb5.cpp` - the registry read/write sites for `dead_zone`.
+- `game/modern_move.h` / `.cpp` - `ModernDeadZoneUser` and its comment.
+- `specific/input.cpp` - the two `ModernStickDeadZone` calls scaled.
+- `game/modern_state.cpp` - `dead_l`/`dead_r` now effective, `dead_user=`
+  appended.
+- `Preparation/Tools/Diagnose/MenuTest.cpp`, `bmenu.bat` (new) -
+  `game/menu_nav.h`'s own harness.
+- `Preparation/Tools/Diagnose/ModernTest.cpp` - the `deadzone` group's eight
+  new cases.
+- `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md`,
+  `README.md`, `docs/Engine-Manual.md` (this entry, and the tool and manual
+  rows the moved paths needed) - outside the counts below, the same
+  convention every round has kept.
+
+**NO DEDICATED SKEPTICAL REVIEW RAN THIS ROUND** - the brief's four steps are
+all build steps, unlike 161a3b's own workflow. Two self-corrections are named
+in the earlier steps' own reports rather than papered over: the legacy
+`tomb5` options entry point discarding `TroyeMenuPage(0)`'s return value
+(which is the arrow row's own bit) was caught before its first commit, not
+after; and the geometry budget's row count (12, not the base page's 13) was
+recomputed from `GetFixedScale` rather than copied from an earlier page. The
+base defect step 1 found and left alone stands unchanged: the keyboard reset
+never calls `CheckKeyConflicts()`, so `conflict[]` stays stale after a reset
+until the next capture - carried over unchanged, because it is a behaviour
+difference and no measurement in this round said it was wanted.
+
+Five commits, `Round 161b1 (#161): <what>`. `ModernTest` ends the round at
+**5,403 checks, 0 failed** (5,359 at base `a6ecbb5`, unaffected by steps 1-2
+which touch no file it includes, +44 from step 3's `deadzone` group).
+`MenuTest`, new this round, stands at **12,240 checks, 0 failed** - every
+function of `game/menu_nav.h` swept rather than sampled, and one group
+asserting both the brief's own worked example (13) and the frame's true
+maximum (11) side by side, since they disagree and both are worth holding.
+`InterpTest` is untouched at **373 checks, 0 failed** - nothing in the round
+goes near a file it includes. The row ledger counted 50 lines against map
+section 9's own 50 rows, 46 of them moved plus the Special Features tab plus
+the new Dead zone - 47 settings in the finished tree, none of them
+duplicated and none of them lost.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

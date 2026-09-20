@@ -519,7 +519,17 @@ static void MenuSelectBinding(long role)
 static void MenuResetBindings(long)
 {
 	SoundEffect(SFX_MENU_SELECT, 0, 2);
-	memcpy(layout[1], layout, 72);
+	// THE COPY BASE GOT WRONG (menu-map R3). "memcpy(layout[1], layout, 72)"
+	// copied 72 bytes into a destination that starts 36 bytes into a 72-byte
+	// object: `short layout[2][18]` is 36 shorts altogether, so the write
+	// spanned bytes [36,108) of it and the last 36 landed past the end
+	// entirely - `long conflict[18]` is the next global declared in the same
+	// file (specific\input.cpp:427), which makes it the plausible target. Source
+	// and destination overlapped as well ([0,72) against [36,108)), which is
+	// undefined for memcpy on its own. The intent was always "put the
+	// compiled-in defaults over the active bindings", and that is one row of
+	// the array: 36 bytes from layout[0].
+	memmove(layout[1], layout[0], sizeof(layout[0]));
 	ApplyJoyDefaults();	// defaults matching page AND input path (input.cpp)
 }
 

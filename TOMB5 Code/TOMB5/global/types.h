@@ -2734,8 +2734,11 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * `ModernWeaponBits` already takes this bit as its first argument and
 	 * returns the classic bits untouched at 0 - so Toggle needs nothing more
 	 * from this round. Drawn and saved on the Controls page from round 161a
-	 * step 7 (decision 1), but nothing calls `ModernWeaponBits` with this bit
-	 * set to 1 yet; workflow B wires Hold itself. */
+	 * step 7 (decision 1); round 161b2a gave it its caller, the weapon seam at
+	 * the end of `S_UpdateInput` (specific\input.cpp), which passes this bit
+	 * and the two truths - the weapon is out, the key is down - so that one
+	 * request goes out per tick on which the two disagree. It is read on both
+	 * control types and for keyboard and pad alike, by the user's decision. */
 	bool combat_hold;
 
 	/* ACTION KEY (#161). Off = One key, the engine's own behaviour today: the

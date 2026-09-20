@@ -239,7 +239,9 @@ static bool MenuStepCombatMode(long, long dir)
 	if (!dir)
 		return 0;
 
-	// Drawn and saved only - nothing reads tomb5.combat_hold yet (workflow B).
+	// Hold is wired since round 161b2a: S_UpdateInput's weapon seam reads this
+	// bit every tick (specific\input.cpp), so flipping the row changes the draw
+	// key's meaning at once, with no reload and nothing else to keep in step.
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.combat_hold = !tomb5.combat_hold;
 	return 1;

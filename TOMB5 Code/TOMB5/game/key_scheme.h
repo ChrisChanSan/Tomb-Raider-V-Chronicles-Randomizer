@@ -32,17 +32,45 @@
  * is - that is the other half of "one row, not two".
  */
 
-/* NINETEEN SINCE ROUND 161b2c (#161, item 2): slot 18 is the SECONDARY action.
- * It is appended rather than inserted, because every one of the eighteen
- * before it is addressed by number - in the registry (Key0..Key17, MKey0..17),
+/* THIRTY-FOUR SINCE ROUND 161b2d (#161, item 2), and every one of the
+ * nineteen before them keeps its number. Slot 18 is the SECONDARY action
+ * (round 161b2c, item 2) and slots 19..33 are the hotkeys that used to be
+ * hard-wired scan codes in specific\input.cpp - the two medipacks, quick save
+ * and quick load, the six weapons of DoWeaponHotkey, and the five cheats.
+ *
+ * APPENDED, NEVER INSERTED, for the same reason the nineteenth slot was: every
+ * slot is addressed by NUMBER - in the registry (Key0..Key33, MKey0..MKey33),
  * in the engine's own Key(n) calls and in the bind rows of
- * game\menu_frame.cpp - so a set written by the 161b2a build reads back
- * unchanged and only the new slot is missing from it, which is true. */
-#define KEY_SCHEME_ROLES	19
+ * game\menu_frame.cpp - so a set written by the 161b2c build reads back
+ * unchanged and only the fifteen new slots are missing from it, which is
+ * true: they then take their row's default, which is the key that was
+ * hard-wired there before. */
+#define KEY_SCHEME_ROLES	34
 
-/* The Secondary role's slot, so that the one number lives in one place. It is
- * the last slot by construction and cannot drift from the count above. */
-#define KEY_ROLE_SECOND		(KEY_SCHEME_ROLES - 1)
+/* The Secondary role's slot, so that the one number lives in one place. It was
+ * "the last slot" while there were nineteen; since the hotkeys were appended
+ * behind it, it is the LITERAL 18 and must stay there - a registry written by
+ * the 161b2c build calls that slot Key18/MKey18 and means the Secondary
+ * action. The number is no longer derivable from the count, so it is written
+ * out and checked by MenuTest. */
+#define KEY_ROLE_SECOND		18
+
+/* THE HOTKEY SLOTS BY NAME, so that no call site carries a bare number
+ * (#161, round 161b2d, item 2). The order is the order of the two default rows
+ * below and of the bind rows on the Key bindings page; the weapons are in
+ * DoWeaponHotkey's own order, which is the order of the keys 1..6 it used to
+ * read directly. */
+#define KEY_ROLE_MEDI_SMALL	19
+#define KEY_ROLE_MEDI_LARGE	20
+#define KEY_ROLE_SAVE		21
+#define KEY_ROLE_LOAD		22
+#define KEY_ROLE_WEAPON_FIRST	23	/* 23..28: pistols, shotgun, uzi, revolver, HK, crossbow */
+#define KEY_ROLE_WEAPONS	6
+#define KEY_ROLE_CHEAT_FLY	29
+#define KEY_ROLE_CHEAT_GUNS	30
+#define KEY_ROLE_CHEAT_ITEMS	31
+#define KEY_ROLE_CHEAT_HEAL	32
+#define KEY_ROLE_CHEAT_SKIP	33
 
 /* THE MODERN DEFAULT ROW, in the engine's own slot order: 0-3
  * forward/back/left/right, 4 duck, 5 dash, 6 walk, 7 jump, 8 action, 9 draw,
@@ -67,14 +95,32 @@
  * key the Modern row does not otherwise use, so the row stays sound and the
  * role is reachable from the first launch; it is meant to be replaced, not
  * defended. Tank's own slot 18 is DIK_HOME (specific\input.cpp), free in
- * Core's cluster for the same reason. */
+ * Core's cluster for the same reason.
+ *
+ * SLOTS 19..33 ARE THE KEYS THE ENGINE ALREADY ANSWERED TO (round 161b2d,
+ * item 2), moved out of specific\input.cpp's own `keymap[DIK_x]` reads and
+ * into roles a player can rebind. That is why the Modern half of this row is
+ * the SAME fifteen keys as Tank's: they are not a new layout, they are the
+ * layout the engine has had all along, so an untouched registry answers to
+ * exactly the keys it answered to before.
+ *
+ * THE ONE DELIBERATE DIFFERENCE, and it is the user's own: quick load is F9
+ * under Modern (the binding page he compares with has it there) and stays F6
+ * under Tank, which is Core's. F1/F2/F7/F8/F11 are the five cheat roles; they
+ * are the free F keys once F3 and F4 (the outfit changer,
+ * specific\hd\hd_outfitmenu.cpp), F10 (IN_E) and F12 (specific\output.cpp) are
+ * left alone, and F5/F6/F9 belong to save and load. */
 #define KEY_SCHEME_MODERN_ROW	\
 {							\
 	0x11, 0x1F, 0x1E, 0x20,	/* W S A D                 */	\
 	0x2E, 0x2A, 0x38, 0x39,	/* C LShift LAlt Space     */	\
 	0x12, 0x10, 0x21, 0x13,	/* E Q F R                 */	\
 	0x1D, 0x01, 0x2C, 0x2D,	/* LCtrl Escape Z X        */	\
-	0x19, 0x1C, 0x52		/* P Return Numpad0        */	\
+	0x19, 0x1C, 0x52,		/* P Return Numpad0        */	\
+	0x0B, 0x0A, 0x3F, 0x43,	/* 0 9 F5 F9 - medipacks, save, load */	\
+	0x02, 0x03, 0x04, 0x05,	/* 1 2 3 4 - pistols shotgun uzi revolver */	\
+	0x06, 0x07,				/* 5 6 - HK crossbow       */	\
+	0x3C, 0x41, 0x42, 0x57, 0x3B	/* F2 F7 F8 F11 F1 - the five cheats */	\
 }
 
 /* ONE MEASURED COLLISION IN THAT ROW, named here rather than quietly changed

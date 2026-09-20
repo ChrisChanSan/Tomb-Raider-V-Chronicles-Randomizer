@@ -1428,10 +1428,43 @@ static const menu_row menu_rows_keybinds_kbd[] =
 	MENU_BIND("Inventory", TXT_Inventory, 13),
 	MENU_BIND("Step Left", TXT_Step_Left, 14),
 	MENU_BIND("Step Right", TXT_Step_Right, 15),
-	// LAST ON PURPOSE, IN BOTH LISTS: MenuResolveKeybinds hands out one row
-	// fewer with "One key", so the row that disappears is this one and every
-	// row above it keeps its place on the page (#161, round 161b2c, item 2).
-	MENU_BIND("Secondary", -1, KEY_ROLE_SECOND)
+	// The Secondary row is still offered only under "Separate" (#161, round
+	// 161b2c, item 2), but it is no longer the LAST row of the list, so it can
+	// no longer be dropped by counting one row fewer - MenuResolveKeybinds
+	// builds the list instead. The pad list below still ends with it and still
+	// uses the count.
+	MENU_BIND("Secondary", -1, KEY_ROLE_SECOND),
+	/* THE HOTKEYS, ONE LIST WITH THE REST (#161, round 161b2d, item 2) - the
+	 * user's own decision: "Ich wuerde es nicht als zweite Liste machen, dann
+	 * kann alles mit in die Keybinds rein, da koennen wir ja die Seiten
+	 * umschalten." They were hard-wired scan codes in specific\input.cpp until
+	 * this round; the rows below are the same keys, now bindable.
+	 *
+	 * The four weapon names the string wad has are taken from it rather than
+	 * invented (the inventory calls them by these ids); the HK's name is the
+	 * id its own inventory entry carries. The crossbow has no weapon-name
+	 * string of its own - TXT_GRAP2 sits on the AMMO rows - so it goes through
+	 * CustomText like the cheat rows. */
+	MENU_BIND("Small Medipack", TXT_Small_Medipack, KEY_ROLE_MEDI_SMALL),
+	MENU_BIND("Large Medipack", TXT_Large_Medipack, KEY_ROLE_MEDI_LARGE),
+	MENU_BIND("Save", TXT_Save, KEY_ROLE_SAVE),
+	MENU_BIND("Load", TXT_Load, KEY_ROLE_LOAD),
+	MENU_BIND("Pistols", TXT_Pistols, KEY_ROLE_WEAPON_FIRST + 0),
+	MENU_BIND("Shotgun", TXT_Shotgun, KEY_ROLE_WEAPON_FIRST + 1),
+	MENU_BIND("Uzi", TXT_Uzi, KEY_ROLE_WEAPON_FIRST + 2),
+	MENU_BIND("Revolver", TXT_Revolver, KEY_ROLE_WEAPON_FIRST + 3),
+	MENU_BIND("HK", TXT_HKSTRING0, KEY_ROLE_WEAPON_FIRST + 4),
+	MENU_BIND("Crossbow", -1, KEY_ROLE_WEAPON_FIRST + 5),
+	/* AND THE FIVE CHEAT ROLES, WHICH THE PAGE SHOWS ONLY WHILE CHEATS ARE ON
+	 * (#161, round 161b2d, item 2). A hidden role is inert - not even asked -
+	 * exactly like Secondary under "One key", so a player with Cheats off sees
+	 * the page he saw before. Their consumers arrive with item 4; until then
+	 * these five roles are bound to nothing that reads them. */
+	MENU_BIND("Fly mode", -1, KEY_ROLE_CHEAT_FLY),
+	MENU_BIND("All weapons", -1, KEY_ROLE_CHEAT_GUNS),
+	MENU_BIND("All items", -1, KEY_ROLE_CHEAT_ITEMS),
+	MENU_BIND("Heal", -1, KEY_ROLE_CHEAT_HEAL),
+	MENU_BIND("Skip level", -1, KEY_ROLE_CHEAT_SKIP)
 };
 
 static const menu_row menu_rows_keybinds_joy[] =
@@ -1455,28 +1488,57 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("Secondary", -1, JOY_ROLE_SECOND)
 };
 
-/* THE SECONDARY ROW IS OFFERED ONLY UNDER "Separate" (#161, round 161b2c,
- * item 2). With "One key" the role produces nothing at all - the two
- * producers in specific\input.cpp do not even call Key() for it - so a row
- * that let the player bind it would be a row that does nothing, and the page
- * has to look exactly as it did at base. This page already builds its list at
- * run time, which is why dropping the last row costs one line and no second
- * pair of tables. */
+/* THE KEYBOARD'S LIST IS BUILT NOW (#161, round 161b2d, item 2). Two roles are
+ * hidden rather than shown grey: Secondary unless "Action" says Separate (round
+ * 161b2c, item 2 - with "One key" the role produces nothing at all, so a row
+ * that let the player bind it would be a row that does nothing), and the five
+ * cheat roles unless Cheats are on. A HIDDEN ROW IS INERT: the drive loop can
+ * only reach rows this function hands out, so a hidden role is never even
+ * asked to be bound, which is exactly what "the page looks as it did before"
+ * means for a player with both settings off.
+ *
+ * Dropping the LAST row by counting one fewer - which is all this function did
+ * while Secondary was last - no longer works, because the hotkeys sit behind
+ * it. The pad list is untouched this round and still ends with Secondary, so
+ * it still uses the count. */
+static menu_row menu_keybinds_built[sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0])];
+
 static void MenuResolveKeybinds(const menu_row** rows, long* num)
 {
+	long i, out, total;
+
 	if (ControlMethod == 1)
 	{
 		*rows = menu_rows_keybinds_joy;
 		*num = sizeof(menu_rows_keybinds_joy) / sizeof(menu_rows_keybinds_joy[0]);
-	}
-	else
-	{
-		*rows = menu_rows_keybinds_kbd;
-		*num = sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0]);
+
+		if (!tomb5.action_split)
+			(*num)--;
+
+		return;
 	}
 
-	if (!tomb5.action_split)
-		(*num)--;
+	total = sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0]);
+	out = 0;
+
+	for (i = 0; i < total; i++)
+	{
+		const menu_row* row = &menu_rows_keybinds_kbd[i];
+
+		if (row->kind == MROW_BINDING)
+		{
+			if (row->param == KEY_ROLE_SECOND && !tomb5.action_split)
+				continue;
+
+			if (row->param >= KEY_ROLE_CHEAT_FLY && !tomb5.enable_cheats)
+				continue;
+		}
+
+		menu_keybinds_built[out++] = *row;
+	}
+
+	*rows = menu_keybinds_built;
+	*num = out;
 }
 
 #define MENU_ROWS(a)	a, sizeof(a) / sizeof(a[0])
@@ -1942,6 +2004,24 @@ void MenuFrameRun()
 		col = (uchar)(cur == nvis ? 1 : 6);
 		PrintString(phd_centerx - (phd_centerx >> 3), MENU_BOTTOM_ROW * font_height, col, "\x19", 0);
 		PrintString(phd_centerx + (phd_centerx >> 3), MENU_BOTTOM_ROW * font_height, col, "\x1B", 0);
+		/* AND WHICH PAGE OF HOW MANY, BETWEEN THEM (#161, round 161b2d, item
+		 * 1): "Ich wuerde auch gerne in der Mitte zwischen den beiden Pfeilen
+		 * eine Seitenangabe haben '1/N', dann ist das ein bisschen sauberer."
+		 * In the arrows' own colour, and inside the same `if` - it says
+		 * nothing on a page that does not page.
+		 *
+		 * IT FITS, measured on the real font rather than assumed. The arrows
+		 * sit at phd_centerx -/+ (phd_centerx >> 3), left-aligned, and the
+		 * left/right glyphs (CharDef[99] and [101], game\chardef.inc) are 13
+		 * wide before the resolution scale of phd_winxmax / 512 - 16 at
+		 * 640x480. So the gap between the two glyphs runs from centerx - 24 to
+		 * centerx + 40, and "1/3", the widest string any list of this tree
+		 * produces (the longest is the keyboard's at 3 pages), is 6 + 9 + 8 =
+		 * 23 before the scale and 27 after it, centred: centerx - 13 to
+		 * centerx + 14. Ten pixels of air on the tight side at 4:3, and the
+		 * scale multiplies both sides alike at every other resolution. */
+		sprintf(buf, "%ld/%ld", page_no + 1, pages);
+		PrintString(phd_centerx, MENU_BOTTOM_ROW * font_height, col, buf, FF_CENTER);
 	}
 
 	/* ---------------------------------------------------------- drive -- */

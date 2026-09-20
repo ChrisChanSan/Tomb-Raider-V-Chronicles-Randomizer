@@ -40,12 +40,21 @@ const char* KeyboardButtons[272] =
 	"Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "<", ">", "Return",
 	"Ctrl", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "`",
 	"Shift", "#", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Shift",
-	"Padx", "Alt", "Space", "Caps", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	/* THE EIGHT F KEYS THE HOTKEY ROLES DEFAULT TO, AND NO MORE (#161, round
+	 * 161b2d, item 2). Base named none of DIK_F1..DIK_F12 at all, so
+	 * MenuValBinding would have printed a null pointer for the new rows and
+	 * MenuCaptureBinding - which binds "any NAMED key" - could not have bound
+	 * one. F1, F2, F5, F6, F7, F8, F9 and F11 are what the two default rows
+	 * use; F3 and F4 (the outfit changer), F10 (IN_E) and F12
+	 * (specific\output.cpp) stay nameless on purpose, so the capture keeps
+	 * refusing them and no player can bind a role onto a key the engine
+	 * already answers to elsewhere. */
+	"Padx", "Alt", "Space", "Caps", "F1", "F2", 0, 0, "F5", "F6", "F7", "F8", "F9", 0,
 	"Nmlk", 0,
 	"Pad7", "Pad8", "Pad9", "Pad-",
 	"Pad4", "Pad5", "Pad6", "Pad+",
 	"Pad1", "Pad2", "Pad3",
-	"Pad0", "Pad.", 0, 0, "\\", 0,
+	"Pad0", "Pad.", 0, 0, "\\", "F11",	// F11 is the heal cheat's default key (#161, round 161b2d)
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -66,12 +75,14 @@ const char* GermanKeyboard[272] =
 	"Tab", "Q", "W", "E", "R", "T", "Z", "U", "I", "O", "P", "~u", "x", "Enter",
 	"Strg", "A", "S", "D", "F", "G", "H", "J", "K", "L", "~o", "~a", "( ",
 	"Shift", "#", "Y", "X", "C", "V", "B", "N", "M", ",", ".", "-", "Shift",
-	"Num x", "Alt", "Leert.", "Caps", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	// The same eight F keys as in the English table above, and for the same
+	// reason - a German keyboard calls them F1..F12 as well.
+	"Num x", "Alt", "Leert.", "Caps", "F1", "F2", 0, 0, "F5", "F6", "F7", "F8", "F9", 0,
 	"Nmlk", 0,
 	"Num7", "Num8", "Num9", "Num-",
 	"Num4", "Num5", "Num6", "Num+",
 	"Num1", "Num2", "Num3",
-	"Num0", "Num.", 0, 0, ">", 0,
+	"Num0", "Num.", 0, 0, ">", "F11",
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -574,7 +585,7 @@ long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, 0, 0,
 
 /* THE MODERN ROW'S SCAN CODES ARE THE HEADER'S (game\key_scheme.h), so that
  * MenuTest checks the row the ENGINE really uses and not a copy of it. These
- * eighteen lines are the other half of that bargain: the header can hold no
+ * thirty-four lines are the other half of that bargain: the header can hold no
  * dinput.h, so they say at compile time WHICH key each of its numbers is. A
  * typo in either place stops the build instead of reaching a player. */
 static constexpr short kModernRow[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
@@ -597,6 +608,26 @@ static_assert(kModernRow[15] == DIK_X, "modern row: step right is X");
 static_assert(kModernRow[16] == DIK_P, "modern row: pause is P");
 static_assert(kModernRow[17] == DIK_RETURN, "modern row: select is return");
 static_assert(kModernRow[18] == DIK_NUMPAD0, "modern row: secondary action is numpad 0");
+/* AND THE FIFTEEN HOTKEY SLOTS (#161, round 161b2d, item 2). Each one is the
+ * key specific\input.cpp read directly before this round, so this block is
+ * also the byte-identity claim written as a compile-time test: the reads below
+ * became Key(role), and Key(role)'s first test is keymap[layout[1][role]],
+ * which for an untouched registry is keymap of exactly the key named here. */
+static_assert(kModernRow[KEY_ROLE_MEDI_SMALL] == DIK_0, "modern row: small medipack is 0");
+static_assert(kModernRow[KEY_ROLE_MEDI_LARGE] == DIK_9, "modern row: large medipack is 9");
+static_assert(kModernRow[KEY_ROLE_SAVE] == DIK_F5, "modern row: quick save is F5");
+static_assert(kModernRow[KEY_ROLE_LOAD] == DIK_F9, "modern row: quick load is F9 - the one deliberate default change");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 0] == DIK_1, "modern row: pistols are 1");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 1] == DIK_2, "modern row: shotgun is 2");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 2] == DIK_3, "modern row: uzi is 3");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 3] == DIK_4, "modern row: revolver is 4");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 4] == DIK_5, "modern row: HK is 5");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 5] == DIK_6, "modern row: crossbow is 6");
+static_assert(kModernRow[KEY_ROLE_CHEAT_FLY] == DIK_F2, "modern row: fly mode is F2");
+static_assert(kModernRow[KEY_ROLE_CHEAT_GUNS] == DIK_F7, "modern row: all weapons is F7");
+static_assert(kModernRow[KEY_ROLE_CHEAT_ITEMS] == DIK_F8, "modern row: all items is F8");
+static_assert(kModernRow[KEY_ROLE_CHEAT_HEAL] == DIK_F11, "modern row: heal is F11");
+static_assert(kModernRow[KEY_ROLE_CHEAT_SKIP] == DIK_F1, "modern row: skip level is F1");
 
 /* FOUR ROWS SINCE ROUND 161b2a, AND THE FIRST TWO ARE WHAT THEY ALWAYS WERE
  * (#161, item 1). Every reader in the tree reads row 1 and every writer writes
@@ -616,14 +647,24 @@ static_assert(kModernRow[18] == DIK_NUMPAD0, "modern row: secondary action is nu
  * action. Tank's is DIK_HOME: Core's own cluster uses End, Delete, Page Down
  * and the arrows but never Home, so the row keeps its two properties - every
  * slot bound, no key twice (KeySchemeRowSound, game\key_scheme.h) - without
- * taking a key off any of the eighteen roles a Tank player already has. */
+ * taking a key off any of the eighteen roles a Tank player already has.
+ *
+ * THIRTY-FOUR SINCE ROUND 161b2d (item 2), and the fifteen new columns are not
+ * a new layout: each is the scan code this file used to read directly a few
+ * hundred lines below - the medipacks' 0 and 9, save's F5, load's F6, the six
+ * weapon keys 1..6 of DoWeaponHotkey, and the five free F keys the cheat roles
+ * take. Tank's row is therefore Core's own behaviour written down as
+ * bindings, and the Modern row differs from it in ONE slot, quick load (F9,
+ * the user's own decision - game\key_scheme.h). */
 short layout[4][KEY_SCHEME_ROLES] =
 {
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME },
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME,
+	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6, DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1 },
 
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME },
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME,
+	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6, DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1 },
 
 	KEY_SCHEME_MODERN_ROW,
 
@@ -867,7 +908,14 @@ static void DoWeaponHotkey()
 	if (!goin)
 		return;
 	
-	if (keymap[DIK_1])
+	/* THE SIX KEYS ARE SIX ROLES NOW (#161, round 161b2d, item 2), and nothing
+	 * else in this function moved: the chain is the same else-if chain, the
+	 * order is the same, every branch is Core's code as before. Key(role) with
+	 * an untouched registry IS keymap[DIK_1..DIK_6] - its first test reads
+	 * layout[1][role], which the loader filled from the row's default, and that
+	 * default is the very key that stood here (the static_asserts above say so
+	 * for the Modern row, the layout table for Tank's). */
+	if (Key(KEY_ROLE_WEAPON_FIRST + 0))
 	{
 		if (!(lara.pistols_type_carried & W_PRESENT))
 			return;
@@ -877,7 +925,7 @@ static void DoWeaponHotkey()
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_PISTOLS)
 			lara.gun_status = LG_DRAW_GUNS;
 	}
-	else if (keymap[DIK_2])
+	else if (Key(KEY_ROLE_WEAPON_FIRST + 1))
 	{
 		if (!(lara.shotgun_type_carried & W_PRESENT))
 			return;
@@ -912,7 +960,7 @@ static void DoWeaponHotkey()
 			}
 		}
 	}
-	else if (keymap[DIK_3])
+	else if (Key(KEY_ROLE_WEAPON_FIRST + 2))
 	{
 		if (!(lara.uzis_type_carried & W_PRESENT))
 			return;
@@ -922,7 +970,7 @@ static void DoWeaponHotkey()
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_UZI)
 			lara.gun_status = LG_DRAW_GUNS;
 	}
-	else if (keymap[DIK_4])
+	else if (Key(KEY_ROLE_WEAPON_FIRST + 3))
 	{
 		if (!(lara.sixshooter_type_carried & W_PRESENT))
 			return;
@@ -932,7 +980,7 @@ static void DoWeaponHotkey()
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_REVOLVER)
 			lara.gun_status = LG_DRAW_GUNS;
 	}
-	else if (keymap[DIK_5])
+	else if (Key(KEY_ROLE_WEAPON_FIRST + 4))
 	{
 		// The HK had to share key 1 with the pistols; now it has its own.
 		if (!(lara.hk_type_carried & W_PRESENT))
@@ -975,7 +1023,7 @@ static void DoWeaponHotkey()
 			}
 		}
 	}
-	else if (keymap[DIK_6])
+	else if (Key(KEY_ROLE_WEAPON_FIRST + 5))
 	{
 		// The crossbow had to share key 2 with the shotgun; now it has its own.
 		if (!(lara.crossbow_type_carried & W_PRESENT))
@@ -1799,7 +1847,12 @@ long S_UpdateInput()
 	 * reached and the two conditions below are the expressions they were. */
 	const long medi_dpad = tomb5.control_modern && ModernMenuReadsPad();
 
-	if (keymap[DIK_0] || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[13])) && Key(jLayout[13] + 256)))
+	/* The keyboard half is a role now (#161, round 161b2d, item 2) - Key() of
+	 * an untouched slot is keymap[DIK_0] exactly. The PAD half is untouched
+	 * here on purpose: the chord rule and the pad's own hotkey roles are the
+	 * next step's, and mixing the two would have made this step's byte-identity
+	 * argument two arguments instead of one. */
+	if (Key(KEY_ROLE_MEDI_SMALL) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[13])) && Key(jLayout[13] + 256)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -1829,7 +1882,7 @@ long S_UpdateInput()
 			}
 		}
 	}
-	else if (keymap[DIK_9] || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[14])) && Key(jLayout[14] + 256)))
+	else if (Key(KEY_ROLE_MEDI_LARGE) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[14])) && Key(jLayout[14] + 256)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -2126,10 +2179,15 @@ long S_UpdateInput()
 
 	if (!gfGameMode && Gameflow->LoadSaveEnabled)
 	{
-		if (keymap[DIK_F5] || (ControlMethod == 1 && Key(jLayout[11] + 256)))
+		/* Two roles now (#161, round 161b2d, item 2), same guard, same bits, and
+		 * the pad halves untouched until the next step. At Tank both roles hold
+		 * the keys that stood here, F5 and F6; under Modern quick load is F9
+		 * instead - the one default this round moves, and the user's own
+		 * decision (game\key_scheme.h). */
+		if (Key(KEY_ROLE_SAVE) || (ControlMethod == 1 && Key(jLayout[11] + 256)))
 			linput |= IN_SAVE;
 
-		if (keymap[DIK_F6] || (ControlMethod == 1 && Key(jLayout[12] + 256)))
+		if (Key(KEY_ROLE_LOAD) || (ControlMethod == 1 && Key(jLayout[12] + 256)))
 			linput |= IN_LOAD;
 	}
 

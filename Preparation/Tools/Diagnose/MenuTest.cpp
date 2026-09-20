@@ -29,8 +29,10 @@
  * range rather than sampled, because the interesting cases are the ends: a
  * disabled first row, a disabled last row, a page with exactly one enabled row,
  * runs of disabled rows, a list of one and a list of none. The paging cases are
- * named after the two lists the engine really has: sixteen keyboard roles and
- * fifteen pad roles, and the balanced split the user asked for (8+8 and 8+7).
+ * named after the two lists the engine really has: the keyboard's roles and
+ * the pad's, and the balanced split the user asked for - 8+8 and 8+7 while
+ * both lists were sixteen and fifteen long, and the keyboard's own three-page
+ * split since the hotkey roles joined it (#161, round 161b2d).
  */
 
 #include <stdio.h>
@@ -206,6 +208,27 @@ static void paging_engine_cases()
 	check(MenuRowsPerPage(16, 11), 8, "16 at 11: still 8 per page");
 	check(MenuPageCount(15, 11), 2, "15 at 11: two pages");
 	check(MenuRowsPerPage(15, 11), 8, "15 at 11: still 8 per page");
+
+	/* AND THE KEYBOARD LIST AS ROUND 161b2d LEAVES IT (#161, item 2): sixteen
+	 * roles, the Secondary one only under "Separate", ten hotkeys, and the five
+	 * cheat rows only while Cheats are on - four lengths, all at the frame's
+	 * real maximum of 11, and all of them three pages. That is the "1/N" item 1
+	 * draws between the arrows, so the number is worth holding. */
+	check(MenuPageCount(26, 11), 3, "One key, cheats off: 26 rows, three pages");
+	check(MenuRowsPerPage(26, 11), 9, "26 at 11: 9 per page");
+	check(MenuRowsOnPage(26, 11, 2), 8, "26 at 11: the last page has 8");
+
+	check(MenuPageCount(27, 11), 3, "Separate, cheats off: 27 rows, three pages");
+	check(MenuRowsPerPage(27, 11), 9, "27 at 11: 9 per page");
+	check(MenuRowsOnPage(27, 11, 2), 9, "27 at 11: the last page has 9");
+
+	check(MenuPageCount(31, 11), 3, "One key, cheats on: 31 rows, three pages");
+	check(MenuRowsPerPage(31, 11), 11, "31 at 11: 11 per page");
+	check(MenuRowsOnPage(31, 11, 2), 9, "31 at 11: the last page has 9");
+
+	check(MenuPageCount(32, 11), 3, "Separate, cheats on: 32 rows, three pages");
+	check(MenuRowsPerPage(32, 11), 11, "32 at 11: 11 per page");
+	check(MenuRowsOnPage(32, 11, 2), 10, "32 at 11: the last page has 10");
 }
 
 static void paging_ends()
@@ -323,30 +346,77 @@ static const short kModern[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
 
 /* A row that shares no key with the Modern one, to play the part of "some
  * other binding" wherever a second row is needed. The numbers are scan codes
- * of keys the Modern row does not use (the function keys and the numeric
- * keypad), and nothing else about them matters. */
+ * of keys neither default row uses - letters, the two spare digits, the four F
+ * keys the engine keeps for itself, the numeric keypad and Insert - and
+ * nothing else about them matters. It had to be rewritten for round 161b2d:
+ * its old numbers were the function keys, and the hotkey roles took eight of
+ * them. */
 static const short kOther[KEY_SCHEME_ROLES] =
 {
-	0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43,
-	0x44, 0x57, 0x58, 0x47, 0x48, 0x49, 0x4B, 0x4C, 0x4D,
-	0x50
+	0x14, 0x15, 0x16, 0x17, 0x18,	/* T Y U I O           */
+	0x22, 0x23, 0x24, 0x25, 0x26,	/* G H J K L           */
+	0x2F, 0x30, 0x31, 0x32,			/* V B N M             */
+	0x08, 0x09,						/* 7 8                 */
+	0x3D, 0x3E, 0x44, 0x58,			/* F3 F4 F10 F12       */
+	0x45, 0x47, 0x48, 0x49, 0x4A,	/* NumLock Num7 Num8 Num9 Num- */
+	0x4B, 0x4C, 0x4D, 0x4E,			/* Num4 Num5 Num6 Num+ */
+	0x4F, 0x50, 0x51, 0x53,			/* Num1 Num2 Num3 Num. */
+	0xD2							/* Insert              */
 };
 
-/* The nineteenth slot, appended with the Secondary action (#161, round
- * 161b2c, item 2). 0x50 is Numpad 2 - a key the Modern row does not use, so
- * kOther stays disjoint from it, which is the only property the rows below
- * ask of it. */
+/* THE SLOT NUMBERS THEMSELVES (#161, rounds 161b2c and 161b2d, item 2). Every
+ * slot is addressed by number in the registry, so a number that moves is a
+ * player's bindings silently meaning something else. Slot 18 is the Secondary
+ * action and must stay 18 now that the hotkeys sit BEHIND it rather than
+ * before it - it is no longer "the last slot" and no longer derivable from the
+ * count, which is exactly why it is checked here. */
 static void key_secondary_slot()
 {
-	check(KEY_SCHEME_ROLES, 19, "nineteen roles since the Secondary action");
-	check(KEY_ROLE_SECOND, KEY_SCHEME_ROLES - 1, "the Secondary role is the last slot");
+	check(KEY_SCHEME_ROLES, 34, "thirty-four roles since the hotkeys");
+	check(KEY_ROLE_SECOND, 18, "the Secondary role is still slot 18");
 	check(kModern[KEY_ROLE_SECOND], 0x52, "the Modern row's Secondary key is numpad 0");
 
-	// Disjoint is what kOther is for, and one more slot is one more chance to
+	// Disjoint is what kOther is for, and every new slot is one more chance to
 	// break it by accident.
 	for (int i = 0; i < KEY_SCHEME_ROLES; i++)
 		for (int j = 0; j < KEY_SCHEME_ROLES; j++)
 			check(kOther[i] == kModern[j], 0, "kOther shares no key with the Modern row");
+}
+
+/* THE FIFTEEN HOTKEY SLOTS (#161, round 161b2d, item 2). Two things are worth
+ * a test rather than a comment: that the numbers are the fifteen consecutive
+ * slots behind the Secondary one (a gap or an overlap would make one registry
+ * name mean two roles), and that the Modern row's keys are the keys
+ * specific\input.cpp used to read directly - which is this round's whole
+ * byte-identity claim, since Key(role) reads that key for an untouched
+ * registry. The engine's own static_asserts say the same thing against the
+ * DIK_ names; this says it against the numbers, where a player's registry
+ * lives. */
+static void key_hotkey_slots()
+{
+	const short want[15] =
+	{
+		0x0B, 0x0A, 0x3F, 0x43,			/* 0 9 F5 F9        */
+		0x02, 0x03, 0x04, 0x05, 0x06, 0x07,	/* 1 2 3 4 5 6  */
+		0x3C, 0x41, 0x42, 0x57, 0x3B	/* F2 F7 F8 F11 F1  */
+	};
+	int i;
+
+	check(KEY_ROLE_MEDI_SMALL, KEY_ROLE_SECOND + 1, "the hotkeys start behind the Secondary slot");
+	check(KEY_ROLE_MEDI_LARGE, KEY_ROLE_MEDI_SMALL + 1, "large medipack follows small");
+	check(KEY_ROLE_SAVE, KEY_ROLE_MEDI_LARGE + 1, "quick save follows the medipacks");
+	check(KEY_ROLE_LOAD, KEY_ROLE_SAVE + 1, "quick load follows quick save");
+	check(KEY_ROLE_WEAPON_FIRST, KEY_ROLE_LOAD + 1, "the weapons follow load");
+	check(KEY_ROLE_WEAPONS, 6, "six weapon roles, DoWeaponHotkey's own six");
+	check(KEY_ROLE_CHEAT_FLY, KEY_ROLE_WEAPON_FIRST + KEY_ROLE_WEAPONS, "the cheats follow the weapons");
+	check(KEY_ROLE_CHEAT_GUNS, KEY_ROLE_CHEAT_FLY + 1, "all weapons follows fly mode");
+	check(KEY_ROLE_CHEAT_ITEMS, KEY_ROLE_CHEAT_GUNS + 1, "all items follows all weapons");
+	check(KEY_ROLE_CHEAT_HEAL, KEY_ROLE_CHEAT_ITEMS + 1, "heal follows all items");
+	check(KEY_ROLE_CHEAT_SKIP, KEY_ROLE_CHEAT_HEAL + 1, "skip level follows heal");
+	check(KEY_ROLE_CHEAT_SKIP, KEY_SCHEME_ROLES - 1, "and skip level is the last slot");
+
+	for (i = 0; i < 15; i++)
+		check(kModern[KEY_ROLE_MEDI_SMALL + i], want[i], "the Modern row's hotkey keys are the old hard-wired ones");
 }
 
 static void key_modern_row_is_sound()
@@ -602,7 +672,7 @@ static void pad_seat()
 
 int main()
 {
-	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h (#161, rounds 161b1, 161b2a and 161b2c)\n\n");
+	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h (#161, rounds 161b1, 161b2a, 161b2c and 161b2d)\n\n");
 
 	cursor_all_enabled();
 	cursor_disabled();
@@ -611,6 +681,7 @@ int main()
 	paging_sweep();
 	page_step();
 	key_secondary_slot();
+	key_hotkey_slots();
 	key_modern_row_is_sound();
 	key_row_sound_rejects();
 	key_conflicts();

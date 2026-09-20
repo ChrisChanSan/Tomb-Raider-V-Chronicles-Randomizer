@@ -401,6 +401,26 @@ bool LoadSettings()
 	REG_ReadLong((char*)"Key18", key, layout[0][18]);
 	layout[1][18] = (short)key;
 
+	/* THE FIFTEEN HOTKEY SLOTS (#161, round 161b2d, item 2), in the same shape
+	 * again and for the same reason: a registry written by the 161b2c build has
+	 * no Key19..Key33, so each one reads as its row's default - which IS the
+	 * key specific\input.cpp used to read directly, so an untouched registry
+	 * answers to exactly the keys it answered to before. A loop and not fifteen
+	 * unrolled lines, like the MKey block below: the names are new, so there is
+	 * no Core original whose shape has to be kept. */
+	{
+		short* cset = KeySchemeSet(0);
+
+		for (long i = KEY_ROLE_SECOND + 1; i < KEY_SCHEME_ROLES; i++)
+		{
+			char name[12];
+
+			sprintf(name, "Key%ld", i);
+			REG_ReadLong(name, key, layout[0][i]);
+			cset[i] = (short)key;
+		}
+	}
+
 	/* THE SECOND SET (#161, round 161b2a, item 1). Key0..Key18 above keep
 	 * their meaning exactly - they are the CLASSIC set, whichever scheme the
 	 * game was in when it last shut down - and the Modern set gets names of its
@@ -531,6 +551,18 @@ void SaveSettings()
 	REG_WriteLong((char*)"Key16", cset[16]);
 	REG_WriteLong((char*)"Key17", cset[17]);
 	REG_WriteLong((char*)"Key18", cset[18]);	// the Secondary action (#161, round 161b2c)
+
+	// And the fifteen hotkey slots beside them (#161, round 161b2d, item 2),
+	// under names the 161b2c build does not look for - so a registry this build
+	// writes still loads there, with the hotkeys back to hard-wired keys, which
+	// is what that build does anyway.
+	for (long i = KEY_ROLE_SECOND + 1; i < KEY_SCHEME_ROLES; i++)
+	{
+		char name[12];
+
+		sprintf(name, "Key%ld", i);
+		REG_WriteLong(name, cset[i]);
+	}
 
 	// And the Modern set beside it, under names of its own. Written at Tank
 	// too, and harmlessly: nothing at Tank reads MKey*, and the accepted 161b1

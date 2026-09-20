@@ -1353,6 +1353,25 @@ const char* CustomText(const char* engl)
 		// above's own words and are already in this table.
 		{ "Sprint mode",     "Sprint mode",     "Sprintmodus",    "Sprint mode",        "Sprint mode" },
 		{ "Duck mode",       "Duck mode",       "Duckmodus",      "Duck mode",          "Duck mode" },
+		// #161, round 161b2d step 1 - the bind rows of the hotkeys that used to
+		// be hard-wired keys. Only six of the sixteen new rows are here: the
+		// other ten take the string wad's own names through SCRIPT_TEXT (the
+		// medipacks, save, load and four of the weapons), exactly as the pad's
+		// list already does. Same rule as every block above - German is the only
+		// real translation, the other three repeat the English literal, because
+		// an empty column would print blank rather than fall back.
+		//
+		// "Level \xFC" "berspringen" is ONE string in two pieces on purpose: the
+		// letter after the umlaut is 'b', which IS a hex digit, so "\xFCb" would
+		// be read as one enormous escape. Every other umlaut in this table is
+		// followed by a letter that is not, which is why none of them needs the
+		// split (the comment at the big block below says to keep it that way).
+		{ "Crossbow",        "Crossbow",        "Armbrust",       "Crossbow",           "Crossbow" },
+		{ "Fly mode",        "Fly mode",        "Flugmodus",      "Fly mode",           "Fly mode" },
+		{ "All weapons",     "All weapons",     "Alle Waffen",    "All weapons",        "All weapons" },
+		{ "All items",       "All items",       "Alle Gegenst\xE4nde", "All items",     "All items" },
+		{ "Heal",            "Heal",            "Heilen",         "Heal",               "Heal" },
+		{ "Skip level",      "Skip level",      "Level \xFC" "berspringen", "Skip level", "Skip level" },
 		// #161, round 161a2b step 5 - the Camera speed row (item 5). Same
 		// rule as the block above: only German is a real translation, the
 		// other three repeat the English literal on purpose.

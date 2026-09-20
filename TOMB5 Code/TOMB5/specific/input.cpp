@@ -1737,21 +1737,33 @@ long S_UpdateInput()
 			linput = ModernWeaponBits(1, ready, holstered, held, linput);
 
 		/* COMBATLOG, behind -log like every other seam of this round. On the
-		 * CHANGE of the produced bit and not every tick, because the bit is
-		 * one tick long in play and a per-tick line would bury it; the two
+		 * CHANGE of the bit or of the seam and not every tick, because the bit
+		 * is one tick long in play and a per-tick line would bury it; the two
 		 * truths and the key are printed beside it so a reader can see WHICH
 		 * of the four rules answered. -1 so the first line of a session is
-		 * always written, whatever the bit turns out to be. */
+		 * always written, whatever the bit turns out to be.
+		 *
+		 * `draw` IS THE BIT THAT LEAVES THIS FUNCTION, not the one the weapon
+		 * half produced, and `seam` says which of the two a reader is looking
+		 * at. Round 161b2a's review found that the difference decides whether
+		 * the line can be believed: with the seam off - a torch in the hand,
+		 * an FMV, the inventory - the key's own IN_DRAW is still in the word
+		 * and is still consumed further down the frame (game\flmtorch.cpp
+		 * throws the burning torch on exactly that bit, specific\fmv.cpp skips
+		 * a video on it), so a field that printed 0 there would tell a reader
+		 * chasing "why did my torch throw" the opposite of the truth. */
 		if (gLogEnabled)
 		{
-			static long combat_last_draw = -1;
-			const long draw = (combat_seam && (linput & IN_DRAW)) ? 1 : 0;
+			static long combat_last_state = -1;
+			const long draw = (linput & IN_DRAW) != 0;
+			const long state = draw | (combat_seam ? 2 : 0);
 
-			if (draw != combat_last_draw)
+			if (state != combat_last_state)
 			{
-				Log("COMBATLOG f=%ld held=%d ready=%d holstered=%d draw=%d",
-					(long)GlobalCounter, (int)held, (int)ready, (int)holstered, (int)draw);
-				combat_last_draw = draw;
+				Log("COMBATLOG f=%ld held=%d ready=%d holstered=%d draw=%d seam=%d",
+					(long)GlobalCounter, (int)held, (int)ready, (int)holstered, (int)draw,
+					(int)(combat_seam != 0));
+				combat_last_state = state;
 			}
 		}
 	}

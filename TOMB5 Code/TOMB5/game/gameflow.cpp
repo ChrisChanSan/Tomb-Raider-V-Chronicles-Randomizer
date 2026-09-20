@@ -1361,23 +1361,20 @@ const char* CustomText(const char* engl)
 		// into Controls. Same rule as every block above: only German is a
 		// real translation, French/Italian/Spanish repeat the English
 		// literal on purpose (an empty string would print blank, not fall
-		// back to English). Umlauts written "~u"/"~o"/"~a", the way
-		// GermanKeyboard[] (specific\input.cpp) already does it - checked
-		// against the accent path in game\text.cpp first: PrintString has no
-		// escape for '~', so this is two plain glyphs, not a real umlaut
-		// glyph, exactly as GermanKeyboard's own rows already render. There
-		// is no sharp s in these strings on purpose (the brief's own words).
-		//
-		// A REAL umlaut glyph is nevertheless reachable, and the review round
-		// of #161 measured it after an earlier draft of this record claimed
-		// otherwise: AccentToCode (game\text.cpp:187) maps the Latin-1 bytes
-		// 0xE4/0xF6/0xFC to codes 128+4/128+20/128+1, and PrintString
-		// composes those from CharDef plus AccentTable's rows {'a','^'},
-		// {'o','^'}, {'u','^'} (game\accent.inc). Only the sharp s has no
-		// row. The tilde spelling stays because the user's own word table
-		// prescribes it and it matches what GermanKeyboard[] already shows on
-		// the binding page; three strings below would change if the real
-		// glyphs were ever wanted (Kamerad~ampfung, K~orper, Game-Over-Men~u).
+		// back to English). Umlauts are the Latin-1 bytes 0xE4 / 0xF6 / 0xFC,
+		// written as hex escapes so this file stays ASCII: AccentToCode
+		// (game\text.cpp:187) maps them to codes 128+4 / 128+20 / 128+1 and
+		// PrintString composes those from CharDef plus AccentTable's rows
+		// (game\accent.inc) - the path the German language file's own
+		// umlauts take. The round first wrote "~u"/"~o"/"~a", the way
+		// GermanKeyboard[] (specific\input.cpp) labels its keys, because the
+		// round's brief prescribed it; PrintString has no escape for '~', so
+		// the menu would have shown a tilde and a plain vowel. The brief was
+		// wrong there, the review round measured the real path, and the
+		// project manager corrected the three strings after acceptance. Only
+		// the sharp s has no accent row, so none of these strings has one.
+		// Every escape below is followed by a letter that is no hex digit, or
+		// by the end of the string - keep it that way when editing.
 		//
 		// Rows with no German entry (PSX/TR4/TR5, "Display"/"Display (60)",
 		// "Original") are not listed here - CustomText already falls back to
@@ -1389,8 +1386,8 @@ const char* CustomText(const char* engl)
 		{ "Field of view",   "Field of view",   "Sichtfeld",      "Field of view",      "Field of view" },
 		{ "Death camera",    "Death camera",    "Todeskamera",    "Death camera",       "Death camera" },
 		{ "Follow head bone", "Follow head bone", "Kopfknochen folgen", "Follow head bone", "Follow head bone" },
-		{ "Camera damping",  "Camera damping",  "Kamerad~ampfung", "Camera damping",    "Camera damping" },
-		{ "Body",            "Body",            "K~orper",        "Body",               "Body" },
+		{ "Camera damping",  "Camera damping",  "Kamerad\xE4mpfung", "Camera damping",    "Camera damping" },
+		{ "Body",            "Body",            "K\xF6rper",        "Body",               "Body" },
 		{ "Frame rate",      "Frame rate",      "Bildrate",       "Frame rate",         "Frame rate" },
 		{ "VSync",           "VSync",           "VSync",          "VSync",              "VSync" },
 		{ "Ammotype hotkeys", "Ammotype hotkeys", "Munitions-Hotkeys", "Ammotype hotkeys", "Ammotype hotkeys" },
@@ -1406,7 +1403,7 @@ const char* CustomText(const char* engl)
 		{ "Bar positions",   "Bar positions",   "Balkenposition", "Bar positions",      "Bar positions" },
 		{ "Enemy bars",      "Enemy bars",      "Gegnerbalken",   "Enemy bars",         "Enemy bars" },
 		{ "Ammo counter",    "Ammo counter",    "Munitionsanzeige", "Ammo counter",     "Ammo counter" },
-		{ "Gameover menu",   "Gameover menu",   "Game-Over-Men~u", "Gameover menu",     "Gameover menu" },
+		{ "Gameover menu",   "Gameover menu",   "Game-Over-Men\xFC", "Gameover menu",     "Gameover menu" },
 		{ "Fog",             "Fog",             "Nebel",          "Fog",                "Fog" },
 		{ "HD textures",     "HD textures",     "HD-Texturen",    "HD textures",        "HD textures" },
 		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },

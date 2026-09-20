@@ -16530,20 +16530,22 @@ the one option named in two places carries ONE literal: this entry first said
 stayed two strings on purpose, which is not what brief item 4 asked for - the
 second review said so and the option row now says "Level Select" too, one
 `CustomText` key for one setting, the duplicate table row deleted. German
-umlauts are written the way `GermanKeyboard[]` in
-`specific/input.cpp` already does - `~u`, `~o`, `~a`, a literal tilde before
-the plain vowel, which the renderer draws as two plain glyphs because
-`PrintString` has no escape for `~`. **A real umlaut glyph does exist and this
-entry first said it did not** - the review round measured it and the sentence
-is corrected here rather than quietly dropped: `AccentToCode`
-(`game/text.cpp:187`) maps the Latin-1 bytes `0xE4` -> 128+4, `0xF6` -> 128+20
-and `0xFC` -> 128+1, and `PrintString` (`game/text.cpp:410-419`) composes each
-of those codes from `CharDef` plus its row of `AccentTable`
-(`game/accent.inc`: `{'a','^'}`, `{'o','^'}`, `{'u','^'}`) - only the sharp s
-has no row, which is why the brief's own word table avoids it. The three
-strings stay as they are because the brief's word table prescribes them that
-way and the brief wins; if they are ever wanted as real umlauts, exactly three
-change (`Kamerad~ampfung`, `K~orper`, `Game-Over-Men~u`). `CustomText` grew
+umlauts are the Latin-1 bytes `0xE4`, `0xF6` and `0xFC`, written as hex escapes
+(`Kamerad\xE4mpfung`, `K\xF6rper`, `Game-Over-Men\xFC`): `AccentToCode`
+(`game/text.cpp:187`) maps them to 128+4, 128+20 and 128+1, and `PrintString`
+(`game/text.cpp:410-419`) composes each of those codes from `CharDef` plus its
+row of `AccentTable` (`game/accent.inc`) - the path the German language file's
+own umlauts take; only the sharp s has no row, which is why the word table
+avoids it. **The round first wrote these three as `~a`, `~o`, `~u`, and this
+entry first said no real umlaut glyph existed**: the brief's word table
+prescribed the spelling `GermanKeyboard[]` in `specific/input.cpp` uses for its
+key labels, `PrintString` has no escape for `~`, and the menu would have shown a
+tilde and a plain vowel. The review round measured the real path, the builders
+kept the brief's spelling because the brief wins, and the project manager
+corrected his own brief in a follow-up commit after acceptance - three strings
+and their comment, nothing else (the engine was rebuilt, the three byte
+sequences were read back out of the EXE).
+`CustomText` grew
 from **17** rows at base `a6ecbb5` to **74** - counted per commit by walking
 the initialiser's own braces, not with `grep -c '{ "'`, which also counts the
 unrelated `names[8]` language-name array at `game/gameflow.cpp:1287` and made
@@ -16698,7 +16700,8 @@ switched off in turn) now hold the direction - 173 checks, and the swapped
 loops fail 172 of them, re-mutated in a copy of the tree under `Agent-Scratch`
 and never in the repository.
 
-Twelve commits, `Round 161b1 (#161): <what>` - six from the build steps (the
+Thirteen commits, `Round 161b1 (#161): <what>` - the last of them the project
+manager's own after acceptance (the three umlauts above) - six from the build steps (the
 sixth of them this entry itself), two answering the first skeptical review,
 which found one refuted measurement stated as fact, three stale counts or
 paths in the record and the manual, one truncated comment and one test that

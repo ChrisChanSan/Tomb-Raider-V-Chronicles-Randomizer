@@ -2792,6 +2792,26 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool sprint_toggle;
 	bool duck_toggle;
 
+	/* GRAB MODE (#161, round 161b2d, item 5 - the user: "Es gibt im Remaster
+	 * eine Funktion fuer die moderne Steuerung, dass Lara sich nicht
+	 * festhalten muss, sie bleibt nach dem Greifen haengen und mit noch mal
+	 * druecken laesst sie los"). Off = Hold, the engine's own behaviour: she
+	 * holds on for exactly as long as the key or button is down. On = Toggle:
+	 * while she is in one of the states a cleared IN_ACTION would drop her
+	 * from - a hang, a shimmy, a corner, a monkey swing, a ladder, a pole, a
+	 * rope, the zip line, the parallel bars - the bit is delivered without the
+	 * key, and a fresh press is what lets go.
+	 *
+	 * `ModernGrabLatch` (game\modern_move.cpp) is the whole of the arithmetic
+	 * and `ModernStateIsGrab` beside it is the family; specific\input.cpp's
+	 * mode seam is their one caller, on both control types and for keyboard
+	 * and pad alike, exactly like the three rows above. The bit it writes is
+	 * IN_ACTION and only IN_ACTION, so under "One key" the Action button's
+	 * other two bits - IN_SELECT and IN_INTERACT - are untouched and a
+	 * pushblock is pushed with the key held, as it always was.
+	 * Registry: grab_toggle. */
+	bool grab_toggle;
+
 	/* THE CAMERA SPEED SLIDER (#161, round 161a2b, item 5). "Der rechte Stick
 	 * muss noch schneller werden, der ist viel zu langsam. Am besten ein
 	 * Slider wie die SFX und Musik." - so this is a row on the Controls page,

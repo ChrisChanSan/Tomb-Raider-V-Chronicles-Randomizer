@@ -293,6 +293,32 @@ static bool MenuStepDuckMode(long, long dir)
 	return 1;
 }
 
+/* GRAB MODE (#161, round 161b2d, item 5). The fourth row of the same shape, and
+ * the reason the three above it moved to a sub-page of their own: "Die vier
+ * Modi bitte auf eine Unterseite. Macht es uebersichtlicher."
+ *
+ * 0 is Hold here too, and for the same reason as the two rows above: the
+ * engine's own grab is held. What Toggle buys is the state doing the holding
+ * instead of the thumb - see ModernGrabLatch (game\modern_move.cpp). */
+static const char* MenuValGrabMode(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.grab_toggle ? "Toggle" : "Hold"));
+	return buf;
+}
+
+static bool MenuStepGrabMode(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.grab_toggle = !tomb5.grab_toggle;
+	// The same reason as the two rows above, and one of its own: a release
+	// press left standing would take the next grab away as well.
+	InputModeLatchReset();
+	return 1;
+}
+
 static const char* MenuValAction(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.action_split ? "Separate" : "One key"));
@@ -1345,19 +1371,32 @@ static const menu_row menu_rows_audio[] =
 	MENU_VALUE("Language", MenuValLanguage, MenuStepLanguage, MENU_SAVE_GAME)
 };
 
+/* THE MODES SUB-PAGE (#161, round 161b2d, item 5; the user, after this round
+ * was launched: "Die vier Modi bitte auf eine Unterseite. Macht es
+ * uebersichtlicher").
+ *
+ * The three rows that were on the Controls page moved here as the one table
+ * line each they are - same callbacks, same save class, same labels, so the
+ * MENULOG line each of them writes is word for word the one it wrote before
+ * except for `page=Modes` in place of `page=Controls`. Grab mode is the fourth
+ * and new. Four rows: one page, no arrows (MENU_MAX_ROWS is 12). */
+static const menu_row menu_rows_modes[] =
+{
+	MENU_VALUE("Combat mode", MenuValCombatMode, MenuStepCombatMode, MENU_SAVE_TOMB5),
+	MENU_VALUE("Sprint mode", MenuValSprintMode, MenuStepSprintMode, MENU_SAVE_TOMB5),
+	MENU_VALUE("Duck mode", MenuValDuckMode, MenuStepDuckMode, MENU_SAVE_TOMB5),
+	MENU_VALUE("Grab mode", MenuValGrabMode, MenuStepGrabMode, MENU_SAVE_TOMB5)
+};
+
 static const menu_row menu_rows_controls[] =
 {
 	MENU_TAB("Key bindings", MENU_PAGE_KEYBINDS),
 	MENU_TAB("View", MENU_PAGE_VIEW),
+	// #161, round 161b2d item 5 - the third tab, directly after "View", where
+	// the four mode rows now live. The page is ten rows with it and stays on
+	// one page: it was twelve, three left and this one arrived.
+	MENU_TAB("Modes", MENU_PAGE_MODES),
 	MENU_VALUE("Control type", MenuValControlType, MenuStepControlType, MENU_SAVE_TOMB5),
-	MENU_VALUE("Combat mode", MenuValCombatMode, MenuStepCombatMode, MENU_SAVE_TOMB5),
-	// #161, round 161b2c item 4 - directly under Combat mode, as the user's own
-	// sentence puts them. The page stands at twelve rows with these two, which
-	// is MENU_MAX_ROWS exactly (game\menu_frame.h) - so MenuPageCount gives it
-	// one page and no arrows, the way menu_rows_graphics has had twelve since
-	// round 161b1.
-	MENU_VALUE("Sprint mode", MenuValSprintMode, MenuStepSprintMode, MENU_SAVE_TOMB5),
-	MENU_VALUE("Duck mode", MenuValDuckMode, MenuStepDuckMode, MENU_SAVE_TOMB5),
 	MENU_VALUE("Action", MenuValAction, MenuStepAction, MENU_SAVE_TOMB5),
 	MENU_VALUE("Control layout", MenuValControlLayout, MenuStepControlLayout, MENU_SAVE_GAME),
 	MENU_SLIDER("Camera speed", -1, MenuNumCameraSpeed, MenuStepCameraSpeed, MENU_SAVE_TOMB5, MenuEnabledModern),
@@ -1616,7 +1655,8 @@ static const menu_page menu_pages[MENU_PAGE_COUNT] =
 	{ "HUD",          -1,          MENU_ROWS(menu_rows_hud),      0, 0 },
 	{ "tomb5 options", -1,         MENU_ROWS(menu_rows_tomb5),    0, 0 },
 	{ "Special Features", -1,      0, 0,                          0, 0 },	// the existing screen
-	{ "Credits",      -1,          0, 0,                          0, 0 }	// the existing screen
+	{ "Credits",      -1,          0, 0,                          0, 0 },	// the existing screen
+	{ "Modes",        -1,          MENU_ROWS(menu_rows_modes),    0, 0 }	// #161, round 161b2d item 5
 };
 
 /* ========================================================================= */

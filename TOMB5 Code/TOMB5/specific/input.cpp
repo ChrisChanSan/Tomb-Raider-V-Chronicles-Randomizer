@@ -874,6 +874,13 @@ static long modern_tank_prev;
 static long sprint_latch;
 static long duck_latch;
 
+/* AND GRAB MODE'S (#161, round 161b2d, item 5). A third long of the same kind,
+ * written only from the mode seam and from InputModeLatchReset, and holding
+ * only MODERN_GRAB_RELEASE and MODERN_LATCH_KEY - the grab latch remembers
+ * which press let go, never that she is holding on, because the STATE says
+ * that (game\modern_move.cpp). At the default nothing reads or writes it. */
+static long grab_latch;
+
 /* "THIS LATCH IS OFF NOW", said from outside a tick. Three callers, each with
  * its own reason:
  *
@@ -895,6 +902,9 @@ void InputModeLatchReset()
 {
 	ModernModeLatchDrop(&sprint_latch);
 	ModernModeLatchDrop(&duck_latch);
+	// #161, round 161b2d item 5: the third row's latch, through the same call
+	// and for the same two reasons - a level starts, or the row itself flips.
+	ModernModeLatchDrop(&grab_latch);
 }
 
 /* AND THE ONE QUESTION THE REST OF THE ENGINE MAY ASK ABOUT IT. The bypass
@@ -2171,8 +2181,22 @@ long S_UpdateInput()
 	 *
 	 * AND THE WHOLE BLOCK IS BEHIND THE TWO OPTIONS. With both rows at Hold the
 	 * only statement of this round that runs in this function is the test on the
-	 * next line, and the word leaves exactly as it did at cb55d72. */
-	if (tomb5.sprint_toggle || tomb5.duck_toggle)
+	 * next line, and the word leaves exactly as it did at cb55d72.
+	 *
+	 * GRAB MODE JOINED THEM HERE (#161, round 161b2d, item 5) rather than taking
+	 * a seam of its own, and the same grep is the reason: IN_ACTION has exactly
+	 * four producers in this file - the keyboard's Key(8) and Key(KEY_ROLE_
+	 * SECOND), the pad's JoyRole(4) and JoyRole(JOY_ROLE_SECOND), four hundred
+	 * lines above - and nothing between them and here reads or writes the bit.
+	 * So `linput` carries it at this point exactly as the keyboard or the pad
+	 * wrote it, in both control types, One key and Separate alike; under
+	 * Separate the holding key IS the Secondary, because that is the role that
+	 * produces IN_ACTION there, and the either-key sites (game\lara.cpp's
+	 * IN_ACTION_ANY) are served by it too, since ANY is the OR of the two.
+	 *
+	 * The test on the next line grew a third term with it: MODELOG has to be
+	 * able to speak when Grab mode is the only row that is on. */
+	if (tomb5.sprint_toggle || tomb5.duck_toggle || tomb5.grab_toggle)
 	{
 		/* THE TICKS NO LATCH MAY STAND ON. The first seven terms are the weapon
 		 * seam's, read with the same meaning - a cutscene, a spotcam and
@@ -2199,12 +2223,27 @@ long S_UpdateInput()
 		 *   `inputBusy` as ZOOM IN and ZOOM OUT (game\camera.cpp:3520/:3529).
 		 *   That is a held key by its nature - the zoom steps once per tick -
 		 *   so the sight is a drop, and a drop tick hands the raw key through
-		 *   untouched, which leaves the zoom exactly as it is today. */
+		 *   untouched, which leaves the zoom exactly as it is today.
+		 *
+		 * ROUND 161b2d SPLIT THE ELEVEN TERMS IN THREE, and moved not one of
+		 * them: the eight below are what all three latches share, and the three
+		 * that follow are asked by name where they were asked before. The sprint
+		 * and the duck are the same expression they were, term for term and in
+		 * the same order; what changed is only that the duck now asks WHERE she
+		 * is when the hands are busy (item 5b) and that the grab has its own
+		 * short list. */
 		const long mode_drop = !lara_item || App.fmv || GLOBAL_playing_cutseq ||
 			bUseSpotCam || bDisableLaraControl || InventoryActive ||
-			gfLevelId == LVL5_TITLE || lara_item->hit_points <= 0 ||
-			lara.water_status != LW_ABOVE_WATER || lara.gun_status == LG_HANDS_BUSY ||
-			BinocularRange != 0;
+			gfLevelId == LVL5_TITLE || lara_item->hit_points <= 0;
+
+		// The three terms that are not everybody's, read once. `mode_state` is
+		// last tick's state, which is what the family tables are asked about -
+		// S_UpdateInput runs before LaraControl, so it is the state she is in
+		// while the word is being built.
+		const long mode_water = lara.water_status != LW_ABOVE_WATER;
+		const long mode_hands = lara.gun_status == LG_HANDS_BUSY;
+		const long mode_sight = BinocularRange != 0;
+		const short mode_state = lara_item ? lara_item->current_anim_state : (short)0;
 
 		/* AND THE TWO THE SPRINT ADDS. "The sprint latch also drops when no
 		 * direction is pushed or the engine ends the sprint" - the first is
@@ -2216,13 +2255,45 @@ long S_UpdateInput()
 		 * standing still on purpose. */
 		const long moving = (linput & (IN_FORWARD | IN_BACK | IN_LEFT | IN_RIGHT |
 			IN_LSTEP | IN_RSTEP)) != 0;
-		const long sprint_drop = mode_drop || !DashTimer || !moving;
-		const long duck_drop = mode_drop;
+		const long sprint_drop = mode_drop || mode_water || mode_hands ||
+			mode_sight || !DashTimer || !moving;
+
+		/* THE DUCK'S ONE CHANGE, AND IT IS THE USER'S PLAY TEST (#161, round
+		 * 161b2d, item 5b): "sie haelt es so lange automatisch fest, bis ich in
+		 * die nach-vorne-kriechen-Animation wechsle, dann bricht sie ab". His
+		 * log says it eleven times - `duck=1`, a second later `duck=0 drop=1/1`.
+		 * MEASURED: entering the crawl runs ANIM_DUCK_TO_ALL4S, which sets
+		 * LG_HANDS_BUSY itself (game\lara.cpp:3691), so round 161b2c's "ladder
+		 * and vehicle" term fired on the crawl. The term stays - a ladder, a
+		 * rope and the crawl-to-hang still end the latch - but it is now asked
+		 * together with where she is, and inside the duck-and-crawl family
+		 * LG_HANDS_BUSY means "she is crawling" and nothing more.
+		 * ModernStateIsDuck (game\modern_move.cpp) is that family, measured
+		 * there against the engine's own list in game\newinv2.cpp:2827. */
+		const long duck_drop = mode_drop || mode_water || mode_sight ||
+			(mode_hands && !ModernStateIsDuck(mode_state));
+
+		/* AND THE GRAB'S OWN LIST, which is the eight shared terms and NOTHING
+		 * else - the brief's "level start, death, cutscene, a menu owning the
+		 * input", the level start arriving through InputModeLatchReset. Each of
+		 * the three that are missing was measured before it was left out:
+		 * - LG_HANDS_BUSY IS the family. A hang, a ladder, a rope and a pole
+		 *   all leave gun_status there (game\lara.cpp:2465, :2546, :2918), so
+		 *   the term would drop the latch on every tick it was meant to stand.
+		 * - the water: she can climb a ladder out of shallow water, where
+		 *   water_status is LW_WADE, and dropping her off it would be a bug of
+		 *   our own making. No family state is reachable under water at all.
+		 * - the binoculars: with the sight up she is standing, so the family is
+		 *   0 and the bit is the key's either way. A term would say nothing. */
+		const long grab_family = ModernStateIsGrab(mode_state);
+		const long grab_drop = mode_drop;
 
 		linput = ModernModeLatch(tomb5.sprint_toggle, (linput & IN_SPRINT) != 0,
 			sprint_drop, &sprint_latch, IN_SPRINT, linput);
 		linput = ModernModeLatch(tomb5.duck_toggle, (linput & IN_DUCK) != 0,
 			duck_drop, &duck_latch, IN_DUCK, linput);
+		linput = ModernGrabLatch(tomb5.grab_toggle, (linput & IN_ACTION) != 0,
+			grab_family, grab_drop, &grab_latch, IN_ACTION, linput);
 
 		/* MODELOG, behind -log like every other seam of this round, and on the
 		 * CHANGE of a latch and not every tick: a latched bit stands for
@@ -2235,16 +2306,25 @@ long S_UpdateInput()
 		if (gLogEnabled)
 		{
 			static long mode_logged = -1;
+			/* `grab` is the family and not a latch bit, because that IS what
+			 * the grab latch delivers: the bit is in the word while she is
+			 * holding on, whatever the key says. A change of it is the moment
+			 * a play test is after - she reached the ledge, she let go - and
+			 * MODERN_GRAB_RELEASE goes with it on the same edge. */
 			const long now = ((sprint_latch & MODERN_LATCH_ON) ? 1 : 0) |
-				((duck_latch & MODERN_LATCH_ON) ? 2 : 0);
+				((duck_latch & MODERN_LATCH_ON) ? 2 : 0) |
+				((tomb5.grab_toggle && grab_family && !(grab_latch & MODERN_GRAB_RELEASE)) ? 4 : 0);
 
 			if (now != mode_logged)
 			{
 				mode_logged = now;
-				Log("MODELOG f=%ld sprint=%d duck=%d drop=%d/%d mode=%d/%d",
+				// Extended at its END by ` grab=%d`, round 161b2d item 5: every
+				// field the 161b2c line printed stands where it stood.
+				Log("MODELOG f=%ld sprint=%d duck=%d drop=%d/%d mode=%d/%d grab=%d",
 					(long)GlobalCounter, (int)(now & 1), (int)((now >> 1) & 1),
 					(int)(sprint_drop != 0), (int)(duck_drop != 0),
-					(int)tomb5.sprint_toggle, (int)tomb5.duck_toggle);
+					(int)tomb5.sprint_toggle, (int)tomb5.duck_toggle,
+					(int)((now >> 2) & 1));
 			}
 		}
 	}

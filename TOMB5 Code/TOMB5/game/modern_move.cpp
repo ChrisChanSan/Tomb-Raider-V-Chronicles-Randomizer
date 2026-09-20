@@ -577,6 +577,188 @@ long ModernStateIsSwim(short anim_state)
 	return (anim_state == 13 || anim_state == 17 || anim_state == 18) ? 1 : 0;
 }
 
+/* THE HOLD-ON FAMILY (#161, round 161b2d, item 5; the user: "Es gibt im
+ * Remaster eine Funktion fuer die moderne Steuerung, dass Lara sich nicht
+ * festhalten muss, sie bleibt nach dem Greifen haengen und mit noch mal
+ * druecken laesst sie los").
+ *
+ * Every state in which a CLEARED IN_ACTION makes her let go, and no other. The
+ * list was not taken from the design: it is every routine in the tree that
+ * reads the bit as "still holding on", found by grep on IN_ACTION and
+ * IN_ACTION_ANY and then read one by one.
+ *
+ *   10  lara_col_hang      -> LaraHangTest       game\lara.cpp:2307, :5230
+ *   30  lara_col_hangleft  -> LaraHangTest       game\lara.cpp:3034
+ *   31  lara_col_hangright -> LaraHangTest       game\lara.cpp:3053
+ *   75  lara_as_hang2      IN_ACTION             game\lara.cpp:3387
+ *       lara_col_hang2     -> LaraHangTest       game\lara.cpp:3432
+ *   76  lara_col_monkeyswing                     game\lara.cpp:3506
+ *   77  lara_col_monkeyl                         game\lara.cpp:3573
+ *   78  lara_col_monkeyr                         game\lara.cpp:3613
+ *   79  lara_col_monkey180 -> lara_col_monkeyswing  game\lara.cpp:3639
+ *   82  lara_col_hangturnlr                      game\lara.cpp:3980
+ *   83  the same routine
+ *   56  lara_col_climbstnc -> LaraCheckForLetGo  game\laraclmb.cpp:76, :23
+ *   57  lara_col_climbing  -> the same           game\laraclmb.cpp:181
+ *   58  lara_col_climbleft -> the same           game\laraclmb.cpp:254
+ *   60  lara_col_climbright-> the same           game\laraclmb.cpp:277
+ *   61  lara_col_climbdown -> the same           game\laraclmb.cpp:309
+ *   99  lara_col_polestat  IN_ACTION_ANY         game\lara.cpp:4371
+ *  100  lara_col_poleup                          game\lara.cpp:4421
+ *  101  lara_col_poledown                        game\lara.cpp:4452
+ *  102  lara_as_poleleft                         game\lara.cpp:4328
+ *  103  lara_as_poleright                        game\lara.cpp:4339
+ *   90  lara_as_ropel                            game\lara.cpp:4736
+ *   91  lara_as_roper                            game\lara.cpp:4746
+ *  111  lara_as_rope / lara_col_rope             game\lara.cpp:4623, :4632
+ *  114  lara_as_rope (AS_ROPEFWD shares it)      game\lara.cpp:4623
+ *  115  lara_as_rope (AS_ROPEBACK)               game\lara.cpp:4623
+ *  113  lara_as_climbroped -> LaraClimbRope      game\rope.cpp:596
+ *   70  lara_as_deathslide - the zip line        game\lara.cpp:4292
+ *  128  lara_as_parallelbars                     game\lara.cpp:4897
+ *
+ * AND FIVE STATES THAT READ NOTHING AND ARE IN THE FAMILY ANYWAY, because they
+ * are transitions INSIDE it and the bit must not blink off while one runs: 59
+ * AS_CLIMBEND (the half rung at the top of a ladder), 112 AS_CLIMBROPE (the
+ * pull up the rope, which reads IN_ROLL and hands her back to 111), and the
+ * four corner shimmies 107-110, whose four routines (lara_as_extcornerl and
+ * its three sisters) call SetCornerAnim (game\lara.cpp:5327) and put her back
+ * into AS_HANG or AS_CLIMBSTNC - both of which ARE in the list above.
+ *
+ * WHAT IS DELIBERATELY NOT IN IT, each measured:
+ * - the catches. 11 AS_REACH, 28 AS_UPJUMP, 29 AS_FALLBACK, 2 AS_STOP and the
+ *   rest read IN_ACTION as "grab this", not as "keep holding" (game\lara.cpp:
+ *   708, :858, :1126, :2450, :2907, game\objects.cpp, game\switch.cpp,
+ *   game\rope.cpp:183, game\traps.cpp:1099, game\deathsld.cpp:36). A latched
+ *   bit there would make her grab everything she fell past.
+ * - 80 AS_ALL4S, where IN_ACTION and IN_BACK together start the crawl-to-hang
+ *   (game\lara.cpp:3768, :3790). That is a catch too, and it is the one the
+ *   family list would have broken most visibly.
+ * - 87 AS_HANG2DUCK and 88 AS_CRAWL2HANG: one-way transitions across the
+ *   family's edge whose routines read no input at all (lara_as_null /
+ *   lara_col_crawl2hang), so membership would change nothing either way.
+ * - 129 AS_PBLEAP, the leap OFF the bar: she has already let go.
+ * - pushing and pulling a block (36/37/38). It is not a question of the
+ *   family: game\moveblok.cpp:158, :220 and :268 read IN_INTERACT and not
+ *   IN_ACTION at all since round 161b2c, and the latch writes only IN_ACTION.
+ *   Under "Separate" they are two different keys; under "One key" they are the
+ *   same key but still two bits, and the one this function governs is not the
+ *   one the push loop asks for. So a block is pushed exactly as it is today,
+ *   with the key held, at either setting. */
+long ModernStateIsGrab(short anim_state)
+{
+	switch (anim_state)
+	{
+	case 10:	// AS_HANG - the ledge hang
+	case 30:	// AS_HANGLEFT - shimmy
+	case 31:	// AS_HANGRIGHT
+	case 82:	// AS_HANGTURNL
+	case 83:	// AS_HANGTURNR
+	case 107:	// AS_CORNEREXTL - the four corner shimmies, transitions
+	case 108:	// AS_CORNEREXTR
+	case 109:	// AS_CORNERINTL
+	case 110:	// AS_CORNERINTR
+		return 1;
+
+	case 75:	// AS_HANG2 - the overhead hang
+	case 76:	// AS_MONKEYSWING
+	case 77:	// AS_MONKEYL
+	case 78:	// AS_MONKEYR
+	case 79:	// AS_MONKEY180
+		return 1;
+
+	case 56:	// AS_CLIMBSTNC - the ladder
+	case 57:	// AS_CLIMBING
+	case 58:	// AS_CLIMBLEFT
+	case 59:	// AS_CLIMBEND - a transition, reads nothing
+	case 60:	// AS_CLIMBRIGHT
+	case 61:	// AS_CLIMBDOWN
+		return 1;
+
+	case 99:	// AS_POLESTAT - the pole
+	case 100:	// AS_POLEUP
+	case 101:	// AS_POLEDOWN
+	case 102:	// AS_POLELEFT
+	case 103:	// AS_POLERIGHT
+		return 1;
+
+	case 90:	// AS_ROPELEFT - the rope
+	case 91:	// AS_ROPERIGHT
+	case 111:	// AS_ROPE
+	case 112:	// AS_CLIMBROPE - a transition, reads IN_ROLL
+	case 113:	// AS_SLIDEROPE
+	case 114:	// AS_ROPEFWD
+	case 115:	// AS_ROPEBACK
+		return 1;
+
+	case 70:	// AS_DEATHSLIDE - the zip line
+	case 128:	// AS_PBSPIN - the parallel bars
+		return 1;
+
+	default:
+		return 0;
+	}
+}
+
+/* THE DUCK-AND-CRAWL FAMILY (#161, round 161b2d, item 5b, after the user's play
+ * test of round 161b2c: "Bis auf das Ducken geht alles. Problem beim Ducken
+ * ist, sie haelt es so lange automatisch fest, bis ich in die
+ * nach-vorne-kriechen-Animation wechsle, dann bricht sie ab").
+ *
+ * MEASURED CAUSE, and it is one line: the duck latch's drop list carries
+ * lara.gun_status == LG_HANDS_BUSY, which round 161b2c wrote as "ladder and
+ * vehicle" - but lara_as_all4s sets LG_HANDS_BUSY itself the moment
+ * ANIM_DUCK_TO_ALL4S runs (game\lara.cpp:3691), which is exactly the animation
+ * he named. So the latch fell where a Toggle player needs it most. The fix is
+ * not to drop the term but to ask WHERE she is when it is true: inside this
+ * family it says "she is crawling", outside it still says "ladder, rope, a
+ * crawl-to-hang", and there it still drops the latch.
+ *
+ * The list is the engine's OWN spelling of "she is crouched or crawling" -
+ * game\newinv2.cpp:2827 refuses a long gun in exactly these states - with two
+ * differences, both deliberate:
+ * - AS_DUCKROLL (72) is added. The roll out of a duck is part of the family by
+ *   the user's own sentence ("the roll out of a duck") and it ends in a duck.
+ * - AS_CRAWL2HANG (88) is NOT in it. The brief names it as a drop and the code
+ *   agrees: game\lara.cpp:4197 sets LG_HANDS_BUSY for a reason there, she is
+ *   leaving the floor, and the grab family above takes over.
+ *
+ * The three pickup states are in it because a pickup made from the crouch or
+ * the crawl sets LG_HANDS_BUSY too (game\pickup.cpp) and must not stand her up
+ * afterwards. They cost nothing when she picks something up standing: the
+ * latch can only be standing if she is crouched, and during a pickup lara.Busy
+ * strips IN_DUCK from the word anyway (specific\input.cpp).
+ *
+ * 89 AS_CONTROLLED is NOT in it: the crawl jump (game\lara.cpp:3674) borrows a
+ * scripted state that a dozen other objects use, so membership would hand the
+ * latch to a pulley or a trapdoor animation as well. */
+long ModernStateIsDuck(short anim_state)
+{
+	switch (anim_state)
+	{
+	case 71:	// AS_DUCK - the crouch itself
+	case 72:	// AS_DUCKROLL - the roll out of it
+	case 105:	// AS_DUCKROTL - the crouch turn
+	case 106:	// AS_DUCKROTR
+		return 1;
+
+	case 80:	// AS_ALL4S - all fours, and ANIM_DUCK_TO_ALL4S runs in it
+	case 81:	// AS_CRAWL - forward
+	case 84:	// AS_ALL4TURNL - the crawl turn
+	case 85:	// AS_ALL4TURNR
+	case 86:	// AS_CRAWLBACK
+		return 1;
+
+	case 39:	// AS_PICKUP - a pickup made from the crouch or the crawl
+	case 67:	// AS_FLAREPICKUP
+	case 98:	// AS_HIDDENPICKUP
+		return 1;
+
+	default:
+		return 0;
+	}
+}
+
 /* THE WATER'S TURN TABLE, and the predicate that says "this tick is the
  * water's" at the same time: 0 means no water state, anything else is the
  * rate that state turns at in TR5 itself (see the constants in the header for
@@ -1301,6 +1483,76 @@ long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, l
 	return bits;
 }
 
+/* GRAB MODE (#161, round 161b2d, item 5). The third latch, and it is NOT
+ * ModernModeLatch with another bit, because what the player asked for is not a
+ * toggle at all: "sie bleibt nach dem Greifen haengen und mit noch mal
+ * druecken laesst sie los". She hangs because she is HANGING - the state says
+ * so, and `family` is ModernStateIsGrab's answer about it. There is nothing to
+ * remember about the holding; the only memory this needs is the opposite one,
+ * which press was the letting go.
+ *
+ * HOLD IS THE DEFAULT AND HANDS THE WORD BACK UNTOUCHED, the same first branch
+ * and the same clearing as the mode latch above: that is the whole of
+ * "byte-identical at the defaults" for this function.
+ *
+ * THE FOUR ANSWERS, in the order the code asks them:
+ * - a press INSIDE the family is a let-go: MODERN_GRAB_RELEASE goes up and the
+ *   bit is taken out of the word, so the state routine sees what it sees when
+ *   a player lets the key go.
+ * - while THAT press lasts the bit stays clear, wherever she is by then. This
+ *   is the one place where "outside the family the key is the key" bends, and
+ *   it bends on purpose: without it the very press that let go of the ledge
+ *   would still be down two ticks later, when she is falling past the next
+ *   one, and she would catch it. No instant re-grab.
+ * - inside the family with no such press, the bit is DELIVERED whether the key
+ *   is down or not. A savegame restored in a hang needs no key at all, which
+ *   is the case the user will test first.
+ * - outside the family, with no let-go press standing, the word goes through
+ *   as it came: the catch is the key, the vault is the key, firing is the key.
+ *
+ * `drop` is a tick on which no latch may stand - a cutscene, a menu, the title
+ * screen, death - and like the mode latch a drop tick is a Hold tick bit for
+ * bit. The key memory is tracked across drops too, so a key still down when a
+ * menu closes is not a fresh press and cannot let go of anything by itself. */
+long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit, long bits)
+{
+	long s;
+
+	if (!toggle)
+	{
+		if (state)
+			*state = 0;
+
+		return bits;
+	}
+
+	s = state ? *state : 0;
+
+	if (drop || !down)
+		s &= ~(long)MODERN_GRAB_RELEASE;
+	else if (family && !(s & MODERN_LATCH_KEY))
+		s |= MODERN_GRAB_RELEASE;
+
+	if (down)
+		s |= MODERN_LATCH_KEY;
+	else
+		s &= ~(long)MODERN_LATCH_KEY;
+
+	if (state)
+		*state = s;
+
+	if (drop)
+		return bits;
+
+	if (s & MODERN_GRAB_RELEASE)
+		return bits & ~bit;
+
+	if (family)
+		bits |= bit;
+
+	return bits;
+}
+
 /* AND THE ONE THING THE ENGINE HAS TO BE ABLE TO SAY FROM OUTSIDE A TICK: this
  * latch is off now. A level start and a savegame restore go through it
  * (game\gameflow.cpp), and so does flipping the row itself
@@ -1308,11 +1560,15 @@ long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, l
  * survive its own option being switched off.
  *
  * It clears the LATCH only and leaves the key memory alone, on purpose - see
- * the paragraph above. */
+ * the paragraph above. Round 161b2d gave it the grab latch's release bit as
+ * well: the three latches are three longs of the same shape, the two bits are
+ * both "a decision that must not outlive a level change", and a caller that
+ * had to know which kind of latch it was holding would be the only place in
+ * this file that did. */
 void ModernModeLatchDrop(long* state)
 {
 	if (state)
-		*state &= ~(long)MODERN_LATCH_ON;
+		*state &= ~(long)(MODERN_LATCH_ON | MODERN_GRAB_RELEASE);
 }
 
 /* WHAT AN ACTIVE TICK LEAVES BEHIND (round 161a2b, #161 item 7b). Four of the

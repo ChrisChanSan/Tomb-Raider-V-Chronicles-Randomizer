@@ -252,6 +252,25 @@ static void paging_engine_cases()
 	check(MenuPageCount(28, 11), 3, "pad, Separate, cheats on: 28 body rows, three pages");
 	check(MenuRowsPerPage(28, 11), 10, "28 at 11: 10 per page");
 	check(MenuRowsOnPage(28, 11, 2), 8, "28 at 11: the last page has 8");
+
+	/* AND THE TWO PAGES ROUND 161b2d ITEM 5 LEAVES BEHIND IT. The four mode
+	 * rows moved off the Controls page onto a sub-page of their own ("Die vier
+	 * Modi bitte auf eine Unterseite"), so Controls is ten rows where it was
+	 * twelve - three left, the "Modes" tab arrived - and Modes is four. Neither
+	 * has a fixed row, so both are asked at the full MENU_MAX_ROWS of 12, and
+	 * both are ONE page: no arrows, and therefore no "1/N" indicator on either. */
+	check(MenuPageCount(10, 12), 1, "Controls: 10 rows at 12, one page");
+	check(MenuRowsOnPage(10, 12, 0), 10, "Controls: all ten on page 0");
+	check(MenuPageFirstRow(10, 12, 0), 0, "Controls: page 0 starts at 0");
+	check(MenuRowsOnPage(10, 12, 1), 0, "Controls: there is no second page");
+
+	check(MenuPageCount(4, 12), 1, "Modes: 4 rows at 12, one page");
+	check(MenuRowsOnPage(4, 12, 0), 4, "Modes: all four on page 0");
+	check(MenuRowsOnPage(4, 12, 1), 0, "Modes: there is no second page");
+
+	// And the row count the page LEFT behind is still a one-page count, so the
+	// move cannot have been what makes Controls page: it never did.
+	check(MenuPageCount(12, 12), 1, "the twelve rows Controls had were one page too");
 }
 
 static void paging_ends()

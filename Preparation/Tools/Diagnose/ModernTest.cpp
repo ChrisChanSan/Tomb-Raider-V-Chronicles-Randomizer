@@ -5272,6 +5272,279 @@ static void mode_latch()
 		MODERN_MOVE_MASK & (MODERN_IN_DUCK | MODERN_IN_SPRINT), 0);
 }
 
+/* ------------------------------------------------------- Grab mode (5) ---- */
+
+/* The two family tables, each against a reference of its own, the way
+ * classic_states() does it for ModernStateIsClassic: every index 0..138, so a
+ * slip in the switch shows up as a mismatch rather than as the same mistake
+ * made twice. The reference lists are the measurement in the report, written
+ * out by hand from the routines. */
+static void grab_family()
+{
+	int i;
+
+	printf("Grab mode - the hold-on family, and the duck-and-crawl family\n");
+
+	{
+		const short grab[] =
+		{
+			10, 30, 31, 56, 57, 58, 59, 60, 61, 70, 75, 76, 77, 78, 79,
+			82, 83, 90, 91, 99, 100, 101, 102, 103, 107, 108, 109, 110,
+			111, 112, 113, 114, 115, 128
+		};
+		unsigned char want[139];
+
+		for (i = 0; i < 139; i++)
+			want[i] = 0;
+
+		for (i = 0; i < (int)(sizeof(grab) / sizeof(grab[0])); i++)
+			want[grab[i]] = 1;
+
+		for (i = 0; i <= 138; i++)
+			ok(ModernStateIsGrab((short)i) == want[i],
+				"all 139 states: the hold-on family matches the reference",
+				ModernStateIsGrab((short)i), want[i]);
+
+		ok((int)(sizeof(grab) / sizeof(grab[0])) == 34,
+			"...34 of 139 states hold on", (int)(sizeof(grab) / sizeof(grab[0])), 34);
+	}
+
+	/* THE FOUR THE REPORT ARGUES ABOUT, named one by one so that a later round
+	 * that changes one of them has to change a check with a sentence on it. */
+	ok(ModernStateIsGrab(11) == 0, "AS_REACH is a catch, not a hold", ModernStateIsGrab(11), 0);
+	ok(ModernStateIsGrab(28) == 0, "AS_UPJUMP likewise", ModernStateIsGrab(28), 0);
+	ok(ModernStateIsGrab(80) == 0, "AS_ALL4S is where the crawl-to-hang STARTS",
+		ModernStateIsGrab(80), 0);
+	ok(ModernStateIsGrab(36) == 0, "and a pushblock is not in it at all",
+		ModernStateIsGrab(36), 0);
+
+	{
+		const short duck[] = { 39, 67, 71, 72, 80, 81, 84, 85, 86, 98, 105, 106 };
+		unsigned char want[139];
+
+		for (i = 0; i < 139; i++)
+			want[i] = 0;
+
+		for (i = 0; i < (int)(sizeof(duck) / sizeof(duck[0])); i++)
+			want[duck[i]] = 1;
+
+		for (i = 0; i <= 138; i++)
+			ok(ModernStateIsDuck((short)i) == want[i],
+				"all 139 states: the duck-and-crawl family matches the reference",
+				ModernStateIsDuck((short)i), want[i]);
+
+		ok((int)(sizeof(duck) / sizeof(duck[0])) == 12,
+			"...12 of 139 states are the crouch and the crawl",
+			(int)(sizeof(duck) / sizeof(duck[0])), 12);
+	}
+
+	// Item 5b in one line: ANIM_DUCK_TO_ALL4S runs in AS_ALL4S and sets
+	// LG_HANDS_BUSY, so AS_ALL4S has to be in the family or the latch falls
+	// exactly where the user's play test said it fell.
+	ok(ModernStateIsDuck(80) == 1, "AS_ALL4S is in it - that is the 161b2c bug",
+		ModernStateIsDuck(80), 1);
+	ok(ModernStateIsDuck(88) == 0, "AS_CRAWL2HANG is NOT - she is leaving the floor",
+		ModernStateIsDuck(88), 0);
+	ok(ModernStateIsDuck(89) == 0, "and AS_CONTROLLED is a dozen other objects' state",
+		ModernStateIsDuck(89), 0);
+
+	// The two families never overlap: no state both holds on and crawls, or one
+	// press would have two meanings.
+	{
+		int both = 0;
+
+		for (i = 0; i <= 138; i++)
+			if (ModernStateIsGrab((short)i) && ModernStateIsDuck((short)i))
+				both++;
+
+		ok(both == 0, "no state is in both families", both, 0);
+	}
+}
+
+/* One tick of ModernGrabLatch as specific\input.cpp calls it. */
+static long grab_tick(long toggle, int down, int family, int drop, long* state, long extra)
+{
+	const long in = (down ? MODERN_IN_ACTION : 0) | extra;
+
+	return ModernGrabLatch(toggle, down, family, drop, state, MODERN_IN_ACTION, in);
+}
+
+static void grab_latch()
+{
+	long state;
+	long bits;
+	int i;
+
+	printf("Grab mode - Hold is the original, Toggle hangs on the state\n");
+
+	/* HOLD IS THE DEFAULT, over every combination of key, family, drop and
+	 * word: the word comes back exactly as it went in and the memory is left at
+	 * 0, so a trip through Toggle and back cannot resurrect anything. */
+	{
+		long differs = 0;
+		long stuck = 0;
+		int down, family, drop, b;
+
+		for (down = 0; down < 2; down++)
+			for (family = 0; family < 2; family++)
+				for (drop = 0; drop < 2; drop++)
+					for (b = 0; b < 4; b++)
+					{
+						const long in = (b & 1 ? MODERN_IN_ACTION : 0) |
+							(b & 2 ? (MODERN_IN_FORWARD | MODERN_IN_WALK) : 0);
+
+						state = MODERN_GRAB_RELEASE | MODERN_LATCH_KEY;
+
+						if (ModernGrabLatch(0, down, family, drop, &state,
+							MODERN_IN_ACTION, in) != in)
+							differs++;
+
+						if (state != 0)
+							stuck++;
+					}
+
+		ok(differs == 0, "Hold differs on none of the 32 combinations", differs, 0);
+		ok(stuck == 0, "Hold clears the memory on every one of them", stuck, 0);
+	}
+
+	/* THE USER'S OWN SCRIPT. She jumps with the key held, catches the ledge,
+	 * hangs; the key goes up and she is still hanging; the next press lets go
+	 * and the bit stays clear while that press lasts. */
+	state = 0;
+	bits = grab_tick(1, 1, 0, 0, &state, 0);	// in the air, key down: the catch
+	ok((bits & MODERN_IN_ACTION) != 0, "outside the family the key is the key",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+	bits = grab_tick(1, 1, 1, 0, &state, 0);	// she is hanging now, key still down
+	ok((bits & MODERN_IN_ACTION) != 0, "the hang keeps the bit while the key is down",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+	bits = grab_tick(1, 0, 1, 0, &state, 0);	// the key goes up
+	ok((bits & MODERN_IN_ACTION) != 0, "and she hangs on with the key released",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+
+	{
+		int lost = 0;
+
+		for (i = 0; i < 30; i++)
+			if ((grab_tick(1, 0, 1, 0, &state, 0) & MODERN_IN_ACTION) == 0)
+				lost++;
+
+		ok(lost == 0, "thirty ticks of hanging with no key at all", lost, 0);
+	}
+
+	bits = grab_tick(1, 1, 1, 0, &state, 0);	// the press that lets go
+	ok((bits & MODERN_IN_ACTION) == 0, "a fresh press inside the family lets go",
+		bits & MODERN_IN_ACTION, 0);
+	ok((state & MODERN_GRAB_RELEASE) != 0, "and is remembered as the let-go press",
+		state & MODERN_GRAB_RELEASE, MODERN_GRAB_RELEASE);
+	bits = grab_tick(1, 1, 1, 0, &state, 0);	// still down, still hanging for a tick
+	ok((bits & MODERN_IN_ACTION) == 0, "while that press lasts the bit stays clear",
+		bits & MODERN_IN_ACTION, 0);
+	bits = grab_tick(1, 1, 0, 0, &state, 0);	// falling now, key STILL down
+	ok((bits & MODERN_IN_ACTION) == 0, "no instant re-grab on the way down",
+		bits & MODERN_IN_ACTION, 0);
+	bits = grab_tick(1, 0, 0, 0, &state, 0);	// the press ends
+	ok((state & MODERN_GRAB_RELEASE) == 0, "the release ends with the press",
+		state & MODERN_GRAB_RELEASE, 0);
+	bits = grab_tick(1, 1, 0, 0, &state, 0);	// and the next press is a catch again
+	ok((bits & MODERN_IN_ACTION) != 0, "and the next press catches the lower ledge",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+
+	/* THE SAVEGAME RESTORED IN A HANG: no key was ever pressed, the state says
+	 * she is hanging, and the bit is there. */
+	state = 0;
+	bits = grab_tick(1, 0, 1, 0, &state, 0);
+	ok((bits & MODERN_IN_ACTION) != 0, "a restore in a hang needs no key",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+
+	/* A PRESS THAT BEGAN OUTSIDE THE FAMILY IS NOT A LET-GO. She jumps for the
+	 * ledge with the key down and holds it through the whole hang - the case
+	 * the brief asks about first. */
+	{
+		int dropped = 0;
+
+		state = 0;
+		grab_tick(1, 1, 0, 0, &state, 0);	// the press, in the air
+
+		for (i = 0; i < 20; i++)
+			if ((grab_tick(1, 1, 1, 0, &state, 0) & MODERN_IN_ACTION) == 0)
+				dropped++;
+
+		ok(dropped == 0, "the key held from the jump through the hang never lets go",
+			dropped, 0);
+
+		bits = grab_tick(1, 0, 1, 0, &state, 0);
+		ok((bits & MODERN_IN_ACTION) != 0, "and releasing it later changes nothing",
+			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+	}
+
+	/* THE DROP. It is a Hold tick bit for bit, it clears a standing release,
+	 * and a press on one lets go of nothing. */
+	state = 0;
+	bits = grab_tick(1, 0, 1, 1, &state, 0);
+	ok((bits & MODERN_IN_ACTION) == 0, "a drop tick hands the raw key through (up)",
+		bits & MODERN_IN_ACTION, 0);
+	bits = grab_tick(1, 1, 1, 1, &state, 0);
+	ok((bits & MODERN_IN_ACTION) != 0, "a drop tick hands the raw key through (down)",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+	ok((state & MODERN_GRAB_RELEASE) == 0, "and a press on a drop tick is no let-go",
+		state & MODERN_GRAB_RELEASE, 0);
+
+	/* THE KEY HELD ACROSS A DROP - out of a menu, into a level. The key memory
+	 * is tracked on drop ticks too, so the tick the drop ends is not a fresh
+	 * press and she does not let go by herself. */
+	{
+		int dropped = 0;
+
+		state = MODERN_GRAB_RELEASE | MODERN_LATCH_KEY;
+		ModernModeLatchDrop(&state);
+		ok((state & MODERN_GRAB_RELEASE) == 0, "the outside drop clears the release",
+			state & MODERN_GRAB_RELEASE, 0);
+		ok((state & MODERN_LATCH_KEY) != 0, "and leaves the key memory alone",
+			state & MODERN_LATCH_KEY, MODERN_LATCH_KEY);
+
+		for (i = 0; i < 8; i++)
+			if ((grab_tick(1, 1, 1, 0, &state, 0) & MODERN_IN_ACTION) == 0)
+				dropped++;
+
+		ok(dropped == 0, "a key held across the boundary lets go on none of eight ticks",
+			dropped, 0);
+
+		grab_tick(1, 0, 1, 0, &state, 0);
+		bits = grab_tick(1, 1, 1, 0, &state, 0);
+		ok((bits & MODERN_IN_ACTION) == 0, "and the next real press does let go",
+			bits & MODERN_IN_ACTION, 0);
+	}
+
+	/* EVERY OTHER BIT IS LEFT ALONE, in the family and out of it - which is
+	 * what keeps IN_SELECT and IN_INTERACT the Action button's own under "One
+	 * key", and therefore keeps a pushblock being pushed by a held key. */
+	{
+		const long extra = MODERN_IN_FORWARD | MODERN_IN_WALK;
+		int hurt = 0;
+
+		state = 0;
+
+		for (i = 0; i < 8; i++)
+		{
+			bits = grab_tick(1, i & 1, (i & 2) != 0, (i == 6), &state, extra);
+
+			if ((bits & extra) != extra)
+				hurt++;
+		}
+
+		ok(hurt == 0, "the other bits come through all eight ticks untouched", hurt, 0);
+	}
+
+	// The bit itself, like bit_values() does for the other nine.
+	ok(MODERN_IN_ACTION == 0x40, "MODERN_IN_ACTION is IN_ACTION's own bit",
+		MODERN_IN_ACTION, 0x40);
+	ok((MODERN_MOVE_MASK & MODERN_IN_ACTION) == 0,
+		"and it is not in MODERN_MOVE_MASK - the movement seam never writes it",
+		MODERN_MOVE_MASK & MODERN_IN_ACTION, 0);
+	ok(MODERN_GRAB_RELEASE == 0x4, "MODERN_GRAB_RELEASE is its own bit beside the two",
+		MODERN_GRAB_RELEASE, 0x4);
+}
+
 /* LARA'S OWN GUN CYCLE, as a model (#161, round 161b2a, item 2). The truth
  * table above says what the function answers to one tick; the sequences below
  * say what a PLAYER gets, and for that the answer has to be fed back into the
@@ -7572,6 +7845,8 @@ int main()
 	firing_run();
 	weapons();
 	mode_latch();
+	grab_family();
+	grab_latch();
 	sweeps();
 	camera_orbit();
 	camera_speed();

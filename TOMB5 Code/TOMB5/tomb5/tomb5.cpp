@@ -276,6 +276,14 @@ void init_tomb5_stuff()
 		tomb5.duck_toggle = 0;							//off, Hold
 		REG_WriteBool(buf, tomb5.duck_toggle);
 
+		// #161, round 161b2d item 5 - the fourth mode row, on the new Modes
+		// sub-page with the other three. 0 = Hold again, which is the engine
+		// holding on for as long as the key is down (its comment in
+		// tomb5_options, global\types.h).
+		sprintf(buf, "grab_toggle");
+		tomb5.grab_toggle = 0;							//off, Hold
+		REG_WriteBool(buf, tomb5.grab_toggle);
+
 		// #161, round 161a2b step 5: the fourth Controls-page row, a slider
 		// rather than a toggle - 40, MODERN_CAMERA_SPEED_DEFAULT
 		// (game/modern_camera.h), the rate round 161a2 already shipped
@@ -472,6 +480,12 @@ void init_tomb5_stuff()
 		sprintf(buf, "duck_toggle");
 		REG_ReadBool(buf, tomb5.duck_toggle, 0);
 
+		// #161, round 161b2d item 5. Same rule as the two above: absent - every
+		// registry older than this round - reads as 0, Hold, so an existing
+		// installation holds on exactly as it did.
+		sprintf(buf, "grab_toggle");
+		REG_ReadBool(buf, tomb5.grab_toggle, 0);
+
 		// #161, round 161a2b step 5. Same clamp discipline as ego_fov/fps_mode
 		// above: a value from an older build (there was none before this
 		// round) or a hand-edited one must not hand the orbit a rate past
@@ -647,6 +661,10 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "duck_toggle");
 	REG_WriteBool(buf, tomb5.duck_toggle);
+
+	// #161, round 161b2d item 5 - the fourth mode row.
+	sprintf(buf, "grab_toggle");
+	REG_WriteBool(buf, tomb5.grab_toggle);
 
 	// #161, round 161a2b step 5 - the fourth Controls-page row.
 	sprintf(buf, "cam_speed");

@@ -66,6 +66,7 @@ enum modern_input_bits
 	MODERN_IN_RIGHT =	0x8,	// IN_RIGHT
 	MODERN_IN_JUMP =	0x10,	// IN_JUMP - under water it is the stroke (step 4)
 	MODERN_IN_DRAW =	0x20,	// IN_DRAW - the weapon half below, nothing else
+	MODERN_IN_ACTION =	0x40,	// IN_ACTION - Grab mode (#161, round 161b2d, item 5)
 	MODERN_IN_WALK =	0x80,	// IN_WALK
 	MODERN_IN_LSTEP =	0x400,	// IN_LSTEP
 	MODERN_IN_RSTEP =	0x800,	// IN_RSTEP
@@ -98,7 +99,20 @@ enum modern_input_bits
 enum modern_latch_bits
 {
 	MODERN_LATCH_ON =	0x1,	// the bit is latched on
-	MODERN_LATCH_KEY =	0x2	// the key or button was down on the previous tick
+	MODERN_LATCH_KEY =	0x2,	// the key or button was down on the previous tick
+
+	/* GRAB MODE'S OWN LATCH BIT (#161, round 161b2d, item 5), and it is a
+	 * different kind of memory from MODERN_LATCH_ON, which is why it gets a
+	 * bit of its own rather than that one's meaning. The grab latch does not
+	 * remember "she is holding on" - the STATE says that, and the family table
+	 * below is how it is asked. What it has to remember is the opposite: that
+	 * the press under the player's thumb right now is the one that let go, so
+	 * that the same press cannot grab the next ledge on the way down. It is
+	 * set on a press inside the family and cleared when that press ends.
+	 *
+	 * The key memory above is shared, unchanged in meaning, and tracked on
+	 * every tick the option is on for exactly the same reason. */
+	MODERN_GRAB_RELEASE =	0x4
 };
 
 /* What came out, for the log and for the tests. The translation itself makes
@@ -823,6 +837,8 @@ long ModernDeadZoneUser(long base, long user);
 long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long* out_y);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsSwim(short anim_state);
+long ModernStateIsGrab(short anim_state);
+long ModernStateIsDuck(short anim_state);
 long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state);
 long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_RESULT* out,
 	long target_pitch, long x_rot, long* yaw_delta, long* new_x_rot, long* stroke);
@@ -840,6 +856,7 @@ long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITU
 	MODERN_RESULT* out, long* yaw_delta);
 long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, long bits);
 long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, long bits);
+long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit, long bits);
 void ModernModeLatchDrop(long* state);
 void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, long stick_y,
 	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out);

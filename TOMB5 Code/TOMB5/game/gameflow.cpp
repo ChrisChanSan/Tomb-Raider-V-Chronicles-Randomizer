@@ -1353,6 +1353,12 @@ const char* CustomText(const char* engl)
 		// above's own words and are already in this table.
 		{ "Sprint mode",     "Sprint mode",     "Sprintmodus",    "Sprint mode",        "Sprint mode" },
 		{ "Duck mode",       "Duck mode",       "Duckmodus",      "Duck mode",          "Duck mode" },
+		// #161, round 161b2d step 4 - the fourth mode row and the sub-page the
+		// four of them moved to ("Die vier Modi bitte auf eine Unterseite").
+		// "Modi" is both the page title and the tab's label: one literal, one
+		// row, exactly as "Key bindings" and "Credits" are above.
+		{ "Grab mode",       "Grab mode",       "Greifmodus",     "Grab mode",          "Grab mode" },
+		{ "Modes",           "Modes",           "Modi",           "Modes",              "Modes" },
 		// #161, round 161b2d step 1 - the bind rows of the hotkeys that used to
 		// be hard-wired keys. Only six of the sixteen new rows are here: the
 		// other ten take the string wad's own names through SCRIPT_TEXT (the

@@ -16037,22 +16037,28 @@ drawn frames; M9, his pad rests within 10 of 128, well inside the DirectInput
 right stick's own 62-wide zone and above the left radial zone 31, which was
 killing real pushes of 18-31.
 
-**THE EIGHT ITEMS**, each measured before it was built, by step:
+**THE EIGHT ITEMS**, each measured before it was built, by step. They are
+numbered as the brief numbered them, which is how every comment in the source
+names them - the first version of this entry had 1 and 2 the other way round
+and a reader cross-checking `game/camera.cpp`'s own "item 1" landed on the turn
+rate; the fix pass below put the list back:
 
-1. **She turns at the rate his thumb asks for** (step 1, `game/modern_move.*`).
-   MODERN_TURN_RATE 3277 -> 5461 (about 30 deg/tick); the one-tick flick is
-   gone (MODERN_SNAP_DELTA deleted with it) and a reversal now turns at the
-   rate like everything else, the short way, a tie broken by her own last
-   turn; a stand (states 2, 6, 7, 20) withholds IN_FORWARD only past 90
-   degrees now (MODERN_SNAP_FORWARD_STAND), not 45, so the standing spin
-   M4 found cannot outlast three ticks at the new rate.
-2. **The eye comes in along the ray, never round her** (step 2,
+1. **The eye comes in along the ray, never round her** (step 2,
    `game/camera.cpp`). ChaseCamera and CombatCamera keep ONE clipped
    candidate as round 161a2b already had them do, but the wall answer is now
    `ModernCameraRayBounds` - a walk back toward the target along the ray
    until MODERN_CAMERA_PULL_PUSH clearance is found - in place of
    `CameraCollisionBounds`'s sector-grid push, with its y-correction half
    kept. The movement reference stays the orbit's world yaw.
+2. **She turns at the rate his thumb asks for** (step 1, `game/modern_move.*`).
+   MODERN_TURN_RATE 3277 -> 5461 (about 30 deg/tick); the one-tick flick is
+   gone (MODERN_SNAP_DELTA deleted with it) and a reversal now turns at the
+   rate like everything else, the short way, a tie broken by her own last
+   turn; a stand (states 2, 6, 7, 20) withholds IN_FORWARD only past 90
+   degrees now (MODERN_SNAP_FORWARD_STAND), not 45 - and, since this round's
+   own fix pass, hands it over anyway after MODERN_STAND_FORWARD_TICKS (8)
+   ticks of standing, turning and arriving nowhere, which is the one case no
+   width of gate can reach (see the fix pass below).
 3. **LOOK held is Tank on the spot, with her own animation** (step 3,
    `specific/input.cpp`). While the look key is held (no weapon ready) the
    translation is bypassed as it has been since round 161a, and now IN_LOOK
@@ -16108,7 +16114,7 @@ killing real pushes of 18-31.
 fields, each owed by name in an earlier step's own report and none of them
 disturbing where the line used to end:
 
-- `view_err=` (item 2's own proof, read back every tick) - abs(`cam` -
+- `view_err=` (item 1's own proof, read back every tick) - abs(`cam` -
   `cam_world`) wrapped the short way, in the SAME raw units `cam`/`cam_world`/
   `err`/`yawd` already share rather than converted to degrees.
 - `air=` (item 4) - `ModernAirTurn`'s own step this tick, 0 whenever it did
@@ -16123,14 +16129,15 @@ disturbing where the line used to end:
   look key is steering her, so the function's own line cannot say anything
   about it, and without a line of its own a play test log fell silent for as
   long as the key was held and could not tell that from the scheme standing
-  aside for some other reason (`ModernLookTankActive()`, declared by step 3,
-  had no caller until now).
+  aside for some other reason (`ModernLookTankActive()`, declared by step 3;
+  step 5 re-tested its condition inline and the fix pass below gave it the
+  caller it was declared for).
 
 The init line gains six reads: `air_rate=`/`swim_rate=`/`swim_pitch_rate=`
 (the live `modern_cfg` fields items 4 and 6 seat, read back for the same
 reason `rate=` already is - a "measure ourselves" constant is only honest in
 a log if a hand edit of the registry would show up in it too) and
-`cam_pull_steps=`/`cam_pull_push=` (item 2's own ray-walk constants, through
+`cam_pull_steps=`/`cam_pull_push=` (item 1's own ray-walk constants, through
 two new out-parameters on `ModernCameraLogConfig`, keeping every camera
 number MODERNLOG prints coming through `game/camera.cpp` and nothing else).
 One existing field was corrected rather than only widened: `dead_l=` printed
@@ -16168,15 +16175,56 @@ under, the number M9 measured and item 7 built.
   entry) - outside every count below, the same convention every round's own
   step 5 has kept.
 
-Five commits, one per step, `Round 161a3 (#161): <what>` for steps 1-3 and 5,
-`Round 161a3 (#169): <what>` for step 4 (#169's own interpolation fix, folded
-into this round rather than a round of its own because the user asked for it
-alongside the play test in the same brief). `ModernTest` ends the round at
-**5174 checks, 0 failed** (4449 at base `405ad19`; unaffected by steps 4 and
-5, which add MODERNLOG fields and an interpolation fix respectively rather
-than pure arithmetic for this tool to hold). `InterpTest` ends it at **373
-checks, 0 failed** (361 before step 4; unaffected by steps 1-3 and 5, which
-touch no file this tool includes).
+**THE FIX PASS**, after a skeptical reading of all five steps. One finding was
+about what she does and it was right:
+
+- **A standing turn that arrives nowhere now runs anyway**
+  (`game/modern_move.*`). Item 2c widened the standing IN_FORWARD gate from 45
+  to 90 degrees, and that is not enough, because a stick circling at EXACTLY
+  her new rate moves the course by as much as she turns it: the error the
+  first push seated is the error she keeps, the gate never opens, and she
+  stands in AS_STOP turning with no animation - M4's own complaint, moved from
+  18 deg/tick to 30, which is the top of the 15-30 M2 measured his thumb at.
+  Five of 36 starts at that speed never reached the run. No width of gate can
+  cure it (the gate asks how much is LEFT; what is wrong is that nothing is
+  coming off), so the second question is asked in ticks:
+  `MODERN_STAND_FORWARD_TICKS` 8 - the brief's own acceptance number - hands
+  IN_FORWARD over after eight ticks of standing, turning and not arriving. A
+  HELD stick never reaches it (thrown a full half turn and held she is inside
+  the 90 degree gate on tick 4; `reversal()` measures the counter over all 128
+  runs and finds 3 of 8), so the ledge the gate protects is untouched and the
+  rule answers a moving thumb only. `MODERNLOG` gains `stand_hold=` on the
+  tick line and `stand_ticks=` on the init line.
+
+The other four changed what the code CLAIMS rather than what it does, which is
+the same defect one level up: `ModernCameraCarryStep`'s numerator is 64-bit
+now, because its own comment promised no overflow at any `carry_ticks` and
+3 * n^3 * 4096 passes 2^31 at n = 56; `ModernCameraCarryFromAnim`'s comment
+said the subtraction is what the ANIMATION did, where measuring finds four
+other writers of `lara_item->pos.y_rot` that land after the publish
+(`CreatureKill`'s grab, the lift, the electric grab, the ceiling trapdoor) and
+every one of them is the same defect, so the rule is deliberately "a heading
+change this turn did not make"; `ModernLookTankActive()` got the caller it was
+declared for; and both harnesses now say in writing that `look_tank()` and
+`camera_pull()` MIRROR `specific/input.cpp` and `game/camera.cpp` rather than
+linking them. One finding was refuted with the measurement rather than
+followed: the look key's bypass does not cost an extra tick on the release -
+it is one tick behind at both ends, so a hold of n ticks is bypassed for n
+ticks, which is the latency the pre-item-3 gate had as well (it read `input &
+IN_LOOK`, a word exactly as old as the latch that stands in for it). The loose
+heading that said otherwise is rewritten and `look_tank()`'s new block 2b
+counts ten held ticks against ten bypassed ones.
+
+Eight commits: five for the steps, `Round 161a3 (#161): <what>` for steps 1-3
+and 5 and `Round 161a3 (#169): <what>` for step 4 (#169's own interpolation
+fix, folded into this round rather than a round of its own because the user
+asked for it alongside the play test in the same brief), then three for the
+fix pass. `ModernTest` ends the round at **5187 checks, 0 failed** (4449 at
+base `405ad19`; steps 4 and 5 left it where step 3 did, adding MODERNLOG
+fields and an interpolation fix rather than pure arithmetic for this tool to
+hold, and the fix pass added 13). `InterpTest` ends it at **373 checks, 0
+failed** (361 before step 4; unaffected by steps 1-3 and 5 and by the fix
+pass, which touch no file this tool includes).
 
 **ONE DIVERGENCE FROM THE BRIEF WORTH RECORDING HERE, ACROSS THE WHOLE
 ROUND**: item 2b's tie-break ("toward the side the stick came from") could

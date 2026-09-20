@@ -16698,11 +16698,14 @@ switched off in turn) now hold the direction - 173 checks, and the swapped
 loops fail 172 of them, re-mutated in a copy of the tree under `Agent-Scratch`
 and never in the repository.
 
-Ten commits, `Round 161b1 (#161): <what>` - six from the build steps (the
+Twelve commits, `Round 161b1 (#161): <what>` - six from the build steps (the
 sixth of them this entry itself), two answering the first skeptical review,
 which found one refuted measurement stated as fact, three stale counts or
 paths in the record and the manual, one truncated comment and one test that
-could not see the constant it documented, and two answering the second, above.
+could not see the constant it documented, and four answering the second,
+above: the code, this record, and two that corrected sentences of this record
+which were wrong when they were written (a count of the review's own findings,
+and this count of commits, each fixed in the open rather than amended away).
 `ModernTest` ends the round at
 **5,413 checks, 0 failed** (5,359 at base `a6ecbb5`, unaffected by steps 1-2
 which touch no file it includes, +44 from step 3's `deadzone` group and +10

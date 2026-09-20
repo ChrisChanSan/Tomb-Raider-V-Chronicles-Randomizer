@@ -83,10 +83,12 @@ static const char* screen_paths[5] =
  * layout[0] - which at Tank IS layout[0].
  *
  * The third argument is #161, round 161b2c's fix round: the Secondary slot may
- * only claim a key while the role is live. See KeySchemeConflicts. */
+ * only claim a key while the role is live. The fourth is the same sentence for
+ * the five cheat roles (#161, round 161b2d's fix round) - with Cheats off they
+ * are not offered and nothing reads them. See KeySchemeConflicts. */
 void CheckKeyConflicts()
 {
-	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict, tomb5.action_split ? 1 : 0);
+	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict, tomb5.action_split ? 1 : 0, tomb5.enable_cheats ? 1 : 0);
 }
 
 void DisplayStatsUCunt()

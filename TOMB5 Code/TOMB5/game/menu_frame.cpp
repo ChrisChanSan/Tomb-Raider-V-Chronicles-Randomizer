@@ -1183,6 +1183,13 @@ static bool MenuStepCheats(long, long dir)
 
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.enable_cheats = !tomb5.enable_cheats;
+	/* AND THE CONFLICT ANSWER DEPENDS ON THIS ROW TOO (#161, round 161b2d, fix
+	 * round). KeySchemeConflicts lets the five cheat slots claim a key only
+	 * while they are live, so the row that makes them live - or inert - has to
+	 * recompute the table, exactly as Reset, a capture and the Action row do.
+	 * Without this the freed default key would stay silent until the next
+	 * capture. */
+	CheckKeyConflicts();
 	return 1;
 }
 

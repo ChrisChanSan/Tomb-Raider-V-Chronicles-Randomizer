@@ -157,8 +157,21 @@
  * End while in "Separate" and then goes back to "One key" would have lost the
  * default End with nothing put in its place. At the defaults this changes no
  * byte: neither default row contains the Secondary slot's own default key
- * (Tank DIK_HOME, Modern DIK_NUMPAD0), so the claim was never made there. */
-inline void KeySchemeConflicts(const short* active, const short* def, long* out, long second)
+ * (Tank DIK_HOME, Modern DIK_NUMPAD0), so the claim was never made there.
+ *
+ * AND THE SAME SENTENCE FOR THE FIVE CHEAT ROLES (#161, round 161b2d, fix
+ * round - the review's fifth finding). `cheats` is `tomb5.enable_cheats`. With
+ * Cheats off those five rows are not even offered on the binding page
+ * (game\menu_frame.cpp) and nothing reads them - game\laramisc.cpp asks them
+ * only from inside LaraCheatyBits, which is behind the same flag - so a key
+ * bound to one of them is exactly as inert as Secondary under "One key", and
+ * counting it as a claimer would silence some other role's default-key
+ * fallback in favour of a binding that cannot fire. At the defaults this
+ * changes no byte either: F1, F2, F7, F8 and F11 appear in no other slot of
+ * either default row, so the claim was never made there. The row that makes
+ * the five live - the Cheats setting itself - recomputes the table, exactly as
+ * Reset, a capture and the Action row do. */
+inline void KeySchemeConflicts(const short* active, const short* def, long* out, long second, long cheats)
 {
 	for (int i = 0; i < KEY_SCHEME_ROLES; i++)
 	{
@@ -167,6 +180,11 @@ inline void KeySchemeConflicts(const short* active, const short* def, long* out,
 		for (int j = 0; j < KEY_SCHEME_ROLES; j++)
 		{
 			if (j == KEY_ROLE_SECOND && !second)
+				continue;
+
+			// Named at both ends, so a slot appended behind SKIP in a later
+			// round does not quietly join the exemption.
+			if (j >= KEY_ROLE_CHEAT_FLY && j <= KEY_ROLE_CHEAT_SKIP && !cheats)
 				continue;
 
 			if (def[i] == active[j])

@@ -558,8 +558,28 @@ bool LoadSettings()
 		 *
 		 * The correction is written back at once rather than left to the next
 		 * clean exit, so that the read above (which writes its default when it
-		 * misses) cannot leave a mask behind that outlives this run. */
-		if (stored && !REG_ReadLong((char*)JoyChordRegNames[1], (ulong&)*schord, (ulong)*schord))
+		 * misses) cannot leave a mask behind that outlives this run.
+		 *
+		 * AND THE READ MUST NOT SIT BEHIND `stored &&` (#161, round 161b2d,
+		 * fix round - the review's one high finding, measured before it was
+		 * believed). REG_ReadLong WRITES its default when the name is missing,
+		 * so the loop above CREATES all sixteen SJ* names on a virgin registry
+		 * - and winmain.cpp calls LoadSettings a SECOND time in the same
+		 * process whenever the first call returns REG_Setup 0, which a virgin
+		 * registry always does (the setup dialog in between writes nothing but
+		 * the System key). Short-circuited, the first pass never wrote SJChord;
+		 * the second pass then found sixteen SJ* names, missed the SJChord
+		 * nobody had written, and took this branch against a set THIS build had
+		 * just created - stripping the fresh Separate row of the very chords it
+		 * had been given one pass earlier, while line 571's read handed the
+		 * Modifier straight back. The result was the case item 3 forbids: six
+		 * buttons doing two things at once (look and quick save both plain on
+		 * R3, dash and quick load both on L3, jump and pistols both on Cross).
+		 * Read unconditionally, and `stored` decides only what the ABSENCE
+		 * means. */
+		const bool chord_stored = REG_ReadLong((char*)JoyChordRegNames[1], (ulong&)*schord, (ulong)*schord);
+
+		if (stored && !chord_stored)
 		{
 			*schord = 0;
 			REG_WriteLong((char*)JoyChordRegNames[1], 0);

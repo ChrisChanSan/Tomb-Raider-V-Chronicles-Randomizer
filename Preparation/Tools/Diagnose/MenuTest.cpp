@@ -510,7 +510,7 @@ static void key_conflicts()
 	// The last argument is "the Secondary role is live" (tomb5.action_split);
 	// these three sweeps pass 1, which is the whole table as round 161b2a
 	// wrote it. The inert case is the block below.
-	KeySchemeConflicts(kOther, kModern, got, 1);
+	KeySchemeConflicts(kOther, kModern, got, 1, 1);
 
 	for (i = 0; i < KEY_SCHEME_ROLES; i++)
 		check((int)got[i], 0, "a default key nobody claimed is free");
@@ -518,7 +518,7 @@ static void key_conflicts()
 	// A player who never rebinds: the active set IS the default row, so every
 	// default key is "claimed" - by the role that owns it. The fallback is
 	// dead and costs nothing, because the primary binding is the same key.
-	KeySchemeConflicts(kModern, kModern, got, 1);
+	KeySchemeConflicts(kModern, kModern, got, 1, 1);
 
 	for (i = 0; i < KEY_SCHEME_ROLES; i++)
 		check((int)got[i], 1, "an untouched set claims its own defaults");
@@ -530,7 +530,7 @@ static void key_conflicts()
 		memcpy(active, kOther, sizeof(active));
 		active[0] = kModern[r];
 
-		KeySchemeConflicts(active, kModern, got, 1);
+		KeySchemeConflicts(active, kModern, got, 1, 1);
 
 		for (i = 0; i < KEY_SCHEME_ROLES; i++)
 			check((int)got[i], i == r ? 1 : 0, "exactly the claimed default is flagged");
@@ -555,12 +555,12 @@ static void key_conflicts_inert()
 		memcpy(active, kOther, sizeof(active));
 		active[KEY_ROLE_SECOND] = kModern[r];
 
-		KeySchemeConflicts(active, kModern, got, 1);
+		KeySchemeConflicts(active, kModern, got, 1, 1);
 
 		for (i = 0; i < KEY_SCHEME_ROLES; i++)
 			check((int)got[i], i == r ? 1 : 0, "live, the Secondary slot claims like any other");
 
-		KeySchemeConflicts(active, kModern, got, 0);
+		KeySchemeConflicts(active, kModern, got, 0, 1);
 
 		for (i = 0; i < KEY_SCHEME_ROLES; i++)
 			check((int)got[i], 0, "inert, the Secondary slot claims nothing");
@@ -573,7 +573,7 @@ static void key_conflicts_inert()
 		memcpy(active, kOther, sizeof(active));
 		active[0] = kModern[r];
 
-		KeySchemeConflicts(active, kModern, got, 0);
+		KeySchemeConflicts(active, kModern, got, 0, 1);
 
 		for (i = 0; i < KEY_SCHEME_ROLES; i++)
 			check((int)got[i], i == r ? 1 : 0, "the flag moves only the Secondary slot");
@@ -583,14 +583,76 @@ static void key_conflicts_inert()
 	// answer is the same in both settings, because neither default row holds
 	// that key. This is the byte-identity claim the fix round makes.
 	memcpy(active, kModern, sizeof(active));
-	KeySchemeConflicts(active, kModern, got, 1);
+	KeySchemeConflicts(active, kModern, got, 1, 1);
 
 	for (i = 0; i < KEY_SCHEME_ROLES; i++)
 	{
 		long other[KEY_SCHEME_ROLES];
 
-		KeySchemeConflicts(active, kModern, other, 0);
+		KeySchemeConflicts(active, kModern, other, 0, 1);
 		check((int)other[i], (int)(i == KEY_ROLE_SECOND ? 0 : got[i]), "at the defaults only the inert slot itself differs");
+	}
+}
+
+/* AND THE FIVE CHEAT SLOTS ARE INERT WITH CHEATS OFF (#161, round 161b2d, fix
+ * round - the skeptical review's fifth finding). Same sentence as the block
+ * above, one flag further: with Cheats off the five rows are not offered and
+ * nothing reads them, so a key bound to one of them may not silence another
+ * role's default-key fallback. */
+static void key_conflicts_cheats_inert()
+{
+	long got[KEY_SCHEME_ROLES];
+	short active[KEY_SCHEME_ROLES];
+	int i, r, c;
+
+	// One cheat slot at a time holds another role's default key. Cheats on, it
+	// silences that role; Cheats off, it silences nothing.
+	for (c = KEY_ROLE_CHEAT_FLY; c <= KEY_ROLE_CHEAT_SKIP; c++)
+		for (r = 0; r < KEY_SCHEME_ROLES; r++)
+		{
+			if (r == c)
+				continue;
+
+			memcpy(active, kOther, sizeof(active));
+			active[c] = kModern[r];
+
+			KeySchemeConflicts(active, kModern, got, 1, 1);
+
+			for (i = 0; i < KEY_SCHEME_ROLES; i++)
+				check((int)got[i], i == r ? 1 : 0, "live, a cheat slot claims like any other");
+
+			KeySchemeConflicts(active, kModern, got, 1, 0);
+
+			for (i = 0; i < KEY_SCHEME_ROLES; i++)
+				check((int)got[i], 0, "with Cheats off a cheat slot claims nothing");
+		}
+
+	// Every slot that is not one of the five is untouched by the flag.
+	for (r = 0; r < KEY_SCHEME_ROLES; r++)
+	{
+		memcpy(active, kOther, sizeof(active));
+		active[0] = kModern[r];
+
+		KeySchemeConflicts(active, kModern, got, 1, 0);
+
+		for (i = 0; i < KEY_SCHEME_ROLES; i++)
+			check((int)got[i], i == r ? 1 : 0, "the Cheats flag moves only the five cheat slots");
+	}
+
+	// The engine's own case, and the byte-identity claim this fix makes: with
+	// every slot at its default key the answer is the same with Cheats off as
+	// with Cheats on for every role but the five themselves, because F1, F2,
+	// F7, F8 and F11 appear in no other slot of the row.
+	memcpy(active, kModern, sizeof(active));
+	KeySchemeConflicts(active, kModern, got, 1, 1);
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		long other[KEY_SCHEME_ROLES];
+		const int cheat = (i >= KEY_ROLE_CHEAT_FLY && i <= KEY_ROLE_CHEAT_SKIP);
+
+		KeySchemeConflicts(active, kModern, other, 1, 0);
+		check((int)other[i], cheat ? 0 : (int)got[i], "at the defaults only the five inert slots themselves differ");
 	}
 }
 
@@ -929,6 +991,7 @@ int main()
 	key_row_sound_rejects();
 	key_conflicts();
 	key_conflicts_inert();
+	key_conflicts_cheats_inert();
 	key_seat();
 	pad_seat();
 	pad_role_slots();

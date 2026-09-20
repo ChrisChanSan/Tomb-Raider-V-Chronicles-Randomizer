@@ -1368,6 +1368,17 @@ const char* CustomText(const char* engl)
 		// glyph, exactly as GermanKeyboard's own rows already render. There
 		// is no sharp s in these strings on purpose (the brief's own words).
 		//
+		// A REAL umlaut glyph is nevertheless reachable, and the review round
+		// of #161 measured it after an earlier draft of this record claimed
+		// otherwise: AccentToCode (game\text.cpp:187) maps the Latin-1 bytes
+		// 0xE4/0xF6/0xFC to codes 128+4/128+20/128+1, and PrintString
+		// composes those from CharDef plus AccentTable's rows {'a','^'},
+		// {'o','^'}, {'u','^'} (game\accent.inc). Only the sharp s has no
+		// row. The tilde spelling stays because the user's own word table
+		// prescribes it and it matches what GermanKeyboard[] already shows on
+		// the binding page; three strings below would change if the real
+		// glyphs were ever wanted (Kamerad~ampfung, K~orper, Game-Over-Men~u).
+		//
 		// Rows with no German entry (PSX/TR4/TR5, "Display"/"Display (60)",
 		// "Original") are not listed here - CustomText already falls back to
 		// the English literal on its own when nothing matches, which is

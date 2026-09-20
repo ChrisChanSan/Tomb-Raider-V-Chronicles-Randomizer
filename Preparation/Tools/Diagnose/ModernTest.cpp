@@ -851,6 +851,53 @@ static void deadzone()
 			ok(rising == 1, "the bar never gives back a narrower zone", rising, 1);
 		}
 
+		/* AND THE +25 IS REALLY THERE (#161, round 161b1, the review round).
+		 * The three endpoints above cannot see it: at 0 and at 50 the remainder
+		 * is 0, and at 100 the half-divisor truncates away again, so dropping
+		 * the +25 from (base*user+25)/50 passed every case in this group. The
+		 * comment at the function and the record both promise round-to-nearest,
+		 * so the promise is held here instead of left to a reader's trust.
+		 *
+		 * The reference is computed the other way round - quotient plus
+		 * remainder, no half-divisor in the numerator - so it is a second
+		 * opinion and not the same expression twice. `rounded` counts the
+		 * settings where the two roads would differ, and is asserted to be
+		 * non-zero: a sweep that never meets a remainder of 25 or more proves
+		 * nothing about rounding. */
+		{
+			long rounded = 0;
+
+			for (b = 0; b < 8; b++)
+			{
+				long exact = 1;
+
+				for (u = 0; u <= 100; u++)
+				{
+					const long whole = base8[b] * u;
+					const long expect = whole / 50 + ((whole % 50) >= 25 ? 1 : 0);
+
+					if (whole % 50 >= 25)
+						rounded++;
+
+					if (ModernDeadZoneUser(base8[b], u) != expect)
+						exact = 0;
+				}
+
+				ok(exact == 1, "every notch of the bar rounds to the nearest unit",
+					exact, 1);
+			}
+
+			ok(rounded > 0, "and the sweep really met the settings that round up",
+				rounded, 1);
+
+			/* The one the function's own comment names, kept as a case of its
+			 * own so a failure says which number was meant: 31 at 40 per cent
+			 * is 24.8, which answers 25 and not 24. */
+			ok(ModernDeadZoneUser(MODERN_DEAD_LEFT, 40) == 25,
+				"the comment's own example: 31 at 40 per cent is 25, not 24",
+				ModernDeadZoneUser(MODERN_DEAD_LEFT, 40), 25);
+		}
+
 		/* THE ARGUMENTS ARE GUARDED, not trusted - the value comes from the
 		 * registry and a hand can edit it. Out of range is pinned to the ends,
 		 * and a base of 0 or less is no width to scale. */

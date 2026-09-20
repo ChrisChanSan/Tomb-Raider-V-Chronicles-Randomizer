@@ -1783,9 +1783,11 @@ void MenuFrameRun()
 
 	if (pages > 1)
 	{
-		// One line, pinned to the bottom of the screen whatever the page is
-		// as long as. The glyphs are the ones the tomb5 options already page
-		// with (tomb5\troyestuff.cpp:120-121).
+		// One line, pinned to the bottom of the screen whatever the page is -
+		// MENU_BOTTOM_ROW, never after the last drawn row - and drawn only
+		// while the list really has more than one page, which is the `if`
+		// above. The glyphs are the ones the tomb5 options already page with
+		// (tomb5\troyestuff.cpp:120-121).
 		col = (uchar)(cur == nvis ? 1 : 6);
 		PrintString(phd_centerx - (phd_centerx >> 3), MENU_BOTTOM_ROW * font_height, col, "\x19", 0);
 		PrintString(phd_centerx + (phd_centerx >> 3), MENU_BOTTOM_ROW * font_height, col, "\x1B", 0);

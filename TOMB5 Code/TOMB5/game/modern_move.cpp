@@ -492,7 +492,7 @@ long ModernStateIsClassic(short anim_state)
 	case 50:	// AS_USEMIDAS, lara_void_func - Busy
 	case 51:	// AS_DIEMIDAS, lara_void_func - Busy
 	case 67:	// AS_FLAREPICKUP, lara_as_pickupflare - Busy
-	case 70:	// AS_DEATHSLIDE, lara_as_deathslide - reads IN_ACTION only, Busy
+	case 70:	// AS_DEATHSLIDE, lara_as_deathslide - reads IN_ACTION_ANY, Busy
 		return 1;
 
 	/* TROne's "89-104": rope-swing entry, the trap and switch objects a

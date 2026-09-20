@@ -254,7 +254,7 @@ Under Separate:
 | Key | Does |
 |---|---|
 | Action | Everything in the world: switches and levers, keyholes, puzzle holes, search objects and monitor screens, pickups, doors, movable blocks (pushing them and the ready pose in front of one), pulleys, the floor trap door, the burning torch, and the cutscene item triggers. It also stays the menu key — it confirms in every menu and in the inventory ring, exactly as it does under One key. |
-| Secondary | Everything Lara does with her own hands: grabbing and climbing a ledge, hanging and shimmying along one, letting go, the monkey swing, pulling herself out of the water — and firing, which is every weapon, the laser sight, the VCI headset light and the DOZY cheat's own light. It confirms in the inventory ring too, which is an addition rather than a change. |
+| Secondary | Everything Lara does with her own hands: grabbing and climbing a ledge, hanging and shimmying along one, letting go, the monkey swing, pulling herself out of the water — and firing, which is every weapon, the laser sight, the VCI headset light and the DOZY cheat's own light. It does *not* confirm in menus or in the inventory ring — that stays the *Action* key's job alone, so a trigger pull in the ring cannot equip whatever the cursor happens to sit on. |
 | Either key | The pole, the tightrope, the parallel bars, the death slide, catching and swinging on a rope, the jump switch and the ceiling trap door — eight sites where a held state would drop her the instant the "wrong" key let go, so both keys reach them and both keys hold them. |
 
 That is the whole division, and it is the engine's own: every place that asked
@@ -283,7 +283,7 @@ you left them.
 | Roll | Circle |
 | Inventory | Share |
 | Pause | Options |
-| Save | the PS button on the PS5 page, *Joy 13* on the Xbox and Joystick pages — but only while the pad reports as DirectInput; over XInput neither page has a PS or Guide button to name, so there *Save* starts unbound |
+| Save | *Joy 13* on the Joystick page always, and on the PS5 and Xbox pages while the pad reports as DirectInput (the PS button, named as such, on the PS5 page). Over XInput those two pages stop naming buttons before they reach a PS or Guide button, so there *Save* starts unbound |
 | Load | unbound |
 | Small medipack / Large medipack | wherever this pad's own One-key table already puts them |
 | Secondary | R2 |

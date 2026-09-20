@@ -100,8 +100,19 @@
  * a role keeps its default key as a second trigger unless some ACTIVE binding
  * has claimed that key, in which case the default must stay silent or one
  * press would do two things. `def` is the active scheme's default row - that is
- * the whole of what this round changed about it. */
-inline void KeySchemeConflicts(const short* active, const short* def, long* out)
+ * the whole of what round 161b2a changed about it.
+ *
+ * AN INERT BINDING CLAIMS NOTHING (#161, round 161b2c, fix round). `second`
+ * says whether the Secondary role is live, which is `tomb5.action_split`. With
+ * "One key" that role produces no bit whatever it is bound to - the two
+ * producers in specific\input.cpp are behind the same flag - so counting its
+ * key as a claimer would silence another role's default-key fallback in favour
+ * of a key that cannot do anything. A player who binds Secondary onto, say,
+ * End while in "Separate" and then goes back to "One key" would have lost the
+ * default End with nothing put in its place. At the defaults this changes no
+ * byte: neither default row contains the Secondary slot's own default key
+ * (Tank DIK_HOME, Modern DIK_NUMPAD0), so the claim was never made there. */
+inline void KeySchemeConflicts(const short* active, const short* def, long* out, long second)
 {
 	for (int i = 0; i < KEY_SCHEME_ROLES; i++)
 	{
@@ -109,6 +120,9 @@ inline void KeySchemeConflicts(const short* active, const short* def, long* out)
 
 		for (int j = 0; j < KEY_SCHEME_ROLES; j++)
 		{
+			if (j == KEY_ROLE_SECOND && !second)
+				continue;
+
 			if (def[i] == active[j])
 			{
 				out[i] = 1;

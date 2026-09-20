@@ -317,6 +317,12 @@ static bool MenuStepAction(long, long dir)
 	 * sets already and is simply not offered under One key
 	 * (MenuResolveKeybinds below). */
 	ApplyJoySplit();
+	/* AND THE CONFLICT ANSWER DEPENDS ON THIS ROW (#161, round 161b2c, fix
+	 * round). KeySchemeConflicts now lets the Secondary slot claim a key only
+	 * while the role is live, so the row that makes it live - or inert - has
+	 * to recompute the table, exactly as Reset and a capture do. Without this
+	 * the freed default key would stay silent until the next capture. */
+	CheckKeyConflicts();
 	return 1;
 }
 

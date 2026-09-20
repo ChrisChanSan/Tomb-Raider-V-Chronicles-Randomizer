@@ -43,6 +43,7 @@
 #include "savegame.h"
 #include "../specific/hd/hd_object.h"	// #123, fix round P: the ring in HD
 #include "inventory_interp.h"		// #154: the ring at the frame rate
+#include "../tomb5/tomb5.h"			// #161, round 161b2c fix round: tomb5.action_split, for the ring's confirm key
 #include "interpolate.h"		// #154: InterpIsTweenFrame - the one latch
 
 static RINGME* rings[2];
@@ -1017,7 +1018,17 @@ void do_debounced_joystick_poo()
 	else
 		down_debounce = 0;
 
-	if (input & IN_ACTION || input & IN_SELECT)
+	/* THE RING CONFIRMS ON THE ACTION KEY, NOT ON THE SECONDARY ONE (#161,
+	 * round 161b2c, fix round). IN_SELECT belongs to the Action role in both
+	 * settings, so the key that chose here yesterday still chooses; the
+	 * IN_ACTION term is Core's and is kept for "One key" alone, where it is
+	 * the same press and the same word. Under "Separate" IN_ACTION is the
+	 * Secondary role - the fire key - and a trigger pull in the ring would
+	 * have equipped whatever the cursor sat on. The guard is written out
+	 * rather than the term simply dropped so that the default is byte-
+	 * identical by construction and not by an argument about which bits
+	 * travel together. */
+	if (input & IN_SELECT || (!tomb5.action_split && input & IN_ACTION))
 		select_debounce = 1;
 	else
 	{

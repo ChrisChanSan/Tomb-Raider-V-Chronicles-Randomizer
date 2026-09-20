@@ -80,10 +80,13 @@ static const char* screen_paths[5] =
 /* Unchanged arithmetic in a new place (#161, round 161b2a, item 1): the double
  * loop moved into game\key_scheme.h so that MenuTest can hold it, and the row
  * it compares against is now the ACTIVE scheme's default row instead of
- * layout[0] - which at Tank IS layout[0]. */
+ * layout[0] - which at Tank IS layout[0].
+ *
+ * The third argument is #161, round 161b2c's fix round: the Secondary slot may
+ * only claim a key while the role is live. See KeySchemeConflicts. */
 void CheckKeyConflicts()
 {
-	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict);
+	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict, tomb5.action_split ? 1 : 0);
 }
 
 void DisplayStatsUCunt()

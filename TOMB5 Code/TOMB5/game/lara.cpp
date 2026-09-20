@@ -4439,7 +4439,17 @@ void lara_col_poledown(ITEM_INFO* item, COLL_INFO* coll)
 	if (input & IN_LOOK)
 		LookUpDown();
 
-	if ((input & (IN_BACK | IN_ACTION_ANY)) != (IN_BACK | IN_ACTION_ANY) || item->hit_points <= 0)
+	/* A MASK AND NOT AN EQUALITY, WHICH IS WHY THIS LINE LOOKS UNLIKE CORE'S
+	 * (#161, round 161b2c, fix round). Core wrote `(input & (IN_BACK |
+	 * IN_ACTION)) != (IN_BACK | IN_ACTION)` - sound while the right-hand side
+	 * is ONE bit, wrong the moment it is two. IN_ACTION_ANY is two, and under
+	 * "Separate" only ever one of them is in the word (the Action role sets
+	 * IN_INTERACT, the Secondary role IN_ACTION), so the equality could never
+	 * hold and this test was true on every tick: sliding down a pole would
+	 * have been reachable by no key at all. Written as two mask tests it is
+	 * the same statement at "One key", where both bits arrive together, and it
+	 * is the shape lara_col_poleup one function above already uses. */
+	if (!(input & IN_ACTION_ANY) || !(input & IN_BACK) || item->hit_points <= 0)
 		item->goal_anim_state = AS_POLESTAT;
 
 	coll->bad_pos = -NO_HEIGHT;

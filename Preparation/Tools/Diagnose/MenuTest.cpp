@@ -395,7 +395,10 @@ static void key_conflicts()
 	int i, r;
 
 	// Nothing shared: every role keeps its default key as a second trigger.
-	KeySchemeConflicts(kOther, kModern, got);
+	// The last argument is "the Secondary role is live" (tomb5.action_split);
+	// these three sweeps pass 1, which is the whole table as round 161b2a
+	// wrote it. The inert case is the block below.
+	KeySchemeConflicts(kOther, kModern, got, 1);
 
 	for (i = 0; i < KEY_SCHEME_ROLES; i++)
 		check((int)got[i], 0, "a default key nobody claimed is free");
@@ -403,22 +406,79 @@ static void key_conflicts()
 	// A player who never rebinds: the active set IS the default row, so every
 	// default key is "claimed" - by the role that owns it. The fallback is
 	// dead and costs nothing, because the primary binding is the same key.
-	KeySchemeConflicts(kModern, kModern, got);
+	KeySchemeConflicts(kModern, kModern, got, 1);
 
 	for (i = 0; i < KEY_SCHEME_ROLES; i++)
 		check((int)got[i], 1, "an untouched set claims its own defaults");
 
-	// One claim at a time, swept over all eighteen roles: only the role whose
+	// One claim at a time, swept over all nineteen roles: only the role whose
 	// DEFAULT key was taken may go silent, and no other.
 	for (r = 0; r < KEY_SCHEME_ROLES; r++)
 	{
 		memcpy(active, kOther, sizeof(active));
 		active[0] = kModern[r];
 
-		KeySchemeConflicts(active, kModern, got);
+		KeySchemeConflicts(active, kModern, got, 1);
 
 		for (i = 0; i < KEY_SCHEME_ROLES; i++)
 			check((int)got[i], i == r ? 1 : 0, "exactly the claimed default is flagged");
+	}
+}
+
+/* AN INERT SECONDARY SLOT CLAIMS NOTHING (#161, round 161b2c, fix round - the
+ * skeptical review's fifth finding). With "One key" the Secondary role cannot
+ * produce a bit however it is bound, so its key must not silence another
+ * role's default-key fallback; with "Separate" it is a binding like any other
+ * and Core's rule applies to it unchanged. */
+static void key_conflicts_inert()
+{
+	long got[KEY_SCHEME_ROLES];
+	short active[KEY_SCHEME_ROLES];
+	int i, r;
+
+	// The Secondary slot alone holds another role's default key. Live, it
+	// silences that role; inert, it silences nothing at all.
+	for (r = 0; r < KEY_SCHEME_ROLES - 1; r++)
+	{
+		memcpy(active, kOther, sizeof(active));
+		active[KEY_ROLE_SECOND] = kModern[r];
+
+		KeySchemeConflicts(active, kModern, got, 1);
+
+		for (i = 0; i < KEY_SCHEME_ROLES; i++)
+			check((int)got[i], i == r ? 1 : 0, "live, the Secondary slot claims like any other");
+
+		KeySchemeConflicts(active, kModern, got, 0);
+
+		for (i = 0; i < KEY_SCHEME_ROLES; i++)
+			check((int)got[i], 0, "inert, the Secondary slot claims nothing");
+	}
+
+	// Every OTHER slot is untouched by the flag: a claim made by a live role
+	// stands whether the Secondary role is offered or not.
+	for (r = 0; r < KEY_SCHEME_ROLES; r++)
+	{
+		memcpy(active, kOther, sizeof(active));
+		active[0] = kModern[r];
+
+		KeySchemeConflicts(active, kModern, got, 0);
+
+		for (i = 0; i < KEY_SCHEME_ROLES; i++)
+			check((int)got[i], i == r ? 1 : 0, "the flag moves only the Secondary slot");
+	}
+
+	// The engine's own case: with the Secondary slot at its default key, the
+	// answer is the same in both settings, because neither default row holds
+	// that key. This is the byte-identity claim the fix round makes.
+	memcpy(active, kModern, sizeof(active));
+	KeySchemeConflicts(active, kModern, got, 1);
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		long other[KEY_SCHEME_ROLES];
+
+		KeySchemeConflicts(active, kModern, other, 0);
+		check((int)other[i], (int)(i == KEY_ROLE_SECOND ? 0 : got[i]), "at the defaults only the inert slot itself differs");
 	}
 }
 
@@ -554,6 +614,7 @@ int main()
 	key_modern_row_is_sound();
 	key_row_sound_rejects();
 	key_conflicts();
+	key_conflicts_inert();
 	key_seat();
 	pad_seat();
 

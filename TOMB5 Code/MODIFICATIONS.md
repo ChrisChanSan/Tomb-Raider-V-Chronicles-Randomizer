@@ -17209,9 +17209,9 @@ first Modern repair, the same weakness the One-key defaults have had since
 base. The Tank keyboard row's own soundness (every slot bound, no key twice)
 is still checked by hand and not by `MenuTest`, as at round 161b2a. Play
 test: the either-key feel at the pole, the rope, the parallel bars and the
-death slide; toggled Sprint and Duck in the field; whether Secondary should
-also confirm in the inventory ring (it does, in addition to Action, which
-still confirms exactly as under One key).
+death slide; toggled Sprint and Duck in the field. (Whether *Secondary* should
+also confirm in the inventory ring was open here; the second review pass
+settled it - it does not, see the second fix round below.)
 
 **THE SKEPTICAL REVIEW'S FIX ROUND** found no defect in the engine and five in
 the record, which are corrected above and in `docs/Engine-Manual.md`: the
@@ -17223,7 +17223,8 @@ the keyboard's *Secondary* row is always listed, where `MenuResolveKeybinds`
 drops the last row of EITHER list under "One key", and still counted sixteen
 keyboard rows and fifteen pad roles; the *Save* default is unbound on the two
 XInput-ORDERED rows and not "on Xbox and Joystick", which take the generic row
-(`Joy 13`) whenever the pad delivers through DirectInput; this entry named
+(`Joy 13`) through DirectInput - and the Joystick page takes it on either path,
+which the second review pass had to correct once more; this entry named
 `joy_split_seated` where `ApplyJoySplit` tests `joy_scheme_seated`, and put
 the seat itself under that test, where only the repair is; and the duck
 latch's crawl case reached the right outcome by the wrong mechanism - the
@@ -17234,9 +17235,46 @@ The new header `game/pad_scheme.h` also got the `ClInclude` entry in
 `ModernTest` 5459, `MenuTest` 13,474, `InterpTest` 373, all 0 failed, re-run
 after the fix; no engine source changed.
 
+**THE SECOND SKEPTICAL PASS** found one real defect in the engine, and it was
+one the tests could not have caught. `lara_col_poledown` (`game/lara.cpp`) was
+the single site where the round substituted the new bit inside a COMPOSITE
+EQUALITY rather than a mask test: Core wrote `(input & (IN_BACK | IN_ACTION))
+!= (IN_BACK | IN_ACTION)`, which is sound while the right-hand side is one bit
+and wrong the moment it is two. `IN_ACTION_ANY` is two, and under *Separate*
+only ever one of them is in the word - the *Action* role sets `IN_INTERACT`,
+*Secondary* sets `IN_ACTION` - so the equality could never hold, the test was
+true on every tick, and sliding down a pole was reachable by no key at all.
+Byte-identical at the default, where both bits arrive together, which is why
+neither a test nor a default check could see it. It is now two mask tests, the
+shape `lara_col_poleup` one function above already had. All nineteen other
+`IN_ACTION_ANY` reads were re-grepped and are mask form.
+
+Three smaller things went with it. The inventory ring's confirm
+(`game/newinv2.cpp`) read `IN_ACTION`, so under *Separate* the *Secondary* key
+- the fire key - equipped whatever the cursor sat on; the read is now
+`IN_SELECT` (which belongs to the *Action* role in both settings) with Core's
+`IN_ACTION` term kept behind `!tomb5.action_split`, so "One key" is
+byte-identical by construction rather than by an argument about which bits
+travel together. `KeySchemeConflicts` (`game/key_scheme.h`) gained a "the
+Secondary role is live" argument: with *One key* that role produces no bit
+whatever it is bound to, so counting its key as a claimer would silence another
+role's default-key fallback in favour of a key that can do nothing - and the
+*Action* row now recomputes the table, as Reset and a capture already did. At
+the defaults nothing moves, because neither default row holds that slot's own
+default key. And one stale comment in `game/modern_move.cpp` still said
+`AS_DEATHSLIDE` "reads `IN_ACTION` only".
+
+`docs/Engine-Manual.md` follows: *Secondary* does not confirm in menus or in
+the ring, and the *Save* default is `Joy 13` on the Joystick page on either
+path (its `JoyDefaultRecord` branch does not ask `joystick_is_xinput` at all),
+unbound over XInput on the PS5 and Xbox pages alone. `be.bat` clean;
+`ModernTest` 5459, `MenuTest` 14,538 (+1064: the new `key_conflicts_inert()`
+block) and `InterpTest` 373, all 0 failed.
+
 Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), `b29adbf`
-(this entry and the manual/README updates it describes), `0f1602b` (the fix
-round's corrections listed directly above), and the one that names it here.
+(this entry and the manual/README updates it describes), `0f1602b` (the first
+fix round's corrections), `661de4a` (naming it here), the second fix round's
+own commit listed directly above, and the one that names it here.
 
 ## Building this yourself
 

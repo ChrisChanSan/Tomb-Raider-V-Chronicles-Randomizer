@@ -23,5 +23,6 @@ void LaraCheatGetStuff();
 void AnimateLara(ITEM_INFO* item);
 void LaraCheatyBits();
 void LaraControl(short item_number);
+void CheatLog(const char* what, const char* src);	// #161, round 161b2d, item 4: the one seam for every cheat that fires, words included
 
 extern COLL_INFO mycoll;

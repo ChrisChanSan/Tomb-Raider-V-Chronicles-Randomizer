@@ -43,6 +43,7 @@
 #include "savegame.h"
 #include "../specific/hd/hd_object.h"	// #123, fix round P: the ring in HD
 #include "inventory_interp.h"		// #154: the ring at the frame rate
+#include "laramisc.h"			// #161, round 161b2d, item 4: CheatLog - the words share the hotkeys' seam
 #include "../tomb5/tomb5.h"			// #161, round 161b2c fix round: tomb5.action_split, for the ring's confirm key
 #include "interpolate.h"		// #154: InterpIsTweenFrame - the one latch
 
@@ -555,6 +556,30 @@ static void RestoreRingInput(InvInputShadow* s)
 	s->down_now = false;
 }
 
+/* THE WORDS' HALF OF THE CHEAT SEAM (#161, round 161b2d, item 4). The four
+ * word cheats fire on EVERY logic step their four letters are held - that is
+ * their own behaviour and none of it changes here (three are idempotent and the
+ * fourth plays a sound). The seam must not: a line per step is thirty a second,
+ * and this round's rule for every seam is "on change, never per frame". So the
+ * LOG ALONE is put on the press edge; nothing the cheat does hangs on the
+ * answer. One bit per word, in the order they stand below.
+ *
+ * The bits are cleared only while the ring is open, so a word held as the ring
+ * closes stays "held" until it is asked again - which costs at most one missing
+ * log line and no game behaviour. */
+static long CheatWordEdge(long bit, long down)
+{
+	static long word_held = 0;
+	const long was = (word_held >> bit) & 1;
+
+	if (down)
+		word_held |= 1L << bit;
+	else
+		word_held &= ~(1L << bit);
+
+	return down && !was;
+}
+
 long S_CallInventory2()
 {
 	FLOOR_INFO* floor;
@@ -714,8 +739,20 @@ long S_CallInventory2()
 		 * three of the four are idempotent and the fourth plays a sound. */
 		if (invStep)
 		{
-			if (item == INV_COMPASS_ITEM && keymap[DIK_G] && keymap[DIK_U] && keymap[DIK_N] && keymap[DIK_S])//GUNS
+			/* The five conditions are the ones that stood here, letter for
+			 * letter, and each cheat runs exactly where and when it ran; the
+			 * four that have a hotkey role now say so in the seam as well
+			 * (CheatWordEdge above, and BITS gets neither a role nor a line). */
+			const long word_guns = item == INV_COMPASS_ITEM && keymap[DIK_G] && keymap[DIK_U] && keymap[DIK_N] && keymap[DIK_S];
+			const long word_item = item == INV_COMPASS_ITEM && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_E] && keymap[DIK_M];
+			const long word_skip = item == INV_COMPASS_ITEM && keymap[DIK_S] && keymap[DIK_K] && keymap[DIK_I] && keymap[DIK_P];
+			const long word_heal = item == INV_COMPASS_ITEM && keymap[DIK_H] && keymap[DIK_E] && keymap[DIK_A] && keymap[DIK_L];
+
+			if (word_guns)//GUNS
 				dels_give_lara_guns_cheat();
+
+			if (CheatWordEdge(0, word_guns))
+				CheatLog("weapons", "word");
 
 			if (item == INV_COMPASS_ITEM && keymap[DIK_B] && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_S])//BITS
 			{
@@ -725,18 +762,27 @@ long S_CallInventory2()
 				savegame.CampaignSecrets[3] = 9;
 			}
 
-			if (item == INV_COMPASS_ITEM && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_E] && keymap[DIK_M])	//ITEM
+			if (word_item)	//ITEM
 				dels_give_lara_items_cheat();
 
-			if (item == INV_COMPASS_ITEM && keymap[DIK_S] && keymap[DIK_K] && keymap[DIK_I] && keymap[DIK_P])	//SKIP
+			if (CheatWordEdge(1, word_item))
+				CheatLog("items", "word");
+
+			if (word_skip)	//SKIP
 			{
 				gfLevelComplete = gfCurrentLevel + 1;
 				SCNoDrawLara = 0;
 				bDisableLaraControl = 0;
 			}
 
-			if (item == INV_COMPASS_ITEM && keymap[DIK_H] && keymap[DIK_E] && keymap[DIK_A] && keymap[DIK_L])	//heal
+			if (CheatWordEdge(2, word_skip))
+				CheatLog("skip", "word");
+
+			if (word_heal)	//heal
 				lara_item->hit_points = 1000;
+
+			if (CheatWordEdge(3, word_heal))
+				CheatLog("heal", "word");
 		}
 
 		if (GLOBAL_invkeypadmode)

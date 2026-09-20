@@ -16327,10 +16327,12 @@ the old 6 deg/tick each jump was smeared over several ticks.
    the return, so a carried swing is inside it, which is right for leading the
    EYE and would have broken the protection here.
 
-**MODERNLOG** gains three fields, each at the end of the line it belongs to, as
-every round's have been: `sector=` (0 none, 1 turn, 2 step) and `out=` on the
-`mode=tank` line, so a log read afterwards can hold a thumb's angle against the
-bits it produced instead of inferring them; and `cam_step=` on the tick line,
+**MODERNLOG** gains four fields, each at the end of the line it belongs to, as
+every round's have been: `sector=` (0 none, 1 turn, 2 step), `out=` and `aim=`
+on the `mode=tank` line, so a log read afterwards can hold a thumb's angle
+against the bits it produced instead of inferring them, and can tell a pushed
+stick that came out sector-less because the look key was aiming from one that
+came out sector-less for any other reason; and `cam_step=` on the tick line,
 the step handed over, which reads beside `cstep=` and shows the course
 following the view tick for tick instead of standing still and then jumping.
 
@@ -16338,7 +16340,7 @@ following the view tick for tick instead of standing still and then jumping.
 the whole scheme rests on. With `tomb5.control_modern` 0 the diff executes:
 three local copies in `S_UpdateInput` (`tank_x`/`tank_y` taking `move_x`/
 `move_y`, `tank_sector` taking 0), which the four classic comparisons then read
-instead of the originals - the same values; the two named conditions, both
+instead of the originals - the same values; the three named conditions, all
 short-circuiting on `tomb5.control_modern` to 0, one of them a statement that
 only MOVED; the `if (tomb5.control_modern)` that keeps the sector call and its
 static out of Tank altogether; and one field set to 0 in `ModernCameraReset`, on
@@ -16354,21 +16356,57 @@ all three log fields are behind the option. `game/interpolate.*`,
 - `game/modern_camera.h` / `.cpp` (item 2) - `MODERN_CAMERA_STATE::stick_step`,
   taken in rule 1 and cleared in the reset.
 - `game/camera.h` / `.cpp` (item 2) - `ModernCameraPlayerStep`.
-- `specific/input.cpp` (item 1) - the seam's condition moved up, `modern_tank`,
-  the sector call and its static, and the tank line's two new fields.
+- `specific/input.cpp` (item 1) - the seam's condition moved up, `modern_tank`
+  and `modern_tank_aim`, the sector call and its static, and the tank line's
+  three new fields.
 - `game/modern_state.cpp` (item 2) - the situation's fill and `cam_step=`.
 - `Preparation/Tools/Diagnose/ModernTest.cpp` (items 1, 2) - `tank_sector` and
   `cam_steer`.
 - `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md` (this entry) -
   outside the counts below, the same convention every round has kept.
 
-Three commits, `Round 161a3b (#161): <what>`. `ModernTest` ends the round at
-**5357 checks, 0 failed** (5187 at base `12eb4e0`; 5336 after item 1, 5357 after
-item 2). `InterpTest` is untouched at **373 checks, 0 failed** - neither item
-goes near a file it includes. Item 2's own group was shown to FAIL before the
-change rather than only to pass after it: with step 2a disabled the same runs
-fail eight checks and show 14 impulses per run, biggest 15.0 degrees in the
-water and 30.0 on land, which is M2's own shape reproduced by the harness.
+**THE SKEPTICAL REVIEW FOUND ONE THING THAT MATTERED, AND IT WAS A PROMISE
+BROKEN IN THE SAME FILE.** Round 161a3's own comment two hundred lines below
+the new sector says, in writing, that the look key is NOT a steering modifier
+with a weapon ready - "That case keeps the classic look, exactly as it is
+today" - and the strip it guards duly asks `lara.gun_status != LG_READY`. The
+sector did not ask. `modern_tank` is true whenever the look bit survived the
+previous tick, and with a weapon ready it survives twice over: the IN_TARGET
+swallow releases it from the seventh tick of a hold (`LookCnt` 100), and
+`game/control.cpp` puts it back with `input |= IN_LOOK` on every single tick of
+a binocular or lasersight session. On exactly those ticks the classic direction
+bits are what `LookUpDown` and `LookLeftRight` consume to aim the head, the
+binoculars and the crosshair - so a sector letting one axis through would have
+made a diagonal impossible: left or right, up or down, never both. Fixed by
+`modern_tank_aim`, which gates the sector call alone. `modern_tank` itself is
+deliberately left as it was, because the bypass gate and the log line are round
+161a3's behaviour with a weapon ready and this round does not get to change it;
+the static's clearing stays outside the gate too, so that drawing a weapon
+mid-hold ends the steering and the push after the holster starts from the plain
+boundary rather than from a stale bias. `aim=` on the tank line is what a play
+test reads this by.
+
+Two small ones with it: `ModernCameraPlayerStep`'s declaration had been
+inserted between `ModernCameraWorldYaw`'s comment and that comment's own
+continuation lines in `game/camera.h`, truncating one sentence and misplacing
+the other - moved below them; and the boundary walk's stepping-edge assertion
+was written as "somewhere below 50" and still held with
+MODERN_TANK_SECTOR_HYST mutated to 0. That one is worth the space it takes,
+because the obvious repair is wrong: every assertion in the group derives its
+expectation FROM the constant, so tightening the window moves the window with
+the constant and the mutation passes even harder - measured, 0 failed. What
+bites is a check on the two numbers THEMSELVES, plus the two edges asked
+strictly against the plain boundary so the rule's direction survives a later
+tuning. With those in, the same mutation fails 2.
+
+Six commits, `Round 161a3b (#161): <what>`. `ModernTest` ends the round at
+**5359 checks, 0 failed** (5187 at base `12eb4e0`; 5336 after item 1, 5357 after
+item 2, 5359 after the review's fixes). `InterpTest` is untouched at **373
+checks, 0 failed** - neither item goes near a file it includes. Item 2's own
+group was shown to FAIL before the change rather than only to pass after it:
+with step 2a disabled the same runs fail eight checks and show 14 impulses per
+run, biggest 15.0 degrees in the water and 30.0 on land, which is M2's own
+shape reproduced by the harness.
 
 ## Building this yourself
 

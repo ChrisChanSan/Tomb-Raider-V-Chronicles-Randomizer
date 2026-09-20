@@ -126,13 +126,15 @@ DirectInput, so a DualSense behind Steam still gets PS5 names.
 Open *Key bindings* with a controller layout selected and the list holds
 fifteen bindable rows, including *Pause*, *Save*, *Load* and the two
 medipacks — vanilla had no joystick binding screen at all. Set *Action* (see
-below) to *Separate* and a sixteenth row, *Secondary*, joins the list — on
-keyboard the same row is always there but does nothing while *Action* is
-*One key*. The four right-stick tilts can be bound like buttons. Round 161b1
-also put the list on
+below) to *Separate* and a sixteenth row, *Secondary*, joins the list; the
+keyboard list gains the same row as its seventeenth, and under *One key*
+neither list shows it, because a row the setting makes inert is a row that
+would do nothing. The four right-stick tilts can be bound like buttons. Round
+161b1 also put the list on
 its own page rather than folding it into *Controls* itself, so it can page
-left and right with the arrows when the sixteen keyboard rows (or fifteen pad
-roles) do not fit one screen — the same paging *tomb5 options* already used.
+left and right with the arrows when the keyboard's sixteen bindable rows —
+seventeen under *Separate* — or the pad's fifteen (sixteen under *Separate*)
+do not fit one screen — the same paging *tomb5 options* already used.
 
 A few things worth knowing:
 
@@ -251,15 +253,17 @@ Under Separate:
 
 | Key | Does |
 |---|---|
-| Action | Switches and levers, keyholes, puzzle holes and search objects, pickups, doors, movable blocks, pulleys, the floor trap door, the burning torch, and the cutscene item triggers. |
-| Secondary | Climbing onto a movable block or riding a pulley. |
-| Either key | The pole, the tightrope, the parallel bars, the death slide, catching and swinging on a rope, the jump switch and the ceiling trap door — eight sites where a held state would drop her the instant the "wrong" key let go, so both keys hold it. |
+| Action | Everything in the world: switches and levers, keyholes, puzzle holes, search objects and monitor screens, pickups, doors, movable blocks (pushing them and the ready pose in front of one), pulleys, the floor trap door, the burning torch, and the cutscene item triggers. It also stays the menu key — it confirms in every menu and in the inventory ring, exactly as it does under One key. |
+| Secondary | Everything Lara does with her own hands: grabbing and climbing a ledge, hanging and shimmying along one, letting go, the monkey swing, pulling herself out of the water — and firing, which is every weapon, the laser sight, the VCI headset light and the DOZY cheat's own light. It confirms in the inventory ring too, which is an addition rather than a change. |
+| Either key | The pole, the tightrope, the parallel bars, the death slide, catching and swinging on a rope, the jump switch and the ceiling trap door — eight sites where a held state would drop her the instant the "wrong" key let go, so both keys reach them and both keys hold them. |
 
-Everything else — Lara's own grab, climb, hang, monkey swing and water-climb
-reads, every weapon, the binocular and laser-sight zoom, the DOZY cheat, and
-the Action key's own confirm in a menu or the inventory ring — keeps reading
-Action alone, exactly as under One key; the Secondary key additionally
-confirms in the ring under Separate.
+That is the whole division, and it is the engine's own: every place that asked
+"is *Action* down?" about a world object now asks the *Action* key, every place
+that asked it about Lara's body or her gun now asks *Secondary*, and the
+handful of held states above take either. Nothing else moves — *Combat mode*,
+the binocular and laser-sight zoom (which read the sprint and duck keys, not
+this one) and every other row are untouched. Under *One key* one key sets both
+halves in the same breath, which is why the setting costs nothing there.
 
 On a controller under Separate, the pad's default bindings switch to their
 own set as well (below) — your One-key bindings on that pad are not
@@ -279,7 +283,7 @@ you left them.
 | Roll | Circle |
 | Inventory | Share |
 | Pause | Options |
-| Save | PS button (unbound on Xbox and Joystick) |
+| Save | the PS button on the PS5 page, *Joy 13* on the Xbox and Joystick pages — but only while the pad reports as DirectInput; over XInput neither page has a PS or Guide button to name, so there *Save* starts unbound |
 | Load | unbound |
 | Small medipack / Large medipack | wherever this pad's own One-key table already puts them |
 | Secondary | R2 |
@@ -304,13 +308,16 @@ finger:
   does, or the moment you stop pushing a direction; it does not fight the
   dash timer or leave you sprinting on the spot.
 - **Duck** never holds her crouched where the bit means nothing: standing up
-  under a low ceiling still needs the ceiling, not the key, so toggling duck
-  into a crawl space and pressing again *inside* it leaves her crawling until
-  she reaches a spot she can actually stand in — exactly what letting go of
-  the key does under Hold.
+  under a low ceiling still needs the ceiling, not the key. Going down onto
+  all fours is one of the moments the latch lets go (her hands are busy, the
+  same rule as a ladder below), so a crawl runs on the ceiling from there on:
+  she crawls until she reaches a spot she can actually stand in, stands up
+  there, and the next duck is a fresh press — pressing again *inside* the
+  crawl does not latch anything.
 - Both let go on their own at a level change, a savegame load, a cutscene,
-  death, entering water, a ladder or a vehicle, and while a menu owns the
-  input — so a key still held across one of those never latches by surprise.
+  death, entering water, and whenever her hands are busy — a ladder, a rope, a
+  crawl, a pickup — and while a menu owns the input, so a key still held
+  across one of those never latches by surprise.
 
 ---
 

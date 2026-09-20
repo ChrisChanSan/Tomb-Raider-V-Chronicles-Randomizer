@@ -17087,7 +17087,10 @@ what each site enters and holds:
 - **2 sites now read `IN_INTERACT` alone though the design did not list
   them**: `lara_as_ppready` and `lara_as_pulley` in `game/lara.cpp`, entered
   only by `MovableBlockCollision` and `PulleyCollision`, both `IN_INTERACT`.
-- **35 reads still read `IN_ACTION`** exactly as before: Lara's own
+- **35 reads still read `IN_ACTION`** exactly as before - which under
+  "Separate" means they are the SECONDARY key's, because that is the role
+  producing the bit there; naming them by bit and not by key is what keeps the
+  two apart in this list: Lara's own
   automaton (grab, climb, hang, monkey swing, swim surface - 14 in
   `game/lara.cpp` plus one each in `laraclmb.cpp` and `larasurf.cpp`), every
   weapon read (16, `lara1gun.cpp`/`lara2gun.cpp`/`larafire.cpp`), the
@@ -17132,14 +17135,22 @@ repair keeps working on whichever set is active - measured that the repair
 must NOT run at the startup seat, because `ActiveJoyStyle()` and
 `joystick_is_xinput` are only answered by the first poll, and calling it
 early would cancel the pending seat `S_UpdateInput` already runs for that
-reason; `ApplyJoySplit` only seats and repairs once `joy_split_seated >= 0`,
-i.e. a seat has genuinely happened before. Defaults by button name, decoded
+reason; so `ApplyJoySplit` swaps the two sets unconditionally and calls
+`ApplyJoyScheme()` only under `joy_scheme_seated >= 0`, i.e. only once a
+control scheme has genuinely been seated - when it has not, the seat still
+pending in `S_UpdateInput` repairs whichever set is active by then, which is
+the one just seated. (`joy_split_seated` is a different variable and can never
+be negative: it starts at 0 because the two sets have registry names of their
+own and their setting is never guessed.) Defaults by button name, decoded
 back through each path's own `JoyNames*` table and checked distinct on every
 page: walk Square/X, jump Cross/A, action Triangle/Y, draw L2/LT, look
 R3, roll Circle/B, duck L1/LB, sprint L3, secondary R2/RT, flare R1/RB,
-inventory Share/View, pause Options/Menu, save PS button (unbound on the two
-Xbox-vocabulary pages), load unbound everywhere, medipacks wherever
-`JoyDefaultRecord` already puts them for that scheme and page.
+inventory Share/View, pause Options/Menu, save the PS button on the PS5
+DirectInput row and its number (`Joy 13`) on the generic row that the Xbox and
+Joystick pages take while the pad delivers through DirectInput - unbound on
+the two XInput-ORDERED rows (`jSepPS5XInput` and `jSepXbox`) alone, because
+neither names a PS or Guide button - load unbound everywhere, medipacks
+wherever `JoyDefaultRecord` already puts them for that scheme and page.
 
 **ITEM 3, SPRINT MODE AND DUCK MODE.** `tomb5.sprint_toggle` and
 `tomb5.duck_toggle` (registry names of the same spelling, default 0 = Hold =
@@ -17155,10 +17166,16 @@ player as pushing nothing and drop his sprint. Toggle: a press latches the
 bit, the next press releases it; the sprint latch also drops on `!moving` or
 when `lara_as_dash` itself ends the sprint (`!DashTimer`, the dash timer that
 refills the instant she leaves `AS_DASH`); the duck latch never holds her
-crouched where the bit means nothing, because the six crawl-hold readers all
-gate on `lara.keep_ducked` (the ceiling) as well, so toggling duck into a
-crawl space and pressing again *inside* it leaves her crawling to the first
-place she can stand - exactly what releasing the key does under Hold. Both
+crouched where the bit means nothing, and a crawl is the plainest case:
+`ANIM_DUCK_TO_ALL4S` sets `lara.gun_status = LG_HANDS_BUSY`
+(`game/lara.cpp:3692`) and that is one of the eleven drop terms, so going down
+onto all fours drops the latch outright, a press *inside* the crawl lands on a
+drop tick and latches nothing, and the crawl runs on `lara.keep_ducked` (the
+ceiling) with the raw key handed through - she crawls to the first place she
+can stand, stands there, and the next duck is a fresh press. That is the
+outcome releasing the key gives under Hold, reached by the drop and not by a
+latched bit; a ladder, a rope and a pickup end a toggled duck the same way.
+Both
 drop through `InputModeLatchReset()` at the level's priming tick (so a
 savegame load gets it too), the two menu rows' own step functions, and every
 drop tick this round is byte-identical to Hold because the bit is handed
@@ -17196,8 +17213,30 @@ death slide; toggled Sprint and Duck in the field; whether Secondary should
 also confirm in the inventory ring (it does, in addition to Action, which
 still confirms exactly as under One key).
 
-Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), and the
-one that carries this entry and the manual/README updates it describes.
+**THE SKEPTICAL REVIEW'S FIX ROUND** found no defect in the engine and five in
+the record, which are corrected above and in `docs/Engine-Manual.md`: the
+manual's *Separate* table had the two keys' jobs the wrong way round (it gave
+*Secondary* the movable block and the pulley, which are `IN_INTERACT` and so
+the *Action* key, and left *Secondary*'s real work - grab, climb, hang, monkey
+swing, water climb-out and firing - out of the table altogether); it claimed
+the keyboard's *Secondary* row is always listed, where `MenuResolveKeybinds`
+drops the last row of EITHER list under "One key", and still counted sixteen
+keyboard rows and fifteen pad roles; the *Save* default is unbound on the two
+XInput-ORDERED rows and not "on Xbox and Joystick", which take the generic row
+(`Joy 13`) whenever the pad delivers through DirectInput; this entry named
+`joy_split_seated` where `ApplyJoySplit` tests `joy_scheme_seated`, and put
+the seat itself under that test, where only the repair is; and the duck
+latch's crawl case reached the right outcome by the wrong mechanism - the
+crawl is a DROP (`LG_HANDS_BUSY`), not a latched bit held open by the ceiling.
+The new header `game/pad_scheme.h` also got the `ClInclude` entry in
+`tomb5.vcxproj` its three siblings have; it compiled either way, through
+`specific/input.h`, but the project's header list was incomplete without it.
+`ModernTest` 5459, `MenuTest` 13,474, `InterpTest` 373, all 0 failed, re-run
+after the fix; no engine source changed.
+
+Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), `b29adbf`
+(this entry and the manual/README updates it describes), and the fix round's
+own, which carries the corrections listed directly above.
 
 ## Building this yourself
 

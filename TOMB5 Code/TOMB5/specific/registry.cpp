@@ -17,6 +17,7 @@
 #include "input.h"
 #include "setupdlg.h"
 #include "../game/gameflow.h"	// LanguageChoice
+#include "../game/key_scheme.h"	// KEY_SCHEME_ROLES - the two keyboard sets (#161, round 161b2a)
 
 static HKEY phkResult;
 static DWORD dwDisposition;
@@ -377,6 +378,36 @@ bool LoadSettings()
 	REG_ReadLong((char*)"Key17", key, layout[0][17]);
 	layout[1][17] = (short)key;
 
+	/* THE SECOND SET (#161, round 161b2a, item 1). Key0..Key17 above keep
+	 * their meaning exactly - they are the CLASSIC set, whichever scheme the
+	 * game was in when it last shut down - and the Modern set gets names of its
+	 * own beside them. Missing means the Modern defaults (layout[2]), so a
+	 * registry written by any earlier build reads as "never touched the Modern
+	 * keys", which is true.
+	 *
+	 * THE SET GOES IN BY SCHEME AND NOT BY ROW, because the seat has not
+	 * happened yet and must not be assumed either way: LoadSettings runs in
+	 * WinMain (specific\winmain.cpp) and init_tomb5_stuff - which is what reads
+	 * tomb5.control_modern out of the OTHER registry key - runs later, on the
+	 * game thread (specific\gamemain.cpp). That is where ApplyKeyScheme() is
+	 * called, one line after it, and until then Tank is seated.
+	 *
+	 * A loop and not eighteen unrolled lines like the block above: the names
+	 * are new, so there is no Core original to keep the shape of, and one loop
+	 * is one place for a typo instead of eighteen. */
+	{
+		short* mset = KeySchemeSet(1);
+
+		for (long i = 0; i < KEY_SCHEME_ROLES; i++)
+		{
+			char name[12];
+
+			sprintf(name, "MKey%ld", i);
+			REG_ReadLong(name, key, layout[2][i]);
+			mset[i] = (short)key;
+		}
+	}
+
 	REG_ReadLong((char*)"JDck", (ulong&)jLayout[0], 5);
 	REG_ReadLong((char*)"JDsh", (ulong&)jLayout[1], 3);
 	REG_ReadLong((char*)"JWlk", (ulong&)jLayout[2], 4);
@@ -417,24 +448,44 @@ bool LoadSettings()
 void SaveSettings()
 {
 	OpenRegistry("Game");
-	REG_WriteLong((char*)"Key0", layout[1][0]);
-	REG_WriteLong((char*)"Key1", layout[1][1]);
-	REG_WriteLong((char*)"Key2", layout[1][2]);
-	REG_WriteLong((char*)"Key3", layout[1][3]);
-	REG_WriteLong((char*)"Key4", layout[1][4]);
-	REG_WriteLong((char*)"Key5", layout[1][5]);
-	REG_WriteLong((char*)"Key6", layout[1][6]);
-	REG_WriteLong((char*)"Key7", layout[1][7]);
-	REG_WriteLong((char*)"Key8", layout[1][8]);
-	REG_WriteLong((char*)"Key9", layout[1][9]);
-	REG_WriteLong((char*)"Key10", layout[1][10]);
-	REG_WriteLong((char*)"Key11", layout[1][11]);
-	REG_WriteLong((char*)"Key12", layout[1][12]);
-	REG_WriteLong((char*)"Key13", layout[1][13]);
-	REG_WriteLong((char*)"Key14", layout[1][14]);
-	REG_WriteLong((char*)"Key15", layout[1][15]);
-	REG_WriteLong((char*)"Key16", layout[1][16]);
-	REG_WriteLong((char*)"Key17", layout[1][17]);
+
+	/* BOTH SETS, WHICHEVER ONE IS ACTIVE (#161, round 161b2a, item 1).
+	 * Key0..Key17 are the CLASSIC set BY NAME and must keep being it, so they
+	 * can no longer be written from layout[1]: under Modern that row holds the
+	 * other set. At Tank KeySchemeSet(0) IS layout[1], and these eighteen lines
+	 * write byte for byte what they wrote at base. */
+	const short* cset = KeySchemeSet(0);
+	const short* mset = KeySchemeSet(1);
+
+	REG_WriteLong((char*)"Key0", cset[0]);
+	REG_WriteLong((char*)"Key1", cset[1]);
+	REG_WriteLong((char*)"Key2", cset[2]);
+	REG_WriteLong((char*)"Key3", cset[3]);
+	REG_WriteLong((char*)"Key4", cset[4]);
+	REG_WriteLong((char*)"Key5", cset[5]);
+	REG_WriteLong((char*)"Key6", cset[6]);
+	REG_WriteLong((char*)"Key7", cset[7]);
+	REG_WriteLong((char*)"Key8", cset[8]);
+	REG_WriteLong((char*)"Key9", cset[9]);
+	REG_WriteLong((char*)"Key10", cset[10]);
+	REG_WriteLong((char*)"Key11", cset[11]);
+	REG_WriteLong((char*)"Key12", cset[12]);
+	REG_WriteLong((char*)"Key13", cset[13]);
+	REG_WriteLong((char*)"Key14", cset[14]);
+	REG_WriteLong((char*)"Key15", cset[15]);
+	REG_WriteLong((char*)"Key16", cset[16]);
+	REG_WriteLong((char*)"Key17", cset[17]);
+
+	// And the Modern set beside it, under names of its own. Written at Tank
+	// too, and harmlessly: nothing at Tank reads MKey*, and the accepted 161b1
+	// build ignores values it does not know.
+	for (long i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		char name[12];
+
+		sprintf(name, "MKey%ld", i);
+		REG_WriteLong(name, mset[i]);
+	}
 
 	REG_WriteLong((char*)"JDck", jLayout[0]);
 	REG_WriteLong((char*)"JDsh", jLayout[1]);

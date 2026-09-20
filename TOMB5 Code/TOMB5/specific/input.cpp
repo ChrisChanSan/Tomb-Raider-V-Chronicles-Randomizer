@@ -29,6 +29,7 @@
 #include "../game/deltapak.h"		// GLOBAL_playing_cutseq - the modern seam's guard
 #include "../game/modern_state.h"	// the modern control's one tick (#161)
 #include "../game/modern_move.h"	// the radial dead zone and its two widths (#161, round 161a2b, item 6)
+#include "../game/key_scheme.h"		// the two keyboard sets, as arithmetic (#161, round 161b2a, item 1)
 #include "../tomb5/tomb5.h"
 #include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank (round 161a3, step 5)
 
@@ -415,14 +416,108 @@ static long JoyBitIsDpad(long bit)
 
 long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-short layout[2][18] =
+/* THE MODERN ROW'S SCAN CODES ARE THE HEADER'S (game\key_scheme.h), so that
+ * MenuTest checks the row the ENGINE really uses and not a copy of it. These
+ * eighteen lines are the other half of that bargain: the header can hold no
+ * dinput.h, so they say at compile time WHICH key each of its numbers is. A
+ * typo in either place stops the build instead of reaching a player. */
+static constexpr short kModernRow[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
+static_assert(kModernRow[0] == DIK_W, "modern row: forward is W");
+static_assert(kModernRow[1] == DIK_S, "modern row: back is S");
+static_assert(kModernRow[2] == DIK_A, "modern row: left is A");
+static_assert(kModernRow[3] == DIK_D, "modern row: right is D");
+static_assert(kModernRow[4] == DIK_C, "modern row: duck is C");
+static_assert(kModernRow[5] == DIK_LSHIFT, "modern row: dash is left shift");
+static_assert(kModernRow[6] == DIK_LMENU, "modern row: walk is left alt");
+static_assert(kModernRow[7] == DIK_SPACE, "modern row: jump is space");
+static_assert(kModernRow[8] == DIK_E, "modern row: action is E");
+static_assert(kModernRow[9] == DIK_Q, "modern row: draw is Q");
+static_assert(kModernRow[10] == DIK_F, "modern row: flare is F");
+static_assert(kModernRow[11] == DIK_R, "modern row: look is R");
+static_assert(kModernRow[12] == DIK_LCONTROL, "modern row: roll is left ctrl");
+static_assert(kModernRow[13] == DIK_ESCAPE, "modern row: inventory is escape");
+static_assert(kModernRow[14] == DIK_Z, "modern row: step left is Z");
+static_assert(kModernRow[15] == DIK_X, "modern row: step right is X");
+static_assert(kModernRow[16] == DIK_P, "modern row: pause is P");
+static_assert(kModernRow[17] == DIK_RETURN, "modern row: select is return");
+
+/* FOUR ROWS SINCE ROUND 161b2a, AND THE FIRST TWO ARE WHAT THEY ALWAYS WERE
+ * (#161, item 1). Every reader in the tree reads row 1 and every writer writes
+ * it, which is why the second keyboard set is seated INTO it rather than read
+ * from somewhere new - specific\registry.cpp, specific\LoadSave.cpp and
+ * game\menu_frame.cpp needed no second path at all.
+ *
+ *   0  the Tank default row - Core's own, byte for byte as at base
+ *   1  the ACTIVE set: whichever scheme is seated (KeySchemeSet, ApplyKeyScheme)
+ *   2  the Modern default row (game\key_scheme.h)
+ *   3  the PARKED set: the other scheme's, kept while it is not in use
+ *
+ * Row 3 starts as the Modern defaults because row 1 starts as the Tank set and
+ * Tank is the seated scheme at startup (key_scheme_seated below). */
+short layout[4][18] =
 {
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
 	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN },
 
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN }
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN },
+
+	KEY_SCHEME_MODERN_ROW,
+
+	KEY_SCHEME_MODERN_ROW
 };
+
+/* WHICH SCHEME'S SET IS IN ROW 1: 0 Tank, 1 Modern. It starts at Tank and not
+ * at -1 (the pad's joy_scheme_seated does start there) because the two sets
+ * have NAMES of their own in the registry - Key0..Key17 and MKey0..MKey17 -
+ * so there is never a table whose scheme has to be guessed. What the keyboard
+ * needs is only the answer to "has the swap been done yet", and at startup it
+ * has not. */
+static long key_scheme_seated = 0;
+
+/* The default row the ACTIVE scheme falls back to - Key()'s second chance and
+ * CheckKeyConflicts()'s subject. Under Modern that must be the Modern row: its
+ * movement keys are W/S/A/D, and Tank's arrow keys falling through behind them
+ * would move her relative to a camera she is no longer facing along (a later
+ * round gives the arrows the camera instead). At Tank this returns layout[0],
+ * which is the expression that stood here before the round. */
+const short* KeyDefaultRow()
+{
+	return layout[tomb5.control_modern ? 2 : 0];
+}
+
+/* The stored set of ONE scheme, wherever it happens to be sitting. The
+ * registry addresses the two sets by scheme and not by row, because Key0..17
+ * must keep meaning the classic set whichever scheme is active when the game
+ * shuts down (the accepted 161b1 build reads those names and ignores MKey*). */
+short* KeySchemeSet(long modern)
+{
+	return (key_scheme_seated == (modern ? 1 : 0)) ? layout[1] : layout[3];
+}
+
+/* THE KEYBOARD'S HALF OF THE SCHEME SWITCH, beside ApplyJoyScheme's. The pad
+ * REPAIRS one stored set because it has only one; the keyboard EXCHANGES two,
+ * because each scheme keeps its own - so a player who rebound Modern's W/S/A/D
+ * and then went back to Tank finds his Tank keys, and his Modern keys are
+ * still there when he returns. Nothing is lost and nothing is overwritten.
+ *
+ * The conflict table is recomputed because it is derived from both rows that
+ * just moved: layout[1] is the other set now, and KeyDefaultRow() answers with
+ * the other default row. Stale conflict[] entries would make a role's default
+ * key silent - or loud - for the wrong reason until the next capture. */
+void ApplyKeyScheme()
+{
+	const long modern = tomb5.control_modern ? 1 : 0;
+
+	if (key_scheme_seated == modern)
+		return;
+
+	key_scheme_seated = KeySchemeSeat(layout[1], layout[3], (int)key_scheme_seated, (int)modern);
+	CheckKeyConflicts();
+
+	if (gLogEnabled)
+		Log("KEYLOG scheme=%s seated", modern ? "modern" : "tank");
+}
 
 long conflict[18];
 long input;
@@ -741,7 +836,9 @@ long Key(long number)
 	if (conflict[number])
 		return 0;
 
-	key = layout[0][number];
+	// The ACTIVE scheme's default row, which at Tank is layout[0] - the
+	// expression this line held before round 161b2a (see KeyDefaultRow).
+	key = KeyDefaultRow()[number];
 
 	if (keymap[key])
 		return 1;
@@ -1282,6 +1379,46 @@ long S_UpdateInput()
 
 	if (Key(17))
 		linput |= IN_SELECT;
+
+	/* THE MENUS KEEP THE ARROWS AND RETURN UNDER MODERN (#161, round 161b2a,
+	 * item 1).
+	 *
+	 * Modern binds W/S/A/D to the four direction slots, and those slots are
+	 * what every menu in the tree steps with - IN_FORWARD/IN_BACK/IN_LEFT/
+	 * IN_RIGHT out of Key(0..3), measured across the title, the pause menu and
+	 * its option pages, the inventory ring, load/save and the outfit changer.
+	 * So without this a Modern player would drive menus with W/S/A/D, and a
+	 * player who rebound them onto something else would be locked out of the
+	 * menu he rebound them in.
+	 *
+	 * THE PREDICATE IS THE PAD'S OWN, deliberately. ModernMenuReadsPad() is
+	 * already the tree's one answer to "is a menu reading the direction bits
+	 * rather than Lara" (round 161a2b, item 9), and a second spelling of it
+	 * here would be a second thing to keep in step. It is exactly the inverse
+	 * of the movement seam's last two terms, so in PLAY the arrows do only what
+	 * the active table says - which is the other half of the user's decision.
+	 *
+	 * Raw keymap and not Key(), because these five are the menu's fixed keys
+	 * and not a role: the capture refuses to bind any of them over the
+	 * navigation (game\menu_frame.cpp) for the same reason. Escape needs no
+	 * line - it already reaches IN_DESELECT unconditionally, below. */
+	if (tomb5.control_modern && ModernMenuReadsPad())
+	{
+		if (keymap[DIK_UP])
+			linput |= IN_FORWARD;
+
+		if (keymap[DIK_DOWN])
+			linput |= IN_BACK;
+
+		if (keymap[DIK_LEFT])
+			linput |= IN_LEFT;
+
+		if (keymap[DIK_RIGHT])
+			linput |= IN_RIGHT;
+
+		if (keymap[DIK_RETURN])
+			linput |= IN_SELECT;
+	}
 
 	if (ControlMethod == 1)
 	{

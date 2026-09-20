@@ -27,6 +27,7 @@
 #include "../game/savegame.h"
 #include "../game/balance.h"
 #include "../game/secretreward.h"
+#include "input.h"			// ApplyKeyScheme - the one-time keyboard seat (#161, round 161b2a)
 #include "../tomb5/tomb5.h"
 
 WATERTAB WaterTable[22][64];
@@ -270,6 +271,14 @@ unsigned int __stdcall GameMain(void* ptr)
 
 		RPC_Init();
 		init_tomb5_stuff();
+		/* AND ONLY NOW CAN THE KEYBOARD KNOW WHICH SCHEME IT IS IN (#161,
+		 * round 161b2a, item 1). LoadSettings() read both key sets back in
+		 * WinMain, long before this - specific\winmain.cpp - and the line
+		 * above is what reads tomb5.control_modern out of the other registry
+		 * key, so the seat belongs here and nowhere earlier. At Tank the
+		 * scheme already seated is the one wanted and the call returns without
+		 * touching anything (specific\input.cpp). */
+		ApplyKeyScheme();
 		DoGameflow();
 		GameClose();
 		S_CDStop();

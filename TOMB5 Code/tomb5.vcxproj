@@ -457,6 +457,7 @@
     <ClInclude Include="TOMB5\game\init.h" />
     <ClInclude Include="TOMB5\game\items.h" />
     <ClInclude Include="TOMB5\game\joby.h" />
+    <ClInclude Include="TOMB5\game\key_scheme.h" />
     <ClInclude Include="TOMB5\game\lara.h" />
     <ClInclude Include="TOMB5\game\lara1gun.h" />
     <ClInclude Include="TOMB5\game\lara2gun.h" />

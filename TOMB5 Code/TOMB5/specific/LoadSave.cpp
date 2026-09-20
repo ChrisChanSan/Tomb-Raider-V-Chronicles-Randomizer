@@ -35,6 +35,7 @@
 #include "../game/newinv2.h"
 #include "../game/control.h"
 #include "../game/menu_frame.h"	// #161, round 161b1: the options menu, one table-driven frame for every page
+#include "../game/key_scheme.h"	// #161, round 161b2a: KeySchemeConflicts - the conflict rule, as arithmetic
 #include "3dmath.h"
 #include "../tomb5/troyestuff.h"
 #include "../tomb5/tomb5.h"
@@ -76,25 +77,13 @@ static const char* screen_paths[5] =
 	"SCREENS\\SCREENS.STR"
 };
 
+/* Unchanged arithmetic in a new place (#161, round 161b2a, item 1): the double
+ * loop moved into game\key_scheme.h so that MenuTest can hold it, and the row
+ * it compares against is now the ACTIVE scheme's default row instead of
+ * layout[0] - which at Tank IS layout[0]. */
 void CheckKeyConflicts()
 {
-	short key;
-
-	for (int i = 0; i < 18; i++)
-	{
-		key = layout[0][i];
-
-		conflict[i] = 0;
-
-		for (int j = 0; j < 18; j++)
-		{
-			if (key == layout[1][j])
-			{
-				conflict[i] = 1;
-				break;
-			}
-		}
-	}
+	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict);
 }
 
 void DisplayStatsUCunt()

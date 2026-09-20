@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "../../../TOMB5 Code/TOMB5/game/menu_nav.h"
+#include "../../../TOMB5 Code/TOMB5/game/key_scheme.h"
 
 static int g_checks;
 static int g_fail;
@@ -312,9 +313,147 @@ static void page_step()
 	}
 }
 
+/* ------------------------------------------------------------ keyboard -- */
+/* game\key_scheme.h - the two keyboard sets (#161, round 161b2a, item 1).
+ * Same rule as above: the ENGINE'S header, not a copy, so the row checked here
+ * is the row a player gets. */
+
+static const short kModern[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
+
+/* A row that shares no key with the Modern one, to play the part of "some
+ * other binding" wherever a second row is needed. The numbers are scan codes
+ * of keys the Modern row does not use (the function keys and the numeric
+ * keypad), and nothing else about them matters. */
+static const short kOther[KEY_SCHEME_ROLES] =
+{
+	0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43,
+	0x44, 0x57, 0x58, 0x47, 0x48, 0x49, 0x4B, 0x4C, 0x4D
+};
+
+static void key_modern_row_is_sound()
+{
+	check(KeySchemeRowSound(kModern), 1, "the Modern default row is sound");
+
+	// The two halves of "sound", said again slot by slot so that a failure
+	// names the role rather than only the row.
+	for (int i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		int seen = 0;
+
+		check(kModern[i] > 0, 1, "every Modern slot is bound");
+
+		for (int j = 0; j < KEY_SCHEME_ROLES; j++)
+			if (kModern[i] == kModern[j])
+				seen++;
+
+		check(seen, 1, "no Modern key is bound twice");
+	}
+}
+
+static void key_row_sound_rejects()
+{
+	short row[KEY_SCHEME_ROLES];
+
+	memcpy(row, kModern, sizeof(row));
+	row[7] = 0;
+	check(KeySchemeRowSound(row), 0, "a hole in the row is not sound");
+
+	memcpy(row, kModern, sizeof(row));
+	row[7] = row[3];
+	check(KeySchemeRowSound(row), 0, "a key on two roles is not sound");
+
+	memcpy(row, kModern, sizeof(row));
+	row[KEY_SCHEME_ROLES - 1] = row[0];
+	check(KeySchemeRowSound(row), 0, "the last slot is checked too");
+
+	check(KeySchemeRowSound(kOther), 1, "the disjoint row is sound as well");
+}
+
+static void key_conflicts()
+{
+	long got[KEY_SCHEME_ROLES];
+	short active[KEY_SCHEME_ROLES];
+	int i, r;
+
+	// Nothing shared: every role keeps its default key as a second trigger.
+	KeySchemeConflicts(kOther, kModern, got);
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+		check((int)got[i], 0, "a default key nobody claimed is free");
+
+	// A player who never rebinds: the active set IS the default row, so every
+	// default key is "claimed" - by the role that owns it. The fallback is
+	// dead and costs nothing, because the primary binding is the same key.
+	KeySchemeConflicts(kModern, kModern, got);
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+		check((int)got[i], 1, "an untouched set claims its own defaults");
+
+	// One claim at a time, swept over all eighteen roles: only the role whose
+	// DEFAULT key was taken may go silent, and no other.
+	for (r = 0; r < KEY_SCHEME_ROLES; r++)
+	{
+		memcpy(active, kOther, sizeof(active));
+		active[0] = kModern[r];
+
+		KeySchemeConflicts(active, kModern, got);
+
+		for (i = 0; i < KEY_SCHEME_ROLES; i++)
+			check((int)got[i], i == r ? 1 : 0, "exactly the claimed default is flagged");
+	}
+}
+
+static void key_seat()
+{
+	short active[KEY_SCHEME_ROLES];
+	short parked[KEY_SCHEME_ROLES];
+	int seated, i;
+
+	// Asking for the scheme already seated moves nothing - the menu row and
+	// the startup seat both call it and neither may double-swap.
+	memcpy(active, kOther, sizeof(active));
+	memcpy(parked, kModern, sizeof(parked));
+	seated = KeySchemeSeat(active, parked, 0, 0);
+	check(seated, 0, "seating the seated scheme keeps it");
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		check(active[i], kOther[i], "the active set stands");
+		check(parked[i], kModern[i], "the parked set stands");
+	}
+
+	// The flip: the set that leaves is kept, not overwritten.
+	seated = KeySchemeSeat(active, parked, seated, 1);
+	check(seated, 1, "the flip seats the other scheme");
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		check(active[i], kModern[i], "the other set is active now");
+		check(parked[i], kOther[i], "and the first one is parked");
+	}
+
+	// And back again, to exactly what the player had.
+	seated = KeySchemeSeat(active, parked, seated, 0);
+	check(seated, 0, "the flip back comes home");
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		check(active[i], kOther[i], "a round trip changes no key");
+		check(parked[i], kModern[i], "on either side");
+	}
+
+	// `want` is a tomb5_options bool by the time it gets here, but the
+	// normalisation is the header's own so that no caller has to think about it.
+	seated = KeySchemeSeat(active, parked, 0, 5);
+	check(seated, 1, "any nonzero want means Modern");
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+		check(active[i], kModern[i], "and it really swapped");
+}
+
 int main()
 {
-	printf("MenuTest - game\\menu_nav.h (#161, round 161b1)\n\n");
+	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h (#161, rounds 161b1 and 161b2a)\n\n");
 
 	cursor_all_enabled();
 	cursor_disabled();
@@ -322,6 +461,10 @@ int main()
 	paging_ends();
 	paging_sweep();
 	page_step();
+	key_modern_row_is_sound();
+	key_row_sound_rejects();
+	key_conflicts();
+	key_seat();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -220,6 +220,11 @@ static bool MenuStepControlType(long, long dir)
 	// switch. Deliberately NOT ApplyJoyDefaults(): a player who customised
 	// his pad must not lose it for trying the other scheme.
 	ApplyJoyScheme();
+	// The keyboard's half of the same sentence (#161, round 161b2a, item 1):
+	// each scheme keeps its OWN set, so the two change places instead of one
+	// being repaired. It recomputes conflict[] as well, because both rows the
+	// table is derived from have just moved (specific\input.cpp).
+	ApplyKeyScheme();
 	return 1;
 }
 
@@ -1176,8 +1181,10 @@ static void MenuSelectBinding(long role)
 
 /* "Reset to defaults", the centred action above the list. It is exactly what
  * the Method row's fifth position did: the compiled-in keyboard table AND the
- * pad defaults matching the chosen page and the active input path. Per-scheme
- * reset is round B2. */
+ * pad defaults matching the chosen page and the active input path - and since
+ * round 161b2a (item 1) the keyboard table it restores is the ACTIVE SCHEME'S,
+ * which at Tank is the row it always was. Reset means "the defaults of the
+ * scheme I am playing in", not "Core's defaults whatever I am playing in". */
 static void MenuResetBindings(long)
 {
 	SoundEffect(SFX_MENU_SELECT, 0, 2);
@@ -1190,9 +1197,21 @@ static void MenuResetBindings(long)
 	// and destination overlapped as well ([0,72) against [36,108)), which is
 	// undefined for memcpy on its own. The intent was always "put the
 	// compiled-in defaults over the active bindings", and that is one row of
-	// the array: 36 bytes from layout[0].
-	memmove(layout[1], layout[0], sizeof(layout[0]));
+	// the array: 36 bytes, from layout[0] at Tank and from the Modern default
+	// row under Modern (KeyDefaultRow, #161 round 161b2a). sizeof(layout[0])
+	// is one row whatever the array grows to, which is why it is written that
+	// way rather than as 36.
+	memmove(layout[1], KeyDefaultRow(), sizeof(layout[0]));
 	ApplyJoyDefaults();	// defaults matching page AND input path (input.cpp)
+	/* AND THE CONFLICT TABLE IS RECOMPUTED (#161, round 161b2a, item 1 - the
+	 * base defect round 161b1 reported and deliberately left alone). Reset
+	 * changes every active binding, and conflict[] is derived from them: which
+	 * roles may still answer to their default key. Without this it kept the
+	 * answer computed for the bindings the player just discarded, until the
+	 * next capture happened to recompute it - so a role whose default key had
+	 * been claimed stayed silent after a Reset that had freed it again. This is
+	 * the one behaviour of this round that a Tank player can see. */
+	CheckKeyConflicts();
 }
 
 /* ========================================================================= */

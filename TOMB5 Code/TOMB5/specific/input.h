@@ -28,6 +28,9 @@ long JoyMenuDeflected();
 const char* JoyButtonName(long idx);
 void ApplyJoyDefaults();
 void ApplyJoyScheme();	// #161, round 161a2: the active scheme repairs the bindings it cannot honour
+void ApplyKeyScheme();	// #161, round 161b2a: ... and the keyboard's two sets change places
+const short* KeyDefaultRow();	// the active scheme's default row - Key()'s fallback and CheckKeyConflicts()'s subject
+short* KeySchemeSet(long modern);	// one scheme's stored set, wherever it is sitting (specific\registry.cpp)
 long JoyBitConfirm();
 long JoyBitBack();
 long ModernLookTankActive();	// #161, round 161a3, item 3: the look key is steering her as at Tank this tick
@@ -37,7 +40,7 @@ extern const char* GermanKeyboard[272];
 extern long JoyStyle;
 extern long jLayout[32];
 
-extern short layout[2][18];
+extern short layout[4][18];	// 0 Tank defaults, 1 the active set, 2 Modern defaults, 3 the parked set (#161, round 161b2a)
 extern long conflict[18];
 extern long input;
 extern long dbinput;

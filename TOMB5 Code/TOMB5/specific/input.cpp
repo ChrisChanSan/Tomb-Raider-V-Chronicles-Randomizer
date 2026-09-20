@@ -1699,10 +1699,18 @@ long S_UpdateInput()
 	 * the binocular and lasersight sessions on top of that, exactly as it
 	 * strips the original's.
 	 *
-	 * THE TORCH IS THE ONE HAND THAT IS NOT A WEAPON: WEAPON_TORCH at
-	 * LG_READY is a burning stick, not a gun, and `ready` says no - design
-	 * section 1.5 names it, and LaraGun returns before its chain for it
-	 * anyway (:221).
+	 * THE TORCH IS THE ONE HAND THAT IS NOT A WEAPON, and it is a term of the
+	 * GUARD and not of `ready`, which design section 1.5 leaves open and a
+	 * measurement settles. A burning torch sits at LG_READY with gun_type
+	 * WEAPON_TORCH (game\flmtorch.cpp:196), LaraGun returns before its chain
+	 * for it (:221), and the bit is read instead by DoFlameTorch (:117) to
+	 * THROW the torch. Had the torch only made `ready` false, the weapon half
+	 * would still have cleared the key's own bit - both truths false - and the
+	 * torch could never be thrown again in Hold. With the torch in the guard
+	 * the original passes through untouched, which is the only right answer
+	 * for a hand the draw key does not govern. The term clears itself:
+	 * gun_type goes back to last_gun_type or WEAPON_NONE the moment the torch
+	 * leaves her (:147, :169).
 	 *
 	 * AND THE FLARE NEEDS NO EXCEPTION, which was worth measuring rather than
 	 * assuming, because a rule that put a lit flare away on the first tick the
@@ -1717,13 +1725,12 @@ long S_UpdateInput()
 	{
 		const long combat_seam = lara_item && !App.fmv && !GLOBAL_playing_cutseq &&
 			!bUseSpotCam && !bDisableLaraControl && !InventoryActive &&
-			gfLevelId != LVL5_TITLE;
+			gfLevelId != LVL5_TITLE && lara.gun_type != WEAPON_TORCH;
 
 		// The draw key or button physically down THIS tick - which is what
 		// this bit already is at this point, from either producer.
 		const long held = (linput & IN_DRAW) != 0;
-		const long ready = (combat_seam && lara.gun_status == LG_READY &&
-			lara.gun_type != WEAPON_TORCH) ? 1 : 0;
+		const long ready = (combat_seam && lara.gun_status == LG_READY) ? 1 : 0;
 		const long holstered = (combat_seam && lara.gun_status == LG_NO_ARMS) ? 1 : 0;
 
 		if (combat_seam)

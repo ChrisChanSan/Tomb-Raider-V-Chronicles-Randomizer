@@ -152,9 +152,8 @@ A few things worth knowing:
 ### The keyboard: two schemes, two sets
 
 *Control type* (round 161b2a) picks **Tank**, the original scheme, or
-**Modern**, laid out on Chronicles' own default keys of the remaster it is
-re-derived from — and behind the scenes each scheme keeps its **own**
-keyboard bindings, remembered independently:
+**Modern**, a hand-on-the-left layout around W/S/A/D — and behind the scenes
+each scheme keeps its **own** keyboard bindings, remembered independently:
 
 | Role | Tank (default) | Modern (default) |
 |---|---|---|
@@ -162,7 +161,7 @@ keyboard bindings, remembered independently:
 | Duck | Period (`.`) | C |
 | Dash | Slash (`/`) | Left Shift |
 | Walk | Right Shift | Left Alt |
-| Jump | Space | Space |
+| Jump | Right Alt | Space |
 | Action | Right Ctrl | E |
 | Draw weapon | Space | Q |
 | Flare | Comma (`,`) | F |

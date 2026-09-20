@@ -16944,15 +16944,20 @@ scheme, exactly as intended.
   model of `LaraGun`'s own draw/holster chain, run through a press-hold-release
   script over the three gun states.
 
-**THE REVIEW.** No dedicated skeptical review ran this round - the brief's
-three steps are all build steps, unlike round 161b1's four. Step 2 caught and
-fixed its own defect (the torch) before this record was written, in the open,
-in a second commit rather than an amended one; that is the only
-self-correction this round has to report.
+**THE REVIEW.** The brief's three steps are all build steps, unlike round
+161b1's four, so this paragraph was first written as "no dedicated review
+ran" - and then TWO skeptical reviews ran on the finished tree, each followed
+by a fix round, and neither correction reached this paragraph until the
+second. It says now what happened: review 1 found three record defects (below),
+review 2 found five more (further below). Step 2 had already caught and fixed a
+defect of its own, the torch, before any reviewer saw it - in the open, in a
+second commit rather than an amended one.
 
-Four commits, `Round 161b2a (#161): <what>` - three from the build steps
+Seven commits, `Round 161b2a (#161): <what>` - three from the build steps
 (`ea110cc` item 1, `60df63c` and `2d9fc8a` item 2, the second a fix of the
-first's own defect) and this record itself.
+first's own defect), this record itself, and three from the first fix round
+(`fdb288d`, `712c833`, `7e5f9a2`). The second fix round's own commits are
+named in its paragraph at the end.
 `ModernTest` ends the round at **5,435 checks, 0 failed** (5,413 at base
 `a9b1922`, +22 from item 2's `weapon_sequences()` group).
 `MenuTest` ends at **12,944 checks, 0 failed** (12,413 at base, +531 from item
@@ -16960,7 +16965,7 @@ first's own defect) and this record itself.
 `InterpTest` is untouched at **373 checks, 0 failed** - nothing in the round
 goes near a file it includes.
 
-**The skeptical review's three findings, all in the record rather than in the
+**The FIRST review's three findings, all in the record rather than in the
 engine's behaviour, and all fixed.** (1) The manual's new Tank column gave
 **Space** for Jump; `specific\input.cpp`'s row 0 slot 7 is `DIK_RALT`, and
 Space is slot 9, the Tank DRAW key the same table already listed one row
@@ -16980,6 +16985,46 @@ sentence now describes the layout itself, a hand-on-the-left scheme around
 W/S/A/D. Rebuilt clean afterwards and re-run: the engine's only warnings are
 base's own (`camera.cpp` C4244, `trex.cpp` C4101, `types.h` C4005), and the
 three counts above are unmoved.
+
+**The SECOND review's five findings - one about this record, two about what
+the round tells a player, one about a log line, one not ours.** (1) This very
+paragraph's neighbour said "no dedicated skeptical review ran this round" and
+counted four commits, while sixteen lines further down the same entry reported
+a review's findings and the history held seven. Both statements have been
+rewritten above; a reader reconstructing the round from this file now gets the
+count and the review history the repository actually has. (2) The manual
+promised that Hold "never interferes with a torch or a flare already in her
+hand". Half true, and the wrong half was the one a player meets: the torch is a
+term of `combat_seam` and really is untouched, but `ready_flare()` parks a
+BURNING flare at `LG_NO_ARMS`, so it reads as `holstered`, and Hold's normal
+steady state is the key held - `held && holstered` sends one `IN_DRAW`, and
+`larafire.cpp` throws the flare and draws the gun. The engine is doing exactly
+what the item asked for and what the original does for a draw-key press with a
+flare in hand, so nothing in the engine changed; the manual now says it
+plainly, including the advice to let the key go before lighting one. It is on
+the play-test list as the user's call. (3) The Modern default row binds walk to
+Left Alt, and three screens that own the input - the title, load/save, the
+outfit changer - suppress confirm while Left Alt is down, because that is the
+guard that keeps Alt+Enter from choosing a row while it toggles fullscreen. A
+Modern player holding walk on one of those three cannot confirm until he lets
+go; Escape still leaves, nothing locks. Dropping the guard under Modern would
+restore precisely the double action it was written to prevent, and the row is
+the user's own listing that he said he would correct key by key after playing,
+so the collision is written down - in `game\key_scheme.h` beside the row and in
+the manual beside the menu rules - and not guessed at. (4) `COMBATLOG`'s
+`draw` field printed the weapon half's produced bit, which is 0 whenever the
+seam is off, although the key's own `IN_DRAW` is still in the word there and is
+still consumed - `flmtorch.cpp` throws the torch on it, `fmv.cpp` skips a video
+on it. The field now prints the bit that LEAVES `S_UpdateInput`, and a new
+`seam=` field at the END of the line says which half is answering, so the line
+can no longer be read to mean the opposite of what happened; it still prints on
+a change rather than every tick, now of either value. (5) Three compiled
+executables under the workflow's text-scratch tree, which the rules put under
+`Agent-Scratch` only - all three from rounds 161a3/161a3b, none from this one.
+Deleted; this round's own scratch folders never held an executable.
+Nothing executable moved for findings 1, 2 and 3: they are a record, a manual
+and a comment. Finding 4 changed one diagnostic line behind `-log`. Rebuilt and
+re-run once more, and the three counts above are still unmoved.
 
 ## Building this yourself
 

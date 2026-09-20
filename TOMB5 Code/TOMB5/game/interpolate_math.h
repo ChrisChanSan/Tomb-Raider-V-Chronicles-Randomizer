@@ -663,6 +663,60 @@ inline void InterpRootLerp(const long prev[3], const long cur[3], float t, long 
 		out[i] = InterpLerpLong(prev[i], cur[i], t);
 }
 
+/* AND THE HALF TURN TURNS THE PREVIOUS OFFSET WITH HER (#169, round 161a3).
+ *
+ * The two offsets InterpRootLerp blends are in the ITEM'S OWN frame, and on a
+ * tick that turned half a turn those two frames are half a turn apart. The
+ * draw is at the NEW one - ApplyNode (game\interpolate.cpp) keeps the live
+ * rotation on exactly this tick - so the previous tick's offset is a point of
+ * the OLD frame handed to the new one, and the straight blend of the two drags
+ * her root through her own pivot.
+ *
+ * MEASURED, the underwater roll (the user's log of 2026-09-20 and RootProbe
+ * over ANDREA1): animation 203's last frame 5330 carries (42,122,68), the
+ * frame the change lands on - 205's frame 5423, where FlipEffect 0 fires -
+ * carries (-45,122,-67), and the drawn offset walked (32,122,53), (17,122,29),
+ * (1,122,4), (-15,122,-20) through the middle. Up to 140 units beside her for
+ * a drawn frame or two, which is what the play test filmed.
+ *
+ * WHY THE WHOLE TRANSFORM IS TWO SIGNS. turn180_effect (game\effects.cpp) is
+ * `y_rot -= 0x8000` AND `x_rot = -x_rot` in the same breath, so the offset has
+ * to be carried by Rcur^-1 * Rprev with the engine's own Y*X*Z order. Written
+ * out with the y turned by half and the x negated, that product is
+ *
+ *     Rz(-z) * Rx(x) * Ry(180) * Rx(x) * Rz(z)
+ *
+ * and Rx(a) * Ry(180) * Rx(a) is diag(-1, 1, -1) for EVERY a - the x_rot
+ * negation cancels itself, which is why the effect negates it at all. With the
+ * lean z equal at both ticks the two Rz cancel as well and what is left is
+ * Ry(180): negate x and z, keep y. The level file says the same thing without
+ * any of this arithmetic - animation 205's own key 0, the frame the change
+ * skips over, carries (42,122,68), the pre-flip offset, against key 1's
+ * (-45,122,-67): the authors wrote the two as the same world point, three
+ * units apart, and the flip is the whole of the difference.
+ *
+ * THE LEAN IS THE ONE TERM LEFT, and it is written down rather than built: a
+ * z_rot of z leaves Rz(-z) * Ry(180) * Rz(z), which turns the x/y pair by 2z
+ * on top of the flip. Nothing here can repair that, because the ANIMATION
+ * itself was authored without it - at thirty hertz the same 2z sits between
+ * the two ticks' pictures. Blending the turned offset reproduces both ends of
+ * vanilla's own step; inventing a lean correction would move the picture away
+ * from the one thirty hertz draws.
+ *
+ * THE IDEA IS TODESENGEL'S, re-derived and not taken: TROne (GPLv3,
+ * github.com/todesengel1931) interpolates whole node MATRICES and blends the
+ * previous frame expressed in the CURRENT one, so a translation is never split
+ * from the rotation it belongs to and a flip cannot come apart. This engine
+ * blends Euler angles and a separate root offset, so the "express it in the
+ * current frame" step has to be done by hand - and for half a turn it is two
+ * signs. Nothing of that source is in this file. */
+inline void InterpRootFlip(const long in[3], long out[3])
+{
+	out[0] = -in[0];
+	out[1] = in[1];
+	out[2] = -in[2];
+}
+
 
 /* ==========================================================================
  * ORDER 4 - THE PAIR A MATRIX BLEND CANNOT SURVIVE (#148; #123 fix round S, S2)

@@ -225,6 +225,14 @@ namespace
 	// read without it, so it needs no clearing of its own.
 	long g_rootPrev[MAX_ITEMS][3];
 
+	/* AND WHETHER THAT OFFSET IS STILL IN THIS TICK'S FRAME (#169). Answered
+	 * in the same walk as g_poseOk and one line after it, because only there
+	 * are the two ticks' rotations both to hand - by the draw, the live one
+	 * has been blended over. Written for every slot the walk lets through, so
+	 * like g_rootPrev it cannot be read stale: a slot at POSE_ROOT is a slot
+	 * that reached that line this frame. See InterpRootFlip. */
+	unsigned char g_rootFlip[MAX_ITEMS];
+
 	// Lara's pose is built two or three times a frame and counted once.
 	bool g_laraPosed = false;
 
@@ -385,6 +393,10 @@ namespace
 	 * is what the ladder really reads and a mean of that rounds to 0.0. */
 	int g_secRootFix = 0;
 	int g_secRootLines = 0;		// ... and how many of them wrote Lara's line
+	/* #169: and of those, the ones whose previous offset had to be turned by
+	 * a half turn first. A count as well, for the same reason: turn180_effect
+	 * fires once per roll. */
+	int g_secRootFlip = 0;
 	/* Fix round U (U2): the worst a bone was shortened by the pose blend
 	 * this second, in hundredths, with the node, the animation and the frame
 	 * it was on. 100 is a rigid pose and is what a second with no tween frame
@@ -861,7 +873,20 @@ namespace
 	 *                   kind that is plainly on screen and missing from this
 	 *                   mask simply looks like thirty hertz, which is what it
 	 *                   is. Standing in the rain with no 0040 bit is a bug;
-	 *                   no 2000 bit in a level with no rope in it is not. */
+	 *                   no 2000 bit in a level with no rope in it is not.
+ *
+ * AND ROUND 161a3 ADDS ONE (#169):
+ *
+ *   root_flip    of the root_fix frames, the ones whose PREVIOUS offset was
+ *                half a turn behind the frame it was handed to and had to be
+ *                turned into it first - the underwater roll's animation
+ *                change, where turn180_effect fires on the very frame the
+ *                change lands on. It is a subset of root_fix and it should
+ *                read one per roll: `halfturn=` beside it counts the same
+ *                ticks from the rotation's side, so a second with halfturn
+ *                and no root_flip is a flip whose animation did not change
+ *                with it, which is what the other six turn180 animations do.
+ *                Lara's `root` line prints the turned offset as `turned=`. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -873,7 +898,7 @@ namespace
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
-				"particles=%.1f particle_kinds=%04lx",
+				"particles=%.1f particle_kinds=%04lx root_flip=%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -894,7 +919,8 @@ namespace
 				g_secArm, g_secArmSkip, g_secTween,
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
-				(double)g_secParticles / g_secFrames, g_secPartKinds);
+				(double)g_secParticles / g_secFrames, g_secPartKinds,
+				g_secRootFlip);
 
 		/* TICKLOG - order 3's own proof, and the one the user reads.
 		 *
@@ -949,6 +975,7 @@ namespace
 		g_secLaraPose = 0;
 		g_secRootFix = 0;
 		g_secRootLines = 0;
+		g_secRootFlip = 0;
 		g_secArm = 0;
 		g_secArmSkip = 0;
 		g_secStretch = 100;
@@ -1525,6 +1552,13 @@ void InterpBeginFrame(float alpha)
 		 * exactly the case where the pose is all there is to interpolate. */
 		g_poseOk[i] = 1;
 
+		/* #169: and the same pair answers the root's question while it still
+		 * can - ApplyNode is about to write the blend over item->pos. The test
+		 * is ApplyNode's own, so the two always agree: a rotation that keeps
+		 * the live value is a rotation the previous tick's root offset is half
+		 * a turn behind. */
+		g_rootFlip[i] = (unsigned char)InterpHalfTurn(n->yr, item->pos.y_rot);
+
 		if (!NodeMoved(n, &item->pos))
 			continue;
 
@@ -2049,11 +2083,25 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 
 	/* WHAT THIS TICK'S OWN FRAME IS DRAWN WITH, by vanilla's arithmetic and
 	 * from the pair GetFramesNow left behind, and then the two ticks blended
-	 * in TIME at the factor everything else on this frame is drawn at. */
-	long cur[3], blended[3];
+	 * in TIME at the factor everything else on this frame is drawn at.
+	 *
+	 * #169: THE PREVIOUS OFFSET IS PUT INTO THIS TICK'S FRAME FIRST, and on
+	 * every tick but a half turn that is a copy - the walk has already said
+	 * which this is. See InterpRootFlip (game\interpolate_math.h) for the
+	 * arithmetic and for what the underwater roll measured. */
+	long prev[3], cur[3], blended[3];
+
+	if (g_rootFlip[i])
+		InterpRootFlip(g_rootPrev[i], prev);
+	else
+	{
+		prev[0] = g_rootPrev[i][0];
+		prev[1] = g_rootPrev[i][1];
+		prev[2] = g_rootPrev[i][2];
+	}
 
 	InterpRootKey(frm[0], frm[1], frac, blend, cur);
-	InterpRootLerp(g_rootPrev[i], cur, g_alpha, blended);
+	InterpRootLerp(prev, cur, g_alpha, blended);
 
 	/* AND THE DRAW IS ONLY TOLD WHERE THE BLEND LANDS SOMEWHERE ELSE (#157,
 	 * fix round).
@@ -2100,6 +2148,9 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 
 		g_secRootFix++;
 
+		if (g_rootFlip[i])
+			g_secRootFlip++;
+
 		/* ONE LINE FOR LARA, AND AT MOST FOUR A SECOND. The counter above
 		 * says how often the rule fired; this says what it did with the
 		 * numbers, so that the user's next log can be held against the table
@@ -2114,13 +2165,15 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 		{
 			g_secRootLines++;
 			Log("INTERPLOG root lara anim %d->%d frame %d->%d "
-				"offset_prev=(%d,%d,%d) offset_cur=(%d,%d,%d) drawn=(%d,%d,%d) pos_y=%d",
+				"offset_prev=(%d,%d,%d) offset_cur=(%d,%d,%d) drawn=(%d,%d,%d) pos_y=%d"
+				" flip=%d turned=(%d,%d,%d)",
 				(int)g_prevItem[i].anim, (int)item->anim_number,
 				(int)g_prevItem[i].frame, (int)item->frame_number,
 				(int)g_rootPrev[i][0], (int)g_rootPrev[i][1], (int)g_rootPrev[i][2],
 				(int)cur[0], (int)cur[1], (int)cur[2],
 				(int)out[0], (int)out[1], (int)out[2],
-				(int)item->pos.y_pos);
+				(int)item->pos.y_pos,
+				(int)g_rootFlip[i], (int)prev[0], (int)prev[1], (int)prev[2]);
 		}
 	}
 

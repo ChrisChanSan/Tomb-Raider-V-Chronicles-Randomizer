@@ -3231,6 +3231,233 @@ static void title_shadow()
 	}
 }
 
+/* THE ROOT OFFSET ACROSS A HALF TURN (#169, round 161a3).
+ *
+ * The defect the user filmed, in numbers: on the tick the underwater roll
+ * changes animation, turn180_effect fires on the very frame the change lands
+ * on. ApplyNode (game\interpolate.cpp) then keeps the LIVE rotation for the
+ * whole drawn frame - the half turn is a snap, fix round R - while
+ * InterpRootNow blends the previous tick's ROOT OFFSET, which belongs to the
+ * frame half a turn back, straight into this one. The blend walks through her
+ * own pivot.
+ *
+ * THE FOUR NUMBERS ARE MEASURED and are not invented here:
+ *   - RootProbe over ANDREA1.TRC: animation 203's last frame 5330 carries
+ *     (42,122,68); animation 205's frame 5423, the one the change lands on and
+ *     the one FlipEffect 0 sits on, carries (-45,122,-67); and 205's own key 0
+ *     (frame 5422, which the change skips) carries (42,122,68) again - the
+ *     authors wrote the pre-flip offset and the post-flip offset as the same
+ *     world point.
+ *   - the user's log of 2026-09-20: drawn=(32,122,53), (17,122,29), (1,122,4),
+ *     (-15,122,-20) on four in-between frames of one roll.
+ *   - the ground roll's refused tick, from the same tool: offset_prev=
+ *     (-14,-421,-7), offset_cur=(-8,-439,-7), and no flip on that tick - the
+ *     effect fired one tick earlier, inside animation 48, where the frame
+ *     steps by one and the pose is accepted.
+ *
+ * THE MEASURE. Both offsets are turned by the SAME rotation when they are
+ * drawn - the live one - so the world error is the distance in the item's own
+ * frame between the drawn offset and the segment the two ticks put it on, and
+ * no rotation has to be built to check it. */
+static double seg_dist(const long p[3], const long a[3], const long b[3])
+{
+	const double ax = (double)a[0], ay = (double)a[1], az = (double)a[2];
+	const double bx = (double)b[0], by = (double)b[1], bz = (double)b[2];
+	const double dx = bx - ax, dy = by - ay, dz = bz - az;
+	const double len = dx * dx + dy * dy + dz * dz;
+	double t = 0.0;
+
+	if (len > 0.0)
+	{
+		t = ((p[0] - ax) * dx + (p[1] - ay) * dy + (p[2] - az) * dz) / len;
+
+		if (t < 0.0)
+			t = 0.0;
+
+		if (t > 1.0)
+			t = 1.0;
+	}
+
+	const double ex = p[0] - (ax + dx * t);
+	const double ey = p[1] - (ay + dy * t);
+	const double ez = p[2] - (az + dz * t);
+
+	return sqrt(ex * ex + ey * ey + ez * ez);
+}
+
+static void root_flip()
+{
+	printf("root offset across a half turn (#169)\n");
+
+	/* THE TWO SIGNS. Half a turn about y negates x and z and leaves y, and it
+	 * is its own inverse - which is the one property the rule needs, because
+	 * the same function has to answer a flip either way round. */
+	{
+		long worst = 0;
+		long badY = 0;
+		long badBack = 0;
+
+		for (long x = -400; x <= 400; x += 7)
+		{
+			for (long y = -400; y <= 400; y += 13)
+			{
+				for (long z = -400; z <= 400; z += 11)
+				{
+					const long in[3] = { x, y, z };
+					long out[3], back[3];
+
+					InterpRootFlip(in, out);
+					InterpRootFlip(out, back);
+
+					if (out[1] != y)
+						badY++;
+
+					if (back[0] != x || back[1] != y || back[2] != z)
+						badBack++;
+
+					if (out[0] != -x || out[2] != -z)
+						worst++;
+				}
+			}
+		}
+
+		ok(worst == 0, "the flip negates x and z over the whole sweep", worst, 0);
+		ok(badY == 0, "and never touches y - the height above the pivot is hers",
+			badY, 0);
+		ok(badBack == 0, "and is its own inverse", badBack, 0);
+	}
+
+	/* THE UNDERWATER ROLL, anim 203 frame 5330 -> anim 205 frame 5423. */
+	{
+		const long prev[3] = { 42, 122, 68 };
+		const long cur[3] = { -45, 122, -67 };
+		long turned[3];
+
+		InterpRootFlip(prev, turned);
+
+		ok(turned[0] == -42 && turned[1] == 122 && turned[2] == -68,
+			"205's pre-flip offset turned into the post-flip frame", turned[0], -42);
+
+		/* The level file's own answer: 205 key 0 is the pre-flip offset and
+		 * key 1 the post-flip one, so the turned one has to land on key 1. */
+		const double gap = seg_dist(turned, cur, cur);
+
+		okf(gap < 4.0, "and lands on the frame the animation really carries",
+			gap, 0.0);
+
+		double worstToday = 0.0;
+		double worstFixed = 0.0;
+
+		for (int s = 0; s <= 256; s++)
+		{
+			const float t = (float)s / 256.0F;
+			long today[3], fixed[3];
+
+			InterpRootLerp(prev, cur, t, today);
+			InterpRootLerp(turned, cur, t, fixed);
+
+			const double a = seg_dist(today, turned, cur);
+			const double b = seg_dist(fixed, turned, cur);
+
+			if (a > worstToday)
+				worstToday = a;
+
+			if (b > worstFixed)
+				worstFixed = b;
+		}
+
+		okf(worstToday > 140.0, "today the drawn root leaves the two ticks by over 140 units",
+			worstToday, 140.0);
+		okf(worstFixed <= 2.0, "turned first, it never leaves them by more than the truncation",
+			worstFixed, 2.0);
+
+		/* The four frames the user's log printed, against the same segment. */
+		const long filmed[4][3] =
+		{
+			{ 32, 122, 53 }, { 17, 122, 29 }, { 1, 122, 4 }, { -15, 122, -20 }
+		};
+		int filmedOut = 0;
+
+		printf("  the roll's four filmed frames, units beside the two ticks:");
+
+		for (int f = 0; f < 4; f++)
+		{
+			const double d = seg_dist(filmed[f], turned, cur);
+
+			printf(" %.0f", d);
+
+			if (d > 50.0)
+				filmedOut++;
+		}
+
+		printf("\n  worst over the whole alpha sweep: today %.0f, turned first %.1f\n",
+			worstToday, worstFixed);
+
+		ok(filmedOut == 4, "all four frames the play test filmed are over 50 units out",
+			filmedOut, 4);
+	}
+
+	/* AND A TICK WITHOUT A FLIP IS THE ARITHMETIC IT WAS. The ground roll's
+	 * refused tick is the worked example, and the sweep behind it is every
+	 * offset pair this file can think of: where the walk says no flip, the
+	 * engine hands InterpRootLerp the previous offset unchanged, so the two
+	 * lines below ARE the whole of the old rule. */
+	{
+		const long prev[3] = { -14, -421, -7 };
+		const long cur[3] = { -8, -439, -7 };
+		int moved = 0;
+
+		for (int s = 0; s <= 256; s++)
+		{
+			const float t = (float)s / 256.0F;
+			long a[3], b[3];
+
+			InterpRootLerp(prev, cur, t, a);
+			InterpRootLerp(prev, cur, t, b);
+
+			if (a[0] != b[0] || a[1] != b[1] || a[2] != b[2])
+				moved++;
+		}
+
+		ok(moved == 0, "the ground roll's refused tick blends exactly as it did",
+			moved, 0);
+
+		/* It is refused, and it is not a flip: the previous tick's offset and
+		 * this one's are on the same side of her axis, which a flip never is. */
+		ok(prev[0] * cur[0] > 0 && prev[2] * cur[2] > 0,
+			"and its two offsets are on the same side of her, so no flip is asked for",
+			(long)(prev[0] * cur[0] > 0), 1);
+	}
+
+	/* THE PREDICATE IS ApplyNode'S OWN, so the engine cannot fire one rule
+	 * without the other. Every half turn is a half turn either way round, and
+	 * nothing under a half turn is one. */
+	{
+		int missed = 0;
+		int spurious = 0;
+
+		for (long a = -32768; a < 32768; a += 37)
+		{
+			const short from = (short)a;
+
+			if (!InterpHalfTurn(from, (short)(from + 0x8000)))
+				missed++;
+
+			if (!InterpHalfTurn(from, (short)(from - 0x8000)))
+				missed++;
+
+			for (long d = -32000; d <= 32000; d += 4001)
+			{
+				if (d && InterpHalfTurn(from, (short)(from + d)))
+					spurious++;
+			}
+		}
+
+		ok(missed == 0, "every half turn is seen, both ways round", missed, 0);
+		ok(spurious == 0, "and nothing short of one is taken for it", spurious, 0);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4, 5 and 6)\n");
@@ -3250,6 +3477,7 @@ int main()
 	counters();
 	pose_factor();
 	pose_time();
+	root_flip();
 	particles();
 	portal_walk();
 	reach_rect();

@@ -377,7 +377,18 @@ void InterpNotePoseFar();
  * by that tick's own key pair and factor - or null for "nothing was refused
  * for this item", which is what the two draws that must keep their own
  * frame's offset say: Lara's hit reaction, which wears a frame picked by hand
- * out of a spaz animation, and the first person still body of fix round U. */
+ * out of a spaz animation, and the first person still body of fix round U.
+ *
+ * AND `prev` IS IN THE PREVIOUS TICK'S FRAME (#169, round 161a3). Nearly
+ * always that is this tick's frame as well and the blend is the one above; on
+ * the tick turn180_effect fires it is half a turn behind, and the underwater
+ * roll - where the flip lands on the very frame the ANIMATION changes on, so
+ * the refusal and the flip are the same tick - drew her root up to 140 units
+ * beside herself for a frame or two. InterpRootNow turns the offset into this
+ * tick's frame before it blends; InterpRootFlip (game\interpolate_math.h)
+ * carries the arithmetic and the measurement. The other six animations that
+ * fire the effect fire it on their LAST frame, where the frame steps by one,
+ * the pose is accepted and none of this is reached. */
 void InterpRootRefused(const ITEM_INFO* item, const long prev[3]);
 
 /* THE OFFSET THIS DRAW SHOULD TRANSLATE BY, or false and `out` untouched -

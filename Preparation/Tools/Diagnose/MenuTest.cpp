@@ -1,0 +1,301 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+
+/* MenuTest - the arithmetic of the options menu, checked without a game
+ * (#161, round 161b1 step 1).
+ *
+ * Build with bmenu.bat, run with no arguments.
+ *
+ * WHY IT EXISTS. The menu's cursor used to be a one-hot bit mask shifted by
+ * hand at five call sites, and every row added above a list meant recounting a
+ * shift somewhere else - round 161a2 and round 161a2b each had to move two of
+ * them, and the comments in specific\LoadSave.cpp say what went wrong when one
+ * was missed. The arithmetic is now one header, game\menu_nav.h, and this file
+ * INCLUDES THAT HEADER rather than a copy of it - the way InterpTest.cpp
+ * includes game\interpolate_math.h. A change to the tree is a change this test
+ * sees.
+ *
+ * WHAT IT CHECKS. Every function of the header is swept over its whole small
+ * range rather than sampled, because the interesting cases are the ends: a
+ * disabled first row, a disabled last row, a page with exactly one enabled row,
+ * runs of disabled rows, a list of one and a list of none. The paging cases are
+ * named after the two lists the engine really has: sixteen keyboard roles and
+ * fifteen pad roles, and the balanced split the user asked for (8+8 and 8+7).
+ */
+
+#include <stdio.h>
+#include <string.h>
+
+#include "../../../TOMB5 Code/TOMB5/game/menu_nav.h"
+
+static int g_checks;
+static int g_fail;
+
+static void check(int got, int want, const char* what)
+{
+	g_checks++;
+
+	if (got != want)
+	{
+		g_fail++;
+		printf("FAIL %-44s got %d, want %d\n", what, got, want);
+	}
+}
+
+/* A tiny helper so a case can be written as a picture of the page: '1' is an
+ * enabled row, '.' a disabled one. */
+static int mask(const char* pic, unsigned char* out)
+{
+	int n = (int)strlen(pic);
+
+	for (int i = 0; i < n; i++)
+		out[i] = (unsigned char)(pic[i] == '1' ? 1 : 0);
+
+	return n;
+}
+
+/* ---------------------------------------------------------------- cursor -- */
+
+static void cursor_all_enabled()
+{
+	/* No mask at all is the common page: the cursor walks and stops at the
+	 * ends, exactly as base's clamp did. */
+	for (int n = 1; n <= 20; n++)
+	{
+		check(MenuCursorStep(0, n, 0, -1), 0, "step up off the top stays");
+		check(MenuCursorStep(0, n, n - 1, +1), n - 1, "step down off the bottom stays");
+
+		for (int i = 0; i < n - 1; i++)
+			check(MenuCursorStep(0, n, i, +1), i + 1, "step down");
+
+		for (int i = 1; i < n; i++)
+			check(MenuCursorStep(0, n, i, -1), i - 1, "step up");
+
+		check(MenuCursorStep(0, n, 0, 0), 0, "no direction, no move");
+		check(MenuFirstEnabled(0, n), 0, "first enabled with no mask");
+	}
+}
+
+static void cursor_disabled()
+{
+	unsigned char m[32];
+	int n;
+
+	/* First row disabled - entering the page must not land on it. */
+	n = mask(".111", m);
+	check(MenuFirstEnabled(m, n), 1, "first row disabled");
+	check(MenuCursorStep(m, n, 1, -1), 1, "up into the disabled first row stays");
+	check(MenuClampCursor(m, n, 0), 1, "clamp off the disabled first row");
+
+	/* Last row disabled. */
+	n = mask("111.", m);
+	check(MenuCursorStep(m, n, 2, +1), 2, "down into the disabled last row stays");
+	check(MenuClampCursor(m, n, 3), 2, "clamp off the disabled last row");
+
+	/* A run of disabled rows is jumped in one step, not walked into. */
+	n = mask("1...1", m);
+	check(MenuCursorStep(m, n, 0, +1), 4, "one step over three disabled rows");
+	check(MenuCursorStep(m, n, 4, -1), 0, "and back again");
+
+	/* Two consecutive, in the middle, both directions. */
+	n = mask("11..11", m);
+	check(MenuCursorStep(m, n, 1, +1), 4, "down over two disabled");
+	check(MenuCursorStep(m, n, 4, -1), 1, "up over two disabled");
+
+	/* All but one enabled - whichever one it is, the cursor cannot leave it. */
+	for (int k = 0; k < 6; k++)
+	{
+		char pic[8];
+
+		for (int i = 0; i < 6; i++)
+			pic[i] = (i == k) ? '1' : '.';
+
+		pic[6] = 0;
+		n = mask(pic, m);
+
+		check(MenuFirstEnabled(m, n), k, "the only enabled row is found");
+		check(MenuCursorStep(m, n, k, +1), k, "the only enabled row keeps the cursor (down)");
+		check(MenuCursorStep(m, n, k, -1), k, "the only enabled row keeps the cursor (up)");
+
+		for (int i = 0; i < 6; i++)
+			check(MenuClampCursor(m, n, i), k, "clamp finds the only enabled row");
+	}
+
+	/* No enabled row at all: -1 says so rather than a row number that is a
+	 * lie. MenuClampCursor has nothing to move to and says so by not moving. */
+	n = mask("....", m);
+	check(MenuFirstEnabled(m, n), -1, "a page with nothing selectable");
+	check(MenuClampCursor(m, n, 2), 2, "clamp with nothing selectable");
+
+	/* A remembered cursor from a longer visit. */
+	n = mask("1111", m);
+	check(MenuClampCursor(m, n, 9), 3, "remembered cursor past the end");
+	check(MenuClampCursor(m, n, -3), 0, "remembered cursor before the start");
+	check(MenuClampCursor(0, 0, 4), 0, "clamp on an empty page");
+	check(MenuCursorStep(0, 0, 0, +1), 0, "step on an empty page");
+	check(MenuFirstEnabled(0, 0), -1, "first enabled on an empty page");
+
+	/* The Controls page's own case, drawn as a picture: Camera speed (row 5)
+	 * is off under Tank, so the cursor jumps Control layout -> Targeting. */
+	n = mask("1111.1", m);
+	check(MenuCursorStep(m, n, 3, +1), 5, "Tank: Control layout down to Targeting");
+	check(MenuCursorStep(m, n, 5, -1), 3, "Tank: Targeting up to Control layout");
+}
+
+/* ----------------------------------------------------------------- pages -- */
+
+static void paging_engine_cases()
+{
+	/* The two lists the engine really pages, at the maximum the brief names. */
+	check(MenuPageCount(16, 13), 2, "16 keyboard roles at 13: two pages");
+	check(MenuRowsPerPage(16, 13), 8, "16 at 13: 8 per page");
+	check(MenuRowsOnPage(16, 13, 0), 8, "16 at 13: page 0 has 8");
+	check(MenuRowsOnPage(16, 13, 1), 8, "16 at 13: page 1 has 8");
+	check(MenuPageFirstRow(16, 13, 0), 0, "16 at 13: page 0 starts at 0");
+	check(MenuPageFirstRow(16, 13, 1), 8, "16 at 13: page 1 starts at 8");
+
+	check(MenuPageCount(15, 13), 2, "15 pad roles at 13: two pages");
+	check(MenuRowsPerPage(15, 13), 8, "15 at 13: 8 per page");
+	check(MenuRowsOnPage(15, 13, 0), 8, "15 at 13: page 0 has 8");
+	check(MenuRowsOnPage(15, 13, 1), 7, "15 at 13: page 1 has 7");
+	check(MenuPageFirstRow(15, 13, 1), 8, "15 at 13: page 1 starts at 8");
+
+	/* The same two lists at the maximum the frame really uses once the
+	 * centred Reset row has taken one of the twelve lines (menu_frame.h). */
+	check(MenuPageCount(16, 11), 2, "16 at 11: two pages");
+	check(MenuRowsPerPage(16, 11), 8, "16 at 11: still 8 per page");
+	check(MenuPageCount(15, 11), 2, "15 at 11: two pages");
+	check(MenuRowsPerPage(15, 11), 8, "15 at 11: still 8 per page");
+}
+
+static void paging_ends()
+{
+	check(MenuPageCount(1, 13), 1, "one row, one page");
+	check(MenuRowsPerPage(1, 13), 1, "one row per page");
+	check(MenuRowsOnPage(1, 13, 0), 1, "one row on page 0");
+	check(MenuPageFirstRow(1, 13, 0), 0, "one row starts at 0");
+
+	check(MenuPageCount(0, 13), 1, "no rows still make one page");
+	check(MenuRowsPerPage(0, 13), 0, "no rows per page");
+	check(MenuRowsOnPage(0, 13, 0), 0, "no rows on page 0");
+
+	check(MenuPageCount(13, 13), 1, "exactly the maximum is one page");
+	check(MenuRowsOnPage(13, 13, 0), 13, "exactly the maximum fits");
+	check(MenuPageCount(14, 13), 2, "one over the maximum is two pages");
+	check(MenuRowsPerPage(14, 13), 7, "14 at 13 splits 7 + 7");
+	check(MenuRowsOnPage(14, 13, 1), 7, "14 at 13: page 1 has 7");
+
+	/* A maximum of one is the degenerate page-per-row case, and a maximum of
+	 * zero or less must not divide by it. */
+	check(MenuPageCount(5, 1), 5, "max 1: one page per row");
+	check(MenuRowsPerPage(5, 1), 1, "max 1: one row per page");
+	check(MenuPageCount(5, 0), 1, "max 0 is refused, not divided by");
+	check(MenuPageCount(5, -4), 1, "a negative max likewise");
+	check(MenuRowsOnPage(16, 13, 2), 0, "a page past the end is empty");
+	check(MenuRowsOnPage(16, 13, 9), 0, "and stays empty further out");
+}
+
+static void paging_sweep()
+{
+	/* The two properties that matter, over every list and every maximum the
+	 * menu could ever hand it: the pages cover the list exactly once, and no
+	 * page is longer than the maximum. */
+	for (int max = 1; max <= 20; max++)
+	{
+		for (int n = 0; n <= 40; n++)
+		{
+			int pages = MenuPageCount(n, max);
+			int seen = 0;
+
+			check(pages >= 1, 1, "at least one page");
+
+			for (int p = 0; p < pages; p++)
+			{
+				int first = MenuPageFirstRow(n, max, p);
+				int rows = MenuRowsOnPage(n, max, p);
+
+				check(first == seen, 1, "pages follow on without a gap");
+				check(rows <= max, 1, "no page is longer than the maximum");
+				check(rows >= 0, 1, "no page has a negative length");
+				seen += rows;
+			}
+
+			check(seen, n, "the pages cover the list exactly");
+		}
+	}
+}
+
+static void page_step()
+{
+	/* Wraps in both directions - that is the one thing base's own paging did
+	 * not do. */
+	check(MenuPageStep(0, 3, +1), 1, "page forward");
+	check(MenuPageStep(1, 3, +1), 2, "page forward again");
+	check(MenuPageStep(2, 3, +1), 0, "page forward wraps");
+	check(MenuPageStep(0, 3, -1), 2, "page back wraps");
+	check(MenuPageStep(2, 3, -1), 1, "page back");
+	check(MenuPageStep(0, 1, +1), 0, "a single page goes nowhere");
+	check(MenuPageStep(0, 1, -1), 0, "a single page goes nowhere back");
+	check(MenuPageStep(0, 0, +1), 0, "no pages at all");
+
+	/* A full lap in each direction over every page count the menu can reach
+	 * ends where it started, and visits each page once. */
+	for (int pages = 1; pages <= 8; pages++)
+	{
+		int p = 0;
+		int seen[9];
+
+		memset(seen, 0, sizeof(seen));
+
+		for (int k = 0; k < pages; k++)
+		{
+			seen[p]++;
+			p = MenuPageStep(p, pages, +1);
+		}
+
+		check(p, 0, "a forward lap comes home");
+
+		for (int k = 0; k < pages; k++)
+			check(seen[k], 1, "a forward lap visits each page once");
+
+		p = 0;
+		memset(seen, 0, sizeof(seen));
+
+		for (int k = 0; k < pages; k++)
+		{
+			seen[p]++;
+			p = MenuPageStep(p, pages, -1);
+		}
+
+		check(p, 0, "a backward lap comes home");
+
+		for (int k = 0; k < pages; k++)
+			check(seen[k], 1, "a backward lap visits each page once");
+	}
+}
+
+int main()
+{
+	printf("MenuTest - game\\menu_nav.h (#161, round 161b1)\n\n");
+
+	cursor_all_enabled();
+	cursor_disabled();
+	paging_engine_cases();
+	paging_ends();
+	paging_sweep();
+	page_step();
+
+	printf("\n%d checks, %d failed\n", g_checks, g_fail);
+
+	return g_fail ? 1 : 0;
+}

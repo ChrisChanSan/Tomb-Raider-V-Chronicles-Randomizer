@@ -229,6 +229,29 @@ static void paging_engine_cases()
 	check(MenuPageCount(32, 11), 3, "Separate, cheats on: 32 rows, three pages");
 	check(MenuRowsPerPage(32, 11), 11, "32 at 11: 11 per page");
 	check(MenuRowsOnPage(32, 11, 2), 10, "32 at 11: the last page has 10");
+
+	/* AND THE PAD LIST AS ROUND 161b2d LEAVES IT (#161, item 3). It was fifteen
+	 * roles and one page-and-a-bit; it is sixteen roles with the Secondary one
+	 * only under "Separate", the Modifier, six weapons and five cheat rows only
+	 * while Cheats are on - 22, 23, 27 or 28 BODY rows, the centred Reset row
+	 * being fixed and on every page (menu_frame.cpp's `fixed`). Two pages at the
+	 * shortest and three at the other three, so "1/3" stays the widest string
+	 * the indicator of item 1 can draw anywhere in this tree. */
+	check(MenuPageCount(22, 11), 2, "pad, One key, cheats off: 22 body rows, two pages");
+	check(MenuRowsPerPage(22, 11), 11, "22 at 11: 11 per page");
+	check(MenuRowsOnPage(22, 11, 1), 11, "22 at 11: the last page has 11");
+
+	check(MenuPageCount(23, 11), 3, "pad, Separate, cheats off: 23 body rows, three pages");
+	check(MenuRowsPerPage(23, 11), 8, "23 at 11: 8 per page");
+	check(MenuRowsOnPage(23, 11, 2), 7, "23 at 11: the last page has 7");
+
+	check(MenuPageCount(27, 11), 3, "pad, One key, cheats on: 27 body rows, three pages");
+	check(MenuRowsPerPage(27, 11), 9, "27 at 11: 9 per page");
+	check(MenuRowsOnPage(27, 11, 2), 9, "27 at 11: the last page has 9");
+
+	check(MenuPageCount(28, 11), 3, "pad, Separate, cheats on: 28 body rows, three pages");
+	check(MenuRowsPerPage(28, 11), 10, "28 at 11: 10 per page");
+	check(MenuRowsOnPage(28, 11, 2), 8, "28 at 11: the last page has 8");
 }
 
 static void paging_ends()
@@ -624,8 +647,9 @@ static void pad_seat()
 	long parked[JOY_ROLES];
 	int seated, i;
 
-	check(JOY_ROLES, 16, "sixteen pad roles");
-	check(JOY_ROLE_SECOND, JOY_ROLES - 1, "the Secondary role is the last pad slot");
+	// The count and the Secondary slot moved to pad_role_slots() with round
+	// 161b2d (item 3): the Secondary role is no longer the last of them, so
+	// "the last slot" stopped being a way to say 15.
 
 	// Asking for the setting already seated moves nothing - the Action row and
 	// the startup seat both call it and neither may double-swap.
@@ -670,6 +694,206 @@ static void pad_seat()
 		check((int)active[i], (int)kPadSep[i], "and it really swapped");
 }
 
+/* THE PAD'S TWELVE NEW ROLES AND THE ONE RULE THAT READS THEM (#161, round
+ * 161b2d, item 3). The numbers are checked here for the reason KEY_ROLE_SECOND
+ * is: they are what the registry addresses a stored binding by, so a slot that
+ * moved would be a player's binding that moved with it. */
+static void pad_role_slots(void)
+{
+	check(JOY_ROLES, 28, "twenty-eight pad roles");
+	check(JOY_ROLE_SECOND, 15, "the Secondary pad role is still slot 15");
+	check(JOY_ROLE_MODIFIER, 16, "the Modifier is slot 16");
+	check(JOY_ROLE_WEAPON_FIRST, 17, "the pad's weapon hotkeys start at 17");
+	check(JOY_ROLE_WEAPONS, 6, "and there are six of them");
+	check(JOY_ROLE_CHEAT_FLY, 23, "fly mode is slot 23");
+	check(JOY_ROLE_CHEAT_GUNS, 24, "all weapons is slot 24");
+	check(JOY_ROLE_CHEAT_ITEMS, 25, "all items is slot 25");
+	check(JOY_ROLE_CHEAT_HEAL, 26, "heal is slot 26");
+	check(JOY_ROLE_CHEAT_SKIP, 27, "skip level is slot 27");
+	check(JOY_ROLE_CHEAT_SKIP, JOY_ROLES - 1, "and the cheats are the last of the roles");
+	check(JOY_ROLE_WEAPON_FIRST + JOY_ROLE_WEAPONS, JOY_ROLE_CHEAT_FLY, "the weapons end where the cheats begin");
+	check(JOY_BIT_MAX, 23, "23 is the highest bit either joystick path writes");
+}
+
+/* THE CHORD RULE, SWEPT RATHER THAN SAMPLED. The two ends are the interesting
+ * cases here as everywhere else in this file: an unbound role, an unbound
+ * Modifier, and the Modifier's own button. */
+static void pad_chord_rule(void)
+{
+	long bit, other;
+
+	// PadBitDown closes both ends of the shift. -1 is the unbound row and has
+	// to answer no; so does anything above the highest bit the pad writes,
+	// because a binding comes out of the registry and is a number, not a
+	// promise.
+	for (bit = -2; bit <= JOY_BIT_MAX + 2; bit++)
+		check(PadBitDown(0xFFFFFFFFUL, bit), (bit >= 0 && bit <= JOY_BIT_MAX) ? 1 : 0,
+			"PadBitDown answers only for a real button");
+
+	/* WITH NO MODIFIER BOUND THE RULE IS THE EXPRESSION IT REPLACED. This is
+	 * the round's byte-identity argument as a test: for every button, a plain
+	 * role fires exactly when its own button is down and nothing else does,
+	 * which is what Key(jLayout[n] + 256) answered. */
+	for (bit = 0; bit <= JOY_BIT_MAX; bit++)
+	{
+		const unsigned long fire = 1UL << bit;
+
+		for (other = 0; other <= JOY_BIT_MAX; other++)
+			check(PadRoleFires(fire, other, 0, -1), other == bit ? 1 : 0,
+				"no Modifier: a plain role is its own button");
+
+		check(PadRoleFires(fire, bit, 1, -1), 0, "no Modifier: no chord can fire");
+		check(PadRoleFires(fire, -1, 0, -1), 0, "no Modifier: an unbound role fires nothing");
+		check(PadRoleFires(fire, -1, 1, -1), 0, "no Modifier: nor an unbound chord");
+	}
+
+	/* And with one bound - bit 13, the touchpad click, which is where the two
+	 * DirectInput-numbered Separate rows put it. R3 is bit 11 there. */
+	{
+		const long m = 13;
+		const unsigned long modonly = 1UL << m;
+		const unsigned long plain = 1UL << 11;
+		const unsigned long pair = modonly | plain;
+
+		check(PadRoleFires(plain, 11, 0, m), 1, "plain R3 fires on its own");
+		check(PadRoleFires(plain, 11, 1, m), 0, "Modifier+R3 needs the Modifier");
+		check(PadRoleFires(pair, 11, 1, m), 1, "Modifier+R3 fires with it");
+		check(PadRoleFires(pair, 11, 0, m), 0, "and plain R3 stands aside while it does");
+		check(PadRoleFires(modonly, 11, 0, m), 0, "the Modifier alone fires no plain role");
+		check(PadRoleFires(modonly, 11, 1, m), 0, "and no chord either");
+		check(PadRoleFires(modonly, m, 0, m), 0, "the Modifier's own button is no role's trigger");
+		check(PadRoleFires(modonly, m, 1, m), 0, "plain or chord");
+		check(PadRoleFires(0, 11, 0, m), 0, "nothing down, nothing fires");
+		check(PadRoleFires(0, 11, 1, m), 0, "either way");
+	}
+}
+
+/* THE EIGHT DEFAULT TABLES, AGAINST THE ONE RULE THEY ALL HAVE TO KEEP (#161,
+ * round 161b2d, item 3): no two roles on one PAIR, and no plain role on the
+ * Modifier's own button.
+ *
+ * The four Separate rows are the engine's, through the macros of
+ * game\pad_scheme.h - this file instantiates what specific\input.cpp
+ * instantiates, so the check runs on the row a player really gets. */
+static const long kSepPS5DInput[JOY_ROLES] = JOY_SEP_PS5_DINPUT;
+static const long kSepPS5XInput[JOY_ROLES] = JOY_SEP_PS5_XINPUT;
+static const long kSepXbox[JOY_ROLES] = JOY_SEP_XBOX;
+static const long kSepGeneric[JOY_ROLES] = JOY_SEP_GENERIC;
+
+static void pad_table_sound(const long* row, long chord, int modern, const char* what)
+{
+	long t[JOY_ROLES];
+	long i, k;
+
+	for (i = 0; i < JOY_ROLES; i++)
+		t[i] = row[i];
+
+	// JoyDefaultRecord's own Modern override, in one place there and in one
+	// place here: the medipacks move to the d-pad's own bits (the user's
+	// decision 8, round 161a2 step 3).
+	if (modern)
+	{
+		t[13] = 20;
+		t[14] = 21;
+	}
+
+	// A chord mask with no Modifier to chord against would be twelve bindings
+	// that can never fire.
+	check(chord != 0 && t[JOY_ROLE_MODIFIER] < 0 ? 1 : 0, 0, what);
+	// The Modifier is always plain - it is the thing a chord is held with.
+	check((int)((chord >> JOY_ROLE_MODIFIER) & 1), 0, what);
+
+	for (i = 0; i < JOY_ROLES; i++)
+	{
+		if (t[i] < 0)
+		{
+			// An unbound role carries no flag either, or a Reset would hand
+			// back a chord on nothing.
+			check((int)((chord >> i) & 1), 0, what);
+			continue;
+		}
+
+		check(t[i] <= JOY_BIT_MAX ? 1 : 0, 1, what);
+
+		// Nothing plain sits on the Modifier's button: its own press would
+		// hold the Modifier down, so the role could never fire.
+		if (i != JOY_ROLE_MODIFIER)
+			check(t[i] == t[JOY_ROLE_MODIFIER] ? 1 : 0, 0, what);
+
+		// And no two roles share a pair. R3 and Modifier+R3 are two pairs and
+		// are allowed to coexist - that is the second term.
+		for (k = i + 1; k < JOY_ROLES; k++)
+			check(t[k] == t[i] && ((chord >> k) & 1) == ((chord >> i) & 1) ? 1 : 0, 0, what);
+	}
+}
+
+static void pad_default_tables(void)
+{
+	long one[JOY_ROLES];
+	long i;
+
+	pad_table_sound(kSepPS5DInput, JOY_SEP_CHORD_DINPUT, 0, "Separate PS5 DirectInput, Tank");
+	pad_table_sound(kSepPS5DInput, JOY_SEP_CHORD_DINPUT, 1, "Separate PS5 DirectInput, Modern");
+	pad_table_sound(kSepGeneric, JOY_SEP_CHORD_DINPUT, 0, "Separate generic, Tank");
+	pad_table_sound(kSepGeneric, JOY_SEP_CHORD_DINPUT, 1, "Separate generic, Modern");
+	pad_table_sound(kSepPS5XInput, JOY_SEP_CHORD_XINPUT, 0, "Separate PS5 XInput, Tank");
+	pad_table_sound(kSepPS5XInput, JOY_SEP_CHORD_XINPUT, 1, "Separate PS5 XInput, Modern");
+	pad_table_sound(kSepXbox, JOY_SEP_CHORD_XINPUT, 0, "Separate Xbox, Tank");
+	pad_table_sound(kSepXbox, JOY_SEP_CHORD_XINPUT, 1, "Separate Xbox, Modern");
+
+	/* AND THE FOUR ONE-KEY ROWS BY THE CONSTRUCTION THAT BUILDS THEM. They
+	 * themselves are fifteen entries in specific\input.cpp and this round does
+	 * not touch them - the user's decision of 2026-09-16 keeps them as our pad
+	 * layout - so what there is to check is what JoyDefaultRecord puts BEHIND
+	 * them at "One key": every role from the Secondary on unbound, and a chord
+	 * mask of 0. With no Modifier bound the last two of the rules above are
+	 * vacuous, which is the point: at One key no chord can exist at all. The
+	 * fifteen here stand in for whichever row the pad is on. */
+	for (i = 0; i < 15; i++)
+		one[i] = i;
+
+	for (i = 15; i < JOY_ROLES; i++)
+		one[i] = -1;
+
+	check((int)one[JOY_ROLE_MODIFIER], -1, "One key: no Modifier on any path");
+	pad_table_sound(one, 0, 0, "One key, Tank");
+	pad_table_sound(one, 0, 1, "One key, Modern");
+
+	/* THE USER'S OWN SECOND BINDING PAGE, DECODED. The four Separate tables are
+	 * bit indices; these are the seven pairs he wrote down, read back out of
+	 * the DirectInput row by name (specific\input.cpp names the bits: 0 Square,
+	 * 1 Cross, 2 Circle, 3 Triangle, 5 R1, 10 L3, 11 R3, 13 Touchpad). */
+	check((int)kSepPS5DInput[JOY_ROLE_MODIFIER], 13, "Modifier = the touchpad click");
+	check((int)kSepPS5DInput[11], 11, "quick save on R3");
+	check((int)kSepPS5DInput[12], 10, "quick load on L3");
+	check((int)kSepPS5DInput[6], 5, "flare on R1");
+	check((int)kSepPS5DInput[JOY_ROLE_WEAPON_FIRST + 0], 1, "pistols on Cross");
+	check((int)kSepPS5DInput[JOY_ROLE_WEAPON_FIRST + 1], 2, "shotgun on Circle");
+	check((int)kSepPS5DInput[JOY_ROLE_WEAPON_FIRST + 2], 3, "uzi on Triangle");
+	check((int)kSepPS5DInput[JOY_ROLE_WEAPON_FIRST + 3], 0, "revolver on Square");
+
+	for (i = 0; i < JOY_ROLES; i++)
+	{
+		const int want = (i == 6 || i == 11 || i == 12 ||
+			(i >= JOY_ROLE_WEAPON_FIRST && i < JOY_ROLE_WEAPON_FIRST + 4)) ? 1 : 0;
+
+		check((int)((JOY_SEP_CHORD_DINPUT >> i) & 1), want, "and all seven of them are chords");
+		check((int)((JOY_SEP_CHORD_XINPUT >> i) & 1), 0, "the XInput rows have no chord at all");
+	}
+
+	// The medipacks are a pair and both go: the small one sat on bit 13, which
+	// is the Modifier's button now. 0 and 9 still work, and under Modern the
+	// override above puts them back on the d-pad.
+	check((int)kSepPS5DInput[13], -1, "Separate DirectInput: small medipack unbound");
+	check((int)kSepPS5DInput[14], -1, "and the large one with it");
+	// The two XInput rows keep the 161b2c defaults whole: no spare button, so
+	// no Modifier and no chord.
+	check((int)kSepXbox[JOY_ROLE_MODIFIER], -1, "Separate Xbox: no Modifier");
+	check((int)kSepXbox[6], 5, "so the flare stays a plain R1");
+	check((int)kSepXbox[13], 18, "and the medipacks stay where they were");
+	check((int)kSepXbox[14], 19, "both of them");
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h (#161, rounds 161b1, 161b2a, 161b2c and 161b2d)\n\n");
@@ -688,6 +912,9 @@ int main()
 	key_conflicts_inert();
 	key_seat();
 	pad_seat();
+	pad_role_slots();
+	pad_chord_rule();
+	pad_default_tables();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

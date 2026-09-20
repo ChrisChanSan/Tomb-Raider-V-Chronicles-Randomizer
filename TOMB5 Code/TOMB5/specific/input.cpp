@@ -129,7 +129,11 @@ const char* GermanKeyboard[272] =
 static const char* JoyNamesPS5DInput[24] =
 {
 	"Square", "Cross", "Circle", "Triangle", "L1", "R1", "L2", "R2",
-	"Share", "Options", "L3", "R3", "PS Button", "Joy 14", "Joy 15", "Joy 16",
+	// "Touchpad" and not "Joy 14" since round 161b2d (#161, item 3): bit 13 is
+	// the DualSense's touchpad CLICK on this path, and it is the Modifier's
+	// own default there, so the binding page has to be able to name it. Bit 14
+	// is the mute button and stays a number - nothing binds it.
+	"Share", "Options", "L3", "R3", "PS Button", "Touchpad", "Joy 15", "Joy 16",
 	JOYNAME_STICK, JOYNAME_DPAD
 };
 
@@ -215,11 +219,20 @@ static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 
  * action - added at the end, which is the entry those tables have no business
  * carrying (JoyDefaultRecord). The medipacks (13, 14) are what the One-key
  * tables give them for this page, so that decision 8's move to the d-pad under
- * Modern keeps happening in one place and not in five. */
-static const long jSepPS5DInput[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 12, -1, 13, 14, 7 };
-static const long jSepPS5XInput[JOY_ROLES] = { 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, -1, -1, 18, 19, 11 };
-static const long jSepXbox[JOY_ROLES] = { 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, -1, -1, 18, 19, 11 };
-static const long jSepGeneric[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 12, -1, 13, 14, 7 };
+ * Modern keeps happening in one place and not in five.
+ *
+ * AND THE ROWS THEMSELVES MOVED INTO game\pad_scheme.h WITH ROUND 161b2d
+ * (item 3), twelve entries longer and with a chord mask each. They are the same
+ * bargain the Modern keyboard row struck in 161b2a: the header holds the
+ * numbers, this file instantiates them, and Preparation\Tools\Diagnose\MenuTest
+ * instantiates the very same macros - so the table check that proves no two
+ * roles share a pair runs on the rows a player really gets. The four ONE-KEY
+ * tables above are untouched and stay here: nothing of this round reaches
+ * them. */
+static const long jSepPS5DInput[JOY_ROLES] = JOY_SEP_PS5_DINPUT;
+static const long jSepPS5XInput[JOY_ROLES] = JOY_SEP_PS5_XINPUT;
+static const long jSepXbox[JOY_ROLES] = JOY_SEP_XBOX;
+static const long jSepGeneric[JOY_ROLES] = JOY_SEP_GENERIC;
 
 /* THE BITS A SCHEME CANNOT HONOUR (#161, round 161a2, fix round - the
  * skeptical review's second finding). Each scheme takes one group of four
@@ -241,14 +254,37 @@ static const long jSepGeneric[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 
  * jLayout[0..14] and nothing else), so the table on disk belongs to whichever
  * scheme was active when it was written - and a table written by Tank, or by a
  * build older than this round, can reach a Modern player with the medipacks
- * still on the right stick. This is what notices. */
+ * still on the right stick. This is what notices.
+ *
+ * (Since round 161b2c the registry keeps TWO tables, J* and SJ*, and since
+ * round 161b2d a chord mask beside each; what is still not kept is which
+ * control scheme wrote them, which is the sentence above and is unchanged.) */
 static long joy_scheme_seated = -1;
 
-/* ONE PLACE THAT PRODUCES A 16-ROLE RECORD, for either scheme AND either Action
- * setting (`split`, round 161b2c item 3 - 0 One key, 1 Separate). The active
- * style's own table is the source in all four cases, so the roles no decision
- * ever asked to change cannot drift apart. */
-static void JoyDefaultRecord(long modern, long split, long* out)
+/* THE CHORD FLAGS, ONE BIT PER ROLE, ONE LONG PER SET (#161, round 161b2d,
+ * item 3). `jChord` belongs to whichever Action setting is seated in jLayout and
+ * `jSplitParkedChord` to the one parked in jSplitParked, exactly as the two
+ * binding arrays do; ApplyJoySplit exchanges the pair in the same breath it
+ * exchanges the arrays.
+ *
+ * WHY BESIDE THE BUTTON AND NOT INSIDE IT. A binding is a bit index, and the
+ * registry value must stay a plain button number - the accepted 161b2c build
+ * reads JDck..JSec and SJDck..SJSec and would take an encoded flag for a
+ * button. So the flags get names of their own ("JChord", "SJChord") that older
+ * builds do not look for, and a registry written here loads there unharmed.
+ *
+ * Twenty-eight roles in thirty-two bits, so one long says it all. The starting
+ * values are the One-key ones - no chord - for the same reason jLayout's
+ * initialiser is the One-key table: LoadSettings overwrites both before the
+ * first frame. */
+static long jChord = 0;
+static long jSplitParkedChord = JOY_SEP_CHORD_DINPUT;
+
+/* ONE PLACE THAT PRODUCES A 28-ROLE RECORD AND ITS CHORD MASK, for either
+ * scheme AND either Action setting (`split`, round 161b2c item 3 - 0 One key,
+ * 1 Separate). The active style's own table is the source in all four cases, so
+ * the roles no decision ever asked to change cannot drift apart. */
+static void JoyDefaultRecord(long modern, long split, long* out, long* chord)
 {
 	const long* source;
 
@@ -269,25 +305,37 @@ static void JoyDefaultRecord(long modern, long split, long* out)
 		break;
 	}
 
+	/* THE CHORD MASK IS THE SOURCE TABLE'S OWN (#161, round 161b2d, item 3),
+	 * chosen by exactly the switch above rather than by a second one: only the
+	 * two DirectInput-numbered Separate rows have a Modifier to chord against,
+	 * and at One key there is nothing to chord at all. The One-key branch is 0,
+	 * which is what "all twelve unbound on every path" means for the flags. */
+	if (!split)
+		*chord = 0;
+	else if (source == jSepPS5DInput || source == jSepGeneric)
+		*chord = JOY_SEP_CHORD_DINPUT;
+	else
+		*chord = JOY_SEP_CHORD_XINPUT;
+
 	// Fifteen and not JOY_ROLES: that is the length the One-key tables have,
-	// and the sixteenth entry is read one statement down, where it is known to
-	// exist.
+	// and everything behind it is read one statement down, where the two cases
+	// are told apart.
 	for (int i = 0; i < 15; i++)
 		out[i] = source[i];
 
 	/* THE SECONDARY ROLE HAS NO DEFAULT AT "ONE KEY" (#161, round 161b2c,
-	 * item 2). The four One-key tables are the ones the user's decision of
-	 * 2026-09-16 keeps as our pad layout in both schemes, and this round does
-	 * not touch them - they have fifteen entries and they stay fifteen. With
+	 * item 2), AND NEITHER HAS ANY OF THE TWELVE BEHIND IT (round 161b2d,
+	 * item 3). The four One-key tables are the ones the user's decision of
+	 * 2026-09-16 keeps as our pad layout in both schemes, and neither round
+	 * touches them - they have fifteen entries and they stay fifteen. With
 	 * "One key" the Secondary role is inert and the binding page does not offer
-	 * it, so unbound is not a hole; it is the truth. Under Separate the role is
-	 * the whole point, and the four tables added for it (item 3) carry its
-	 * button in their sixteenth entry - which is why this reads source[15] only
-	 * on that branch. */
-	if (split)
-		out[JOY_ROLE_SECOND] = source[JOY_ROLE_SECOND];
-	else
-		out[JOY_ROLE_SECOND] = -1;
+	 * it, the Modifier is unbound so no chord can exist, and the hotkey roles
+	 * are unbound because the user asked for exactly that; none of it is a
+	 * hole, it is the truth. Under Separate those roles are the whole point,
+	 * and the four tables of game\pad_scheme.h carry them - which is why this
+	 * reads source[i] only on that branch. */
+	for (int i = 15; i < JOY_ROLES; i++)
+		out[i] = split ? source[i] : -1;
 
 	/* THE MODERN PAD SET (#161, round 161a2, step 3). Duck..Load (roles 0-12)
 	 * are the SAME choice as Tank's and stay sourced from it, unchanged - the
@@ -313,33 +361,21 @@ void ApplyJoyDefaults()
 	 * Separate layout has not asked to lose his One-key one. */
 	const long split = tomb5.action_split ? 1 : 0;
 
-	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, split, jLayout);
+	/* AND THE CHORD FLAGS WITH THEM (#161, round 161b2d, item 3) - "Reset to
+	 * defaults" has to mean the pairs, not the buttons: a player who had put
+	 * quick save on a plain R3 and pressed Reset must get Modifier+R3 back, not
+	 * a plain R3 that happens to carry the default's button. One call answers
+	 * both, so the two can never come back out of step. */
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, split, jLayout, &jChord);
 
-	/* The zero-fill of jLayout[15..31] that stood here is gone with round
-	 * 161b2c (item 2), and nothing is left uninitialised by its going: the
-	 * call above now fills 0..15 and the call below 16..31, which is the whole
-	 * array. Slot 15 used to be zeroed because it was nothing; it is the
-	 * Secondary role now and JoyDefaultRecord answers for it. */
-
-	/* jLayout[16..31] - allocated and unused before round 161a2 - is the OTHER
-	 * scheme's record: what the set would be if the player switched. It is the
-	 * span A1's decision 4 named, and it is kept true wherever the scheme
-	 * changes (ApplyJoyScheme) rather than only here, so Reset - the call site
-	 * of this function, specific\LoadSave.cpp - restores the ACTIVE scheme's
-	 * set and leaves the other one describing the truth.
-	 *
-	 * IT IS A RECORD AND NOT A SOURCE, which the second fix round had to say
-	 * out loud (the review's fifth finding: the span is written twice and read
-	 * nowhere, under a comment that promised a reader). Nothing reads it back,
-	 * and ApplyJoyScheme deliberately recomputes the other record instead of
-	 * taking this one: JoyDefaultRecord answers for the style the pad is
-	 * ACTUALLY on, and both ActiveJoyStyle() and joystick_is_xinput can change
-	 * between the two calls - the player pages JoyStyle, or the pad answers on
-	 * the other path after a reconnect - so a stored copy would be the stale
-	 * one exactly when it mattered. What lives here is a snapshot for the
-	 * binding page and for a later round to show, never an input to the
-	 * repair. */
-	JoyDefaultRecord(tomb5.control_modern ? 0 : 1, split, &jLayout[16]);
+	/* THE OTHER SCHEME'S SNAPSHOT THAT STOOD HERE IS GONE (round 161b2d, item
+	 * 3). It filled jLayout[16..31], it was written here and again in
+	 * ApplyJoyScheme, and it was read by nothing - the second fix round of
+	 * 161a2 already had to say so out loud. The twelve new roles need those
+	 * slots, and a thing nobody reads does not get an array of its own: if a
+	 * later round wants to SHOW the other scheme's set, JoyDefaultRecord
+	 * computes it in one line and fresher than a stored copy could be
+	 * (ActiveJoyStyle() and joystick_is_xinput both change under it). */
 	joy_scheme_seated = tomb5.control_modern ? 1 : 0;
 }
 
@@ -391,10 +427,27 @@ void ApplyJoyDefaults()
  * medipacks, since roles 0-12 have the same default in both records. Curing it
  * would mean persisting the seated scheme, which is a new stored setting for a
  * case the play test has not reported. */
-static long JoyBitTaken(long bit, long except)
+/* AND SINCE ROUND 161b2d (item 3) "TAKEN" IS THE PAIR AND NOT THE BUTTON. R3
+ * and Modifier+R3 are two bindings that coexist on purpose - that is the whole
+ * point of a chord - so a repair that judged by the button alone would unbind
+ * one of them the first time it moved the other. */
+static long JoyChordOf(long role)
+{
+	return (jChord >> role) & 1;
+}
+
+static void JoyChordWrite(long role, long on)
+{
+	if (on)
+		jChord |= 1L << role;
+	else
+		jChord &= ~(1L << role);
+}
+
+static long JoyBitTaken(long bit, long chord, long except)
 {
 	for (int i = 0; i < JOY_ROLES; i++)
-		if (i != except && jLayout[i] == bit)
+		if (i != except && jLayout[i] == bit && JoyChordOf(i) == chord)
 			return 1;
 
 	return 0;
@@ -404,6 +457,7 @@ void ApplyJoyScheme()
 {
 	long want[JOY_ROLES];
 	long other[JOY_ROLES];
+	long want_chord, other_chord;
 	const long modern = tomb5.control_modern ? 1 : 0;
 	// The repair is the ACTIVE set's, whichever Action setting seated it (#161,
 	// round 161b2c, item 3): jLayout is that set by construction, and the
@@ -413,32 +467,43 @@ void ApplyJoyScheme()
 	const long split = tomb5.action_split ? 1 : 0;
 	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
 
-	JoyDefaultRecord(modern, split, want);
-	JoyDefaultRecord(modern ? 0 : 1, split, other);
+	JoyDefaultRecord(modern, split, want, &want_chord);
+	JoyDefaultRecord(modern ? 0 : 1, split, other, &other_chord);
 
 	for (int i = 0; i < JOY_ROLES; i++)
 	{
-		// 23 is the highest bit either joystick path writes (specific\dxshell.cpp);
-		// the bound is here because the value comes out of the registry.
-		const long broken = jLayout[i] >= 0 && jLayout[i] <= 23 &&
+		// JOY_BIT_MAX is the highest bit either joystick path writes
+		// (specific\dxshell.cpp); the bound is here because the value comes out
+		// of the registry.
+		const long broken = jLayout[i] >= 0 && jLayout[i] <= JOY_BIT_MAX &&
 			((1L << jLayout[i]) & blocked) != 0;
 		const long theirs = other[i] != want[i] && jLayout[i] == other[i];
 
 		if (!broken && !theirs)
 			continue;
 
+		/* The FLAG follows the button (#161, round 161b2d, item 3). The two
+		 * records' chord masks are always equal - a chord is a property of the
+		 * Action setting and of the page, and both calls above were given the
+		 * same `split` - so this can only ever put a role the repair just moved
+		 * back onto its own default's pair. */
 		jLayout[i] = want[i];
+		JoyChordWrite(i, (want_chord >> i) & 1);
 
 		if (want[i] >= 0)
 		{
+			const long wc = (want_chord >> i) & 1;
+
 			for (int k = 0; k < JOY_ROLES; k++)
-				if (k != i && jLayout[k] == want[i])
-					jLayout[k] = (want[k] >= 0 && !JoyBitTaken(want[k], k)) ? want[k] : -1;
+				if (k != i && jLayout[k] == want[i] && JoyChordOf(k) == wc)
+				{
+					const long kc = (want_chord >> k) & 1;
+
+					jLayout[k] = (want[k] >= 0 && !JoyBitTaken(want[k], kc, k)) ? want[k] : -1;
+					JoyChordWrite(k, jLayout[k] >= 0 ? kc : 0);
+				}
 		}
 	}
-
-	for (int i = 0; i < JOY_ROLES; i++)
-		jLayout[JOY_ROLES + i] = other[i];
 
 	joy_scheme_seated = modern;
 }
@@ -459,12 +524,13 @@ void ApplyJoyScheme()
  * the first frame (specific\registry.cpp), and what stands here is only what a
  * registry that cannot be opened at all falls back to.
  *
- * WHY THIS IS A SECOND ARRAY AND NOT jLayout[16..31]. That span is the other
- * CONTROL SCHEME's record - a snapshot for the binding page, written by
- * ApplyJoyScheme and read back by nothing. This is a user set: it is persisted,
- * it is edited by the player, and it must survive. Two different things with
- * two different lifetimes do not share sixteen longs. */
-static long jSplitParked[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 12, -1, 13, 14, 7 };
+ * WHY THIS IS A SECOND ARRAY AND NOT jLayout[16..31]. That span WAS the other
+ * CONTROL SCHEME's record - a snapshot written by ApplyJoyScheme and read back
+ * by nothing, which round 161b2d retired to make room for the twelve new roles.
+ * It could never have been this: this is a user set, it is persisted, it is
+ * edited by the player, and it must survive. Two different things with two
+ * different lifetimes do not share one array. */
+static long jSplitParked[JOY_ROLES] = JOY_SEP_PS5_DINPUT;
 
 /* Which Action setting's set is in jLayout: 0 One key, 1 Separate. It starts at
  * One key and not at -1 (joy_scheme_seated does start there) because the two
@@ -483,13 +549,33 @@ long* JoySplitSet(long split)
 	return (joy_split_seated == (split ? 1 : 0)) ? jLayout : jSplitParked;
 }
 
-/* What a registry without SJ* means: this page's and this path's Separate
- * defaults. Computed rather than written out a second time in
- * specific\registry.cpp, so the four tables above stay the only place the
- * layout is stated. */
-void JoySplitDefaults(long* out)
+// The same sentence for the chord flags (#161, round 161b2d, item 3): the
+// registry addresses a set by SETTING, never by array, so the flags have to be
+// reachable the same way the bindings are.
+long* JoyChordSet(long split)
 {
-	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, 1, out);
+	return (joy_split_seated == (split ? 1 : 0)) ? &jChord : &jSplitParkedChord;
+}
+
+/* What a registry without SJ* means: this page's and this path's Separate
+ * defaults, and since round 161b2d its chord mask beside them. Computed rather
+ * than written out a second time in specific\registry.cpp, so game\pad_scheme.h
+ * stays the only place the layout is stated. */
+void JoySplitDefaults(long* out, long* chord)
+{
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, 1, out, chord);
+}
+
+/* The active set's chord flag, for the binding page and for the capture. The
+ * repair has its own two above; these are the ones outside this file. */
+long JoyRoleIsChord(long role)
+{
+	return JoyChordOf(role);
+}
+
+void JoyRoleSetChord(long role, long on)
+{
+	JoyChordWrite(role, on);
 }
 
 /* THE PAD'S HALF OF THE ACTION ROW, beside ApplyKeyScheme's and
@@ -512,6 +598,17 @@ void ApplyJoySplit()
 
 	if (joy_split_seated == split)
 		return;
+
+	/* The flags travel with their set (#161, round 161b2d, item 3). One long
+	 * each, so this is an exchange and not a loop, and it sits AFTER the guard
+	 * above for the same reason PadSetSeat is idempotent: the Action row and
+	 * the startup seat both call this and neither may double-swap. */
+	{
+		const long t = jChord;
+
+		jChord = jSplitParkedChord;
+		jSplitParkedChord = t;
+	}
 
 	joy_split_seated = PadSetSeat(jLayout, jSplitParked, (int)joy_split_seated, (int)split);
 
@@ -570,18 +667,20 @@ static long JoyBitIsDpad(long bit)
 	return (bit >= 0 && bit <= 23 && ((1L << bit) & JOY_DPAD_BITS) != 0) ? 1 : 0;
 }
 
-/* SIXTEEN ROLES SINCE ROUND 161b2c (#161, item 2), AND THE RECORD MOVED UP ONE
- * TO MAKE ROOM. Slot 15 is the Secondary action; it held a hard 0 before -
- * written by nothing, read by nothing, but 0 is a real button bit (Square on
- * the PS5 DirectInput page), so it starts UNBOUND at -1 instead, which is the
- * value Key() has a sentinel for. Its own default arrived one step later, with
- * the Separate pad set (item 3): R2 there, nothing here, because with "One key"
- * the role is inert and the binding page does not offer it. jLayout[0..15] is
- * whichever set the Action row has seated (JoySplitSet) and jLayout[16..31] is
- * the other CONTROL SCHEME's record - the latter was [16..30]
- * while there were fifteen roles, and the array's 32 entries are exactly two
- * sixteen-role sets, with nothing left over. */
-long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+/* TWENTY-EIGHT ROLES SINCE ROUND 161b2d (#161, item 3), AND THE ARRAY IS THE
+ * ACTIVE SET AND NOTHING ELSE. Slot 15 is the Secondary action (round 161b2c,
+ * item 2); 16 is the Modifier, 17-22 the six weapon hotkeys, 23-27 the five
+ * cheats. Whichever set the Action row has seated lives here (JoySplitSet); the
+ * other CONTROL SCHEME's record that used to sit at [16..31] is retired -
+ * written twice, read by nothing, and in the way (game\pad_scheme.h says why).
+ *
+ * The initialiser is the One-key PS5 DirectInput row with -1 behind it, and it
+ * is only what a registry that cannot be opened at all falls back to:
+ * LoadSettings overwrites the whole array before the first frame. -1 is the
+ * value Key() and PadRoleFires both read as "unbound", which is why slot 15
+ * stopped being a hard 0 in 161b2c - 0 is a real button bit (Square on that
+ * page). */
+long jLayout[JOY_ROLES] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
 /* THE MODERN ROW'S SCAN CODES ARE THE HEADER'S (game\key_scheme.h), so that
  * MenuTest checks the row the ENGINE really uses and not a copy of it. These
@@ -890,33 +989,22 @@ char ammo_change_buf[12];
 // press (which alone is what the "Ammotype hotkeys" option governs -
 // drawing a weapon works whether it is on or off, and always did).
 //----------------------------------------------------------------------------
-static void DoWeaponHotkey()
+/* AND THE SIX BRANCHES ARE ONE ROUTINE THE PAD CALLS TOO (#161, round 161b2d,
+ * item 3). "The pad's weapon hotkeys call exactly what the keyboard's do": one
+ * routine taking WHICH weapon, and the two halves of every role read it the way
+ * the medipacks, quick save and quick load have always been read - the
+ * keyboard's Key(role) OR the pad's, one `if` per weapon.
+ *
+ * NOTHING INSIDE THE BRANCHES MOVED. They are Core's code as they have been
+ * since #139: the "is it carried" test, the draw, and the ammunition cycling on
+ * a second press. What was an else-if chain is a switch with the same order and
+ * the same early `return`s - the chain could only ever run one branch, and so
+ * can this, because the caller stops at the first weapon whose role answers. */
+static void DoWeaponRequest(long which)
 {
-	short state;
-	bool goin;
-
-	if (!lara_item)
-		goin = 0;
-	else
+	switch (which)
 	{
-		state = lara_item->current_anim_state;
-		goin = !(gfLevelFlags & GF_YOUNGLARA) && (lara.water_status == LW_ABOVE_WATER || lara.water_status == LW_WADE) && !bDisableLaraControl &&
-			(state != AS_ALL4S && state != AS_CRAWL && state != AS_ALL4TURNL && state != AS_ALL4TURNR && state != AS_CRAWLBACK &&
-				state != AS_CRAWL2HANG && state != AS_DUCK && state != AS_DUCKROTL && state != AS_DUCKROTR);
-	}
-
-	if (!goin)
-		return;
-	
-	/* THE SIX KEYS ARE SIX ROLES NOW (#161, round 161b2d, item 2), and nothing
-	 * else in this function moved: the chain is the same else-if chain, the
-	 * order is the same, every branch is Core's code as before. Key(role) with
-	 * an untouched registry IS keymap[DIK_1..DIK_6] - its first test reads
-	 * layout[1][role], which the loader filled from the row's default, and that
-	 * default is the very key that stood here (the static_asserts above say so
-	 * for the Modern row, the layout table for Tank's). */
-	if (Key(KEY_ROLE_WEAPON_FIRST + 0))
-	{
+	case 0:
 		if (!(lara.pistols_type_carried & W_PRESENT))
 			return;
 
@@ -924,9 +1012,9 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_PISTOLS)
 			lara.gun_status = LG_DRAW_GUNS;
-	}
-	else if (Key(KEY_ROLE_WEAPON_FIRST + 1))
-	{
+		break;
+
+	case 1:
 		if (!(lara.shotgun_type_carried & W_PRESENT))
 			return;
 
@@ -959,9 +1047,9 @@ static void DoWeaponHotkey()
 				}
 			}
 		}
-	}
-	else if (Key(KEY_ROLE_WEAPON_FIRST + 2))
-	{
+		break;
+
+	case 2:
 		if (!(lara.uzis_type_carried & W_PRESENT))
 			return;
 
@@ -969,9 +1057,9 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_UZI)
 			lara.gun_status = LG_DRAW_GUNS;
-	}
-	else if (Key(KEY_ROLE_WEAPON_FIRST + 3))
-	{
+		break;
+
+	case 3:
 		if (!(lara.sixshooter_type_carried & W_PRESENT))
 			return;
 
@@ -979,9 +1067,9 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_REVOLVER)
 			lara.gun_status = LG_DRAW_GUNS;
-	}
-	else if (Key(KEY_ROLE_WEAPON_FIRST + 4))
-	{
+		break;
+
+	case 4:
 		// The HK had to share key 1 with the pistols; now it has its own.
 		if (!(lara.hk_type_carried & W_PRESENT))
 			return;
@@ -1022,9 +1110,9 @@ static void DoWeaponHotkey()
 				}
 			}
 		}
-	}
-	else if (Key(KEY_ROLE_WEAPON_FIRST + 5))
-	{
+		break;
+
+	case 5:
 		// The crossbow had to share key 2 with the shotgun; now it has its own.
 		if (!(lara.crossbow_type_carried & W_PRESENT))
 			return;
@@ -1033,6 +1121,50 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_CROSSBOW)
 			lara.gun_status = LG_DRAW_GUNS;
+		break;
+	}
+}
+
+/* WHICH WEAPON ROLE IS ASKING - the guard that used to open DoWeaponHotkey,
+ * unchanged, and then the six roles in DoWeaponHotkey's own order (#161, round
+ * 161b2d, item 3).
+ *
+ * THE LOOP IS THE ELSE-IF CHAIN. It stops at the first role that answers, which
+ * is what an else-if chain does, and the branches' own early `return`s became
+ * `return`s out of DoWeaponRequest, which is where they always went - nothing
+ * followed the chain in this function.
+ *
+ * EDGE AND REPEAT ARE THE KEYBOARD'S, because there is only one answer now: the
+ * role is read every tick while it is held, as the keys always were. Drawing a
+ * weapon is idempotent (request_gun_type is a request), and the one thing a
+ * repeat could run away with - the ammunition cycle - is held off by
+ * ammo_change_timer, which is Core's own and untouched. */
+static void DoWeaponHotkey()
+{
+	short state;
+	bool goin;
+
+	if (!lara_item)
+		goin = 0;
+	else
+	{
+		state = lara_item->current_anim_state;
+		goin = !(gfLevelFlags & GF_YOUNGLARA) && (lara.water_status == LW_ABOVE_WATER || lara.water_status == LW_WADE) && !bDisableLaraControl &&
+			(state != AS_ALL4S && state != AS_CRAWL && state != AS_ALL4TURNL && state != AS_ALL4TURNR && state != AS_CRAWLBACK &&
+				state != AS_CRAWL2HANG && state != AS_DUCK && state != AS_DUCKROTL && state != AS_DUCKROTR);
+	}
+
+	if (!goin)
+		return;
+
+	for (long i = 0; i < KEY_ROLE_WEAPONS; i++)
+	{
+		if (Key(KEY_ROLE_WEAPON_FIRST + i) ||
+			(ControlMethod == 1 && JoyRole(JOY_ROLE_WEAPON_FIRST + i)))
+		{
+			DoWeaponRequest(i);
+			return;
+		}
 	}
 }
 
@@ -1042,10 +1174,15 @@ long Key(long number)
 		// jLayout[n] was -1 (unbound - see LoadSave.cpp's auto-unbind-on-conflict),
 		// so the caller's "+256" offset landed on 255 instead of a real >=256
 		// joystick-button value. 255 is never a real keyboard role index (those
-		// only go 0-18 since round 161b2c's Secondary role) or a real encoded
+		// only go 0-33 since round 161b2d's hotkey roles) or a real encoded
 		// joystick value (real button indices are
 		// 0-23 since the d-pad's own bits joined the right stick's, #161 round
 		// 161a2 step 3, i.e. 256-279), so it's safe to use as this sentinel.
+		//
+		// NOTHING IN THE ENGINE REACHES THIS ANY MORE (round 161b2d, item 3):
+		// every pad read goes through JoyRole/PadRoleFires below, which answers
+		// -1 itself. The sentinel stays because Key() is a public function and
+		// the encoding it documents is still the one JoyRole undoes.
 		return 0;
 
 	if (number >= 256)
@@ -1105,6 +1242,34 @@ long Key(long number)
 	}
 
 	return 0;
+}
+
+/* THE PAD'S OWN Key(), AND EVERY PRODUCER GOES THROUGH IT (#161, round 161b2d,
+ * item 3).
+ *
+ * `Key(jLayout[r] + 256)` was the whole pad read until this round: a bit test
+ * with a sentinel for the unbound row. It cannot stay, because a role is a PAIR
+ * now - a button and whether the Modifier has to be held with it - and the pair
+ * has to be answered in one place or the medipacks, the flare and the six
+ * weapons will each grow their own opinion of it. PadRoleFires
+ * (game\pad_scheme.h) is that place and is pure; this is the two lines of state
+ * it needs.
+ *
+ * AND IT IS TODAY'S EXPRESSION WHEREVER THE MODIFIER IS UNBOUND. jLayout
+ * [JOY_ROLE_MODIFIER] is -1 at "One key" on every page and path - the four
+ * One-key tables have fifteen entries and JoyDefaultRecord fills the rest with
+ * -1 - so `held` is 0, every role's chord flag is 0, and the rule returns
+ * exactly "is the role's button down in joy_fire". That is the byte-identity
+ * argument for the default, and it holds at Tank and at Modern alike.
+ *
+ * ControlMethod is NOT tested here. Every call site already stands inside the
+ * same `if (ControlMethod == 1)` it stood in before, the two medipack reads and
+ * the save/load pair carry it in their own conditions, and putting it in here
+ * as well would be a second spelling of one guard. */
+long JoyRole(long role)
+{
+	return PadRoleFires((unsigned long)joy_fire, jLayout[role], (int)JoyChordOf(role),
+		jLayout[JOY_ROLE_MODIFIER]);
 }
 
 long S_UpdateInput()
@@ -1495,9 +1660,9 @@ long S_UpdateInput()
 		 * is the second branch, which is the expression that stood here
 		 * before the round, character for character. */
 		const long mAction = tomb5.action_split
-			? (Key(KEY_ROLE_SECOND) || Key(jLayout[JOY_ROLE_SECOND] + 256))
-			: (Key(8) || Key(jLayout[4] + 256));
-		const long mJump = Key(7) || Key(jLayout[3] + 256);
+			? (Key(KEY_ROLE_SECOND) || JoyRole(JOY_ROLE_SECOND))
+			: (Key(8) || JoyRole(4));
+		const long mJump = Key(7) || JoyRole(3);
 
 		// move_x/move_y, not joy_x/joy_y - in Modern that pair is the left
 		// stick's own reading, which the d-pad never writes over (see above),
@@ -1587,6 +1752,29 @@ long S_UpdateInput()
 			action_bits, (long)layout[1][KEY_ROLE_SECOND], jLayout[JOY_ROLE_SECOND]);
 	}
 
+	/* THE PAD'S CHORD LAYER, ON CHANGE AND NEVER PER FRAME (#161, round 161b2d,
+	 * item 3). A line of its own and not two more fields on the one above: the
+	 * Modifier and the mask move when a binding is captured, when the Action row
+	 * flips and when Reset is pressed, and none of those touches action_bits -
+	 * so a play test log that only ever saw KEYLOG could not tell which chord
+	 * layout was live when something fired.
+	 *
+	 * mod=-1 IS THE LINE THAT PROVES THE DEFAULT. With no Modifier bound no
+	 * chord can fire and every pad role is the bit test it was before this
+	 * round; one glance at this line says which of the two a log is. The two
+	 * statics are the only state it keeps and a run without -log never reaches
+	 * them. */
+	static long modifier_logged = -2;
+	static long chord_logged = -1;
+
+	if (gLogEnabled && (jLayout[JOY_ROLE_MODIFIER] != modifier_logged || jChord != chord_logged))
+	{
+		modifier_logged = jLayout[JOY_ROLE_MODIFIER];
+		chord_logged = jChord;
+		Log("PADLOG mod=%ld chord=0x%lX split=%s", modifier_logged, chord_logged,
+			tomb5.action_split ? "separate" : "onekey");
+	}
+
 	if (Key(4))
 		linput |= IN_DUCK;
 
@@ -1615,30 +1803,30 @@ long S_UpdateInput()
 
 	if (ControlMethod == 1)
 	{
-		if (Key(jLayout[3] + 256))
+		if (JoyRole(3))
 			linput |= IN_JUMP;
 
-		if (Key(jLayout[4] + 256))
+		if (JoyRole(4))
 			linput |= action_bits;
 
 		// The pad's half of the Secondary role, under the same guard and for
 		// the same reason as the keyboard's above.
-		if (tomb5.action_split && Key(jLayout[JOY_ROLE_SECOND] + 256))
+		if (tomb5.action_split && JoyRole(JOY_ROLE_SECOND))
 			linput |= IN_ACTION;
 
-		if (Key(jLayout[5] + 256))
+		if (JoyRole(5))
 			linput |= IN_DRAW;
 
-		if (Key(jLayout[1] + 256))
+		if (JoyRole(1))
 			linput |= IN_SPRINT;
 
-		if (Key(jLayout[2] + 256))
+		if (JoyRole(2))
 			linput |= IN_WALK;
 
-		if (Key(jLayout[0] + 256))
+		if (JoyRole(0))
 			linput |= IN_DUCK;
 
-		if (Key(jLayout[6] + 256))
+		if (JoyRole(6))
 			flag = 1;
 	}
 
@@ -1727,16 +1915,16 @@ long S_UpdateInput()
 
 	if (ControlMethod == 1)
 	{
-		if (Key(jLayout[7] + 256))
+		if (JoyRole(7))
 			linput |= IN_LOOK;
 
-		if (Key(jLayout[8] + 256))
+		if (JoyRole(8))
 			linput |= IN_ROLL;
 
-		if (Key(jLayout[9] + 256))
+		if (JoyRole(9))
 			linput |= IN_OPTION;
 
-		if (Key(jLayout[10] + 256))
+		if (JoyRole(10))
 			linput |= IN_PAUSE;
 	}
 
@@ -1848,11 +2036,15 @@ long S_UpdateInput()
 	const long medi_dpad = tomb5.control_modern && ModernMenuReadsPad();
 
 	/* The keyboard half is a role now (#161, round 161b2d, item 2) - Key() of
-	 * an untouched slot is keymap[DIK_0] exactly. The PAD half is untouched
-	 * here on purpose: the chord rule and the pad's own hotkey roles are the
-	 * next step's, and mixing the two would have made this step's byte-identity
-	 * argument two arguments instead of one. */
-	if (Key(KEY_ROLE_MEDI_SMALL) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[13])) && Key(jLayout[13] + 256)))
+	 * an untouched slot is keymap[DIK_0] exactly - and the pad half goes
+	 * through the chord rule (item 3), which with the Modifier unbound is the
+	 * bit test it was. The d-pad guard in front of it is untouched and still
+	 * reads the BUTTON: it asks "is this binding one of the four bits a menu is
+	 * steering with", which is a question about the button and not about the
+	 * pair. A medipack chorded onto a d-pad bit is still silenced in the
+	 * inventory, and rightly - the Modifier does not stop Up from moving the
+	 * cursor. */
+	if (Key(KEY_ROLE_MEDI_SMALL) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[13])) && JoyRole(13)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -1882,7 +2074,7 @@ long S_UpdateInput()
 			}
 		}
 	}
-	else if (Key(KEY_ROLE_MEDI_LARGE) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[14])) && Key(jLayout[14] + 256)))
+	else if (Key(KEY_ROLE_MEDI_LARGE) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[14])) && JoyRole(14)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -2180,14 +2372,16 @@ long S_UpdateInput()
 	if (!gfGameMode && Gameflow->LoadSaveEnabled)
 	{
 		/* Two roles now (#161, round 161b2d, item 2), same guard, same bits, and
-		 * the pad halves untouched until the next step. At Tank both roles hold
-		 * the keys that stood here, F5 and F6; under Modern quick load is F9
-		 * instead - the one default this round moves, and the user's own
-		 * decision (game\key_scheme.h). */
-		if (Key(KEY_ROLE_SAVE) || (ControlMethod == 1 && Key(jLayout[11] + 256)))
+		 * the pad halves through the chord rule since item 3. At Tank both
+		 * roles hold the keys that stood here, F5 and F6; under Modern quick
+		 * load is F9 instead - the one default this round moves, and the user's
+		 * own decision (game\key_scheme.h). On the pad's Separate DirectInput
+		 * pages the two are Modifier+R3 and Modifier+L3, which is his own
+		 * second binding page; at One key they are the buttons they were. */
+		if (Key(KEY_ROLE_SAVE) || (ControlMethod == 1 && JoyRole(11)))
 			linput |= IN_SAVE;
 
-		if (Key(KEY_ROLE_LOAD) || (ControlMethod == 1 && Key(jLayout[12] + 256)))
+		if (Key(KEY_ROLE_LOAD) || (ControlMethod == 1 && JoyRole(12)))
 			linput |= IN_LOAD;
 	}
 

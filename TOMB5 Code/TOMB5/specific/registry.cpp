@@ -35,8 +35,34 @@ static bool REG_Setup;
 static const char* const JoySplitRegNames[JOY_ROLES] =
 {
 	"SJDck", "SJDsh", "SJWlk", "SJJmp", "SJAct", "SJDrw", "SJFlr", "SJLok",
-	"SJRol", "SJInv", "SJPau", "SJSav", "SJLod", "SJSmd", "SJBmd", "SJSec"
+	"SJRol", "SJInv", "SJPau", "SJSav", "SJLod", "SJSmd", "SJBmd", "SJSec",
+	// The twelve of round 161b2d (item 3), appended: the Modifier, the six
+	// weapon hotkeys in DoWeaponHotkey's order, the five cheats.
+	"SJMod", "SJWp1", "SJWp2", "SJWp3", "SJWp4", "SJWp5", "SJWp6",
+	"SJCt1", "SJCt2", "SJCt3", "SJCt4", "SJCt5"
 };
+
+/* AND THE SAME TWELVE FOR THE ONE-KEY SET (#161, round 161b2d, item 3). JDck..
+ * JSec are Core's own suffixes and stay sixteen unrolled REG_ReadLong lines
+ * below, because that is the shape they have had since base; the twelve behind
+ * them are new, so they get a table and a loop - one place for a typo instead
+ * of twelve. They are the One-key names, which is why they have no S. */
+static const char* const JoyOneRegNames[JOY_ROLES - JOY_ROLE_MODIFIER] =
+{
+	"JMod", "JWp1", "JWp2", "JWp3", "JWp4", "JWp5", "JWp6",
+	"JCt1", "JCt2", "JCt3", "JCt4", "JCt5"
+};
+
+/* THE CHORD FLAGS ARE ONE VALUE PER SET (#161, round 161b2d, item 3) - twenty-
+ * eight roles fit in a long, so a mask says it all and the registry gains two
+ * names rather than twenty-eight.
+ *
+ * NAMES OF THEIR OWN, AND NOT A BIT HIDDEN IN A BINDING. Every J* and SJ* value
+ * keeps its plain meaning - a button bit index, or -1 - so a registry written by
+ * this build loads in the accepted 161b2c build without harm: that build never
+ * asks for these two names, reads every binding exactly as it wrote it, and has
+ * no chord to be wrong about. */
+static const char* const JoyChordRegNames[2] = { "JChord", "SJChord" };
 
 bool REG_OpenKey(LPCSTR lpSubKey)
 {
@@ -471,6 +497,20 @@ bool LoadSettings()
 	// pad set is where a sixteenth button belongs (specific\input.cpp).
 	REG_ReadLong((char*)"JSec", (ulong&)jLayout[JOY_ROLE_SECOND], (ulong)-1);
 
+	/* THE TWELVE NEW ONE-KEY ROLES (#161, round 161b2d, item 3), and every one
+	 * of them defaults to UNBOUND. That is the user's own rule for this set -
+	 * "One key: all twelve unbound on every path" - and it is also what makes
+	 * the whole round byte-identical at the default: with no Modifier bound no
+	 * chord can fire, and PadRoleFires collapses to the bit test every producer
+	 * used before (game\pad_scheme.h). A registry written by the 161b2c build
+	 * carries none of these names, so it reads as exactly that. */
+	for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
+		REG_ReadLong((char*)JoyOneRegNames[i - JOY_ROLE_MODIFIER], (ulong&)jLayout[i], (ulong)-1);
+
+	// The One-key set's chord flags. 0 for a registry that has never seen this
+	// build, which is the same sentence one line up in mask form.
+	REG_ReadLong((char*)JoyChordRegNames[0], (ulong&)*JoyChordSet(0), 0);
+
 	/* AND SEPARATE'S OWN SET BESIDE IT (#161, round 161b2c, item 3). The
 	 * fifteen lines above keep their meaning exactly - they are the ONE-KEY
 	 * set, whichever setting the game was in when it last shut down - and they
@@ -491,10 +531,44 @@ bool LoadSettings()
 	 * player who rebinds anything overwrites the guess with his own choice. */
 	{
 		long* sset = JoySplitSet(1);
+		long* schord = JoyChordSet(1);
+		long stored = 0;
 
-		JoySplitDefaults(sset);
+		JoySplitDefaults(sset, schord);
 
-		for (long i = 0; i < JOY_ROLES; i++)
+		// The sixteen names the 161b2c build already wrote. REG_ReadLong says
+		// whether it found one, which is the only question that cannot be
+		// answered from the value itself.
+		for (long i = 0; i < JOY_ROLE_MODIFIER; i++)
+			if (REG_ReadLong((char*)JoySplitRegNames[i], (ulong&)sset[i], (ulong)sset[i]))
+				stored = 1;
+
+		/* A STORED SEPARATE SET KEEPS ITS OLD BINDINGS, AND GETS NO CHORD
+		 * GRAFTED ONTO THEM (#161, round 161b2d, item 3). A registry written by
+		 * the 161b2c build has all sixteen SJ* values and no SJChord, so the
+		 * loop above takes the player's own buttons - and if the new row's
+		 * chord mask were then laid over them, three things would break at
+		 * once, measured on that build's own defaults: his flare would move
+		 * from a plain R1 to Modifier+R1, his quick save from the PS button to
+		 * Modifier+PS, and his small medipack would fall silent altogether,
+		 * because it sits on bit 13, which the new Modifier would have taken.
+		 * His bindings were a choice; the chords were never asked. So this set
+		 * comes up as the 161b2c build left it - no chord, no Modifier - and
+		 * "Reset to defaults" once gives him the new row whole.
+		 *
+		 * The correction is written back at once rather than left to the next
+		 * clean exit, so that the read above (which writes its default when it
+		 * misses) cannot leave a mask behind that outlives this run. */
+		if (stored && !REG_ReadLong((char*)JoyChordRegNames[1], (ulong&)*schord, (ulong)*schord))
+		{
+			*schord = 0;
+			REG_WriteLong((char*)JoyChordRegNames[1], 0);
+
+			for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
+				sset[i] = -1;
+		}
+
+		for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
 			REG_ReadLong((char*)JoySplitRegNames[i], (ulong&)sset[i], (ulong)sset[i]);
 	}
 
@@ -601,11 +675,22 @@ void SaveSettings()
 	REG_WriteLong((char*)"JBmd", oneset[14]);
 	REG_WriteLong((char*)"JSec", oneset[JOY_ROLE_SECOND]);
 
+	// The twelve of round 161b2d (item 3) behind them, from the same set. A
+	// loop and not twelve lines for the reason the table above gives.
+	for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
+		REG_WriteLong((char*)JoyOneRegNames[i - JOY_ROLE_MODIFIER], oneset[i]);
+
 	// And Separate's set under names of its own. Written at One key too, and
 	// harmlessly: nothing at One key reads SJ*, and the accepted 161b2a build
 	// ignores values it does not know.
 	for (long i = 0; i < JOY_ROLES; i++)
 		REG_WriteLong((char*)JoySplitRegNames[i], sepset[i]);
+
+	// The two chord masks, one per set (#161, round 161b2d, item 3). Written
+	// beside their bindings and never inside them, so every J*/SJ* value on
+	// disk stays the plain button number the 161b2c build reads it as.
+	REG_WriteLong((char*)JoyChordRegNames[0], *JoyChordSet(0));
+	REG_WriteLong((char*)JoyChordRegNames[1], *JoyChordSet(1));
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
 	REG_WriteLong((char*)"JoyStyle", JoyStyle);

@@ -1227,6 +1227,32 @@ static const char* MenuValBinding(long role, char* buf)
 	if (jLayout[role] == -1)
 		return "---";
 
+	/* A CHORD PRINTS AS A PAIR (#161, round 161b2d, item 3): the Modifier, a
+	 * plus, the button.
+	 *
+	 * AND THE MODIFIER'S HALF IS THE WORD "Mod" AND NOT ITS BUTTON'S NAME,
+	 * which is the brief's own fallback and it is needed. Measured on the real
+	 * font (game\chardef.inc, the widths GetStringLength adds up): the value
+	 * column is left-aligned at phd_centerx + (phd_centerx >> 2), which leaves
+	 * 240 px to the right edge at 640x480, and "Touchpad+Stick R Down" - the
+	 * longest pair a player can really make on the PS5 DirectInput page, where
+	 * the Modifier's own default lives - is 273 px. It would run off the
+	 * screen. "Mod+Stick R Down" is 215 px, twenty-five clear, and the scale is
+	 * phd_winxmax / 512 on both sides at every other resolution (657 of 720 at
+	 * 1920x1080). The Modifier's OWN row still shows the button's real name, so
+	 * the player is never left guessing which button "Mod" is.
+	 *
+	 * AN UNBOUND MODIFIER WITH A CHORD STORED reads "---+R3": the same "---"
+	 * that means unbound one line above, in the half that is unbound. It is
+	 * honest - that binding cannot fire - and it fits (198 px at its widest,
+	 * "---+Stick R Down"). */
+	if (JoyRoleIsChord(role))
+	{
+		sprintf(buf, "%s+%s", jLayout[JOY_ROLE_MODIFIER] == -1 ? "---" : "Mod",
+			JoyButtonName(jLayout[role]));
+		return buf;
+	}
+
 	return JoyButtonName(jLayout[role]);
 }
 
@@ -1485,7 +1511,28 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("Load", TXT_Load, 12),
 	MENU_BIND("Small Medipack", TXT_Small_Medipack, 13),
 	MENU_BIND("Large Medipack", TXT_Large_Medipack, 14),
-	MENU_BIND("Secondary", -1, JOY_ROLE_SECOND)
+	MENU_BIND("Secondary", -1, JOY_ROLE_SECOND),
+
+	/* THE TWELVE OF ROUND 161b2d (#161, item 3), in the order of the four
+	 * Separate default tables. The Modifier comes first because it is what the
+	 * eleven below can be chorded against: with it unbound, every row under it
+	 * can still be bound plainly, and no chord exists anywhere.
+	 *
+	 * The labels are the keyboard list's own - the same CustomText and the same
+	 * script ids - because they name the same eleven things. Only "Modifier" is
+	 * new, and only the pad has it. */
+	MENU_BIND("Modifier", -1, JOY_ROLE_MODIFIER),
+	MENU_BIND("Pistols", TXT_Pistols, JOY_ROLE_WEAPON_FIRST + 0),
+	MENU_BIND("Shotgun", TXT_Shotgun, JOY_ROLE_WEAPON_FIRST + 1),
+	MENU_BIND("Uzi", TXT_Uzi, JOY_ROLE_WEAPON_FIRST + 2),
+	MENU_BIND("Revolver", TXT_Revolver, JOY_ROLE_WEAPON_FIRST + 3),
+	MENU_BIND("HK", TXT_HKSTRING0, JOY_ROLE_WEAPON_FIRST + 4),
+	MENU_BIND("Crossbow", -1, JOY_ROLE_WEAPON_FIRST + 5),
+	MENU_BIND("Fly mode", -1, JOY_ROLE_CHEAT_FLY),
+	MENU_BIND("All weapons", -1, JOY_ROLE_CHEAT_GUNS),
+	MENU_BIND("All items", -1, JOY_ROLE_CHEAT_ITEMS),
+	MENU_BIND("Heal", -1, JOY_ROLE_CHEAT_HEAL),
+	MENU_BIND("Skip level", -1, JOY_ROLE_CHEAT_SKIP)
 };
 
 /* THE KEYBOARD'S LIST IS BUILT NOW (#161, round 161b2d, item 2). Two roles are
@@ -1499,38 +1546,51 @@ static const menu_row menu_rows_keybinds_joy[] =
  *
  * Dropping the LAST row by counting one fewer - which is all this function did
  * while Secondary was last - no longer works, because the hotkeys sit behind
- * it. The pad list is untouched this round and still ends with Secondary, so
- * it still uses the count. */
-static menu_row menu_keybinds_built[sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0])];
+ * it. THE PAD'S LIST IS BUILT THE SAME WAY SINCE ITEM 3, and for the same
+ * reason: Secondary is no longer last there either. The Modifier and the six
+ * weapons are always offered - the Modifier is how a chord is made at all, and
+ * a weapon role the player has not bound simply says "---".
+ *
+ * ONE BUFFER FOR BOTH LISTS, sized by the longer of the two so that neither can
+ * outgrow it whichever way the tables move. */
+#define MENU_KEYBINDS_KBD_ROWS	(sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0]))
+#define MENU_KEYBINDS_JOY_ROWS	(sizeof(menu_rows_keybinds_joy) / sizeof(menu_rows_keybinds_joy[0]))
+
+static menu_row menu_keybinds_built[MENU_KEYBINDS_KBD_ROWS > MENU_KEYBINDS_JOY_ROWS
+	? MENU_KEYBINDS_KBD_ROWS : MENU_KEYBINDS_JOY_ROWS];
 
 static void MenuResolveKeybinds(const menu_row** rows, long* num)
 {
-	long i, out, total;
+	const menu_row* src;
+	long i, out, total, second, cheat;
 
 	if (ControlMethod == 1)
 	{
-		*rows = menu_rows_keybinds_joy;
-		*num = sizeof(menu_rows_keybinds_joy) / sizeof(menu_rows_keybinds_joy[0]);
-
-		if (!tomb5.action_split)
-			(*num)--;
-
-		return;
+		src = menu_rows_keybinds_joy;
+		total = MENU_KEYBINDS_JOY_ROWS;
+		second = JOY_ROLE_SECOND;
+		cheat = JOY_ROLE_CHEAT_FLY;
+	}
+	else
+	{
+		src = menu_rows_keybinds_kbd;
+		total = MENU_KEYBINDS_KBD_ROWS;
+		second = KEY_ROLE_SECOND;
+		cheat = KEY_ROLE_CHEAT_FLY;
 	}
 
-	total = sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0]);
 	out = 0;
 
 	for (i = 0; i < total; i++)
 	{
-		const menu_row* row = &menu_rows_keybinds_kbd[i];
+		const menu_row* row = &src[i];
 
 		if (row->kind == MROW_BINDING)
 		{
-			if (row->param == KEY_ROLE_SECOND && !tomb5.action_split)
+			if (row->param == second && !tomb5.action_split)
 				continue;
 
-			if (row->param >= KEY_ROLE_CHEAT_FLY && !tomb5.enable_cheats)
+			if (row->param >= cheat && !tomb5.enable_cheats)
 				continue;
 		}
 
@@ -1784,6 +1844,27 @@ static void MenuCaptureBinding()
 		if (!Key(jLayout[4] + 256))
 			menu_action_still_held = 0;
 
+		/* THE MODIFIER MAKES THE NEXT PRESS A CHORD (#161, round 161b2d, item
+		 * 3). The raw reading is what this capture has always used, and it is
+		 * still raw here - PadRoleFires is the rule for PLAY, and a capture that
+		 * went through it could never record a chord at all (a plain read is
+		 * suppressed while the Modifier is held, which is the point).
+		 *
+		 * THE MODIFIER'S OWN BIT IS TAKEN OUT OF THE READING FIRST, or the
+		 * highest-bit search below would find IT and not the button the player
+		 * pressed with it - bit 13, the DualSense's touchpad click, is above
+		 * every face button on that page. With the bit gone, `jread` is zero
+		 * until a second button really arrives, and the `if` below simply waits,
+		 * which is exactly "the Modifier alone is not a binding".
+		 *
+		 * EXCEPT ON THE MODIFIER'S OWN ROW, where it is the one thing that CAN
+		 * be bound and must therefore stay in the reading. */
+		const long mbit = jLayout[JOY_ROLE_MODIFIER];
+		const long chord = (menu_wait_role != JOY_ROLE_MODIFIER && PadBitDown((unsigned long)jread, mbit)) ? 1 : 0;
+
+		if (chord)
+			jread &= ~(1L << mbit);
+
 		if (jread)
 		{
 			lp = jread >> 1;
@@ -1803,12 +1884,31 @@ static void MenuCaptureBinding()
 			if (lp2 != jLayout[4] || !menu_action_still_held)
 			{
 				jLayout[menu_wait_role] = lp2;
+				JoyRoleSetChord(menu_wait_role, chord);
 
-				// If another action already used this same button or
-				// stick direction, unbind it (-1 marks unbound).
+				/* THE CONFLICT IS THE PAIR AND NOT THE BUTTON (#161, round
+				 * 161b2d, item 3). R3 and Modifier+R3 are two bindings and
+				 * coexist - that is what a chord is for - so only a role on the
+				 * SAME button AND the same side of the Modifier is the one that
+				 * has to give way. Without the second term the user's own
+				 * default row would unbind half of itself the first time
+				 * anything was rebound onto it.
+				 *
+				 * BINDING THE MODIFIER ONTO A USED BUTTON CLEARS THAT BUTTON
+				 * WHOLE. Its own chord flag is 0, so the pair test above already
+				 * takes every PLAIN role sitting there; the second term takes
+				 * the chord ones too, which the pair test would have left. They
+				 * are just as broken: a chord on the Modifier's own button would
+				 * fire when the Modifier alone is pressed, and PadRoleFires
+				 * refuses it anyway - this is the same answer said where the
+				 * player can see it happen. */
 				for (i = 0; i < JOY_ROLES; i++)
-					if (i != menu_wait_role && jLayout[i] == lp2)
+					if (i != menu_wait_role && jLayout[i] == lp2 &&
+						(JoyRoleIsChord(i) == chord || menu_wait_role == JOY_ROLE_MODIFIER))
+					{
 						jLayout[i] = -1;
+						JoyRoleSetChord(i, 0);
+					}
 
 				menu_waiting_for_key = 0;
 				MenuBindingChanged();

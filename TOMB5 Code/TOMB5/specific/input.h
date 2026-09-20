@@ -32,8 +32,12 @@ void ApplyJoyDefaults();
 void ApplyJoyScheme();	// #161, round 161a2: the active scheme repairs the bindings it cannot honour
 void ApplyKeyScheme();	// #161, round 161b2a: ... and the keyboard's two sets change places
 void ApplyJoySplit();	// #161, round 161b2c: ... and so do the pad's, when the Action row flips
-void JoySplitDefaults(long* out);	// the Separate set's defaults for the active page and path - what a registry without SJ* means
+void JoySplitDefaults(long* out, long* chord);	// the Separate set's defaults for the active page and path - what a registry without SJ* means
 long* JoySplitSet(long split);	// one Action setting's stored pad set, wherever it is sitting (specific\registry.cpp)
+long* JoyChordSet(long split);	// ... and that set's chord flags, one bit per role (#161, round 161b2d, item 3)
+long JoyRoleIsChord(long role);	// is the ACTIVE set's role a chord? - the binding page and the repair
+void JoyRoleSetChord(long role, long on);
+long JoyRole(long role);	// does the ACTIVE set's pad role fire this tick? every producer's one question (PadRoleFires, game\pad_scheme.h)
 const short* KeyDefaultRow();	// the active scheme's default row - Key()'s fallback and CheckKeyConflicts()'s subject
 short* KeySchemeSet(long modern);	// one scheme's stored set, wherever it is sitting (specific\registry.cpp)
 long JoyBitConfirm();
@@ -44,7 +48,12 @@ void InputModeLatchReset();	// #161, round 161b2c, item 4: Sprint mode / Duck mo
 extern const char* KeyboardButtons[272];
 extern const char* GermanKeyboard[272];
 extern long JoyStyle;
-extern long jLayout[32];
+/* THE ACTIVE PAD SET AND NOTHING ELSE SINCE ROUND 161b2d (item 3). It was
+ * `long[32]` - sixteen roles and a snapshot of the other control scheme's set
+ * behind them, written twice and read by nothing. Twelve new roles took the
+ * room, and the snapshot was retired rather than rehoused; game\pad_scheme.h
+ * says why. */
+extern long jLayout[JOY_ROLES];
 
 /* JOY_ROLES and JOY_ROLE_SECOND stood here when round 161b2c appended the
  * Secondary role; item 3 moved them into game\pad_scheme.h beside the seat that

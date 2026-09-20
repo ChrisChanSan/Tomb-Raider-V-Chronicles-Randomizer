@@ -1372,6 +1372,12 @@ const char* CustomText(const char* engl)
 		{ "All items",       "All items",       "Alle Gegenst\xE4nde", "All items",     "All items" },
 		{ "Heal",            "Heal",            "Heilen",         "Heal",               "Heal" },
 		{ "Skip level",      "Skip level",      "Level \xFC" "berspringen", "Skip level", "Skip level" },
+		// #161, round 161b2d item 3 - the pad's Modifier row, the only label of
+		// that step the keyboard list has no twin for. "Modifikator" reads as
+		// what it is on a German keyboard page; the value column beside it
+		// prints the button's own name, so the word never has to carry which
+		// button it is.
+		{ "Modifier",        "Modifier",        "Modifikator",    "Modifier",           "Modifier" },
 		// #161, round 161a2b step 5 - the Camera speed row (item 5). Same
 		// rule as the block above: only German is a real translation, the
 		// other three repeat the English literal on purpose.

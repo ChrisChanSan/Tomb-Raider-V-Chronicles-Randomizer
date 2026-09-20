@@ -50,10 +50,13 @@ long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world 
 long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points
 bool ModernLaraHidden();		// too close to draw her at all (observation 4)
 void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
-	short* world_yaw, long* wall);	// MODERNLOG tick line (step 5; world_yaw/wall added 161a2b step 5)
+	short* world_yaw, long* wall, long* carry);	// MODERNLOG tick line (step 5; world_yaw/wall
+						// added 161a2b step 5, carry added 161a3 step 5)
 void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
 	long* hide_dist, long* invert_pitch, long* pitch_return,
-	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max);	// MODERNLOG init line (step 5; last four added 161a2b step 5)
+	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max,
+	long* pull_steps, long* pull_push);	// MODERNLOG init line (step 5; speed..pitch_max
+						// added 161a2b step 5, pull_steps/pull_push 161a3 step 5)
 
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;

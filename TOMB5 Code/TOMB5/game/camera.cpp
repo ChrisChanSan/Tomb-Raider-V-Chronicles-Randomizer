@@ -802,28 +802,33 @@ bool ModernLaraHidden()
 }
 
 /* WHAT MODERNLOG'S TICK LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5;
- * widened round 161a2b, step 5). Raw reads of this file's own statics and
- * nothing computed from them, so a play test can watch the curve
- * MODERN_CAMERA_RETURN and MODERN_CAMERA_WALL_FACTOR promise instead of
- * taking the header's own arithmetic on faith.
+ * widened round 161a2b, step 5; widened again round 161a3, step 5). Raw
+ * reads of this file's own statics and nothing computed from them, so a play
+ * test can watch the curve MODERN_CAMERA_RETURN and MODERN_CAMERA_WALL_FACTOR
+ * promise instead of taking the header's own arithmetic on faith.
  *
  * ONE TICK BEHIND FOR THE STATE, LIKE camera_yaw ABOVE IT AND FOR THE SAME
  * REASON: game\modern_state.cpp's own tick line runs before CalculateCamera
  * (game\control.cpp calls the input first), so offset_yaw, offset_pitch,
- * ret, world_yaw and wall are still what the orbit's LAST tick left, not
- * this one's - the reset values (0, MODERN_CAMERA_PITCH_HOME, 0, 0, 0) on
- * the first line after a cut. rs_x/rs_y are the one exception and are
+ * ret, world_yaw, wall and carry are still what the orbit's LAST tick left,
+ * not this one's - the reset values (0, MODERN_CAMERA_PITCH_HOME, 0, 0, 0, 0)
+ * on the first line after a cut. rs_x/rs_y are the one exception and are
  * already this tick's own: specific\input.cpp calls ModernCameraStick()
  * earlier in the same S_UpdateInput, before ModernUpdateInput runs.
  *
- * world_yaw AND wall ARE THE TWO NEW READS (round 161a2b, items 1 and 3):
+ * world_yaw AND wall ARE THE TWO READS ROUND 161a2b ADDED (items 1 and 3):
  * MODERNLOG's cam_world= is this file's own world_yaw exactly, 0 before the
  * first seating exactly as a fresh MODERN_CAMERA_STATE reads (ModernCameraReset);
  * clip= is state->wall, the SAME flag the return rate itself multiplies by
  * MODERN_CAMERA_WALL_FACTOR while it is set - "the eye was clipped this
- * tick", not a second measurement of it. */
+ * tick", not a second measurement of it.
+ *
+ * carry IS THE ONE ROUND 161a3 ADDS (item 5): MODERN_CAMERA_STATE::carry
+ * itself, the swing an animation about-turn still owes the offset - signed,
+ * 0 whenever nothing is paying out, and read back rather than kept anywhere
+ * else, the same discipline every other field on this line already keeps. */
 void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
-	short* world_yaw, long* wall)
+	short* world_yaw, long* wall, long* carry)
 {
 	ModernCameraArm();
 
@@ -847,6 +852,9 @@ void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_
 
 	if (wall)
 		*wall = modern_cam_state.wall;
+
+	if (carry)
+		*carry = modern_cam_state.carry;
 }
 
 /* WHAT MODERNLOG'S INIT LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5;
@@ -881,10 +889,18 @@ void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_
  * ModernCameraSpeedRates just seated from it, i.e. the derived rate rather
  * than the setting - the two together are what let a play test tell "the
  * slider is at the wrong number" from "the mapping came out wrong" without
- * running the arithmetic by hand. */
+ * running the arithmetic by hand.
+ *
+ * pull_steps AND pull_push ARE ROUND 161a3's OWN (item 1): the two
+ * constants ModernCameraRayBounds walks the clipped candidate back along
+ * the ray by, MODERN_CAMERA_PULL_STEPS and MODERN_CAMERA_PULL_PUSH - read
+ * back here rather than printed from game\modern_state.cpp's own include
+ * of a header it has never needed, keeping the same rule as every field
+ * above it: every camera number MODERNLOG prints comes through this file. */
 void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
 	long* hide_dist, long* invert_pitch, long* pitch_return,
-	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max)
+	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max,
+	long* pull_steps, long* pull_push)
 {
 	ModernCameraArm();
 
@@ -917,6 +933,12 @@ void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_facto
 
 	if (pitch_max)
 		*pitch_max = modern_cam_cfg.pitch_max;
+
+	if (pull_steps)
+		*pull_steps = MODERN_CAMERA_PULL_STEPS;
+
+	if (pull_push)
+		*pull_push = MODERN_CAMERA_PULL_PUSH;
 }
 
 void InitialiseCamera()

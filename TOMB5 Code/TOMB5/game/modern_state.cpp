@@ -247,46 +247,69 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * derived rate, the sphere's two poles now that item 4a moved one of
 		 * them, whether firing still runs (item 8, ships off - "off" is the
 		 * value, not the absence of the field), and the two radial dead
-		 * zones item 6 gave the sticks. `dead_r` prints the ONE the engine
-		 * is actually using this session - MODERN_DEAD_RIGHT on XInput,
+		 * zones item 6 gave the sticks. `dead_l` and `dead_r` print the ONE
+		 * the engine is actually using this session - MODERN_DEAD_LEFT /
+		 * MODERN_DEAD_RIGHT on XInput, MODERN_DEAD_LEFT_DINPUT /
 		 * MODERN_DEAD_RIGHT_DINPUT on the DirectInput fallback this user's
-		 * own pad takes - which is also why the new MODERNLOG pad line
+		 * own pad takes (round 161a3 gave dead_l its own DirectInput
+		 * constant, item 7 - before that this line always printed the
+		 * XInput one, which is why dead_l never moved with M9's own
+		 * measurement until now) - which is also why the MODERNLOG pad line
 		 * beside this one carries the raw axes: the DirectInput zone was
 		 * never measured against this pad's real rest position, only
 		 * guessed wide enough, and the pad line is what the next play test
-		 * reads to say whether it can come down. */
+		 * reads to say whether it can come down.
+		 *
+		 * air_rate, swim_rate AND swim_pitch_rate ARE ROUND 161a3's OWN
+		 * (items 4 and 6): the live cfg's own air_turn_rate, swim_turn_rate
+		 * and swim_pitch_rate, read back rather than trusted from the header
+		 * for the same reason rate already is - a measure ourselves constant
+		 * is only honest in a log if a hand edit of the registry would show
+		 * up in it too. */
 		if (gLogEnabled)
 		{
-			/* THE ORBIT'S OWN TEN NOW (round 161a2, step 5; four more in
-			 * round 161a2b, step 5), the same discipline as the five above:
-			 * the live cfg game\camera.cpp seats, not the raw enum in
-			 * game\modern_camera.h, and only the numbers steps 1, 2, 4 and 5's
-			 * own reports named as the play test's to move or to read back -
-			 * cam_return / cam_return_min, cam_wall_factor, cam_hide_dist,
-			 * cam_invert, cam_pitch_return, and now cam_speed / cam_yaw_rate /
-			 * cam_pitch_min / cam_pitch_max. game\camera.h says which of
-			 * MODERN_CAMERA_CFG's remaining fields were left out and why. */
+			/* THE ORBIT'S OWN TWELVE NOW (round 161a2, step 5; four more in
+			 * round 161a2b, step 5; two more in round 161a3, step 5), the same
+			 * discipline as the five above: the live cfg game\camera.cpp seats,
+			 * not the raw enum in game\modern_camera.h, and only the numbers
+			 * steps 1, 2, 4 and 5's own reports named as the play test's to move
+			 * or to read back - cam_return / cam_return_min, cam_wall_factor,
+			 * cam_hide_dist, cam_invert, cam_pitch_return, cam_speed /
+			 * cam_yaw_rate / cam_pitch_min / cam_pitch_max, and now
+			 * cam_pull_steps / cam_pull_push - item 1's own ray walk, constants
+			 * rather than measure ourselves numbers, printed anyway because a
+			 * play test that asks why the eye still pumps in and out has the
+			 * granularity on the same line as everything else about the orbit.
+			 * game\camera.h says which of MODERN_CAMERA_CFG's remaining fields
+			 * were left out and why. */
 			long cam_return, cam_return_min, cam_wall_factor, cam_hide_dist;
 			long cam_invert, cam_pitch_return;
 			long cam_speed, cam_yaw_rate, cam_pitch_min, cam_pitch_max;
-			long dead_r;
+			long cam_pull_steps, cam_pull_push;
+			long dead_l, dead_r;
 
 			ModernCameraLogConfig(&cam_return, &cam_return_min, &cam_wall_factor,
 				&cam_hide_dist, &cam_invert, &cam_pitch_return,
-				&cam_speed, &cam_yaw_rate, &cam_pitch_min, &cam_pitch_max);
+				&cam_speed, &cam_yaw_rate, &cam_pitch_min, &cam_pitch_max,
+				&cam_pull_steps, &cam_pull_push);
 
+			dead_l = joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT;
 			dead_r = joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT;
 
 			Log("MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d "
 				"jump_dir=%d cam_return=%d cam_return_min=%d cam_wall_factor=%d "
 				"cam_hide_dist=%d cam_invert=%d cam_pitch_return=%d "
 				"cam_speed=%d cam_yaw_rate=%d cam_pitch_min=%d cam_pitch_max=%d "
-				"aim_strafe=%d dead_l=%d dead_r=%d",
+				"aim_strafe=%d dead_l=%d dead_r=%d "
+				"air_rate=%d swim_rate=%d swim_pitch_rate=%d "
+				"cam_pull_steps=%d cam_pull_push=%d",
 				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
 				modern_cfg.recenter, modern_cfg.jump_dir, cam_return, cam_return_min,
 				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return,
 				cam_speed, cam_yaw_rate, cam_pitch_min, cam_pitch_max,
-				modern_cfg.aim_strafe, (long)MODERN_DEAD_LEFT, dead_r);
+				modern_cfg.aim_strafe, dead_l, dead_r,
+				modern_cfg.air_turn_rate, modern_cfg.swim_turn_rate, modern_cfg.swim_pitch_rate,
+				cam_pull_steps, cam_pull_push);
 
 			/* MODERNLOG PAD (round 161a2b, item 6 and item 5's own log
 			 * obligation), once beside the init line above and for the same
@@ -636,17 +659,36 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * back to the measured vector until then. `clip` is the flag item 3's
 	 * candidate loop writes and the return's own wall_factor reads, not a
 	 * second measurement of a wall: 1 on a tick the eye was clipped, which
-	 * is also the tick the return runs eight times as fast. */
+	 * is also the tick the return runs eight times as fast.
+	 *
+	 * THREE MORE AFTER `clip` (round 161a3, step 5), each owed by one of the
+	 * round's own items and appended rather than worked into any of the seven
+	 * above, so a reader who does not know about them still finds the line
+	 * exactly where it always ended:
+	 * `view_err` is item 1's own proof read back every tick rather than only
+	 * inside ModernTest - abs(camera_yaw - cam_world) wrapped the short way
+	 * exactly as `err` above already is, in the SAME raw units (0 == on the
+	 * ray, 32768 == pointing the opposite way) rather than converted to
+	 * degrees, so it reads beside `cam`/`cam_world`/`err`/`yawd` in the unit
+	 * they already share instead of a unit of its own.
+	 * `air` is item 4's own local, already in this function's scope (0
+	 * whenever ModernAirTurn did not run this tick, which is every tick but
+	 * the ones in AS_FORWARDJUMP with the stick held off centre).
+	 * `carry` is item 5's swing still pending, MODERN_CAMERA_STATE::carry read
+	 * back from game\camera.cpp for the same reason cam_off and its
+	 * neighbours are - one tick behind, because this line runs before
+	 * CalculateCamera pays any of it out. */
 	if (gLogEnabled)
 	{
-		/* THE ORBIT'S OWN SEVEN NOW (round 161a2, step 5; two more in round
-		 * 161a2b, step 5), read back rather than kept in a local of this
-		 * function's own: game\camera.cpp owns the one instance of both, the
-		 * same division of labour camera_yaw above already keeps with that
-		 * file. cam_off/cam_pitch/cam_ret/cam_world/clip are one tick behind,
-		 * exactly as camera_yaw is and for the same reason (this line runs
-		 * before CalculateCamera); rs_x/rs_y are already this tick's own
-		 * (game\camera.cpp's own comment on ModernCameraLogState says why).
+		/* THE ORBIT'S OWN EIGHT NOW (round 161a2, step 5; two more in round
+		 * 161a2b, step 5; one more in round 161a3, step 5), read back rather
+		 * than kept in a local of this function's own: game\camera.cpp owns the
+		 * one instance of both, the same division of labour camera_yaw above
+		 * already keeps with that file. cam_off/cam_pitch/cam_ret/cam_world/
+		 * clip/carry are one tick behind, exactly as camera_yaw is and for the
+		 * same reason (this line runs before CalculateCamera); rs_x/rs_y are
+		 * already this tick's own (game\camera.cpp's own comment on
+		 * ModernCameraLogState says why).
 		 * `hide` is the raw measured distance and not a flag, so a play test
 		 * can watch it close on MODERN_CAMERA_HIDE_DIST rather than only
 		 * learn that it crossed - and it is one tick behind WITH the others
@@ -655,22 +697,29 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * camera.target, which are the points the LAST CalculateCamera
 		 * left. */
 		short cam_off, cam_pitch, cam_world;
-		long cam_ret, cam_rs_x, cam_rs_y, clip;
+		long cam_ret, cam_rs_x, cam_rs_y, clip, carry;
+		long view_err;
 
 		ModernCameraLogState(&cam_off, &cam_pitch, &cam_ret, &cam_rs_x, &cam_rs_y,
-			&cam_world, &clip);
+			&cam_world, &clip, &carry);
+
+		view_err = ModernWrap((long)camera_yaw - (long)cam_world);
+
+		if (view_err < 0)
+			view_err = -view_err;
 
 		Log("MODERNLOG f=%ld src=%s stick=%ld/%ld mag=%ld cam=%d ref=%d course=%d lara=%d "
 			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
-			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d",
+			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
+			"view_err=%ld air=%ld carry=%ld",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
 			modern_state.aligned, modern_state.blocked_count, out.blocked,
 			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
-			cam_world, clip);
+			cam_world, clip, view_err, air, carry);
 	}
 
 	return bits;

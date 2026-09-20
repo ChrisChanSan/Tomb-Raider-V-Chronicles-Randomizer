@@ -30,6 +30,7 @@
 #include "../game/modern_state.h"	// the modern control's one tick (#161)
 #include "../game/modern_move.h"	// the radial dead zone and its two widths (#161, round 161a2b, item 6)
 #include "../tomb5/tomb5.h"
+#include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank (round 161a3, step 5)
 
 const char* KeyboardButtons[272] =
 {
@@ -1020,6 +1021,21 @@ long S_UpdateInput()
 		// above as a movement stick.
 		linput = ModernUpdateInput(linput, move_x, move_y, mAction, mJump);
 	}
+
+	/* MODERNLOG's `mode=tank` (round 161a3, step 5). The line above never
+	 * runs on a bypass tick - that is the whole point of the bypass - so
+	 * without a line of its own here a play test log falls silent for as
+	 * long as the look key is held and cannot tell that from the scheme
+	 * standing aside for some other reason. The condition is the SAME one
+	 * the `if` above just tested, only inverted and without re-reading
+	 * `modern_look_tank` after this tick has had its own say (the write to
+	 * it is three lines below, in the block that also strips IN_LOOK), so
+	 * this cannot fire on a tick the line above also fired on, nor miss a
+	 * tick where it did not. `stick` is move_x/move_y exactly as the line
+	 * above would have handed them to ModernUpdateInput. */
+	if (gLogEnabled && modern_seam && ((input & IN_LOOK) || modern_look_tank))
+		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld",
+			(long)GlobalCounter, move_x, move_y);
 
 	/* THE WALK KEY SURVIVES THE SEAM (round 161a-fix, #161 item 1 - verified
 	 * by reading this function rather than assumed). MODERN_MOVE_MASK

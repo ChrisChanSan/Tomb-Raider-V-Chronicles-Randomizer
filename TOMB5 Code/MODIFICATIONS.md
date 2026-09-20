@@ -15970,6 +15970,223 @@ last pair and the one that counted them:
   opposite of what the code did) and `ModernTest.cpp`, whose new `camera_stamp`
   group holds the gate including its wrap. **4,449 checks, 0 failed.**
 
+#### Round 161a3 (#161, #169) - how she moves, after the second play test
+
+Continuing directly from round 161a2b's own accepted head, `405ad19`, on the
+same branch. Round 161a2b answered the FIRST play test of the orbit camera;
+this round answers the SECOND (2026-09-19, the same PS5 pad over the same
+DirectInput path, camera speed slider at 48) and, in the same round, #169's
+own report of a one-frame interpolation glitch in the underwater roll. Nine
+folders of description, log and Remaster-against-our-build video pairs under
+`C:/Cloude AI/Sammlung von neuen Baustellen/` (READ ONLY), measured by the
+project manager and quoted here in the user's own words:
+
+1. *"Wenn die Kamera sehr nah an Lara ist, ist sie sehr unberechenbar ... Es
+   ist fast so, als waere die Kamera, wenn sie sehr nahe ist, invertiert. Ich
+   lenke nach rechts, sie geht aber nach links."*
+2. *"Wenn ich mich im Remaster auf der Stelle drehe und mit dem linken Stick
+   einen Kreis drehe, kann ich Laras radiale Geschwindigkeit erhoehen. ...
+   wenn ich anfange, den Stick schneller im Kreis zu drehen, bricht sie aus
+   der Rotation aus und laeuft random in eine Richtung oder bleibt stehen."*
+3. *"Unsere Drehung ist noch sehr 'direkt', ich kann mich direkt 180 Grad
+   drehen. Im Remaster ist das ein fluessiger Turn. ... weil es A
+   unnatuerlich ist und B selbst das Interpolating nicht hinterherkommt."*
+4. *"Wenn ich im Remaster die Umsehen-Taste 'L1' druecke ... Lara kann sich
+   dann auf der Stelle wie im Tank-Modus drehen mit ihrer alten Animation.
+   Bei uns ... dreht sie sich zwar 360 Grad im Kreis, aber ohne ihre echte
+   Animation."*
+5. *"Im Remaster kann sie auch nach dem Sprung in der Luft weiterhin nach
+   links und rechts lenken. Bei uns ist das noch wie in der Panzersteuerung
+   sehr starr."*
+6. *"Im Remaster dreht sich die Kamera automatisch mit Lara mit und richtet
+   sich hinter ihr wieder aus. ... Bei uns bleibt die Kamera in jedem Fall
+   immer da, wo sie war."*
+7. *"Der Wendekreis unter Wasser ist noch zu hoch, der ist im Remaster auch
+   auf der Stelle. Auch die allgemeine Dynamik: es fuehlt sich noch ein
+   bisschen sluggish an."*
+8. *"Wie schon bei der Rolle oder der Leiter. Unter Wasser schleicht sich in
+   Laras Drehung mit der Rollentaste auch in einem Frame ein Fehler ein. ...
+   Einmal bei Todesengel nachsehen, wie er es geloest hat, und dann eine
+   Implementierung fuer uns suchen."* (#169)
+
+**WHAT WAS MEASURED, NOT ASSUMED.** Nine findings (`bl.py`, `near.py`,
+`turn.py`, `radius.py`, `spot.py` under the scratchpad's own `baustellen`
+folder), each a number rather than a feeling: M1, close to her, the eye's own
+picture and the movement reference disagreed by 60 degrees or more on 481 of
+930 pushed ticks, all of them clipped - `CameraCollisionBounds` snaps a
+clipped point onto the SECTOR GRID rather than pulling it along the ray, a
+nudge at 1536 units and any angle at 300; M2/M3, her thumb's own 15-30
+deg/tick circle ran past the 18 deg/tick lid (MODERN_TURN_RATE 3277) and
+broke out of the turn, while a one-tick flick above 90 degrees snapped in a
+single frame where the Remaster's own 60 fps video shows six ticks (about 30
+deg/tick answers both); M4, a standing circle never reached IN_FORWARD at all
+because it was withheld past 45 degrees, and the look key's Tank-turn
+decision from round 161a never fired because the classic engine still
+answered IN_LOOK with the look camera; M5, the forward jump's own 1 deg/tick
+turned 1-36 degrees over 40 ticks where the Remaster curves about 90 around a
+pillar in one jump; M6, 25 one-tick animation flips of 180 degrees (the
+ground roll, the jump twist, the underwater roll) left the camera in front of
+her, `cam_world` unmoved, where the Remaster's camera swings round with her
+and sits behind her again after 0.6-0.75 s; M7, the water's own 6 deg/tick
+(MODERN_SWIM_TURN_RATE 1092) left up to 59 ticks in a row more than 45
+degrees out; M8 (#169), the underwater roll's animation change flips y_rot by
+180 degrees in the same tick the root offset is still blended LINEARLY in her
+local frame between two offsets that are the SAME world point one turn apart,
+dragging her through her own pivot for up to about 140 units on one or two
+drawn frames; M9, his pad rests within 10 of 128, well inside the DirectInput
+right stick's own 62-wide zone and above the left radial zone 31, which was
+killing real pushes of 18-31.
+
+**THE EIGHT ITEMS**, each measured before it was built, by step:
+
+1. **She turns at the rate his thumb asks for** (step 1, `game/modern_move.*`).
+   MODERN_TURN_RATE 3277 -> 5461 (about 30 deg/tick); the one-tick flick is
+   gone (MODERN_SNAP_DELTA deleted with it) and a reversal now turns at the
+   rate like everything else, the short way, a tie broken by her own last
+   turn; a stand (states 2, 6, 7, 20) withholds IN_FORWARD only past 90
+   degrees now (MODERN_SNAP_FORWARD_STAND), not 45, so the standing spin
+   M4 found cannot outlast three ticks at the new rate.
+2. **The eye comes in along the ray, never round her** (step 2,
+   `game/camera.cpp`). ChaseCamera and CombatCamera keep ONE clipped
+   candidate as round 161a2b already had them do, but the wall answer is now
+   `ModernCameraRayBounds` - a walk back toward the target along the ray
+   until MODERN_CAMERA_PULL_PUSH clearance is found - in place of
+   `CameraCollisionBounds`'s sector-grid push, with its y-correction half
+   kept. The movement reference stays the orbit's world yaw.
+3. **LOOK held is Tank on the spot, with her own animation** (step 3,
+   `specific/input.cpp`). While the look key is held (no weapon ready) the
+   translation is bypassed as it has been since round 161a, and now IN_LOOK
+   itself is kept away from the engine for those ticks too (a new latch,
+   `modern_look_tank`, because the word alone cannot tell "ours, taken back
+   out" from "the binoculars' own session"), so LookLeftRight/LookUpDown
+   never eat the direction bits and AS_TURN_L/AS_TURN_R/AS_FASTTURN run with
+   their real animation.
+4. **She steers in the air** (steps 1 and 3). In AS_FORWARDJUMP - the only
+   airborne state the classic code reads a turn bit in at all - the heading
+   moves toward the stick's course by MODERN_AIR_TURN_RATE (728, 4 deg/tick,
+   four times the classic 182) per tick, and the classic IN_LEFT/IN_RIGHT are
+   withheld so she is not turned twice.
+5. **An animation about-turn takes the camera with it** (steps 1 and 2). A
+   heading change of more than 150 degrees in one tick that the modern direct
+   turn did not cause hands the orbit a pending swing of the same 180
+   degrees (MODERN_CAMERA_CARRY_FLIP/`_CARRY_TICKS`), paid out over 20 ticks
+   on an eased profile so her offset after the swing is what it was before
+   the flip; the stick cancels what is left of it the moment it is pushed.
+6. **Under water she turns where the stick points** (step 1). MODERN_SWIM_
+   TURN_RATE 1092 -> 2730 (15 deg/tick), MODERN_SWIM_PITCH_RATE 364 -> 728 (4
+   deg/tick); nothing else lids the turn once the modern branch has zeroed
+   `lara.turn_rate` (measured: SwimTurn's own accumulator never fills, the
+   x_rot clamp is the engine's own unchanged pair, the surface's 728/364
+   stay rates rather than lids because LaraSurface writes y_rot straight with
+   no accumulator at all).
+7. **The dead zones follow the pad that was measured** (steps 1 and 3).
+   DirectInput only: MODERN_DEAD_RIGHT_DINPUT 62 -> 24, MODERN_DEAD_AXIS_
+   RIGHT_DINPUT 62 -> 20, and the left stick's own MODERN_DEAD_LEFT_DINPUT
+   (24) wired into `specific/input.cpp`'s own dead-zone call for the first
+   time - it existed since round 161a2b's own item 6 but the DirectInput path
+   still read the XInput constant on both stick calls.
+8. **The underwater roll keeps her in place between two ticks** (step 4,
+   #169, `game/interpolate.*`). On a tick whose y_rot flips by exactly half a
+   turn, the previous root offset is now turned by that same flip
+   (`InterpRootFlip`, two sign changes - `Rx(a) * Ry(180) * Rx(a) =
+   diag(-1, 1, -1)` for every `a`, so the x_rot negation the effect also
+   carries cancels itself) before it is blended, rather than left to drag her
+   through her own pivot. Read (not copied) from TROne's own
+   `frame_interp.cpp`, credited in the header: it never splits a rotation
+   from the translation it belongs to at all, blending previous-frame
+   matrices already expressed in the current frame instead of separate
+   Euler angles and a separate offset, which is the harder problem our own
+   two-part interpolation has to solve by hand for exactly this one case.
+   Measured to be the ONLY one of ANDREA1's seven `turn180_effect`
+   animations that can reach the rule at all - on the other six the flip
+   tick steps the frame by one rather than landing on the animation change,
+   so the pose is accepted and the root never goes through `InterpRootNow`.
+   Changes nothing at `fps_mode 0` and nothing on a tick without an
+   about-turn, both asserted in `InterpTest`.
+
+**STEP 5, THE LOG AND THE RECORD**, closes the round with four new MODERNLOG
+fields, each owed by name in an earlier step's own report and none of them
+disturbing where the line used to end:
+
+- `view_err=` (item 2's own proof, read back every tick) - abs(`cam` -
+  `cam_world`) wrapped the short way, in the SAME raw units `cam`/`cam_world`/
+  `err`/`yawd` already share rather than converted to degrees.
+- `air=` (item 4) - `ModernAirTurn`'s own step this tick, 0 whenever it did
+  not run.
+- `carry=` (item 5) - `MODERN_CAMERA_STATE::carry`, the swing still pending,
+  read back from `game/camera.cpp` through a new `carry` out-parameter on
+  `ModernCameraLogState` (one tick behind, like its six neighbours, for the
+  same reason: this line runs before `CalculateCamera`).
+- `mode=tank` (item 3) - its own separate line, `MODERNLOG f= src=tank
+  mode=tank stick=`, from `specific/input.cpp` rather than from
+  `ModernUpdateInput`: the bypass runs INSTEAD of that function on a tick the
+  look key is steering her, so the function's own line cannot say anything
+  about it, and without a line of its own a play test log fell silent for as
+  long as the key was held and could not tell that from the scheme standing
+  aside for some other reason (`ModernLookTankActive()`, declared by step 3,
+  had no caller until now).
+
+The init line gains six reads: `air_rate=`/`swim_rate=`/`swim_pitch_rate=`
+(the live `modern_cfg` fields items 4 and 6 seat, read back for the same
+reason `rate=` already is - a "measure ourselves" constant is only honest in
+a log if a hand edit of the registry would show up in it too) and
+`cam_pull_steps=`/`cam_pull_push=` (item 2's own ray-walk constants, through
+two new out-parameters on `ModernCameraLogConfig`, keeping every camera
+number MODERNLOG prints coming through `game/camera.cpp` and nothing else).
+One existing field was corrected rather than only widened: `dead_l=` printed
+MODERN_DEAD_LEFT unconditionally since round 161a2b, on both input paths,
+because item 7's own DirectInput constant had nothing to choose between
+until this step wired the choice the same way `dead_r=` already made it -
+so a DirectInput session's log now shows the zone it is really running
+under, the number M9 measured and item 7 built.
+
+**THE FILES**, round 161a3's own against base `405ad19`:
+
+- `game/modern_move.h` / `.cpp` (step 1) - the turn rate, the flick's
+  removal, the standing gate, the air turn's pure half, the swim rates, the
+  DirectInput left dead zone's own constant.
+- `game/modern_camera.h` / `.cpp` (steps 1, 2) - the carry's pure half, the
+  ray-walk constants.
+- `game/camera.cpp` / `.h` (steps 2, 5) - the ray-bounds resolution in both
+  orbit cameras, the carry seated from the animation, and this step's own
+  `carry`/`pull_steps`/`pull_push` reads.
+- `specific/input.cpp` / `.h`, `specific/dxshell.cpp` (step 3) - the look
+  key's own latch and the engine kept from answering it, the air turn wired
+  into the turn chain, the DirectInput left zone's call site, and this
+  step's own `mode=tank` line.
+- `game/modern_state.cpp` (steps 1, 3, 5) - the air turn's third arm of the
+  turn chain, the `cstep=` paragraph's comment, and this step's own
+  `view_err=`/`air=`/`carry=` and the init line's six new reads.
+- `game/interpolate_math.h` / `.h` / `.cpp` (step 4, #169) - `InterpRootFlip`,
+  the per-item flip flag, the root blend turned before it runs.
+- `Preparation/Tools/Diagnose/ModernTest.cpp` (steps 1-3) - `reversal`,
+  `spin_sweep`, `air_turn`, `camera_carry`, `camera_pull`, `camera_flip`,
+  `turn_chain`, `look_tank`, plus the rewritten expectations the rate and the
+  deleted flick left behind.
+- `Preparation/Tools/Diagnose/InterpTest.cpp` (step 4) - `root_flip`.
+- `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md` (step 5, this
+  entry) - outside every count below, the same convention every round's own
+  step 5 has kept.
+
+Five commits, one per step, `Round 161a3 (#161): <what>` for steps 1-3 and 5,
+`Round 161a3 (#169): <what>` for step 4 (#169's own interpolation fix, folded
+into this round rather than a round of its own because the user asked for it
+alongside the play test in the same brief). `ModernTest` ends the round at
+**5174 checks, 0 failed** (4449 at base `405ad19`; unaffected by steps 4 and
+5, which add MODERNLOG fields and an interpolation fix respectively rather
+than pure arithmetic for this tool to hold). `InterpTest` ends it at **373
+checks, 0 failed** (361 before step 4; unaffected by steps 1-3 and 5, which
+touch no file this tool includes).
+
+**ONE DIVERGENCE FROM THE BRIEF WORTH RECORDING HERE, ACROSS THE WHOLE
+ROUND**: item 2b's tie-break ("toward the side the stick came from") could
+not be built as asked, because on a tick a flick lands on exactly 180 degrees
+the course step and the stick step both wrap to the same value as well, so
+there is nothing left in the stick to read the side from - step 1's own
+report has the measurement and the fallback (her own last turn, then a fixed
+side). Every other divergence is recorded in the step that made it, in the
+report handed to this one.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

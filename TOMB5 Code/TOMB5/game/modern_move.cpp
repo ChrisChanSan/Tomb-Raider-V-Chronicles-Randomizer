@@ -208,6 +208,7 @@ void ModernDefaults(MODERN_CFG* cfg)
 	cfg->direct_turn = MODERN_DIRECT_TURN;
 	cfg->snap_forward = MODERN_SNAP_FORWARD;
 	cfg->snap_forward_stand = MODERN_SNAP_FORWARD_STAND;
+	cfg->stand_forward_ticks = MODERN_STAND_FORWARD_TICKS;
 	cfg->air_turn_rate = MODERN_AIR_TURN_RATE;
 	cfg->stick_full = MODERN_STICK_FULL;
 	cfg->swim_turn_rate = MODERN_SWIM_TURN_RATE;
@@ -242,6 +243,7 @@ void ModernResetState(MODERN_STATE* state)
 	state->last_course = 0;
 	state->have_course = 0;
 	state->last_turn = 0;
+	state->stand_hold = 0;
 }
 
 /* THE STATES THAT STAY CLASSIC (round 161a step 3).
@@ -722,7 +724,10 @@ long ModernGroundTurnBiased(short anim_state, long delta, long rate, long bias)
  * costing her a one-tick AS_STOP every time the stick outran her turn, which
  * the player sees as a stumble. Every other allowed state keeps the rule, and
  * the four turn-on-the-spot states keep it at twice the width
- * (ModernStateIsSpotTurn, round 161a3 item 2c).
+ * (ModernStateIsSpotTurn, round 161a3 item 2c) plus a second way out that is
+ * counted in ticks rather than degrees (MODERN_STAND_FORWARD_TICKS, the fix
+ * pass of the same round), for the standing turn that arrives nowhere at all
+ * because the thumb is circling at exactly her own rate.
  *
  * THE INSTANT ABOUT-TURN IS GONE (round 161a3, #161 item 2b), and this is
  * where it used to be: past 90 degrees of error, on a tick where the course
@@ -749,9 +754,27 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	MODERN_CFG spare_cfg;
 	long yaw;
 	long remaining;
+	long spot;
+	long forward;
+	long hold;
 
 	if (yaw_delta)
 		*yaw_delta = 0;
+
+	/* THE STANDING STALL'S COUNTER BELONGS TO ONE UNBROKEN TURN (round 161a3,
+	 * fix pass, MODERN_STAND_FORWARD_TICKS). It is taken out of the state here
+	 * and written back only on the path that really turns her, so every early
+	 * return below - the stick at rest, a classic tick, a state this turn does
+	 * not own - ends the episode by simply not writing it again. A count left
+	 * standing would otherwise hand IN_FORWARD to the FIRST tick of the next
+	 * push, and that one tick is what the 90 degree gate exists for. With no
+	 * state at all (a caller that passes none) the local starts at 0 every call
+	 * and the rule can never fire, which is the same answer the tie-break gives
+	 * such a caller. */
+	hold = state ? state->stand_hold : 0;
+
+	if (state)
+		state->stand_hold = 0;
 
 	if (!out || !out->active || out->mode != MODERN_MODE_RUN)
 		return 0;
@@ -802,9 +825,31 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 
 	out->bits &= ~(long)MODERN_DIR_MASK;
 
-	if (remaining <= (ModernStateIsSpotTurn(sit->anim_state) ?
-			cfg->snap_forward_stand : cfg->snap_forward) ||
-		ModernStateIsRunning(sit->anim_state))
+	spot = ModernStateIsSpotTurn(sit->anim_state);
+	forward = ModernStateIsRunning(sit->anim_state) ||
+		remaining <= (spot ? cfg->snap_forward_stand : cfg->snap_forward);
+
+	/* AND THE SECOND QUESTION, ASKED IN TICKS (round 161a3, fix pass,
+	 * MODERN_STAND_FORWARD_TICKS - the reviewer of this round confirmed the
+	 * case the gate alone leaves standing). Only the turn-on-the-spot states
+	 * count: everywhere else she is already moving, so a withheld IN_FORWARD
+	 * costs her a step and not an animation, and a state that is not this
+	 * turn's own falls through to AS_STOP within a tick or two and is counted
+	 * there. The counter is sticky by construction - the tick after it opens,
+	 * the gate is still shut, so it counts one higher and stays open until the
+	 * run begins or the turn arrives. */
+	if (spot && !forward)
+	{
+		hold++;
+
+		if (state)
+			state->stand_hold = hold;
+
+		if (cfg->stand_forward_ticks > 0 && hold >= cfg->stand_forward_ticks)
+			forward = 1;
+	}
+
+	if (forward)
 		out->bits |= MODERN_IN_FORWARD;
 
 	out->turning = (remaining > 0) ? 1 : 0;

@@ -303,6 +303,12 @@ static void bit_values()
 		 * pose spinning on the spot for 232 ticks behind the narrow one. */
 		ok(cfg.snap_forward_stand == 0x4000, "...and at 90 while she turns on the spot",
 			cfg.snap_forward_stand, 0x4000);
+		/* Item 2c's second half, added by the fix pass of the same round: a
+		 * standing turn that is getting NOWHERE - the thumb circling at exactly
+		 * her rate, so the error never falls - is handed IN_FORWARD after this
+		 * many ticks whatever the gate says. spin_sweep() measures both halves. */
+		ok(cfg.stand_forward_ticks == 8, "...and a standing turn that arrives nowhere"
+			" runs after eight ticks", cfg.stand_forward_ticks, 8);
 		/* Item 4: the forward jump's own rate, four times the classic's 182. */
 		ok(cfg.air_turn_rate == 728, "the air turn is 4 degrees a tick", cfg.air_turn_rate, 728);
 		ok(cfg.stick_full == 128, "full deflection in our units", cfg.stick_full, 128);
@@ -3059,6 +3065,7 @@ struct REVERSAL
 	long overshoot;	/* ticks that went past the course and had to come back */
 	long forward_at;	/* the first tick with IN_FORWARD, 0 if never */
 	long left_at_six;	/* what was still to turn after six ticks */
+	long worst_hold;	/* the highest MODERN_STATE::stand_hold of the run */
 };
 
 static void reversal_run(short heading, short anim, long rate, REVERSAL* r)
@@ -3091,6 +3098,7 @@ static void reversal_run(short heading, short anim, long rate, REVERSAL* r)
 	r->overshoot = 0;
 	r->forward_at = 0;
 	r->left_at_six = 0;
+	r->worst_hold = 0;
 
 	for (t = 1; t <= 40; t++)
 	{
@@ -3110,6 +3118,13 @@ static void reversal_run(short heading, short anim, long rate, REVERSAL* r)
 
 		if (!r->forward_at && (out.bits & MODERN_IN_FORWARD))
 			r->forward_at = t;
+
+		/* THE STANDING STALL'S COUNTER, WATCHED FROM THE OUTSIDE (round 161a3,
+		 * fix pass). A HELD stick is the case the 90 degree gate exists for -
+		 * he pushes away from a ledge - so the tick-counted way out must never
+		 * open here. This is the number that proves it did not. */
+		if (state.stand_hold > r->worst_hold)
+			r->worst_hold = state.stand_hold;
 
 		heading = (short)ModernWrap((long)heading + yaw);
 		left = absl(ModernWrap((long)state.course - heading));
@@ -3151,6 +3166,7 @@ static void reversal()
 	worst.worst_step = 0;
 	worst.flips = 0;
 	worst.overshoot = 0;
+	worst.worst_hold = 0;
 
 	for (h = -32768; h < 32768; h += 1024)
 	{
@@ -3168,6 +3184,9 @@ static void reversal()
 
 			worst.flips += r.flips;
 			worst.overshoot += r.overshoot;
+
+			if (r.worst_hold > worst.worst_hold)
+				worst.worst_hold = r.worst_hold;
 		}
 	}
 
@@ -3180,6 +3199,18 @@ static void reversal()
 		worst.worst_step, MODERN_TURN_RATE);
 	ok(worst.flips == 0, "...monotone: never a tick against the one before", worst.flips, 0);
 	ok(worst.overshoot == 0, "...and never past the course", worst.overshoot, 0);
+
+	/* AND THE LEDGE IS STILL SAFE (round 161a3, fix pass). The tick-counted way
+	 * out of a standing turn (MODERN_STAND_FORWARD_TICKS) must answer a MOVING
+	 * thumb only; a stick thrown a half turn and HELD is exactly the case the
+	 * 90 degree gate protects, and over all 128 runs above the counter never
+	 * gets past three - she is inside the gate on tick four and the rule is
+	 * never reached at all. */
+	ok(worst.worst_hold < MODERN_STAND_FORWARD_TICKS,
+		"...and a held stick never reaches the tick-counted way out",
+		worst.worst_hold, MODERN_STAND_FORWARD_TICKS - 1);
+	printf("    the standing stall's counter over all of them: %ld of %d\n",
+		worst.worst_hold, (int)MODERN_STAND_FORWARD_TICKS);
 
 	/* 2. SIX TICKS AND A REMAINDER, which is the number the brief asks for and
 	 * the number the arithmetic gives: 32768 / 5461 = 6.0004, so six whole
@@ -3302,8 +3333,11 @@ struct CIRCLE
 	long spun;			/* ticks in AS_STOP with a turn and no forward - M4's own count */
 };
 
+/* `stand_ticks` is the tick-counted way out of a standing turn: -1 leaves the
+ * shipped default alone, 0 switches it off - which is what the runs of the OLD
+ * rule below pass, because that rule never had one. */
 static void circle_run(long step_units, long start_units, long ticks, long rate,
-	long stand_gate, CIRCLE* c)
+	long stand_gate, long stand_ticks, CIRCLE* c)
 {
 	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
 	MODERN_CFG cfg;
@@ -3322,6 +3356,9 @@ static void circle_run(long step_units, long start_units, long ticks, long rate,
 
 	if (stand_gate > 0)
 		cfg.snap_forward_stand = stand_gate;
+
+	if (stand_ticks >= 0)
+		cfg.stand_forward_ticks = stand_ticks;
 
 	ModernResetState(&state);
 	sit.classic = 0;
@@ -3389,7 +3426,7 @@ static void spin_sweep()
 
 	for (i = 0; i < 6; i++)
 	{
-		circle_run(speeds[i], 0, 300, 0, 0, &c);
+		circle_run(speeds[i], 0, 300, 0, 0, -1, &c);
 		printf("    %s deg/tick: worst error %5ld (%3ld deg), %ld direction flips,"
 			" forward on tick %ld\n", names[i], c.worst_error,
 			c.worst_error * 360 / 65536, c.flips, c.forward_at);
@@ -3410,7 +3447,7 @@ static void spin_sweep()
 	 * 6371, and 5461 is what his own Remaster video was counted at. It is the
 	 * same shape as the defect M2 measured at 3277 - only the speed it starts
 	 * at has moved from 18 to 30 degrees a tick. */
-	circle_run(6371, 0, 300, 0, 0, &c);
+	circle_run(6371, 0, 300, 0, 0, -1, &c);
 	ok(c.flips > 0, "at 35 deg/tick the thumb outruns her and the side does change",
 		c.flips, 1);
 	printf("    - and that is the honest limit: past 30 deg/tick she lags by the"
@@ -3432,7 +3469,7 @@ static void spin_sweep()
 
 		for (start = 0; start < 65536; start += 1820)
 		{
-			circle_run(speeds[i], start, 300, 0, 0, &c);
+			circle_run(speeds[i], start, 300, 0, 0, -1, &c);
 
 			if (!c.forward_at)
 				new_never++;
@@ -3448,7 +3485,7 @@ static void spin_sweep()
 				spun_new += c.spun;
 			}
 
-			circle_run(speeds[i], start, 300, MODERN_TURN_RATE_TRONE, 0x2000, &c);
+			circle_run(speeds[i], start, 300, MODERN_TURN_RATE_TRONE, 0x2000, 0, &c);
 
 			if (!c.forward_at)
 				old_never++;
@@ -3465,11 +3502,17 @@ static void spin_sweep()
 			"   (3277 and 45 deg: %3ld, %ld never)\n",
 			names[i], new_worst, new_never, old_worst, old_never);
 
-		if (i <= 3)
-		{
-			ok(new_never == 0, "up to 25 deg/tick every start reaches the run", new_never, 0);
-			ok(new_worst <= 20, "...within 20 ticks of the first push", new_worst, 20);
-		}
+		/* ITEM 2c's OWN ACCEPTANCE, AND IT HOLDS AT EVERY SPEED NOW (round
+		 * 161a3, fix pass). Before it, five of these 36 starts at 30 deg/tick
+		 * never reached the run at all and the block asserted a weaker claim
+		 * (up to 25 deg/tick, within 20 ticks) with the rest printed. The
+		 * tick-counted way out is what closed the gap, and it closed it at 35
+		 * as well, where she can never catch the thumb by turning. */
+		ok(new_never == 0, "every start reaches the run, at every speed the thumb was"
+			" measured at", new_never, 0);
+		ok(new_worst <= MODERN_STAND_FORWARD_TICKS,
+			"...within the eight ticks the brief asks for", new_worst,
+			MODERN_STAND_FORWARD_TICKS);
 
 		if (new_worst > worst_new)
 			worst_new = new_worst;
@@ -3481,29 +3524,46 @@ static void spin_sweep()
 		never_old += old_never;
 	}
 
-	printf("  standing ticks spun with no animation, over the 211 starts that reach the"
-		" run: %ld now, %ld then\n", spun_new, spun_old);
+	printf("  standing ticks spun with no animation, over the starts that reach the run"
+		" (216 of 216 now, 211 before this pass): %ld now, %ld then\n",
+		spun_new, spun_old);
 	printf("  (M4 counted 232 such ticks in one play session, 140 of them stepping"
 		" 18 deg with no bit at all)\n");
 	ok(spun_new * 4 < spun_old, "the standing spin M4 measured is a quarter of what it was",
 		spun_new, spun_old / 4);
 
-	/* AND THE ONE THING THIS ITEM CANNOT FIX, MEASURED INSTEAD OF SMOOTHED
-	 * OVER. A stick circling at EXACTLY her turn rate moves the course by as
-	 * much as she turns, so whatever error the first push seated is the error
-	 * she keeps - for ever, if the thumb is that steady. It is not a rule that
-	 * can be added or taken away; it is what "turn toward the course at a fixed
-	 * rate" means, and the old rate had it too, twelve degrees a tick lower
-	 * down where the user's own thumb lived (M2 measured him at 15 to 30). The
-	 * count above is the lock: those starts are the ones over 90 degrees off at
-	 * 30 deg/tick. */
-	circle_run(MODERN_TURN_RATE, 0x6000, 300, 0, 0, &c);
-	ok(c.forward_at == 0, "a stick at exactly her rate holds the error it started with",
-		c.forward_at, 0);
+	/* THE LOCK ITSELF IS ARITHMETIC AND STAYS (round 161a3, fix pass - the
+	 * first version of this block asserted it and left it standing). A stick
+	 * circling at EXACTLY her turn rate moves the course by as much as she
+	 * turns, so whatever error the first push seated is the error she keeps:
+	 * that is what "turn toward the course at a fixed rate" means and no rule
+	 * can take it away. What CAN be taken away is the consequence - she used to
+	 * stand in AS_STOP turning with no animation for as long as the thumb kept
+	 * it up, which is M4's complaint, and the old rate had the same lock twelve
+	 * degrees a tick lower down, inside the 15 to 30 M2 measured him at.
+	 *
+	 * So the error still holds and she RUNS it out: the tick-counted way out
+	 * hands IN_FORWARD over on the eighth shut tick, the automaton leaves
+	 * AS_STOP, and a thumb that keeps circling now steers a run instead of
+	 * winding a statue. The run below is the same 135 degrees off that never
+	 * reached the run before this pass. */
+	circle_run(MODERN_TURN_RATE, 0x6000, 300, 0, 0, -1, &c);
+	ok(c.forward_at > 0 && c.forward_at <= MODERN_STAND_FORWARD_TICKS,
+		"a stick at exactly her rate still gets her running, on the eighth tick",
+		c.forward_at, MODERN_STAND_FORWARD_TICKS);
+	ok(c.worst_error > 0x4000, "...while the error it seated is indeed still there",
+		c.worst_error, 0x4000);
 	printf("  the lock: a circle at exactly %d units a tick, started 135 degrees off,"
-		" holds %ld deg\n", (int)MODERN_TURN_RATE, c.worst_error * 360 / 65536);
+		" holds %ld deg and runs on tick %ld\n", (int)MODERN_TURN_RATE,
+		c.worst_error * 360 / 65536, c.forward_at);
 
-	circle_run(MODERN_TURN_RATE_TRONE, 0x6000, 300, MODERN_TURN_RATE_TRONE, 0x2000, &c);
+	circle_run(MODERN_TURN_RATE, 0x6000, 300, 0, 0, 0, &c);
+	ok(c.forward_at == 0, "...and with the way out switched off she stands there for ever",
+		c.forward_at, 0);
+	printf("            with stand_forward_ticks 0 (the rule this pass added, switched"
+		" off): %ld standing ticks of 300\n", c.spun);
+
+	circle_run(MODERN_TURN_RATE_TRONE, 0x6000, 300, MODERN_TURN_RATE_TRONE, 0x2000, 0, &c);
 	ok(c.forward_at == 0, "...and the old rate had the same lock at 18 deg/tick",
 		c.forward_at, 0);
 	printf("            the same at the old 3277 - the lock moved UP 12 deg/tick,"

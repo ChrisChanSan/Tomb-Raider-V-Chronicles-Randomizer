@@ -302,14 +302,14 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 				"cam_speed=%d cam_yaw_rate=%d cam_pitch_min=%d cam_pitch_max=%d "
 				"aim_strafe=%d dead_l=%d dead_r=%d "
 				"air_rate=%d swim_rate=%d swim_pitch_rate=%d "
-				"cam_pull_steps=%d cam_pull_push=%d",
+				"cam_pull_steps=%d cam_pull_push=%d stand_ticks=%d",
 				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
 				modern_cfg.recenter, modern_cfg.jump_dir, cam_return, cam_return_min,
 				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return,
 				cam_speed, cam_yaw_rate, cam_pitch_min, cam_pitch_max,
 				modern_cfg.aim_strafe, dead_l, dead_r,
 				modern_cfg.air_turn_rate, modern_cfg.swim_turn_rate, modern_cfg.swim_pitch_rate,
-				cam_pull_steps, cam_pull_push);
+				cam_pull_steps, cam_pull_push, modern_cfg.stand_forward_ticks);
 
 			/* MODERNLOG PAD (round 161a2b, item 6 and item 5's own log
 			 * obligation), once beside the init line above and for the same
@@ -712,14 +712,14 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
-			"view_err=%ld air=%ld carry=%ld",
+			"view_err=%ld air=%ld carry=%ld stand_hold=%ld",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
 			modern_state.aligned, modern_state.blocked_count, out.blocked,
 			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
-			cam_world, clip, view_err, air, carry);
+			cam_world, clip, view_err, air, carry, modern_state.stand_hold);
 	}
 
 	return bits;

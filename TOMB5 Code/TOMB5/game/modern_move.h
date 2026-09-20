@@ -399,6 +399,31 @@ enum modern_constants
 	MODERN_SNAP_FORWARD = 0x2000,
 	MODERN_SNAP_FORWARD_STAND = 0x4000,
 
+	/* AND THE ONE CASE NO WIDTH OF GATE CAN REACH (round 161a3, fix pass, item
+	 * 2c's own acceptance criterion). A stick circling at EXACTLY her turn rate
+	 * moves the course by as much as she turns, so the error the first push
+	 * seated is the error she keeps: 105 degrees stays 105 degrees for ever, the
+	 * gate never opens, and she stands in AS_STOP turning with no animation.
+	 * That is M4's complaint word for word - item 2a only moved it from 18
+	 * degrees a tick up to 30, which is the very top of the 15 to 30 M2
+	 * measured his thumb at. No width of gate can cure it, because the gate
+	 * asks how much is LEFT and what is wrong here is that nothing is coming
+	 * off.
+	 *
+	 * SO THE SECOND QUESTION IS ASKED IN TICKS: after this many ticks of
+	 * standing, turning and not arriving, IN_FORWARD is handed over anyway and
+	 * she runs the rest of the turn out. 8 is the brief's own acceptance number
+	 * ("she is handed IN_FORWARD within 8 ticks" under a stick circling at up to
+	 * 30 deg/tick from rest), and it is safe because it is more than twice what
+	 * a HELD stick ever needs: thrown a full half turn and held, she is inside
+	 * the 90 degree gate on tick 4 at the latest (reversal() and spin_sweep()
+	 * measure both). So the ledge the gate protects - he pushes AWAY from it and
+	 * she must not step toward it - never reaches this rule at all; it answers a
+	 * MOVING thumb only, where a step into the sweep is what he is asking for.
+	 * MODERNLOG's stand_hold= is the counter, and 0 in the cfg switches the rule
+	 * off and leaves the gate on its own. */
+	MODERN_STAND_FORWARD_TICKS = 8,
+
 	/* SHE STEERS IN THE AIR (round 161a3, item 4), MEASURE. "Im Remaster kann
 	 * sie auch nach dem Sprung in der Luft weiterhin nach links und rechts
 	 * lenken. Bei uns ist das noch wie in der Panzersteuerung sehr starr. ...
@@ -599,6 +624,7 @@ struct MODERN_CFG
 	long direct_turn;	// step 4: the direct turn's own gate
 	long snap_forward;	// step 4: error under which IN_FORWARD comes back
 	long snap_forward_stand;// step 4: the same, in the four turn-on-the-spot states
+	long stand_forward_ticks;// ticks of a standing turn that arrives nowhere; 0 switches it off
 	long air_turn_rate;	// the forward jump's own turn, units per tick; 0 switches it off
 	long stick_full;	// full deflection in our units
 	long swim_turn_rate;// step 4: the direct turn under water, units per tick
@@ -659,6 +685,13 @@ struct MODERN_STATE
 	 * left to read. It also keeps the swing monotone across a takeoff, because
 	 * the air turn reads and writes the same field. */
 	long last_turn;
+
+	/* HOW LONG THIS STANDING TURN HAS BEEN GETTING NOWHERE (round 161a3, fix
+	 * pass, MODERN_STAND_FORWARD_TICKS above). Ticks in a turn-on-the-spot state
+	 * with the forward gate shut; every tick the direct turn does not take puts
+	 * it back to 0, so it counts one unbroken turn and never the sum of two.
+	 * MODERNLOG's stand_hold=. */
+	long stand_hold;
 };
 
 /* What the caller knows about Lara this tick. A struct of zeroes gives plain

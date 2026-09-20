@@ -412,6 +412,23 @@ static long ModernCameraLaraMoving()
  * survives a later round adding a second way for the stick to turn her, because
  * the published heading is read back off the item and not composed.
  *
+ * AND IT IS NOT ONLY ANIMATIONS THAT REACH IT, which is a measurement and not a
+ * slip (round 161a3, fix pass - the reviewer of this round found the first of
+ * these). The subtraction asks what turned her that the modern turn did not,
+ * and beside the animation flips the tree has four writers of
+ * lara_item->pos.y_rot that can land after the publish: game\box.cpp:1526,
+ * where a creature seizes her for the kill and snaps her onto its own heading;
+ * game\lifts.cpp:114 and game\tomb4fx.cpp:559, which seat her on an object's
+ * heading half a turn round; and game\traps.cpp:1101, the ceiling trapdoor's
+ * own half turn. Every one of them is the same defect the item is about - her
+ * heading jumps in a single tick and the eye is left standing in front of her
+ * face - so every one of them gets the same cure, and the rule is deliberately
+ * "a heading change this turn did not make" rather than "an animation". The two
+ * writers that cannot reach it are named for completeness: game\mirror.cpp
+ * negates y_rot and puts it back inside one DrawLara, long after
+ * CalculateCamera has run, and game\laraswim.cpp's own 910 is five degrees, a
+ * fiftieth of the threshold.
+ *
  * It is seated BEFORE ModernCameraUpdate below, so the swing's first instalment
  * is paid out on the same tick the flip happened on; the threshold, the side and
  * the profile are ModernCameraCarry's, in game\modern_camera.cpp, where they can

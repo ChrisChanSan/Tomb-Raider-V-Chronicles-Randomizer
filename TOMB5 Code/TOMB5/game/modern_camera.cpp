@@ -171,8 +171,19 @@ void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
  * the rounding cancels itself.
  *
  * The profile is computed in 4096ths first and the total scaled by it second,
- * so nothing here can leave a long: the profile is at most one whole
- * (4096) whatever carry_ticks is, and a swing is at most a full turn. */
+ * so the RESULT is at most one whole (4096) whatever carry_ticks is, and a
+ * swing is at most a full turn.
+ *
+ * THE WAY THERE NEEDS 64 BITS, THOUGH, AND THE MEASUREMENT IS WHY (round 161a3,
+ * fix pass; the reviewer of this round did the arithmetic). This paragraph used
+ * to say that nothing here could leave a long at any carry_ticks, and that was
+ * false: the numerator 3 * n^3 * 4096 passes 2^31 at n = 56, so a later round
+ * that made carry_ticks a menu setting and a player who picked 60 would have
+ * got a NEGATIVE fraction and a swing running backwards. Nothing is near it at
+ * the shipped 20 and carry_ticks is not a setting yet - but a comment that
+ * licenses a value the arithmetic cannot hold is worse than the value. One
+ * multiplication in 64 bits costs nothing here and camera_carry() sweeps
+ * carry_ticks to 120 against it. */
 long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick)
 {
 	MODERN_CAMERA_CFG spare_cfg;
@@ -192,7 +203,8 @@ long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick)
 	if (tick >= n)
 		return total;
 
-	u = ((3 * tick * tick * n - 2 * tick * tick * tick) * MODERN_CAMERA_CARRY_ONE) / (n * n * n);
+	u = (long)(((__int64)tick * tick * (3 * n - 2 * tick) * MODERN_CAMERA_CARRY_ONE) /
+		((__int64)n * n * n));
 
 	return total * u / MODERN_CAMERA_CARRY_ONE;
 }

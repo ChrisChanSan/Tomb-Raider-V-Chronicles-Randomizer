@@ -979,7 +979,15 @@ long S_UpdateInput()
 	 * placed exactly. `input` is the word of the PREVIOUS tick - IN_LOOK is
 	 * read further down this same function - so the bypass starts a
 	 * thirtieth of a second after the key and ends the same way, which is
-	 * under the frame a player can see. With a weapon ready the look key is
+	 * under the frame a player can see. EXACTLY, because round 161a3's fix
+	 * pass was asked to be exact about it: a hold of n ticks is bypassed for
+	 * n ticks, the first of them the tick after the key goes down and the
+	 * last the first tick it reads up again, so the scheme is back on the
+	 * SECOND tick after the last held one. Both ends are one tick behind and
+	 * neither is behind the other; the latch below is exactly as old as the
+	 * word it stands in for, so this is the latency the bypass has had since
+	 * round 161a and not something item 3 added. ModernTest's look_tank()
+	 * counts both ends against the hold. With a weapon ready the look key is
 	 * swallowed for six ticks further down (it becomes IN_TARGET), so there
 	 * the bypass begins when the hold becomes a real look.
 	 *
@@ -1027,13 +1035,17 @@ long S_UpdateInput()
 	 * without a line of its own here a play test log falls silent for as
 	 * long as the look key is held and cannot tell that from the scheme
 	 * standing aside for some other reason. The condition is the SAME one
-	 * the `if` above just tested, only inverted and without re-reading
-	 * `modern_look_tank` after this tick has had its own say (the write to
-	 * it is three lines below, in the block that also strips IN_LOOK), so
-	 * this cannot fire on a tick the line above also fired on, nor miss a
+	 * the `if` above just tested, only inverted, and the latch half of it is
+	 * read through ModernLookTankActive() - the accessor item 3 declared for
+	 * exactly this question, so that the engine keeps ONE spelling of "the
+	 * look key is steering her as at Tank" and not two that can drift apart
+	 * (round 161a3, fix pass; the reviewer of this round found the accessor
+	 * with no caller at all). It is still this tick's own answer: the latch's
+	 * own write is three lines below, in the block that also strips IN_LOOK,
+	 * so this cannot fire on a tick the line above also fired on, nor miss a
 	 * tick where it did not. `stick` is move_x/move_y exactly as the line
 	 * above would have handed them to ModernUpdateInput. */
-	if (gLogEnabled && modern_seam && ((input & IN_LOOK) || modern_look_tank))
+	if (gLogEnabled && modern_seam && ((input & IN_LOOK) || ModernLookTankActive()))
 		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld",
 			(long)GlobalCounter, move_x, move_y);
 

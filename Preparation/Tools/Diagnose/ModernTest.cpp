@@ -3801,7 +3801,16 @@ static void turn_chain()
  *
  * The bit's VALUE does not matter to the model, only that it is one bit; the
  * engine's own IN_LOOK lives behind global\types.h, which this harness does
- * not open (the same reason game\modern_move.h mirrors the movement bits). */
+ * not open (the same reason game\modern_move.h mirrors the movement bits).
+ *
+ * AND WHAT A MODEL CANNOT DO, SAID PLAINLY (round 161a3, fix pass - the
+ * reviewer of this round asked for it in writing). bmt.bat compiles this file
+ * beside game\modern_move.cpp and game\modern_camera.cpp and nothing else, so
+ * specific\input.cpp is NOT under test here: an edit to the seam's own gate
+ * would leave every check below passing. The model is read against the file
+ * whenever either changes, and that reading is the test. The same holds for
+ * camera_pull()'s three mirrors of game\camera.cpp further down, which say so
+ * in their own header. */
 enum { LOOK_BIT = 1 };
 
 typedef struct LOOK_SEAM
@@ -3899,11 +3908,55 @@ static void look_tank()
 	ok(spun == 1, "the translation runs on the first tick and then stands down", spun, 1);
 	ok(flips == 1, "...and the scheme changes hands once, not every tick", flips, 1);
 
-	/* 2. AND IT COMES BACK ON THE TICK AFTER THE RELEASE. */
+	/* 2. AND IT COMES BACK ONE TICK AFTER THE KEY, JUST AS IT WENT DOWN ONE
+	 * TICK AFTER IT (round 161a3, fix pass - the reviewer of this round read
+	 * the old heading here, "on the tick after the release", as claiming less
+	 * latency than the seam has). Both ends are one tick behind, so the
+	 * SCHEME is back on the second tick after the last held one - and that is
+	 * not something item 3 added: before it the gate read `input & IN_LOOK`,
+	 * which is the previous tick's word and exactly as old as the latch that
+	 * stands in for it now. 2b below counts both ends against the hold. */
 	word = look_tick(&s, 0, 0, 1, &translated, &targeted);
-	ok(translated == 0, "the tick the key is released is still Tank's", translated, 0);
+	ok(translated == 0, "the first tick the key reads up is still Tank's", translated, 0);
 	word = look_tick(&s, 0, 0, 1, &translated, &targeted);
 	ok(translated == 1, "the next one is the modern scheme again", translated, 1);
+
+	/* 2b. TEN TICKS HELD, TEN TICKS BYPASSED - the symmetry itself, because a
+	 * bypass that outlasted the hold would be a scheme the player cannot let
+	 * go of, and that is what the finding suspected. */
+	{
+		LOOK_SEAM h;
+		long bypass = 0;
+		long resumed = 0;
+
+		h.latch = 0;
+		h.look_cnt = 0;
+		h.word = 0;
+
+		for (i = 0; i < 10; i++)
+		{
+			look_tick(&h, 1, 0, 1, &translated, &targeted);
+
+			if (!translated)
+				bypass++;
+		}
+
+		for (i = 0; i < 5; i++)
+		{
+			look_tick(&h, 0, 0, 1, &translated, &targeted);
+
+			if (!translated)
+				bypass++;
+			else if (!resumed)
+				resumed = i + 1;
+		}
+
+		ok(bypass == 10, "a hold of ten ticks is bypassed for exactly ten", bypass, 10);
+		ok(resumed == 2, "...and the modern scheme is back on the second tick after"
+			" the key reads up", resumed, 2);
+		printf("  the look key's own latency: one tick down, one tick up,"
+			" %ld bypassed ticks for ten held\n", bypass);
+	}
 
 	/* 3. A WEAPON READY IS THE CLASSIC LOOK, UNCHANGED. Six ticks of swallow
 	 * with the translation still running, then the bit stands - which is what
@@ -4234,6 +4287,49 @@ static void camera_carry()
 		ModernCameraUpdate(&off_cfg, &state, 0, 0, 0, 1, 0, &off, &pitch);
 		ModernCameraCarry(&off_cfg, &state, 0x8000);
 		ok(state.carry == 0, "carry_ticks 0: the camera stays where it was", state.carry, 0);
+	}
+
+	/* 8. AND THE PROFILE HOLDS AT ANY carry_ticks A SETTING COULD EVER OFFER
+	 * (round 161a3, fix pass). Its numerator was a plain long and 3 * n^3 *
+	 * 4096 passes 2^31 at n = 56, so the slow swing a later menu might offer
+	 * would have come back NEGATIVE and run backwards. It is 64-bit now; this
+	 * sweep is the proof, and what it sweeps is the engine's own function and
+	 * not a model of it. */
+	{
+		MODERN_CAMERA_CFG wide = cfg;
+		long bad_back = 0;
+		long bad_range = 0;
+		long bad_end = 0;
+		long n;
+
+		for (n = 1; n <= 120; n++)
+		{
+			long prev = 0;
+			long k;
+
+			wide.carry_ticks = n;
+
+			for (k = 0; k <= n; k++)
+			{
+				const long paid = ModernCameraCarryStep(&wide, 0x8000, k);
+
+				if (paid < prev)
+					bad_back++;
+
+				if (paid < 0 || paid > 0x8000)
+					bad_range++;
+
+				prev = paid;
+			}
+
+			if (prev != 0x8000)
+				bad_end++;
+		}
+
+		ok(bad_back == 0, "the swing never runs backwards, at any carry_ticks up to 120",
+			bad_back, 0);
+		ok(bad_range == 0, "...nor past the swing it was given", bad_range, 0);
+		ok(bad_end == 0, "...and it always arrives on the last tick", bad_end, 0);
 	}
 }
 
@@ -6062,7 +6158,15 @@ static void camera_camcut()
    with its y half removed. The ARITHMETIC under test is not mirrored: h_new
    calls the engine's own ModernCameraPullAxis, which is why that function sits
    in game\modern_camera.cpp rather than in the camera. Change one, change the
-   other. */
+   other.
+
+   AND THE LIMIT OF THAT, SAID PLAINLY (round 161a3, fix pass): bmt.bat compiles
+   this file beside game\modern_move.cpp and game\modern_camera.cpp only, so
+   game\camera.cpp is not linked and cannot be under test. A later edit to
+   ModernCameraRayBounds's probe order would leave these checks passing on the
+   mirror. What they do hold is the RULE - that a pulled eye keeps the orbit's
+   own yaw where the sector snap threw it away - and the one piece of arithmetic
+   the engine really runs. */
 
 static const char* const g_corridor[8] = {
 	"########",

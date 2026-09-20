@@ -16960,6 +16960,27 @@ first's own defect) and this record itself.
 `InterpTest` is untouched at **373 checks, 0 failed** - nothing in the round
 goes near a file it includes.
 
+**The skeptical review's three findings, all in the record rather than in the
+engine's behaviour, and all fixed.** (1) The manual's new Tank column gave
+**Space** for Jump; `specific\input.cpp`'s row 0 slot 7 is `DIK_RALT`, and
+Space is slot 9, the Tank DRAW key the same table already listed one row
+lower - so the column printed one key twice, which the engine's own
+`KeySchemeRowSound` forbids, and a player following it would have drawn his
+gun instead of jumping. Now **Right Alt**; every other cell of both columns
+was walked slot by slot against the code a second time and stands. (2) The
+comment above the Combat mode row in `game\menu_frame.cpp` still said the
+setting was "drawn and saved only", which its OWN round had made false at
+commit `60df63c` - and the same sentence stood at the field's declaration in
+`global\types.h`. Both now name the caller, `S_UpdateInput`'s weapon seam.
+Nothing else changed: two comments, no statement. (3) The manual attributed
+the Modern key table to "the remaster it is re-derived from". The table is
+the user's own listing (above), and the round's taboo forbids taking anything
+from a Remaster binary, so the manual may not tell a reader otherwise; the
+sentence now describes the layout itself, a hand-on-the-left scheme around
+W/S/A/D. Rebuilt clean afterwards and re-run: the engine's only warnings are
+base's own (`camera.cpp` C4244, `trex.cpp` C4101, `types.h` C4005), and the
+three counts above are unmoved.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

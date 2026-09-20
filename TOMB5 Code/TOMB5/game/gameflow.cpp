@@ -1393,7 +1393,6 @@ const char* CustomText(const char* engl)
 		{ "Body",            "Body",            "K~orper",        "Body",               "Body" },
 		{ "Frame rate",      "Frame rate",      "Bildrate",       "Frame rate",         "Frame rate" },
 		{ "VSync",           "VSync",           "VSync",          "VSync",              "VSync" },
-		{ "Level select",    "Level select",    "Levelauswahl",   "Level select",       "Level select" },
 		{ "Ammotype hotkeys", "Ammotype hotkeys", "Munitions-Hotkeys", "Ammotype hotkeys", "Ammotype hotkeys" },
 		{ "Look transparency", "Look transparency", "Umsehen transparent", "Look transparency", "Look transparency" },
 		{ "Static lighting", "Static lighting", "Statisches Licht", "Static lighting",  "Static lighting" },

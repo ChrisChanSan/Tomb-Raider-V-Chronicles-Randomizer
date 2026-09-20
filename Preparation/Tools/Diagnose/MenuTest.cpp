@@ -145,6 +145,34 @@ static void cursor_disabled()
 	check(MenuCursorStep(0, 0, 0, +1), 0, "step on an empty page");
 	check(MenuFirstEnabled(0, 0), -1, "first enabled on an empty page");
 
+	/* WHICH WAY THE CLAMP MOVES when it really has a choice. The header says
+	 * downward first, and every case above is satisfied by a clamp that
+	 * searched upward instead: the disabled row is at an end there, so only
+	 * one direction ever finds anything. The review round swapped the two
+	 * loops and MenuTest did not notice - these cases are what notices. */
+	n = mask("1.1", m);
+	check(MenuClampCursor(m, n, 1), 2, "clamp prefers the row below");
+
+	n = mask("1..", m);
+	check(MenuClampCursor(m, n, 1), 0, "clamp goes up only when nothing is below");
+
+	for (int len = 3; len <= 20; len++)
+	{
+		char pic[24];
+
+		/* Every interior row switched off in turn, everything else on: the
+		 * answer is always the row below, never the one above. */
+		for (int k = 1; k < len - 1; k++)
+		{
+			for (int i = 0; i < len; i++)
+				pic[i] = (i == k) ? '.' : '1';
+
+			pic[len] = 0;
+			n = mask(pic, m);
+			check(MenuClampCursor(m, n, k), k + 1, "clamp prefers the row below, swept");
+		}
+	}
+
 	/* The Controls page's own case, drawn as a picture: Camera speed (row 5)
 	 * is off under Tank, so the cursor jumps Control layout -> Targeting. */
 	n = mask("1111.1", m);

@@ -1301,7 +1301,10 @@ static const menu_row menu_rows_tomb5[] =
 {
 	MENU_VALUE("Cutscene skipper", MenuValCutsceneSkipper, MenuStepCutsceneSkipper, MENU_SAVE_TOMB5),
 	MENU_VALUE("Cheats", MenuValCheats, MenuStepCheats, MENU_SAVE_TOMB5),
-	MENU_VALUE("Level select", MenuValLevelSelect, MenuStepLevelSelect, MENU_SAVE_TOMB5),
+	// ONE literal for the two places this option is named (brief item 4): the
+	// title screen's own row has said "Level Select" since round 161a, and a
+	// second spelling would have been a second CustomText key for one setting.
+	MENU_VALUE("Level Select", MenuValLevelSelect, MenuStepLevelSelect, MENU_SAVE_TOMB5),
 	MENU_VALUE("Fix climb up delay", MenuValFixClimbUpDelay, MenuStepFixClimbUpDelay, MENU_SAVE_TOMB5),
 	MENU_VALUE("Flexible crawling", MenuValFlexibleCrawling, MenuStepFlexibleCrawling, MENU_SAVE_TOMB5),
 	MENU_VALUE("Crawl Tilting", MenuValCrawlTilting, MenuStepCrawlTilting, MENU_SAVE_TOMB5)
@@ -1535,6 +1538,37 @@ static long MenuStepDir()
 	return 0;
 }
 
+/* A finished rebind is a value change like any other, so it goes through the
+ * frame's own path: the seam names it and the Game block is marked. It used to
+ * set menu_game_dirty by hand, which saved correctly but left MENULOG silent on
+ * the one page whose whole purpose is changing values (found by review). The
+ * role's row is looked up rather than passed, because the capture runs from the
+ * drive loop's head, before the row under the cursor is fetched. */
+static void MenuBindingChanged()
+{
+	const menu_row* rows;
+	const menu_row* row;
+	char buf[256];
+	long num, i;
+
+	MenuResolveKeybinds(&rows, &num);
+
+	for (i = 0; i < num; i++)
+	{
+		row = &rows[i];
+
+		if (row->kind == MROW_BINDING && row->param == menu_wait_role)
+		{
+			buf[0] = 0;
+			MenuAfterChange(MENU_PAGE_KEYBINDS, row, row->value ? row->value(row->param, buf) : "");
+			return;
+		}
+	}
+
+	// A role with no row of its own would still have to be saved.
+	menu_game_dirty = 1;
+}
+
 /* Waiting for a key or a button. Carried over from base's DoOptions()
  * (specific\LoadSave.cpp:596-730) with one change: the role is
  * menu_wait_role, so the two shift-then-count blocks that turned the
@@ -1565,7 +1599,7 @@ static void MenuCaptureBinding()
 				{
 					menu_waiting_for_key = 0;
 					layout[1][menu_wait_role] = (short)lp;
-					menu_game_dirty = 1;
+					MenuBindingChanged();
 				}
 			}
 		}
@@ -1610,7 +1644,7 @@ static void MenuCaptureBinding()
 						jLayout[i] = -1;
 
 				menu_waiting_for_key = 0;
-				menu_game_dirty = 1;
+				MenuBindingChanged();
 			}
 		}
 	}
@@ -1684,7 +1718,19 @@ void MenuFrameRun()
 	}
 
 	if (MenuRunLegacy(page))
+	{
+		// The pause key closes the whole menu from wherever the player stands,
+		// and the two legacy screens do not consume it (CreditsScreen takes
+		// only IN_DESELECT|IN_SELECT) - so without this the caller would shut
+		// Options while the frame still had Credits on its stack, and the next
+		// visit would open straight into it. Found by review; the same line
+		// stands at the end of the ordinary path below, so a legacy page now
+		// leaves the tree exactly the way every other page does.
+		if (dbinput & IN_PAUSE)
+			MenuLeave();
+
 		return;
+	}
 
 	pg = &menu_pages[page];
 

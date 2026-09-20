@@ -197,6 +197,13 @@ use them in a menu, and a player who unbound them entirely is never locked
 out of one. In the game itself the arrow keys do only what the active
 scheme's table says they do.
 
+One consequence of Modern's default *Walk* key worth knowing: it is **Left
+Alt**, and the title screen, load/save and the outfit changer all refuse to
+confirm a row while Left Alt is held — that guard is there so that Alt+Enter,
+the fullscreen toggle, does not also pick whatever the cursor sits on. Let the
+walk key go to confirm on those three screens, or rebind *Walk* to a key of
+your own; Escape always leaves, either way.
+
 ### Combat mode: Toggle or Hold
 
 *Combat mode* (round 161b2a), under *Controls*, governs what the draw key or
@@ -206,8 +213,15 @@ button does — for keyboard and pad alike, under either *Control type*:
   press again to holster.
 - **Hold**: draw while the key or button is held down, holster the moment you
   let go. Releasing mid-draw still lets the draw finish before she holsters —
-  nothing is cut short — and it never interferes with a torch or a flare
-  already in her hand.
+  nothing is cut short — and a **torch** in her hand is never touched: while
+  she is carrying one the draw key does only what it always did, which is
+  throw it.
+
+  A **flare** is a different hand. The game parks a lit flare in the same
+  empty-handed state as no weapon at all, so with the draw key held down Lara
+  throws the flare away and brings the guns back — the same thing a press of
+  the draw key does with a flare in hand in the original. Let the key go
+  before you light one, or expect to light it and lose it.
 
 ---
 

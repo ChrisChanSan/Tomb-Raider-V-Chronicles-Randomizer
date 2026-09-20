@@ -59,6 +59,24 @@
 	0x19, 0x1C				/* P Return                */	\
 }
 
+/* ONE MEASURED COLLISION IN THAT ROW, named here rather than quietly changed
+ * (round 161b2a's review). Slot 6, walk, is 0x38 = DIK_LMENU, Left Alt - and
+ * three screens that own the input suppress confirm while Left Alt is down:
+ * game\gameflow.cpp (the title), specific\LoadSave.cpp (load/save) and
+ * specific\hd\hd_outfitmenu.cpp (the outfit changer) all ask
+ * `dbinput & IN_SELECT && !keymap[DIK_LALT]`. That guard is NOT ours and is
+ * not a defect: it exists so that Alt+Enter, the fullscreen toggle, does not
+ * also choose the row under the cursor. A Modern player holding walk on one of
+ * those three screens therefore cannot confirm until he lets the key go;
+ * Escape still leaves, and nothing is locked.
+ *
+ * It stays as it is on purpose. Dropping the guard under Modern would hand
+ * back exactly the double action it was written to prevent, and the row is the
+ * user's own listing, which he said he would correct key by key after playing
+ * - so this is his decision to make with a pad in his hand, not one to guess
+ * at here. The fact is written down so the next round does not rediscover it.
+ */
+
 /* WHICH ROLES STILL ANSWER TO THEIR DEFAULT KEY. Core's rule, carried over
  * statement for statement from specific\LoadSave.cpp's CheckKeyConflicts():
  * a role keeps its default key as a second trigger unless some ACTIVE binding

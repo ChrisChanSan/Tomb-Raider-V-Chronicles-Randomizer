@@ -17235,8 +17235,8 @@ The new header `game/pad_scheme.h` also got the `ClInclude` entry in
 after the fix; no engine source changed.
 
 Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), `b29adbf`
-(this entry and the manual/README updates it describes), and the fix round's
-own, which carries the corrections listed directly above.
+(this entry and the manual/README updates it describes), `0f1602b` (the fix
+round's corrections listed directly above), and the one that names it here.
 
 ## Building this yourself
 

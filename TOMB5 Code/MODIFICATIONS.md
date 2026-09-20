@@ -16452,7 +16452,7 @@ Display sub-tab, then HD textures, Fog, Distance fog, Shimmer, Mono screen
 style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency,
 Footprints); HUD (Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover
 menu, TR4 loadscreens, Loadbar style, Loading text); tomb5 options (Cutscene
-skipper, Cheats, Level select, Fix climb up delay, Flexible crawling, Crawl
+skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl
 Tilting); Special Features (untouched inside, title-only as before); Credits
 (untouched inside). Every one of the row ledger's 46 moved settings, plus the
 new Dead zone, exists exactly once - same variable, range, default, registry
@@ -16477,7 +16477,7 @@ three `MENU_SAVE_*` targets, the five callback types, `struct menu_row` and
 `game/menu_frame.cpp` is every row's EXISTING logic carried over into one
 table per page, the draw-and-drive loop, the key capture and the `MENULOG`
 seam. `specific/LoadSave.cpp`'s `DoOptions()` is three lines now - it calls
-`MenuFrameRun()` - down from 944 lines removed against 79 added; the Special
+`MenuFrameRun()` - 917 lines removed against 55 added; the Special
 Features page kept its own function, `SpecialFeaturesPageRun()`, because it
 is still legacy-dispatched rather than a table (its logic did not move, only
 its calling convention). `tomb5/troyestuff.cpp` lost `TroyeMenu`,
@@ -16493,7 +16493,8 @@ the fullest page (Graphics, Display tab plus eleven settings) needs. The
 Controls page's own R7 (`font_height` forced down to `GetFixedScale(22)`,
 overlapping glyph cells by 3px at 640x480 and 8px at 1920x1080) is cured by
 construction: no page writes `font_height` any more, and Controls itself has
-seven rows now that Key bindings carries its own paged list. Key bindings
+ten rows now that Key bindings carries its own paged list - two under the
+twelve the budget allows. Key bindings
 splits balanced (`pages = ceil(n / max)`, `rows per page = ceil(n / pages)`)
 with the arrow row pinned to the bottom line and a centred "Reset to
 defaults" above the list on every page, LEFT/RIGHT paging with wrap, the
@@ -16523,10 +16524,13 @@ from `Page0` / `Page1` / `PageDisplay` / `Page2`; Ammotype hotkeys moved onto
 Controls, the View tab was added there. Every label, value and title of every
 framework page goes through `CustomText` with an English and a German
 column - French, Italian and Spanish repeat the English literal, as the whole
-table already did. The lookup key is the exact English literal throughout, so
-"Level Select" (the title-screen row, already existing) and "Level select"
-(this round's option row) stayed two different strings on purpose rather than
-colliding. German umlauts are written the way `GermanKeyboard[]` in
+table already did. The lookup key is the exact English literal throughout, and
+the one option named in two places carries ONE literal: this entry first said
+"Level Select" (the title-screen row) and "Level select" (the option row)
+stayed two strings on purpose, which is not what brief item 4 asked for - the
+second review said so and the option row now says "Level Select" too, one
+`CustomText` key for one setting, the duplicate table row deleted. German
+umlauts are written the way `GermanKeyboard[]` in
 `specific/input.cpp` already does - `~u`, `~o`, `~a`, a literal tilde before
 the plain vowel, which the renderer draws as two plain glyphs because
 `PrintString` has no escape for `~`. **A real umlaut glyph does exist and this
@@ -16540,15 +16544,16 @@ has no row, which is why the brief's own word table avoids it. The three
 strings stay as they are because the brief's word table prescribes them that
 way and the brief wins; if they are ever wanted as real umlauts, exactly three
 change (`Kamerad~ampfung`, `K~orper`, `Game-Over-Men~u`). `CustomText` grew
-from **17** rows at base `a6ecbb5` to **75** - counted per commit by walking
+from **17** rows at base `a6ecbb5` to **74** - counted per commit by walking
 the initialiser's own braces, not with `grep -c '{ "'`, which also counts the
 unrelated `names[8]` language-name array at `game/gameflow.cpp:1287` and made
 the first draft of this paragraph one too high at both ends. The true run is
 17 -> 23 after step 1's six page titles -> 74 after step 2's 51
-label/title/value pairs -> 75 after step 3's one, `Dead zone` / `Deadzone` -
-58 new rows over the whole round (the delta was right all along; only the two
-absolute numbers were not), and step 2's own report named 24 as its own
-baseline when step 1's second commit had already reached that count.
+label/title/value pairs -> 75 after step 3's one, `Dead zone` / `Deadzone`,
+-> 74 again after the second review's "Level Select", which deleted the
+duplicate row rather than adding one - 57 new rows over the whole round, and
+step 2's own report named 24 as its own baseline when step 1's second commit
+had already reached that count.
 
 **THE DEAD ZONE BECOMES HIS VALUE.** New `tomb5.dead_zone` (`ulong`, the
 last field of `tomb5_options` so no existing offset moves), 0..100, default
@@ -16579,7 +16584,10 @@ same numbers only at `dead_user=50`.
 row=<english label> value=<text>` when a value changes - sliders once when
 the value settles, never per frame. `row=` is always the English label, even
 in a German menu, the same convention every earlier round's own log fields
-have kept.
+have kept. A finished key or pad rebind says so too: it set the Game block's
+dirty flag by hand at first, which saved correctly but left the seam silent on
+the one page whose whole purpose is changing values, and it now goes through
+the same `MenuAfterChange` path as every other row (second review).
 
 **BYTE IDENTITY AT TANK**, the dead zone's own part of it enumerated
 statement by statement, because that is the one gameplay-side change the
@@ -16604,9 +16612,10 @@ the Tank key/pad default tables were not touched anywhere in the round.
   table, ~1100 lines carrying every row's base logic over verbatim.
 - `specific/LoadSave.cpp` / `.h` - `DoOptions()` reduced to `MenuFrameRun()`;
   `SpecialFeaturesPageRun()` split out.
-- `game/gameflow.cpp` - 58 new `CustomText` rows over the round (six page
+- `game/gameflow.cpp` - 57 new `CustomText` rows over the round (six page
   titles from step 1, 51 label/title/value pairs from step 2's right half,
-  one more from step 3, `Dead zone`/`Deadzone`).
+  one more from step 3, `Dead zone`/`Deadzone`, less the duplicate
+  "Level select" the second review had deleted).
 - `TOMB5 Code/tomb5.vcxproj` - the three new menu files added alphabetically.
 - `tomb5/troyestuff.cpp` / `.h` - the old page functions and their constants
   deleted; `CreditsScreen` untouched.
@@ -16617,9 +16626,10 @@ the Tank key/pad default tables were not touched anywhere in the round.
 - `game/modern_state.cpp` - `dead_l`/`dead_r` now effective, `dead_user=`
   appended.
 - `Preparation/Tools/Diagnose/MenuTest.cpp`, `bmenu.bat` (new) -
-  `game/menu_nav.h`'s own harness.
+  `game/menu_nav.h`'s own harness, plus the second review's clamp-direction
+  cases.
 - `Preparation/Tools/Diagnose/ModernTest.cpp` - the `deadzone` group's eight
-  new cases, and the review round's nine that hold the rounding term.
+  new cases, and the first review round's ten that hold the rounding term.
 - `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md`,
   `README.md`, `docs/Engine-Manual.md` (this entry, and the tool and manual
   rows the moved paths needed) - outside the counts below, the same
@@ -16659,18 +16669,49 @@ never calls `CheckKeyConflicts()`, so `conflict[]` stays stale after a reset
 until the next capture - carried over unchanged, because it is a behaviour
 difference and no measurement in this round said it was wanted.
 
-Eight commits, `Round 161b1 (#161): <what>` - six from the build steps (the
-sixth of them this entry itself) and two answering the skeptical review, which
-found one refuted measurement stated as fact, three stale counts or paths in
-the record and the manual, one truncated comment and one test that could not
-see the constant it documented. `ModernTest` ends the round at
+**THE SECOND REVIEW** did not accept that answer either, and found one thing
+that was behaviour rather than words. `MenuFrameRun()` left the frame early on
+a legacy page (`Special Features`, `Credits`) and so never reached its own
+`IN_PAUSE` line. `CreditsScreen` consumes only `IN_DESELECT|IN_SELECT`, so the
+pause key reached `S_DisplayPauseMenu`, which closed Options - while the frame
+still had `Credits` on its stack, and the next visit from either caller opened
+straight into it. That is exactly the guarantee brief item 1 asked for
+("entering Options from the title or the pause menu always starts on the
+Options page") and step 1's report claimed fell out of the design; it did, for
+every page but the two legacy ones. The legacy branch now reads the same
+`IN_PAUSE` line before it returns, so those two pages leave the tree the way
+every other page does - which also means the pause key on the TITLE screen
+bounces a legacy page back to the Options root, as it already did on every
+other page of this tree. Five words went with it: the rebind's silent seam
+above, the "Level Select" literal above, `LoadSave.cpp`'s line count in this
+entry (944/79 was step 1's own figure carried over instead of recomputed;
+`git diff --numstat a6ecbb5..HEAD` says 55 added against 917 removed), the
+Controls page's row count (seven was its count before the View tab, Ammotype
+hotkeys and Dead zone arrived - it is ten), and "nine" cases for the rounding
+term where ten were added (nine is how many of them the dropped-`+25` mutant
+fails). The review's own mutation run found one more gap and it is closed:
+`MenuClampCursor`'s header says it searches DOWNWARD first, and swapping its
+two loops passed all 12,240 checks, because every disabled row in the suite
+sat at an end where only one direction finds anything. A case with a real
+choice and a sweep of it (every interior row of every list length 3..20
+switched off in turn) now hold the direction - 173 checks, and the swapped
+loops fail 172 of them, re-mutated in a copy of the tree under `Agent-Scratch`
+and never in the repository.
+
+Ten commits, `Round 161b1 (#161): <what>` - six from the build steps (the
+sixth of them this entry itself), two answering the first skeptical review,
+which found one refuted measurement stated as fact, three stale counts or
+paths in the record and the manual, one truncated comment and one test that
+could not see the constant it documented, and two answering the second, above.
+`ModernTest` ends the round at
 **5,413 checks, 0 failed** (5,359 at base `a6ecbb5`, unaffected by steps 1-2
 which touch no file it includes, +44 from step 3's `deadzone` group and +10
-from the review round's rounding cases).
-`MenuTest`, new this round, stands at **12,240 checks, 0 failed** - every
-function of `game/menu_nav.h` swept rather than sampled, and one group
-asserting both the brief's own worked example (13) and the frame's true
-maximum (11) side by side, since they disagree and both are worth holding.
+from the first review round's rounding cases).
+`MenuTest`, new this round, stands at **12,413 checks, 0 failed** (12,240 from
+step 1, +173 from the second review's clamp-direction cases) - every function
+of `game/menu_nav.h` swept rather than sampled, and one group asserting both
+the brief's own worked example (13) and the frame's true maximum (11) side by
+side, since they disagree and both are worth holding.
 `InterpTest` is untouched at **373 checks, 0 failed** - nothing in the round
 goes near a file it includes. The row ledger counted 50 lines against map
 section 9's own 50 rows, 46 of them moved plus the Special Features tab plus

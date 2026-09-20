@@ -169,7 +169,7 @@ right). The seven tabs:
 | Controls | *Key bindings*, *View*, Control type, Combat mode, Action, Control layout, Camera speed, Dead zone, Targeting, Ammotype hotkeys | see below |
 | Graphics | *Display*, HD textures, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints | see **tomb5 options** |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, TR4 loadscreens, Loadbar style, Loading text | see **tomb5 options** |
-| tomb5 options | Cutscene skipper, Cheats, Level select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
+| tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
 | Credits | who this is built on | — |
 
@@ -198,7 +198,7 @@ sorting the tree moved the graphics and HUD rows off this tab onto their own
 (see **The options menu** above) and left *tomb5 options* with the six that
 belong to neither:
 
-*Cutscene skipper* (off), *Cheats* (off), *Level select* (off), *Fix climb up
+*Cutscene skipper* (off), *Cheats* (off), *Level Select* (off), *Fix climb up
 delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
@@ -246,7 +246,7 @@ Worth spelling out:
   with a rolled order it fires in scattered levels rather than "later"; and
   because the weapons travel too, Lara can carry an HK in the first level,
   where no key would have drawn it.
-- **Level select** adds a fifth row to the title screen that jumps straight to
+- **Level Select** adds a fifth row to the title screen that jumps straight to
   any level. It is a development shortcut, hidden by default.
 - **Loading text** only shows while *Loadbar style* is TR4.
 

@@ -1337,6 +1337,21 @@ const char* CustomText(const char* engl)
 		// rule as the block above: only German is a real translation, the
 		// other three repeat the English literal on purpose.
 		{ "Camera speed",    "Camera speed",    "Kamerageschwindigkeit", "Camera speed", "Camera speed" },
+		// #161, round 161b1 step 1 - the pages of the new tree that step 1
+		// builds, and the two rows it renames. Same rule again: German is the
+		// only real translation, the other three repeat the English literal.
+		// The rest of the words arrive with step 2.
+		//
+		// "Standard wiederherstellen" is longer than the value column allows
+		// for a LABEL - it is a centred action row, where the whole width of
+		// the screen is its own, so the rule about "Kamerageschwindigkeit"
+		// being the widest label does not reach it.
+		{ "Audio",           "Audio",           "Audio",          "Audio",              "Audio" },
+		{ "Graphics",        "Graphics",        "Grafik",         "Graphics",           "Graphics" },
+		{ "Display",         "Display",         "Display",        "Display",            "Display" },
+		{ "Key bindings",    "Key bindings",    "Tastenbelegung", "Key bindings",       "Key bindings" },
+		{ "Reset to defaults", "Reset to defaults", "Standard wiederherstellen", "Reset to defaults", "Reset to defaults" },
+		{ "Control layout",  "Control layout",  "Steuerungslayout", "Control layout",   "Control layout" },
 	};
 
 	long column;

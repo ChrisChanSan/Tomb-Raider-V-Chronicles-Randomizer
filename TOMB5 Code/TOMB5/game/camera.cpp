@@ -266,21 +266,11 @@ static char CameraSnaps = 0;
  * excepted (CalculateCamera). Flybys and cutscenes are untouched in every
  * mode - CalculateCamera is not even called during a flyby. */
 
-/* HOW FAR THE EYE MAY BE FROM HER AND STILL BE ORBITING HER AT ALL, the outer
- * bound ModernCameraLeadEye needs. Eight sectors is five times the orbit's own
- * radius of 1536: past that the eye is not circling her, it is arriving from
- * somewhere - a fixed camera just released, a cut, a room change - and turning
- * it about her by a stick step would be turning the wrong thing. It also keeps
- * the squares in that function inside a long with room to spare.
- *
- * IT IS NOT THE BOUND THE CUT DETECTION NEEDS, and this round's fix round says
- * so where the first version of item 2 left it unsaid: a rotation moves the eye
- * by a chord that grows with the RADIUS, so an eye walking in from three or
- * four sectors away would have been turned further in one tick than
- * INTERP_CAM_SNAP allows, in exactly the ticks the player is steering. That
- * bound is camera.target_distance and it lives in the function, because it is
- * the radius the ideal itself is built at in the same breath. */
-#define MODERN_CAM_LEAD_MAX	8192
+/* MODERN_CAMERA_LEAD_MAX, the outer bound ModernCameraLeadEye needs, used to
+ * be a #define here. It moved into game\modern_camera.h in this round's second
+ * review pass so that Preparation\Tools\Diagnose\ModernTest reads the tree's own
+ * number instead of a hand-copied one; the header says the whole of why, and
+ * nothing else about the bound changed. */
 
 static MODERN_CAMERA_CFG modern_cam_cfg;
 static MODERN_CAMERA_STATE modern_cam_state;
@@ -289,6 +279,7 @@ static long modern_cam_rs_x;		// the right stick, as input.cpp last read it
 static long modern_cam_rs_y;
 static long modern_cam_clipped;		// did mgLOS have to clip the eye LAST tick?
 static ushort modern_cam_clipped_at;	// the tick that measured it - see ModernCameraOrbit
+static ushort modern_cam_orbit_at;	// and the tick the orbit itself last ran - ModernCameraWorldYaw
 static long modern_cam_lead_yaw;	// what the STICK moved this tick, and not the return
 static long modern_cam_lead_pitch;	// - the two steps ModernCameraLeadEye hands the eye
 static long modern_cam_have_pos;	// is the position below this level's?
@@ -334,6 +325,7 @@ void ModernCameraResetOrbit()
 	ModernCameraArm();
 	modern_cam_clipped = 0;
 	modern_cam_clipped_at = 0;	// harmless either way: a flag of 0 turns any tick it is accepted on into no wall at all
+	modern_cam_orbit_at = 0;	// likewise: the state it guards is unseated by the reset above, and unseated answers nothing
 	modern_cam_lead_yaw = 0;
 	modern_cam_lead_pitch = 0;
 	modern_cam_have_pos = 0;
@@ -431,9 +423,11 @@ static void ModernCameraOrbit()
 	 * GlobalCounter is the honest stamp: game\control.cpp steps it once per
 	 * logic tick (:292) and calls CalculateCamera once in the same tick body
 	 * (:677), so two consecutive orbit ticks are exactly one apart and anything
-	 * else is a gap. The subtraction is done in the counter's own unsigned
-	 * width, so the wrap at 65536 costs nothing. */
-	clipped = ((ushort)(GlobalCounter - modern_cam_clipped_at) == 1) ? modern_cam_clipped : 0;
+	 * else is a gap. The arithmetic of "exactly one apart" is
+	 * ModernCameraTickFollows in game\modern_camera.cpp, shared with the orbit's
+	 * own stamp at the end of this function so that the two cannot disagree; the
+	 * wrap at 65536 costs nothing and that file says why. */
+	clipped = ModernCameraTickFollows(GlobalCounter, modern_cam_clipped_at) ? modern_cam_clipped : 0;
 
 	/* HER HEADING IS HANDED IN, and it is what makes the orbit a WORLD angle
 	 * (round 161a2b, item 1): the state holds where the eye stands in the
@@ -511,6 +505,17 @@ static void ModernCameraOrbit()
 	 * >> 3 keeps doing its job on her slope, on the wall and on the return and
 	 * does nothing at all to the thumb. */
 	camera.actual_elevation = (short)(camera.actual_elevation + modern_cam_lead_pitch);
+
+	/* AND THE ORBIT SAYS THAT IT RAN (#161, round 161a2b, the second review
+	 * pass). game\modern_state.cpp builds her course against the world angle
+	 * this function keeps, and that angle is only the player's view while this
+	 * function is the camera. It is not always: a rich2 sniper camera is the one
+	 * level camera Modern does NOT discard, so FixedCamera runs instead of
+	 * ChaseCamera and the orbit stands still while the player is still steering
+	 * her. The stamp is what ModernCameraWorldYaw asks before it answers - see
+	 * there for what the stale angle cost - and it is the clip flag's own
+	 * discipline, one tick apart, from the same function. */
+	modern_cam_orbit_at = GlobalCounter;
 }
 
 /* THE STICK REACHES THE EYE IN THE SAME TICK (#161, round 161a2b, item 2).
@@ -540,6 +545,15 @@ static void ModernCameraOrbit()
  * orbit's step at speed 10 and 12.0 at speed 8; it moves 99.9 per cent now, at
  * both speeds and at both ends of the slider.
  *
+ * AND WHOEVER EDITS THIS FUNCTION HAS A SECOND FILE TO EDIT (#161, round 161a2b,
+ * the second review pass). This file cannot be linked without a level, so
+ * ModernTest's lead_run() MODELS the body below - the two bounds, the scale, the
+ * pitch-then-yaw order and the truncating divisions - and every number the round
+ * publishes about the lead is measured on that model. The bound is shared for
+ * real now (MODERN_CAMERA_LEAD_MAX, game\modern_camera.h, so deleting it breaks
+ * the test's build); the rest is a mirror and nothing but this sentence and the
+ * one at the other end keeps the two in step. Change one, change the other.
+ *
  * THE PITCH IS THE SAME ROTATION about the horizontal axis through her, and it
  * is the second half of the same tick - the first half went into
  * camera.actual_elevation up in ModernCameraOrbit, where it gets the step past
@@ -547,7 +561,7 @@ static void ModernCameraOrbit()
  * decides where the ideal is.
  *
  * WHAT IT IS NOT ALLOWED TO TOUCH is an eye that is not orbiting her at all
- * (MODERN_CAM_LEAD_MAX), and a horizontal radius of nothing: a camera standing
+ * (MODERN_CAMERA_LEAD_MAX), and a horizontal radius of nothing: a camera standing
  * on her own axis has no direction to turn, which is the same degeneracy
  * MODERN_CAMERA_PITCH_MIN cut out of the sphere.
  *
@@ -580,8 +594,8 @@ static void ModernCameraLeadEye()
 	dy = camera.pos.y - camera.target.y;
 	dz = camera.pos.z - camera.target.z;
 
-	if (abs(dx) > MODERN_CAM_LEAD_MAX || abs(dy) > MODERN_CAM_LEAD_MAX ||
-		abs(dz) > MODERN_CAM_LEAD_MAX)
+	if (abs(dx) > MODERN_CAMERA_LEAD_MAX || abs(dy) > MODERN_CAMERA_LEAD_MAX ||
+		abs(dz) > MODERN_CAMERA_LEAD_MAX)
 		return;
 
 	h = (long)phd_sqrt((ulong)(SQUARE(dx) + SQUARE(dz)));
@@ -648,13 +662,41 @@ static void ModernCameraLeadEye()
  *
  * The world yaw has neither failure: it is what the player dialled, it is exact
  * at any pitch, and it does not move when geometry moves the eye. `seated` is
- * the one case it cannot answer - the tick before the orbit's first - and there
- * the measured vector is still the right fallback. */
+ * one case it cannot answer - the tick before the orbit's first - and there the
+ * measured vector is still the right fallback.
+ *
+ * AND SO IS A TICK THE ORBIT DID NOT RUN, which is the other one, and it is not
+ * hypothetical (#161, round 161a2b, the second review pass). ModernCameraActive()
+ * does not mean "the orbit is the camera": it reads the option, lara_item, the
+ * title, the spotcam, the cutscene and first person, and none of those is the
+ * one level camera Modern deliberately keeps. A rich2 sniper camera is exactly
+ * that - CalculateCamera's modernDiscard holds sniperCam back on purpose - so
+ * FixedCamera runs, ChaseCamera and CombatCamera do not, the orbit stands still,
+ * and the player is STILL steering her. Without the stamp this function went on
+ * answering the world angle the orbit had been left at, frozen at the tick the
+ * camera took over, and her course was built against a camera that is no longer
+ * on screen: pushing forward would walk her along the angle the chase camera had
+ * before the cut rather than away from the sniper's own view. The brief's own
+ * sentence for item 4b says the other thing - "without the orbit (the rich2
+ * sniper camera, anything that makes ModernCameraActive() false) the measured
+ * vector stays" - and now it does. The look key is not in this list because
+ * there the seam does not run at all (specific\input.cpp's own !(input &
+ * IN_LOOK)), and a flyby, a cutscene, the title and first person are not in it
+ * because ModernCameraActive() already refuses them; the stamp is what catches
+ * whatever else stops the orbit without stopping her. */
 long ModernCameraWorldYaw(short* yaw)
 {
 	ModernCameraArm();
 
 	if (!modern_cam_state.seated)
+		return 0;
+
+	/* The caller is game\modern_state.cpp, reached from S_UpdateInput, which
+	 * game\control.cpp runs at :296 of the same tick body whose CalculateCamera
+	 * runs at :677 - so the orbit's own most recent tick is the PREVIOUS one and
+	 * "one apart" is what a live orbit looks like from here, exactly as it is
+	 * from the clip flag's side. */
+	if (!ModernCameraTickFollows(GlobalCounter, modern_cam_orbit_at))
 		return 0;
 
 	if (yaw)

@@ -339,3 +339,35 @@ short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch)
 
 	return (short)(pitch - cfg->pitch_home);
 }
+
+/* DID THE TICK THAT STAMPED THIS ONE RUN IMMEDIATELY BEFORE THIS ONE (#161,
+ * round 161a2b, the second review pass)?
+ *
+ * game\camera.cpp keeps two answers that are only worth anything while the
+ * orbit is really ticking every tick - whether mgLOS clipped the eye, and what
+ * world angle the player has dialled - and the orbit does NOT tick every tick.
+ * It stands still through a flyby, a cutscene, first person, the look key and
+ * the four rich2 sniper cameras, and an answer carried across such a break is
+ * an answer about a camera and a world that are no longer there. So each is
+ * stamped with GlobalCounter when it is written and asked through this
+ * function when it is read.
+ *
+ * WHY "EXACTLY ONE" AND NOT "AT MOST ONE". game\control.cpp steps GlobalCounter
+ * once per logic tick (:292) and everything that reads or writes those two
+ * answers runs once inside that same tick body - S_UpdateInput at :296,
+ * CalculateCamera at :677 - so two consecutive ticks are exactly one apart and
+ * any other distance is a gap by construction. Zero would mean the same tick
+ * asking twice, which no caller does and which would hide a doubled call rather
+ * than report it.
+ *
+ * THE WRAP COSTS NOTHING because the subtraction is done in the counter's own
+ * unsigned width: a gap is only mistaken for a neighbour if it is exactly
+ * 65,537 ticks long, which is thirty-six minutes of one unbroken sniper camera.
+ *
+ * It is here, in the pure file, rather than written out twice in the engine
+ * one: it is arithmetic, it has an edge that a test can reach and an engine
+ * cannot, and the two call sites must not be allowed to disagree. */
+long ModernCameraTickFollows(unsigned short now, unsigned short stamp)
+{
+	return ((unsigned short)(now - stamp) == 1) ? 1 : 0;
+}

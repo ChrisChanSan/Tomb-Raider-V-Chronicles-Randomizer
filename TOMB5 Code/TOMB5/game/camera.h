@@ -40,11 +40,13 @@ short GetFirstPersonRoll();		// the head bone's roll, for the interpolator (#148
  * speed slider and the pitch clamp on the init line) rather than adding an
  * eighth and ninth accessor, for the same reason: nothing they read is new
  * to this file, only new to what a play test gets told about it. */
-bool ModernCameraActive();		// is the orbit steering the view this tick?
+bool ModernCameraActive();		// may the orbit steer the view - NOT "does it": see ModernCameraWorldYaw
 void ModernCameraResetOrbit();		// level start, savegame load, scheme change
 void ModernCameraStick(long rs_x, long rs_y);	// the right stick, from specific\input.cpp
 short ModernCameraSwimTarget();		// the attitude the orbit points at (step 4, the water)
-long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world - 0 = not seated yet (161a2b, item 4b)
+long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world (161a2b, item 4b) - 0 = not seated
+					// yet, OR the orbit did not tick last tick and the angle is
+					// stale: a rich2 sniper camera is the case that made that real
 long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points
 bool ModernLaraHidden();		// too close to draw her at all (observation 4)
 void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,

@@ -343,7 +343,31 @@ enum modern_camera_constants
 	 * cure is to stop producing the snap at all - only the angle we asked for,
 	 * clipped by mgLOS at any distance, which is item 3 in game\camera.cpp -
 	 * and not to absorb it here. */
-	MODERN_CAMERA_PITCH_RETURN = 0
+	MODERN_CAMERA_PITCH_RETURN = 0,
+
+	/* HOW FAR THE EYE MAY BE FROM HER AND STILL BE ORBITING HER AT ALL, the
+	 * outer bound game\camera.cpp's ModernCameraLeadEye needs. Eight sectors is
+	 * five times the orbit's own radius of 1536: past that the eye is not
+	 * circling her, it is arriving from somewhere - a fixed camera just
+	 * released, a cut, a room change - and turning it about her by a stick step
+	 * would be turning the wrong thing. It also keeps the squares in that
+	 * function inside a long with room to spare.
+	 *
+	 * IT IS NOT THE BOUND THE CUT DETECTION NEEDS: a rotation moves the eye by a
+	 * chord that grows with the RADIUS, so an eye walking in from three or four
+	 * sectors away would be turned further in one tick than INTERP_CAM_SNAP
+	 * allows, in exactly the ticks the player is steering. That bound is
+	 * camera.target_distance and it lives in the function, because it is the
+	 * radius the ideal itself is built at in the same breath.
+	 *
+	 * IT LIVES IN THIS HEADER, and not beside the function it guards, for one
+	 * reason the round's second review pass named: Preparation\Tools\Diagnose\
+	 * ModernTest models ModernCameraLeadEye by hand - camera.cpp cannot be
+	 * linked without a level - and while this number was a #define in that .cpp
+	 * the model held a hand-copied 8192 that no compiler would ever compare
+	 * against the tree. Here the test reads the tree's own number, so moving or
+	 * deleting it breaks the build of the test rather than its silence. */
+	MODERN_CAMERA_LEAD_MAX = 8192
 };
 
 /* The orbit's thresholds, in one place, filled by ModernCameraDefaults().
@@ -405,3 +429,4 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	short* out_yaw_offset, short* out_pitch);
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance);
 short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch);
+long ModernCameraTickFollows(unsigned short now, unsigned short stamp);

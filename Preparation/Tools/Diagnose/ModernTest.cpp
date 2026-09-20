@@ -21,7 +21,11 @@
  * sphere's top cap, added the speed slider's mapping and took the wall feedback
  * out again - the round's refuted assumption, and its checks went with it, and
  * its step 4 gave the PAD a pure function at last, the radial dead zone, which
- * is what the note about step 3 having none had been waiting for).
+ * is what the note about step 3 having none had been waiting for; that round's
+ * second review pass then added camera_stamp, the gate that says whether the
+ * orbit is still the camera at all - it is not, through a rich2 sniper camera,
+ * and the seam had been taking its movement reference from a frozen angle for
+ * as long as one of those had the view).
  * Build with bmt.bat, run with no arguments.
  *
  * WHAT IT CHECKS, and why it exists at all. The modern control is a pure
@@ -4168,7 +4172,20 @@ static void camera_seam()
  * from a cut or a released fixed camera, which is the case the fix round had to
  * measure. Both of ModernCameraLeadEye's bounds are modelled with them: the
  * outer one that refuses to turn an eye eight sectors away at all, and the
- * scale that keeps the eye's own step down to the ideal's wherever it is. */
+ * scale that keeps the eye's own step down to the ideal's wherever it is.
+ *
+ * AND THIS IS A MODEL AND NOT THE FUNCTION, which is the one thing about this
+ * group that has to be said out loud (#161, round 161a2b, the second review
+ * pass). Everything else in this file compiles the engine's own source beside
+ * itself; game\camera.cpp cannot be linked without a level, so the body above is
+ * a hand-built twin of ModernCameraLeadEye and every number this round publishes
+ * about the lead - "99.9 per cent on the first tick", the 407/609/812 sweep - is
+ * measured on the twin. One piece of it is shared for real now: the outer bound
+ * is MODERN_CAMERA_LEAD_MAX out of game\modern_camera.h, moved there for this
+ * line, so that much cannot drift without breaking this build. The rest - the
+ * target_distance scale, the pitch-then-yaw order, the truncating divisions -
+ * is kept in step by this paragraph and by the one at the other end, in
+ * ModernCameraLeadEye's own header. Change one, change the other. */
 struct LEAD_RUN
 {
 	double first_yaw;	// the eye's yaw step on the FIRST tick, in angle units
@@ -4183,9 +4200,11 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 	long ticks, double radius, double start, LEAD_RUN* r)
 {
 	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
-	// The outer bound is camera.cpp's own MODERN_CAM_LEAD_MAX, which lives in
-	// that file and is mirrored here because a .cpp has no header to lend it.
-	const long lead_max = 8192;
+	// The outer bound is the tree's own, not a copy of it: the round's second
+	// review pass moved it out of camera.cpp into game\modern_camera.h for
+	// exactly this line, so deleting or renaming it now breaks this build
+	// instead of leaving this model measuring a number the engine gave up.
+	const long lead_max = MODERN_CAMERA_LEAD_MAX;
 	const long lim = (long)radius;
 	MODERN_CAMERA_CFG cfg;
 	long ang = 0;
@@ -4324,6 +4343,85 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 		prev_yaw = now_yaw;
 		prev_pitch = now_pitch;
 	}
+}
+
+/* THE STAMP THAT SAYS THE ORBIT IS STILL THE CAMERA (#161, round 161a2b, the
+ * second review pass).
+ *
+ * game\camera.cpp keeps two answers that are only worth anything while the orbit
+ * really ticks every tick - whether mgLOS clipped the eye, and what world angle
+ * the player has dialled - and the orbit does not tick every tick. The one that
+ * cost something was the second: ModernCameraActive() reads the option, Lara,
+ * the title, the spotcam, the cutscene and first person, but NOT which camera
+ * the engine is running, so through a rich2 sniper camera - the one level camera
+ * Modern deliberately keeps - it stayed true while FixedCamera had the view and
+ * the orbit stood still. game\modern_state.cpp went on building her course
+ * against the world angle the orbit had been frozen at, which is a camera that
+ * is no longer on screen.
+ *
+ * Both answers now go through ModernCameraTickFollows, which is the whole of the
+ * rule and is checked here: the engine side is two stamps and two calls, and
+ * this is the arithmetic under them - including the wrap, which the engine
+ * reaches once every thirty-six minutes and a test reaches in a line. */
+static void camera_stamp()
+{
+	long lp;
+	long live;
+
+	printf("the tick stamp - the orbit's answers expire when the orbit stops\n");
+
+	ok(ModernCameraTickFollows(1, 0) == 1, "the tick after: one apart is a live answer",
+		ModernCameraTickFollows(1, 0), 1);
+	ok(ModernCameraTickFollows(1000, 999) == 1, "and anywhere in the counter's range",
+		ModernCameraTickFollows(1000, 999), 1);
+	ok(ModernCameraTickFollows(1000, 1000) == 0, "the SAME tick asking twice is not one apart",
+		ModernCameraTickFollows(1000, 1000), 0);
+	ok(ModernCameraTickFollows(1000, 998) == 0, "two ticks is a gap: a sniper camera took one",
+		ModernCameraTickFollows(1000, 998), 0);
+	ok(ModernCameraTickFollows(1000, 900) == 0, "and a hundred is the flyby that took a hundred",
+		ModernCameraTickFollows(1000, 900), 0);
+	ok(ModernCameraTickFollows(1000, 1001) == 0, "a stamp from the FUTURE answers nothing",
+		ModernCameraTickFollows(1000, 1001), 0);
+
+	/* THE WRAP, which is why the subtraction is done in the counter's own width.
+	 * GlobalCounter is a ushort and the level it counts runs for hours. */
+	ok(ModernCameraTickFollows(0, 65535) == 1, "over the wrap 65535 -> 0 is still one apart",
+		ModernCameraTickFollows(0, 65535), 1);
+	ok(ModernCameraTickFollows(0, 65534) == 0, "and 65534 -> 0 is still a gap",
+		ModernCameraTickFollows(0, 65534), 0);
+	ok(ModernCameraTickFollows(0, 0) == 0, "a reset leaves both at 0, which answers nothing",
+		ModernCameraTickFollows(0, 0), 0);
+
+	/* EXACTLY ONE STAMP IN THE WHOLE COUNTER IS LIVE for any given tick, which is
+	 * the property the engine leans on: the flag cannot survive a break of any
+	 * length, so nothing it guards has to be cleared on the way out of one. */
+	live = 0;
+
+	for (lp = 0; lp < 65536; lp++)
+		live += ModernCameraTickFollows(4321, (unsigned short)lp);
+
+	ok(live == 1, "of all 65536 possible stamps, exactly one is a live answer at any tick",
+		live, 1);
+
+	/* AND WALKED AS THE ENGINE WALKS IT: the orbit stamps every tick it runs, so
+	 * the seam's reference is live on every one of them; the moment a camera
+	 * takes over, the very next tick declines and every tick after it declines
+	 * too - the stale angle can never come back without the orbit coming back. */
+	live = 0;
+
+	for (lp = 1; lp <= 300; lp++)
+		live += ModernCameraTickFollows((unsigned short)lp, (unsigned short)(lp - 1));
+
+	ok(live == 300, "300 ticks of an orbit that runs: the reference is live on all 300",
+		live, 300);
+
+	live = 0;
+
+	for (lp = 1; lp <= 300; lp++)
+		live += ModernCameraTickFollows((unsigned short)(300 + lp), 300);
+
+	ok(live == 1, "300 ticks of a sniper camera: live on the first only, then never again",
+		live, 1);
 }
 
 static void camera_lead()
@@ -4558,7 +4656,7 @@ static void camera_camcut()
 	 * and the promise that the orbit never makes the interpolator cut was never
 	 * measured there at all.
 	 *
-	 * SO BOTH SPELLINGS ARE SWEPT, out to the distance MODERN_CAM_LEAD_MAX stops
+	 * SO BOTH SPELLINGS ARE SWEPT, out to the distance MODERN_CAMERA_LEAD_MAX stops
 	 * the lead at, and at each of the three distances the engine can set
 	 * (camera.target_distance is 1536 behind her, 1024 in the puzzle states and
 	 * 2048 on the rope - game\lara.cpp). `lead` 2 is what step 2 shipped and 1 is
@@ -4715,6 +4813,7 @@ int main()
 	camera_wall();
 	camera_hide();
 	camera_seam();
+	camera_stamp();
 	camera_lead();
 	camera_camcut();
 	deferred();

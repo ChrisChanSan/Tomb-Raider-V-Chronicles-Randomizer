@@ -322,11 +322,23 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * behind, exactly as camera_yaw is and for the same reason (game\control.cpp
 	 * runs the input before CalculateCamera).
 	 *
-	 * WITHOUT THE ORBIT NOTHING CHANGES: the rich2 sniper camera, a flyby, a
-	 * cutscene, first person, the title - ModernCameraActive() is false in every
-	 * one of them and the measured vector is the reference, as it has been since
-	 * A1. So is the one tick before the orbit's first, where it is not seated yet
-	 * and has no world angle to give.
+	 * WITHOUT THE ORBIT NOTHING CHANGES: a flyby, a cutscene, first person, the
+	 * title - ModernCameraActive() is false in every one of them and the measured
+	 * vector is the reference, as it has been since A1. So is the one tick before
+	 * the orbit's first, where it is not seated yet and has no world angle to
+	 * give.
+	 *
+	 * AND THE RICH2 SNIPER CAMERA IS IN THAT LIST TOO, but it does not get there
+	 * through ModernCameraActive() and the first version of this comment said it
+	 * did (#161, round 161a2b, the second review pass). That predicate reads the
+	 * option, lara_item, the title, the spotcam, the cutscene and first person -
+	 * not the camera the engine is actually running. The sniper is the one level
+	 * camera Modern keeps rather than discards, so FixedCamera runs, the orbit
+	 * does not tick, and ModernCameraActive() is true through all of it. What
+	 * answers it is game\camera.cpp's own stamp: ModernCameraWorldYaw declines
+	 * unless the orbit ran on the tick before this one, so the line below falls
+	 * back to the measured vector for as long as the sniper has the view - which
+	 * is the right reference there, being the camera the player can see.
 	 *
 	 * MODERNLOG keeps printing BOTH: `cam=` is the measured vector above and
 	 * `ref=` is what the translation really used (out.reference), so a play test

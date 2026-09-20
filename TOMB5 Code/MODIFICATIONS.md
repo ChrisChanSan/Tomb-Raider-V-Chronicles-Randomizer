@@ -17273,8 +17273,8 @@ block) and `InterpTest` 373, all 0 failed.
 
 Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), `b29adbf`
 (this entry and the manual/README updates it describes), `0f1602b` (the first
-fix round's corrections), `661de4a` (naming it here), the second fix round's
-own commit listed directly above, and the one that names it here.
+fix round's corrections), `661de4a` (naming it here), `2fb27d5` (the second
+fix round, described directly above), and the one that names it here.
 
 ## Building this yourself
 

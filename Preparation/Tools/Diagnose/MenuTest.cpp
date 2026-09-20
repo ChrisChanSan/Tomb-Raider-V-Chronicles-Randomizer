@@ -783,6 +783,12 @@ static void pad_role_slots(void)
 {
 	check(JOY_ROLES, 28, "twenty-eight pad roles");
 	check(JOY_ROLE_SECOND, 15, "the Secondary pad role is still slot 15");
+	// Core's own three, named by the fix round so that the chord mask below is
+	// really written out of role names. A registry calls these slots JFlr/JSav/
+	// JLod and SJFlr/SJSav/SJLod, so the numbers are not ours to move.
+	check(JOY_ROLE_FLARE, 6, "the flare is slot 6");
+	check(JOY_ROLE_SAVE, 11, "quick save is slot 11");
+	check(JOY_ROLE_LOAD, 12, "quick load is slot 12");
 	check(JOY_ROLE_MODIFIER, 16, "the Modifier is slot 16");
 	check(JOY_ROLE_WEAPON_FIRST, 17, "the pad's weapon hotkeys start at 17");
 	check(JOY_ROLE_WEAPONS, 6, "and there are six of them");

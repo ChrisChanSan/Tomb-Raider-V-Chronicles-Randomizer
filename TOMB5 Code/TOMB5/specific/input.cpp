@@ -309,13 +309,21 @@ static void JoyDefaultRecord(long modern, long split, long* out, long* chord)
 	 * chosen by exactly the switch above rather than by a second one: only the
 	 * two DirectInput-numbered Separate rows have a Modifier to chord against,
 	 * and at One key there is nothing to chord at all. The One-key branch is 0,
-	 * which is what "all twelve unbound on every path" means for the flags. */
-	if (!split)
-		*chord = 0;
-	else if (source == jSepPS5DInput || source == jSepGeneric)
-		*chord = JOY_SEP_CHORD_DINPUT;
-	else
-		*chord = JOY_SEP_CHORD_XINPUT;
+	 * which is what "all twelve unbound on every path" means for the flags.
+	 *
+	 * `chord` MAY BE NULL (#161, round 161b2d, fix round - the review's third
+	 * finding): ApplyJoyScheme wants the OTHER scheme's record for its buttons
+	 * alone and has no use for a second mask, and a caller that has to declare
+	 * a variable it never reads is a thing the next reader must disprove. */
+	if (chord)
+	{
+		if (!split)
+			*chord = 0;
+		else if (source == jSepPS5DInput || source == jSepGeneric)
+			*chord = JOY_SEP_CHORD_DINPUT;
+		else
+			*chord = JOY_SEP_CHORD_XINPUT;
+	}
 
 	// Fifteen and not JOY_ROLES: that is the length the One-key tables have,
 	// and everything behind it is read one statement down, where the two cases
@@ -457,7 +465,7 @@ void ApplyJoyScheme()
 {
 	long want[JOY_ROLES];
 	long other[JOY_ROLES];
-	long want_chord, other_chord;
+	long want_chord;
 	const long modern = tomb5.control_modern ? 1 : 0;
 	// The repair is the ACTIVE set's, whichever Action setting seated it (#161,
 	// round 161b2c, item 3): jLayout is that set by construction, and the
@@ -468,7 +476,13 @@ void ApplyJoyScheme()
 	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
 
 	JoyDefaultRecord(modern, split, want, &want_chord);
-	JoyDefaultRecord(modern ? 0 : 1, split, other, &other_chord);
+	// NULL and not a second mask (#161, round 161b2d, fix round): `other` is
+	// asked for its BUTTONS only - the displaced-role test below compares
+	// numbers, and the repair writes the ACTIVE record's flag, want_chord's.
+	// The two masks are equal anyway (both calls were given the same `split`),
+	// which is why a variable holding the second one read as though something
+	// still had to check it.
+	JoyDefaultRecord(modern ? 0 : 1, split, other, NULL);
 
 	for (int i = 0; i < JOY_ROLES; i++)
 	{
@@ -2231,10 +2245,28 @@ long S_UpdateInput()
 		 * and the duck are the same expression they were, term for term and in
 		 * the same order; what changed is only that the duck now asks WHERE she
 		 * is when the hands are busy (item 5b) and that the grab has its own
-		 * short list. */
-		const long mode_drop = !lara_item || App.fmv || GLOBAL_playing_cutseq ||
-			bUseSpotCam || bDisableLaraControl || InventoryActive ||
+		 * short list.
+		 *
+		 * THE FIX ROUND SPLIT bUseSpotCam OFF THE OTHER SEVEN (the review's
+		 * fourth finding), and it is a separate term and not a reordering: the
+		 * sprint and the duck still ask `mode_drop`, which is the same eight
+		 * reads in the same order (`!lara_item` stays first, so the hit_points
+		 * deref is guarded as before), and only the GRAB asks the seven.
+		 * MEASURED, and the case is not exotic: InitialiseSpotCam sets
+		 * bDisableLaraControl to 0 and raises it again only for SP_NOLARACONTROL
+		 * (game\spotcam.cpp:148, :176), so an ordinary flyby leaves her playable
+		 * with bUseSpotCam standing; and game\control.cpp:647 holds bUseSpotCam
+		 * at 1 for as long as a GF_OFFICE level's flipmap is above 10, with full
+		 * control throughout. In that window the eighth term would have taken
+		 * IN_ACTION off a Toggle player who had let the button go - she would
+		 * let go of the ledge - while a Hold player holding it would hang on.
+		 * That is the one thing the mode may not do. The other seven stay: a
+		 * video, a cutscene, a menu, the title, a disabled control word and her
+		 * death are all ticks the word is not hers. */
+		const long mode_base = !lara_item || App.fmv || GLOBAL_playing_cutseq ||
+			bDisableLaraControl || InventoryActive ||
 			gfLevelId == LVL5_TITLE || lara_item->hit_points <= 0;
+		const long mode_drop = mode_base || bUseSpotCam;
 
 		// The three terms that are not everybody's, read once. `mode_state` is
 		// last tick's state, which is what the family tables are asked about -
@@ -2273,10 +2305,15 @@ long S_UpdateInput()
 		const long duck_drop = mode_drop || mode_water || mode_sight ||
 			(mode_hands && !ModernStateIsDuck(mode_state));
 
-		/* AND THE GRAB'S OWN LIST, which is the eight shared terms and NOTHING
-		 * else - the brief's "level start, death, cutscene, a menu owning the
-		 * input", the level start arriving through InputModeLatchReset. Each of
-		 * the three that are missing was measured before it was left out:
+		/* AND THE GRAB'S OWN LIST, which is SEVEN of the eight shared terms and
+		 * nothing else - the brief's "level start, death, cutscene, a menu
+		 * owning the input", the level start arriving through
+		 * InputModeLatchReset. The eighth, bUseSpotCam, is the fix round's and
+		 * its measurement stands above mode_base: a flyby without
+		 * SP_NOLARACONTROL and a GF_OFFICE camera room both leave her playing
+		 * with that flag up, and there a drop would have let go of the ledge for
+		 * a Toggle player and not for a Hold player. Each of the three others
+		 * that are missing was measured before it was left out:
 		 * - LG_HANDS_BUSY IS the family. A hang, a ladder, a rope and a pole
 		 *   all leave gun_status there (game\lara.cpp:2465, :2546, :2918), so
 		 *   the term would drop the latch on every tick it was meant to stand.
@@ -2286,7 +2323,7 @@ long S_UpdateInput()
 		 * - the binoculars: with the sight up she is standing, so the family is
 		 *   0 and the bit is the key's either way. A term would say nothing. */
 		const long grab_family = ModernStateIsGrab(mode_state);
-		const long grab_drop = mode_drop;
+		const long grab_drop = mode_base;
 
 		linput = ModernModeLatch(tomb5.sprint_toggle, (linput & IN_SPRINT) != 0,
 			sprint_drop, &sprint_latch, IN_SPRINT, linput);

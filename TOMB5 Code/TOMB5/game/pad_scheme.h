@@ -67,6 +67,19 @@
  * KEY_ROLE_SECOND's literal 18. MenuTest checks the number. */
 #define JOY_ROLE_SECOND		15
 
+/* THREE OF CORE'S OWN ROLES BY NAME (#161, round 161b2d, fix round - the
+ * skeptical review's second finding). They are the three the chord mask below
+ * names, and it claimed in as many words to be "written out of the role names"
+ * while spelling them 6, 11 and 12. Now it is: the numbers are Core's role
+ * order (duck dash walk jump action draw FLARE look roll inventory pause SAVE
+ * LOAD smallmedi largemedi secondary), they cannot move - the registry calls
+ * those slots JFlr/JSav/JLod and SJFlr/SJSav/SJLod and the accepted 161b2c
+ * build reads them - and naming them costs nothing but makes the promise true.
+ * The other thirteen stay numbers: nothing here asks for them by name. */
+#define JOY_ROLE_FLARE		6
+#define JOY_ROLE_SAVE		11
+#define JOY_ROLE_LOAD		12
+
 /* THE NEW ROLES BY NAME, so that no call site carries a bare number (#161,
  * round 161b2d, item 3). The order is the order of the four Separate default
  * tables below and of the bind rows on the Key bindings page. */
@@ -184,7 +197,7 @@ inline int PadRoleFires(unsigned long fire, long button, int chord, long modifie
  * rather than as a hex number, so that a role moving would move its bit with
  * it. Flare, quick save, quick load and the first four weapons - the seven the
  * user's own page has, and nothing else. */
-#define JOY_SEP_CHORD_DINPUT	((1L << 6) | (1L << 11) | (1L << 12) | \
+#define JOY_SEP_CHORD_DINPUT	((1L << JOY_ROLE_FLARE) | (1L << JOY_ROLE_SAVE) | (1L << JOY_ROLE_LOAD) | \
 				 (1L << (JOY_ROLE_WEAPON_FIRST + 0)) | (1L << (JOY_ROLE_WEAPON_FIRST + 1)) | \
 				 (1L << (JOY_ROLE_WEAPON_FIRST + 2)) | (1L << (JOY_ROLE_WEAPON_FIRST + 3)))
 #define JOY_SEP_CHORD_XINPUT	0L

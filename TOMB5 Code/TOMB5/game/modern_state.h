@@ -44,6 +44,13 @@
  * see the tick guard in the .cpp). */
 long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump);
 
+/* Her heading as the function above left it THIS tick, for game\camera.cpp and
+ * nothing else (round 161a3, item 5). Returns 0 when the modern input did not
+ * run this tick at all, and then writes nothing: the camera has no baseline on
+ * such a tick and must not seat a swing. The .cpp says which four ticks those
+ * are and why the stamp is an equality. */
+long ModernHeadingAfterInput(short* yaw);
+
 /* Forget everything remembered: the held course, the spin, the blocked
  * counter and the position the counter measures against.
  *

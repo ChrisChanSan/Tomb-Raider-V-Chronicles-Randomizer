@@ -30,6 +30,7 @@
 #include "../specific/input.h"
 #include "../specific/audio.h"
 #include "modern_camera.h"		// the orbit's arithmetic (#161, round 161a2)
+#include "modern_state.h"		// and the one question the orbit asks it (round 161a3, item 5)
 #include "lara.h"
 #include "tomb4fx.h"
 #include "savegame.h"
@@ -397,6 +398,35 @@ static long ModernCameraLaraMoving()
 	return moving;
 }
 
+/* AN ANIMATION TURNED HER AND THE CAMERA OWES HER A SWING (#161, round 161a3,
+ * item 5, and the user's word 6: "Im Remaster dreht sich die Kamera automatisch
+ * mit Lara mit und richtet sich hinter ihr wieder aus ... Bei uns bleibt die
+ * Kamera in jedem Fall immer da, wo sie war").
+ *
+ * WHAT IS MEASURED IS THE PART OF THE TICK THE STICK CANNOT ACCOUNT FOR, and
+ * both ends of that subtraction are this tick's own. game\modern_state.cpp runs
+ * at the top of the tick body and publishes her heading as IT left it; by the
+ * time this runs, AnimateLara and the collision have been and gone. So the
+ * difference is exactly what the ANIMATION did, and the brief's "yawd of that
+ * tick is not the cause" is a subtraction rather than a comparison - which also
+ * survives a later round adding a second way for the stick to turn her, because
+ * the published heading is read back off the item and not composed.
+ *
+ * It is seated BEFORE ModernCameraUpdate below, so the swing's first instalment
+ * is paid out on the same tick the flip happened on; the threshold, the side and
+ * the profile are ModernCameraCarry's, in game\modern_camera.cpp, where they can
+ * be measured. A tick with no published heading seats nothing - see there. */
+static void ModernCameraCarryFromAnim()
+{
+	short turned;
+
+	if (!ModernHeadingAfterInput(&turned))
+		return;
+
+	ModernCameraCarry(&modern_cam_cfg, &modern_cam_state,
+		(short)(lara_item->pos.y_rot - turned));
+}
+
 /* ONE TICK OF THE ORBIT, AND THE TWO SLOTS IT WRITES. */
 static void ModernCameraOrbit()
 {
@@ -408,6 +438,11 @@ static void ModernCameraOrbit()
 	long clipped;
 
 	ModernCameraArm();
+
+	/* THE ANIMATION'S OWN TURN, BEFORE THE TICK IS PAID OUT (item 5). It needs
+	 * the cfg, so it comes after the arming; it changes only the three carry
+	 * fields of the state, so it changes nothing the three reads below want. */
+	ModernCameraCarryFromAnim();
 
 	/* A WALL IS WORTH ONE TICK AND NOT ONE INTERRUPTION (#161, round 161a2, fix
 	 * round - the review's third finding). It is measured at the end of one
@@ -1594,6 +1629,189 @@ long CameraCollisionBounds(GAME_VECTOR* ideal, long push, long yfirst)
 	return 0;
 }
 
+/* IS THERE A ROOM AT THIS POINT AT ALL - the five terms CameraCollisionBounds
+ * asks five times over, in one place so that the two below cannot spell them
+ * differently. They are its own, in its own order (camera.cpp:1587); the four
+ * probes it runs earlier ask the same five with two of them swapped, which is
+ * the same question. */
+static long ModernCameraEyeInRoom(long wx, long wy, long wz, short room)
+{
+	FLOOR_INFO* floor;
+	long h, c;
+	short room_number;
+
+	room_number = room;
+	floor = GetFloor(wx, wy, wz, &room_number);
+	h = GetHeight(floor, wx, wy, wz);
+	c = GetCeiling(floor, wx, wy, wz);
+
+	if (h < wy || wy < c || h == NO_HEIGHT || c == NO_HEIGHT || c >= h)
+		return 0;
+
+	return 1;
+}
+
+/* AND THE HALF OF CameraCollisionBounds THAT STAYS: the floor and the ceiling,
+ * verbatim from its yfirst block (camera.cpp:1520-1533), returning the y rather
+ * than writing it. A ceiling may push the eye down and a floor may push it up -
+ * that has never moved the picture round her and item 1 does not touch it. */
+static long ModernCameraEyeY(long wx, long wy, long wz, short room)
+{
+	FLOOR_INFO* floor;
+	long h, c;
+	short room_number;
+
+	room_number = room;
+	floor = GetFloor(wx, wy, wz, &room_number);
+	h = GetHeight(floor, wx, wy, wz);
+	c = GetCeiling(floor, wx, wy, wz);
+
+	if (c > wy - 255 && h < wy + 255 && c < h && c != NO_HEIGHT && h != NO_HEIGHT)
+		return (h + c) >> 1;
+
+	if (h < wy + 255 && c < h && c != NO_HEIGHT && h != NO_HEIGHT)
+		return h - 255;
+
+	if (c > wy - 255 && c < h && c != NO_HEIGHT && h != NO_HEIGHT)
+		return c + 255;
+
+	return wy;
+}
+
+/* THE EYE COMES IN ALONG THE RAY, AND NEVER ROUND HER (#161, round 161a3,
+ * item 1, and the user's word 1: "Ich lenke nach rechts, sie geht aber nach
+ * links ... Als waeren Stick, Kamera und Laras Position out of sync").
+ *
+ * WHAT CameraCollisionBounds ABOVE DOES TO A CLIPPED IDEAL, measured in the
+ * tree before a line of this was written. Both orbit cameras call it with push
+ * 384 and yfirst 1, so its !yfirst half never runs for them:
+ *
+ *   :1520-1533  the y, against the floor and the ceiling AT the point
+ *   :1536-1541  (wx - 384) has no room  ->  wx = (wx & ~1023) + 384
+ *   :1543-1549  (wz - 384) has no room  ->  wz = (wz & ~1023) + 384
+ *   :1551-1557  (wx + 384) has no room  ->  wx = (wx | 1023) - 384
+ *   :1559-1565  (wz + 384) has no room  ->  wz = (wz | 1023) - 384
+ *   :1587       the point itself has no room -> return 1, ideal untouched
+ *
+ * The four middle branches are the defect, and it is not that they push too
+ * far: they do not push ALONG anything. Each destination is an absolute world
+ * coordinate with nothing of the old one left in it - the near or the far edge
+ * of whichever sector the point happens to be in, plus or minus the push - so a
+ * point at the wrong edge of its sector moves 1023 - 384 = 639 units SIDEWAYS,
+ * x and z can both fire in one call, and the +x probe reads the wx the -x probe
+ * has already moved. At the orbit's own radius of 1536 that is up to 23 degrees
+ * an axis. At the 200 to 400 units a wall leaves when the eye has been pulled
+ * in it is any angle at all, and M1 counted the bill: 481 of 930 pushed ticks
+ * with the picture and the movement reference more than 60 degrees apart, EVERY
+ * one of them on a tick mgLOS had clipped, median 124 degrees at 200 to 400 and
+ * 146 under 200. He steers by the picture and she runs by the orbit's angle.
+ *
+ * SO IN MODERN THE SIDEWAYS HALF GOES AND THE RAY STAYS. mgLOS has already put
+ * the eye on the ray at the angle the player dialled (round 161a2b, item 3);
+ * this walks it further in along that SAME ray, an eighth at a time, until the
+ * point has the clearance the four probes were asking for - and keeps the y
+ * correction on whatever it settles on. A floor or a ceiling may move the eye.
+ * A wall may only bring it closer.
+ *
+ * AND IF NOTHING ON THE RAY CLEARS, THE RAY WINS. She can stand with her back
+ * to a wall, and then no point between her and the eye is 384 from it; the
+ * classic's answer there is the snap, and the snap is the thing being removed.
+ * The mgLOS point stands instead, with its y correction - mgLOS's own push of
+ * 200 is what kept it inside a room in the first place, and
+ * MODERN_CAMERA_HIDE_DIST takes her out of the picture long before the eye is
+ * inside her.
+ *
+ * AND THE EYE NEVER ENDS UP STANDING ON HER OWN AXIS, which is a degeneracy
+ * mgLOS hands out rather than one this invents, and it is not rare: when the
+ * FIRST of its eight steps is already in the wall it steps back onto the start
+ * point and returns the TARGET (camera.cpp:1495 - `if (lp)` is true at lp 1 and
+ * the one step it undoes is the only one there was). M1 counted the band it
+ * lives in, 22 pushed ticks under 200 units with a median error of 146 degrees.
+ * An eye there has no direction at all: the picture has no angle to be right or
+ * wrong about and ModernCameraLeadEye's own `h` guard would refuse to turn it.
+ * The classic answers it with the snap, so the ray answers it with the shortest
+ * distance at which there is still a picture - MODERN_CAMERA_HIDE_DIST, the
+ * eye-to-centre distance at which she stops being drawn at all
+ * (game\modern_camera.h has where 122 comes from) - measured along the DIALLED
+ * candidate, which is what `want` is for and why it is passed in unclipped. Her
+ * own collision radius is 102, so that point is at most 20 units past a wall
+ * face she could ever be that close to, and the near plane is 20.
+ *
+ * The return value is CameraCollisionBounds' own contract - 1 means "no point
+ * was usable, ideal is untouched" - kept although neither call site reads it,
+ * because a reader comparing the two functions should not have to check. */
+static long ModernCameraRayBounds(GAME_VECTOR* ideal, const GAME_VECTOR* want, long push)
+{
+	long bx, by, bz, wx, wy, wz, step, dist;
+	short room;
+
+	bx = ideal->x;
+	by = ideal->y;
+	bz = ideal->z;
+	room = ideal->room_number;
+
+	if (bx == camera.target.x && by == camera.target.y && bz == camera.target.z)
+	{
+		wx = want->x - camera.target.x;
+		wy = want->y - camera.target.y;
+		wz = want->z - camera.target.z;
+		dist = (long)phd_sqrt((ulong)(SQUARE(wx) + SQUARE(wy) + SQUARE(wz)));
+
+		if (dist > MODERN_CAMERA_HIDE_DIST)
+		{
+			wx = wx * MODERN_CAMERA_HIDE_DIST / dist;
+			wy = wy * MODERN_CAMERA_HIDE_DIST / dist;
+			wz = wz * MODERN_CAMERA_HIDE_DIST / dist;
+		}
+
+		bx = camera.target.x + wx;
+		by = camera.target.y + wy;
+		bz = camera.target.z + wz;
+	}
+
+	for (step = MODERN_CAMERA_PULL_STEPS; step > 0; step--)
+	{
+		wx = ModernCameraPullAxis(camera.target.x, bx, step, MODERN_CAMERA_PULL_STEPS);
+		wy = ModernCameraPullAxis(camera.target.y, by, step, MODERN_CAMERA_PULL_STEPS);
+		wz = ModernCameraPullAxis(camera.target.z, bz, step, MODERN_CAMERA_PULL_STEPS);
+
+		// A fraction of a very short ray truncates onto her own axis, and that
+		// is the one point this function may never hand back - see above.
+		if (wx == camera.target.x && wy == camera.target.y && wz == camera.target.z)
+			continue;
+
+		wy = ModernCameraEyeY(wx, wy, wz, room);
+
+		if (!ModernCameraEyeInRoom(wx - push, wy, wz, room) ||
+			!ModernCameraEyeInRoom(wx + push, wy, wz, room) ||
+			!ModernCameraEyeInRoom(wx, wy, wz - push, room) ||
+			!ModernCameraEyeInRoom(wx, wy, wz + push, room))
+			continue;
+
+		if (!ModernCameraEyeInRoom(wx, wy, wz, room))
+			continue;
+
+		GetFloor(wx, wy, wz, &ideal->room_number);
+		ideal->x = wx;
+		ideal->y = wy;
+		ideal->z = wz;
+		return 0;
+	}
+
+	wx = bx;
+	wz = bz;
+	wy = ModernCameraEyeY(bx, by, bz, room);
+
+	if (!ModernCameraEyeInRoom(wx, wy, wz, room))
+		return 1;
+
+	GetFloor(wx, wy, wz, &ideal->room_number);
+	ideal->x = wx;
+	ideal->y = wy;
+	ideal->z = wz;
+	return 0;
+}
+
 void UpdateCameraElevation()
 {
 	PHD_VECTOR pos;
@@ -1783,6 +2001,7 @@ void ChaseCamera(ITEM_INFO* item)
 	GAME_VECTOR ideal;
 	GAME_VECTOR ideals[5];
 	GAME_VECTOR temp[2];
+	GAME_VECTOR want;	// the dialled candidate, kept unclipped for item 1
 	long distance, dx, dz, farthest, farthestnum, h, c, wx, wy, wz, angle, lp;
 	long modern_orbit;
 	short room_number;
@@ -1885,6 +2104,13 @@ void ChaseCamera(ITEM_INFO* item)
 		 * says what that costs. CameraCollisionBounds below is untouched. */
 		if (!lp && modern_orbit)
 		{
+			// The dialled point, before mgLOS cuts it back: item 1's own
+			// answer to a ray with nothing on it needs a direction, and after
+			// the call below there is none left in ideals[0].
+			want.x = ideals[lp].x;
+			want.y = ideals[lp].y;
+			want.z = ideals[lp].z;
+			want.room_number = ideals[lp].room_number;
 			modern_cam_clipped = mgLOS(&camera.target, &ideals[lp], 200) ? 0 : 1;
 			modern_cam_clipped_at = GlobalCounter;
 			farthestnum = 0;
@@ -1951,7 +2177,15 @@ void ChaseCamera(ITEM_INFO* item)
 	ideal.y = ideals[farthestnum].y;
 	ideal.z = ideals[farthestnum].z;
 	ideal.room_number = ideals[farthestnum].room_number;
-	CameraCollisionBounds(&ideal, 384, 1);
+
+	// AND THE EYE IS RESOLVED ALONG THE RAY IN MODERN (#161, round 161a3,
+	// item 1). Same question, same 384, same y correction; the answer no longer
+	// moves the eye round her. ModernCameraRayBounds carries the measurement of
+	// what the classic one did instead.
+	if (modern_orbit)
+		ModernCameraRayBounds(&ideal, &want, MODERN_CAMERA_PULL_PUSH);
+	else
+		CameraCollisionBounds(&ideal, 384, 1);
 
 	// THE STICK'S OWN STEP, HANDED TO THE EYE (#161, round 161a2b, item 2).
 	// After the resolution, so that nothing of it is changed, and immediately
@@ -1971,6 +2205,7 @@ void CombatCamera(ITEM_INFO* item)
 	GAME_VECTOR ideal;
 	GAME_VECTOR ideals[9];
 	GAME_VECTOR temp[2];
+	GAME_VECTOR want;	// the dialled candidate, kept unclipped for item 1
 	long distance, dx, dz, farthest, farthestnum, h, c, wx, wy, wz, angle, lp;
 	long modern_orbit;
 	short room_number;
@@ -2077,9 +2312,13 @@ void CombatCamera(ITEM_INFO* item)
 		// The same wall, resolved the same way (#161, round 161a2b, item 3):
 		// this loop and ChaseCamera's are the same five candidates and the same
 		// collision, so a weapon out may not mean a different camera at a wall.
-		// ChaseCamera carries the reasoning and the measurement.
+		// ChaseCamera carries the reasoning and the measurement, `want` included.
 		if (!lp && modern_orbit)
 		{
+			want.x = ideals[lp].x;
+			want.y = ideals[lp].y;
+			want.z = ideals[lp].z;
+			want.room_number = ideals[lp].room_number;
 			modern_cam_clipped = mgLOS(&camera.target, &ideals[lp], 200) ? 0 : 1;
 			modern_cam_clipped_at = GlobalCounter;
 			farthestnum = 0;
@@ -2146,7 +2385,13 @@ void CombatCamera(ITEM_INFO* item)
 	ideal.y = ideals[farthestnum].y;
 	ideal.z = ideals[farthestnum].z;
 	ideal.room_number = ideals[farthestnum].room_number;
-	CameraCollisionBounds(&ideal, 384, 1);
+
+	// And the same ray (item 1): a weapon out may not mean a different eye at a
+	// wall, for the reason the candidate loop above gives.
+	if (modern_orbit)
+		ModernCameraRayBounds(&ideal, &want, MODERN_CAMERA_PULL_PUSH);
+	else
+		CameraCollisionBounds(&ideal, 384, 1);
 
 	// And the same lead (item 2). The damping here is camera.speed 8 rather than
 	// 10 - the combat camera has always been the quicker of the two - so the

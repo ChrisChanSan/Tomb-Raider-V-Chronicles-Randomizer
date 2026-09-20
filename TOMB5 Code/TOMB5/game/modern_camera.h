@@ -388,6 +388,34 @@ enum modern_camera_constants
 	MODERN_CAMERA_CARRY_TICKS = 20,		// 0.67 s at 30 Hz - the Remaster's own 0.6 to 0.75
 	MODERN_CAMERA_CARRY_ONE = 4096,		// the eased profile's fixed point
 
+	/* HOW MANY FRACTIONS OF THE RAY THE EYE IS PULLED IN ALONG (round 161a3,
+	 * item 1, and the user's word 1: "Als waeren Stick, Kamera und Laras
+	 * Position out of sync").
+	 *
+	 * Eight, because mgLOS already walks that same ray in eight
+	 * (game\camera.cpp:1430, `(target->x - start->x) >> 3` and a loop of 8), so
+	 * the clipped point it hands back always sits on an eighth and the pull-in
+	 * that follows it measures in the same units instead of inventing a second
+	 * grid. At the orbit's own radius of 1536 that is 192 units a step.
+	 *
+	 * THE ARITHMETIC IS HERE and the geometry is not: ModernCameraPullAxis
+	 * below is the whole of the rule - one coordinate, one fraction - and
+	 * game\camera.cpp's ModernCameraRayBounds asks the floor and the ceiling
+	 * about the point it gets back. That split is what lets Preparation\Tools\
+	 * Diagnose\ModernTest check the thing the yaw depends on, which is that the
+	 * SAME fraction is applied to x and to z, so the point stays on the ray and
+	 * the picture keeps showing the angle the movement is measured against. */
+	MODERN_CAMERA_PULL_STEPS = 8,
+
+	/* AND THE CLEARANCE THAT POINT IS ASKED FOR, which is the classic camera
+	 * collision's own push and deliberately not a new number:
+	 * CameraCollisionBounds is called with 384 from both orbit cameras
+	 * (game\camera.cpp:1954, :2149) and 384 is what the engine has always meant
+	 * by "the closest the eye may sit to a wall". Item 1 keeps the question and
+	 * throws away the answer - the sector-grid snap - so the number that asks
+	 * it stays exactly what it was. */
+	MODERN_CAMERA_PULL_PUSH = 384,
+
 	/* HOW FAR THE EYE MAY BE FROM HER AND STILL BE ORBITING HER AT ALL, the
 	 * outer bound game\camera.cpp's ModernCameraLeadEye needs. Eight sectors is
 	 * five times the orbit's own radius of 1536: past that the eye is not
@@ -477,6 +505,7 @@ struct MODERN_CAMERA_STATE
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg);
 void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state, long flip);
 long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick);
+long ModernCameraPullAxis(long target, long eye, long step, long steps);
 void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate);
 void ModernCameraReset(MODERN_CAMERA_STATE* state);
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,

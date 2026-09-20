@@ -48,6 +48,16 @@ static long modern_last_x;
 static long modern_last_z;
 static long modern_want_move;
 
+/* WHERE THE MODERN HALF OF THIS TICK LEFT HER HEADING, and the tick it was
+ * left on (round 161a3, item 5). game\camera.cpp reads it a few hundred lines
+ * of the SAME tick later and subtracts it from her heading as it stands then;
+ * what is left over is the part of the tick no stick asked for - the roll, the
+ * jump twist, the underwater roll - which is exactly the flip the camera owes
+ * a swing for. `modern_turned_seen` keeps a stamp of 0 from answering. */
+static short modern_turned_yaw;
+static ushort modern_turned_at;
+static long modern_turned_seen;
+
 void ModernResetControls()
 {
 	ModernDefaults(&modern_cfg);
@@ -59,6 +69,34 @@ void ModernResetControls()
 	modern_last_x = 0;
 	modern_last_z = 0;
 	modern_want_move = 0;
+	modern_turned_yaw = 0;
+	modern_turned_at = 0;
+	modern_turned_seen = 0;
+}
+
+/* AND THE ONE QUESTION game\camera.cpp ASKS OF IT (round 161a3, item 5).
+ *
+ * The stamp is an equality and not the orbit's own "one tick apart", because
+ * this is not a tick behind: game\control.cpp runs S_UpdateInput at :296 and
+ * CalculateCamera at :677 of the SAME tick body, with GlobalCounter stepped
+ * once before both (:292). So the answer is this tick's own or there is none.
+ *
+ * There is none whenever ModernUpdateInput did not get as far as the turn:
+ * no Lara, a repeat call inside one logic tick (the menus and the FMV loop
+ * call S_UpdateInput too), a break in the tick chain, and every tick the look
+ * key holds the seam back. All four are ticks in which the camera has no
+ * baseline to measure a flip against, and a carry seated without one would be
+ * a swing for a heading change nobody can account for - so it answers 0 and
+ * the camera does nothing at all. */
+long ModernHeadingAfterInput(short* yaw)
+{
+	if (!modern_turned_seen || modern_turned_at != GlobalCounter)
+		return 0;
+
+	if (yaw)
+		*yaw = modern_turned_yaw;
+
+	return 1;
 }
 
 /* THE D-PAD, RETIRED (the user's decision 3, superseded by decision 8:
@@ -472,6 +510,18 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + yaw);
 		lara.turn_rate = 0;
 	}
+
+	/* AND THE HEADING THE STICK IS ACCOUNTABLE FOR IS PUBLISHED HERE (round
+	 * 161a3, item 5). It is READ BACK OFF THE ITEM rather than composed out of
+	 * lara_yaw and `yaw`, so that a branch above which turns her some other way
+	 * - the water's own move, and whatever a later round adds beside it -
+	 * cannot drift away from it: whatever this file did to her heading this
+	 * tick, this is where it ended. Everything that happens to it AFTER this
+	 * line happens in AnimateLara and the collision, which is what
+	 * game\camera.cpp is left holding. */
+	modern_turned_yaw = lara_item->pos.y_rot;
+	modern_turned_at = GlobalCounter;
+	modern_turned_seen = 1;
 
 	/* THE ONLY WRITE TO THE INPUT WORD. When the translation says it is not
 	 * responsible - a classic state, the stick at rest - the bits the stick

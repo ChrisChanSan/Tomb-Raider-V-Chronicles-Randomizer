@@ -247,6 +247,36 @@ void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
 	state->carry_tick = 0;
 }
 
+/* ONE COORDINATE OF THE EYE, PULLED `step` OF `steps` ALONG THE RAY BACK
+ * TOWARD HER (round 161a3, item 1).
+ *
+ * step == steps is the eye where it stands, step == 0 is the target itself,
+ * and everything between is the straight line joining them. THAT is the whole
+ * of the rule, and the reason it is a function at all rather than three lines
+ * in game\camera.cpp: the yaw the player sees is only preserved while x and z
+ * are moved by the SAME fraction, so the fraction belongs in one place where
+ * Preparation\Tools\Diagnose\ModernTest can measure what the truncation of it
+ * costs (camera_pull). The round-161a2b defect this replaces is precisely a
+ * pair of coordinates moved by different amounts - CameraCollisionBounds
+ * snapping wx and wz onto the sector grid one at a time.
+ *
+ * THE MULTIPLICATION COMES FIRST so that the fraction is taken of the whole
+ * distance rather than of a truncated eighth of it; (eye - target) is at most
+ * a few thousand units and steps a handful, so the product is nowhere near a
+ * long. The division truncates toward the target for a positive difference and
+ * away from it for a negative one, which is C and which ModernTest prints - it
+ * is under a unit either way and no angle can be built out of it. */
+long ModernCameraPullAxis(long target, long eye, long step, long steps)
+{
+	if (steps <= 0 || step >= steps)
+		return eye;
+
+	if (step <= 0)
+		return target;
+
+	return target + (eye - target) * step / steps;
+}
+
 /* BEHIND HER BACK, AND AT THE HEIGHT THE GAME HAS ALWAYS USED.
  *
  * The OFFSET goes to zero because zero is behind her, and the world yaw goes

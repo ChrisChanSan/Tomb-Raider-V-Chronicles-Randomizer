@@ -5706,6 +5706,473 @@ static void camera_camcut()
 	}
 }
 
+/* ----------------------------------------- item 1: the eye stays on the ray ---
+
+   A FLAT WORLD OF SECTORS, because that is all item 1 is about. The harness is
+   2D on purpose: the rule under test moves x and z, and the y is left to the
+   floor and the ceiling, which game\camera.cpp's ModernCameraRayBounds keeps
+   verbatim out of CameraCollisionBounds. Eight by eight sectors of 1024, '#'
+   solid and '.' open, row 0 is gz 0 and column 0 is gx 0.
+
+   TWO MAPS, the two the brief asks for. The corridor is ONE sector wide, so a
+   dialled angle across it is clipped on most of the circle; the niche is a room
+   with a two-by-two pillar beside her, which is the shape that gave the classic
+   snap two axes to fire at once.
+
+   AND THE THREE MODELS BELOW ARE MIRRORS, for the same reason lead_run() is one:
+   game\camera.cpp cannot be linked without a level. h_mglos mirrors mgLOS
+   (camera.cpp:1424 - the >> 3, the eight steps, the step back at the end),
+   h_old mirrors the four horizontal branches of CameraCollisionBounds
+   (camera.cpp:1536-1565) and h_new mirrors the loop of ModernCameraRayBounds
+   with its y half removed. The ARITHMETIC under test is not mirrored: h_new
+   calls the engine's own ModernCameraPullAxis, which is why that function sits
+   in game\modern_camera.cpp rather than in the camera. Change one, change the
+   other. */
+
+static const char* const g_corridor[8] = {
+	"########",
+	"###.####",
+	"###.####",
+	"###.####",
+	"###.####",
+	"###.####",
+	"###.####",
+	"########"
+};
+
+static const char* const g_niche[8] = {
+	"########",
+	"#......#",
+	"#......#",
+	"#..##..#",
+	"#..##..#",
+	"#......#",
+	"#......#",
+	"########"
+};
+
+static bool h_solid(long x, long z, const char* const* map)
+{
+	const long gx = x >> 10;
+	const long gz = z >> 10;
+
+	if (x < 0 || z < 0 || gx > 7 || gz > 7)
+		return true;
+
+	return map[gz][gx] == '#';
+}
+
+/* Returns how many of the eight steps were still in a room, so the caller can
+   tell a clipped ray from a clear one. */
+static long h_mglos(long tx, long tz, long ex, long ez, const char* const* map,
+	long* ox, long* oz)
+{
+	const long dx = (ex - tx) >> 3;
+	const long dz = (ez - tz) >> 3;
+	long x = tx;
+	long z = tz;
+	long lp;
+
+	for (lp = 0; lp < 8; lp++)
+	{
+		if (h_solid(x, z, map))
+			break;
+
+		x += dx;
+		z += dz;
+	}
+
+	/* mgLOS steps back whenever lp is not 0 - and lp is 8 on a CLEAR line as
+	   well, so even an unclipped eye comes home at seven eighths of what was
+	   asked for. Vanilla's own arithmetic, modelled rather than corrected. */
+	if (lp)
+	{
+		x -= dx;
+		z -= dz;
+	}
+
+	*ox = x;
+	*oz = z;
+	return lp;
+}
+
+static void h_old(long wx, long wz, const char* const* map, long* ox, long* oz)
+{
+	const long push = (long)MODERN_CAMERA_PULL_PUSH;
+
+	if (h_solid(wx - push, wz, map))
+		wx = (wx & ~1023) + push;
+
+	if (h_solid(wx, wz - push, map))
+		wz = (wz & ~1023) + push;
+
+	if (h_solid(wx + push, wz, map))
+		wx = (wx | 1023) - push;
+
+	if (h_solid(wx, wz + push, map))
+		wz = (wz | 1023) - push;
+
+	*ox = wx;
+	*oz = wz;
+}
+
+static void h_new(long tx, long tz, long bx, long bz, long wantx, long wantz,
+	const char* const* map, long* ox, long* oz)
+{
+	const long push = (long)MODERN_CAMERA_PULL_PUSH;
+	const long steps = (long)MODERN_CAMERA_PULL_STEPS;
+	long step, wx, wz;
+
+	/* mgLOS's degenerate answer, and the floor the engine puts under it: a ray
+	   whose FIRST eighth is already in the wall comes back as the target
+	   itself, and an eye on her own axis has no angle at all. The dialled
+	   candidate gives the direction and MODERN_CAMERA_HIDE_DIST the distance. */
+	if (bx == tx && bz == tz)
+	{
+		const long dx = wantx - tx;
+		const long dz = wantz - tz;
+		const long d = (long)floor(sqrt((double)dx * dx + (double)dz * dz));
+
+		bx = (d > (long)MODERN_CAMERA_HIDE_DIST)
+			? tx + dx * (long)MODERN_CAMERA_HIDE_DIST / d : wantx;
+		bz = (d > (long)MODERN_CAMERA_HIDE_DIST)
+			? tz + dz * (long)MODERN_CAMERA_HIDE_DIST / d : wantz;
+	}
+
+	for (step = steps; step > 0; step--)
+	{
+		wx = ModernCameraPullAxis(tx, bx, step, steps);
+		wz = ModernCameraPullAxis(tz, bz, step, steps);
+
+		if (wx == tx && wz == tz)
+			continue;
+
+		if (h_solid(wx - push, wz, map) || h_solid(wx + push, wz, map) ||
+			h_solid(wx, wz - push, map) || h_solid(wx, wz + push, map))
+			continue;
+
+		if (h_solid(wx, wz, map))
+			continue;
+
+		*ox = wx;
+		*oz = wz;
+		return;
+	}
+
+	*ox = bx;	// nothing on the ray cleared: the ray wins, as the engine's does
+	*oz = bz;
+}
+
+/* The dialled angle read back out of a resolved eye, in the engine's own
+   convention: the candidates are built as target - d * sin(a) in x and
+   target - d * cos(a) in z (camera.cpp:1854), so the angle is the atan2 of the
+   negated pair - exactly the reading lead_run() already uses. */
+static double h_yaw(long tx, long tz, long ex, long ez)
+{
+	return atan2((double)-(ex - tx), (double)-(ez - tz)) * 32768.0 / 3.14159265358979323846;
+}
+
+static double h_wrap(double units)
+{
+	while (units >= 32768.0)
+		units -= 65536.0;
+
+	while (units < -32768.0)
+		units += 65536.0;
+
+	return units;
+}
+
+struct PULL_RUN
+{
+	double worst_new;	// biggest |dialled - resolved| in units, under item 1's rule
+	double worst_old;	// and the same for the classic sector snap
+	long over_60_new;	// how many of the swept angles are 60 degrees out
+	long over_60_old;
+	long clipped;		// how many rays mgLOS had to cut short
+	long pulled;		// how many of those the pull-in moved further in
+	long outward;		// how many ended FURTHER out than was dialled - must be 0
+	long degenerate;	// resolved eyes sitting on her own axis - must be 0
+	long onaxis;		// rays mgLOS handed back as the target itself
+	long stood;		// clipped rays where nothing on the ray cleared
+};
+
+static void pull_run(const char* const* map, long tx, long tz, long radius, PULL_RUN* r)
+{
+	const double turn = 32768.0 / 3.14159265358979323846;
+	const double sixty = 60.0 * 65536.0 / 360.0;
+	long a;
+
+	r->worst_new = 0.0;
+	r->worst_old = 0.0;
+	r->over_60_new = 0;
+	r->over_60_old = 0;
+	r->clipped = 0;
+	r->pulled = 0;
+	r->outward = 0;
+	r->degenerate = 0;
+	r->onaxis = 0;
+	r->stood = 0;
+
+	for (a = -32768; a < 32768; a += 256)
+	{
+		const double rad = (double)a / turn;
+		const long ex = tx - (long)floor((double)radius * sin(rad) + 0.5);
+		const long ez = tz - (long)floor((double)radius * cos(rad) + 0.5);
+		long bx, bz, nx, nz, ox, oz, cut;
+		double en, eo;
+
+		cut = h_mglos(tx, tz, ex, ez, map, &bx, &bz);
+
+		if (bx == tx && bz == tz)
+			r->onaxis++;
+
+		if (cut < 8)
+			r->clipped++;
+
+		h_new(tx, tz, bx, bz, ex, ez, map, &nx, &nz);
+		h_old(bx, bz, map, &ox, &oz);
+
+		if (nx != bx || nz != bz)
+			r->pulled++;
+		else if (cut < 8)
+			r->stood++;
+
+		if (nx == tx && nz == tz)
+		{
+			r->degenerate++;
+			continue;	// no angle to measure, and the check below is the one that fires
+		}
+
+		if ((nx - tx) * (nx - tx) + (nz - tz) * (nz - tz) >
+			(ex - tx) * (ex - tx) + (ez - tz) * (ez - tz))
+			r->outward++;
+
+		en = fabs(h_wrap(h_yaw(tx, tz, nx, nz) - (double)a));
+		eo = fabs(h_wrap(h_yaw(tx, tz, ox, oz) - (double)a));
+
+		if (en > r->worst_new)
+			r->worst_new = en;
+
+		if (eo > r->worst_old)
+			r->worst_old = eo;
+
+		if (en >= sixty)
+			r->over_60_new++;
+
+		if (eo >= sixty)
+			r->over_60_old++;
+	}
+}
+
+static void camera_pull()
+{
+	PULL_RUN c, n;
+	long i;
+
+	printf("\nthe ray - the eye comes in along it and never round her (item 1)\n");
+
+	/* 1. THE ARITHMETIC ITSELF. The ends are exact and the fraction is taken of
+	   the whole distance, so the same step on two axes keeps the ratio. */
+	ok(ModernCameraPullAxis(1000, 3000, 8, 8) == 3000,
+		"pull: the full step is the eye itself",
+		ModernCameraPullAxis(1000, 3000, 8, 8), 3000);
+	ok(ModernCameraPullAxis(1000, 3000, 0, 8) == 1000,
+		"pull: step 0 is the target itself",
+		ModernCameraPullAxis(1000, 3000, 0, 8), 1000);
+	ok(ModernCameraPullAxis(1000, 3000, 4, 8) == 2000,
+		"pull: half way is half way",
+		ModernCameraPullAxis(1000, 3000, 4, 8), 2000);
+	ok(ModernCameraPullAxis(1000, 3000, 9, 8) == 3000,
+		"pull: a step past the end cannot push the eye out",
+		ModernCameraPullAxis(1000, 3000, 9, 8), 3000);
+	ok(ModernCameraPullAxis(1000, 3000, 4, 0) == 3000,
+		"pull: no steps at all leaves the eye alone",
+		ModernCameraPullAxis(1000, 3000, 4, 0), 3000);
+	ok(ModernCameraPullAxis(3000, 1000, 4, 8) == 2000,
+		"pull: and backwards, for an eye west of her",
+		ModernCameraPullAxis(3000, 1000, 4, 8), 2000);
+
+	/* 2. THE TRUNCATION COSTS LESS THAN A UNIT ON AN AXIS, which is the whole
+	   of why the yaw survives: the division is the last thing done, on a
+	   product of the WHOLE difference, so nothing accumulates. */
+	{
+		long worst = 0;
+
+		for (i = -4096; i <= 4096; i += 7)
+		{
+			long step;
+
+			for (step = 1; step <= (long)MODERN_CAMERA_PULL_STEPS; step++)
+			{
+				const long got = ModernCameraPullAxis(0, i, step, MODERN_CAMERA_PULL_STEPS);
+				const double want = (double)i * (double)step / (double)MODERN_CAMERA_PULL_STEPS;
+				const long err = absl(got - roundl2(want));
+
+				if (err > worst)
+					worst = err;
+			}
+		}
+
+		printf("  measured: the truncation is at most %ld unit(s) on an axis\n", worst);
+		ok(worst <= 1, "pull: the fraction truncates by under a unit", worst, 1);
+	}
+
+	/* 3. THE CORRIDOR AND THE NICHE. The dialled angle is what her movement is
+	   measured against (the orbit's world yaw) and the resolved eye is what the
+	   player sees; item 1 says they are the same angle. */
+	/* SHE IS OFF THE CENTRE LINE IN BOTH, because that is where the player runs
+	   and it is the only place the defect is worth its measured size: 228 units
+	   from the corridor wall and 210 from the pillar, both well outside her own
+	   collision radius of 102. Down the middle of the corridor the sector snap
+	   costs 37 degrees; hugging the wall it costs 180, which is M1's own shape. */
+	pull_run(g_corridor, 3300, 3584, 1536, &c);
+	pull_run(g_niche, 2950, 3400, 1536, &n);
+
+	printf("  corridor (one sector wide, she hugs the wall, 256 angles): %ld clipped, %ld pulled in,\n",
+		c.clipped, c.pulled);
+	printf("           %ld stood, %ld came back on her axis and were floored\n",
+		c.stood, c.onaxis);
+	printf("           worst view error   ours %6.2f deg    the sector snap %6.2f deg\n",
+		c.worst_new * 360.0 / 65536.0, c.worst_old * 360.0 / 65536.0);
+	printf("           60 deg or worse    ours %ld              the sector snap %ld\n",
+		c.over_60_new, c.over_60_old);
+	printf("  niche (a 2x2 pillar she hugs): %ld clipped, %ld pulled in,\n",
+		n.clipped, n.pulled);
+	printf("           %ld stood, %ld came back on her axis and were floored\n",
+		n.stood, n.onaxis);
+	printf("           worst view error   ours %6.2f deg    the sector snap %6.2f deg\n",
+		n.worst_new * 360.0 / 65536.0, n.worst_old * 360.0 / 65536.0);
+	printf("           60 deg or worse    ours %ld              the sector snap %ld\n",
+		n.over_60_new, n.over_60_old);
+
+	/* Two degrees is the mgLOS model's own >> 3 and not ours: the eighth it
+	   steps in truncates the direction by a few units of POSITION before
+	   anything here is asked a question. */
+	ok(c.worst_new <= 2 * 65536 / 360,
+		"ray: the corridor's picture shows the angle she runs at",
+		roundl2(c.worst_new * 360.0 / 65536.0), 2);
+	ok(n.worst_new <= 2 * 65536 / 360,
+		"ray: and the niche's",
+		roundl2(n.worst_new * 360.0 / 65536.0), 2);
+	ok(c.over_60_new == 0 && n.over_60_new == 0,
+		"ray: no angle at all is 60 degrees out any more",
+		c.over_60_new + n.over_60_new, 0);
+	ok(c.outward == 0 && n.outward == 0,
+		"ray: a wall may only bring the eye CLOSER, never past what was dialled",
+		c.outward + n.outward, 0);
+	ok(c.degenerate == 0 && n.degenerate == 0,
+		"ray: and no eye came back sitting on her own axis",
+		c.degenerate + n.degenerate, 0);
+	ok(c.onaxis + n.onaxis > 0,
+		"ray: mgLOS really does hand back the target, so the floor is not theory",
+		c.onaxis + n.onaxis, 1);
+
+	/* And the defect this replaces, pinned rather than described. M1 counted it
+	   in play - 481 of 930 pushed ticks 60 degrees out, all of them clipped,
+	   median 124 between 200 and 400 units; these two maps reproduce the SHAPE
+	   of it out of nothing but the geometry, and what the shape is is a picture
+	   that no longer shows the angle she is running at. */
+	ok(c.over_60_old > 0 && n.over_60_old > 0,
+		"ray: the sector snap DID throw the picture 60 degrees out, on both maps",
+		c.over_60_old + n.over_60_old, 1);
+	ok(c.worst_old > c.worst_new && n.worst_old > n.worst_new,
+		"ray: and it was worse than ours everywhere it fired",
+		roundl2((c.worst_old - c.worst_new) * 360.0 / 65536.0), 1);
+}
+
+/* ------------------------------ item 5: what the engine hands the carry --- */
+
+/* THE ENGINE HALF IS A SUBTRACTION, and this is it (round 161a3, item 5).
+   game\modern_state.cpp publishes her heading as the modern input left it, and
+   game\camera.cpp's ModernCameraCarryFromAnim subtracts that from her heading
+   as the animation has left it a few hundred lines later in the SAME tick. What
+   is left over is the animation's own turn - so a stick turn of any size, on
+   its own, can never seat a swing, and an animation flip seats the whole of
+   itself whatever the stick did in the same tick. */
+static void camera_flip()
+{
+	MODERN_CAMERA_CFG cfg;
+	long heading, turn;
+
+	printf("\nthe flip - what game\\camera.cpp hands ModernCameraCarry (item 5)\n");
+
+	ModernCameraDefaults(&cfg);
+
+	for (heading = -32768; heading < 32768; heading += 1009)
+	{
+		for (turn = -(long)MODERN_TURN_RATE; turn <= (long)MODERN_TURN_RATE;
+			turn += (long)MODERN_TURN_RATE)
+		{
+			/* What game\modern_state.cpp publishes: her heading after the
+			   modern turn of this tick, read back off the item. */
+			const short published = ModernWrap(heading + turn);
+			MODERN_CAMERA_STATE st;
+			short after;
+
+			/* a. The stick alone. The animation left her heading where the
+			   input put it, so the subtraction is nothing at all - whatever
+			   rate a later round picks for the turn. */
+			after = published;
+			ModernCameraReset(&st);
+			ModernCameraCarry(&cfg, &st, ModernWrap((long)after - published));
+			ok(st.carry == 0 && st.carry_total == 0,
+				"flip: a turn by the stick seats no swing at all",
+				st.carry_total, 0);
+
+			/* b. And the same tick with an animation about-turn on top of it -
+			   the roll, the jump twist, the underwater roll. The subtraction
+			   sees the half turn and nothing of the stick. */
+			after = ModernWrap((long)published + 32768);
+			ok(absl(ModernWrap((long)after - published)) == 32768,
+				"flip: the animation's half turn survives the subtraction",
+				absl(ModernWrap((long)after - published)), 32768);
+
+			ModernCameraReset(&st);
+			ModernCameraCarry(&cfg, &st, ModernWrap((long)after - published));
+			ok(absl(st.carry_total) == 32768,
+				"flip: and the whole half turn is what the camera owes",
+				absl(st.carry_total), 32768);
+		}
+	}
+
+	/* c. THE SWING IN TICKS, through the engine's own two functions: seated by
+	   the subtraction above, paid out by the eased profile, arriving whole. */
+	{
+		MODERN_CAMERA_STATE st;
+		long t, paid, last, biggest, against;
+
+		ModernCameraReset(&st);
+		ModernCameraCarry(&cfg, &st, ModernWrap(32768));
+
+		last = 0;
+		biggest = 0;
+		against = 0;
+
+		for (t = 1; t <= cfg.carry_ticks; t++)
+		{
+			paid = ModernCameraCarryStep(&cfg, st.carry_total, t);
+
+			if (absl(paid - last) > biggest)
+				biggest = absl(paid - last);
+
+			if ((paid - last) * ((st.carry_total >= 0) ? 1 : -1) < 0)
+				against++;
+
+			last = paid;
+		}
+
+		printf("  measured: %ld units over %ld ticks, biggest tick %ld, %ld against the grain\n",
+			absl(last), cfg.carry_ticks, biggest, against);
+		ok(absl(last) == 32768, "flip: the swing arrives whole", absl(last), 32768);
+		ok(against == 0, "flip: and never runs backwards on the way", against, 0);
+		ok(ModernCameraCarryStep(&cfg, st.carry_total, cfg.carry_ticks - 1) != st.carry_total,
+			"flip: and it really takes all of them",
+			ModernCameraCarryStep(&cfg, st.carry_total, cfg.carry_ticks - 1),
+			st.carry_total);
+	}
+}
+
 /* ------------------------------------------------------ what is not ours --- */
 
 static void deferred()
@@ -5765,6 +6232,8 @@ int main()
 	camera_lead();
 	camera_camcut();
 	camera_carry();
+	camera_pull();
+	camera_flip();
 	deferred();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

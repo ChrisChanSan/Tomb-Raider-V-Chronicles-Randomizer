@@ -16682,9 +16682,9 @@ every page but the two legacy ones. The legacy branch now reads the same
 `IN_PAUSE` line before it returns, so those two pages leave the tree the way
 every other page does - which also means the pause key on the TITLE screen
 bounces a legacy page back to the Options root, as it already did on every
-other page of this tree. Five words went with it: the rebind's silent seam
-above, the "Level Select" literal above, `LoadSave.cpp`'s line count in this
-entry (944/79 was step 1's own figure carried over instead of recomputed;
+other page of this tree. Five smaller ones went with it - two of them code,
+three of them words in this entry: the rebind's silent seam above, the
+"Level Select" literal above, `LoadSave.cpp`'s line count here (944/79 was step 1's own figure carried over instead of recomputed;
 `git diff --numstat a6ecbb5..HEAD` says 55 added against 917 removed), the
 Controls page's row count (seven was its count before the View tab, Ammotype
 hotkeys and Dead zone arrived - it is ten), and "nine" cases for the rounding

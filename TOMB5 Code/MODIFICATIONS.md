@@ -16724,6 +16724,242 @@ section 9's own 50 rows, 46 of them moved plus the Special Features tab plus
 the new Dead zone - 47 settings in the finished tree, none of them
 duplicated and none of them lost.
 
+#### Round 161b2a (#161) - the keyboard gets its Modern table, and Combat mode "Hold" starts working
+
+Continuing directly from round 161b1's own accepted head, `a9b1922`, on the
+same branch. Two of the user's decisions from 2026-09-16 drove it:
+
+1. *"Tastatur modern = Remaster, klassisch = Core."*
+2. The *Controls* page carries *Kampfmodus* Toggle / Hold, with Toggle as the
+   default.
+
+A third, older decision came due with it: the Key bindings page's *Reset* is
+wanted per scheme, which round 161b1 had left as it was and said so.
+
+**ITEM 1, TWO KEYBOARD SETS, ONE PER SCHEME.** Measured first, by grep, every
+reader and writer of `layout` and `conflict` in the tree (specific\input.cpp,
+specific\LoadSave.cpp, specific\registry.cpp, game\menu_frame.cpp) before
+anything moved. `short layout[2][18]` became `short layout[4][18]`
+(specific\input.cpp, specific\input.h): row 0 stays the Tank default row,
+Core's own and byte for byte unchanged; row 1 stays the ACTIVE set, which is
+what every existing reader and writer already reads and writes, so none of
+them needed a second path; row 2 is new, the Modern default row; row 3 is new,
+the PARKED set of whichever scheme is not seated. Row 3 starts as the Modern
+defaults because row 1 starts as the Tank set. The Modern row itself is the
+user's own listing, transcribed to positional scan codes in a new pure header,
+`game\key_scheme.h` (no engine include, on the model of `game\menu_nav.h`):
+forward W, back S, left A, right D, duck C, dash Left Shift, walk Left Alt,
+jump Space, action E, draw Q, flare F, look R, roll Left Ctrl, inventory
+Escape, step left Z, step right X, pause P, select Return - kept ONE table row
+rather than negotiated, on the user's own word that he would correct
+individual keys after playing. Eighteen `static_assert`s in
+specific\input.cpp tie the header's bare numbers to their `DIK_` names, since
+the header itself may not include `dinput.h`.
+
+Each scheme keeps its OWN user set, both persisted: the classic one stays
+under `Key0..Key17` exactly as before, the new Modern one goes under new
+registry names `MKey0..MKey17` (missing = Modern defaults). `KeySchemeSet(long
+modern)` answers which row currently holds a given scheme's set;
+`KeySchemeSeat()` exchanges rows 1 and 3 rather than overwriting either, so a
+player's Modern bindings are still there when he flips back to Tank and vice
+versa; `KeySchemeConflicts()` is Core's own `CheckKeyConflicts()` double loop,
+moved into the header unchanged and now run against the ACTIVE scheme's
+default row instead of a single hard-coded one. All three are pure and are
+what the new `MenuTest` groups hold: the Modern row has no key twice and no
+empty slot, the conflict computation over an active row and a default row, and
+the seat/keep logic of the two sets. `ApplyKeyScheme()` (specific\input.cpp)
+is the keyboard's half of the scheme switch beside the pad's own
+`ApplyJoyScheme()` - called once beside it in specific\gamemain.cpp - and
+recomputes `conflict[]` after every seat, because both rows it depends on just
+moved. `Key()`'s fallback now reads `KeyDefaultRow()` instead of `layout[0]`
+directly: at Tank that is still `layout[0]`, unchanged; under Modern it is the
+Modern default row, so the arrow keys cannot move her behind a Modern player's
+back (a later round gives them the camera, on the user's own word, not this
+one).
+
+Wherever a menu owns the input - the places `ModernMenuReadsPad()` already
+names: the title, the pause menu and its option pages, the inventory ring,
+load/save, the outfit changer - all measured to read `Key(0..3)` and `Key(17)`
+for their direction and select bits and nothing else, except the sliders'
+extra raw reads and the capture's own wholesale one on the Key bindings page
+itself. A new block in `S_UpdateInput` (specific\input.cpp) OR's the four
+arrow keys and Return into `IN_FORWARD/IN_BACK/IN_LEFT/IN_RIGHT/IN_SELECT`
+under `tomb5.control_modern && ModernMenuReadsPad()`, reading raw `keymap[]`
+rather than a role because these five are the menu's own fixed keys, exactly
+like the ones the capture already refuses to bind over. The predicate is the
+pad's own rather than a second spelling of the same question - it is exactly
+the inverse of the movement seam's last two terms, so it can never fire where
+the seam is also live, and in play the arrows do only what the active table
+says. Escape needed no line; it already reaches `IN_DESELECT`
+unconditionally. The Key bindings page keeps showing and capturing the ACTIVE
+scheme's set, unchanged; its Reset ACTION restores the active scheme's
+keyboard defaults from `KeyDefaultRow()` (the 36-byte overrun round 161b1's R3
+had already cured stays cured, `sizeof(layout[0])` being one row whatever the
+array grows to) and now also calls `CheckKeyConflicts()` - the base defect
+round 161b1 found and left alone, closed this round because item 1 asked for
+Reset per scheme in the same breath.
+
+Two places did the honest equivalent of the brief's letter rather than its
+words, both worth naming rather than papering over. The brief pictured the
+seat happening in `LoadSettings()`; measured, it cannot: `LoadSettings()` runs
+in `WinMain` before the window exists, and `tomb5.control_modern` is not read
+out of the registry until `init_tomb5_stuff()` runs later on the game thread
+(specific\winmain.cpp says so in its own comment). So `LoadSettings()` now
+stores the two sets BY NAME - classic into `KeySchemeSet(0)`, modern into
+`KeySchemeSet(1)` - while Tank is still seated, and the one-time seat is the
+single `ApplyKeyScheme()` call after `init_tomb5_stuff()`; no lazy seat was
+needed, because the keyboard's two sets have registry names of their own and
+there is never a table whose scheme has to be guessed. And `SaveSettings()`
+had to change its SOURCE and not merely gain a second loop: at base it wrote
+`Key0..17` from `layout[1]`, which under Modern would be the Modern set - a
+player's classic keys would have been overwritten by his modern ones on the
+first exit in Modern. It now reads `KeySchemeSet(0)` for the `Key*` writes,
+which at Tank IS `layout[1]` and is base's own bytes, and a second loop over
+`KeySchemeSet(1)` for the new `MKey*` names.
+
+**ITEM 2, COMBAT MODE "HOLD".** `ModernWeaponBits()` already existed in
+`game\modern_move.cpp` with its own `ModernTest` truth table and was called
+nowhere; `tomb5.combat_hold` was drawn and saved only. MEASURED FIRST where
+the edge lives, because Hold's request has to arrive in the form its reader
+takes: nowhere in the input word. `IN_DRAW` has exactly two producers in the
+whole tree (`Key(9)` for the keyboard, `jLayout[5]+256` for the pad, both far
+above the new seam) and no consumer ever reads its edge - what debounces the
+draw key today is Lara's OWN state machine. `LaraGun`'s opening chain asks
+about `IN_DRAW` only at `LG_NO_ARMS` and at `LG_READY`; between those two she
+is `LG_DRAW_GUNS` or `LG_UNDRAW_GUNS`, where the chain has no branch at all
+and only the animation runs. The animation IS the debounce, so a held key in
+the ORIGINAL really does draw and holster without end and a player has simply
+never held it longer than the animation takes. `ModernWeaponBits` was
+therefore wired at the very end of `S_UpdateInput`, after the `IN_RIGHT |
+IN_LEFT` cancel, so it sees `linput` the way every other consumer does: one
+request per tick on which the state and the key DISAGREE, none while the
+animation runs (both truths false, since `lara.gun_status` is neither
+`LG_READY` nor `LG_NO_ARMS` then), self-correcting because `LaraGun` runs
+again on the very next tick and reads the state the request produced.
+
+The guard the disagreement rule rests on is not decoration.
+`specific\fmv.cpp` skips the outro video on a RISING edge of
+`IN_OPTION|IN_DRAW|IN_SELECT`; a bit held on for the whole video - `LG_READY`
+carried over from the end of the level, key up - would have saturated that OR
+and made the video unskippable by any key at all. The new `combat_seam` local
+carries a new term for it, `!App.fmv`, beside the state half of the movement
+seam's own existing guard read with the same meaning (`lara_item`,
+`GLOBAL_playing_cutseq`, `bUseSpotCam`, `bDisableLaraControl`,
+`InventoryActive`, `gfLevelId != LVL5_TITLE`) - `ControlMethod` and
+`tomb5.control_modern` are deliberately not terms, since the user put combat
+mode on both control types and both devices alike. The six cases the brief
+asked worked through: a key held while she climbs out of water queues nothing
+across every busy tick (`LG_HANDS_BUSY` is neither truth) and draws once on
+the first free tick; a key released during the draw animation still lets the
+draw finish and then holsters once, because both truths stay false until
+`LG_READY`; a flare in the hand needs no exception at all, measured rather
+than assumed - `laraflar.cpp`'s `ready_flare()` parks a burning flare at
+`LG_NO_ARMS`, so it reads as `holstered` and a key held or not either keeps it
+or throws it exactly as the original does; weapons taken away by the level
+leave `LG_NO_ARMS`, and a held key's one request is swallowed the same tick by
+`larafire.cpp`'s own `default:` case, bit for bit what base already does for a
+held key; the look key's Tank mode with a weapon out is unaffected, because
+the look-to-target swallow (specific\input.cpp) asks about `gun_status` about
+130 lines above this seam and never about `IN_DRAW`, so it decides on the same
+answer the seam then reads, not a different one; a savegame load with the key
+down produces the right single request or none at all in every one of its
+three states, since `InventoryActive` holds the seam off while the load
+screen itself is up.
+
+The FIRST commit of this item left a defect of its own, found and fixed in a
+second commit rather than amended away: the brief's own wording, "`ready` is
+`LG_READY` without a torch in hand", taken literally put the torch term on
+`ready` and left both truths false for a burning torch - which cleared the
+key's own `IN_DRAW` bit before `game\flmtorch.cpp` could read it to throw the
+torch, so a torch could never be thrown again under Hold. Measured by walking
+every consumer of `IN_DRAW` rather than stopping at `larafire.cpp`. The torch
+term now sits in the GUARD (`lara.gun_type != WEAPON_TORCH`) instead, so the
+weapon half stands aside entirely while a torch is out and the original
+passes through untouched - which is the only right answer for a hand the draw
+key does not govern. The term clears itself, since `gun_type` returns to
+`last_gun_type` or `WEAPON_NONE` the moment the torch leaves her.
+
+A new `COMBATLOG f=%ld held=%d ready=%d holstered=%d draw=%d` line, behind
+`-log` like every seam before it, prints on the CHANGE of the produced bit
+rather than every tick, so a one-tick pulse is not buried in a per-frame flood
+- both truths and the raw key are printed beside it so a log reader can see
+which of the four rules answered.
+
+**BYTE IDENTITY AT THE DEFAULTS**, both items enumerated statement by
+statement, because that is what the brief's hard frame demanded. Item 1: the
+new rows 2 and 3 of `layout` are storage nothing at Tank reads; the eighteen
+`static_assert`s and `kModernRow` are compile-time only; `key_scheme_seated`
+starts at 0 and is read only by `KeySchemeSet`/`ApplyKeyScheme`; `Key()`'s
+`KeyDefaultRow()[number]` returns `layout[0][number]` at Tank, the same value
+the line it replaced returned; `CheckKeyConflicts()` calls the same double
+loop it always ran, only moved into the header; `LoadSettings()`'s new `MKey*`
+loop writes only `layout[3]` and reads registry names nothing at Tank
+consumes; `SaveSettings()`'s `Key*` writes read `KeySchemeSet(0)`, which AT
+TANK is `layout[1]` - the same eighteen values base wrote; its new `MKey*`
+loop writes eighteen new registry names nothing at Tank reads back, and the
+accepted 161b1 build ignores unknown values, so a registry this build writes
+still loads there without harm; `ApplyKeyScheme()` in `gamemain.cpp` compares
+`seated(0)` against `modern(0)`, finds them equal and returns before touching
+anything; `MenuStepControlType`'s own call to it can only run at
+`control_modern == 0` on the flip BACK from Modern, never in a session that
+stayed Tank throughout; `MenuResetBindings`'s `memmove` source is
+`KeyDefaultRow()`, which at Tank is `layout[0]`, identical to before; the new
+menu block's `tomb5.control_modern &&` short-circuits before evaluating
+anything else. Item 2: `if (tomb5.combat_hold)` is one bool read of an
+existing, already-drawn setting, false at the default, guarding every new
+local, the `ModernWeaponBits` call and the `COMBATLOG` block alike - none of
+it is reached, so none of it can change a bit; `ModernWeaponBits` itself keeps
+its own `ModernTest` proof that it hands the bits back untouched under
+Toggle, so even a reached call could not have moved anything. Not inert, and
+deliberate: `MenuResetBindings` now calling `CheckKeyConflicts()` (item 1's
+own closing of round 161b1's base defect) is a real behaviour change at every
+scheme, exactly as intended.
+
+**THE FILES.**
+
+- `TOMB5 Code/TOMB5/game/key_scheme.h` (new) - the two keyboard sets' pure
+  arithmetic: `KEY_SCHEME_ROLES`, `KEY_SCHEME_MODERN_ROW`,
+  `KeySchemeConflicts`, `KeySchemeSeat`, `KeySchemeRowSound`.
+- `TOMB5 Code/TOMB5/specific/input.cpp` - `layout[4][18]`, the eighteen
+  `static_assert`s, `key_scheme_seated`, `KeyDefaultRow`, `KeySchemeSet`,
+  `ApplyKeyScheme`, `Key()`'s fallback, the Modern menu-arrow block, and the
+  whole `combat_hold` block at the end of `S_UpdateInput`.
+- `TOMB5 Code/TOMB5/specific/input.h` - `layout[4][18]`, the three new
+  declarations.
+- `TOMB5 Code/TOMB5/specific/LoadSave.cpp` - `CheckKeyConflicts()` reduced to
+  one call into the header, against `KeyDefaultRow()`.
+- `TOMB5 Code/TOMB5/specific/registry.cpp` - `LoadSettings()` reads
+  `MKey0..17` (default the Modern row); `SaveSettings()` writes `Key0..17`
+  from the classic set and `MKey0..17` from the Modern set, whichever is
+  active.
+- `TOMB5 Code/TOMB5/specific/gamemain.cpp` - the one-time `ApplyKeyScheme()`
+  call, after `init_tomb5_stuff()`.
+- `TOMB5 Code/TOMB5/game/menu_frame.cpp` - the Control type row also calls
+  `ApplyKeyScheme()`; Reset copies `KeyDefaultRow()` and calls
+  `CheckKeyConflicts()`.
+- `TOMB5 Code/tomb5.vcxproj` - `game\key_scheme.h` added.
+- `Preparation/Tools/Diagnose/MenuTest.cpp`, `bmenu.bat` - four new blocks
+  over `key_scheme.h` (row soundness, conflicts, the seat).
+- `Preparation/Tools/Diagnose/ModernTest.cpp` - `weapon_sequences()`: a small
+  model of `LaraGun`'s own draw/holster chain, run through a press-hold-release
+  script over the three gun states.
+
+**THE REVIEW.** No dedicated skeptical review ran this round - the brief's
+three steps are all build steps, unlike round 161b1's four. Step 2 caught and
+fixed its own defect (the torch) before this record was written, in the open,
+in a second commit rather than an amended one; that is the only
+self-correction this round has to report.
+
+Four commits, `Round 161b2a (#161): <what>` - three from the build steps
+(`ea110cc` item 1, `60df63c` and `2d9fc8a` item 2, the second a fix of the
+first's own defect) and this record itself.
+`ModernTest` ends the round at **5,435 checks, 0 failed** (5,413 at base
+`a9b1922`, +22 from item 2's `weapon_sequences()` group).
+`MenuTest` ends at **12,944 checks, 0 failed** (12,413 at base, +531 from item
+1's four new groups over `key_scheme.h`).
+`InterpTest` is untouched at **373 checks, 0 failed** - nothing in the round
+goes near a file it includes.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

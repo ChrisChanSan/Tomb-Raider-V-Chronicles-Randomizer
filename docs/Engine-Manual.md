@@ -149,6 +149,67 @@ A few things worth knowing:
 > the same pad directly. Every press then arrives twice. Nothing on our side
 > can prevent that.
 
+### The keyboard: two schemes, two sets
+
+*Control type* (round 161b2a) picks **Tank**, the original scheme, or
+**Modern**, laid out on Chronicles' own default keys of the remaster it is
+re-derived from — and behind the scenes each scheme keeps its **own**
+keyboard bindings, remembered independently:
+
+| Role | Tank (default) | Modern (default) |
+|---|---|---|
+| Forward / Back / Left / Right | Up / Down / Left / Right arrows | W / S / A / D |
+| Duck | Period (`.`) | C |
+| Dash | Slash (`/`) | Left Shift |
+| Walk | Right Shift | Left Alt |
+| Jump | Space | Space |
+| Action | Right Ctrl | E |
+| Draw weapon | Space | Q |
+| Flare | Comma (`,`) | F |
+| Look | Numpad 0 | R |
+| Roll | End | Left Ctrl |
+| Inventory | Escape | Escape |
+| Step left | Delete | Z |
+| Step right | Page Down | X |
+| Pause | P | P |
+| Select | Return | Return |
+
+The Modern column is deliberately one plain listing rather than a claim of
+being final — it is fully rebindable, the same as Tank's own. Every key shown
+is a **scan code**, so it is *positional*: on a QWERTZ keyboard the two
+letters that move between layouts print as Y and Z swapped, but the physical
+keys bound are the same.
+
+Switching *Control type* does not overwrite either scheme's bindings — it
+**swaps to** the other one's, so rebinding W/S/A/D under Modern and then
+switching to Tank still leaves your Tank keys exactly as you left them, and
+switching back to Modern brings your Modern rebinds back too. The *Key
+bindings* page always shows and captures whichever scheme is currently active,
+and its **Reset to defaults** row restores that scheme's own defaults only —
+resetting under Modern never touches your Tank bindings, and the other way
+round.
+
+**Menus under Modern.** Wherever the game reads keys for a menu rather than
+for Lara — the title screen, the pause menu and every options page, the
+inventory ring, load/save, the outfit changer — the four arrow keys and
+Return still step and confirm, whatever you bound W/S/A/D and Enter's Modern
+equivalent to. A Modern player who rebound the movement keys is not forced to
+use them in a menu, and a player who unbound them entirely is never locked
+out of one. In the game itself the arrow keys do only what the active
+scheme's table says they do.
+
+### Combat mode: Toggle or Hold
+
+*Combat mode* (round 161b2a), under *Controls*, governs what the draw key or
+button does — for keyboard and pad alike, under either *Control type*:
+
+- **Toggle** (the default, and the original behaviour): press once to draw,
+  press again to holster.
+- **Hold**: draw while the key or button is held down, holster the moment you
+  let go. Releasing mid-draw still lets the draw finish before she holsters —
+  nothing is cut short — and it never interferes with a torch or a flare
+  already in her hand.
+
 ---
 
 ## The options menu

@@ -214,6 +214,44 @@ enum modern_constants
 	MODERN_DEAD_AXIS_LEFT_DINPUT = 18,		// DirectInput left, 150 of 1000 in /8 units - the hardware really holds this one
 	MODERN_DEAD_AXIS_RIGHT_DINPUT = 20,		// measured rest <= 10 of 128; that path's own 500 no longer reaches the seam
 
+	/* Row 4c, THE LOOK KEY'S OWN TWO SECTORS (#161, round 161a3b, item 1).
+	 *
+	 * With the look key held the translation stands aside and the stick is read
+	 * by specific\input.cpp's classic assembly - two independent per-axis
+	 * thresholds of 8. At Tank those 8 sit behind the hardware's own per-axis
+	 * zone; in Modern they sit behind the RADIAL zone, so 8 of 128 is a window
+	 * of +-3.6 degrees round the exact horizontal, and anything outside it sends
+	 * a turn AND a step bit at once. M1 of round 161a3b's brief counted what
+	 * that costs on the user's own pad: his thumb pushes "left" at a median of
+	 * -100 to -106 degrees, ten to sixteen degrees below the horizontal - the
+	 * natural arc of a thumb - so of 962 pushed tank ticks, 680 came out as
+	 * LEFT+BACK and only 57 as a pure side. lara_as_stop lets IN_BACK overwrite
+	 * the turn goal, which is his "sie macht den Schritt zurueck". The camera
+	 * has no part in it; the pattern is the same at every cam_off of the 19
+	 * episodes.
+	 *
+	 * So on those ticks ONE axis survives: inside this much of the horizontal
+	 * the pair is a pure turn, outside it a pure step. No diagonals - this mode
+	 * exists to place her exactly, and a diagonal is what broke it.
+	 *
+	 * BOTH ARE MEASURE-OURSELVES NUMBERS. 50 degrees is a boundary chosen to
+	 * carry his whole measured arc (16 degrees at the widest) with room over,
+	 * while leaving the vertical +-40 degrees of its own, which is more than
+	 * any forward push of his log missed by. The hysteresis is the smallest
+	 * width that a thumb resting ON the boundary cannot cross twice in a tick
+	 * at his measured stick rates. MODERNLOG's tank line prints `sector=` and
+	 * `out=` so both can be read back from a play test rather than argued. The
+	 * unit is the engine's own angle - 32768 is half a turn - so 50 degrees is
+	 * 50 * 32768 / 180 and 8 degrees is 8 * 32768 / 180. */
+	MODERN_TANK_TURN_SECTOR = 9102,			// 50 degrees either side of the horizontal
+	MODERN_TANK_SECTOR_HYST = 1456,			// 8 degrees of hysteresis on that boundary
+
+	/* And the three answers, named rather than spelled 0/1/2 in three files -
+	 * MODERNLOG's `sector=` prints exactly these. */
+	MODERN_TANK_SECTOR_NONE = 0,
+	MODERN_TANK_SECTOR_TURN = 1,
+	MODERN_TANK_SECTOR_STEP = 2,
+
 	/* Row 5, MEASURE - ANSWERED BY THE FIRST PLAY TEST (2026-09-17). The RULE
 	 * was TROne's and came from play - under half deflection Lara walks -
 	 * and the number was theirs too: 16000 of 32767, scaled to our full
@@ -727,6 +765,7 @@ void ModernResetState(MODERN_STATE* state);
 short ModernWrap(long angle);
 short ModernAngle(long x, long z);
 long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* out_x, long* out_y);
+long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long* out_y);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsSwim(short anim_state);
 long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state);

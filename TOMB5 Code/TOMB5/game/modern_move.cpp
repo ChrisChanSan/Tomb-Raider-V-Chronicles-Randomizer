@@ -155,6 +155,85 @@ long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* 
 	return ModernRound(want);
 }
 
+/* THE LOOK KEY'S TANK, READ BY SECTOR (#161, round 161a3b, item 1).
+ *
+ * On the bypass ticks - and on no others - the stick is handed to the CLASSIC
+ * assembly in specific\input.cpp, which reads it as two independent per-axis
+ * thresholds of 8. That is Core's own arithmetic and it is right behind the
+ * hardware's per-axis zone; behind the modern RADIAL zone it is a window of
+ * +-3.6 degrees round the exact horizontal, and M1 measured what a thumb does
+ * with that: 680 of 962 pushed tank ticks came out LEFT+BACK, because the
+ * natural arc of a thumb pushing "left" sits ten to sixteen degrees low.
+ * lara_as_stop lets the back bit overwrite the turn goal, so the user's own
+ * "ich kann nur mit einem genauen Winkel die Drehung starten ... und sie macht
+ * den Schritt zurueck" is that window and nothing about the camera.
+ *
+ * So exactly one axis comes out of here. The decision is made on the stick's
+ * ANGLE, which is the number the thumb actually controls, and the value handed
+ * on is the stick's own MAGNITUDE on the surviving axis - not its component,
+ * which would shrink towards the sector's edge and could fall back under the
+ * classic 8 that this function exists to get past.
+ *
+ * WHY THE PREVIOUS SECTOR IS AN ARGUMENT AND NOT A STATIC OF THIS FILE: it is
+ * one thumb's history on one pad, and the file it lives in is the one that
+ * knows when the bypass began and ended (specific\input.cpp clears it there).
+ * Keeping it here would make this function a state machine that every test
+ * would have to reset, for a memory of exactly one tick.
+ *
+ * Returns the sector it chose, MODERN_TANK_SECTOR_*, which is MODERNLOG's own
+ * `sector=`. 0/0 in is 0/0 out and no sector: the radial dead zone one step
+ * earlier is what makes a resting stick that pair, and this function must not
+ * invent a direction for it. */
+long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long* out_y)
+{
+	long bound = MODERN_TANK_TURN_SECTOR;
+	long heading;
+	long off_h;
+	long mag;
+
+	if (!out_x || !out_y)
+		return MODERN_TANK_SECTOR_NONE;
+
+	*out_x = 0;
+	*out_y = 0;
+
+	if (!in_x && !in_y)
+		return MODERN_TANK_SECTOR_NONE;
+
+	/* The stick's own heading, in the convention the whole of this file uses:
+	 * 0 is straight forward, +0x4000 is right, and stick_y is forward-negative
+	 * (specific\dxshell.cpp), which is why it goes in negated - exactly as
+	 * ModernTranslate takes it. */
+	heading = ModernAngle(in_x, -in_y);
+
+	/* ... and how far that is from the HORIZONTAL, which is the axis this
+	 * decision is about: 0x4000 either side of forward. Folding the sign away
+	 * first makes left and right one case, which they are. */
+	off_h = ModernAbs(ModernAbs(heading) - 0x4000L);
+
+	/* THE HYSTERESIS, AND IT ONLY EVER WIDENS THE SECTOR THE THUMB IS ALREADY
+	 * IN. A thumb resting ON the boundary crosses it with noise otherwise, and
+	 * at 30 ticks a second that is the turn and the step alternating in the
+	 * hand - the one failure this item exists to avoid repeating in another
+	 * shape. With no previous sector (the first tick of a hold) the plain
+	 * boundary answers, so a fresh push is never biased. */
+	if (prev_sector == MODERN_TANK_SECTOR_TURN)
+		bound += MODERN_TANK_SECTOR_HYST;
+	else if (prev_sector == MODERN_TANK_SECTOR_STEP)
+		bound -= MODERN_TANK_SECTOR_HYST;
+
+	mag = ModernRound(sqrt((double)(in_x * in_x + in_y * in_y)));
+
+	if (off_h <= bound)
+	{
+		*out_x = (in_x < 0) ? -mag : mag;
+		return MODERN_TANK_SECTOR_TURN;
+	}
+
+	*out_y = (in_y < 0) ? -mag : mag;
+	return MODERN_TANK_SECTOR_STEP;
+}
+
 /* A world course, in LARA'S OWN frame, as one direction bit. Four sectors:
  * forward, back, and the two sides. `sector` is the boundary to the front and
  * to the back; `step_bits` picks the side step instead of the turn, which is

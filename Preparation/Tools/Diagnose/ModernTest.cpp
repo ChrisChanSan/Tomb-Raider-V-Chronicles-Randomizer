@@ -4068,6 +4068,198 @@ static void look_tank()
 	}
 }
 
+/* ------------------------------------ the look key's Tank, read by sector ----- */
+
+/* A stick at a given HEADING, in the convention the whole scheme uses: 0 is
+ * straight forward, +90 is right, -90 is left, and stick_y is forward-negative
+ * because that is how specific\dxshell.cpp hands the axis over. The user's own
+ * measured thumb angles are quoted in degrees throughout M1, so the tests are
+ * written in degrees and converted here once. */
+static void stick_at(double deg, long mag, long* x, long* y)
+{
+	const double rad = deg * 3.14159265358979323846 / 180.0;
+
+	*x = roundl2(sin(rad) * (double)mag);
+	*y = -roundl2(cos(rad) * (double)mag);
+}
+
+static void tank_sector()
+{
+	/* M1's own four: the medians of his thumb pushing left and right at full
+	 * deflection, ten to sixteen degrees below the horizontal. Every one of
+	 * them used to come out of the classic assembly as a turn AND a step. */
+	const double thumb[4] = { -100.0, -106.0, 112.0, 116.0 };
+	const double turn_deg = (double)MODERN_TANK_TURN_SECTOR * 180.0 / 32768.0;
+	long x, y, ox, oy, sector;
+	int i;
+
+	printf("\nthe look key's Tank reads the stick by sector (#161 round 161a3b item 1,"
+		" the user's word 2)\n");
+
+	/* 1. THE MEASURED THUMB. One axis out, the turn's, at the stick's own
+	 * magnitude and not its component - the component of a push 16 degrees low
+	 * is already smaller than the push, and the point of the item is that the
+	 * classic threshold of 8 must not be the thing that decides. */
+	for (i = 0; i < 4; i++)
+	{
+		stick_at(thumb[i], 120, &x, &y);
+		sector = ModernTankSector(x, y, MODERN_TANK_SECTOR_NONE, &ox, &oy);
+
+		ok(sector == MODERN_TANK_SECTOR_TURN, "his measured thumb is a pure turn",
+			sector, MODERN_TANK_SECTOR_TURN);
+		ok(oy == 0, "...and no step bit goes out with it", oy, 0);
+		ok(absl(ox) == 120, "...at the stick's own magnitude, not its component",
+			absl(ox), 120);
+		ok((ox < 0) == (thumb[i] < 0.0), "...and on the side the thumb was on",
+			ox, thumb[i] < 0.0 ? -120 : 120);
+	}
+
+	printf("  his four measured angles (%.0f, %.0f, %+.0f, %+.0f deg) all turn;"
+		" the sector is +-%.0f deg of the horizontal\n",
+		thumb[0], thumb[1], thumb[2], thumb[3], turn_deg);
+
+	/* 2. AND THE VERTICAL IS THE STEP, over the whole +-25 degrees the brief
+	 * names - which is the widest a forward or back push of his log missed the
+	 * vertical by. The magnitude asked for is the QUANTISED pair's own and not
+	 * a flat 120: at 9 degrees the integer stick (19, -119) is 120.5 units long
+	 * and rounds to 121, which is the axes being whole numbers and not this
+	 * function doing anything. */
+	for (i = -25; i <= 25; i++)
+	{
+		long mag;
+
+		stick_at((double)i, 120, &x, &y);
+		mag = roundl2(sqrt((double)(x * x + y * y)));
+		sector = ModernTankSector(x, y, MODERN_TANK_SECTOR_NONE, &ox, &oy);
+		ok(sector == MODERN_TANK_SECTOR_STEP && ox == 0 && oy == -mag,
+			"25 degrees either side of forward is a pure step", sector * 1000 + oy,
+			MODERN_TANK_SECTOR_STEP * 1000 - mag);
+
+		stick_at(180.0 - (double)i, 120, &x, &y);
+		mag = roundl2(sqrt((double)(x * x + y * y)));
+		sector = ModernTankSector(x, y, MODERN_TANK_SECTOR_NONE, &ox, &oy);
+		ok(sector == MODERN_TANK_SECTOR_STEP && ox == 0 && oy == mag,
+			"...and so is 25 degrees either side of back", sector * 1000 + oy,
+			MODERN_TANK_SECTOR_STEP * 1000 + mag);
+	}
+
+	/* 3. THE BOUNDARY, AND THE HYSTERESIS ON IT, BOTH WAYS. A thumb sitting
+	 * exactly on the plain boundary is read as whichever sector it was already
+	 * in - that is the whole of the rule, and without it the turn and the step
+	 * alternate at 30 Hz in the hand. The widths are held as numbers too: the
+	 * sector really is MODERN_TANK_SECTOR_HYST wider one way and narrower the
+	 * other, measured by walking the angle a degree at a time. */
+	{
+		const double hyst_deg = (double)MODERN_TANK_SECTOR_HYST * 180.0 / 32768.0;
+		double held_turn = 0.0;
+		double held_step = 0.0;
+		double held_none = 0.0;
+		double d;
+
+		/* WHERE EACH MEMORY GIVES WAY, walked from the horizontal up a quarter
+		 * of a degree at a time. It is walked rather than asked at one angle
+		 * because the stick is a pair of WHOLE numbers: at 128 units the
+		 * nearest push to any given angle is up to half a degree off it, so
+		 * "exactly on the boundary" is not a stick position that exists. What
+		 * can be held exactly is the ORDER of the three and the WIDTH of the
+		 * band, which is the rule. */
+		for (d = 0.0; d <= 90.0; d += 0.25)
+		{
+			stick_at(-(90.0 - d), 128, &x, &y);
+
+			if (ModernTankSector(x, y, MODERN_TANK_SECTOR_TURN, &ox, &oy)
+				== MODERN_TANK_SECTOR_TURN)
+				held_turn = d;
+
+			if (ModernTankSector(x, y, MODERN_TANK_SECTOR_STEP, &ox, &oy)
+				== MODERN_TANK_SECTOR_TURN)
+				held_step = d;
+
+			if (ModernTankSector(x, y, MODERN_TANK_SECTOR_NONE, &ox, &oy)
+				== MODERN_TANK_SECTOR_TURN)
+				held_none = d;
+		}
+
+		ok(held_turn > turn_deg && held_turn < turn_deg + hyst_deg + 1.0,
+			"a turning thumb keeps the turn a hysteresis further out",
+			(long)(held_turn * 10.0), (long)((turn_deg + hyst_deg) * 10.0));
+		ok(held_step < turn_deg && held_step > turn_deg - hyst_deg - 1.0,
+			"...and a stepping one gives the step up a hysteresis sooner",
+			(long)(held_step * 10.0), (long)((turn_deg - hyst_deg) * 10.0));
+		ok(held_none > turn_deg - 1.0 && held_none < turn_deg + 1.0,
+			"...and a fresh push takes the plain boundary, biased neither way",
+			(long)(held_none * 10.0), (long)(turn_deg * 10.0));
+		ok(held_turn - held_step > 2.0 * hyst_deg - 1.0
+			&& held_turn - held_step < 2.0 * hyst_deg + 1.0,
+			"the band is two hysteresis widths wide, one either side",
+			(long)((held_turn - held_step) * 10.0), (long)(2.0 * hyst_deg * 10.0));
+		printf("  the boundary walks from %.2f deg (was stepping) through %.2f"
+			" (a fresh push) to %.2f (was turning), a band of %.2f deg round %.0f\n",
+			held_step, held_none, held_turn, held_turn - held_step, turn_deg);
+	}
+
+	/* 4. THE STICK AT REST, and it is the radial dead zone one step earlier
+	 * that makes it that pair - so the case is driven through BOTH functions,
+	 * the way the engine drives them, rather than asserted on a hand-written
+	 * 0/0. A push under the zone is 0/0 out of the zone and must stay 0/0 and
+	 * no sector here; this function may not invent a direction for it. */
+	{
+		long zx, zy;
+
+		for (i = 0; i <= MODERN_DEAD_LEFT_DINPUT; i++)
+		{
+			ModernStickDeadZone(MODERN_DEAD_LEFT_DINPUT, MODERN_DEAD_AXIS_LEFT_DINPUT,
+				-i, 0, &zx, &zy);
+			sector = ModernTankSector(zx, zy, MODERN_TANK_SECTOR_TURN, &ox, &oy);
+			ok(sector == MODERN_TANK_SECTOR_NONE && !ox && !oy,
+				"a magnitude under the zone is no sector and no bits", sector,
+				MODERN_TANK_SECTOR_NONE);
+		}
+	}
+
+	/* 5. AND WHAT THIS COSTS THE CLASSIC ASSEMBLY, counted rather than claimed:
+	 * the same sweep of angles through the two thresholds of 8, with the sector
+	 * and without it. `both` is the defect - a turn bit and a step bit in the
+	 * same word, where lara_as_stop lets the step overwrite the turn goal. */
+	{
+		long both_old = 0;
+		long both_new = 0;
+		long deg;
+
+		for (deg = -179; deg <= 180; deg++)
+		{
+			long turn_bit, step_bit;
+
+			stick_at((double)deg, 120, &x, &y);
+
+			turn_bit = (x < -8 || x > 8) ? 1 : 0;
+			step_bit = (y > 8 || y < -8) ? 1 : 0;
+
+			if (turn_bit && step_bit)
+				both_old++;
+
+			ModernTankSector(x, y, MODERN_TANK_SECTOR_NONE, &ox, &oy);
+			turn_bit = (ox < -8 || ox > 8) ? 1 : 0;
+			step_bit = (oy > 8 || oy < -8) ? 1 : 0;
+
+			if (turn_bit && step_bit)
+				both_new++;
+		}
+
+		ok(both_new == 0, "no direction of the stick sends a turn and a step together",
+			both_new, 0);
+		ok(both_old > 300, "...where every angle off the two axes used to", both_old, 301);
+		printf("  360 whole-degree pushes: %ld sent a turn AND a step before,"
+			" %ld do now\n", both_old, both_new);
+	}
+
+	/* 6. AND WHAT A MODEL CANNOT DO, SAID PLAINLY, as look_tank() above says it:
+	 * bmt.bat does not compile specific\input.cpp, so WHERE this function is
+	 * called - on the bypass ticks and on no others, under tomb5.control_modern -
+	 * is read against that file and not checked here. What is checked is the
+	 * arithmetic, which is the whole of why it lives in game\modern_move.cpp. */
+}
+
 /* -------------------------------------------- the camera follows a flip ----- */
 
 static void camera_carry()
@@ -6660,6 +6852,7 @@ int main()
 	air_turn();
 	turn_chain();
 	look_tank();
+	tank_sector();
 	firing_run();
 	weapons();
 	sweeps();

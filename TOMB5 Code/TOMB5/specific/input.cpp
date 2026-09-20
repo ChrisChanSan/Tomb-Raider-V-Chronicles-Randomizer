@@ -456,6 +456,16 @@ static long joy_x, joy_y;
  * tomb5.control_modern; at Tank nothing reads it and nothing writes it. */
 static long modern_look_tank;
 
+/* AND WHICH OF THE TWO SECTORS THE THUMB WAS IN LAST TICK (#161, round 161a3b,
+ * item 1). The hysteresis of MODERN_TANK_SECTOR_HYST needs one tick of memory
+ * and nothing more, and it belongs here rather than in game\modern_move.cpp
+ * because this is the file that knows when a hold begins and ends: the block
+ * that calls ModernTankSector clears it on every tick that is not a bypass
+ * tick, so a fresh hold always starts from MODERN_TANK_SECTOR_NONE and the
+ * plain boundary. Written only under tomb5.control_modern; at Tank nothing
+ * reads it and nothing writes it. */
+static long modern_tank_prev;
+
 /* AND THE ONE QUESTION THE REST OF THE ENGINE MAY ASK ABOUT IT. The bypass
  * runs INSTEAD of ModernUpdateInput, so MODERNLOG's own line - which is
  * printed from inside that function - says nothing at all on these ticks, and
@@ -924,18 +934,95 @@ long S_UpdateInput()
 				joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
 	}
 
+	/* THE SEAM'S CONDITION, ASKED HERE SINCE ROUND 161a3b (#161, item 1). It
+	 * used to be declared with the `if` that reads it, a hundred lines below -
+	 * and item 1 has to know whether this is one of the look key's own ticks
+	 * while move_x/move_y are still on their way INTO the four direction bits.
+	 * The one thing that must not happen is a second spelling of the eight
+	 * terms, so the declaration moved instead of being copied. It is the same
+	 * answer taken earlier: nothing between here and that `if` writes one of
+	 * the terms - what lies between is the classic thresholds and the four
+	 * direction keys, which read and write `linput` and nothing else.
+	 *
+	 * THE GUARD, term by term. tomb5.control_modern is first because it is
+	 * the one that matters: at the default (Tank, 0) nothing below is
+	 * reached, nothing new is called, and the engine is what it was.
+	 * ControlMethod == 1 because the stick is only an input at all when the
+	 * player has chosen the pad - otherwise a controller resting on the desk
+	 * would take the keyboard's direction keys away from him. First person is
+	 * skipped because there the camera IS Lara's head and a camera-relative
+	 * heading means nothing; spotcams, cutscenes and bDisableLaraControl
+	 * because she is not the player's to steer then (the last one is also a
+	 * pickup, a switch and a lift, which the other two do not cover); the
+	 * inventory and the title because there the direction bits steer a menu.
+	 *
+	 * THE CONDITION IS A NAME because item 3 asked it twice and item 1 asks it
+	 * a third time. Three copies of eight terms would be three chances to
+	 * drift apart. tomb5.control_modern stays the first term, so at Tank this
+	 * is one short-circuit and a local 0. */
+	const long modern_seam = tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() &&
+		!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
+		!InventoryActive && gfLevelId != LVL5_TITLE;
+
+	/* ... AND WHETHER THIS IS A TICK THE LOOK KEY IS STEERING HER ON, which is
+	 * the seam standing aside rather than running: exactly the inverse of the
+	 * bypass gate below, written once here and read by all three of its
+	 * readers. The latch half goes through ModernLookTankActive() - the
+	 * accessor item 3 declared for this one question - so the engine keeps ONE
+	 * spelling of "the look key is steering her as at Tank". */
+	const long modern_tank = modern_seam && ((input & IN_LOOK) || ModernLookTankActive());
+
+	/* AND THERE THE STICK IS READ BY SECTOR (#161, round 161a3b, item 1).
+	 *
+	 * The classic assembly below is two independent per-axis thresholds of 8,
+	 * which is Core's own arithmetic behind the hardware's per-axis zone. In
+	 * Modern the pair has come through the RADIAL zone instead, so those 8 are
+	 * a window of +-3.6 degrees round the horizontal - and M1 counted 680 of
+	 * 962 pushed tank ticks coming out LEFT+BACK because a thumb pushing
+	 * "left" sits ten to sixteen degrees low. ModernTankSector lets exactly one
+	 * axis through, so a turn is a turn and a step is a step; the arithmetic
+	 * and both constants are in game\modern_move.*, where a test can hold them.
+	 *
+	 * ON THE BYPASS TICKS AND NOWHERE ELSE. Every other Modern tick goes to
+	 * ModernUpdateInput, which reads move_x/move_y itself and would be the
+	 * wrong place entirely for a rule about the classic bits.
+	 *
+	 * THE RAW PAIR IS KEPT BESIDE THE SECTORED ONE, because MODERNLOG's tank
+	 * line prints both - `stick=` is what the thumb did and `out=` is what the
+	 * assembly was handed, and a play test that cannot see the difference
+	 * cannot check this item at all.
+	 *
+	 * THE PREVIOUS SECTOR IS THIS FILE'S, and the outer `if` is what clears it:
+	 * a hold that ends, an inventory, a cutscene, first person - anything that
+	 * takes the seam away - leaves the next hold to start from no sector and
+	 * the plain boundary, which is what "a fresh push is never biased" means.
+	 * The outer term is tomb5.control_modern and not modern_seam so that at
+	 * Tank the static is neither read nor written; modern_tank already carries
+	 * every one of the seam's terms. */
+	long tank_x = move_x;
+	long tank_y = move_y;
+	long tank_sector = MODERN_TANK_SECTOR_NONE;
+
+	if (tomb5.control_modern)
+	{
+		if (modern_tank)
+			tank_sector = ModernTankSector(move_x, move_y, modern_tank_prev, &tank_x, &tank_y);
+
+		modern_tank_prev = tank_sector;
+	}
+
 	linput = 0;
 
 	if (ControlMethod == 1)
 	{
-		if (move_x < -8)
+		if (tank_x < -8)
 			linput = IN_LEFT;
-		else if (move_x > 8)
+		else if (tank_x > 8)
 			linput = IN_RIGHT;
 
-		if (move_y > 8)
+		if (tank_y > 8)
 			linput |= IN_BACK;
-		else if (move_y < -8)
+		else if (tank_y < -8)
 			linput |= IN_FORWARD;
 	}
 
@@ -961,17 +1048,9 @@ long S_UpdateInput()
 	 * simply stand and the pad behaves exactly as it does today. That is the
 	 * reason this scheme needs no second input path anywhere in the tree.
 	 *
-	 * THE GUARD, term by term. tomb5.control_modern is first because it is
-	 * the one that matters: at the default (Tank, 0) nothing below is
-	 * reached, nothing new is called, and the engine is what it was.
-	 * ControlMethod == 1 because the stick is only an input at all when the
-	 * player has chosen the pad - otherwise a controller resting on the desk
-	 * would take the keyboard's direction keys away from him. First person is
-	 * skipped because there the camera IS Lara's head and a camera-relative
-	 * heading means nothing; spotcams, cutscenes and bDisableLaraControl
-	 * because she is not the player's to steer then (the last one is also a
-	 * pickup, a switch and a lift, which the other two do not cover); the
-	 * inventory and the title because there the direction bits steer a menu.
+	 * THE GUARD IS DECLARED ABOVE, with the stick's own reading, since round
+	 * 161a3b's item 1 needed the same answer before the classic assembly ran -
+	 * `modern_seam` there carries the term-by-term reasoning with it.
 	 *
 	 * AND THE LOOK KEY (the user's decision 4): while it is held the
 	 * translation is bypassed altogether, so the stick turns her finely on
@@ -1005,16 +1084,13 @@ long S_UpdateInput()
 	 * alone and this term is the one that answers, exactly as it did before the
 	 * round. The latch answers the other case, where the bit is ours and gone.
 	 *
-	 * THE CONDITION IS A NAME NOW, because item 3 asks it twice: here, to
-	 * decide whether the translation runs, and after the weapon block, to
-	 * decide whether the look key may reach the engine. Two copies of eight
-	 * terms would be two chances to drift apart. tomb5.control_modern stays the
-	 * first term, so at Tank this is one short-circuit and a local 0. */
-	const long modern_seam = tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() &&
-		!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
-		!InventoryActive && gfLevelId != LVL5_TITLE;
-
-	if (modern_seam && !(input & IN_LOOK) && !modern_look_tank)
+	 * AND BOTH TERMS ARE `modern_tank` SINCE ROUND 161a3b (item 1), which is
+	 * this gate inverted and is declared above because the sector rule needs it
+	 * there. "The seam runs unless the look key is steering her" and "the look
+	 * key is steering her" were two spellings of one question, in two places,
+	 * and the log line below already had the second of them; they are one now,
+	 * and the two are equal term for term. */
+	if (modern_seam && !modern_tank)
 	{
 		// The two key roles the scheme has to know about before they are read
 		// into the word below - aiming asks for the action key, the
@@ -1034,20 +1110,27 @@ long S_UpdateInput()
 	 * runs on a bypass tick - that is the whole point of the bypass - so
 	 * without a line of its own here a play test log falls silent for as
 	 * long as the look key is held and cannot tell that from the scheme
-	 * standing aside for some other reason. The condition is the SAME one
-	 * the `if` above just tested, only inverted, and the latch half of it is
-	 * read through ModernLookTankActive() - the accessor item 3 declared for
-	 * exactly this question, so that the engine keeps ONE spelling of "the
-	 * look key is steering her as at Tank" and not two that can drift apart
-	 * (round 161a3, fix pass; the reviewer of this round found the accessor
-	 * with no caller at all). It is still this tick's own answer: the latch's
-	 * own write is three lines below, in the block that also strips IN_LOOK,
-	 * so this cannot fire on a tick the line above also fired on, nor miss a
-	 * tick where it did not. `stick` is move_x/move_y exactly as the line
-	 * above would have handed them to ModernUpdateInput. */
-	if (gLogEnabled && modern_seam && ((input & IN_LOOK) || ModernLookTankActive()))
-		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld",
-			(long)GlobalCounter, move_x, move_y);
+	 * standing aside for some other reason. The condition is `modern_tank`,
+	 * which is the SAME one the `if` above just tested, only inverted, and
+	 * which reads the latch half through ModernLookTankActive() - the accessor
+	 * item 3 declared for exactly this question, so that the engine keeps ONE
+	 * spelling of "the look key is steering her as at Tank" and not two that
+	 * can drift apart (round 161a3, fix pass; the reviewer of that round found
+	 * the accessor with no caller at all - round 161a3b gave the spelling a
+	 * name instead, and all three readers use it). It is still this tick's own
+	 * answer: the latch's own write is three lines below, in the block that
+	 * also strips IN_LOOK, so this cannot fire on a tick the line above also
+	 * fired on, nor miss a tick where it did not. `stick` is move_x/move_y
+	 * exactly as the line above would have handed them to ModernUpdateInput.
+	 *
+	 * AND `sector`/`out` ARE ITEM 1'S OWN TWO (round 161a3b), appended at the
+	 * end of the line as every round's new fields are: `sector` is 0 none, 1
+	 * turn, 2 step, and `out` is the pair the classic assembly was really
+	 * handed, so a log read afterwards can hold a thumb's angle against the
+	 * bits it produced instead of inferring them. */
+	if (gLogEnabled && modern_tank)
+		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld sector=%ld out=%ld/%ld",
+			(long)GlobalCounter, move_x, move_y, tank_sector, tank_x, tank_y);
 
 	/* THE WALK KEY SURVIVES THE SEAM (round 161a-fix, #161 item 1 - verified
 	 * by reading this function rather than assumed). MODERN_MOVE_MASK

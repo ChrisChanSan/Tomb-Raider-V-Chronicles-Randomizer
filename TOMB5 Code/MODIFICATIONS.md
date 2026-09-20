@@ -16953,11 +16953,14 @@ review 2 found five more (further below). Step 2 had already caught and fixed a
 defect of its own, the torch, before any reviewer saw it - in the open, in a
 second commit rather than an amended one.
 
-Seven commits, `Round 161b2a (#161): <what>` - three from the build steps
-(`ea110cc` item 1, `60df63c` and `2d9fc8a` item 2, the second a fix of the
-first's own defect), this record itself, and three from the first fix round
-(`fdb288d`, `712c833`, `7e5f9a2`). The second fix round's own commits are
-named in its paragraph at the end.
+The round's commits are all named `Round 161b2a (#161): <what>`: three from
+the build steps (`ea110cc` item 1, `60df63c` and `2d9fc8a` item 2, the second
+a fix of the first's own defect), this record itself (`c750b0d`), three from
+the first fix round (`fdb288d`, `712c833`, `7e5f9a2`) and the second fix
+round's, listed in its own paragraph at the end. A TOTAL is deliberately not
+written here: the sentence that carried one was wrong twice, because the
+commit that corrects a count is itself one more commit. `git log a9b1922..`
+answers it and cannot go stale.
 `ModernTest` ends the round at **5,435 checks, 0 failed** (5,413 at base
 `a9b1922`, +22 from item 2's `weapon_sequences()` group).
 `MenuTest` ends at **12,944 checks, 0 failed** (12,413 at base, +531 from item
@@ -17033,6 +17036,11 @@ held an executable at all.
 Nothing executable moved for findings 1, 2 and 3: they are a record, a manual
 and a comment. Finding 4 changed one diagnostic line behind `-log`. Rebuilt and
 re-run once more, and the three counts above are still unmoved.
+
+That second fix round is `a73ca8c` (the log line), `d509eea` (the manual and
+the row's comment), `39efaa2` (this paragraph and its neighbour), `b448d37`
+(correcting a sentence of `39efaa2`'s own, in the open) and the one that
+carries these last lines.
 
 ## Building this yourself
 

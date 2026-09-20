@@ -17042,6 +17042,163 @@ the row's comment), `39efaa2` (this paragraph and its neighbour), `b448d37`
 (correcting a sentence of `39efaa2`'s own, in the open) and the one that
 carries these last lines.
 
+#### Round 161b2c (#161) - two action keys, and Sprint mode and Duck mode
+
+Continuing directly from round 161b2a's own accepted head, `cb55d72`, on the
+same branch. The user sent two screenshots of the binding page of the game he
+compares with - his own screen, layout facts only - and wrote:
+
+"Aktion ist aufheben, Schalter und Keys. Die sekundaere Aktion ist fuer das
+Klettern, Greifen und Schiessen, sprich L2 halten fuer Waffen in der Hand und
+R2 halten um dann zu schiessen wie ein modernes FPS game. 'Sprintmodus' und
+'Duckmodus' kann auch mit rein."
+
+**ITEM 1, THE INTERACTION BIT AND THE SECONDARY ROLE.** `IN_A = 0x4000`
+(`global/types.h`) was declared and used nowhere - re-grepped tree-wide before
+anything moved, one hit, its own declaration - so it is RETIRED rather than
+aliased, and `IN_INTERACT = 0x4000` takes the bit in its place, with
+`IN_ACTION_ANY = IN_ACTION | IN_INTERACT` beside it, on the model of
+`IN_ALL`. At *Action* "One key" the Action role still sets `IN_SELECT |
+IN_ACTION | IN_INTERACT` at one word, `action_bits`, the way it always set
+`IN_SELECT | IN_ACTION`; at "Separate" it sets `IN_SELECT | IN_INTERACT` and
+a new Secondary role sets `IN_ACTION` on its own. The re-grep found 91 reads
+of `IN_ACTION` in 19 files, confirming the design's own count; classified by
+what each site enters and holds:
+
+- **33 sites now read `IN_INTERACT`** (unchanged bit position, so "One key"
+  is byte-identical by construction): `game/switch.cpp` 13 (every switch but
+  `JumpSwitchCollision`), `game/pickup.cpp` 6, `game/control.cpp` 5
+  (`NeatAndTidyTriggerCutscene`'s five use-item triggers), `game/door.cpp` 4,
+  `game/moveblok.cpp` 3, `game/traps.cpp` `FloorTrapDoorCollision`,
+  `game/flmtorch.cpp` `FireCollision`.
+- **20 sites now read `IN_ACTION_ANY`**, so neither key is ever the wrong one
+  there: the 8 the design named - `game/objects.cpp` 4 (`PoleCollision` x2,
+  `TightRopeCollision`, `ParallelBarsCollision`), `game/rope.cpp`
+  `RopeCollision` (the catch), `game/deathsld.cpp`, `game/switch.cpp`
+  `JumpSwitchCollision`, `game/traps.cpp` `CeilingTrapDoorCollision` - plus 12
+  the design did not have, found by asking what state each of those 8 enters
+  and what holds her there: every HOLD reader of the pole, the rope, the
+  parallel bars and the death slide in `game/lara.cpp` and `game/rope.cpp`
+  (`lara_as_deathslide`, `lara_as_poleleft/right`, `lara_col_polestat`,
+  `lara_col_poleup/down`, `lara_as_rope`, `lara_col_rope`, `lara_as_ropel/r`,
+  `lara_as_parallelbars`, `LaraClimbRope`) - a state entered by an either-key
+  collision routine but held by only `IN_ACTION` would have thrown her off on
+  the very next tick the moment Secondary let go.
+- **2 sites now read `IN_INTERACT` alone though the design did not list
+  them**: `lara_as_ppready` and `lara_as_pulley` in `game/lara.cpp`, entered
+  only by `MovableBlockCollision` and `PulleyCollision`, both `IN_INTERACT`.
+- **35 reads still read `IN_ACTION`** exactly as before: Lara's own
+  automaton (grab, climb, hang, monkey swing, swim surface - 14 in
+  `game/lara.cpp` plus one each in `laraclmb.cpp` and `larasurf.cpp`), every
+  weapon read (16, `lara1gun.cpp`/`lara2gun.cpp`/`larafire.cpp`), the
+  binocular and laser-sight reads (3 in `camera.cpp`, 1 in `control.cpp`, all
+  on `inputBusy`), the menu debounce (`newinv2.cpp`) and the swim cheat
+  (`laraswim.cpp`).
+
+One mask needed the honest reading rather than the brief's own "only firing":
+`game/lara.cpp`'s `input &= ~IN_ACTION` (`LaraAboveWater`) is followed on the
+next line by `TestTriggers()`, whose `TO_CUTSCENE` case reaches five of the
+33 `IN_INTERACT` sites. Left as `~IN_ACTION` it would have made those five
+triggers fire where base could not, in a level with the crossbow holstered -
+a default-behaviour change hard rule 3 forbids. The mask now clears
+`IN_ACTION_ANY` at "One key" and `IN_ACTION` alone at "Separate", so a
+Separate player still gets the convenience without moving base's own
+behaviour.
+
+The Secondary role got a sixteenth pad slot (`jLayout[15]`, registry `JSec`,
+default -1 = unbound) and a nineteenth keyboard slot (`KEY_SCHEME_ROLES` 18
+-> 19, `KEY_ROLE_SECOND`, registry `Key18`/`MKey18`; Tank default `DIK_HOME`,
+free in Core's cluster, Modern default `DIK_NUMPAD0`, a placeholder for the
+mouse round). `jLayout[15]` held a hard 0 - a real button bit - written by
+`ApplyJoyDefaults` and read nowhere, so it is now the unbound sentinel; the
+other scheme's parked record moved from `jLayout[16..30]` to `jLayout[16..31]`
+- two sixteen-role sets now fill the array exactly, and the old zero-fill is
+gone. With "One key" the Secondary row is bindable but inert and the *Key
+bindings* page does not offer it at all - `MenuResolveKeybinds` drops the row
+unless `action_split` - so a One-key player sees the page exactly as before.
+
+**ITEM 2, THE PAD SET OF SEPARATE MODE.** Separate keeps its OWN persisted
+pad set, seated when *Action* flips to Separate and parked when it flips
+back, so a player's One-key bindings are never rewritten by the flip - new
+header `game/pad_scheme.h` (pure arithmetic, no engine include, on the model
+of `game/key_scheme.h`) holds `JOY_ROLES`/`JOY_ROLE_SECOND` (moved out of
+`specific/input.h`) and `PadSetSeat`, the pure swap; `specific/input.cpp`
+gained four Separate default tables (`jSepPS5DInput`/`jSepPS5XInput`/
+`jSepXbox`/`jSepGeneric`, 16 entries each, beside the four existing One-key
+tables, none of them touched) and `jSplitParked[JOY_ROLES]` /
+`joy_split_seated` / `JoySplitSet` / `JoySplitDefaults` / `ApplyJoySplit`;
+registry `SJDck..SJBmd`/`SJSec` (missing = the defaults). `ApplyJoyScheme()`'s
+repair keeps working on whichever set is active - measured that the repair
+must NOT run at the startup seat, because `ActiveJoyStyle()` and
+`joystick_is_xinput` are only answered by the first poll, and calling it
+early would cancel the pending seat `S_UpdateInput` already runs for that
+reason; `ApplyJoySplit` only seats and repairs once `joy_split_seated >= 0`,
+i.e. a seat has genuinely happened before. Defaults by button name, decoded
+back through each path's own `JoyNames*` table and checked distinct on every
+page: walk Square/X, jump Cross/A, action Triangle/Y, draw L2/LT, look
+R3, roll Circle/B, duck L1/LB, sprint L3, secondary R2/RT, flare R1/RB,
+inventory Share/View, pause Options/Menu, save PS button (unbound on the two
+Xbox-vocabulary pages), load unbound everywhere, medipacks wherever
+`JoyDefaultRecord` already puts them for that scheme and page.
+
+**ITEM 3, SPRINT MODE AND DUCK MODE.** `tomb5.sprint_toggle` and
+`tomb5.duck_toggle` (registry names of the same spelling, default 0 = Hold =
+today), two new Controls rows directly under *Combat mode* - the page is now
+at the frame's own maximum of 12 rows, proved by `MenuPageCount(12,12) = 1`,
+no paging arrows. A pure latch, `ModernModeLatch`/`ModernModeLatchDrop`
+(`game/modern_move.*`, `modern_latch_bits` with `MODERN_LATCH_ON` and
+`MODERN_LATCH_KEY` kept apart), applied at one seam in `S_UpdateInput`
+immediately before the weapon seam rather than at the four producers - the
+walk-sidestep rewrite already turns `IN_LEFT`/`IN_RIGHT` into sidestep bits
+above that point, so a seam at the producers would read a sidestepping
+player as pushing nothing and drop his sprint. Toggle: a press latches the
+bit, the next press releases it; the sprint latch also drops on `!moving` or
+when `lara_as_dash` itself ends the sprint (`!DashTimer`, the dash timer that
+refills the instant she leaves `AS_DASH`); the duck latch never holds her
+crouched where the bit means nothing, because the six crawl-hold readers all
+gate on `lara.keep_ducked` (the ceiling) as well, so toggling duck into a
+crawl space and pressing again *inside* it leaves her crawling to the first
+place she can stand - exactly what releasing the key does under Hold. Both
+drop through `InputModeLatchReset()` at the level's priming tick (so a
+savegame load gets it too), the two menu rows' own step functions, and every
+drop tick this round is byte-identical to Hold because the bit is handed
+through unmodified rather than forced off - which is also why the binocular
+and laser-sight zoom, both of which read `inputBusy & IN_SPRINT`/`IN_DUCK` on
+a held tick, keep working exactly as before under both settings. The key
+held across a level change is not treated as a fresh press:
+`ModernModeLatchDrop` clears `MODERN_LATCH_ON` only and leaves
+`MODERN_LATCH_KEY` standing, so the first tick of a new level with the key
+still down sees no edge, and the first release afterwards is what re-arms it.
+Every statement this item adds is unreachable with both options off - the
+whole of the seam inside `S_UpdateInput` sits behind one
+`if (tomb5.sprint_toggle || tomb5.duck_toggle)`.
+
+**PROOF.** `be.bat` clean each time; `bmt.bat`/`ModernTest.exe` unchanged by
+items 1 and 2, 5459 checks (0 failed) after item 3, +24 in a new `mode_latch`
+group; `bmenu.bat`/`MenuTest.exe` 13,356 checks (0 failed) after item 1
+(+412, the new `key_secondary_slot()` block plus the existing
+`KEY_SCHEME_ROLES` sweeps going eighteen slots to nineteen), 13,474 (0
+failed) after item 2 (+118, the new `pad_seat()` block over two synthetic
+sixteen-role rows), unchanged by item 3; `bit.bat`/`InterpTest.exe` 373
+checks, 0 failed throughout, run each time as a control since this round
+touches nothing it owns. Line endings preserved per file at every step,
+checked on the git blobs. The game folder was never touched by any of the
+three steps' builds, checked by file time against the user's own copy there.
+
+**OPEN.** The mouse round replaces the Modern Secondary key with Mouse Left,
+matching the keyboard page the user's screenshot showed. A fresh Xbox
+player's Separate pad defaults are the DirectInput numbers until Reset or the
+first Modern repair, the same weakness the One-key defaults have had since
+base. The Tank keyboard row's own soundness (every slot bound, no key twice)
+is still checked by hand and not by `MenuTest`, as at round 161b2a. Play
+test: the either-key feel at the pole, the rope, the parallel bars and the
+death slide; toggled Sprint and Duck in the field; whether Secondary should
+also confirm in the inventory ring (it does, in addition to Action, which
+still confirms exactly as under One key).
+
+Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), and the
+one that carries this entry and the manual/README updates it describes.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

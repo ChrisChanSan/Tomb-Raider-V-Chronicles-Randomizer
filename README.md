@@ -33,7 +33,7 @@ GPLv3.
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
 | **Weather** | Rolled per level — the rainy Ireland levels can come up dry, the Russian base can get rain instead of snow |
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
-| **Engine** | Native Direct3D 9 and XAudio2, controller support with an optional modern (analog-stick) control scheme — a free orbit camera on the right stick, matching swim controls — a first-person view, an optional modern keyboard scheme with its own rebindable W/S/A/D-style default keys, a Combat mode that can hold the draw key instead of toggling it, and a long list of fixed original bugs |
+| **Engine** | Native Direct3D 9 and XAudio2, controller support with an optional modern (analog-stick) control scheme — a free orbit camera on the right stick, matching swim controls — a first-person view, an optional modern keyboard scheme with its own rebindable W/S/A/D-style default keys, a Combat mode that can hold the draw key instead of toggling it, an Action row that splits Interact and the Secondary (climb/grab/shoot) button onto two keys with the pad's own second bindings page, Sprint mode and Duck mode as Toggle instead of Hold, and a long list of fixed original bugs |
 
 The same **seed** produces the same game on any machine. The randomizer
 window shows the version and the build id, and every run writes

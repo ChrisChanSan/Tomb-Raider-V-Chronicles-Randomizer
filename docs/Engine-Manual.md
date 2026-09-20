@@ -125,8 +125,11 @@ DirectInput, so a DualSense behind Steam still gets PS5 names.
 
 Open *Key bindings* with a controller layout selected and the list holds
 fifteen bindable rows, including *Pause*, *Save*, *Load* and the two
-medipacks — vanilla had no joystick binding screen at all. The four
-right-stick tilts can be bound like buttons. Round 161b1 also put the list on
+medipacks — vanilla had no joystick binding screen at all. Set *Action* (see
+below) to *Separate* and a sixteenth row, *Secondary*, joins the list — on
+keyboard the same row is always there but does nothing while *Action* is
+*One key*. The four right-stick tilts can be bound like buttons. Round 161b1
+also put the list on
 its own page rather than folding it into *Controls* itself, so it can page
 left and right with the arrows when the sixteen keyboard rows (or fifteen pad
 roles) do not fit one screen — the same paging *tomb5 options* already used.
@@ -172,6 +175,14 @@ each scheme keeps its **own** keyboard bindings, remembered independently:
 | Step right | Page Down | X |
 | Pause | P | P |
 | Select | Return | Return |
+| Secondary | Home | Numpad 0 |
+
+*Secondary* (round 161b2c) is the nineteenth slot in each scheme's table, and
+it is bindable but does nothing while *Action* (below) is set to *One key* —
+the *Key bindings* page only lists it under *Separate*, so *One key* shows
+the page exactly as it always has. The Modern default is a placeholder: a
+later round gives it Mouse Left, to match the game this scheme is modelled
+on.
 
 The Modern column is deliberately one plain listing rather than a claim of
 being final — it is fully rebindable, the same as Tank's own. Every key shown
@@ -222,6 +233,84 @@ button does — for keyboard and pad alike, under either *Control type*:
   throws the flare away and brings the guns back — the same thing a press of
   the draw key does with a flare in hand in the original. Let the key go
   before you light one, or expect to light it and lose it.
+
+### Action: One key or Separate
+
+*Action* (round 161b2c), under *Controls*, governs whether interacting and
+the Secondary function share one button or sit on two, for keyboard and pad
+alike, under either *Control type*:
+
+- **One key** (the default, and the original behaviour): the *Action* key or
+  button both interacts and does the Secondary function — there is only ever
+  one key to reach for.
+- **Separate**: *Action* interacts, switches, opens and picks up; *Secondary*
+  climbs, grabs and holds a weapon ready to fire — hold it, the way the game
+  he compares with holds L2 for the weapon and R2 to shoot.
+
+Under Separate:
+
+| Key | Does |
+|---|---|
+| Action | Switches and levers, keyholes, puzzle holes and search objects, pickups, doors, movable blocks, pulleys, the floor trap door, the burning torch, and the cutscene item triggers. |
+| Secondary | Climbing onto a movable block or riding a pulley. |
+| Either key | The pole, the tightrope, the parallel bars, the death slide, catching and swinging on a rope, the jump switch and the ceiling trap door — eight sites where a held state would drop her the instant the "wrong" key let go, so both keys hold it. |
+
+Everything else — Lara's own grab, climb, hang, monkey swing and water-climb
+reads, every weapon, the binocular and laser-sight zoom, the DOZY cheat, and
+the Action key's own confirm in a menu or the inventory ring — keeps reading
+Action alone, exactly as under One key; the Secondary key additionally
+confirms in the ring under Separate.
+
+On a controller under Separate, the pad's default bindings switch to their
+own set as well (below) — your One-key bindings on that pad are not
+rewritten, and switching *Action* back to One key brings them back exactly as
+you left them.
+
+| Role | Separate default (by name) |
+|---|---|
+| Duck | L1 |
+| Sprint | L3 |
+| Walk | Square |
+| Jump | Cross |
+| Action | Triangle |
+| Draw | L2 |
+| Flare | R1 |
+| Look | R3 |
+| Roll | Circle |
+| Inventory | Share |
+| Pause | Options |
+| Save | PS button (unbound on Xbox and Joystick) |
+| Load | unbound |
+| Small medipack / Large medipack | wherever this pad's own One-key table already puts them |
+| Secondary | R2 |
+
+### Sprint mode and Duck mode: Toggle or Hold
+
+*Sprint mode* and *Duck mode* (round 161b2c), under *Controls*, each govern
+one key the same way *Combat mode* governs the draw key — Hold is the
+default and the original behaviour, Toggle turns a press into an on/off
+switch:
+
+- **Hold** (the default): sprint or duck while the key is held, stop the
+  moment you let go — today's behaviour.
+- **Toggle**: press once to start, press again to stop.
+
+A few things a toggled key still respects, because it is the same bit Lara's
+own states have always read, only held open by the option instead of by your
+finger:
+
+- **Sprint** still ends itself — running out of breath, hitting a wall,
+  ducking, wading into deep water — and the toggle lets go the instant it
+  does, or the moment you stop pushing a direction; it does not fight the
+  dash timer or leave you sprinting on the spot.
+- **Duck** never holds her crouched where the bit means nothing: standing up
+  under a low ceiling still needs the ceiling, not the key, so toggling duck
+  into a crawl space and pressing again *inside* it leaves her crawling until
+  she reaches a spot she can actually stand in — exactly what letting go of
+  the key does under Hold.
+- Both let go on their own at a level change, a savegame load, a cutscene,
+  death, entering water, a ladder or a vehicle, and while a menu owns the
+  input — so a key still held across one of those never latches by surprise.
 
 ---
 

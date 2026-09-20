@@ -232,11 +232,13 @@ between them named:
 Quick load's Modern default is the round's one deliberate change from
 today's behaviour — every other default key, in either scheme, is the same
 key that already did that job. **If you had already bound one of the keys
-above to some other role, that key now belongs to the new role alone** —
-the engine's own binding-conflict rule, unchanged, just noticing a row that
-did not exist before. Rebinding a hotkey role *away* from its default key
-does not free that key from still working as the hotkey too, the same way
-any other role's abandoned default key keeps answering to it.
+above to some other role, nothing changes for you**: that key goes on doing
+both jobs, exactly as it did before this round, because a role always answers
+to its own binding first. What is new is the other direction — rebind a
+hotkey role *away* from its default key and that key can stop being the
+hotkey, though only once some other binding claims it: an abandoned default
+key otherwise keeps answering to its own role, the same way every other
+role's does.
 
 The Modern column is deliberately one plain listing rather than a claim of
 being final — it is fully rebindable, the same as Tank's own. Every key shown
@@ -330,7 +332,7 @@ you left them.
 | Jump | Cross |
 | Action | Triangle |
 | Draw | L2 |
-| Flare | R1 (PS5/Xbox DirectInput, generic) / **Modifier+R1** (PS5 DirectInput, generic — see below) |
+| Flare | **Modifier+R1** on the PS5 DirectInput and generic pages (round 161b2d — the plain R1 default goes with it); plain R1 on the two XInput-ordered pages (PS5 XInput, Xbox) |
 | Look | R3 |
 | Roll | Circle |
 | Inventory | Share |
@@ -366,6 +368,12 @@ Defaults, decoded back to button names:
 | Revolver | Modifier+Square | unbound |
 | HK / Crossbow | unbound | unbound |
 | Fly mode / All weapons / All items / Heal / Skip level (cheats) | unbound | unbound |
+
+"PS5 DirectInput / generic" above means the two tables whose buttons are
+numbered the DirectInput way: the *PS5* page on a pad the engine is reading
+through DirectInput, and the *Joystick* page always — and with it the *Xbox*
+page on a DirectInput pad, which shares the *Joystick* table. The other two
+are the *PS5* and *Xbox* pages on an XInput pad.
 
 With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
@@ -424,10 +432,14 @@ finger:
   put: a fresh press while holding on lets go instead, and — so a fall past a
   lower ledge can never snap back onto it — that same press keeps letting go
   for as long as you keep it held, so release it and press again to catch
-  something new. Nothing changes where the key was never "let go" in the
-  first place: firing a weapon, pushing a block, and every menu use of the
-  key are untouched, because the latch only ever touches the bit inside
-  Lara's own hold-on states.
+  something new. That last part has one price worth knowing: from the press
+  that let go until you release the button, the action bit stays clear
+  wherever she is, so the *same* continuous hold will not fire a weapon or
+  catch anything either — let the button go once and it is an ordinary key
+  again. Everywhere else *Toggle* changes nothing at all: pushing a block
+  uses the interact key under *Separate* and its own bit under *One key*, and
+  menus read the pad and the keyboard directly, so neither ever sees the
+  latch.
 - Every one of the four lets go on its own at a level change, a savegame
   load, a cutscene, death, entering water, and while a menu owns the input,
   so a key still held across one of those never latches by surprise.

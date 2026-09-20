@@ -17323,13 +17323,17 @@ F12 stay nameless on purpose, because the outfit changer, `IN_E` and
 instead of handing out a fixed table: the sixteen roles, *Secondary* only
 under *Separate*, the ten hotkeys, and the five cheat rows only while
 *Cheats* is on - a hidden role is asked for nothing, the same rule *Secondary*
-already lived under with *One key*. The one visible change for anyone who had
-already bound 0, 9, 1-6, F5 or F6 to some other role: that key now belongs to
-the role alone (Core's own conflict rule, unchanged) - REFINED from what the
-brief expected, and reported rather than smoothed over: the reverse case, a
-player rebinding one of the new roles AWAY from its default key, does not
-free that key from also being a hotkey, because `Key()`'s own default-row
-fallback is checked before `conflict[]` is ever consulted. A 161b2c registry
+already lived under with *One key*. REFUTED, and reported rather than smoothed
+over: the brief expected one visible change for anyone who had already bound
+0, 9, 1-6, F5 or F6 to some other role - "that key now belongs to the role
+alone". It does not. `Key()` tests the role's own binding first and returns
+before `conflict[]` is ever consulted, so such a key still does BOTH things,
+exactly as at base, where the hard-wired `keymap[DIK_F5]` read and the other
+role's binding also both fired. The only new case is the reverse one: once a
+hotkey role is rebound AWAY from its default key, that key stops being the
+hotkey - and even then only if some other active binding has claimed it,
+because Core's own conflict rule otherwise keeps an abandoned default working
+as a second trigger. A 161b2c registry
 walked through both directions: none of `Key0..18`/`MKey0..18` move, and the
 fifteen new names load as their row's own default in a build that never wrote
 them.
@@ -17468,6 +17472,40 @@ changed, from `page=Controls` to `page=Modes`. A new `menu_page_id`,
 among them, so nothing already in `menu_pages[]` changed its number; back
 navigation and cursor memory follow the same stack every other tab uses.
 
+**THE FIX ROUND.** The skeptical review found one real defect in item 2 and
+it was a bad one. `REG_ReadLong` WRITES its default when a name is missing,
+and `winmain.cpp` calls `LoadSettings` a SECOND time in the same process
+whenever the first call returns `REG_Setup` 0 - which a virgin registry always
+does, the setup dialog in between writing nothing but the *System* key. The
+test that tells a pre-161b2d Separate pad set apart from a fresh one asked for
+`SJChord` behind a `stored &&` short-circuit, so on a brand-new installation
+the first pass created all sixteen `SJ*` names and no `SJChord`, and the
+second pass then read that as "a stored set from the old build" - against a
+set this very build had written one pass earlier. It stripped the fresh
+Separate row of the chords it had just been given while handing the Modifier
+straight back, which is exactly the case item 2 forbids: six buttons doing two
+things at once (*Look* and *Save* both plain on R3, *Sprint* and *Load* both
+on L3, *Jump* and *Pistols* both on Cross), and every plain role silent while
+the touchpad was held. `SJChord` is read unconditionally now, and `stored`
+decides only what its ABSENCE means; a fresh registry keeps the new row whole
+through both passes, a 161b2c registry still comes up chord-free. The same
+review's fifth finding is fixed beside it: `KeySchemeConflicts` let the five
+cheat slots claim a key while *Cheats* was off, where they are not offered on
+the binding page and nothing reads them - so binding a cheat role onto another
+role's default key could silence that role with a binding that cannot fire.
+They are exempt now exactly as *Secondary* is under *One key*, and the *Cheats*
+row recomputes the table like every other row that makes a role live or inert.
+Three documentation claims were corrected rather than defended: this entry and
+the manual both asserted that a key already bound to some other role "now
+belongs to the new role alone" - `Key()` tests the role's own binding before
+`conflict[]` is ever consulted, so it still does both things, exactly as at
+base, and the paragraphs above and in the manual now say so; the manual's Grab
+mode bullet claimed firing and pushing were untouched without naming the one
+price of "no instant re-grab" (from the press that lets go until the button is
+released, the action bit stays clear wherever she is); and its Separate pad
+table named the same pages on both sides of the *Flare* row, where the *Xbox*
+page on a DirectInput pad takes the *Joystick* table and is therefore chorded.
+
 **PROOF.** `be.bat` clean throughout; `bmt.bat`/`ModernTest.exe` unchanged
 through items 1-3 (none of them touch `modern_move.cpp`), 5773 checks (0
 failed) after item 4 (+314: `grab_family` and `duck_family`, both swept
@@ -17475,9 +17513,18 @@ failed) after item 4 (+314: `grab_family` and `duck_family`, both swept
 `MenuTest.exe` 18,702 checks (0 failed) after item 1 (+4164), 23,126 (0
 failed) after item 2 (+4424), unchanged by item 3 (no role or table item 3
 adds is one `MenuTest` sweeps by itself), 23,134 (0 failed) after item 4
-(+8: the two new pages' own arithmetic); `bit.bat`/`InterpTest.exe` 373
+(+8: the two new pages' own arithmetic) and 35,544 (0 failed) after the fix
+round (+12,410: `key_conflicts_cheats_inert`, each of the five cheat slots
+swept onto every other role's default key in both settings); `bit.bat`/`InterpTest.exe` 373
 checks, 0 failed throughout, run each time as a control since this round
-touches nothing it owns. Line endings preserved per file at every step,
+touches nothing it owns. `LoadSettings`' Separate-pad block is the one thing
+`MenuTest` cannot hold - it is not a pure function but a conversation with a
+registry that writes back - so the fix round proved it with a throwaway probe
+outside the repository that reproduces `REG_ReadLong`'s own semantics and
+`winmain.cpp`'s two calls: under the shipped block a virgin registry came up
+on its second pass with the Modifier bound, the mask at 0 and six buttons
+doing two things; under the fixed block both passes give the same full row,
+and a 161b2c set stays chord-free through two runs either way. Line endings preserved per file at every step,
 checked on the git blobs. The game folder was never touched by this round's
 own builds, checked by file time against the user's copy there at every
 step - though intermediate release EXEs turned up there twice from outside

@@ -16235,6 +16235,141 @@ report has the measurement and the fallback (her own last turn, then a fixed
 side). Every other divergence is recorded in the step that made it, in the
 report handed to this one.
 
+#### Round 161a3b (#161) - the look key's turn, and steering by the camera
+
+Continuing directly from round 161a3's own accepted head, `12eb4e0`, on the
+same branch. He played that build (`PCtomb5 built Sep 20 2026 13:27:17`) on the
+same PS5 pad over the same DirectInput path and sent a log of 7,260 modern
+ticks, 1,477 of them `mode=tank`, with two videos. Two complaints out of three
+sentences, and the third sentence is the reason the round is small:
+
+1. *"Saubere Sache, das fuehlt sich schon richtig geil an."*
+2. *"L1 geht noch nicht richtig: ich kann nur mit einem genauen Winkel die
+   Drehung starten; wenn die Kamera auch nur leicht nicht hinter Lara ist,
+   kann ich die Drehung nach rechts nicht starten und sie macht den Schritt
+   zurueck."*
+3. *"Und unter Wasser ist es noch ein bisschen ruppig, als wuerde sie in ihrer
+   Animation zur Seite stottern. Das muessen wir noch ein bisschen
+   glaetten."*
+
+**WHAT WAS MEASURED, NOT ASSUMED.** Two findings from that one log, each a
+count rather than a feeling.
+
+M1, **the look key's Tank reads the stick through two per-axis thresholds of
+8**. On a bypass tick `specific/input.cpp` builds the classic word from
+`move_x`/`move_y` with `> 8` / `< -8` per axis - Core's own arithmetic, and
+right behind the hardware's per-axis zone. In Modern the pair has come through
+the RADIAL zone instead, so 8 of 128 is a window of +-3.6 degrees round the
+exact horizontal. His thumb pushes "left" at a median of -100 to -106 degrees,
+ten to sixteen degrees below it, which is the natural arc of a thumb: of 962
+pushed tank ticks, 680 came out LEFT+BACK, 115 RIGHT+BACK, 85 LEFT+FORWARD, 20
+RIGHT+FORWARD and only 57 as a pure side. `lara_as_stop` lets IN_BACK and
+IN_FORWARD overwrite the turn goal, which is his step backwards. **The camera
+has no part in it**: the pattern is the same at every `cam_off` of the 19
+episodes, and his impression of it comes from pushing camera-relative out of
+habit, which moves the thumb off the horizontal.
+
+M2, **while he steers with the camera, her course moves in stairs**. The held
+world course re-latches only when the LEFT stick's own direction moves by
+`recenter` (384 units) or more, which protects her from circling when the orbit
+moves BY ITSELF - and ignored the camera when the PLAYER moved it too. With the
+left stick held and the right stick turning the view, the course stood still
+until his left thumb happened to shift and then jumped to the new camera angle,
+and at round 161a3's turn rates the whole jump is paid in one tick: in the
+water (levels 13, 17, 18) 423 camera-steered pushed ticks at a median camera
+speed of 3.6 deg/tick gave 34 impulses, median 13.6 degrees, max 15.0 - the
+water rate itself; running and sprinting (1, 73) 617 ticks at 6.5 deg/tick gave
+57, median 13.2, max 30.0 - the land rate. A sample from the water, f=3095 to
+3101: the reference held for five ticks while `cam_world` moved 22 degrees,
+then one step of -13.3. Under water every impulse also kicks the roll lean,
+which is the "zur Seite stottern". Round 161a3 did not create the stairs; at
+the old 6 deg/tick each jump was smeared over several ticks.
+
+**THE TWO ITEMS.**
+
+1. **The look key's Tank reads the stick by sector** (M1, his word 2;
+   `game/modern_move.*`, `specific/input.cpp`). On a bypass tick and nowhere
+   else, `move_x`/`move_y` pass through `ModernTankSector` before the classic
+   thresholds see them, and exactly ONE axis survives: inside
+   MODERN_TANK_TURN_SECTOR (50 degrees of the horizontal) the pair is a pure
+   turn, outside it a pure step, at the stick's own MAGNITUDE rather than its
+   component - which shrinks towards the sector's edge and could fall back
+   under the very threshold the item exists to get past. No diagonals: this
+   mode exists to place her exactly, and a diagonal is what broke it.
+   MODERN_TANK_SECTOR_HYST (8 degrees) keeps a thumb resting on the boundary
+   from alternating between the two at 30 Hz; the one tick of memory it needs
+   is a static in `specific/input.cpp`, cleared on every tick that is not a
+   bypass tick, so a fresh hold is never biased. Both constants are "measure
+   ourselves" and both name their MODERNLOG field. The seam's own condition
+   moved up to the stick's reading with them, because the sector needs the same
+   answer before the classic assembly runs and a second spelling of those eight
+   terms would be a second chance to drift; the bypass gate and the log line
+   now share one name for it, `modern_tank`, which is the gate inverted and was
+   already written out twice.
+2. **The camera he turns takes her course with it** (M2, his word 3;
+   `game/modern_camera.*`, `game/camera.*`, `game/modern_move.*`,
+   `game/modern_state.cpp`). The yaw step the RIGHT stick gave the orbit in its
+   last tick - and only that: not the return, not the carried swing, not a
+   re-seat - is added to the held reference AND the held course before the
+   course is read. `MODERN_CAMERA_STATE::stick_step` is taken in
+   `ModernCameraUpdate`'s rule 1, before the swing pays out and before the
+   return falls home; `ModernCameraPlayerStep` in `game/camera.cpp` hands it on
+   behind the same two gates as `ModernCameraWorldYaw` and for the same reasons
+   (an orbit that is not seated, or that did not tick on the previous tick, has
+   no step to give - the rich2 sniper camera, a flyby, the look key);
+   `MODERN_SITUATION::cam_player_step` carries it and `ModernTranslate`'s new
+   step 2a applies it. The re-latch rule is untouched - with the course already
+   carried, a re-latch finds nothing left to jump - and so is the protection
+   the held course exists for: a camera moved by the return or by a carried
+   swing still moves no course at all. It is one function, so the water and the
+   land are answered together. `game/camera.cpp`'s own `modern_cam_lead_yaw`
+   looks like this quantity and is NOT - it is the world yaw's whole step less
+   the return, so a carried swing is inside it, which is right for leading the
+   EYE and would have broken the protection here.
+
+**MODERNLOG** gains three fields, each at the end of the line it belongs to, as
+every round's have been: `sector=` (0 none, 1 turn, 2 step) and `out=` on the
+`mode=tank` line, so a log read afterwards can hold a thumb's angle against the
+bits it produced instead of inferring them; and `cam_step=` on the tick line,
+the step handed over, which reads beside `cstep=` and shows the course
+following the view tick for tick instead of standing still and then jumping.
+
+**BYTE IDENTITY AT TANK**, statement by statement, because that is the promise
+the whole scheme rests on. With `tomb5.control_modern` 0 the diff executes:
+three local copies in `S_UpdateInput` (`tank_x`/`tank_y` taking `move_x`/
+`move_y`, `tank_sector` taking 0), which the four classic comparisons then read
+instead of the originals - the same values; the two named conditions, both
+short-circuiting on `tomb5.control_modern` to 0, one of them a statement that
+only MOVED; the `if (tomb5.control_modern)` that keeps the sector call and its
+static out of Tank altogether; and one field set to 0 in `ModernCameraReset`, on
+the single arming call the draw path makes, which nothing at Tank reads.
+`ModernTankSector`, `ModernCameraPlayerStep`, the situation's fill, step 2a and
+all three log fields are behind the option. `game/interpolate.*`,
+`TR5Randomizer/` and the Tank key and pad tables are untouched.
+
+**THE FILES**, round 161a3b's own against base `12eb4e0`:
+
+- `game/modern_move.h` / `.cpp` (items 1, 2) - `ModernTankSector` and its two
+  constants, `MODERN_SITUATION::cam_player_step`, the translation's step 2a.
+- `game/modern_camera.h` / `.cpp` (item 2) - `MODERN_CAMERA_STATE::stick_step`,
+  taken in rule 1 and cleared in the reset.
+- `game/camera.h` / `.cpp` (item 2) - `ModernCameraPlayerStep`.
+- `specific/input.cpp` (item 1) - the seam's condition moved up, `modern_tank`,
+  the sector call and its static, and the tank line's two new fields.
+- `game/modern_state.cpp` (item 2) - the situation's fill and `cam_step=`.
+- `Preparation/Tools/Diagnose/ModernTest.cpp` (items 1, 2) - `tank_sector` and
+  `cam_steer`.
+- `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md` (this entry) -
+  outside the counts below, the same convention every round has kept.
+
+Three commits, `Round 161a3b (#161): <what>`. `ModernTest` ends the round at
+**5357 checks, 0 failed** (5187 at base `12eb4e0`; 5336 after item 1, 5357 after
+item 2). `InterpTest` is untouched at **373 checks, 0 failed** - neither item
+goes near a file it includes. Item 2's own group was shown to FAIL before the
+change rather than only to pass after it: with step 2a disabled the same runs
+fail eight checks and show 14 impulses per run, biggest 15.0 degrees in the
+water and 30.0 on land, which is M2's own shape reproduced by the harness.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

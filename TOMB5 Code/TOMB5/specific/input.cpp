@@ -972,6 +972,29 @@ long S_UpdateInput()
 	 * spelling of "the look key is steering her as at Tank". */
 	const long modern_tank = modern_seam && ((input & IN_LOOK) || ModernLookTankActive());
 
+	/* ... AND WHETHER THAT LOOK KEY IS AIMING SOMETHING INSTEAD (#161, round
+	 * 161a3b review, the one high finding). With a weapon ready the look key
+	 * is NOT a steering modifier and never was: the strip two hundred lines
+	 * below asks `lara.gun_status != LG_READY` before it takes IN_LOOK out,
+	 * and its own comment says so in writing - "That case keeps the classic
+	 * look, exactly as it is today."
+	 *
+	 * MEASURED, NOT ASSUMED. The bit really does survive into these ticks, by
+	 * two roads. The IN_TARGET swallow below (`if (lara.gun_status ==
+	 * LG_READY)`) lets it through from the seventh tick of a hold, LookCnt
+	 * 100; and game\control.cpp:527 puts it back with `input |= IN_LOOK` on
+	 * EVERY tick of a binocular or lasersight session. On exactly those ticks
+	 * the classic direction bits are what LookUpDown (game\lara.cpp:887) and
+	 * LookLeftRight (:920) consume to aim the head, the binoculars and the
+	 * crosshair - and a sector that lets one axis through would make a
+	 * diagonal impossible: left or right, up or down, never both.
+	 *
+	 * SO THE SECTOR IS CONFINED TO THE TICKS THE LOOK KEY REALLY IS STEERING
+	 * HER. Only the sector - `modern_tank` itself is untouched, because the
+	 * bypass gate and the log line below are round 161a3's behaviour with a
+	 * weapon ready and this round does not get to change it. */
+	const long modern_tank_aim = modern_tank && lara.gun_status == LG_READY;
+
 	/* AND THERE THE STICK IS READ BY SECTOR (#161, round 161a3b, item 1).
 	 *
 	 * The classic assembly below is two independent per-axis thresholds of 8,
@@ -998,14 +1021,21 @@ long S_UpdateInput()
 	 * the plain boundary, which is what "a fresh push is never biased" means.
 	 * The outer term is tomb5.control_modern and not modern_seam so that at
 	 * Tank the static is neither read nor written; modern_tank already carries
-	 * every one of the seam's terms. */
+	 * every one of the seam's terms.
+	 *
+	 * AND THE CLEARING STAYS OUTSIDE THE AIMING GATE, deliberately. Drawing a
+	 * weapon in the middle of a hold ends the steering; what follows the
+	 * holster is a fresh push and has to start from the plain boundary. The
+	 * other placement - keeping the memory across the aiming ticks - would
+	 * bias that fresh push by whatever the thumb was doing before the gun came
+	 * out, which is the one thing "a fresh push is never biased" forbids. */
 	long tank_x = move_x;
 	long tank_y = move_y;
 	long tank_sector = MODERN_TANK_SECTOR_NONE;
 
 	if (tomb5.control_modern)
 	{
-		if (modern_tank)
+		if (modern_tank && !modern_tank_aim)
 			tank_sector = ModernTankSector(move_x, move_y, modern_tank_prev, &tank_x, &tank_y);
 
 		modern_tank_prev = tank_sector;
@@ -1128,9 +1158,13 @@ long S_UpdateInput()
 	 * turn, 2 step, and `out` is the pair the classic assembly was really
 	 * handed, so a log read afterwards can hold a thumb's angle against the
 	 * bits it produced instead of inferring them. */
+	/* `aim=` was appended by the 161a3b review's high finding: it is the one
+	 * field that tells a reader WHY a tank tick came out sector=0 with the
+	 * stick still pushed - the look key is aiming a weapon, the binoculars or
+	 * the lasersight, so the pair went through untouched on purpose. */
 	if (gLogEnabled && modern_tank)
-		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld sector=%ld out=%ld/%ld",
-			(long)GlobalCounter, move_x, move_y, tank_sector, tank_x, tank_y);
+		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld sector=%ld out=%ld/%ld aim=%ld",
+			(long)GlobalCounter, move_x, move_y, tank_sector, tank_x, tank_y, modern_tank_aim);
 
 	/* THE WALK KEY SURVIVES THE SEAM (round 161a-fix, #161 item 1 - verified
 	 * by reading this function rather than assumed). MODERN_MOVE_MASK

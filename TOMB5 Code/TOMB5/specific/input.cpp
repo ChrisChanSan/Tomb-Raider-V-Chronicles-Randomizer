@@ -440,6 +440,31 @@ long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/St
 static long joy_fire;
 static long joy_x, joy_y;
 
+/* THE LOOK KEY, AS THE MODERN SCHEME REMEMBERS IT (#161, round 161a3, item 3).
+ *
+ * The bypass used to read `input & IN_LOOK`, the word of the previous tick, and
+ * that worked only as long as the bit was still IN that word. Item 3 takes it
+ * out of the word - the engine must not answer the look key with the look
+ * camera while the stick is steering her as in Tank - so the gate needs its own
+ * memory, or it would read back the bit it had just cleared, let the seam run
+ * again, set the bit again and flicker between the two schemes at 30 Hz.
+ *
+ * So this is what `input & IN_LOOK` WOULD have said: the look bit of the last
+ * word this function built, taken before that word is stripped, with the
+ * six-tick IN_TARGET swallow already applied to it. Written only under
+ * tomb5.control_modern; at Tank nothing reads it and nothing writes it. */
+static long modern_look_tank;
+
+/* AND THE ONE QUESTION THE REST OF THE ENGINE MAY ASK ABOUT IT. The bypass
+ * runs INSTEAD of ModernUpdateInput, so MODERNLOG's own line - which is
+ * printed from inside that function - says nothing at all on these ticks, and
+ * a log read afterwards cannot tell "she was steered as in Tank" from "the
+ * seam never ran". This is what step 5 prints as `mode=tank`. */
+long ModernLookTankActive()
+{
+	return modern_look_tank;
+}
+
 // The pad's stick/d-pad as a single menu step, edge triggered: -1 left,
 // +1 right, 0 nothing. Deliberately UNGATED by ControlMethod.
 //
@@ -885,8 +910,15 @@ long S_UpdateInput()
 		move_x = 0;
 		move_y = 0;
 
+		/* AND THE LEFT ZONE IS THE PATH'S OWN TOO SINCE ROUND 161a3 (item 7).
+		 * Both arguments now pick by path, where the first one used to be
+		 * XInput's 31 on either: the DirectInput axes come in at a different
+		 * scale and their per-axis gate is 18, so a radial 31 above it killed
+		 * every real push between the two - M9's own finding, and the reason a
+		 * slow thumb felt like it had a step in it. MODERN_DEAD_LEFT_DINPUT is
+		 * 24, which is above the gate and below the old radius. */
 		if (joystick_read)
-			ModernStickDeadZone(MODERN_DEAD_LEFT,
+			ModernStickDeadZone(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
 				joystick_is_xinput ? MODERN_DEAD_AXIS_LEFT : MODERN_DEAD_AXIS_LEFT_DINPUT,
 				joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
 	}
@@ -948,10 +980,32 @@ long S_UpdateInput()
 	 * thirtieth of a second after the key and ends the same way, which is
 	 * under the frame a player can see. With a weapon ready the look key is
 	 * swallowed for six ticks further down (it becomes IN_TARGET), so there
-	 * the bypass begins when the hold becomes a real look. */
-	if (tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() && !bUseSpotCam &&
-		!GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item && !InventoryActive &&
-		gfLevelId != LVL5_TITLE && !(input & IN_LOOK))
+	 * the bypass begins when the hold becomes a real look.
+	 *
+	 * AND THE HOLD IS REMEMBERED BESIDE THE WORD SINCE ROUND 161a3 (item 3).
+	 * The word alone can no longer answer, because the block below the
+	 * IN_TARGET swallow takes the bit out of it - it would read back the bit it
+	 * had just cleared, let the translation run again, clear it again, and
+	 * change schemes at 30 Hz. modern_look_tank is that bit one tick later.
+	 *
+	 * BOTH TERMS, NOT THE NEW ONE INSTEAD OF THE OLD (measured before it was
+	 * written): game\control.cpp writes IN_LOOK into `input` itself, and the
+	 * one that matters is :527, where it holds the bit ON for the whole
+	 * binocular and lasersight session whether the player is still pressing or
+	 * not. That session is a LG_READY one, so the block below leaves the bit
+	 * alone and this term is the one that answers, exactly as it did before the
+	 * round. The latch answers the other case, where the bit is ours and gone.
+	 *
+	 * THE CONDITION IS A NAME NOW, because item 3 asks it twice: here, to
+	 * decide whether the translation runs, and after the weapon block, to
+	 * decide whether the look key may reach the engine. Two copies of eight
+	 * terms would be two chances to drift apart. tomb5.control_modern stays the
+	 * first term, so at Tank this is one short-circuit and a local 0. */
+	const long modern_seam = tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() &&
+		!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
+		!InventoryActive && gfLevelId != LVL5_TITLE;
+
+	if (modern_seam && !(input & IN_LOOK) && !modern_look_tank)
 	{
 		// The two key roles the scheme has to know about before they are read
 		// into the word below - aiming asks for the action key, the
@@ -1120,6 +1174,56 @@ long S_UpdateInput()
 
 			LookCnt = 0;
 		}
+	}
+
+	/* AND IN MODERN THE LOOK KEY IS A STEERING MODIFIER, NOT A CAMERA (#161,
+	 * round 161a3, item 3). "Wenn ich im Remaster die Umsehen-Taste 'L1'
+	 * druecke ... Lara kann sich dann auf der Stelle wie im Tank-Modus drehen
+	 * mit ihrer alten Animation. Bei uns ... dreht sie sich zwar 360 Grad im
+	 * Kreis, aber ohne ihre echte Animation."
+	 *
+	 * The bypass above has been in the tree since round 161a and does half the
+	 * job: it stands the translation down, so the stick's own IN_LEFT / IN_RIGHT
+	 * / IN_FORWARD / IN_BACK stand as they do at Tank. The other half is that
+	 * the engine ANSWERS the look key, and the answer eats exactly those bits.
+	 * Measured in the tree rather than assumed:
+	 *   game\lara.cpp:4911   LaraAboveWater calls LookLeftRight() while the bit
+	 *                        is held, and LookLeftRight (:920) sets
+	 *                        camera.type = LOOK_CAMERA and SUBTRACTS IN_LEFT or
+	 *                        IN_RIGHT from the word for the head's own yaw.
+	 *   game\lara.cpp:1428+  fifteen state routines call LookUpDown() (:887),
+	 *                        which does the same to IN_FORWARD / IN_BACK.
+	 *   game\laraswim.cpp:554, game\larasurf.cpp:168/308, game\laraclmb.cpp:48
+	 *                        the same in the water, on the surface and on a
+	 *                        ladder - the surface one RETURNS, so nothing else
+	 *                        of that tick runs at all.
+	 * So she turned 360 degrees with no animation, which is M4's own count: 140
+	 * ticks of 18 degrees in AS_STOP with the state never leaving 2.
+	 *
+	 * Taking the bit out here - the last place before `input` is written, and
+	 * the only place that knows the scheme - hands those bits back to
+	 * lara_as_stop, and with them AS_TURN_L / AS_TURN_R / AS_FASTTURN and the
+	 * animations the user asked for. In Modern the right stick is his look
+	 * (the orbit), so nothing is lost by it.
+	 *
+	 * NOT WITH A WEAPON READY. There the look key is already the six-tick
+	 * IN_TARGET swallow just above, and the seventh tick is what opens the
+	 * binoculars and the lasersight (game\control.cpp:462, which asks for
+	 * LG_READY and for the revolver, the crossbow or the HK). Clearing the bit
+	 * there would take the sight away from the scheme altogether. That case
+	 * keeps the classic look, exactly as it is today.
+	 *
+	 * ONE MEASURED SIDE EFFECT, WRITTEN DOWN RATHER THAN BRANCHED AROUND: DOZY
+	 * ends on IN_WALK "without look" (game\laramisc.cpp:132), so in Modern the
+	 * walk key ends the cheat even while the look key is held. It is a cheat,
+	 * behind tomb5.enable_cheats, and a branch for it would cost more than it
+	 * buys. */
+	if (tomb5.control_modern)
+	{
+		modern_look_tank = (linput & IN_LOOK) ? 1 : 0;
+
+		if (modern_seam && lara.gun_status != LG_READY)
+			linput &= ~IN_LOOK;
 	}
 
 	DoWeaponHotkey();

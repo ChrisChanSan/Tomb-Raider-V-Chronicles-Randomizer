@@ -939,9 +939,20 @@ static long DXUpdateJoystickDirectInput()
 	// it meant - it is the four BINDABLE BITS' threshold, and item 6 does not
 	// touch those. What the camera loses by leaving it behind is the axis
 	// snap; what it must not lose is the reason the number is 500 and not 150,
-	// namely that this controller's Z/Rz rest OFF CENTRE, so the modern zone
-	// on this path is 62 of 128 - the same radius - and not the 34 XInput
-	// gets. MODERN_DEAD_RIGHT_DINPUT in game\modern_move.h carries that.
+	// namely that this controller's Z/Rz were believed to rest OFF CENTRE.
+	//
+	// AND THAT BELIEF HAS NOW BEEN MEASURED (#161, round 161a3, item 7). The
+	// pad line of eight MODERNLOG sessions read this stick resting at rx 2..5,
+	// ry -6..2 of 128, so the 500 was never absorbing a real offset - it was a
+	// guess wide enough to cover one. The modern zone on this path is
+	// MODERN_DEAD_RIGHT_DINPUT 24 with its per-axis square 20 now, not 62, and
+	// game\modern_move.h carries the measurement beside both numbers.
+	//
+	// THE ORDER IS THE POINT OF THIS PARAGRAPH, and it is why item 7 needed no
+	// line here: the two assignments below come BEFORE the 500, and the left
+	// stick's own pair above comes before the 150, so what the modern seam
+	// reads is the raw axis in both cases and neither per-axis gate has ever
+	// been in its way. The four bindable bits keep theirs.
 	joystick_raw_rx = rrx / 8;
 	joystick_raw_ry = rry / 8;
 

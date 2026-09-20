@@ -159,6 +159,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	long water;		// round 161a2 step 4: the state's own swim turn rate, 0 on land
 	long xrot;		// her attitude after the pointer has had its say
 	long stroke;		// 1 = hold the stroke key this tick (water_auto_stroke)
+	long air;		// round 161a3 item 4: the step the air turn applied - MODERNLOG's `air=`
 
 	if (!lara_item)
 		return bits;
@@ -449,6 +450,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	water = ModernWaterTurnRate(&modern_cfg, sit.anim_state);
 	xrot = lara_item->pos.x_rot;
 	stroke = 0;
+	air = 0;
 
 	lara_yaw = lara_item->pos.y_rot;
 
@@ -508,6 +510,35 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	else if (ModernDirectTurn(&modern_cfg, &modern_state, &sit, &out, &yaw))
 	{
 		lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + yaw);
+		lara.turn_rate = 0;
+	}
+	/* AND IN THE AIR THE SAME LINE AGAIN, AT THE JUMP'S OWN RATE (round 161a3,
+	 * item 4). "Im Remaster kann sie auch nach dem Sprung in der Luft weiterhin
+	 * nach links und rechts lenken. ... Lara kann dadurch einen viel weiteren
+	 * Radius um eine Kante springen."
+	 *
+	 * A THIRD ARM OF THE SAME EITHER/OR, and it can be one because the three
+	 * lists do not overlap: ModernWaterTurnRate answers only the eight swim and
+	 * surface states, ModernStateAllowsDirectTurn the ten on the ground, and
+	 * ModernStateAllowsAirTurn the one in the air (3, AS_FORWARDJUMP - the only
+	 * airborne routine in game\lara.cpp that reads a turn bit at all).
+	 * ModernTest asserts the three-way exclusivity over all 139 states, so the
+	 * order of the arms cannot come to matter later.
+	 *
+	 * turn_rate goes to zero for the same reason as on the ground:
+	 * lara_as_forwardjump ramps it from IN_LEFT / IN_RIGHT and LaraAboveWater
+	 * adds it to y_rot a moment later, so without this she would turn twice -
+	 * once at our rate and once at the classic's 182 units. ModernAirTurn has
+	 * already taken those two bits out of out.bits, which is what the write
+	 * below hands on.
+	 *
+	 * IT IS BEFORE THE PUBLISH LINE ON PURPOSE. game\camera.cpp subtracts the
+	 * heading published three lines down from her heading after the animation,
+	 * and calls what is left an animation about-turn worth a camera swing (item
+	 * 5). A turn written after the publish would be read as exactly that. */
+	else if (ModernAirTurn(&modern_cfg, &modern_state, &sit, &out, &air))
+	{
+		lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + air);
 		lara.turn_rate = 0;
 	}
 

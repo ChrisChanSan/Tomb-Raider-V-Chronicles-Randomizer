@@ -30,6 +30,7 @@ void ApplyJoyDefaults();
 void ApplyJoyScheme();	// #161, round 161a2: the active scheme repairs the bindings it cannot honour
 long JoyBitConfirm();
 long JoyBitBack();
+long ModernLookTankActive();	// #161, round 161a3, item 3: the look key is steering her as at Tank this tick
 
 extern const char* KeyboardButtons[272];
 extern const char* GermanKeyboard[272];

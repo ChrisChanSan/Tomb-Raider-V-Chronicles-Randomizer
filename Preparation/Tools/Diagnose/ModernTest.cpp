@@ -3680,6 +3680,281 @@ static void air_turn()
 		ModernStateAllowsAirTurn(1), 0);
 }
 
+/* ------------------------------------------- the three arms of one turn ----- */
+
+/* WHAT THE ENGINE'S OWN EITHER/OR RESTS ON (#161, round 161a3, step 3).
+ * game\modern_state.cpp turns her in three places and they are one chain of
+ * else-ifs: the water's move, the ground's direct turn, the air turn. That is
+ * only honest while no state can answer two of them - otherwise the ORDER of
+ * the arms would silently be a rule, and a later round that reorders them
+ * would change her turning without touching a rate. So the exclusivity is
+ * asserted here over every state number the engine can put in, rather than
+ * argued from three lists nobody has laid side by side. */
+static void turn_chain()
+{
+	MODERN_CFG cfg;
+	long water = 0;
+	long ground = 0;
+	long airs = 0;
+	long clash = 0;
+	long i;
+
+	printf("\nthe three arms of the turn - one state, one answer (#161 step 3)\n");
+
+	ModernDefaults(&cfg);
+
+	for (i = 0; i < 139; i++)
+	{
+		const long w = ModernWaterTurnRate(&cfg, (short)i) ? 1 : 0;
+		const long g = ModernStateAllowsDirectTurn((short)i) ? 1 : 0;
+		const long a = ModernStateAllowsAirTurn((short)i) ? 1 : 0;
+
+		water += w;
+		ground += g;
+		airs += a;
+
+		if (w + g + a > 1)
+			clash++;
+	}
+
+	ok(clash == 0, "no state answers two arms of the chain", clash, 0);
+	ok(airs == 1, "the air arm is the forward jump and nothing else", airs, 1);
+	printf("  of 139 states: water %ld, ground %ld, air %ld, overlapping %ld\n",
+		water, ground, airs, clash);
+
+	/* AND THE ONE THE CHAIN IS BUILT ON. game\modern_state.cpp asks the water
+	 * first, by rate, so a swim state must never be steerable on the ground
+	 * either - which is the same claim from the other side, and cheap to make
+	 * again by name. */
+	ok(ModernWaterTurnRate(&cfg, 3) == 0, "the forward jump is not the water's", 0, 0);
+	ok(ModernStateAllowsDirectTurn(3) == 0, "...nor the ground's", 0, 0);
+	ok(ModernStateAllowsAirTurn(3) == 1, "...it is the air's", 1, 1);
+}
+
+/* ------------------------------------------------- the look key as Tank ----- */
+
+/* THE SEAM'S OWN TAIL, MODELLED (#161, round 161a3, item 3). The engine half
+ * of this item is two statements in specific\input.cpp and one of them clears
+ * the very bit the other one is gated on - the sort of thing that reads
+ * correctly and flickers at 30 Hz in the hand. So the tail is modelled here,
+ * in the order the file has it, and driven through the cases that matter.
+ *
+ * The bit's VALUE does not matter to the model, only that it is one bit; the
+ * engine's own IN_LOOK lives behind global\types.h, which this harness does
+ * not open (the same reason game\modern_move.h mirrors the movement bits). */
+enum { LOOK_BIT = 1 };
+
+typedef struct LOOK_SEAM
+{
+	long latch;		/* modern_look_tank, specific\input.cpp */
+	long look_cnt;		/* LookCnt, the six-tick IN_TARGET swallow */
+	long word;		/* `input`, the word the engine was handed last tick */
+} LOOK_SEAM;
+
+/* One pass of S_UpdateInput's tail. Returns the word the ENGINE is handed;
+ * `translated` says whether the modern translation ran on this tick and
+ * `targeted` whether the release turned into IN_TARGET. */
+static long look_tick(LOOK_SEAM* s, long look_key, long gun_ready, long seam_on,
+	long* translated, long* targeted)
+{
+	long word = look_key ? LOOK_BIT : 0;
+
+	/* 1. the seam, gated on BOTH halves of the previous tick: the word the
+	 * engine was handed - which game\control.cpp can put the bit into on its
+	 * own, for the binoculars - and the latch this round added beside it. */
+	*translated = (seam_on && !(s->word & LOOK_BIT) && !s->latch) ? 1 : 0;
+	*targeted = 0;
+
+	/* 2. the weapon's own swallow, untouched by this round (:1102) */
+	if (gun_ready)
+	{
+		if (word & LOOK_BIT)
+		{
+			if (s->look_cnt >= 6)
+				s->look_cnt = 100;
+			else
+			{
+				word &= ~(long)LOOK_BIT;
+				s->look_cnt++;
+			}
+		}
+		else
+		{
+			if (s->look_cnt && s->look_cnt != 100)
+				*targeted = 1;
+
+			s->look_cnt = 0;
+		}
+	}
+
+	/* 3. the latch, and then the strip (round 161a3's own two statements) */
+	s->latch = (word & LOOK_BIT) ? 1 : 0;
+
+	if (seam_on && !gun_ready)
+		word &= ~(long)LOOK_BIT;
+
+	s->word = word;
+	return word;
+}
+
+static void look_tank()
+{
+	LOOK_SEAM s;
+	long word, translated, targeted;
+	long seen = 0;
+	long spun = 0;
+	long flips = 0;
+	long last = -1;
+	long i;
+
+	printf("\nthe look key steers her as at Tank (#161 item 3, the user's word 4)\n");
+
+	/* 1. THIRTY TICKS OF A HELD KEY, NO WEAPON. The engine must never see the
+	 * bit - that is what keeps LookLeftRight (game\lara.cpp:920) from eating
+	 * IN_LEFT / IN_RIGHT and leaves them to lara_as_stop, which is where
+	 * AS_TURN_L and its animation come from. And the scheme must change hands
+	 * exactly ONCE, on the second tick: the first tick is the one the latch
+	 * has not been written on yet. */
+	s.latch = 0;
+	s.look_cnt = 0;
+	s.word = 0;
+
+	for (i = 0; i < 30; i++)
+	{
+		word = look_tick(&s, 1, 0, 1, &translated, &targeted);
+
+		if (word & LOOK_BIT)
+			seen++;
+
+		if (translated)
+			spun++;
+
+		if (last >= 0 && translated != last)
+			flips++;
+
+		last = translated;
+	}
+
+	ok(seen == 0, "the engine never sees the look key in Modern", seen, 0);
+	ok(spun == 1, "the translation runs on the first tick and then stands down", spun, 1);
+	ok(flips == 1, "...and the scheme changes hands once, not every tick", flips, 1);
+
+	/* 2. AND IT COMES BACK ON THE TICK AFTER THE RELEASE. */
+	word = look_tick(&s, 0, 0, 1, &translated, &targeted);
+	ok(translated == 0, "the tick the key is released is still Tank's", translated, 0);
+	word = look_tick(&s, 0, 0, 1, &translated, &targeted);
+	ok(translated == 1, "the next one is the modern scheme again", translated, 1);
+
+	/* 3. A WEAPON READY IS THE CLASSIC LOOK, UNCHANGED. Six ticks of swallow
+	 * with the translation still running, then the bit stands - which is what
+	 * opens the binoculars and the lasersight in game\control.cpp:462. */
+	s.latch = 0;
+	s.look_cnt = 0;
+	s.word = 0;
+	seen = 0;
+	spun = 0;
+
+	for (i = 0; i < 10; i++)
+	{
+		word = look_tick(&s, 1, 1, 1, &translated, &targeted);
+
+		if (word & LOOK_BIT)
+			seen++;
+
+		if (translated)
+			spun++;
+	}
+
+	ok(seen == 4, "with a weapon ready the look key reaches the engine from tick 7",
+		seen, 4);
+	ok(spun == 7, "...and the translation runs until it does", spun, 7);
+
+	/* 4. AND A TAP WITH A WEAPON READY IS STILL IN_TARGET. Three ticks held is
+	 * under the six, so the bit never leaves the seam and the release fires the
+	 * target instead - the swallow this round promised not to touch. */
+	s.latch = 0;
+	s.look_cnt = 0;
+	s.word = 0;
+	seen = 0;
+
+	for (i = 0; i < 3; i++)
+	{
+		word = look_tick(&s, 1, 1, 1, &translated, &targeted);
+
+		if (word & LOOK_BIT)
+			seen++;
+	}
+
+	word = look_tick(&s, 0, 1, 1, &translated, &targeted);
+	ok(seen == 0, "a tap with a weapon ready never reaches the engine as a look", seen, 0);
+	ok(targeted == 1, "...it is IN_TARGET on the release, as it always was", targeted, 1);
+
+	/* 5. WHERE THE SEAM IS NOT REACHABLE AT ALL - a cutscene, a spotcam, the
+	 * inventory, first person, the title - the key is the engine's as before.
+	 * One term of the seam's condition stands for all eight of them. */
+	s.latch = 0;
+	s.look_cnt = 0;
+	s.word = 0;
+	word = look_tick(&s, 1, 0, 0, &translated, &targeted);
+	ok((word & LOOK_BIT) != 0, "outside the seam the look key is the engine's",
+		word & LOOK_BIT, LOOK_BIT);
+
+	/* 6. AND THE BINOCULARS ARE WHY THE OLD TERM STAYED. game\control.cpp:527
+	 * holds IN_LOOK in the word for the whole binocular and lasersight session,
+	 * long after the player has let go - so the word can carry the bit when
+	 * nothing in this file put it there. The translation must stay down for as
+	 * long as it does, which is what the first of the gate's two terms says. */
+	s.latch = 0;
+	s.look_cnt = 0;
+	s.word = 0;
+	spun = 0;
+
+	for (i = 0; i < 8; i++)
+	{
+		word = look_tick(&s, 0, 1, 1, &translated, &targeted);
+		s.word |= LOOK_BIT;		/* game\control.cpp, the session holding it on */
+
+		if (translated)
+			spun++;
+	}
+
+	ok(spun == 1, "the binocular session keeps the translation down, key or no key",
+		spun, 1);
+
+	/* 7. AND THE LEFT STICK'S OWN ZONE ON THIS PATH (item 7, the other half of
+	 * the wiring). M9: "die linke radiale Zone 31 liegt ueber dem Achs-Gate 18
+	 * und toetet echte Schuebe von 18..31" - the seam passed XInput's 31 on
+	 * both paths until this step. Every push between the gate and the old
+	 * radius, in eight directions, and how many of them live now. */
+	{
+		const long dir[8][2] = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 },
+			{ 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+		long alive_old = 0;
+		long alive_new = 0;
+		long d, m, ox, oy;
+
+		for (d = 0; d < 8; d++)
+			for (m = 19; m <= 31; m++)
+			{
+				const long px = dir[d][0] * m;
+				const long py = dir[d][1] * m;
+
+				if (ModernStickDeadZone(MODERN_DEAD_LEFT, MODERN_DEAD_AXIS_LEFT_DINPUT,
+					px, py, &ox, &oy))
+					alive_old++;
+
+				if (ModernStickDeadZone(MODERN_DEAD_LEFT_DINPUT, MODERN_DEAD_AXIS_LEFT_DINPUT,
+					px, py, &ox, &oy))
+					alive_new++;
+			}
+
+		ok(alive_new > alive_old, "the DirectInput left zone hands back the pushes 31 killed",
+			alive_new, alive_old + 1);
+		printf("  pushes of 19..31 in eight directions: %ld live under the old 31,"
+			" %ld under the new 24\n", alive_old, alive_new);
+	}
+}
+
 /* -------------------------------------------- the camera follows a flip ----- */
 
 static void camera_carry()
@@ -6219,6 +6494,8 @@ int main()
 	reversal();
 	spin_sweep();
 	air_turn();
+	turn_chain();
+	look_tank();
 	firing_run();
 	weapons();
 	sweeps();

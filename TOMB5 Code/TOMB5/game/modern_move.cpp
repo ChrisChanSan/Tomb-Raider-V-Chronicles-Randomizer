@@ -155,6 +155,45 @@ long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* 
 	return ModernRound(want);
 }
 
+/* THE PLAYER'S OWN SHARE OF THAT ZONE (#161, round 161b1, item 5) - "den wie im
+ * Remaster toggelbar fuer den User hier einbinden".
+ *
+ * `base` is one of the eight tuned MODERN_DEAD_* widths (game\modern_move.h),
+ * `user` is tomb5.dead_zone, 0..100, and the answer is the width the seam
+ * really applies. The whole point of the formula is its MIDDLE:
+ *
+ *   (base * 50 + 25) / 50 = base + 25/50 = base, exactly, for every base,
+ *
+ * because integer division throws the remainder away. So the default setting is
+ * not "close to" round 161a3's tuning, it IS that tuning, and a player who never
+ * touches the row plays the engine the play tests were run on. The +25 is the
+ * half-divisor that makes the rest of the bar round to nearest rather than
+ * always down: 31 at 40 per cent is 24.8, which answers 25 and not 24.
+ *
+ * 0 answers 0 for every base - no zone at all - and 100 answers twice the base.
+ * The function is monotone in `user` because the numerator is, and it is pure
+ * for the same reason ModernStickDeadZone above is: ModernTest is where the
+ * three promises are kept, not a play test.
+ *
+ * Both arguments are guarded rather than trusted. `user` arrives from the
+ * registry, which a hand can edit (tomb5\tomb5.cpp clamps it too, but the
+ * clamp belongs where the value is USED as well as where it is read), and a
+ * negative `base` has no meaning as a width - ModernStickDeadZone reads 0 and
+ * below as "no zone", so that is what a caller gets back here. */
+long ModernDeadZoneUser(long base, long user)
+{
+	if (base <= 0)
+		return 0;
+
+	if (user < 0)
+		user = 0;
+
+	if (user > 100)
+		user = 100;
+
+	return (base * user + 25) / 50;
+}
+
 /* THE LOOK KEY'S TANK, READ BY SECTOR (#161, round 161a3b, item 1).
  *
  * On the bypass ticks - and on no others - the stick is handed to the CLASSIC

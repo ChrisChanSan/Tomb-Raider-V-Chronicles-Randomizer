@@ -2763,5 +2763,21 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * zero default stand, exactly as the three bools above it do not leave
 	 * their own zero unexamined either. Registry: cam_speed. */
 	ulong camera_speed;
+
+	/* THE DEAD ZONE SLIDER (#161, round 161b1, item 5). "Das ist bei uns
+	 * momentan noch ein fester Wert, den wie im Remaster toggelbar fuer den
+	 * User hier einbinden." - a second Controls-page slider beside camera_speed
+	 * and driven exactly like it, 0..100.
+	 *
+	 * The NUMBER is a per cent of the tuned zone and not a zone itself:
+	 * game\modern_move.cpp's ModernDeadZoneUser(base, user) is the one place
+	 * that turns it into a width, and it is built so that 50 reproduces every
+	 * one of the eight MODERN_DEAD_* constants EXACTLY. So the default is 50
+	 * and the default engine is round 161a3's own tuning, unchanged; 0 is no
+	 * zone at all and 100 is twice the zone. Like camera_speed this field only
+	 * ever has to be stored and clamped, never interpreted, and like it a bare
+	 * zero would be a real setting rather than "unset" - which is why
+	 * init_tomb5_stuff() seats it at 50 on a first run. Registry: dead_zone. */
+	ulong dead_zone;
 };
 #pragma pack(pop)

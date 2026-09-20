@@ -788,6 +788,109 @@ static void deadzone()
 				name2[k], hits, worst);
 		}
 	}
+
+	/* 7. AND THE PLAYER'S OWN PER CENT ON TOP OF ALL EIGHT (#161, round 161b1,
+	 * item 5) - "den wie im Remaster toggelbar fuer den User hier einbinden".
+	 *
+	 * The row is worth nothing if its DEFAULT is not the engine the play tests
+	 * were run on, and that is the first thing checked here: 50 has to give back
+	 * every one of the eight tuned widths unchanged, not something near them. */
+	{
+		const long base8[8] = { MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT,
+			MODERN_DEAD_LEFT_DINPUT, MODERN_DEAD_RIGHT_DINPUT,
+			MODERN_DEAD_AXIS_LEFT, MODERN_DEAD_AXIS_RIGHT,
+			MODERN_DEAD_AXIS_LEFT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT };
+		const char* name8[8] = { "MODERN_DEAD_LEFT", "MODERN_DEAD_RIGHT",
+			"MODERN_DEAD_LEFT_DINPUT", "MODERN_DEAD_RIGHT_DINPUT",
+			"MODERN_DEAD_AXIS_LEFT", "MODERN_DEAD_AXIS_RIGHT",
+			"MODERN_DEAD_AXIS_LEFT_DINPUT", "MODERN_DEAD_AXIS_RIGHT_DINPUT" };
+		long b, u;
+
+		printf("  the dead zone slider - 50 is the tuned engine, 0 is none, 100 is twice\n");
+
+		for (b = 0; b < 8; b++)
+		{
+			ok(ModernDeadZoneUser(base8[b], 50) == base8[b],
+				"the slider's middle is the tuned constant itself",
+				ModernDeadZoneUser(base8[b], 50), base8[b]);
+			ok(ModernDeadZoneUser(base8[b], 0) == 0,
+				"...and its bottom end is no zone at all",
+				ModernDeadZoneUser(base8[b], 0), 0);
+			ok(ModernDeadZoneUser(base8[b], 100) == 2 * base8[b],
+				"...and its top end is twice the zone",
+				ModernDeadZoneUser(base8[b], 100), 2 * base8[b]);
+		}
+
+		printf("    %-30s %s\n", "constant", "0 / 25 / 50 / 75 / 100");
+
+		for (b = 0; b < 8; b++)
+			printf("    %-30s %ld / %ld / %ld / %ld / %ld\n", name8[b],
+				ModernDeadZoneUser(base8[b], 0), ModernDeadZoneUser(base8[b], 25),
+				ModernDeadZoneUser(base8[b], 50), ModernDeadZoneUser(base8[b], 75),
+				ModernDeadZoneUser(base8[b], 100));
+
+		/* MONOTONE over the whole bar, for every base: a slider that gives back
+		 * a NARROWER zone one notch further right is a slider nobody can tune
+		 * by feel, and integer rounding is exactly the thing that could do it. */
+		for (b = 0; b < 8; b++)
+		{
+			long rising = 1;
+
+			prev = ModernDeadZoneUser(base8[b], 0);
+
+			for (u = 1; u <= 100; u++)
+			{
+				const long now = ModernDeadZoneUser(base8[b], u);
+
+				if (now < prev)
+					rising = 0;
+
+				prev = now;
+			}
+
+			ok(rising == 1, "the bar never gives back a narrower zone", rising, 1);
+		}
+
+		/* THE ARGUMENTS ARE GUARDED, not trusted - the value comes from the
+		 * registry and a hand can edit it. Out of range is pinned to the ends,
+		 * and a base of 0 or less is no width to scale. */
+		ok(ModernDeadZoneUser(MODERN_DEAD_LEFT, -5) == 0,
+			"a negative setting reads as the bottom end",
+			ModernDeadZoneUser(MODERN_DEAD_LEFT, -5), 0);
+		ok(ModernDeadZoneUser(MODERN_DEAD_LEFT, 500) == 2 * MODERN_DEAD_LEFT,
+			"and one past the top reads as the top",
+			ModernDeadZoneUser(MODERN_DEAD_LEFT, 500), 2 * MODERN_DEAD_LEFT);
+		ok(ModernDeadZoneUser(0, 100) == 0, "no base is no zone at any setting",
+			ModernDeadZoneUser(0, 100), 0);
+		ok(ModernDeadZoneUser(-3, 100) == 0, "...and neither is a negative one",
+			ModernDeadZoneUser(-3, 100), 0);
+
+		/* AND THE PAD STILL RESTS SILENT AT THE DEFAULT. The two rest positions
+		 * item 5 names, on both DirectInput sticks, through the scaled pair the
+		 * seam really passes at 50 (specific\input.cpp) - the same promise the
+		 * measured rest above makes, asked once more on the way the slider now
+		 * takes. The XInput pair is asked beside them because the same two
+		 * readings arrive there when a DualSense runs through a wrapper. */
+		{
+			const long rest2[2][2] = { { 5, -6 }, { 2, 10 } };
+			long r3, k3;
+
+			for (k3 = 0; k3 < 4; k3++)
+				for (r3 = 0; r3 < 2; r3++)
+				{
+					const long zb[4] = { MODERN_DEAD_LEFT_DINPUT, MODERN_DEAD_RIGHT_DINPUT,
+						MODERN_DEAD_LEFT, MODERN_DEAD_RIGHT };
+					const long ab[4] = { MODERN_DEAD_AXIS_LEFT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT,
+						MODERN_DEAD_AXIS_LEFT, MODERN_DEAD_AXIS_RIGHT };
+
+					m = ModernStickDeadZone(ModernDeadZoneUser(zb[k3], 50),
+						ModernDeadZoneUser(ab[k3], 50),
+						rest2[r3][0], rest2[r3][1], &ox, &oy);
+					ok(m == 0 && !ox && !oy,
+						"a resting pad is still silent at the slider's default", m, 0);
+				}
+		}
+	}
 }
 
 /* ------------------------------------------------- the stick becomes bits -- */

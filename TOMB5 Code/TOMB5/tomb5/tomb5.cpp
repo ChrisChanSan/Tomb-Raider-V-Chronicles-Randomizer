@@ -272,6 +272,14 @@ void init_tomb5_stuff()
 		tomb5.camera_speed = 40;
 		REG_WriteLong(buf, tomb5.camera_speed);
 
+		// #161, round 161b1 step 3: the fifth Controls-page row, the second
+		// slider. 50 is the middle of the bar and the one value at which
+		// ModernDeadZoneUser reproduces every MODERN_DEAD_* constant exactly
+		// (game/modern_move.h), so a first run ships round 161a3's tuning.
+		sprintf(buf, "dead_zone");
+		tomb5.dead_zone = 50;
+		REG_WriteLong(buf, tomb5.dead_zone);
+
 		// Empty: the Steam discovery looks for the Remaster by itself. A
 		// path here overrides it - one of the two settings that is not a
 		// number.
@@ -451,6 +459,19 @@ void init_tomb5_stuff()
 		if (tomb5.camera_speed > 100)
 			tomb5.camera_speed = 100;
 
+		// #161, round 161b1 step 3. Guarded like cam_speed above but landing
+		// on the DEFAULT rather than on the nearest end, because an
+		// out-of-range value here says nothing about which end was meant and
+		// the middle is the only value with a known feel: a hand-edited 400
+		// would multiply
+		// every dead zone by eight and leave the sticks dead in their whole
+		// travel. Missing or out of range is 50, the value that reproduces the
+		// tuned constants (the field is a ulong, so a negative cannot arrive).
+		sprintf(buf, "dead_zone");
+		REG_ReadLong(buf, tomb5.dead_zone, 50);
+		if (tomb5.dead_zone > 100)
+			tomb5.dead_zone = 50;
+
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
 
@@ -601,6 +622,10 @@ void save_new_tomb5_settings()
 	// #161, round 161a2b step 5 - the fourth Controls-page row.
 	sprintf(buf, "cam_speed");
 	REG_WriteLong(buf, tomb5.camera_speed);
+
+	// #161, round 161b1 step 3 - the fifth, the dead zone slider.
+	sprintf(buf, "dead_zone");
+	REG_WriteLong(buf, tomb5.dead_zone);
 
 	CloseRegistry();
 }

@@ -1352,6 +1352,10 @@ const char* CustomText(const char* engl)
 		{ "Key bindings",    "Key bindings",    "Tastenbelegung", "Key bindings",       "Key bindings" },
 		{ "Reset to defaults", "Reset to defaults", "Standard wiederherstellen", "Reset to defaults", "Reset to defaults" },
 		{ "Control layout",  "Control layout",  "Steuerungslayout", "Control layout",   "Control layout" },
+		// #161, round 161b1 step 3 - the Dead zone row (item 5). German keeps
+		// the borrowed word the user himself used ("Deadzone"), which is also
+		// the shorter label of the two.
+		{ "Dead zone",       "Dead zone",       "Deadzone",       "Dead zone",          "Dead zone" },
 		// #161, round 161b1 step 2 - the right half of the tree (item 4):
 		// Graphics, HUD, View and tomb5 options, plus Ammotype hotkeys moving
 		// into Controls. Same rule as every block above: only German is a

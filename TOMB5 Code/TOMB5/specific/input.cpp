@@ -858,10 +858,19 @@ long S_UpdateInput()
 		 *
 		 * ControlMethod == 1 as before, and ZEROED rather than skipped in the
 		 * other case, so that a stick which was out when the player switched
-		 * to the keyboard cannot leave the orbit turning for ever. */
+		 * to the keyboard cannot leave the orbit turning for ever.
+		 *
+		 * AND BOTH WIDTHS ARE THE PLAYER'S SINCE ROUND 161b1 (item 5): the two
+		 * constants go through ModernDeadZoneUser with tomb5.dead_zone, whose
+		 * default 50 hands each of them back unchanged (game\modern_move.cpp).
+		 * Asked here at the use and not once at startup, so that moving the
+		 * slider is felt on the next tick and not on the next launch. */
 		if (ControlMethod == 1)
-			ModernStickDeadZone(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
-				joystick_is_xinput ? MODERN_DEAD_AXIS_RIGHT : MODERN_DEAD_AXIS_RIGHT_DINPUT,
+			ModernStickDeadZone(
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
+					(long)tomb5.dead_zone),
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_AXIS_RIGHT : MODERN_DEAD_AXIS_RIGHT_DINPUT,
+					(long)tomb5.dead_zone),
 				joystick_raw_rx, joystick_raw_ry, &cam_x, &cam_y);
 
 		ModernCameraStick(cam_x, cam_y);
@@ -927,10 +936,18 @@ long S_UpdateInput()
 		 * scale and their per-axis gate is 18, so a radial 31 above it killed
 		 * every real push between the two - M9's own finding, and the reason a
 		 * slow thumb felt like it had a step in it. MODERN_DEAD_LEFT_DINPUT is
-		 * 24, which is above the gate and below the old radius. */
+		 * 24, which is above the gate and below the old radius.
+		 *
+		 * AND THROUGH THE PLAYER'S OWN PER CENT SINCE ROUND 161b1 (item 5),
+		 * exactly as the camera stick above: tomb5.dead_zone at its default 50
+		 * hands both constants back unchanged, so this line at Modern's own
+		 * defaults is the line round 161a3 shipped. */
 		if (joystick_read)
-			ModernStickDeadZone(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
-				joystick_is_xinput ? MODERN_DEAD_AXIS_LEFT : MODERN_DEAD_AXIS_LEFT_DINPUT,
+			ModernStickDeadZone(
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
+					(long)tomb5.dead_zone),
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_AXIS_LEFT : MODERN_DEAD_AXIS_LEFT_DINPUT,
+					(long)tomb5.dead_zone),
 				joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
 	}
 

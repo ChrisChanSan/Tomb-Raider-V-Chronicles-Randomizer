@@ -214,6 +214,29 @@ enum modern_constants
 	MODERN_DEAD_AXIS_LEFT_DINPUT = 18,		// DirectInput left, 150 of 1000 in /8 units - the hardware really holds this one
 	MODERN_DEAD_AXIS_RIGHT_DINPUT = 20,		// measured rest <= 10 of 128; that path's own 500 no longer reaches the seam
 
+	/* AND ALL EIGHT ARE THE MIDDLE OF A SLIDER NOW (#161, round 161b1, item 5).
+	 * "Das ist bei uns momentan noch ein fester Wert, den wie im Remaster
+	 * toggelbar fuer den User hier einbinden." Nothing above moved: every
+	 * number is still the measurement it was, and the row's default of 50 hands
+	 * each of them through ModernDeadZoneUser unchanged (the function below
+	 * carries the proof). What the slider adds is the two ends - 0 for a pad
+	 * whose sticks are tighter than this one's, 100 for a worn pad that creeps.
+	 *
+	 * IT SCALES THE SQUARE TOO, and that is a decision rather than an oversight.
+	 * The square exists because the per-axis zone in specific\dxshell.cpp used
+	 * to hold a resting stick in its corners (see the paragraph above), so a
+	 * player who widens the zone wants the corners widened with it; a player who
+	 * sets 0 has asked for no zone at all and gets exactly that, on both gates.
+	 *
+	 * AND THERE IS NOTHING UNDER IT. Measured for this item rather than assumed:
+	 * both paths in specific\dxshell.cpp write joystick_raw_* BEFORE their own
+	 * per-axis gates (the DirectInput left stick's 150 of 1000 at its line 886,
+	 * the right stick's 500 at 959, XInput's two published thumb zones at 1022
+	 * and 1087), and the seam reads that raw pair, so no classic zone is a floor
+	 * under this slider on any path or stick. DIPROP_DEADZONE is never set on
+	 * the DirectInput device either - only DIPROP_RANGE. At 0 the smallest
+	 * effective zone is therefore 0 everywhere, which is what 0 promises. */
+
 	/* Row 4c, THE LOOK KEY'S OWN TWO SECTORS (#161, round 161a3b, item 1).
 	 *
 	 * With the look key held the translation stands aside and the stick is read
@@ -780,6 +803,7 @@ void ModernResetState(MODERN_STATE* state);
 short ModernWrap(long angle);
 short ModernAngle(long x, long z);
 long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* out_x, long* out_y);
+long ModernDeadZoneUser(long base, long user);
 long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long* out_y);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsSwim(short anim_state);

@@ -19,6 +19,7 @@
 #include "../specific/3dmath.h"		// phd_atan - the engine's own angle
 #include "../specific/function_stubs.h"	// Log, gLogEnabled - MODERNLOG (step 5)
 #include "../specific/input.h"	// joystick_raw_lx/ly/rx/ry, joystick_is_xinput - the MODERNLOG pad line (round 161a2b, step 5)
+#include "../tomb5/tomb5.h"	// tomb5.dead_zone - the effective zones and dead_user= (round 161b1, item 5)
 
 /* game\modern_move.h mirrors input_buttons by value, because it must compile
  * without the Direct3D type set behind global\types.h. This is the first file
@@ -293,8 +294,17 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 				&cam_speed, &cam_yaw_rate, &cam_pitch_min, &cam_pitch_max,
 				&cam_pull_steps, &cam_pull_push);
 
-			dead_l = joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT;
-			dead_r = joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT;
+			/* AND THEY PRINT THE EFFECTIVE WIDTH SINCE ROUND 161b1 (item 5),
+			 * not the constant: the slider scales both at the seam
+			 * (specific\input.cpp), so a line that kept printing 31 and 34
+			 * would be describing an engine the player no longer has. What he
+			 * set is on the same line as what it did - `dead_user` at the end.
+			 * Only the RADIAL pair is printed, as before; the square beside it
+			 * moves with the same per cent and has never had a field. */
+			dead_l = ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
+				(long)tomb5.dead_zone);
+			dead_r = ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
+				(long)tomb5.dead_zone);
 
 			Log("MODERNLOG init scheme=modern rate=%d direct=%d walk_below=%d recenter=%d "
 				"jump_dir=%d cam_return=%d cam_return_min=%d cam_wall_factor=%d "
@@ -302,14 +312,16 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 				"cam_speed=%d cam_yaw_rate=%d cam_pitch_min=%d cam_pitch_max=%d "
 				"aim_strafe=%d dead_l=%d dead_r=%d "
 				"air_rate=%d swim_rate=%d swim_pitch_rate=%d "
-				"cam_pull_steps=%d cam_pull_push=%d stand_ticks=%d",
+				"cam_pull_steps=%d cam_pull_push=%d stand_ticks=%d "
+				"dead_user=%d",	// #161, round 161b1 item 5 - appended at the END, nothing above reworded
 				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
 				modern_cfg.recenter, modern_cfg.jump_dir, cam_return, cam_return_min,
 				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return,
 				cam_speed, cam_yaw_rate, cam_pitch_min, cam_pitch_max,
 				modern_cfg.aim_strafe, dead_l, dead_r,
 				modern_cfg.air_turn_rate, modern_cfg.swim_turn_rate, modern_cfg.swim_pitch_rate,
-				cam_pull_steps, cam_pull_push, modern_cfg.stand_forward_ticks);
+				cam_pull_steps, cam_pull_push, modern_cfg.stand_forward_ticks,
+				(long)tomb5.dead_zone);
 
 			/* MODERNLOG PAD (round 161a2b, item 6 and item 5's own log
 			 * obligation), once beside the init line above and for the same

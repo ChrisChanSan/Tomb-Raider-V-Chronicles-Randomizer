@@ -377,6 +377,28 @@ static bool MenuStepCameraSpeed(long, long dir)
 	return tomb5.camera_speed != old;
 }
 
+static long MenuNumDeadZone(long)
+{
+	return (long)tomb5.dead_zone;
+}
+
+static bool MenuStepDeadZone(long, long dir)
+{
+	// "Das ist bei uns momentan noch ein fester Wert, den wie im Remaster
+	// toggelbar fuer den User hier einbinden." Stored and clamped here like the
+	// row above it; the eight widths it scales, and why 50 is the tuned engine
+	// unchanged, live at ModernDeadZoneUser (game\modern_move.cpp).
+	ulong old = tomb5.dead_zone;
+
+	if (dir < 0 && tomb5.dead_zone > 0)
+		tomb5.dead_zone--;
+
+	if (dir > 0 && tomb5.dead_zone < 100)
+		tomb5.dead_zone++;
+
+	return tomb5.dead_zone != old;
+}
+
 static const char* MenuValTargeting(long, char* buf)
 {
 	if (App.AutoTarget)
@@ -1223,6 +1245,9 @@ static const menu_row menu_rows_controls[] =
 	MENU_VALUE("Action", MenuValAction, MenuStepAction, MENU_SAVE_TOMB5),
 	MENU_VALUE("Control layout", MenuValControlLayout, MenuStepControlLayout, MENU_SAVE_GAME),
 	MENU_SLIDER("Camera speed", -1, MenuNumCameraSpeed, MenuStepCameraSpeed, MENU_SAVE_TOMB5, MenuEnabledModern),
+	// #161, round 161b1 item 5 - the same slider, the same predicate, in the
+	// place the user's tree gives it: right after Camera speed.
+	MENU_SLIDER("Dead zone", -1, MenuNumDeadZone, MenuStepDeadZone, MENU_SAVE_TOMB5, MenuEnabledModern),
 	MENU_VALUE_TXT("Targeting", TXT_Targeting, MenuValTargeting, MenuStepTargeting, MENU_SAVE_GAME),
 	MENU_VALUE("Ammotype hotkeys", MenuValAmmotypeHotkeys, MenuStepAmmotypeHotkeys, MENU_SAVE_TOMB5)
 };

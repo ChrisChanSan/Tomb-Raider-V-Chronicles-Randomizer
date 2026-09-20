@@ -13,6 +13,7 @@
 #pragma once
 #include "../global/types.h"
 #include "../game/key_scheme.h"	// KEY_SCHEME_ROLES and KEY_ROLE_SECOND - the keyboard's slot count is the shape of `layout` below
+#include "../game/pad_scheme.h"	// JOY_ROLES, JOY_ROLE_SECOND and PadSetSeat - the pad's, and the seat of its two sets (#161, round 161b2c, item 3)
 
 // Control-method pages for the joystick: only the display's VOCABULARY.
 // The bit order is determined by the active input path (joystick_is_xinput).
@@ -30,6 +31,9 @@ const char* JoyButtonName(long idx);
 void ApplyJoyDefaults();
 void ApplyJoyScheme();	// #161, round 161a2: the active scheme repairs the bindings it cannot honour
 void ApplyKeyScheme();	// #161, round 161b2a: ... and the keyboard's two sets change places
+void ApplyJoySplit();	// #161, round 161b2c: ... and so do the pad's, when the Action row flips
+void JoySplitDefaults(long* out);	// the Separate set's defaults for the active page and path - what a registry without SJ* means
+long* JoySplitSet(long split);	// one Action setting's stored pad set, wherever it is sitting (specific\registry.cpp)
 const short* KeyDefaultRow();	// the active scheme's default row - Key()'s fallback and CheckKeyConflicts()'s subject
 short* KeySchemeSet(long modern);	// one scheme's stored set, wherever it is sitting (specific\registry.cpp)
 long JoyBitConfirm();
@@ -41,12 +45,11 @@ extern const char* GermanKeyboard[272];
 extern long JoyStyle;
 extern long jLayout[32];
 
-/* The pad's role count, and the Secondary action's slot in it (#161, round
- * 161b2c, item 2). Sixteen roles in jLayout[0..15]; jLayout[16..31] is the
- * other scheme's record, which is why the array is 32 long and why the record
- * moved up by one when this role was appended (specific\input.cpp). */
-#define JOY_ROLES		16
-#define JOY_ROLE_SECOND		15
+/* JOY_ROLES and JOY_ROLE_SECOND stood here when round 161b2c appended the
+ * Secondary role; item 3 moved them into game\pad_scheme.h beside the seat that
+ * counts with them, so that MenuTest asserts on the engine's own number rather
+ * than on a copy of it - the bargain game\key_scheme.h already has. Every user
+ * of the two names reaches them through this header exactly as before. */
 
 extern short layout[4][KEY_SCHEME_ROLES];	// 0 Tank defaults, 1 the active set, 2 Modern defaults, 3 the parked set (#161, round 161b2a)
 extern long conflict[KEY_SCHEME_ROLES];

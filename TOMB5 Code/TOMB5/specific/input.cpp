@@ -182,6 +182,34 @@ static const long jDefPS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1
 static const long jDefXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };
 static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
 
+/* AND FOUR MORE BESIDE THEM FOR "SEPARATE" (#161, round 161b2c, item 3). The
+ * four above are the user's own pad layout and his decision of 2026-09-16 keeps
+ * them as the default in both control schemes; this round does not touch them.
+ * The Separate setting is a layout of its OWN, read off the binding page of the
+ * game he compares with, and he wrote it down as button NAMES:
+ *
+ *   walk Square   jump Cross    action Triangle   draw L2   look R3
+ *   roll Circle   duck L1       sprint L3         flare R1  secondary R2
+ *   inventory Share             pause Options     save PS button   load -
+ *
+ * SO THE ROWS ARE DERIVED AND NOT TYPED. Each name is looked up in the
+ * JoyNames* table of its own page (above) and the bit index it sits at is what
+ * goes in - which is why the two XInput-ordered rows come out identical while
+ * their names differ (Xbox reads X/A/B/Y/LB/RB/LT/RT for Square/Cross/Circle/
+ * Triangle/L1/R1/L2/R2, the user's own mapping), and why the generic row is the
+ * DirectInput numbers. Save is the PS button where a page has one and unbound
+ * where it has not: the two XInput pages stop naming buttons at 11.
+ *
+ * Role order is the tables' above, with the SIXTEENTH entry - the Secondary
+ * action - added at the end, which is the entry those tables have no business
+ * carrying (JoyDefaultRecord). The medipacks (13, 14) are what the One-key
+ * tables give them for this page, so that decision 8's move to the d-pad under
+ * Modern keeps happening in one place and not in five. */
+static const long jSepPS5DInput[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 12, -1, 13, 14, 7 };
+static const long jSepPS5XInput[JOY_ROLES] = { 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, -1, -1, 18, 19, 11 };
+static const long jSepXbox[JOY_ROLES] = { 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, -1, -1, 18, 19, 11 };
+static const long jSepGeneric[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 12, -1, 13, 14, 7 };
+
 /* THE BITS A SCHEME CANNOT HONOUR (#161, round 161a2, fix round - the
  * skeptical review's second finding). Each scheme takes one group of four
  * digital bits away from the bindings and gives it another job, so a role
@@ -205,37 +233,50 @@ static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 
  * still on the right stick. This is what notices. */
 static long joy_scheme_seated = -1;
 
-/* ONE PLACE THAT PRODUCES A 15-ROLE RECORD, for either scheme. The active
- * style's own table is the source in both, so the thirteen roles neither
- * decision ever asked to change cannot drift apart. */
-static void JoyDefaultRecord(long modern, long* out)
+/* ONE PLACE THAT PRODUCES A 16-ROLE RECORD, for either scheme AND either Action
+ * setting (`split`, round 161b2c item 3 - 0 One key, 1 Separate). The active
+ * style's own table is the source in all four cases, so the roles no decision
+ * ever asked to change cannot drift apart. */
+static void JoyDefaultRecord(long modern, long split, long* out)
 {
 	const long* source;
 
 	switch (ActiveJoyStyle())
 	{
 	case JOYSTYLE_PS5:
-		source = joystick_is_xinput ? jDefPS5XInput : jDefPS5DInput;
+		source = joystick_is_xinput
+			? (split ? jSepPS5XInput : jDefPS5XInput)
+			: (split ? jSepPS5DInput : jDefPS5DInput);
 		break;
 	case JOYSTYLE_XBOX:
-		source = joystick_is_xinput ? jDefXbox : jDefGeneric;
+		source = joystick_is_xinput
+			? (split ? jSepXbox : jDefXbox)
+			: (split ? jSepGeneric : jDefGeneric);
 		break;
 	default:
-		source = jDefGeneric;
+		source = split ? jSepGeneric : jDefGeneric;
 		break;
 	}
 
+	// Fifteen and not JOY_ROLES: that is the length the One-key tables have,
+	// and the sixteenth entry is read one statement down, where it is known to
+	// exist.
 	for (int i = 0; i < 15; i++)
 		out[i] = source[i];
 
-	/* THE SECONDARY ROLE HAS NO DEFAULT HERE (#161, round 161b2c, item 2).
-	 * The four tables above are the ones the user's decision of 2026-09-16
-	 * keeps as our pad layout in both schemes, and this round does not touch
-	 * them - they have fifteen entries and they stay fifteen. With "One key"
-	 * the Secondary role is inert and the binding page does not offer it, so
-	 * unbound is not a hole; it is the truth. Its own default arrives with the
-	 * Separate pad set, which is where a sixteenth button belongs. */
-	out[JOY_ROLE_SECOND] = -1;
+	/* THE SECONDARY ROLE HAS NO DEFAULT AT "ONE KEY" (#161, round 161b2c,
+	 * item 2). The four One-key tables are the ones the user's decision of
+	 * 2026-09-16 keeps as our pad layout in both schemes, and this round does
+	 * not touch them - they have fifteen entries and they stay fifteen. With
+	 * "One key" the Secondary role is inert and the binding page does not offer
+	 * it, so unbound is not a hole; it is the truth. Under Separate the role is
+	 * the whole point, and the four tables added for it (item 3) carry its
+	 * button in their sixteenth entry - which is why this reads source[15] only
+	 * on that branch. */
+	if (split)
+		out[JOY_ROLE_SECOND] = source[JOY_ROLE_SECOND];
+	else
+		out[JOY_ROLE_SECOND] = -1;
 
 	/* THE MODERN PAD SET (#161, round 161a2, step 3). Duck..Load (roles 0-12)
 	 * are the SAME choice as Tank's and stay sourced from it, unchanged - the
@@ -254,7 +295,14 @@ static void JoyDefaultRecord(long modern, long* out)
 
 void ApplyJoyDefaults()
 {
-	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, jLayout);
+	/* RESET IS THE ACTIVE SET'S OWN DEFAULTS (#161, round 161b2c, item 3), the
+	 * same sentence the keyboard's Reset has carried since 161b2a: "the
+	 * defaults of the setting I am playing in". The parked set is the other
+	 * setting's bindings and is not touched here - a player resetting his
+	 * Separate layout has not asked to lose his One-key one. */
+	const long split = tomb5.action_split ? 1 : 0;
+
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, split, jLayout);
 
 	/* The zero-fill of jLayout[15..31] that stood here is gone with round
 	 * 161b2c (item 2), and nothing is left uninitialised by its going: the
@@ -280,7 +328,7 @@ void ApplyJoyDefaults()
 	 * one exactly when it mattered. What lives here is a snapshot for the
 	 * binding page and for a later round to show, never an input to the
 	 * repair. */
-	JoyDefaultRecord(tomb5.control_modern ? 0 : 1, &jLayout[16]);
+	JoyDefaultRecord(tomb5.control_modern ? 0 : 1, split, &jLayout[16]);
 	joy_scheme_seated = tomb5.control_modern ? 1 : 0;
 }
 
@@ -346,10 +394,16 @@ void ApplyJoyScheme()
 	long want[JOY_ROLES];
 	long other[JOY_ROLES];
 	const long modern = tomb5.control_modern ? 1 : 0;
+	// The repair is the ACTIVE set's, whichever Action setting seated it (#161,
+	// round 161b2c, item 3): jLayout is that set by construction, and the
+	// defaults it is measured against must be the same setting's, or a Separate
+	// player's action button would look like "the other scheme's default" and
+	// follow a switch it has nothing to do with.
+	const long split = tomb5.action_split ? 1 : 0;
 	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
 
-	JoyDefaultRecord(modern, want);
-	JoyDefaultRecord(modern ? 0 : 1, other);
+	JoyDefaultRecord(modern, split, want);
+	JoyDefaultRecord(modern ? 0 : 1, split, other);
 
 	for (int i = 0; i < JOY_ROLES; i++)
 	{
@@ -376,6 +430,85 @@ void ApplyJoyScheme()
 		jLayout[JOY_ROLES + i] = other[i];
 
 	joy_scheme_seated = modern;
+}
+
+/* SEPARATE'S OWN PAD SET (#161, round 161b2c, item 3).
+ *
+ * "Unsere Tastenbelegung bleibt der Standard" was about the ONE-KEY pad, and
+ * Separate needs a sixteenth button and moves half the others, so the two
+ * cannot share one table. They do not have to: the pad now works the way the
+ * keyboard has since 161b2a - the ACTIVE setting's set sits in jLayout, where
+ * the binding page, Key() and every producer already read it, and the other
+ * setting's set waits here. Flipping the Action row exchanges the two
+ * (PadSetSeat, game\pad_scheme.h), so a player who tries Separate and comes
+ * back finds his own pad exactly as he left it.
+ *
+ * THE STARTING VALUE IS THE PS5 DIRECTINPUT SEPARATE ROW, for the same reason
+ * jLayout's initialiser is the One-key one: LoadSettings overwrites both before
+ * the first frame (specific\registry.cpp), and what stands here is only what a
+ * registry that cannot be opened at all falls back to.
+ *
+ * WHY THIS IS A SECOND ARRAY AND NOT jLayout[16..31]. That span is the other
+ * CONTROL SCHEME's record - a snapshot for the binding page, written by
+ * ApplyJoyScheme and read back by nothing. This is a user set: it is persisted,
+ * it is edited by the player, and it must survive. Two different things with
+ * two different lifetimes do not share sixteen longs. */
+static long jSplitParked[JOY_ROLES] = { 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 12, -1, 13, 14, 7 };
+
+/* Which Action setting's set is in jLayout: 0 One key, 1 Separate. It starts at
+ * One key and not at -1 (joy_scheme_seated does start there) because the two
+ * sets have NAMES of their own in the registry - J* and SJ* - so there is never
+ * a table whose setting has to be guessed; what is needed here is only the
+ * answer to "has the swap been done yet", and at startup it has not. */
+static long joy_split_seated = 0;
+
+/* The stored set of ONE Action setting, wherever it happens to be sitting. The
+ * registry addresses the two by setting and not by array, because JDck..JSec
+ * must keep meaning the One-key set whichever setting is active when the game
+ * shuts down - the accepted 161b2a build reads those names and knows nothing of
+ * SJ*. */
+long* JoySplitSet(long split)
+{
+	return (joy_split_seated == (split ? 1 : 0)) ? jLayout : jSplitParked;
+}
+
+/* What a registry without SJ* means: this page's and this path's Separate
+ * defaults. Computed rather than written out a second time in
+ * specific\registry.cpp, so the four tables above stay the only place the
+ * layout is stated. */
+void JoySplitDefaults(long* out)
+{
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, 1, out);
+}
+
+/* THE PAD'S HALF OF THE ACTION ROW, beside ApplyKeyScheme's and
+ * ApplyJoyScheme's. Called from the row itself (game\menu_frame.cpp) and once
+ * at startup, where it is the first moment tomb5.action_split is known
+ * (specific\gamemain.cpp).
+ *
+ * AND THE REPAIR FOLLOWS THE SET THAT JUST SAT DOWN, but only once there is a
+ * seated scheme to repair against. ApplyJoyScheme judges a binding by
+ * ActiveJoyStyle() and joystick_is_xinput, and both are answered by the POLL,
+ * not by the init - which is why the Modern seat waits for `joystick_read` in
+ * S_UpdateInput. Calling it here before that has happened would set
+ * joy_scheme_seated and so cancel the seat that was still waiting to do the job
+ * properly. joy_scheme_seated >= 0 is exactly "a seat has happened", and when
+ * it has not, the pending one repairs whichever set is active by then - which
+ * is the one this function just seated. */
+void ApplyJoySplit()
+{
+	const long split = tomb5.action_split ? 1 : 0;
+
+	if (joy_split_seated == split)
+		return;
+
+	joy_split_seated = PadSetSeat(jLayout, jSplitParked, (int)joy_split_seated, (int)split);
+
+	if (joy_scheme_seated >= 0)
+		ApplyJoyScheme();
+
+	if (gLogEnabled)
+		Log("KEYLOG split=%s seated", split ? "separate" : "onekey");
 }
 
 // Confirm (Cross/A) and back (Circle/B) as the active path's bit.
@@ -430,9 +563,11 @@ static long JoyBitIsDpad(long bit)
  * TO MAKE ROOM. Slot 15 is the Secondary action; it held a hard 0 before -
  * written by nothing, read by nothing, but 0 is a real button bit (Square on
  * the PS5 DirectInput page), so it starts UNBOUND at -1 instead, which is the
- * value Key() has a sentinel for. Its own defaults arrive with the Separate
- * pad set; with "One key" the role is inert and the binding page does not
- * offer it. jLayout[16..31] is the other scheme's record - it was [16..30]
+ * value Key() has a sentinel for. Its own default arrived one step later, with
+ * the Separate pad set (item 3): R2 there, nothing here, because with "One key"
+ * the role is inert and the binding page does not offer it. jLayout[0..15] is
+ * whichever set the Action row has seated (JoySplitSet) and jLayout[16..31] is
+ * the other CONTROL SCHEME's record - the latter was [16..30]
  * while there were fifteen roles, and the array's 32 entries are exactly two
  * sixteen-role sets, with nothing left over. */
 long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };

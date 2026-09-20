@@ -258,9 +258,19 @@ static bool MenuStepAction(long, long dir)
 	if (!dir)
 		return 0;
 
-	// Same as Combat mode above - drawn and saved, no reader yet.
+	// Wired since round 161b2c: S_UpdateInput builds the Action role's whole
+	// word from this bit every tick, and the Secondary role only exists while
+	// it is set (specific\input.cpp), so the row changes the keys' meaning at
+	// once with nothing else to keep in step.
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.action_split = !tomb5.action_split;
+	/* AND THE PAD HAS A SET PER SETTING (item 3): the flip seats the other one
+	 * and parks this one, so neither is ever rewritten by the other - the
+	 * player's own One-key layout is still there when he comes back. The
+	 * keyboard needs no call of its own here: its slot 18 lives in both key
+	 * sets already and is simply not offered under One key
+	 * (MenuResolveKeybinds below). */
+	ApplyJoySplit();
 	return 1;
 }
 

@@ -23,6 +23,21 @@ static HKEY phkResult;
 static DWORD dwDisposition;
 static bool REG_Setup;
 
+/* SEPARATE'S OWN PAD SET, BY NAME (#161, round 161b2c, item 3). The same
+ * fifteen suffixes the One-key set has carried since base, with an S in front
+ * and the Secondary role appended - so a reader of either set can see at a
+ * glance which is which, and the 161b2a build, which looks for none of them,
+ * reads a registry written here exactly as it read one written by itself.
+ *
+ * A table and a loop rather than sixteen unrolled lines like the J* block
+ * below: those keep the shape of Core's original, these are new, and one loop
+ * is one place for a typo instead of sixteen. */
+static const char* const JoySplitRegNames[JOY_ROLES] =
+{
+	"SJDck", "SJDsh", "SJWlk", "SJJmp", "SJAct", "SJDrw", "SJFlr", "SJLok",
+	"SJRol", "SJInv", "SJPau", "SJSav", "SJLod", "SJSmd", "SJBmd", "SJSec"
+};
+
 bool REG_OpenKey(LPCSTR lpSubKey)
 {
 	return RegCreateKeyEx(HKEY_CURRENT_USER, lpSubKey, 0, (CHAR*)"", REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, 0, &phkResult, &dwDisposition) == ERROR_SUCCESS;
@@ -436,6 +451,33 @@ bool LoadSettings()
 	// pad set is where a sixteenth button belongs (specific\input.cpp).
 	REG_ReadLong((char*)"JSec", (ulong&)jLayout[JOY_ROLE_SECOND], (ulong)-1);
 
+	/* AND SEPARATE'S OWN SET BESIDE IT (#161, round 161b2c, item 3). The
+	 * fifteen lines above keep their meaning exactly - they are the ONE-KEY
+	 * set, whichever setting the game was in when it last shut down - and they
+	 * go straight into jLayout for the same reason the classic keyboard set
+	 * goes straight into layout[1]: the seat has not happened yet and must not
+	 * be assumed either way, so at this moment One key is seated and jLayout IS
+	 * JoySplitSet(0).
+	 *
+	 * MISSING MEANS THE DEFAULTS, and the defaults are asked for rather than
+	 * written out a second time here (specific\input.cpp holds the four tables).
+	 * They are this path's best answer at THIS moment and not the final one -
+	 * JoyStyle is read forty lines further down, tomb5.control_modern comes out
+	 * of the other registry key later still, and joystick_is_xinput is answered
+	 * by the first poll - which is the same approximation the J* defaults above
+	 * have always been (they are the PS5 DirectInput numbers, literally). What
+	 * makes it harmless is that a binding the active scheme cannot honour is
+	 * repaired when the scheme is seated for real (ApplyJoyScheme), and that a
+	 * player who rebinds anything overwrites the guess with his own choice. */
+	{
+		long* sset = JoySplitSet(1);
+
+		JoySplitDefaults(sset);
+
+		for (long i = 0; i < JOY_ROLES; i++)
+			REG_ReadLong((char*)JoySplitRegNames[i], (ulong&)sset[i], (ulong)sset[i]);
+	}
+
 	REG_ReadLong((char*)"MusicVolume", (ulong&)MusicVolume, 80);
 	REG_ReadLong((char*)"SFXVolume", (ulong&)SFXVolume, 90);
 	REG_ReadLong((char*)"ControlMethod", (ulong&)ControlMethod, 0);
@@ -501,22 +543,37 @@ void SaveSettings()
 		REG_WriteLong(name, mset[i]);
 	}
 
-	REG_WriteLong((char*)"JDck", jLayout[0]);
-	REG_WriteLong((char*)"JDsh", jLayout[1]);
-	REG_WriteLong((char*)"JWlk", jLayout[2]);
-	REG_WriteLong((char*)"JJmp", jLayout[3]);
-	REG_WriteLong((char*)"JAct", jLayout[4]);
-	REG_WriteLong((char*)"JDrw", jLayout[5]);
-	REG_WriteLong((char*)"JFlr", jLayout[6]);
-	REG_WriteLong((char*)"JLok", jLayout[7]);
-	REG_WriteLong((char*)"JRol", jLayout[8]);
-	REG_WriteLong((char*)"JInv", jLayout[9]);
-	REG_WriteLong((char*)"JPau", jLayout[10]);
-	REG_WriteLong((char*)"JSav", jLayout[11]);
-	REG_WriteLong((char*)"JLod", jLayout[12]);
-	REG_WriteLong((char*)"JSmd", jLayout[13]);
-	REG_WriteLong((char*)"JBmd", jLayout[14]);
-	REG_WriteLong((char*)"JSec", jLayout[JOY_ROLE_SECOND]);
+	/* BOTH PAD SETS, WHICHEVER ONE IS ACTIVE (#161, round 161b2c, item 3) -
+	 * word for word the keyboard's sentence above, one array lower. JDck..JSec
+	 * are the ONE-KEY set BY NAME and must keep being it, so they can no longer
+	 * be written from jLayout: under Separate that array holds the other set.
+	 * At One key JoySplitSet(0) IS jLayout and these sixteen lines write byte
+	 * for byte what they wrote at base. */
+	const long* oneset = JoySplitSet(0);
+	const long* sepset = JoySplitSet(1);
+
+	REG_WriteLong((char*)"JDck", oneset[0]);
+	REG_WriteLong((char*)"JDsh", oneset[1]);
+	REG_WriteLong((char*)"JWlk", oneset[2]);
+	REG_WriteLong((char*)"JJmp", oneset[3]);
+	REG_WriteLong((char*)"JAct", oneset[4]);
+	REG_WriteLong((char*)"JDrw", oneset[5]);
+	REG_WriteLong((char*)"JFlr", oneset[6]);
+	REG_WriteLong((char*)"JLok", oneset[7]);
+	REG_WriteLong((char*)"JRol", oneset[8]);
+	REG_WriteLong((char*)"JInv", oneset[9]);
+	REG_WriteLong((char*)"JPau", oneset[10]);
+	REG_WriteLong((char*)"JSav", oneset[11]);
+	REG_WriteLong((char*)"JLod", oneset[12]);
+	REG_WriteLong((char*)"JSmd", oneset[13]);
+	REG_WriteLong((char*)"JBmd", oneset[14]);
+	REG_WriteLong((char*)"JSec", oneset[JOY_ROLE_SECOND]);
+
+	// And Separate's set under names of its own. Written at One key too, and
+	// harmlessly: nothing at One key reads SJ*, and the accepted 161b2a build
+	// ignores values it does not know.
+	for (long i = 0; i < JOY_ROLES; i++)
+		REG_WriteLong((char*)JoySplitRegNames[i], sepset[i]);
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
 	REG_WriteLong((char*)"JoyStyle", JoyStyle);

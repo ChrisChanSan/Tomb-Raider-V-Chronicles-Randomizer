@@ -279,6 +279,12 @@ unsigned int __stdcall GameMain(void* ptr)
 		 * scheme already seated is the one wanted and the call returns without
 		 * touching anything (specific\input.cpp). */
 		ApplyKeyScheme();
+		/* AND THE PAD ITS ACTION SETTING (#161, round 161b2c, item 3), for the
+		 * same reason one line up: tomb5.action_split is in the other registry
+		 * key too, so this is the first moment the two pad sets can be told
+		 * apart. At One key the setting already seated is the one wanted and
+		 * the call returns without touching anything. */
+		ApplyJoySplit();
 		DoGameflow();
 		GameClose();
 		S_CDStop();

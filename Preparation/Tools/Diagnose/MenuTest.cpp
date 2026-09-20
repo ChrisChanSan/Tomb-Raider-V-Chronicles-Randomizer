@@ -38,6 +38,7 @@
 
 #include "../../../TOMB5 Code/TOMB5/game/menu_nav.h"
 #include "../../../TOMB5 Code/TOMB5/game/key_scheme.h"
+#include "../../../TOMB5 Code/TOMB5/game/pad_scheme.h"
 
 static int g_checks;
 static int g_fail;
@@ -469,9 +470,79 @@ static void key_seat()
 		check(active[i], kModern[i], "and it really swapped");
 }
 
+/* THE PAD'S TWO SETS (#161, round 161b2c, item 3). Two rows of sixteen that
+ * are DELIBERATELY not copies of the engine's tables: the seat swaps whatever
+ * it is given and has no business knowing what a number means, so a twin of
+ * jDefPS5DInput here would only be a second place to keep in step. 100+ and
+ * 200+ say "some binding" and nothing more; the -1 in each is the one value
+ * with a meaning - an unbound role - and it has to travel like any other. */
+static const long kPadOne[JOY_ROLES] =
+{
+	100, 101, 102, 103, 104, 105, 106, 107,
+	108, 109, 110, 111, 112, 113, 114, -1
+};
+
+static const long kPadSep[JOY_ROLES] =
+{
+	200, 201, 202, 203, 204, 205, 206, 207,
+	208, 209, 210, -1, 212, 213, 214, 215
+};
+
+static void pad_seat()
+{
+	long active[JOY_ROLES];
+	long parked[JOY_ROLES];
+	int seated, i;
+
+	check(JOY_ROLES, 16, "sixteen pad roles");
+	check(JOY_ROLE_SECOND, JOY_ROLES - 1, "the Secondary role is the last pad slot");
+
+	// Asking for the setting already seated moves nothing - the Action row and
+	// the startup seat both call it and neither may double-swap.
+	memcpy(active, kPadOne, sizeof(active));
+	memcpy(parked, kPadSep, sizeof(parked));
+	seated = PadSetSeat(active, parked, 0, 0);
+	check(seated, 0, "seating the seated Action setting keeps it");
+
+	for (i = 0; i < JOY_ROLES; i++)
+	{
+		check((int)active[i], (int)kPadOne[i], "the active pad set stands");
+		check((int)parked[i], (int)kPadSep[i], "the parked pad set stands");
+	}
+
+	// The flip: the One-key bindings are kept, not overwritten.
+	seated = PadSetSeat(active, parked, seated, 1);
+	check(seated, 1, "the flip seats Separate");
+
+	for (i = 0; i < JOY_ROLES; i++)
+	{
+		check((int)active[i], (int)kPadSep[i], "Separate's set is active now");
+		check((int)parked[i], (int)kPadOne[i], "and the One-key set is parked");
+	}
+
+	// And back again, to exactly what the player had - the whole point of the
+	// second set.
+	seated = PadSetSeat(active, parked, seated, 0);
+	check(seated, 0, "the flip back comes home");
+
+	for (i = 0; i < JOY_ROLES; i++)
+	{
+		check((int)active[i], (int)kPadOne[i], "a round trip changes no binding");
+		check((int)parked[i], (int)kPadSep[i], "on either side");
+	}
+
+	// `want` is a tomb5_options bool by the time it gets here, but the
+	// normalisation is the header's own so that no caller has to think about it.
+	seated = PadSetSeat(active, parked, 0, 7);
+	check(seated, 1, "any nonzero want means Separate");
+
+	for (i = 0; i < JOY_ROLES; i++)
+		check((int)active[i], (int)kPadSep[i], "and it really swapped");
+}
+
 int main()
 {
-	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h (#161, rounds 161b1 and 161b2a)\n\n");
+	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h (#161, rounds 161b1, 161b2a and 161b2c)\n\n");
 
 	cursor_all_enabled();
 	cursor_disabled();
@@ -484,6 +555,7 @@ int main()
 	key_row_sound_rejects();
 	key_conflicts();
 	key_seat();
+	pad_seat();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

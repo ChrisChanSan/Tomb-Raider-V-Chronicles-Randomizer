@@ -30,7 +30,7 @@ void FireCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	item = &items[item_num];
 
 	if (lara.gun_type == WEAPON_TORCH && lara.gun_status == LG_READY && !lara.left_arm.lock && (item->status & ITEM_ACTIVE) != lara.LitTorch &&
-		item->timer != -1 && input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->gravity_status)
+		item->timer != -1 && input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->gravity_status)
 	{
 		rot = item->pos.y_rot;
 

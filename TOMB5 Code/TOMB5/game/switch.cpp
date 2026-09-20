@@ -99,7 +99,7 @@ void CrowDoveSwitchCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	item = &items[item_num];
 
 	if (!(item->flags & IFL_INVISIBLE) && item->mesh_bits & 4 &&
-		(input & IN_ACTION && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP &&
+		(input & IN_INTERACT && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP &&
 		l->anim_number == ANIM_BREATH && !l->gravity_status || lara.IsMoving && lara.GeneralPtr == (void*)item_num))
 	{
 		roty = item->pos.y_rot;
@@ -202,7 +202,7 @@ void SwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_number];
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS
 		&& item->status == ITEM_INACTIVE && !(item->flags & IFL_INVISIBLE) && item->trigger_flags >= 0
 		|| lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
@@ -331,7 +331,7 @@ void SwitchCollision2(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_number];
 
-	if (input & IN_ACTION && item->status==ITEM_INACTIVE && lara.water_status == LW_UNDERWATER &&
+	if (input & IN_INTERACT && item->status==ITEM_INACTIVE && lara.water_status == LW_UNDERWATER &&
 		lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_TREAD)
 	{
 		if (TestLaraPosition(Switch2Bounds, item, l))
@@ -364,7 +364,7 @@ void UnderwaterSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_number];
 
-	if (input & IN_ACTION && lara.water_status == LW_UNDERWATER && l->current_anim_state == AS_TREAD && l->anim_number == ANIM_TREAD &&
+	if (input & IN_INTERACT && lara.water_status == LW_UNDERWATER && l->current_anim_state == AS_TREAD && l->anim_number == ANIM_TREAD &&
 		lara.gun_status == LG_NO_ARMS && item->current_anim_state == 0 || lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
 		flag = 0;
@@ -413,7 +413,7 @@ void PulleyCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_number];
 
-	if (!(item->flags & IFL_INVISIBLE) && (input&IN_ACTION && lara.gun_status==LG_NO_ARMS && l->current_anim_state == AS_STOP &&
+	if (!(item->flags & IFL_INVISIBLE) && (input&IN_INTERACT && lara.gun_status==LG_NO_ARMS && l->current_anim_state == AS_STOP &&
 		l->anim_number == ANIM_BREATH && !l->gravity_status || lara.IsMoving&& lara.GeneralPtr == (void*)item_number))
 	{
 		roty = item->pos.y_rot;
@@ -467,7 +467,7 @@ void TurnSwitchControl(short item_number)
 		{
 			item->pos.y_rot += 16384;
 
-			if (input & IN_ACTION)
+			if (input & IN_INTERACT)
 			{
 				l->anim_number = ANIM_TURNSWITCHCB;
 				l->frame_number = anims[ANIM_TURNSWITCHCB].frame_base;
@@ -489,7 +489,7 @@ void TurnSwitchControl(short item_number)
 		{
 			item->pos.y_rot -= 16384;
 
-			if (input & IN_ACTION)
+			if (input & IN_INTERACT)
 			{
 				l->anim_number = ANIM_TURNSWITCHAB;
 				l->frame_number = anims[ANIM_TURNSWITCHAB].frame_base;
@@ -532,7 +532,7 @@ void TurnSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	flag = 0;
 	item = &items[item_number];
 
-	if (!item->current_anim_state && input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH
+	if (!item->current_anim_state && input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH
 		&& !l->gravity_status && lara.gun_status == LG_NO_ARMS || lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
 		if (TestLaraPosition(TurnSwitchBoundsA, item, l))
@@ -635,7 +635,7 @@ void RailSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	flag = 0;
 	item = &items[item_number];
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH &&
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH &&
 		lara.gun_status == LG_NO_ARMS || lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
 		if (item->current_anim_state == 1)
@@ -700,13 +700,19 @@ void RailSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	}
 }
 
+/* THE ONE SWITCH IN THIS FILE THAT TAKES EITHER KEY (#161, round 161b2c, item
+ * 1). The other thirteen are IN_INTERACT: Lara is standing in front of a thing
+ * and using it. This one is caught IN MID-JUMP, out of AS_REACH or AS_UPJUMP
+ * with gravity under her - the same press and the same instant as grabbing a
+ * ledge - so IN_ACTION_ANY, and under "Separate" a player who reaches for it
+ * with either key hits it. See IN_ACTION_ANY in global\types.h. */
 void JumpSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ITEM_INFO* item;
 
 	item = &items[item_number];
 
-	if (input & IN_ACTION && lara.gun_status == LG_NO_ARMS && (l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP) &&
+	if (input & IN_ACTION_ANY && lara.gun_status == LG_NO_ARMS && (l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP) &&
 		l->gravity_status && l->fallspeed > 0 && item->current_anim_state == 0)
 	{
 		if (TestLaraPosition(JumpSwitchBounds, item, l))
@@ -733,7 +739,7 @@ void CrowbarSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	flag = 0;
 	item = &items[item_number];
 
-	if (input & IN_ACTION || GLOBAL_inventoryitemchosen == CROWBAR_ITEM && l->current_anim_state == AS_STOP &&
+	if (input & IN_INTERACT || GLOBAL_inventoryitemchosen == CROWBAR_ITEM && l->current_anim_state == AS_STOP &&
 		l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS && !item->item_flags[0] ||
 		lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
@@ -865,7 +871,7 @@ void FullBlockSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_number];
 
-	if (input & IN_ACTION && item->status == ITEM_INACTIVE && !(item->flags & IFL_INVISIBLE) && CurrentSequence < 3 && lara.gun_status == LG_NO_ARMS &&
+	if (input & IN_INTERACT && item->status == ITEM_INACTIVE && !(item->flags & IFL_INVISIBLE) && CurrentSequence < 3 && lara.gun_status == LG_NO_ARMS &&
 		l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH || lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
 		if (TestLaraPosition(FullBlockSwitchBounds, item, l))
@@ -913,7 +919,7 @@ void CogSwitchControl(short item_number)
 
 	if (item->current_anim_state == 1)
 	{
-		if (item->goal_anim_state == 1 && !(input & IN_ACTION))
+		if (item->goal_anim_state == 1 && !(input & IN_INTERACT))
 		{
 			lara_item->goal_anim_state = AS_STOP;
 			item->goal_anim_state = 0;
@@ -959,7 +965,7 @@ void CogSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	if (item->status != ITEM_INACTIVE)
 		return;
 	
-	if (!(item->flags & IFL_INVISIBLE) && (input & IN_ACTION && lara.gun_status == LG_NO_ARMS && !l->gravity_status &&
+	if (!(item->flags & IFL_INVISIBLE) && (input & IN_INTERACT && lara.gun_status == LG_NO_ARMS && !l->gravity_status &&
 		l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH || lara.IsMoving && lara.GeneralPtr == (void*)item_number))
 	{
 		if (TestLaraPosition(CogSwitchBounds, item, l))

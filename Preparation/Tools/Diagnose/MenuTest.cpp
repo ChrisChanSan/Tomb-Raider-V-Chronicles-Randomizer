@@ -327,8 +327,26 @@ static const short kModern[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
 static const short kOther[KEY_SCHEME_ROLES] =
 {
 	0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43,
-	0x44, 0x57, 0x58, 0x47, 0x48, 0x49, 0x4B, 0x4C, 0x4D
+	0x44, 0x57, 0x58, 0x47, 0x48, 0x49, 0x4B, 0x4C, 0x4D,
+	0x50
 };
+
+/* The nineteenth slot, appended with the Secondary action (#161, round
+ * 161b2c, item 2). 0x50 is Numpad 2 - a key the Modern row does not use, so
+ * kOther stays disjoint from it, which is the only property the rows below
+ * ask of it. */
+static void key_secondary_slot()
+{
+	check(KEY_SCHEME_ROLES, 19, "nineteen roles since the Secondary action");
+	check(KEY_ROLE_SECOND, KEY_SCHEME_ROLES - 1, "the Secondary role is the last slot");
+	check(kModern[KEY_ROLE_SECOND], 0x52, "the Modern row's Secondary key is numpad 0");
+
+	// Disjoint is what kOther is for, and one more slot is one more chance to
+	// break it by accident.
+	for (int i = 0; i < KEY_SCHEME_ROLES; i++)
+		for (int j = 0; j < KEY_SCHEME_ROLES; j++)
+			check(kOther[i] == kModern[j], 0, "kOther shares no key with the Modern row");
+}
 
 static void key_modern_row_is_sound()
 {
@@ -461,6 +479,7 @@ int main()
 	paging_ends();
 	paging_sweep();
 	page_step();
+	key_secondary_slot();
 	key_modern_row_is_sound();
 	key_row_sound_rejects();
 	key_conflicts();

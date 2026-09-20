@@ -891,7 +891,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 	{
 		inv_item_stealth_frigggggs = value == 2 ? CROWBAR_ITEM : WET_CLOTH;
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object((short)inv_item_stealth_frigggggs))
 		{
@@ -924,7 +924,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 39:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_TREAD && lara_item->anim_number == ANIM_TREAD &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(PUZZLE_ITEM2))
 			GLOBAL_enterinventory = PUZZLE_ITEM2;
@@ -938,7 +938,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 38:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(PUZZLE_ITEM1))
 			GLOBAL_enterinventory = PUZZLE_ITEM1;
@@ -979,7 +979,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 20:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(KEY_ITEM7))
 			GLOBAL_enterinventory = KEY_ITEM7;
@@ -993,7 +993,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 14:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(PUZZLE_ITEM2))
 			GLOBAL_enterinventory = PUZZLE_ITEM2;

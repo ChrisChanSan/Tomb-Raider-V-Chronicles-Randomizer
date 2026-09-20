@@ -165,6 +165,13 @@ void RopeControl(short item_number)
 		currope->Active = 0;
 }
 
+/* THE CATCH TAKES EITHER KEY - AND SO MUST THE HOLD (#161, round 161b2c,
+ * item 1). This is the jump onto the rope, out of AS_REACH or AS_UPJUMP with
+ * gravity under her, which is a grab, so IN_ACTION_ANY. LaraClimbRope() below
+ * had to follow: it drops her the moment the key is not down, so a catch with
+ * one key and a hold on the other would have thrown her off on the very next
+ * tick under "Separate". The design's list did not have it; the measurement
+ * did. See IN_ACTION_ANY in global\types.h. */
 void RopeCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ROPE_STRUCT* rope;
@@ -173,7 +180,7 @@ void RopeCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	rope = &RopeList[items[item_number].trigger_flags];
 
-	if (input & IN_ACTION && lara.gun_status == LG_NO_ARMS && (l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP) &&
+	if (input & IN_ACTION_ANY && lara.gun_status == LG_NO_ARMS && (l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP) &&
 		l->gravity_status && l->fallspeed > 0 && rope->Active)
 	{
 		bounds = GetBoundsAccurate(l);
@@ -586,7 +593,7 @@ void AlignLaraToRope(ITEM_INFO* l)
 
 void LaraClimbRope(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 	{
 		FallFromRope(item);
 		return;

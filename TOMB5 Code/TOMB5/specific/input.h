@@ -12,6 +12,7 @@
  */
 #pragma once
 #include "../global/types.h"
+#include "../game/key_scheme.h"	// KEY_SCHEME_ROLES and KEY_ROLE_SECOND - the keyboard's slot count is the shape of `layout` below
 
 // Control-method pages for the joystick: only the display's VOCABULARY.
 // The bit order is determined by the active input path (joystick_is_xinput).
@@ -40,8 +41,15 @@ extern const char* GermanKeyboard[272];
 extern long JoyStyle;
 extern long jLayout[32];
 
-extern short layout[4][18];	// 0 Tank defaults, 1 the active set, 2 Modern defaults, 3 the parked set (#161, round 161b2a)
-extern long conflict[18];
+/* The pad's role count, and the Secondary action's slot in it (#161, round
+ * 161b2c, item 2). Sixteen roles in jLayout[0..15]; jLayout[16..31] is the
+ * other scheme's record, which is why the array is 32 long and why the record
+ * moved up by one when this role was appended (specific\input.cpp). */
+#define JOY_ROLES		16
+#define JOY_ROLE_SECOND		15
+
+extern short layout[4][KEY_SCHEME_ROLES];	// 0 Tank defaults, 1 the active set, 2 Modern defaults, 3 the parked set (#161, round 161b2a)
+extern long conflict[KEY_SCHEME_ROLES];
 extern long input;
 extern long dbinput;
 extern long inputBusy;

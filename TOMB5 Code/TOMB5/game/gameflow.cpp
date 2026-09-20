@@ -1333,6 +1333,12 @@ const char* CustomText(const char* engl)
 		{ "Action",          "Action",          "Aktion",         "Action",             "Action" },
 		{ "One key",         "One key",         "Eine Taste",     "One key",            "One key" },
 		{ "Separate",        "Separate",        "Getrennt",       "Separate",           "Separate" },
+		// #161, round 161b2c step 1 - the Secondary action's bind row, which
+		// the Key bindings page offers only while "Action" says Separate. The
+		// umlaut is the Latin-1 byte 0xE4 as a hex escape, the way every
+		// German string in this table carries one; the 'r' after it is no hex
+		// digit, so the escape ends where it should.
+		{ "Secondary",       "Secondary",       "Sekund\xE4r",    "Secondary",          "Secondary" },
 		// #161, round 161a2b step 5 - the Camera speed row (item 5). Same
 		// rule as the block above: only German is a real translation, the
 		// other three repeat the English literal on purpose.

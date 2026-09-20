@@ -228,6 +228,15 @@ static void JoyDefaultRecord(long modern, long* out)
 	for (int i = 0; i < 15; i++)
 		out[i] = source[i];
 
+	/* THE SECONDARY ROLE HAS NO DEFAULT HERE (#161, round 161b2c, item 2).
+	 * The four tables above are the ones the user's decision of 2026-09-16
+	 * keeps as our pad layout in both schemes, and this round does not touch
+	 * them - they have fifteen entries and they stay fifteen. With "One key"
+	 * the Secondary role is inert and the binding page does not offer it, so
+	 * unbound is not a hole; it is the truth. Its own default arrives with the
+	 * Separate pad set, which is where a sixteenth button belongs. */
+	out[JOY_ROLE_SECOND] = -1;
+
 	/* THE MODERN PAD SET (#161, round 161a2, step 3). Duck..Load (roles 0-12)
 	 * are the SAME choice as Tank's and stay sourced from it, unchanged - the
 	 * user's own layout is the default in either scheme. Only the medipacks
@@ -247,10 +256,13 @@ void ApplyJoyDefaults()
 {
 	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, jLayout);
 
-	for (int i = 15; i < 32; i++)
-		jLayout[i] = 0;
+	/* The zero-fill of jLayout[15..31] that stood here is gone with round
+	 * 161b2c (item 2), and nothing is left uninitialised by its going: the
+	 * call above now fills 0..15 and the call below 16..31, which is the whole
+	 * array. Slot 15 used to be zeroed because it was nothing; it is the
+	 * Secondary role now and JoyDefaultRecord answers for it. */
 
-	/* jLayout[16..30] - allocated and unused before round 161a2 - is the OTHER
+	/* jLayout[16..31] - allocated and unused before round 161a2 - is the OTHER
 	 * scheme's record: what the set would be if the player switched. It is the
 	 * span A1's decision 4 named, and it is kept true wherever the scheme
 	 * changes (ApplyJoyScheme) rather than only here, so Reset - the call site
@@ -322,7 +334,7 @@ void ApplyJoyDefaults()
  * case the play test has not reported. */
 static long JoyBitTaken(long bit, long except)
 {
-	for (int i = 0; i < 15; i++)
+	for (int i = 0; i < JOY_ROLES; i++)
 		if (i != except && jLayout[i] == bit)
 			return 1;
 
@@ -331,15 +343,15 @@ static long JoyBitTaken(long bit, long except)
 
 void ApplyJoyScheme()
 {
-	long want[15];
-	long other[15];
+	long want[JOY_ROLES];
+	long other[JOY_ROLES];
 	const long modern = tomb5.control_modern ? 1 : 0;
 	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
 
 	JoyDefaultRecord(modern, want);
 	JoyDefaultRecord(modern ? 0 : 1, other);
 
-	for (int i = 0; i < 15; i++)
+	for (int i = 0; i < JOY_ROLES; i++)
 	{
 		// 23 is the highest bit either joystick path writes (specific\dxshell.cpp);
 		// the bound is here because the value comes out of the registry.
@@ -354,14 +366,14 @@ void ApplyJoyScheme()
 
 		if (want[i] >= 0)
 		{
-			for (int k = 0; k < 15; k++)
+			for (int k = 0; k < JOY_ROLES; k++)
 				if (k != i && jLayout[k] == want[i])
 					jLayout[k] = (want[k] >= 0 && !JoyBitTaken(want[k], k)) ? want[k] : -1;
 		}
 	}
 
-	for (int i = 0; i < 15; i++)
-		jLayout[16 + i] = other[i];
+	for (int i = 0; i < JOY_ROLES; i++)
+		jLayout[JOY_ROLES + i] = other[i];
 
 	joy_scheme_seated = modern;
 }
@@ -414,7 +426,16 @@ static long JoyBitIsDpad(long bit)
 	return (bit >= 0 && bit <= 23 && ((1L << bit) & JOY_DPAD_BITS) != 0) ? 1 : 0;
 }
 
-long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+/* SIXTEEN ROLES SINCE ROUND 161b2c (#161, item 2), AND THE RECORD MOVED UP ONE
+ * TO MAKE ROOM. Slot 15 is the Secondary action; it held a hard 0 before -
+ * written by nothing, read by nothing, but 0 is a real button bit (Square on
+ * the PS5 DirectInput page), so it starts UNBOUND at -1 instead, which is the
+ * value Key() has a sentinel for. Its own defaults arrive with the Separate
+ * pad set; with "One key" the role is inert and the binding page does not
+ * offer it. jLayout[16..31] is the other scheme's record - it was [16..30]
+ * while there were fifteen roles, and the array's 32 entries are exactly two
+ * sixteen-role sets, with nothing left over. */
+long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* THE MODERN ROW'S SCAN CODES ARE THE HEADER'S (game\key_scheme.h), so that
  * MenuTest checks the row the ENGINE really uses and not a copy of it. These
@@ -440,6 +461,7 @@ static_assert(kModernRow[14] == DIK_Z, "modern row: step left is Z");
 static_assert(kModernRow[15] == DIK_X, "modern row: step right is X");
 static_assert(kModernRow[16] == DIK_P, "modern row: pause is P");
 static_assert(kModernRow[17] == DIK_RETURN, "modern row: select is return");
+static_assert(kModernRow[18] == DIK_NUMPAD0, "modern row: secondary action is numpad 0");
 
 /* FOUR ROWS SINCE ROUND 161b2a, AND THE FIRST TWO ARE WHAT THEY ALWAYS WERE
  * (#161, item 1). Every reader in the tree reads row 1 and every writer writes
@@ -453,14 +475,20 @@ static_assert(kModernRow[17] == DIK_RETURN, "modern row: select is return");
  *   3  the PARKED set: the other scheme's, kept while it is not in use
  *
  * Row 3 starts as the Modern defaults because row 1 starts as the Tank set and
- * Tank is the seated scheme at startup (key_scheme_seated below). */
-short layout[4][18] =
+ * Tank is the seated scheme at startup (key_scheme_seated below).
+ *
+ * NINETEEN COLUMNS SINCE ROUND 161b2c (item 2), and slot 18 is the Secondary
+ * action. Tank's is DIK_HOME: Core's own cluster uses End, Delete, Page Down
+ * and the arrows but never Home, so the row keeps its two properties - every
+ * slot bound, no key twice (KeySchemeRowSound, game\key_scheme.h) - without
+ * taking a key off any of the eighteen roles a Tank player already has. */
+short layout[4][KEY_SCHEME_ROLES] =
 {
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN },
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME },
 
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN },
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME },
 
 	KEY_SCHEME_MODERN_ROW,
 
@@ -519,7 +547,7 @@ void ApplyKeyScheme()
 		Log("KEYLOG scheme=%s seated", modern ? "modern" : "tank");
 }
 
-long conflict[18];
+long conflict[KEY_SCHEME_ROLES];
 long input;
 long dbinput;
 long inputBusy;
@@ -798,7 +826,8 @@ long Key(long number)
 		// jLayout[n] was -1 (unbound - see LoadSave.cpp's auto-unbind-on-conflict),
 		// so the caller's "+256" offset landed on 255 instead of a real >=256
 		// joystick-button value. 255 is never a real keyboard role index (those
-		// only go 0-17) or a real encoded joystick value (real button indices are
+		// only go 0-18 since round 161b2c's Secondary role) or a real encoded
+		// joystick value (real button indices are
 		// 0-23 since the d-pad's own bits joined the right stick's, #161 round
 		// 161a2 step 3, i.e. 256-279), so it's safe to use as this sentinel.
 		return 0;
@@ -1240,7 +1269,18 @@ long S_UpdateInput()
 		// into the word below - aiming asks for the action key, the
 		// directional jump for the jump key. Same keys, same pad buttons, read
 		// in the same order as the blocks that follow.
-		const long mAction = Key(8) || Key(jLayout[4] + 256);
+		/* AND THE AIMING ONE FOLLOWS THE FIRE KEY (#161, round 161b2c,
+		 * item 1). MODE AIM is "weapon up and action held: strafe, do not
+		 * turn" (game\modern_move.h) - a weapon behaviour, and under
+		 * "Separate" the weapons are the Secondary role's, not the Action
+		 * role's. So the two role slots are chosen by the same bit that
+		 * chooses which of them produces IN_ACTION forty lines below, and the
+		 * two answers can never disagree. With "One key" - the default - this
+		 * is the second branch, which is the expression that stood here
+		 * before the round, character for character. */
+		const long mAction = tomb5.action_split
+			? (Key(KEY_ROLE_SECOND) || Key(jLayout[JOY_ROLE_SECOND] + 256))
+			: (Key(8) || Key(jLayout[4] + 256));
 		const long mJump = Key(7) || Key(jLayout[3] + 256);
 
 		// move_x/move_y, not joy_x/joy_y - in Modern that pair is the left
@@ -1295,6 +1335,42 @@ long S_UpdateInput()
 	 * this would have been a real defect: the seam would wipe the key's own
 	 * bit out from under it on every Modern tick. It is not; this paragraph
 	 * is the record of having checked. */
+	/* THE ACTION ROLE'S WHOLE WORD, COMPUTED ONCE (#161, round 161b2c, item 1).
+	 *
+	 * Both producers below - the keyboard's Key(8) and the pad's jLayout[4] -
+	 * OR this same variable, so the two can never come to disagree about what
+	 * the Action button means. That is the byte-identity argument in its
+	 * shortest form: with "One key" the value is IN_SELECT | IN_INTERACT |
+	 * IN_ACTION, one word, and the two action bits leave every producer in the
+	 * engine in the same assignment. Nothing between here and any reader takes
+	 * one without the other - lara.Busy's mask at the end of this function
+	 * keeps neither, `inputBusy` and `dbinput` copy the whole word, the modern
+	 * seam writes only MODERN_MOVE_MASK and IN_DRAW, and the one mask in
+	 * game\lara.cpp clears both at this setting (it reaches further than the
+	 * design thought - see the comment there).
+	 *
+	 * With "Separate" the Action role drops IN_ACTION and the Secondary role
+	 * below picks it up. IN_SELECT stays with the Action role on purpose: it
+	 * is what confirms in every menu and in the inventory ring, and the user's
+	 * division does not move menus. */
+	const long action_bits = IN_SELECT | IN_INTERACT | (tomb5.action_split ? 0 : IN_ACTION);
+
+	/* ITS SEAM, ON CHANGE AND NEVER PER FRAME (#161, round 161b2c, item 1).
+	 * game\menu_frame.cpp's MENULOG line already records the row being SET;
+	 * this one records what the input assembly made of it, which is the half a
+	 * play test needs when a key does the wrong thing - the row can be set
+	 * before a level even loads, and the word below is the engine's own
+	 * answer. The static is the only state it keeps, it depends on nothing but
+	 * the option, and a run without -log never reaches it. */
+	static long action_bits_logged = -1;
+
+	if (gLogEnabled && action_bits != action_bits_logged)
+	{
+		action_bits_logged = action_bits;
+		Log("KEYLOG action=%s bits=0x%lX second=%ld/%ld", tomb5.action_split ? "separate" : "onekey",
+			action_bits, (long)layout[1][KEY_ROLE_SECOND], jLayout[JOY_ROLE_SECOND]);
+	}
+
 	if (Key(4))
 		linput |= IN_DUCK;
 
@@ -1308,7 +1384,15 @@ long S_UpdateInput()
 		linput |= IN_JUMP;
 
 	if (Key(8))
-		linput |= IN_SELECT | IN_ACTION;
+		linput |= action_bits;
+
+	/* THE SECONDARY ROLE, AND IT IS NOT EVEN ASKED WITH "One key" (#161, round
+	 * 161b2c, item 2). The `&&` short-circuits, so at the default Key() is not
+	 * called for slot 18 at all and the role cannot produce a bit however it
+	 * is bound - which is also why its pad twin may sit at -1 without
+	 * Key(255) ever being reached. */
+	if (tomb5.action_split && Key(KEY_ROLE_SECOND))
+		linput |= IN_ACTION;
 
 	if (Key(9))
 		linput |= IN_DRAW;
@@ -1319,7 +1403,12 @@ long S_UpdateInput()
 			linput |= IN_JUMP;
 
 		if (Key(jLayout[4] + 256))
-			linput |= IN_SELECT | IN_ACTION;
+			linput |= action_bits;
+
+		// The pad's half of the Secondary role, under the same guard and for
+		// the same reason as the keyboard's above.
+		if (tomb5.action_split && Key(jLayout[JOY_ROLE_SECOND] + 256))
+			linput |= IN_ACTION;
 
 		if (Key(jLayout[5] + 256))
 			linput |= IN_DRAW;

@@ -337,7 +337,7 @@ void DoorCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	item = &items[item_num];
 
 	if (item->trigger_flags == 2 && !(item->status && item->gravity_status) &&
-		((input & IN_ACTION || GLOBAL_inventoryitemchosen == CROWBAR_ITEM) &&
+		((input & IN_INTERACT || GLOBAL_inventoryitemchosen == CROWBAR_ITEM) &&
 			l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->hit_status && lara.gun_status == LG_NO_ARMS ||
 			lara.IsMoving && lara.GeneralPtr == (void*)item_num))
 	{
@@ -432,7 +432,7 @@ void PushPullKickDoorCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_num];
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && item->status != ITEM_ACTIVE &&
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && item->status != ITEM_ACTIVE &&
 		!l->gravity_status && lara.gun_status == LG_NO_ARMS || lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		flag = 0;
@@ -539,7 +539,7 @@ void DoubleDoorCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_num];
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && item->status != ITEM_ACTIVE &&
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && item->status != ITEM_ACTIVE &&
 		!l->gravity_status && lara.gun_status == LG_NO_ARMS || lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		item->pos.y_rot ^= 0x8000;
@@ -584,7 +584,7 @@ void UnderwaterDoorCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_num];
 
-	if (input & IN_ACTION && item->status != ITEM_ACTIVE && l->current_anim_state == AS_TREAD && lara.water_status == LW_UNDERWATER &&
+	if (input & IN_INTERACT && item->status != ITEM_ACTIVE && l->current_anim_state == AS_TREAD && lara.water_status == LW_UNDERWATER &&
 		lara.gun_status == LG_NO_ARMS || lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		l->pos.y_rot ^= 0x8000;

@@ -349,7 +349,23 @@ enum input_buttons
 	IN_RSTEP =			0x800,
 	IN_ROLL =			0x1000,
 	IN_PAUSE =			0x2000,
-	IN_A =				0x4000,
+	/* THE INTERACTION BIT (#161, round 161b2c, item 1). It is Core's own
+	 * `IN_A`, renamed rather than added beside: 0x4000 was declared and read
+	 * by nothing at all in the tree (grep over game\, specific\, tomb5\ and
+	 * global\ - the only line naming it was this one), so an alias would only
+	 * be a second name for a bit no caller has. Retired, not kept.
+	 *
+	 * WHAT IT MEANS, in the user's own division: "Aktion ist aufheben,
+	 * Schalter und Keys. Die sekundaere Aktion ist fuer das Klettern, Greifen
+	 * und Schiessen". So IN_INTERACT is the world-object key - switches,
+	 * pickups, doors, pushblocks - and IN_ACTION stays the grab-climb-shoot
+	 * key that Lara's own automaton and every weapon already read.
+	 *
+	 * WITH "One key" THE TWO ARE NEVER APART. specific\input.cpp sets them in
+	 * the same statement at both producers, and nothing between there and any
+	 * reader separates them, so every site below behaves byte for byte as at
+	 * base - by construction and not by inspection. */
+	IN_INTERACT =		0x4000,
 	IN_B =				0x8000,
 	IN_CHEAT =			0x10000,
 	IN_D =				0x20000,
@@ -367,7 +383,15 @@ enum input_buttons
 	IN_DUCK =			0x20000000,
 	IN_SPRINT =			0x40000000,
 	IN_TARGET =			0x80000000,
-	IN_ALL =			0xFFFFFFFF
+	IN_ALL =			0xFFFFFFFF,
+
+	/* EITHER KEY WILL DO (#161, round 161b2c, item 1). A composite like
+	 * IN_ALL above, not a bit of its own. Eight grab-and-hang sites read it -
+	 * pole, tightrope, parallel bars, the rope catch, the death slide, the
+	 * jump switch, the ceiling trapdoor - because they are the places where
+	 * "grab" and "use the thing" are the same press to a player, and under
+	 * "Separate" neither key may be the wrong one there. */
+	IN_ACTION_ANY =		IN_ACTION | IN_INTERACT
 };
 
 enum height_types
@@ -2742,12 +2766,15 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool combat_hold;
 
 	/* ACTION KEY (#161). Off = One key, the engine's own behaviour today: the
-	 * one `IN_ACTION` button both interacts with the world and fires. On =
-	 * Separate: a second button/key would read its own bit for the 41
-	 * "interact with a world object" sites of design section 5.8, freeing
-	 * `IN_ACTION` for firing alone. Drawn and saved on the Controls page from
-	 * round 161a step 7 (decision 1); the second bit and the split itself do
-	 * not exist yet - workflow B adds them. */
+	 * one Action button both interacts with the world and fires. On =
+	 * Separate: the Action role keeps `IN_INTERACT` - the 41 "interact with a
+	 * world object" sites of design section 5.8, 33 of them exclusively - and
+	 * the new Secondary role takes `IN_ACTION`, which is climbing, grabbing
+	 * and firing. Drawn and saved on the Controls page from round 161a step 7
+	 * (decision 1); round 161b2c gave it its readers - the two producers in
+	 * specific\input.cpp, and the Key bindings page, which offers the
+	 * Secondary row only while this bit is on (game\menu_frame.cpp). Off, both
+	 * bits leave every producer together and the engine is base. */
 	bool action_split;
 
 	/* THE CAMERA SPEED SLIDER (#161, round 161a2b, item 5). "Der rechte Stick

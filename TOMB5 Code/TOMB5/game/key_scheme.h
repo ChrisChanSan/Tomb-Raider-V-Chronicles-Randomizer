@@ -32,12 +32,22 @@
  * is - that is the other half of "one row, not two".
  */
 
-#define KEY_SCHEME_ROLES	18
+/* NINETEEN SINCE ROUND 161b2c (#161, item 2): slot 18 is the SECONDARY action.
+ * It is appended rather than inserted, because every one of the eighteen
+ * before it is addressed by number - in the registry (Key0..Key17, MKey0..17),
+ * in the engine's own Key(n) calls and in the bind rows of
+ * game\menu_frame.cpp - so a set written by the 161b2a build reads back
+ * unchanged and only the new slot is missing from it, which is true. */
+#define KEY_SCHEME_ROLES	19
+
+/* The Secondary role's slot, so that the one number lives in one place. It is
+ * the last slot by construction and cannot drift from the count above. */
+#define KEY_ROLE_SECOND		(KEY_SCHEME_ROLES - 1)
 
 /* THE MODERN DEFAULT ROW, in the engine's own slot order: 0-3
  * forward/back/left/right, 4 duck, 5 dash, 6 walk, 7 jump, 8 action, 9 draw,
  * 10 flare, 11 look, 12 roll, 13 inventory, 14 step left, 15 step right,
- * 16 pause, 17 select.
+ * 16 pause, 17 select, 18 secondary action.
  *
  * ONE TABLE ROW AND NOT A NEGOTIATION - the user asked for exactly that and
  * said he would correct individual keys after playing, which is what makes the
@@ -49,14 +59,22 @@
  *   Space jump             E action    Q draw        F flare
  *   R look                 LCtrl roll  Escape inventory
  *   Z step left            X step right               P pause   Return select
- */
+ *   Numpad0 secondary
+ *
+ * SLOT 18 IS A PLACEHOLDER AND SAYS SO (round 161b2c, item 2). His keyboard
+ * page has the secondary action on Mouse Left, and the mouse is a later round
+ * - Key() reads `keymap` and has no mouse button to read yet. Numpad 0 is a
+ * key the Modern row does not otherwise use, so the row stays sound and the
+ * role is reachable from the first launch; it is meant to be replaced, not
+ * defended. Tank's own slot 18 is DIK_HOME (specific\input.cpp), free in
+ * Core's cluster for the same reason. */
 #define KEY_SCHEME_MODERN_ROW	\
 {							\
 	0x11, 0x1F, 0x1E, 0x20,	/* W S A D                 */	\
 	0x2E, 0x2A, 0x38, 0x39,	/* C LShift LAlt Space     */	\
 	0x12, 0x10, 0x21, 0x13,	/* E Q F R                 */	\
 	0x1D, 0x01, 0x2C, 0x2D,	/* LCtrl Escape Z X        */	\
-	0x19, 0x1C				/* P Return                */	\
+	0x19, 0x1C, 0x52		/* P Return Numpad0        */	\
 }
 
 /* ONE MEASURED COLLISION IN THAT ROW, named here rather than quietly changed

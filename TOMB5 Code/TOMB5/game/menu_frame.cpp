@@ -1358,7 +1358,11 @@ static const menu_row menu_rows_keybinds_kbd[] =
 	MENU_BIND("Roll", TXT_Roll, 12),
 	MENU_BIND("Inventory", TXT_Inventory, 13),
 	MENU_BIND("Step Left", TXT_Step_Left, 14),
-	MENU_BIND("Step Right", TXT_Step_Right, 15)
+	MENU_BIND("Step Right", TXT_Step_Right, 15),
+	// LAST ON PURPOSE, IN BOTH LISTS: MenuResolveKeybinds hands out one row
+	// fewer with "One key", so the row that disappears is this one and every
+	// row above it keeps its place on the page (#161, round 161b2c, item 2).
+	MENU_BIND("Secondary", -1, KEY_ROLE_SECOND)
 };
 
 static const menu_row menu_rows_keybinds_joy[] =
@@ -1378,9 +1382,17 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("Save", TXT_Save, 11),
 	MENU_BIND("Load", TXT_Load, 12),
 	MENU_BIND("Small Medipack", TXT_Small_Medipack, 13),
-	MENU_BIND("Large Medipack", TXT_Large_Medipack, 14)
+	MENU_BIND("Large Medipack", TXT_Large_Medipack, 14),
+	MENU_BIND("Secondary", -1, JOY_ROLE_SECOND)
 };
 
+/* THE SECONDARY ROW IS OFFERED ONLY UNDER "Separate" (#161, round 161b2c,
+ * item 2). With "One key" the role produces nothing at all - the two
+ * producers in specific\input.cpp do not even call Key() for it - so a row
+ * that let the player bind it would be a row that does nothing, and the page
+ * has to look exactly as it did at base. This page already builds its list at
+ * run time, which is why dropping the last row costs one line and no second
+ * pair of tables. */
 static void MenuResolveKeybinds(const menu_row** rows, long* num)
 {
 	if (ControlMethod == 1)
@@ -1393,6 +1405,9 @@ static void MenuResolveKeybinds(const menu_row** rows, long* num)
 		*rows = menu_rows_keybinds_kbd;
 		*num = sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0]);
 	}
+
+	if (!tomb5.action_split)
+		(*num)--;
 }
 
 #define MENU_ROWS(a)	a, sizeof(a) / sizeof(a[0])
@@ -1660,7 +1675,7 @@ static void MenuCaptureBinding()
 
 				// If another action already used this same button or
 				// stick direction, unbind it (-1 marks unbound).
-				for (i = 0; i < 15; i++)
+				for (i = 0; i < JOY_ROLES; i++)
 					if (i != menu_wait_role && jLayout[i] == lp2)
 						jLayout[i] = -1;
 

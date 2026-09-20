@@ -378,7 +378,15 @@ bool LoadSettings()
 	REG_ReadLong((char*)"Key17", key, layout[0][17]);
 	layout[1][17] = (short)key;
 
-	/* THE SECOND SET (#161, round 161b2a, item 1). Key0..Key17 above keep
+	/* THE SECONDARY ACTION (#161, round 161b2c, item 2). A nineteenth name in
+	 * the same shape as the eighteen above, and a NEW one: a registry written
+	 * by the 161b2a build has no Key18, so it reads as the Tank default row's
+	 * own slot 18 - never touched, which is true - and a registry written here
+	 * carries one value that the older build simply does not look for. */
+	REG_ReadLong((char*)"Key18", key, layout[0][18]);
+	layout[1][18] = (short)key;
+
+	/* THE SECOND SET (#161, round 161b2a, item 1). Key0..Key18 above keep
 	 * their meaning exactly - they are the CLASSIC set, whichever scheme the
 	 * game was in when it last shut down - and the Modern set gets names of its
 	 * own beside them. Missing means the Modern defaults (layout[2]), so a
@@ -392,9 +400,9 @@ bool LoadSettings()
 	 * game thread (specific\gamemain.cpp). That is where ApplyKeyScheme() is
 	 * called, one line after it, and until then Tank is seated.
 	 *
-	 * A loop and not eighteen unrolled lines like the block above: the names
+	 * A loop and not nineteen unrolled lines like the block above: the names
 	 * are new, so there is no Core original to keep the shape of, and one loop
-	 * is one place for a typo instead of eighteen. */
+	 * is one place for a typo instead of nineteen. */
 	{
 		short* mset = KeySchemeSet(1);
 
@@ -423,6 +431,10 @@ bool LoadSettings()
 	REG_ReadLong((char*)"JLod", (ulong&)jLayout[12], 12);
 	REG_ReadLong((char*)"JSmd", (ulong&)jLayout[13], 13);
 	REG_ReadLong((char*)"JBmd", (ulong&)jLayout[14], 14);
+	// The pad's Secondary role, missing = unbound (-1, Key()'s own sentinel).
+	// It has no default in the four existing tables on purpose - the Separate
+	// pad set is where a sixteenth button belongs (specific\input.cpp).
+	REG_ReadLong((char*)"JSec", (ulong&)jLayout[JOY_ROLE_SECOND], (ulong)-1);
 
 	REG_ReadLong((char*)"MusicVolume", (ulong&)MusicVolume, 80);
 	REG_ReadLong((char*)"SFXVolume", (ulong&)SFXVolume, 90);
@@ -450,10 +462,11 @@ void SaveSettings()
 	OpenRegistry("Game");
 
 	/* BOTH SETS, WHICHEVER ONE IS ACTIVE (#161, round 161b2a, item 1).
-	 * Key0..Key17 are the CLASSIC set BY NAME and must keep being it, so they
+	 * Key0..Key18 are the CLASSIC set BY NAME and must keep being it, so they
 	 * can no longer be written from layout[1]: under Modern that row holds the
-	 * other set. At Tank KeySchemeSet(0) IS layout[1], and these eighteen lines
-	 * write byte for byte what they wrote at base. */
+	 * other set. At Tank KeySchemeSet(0) IS layout[1], and the first eighteen
+	 * of these lines write byte for byte what they wrote at base; Key18 is the
+	 * Secondary action, new with round 161b2c and new in the registry. */
 	const short* cset = KeySchemeSet(0);
 	const short* mset = KeySchemeSet(1);
 
@@ -475,6 +488,7 @@ void SaveSettings()
 	REG_WriteLong((char*)"Key15", cset[15]);
 	REG_WriteLong((char*)"Key16", cset[16]);
 	REG_WriteLong((char*)"Key17", cset[17]);
+	REG_WriteLong((char*)"Key18", cset[18]);	// the Secondary action (#161, round 161b2c)
 
 	// And the Modern set beside it, under names of its own. Written at Tank
 	// too, and harmlessly: nothing at Tank reads MKey*, and the accepted 161b1
@@ -502,6 +516,7 @@ void SaveSettings()
 	REG_WriteLong((char*)"JLod", jLayout[12]);
 	REG_WriteLong((char*)"JSmd", jLayout[13]);
 	REG_WriteLong((char*)"JBmd", jLayout[14]);
+	REG_WriteLong((char*)"JSec", jLayout[JOY_ROLE_SECOND]);
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
 	REG_WriteLong((char*)"JoyStyle", JoyStyle);

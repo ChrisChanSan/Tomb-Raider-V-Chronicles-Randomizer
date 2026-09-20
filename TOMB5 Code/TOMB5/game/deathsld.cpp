@@ -33,7 +33,7 @@ void DeathSlideCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ITEM_INFO* item;
 
-	if (input & IN_ACTION && !l->gravity_status && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP)
+	if (input & IN_ACTION_ANY && !l->gravity_status && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP)
 	{
 		item = &items[item_number];
 

@@ -1311,6 +1311,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		no_sit.action = 0;
 		no_sit.jump = 0;
 		no_sit.blocked = 0;
+		no_sit.cam_player_step = 0;
 		sit = &no_sit;
 	}
 
@@ -1348,6 +1349,45 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 
 	/* 2. The stick's own direction, and the held world course. */
 	offset = ModernAngle(stick_x, -stick_y);
+
+	/* 2a. AND THE CAMERA HE TURNED TAKES THE COURSE WITH IT (round 161a3b,
+	 * item 2), before the course is read and before the tree below can decide
+	 * anything about it.
+	 *
+	 * The held course is the rule that stops her circling, and it does that by
+	 * NOT consulting the camera between re-latches. That is right for a camera
+	 * that moves by itself - the slow return home, an animation's carried
+	 * swing, a cut - and it was wrong for the one camera movement that IS an
+	 * instruction: the player's own right thumb. M2 measured what it cost.
+	 * Steering with the camera while the left stick is held, her course stood
+	 * still for as long as his left thumb did and then paid the whole
+	 * accumulated angle in a single tick, because the re-latch seats on the
+	 * camera of THAT tick: 34 such jumps in the water over 423 ticks, median
+	 * 13.6 degrees, and 57 on foot over 617, median 13.2 - each one the turn
+	 * rate's whole allowance in one frame. Round 161a3 did not create them; at
+	 * the old 6 deg/tick each jump was smeared over several ticks.
+	 *
+	 * BOTH THE REFERENCE AND THE COURSE, because they are one angle seen twice:
+	 * the reference is the camera the course was seated on, and a reference
+	 * left behind would make the next re-latch a jump of exactly what this line
+	 * just paid. With both carried, a re-latch finds nothing left to jump.
+	 *
+	 * THE PROTECTION IS UNTOUCHED. `cam_player_step` is the stick's own term
+	 * and nothing else (game\modern_camera.cpp keeps it before the swing and
+	 * the return run), so a camera moved by the return or by a carried swing
+	 * still moves no course at all - which is what the camera-cut sweep and
+	 * the return case in ModernTest hold. And the re-latch rule itself is not
+	 * touched either: `last_off` is the STICK's own direction and this line
+	 * does not go near it.
+	 *
+	 * ONLY WITH A COURSE IN HAND. Before the first push there is nothing to
+	 * carry, and with hold_course off the camera of every tick is the
+	 * reference anyway - the branch below seats it fresh. */
+	if (state->have_ref && cfg->hold_course && sit->cam_player_step)
+	{
+		state->ref = ModernWrap((long)state->ref + sit->cam_player_step);
+		state->course = ModernWrap((long)state->course + sit->cam_player_step);
+	}
 
 	if (!state->have_ref)
 	{

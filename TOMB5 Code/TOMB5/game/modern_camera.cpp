@@ -317,6 +317,7 @@ void ModernCameraReset(MODERN_CAMERA_STATE* state)
 	state->carry = 0;
 	state->carry_total = 0;
 	state->carry_tick = 0;
+	state->stick_step = 0;
 }
 
 /* THE WHOLE ORBIT, IN THE ORDER THE THREE RULES HAPPEN AND FOR A REASON.
@@ -383,7 +384,18 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	 * (MODERN_CAMERA_PITCH_MIN). */
 	state->steering = (ModernCameraAxisOut(cfg, rs_x) || ModernCameraAxisOut(cfg, rs_y)) ? 1 : 0;
 
-	world = ModernWrap(world + ModernCameraRate(cfg, rs_x, cfg->yaw_rate));
+	/* AND THE STICK'S OWN YAW STEP IS KEPT (round 161a3b, item 2), here, where
+	 * it is the term and not yet a difference of two angles. Taken after this
+	 * line and before 1b and 2 below, so the swing and the return cannot get
+	 * into it: game\modern_state.cpp adds exactly this to her held course, and
+	 * "a camera the player turns takes her course with it, one that moves by
+	 * itself does not" is only true if the number is the thumb's alone.
+	 * game\camera.cpp's own modern_cam_lead_yaw looks like the same quantity
+	 * and is NOT - it is the world yaw's whole step less the return, so the
+	 * swing is in it, which is right for leading the EYE and wrong here. */
+	state->stick_step = ModernWrap(ModernCameraRate(cfg, rs_x, cfg->yaw_rate));
+
+	world = ModernWrap(world + state->stick_step);
 
 	if (cfg->invert_pitch)
 		pitch += ModernCameraRate(cfg, rs_y, cfg->pitch_rate);

@@ -500,6 +500,16 @@ struct MODERN_CAMERA_STATE
 	long carry;			// units of world yaw still to be paid out
 	long carry_total;	// the whole swing, so the profile is measured from its start
 	long carry_tick;	// how many of carry_ticks have been paid
+
+	/* WHAT THE PLAYER'S OWN THUMB MOVED THIS TICK (round 161a3b, item 2), and
+	 * only that: the yaw step rule 1 takes from the right stick, before the
+	 * swing above pays anything out and before the return falls home. The
+	 * translation adds it to her held course, so that a camera the PLAYER turns
+	 * takes her course with it while a camera that moves by itself does not -
+	 * and the distinction is only honest if this number is the stick's alone.
+	 * It is not a second sum of anything: it is the term itself, kept.
+	 * MODERNLOG's `cam_step=`. */
+	short stick_step;	// the right stick's own yaw step this tick, signed
 };
 
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg);

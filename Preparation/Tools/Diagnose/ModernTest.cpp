@@ -1144,6 +1144,7 @@ static void spin_hysteresis()
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	ModernResetState(&state);
 	tick(&cfg, &state, S(30000), 0, -0x0800, 0, &sit, &out);
@@ -1319,6 +1320,7 @@ static void aiming()
 	sit.action = 1;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
 	ok(out.mode == MODERN_MODE_AIM, "the aim mode", out.mode, MODERN_MODE_AIM);
@@ -1418,6 +1420,7 @@ static void jumping()
 	sit.action = 0;
 	sit.jump = 1;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	tick(&cfg, &state, 0, S(30000), 0, 0, &sit, &out);
 	ok(out.mode == MODERN_MODE_JUMP, "the jump mode", out.mode, MODERN_MODE_JUMP);
@@ -1569,6 +1572,7 @@ static void classic_states()
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	/* TROne: modern.classic_states_keep_the_original_input, second half, and
 	 * modern.classic_situations_report_inactive_so_the_host_can_fill_in, last
@@ -1830,6 +1834,7 @@ static void water_move()
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	/* THE TABLE. Two of the three rates are still the engine's own - 728 is
 	 * what lara_as_surftread and lara_as_surfswim write into y_rot themselves
@@ -2264,6 +2269,7 @@ static void blocked()
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	tick(&cfg, &state, S(30000), 0, (short)-0x3800, 0, &sit, &out);
 	ok(out.delta == 0x0800, "the band: 11 degrees of error", out.delta, 0x0800);
@@ -2400,6 +2406,7 @@ static void direct_turn()
 	sit.action = 0;
 	sit.jump = 1;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 	ok(tick_turn(&cfg, &state, 20, -120, 0, 0, &sit, &out, &yaw) == 1,
 		"AS_COMPRESS, unarmed: the direct turn takes charge too", 1, 1);
 	ok(out.mode == MODERN_MODE_RUN, "...because unarmed it is rule 6 answering",
@@ -2471,6 +2478,7 @@ static void direct_turn()
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	ok(tick_turn(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"running: the direct turn takes charge", 1, 1);
@@ -2891,6 +2899,7 @@ static void spin_run(long step_units, long ticks, int rule, long rate, SPIN_RUN*
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	r->no_forward = 0;
 	r->drops = 0;
@@ -3091,6 +3100,7 @@ static void reversal_run(short heading, short anim, long rate, REVERSAL* r)
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	r->ticks = 0;
 	r->worst_step = 0;
@@ -3244,6 +3254,7 @@ static void reversal()
 		sit.action = 0;
 		sit.jump = 0;
 		sit.blocked = 0;
+		sit.cam_player_step = 0;
 
 		tick(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out);
 		tick(&cfg, &state, 0, S(32000), 0, 0, &sit, &out);
@@ -3305,6 +3316,7 @@ static void reversal()
 		sit.action = 0;
 		sit.jump = 0;
 		sit.blocked = 0;
+		sit.cam_player_step = 0;
 
 		tick_turn(&cfg, &state, S(32000), 0, 0, 0, &sit, &out, &yaw);
 		ok(yaw > 0, "a stick to the right turns her right", (yaw > 0) ? 1 : 0, 1);
@@ -3366,6 +3378,7 @@ static void circle_run(long step_units, long start_units, long ticks, long rate,
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	c->worst_error = 0;
 	c->flips = 0;
@@ -3624,6 +3637,7 @@ static void air_turn()
 	sit.action = 0;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	{
 		short heading = 0;
@@ -4260,6 +4274,169 @@ static void tank_sector()
 	 * arithmetic, which is the whole of why it lives in game\modern_move.cpp. */
 }
 
+/* -------------------------- the camera he turns takes her course with it ----- */
+
+/* WHAT 120 TICKS OF STEERING WITH THE CAMERA LEAVE BEHIND (#161, round 161a3b,
+ * item 2). `impulses` is M2's own measure and the reason this group exists: a
+ * tick on which her heading did not move at all, followed by one that moves
+ * five degrees or more. That is what the held course produced while the PLAYER
+ * turned the view - the course ignored the camera until his left thumb happened
+ * to shift, then the re-latch seated on the camera of that tick and paid the
+ * whole accumulated angle at the turn rate, in one frame. His own words for it
+ * under water: "als wuerde sie in ihrer Animation zur Seite stottern". */
+struct STEER
+{
+	long impulses;		/* still tick, then 5 degrees or more at once */
+	long biggest;		/* the biggest single heading step of the run */
+	long off_rate;		/* steady ticks whose step was NOT the camera's own */
+	long course_moved;	/* ticks on which the held course moved at all */
+};
+
+/* `cam_step` is what the right stick gives the orbit per tick; `wobble` is how
+ * often the LEFT thumb shifts by three degrees (0 = held perfectly still), which
+ * is what makes the old re-latch fire; `player` says the step is his thumb's
+ * (item 2 carries it into the course) rather than the return's or a carried
+ * swing's (it must change nothing). `water` drives ModernWaterMove instead of
+ * ModernDirectTurn, because the two are the translation's two turners and item
+ * 2 is one function above both of them. */
+static void steer_run(long cam_step, long wobble, short anim, long water, long player,
+	STEER* s)
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	short heading = 0;
+	short cam = 0;
+	long last_yaw = 1;			/* the first tick has no predecessor to be still */
+	long off = 0;				/* the left thumb's own angle, in units */
+	long t;
+
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = anim;
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+	sit.cam_player_step = 0;
+
+	s->impulses = 0;
+	s->biggest = 0;
+	s->off_rate = 0;
+	s->course_moved = 0;
+
+	for (t = 0; t < 120; t++)
+	{
+		const double rad = (double)off * 3.14159265358979323846 / 32768.0;
+		const long x = roundl2(sin(rad) * 120.0);
+		const long y = -roundl2(cos(rad) * 120.0);
+		long yaw = 0;
+		long xrot = 0;
+		long stroke = 0;
+
+		/* The orbit's own tick, as game\camera.cpp would have left it: the
+		 * world angle has moved by the step, and the situation carries that
+		 * step only when it was the player's thumb that did it. */
+		cam = (short)ModernWrap((long)cam + cam_step);
+		sit.cam_player_step = player ? (short)cam_step : (short)0;
+
+		ModernTranslate(&cfg, &state, x, y, cam, heading, &sit, &out);
+
+		if (water)
+			ModernWaterMove(&cfg, &sit, &out, 0, xrot, &yaw, &xrot, &stroke);
+		else
+			ModernDirectTurn(&cfg, &state, &sit, &out, &yaw);
+
+		if (absl(yaw) > s->biggest)
+			s->biggest = absl(yaw);
+
+		if (out.course_step)
+			s->course_moved++;
+
+		/* M2's impulse, exactly: a still tick and then five degrees at once. */
+		if (!last_yaw && absl(yaw) >= 910)
+			s->impulses++;
+
+		/* And the other side of the same claim, on the ticks that are neither
+		 * the first nor a thumb shift: the step SHOULD be the camera's own. */
+		if (t >= 10 && (!wobble || (t % wobble)) && absl(yaw) != absl(cam_step))
+			s->off_rate++;
+
+		last_yaw = yaw;
+		heading = (short)ModernWrap((long)heading + yaw);
+
+		if (wobble && !(t % wobble))
+			off += 546;		/* three degrees, over cfg.recenter's 384 */
+	}
+}
+
+static void cam_steer()
+{
+	/* 3.6 and 6.5 degrees a tick: the median camera speeds M2 counted while he
+	 * was steering with the view, in the water and on foot. */
+	const long rates[2] = { 655, 1183 };
+	const char* names[2] = { "3.6", "6.5" };
+	const short anims[2] = { 17, 1 };		/* AS_SWIM and AS_RUN */
+	const char* where[2] = { "water", "land " };
+	STEER s;
+	int r, w;
+
+	printf("\nthe camera he turns takes her course with it (#161 round 161a3b item 2,"
+		" the user's word 3)\n");
+
+	for (w = 0; w < 2; w++)
+		for (r = 0; r < 2; r++)
+		{
+			/* 1. THE LEFT STICK HELD PERFECTLY STILL. Her heading follows the
+			 * view every single tick, by exactly the camera's own step - both
+			 * rates are well inside both turn rates, so nothing is being
+			 * clipped and "follows" means follows. Before item 2 this run
+			 * turned her onto the course the first push seated and then stood
+			 * there for 120 ticks while the view swung round her. */
+			steer_run(rates[r], 0, anims[w], w == 0, 1, &s);
+			ok(s.off_rate == 0, "steering with the camera, her heading follows it every tick",
+				s.off_rate, 0);
+			ok(s.biggest == rates[r], "...by the camera's own step and no more",
+				s.biggest, rates[r]);
+
+			/* 2. AND WITH THE LEFT THUMB SHIFTING every eight ticks, which is
+			 * what used to make the old re-latch fire and pay the whole
+			 * accumulated angle in one frame. M2 counted 34 such impulses in
+			 * the water and 57 on foot; here there are none. */
+			steer_run(rates[r], 8, anims[w], w == 0, 1, &s);
+			ok(s.impulses == 0, "...and a shifting thumb no longer makes her jump",
+				s.impulses, 0);
+			printf("  %s at %s deg/tick: %ld impulses, biggest step %ld"
+				" (%.1f deg), course moved on %ld of 120 ticks\n",
+				where[w], names[r], s.impulses, s.biggest,
+				(double)s.biggest * 180.0 / 32768.0, s.course_moved);
+
+			/* 3. AND THE PROTECTION THE HELD COURSE EXISTS FOR IS UNTOUCHED: the
+			 * same camera movement, this time the return falling home or an
+			 * animation's carried swing paying out, with no thumb behind it.
+			 * The course does not move at all - which is the rule that stops her
+			 * circling, and the reason cam_player_step is the stick's own term
+			 * and not the orbit's whole step. */
+			steer_run(rates[r], 0, anims[w], w == 0, 0, &s);
+			ok(s.course_moved == 0, "a camera moving by ITSELF still moves no course",
+				s.course_moved, 0);
+			ok(s.impulses == 0, "...and no jump comes of it either", s.impulses, 0);
+		}
+
+	/* 4. AND THE WHOLE POINT, MEASURED THE WAY M2 MEASURED IT: the same
+	 * shifting thumb with the carry switched off at the situation, which is
+	 * the code as it stood at base. The impulses come back - so this group can
+	 * fail, which is what makes the zeroes above worth anything. */
+	steer_run(1183, 8, 1, 0, 0, &s);
+	ok(s.impulses > 0, "without the carry the same run stutters, as M2 counted it",
+		s.impulses, 1);
+	printf("  the counter-proof: the land run at 6.5 deg/tick with the step NOT"
+		" handed over shows %ld impulses, biggest %ld (%.1f deg)\n",
+		s.impulses, s.biggest, (double)s.biggest * 180.0 / 32768.0);
+}
+
 /* -------------------------------------------- the camera follows a flip ----- */
 
 static void camera_carry()
@@ -4550,6 +4727,7 @@ static void firing_run()
 	sit.action = 1;
 	sit.jump = 0;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 
 	tick_turn(&cfg, &state, S(30000), 0, 0, 0, &sit, &out, &yaw);
 	ok(out.mode == MODERN_MODE_RUN, "firing: the running mode", out.mode, MODERN_MODE_RUN);
@@ -4758,6 +4936,7 @@ static void sweeps()
 		sit.action = 0;
 		sit.jump = 0;
 		sit.blocked = 1;
+		sit.cam_player_step = 0;
 
 		for (i = 0; i < 2; i++)
 		{
@@ -4801,6 +4980,7 @@ static void sweeps()
 		long together = 0;
 
 		sit.blocked = 0;
+		sit.cam_player_step = 0;
 		sit.anim_state = 1;
 
 		for (a = 0; a < 64; a++)
@@ -4831,6 +5011,7 @@ static void sweeps()
 	 * with TROne's own threshold scaled in, over every stick pair inside it. */
 	sit.anim_state = 2;
 	sit.blocked = 0;
+	sit.cam_player_step = 0;
 	ModernResetState(&state);
 	tick(&cfg, &state, S(30000), 0, 0x1234, 0, &sit, &out);
 	ok(state.have_ref == 1, "(b) a push seats the course", state.have_ref, 1);
@@ -6853,6 +7034,7 @@ int main()
 	turn_chain();
 	look_tank();
 	tank_sector();
+	cam_steer();
 	firing_run();
 	weapons();
 	sweeps();

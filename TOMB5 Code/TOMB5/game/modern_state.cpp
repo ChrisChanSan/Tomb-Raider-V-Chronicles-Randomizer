@@ -463,6 +463,22 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	sit.blocked = (modern_cfg.block_frames > 0 &&
 		modern_state.blocked_count >= modern_cfg.block_frames) ? 1 : 0;
 
+	/* AND WHAT HIS RIGHT THUMB DID TO THE VIEW LAST TICK (#161, round 161a3b,
+	 * item 2). Asked exactly as `ref_yaw` above is, of the same file and behind
+	 * the same two gates - ModernCameraActive() for "may the orbit steer the
+	 * view at all" and the orbit's own tick stamp inside the accessor for "did
+	 * it really run" - so the two answers cannot disagree about which camera
+	 * this tick had. Where either says no the step is 0 and the held course is
+	 * exactly what it was before this round: a flyby, a cutscene, first person,
+	 * the title, the rich2 sniper camera, the tick before the orbit's first.
+	 * The accessor gives back the STICK's own term and not the orbit's whole
+	 * step, which is what keeps the return and the carried swing out of her
+	 * course. */
+	sit.cam_player_step = 0;
+
+	if (ModernCameraActive())
+		ModernCameraPlayerStep(&sit.cam_player_step);
+
 	/* IS THIS TICK THE WATER'S, and at what rate (round 161a2 step 4)? Asked
 	 * once, here, from the state alone, and answered by the same table the
 	 * translation asks - so the branch below and the two rules the water
@@ -677,7 +693,17 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * `carry` is item 5's swing still pending, MODERN_CAMERA_STATE::carry read
 	 * back from game\camera.cpp for the same reason cam_off and its
 	 * neighbours are - one tick behind, because this line runs before
-	 * CalculateCamera pays any of it out. */
+	 * CalculateCamera pays any of it out.
+	 *
+	 * AND `cam_step` IS THE LINE'S LAST, appended by round 161a3b's item 2 as
+	 * every round appends its own: the step the player's right thumb gave the
+	 * orbit on the previous tick, which is exactly what was added to her held
+	 * course a few lines above. It is the situation's own field read back and
+	 * not a second measurement, so a play test can hold `cam_step` against
+	 * `cstep` and see the course following the view tick for tick instead of
+	 * standing still and then jumping - which is the whole of what M2
+	 * measured. 0 on every tick the orbit did not tick, and on every tick the
+	 * camera moved by itself. */
 	if (gLogEnabled)
 	{
 		/* THE ORBIT'S OWN EIGHT NOW (round 161a2, step 5; two more in round
@@ -712,14 +738,15 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
-			"view_err=%ld air=%ld carry=%ld stand_hold=%ld",
+			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
 			modern_state.aligned, modern_state.blocked_count, out.blocked,
 			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
-			cam_world, clip, view_err, air, carry, modern_state.stand_hold);
+			cam_world, clip, view_err, air, carry, modern_state.stand_hold,
+			sit.cam_player_step);
 	}
 
 	return bits;

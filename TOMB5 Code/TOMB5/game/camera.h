@@ -45,6 +45,7 @@ void ModernCameraResetOrbit();		// level start, savegame load, scheme change
 void ModernCameraStick(long rs_x, long rs_y);	// the right stick, from specific\input.cpp
 short ModernCameraSwimTarget();		// the attitude the orbit points at (step 4, the water)
 long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world (161a2b, item 4b) - 0 = not seated
+long ModernCameraPlayerStep(short* step);	// and how far HIS OWN THUMB moved it last tick (161a3b, item 2)
 					// yet, OR the orbit did not tick last tick and the angle is
 					// stale: a rich2 sniper camera is the case that made that real
 long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points

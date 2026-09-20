@@ -744,6 +744,21 @@ struct MODERN_SITUATION
 	long action;		// the action key is down
 	long jump;			// the jump key is down
 	long blocked;		// step 4's counter says forward is not going anywhere
+
+	/* HOW FAR THE PLAYER'S OWN THUMB TURNED THE CAMERA LAST TICK (#161, round
+	 * 161a3b, item 2), signed, and 0 whenever the orbit did not tick or moved
+	 * by itself. The held course below is a WORLD course precisely so that a
+	 * camera moving on its own leaves her path alone - and that rule ignored
+	 * the camera when the PLAYER moved it too, so her course stood still while
+	 * he swung the view and then jumped to the new angle the moment his left
+	 * thumb happened to shift. M2 counted 34 such jumps in the water (median
+	 * 13.6 degrees, at the water's own 15 deg/tick lid) and 57 on foot (median
+	 * 13.2, up to the land's 30), which is the user's "unter Wasser ist es noch
+	 * ein bisschen ruppig, als wuerde sie in ihrer Animation zur Seite
+	 * stottern". The caller measures it, because only the caller can tell the
+	 * thumb from the return and the carried swing (game\camera.cpp's
+	 * ModernCameraPlayerStep). */
+	short cam_player_step;
 };
 
 struct MODERN_RESULT

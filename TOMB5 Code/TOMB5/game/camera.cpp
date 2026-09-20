@@ -757,6 +757,45 @@ long ModernCameraWorldYaw(short* yaw)
 	return 1;
 }
 
+/* AND HOW FAR THE PLAYER'S OWN THUMB MOVED IT (#161, round 161a3b, item 2).
+ *
+ * The same two gates as the world yaw above, for the same two reasons and in
+ * the same order: an orbit that is not seated has no step to give, and an orbit
+ * that did not tick on the previous tick would be handing out the step of some
+ * earlier tick - under a rich2 sniper camera, through a flyby, through the look
+ * key - which the translation would then add to her course a second time.
+ *
+ * WHAT IT IS NOT is the whole of what the orbit moved. modern_cam_lead_yaw
+ * above looks like this number and is the world yaw's step less the return,
+ * so an animation about-turn's swing (item 5 of the round before) is inside
+ * it. That is right for leading the EYE and wrong here: the protection this
+ * item must keep is that a camera moving BY ITSELF - the slow return home, the
+ * carried swing - leaves her course alone, and only a camera the player is
+ * turning takes it with him. So the number is the orbit's own `stick_step`,
+ * which game\modern_camera.cpp takes from rule 1 before either of the other
+ * two has run.
+ *
+ * It is one tick behind, exactly as the world yaw is and for the same reason:
+ * game\control.cpp runs S_UpdateInput at :296 and CalculateCamera at :677, so
+ * the orbit's most recent tick is the previous one. That is also why adding it
+ * to the course is right rather than double counting - the course was last
+ * read against the world yaw of that same previous tick. */
+long ModernCameraPlayerStep(short* step)
+{
+	ModernCameraArm();
+
+	if (!modern_cam_state.seated)
+		return 0;
+
+	if (!ModernCameraTickFollows(GlobalCounter, modern_cam_orbit_at))
+		return 0;
+
+	if (step)
+		*step = modern_cam_state.stick_step;
+
+	return 1;
+}
+
 /* HOW FAR THE EYE IS FROM HER, MEASURED WITH THE CAMERA'S OWN TWO POINTS.
  *
  * camera.target is the point the camera looks at, and for both orbit cameras

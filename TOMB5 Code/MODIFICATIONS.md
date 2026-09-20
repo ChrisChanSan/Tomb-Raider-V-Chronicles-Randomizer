@@ -17506,6 +17506,46 @@ released, the action bit stays clear wherever she is); and its Separate pad
 table named the same pages on both sides of the *Flare* row, where the *Xbox*
 page on a DirectInput pad takes the *Joystick* table and is therefore chorded.
 
+**THE SECOND FIX ROUND.** The review of that one found four more, and the one
+that was only an observation turned out to be the real defect of the four.
+
+1. **One term too many in the grab's drop list.** `grab_drop` was the eight
+   shared terms, and the eighth is `bUseSpotCam`. Measured rather than argued
+   about: `InitialiseSpotCam` sets `bDisableLaraControl` to 0 and raises it
+   again only for `SP_NOLARACONTROL` (`spotcam.cpp:148`, `:176`), so an
+   ordinary flyby leaves you playing with that flag standing; and
+   `control.cpp:647` holds it at 1 for as long as a `GF_OFFICE` level's
+   flipmap is above 10, with full control throughout. In either window a
+   *Grab mode* **Toggle** player who had let the button go would have lost
+   `IN_ACTION` - she lets go of the ledge - where a **Hold** player holding it
+   hangs on, which is the one thing the mode may not do. The eight terms are
+   `mode_base` plus `bUseSpotCam` now: the sprint and the duck still ask the
+   whole eight, in the same order and with `!lara_item` still first, and only
+   the grab asks the seven. The sprint and the duck keep the term on purpose -
+   it is their behaviour since round 161b2c and what it costs there is a
+   sprint that stops during a camera, not a fall.
+2. **A comment promised what its own macro did not do.** `JOY_SEP_CHORD_DINPUT`
+   said it was "written out of the role names rather than as a hex number, so
+   that a role moving would move its bit with it" while spelling the flare,
+   quick save and quick load bits `6`, `11` and `12`. Three names -
+   `JOY_ROLE_FLARE`, `JOY_ROLE_SAVE`, `JOY_ROLE_LOAD` - make the promise true;
+   the numbers themselves cannot move (the registry calls those slots
+   `JFlr`/`JSav`/`JLod` and `SJFlr`/`SJSav`/`SJLod`, and the accepted 161b2c
+   build reads them), and `MenuTest` pins all three.
+3. **A dead output kept alive by a pointer.** `ApplyJoyScheme` declared
+   `other_chord`, had `JoyDefaultRecord` fill it and never read it - the repair
+   uses `want_chord` alone, correctly. `JoyDefaultRecord`'s `chord` parameter
+   may be `NULL` now and that call passes it, so a reader no longer has to
+   disprove a variable.
+4. **A manual row that contradicted itself.** The Separate pad table's *Save*
+   row read "*Joy 13* on the Joystick page always, and Modifier+R3 on the PS5
+   DirectInput and generic pages" - but the *Joystick* page IS the generic
+   table, whose quick save is `Modifier+Joy 12`, and `Joy 13` was the plain
+   PS-button default this very round removed. It is written like the *Flare*
+   and *Load* rows beside it now, and one new sentence under the chords table
+   gives the generic reading of every DualSense name those rows use, so the
+   class of error cannot repeat silently.
+
 **PROOF.** `be.bat` clean throughout; `bmt.bat`/`ModernTest.exe` unchanged
 through items 1-3 (none of them touch `modern_move.cpp`), 5773 checks (0
 failed) after item 4 (+314: `grab_family` and `duck_family`, both swept
@@ -17513,9 +17553,11 @@ failed) after item 4 (+314: `grab_family` and `duck_family`, both swept
 `MenuTest.exe` 18,702 checks (0 failed) after item 1 (+4164), 23,126 (0
 failed) after item 2 (+4424), unchanged by item 3 (no role or table item 3
 adds is one `MenuTest` sweeps by itself), 23,134 (0 failed) after item 4
-(+8: the two new pages' own arithmetic) and 35,544 (0 failed) after the fix
+(+8: the two new pages' own arithmetic), 35,544 (0 failed) after the fix
 round (+12,410: `key_conflicts_cheats_inert`, each of the five cheat slots
-swept onto every other role's default key in both settings); `bit.bat`/`InterpTest.exe` 373
+swept onto every other role's default key in both settings) and 35,547 (0
+failed) after the second one (+3: Core's three named role slots);
+`bit.bat`/`InterpTest.exe` 373
 checks, 0 failed throughout, run each time as a control since this round
 touches nothing it owns. `LoadSettings`' Separate-pad block is the one thing
 `MenuTest` cannot hold - it is not a pure function but a conversation with a
@@ -17540,13 +17582,16 @@ Z no longer ending it, the walk key and X still doing so); Grab mode Toggle
 through a hang, a shimmy, a corner, the monkey swing, a ladder, a pole, a
 rope, the zip line and the parallel bars, and the drop-and-catch case; Duck
 mode Toggle through a whole crawl, including a pickup made from it; the new
-*Modes* sub-page's back navigation. A 161b2c player with a stored Separate
+*Modes* sub-page's back navigation; and, since the second fix round, Grab
+mode Toggle held through a flyby camera and through an office camera room,
+where the latch used to fall. A 161b2c player with a stored Separate
 pad set keeps his own bindings, chord-free, until he chooses *Reset to
 defaults* once - worth a line to him directly, since nothing on the binding
 page itself says so.
 
 Commits: `81a8827` (item 1), `f331108` (item 2), `884bd0a` (item 3),
-`9a26fbc` (item 4), and the one that names it here.
+`9a26fbc` (item 4), `8c31d0f` (the record), `b3930c8` and `89427f4` (the fix
+round), `83e56f7` (the second fix round), and the one that names them here.
 
 ## Building this yourself
 

@@ -337,8 +337,8 @@ you left them.
 | Roll | Circle |
 | Inventory | Share |
 | Pause | Options |
-| Save | *Joy 13* on the Joystick page always, and Modifier+R3 on the PS5 DirectInput and generic pages (round 161b2d — the plain PS-button default goes with it); unbound on the two XInput-ordered pages (PS5 XInput, Xbox), which name no spare button at all |
-| Load | Modifier+L3 on the PS5 DirectInput and generic pages; unbound elsewhere |
+| Save | **Modifier+R3** on the PS5 DirectInput and generic pages (round 161b2d — the plain PS-button default goes with it, and the *Joystick* page's old plain *Joy 13* with it); unbound on the two XInput-ordered pages (PS5 XInput, Xbox), which name no spare button at all |
+| Load | **Modifier+L3** on the PS5 DirectInput and generic pages; unbound elsewhere |
 | Small medipack / Large medipack | wherever this pad's own One-key table already puts them — except on the PS5 DirectInput and generic Tank rows, where the small medipack's usual button is now the Modifier and both medipacks go unbound there instead of sharing it (0 and 9 on the keyboard still reach them; the Modern d-pad rows are untouched) |
 | Secondary | R2 |
 
@@ -374,6 +374,12 @@ numbered the DirectInput way: the *PS5* page on a pad the engine is reading
 through DirectInput, and the *Joystick* page always — and with it the *Xbox*
 page on a DirectInput pad, which shares the *Joystick* table. The other two
 are the *PS5* and *Xbox* pages on an XInput pad.
+
+The DualSense names above are what the *PS5* page prints; the *Joystick* page
+prints the same buttons as numbers, so read *Touchpad* as `Joy 14`, R1 as
+`Joy 6`, R3 as `Joy 12`, L3 as `Joy 11`, and Cross / Circle / Triangle /
+Square as `Joy 2` / `Joy 3` / `Joy 4` / `Joy 1`. Whatever the page calls them,
+the binding page shows you the name your own pad's page uses.
 
 With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
@@ -441,8 +447,12 @@ finger:
   menus read the pad and the keyboard directly, so neither ever sees the
   latch.
 - Every one of the four lets go on its own at a level change, a savegame
-  load, a cutscene, death, entering water, and while a menu owns the input,
-  so a key still held across one of those never latches by surprise.
+  load, a cutscene, death, and while a menu owns the input, so a key still
+  held across one of those never latches by surprise. Water ends the sprint
+  and the duck; it does not end *Grab*, because a ladder can be climbed
+  straight out of shallow water. Neither does a flyby camera or one of the
+  office security cameras: those hand you the controls back, so they leave
+  the grab alone as well.
 
 ---
 

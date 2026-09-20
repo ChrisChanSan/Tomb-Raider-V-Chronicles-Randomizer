@@ -85,14 +85,14 @@ Alt-Tab is instant and overlays behave.
 In the registry, under `HKEY_CURRENT_USER\Software\Core Design\Tomb Raider
 Chronicles`.
 
-> **The main Options page is written only when the game closes normally.**
-> Volumes, sound quality, targeting, language, control method and every key
-> and pad binding are saved on exit. If the game crashes or you kill it from
-> the Task Manager, that session's changes are lost. **Leave through "Exit"
-> after rebinding your keys.**
->
-> The tomb5 option pages are the exception — they write themselves the moment
-> you change a row.
+> **Everything in the menu is written while you play, since round 161b1.**
+> The tomb5 options write themselves the moment you change a row, as they
+> always did. The rest — volumes, sound quality, targeting, language, control
+> layout and every key and pad binding — used to live in memory until the game
+> closed normally, so a crash threw that whole session's settings away; they
+> are now written when you leave the page you changed them on, which for a
+> rebinding session means leaving *Key bindings*. Nothing you change in the
+> menu waits for "Exit" any more.
 
 Every tomb5 option has a value of its own under
 `HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`. Almost
@@ -109,10 +109,11 @@ worth knowing by name:
 
 ## Controls
 
-**Options → *Controls*.** The top row is *Control layout* (the old *Control
-Method*, renamed since round 161b1 to tell it apart from the newer *Control
-type* row) with four positions: *Keyboard*, *PS5 Controller*, *Xbox
-Controller* and *Joystick*.
+**Options → *Controls*.** The page opens with the two centred tabs *Key
+bindings* and *View*; under them come *Control type*, *Combat mode*, *Action*
+and then, sixth, *Control layout* (the old *Control Method*, renamed since
+round 161b1 to tell it apart from the newer *Control type* row) with four
+positions: *Keyboard*, *PS5 Controller*, *Xbox Controller* and *Joystick*.
 
 The three controller positions mostly mean the same thing to the game — they
 choose the **vocabulary** the buttons are named with, and with it the default
@@ -548,7 +549,7 @@ same way.
 
 ## Language, and HQ music
 
-**Options → Language** switches all game text immediately, with no restart —
+**Options → *Audio* → Language** switches all game text immediately, with no restart —
 vanilla took the first file it found and never offered a choice.
 
 Only files in the true TR5 PC text layout are accepted; the game checks the
@@ -1116,7 +1117,7 @@ moment, and hanging off the same switch.
 | What | Where you see it | The switch |
 |---|---|---|
 | Torch, flare, muzzle flash, explosions | any dark room you carry a flare into | — |
-| Distance fog | anywhere with a long view | *Distance fog*, page 2 |
+| Distance fog | anywhere with a long view | *Distance fog*, on *Graphics* |
 | Fog bulbs | the Rome levels — Colosseum, Trajan's Markets, the Base | *Fog* |
 | Water shimmer on a surface | any pool, and the mist rooms | *Shimmer* |
 | Underwater darkening and the screen wobble | swimming, anywhere | — |

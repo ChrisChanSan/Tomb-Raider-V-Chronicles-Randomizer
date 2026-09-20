@@ -16528,15 +16528,27 @@ table already did. The lookup key is the exact English literal throughout, so
 (this round's option row) stayed two different strings on purpose rather than
 colliding. German umlauts are written the way `GermanKeyboard[]` in
 `specific/input.cpp` already does - `~u`, `~o`, `~a`, a literal tilde before
-the plain vowel, checked against the accent path in `game/text.cpp` first:
-there is no other umlaut path in this renderer to use instead. `CustomText`
-grew from **18** rows at base `a6ecbb5` to **76** - measured per commit with
-`grep -c '{ "' game/gameflow.cpp` rather than carried over from an earlier
-report (which is how this entry catches its own predecessors' rounding: step
-2's own report named its own baseline as 24, one commit too late; the true
-run is 18 -> 24 after step 1's six page titles -> 75 after step 2's 51
-label/title/value pairs -> 76 after step 3's one, `Dead zone` / `Deadzone` -
-58 new rows over the whole round, not 52).
+the plain vowel, which the renderer draws as two plain glyphs because
+`PrintString` has no escape for `~`. **A real umlaut glyph does exist and this
+entry first said it did not** - the review round measured it and the sentence
+is corrected here rather than quietly dropped: `AccentToCode`
+(`game/text.cpp:187`) maps the Latin-1 bytes `0xE4` -> 128+4, `0xF6` -> 128+20
+and `0xFC` -> 128+1, and `PrintString` (`game/text.cpp:410-419`) composes each
+of those codes from `CharDef` plus its row of `AccentTable`
+(`game/accent.inc`: `{'a','^'}`, `{'o','^'}`, `{'u','^'}`) - only the sharp s
+has no row, which is why the brief's own word table avoids it. The three
+strings stay as they are because the brief's word table prescribes them that
+way and the brief wins; if they are ever wanted as real umlauts, exactly three
+change (`Kamerad~ampfung`, `K~orper`, `Game-Over-Men~u`). `CustomText` grew
+from **17** rows at base `a6ecbb5` to **75** - counted per commit by walking
+the initialiser's own braces, not with `grep -c '{ "'`, which also counts the
+unrelated `names[8]` language-name array at `game/gameflow.cpp:1287` and made
+the first draft of this paragraph one too high at both ends. The true run is
+17 -> 23 after step 1's six page titles -> 74 after step 2's 51
+label/title/value pairs -> 75 after step 3's one, `Dead zone` / `Deadzone` -
+58 new rows over the whole round (the delta was right all along; only the two
+absolute numbers were not), and step 2's own report named 24 as its own
+baseline when step 1's second commit had already reached that count.
 
 **THE DEAD ZONE BECOMES HIS VALUE.** New `tomb5.dead_zone` (`ulong`, the
 last field of `tomb5_options` so no existing offset moves), 0..100, default
@@ -16607,15 +16619,37 @@ the Tank key/pad default tables were not touched anywhere in the round.
 - `Preparation/Tools/Diagnose/MenuTest.cpp`, `bmenu.bat` (new) -
   `game/menu_nav.h`'s own harness.
 - `Preparation/Tools/Diagnose/ModernTest.cpp` - the `deadzone` group's eight
-  new cases.
+  new cases, and the review round's nine that hold the rounding term.
 - `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md`,
   `README.md`, `docs/Engine-Manual.md` (this entry, and the tool and manual
   rows the moved paths needed) - outside the counts below, the same
   convention every round has kept.
 
-**NO DEDICATED SKEPTICAL REVIEW RAN THIS ROUND** - the brief's four steps are
-all build steps, unlike 161a3b's own workflow. Two self-corrections are named
-in the earlier steps' own reports rather than papered over: the legacy
+**THE REVIEW.** This paragraph first said no dedicated skeptical review ran
+this round, because the brief's four steps are all build steps. One ran after
+them all the same, rebuilt both harnesses itself, mutated `game/menu_nav.h`
+(five mutations, five caught) and `ModernDeadZoneUser` (four mutations, three
+caught), and did not accept the build. It found seven things, all of them in
+words rather than in behaviour: the umlaut sentence above, which claimed a
+measurement that this tree refutes; two `CustomText` counts one too high and
+one commit count one too low in this entry; three menu paths in
+`docs/Engine-Manual.md` that this round moved and step 4 did not follow (the
+*Controls* page's top row, *Language*, *Distance fog*); a comment in
+`game/menu_frame.cpp` that broke off mid-sentence; and the one mutation its
+own run did NOT catch - dropping the `+25` from `ModernDeadZoneUser` passed
+all 5,403 checks, because the group asserted only 0, 50 and 100, where the
+half-divisor cannot be seen. Ten cases were added for it (every notch of
+every one of the eight constants against a round-to-nearest reference built
+the other way round, quotient plus remainder; a count saying the sweep really
+met the settings that round up, so it cannot go vacuous; and the function's
+own worked example, 31 at 40 per cent). Re-mutated afterwards, in a copy of
+the tree under `Agent-Scratch` and never in the repository: dropping the `+25`
+now fails 9 checks, and rounding always UP instead (`+49`) fails 8. A seventh
+item the review did not raise went with them: the manual's own blockquote
+still told the player that the main Options page is written only on a clean
+exit, which is precisely what curing R4 above stopped being true. Two
+self-corrections from the build steps stay named here rather than papered
+over: the legacy
 `tomb5` options entry point discarding `TroyeMenuPage(0)`'s return value
 (which is the arrow row's own bit) was caught before its first commit, not
 after; and the geometry budget's row count (12, not the base page's 13) was
@@ -16625,9 +16659,14 @@ never calls `CheckKeyConflicts()`, so `conflict[]` stays stale after a reset
 until the next capture - carried over unchanged, because it is a behaviour
 difference and no measurement in this round said it was wanted.
 
-Five commits, `Round 161b1 (#161): <what>`. `ModernTest` ends the round at
-**5,403 checks, 0 failed** (5,359 at base `a6ecbb5`, unaffected by steps 1-2
-which touch no file it includes, +44 from step 3's `deadzone` group).
+Eight commits, `Round 161b1 (#161): <what>` - six from the build steps (the
+sixth of them this entry itself) and two answering the skeptical review, which
+found one refuted measurement stated as fact, three stale counts or paths in
+the record and the manual, one truncated comment and one test that could not
+see the constant it documented. `ModernTest` ends the round at
+**5,413 checks, 0 failed** (5,359 at base `a6ecbb5`, unaffected by steps 1-2
+which touch no file it includes, +44 from step 3's `deadzone` group and +10
+from the review round's rounding cases).
 `MenuTest`, new this round, stands at **12,240 checks, 0 failed** - every
 function of `game/menu_nav.h` swept rather than sampled, and one group
 asserting both the brief's own worked example (13) and the frame's true

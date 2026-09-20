@@ -4194,10 +4194,34 @@ static void tank_sector()
 				held_none = d;
 		}
 
-		ok(held_turn > turn_deg && held_turn < turn_deg + hyst_deg + 1.0,
+		/* THE CONSTANTS THEMSELVES, HELD AS NUMBERS - and this is the 161a3b
+		 * review's low finding, answered by measuring rather than by tightening
+		 * a window. Every assertion below derives its expectation FROM
+		 * MODERN_TANK_SECTOR_HYST, which is right for the arithmetic and blind
+		 * to the value: mutate the hysteresis to 0 and the walk AND its windows
+		 * move together, so a purely derived test cannot fail. Tried it - 0
+		 * failed. So the two chosen numbers are asserted here, once, as the one
+		 * place a mutation of either has to stop, and the windows below go on
+		 * testing what they are for, which is that the code honours whatever
+		 * they say. Both are "measure ourselves"; both read back as `sector=`
+		 * in MODERNLOG's tank line. */
+		ok(MODERN_TANK_TURN_SECTOR == 9102, "the turn sector is the round's own 50 degrees",
+			MODERN_TANK_TURN_SECTOR, 9102);
+		ok(MODERN_TANK_SECTOR_HYST == 1456, "...and the hysteresis on it its own 8",
+			MODERN_TANK_SECTOR_HYST, 1456);
+
+		/* BOTH EDGES LIE ON THE RIGHT SIDE OF THE PLAIN BOUNDARY - asked
+		 * strictly, with no hysteresis term in it, so that these two hold the
+		 * DIRECTION of the rule however the constant is later tuned - and each
+		 * sits within a degree of where the constant puts it. A degree is the
+		 * walk's own quarter plus the quantised stick's half; anything wider
+		 * stops being a test of the arithmetic at all. */
+		ok(held_turn > turn_deg
+			&& held_turn > turn_deg + hyst_deg - 1.0 && held_turn < turn_deg + hyst_deg + 1.0,
 			"a turning thumb keeps the turn a hysteresis further out",
 			(long)(held_turn * 10.0), (long)((turn_deg + hyst_deg) * 10.0));
-		ok(held_step < turn_deg && held_step > turn_deg - hyst_deg - 1.0,
+		ok(held_step < turn_deg
+			&& held_step > turn_deg - hyst_deg - 1.0 && held_step < turn_deg - hyst_deg + 1.0,
 			"...and a stepping one gives the step up a hysteresis sooner",
 			(long)(held_step * 10.0), (long)((turn_deg - hyst_deg) * 10.0));
 		ok(held_none > turn_deg - 1.0 && held_none < turn_deg + 1.0,

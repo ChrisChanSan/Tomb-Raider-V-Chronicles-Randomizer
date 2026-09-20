@@ -1352,6 +1352,76 @@ const char* CustomText(const char* engl)
 		{ "Key bindings",    "Key bindings",    "Tastenbelegung", "Key bindings",       "Key bindings" },
 		{ "Reset to defaults", "Reset to defaults", "Standard wiederherstellen", "Reset to defaults", "Reset to defaults" },
 		{ "Control layout",  "Control layout",  "Steuerungslayout", "Control layout",   "Control layout" },
+		// #161, round 161b1 step 2 - the right half of the tree (item 4):
+		// Graphics, HUD, View and tomb5 options, plus Ammotype hotkeys moving
+		// into Controls. Same rule as every block above: only German is a
+		// real translation, French/Italian/Spanish repeat the English
+		// literal on purpose (an empty string would print blank, not fall
+		// back to English). Umlauts written "~u"/"~o"/"~a", the way
+		// GermanKeyboard[] (specific\input.cpp) already does it - checked
+		// against the accent path in game\text.cpp first: PrintString has no
+		// escape for '~', so this is two plain glyphs, not a real umlaut
+		// glyph, exactly as GermanKeyboard's own rows already render. There
+		// is no sharp s in these strings on purpose (the brief's own words).
+		//
+		// Rows with no German entry (PSX/TR4/TR5, "Display"/"Display (60)",
+		// "Original") are not listed here - CustomText already falls back to
+		// the English literal on its own when nothing matches, which is
+		// exactly what the brief's word table means by "stay".
+		{ "HUD",             "HUD",             "HUD",            "HUD",                "HUD" },
+		{ "View",            "View",            "Ansicht",        "View",               "View" },
+		{ "First person view", "First person view", "Ego-Sicht",  "First person view",  "First person view" },
+		{ "Field of view",   "Field of view",   "Sichtfeld",      "Field of view",      "Field of view" },
+		{ "Death camera",    "Death camera",    "Todeskamera",    "Death camera",       "Death camera" },
+		{ "Follow head bone", "Follow head bone", "Kopfknochen folgen", "Follow head bone", "Follow head bone" },
+		{ "Camera damping",  "Camera damping",  "Kamerad~ampfung", "Camera damping",    "Camera damping" },
+		{ "Body",            "Body",            "K~orper",        "Body",               "Body" },
+		{ "Frame rate",      "Frame rate",      "Bildrate",       "Frame rate",         "Frame rate" },
+		{ "VSync",           "VSync",           "VSync",          "VSync",              "VSync" },
+		{ "Level select",    "Level select",    "Levelauswahl",   "Level select",       "Level select" },
+		{ "Ammotype hotkeys", "Ammotype hotkeys", "Munitions-Hotkeys", "Ammotype hotkeys", "Ammotype hotkeys" },
+		{ "Look transparency", "Look transparency", "Umsehen transparent", "Look transparency", "Look transparency" },
+		{ "Static lighting", "Static lighting", "Statisches Licht", "Static lighting",  "Static lighting" },
+		{ "Footprints",      "Footprints",      "Trittspuren",    "Footprints",         "Footprints" },
+		{ "Shadow mode",     "Shadow mode",     "Schatten",       "Shadow mode",        "Shadow mode" },
+		{ "Fix climb up delay", "Fix climb up delay", "Klettern ohne Pause", "Fix climb up delay", "Fix climb up delay" },
+		{ "Flexible crawling", "Flexible crawling", "Flexibles Kriechen", "Flexible crawling", "Flexible crawling" },
+		{ "Cutscene skipper", "Cutscene skipper", "Cutscene-Skipper", "Cutscene skipper", "Cutscene skipper" },
+		{ "Cheats",          "Cheats",          "Cheats",         "Cheats",             "Cheats" },
+		{ "Bar mode",        "Bar mode",        "Balkenstil",     "Bar mode",           "Bar mode" },
+		{ "Bar positions",   "Bar positions",   "Balkenposition", "Bar positions",      "Bar positions" },
+		{ "Enemy bars",      "Enemy bars",      "Gegnerbalken",   "Enemy bars",         "Enemy bars" },
+		{ "Ammo counter",    "Ammo counter",    "Munitionsanzeige", "Ammo counter",     "Ammo counter" },
+		{ "Gameover menu",   "Gameover menu",   "Game-Over-Men~u", "Gameover menu",     "Gameover menu" },
+		{ "Fog",             "Fog",             "Nebel",          "Fog",                "Fog" },
+		{ "HD textures",     "HD textures",     "HD-Texturen",    "HD textures",        "HD textures" },
+		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },
+		{ "PSX skies",       "PSX skies",       "PSX-Himmel",     "PSX skies",          "PSX skies" },
+		{ "TR4 loadscreens", "TR4 loadscreens", "TR4-Ladebilder", "TR4 loadscreens",    "TR4 loadscreens" },
+		{ "Loadbar style",   "Loadbar style",   "Ladebalken",     "Loadbar style",      "Loadbar style" },
+		{ "Mono screen style", "Mono screen style", "Mono-Screen-Stil", "Mono screen style", "Mono screen style" },
+		{ "Loading text",    "Loading text",    "Ladetext",       "Loading text",       "Loading text" },
+		{ "Shimmer",         "Shimmer",         "Schimmern",      "Shimmer",            "Shimmer" },
+		{ "Distance fog",    "Distance fog",    "Distanznebel",   "Distance fog",       "Distance fog" },
+		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
+		// Values, not row labels - "on/off", "Circle" etc. reused across many
+		// rows (Values line of the brief's table). "PSX"/"TR4"/"TR5" and
+		// "Original" are not here for the same reason as above: they stay.
+		{ "on",              "on",              "an",             "on",                 "on" },
+		{ "off",             "off",             "aus",            "off",                "off" },
+		{ "Circle",          "Circle",          "Kreis",          "Circle",             "Circle" },
+		{ "Faded circle",    "Faded circle",    "Weicher Kreis",  "Faded circle",       "Faded circle" },
+		{ "Improved",        "Improved",        "Verbessert",     "Improved",           "Improved" },
+		{ "Clear",           "Clear",           "Klar",           "Clear",              "Clear" },
+		{ "Light",           "Light",           "Leicht",         "Light",              "Light" },
+		{ "Medium",          "Medium",          "Mittel",         "Medium",             "Medium" },
+		{ "Strong",          "Strong",          "Stark",          "Strong",             "Strong" },
+		{ "First person",    "First person",    "Ego-Sicht",      "First person",       "First person" },
+		{ "Third person",    "Third person",    "Dritte Person",  "Third person",       "Third person" },
+		{ "still",           "still",           "ruhig",          "still",              "still" },
+		{ "animated",        "animated",        "animiert",       "animated",           "animated" },
+		{ "on (restart)",    "on (restart)",    "an (Neustart)",  "on (restart)",       "on (restart)" },
+		{ "off (restart)",   "off (restart)",   "aus (Neustart)", "off (restart)",      "off (restart)" },
 	};
 
 	long column;

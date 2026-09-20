@@ -411,14 +411,33 @@ static bool MenuStepTargeting(long, long dir)
 	return App.AutoTarget != old;
 }
 
+static const char* MenuValAmmotypeHotkeys(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.ammotype_hotkeys ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepAmmotypeHotkeys(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.ammotype_hotkeys = !tomb5.ammotype_hotkeys;
+	return 1;
+}
+
 /* -------------------------------------------------------------- Display -- */
 
 static const char* MenuValFrameRate(long, char* buf)
 {
 	/* 30, 60 or the monitor's own rate. "Display" needs VSync - it is the
 	 * blocking present that paces it - so with VSync off it runs at 60 and
-	 * the row says which of the two the player is really getting. */
-	strcpy(buf, tomb5.fps_mode == 2 ? (tomb5.vsync ? "Display" : "Display (60)") :
+	 * the row says which of the two the player is really getting. "30"/"60"
+	 * are digits, not words, and stay unwrapped; "Display"/"Display (60)"
+	 * have no German entry (the brief's table says they stay) - CustomText
+	 * falls back to the English literal on its own when nothing matches. */
+	strcpy(buf, tomb5.fps_mode == 2 ? CustomText(tomb5.vsync ? "Display" : "Display (60)") :
 	            tomb5.fps_mode == 1 ? "60" : "30");
 	return buf;
 }
@@ -450,7 +469,7 @@ static const char* MenuValVSync(long, char* buf)
 	// device-creation parameter (D3D9 has no other way to ask for it), so it
 	// is picked up the next time the game starts. The row says so on the
 	// right rather than in a manual nobody has open.
-	strcpy(buf, tomb5.vsync ? "on (restart)" : "off (restart)");
+	strcpy(buf, CustomText(tomb5.vsync ? "on (restart)" : "off (restart)"));
 	return buf;
 }
 
@@ -461,6 +480,627 @@ static bool MenuStepVSync(long, long dir)
 
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.vsync = tomb5.vsync ? 0 : 1;
+	return 1;
+}
+
+/* -------------------------------------------------------------- Graphics -- */
+/* Every row below is a case of base's Page0 or Page1 (tomb5\troyestuff.cpp),
+ * one function each instead of one shared switch - the row ledger names the
+ * base line for each. Toggle rows return `!dir` unconditionally, exactly as
+ * the model Display page's VSync row does, because base toggled on EITHER
+ * direction (`dbinput & IN_LEFT || dbinput & IN_RIGHT`); wrapping/clamping
+ * rows keep base's own per-direction shape, "changed" included where base
+ * set it unconditionally inside a direction's block (Distance fog). */
+
+static const char* MenuValFootprints(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.footprints ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepFootprints(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.footprints = !tomb5.footprints;
+	return 1;
+}
+
+static const char* MenuValShadowMode(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.shadow_mode == 1 ? "Original" : tomb5.shadow_mode == 2 ? "Circle" :
+	           tomb5.shadow_mode == 3 ? "Faded circle" : "PSX"));
+	return buf;
+}
+
+static bool MenuStepShadowMode(long, long dir)
+{
+	if (dir > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.shadow_mode = tomb5.shadow_mode >= 4 ? 1 : tomb5.shadow_mode + 1;
+		return 1;
+	}
+
+	if (dir < 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.shadow_mode = tomb5.shadow_mode <= 1 ? 4 : tomb5.shadow_mode - 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char* MenuValFog(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.fog ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepFog(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.fog = !tomb5.fog;
+	return 1;
+}
+
+static const char* MenuValHdTextures(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.hd_enable ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepHdTextures(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	// #123: the Remaster's room art, read from the player's own installation.
+	// It is taken at the START of a level (base troyestuff.cpp Page0), so
+	// this row shows what the NEXT level will do, not the level on screen.
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.hd_enable = !tomb5.hd_enable;
+	return 1;
+}
+
+static const char* MenuValPsxSkies(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.PSX_skies ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepPsxSkies(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.PSX_skies = !tomb5.PSX_skies;
+	return 1;
+}
+
+static const char* MenuValMonoScreenStyle(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.inv_bg_mode == 1 ? "Original" : tomb5.inv_bg_mode == 2 ? "TR4" : "Clear"));
+	return buf;
+}
+
+static bool MenuStepMonoScreenStyle(long, long dir)
+{
+	if (dir > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.inv_bg_mode = tomb5.inv_bg_mode >= 3 ? 1 : tomb5.inv_bg_mode + 1;
+		return 1;
+	}
+
+	if (dir < 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.inv_bg_mode = tomb5.inv_bg_mode <= 1 ? 3 : tomb5.inv_bg_mode - 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char* MenuValShimmer(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.shimmer ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepShimmer(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.shimmer = !tomb5.shimmer;
+	return 1;
+}
+
+static const char* MenuValDistanceFog(long, char* buf)
+{
+	sprintf(buf, "%i", (int)tomb5.distance_fog);
+	return buf;
+}
+
+static bool MenuStepDistanceFog(long, long dir)
+{
+	// changed=1 fires even at the clamp, as it did at base (troyestuff.cpp
+	// Page1 case 1<<7) - the save it triggers writes the same value again,
+	// harmless, and this round leaves that quirk exactly where base put it.
+	bool changed = 0;
+
+	if (dir > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.distance_fog++;
+
+		if (tomb5.distance_fog > 30)
+			tomb5.distance_fog = 30;
+
+		changed = 1;
+	}
+
+	if (dir < 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.distance_fog--;
+
+		if (tomb5.distance_fog < 3)
+			tomb5.distance_fog = 3;
+
+		changed = 1;
+	}
+
+	return changed;
+}
+
+static const char* MenuValLookTransparency(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.look_transparency ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepLookTransparency(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.look_transparency = !tomb5.look_transparency;
+	return 1;
+}
+
+static const char* MenuValStaticLighting(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.static_lighting ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepStaticLighting(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.static_lighting = !tomb5.static_lighting;
+	return 1;
+}
+
+static const char* MenuValUwEffect(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.uw_dust == 1 ? "off" : tomb5.uw_dust == 2 ? "Original" : "TR4"));
+	return buf;
+}
+
+static bool MenuStepUwEffect(long, long dir)
+{
+	if (dir > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.uw_dust = tomb5.uw_dust >= 3 ? 1 : tomb5.uw_dust + 1;
+		return 1;
+	}
+
+	if (dir < 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.uw_dust = tomb5.uw_dust <= 1 ? 3 : tomb5.uw_dust - 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+/* ------------------------------------------------------------------ View -- */
+/* All six rows of base's Page2 (troyestuff.cpp), offered on their own tab now
+ * and no longer gated by "First person view" (ledger row 26 - "ohne den
+ * Switch mit on oder off"). "First person view" itself moves in from Page1
+ * as a normal toggle row, first on the tab as the brief's tree has it. */
+
+static const char* MenuValFirstPersonView(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.first_person ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepFirstPersonView(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.first_person = !tomb5.first_person;
+	return 1;
+}
+
+static const char* MenuValFieldOfView(long, char* buf)
+{
+	sprintf(buf, "%d", (int)tomb5.first_person_fov);
+	return buf;
+}
+
+static bool MenuStepFieldOfView(long, long dir)
+{
+	// Steps of ten from 60 to 100 rather than a free slider (base
+	// troyestuff.cpp Page2): the difference between neighbouring values is
+	// already plain to see, and a stepped choice says what it is doing.
+	if (dir < 0 && tomb5.first_person_fov > 60)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.first_person_fov -= 10;
+		return 1;
+	}
+
+	if (dir > 0 && tomb5.first_person_fov < 100)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.first_person_fov += 10;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char* MenuValDeathCamera(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.first_person_death ? "First person" : "Third person"));
+	return buf;
+}
+
+static bool MenuStepDeathCamera(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.first_person_death = !tomb5.first_person_death;
+	return 1;
+}
+
+static const char* MenuValFollowHeadBone(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.first_person_head ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepFollowHeadBone(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.first_person_head = !tomb5.first_person_head;
+	return 1;
+}
+
+static const char* MenuValCameraDamping(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.first_person_smooth == 0 ? "off" :
+	           tomb5.first_person_smooth == 1 ? "Light" :
+	           tomb5.first_person_smooth == 2 ? "Medium" : "Strong"));
+	return buf;
+}
+
+static bool MenuStepCameraDamping(long, long dir)
+{
+	if (dir < 0 && tomb5.first_person_smooth > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.first_person_smooth--;
+		return 1;
+	}
+
+	if (dir > 0 && tomb5.first_person_smooth < 3)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.first_person_smooth++;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char* MenuValBody(long, char* buf)
+{
+	// #123, fix round U/U4: "still" holds her body on one frame while she is
+	// standing, crouching or kneeling still - the head still turns with the
+	// look, the arms still aim and fire, and every step, jump, climb and pull
+	// stays animated as before.
+	strcpy(buf, CustomText(tomb5.first_person_body_still ? "still" : "animated"));
+	return buf;
+}
+
+static bool MenuStepBody(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.first_person_body_still = !tomb5.first_person_body_still;
+	return 1;
+}
+
+/* ------------------------------------------------------------------- HUD -- */
+/* Base's Page0 rows that are about the heads-up display and the load screens,
+ * grouped on their own tab so Graphics keeps its headroom (deliberate choice,
+ * brief section "The tree he wants"). */
+
+static const char* MenuValBarMode(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.bar_mode == 1 ? "Original" : tomb5.bar_mode == 2 ? "TR4" : "PSX"));
+	return buf;
+}
+
+static bool MenuStepBarMode(long, long dir)
+{
+	if (dir > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.bar_mode = tomb5.bar_mode >= 3 ? 1 : tomb5.bar_mode + 1;
+		return 1;
+	}
+
+	if (dir < 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.bar_mode = tomb5.bar_mode <= 1 ? 3 : tomb5.bar_mode - 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char* MenuValBarPositions(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.bars_pos == 1 ? "Original" : tomb5.bars_pos == 2 ? "Improved" : "PSX"));
+	return buf;
+}
+
+static bool MenuStepBarPositions(long, long dir)
+{
+	if (dir > 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.bars_pos = tomb5.bars_pos >= 3 ? 1 : tomb5.bars_pos + 1;
+		return 1;
+	}
+
+	if (dir < 0)
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		tomb5.bars_pos = tomb5.bars_pos <= 1 ? 3 : tomb5.bars_pos - 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char* MenuValEnemyBars(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.enemy_bars ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepEnemyBars(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.enemy_bars = !tomb5.enemy_bars;
+	return 1;
+}
+
+static const char* MenuValAmmoCounter(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.ammo_counter ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepAmmoCounter(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.ammo_counter = !tomb5.ammo_counter;
+	return 1;
+}
+
+static const char* MenuValGameoverMenu(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.gameover ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepGameoverMenu(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.gameover = !tomb5.gameover;
+	return 1;
+}
+
+static const char* MenuValTr4Loadscreens(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.tr4_loadscreens ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepTr4Loadscreens(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.tr4_loadscreens = !tomb5.tr4_loadscreens;
+	return 1;
+}
+
+static const char* MenuValLoadbarStyle(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.tr4_loadbar ? "TR4" : "TR5"));	// both stay, no German entry
+	return buf;
+}
+
+static bool MenuStepLoadbarStyle(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.tr4_loadbar = !tomb5.tr4_loadbar;
+	return 1;
+}
+
+static const char* MenuValLoadingText(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.loadingtxt ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepLoadingText(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.loadingtxt = !tomb5.loadingtxt;
+	return 1;
+}
+
+/* ------------------------------------------------------------ tomb5 options -- */
+/* What is left of base's Page0/Page1 once Graphics, HUD and View have taken
+ * their rows: six switches with no better home yet. */
+
+static const char* MenuValFixClimbUpDelay(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.fix_climb_up_delay ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepFixClimbUpDelay(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.fix_climb_up_delay = !tomb5.fix_climb_up_delay;
+	return 1;
+}
+
+static const char* MenuValFlexibleCrawling(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.flexible_crawling ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepFlexibleCrawling(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.flexible_crawling = !tomb5.flexible_crawling;
+	return 1;
+}
+
+static const char* MenuValCutsceneSkipper(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.cutseq_skipper ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepCutsceneSkipper(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.cutseq_skipper = !tomb5.cutseq_skipper;
+	return 1;
+}
+
+static const char* MenuValCheats(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.enable_cheats ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepCheats(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.enable_cheats = !tomb5.enable_cheats;
+	return 1;
+}
+
+static const char* MenuValLevelSelect(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.level_select ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepLevelSelect(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	// Adds/removes the title menu's own "Level Select" row (gameflow.cpp) -
+	// a side effect of the variable, not of this handler; carried over
+	// unchanged (ledger row 27).
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.level_select = !tomb5.level_select;
+	return 1;
+}
+
+static const char* MenuValCrawlTilting(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.crawltilt ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepCrawlTilting(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.crawltilt = !tomb5.crawltilt;
 	return 1;
 }
 
@@ -560,6 +1200,7 @@ static const menu_row menu_rows_options[] =
 	MENU_TAB("Audio", MENU_PAGE_AUDIO),
 	MENU_TAB("Controls", MENU_PAGE_CONTROLS),
 	MENU_TAB("Graphics", MENU_PAGE_GRAPHICS),
+	MENU_TAB("HUD", MENU_PAGE_HUD),
 	MENU_TAB("tomb5 options", MENU_PAGE_TOMB5),
 	MENU_TAB_TXT_IF("Special Features", TXT_Special_Features, MENU_PAGE_SPECIAL, MenuEnabledSpecialFeatures),
 	MENU_TAB("Credits", MENU_PAGE_CREDITS)
@@ -576,25 +1217,69 @@ static const menu_row menu_rows_audio[] =
 static const menu_row menu_rows_controls[] =
 {
 	MENU_TAB("Key bindings", MENU_PAGE_KEYBINDS),
+	MENU_TAB("View", MENU_PAGE_VIEW),
 	MENU_VALUE("Control type", MenuValControlType, MenuStepControlType, MENU_SAVE_TOMB5),
 	MENU_VALUE("Combat mode", MenuValCombatMode, MenuStepCombatMode, MENU_SAVE_TOMB5),
 	MENU_VALUE("Action", MenuValAction, MenuStepAction, MENU_SAVE_TOMB5),
 	MENU_VALUE("Control layout", MenuValControlLayout, MenuStepControlLayout, MENU_SAVE_GAME),
 	MENU_SLIDER("Camera speed", -1, MenuNumCameraSpeed, MenuStepCameraSpeed, MENU_SAVE_TOMB5, MenuEnabledModern),
-	MENU_VALUE_TXT("Targeting", TXT_Targeting, MenuValTargeting, MenuStepTargeting, MENU_SAVE_GAME)
+	MENU_VALUE_TXT("Targeting", TXT_Targeting, MenuValTargeting, MenuStepTargeting, MENU_SAVE_GAME),
+	MENU_VALUE("Ammotype hotkeys", MenuValAmmotypeHotkeys, MenuStepAmmotypeHotkeys, MENU_SAVE_TOMB5)
+};
+
+// All six always offered, not gated by tomb5.first_person (ledger row 26).
+static const menu_row menu_rows_view[] =
+{
+	MENU_VALUE("First person view", MenuValFirstPersonView, MenuStepFirstPersonView, MENU_SAVE_TOMB5),
+	MENU_VALUE("Field of view", MenuValFieldOfView, MenuStepFieldOfView, MENU_SAVE_TOMB5),
+	MENU_VALUE("Death camera", MenuValDeathCamera, MenuStepDeathCamera, MENU_SAVE_TOMB5),
+	MENU_VALUE("Follow head bone", MenuValFollowHeadBone, MenuStepFollowHeadBone, MENU_SAVE_TOMB5),
+	MENU_VALUE("Camera damping", MenuValCameraDamping, MenuStepCameraDamping, MENU_SAVE_TOMB5),
+	MENU_VALUE("Body", MenuValBody, MenuStepBody, MENU_SAVE_TOMB5)
 };
 
 static const menu_row menu_rows_graphics[] =
 {
-	// Step 2 of this round fills the eleven settings in beneath this tab;
-	// until then they are still reachable through "tomb5 options".
-	MENU_TAB("Display", MENU_PAGE_DISPLAY)
+	MENU_TAB("Display", MENU_PAGE_DISPLAY),
+	MENU_VALUE("HD textures", MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),
+	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),
+	MENU_VALUE("Distance fog", MenuValDistanceFog, MenuStepDistanceFog, MENU_SAVE_TOMB5),
+	MENU_VALUE("Shimmer", MenuValShimmer, MenuStepShimmer, MENU_SAVE_TOMB5),
+	MENU_VALUE("Mono screen style", MenuValMonoScreenStyle, MenuStepMonoScreenStyle, MENU_SAVE_TOMB5),
+	MENU_VALUE("Shadow mode", MenuValShadowMode, MenuStepShadowMode, MENU_SAVE_TOMB5),
+	MENU_VALUE("PSX skies", MenuValPsxSkies, MenuStepPsxSkies, MENU_SAVE_TOMB5),
+	MENU_VALUE("Static lighting", MenuValStaticLighting, MenuStepStaticLighting, MENU_SAVE_TOMB5),
+	MENU_VALUE("UW Effect", MenuValUwEffect, MenuStepUwEffect, MENU_SAVE_TOMB5),
+	MENU_VALUE("Look transparency", MenuValLookTransparency, MenuStepLookTransparency, MENU_SAVE_TOMB5),
+	MENU_VALUE("Footprints", MenuValFootprints, MenuStepFootprints, MENU_SAVE_TOMB5)
 };
 
 static const menu_row menu_rows_display[] =
 {
 	MENU_VALUE("Frame rate", MenuValFrameRate, MenuStepFrameRate, MENU_SAVE_TOMB5),
 	MENU_VALUE("VSync", MenuValVSync, MenuStepVSync, MENU_SAVE_TOMB5)
+};
+
+static const menu_row menu_rows_hud[] =
+{
+	MENU_VALUE("Bar mode", MenuValBarMode, MenuStepBarMode, MENU_SAVE_TOMB5),
+	MENU_VALUE("Bar positions", MenuValBarPositions, MenuStepBarPositions, MENU_SAVE_TOMB5),
+	MENU_VALUE("Enemy bars", MenuValEnemyBars, MenuStepEnemyBars, MENU_SAVE_TOMB5),
+	MENU_VALUE("Ammo counter", MenuValAmmoCounter, MenuStepAmmoCounter, MENU_SAVE_TOMB5),
+	MENU_VALUE("Gameover menu", MenuValGameoverMenu, MenuStepGameoverMenu, MENU_SAVE_TOMB5),
+	MENU_VALUE("TR4 loadscreens", MenuValTr4Loadscreens, MenuStepTr4Loadscreens, MENU_SAVE_TOMB5),
+	MENU_VALUE("Loadbar style", MenuValLoadbarStyle, MenuStepLoadbarStyle, MENU_SAVE_TOMB5),
+	MENU_VALUE("Loading text", MenuValLoadingText, MenuStepLoadingText, MENU_SAVE_TOMB5)
+};
+
+static const menu_row menu_rows_tomb5[] =
+{
+	MENU_VALUE("Cutscene skipper", MenuValCutsceneSkipper, MenuStepCutsceneSkipper, MENU_SAVE_TOMB5),
+	MENU_VALUE("Cheats", MenuValCheats, MenuStepCheats, MENU_SAVE_TOMB5),
+	MENU_VALUE("Level select", MenuValLevelSelect, MenuStepLevelSelect, MENU_SAVE_TOMB5),
+	MENU_VALUE("Fix climb up delay", MenuValFixClimbUpDelay, MenuStepFixClimbUpDelay, MENU_SAVE_TOMB5),
+	MENU_VALUE("Flexible crawling", MenuValFlexibleCrawling, MenuStepFlexibleCrawling, MENU_SAVE_TOMB5),
+	MENU_VALUE("Crawl Tilting", MenuValCrawlTilting, MenuStepCrawlTilting, MENU_SAVE_TOMB5)
 };
 
 /* The two bindable lists. Row 0 of each is the centred reset action, and it is
@@ -663,15 +1348,18 @@ static void MenuResolveKeybinds(const menu_row** rows, long* num)
 
 #define MENU_ROWS(a)	a, sizeof(a) / sizeof(a[0])
 
+// POSITIONAL: this order must match enum menu_page_id exactly (menu_frame.h).
 static const menu_page menu_pages[MENU_PAGE_COUNT] =
 {
 	{ "Options",      TXT_Options, MENU_ROWS(menu_rows_options),  0, 0 },
 	{ "Audio",        -1,          MENU_ROWS(menu_rows_audio),    0, 0 },
 	{ "Controls",     -1,          MENU_ROWS(menu_rows_controls), 0, 0 },
 	{ "Key bindings", -1,          0, 0,                          1, MenuResolveKeybinds },
+	{ "View",         -1,          MENU_ROWS(menu_rows_view),     0, 0 },
 	{ "Graphics",     -1,          MENU_ROWS(menu_rows_graphics), 0, 0 },
 	{ "Display",      -1,          MENU_ROWS(menu_rows_display),  0, 0 },
-	{ "tomb5 options", -1,         0, 0,                          0, 0 },	// the old TroyeMenu until step 2
+	{ "HUD",          -1,          MENU_ROWS(menu_rows_hud),      0, 0 },
+	{ "tomb5 options", -1,         MENU_ROWS(menu_rows_tomb5),    0, 0 },
 	{ "Special Features", -1,      0, 0,                          0, 0 },	// the existing screen
 	{ "Credits",      -1,          0, 0,                          0, 0 }	// the existing screen
 };
@@ -906,9 +1594,10 @@ static void MenuCaptureBinding()
 	dbinput = 0;
 }
 
-/* The three screens that keep their own code: the tomb5 options (until step 2
- * of this round), Special Features and the Credits. They are pages of the tree
- * like any other; only what happens INSIDE them is still theirs. */
+/* The two screens that still keep their own code: Special Features and the
+ * Credits (troyestuff.cpp). "tomb5 options" left this list in step 2 - it is
+ * a table like any other page now. They are pages of the tree like any
+ * other; only what happens INSIDE them is still theirs. */
 static ulong menu_legacy_sel;
 
 static bool MenuRunLegacy(long page)
@@ -917,9 +1606,7 @@ static bool MenuRunLegacy(long page)
 
 	legacy_menu = 1;
 
-	if (page == MENU_PAGE_TOMB5)
-		TroyeMenu(font_height - (font_height >> 1), legacy_menu, menu_legacy_sel, menu_legacy_sel);
-	else if (page == MENU_PAGE_CREDITS)
+	if (page == MENU_PAGE_CREDITS)
 		CreditsScreen(font_height - (font_height >> 1), legacy_menu, menu_legacy_sel, menu_legacy_sel);
 	else if (page == MENU_PAGE_SPECIAL)
 		legacy_menu = SpecialFeaturesPageRun() ? 0 : 1;
@@ -934,15 +1621,7 @@ static bool MenuRunLegacy(long page)
 
 static void MenuEnterLegacy(long page)
 {
-	if (page == MENU_PAGE_TOMB5)
-	{
-		TroyeMenuPage(0);	// always start on the first page
-		// Row 0 of that page, which is what base did: it called
-		// TroyeMenuPage for its side effect and set its own sel to 1,
-		// discarding the arrow-row selection the call hands back.
-		menu_legacy_sel = 1;
-	}
-	else if (page == MENU_PAGE_SPECIAL)
+	if (page == MENU_PAGE_SPECIAL)
 		CalculateNumSpecialFeatures();
 }
 

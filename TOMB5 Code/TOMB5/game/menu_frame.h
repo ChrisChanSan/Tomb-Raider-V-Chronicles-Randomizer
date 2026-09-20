@@ -60,9 +60,11 @@ enum menu_page_id
 	MENU_PAGE_AUDIO,
 	MENU_PAGE_CONTROLS,
 	MENU_PAGE_KEYBINDS,
+	MENU_PAGE_VIEW,		// step 2: the six first-person rows, always offered
 	MENU_PAGE_GRAPHICS,
 	MENU_PAGE_DISPLAY,
-	MENU_PAGE_TOMB5,	// still the old TroyeMenu until step 2 of this round
+	MENU_PAGE_HUD,		// step 2
+	MENU_PAGE_TOMB5,	// step 2: a table now, no longer the old TroyeMenu
 	MENU_PAGE_SPECIAL,	// the existing Special Features screen, untouched inside
 	MENU_PAGE_CREDITS,	// the existing Credits screen, untouched inside
 	MENU_PAGE_COUNT

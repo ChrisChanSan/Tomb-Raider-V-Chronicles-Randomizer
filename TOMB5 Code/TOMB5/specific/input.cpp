@@ -1651,6 +1651,104 @@ long S_UpdateInput()
 	if ((linput & (IN_RIGHT | IN_LEFT)) == (IN_RIGHT | IN_LEFT))
 		linput -= IN_RIGHT | IN_LEFT;
 
+	/* THE WEAPON HALF (#161, round 161b2a, item 2; design section 1.5). The
+	 * second and much smaller seam of this function, and the last thing that
+	 * touches IN_DRAW before the word leaves: the keyboard's Key(9) and the
+	 * pad's jLayout[5] are both three hundred lines above, and nothing
+	 * between them and here reads or writes that bit - measured by grep, it
+	 * has exactly two producers in this file and no other consumer.
+	 *
+	 * WHERE THE EDGE LIVES TODAY, because Hold has to produce its request in
+	 * the form the reader takes, and the reader is game\larafire.cpp. MEASURED:
+	 * there is no edge in the input word at all. Key(9) is a level read of
+	 * keymap[], `input` is `linput` unlatched, and dbinput is computed but
+	 * never asked about IN_DRAW by anyone. What debounces the draw key is
+	 * LARA'S OWN STATE MACHINE: LaraGun's opening chain asks about IN_DRAW
+	 * only at LG_NO_ARMS (:229) and at LG_READY (:290), and between those two
+	 * she is in LG_DRAW_GUNS or LG_UNDRAW_GUNS, where the chain has no branch
+	 * at all and the animation simply runs. The animation IS the debounce. So
+	 * a held key in the original really does draw and holster without end -
+	 * base does that today - and a player never sees it only because a tap is
+	 * shorter than the animation. That is why ModernWeaponBits asks for the
+	 * disagreement and not for the key: one request per tick on which the
+	 * state and the key disagree, none while the animation runs (both truths
+	 * false), and therefore nothing that can queue up and fire a second later.
+	 * It corrects itself, because the very next tick reads the state the
+	 * request produced.
+	 *
+	 * THE GUARD IS THE STATES IN WHICH NOBODY WOULD CONSUME THE REQUEST. The
+	 * self-correction above rests on LaraGun running on the next tick; where
+	 * it does not, a request would sit in the word for as long as the state
+	 * stood still. Measured consequence, and the reason this guard is not
+	 * decoration: specific\fmv.cpp:263 skips a video on a RISING edge of
+	 * IN_OPTION|IN_DRAW|IN_SELECT, so a bit that is on for every frame of the
+	 * outro FMV - LG_READY from the end of the level, the key up - would
+	 * saturate that OR and make the video unskippable by any key. Hence
+	 * App.fmv. The other terms are the state half of the movement seam's own
+	 * guard (see modern_seam above), read with the same meaning: a cutscene, a
+	 * spotcam and bDisableLaraControl are ticks she is not the player's to
+	 * steer, the inventory and the pause menu (InventoryActive covers both)
+	 * and the title are ticks a menu owns the word. ControlMethod and
+	 * tomb5.control_modern are deliberately NOT terms: combat mode is the
+	 * user's decision for both control types and for keyboard and pad alike.
+	 *
+	 * AND THE HANDS BUSY NEED NO TERM. A ladder, the water, a vehicle and a
+	 * pickup all leave lara.gun_status at LG_HANDS_BUSY, which is neither
+	 * LG_READY nor LG_NO_ARMS, so both truths are false and the function is
+	 * quiet by its own rule. lara.Busy strips IN_DRAW forty lines below for
+	 * the binocular and lasersight sessions on top of that, exactly as it
+	 * strips the original's.
+	 *
+	 * THE TORCH IS THE ONE HAND THAT IS NOT A WEAPON: WEAPON_TORCH at
+	 * LG_READY is a burning stick, not a gun, and `ready` says no - design
+	 * section 1.5 names it, and LaraGun returns before its chain for it
+	 * anyway (:221).
+	 *
+	 * AND THE FLARE NEEDS NO EXCEPTION, which was worth measuring rather than
+	 * assuming, because a rule that put a lit flare away on the first tick the
+	 * key was not held would make flares unusable in Hold. It cannot happen:
+	 * game\laraflar.cpp:175, ready_flare(), parks a BURNING flare at
+	 * LG_NO_ARMS and not at LG_READY. So the flare reads as `holstered`, and
+	 * with the key up neither rule fires and she keeps it; with the key down
+	 * the request goes out and LaraGun throws the flare and draws the gun -
+	 * which is what a draw-key press with a flare in hand does in the
+	 * original too. */
+	if (tomb5.combat_hold)
+	{
+		const long combat_seam = lara_item && !App.fmv && !GLOBAL_playing_cutseq &&
+			!bUseSpotCam && !bDisableLaraControl && !InventoryActive &&
+			gfLevelId != LVL5_TITLE;
+
+		// The draw key or button physically down THIS tick - which is what
+		// this bit already is at this point, from either producer.
+		const long held = (linput & IN_DRAW) != 0;
+		const long ready = (combat_seam && lara.gun_status == LG_READY &&
+			lara.gun_type != WEAPON_TORCH) ? 1 : 0;
+		const long holstered = (combat_seam && lara.gun_status == LG_NO_ARMS) ? 1 : 0;
+
+		if (combat_seam)
+			linput = ModernWeaponBits(1, ready, holstered, held, linput);
+
+		/* COMBATLOG, behind -log like every other seam of this round. On the
+		 * CHANGE of the produced bit and not every tick, because the bit is
+		 * one tick long in play and a per-tick line would bury it; the two
+		 * truths and the key are printed beside it so a reader can see WHICH
+		 * of the four rules answered. -1 so the first line of a session is
+		 * always written, whatever the bit turns out to be. */
+		if (gLogEnabled)
+		{
+			static long combat_last_draw = -1;
+			const long draw = (combat_seam && (linput & IN_DRAW)) ? 1 : 0;
+
+			if (draw != combat_last_draw)
+			{
+				Log("COMBATLOG f=%ld held=%d ready=%d holstered=%d draw=%d",
+					(long)GlobalCounter, (int)held, (int)ready, (int)holstered, (int)draw);
+				combat_last_draw = draw;
+			}
+		}
+	}
+
 	if (debounce)
 		dbinput = inputBusy;
 

@@ -4959,6 +4959,8 @@ static void firing_run()
 
 /* ---------------------------------------------------------- the weapons ---- */
 
+static void weapon_sequences();	/* the press-hold-release scripts, below */
+
 static void weapons()
 {
 	long bits;
@@ -5078,6 +5080,176 @@ static void weapons()
 	 * edge, together with the pointer keys it belongs to. What is ours here is
 	 * the other side of the same coin, asserted above: Toggle never invents a
 	 * bit and never swallows one. */
+
+	weapon_sequences();
+}
+
+/* LARA'S OWN GUN CYCLE, as a model (#161, round 161b2a, item 2). The truth
+ * table above says what the function answers to one tick; the sequences below
+ * say what a PLAYER gets, and for that the answer has to be fed back into the
+ * state that produced it. This is that feedback, and it is the engine's own
+ * chain and nothing invented: game\larafire.cpp asks about IN_DRAW at
+ * LG_NO_ARMS (:229) and at LG_READY (:290) and nowhere else, so while
+ * LG_DRAW_GUNS or LG_UNDRAW_GUNS runs the chain has no branch and the
+ * animation simply plays out (game\lara2gun.cpp:52 ends the draw at LG_READY,
+ * :495 ends the holster at LG_NO_ARMS). The animation is the debounce.
+ *
+ * The four states are numbered in the order she walks them. GUN_BUSY is
+ * LG_HANDS_BUSY - a ladder, the water, a vehicle - and answers neither truth,
+ * which is exactly why it is here: a script that runs through it must come out
+ * the other side with nothing queued. */
+enum { GUN_AWAY = 0, GUN_DRAWING = 1, GUN_OUT = 2, GUN_HOLSTERING = 3, GUN_BUSY = 4 };
+
+#define GUN_ANIM_TICKS 8	/* any length > 1 makes the point; the real draw is ~10 frames */
+
+typedef struct
+{
+	int draws;		/* transitions into the draw animation */
+	int holsters;		/* transitions into the holster animation */
+	int requests;		/* ticks on which IN_DRAW went out at all */
+	int state;		/* where she ended up */
+} GUN_RUN;
+
+/* One tick: ask ModernWeaponBits with the state's two truths, then let the
+ * engine's chain answer. `held` is the key, and `bits` carries the key's own
+ * IN_DRAW exactly as specific\input.cpp hands it over at the seam. */
+static void gun_tick(int mode, int held, int* state, int* timer, GUN_RUN* run)
+{
+	const long ready = (*state == GUN_OUT) ? 1 : 0;
+	const long holstered = (*state == GUN_AWAY) ? 1 : 0;
+	const long in = held ? MODERN_IN_DRAW : 0;
+	const long draw = ModernWeaponBits(mode, ready, holstered, (long)held, in) & MODERN_IN_DRAW;
+
+	if (draw)
+		run->requests++;
+
+	if (*state == GUN_AWAY && draw)
+	{
+		*state = GUN_DRAWING;
+		*timer = GUN_ANIM_TICKS;
+		run->draws++;
+	}
+	else if (*state == GUN_OUT && draw)
+	{
+		*state = GUN_HOLSTERING;
+		*timer = GUN_ANIM_TICKS;
+		run->holsters++;
+	}
+
+	if (*state == GUN_DRAWING || *state == GUN_HOLSTERING)
+		if (--*timer <= 0)
+			*state = (*state == GUN_DRAWING) ? GUN_OUT : GUN_AWAY;
+}
+
+/* A script is a string of ticks: '.' the key up, '#' the key down. */
+static GUN_RUN gun_script(int mode, int start, const char* script)
+{
+	GUN_RUN run;
+	int state = start;
+	int timer = 0;
+	const char* c;
+
+	run.draws = 0;
+	run.holsters = 0;
+	run.requests = 0;
+
+	for (c = script; *c; c++)
+		gun_tick(mode, (*c == '#') ? 1 : 0, &state, &timer, &run);
+
+	run.state = state;
+	return run;
+}
+
+static void weapon_sequences()
+{
+	GUN_RUN run;
+
+	printf("the weapon half - press, hold, release, fed back through her own state\n");
+
+	/* THE ITEM'S OWN SENTENCE: a press-hold-release script over the three gun
+	 * states gives exactly one draw and one holster. Thirty ticks held is
+	 * nearly four draw animations long, so anything that repeated its request
+	 * would show up here at once. */
+	run = gun_script(1, GUN_AWAY, ".....##############################..............................");
+	ok(run.draws == 1, "Hold: one long press draws exactly once", run.draws, 1);
+	ok(run.holsters == 1, "Hold: and the release holsters exactly once", run.holsters, 1);
+	ok(run.state == GUN_AWAY, "Hold: and she ends with empty hands", run.state, GUN_AWAY);
+	ok(run.requests == 2, "Hold: two ticks of the whole script carried the bit",
+		run.requests, 2);
+
+	/* THE MEASUREMENT THE SEAM RESTS ON, asserted rather than asserted about:
+	 * the SAME script in Toggle really does cycle, because Key(9) is a level
+	 * read and larafire turns every tick of it into the next transition. Base
+	 * does this today; a player never sees it because a tap is shorter than
+	 * the animation. If this ever came out 1 the premise of Hold would be
+	 * wrong, so it is worth a check of its own. */
+	run = gun_script(0, GUN_AWAY, ".....##############################..............................");
+	ok(run.draws >= 2, "Toggle: a held key cycles - the original, measured", run.draws >= 2, 1);
+	ok(run.state == GUN_AWAY, "Toggle: the cycle ends where the key leaves it",
+		run.state, GUN_AWAY);
+
+	/* CASE: the key is released DURING the draw animation. Nothing may be
+	 * queued - the holster is asked for on the first tick she is really
+	 * LG_READY, not on the tick the key came up. */
+	run = gun_script(1, GUN_AWAY, "##....................");
+	ok(run.draws == 1, "Hold: a short press still draws once", run.draws, 1);
+	ok(run.holsters == 1, "Hold: and holsters once, after the draw has finished",
+		run.holsters, 1);
+	ok(run.state == GUN_AWAY, "Hold: and nothing is left over", run.state, GUN_AWAY);
+
+	/* CASE: the hands are busy for the whole script - a ladder, the water, a
+	 * vehicle. Neither truth is true, so not one bit goes out, and no request
+	 * waits for the moment she is free. */
+	run = gun_script(1, GUN_BUSY, "..####..####..####..");
+	ok(run.requests == 0, "Hold: busy hands answer nothing at all", run.requests, 0);
+	ok(run.state == GUN_BUSY, "Hold: and the state is not touched", run.state, GUN_BUSY);
+
+	/* CASE: she comes out of the water with the key ALREADY down. The tick she
+	 * turns LG_NO_ARMS is the tick the draw goes out - one request, not one
+	 * per tick of the swim. */
+	{
+		GUN_RUN busy = gun_script(1, GUN_BUSY, "##########");
+		int state = GUN_AWAY;
+		int timer = 0;
+		int i;
+
+		ok(busy.requests == 0, "Hold: ten ticks of busy, held, queue nothing",
+			busy.requests, 0);
+
+		run.draws = 0;
+		run.holsters = 0;
+		run.requests = 0;
+
+		for (i = 0; i < 30; i++)
+			gun_tick(1, 1, &state, &timer, &run);
+
+		ok(run.draws == 1, "Hold: and the first free tick draws, once", run.draws, 1);
+		ok(state == GUN_OUT, "Hold: she is out of the water with the guns out",
+			state, GUN_OUT);
+	}
+
+	/* CASE: a savegame is loaded with the key down and the guns already out.
+	 * Held and ready agree, so the load is silent - she does not holster the
+	 * weapons the save gave her. */
+	run = gun_script(1, GUN_OUT, "####################");
+	ok(run.requests == 0, "Hold: a load with the key down and the guns out is silent",
+		run.requests, 0);
+	ok(run.state == GUN_OUT, "Hold: and they stay out", run.state, GUN_OUT);
+
+	/* ... and the same load with the key UP asks once, which is the agreement
+	 * the other way round and the whole point of Hold. */
+	run = gun_script(1, GUN_OUT, "....................");
+	ok(run.holsters == 1, "Hold: a load with the key up holsters, once", run.holsters, 1);
+	ok(run.requests == 1, "Hold: exactly one tick carried it", run.requests, 1);
+	ok(run.state == GUN_AWAY, "Hold: and she settles with empty hands", run.state, GUN_AWAY);
+
+	/* AND THE SCRIPT THAT WOULD CATCH A LATCH: press, release, press again.
+	 * Two presses, two draws, two holsters - a function that remembered
+	 * anything between them would come out odd. */
+	run = gun_script(1, GUN_AWAY, "############............############............");
+	ok(run.draws == 2, "Hold: two presses, two draws", run.draws, 2);
+	ok(run.holsters == 2, "Hold: two releases, two holsters", run.holsters, 2);
+	ok(run.state == GUN_AWAY, "Hold: and she ends where she started", run.state, GUN_AWAY);
 }
 
 /* --------------------------------------------------------- our own sweeps -- */

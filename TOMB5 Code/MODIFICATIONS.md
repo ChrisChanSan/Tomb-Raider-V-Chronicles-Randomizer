@@ -17021,7 +17021,15 @@ can no longer be read to mean the opposite of what happened; it still prints on
 a change rather than every tick, now of either value. (5) Three compiled
 executables under the workflow's text-scratch tree, which the rules put under
 `Agent-Scratch` only - all three from rounds 161a3/161a3b, none from this one.
-Deleted; this round's own scratch folders never held an executable.
+Their 123 object, program-database and incremental-link files are deleted; the
+three executables themselves are NOT, and saying otherwise would be the easier
+sentence to write. Every route refused them with access denied - Explorer's own
+delete, `del`, Python's `os.remove`, and a `chmod` beforehand - while the
+object files beside them in the same folders went without complaint. That is
+the machine protecting a compiled executable under the temp tree, which is the
+very reason the rules put executables under `Agent-Scratch` in the first place;
+only the user can clear those three. This round's own scratch folders never
+held an executable at all.
 Nothing executable moved for findings 1, 2 and 3: they are a record, a manual
 and a comment. Finding 4 changed one diagnostic line behind `-log`. Rebuilt and
 re-run once more, and the three counts above are still unmoved.

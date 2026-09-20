@@ -15847,7 +15847,7 @@ ratio the radius is up whenever the eye is further out than
 own radius and changes nothing at all inside it (which is where a wall keeps the
 eye). `camera_camcut` was reswept at each of the three distances the engine
 actually sets - 1536 behind her, 1024 in the puzzle states, 2048 on the rope
-(`game/lara.cpp`) - out to the distance `MODERN_CAM_LEAD_MAX` stops the lead at
+(`game/lara.cpp`) - out to the distance `MODERN_CAMERA_LEAD_MAX` stops the lead at
 altogether: **407, 609 and 812 against 1024**, each at or under the ideal's own
 step at that same distance (411, 616, 820), and no aim cut anywhere. That last
 sweep also answered a question nobody had asked: the orbit's own step is under
@@ -15861,11 +15861,77 @@ the value stops moving, when the cursor leaves the row, or when the page is left
 whichever comes first: once per adjustment however long the hold. The three
 toggles above it are debounced by `dbinput &` and never had this to avoid.
 
+**THE SECOND REVIEW PASS, AND THE ONE THING IT FOUND.** The fix round above was
+reviewed in its turn and not accepted either. One finding was real and is fixed;
+the three others were documentation, a named drift risk and a spelling of the
+commit trailer, and they are answered below - one of them by saying no, with the
+reason.
+
+The real one was **the movement reference going stale under the rich2 sniper
+camera**, which is item 4b failing in the one case the item's own sentence names
+by name: "without the orbit (the rich2 sniper camera, anything that makes
+`ModernCameraActive()` false) the measured vector stays". The trouble is that
+those two are not the same thing. `ModernCameraActive()` reads the option,
+`lara_item`, the title, the spotcam, the cutscene and first person - it does not
+read which camera the engine is running, and the sniper is the one level camera
+Modern deliberately keeps rather than discards (`CalculateCamera`'s own
+`modernDiscard` holds `sniperCam` back on purpose, the user's observation 5).
+So while a sniper camera has the view, `FixedCamera` runs, `ChaseCamera` and
+`CombatCamera` do not, `ModernCameraOrbit` never ticks - and she is still the
+player's to steer. `ModernCameraWorldYaw` went on answering the world angle the
+orbit had been left at, frozen at the tick the camera took over, so her course
+was built against a camera that is no longer on screen: pushing forward walked
+her along the bearing the chase camera had before the cut. Worse, `game/
+modern_state.cpp`'s own comment asserted the opposite of what the code did - it
+listed the sniper camera among the cases `ModernCameraActive()` is false in -
+which would have sent the next reader looking in the wrong file.
+
+The cure is a stamp, and it is the clip flag's own discipline reused rather than
+a second idea: `ModernCameraOrbit` writes `GlobalCounter` into
+`modern_cam_orbit_at` on every tick it runs, and `ModernCameraWorldYaw` declines
+unless that stamp is exactly one tick old. One apart is what a live orbit looks
+like from the seam, because `game/control.cpp` steps the counter at `:292`, runs
+`S_UpdateInput` at `:296` and `CalculateCamera` at `:677` of the same tick body -
+so the orbit's most recent tick is always the previous one. The arithmetic of
+"exactly one apart" moved into the pure file as `ModernCameraTickFollows`
+(`game/modern_camera.cpp`), where both stamps now read it and where a test can
+reach the wrap the engine meets once every thirty-six minutes. **Measured over a
+walk of the engine's own tick order** (100 ordinary ticks, 60 of sniper camera
+with the player still steering, then ordinary again): the old predicate answered
+with the frozen angle on **60 of the 60** sniper ticks, the new one on **1** -
+the first, where the orbit really did run on the tick before - and it declines
+again on the handover tick at the other end, where the camera on screen is still
+the sniper's. Nothing outside the sniper changes: a flyby, a cutscene, first
+person and the title are refused by `ModernCameraActive()` as before, and the
+look key never reaches the seam at all (`specific/input.cpp`'s own `!(input &
+IN_LOOK)`). The stamp is what catches whatever else ever stops the orbit without
+stopping her.
+
+The other three were not defects in what the engine does. The record said **six
+commits where there were seven** - the fix round made two and the second was the
+one writing the sentence - and this paragraph's own file list now says nine and
+names them. `ModernTest`'s `camera_lead` group **models `ModernCameraLeadEye` by
+hand** rather than compiling it, because `game/camera.cpp` cannot be linked
+without a level; that was disclosed at the test's end and is now disclosed at
+both, with a "change one, change the other" line in the function's own header,
+and the one piece of it that could be shared really is shared:
+`MODERN_CAM_LEAD_MAX` moved out of `camera.cpp` into `game/modern_camera.h` as
+`MODERN_CAMERA_LEAD_MAX`, so the test reads the tree's own number and deleting it
+breaks the test's build instead of its silence. And the **commit trailer is
+spelled two ways inside the round** - five with the running model's parenthetical
+form, one without it, and step 5's correctly naming Sonnet. That one is left
+alone on purpose: making it uniform means rewriting seven local commits to choose
+between two truthful spellings of the same attribution, and this project's own
+standing rule about history rewrites is that they kill every hash anybody has
+written down. A blemish in the log is cheaper than that, and it is recorded here
+instead.
+
 **THE FILES**, round 161a2b's own fifteen against base `04aa78a`, **2,827
 insertions, 619 deletions** at the end of step 5 (this record and the two README
 sentences are outside that count, the same convention round 161a2's own entry
-used). Six commits, `Round 161a2b (#161): <what>` - one per step, and one for
-the review's three findings:
+used). Nine commits, `Round 161a2b (#161): <what>` - five, one per step; two for
+the skeptical review's three findings; and two for its second pass, which is the
+last pair and the one that counted them:
 
 - `game/modern_camera.h` / `.cpp` (step 1) - the world yaw, the speed
   slider's mapping, the refuted wall feedback removed.
@@ -15895,6 +15961,14 @@ the review's three findings:
   the end of the hold), and `ModernTest.cpp`, whose `deadzone` and
   `camera_camcut` groups carry the proofs. **4,437 checks, 0 failed** - 2,297
   at base `04aa78a`, 4,410 at the end of step 5.
+- and the second review pass, in six: `game/camera.cpp` / `.h` (the orbit's own
+  tick stamp, `ModernCameraWorldYaw` declining a stale one, and the header's own
+  two lines saying what `ModernCameraActive()` does and does not mean),
+  `game/modern_camera.h` / `.cpp` (`ModernCameraTickFollows`, the shared
+  arithmetic under both stamps, and `MODERN_CAMERA_LEAD_MAX` given a home the
+  test can read), `game/modern_state.cpp` (the comment that had said the
+  opposite of what the code did) and `ModernTest.cpp`, whose new `camera_stamp`
+  group holds the gate including its wrap. **4,449 checks, 0 failed.**
 
 ## Building this yourself
 

@@ -109,11 +109,13 @@ worth knowing by name:
 
 ## Controls
 
-**Options → *Controls*.** The page opens with the two centred tabs *Key
-bindings* and *View*; under them come *Control type*, *Combat mode*, *Action*
-and then, sixth, *Control layout* (the old *Control Method*, renamed since
-round 161b1 to tell it apart from the newer *Control type* row) with four
-positions: *Keyboard*, *PS5 Controller*, *Xbox Controller* and *Joystick*.
+**Options → *Controls*.** The page opens with the three centred tabs *Key
+bindings*, *View* and, since round 161b2d, *Modes* (Combat mode, Sprint mode,
+Duck mode and Grab mode, moved together onto their own sub-page — see **The
+Modes sub-page** below); under them come *Control type*, *Action* and then
+*Control layout* (the old *Control Method*, renamed since round 161b1 to tell
+it apart from the newer *Control type* row) with four positions: *Keyboard*,
+*PS5 Controller*, *Xbox Controller* and *Joystick*.
 
 The three controller positions mostly mean the same thing to the game — they
 choose the **vocabulary** the buttons are named with, and with it the default
@@ -135,6 +137,18 @@ its own page rather than folding it into *Controls* itself, so it can page
 left and right with the arrows when the keyboard's sixteen bindable rows —
 seventeen under *Separate* — or the pad's fifteen (sixteen under *Separate*)
 do not fit one screen — the same paging *tomb5 options* already used.
+
+**Round 161b2d puts the hotkeys on the same page.** The game the user
+compares with keeps a second binding screen just for its "combination" keys —
+his own words were "Ich wuerde es nicht als zweite Liste machen, dann kann
+alles mit in die Keybinds rein, da koennen wir ja die Seiten umschalten." So
+the small and large medipack, quick save, quick load, the six weapons and (while
+*Cheats* is on) the five cheat hotkeys are now rows on the SAME *Key
+bindings* list, keyboard and pad alike — nothing new to open, only more pages
+of the one list. A centred **"1/N"** now sits between the paging arrows
+whenever the list needs more than one page, so it is always clear how many
+there are. See **The hotkey rows** and **The pad's Modifier and its chords**
+below for what those extra rows are and how they default.
 
 A few things worth knowing:
 
@@ -185,6 +199,44 @@ the *Key bindings* page only lists it under *Separate*, so *One key* shows
 the page exactly as it always has. The Modern default is a placeholder: a
 later round gives it Mouse Left, to match the game this scheme is modelled
 on.
+
+### The hotkey rows
+
+Round 161b2d adds fifteen more rows behind the nineteen above, on the same
+*Key bindings* list and the same *Reset to defaults*: the two medipacks,
+quick save, quick load, the six weapons (in the order the number keys always
+drew them), and — only while *Cheats* is on, see **Cheats and the cheat
+hotkeys** below — five cheat rows. Every one of them was a key hard-wired
+into the engine before this round; now it is a role like any other, so it can
+be rebound like any other. Defaults, both key sets, the one difference
+between them named:
+
+| Role | Tank / Modern default |
+|---|---|
+| Small medipack | 0 |
+| Large medipack | 9 |
+| Quick save | F5 |
+| Quick load | F6 (Tank) / **F9 (Modern)** |
+| Pistols | 1 |
+| Shotgun | 2 |
+| Uzis | 3 |
+| Revolver | 4 |
+| HK | 5 |
+| Crossbow (Grappling Gun in rich3) | 6 |
+| Fly mode (cheat) | F2 |
+| All weapons (cheat) | F7 |
+| All items (cheat) | F8 |
+| Heal (cheat) | F11 |
+| Skip level (cheat) | F1 |
+
+Quick load's Modern default is the round's one deliberate change from
+today's behaviour — every other default key, in either scheme, is the same
+key that already did that job. **If you had already bound one of the keys
+above to some other role, that key now belongs to the new role alone** —
+the engine's own binding-conflict rule, unchanged, just noticing a row that
+did not exist before. Rebinding a hotkey role *away* from its default key
+does not free that key from still working as the hotkey too, the same way
+any other role's abandoned default key keeps answering to it.
 
 The Modern column is deliberately one plain listing rather than a claim of
 being final — it is fully rebindable, the same as Tank's own. Every key shown
@@ -278,25 +330,71 @@ you left them.
 | Jump | Cross |
 | Action | Triangle |
 | Draw | L2 |
-| Flare | R1 |
+| Flare | R1 (PS5/Xbox DirectInput, generic) / **Modifier+R1** (PS5 DirectInput, generic — see below) |
 | Look | R3 |
 | Roll | Circle |
 | Inventory | Share |
 | Pause | Options |
-| Save | *Joy 13* on the Joystick page always, and on the PS5 and Xbox pages while the pad reports as DirectInput (the PS button, named as such, on the PS5 page). Over XInput those two pages stop naming buttons before they reach a PS or Guide button, so there *Save* starts unbound |
-| Load | unbound |
-| Small medipack / Large medipack | wherever this pad's own One-key table already puts them |
+| Save | *Joy 13* on the Joystick page always, and Modifier+R3 on the PS5 DirectInput and generic pages (round 161b2d — the plain PS-button default goes with it); unbound on the two XInput-ordered pages (PS5 XInput, Xbox), which name no spare button at all |
+| Load | Modifier+L3 on the PS5 DirectInput and generic pages; unbound elsewhere |
+| Small medipack / Large medipack | wherever this pad's own One-key table already puts them — except on the PS5 DirectInput and generic Tank rows, where the small medipack's usual button is now the Modifier and both medipacks go unbound there instead of sharing it (0 and 9 on the keyboard still reach them; the Modern d-pad rows are untouched) |
 | Secondary | R2 |
 
-### Sprint mode and Duck mode: Toggle or Hold
+### The pad's Modifier and its chords
 
-*Sprint mode* and *Duck mode* (round 161b2c), under *Controls*, each govern
-one key the same way *Combat mode* governs the draw key — Hold is the
-default and the original behaviour, Toggle turns a press into an on/off
-switch:
+Round 161b2d adds a **Modifier** role and twelve chorded roles behind it —
+weapon 1-6 and, while *Cheats* is on, the five cheat rows — the pad's own
+version of the keyboard's F-key hotkeys, on the SAME *Key bindings* list. A
+**chord** is the Modifier held down together with a second button; the value
+column shows it as `Mod+<Button>`, or `---+<Button>` if the Modifier is not
+bound to anything yet. Binding a chord: hold the Modifier and press the other
+button while the row waits; the Modifier alone never binds any row but its
+own. A plain binding and its chorded twin on the
+same button coexist as two separate rows (*Look*'s plain R3 and *Save*'s
+Modifier+R3, *Sprint*'s plain L3 and *Load*'s Modifier+L3); binding the
+Modifier onto a button already in use unbinds every role there, plain or
+chorded.
 
-- **Hold** (the default): sprint or duck while the key is held, stop the
-  moment you let go — today's behaviour.
+Defaults, decoded back to button names:
+
+| Role | PS5 DirectInput / generic default | PS5 XInput / Xbox default |
+|---|---|---|
+| Modifier | Touchpad (`Joy 14` on the generic page) | unbound — neither page names a spare button |
+| Pistols | Modifier+Cross | unbound |
+| Shotgun | Modifier+Circle | unbound |
+| Uzis | Modifier+Triangle | unbound |
+| Revolver | Modifier+Square | unbound |
+| HK / Crossbow | unbound | unbound |
+| Fly mode / All weapons / All items / Heal / Skip level (cheats) | unbound | unbound |
+
+With the Modifier unbound — every One-key pad, and the two XInput-ordered
+Separate pages — no chord can ever fire, and every plain role reads exactly
+as it did before this round.
+
+**A stored Separate pad set from before this round keeps its own bindings,
+chord-free, until you choose *Reset to defaults* once.** The engine tells a
+pre-161b2d set apart from a fresh one and leaves it alone rather than laying
+the new Modifier and its chords over buttons you had already bound
+yourself — *Reset to defaults* is what fetches the new row, Modifier and all,
+in one step.
+
+### The Modes sub-page: Combat, Sprint, Duck and Grab
+
+Since round 161b2d these four rows sit together on their own sub-page,
+**Modes** (German *Modi*), reached by a centred tab on *Controls* right after
+*View* — the same tabbed style *Key bindings* and *View* already use. Moving
+them off the main *Controls* list changed nothing about any one of them:
+same variable, same registry name, same default, same effect, only the page
+they are found on.
+
+### Combat mode, Sprint mode, Duck mode and Grab mode: Toggle or Hold
+
+*Combat mode*, *Sprint mode*, *Duck mode* and, since round 161b2d, *Grab
+mode* each govern one key or button the same way — Hold is the default and
+the original behaviour, Toggle turns a press into an on/off switch:
+
+- **Hold** (the default): sprint, duck or hold on while the key is held, stop
+  the moment you let go — today's behaviour.
 - **Toggle**: press once to start, press again to stop.
 
 A few things a toggled key still respects, because it is the same bit Lara's
@@ -307,17 +405,32 @@ finger:
   ducking, wading into deep water — and the toggle lets go the instant it
   does, or the moment you stop pushing a direction; it does not fight the
   dash timer or leave you sprinting on the spot.
-- **Duck** never holds her crouched where the bit means nothing: standing up
-  under a low ceiling still needs the ceiling, not the key. Going down onto
-  all fours is one of the moments the latch lets go (her hands are busy, the
-  same rule as a ladder below), so a crawl runs on the ceiling from there on:
-  she crawls until she reaches a spot she can actually stand in, stands up
-  there, and the next duck is a fresh press — pressing again *inside* the
-  crawl does not latch anything.
-- Both let go on their own at a level change, a savegame load, a cutscene,
-  death, entering water, and whenever her hands are busy — a ladder, a rope, a
-  crawl, a pickup — and while a menu owns the input, so a key still held
-  across one of those never latches by surprise.
+- **Duck** holds through the whole duck-and-crawl family now — crouching,
+  its roll, both duck turns, all fours, crawling forward and back, both crawl
+  turns, and a pickup made from any of them — and lets go only on a real
+  drop: a ladder, a rope, a crawl-to-hang, death, water, a cutscene, a menu
+  owning the input, or a level change. (An earlier printing of this manual
+  said the crawl dropped the latch because of the ceiling test alone — that
+  is what a low ceiling does to a *Hold* key too, but the latch itself
+  dropped there because entering the crawl briefly occupies her hands, the
+  same reason a ladder drops it; round 161b2d keeps the latch through the
+  crawl instead, so a crawl space still never traps you: the ceiling test
+  still decides when you may stand back up, and the next duck after that is
+  a fresh press.)
+- **Grab** (round 161b2d) governs letting go rather than holding a
+  direction: while hanging, shimmying, on a ladder, a pole, a rope, the zip
+  line, the parallel bars or the monkey swing, *Hold* is today's behaviour —
+  let the key go and she drops. *Toggle* lets you release the key and stay
+  put: a fresh press while holding on lets go instead, and — so a fall past a
+  lower ledge can never snap back onto it — that same press keeps letting go
+  for as long as you keep it held, so release it and press again to catch
+  something new. Nothing changes where the key was never "let go" in the
+  first place: firing a weapon, pushing a block, and every menu use of the
+  key are untouched, because the latch only ever touches the bit inside
+  Lara's own hold-on states.
+- Every one of the four lets go on its own at a level change, a savegame
+  load, a cutscene, death, entering water, and while a menu owns the input,
+  so a key still held across one of those never latches by surprise.
 
 ---
 
@@ -336,7 +449,7 @@ right). The seven tabs:
 | Tab | Holds | Default |
 |---|---|---|
 | Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
-| Controls | *Key bindings*, *View*, Control type, Combat mode, Action, Control layout, Camera speed, Dead zone, Targeting, Ammotype hotkeys | see below |
+| Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Targeting, Ammotype hotkeys | see below |
 | Graphics | *Display*, HD textures, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints | see **tomb5 options** |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, TR4 loadscreens, Loadbar style, Loading text | see **tomb5 options** |
 | tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
@@ -398,8 +511,48 @@ Worth spelling out:
 
   See *Frame rate* further down for what the settings really do and how to
   check them.
-- **Cheats** governs DOZY only — type it while playing to fly. The classic
-  cheats still need the compass in hand and are unaffected.
+- **Cheats** unlocks DOZY and, since round 161b2d, five hotkey rows on the
+  *Key bindings* page (below). The classic cheat words still need the compass
+  in hand.
+
+### Cheats and the cheat hotkeys
+
+Type **D O Z Y** while playing to fly — the classic chord, unchanged in what
+it does. Round 161b2a's Modern keyboard scheme had broken it: Z is Modern's
+*Step left* key, one of DOZY's own four letters, and Modern *Step* also
+carries the same bit the chord's own exit reads, so the flight switched on
+and off again in the same tick — she rose and immediately fell, which is
+what the user meant by "ich kann D.O.Z.Y ingame nicht mehr verwenden."
+Round 161b2d's fix is the one condition the flight needed: its exit is now
+ignored for as long as any of the four DOZY letters is still physically
+down. Nothing else about ending the flight changed — the walk key, and under
+Tank the step keys, still end it exactly as before; only Modern's own
+step-left key can no longer do it on its own, because holding it is now part
+of what keeps her flying.
+
+The inventory words — **G U N S**, **I T E M**, **S K I P**, **H E A L**,
+**B I T S** — are unchanged and still spelt out with the compass in hand;
+Modern's own S/A/E/P bindings can make them awkward to type there, which is
+what the user meant by "im Inventar G.U.N.S/S.K.I.P ist auch schwer zu
+verwenden." Round 161b2d's answer is not to change the words, but to give
+four of the five (all but BITS, which has no cheat effect of its own) a
+second doorway: a hotkey, bindable on the *Key bindings* page like any other
+row, keyboard and pad alike, that does exactly what the word does — while
+*Cheats* is on, in the game (not the title screen, not a cutscene, and not
+while Lara is dead), one press, one effect:
+
+| Cheat | Default key | Default pad chord |
+|---|---|---|
+| Fly mode (same toggle as DOZY) | F2 | unbound |
+| All weapons (same as GUNS) | F7 | unbound |
+| All items (same as ITEM) | F8 | unbound |
+| Heal (same as HEAL) | F11 | unbound |
+| Skip level (same as SKIP) | F1 | unbound |
+
+These five rows only appear on the *Key bindings* page while *Cheats* is
+switched on — with it off they are not offered at all, the same way
+*Secondary* is not offered under *One key*. See **The pad's Modifier and its
+chords** above for binding one of them to a pad chord.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
   pressing a weapon's number again while it is already out. Drawing a weapon
   and the medipacks work whether it is on or off.

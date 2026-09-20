@@ -17276,6 +17276,231 @@ Commits: `d86b8a6` (item 1), `d69e74d` (item 2), `da66ba8` (item 3), `b29adbf`
 fix round's corrections), `661de4a` (naming it here), `2fb27d5` (the second
 fix round, described directly above), and the one that names it here.
 
+#### Round 161b2d (#161) - one binding list, the pad's Modifier, the cheats' own doorway, and Grab mode
+
+Continuing directly from round 161b2c's own accepted head, `2ae3ba9`, on the
+same branch. The user sent the second binding page ("Kombinationen") of the
+game he compares with - his own screen, layout facts only, quoted below where
+they set a default - and four decisions: fold the pad's second binding list
+into the one *Key bindings* page rather than keep it apart, so a page
+indicator earns its place; treat his layout as "nur zum Test, es kann da
+schon das Remaster werden" (the Separate pad defaults follow it); accept F
+keys for the keyboard hotkeys and the pad's own chords for Cheats and the
+weapons ("Das mit den F Tasten und den Binds fuer den Controller ist ne gute
+Loesung ... Machen wir so"); and add Grab mode, "eine Funktion fuer die
+moderne Steuerung, dass Lara sich nicht festhalten muss, sie bleibt nach dem
+Greifen haengen und mit noch mal druecken laesst sie los" - amended mid-round
+to move all four mode rows onto their own sub-page ("Die vier Modi bitte auf
+eine Unterseite. Macht es uebersichtlicher"), and again by a play test of the
+accepted 161b2c build that found the Duck latch dropping in the crawl.
+
+**ITEM 1, THE PAGE INDICATOR AND THE KEYBOARD'S HOTKEY ROLES.** "1/N" now
+draws centred between the two paging arrows on `MENU_BOTTOM_ROW`, in their own
+colour, only while `pages > 1` - "Ich wuerde auch gerne in der Mitte zwischen
+den beiden Pfeilen eine Seitenangabe haben '1/N', dann ist das ein bisschen
+sauberer." Measured against the real font (`game/chardef.inc`) rather than
+assumed: the widest string this tree ever draws is `1/3` (see the page
+arithmetic below), 27 px scaled at 640x480, centred in the arrow gap with 10
+px clear on the tight side - it fits without moving the arrows.
+
+Fifteen more keyboard slots sit behind the original nineteen
+(`KEY_SCHEME_ROLES` 19 -> 34, `KEY_ROLE_SECOND` re-pinned to the literal 18
+rather than derived, so growing the table again cannot move it): the small
+and large medipack, quick save, quick load, the six weapons of
+`DoWeaponHotkey` in its own order, and the five cheat roles item 4 fills in.
+Ten hard-wired `keymap[DIK_*]` reads in `specific/input.cpp` became
+`Key(role)` one for one, same guard, same timer, same ammo-cycle condition -
+the pad halves of those same ten reads were left exactly as they were, item
+2's own work. Defaults, both rows identical but for the one deliberate change
+the user's screenshot named: 0, 9, F5, F6 (F9 under Modern), 1-6, F2, F7, F8,
+F11, F1. Measured and refuted before it shipped: the keyboard name tables
+`KeyboardButtons`/`GermanKeyboard` named none of DIK_F1..DIK_F12 at all, so
+eight of the fifteen new default keys would have printed a null pointer on
+the binding page - both tables now name F1, F2, F5-F9 and F11 (F3, F4, F10 and
+F12 stay nameless on purpose, because the outfit changer, `IN_E` and
+`specific/output.cpp` own them and a capture must keep refusing them).
+`MenuResolveKeybinds` now BUILDS its keyboard list into a static buffer
+instead of handing out a fixed table: the sixteen roles, *Secondary* only
+under *Separate*, the ten hotkeys, and the five cheat rows only while
+*Cheats* is on - a hidden role is asked for nothing, the same rule *Secondary*
+already lived under with *One key*. The one visible change for anyone who had
+already bound 0, 9, 1-6, F5 or F6 to some other role: that key now belongs to
+the role alone (Core's own conflict rule, unchanged) - REFINED from what the
+brief expected, and reported rather than smoothed over: the reverse case, a
+player rebinding one of the new roles AWAY from its default key, does not
+free that key from also being a hotkey, because `Key()`'s own default-row
+fallback is checked before `conflict[]` is ever consulted. A 161b2c registry
+walked through both directions: none of `Key0..18`/`MKey0..18` move, and the
+fifteen new names load as their row's own default in a build that never wrote
+them.
+
+**ITEM 2, THE PAD'S MODIFIER, ITS CHORDS, AND ITS OWN HOTKEY ROLES.** Twelve
+more pad roles sit behind the sixteen of round 161b2c (`JOY_ROLES` 16 -> 28,
+`JOY_ROLE_SECOND` likewise re-pinned to the literal 15): a Modifier, the six
+weapons and the five cheat roles. Whether a role fires is now ONE pure
+function, `PadRoleFires` (`game/pad_scheme.h`, beside `PadBitDown`): a chord
+role needs the Modifier held and its own button down, a plain role needs its
+button down and the Modifier NOT held - every pad producer, the medipacks,
+save/load and both new hotkey families read the pad through it now. With the
+Modifier unbound the function collapses to today's `joy_fire & (1 << bit)`
+term for term (swept over all 24 bits and 24 roles in `MenuTest`), so a
+One-key player - whose four `jDef*` default tables this round does not touch
+at all, item 1 already filled the new roles with -1 - gets today's engine
+back exactly. The flag that marks a role a chord lives beside its button
+number, its own array and its own registry names per set (`JChord`/
+`SJChord`), never folded into the button value itself, so a registry this
+build writes still loads in 161b2c without harm.
+
+The unread snapshot at `jLayout[16..31]` - two writers, `ApplyJoyDefaults` and
+`ApplyJoyScheme`, and no reader the whole tree over - is retired rather than
+grown to 28 entries apiece: the twelve new roles needed the room, and
+`ApplyJoyScheme` already recomputes the other scheme's repair in one call
+whenever it is wanted, fresher than a stored copy could be. `jSplitParked`
+grew with the active set instead.
+
+Capture: while a row waits and the Modifier is held, the NEXT other button is
+stored as a chord (the Modifier alone binds only its own row); a plain
+binding and its chord twin coexist as two separate rows (look R3 plain,
+quick save Modifier+R3); binding the Modifier onto a used button clears every
+role there, chord and plain alike, because a chord on the Modifier's own
+button could only ever fire when the Modifier is not held, which is not what
+it would say. The value column prints `Mod+<Button>` / `---+<Button>` -
+measured against the font: `<Modifier>+<Button>` does not fit at 4:3
+(`Touchpad+Stick R Down` is 273 px in a 240 px column), so the brief's own
+short-word fallback is what shipped, 215 px at its widest. Bit 13 on the PS5
+DirectInput page is named "Touchpad" now (it was still "Joy 14"); the generic
+page keeps the number.
+
+Defaults, decoded back to button names and swept for no shared pair, nothing
+on the Modifier's own button and no chord without it: on the two
+DirectInput-numbered tables (PS5 DirectInput, generic) the Modifier takes the
+touchpad click, quick save Modifier+R3, quick load Modifier+L3, flare
+Modifier+R1 (its old plain-R1 default goes with it), the four weapons
+Modifier+Cross/Circle/Triangle/Square, HK/crossbow/the cheats unbound; where
+the Separate row already put the small medipack on the touchpad's bit
+(Tank), both medipacks go unbound there rather than share it with the
+Modifier - 0 and 9 still reach them. The two XInput-ordered tables (PS5
+XInput, Xbox) name no spare button at all, so their Modifier stays unbound
+and their 161b2c defaults (plain R1 flare, save/load as they already were)
+are untouched. A 161b2c registry with `SJ*` bindings and no `SJChord` is
+recognised as pre-round and kept chord-free rather than have the new mask
+laid over his own buttons - measured that doing the naive thing would have
+cost him flare, quick save and the small medipack at once; one *Reset to
+defaults* fetches the new row whole.
+
+**ITEM 3, THE CHEATS.** DOZY traced tick by tick in the Modern key set:
+`LaraCheat`'s exit reads `IN_WALK && !IN_LOOK`, and the Modern step-left key
+is Z - one of the four DOZY letters - which under Modern also carries
+`IN_WALK` while `IN_LOOK` is stripped, so the chord's own switch and its own
+exit fired in the SAME logic tick: she rose 128 units and fell straight back
+out of `LW_FLYCHEAT` before a frame was ever drawn. CONFIRMED cause, ONE
+condition fixed it: the exit is now ignored while any of the four letters is
+still physically down (`LaraCheatLetterDown`), the walk key and the other
+three original exits untouched. REFINED from the brief: a Tank player holding
+the walk key AND a cheat letter at once now also keeps flying, and under
+Modern the step-left key can no longer end a flight on its own (step-right
+and the walk key still can) - producible, but nothing at the defaults, since
+no default row lands a role on Z by itself.
+
+The five cheat hotkeys - keyboard roles 29-33, pad roles 23-27 - fire only
+while *Cheats* is on, only with a living Lara in the game (not the title, not
+a cutscene, not dead), each on its own press edge: fly mode toggles through
+the same routine the chord now shares (`LaraCheatFlyToggle`); all
+weapons/items/heal/skip level call exactly what GUNS/ITEM/HEAL/SKIP already
+do in the inventory ring - measured that none of the four needs anything the
+ring itself would have set up, so calling them from `LaraControl` costs
+nothing the ring owed them. BITS gets no role, as asked. Seam: `CHEATLOG
+f=%ld what=<fly_on|fly_off|weapons|items|heal|skip> src=<word|hotkey>`,
+behind `gLogEnabled`, for every cheat that fires including the five words -
+only their LOG line moved onto a press edge, the words themselves still fire
+every tick their letters are held, exactly as before.
+
+**ITEM 4, GRAB MODE, THE MODES SUB-PAGE, AND THE DUCK LATCH THROUGH THE
+CRAWL.** `tomb5.grab_toggle` (registry `grab_toggle`, default 0 = Hold =
+today) is a third pure latch beside Sprint's and Duck's, applied to
+`IN_ACTION` at the same seam in `S_UpdateInput`. MEASURED FIRST: the
+"hold-on" family is 34 of Lara's 139 animation states, every one whose own
+collision or state routine drops her the instant `IN_ACTION`/`IN_ACTION_ANY`
+reads clear - the hang and its two side shimmies, the four corner turns, the
+monkey swing both ways and its 180, the climb states and the four ladder
+directions, the pole (stationary, up, down, both turns), the rope (catch,
+hold, both leans, the climb, the two exits) and the parallel bars, the zip
+line - swept against every OTHER reader of the same bits in the tree, none of
+which is reachable from inside the family, so the latch can never manufacture
+a catch it should not, and pushing a block is untouched for a stronger
+reason still: round 161b2c already moved the push loops onto `IN_INTERACT`,
+a bit this latch never touches. Toggle: inside the family the bit is
+delivered without the key, including on the first tick after a savegame load
+in a hang; a fresh press inside the family lets go, and the bit stays clear
+for as long as THAT press lasts, so falling past a lower ledge with the
+button still down cannot re-catch it - release and press again outside the
+family and the key is the key, one release earlier than a first glance
+suggests.
+
+The Duck latch's own crawl case is CORRECTED here, not merely re-described:
+161b2c's record called the crawl's drop "a property of the ceiling" - true of
+what happens next, but the drop itself is `LG_HANDS_BUSY`, set by
+`ANIM_DUCK_TO_ALL4S` the instant she goes down, which just as truly drops the
+latch for a Toggle player mid-crawl, exactly the symptom his play test log
+showed eleven times over (`duck=1` then, a second later, `duck=0
+drop=1/1`). MEASURED the duck-and-crawl family the same way: twelve states -
+duck, its roll, both duck turns, all fours, crawl forward and back, both
+crawl turns, and the three pickup states reachable from a duck or a crawl -
+against every place inside it that still sets `LG_HANDS_BUSY` (`AS_ALL4S`'s
+own transition animation, and nothing else in the twelve). With Duck mode
+Toggle the latch now holds through the whole family and drops only outside
+it - a crawl-to-hang, a ladder, a rope - or on a real drop shared with
+Sprint's own list; no trap follows, because the ceiling test that already
+governs a held key governs a released latch exactly the same way, so a low
+crawl space still keeps her down until she reaches a spot to stand in. `MODELOG`
+gained a fourth field at its end, ` grab=%d`.
+
+The four mode rows - Combat, Sprint, Duck, and the new Grab - moved together
+onto a new sub-page, *Modes* (German *Modi*), opened by a centred tab on
+*Controls* directly after *View*, per the user's own decision mid-round
+("Die vier Modi bitte auf eine Unterseite"): *Controls* is ten rows now, one
+page (`MenuPageCount(10,12) = 1`); *Modes* is four, also one page
+(`MenuPageCount(4,12) = 1`) - neither ever draws the new "1/N" indicator,
+since it needs `pages > 1`. The three moved rows kept their callbacks, save
+class and `MENULOG` row names; only the page name in their own log lines
+changed, from `page=Controls` to `page=Modes`. A new `menu_page_id`,
+`MENU_PAGE_MODES`, was appended after every existing id rather than inserted
+among them, so nothing already in `menu_pages[]` changed its number; back
+navigation and cursor memory follow the same stack every other tab uses.
+
+**PROOF.** `be.bat` clean throughout; `bmt.bat`/`ModernTest.exe` unchanged
+through items 1-3 (none of them touch `modern_move.cpp`), 5773 checks (0
+failed) after item 4 (+314: `grab_family` and `duck_family`, both swept
+0..138 against a written-out reference, and the latch script); `bmenu.bat`/
+`MenuTest.exe` 18,702 checks (0 failed) after item 1 (+4164), 23,126 (0
+failed) after item 2 (+4424), unchanged by item 3 (no role or table item 3
+adds is one `MenuTest` sweeps by itself), 23,134 (0 failed) after item 4
+(+8: the two new pages' own arithmetic); `bit.bat`/`InterpTest.exe` 373
+checks, 0 failed throughout, run each time as a control since this round
+touches nothing it owns. Line endings preserved per file at every step,
+checked on the git blobs. The game folder was never touched by this round's
+own builds, checked by file time against the user's copy there at every
+step - though intermediate release EXEs turned up there twice from outside
+the build path (steps 3 and 4 both name it), matching his documented habit of
+fetching a build from `release\` himself mid-round.
+
+**OPEN.** Play test: F9 as Modern's quick load; the fifteen new keyboard
+hotkeys and the twelve new pad roles on the paged *Key bindings* list; the
+"1/N" indicator at his own resolution; the Separate pad chords (Touchpad held
+plus R3/L3/R1/Cross/Circle/Triangle/Square); the five cheat hotkeys with
+*Cheats* on, keyboard and pad; DOZY under Modern (D+O+Z+Y held and released,
+Z no longer ending it, the walk key and X still doing so); Grab mode Toggle
+through a hang, a shimmy, a corner, the monkey swing, a ladder, a pole, a
+rope, the zip line and the parallel bars, and the drop-and-catch case; Duck
+mode Toggle through a whole crawl, including a pickup made from it; the new
+*Modes* sub-page's back navigation. A 161b2c player with a stored Separate
+pad set keeps his own bindings, chord-free, until he chooses *Reset to
+defaults* once - worth a line to him directly, since nothing on the binding
+page itself says so.
+
+Commits: `81a8827` (item 1), `f331108` (item 2), `884bd0a` (item 3),
+`9a26fbc` (item 4), and the one that names it here.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

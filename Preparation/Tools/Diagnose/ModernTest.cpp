@@ -5084,6 +5084,194 @@ static void weapons()
 	weapon_sequences();
 }
 
+/* ------------------------------------------------- Sprint and Duck mode ---- */
+
+/* One tick of ModernModeLatch, as specific\input.cpp calls it: the raw key's
+ * own bit is already in the word, the function hands back what leaves the
+ * assembly. `bit` is the mode's bit and nothing else is ever in the word here
+ * except the one companion bit the "everything else is left alone" checks
+ * carry. */
+static long latch_tick(long toggle, int down, int drop, long* state, long bit, long extra)
+{
+	const long in = (down ? bit : 0) | extra;
+
+	return ModernModeLatch(toggle, down, drop, state, bit, in);
+}
+
+static void mode_latch()
+{
+	long state;
+	long bits;
+	int i;
+
+	printf("the two mode latches - Hold is the original, bit for bit\n");
+
+	/* HOLD IS THE DEFAULT, and this is the whole of "byte-identical at the
+	 * defaults" for this function: every combination of key, drop and word
+	 * comes back exactly as it went in, and the state is left at 0 so that a
+	 * trip through Toggle and back cannot resurrect a latch. */
+	{
+		long differs = 0;
+		long stuck = 0;
+		int down, drop, b;
+
+		for (down = 0; down < 2; down++)
+			for (drop = 0; drop < 2; drop++)
+				for (b = 0; b < 4; b++)
+				{
+					const long in = (b & 1 ? MODERN_IN_SPRINT : 0) |
+						(b & 2 ? (MODERN_IN_FORWARD | MODERN_IN_WALK) : 0);
+
+					state = MODERN_LATCH_ON | MODERN_LATCH_KEY;	// a latch from before the row was switched off
+
+					if (ModernModeLatch(0, down, drop, &state, MODERN_IN_SPRINT, in) != in)
+						differs++;
+
+					if (state != 0)
+						stuck++;
+				}
+
+		ok(differs == 0, "Hold differs on none of the 16 combinations", differs, 0);
+		ok(stuck == 0, "Hold clears the memory on every one of them", stuck, 0);
+	}
+
+	/* THE PRESS LATCHES AND THE NEXT PRESS RELEASES. Four ticks: press, hold,
+	 * release, press again - the shortest script that says "toggle". */
+	state = 0;
+	bits = latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0);
+	ok((bits & MODERN_IN_DUCK) != 0, "Toggle: the press latches the bit on",
+		bits & MODERN_IN_DUCK, MODERN_IN_DUCK);
+	bits = latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0);
+	ok((bits & MODERN_IN_DUCK) != 0, "Toggle: holding it down changes nothing",
+		bits & MODERN_IN_DUCK, MODERN_IN_DUCK);
+	bits = latch_tick(1, 0, 0, &state, MODERN_IN_DUCK, 0);
+	ok((bits & MODERN_IN_DUCK) != 0, "Toggle: and the bit survives the release",
+		bits & MODERN_IN_DUCK, MODERN_IN_DUCK);
+	bits = latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0);
+	ok((bits & MODERN_IN_DUCK) == 0, "Toggle: the second press lets it go",
+		bits & MODERN_IN_DUCK, 0);
+	bits = latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0);
+	ok((bits & MODERN_IN_DUCK) == 0,
+		"Toggle: and the key still down afterwards does not latch it again",
+		bits & MODERN_IN_DUCK, 0);
+
+	/* A LATCHED BIT STANDS FOR AS LONG AS NOBODY ASKS IT TO GO. Thirty ticks
+	 * with the key up - a second of play - and it is still there. */
+	{
+		int lost = 0;
+
+		state = 0;
+		latch_tick(1, 1, 0, &state, MODERN_IN_SPRINT, 0);
+
+		for (i = 0; i < 30; i++)
+			if ((latch_tick(1, 0, 0, &state, MODERN_IN_SPRINT, 0) & MODERN_IN_SPRINT) == 0)
+				lost++;
+
+		ok(lost == 0, "Toggle: a latched bit holds for thirty ticks", lost, 0);
+	}
+
+	/* THE DROP. It clears the latch, and a drop tick is a Hold tick bit for
+	 * bit: whatever the key says goes through untouched. That is what lets the
+	 * binocular zoom keep reading IN_SPRINT and IN_DUCK while the sight is up
+	 * (game\camera.cpp), which is the one reader that needs a held key. */
+	state = 0;
+	latch_tick(1, 1, 0, &state, MODERN_IN_SPRINT, 0);
+	bits = latch_tick(1, 0, 1, &state, MODERN_IN_SPRINT, 0);
+	ok((bits & MODERN_IN_SPRINT) == 0, "a drop lets the latch go",
+		bits & MODERN_IN_SPRINT, 0);
+	ok((state & MODERN_LATCH_ON) == 0, "and takes it out of the memory as well",
+		state & MODERN_LATCH_ON, 0);
+	bits = latch_tick(1, 1, 1, &state, MODERN_IN_SPRINT, 0);
+	ok((bits & MODERN_IN_SPRINT) != 0, "a drop tick hands the raw key through",
+		bits & MODERN_IN_SPRINT, MODERN_IN_SPRINT);
+	ok((state & MODERN_LATCH_ON) == 0, "and a press on a drop tick latches nothing",
+		state & MODERN_LATCH_ON, 0);
+
+	/* THE KEY HELD ACROSS A DROP - the level change, and the menu. The key
+	 * memory is tracked on drop ticks too, so the tick the drop ends is not a
+	 * fresh press and nothing latches by itself. */
+	{
+		int latched = 0;
+
+		state = MODERN_LATCH_ON | MODERN_LATCH_KEY;	// ducked, key down, and a level starts
+		ModernModeLatchDrop(&state);
+		ok((state & MODERN_LATCH_ON) == 0, "the outside drop clears the latch",
+			state & MODERN_LATCH_ON, 0);
+		ok((state & MODERN_LATCH_KEY) != 0, "and leaves the key memory alone",
+			state & MODERN_LATCH_KEY, MODERN_LATCH_KEY);
+
+		for (i = 0; i < 8; i++)
+			if ((latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0) & MODERN_IN_DUCK) != 0)
+				latched++;
+
+		ok(latched == 0, "a key held across the boundary latches on none of eight ticks",
+			latched, 0);
+
+		bits = latch_tick(1, 0, 0, &state, MODERN_IN_DUCK, 0);
+		ok((bits & MODERN_IN_DUCK) == 0, "the release is still no press",
+			bits & MODERN_IN_DUCK, 0);
+		bits = latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0);
+		ok((bits & MODERN_IN_DUCK) != 0, "and the next real press latches again",
+			bits & MODERN_IN_DUCK, MODERN_IN_DUCK);
+	}
+
+	/* EVERY OTHER BIT IS LEFT ALONE, latched, unlatched and dropped. */
+	{
+		const long extra = MODERN_IN_FORWARD | MODERN_IN_WALK;
+		int hurt = 0;
+
+		state = 0;
+
+		for (i = 0; i < 6; i++)
+		{
+			bits = latch_tick(1, i & 1, (i == 4), &state, MODERN_IN_SPRINT, extra);
+
+			if ((bits & extra) != extra)
+				hurt++;
+		}
+
+		ok(hurt == 0, "the other bits come through all six ticks untouched", hurt, 0);
+	}
+
+	/* AND THE TWO MODES DO NOT SHARE A THING. Each carries its own state and
+	 * its own bit, which is how one row can say Toggle while the other says
+	 * Hold - the case the options page makes possible and the seam has to
+	 * honour. */
+	{
+		long sprint = 0;
+		long duck = 0;
+
+		bits = MODERN_IN_SPRINT | MODERN_IN_DUCK;
+		bits = ModernModeLatch(1, 1, 0, &sprint, MODERN_IN_SPRINT, bits);
+		bits = ModernModeLatch(0, 1, 0, &duck, MODERN_IN_DUCK, bits);
+		ok((bits & MODERN_IN_SPRINT) != 0 && (bits & MODERN_IN_DUCK) != 0,
+			"sprint Toggle beside duck Hold: both bits out on the press tick",
+			bits & (MODERN_IN_SPRINT | MODERN_IN_DUCK),
+			MODERN_IN_SPRINT | MODERN_IN_DUCK);
+
+		bits = 0;
+		bits = ModernModeLatch(1, 0, 0, &sprint, MODERN_IN_SPRINT, bits);
+		bits = ModernModeLatch(0, 0, 0, &duck, MODERN_IN_DUCK, bits);
+		ok((bits & MODERN_IN_SPRINT) != 0 && (bits & MODERN_IN_DUCK) == 0,
+			"and on release only the latched one stays",
+			bits & (MODERN_IN_SPRINT | MODERN_IN_DUCK), MODERN_IN_SPRINT);
+		ok(duck == 0, "the Hold mode keeps no memory at all", duck, 0);
+	}
+
+	/* THE BITS THEMSELVES, like bit_values() does for the other nine: the
+	 * mirrors in game\modern_move.h are what specific\input.cpp passes in, and
+	 * global\types.h is checked against them by the static_assert in
+	 * game\modern_state.cpp - which this tool cannot compile, so the numbers are
+	 * written out here as well. */
+	ok(MODERN_IN_DUCK == 0x20000000, "MODERN_IN_DUCK is IN_DUCK's own bit",
+		MODERN_IN_DUCK, 0x20000000);
+	ok(MODERN_IN_SPRINT == 0x40000000, "MODERN_IN_SPRINT is IN_SPRINT's own bit",
+		MODERN_IN_SPRINT, 0x40000000);
+	ok((MODERN_MOVE_MASK & (MODERN_IN_DUCK | MODERN_IN_SPRINT)) == 0,
+		"and neither is in MODERN_MOVE_MASK - the movement seam never writes them",
+		MODERN_MOVE_MASK & (MODERN_IN_DUCK | MODERN_IN_SPRINT), 0);
+}
+
 /* LARA'S OWN GUN CYCLE, as a model (#161, round 161b2a, item 2). The truth
  * table above says what the function answers to one tick; the sequences below
  * say what a PLAYER gets, and for that the answer has to be fed back into the
@@ -7383,6 +7571,7 @@ int main()
 	cam_steer();
 	firing_run();
 	weapons();
+	mode_latch();
 	sweeps();
 	camera_orbit();
 	camera_speed();

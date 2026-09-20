@@ -69,6 +69,8 @@ enum modern_input_bits
 	MODERN_IN_WALK =	0x80,	// IN_WALK
 	MODERN_IN_LSTEP =	0x400,	// IN_LSTEP
 	MODERN_IN_RSTEP =	0x800,	// IN_RSTEP
+	MODERN_IN_DUCK =	0x20000000,	// IN_DUCK - Duck mode, and nothing else here
+	MODERN_IN_SPRINT =	0x40000000,	// IN_SPRINT - Sprint mode (#161, round 161b2c, item 4)
 
 	/* The six bits that say WHERE she goes. This is what the direct turn
 	 * replaces when it takes the turning into its own hand (step 4): it
@@ -83,6 +85,20 @@ enum modern_input_bits
 	 * NOT in it: the weapon half hands its bits back rather than replacing
 	 * them, and the movement half never touches the draw key. */
 	MODERN_MOVE_MASK =	MODERN_DIR_MASK | MODERN_IN_WALK
+};
+
+/* THE TWO MODE LATCHES' WHOLE MEMORY (#161, round 161b2c, item 4). Two bits
+ * per mode, in one long the CALLER owns - the same division ModernWeaponBits
+ * draws, where the pure function decides and the engine keeps the state.
+ *
+ * MODERN_LATCH_KEY is the key as it stood LAST tick and is what makes the
+ * press an edge; it is tracked on every tick the option is on, including the
+ * ticks the latch may not stand, so that a key held across a level boundary or
+ * out of a menu cannot arrive as a fresh press. */
+enum modern_latch_bits
+{
+	MODERN_LATCH_ON =	0x1,	// the bit is latched on
+	MODERN_LATCH_KEY =	0x2	// the key or button was down on the previous tick
 };
 
 /* What came out, for the log and for the tests. The translation itself makes
@@ -823,5 +839,7 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
 	MODERN_RESULT* out, long* yaw_delta);
 long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, long bits);
+long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, long bits);
+void ModernModeLatchDrop(long* state);
 void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, long stick_y,
 	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out);

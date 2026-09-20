@@ -2777,6 +2777,21 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * bits leave every producer together and the engine is base. */
 	bool action_split;
 
+	/* SPRINT MODE AND DUCK MODE (#161, round 161b2c, item 4 - the user: "
+	 * 'Sprintmodus' und 'Duckmodus' kann auch mit rein"). Off = Hold, the
+	 * engine's own behaviour: the bit is in the word for exactly as long as the
+	 * key or button is down. On = Toggle: a press latches the bit and the next
+	 * press releases it, `ModernModeLatch` (game\modern_move.cpp) being the
+	 * whole of the arithmetic and specific\input.cpp's mode seam its one caller.
+	 *
+	 * Read on both control types and for keyboard and pad alike, like the two
+	 * rows above, and each on its own bit - a player may well want a latched
+	 * sprint and a held duck. Off, the seam is not entered at all and the two
+	 * bits leave S_UpdateInput exactly as their producers wrote them.
+	 * Registry: sprint_toggle, duck_toggle. */
+	bool sprint_toggle;
+	bool duck_toggle;
+
 	/* THE CAMERA SPEED SLIDER (#161, round 161a2b, item 5). "Der rechte Stick
 	 * muss noch schneller werden, der ist viel zu langsam. Am besten ein
 	 * Slider wie die SFX und Musik." - so this is a row on the Controls page,

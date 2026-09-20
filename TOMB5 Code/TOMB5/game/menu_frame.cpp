@@ -247,6 +247,52 @@ static bool MenuStepCombatMode(long, long dir)
 	return 1;
 }
 
+/* SPRINT MODE AND DUCK MODE (#161, round 161b2c, item 4). Two rows of the same
+ * shape as Combat mode above, and directly under it because that is where the
+ * user's sentence puts them - "'Sprintmodus' und 'Duckmodus' kann auch mit
+ * rein", said in one breath with the Action split.
+ *
+ * The value words are the other way round from Combat mode's on purpose: there
+ * 0 is Toggle, because the engine's own draw key already IS a toggle; here 0 is
+ * Hold, because the engine's own sprint and duck keys are held. Both rows say
+ * "off = what the engine does today", which is the rule, not the word. */
+static const char* MenuValSprintMode(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.sprint_toggle ? "Toggle" : "Hold"));
+	return buf;
+}
+
+static bool MenuStepSprintMode(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.sprint_toggle = !tomb5.sprint_toggle;
+	// A latch must not outlive its own option: with both rows at Hold the mode
+	// seam is not entered at all, so nothing in S_UpdateInput would ever clear
+	// it again (specific\input.cpp).
+	InputModeLatchReset();
+	return 1;
+}
+
+static const char* MenuValDuckMode(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.duck_toggle ? "Toggle" : "Hold"));
+	return buf;
+}
+
+static bool MenuStepDuckMode(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.duck_toggle = !tomb5.duck_toggle;
+	InputModeLatchReset();		// the same reason as one row up
+	return 1;
+}
+
 static const char* MenuValAction(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.action_split ? "Separate" : "One key"));
@@ -1273,6 +1319,13 @@ static const menu_row menu_rows_controls[] =
 	MENU_TAB("View", MENU_PAGE_VIEW),
 	MENU_VALUE("Control type", MenuValControlType, MenuStepControlType, MENU_SAVE_TOMB5),
 	MENU_VALUE("Combat mode", MenuValCombatMode, MenuStepCombatMode, MENU_SAVE_TOMB5),
+	// #161, round 161b2c item 4 - directly under Combat mode, as the user's own
+	// sentence puts them. The page stands at twelve rows with these two, which
+	// is MENU_MAX_ROWS exactly (game\menu_frame.h) - so MenuPageCount gives it
+	// one page and no arrows, the way menu_rows_graphics has had twelve since
+	// round 161b1.
+	MENU_VALUE("Sprint mode", MenuValSprintMode, MenuStepSprintMode, MENU_SAVE_TOMB5),
+	MENU_VALUE("Duck mode", MenuValDuckMode, MenuStepDuckMode, MENU_SAVE_TOMB5),
 	MENU_VALUE("Action", MenuValAction, MenuStepAction, MENU_SAVE_TOMB5),
 	MENU_VALUE("Control layout", MenuValControlLayout, MenuStepControlLayout, MENU_SAVE_GAME),
 	MENU_SLIDER("Camera speed", -1, MenuNumCameraSpeed, MenuStepCameraSpeed, MENU_SAVE_TOMB5, MenuEnabledModern),

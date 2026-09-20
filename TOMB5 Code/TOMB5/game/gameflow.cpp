@@ -1126,6 +1126,15 @@ void DoLevel(uchar Name, uchar Audio)
 	if (tomb5.control_modern)
 		ModernResetControls();
 
+	/* AND THE TWO MODE LATCHES LET GO HERE TOO (#161, round 161b2c, item 4).
+	 * The same line, the same reason and the same reach - a level start and,
+	 * through sgRestoreGame's one caller sixty lines above, every savegame
+	 * restore. NOT under tomb5.control_modern, unlike the call above it: Sprint
+	 * mode and Duck mode are read in both control types, so a latch left
+	 * standing at Tank would be a key nobody is holding in the next level.
+	 * Inert at the defaults, where the two statics it clears are already 0. */
+	InputModeLatchReset();
+
 	gfStatus = ControlPhase(2, 0);
 	Log("DoLevel: first logic phase done");
 	dbinput = 0;
@@ -1339,6 +1348,11 @@ const char* CustomText(const char* engl)
 		// German string in this table carries one; the 'r' after it is no hex
 		// digit, so the escape ends where it should.
 		{ "Secondary",       "Secondary",       "Sekund\xE4r",    "Secondary",          "Secondary" },
+		// #161, round 161b2c step 3 - the two mode rows under Combat mode. Only
+		// the labels are new: their two values, Hold and Toggle, are the rows
+		// above's own words and are already in this table.
+		{ "Sprint mode",     "Sprint mode",     "Sprintmodus",    "Sprint mode",        "Sprint mode" },
+		{ "Duck mode",       "Duck mode",       "Duckmodus",      "Duck mode",          "Duck mode" },
 		// #161, round 161a2b step 5 - the Camera speed row (item 5). Same
 		// rule as the block above: only German is a real translation, the
 		// other three repeat the English literal on purpose.

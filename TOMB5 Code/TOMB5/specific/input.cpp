@@ -724,6 +724,39 @@ static long modern_look_tank;
  * reads it and nothing writes it. */
 static long modern_tank_prev;
 
+/* SPRINT MODE AND DUCK MODE, THEIR WHOLE MEMORY (#161, round 161b2c, item 4).
+ * Two longs of MODERN_LATCH_* bits, one per mode, exactly as
+ * game\modern_move.h divides the work: the arithmetic is pure and lives there,
+ * the state is the engine's and lives here. Written only from the mode seam in
+ * S_UpdateInput, which is entered only while one of the two rows says Toggle,
+ * and from InputModeLatchReset below. At the defaults nothing reads or writes
+ * them, and they stay at the 0 the loader gives every static. */
+static long sprint_latch;
+static long duck_latch;
+
+/* "THIS LATCH IS OFF NOW", said from outside a tick. Three callers, each with
+ * its own reason:
+ *
+ * - game\gameflow.cpp, beside the level's priming tick. That one line is a
+ *   level start AND every savegame restore, because sgRestoreGame has exactly
+ *   one caller and it is sixty lines above it in the same function - the same
+ *   argument ModernResetControls' call there already rests on. NOT under
+ *   tomb5.control_modern, unlike that call: these two modes are read in both
+ *   control types.
+ * - game\menu_frame.cpp, from each of the two rows' own step function. Without
+ *   it a latch could outlive its option: the seam is not entered at all while
+ *   both rows say Hold, so a player who latched the duck and then switched the
+ *   row off would find the latch still standing when he switched it back on.
+ *
+ * The KEY memory is deliberately left alone: a key still held across a level
+ * boundary or out of a menu is not a fresh press and must not latch
+ * (game\modern_move.cpp says the same thing at greater length). */
+void InputModeLatchReset()
+{
+	ModernModeLatchDrop(&sprint_latch);
+	ModernModeLatchDrop(&duck_latch);
+}
+
 /* AND THE ONE QUESTION THE REST OF THE ENGINE MAY ASK ABOUT IT. The bypass
  * runs INSTEAD of ModernUpdateInput, so MODERNLOG's own line - which is
  * printed from inside that function - says nothing at all on these ticks, and
@@ -1874,6 +1907,102 @@ long S_UpdateInput()
 
 	if ((linput & (IN_RIGHT | IN_LEFT)) == (IN_RIGHT | IN_LEFT))
 		linput -= IN_RIGHT | IN_LEFT;
+
+	/* THE TWO MODE LATCHES (#161, round 161b2c, item 4; the user: "'Sprintmodus'
+	 * und 'Duckmodus' kann auch mit rein").
+	 *
+	 * HERE AND NOT AT THE FOUR PRODUCERS, and the reason is measurable: the
+	 * walk-sidestep rewrite forty lines above turns IN_LEFT and IN_RIGHT into
+	 * the two step bits, so a direction test up there would read a sidestep as
+	 * "pushing nothing" and drop the sprint under the player. Everything else is
+	 * the weapon seam's own argument twenty lines below, and it holds for these
+	 * two bits with the same grep behind it: IN_DUCK and IN_SPRINT have exactly
+	 * two producers each in this file - the keyboard's Key(4)/Key(5) and the
+	 * pad's jLayout[0]/jLayout[1], three hundred lines above - and nothing
+	 * between them and here reads or writes either. So `linput` carries them at
+	 * this point exactly as the keyboard or the pad wrote them, in both control
+	 * types, which is what "in both control types, keyboard and pad" costs: one
+	 * seam and no per-producer branch at all.
+	 *
+	 * AND THE WHOLE BLOCK IS BEHIND THE TWO OPTIONS. With both rows at Hold the
+	 * only statement of this round that runs in this function is the test on the
+	 * next line, and the word leaves exactly as it did at cb55d72. */
+	if (tomb5.sprint_toggle || tomb5.duck_toggle)
+	{
+		/* THE TICKS NO LATCH MAY STAND ON. The first seven terms are the weapon
+		 * seam's, read with the same meaning - a cutscene, a spotcam and
+		 * bDisableLaraControl are ticks she is not the player's to steer, the
+		 * inventory and the pause menu (InventoryActive covers both) and the
+		 * title are ticks a menu owns the word, and App.fmv is a video.
+		 *
+		 * The other four are what these two bits themselves need, and each was
+		 * measured before it was written:
+		 * - dead: lara_as_dash and lara_as_duckl/duckr all end on hit_points
+		 *   <= 0 (game\lara.cpp:1746, :4487, :4497), so the engine drops both
+		 *   anyway and a latch that outlived her would be the only thing left
+		 *   holding a key.
+		 * - the water: EVERY IN_DUCK reader in game\lara.cpp excludes LW_WADE
+		 *   by hand and lara_as_dash names it as its fourth exit; under water
+		 *   and at the surface neither AS_DUCK nor AS_DASH is reachable at all.
+		 *   So anything but LW_ABOVE_WATER is a tick the bits mean nothing on.
+		 * - LG_HANDS_BUSY is TR5's own spelling of the brief's "ladder and
+		 *   vehicle": a ladder, a rope, the water and a pickup all leave
+		 *   gun_status there (game\lara.cpp:1156, :1168 among others), and
+		 *   LARA_INFO has no Vehicle field to ask instead - measured, the name
+		 *   does not occur in global\types.h.
+		 * - the binoculars and the lasersight read IN_SPRINT and IN_DUCK out of
+		 *   `inputBusy` as ZOOM IN and ZOOM OUT (game\camera.cpp:3520/:3529).
+		 *   That is a held key by its nature - the zoom steps once per tick -
+		 *   so the sight is a drop, and a drop tick hands the raw key through
+		 *   untouched, which leaves the zoom exactly as it is today. */
+		const long mode_drop = !lara_item || App.fmv || GLOBAL_playing_cutseq ||
+			bUseSpotCam || bDisableLaraControl || InventoryActive ||
+			gfLevelId == LVL5_TITLE || lara_item->hit_points <= 0 ||
+			lara.water_status != LW_ABOVE_WATER || lara.gun_status == LG_HANDS_BUSY ||
+			BinocularRange != 0;
+
+		/* AND THE TWO THE SPRINT ADDS. "The sprint latch also drops when no
+		 * direction is pushed or the engine ends the sprint" - the first is
+		 * this word's own six direction bits, the second is the dash bar:
+		 * lara_as_dash leaves AS_DASH on `!DashTimer` and game\laramisc.cpp:502
+		 * refills it the moment she is out of AS_DASH, so a latch that sat
+		 * through an empty bar would put her back into a sprint on the single
+		 * unit of the refill. Both belong to the sprint alone; a duck holds her
+		 * standing still on purpose. */
+		const long moving = (linput & (IN_FORWARD | IN_BACK | IN_LEFT | IN_RIGHT |
+			IN_LSTEP | IN_RSTEP)) != 0;
+		const long sprint_drop = mode_drop || !DashTimer || !moving;
+		const long duck_drop = mode_drop;
+
+		linput = ModernModeLatch(tomb5.sprint_toggle, (linput & IN_SPRINT) != 0,
+			sprint_drop, &sprint_latch, IN_SPRINT, linput);
+		linput = ModernModeLatch(tomb5.duck_toggle, (linput & IN_DUCK) != 0,
+			duck_drop, &duck_latch, IN_DUCK, linput);
+
+		/* MODELOG, behind -log like every other seam of this round, and on the
+		 * CHANGE of a latch and not every tick: a latched bit stands for
+		 * hundreds of ticks and a per-tick line would bury the two moments a
+		 * play test is actually after - the press that latched it and whatever
+		 * let it go. The two drops are printed beside it so a reader can see
+		 * WHICH of the eleven terms answered, and the two options so that a log
+		 * read afterwards need not guess how the rows stood. -1 so the first
+		 * line of a session is always written. */
+		if (gLogEnabled)
+		{
+			static long mode_logged = -1;
+			const long now = ((sprint_latch & MODERN_LATCH_ON) ? 1 : 0) |
+				((duck_latch & MODERN_LATCH_ON) ? 2 : 0);
+
+			if (now != mode_logged)
+			{
+				mode_logged = now;
+				Log("MODELOG f=%ld sprint=%d duck=%d drop=%d/%d mode=%d/%d",
+					(long)GlobalCounter, (int)(now & 1), (int)((now >> 1) & 1),
+					(int)(sprint_drop != 0), (int)(duck_drop != 0),
+					(int)tomb5.sprint_toggle, (int)tomb5.duck_toggle);
+			}
+		}
+	}
 
 	/* THE WEAPON HALF (#161, round 161b2a, item 2; design section 1.5). The
 	 * second and much smaller seam of this function, and the last thing that

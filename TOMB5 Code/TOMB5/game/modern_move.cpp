@@ -1240,6 +1240,81 @@ long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, l
 	return bits;
 }
 
+/* SPRINT MODE AND DUCK MODE (#161, round 161b2c, item 4; the user's own
+ * sentence, "'Sprintmodus' und 'Duckmodus' kann auch mit rein"). One latch,
+ * used twice, and deliberately not two functions: the two modes differ in
+ * nothing but which bit they carry and what counts as a tick the latch may not
+ * stand on, and both of those come in as arguments.
+ *
+ * HOLD IS THE DEFAULT AND HANDS THE WORD BACK UNTOUCHED - the first branch, and
+ * the whole of "byte-identical at the defaults" for this function. The memory
+ * is cleared on the way past, so that switching the row to Toggle and back
+ * cannot leave a latch standing behind the player's back.
+ *
+ * `down` is the key or button as the input assembly has it THIS tick, and
+ * `drop` is the caller's answer to "may a latch stand at all right now" - dead,
+ * in the water, in a menu, and for the sprint also the empty dash bar and a
+ * thumb pushing nothing. A DROP TICK IS A HOLD TICK, bit for bit: the latch
+ * falls, and the raw key goes through exactly as it would at Hold. That is the
+ * conservative answer and it is also the useful one - the binocular zoom reads
+ * IN_SPRINT and IN_DUCK out of `inputBusy` (game\camera.cpp), and a rule that
+ * forced those bits off while the sight was up would take the zoom away.
+ *
+ * The key memory is tracked on the drop ticks too, which is the whole of case
+ * three in the record: a key still held when a level starts or a menu closes is
+ * not a fresh press, and must not latch. */
+long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, long bits)
+{
+	long s;
+
+	if (!toggle)
+	{
+		if (state)
+			*state = 0;
+
+		return bits;
+	}
+
+	s = state ? *state : 0;
+
+	if (drop)
+		s &= ~(long)MODERN_LATCH_ON;
+	else if (down && !(s & MODERN_LATCH_KEY))
+		s ^= (long)MODERN_LATCH_ON;
+
+	if (down)
+		s |= MODERN_LATCH_KEY;
+	else
+		s &= ~(long)MODERN_LATCH_KEY;
+
+	if (state)
+		*state = s;
+
+	if (drop)
+		return bits;
+
+	bits &= ~bit;
+
+	if (s & MODERN_LATCH_ON)
+		bits |= bit;
+
+	return bits;
+}
+
+/* AND THE ONE THING THE ENGINE HAS TO BE ABLE TO SAY FROM OUTSIDE A TICK: this
+ * latch is off now. A level start and a savegame restore go through it
+ * (game\gameflow.cpp), and so does flipping the row itself
+ * (game\menu_frame.cpp), which is the only way the state could otherwise
+ * survive its own option being switched off.
+ *
+ * It clears the LATCH only and leaves the key memory alone, on purpose - see
+ * the paragraph above. */
+void ModernModeLatchDrop(long* state)
+{
+	if (state)
+		*state &= ~(long)MODERN_LATCH_ON;
+}
+
 /* WHAT AN ACTIVE TICK LEAVES BEHIND (round 161a2b, #161 item 7b). Four of the
  * translation's branches below end with a course in hand - aiming, the
  * directional jump, the step back and the ordinary run - and all four have to

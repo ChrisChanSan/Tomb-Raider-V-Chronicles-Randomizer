@@ -39,6 +39,7 @@ short* KeySchemeSet(long modern);	// one scheme's stored set, wherever it is sit
 long JoyBitConfirm();
 long JoyBitBack();
 long ModernLookTankActive();	// #161, round 161a3, item 3: the look key is steering her as at Tank this tick
+void InputModeLatchReset();	// #161, round 161b2c, item 4: Sprint mode / Duck mode let go - a level start, a savegame, a flip of either row
 
 extern const char* KeyboardButtons[272];
 extern const char* GermanKeyboard[272];

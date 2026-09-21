@@ -1,3 +1,16 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+
 // MapProbe - which .TRM the Remaster draws for each of a level's slots
 // (#123, stage S0).
 //
@@ -60,6 +73,16 @@
 #include "hd_lara.h"			// the outfit numbers of data[3]
 #include "hd_markers.h"			// the .hdm reader the engine uses
 #include "hd_trm.h"
+
+/* hd_install.cpp reads the two registry overrides out of these, which the
+ * engine defines in tomb5\tomb5.cpp. A tool that links hd_install.cpp - and
+ * this one does, since audit round A1 (#172) put hd_wardrobe.cpp on bmap's
+ * line and the wardrobe asks the installer where the remasters are - has to
+ * bring its own pair; ModelProbe, SfxProbe and TrgProbe do the same. Left
+ * empty, so the search runs exactly as it does for a player who never set the
+ * registry value; this tool is handed its folders on the command line. */
+char tomb5_hd_install[260];
+char tomb5_hd_install_tr3[260];
 
 namespace
 {

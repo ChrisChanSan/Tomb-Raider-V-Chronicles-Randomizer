@@ -14281,6 +14281,158 @@ counts the frame, the `root lara` line names the two animations and the
 position, and `snaps=` beside them says whether order 2 blended the grab or
 refused it.
 
+#### Round 157b (#157) - K6 refuses the pose, never the root, as far as a position step pays for it
+
+The user's play test of the accepted 161b2c build, 2026-09-20, 165 Hz panel,
+fps_mode 2, in his own words: *Was mir auch aufgefallen ist bei dem schnellen
+Wechsel von kriechen zum aufstehen ist der gleiche Interpolationsbug wie an
+der Leiter 1 Frame steht sie hoeher als ihre Wurzel.* His `-log` cut the case
+out of 368 `INTERPLOG root lara` lines:
+
+```
+INTERPLOG root lara anim 274->222 frame 6655->5653 offset_prev=(0,-204,-37) offset_cur=(0,-143,-37)
+  drawn=(0,-197,-37) then (0,-188,..) (0,-176,..) (0,-164,..)   pos_y=-1024 on all four
+```
+
+The crawl ends, the crouch begins, `item->pos` does not move at all - and for
+four drawn frames the CROUCH pose, built for a root 143 units above the
+floor, is drawn 54, 45, 33 and 21 units too high: she floats, then sinks into
+place. The largest steps in the same log, all with `pos_y` constant: 6->10
+d=(64,-10,1); 274->222 d=(0,61,0); 245->258 d=(0,-27,3); 24->11 d=(26,4,2);
+273->264 d=(0,26,0); 221->6 d=(-5,-19,-5); 35->82, 217->245, 259->274
+d=(0,18,..); 305->307, 304->306 d=(..,14,..). No ladder in this log.
+
+**ROUND 157'S SENTENCE WAS ONE CLAUSE SHORT.** "K6 refuses the pose, never
+the root" is right on the ladder, where the climb's whole travel sits in the
+offsets and the engine pays it back at the wrap with `TranslateItem`: offset
+step and position step point against each other and cancel, so blending the
+offset between the two ticks' drawn roots reproduces the whole step. Crawl to
+crouch has the offset step and NO position step - nothing cancels, and the
+old rule dragged the new pose away from the offset it was built for. The
+clause that was missing: *never the root - as far as a position step pays
+for it.*
+
+**THE RULE.** Per axis, in the item's own frame (`y_rot` alone - see below),
+with `d = cur - prev` (`prev` already turned by `InterpRootFlip` on a #169
+half-turn tick) and `step` this tick's own position step: the part the blend
+may still keep is `min(|d|, |step|)` where the two point AGAINST each other,
+and nothing where they do not; the offset the blend starts from is `cur`
+minus that kept part, in place of `prev`. `InterpRootNarrow`
+(`game/interpolate_math.h`), a pure inline beside `InterpRootLerp`; the
+position step is `RootStep` (`game/interpolate.cpp`, `TranslateItem`'s own
+inverse turned back by `y_rot`), captured in `InterpBeginFrame`'s walk beside
+`g_rootFlip`, above the `NodeMoved` exit, into the new global
+`g_rootStep[MAX_ITEMS][3]`; `InterpRootNow` calls `InterpRootNarrow` before
+`InterpRootLerp`, so the blend handed to the draw already starts from the
+narrowed offset.
+
+**MEASURED, THE REGRESSION TABLE** (`RootProbe`, JOBY5, drawn offset at alpha
+0.5, all three axes; round 157's own default set and the grab):
+
+```
+  transition        TranslateItem   d_off (x,y,z)    kept          today drawn        narrowed drawn      verdict
+  96->96  f1424     none            (0,0,0)          (0,0,0)       rule does not fire  does not fire      IDENTICAL
+  161->161 f3113    (0,-512,0)      (-4,504,3)       (0,504,0)     (-11,-627,-102)    (-13,-627,-100)    y IDENTICAL; x,z 2 units
+  164->164 f3206    none            (0,0,-1)         (0,0,0)       does not fire      does not fire      IDENTICAL
+  165->161 f3113    none            (0,-12,7)        (0,0,0)       (-13,-369,-104)    does not fire ->
+                                                                                       (-13,-375,-100)    y 6, z 4
+  168->168 f3316    (0,512,0)       (0,-504,2)       (0,504,0)     (1,-123,-101)      (1,-123,-100)      y IDENTICAL; z 1
+  169->168 f3316    (0,256,0)       (0,-239,6)       (0,239,0)     (1,-255,-103)      (1,-255,-100)      y IDENTICAL; z 3
+  173->164 f3206    none            (3,-1,-1)        (0,0,0)       (-8,-283,-157)     does not fire ->
+                                                                                       (-6,-284,-158)     x 2, y 1, z 1
+  172->173 f3491    (0,-190,0)      (-2,181,0)       (0,181,0)     (-9,-208,45)       (-10,-208,45)      y IDENTICAL; x 1
+```
+
+Every axis a position step pays for lands to the unit. What differs is axes
+with a small offset step and no position step behind it (x/z of 161, z of
+168/169, and two transitions that stop blending altogether: 165->161 and
+173->164) - the largest single difference in the whole round-157 set is 6
+units, on 165->161's y. **THAT DOES NOT REFUTE THE PROPOSAL, and it is
+reported rather than hidden: the round's own argument says the narrowed
+picture is the right one there** - vanilla's thirty hertz draws pose B at B's
+offset once the wrap has happened, and a refused frame draws pose B, so it
+belongs at B's offset unless a position step says otherwise. `-grab 274 222`
+(the crawl case) and every other transition of his log table stand down the
+same way: `pos_y` constant means `step` is 0, `kept` is 0, the blend lands on
+`cur`, and `InterpRootNow` returns false - no `INTERPLOG root lara` line at
+all, which is the rule working and not a regression.
+
+**THE SWEEP** (`RootProbe -sweep`, new probe mode, ANDREA1's 474 and JOBY5's
+813 animations, every wrap and `jump_anim_num` change with an offset step of
+8 units or more on any axis; JOBY5 in brackets):
+
+```
+  433 [352] transitions with an offset step of 8 units or more on an axis
+     4 [4]   paid in full     - every axis with a step is paid (e.g. wrap 163->164 d=(0,256,0) trans=(0,-256,0))
+    27 [26]  paid in part     - the big axis paid, a small secondary axis not (161->161, 168->168, 172->173,
+                                174->102 d=(41,514,35) trans=(-50,-512,0) -> kept (41,512,0), 290->302
+                                d=(0,0,388) trans=(0,0,-250) -> kept (0,0,250))
+   402 [322] not at all (file) - 118 wraps without a command and 284 state changes; these blend today and do not
+                                blend under the narrowed rule
+     0 [0]   cases where the narrowed rule blends and today's does not   <- the invariant, measured
+```
+
+Not one of the 433 blends where today's does not - the invariant the round
+rests on. The 402 "not at all (file)" rows are state CHANGES and wraps with
+no `TranslateItem`: `GetChange` swaps the animation before `AnimateLara`'s
+command block is reached, so no command ever fires on a change, and what
+really moves Lara there is a state routine writing `item->pos` by hand - the
+rule still measures that step, because it measures `item->pos` and not the
+animation table, but the level file alone cannot show it. Grep of
+`pos.y_pos +=`, `pos.y_pos -=`, `TranslateItem`, `MoveLaraPosition` over
+`game/lara*.cpp` names them: the ledge grab (`lara_col_reach`,
+`LaraHangTest`, `IsValidHangPos`, `CanLaraHangSideways`), the vault and
+pull-up (`TestLaraVault`, `lara_col_upjump`, `MonkeySwingSnap`,
+`MonkeySwingFall`), the pushblock (`lara_as_pbleapoff`,
+`SnapLaraToEdgeOfBlock`), the ladder's own corner and hang routines
+(`lara_col_climbstnc`/`climbing`/`climbdown`, `LaraDoClimbLeftRight`,
+`LaraClimb{Left,Right}CornerTest`, `LaraTestClimbStance`,
+`LaraTestHangOnClimbWall`, `SetCornerAnim`), crawl and duck
+(`lara_col_all4s`, `lara_col_crawl2hang`, `lara_col_crawl`,
+`lara_col_duckroll`), pole and rope (`lara_col_polestat`,
+`lara_col_poledown`, `FallFromRope`), and water (`LaraTestWaterStepOut`,
+`LaraTestWaterClimbOut`, `LaraSurface`, `LaraUnderWater`,
+`UpdateSubsuitAngles`). All of them write `y_pos` straight and their x/z
+through `phd_sin`/`phd_cos` of `pos.y_rot` - the same frame `TranslateItem`
+turns its own three shorts in (`game/control.cpp`) - which is why `y_rot`
+alone, and not the full `Y*X*Z` inverse, is the right frame for the
+comparison: it is the frame every one of these steps was authored in. She
+swims with an `x_rot`, but her own swimming step (`LaraUnderWater`) is
+authored in that same `y_rot` frame too.
+
+**THE SEAM.** `INTERPLOG root lara` gains ` step=(%d,%d,%d) kept=(%d,%d,%d)`
+at its END - nothing reworded, nothing removed. Transitions that no longer
+blend print no line at all any more, which is the rule working and not a
+regression; `root_fix` does not count them either, unchanged from round 157.
+
+**INTERPTEST.** A new `root_narrow` group, 25 checks: the ladder's whole step
+kept (equal to `InterpRootLerp(prev, cur, t)` for every `t` in 1/256 steps),
+the crawl's nothing kept (result `== cur` for every `t`), a partial case,
+same-sign and zero steps, each axis on its own, the #169 flip run before the
+narrowing, and `LONG_MIN`/`LONG_MAX` steps without overflow. A mutation
+proof, built and run only under the round's own EXE scratch folder and
+deleted afterwards, failed against three wrong rules - "any step pays
+whatever way it points" (3 of 25), "keep the larger magnitude" (8), "always
+start at prev" (14) - the unmutated group passes all 25. `bit.bat`: 373 -> 398
+checks, 0 failed. `bmt.bat` (5788) and `bmenu.bat` (35547) unchanged.
+
+**WHAT DOES NOT CHANGE.** `fps_mode 0` is byte-identical: `RootStep`'s six
+statements and its one call sit inside `InterpBeginFrame`'s walk, below
+`g_applied = true`, and `InterpBeginFrame` itself returns before that walk
+whenever `alpha >= 1.0F` - which is what `fps_mode 0` always hands it, so
+`g_rootStep` is never written at `fps_mode 0` and stays at whatever it last
+held. `InterpRootNarrow` and the changed first operand of `InterpRootLerp`
+inside `InterpRootNow` both sit below that function's own `!g_applied`
+return, so neither runs either. `hd_enable`, the Tank controls, rule K6,
+order 2, the #169 flip and the camera are untouched - this round touches only
+`game/interpolate.cpp`, `game/interpolate.h`, `game/interpolate_math.h`,
+`Preparation/Tools/Diagnose/RootProbe.cpp` and `InterpTest.cpp`. `g_rootStep`
+reads no staler than `g_rootFlip` does, and for the same reason: it is
+written in the walk one statement after `g_poseOk[i] = 1` and ABOVE the
+`NodeMoved` exit, so a slot the walk lets through always carries this
+frame's own value, and a slot that snapped or never moved is never read for
+it.
+
 #### Round 161a (#161) - modern controls, the movement half
 
 The user's order, in his own words: *Moderne Steuerung implementieren.

@@ -595,7 +595,8 @@ inline long InterpBlendLong(long a, long b, long alpha8)
  * refused tween frame the offset is blended in TIME between what the previous
  * tick drew and what this one draws, and the two halves then add up to the
  * whole step - pos contributes D/2 and the offset the other D/2 - so the
- * in-between frame lands exactly where both of its neighbours are. Where the
+ * in-between frame lands exactly where both of its neighbours are (NARROWED
+ * where nothing else moved with it - see InterpRootNarrow below, #157b). Where the
  * two ticks' offsets are equal, which is every animation that does not carry
  * its own travel and every item standing still, the blend comes out at that
  * same offset - and InterpRootNow then says so and hands the draw NOTHING, so

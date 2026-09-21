@@ -345,6 +345,15 @@ void InterpNotePoseFar();
  * the one frame of thirty hertz K6 was always allowed to keep; with the root
  * blended it is finally the invisible one its own comment promises.
  *
+ * NARROWED BY ROUND 157b: "the previous tick drew" above is not the whole
+ * story where nothing else moved with it. The blend starts at the previous
+ * offset only as far as this tick's own position step (TranslateItem, or a
+ * state routine that writes item->pos by hand) pays for it on that axis, and
+ * at the current offset where it does not - see InterpRootNarrow and its note
+ * (game\interpolate_math.h). The ladder is unaffected to the unit; a crawl
+ * ending into a stand, where the pose changes and item->pos does not move at
+ * all, no longer floats the new pose at the old one's height.
+ *
  * WHERE IT FIRES AND WHERE IT CANNOT, and this is TESTED and not assumed:
  * InterpRootNow blends, and then hands the draw the result only where it is
  * not the offset the frame already carries. So the rule reaches only the

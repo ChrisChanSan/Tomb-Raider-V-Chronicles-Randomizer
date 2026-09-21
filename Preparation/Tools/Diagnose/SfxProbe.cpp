@@ -5,6 +5,15 @@
  *
  * Modified 2026 by ChrisChanSan.
  *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ *
  * THE POINT OF THIS TOOL (#153, round M1). The HQ sound bank used to be one
  * file in one place - audio\MAIN.SFX, put there by hand - and "is it there"
  * was the whole of the question. Round M1 made it a chain of three, gave a
@@ -211,6 +220,7 @@ int main(int argc, char** argv)
 	{
 		printf("usage: SfxProbe <game folder> [-mods <folder>] "
 			"[-install <5-folder>] [-id <n>] [-all-ids] [-wavs] [-samples]\n"
+			"       [-level <path.trc>]\n"
 			"       see the head of SfxProbe.cpp for the whole list\n");
 		return 2;
 	}

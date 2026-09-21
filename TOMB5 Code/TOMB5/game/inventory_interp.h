@@ -38,7 +38,7 @@
  * very loop that draws each icon, and the slide is stepped at the bottom of
  * the same function, after the draw. A value written before that body is
  * stepped over by the body itself, and one written after it is too late for
- * the picture. So the blend is asked for at the READ, by the eight accessors
+ * the picture. So the blend is asked for at the READ, by the nine accessors
  * below, each of which answers the live value whenever there is nothing to
  * blend - at fps_mode 0 on the first test, on the frame that carries the
  * step's own picture, and after every cut.

@@ -836,7 +836,11 @@ namespace
 	 *                drops by one on each frame where she changes animation.
 	 *   root_fix     #157: how many of those refused frames had their ROOT
 	 *                OFFSET blended in time instead - a COUNT over the second,
-	 *                not a mean per frame. K6 refuses the pose and never the
+	 *                not a mean per frame. The rule it counts is
+	 *                InterpRootNarrow (game\interpolate_math.h), which since
+	 *                #157b keeps only the part of the offset the tick's own
+	 *                position step pays for; this legend named the older,
+	 *                unnarrowed rule until audit round A1. K6 refuses the pose and never the
 	 *                root, so a refusal on an animation that carries its own
 	 *                travel does not have to lose half of the travel with it.
 	 *                It counts the frames the blend really MOVED: the offset

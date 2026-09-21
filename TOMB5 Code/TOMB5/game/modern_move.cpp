@@ -32,7 +32,7 @@
  * the whole point of keeping the translation in a file of its own.
  *
  * So the stick's own direction is taken with the C library's atan2, scaled to
- * the same 16-bit units. Measured over all 131768 integer stick pairs in
+ * the same 16-bit units. Measured over all 131769 integer stick pairs in
  * -181..181 (full deflection on a diagonal is 181), the largest disagreement
  * between this function and (short)phd_atan(z, x) is 5 of 65536 - 0.03
  * degrees, and that is the tan table's own resolution, not an error. The

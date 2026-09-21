@@ -817,10 +817,14 @@ inline void InterpRootFlip(const long in[3], long out[3])
  * an item whose creature routine walks it by hand is measured through
  * item->pos like she is.
  *
- * NOTHING HERE NEGATES `step`. It is a difference of two tick positions and a
- * long; the magnitudes are compared by carrying the sign to the other side, so
- * the arithmetic holds over the whole range of the type. d itself is a
- * difference of two frame offsets, which are shorts, so it cannot overflow. */
+ * `step` IS NEGATED ONLY WHERE IT CANNOT HURT. The loop below writes -step[i],
+ * and the ternary in front of it is what makes that safe: the branch is only
+ * reached when step[i] and d have opposite signs and |step[i]| < |d|, and d is
+ * a difference of two frame offsets, which are shorts - so LONG_MIN never
+ * reaches the negation. (This paragraph said "NOTHING HERE NEGATES step" until
+ * audit round A1, which is literally false of the code.) The magnitudes
+ * themselves are compared by carrying the sign to the other side, so that part
+ * of the arithmetic holds over the whole range of the type. */
 inline void InterpRootNarrow(const long prev[3], const long cur[3], const long step[3],
 	long out[3])
 {

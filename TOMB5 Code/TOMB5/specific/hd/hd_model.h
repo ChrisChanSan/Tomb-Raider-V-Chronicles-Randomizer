@@ -172,10 +172,14 @@ struct HDModelSlot
 	 * BY NODE AND NOT BY PAGE, although for OUTFIT_CLASSIC the two would
 	 * almost agree (9,483 of the head node's 9,485 triangles wear page 8002,
 	 * and 14 triangles of that page belong to other nodes). A head is a NODE:
-	 * cutting it that way is what makes the part's coverage exactly bit 14,
-	 * so the first person mask that takes the body's head off takes this with
-	 * it and nothing else, and so that a donor whose artist put the hair on
-	 * two pages would still come out whole.
+	 * cutting it that way is what puts the part's coverage on bit 14, so the
+	 * first person mask that takes the body's head off takes this with it and
+	 * nothing else, and so that a donor whose artist put the hair on two pages
+	 * would still come out whole. (Audit round A1 corrected "exactly bit 14":
+	 * a head range's vertices carry scatter weights on nodes 5, 7 and 8 as
+	 * well. What the draw masks by is the RANGE's dominant node, which is 14,
+	 * so the effect is what the sentence said - only the wording was too
+	 * strong.)
 	 *
 	 * The dominant node is the one that carries the most weight over the
 	 * triangle's three corners - the same rule the ranges are bucketed by, so

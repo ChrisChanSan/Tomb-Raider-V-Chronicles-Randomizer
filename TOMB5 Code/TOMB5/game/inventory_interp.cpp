@@ -433,11 +433,15 @@ void InvInterpCut(const char* why)
 /* ==========================================================================
  * WHAT THIS FRAME DRAWS.
  *
- * The first five take the pair (previous, live), because vanilla steps them
- * BEFORE the icon is drawn and the live value is therefore the one this frame
- * would have shown. The last three take the two previous generations, because
- * vanilla steps them AFTER the draw and the live value belongs to the next
- * frame - see the header.
+ * SIX of the nine take the pair (previous, live) - the icon's spin and its
+ * brightness, the ammo spin, and the combine, normal and examine fades -
+ * because vanilla steps them BEFORE the icon is drawn and the live value is
+ * therefore the one this frame would have shown. The other THREE - the row
+ * slide, the current slot and the ammo fade, the three behind Blending(2) -
+ * take the two previous generations, because vanilla steps them AFTER the
+ * draw and the live value belongs to the next frame. They do not stand in
+ * that order below, which is what this banner's old "the first five / the
+ * last three" got wrong until audit round A1 - see the header.
  * ======================================================================== */
 
 ushort InvDrawSpin(long ring, long n, short invitem, ushort live)

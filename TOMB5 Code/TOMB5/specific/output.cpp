@@ -1444,8 +1444,11 @@ static void NoteDisplayBoundPresent()
  *
  *   THE RING. The inventory is a modal loop of its own (game\newinv2.cpp)
  *   that calls S_UpdateInput once per present and is therefore consistent at
- *   any rate; it already keeps thirty because it presents with the default
- *   gPresentMinTicks. DrawPhaseGame is not reached while it is up, so this
+ *   any rate. (It kept thirty through the default gPresentMinTicks when this
+ *   note was written; since round 154 it paces its own present through
+ *   InvFrameMinTicks, game\inventory_interp.cpp, and follows the option like
+ *   the game does - corrected in audit round A1, and said correctly at
+ *   GameFrameMinTicks below.) DrawPhaseGame is not reached while it is up, so this
  *   test never fires today - it is here so that the rule reads as the rule,
  *   and so that a future path into DrawPhaseGame from a menu cannot pick up
  *   sixty by accident.

@@ -59,8 +59,12 @@ void HWR_DrawSortList(D3DTLBUMPVERTEX* info, short num_verts, short texture, sho
 	 *    atlas is MINIFIED by 1.8 (by 2.7 at 1280 x 720, by 1.35 at 2560 x
 	 *    1440). Without mips that is an undersample and thin strokes crawl;
 	 *    with them the bias pulls the level back under one so the picture
-	 *    stays sharp instead of going soft. -0.7 is TROne's number and it
-	 *    lands at level 0.14 at 1080p and at 0 at 1440p.
+	 *    stays sharp instead of going soft. -0.7 is TROne's number, for this
+	 *    very reason and said so in its own words (Copyright 2026 Todesengel,
+	 *    GPLv3, host\render\game_renderer.cpp:2100-2106 of the TROne version
+	 *    of 2026-09-13; audit round A1 read the line there). It lands at
+	 *    level 0.14 at 1080p and at 0 at 1440p, which is ours: the
+	 *    minification above is measured on this engine's own output.
 	 *  - LINEAR min and mag whatever App.Filtering says. Point sampling an
 	 *    eightfold atlas down to a sixth of its size is not "crisp", it is
 	 *    noise; the HD room path makes the same decision for the same reason

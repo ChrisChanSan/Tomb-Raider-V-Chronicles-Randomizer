@@ -36,6 +36,33 @@
  * the voice is ours. Nothing is copied. What IS taken across are the test
  * expectations, and ModernTest.cpp says so in its own header.
  *
+ * THE ORIGIN, IN FULL (written down in audit round A1 because a reader is
+ * entitled to the whole chain, not the last link of it).
+ *
+ *  - What was re-derived here is the TROne of 2026-09-13, the version the
+ *    author had in hand for #161.
+ *  - TROne's modern control is TROne's OWN design, not a reading of anybody's
+ *    program. Its docs\CONTROLS.md sets out the plain arithmetic - stick
+ *    direction plus a held reference heading, turned into the game's own tank
+ *    bits, with the game logic left 1:1 - and justifies the held-heading rule
+ *    with a proof run of its own, 600 frames of its own recording. Its input
+ *    code cites no disassembler and no decompilation.
+ *  - This project then checked itself rather than taking that on trust. On
+ *    2026-09-16 every one of the 32 constants in the modern-control set was
+ *    put through a taboo table: 16 had a stated origin and were fine, 9 were
+ *    re-measured here by playing the game, 5 did not apply, and 2 whose origin
+ *    could not be established were NOT taken. None was derived from a remaster
+ *    binary, and no file and no document of the modern control mentions one.
+ *  - The single fact in the whole set that comes from the remaster at all is a
+ *    set of option NAMES, read out of a plain text file (COMMON.TXT) of the
+ *    player's own installation. No binary was opened for it.
+ *
+ * The user's instruction that started #161 was, in his words, to rebuild the
+ * remaster's modern control. It was rebuilt the only lawful way: by playing it
+ * and watching what it does. Nothing of the remaster's code is here, and
+ * TROne's own docs\LEGAL.md forbids that route as plainly as this project
+ * does.
+ *
  * ANGLES are the engine's own 16-bit units: 65536 is a full turn, 0 is +Z,
  * 0x4000 is +X - the convention of item->pos.y_rot and of phd_atan(z, x).
  *
@@ -493,7 +520,13 @@ enum modern_constants
 	 * and not a feel number: she still never starts a step toward a direction
 	 * the stick points AWAY from, so a ledge behind her stays safe when he
 	 * pushes away from it, and at 5461 a full about-turn now spends at most
-	 * three ticks over it. MODERNLOG's bits= is where that is read back. */
+	 * three ticks over it. MODERNLOG's bits= is where that is read back.
+	 *
+	 * THE ONE EXCEPTION IS MODERN_STAND_FORWARD_TICKS below (added in audit
+	 * round A1, which found this paragraph stating the rule without it): a
+	 * MOVING thumb that has spent eight ticks turning on the spot and getting
+	 * nowhere does open the gate. A HELD stick never reaches that rule, so the
+	 * ledge behind her is still safe. */
 	MODERN_SNAP_FORWARD = 0x2000,
 	MODERN_SNAP_FORWARD_STAND = 0x4000,
 

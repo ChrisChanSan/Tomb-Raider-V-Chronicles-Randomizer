@@ -76,10 +76,11 @@
  * own packing, not ours. D3DDECLTYPE_UBYTE4 is NOT normalised, so the flag
  * bytes arrive as 0.0 or 1.0 exactly as they were written.
  *
- * THE LIGHT. light = colour1 * roomShadow + colour2, and the pixel is
- * texel * light. A SUM, not a product - TRForge measured that over all 144
- * .TRG files, and getting it wrong costs a factor of 2.65 in brightness.
- * roomShadow is 1 until shadow maps exist.
+ * THE LIGHT. light = colour1 * gPass.z + colour2, and the pixel is
+ * texel * light. A SUM, not a product - as TRForge's MIT reader adds the
+ * two triples (trf_remaster/HdMesh.cpp, colour_of). gPass.z is a spare
+ * scale on the first colour that this build always sets to 1; nothing
+ * computes it.
  *
  * THE THREE PASSES are the three index runs of a .TRG part, in this order:
  *
@@ -636,8 +637,10 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 
 	/* 2b. THE WIND (#123, stage S5). The fourth SHORT of the position is
 	 * TrgVertex::sway, the remaster's own per vertex weight for what moves in
-	 * the wind or the current - "wind and water weight, divided by 32767"
-	 * (Trg.h, read off the remaster's own shaders). Measured over the 15
+	 * the wind or the current - a wind and water weight over 32767. That is
+	 * the .TRG field layout as TRForge's MIT format description gives it, and
+	 * the range is re-measured on the player's own files (hd_render.h,
+	 * HDStats::swayMax). Measured over the 15
 	 * levels it is the ivy and the banners of Rome, the grass of Ireland and
 	 * the kelp of the Deepsea Dive, and it is disjoint from the classic
 	 * engine's water vertices except in JOBY4, where the kelp stands in the

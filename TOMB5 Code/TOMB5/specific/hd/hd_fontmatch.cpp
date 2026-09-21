@@ -6,7 +6,8 @@
  * history of this source tree.
  *
  * The template match is TROne's idea (Copyright 2026 Todesengel, GPLv3,
- * host\render\game_renderer.cpp:7367-7870) - see hd_fontmatch.h and
+ * host\render\game_renderer.cpp, the block marked "hdtext") - see
+ * hd_fontmatch.h, which says why the citation carries no line numbers, and
  * THIRD-PARTY.md.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the

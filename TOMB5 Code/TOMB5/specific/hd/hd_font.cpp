@@ -4,10 +4,11 @@
  * The idea of finding the classic glyphs in the remaster's atlas by template
  * match, and the rule of widening image and screen in the same ratio so that
  * a letter neither moves nor grows, are TROne's (Copyright 2026 Todesengel,
- * GPLv3, host\render\game_renderer.cpp:7367-7870 and :11211-11269). Written
- * against that description, not copied - and it needs neither their sprite
- * scan nor their "is this an alphabet" gate, because the 106 glyph rectangles
- * are known here (game\chardef.inc). See THIRD-PARTY.md.
+ * GPLv3, host\render\game_renderer.cpp, the block marked "hdtext" and its
+ * glyph draw; hd_fontmatch.h says why the citation carries no line numbers).
+ * Written against that description, not copied - and it needs neither their
+ * sprite scan nor their "is this an alphabet" gate, because the 106 glyph
+ * rectangles are known here (game\chardef.inc). See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git

@@ -4,9 +4,10 @@
  * The rule DrawChar's HD branch rests on - widen the sampled window and
  * the quad in the SAME ratio, so that a letter drawn from the remaster's
  * glyph atlas neither moves nor grows - is TROne's (Copyright 2026
- * Todesengel, GPLv3, host\render\game_renderer.cpp:11211-11269).
- * Written against that description, not copied; everything else in this
- * file, the glyph table and PrintString included, is TR5's own. See
+ * Todesengel, GPLv3, host\render\game_renderer.cpp, its "hdtext" glyph
+ * draw; specific\hd\hd_fontmatch.h says why the citation carries no line
+ * numbers). Written against that description, not copied; everything else
+ * in this file, the glyph table and PrintString included, is TR5's own. See
  * THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
@@ -186,73 +187,73 @@ void DrawChar(long x, long y, ushort col, CHARDEF* def)
 
 static void AccentToCode(uchar& s)
 {
-	if (s == (uchar)'¡')
+	if (s == (uchar)'ï¿½')
 		s = 128 + 45;
-	else if (s == (uchar)'¿')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 40;
-	else if (s == (uchar)'Ñ')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 37;
-	else if (s == (uchar)'ñ')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 36;
-	else if (s == (uchar)'ú')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 35;
-	else if (s == (uchar)'ó')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 34;
-	else if (s == (uchar)'í')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 33;
-	else if (s == (uchar)'á')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 32;
-	else if (s == (uchar)'Ó')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 28;
-	else if (s == (uchar)'Ü')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 26;
-	else if (s == (uchar)'Ö')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 25;
-	else if (s == (uchar)'ÿ')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 24;
-	else if (s == (uchar)'ù')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 23;
-	else if (s == (uchar)'û')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 22;
-	else if (s == (uchar)'ò')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 21;
-	else if (s == (uchar)'ö')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 20;
-	else if (s == (uchar)'ô')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 19;
-	else if (s == (uchar)'Á')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 17;
-	else if (s == (uchar)'É')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 16;
-	else if (s == (uchar)'Â')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 15;
-	else if (s == (uchar)'Ä')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 14;
-	else if (s == (uchar)'ì')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 13;
-	else if (s == (uchar)'î')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 12;
-	else if (s == (uchar)'ï')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 11;
-	else if (s == (uchar)'è')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 10;
-	else if (s == (uchar)'ë')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 9;
-	else if (s == (uchar)'ê')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 8;
-	else if (s == (uchar)'ç')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 0;
-	else if (s == (uchar)'á')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 6;
-	else if (s == (uchar)'à')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 5;
-	else if (s == (uchar)'ä')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 4;
-	else if (s == (uchar)'â')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 3;
-	else if (s == (uchar)'é')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 2;
-	else if (s == (uchar)'ü')
+	else if (s == (uchar)'ï¿½')
 		s = 128 + 1;
 }
 

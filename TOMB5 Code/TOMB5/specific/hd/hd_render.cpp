@@ -3865,8 +3865,9 @@ namespace
 			return;
 
 		/* gPass: x is the ALPHA REFERENCE - a texel below it is thrown away
-		 * and zero throws nothing away - y the additive weighting, z is the
-		 * room shadow (1 until shadow maps exist), w the specular add - the
+		 * and zero throws nothing away - y the additive weighting, z a spare
+		 * scale on the first vertex colour that is always 1 here and that
+		 * nothing computes, w the specular add - the
 		 * classic path switches D3DRS_SPECULARENABLE off for its additive
 		 * draw type (polyinsert.cpp:72) and the overbright half of the room
 		 * colour goes off with it.

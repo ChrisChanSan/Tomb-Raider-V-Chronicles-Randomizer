@@ -35,6 +35,15 @@
 // That the first RIFF lands exactly where the header ends, and that the chain
 // of RIFFs comes out exactly on the last byte, is what turns a guess about
 // the layout into a test of it.
+//
+// WHERE THE LAYOUT COMES FROM (stated here in audit round A1, where it had
+// been left unsaid): from the bytes of the player's own MAIN.SFX and from
+// nothing else. No remaster program was opened, read or disassembled for it -
+// the table above is a reading of one data file, and the two tests in the
+// paragraph above are what proved the reading right. The work is recorded in
+// commit dbc0b30 (#117), whose message carries the measurements: 463 samples,
+// three of them resampled after all, and the residue test that showed the
+// rest are not the 22050 Hz originals upsampled.
 
 #define SFX_LUT_ENTRIES		500
 #define SFX_MAX_SAMPLES		4096	// sanity bound; the shipped file has 473

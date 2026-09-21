@@ -13,7 +13,7 @@
  *
  * The lighting below the line "THE PARITY BLOCK" is ours: TROne lights an
  * item with a flat ambient blown up into a six-face cube and up to four point
- * lights of its own invention, while this engine has the classic path's own
+ * lights of its own, while this engine has the classic path's own
  * per-object light list, its distance fog and its fog bulbs - and a torch has
  * to reach an HD guard exactly as far as it reaches the classic wall behind
  * him. So the ambient comes from the engine's own CalculateObjectLighting, the

@@ -6,13 +6,21 @@
  * history of this source tree.
  *
  * The template match below is TROne's idea (Copyright 2026 Todesengel,
- * GPLv3, host\render\game_renderer.cpp:7367-7870, the block marked
+ * GPLv3, host\render\game_renderer.cpp, the block marked
  * "hdtext"): mask the ink of a classic glyph, slide it over the remaster's
  * glyph atlas, score intersection over union and refuse anything under a
  * high threshold, because "a similar character is the wrong character". The
  * code here is written against that description, not copied - and it needs
  * neither their sprite scan nor their "is this an alphabet" gate, because we
  * know which 106 rectangles are glyphs (game\chardef.inc). See THIRD-PARTY.md.
+ *
+ * THE CITATION CARRIES NO LINE NUMBERS ANY MORE (audit round A1). It used to
+ * read ":7367-7870", and those numbers belong to a later TROne version than
+ * the public copy: neither TROne as published (game_renderer.cpp, 4,782
+ * lines) nor the version of 2026-09-13 has the block at those lines. The
+ * block's own marker "hdtext" names it in every version, so the marker is
+ * what this header cites. The same applies to the ":11211-11269" the font
+ * files below used to give for the widening rule.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software
@@ -67,8 +75,8 @@
  * antialiased rim and the drop shadow the remaster painted around every
  * letter: measured, 12.6 % of a glyph's ink. So the window is widened AND the
  * quad is widened in the same ratio, which is TROne's rule
- * (game_renderer.cpp:11249-11254) - the letter neither moves nor grows, only
- * more of the atlas around it becomes visible.
+ * (game_renderer.cpp, its "hdtext" glyph draw) - the letter neither moves
+ * nor grows, only more of the atlas around it becomes visible.
  *
  * THIS IS THE CEILING, NOT THE MARGIN. A uniform margin was tried first and
  * looked wrong: the atlas packs the small marks close together, so the same

@@ -8,8 +8,9 @@
  * The idea of finding the classic glyphs in the remaster's atlas by template
  * match, and the rule of widening image and screen in the same ratio so that
  * a letter neither moves nor grows, are TROne's (Copyright 2026 Todesengel,
- * GPLv3, host\render\game_renderer.cpp:7367-7870 and :11211-11269). Written
- * against that description, not copied. See THIRD-PARTY.md.
+ * GPLv3, host\render\game_renderer.cpp, the block marked "hdtext" and its
+ * glyph draw; hd_fontmatch.h says why the citation carries no line numbers).
+ * Written against that description, not copied. See THIRD-PARTY.md.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software

@@ -11,7 +11,16 @@ rem
 rem So every .inc carries the MD5 of its .hlsl on its last line (bshader.bat,
 rem :stamp) and this compares them. A CONTENT stamp and not a file date,
 rem because a fresh clone gives every file the same date and a date guard
-rem would then either cry wolf or say nothing at all. A shader that is out of
+rem would then either cry wolf or say nothing at all.
+rem
+rem A content stamp is only as deterministic as the content, and audit round
+rem A1 (#172) found that the content was not: git's own Windows default,
+rem core.autocrlf=true, checked the HLSL out with carriage returns, and an MD5
+rem is taken over bytes. So in every fresh clone this guard fired on a shader
+rem that was perfectly in step, rebuilt it, and left two tracked files
+rem modified. .gitattributes now pins **/hd_shader/*.hlsl and *.inc to
+rem eol=lf, which is why the hash below means the same thing on every machine.
+rem A shader that is out of
 rem step is rebuilt on the spot rather than reported - a build that quietly
 rem draws the wrong thing is the failure this exists to stop, and asking the
 rem user to type one more command is not a safer answer than doing it.

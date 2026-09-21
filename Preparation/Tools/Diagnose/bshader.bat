@@ -16,6 +16,12 @@ rem It exists because round R3b left a rejected variant in hd_room.hlsl and
 rem never ran this script: the source said one thing, the engine drew another,
 rem and nothing in the tree could say so. A date cannot be trusted for this -
 rem a fresh clone gives every file the same one - so the stamp is the content.
+rem
+rem And the content has to be the same content everywhere, which until audit
+rem round A1 (#172) it was not: git checked the HLSL out with carriage returns
+rem on a default Windows machine and without them here, so the stamp written
+rem here did not match the one be.bat computed there. .gitattributes pins
+rem **/hd_shader/*.hlsl and *.inc to eol=lf for exactly this line.
 setlocal enabledelayedexpansion
 
 set "SHADERDIR=%~dp0..\..\..\TOMB5 Code\TOMB5\specific\hd\hd_shader"

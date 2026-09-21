@@ -5,9 +5,9 @@ carry a hidden signature (an acrostic); reformatting destroys it. Anything
 this project needs differently is written in our own wrappers under
 TOMB5\specific\hd\, never in here.
 
-Source : C:\Cloude AI\Todesengel\TROne-main Aktuell\vendor\trforge
-         (TROne's own vendor copy, which states: TRForge_Remastered,
-         remastered 030ed51fed4f73914bd91c36ed9a7598ea9da711, 2026-08-31)
+Source : TROne's own vendor copy of TRForge (TROne, GPLv3, by Todesengel1931 -
+         https://github.com/todesengel1931), which states: TRForge_Remastered,
+         remastered 030ed51fed4f73914bd91c36ed9a7598ea9da711, 2026-08-31
 Taken  : 2026-09-05, for #123 stage S0 (HD at run time)
 Files  : 5
 

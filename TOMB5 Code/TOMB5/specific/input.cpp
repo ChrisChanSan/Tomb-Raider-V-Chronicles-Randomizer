@@ -2329,8 +2329,33 @@ long S_UpdateInput()
 			sprint_drop, &sprint_latch, IN_SPRINT, linput);
 		linput = ModernModeLatch(tomb5.duck_toggle, (linput & IN_DUCK) != 0,
 			duck_drop, &duck_latch, IN_DUCK, linput);
+		/* AND THE LET-GO MASK, WHICH IS NOT THE DELIVERED BIT (#161, round
+		 * 161b2d, fix 3 - measured; the design said one mask would do and it
+		 * was wrong).
+		 *
+		 * The press that lets go has to take out every bit THE GRAB KEY
+		 * ITSELF raises, because thirteen of the thirty-four family states
+		 * test IN_ACTION_ANY and not IN_ACTION (the pole, the rope, the zip
+		 * line, the parallel bars). Under "One key" `action_bits` above puts
+		 * IN_ACTION and IN_INTERACT into the word in one statement, so
+		 * clearing IN_ACTION alone left those states reading "still held" and
+		 * the press did nothing at all - on a rope and on the bars there is
+		 * no other exit and she was trapped.
+		 *
+		 * This is the same distinction game\lara.cpp:5003 already makes, and
+		 * the same reasoning: under "Separate" IN_INTERACT comes from a
+		 * DIFFERENT physical key, the latch has nothing to say about it, and
+		 * the mask must stay IN_ACTION alone - which also keeps that setting
+		 * bit for bit what it was. IN_SELECT is never in it: it confirms in
+		 * menus and no menu is open while she hangs.
+		 *
+		 * The DELIVERY stays IN_ACTION alone (the argument before this one):
+		 * every state that asks ANY is satisfied by it, and an IN_INTERACT
+		 * handed out without a key would open doors by itself. */
+		const long grab_release = tomb5.action_split ? IN_ACTION : IN_ACTION_ANY;
+
 		linput = ModernGrabLatch(tomb5.grab_toggle, (linput & IN_ACTION) != 0,
-			grab_family, grab_drop, &grab_latch, IN_ACTION, linput);
+			grab_family, grab_drop, &grab_latch, IN_ACTION, grab_release, linput);
 
 		/* MODELOG, behind -log like every other seam of this round, and on the
 		 * CHANGE of a latch and not every tick: a latched bit stands for

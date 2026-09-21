@@ -70,6 +70,13 @@ enum modern_input_bits
 	MODERN_IN_WALK =	0x80,	// IN_WALK
 	MODERN_IN_LSTEP =	0x400,	// IN_LSTEP
 	MODERN_IN_RSTEP =	0x800,	// IN_RSTEP
+	/* The two bits the ONE action key raises beside IN_ACTION under "One key"
+	 * (specific\input.cpp's action_bits). Nothing in this file writes them;
+	 * they are mirrored because the grab latch's let-go mask is now a word the
+	 * caller composes out of them, and because ModernTest has to be able to
+	 * build a real "One key" word to check it (#161, round 161b2d, fix 3). */
+	MODERN_IN_INTERACT =	0x4000,		// IN_INTERACT - the world-object half
+	MODERN_IN_SELECT =	0x100000,	// IN_SELECT - the menus', never the latch's
 	MODERN_IN_DUCK =	0x20000000,	// IN_DUCK - Duck mode, and nothing else here
 	MODERN_IN_SPRINT =	0x40000000,	// IN_SPRINT - Sprint mode (#161, round 161b2c, item 4)
 
@@ -856,7 +863,8 @@ long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITU
 	MODERN_RESULT* out, long* yaw_delta);
 long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, long bits);
 long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, long bits);
-long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit, long bits);
+long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit,
+	long release, long bits);
 void ModernModeLatchDrop(long* state);
 void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, long stick_y,
 	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out);

@@ -30,7 +30,8 @@ static_assert(IN_FORWARD == MODERN_IN_FORWARD && IN_BACK == MODERN_IN_BACK &&
 	IN_DRAW == MODERN_IN_DRAW && IN_WALK == MODERN_IN_WALK &&
 	IN_LSTEP == MODERN_IN_LSTEP && IN_RSTEP == MODERN_IN_RSTEP &&
 	IN_JUMP == MODERN_IN_JUMP && IN_ACTION == MODERN_IN_ACTION &&
-	IN_DUCK == MODERN_IN_DUCK && IN_SPRINT == MODERN_IN_SPRINT,
+	IN_DUCK == MODERN_IN_DUCK && IN_SPRINT == MODERN_IN_SPRINT &&
+	IN_INTERACT == MODERN_IN_INTERACT && IN_SELECT == MODERN_IN_SELECT,
 	"input_buttons moved - update game\\modern_move.h");
 
 /* THE ONE STATE. There is exactly one Lara and one stick, so this is a file

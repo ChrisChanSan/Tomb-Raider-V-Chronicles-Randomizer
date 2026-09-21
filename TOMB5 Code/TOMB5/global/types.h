@@ -2805,10 +2805,17 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * `ModernGrabLatch` (game\modern_move.cpp) is the whole of the arithmetic
 	 * and `ModernStateIsGrab` beside it is the family; specific\input.cpp's
 	 * mode seam is their one caller, on both control types and for keyboard
-	 * and pad alike, exactly like the three rows above. The bit it writes is
-	 * IN_ACTION and only IN_ACTION, so under "One key" the Action button's
-	 * other two bits - IN_SELECT and IN_INTERACT - are untouched and a
-	 * pushblock is pushed with the key held, as it always was.
+	 * and pad alike, exactly like the three rows above. The bit it DELIVERS is
+	 * IN_ACTION and only IN_ACTION, so a pushblock is pushed with the key
+	 * held, as it always was, and nothing is operated by a latch.
+	 *
+	 * The bit it CLEARS on a let-go press is wider, and it has to be (round
+	 * 161b2d, fix 3): thirteen family states - pole, rope, zip line, parallel
+	 * bars - read IN_ACTION_ANY, and under "One key" the one action key raises
+	 * IN_INTERACT with IN_ACTION, so IN_ACTION alone left them reading "still
+	 * held" and the press was inert. The seam therefore hands the latch
+	 * IN_ACTION_ANY under "One key" and IN_ACTION under "Separate", where
+	 * IN_INTERACT is a different physical key. IN_SELECT is never cleared.
 	 * Registry: grab_toggle. */
 	bool grab_toggle;
 

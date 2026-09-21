@@ -5361,12 +5361,33 @@ static void grab_family()
 	}
 }
 
-/* One tick of ModernGrabLatch as specific\input.cpp calls it. */
+/* One tick of ModernGrabLatch as specific\input.cpp calls it under "Separate",
+ * where the let-go mask is IN_ACTION alone because IN_INTERACT is a different
+ * physical key. This is the shape every check written before fix 3 used, and
+ * it stays that shape so those checks still say what they said. */
 static long grab_tick(long toggle, int down, int family, int drop, long* state, long extra)
 {
 	const long in = (down ? MODERN_IN_ACTION : 0) | extra;
 
-	return ModernGrabLatch(toggle, down, family, drop, state, MODERN_IN_ACTION, in);
+	return ModernGrabLatch(toggle, down, family, drop, state, MODERN_IN_ACTION,
+		MODERN_IN_ACTION, in);
+}
+
+/* AND ONE TICK UNDER "One key" (#161, round 161b2d, fix 3). The one action key
+ * raises IN_SELECT | IN_INTERACT | IN_ACTION in a single statement
+ * (specific\input.cpp's action_bits), so the whole word goes down and up
+ * together and the let-go mask is IN_ACTION_ANY. IN_SELECT is deliberately NOT
+ * in the mask: it confirms in menus, and it is what the third check below
+ * watches survive. */
+#define GRAB_ONEKEY_WORD	(MODERN_IN_ACTION | MODERN_IN_INTERACT | MODERN_IN_SELECT)
+#define GRAB_ONEKEY_RELEASE	(MODERN_IN_ACTION | MODERN_IN_INTERACT)
+
+static long grab_tick_onekey(long toggle, int down, int family, int drop, long* state, long extra)
+{
+	const long in = (down ? GRAB_ONEKEY_WORD : 0) | extra;
+
+	return ModernGrabLatch(toggle, down, family, drop, state, MODERN_IN_ACTION,
+		GRAB_ONEKEY_RELEASE, in);
 }
 
 static void grab_latch()
@@ -5379,31 +5400,40 @@ static void grab_latch()
 
 	/* HOLD IS THE DEFAULT, over every combination of key, family, drop and
 	 * word: the word comes back exactly as it went in and the memory is left at
-	 * 0, so a trip through Toggle and back cannot resurrect anything. */
+	 * 0, so a trip through Toggle and back cannot resurrect anything.
+	 *
+	 * Fix 3 put the let-go mask in as a parameter of its own and the sweep runs
+	 * over BOTH of the values specific\input.cpp can hand in - the sixty-four
+	 * combinations are the thirty-two of before, once per Action setting. Hold
+	 * returns before either mask is read, so neither may make a difference, and
+	 * this is the check that says so. */
 	{
 		long differs = 0;
 		long stuck = 0;
-		int down, family, drop, b;
+		int down, family, drop, b, rel;
 
 		for (down = 0; down < 2; down++)
 			for (family = 0; family < 2; family++)
 				for (drop = 0; drop < 2; drop++)
 					for (b = 0; b < 4; b++)
-					{
-						const long in = (b & 1 ? MODERN_IN_ACTION : 0) |
-							(b & 2 ? (MODERN_IN_FORWARD | MODERN_IN_WALK) : 0);
+						for (rel = 0; rel < 2; rel++)
+						{
+							const long release = rel ? GRAB_ONEKEY_RELEASE :
+								MODERN_IN_ACTION;
+							const long in = (b & 1 ? GRAB_ONEKEY_WORD : 0) |
+								(b & 2 ? (MODERN_IN_FORWARD | MODERN_IN_WALK) : 0);
 
-						state = MODERN_GRAB_RELEASE | MODERN_LATCH_KEY;
+							state = MODERN_GRAB_RELEASE | MODERN_LATCH_KEY;
 
-						if (ModernGrabLatch(0, down, family, drop, &state,
-							MODERN_IN_ACTION, in) != in)
-							differs++;
+							if (ModernGrabLatch(0, down, family, drop, &state,
+								MODERN_IN_ACTION, release, in) != in)
+								differs++;
 
-						if (state != 0)
-							stuck++;
-					}
+							if (state != 0)
+								stuck++;
+						}
 
-		ok(differs == 0, "Hold differs on none of the 32 combinations", differs, 0);
+		ok(differs == 0, "Hold differs on none of the 64 combinations", differs, 0);
 		ok(stuck == 0, "Hold clears the memory on every one of them", stuck, 0);
 	}
 
@@ -5515,9 +5545,66 @@ static void grab_latch()
 			bits & MODERN_IN_ACTION, 0);
 	}
 
+	/* "One key", WHICH IS THE DEFAULT ACTION SETTING, AND THE LET-GO PRESS
+	 * THERE (#161, round 161b2d, fix 3 - the reviewer's HIGH: on a rope or the
+	 * parallel bars the press was inert and there is no other exit, so she was
+	 * trapped until a reload).
+	 *
+	 * The one action key carries IN_SELECT | IN_INTERACT | IN_ACTION. Thirteen
+	 * family states test IN_ACTION_ANY, so a let-go press that leaves
+	 * IN_INTERACT standing is no let-go at all. IN_SELECT is the control: it
+	 * must come through untouched, because the latch has no business in a
+	 * menu. */
+	state = 0;
+	bits = grab_tick_onekey(1, 0, 1, 0, &state, 0);	// restored on the rope, no key
+	ok((bits & MODERN_IN_ACTION) != 0, "One key: the rope is held with no key at all",
+		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+	ok(bits == MODERN_IN_ACTION, "and the delivery is IN_ACTION alone - nothing is operated",
+		bits, MODERN_IN_ACTION);
+	bits = grab_tick_onekey(1, 1, 1, 0, &state, 0);	// the press that lets go
+	ok((bits & MODERN_IN_ACTION) == 0, "One key: the let-go press clears IN_ACTION",
+		bits & MODERN_IN_ACTION, 0);
+	ok((bits & MODERN_IN_INTERACT) == 0, "and IN_INTERACT with it - this is the fix",
+		bits & MODERN_IN_INTERACT, 0);
+	ok((bits & MODERN_IN_SELECT) != 0, "and leaves IN_SELECT, which is the menus'",
+		bits & MODERN_IN_SELECT, MODERN_IN_SELECT);
+	bits = grab_tick_onekey(1, 1, 0, 0, &state, 0);	// still held, off the rope now
+	ok((bits & (MODERN_IN_ACTION | MODERN_IN_INTERACT)) == 0,
+		"the held press picks nothing up on the way down either",
+		bits & (MODERN_IN_ACTION | MODERN_IN_INTERACT), 0);
+	ok((bits & MODERN_IN_SELECT) != 0, "IN_SELECT still through on that tick",
+		bits & MODERN_IN_SELECT, MODERN_IN_SELECT);
+	grab_tick_onekey(1, 0, 0, 0, &state, 0);	// the key goes up
+	bits = grab_tick_onekey(1, 1, 0, 0, &state, 0);	// and the next press is whole again
+	ok(bits == GRAB_ONEKEY_WORD, "and the next press is the whole action word again",
+		bits, GRAB_ONEKEY_WORD);
+
+	/* "Separate" IS UNTOUCHED BY ALL OF THAT, and this is the check that says
+	 * so: there IN_INTERACT comes from the OTHER key, so a player holding it
+	 * to push at a door while he lets go of a ledge keeps it through the
+	 * let-go press. grab_tick is the "Separate" call, mask IN_ACTION alone. */
+	{
+		const long other = MODERN_IN_INTERACT;
+
+		state = 0;
+		bits = grab_tick(1, 0, 1, 0, &state, other);
+		ok((bits & MODERN_IN_INTERACT) != 0, "Separate: the other key's bit is there while she hangs",
+			bits & MODERN_IN_INTERACT, MODERN_IN_INTERACT);
+		bits = grab_tick(1, 1, 1, 0, &state, other);
+		ok((bits & MODERN_IN_ACTION) == 0, "Separate: the let-go press still lets go",
+			bits & MODERN_IN_ACTION, 0);
+		ok((bits & MODERN_IN_INTERACT) != 0, "and does NOT take the other key's bit with it",
+			bits & MODERN_IN_INTERACT, MODERN_IN_INTERACT);
+		bits = grab_tick(1, 1, 0, 0, &state, other);
+		ok((bits & MODERN_IN_INTERACT) != 0, "nor on the ticks the release still stands",
+			bits & MODERN_IN_INTERACT, MODERN_IN_INTERACT);
+	}
+
 	/* EVERY OTHER BIT IS LEFT ALONE, in the family and out of it - which is
-	 * what keeps IN_SELECT and IN_INTERACT the Action button's own under "One
-	 * key", and therefore keeps a pushblock being pushed by a held key. */
+	 * what keeps IN_SELECT the Action button's own under "One key", and what
+	 * keeps a pushblock being pushed by a held key: the latch delivers
+	 * IN_ACTION and nothing else, and IN_INTERACT is only ever taken away, and
+	 * only for the rest of one let-go press. */
 	{
 		const long extra = MODERN_IN_FORWARD | MODERN_IN_WALK;
 		int hurt = 0;
@@ -5543,6 +5630,14 @@ static void grab_latch()
 		MODERN_MOVE_MASK & MODERN_IN_ACTION, 0);
 	ok(MODERN_GRAB_RELEASE == 0x4, "MODERN_GRAB_RELEASE is its own bit beside the two",
 		MODERN_GRAB_RELEASE, 0x4);
+	// The two bits fix 3 mirrored, by value, the same way as the nine above.
+	ok(MODERN_IN_INTERACT == 0x4000, "MODERN_IN_INTERACT is IN_INTERACT's own bit",
+		MODERN_IN_INTERACT, 0x4000);
+	ok(MODERN_IN_SELECT == 0x100000, "MODERN_IN_SELECT is IN_SELECT's own bit",
+		MODERN_IN_SELECT, 0x100000);
+	ok(GRAB_ONEKEY_RELEASE == (MODERN_IN_ACTION | MODERN_IN_INTERACT),
+		"and IN_ACTION_ANY is the OR of the two - the let-go mask under One key",
+		GRAB_ONEKEY_RELEASE, MODERN_IN_ACTION | MODERN_IN_INTERACT);
 }
 
 /* LARA'S OWN GUN CYCLE, as a model (#161, round 161b2a, item 2). The truth

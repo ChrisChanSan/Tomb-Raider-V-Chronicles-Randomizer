@@ -617,7 +617,8 @@ long ModernStateIsSwim(short anim_state)
  *   70  lara_as_deathslide - the zip line        game\lara.cpp:4292
  *  128  lara_as_parallelbars                     game\lara.cpp:4897
  *
- * AND FIVE STATES THAT READ NOTHING AND ARE IN THE FAMILY ANYWAY, because they
+ * AND SIX STATES THAT READ NOTHING AND ARE IN THE FAMILY ANYWAY (the word said
+ * "five" until fix 3 counted the list it introduces), because they
  * are transitions INSIDE it and the bit must not blink off while one runs: 59
  * AS_CLIMBEND (the half rung at the top of a ladder), 112 AS_CLIMBROPE (the
  * pull up the rope, which reads IN_ROLL and hands her back to 111), and the
@@ -640,11 +641,16 @@ long ModernStateIsSwim(short anim_state)
  * - 129 AS_PBLEAP, the leap OFF the bar: she has already let go.
  * - pushing and pulling a block (36/37/38). It is not a question of the
  *   family: game\moveblok.cpp:158, :220 and :268 read IN_INTERACT and not
- *   IN_ACTION at all since round 161b2c, and the latch writes only IN_ACTION.
- *   Under "Separate" they are two different keys; under "One key" they are the
- *   same key but still two bits, and the one this function governs is not the
- *   one the push loop asks for. So a block is pushed exactly as it is today,
- *   with the key held, at either setting. */
+ *   IN_ACTION at all since round 161b2c, and the latch DELIVERS only
+ *   IN_ACTION. Under "Separate" they are two different keys; under "One key"
+ *   they are the same key but still two bits, and the one this function
+ *   governs is not the one the push loop asks for. So a block is pushed
+ *   exactly as it is today, with the key held, at either setting.
+ *   Fix 3 widened what a let-go press CLEARS to the whole action word under
+ *   "One key", and it reaches this loop too - but only for the rest of that
+ *   one press, which by then began inside the family and has to be let go
+ *   before anything is grasped again. The press that starts a push is a
+ *   press of its own, and it pushes. */
 long ModernStateIsGrab(short anim_state)
 {
 	switch (anim_state)
@@ -1499,11 +1505,14 @@ long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, l
  * - a press INSIDE the family is a let-go: MODERN_GRAB_RELEASE goes up and the
  *   bit is taken out of the word, so the state routine sees what it sees when
  *   a player lets the key go.
- * - while THAT press lasts the bit stays clear, wherever she is by then. This
- *   is the one place where "outside the family the key is the key" bends, and
- *   it bends on purpose: without it the very press that let go of the ledge
+ * - while THAT press lasts `release` stays clear, wherever she is by then.
+ *   This is the one place where "outside the family the key is the key" bends,
+ *   and it bends on purpose: without it the very press that let go of the ledge
  *   would still be down two ticks later, when she is falling past the next
- *   one, and she would catch it. No instant re-grab.
+ *   one, and she would catch it. No instant re-grab - and under "One key",
+ *   where `release` is the whole action word, the held let-go press also picks
+ *   nothing up and operates nothing until the key was up once. That is the
+ *   same rule as "fires no weapon and catches nothing", one key wide.
  * - inside the family with no such press, the bit is DELIVERED whether the key
  *   is down or not. A savegame restored in a hang needs no key at all, which
  *   is the case the user will test first.
@@ -1513,8 +1522,38 @@ long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, l
  * `drop` is a tick on which no latch may stand - a cutscene, a menu, the title
  * screen, death - and like the mode latch a drop tick is a Hold tick bit for
  * bit. The key memory is tracked across drops too, so a key still down when a
- * menu closes is not a fresh press and cannot let go of anything by itself. */
-long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit, long bits)
+ * menu closes is not a fresh press and cannot let go of anything by itself.
+ *
+ * `bit` IS THE DELIVERY AND `release` IS THE LETTING GO, AND THEY ARE NOT THE
+ * SAME WORD (#161, round 161b2d, fix 3 - measured, and it refutes the design
+ * sentence that said one mask would do).
+ *
+ * Thirteen of the family's thirty-four states do not ask IN_ACTION but
+ * IN_ACTION_ANY - the pole, the rope, the zip line and the parallel bars
+ * (game\lara.cpp:4292, :4328, :4339, :4371, :4421, :4452, :4623, :4632, :4736,
+ * :4746, :4897 and game\rope.cpp:596). Under "One key" the one action key
+ * raises IN_ACTION and IN_INTERACT in the same statement
+ * (specific\input.cpp's action_bits), so clearing IN_ACTION alone left the
+ * other bit standing, the state still read "held", and the let-go press was
+ * inert. On the rope and on the bars that is a trap: their only exit is the
+ * cleared test.
+ *
+ * So the caller hands in BOTH words and this function stays pure - it knows
+ * nothing about settings, only that one mask goes out and one comes in:
+ * - `release` is every bit the grab key raises in the active Action setting.
+ *   specific\input.cpp composes it the way game\lara.cpp:5003 already spells
+ *   that same distinction: IN_ACTION_ANY under "One key", IN_ACTION alone
+ *   under "Separate", where IN_INTERACT belongs to a different physical key
+ *   and this latch has nothing to say about it.
+ * - `bit` is what is DELIVERED inside the family, and it stays IN_ACTION
+ *   alone: every state that asks IN_ACTION_ANY is satisfied by it, since ANY
+ *   is the OR of the two, and an IN_INTERACT delivered without a key would be
+ *   an interaction nobody asked for.
+ * With Grab mode off the first branch still hands the word back before either
+ * mask is looked at, so "Hold" is byte-identical as before; with "Separate"
+ * the two words are the same value and so is every tick. */
+long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit,
+	long release, long bits)
 {
 	long s;
 
@@ -1545,7 +1584,7 @@ long ModernGrabLatch(long toggle, long down, long family, long drop, long* state
 		return bits;
 
 	if (s & MODERN_GRAB_RELEASE)
-		return bits & ~bit;
+		return bits & ~release;
 
 	if (family)
 		bits |= bit;

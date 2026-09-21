@@ -1002,8 +1002,11 @@ New, under `TOMB5/specific/hd/`:
   drifting away from the enum.
 - `hd_trm.cpp` / `.h` — the header of a `.TRM`, including the trick that gets
   past the facial rig the head models carry. Written against TRForge's format
-  description, not copied from it (its own file pulls in a level library we do
-  not want).
+  description, except the facial-rig rescan and the small byte reader beside
+  it, which follow TRForge's own code closely (MIT, its notice in
+  `vendor/trforge/LICENSE`; corrected in audit round A1 - see the file's own
+  header and `THIRD-PARTY.md`). TRForge's own file was not vendored because it
+  pulls in a level library we do not want.
 - `hd_scan.cpp` / `.h` — reads the `.TRG`, counts groups, pages, vertices,
   indices and draw ranges, binds the slots, and times our BC7 decoder over every
   page of the level. Engine-free on purpose: the diagnostic tools `TrgProbe` and
@@ -18221,12 +18224,16 @@ change what a player feels, and each of them wants its own play test. And one
 bit is not ours to decide: the order of the two water-material parameters at
 `hd_render.cpp:565`. A build with the two exchanged was made outside the
 repository for the user to look at; the tree keeps today's order until he has
-compared JOBY4's sea with a fountain and said which is right. One question is
-left open on purpose: nobody has yet compared our re-typed readers
-`hd_trm.cpp`, `hd_scan.cpp` and `hd_bind.cpp` line by line against the upstream
-MIT sources for copied passages. Copying them would be lawful under MIT and we
-carry the notice; it is an attribution question, and it belongs to the next
-round.
+compared JOBY4's sea with a fountain and said which is right. One question the
+audit had left open was answered inside the round: the re-typed readers
+`hd_trm.cpp`, `hd_scan.cpp` and `hd_bind.cpp` were compared against the
+upstream MIT sources for copied passages. `hd_scan.cpp` came out clean; the
+facial-rig rescan of `hd_trm.cpp` with the small byte reader beside it, and
+`read_map_file` in `hd_bind.cpp`, follow TRForge's own code closely. That is
+lawful under MIT and the notice travels in `vendor/trforge/LICENSE`; the three
+sentences that had said "rather than copied" of the whole files - the two file
+headers and `THIRD-PARTY.md` - were corrected in `1823f98`, and the entry for
+`hd_trm.cpp` in section 4's file list in the commit that closes the round.
 
 Commits of this round: `7c02357`, `a1c6129`, `8219710`, `e6fc7c4`, `1bcacee`,
 `5b5412d`, `c8b89b0` (the engine), `5dcc9fb`, `1e4f21a`, `86fc9c0`, `f768981`,

@@ -1,5 +1,6 @@
-Copy the loading screens from the TR4-6 Remasters (they sit in 5\PIX\HD)
-into the HD folder:
+Copy the loading screens out of your own TR4-6 Remaster installation
+(they sit in 5\PIX\HD) into the HD folder - none of them is included
+here:
 ANDREA1.DDS to RICH3.DDS, TITLE.DDS and LOGO_DE / LOGO_EU / LOGO_FR /
 LOGO_US.DDS (1920 x 1080, BC7).
 

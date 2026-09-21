@@ -1,9 +1,12 @@
-Copy your HQ audio files from the TR4-6 Remasters into the folders of
-the languages you want to use with the ingame language switch.
+Copy your HQ audio files from your own TR4-6 Remaster installation
+into the folders of the languages you want to use with the ingame
+language switch. Nothing of the Remaster is included here.
 
 JP is still WIP.
 
-The sound effects work the same way. Copy MAIN.SFX out of the TR4-6
-Remaster - it sits in 5\DATA - into this folder and keep the name. The
-game then plays its sound effects at 44.1 kHz instead of the original
-22 kHz. Without the file nothing changes.
+The sound effects need no copy any more: with the TR4-6 Remaster
+installed, the game reads its MAIN.SFX (it sits there in 5\DATA)
+where it lies and plays its sound effects at 44.1 kHz instead of the
+original 22 kHz. A MAIN.SFX in this folder, under that name, is used
+before it - for those who copied one here already. With neither, the
+game plays the original samples as it always did.

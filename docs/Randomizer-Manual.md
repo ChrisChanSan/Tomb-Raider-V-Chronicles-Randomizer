@@ -105,7 +105,7 @@ agree:
 | Random outfits, TR3 outfits, the wardrobe | the secret options |
 | extra enemies and their count | the music options |
 | enemy swap, enemy pool | level sections and level order |
-| | the three balance sliders |
+| Shuffle weather | the three balance sliders |
 
 And three things sit outside the seed entirely: **the randomizer's version,
 the level data it ships with, and the engine**. The build number matters most
@@ -114,7 +114,7 @@ changes to the curated placement data, which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_1.0` is the release, `Build 0.18` is the placement data. Nothing stops
+`Beta_1.0` is the release, `Build 0.19` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 
@@ -130,9 +130,8 @@ there to be read, not enforced.
 choice is remembered, so it is asked once.
 
 **"Check again"** re-hashes every level and compares it against the shipped
-list. It runs by itself at start and after every run; the button is for
-repeating it by hand. It also re-scans `data\secrets`, which is what makes a newly
-added secret list appear. It also runs at startup and when you choose a
+list, and it re-scans `data\secrets`, which is what makes a newly added
+secret list appear. It runs by itself at startup and when you choose a
 folder, but NOT after a run - so after dropping a list into `data\secrets`
 while the program is open, the button is what makes it show up.
 
@@ -229,8 +228,8 @@ drawn. What is stored is the *deselection*, so an outfit added in a later
 version arrives switched on rather than falling through an old settings file.
 
 The engine can wear about a hundred other outfits — every `OUTFIT_*` file of
-the two Remasters, and whatever an outfit mod brings — but **none of them is
-in this window and none of them is ever rolled**. They are the *in-game*
+your own two Remaster installations, and whatever an outfit mod brings — but
+**none of them is in this window and none of them is ever rolled**. They are the *in-game*
 outfit changer's list, and the reason they are kept out of a run is
 reproducibility: a seed and its settings travel from one player to another, an
 installation and a `Mods` folder do not. Nothing about them is written into a
@@ -311,6 +310,9 @@ within a section still works.
 sections*, and *free across everything*. "Within" shuffles the levels inside
 each block; "free" throws all thirteen playable levels into one pot.
 
+With the drop-down at *free across everything* the section checkbox is greyed
+out — a free roll already crosses the sections, so the box would mean nothing.
+
 The cutscene richcut2 is glued behind rich2 and travels with it. Neither roll
 can land on the vanilla order — it re-rolls if it does, so the box always
 visibly does something.
@@ -349,7 +351,8 @@ sky" and the "not inside" flag, and those seven have no such room. They keep
 what Core gave them, which for joby3 means it keeps the snow Core set there
 and the engine has never shown.
 
-The option is part of the seed, like every other checkbox — the same seed text
+The option is part of the seed — the table under **The seed** says which
+others are, and which are not — so the same seed text
 with the box ticked is a different game from the same text without it, and the
 effective seed under the seed field shows that. spoiler.txt names what each
 level got, together with what it had before.
@@ -475,7 +478,10 @@ next to the `.trc` it belongs to: `Andrea1.hdm`, `joby2.hdm` and so on, a
 handful of lines each.
 
 They are notes for the engine's **HD mode**, which draws the levels with the
-Remaster's own artwork. That artwork describes the *original* level, so the
+Remaster's own artwork. That mode needs your own installation of **Tomb Raider
+IV-VI Remastered**: nothing of it is included here, nothing of it is written
+into a level file, and the engine reads it where it lies while the game runs.
+That artwork describes the *original* level, so the
 randomizer has to say where it no longer fits: where a secret list opened a
 wall, which rooms it lifted or built from nothing, which object slots hold a
 model out of a different level, and which Tomb Raider III outfit you rolled.

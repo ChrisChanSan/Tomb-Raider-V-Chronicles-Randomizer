@@ -28,6 +28,15 @@ You additionally need your own installation of Tomb Raider
 Chronicles. Game data is deliberately NOT included here - the game
 belongs to its rights holders.
 
+This is an unofficial, non-commercial fan project. It is not
+affiliated with, authorised by or endorsed by Core Design, Eidos,
+Crystal Dynamics, Aspyr, Saber Interactive or Embracer. Tomb Raider,
+Tomb Raider Chronicles and Tomb Raider IV-VI Remastered belong to
+their rights holders. Nothing of theirs is included here and nothing
+is ever copied out of their installations: for the HD art, the HQ
+sound bank and the HD loading screens you need your own copy of the
+Remaster, and the engine reads it where it lies while the game runs.
+
 Getting started
 ---------------
   1. Start TR5Randomizer.exe.
@@ -87,14 +96,18 @@ original, even if you set the enemies to harmless.
 Better sound and music, from your own remaster
 ----------------------------------------------
 If you own the Tomb Raider 4-6 Remaster, three things from it can be
-used here. Nothing of either is included - the engine only looks
-whether the files are there.
+used here. Nothing of it is included - the engine reads your own
+files where they lie, and copies nothing out of them.
 
-Sound effects: copy MAIN.SFX from the remaster (it sits in 5\DATA)
-into the audio folder, keeping the name. The original stores its
-sounds as 22 kHz ADPCM inside every level file; the remaster's are
-44.1 kHz, and they are not the old ones upsampled - there really is
-more in them. About nine sounds in ten are swapped. The rest keep
+Sound effects: there is nothing to copy any more. The engine reads
+MAIN.SFX out of your installed remaster (it sits there in 5\DATA)
+where it lies. A copy of that file in the audio folder, keeping the
+name, is still used first - for players who made one already.
+
+The original stores its sounds as 22 kHz ADPCM inside every level
+file; the remaster's are 44.1 kHz, and they are not the old ones
+upsampled - there really is more in them. About nine sounds in ten
+are swapped. The rest keep
 their original version on purpose: enemies the randomizer moved in
 from other levels, and the guests from Tomb Raider III, have no
 counterpart in the remaster and keep the sounds they arrived with.
@@ -102,7 +115,7 @@ counterpart in the remaster and keep the sounds they arrived with.
 Music: the HQ soundtracks go into audio\HQ EN, audio\HQ DE and so on,
 named after the track number. There is a note in the audio folder.
 
-Loading screens and logos: copy the remaster's DDS pictures from
+Loading screens and logos: copy your own remaster's DDS pictures from
 5\PIX\HD (ANDREA1 to RICH3, TITLE, and LOGO_DE, LOGO_EU, LOGO_FR,
 LOGO_US) into screens\HD. The game then shows them while a level
 loads, builds the logo screen from TITLE plus the logo of your
@@ -147,8 +160,8 @@ chreden (https://github.com/chreden/trview). Copy it to
 and restart trview; it merges the file over its built-in list at
 startup.
 
-It only affects names. Ten slots would otherwise read wrongly or not
-at all, for four different reasons:
+It only affects names. Eleven slots would otherwise read wrongly or
+not at all, for four different reasons:
 
   - Four (31, 43, 53, 75) carry different contents after randomizing:
     the guests from Tomb Raider III take over slots that held a SAS
@@ -156,8 +169,9 @@ at all, for four different reasons:
     and wrongly.
   - Two (47, 55) are ordinary Chronicles slots trview has no entry
     for at all.
-  - Two (460, 461) lie beyond the original 460 and exist in no vanilla
-    level, so trview's list ends before them - its last TR5 id is 452.
+  - Three (460, 461, 469) lie beyond the original 460 and exist in no
+    vanilla level, so trview's list ends before them - its last TR5
+    id is 452.
   - Two (85, 61) trview does know but cannot tell apart: it calls both
     41 and 85 "Dog" although only one is the husky, and "Soldier
     Statue" is no longer enough now that two Roman gods can stand in
@@ -175,9 +189,10 @@ data\Backup. Please do not delete that folder - it is the only copy
 of your original levels the program knows about.
 
 A note on savegames: the save format was changed compared to the
-original. Old savegames are rejected with a message instead of
-breaking silently - so finish a running playthrough before you switch
-to a new version.
+original. An old savegame is not loaded into a mismatch: the game
+says so in a message box and then closes. So move your old saves
+aside, or finish a running playthrough, before you switch to a new
+version.
 
 If you want to report something, start the game once with -log:
 

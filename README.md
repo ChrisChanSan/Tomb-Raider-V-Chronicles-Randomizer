@@ -11,6 +11,17 @@ game engine that runs natively on Windows 11 (D3D9 + XAudio2, no wrappers).
 Game data is **not** included — bring your own installation. Everything is
 GPLv3.
 
+> **An unofficial, non-commercial fan project.** It is not affiliated with,
+> authorised by or endorsed by Core Design, Eidos, Crystal Dynamics, Aspyr,
+> Saber Interactive or Embracer. *Tomb Raider*, *Tomb Raider Chronicles* and
+> *Tomb Raider IV-VI Remastered* belong to their rights holders. Nothing of
+> theirs is included here and nothing is ever copied out of their
+> installations: you need your own copy of Chronicles, and — for the HD art,
+> the HQ sound bank and the HD loading screens — your own copy of the
+> Remaster. The screenshots on this page show the original game's own levels,
+> and where HD is on, art that the engine reads at run time out of the
+> author's own Remaster installation.
+
 ## Manuals
 
 - **[The engine](docs/Engine-Manual.md)** - every option, every file it
@@ -28,8 +39,10 @@ GPLv3.
 | **Outfits** | Lara's three Chronicles outfits, plus outfits imported from Tomb Raider III — pick what may be rolled in the wardrobe |
 | **Secrets** | Placed in a glitchless or a glitched set, or rolled from a pool |
 | **Music** | Ambience and triggers permuted; HQ soundtracks in OGG are played if you supply them |
-| **Sound** | Drop the remaster's `MAIN.SFX` into `audio\` and the game plays its effects at 44.1 kHz - measurably wider, not upsampled |
-| **Loading screens** | Drop the remaster's pictures into `screens\HD\` and the loading screens run at 1920x1080 instead of 640x480 |
+| **Sound** | With your own Tomb Raider IV-VI Remastered installed, the game plays its sound effects at 44.1 kHz — measurably wider, not upsampled. A `MAIN.SFX` you put into `audio\` yourself is used before it |
+| **Loading screens** | Your own Remaster's pictures in `screens\HD\` make the loading screens run at 1920x1080 instead of 640x480 |
+| **HD art** | With your own Remaster installed, the levels, Lara and the pickups are drawn with its HD models and textures — read where they lie, never copied, never shipped. *Options -> Graphics -> HD textures* turns it off |
+| **60 frames a second** | The default. The game still thinks thirty times a second and what is drawn in between is interpolated, so nothing about the physics changes. *Options -> Graphics -> Display -> Frame rate* offers 30, 60 and the display's own refresh |
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
 | **Weather** | Rolled per level — the rainy Ireland levels can come up dry, the Russian base can get rain instead of snow |
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
@@ -87,15 +100,63 @@ Both are under the **GNU GPL v3**; the complete source code lives here.
 
 ### In the game
 
+Everything the engine adds sits under **Options**, in the pause menu and on
+the title screen, as a tree of tabs: **Audio**, **Controls**, **Graphics**,
+**HUD**, **tomb5 options**, **Special Features** and **Credits** — with
+sub-pages of their own, *Key bindings*, *View* and *Modes* under Controls and
+*Display* under Graphics. The original's own rows are where they always were;
+nothing was taken away.
+
 <table>
 <tr>
-<td width="50%"><img src="docs/features-1.jpg" alt="New options page"><br>
-An options page of its own: PSX skies, crawl tilting, distance fog, the
-loading bar and screen styles, ammo hotkeys, static lighting, level select.</td>
-<td width="50%"><img src="docs/features-2.jpg" alt="First person view options"><br>
-The first-person view, with field of view, a death camera, the head-bone
-look and how hard the camera is damped.</td>
+<td width="50%"><img src="docs/menu-options.jpg" alt="The Options menu"><br>
+The seven tabs. <i>Special Features</i> opens from the title screen; in a
+pause session it is shown greyed out.</td>
+<td width="50%"><img src="docs/menu-tomb5-options.jpg" alt="tomb5 options"><br>
+<b>tomb5 options</b>: the cutscene skipper, cheats, level select, and the
+three movement fixes — climb-up delay, flexible crawling, crawl tilting.</td>
 </tr>
+<tr>
+<td width="50%"><img src="docs/menu-graphics.jpg" alt="Graphics"><br>
+<b>Graphics</b>: HD textures, fog and distance fog, shimmer, the mono screen
+and shadow styles, PSX skies, static lighting, the underwater effect, look
+transparency and footprints.</td>
+<td width="50%"><img src="docs/menu-display.jpg" alt="Display"><br>
+<b>Display</b>, under Graphics: the frame rate — 30, 60 or whatever your
+screen refreshes at — and VSync. 60 is what a fresh installation gets.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/menu-controls.jpg" alt="Controls"><br>
+<b>Controls</b>: Tank or Modern, the Action row that splits Interact from the
+Secondary button, the pad layout, camera speed and dead zone, targeting and
+the ammo hotkeys.</td>
+<td width="50%"><img src="docs/menu-key-bindings.jpg" alt="Key bindings"><br>
+<b>Key bindings</b>: every role rebindable, on the keyboard and on the pad
+alike, over as many pages as the list needs, with <i>Reset to defaults</i>
+standing above each of them.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/menu-view.jpg" alt="View"><br>
+<b>View</b>: the first-person view, its field of view, the death camera, the
+head-bone look, the damping, and whether her body is drawn.</td>
+<td width="50%"><img src="docs/menu-modes.jpg" alt="Modes"><br>
+<b>Modes</b>: Combat, Sprint, Duck and Grab, each of them Toggle or Hold.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/menu-hud.jpg" alt="HUD"><br>
+<b>HUD</b>: bar mode and positions, enemy bars, the ammo counter, the
+game-over menu, TR4 loading screens, the loading bar style and the loading
+text.</td>
+<td width="50%"><img src="docs/menu-audio.jpg" alt="Audio"><br>
+<b>Audio</b>: music and effect volume, sound quality — and the language,
+which can be changed while the game runs.</td>
+</tr>
+</table>
+
+<sup>HD art is read at run time from the player's own Tomb Raider IV-VI
+Remastered installation — none of it is included here.</sup>
+
+<table>
 <tr>
 <td width="50%"><img src="docs/features-3.jpg" alt="Per-level secret counter"><br>
 The pause screen now counts the secrets of the level you are in, in
@@ -106,9 +167,7 @@ The setup dialog, driving a native Direct3D 9 device — resolution,
 fullscreen or windowed, FMVs and sound, with the build date in the corner.</td>
 </tr>
 <tr>
-<td><img src="docs/gui-language.jpg" alt="Language switching"><br>
-The language can be changed while the game runs.</td>
-<td><img src="docs/gui-credits.jpg" alt="Credits"><br>
+<td colspan="2" align="center"><img src="docs/gui-credits.jpg" alt="The in-game credits screen" width="640"><br>
 Credits for everyone whose work is in here.</td>
 </tr>
 </table>
@@ -135,6 +194,22 @@ I-III Remastered** the first has not got under the same name, and every one
 your `Mods` folder adds. Each row carries where it came from — `IV-VI`,
 `I-III`, or the mod's own folder name — and the row in force is marked with
 a `*`.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/outfit-changer.jpg" alt="The F4 outfit changer"><br>
+The bodies of the installed Remasters, with the footsteps, the head rule,
+the shine and the skin glow of the highlighted one — and, in brackets, which
+tier decided each.</td>
+<td width="50%"><img src="docs/outfit-changer-mods.jpg" alt="The F4 outfit changer with mod outfits"><br>
+The same list with a mod folder installed: every row names the folder it came
+out of. The outfits shown here are a third-party mod, credited under
+<i>Mods shown in the screenshots</i> below.</td>
+</tr>
+</table>
+
+<sup>HD art is read at run time from the player's own Tomb Raider IV-VI
+Remastered installation — none of it is included here.</sup>
 
 The first row is **Level facts**, and it means "no choice at all": the level
 and the rolled run decide, which is what a player who has never opened this
@@ -236,8 +311,8 @@ for the bodies that have no boots. Your own choice wins over both and is kept
 per outfit.
 
 There is no separate barefoot LANDING among those five recordings, and the
-remaster has none either: measured on a recording of the remaster, its
-barefoot landing is a random one of the same five. So ours draws the landing
+remaster has none either: measured on a recording the author made of his own
+Remaster installation, its barefoot landing is a random one of the same five. So ours draws the landing
 from the same five too. A level with no room left for a second
 set, or with no sound bank to take one from, shows the row as *unavailable*
 and the log says which of the two it was. Every line of it begins with
@@ -653,9 +728,36 @@ HD art. Start the game with `-log` and the log tells you which mods were
 found, what each one replaced and what was refused — every one of those
 lines begins with `MODLOG`.
 
+<table>
+<tr>
+<td width="50%"><img src="docs/mods-shotgun.jpg" alt="A mod's shotgun in Lara's hands"><br>
+A mod's weapon model in her hands and a mod's outfit on her, in the middle of
+a rolled run.</td>
+<td width="50%"><img src="docs/mods-uzis.jpg" alt="A mod's Uzis in the inventory ring"><br>
+A mod's Uzis in the inventory ring — a model written for Tomb Raider I-III,
+turned onto the Chronicles item's own shape and posed out of that game's own
+first frame, so the pair comes out crossed.</td>
+</tr>
+</table>
+
+<sup>HD art is read at run time from the player's own Tomb Raider IV-VI
+Remastered installation — none of it is included here.</sup>
+
+### Mods shown in the screenshots
+
+| Mod | Author | Shown in |
+| --- | --- | --- |
+| [SPAS-12 Shotgun Replacer](https://www.nexusmods.com/tombraidertrilogyremastered/mods/135) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the shotgun picture |
+| [IMI Uzi Replacement for Mac-10](https://www.nexusmods.com/tombraidertrilogyremastered/mods/187) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the Uzi picture |
+| [Tomb Raider - Underworld - AIO](https://www.nexusmods.com/tombraidertrilogyremastered/mods/954) | [DarkLegendAoD](https://www.nexusmods.com/profile/DarkLegendAoD) | the outfit changer with mods, and the Uzi picture |
+| [OPERA DRESS (Tomb Raider 5)](https://www.nexusmods.com/tombraidertrilogyremastered/mods/281) | [Zellphie](https://www.nexusmods.com/profile/Zellphie) | the shotgun picture |
+
+These are third-party mods by their respective authors. They are not part of
+this project and are not included; get them from the authors' pages.
+
 ## What you need
 
-Your own installation of **Tomb Raider Chronicles**. Game data is
+**To play:** your own installation of **Tomb Raider Chronicles**. Game data is
 deliberately **not** part of this project — neither levels nor music,
 videos or language files. The game belongs to its rights holders; the
 randomizer patches your own files at runtime and backs everything up to
@@ -663,14 +765,32 @@ randomizer patches your own files at runtime and backs everything up to
 original levels' geometry, which it needs to place anything legally —
 [THIRD-PARTY.md](THIRD-PARTY.md) says exactly what that is and is not.
 
+**For the HD art, the HQ sound bank and the HD loading screens:** your own
+installation of **Tomb Raider IV-VI Remastered** — and, for the four Tomb
+Raider III guests in HD, of **Tomb Raider I-III Remastered**. Not one file of
+either is part of this project or of the release package, none is offered for
+download anywhere here, and nothing is ever copied out of them: the engine
+reads them where they lie, on your own machine, while the game runs. Without
+them the game runs exactly as the original did, with the classic art, the
+classic sound bank and the classic 640x480 loading screens.
+
+The four Tomb Raider III guests (T-Rex, raptor, compy, vulture) likewise need
+your own **Tomb Raider III** installation; their models and sounds are read
+from it at run time and none of them ships here either.
+
 ## Building
+
+**The one prerequisite is Visual Studio with the C++ desktop workload.** Every
+build script in this repository is otherwise relative to its own folder, so a
+fresh clone builds; the single absolute path in each of them is the call to
+`vcvars32.bat` or `vcvars64.bat`, pinned to the install this was built with —
+`C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\`.
+Another version, edition or drive means editing that one line in the script
+you are running, and nothing else.
 
 - **Engine:** `TOMB5 Code\tomb5.vcxproj` with Visual Studio (Win32, Release).
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
-  `b2.bat` (GUI) — the source paths are relative to the repo, but line 3 of
-  each script calls `vcvars64.bat` at a hardcoded location
-  (`C:\Program Files\Microsoft Visual Studio\18\Community\...`). Another
-  version, edition or drive means editing that one line.
+  `b2.bat` (GUI).
 - **Package:** `Preparation\Tools\BuildRelease.ps1` assembles
   the shippable folder including source code and licenses.
 
@@ -684,12 +804,16 @@ original levels' geometry, which it needs to place anything legally —
   from there (GPLv3, taken over directly rather than rewritten, so its
   origin stays visible). Their models and sounds are not shipped; the
   randomizer reads them from your own Tomb Raider III installation.
-- **[TROne](https://github.com/todesengel1931)** by Todesengel1931 (GPLv3) —
-  the design of the modern (analog-stick) control scheme on the Controls
-  page, re-derived here in our own units and our own voice; nothing of
-  TROne's code is in this tree. The one thing taken across verbatim is the
-  ported test suite's expectations, credited by name in
-  `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header.
+- **TROne (GPLv3) by Todesengel1931** —
+  https://github.com/todesengel1931 — and in two different ways. The design
+  of the modern (analog-stick) control scheme on the Controls page was
+  re-derived here in our own units and our own voice, with the ported test
+  suite's expectations taken across verbatim and credited by name in
+  `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header. The
+  HD-at-run-time path (#123) is different: it **carries TROne's own code
+  over**. Twenty-one source files in this tree name Todesengel's copyright in
+  their own headers, and [THIRD-PARTY.md](THIRD-PARTY.md) lists what came
+  from where, file by file.
 - **[trview](https://github.com/chreden/trview)** by chreden — the tool
   every single zone boundary of this randomizer was verified with.
 - **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut (MIT) —
@@ -698,6 +822,10 @@ original levels' geometry, which it needs to place anything legally —
   the background image.
 - **[zlib](https://zlib.net/)** by Jean-loup Gailly and Mark Adler — the
   level files are compressed with it.
+- **TRForge** by the TRForge contributors (MIT) — five of its files, the
+  reader for the Remaster's own room-geometry format, are vendored into the
+  engine byte for byte and compiled in;
+  [THIRD-PARTY.md](THIRD-PARTY.md) says which and why.
 - **[discord-rpc](https://github.com/discord/discord-rpc)** by Discord, Inc.
   (MIT) — Troye's Discord Rich Presence. This fork switches it off, so it is
   in no binary; its libraries and headers still travel in the source tree,

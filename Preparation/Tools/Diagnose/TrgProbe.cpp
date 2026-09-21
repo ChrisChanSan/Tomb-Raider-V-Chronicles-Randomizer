@@ -1670,7 +1670,7 @@ namespace
 		 * asked offline, out of the same two files, so "the palm is baked
 		 * into the room art" is a number rather than a guess.
 		 *
-		 * The room blob IS a ROOM_INFO written out (specificlexstuff.cpp,
+		 * The room blob IS a ROOM_INFO written out (specific\alexstuff.cpp,
 		 * aFixUpRoom), so `mesh` at +16 is the blob-relative offset of the
 		 * MESH_INFO array and `num_meshes` sits at +50. The visibility box of
 		 * a slot comes out of the level's own static block, which follows the

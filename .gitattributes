@@ -47,7 +47,7 @@
 #
 # eol=lf pins the checkout instead of teaching the batch file to normalise:
 # one line of rule rather than a second hashing path in two scripts that would
-# have to agree forever. These five files are C source and HLSL - no tool in
+# have to agree forever. These six files are C source and HLSL - no tool in
 # this project cares which ending they carry, only that every machine sees the
 # same one.
 **/hd_shader/*.hlsl eol=lf

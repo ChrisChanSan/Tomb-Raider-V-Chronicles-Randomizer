@@ -17433,7 +17433,10 @@ line - swept against every OTHER reader of the same bits in the tree, none of
 which is reachable from inside the family, so the latch can never manufacture
 a catch it should not, and pushing a block is untouched for a stronger
 reason still: round 161b2c already moved the push loops onto `IN_INTERACT`,
-a bit this latch never touches. Toggle: inside the family the bit is
+a bit this latch never DELIVERS - the third fix round below widened what a
+let-go press CLEARS to include it under *One key*, which reaches the push
+loop for the rest of that one press and no further. Toggle: inside the
+family the bit is
 delivered without the key, including on the first tick after a savegame load
 in a hang; a fresh press inside the family lets go, and the bit stays clear
 for as long as THAT press lasts, so falling past a lower ledge with the
@@ -17546,10 +17549,82 @@ that was only an observation turned out to be the real defect of the four.
    gives the generic reading of every DualSense name those rows use, so the
    class of error cannot repeat silently.
 
+**THE THIRD FIX ROUND: THE LET-GO PRESS WAS INERT ON FOUR OF THE EIGHT KINDS
+OF HOLD.** The third review re-measured the whole round and everything held
+but this, and this was a trap. Failure as it found it: *Grab mode* **Toggle**,
+*Action* **One key** - the DEFAULT - and Lara on a rope. She hangs, which is
+the feature. The player presses to let go and nothing happens, and nothing
+happens for as long as the option is on: `lara_col_rope`'s only way off is the
+cleared test and `lara_as_parallelbars`' only way out of `AS_PBSPIN` is the
+same. She swings, or spins, until she reloads or turns the row off. On the
+pole and the zip line the same press is equally inert, though both have
+another exit.
+
+The cause is one mask used for two jobs. `ModernGrabLatch` was handed
+`IN_ACTION` and cleared exactly that on a let-go press, and item 4's own
+comment in `global\types.h` said so deliberately, reasoned from the pushblock.
+But `specific\input.cpp`'s `action_bits` is
+`IN_SELECT | IN_INTERACT | (action_split ? 0 : IN_ACTION)`: under *One key*
+the ONE action key raises `IN_ACTION` and `IN_INTERACT` in a single statement,
+and THIRTEEN of the family's thirty-four states test `IN_ACTION_ANY` rather
+than `IN_ACTION` - the five pole states, the five rope states, `AS_SLIDEROPE`,
+the zip line and the parallel bars. Clearing one of the two bits left the
+other standing, so those thirteen still read "still holding on". The round's
+own comment at `game\lara.cpp:4262` had named the very property that defeats
+it: under *One key* "the two bits leave every producer together".
+
+The fix is the smallest one that exists: the let-go mask becomes a parameter
+of its own beside the delivered bit. `ModernGrabLatch(..., bit, release,
+bits)` stays pure - it knows nothing about settings - and the mode seam in
+`specific\input.cpp` composes `release` the way `game\lara.cpp:5003` already
+spells that same distinction: `IN_ACTION_ANY` under *One key*, `IN_ACTION`
+alone under *Separate*, where `IN_INTERACT` is a different physical key and
+this latch has no business with it. The DELIVERY stays `IN_ACTION` alone,
+because every state that asks ANY is satisfied by it and an `IN_INTERACT`
+handed out without a key would operate things by itself; `IN_SELECT` is never
+in either mask. *Hold* returns before either word is read, so the default is
+byte-identical as before, and under *Separate* the two words are the same
+value and every tick is what `c50ffae` produced.
+
+THE TRACE, all thirty-four states, measured rather than assumed: fifteen read
+plain `IN_ACTION` (hang, both shimmies, both hang turns, the overhead hang,
+the four monkey-swing states, and five of the six ladder states, through
+`LaraHangTest`, `lara_as_hang2`, `lara_col_monkeyswing` and
+`LaraCheckForLetGo`); thirteen read `IN_ACTION_ANY` (pole 99-103, rope
+90/91/111/114/115, `AS_SLIDEROPE` 113 in `game\rope.cpp`, the zip line 70, the
+parallel bars 128); six read no input at all and are in the family only so the
+bit cannot blink off mid-transition (`AS_CLIMBEND` 59, `AS_CLIMBROPE` 112,
+which reads `IN_ROLL`, and the four corner shimmies 107-110, whose routines
+call `SetCornerAnim` and hand her back into `AS_HANG` or `AS_CLIMBSTNC`).
+After the fix every one of the twenty-eight that read anything lets go on a
+press at BOTH *Action* settings; the six that read nothing let go on the state
+they leave into, which is one of the twenty-eight. No family state reads
+`IN_INTERACT` alone for anything else - the only two routines that do are
+`lara_as_ppready` and `lara_as_pulley`, neither in the family. (The count of
+the input-less states is six, not the "five" `ModernStateIsGrab`'s own comment
+said; the word is corrected there.)
+
+The rule the widened mask inherits is the documented one and gains one clause:
+while that press lasts the whole mask stays clear wherever she is, so under
+*One key* the held let-go press also picks nothing up and operates nothing
+until the button was up once - the same sentence as "fires no weapon and
+catches nothing", one key wide. It is said in the function comment, in
+`global\types.h`'s `grab_toggle` paragraph (whose old sentence claimed the
+opposite and is replaced), in `ModernStateIsGrab`'s pushblock paragraph, and
+in the manual's *Grab* bullet, which the review's second finding had rightly
+called a promise the code did not keep. Both it and this entry's own "a fresh
+press inside the family lets go" are now true as written.
+
 **PROOF.** `be.bat` clean throughout; `bmt.bat`/`ModernTest.exe` unchanged
 through items 1-3 (none of them touch `modern_move.cpp`), 5773 checks (0
 failed) after item 4 (+314: `grab_family` and `duck_family`, both swept
-0..138 against a written-out reference, and the latch script); `bmenu.bat`/
+0..138 against a written-out reference, and the latch script) and 5788 (0
+failed) after the third fix round (+15: a real *One key* word through the
+latch script, the *Separate* word's other key kept through a let-go press,
+the delivery asserted to be `IN_ACTION` and nothing else, the two newly
+mirrored bits by value, and the Hold byte-identity sweep widened from 32
+combinations to 64, once per *Action* setting - narrowing the let-go mask
+back to `IN_ACTION` fails 2 of them); `bmenu.bat`/
 `MenuTest.exe` 18,702 checks (0 failed) after item 1 (+4164), 23,126 (0
 failed) after item 2 (+4424), unchanged by item 3 (no role or table item 3
 adds is one `MenuTest` sweeps by itself), 23,134 (0 failed) after item 4
@@ -17584,14 +17659,25 @@ rope, the zip line and the parallel bars, and the drop-and-catch case; Duck
 mode Toggle through a whole crawl, including a pickup made from it; the new
 *Modes* sub-page's back navigation; and, since the second fix round, Grab
 mode Toggle held through a flyby camera and through an office camera room,
-where the latch used to fall. A 161b2c player with a stored Separate
+where the latch used to fall; and, since the third one, Grab mode Toggle at
+the DEFAULT *Action* setting *One key* on the four kinds of hold that could
+not be let go of at all before it - the rope, the pole, the zip line and the
+parallel bars - together with the same press on a pushblock, which must still
+push. A 161b2c player with a stored Separate
 pad set keeps his own bindings, chord-free, until he chooses *Reset to
 defaults* once - worth a line to him directly, since nothing on the binding
-page itself says so.
+page itself says so. The other direction of that downgrade is worth the same
+line: a registry written by THIS build and then read by a 161b2c build puts
+the chord roles PLAIN on their buttons, because 161b2c never reads `JChord` or
+`SJChord` - quick save on R3 beside *Look*, quick load on L3 beside *Dash*,
+the flare and the four weapons likewise. The values load without harm; going
+back means rebinding those rows there, or pressing *Reset to defaults* once in
+the older build.
 
 Commits: `81a8827` (item 1), `f331108` (item 2), `884bd0a` (item 3),
 `9a26fbc` (item 4), `8c31d0f` (the record), `b3930c8` and `89427f4` (the fix
-round), `83e56f7` (the second fix round), and the one that names them here.
+round), `83e56f7` (the second fix round), `c50ffae` (the record of it), the
+third fix round's own commit, and the one that names them here.
 
 ## Building this yourself
 

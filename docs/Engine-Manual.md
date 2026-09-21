@@ -441,11 +441,12 @@ finger:
   something new. That last part has one price worth knowing: from the press
   that let go until you release the button, the action bit stays clear
   wherever she is, so the *same* continuous hold will not fire a weapon or
-  catch anything either — let the button go once and it is an ordinary key
-  again. Everywhere else *Toggle* changes nothing at all: pushing a block
-  uses the interact key under *Separate* and its own bit under *One key*, and
-  menus read the pad and the keyboard directly, so neither ever sees the
-  latch.
+  catch anything either — and under *One key*, where one button carries the
+  whole action, that held press also picks nothing up and operates nothing.
+  Let the button go once and it is an ordinary key again. Everywhere else
+  *Toggle* changes nothing at all: pushing a block uses the interact key
+  under *Separate* and its own bit under *One key*, and menus read the pad
+  and the keyboard directly, so neither ever sees the latch.
 - Every one of the four lets go on its own at a level change, a savegame
   load, a cutscene, death, and while a menu owns the input, so a key still
   held across one of those never latches by surprise. Water ends the sprint

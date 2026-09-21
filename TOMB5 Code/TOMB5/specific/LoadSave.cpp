@@ -1340,6 +1340,12 @@ void CalculateNumSpecialFeatures()
 	}
 }
 
+/* The accented letters of the French and German rows are hex escapes on purpose:
+ * the engine's own font takes the single CP-1252 bytes E9 and FC (AccentToCode,
+ * game\text.cpp), and an editor that saves this file as UTF-8 turns them into the
+ * replacement character - which is what happened here and was undone in audit round
+ * A1. The literal is split where a hex digit follows the escape ("Zur\xFC" "ck"),
+ * because "\xFCc" would be read as a single escape. */
 static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 {
 	static char buf[32];
@@ -1351,9 +1357,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Ensuite \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Pr�c�dent / Ensuite \x1b");
+			strcpy(buf, "\x19 Pr\xE9" "c\xE9" "dent / Ensuite \x1b");
 		else
-			strcpy(buf, "\x19 Pr�c�dent");
+			strcpy(buf, "\x19 Pr\xE9" "c\xE9" "dent");
 
 		break;
 
@@ -1362,9 +1368,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Weiter \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Zur�ck / Weiter \x1b");
+			strcpy(buf, "\x19 Zur\xFC" "ck / Weiter \x1b");
 		else
-			strcpy(buf, "\x19 Zur�ck");
+			strcpy(buf, "\x19 Zur\xFC" "ck");
 
 		break;
 

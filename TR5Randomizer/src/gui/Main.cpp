@@ -275,9 +275,8 @@ namespace
             DWORD opts = 0;
             dlg->GetOptions(&opts);
             dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-            dlg->SetTitle(gGermanUi
-                ? L"Ordner der Tomb Raider Chronicles-Installation waehlen"
-                : L"Choose the folder of your Tomb Raider Chronicles installation");
+            const std::wstring title = PathUtil::widen(T("Choose the folder of your Tomb Raider Chronicles installation"));
+            dlg->SetTitle(title.c_str());
             if (SUCCEEDED(dlg->Show(owner)))
             {
                 IShellItem* item = nullptr;
@@ -476,7 +475,6 @@ namespace
         int  optItemAmount = 0;         // 0 vanilla amount, 1 more, 2 a lot more (#36)
         bool phTexRgb = false;          // color dice over vanilla textures
         bool phTexMix = false;          // mix textures across levels
-        bool phTexRemaster = false;     // patch remaster textures
         bool phRoomBackdrops = false;   // include backdrop areas
         bool phRoomNeighbors = false;   // open locked neighboring rooms
         bool phJoby4NoWater = false;    // Deepsea Dive without water
@@ -2542,9 +2540,6 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Checkbox(T("Mix across levels"), &a.phTexMix);
     hoverHelp("Coming later: swap texture pages between levels - Rome in "
               "Russia, the submarine in Ireland.");
-    ImGui::Checkbox(T("Patch remaster textures"), &a.phTexRemaster);
-    hoverHelp("Coming later: patch remaster textures (if the player owns "
-              "them) into the classic levels.");
 
     ImGui::TextDisabled(T("Rooms"));
     ImGui::Checkbox(T("Include backdrop areas"), &a.phRoomBackdrops);

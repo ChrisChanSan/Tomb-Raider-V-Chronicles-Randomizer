@@ -10,6 +10,15 @@ Everything the program does, in the order you will meet it. If you only read
 one section, read [Your first run](#your-first-run) — the rest you can look
 up when you need it.
 
+> **An unofficial, non-commercial fan project.** It is not affiliated with,
+> authorised by or endorsed by Core Design, Eidos, Crystal Dynamics, Aspyr,
+> Saber Interactive or Embracer. *Tomb Raider*, *Tomb Raider Chronicles* and
+> *Tomb Raider IV-VI Remastered* belong to their rights holders. Nothing of
+> theirs is included here and nothing is ever copied out of their
+> installations: you need your own copy of Chronicles, and — for the guest
+> enemies and guest outfits, and for the HD art the engine can draw — your
+> own copies of *Tomb Raider III* and of the Remaster.
+
 - [What you need](#what-you-need)
 - [Your first run](#your-first-run)
 - [The seed](#the-seed)

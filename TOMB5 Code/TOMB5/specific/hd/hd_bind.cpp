@@ -7,9 +7,17 @@
  *
  * The LEVELn.MAP format - KEY=VALUE a line, CRLF, no sections and no comments
  * in any shipped file - is TRForge's measurement (MIT, trf_remaster\Remaster.h,
- * load_object_map). The reader below is written against that description
- * rather than copied, because TRForge's own file drags in its level library.
- * See vendor\trforge\VERSION.txt.
+ * load_object_map). That file could not be vendored, because it drags in
+ * TRForge's own level library - see vendor\trforge\VERSION.txt - so what
+ * stands here was written against the description instead.
+ *
+ * One passage is the exception, and audit round A1 corrected this notice to
+ * say so: the line splitter and KEY=VALUE parser inside read_map_file follow
+ * TRForge's own load_object_map closely. What differs is that the file is read
+ * in chunks here rather than in one piece, and that a tab joins the characters
+ * stripped from the end of a line. That is lawful, TRForge being MIT, and its
+ * notice travels with this tree in vendor\trforge\LICENSE; the blanket
+ * "rather than copied" that used to stand here was not true of that loop.
  *
  * bind_against's third rule, the EXTRA prefix (fix round O, #123), is written
  * against a description of two things neither of which is copied: TRForge's

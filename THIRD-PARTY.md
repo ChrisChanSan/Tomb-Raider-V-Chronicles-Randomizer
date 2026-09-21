@@ -117,9 +117,14 @@ level library and would drag it in with it. What it gave us is the **format**
 of a `.TRM` object model — the header, the part table, the meaning of the word
 that is zero in every model but a head, the trick that finds a head's geometry
 behind its facial rig, and the 24 byte vertex with its three bones and three
-weights. `TOMB5/specific/hd/hd_trm.cpp` is written against that description
-rather than copied from it, and says so in its header; every number in its
-comments was measured again here over the 566 models of the remaster's game 5.
+weights. `TOMB5/specific/hd/hd_trm.cpp` is written against that description,
+with two exceptions its own header now names: the facial-rig rescan and the
+small byte reader beside it follow TRForge's code closely. That is lawful
+under the MIT licence, and TRForge's notice travels with this tree in
+`vendor/trforge/LICENSE`. Until audit round A1 this page and that header both
+said "rather than copied" of the whole file, which was true of the rest of it
+and not of those two passages. Every number in its comments was measured again
+here over the 566 models of the remaster's game 5.
 
 The same file gave one more thing, in stage S7-2: the rule by which a slot
 finds its model at all. TRForge's `bind_level_items` matches a slot on the

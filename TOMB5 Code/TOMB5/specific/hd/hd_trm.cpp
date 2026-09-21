@@ -3,10 +3,19 @@
  *
  * The .TRM layout, the meaning of the word that is zero in every model but a
  * head, and the trick that finds a head's geometry behind its facial rig are
- * TRForge's measurements (MIT, trf_remaster\ItemModels.h / .cpp). The reader
- * below is written against that description rather than copied, because
- * TRForge's own file includes its level library - see vendor\trforge\
- * VERSION.txt.
+ * TRForge's measurements (MIT, trf_remaster\ItemModels.h / .cpp). That file
+ * could not be vendored, because it includes TRForge's own level library and
+ * would drag it in - see vendor\trforge\VERSION.txt - so the reader below is
+ * written against the description instead.
+ *
+ * Two passages are the exception, and audit round A1 corrected this notice to
+ * say so: the facial-rig rescan further down and the little byte reader beside
+ * it (Reader, have / u32 / f32) follow TRForge's own code closely - the same
+ * loop, the same bounds, the same order of the arithmetic, with the names and
+ * the brace style changed. That is lawful, TRForge being MIT, and its notice
+ * travels with this tree in vendor\trforge\LICENSE. What was not true is the
+ * blanket sentence that used to stand here: "written against that description
+ * rather than copied" holds for the rest of the file but not for those two.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software

@@ -1,4 +1,8 @@
 build/
+# The two build scripts live in build/ and are tracked on purpose; the blanket
+# ignore above would otherwise hide them (and any future script there) too.
+!build/b1.bat
+!build/b2.bat
 *.obj
 *.exe
 *.pdb

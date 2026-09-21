@@ -14326,36 +14326,48 @@ inverse turned back by `y_rot`), captured in `InterpBeginFrame`'s walk beside
 `InterpRootLerp`, so the blend handed to the draw already starts from the
 narrowed offset.
 
-**MEASURED, THE REGRESSION TABLE** (`RootProbe`, JOBY5, drawn offset at alpha
-0.5, all three axes; round 157's own default set and the grab):
+**MEASURED, THE REGRESSION TABLE** (`RootProbe`, JOBY5, round 157's own
+default set and the grab, all three axes). The two drawn columns are the
+probe's own tween frame at alpha 0.5. The last column is what the difference
+of the two pictures grows to over the WHOLE of a tween: today blends from
+`prev`, the narrowed rule from the narrowed start, and the gap between them is
+largest as alpha goes towards 0 - there it is exactly the UNPAID part of
+`d_off`, axis by axis. That column, and not the alpha-0.5 pair, is the honest
+answer to "how far does this round move the picture" (the probe prints it as
+`worst=`; the fix round of 157b added it after a reviewer read the first
+version of this table as a bound and found it was not one):
 
 ```
-  transition        TranslateItem   d_off (x,y,z)    kept          today drawn        narrowed drawn      verdict
-  96->96  f1424     none            (0,0,0)          (0,0,0)       rule does not fire  does not fire      IDENTICAL
-  161->161 f3113    (0,-512,0)      (-4,504,3)       (0,504,0)     (-11,-627,-102)    (-13,-627,-100)    y IDENTICAL; x,z 2 units
-  164->164 f3206    none            (0,0,-1)         (0,0,0)       does not fire      does not fire      IDENTICAL
-  165->161 f3113    none            (0,-12,7)        (0,0,0)       (-13,-369,-104)    does not fire ->
-                                                                                       (-13,-375,-100)    y 6, z 4
-  168->168 f3316    (0,512,0)       (0,-504,2)       (0,504,0)     (1,-123,-101)      (1,-123,-100)      y IDENTICAL; z 1
-  169->168 f3316    (0,256,0)       (0,-239,6)       (0,239,0)     (1,-255,-103)      (1,-255,-100)      y IDENTICAL; z 3
-  173->164 f3206    none            (3,-1,-1)        (0,0,0)       (-8,-283,-157)     does not fire ->
-                                                                                       (-6,-284,-158)     x 2, y 1, z 1
-  172->173 f3491    (0,-190,0)      (-2,181,0)       (0,181,0)     (-9,-208,45)       (-10,-208,45)      y IDENTICAL; x 1
+  transition        TranslateItem   d_off (x,y,z)    kept          today drawn        narrowed drawn     worst over a tween
+  96->96  f1424     none            (0,0,0)          (0,0,0)       stands down        stands down        (0,0,0)   IDENTICAL
+  161->161 f3113    (0,-512,0)      (-4,504,3)       (0,504,0)     (-11,-627,-102)    (-13,-627,-100)    (4,0,3)   y to the unit
+  164->164 f3206    none            (0,0,-1)         (0,0,0)       (-6,-284,-157)     stands down (cur)  (0,0,1)
+  165->161 f3113    none            (0,-12,7)        (0,0,0)       (-13,-369,-104)    stands down (cur)  (0,12,7)
+  168->168 f3316    (0,512,0)       (0,-504,2)       (0,504,0)     (1,-123,-101)      (1,-123,-100)      (0,0,2)   y to the unit
+  169->168 f3316    (0,256,0)       (0,-239,6)       (0,239,0)     (1,-255,-103)      (1,-255,-100)      (0,0,6)   y to the unit
+  173->164 f3206    none            (3,-1,-1)        (0,0,0)       (-8,-283,-157)     stands down (cur)  (3,1,1)
+  172->173 f3491    (0,-190,0)      (-2,181,0)       (0,181,0)     (-9,-208,45)       (-10,-208,45)      (2,0,0)   y to the unit
 ```
 
-Every axis a position step pays for lands to the unit. What differs is axes
-with a small offset step and no position step behind it (x/z of 161, z of
-168/169, and two transitions that stop blending altogether: 165->161 and
-173->164) - the largest single difference in the whole round-157 set is 6
-units, on 165->161's y. **THAT DOES NOT REFUTE THE PROPOSAL, and it is
-reported rather than hidden: the round's own argument says the narrowed
-picture is the right one there** - vanilla's thirty hertz draws pose B at B's
-offset once the wrap has happened, and a refused frame draws pose B, so it
-belongs at B's offset unless a position step says otherwise. `-grab 274 222`
-(the crawl case) and every other transition of his log table stand down the
-same way: `pos_y` constant means `step` is 0, `kept` is 0, the blend lands on
-`cur`, and `InterpRootNow` returns false - no `INTERPLOG root lara` line at
-all, which is the rule working and not a regression.
+**EVERY AXIS A POSITION STEP PAYS FOR IS IDENTICAL TO THE UNIT AT EVERY
+ALPHA** - the ladder's y, the grab's y, 168's and 169's y. That is the
+regression proof and it holds without a qualifier. **SEVEN OF THE EIGHT CASES
+NEVERTHELESS CHANGE THEIR PICTURE ON SOME AXIS**, and the numbers stand here
+rather than being hidden: an axis with a small offset step and NO position step
+behind it moves by the `worst` column - 4 and 3 units on 161's x and z, 6 on
+169's z, 2 on 168's z and on 172->173's x, 1 on 164->164's z - and three of the
+set stop blending altogether, 164->164 (z 1), 173->164 (3,1,1) and 165->161,
+the largest of the whole round-157 set at **12 units on y** (about ten of them
+at the first tween frame of his own 165 Hz panel, alpha near 0.18). **THAT DOES
+NOT REFUTE THE PROPOSAL: the round's own argument says the narrowed picture is
+the right one there** - vanilla's thirty hertz draws pose B at B's offset once
+the wrap has happened, and a refused frame draws pose B, so it belongs at B's
+offset unless a position step says otherwise. `-grab 274 222` (the crawl case
+he reported) stands down the same way and by the same amount the bug was worth:
+`d_off` 61 on y, `step` 0, `kept` 0, `worst` 61 - the whole of the float. Every
+other transition of his log table has `pos_y` constant, so `step` is 0 there
+too, the blend lands on `cur`, and `InterpRootNow` returns false - no `INTERPLOG
+root lara` line at all, which is the rule working and not a regression.
 
 **THE SWEEP** (`RootProbe -sweep`, new probe mode, ANDREA1's 474 and JOBY5's
 813 animations, every wrap and `jump_anim_num` change with an offset step of
@@ -14400,6 +14412,22 @@ comparison: it is the frame every one of these steps was authored in. She
 swims with an `x_rot`, but her own swimming step (`LaraUnderWater`) is
 authored in that same `y_rot` frame too.
 
+**AND THE HONEST HALF OF THAT** (added in the fix round of 157b, a reviewer's
+finding): the quantity the step is weighed AGAINST, `d_off`, is applied by the
+draw through the FULL `phd_RotYXZ` (`game/delstuff.cpp:343` turns by `y_rot`,
+`x_rot`, `z_rot` and translates by the offset after it), so where a pitch or a
+roll is not zero the two quantities do live in different frames and the
+`y_rot`-only inverse IS an approximation there. What it can cost is bounded by
+the shape of the rule and not by the accuracy of the inverse: the kept part is
+clamped to `|d_off|` on its own axis whatever `step` says, so the start offset
+always lies on the segment between `cur` and `prev` - understate a component
+and the rule keeps less, overstate it and the rule keeps at most the whole
+step, which is today's picture. Never more than today, never in another
+direction. Nothing measured reaches it either: of the 31 transitions of
+ANDREA1 whose offset step the file pays for, not one is in a pitched state
+(the states are 0, 1, 2, 10, 19, 25, 36, 37, 54, 56, 57, 61, 87, 88, 89 and
+117 - no `AS_TREAD` 13, no `AS_SWIM` 17, no `AS_GLIDE` 18).
+
 **THE SEAM.** `INTERPLOG root lara` gains ` step=(%d,%d,%d) kept=(%d,%d,%d)`
 at its END - nothing reworded, nothing removed. Transitions that no longer
 blend print no line at all any more, which is the rule working and not a
@@ -14430,8 +14458,33 @@ order 2, the #169 flip and the camera are untouched - this round touches only
 reads no staler than `g_rootFlip` does, and for the same reason: it is
 written in the walk one statement after `g_poseOk[i] = 1` and ABOVE the
 `NodeMoved` exit, so a slot the walk lets through always carries this
-frame's own value, and a slot that snapped or never moved is never read for
-it.
+frame's own value. A slot that did NOT move is read - that is exactly why the
+call stands above the `NodeMoved` exit and not below it, and what it reads is
+an honest zero for this frame rather than a step left over from another one.
+A slot that SNAPPED is the one that is never read: `g_poseOk[i]` stays 0 and
+`InterpRootNow` returns at its own `g_poseOk[i] != POSE_ROOT` test before it
+touches `g_rootStep` (the sentence here said "snapped or never moved" until
+the fix round of 157b; a reviewer pointed out that half of it is backwards).
+
+**THE FIX ROUND.** The skeptical reviewer did not accept the first build of
+this round, and three of his findings were about this entry rather than about
+the engine - the regression table called 164->164 IDENTICAL when today's rule
+blends there and the narrowed one does not, the summarising sentence quoted an
+alpha-0.5 difference as if it were a bound, and `Preparation/Tools/README.md`
+still carried `InterpTest`'s old count of 373 in the middle of the very row
+whose end says 398. All three are corrected above and in that file. Nothing of
+the RULE changed, and it was not narrowed further to make the table read better
+- the differences are stated instead, because the round exists over differences
+of this size and a record that hides them is worth nothing. Two things did
+change in the tools, both to stop the misreading happening again:
+`RootProbe`'s `step=`/`kept=` line now prints `d_off=`, `today=`/`narrowed=`
+in words, and `worst=` (the difference over a whole tween) instead of leaving
+all three to be inferred from rows above and from the ABSENCE of a marker -
+that absence is what produced the wrong 164->164 row; and one `InterpTest`
+check in `root_narrow` passed the literals `1, 1` as its got/want pair, so a
+failure of it would have printed `got 1, want 1` - it now passes the two values
+it compares. The check count is unchanged at 398; the code of
+`InterpRootNarrow` is unchanged to the token.
 
 #### Round 161a (#161) - modern controls, the movement half
 

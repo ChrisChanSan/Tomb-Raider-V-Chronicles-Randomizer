@@ -523,14 +523,33 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 				nfires ? "" : "   (rule does not fire)");
 
 			if (fires || nfires)
+				/* THE d_off AND THE TWO VERDICTS ARE SPELLED OUT (fix round of
+				 * 157b). This line used to leave both to be inferred - d_off
+				 * from the offsets three rows up, "today fires" from the
+				 * ABSENCE of a marker on the fixed row - and the round's first
+				 * record then carried 164->164 as "does not fire" for both
+				 * when today's rule does fire there. A table column that has
+				 * to be inferred is a table column that gets read wrong. The
+				 * worst= pair is what the tween frames really cost: the blend
+				 * runs over the whole of alpha, and at alpha towards 0 today
+				 * draws prev while the narrowed rule stands at cur, so the
+				 * largest difference of the two pictures over the drawn frames
+				 * is the UNPAID part of d_off, axis by axis. */
 				std::printf("    step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)"
-					"  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s\n",
+					"  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s"
+					"  d_off=(%ld,%ld,%ld) today=%s narrowed=%s"
+					" worst=(%ld,%ld,%ld)\n",
 					t.step[0], t.step[1], t.step[2],
 					labs(t.off[0] - start[0]), labs(t.off[1] - start[1]),
 					labs(t.off[2] - start[2]),
 					fix[0], fix[1], fix[2], narrow[0], narrow[1], narrow[2],
 					(fix[0] == narrow[0] && fix[1] == narrow[1] && fix[2] == narrow[2])
-						? "  IDENTICAL" : "");
+						? "  IDENTICAL" : "",
+					t.off[0] - p.off[0], t.off[1] - p.off[1], t.off[2] - p.off[2],
+					fires ? "blends" : "stands down",
+					nfires ? "blends" : "stands down",
+					labs(start[0] - p.off[0]), labs(start[1] - p.off[1]),
+					labs(start[2] - p.off[2]));
 
 			if (nfires)
 			{
@@ -601,11 +620,19 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 	std::printf("  tick  N+1    pos.y %6ld  off.y %6ld  drawn %8ld\n", posStep, off1[1], drawn1);
 	std::printf("  offsets x/z: last (%ld,%ld) -> first (%ld,%ld)\n",
 		off0[0], off0[2], off1[0], off1[2]);
-	std::printf("  step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s\n",
+	/* Same three additions as the wrap table above (fix round of 157b): d_off,
+	 * which of the two rules blends at all, and what the difference of the two
+	 * pictures grows to over the tween frames. */
+	std::printf("  step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s"
+		"  d_off=(%ld,%ld,%ld) today=%s narrowed=%s worst=(%ld,%ld,%ld)\n",
 		step[0], step[1], step[2],
 		labs(off1[0] - start[0]), labs(off1[1] - start[1]), labs(off1[2] - start[2]),
 		fix[0], fix[1], fix[2], narrow[0], narrow[1], narrow[2],
-		(fix[0] == narrow[0] && fix[1] == narrow[1] && fix[2] == narrow[2]) ? "  IDENTICAL" : "");
+		(fix[0] == narrow[0] && fix[1] == narrow[1] && fix[2] == narrow[2]) ? "  IDENTICAL" : "",
+		off1[0] - off0[0], off1[1] - off0[1], off1[2] - off0[2],
+		(fix[0] != off1[0] || fix[1] != off1[1] || fix[2] != off1[2]) ? "blends" : "stands down",
+		(narrow[0] != off1[0] || narrow[1] != off1[1] || narrow[2] != off1[2]) ? "blends" : "stands down",
+		labs(start[0] - off0[0]), labs(start[1] - off0[1]), labs(start[2] - off0[2]));
 
 	if (narrow[0] != off1[0] || narrow[1] != off1[1] || narrow[2] != off1[2])
 		std::printf("  the -log line this frame produces (Y = pos.y of tick N):\n"

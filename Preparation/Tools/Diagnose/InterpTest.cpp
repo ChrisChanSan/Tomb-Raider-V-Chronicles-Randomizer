@@ -3650,7 +3650,10 @@ static void root_narrow()
 		ok(wrong[0] == cur[0] + 4,
 			"taken in the old frame the same step pays for 4 of 87 and starts elsewhere",
 			wrong[0], cur[0] + 4);
-		ok(right[0] != wrong[0], "so the order of the two is not free", 1, 1);
+		/* The two must not agree; printing the pair is what tells a failing
+		 * run WHICH value both collapsed onto (fix round of 157b). */
+		ok(right[0] != wrong[0], "so the order of the two is not free",
+			right[0], wrong[0]);
 
 		/* And with nothing to pay, a flip tick stands down like any other. */
 		const long none[3] = { 0, 0, 0 };

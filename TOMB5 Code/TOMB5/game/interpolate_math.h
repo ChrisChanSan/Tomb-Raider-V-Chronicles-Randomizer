@@ -769,15 +769,33 @@ inline void InterpRootFlip(const long in[3], long out[3])
  * SetCornerAnim and their kin), and the rule measures that step because it
  * measures item->pos and not the animation table.
  *
- * THE FRAME THE TWO STEPS ARE COMPARED IN IS y_rot ALONE, and that is not an
- * approximation of a fuller one. TranslateItem (game\control.cpp) turns its
- * three shorts by phd_sin/phd_cos of y_rot and adds y straight, and so does
- * every state routine that moves her by hand - the vault, the ledge grab, the
- * pushblock all write y_pos directly and their x/z through phd_sin of y_rot.
- * The y_rot frame IS the frame a position step is authored in; running it
- * through the full Y*X*Z would put the step into a frame nothing that produces
- * it ever used. She swims with an x_rot, but her swimming steps are authored in
- * that same y_rot frame too (LaraUnderWater, game\laraswim.cpp).
+ * THE FRAME THE TWO STEPS ARE COMPARED IN IS y_rot ALONE, and it is enough
+ * because nothing that pays a step does so with a pitch. TranslateItem
+ * (game\control.cpp) turns its three shorts by phd_sin/phd_cos of y_rot and
+ * adds y straight, and so does every state routine that moves her by hand -
+ * the vault, the ledge grab, the pushblock all write y_pos directly and their
+ * x/z through phd_sin of y_rot. The y_rot frame IS the frame a position step is
+ * authored in; running it through the full Y*X*Z would put the step into a
+ * frame nothing that produces it ever used.
+ *
+ * BE HONEST ABOUT THE OTHER HALF (fix round of 157b, a reviewer's finding):
+ * the quantity the step is weighed AGAINST, d, is applied by the draw through
+ * the FULL phd_RotYXZ (game\delstuff.cpp turns by y_rot, x_rot, z_rot and then
+ * translates by the offset), so where x_rot or z_rot is not zero the two do
+ * live in different frames and this y_rot-only inverse IS an approximation
+ * there. What that can cost is bounded by the shape of the rule itself, and
+ * not by the accuracy of the inverse: the kept part is clamped to |d| on its
+ * own axis whatever `step` says, so the start offset always lies on the
+ * segment between cur and prev. A component the inverse understates keeps
+ * less, one it overstates keeps at most the whole step - which is today's
+ * picture. Never more than today, never in another direction: the one
+ * guarantee the round rests on holds either way.
+ * And it is not reached by anything measured: of the 31 transitions in ANDREA1
+ * whose offset step the file pays for, not one is an underwater state (the
+ * states seen are 0, 1, 2, 10, 19, 25, 36, 37, 54, 56, 57, 61, 87, 88, 89 and
+ * 117 - no AS_TREAD 13, no AS_SWIM 17, no AS_GLIDE 18, the three that carry a
+ * pitch; measured by RootProbe -sweep). She swims with an x_rot, but her step
+ * (LaraUnderWater, game\laraswim.cpp) is authored in the y_rot frame too.
  *
  * NOTHING HERE NEGATES `step`. It is a difference of two tick positions and a
  * long; the magnitudes are compared by carrying the sign to the other side, so

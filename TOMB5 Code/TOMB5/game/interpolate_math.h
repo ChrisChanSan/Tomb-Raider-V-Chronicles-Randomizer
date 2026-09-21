@@ -717,6 +717,87 @@ inline void InterpRootFlip(const long in[3], long out[3])
 	out[2] = -in[2];
 }
 
+/* AND IT BLENDS ONLY WHAT A POSITION STEP PAYS FOR (#157, round 157b).
+ *
+ * THE PLAY TEST, 2026-09-20, 165 Hz panel, fps_mode 2: *bei dem schnellen
+ * Wechsel von kriechen zum aufstehen ist der gleiche Interpolationsbug wie an
+ * der Leiter, 1 Frame steht sie hoeher als ihre Wurzel.* His own -log says it
+ * in numbers - the crawl ends, the crouch begins, and item->pos does not move:
+ *
+ *   INTERPLOG root lara anim 274->222 frame 6655->5653
+ *     offset_prev=(0,-204,-37) offset_cur=(0,-143,-37)
+ *     drawn=(0,-197,-37) then (0,-188,..) (0,-176,..) (0,-164,..) pos_y=-1024
+ *
+ * Four drawn frames of the CROUCH pose - a pose built for a root 143 above the
+ * floor - carried 54, 45, 33 and 21 units too high, and then settling into it.
+ *
+ * WHY THE LADDER IS RIGHT AND THIS IS WRONG is one sentence either way. The
+ * climb carries its travel in the offsets and the engine moves item->pos by
+ * the same amount at the wrap (TranslateItem, game\laramisc.cpp AnimateLara):
+ * offset step +504, position step -512, and the two halves cancel - order 2
+ * blends the one, this rule blends the other, and the drawn root is continuous.
+ * Crawl to crouch has the offset step and NO position step. Nothing cancels, so
+ * the blend simply drags the new pose away from the offset it was built for. At
+ * thirty hertz vanilla shows pose A at A's offset and then pose B at B's; a
+ * refused in-between frame draws pose B, and pose B belongs at B's offset
+ * unless a position step says otherwise.
+ *
+ * SO ROUND 157'S SENTENCE WAS ONE CLAUSE SHORT: K6 refuses the POSE, never the
+ * ROOT - AS FAR AS A POSITION STEP PAYS FOR IT. Per axis, with d = cur - prev
+ * (prev already turned by InterpRootFlip) and `step` this tick's own position
+ * step in the same frame, the paid part is min(|d|, |step|) where the two point
+ * AGAINST each other and nothing at all where they do not, and the blend starts
+ * from cur minus that part instead of from prev.
+ *
+ * MEASURED (RootProbe, against the user's own two cases). The ladder wrap
+ * 161->161: d.y +504 against a step of -512, so the whole step is paid, the
+ * start offset IS prev, InterpRootLerp sees today's operands and the drawn y is
+ * today's TO THE UNIT. Crawl to crouch 274->222: step 0, nothing is paid, the
+ * start offset is cur, the blend comes out at cur and InterpRootNow's own
+ * "blended == cur" exit then hands the draw nothing - the picture of thirty
+ * hertz, which is the one the pose was authored for. The rule can only ever
+ * blend LESS than it does today, never more and never in another direction.
+ *
+ * AND OVER THE WHOLE OF LARA (RootProbe -sweep, ANDREA1, her 474 animations):
+ * 433 transitions carry an offset step of 8 units or more. Every one of the 31
+ * that the file pays for - a TranslateItem at a wrap - keeps its paid axis, and
+ * in NOT ONE of the 433 does the narrowed rule blend where today's does not.
+ * The other 402 are state changes and wraps without a command, where the file
+ * knows of no step at all; what really moves her there is the state routine
+ * (lara_col_reach, TestLaraVault, SnapLaraToEdgeOfBlock, LaraDoClimbLeftRight,
+ * SetCornerAnim and their kin), and the rule measures that step because it
+ * measures item->pos and not the animation table.
+ *
+ * THE FRAME THE TWO STEPS ARE COMPARED IN IS y_rot ALONE, and that is not an
+ * approximation of a fuller one. TranslateItem (game\control.cpp) turns its
+ * three shorts by phd_sin/phd_cos of y_rot and adds y straight, and so does
+ * every state routine that moves her by hand - the vault, the ledge grab, the
+ * pushblock all write y_pos directly and their x/z through phd_sin of y_rot.
+ * The y_rot frame IS the frame a position step is authored in; running it
+ * through the full Y*X*Z would put the step into a frame nothing that produces
+ * it ever used. She swims with an x_rot, but her swimming steps are authored in
+ * that same y_rot frame too (LaraUnderWater, game\laraswim.cpp).
+ *
+ * NOTHING HERE NEGATES `step`. It is a difference of two tick positions and a
+ * long; the magnitudes are compared by carrying the sign to the other side, so
+ * the arithmetic holds over the whole range of the type. d itself is a
+ * difference of two frame offsets, which are shorts, so it cannot overflow. */
+inline void InterpRootNarrow(const long prev[3], const long cur[3], const long step[3],
+	long out[3])
+{
+	for (int i = 0; i < 3; i++)
+	{
+		const long d = cur[i] - prev[i];
+
+		if (d > 0 && step[i] < 0)
+			out[i] = cur[i] - (step[i] <= -d ? d : -step[i]);
+		else if (d < 0 && step[i] > 0)
+			out[i] = cur[i] + (step[i] >= -d ? -d : step[i]);
+		else
+			out[i] = cur[i];
+	}
+}
+
 
 /* ==========================================================================
  * ORDER 4 - THE PAIR A MATRIX BLEND CANNOT SURVIVE (#148; #123 fix round S, S2)

@@ -44,10 +44,23 @@
  *     pair and not either key. The tool does that arithmetic here so that the
  *     record and the play test's log can be compared to the unit.
  *
+ * ROUND 157b added the NARROWED rule beside the other two rows - the blend
+ * that keeps only as much of the offset step as the tick's own POSITION step
+ * pays for (InterpRootNarrow, same header) - and the -sweep mode, which walks
+ * every wrap and every state change of Lara's in one level and says of each
+ * one whether the file pays for its offset step in full, in part or not at
+ * all. That table is the record of what the round changes.
+ *
  * Usage:
  *   RootProbe <level.trc> [anim ...]        default: 96 161 164 165 168 169 173
- *   RootProbe <level.trc> -grab <a> <b>     the drawn root across a change
- *                                           from animation a to animation b
+ *   RootProbe <level.trc> -grab <a> <b> [y] the drawn root across a change
+ *                                           from animation a to animation b;
+ *                                           the position step defaults to a's
+ *                                           own TranslateItem where the change
+ *                                           is its wrap, and `y` overrides it
+ *   RootProbe <level.trc> -sweep [least]    every transition of Lara's whose
+ *                                           offset step is `least` units or
+ *                                           more on an axis (default 8)
  *
  * Build (64 bit): broot.bat next to this file. See Preparation/Tools/README.md.
  */
@@ -242,6 +255,52 @@ static void printCommands(const Tr5Level& l, const AnimRow& a, long trans[3], bo
 	}
 }
 
+/* THE TranslateItem OF ONE ANIMATION, without printing anything - the sweep
+ * and the -grab default both need the number and not the table. It is the
+ * command that runs at the WRAP (AnimateLara, game\laramisc.cpp: the command
+ * block is walked only where frame_number has passed frame_end), so a state
+ * change never sees it. */
+static bool readTranslate(const Tr5Level& l, const AnimRow& a, long trans[3])
+{
+	size_t cmdAt = 0;
+	int32_t nCmd = 0;
+
+	trans[0] = trans[1] = trans[2] = 0;
+
+	if (!a.numCommands || !l.debugCommandBlock(cmdAt, nCmd))
+		return false;
+
+	const std::vector<uint8_t>& b = l.debugBytes();
+	size_t p = cmdAt + (size_t)a.commandIndex * 2;
+
+	auto r16 = [&](size_t at) -> int16_t
+	{
+		int16_t v = 0;
+		std::memcpy(&v, b.data() + at, 2);
+		return v;
+	};
+
+	for (int k = 0; k < a.numCommands && p + 2 <= cmdAt + (size_t)nCmd * 2; k++)
+	{
+		const int typ = (int)(uint16_t)r16(p);
+		p += 2;
+
+		if (typ == 1)
+		{
+			trans[0] = r16(p);
+			trans[1] = r16(p + 2);
+			trans[2] = r16(p + 4);
+			return true;
+		}
+		else if (typ == 2 || typ == 5 || typ == 6)
+			p += 4;
+		else if (typ != 3 && typ != 4)
+			break;
+	}
+
+	return false;
+}
+
 /* WHERE A STATE CHANGE REALLY GOES. The change block is three shorts per
  * entry - the goal state, how many ranges, the first range - and the range
  * block four: the frame window it is allowed in, and the animation and FRAME
@@ -350,43 +409,9 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 	if (!readAnim(l, a.nextAnim, nxt))
 		return;
 
+	/* Read the commands again, silently, for the translate alone. */
 	long trans[3] = { 0, 0, 0 };
-	bool haveTrans = false;
-	size_t cmdAt = 0;
-	int32_t nCmd = 0;
-
-	if (a.numCommands && l.debugCommandBlock(cmdAt, nCmd))
-	{
-		/* Read the commands again, silently, for the translate alone. */
-		const std::vector<uint8_t>& b = l.debugBytes();
-		size_t p = cmdAt + (size_t)a.commandIndex * 2;
-
-		auto r16 = [&](size_t at) -> int16_t
-		{
-			int16_t v = 0;
-			std::memcpy(&v, b.data() + at, 2);
-			return v;
-		};
-
-		for (int k = 0; k < a.numCommands && p + 2 <= cmdAt + (size_t)nCmd * 2; k++)
-		{
-			const int typ = (int)(uint16_t)r16(p);
-			p += 2;
-
-			if (typ == 1)
-			{
-				trans[0] = r16(p);
-				trans[1] = r16(p + 2);
-				trans[2] = r16(p + 4);
-				haveTrans = true;
-				p += 6;
-			}
-			else if (typ == 2 || typ == 5 || typ == 6)
-				p += 4;
-			else if (typ != 3 && typ != 4)
-				break;
-		}
-	}
+	const bool haveTrans = readTranslate(l, a, trans);
 
 	/* A one frame animation has no three ticks before its wrap - anim 172,
 	 * the single frame the ladder grab passes through, is one of them. */
@@ -401,7 +426,12 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 	std::printf("TranslateItem at the wrap: %s(%ld, %ld, %ld)\n",
 		haveTrans ? "" : "none ", trans[0], trans[1], trans[2]);
 
-	struct Tick { int anim; int frame; long pos; long off[3]; long drawn; };
+	/* `step` is the position step taken to REACH this tick, in the item's own
+	 * y_rot frame - which is the frame TranslateItem writes its three shorts
+	 * in (game\control.cpp), so the command's numbers go in unturned. It is
+	 * zero on every tick but the wrap, and it is what the narrowed rule of
+	 * round 157b weighs the offset step against. */
+	struct Tick { int anim; int frame; long pos; long off[3]; long drawn; long step[3]; };
 	std::vector<Tick> ticks;
 
 	long posY = 0;
@@ -413,6 +443,7 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 		t.anim = index;
 		t.frame = a.frameEnd - i + 1;
 		t.pos = posY;
+		t.step[0] = t.step[1] = t.step[2] = 0;
 
 		if (!frameRoot(l, a, t.frame, t.off))
 			return;
@@ -433,6 +464,9 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 		t.anim = a.nextAnim;
 		t.frame = a.nextFrame + i;
 		t.pos = posY;
+		t.step[0] = (!i && haveTrans) ? trans[0] : 0;
+		t.step[1] = (!i && haveTrans) ? trans[1] : 0;
+		t.step[2] = (!i && haveTrans) ? trans[2] : 0;
 
 		if (!frameRoot(l, nxt, t.frame, t.off))
 			return;
@@ -459,15 +493,22 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 			const Tick& p = ticks[i - 1];
 			const long posT = InterpLerpLong(p.pos, t.pos, 0.5F);
 			const bool refused = p.anim != t.anim || t.frame != p.frame + 1;
-			long fix[3];
+			long fix[3], start[3], narrow[3];
 
 			InterpRootLerp(p.off, t.off, 0.5F, fix);
+
+			/* ROUND 157b: the same blend, from the narrowed start offset -
+			 * the engine's own InterpRootNarrow out of interpolate_math.h. */
+			InterpRootNarrow(p.off, t.off, t.step, start);
+			InterpRootLerp(start, t.off, 0.5F, narrow);
 
 			/* The rule only reaches the draw where the blend lands somewhere
 			 * other than the frame's own offset - the engine tests exactly
 			 * this in InterpRootNow, and root_fix counts exactly these. */
 			const bool fires = refused &&
 				(fix[0] != t.off[0] || fix[1] != t.off[1] || fix[2] != t.off[2]);
+			const bool nfires = refused &&
+				(narrow[0] != t.off[0] || narrow[1] != t.off[1] || narrow[2] != t.off[2]);
 
 			std::printf("  tween  today   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
 				t.anim, t.frame, posT, t.off[1], posT + t.off[1],
@@ -476,8 +517,22 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 				t.anim, t.frame, posT, fix[1], posT + fix[1],
 				posT + fix[1] - lastDrawn,
 				fires ? "" : "   (rule does not fire)");
+			std::printf("  tween  narrow  %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
+				t.anim, t.frame, posT, narrow[1], posT + narrow[1],
+				posT + narrow[1] - lastDrawn,
+				nfires ? "" : "   (rule does not fire)");
 
-			if (fires)
+			if (fires || nfires)
+				std::printf("    step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)"
+					"  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s\n",
+					t.step[0], t.step[1], t.step[2],
+					labs(t.off[0] - start[0]), labs(t.off[1] - start[1]),
+					labs(t.off[2] - start[2]),
+					fix[0], fix[1], fix[2], narrow[0], narrow[1], narrow[2],
+					(fix[0] == narrow[0] && fix[1] == narrow[1] && fix[2] == narrow[2])
+						? "  IDENTICAL" : "");
+
+			if (nfires)
 			{
 				/* AND THE LINE THE ENGINE PRINTS FOR THIS FRAME, in full and
 				 * in all three axes, so that the record and the play test's
@@ -487,11 +542,15 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 				std::printf("  the -log line this frame produces (Y = pos.y of the tick above):\n"
 					"  INTERPLOG root lara anim %d->%d frame %d->%d"
 					" offset_prev=(%ld,%ld,%ld) offset_cur=(%ld,%ld,%ld)"
-					" drawn=(%ld,%ld,%ld) pos_y=Y%+ld\n",
+					" drawn=(%ld,%ld,%ld) pos_y=Y%+ld"
+					" step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)\n",
 					p.anim, t.anim, p.frame, t.frame,
 					p.off[0], p.off[1], p.off[2],
 					t.off[0], t.off[1], t.off[2],
-					fix[0], fix[1], fix[2], posT);
+					narrow[0], narrow[1], narrow[2], posT,
+					t.step[0], t.step[1], t.step[2],
+					labs(t.off[0] - start[0]), labs(t.off[1] - start[1]),
+					labs(t.off[2] - start[2]));
 			}
 		}
 
@@ -508,7 +567,7 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 /* THE SAME TABLE FOR A CHANGE FROM ONE ANIMATION TO ANOTHER - the ladder
  * grab. There is no TranslateItem here; whatever moves item->pos is the
  * collision code, and that amount is the caller's to supply. */
-static void printChange(const Tr5Level& l, int from, int to, long posStep)
+static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 {
 	AnimRow a, b;
 
@@ -522,32 +581,275 @@ static void printChange(const Tr5Level& l, int from, int to, long posStep)
 
 	std::printf("\n--- the change anim %d (frame %d, its last) -> anim %d (frame %d) ---\n",
 		from, a.frameEnd, to, b.frameStart);
-	std::printf("  assumed pos.y step of the change: %ld\n", posStep);
+	std::printf("  assumed pos step of the change (item frame): (%ld,%ld,%ld)\n",
+		step[0], step[1], step[2]);
 
+	const long posStep = step[1];
 	const long drawn0 = off0[1];
 	const long drawn1 = posStep + off1[1];
 	const long posT = InterpLerpLong(0, posStep, 0.5F);
-	long fix[3];
+	long fix[3], start[3], narrow[3];
 
 	InterpRootLerp(off0, off1, 0.5F, fix);
+	InterpRootNarrow(off0, off1, step, start);
+	InterpRootLerp(start, off1, 0.5F, narrow);
 
-	std::printf("  tick  N     pos.y %6d  off.y %6ld  drawn %8ld\n", 0, off0[1], drawn0);
-	std::printf("  tween today pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, off1[1], posT + off1[1]);
-	std::printf("  tween fixed pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, fix[1], posT + fix[1]);
-	std::printf("  tick  N+1   pos.y %6ld  off.y %6ld  drawn %8ld\n", posStep, off1[1], drawn1);
+	std::printf("  tick  N      pos.y %6d  off.y %6ld  drawn %8ld\n", 0, off0[1], drawn0);
+	std::printf("  tween today  pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, off1[1], posT + off1[1]);
+	std::printf("  tween fixed  pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, fix[1], posT + fix[1]);
+	std::printf("  tween narrow pos.y %6ld  off.y %6ld  drawn %8ld\n", posT, narrow[1], posT + narrow[1]);
+	std::printf("  tick  N+1    pos.y %6ld  off.y %6ld  drawn %8ld\n", posStep, off1[1], drawn1);
 	std::printf("  offsets x/z: last (%ld,%ld) -> first (%ld,%ld)\n",
 		off0[0], off0[2], off1[0], off1[2]);
+	std::printf("  step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s\n",
+		step[0], step[1], step[2],
+		labs(off1[0] - start[0]), labs(off1[1] - start[1]), labs(off1[2] - start[2]),
+		fix[0], fix[1], fix[2], narrow[0], narrow[1], narrow[2],
+		(fix[0] == narrow[0] && fix[1] == narrow[1] && fix[2] == narrow[2]) ? "  IDENTICAL" : "");
 
-	if (fix[0] != off1[0] || fix[1] != off1[1] || fix[2] != off1[2])
+	if (narrow[0] != off1[0] || narrow[1] != off1[1] || narrow[2] != off1[2])
 		std::printf("  the -log line this frame produces (Y = pos.y of tick N):\n"
 			"  INTERPLOG root lara anim %d->%d frame %d->%d"
 			" offset_prev=(%ld,%ld,%ld) offset_cur=(%ld,%ld,%ld)"
-			" drawn=(%ld,%ld,%ld) pos_y=Y%+ld\n",
+			" drawn=(%ld,%ld,%ld) pos_y=Y%+ld step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)\n",
 			from, to, a.frameEnd, b.frameStart,
 			off0[0], off0[1], off0[2], off1[0], off1[1], off1[2],
-			fix[0], fix[1], fix[2], posT);
+			narrow[0], narrow[1], narrow[2], posT,
+			step[0], step[1], step[2],
+			labs(off1[0] - start[0]), labs(off1[1] - start[1]), labs(off1[2] - start[2]));
 	else
 		std::printf("  the rule does not fire here: the blend is the frame's own offset\n");
+}
+
+/* ==========================================================================
+ * THE SWEEP (round 157b) - EVERY TRANSITION OF LARA'S IN ONE LEVEL, AND WHAT
+ * PAYS FOR IT.
+ * ==========================================================================
+ *
+ * The narrowed rule blends the offset step only as far as the tick's own
+ * POSITION step pays for it, so the record of what this round changes is the
+ * list of transitions with an offset step and the position step beside it.
+ * Two kinds reach the draw:
+ *
+ *   WRAP    frame_number passed frame_end: AnimateLara runs the command block
+ *           first, so a TranslateItem here IS the position step, and it is
+ *           already written in the y_rot frame the rule compares in.
+ *   CHANGE  GetChange swapped the animation before that test, so NO command
+ *           runs and the level file knows of no position step at all. What
+ *           really moves her is the state routine - the vault, the ledge grab,
+ *           the pushblock snap, the climb shifts - which writes item->pos by
+ *           hand. The ENGINE measures that step and this table cannot: a
+ *           CHANGE row reads "not at all (file)" and means "nothing in the
+ *           file pays for it", never "nothing pays for it".
+ *
+ * A change is allowed over a whole frame range, so the offset step depends on
+ * which frame it fired at; the row prints the frame of the range that gives
+ * the LARGEST step, which is the worst case the play test could meet. */
+static void sweep(const Tr5Level& l, int first, int last, long least)
+{
+	size_t chAt = 0, rgAt = 0;
+	int32_t nCh = 0, nRg = 0;
+	const bool haveChanges = l.debugChangeBlock(chAt, nCh) && l.debugRangeBlock(rgAt, nRg);
+	const std::vector<uint8_t>& b = l.debugBytes();
+
+	auto r16 = [&](size_t at) -> int16_t
+	{
+		int16_t v = 0;
+		std::memcpy(&v, b.data() + at, 2);
+		return v;
+	};
+
+	std::printf("\n=== sweep: animations %d..%d, offset steps of %ld units or more ===\n",
+		first, last, least);
+	std::printf("kind    from            to             d off (x,y,z)      step (x,y,z)      "
+		"kept (x,y,z)      today  narrow  verdict\n");
+
+	long rows = 0, full = 0, part = 0, none = 0, stops = 0;
+
+	for (int i = first; i <= last; i++)
+	{
+		AnimRow a;
+
+		if (!readAnim(l, i, a) || a.rate < 1 || a.size < 9)
+			continue;
+
+		for (int kind = 0; kind < 2; kind++)
+		{
+			const int entries = kind ? (haveChanges ? a.numChanges : 0) : 1;
+
+			for (int c = 0; c < entries; c++)
+			{
+				int to = 0, toFrame = 0, lo = 0, hi = 0, ranges = 0, firstRange = 0;
+				long step[3] = { 0, 0, 0 };
+
+				if (!kind)
+				{
+					to = a.nextAnim;
+					toFrame = a.nextFrame;
+					lo = hi = a.frameEnd;
+					readTranslate(l, a, step);
+				}
+				else
+				{
+					if (a.changeIndex + c >= nCh)
+						break;
+
+					ranges = r16(chAt + (size_t)(a.changeIndex + c) * 6 + 2);
+					firstRange = r16(chAt + (size_t)(a.changeIndex + c) * 6 + 4);
+				}
+
+				for (int r = 0; r < (kind ? ranges : 1); r++)
+				{
+					AnimRow bnx;
+
+					if (kind)
+					{
+						if (firstRange + r >= nRg)
+							break;
+
+						const size_t q = rgAt + (size_t)(firstRange + r) * 8;
+
+						lo = r16(q);
+						hi = r16(q + 2);
+						to = r16(q + 4);
+						toFrame = r16(q + 6);
+					}
+
+					if (!readAnim(l, to, bnx) || bnx.rate < 1 || bnx.size < 9)
+						continue;
+
+					long cur[3];
+
+					if (!frameRoot(l, bnx, toFrame, cur))
+						continue;
+
+					/* The frame of the range that gives the biggest step. */
+					long prev[3] = { 0, 0, 0 }, best = -1;
+					int bestFrame = lo;
+
+					for (int f = lo; f <= hi && f - lo < 256; f++)
+					{
+						long o[3];
+
+						if (!frameRoot(l, a, f, o))
+							continue;
+
+						const long m = labs(cur[0] - o[0]) > labs(cur[1] - o[1])
+							? (labs(cur[0] - o[0]) > labs(cur[2] - o[2])
+								? labs(cur[0] - o[0]) : labs(cur[2] - o[2]))
+							: (labs(cur[1] - o[1]) > labs(cur[2] - o[2])
+								? labs(cur[1] - o[1]) : labs(cur[2] - o[2]));
+
+						if (m > best)
+						{
+							best = m;
+							bestFrame = f;
+							prev[0] = o[0]; prev[1] = o[1]; prev[2] = o[2];
+						}
+					}
+
+					if (best < least)
+						continue;
+
+					long start[3], today[3], narrow[3], kept[3];
+
+					InterpRootLerp(prev, cur, 0.5F, today);
+					InterpRootNarrow(prev, cur, step, start);
+					InterpRootLerp(start, cur, 0.5F, narrow);
+
+					bool anyPaid = false, allPaid = true;
+
+					for (int k = 0; k < 3; k++)
+					{
+						kept[k] = labs(cur[k] - start[k]);
+
+						if (kept[k])
+							anyPaid = true;
+
+						if (kept[k] != labs(cur[k] - prev[k]))
+							allPaid = false;
+					}
+
+					const bool firesToday = today[0] != cur[0] || today[1] != cur[1] ||
+						today[2] != cur[2];
+					const bool firesNarrow = narrow[0] != cur[0] || narrow[1] != cur[1] ||
+						narrow[2] != cur[2];
+
+					rows++;
+
+					if (allPaid)
+						full++;
+					else if (anyPaid)
+						part++;
+					else
+						none++;
+
+					if (firesToday && !firesNarrow)
+						stops++;
+
+					std::printf("%-6s  %4d f%-8d %4d f%-8d (%5ld,%5ld,%5ld)  "
+						"(%5ld,%5ld,%5ld)  (%5ld,%5ld,%5ld)  %-5s  %-6s  %s\n",
+						kind ? "change" : "wrap", i, bestFrame, to, toFrame,
+						cur[0] - prev[0], cur[1] - prev[1], cur[2] - prev[2],
+						step[0], step[1], step[2],
+						kept[0], kept[1], kept[2],
+						firesToday ? "fires" : "-", firesNarrow ? "fires" : "-",
+						allPaid ? "paid in full"
+							: (anyPaid ? "paid in part"
+								: (kind ? "not at all (file)" : "not at all")));
+				}
+			}
+		}
+	}
+
+	std::printf("\n%ld transitions with a step of %ld or more: %ld paid in full, %ld in part, "
+		"%ld not at all;\n%ld of them blend today and do not blend under the narrowed rule.\n",
+		rows, least, full, part, none, stops);
+}
+
+/* LARA'S OWN SLICE OF THE ANIMATION TABLE. A TR5 moveable is 20 bytes with the
+ * animation index a uint16 at +16 (the frame pointer is at +12); object 0 is
+ * LARA, and her animations run up to the next moveable's first one. */
+static bool laraAnims(const Tr5Level& l, int& first, int& last)
+{
+	size_t objAt = 0, frAt = 0;
+	int32_t objN = 0, frN = 0;
+	size_t animAt = 0;
+	int32_t animN = 0;
+
+	if (!l.debugModelBlocks(objAt, objN, frAt, frN) || !l.debugAnimBlock(animAt, animN))
+		return false;
+
+	const std::vector<uint8_t>& b = l.debugBytes();
+	int best = -1;
+
+	first = -1;
+	last = animN - 1;
+
+	for (int i = 0; i < objN; i++)
+	{
+		uint32_t id = 0;
+		uint16_t an = 0;
+
+		std::memcpy(&id, b.data() + objAt + (size_t)i * 20 + 0, 4);
+		std::memcpy(&an, b.data() + objAt + (size_t)i * 20 + 16, 2);
+
+		if (an == 0xFFFF)
+			continue;
+
+		if (!id)
+			first = (int)an;
+		else if (first >= 0 && (int)an > first && ((int)an < best || best < 0))
+			best = (int)an;
+	}
+
+	if (first < 0)
+		return false;
+
+	if (best > 0)
+		last = best - 1;
+
+	return true;
 }
 
 int main(int argc, char** argv)
@@ -555,7 +857,8 @@ int main(int argc, char** argv)
 	if (argc < 2)
 	{
 		std::printf("usage: RootProbe <level.trc> [anim ...]\n"
-			"       RootProbe <level.trc> -grab <from> <to> [posStep]\n");
+			"       RootProbe <level.trc> -grab <from> <to> [posStepY]\n"
+			"       RootProbe <level.trc> -sweep [leastStep]\n");
 		return 2;
 	}
 
@@ -574,13 +877,45 @@ int main(int argc, char** argv)
 	l.debugAnimBlock(at, n);
 	std::printf("%s: %d animations\n", argv[1], (int)n);
 
+	if (argc >= 3 && !_stricmp(argv[2], "-sweep"))
+	{
+		const long least = argc >= 4 ? std::atol(argv[3]) : 8;
+		int first = 0, last = 0;
+
+		if (!laraAnims(l, first, last))
+		{
+			std::printf("no LARA moveable in this level\n");
+			return 1;
+		}
+
+		sweep(l, first, last, least);
+
+		return 0;
+	}
+
 	if (argc >= 4 && !_stricmp(argv[2], "-grab"))
 	{
 		const int from = std::atoi(argv[3]);
 		const int to = argc >= 5 ? std::atoi(argv[4]) : 0;
-		const long step = argc >= 6 ? std::atol(argv[5]) : 0;
-		long trans[3];
+		long trans[3] = { 0, 0, 0 };
+		long step[3] = { 0, 0, 0 };
 		bool haveTrans = false;
+		AnimRow a;
+
+		/* THE STEP IS THE LEAVING ANIMATION'S OWN TranslateItem where the
+		 * change really is its wrap - anim 172, the one frame the ladder grab
+		 * passes through, carries (0,-190,0) and round 157 recorded it. An
+		 * explicit argument overrides it for a change that a state routine
+		 * moves by hand, which the file cannot know. */
+		if (readAnim(l, from, a) && a.nextAnim == to && readTranslate(l, a, trans))
+		{
+			step[0] = trans[0];
+			step[1] = trans[1];
+			step[2] = trans[2];
+		}
+
+		if (argc >= 6)
+			step[1] = std::atol(argv[5]);
 
 		printAnim(l, from, trans, haveTrans);
 		printAnim(l, to, trans, haveTrans);

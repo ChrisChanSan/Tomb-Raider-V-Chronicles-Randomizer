@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>		// LONG_MIN / LONG_MAX - the extremes of root_narrow (#157, round 157b)
 
 #include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
 
@@ -3458,6 +3459,239 @@ static void root_flip()
 	}
 }
 
+/* Round 157b: what a position step pays for, and nothing else. The engine's
+ * own order is InterpRootFlip, then InterpRootKey, then InterpRootNarrow, then
+ * InterpRootLerp from the narrowed start offset - so every case below hands
+ * InterpRootNarrow the offset the DRAW is in, and the last group proves that
+ * the order is not free. */
+static void root_narrow()
+{
+	printf("the root blends only what a position step pays for (#157, round 157b)\n");
+
+	/* THE LADDER, and it is the regression proof of the whole round: ANDREA1
+	 * and JOBY5 both carry the wrap of anim 161 at these numbers, and the
+	 * TranslateItem that runs at it is (0,-512,0). 512 pays for 504, so the y
+	 * axis keeps its whole step and the start offset IS prev - which makes
+	 * InterpRootLerp's operands today's, at every alpha there is. */
+	{
+		const long prev[3] = { -9, -879, -103 };
+		const long cur[3] = { -13, -375, -100 };
+		const long step[3] = { 0, -512, 0 };
+		long start[3];
+
+		InterpRootNarrow(prev, cur, step, start);
+
+		ok(start[1] == prev[1], "the ladder wrap keeps its whole y step: the start offset is prev",
+			start[1], prev[1]);
+		ok(labs(cur[1] - start[1]) == 504, "which is 504 units, and 512 paid for it",
+			labs(cur[1] - start[1]), 504);
+
+		/* x and z have a step of -4 and +3 and nothing pays for either, so the
+		 * refused frame is drawn at the offset its own pose was built for. */
+		ok(start[0] == cur[0] && start[2] == cur[2],
+			"and x and z, which nothing paid for, start at the frame's own offset",
+			start[0], cur[0]);
+
+		int movedY = 0, movedXZ = 0;
+
+		for (int s = 0; s <= 256; s++)
+		{
+			const float t = (float)s / 256.0F;
+			long today[3], narrow[3];
+
+			InterpRootLerp(prev, cur, t, today);
+			InterpRootLerp(start, cur, t, narrow);
+
+			if (narrow[1] != today[1])
+				movedY++;
+
+			if (narrow[0] != cur[0] || narrow[2] != cur[2])
+				movedXZ++;
+		}
+
+		ok(movedY == 0, "the drawn y is today's at every alpha in 1/256 steps", movedY, 0);
+		ok(movedXZ == 0, "and x and z never leave the frame's own offset", movedXZ, 0);
+	}
+
+	/* THE CRAWL, which is what the round is for: ANDREA1 anim 274 frame 6655
+	 * to anim 222 frame 5653, a y step of 61 units and item->pos does not move.
+	 * Nothing is paid, the blend comes out at cur, and InterpRootNow's own
+	 * "blended == cur" exit then hands the draw nothing at all. */
+	{
+		const long prev[3] = { 0, -204, -37 };
+		const long cur[3] = { 0, -143, -37 };
+		const long step[3] = { 0, 0, 0 };
+		long start[3];
+		int moved = 0;
+
+		InterpRootNarrow(prev, cur, step, start);
+
+		ok(start[0] == cur[0] && start[1] == cur[1] && start[2] == cur[2],
+			"crawl to crouch keeps nothing: the start offset is cur", start[1], cur[1]);
+
+		for (int s = 0; s <= 256; s++)
+		{
+			const float t = (float)s / 256.0F;
+			long narrow[3];
+
+			InterpRootLerp(start, cur, t, narrow);
+
+			if (narrow[0] != cur[0] || narrow[1] != cur[1] || narrow[2] != cur[2])
+				moved++;
+		}
+
+		ok(moved == 0, "so the blend is cur at every alpha, and the rule stands down",
+			moved, 0);
+
+		/* And the picture it replaces, which is what the play test filmed: the
+		 * crouch pose drawn 30 units above the offset it was built for. */
+		long today[3];
+
+		InterpRootLerp(prev, cur, 0.5F, today);
+		ok(today[1] == -174 && cur[1] - today[1] == 31,
+			"where today it is drawn 31 units above its own root at a half",
+			cur[1] - today[1], 31);
+	}
+
+	/* A PARTIAL CASE, measured and not invented: ANDREA1's wrap of anim 174
+	 * into anim 102, whose TranslateItem is (-50,-512,0) against an offset step
+	 * of (+41,+514,+35). x is paid in full, y is two units short of its step,
+	 * and z is not paid at all - three verdicts on one transition. */
+	{
+		const long prev[3] = { -49, -953, 157 };
+		const long cur[3] = { -8, -439, 192 };
+		const long step[3] = { -50, -512, 0 };
+		long start[3], today[3], narrow[3];
+
+		InterpRootNarrow(prev, cur, step, start);
+
+		ok(start[0] == prev[0], "174's x is paid in full and starts at prev", start[0], prev[0]);
+		ok(start[1] == cur[1] - 512, "its y keeps 512 of 514 - what the command paid",
+			start[1], cur[1] - 512);
+		ok(start[2] == cur[2], "and its z, which nothing paid for, starts at cur",
+			start[2], cur[2]);
+
+		InterpRootLerp(prev, cur, 0.5F, today);
+		InterpRootLerp(start, cur, 0.5F, narrow);
+
+		ok(today[1] == -696 && narrow[1] == -695,
+			"so a half draws y at -695 where today draws -696", narrow[1], -695);
+		ok(today[2] == 174 && narrow[2] == 192,
+			"and z at its own 192 where today drags it to 174", narrow[2], 192);
+	}
+
+	/* THE INVARIANT, over a grid and not over an example: the start offset is
+	 * always between prev and cur INCLUSIVE, which is the whole of "never more
+	 * than today and never in another direction"; a step that points the same
+	 * way as the offset step pays for nothing; and a step on one axis narrows
+	 * that axis alone. */
+	{
+		int outside = 0, sameSign = 0, zeroStep = 0, bled = 0;
+
+		for (long p = -600; p <= 600; p += 23)
+		{
+			for (long c = -600; c <= 600; c += 29)
+			{
+				const long d = c - p;
+
+				for (long v = -900; v <= 900; v += 37)
+				{
+					const long prev[3] = { p, p, p };
+					const long cur[3] = { c, c, c };
+					const long onY[3] = { 0, v, 0 };
+					long start[3];
+
+					InterpRootNarrow(prev, cur, onY, start);
+
+					/* Between the two, inclusive, on the axis that was paid. */
+					if (d > 0 ? (start[1] < p || start[1] > c) : (start[1] > p || start[1] < c))
+						outside++;
+
+					if (labs(c - start[1]) > labs(d))
+						outside++;
+
+					if (d && v && ((d > 0) == (v > 0)) && start[1] != c)
+						sameSign++;
+
+					if (!v && start[1] != c)
+						zeroStep++;
+
+					/* x and z had no step of their own, so they cannot move. */
+					if (start[0] != c || start[2] != c)
+						bled++;
+				}
+			}
+		}
+
+		ok(outside == 0, "the start offset never leaves the segment prev..cur", outside, 0);
+		ok(sameSign == 0, "a step that points the same way as the offset step pays for nothing",
+			sameSign, 0);
+		ok(zeroStep == 0, "and a zero step pays for nothing at all", zeroStep, 0);
+		ok(bled == 0, "a step on one axis narrows that axis and no other", bled, 0);
+	}
+
+	/* THE FLIP COMES FIRST (#169), and it is not a free choice. The underwater
+	 * roll's own offsets: 203's last frame carries (42,122,68) and the frame
+	 * the change lands on carries (-45,122,-67), so the turned previous offset
+	 * is (-42,122,-68) and the step the narrowing weighs is -3 on x, not -87. */
+	{
+		const long prev[3] = { 42, 122, 68 };
+		const long cur[3] = { -45, 122, -67 };
+		const long step[3] = { 4, 0, 0 };
+		long turned[3], right[3], wrong[3];
+
+		InterpRootFlip(prev, turned);
+		InterpRootNarrow(turned, cur, step, right);
+		InterpRootNarrow(prev, cur, step, wrong);
+
+		ok(right[0] == turned[0],
+			"flipped first, the 3 units of x a step of 4 could pay for are all of it",
+			right[0], turned[0]);
+		ok(wrong[0] == cur[0] + 4,
+			"taken in the old frame the same step pays for 4 of 87 and starts elsewhere",
+			wrong[0], cur[0] + 4);
+		ok(right[0] != wrong[0], "so the order of the two is not free", 1, 1);
+
+		/* And with nothing to pay, a flip tick stands down like any other. */
+		const long none[3] = { 0, 0, 0 };
+		long idle[3];
+
+		InterpRootNarrow(turned, cur, none, idle);
+		ok(idle[0] == cur[0] && idle[1] == cur[1] && idle[2] == cur[2],
+			"and a flip tick that nothing pays for is handed back to the draw site",
+			idle[0], cur[0]);
+	}
+
+	/* EXTREMES. The offsets are shorts widened to long, so their difference is
+	 * at most 65535; `step` is a difference of two tick positions and could in
+	 * principle be anything a long holds. Nothing in InterpRootNarrow negates
+	 * it, so the whole range is safe - including the value that has no
+	 * positive twin. */
+	{
+		const long lo = -32768, hi = 32767;
+		const long prev[3] = { lo, hi, lo };
+		const long cur[3] = { hi, lo, hi };
+		const long huge[3] = { LONG_MIN, LONG_MAX, 0 };
+		long start[3];
+
+		InterpRootNarrow(prev, cur, huge, start);
+
+		ok(start[0] == lo, "a step of LONG_MIN against a rise of 65535 pays for all of it",
+			start[0], lo);
+		ok(start[1] == hi, "and LONG_MAX against a fall of 65535 likewise", start[1], hi);
+		ok(start[2] == cur[2], "while a zero step still pays for nothing", start[2], cur[2]);
+
+		/* The same magnitudes pointing the SAME way pay for nothing, which is
+		 * the branch an overflow would have hidden. */
+		const long same[3] = { LONG_MAX, LONG_MIN, LONG_MAX };
+		long idle[3];
+
+		InterpRootNarrow(prev, cur, same, idle);
+		ok(idle[0] == cur[0] && idle[1] == cur[1] && idle[2] == cur[2],
+			"and the same magnitudes the same way round pay for nothing", idle[0], cur[0]);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4, 5 and 6)\n");
@@ -3478,6 +3712,7 @@ int main()
 	pose_factor();
 	pose_time();
 	root_flip();
+	root_narrow();
 	particles();
 	portal_walk();
 	reach_rect();

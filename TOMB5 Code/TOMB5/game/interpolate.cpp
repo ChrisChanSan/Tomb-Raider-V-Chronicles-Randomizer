@@ -233,6 +233,16 @@ namespace
 	 * that reached that line this frame. See InterpRootFlip. */
 	unsigned char g_rootFlip[MAX_ITEMS];
 
+	/* AND WHAT THE SLOT'S OWN POSITION STEP PAYS FOR (#157, round 157b).
+	 *
+	 * The root rule blends the offset step only as far as the tick's position
+	 * step pays for it, so the step has to be measured where both ticks'
+	 * positions are still known - the same line as g_rootFlip, one statement
+	 * before ApplyNode writes the blend over the live one. Kept in the ITEM'S
+	 * OWN y_rot frame, which is the frame the offsets live in and the frame
+	 * TranslateItem writes its step in. See InterpRootNarrow. */
+	long g_rootStep[MAX_ITEMS][3];
+
 	// Lara's pose is built two or three times a frame and counted once.
 	bool g_laraPosed = false;
 
@@ -549,6 +559,34 @@ namespace
 		pos->x_rot = LerpAngle(n->xr, save->xr, alpha);
 		pos->y_rot = LerpAngle(n->yr, save->yr, alpha);
 		pos->z_rot = LerpAngle(n->zr, save->zr, alpha);
+	}
+
+	/* THE TICK'S POSITION STEP IN THE ITEM'S OWN FRAME (#157, round 157b).
+	 *
+	 * The root offsets are in the item's frame and the two positions are in
+	 * the world, so the step is turned back by the item's y_rot - by exactly
+	 * the rotation TranslateItem (game\control.cpp) turned it BY when it made
+	 * the step, with the same phd_sin/phd_cos and the same shift, so a command
+	 * of (0,-512,0) comes back out of here as (0,-512,0). The rotation taken is
+	 * the CURRENT tick's, because the current tick's frame is the one the drawn
+	 * offset is in - and it is still the live one at the only line this can be
+	 * called from.
+	 *
+	 * x_rot and z_rot are deliberately not undone: TranslateItem ignores them
+	 * and so does every state routine that moves her by hand - the vault, the
+	 * ledge grab, the pushblock snap all write y_pos straight and their x and z
+	 * through phd_sin of y_rot alone. See InterpRootNarrow (interpolate_math.h)
+	 * for why that is the right frame and not an approximation of one. */
+	void RootStep(const InterpNode* n, const PHD_3DPOS* pos, long out[3])
+	{
+		const long dx = pos->x_pos - n->x;
+		const long dz = pos->z_pos - n->z;
+		const long s = phd_sin(pos->y_rot);
+		const long c = phd_cos(pos->y_rot);
+
+		out[0] = (dx * c - dz * s) >> W2V_SHIFT;
+		out[1] = pos->y_pos - n->y;
+		out[2] = (dx * s + dz * c) >> W2V_SHIFT;
 	}
 
 	void RestoreNode(PHD_3DPOS* pos, const SavedNode* save)
@@ -1559,6 +1597,13 @@ void InterpBeginFrame(float alpha)
 		 * a turn behind. */
 		g_rootFlip[i] = (unsigned char)InterpHalfTurn(n->yr, item->pos.y_rot);
 
+		/* ROUND 157b: and the step item->pos really takes on this tick, in the
+		 * same breath and for the same reason - one statement later ApplyNode
+		 * has overwritten the live position and the step would read half of
+		 * itself. A slot that did not move is a step of zero, which is exactly
+		 * what the rule wants of it, so this stands ABOVE the NodeMoved exit. */
+		RootStep(n, &item->pos, g_rootStep[i]);
+
 		if (!NodeMoved(n, &item->pos))
 			continue;
 
@@ -2088,8 +2133,13 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 	 * #169: THE PREVIOUS OFFSET IS PUT INTO THIS TICK'S FRAME FIRST, and on
 	 * every tick but a half turn that is a copy - the walk has already said
 	 * which this is. See InterpRootFlip (game\interpolate_math.h) for the
-	 * arithmetic and for what the underwater roll measured. */
-	long prev[3], cur[3], blended[3];
+	 * arithmetic and for what the underwater roll measured.
+	 *
+	 * ROUND 157b: AND THE BLEND STARTS WHERE THE POSITION STEP PAYS FOR, which
+	 * is prev on the ladder and cur where nothing moved. The flip comes first,
+	 * because the narrowing weighs the offset step of THIS tick's frame. See
+	 * InterpRootNarrow (game\interpolate_math.h). */
+	long prev[3], cur[3], start[3], blended[3];
 
 	if (g_rootFlip[i])
 		InterpRootFlip(g_rootPrev[i], prev);
@@ -2101,7 +2151,8 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 	}
 
 	InterpRootKey(frm[0], frm[1], frac, blend, cur);
-	InterpRootLerp(prev, cur, g_alpha, blended);
+	InterpRootNarrow(prev, cur, g_rootStep[i], start);
+	InterpRootLerp(start, cur, g_alpha, blended);
 
 	/* AND THE DRAW IS ONLY TOLD WHERE THE BLEND LANDS SOMEWHERE ELSE (#157,
 	 * fix round).
@@ -2160,20 +2211,31 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 		 *
 		 * pos_y is the BLENDED position, which is what this frame is drawn
 		 * at: pos_y + drawn.y is the number that has to sit between the two
-		 * ticks either side of it. */
+		 * ticks either side of it.
+		 *
+		 * ROUND 157b PUT step AND kept AT THE END of it, and nothing else of
+		 * the line moved. `step` is the tick's own position step in her frame
+		 * and `kept` how much of the offset step that paid for, so his next
+		 * log says not only what the rule drew but why it was allowed to. A
+		 * transition that no longer blends prints no line at all now - the
+		 * exit above handed it back to the draw site before this - and that
+		 * absence is the rule working. */
 		if (item == lara_item && g_secRootLines < 4)
 		{
 			g_secRootLines++;
 			Log("INTERPLOG root lara anim %d->%d frame %d->%d "
 				"offset_prev=(%d,%d,%d) offset_cur=(%d,%d,%d) drawn=(%d,%d,%d) pos_y=%d"
-				" flip=%d turned=(%d,%d,%d)",
+				" flip=%d turned=(%d,%d,%d) step=(%d,%d,%d) kept=(%d,%d,%d)",
 				(int)g_prevItem[i].anim, (int)item->anim_number,
 				(int)g_prevItem[i].frame, (int)item->frame_number,
 				(int)g_rootPrev[i][0], (int)g_rootPrev[i][1], (int)g_rootPrev[i][2],
 				(int)cur[0], (int)cur[1], (int)cur[2],
 				(int)out[0], (int)out[1], (int)out[2],
 				(int)item->pos.y_pos,
-				(int)g_rootFlip[i], (int)prev[0], (int)prev[1], (int)prev[2]);
+				(int)g_rootFlip[i], (int)prev[0], (int)prev[1], (int)prev[2],
+				(int)g_rootStep[i][0], (int)g_rootStep[i][1], (int)g_rootStep[i][2],
+				(int)labs(cur[0] - start[0]), (int)labs(cur[1] - start[1]),
+				(int)labs(cur[2] - start[2]));
 		}
 	}
 

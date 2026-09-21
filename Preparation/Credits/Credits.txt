@@ -48,8 +48,8 @@ discord-rpc: https://github.com/discord/discord-rpc (Discord, Inc.) - in
   (Corrected in audit round A1, 2026-09-21: this entry used to say the
   library was linked and that tomb5.cpp called it. Neither has been true
   since 2026-08-05.)
-  (Both added 2026-08-30. See THIRD-PARTY.md at the repository root for
-  the licences and where each full text lives.)
+  (zlib and discord-rpc were both added 2026-08-30. See THIRD-PARTY.md at
+  the repository root for the licences and where each full text lives.)
 
 Tomb Raider Chronicles(2000): https://core-design.com/
 

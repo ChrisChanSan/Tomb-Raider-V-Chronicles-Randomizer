@@ -141,8 +141,10 @@ light SUM comes from TRForge's MIT reading of the `.TRG`), or not used.
   (ANDREA2). Vertex packed as on disk, 20 bytes (SHORT4 pos+sway, UBYTE4
   normal+layer, two D3DCOLOR carrying colour+u / colour+v): 37 MB VB,
   22 MB IB (32-bit indices), both DEFAULT|WRITEONLY. The byte normal is
-  decoded as `(n-127)/128` (signed read costs a third of the page
-  matches, `SHADER_RULES.md:82-87`).
+  decoded as `(n-127)/128` (the bias-127 normal of TRForge's MIT format
+  description, re-measured here on the player's own `.TRG` files; the
+  citation of `SHADER_RULES.md` that stood here was struck in audit round
+  A1 for the same reason as the two below).
 - **Skinning.** 3 bones + 3 weights per vertex; palette 32 joints x 3
   vec4 = 96 constants; highest bone index over 554 readable TR5 TRMs is
   28. TROne's 32 `uBind` vectors fold into the matrices on the CPU

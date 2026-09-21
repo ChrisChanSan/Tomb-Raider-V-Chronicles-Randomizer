@@ -2,18 +2,26 @@
 
 Information only. Nothing in this document has been built or adopted. Two
 read-only surveys, both taken on 2026-09-07 against Todesengel's TROne tree
-`Todesengel/Für neuen diff/TROne-abnahme-D` and our earlier copy
-`Todesengel/TROne-main Aktuell`, and against our own tree at `hd-runtime`
-commit 80df417. TROne's own state file says the surveyed branch carries
+of branch `abnahme-D` (2026-09-06) and our earlier copy of it (2026-09-05),
+both read where the author keeps them on his own machine, and against our own
+tree at `hd-runtime` commit 80df417. TROne's own state file says the surveyed branch carries
 thirteen merged rounds with only one verifier verdict in, so every TROne
 measurement below is a claim with a method, not an accepted result.
 
 Licence frame for everything below: TROne is GPLv3 (Copyright 2026
 Todesengel), `vendor/trforge` is MIT. Our tree is GPLv3. Adopting logic
 from TROne means an attribution note in the file header and in
-THIRD-PARTY.md, as `specific/hd/hd_object.h` already does. Nothing here
-comes from the Remaster binaries; only shipped data files (`.MAP`, `.TRM`,
-`.DDS`) were measured.
+THIRD-PARTY.md, as `specific/hd/hd_object.h` already does. Nothing in THIS
+document's own measurements comes from the Remaster binaries: what was
+measured here are shipped data files (`.MAP`, `.TRM`, `.DDS`).
+**Corrected in audit round A1 (2026-09-21):** that sentence used to be
+absolute, while the pages below cite TROne's `SHADER_RULES.md`, which is by
+its own preamble a measurement of the Remaster's PROGRAMS. Those citations
+are ORIENTATION ONLY - they say what TROne does, they are not an origin for
+anything in this project, and nothing may be carried over from them. Where
+this project uses a rule that document also names, the rule has a lawful
+route of its own: TRForge's MIT format description, TROne's own GPLv3 code
+with attribution, or a measurement taken here on the player's own files.
 
 ## Decisions this document leaves open
 
@@ -66,7 +74,7 @@ predates it and carries nothing over) and `MODIFICATIONS.md` fix round B
 
 ## Scope and method
 
-Compared `C:\Cloude AI\Todesengel\TROne-main Aktuell\` (2026-09-05) against `C:\Cloude AI\Todesengel\Für neuen diff\TROne-abnahme-D\` (2026-09-06 23:34). Read `.claude\workflows\STAND-2026-09-06.md`, all of `docs\`, then `diff -rq`, then the large diffs. Nothing was written, built or committed. No binary from `tomb5.dll` / `tomb456.exe` / `tomb123.exe` was touched — only source and prose.
+Compared our earlier TROne copy (2026-09-05) against TROne branch `abnahme-D` (2026-09-06 23:34), both read where the author keeps them on his own machine. Read `.claude\workflows\STAND-2026-09-06.md`, all of `docs\`, then `diff -rq`, then the large diffs. Nothing was written, built or committed. No binary from `tomb5.dll` / `tomb456.exe` / `tomb123.exe` was touched — only source and prose.
 
 Headline: `host\render\game_renderer.cpp` grew from 4 782 to 11 270 lines; Host-API 10 → 20; `docs\SHADER_RULES.md` gained ~470 lines; six new docs; new host subsystems `host\photo\`, `host\mods\`, `host\custom\`, `host\script\`, `host\input\`. `vendor\trforge\` is byte-identical (no TRG/TRM format change).
 
@@ -76,7 +84,7 @@ Headline: `host\render\game_renderer.cpp` grew from 4 782 to 11 270 lines; Host-
 
 ## 1.1 The state file's own summary
 
-`Für neuen diff\TROne-abnahme-D\.claude\workflows\STAND-2026-09-06.md` describes branch `abnahme-D` carrying 13 merge commits, only 1 of 13 verifier verdicts in: **Alpha, water+waves, fog, fountain basin, Z-buffer, light, photo mode, 60 fps, sky, HD text, voice, modding, custom levels**, Host-API v20, plus a prepared (not started) round E (mirrors, remaster water, TR5 fountain, atmosphere, 3D weather + footprints, braid shape/physics, cold breath, young Lara, Von Croy neck, TR1 fly, TR4 moreguns, weapon classes, projectile models, anim meshes HD, 3D pickups, coop).
+Branch `abnahme-D`'s own `.claude\workflows\STAND-2026-09-06.md` describes it carrying 13 merge commits, only 1 of 13 verifier verdicts in: **Alpha, water+waves, fog, fountain basin, Z-buffer, light, photo mode, 60 fps, sky, HD text, voice, modding, custom levels**, Host-API v20, plus a prepared (not started) round E (mirrors, remaster water, TR5 fountain, atmosphere, 3D weather + footprints, braid shape/physics, cold breath, young Lara, Von Croy neck, TR1 fly, TR4 moreguns, weapon classes, projectile models, anim meshes HD, 3D pickups, coop).
 
 **Caveat for you:** this tree is explicitly *unverified*. The STAND file says "Prüfung: 1 von 13 Urteilen da". Treat measurements as claims-with-method, not as accepted results.
 
@@ -342,8 +350,8 @@ Unchanged: the project stays **GPL-3** (`COPYING` identical), `vendor\trforge\` 
 All paths below are read-only findings. Nothing was changed.
 
 Reference trees:
-- TROne: `C:\Cloude AI\Todesengel\Für neuen diff\TROne-abnahme-D\`
-- Ours: `C:\Cloude AI\TR Randomizer final steps\TOMB5 Code\TOMB5\`
+- TROne: branch `abnahme-D` (2026-09-06), read where the author keeps it
+- Ours: `TOMB5 Code\TOMB5\` of this repository
 
 Context from `.claude\workflows\STAND-2026-09-06.md`: this `abnahme-D` tree carries 13 unreviewed merge commits (incl. **HD-Text**), only 1 of 13 verdicts was in. A separate track **"Pickups-3D"** (`.claude\workflows\trone-E-arbeit.js:289-295`) is *prepared but not started*, so pickup spin/3D is explicitly still open on their side too.
 
@@ -547,4 +555,4 @@ Roughly: a font loader + template matcher (~200 lines, no new dependency), 106 e
 - **TROne is GPLv3**, Copyright 2026 Todesengel; `host\`, `games\`, `tools\`, `docs\` are all GPL-3 per `docs\LEGAL.md:9-24`.
 - **`vendor\trforge\` is MIT**: that includes `ItemModels.cpp`/`.h` (the `.TRM` format description, `bind_level_items`) and `Remaster.h` (the `.MAP` format). MIT is the easier provenance for the format knowledge.
 - Our tree is GPLv3 too, so carrying logic across is licence-compatible **provided attribution is kept**. Our existing practice is already correct and should be continued: `specific\hd\hd_object.h:1-9` names TROne, the copyright, GPLv3, the exact `game_renderer.cpp` line ranges, and `THIRD-PARTY.md`; `hd_bind.cpp:8-12` names TRForge/MIT for the `.MAP` format and states the reader was *written against the description rather than copied*. Do the same for anything taken from the `hdtext` block or from `hostglue_2d5.cpp`.
-- **Nothing here touches `tomb5.dll`/`tomb456.exe`.** Everything above is either GPL/MIT source or measurements of shipped data files (`.MAP`, `.TRM`, `.DDS`); the `.MAP` files are plain text and the `.TRM`/`.DDS` layouts come from TRForge's MIT description, not from disassembly.
+- **Nothing here touches `tomb5.dll`/`tomb456.exe`.** Everything measured above is either GPL/MIT source or a shipped data file (`.MAP`, `.TRM`, `.DDS`); the `.MAP` files are plain text and the `.TRM`/`.DDS` layouts come from TRForge's MIT description, not from disassembly. **Corrected in audit round A1 (2026-09-21):** this bullet used to read as if everything NAMED above were of that kind. It is not - the pages above also cite TROne's `SHADER_RULES.md`, which is by its own preamble a measurement of the Remaster's programs. Those citations are orientation only, as the licence frame at the head of this document now says; nothing may be carried over from them, and nothing in this project is.

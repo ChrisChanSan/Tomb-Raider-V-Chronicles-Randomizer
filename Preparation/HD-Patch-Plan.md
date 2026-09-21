@@ -5,10 +5,24 @@
 > time (rooms from the `.TRG`, objects and Lara as `.TRM` models); that
 > plan is `HD-Runtime-Plan.md`. Way A stays here for its measurements
 > (loader stride, page ceiling, checksum gate) and as the fallback.
+>
+> **And it stays superseded for a second reason, recorded in audit round
+> A1 (2026-09-21):** way A would have written the Remaster's own art into
+> level files, which are files this project's users pass around. Way B
+> reads that art at run time out of the player's own installation and
+> writes none of it anywhere, which is the only arrangement this project
+> will ship. Anything that revived way A would have to answer that first.
+>
+> **The last visible trace of way A is gone too** (audit round A1,
+> LENS7B-07): the randomizer's launcher carried an unfinished checkbox
+> *Patch remaster textures* with a tooltip promising exactly this plan.
+> It was never wired to anything - no seed bit, nothing saved - and it
+> was deleted, because a shipped program must not promise to write
+> Remaster art into level files.
 
 Written 2026-09-05 from a read-only survey of this repository, the TRForge
-library (MIT, `C:\Cloude AI\Todesengel\TRForge-remastered`) and a fresh
-Steam copy of Tomb Raider IV-VI Remastered. Every number below was measured;
+library (MIT, the author's own read-only copy of `TRForge-remastered`) and
+a fresh Steam copy of Tomb Raider IV-VI Remastered. Every number below was measured;
 the file:line anchors are today's. Nothing has been built yet - this is the
 plan the user decides on.
 
@@ -37,9 +51,9 @@ as facts.
    text has to say so.
 3. **The page budget is large, not tight.** Vanilla levels carry 6..17
    pages (RT+OT+BT from the header). Our port has `Textures[256]`
-   (`texture.cpp:25`), checked at `file.cpp:457`. TRForge's
-   `pages_the_engine_will_take(TR5) = 32` was read from the Remaster's
-   tomb5.dll and does not apply to us. About 235 entries are free; the
+   (`texture.cpp:25`), checked at `file.cpp:457`. TRForge's own TR5 page
+   ceiling, `pages_the_engine_will_take(TR5) = 32`, is a TRForge constant
+   and does not apply to us. About 235 entries are free; the
    real limit is texture memory (256 KB per page, ~512 KB with the managed
    copy). Side finding: the check at `file.cpp:457` does not count the
    loader's own three pages (shine, font, sky) nor the title's two logo

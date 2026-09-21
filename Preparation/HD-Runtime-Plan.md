@@ -19,8 +19,8 @@
 > `TOMB5 Code\MODIFICATIONS.md` - stages S0..S8 and then one section per fix
 > round. Where the two disagree, MODIFICATIONS.md is the one that was measured.
 
-Written 2026-09-05 from a read-only survey of TROne (GPLv3,
-`C:\Cloude AI\Todesengel\TROne-main`, the user's chosen base), its vendored
+Written 2026-09-05 from a read-only survey of TROne (GPLv3, the author's
+local copy of the `TROne-main` tree, the chosen base), its vendored
 TRForge readers (MIT), our engine and a fresh Steam copy of the Remaster.
 Every number is measured over the real files unless marked "estimated".
 The user's decision: way B - the engine draws the Remaster's rooms from
@@ -91,9 +91,15 @@ swap keys, the Lara branch: the part nobody wants to reinvent),
 (2386-2886), `hd_load` structure (1919-2256), `hd_draw_room`/`hd_draw_sky`
 (2259-2385), `hd_pages.cpp` reading (50-195), the GLSL shaders
 (135-236, 318-409) translated to HLSL. About 2,100 lines: ~1,100 near
-verbatim, ~1,000 as structure over a new D3D9 base. `SHADER_RULES.md`
-states the host shaders were written against that document only and
-contain no Aspyr line - a GPL-to-GPL derivation is allowed.
+verbatim, ~1,000 as structure over a new D3D9 base. TROne's own GLSL is
+GPLv3 and may be carried over with attribution, which is what makes this
+a GPL-to-GPL derivation. **Corrected in audit round A1 (2026-09-21):**
+this paragraph used to rest that argument on TROne's `SHADER_RULES.md`
+as well. It must not. That document is by its own preamble a measurement
+of the Remaster's PROGRAMS, so it is off limits here even at second
+hand; every rule it names is either re-measured in this project on the
+player's own data files, or taken by a lawful route of its own (the room
+light SUM comes from TRForge's MIT reading of the `.TRG`), or not used.
 
 
 ## 2. D3D9 instead of OpenGL 3.3
@@ -147,14 +153,22 @@ contain no Aspyr line - a GPL-to-GPL derivation is allowed.
   build step, bytecode embedded as `.inc` arrays. No runtime
   dependency.
 - **Room shader:** `light = L * roomshade + C`, `colour = texel * light`
-  (addition, not product - the mistake costs a factor 2.65); pass 1
+  (addition, not product - as TRForge's MIT reader adds the two colour
+  triples, `trf_remaster/HdMesh.cpp`, `colour_of`; the proof figure that
+  stood here in audit round A1 was SHADER_RULES', and is struck); pass 1
   alpha-tested `clip(a - 0.5)`, pass 0 not (opaque tiles carry a gloss
   mask in alpha), pass 2 additive `float4(lit*a, a)` with ONE/ONE and no
   Z write. Plus the parity uniforms from finding 3: up to 8 dynamic
   lights (selection already made by `aBuildRoomletLights`), distance
   fog, shimmer via a 64-entry table, underwater wibble, fog bulbs.
-  Estimated +150-200 HLSL lines. **TRM shader:** skinning + ambient cube
-  + up to 4 point lights with `att = (1024/6)^2 / d^2`, capped at 1.
+  Estimated +150-200 HLSL lines. **TRM shader:** skinning, and the item
+  light. **NOT BUILT as planned, and struck in audit round A1
+  (2026-09-21):** this line used to plan TROne's own item lighting for
+  our shader and wrote out its attenuation formula, which is a rule of
+  SHADER_RULES' - a measurement of the Remaster's programs, off limits
+  here at second hand. Nothing of it was ever implemented: the item light
+  in `hd_model.hlsl` is this engine's own `CalculateObjectLighting`, with
+  the classic path's per-object light list, distance fog and fog bulbs.
 - **Groups and rooms.** Group i = room i, proven over all 15 levels
   (group count = room count + 1 sky dome, except JOBY3/JOBY5 = equal,
   TITLE + 2). Rule: ignore groups >= `number_rooms`. TR5 draws its sky
@@ -450,8 +464,14 @@ notice plus our "Modified 2026" header; `THIRD-PARTY.md` gets a section,
 acrostic header lines untouched. Inherited taboo list: no TRX code, no
 TRMix/TR2X_alt, **nothing from tomb5.dll/tomb456.exe** (no code, no
 tables, no disassembly, no Ghidra output), no leaked Core sources, no
-verbatim Aspyr GLSL (our HLSL is written against `SHADER_RULES.md` and
-TROne's own GLSL only), no TombEngine code. Asset rule as today: no
+verbatim Aspyr GLSL. **Corrected in audit round A1 (2026-09-21):** this
+sentence used to name `SHADER_RULES.md` beside TROne's own GLSL as a
+permitted template for our HLSL. It is not one - it is Todesengel's
+measurement of the Remaster's programs, and the taboo above covers it at
+second hand as well. Our HLSL is written against TROne's own GPLv3 GLSL,
+with attribution, against TRForge's MIT format descriptions, and against
+measurements taken here on the player's own data files. No TombEngine
+code. Asset rule as today: no
 Remaster data in the repository or the package - not the TRG, TRM, DDS,
 nor extracted name tables; the S7 hand table holds names only.
 

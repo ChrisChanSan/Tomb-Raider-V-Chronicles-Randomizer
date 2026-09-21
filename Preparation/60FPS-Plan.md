@@ -1,10 +1,29 @@
 # 60 frames a second for the TOMB5 port (#148) - implementation plan
 
+> **Where this stands** (added in audit round A1, 2026-09-21). All six
+> orders are BUILT, on branch `hd-runtime`. The shipped defaults are not
+> the ones this plan recommended, so read the recommendations as what was
+> proposed on 2026-09-06 and the notes beside them as what was decided:
+>
+> - **The frame rate ships at 60.** `tomb5.fps_mode` is `1` at start
+>   (`tomb5/tomb5.cpp`), i.e. 60 frames a second is the DEFAULT, not an
+>   option that is off. Decision 1 below recommended the opposite and is
+>   marked accordingly.
+> - **There is no automatic fall-back.** Nothing lowers `fps_mode` on its
+>   own, at any load; the only writers are the options menu and the clamp
+>   at start-up. Decision 3 below recommended one and is marked accordingly.
+> - **The row has three positions since order 6**: 30, 60, and the
+>   display's own refresh - the third is a real setting that is kept, not
+>   a reserved value.
+> - What was actually built, order by order, is in
+>   `TOMB5 Code\MODIFICATIONS.md`; where it and this plan disagree,
+>   MODIFICATIONS.md is the one that was measured.
+
 Written 2026-09-06 from a read-only survey of branch `hd-runtime` (head
 `46a2f31`, HD part complete: rooms, objects and Lara from the Remaster,
 seam in `InsertRoom` / `DrawAnimatingItem` / `DrawLara`, matrices off
-the engine's own stack), of TROne (GPLv3, `C:\Cloude AI\Todesengel\
-TROne-main Aktuell`) and of the frame path of this engine. Nothing was
+the engine's own stack), of TROne (GPLv3, the author's own copy of it as
+it stood on 2026-09-05) and of the frame path of this engine. Nothing was
 changed. Every line number is from this tree. Nothing was read from
 `tomb5.dll`, `tomb456.exe` or `tomb123.exe`.
 
@@ -667,7 +686,7 @@ crosses portals.
 
 | # | risk | severity | mitigation |
 |---|---|---|---|
-| K1 | HD + 60 Hz does not hold. F9 already shows 39 late frames in 418 s at 30 Hz with HD on; the render work doubles | high | 60 Hz is an option, off by default with HD on. Order 1 ships the measurement before any work is done on top of it. Optionally auto-fall-back: if `late` exceeds a threshold over N seconds, drop to `fps_mode 0` and say so in the log. |
+| K1 | HD + 60 Hz does not hold. F9 already shows 39 late frames in 418 s at 30 Hz with HD on; the render work doubles | high | 60 Hz is an option, off by default with HD on. **Not as built - see "Where this stands": 60 is the default and there is no automatic fall-back.** Order 1 ships the measurement before any work is done on top of it. Optionally auto-fall-back: if `late` exceeds a threshold over N seconds, drop to `fps_mode 0` and say so in the log. |
 | K2 | Camera cuts. Fixed cameras, spot cams, the cutscene camera and the binoculars all jump on purpose | medium | 1.3 snap rules; `GLOBAL_playing_cutseq` snapped entirely. Cheap to test: every level's first cutscene. |
 | K3 | The first-person head filter (#134/#126). `fpVel`, `fpSpd`, `fpRel`, `fpSmoothValid` (`game\camera.cpp:1496-2145`) are tuned as a per-logic-tick exponential filter, and `fpSmoothSlow[]` (`:99`) is a per-tick constant | medium | Do not move the filter. `FirstPersonCamera` stays inside `CalculateCamera`, at 30 Hz. Only the output (`camera.pos`, `camera.target`, `fpRoll`) is interpolated. `fpRoll` needs a short-angle lerp and a getter. The existing `FPHEAD` log line (`game\camera.cpp:2127-2134`) proves the filter still sees one sample per tick. |
 | K4 | The modal loops (R13) run their own present loops | medium | `gPresentMinTicks` defaults to 2 and only `DrawPhaseGame` raises the rate. They keep 30 Hz. |
@@ -688,6 +707,10 @@ Before order 1
 
 1. Is 60 Hz an option or the default? Recommendation: an option,
    default off, because of K1.
+   **DECIDED OTHERWISE, as built (#148, recorded in audit round A1):**
+   60 is the DEFAULT - `tomb5.fps_mode = 1` at start - and 30 is the
+   option. K1 is answered by `FPSLOG` and by the player's own choice of
+   the row, not by shipping the slower setting.
 2. What shape does the option take? Recommendation: `fps_mode` as a
    `ulong` - `0 = 30 (classic)`, `1 = 60`, reserving `2 = display
    refresh` for order 6. Registry + one row on the tomb5 options page,
@@ -695,6 +718,10 @@ Before order 1
 3. Should there be an automatic fall-back when `FPSLOG` sees sustained
    `late` frames? Recommendation: yes, and loud - one log line and a
    return to 30.
+   **NOT BUILT, as built (recorded in audit round A1):** there is no
+   automatic fall-back. `FPSLOG` reports; the engine never lowers the
+   setting on its own, and the manual says so. Only the options menu and
+   the start-up clamp write `fps_mode`.
 
 Before order 3
 
@@ -846,8 +873,10 @@ step. One constant - the `< 2` in `S_DumpScreen` - is the entire 30 Hz
 cap. A second, fully working, HD-trusted matrix stack for blending two
 poses already exists, and the HD seam takes its matrices off the
 engine's own stack, so interpolating before the stack makes HD follow
-with no HD changes at all. TROne has no 60 FPS and nothing to carry
-over. What the work really consists of is not the interpolation but the
+with no HD changes at all. TROne had no 60 FPS when this was written on
+2026-09-06, and nothing was carried over; it has had one since - see
+section 0.5 and `TROne-Diff-2026-09-07.md`, which changes nothing about
+the work below. What the work really consists of is not the interpolation but the
 fifteen counters that step per drawn frame instead of per logic tick -
 with `Fade`, `DoScreenFade` and the `after_death` counter in
 `PrintObjects` as the three that matter. Way B, a 60 Hz simulation,
@@ -855,3 +884,10 @@ would break every savegame and every authored animation and trigger
 timing across 101,344 lines and is rejected. Recommendation: way A in
 six orders, ~1,450 new lines, shippable after three, as a user option
 that is off by default until `FPSLOG` says the machine can hold it.
+
+**As built (recorded in audit round A1, 2026-09-21):** all six orders
+were built, and that last clause is the one thing the build did NOT
+follow. #148 ships with `fps_mode = 1`, so 60 is the default and 30 is
+the option; there is no automatic fall-back. See the "Where this stands"
+block at the head of this file, and `TOMB5 Code\MODIFICATIONS.md` for
+what was measured.

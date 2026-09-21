@@ -74,7 +74,7 @@ are not versioned and drift silently.
 
 | Folder | What |
 |---|---|
-| `Tools\` | 34 diagnostic tools and their build scripts, plus the PowerShell that generates curation and packages. **Start at `Tools\README.md`** - it says which tool answers which question, and which engine log seam to use for which symptom. |
+| `Tools\` | 52 diagnostic tools and their build scripts (43 of them have one; counted again in audit round A1, 2026-09-21), plus the PowerShell that generates curation and packages. **Start at `Tools\README.md`** - it says which tool answers which question, and which engine log seam to use for which symptom. |
 | `Tools\ZoneAnalysis.ps1` | the curation itself, and by far the most consequential file in this folder. |
 | `Level Infos\` | the measured level data (tracked), plus the zone reports and the level-order plan. |
 | `Item Infos\` | object and inventory ids, and what governs which item may go where. Two different number spaces - the file says which is which. |

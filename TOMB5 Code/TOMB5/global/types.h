@@ -386,11 +386,16 @@ enum input_buttons
 	IN_ALL =			0xFFFFFFFF,
 
 	/* EITHER KEY WILL DO (#161, round 161b2c, item 1). A composite like
-	 * IN_ALL above, not a bit of its own. Eight grab-and-hang sites read it -
-	 * pole, tightrope, parallel bars, the rope catch, the death slide, the
-	 * jump switch, the ceiling trapdoor - because they are the places where
-	 * "grab" and "use the thing" are the same press to a player, and under
-	 * "Separate" neither key may be the wrong one there. */
+	 * IN_ALL above, not a bit of its own. TWENTY sites read it (counted in
+	 * audit round A1, where this comment still announced eight and then
+	 * listed seven): the eight the design named - the pole, the tightrope,
+	 * the parallel bars, the rope catch, the death slide, the jump switch and
+	 * the ceiling trapdoor - because they are the places where "grab" and
+	 * "use the thing" are the same press to a player and under "Separate"
+	 * neither key may be the wrong one there; and the twelve HOLD states
+	 * those grabs lead into, which have to read the same mask or the catch
+	 * would be a lie - one key grabs, the next tick lets go (the argument is
+	 * written out over lara_as_deathslide, game\lara.cpp). */
 	IN_ACTION_ANY =		IN_ACTION | IN_INTERACT
 };
 
@@ -2807,7 +2812,11 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * mode seam is their one caller, on both control types and for keyboard
 	 * and pad alike, exactly like the three rows above. The bit it DELIVERS is
 	 * IN_ACTION and only IN_ACTION, so a pushblock is pushed with the key
-	 * held, as it always was, and nothing is operated by a latch.
+	 * held, as it always was, and nothing is operated by a latch. WITH ONE
+	 * QUALIFICATION, written in during audit round A1 because the sentence
+	 * stood bare: under "One key" the let-go press takes IN_INTERACT away with
+	 * IN_ACTION, so a block will not move under that one held press until the
+	 * key has been off once (game\modern_move.cpp says it in full).
 	 *
 	 * The bit it CLEARS on a let-go press is wider, and it has to be (round
 	 * 161b2d, fix 3): thirteen family states - pole, rope, zip line, parallel

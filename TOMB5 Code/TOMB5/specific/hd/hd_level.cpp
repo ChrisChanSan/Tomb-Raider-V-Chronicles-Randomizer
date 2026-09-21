@@ -309,12 +309,21 @@ namespace
 	 *          beyond. This is the number that says the frame rate really
 	 *          fell under the target.
 	 *
-	 * A SECOND SPENT IN A MENU is not a second of gameplay: `logic_ticks=0`,
-	 * `hd_rooms=0` and `frames=30` together mean the inventory, the pause
-	 * menu or the title was up, and those keep thirty by design at any
-	 * setting. `budget=` says so on the line itself. PROFLOG goes one step
-	 * further and calls such an interval a `pause` rather than a frame -
-	 * FPSLOG cannot, because it never sees where a frame came from.
+	 * A SECOND SPENT IN A MODAL MENU is not a second of gameplay:
+	 * `logic_ticks=0`, `hd_rooms=0` and `frames=30` together mean the pause
+	 * menu, the load or save screen, the death menu or the level-change fade
+	 * was up, and those keep thirty by design at any setting. `budget=` says
+	 * so on the line itself. PROFLOG goes one step further and calls such an
+	 * interval a `pause` rather than a frame - FPSLOG cannot, because it never
+	 * sees where a frame came from.
+	 *
+	 * THE TITLE AND THE RING ARE NOT ON THAT LIST (corrected in audit round
+	 * A1; this paragraph named them until then, and they came off the list in
+	 * round 154). DoTitle calls ControlPhase like the game does, so a title
+	 * second reads `logic_ticks=30` and draws rooms; and the title and the
+	 * inventory ring both present at the rate the option asks for -
+	 * GameFrameMinTicks in specific\output.cpp for the one, InvFrameMinTicks
+	 * in game\inventory_interp.cpp for the other.
 	 *
 	 * NOTHING HAPPENS WITHOUT -log. The first line of HDFramePresented is
 	 * `if (!gLogEnabled) return;` - one bool test per present, no counter
@@ -325,10 +334,12 @@ namespace
 	 * a pair of constants while thirty was the only rate there was; order 1
 	 * made it follow tomb5.fps_mode, and that was still wrong, because
 	 * fps_mode is not what a given frame waited for. Only DrawPhaseGame's own
-	 * present ever drops to one tick (and only outside the title - see
-	 * GameFrameMinTicks); the inventory, the pause menu, the load/save
-	 * screen, the death menu, the title and the level-change fade all keep
-	 * their two whatever the option says. Judged against 16.7 ms they
+	 * present ever drops to one tick; the pause menu, the load/save screen,
+	 * the death menu and the level-change fade keep their two whatever the
+	 * option says. (The clause "and only outside the title", and the title
+	 * and the inventory in that list, were corrected out in audit round A1:
+	 * round 154 gave both of them the option's own rate - GameFrameMinTicks
+	 * and InvFrameMinTicks.) Judged against 16.7 ms they
 	 * reported a perfectly healthy menu second as thirty slow and a dozen
 	 * late frames, which is exactly what the 2026-09-07 log showed.
 	 *

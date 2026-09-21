@@ -107,9 +107,13 @@
  * THE ONE DELIBERATE DIFFERENCE, and it is the user's own: quick load is F9
  * under Modern (the binding page he compares with has it there) and stays F6
  * under Tank, which is Core's. F1/F2/F7/F8/F11 are the five cheat roles; they
- * are the free F keys once F3 and F4 (the outfit changer,
+ * are the free F keys once F4 (the outfit changer,
  * specific\hd\hd_outfitmenu.cpp), F10 (IN_E) and F12 (specific\output.cpp) are
- * left alone, and F5/F6/F9 belong to save and load. */
+ * left alone, and F5/F6/F9 belong to save and load. F3 stood in that list
+ * beside F4 until audit round A1 measured it: the outfit changer reads F4
+ * alone, and the one DIK_F3 in the whole tree is Core's level skip in the
+ * _DEBUG branch of LaraCheatyBits (game\laramisc.cpp), which no release build
+ * contains. It is still left unassigned here, so a debug build keeps it. */
 #define KEY_SCHEME_MODERN_ROW	\
 {							\
 	0x11, 0x1F, 0x1E, 0x20,	/* W S A D                 */	\

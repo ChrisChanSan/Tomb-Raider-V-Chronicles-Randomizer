@@ -14369,9 +14369,13 @@ other transition of his log table has `pos_y` constant, so `step` is 0 there
 too, the blend lands on `cur`, and `InterpRootNow` returns false - no `INTERPLOG
 root lara` line at all, which is the rule working and not a regression.
 
-**THE SWEEP** (`RootProbe -sweep`, new probe mode, ANDREA1's 474 and JOBY5's
-813 animations, every wrap and `jump_anim_num` change with an offset step of
-8 units or more on any axis; JOBY5 in brackets):
+**THE SWEEP** (`RootProbe -sweep`, new probe mode, LARA'S OWN 474 animations,
+the same slice in both levels - the probe prints `animations 0..473` for each,
+and the moveable table gives object 0 an `animIdx` of 0 and a slice of 474
+whichever level is loaded; the 1310 animations of JOBY5 and the 1145 of
+ANDREA1 are the whole file, every moveable in it. Every wrap and every
+`jump_anim_num` change of hers with an offset step of 8 units or more on any
+axis; JOBY5 in brackets):
 
 ```
   433 [352] transitions with an offset step of 8 units or more on an axis
@@ -14381,12 +14385,25 @@ root lara` line at all, which is the rule working and not a regression.
                                 d=(0,0,388) trans=(0,0,-250) -> kept (0,0,250))
    402 [322] not at all (file) - 118 wraps without a command and 284 state changes; these blend today and do not
                                 blend under the narrowed rule
-     0 [0]   cases where the narrowed rule blends and today's does not   <- the invariant, measured
+     0 [0]   rows where the narrowed draw leaves the segment from the frame's own offset to today's draw
+             - further out, or the other way   <- THE INVARIANT, and the probe's own last line
 ```
 
-Not one of the 433 blends where today's does not - the invariant the round
-rests on. The 402 "not at all (file)" rows are state CHANGES and wraps with
-no `TranslateItem`: `GetChange` swaps the animation before `AnimateLara`'s
+That last figure is printed by `-sweep` itself, beside the count that stops
+blending, with the sentence that it must read 0; it is not a count made by
+reading hundreds of rows. It is the invariant in the form that can actually
+be violated. "How many blend under the narrowed rule and do NOT blend today"
+- the shape it was first asked for - is a dead number here: a row only enters
+the sweep when some axis moves by 8 units or more, so today's half-blend
+always lands off `cur` and the reverse case cannot arise whatever the rule
+does. Measured against a deliberately broken `InterpRootNarrow` it stayed at
+0, while the counter above went to 315 of 352. On the real rule it is 0 of
+433 and 0 of 352.
+
+Not one of the 433 blends further than today's rule or the other way - the
+invariant the round rests on. The 402 "not at all (file)" rows are state
+CHANGES and wraps with no `TranslateItem`: `GetChange` swaps the animation
+before `AnimateLara`'s
 command block is reached, so no command ever fires on a change, and what
 really moves Lara there is a state routine writing `item->pos` by hand - the
 rule still measures that step, because it measures `item->pos` and not the
@@ -14485,6 +14502,58 @@ check in `root_narrow` passed the literals `1, 1` as its got/want pair, so a
 failure of it would have printed `got 1, want 1` - it now passes the two values
 it compares. The check count is unchanged at 398; the code of
 `InterpRootNarrow` is unchanged to the token.
+
+**THE SECOND FIX ROUND.** The reviewer did not accept that build either, and
+his one HIGH is the decision above and not a defect: the round buys the
+removal of a 61-unit float with 1 to 12 units on axes NO position step pays
+for, in seven of the eight cases of the regression table, and three of them
+stop blending altogether. He re-measured every figure of the table himself,
+against a probe built from the base commit, and they stand. That is the
+judgement to accept or refuse, and narrowing the rule further to make those
+axes match today would be bending it to hide a number. His four other
+findings were about this entry and about the probe's table, and all four are
+corrected:
+
+- **The sweep's scope.** The paragraph above said "ANDREA1's 474 and JOBY5's
+  813 animations". Both sweeps run over LARA'S 474 - the probe prints
+  `animations 0..473` for either level - and 813 was round 157's differently
+  scoped number carried in. Corrected above. Every count inside the table
+  (433/4/27/402 and 352/4/26/322) was reproduced by the reviewer and stands.
+- **The invariant was the reader's count, not the tool's.** `-sweep` printed
+  only how many transitions stop blending; the zero the round rests on had to
+  be read off the per-row columns over hundreds of rows. The probe now counts
+  it itself and prints it with the sentence that it must read 0: 0 of 433 in
+  ANDREA1, 0 of 352 in JOBY5. It counts the invariant in the one form that
+  CAN be violated - a row where the narrowed draw leaves the segment from the
+  frame's own offset to today's draw, further out or the other way - and not
+  in the form the finding asked for, "blends where today's does not", which
+  is dead: a row only enters the sweep when an axis moves 8 units or more, so
+  today's half-blend always lands off `cur` and the reverse case cannot arise
+  whatever the rule does. That was measured rather than reasoned: a
+  deliberately broken `InterpRootNarrow` (the unpaid branch starting one unit
+  off `cur`) left the asked-for counter at 0 and drove the one built to 315
+  of 352. The mutation was built and run only under
+  `C:/Cloude AI/Agent-Scratch/round157b/fix`, which is deleted again.
+- **The rule is not Lara's.** Everything measured here is hers, but
+  `InterpRootNow` is asked once per drawn item in `DrawAnimatingItem`
+  (`game\draw.cpp`), so every animating moveable in the level is narrowed by
+  the same arithmetic - and the `-log` seam prints Lara's line alone, so
+  nobody would go looking for theirs. It is safe for them for the reason it
+  is safe for her: the kept part is clamped to `|d|` per axis, so the rule
+  blends at most what it blends today and never in another direction,
+  whatever moved the item. Said so now in the note over `InterpRootNarrow`.
+- **One marker meant two things.** On a tween frame that K6 ACCEPTED, the
+  probe's `fixed` and `narrow` rows both said "(rule does not fire)" while
+  carrying different numbers - e.g. anim 161 f3170, `fixed` -877 against
+  `narrow` -878. Neither rule is ever asked on an accepted frame; the numbers
+  are the arithmetic of a blend nobody performs. An accepted row now says
+  "(accepted frame - not drawn)" and only a refused one speaks of the rule.
+  Exactly the inferential column the first fix round set out to remove.
+
+Nothing of the engine's behaviour changed in this second fix round either:
+the only engine file touched is `game/interpolate_math.h` and only its
+comment lines. `RootProbe`'s measured numbers are identical to the first fix
+round's, line for line.
 
 #### Round 161a (#161) - modern controls, the movement half
 

@@ -762,7 +762,13 @@ inline void InterpRootFlip(const long in[3], long out[3])
  * AND OVER THE WHOLE OF LARA (RootProbe -sweep, ANDREA1, her 474 animations):
  * 433 transitions carry an offset step of 8 units or more. Every one of the 31
  * that the file pays for - a TranslateItem at a wrap - keeps its paid axis, and
- * in NOT ONE of the 433 does the narrowed rule blend where today's does not.
+ * in NOT ONE of the 433 does the narrowed draw leave the segment from the
+ * frame's own offset to today's draw, further out or the other way. That last
+ * figure is the invariant in the form that can be violated, and the sweep
+ * counts it itself; the shape it reads more naturally in - "blends where
+ * today's does not" - is dead there, because a row only enters the sweep when
+ * an axis moves 8 units or more and today's half-blend then always lands off
+ * cur, whatever this function does.
  * The other 402 are state changes and wraps without a command, where the file
  * knows of no step at all; what really moves her there is the state routine
  * (lara_col_reach, TestLaraVault, SnapLaraToEdgeOfBlock, LaraDoClimbLeftRight,
@@ -796,6 +802,20 @@ inline void InterpRootFlip(const long in[3], long out[3])
  * 117 - no AS_TREAD 13, no AS_SWIM 17, no AS_GLIDE 18, the three that carry a
  * pitch; measured by RootProbe -sweep). She swims with an x_rot, but her step
  * (LaraUnderWater, game\laraswim.cpp) is authored in the y_rot frame too.
+ *
+ * THIS IS NOT LARA'S RULE, and the whole of the measurement above is hers
+ * (second fix round of 157b, a reviewer's finding). InterpRootNow is asked
+ * once per drawn item in DrawAnimatingItem (game\draw.cpp), so every animating
+ * moveable in the level - every enemy, every door, every machine - is narrowed
+ * by exactly this arithmetic, and the `-log` seam prints Lara's line alone, so
+ * nobody would go looking for theirs. It is safe for them for the reason it is
+ * safe for her and for no reason of hers in particular: the kept part is
+ * clamped to |d| per axis, so the rule blends at most what it blends today and
+ * never in another direction, whatever moved the item. What a sweep of Lara
+ * cannot say is how OFTEN it changes their picture; the answer for them is the
+ * same shape as for her - a wrap with a TranslateItem keeps its paid axis, and
+ * an item whose creature routine walks it by hand is measured through
+ * item->pos like she is.
  *
  * NOTHING HERE NEGATES `step`. It is a difference of two tick positions and a
  * long; the magnitudes are compared by carrying the sign to the other side, so

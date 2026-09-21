@@ -510,17 +510,29 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 			const bool nfires = refused &&
 				(narrow[0] != t.off[0] || narrow[1] != t.off[1] || narrow[2] != t.off[2]);
 
+			/* WHY TWO DIFFERENT MARKERS (second fix round of 157b). A row
+			 * that carries neither rule's blend used to say "rule does not
+			 * fire" for BOTH reasons at once - the frame was accepted by K6,
+			 * so neither rule is ever asked, and the rule was asked and landed
+			 * on the frame's own offset. The numbers on an ACCEPTED row still
+			 * differ (they are the arithmetic of a blend nobody performs), and
+			 * a reader who takes the shared marker for "the two agree" reads
+			 * them as a difference. So an accepted row says so in its own
+			 * words and only a refused one speaks of the rule at all. */
+			const char* const fixMark = !refused ? "   (accepted frame - not drawn)"
+				: (fires ? "" : "   (rule does not fire)");
+			const char* const narMark = !refused ? "   (accepted frame - not drawn)"
+				: (nfires ? "" : "   (rule does not fire)");
+
 			std::printf("  tween  today   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
 				t.anim, t.frame, posT, t.off[1], posT + t.off[1],
 				posT + t.off[1] - lastDrawn, refused ? "   <-- refused" : "");
 			std::printf("  tween  fixed   %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
 				t.anim, t.frame, posT, fix[1], posT + fix[1],
-				posT + fix[1] - lastDrawn,
-				fires ? "" : "   (rule does not fire)");
+				posT + fix[1] - lastDrawn, fixMark);
 			std::printf("  tween  narrow  %-4d  %-6d  %6ld  %6ld  %8ld  %+ld%s\n",
 				t.anim, t.frame, posT, narrow[1], posT + narrow[1],
-				posT + narrow[1] - lastDrawn,
-				nfires ? "" : "   (rule does not fire)");
+				posT + narrow[1] - lastDrawn, narMark);
 
 			if (fires || nfires)
 				/* THE d_off AND THE TWO VERDICTS ARE SPELLED OUT (fix round of
@@ -691,7 +703,23 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 	std::printf("kind    from            to             d off (x,y,z)      step (x,y,z)      "
 		"kept (x,y,z)      today  narrow  verdict\n");
 
-	long rows = 0, full = 0, part = 0, none = 0, stops = 0;
+	/* `beyond` IS THE ROUND'S INVARIANT, AND THE TOOL COUNTS IT ITSELF (second
+	 * fix round of 157b). The claim the record rests on is that the narrowed
+	 * rule blends never MORE than today's and never in another direction. The
+	 * sweep always had the per-row columns a reader could derive it from, but
+	 * the summary printed only `stops`, and a number a reader has to derive is
+	 * a number nobody checks twice.
+	 *
+	 * IT IS NOT COUNTED AS "blends where today does not", which the reviewer
+	 * asked for and which would be a DEAD counter here: a row only enters the
+	 * sweep when some axis moves by `least` units or more, so today's blend at
+	 * a half always lands off `cur` and the reverse case cannot arise whatever
+	 * the rule does. Measured against a mutated InterpRootNarrow it stayed 0.
+	 * What is counted instead is the invariant itself, axis by axis: the
+	 * narrowed draw must lie ON THE SEGMENT from `cur` to today's draw - same
+	 * side, no further - which has "blends where today stands down" inside it
+	 * as the case where that segment is a point. */
+	long rows = 0, full = 0, part = 0, none = 0, stops = 0, beyond = 0;
 
 	for (int i = first; i <= last; i++)
 	{
@@ -814,6 +842,19 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 					if (firesToday && !firesNarrow)
 						stops++;
 
+					for (int k = 0; k < 3; k++)
+					{
+						const long t = today[k] - cur[k];
+						const long n = narrow[k] - cur[k];
+
+						if ((t < 0 && n > 0) || (t > 0 && n < 0) ||
+							(!t && n) || labs(n) > labs(t))
+						{
+							beyond++;
+							break;
+						}
+					}
+
 					std::printf("%-6s  %4d f%-8d %4d f%-8d (%5ld,%5ld,%5ld)  "
 						"(%5ld,%5ld,%5ld)  (%5ld,%5ld,%5ld)  %-5s  %-6s  %s\n",
 						kind ? "change" : "wrap", i, bestFrame, to, toFrame,
@@ -830,8 +871,11 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 	}
 
 	std::printf("\n%ld transitions with a step of %ld or more: %ld paid in full, %ld in part, "
-		"%ld not at all;\n%ld of them blend today and do not blend under the narrowed rule.\n",
-		rows, least, full, part, none, stops);
+		"%ld not at all;\n%ld of them blend today and do not blend under the narrowed rule,\n"
+		"and in %ld the narrowed draw leaves the segment from the frame's own offset to\n"
+		"today's draw - further, or the other way (this one must read 0: it is the round's\n"
+		"invariant, that the rule blends never more than today and never in another direction).\n",
+		rows, least, full, part, none, stops, beyond);
 }
 
 /* LARA'S OWN SLICE OF THE ANIMATION TABLE. A TR5 moveable is 20 bytes with the

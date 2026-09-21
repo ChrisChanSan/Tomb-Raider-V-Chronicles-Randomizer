@@ -27,6 +27,7 @@ The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.m
 - [The options menu](#the-options-menu)
 - [tomb5 options](#tomb5-options)
 - [First person view](#first-person-view)
+- [Frame rate](#frame-rate)
 - [Language, and HQ music](#language-and-hq-music)
 - [The outfit changer, Mods and footsteps](#the-outfit-changer-mods-and-footsteps)
 - [Balance.txt — tuning the whole game](#balancetxt--tuning-the-whole-game)

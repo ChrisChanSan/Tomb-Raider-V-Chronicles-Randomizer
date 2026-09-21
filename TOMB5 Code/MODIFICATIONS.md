@@ -4,7 +4,7 @@
 decompilation project by Troye/Trxyebeep and contributors,
 <https://github.com/Trxyebeep/TOMB5>).
 
-Modified between **2026-07-30 and 2026-08-30** (ongoing) for the
+Modified between **2026-07-30 and 2026-09-22** (ongoing) for the
 *TR5 Randomizer* project. The upstream code as we received it is preserved as
 the **first commit of this repository** (no hash given here on purpose; it changes
 whenever the history is rewritten for privacy scrubbing, the content does
@@ -90,6 +90,24 @@ we change nothing in them, so there is nothing to notice.
 `game/trex.h`, `game/raptor.h` and `game/compy.h` carry the notice AND name
 tomb3 as their origin further down (section 3 below); `game/newinv2.h` had
 been missed entirely and was given its notice on 2026-08-30.
+
+Measured again on **2026-09-22**, in audit round A1 (#172) and covering
+everything since the count above - the rest of "HD art from the Remaster",
+the outfit changer and the Mods folder (#153), the modern controls (#161) and
+the last of the sixty-frames orders: **122** files changed, **98** entirely
+new - **220** in all, none deleted, **206** of them carrying the notice. The
+figures come from a byte-for-byte comparison of every file under `TOMB5/`
+against the first commit of this repository, not from a grep over what we
+remembered changing. Fourteen still do not carry the notice, and they are
+exactly the fourteen described above - the four `hd_shader/*.inc`,
+`tomb5/libs/stb/stb_vorbis.c`, `tomb5/libs/discordRPC/LICENSE` and the eight
+files under `vendor/trforge/`. That the number did not grow is the point of
+the round: the audit found **seven** files that earlier rounds had changed and
+never given the notice - `game/draw.h`, `game/tomb4fx.cpp`, `game/rope.cpp`,
+`game/sphere.cpp`, `game/deathsld.cpp`, `game/flmtorch.cpp` and
+`specific/polyinsert.h` - and they were given it in `7c02357`, so the sentence
+four paragraphs below, that every file we changed under `TOMB5/` carries a
+notice, is true again for the first time since those rounds.
 
 This modified version remains licensed under the **GNU General Public License
 version 3**, the same licence as the original. See `LICENSE`. The complete
@@ -249,6 +267,18 @@ respective CDs, so on the Steam edition German and French fall back to the
 English one. If the player has `screens\HD\LOGO_<language>.DDS`, the mark out
 of that file is used instead - and German, French and the US emblem then
 finally appear in the menu at all.
+
+**One always-on change went with it and this record owed it a line, written in
+audit round A1.** American English used to take its own `data\uslogo.pak`
+(`if (Gameflow->Language == US)`, `specific/file.cpp`); that branch is deleted,
+so a US player now gets `logo512.pak` like everybody else. The reason stands in
+the code at `file.cpp:681-685` and was seen in the game on 2026-09-04: the
+Steam data's `uslogo.pak` - and the unused `uklogo.pak` beside it - carry
+**Tomb Raider IV's** "The Last Revelation" wordmark on opaque black, a leftover
+like `JAPAN.DAT`, and because the colour key is magenta the black stayed as a
+box behind the wrong game's name. It is a fix, not a regression, but it happens
+with `hd_enable=0` and with no `screens\HD\` folder, so it is a change a US
+player sees.
 
 The mark is cut out with the same alpha box the loading screen uses, resampled
 with the same premultiplied bilinear tap, and put into **one** texture page,
@@ -942,6 +972,22 @@ which is **0 out of the box**: with it off, `HDEnabled()` returns before any
 folder is searched or any file is opened, and the two calls in `file.cpp` are
 the only way into the new code at all.
 
+**A note on the commit subjects of this work, added in audit round A1.** A
+commit subject is one line and cannot be changed after the fact, and seven of
+this range's read as if something had been taken out of the Remaster -
+`98f733e` "the pure functions turn at the Remaster's rate", `f6d2e6e` "the font
+in HD from the remaster atlas", `2ab35c1` "Remaster models loaded and skinned",
+`ee61e4c` "HD loading screens from the Remaster, when they are there",
+`dbc0b30` "Optional HQ sound bank from the TR4-6 Remaster", `72bc5bf` and
+`b79b649`. Their bodies say what they mean and they all mean the same thing:
+**read at run time out of the player's own installation, never copied into this
+repository and never shipped with it**; and where a subject says "the
+Remaster's rate", a number counted off the author's own screen recordings.
+Nothing in this range opens, maps, links or disassembles a Remaster program -
+`hd_install.cpp` only tests that `tomb456.exe` or `tomb123.exe` EXISTS, as a
+marker that a folder is the right one. The subjects stay as they are; this
+paragraph is what they are short for.
+
 New, under `TOMB5/specific/hd/`:
 
 - `hd_install.cpp` / `.h` — finds the installation. The registry value
@@ -1158,9 +1204,15 @@ object is alive, and all of the HD path's are.
 
 **The options row.** *Options -> tomb5 options*, the FIRST page, new last row
 **HD textures** (on/off, `PAGE0_NUM` 12 -> 13), written to the registry by the
-page's own `save_new_tomb5_settings()` like every neighbouring row. Those rows
-are hard-coded English literals in `tomb5/troyestuff.cpp`, not language-table
-entries, so nothing in `Language.cpp` changes. It takes effect at the next level
+page's own `save_new_tomb5_settings()` like every neighbouring row - **that was
+the menu of the day: round 161b1 deleted the Troye pages and `PAGE0_NUM` with
+them, and this row now lives on the *Graphics* page of the table-driven frame**.
+Those rows were hard-coded English literals in `tomb5/troyestuff.cpp` at the
+time, not language-table entries; round 161b1 moved every label of every
+framework page into the frame's own `CustomText` table (`game/gameflow.cpp`),
+where **HD textures** carries a German column too. Either way nothing in the
+randomizer's own `Language.cpp` changes, which is what the sentence was written
+to settle. It takes effect at the next level
 start, and the code enforces that rather than promising it: the frame path tests
 a flag that only `HDLevelBuild` sets.
 
@@ -3604,8 +3656,17 @@ Two obvious answers were measured first and both are wrong:
   host tree and its docs: the only matches are a comment about the water UV
   wobble "distorting the reflection" and the note in `game_renderer.cpp:373`
   that an opaque page's DDS alpha is a *"sparkle/specular MASK, not coverage"*.
-  `SHADER_RULES.md` - Todesengel's own measurement of the remaster's programs -
-  lists six rules and none of them is a mirror.
+  `SHADER_RULES.md` - Todesengel's own write-up of the remaster's render rules,
+  part measured on the shipped data files and part on the remaster's PROGRAMS -
+  lists six rules and none of them is a mirror. **Corrected in audit round A1:**
+  that document is a third party's reading of the remaster's programs, so it is
+  off limits to this project at second hand, and it is NOT a template our
+  shaders were written against. Of the rules it names, the only one this tree
+  implements is the SUM of a room vertex's two colours, and that one is taken
+  the way TRForge's MIT reader adds them
+  (`TOMB5/vendor/trforge`, `trf_remaster/HdMesh.cpp`); every other rule is
+  either re-measured here on the player's own data files or not used at all. It
+  is cited above only for what TROne's own work does and does not contain.
 - **The gloss mask of fix round A2 is not on the marble.** RICH2's floor rooms
   draw with pages 1010, 1032 and 1033, and all three are alpha 255 on all
   262,144 texels of the top mip (`DdsProbe -alpha`). A2's masked pages are
@@ -5165,10 +5226,18 @@ for a 30 Hz present.
 
 `tomb5.fps_mode` is a `ulong` in `tomb5_options` (`global/types.h`), read and
 written under the registry name `fps_mode`, `1` (60) by default; `0` is 30 and
-`2` is reserved for the display's own refresh and reads back as `1`. The menu
+`2` was reserved at this point for the display's own refresh and read back as
+`1`. **Corrected in audit round A1:** order 6 (5.12) made `2` a real third
+setting that is kept as `2` - the clamp in `tomb5/tomb5.cpp` has read
+`if (tomb5.fps_mode > 2)` ever since - so the sentence above describes the
+value only as it stood when this order was written, and 5.12 is what holds
+today. The menu
 row is *Frame rate* on page 1 of the tomb5 options
 (`tomb5/troyestuff.cpp`), which grew from thirteen rows to fourteen - the
-ceiling for that screen, as the comment over `PAGE0_NUM` now records.
+ceiling for that screen, as the comment over `PAGE0_NUM` now records - **and
+that menu is gone: round 161b1 deleted the Troye pages with `PAGE0_NUM`, and
+*Frame rate* now stands on the *Display* page of the table-driven frame,
+reached as a tab from *Graphics***.
 
 `TargetPresentHz()` is the same decision as a number (30 or 60) for the two
 places that need a rate rather than a tick count.
@@ -5279,7 +5348,12 @@ declaration, and Windows paging the process in. Those are for `PROFLOG`'s
 
 #### 5.7 What `fps_mode 0` does
 
-Nothing. Every branch this order added is inert at 30: `gPresentMinTicks` is 2
+Nothing - with one later exception, added in audit round A1 for accuracy: order
+6 replaced the resolution caption's step with one decrement per logic tick in
+every mode (5.12, `R15`), so at `fps_mode 0` it is one decrement per frame,
+which is what the base build did at a steady thirty; the citation below is the
+arithmetic as it stood at this order and is no longer in the build. Every
+branch this order added is inert at 30: `gPresentMinTicks` is 2
 and `S_DumpScreen` reads `while (n < 2)`; `TargetPresentHz()` is 30, so the
 caption's step is `long(30 / App.fps)` and its start is 120; `FrameBudgetMs()`
 is `2 * 1000/60` and `MissedSlotMs()` that plus 1000/120, the two old
@@ -5305,7 +5379,10 @@ all, `dbinput` keeps standing, and the next `TitleOptions` reads the same
 press again: one tap of Down moved the cursor two rows, and *New Game* could
 not be selected. Everything `TitleOptions` reaches has the same shape - the
 level select, the whole options tree, the Tomb5 pages in
-`tomb5/troyestuff.cpp` - because all of them read `dbinput` per call.
+`tomb5/troyestuff.cpp` - because all of them read `dbinput` per call. (Round
+161b1 replaced those pages with the table-driven frame in
+`game/menu_frame.cpp`; the argument is untouched by the move, because the frame
+reads `dbinput` per call in exactly the same way.)
 
 The fix is `GameFrameMinTicks()` (`specific/output.cpp`): sixty is for a
 played frame, so it returns 2 whenever `gfLevelId == LVL5_TITLE` or
@@ -5895,6 +5972,21 @@ vanilla's own pair, which is the same approximation vanilla already makes on
 every interpolated tick frame - and the sequence of boxes over a crossing is
 `K, K, K'`, so nothing alternates.
 
+**`game/sphere.cpp` is the eighth engine file this order touched, and it is
+here so that the pose does NOT reach it** (named in audit round A1, which found the
+file in no entry of this record at all). `InitInterpolate2` serves the half of the second matrix stack that
+answers where a joint *is* rather than what it looks like -
+`GetJointAbsPosition`,
+`GetJointAbsPositionMatrix` and the creature collision spheres. It now sets
+`IM_alpha` and `IM_alpha8` from `InterpKeyAlpha`/`InterpEighths` like its
+neighbour, so the two halves of the stack blend by one factor instead of by
+four hard-wired branches - but it is fed `frac` and `rate` from the LOGIC tick
+and never a midpoint in time, which is the point: a sphere that a tick's
+collision test asks about must stand where that tick put it, whatever the
+picture rate. Eight lines, an include and a comment saying so; at `fps_mode 0`
+the factor is vanilla's own three-way test to the bit, as 5.11's proof shows
+for the whole stack.
+
 **`INTERPLOG` grew four fields** - `pose_items`, `pose_skips`, `pose_hd`,
 `lara_pose` - documented in `docs/Engine-Manual.md`.
 
@@ -5933,7 +6025,10 @@ for `tomb5.fps_mode`:
 They are one subject and they now have a page of their own, *Display*, third
 in the tomb5 options cycle. Pages 0 and 1 were both at the fourteen-row
 ceiling (`troyestuff.cpp`), so *Frame rate* moved off page 0 rather than being
-squeezed in - and the row that offers *Display* belongs beside the row that
+squeezed in. (**The cycle is gone**: round 161b1 replaced the Troye pages with
+the table-driven frame, and *Display* is a tab of *Graphics* there - the same
+two rows, reached a different way.) The row that offers *Display* belongs
+beside the row that
 says whether the present waits, because without the second the first cannot be
 honoured.
 
@@ -6318,8 +6413,12 @@ spin and the brightness ramp sit inside the very loop that draws each icon,
 and the slide is stepped at the bottom of the same function, after the draw.
 A value written before that body is stepped over by the body itself, and one
 written after it is too late for the picture. So `game/inventory_interp.cpp`
-keeps the snapshot and eight accessors answer it, each returning the live
-value whenever there is nothing to blend.
+keeps the snapshot and **nine** accessors answer it (corrected in audit round
+A1 - the file says nine and so does its own banner now), each returning the
+live value whenever there is nothing to blend. Six of them take the previous
+generation and the live one; three - the row slide, the current slot and the
+ammo fade - take the two previous generations, because their subject has
+already been stepped by the loop that draws it.
 
 **And it is the STEP frame that is blended, which reads backwards until the
 order of the loop is written out.** In the game the draw comes before the
@@ -7230,7 +7329,9 @@ switched U3's arm blend back off in exactly the case U3 was built for. The
 shadow takes the held frame's own bounds for the same reason. The
 option is `tomb5.first_person_body_still` (`ego_body_still` in the registry),
 default `animated`, row five of the "First person view" page under Camera
-damping.
+damping - **which round 161b1 rebuilt: the page is called *View* in the
+table-driven frame and *Body* is its sixth and last row, still directly under
+*Camera damping***.
 
 **U5 - what the review of fix round S found, in words only.** `hd_model.h`
 carried a whole comment for `HDModelSetInnerSkin`, a function fix round S
@@ -9566,7 +9667,11 @@ Without mips that is a bilinear undersample and thin strokes crawl. The whole
 six-level chain out of the `.DDS` is uploaded and the draw sets
 `D3DTEXF_LINEAR` with `D3DSAMP_MIPMAPLODBIAS` -0.7, which lands at level 0.14
 at 1080p and at 0 at 1440p: sharp instead of soft, and the states are put back
-the way the classic path keeps them the moment the call returns.
+the way the classic path keeps them the moment the call returns. The three
+minification figures are our own measurement; **the bias -0.7 is TROne's
+number**, for the same reason and in its own words, and audit round A1 gave it
+its citation in `specific/polyinsert.cpp` - TROne (GPLv3) by Todesengel1931,
+`host/render/game_renderer.cpp:2100-2106` of the version of 2026-09-13.
 
 **Where it lives.**
 
@@ -13243,7 +13348,12 @@ reader. A `.TRM` vertex names three bones and those are classic mesh tree nodes,
 so "what is on Lara's head node" is a count and not an opinion. The triangle
 column is the DOMINANT node - the node carrying the most weight over the
 triangle's three corners, which is the rule `hd_model.cpp` buckets its draw
-ranges by, so it is also the count of what a node mask would hide.
+ranges by, so it is also the count of what a node mask would hide. One caveat
+on the last column, added in audit round A1: it is NOT read that way
+throughout. `OUTFIT_TRX_BIKER_1` names a page although its triangle count on
+the node is 0, so that row's page comes from the node's VERTICES while the
+rows above it list the pages of their dominant-node triangles. Read the column
+as which pages the node touches, not as a count of anything.
 
 ```
   file                        node 14      of which      triangles   pages on
@@ -13339,7 +13449,11 @@ I-III install and for every mod whose `mod.txt` says `origin=tr1|tr2|tr3`;
 `outfit` for everything else. A mod's `outfit.txt` overrides with
 `head=tr5|hair|outfit`, an unknown value is a note and the default stands. On
 this machine: 104 entries, 63 `tr5` and all 63 by origin, 41 keeping their own
-head.
+head. (Corrected in audit round A1: that is one scan of one folder at one
+moment, and the sample log below is that same scan. The author's own `Mods`
+folder lost a body later in the round, so a scan after it counts 103 entries
+and 62 `tr5`. The rule is what this section states; the figures only say what
+that folder held on the day.)
 
 **AND THERE IS NO RULE BY NAME AND NONE BY GEOMETRY, ON PURPOSE.**
 `OUTFIT_TR2_HOME` is the name of a IV-VI body with a full head AND the name a
@@ -14066,10 +14180,13 @@ first answer are inside `HDLevelBuildHD`, past its own `HDEnabled()` test;
 `HDEnabled() && g_level_active` in their first line; and the F4 window cannot
 open at all without `HDEnabled()` (`HDOutfitMenuWanted`). Nothing of this round
 is on a drawn frame's path, nothing of it is in the 60 fps files, and
-`hd_enable=0` and `fps_mode 0` draw the frame they drew before. The three
-literal `false` arguments in `hd_level.cpp` became one named `kPagesManaged`
+`hd_enable=0` and `fps_mode 0` draw the frame they drew before. The literal
+`false` arguments in `hd_level.cpp` became one named `kPagesManaged`
 with the same value, so the `pool=` the log prints is the pool the call really
-uses and not a typed word.
+uses and not a typed word. (Corrected in audit round A1: that is **two** call
+sites in `hd_level.cpp` plus the log line that prints the pool, not three call
+sites, and `hd_object.cpp`'s own model build still passes the literal at its
+one call - the same value, and the line to change if the pool ever moves.)
 
 **NOT IN THIS ROUND.** Page eviction, a shrinking cache, `D3DPOOL` changes, an
 automatic level rebuild, x64 (#143), the randomizer, the ring, the wardrobe, and
@@ -14533,7 +14650,7 @@ corrected:
   deliberately broken `InterpRootNarrow` (the unpaid branch starting one unit
   off `cur`) left the asked-for counter at 0 and drove the one built to 315
   of 352. The mutation was built and run only under
-  `C:/Cloude AI/Agent-Scratch/round157b/fix`, which is deleted again.
+  a scratch folder outside the repository, which is deleted again.
 - **The rule is not Lara's.** Everything measured here is hers, but
   `InterpRootNow` is asked once per drawn item in `DrawAnimatingItem`
   (`game\draw.cpp`), so every animating moveable in the level is narrowed by
@@ -14562,6 +14679,20 @@ Todesengel hat es geschafft, die moderne Steuerung aus dem Remaster
 nachzubauen. Das ist der letzte Meilenstein, der uns noch fehlt.* And on being
 shown that even TROne's own scheme is not flawless: *Die ist noch nicht
 perfekt, ich wuerde sagen 90 % gut. Den Rest tweaken wir.*
+
+**What "nachzubauen" means here, said plainly in audit round A1**, because the
+quotation above is the user's and may not be edited: the scheme was rebuilt by
+playing the Remaster and watching what it does. No Remaster code, table or
+shader is involved, at first hand or at second - TROne's own `docs/LEGAL.md`
+forbids that route for TROne as well, and TROne's `docs/CONTROLS.md` presents
+the scheme as its own design, justified by its own 600-frame proof run. This
+project's taboo table of 2026-09-16 walked all 32 constants of the design and
+found **none** derived from a Remaster binary (16 fine as they stood, 9
+re-measured here by play, 5 not applicable, 2 unknown and therefore not
+taken). The only Remaster-derived fact anywhere in the set is a handful of
+option NAMES read out of a plain text file of the user's own installation. The
+origin block in `game/modern_move.h` carries the same statement beside the
+code.
 
 **WHAT MODERN CONTROL IS.** It is not a new way of moving Lara. It is a pure
 function that turns "stick direction plus a remembered world heading" into
@@ -14612,7 +14743,7 @@ is needed - which it was, twice, while this paragraph was being corrected.
   own arc tangent cannot call the engine's `phd_atan` (that would drag the
   whole Direct3D type set into a file that has to compile alone), so it uses
   the C library's `atan2` scaled to our 16-bit convention instead, measured
-  against the real `phd_atan` rather than assumed: over all 131,768 integer
+  against the real `phd_atan` rather than assumed: over all 131,769 integer
   stick pairs a controller can produce, the worst disagreement is 5 of 65,536
   units (0.03 degrees, at x=-181 z=-73), against a smallest threshold
   (`steer_step`) of 384 - re-verified against this tree while writing this
@@ -14843,8 +14974,11 @@ three checks closed the gap).
 **THE "CONTROLS" PAGE.** `specific/LoadSave.cpp`'s `menu == 1` gains three
 rows - Control type (Tank/Modern), Combat mode (Toggle/Hold), Action (One
 key/Separate) - above the existing Method row and key-binding list, which
-both move down with it (selection bits 1/16/17 become 4/19/20, a uniform +3,
-because the three new rows take the bits the Method row used to hold). Combat
+both move down with it (the page's `nMask` goes 1/16/17 to 4/19/20, a uniform
++3, because the three new rows come above the ones it counted; corrected in
+audit round A1, which found this written as "selection bits" - `nMask` is the
+COUNT of selectable rows, used as `1 << (nMask - 1)`, not a bit position).
+Combat
 mode and Action are drawn, toggled and saved but read by nobody yet - one
 comment says so at both the row and its LEFT/RIGHT handling - workflow B
 gives them an effect. Control type calls `ModernResetControls()` on every
@@ -16252,7 +16386,8 @@ this round answers the SECOND (2026-09-19, the same PS5 pad over the same
 DirectInput path, camera speed slider at 48) and, in the same round, #169's
 own report of a one-frame interpolation glitch in the underwater roll. Nine
 folders of description, log and Remaster-against-our-build video pairs under
-`C:/Cloude AI/Sammlung von neuen Baustellen/` (READ ONLY), measured by the
+the author's own collection folder outside the repository (READ ONLY,
+never copied into it), measured by the
 project manager and quoted here in the user's own words:
 
 1. *"Wenn die Kamera sehr nah an Lara ist, ist sie sehr unberechenbar ... Es
@@ -16756,8 +16891,9 @@ Features page kept its own function, `SpecialFeaturesPageRun()`, because it
 is still legacy-dispatched rather than a table (its logic did not move, only
 its calling convention). `tomb5/troyestuff.cpp` lost `TroyeMenu`,
 `TroyeMenuPage`, `Page0`, `Page1`, `Page2`, `PageDisplay` and the page-number
-constants outright - 905 lines removed - once their rows were tables of the
-frame; only `CreditsScreen` remains, byte for byte.
+constants outright - 898 lines removed against 7 added (corrected in audit
+round A1; 905 was the two numbers added together) - once their rows were
+tables of the frame; only `CreditsScreen` remains, byte for byte.
 
 Geometry is one rule for every page now, recomputed rather than assumed: at
 `font_height = GetFixedScale(28)`, which scales with the window so the row
@@ -16907,9 +17043,10 @@ the Tank key/pad default tables were not touched anywhere in the round.
 - `Preparation/Tools/Diagnose/ModernTest.cpp` - the `deadzone` group's eight
   new cases, and the first review round's ten that hold the rounding term.
 - `TOMB5 Code/MODIFICATIONS.md`, `Preparation/Tools/README.md`,
-  `README.md`, `docs/Engine-Manual.md` (this entry, and the tool and manual
+  `docs/Engine-Manual.md` (this entry, and the tool and manual
   rows the moved paths needed) - outside the counts below, the same
-  convention every round has kept.
+  convention every round has kept. (Corrected in audit round A1: the front
+  page `README.md` stood in this list and no commit of the round touched it.)
 
 **THE REVIEW.** This paragraph first said no dedicated skeptical review ran
 this round, because the brief's four steps are all build steps. One ran after
@@ -17255,11 +17392,14 @@ setting was "drawn and saved only", which its OWN round had made false at
 commit `60df63c` - and the same sentence stood at the field's declaration in
 `global\types.h`. Both now name the caller, `S_UpdateInput`'s weapon seam.
 Nothing else changed: two comments, no statement. (3) The manual attributed
-the Modern key table to "the remaster it is re-derived from". The table is
+the Modern key table to "the remaster it is re-derived from" - **a wrong
+sentence, and audit round A1 asks that this entry say so rather than only
+quote it**: the table is not re-derived from the Remaster at all, it is
 the user's own listing (above), and the round's taboo forbids taking anything
-from a Remaster binary, so the manual may not tell a reader otherwise; the
+from a Remaster binary, so the manual may not tell a reader otherwise. The
 sentence now describes the layout itself, a hand-on-the-left scheme around
-W/S/A/D. Rebuilt clean afterwards and re-run: the engine's only warnings are
+W/S/A/D, and the design behind it is TROne's, re-derived here. Rebuilt clean
+afterwards and re-run: the engine's only warnings are
 base's own (`camera.cpp` C4244, `trex.cpp` C4101, `types.h` C4005), and the
 three counts above are unmoved.
 
@@ -17369,8 +17509,12 @@ what each site enters and holds:
   `game/lara.cpp` plus one each in `laraclmb.cpp` and `larasurf.cpp`), every
   weapon read (16, `lara1gun.cpp`/`lara2gun.cpp`/`larafire.cpp`), the
   binocular and laser-sight reads (3 in `camera.cpp`, 1 in `control.cpp`, all
-  on `inputBusy`), the menu debounce (`newinv2.cpp`) and the swim cheat
-  (`laraswim.cpp`).
+  on `inputBusy`), the ring's confirm read (`newinv2.cpp`) and the swim cheat
+  (`laraswim.cpp`). **One of those 35 did not stay untouched, corrected in
+  audit round A1:** the ring's confirm read was itself gated later in this same
+  round (`2fb27d5`, "the ring's confirm key") on `!tomb5.action_split`, so
+  under *One key* it reads `IN_ACTION` exactly as before and under *Separate*
+  it does not read the bit at all - `IN_SELECT` alone confirms there.
 
 One mask needed the honest reading rather than the brief's own "only firing":
 `game/lara.cpp`'s `input &= ~IN_ACTION` (`LaraAboveWater`) is followed on the
@@ -17953,12 +18097,202 @@ Commits: `81a8827` (item 1), `f331108` (item 2), `884bd0a` (item 3),
 round), `83e56f7` (the second fix round), `c50ffae` (the record of it), the
 third fix round's own commit, and the one that names them here.
 
+#### Audit round A1 (#172) - the push audit, and what it corrected
+
+Before this work went to the public repository the whole tree was read by
+twenty-five agents in four runs, and every finding was handed to a second
+agent whose only job was to refute it. About a hundred and twenty findings
+survived that. **None of them is about the substance.**
+
+What the runs proved, several points twice and by two agents independently:
+nothing in this tree opens, maps, links, parses or disassembles a program of
+the *Tomb Raider IV-VI Remaster* - `hd_install.cpp` tests that `tomb456.exe`
+or `tomb123.exe` EXISTS and nothing more; there is no Remaster file and no PE
+binary among the tracked files; the seventeen blobs inside
+`EmbeddedData.cpp` inflate to the classic zone data and two checksum tables and
+nothing else; the four `hd_shader/*.inc` were rebuilt from our own two `.hlsl`
+by the finder and again by the skeptic, and both times the stamps matched, so
+they are the compiler's output of our own source and carry nothing else; the
+vendored TRForge files are byte-identical to the MIT original; a fresh clone of
+the repository builds the engine, both randomizer programs and forty-one of the
+forty-three other tool scripts; `ModernTest` 5788, `MenuTest` 35547 and
+`InterpTest` 398 all pass with 0 failed, which are the numbers this record
+already gave; the randomizer produces byte-identical output for the same seed,
+and a bare run of the Beta 1.0 build against today's is byte-equal for `andy1`,
+every other difference being explained by a task recorded here; and the
+default-off ledger holds - 449 hunks in 70 modified engine files were read one
+by one, no gate is inverted, the only save-format change is #150, and of
+nineteen new options exactly one, `fps_mode`, changes what a player gets out of
+the box, which the record and the manual both say.
+
+What was wrong was **sentences**: origin claims that named a third party's
+reading of the Remaster's programs instead of the lawful source the code really
+has, counts that had drifted, chapters describing a menu that round 161b1 had
+taken apart, and notices missing from files that earlier rounds had changed in
+a hurry.
+
+**WHAT WAS FIXED IN THE CODE.** The licence side first: seven files that this
+project changed long ago and never gave the modification notice - `game/draw.h`,
+`game/tomb4fx.cpp`, `game/rope.cpp`, `game/sphere.cpp`, `game/deathsld.cpp`,
+`game/flmtorch.cpp`, `specific/polyinsert.h` - got it (`7c02357`, the block
+copied byte for byte out of `game/lara.cpp`), fourteen diagnostic tools written
+since Beta 1.0 and `EmbedData.ps1` got theirs (`86fc9c0`), the randomizer's
+`Tr5Tr3Import.cpp` got the project header it was the only source file to lack
+(`fdd7508`), and `tomb5.vcxproj` finally names `game/interpolate_math.h` while
+`tomb5.vcxproj.filters` caught up by 87 entries (`84a0c93`). Then the origin
+sentences (`8219710`, `9157c00`): every place in the engine that had named the
+Remaster's own shaders or programs as the source of a rule now names what it
+really rests on - TRForge's MIT format description, TROne's own GPLv3 code with
+its file and line, or a measurement made here on the player's own data files.
+Two things the player can see were repaired: the French and German footers of
+the save/load page, where every accented letter had become two garbage glyphs
+(`a1c6129`), and the CP-1252 accent table of `game/text.cpp`, which an editor
+silently re-encoded **inside this round** and which was repaired byte for byte
+against the round's own base (`c8b89b0`) - the same defect twice in one night,
+recorded here because the next person needs to know the trap. The build from a
+clean clone: the shader guard hashes bytes, and line endings are bytes, so a
+Windows checkout made it fire on shaders that were in step; `.gitattributes`
+now pins the `.hlsl`/`.inc` pair to LF and the regenerated `.inc` differ in
+their stamp line alone (`5dcc9fb`); `bmap.bat` and `btrg.bat` moved to the
+`%~dp0` pattern of the other scripts and `bmap` now links what its own header
+had been promising (`1e4f21a`); `SfxProbe`'s usage banner names its best switch
+(`f768981`). The diagnostic seam of the HQ sound bank built its eleven log
+lines whether or not `-log` was given, and now tests the switch first
+(`e6fc7c4`). Three comments that counted or named the wrong thing, and the
+parked comment lows of earlier rounds, were swept (`1bcacee`, `5b5412d`). On
+the randomizer's side the two tracked build scripts survive their folder's own
+ignore rule (`b20664e`), `RANDO_BUILD_ID` went 18 to 19 because four commits
+since Beta 1.0 change where an enemy may stand (`f4530f1`), and the launcher
+dropped a checkbox that promised to patch Remaster textures into level files -
+a plan superseded on 2026-09-05 - together with the one German string literal
+that had bypassed the translation table (`3bde4b1`).
+
+**WHAT WAS FIXED IN THE DOCUMENTS.** This record: the head ledger above,
+measured again; the five places that still put the HD-textures row in the menu
+round 161b1 deleted; the `fps_mode` entry that stated two contradictory facts
+about the same registry value; `game/sphere.cpp`, the eighth file of the 60 fps
+order that section 5.11 had never named; the `SHADER_RULES.md` sentence; and
+the absolute paths of the author's own machine. `THIRD-PARTY.md` and
+`Preparation/Credits/Credits.txt` now carry a row or a line for every taking
+and every library, TROne's credit with its handle and URL, TRForge, the
+sub-component holders inside zlib and Dear ImGui, the RapidJSON that a
+discord-rpc library embeds, and one sentence saying that the five pictures of
+this repository are the author's own AI-generated artwork. The four plans no
+longer claim a source they do not lawfully have. `Preparation/Verification.md`
+gained the four post-Beta tasks that are allowed to move randomized bytes, and
+a fourth detector for the encoding sweep - which was then run over all 853
+tracked files with zero replacement characters found. The engine manual was
+corrected where it had gone behind the code (the HQ sound bank is read out of
+the installed Remaster and needs no hand copy; `RICHCUT2` borrows Red Alert's
+HD picture; the graphics-card requirements; the `INTERPLOG` field table; what
+happens to an old savegame) and gained the chapter the F4 outfit changer, the
+Mods folder and the per-outfit footsteps never had. The front page gained the
+disclaimer, a "what you need" that names the player's own Remaster, two rows
+for HD and 60 fps, fourteen new screenshots with their caption, and credits for
+the four third-party mods that appear in them.
+
+**WHAT STAYS, AND WHY.** Core Design's setup render is reachable in this
+history through the import baseline. It came with Troye's upstream, it has been
+public since Beta 1.0 and it is in upstream's own history too; removing it
+means a sixth history rewrite, a force-push and the death of every hash cited
+in this record, and it would change nothing about what is already out there.
+The user's decision: it stays, for completeness. The two `discord-rpc`
+libraries are upstream's as well, switched off at the source
+(`TOMB5_DISCORD_RPC 0`), with no call site compiled and nothing of them pulled
+into any binary; they stay exactly as upstream shipped them, and what changed
+is that `Credits.txt` and `THIRD-PARTY.md` now say that truth instead of the
+old sentence claiming they are linked and called. The behavioural low findings
+of earlier rounds stay parked - a push audit is not the place to change what a
+player feels, and each of them wants its own play test. And one bit is not ours
+to decide: the order of the two water-material parameters at
+`hd_render.cpp:565`. A build with the two exchanged was made outside the
+repository for the user to look at; the tree keeps today's order until he has
+compared JOBY4's sea with a fountain and said which is right. One question is
+left open on purpose: nobody has yet compared our re-typed readers
+`hd_trm.cpp`, `hd_scan.cpp` and `hd_bind.cpp` line by line against the upstream
+MIT sources for copied passages. Copying them would be lawful under MIT and we
+carry the notice; it is an attribution question, and it belongs to the next
+round.
+
+Commits of this round: `7c02357`, `a1c6129`, `8219710`, `e6fc7c4`, `1bcacee`,
+`5b5412d`, `c8b89b0` (the engine), `5dcc9fb`, `1e4f21a`, `86fc9c0`, `f768981`,
+`84a0c93`, `9157c00` (the tools, the project file and the shader guard),
+`b20664e`, `fdd7508`, `f4530f1`, `3bde4b1` (the randomizer), and the document
+commits that follow them, this entry among them.
+
+## Randomizer changes since Beta 1.0
+
+The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
+`TR5Randomizer.exe` - is this project's own work from the first line, so it
+owes nobody a GPLv3 section 5(a) notice and has never had a record of the kind
+above. It should still be possible to read what changed in it since the public
+Beta 1.0, so here it is by task number. Nineteen files under
+`TR5Randomizer/src` changed in that span; audit round A1 found three of them
+named in no document at all and that is what this section was written for.
+
+- **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
+  `Randomize.cpp` and `gui/Main.cpp`: the randomizer writes the HD room markers
+  into the `.TRC` so the engine can find the right room again after the levels
+  have been shuffled, keeps a marker room's HD art across the portal cut (fix
+  round Z), and carries material 16 as the still-water surface (fix round N).
+- **#137 - secret lists.** `SecretList.cpp`, `ApplyPatch.cpp`, `Tr5Level.cpp` /
+  `.h`: two further forms in the secret list, and geometry built for rooms that
+  have none.
+- **#141 - where an enemy may stand.** `Randomizer.cpp` / `.h`,
+  `ApplyPatch.cpp` / `.h`, `Tr3Source.cpp` / `.h`, `Tr5Level.cpp` / `.h`: the
+  headroom check (part 1), the Hydra's footprint of five free tiles out of nine
+  (part 2) and its doubled weight in the kind roll (part 2b).
+- **#142 - the data baked into the binary.** `EmbeddedData.cpp` and `.h` are
+  new and **generated** by `Preparation/Tools/EmbedData.ps1` - the fifteen
+  `zones_*.json` and the two checksum tables as zlib streams, 7,186 lines.
+  `core/DataFile.cpp` is new and hand-written: it unpacks them, looks a name up
+  and implements the rule that a real file in `data\` wins and the baked copy is
+  the floor. It is kept apart from the generated file on purpose, so
+  regenerating the tables cannot overwrite logic. `DataFolder.cpp` / `.h` gained
+  `loadChecksumsText()`, a second entry point for callers that hold the checksum
+  text rather than a path. These three - `DataFile.cpp`, `DataFolder.cpp`,
+  `DataFolder.h` - are the files the audit found named nowhere.
+- **#144 - the weather roll.** `Config.cpp` / `.h`, `Randomizer.cpp` / `.h`,
+  `ApplyPatch.cpp` / `.h`, `Tr5Level.cpp` / `.h`, `Randomize.cpp`,
+  `gui/Main.cpp`, `gui/Language.cpp`: the option, the roll and the level fields
+  it writes. Six of the thirteen playable levels can show it.
+- **#146 - the cyborg in the cross pool.** `Randomizer.cpp` and
+  `gui/Language.cpp`: slot 469 joins the pool the cross mix draws from.
+- **#147 - the flipmap mirror.** `ApplyPatch.cpp` / `.h`, `Randomizer.cpp`,
+  `Randomize.cpp`, `gui/Main.cpp`: an enemy waker moved into a room is mirrored
+  into that room's flipmap partner, and (#147b) a moved key trigger with it.
+- **#153 - the Mods folder.** `Config.cpp` / `.h`, `Randomizer.cpp` / `.h`,
+  `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp`, `Randomize.cpp`, `gui/Main.cpp`,
+  `gui/Language.cpp`: the randomizer rolls out of the same scan the engine's
+  wardrobe uses, and knows again when there are no scanned outfits.
+- **#172 - audit round A1.** `core/BuildId.h`: `RANDO_BUILD_ID` 18 to 19 with a
+  ledger line naming the four commits since Beta 1.0 that move where an enemy
+  may stand (`38b8bd5`, `9b7b827`, `4dd8c6c`, `5e087f7`); the number is printed
+  in the launcher and written into `spoiler.txt` and is not part of the seed.
+  `core/Tr5Tr3Import.cpp` got the project's licence header, the only source file
+  under `src/` that lacked it. `gui/Main.cpp` and `gui/Language.cpp` lost the
+  never-wired checkbox *Patch remaster textures* with its tooltip and both
+  language rows, and the folder-picker's German title now goes through the
+  translation table like every other string. `TR5Randomizer/.gitignore` keeps
+  the tracked `build/b1.bat` and `b2.bat` out of its own blanket ignore. The
+  change was proved harmless the way `Preparation/Verification.md` prescribes:
+  the same seed 380 through the old and the new build gives byte-identical
+  `.trc` and `.hdm` for a bare `andy1` run and for a `rich2` run with the enemy,
+  weapon and cross-mix switches on.
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:
 
 - build from this tree directly — open `tomb5.sln`, configuration `Release`,
-  platform `x86`; the result is `release/PCtomb5.exe`; or
+  platform `x86`; the result is `release/PCtomb5.exe`. `Release|x64` builds the
+  same sources (#143) and is there for whoever wants it; `x86` is what we ship
+  and what every measurement in this record was made on. The four
+  `TOMB5/specific/hd/hd_shader/*.inc` are `fxc` output of the two `.hlsl`
+  beside them and are tracked, so nothing has to be regenerated to get a
+  working binary - but if you edit a shader, run
+  `Preparation/Tools/Diagnose/bshader.bat` (`be.bat` carries the same guard and
+  regenerates them for you); or
 - start from upstream <https://github.com/Trxyebeep/TOMB5>, and apply our
   changes on top. Every change is a commit in this repository, so
   `git diff "$(git rev-list --max-parents=0 HEAD)" HEAD -- "TOMB5 Code"`
@@ -17968,7 +18302,11 @@ You do not need to trust our binary. Either:
   hash does not survive that.
 
 Unlike upstream, this build produces a **single self-contained executable**.
-Upstream ships `PCTomb5.exe` plus `tomb5.dll`, where the DLL carries the game
+Upstream ships `PCTomb5.exe` plus `tomb5.dll` - **the upstream TOMB5 project's
+own DLL, built from this very source tree's ancestor, and not the
+`tomb5.dll` of the Tomb Raider IV-VI Remaster, which this project never opens,
+links or reads** (the two names are spelled the same and mean different files;
+said here in audit round A1). The upstream DLL carries the game
 code and does its work from `DllMain`; that is why upstream updates can ship as
 "dll only". This fork builds the Win32 target as an ordinary application with
 its own `WinMain`, so there is no DLL.

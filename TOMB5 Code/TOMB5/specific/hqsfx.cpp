@@ -119,6 +119,12 @@ static long hq_replaced;	// of those, a sample the mod's BANK replaced
 static char* hq_wav;		// the loose .wav in hand, if any
 static long hq_wav_bytes;
 
+/* THE SWITCH IS TESTED BEFORE THE LINE IS BUILT (audit round A1). Log() tests
+ * gLogEnabled itself, but every caller here used to run its own snprintf first,
+ * so the whole text - one per bank, one per mod .wav, one per refused pairing -
+ * was formatted on every level load with no -log on the command line. Each pair
+ * now sits in `if (gLogEnabled)`, the shape the other seams use. With -log the
+ * text is byte for byte what it was. */
 static void HQSfxLog(const char* line)
 {
 	Log("%s", line);
@@ -137,9 +143,12 @@ static bool HQSfxTry(const char* path, const char* label, SfxBank** into,
 
 	if (!path || !*path)
 	{
-		snprintf(line, sizeof(line),
-			"MODLOG bank %s - there is none to look at", label);
-		HQSfxLog(line);
+		if (gLogEnabled)
+		{
+			snprintf(line, sizeof(line),
+				"MODLOG bank %s - there is none to look at", label);
+			HQSfxLog(line);
+		}
 		return false;
 	}
 
@@ -147,18 +156,24 @@ static bool HQSfxTry(const char* path, const char* label, SfxBank** into,
 
 	if (!*into)
 	{
-		snprintf(line, sizeof(line), "MODLOG bank %s (%s) - not opened: %s",
-			label, path, why);
-		HQSfxLog(line);
+		if (gLogEnabled)
+		{
+			snprintf(line, sizeof(line), "MODLOG bank %s (%s) - not opened: %s",
+				label, path, why);
+			HQSfxLog(line);
+		}
 		return false;
 	}
 
 	snprintf(source, (size_t)sourceSize, "%s", label);
-	snprintf(line, sizeof(line),
-		"MODLOG bank %s (%s) - opened, %d samples in %d sound ids, %d infos, "
-		"largest %ld bytes", label, path, SfxBankSamples(*into),
-		SfxBankIdsUsed(*into), SfxBankInfos(*into), SfxBankLargest(*into));
-	HQSfxLog(line);
+	if (gLogEnabled)
+	{
+		snprintf(line, sizeof(line),
+			"MODLOG bank %s (%s) - opened, %d samples in %d sound ids, %d infos, "
+			"largest %ld bytes", label, path, SfxBankSamples(*into),
+			SfxBankIdsUsed(*into), SfxBankInfos(*into), SfxBankLargest(*into));
+		HQSfxLog(line);
+	}
 	return true;
 }
 
@@ -229,11 +244,14 @@ bool HQSfxOpen()
 
 	if (fromMod && hq_ref)
 	{
-		snprintf(line, sizeof(line),
-			"MODLOG bank ruler: %s, %d samples - a mod's bank is played and "
-			"this one measures the bridge", hq_ref_source,
-			SfxBankSamples(hq_ref));
-		HQSfxLog(line);
+		if (gLogEnabled)
+		{
+			snprintf(line, sizeof(line),
+				"MODLOG bank ruler: %s, %d samples - a mod's bank is played and "
+				"this one measures the bridge", hq_ref_source,
+				SfxBankSamples(hq_ref));
+			HQSfxLog(line);
+		}
 	}
 	else if (fromMod)
 		HQSfxLog("MODLOG bank ruler: none - a mod's bank is played and there is "
@@ -358,10 +376,13 @@ static long* HQSfxMapThrough(SfxBank* bank, const short* levelLut,
 			{
 				char line[160];
 
-				snprintf(line, sizeof(line),
-					"SFXLOG bridge: id %d is a randomizer import - the level's "
-					"own sample plays", (int)sfx);
-				HQSfxLog(line);
+				if (gLogEnabled)
+				{
+					snprintf(line, sizeof(line),
+						"SFXLOG bridge: id %d is a randomizer import - the level's "
+						"own sample plays", (int)sfx);
+					HQSfxLog(line);
+				}
 			}
 
 			if (refused)
@@ -390,15 +411,18 @@ static long* HQSfxMapThrough(SfxBank* bank, const short* levelLut,
 			{
 				char line[192];
 
-				snprintf(line, sizeof(line),
-					"SFXLOG bridge: id %d is paired, but the bank says no level "
-					"of ours uses it (mask 0x%08x%08x, this level is bit %d) - a "
-					"sound the run moved here, or one nobody has declared",
-					(int)sfx,
-					(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) >> 32),
-					(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) & 0xFFFFFFFFu),
-					bit);
-				HQSfxLog(line);
+				if (gLogEnabled)
+				{
+					snprintf(line, sizeof(line),
+						"SFXLOG bridge: id %d is paired, but the bank says no level "
+						"of ours uses it (mask 0x%08x%08x, this level is bit %d) - a "
+						"sound the run moved here, or one nobody has declared",
+						(int)sfx,
+						(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) >> 32),
+						(unsigned int)((unsigned long long)SfxBankMask(bank, (int)sfx) & 0xFFFFFFFFu),
+						bit);
+					HQSfxLog(line);
+				}
 			}
 		}
 
@@ -469,10 +493,13 @@ void HQSfxBuildMap(const short* levelLut, long levelLutEntries,
 	{
 		char line[256];
 
-		snprintf(line, sizeof(line),
-			"MODLOG bridge: %d pairs through the mod's bank, %d through the "
-			"ruler", paired, refPaired);
-		HQSfxLog(line);
+		if (gLogEnabled)
+		{
+			snprintf(line, sizeof(line),
+				"MODLOG bridge: %d pairs through the mod's bank, %d through the "
+				"ruler", paired, refPaired);
+			HQSfxLog(line);
+		}
 	}
 }
 
@@ -511,17 +538,23 @@ static char* HQSfxWavFor(long g, long* riffBytes, SfxRiffParts* parts)
 
 	if (!hq_wav)
 	{
-		snprintf(line, sizeof(line), "MODLOG wav %04ld refused - %s (%s)",
-			g, why, path);
-		HQSfxLog(line);
+		if (gLogEnabled)
+		{
+			snprintf(line, sizeof(line), "MODLOG wav %04ld refused - %s (%s)",
+				g, why, path);
+			HQSfxLog(line);
+		}
 		return 0;
 	}
 
 	if (!SfxRiffCheck(hq_wav, hq_wav_bytes, &dataBytes, &byteRate, &why, &where))
 	{
-		snprintf(line, sizeof(line), "MODLOG wav %04ld refused - %s (%s)",
-			g, why, path);
-		HQSfxLog(line);
+		if (gLogEnabled)
+		{
+			snprintf(line, sizeof(line), "MODLOG wav %04ld refused - %s (%s)",
+				g, why, path);
+			HQSfxLog(line);
+		}
 		free(hq_wav);
 		hq_wav = 0;
 		hq_wav_bytes = 0;
@@ -534,11 +567,14 @@ static char* HQSfxWavFor(long g, long* riffBytes, SfxRiffParts* parts)
 	 * fixed offset 20 - which in such a file is the middle of that first
 	 * block's header. The file was accepted here, discarded there, and the
 	 * line just above was a lie. Now what was found is what is handed on. */
-	snprintf(line, sizeof(line),
-		"MODLOG wav %04ld <- mod%d %s, %ld bytes, %ld of them audio, %ld B/s, "
-		"format block at +%ld",
-		g, mod, HDModsName(mod), hq_wav_bytes, dataBytes, byteRate, where.fmtAt);
-	HQSfxLog(line);
+	if (gLogEnabled)
+	{
+		snprintf(line, sizeof(line),
+			"MODLOG wav %04ld <- mod%d %s, %ld bytes, %ld of them audio, %ld B/s, "
+			"format block at +%ld",
+			g, mod, HDModsName(mod), hq_wav_bytes, dataBytes, byteRate, where.fmtAt);
+		HQSfxLog(line);
+	}
 
 	hq_overlaid++;
 
@@ -669,11 +705,14 @@ char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
 			{
 				char line[256];
 
-				snprintf(line, sizeof(line),
-					"MODLOG bank sample %ld is %ld bytes where the ruler has "
-					"%ld - a recording the mod replaced, and the bridge holds",
-					g, dataLen, refLen);
-				HQSfxLog(line);
+				if (gLogEnabled)
+				{
+					snprintf(line, sizeof(line),
+						"MODLOG bank sample %ld is %ld bytes where the ruler has "
+						"%ld - a recording the mod replaced, and the bridge holds",
+						g, dataLen, refLen);
+					HQSfxLog(line);
+				}
 			}
 		}
 	}

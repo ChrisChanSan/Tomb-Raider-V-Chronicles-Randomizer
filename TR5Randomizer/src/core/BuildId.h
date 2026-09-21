@@ -90,8 +90,14 @@
 //     TYPE_EXCLUDE_SECTORS.
 // 18: EQUIP_GATE is enforced instead of merely reported. Andrea1's revolver
 //     and lasersight may no longer wander behind the bell.
-#define RANDO_BUILD_ID      18
-#define RANDO_BUILD_STRING  "0.18"
+// 19: Audit round A1 (#172), LENS5C-02 - four commits since Beta 1.0 moved
+//     where enemies land or which kinds are rolled, and the id had not
+//     followed: 38b8bd5 (ceiling check, #141 part 1), 9b7b827 (Hydra needs
+//     five of nine tiles free, #141 part 2), 4dd8c6c (Hydra counts double
+//     in the kind roll, #141 part 2b), 5e087f7 (the cyborg joins the cross
+//     pool, #146).
+#define RANDO_BUILD_ID      19
+#define RANDO_BUILD_STRING  "0.19"
 
 // The published version, and a different thing from the build id above.
 // That one counts revisions of the curation data and decides whether two

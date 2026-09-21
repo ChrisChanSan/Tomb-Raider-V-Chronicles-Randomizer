@@ -12,6 +12,15 @@ does that the original did not, and everything you can set.
 
 The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.md).
 
+> **An unofficial, non-commercial fan project.** Not affiliated with, and not
+> endorsed by, Core Design, Eidos, Crystal Dynamics, Aspyr, Saber Interactive
+> or Embracer. *Tomb Raider* and *Tomb Raider IV-VI Remastered* are theirs.
+> You need your own copy of *Tomb Raider Chronicles*, and for the HD art, the
+> HQ sounds and the HD loading screens your own copy of *Tomb Raider IV-VI
+> Remastered*. Nothing of either is included here, and nothing of either is
+> copied anywhere: what the HD mode draws is read at run time out of your own
+> installation.
+
 - [What this build is](#what-this-build-is)
 - [Starting it, and the setup dialog](#starting-it-and-the-setup-dialog)
 - [Controls](#controls)
@@ -19,6 +28,7 @@ The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.m
 - [tomb5 options](#tomb5-options)
 - [First person view](#first-person-view)
 - [Language, and HQ music](#language-and-hq-music)
+- [The outfit changer, Mods and footsteps](#the-outfit-changer-mods-and-footsteps)
 - [Balance.txt — tuning the whole game](#balancetxt--tuning-the-whole-game)
 - [The secret counters](#the-secret-counters)
 - [Secret rewards](#secret-rewards)
@@ -32,7 +42,10 @@ The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.m
 ## What this build is
 
 Upstream TOMB5 — Troye's decompilation of Chronicles — ships `PCTomb5.exe`
-plus a `tomb5.dll` that carries the game code. **This build is a single
+plus a `tomb5.dll` of its own that carries the game code. (That is upstream's
+file, and it is not *Tomb Raider IV-VI Remastered*'s `tomb5.dll`, which has
+the same name and nothing else in common; nothing in this build ever opens
+the Remaster's.) **This build is a single
 executable.** There is no DLL to copy, upstream's "dll only" updates do not
 apply to it, and because it links the C runtime statically it needs no Visual
 C++ redistributable installed.
@@ -103,7 +116,7 @@ worth knowing by name:
 |---|---|---|
 | `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30; `2` is the display's own refresh rate, which needs `vsync` on. There is no uncapped mode. The *Frame rate* row on the *Display* page writes this. See **Frame rate**. |
 | `vsync` | DWORD | `1`, the default: the picture waits for the monitor, so it is never torn across the middle. `0` for the original behaviour. **The only setting in the build that is not instant** — it is read when the graphics device is made, so a change takes hold the next time the game starts (or on the next Alt+Enter or resolution change). The *VSync* row writes this. |
-| `hd_enable` and its five companions | | The Remaster art. Their own table under **HD from the Remaster**. |
+| `hd_enable` and its companions | | The Remaster art, and the outfit the F4 changer remembers. They have a table of their own under **HD from the Remaster**; every one of them is there, with its default. |
 
 ---
 
@@ -125,18 +138,23 @@ page, as a centred row of its own — it does exactly what the old value did).
 The engine works out by itself whether your pad reports as XInput or
 DirectInput, so a DualSense behind Steam still gets PS5 names.
 
-Open *Key bindings* with a controller layout selected and the list holds
-fifteen bindable rows, including *Pause*, *Save*, *Load* and the two
-medipacks — vanilla had no joystick binding screen at all. Set *Action* (see
-below) to *Separate* and a sixteenth row, *Secondary*, joins the list; the
-keyboard list gains the same row as its seventeenth, and under *One key*
-neither list shows it, because a row the setting makes inert is a row that
-would do nothing. The four right-stick tilts can be bound like buttons. Round
-161b1 also put the list on
-its own page rather than folding it into *Controls* itself, so it can page
-left and right with the arrows when the keyboard's sixteen bindable rows —
-seventeen under *Separate* — or the pad's fifteen (sixteen under *Separate*)
-do not fit one screen — the same paging *tomb5 options* already used.
+Open *Key bindings* with a controller layout selected and the movement and
+action block holds fifteen bindable rows, including *Pause*, *Save*, *Load*
+and the two medipacks — vanilla had no joystick binding screen at all. Set
+*Action* (see below) to *Separate* and a sixteenth row, *Secondary*, joins
+the list; the keyboard's own block of sixteen gains the same row as its
+seventeenth, and under *One key* neither list shows it, because a row the
+setting makes inert is a row that would do nothing. The four right-stick
+tilts can be bound like buttons.
+
+**How long the list really is.** Since round 161b2d the hotkeys sit on the
+same page (below), so those blocks are no longer the whole of it. With
+*Action* at *One key* and *Cheats* off the page holds **26** bindable rows on
+the keyboard and **22** on a pad; *Separate* adds the *Secondary* row and
+*Cheats* adds five more, so with both on it is **32** and **28**. Round 161b1
+put the list on its own page rather than folding it into *Controls* itself,
+so it can page left and right with the arrows when they do not fit one
+screen — the same paging *tomb5 options* already used.
 
 **Round 161b2d puts the hotkeys on the same page.** The game the user
 compares with keeps a second binding screen just for its "combination" keys —
@@ -193,6 +211,15 @@ each scheme keeps its **own** keyboard bindings, remembered independently:
 | Select | Return | Return |
 | Secondary | Home | Numpad 0 |
 
+> **Where the Modern scheme comes from.** The design of the modern control —
+> the stick direction read against a held reference heading and turned back
+> into the game's own tank bits, with Lara's automaton left exactly as it was
+> — is carried over from **TROne (GPLv3) by Todesengel1931**,
+> <https://github.com/todesengel1931>, and re-derived here in this engine's
+> own units; its test expectations came across with it. `THIRD-PARTY.md`
+> lists what was taken, file by file. The key row above is not TROne's: it is
+> this project's own starting point, and every key in it is rebindable.
+
 *Secondary* (round 161b2c) is the nineteenth slot in each scheme's table, and
 it is bindable but does nothing while *Action* (below) is set to *One key* —
 the *Key bindings* page only lists it under *Separate*, so *One key* shows
@@ -228,6 +255,12 @@ between them named:
 | All items (cheat) | F8 |
 | Heal (cheat) | F11 |
 | Skip level (cheat) | F1 |
+
+> **F4 is not on that list and cannot be bound.** It opens the outfit changer
+> and is read as a plain key, because it means nothing to the game and a pad
+> could not reach it anyway — see **The outfit changer, Mods and footsteps**.
+> F10 and F12 are likewise left alone, which is why the five cheat rows
+> default to the F keys they do.
 
 Quick load's Modern default is the round's one deliberate change from
 today's behaviour — every other default key, in either scheme, is the same
@@ -392,6 +425,20 @@ the new Modifier and its chords over buttons you had already bound
 yourself — *Reset to defaults* is what fetches the new row, Modifier and all,
 in one step.
 
+### Camera speed and Dead zone
+
+Two sliders on the *Controls* page, both new in round #161, and both the
+modern control's own feel — under *Control type: Tank* nothing reads either
+number, so both rows are drawn greyed out and the cursor skips them.
+
+| Row | Range | Default | What it does |
+|---|---|---|---|
+| *Camera speed* | 0–100 | **40** | How fast the right stick swings the camera round Lara. `0` turns at 60 degrees a second, `100` at 360, and the default 40 is the rate round 161a2 was tuned at. The up-and-down rate is always half the sideways one. Registry: `cam_speed`. |
+| *Dead zone* | 0–100 | **50** | How far a stick has to be pushed before it counts as pushed. The number is a **per cent of the tuned zone**, not a zone in itself: `50` reproduces every one of the engine's own eight dead-zone widths exactly, `0` is no zone at all and `100` is twice the zone. Registry: `dead_zone`. |
+
+Both are sliders, and a slider is written the moment it stops moving rather
+than on every step while you hold the key down.
+
 ### The Modes sub-page: Combat, Sprint, Duck and Grab
 
 Since round 161b2d these four rows sit together on their own sub-page,
@@ -403,13 +450,20 @@ they are found on.
 
 ### Combat mode, Sprint mode, Duck mode and Grab mode: Toggle or Hold
 
-*Combat mode*, *Sprint mode*, *Duck mode* and, since round 161b2d, *Grab
-mode* each govern one key or button the same way — Hold is the default and
-the original behaviour, Toggle turns a press into an on/off switch:
+*Sprint mode*, *Duck mode* and, since round 161b2d, *Grab mode* each govern
+one key or button the same way — Hold is the default and the original
+behaviour, Toggle turns a press into an on/off switch:
 
 - **Hold** (the default): sprint, duck or hold on while the key is held, stop
   the moment you let go — today's behaviour.
 - **Toggle**: press once to start, press again to stop.
+
+*Combat mode* is the fourth row of the same page and works the same way, but
+it **defaults the other way round**: drawing a weapon has always been a
+toggle in this game, so that row stands at *Toggle* on a fresh install and
+*Hold* is the new behaviour. See **Combat mode: Toggle or Hold** above.
+(An earlier printing of this manual put all four rows under one "Hold is the
+default" sentence; corrected in audit round A1.)
 
 A few things a toggled key still respects, because it is the same bit Lara's
 own states have always read, only held open by the option instead of by your
@@ -460,9 +514,13 @@ finger:
 ## The options menu
 
 Reached from the title screen row *Options*, or from the pause screen while
-playing. The two are identical except for one row: **Special Features** only
-appears from the title screen (or, while playing, once you have found nine
-secrets in the matching quarter of the campaign).
+playing. The two are identical except for one row: **Special Features** can
+only be opened from the title screen. From the pause menu the row is still
+there — drawn greyed out, and the cursor steps over it — however many secrets
+you have found; the nine secrets of a quarter of the campaign decide what the
+gallery **holds**, never whether the row can be reached. (An earlier printing
+of this manual had the nine secrets opening the row in a pause session;
+corrected in audit round A1.)
 
 Since round 161b1 the page is one sorted tree instead of a single flat list:
 a title, then rows that either open another page (drawn centred, like the
@@ -496,7 +554,11 @@ live in `README.txt`, because the game font cannot draw every character.
 
 ## tomb5 options
 
-<p align="center"><img src="features-1.jpg" alt="The tomb5 options page" width="700"></p>
+<p align="center"><img src="menu-tomb5-options.jpg" alt="The tomb5 options tab" width="700"></p>
+
+<p align="center"><em>The HD art in this and every other screenshot is read at
+run time from the player's own <strong>Tomb Raider IV-VI Remastered</strong>
+installation — none of it is included here.</em></p>
 
 Six settings the original never had. Before round 161b1 these sat across two
 numbered pages together with most of the *Graphics* and *HUD* rows below;
@@ -508,7 +570,8 @@ belong to neither:
 delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
-Everything else the screenshot above still shows — *Footprints*, *Shadow
+Everything that used to sit on those two numbered pages beside them —
+*Footprints*, *Shadow
 mode*, *Fog*, *HD textures*, *Bar mode*, *Bar positions*, *Enemy bars*, *Ammo
 counter*, *Gameover menu*, *PSX skies*, *TR4 loadscreens*, *Loadbar style*,
 *Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*, *Ammotype
@@ -669,7 +732,7 @@ from the pause screen in the middle of a level and the next picture is drawn
 the new way — no restart, nothing reloaded.
 
 **The game does not change.** Tomb Raider Chronicles is a thirty-steps-a-second
-simulation and it stays one in both settings: every animation frame, every
+simulation and it stays one in all three settings: every animation frame, every
 timer, every trigger, every enemy decision and every piece of physics happens
 exactly as often as it always did. What the setting changes is how often the
 finished picture is handed to the graphics card.
@@ -686,7 +749,8 @@ Two ways to check it yourself:
   presents, thirty game steps. `logic_ticks` reads 30 at every setting on
   this page; only `frames` changes.
 - The stopwatch: a timed section (the countdown in the Submarine, the
-  Escape With The Iris timer) runs for exactly as many real seconds in both.
+  Escape With The Iris timer) runs for exactly as many real seconds in all
+  three.
 
 **Where the sixty applies.** In the level, on the **title screen** and in the
 **inventory ring**. The pause screen, the load and save screens, the death
@@ -701,9 +765,15 @@ The title and the ring used to be on that list and came off it in September
 the menu, the input, the cursor, every counter they own — still runs thirty
 times a second, exactly as the game does. The ring's icons spin and the row
 slides in half steps between two of those, the title's fly-by is drawn the
-same way the level is, and a tap of Down still moves one row: the frame that
-would have read the same button press a second time is handed a blank input
-for the length of that one call and gets its own back immediately after.
+same way the level is, and a tap of Down still moves one row on either of
+them — but by two different means, because the two screens are built
+differently. The **ring** runs its whole logic body — the input, the repeats,
+the pulse colour, the mode handlers and every counter it owns — once per two
+ticks, through an accumulator of exactly the shape the game's own loop uses,
+so a press is simply never read twice. The **title** is walked once per
+picture, as it always was, so the walk that would have read the same press a
+second time is handed a blank input for the length of that one call and gets
+its own back immediately after.
 
 With `-log` the ring writes an `INVLOG` line a second — `frames=` what was
 presented, `steps=` its logic, and which of its motions were really drawn
@@ -735,9 +805,25 @@ Two things about it are worth knowing. The in-between pose is the *midpoint
 of the two poses the original draws*, never a newly computed "more correct"
 one: some of the game's own blending is coarse, and correcting it would be a
 different game rather than a smoother one. And where an animation *changes*
-between two game steps — a jump beginning, a state ending — nothing is
-blended: that one frame shows the new pose, which is exactly what thirty
+between two game steps — a jump beginning, a state ending — the **pose** is
+not blended: that one frame wears the new pose, which is exactly what thirty
 shows, and it lasts a sixtieth of a second.
+
+Its **position** is another matter, and rounds 157 and 157b are why. An
+animation carries an offset of its own that moves the whole body — a climb
+wrap moves it 248 units in one step, the entry into a climb down 111, the
+ladder grab 86 — and on the very frame the animation changes, her place in the
+room has already moved half a step while that offset has not moved at all, so
+the body drawn out of the two jumps. On those frames the offset **is**
+therefore blended in time as well, as far as the
+tick's own position step really pays for it and no further: where nothing
+else moved with it, the frame keeps the offset it already carries. A ladder
+wrap and a ledge grab are continuous; a crawl ending in a stand does not
+float at the old height. The frames this really moved are counted as
+`root_fix` in the `INTERPLOG` line, and they are a small minority of the
+refused ones — an ordinary room has a couple of dozen refusals per drawn
+frame and no `root_fix` at all. (An earlier printing of this manual said
+"nothing is blended" here; corrected in audit round A1.)
 
 The HD renderer follows without being asked: it takes its matrices off the
 engine's own stack, so it gets the halved motion and the halved pose for
@@ -932,19 +1018,34 @@ next track that starts.
 
 ### HQ sounds
 
-The same remaster also has the game's sound effects at twice the sample rate.
-Copy its `MAIN.SFX` into `audio\`:
+The same remaster also has the game's sound effects at twice the sample rate,
+and **you do not have to copy anything for them.** At every level load the
+engine looks for a sound bank in three places, in this order, and takes the
+first one it finds:
 
 ```
-audio\MAIN.SFX
+Mods\<...>\5\DATA\MAIN.SFX     a mod's own bank, in the Mods scan's order
+audio\MAIN.SFX                 a hand copy, for the players who made one
+<your remaster>\5\DATA\MAIN.SFX   the installed remaster's own, read where it lies
 ```
 
-In your remaster installation it sits in `5\DATA\MAIN.SFX`. Keep the name - the
-engine looks for exactly that, and the original game has no file of that name,
-so nothing can collide.
+The third link is why the hand copy is no longer needed: if the engine finds
+your *Tomb Raider IV-VI Remastered* installation — the same search the HD art
+uses, see **HD from the Remaster** — it reads the bank straight out of it. If
+you would rather keep a copy of your own, put it in `audio\MAIN.SFX` and keep
+that name: the engine looks for exactly that, and the original game has no
+file of that name, so nothing can collide.
 
-**Nothing ships**, the same as with the soundtracks. Without the file the game
-plays Core's samples as it always has.
+**This path does not wait for `hd_enable`.** The sound is opened whatever the
+HD art is set to, so a player who has the remaster installed and has never
+touched an HD setting is already hearing the 44.1 kHz samples. There is no
+option that turns it off: what decides is whether the engine finds a bank at
+all. (An earlier printing of this manual
+said the file had to be copied by hand and that nothing changed without it;
+corrected in audit round A1, the chain having moved in round M1.)
+
+**Nothing ships**, the same as with the soundtracks. Without the remaster and
+without a copy of your own, the game plays Core's samples as it always has.
 
 What it buys you: the original stores its sounds as 22 kHz ADPCM inside every
 level file. The remaster's are 44.1 kHz PCM, and they are not the old ones
@@ -985,8 +1086,9 @@ as it is if you did not copy the other.
 
 **Nothing ships**, the same as with the sounds and the soundtracks. Any picture
 you do not copy simply stays the original 640x480 one, so a half-filled folder
-is fine. There is no `RICHCUT2.DDS` in the remaster and none is needed — that
-level keeps Core's picture.
+is fine. There is no `RICHCUT2.DDS` in the remaster and none is needed — the
+Security Breach cutscene borrows `RICH3.DDS`, Red Alert's picture, so it has
+an HD screen without a file of its own.
 
 The originals are 4:3 and the engine has always stretched them onto your
 window. The HD ones are 16:9 and are fitted instead: on a 16:9 window they land
@@ -1001,7 +1103,16 @@ fallen back to the English lettering. With the HD file in place they get their
 own at last: **DIE CHRONIK**, **SUR LES TRACES DE LARA CROFT**, and for
 American English the flaming emblem. The mark is fitted into the same
 rectangle the old logo filled, so it keeps its shape whatever your window size
-is. Without the file nothing changes and the pak logo is drawn as before.
+is. Without the file nothing changes for German and French — they fall back to
+the English lettering, as they always did.
+
+**American English is the one exception.** Without `LOGO_US.DDS` it now draws
+`logo512.pak`, the English lettering, rather than `data\uslogo.pak`: that pak
+is *Tomb Raider: The Last Revelation*'s wordmark on opaque black, left behind
+in Chronicles' own `data\` folder, and drawing it over the title picture was a
+black rectangle with the wrong game's name in it. With the HD file in place
+American English gets its own flaming emblem instead. (This build's behaviour;
+the manual said "nothing changes" here until audit round A1.)
 
 > The wordmark is picked when the title level loads, so switching the
 > **Language** row in the options changes the menu text at once but not the
@@ -1022,6 +1133,17 @@ object, at eight times the texture resolution. The long-term plan (#123) is for
 this engine to draw that art when it finds the remaster installed, and the
 original art when it does not: file present → HD, otherwise vanilla, exactly
 the deal the loading screens and the HQ sounds already have.
+
+> **Where this work comes from.** Reading the Remaster's art at run time was
+> solved first by **TROne (GPLv3) by Todesengel1931**,
+> <https://github.com/todesengel1931>, and a good deal of this chapter's
+> design is carried over from it — the Steam discovery, the shape of the level
+> build and of the draw, the page lookup, the rules of the object path, the
+> composite Lara is made of — re-derived here for Direct3D 9 and this engine's
+> own classic path. `THIRD-PARTY.md` lists what was taken, file by file, and
+> says what was deliberately left. **None of the Remaster's own art is
+> included here**: every picture, page and model the HD mode draws is read at
+> run time out of your own installation.
 
 **As of this build the rooms, the objects and Lara are drawn in HD.** Enemies,
 doors, switches, pickups, traps and machinery come out of the remaster's own
@@ -1203,8 +1325,9 @@ glow is always slightly wrong"* — and that turned out to be the whole story.
   crate rather than gone.
 - **The light stopped throbbing.** The travel of brightness along a shaft was
   set by hand at a quarter either way in the third round, and the play test
-  called it pulsing. Measured against the Remaster's own two recordings of the
-  same corridor three seconds apart, its shafts move their bright places
+  called it pulsing. Measured against two recordings the author made of his
+  own Remaster installation, of the same corridor three seconds apart, its
+  shafts move their bright places
   around and their level barely changes — four percent over three seconds. The
   travel is a sixth of what it was; the streaks still wander, the room no
   longer breathes.
@@ -1366,28 +1489,45 @@ values, in the same key as every other setting
 
 | Value | Type | Meaning |
 |---|---|---|
-| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
+| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. (This row read "nothing below is read at all" until audit round A1, which is false of `hd_install` and `hd_install_tr3`: the sound bank's own search reads them and walks your Steam libraries with `hd_enable` at `0`.) |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
-| `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, and the slow travel of light along a shaft or a lamp cone. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
+| `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** the Remaster's own art carries, `1` by default: the marble of Rome, the painted steel of the submarine and a few hundred other surfaces its artists marked as polished, each with a strength of its own. What they get is not a mirror - nothing is drawn twice - but the one thing a polished floor does that a matt one does not: seen at a grazing angle it lifts towards its own lit colour. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and every surface is matt again. The three VCI levels carry no such mark in their art at all and look the same either way. Does nothing while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
 | `hd_texture_format` | String | `rgba`, the default, keeps every page exactly as the Remaster drew it. `dxt5` compresses them and uses a quarter of the video memory for a small, measurable loss. Anything else reads as `rgba`. |
+| `hd_outfit` | String | Which body Lara wears, written by the **F4 outfit changer** and read at every level start. Empty — the default — means *Level facts*: the level and the rolled run decide. There is no options row for it; set it in the changer. See **The outfit changer, Mods and footsteps**. |
+| `hd_footsteps` | subkey | Not a value but a key of its own, `…\tomb5\hd_footsteps`, holding one DWORD per outfit: the value's **name** is the outfit's own key and its value is `1` for bare feet or `2` for boots. Written by the changer's *Footsteps* row, one entry per outfit you have set, and read at every level start. |
 
 ### What the HD art asks of your graphics card
 
-The floor is 2004 hardware: **vertex and pixel shader 3.0** (a GeForce 6 or a
-Radeon X1000 and anything since), **A8R8G8B8 textures**, and a **32 bit index
-buffer**. Miss one of those and the game runs classic for the rest of the
-session, with the reason in the log — nothing crashes and no message box
-appears. Textures up to **4096 pixels** are wanted but not required: eleven of
-the Remaster's pages are that big, and a card that stops at 2048 gets those
-eleven one mip level down instead of not at all. (The 32 bit index buffer is
-the one real cut-off, and it is not a judgement: the Remaster's level files
-number their vertices over the whole level, so a single wall tile can name
-three vertices a million entries apart, and no amount of splitting brings that
-under 65536. Only RICHCUT2 is small enough to draw without one.)
+The floor is 2004 hardware, and there are four things the device itself has to
+have: **vertex and pixel shader 3.0** (a GeForce 6 or a Radeon X1000 and
+anything since), at least **320 pixel shader instruction slots** (shader model
+3 guarantees 512, and the room shader is 313), the **UBYTE4** vertex element
+the 20-byte vertex is built out of, and **A8R8G8B8 textures**. Miss one of
+those and the game runs classic for the rest of the session, with the reason in
+the log — nothing crashes and no message box appears. Textures up to **4096
+pixels** are wanted but not required: eleven of the Remaster's pages are that
+big, and a card that stops at 2048 gets those eleven one mip level down instead
+of not at all.
+
+A **32 bit index buffer** is *not* on that list, and has not been since #123
+stage S6. A card that says it can only address 65,536 vertices at a time is no
+longer turned away: every draw here is one range, so each range's indices are
+rebased on the lowest vertex it names and the vertex stream is moved to that
+vertex instead, which never shows the device more than 65,536 at once. What
+the build then does is **measure** rather than assume, per level, and refuse
+out loud with the number in the log if one range really needs more. In
+practice that refusal still comes: the floor under any splitting is one
+triangle, and the Remaster's level files number their vertices over the whole
+level, so the widest single triangle reaches over 235,507 vertices (JOBY4) to
+1,391,696 (RICH2) — while RICHCUT2's widest is 33,585. So on a 16 bit card
+RICHCUT2 draws in HD and the other fourteen levels stay classic, each saying
+so in the log. (This paragraph listed the index buffer among the device's own
+requirements until audit round A1; the outcome is the same, the reason is
+not.)
 
 Video memory is the real question, and the answer is measured rather than
 guessed. Kept exactly as the Remaster drew them, one level's pages come to
@@ -2223,6 +2363,178 @@ let the chain settle, and a box has no curved side to slide down.
 
 ---
 
+## The outfit changer, Mods and footsteps
+
+Three things that live on top of the HD path: the outfit changer, the `Mods`
+folder it draws its extra bodies from, and the footsteps that follow the
+outfit.
+
+**The changer needs the HD art on.** With *HD textures* off, or with no
+*Tomb Raider IV-VI Remastered* found, there is nothing to dress Lara in and
+nothing to re-dress her with, so F4 does nothing at all — with `-log` it says
+which of the two it was, once per session. The same goes for a mod's
+**models**, which only the HD path draws, and for the barefoot set. A mod's
+**sound bank** is the exception: that is read by the HQ-sound chain, which
+does not care what `hd_enable` says (see **HQ sounds**).
+
+### F4 — the outfit changer
+
+<p align="center"><img src="outfit-changer.jpg" alt="The F4 outfit window" width="700"></p>
+
+**Press F4 in the game and everything stops**, exactly as the pause menu stops
+it — the window is headed simply **Outfit**. F4 is a fixed key and not one of
+the bindable roles: it is read on its own
+edge, because it has no meaning in the game and a pad cannot reach it anyway
+(the menu itself is driven by the ordinary menu bits, so a pad works *inside*
+it). It does nothing on the title screen, in a cutscene, with Lara dead, or
+while you are looking through the binoculars or a laser sight; the inventory
+and the pause menu run their own loop and cannot be open at the same time.
+
+The list is every body this machine can dress her in — the outfits of your
+*Tomb Raider IV-VI Remastered*, those of *Tomb Raider I-III Remastered* the
+first has not got under the same name, and every one your `Mods` folder adds.
+Each row carries where it came from — `IV-VI`, `I-III`, or the mod's own name
+— and the row in force is marked with a `*`.
+
+The first row is **Level facts**, and it means *no choice at all*: the level
+and the rolled run decide, which is what a player who has never opened this
+menu has, so on a fresh machine that first row is the one carrying the `*`.
+Choosing it again clears the setting.
+
+| key | what it does |
+|---|---|
+| up / down | move through the list |
+| left / right | switch the highlighted outfit between **Boots** and **Bare** |
+| select — the *Select* key (Return by default), or the pad's confirm button | wear it and close |
+| deselect — Escape, the pad's back button, or the pause button | close and change nothing |
+
+Like the title screen and the load/save screens, this one refuses to confirm a
+row while **Left Alt** is held, so that Alt+Enter cannot also pick whatever
+the cursor sits on — which is worth knowing under *Control type: Modern*,
+where Left Alt is the default *Walk* key.
+
+Under the list stand four rows about the **highlighted** body. *Footsteps* is
+the only one of them you can change; the other three are facts, and they are
+there because a value you wrote yourself somewhere else is worth nothing if
+the game will not say whether it arrived — each ends with the word for which
+tier answered (*the default*, *measured*, *the table*, *outfit.txt*, *origin*,
+*the list*).
+
+| row | says |
+|---|---|
+| *Footsteps* | **Boots** or **Bare** for this outfit — left and right change it. On *Level facts* there is nothing to hang the choice on, so it reads *as the outfit says* and the keys do nothing. If the level has no room for a second set of recordings, or nothing to take one from, the row is greyed and says so. |
+| *Head* | whose head this body wears — *own head*, *TR5 head* or *TR5 hair*. A body drawn for Tomb Raider I-III carries headgear and no hair, so it is given TR5's instead; the row says so before you pick it. |
+| *Shine* | the body's own specular strength and its exponent. |
+| *Skin glow* | the same two numbers for Lara's **skin** — her face, her neck, her bare hands. |
+
+**It takes effect at once.** The level's models are built again with the new
+body while the game stands still; the rooms, the inventory, her weapons and
+everything classic are untouched. The page cache never gives a page back
+inside a level, so before every change the game asks three questions — is
+there room in this level's **texture budget**, in the program's own **address
+space** (`PCtomb5.exe` is a 32 bit program: four gigabytes, whatever the card
+holds), and is there one free **block** big enough for a page. All three have
+to say yes; otherwise the row under the list reads *applies at the next
+level*, and the footsteps wait with the body. A save and load, or the next
+level, starts a fresh cache and gives all of it back. With `-log` every level
+build prints the budget, the free address space, the largest free block and
+the reserve held back, and every change prints what it cost and how much room
+is left.
+
+**It is remembered**, in the registry beside every other setting: the string
+`hd_outfit` for the body and one DWORD per outfit under the subkey
+`…\tomb5\hd_footsteps` — the value's name is the outfit's key, `1` is bare and
+`2` is boots. Both are read at every level start. An outfit whose mod you have
+taken out again is a line in the log and the level's own body, not an error.
+
+### The `Mods` folder
+
+Put a folder called `Mods` next to `PCtomb5.exe` and the engine reads it at
+the first level. The layout is the Remaster's own drop-in layout, so a mod
+made for the Remaster works here as it lies:
+
+```
+Mods\<Category>\<Mod>\5\ITEM\<NAME>.TRM      models
+                     \5\TEX\<n>.DDS          the pages those models wear
+                     \5\DATA\MAIN.SFX        a whole sound bank
+                     \4\...                  the same, searched after 5
+Mods\<Mod>\...                               a mod without a category works too
+```
+
+**Order and priority.** Alphabetical by the folder's whole path, and the first
+mod that has a file wins. A folder whose name begins with `_` is switched off
+and everything under it with it — rename `IMI Uzis` to `_IMI Uzis` and the
+original is back, with nothing else to undo. Nothing is ever written into your
+installation or into the mod: a mod replaces a file by being *looked at
+first*, never on disk.
+
+A mod may carry a `mod.txt` beside its game folders, one `key=value` per line
+with `#` for a comment. The only key so far is `origin=`, which names the game
+the mod was authored for; an unknown key is a note in the log and never a
+fault, so a mod written for a later build stays loadable by this one.
+
+### A mod's own outfit, and the list files
+
+A mod that ships outfits may put an `outfit.txt` next to them, in the same
+shape as `mod.txt`, saying what its bodies are: `name=` what the F4 window
+calls it, `hands=` `braid=` `holsters=` `rig=` which of the separate models it
+wears, `sheen=` and `exponent=` its shine, `skin_sheen=` and `skin_exponent=`
+Lara's own skin's, `skin=` which of its pages are that skin,
+`footsteps=bare|boots` and `head=tr5|hair|outfit`. An unknown key is a note,
+never a fault.
+
+**A body without a mod folder can be given the same keys from a list file.**
+Any loose `.txt` lying *beside* the mod folders — `Mods\outfit.txt`,
+`Mods\Outfits\my_list.txt` — is read as a list; the walk never steps into a
+mod, so a mod's own `mod.txt` or `outfit.txt` can never be picked up as one,
+and a leading `_` switches a list off exactly as it switches a mod off. The
+shape is four rules and no more:
+
+```
+# a comment, and it closes nothing
+Outfit: <name>      opens a block, and closes the one before it
+key=value           belongs to the open block - the same keys as outfit.txt
+<an empty line>     closes the block
+```
+
+A key outside a block, a block with no name and a line with no `=` are each a
+note in the log and the file goes on being read: one bad line in a file of
+fifty blocks may not cost the other forty-nine. Lists are read **last**, in
+path order, so a block can overrule a mod's own `outfit.txt`, the built-in
+table and the defaults — and where two files name one outfit, the later one
+wins. With `-log` each file reports how many blocks it opened and how many of
+them found an outfit, and each block says which keys it really took, so a
+value that never arrived is visible rather than silent.
+
+### Footsteps
+
+A step in this engine is **two sounds on one frame**: her own foot (sound id
+0, about 40 ms) and the surface under it (sound ids 288 to 294, about 190 ms —
+a boot on mud, on metal, on wood, chosen by the sector). The floor layer is
+the loud half.
+
+**Boots** is the level's own footstep sound, taken from the first bank in the
+chain that is *not* a mod's, so a sound mod that replaces the footsteps no
+longer makes every outfit barefoot. **Bare** is a second set of recordings
+loaded beside the level's own: what the ordinary chain would have played for
+those ids — your sound mod's own footsteps, if a mod really replaces sound id
+0 — and, where the chain has nothing of its own to say, the barefoot
+recordings the Remaster's bank carries and no level uses. Both ways of
+shipping footsteps count: a mod's own `5\DATA\MAIN.SFX`, and loose `0000.wav`
+to `0003.wav` and `0010.wav` beside it with no bank at all. While she walks
+barefoot the **floor layer does not play at all**, because those recordings
+are a boot on a surface and putting one under a barefoot step is exactly the
+double sound this setting exists to avoid. The foot*print* is a picture and is
+not touched.
+
+What an outfit does unless you say otherwise comes from the wardrobe — an
+`outfit.txt` or a list block can say `footsteps=bare`, and the built-in table
+says it for the bodies that have no boots. Your own choice in the F4 window
+wins over both and is kept per outfit. Every line of this in the log begins
+with `SFXLOG footsteps:`.
+
+---
+
 ## Balance.txt — tuning the whole game
 
 <p align="center"><img src="engine-settings.jpg" alt="Balance.txt and SecretRewards.txt" width="760"></p>
@@ -2335,7 +2647,15 @@ still lying loose in the game folder is moved in there once, at startup, and
 never overwrites a file already there.
 
 A save written before the save format grew is **recognised and refused** with
-a clear message rather than loaded into a mismatch.
+a clear message rather than loaded into a mismatch — and then the game
+**closes**. There is no way back to the title screen from there: the load has
+already faded the screen and reloaded the level, so the program says what is
+wrong and exits rather than carry on with half a game in memory.
+
+> **Move your old saves aside before you start this build.** If you played
+> Beta 1.0, put the contents of `savegame\` somewhere else first. Otherwise
+> your first attempt to load one ends with a message box and a closed game —
+> nothing is destroyed, the file is untouched, but it cannot be loaded here.
 
 There was also a bug worth knowing about, because it is in the game you
 already own: saving during the key-insert animation lost the keyhole's state.
@@ -2345,8 +2665,8 @@ reload, that was probably why. Fixed here.
 
 Keys now count like puzzle items — a second key of the same type is kept
 instead of being thrown away, and the ring shows how many you carry; the save
-format grew with it, so savegames from an older build are refused rather than
-loaded.
+format grew with it, which is what makes every Beta 1.0 save too short for
+this build — refused, with the message box above, and the game closes.
 
 ---
 
@@ -2449,7 +2769,7 @@ FPSLOG level=ANDREA1 summary seconds=418 frames=24906 worst_ms=83.4
        slow_frames=5602 late_frames=39
 ```
 
-The game's logic is a fixed **30 steps a second** in both *Frame rate*
+The game's logic is a fixed **30 steps a second** in all three *Frame rate*
 settings — that is the engine, not this build. What the setting changes is how
 often the picture is presented. Read the line like this:
 
@@ -2462,17 +2782,26 @@ often the picture is presented. Read the line like this:
   in milliseconds: `16.7` for frames presented at sixty, `33.3` for frames
   presented at thirty, and the monitor's own period at *Display* — `6.9` on a
   144 Hz panel. The first two differ whenever the setting says 60 but the
-  picture came from a menu — the title screen, the inventory, the pause and
-  load screens all keep thirty at either setting (see **Frame rate**), and
-  judging them against 16.7 ms would report a perfectly healthy menu as thirty
-  late frames a second.
+  picture came from a **modal** screen — the pause menu, the load and save
+  screens, the death menu and the level-change fade, all of which keep thirty
+  at any setting (see **Frame rate**) — and judging those against 16.7 ms
+  would report a perfectly healthy menu as thirty late frames a second. The
+  title screen and the inventory ring are *not* on that list: since round 154
+  both present at the rate the option asks for, and `budget=` follows them
+  there by itself, because it is read off the present the frame really waited
+  for rather than off the setting.
 - **`frames=`** is the frame rate itself. Under the rate `budget=` implies is
   a second in which the machine did not keep up.
 - **`logic_ticks=`** is what the game really ran, and it must read **30**
   whatever `frames=` says. If it ever does not, the frame rate setting has
   changed the game — which is precisely what it is not allowed to do. A
-  second in a menu reads `logic_ticks=0`: the game is not running at all
-  there, which together with `hd_rooms=0` is how a menu second is recognised.
+  second in a **modal** menu reads `logic_ticks=0`: the game is not running at
+  all there, which together with `hd_rooms=0` and `frames=30` is how such a
+  second is recognised. The **title** screen is not one of them — it walks its
+  own thirty ticks and draws rooms, so a title second reads `logic_ticks=30`.
+  (An earlier printing of this manual said "a second in a menu" and named the
+  title and the inventory among the screens kept at thirty; corrected in audit
+  round A1.)
 - **`late=`** counts the frames that actually missed their slot — over
   `budget` plus half a sixtieth, so over 41.7 ms at a 33.3 ms budget and over
   25.0 ms at a 16.7 ms one. This is the number that matters.
@@ -2566,10 +2895,15 @@ frame rate setting really did:
 
 ```
 INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
-  items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) camcut=0 cutscene=0
-  pose_items=3.5 pose_skips=0.2 pose_hd=1.5 lara_pose=29/30
-  particles=118.5 particle_kinds=0041
+  items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) halfturn=0
+  camcut=0 (type=0 spot=0 eye=0 aim=0 handover=1) cutscene=0
+  pose_items=3.5 pose_skips=0.2 pose_far=0.0 pose_hd=1.5 lara_pose=29/30
+  root_fix=1 arms=30/2/30 stretch=1.00@node0(anim0 f0)
+  particles=118.5 particle_kinds=0041 root_flip=0
 ```
+
+That is the whole line, in the order the engine prints it — it is one line in
+`log.txt` and is only broken up here to fit the page.
 
 | field | what it says |
 |---|---|
@@ -2579,14 +2913,20 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
 | `lara_step` | **the number that proves it works.** How far Lara moved *on screen* from one picture to the next, averaged over the second. Walk the same corridor at 30 and at 60 and the 60 run must read about **half** of the 30 run — the same distance cut into twice as many steps |
 | `items` | how many things really moved and were interpolated, per frame. Idle pickups, switches and empty slots are not counted |
 | `snaps` | how often interpolation was deliberately skipped, and why: `teleport` something crossed more than half a sector in one step, `roomjump` it did so across a room boundary, `object` an item slot was handed to a different object, `invalid` there was no previous state |
-| `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up |
+| `halfturn` | rotations that turned **exactly half a turn** between the two steps and kept the live value instead of blending it — that is the roll's own about-face firing, once per roll. A handful over a run through a level, nought in a still second; a large number means something is turning half a turn that should not |
+| `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up. The five numbers in brackets split it: `type` changes that left the smooth camera family, `spot` flyby cuts, `eye` and `aim` the camera's two ends jumping on their own, and `handover` changes **inside** the smooth family that were deliberately *not* taken for a cut — drawing or holstering a weapon, looking around. One or two `handover` per draw is what it looks like |
 | `cutscene` | frames in a cut scene, which is played whole at thirty |
 | `pose_items` | things whose **limbs** were drawn halfway between two game steps, per frame. Zero at 30, always |
 | `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped. A few per second is normal — that is what an animation change is |
+| `pose_far` | poses refused for the *other* reason: two adjacent stored frames — a pair the original never blends at all — whose two poses turn more than ninety degrees at some joint. Blending a turn that size element by element does not go the long way round, it shortens the bone, so those are left alone. A small fraction is normal; a big number means an animation nobody has looked at yet |
 | `pose_hd` | how many of the blended poses went through the **HD** renderer's own path. Zero with the HD art off |
 | `lara_pose` | frames of the second on which **Lara's** own pose was blended, against the number of in-between frames beside it. Nearly all of them while she is moving |
+| `root_fix` | of the refused frames, how many had their **position offset** blended in time instead — the rule under *And the limbs move with the body* above. A **count** over the second and not a mean, and a small minority of `pose_skips`: a door at rest, a machine standing still and an animation change that does not move the body are all refused and none of them counted. About one per climb cycle on a ladder; nought in a room with nothing moving in it |
+| `arms` | blended / refused / in-between frames, for the **weapon arm's** own animation — the pose first person is nearly all made of. With a weapon in her hands the first number should be the in-between count and the second a handful a second, one on each frame the weapon animation changes. With empty hands, a flare or a torch all three stay nought, because those arms come out of her own key frames and there is nothing there to blend |
+| `stretch` | the worst a **bone** was shortened by the pose blend that second, over its own length, with the joint, the animation and the frame it happened on. `1.00` is a rigid pose and is what a second with no in-between frame reads. Under about `0.85` is a limb one can *see* in the wrong place, and the animation and frame beside it are the pair to look at |
 | `particles` | sparks, raindrops, snowflakes, drips, blood, debris, shells, bats and the rest, drawn **between** two game steps, per frame. Hundreds in the rain, nought in a still room, and nought at 30 always |
 | `particle_kinds` | which kinds those were, one bit each: `0001` sparks, `0002` fire, `0004` smoke, `0008` blood, `0010` drips, `0020` debris, `0040` rain, `0080` snow, `0100` underwater dust, `0200` shockwaves, `0400` shells, `0800` rats/bats/spiders, `1000` bubbles, `2000` ropes. `0041` above is sparks and rain |
+| `root_flip` | of the `root_fix` frames, the ones whose previous offset was half a turn behind the frame it was handed to and had to be turned into it first — the underwater roll, where the about-face lands on the very frame the animation changes. A subset of `root_fix`, and it should read one per roll. A second with `halfturn` and no `root_flip` is an about-face whose animation did not change with it, which is what the other six of them do |
 
 A healthy line during ordinary play has `snaps=0` or a small handful.
 `camcut` counting every frame of a stretch means the camera never settled
@@ -2691,24 +3031,40 @@ modified version and the randomizer. That is why the complete source ships
 inside the package rather than only living on a website: you can rebuild the
 executable yourself and do not have to take anyone's word for what is in it.
 
-Every changed file carries a modification notice, and
-`Source\TOMB5 engine\MODIFICATIONS.md` is the dated record the licence asks
-for — written file by file, with the reasoning.
+Every changed file carries a modification notice, and `MODIFICATIONS.md` is
+the dated record the licence asks for — written file by file, with the
+reasoning. In the release package it sits at
+`Source\TOMB5 engine\MODIFICATIONS.md`; in the repository it is
+`TOMB5 Code/MODIFICATIONS.md`.
 
 The control code of the four Tomb Raider III guests is not this project's
 either: it comes from **tomb3**, Troye's Tomb Raider III decompilation, is also
 GPLv3, and was taken over as-is rather than rewritten so its origin stays
-visible. The libraries compiled in keep their own notices — Dear ImGui, zlib,
-stb_vorbis, discord-rpc. All of them are named in `THIRD-PARTY.md`, and every
-licence text is in `Licenses\`.
+visible. The same goes for **TROne (GPLv3) by Todesengel1931**,
+<https://github.com/todesengel1931>, which the HD work and the modern control
+carry over from — see the two credits in those chapters.
 
-**No Tomb Raider game data ships with any of it.** The game belongs to its
-rights holders; you supply your own copy.
+Compiled into `PCtomb5.exe` itself are **zlib**, **stb_vorbis** and
+**TRForge** (MIT); `Dear ImGui` is the *randomizer's* window and is compiled
+into `TR5Randomizer.exe`, not into the game. **discord-rpc** is in the source
+tree as upstream shipped it and is switched off at the source
+(`TOMB5_DISCORD_RPC 0`) — nothing of it is linked into either program, and its
+notice travels because the source does. All of them are named in
+`THIRD-PARTY.md`, and every licence text is in `Licenses\`. (This paragraph
+named Dear ImGui and discord-rpc as compiled into the engine, and left TRForge
+out, until audit round A1.)
+
+**No Tomb Raider game data ships with any of it**, and none of *Tomb Raider
+IV-VI Remastered*'s either. Both games belong to their rights holders; you
+supply your own copies, and everything the HD mode, the HQ sounds and the HD
+loading screens draw on is read at run time out of your own installation.
 
 ### Building the engine
 
-Open `Source\TOMB5 engine\tomb5.sln` in Visual Studio with the C++ workload.
-Configuration **Release**, platform **Win32 (x86)**. The result is
+Open the engine's solution in Visual Studio with the C++ workload — in the
+release package it is `Source\TOMB5 engine\tomb5.sln`, in the repository
+`TOMB5 Code/tomb5.sln` (the package renames the folder so the two can be told
+apart). Configuration **Release**, platform **Win32 (x86)**. The result is
 `release\PCtomb5.exe`.
 
 > **Pick Win32.** The x64 configurations are leftovers from the original

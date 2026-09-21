@@ -14711,8 +14711,13 @@ obvious way round does not work: read the camera fresh every tick instead of
 holding a world course, and TROne measured her spinning in circles. The
 DESIGN is theirs, re-derived here in our own units - our stick arrives as
 about +-128 where theirs is +-32767, our state list is TR5's own and runs to
-138 where theirs stops at 104 - and in our own voice; nothing of their code
-is in this tree. What IS taken across verbatim, and named as such in
+138 where theirs stops at 104 - and in our own voice; none of their
+modern-control code is in this tree. (Corrected in audit round A1: this
+sentence used to read "nothing of their code is in this tree", which is
+false of the project as a whole - the HD-at-run-time path of #123 does
+carry TROne's own code over, and twenty-one source files in this tree name
+Todesengel's copyright in their own headers. See `THIRD-PARTY.md`.) What IS
+taken across verbatim, and named as such in
 `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header, are 32 test
 expectations (28 `modern.*` and 4 `combatmode.*` cases of their
 `tests/test_controller.cpp`) - somebody else's five games' worth of play
@@ -18201,10 +18206,19 @@ libraries are upstream's as well, switched off at the source
 (`TOMB5_DISCORD_RPC 0`), with no call site compiled and nothing of them pulled
 into any binary; they stay exactly as upstream shipped them, and what changed
 is that `Credits.txt` and `THIRD-PARTY.md` now say that truth instead of the
-old sentence claiming they are linked and called. The behavioural low findings
-of earlier rounds stay parked - a push audit is not the place to change what a
-player feels, and each of them wants its own play test. And one bit is not ours
-to decide: the order of the two water-material parameters at
+old sentence claiming they are linked and called. The in-game credits screen
+(`tomb5/troyestuff.cpp`) still names Todesengel1931 only on its Contributors
+row, among the people who played the seeds, although twenty-one source files
+carry his GPLv3 copyright; the screen holds exactly fifteen rows and all
+fifteen are in use, so giving TROne a heading of its own means compressing
+two existing headings into one - a decision about what the player sees, which
+is not a thing to settle in a push audit. The licence obligation is met
+either way, by the notices in those twenty-one file headers and by
+`THIRD-PARTY.md` and `Preparation/Credits/Credits.txt`, both of which now
+carry TROne's own entry. It waits for the next round. The behavioural low
+findings of earlier rounds stay parked - a push audit is not the place to
+change what a player feels, and each of them wants its own play test. And one
+bit is not ours to decide: the order of the two water-material parameters at
 `hd_render.cpp:565`. A build with the two exchanged was made outside the
 repository for the user to look at; the tree keeps today's order until he has
 compared JOBY4's sea with a fountain and said which is right. One question is
@@ -18226,7 +18240,7 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it
 owes nobody a GPLv3 section 5(a) notice and has never had a record of the kind
 above. It should still be possible to read what changed in it since the public
-Beta 1.0, so here it is by task number. Nineteen files under
+Beta 1.0, so here it is by task number. Twenty-one files under
 `TR5Randomizer/src` changed in that span; audit round A1 found three of them
 named in no document at all and that is what this section was written for.
 

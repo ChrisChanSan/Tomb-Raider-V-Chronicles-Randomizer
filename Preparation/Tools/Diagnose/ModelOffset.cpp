@@ -1,15 +1,14 @@
 // ModelOffset - measures where a TR5 model sits relative to the item origin.
 //
-// Background: the Crane Guy (slot 55) stands 512 units off the sector
-// center in game although the item lies exactly centered. Core only built
-// him into joby2 as ANIMATING4 at the crane console - so the offset sits
-// in the model itself, in the frame offsets and the frame box.
+// The Crane Guy (slot 55) stands 512 units off the sector center in game
+// although the item lies exactly centered. Core built him into joby2 as
+// ANIMATING4 at the crane console, so the offset sits in the model itself,
+// in the frame offsets and the frame box.
 //
 // Usage: ModelOffset <level.trc> [slot ...]
 //        ModelOffset <level.trc> -sound <mapId ...>
 //          The second mode walks SoundMap -> SAMPLE_INFO and prints number,
-//          volume, radius and variant count per map id. It was documented
-//          only in an inline comment further down.
+//          volume, radius and variant count per map id.
 //
 // Output per slot: the first frame's box and its center. A cleanly
 // centered model has a center near 0/0 in x and z.
@@ -63,12 +62,12 @@ int main(int argc, char** argv)
     std::printf("%s: %d moveables, frame slice %d words, %d samples\n\n",
                 argv[1], objN, frN, lvl.soundSampleCount());
 
-    // --- Check the sound chain: ModelOffset <level.trc> -sound <mapId ...> -------
+    // --- ModelOffset <level.trc> -sound <mapId ...> ---------------------------
     //
     // Walks the same way the engine walks: SoundMap[id] -> SAMPLE_INFO ->
-    // its number and variant count. Needed because with the Compy a
-    // foreign sound cut in, and from the inserter's mapping table alone it
-    // could not be seen what a place REALLY points at in the end.
+    // its number and variant count. Needed because a foreign sound can cut
+    // in (as it did with the Compy), and the inserter's mapping table
+    // alone does not show what a map id really points at in the end.
     if (argc >= 3 && std::strcmp(argv[2], "-sound") == 0)
     {
         size_t lutAt = 0, infosAt = 0;

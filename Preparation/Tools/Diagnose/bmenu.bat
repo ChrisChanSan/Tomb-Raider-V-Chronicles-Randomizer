@@ -1,12 +1,12 @@
 @echo off
-rem bmenu - build MenuTest (#161, round 161b1, step 1).
+rem bmenu - build MenuTest.
 rem
 rem vcvars32, like bit.bat and bmt.bat and for the same reason: the tool
-rem includes the ENGINE'S OWN game\menu_nav.h, game\key_scheme.h and
+rem includes the engine's own game\menu_nav.h, game\key_scheme.h and
 rem game\pad_scheme.h rather than copies, and the engine is a Win32 build. All
 rem three are `int` and `long` arithmetic, the same widths in either target on
 rem Windows, so this is belt and braces - but the tool exists to say what the
-rem ENGINE does.
+rem engine does.
 rem
 rem Only this one file on the command line: all three headers are headers of
 rem inline functions with no engine include at all, which is what lets them be checked

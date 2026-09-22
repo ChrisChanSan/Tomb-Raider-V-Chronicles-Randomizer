@@ -1,5 +1,5 @@
-// Cross-check of the dino table (#92): does it produce, for all four, the
-// same packages as the tools? One call, four guests, no argument fiddling.
+// Cross-checks the dino table against the packages the tools build for all
+// four dinosaurs, in one call with no argument fiddling.
 #include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>

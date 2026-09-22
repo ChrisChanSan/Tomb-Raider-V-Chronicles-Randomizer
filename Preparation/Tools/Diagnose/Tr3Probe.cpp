@@ -4,9 +4,8 @@
  * from the TR3Fetch tool.
  *
  * The two are twins by design: the tool is what we develop and measure
- * with, the library is what ships. Twins drift, and they drift silently -
- * this project has paid for that once already with the zone exports. A
- * byte comparison is the only thing that proves they still agree.
+ * with, the library is what ships. Twins drift, and they drift silently.
+ * A byte comparison is the only thing that proves they still agree.
  *
  *     Tr3Probe <tr3level.TR2> <objectId> <out.bin> [-shiny n] [-recolor r,g,b=r,g,b]
  *

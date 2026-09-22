@@ -1,9 +1,9 @@
 // AnimMap - two modes around a .trc's animation table.
 //
-// Occasion (#121 follow-up): an imported enemy blinks - some animations
-// draw, others deliver zeros as bounds and drop out of drawing AND hit
-// testing. The question to the file: WHICH anims are broken, and do their
-// frame pointers still agree with the donor level?
+// Finds imported-enemy blink bugs: some animations draw, others deliver
+// zeros as bounds and drop out of drawing AND hit testing. Shows which
+// anims are broken and whether their frame pointers still agree with the
+// donor level.
 //
 //   AnimMap <level.trc>
 //       All moveable slots sorted by anim_index, with mesh count and the

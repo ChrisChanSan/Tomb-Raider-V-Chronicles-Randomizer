@@ -11,7 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-// CornerCheck - proof for Tr5Level::cornerFloor / cornerCeiling (#137).
+// CornerCheck - proof for Tr5Level::cornerFloor / cornerCeiling.
 //
 // The two functions compute a sector's corner height from the floordata, as a
 // port of the engine's GetHeight / GetCeiling with exactly one substitution

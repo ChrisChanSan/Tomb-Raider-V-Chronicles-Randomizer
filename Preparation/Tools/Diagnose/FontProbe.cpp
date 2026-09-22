@@ -13,7 +13,7 @@
 
 /*
  * FontProbe - where every classic glyph lives in the remaster's font atlas,
- * and what it looks like when it is drawn from there (#123, fix round Q).
+ * and what it looks like when it is drawn from there.
  *
  * The engine draws every line of text it has - title menu, inventory ring,
  * options, load and save lists, statistics, HUD counters, item names,

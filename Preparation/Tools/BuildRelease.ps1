@@ -10,9 +10,9 @@
 # demands a clear notice of the modification including a date: that is
 # TOMB5 Code\MODIFICATIONS.md.
 #
-# What DELIBERATELY does NOT go in here: game data. Neither levels nor
+# What deliberately does NOT go in here: game data. Neither levels nor
 # music, videos or language files. Tomb Raider Chronicles belongs to its
-# rights holders; the user brings their own installation, and the
+# rights holders; a player brings their own installation, and the
 # randomizer copies what it needs on first start by itself.
 param(
     [string]$OutDir = "",
@@ -21,8 +21,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Everything relative to the script location (Tools -> two levels up = repo
-# root), so the script runs on any machine and carries no developer paths
-# (#72).
+# root), so the script runs on any machine and carries no developer paths.
 $Root      = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($OutDir -eq "") { $OutDir = Join-Path $Root "Release Package" }
 $EngineSrc = "$Root\TOMB5 Code"
@@ -85,9 +84,9 @@ foreach ($f in (Get-ChildItem "$LevelInfo\*.json" | Sort-Object Name)) {
 # ZoneAnalysis reads the sector grid from them.
 Say "Data          : $zones zone exports + checksum list"
 
-# The secret lists (#53). The GUI looks for them in data\secrets next to the
-# EXE (findSecretSources) - without them both dropdowns stay empty and the
-# whole secret feature silently does not exist for anyone but us. They are
+# The secret lists. The GUI looks for them in data\secrets next to the EXE
+# (findSecretSources) - without them both dropdowns stay empty and the whole
+# secret feature silently does not exist for anyone but us. They are
 # hand-maintained text, not generated, so they are copied, not rebuilt.
 $secretsOut = "$dataOut\secrets"
 New-Item -ItemType Directory -Path $secretsOut -Force | Out-Null
@@ -140,16 +139,16 @@ Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
 # The randomizer is a standalone program that reads and writes data files.
 # It is not a fork of the engine, but it is not wholly independent of it
 # either: src\core\Floor.h ports GetHeight and CheckNoColFloorTriangle
-# VERBATIM from control.cpp, and says so in its own header. Both are
+# verbatim from control.cpp, and says so in its own header. Both are
 # GPLv3, so the combination is fine - but the source has to come along for
 # that reason, not merely as a courtesy.
-# src\ ALONE IS NOT ENOUGH. The binary also links Dear ImGui, and the GPL
-# counts "the scripts used to control compilation" as part of the source -
-# so b1.bat and b2.bat travel too, and imgui brings its own MIT licence.
-# Without these a recipient holds source that cannot rebuild the program,
-# which is exactly what the obligation exists to prevent. zlib is not
-# repeated here: the build scripts read it out of the engine source, which
-# this package already ships in full.
+# The src folder alone is not enough: the binary also links Dear ImGui, and
+# the GPL counts "the scripts used to control compilation" as part of the
+# source - so b1.bat and b2.bat travel too, and imgui brings its own MIT
+# licence. Without these a recipient holds source that cannot rebuild the
+# program, which is exactly what the obligation exists to prevent. zlib is
+# not repeated here: the build scripts read it out of the engine source,
+# which this package already ships in full.
 $rsOut = "$OutDir\Source\TR5Randomizer"
 New-Item -ItemType Directory -Path $rsOut -Force | Out-Null
 Copy-Item "$RandoRoot\src" $rsOut -Recurse -Force
@@ -183,9 +182,9 @@ if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearI
 # source tree this package distributes. See THIRD-PARTY.md.
 $drpc = "$EngineSrc\TOMB5\tomb5\libs\discordRPC\LICENSE"
 if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
-# TRForge (#123): five files are vendored VERBATIM under TOMB5\vendor\trforge
-# and its .TRG reader IS compiled into PCtomb5.exe, so unlike discord-rpc this
-# notice has to travel with the BINARY, not only with the source.
+# TRForge: five files are vendored verbatim under TOMB5\vendor\trforge and
+# its .TRG reader is compiled into PCtomb5.exe, so unlike discord-rpc this
+# notice has to travel with the binary, not only with the source.
 $trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"
 if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
 # zlib and stb_vorbis keep their notice inside their own source. It is lifted

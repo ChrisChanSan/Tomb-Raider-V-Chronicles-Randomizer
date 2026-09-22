@@ -11,8 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-// MapProbe - which .TRM the Remaster draws for each of a level's slots
-// (#123, stage S0).
+// MapProbe - which .TRM the Remaster draws for each of a level's slots.
 //
 // Occasion: the HD path replaces an object's mesh with a model of its own,
 // one file per slot in <5>\ITEM. Which file that is comes from the level's
@@ -42,15 +41,15 @@
 // called it, but the .MAP that belongs to it is the origin level's. Without
 // it every slot binds by name alone and the missing count is meaningless.
 //
-// -hdm IS THE PROOF OF STAGE S7-2 without starting the game. The sidecar
-// beside a randomized level says which rooms the run reshaped, which openings
-// it cut (#123, fix round Z) and which slots hold a model from another level
-// file; this reads it with the ENGINE'S OWN reader (specific\hd\
-// hd_markers.cpp is compiled in) and answers each line the way the engine
-// will answer it - a room classic with the reason "marker", a cut box with
-// the volume it takes out of every room's art, a donor slot through the
-// DONOR'S .MAP, a Tomb Raider III guest through the four-line table and the
-// other bundle. Two things it cannot answer: the skeleton test, which needs
+// -hdm proves what the HD room-cut and donor-slot machinery decided, without
+// starting the game. The sidecar beside a randomized level says which rooms
+// the run reshaped, which openings it cut and which slots hold a model from
+// another level file; this reads it with the engine's own reader
+// (specific\hd\hd_markers.cpp is compiled in) and answers each line the way
+// the engine will answer it - a room classic with the reason "marker", a cut
+// box with the volume it takes out of every room's art, a donor slot through
+// the donor's own .MAP, a Tomb Raider III guest through the four-line table
+// and the other bundle. Two things it cannot answer: the skeleton test, which needs
 // the model on a card (ModelProbe's job, and it says so per line), and how
 // many triangles a cut box really catches, which needs the level built
 // (RoomProbe -hdm, and the engine's own "HDLOG ... cut N" line).
@@ -76,11 +75,11 @@
 
 /* hd_install.cpp reads the two registry overrides out of these, which the
  * engine defines in tomb5\tomb5.cpp. A tool that links hd_install.cpp - and
- * this one does, since audit round A1 (#172) put hd_wardrobe.cpp on bmap's
- * line and the wardrobe asks the installer where the remasters are - has to
- * bring its own pair; ModelProbe, SfxProbe and TrgProbe do the same. Left
- * empty, so the search runs exactly as it does for a player who never set the
- * registry value; this tool is handed its folders on the command line. */
+ * this one does, because hd_wardrobe.cpp is on bmap's build line and the
+ * wardrobe asks the installer where the remasters are - has to bring its own
+ * pair; ModelProbe, SfxProbe and TrgProbe do the same. Left empty, so the
+ * search runs exactly as it does for a player who never set the registry
+ * value; this tool is handed its folders on the command line. */
 char tomb5_hd_install[260];
 char tomb5_hd_install_tr3[260];
 
@@ -197,16 +196,16 @@ namespace
 				"or rebuilt it; nothing of the Remaster's art is kept)\n",
 				HDMarkersRoom(i));
 
-		/* Fix round Z. A cut box takes no room away - it takes a box of
-		 * triangles out of EVERY room's art, and which rooms lose how much
-		 * is a question only the build can answer (the engine's own log line
+		/* A cut box takes no room away - it takes a box of triangles out of
+		 * every room's art, and which rooms lose how much is a question only
+		 * the build can answer (the engine's own log line
 		 * "HDLOG level=... cut N ..." says it, and RoomProbe -hdm draws it).
 		 * What this tool can say is the box, and whether it looks like one
 		 * opening: exactly one of the three spans reads 1024, and that is
 		 * the opening's normal (2 * 512 over a raw box that is flat there).
-		 * The other two are the opening's own size LESS 2 * 128 - the
-		 * inward step of fix round Z1, which keeps the passage's own floor
-		 * and ceiling out of the box. */
+		 * The other two are the opening's own size less 2 * 128, the inward
+		 * step that keeps the passage's own floor and ceiling out of the
+		 * box. */
 		for (int i = 0; i < HDMarkersCutCount(); i++)
 		{
 			const HDMarkerCut* cut = HDMarkersCut(i);

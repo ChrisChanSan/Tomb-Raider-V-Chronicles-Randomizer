@@ -1,5 +1,5 @@
 @echo off
-rem bsd - build SaveDiff (#148, order 1).
+rem bsd - build SaveDiff.
 rem
 rem vcvars32 and not vcvars64 like every other tool here, and that is not a
 rem detail: SaveDiff takes the savegame's layout from the engine's own

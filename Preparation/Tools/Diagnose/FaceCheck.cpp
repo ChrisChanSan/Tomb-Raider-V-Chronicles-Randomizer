@@ -1,15 +1,13 @@
 // FaceCheck - the drawn faces of a room, and which of them cover a sector.
 //
-// Occasion (#136): a new Make_Portal opens the passage in the floordata and
-// registers the rooms with each other, but you still cannot SEE through - the
-// wall is additionally a textured quad in the room geometry, and the portal
-// underneath does not hide it.
+// A new Make_Portal opens the passage in the floordata and registers the
+// rooms with each other, but the wall stays visible - it is additionally a
+// textured quad in the room geometry, and the portal underneath does not
+// hide it.
 //
-// The user's remark that put this on rails: no editor of the old days could
-// ever put a texture ON a portal, "that is why they were always something
-// special". So a genuine portal sector carries NO face at all, and making a
-// new one see-through means taking the face away rather than inventing a
-// transparent texture.
+// No level editor ever puts a texture on a genuine portal. So a genuine
+// portal sector carries no face at all, and making a new one see-through
+// means taking the face away rather than inventing a transparent texture.
 //
 // Usage: FaceCheck <level.trc> <room> [sx sz]
 //        without a sector: every face of the room

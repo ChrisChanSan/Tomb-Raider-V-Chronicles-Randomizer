@@ -5,8 +5,6 @@
 //          [texinfo] [sound.bin]
 //          [-keepmesh n] [-dropjoint n] [-jointcolor n=r,g,b] [-tone n]
 //          [-muted] [-muteslot] [-base] [-volumes]
-//        (sound.bin is a sixth POSITIONAL argument; all eight switches and
-//         that argument were added after this header was first written)
 //
 // texinfo (default 0): ALL faces point at this existing texinfo afterwards.
 // No texture page is touched - see Tr5Tr3Import.cpp.
@@ -34,7 +32,7 @@ static std::wstring toW(const char* s)
 //
 // Without this step the enemy keeps calling its TR3 numbers, which in the
 // target are different sounds or none at all. The same omission at the
-// dispatch table was the crash in #88 - hence explicit here.
+// dispatch table crashes the target - hence explicit here.
 static int remapSfx(std::vector<uint8_t>& package, const std::vector<std::pair<int,int>>& mapping,
                       std::vector<int>& unresolved, std::vector<std::pair<int,int>>& used,
                       std::vector<std::pair<int,int>>& kinds)
@@ -68,21 +66,14 @@ static int remapSfx(std::vector<uint8_t>& package, const std::vector<std::pair<i
         if (!count) continue;
         const uint16_t start = g16(ao + 38);
 
-    // THE COUNT COUNTS COMMANDS, NOT WORDS.
-    //
-    // "i < start + count" stood here with i as a WORD index - and because
-    // a command occupies 1 to 4 words depending on its kind, the loop
-    // broke off far too early. It saw only the first few commands of an
-    // animation, the rest stayed untouched AND unnoticed: the "without a
-    // mapping" report can only report what it read at all.
-    //
-    // It surfaced with the Compsognathus. His walking animation calls the
-    // step several times; the first occurrence was rerouted, the later
-    // ones kept their TR3 number 243 - and 243 in TR5 is
-    // SFX_GENERIC_HEAVY_FEET, a hefty heavy step. Exactly that is what the
-    // user heard while all measurements on model, mapping, soundmap and
-    // wave data stayed clean. It only became visible through the sound log
-    // in the engine.
+    // The count is commands, not words: a command occupies 1 to 4 words
+    // depending on its kind, so the loop must step by command, not by word
+    // index. Undercounting here leaves later commands in an animation
+    // unprocessed and unreported - as with the Compsognathus, whose walking
+    // animation calls its step sound several times: only the first
+    // occurrence would be rerouted, the rest would keep TR3 number 243,
+    // which in TR5 is SFX_GENERIC_HEAVY_FEET, a heavy step among the right
+    // sounds.
     uint32_t i = start;
     for (uint16_t k = 0; k < count && i < nCmd; ++k)
     {
@@ -119,17 +110,15 @@ static int remapSfx(std::vector<uint8_t>& package, const std::vector<std::pair<i
                     mapped = true;
                     // Count WHICH ID is called how often and in which
                     // animation. A mere total does not say whether the
-                    // sought sound occurs at all - with the Compy I
-                    // wrongly took the walking sound as covered because
-                    // the sum matched.
+                    // sought sound occurs at all - with the Compy, a
+                    // matching sum wrongly suggested the walking sound was
+                    // covered.
                     used.push_back(std::make_pair(nr, (int)a));
                     break;
                 }
 
             // REPORT unmapped numbers. Otherwise they silently keep their
-            // TR3 number and hit some foreign sound in the target -
-            // exactly the sort of silent error that has cost this project
-            // time several times already.
+            // TR3 number and hit some foreign sound in the target.
             if (!mapped)
             {
                 bool alreadyReported = false;
@@ -316,12 +305,11 @@ int main(int argc, char** argv)
         // 446..449: free in all 16 levels. The soundmap is a fixed field of
         // 450 places, so a high place costs no byte.
         // Volume per sound in package order (84 attack, 87 roar, 88 foot
-        // stomp, 89 sniffing, 255 raptor death scream). The roar shall be
-        // about 30 percent louder - heard in game, the user's wish.
-        // All listened to in game and set by the user. ATTENTION: the base
-        // value is 191 and the field one byte - everything above 133
-        // percent lands at the cap 255. Roar and death lie there, so their
-        // percentages are the wish, not the result.
+        // stomp, 89 sniffing, 255 raptor death scream), the roar set about
+        // 30 percent louder than the rest. The base value is 191 and the
+        // field is one byte, so anything above 133 percent clamps to 255;
+        // roar and death land there, so those two percentages describe the
+        // setting, not the resulting volume.
         std::vector<int> volumes = { 100, 130, 150, 100, 140 };
 
         // -muted <id,...>: deliberately reroute these numbers onto an
@@ -330,17 +318,15 @@ int main(int argc, char** argv)
         // 411 is unoccupied in all 16 TR5 levels - measured with ModelOffset
         // -ton on every single one, not assumed. The first candidate 405
         // was occupied in rich3; free are 411 to 419. The place lies
-        // outside the ranges we assign for imports (420-449).
+        // outside the range assigned for imports (420-449).
         std::vector<int> muted;
         int muteSlot = 411;
 
         // 445..449: five places at the upper end, free in all levels.
         int base = 445;
 
-        // Since the raptor (#97), the base place and the volumes are
-        // adjustable - before, the T-Rex values were fixed in the tool.
-        // Two enemies do not share the top edge of the soundmap by
-        // themselves:
+        // The base place and the volumes are adjustable: two enemies do not
+        // share the top edge of the soundmap by themselves.
         //   -base N          first target place
         //   -volumes a,b,c,..  percent per sound in package order
         for (int a = 5; a < argc; ++a)
@@ -429,32 +415,25 @@ int main(int argc, char** argv)
         }
         if (n2 < 0) { std::printf("command block in the model package not findable\n"); return 1; }
         std::printf("  anim commands: %d SFX numbers rerouted\n", n2);
-        // ABORT HARD, do not just warn.
+        // Aborts instead of merely warning: a TR3 number left in place hits
+        // some vanilla sound in the target instead of failing loudly - with
+        // the Compsognathus, 243 stayed and became SFX_GENERIC_HEAVY_FEET,
+        // a heavy step among the right sounds, while every measurement on
+        // the files stayed clean; only the sound log in the engine showed
+        // it. Where the target places lie does not help: they sit high
+        // (420-449) and cannot collide with TR3 numbers (up to about 256) -
+        // the protection has to take hold at the source, so every called
+        // number MUST have a mapping.
         //
-        // A TR3 number left in place hits some vanilla sound in the
-        // target. That is no cosmetic flaw: with the Compsognathus, 243
-        // stayed and became SFX_GENERIC_HEAVY_FEET - a hefty heavy step in
-        // the middle of the right sounds. The hunt for it cost hours,
-        // because all measurements on the files were clean and only a
-        // WARNING stood in the build log, which one reads past.
+        // Whoever deliberately does not want to take a sound along reroutes
+        // it onto an own silent place instead: deliberately muted numbers
+        // go to an EMPTY place of the soundmap, where the engine bails out
+        // (sound.cpp: lut == -1 -> "Non present sample") and plays nothing.
         //
-        // Where the target places lie does not help against that: they lie
-        // high anyway (420-449) and cannot collide with TR3 numbers (up to
-        // about 256). The protection must take hold at the source - every
-        // called number MUST have a mapping.
-        //
-        // Whoever deliberately does not want to take a sound along
-        // reroutes it onto an own silent place. Simply leaving it is no
-        // longer an option.
-        // Deliberately muted numbers: they are rerouted onto an EMPTY
-        // place of the soundmap. The engine bails out there (sound.cpp:
-        // lut == -1 -> "Non present sample") and plays nothing. That costs
-        // no sample and is guaranteed to hit nothing foreign.
-        //
-        // Needed for sounds we do not want to take from the source game:
-        // TR3 143 "Falling" with the T-Rex and the raptor, TR3 56 (Lara's
-        // step) with the vulture. Leaving them is no option - 143 and 56
-        // are occupied in TR5 (SFX_GENERIC_BODY_FALL, SFX_LARA_GRABFEET).
+        // Needed for sounds not wanted from the source game: TR3 143
+        // ("Falling") with the T-Rex and the raptor, TR3 56 (Lara's step)
+        // with the vulture - leaving them is no option since 143 and 56 are
+        // occupied in TR5 (SFX_GENERIC_BODY_FALL, SFX_LARA_GRABFEET).
         if (!unresolved.empty() && !muted.empty())
         {
             std::vector<std::pair<int,int>> toMute;
@@ -555,7 +534,7 @@ int main(int argc, char** argv)
     std::printf("  mesh check: %d of %d not readable\n", bad, mi.nmeshes);
 
     // Pack the texture pages back down before saving. Adding pages opens the
-    // texture workshop (#104), and save refuses while it is open. Closing is a
+    // texture workshop, and save refuses while it is open. Closing is a
     // no-op when nothing was added, so it can stand unconditionally.
     if (!lvl.texWorkshopClose(err)) { std::printf("texture workshop: %s\n", err.c_str()); return 1; }
 

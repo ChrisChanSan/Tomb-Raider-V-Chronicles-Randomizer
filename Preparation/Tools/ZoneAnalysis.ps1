@@ -29,14 +29,13 @@ param(
     # estimate: TestLaraVault (game/lara.cpp:1107) handles hdif down to -1920
     # (Vault2/Vault3/high jump) and above that falls into
     # "if (!lara.climb_status) return 0;" - higher only works at climbable
-    # walls. The user had judged it exactly right in game ("anything above
-    # 2x1024 cannot be done from a standstill" - the Andrea1 wall at 2048
-    # really is insurmountable, 1920 is the precise code limit below it).
+    # walls. Matches the in-game limit: the Andrea1 wall at 2048 is
+    # insurmountable, 2x1024 cannot be climbed from a standstill, and 1920 is
+    # the precise code limit below that.
     [int]$CLIMB_LIMIT = 1920,
-    # PHYSICS MODEL, PARKED (2026-08-04): direction-dependent climb rule +
-    # jump edges. Three measurement rounds showed: the rule closes real leaks
-    # (the Andrea1 wall) but tears multi-story levels apart, because the
-    # sector-data semantics do not suffice for it. Core finding from GetFloor
+    # Direction-dependent climb rule + jump edges, parked: it closes real
+    # leaks (the Andrea1 wall) but tears multi-story levels apart, because
+    # the sector-data semantics do not suffice for it. GetFloor
     # (game/control.cpp:1206): the descent through pit_room happens ONLY when
     # y >= floor level - the floor byte is thus real, solid ground EVEN when
     # roomBelow is set (stacked stories, Andrea2 room 211 above 54: both
@@ -182,92 +181,74 @@ $ONEWAY_OUT = @{
 # unusable both as a rule and as a suspicion generator. Hence hand curation:
 # one number per room, directly readable in trview.
 $EXCLUDE_ROOMS = @{
-    # Reviewed by the user in trview. Roofs (177/226 and neighbors), pure air
-    # rooms above the alleys and the area behind the deco doors 89/90.
+    # Roofs (177/226 and neighbors), pure air rooms above the alleys and the
+    # area behind the deco doors 89/90.
     'Andrea2' = @(148,215,83,177,205,220,189,153,226,232,242,47,224,162,237,
                   181,156,124,127,185,112,122,119,118,128,114,115,141,87)
     # One-way rooms that only show the skybox and give the level depth.
     'Andrea3' = @(113,114,115,116,64,66,67,69)
     # joby2: terrain that looks walkable and is not - the big slanted
-    # surfaces at the facility's edge (room 158 is the most striking case,
-    # checked by the user in trview). The zone flood runs across them because
-    # the sectors report floor; Lara never gets there.
-    # Together 296 placeable sectors that would otherwise count as spots.
-    # Second round after a trview review: roofs, ship hulls, quay walls and
-    # other surfaces that report floor and are none. Not a single pickup lies
-    # in them - only two snipers, animatings and bridge flats.
+    # surfaces at the facility's edge (room 158 is the most striking case).
+    # The zone flood runs across them because the sectors report floor; Lara
+    # never gets there. Together 296 placeable sectors that would otherwise
+    # count as spots: roofs, ship hulls, quay walls and other surfaces that
+    # report floor and are none. Not a single pickup lies in them - only two
+    # snipers, animatings and bridge flats.
     'joby2' = @(6,7,9,14,149,155,158,
                 8,10,13,15,19,21,139,145,147,148,150,151,153,154,159,
-                # 39, 41 and 44 only surfaced at all through the lighting
-                # correction - all three spots per room are new. The user
-                # recognized them as invalid immediately. So the correction
-                # does not only bring gains, it also creates new review work.
+                # 39, 41 and 44 surfaced only after a lighting correction -
+                # all three spots per room are new and equally invalid.
                 39,41,44)
-    # joby3, reviewed by the user in trview. No pickup lies in them - only an
-    # electrical light and an animating in room 104 plus one closed door each
-    # in 118 and 130.
+    # joby3. No pickup lies in them - only an electrical light and an
+    # animating in room 104 plus one closed door each in 118 and 130.
     #
-    # 116, 119, 129 and 184 joined during measuring: they hang only on the
-    # rooms above and thereby dropped out. 116, 129 and 184 have no spot at
-    # all anyway, so they are pure passages. Room 119 has four - per the
-    # user they lie behind a deco door and are unreachable.
+    # 116, 119, 129 and 184 hang only on the rooms above and thereby drop
+    # out. 116, 129 and 184 have no spot at all anyway, so they are pure
+    # passages. Room 119 has four; they lie behind a deco door and are
+    # unreachable.
     #
-    # Note on that: our deco-door rule treats a door without a trigger as
-    # NOT blocking. In joby2 that was right because Lara could jump onto the
-    # ledges. Here it is the other way round - the door never opens and
-    # there is no other way. Both cases look identical in the data, the
-    # difference sits solely in the geometry behind it.
+    # The deco-door rule treats a door without a trigger as NOT blocking. In
+    # joby2 that is right because Lara can jump onto the ledges. Here it is
+    # the other way round - the door never opens and there is no other way.
+    # Both cases look identical in the data, the difference sits solely in
+    # the geometry behind it.
     'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
-    # andy1, reviewed by the user in trview. Room 236 is with 36 spots the
-    # level's largest single item and lies behind the level's end - pure
-    # scenery. 71, 92, 93, 162 and 211 likewise. No item lies in any of them.
+    # andy1. Room 236 is with 36 spots the level's largest single item and
+    # lies behind the level's end - pure scenery. 71, 92, 93, 162 and 211
+    # likewise. No item lies in any of them.
     #
-    # Expressly NOT included although the suspicion generator listed them:
-    # 113 (a cutscene fires there, core area) plus 195, 50, 197, 170, 38 and
-    # 37 - all playable. The generator shows suspects, not results; here it
-    # was wrong in seven of thirteen cases.
+    # Expressly NOT included: 113 (a cutscene fires there, core area) plus
+    # 195, 50, 197, 170, 38 and 37 - all playable, despite looking similar
+    # on the surface.
     #
-    # Second group: 6, 14, 16, 20, 58, 59 and 185 lie together in one level
-    # corner and are unreachable one and all. Together only 19 spots and not
-    # a single item. Room 59 was the occasion - it has 26 walkable sectors
-    # and portals to 6, 16 and 185, so it looks like a proper room. It is
-    # one, only nobody enters it.
-    # User: "We will have that more often in this level."
+    # 6, 14, 16, 20, 58, 59 and 185 lie together in one level corner and are
+    # unreachable one and all. Together only 19 spots and not a single item.
+    # Room 59 has 26 walkable sectors and portals to 6, 16 and 185, so it
+    # looks like a proper room; it is one, only nobody enters it.
     #
-    # Third and largest group, 30 rooms from a further review. The user on
-    # the procedure: "We take whole rooms, anything else would be too
-    # extreme." Room 193 stands as the example - eight spots, floor heights
-    # from 5632 to 8192, i.e. up to two and a half meters of difference
-    # between neighboring sectors. Geometrically walkable, unapproachable
-    # with Lara's moves. Curating sector by sector would be out of
-    # proportion here.
+    # The remaining 30 rooms hold no items either - geometrically walkable,
+    # unapproachable with Lara's moves, and too irregular to bar sector by
+    # sector. Room 193 is the example: eight spots, floor heights from 5632
+    # to 8192, up to two and a half meters of difference between neighboring
+    # sectors. Costs 127 of the 502 spots and not a single pickup.
     #
-    # Costs 127 of the 502 spots and not a single pickup. Rooms 50 and 195
-    # still counted as core level in an earlier review and on closer
-    # inspection are not - the later statement applies.
-    # The 30 rooms of the third review are NOT here but in NO_ITEM_ROOMS:
-    # they are core areas Lara walks through, only their edges are no spot.
-    # As a walkability bar they would have cut the key chain.
+    # This 30-room group stands in NO_ITEM_ROOMS, not here: they are core
+    # areas Lara walks through, only their edges are no spot. As a
+    # walkability bar here they would have cut the key chain.
     'andy1' = @(6,14,16,20,58,59,71,92,93,162,185,211,236)
     # joby5: four rooms right at the level start. The doors before them -
-    # 176, 187, 193 and 195 - have NO trigger, so our deco-door rule lets
+    # 176, 187, 193 and 195 - have NO trigger, so the deco-door rule lets
     # them pass as non-blocking and the rooms behind count as reachable.
-    # They are not. Three of them contain only a pulse light.
-    # Third case of this kind after joby3 room 119 and joby2 room 11: in the
-    # data, blocking and non-blocking deco doors look identical.
-    # Room 112 comes from the same review: it hangs on a Floor Trapdoor1
-    # (item 130) with flags 0 and without any trigger - it never opens.
-    # Fourth case of the deco-door limit in this level.
+    # They are not. Three of them contain only a pulse light. As in joby3
+    # room 119 and joby2 room 11, blocking and non-blocking deco doors look
+    # identical in the data.
+    # Room 112 hangs on a Floor Trapdoor1 (item 130) with flags 0 and
+    # without any trigger - it never opens, the same deco-door limit again.
     'joby5' = @(112,160,169,172,175)
-    # joby4 first stood here with rooms 116, 135, 136 - following the 3x1024
-    # estimate and room-clean at the time. The user's in-game measurement
-    # then placed the limit at around y 13200, and there it is NOT room-clean
-    # anymore. It now stands as a number in $MIN_FLOOR_Y and covers those
-    # three rooms as well.
-    #
-    # 120 and 122 join from the user's review. They are the level's largest
-    # single item: 96 spots each, together 192 of 586, so a scant third. No
-    # item lies in either.
+    # joby4: rooms 120 and 122 are the level's largest single items, 96
+    # spots each, 192 of 586 total. No item lies in either. Rooms 116, 135
+    # and 136 cover the same kind of area but are not room-clean, so they
+    # are barred instead by height through $MIN_FLOOR_Y (around y 13200).
     'joby4' = @(120,122)
 }
 
@@ -288,35 +269,26 @@ $EXCLUDE_SECTORS = @{
     # rich2's laser (item 178) between room 119 and 57. It is the only one of
     # the level's four lasers WITHOUT a trigger - 21, 181 and 34 can be
     # switched off, this one cannot -, so it is permanently on and a real
-    # wall.
+    # wall. Barring it in isolation used to cost 63 rooms (590 spots down to
+    # 131, zones 6 down to 3), because the portal graph knew only TWO
+    # entrances into this area and both are shut: 119->57 is the wall
+    # itself, and 58->59 leads through door 115, opened by switch 0 in room
+    # 7 from INSIDE. The real way was missing from the model entirely.
     #
-    # It long cost 63 rooms - 590 spots down to 131, zones 6 down to 3 - and
-    # was therefore removed three times. The reason was never the wall: the
-    # portal graph knew only TWO entrances into this area, and both are shut.
-    # 119->57 is the wall itself, and 58->59 leads through door 115, which
-    # switch 0 in room 7 opens - from INSIDE. The real way was missing from
-    # the model entirely.
-    #
-    # It now stands in MANUAL_LINK: room 130 -> room 139, the jump across the
-    # WC niche into the elevator shaft. With it the wall costs NOTHING
-    # anymore - 590 spots with it as without it -, and the zones grow from 6
+    # The real way now stands in MANUAL_LINK: room 130 -> room 139, the jump
+    # across the WC niche into the elevator shaft. With it the wall costs
+    # nothing - 590 spots with it as without it - and the zones grow from 6
     # to 7, because the elevator section now hangs behind the keypad instead
-    # of next to the shortcut. Exactly how a proper bar must behave: it
-    # orders, it does not take away.
+    # of next to the shortcut. A bar that costs half the level almost always
+    # means a way is missing from the model, not that the bar is too strict.
     #
-    # Note for the next case of this kind: a bar that costs half the level is
-    # almost never too strict - it is missing a way the model does not know.
-    # Find the way first, then judge the bar.
-    #
-    # Four sectors, not two. (8,1) and (8,2) are the tiles the beam lies on -
-    # the user named them so, item 178 stands there. (9,1) and (9,2) are the
-    # PORTAL to room 57, one sector behind.
-    #
-    # Barring both is necessary because Add-Edge creates portals both ways:
-    # from 57 the flood arrived over the back edge into 119(9,z) without ever
-    # having had to pass (8,z). For the main flood that changed nothing,
-    # (8,z) was already the brake there - but the elevator island thereby
-    # reached for room 119 and with it for a zone-0 room of the main side.
+    # Four sectors, not two. (8,1) and (8,2) are the tiles the beam (item
+    # 178) lies on. (9,1) and (9,2) are the PORTAL to room 57, one sector
+    # behind - barring both is necessary because Add-Edge creates portals
+    # both ways: from 57 the flood would arrive over the back edge into
+    # 119(9,z) without ever having had to pass (8,z), and the elevator
+    # island would thereby reach room 119 and with it a zone-0 room of the
+    # main side.
     'rich2' = @('119,8,1','119,8,2','119,9,1','119,9,2')
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
@@ -333,24 +305,21 @@ $TYPE_EXCLUDE_ROOMS = @{
         175 = @(70,204)                       # Puzzle Item4
         176 = @(70,204)                       # Puzzle Item5 (141/87 are
                                               # entirely barred by now)
-        # The valve (#61, user review at the wall test 2026-08-19). Puzzle
-        # Item3 is already caught correctly by its zone limit, the valve
-        # must stop earlier:
+        # The valve. Puzzle Item3 is already caught correctly by its zone
+        # limit, the valve must stop earlier:
         #  - 31 is the leak path. From there the flood runs to 132 (and on
         #    to 246 - the statue's boss room) although all of that lies
-        #    behind the door. User:
-        #    "Room 31 must become a blocker."
+        #    behind the door, so 31 must become a blocker.
         #  - 103 is only reachable AFTER the valve has been used - a valve
         #    lying there could not unlock itself.
-        #  - 246 is the statue's boss room, confirmed by the user: "that
-        #    lies behind the door". With it the area is self-contained.
+        #  - 246 is the statue's boss room, which lies behind the door; with
+        #    it the area is self-contained.
         #  - The flood still runs on: TYPE_EXCLUDE_ROOMS bars only the TYPE,
         #    not the zone run. The zone behind the door therefore stays low,
-        #    and the rooms behind it stayed allowed. The user read them off
-        #    in trview and gave the go-ahead to bar them individually. The
-        #    structural fix would be GATED_AREA (gate + stop edge as in
-        #    Andrea1) - that needs the door numbers and a closed
-        #    PreGateRooms list.
+        #    and the rooms behind it stay allowed, so they are barred
+        #    individually by hand. The structural fix would be GATED_AREA
+        #    (gate + stop edge as in Andrea1) - that needs the door numbers
+        #    and a closed PreGateRooms list.
         172 = @(31,132,246,103,
                 109,175,174,217,136,131,93,86,135,76)   # Puzzle Item1 (valve)
     }
@@ -358,66 +327,59 @@ $TYPE_EXCLUDE_ROOMS = @{
     # behind its own door" barely applies here - it finds only a single
     # sector, because you get behind the door via the outside area without
     # opening it. From the model's view the area thus does not lie behind it
-    # at all, in game it does. Hence by hand, compiled by the user in trview.
+    # at all, in game it does. Hence by hand.
     'joby2' = @{
-        # Room 67 joined like 39/41/44 only with the lighting correction,
+        # Room 67 joined like 39/41/44 only after the lighting correction,
         # with 23 spots in one stroke. Unlike those it stays usable for
         # normal items - only Key Item7 may not lie there.
         202 = @(11,12,16,20,24,25,34,40,42,60,61,65,67,73,76,92,93,98,138,152)
         203 = @(83,115)                       # Key Item8
-        # The fuse. Room 146 from the user's last review; the three single
-        # tiles in room 141 stand in TYPE_EXCLUDE_SECTORS because the rest of
-        # that room is fine for it.
+        # The fuse. The three single tiles in room 141 stand in
+        # TYPE_EXCLUDE_SECTORS instead because the rest of that room is fine
+        # for it.
         172 = @(146)                          # fuse
     }
-    # joby3: Key Item7 must not lie behind door 175, it is its deadstop
-    # (user: "Key 6/7 may appear up to room 106"). Measured with a flood from
-    # room 109, door 175 as a wall, room 123 as the boundary: 58 rooms with
-    # spots lie behind it - but 52 of them are already excluded by the zone
-    # limit <=Z2 anyway. These six remain, and only they make the
-    # difference. Room 109 is the case the user saw in the test level.
+    # joby3: Key Item7 must not lie behind door 175 - Key 6/7 may appear up
+    # to room 106, its deadstop. A flood from room 109 with door 175 as a
+    # wall and room 123 as the boundary shows 58 rooms with spots lying
+    # behind it, but 52 of them are already excluded by the zone limit <=Z2
+    # anyway; these six remain and make the difference.
     # Key Item6 needs nothing of the kind: it stays with the chef in
     # VANILLA_TYPES.
     'joby3' = @{
         202 = @(49,60,109,126,152,159)
     }
     # joby5: Keyhole6 opens rooms 18, 54 and 106. Key Item6 must not lie
-    # there - it would be behind the door it opens itself. Exactly the case
-    # the withdrawn automatic rule was meant to cover; until there is a
-    # sound solution for it (task #49), it stands here.
-    # Key Item8 (the keycard for door 15) needs NO entry here. On 2026-08-23
-    # one stood here briefly, after a tester report about permanently live
-    # cables - it was superfluous and moreover narrower than what applies
-    # anyway: NO_KEY_ROOMS already bars all five electrified water rooms for
-    # joby5 (126,127,128,158,183), and that holds for EVERY key type.
-    # Checked in the zone export: type 203 arrives there with maxZone 0 and
-    # exactly these five rooms.
+    # there - it would be behind the door it opens itself.
+    # Key Item8 (the keycard for door 15) needs NO entry here: NO_KEY_ROOMS
+    # already bars all five electrified water rooms for joby5
+    # (126,127,128,158,183), and that holds for EVERY key type - the zone
+    # export confirms type 203 arrives there with maxZone 0 and exactly
+    # these five rooms.
     'joby5' = @{
         201 = @(18,54,106)
     }
-    # andy3: crowbar (174) and chalk (172) hang together and both hang on the
-    # same point of no return. The user explained the chain: with the crowbar
-    # Lara breaks the chalk out of the wall (Puzzle Item1 therefore carries
-    # OCB 2, the crowbar pickup), with the chalk she draws the banishing seal
-    # in room 18 sector (2,5), the cutscene makes the teleporter in room 110
-    # reachable - and that is a one-way street.
+    # andy3: crowbar (174) and chalk (172) hang together and both hang on
+    # the same point of no return. With the crowbar Lara breaks the chalk
+    # out of the wall (Puzzle Item1 therefore carries OCB 2, the crowbar
+    # pickup); with the chalk she draws the banishing seal in room 18 sector
+    # (2,5), and the cutscene makes the teleporter in room 110 reachable -
+    # that is a one-way street.
     #
     # The level has neither a puzzle hole nor a key hole, so the zone logic
     # sees nothing of this chain and derives not a single constraint.
     #
     # An island group would be overkill here. The area behind the teleporter
-    # is the component around room 140, and measured it comprises six rooms
-    # with FOUR spots in total. In the portal graph it hangs on room 135 via
-    # 142, in game you only get in by teleporter and not back. Barring six
-    # room numbers is more traceable than a second flood and works just the
-    # same.
+    # is the component around room 140 and comprises six rooms with FOUR
+    # spots in total. In the portal graph it hangs on room 135 via 142; in
+    # game you only get in by teleporter and not back. Barring six room
+    # numbers is more traceable than a second flood and works just the same.
     'andy3' = @{
         172 = @(136,137,139,140,141,142)      # chalk
         174 = @(136,137,139,140,141,142)      # crowbar
         # The coin: its COARSE area stands as TYPE_ALLOW_ISLAND (from 142,
         # stops 137/97/149). Within that island there are still rooms where
-        # it has no business - user review in the debug level 2026-08-24,
-        # which completes the list.
+        # it has no business - this list bars them individually.
         173 = @(37,42,43,45,46,47,50,51,53,55,56,57,77,78,81,
                 143,144,151,195,196,197)
     }
@@ -450,13 +412,11 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 # level - 128 of 179 rooms, down to Lara's start room. The sector graph
 # carries the wall and stays inside.
 $NO_KEY_ISLAND = @{
-    # andy3 (#61): the two wall pickups - chalk (172) and fence crowbar
-    # (174) - belong in the first island group, in which Lara starts and in
-    # which both are needed. User statement:
-    #
-    #   "Deadstops are rooms 18, 19, 22. The chalk is used there, which is
-    #    the only way to reach the teleporter Trigger74 in room 110 at all.
-    #    That should now form a wall so the flood cannot get out."
+    # andy3: the two wall pickups - chalk (172) and fence crowbar (174) -
+    # belong in the first island group, in which Lara starts and in which
+    # both are needed. Deadstops are rooms 18, 19, 22: the chalk is used
+    # there, which is the only way to reach the teleporter Trigger74 in room
+    # 110 at all, so this forms a wall the flood cannot get out of.
     #
     # The entrance is room 140 - the same start room ISLAND_YBAND keeps for
     # island 2. Everything that lies behind the wall 18/19/22 from there
@@ -465,11 +425,11 @@ $NO_KEY_ISLAND = @{
     # Deliberately NOT via TYPE_EXCLUDE_ROOMS: that only bars the type in
     # named rooms and does NOT stop the zone run - in Andrea2 the flood
     # seeped on because of that and in the end it took 14 rooms by hand.
-    # ExemptTypes (#61, 2026-08-24): this island is meant FOR chalk and
-    # crowbar - they should stay on the start island, so it bars everything
-    # else (134 rooms). The coin needs the exact opposite: it must NOT go
-    # onto the start island. Without the exemption both rules apply at once,
-    # and a single room remains (in a test over 15 seeds always room 119).
+    # ExemptTypes: this island is meant FOR chalk and crowbar - they should
+    # stay on the start island, so it bars everything else (134 rooms). The
+    # coin needs the exact opposite: it must NOT go onto the start island.
+    # Without the exemption both rules apply at once and a single room
+    # remains.
     #
     # The exemption takes the type out of THIS island - out of the sector
     # list (keyBarredSectors) as well as out of the excludeRooms. Its own
@@ -477,9 +437,8 @@ $NO_KEY_ISLAND = @{
     'andy3' = @(
         @{ StartRoom = 140; DeadstopRooms = @(18,19,22); ExemptTypes = @(173) }
     )
-    # rich2's elevator section. The user: the entrance is room 140, the exit
-    # room 113, and what lies in between should carry no key items -
-    # ordinary pickups yes.
+    # rich2's elevator section: the entrance is room 140, the exit room 113,
+    # and what lies in between carries no key items - ordinary pickups yes.
     #
     # The reason sits in the section itself. It is a chain of switches, lift
     # doors and five teleporters, at whose end Lara is placed into the
@@ -493,18 +452,17 @@ $NO_KEY_ISLAND = @{
         # the hand edge 130 -> 139 backwards into the WC again and from
         # there into the whole level.
         #
-        # 46 is the actual leak, and finding it took a while because it does
-        # not stand in the sector data: the user saw it in trview. On the
-        # ground floor, with FlipMap 0 the shaft is open, and FlipMap 0 is
-        # set from level start - room 42 thereby hangs permanently on room
-        # 46, the ground-floor hall. Over it the flood ran down to Lara's
-        # start room 129 every time. My first attempt to bar 46's neighbors
-        # 122 and 123 instead was symptom treatment: 46 itself no longer
+        # 46 is the actual leak and does not stand in the sector data: on
+        # the ground floor, with FlipMap 0 the shaft is open, and FlipMap 0
+        # is set from level start - room 42 thereby hangs permanently on
+        # room 46, the ground-floor hall. Over it the flood ran down to
+        # Lara's start room 129 every time. Barring 46's neighbors 122 and
+        # 123 instead would only treat the symptom: 46 itself no longer
         # belongs to the section.
         #
-        # 113 is the exit the user named. It is needed in addition - 46
-        # alone does not suffice, because 113 is also reachable from inside
-        # via 115 and 172 and the flood runs on from there.
+        # 113 is the exit. It is needed in addition - 46 alone does not
+        # suffice, because 113 is also reachable from inside via 115 and 172
+        # and the flood runs on from there.
         #
         # Result: 51 rooms, 638 sectors, 93 of the 588 spots. Without the
         # deadstops it would have been 586 of 588 - practically the whole
@@ -517,29 +475,23 @@ $noKeyIslands = @( if($NO_KEY_ISLAND.ContainsKey($LevelName)){ $NO_KEY_ISLAND[$L
 #----------------------------------------------------------------------------
 # Rooms that stay walkable but in which NOTHING AT ALL may lie.
 #
-# The third bar level, and it was needed because the other two do not hit
-# the case: EXCLUDE_ROOMS also takes the room out of the path network,
-# NO_PLACEMENT_ROOMS bars only key and puzzle items.
+# A third bar level, needed because the other two do not hit the case:
+# EXCLUDE_ROOMS also takes the room out of the path network, NO_PLACEMENT_
+# ROOMS bars only key and puzzle items.
 #
-# andy1 has the case in its pure form. The user describes a gorge Lara walks
-# through; at its edges lie spots that are geometrically walkable and in
-# reality unapproachable. Sector-precise would be out of proportion - "I
-# would now have to hunt 12 sectors as invalid just to save 4 good ones".
-# Entered as EXCLUDE_ROOMS, the list however cut the access to 229 sectors
-# together with Puzzle Item1 and its lock, the level was no longer solvable
-# in the model.
+# andy1 has the case in its pure form: a gorge Lara walks through, with
+# spots at its edges that are geometrically walkable and in reality
+# unapproachable. Sector-precise curation would be out of proportion for a
+# handful of bad tiles among many good ones. Entered as EXCLUDE_ROOMS
+# instead, the list cut the access to 229 sectors together with Puzzle
+# Item1 and its lock, and the level was no longer solvable in the model.
 #
 # Hence here: the way stays, the spots vanish.
 #----------------------------------------------------------------------------
 $NO_ITEM_ROOMS = @{
-    #------------------------------------------------------------------------
-    # The user's last review across all levels, after the test levels showed
-    # both layers (223 on every sector, key ranges above). These six levels
-    # had no entry at all until then.
-    #------------------------------------------------------------------------
     'Andrea1' = @(216,67,155)
-    # Room 6 joined 2026-08-23 (user). It carried 6 spot sectors in zone 0,
-    # vanilla has nothing lying there. Deliberately here and not in
+    # Room 6 carries 6 spot sectors in zone 0, vanilla has nothing lying
+    # there. Deliberately here and not in
     # EXCLUDE_ROOMS: room 6 is a connector (portals to 4, 7 and 55), and
     # room 4 hangs only on 1 and 6 - as a walkability bar it could cut
     # paths. The way stays, the spots vanish.
@@ -547,42 +499,35 @@ $NO_ITEM_ROOMS = @{
     'Andrea3' = @(129,68,75)
     'joby2'   = @(72)
     'joby3'   = @(65)
-    # 16, 40, 41, 42 and 156 joined 2026-08-23 (user, seen in game): enemies
-    # and items still lay in all five. Right after the level intro Flipmap 0
-    # engages, and all five are flip ORIGINALS - measured at the file
-    # (RoomCheck): 16->84, 40->80, 41->69, 42->79, 156->90. From that moment
-    # the flip version stands everywhere, the originals are never walked. An
-    # enemy there never wakes, an item is never to be fetched.
+    # 16, 40, 41, 42 and 156: enemies and items still lay in all five, but
+    # right after the level intro Flipmap 0 engages and all five are flip
+    # ORIGINALS (measured at the file with RoomCheck: 16->84, 40->80,
+    # 41->69, 42->79, 156->90). From that moment the flip version stands
+    # everywhere, the originals are never walked. An enemy there never
+    # wakes, an item is never to be fetched.
     #
     # Deliberately here and not in EXCLUDE_ROOMS: as a walkability bar they
     # would cut the path network although their flip versions are very much
     # walked. The way stays, the spots vanish.
     'joby5'   = @(181,16,40,41,42,156)
-    # Third review: 55, 78, 95, 145, 150, 186, 228, 231 - together 20 spots.
-    # Room 186 is at the same time the island group's deadstop - barred here
-    # only as a spot, the way stays.
+    # 55, 78, 95, 145, 150, 186, 228, 231 - together 20 spots. Room 186 is
+    # at the same time the island group's deadstop - barred here only as a
+    # spot, the way stays.
     #
-    # 55 and 78 hang together and are a special case the user cleared up.
-    # The pickup trigger in room 51 sector (2,2) - exactly where the heart
-    # lies - fires Object:8 (the heart itself), Object:12 (the door in room
-    # 55) and Cutscene:19. If the heart is randomized elsewhere, nobody
-    # picks anything up on this sector anymore, the trigger never fires and
-    # door 12 stays shut. It cannot be moved because it also carries the
-    # cutscene.
-    #
-    # The small area behind it is thereby dead, and that is accepted as
-    # such: "Should the heart ever happen to lie on its trigger, ok, then
-    # it's just empty. Otherwise whatever." That is also why nothing lies
-    # there.
+    # 55 and 78 hang together as a special case. The pickup trigger in room
+    # 51 sector (2,2) - exactly where the heart lies - fires Object:8 (the
+    # heart itself), Object:12 (the door in room 55) and Cutscene:19. If the
+    # heart is randomized elsewhere, nobody picks anything up on this sector
+    # anymore, the trigger never fires and door 12 stays shut. It cannot be
+    # moved because it also carries the cutscene, so the small area behind
+    # it stays dead by design - nothing lies there.
     # (Item 15 in room 78 is a smallmedi, not the heart - that is item 8.)
-    # 27 and 200 joined in the last review.
     'andy1' = @(2,11,24,27,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,
                 95,103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
                 193,195,198,200,228,231,242)
     # Andy2, room 29: the mill's roof. In an 11x11 room a plateau stands in
     # the middle, around it there is no floor - a shaft. Exactly the nine
-    # plateau sectors are spot surface, and the user confirmed them in
-    # trview as unreachable ("those are on the mill").
+    # plateau sectors are spot surface but unreachable in game.
     #
     # The model considers them reachable, and understandably so: sectors
     # 29(5,1) and (5,2) have no floor of their own, Lara stands there on
@@ -590,16 +535,15 @@ $NO_ITEM_ROOMS = @{
     # units, and Test-ClimbEdge allows up to 1920. The edge is not grabbable
     # in game though.
     #
-    # Two automatic detections failed on this. A local test for "ascent >
+    # Two automatic detections fail on this. A local test for "ascent >
     # 1024" does not find the case, because the gate sector 29(5,3) itself
     # is no spot and the plateau sectors lie level among themselves. And a
     # test for "plateau above floorless surroundings" hits over eighty rooms
-    # in Andy2, because every small 3x3 room looks like that - room 29 was
+    # in Andy2, because every small 3x3 room looks like that - room 29 is
     # not even among them. The viable variant would be a second flood with
     # climb bound 1024; until then the room stands here.
     #
-    # The rest of the list is the user's second and third trview review. 31
-    # and 41 are the rooms with the fire and spike traps - the sectors in
+    # 31 and 41 are the rooms with the fire and spike traps - the sectors in
     # between look perfectly fine as spots.
     #
     # 132 and 134 are the flip variants of 31 and 41 and have no spot
@@ -608,64 +552,52 @@ $NO_ITEM_ROOMS = @{
     # stand here as a safety net in case that rule is ever loosened - then
     # the trap rooms must not silently come back.
     'Andy2' = @(7,29,31,41,132,134,143,144,145,173,174,175,176,177,179,180,181,248,250)
-    # andy3 is a different beast among the bar lists than the other levels -
-    # the user estimates at least a hundred rooms. The list grows here in
-    # blocks as he works through them in trview.
+    # andy3 is a different beast among the bar lists than the other levels,
+    # with well over a hundred rooms.
     #
-    # rich1, the user's first review. Five of the named rooms (46, 47, 87,
-    # 90, 92) already had no spot before - they stand here anyway so the
-    # list fully mirrors the review.
+    # rich1. Five of the named rooms (46, 47, 87, 90, 92) already had no
+    # spot before - they stand here anyway so the list is complete.
     #
-    # In room 123 lies a vanilla smallmedi (item 178). That is entered
-    # deliberately: the item is not lost, it only travels elsewhere, and the
-    # acceptance rule "never forbid a vanilla position" is aimed at wrong
-    # DERIVED rules, not at a hand decision of the user.
+    # In room 123 lies a vanilla smallmedi (item 178), entered deliberately:
+    # the item is not lost, it only travels elsewhere. The acceptance rule
+    # "never forbid a vanilla position" is aimed at wrong DERIVED rules, not
+    # at hand curation.
     #
-    # Room 17 has its own reason only the user can know: AS SOON AS THE
-    # HAMMER IS USED, the area is unreachable. What lies there is lost
-    # afterwards. Nothing of that stands in the level data - the room looks
-    # walkable, is reached and carries twelve flawless spots. Exactly the
-    # kind of one-way street the zone model can in principle not see.
-    # Room 5 joined in the last review.
+    # Room 17: as soon as the hammer is used, the area is unreachable, and
+    # what lies there is lost afterwards. Nothing of that stands in the
+    # level data - the room looks walkable, is reached and carries twelve
+    # flawless spots. Exactly the kind of one-way street the zone model can
+    # in principle not see.
     'rich1' = @(5,17,19,20,46,47,68,83,85,87,89,90,92,123,130,154)
-    # rich2, room 107 in the elevator shaft. The user: walkable only once
-    # Flipmap 7 is on, and Lara only gets there from the ground floor - so
-    # AFTER the whole elevator section. The model sees it in zone 2,
-    # together with the shaft itself, and that is several stations too
-    # early. A FLIP_GATE does not help: 107 is a base room without its own
-    # flip variant, the geometry change comes from neighboring rooms
-    # flipping. Two spots are the whole price.
+    # rich2, room 107 in the elevator shaft: walkable only once Flipmap 7 is
+    # on, and Lara only gets there from the ground floor - so AFTER the
+    # whole elevator section. The model sees it in zone 2, together with the
+    # shaft itself, several stations too early. A FLIP_GATE does not help:
+    # 107 is a base room without its own flip variant, the geometry change
+    # comes from neighboring rooms flipping. Two spots are the whole price.
     #
-    # Likewise from the user and noted here only so it does not get lost:
-    # room 105 is the deadstop after the elevator crash - from there it
+    # Room 105 is the deadstop after the elevator crash - from there it
     # goes back into the level. It has no spots anyway, all its sectors are
     # too steep; for a later island group it is the right stop.
     #
-    # The user's first bar list from the trview pass: 19, 42, 43, 44, 60
-    # and 66. Four of them (42, 43, 44, 66) lie in the elevator island and
-    # were already barred there for key items - now nothing at all may lie
-    # there.
-    # 34 and 110 joined in the last review. Room 34 is the one with the
-    # motion sensor that sets off the traps - that question is settled too.
-    # 14, 15, 16 and 18 joined on 2026-08-15: per the user they lie behind
-    # door 171 and thus belong neither to the start island nor reliably to
-    # the area behind it. 19 and 60 already stood here before.
+    # 19, 42, 43, 44, 60 and 66: four of them (42, 43, 44, 66) lie in the
+    # elevator island and were already barred there for key items - now
+    # nothing at all may lie there. Room 34 is the one with the motion
+    # sensor that sets off the traps. 14, 15, 16 and 18 lie behind door 171
+    # and thus belong neither to the start island nor reliably to the area
+    # behind it.
     'rich2' = @(107,14,15,16,18,19,34,42,43,44,60,66,110)
-    # rich3, the user's bar list from the trview pass. 28 rooms; room 121 he
-    # had named twice, 209 came last. With that rich3 is done.
+    # rich3, 28 rooms.
     'rich3' = @(2,23,24,33,41,47,51,52,56,58,60,68,71,72,84,85,92,121,151,153,
                 169,170,171,178,193,198,204,209)
-    # Room 113 is the first and at the same time shows why the model can
-    # help so little here: the room contains NOT ONE item and NOT ONE
-    # static, its spikes sit in the room geometry itself. Neither the item
-    # nor the statics list knows of them, and a sector with floor and head
-    # room looks flawless to the exporter. Such traps can only be found by
-    # eye.
+    # Room 113 shows why the model can help so little here: the room
+    # contains NOT ONE item and NOT ONE static, its spikes sit in the room
+    # geometry itself. Neither the item nor the statics list knows of them,
+    # and a sector with floor and head room looks flawless to the exporter.
+    # Such traps can only be found by eye.
     # 155 is at the same time island 2's deadstop. That does not clash: the
     # sections are determined via the room graph and DeadstopRooms,
     # NO_ITEM_ROOMS acts only afterwards on the spots.
-    # 109 joined with #61 (user review at the wall test): "room 109 may be
-    # nothing."
     'andy3' = @(109,10,12,14,15,16,17,19,22,23,24,25,27,35,36,86,87,108,113,115,116,
                 120,121,133,155,156,158,167,171,172,209)
 }
@@ -695,15 +627,14 @@ $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$Le
 #----------------------------------------------------------------------------
 $TYPE_EXCLUDE_SECTORS = @{
     'joby2' = @{ 172 = @('141,9,3','141,8,3','141,6,2') }
-    # andy3 (#61), user statements from the debug level 2026-08-24. A room
-    # bar would be too coarse in all cases - the rooms are mostly fine for
-    # the respective type.
+    # andy3. A room bar would be too coarse in all cases - the rooms are
+    # mostly fine for the respective type.
     'andy3' = @{
         173 = @('38,2,1','38,3,1','34,2,12','34,3,12')   # coin
-        # Chalk and crowbar: room 31, tile (2,1) - "the geometry there is
-        # too sharp". Both are wall grabs (OCB 2 and 9) and have NO
-        # constraint; they are therefore barred via typeNoSectors, the list
-        # that takes effect outside the constraint branch.
+        # Chalk and crowbar: room 31, tile (2,1) - the geometry there is too
+        # sharp for a valid wall grab. Both are wall grabs (OCB 2 and 9) and
+        # have NO constraint; they are therefore barred via typeNoSectors,
+        # the list that takes effect outside the constraint branch.
         172 = @('31,2,1')                                # chalk
         174 = @('31,2,1')                                # crowbar
     }
@@ -711,14 +642,13 @@ $TYPE_EXCLUDE_SECTORS = @{
 
 $TYPE_ALLOW_ROOMS = @{
     'Andrea2' = @{
-        # Rooms confirmed as "safe" by the user for the crowbar.
+        # Rooms confirmed safe for the crowbar.
         # 240, NOT 172: typeId 172 is called "Puzzle Item1" everywhere, but
         # in Andrea2 it is the valve (item 128, room 196) that is broken
         # open with the crowbar. The real crowbar is typeId 240 "Crowbar
         # Item" (item 2, room 1) - in the whole game only here. In joby3 and
         # rich1 the crowbar really is disguised as a puzzle/key item, hence
         # the risk of confusion.
-        # Room 26 joined in the last review.
         240 = @(0,1,10,17,25,26,46,50,54,207)
     }
     'Andrea3' = @{
@@ -727,8 +657,8 @@ $TYPE_ALLOW_ROOMS = @{
                 88,89,90,100,101,102,103,104,105,106,107,
                 108,110,111,119,120,121,129)
         # Puzzle Item4 Combo1: from room 0 toward 63. The direction toward 58
-        # is barred - a slope lies there, i.e. a one-way street. The dead
-        # stop per the user is room 35.
+        # is barred - a slope lies there, i.e. a one-way street. The
+        # deadstop is room 35.
         186 = @(0,9,31,32,33,35,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,
                 52,53,54,59,60,61,62,63,65,68,75,76,78,79,81,82,84,
                 86,93,94,95,96,97,98,99,109,117,118,125,128)
@@ -738,15 +668,11 @@ $TYPE_ALLOW_ROOMS = @{
 # Like TYPE_ALLOW_ROOMS, only not counted by hand: the allowed room list is
 # derived as a FLOOD over the room graph - start room plus stops.
 #
-# Needed for andy3's coin (#61). The user described the area exactly so, as
-# a directional statement:
-#
-#   "Room 137 -> 139 coin forbidden. Room 137 -> 142 coin allowed, up to 2
-#    points room 97 and room 149. Room 97 must be a stop because that is
-#    behind the water witch - there is a teleporter into another area,
-#    everything around room 157. Room 149 is the other deadstop, that is
-#    the return from the other teleporter. The island in which the coin may
-#    occur is (137 -> 142 and everything after that up to |149|97)."
+# Needed for andy3's coin: it may lie from room 142 onward, up to the two
+# deadstops 97 and 149, but not back through 137 -> 139. Room 97 must be a
+# stop because it lies behind the water witch, where a teleporter leads into
+# another area (around room 157); room 149 is the other deadstop, the
+# return path of that teleporter.
 #
 # As a list that would be 104 room numbers - unreadable and dead as soon as
 # the level graph changes. As a flood, the INTENT stands there: from 142,
@@ -809,8 +735,8 @@ if ($TYPE_EXCLUDE_SECTORS.ContainsKey($LevelName)) {
 # are united in the inventory into Puzzle Item4, only that goes into a
 # Puzzle Hole4 - and only the hole has a zone. Decisive is item 34 in room
 # 24: there the complete combo triggers the teleport. The second Puzzle
-# Hole4 (item 20, room 8) is per the user pure decoration masking the
-# teleport, and no bound. Both lie in zone 3 anyway.
+# Hole4 (item 20, room 8) is pure decoration masking the teleport, and no
+# bound. Both lie in zone 3 anyway.
 # Combo2 (187) deliberately does NOT stand here - see FIXED_ITEMS.
 # Value here: typeId -> maxZone.
 $EXTRA_POOL_TYPES = @{
@@ -821,7 +747,7 @@ $EXTRA_POOL_TYPES = @{
     # is disguised as a puzzle/key item and hangs on a pickup cutscene. Here
     # it is a normal pickup. Zone limit 1 = the zone of the valve (item 128,
     # room 196) that cannot be broken open without the crowbar; the actual
-    # bound is the room list the user confirmed as "safe".
+    # bound is the room list confirmed as safe in TYPE_ALLOW_ROOMS.
     'Andrea2' = @{ 240 = 1 }
     # rich2's only real key item: Puzzle Item3 (typeId 174, item 234, room
     # 166). Of its four locks only Puzzle Hole3 (item 207, room 147) finds a
@@ -858,7 +784,7 @@ $EXTRA_POOL_TYPES = @{
     # Decisive is the lock's zone: room 119 lies in zone 2. Both vanilla
     # positions also lie on zone-2 sectors, so the limit forbids neither.
     'rich3'   = @{ 180 = 2; 181 = 2 }
-    # andy3's coin (typeId 173, Puzzle Item2) - the last remnant of #61.
+    # andy3's coin (typeId 173, Puzzle Item2).
     #
     # It has NO lock in the whole level and therefore does not appear in the
     # keyConstraints by itself; it is the trigger of the swamp witch
@@ -870,42 +796,38 @@ $EXTRA_POOL_TYPES = @{
     # maxZone 1 is the level's maximum, so the zone restricts nothing - that
     # is intentional. The actual bound is the deadstop in room 137
     # (NO_KEY_ISLAND above): behind it lies a teleporter onto the start
-    # island, and a coin beyond it would be a softlock (user statement
-    # 2026-08-24: range 142 -> 135).
+    # island, and a coin beyond it would be a softlock (range 142 -> 135).
     'andy3'   = @{ 173 = 1 }
 }
 
 # rich2's start island: everything Lara can enter BEFORE the X-ray scanner.
-# List from the user (2026-08-15) - it is not derivable from the data, the
-# sector graph is undirected and floods past the point of no return.
-# Needed by REQUIRED_INJECTIONS and TYPE_NO_ROOMS, hence it stands before
-# both.
+# Hand-curated list, not derivable from the data - the sector graph is
+# undirected and floods past the point of no return. Needed by
+# REQUIRED_INJECTIONS and TYPE_NO_ROOMS, hence it stands before both.
 #
-# Addendum of the same day: 14, 15, 16, 18, 19 and 60 lie per the user
-# BEHIND the door and do not belong to the island. They now stand in
-# NO_ITEM_ROOMS - nothing lands there at all anymore, which also settles
-# the HK question for them.
+# 14, 15, 16, 18, 19 and 60 lie BEHIND the door and do not belong to the
+# island. They stand in NO_ITEM_ROOMS instead - nothing lands there at all
+# anymore, which also settles the HK question for them.
 $RICH2_START_ISLAND = @(8,9,10,12,21,29,48,49,50,51,52,53,54,55,56,
                       84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
                       134,135,136,137,138,139,141,170,177)
 
 # The item-free rooms stand in NO_ITEM_ROOMS further down - for rich2, 14,
-# 15, 16 and 18 are added there too (behind door 171, user statement).
+# 15, 16 and 18 are added there too (behind door 171).
 
 # Items a level absolutely NEEDS but that are missing in vanilla. Andrea3
 # contains not a single crowbar (typeId 172, counted in the level: 0
 # instances) - a latent softlock already in vanilla. The randomizer must not
-# only redistribute here but add. Room 120 per the user, the secret (item
-# 102, Pickup Item4) already lies there.
+# only redistribute here but add. Room 120 already holds the secret (item
+# 102, Pickup Item4).
 $REQUIRED_INJECTIONS = @{
     # typeId 240 "Crowbar Item", NOT 172: 172 is called "Puzzle Item1" but is
     # something different per level (a disguised crowbar in joby3/rich1, a
-    # valve in Andrea2). 172 first stood here wrongly - noticed only when the
-    # randomizer actually produced the patch.
+    # valve in Andrea2).
     'Andrea3' = @( @{ typeId = 240; room = 120; reason = 'level contains no crowbar - vanilla softlock' } )
-    # rich2: one HK and two magazines on 140(1,2), spot chosen by the user.
-    # Unlike Andrea3's crowbar with a fixed SECTOR, because here the one tile
-    # matters - all three should lie there together.
+    # rich2: one HK and two magazines on 140(1,2). Unlike Andrea3's crowbar
+    # with a fixed SECTOR, because here the one tile matters - all three
+    # should lie there together.
     #
     # The reason is a softlock only the randomizer creates: from room 140 on,
     # a key item can land under an enemy, and without a weapon Lara could
@@ -916,37 +838,36 @@ $REQUIRED_INJECTIONS = @{
     # The bar there is aimed at randomly distributed weapons BEFORE the
     # X-ray scanner in room 9 - Lara must disarm herself at mesh 15, and a
     # second weapon anywhere before it makes that pointless. Room 140 lies
-    # behind the keypad door and per the user behind a point of no return,
-    # the scanner is long passed by then. The level end is safe as well: the
+    # behind the keypad door and behind a point of no return, so the scanner
+    # is long passed by then. The level end is safe as well: the
     # trigger-triggerer at the fire extinguisher hangs on FlipMap 0, which
     # is only switched off in room 58 - a weapon alone thus opens nothing.
     # Injections do not run through the weapon filter anyway, they are
     # placed directly; the bar stays in force for the distribution.
     'rich2'   = @(
         # This HK's height offset does NOT stand here but in TYPE_OFFSET
-        # under rich2 - a second entry here would double it.
-        # Globally it is gone since #61: the engine already lifts a pickup
-        # by bounds[3] at OCB 0, our -100 came on top and left the HK
-        # floating. Only at this hand-picked spot is it needed.
+        # under rich2 - a second entry here would double it. Globally the
+        # offset is gone: the engine already lifts a pickup by bounds[3] at
+        # OCB 0, and a further -100 on top left the HK floating. Only at
+        # this hand-picked spot is it needed.
         @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - from here on a key item can lie under an enemy' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK ammo next to the HK on the same tile' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK ammo next to the HK on the same tile' }
 
-        # Mandatory Deagle for the start island (user wish 2026-08-15). The
-        # start island is enemy-rich, and since only the HK is barred there,
-        # other weapons may lie around - but chance alone delivers none:
-        # only three to four weapons are scattered per run, and the island
-        # provides 117 of the 544 spots (21 percent). Measured over six
-        # seeds, not a single one landed there.
+        # Mandatory Deagle for the start island. The start island is
+        # enemy-rich, and since only the HK is barred there, other weapons
+        # may lie around - but chance alone delivers none: only three to
+        # four weapons are scattered per run, and the island provides 117 of
+        # the 544 spots (21 percent); measured over six seeds, not a single
+        # one landed there.
         #
         # No fixed room but the whole island as the choice: the seed picks a
-        # different free sector in it every time ("the room can always be
-        # random"). Weapon and magazines do NOT lie together here - each
-        # line rolls its own spot.
+        # different free sector in it every time. Weapon and magazines do
+        # NOT lie together here - each line rolls its own spot.
         #
         # Amount: the Deagle brings 6 shots on pickup, each magazine another
         # 6 (newinv2.cpp:2550 and 2622) - with three magazines that is 24
-        # shots, the "about 20" the user wanted.
+        # shots total.
         @{ typeId = 347; rooms = $RICH2_START_ISLAND; reason = 'Deagle - the start island is enemy-rich, pistols alone do not suffice' }
         @{ typeId = 348; rooms = $RICH2_START_ISLAND; reason = 'Deagle ammo for the start island (6 shots)' }
         @{ typeId = 348; rooms = $RICH2_START_ISLAND; reason = 'Deagle ammo for the start island (6 shots)' }
@@ -974,10 +895,10 @@ $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQU
 # The same maxim as with VANILLA_TYPES - a table that only describes an
 # intent and enforces nothing does not work.
 #
-# 345 (HK): otherwise sits in the floor, invisible and unfindable. Observed
-# by the user. The game's only HK (rich2 item 6, room 8) lies 384 units up
-# in vanilla, but stands on a pedestal there (OCB 4) and is scripted; for a
-# freely placed one, 100 suffice.
+# 345 (HK): otherwise sits in the floor, invisible and unfindable. The
+# game's only HK (rich2 item 6, room 8) lies 384 units up in vanilla, but
+# stands on a pedestal there (OCB 4) and is scripted; for a freely placed
+# one, 100 suffice.
 #
 # Andrea2 / 174: not a height but a depth problem - the object lands at the
 # sector's edge instead of the center, its origin sits half a sector off.
@@ -987,35 +908,29 @@ $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQU
 # positions.
 #----------------------------------------------------------------------------
 $TYPE_OFFSET = @{
-    # The HK (345) stood here with dy -100 and is out again (#61, user
-    # observation 2026-08-19: "the HK floats above the floor again").
+    # The HK (345) does not need a global offset: recomputed instead of
+    # guessed. ModelOffset on the model in rich2 shows the meshes lie at y
+    # 23..50, i.e. BELOW the origin (y grows downward). InitialisePickup
+    # corrects with y -= bounds[3] at OCB 0, and bounds[3] is exactly that
+    # 50. An item at floor height is thus already lifted by the engine to
+    # floorY-50, putting the model's lower edge exactly on the floor. A
+    # further -100 on top would put it at floorY-150, floating 100 units in
+    # the air.
     #
-    # Recomputed instead of guessed. ModelOffset on the model in rich2: the
-    # meshes lie at y 23..50, i.e. BELOW the origin (y grows downward).
-    # InitialisePickup corrects with y -= bounds[3] at OCB 0, and bounds[3]
-    # is exactly that 50. An item at floor height is thus already lifted by
-    # the engine to floorY-50, putting the model's lower edge exactly on
-    # the floor. Our -100 came on top: floorY-150, the model floats 100
-    # units in the air - exactly the picture the user sees.
-    #
-    # The old rule "the HK must go 100 higher or it is invisible" dates
-    # from the time of the faulty rich2 import; it compensated a different
-    # problem. Should the HK stick in the floor without an offset after
-    # all, -50 is the next candidate, not -100.
+    # Should the HK stick in the floor without any offset after all, -50 is
+    # the next candidate, not -100.
     'ALL'     = @{ }
-    # ... except in rich2. There REQUIRED_INJECTIONS puts an HK onto a spot
-    # hand-picked by the user (room 140, sector 1,2), and exactly there the
-    # offset is still needed - user finding 2026-08-19: "Only for rich2 we
-    # must keep the Y offset. The other levels can stay without the
-    # offset."
+    # ... except in rich2. There REQUIRED_INJECTIONS puts an HK onto a
+    # hand-picked spot (room 140, sector 1,2), and exactly there the offset
+    # is still needed.
     #
     # Practically affects only this one HK: rich2's vanilla HK (item 6)
     # stands in VANILLA_TYPES and does not travel anyway.
     'rich2'   = @{ 345 = @{ dy = -100 } }
-    # Andrea2 / 174 stood here with dz -512 and is out again: the type now
-    # stays vanilla (see VANILLA_TYPES), so it is not moved at all anymore.
-    # The measured offset stays noted for completeness in case the object
-    # ever returns to the pool.
+    # Andrea2 / 174 needed dz -512 while it moved; the type now stays
+    # vanilla (see VANILLA_TYPES), so it is not moved at all anymore. The
+    # measured offset stays noted for completeness in case the object ever
+    # returns to the pool.
 }
 
 #----------------------------------------------------------------------------
@@ -1027,25 +942,20 @@ $TYPE_OFFSET = @{
 # but the PICKUP MANNER. Andrea2's Puzzle Item3 carries OCB 2 - the crowbar
 # pickup with its own bounds, its own animation and inventory check
 # (pickup.cpp, case 2). With OCB 0 it lands in the default branch, and
-# there it is provably not pickable at all: the user tried it at three
-# different spots, two of them without any trigger binding. With OCB 2 Lara
-# plays the animation and picks it up.
+# there it is provably not pickable at all, confirmed at several spots,
+# some without any trigger binding. With OCB 2 Lara plays the animation and
+# picks it up.
 #
 # Level-bound here as well: typeId 174 is five different things in five
 # levels, and only in Andrea2 is it a crowbar object.
-#----------------------------------------------------------------------------
-# ANDREA2 / 174 STOOD HERE AND IS OUT AGAIN - the attempt succeeded and
-# still led to the opposite. With OCB 2 Lara picks the object up at any
-# spot, the animation runs, the piece lands in the inventory. Only then the
-# rest of the condition stands there: the crowbar pickup needs a WALL
-# behind it and an angle matching that wall (the user saw it in game and
-# named it himself). Both lie below the sector resolution - the model
-# computes in whole 1024 tiles and knows no wall orientation. It could thus
-# not guarantee a valid position, only guess one.
 #
-# The user made the same decision in THIS level once before: Andrea2's
-# valve (typeId 172) stands in VANILLA_TYPES for exactly this reason. 174
-# follows it.
+# With OCB 2 kept, Lara picks the object up at any spot and the animation
+# runs, but the crowbar pickup's full condition then applies: it needs a
+# WALL behind it and an angle matching that wall, confirmed in game. Both
+# lie below the sector resolution - the model computes in whole 1024 tiles
+# and knows no wall orientation, so it cannot guarantee a valid position,
+# only guess one - the same reason Andrea2's valve (typeId 172) stands in
+# VANILLA_TYPES.
 #
 # Measured and recorded here in case the object ever returns to the pool:
 # it then needs dz -512 (mesh origin offset by half a sector) and dy +512,
@@ -1054,8 +964,9 @@ $TYPE_OFFSET = @{
 #
 # The mechanism stays, it is built and tested - there is just currently no
 # type for which it would be right.
+#----------------------------------------------------------------------------
 $KEEP_OCB = @{
-    # Andrea2's wall pickups (#61). Both carry OCB 2 (crowbar grip); the
+    # Andrea2's wall pickups. Both carry OCB 2 (crowbar grip); the
     # randomizer otherwise zeroes the OCB on moving, and with OCB 0 the
     # object would not be pickable at all anymore.
     #
@@ -1089,21 +1000,19 @@ $typeOffsets = @( $typeOffsetOf.GetEnumerator() | ForEach-Object {
 # readable from the level data - here: Andrea3 item 49 (Puzzle Item4
 # Combo2) triggers a door. Exported into the zones JSON so a later
 # randomizer can adopt the bar instead of having to rediscover it.
-# The enemy entries below come from the user's list "Gegner die Vanilla
-# bleiben muessen.txt" - enemies that must stay vanilla (2026-08-14):
-# scripted enemies that stay untouched
-# for cutscenes, stealth sequences or later reworks. FIXED_ITEMS beats both
-# the enemy swap and every placement.
+# The enemy entries below are scripted enemies that stay untouched for
+# cutscenes, stealth sequences or later reworks. FIXED_ITEMS beats both the
+# enemy swap and every placement.
 $FIXED_ITEMS = @{
     'Andrea3' = @{
         49 = 'Puzzle Item4 Combo2 - triggers a door'
         79 = 'Roman god (room 90) - stays vanilla (user list 2026-08-14)'
     }
     'Andrea2' = @{
-        # Item 128 (the valve) stood here with the reason "must sit at a
-        # wall". Exactly that is what the placement does itself since #61:
-        # wall edge and angle are chosen, KEEP_OCB keeps the OCB 2. The
-        # reason is thus gone, the item may travel.
+        # Item 128 (the valve) needed the reason "must sit at a wall" while
+        # it moved. That is what the placement now does itself: wall edge
+        # and angle are chosen, KEEP_OCB keeps the OCB 2, so the reason is
+        # gone and the item may travel.
         # The scripted Larson. Cutscene 8 (andrea3_end, deltapak.cpp) wakes
         # EXACTLY THIS item and makes it killable, its death fires the heavy
         # trigger on 72,2,2 and with it the death cutscene. A different
@@ -1128,12 +1037,11 @@ $FIXED_ITEMS = @{
     'joby2'   = @{
         20 = 'sniper (room 19) - scripted, stays vanilla (user list)'
         21 = 'sniper (room 21) - scripted, stays vanilla (user list)'
-        # Item 69 (guard OCB 3, room 58 - gets up from the chair) stood here
-        # until the slot decoupling #111: its OCB sets meshswap_meshbits,
-        # and the shared slot 400 carried a foreign donor's set. Since every
-        # enemy has its own parking spot (462-467), a native guard falls
-        # back to the level's own MESHSWAP1 - the hands are right again,
-        # the item may travel.
+        # Item 69 (guard OCB 3, room 58 - gets up from the chair) needed the
+        # entry while its OCB set meshswap_meshbits and the shared slot 400
+        # carried a foreign donor's set. Since every enemy has its own
+        # parking spot (462-467), a native guard falls back to the level's
+        # own MESHSWAP1 - the hands are right, the item may travel.
     }
     'joby3'   = @{ 186 = 'chef (room 120) - only killable via the stealth cutscene, stays vanilla (user list)' }
     'joby5'   = @{ 145 = 'Crane Guy MIP (room 121) - cutscene double, stays vanilla (user list)' }
@@ -1142,8 +1050,7 @@ $FIXED_ITEMS = @{
         85 = 'scientist (room 34) - aim-at cutscene, stays vanilla (user list)'
         180 = 'Twogun (room 130) - stealth-kill sequence, stays vanilla (user list)'
     }
-    # rich2's guards (USSR). User requirement since #38, confirmed and
-    # extended by the user list 2026-08-14.
+    # rich2's guards (USSR) stay vanilla.
     'rich2'   = @{
         154 = 'guard (USSR, room 84) - stays vanilla (user requirement)'
         155 = 'guard (USSR, room 84) - stays vanilla (user list)'
@@ -1152,11 +1059,9 @@ $FIXED_ITEMS = @{
     'rich3'   = @{
         183 = 'Hitman (room 152) - stays vanilla (user list)'
         200 = 'Hitman (room 183) - stays vanilla (user list)'
-        # User decision 2026-08-17 (#109): the soldier family may now be
-        # swapped with an OCB too - but not these two. They stand together
-        # in room 68 (both OCB 5) and hang on the ROPE; a different type
-        # there makes the spot unplayable. "53 54 must stay for now because
-        # of the rope."
+        # The soldier family may be swapped with an OCB too - but not these
+        # two. They stand together in room 68 (both OCB 5) and hang on the
+        # ROPE; a different type there makes the spot unplayable.
         53 = 'SWAT+ (room 68) - hangs on the rope, stays vanilla for now'
         54 = 'SWAT (room 68) - hangs on the rope, stays vanilla for now'
     }
@@ -1168,63 +1073,37 @@ $FIXED_ITEMS = @{
 # Andrea2's valve (172) is the case: it must sit within 512 units of a wall
 # AND its angle must match that wall. Both are conditions below the sector
 # resolution - the model works with whole 1024 sectors and knows no wall
-# orientation, so it could not guarantee a valid position at all. User
-# decision: "The crowbar as random is enough."
+# orientation, so it could not guarantee a valid position at all.
 $VANILLA_TYPES = @{
-    # 174 joined after a long search and for the same reason as 172. The
-    # randomizer zeroes the OCB when moving, and with OCB 0 the object is
-    # NOT pickable - the user tried it at three spots, two of them without
-    # any trigger binding. With the OCB 2 kept it works (tested), but then
-    # the crowbar pickup's full condition applies: a wall behind it and a
-    # matching angle. A model made of 1024 sectors without wall orientation
-    # cannot guarantee that. See the long reasoning at KEEP_OCB.
-    # Andrea2 listed 172 and 174 here - the two wall pickups. Since #61 they
-    # may travel: the placement now picks wall edge and angle, and KEEP_OCB
-    # holds their OCB 2. The reason for the shutdown is thus gone. A side
-    # effect that had to be checked: for shut-down types this script derives
-    # no key constraint - which is why the wall items in the first test
-    # level reached all the way to the level's end.
     # joby3's Puzzle Item1 (item 41, room 22) is the disguised crowbar - it
     # looks like a puzzle piece but opens the crowbar doors 25 and 125. It
     # stays in place so the pickup cutscene is right.
     #
-    # Plus two things around the chef in room 120/107, both user statements:
-    # Key Item6 (201) stays lying with the chef, and the pistols (334) stay
-    # in room 107 - if they are moved, the chef glitch occurs. That is also
-    # why Key6 is no case for a deadstop; only Key Item7 needs one, and the
-    # derived rule "not behind its own door" (door 175) already delivers it
-    # by itself.
+    # Plus two things around the chef in room 120/107: Key Item6 (201) stays
+    # lying with the chef, and the pistols (334) stay in room 107 - if they
+    # are moved, the chef glitch occurs. That is also why Key6 is no case
+    # for a deadstop; only Key Item7 needs one, and the derived rule "not
+    # behind its own door" (door 175) already delivers it by itself.
     'joby3' = @(172,201,334)
     # rich1's Puzzle Item3 is the CD. In vanilla it carries Invisible=true
     # and lies outside the map; the switch in room 15 activates it together
     # with Door 4 and Door 2. In game it falls out of the suit once its
     # animation runs. A relocation would destroy the reveal.
     'rich1'   = @(174)
-    # andy3: all three puzzle items stay put. User decision, and the trview
-    # pictures show why - each sits in the scenery instead of lying on the
-    # floor. The chalk (172) sits in a rock wall and carries OCB 2, the
-    # crowbar pickup; the crowbar (174, OCB 9) sits in a wire fence; the
-    # coin (173, OCB 11) lies on an ornamental lid in the water. On moving,
-    # OCB is set to 0, all three would afterwards lie flat on the floor and
-    # the staging would be gone - the same reason rich1's CD does not
-    # travel.
-    # andy3: 172 (chalk, OCB 2) and 174 (crowbar in the fence, OCB 9) are
-    # free since #61 - the placement picks wall edge and angle, KEEP_OCB
-    # holds their OCB.
+    # andy3: 172 (chalk, OCB 2) and 174 (crowbar, OCB 9) travel freely - the
+    # placement picks wall edge and angle, and KEEP_OCB holds their OCB.
     #
-    # 173 (coin) is ALSO FREE since 2026-08-24 - the last remnant of #61.
-    # The old reason was its OCB 11, and that turned out to be an error:
-    # `PickUpCollision` knows only 1, 2, 3/4/7/8 and 9 as special branches,
-    # EVERYTHING else (11 too) runs into `default` and is picked up
-    # perfectly normally; the floor correction in `InitialisePickup` holds
-    # for 0 and 11 alike. A coin set to 0 thus behaves exactly as before -
-    # which is why it does NOT stand in KEEP_OCB either.
+    # 173 (coin) also travels freely: its OCB 11 does not need a
+    # constraint. `PickUpCollision` knows only 1, 2, 3/4/7/8 and 9 as
+    # special branches - EVERYTHING else (11 too) runs into `default` and
+    # is picked up perfectly normally; the floor correction in
+    # `InitialisePickup` holds for 0 and 11 alike. A coin set to 0 thus
+    # behaves exactly as before, which is why it does NOT stand in KEEP_OCB
+    # either.
     #
-    # What is really lost is only the staging: it lay on an ornamental lid
-    # in the water (room 97, right next to the water witch in room 99).
-    # Exactly that is what the user is now checking in game - including the
-    # question what the witch does when nobody has to climb into her pool
-    # anymore.
+    # What is lost by moving it is only the staging: in vanilla it lies on
+    # an ornamental lid in the water (room 97, right next to the water
+    # witch in room 99).
     'andy3'   = @()
     # rich2: the HK (typeId 345, item 6 in room 8). It is no find but a
     # deposit - Lara lays it down at mesh 15 to disarm herself so the X-ray
@@ -1233,12 +1112,11 @@ $VANILLA_TYPES = @{
     # to 0 and the deposit would become an ordinary pickup.
     'rich2'   = @(345)
     # rich3's crossbow ammo (typeId 342). There are exactly THREE pieces in
-    # the whole level - items 10 (room 2), 82 (room 79) and 209 (room 188)
-    # - and of typeId 343 not a single one. The user wanted three each in
-    # the crossbow and in the combo island; that cannot be distributed with
-    # three, it would take three injections. Until he has decided on a
-    # solution, all three stay where they are - the safe direction, because
-    # wrongly distributed ammo is a softlock, ammo left in place is not.
+    # the whole level - items 10 (room 2), 82 (room 79) and 209 (room 188) -
+    # and of typeId 343 not a single one, too few to distribute across both
+    # the crossbow and the combo island without injections. All three stay
+    # where they are - the safe direction, because wrongly distributed ammo
+    # is a softlock, ammo left in place is not.
     'rich3'   = @(342)
 }
 $vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
@@ -1256,11 +1134,9 @@ if ($FIXED_ITEMS.ContainsKey($LevelName)) {
 # the old spot. If an item stands here, both are moved together - one
 # operation, not two.
 #
-# This is curation and expressly NO general rule. The count across all 13
-# levels showed that of 2044 items only two would qualify at all; the user
-# thereupon closed the item branch and released exactly this one case
-# ("Andre1 the Key107, there we only need to move the trigger along",
-# 13.08.2026).
+# This is curation and expressly NO general rule. Of 2044 items across all
+# 13 levels only two would qualify at all, and only one is released here:
+# Andrea1's Key Item7 (item 107).
 #
 # Do not add without checking:
 #   - Does the trigger carry a blocking command (flipmap, antitrigger,
@@ -1286,16 +1162,15 @@ if ($COUPLED_TRIGGERS.ContainsKey($LevelName)) {
 #
 # The case that led to it (Andrea2 item 62, Puzzle Item4): on its sector
 # lies a HeavyTrigger with Object(62), and on the same position stands the
-# Guardian (item 51). User: "That is a protection so the Guardian's death
-# fires the heavy trigger and sets the pickup to 11111." The puzzle piece
-# is thus only unlocked by the Guardian's death.
+# Guardian (item 51) - a protection so the Guardian's death fires the heavy
+# trigger and sets the pickup to 11111. The puzzle piece is thus only
+# unlocked by the Guardian's death.
 #
 # A HeavyTrigger cannot be taken along - it needs something heavy on
 # exactly this tile, and that is the dying Guardian. Instead of nailing the
 # item down forever because of that, the curation relieves it of the
 # condition: codebits to 11111 right at the start, then it is there from
-# the beginning and may travel. User decision: "We don't care, set it to
-# 11111 and off into the pool."
+# the beginning and may travel.
 #
 # Per entry: item index -> @{ flags = <value>; reason = <reasoning> }.
 # 31 is 11111 in binary, i.e. all five codebits.
@@ -1327,10 +1202,9 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 # Per entry: typeId -> reason/proof. The randomizer sets each of these
 # types into the level with its own OneShot trigger (see addTrigger).
 #
-# NEVER add (user requirement): Scientist, Guardian. The chef has been in
-# the cross pool since #124 (kCross joby3, baseSlot 460, borrowed soldier
-# death), the Hydra since 2026-08-15 - both run through the cross
-# machinery, not through this hand curation list.
+# NEVER add: Scientist, Guardian. The chef and the Hydra run through the
+# cross machinery (kCross, baseSlot 460, borrowed soldier death), not
+# through this hand curation list.
 # Before adding, check:
 #   - Does he need AI objects (AI_GUARD, AI_AMBUSH, ...)? Those do not
 #     exist elsewhere.
@@ -1339,11 +1213,10 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 #     Diagnose\AnimCmd.exe shows it.)
 #   - Does he need water, ceiling height, a track?
 #----------------------------------------------------------------------------
-# The user's list of 13.08.2026 ("Gegner Pool.txt" - the enemy pool),
-# restricted per level to
-# the types whose model is also loaded in THIS level. An enemy type the
-# level does not know cannot be placed - that would first need the object
-# transfer between levels (as with the weapon set).
+# The enemy pool, restricted per level to the types whose model is also
+# loaded in THIS level. An enemy type the level does not know cannot be
+# placed - that would first need the object transfer between levels (as
+# with the weapon set).
 #
 # Checked with Diagnose\SlotList.exe <level.trc> (lists all object
 # slots). One deviation from the list: DOG (41) lies ONLY in Andrea1, not
@@ -1388,9 +1261,9 @@ $ENEMY_TYPES = @{
     'andy3'   = @{ 89 = 'Imp - checked in andy1, not here yet' }
     'joby2'   = @{
         37 = 'Guard (Blue Guard)'
-        # Released by the user 17.08.2026. The Huskie is an enemy of its
-        # OWN, not the dog (41): its own control, 24 instead of 18 hit
-        # points, 26 instead of 21 meshes. joby2 is the only level with a
+        # The Huskie is an enemy of its OWN, not the dog (41): its own
+        # control, 24 instead of 18 hit points, 26 instead of 21 meshes.
+        # joby2 is the only level with a
         # model in slot 85 and has three vanilla instances (items 4, 86,
         # 153) - the hard instance rule above is thereby satisfied.
         85 = 'Huskie - the dog from joby2, its own type with its own control'
@@ -1436,13 +1309,12 @@ if ($ENEMY_TYPES.ContainsKey($LevelName)) {
 # of the 13 levels, but his model lies completely in Andrea2 and Andrea3 -
 # he is a cutscene actor there. What he lacks are exactly his samples, and
 # those can be copied over. His shot sample (map 90) was never shipped by
-# Core at all; the user picked matching replacements from joby5 in trview's
-# soundboard, checked in game.
+# Core at all; the replacements come from joby5's soundboard, checked in
+# game.
 #
-# IMPORTANT: whoever takes an enemy with an entry here into the pool
-# promises something placement alone cannot deliver - the patch path must
-# copy the samples along (task #67). Without that the enemy stands mute in
-# the level.
+# Whoever takes an enemy with an entry here into the pool promises
+# something placement alone cannot deliver - the patch path must copy the
+# samples along. Without that the enemy stands mute in the level.
 #
 # typeId -> list of: Map (the missing SFX number), FromLevel, FromMap, What.
 $ENEMY_SOUND_FIX = @{
@@ -1453,9 +1325,8 @@ $ENEMY_SOUND_FIX = @{
     # Larson: 96 and 98 sit in his death animation (rel15, frames 283 and
     # 340) and are missing in Andrea1 AND Andrea2 - in vanilla too, it just
     # never became audible because he never dies there (flight at 40 HP).
-    # Since the OneShot trigger he dies, so he needs the sounds. The
-    # replacements were picked by the user in trview's soundboard
-    # (14.08.2026).
+    # With the OneShot trigger he does die, so he needs the sounds; the
+    # replacements come from rich1's soundboard.
     45 = @(
         @{ Map = 96; FromLevel = 'rich1'; FromMap = 85;  What = 'death' },
         @{ Map = 98; FromLevel = 'rich1'; FromMap = 143; What = 'death' }
@@ -1477,7 +1348,7 @@ foreach($t in @($enemyTypes | ForEach-Object { [int]$_.typeId })){
 # That is typeId 223 and holds game-wide, independent of the level.
 # Together there are 36 - exactly the number the loading screen shows.
 #
-# The user wants to treat the secrets separately later: an own list of
+# Secrets are meant to be treated separately later: an own list of
 # hand-picked hiding spots plus a switch in the tool that takes them into
 # the pool. Until then they must not travel along - a secret lying openly
 # in the corridor is none anymore, and the niche finds (Andy2 item 142 with
@@ -1530,20 +1401,18 @@ $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName]
 # portals). The inner area is computed at runtime as a connected component
 # from the seed (without entering barrier rooms, without crossing the gate
 # sectors); afterwards every edge from outside to inside that does not run
-# through the gate sectors is cut. Requirement verified by the user in
-# trview for Andrea1: "from the gate 53/54 on, everything behind it may
-# contain no key item positions" - the red box on his map is exactly this
-# complex, the double gate 53/54 (room 112) the only legal access. A full
-# height/physics model would detect this automatically but is parked (see
-# -EnableClimbModel).
-# Rooms = the explicit list of rooms behind the gate. Three automatic
-# approaches were measured and discarded; the reasoning belongs here so
-# nobody repeats them blindly:
+# through the gate sectors is cut. For Andrea1: from the gate 53/54 on,
+# everything behind it may contain no key item positions - the double gate
+# 53/54 (room 112) is the only legal access. A full height/physics model
+# would detect this automatically but is parked (see -EnableClimbModel).
+#
+# Rooms = the explicit list of rooms behind the gate. Deriving it
+# automatically fails three ways, worth recording so nobody repeats them:
 #  1. Island flood from the courtyard: fails on principle because the area
 #     is only sealed ON ONE SIDE - in only through the gate, out by jumping
 #     off at many spots (room 117 alone borders 112,113,116,118,119,144,
 #     150,156). A flood follows the jump-offs outward and eats the level.
-#  2. Barrier room (street 112) as the stop: the flood immediately found
+#  2. Barrier room (street 112) as the stop: the flood immediately finds
 #     other ways out (117->150->130->113->120->114->...).
 #  3. Elevation as the separator: refuted - room 150 (outside) lies at
 #     yBottom -6144 like 145/165/166/181 (inside), room 113 (outside) at
@@ -1552,16 +1421,16 @@ $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName]
 # cleanly, and it lacks reliable floor semantics at portals. The list is
 # transparent for that, directly readable in trview and correctable per
 # room with one number.
-# The solution came from the user by INVERTING the question: instead of
-# guessing the inner rooms (failed, see above), he names the rooms that are
-# still walkable BEFORE the gate. They form a closed stop edge against
-# which a flood from the courtyard runs - the inner area thereby results
-# automatically and completely (Andrea1: 65 rooms, 1499 sectors, no escape
-# route left).
+#
+# The working approach INVERTS the question: instead of guessing the inner
+# rooms (failed, see above), name the rooms that are still walkable BEFORE
+# the gate. They form a closed stop edge against which a flood from the
+# courtyard runs - the inner area thereby results automatically and
+# completely (Andrea1: 65 rooms, 1499 sectors, no escape route left).
 # PreGateRooms expressly stay valid for placements; room 217 is included
-# because per the user it is to be excluded in general and as a stop has
-# the same effect anyway. Pure "air" rooms above these rooms are per the
-# user irrelevant. The emergency hard stop would be 114/120.
+# because it is excluded in general and as a stop has the same effect
+# anyway. Pure "air" rooms above these rooms are irrelevant. The emergency
+# hard stop would be 114/120.
 $GATED_AREA = @{
     'Andrea1' = @( @{
         Doors        = @(53,54)
@@ -1586,20 +1455,18 @@ $gatedAreas = @( if($GATED_AREA.ContainsKey($LevelName)){ $GATED_AREA[$LevelName
 # end of a long chain - the randomizer then produces unsolvable seeds.
 # joby2: Key 7 -> door -> keycard from the guard -> one level up -> jump
 # over the crates -> crane room (104) -> flipmap frees the way.
-# No entry verified yet. joby2 138/141 stood in here briefly and seemingly
-# lifted the level from 1 to 90 percent - wrong: no key/switch trigger in
-# joby2 switches them, so they never open and Lara walks past them. They
-# merely happened to stand at the edge of the reached area. joby2 in truth
-# stops at the geometry (the jump over the crates), see MANUAL_LINK.
+# No entry here: no key/switch trigger in joby2 switches doors 138/141, so
+# they never open and Lara walks past them - they merely happen to stand at
+# the edge of the reached area. joby2 in truth stops at the geometry (the
+# jump over the crates), see MANUAL_LINK.
 # Note: "door without a trigger" first means "door never opens", not "door
 # is opened by script" - assume the latter only after evidence.
 #
-# joby3, user decision (not proven from data but deliberately set as a
-# randomizer rule): the chef in room 120 is to be killed by stealth kill
-# (proximity-based, game/deltapak.cpp stealth3_start/end - see the analysis
-# further up, technically not derivable from sector/item data). Since
-# killing the chef is mandatory once room 120 is reached, the two doors
-# behind him count as safely passable as soon as room 120 is reached:
+# joby3: the chef in room 120 is killed by stealth kill (proximity-based,
+# game/deltapak.cpp stealth3_start/end - technically not derivable from
+# sector/item data). Since killing the chef is mandatory once room 120 is
+# reached, the two doors behind him count as safely passable as soon as
+# room 120 is reached:
 #   door 190 (room 124) <- Key Item6 (typeId 201), the chef's vanilla drop
 #   door 175 (room 106) <- Key Item7 (typeId 202), lies behind door 190 in room 107
 # Placement rule for the randomizer: Key Item6 stays bound to/near the chef
@@ -1610,8 +1477,8 @@ $SCRIPT_DOORS = @{
     # rich1: the scientist (item 85, room 34, OCB 9) has an aim-at cutscene -
     # aiming at him longer opens door 84 directly (the easy way). Kill him
     # instead and a detour is needed. Same class as the chef in joby3:
-    # proximity/behavior-based, not derivable from sector/item data.
-    # User decision, analogous to joby3: room reached = door counts as open.
+    # proximity/behavior-based, not derivable from sector/item data. Same
+    # rule: room reached = door counts as open.
     'rich1' = @{ 84 = 34 }
     # Andrea3: the Roman god (item 79, typeId 61, room 90, sector 2,3)
     # stands exactly on the HeavyTrigger that opens door 103 (Object:103,
@@ -1619,9 +1486,9 @@ $SCRIPT_DOORS = @{
     # chef/scientist this is no stealth/aim-at special case but a normal
     # fightable boss (no known immortality bug); the rule still models the
     # same case, because an NPC death cannot be modeled as "Lara reaches
-    # sector X". The chain afterwards per the user: door 103 -> Key Item2
-    # (room 119) -> key lock room 102 -> door 77 (room 89) -> level end
-    # area (EndLevel trigger, room 70).
+    # sector X". The chain afterwards: door 103 -> Key Item2 (room 119) ->
+    # key lock room 102 -> door 77 (room 89) -> level end area (EndLevel
+    # trigger, room 70).
     'Andrea3' = @{ 103 = 90 }
 }
 $scriptDoors = @{}
@@ -1647,7 +1514,7 @@ if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$Level
 # Hence the rule: sectors of a flip variant do NOT carry. That is the
 # conservative direction - it can only shrink reachability, never invent a
 # way, and a too-small area shows in the report, a too-large one only in
-# game. The user on it: "Flipmaps can often block ways."
+# game.
 #
 # Where a flip variant really opens a way, it is released here - same form
 # as $SCRIPT_DOORS: a reached room as the condition, not "always open".
@@ -1675,9 +1542,9 @@ $FLIP_GATE = @{
     # detour open. 2, 4 and 5 themselves have not a single placeable
     # sector - as a bar they cost nothing and cut the detour at its source.
     'joby2' = @( @{ BlockRooms = @(2,4,5,89); AfterRoom = 35; Why = 'roll gate at the crane' } )
-    # rich1: the second, hard way to the hammer, explained by the user. At
-    # door 153 in room 85 sits a lock that looks as if it could be shot
-    # open. Do it, and the shell casing fires the HeavyTrigger in room 89 -
+    # rich1: the second, hard way to the hammer. At door 153 in room 85 sits
+    # a lock that looks as if it could be shot open. Do it, and the shell
+    # casing fires the HeavyTrigger in room 89 -
     # it switches FlipMap 0, and Lara falls into the room with the Twogun.
     # That is no bug but the alternative to the hammer.
     #
@@ -1690,13 +1557,13 @@ $FLIP_GATE = @{
         @{ Rooms = @(106);              AfterRoom = 101; Why = 'HeavyTrigger in room 101' }
         @{ Rooms = @(107);              AfterRoom = 102; Why = 'HeavyTrigger in room 102' }
     )
-    # rich3, all seven groups explained by the user. The conditions do not
-    # stand there guessed but come from the trigger data - which sector
-    # sets which FlipMap is counted in the level.
+    # rich3, all seven flipmap groups. The conditions do not stand here
+    # guessed but come from the trigger data - which sector sets which
+    # FlipMap is counted in the level.
     #
-    # Group 0 (room 18, base 10) is deliberately missing here: per the user
-    # it only changes the looks of the staircase around Lara's start. It
-    # thus stays barred, and that costs nothing.
+    # Group 0 (room 18, base 10) is deliberately missing here: it only
+    # changes the looks of the staircase around Lara's start. It thus stays
+    # barred, and that costs nothing.
     #
     # Group 7 is missing as well, for the opposite reason: it opens no way
     # the base does not already have, so it does not appear in the report.
@@ -1713,8 +1580,8 @@ $FLIP_GATE = @{
         # - the base of this flip room.
         @{ Rooms = @(13);      AfterRoom = 26;  Why = 'connection to room 61, from there to the crossbow' }
         # The big group: nine rooms leading the staircase via room 57 into
-        # the rest of the level. The user: for that Lara FIRST needs the
-        # grappling gun - in the level that is the crossbow (typeId 341,
+        # the rest of the level. Lara FIRST needs the grappling gun - in the
+        # level that is the crossbow (typeId 341,
         # items 75 and 76 in room 79). Hence NeedTypes and not AfterRoom:
         # the room alone does not suffice, as with andy1's slingshot.
         @{ Rooms = @(9,20,28,32,48,49,50,53,54); NeedTypes = @(341); Why = 'the way via room 57 - needs the crossbow from room 79' }
@@ -1738,7 +1605,7 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # A sector is far from being a reachable placement spot. In joby2, crate
 # stacks stand in room 84; their tops are walkable sectors, but Lara only
 # gets up there at all AFTER she has Key Item8. A key on top is thereby
-# unreachable - exactly the case the user showed at item 1480.
+# unreachable.
 #
 # Instead of excluding such spots one by one, one room of the group sets
 # the floor height, and keys may lie no more than MaxYAbove above it. That
@@ -1754,7 +1621,7 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # Types that should go into the pool although no lock forces them - and
 # that have NO zone limit in the process. joby2: the fuse (Puzzle Item1)
 # behind doors 105/106. It is progress but no bound for anything earlier,
-# so it may lie anywhere. User decision.
+# so it may lie anywhere.
 # Without an entry such a type does not appear in the keyConstraints at
 # all and would thereby stay invisible in the test level and untouched in
 # the randomizer.
@@ -1764,8 +1631,8 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # joby3: the pistols must stay in room 107 or the chef glitch occurs -
 # VANILLA_TYPES handles that. But it does not suffice: VANILLA_TYPES nails
 # one type to its place but keeps no OTHER type from wandering there. A
-# shotgun randomly placed in the chef area triggered the same glitch. User
-# statement for the chef rooms: 105, 106, 120, 124, 125.
+# shotgun randomly placed in the chef area triggers the same glitch. Chef
+# rooms: 105, 106, 120, 124, 125.
 #
 # Barred is 334-348, i.e. weapons and their ammo. Medipacks (349/350),
 # lasersight (351), binoculars (352), flares (354/355) stay allowed - no
@@ -1775,12 +1642,12 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 #----------------------------------------------------------------------------
 # Level-wide height limit for spots.
 #
-# joby4 is a diving level, and the user measured in game: Lara gets
-# nowhere higher than about y 13200. That is no engine limit - for
-# vertical force the code only knows the sinks (laraswim.cpp:721, they pull
-# Lara to their own height) - but the water surface. Above it, at yBottom
-# 13056, the next room layer begins, into which she no longer ascends from
-# the water: 21 rooms there, another 27 above.
+# joby4 is a diving level; measured in game, Lara gets nowhere higher than
+# about y 13200. That is no engine limit - for vertical force the code only
+# knows the sinks (laraswim.cpp:721, they pull Lara to their own height) -
+# but the water surface. Above it, at yBottom 13056, the next room layer
+# begins, into which she no longer ascends from the water: 21 rooms there,
+# another 27 above.
 #
 # Unlike the island group in joby2 this is no property of a group and
 # holds for ALL types, not only keys. And unlike first assumed it is not
@@ -1800,9 +1667,9 @@ if ($MIN_FLOOR_Y.ContainsKey($LevelName)) { $levelMinFloorY = [int]$MIN_FLOOR_Y[
 # Minimum clearance between floor and ceiling.
 #
 # The exporter cuts off at 512 by itself - no level has a spot below that.
-# The user checked joby4 room 123 sector (3,3): floorY 15616, ceilingY
-# 15104, i.e. exactly 512, and Lara does not get there. 768 is the
-# engine's crawl height and thus the next sensible step.
+# joby4 room 123 sector (3,3): floorY 15616, ceilingY 15104, i.e. exactly
+# 512, and Lara does not get there. 768 is the engine's crawl height and
+# thus the next sensible step.
 #
 # DELIBERATELY NOT GLOBAL. The cross-check over all levels finds 25
 # vanilla pickups on sectors with clearance < 768 - among them joby3's Key
@@ -1834,13 +1701,13 @@ if ($MIN_CLEARANCE.ContainsKey($LevelName)) { $levelMinClearance = [int]$MIN_CLE
 #
 # The reach is not the cable's room - decisive is the FlipNumber of the
 # touched water mass, see joby.cpp:191. Which rooms those are therefore
-# does not stand in the level data; the mapping comes from the user:
+# does not stand in the level data; the mapping is:
 # cable 91 -> room 128, cable 136 -> 126 and 127, cable 206 -> 183,
 # cable 165 -> 158.
 #
-# User decision: NORMAL items may lie there, but no keys. The reason is
-# obvious - a normal pickup Lara fetches after the switch, a key by
-# contrast can be part of a chain needed earlier.
+# NORMAL items may lie there, but no keys. The reason is obvious - a
+# normal pickup Lara fetches after the switch, a key by contrast can be
+# part of a chain needed earlier.
 #----------------------------------------------------------------------------
 $NO_KEY_ROOMS = @{
     'joby5' = @(126,127,128,158,183)
@@ -1859,13 +1726,12 @@ $NO_WEAPON_ROOMS = @{
 # this bar holds for EVERY placement path (moving, weapon scattering, item
 # abundance).
 #
-# rich2: ONLY the HK may not go into the start island. The user checked in
-# game that the X-ray scanner in room 9 reacts exclusively to it - Lara
-# lays it down at mesh 15 in room 8 and passes unarmed. The scanner does
-# NOT respond to Uzi, shotgun or Deagle, so those may lie there; without
-# them the start island with its many enemies would have to be survived
-# with pistols only. HK ammo (346) is useless without the weapon and stays
-# allowed.
+# rich2: ONLY the HK may not go into the start island. In game the X-ray
+# scanner in room 9 reacts exclusively to it - Lara lays it down at mesh 15
+# in room 8 and passes unarmed. The scanner does NOT respond to Uzi,
+# shotgun or Deagle, so those may lie there; without them the start island
+# with its many enemies would have to be survived with pistols only. HK
+# ammo (346) is useless without the weapon and stays allowed.
 #----------------------------------------------------------------------------
 $TYPE_NO_ROOMS = @{
     'rich2' = @{ 345 = $RICH2_START_ISLAND }
@@ -1908,7 +1774,7 @@ if ($antitriggerImmune.Count -gt 0) {
 # a certain weapon stands nowhere. Andrea1: the bell (item 75) can only be
 # shot down with revolver/Desert Eagle plus lasersight. Item 72, by
 # contrast, is NOT gated - it can be hit with the pistols too by aiming
-# while kneeling (confirmed by the user in game).
+# while kneeling, confirmed in game.
 #
 # Evaluated before the constraint build: the zone in which the switch is
 # needed limits the named types. Before, this only stood in the text
@@ -1935,11 +1801,11 @@ elseif ($noWeaponRooms.Count -gt 0) {
 
 $POOL_TYPES = @{
     'joby2' = @(172)
-    # andy3 stood here briefly with 172 and 174 because the level has not a
-    # single lock and the progress chain otherwise does not appear in the
-    # keyConstraints at all. The user then decided for vanilla - see
-    # VANILLA_TYPES. The entry stays as a comment because the thought still
-    # holds should the puzzles ever travel after all:
+    # andy3's chalk and crowbar (172, 174) would belong here too - the
+    # level has not a single lock, so the progress chain otherwise does not
+    # appear in the keyConstraints at all - but they stay vanilla instead
+    # (see VANILLA_TYPES). The entry stays as a comment because the thought
+    # still holds should the puzzles ever travel after all:
     #   'andy3' = @(172,174)   together with TYPE_EXCLUDE_ROOMS further down
     # rich1: the hammer (Key Item7, typeId 202, item 35 in room 22). It has
     # no lock - its door 153 opens via the hamgate cutscene -, so without
@@ -1954,11 +1820,11 @@ $POOL_TYPES = @{
     # island and would moreover wrongly forbid seven island sectors from
     # zone 1. Hence here without a zone limit.
     'rich1' = @(202)
-    # rich2: the three types the user wants in the start area - Pickup
-    # Item2 (221), Bottle (235) and Cloth (236). None has a lock, so
-    # without this entry no constraint object arises at all on which the
-    # island group could hang - the island was dutifully computed and ran
-    # into the void. The same trap as with rich1's hammer.
+    # rich2: the three types meant for the start area - Pickup Item2 (221),
+    # Bottle (235) and Cloth (236). None has a lock, so without this entry
+    # no constraint object arises at all on which the island group could
+    # hang - the island would be computed and run into the void. The same
+    # trap as with rich1's hammer.
     'rich2' = @(221,235,236)
     # rich3: the crossbow (typeId 341, items 75 and 76 in room 79). In game
     # it is the grappling gun and thus a progress item - FlipMap 2, the way
@@ -1971,14 +1837,14 @@ $POOL_TYPES = @{
     # breathing apparatus, Puzzle Item4 Combo1+2 the battery; both go into
     # the suit and trigger the final cutscene. The two slots in room 40 lie
     # on top of each other and only feign combinability.
-    # User: the level has no point of no return, the parts are purely for
-    # the end - they may therefore appear anywhere.
+    # The level has no point of no return, the parts are purely for the
+    # end - they may therefore appear anywhere.
     'joby3' = @(184,185,186,187)
     # joby5: Puzzle Item1 and Item2 open the level's end. Slot 1 opens slot
     # 2, slot 2 triggers the end. That also explains why the trigger at
     # Puzzle Hole2 (item 108) looks empty - it has no object command
-    # because it ends the level instead of opening a door. Per the user
-    # both may lie anywhere, without any restriction.
+    # because it ends the level instead of opening a door. Both may lie
+    # anywhere, without any restriction.
     'joby5' = @(172,173)
     # andy1: three types, two different limits. Written as a hashtable
     # because a pure type list cannot express that - typeId -> maxZone.
@@ -1990,9 +1856,9 @@ $POOL_TYPES = @{
     # contradiction: the teleporter leads INTO zone 0.
     #
     # 174 is the iron clapper with which Lara fends off the imps in
-    # cutscene 10 - without it she dies there. The user allows it like the
-    # heart in both areas; in the real course of play the cutscene lies
-    # behind room 202, i.e. after the church. Zone 1 covers that.
+    # cutscene 10 - without it she dies there. Allowed in both areas like
+    # the heart; in the real course of play the cutscene lies behind room
+    # 202, i.e. after the church. Zone 1 covers that.
     #
     # 172, the heart, does not stand here - it has a lock and with it an
     # already derived limit (zone <= 1).
@@ -2014,7 +1880,7 @@ $ISLAND_GROUP = @{
     #
     # The second deadstop is room 186 with door 52. That is the actual way
     # into the level's end, from room 202 - but the flood wrongly finds it
-    # earlier via bridge 43. User statement.
+    # earlier via bridge 43.
     #
     # The island is computed and stands ready - IslandTypes is however
     # deliberately EMPTY. Puzzle Item1 does NOT belong in it: its lock
@@ -2035,13 +1901,10 @@ $ISLAND_GROUP = @{
     #   182/183 (slingshot)      zone 0 -> between teleporter and church
     #   172 (heart), 174 (clapper) zone 1 -> from the teleporter to behind the church
     'andy1' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(172,174,182,183); DeadstopRooms = @(47,186) } )
-    # andy3 has the same case as andy1 - only pointed the other way (#61,
-    # 2026-08-24). The teleporter stands in room 137 and takes Lara back to
-    # the START ISLAND; the coin (173) may therefore not lie there, or it
-    # grasps at nothing once she has left the section. User statement: "Key
-    # item range is from room 142 -> 135. It must not wander toward 137,
-    # there is a teleporter into the start island, then it would be a
-    # softlock."
+    # andy3 has the same case as andy1, pointed the other way: its coin's
+    # key item range is from room 142 -> 135, and must not wander toward
+    # 137, since a teleporter there leads back into the start island and
+    # would be a softlock.
     #
     # Why ISLAND_GROUP and not NO_KEY_ISLAND: the teleporter is NO portal,
     # the room graph does not see it. An ordinary flood can therefore not
@@ -2050,15 +1913,11 @@ $ISLAND_GROUP = @{
     # flood, by contrast, runs from Lara's start WITH CLOSED DOORS and
     # thereby maps exactly the area Lara reaches without progress.
     #
-    # The first two attempts were wrong and stand here as a warning: 137 as
-    # an additional deadstop on the existing NO_KEY_ISLAND shrank the bar
-    # from 3227 to 13 sectors (i.e. the opposite), and a second flood from
-    # room 29 barred 64 rooms without hitting the reported find spot.
-    # andy3 needs nothing here anymore: the coin is positively bounded via
-    # TYPE_ALLOW_ISLAND (from 142, stops 137/97/149). The interim state
-    # with NotOnIslandTypes is thereby superfluous - three overlapping bars
-    # for the same type were exactly the knot at which on 2026-08-24 only a
-    # single room remained.
+    # andy3 needs nothing here anymore: its coin (173) is positively bounded
+    # via TYPE_ALLOW_ISLAND (from 142, stops 137/97/149) instead - a
+    # NotOnIslandTypes entry here, stacked on top of NO_KEY_ISLAND and a
+    # separate flood, once left only a single room allowed by all three
+    # bars combined.
     # DeadstopRooms defines the island via a SECOND, sharper flood. The
     # track bed chain 2/4/5 and room 89 are barred in it, their flip
     # partners 43 and 53 are derived. What is then still reachable from
@@ -2068,8 +1927,8 @@ $ISLAND_GROUP = @{
     # unreachable.
     'joby2' = @( @{ BaselineRoom = 84; MaxYAbove = 1024; RequireTypes = @(202,203)
                     IslandTypes = @(203); DeadstopRooms = @(2,4,5,89) } )
-    # rich1, the hammer. The user's proposal, and it fits better than the
-    # zone limit: a flood from Lara's start with room 12 as the deadstop.
+    # rich1, the hammer. A flood from Lara's start with room 12 as the
+    # deadstop fits better than the zone limit.
     #
     # The island is no subset of a zone - it contains sectors from zone 0
     # AND zone 1 -, because "before room 12" and "before the first door"
@@ -2079,14 +1938,14 @@ $ISLAND_GROUP = @{
     # hammer lies vanilla in room 22 and thus inside.
     'rich1' = @(
         @{ IslandTypes = @(202); DeadstopRooms = @(12) }
-        # Key Item8, four deadstops delimited pairwise by the user: room 63
-        # yes / 111 no, 28 yes / 27 no, 81 yes / 31 no, 43 yes / 42 no. The
-        # key is reusable, a single instance serves all four locks - so it
-        # must lie before each of them.
+        # Key Item8, four deadstops delimited pairwise: room 63 yes / 111
+        # no, 28 yes / 27 no, 81 yes / 31 no, 43 yes / 42 no. The key is
+        # reusable, a single instance serves all four locks - so it must
+        # lie before each of them.
         @{ IslandTypes = @(203); DeadstopRooms = @(27,31,42,111); DoorsOpen = $true }
-        # Puzzle Item4. The user's requirement: a section between two bars,
-        # room 116 on one side and room 66 (door 107 stands there) on the
-        # other - in between the part may lie anywhere. Room 116 is
+        # Puzzle Item4: a section between two bars, room 116 on one side and
+        # room 66 (door 107 stands there) on the other - in between the
+        # part may lie anywhere. Room 116 is
         # reachable via room 114 with explosions and thus presumably itself
         # a point of no return.
         #
@@ -2095,12 +1954,12 @@ $ISLAND_GROUP = @{
         # bar would then already lie before it.
         @{ IslandTypes = @(175); StartRoom = 114; DeadstopRooms = @(66,116); DoorsOpen = $true }
     )
-    # rich2's start area: "everything up to door 105" (user). That is the
-    # keypad door in room 55, behind which it goes into the WC and with it
-    # into the rest of the level. Hence room 55 as the deadstop and a flood
-    # from Lara's start.
+    # rich2's start area: everything up to door 105, the keypad door in
+    # room 55, behind which it goes into the WC and with it into the rest
+    # of the level. Hence room 55 as the deadstop and a flood from Lara's
+    # start.
     #
-    # Three things should lie there, all three user requirements:
+    # Three things should lie there:
     #   221  Pickup Item2 - exactly one instance in the level, must go in
     #   235  Bottle       - four instances, at least one must go in
     #   236  Cloth        - exactly one instance, must go in
@@ -2120,10 +1979,10 @@ $ISLAND_GROUP = @{
     # have comprised half the level's end.
         @{ IslandTypes = @(221); DeadstopRooms = @(55,58); DoorsOpen = $true }
         # Bottle and cloth need a TIGHTER area than Pickup Item2, even
-        # though both are called "start area". User requirement: no further
-        # than room 52, because from room 84 the enemy the chloroform cloth
-        # is meant for already stands there - if one of the two halves only
-        # lies there, Lara arrives at the combination too late.
+        # though both are called "start area": no further than room 52,
+        # because from room 84 the enemy the chloroform cloth is meant for
+        # already stands there - if one of the two halves only lies there,
+        # Lara arrives at the combination too late.
         #
         # Room 84 is therefore the third deadstop; it borders 52, 85, 97
         # and 170, so it cuts off exactly the enemy area. The vanilla cloth
@@ -2131,10 +1990,10 @@ $ISLAND_GROUP = @{
         # because there is only one in the whole level and RequireTypes
         # thereby must place it here.
         @{ IslandTypes = @(); RequireTypes = @(235,236); DeadstopRooms = @(55,58,84); DoorsOpen = $true }
-        # Puzzle Item3 gets a LOWER limit the zone cannot express. User
-        # requirement: it may only lie from room 128 toward room 5, and
-        # doors 180/179 are the deadstop - both stand in room 120 and are
-        # opened by switch 43 in room 26.
+        # Puzzle Item3 gets a LOWER limit the zone cannot express: it may
+        # only lie from room 128 toward room 5, and doors 180/179 are the
+        # deadstop - both stand in room 120 and are opened by switch 43 in
+        # room 26.
         #
         # maxZone 4 from EXTRA_POOL_TYPES says "no later than the lock";
         # this island says "no earlier than room 128". Only both together
@@ -2150,17 +2009,16 @@ $ISLAND_GROUP = @{
         # inside.
         # The third deadstop is room 152, the target of the teleporter from
         # room 149 (item 217, fired by the trigger on 149,5,5 - the same
-        # sector Puzzle Hole2 stands on). User requirement: behind the
-        # teleporter the part may no longer lie. That costs 86, 98, 152,
-        # 156, 161 and 162; room 166 stays reachable without going through
-        # 152, and with it the vanilla place.
+        # sector Puzzle Hole2 stands on): behind the teleporter the part may
+        # no longer lie. That costs 86, 98, 152, 156, 161 and 162; room 166
+        # stays reachable without going through 152, and with it the
+        # vanilla place.
         @{ IslandTypes = @(174); StartRoom = 128; DeadstopRooms = @(120,58,152); DoorsOpen = $true }
     )
     # rich3: the two puzzle combos may only lie behind the one-way
-    # teleporter. User statement, two points of no return in this level:
-    # room 58 via the slope, and switch 310 in room 133, whose teleporter
-    # leads to room 134 - in room 134 there is no trigger that sets Lara
-    # back.
+    # teleporter. Two points of no return exist in this level: room 58 via
+    # the slope, and switch 310 in room 133, whose teleporter leads to room
+    # 134 - in room 134 there is no trigger that sets Lara back.
     #
     # The lock (Puzzle Hole1, item 144) lies in room 119, i.e. beyond this
     # one-way spot. Were one of the two halves before it, Lara could walk
@@ -2178,10 +2036,9 @@ $ISLAND_GROUP = @{
         # may ONLY lie here; IslandTypes delivers both, it is a hard
         # positive list over all instances.
         #
-        # The area is deliberately tiny, and the user tightened it twice.
-        # First it was the whole route from room 61 (359 spots in 31
-        # rooms); then came the decisive finding: once Lara reaches the
-        # antitrigger (item 149, room 124), she does not get out again
+        # The area is deliberately tiny. The whole route from room 61 (359
+        # spots in 31 rooms) would be looser than needed: once Lara reaches
+        # the antitrigger (item 149, room 124), she does not get out again
         # without the crossbow. It may therefore only appear from room 79
         # on and lie no further than room 93 - room 167 is only reachable
         # with it at all.
@@ -2233,7 +2090,7 @@ $CUTSCENE_DOORS = @{
 # rich2's level end - recorded because the model does NOT map it correctly
 # and the next curation would otherwise build on a wrong zone.
 #
-# The user explained the chain:
+# The chain:
 #   - Flipmap 0 is set right at the start. It switches off the
 #     trigger-triggerer (item 25, room 14), which in turn blocks the
 #     EndLevel trigger in room 14 (1,1).
@@ -2269,24 +2126,22 @@ foreach($kv in $cutsceneDoors.GetEnumerator()){ $cutsceneDoorByCutscene[[int]$kv
 # both ways. This is the hand curation for "the flood stops at the
 # geometry".
 #
-# WHY HASHTABLES AND NOT PAIRS OF TWO STRINGS: the table long stood as
-# @( @('a','b') @('c','d') ) and NEVER worked. @(...) is an array
-# EXPRESSION in PowerShell, not a literal list - every inner @(...) is its
-# own statement whose output the stream flattens. Two pairs became four
-# strings, rich2's seven pairs became fourteen. The loop then read
-# $ml[0]/$ml[1] as CHARACTERS of a string and created edges like '1' ->
-# '3': silent, without effect, and unnoticed for three levels. A comma
-# between the pairs would fix it too - but exactly that gets lost again at
-# the next entry. A hashtable is a single value the stream cannot take
-# apart, and the field names additionally say which side is which.
+# Hashtables, not pairs of two strings: @( @('a','b') @('c','d') ) does not
+# work here. @(...) is an array EXPRESSION in PowerShell, not a literal
+# list - every inner @(...) is its own statement whose output the stream
+# flattens. Two pairs become four strings, seven pairs become fourteen, and
+# a loop reading $ml[0]/$ml[1] then sees CHARACTERS of a string and creates
+# edges like '1' -> '3': silent and without effect. A comma between the
+# pairs would fix it too, but that is easy to lose again at the next entry.
+# A hashtable is a single value the stream cannot take apart, and the field
+# names additionally say which side is which.
 $MANUAL_LINK = @{
     # joby2: the way onto the front ledge of room 11, where lasersight and
     # revolver ammo lie. Twice the same running jump across a gap of
     # exactly three sectors - first within room 152, then within room 11
     # across the floorless tiles x6/x7/x8.
-    # The user rule behind it: Lara clears 3 x 1024 with a running start,
-    # provided both edges have the same Y value. Satisfied here,
-    # everything lies on -4608.
+    # Lara clears 3 x 1024 with a running start, provided both edges have
+    # the same Y value. Satisfied here, everything lies on -4608.
     'joby2' = @(
         @{From='152,10,13'; To='152,10,17'}
         @{From='11,9,1';    To='11,5,1'}
@@ -2298,35 +2153,28 @@ $MANUAL_LINK = @{
     #
     # The two switches 49 (room 30) and 175 (room 82) each operate their
     # side's lift doors, the other side's call button (42 in room 23, 143
-    # in room 81) and the other cabin's lift teleporter. The user: the
-    # lifts are usable at any time in both directions - hence an ordinary
-    # two-way edge and no ONEWAY_OUT.
+    # in room 81) and the other cabin's lift teleporter. The lifts are
+    # usable at any time in both directions - hence an ordinary two-way
+    # edge and no ONEWAY_OUT.
     'rich1' = @(
         @{From='30,2,2'; To='82,2,2'}
     )
-    # rich2. SIX TELEPORTER PAIRS ONCE STOOD HERE - they are gone again,
-    # and that is this level's actual lesson. The elevator section hangs on
-    # six teleporters, I had copied them from the trigger data and entered
-    # them by hand. But the code has long derived them itself (see the
-    # TELEPORT_TYPES loop further down) - and DIRECTED at that, from the
-    # trigger to the teleporter, the way ControlTeleporter really moves
-    # Lara.
-    #
-    # My hand entries with the same sectors were thus pure duplicates, only
-    # TWO-WAY. With that the flood walked the chain backwards: it stood on
-    # the ground floor and went from there back into the lift cabin it had
-    # never reached. Making a directed level mechanic into a street is
-    # worse than not knowing it at all.
-    #
-    # Note: before an edge comes by hand, check whether the code already
+    # rich2's elevator section hangs on six teleporters, which the code
+    # already derives itself (see the TELEPORT_TYPES loop further down) -
+    # and DIRECTED at that, from the trigger to the teleporter, the way
+    # ControlTeleporter really moves Lara. A hand entry with the same
+    # sectors here would only be a two-way duplicate that lets the flood
+    # walk the chain backwards, standing on the ground floor and going from
+    # there back into a lift cabin it never reached. Making a directed
+    # level mechanic into a two-way street is worse than not knowing it at
+    # all - before an edge comes by hand, check whether the code already
     # derives it. Teleporters, bridges and doors it does.
     'rich2' = @(
-        # The entry into the elevator section. The way there is the chain
-        # the user described: door 105 by keypad into the WC, from room 134
-        # kick the kick door into niche 131, up through ceiling hatch 188
-        # there to room 139 into the elevator shaft, and from there with
-        # some climbing maneuvers to trapdoor 117, where the lift section
-        # begins.
+        # The entry into the elevator section. The way there is the chain:
+        # door 105 by keypad into the WC, from room 134 kick the kick door
+        # into niche 131, up through ceiling hatch 188 there to room 139
+        # into the elevator shaft, and from there with some climbing
+        # maneuvers to trapdoor 117, where the lift section begins.
         #
         # The portal graph cannot walk this chain. The portal 134->131 lies
         # on WALL SECTORS on both sides (134(2,3) and 131(0,1)), and
@@ -2334,9 +2182,9 @@ $MANUAL_LINK = @{
         # flood would thus not get in even with the kick door open; the
         # door is innocent and has long stood in the deco-door list.
         #
-        # Hence the jump 130 -> 139 named by the user, which skips the
-        # niche. Lara does not linger there anyway, she passes through.
-        # 130(1,1) and 139(1,1) are both clean floor.
+        # Hence the jump 130 -> 139, which skips the niche. Lara does not
+        # linger there anyway, she passes through. 130(1,1) and 139(1,1)
+        # are both clean floor.
         @{From='130,1,1'; To='139,1,1'}
     )
 }
@@ -2345,10 +2193,6 @@ $MANUAL_LINK = @{
 # stay walkable. The sector-fine version of NO_ITEM_ROOMS, for rooms that
 # are otherwise perfectly fine.
 $NO_ITEM_SECTORS = @{
-    #------------------------------------------------------------------------
-    # The user's last review across all levels. These four had no entry
-    # until then.
-    #------------------------------------------------------------------------
     'Andrea1' = @('214,1,1')
     'Andrea2' = @('6,1,2','33,2,2','51,2,2')
     'Andrea3' = @('49,5,3')
@@ -2357,7 +2201,6 @@ $NO_ITEM_SECTORS = @{
     'joby2'   = @('141,1,3','141,1,4','141,1,5','141,2,3','141,2,4','141,2,5',
                   '141,3,3','141,3,4','141,3,5','138,4,1')
     'rich1'   = @('31,3,4')
-    # 1(1,1), 70(5,3), 70(5,5) and 13(2,3) joined in the last review.
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2',
                 '1,1,1','70,5,3','70,5,5','13,2,3')
@@ -2365,25 +2208,21 @@ $NO_ITEM_SECTORS = @{
     # EXCLUDE_SECTORS. Since the jump 130 -> 139 stands in MANUAL_LINK, it
     # is in the right place there - it is a wall, not a placement ban.
     #
-    # What stands here is the user's sector list from the trview pass.
     # 149(5,5) carries Puzzle Hole2 itself - no item has any business on a
-    # lock. The six tiles in room 166 are the user's; the vanilla place of
-    # Puzzle Item3 on 166(3,2) is NOT among them and stays allowed.
-    # 9(2,3) joined in the last review.
+    # lock. The vanilla place of Puzzle Item3 on 166(3,2) is NOT among the
+    # six tiles barred in room 166 and stays allowed.
     'rich2' = @('149,5,5','9,2,3',
                 '166,2,1','166,4,1','166,1,3','166,3,3','166,2,4','166,4,4')
-    # andy3, the user's first sector review. Room 188 carries a secret and
-    # a large medipack - both lie elsewhere in the room, the bar hits no
-    # vanilla position.
+    # andy3. Room 188 carries a secret and a large medipack - both lie
+    # elsewhere in the room, the bar hits no vanilla position.
     'andy3' = @('150,2,1','188,1,2','188,1,3','58,2,1','58,3,1','58,4,1')
-    # Andy2, the user's second and third trview review. The entries from
-    # 133 on are individual trap sectors; those in the flip variants 133,
-    # 135 and 136 are, like rooms 132/134 above, already handled by the
-    # flip bar and stand only as a safety net.
-    # The fourth review takes the remaining trap sectors in the bridge
-    # rooms along. 30, 43, 56 and 57 are the base rooms of flipmap groups
-    # 3, 4 and 5 - the same construction as 31 and 41, only that here the
-    # whole room does not have to go.
+    # Andy2. The entries from 133 on are individual trap sectors; those in
+    # the flip variants 133, 135 and 136 are, like rooms 132/134 above,
+    # already handled by the flip bar and stand only as a safety net.
+    # 30, 43, 56 and 57 are the base rooms of flipmap groups 3, 4 and 5 -
+    # the same construction as 31 and 41, only that here the whole room
+    # does not have to go, just the remaining trap sectors in these bridge
+    # rooms.
     'Andy2' = @('251,1,3','3,6,4','39,3,1',
                 '133,5,4','135,4,5','135,6,5','136,5,5',
                 '30,5,4','30,5,6',
@@ -2398,9 +2237,9 @@ $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTO
 #----------------------------------------------------------------------------
 # Height bands per level section.
 #
-# The user's idea for andy3, and there it pays off immediately: the level
-# falls apart into sections through its one-way teleporters anyway, and
-# within a section the playable floor lies in a narrow height band.
+# For andy3: the level falls apart into sections through its one-way
+# teleporters anyway, and within a section the playable floor lies in a
+# narrow height band.
 # Everything above and below is roof, scenery or abyss. Instead of
 # collecting a hundred room numbers by hand, one band value per section
 # suffices.
@@ -2493,20 +2332,17 @@ $REUSABLE_KEYS = @{
 # animatings stand in them (see Andy2). If the scenery also contains doors
 # or other inventory, it falls through - then only hand curation helps.
 # joby3: the island group around room 140 is only SEEN during the cutscene
-# from the air shaft (room 76) but is not walkable (user statement in the
-# zone report). It contains three doors and is therefore not automatically
-# recognizable as scenery.
+# from the air shaft (room 76) but is not walkable. It contains three doors
+# and is therefore not automatically recognizable as scenery.
 $CAMERA_ROOMS = @{
     'joby3' = @(4,10,11,94,96,97,114,140,185)
     # Andrea3 rooms 73/74: 9 sectors each, completely empty (no items),
-    # isolated. User: "leftovers like in Andrea2, something was probably
-    # planned there once" - cut content, not meant to be entered.
+    # isolated - cut content, not meant to be entered.
     'Andrea3' = @(73,74)
     # rich3 rooms 64/65/66/67: a closed 4-room circuit without any
-    # connection to the rest of the level. User: lies visibly outside the
-    # actual level geometry in trview ("out of map") - that is the intro
-    # flyby with the helicopters circling the level, purely cosmetic, never
-    # walkable.
+    # connection to the rest of the level, lying visibly outside the actual
+    # level geometry in trview - that is the intro flyby with the
+    # helicopters circling the level, purely cosmetic, never walkable.
     'rich3' = @(64,65,66,67)
 }
 $cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$LevelName] } )
@@ -2581,8 +2417,8 @@ foreach($s in $d.sectors){
     # THROUGH the hole and "come back up" on the other side - physically
     # wrong, but coincidentally connecting. With correct fall edges every
     # hole became a one-way trap and shaft/ledge levels collapsed (joby3
-    # 8%, rich2's elevator shaft, Andrea3's Colosseum ledges - named
-    # exactly so by the user). Rule: up to 2 consecutive sectors whose
+    # 8%, rich2's elevator shaft, Andrea3's Colosseum ledges). Rule: up to
+    # 2 consecutive sectors whose
     # resolved standing height lies clearly (>512) below the takeoff
     # height may be jumped over; the landing may lie at most 1 click (256)
     # higher, arbitrarily deep is allowed. Only straight-line and within
@@ -2684,9 +2520,8 @@ foreach($r in $d.rooms){
 # the effect runs, in ALL other cases the else branch applies and sets
 # lara_item->pos to item->pos plus ItemNewRoom. So the teleporter is the
 # TARGET and its trigger the source - the edge is directed, from the trigger
-# sector to the teleporter sector. (Earlier I had noted this exactly the
-# wrong way round; all teleporters of the 16 vanilla levels have OCB 0, so
-# they really do warp.)
+# sector to the teleporter sector. All teleporters of the 16 vanilla levels
+# have OCB 0, so they really do warp.
 $TELEPORT_TYPES = @(387,388)
 foreach($i in $d.items){
     if ($TELEPORT_TYPES -notcontains [int]$i.typeId) { continue }
@@ -2749,8 +2584,8 @@ if ($crowbarDoors.Count -gt 0 -and $crowbarInLevel.Count -eq 0) {
 # the ONLY instance of this type in the level, without an accompanying Key
 # Hole7 and without a key trigger referencing it (verified). Unlike the
 # crowbar in most levels, the hammer here actually lies in the level and
-# must first be reached - Lara does NOT bring it along automatically (user
-# correction: "she brings neither of them along like in Joby").
+# must first be reached - Lara does NOT bring it along automatically, unlike
+# the equivalent items in the joby levels.
 $HAMMER_TYPE = @{
     'rich1' = 202
 }
@@ -2880,16 +2715,16 @@ foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
 # (flags & IFL_CODEBITS) == CODEBITS, i.e. all five bits. If in the whole
 # level no trigger exists that can bring a door to 11111, then it never
 # opens. Since vanilla is completable, such a door cannot bar anything that
-# is needed: it is decoration. User on joby2 room 11: "There is nothing
-# behind the doors, they are deco doors."
+# is needed: it is decoration - joby2 room 11 is the case, nothing lies
+# behind its doors.
 #
-# Before, they barred forever, and behind them lay real pickups (lasersight
-# and revolver ammo) that thereby never entered the pool.
+# Treating such a door as an unconditional bar keeps real pickups behind it
+# (lasersight and revolver ammo in joby2) out of the pool forever.
 #
 # Counted over ALL triggers of the level, including those in the floordata
-# of flip rooms - they only exist after the flip but very much count (user
-# hint). Three exceptions remain doors: script doors, cutscene doors and
-# crowbar doors likewise have no trigger but still open.
+# of flip rooms - they only exist after the flip but very much count.
+# Three exceptions remain doors: script doors, cutscene doors and crowbar
+# doors likewise have no trigger but still open.
 #----------------------------------------------------------------------------
 $doorMaskTotal = @{}
 foreach($tr in $d.triggers){
@@ -2960,10 +2795,10 @@ foreach($s0 in $d.sectors){
 # flip sector. So the blocker does not lie where the variant opens
 # something.
 #
-# Hence, on the user's suggestion, the direct way: set the roll gate as a
-# deadstop and carry the rooms behind it as their own island group. With
-# that everything else falls out by itself - the zone logic forces Key Item8
-# into the start island, because a later zone begins behind the deadstop.
+# Hence the direct way: set the roll gate as a deadstop and carry the rooms
+# behind it as their own island group. With that everything else falls out
+# by itself - the zone logic forces Key Item8 into the start island,
+# because a later zone begins behind the deadstop.
 foreach($gi0 in 0..([Math]::Max(0,$flipGates.Count-1))){
     if ($flipGates.Count -eq 0) { break }
     if ($null -eq $flipGates[$gi0].BlockRooms) { continue }
@@ -2993,9 +2828,9 @@ foreach($ga in $gatedAreas){
     #               inside.
     #  $stopFlood = boundary of the inner-area flood: gate sectors PLUS the
     #               pre-gate rooms.
-    # In a first version both were the same set - with the effect that of
-    # all things the pre-gate rooms were exempt from the cutting, i.e.
-    # exactly the source of the illegal entry edges ("0 entry edges cut").
+    # Using the same set for both would exempt the pre-gate rooms from the
+    # cutting too - exactly the source of the illegal entry edges the
+    # cutting is meant to remove.
     $gateSecs = New-Object System.Collections.Generic.HashSet[string]
     foreach($di in $ga.Doors){ if ($doorSector.ContainsKey([int]$di)) { [void]$gateSecs.Add($doorSector[[int]$di]) } }
     $stop = New-Object System.Collections.Generic.HashSet[string]
@@ -3123,8 +2958,7 @@ while ($true) {
     #------------------------------------------------------------------------
     # Order of the locks when a key type is scarce.
     #
-    # The loop used to run in array order, so a key was consumed at whichever
-    # lock the flood happened to reach first. This choice can be wrong and
+    # Consuming a key at whichever lock the flood happens to reach first can
     # leave half the level unreachable.
     #
     # joby2 is the documented case: Key Item7 exists twice, but only one
@@ -3218,7 +3052,7 @@ while ($true) {
         # must not fire on merely reaching the trigger sector - Lara must
         # actually have the tool first. Without this bar the hammer would
         # be treated as "automatically present", although in rich1 it is a
-        # real object that must first be found (user correction).
+        # real object that must first be found.
         if ($null -ne $hammerType) {
             $needsHammer = $false
             foreach($c in $e.T.commands){ if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $needsHammer = $true } }
@@ -3378,16 +3212,12 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
 #----------------------------------------------------------------------------
 # Enforce equipment gates, not just report them.
 #
-# EQUIP_GATE long stood ONLY in the text report: it computed in which zone
-# the switch is needed and showed whether the necessary equipment lies early
-# enough today. Nothing of it appeared in the export. The randomizer was
-# thus free to move Andrea1's revolver and lasersight - even behind the bell
-# that cannot be shot down without them. That it went well so far was owed
-# to the luck of the tested seeds.
-#
-# The same lesson as with VANILLA_TYPES and the island groups: a table that
-# describes an intent and enforces nothing has no effect. Hence the zone now
-# lands in $extraPool and becomes an ordinary constraint from there.
+# A table that only computes in which zone a switch is needed and reports
+# it has no effect by itself: the randomizer would still be free to move
+# Andrea1's revolver and lasersight behind the bell that cannot be shot down
+# without them. The same lesson as with VANILLA_TYPES and the island
+# groups: an intent has to become an ordinary constraint to be enforced,
+# hence the zone lands in $extraPool.
 #
 # With several gates for the same type, the STRICTEST applies, i.e. the
 # smallest zone - the equipment must be there before EVERY switch that
@@ -3443,9 +3273,8 @@ foreach($ig in $islandGroups){
     # joby2's island before the crane.
     #
     # WITH DoorsOpen only the deadstop counts: the doors count as open, and
-    # the island is simply everything on this side of the bars. That is the
-    # user's reading when he names room pairs - "63 yes, 111 no". rich1's
-    # Key Item8 needs it: its allowed rooms 81 and 43 lie behind doors that
+    # the island is simply everything on this side of the bars. rich1's Key
+    # Item8 needs it: its allowed rooms 81 and 43 lie behind doors that
     # only open in the course of play, and the closed reading therefore
     # wrongly barred them.
     $doorsOpen = ($ig.DoorsOpen -eq $true)
@@ -3491,8 +3320,7 @@ foreach($ig in $islandGroups){
     # BEFORE the teleporter and the one behind it up to the church. A
     # slingshot half in Lara's start room 70 satisfies "zone 0" and is
     # still the softlock: Lara goes through the teleporter without having
-    # collected it and never comes back. Seen by the user in the test
-    # level.
+    # collected it and never comes back.
     #
     # Together with the zone limit that yields "after the point of no
     # return and before the church" - which neither of the two conditions
@@ -3543,20 +3371,18 @@ foreach($ig in $islandGroups){
 #----------------------------------------------------------------------------
 # A key may never lie behind a door it itself opens.
 #
-# Second attempt. The first (commit 3af3f46, taken back with a7e4a70)
-# failed at the UNION: it collected per type the doors of ALL locks of that
-# type and barred everything that lay behind any of them. In Andrea3 that
-# yielded doors 25/24/77/94 from several locks for Key Item2 and forbade
-# its vanilla place in room 119.
+# The rule must use the INTERSECTION across a type's locks, not the UNION.
+# Collecting per type the doors of ALL locks of that type and barring
+# everything behind any of them is too strict: in Andrea3 that yields doors
+# 25/24/77/94 from several locks for Key Item2 and forbids its vanilla
+# place in room 119.
 #
-# Correct is the INTERSECTION. A key of this type can be needed at any of
-# its locks; forbidden is therefore only what lies behind EVERY one of
-# these doors - there, namely, it could reach no lock at all. What lies
-# behind one but before another stays allowed: from there Lara reaches at
-# least one lock.
+# A key of this type can be needed at any of its locks; forbidden is
+# therefore only what lies behind EVERY one of these doors - there,
+# namely, it could reach no lock at all. What lies behind one but before
+# another stays allowed: from there Lara reaches at least one lock.
 #
-# With exactly one lock, intersection and union are the same, so the cases
-# in which the first attempt was right are preserved.
+# With exactly one lock, intersection and union are the same.
 #
 # Per lock an own flood from Lara's start with EXACTLY THIS door shut and
 # all others open. A detour around the door changes nothing about that -
@@ -3565,9 +3391,9 @@ foreach($ig in $islandGroups){
 # Mix hand-set sector bars per type (TYPE_EXCLUDE_SECTORS) into
 # bannedSectors. ONCE here, not in the constraint loops: there are THREE
 # paths through which a constraint can arise - derived from a lock,
-# EXTRA_POOL_TYPES and POOL_TYPES -, and on the first attempt I had patched
-# only the first two. joby2's safeguard runs via the third, and
-# bannedSectors stayed silently empty.
+# EXTRA_POOL_TYPES and POOL_TYPES - and all three must feed the same
+# bannedSectors set, or a safeguard that only reaches a type through the
+# third path (joby2's fuse) silently stays empty.
 foreach($kv in $typeExcludeSectors.GetEnumerator()){
     $nt = [int]$kv.Key
     if (-not $islandBanned.ContainsKey($nt)) { $islandBanned[$nt] = New-Object System.Collections.Generic.HashSet[string] }
@@ -3596,12 +3422,11 @@ if ($null -ne $startKey) {
     # The hammer has no lock in the usual sense - its door does not open
     # via an object command but via a cutscene (rich1: hamgate, door 153).
     # For placement, though, exactly the same holds: it may not lie behind
-    # the door it itself opens. User: "It may not be placed further than
-    # the door."
+    # the door it itself opens.
     #
-    # The flood already knew this condition (it only lets the cutscene door
-    # fire once the hammer is reachable); what was missing was the
-    # inversion for placement. Both now hang on the same rule.
+    # The flood already knows this condition (it only lets the cutscene door
+    # fire once the hammer is reachable); the inversion for placement uses
+    # the same rule.
     if ($null -ne $hammerType -and $cutsceneDoors.Count -gt 0) {
         if (-not $typeDoors.ContainsKey($hammerType)) { $typeDoors[$hammerType] = New-Object System.Collections.Generic.HashSet[int] }
         foreach($cd in $cutsceneDoors.Keys){
@@ -3660,11 +3485,11 @@ if ($null -ne $startKey) {
 # types for which a key constraint exists at all. In andy3 there is not a
 # single one (chalk and crowbar are tools without a receptacle), so the
 # deadstop never reached them. As its own sector set in the export, every
-# generator can apply it, even for types without a receptacle (#61).
+# generator can apply it, even for types without a receptacle.
 $keyBarred = New-Object System.Collections.Generic.HashSet[string]
 # Rooms barred ONLY because of NO_KEY_ISLAND, and the types that stay
-# exempt from it (#61). Both are needed because the bar acts in TWO places:
-# as a sector set in the export and as excludeRooms per type.
+# exempt from it. Both are needed because the bar acts in TWO places: as a
+# sector set in the export and as excludeRooms per type.
 $islandRooms = @()
 $keyBarredExempt = @()
 foreach($ni in $noKeyIslands){
@@ -3695,19 +3520,8 @@ foreach($ni in $noKeyIslands){
     Write-Output "NO_KEY_ISLAND (start $($ni.StartRoom), deadstops $($stopN -join ', ')): $($islN.Count) sectors in $($rmN.Count) rooms without key items"
 }
 
-# NOTE: here stood the derived rule "a key may never lie behind a door it
-# itself opens" (commit 3af3f46). It has been removed again because it was
-# demonstrably too coarse: in Andrea3 it barred the VANILLA position of Key
-# Item2 (item 101, room 119) and shrank its allowed rooms from 32 to 6.
-# The cause was presumably that per key type it united the doors of ALL
-# locks of that type instead of considering them individually - the report
-# showed for type 197 the doors 25/24/77/94 from several locks thrown
-# together.
-#
-# The yardstick stays valid and is the acceptance condition for every new
-# attempt: a rule that forbids where vanilla puts the item is wrong by
-# construction. See task #49.
-
+# Acceptance condition for any rule derived here: a rule that forbids where
+# vanilla puts the item is wrong by construction.
 
 $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
@@ -3716,13 +3530,11 @@ foreach($kv in $byType.GetEnumerator()){
     if ($vanillaTypes -contains $nt) { continue }
     # The maximum over all locks - even for reusable keys.
     #
-    # Here briefly stood a minimum for the reusable ones, with the
-    # reasoning: one instance serves all locks, so it must be there before
-    # the earliest. That sounds compelling and is still wrong, and the user
-    # refuted it at rich1. There the first Key-Item8 lock (item 55, room
-    # 26) lies in zone 0, so the minimum would have nailed the key to zone
-    # 0 - but the user expressly names rooms 81 and 43 from zones 2 and 3
-    # as allowed.
+    # A minimum for reusable keys - one instance serves all locks, so it
+    # must be there before the earliest - sounds compelling and is wrong.
+    # rich1's first Key-Item8 lock (item 55, room 26) lies in zone 0, so a
+    # minimum would nail the key to zone 0, yet rooms 81 and 43 from zones
+    # 2 and 3 are allowed.
     #
     # The thinking error: a lock in zone 0 does not mean it MUST be served
     # first. rich1 has seven different doors from the zone-0 into the
@@ -3732,7 +3544,7 @@ foreach($kv in $byType.GetEnumerator()){
     # that is why this limiting is done by an island group with deadstops
     # here, not by the zone.
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
-    # Exempt types do not see the NO_KEY_ISLAND rooms (#61).
+    # Exempt types do not see the NO_KEY_ISLAND rooms.
     $npT = if ($keyBarredExempt -contains $nt) { @($noPlacement | Where-Object { $islandRooms -notcontains $_ }) } else { $noPlacement }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $npT + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
@@ -3743,7 +3555,7 @@ foreach($kv in $byType.GetEnumerator()){
 foreach($kv in $extraPool.GetEnumerator()){
     $nt = [int]$kv.Key
     if ($byType.ContainsKey($nt)) { continue }
-    # Exempt types do not see the NO_KEY_ISLAND rooms (#61).
+    # Exempt types do not see the NO_KEY_ISLAND rooms.
     $npT = if ($keyBarredExempt -contains $nt) { @($noPlacement | Where-Object { $islandRooms -notcontains $_ }) } else { $noPlacement }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $npT + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
@@ -3774,9 +3586,9 @@ if ($ExportZonesJson -ne "") {
     # it on her FIRST-ACCESS path.
     #
     # Needed for new enemies. The trigger may never lie on the enemy's own
-    # sector - then the enemy spawns into Lara (user finding) -, but it
-    # must be crossed reliably, or the enemy never wakes up. Both at once
-    # is satisfied by exactly one sector: one that lies on the way there.
+    # sector - then the enemy spawns into Lara -, but it must be crossed
+    # reliably, or the enemy never wakes up. Both at once is satisfied by
+    # exactly one sector: one that lies on the way there.
     #
     # $firstParent is the right source for that and not some path through
     # the finished level: it records via WHICH edge a sector was reached
@@ -3802,8 +3614,8 @@ if ($ExportZonesJson -ne "") {
         }
     }
 
-    # Wall edges per sector (#61). Needed for the OCB pickups that must
-    # hang on a wall (crowbar OCB 2, Joby crow OCB 9).
+    # Wall edges per sector. Needed for the OCB pickups that must hang on a
+    # wall (crowbar OCB 2, Joby crow OCB 9).
     #
     # The ANGLE POINTS AT THE WALL, not away from it - measured at vanilla
     # Andrea2 item 121: sector (2,1) in room 166, wall at -Z, item angle
@@ -3851,23 +3663,19 @@ if ($ExportZonesJson -ne "") {
         # NO_KEY_ROOMS expressly does NOT apply here. Pool types have no
         # chain in the level - joby5's Puzzle 1 and 2 are only needed at
         # the very end, and by then the power has long been switched off.
-        # User: "We can leave the puzzles, only keys matter."
-        # TYPE_EXCLUDE_ROOMS very much applies here - an empty list stood
-        # here before, and that was simply a gap. A pool type has no lock
-        # and therefore no derived forcing condition; the hand curation is
-        # thus the ONLY thing that can keep it away from anywhere. andy3 is
-        # the case that uncovered it: chalk and crowbar have no lock in the
-        # level there and must still stay before the teleporter.
+        # TYPE_EXCLUDE_ROOMS very much applies here, though: a pool type has
+        # no lock and therefore no derived forcing condition, so the hand
+        # curation is the ONLY thing that can keep it away from anywhere.
+        # andy3 is the case that shows it: chalk and crowbar have no lock in
+        # the level there and must still stay before the teleporter.
         # A pool type carries EXACTLY THE SAME curation fields as a type
         # with a lock - the line below is, apart from $pt instead of $nt,
         # that of the main path.
         #
-        # Before, fixed $null values stood here, and that silently
-        # swallowed curation three times in a row: first excludeRooms
-        # (andy3's chalk), then forbiddenSectors and finally islandSectors
-        # (rich1's hammer). The thinking error was the same every time - a
-        # pool type has no lock, SO the hand curation is the only thing
-        # that can hold it anywhere, and not, say, dispensable.
+        # A pool type has no lock, SO the hand curation is the only thing
+        # that can hold it anywhere - fixed $null values instead of reading
+        # the curation tables would silently drop excludeRooms (andy3's
+        # chalk), forbiddenSectors and islandSectors (rich1's hammer).
         $ptEx = @( if($typeExclude.ContainsKey($pt)){ $typeExclude[$pt] } )
         $ptAl = @( if($typeAllow.ContainsKey($pt)){ $typeAllow[$pt] } )
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
@@ -3884,11 +3692,9 @@ if ($ExportZonesJson -ne "") {
     }
     # Origin stamp: the checksum of THIS script. The randomizer does not
     # read the curation tables, only this export - a change to the tables
-    # thus only acts after regenerating. Exactly that surfaced on
-    # 2026-08-23: five exports in the working folder dated from 13/14 Aug
-    # and still carried the refuted global HK offset, while the table had
-    # long known it only for rich2. With the stamp the difference is
-    # visible instead of being hunted in game.
+    # thus only acts after regenerating. Without the stamp, a stale export
+    # that still carries an outdated curation value is indistinguishable
+    # from a fresh one and the difference can only be hunted in game.
     $curationStamp = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.Substring(0,16)
 
     [PSCustomObject]@{ level=$LevelName; curationStamp=$curationStamp; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); typeNoSectors=@($typeExcludeSectors.GetEnumerator() | ForEach-Object { [PSCustomObject]@{ typeId=[int]$_.Key; sectors=@($_.Value) } }); antitriggerImmune=@($antitriggerImmune); keyBarredSectors=@($keyBarred); keyBarredExemptTypes=@($keyBarredExempt | Sort-Object -Unique); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
@@ -4136,15 +3942,14 @@ $ANIM_LO = 416; $ANIM_HI = 447
 $KNOWN_GAPS = @{
     # joby3: four niches for the ventilators. All four identically built -
     # 3x4 room, exactly two walkable sectors, not a single portal; in room
-    # 66 an Electrical Light visibly sits. Confirmed by the user in trview.
+    # 66 an Electrical Light visibly sits.
     # joby4: room 0 lies outside the map, a leftover of the devs without
-    # function - looked at by the user in trview. One of the level's three
-    # non-water rooms, floorY -1024 to 256 and thereby far above the
-    # swimming limit. It announced itself as several one-sector gaps.
-    # Per the user, 0 and 1 are the room below and above of a stack - both
-    # outside the map. That matches the data: same dimensions 6x15, the
-    # same 52 non-wall sectors, zero spots, no items, neither a water room,
-    # and room 0 has its only portal into room 1.
+    # function. One of the level's three non-water rooms, floorY -1024 to
+    # 256 and thereby far above the swimming limit. It announces itself as
+    # several one-sector gaps. Rooms 0 and 1 are the room below and above of
+    # a stack, both outside the map. That matches the data: same dimensions
+    # 6x15, the same 52 non-wall sectors, zero spots, no items, neither a
+    # water room, and room 0 has its only portal into room 1.
     'andy1' = @{
         49  = 'not connected'
         220 = 'not connected'
@@ -4153,9 +3958,8 @@ $KNOWN_GAPS = @{
         0 = 'out of map, leftover of the devs, without function (room below)'
         1 = 'out of map, leftover of the devs, without function (room above)'
     }
-    # joby5, all four gaps reviewed by the user in trview. Room 104 is the
-    # one with the Keyhole8 whose door 103 carries 11111 anyway and stands
-    # open from level start - the lock is moot.
+    # joby5. Room 104 is the one with the Keyhole8 whose door 103 carries
+    # 11111 anyway and stands open from level start - the lock is moot.
     'joby5' = @{
         11  = 'ventilator room'
         22  = 'out of map, without meaning'
@@ -4169,9 +3973,9 @@ $KNOWN_GAPS = @{
     }
     # Andy2. The four large gaps are four almost identically built mill
     # modules - 270/270/215/215 sectors, all on yBottom 12544, side by side
-    # in the world, and in all four not a single playable object sits. The
-    # user looked at them in trview: "Those are only flyby areas, no core
-    # segment." The same holds for the area around room 15.
+    # in the world, and in all four not a single playable object sits: only
+    # flyby areas, no core segment. The same holds for the area around room
+    # 15.
     #
     # Nothing has to be barred for that - in none of these rooms lies a
     # single reached placement surface. They stand here exclusively so the
@@ -4194,23 +3998,21 @@ $KNOWN_GAPS = @{
         207 = 'mill module, flyby only'; 242 = 'mill module, flyby only'
         246 = 'mill module, flyby only'; 247 = 'mill module, flyby only'
     }
-    # rich2, all four gaps explained by the user. 137 and 138 are two of
-    # six one-sector niches behind kick doors (131/132/133 hang on room
-    # 134, 136/137/138 on room 135) - Lara simply kicks them in, via room
-    # 131 the level continues. Nothing to bar there: the single sector of
-    # each niche carries the door itself and is thus no spot anyway.
+    # rich2. 137 and 138 are two of six one-sector niches behind kick doors
+    # (131/132/133 hang on room 134, 136/137/138 on room 135) - Lara simply
+    # kicks them in, via room 131 the level continues. Nothing to bar there:
+    # the single sector of each niche carries the door itself and is thus
+    # no spot anyway.
     'rich2' = @{
         83  = 'flyby scenery'
         137 = 'niche behind a kick door, Lara kicks it in'
         138 = 'niche behind a kick door, Lara kicks it in'
         158 = 'out of map'
     }
-    # rich1, all four gaps explained by the user. 98/99 is the flyby
-    # scenery with the Twogun, 64 scenery as well (a scientist and three
-    # animatings, without a single portal), 133-135 and 148/149 scenery.
-    # Room 142 lies out of map and carries the trigger sector for door 186
-    # - so the door can never open, which per the user is again an
-    # antitrigger fix.
+    # rich1. 98/99 is the flyby scenery with the Twogun, 64 scenery as well
+    # (a scientist and three animatings, without a single portal), 133-135
+    # and 148/149 scenery. Room 142 lies out of map and carries the trigger
+    # sector for door 186 - so the door can never open, an antitrigger fix.
     'rich1' = @{
         64  = 'scenery, without a portal'
         98  = 'flyby scenery'
@@ -4222,8 +4024,7 @@ $KNOWN_GAPS = @{
         148 = 'scenery'
         149 = 'scenery'
     }
-    # andy3, all four gaps reviewed by the user in trview. In none of them
-    # lies a playable object.
+    # andy3. In none of these rooms lies a playable object.
     'andy3' = @{
         148 = 'out of map'
         180 = 'flyby scenery'
@@ -4242,10 +4043,9 @@ $KNOWN_GAPS = @{
         66  = 'deco room for the ventilator'
         111 = 'deco room for the ventilator'
         113 = 'deco room for the ventilator'
-        # 180 only came to light after the 13 scenery rooms were barred.
-        # Identically built to the four above - 3x4, two walkable sectors,
-        # no portal - and like room 66 with an Electrical Light inside.
-        # Concluded from the construction, not confirmed by the user.
+        # 180 is identically built to the four above - 3x4, two walkable
+        # sectors, no portal - and like room 66 with an Electrical Light
+        # inside. Concluded from the construction.
         180 = 'deco room for the ventilator (concluded from the construction)'
     }
     'Andrea3' = @{
@@ -4257,18 +4057,17 @@ $KNOWN_GAPS = @{
     'joby2' = @{
         # The crane that swings over the submarine at the level's end is a
         # mesh in the actual level. These rooms exist only for the
-        # animation - why that does not hang on the real crane, the user
-        # does not know either, but nothing here is enterable.
+        # animation - unrelated to the real crane - but nothing here is
+        # enterable.
         49 = 'crane animation for the level end, in the level itself a mesh'
         50 = 'crane animation for the level end, in the level itself a mesh'
         51 = 'crane animation for the level end, in the level itself a mesh'
         0  = 'only animatings, no playable geometry'
     }
-    # rich3: three one-sector rooms without a portal, all three clarified.
-    # 212 and 217 each contain a rollingball - that is its start niche,
-    # from there it rolls off. Lara never goes there. Room 217 the user
-    # additionally named as an antitrigger-fix room, together with room
-    # 112.
+    # rich3: three one-sector rooms without a portal. 212 and 217 each
+    # contain a rollingball - that is its start niche, from there it rolls
+    # off. Lara never goes there. Room 217 is also an antitrigger-fix room,
+    # together with room 112.
     'rich3' = @{
         205 = 'only an animating, camera-flyby geometry'
         212 = 'start niche of a rollingball (item 222)'

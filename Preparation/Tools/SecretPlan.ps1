@@ -1,20 +1,19 @@
 # Reads the secret lists from Curation\Secrets and turns them into a
-# machine-readable plan (#53).
+# machine-readable plan.
 #
-# ONE FILE = ONE LIST. The file name carries author and category:
+# Each file is one list; the file name carries author and category:
 #   ChrisChanSan_Glitchless.txt  ->  dropdown "Glitchless", display "ChrisChanSan"
 #   ChrisChanSan_Glitched.txt    ->  dropdown "Glitched",   display "ChrisChanSan"
 # Files with a leading underscore appear in no dropdown (references).
+# Adding a list means dropping another file here - nothing in the program
+# needs changing.
 #
-# Whoever wants to contribute their own list puts another file there -
-# nothing in the program needs changing.
-#
-# Two modes need no list at all and therefore do not stand in this folder:
+# Two modes need no list and therefore do not stand in this folder:
 # "Vanilla" (secrets stay put) and "Pool" (they travel like ordinary
 # pickups, can turn up anywhere).
 #
-# The lists are maintained by hand and shall stay that way - readable in
-# trview, changeable without a tool. This parser adapts to them.
+# The lists are maintained by hand and stay readable in trview and
+# changeable without a tool; this parser adapts to them.
 #
 # Usage:
 #   SecretPlan.ps1 -List                        show all available lists
@@ -27,9 +26,9 @@ param(
     [string]$Category = "",
     [string]$LevelName = "",
     [string]$AsJson = "",
-    # Cross-check against the real level data: do the Level_IDs really match
-    # the secrets (type 223) of the vanilla file? People mistype, and a
-    # wrong index silently moves the wrong item.
+    # Cross-checks against the real level data whether the Level_IDs really
+    # match the secrets (type 223) of the vanilla file - people mistype, and
+    # a wrong index silently moves the wrong item.
     [string]$VanillaDir = "$PSScriptRoot\..\..\Tomb5 Steam Version\data\Vanilla",
     [string]$ItemCheck = "$PSScriptRoot\Diagnose\ItemCheck.exe",
     [string]$AsPatch = "",
@@ -83,8 +82,9 @@ function Read-Option([string]$o) {
             ocb = $null; angle = $null; height = $null; xOff = $null; zOff = $null; likeItem = $null; triggerKind = $null; triggerTargets = @()
         }
         # Optionally with a move: @Room relocates the item (sector center,
-        # floor computed, @Height on top). Before, an @Room here was
-        # swallowed silently - the joby5 trapdoor, noticed by the user.
+        # floor computed, @Height on top). Without this match, an @Room
+        # clause here would be silently ignored and the replaced item would
+        # not move.
         if ($o -match '@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
             $e.room = [int]$Matches[1]; $e.sectorX = [int]$Matches[2]; $e.sectorZ = [int]$Matches[3]
         }
@@ -149,8 +149,9 @@ function Read-Option([string]$o) {
         foreach ($ax in [regex]::Matches($body, '([xyz])\s*=\s*([+-]?\d+)')) {
             switch ($ax.Groups[1].Value.ToLower()) {
                 'x' { $mx = [int]$ax.Groups[2].Value }
-                # PLUS RAISES - Y grows downward in the file, so the sign
-                # is turned round here, matching how a level editor works.
+                # A positive value here raises the room: Y grows downward in
+                # the file, so the sign is turned round here, matching how a
+                # level editor works.
                 'y' { $my = -[int]$ax.Groups[2].Value }
                 'z' { $mz = [int]$ax.Groups[2].Value }
             }
@@ -171,13 +172,15 @@ function Read-Option([string]$o) {
     # The view windows must already exist in the level (a precondition the
     # patch path checks).
     #
-    # THREE words, not one. Make_Portal is the horizontal kind - through a
-    # wall, floordata function 1, and the height query follows it sideways.
-    # Make_Ceiling_Portal and Make_Floor_Portal are for rooms stacked on each
-    # other; those write nothing but the sector's room-above / room-below
-    # byte. Using the wall form on a stacked pair sends the height query in a
-    # circle and locks the game up, so the kind is NAMED rather than guessed.
-    # "Celing" is tolerated - the author writes it that way.
+    # Make_Portal, Make_Ceiling_Portal and Make_Floor_Portal are three
+    # separate names, not one with a modifier. Make_Portal is the horizontal
+    # kind - through a wall, floordata function 1, with the height query
+    # following it sideways. Make_Ceiling_Portal and Make_Floor_Portal are
+    # for rooms stacked on each other and write only the sector's
+    # room-above / room-below byte. Using the wall form on a stacked pair
+    # sends the height query in a circle and locks the game up, so the kind
+    # is named explicitly rather than guessed. "Celing" is accepted too,
+    # since that misspelling occurs in the lists.
     elseif ($o -match 'Make_(Ce[il]+ing_?|Floor_?)?Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
         $pk = 0
         if     ($Matches[1] -match '^Ce')    { $pk = 1 }
@@ -187,9 +190,9 @@ function Read-Option([string]$o) {
         $pA = [int]$Matches[2]; $pAx = [int]$Matches[3]; $pAz = [int]$Matches[4]
         $pB = [int]$Matches[5]; $pBx = [int]$Matches[6]; $pBz = [int]$Matches[7]
 
-        # #136: the wall at the opening is a drawn face of its own and stays
-        # put unless it is dealt with. @Clear takes it away, @LikeWall gives
-        # it the texture of a sector one can point at.
+        # The wall at the opening is a drawn face of its own and stays put
+        # unless it is dealt with. @Clear takes it away, @LikeWall gives it
+        # the texture of a sector one can point at.
         $pClear = [bool]($o -match '@\s*Clear')
         $lwR = -1; $lwX = -1; $lwZ = -1
         if ($o -match '@\s*LikeWall\s*\(\s*Room(\d+)\s*\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*\)') {
@@ -281,17 +284,13 @@ function Read-List([string]$path) {
         $ids = @($Matches[4] -split ',' | ForEach-Object { [int]$_.Trim() })
         $rest = $Matches[5]
 
-        # The spots stand BEFORE the Extra_Options; the options themselves
+        # The spots stand before the Extra_Options; the options themselves
         # name rooms and would otherwise be counted as additional secrets.
-        #
-        # The boundary used to be the literal "(add" - and thus blind to
-        # every group that starts differently. A line with "(replace ...)"
-        # dropped out SILENTLY: no option read, no warning. Exactly what
-        # the head of this file rules out.
-        #
-        # Now without a word list: the spots consist of "Room<N>(x..,z..)",
-        # and their parentheses are masked out. The first parenthesis still
-        # left after that starts the Extra_Options - whatever the verb.
+        # The spots are found as literal "Room<N>(x..,z..)" patterns and
+        # masked out; the first parenthesis left after that starts the
+        # Extra_Options, whatever the verb - so a line starting with
+        # "(replace ..." is read correctly instead of silently dropping the
+        # whole entry.
         $mask = $rest.ToCharArray()
         foreach ($m in [regex]::Matches($rest, 'Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)')) {
             for ($i = $m.Index; $i -lt $m.Index + $m.Length; $i++) { $mask[$i] = ' ' }
@@ -415,7 +414,7 @@ if ($AsJson -ne "") {
 }
 
 #----------------------------------------------------------------------------
-# Patch output (#53): from one level's plan, a patch JSON for LevelBuild.
+# Patch output: from one level's plan, a patch JSON for LevelBuild.
 #
 # Why as a patch AFTER the roll and not in the randomizer: the secret spots
 # are hand-curated and thus seed-independent. A patch describes exactly
@@ -451,10 +450,9 @@ if ($AsPatch -ne "") {
     for ($i = 0; $i -lt $planLevel.spots.Count; $i++) {
         $s = $planLevel.spots[$i]
         $rm = $ro[[int]$s.room]
-        # Rule 3 here as well: a plinth/hideout OCB describes the OLD spot
-        # and does not survive the move (Andrea3 secret 75: OCB 4 =
-        # plinth, at the new place FindPlinth looks for a plinth that is
-        # not there).
+        # A plinth/hideout OCB describes the old spot and does not survive
+        # the move (Andrea3 secret 75: OCB 4 = plinth, at the new place
+        # FindPlinth looks for a plinth that is not there).
         $edits += [PSCustomObject]@{
             index = [int]$planLevel.ids[$i]; room = [int]$s.room
             x = ([int]$rm.originX + [int]$s.sectorX * 1024 + 512)

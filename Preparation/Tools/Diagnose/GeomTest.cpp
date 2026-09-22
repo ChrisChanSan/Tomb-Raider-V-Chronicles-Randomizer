@@ -11,8 +11,8 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-// GeomTest - tries buildRoomGeometry (#137) on one room of one level and
-// reports what it did. Diagnostic scaffolding, not part of the shipped tools.
+// GeomTest - tries buildRoomGeometry on one room of one level and reports
+// what it did. Diagnostic scaffolding, not part of the shipped tools.
 //
 //   GeomTest <level.trc> <room> [likeRoom] [out.trc]
 #include "core/Tr5Level.h"

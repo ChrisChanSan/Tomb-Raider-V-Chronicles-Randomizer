@@ -13,27 +13,27 @@
  * Foundation, either version 3 of the License, or (at your option) any later
  * version. See the LICENSE file at the root of this source tree.
  *
- * THE POINT OF THIS TOOL. specific\hd\hd_model.cpp loads the remaster's .TRM
- * models and skins them on the card, and until stage S3-2 nothing in the game
- * calls it. A skinning path nobody has seen a picture out of is not a path,
- * it is a hope - so this tool gives it a hidden window, a real Direct3D 9
- * device, a render target and a camera, and puts what comes back into a .PNG.
- * Same source files as the engine links, no copy.
+ * specific\hd\hd_model.cpp loads the remaster's .TRM models and skins them on
+ * the card; no code path in the game called it yet. A skinning path nobody
+ * has seen a picture out of is not a path, it is a hope - so this tool gives
+ * it a hidden window, a real Direct3D 9 device, a render target and a
+ * camera, and puts what comes back into a .PNG. Same source files as the
+ * engine links, no copy.
  *
- * It answers the three questions stage S3-1 owes the plan:
+ * It answers three questions:
  *
- *   - does the model READ? Counts, parts, pages, and the vertex layout with
+ *   - does the model read? Counts, parts, pages, and the vertex layout with
  *     its three bones and three weights.
- *   - does it SKIN? -pose turns one node of the classic mesh tree and
+ *   - does it skin? -pose turns one node of the classic mesh tree and
  *     everything below it. A model that comes back with a turned head and a
  *     body that stayed put has been skinned; one that turns as a lump has
  *     not, and one that tears at the neck has the wrong bind pose.
- *   - does it FIT the classic slot? A .TRM vertex names three bones, and
- *     those numbers are indices into the CLASSIC mesh tree - so TRM node n is
+ *   - does it fit the classic slot? A .TRM vertex names three bones, and
+ *     those numbers are indices into the classic mesh tree - so TRM node n is
  *     classic mesh n and the question is not "which node is which" but "which
  *     of the slot's nodes does the model actually cover". -nodes prints that
  *     for one slot and -all for every bound slot of a level: the nodes with
- *     no geometry are the ones stage S3-2 has to draw the classic way.
+ *     no geometry are the ones the classic draw path still has to cover.
  *
  * USAGE
  *
@@ -48,29 +48,29 @@
  *     -slot <n>           the model bound to slot n of the level, which needs
  *                         -level
  *     -all                every slot of the level, as a table, then stop
- *     -withrooms <LEVEL>  load that level's ROOM pages into the cache first
- *                         (#123, stage S6). The models are then appended to
- *                         it, exactly as HDLevelBuild does in the game, so
- *                         "pages added" is the marginal cost of the models
- *                         rather than their cost in isolation - a page a room
- *                         and a model both wear is paid for once. Prints the
- *                         level's total page bytes as well.
- *     -lara <LEVEL>       LARA'S COMPOSITE (#123, stage S4-1). Loads the
- *                         wardrobe that level wears - the outfit, the face,
- *                         the braid, the hands and the holsters - against the
- *                         level's OWN Lara skeleton, and draws the lot in
- *                         bind pose. Short for -level <LEVEL> plus the mode.
+ *     -withrooms <LEVEL>  load that level's room pages into the cache first.
+ *                         The models are then appended to it, exactly as
+ *                         HDLevelBuild does in the game, so "pages added" is
+ *                         the marginal cost of the models rather than their
+ *                         cost in isolation - a page a room and a model both
+ *                         wear is paid for once. Prints the level's total
+ *                         page bytes as well.
+ *     -lara <LEVEL>       Lara's HD composite. Loads the wardrobe that level
+ *                         wears - the outfit, the face, the braid, the hands
+ *                         and the holsters - against the level's own Lara
+ *                         skeleton, and draws the lot in bind pose. Short
+ *                         for -level <LEVEL> plus the mode.
  *
  *   Lara only:
  *     -outfit <NAME>      wear this one instead of the level's own.
  *                         OUTFIT_VCI, VCI, TR3_COAST, the randomizer's own
  *                         guest id (tr3_london, tr3_jungle, tr3_antarctica,
- *                         tr3_nevada) and, since #153 round M2, any WARDROBE
- *                         KEY - 46/OUTFIT_TR2_HOME, 13/OUTFIT_TRX_WETSUIT_1,
+ *                         tr3_nevada) and any wardrobe key -
+ *                         46/OUTFIT_TR2_HOME, 13/OUTFIT_TRX_WETSUIT_1,
  *                         mod/outfits/aod wetsuit/OUTFIT_CLASSIC. -wardrobe
  *                         prints the keys.
- *     -wardrobe           THE WARDROBE SCAN (#153, round M2), and then stop:
- *                         every outfit this machine can dress her in, with
+ *     -wardrobe           the wardrobe scan, and then stop: every outfit
+ *                         this machine can dress her in, with
  *                         the key to name it by, where the file came from,
  *                         the five flags and where each of them was decided,
  *                         the material and the skin pages - and under it
@@ -89,7 +89,7 @@
  *                         engine keeps. -guns implies empty - unless this
  *                         switch is on the line, and then it wins: -guns
  *                         revolver -holsters revolver is the contradictory
- *                         frame of user finding C1, the gun in her hand and
+ *                         frame where the gun is in her hand and
  *                         in the holster at once, which the seam has to
  *                         resolve to an empty thigh.
  *     -flare / -torch     the LEFT hand alone, as laraflar.cpp / flmtorch.cpp
@@ -103,10 +103,10 @@
  *     -mirror             draw through a view matrix of NEGATIVE determinant,
  *                         which is what a mirror room does to the winding.
  *     -firstperson        draw her the way the seam draws her while the first
- *                         person camera is on (#126): the head node masked
+ *                         person camera is on: the head node masked
  *                         off the body, no LARA_HEAD and no braid - all three
- *                         sit where the camera does. The CAMERA moves with it
- *                         (#123, stage S8): it goes where game/camera.cpp
+ *                         sit where the camera does. The camera moves with it:
+ *                         it goes where game/camera.cpp
  *                         puts the eye - the head joint of this level's own
  *                         skeleton, 16 units up and 48 forward - and looks
  *                         along +z, which is the way she faces. -pitch is
@@ -122,21 +122,19 @@
  *                         which side of her body's triangles is drawn. The
  *                         HD path draws every model double sided; with the
  *                         camera inside her that shows her own inside, so
- *                         first person culls (stage S8). Default: back with
+ *                         first person culls. Default: back with
  *                         -firstperson, none otherwise.
- *     -headcut <w>        the first person HEAD CUT, on her body alone: every
- *                         fragment whose weight on the HEAD node reaches w is
- *                         discarded (#123, fix round U). A negative w draws
- *                         the BEFORE picture. The default with -firstperson is
+ *     -headcut <w>        the first person head cut, on her body alone: every
+ *                         fragment whose weight on the head node reaches w is
+ *                         discarded. A negative w draws
+ *                         the picture from before the cut existed. The default with -firstperson is
  *                         the engine's own HD_LARA_HEAD_CUT_WEIGHT.
- *     -nocap              draw first person WITHOUT the lid that closes the
- *                         hole (#123, fix round S) - the BEFORE picture of
- *                         that half of the round.
+ *     -nocap              draw first person without the lid that closes the
+ *                         hole left by the head cut - the picture before the lid existed.
  *     -eye <x> <y> <z>    move the eye off the head joint, which is what a
- *                         LANDING does (#123, fix round U): the camera leaves
+ *                         landing does: the camera leaves
  *                         the skull and the nape stands in front of it.
- *     -headw              THE HEAD'S OWN WEIGHT, per outfit (#123, fix round
- *                         U): how much of each body the head node really owns,
+ *     -headw              the head's own weight, per outfit: how much of each body the head node really owns,
  *                         scanned over eight thresholds, with the RIM each one
  *                         leaves - its vertices, how far off the neck axis and
  *                         how far down it they stand, which page they wear and
@@ -144,7 +142,7 @@
  *                         carries. It is the measurement the cut's threshold
  *                         and the lid's shape both come out of.
  *     -handfold [<permille>]
- *                         THE MIRRORED HAND WEIGHTS (#153, round M2b), and
+ *                         the mirrored hand weights, and
  *                         what folding them back costs. A hand file is drawn
  *                         once and mirrored, and an exporter that mirrors the
  *                         geometry without the bone names leaves vertices of
@@ -166,13 +164,13 @@
  *                         it wants a pose with the hands APART, e.g.
  *                         -lara-pose 9 50 40 -lara-pose 12 -50 40.
  *     -nofold             build the hands from the file exactly as it stands:
- *                         the picture from BEFORE round M2b, sliver and all.
+ *                         the picture from before the hand fold existed, sliver and all.
  *     -nohandmix          draw a mod's hand model whole, in the mod's own
  *                         skin, instead of putting the install's hands under
- *                         its gun (#153, round M2b) - the other half of the
- *                         BEFORE picture.
+ *                         its gun - the other half of the
+ *                         before picture.
  *     -lara-head tr5|hair|outfit
- *                         WHOSE HEAD THIS BODY WEARS (#156), whatever the
+ *                         whose head this body wears, whatever the
  *                         wardrobe decided for it. tr5 = its own head node is
  *                         not drawn and node 14 of the install's
  *                         OUTFIT_CLASSIC - Lara's hair - stands in its place;
@@ -187,77 +185,75 @@
  *                         either. -wardrobe prints the column. (The plain
  *                         -head is a different switch and older: it draws a
  *                         separate <NAME>_HEAD.TRM beside a -name model.)
- *     -tween60 [<n> ...]  REPLAY those animations at SIXTY (#123, fix round
- *                         U; #148, order 4): every drawn frame, tick and
+ *     -tween60 [<n> ...]  replay those animations at sixty hertz: every drawn frame, tick and
  *                         tween alike, with every node's origin in her own
  *                         frame and how far it stands from the midpoint of
- *                         its own two neighbours. The frame a play test
- *                         photographs as "a leg the wrong way round" is an
+ *                         its own two neighbours. A frame
+ *                         showing "a leg the wrong way round" is an
  *                         outlier here or it is not in the pose at all. With
  *                         no number it takes the rolls and the sprint dive.
- *     -poserisk           what the SIXTY HERTZ pose blend has to survive
- *                         (#148, order 4; fix round S, S2): every adjacent
- *                         key frame pair of every LARA animation, all fifteen
+ *     -poserisk           what the sixty hertz pose blend has to survive:
+ *                         every adjacent
+ *                         key frame pair of every Lara animation, all fifteen
  *                         nodes, with the relative TURN of the two node
  *                         frames in degrees - which is what an element-wise
  *                         matrix blend shrinks by cos(turn/2) - and the
  *                         largest per-axis packed difference in ten bit units
  *                         after the wrap. The rate 1 animations are listed
  *                         apart: those are the pairs vanilla never blended at
- *                         all and order 4 does.
+ *                         all and the sixty hertz path does.
  *     -neck               the measurements those numbers come from: for every
  *                         outfit, how many torso-node vertices sit above the
  *                         shoulder line and how near the nearest of them, of
  *                         the shoulders and of the chest come to the eye - at
  *                         both eye positions the game uses; then the neck as a
- *                         TUBE and as a CYLINDER, with the (S, R) scan that
- *                         says what a candidate cut takes, how much COLLAR it
+ *                         tube and as a cylinder, with the (S, R) scan that
+ *                         says what a candidate cut takes, how much collar it
  *                         leaves standing, whether it can reach an arm and
- *                         what it leaves in the camera; then the neck in TWO
- *                         unit bins with the head-weight column of fix round
- *                         L; then WHAT A CANDIDATE CUT LEAVES, which is the
+ *                         what it leaves in the camera; then the neck in two
+ *                         unit bins with the head-weight column; then what a candidate cut leaves, which is the
  *                         only one of them that models the shader exactly -
  *                         the weighted node push and the range mask, so a
  *                         head-skinned collar vertex is counted where the
  *                         engine really puts it; and last the stump BY PAGE,
  *                         which is where the inner skin's own texel is chosen
  *                         from.
- *     -braidsim [steps]   THE BRAID'S OWN PHYSICS, run offline (#123, fix
- *                         round F, F2). HairControl's chain loop transcribed
+ *     -braidsim [steps]   the braid's own physics, run offline. HairControl's
+ *                         chain loop transcribed
  *                         line for line and driven with this level's Lara
  *                         skeleton, her collision spheres and the HD pack, in
- *                         the bind pose - the pose the user's own two video
- *                         frames were shot in. One line per regime: how far
+ *                         the bind pose. One line per regime: how far
  *                         the busiest link still travels per step after 1,
  *                         10, 30 and `steps` steps, and how deep a link still
  *                         stands inside the backpack - measured against the
- *                         pack BOX of fix round I whether or not the regime
+ *                         pack box whether or not the regime
  *                         has it, so the shipped spheres say how far into the
  *                         pack the braid used to go. A settled braid reads
  *                         zero and stays there; the regimes that read
  *                         anything else are the ones the game had. Default
  *                         60 steps, which is a second of game time.
- *     -classicroot        draw the studio braid from the CLASSIC root, which
- *                         is the picture before fix round I (I2): the plait
+ *     -classicroot        draw the studio braid from the classic root, which
+ *                         is the picture before the root moved to its HD
+ *                         position: the plait
  *                         starts 15 units clear of the hair knot. The default
  *                         is the engine's own HD root.
- *     -braidanim [<n>]    THE SAME CHAIN UNDER A REAL ANIMATION (#123, fix
- *                         round G). The bind pose has no anchor motion at
+ *     -braidanim [<n>]    the same chain under a real animation. The bind pose has no anchor motion at
  *                         all; this reads the level's own animation table,
  *                         decodes the frames Lara really wears and rebuilds
  *                         all eight collision spheres and the braid root from
  *                         them once per game frame, the game's own frame
  *                         blending included. One row per variant - the
- *                         classic body alone, the pack as fix round F ships
- *                         it, and three ways of softening it - counting the
- *                         TIP's travel per frame in the four buckets the play
- *                         test's HAIRLOG was counted in. Repeat the switch
+ *                         classic body alone, the pack as it ships,
+ *                         and three ways of softening it - counting the
+ *                         tip's travel per frame in the four buckets its log
+ *                         was measured in. Repeat the switch
  *                         for more animations; with no number it runs 103
  *                         (breathing on the spot), 0 (the run loop) and 1
  *                         (the walk loop). The step count comes from
  *                         -braidsim, or 120 without it.
  *     -nobraidfloor       take the floor clamp out of -braidanim, which is
- *                         how fix round F's bind pose ran.
+ *                         how the bind-pose simulation ran before the clamp
+ *                         existed.
  *     -laracheck          the two proofs of the Lara seam, as tables, and the
  *                         offline twins of what the engine logs as HDLOG
  *                         laracheck and HDLOG braidcheck on its first HD Lara
@@ -269,20 +265,20 @@
  *                         first place.
  *
  *   The mods and the other bundle:
- *     -mods <folder>      the Mods folder to scan (#153, round M1). The very
+ *     -mods <folder>      the Mods folder to scan. The very
  *                         resolver the engine uses, not a copy of it: a mod's
  *                         .TRM replaces the install's file of the same name,
  *                         and the pages that model asks for are looked for in
  *                         the mod first, then in the bundle its mod.txt names
  *                         with origin=, then in the install. Without the
  *                         switch no Mods folder is scanned at all and every
- *                         answer is the one this tool gave before the round.
+ *                         answer is the one this tool gives for the install alone.
  *     -tr3 <3-folder>     the Tomb Raider I-III Remastered game 3 folder,
  *                         which is what a mod's origin= reaches into - and
  *                         what the four Tomb Raider III guests need. Sets it
  *                         on both modules, as hd_object.cpp does.
  *     -classicpose <game> <MODEL_NAME>
- *                         THE POSE THE ENGINE WILL APPLY (#155),
+ *                         the pose the engine will apply,
  *                         and then stop. Reads the classic object that model
  *                         name stands for in Tomb Raider <game> - 1, 2 or 3 -
  *                         out of the level files of the I-III install, and
@@ -293,9 +289,9 @@
  *                         What the pose does to a particular .TRM is printed
  *                         by -slot <n> -inventory, which is the path that
  *                         really applies it.
- *     -noclassicpose      -inventory WITHOUT that pose - the file as it lies
+ *     -noclassicpose      -inventory without that pose - the file as it lies
  *                         in the mod, which is what the ring drew before
- *                         #155. The switch exists so that what the pose
+ *                         the pose was applied. The switch exists so that what the pose
  *                         buys stays a measurement: the box, the fit, the
  *                         overflow and the floor figure can be had both ways
  *                         out of the same build.
@@ -304,8 +300,8 @@
  *     -level <LEVEL>      stem, e.g. ANDREA1. The classic level is read from
  *                         <5-folder>\DATA\<LEVEL>.TRC and the binding from
  *                         <LEVEL>.MAP beside it.
- *     -classic <path>     a classic .TRC by path instead - the user's own
- *                         Steam data, or a randomized level.
+ *     -classic <path>     a classic .TRC by path instead - a Steam install's
+ *                         own data, or a randomized level.
  *
  *   The picture:
  *     -size <w> <h>       render target, default 1024 1024
@@ -313,7 +309,7 @@
  *     -yaw <deg>          camera around the model, default 180 (from the front)
  *     -pitch <deg>        default 10, looking slightly down
  *     -dist <units>       camera distance; default frames the bounding box
- *     -invrot <x> <y> <z> THE RING'S OWN PRESENTATION (#153, round M3): the
+ *     -invrot <x> <y> <z> the ring's own presentation: the
  *                         three angles the item's row of
  *                         inventry_objects_list carries, raw engine units
  *                         (0x4000 is 90 degrees, decimal or 0x), put on the
@@ -327,7 +323,7 @@
  *                         origin; for an inventory model, which is one
  *                         node, that is the root and nothing else. The
  *                         camera frames the
- *                         TURNED box since the fix round of M3 - before it,
+ *                         turned box - without that,
  *                         a model whose box is off-centre swung out of the
  *                         picture and the .PNG came out empty.
  *     -axisview           the model turned so that its own vertex cloud's
@@ -345,8 +341,8 @@
  *     -inventory          with -slot: draw the mod's own <BASE>_OPTION model
  *                         in the slot's place, turned and scaled onto the box
  *                         of the EXTRA model it replaces, exactly as the
- *                         inventory ring and the pickup display do it (#153,
- *                         round M2b). Prints both boxes and the scale. Wants
+ *                         inventory ring and the pickup display do it.
+ *                         Prints both boxes and the scale. Wants
  *                         -mods; without a mod that ships one it says so and
  *                         draws the slot's own model.
  *     -itemcheck          the matrix proof of the object path, as a table:
@@ -355,40 +351,40 @@
  *                         card is handed. The engine runs the same check on
  *                         its own matrix stack and logs HDLOG itemcheck; this
  *                         one runs it without the game.
- *     -ringcheck          the proof of the INVENTORY RING's off-centre
- *                         projection (#123, fix round P, P2), in two halves.
- *                         THE PLACE: the model's bounding rectangle put on the
+ *     -ringcheck          the proof of the inventory ring's off-centre
+ *                         projection, in two halves.
+ *                         The place: the model's bounding rectangle put on the
  *                         screen twice at every place the ring puts an item -
  *                         once by the classic off-centre projection
  *                         (f_centerx/f_centery moved to the item, as
  *                         phd_PutPolygonsPickup does) and once through the
  *                         engine's own HDModelOffCentreMatrix, which is what
  *                         hd_object.cpp hands the card per ring item. Both the
- *                         place and the SIZE have to agree, at 4:3 and at
- *                         16:9; the budget is 1 pixel. THE LIGHT: the ring's
+ *                         place and the size have to agree, at 4:3 and at
+ *                         16:9; the budget is 1 pixel. The light: the ring's
  *                         sun term over 26 sample normals, on the matrix the
- *                         engine hands the card and on the SHEARED matrix fix
- *                         round P handed it - the first must not move at all,
- *                         and the second is the error P2 removed, kept as a
+ *                         engine hands the card and on a sheared matrix an
+ *                         earlier version of this projection handed it - the first must not move at all,
+ *                         and the second is the shear error, kept as a
  *                         number. Needs the camera, so it does not combine
  *                         with -nodraw - same as -itemcheck and -laracheck.
- *     -pickupcheck        the proof of the PICKUP DISPLAY (#123, fix round
- *                         P2) - the little turning object in the corner
+ *     -pickupcheck        the proof of the pickup display - the little
+ *                         turning object in the corner
  *                         after Lara picks something up - in three halves.
- *                         THE PLACE: the bounding rectangle put on the
+ *                         The place: the bounding rectangle put on the
  *                         screen twice at the place S_DrawPickup puts it
  *                         (x = winwidth - GetFixedScale(80) + PickupX,
  *                         y = winheight - GetFixedScale(75)), at 1920x1080
  *                         and 2560x1440, at rotation 0 and 90 degrees, and
  *                         with the slide-in both fully in and fully out.
- *                         Budget 1 px, on the place and on the SIZE. THE
- *                         LIGHT: the same object rendered twice - once
+ *                         Budget 1 px, on the place and on the size. The
+ *                         light: the same object rendered twice - once
  *                         about the screen centre, once about the display's
  *                         corner - and compared where the two overlap after
  *                         the whole known pixel shift, with the display's
  *                         own light (ambient 8/8/8, one sun of 0x7F7F7F,
- *                         sun scale 0.75 and NOT the ring's 2.0). THE
- *                         BRACKET: every watched device state read before
+ *                         sun scale 0.75 and not the ring's 2.0). The
+ *                         bracket: every watched device state read before
  *                         and after the corner draw. Needs the camera, so
  *                         it does not combine with -nodraw.
  *     -ring <x> <y>       draw the model where the ring would put it, by the
@@ -413,8 +409,7 @@
  *                         below it. Repeat the switch for more nodes.
  *     -head               draw the separate HD face as well, if there is one
  *     -onlypage <n>       with -name: build only the triangles that wear that
- *                         .DDS page, and load only that page (#123, fix round
- *                         D). This is the cut the wardrobe uses to take the
+ *                         .DDS page, and load only that page. This is the cut the wardrobe uses to take the
  *                         thigh holster rig out of OUTFIT_TR3_CATSUIT
  *                         (page 8205) without its legs, and the switch is how
  *                         one looks at what the cut kept.
@@ -422,7 +417,7 @@
  *                         of at the middle of the whole figure: the head, for
  *                         the braid against the skull, or the RIGHT WRIST, for
  *                         the seam between the body's own forearm and the
- *                         separate HAND_ model (#123, fix round K, K2).
+ *                         separate HAND_ model.
  *     -light <x y z r g b range>
  *                         one POINT light in VIEW space (the camera is at the
  *                         origin looking down +z), colour 0..255 and the
@@ -432,8 +427,8 @@
  *
  *   Everything else:
  *     -nodes              print the node table (also printed by -all)
- *     -pagelist           EVERY SLOT OF THE PAGE CACHE after the build
- *                         (#153, round M3): its key as the cache holds it,
+ *     -pagelist           every slot of the page cache after the build:
+ *                         its key as the cache holds it,
  *                         where the .DDS was read from, the size it was
  *                         decoded to and its bytes. One line each and a
  *                         total, so that two runs can be compared with diff
@@ -441,13 +436,13 @@
  *                         the cache" is answered by a set difference instead
  *                         of by a guess. The cache never frees a page
  *                         (hd_pagecache.cpp), so the union of two such lists
- *                         IS what an in-level outfit change leaves behind.
+ *                         is what an in-level outfit change leaves behind.
  *     -threads <n>        page decoding threads, default 8
  *     -managed            pages in D3DPOOL_MANAGED instead of D3DPOOL_DEFAULT
  *     -nodraw             load and measure only - no window, no picture
  *
- *   THE FLOOR A PICKUP LIES ON (#155b):
- *     -floor              with -slot: draw the slot the way the LEVEL draws
+ *   The floor a pickup lies on:
+ *     -floor              with -slot: draw the slot the way the level draws
  *                         it on the ground - the mod's own <BASE>_OPTION
  *                         model where there is one, fitted onto the item's
  *                         box, and the slot's own EXTRA model otherwise -
@@ -465,8 +460,7 @@
  *                         brings the second onto the first. Take it with a
  *                         low camera (-pitch 4 reads well; -pitch 55 shows a
  *                         crossed pair from above).
- *                         IN THE ITEM'S OWN ANIMATION FRAME since #155b fix
- *                         round 1, which is what "the way the LEVEL draws it"
+ *                         In the item's own animation frame, which is what "the way the level draws it"
  *                         means: the frame's rotations are read out of the
  *                         .TRC and put on every node, so a slot whose frame
  *                         stands the model on its head is drawn standing on
@@ -475,29 +469,29 @@
  *                         left out of a floor picture too - the item's frame
  *                         is not a presentation, it is where the thing lies.
  *                         Every other switch's picture is the bind pose.
- *                         THE CAMERA FRAMES THE LIFT AS WELL since fix round
- *                         2: the box it is built from is stretched upward by
+ *                         The camera frames the lift as well:
+ *                         the box it is built from is stretched upward by
  *                         the lift, because a model that comes up 126 units
  *                         (RICH3's crossbow ammunition) otherwise walks out of
  *                         the top of the very picture that wants it. It is
  *                         stretched by the same amount with -nofloorlift, so
  *                         the two pictures share one camera.
- *     -nofloorlift        the same picture with the lift LEFT OFF - what the
- *                         floor showed before this round, so that what the
+ *     -nofloorlift        the same picture with the lift left off - what the
+ *                         floor showed before the lift was added, so that what the
  *                         rule buys is a comparison and not a memory. Implies
  *                         -floor. Same camera as the picture with it, so the
  *                         two can be measured against each other in pixels.
  *     -floorcheck         every pickup slot of the level as a table, and then
  *                         stop: the classic mesh's deepest point, the HD
  *                         model's, the sink and the lift, each of them in the
- *                         frame the level DRAWS the item in - and under every
- *                         row the same three in the BIND pose, with the node
+ *                         frame the level draws the item in - and under every
+ *                         row the same three in the bind pose, with the node
  *                         0 axis that says how far apart the two frames are.
- *                         The fitted <BASE>_OPTION models come with round
- *                         #155's own answer as well, the eight box corners
+ *                         The fitted <BASE>_OPTION models come with
+ *                         their own fit's answer as well, the eight box corners
  *                         through the fit. Loads every slot the way -all
  *                         does; add -all for -all's table as well. Wants
- *                         -mods to see a mod's models, and WANTS -level:
+ *                         -mods to see a mod's models, and wants -level:
  *                         without the level's own .MAP the table describes
  *                         generic-prefix bindings and not the ones the engine
  *                         builds (RICH1's BINOCULARS_ITEM is one row that
@@ -526,8 +520,8 @@
 /* By path, not through a /I of specific\: that folder holds the engine's own
  * time.h, and putting it on the include path makes <chrono> pick it up
  * instead of the CRT's. */
-/* THE TIME INTERPOLATION'S OWN ARITHMETIC (#148, order 4; #123 fix
- * round U, U2). InterpTest includes this same header; -tween60 below
+/* The time interpolation's own arithmetic.
+ * InterpTest includes this same header; -tween60 below
  * replays a whole animation through it, so the tool and the engine
  * cannot answer the question differently. It pulls in no engine header
  * of its own. */
@@ -857,7 +851,7 @@ static void MatRotX(double deg, float* m)
 
 /* ------------------------------------------------------- the ring (P) -- */
 
-/* THE ROAD THE ENGINE DID NOT TAKE (#123, fix round P, corrected in P2).
+/* The road the engine did not take.
  *
  * The classic inventory ring projects each item about the item's own place on
  * the screen: phd_PutPolygonsPickup (specific\output.cpp) moves f_centerx /
@@ -868,7 +862,7 @@ static void MatRotX(double deg, float* m)
  *
  * has to be put somewhere. It can be put into the ITEM'S MATRIX as a shear -
  * vx' = vx + kx * vz, which survives the projection's division by vz as a
- * constant pixel offset - and fix round P did exactly that. This function is
+ * constant pixel offset, which an earlier version of the HD path did. This function is
  * that shear, and it is kept for ONE purpose: -ringcheck measures what it does
  * to the LIGHT, which is why the engine no longer does it. hd_model.hlsl skins
  * the vertex NORMAL through the same matrix and renormalises, so a sheared
@@ -1098,7 +1092,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 	return ok;
 }
 
-/* THE PICTURE'S PIXELS, with no file written (#123, fix round P2).
+/* The picture's pixels, with no file written.
  * ShotWrite measures a mean over the whole target, which answers nothing when
  * the two pictures being compared have the object in DIFFERENT places;
  * -pickupcheck compares them pixel by pixel after the whole known shift, so it
@@ -1132,8 +1126,8 @@ static bool ShotGrab(Shot& shot, std::vector<unsigned long>& out)
 
 /* ------------------------------------------------------- state bracket -- */
 /*
- * THE SAME CHECK RoomProbe MAKES OF THE ROOM PATH'S BRACKET (#123, stage S3-1),
- * brought here in fix round P2 for a bracket that is new: the pickup display
+ * The same check RoomProbe makes of the room path's bracket,
+ * brought here for a bracket that is new: the pickup display
  * opens one in the MIDDLE of a classic frame - after the frame's own HD block
  * has been drawn and closed, between an InitialiseSortList and the DrawSortList
  * that follows it - so anything it leaves behind is handed straight to the
@@ -1438,7 +1432,7 @@ static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
 		if (!verts || at + 12 + (size_t)verts * 6 > bytes.size())
 			continue;
 
-		/* THROUGH THE FRAME THE LEVEL DRAWS THIS NODE IN (fix round 1), which
+		/* Through the frame the level draws this node in, which
 		 * is why all three coordinates are read and not the y alone: a frame
 		 * that turns node 0 - six of ANDREA3's eighteen pickup slots do, and
 		 * UZI_ITEM's turns it upside down - sends a mesh's lowest point
@@ -1474,7 +1468,7 @@ static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
 	return any;
 }
 
-/* THE FRAME THE LEVEL DRAWS A SLOT IN (#155b, fix round 1), out of the .TRC.
+/* The frame the level draws a slot in, out of the .TRC.
  *
  * The engine's own walk is HDFramePose, which this tool links - so the frame a
  * -floor picture is drawn in is the frame the engine measured in, and not a
@@ -1487,7 +1481,7 @@ static bool ClassicMeshLowest(const Tr5Level& level, const ClassicSlot& here,
  * The answer is twelve floats a node - the engine's 3x4, a point is R * p + t
  * - relative to the item's origin, the frame's own offset left out. Empty when
  * the level has no such moveable, and a caller with an empty pose measures and
- * draws the BIND pose, which is what this tool did until this fix round. */
+ * draws the bind pose, which is what this tool drew before it read the item's own animation frame. */
 static int ReadFramePose(const Tr5Level& level, const ClassicSlot& here,
 	std::vector<float>& out)
 {
@@ -1535,7 +1529,7 @@ static void PoseToRowMajor(const float* pose, float* out)
 	out[12] = pose[3]; out[13] = pose[7]; out[14] = pose[11]; out[15] = 1.0f;
 }
 
-/* THE LIFT, STRAIGHT UP IN THE WORLD (#155b, fix round 1) - the engine's own
+/* The lift, straight up in the world - the engine's own
  * move, on the same matrices and in the same space.
  *
  * The node matrices are model space to VIEW space, so a displacement in the
@@ -1544,9 +1538,9 @@ static void PoseToRowMajor(const float* pose, float* out)
  * that is minus that row. The 3x3 is untouched - nothing is scaled, nothing
  * turned, nothing moved sideways.
  *
- * AT THE VIEW END OF THE CHAIN, which is what makes it "up" in the picture
- * whatever is prepended in front of the model afterwards. The first build of
- * this round wrote it onto the fit's own translation row in one branch and
+ * At the view end of the chain, which is what makes it "up" in the picture
+ * whatever is prepended in front of the model afterwards. An earlier build
+ * wrote it onto the fit's own translation row in one branch and
  * onto the node matrix's y row in the other, so -invrot displaced the model
  * in the TURNED frame and a slot whose animation frame stands the model on
  * its head was pushed further into the ground. */
@@ -1570,7 +1564,7 @@ static void LiftNodes(float* matrices, int nodes, float lift, const float* view)
  * applied where -pose asked for it; a node's rotation reaches every node
  * below it because the stack carries it down.
  *
- * `pose` (#155b, fix round 1) is ReadFramePose's answer, and with it the walk
+ * `pose` is ReadFramePose's answer, and with it the walk
  * below is not done at all: the frame's own matrices already carry every
  * translation AND every rotation of the item's animation frame, which is the
  * whole of what -floor has to draw. -pose's turns are a presentation of the
@@ -1672,8 +1666,8 @@ static std::string ParentOf(const std::string& path)
 /* Whether a page has a .DDS of its own anywhere in the bundle. The page cache
  * puts WHITE.DDS in its place when it has none, which is a picture and not an
  * error - but for the report the two have to be told apart. */
-/* WHERE A PAGE REALLY CAME FROM, asked of the cache that loaded it rather
- * than worked out again here (#153, round M1). This used to be a copy of the
+/* Where a page really came from, asked of the cache that loaded it rather
+ * than worked out again here. This used to be a copy of the
  * 5-then-4 rule with a root and a page number, and a copy of a rule is a rule
  * that goes out of step: it knew nothing of the other bundle's namespace and
  * nothing of the mods', so it reported every page of a Tomb Raider III guest
@@ -1754,14 +1748,13 @@ static void PrintNodeTable(int slot, const ClassicSlot* classic, const char* nam
 }
 
 /* ------------------------------------------------------- the neck stump -- */
-/* WHERE THE FIRST PERSON NEAR CUT COMES FROM (#123, stage S8).
+/* Where the first person near cut comes from.
  *
- * The classic path hides Lara's head MESH in first person, and for a classic
+ * The classic path hides Lara's head mesh in first person, and for a classic
  * body that is the whole of it - LM_HEAD is head and neck in one piece. An HD
  * body is a single skinned surface: masking node 14 takes the head off, and
- * the NECK STUMP below it stays, because those triangles are weighted to the
- * TORSO. That is what stands in the camera when she looks down (user finding
- * F3). The diving suit puts its whole helmet on the torso node in the same
+ * the neck stump below it stays, because those triangles are weighted to the
+ * torso. That is what stands in the camera when she looks down. The diving suit puts its whole helmet on the torso node in the same
  * way.
  *
  * This table measures how near that geometry comes to the eye - for every
@@ -1791,18 +1784,18 @@ static std::string TrmPath(const std::string& root5, const char* stem)
 }
 
 /* ------------------------------------------------------- the braid root -- */
-/* #123, fix round C, user finding C4: "the braid does not grip the head
- * properly (Todesengel's too)".
+/* The braid does not grip the head properly for every outfit (Todesengel's
+ * models included).
  *
- * THE THREE THINGS THAT HAVE TO MEET, all in the classic bind pose, which is
+ * The three things that have to meet, all in the classic bind pose, which is
  * the pose every .TRM vertex is written in:
  *
- *   1. THE ROOT the game hangs the braid from. game\hair.cpp:397 walks the
+ *   1. The root the game hangs the braid from. game\hair.cpp:397 walks the
  *      mesh tree to the head bone and translates by (-4, -4, -48) in its own
  *      frame; the result is hairs[0][0], and the seam puts HAIR_OG's bone 0
  *      there. In the bind pose the head frame is axis aligned with the world,
  *      so the root is simply the head joint plus that triple.
- *   2. THE HEAD the braid comes out of - the outfit's own node 14 geometry and
+ *   2. The head the braid comes out of - the outfit's own node 14 geometry and
  *      the separate LARA_HEAD that rides rigidly on it, which is where the
  *      hair and the tie are modelled.
  *   3. HAIR_OG's FIRST LINK, whose bone 0 sits at the model's origin: its
@@ -1848,8 +1841,8 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 		else
 		{
 			double lo = 1.0e9, hi = -1.0e9;
-			/* HOW THICK THE PLAIT IS (#123, fix round I, I1). The push-out of
-			 * a BOX needs a margin, and the margin is the braid's own radius:
+			/* How thick the plait is. The push-out of
+			 * a box needs a margin, and the margin is the braid's own radius:
 			 * a link's axis is its bone's +z, so the radius is the furthest a
 			 * vertex of that link stands from that axis. Measured per link and
 			 * over the whole model, because the plait tapers. */
@@ -1984,10 +1977,10 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 		"NEGATIVE left means the link is already\ninside the head and nothing "
 		"needs moving.\n");
 
-	/* --- WHERE THE HAIR KNOT IS (#123, fix round I, I2) ------------------ */
-	/* The user's finding: "the anchor is still wrong" - the braid starts
-	 * behind the skull beside the pack instead of coming out of the knot. Fix
-	 * round D measured the gap against the SKULL, which is the outfit's own
+	/* --- Where the hair knot is ------------------------------------------ */
+	/* The braid starts
+	 * behind the skull beside the pack instead of coming out of the knot when the anchor is measured against the wrong surface: an earlier
+	 * version measured the gap against the skull, which is the outfit's own
 	 * node 14; the knot is on LARA_HEAD, and the two are not the same surface.
 	 * So the head file is measured on its own: its box, its rearmost point,
 	 * and the nearest of its vertices BEHIND the head joint - which is the
@@ -2055,7 +2048,7 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 		}
 	}
 
-	/* --- THE BACKPACK (#123, fix round D, D3b) --------------------------- */
+	/* --- The backpack ------------------------------------------------------ */
 	/* The classic HairControl collides the braid with five spheres, all of
 	 * them CLASSIC Lara meshes: hips, torso, head and the two upper arms. An
 	 * HD outfit is a different body and its pack stands further out than the
@@ -2075,12 +2068,12 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 	printf("%-19s %7s %24s %8s\n", "-------------------", "-------",
 		"------------------------", "--------");
 
-	/* THE PACK AS A BOX (#123, fix round I, I1). Fix round G measured that the
-	 * pack is a SLAB and that two spheres of radius 36 touch it on the centre
-	 * line alone, so the braid lies IN the pack instead of on it. A box needs
+	/* The pack as a box. Measurement shows the
+	 * pack is a slab and that two spheres of radius 36 touch it on the centre
+	 * line alone, so the braid lies in the pack instead of on it. A box needs
 	 * six numbers and the spheres gave three, so they are taken here - over the
 	 * whole pack point set and, separately, over the middle strip a braid can
-	 * actually reach (|x| <= 30), which is the strip round G quoted. */
+	 * actually reach (|x| <= 30). */
 	double boxLo[3] = { 1.0e9, 1.0e9, 1.0e9 };
 	double boxHi[3] = { -1.0e9, -1.0e9, -1.0e9 };
 	double stripLo[3] = { 1.0e9, 1.0e9, 1.0e9 };
@@ -2184,8 +2177,8 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 			printf("%-19s %7s %24s %8s\n", stem, "-", "no pack", "-");
 		else if (outfit != HD_LARA_OUTFIT_SUBSUIT)
 		{
-			/* THE DIVING SUIT IS NOT IN THE BOX (#123, fix round I, I1, and
-			 * fix round D said the same of the spheres): what sits behind its
+			/* The diving suit is not in the box (nor in the sphere pack
+			 * either): what sits behind its
 			 * torso is two thrusters, it wears a helmet and no braid, and its
 			 * numbers are half as deep again as any pack's. */
 			sprintf(boxRows[boxOutfits], "%-19s %7d  %6.0f..%-6.0f %6.0f..%-6.0f "
@@ -2210,7 +2203,7 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 		"torso node\nwith these offsets; HD_LARA_PACK_* in hd_lara.h carries "
 		"the numbers.\n");
 
-	/* --- THE SAME PACK AS A BOX (#123, fix round I, I1) ------------------ */
+	/* --- The same pack as a box ------------------------------------------- */
 	printf("\n-- the backpack as a BOX, in the torso frame -----------------\n");
 	printf("%-19s %7s  %-13s %-13s %-13s  %-13s %-13s\n", "outfit", "verts",
 		"x", "y", "z", "y (|x|<=30)", "z (|x|<=30)");
@@ -2233,13 +2226,12 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 	}
 }
 
-/* ---------------------------------------- the neck as a CYLINDER (J1) -- */
+/* ---------------------------------------- the neck as a cylinder -------- */
 /*
- * WHY A THIRD NECK TABLE (#123, fix round J, J1).
+ * Why a third neck table.
  *
- * Fix round I cut the neck with a SPHERE around the eye and closed what it
- * opened with a dome whose rim was the body's own outline at s = 50. The
- * play test says both halves are wrong in the picture: the dome is a plate
+ * An earlier cut of the neck used a sphere around the eye and closed what it
+ * opened with a dome whose rim was the body's own outline at s = 50. Both halves are wrong in the picture: the dome is a plate
  * the size of her whole chest, it pokes out through the collar, its middle is
  * a black smear, and the strips between its spokes are long slivers. The
  * cause is in the two numbers this table replaces: at s = 50 the body is no
@@ -2540,7 +2532,7 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 							left++;
 					}
 
-					/* The COLLAR RING (#123, fix round K, K1(a)): what the cut
+					/* The collar ring: what the cut
 					 * leaves standing in the neck band itself. The shoulders
 					 * join at s = 30 in every outfit - the tube table above -
 					 * so a survivor above that line and near the axis is a
@@ -2591,8 +2583,8 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 /* One number as a table cell, so that a column which prints "-" when there is
  * nothing to print does not need a scratch buffer at every call site. Four
  * rotating buffers, which is more than any one printf below asks for. */
-/* THE CYLINDER FIX ROUNDS J TO L SHIPPED, as two plain numbers (#123, fix
- * round S). The engine cuts with one PLANE now and hd_lara.h has no
+/* The cylinder cut that shipped before the plane cut, as two plain numbers.
+ * The engine cuts with one plane now and hd_lara.h has no
  * HD_LARA_NECK_CUT constants any more, but the tables below were the argument
  * that led to the plane and they are kept exactly as they read: a table that
  * silently changes its own reference line is worse than no table. The plane
@@ -2611,22 +2603,22 @@ static const char* Num(double v)
 	return buf[at];
 }
 
-/* WHERE THE COLLAR THAT SURVIVED THE CYLINDER ACTUALLY SITS (#123, fix round
- * L, L1).
+/* Where the collar that survived the cylinder cut actually sits.
  *
- * Fix round K left 94 collar vertices standing on OUTFIT_RUSSIA and 110 on the
- * parka, and reported the limit honestly: one cylinder cannot take a collar of
+ * An earlier measurement left 94 collar vertices standing on
+ * OUTFIT_RUSSIA and 110 on the
+ * parka: one cylinder cannot take a collar of
  * radius 31 and leave shoulders of radius 67 at what the five-unit bins call
- * the same depth. The user's answer is that the collar has to go anyway, so
+ * the same depth. The collar has to go anyway, so
  * this is the measurement that says what shape does it.
  *
- * TWO TABLES. The first is the neck in TWO-unit bins instead of five, with the
+ * Two tables. The first is the neck in two-unit bins instead of five, with the
  * survivors of the shipped cylinder counted separately - it is the picture of
  * a collar as a function of depth, and it shows that the ring lives in a band
  * a few units deep and never as wide as a shoulder. The second walks candidate
- * CONES - wide at the head joint, tapering to the shipped radius where the
+ * cones - wide at the head joint, tapering to the shipped radius where the
  * shoulders arrive - and asks each of them the four questions that matter:
- * how much collar is left, how much CHEST it takes (the thing a wider cut
+ * how much collar is left, how much chest it takes (the thing a wider cut
  * ruins), whether it can reach an arm, and what it leaves nearest the eye.
  */
 static void PrintNeckCandidates(const std::string& root5,
@@ -2755,27 +2747,27 @@ static void PrintCollarShape(const std::string& root5, const ClassicSlot& body)
 	PrintNeckCandidates(root5, body);
 }
 
-/* WHAT A CANDIDATE CUT REALLY LEAVES IN THE CAMERA (#123, fix round L).
+/* What a candidate cut really leaves in the camera.
  *
- * THE TABLE FIX ROUND K HAD WAS BLIND IN ONE EYE, and that is why its collar
+ * An earlier table of the same measurement was blind in one eye, and that is why its collar
  * survived a cut that ought to have taken it. Two rules of the engine were
  * missing from it:
  *
- *   1. A VERTEX IS CUT ONLY IF ALL OF ITS WEIGHT SITS ON NODES THE CUT MAY
- *      TOUCH. The shader adds (1 - cuttable) * 1000 to the keep value, and
+ *   1. A vertex is cut only if all of its weight sits on nodes the cut may
+ *      touch. The shader adds (1 - cuttable) * 1000 to the keep value, and
  *      `cuttable` is the vertex's own weights summed over the masked nodes -
  *      so a vertex half on the torso and half on the head is pushed five
  *      hundred units out of any cut and survives everything. The neck ring is
  *      exactly such a blend.
- *   2. A HEAD-SKINNED VERTEX IS STILL DRAWN IN FIRST PERSON. What first person
- *      masks is the node of a RANGE, and a range's node is the heaviest node
- *      over its triangles; the collar's triangles are heaviest on the TORSO
+ *   2. A head-skinned vertex is still drawn in first person. What first person
+ *      masks is the node of a range, and a range's node is the heaviest node
+ *      over its triangles; the collar's triangles are heaviest on the torso
  *      and carry head-skinned corners along with them. So "the head node is
- *      masked" does not hide them, and round K's measurement, which skipped
- *      every head-majority vertex, could not see them.
+ *      masked" does not hide them, and a measurement that skipped
+ *      every head-majority vertex could not see them.
  *
  * This one models both: it works out each triangle's range node the way
- * hd_model.cpp does, calls a vertex DRAWN when a triangle that survives the
+ * hd_model.cpp does, calls a vertex drawn when a triangle that survives the
  * first person mask uses it, and cuts a drawn vertex only when its whole
  * weight is on the candidate's own node mask.
  */
@@ -3028,9 +3020,9 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 	}
 }
 
-/* WHICH PAGE IS THE NECK (#123, fix round K, K1).
+/* Which page is the neck.
  *
- * The inner skin wears ONE texel and it has to be Lara's throat, so the maker
+ * The inner skin wears one texel and it has to be Lara's throat, so the maker
  * in hd_lara.cpp has to pick a page out of the stump - and the first rule it
  * was given (the topmost ring) answered 8002, which is her HAIR. This is the
  * table that says so: the node 7 vertices inside the cut's own radius,
@@ -3143,20 +3135,20 @@ static void PrintNeckPages(const std::string& root5, const ClassicSlot& body)
 	}
 }
 
-/* WHY A HAND DOES NOT SHINE LIKE THE ARM IT IS ON (#123, fix round K, K2).
+/* Why a hand does not shine like the arm it is on.
  *
- * The user's finding: "the hands react differently to the room's intensity -
- * in five rooms the hand is now brighter, now darker than the forearm; a
- * difference in the TEXTURE would be the same everywhere, so it is LIGHT."
+ * The hands react differently to a room's intensity: in some rooms the hand
+ * is brighter than the forearm, in others darker. A
+ * difference in the texture would be the same everywhere, so it is in the light.
  *
- * WHAT IS THE SAME, read off hd_laradraw.cpp and not guessed: the body and the
- * hand parts are pushed with the SAME nodeLight array, the SAME light list,
+ * What is the same, read off hd_laradraw.cpp and not guessed: the body and the
+ * hand parts are pushed with the same nodeLight array, the same light list,
  * the same sun factor and the same joint matrices. HDObjectPush copies all
  * four per draw and changes none of them. So the ambient and the diffuse at a
  * point on the wrist are identical to the bit whichever model owns it.
  *
- * WHAT DIFFERS IS THE SHEEN, and it is the whole of it. Fix round D gives the
- * BODY the outfit's material and fix round I gives the HAND the skin's, and
+ * What differs is the sheen, and it is the whole of it. The body carries the outfit's material and the hand
+ * carries the skin's, and
  * the forearm the hand meets is the body. The Blinn-Phong term the vertex
  * shader adds is, where the room's own light list is empty - an ordinary room
  * lit by its baked vertex colours, which is most of the game:
@@ -3164,8 +3156,8 @@ static void PrintNeckPages(const std::string& root5, const ClassicSlot& body)
  *     spec = light * strength * pow(N.V, power) / 255
  *
  * `light` is the room's ambient. So the difference between the two materials
- * is MULTIPLIED BY THE ROOM'S INTENSITY - bright in a bright room, gone in a
- * dark one, and its sign follows the outfit. That is the user's five rooms.
+ * is multiplied by the room's intensity - bright in a bright room, gone in a
+ * dark one, and its sign follows the outfit.
  *
  * This table is the measurement: which texture pages the body wears on the
  * arm and hand nodes, which pages the HAND_ model wears, and what each of
@@ -3371,21 +3363,18 @@ static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
 		"finding K2.\n");
 }
 
-/* ------------------------------------------ the head's own weight (U1) -- */
-/* WHAT THE FIRST PERSON CUT REALLY WANTS TO THROW AWAY (#123, fix round U,
- * U1(a)).
+/* ------------------------------------------ the head's own weight ------- */
+/* What the first person cut really wants to throw away.
  *
- * Every shape the rounds before this one cut - a sphere about the eye (stage
- * S8), a cylinder about the neck axis (rounds J to L), a plane carried by the
- * head node (round S) - is a shape in SPACE, and the play test sent every one
- * of them back for the same reason: a skinned vertex MOVES, so a rule written
- * in space takes a different patch of her skin in every pose. Round S's plane
- * was the worst of them, because a plane fixed to the head TILTS with the head
- * and then slices through her chest and her shoulders ("in animations Lara is
- * partly rendered away over her whole body", with the HDLOG line reading
+ * Every shape cut before this one - a sphere about the eye, a cylinder about the neck axis, a plane carried by the
+ * head node - is a shape in space, and each was found wanting for the same reason: a skinned vertex moves, so a rule written
+ * in space takes a different patch of her skin in every pose. A plane fixed to the head
+ * was the worst of them, because it tilts with the head
+ * and then slices through her chest and her shoulders in some animations,
+ * partly rendering Lara away over her whole body (the HDLOG line reads
  * drop= 4, 5 and 9 where 2 is healthy).
  *
- * THE ONE THING ABOUT A VERTEX THAT DOES NOT MOVE is its BONE WEIGHTS. They
+ * The one thing about a vertex that does not move is its bone weights. They
  * are written in the file, they are the same in every animation, at every
  * camera angle and in every pose. So this table measures the wardrobe by
  * weight rather than by position:
@@ -3659,14 +3648,14 @@ static void PrintHeadWeight(const std::string& root5, const ClassicSlot& body)
 				printf("\n");
 			}
 
-			/* THE RIM'S TEXELS AT THE SHIPPING THRESHOLD (#123, fix round U,
-			 * U1b). The lid wears the rim's own texture, and its MIDDLE has
+			/* The rim's texels at the shipping threshold. The lid wears the
+			 * rim's own texture, and its middle has
 			 * to be given a texel of its own because it belongs to no rim
 			 * vertex. Whatever rule picks that texel is the one thing on the
 			 * lid that is not copied from the body, so it is the one thing
-			 * that can be wrong - and the play test of 2026-09-07 says it IS
-			 * wrong on the four TR3 guest bodies: "a dark point in the middle
-			 * of the cap, running dark towards it like a cone", while the TR5
+			 * that can be wrong - and it is
+			 * wrong on the four TR3 guest bodies: a dark point in the middle
+			 * of the cap, running dark towards it like a cone, while the TR5
 			 * outfits are clean. This prints what the rule is working with. */
 			if (fabs(kCut[c] - (double)HD_LARA_HEAD_CUT_WEIGHT) < 1.0e-6)
 			{
@@ -3707,9 +3696,9 @@ static void PrintHeadWeight(const std::string& root5, const ClassicSlot& body)
 			}
 		}
 
-		/* WHAT SURVIVES NEAREST THE HEAD, which is the other half of the
+		/* What survives nearest the head, which is the other half of the
 		 * question: a threshold that leaves a ring of neck standing above the
-		 * lid leaves the tube the user photographed. The nearest surviving
+		 * lid leaves a visible tube of neck poking through it. The nearest surviving
 		 * vertex INSIDE the neck's own radius says where the skin really
 		 * stops. */
 		for (int c = 0; c < kCuts; c++)
@@ -3873,11 +3862,11 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		"about the neck now, and\nthe two tables below are the ones it rests "
 		"on.\n");
 
-	/* --- WHAT THE CUT LEAVES OPEN (#123, fix round I, I3) ----------------
+	/* --- What the cut leaves open ------------------------------------------
 	 *
-	 * The user's finding: the cut leaves a hole at the collar and one looks
+	 * The cut leaves a hole at the collar and one looks
 	 * into the body - the inside of her chest and the backpack straps behind
-	 * it. So the neck has to be CLOSED below the cut, and the first question
+	 * it. So the neck has to be closed below the cut, and the first question
 	 * is what shape the thing being closed is.
 	 *
 	 * The neck AXIS is the line from the torso joint to the head joint; `s` is
@@ -4000,17 +3989,17 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 
 /* ------------------------------------------------- the braid's physics -- */
 /*
- * THE BRAID, RUN OFFLINE (#123, fix round F, F2).
+ * The braid, run offline.
  *
- * The user's finding: the HD braid "glitches about restlessly", two frames of
- * his video showing it long and thrown out to the side in one and short and
- * tucked against her back in the next. Fix round D had changed two things in
+ * The HD braid glitches about restlessly: it can be long and thrown out to
+ * the side in one frame and short and
+ * tucked against her back in the next. Two changes went into
  * game\hair.cpp - the root moved 15 units forward for an HD Lara, and the HD
- * backpack got two collision spheres - and it said of the second: "this is
- * the one change no offline picture can prove". A picture cannot, but the
+ * backpack got two collision spheres - and the second of those is
+ * the one change no offline picture can prove. A picture cannot, but the
  * simulation can be run on its own, and that is what this does.
  *
- * WHAT IS TRANSCRIBED, AND WHAT IS NOT. The loop below is HairControl's, line
+ * What is transcribed, and what is not. The loop below is HairControl's, line
  * for line: integrate three quarters of the last velocity, add the ten units
  * of gravity, push the link out of every sphere, point the link above it at
  * where it landed, and put it back at exactly one bone length along that
@@ -4025,11 +4014,11 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
  * and the FLOOR (a downward clamp). A braid that will not settle standing
  * still in a dry indoor room will not settle anywhere.
  *
- * The pose is the BIND POSE - Lara standing, every joint at rest - which is
- * the pose the user's own two frames were shot in: she stands at a door and
- * does not move, and the braid moves anyway.
+ * The pose is the bind pose - Lara standing, every joint at rest - the same
+ * pose she stands still in at a door
+ * while the braid moves anyway.
  *
- * WHAT COMES OUT is one line per regime: how far the furthest link still
+ * What comes out is one line per regime: how far the furthest link still
  * travels per step after 10, 30 and `steps` steps. A settled chain goes to
  * zero and stays there. The last column is the deepest a link still sits
  * inside a pack sphere, which is what the pack was added for.
@@ -4044,14 +4033,14 @@ struct BraidRegime
 	const char* label;
 	/* What the two halves of HairControl do. The KEY frame is the half that
 	 * runs when the animation is not interpolating - the `else` half, the one
-	 * round D changed - and the TWEEN frame the `if (frac)` half it left
+	 * that moved the root - and the TWEEN frame the `if (frac)` half it left
 	 * alone. `period` is how often a key frame comes round: 1 is "every
 	 * frame is a key frame", 4 is one key frame in four, which is what an
 	 * ordinary Lara animation with an interpolation rate of 4 does. */
 	long keyRootZ, tweenRootZ;
 	int keySpheres, tweenSpheres;
 	int period;
-	// #123 fix round I (I1): does this regime place the pack BOX?
+	// Does this regime place the pack as a box?
 	bool keyBox, tweenBox;
 };
 
@@ -4075,8 +4064,8 @@ static long BraidSqrt(long long v)
 
 /* ---------------------------------------------- the pack, as a box -------
  *
- * The tool's twin of game\hair.cpp's HdPackFrame / HdPackPush (#123, fix round
- * I, I1) - the same six faces, the same per-link margin and the same
+ * The tool's twin of game\hair.cpp's HdPackFrame / HdPackPush
+ * - the same six faces, the same per-link margin and the same
  * preference for the rear one, in doubles instead of the engine's floats
  * because the tool has no fixed-point matrix stack to match.
  *
@@ -4274,10 +4263,10 @@ static long BraidStep(long pos[7][3], long vel[7][3], const long root[3],
 			moved = d2;
 	}
 
-	/* HOW DEEP A LINK STANDS INSIDE THE PACK. Measured against the BOX since
-	 * fix round I (I1), and whether or not the box was switched on for this
+	/* How deep a link stands inside the pack. Measured against the box,
+	 * whether or not the box was switched on for this
 	 * step - so a regime without it says how far the braid walks into the
-	 * backpack it cannot feel, which is the whole of user finding I1. */
+	 * backpack it cannot feel. */
 	if (deepest)
 	{
 		*deepest = 0;
@@ -4294,14 +4283,14 @@ static long BraidStep(long pos[7][3], long vel[7][3], const long root[3],
 	return moved;
 }
 
-/* WHERE THE SIMULATION LEAVES THE BRAID, so that the PICTURE can be the
- * simulation's and not a studio pose (#123, fix round I, I1).
+/* Where the simulation leaves the braid, so that the picture can be the
+ * simulation's and not a studio pose.
  *
  * The braid this tool used to draw was a chain of the tool's own invention -
- * "turned out of its bind direction to point downwards and a little
- * backwards" - which is fine for proving that six bones move independently and
- * useless for the one question this round is about: does the plait lie ON the
- * pack or IN it. -braidrest names one of the regimes below, runs it in the
+ * turned out of its bind direction to point downwards and a little
+ * backwards - which is fine for proving that six bones move independently and
+ * useless for the one question that matters: does the plait lie on the
+ * pack or in it. -braidrest names one of the regimes below, runs it in the
  * bind pose, and hands the settled positions to the draw, which then builds
  * the six matrices exactly as the engine's braid_matrices does.
  *
@@ -4386,11 +4375,12 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		length[1], length[2], length[3], length[4], length[5], length[6],
 		steps);
 
-	/* THE FOUR REGIMES.
+	/* The regimes.
 	 *
-	 * The two "as round D built it" lines are the ones that matter. Round D
-	 * put both of its changes into the ELSE half of HairControl - the half
-	 * that runs on a frame the animation does NOT interpolate - and left the
+	 * The two "as built" lines are the ones that matter: an earlier engine
+	 * version
+	 * put both of its root/pack changes into the else half of HairControl - the half
+	 * that runs on a frame the animation does not interpolate - and left the
 	 * interpolating half untouched. The engine takes one branch or the other
 	 * from frame to frame, so what the braid really saw was a root that
 	 * jumped between two places and a backpack that came and went, which is
@@ -4409,10 +4399,10 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		  HD_LARA_BRAID_ROOT_Z,    8, 8, 1, false, false },
 		{ "root -48, no pack at all",      HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1, false, false },
-		/* #123 fix round I (I1 and I2): the box, at the classic root and at
-		 * the root round F withdrew. The second line is I2's whole question -
-		 * round F's limit cycle was the NECK sphere and a pack SPHERE pushing
-		 * in turn, and a box does not push the same way. */
+		/* The pack as a box, at the classic root and at
+		 * the root an earlier engine version withdrew to. The second line asks whether that
+		 * root's limit cycle - the neck sphere and a pack sphere pushing
+		 * in turn - still happens with a box, which does not push the same way. */
 		{ "round I: root -48, the BOX",    HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1, true, true },
 		{ "round I: root -33, the BOX",    HD_LARA_BRAID_ROOT_Z_HD,
@@ -4485,9 +4475,9 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		long deepest = 0, worstDeepest = 0;
 		BraidBox box;
 
-		/* THE BOX SITS IN THE TORSO NODE'S FRAME, and in the bind pose that
+		/* The box sits in the torso node's frame, and in the bind pose that
 		 * frame carries no rotation at all - so the identity plus the torso
-		 * joint is the whole of it here (#123, fix round I, I1). */
+		 * joint is the whole of it here. */
 		BraidBoxIdentity(box, body.bind[7][0], body.bind[7][1], body.bind[7][2]);
 		long at1 = 0, at10 = 0, at30 = 0, last = 0;
 		int hits = 0, worstHits = 0;
@@ -4588,10 +4578,10 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 
 /* --------------------------------------- the braid under an animation -- */
 /*
- * THE SAME SIMULATION, DRIVEN BY A REAL ANIMATION (#123, fix round G, G1).
+ * The same simulation, driven by a real animation.
  *
- * Fix round F ran the chain in the BIND POSE and found it settles. The user
- * still saw the braid move, and he was right to: a bind pose has no anchor
+ * Running the chain in the bind pose alone finds it settles, yet the braid
+ * still moves in play: a bind pose has no anchor
  * motion at all, and in the game every one of the eight collision spheres
  * rides on Lara's own skeleton. Even standing at a door she breathes -
  * ANIM_BREATH moves her chest and her head a unit or two a frame - and the
@@ -4609,11 +4599,11 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
  * what `(long)aMXPtr[M03]` does.
  *
  * What comes out is the twin of the game's own HAIRLOG: how far the TIP moved
- * this frame and how far the ROOT moved, in the same four buckets the play
- * test's log was counted in (under 2, 2 to 10, 10 to 40, over 40 units). One
+ * this frame and how far the ROOT moved, in the same four buckets its
+ * log is counted in (under 2, 2 to 10, 10 to 40, over 40 units). One
  * row per variant, so the pack's cost is a number and not an opinion.
  *
- * Still left out, and still for the reason fix round F gave: the wind (an
+ * Still left out, for the same reason as the bind-pose simulation: the wind (an
  * outdoor room, and a translation of the whole chain), and the water line. The
  * FLOOR is in, because with a real anchor at a real height it matters - a
  * braid 336 units long hanging from a head 251 units up reaches through the
@@ -4638,8 +4628,7 @@ static double BraidDeg(int16_t angle)
 	return (double)angle * 360.0 / 65536.0;
 }
 
-/* game\lara_states.h, ANIM_BREATH: Lara standing still and breathing, which
- * is the animation the play test's own two video frames were shot in. */
+/* game\lara_states.h, ANIM_BREATH: Lara standing still and breathing. */
 #define ANIM_BREATH_NUMBER	103
 
 struct BraidAnimRow
@@ -4771,7 +4760,7 @@ struct BraidFramePoints
 {
 	double sphere[8][3];
 	double root[3];
-	/* THE TORSO NODE'S WHOLE FRAME (#123, fix round I, I1). A sphere needs a
+	/* The torso node's whole frame. A sphere needs a
 	 * centre and a box needs an orientation, so the pack's frame is carried
 	 * out of here as it stands - row major, the tool's own convention, which
 	 * is the transpose of the engine's. */
@@ -4786,8 +4775,8 @@ static void BraidOrigin(const float* m, double* out)
 }
 
 /* `rootZ` is which of the two braid roots this pose hangs the chain from - the
- * classic -48, or the -33 fix round D wanted and fix round F withdrew. It is a
- * parameter since fix round I (I2), because the question "does the near root
+ * classic -48, or the -33 an earlier engine version tried and withdrew. It is a
+ * parameter because the question "does the near root
  * settle now that the pack is a box" cannot be asked without it. */
 static void BraidPoseAt(const Tr5Level& level, const ClassicSlot& body,
 	const int16_t mesh[5][6], const BraidAnimRow& a, int keyframe,
@@ -4817,10 +4806,10 @@ static void BraidPoseAt(const Tr5Level& level, const ClassicSlot& body,
 	BraidRotSkip(r, 6);			// the six leg nodes
 	BraidRotApply(r, m);			// node 7, the torso
 	/* lara.torso_?_rot would go here; they are zero for a Lara who is not
-	 * aiming, and the play test's braid trembled with her hands empty. */
+	 * aiming. */
 
 	// The pack's own frame, before any mesh offset - game\hair.cpp's
-	// HdPackFrame stands exactly here (#123, fix round I, I1).
+	// HdPackFrame stands exactly here.
 	for (int i = 0; i < 16; i++)
 		out.torso[i] = (double)m[i];
 
@@ -4881,8 +4870,8 @@ static void BraidBoxFromFrame(BraidBox& box, const double* m, double travelZ)
 	box.org[2] = m[14] + travelZ;
 }
 
-/* WHAT THE PACK MAY DO TO A LINK. `spheres` 6 leaves it out of the loop
- * altogether; the rest is what fix round G measured against it. */
+/* What the pack may do to a link. `spheres` 6 leaves it out of the loop
+ * altogether; the rest is measured against it. */
 struct BraidAnimVariant
 {
 	const char* label;
@@ -4890,7 +4879,7 @@ struct BraidAnimVariant
 	long packR;		// the pack's radius
 	long packZ;		// where its centre sits behind the torso joint
 	bool packDamps;		// a pack push-out kills the link's velocity
-	// #123 fix round I: the BOX instead, and which root it hangs from.
+	// The box instead of spheres, and which root it hangs from.
 	bool box;
 	long rootZ;
 	int bias;		// how much the box prefers its rear face
@@ -4962,7 +4951,7 @@ static long BraidAnimStep(long pos[7][3], long vel[7][3], const long root[3],
 			}
 		}
 
-		// ... and out of the box, last, exactly as the game does it (I1).
+		// ... and out of the box, last, exactly as the game does it.
 		if (BraidBoxPush(box, pos[i], i))
 		{
 			(*packHits)++;
@@ -4997,7 +4986,7 @@ static long BraidAnimStep(long pos[7][3], long vel[7][3], const long root[3],
 		}
 	}
 
-	/* How deep a link stands in the pack BOX (#123, fix round I, I1), measured
+	/* How deep a link stands in the pack box, measured
 	 * whether or not this variant switched the box on. */
 	if (deepest)
 	{
@@ -5041,8 +5030,7 @@ static void BraidAngles(const long pos[7][3], double* yaw, double* pitch)
 	}
 }
 
-/* WHAT THE DRAWN BONE IS TURNED BY ABOUT ITS OWN AXIS, under four rules
- * (#123, fix round G, G1).
+/* What the drawn bone is turned by about its own axis, under four rules.
  *
  * A rotation about the bone's own +z moves no vertex out of the braid and
  * lands the next bone in exactly the same place, so the roll is free and the
@@ -5051,7 +5039,7 @@ static void BraidAngles(const long pos[7][3], double* yaw, double* pitch)
  * that moves from frame to frame. Lara faces +z in the tool, so her own facing
  * is 0.
  *
- *   NONE    what shipped up to fix round F: whatever phd_atan made of two
+ *   NONE    the original rule: whatever phd_atan made of two
  *           single-digit integers.
  *   FACING  every link pulled towards her facing, by a weight that fades out
  *           as the link leaves the vertical.
@@ -5084,7 +5072,7 @@ static const char* const kBraidRollName[BRAID_ROLL_COUNT] =
 	"her facing, every link, always"
 };
 
-/* THE HELD REFERENCE of BRAID_ROLL_LOCK. The chain's own azimuth is a good
+/* The held reference of BRAID_ROLL_LOCK. The chain's own azimuth is a good
  * angle while the braid has a horizontal part and noise while it hangs
  * straight; so it is followed when it is worth following and simply held
  * where it is when it is not. One value, and the only state in the whole
@@ -5206,48 +5194,47 @@ static void BraidBucket(long step, int* into)
 		into[3]++;
 }
 
-/* ------------------------------------------------- THE POSE RISK (S2) -----
+/* ------------------------------------------------- the pose risk -----------
  *
- * WHAT ORDER 4 REALLY BLENDS, and what a matrix blend does to a big turn
- * (#123 / #148, fix round S, S2).
+ * What the sixty hertz interpolation path really blends, and what a matrix
+ * blend does to a big turn.
  *
- * The play test of the night's orders came back with a dive roll at sixty
- * hertz in which ONE in-between frame has a leg fully extended the other way
+ * A dive roll at sixty
+ * hertz can show one in-between frame with a leg fully extended the other way
  * round, tucked before it and tucked after it. The obvious reading is a packed
- * ten bit angle interpolated the long way round. It is not that: order 4 hands
- * GetFramesAt's key frame PAIR and a factor to InitInterpolateAlpha, and the
+ * ten bit angle interpolated the long way round. It is not that: the sixty hertz path hands
+ * GetFramesAt's key frame pair and a factor to InitInterpolateAlpha, and the
  * blend itself is vanilla's own InterpolateMatrix, which lerps the two 3x4
- * MATRICES element by element and never touches an angle (game\draw.cpp,
+ * matrices element by element and never touches an angle (game\draw.cpp,
  * game\delstuff.cpp Rich_CalcLaraMatrices_Interpolated).
  *
- * An element-wise lerp of two rotations is never a flip - it is a SHRINK. At
+ * An element-wise lerp of two rotations is never a flip - it is a shrink. At
  * a relative angle D the blend at a half is the short-way bisector scaled by
  * cos(D/2) in the plane across the axis, so at D = 180 degrees the plane
  * collapses to nothing: the bone's own frame goes singular, its length in that
  * plane goes to zero, and whatever hangs off it lands somewhere that is not on
- * either of the two poses. THAT is what a leg pointing the wrong way looks
- * like, and it is a fact about the SIZE of the turn between the two key frames
+ * either of the two poses. That is what a leg pointing the wrong way looks
+ * like, and it is a fact about the size of the turn between the two key frames
  * and nothing else.
  *
- * SO THE QUESTION IS WHICH PAIRS ORDER 4 BLENDS THAT VANILLA NEVER DID. At
+ * So the question is which pairs the sixty hertz path blends that vanilla never did. At
  * thirty hertz the blend runs between key frames k and k+1 at a quarter, a
- * half or three quarters - and only when the animation's RATE is more than
- * one, because with rate 1 every frame IS a key frame and vanilla's `frac` is
- * always zero. Order 4 blends the rate 1 animations too: their two ticks are
+ * half or three quarters - and only when the animation's rate is more than
+ * one, because with rate 1 every frame is a key frame and vanilla's `frac` is
+ * always zero. The sixty hertz path blends the rate 1 animations too: their two ticks are
  * two adjacent stored frames and the midpoint is that pair at a half. Those
  * pairs are a whole game frame apart and are the new exposure.
  *
- * This walks every animation of the LARA slot and measures both readings of
+ * This walks every animation of the Lara slot and measures both readings of
  * every adjacent key frame pair, per node:
  *
  *   turn    the relative rotation angle of the two node matrices, in degrees.
  *           This is the number the matrix blend shrinks by cos(turn/2), so
  *           `>90` costs a quarter of the bone's length at the midpoint and
  *           `>150` costs nine tenths of it.
- *   axis    the largest per-axis difference of the packed rotations, in TEN
- *           BIT units and wrapped into -512..511 - the reading the play test's
- *           first guess was about. Over 512 is impossible after the wrap, so
- *           a column of zeroes is that guess disproved by arithmetic.
+ *   axis    the largest per-axis difference of the packed rotations, in ten
+ *           bit units and wrapped into -512..511. Over 512 is impossible after the wrap, so
+ *           a column of zeroes rules out a wrap-related cause entirely.
  */
 
 struct PoseRiskRot
@@ -5510,40 +5497,39 @@ static void PrintPoseRisk(const Tr5Level& level, const char* stem)
 
 
 /* ======================================================================
- * THE SIXTY HERTZ REPLAY - ONE ANIMATION, EVERY DRAWN FRAME (#123, fix
- * round U, U2; #148, order 4)
+ * The sixty hertz replay - one animation, every drawn frame.
  * ======================================================================
  *
- * WHAT THE PLAY TEST SAW AND WHAT THIS IS FOR. At sixty a dive roll shows one
- * frame with a leg stretched fully the WRONG WAY, with the leg curled up on
- * the frames either side of it; at thirty the same roll is faultless. Fix
- * round S's S2 guessed a rate 1 key frame pair too far apart to blend and put
+ * What this is for. At sixty a dive roll can show one
+ * frame with a leg stretched fully the wrong way, with the leg curled up on
+ * the frames either side of it; at thirty the same roll is faultless. An
+ * earlier guess assumed a rate 1 key frame pair too far apart to blend and put
  * a refusal in for it - and the counter it added, INTERPLOG's pose_far, read
- * 0.0 for the whole of the next play session. A guess that measures zero is a
- * guess disproved, so this walks the animation OFFLINE instead and prints
+ * 0.0 across a whole play session. A guess that measures zero is a
+ * guess disproved, so this walks the animation offline instead and prints
  * where every node really stands on every drawn frame.
  *
- * WHAT IT REPRODUCES, line for line:
+ * What it reproduces, line for line:
  *
- *   the pose at a TICK   GetFrames (game\draw.cpp): key = f / rate, and the
+ *   the pose at a tick   GetFrames (game\draw.cpp): key = f / rate, and the
  *                        factor InterpKeyAlpha(f % rate, InterpKeyRate(...)).
- *   the pose BETWEEN two InterpPoseAt (game\interpolate_math.h) at t = 0.5,
+ *   the pose between two InterpPoseAt (game\interpolate_math.h) at t = 0.5,
  *                        which is the midpoint of the two poses the ticks
- *                        either side of it draw - the whole of order 4.
- *   the pose ITSELF      the two key frames' chains built separately and
- *                        blended ELEMENT BY ELEMENT per node, which is what
+ *                        either side of it draw - the whole of the sixty hertz path.
+ *   the pose itself      the two key frames' chains built separately and
+ *                        blended element by element per node, which is what
  *                        Rich_CalcLaraMatrices_Interpolated does through
  *                        InterpolateMatrix. That blend is the one thing in
  *                        the picture that can put a bone somewhere neither
  *                        of its two ends is, so it is reproduced exactly and
  *                        not approximated by a rotation blend.
  *
- * WHAT IT PRINTS. Per drawn frame, every node's origin in HER OWN frame - the
- * hips at the origin - and, for each, how far it stands from the MIDPOINT of
+ * What it prints. Per drawn frame, every node's origin in her own frame - the
+ * hips at the origin - and, for each, how far it stands from the midpoint of
  * the two frames either side of it, as a fraction of how far those two are
- * apart. A node moving smoothly reads near 0; the frame the play test
- * photographed cannot read near 0, because a leg that is curled, then
- * straight the wrong way, then curled again is the definition of an outlier.
+ * apart. A node moving smoothly reads near 0; a frame with the leg
+ * curled, then straight the wrong way, then curled again cannot read near 0,
+ * because that is the definition of an outlier.
  * `-tween60` names the animations; with none it takes the sprint dive and
  * the rolls. */
 
@@ -5552,9 +5538,9 @@ struct Tween60Chain
 	float m[32][16];
 };
 
-/* ONE KEY FRAME'S WHOLE CHAIN, in Lara's own frame - no item position and no
- * item rotation, because the question is about the POSE and those two are
- * order 2's business and interpolate perfectly well. The walk is
+/* One key frame's whole chain, in Lara's own frame - no item position and no
+ * item rotation, because the question is about the pose and those two are
+ * handled elsewhere and interpolate perfectly well. The walk is
  * Rich_CalcLaraMatrices's: the frame's own translation and the hips'
  * rotation, then per node pop, push, the bone offset and the node's rotation
  * off the same packed stream. */
@@ -5910,9 +5896,9 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 			: 56;
 	}
 
-	/* #123 fix round I: f, g and h are the new ones. f is what ships - the box
-	 * at the classic root; g asks I2's question, the box with the root moved
-	 * up into the hair knot; h is the same box with no preference for its rear
+	/* f, g and h are the box variants. f is what ships - the box
+	 * at the classic root; g asks whether the box with the root moved
+	 * up into the hair knot settles too; h is the same box with no preference for its rear
 	 * face, which is the measurement HD_LARA_PACK_BOX_BIAS rests on. */
 	static const int kVariants = 8;
 	static const BraidAnimVariant kVariant[kVariants] =
@@ -6032,7 +6018,7 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 
 				/* Where the item itself has got to. An animation that carries
 				 * Lara forward moves every sphere with her, and that is most
-				 * of the anchor motion the play test's log counted. */
+				 * of the anchor motion the game's own HAIRLOG counts. */
 				const double travel = (double)move * (double)s;
 
 				for (int j = 0; j < 8; j++)
@@ -6061,7 +6047,7 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 				sphere[6].z += v.packZ - HD_LARA_PACK_Z;
 				sphere[7].z += v.packZ - HD_LARA_PACK_Z;
 
-				/* THE PACK BOX'S FRAME (#123, fix round I, I1), blended
+				/* The pack box's frame, blended
 				 * between the two key frames component by component - which is
 				 * what the engine's own InterpolateMatrix does to a matrix, so
 				 * a slightly non-orthonormal blend is not an approximation
@@ -6123,7 +6109,7 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 
 				/* The first ten steps are the seed settling, not the
 				 * animation - the game has been running for hours by the
-				 * time the play test looks at her. */
+				 * time a player sees her. */
 				if (s < 10)
 				{
 					lastRoot[0] = root[0];
@@ -6261,10 +6247,10 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 }
 
 /* ---------------------------------------------------- Lara's composite -- */
-/* Stage S4-1. Everything the tool needs to know about one wardrobe picture;
+/* Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
-/* #123 fix round D (D2): one part's sheen into the lighting block. `on` is
- * false for -nosheen, which is the BEFORE picture. */
+/* One part's sheen into the lighting block. `on` is
+ * false for -nosheen, which is the before picture. */
 static void SetSheen(HDModelLighting& lighting, int part, bool on)
 {
 	float strength = 0.0f, power = 1.0f;
@@ -6292,67 +6278,68 @@ struct LaraOptions
 	bool mirror;
 	bool firstPerson;
 	bool neck;
-	/* #123 fix round U (U1): the wardrobe measured by BONE WEIGHT rather
+	/* The wardrobe measured by bone weight rather
 	 * than by position - what carries node 14, and where the rim of that is. */
 	bool headWeight;
-	/* #153 round M2b: the MIRRORED hand weights, and what folding them back
+	/* The mirrored hand weights, and what folding them back
 	 * moves in the pose the command line asks for. -1 is off, otherwise the
 	 * bar in per mille the fold is measured at. */
 	int handFold;
-	bool noFold;			// #153 round M2b: the picture before the round
-	bool noHandMix;			// #153 round M2b: and the other half of it
-	/* #156: the head rule forced for this picture - one of the
+	bool noFold;			// the picture before the hand fold existed
+	bool noHandMix;			// the other half of that before picture
+	/* The head rule forced for this picture - one of the
 	 * HD_WARDROBE_HEAD_*, or -1 to let the wardrobe decide, which is what
 	 * the engine always does. */
 	int head;
-	bool poseRisk;			// #148 order 4, fix round S (S2)
-	/* #123 fix round U (U2): the animations to replay at sixty, frame by
-	 * frame, LARA-relative. Empty means the switch was not given. */
+	bool poseRisk;			// the sixty hertz pose blend risk scan
+	/* The animations to replay at sixty, frame by
+	 * frame, Lara-relative. Empty means the switch was not given. */
 	std::vector<int> tween60;
-	bool handLight;			// #123 fix round K (K1/K2): the wrist seam
-	/* #123 fix round K (K2): put the outfit's own material back on Lara's
-	 * SKIN pages, which is the picture before this round - the forearm and
+	bool handLight;			// the wrist seam material measurement
+	/* Put the outfit's own material back on Lara's
+	 * skin pages, which is the picture before the hand took the skin's
+	 * material - the forearm and
 	 * the hand shaded by two different materials. */
 	bool oldSkin;
-	bool braid;			// the braid root table (fix round C, C4)
-	int braidSim;			// #123 fix round F (F2): steps, 0 = off
-	/* #123 fix round G (G1): the same chain under a real animation. Empty =
+	bool braid;			// the braid root table
+	int braidSim;			// steps for the offline braid physics, 0 = off
+	/* The same chain under a real animation. Empty =
 	 * off; `braidFloor` is the game's own floor clamp, on by default. */
 	std::vector<int> braidAnims;
 	bool braidFloor;
-	bool classicBraidRoot;		// #123 fix round I (I2): the BEFORE picture
-	/* #123 fix round I (I4): draw ONE part of the composite and nothing else,
+	bool classicBraidRoot;		// the picture before the root moved to its HD position
+	/* Draw one part of the composite and nothing else,
 	 * so that a question about one part - "does the sheen reach the hands?" -
 	 * is answered by a picture of that part and not by hunting for it in a
 	 * picture of the whole of her. -1 draws them all. */
 	int onlyPart;
-	bool noSheen;			// #123 fix round D (D2): the BEFORE picture
+	bool noSheen;			// the picture before the sheen split existed
 	bool check;
 	bool noDraw;
-	// #153 round M3: the ring's own presentation - see -invrot.
+	// The ring's own presentation - see -invrot.
 	short invRot[3];
 	bool invRotSet;
 	bool managed;
 	int threads;
 	long width, height;
 	double fov, yaw, pitch, dist, shade;
-	/* The head cut (#123, stage S8; a cylinder in fix round J; a plane in fix
-	 * round S; ONE BONE WEIGHT since fix round U): how much of the head node a
+	/* The head cut (a cylinder, then a plane, then
+	 * one bone weight, in that order of development): how much of the head node a
 	 * fragment has to carry to be discarded, of 1. Negative is off, which is
-	 * the BEFORE picture. */
+	 * the picture before the cut existed. */
 	double cutS;
-	bool noCap;			// draw without the lid (#123, fix round S)
+	bool noCap;			// draw without the lid that closes the head cut
 	double fpForward;		// FP_EYE_OFFSET; 0 is the eye against a wall
-	/* #123 fix round U (U1d): the eye moved off the head joint, which is what
+	/* The eye moved off the head joint, which is what
 	 * a landing does - the camera leaves the head and the nape fills the
-	 * picture (the user's second photograph). x/y/z in classic units. */
+	 * picture. x/y/z in classic units. */
 	double eyeOff[3];
 	int cull;			// HDModelCull, on her body alone
 	bool yawSet, pitchSet;		// did the caller name one?
 	const HDObjLight* lights;
 	int lightCount;
 	const double (*turn)[2];
-	// -meshbits, on the composite too (#123, fix round K).
+	// -meshbits, on the composite too.
 	unsigned int nodeMask;
 };
 
@@ -6360,7 +6347,7 @@ struct LaraOptions
  * table in hd_lara speaks names, and this is the one place that turns them
  * back into the numbers the game keeps in LHolster, lara.holster and
  * lara.back_gun. */
-/* THE PAGE CACHE, SLOT BY SLOT (#153, round M3) - for -pagelist.
+/* The page cache, slot by slot - for -pagelist.
  *
  * Written as a sorted list of "key origin size bytes" so that two runs differ
  * only where the two builds really differ, and `diff` says which pages the
@@ -6464,7 +6451,7 @@ static int SlotByName(const Tr5Level& level, const char* want)
  * them from the INVENTORY: setup.cpp puts LARA_HOLSTERS_PISTOLS into both at
  * every level start whether or not the level ever loaded that object. A tool
  * that resolved them through the level's slot list would show an empty thigh
- * in the three VCI levels where the game shows a holster - user finding C3. */
+ * in the three VCI levels where the game shows a holster. */
 static int SlotNumberByName(const char* want)
 {
 	for (int slot = 0; slot < HD_SLOT_COUNT; slot++)
@@ -6565,8 +6552,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 *   LVL5_BASE .. LVL5_SINKING_SUBMARINE, which are the four JOBY
 		 *   files.
 		 *
-		 *   YOUNG LARA IS THE BYTE AND NOTHING ELSE (#123, stage S7-2). It
-		 *   used to be "an ANDY file, or the byte", which was the same
+		 *   Young Lara is the byte and nothing else. An earlier reading
+		 *   used "an ANDY file, or the byte", which was the same
 		 *   mistake the engine's own seam carried: the engine builds the
 		 *   child body only where the Irish range AND the script flag
 		 *   GF_YOUNGLARA meet (game\laramisc.cpp, LaraInitialiseMeshes), the
@@ -6577,7 +6564,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 *   a true one: the randomizer writes the outfit byte and the flag in
 		 *   the same breath. Vanilla ANDY1/2/3 carry 1, which is LARA_YOUNG.
 		 *
-		 *   THE TOMB RAIDER III OUTFIT is data[3] of the level header, passed
+		 *   The Tomb Raider III outfit is data[3] of the level header, passed
 		 *   in raw, exactly as specific\hd\hd_laradraw.cpp passes it. 0 in
 		 *   every vanilla file. */
 		const int drawType = level.laraType() + 1;
@@ -6632,7 +6619,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		(int)present.size());
 
 	/* -nofold: the hands built from the file exactly as it stands, which is
-	 * the picture from before round M2b. Set before the plan, because that is
+	 * the picture from before the hand fold existed. Set before the plan, because that is
 	 * where the bar is read. */
 	if (o.noFold)
 	{
@@ -6648,9 +6635,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			"in its own skin, which is the BEFORE picture\n");
 	}
 
-	/* -lara-head: the head rule this picture is drawn with (#156). Before the
+	/* -lara-head: the head rule this picture is drawn with. Before the
 	 * plan as well, because that is where the parts are chosen - the engine's
-	 * own switch, so "outfit" really is the picture from before the round. */
+	 * own switch, so "outfit" really is the picture from before the head rule existed. */
 	if (o.head >= 0)
 	{
 		HDLaraHeadForce(o.head);
@@ -6681,7 +6668,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		laraStats.wanted, laraStats.loaded, laraStats.missing,
 		laraStats.twins ? "" : "\n");
 
-	// #153 round M2b: the install's own hands beside a mod's gun are on the
+	// The install's own hands beside a mod's gun are on the
 	// card and are not parts, so the two numbers differ and this says why.
 	if (laraStats.twins)
 		printf(" (%d of them the install's own hands under a mod's gun)\n",
@@ -6696,7 +6683,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	if (g_pagelist)
 		PrintPageList();
-	/* The phases of `building`, since #153 round M2's fix round - keys is
+	/* The phases of `building` - keys is
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
@@ -6833,9 +6820,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			 * Unless the caller said otherwise. A -holsters spelled out ON
 			 * THE COMMAND LINE beats this, because the engine's bookkeeping
 			 * really can end up in the contradictory state and the seam's
-			 * rule against it needs a way to be photographed: -guns revolver
-			 * -holsters revolver is the frame of user finding C1, the gun in
-			 * her hand and in the holster at once. */
+			 * rule against it needs a way to be shown: -guns revolver
+			 * -holsters revolver is the frame where the gun is
+			 * in her hand and in the holster at once. */
 			if (o.holsters.empty())
 			{
 				now.leftHolsterSlot = slotHolstersEmpty;
@@ -7003,8 +6990,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	}
 
 	/* --- the camera ------------------------------------------------------ */
-	/* THE HEAD JOINT of this level's own Lara skeleton, which is where the
-	 * first person camera hangs (stage S8). Node 14 of the bind pose. */
+	/* The head joint of this level's own Lara skeleton, which is where the
+	 * first person camera hangs. Node 14 of the bind pose. */
 	const float* const classic14 = body.bind[HD_LARA_HEAD_NODE];
 
 	/* The composite's box is the union of every part's, because the outfit
@@ -7036,13 +7023,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	const double persp = EnginePersp(o.height, o.fov);
 
-	/* -look head aims the camera at the HEAD JOINT instead of the middle of
-	 * the whole figure, which is the only way to get a picture of the one
-	 * junction user finding C4 is about - the braid against the back of the
+	/* -look head aims the camera at the head joint instead of the middle of
+	 * the whole figure, which is the only way to get a picture of the
+	 * braid against the back of the
 	 * skull. Without it the camera frames hips to boots and the head sits off
 	 * the top edge. */
-	/* -look wrist does the same for the RIGHT HAND JOINT (#123, fix round K,
-	 * K2). The seam this round is about is one joint wide - the body's own
+	/* -look wrist does the same for the right hand joint. The seam this is
+	 * about is one joint wide - the body's own
 	 * forearm meets the separate HAND_ model there - and in a picture of the
 	 * whole figure it is four pixels. The radius is the hand's own, not the
 	 * body's, so the frame really is the wrist. */
@@ -7075,7 +7062,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	float view[16];
 
-	/* THE EYE OF THE FIRST PERSON CAMERA (#123, stage S8), where
+	/* The eye of the first person camera, where
 	 * game/camera.cpp puts it and nowhere else:
 	 *
 	 *     GetLaraJointPos(&head, LMX_HEAD)   the head joint
@@ -7083,13 +7070,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 *     + FP_EYE_OFFSET (48) along yrot    forward, when mgLOS lets it
 	 *
 	 * The joint is the bind pose's node 14 here, and that is the same point:
-	 * the joint is the ORIGIN of the head bone, and turning the head about it
+	 * the joint is the origin of the head bone, and turning the head about it
 	 * does not move it. So a bind-pose picture taken from this eye is the
-	 * picture the game gives, minus the animation - and the neck stump this
-	 * stage is about does not move with the animation either, because it
+	 * picture the game gives, minus the animation - and the neck stump the
+	 * first person cut is about does not move with the animation either, because it
 	 * hangs on the torso.
 	 *
-	 * Looking FORWARD is yaw 0: a TR mesh faces +z, and the tool's own
+	 * Looking forward is yaw 0: a TR mesh faces +z, and the tool's own
 	 * default of 180 is the camera standing in front of her. The pitch is the
 	 * look-DOWN angle; the game clamps head_x_rot to 75 degrees and
 	 * item->pos.x_rot can add to that while swimming, so 60 is a plain look
@@ -7108,7 +7095,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			"16 up and %.0f forward", ex, ey, ez, classic14[0], classic14[1],
 			classic14[2], o.fpForward);
 
-		/* AND WHERE -eye MOVED IT FROM THERE (corrected in U7). The line used
+		/* And where -eye moved it from there. An earlier version of this line used
 		 * to name the default derivation whatever the switches said, so a run
 		 * with the eye taken out of the skull - the LANDING case - printed the
 		 * right coordinates under a description of a placement it was not
@@ -7123,8 +7110,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		LookAt(cx - f[0] * dist, cy - f[1] * dist, cz - f[2] * dist, o.yaw,
 			o.pitch, view);
 
-	/* THE MIRROR (#123, stage S4-1 proof). A mirror room turns the world
-	 * inside out, and a matrix that does that has a NEGATIVE determinant:
+	/* The mirror proof. A mirror room turns the world
+	 * inside out, and a matrix that does that has a negative determinant:
 	 * every triangle's winding flips, and a renderer that culls by winding
 	 * loses the whole body. This one negates the view space x, which is the
 	 * cheapest such matrix there is, and the picture that comes back says
@@ -7164,7 +7151,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	BuildNodeMatrices(body, view, o.turn, matrices);
 
-	/* WHERE THE JOINTS REALLY LAND IN VIEW SPACE (#123, fix round L, L2). The
+	/* Where the joints really land in view space. The
 	 * near zone is a radius about the camera measured in view space, so the
 	 * one thing it rests on is that view space is CLASSIC UNITS with the
 	 * camera at the origin. This line says so out loud for the two joints the
@@ -7181,10 +7168,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			sqrt(t[12] * t[12] + t[13] * t[13] + t[14] * t[14]));
 	}
 
-	/* THE MIRRORED HAND WEIGHTS, AND WHAT FOLDING THEM COSTS (#153, round
-	 * M2b). The rule itself is the engine's - HDTrmFoldMirrored, the very call
+	/* The mirrored hand weights, and what folding them costs.
+	 * The rule itself is the engine's - HDTrmFoldMirrored, the very call
 	 * hd_model makes while it loads the same file - so what this prints is what
-	 * the game does. What it adds is the PRICE, which only a pose can say: the
+	 * the game does. What it adds is the price, which only a pose can say: the
 	 * same vertex skinned twice through the node matrices built above, once
 	 * with the file's own weights and once with the folded ones, and the
 	 * distance between the two answers.
@@ -7329,8 +7316,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * of its +z bind direction to point downwards and a little backwards, and
 	 * each further link bent a few degrees more, so that the picture proves
 	 * what it is meant to prove - the six bones move independently and the
-	 * chain hangs together. The angles are the TOOL'S, and only the tool's;
-	 * stage S4-2 takes the real ones out of hairs[0][n].
+	 * chain hangs together. The angles are the tool's, and only the tool's;
+	 * the composite build takes the real ones out of hairs[0][n].
 	 *
 	 * The chain is built the way a chain is: link n's frame is a bend, then a
 	 * step of one link's length along the previous link's own z, then the
@@ -7344,18 +7331,18 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	{
 		float rest[16], anchor[16], base[16];
 
-		/* THE ROOT IS NOT THE HEAD JOINT (#123, fix round C, user finding C4).
+		/* The root is not the head joint.
 		 * game\hair.cpp:397 walks to the head bone and then translates by
-		 * (-4, -4, -48) in the head's OWN frame before it writes hairs[0][0];
+		 * (-4, -4, -48) in the head's own frame before it writes hairs[0][0];
 		 * that offset - up a little and 48 units behind the joint, which is
 		 * the back of the skull - is where the braid hangs from. Only the two
-		 * ANGLES below are the tool's; the root is the game's own formula, so
+		 * angles below are the tool's; the root is the game's own formula, so
 		 * that a studio picture shows the same junction the game shows. */
-		/* Round D moved it 15 units nearer the skull for an HD Lara, fix round
-		 * F withdrew that and fix round I (I2) put it back once the pack was a
+		/* The root moved 15 units nearer the skull for an HD Lara, was
+		 * withdrawn, then put back once the pack became a
 		 * box - see HD_LARA_BRAID_ROOT_Z_HD for all three. This tool draws an
 		 * HD Lara and nothing else, so the HD root is the default and
-		 * -classicroot is the BEFORE picture: the gap of user finding I2. */
+		 * -classicroot is the picture from before the HD root existed. */
 		MatTranslate((float)HD_LARA_BRAID_ROOT_X, (float)HD_LARA_BRAID_ROOT_Y,
 			(float)(o.classicBraidRoot ? HD_LARA_BRAID_ROOT_Z
 				: HD_LARA_BRAID_ROOT_Z_HD), anchor);
@@ -7382,11 +7369,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		memcpy(chain, &hairMatrices[n * 16], sizeof(chain));
 	}
 
-	/* THE SETTLED CHAIN INSTEAD, when -braidrest asked for one (#123, fix
-	 * round I, I1). The six matrices are built the way specific\hd\
+	/* The settled chain instead, when -braidrest asked for one. The six
+	 * matrices are built the way specific\hd\
 	 * hd_laradraw.cpp's braid_matrices builds them and not the way the studio
 	 * chain above is: a translation to the link's own position, then the two
-	 * angles HairControl derives from the chain, then the roll of fix round G.
+	 * angles HairControl derives from the chain, then the roll of the real-animation rule.
 	 *
 	 * The order is the engine's read through the transpose this file works in.
 	 * phd_TranslateAbs, phd_RotY, phd_RotX, phd_RotZ builds M = W . Ry . Rx .
@@ -7624,10 +7611,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	lighting.specStrength = 0.0f;
 	lighting.specPower = 1.0f;
 
-	/* THE SHEEN, part by part (#123, fix round D, D2), out of the same table
+	/* The sheen, part by part, out of the same table
 	 * the engine reads - so a picture from here is the picture the game
-	 * draws. -nosheen sets every one of them to zero, which is the BEFORE
-	 * picture of that fix. */
+	 * draws. -nosheen sets every one of them to zero, which is the before
+	 * picture. */
 	printf("sheen   : ");
 
 	for (int part = 0; part < HD_LARA_PART_COUNT; part++)
@@ -7642,7 +7629,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		printf("%s %.2f/%.0f", HDLaraPartLabel(part), o.noSheen ? 0.0f : st, pw);
 
-		/* And what is IN the hand, on its own pages (#123, fix round I, I4). */
+		/* And what is in the hand, on its own pages. */
 		if (held > 0.0f && HDModelPageSheenCount(HDLaraPartSlot(part)))
 			printf(" [held %.2f/%.0f on %d page(s)]", o.noSheen ? 0.0f : held,
 				hp, HDModelPageSheenCount(HDLaraPartSlot(part)));
@@ -7652,8 +7639,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	printf("%s\n", o.noSheen ? "  (-nosheen: all off)" : "");
 
-	/* #123 fix round I (I4): -onlypart draws one part and leaves the rest
-	 * out, which is how a question about ONE part is answered by a picture
+	/* -onlypart draws one part and leaves the rest
+	 * out, which is how a question about one part is answered by a picture
 	 * of that part. A lambda rather than six copies of the same test. */
 	const auto draws = [&o](int part) { return o.onlyPart < 0 || o.onlyPart == part; };
 
@@ -7688,11 +7675,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	int drawn = 0;
 
-	/* FIRST PERSON (#126), the same three omissions the seam makes: the head
+	/* First person, the same three omissions the seam makes: the head
 	 * node off the body, no separate face, no braid. All three sit exactly
 	 * where the camera does. */
-	/* -meshbits, ON THE COMPOSITE AS WELL (#123, fix round K). It reached the
-	 * single-model path only, and the question "which NODE is that ring in
+	/* -meshbits, on the composite as well. It reached the
+	 * single-model path only, and the question "which node is that ring in
 	 * front of the camera?" is answered by drawing one node and looking. */
 	unsigned int bodyMask = o.nodeMask;
 
@@ -7707,7 +7694,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("meshbits: %08x - the composite is masked to those nodes\n",
 			o.nodeMask);
 
-	/* AND THE BODY'S OWN NODES (#156), which are every one of them unless the
+	/* And the body's own nodes, which are every one of them unless the
 	 * head rule has taken TR5's head instead of this body's - the engine's own
 	 * HDLaraBodyMask, so this picture is the game's picture. Every other part
 	 * keeps the frame's mask, exactly as specific\hd\hd_laradraw.cpp has it. */
@@ -7718,15 +7705,15 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDLaraHasPart(HD_LARA_PART_HEAD) ? "TR5's head is on the card"
 			: "TR5's head is not loaded", ownBody);
 
-	/* THE HEAD CUT (stage S8 a sphere, fix round J a cylinder, fix round S a
-	 * plane, fix round U ONE BONE WEIGHT). The BODY carries it and nothing
+	/* The head cut (a sphere, then a cylinder, then a
+	 * plane, then one bone weight, in that order of development). The body carries it and nothing
 	 * else, exactly as specific/hd/hd_laradraw.cpp pushes it: the hands, the
 	 * holsters and the lid are their own models and must never be cut away.
 	 *
 	 * The two numbers come out of the engine's own HDLaraHeadCut, so this
-	 * picture is the game's picture. Only the THRESHOLD may be overridden,
-	 * which is what -headcut is for; a negative one draws the BEFORE picture,
-	 * with no cut at all. */
+	 * picture is the game's picture. Only the threshold may be overridden,
+	 * which is what -headcut is for; a negative one draws the picture from
+	 * before the cut existed, with no cut at all. */
 	HDModelNeckCut neckCut = { 0 };
 	int cutNode = HD_LARA_HEAD_NODE;
 	float cutBar = 0.0f;
@@ -7747,12 +7734,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		: o.cull == HD_MODEL_CULL_CCW ? "counter-clockwise"
 		: "none - both sides drawn, as every other HD model is");
 
-	/* THE SHEEN, part by part (#123, fix round D, D2): the same table the
+	/* The sheen, part by part: the same table the
 	 * engine reads, so this picture is the game's picture. */
 	const bool sheenOn = !o.noSheen;
 
-	/* -nosheen has to take the PER PAGE materials off as well (#123, fix round
-	 * I, I4), or the BEFORE picture would still carry the gun's highlight. */
+	/* -nosheen has to take the per page materials off as well,
+	 * or the before picture would still carry the gun's highlight. */
 	if (!sheenOn)
 		for (int part = 0; part < HD_LARA_PART_COUNT; part++)
 		{
@@ -7765,10 +7752,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				HDModelSetPageSheen(pslot, HDModelPage(pslot, i), 0.0f, 1.0f);
 		}
 
-	/* -oldskin: her skin back under the outfit's material (#123, fix round K,
-	 * K2). The BEFORE picture, and the only honest way to have one - the
-	 * engine's own table is what the tool draws with, so the picture from
-	 * before the round has to be made by undoing the round rather than by
+	/* -oldskin: her skin back under the outfit's material. The
+	 * picture from before the two materials were split, and the only honest way to have one - the
+	 * engine's own table is what the tool draws with, so that picture
+	 * has to be made by undoing the split rather than by
 	 * describing it. */
 	if (o.oldSkin)
 	{
@@ -7796,7 +7783,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull))
 		drawn++;
 
-	/* TR5's OWN HEAD (#156), in the same place and with the same rules the
+	/* TR5's own head, in the same place and with the same rules the
 	 * seam has: after the body and before the face, the frame's mask, the
 	 * body's cut and the body's cull - see specific\hd\hd_laradraw.cpp. */
 	if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
@@ -7809,12 +7796,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			drawn++;
 	}
 
-	/* THE LID (#123, fix round S, S1; the RIM's own since fix round U), in the
+	/* The lid, in the
 	 * same place and with the same rules the seam has: no cut of its own (its
 	 * rim vertices are copies of the body's and would sit exactly on the
 	 * boundary), no cull, every node (its rim is skinned to whatever the
 	 * body's rim is), and the skin's own material. -nocap leaves it out, which
-	 * is the BEFORE picture. */
+	 * is the picture from before the lid existed. */
 	if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
 		HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 	{
@@ -7833,7 +7820,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		light, bodyMask, &lighting))
 		drawn++;
 
-	/* THE HOLSTER RIG (#123, fix round D, D4), in the same place and with the
+	/* The holster rig, in the same place and with the
 	 * same guard specific\hd\hd_laradraw.cpp puts it: before the pieces,
 	 * because it belongs to the outfit and not to the weapon. */
 	SetSheen(lighting, HD_LARA_PART_HOLSTER_RIG, sheenOn);
@@ -7853,7 +7840,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			light, list[i].nodeMask & bodyMask, &lighting))
 			drawn++;
 
-		/* The install's own hands under a mod's gun (#153, round M2b), in the
+		/* The install's own hands under a mod's gun, in the
 		 * same place and with the same arguments the engine gives them - see
 		 * hd_laradraw.cpp. */
 		if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part) &&
@@ -7906,7 +7893,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	return 0;
 }
 
-/* The Mods folder's notes, on stdout (#153, round M1). hd_mods.cpp is
+/* The Mods folder's notes, on stdout. hd_mods.cpp is
  * engine-free and keeps its notes until somebody says where they go; the
  * engine sends them to Log(), this tool prints them. */
 static void ProbeModsLine(const char* line)
@@ -7926,52 +7913,52 @@ int main(int argc, char** argv)
 
 	std::string root = argv[1];
 	std::string name, levelStem, classicPath, out = ".\\modelprobe";
-	/* Stage S6: load that level's ROOM pages first, so the model page count
+	/* -withrooms: load that level's room pages first, so the model page count
 	 * that comes out is the one the engine really pays - most of a level's
 	 * model pages are pages its rooms already wear, and appending them to a
 	 * cache that already holds the rooms is exactly what HDLevelBuild does. */
 	std::string withRooms;
-	/* #153, round M1: the Mods folder and the other bundle. Both empty by
-	 * default, which is exactly the behaviour this tool had before the round.
+	/* The Mods folder and the other bundle. Both empty by
+	 * default, which is exactly the behaviour this tool has without -mods.
 	 */
 	std::string modsFolder, tr3Root;
-	// #153, round M2: print the wardrobe scan and stop.
+	// -wardrobe: print the wardrobe scan and stop.
 	bool wardrobe = false;
-	/* #155: print the classic pose of one model name and stop.
+	/* -classicpose: print the classic pose of one model name and stop.
 	 * Zero game means the switch was not on the line. */
 	int poseGame = 0;
 	std::string poseName;
-	// ... and -noclassicpose: the ring as it was before that round.
+	// ... and -noclassicpose: the ring as it was before that pose existed.
 	bool noClassicPose = false;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
-	// #155b: -all's own table is printed only for a line that asked for -all;
-	// -floorcheck turns `all` on for the LOAD and prints a table of its own.
+	// -all's own table is printed only for a line that asked for -all;
+	// -floorcheck turns `all` on for the load and prints a table of its own.
 	bool allAsked = false;
-	// #153 round M3: -invrot, the ring's own x/y/z for this item.
+	// -invrot, the ring's own x/y/z for this item.
 	short invRot[3] = { 0, 0, 0 };
 	bool invRotSet = false;
-	// #153 round M3, fix round: -axisview, the model face-on to its own plane.
+	// -axisview, the model face-on to its own plane.
 	bool axisView = false;
 	// ... and -rigid, a -name model loaded the way the ring loads a mod's.
 	bool rigid = false;
 	bool itemcheck = false;
-	bool inventory = false;	// #153 round M2b: a mod's own _OPTION model
-	/* #155b: the floor rule. -floor draws the slot the way the LEVEL draws it
+	bool inventory = false;	// -inventory: a mod's own _OPTION model
+	/* -floor: the floor rule. -floor draws the slot the way the level draws it
 	 * on the ground, lift and all, with the classic mesh's own lowest plane
 	 * over the picture; -floorcheck prints the numbers for every pickup slot
 	 * of the level and draws nothing. */
 	bool floorDraw = false;
 	bool floorCheck = false;
-	/* ... and the BEFORE picture: the same draw with the lift left off, which
-	 * is what the floor showed until this round. The switch exists so that
+	/* ... and the before picture: the same draw with the lift left off, which
+	 * is what the floor showed before the lift existed. The switch exists so that
 	 * what the rule buys stays a measurement instead of a memory. */
 	bool noFloorLift = false;
-	/* #123, fix round P: the inventory ring. -ringcheck is the numeric proof
+	/* The inventory ring. -ringcheck is the numeric proof
 	 * of the shear, -ring <x> <y> draws the model where the ring would put it
 	 * so that the same shear can be looked at. */
 	bool ringcheck = false;
-	/* #123, fix round P2: the pickup display in the corner. The same two
+	/* The pickup display in the corner. The same two
 	 * halves -ringcheck measures - the place and the light - asked at the one
 	 * place the display stands, and a third one the ring never needed: the
 	 * device state bracket, because the display opens one of its own in the
@@ -7981,35 +7968,35 @@ int main(int argc, char** argv)
 	bool ringLight = false;
 	double ringX = 0.0, ringY = 0.0;
 
-	/* Lara's composite - stage S4-1. */
-	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
+	/* Lara's HD composite. */
+	int onlyPage = -1;		// -onlypage: -name with one page
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
-	bool laraHeadWeight = false;	// #123 fix round U (U1)
-	int laraHandFold = -1;		// #153 round M2b
-	bool laraNoFold = false;	// #153 round M2b: the BEFORE picture
-	bool laraNoHandMix = false;	// #153 round M2b: and the other half of it
-	int laraHead = -1;		// #156: -1 = the wardrobe's own answer
-	bool laraPoseRisk = false;	// #148 order 4, fix round S (S2)
-	std::vector<int> laraTween60;	// #123 fix round U (U2)
-	bool laraHandLight = false;	// #123 fix round K (K2): the wrist seam
-	bool laraOldSkin = false;	// #123 fix round K (K2): the BEFORE picture
-	bool classicBraidRoot = false;	// #123 fix round I (I2): the BEFORE picture
-	int onlyPart = -1;		// #123 fix round I (I4): one part alone
-	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
+	bool laraHeadWeight = false;	// -headw
+	int laraHandFold = -1;		// -handfold
+	bool laraNoFold = false;	// -nofold: the before picture
+	bool laraNoHandMix = false;	// -nohandmix: and the other half of it
+	int laraHead = -1;		// -lara-head: -1 = the wardrobe's own answer
+	bool laraPoseRisk = false;	// -poserisk
+	std::vector<int> laraTween60;	// -tween60
+	bool laraHandLight = false;	// -look wrist: the wrist seam
+	bool laraOldSkin = false;	// -oldskin: the before picture
+	bool classicBraidRoot = false;	// -classicroot: the before picture
+	int onlyPart = -1;		// -onlypart: one part alone
+	bool noSheen = false;		// -nosheen: the before picture
 	bool laraBraid = false;
-	int laraBraidSim = 0;		// #123 fix round F (F2): the braid's physics
-	/* #123 fix round G (G1): the same chain under a real animation. */
+	int laraBraidSim = 0;		// -braidsim: the braid's own physics
+	/* -braidanim: the same chain under a real animation. */
 	std::vector<int> laraBraidAnims;
 	bool laraBraidFloor = true;
-	/* Stage S8. -1e9 means "the engine's own constant when -firstperson is
+	/* -1e9 means "the engine's own constant when -firstperson is
 	 * on", which is what makes the tool's default picture the game's picture;
 	 * a number given on the line overrides it, and a negative one is the
-	 * BEFORE picture. */
+	 * before picture. */
 	double cutS = -1.0e9;
-	bool noCap = false;		// #123 fix round S: without the lid
+	bool noCap = false;		// -nocap: without the lid
 	double fpForward = 48.0;
-	double eyeOff[3] = { 0.0, 0.0, 0.0 };	// #123 fix round U (U1d)
+	double eyeOff[3] = { 0.0, 0.0, 0.0 };	// -eye
 	int cullMode = -1;		// -1 = "what -firstperson would use"
 	bool yawSet = false, pitchSet = false;
 	std::string outfitName, gunsName, backName, holstersName, lookName;
@@ -8042,7 +8029,7 @@ int main(int argc, char** argv)
 			modsFolder = argv[++i];
 		else if (!_stricmp(argv[i], "-tr3") && i + 1 < argc)
 			tr3Root = argv[++i];
-		// #155: the pose the ring will apply, out of hd_classic.
+		// The pose the ring will apply, out of hd_classic.
 		else if (!_stricmp(argv[i], "-classicpose") && i + 2 < argc)
 		{
 			poseGame = atoi(argv[++i]);
@@ -8091,11 +8078,11 @@ int main(int argc, char** argv)
 			lara = true;
 			laraFirstPerson = true;
 		}
-		/* #123 fix round U (U1): the head cut's threshold, of 1. Negative
-		 * is no cut at all, which is the BEFORE picture. */
+		/* The head cut's threshold, of 1. Negative
+		 * is no cut at all, which is the before picture. */
 		else if (!_stricmp(argv[i], "-headcut") && i + 1 < argc)
 			cutS = atof(argv[++i]);
-		/* #123 fix round S (S1): the picture with the hole and no lid. */
+		/* The picture with the hole and no lid. */
 		else if (!_stricmp(argv[i], "-nocap"))
 			noCap = true;
 		else if (!_stricmp(argv[i], "-fpforward") && i + 1 < argc)
@@ -8114,15 +8101,15 @@ int main(int argc, char** argv)
 			lara = true;
 			laraNeck = true;
 		}
-		/* #123 fix round U (U1): the head's own WEIGHT, per outfit, and the
+		/* The head's own weight, per outfit, and the
 		 * rim it leaves - the measurement the weight cut is built on. */
 		else if (!_stricmp(argv[i], "-headw"))
 		{
 			lara = true;
 			laraHeadWeight = true;
 		}
-		/* #153 round M2b: the mirrored hand weights, and what folding them
-		 * back costs in THIS pose. An optional bar in per mille; without one
+		/* The mirrored hand weights, and what folding them
+		 * back costs in this pose. An optional bar in per mille; without one
 		 * the engine's own HD_LARA_HAND_FOLD_BAR. */
 		else if (!_stricmp(argv[i], "-handfold"))
 		{
@@ -8132,27 +8119,26 @@ int main(int argc, char** argv)
 			if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
 				laraHandFold = atoi(argv[++i]);
 		}
-		/* #153 round M2b: build the hands from the file exactly as it stands,
-		 * which is the picture from BEFORE the round. A share of 1001 is one
+		/* Build the hands from the file exactly as it stands,
+		 * which is the picture from before the hand fold existed. A share of 1001 is one
 		 * no vertex can reach. */
 		else if (!_stricmp(argv[i], "-nofold"))
 		{
 			lara = true;
 			laraNoFold = true;
 		}
-		/* #153 round M2b: a mod's hand model drawn whole, in the mod's own
-		 * skin - the other half of the BEFORE picture. */
+		/* A mod's hand model drawn whole, in the mod's own
+		 * skin - the other half of that before picture. */
 		else if (!_stricmp(argv[i], "-nohandmix"))
 		{
 			lara = true;
 			laraNoHandMix = true;
 		}
-		/* #156: the head rule this picture is drawn with, whatever the
-		 * wardrobe says - "outfit" is the picture from before the round.
+		/* The head rule this picture is drawn with, whatever the
+		 * wardrobe says - "outfit" is the picture from before the head rule existed.
 		 *
-		 * NOT "-head", although that is what the round's brief called it:
-		 * this tool has had a -head since #123 and it means "draw the
-		 * separate <NAME>_HEAD.TRM as well". So it takes the name its
+		 * Not "-head": this tool's -head means "draw the
+		 * separate <NAME>_HEAD.TRM as well", so this switch takes the name its
 		 * neighbours in the composite block have - -lara-nodes, -lara-pose. */
 		else if (!_stricmp(argv[i], "-lara-head") && i + 1 < argc)
 		{
@@ -8169,7 +8155,7 @@ int main(int argc, char** argv)
 				printf("ModelProbe: -lara-head %s is none of tr5, hair or "
 					"outfit - ignored\n", argv[i]);
 		}
-		/* #123 fix round U (U1d): the eye off the head joint, for the frame
+		/* The eye off the head joint, for the frame
 		 * a landing gives - the camera outside the skull, the nape in front
 		 * of it. Three numbers, in classic units. */
 		else if (!_stricmp(argv[i], "-eye") && i + 3 < argc)
@@ -8178,18 +8164,18 @@ int main(int argc, char** argv)
 			eyeOff[1] = atof(argv[++i]);
 			eyeOff[2] = atof(argv[++i]);
 		}
-		/* #148 order 4, fix round S (S2): which key frame pairs a matrix
+		/* Which key frame pairs a matrix
 		 * blend cannot survive, and whether a packed angle ever wraps. */
 		else if (!_stricmp(argv[i], "-poserisk"))
 		{
 			lara = true;
 			laraPoseRisk = true;
 		}
-		/* #123 fix round U (U2): replay these animations at SIXTY, frame by
+		/* Replay these animations at sixty, frame by
 		 * frame, and say which drawn frame is an outlier between its own two
 		 * neighbours. With no number it takes the sprint dive (230, 232, 240,
 		 * 242, 308, 309), the duck roll (218, 219, 220, 247) and the standing
-		 * roll (146, 147), which is the set the play test's picture is in. */
+		 * roll (146, 147). */
 		else if (!_stricmp(argv[i], "-tween60"))
 		{
 			lara = true;
@@ -8206,15 +8192,15 @@ int main(int argc, char** argv)
 					laraTween60.push_back(kRolls[k]);
 			}
 		}
-		/* #123 fix round K (K2): what the body and the hand shine like where
+		/* What the body and the hand shine like where
 		 * the two meet, for the outfit this run wears. */
 		else if (!_stricmp(argv[i], "-handlight"))
 		{
 			lara = true;
 			laraHandLight = true;
 		}
-		/* #123 fix round K (K2): the BEFORE picture - her skin shaded by the
-		 * outfit's material again, as it was until this round. */
+		/* The before picture - her skin shaded by the
+		 * outfit's material again, as it was before the split. */
 		else if (!_stricmp(argv[i], "-oldskin"))
 		{
 			lara = true;
@@ -8222,7 +8208,7 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-classicroot"))
 			classicBraidRoot = true;
-		/* #123 fix round K (K1): the first person picture WITHOUT the inner
+		/* The first person picture without the inner
 		 * skin, which is what the cut and the culling leave on their own -
 		 * a hole one sees the room through. */
 		else if (!_stricmp(argv[i], "-onlypart") && i + 1 < argc)
@@ -8230,11 +8216,11 @@ int main(int argc, char** argv)
 			lara = true;
 			onlyPart = atoi(argv[++i]);
 		}
-		/* #123 fix round I (I1): draw the braid where the SIMULATION leaves it
+		/* Draw the braid where the simulation leaves it
 		 * rather than in a studio pose. The number is a -braidsim regime; with
 		 * none it is 7, which is what the engine ships (the box, root -33).
-		 * Regime 4 is the picture before this round - root -48 and the two
-		 * pack spheres of fix rounds D to G. */
+		 * Regime 4 is the picture before the box existed - root -48 and the two
+		 * pack spheres. */
 		else if (!_stricmp(argv[i], "-braidrest"))
 		{
 			lara = true;
@@ -8256,7 +8242,7 @@ int main(int argc, char** argv)
 			lara = true;
 			laraBraid = true;
 		}
-		/* #123 fix round F (F2): the braid's own physics, run offline. The
+		/* The braid's own physics, run offline. The
 		 * step count is optional - 60 is a second of game time. */
 		else if (!_stricmp(argv[i], "-braidsim"))
 		{
@@ -8269,9 +8255,9 @@ int main(int argc, char** argv)
 			if (laraBraidSim < 1)
 				laraBraidSim = 60;
 		}
-		/* #123 fix round G (G1): the same chain driven by a real animation.
+		/* The same chain driven by a real animation.
 		 * Repeat the switch for more of them; with no number it runs the
-		 * three the play test spends its time in - breathing on the spot,
+		 * three a player spends most of the time in - breathing on the spot,
 		 * the run loop and the walk loop. */
 		else if (!_stricmp(argv[i], "-braidanim"))
 		{
@@ -8295,7 +8281,7 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-nodes"))
 			nodes = true;
-		/* #153 round M3: every slot of the page cache, so that the cost of a
+		/* Every slot of the page cache, so that the cost of a
 		 * second outfit is a set difference and not a guess. */
 		else if (!_stricmp(argv[i], "-pagelist"))
 			g_pagelist = true;
@@ -8307,11 +8293,11 @@ int main(int argc, char** argv)
 			onlyPage = (int)strtol(argv[++i], 0, 0);
 		else if (!_stricmp(argv[i], "-head"))
 			head = true;
-		/* #153 round M2b: a mod's own <BASE>_OPTION model in the ring's
+		/* A mod's own <BASE>_OPTION model in the ring's
 		 * place, exactly as hd_object.cpp puts it there. */
 		else if (!_stricmp(argv[i], "-inventory"))
 			inventory = true;
-		/* #155b: the floor rule, as a picture and as a table. -floorcheck
+		/* The floor rule, as a picture and as a table. -floorcheck
 		 * wants every slot of the level loaded, which is what -all does - but
 		 * not -all's own table, unless the line asked for that too. */
 		else if (!_stricmp(argv[i], "-floor"))
@@ -8320,7 +8306,7 @@ int main(int argc, char** argv)
 			floorCheck = all = true;
 		else if (!_stricmp(argv[i], "-nofloorlift"))
 			noFloorLift = floorDraw = true;
-		/* #153 round M3: the ring's own three angles, so that a picture out
+		/* The ring's own three angles, so that a picture out
 		 * of this tool is the picture the player sees. */
 		else if (!_stricmp(argv[i], "-invrot") && i + 3 < argc)
 		{
@@ -8329,11 +8315,11 @@ int main(int argc, char** argv)
 			invRot[2] = (short)strtol(argv[++i], 0, 0);
 			invRotSet = true;
 		}
-		/* #153 round M3, the fix round: the model turned so that its own
+		/* The model turned so that its own
 		 * principal plane faces the camera. See the usage block. */
 		else if (!_stricmp(argv[i], "-axisview"))
 			axisView = true;
-		// ... and the same round's -rigid. See the usage block.
+		// ... and -rigid. See the usage block.
 		else if (!_stricmp(argv[i], "-rigid"))
 			rigid = true;
 		else if (!_stricmp(argv[i], "-itemcheck"))
@@ -8391,7 +8377,7 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-light") && i + 7 < argc && lightCount < HD_MAX_OBJ_LIGHTS)
 		{
 			/* x y z r g b range - a POINT light in view space, which is what
-			 * the object shader wants since stage S3-2. The studio camera
+			 * the object shader wants. The studio camera
 			 * looks down -z at the model, so "0 0 -2000" is in front of it. */
 			HDObjLight& light = lights[lightCount++];
 
@@ -8410,8 +8396,8 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-ringlight") && i + 1 < argc &&
 			lightCount < HD_MAX_OBJ_LIGHTS)
 		{
-			/* THE INVENTORY RING'S OWN LIGHT (#123, fix round P), which is
-			 * the whole of it: an ambient of 8/8/8 and ONE sun of the ring's
+			/* The inventory ring's own light, which is
+			 * the whole of it: an ambient of 8/8/8 and one sun of the ring's
 			 * pcbright, direction (0, -50, -100) normalised, doubled - the
 			 * three lines phd_PutPolygonsPickup sets up (specific\output.cpp)
 			 * and the ones HDInvEnd hands the model. `bright` is the ring's
@@ -8445,7 +8431,7 @@ int main(int argc, char** argv)
 
 	printf("install : %s\n", root.c_str());
 
-	/* THE OTHER BUNDLE AND THE MODS (#153, round M1), in the same order and
+	/* The other bundle and the mods, in the same order and
 	 * on the same two modules hd_object.cpp sets them: the alternate root
 	 * before anything can ask for a page, the Mods folder before anything can
 	 * ask for a model. */
@@ -8478,10 +8464,10 @@ int main(int argc, char** argv)
 		}
 	}
 
-	/* THE CLASSIC POSE (#155), and then stop. Needs neither the
+	/* The classic pose, and then stop. Needs neither the
 	 * device nor a level: a mesh tree and a frame are level-file facts, which
 	 * is what lets the engine, this tool and anything else say the same thing
-	 * about the same object. -tr3 names the game 3 folder, so the BUNDLE is
+	 * about the same object. -tr3 names the game 3 folder, so the bundle is
 	 * its parent - the same step hd_model.cpp takes. */
 	if (poseGame)
 	{
@@ -8568,7 +8554,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	/* THE WARDROBE (#153, round M2). The folders are the ones on THIS command
+	/* The wardrobe scan. The folders are the ones on this command
 	 * line and not the ones the registry names, so a measurement can be
 	 * repeated on a copy - which is the whole reason this tool takes the
 	 * install as its first argument. Set unconditionally, because -outfit
@@ -8583,9 +8569,9 @@ int main(int argc, char** argv)
 	{
 		HDWardrobeScan();
 
-		/* The from-words are hd_wardrobe's own since #159 - HDWardrobeFromTag.
+		/* The from-words are hd_wardrobe's own - HDWardrobeFromTag.
 		 * A local array of them stood here and it was one row short of the
-		 * tiers the header defines from #156 on, which is exactly the kind of
+		 * tiers the header defines, which is exactly the kind of
 		 * drift a table of words in the caller invites. */
 		printf("\n-- the wardrobe: %d outfits --------------------------------\n",
 			HDWardrobeCount());
@@ -8601,13 +8587,13 @@ int main(int argc, char** argv)
 		for (int i = 0; i < HDWardrobeCount(); i++)
 		{
 			const HDWardrobeEntry* e = HDWardrobeAt(i);
-			/* SNPRINTF AND NOT SPRINTF, and the buffers are wide enough for a
+			/* snprintf and not sprintf, and the buffers are wide enough for a
 			 * number no file should hold. A sheen of 3e38 - a float's largest
-			 * - is 42 characters before the "/14 (list)" is added, and the
-			 * round that wrote this printed it into 48 bytes with sprintf:
+			 * - is 42 characters before the "/14 (list)" is added, which an
+			 * earlier version printed into 48 bytes with sprintf:
 			 * a table visibly corrupted and a write past the end of a stack
-			 * array. The engine refuses such a value since the fix round of
-			 * #159, so nothing can hand it one any more; a tool that prints
+			 * array. The engine now refuses such a value,
+			 * so nothing can hand it one any more; a tool that prints
 			 * what it is given may not depend on that. */
 			char flags[32], sheen[96], glow[96], skin[64], head[64];
 
@@ -8616,12 +8602,12 @@ int main(int argc, char** argv)
 
 			snprintf(flags, sizeof(flags), "%5d %5d %4d %4d %3d", (int)e->hands,
 				(int)e->braid, (int)e->holsters, (int)e->gloves, (int)e->wearsRig);
-			/* The tier goes in the sheen column as well since #159: a list
-			 * file may now set it, and "0.10/14" alone cannot say whether the
+			/* The tier goes in the sheen column as well: a list
+			 * file may set it, and "0.10/14" alone cannot say whether the
 			 * player's own line was read. */
 			snprintf(sheen, sizeof(sheen), "%.2f/%.0f (%s)", e->sheen,
 				e->sheenPower, HDWardrobeFromTag(e->fromSheen));
-			// #158: what her own skin is made of in this outfit.
+			// What her own skin is made of in this outfit.
 			snprintf(glow, sizeof(glow), "%.2f/%.0f (%s)", e->skinSheen,
 				e->skinSheenPower, HDWardrobeFromTag(e->fromSkinSheen));
 
@@ -8637,7 +8623,7 @@ int main(int argc, char** argv)
 			snprintf(skin + strlen(skin), sizeof(skin) - strlen(skin), " (%s)",
 				HDWardrobeFromTag(e->fromSkin));
 
-			// #156: whose head this body wears, and who decided that.
+			// Whose head this body wears, and who decided that.
 			snprintf(head, sizeof(head), "%s (%s)", HDWardrobeHeadWord(e->head),
 				HDWardrobeFromTag(e->fromHead));
 
@@ -8717,7 +8703,7 @@ int main(int argc, char** argv)
 		return 4;
 	}
 
-	/* --- Lara's composite (#123, stage S4-1) ---------------------------- */
+	/* --- Lara's composite ------------------------------------------------ */
 	if (lara)
 	{
 		LaraOptions o;
@@ -8805,7 +8791,7 @@ int main(int argc, char** argv)
 		/* A bare model, no level: 32 nodes, no bind pose, and the name
 		 * handed straight to hd_model. The picture is the bind pose.
 		 *
-		 * OR ONE RIGID NODE, WITH -rigid (#153, round M3, the fix round), which
+		 * Or one rigid node, with -rigid, which
 		 * is how hd_object.cpp loads a mod's <BASE>_OPTION model for the ring:
 		 * one node, every vertex rigid on it, because the file is another
 		 * game's and stands in its own frame with no mesh tree of ours behind
@@ -8826,8 +8812,8 @@ int main(int argc, char** argv)
 		one.rigidNode = rigid ? 0 : -1;
 		one.bind = 0;
 		one.name = name.c_str();
-		one.onlyPage = onlyPage;	// #123 fix round D (D4)
-		// #155b fix round 1: the floor rule sweeps the kept vertices, every
+		one.onlyPage = onlyPage;	// -onlypage
+		// The floor rule sweeps the kept vertices, every
 		// model and not only the fitted ones - the reason is at
 		// HDModelSlot::keepPoints.
 		one.keepPoints = floorDraw;
@@ -8853,12 +8839,12 @@ int main(int argc, char** argv)
 			one.slot = slots[i];
 			one.nodes = classic[i].nodes;
 			one.bind = &classic[i].bind[0][0];
-			/* #155b fix round 1: a pickup's vertex positions, kept until the
+			/* A pickup's vertex positions, kept until the
 			 * floor rule has swept them. The engine asks for exactly this
 			 * list, by exactly this rule (hd_object.cpp's slot plan). */
 			one.keepPoints = HDSlotIsPickup(slots[i]);
-			/* The mesh TREE as well since #123 fix round B (B4): a separate
-			 * HD face's neck bone follows the head node's PARENT, and this
+			/* The mesh tree as well: a separate
+			 * HD face's neck bone follows the head node's parent, and this
 			 * tool has walked the tree for its own node table anyway. */
 			one.parent = classic[i].parent;
 			one.name = 0;
@@ -8866,10 +8852,10 @@ int main(int argc, char** argv)
 			order.push_back((int)i);
 		}
 
-		/* WHAT THE INVENTORY QUESTION COSTS (#153, round M2b). The engine asks
+		/* What the inventory question costs. The engine asks
 		 * it of every loaded slot at every level build and it walks the mods
 		 * for a slot whose name ends in _ITEM - four names each - so it is
-		 * exactly the shape of thing that turned round M2's level build into
+		 * exactly the shape of thing that can turn a level build into
 		 * twenty-five seconds. The engine's own line says the same number; this
 		 * is how it was measured before it was written down. */
 		if (inventory)
@@ -8907,15 +8893,15 @@ int main(int argc, char** argv)
 		}
 	}
 
-	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b), planned exactly as
-	 * hd_object.cpp plans it for the ring: a pseudo slot, ONE node, every
+	/* A mod's own inventory model, planned exactly as
+	 * hd_object.cpp plans it for the ring: a pseudo slot, one node, every
 	 * vertex rigid on it, no bind pose - the file is another game's and stands
-	 * in its own frame. -inventory then draws THIS instead of the slot's model,
+	 * in its own frame. -inventory then draws this instead of the slot's model,
 	 * through HDModelRingFit, which is what the ring does. */
 	std::string optionName;
 	int optionSlot = -1;
 
-	/* -floor ASKS FOR IT TOO (#155b): since this round the pickup lying on the
+	/* -floor asks for it too: the pickup lying on the
 	 * ground draws a mod's <BASE>_OPTION model where there is one, so a
 	 * picture of the floor has to have the same model on the card that the
 	 * level would put there. */
@@ -8937,12 +8923,12 @@ int main(int argc, char** argv)
 			one.nodes = 1;
 			one.name = optionName.c_str();
 			one.rigidNode = 0;
-			// ... and posed with the donor game's own frame 0 (#155), exactly
+			// ... and posed with the donor game's own frame 0, exactly
 			// as hd_object.cpp asks for it - unless the run asked to see the
 			// file as it lies.
 			one.classicPose = !noClassicPose;
-			// #155b: and its vertices kept, because the floor rule measures
-			// the FITTED model and a fit is only known once both are built.
+			// And its vertices kept, because the floor rule measures
+			// the fitted model and a fit is only known once both are built.
 			one.keepPoints = true;
 			wanted.push_back(one);
 		}
@@ -8996,7 +8982,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-	/* --- the rooms first, if asked (#123, stage S6) --------------------- */
+	/* --- the rooms first, if asked --------------------------------------- */
 	double roomsBytes = 0;
 
 	if (!withRooms.empty())
@@ -9049,14 +9035,14 @@ int main(int argc, char** argv)
 		(stats.vertexBytes + stats.indexBytes) / 1024.0);
 	printf("pages              %d added, %.1f MiB of texture, %.0f ms decode\n",
 		stats.pages, stats.pageStats.bytes / 1048576.0, stats.pageStats.decodeMs);
-	/* #123, fix round B (B2): how many of the models' pages are CUT-OUT
+	/* How many of the models' pages are cut-out
 	 * sheets - a hole share over HD_CUTOUT_PERMILLE of the top mip. The
 	 * opaque pass has to switch the alpha test on for exactly these, which is
-	 * what hd_render has done for the rooms since fix round A (A2). */
+	 * what hd_render has always done for the rooms. */
 	printf("cut-out pages      %d of %d in the cache carry holes\n",
 		HDPageCacheCutoutPages(), HDPageCacheSlots());
 
-	/* WHERE EACH PAGE CAME FROM (#153, round M1). The key on the left is the
+	/* Where each page came from. The key on the left is the
 	 * cache's own - "mod0:6111" is a page out of mod 0's TEX folder and 6111
 	 * on its own is the install's page of that number, two different slots -
 	 * and the word after it is the folder the .DDS was really read from. It
@@ -9079,7 +9065,7 @@ int main(int argc, char** argv)
 			HDPageCacheSlotCutoutPermille(s) / 10.0,
 			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "");
 	}
-	/* The phases of `building`, since #153 round M2's fix round - keys is
+	/* The phases of `building` - keys is
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
@@ -9101,7 +9087,7 @@ int main(int argc, char** argv)
 	/* --- the table ------------------------------------------------------ */
 	if (allAsked)
 	{
-		/* THE SKELETON COLUMNS (#123, stage S3-2). `maxb` is the highest node
+		/* The skeleton columns. `maxb` is the highest node
 		 * a weighted vertex of the .TRM names and `drift` is how far the
 		 * centre of a node's own vertices sits from that node in the SLOT's
 		 * bind pose, mean over the covered nodes. The engine draws HD only
@@ -9120,7 +9106,7 @@ int main(int argc, char** argv)
 		int mismatchNodes = 0, mismatchDrift = 0;
 		float worstGood = 0, bestBad = 1e9f;
 
-		/* THE BIND STEP, per slot (#123, fix round O) - map/hand/donor are
+		/* The bind step, per slot - map/hand/donor are
 		 * not told apart from prefix5/prefix/prefix4/classic here because
 		 * this tool never builds a DonorPlan (it has no .hdm sidecar to read
 		 * for the 15 shipped, unrandomized levels); a donor slot instead
@@ -9264,22 +9250,22 @@ int main(int argc, char** argv)
 				bestBad);
 	}
 
-	/* --- THE FLOOR RULE, SLOT BY SLOT (#155b) ---------------------------- */
+	/* --- The floor rule, slot by slot ------------------------------------ */
 	if (floorCheck)
 	{
-		/* THE ENGINE'S OWN ARITHMETIC, not a copy of it: HDModelFloorLift is
+		/* The engine's own arithmetic, not a copy of it: HDModelFloorLift is
 		 * the function hd_object.cpp calls at level build, and the reference
 		 * it is handed - the classic mesh's deepest point - is read here out
 		 * of the .TRC that the engine reads out of mesh_vtxbuf.
 		 *
-		 * EVERY PICKUP SLOT of the level, not the ones that move: an install
+		 * Every pickup slot of the level, not the ones that move: an install
 		 * file that reads zero is the proof that the rule is inert on vanilla
 		 * data, and it is only a proof if it is printed.
 		 *
-		 * The fitted column is the OPTION case - a mod's <BASE>_OPTION model
+		 * The fitted column is the option case - a mod's <BASE>_OPTION model
 		 * turned onto the item's box - and it is measured twice on purpose:
-		 * on the box CORNERS through the fit, which is what round #155 did,
-		 * and on the VERTICES, which is what the rule does now. */
+		 * on the box corners through the fit, which is the older reading,
+		 * and on the vertices, which is what the rule does now. */
 		printf("\n-- the floor rule --------------------------------------------\n");
 		printf("%-5s %-20s %-26s %8s %8s %8s %7s %s\n", "slot", "slot name",
 			"model on the floor", "classic", "lowest", "sink", "lift",
@@ -9288,8 +9274,8 @@ int main(int argc, char** argv)
 			"-------- -------- -------- ------- -------------\n");
 
 		int measured = 0, lifted = 0;
-		/* WHAT THE SWEEP COSTS. The fitted case walks every kept vertex of
-		 * the model - 27,449 of them on the user's posed pair of Uzis - and
+		/* What the sweep costs. The fitted case walks every kept vertex of
+		 * the model - 27,449 of them on one posed pair of Uzis - and
 		 * it happens once per slot at level build, so the number worth having
 		 * is microseconds per model and not per frame. */
 		LARGE_INTEGER freq, began, ended;
@@ -9312,10 +9298,10 @@ int main(int argc, char** argv)
 				if (wanted[k].slot == at)
 					shape = &classic[(size_t)order[k]];
 
-			/* THE FRAME THE LEVEL DRAWS THIS SLOT IN (fix round 1) - the
-			 * rule's own frame. The BIND numbers are printed beside it,
-			 * because the difference between the two is the whole of what
-			 * this fix round changed and a table that showed only one of
+			/* The frame the level draws this slot in - the
+			 * rule's own frame. The bind numbers are printed beside it,
+			 * because the difference between the two is what the animation-frame
+			 * reading changed, and a table that showed only one of
 			 * them could not be checked against the other. */
 			std::vector<float> framePose;
 			const float* poseAt = 0;
@@ -9333,9 +9319,9 @@ int main(int argc, char** argv)
 				continue;
 			}
 
-			/* THE MODEL THE FLOOR REALLY DRAWS. A mod that ships a
-			 * <BASE>_OPTION model and no EXTRA_ name for the slot puts THAT
-			 * on the ground since #155b, fitted onto the item's box - so the
+			/* The model the floor really draws. A mod that ships a
+			 * <BASE>_OPTION model and no EXTRA_ name for the slot puts that
+			 * on the ground, fitted onto the item's box - so the
 			 * question is asked of the model that is drawn and not of the one
 			 * the slot happens to be bound to. */
 			int option = -1;
@@ -9378,10 +9364,10 @@ int main(int argc, char** argv)
 				HDModelFloorLift(option, fix, 0, shape->nodes, classicBind,
 					&lowestBind, 0);
 
-				/* AND ROUND #155'S OWN ANSWER BESIDE IT: the eight corners of
+				/* And the box-corner answer beside it: the eight corners of
 				 * the source's box through the same fit. It is here to be
-				 * compared, because the whole of what this round changed
-				 * about the measurement is the difference between the two. */
+				 * compared, because the difference between the two is
+				 * what the vertex-level reading changed. */
 				float srcMin[3], srcMax[3], corners = 0.0f;
 
 				HDModelBounds(option, srcMin, srcMax);
@@ -9545,8 +9531,8 @@ int main(int argc, char** argv)
 	printf("\nbounds  : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f\n",
 		mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
 
-	/* THE CLOUD'S OWN AXES beside the box (#153, round M3). A box says how
-	 * much room the model needs; these say which way its SHAPE runs, which
+	/* The cloud's own axes beside the box. A box says how
+	 * much room the model needs; these say which way its shape runs, which
 	 * is what the ring's fit has to know about a crossed pair of guns. */
 	{
 		float axes[9], extent[3];
@@ -9562,21 +9548,20 @@ int main(int argc, char** argv)
 		}
 	}
 
-	/* --- THE FRAME THE LEVEL DRAWS IN, BEFORE THE CAMERA (#155b, fix round
-	 * 1) ---------------------------------------------------------------------
+	/* --- The frame the level draws in, before the camera ------------------
 	 *
-	 * Every other switch's picture is the BIND pose, which is the frame a
+	 * Every other switch's picture is the bind pose, which is the frame a
 	 * .TRM's vertices are measured against and the right frame to look at a
-	 * model in. -floor is the one that claims to show what the LEVEL puts on
-	 * the ground, and until this fix round it showed the bind pose too - which
-	 * is why the round's seventeen renders could not see that the engine's
+	 * model in. -floor is the one that claims to show what the level puts on
+	 * the ground, and a version that only used the bind pose could not have
+	 * shown that the engine's
 	 * lift went the wrong way for six of ANDREA3's eighteen pickup slots.
 	 *
-	 * IT GOES IN FRONT OF THE CAMERA AS WELL, for the reason the ring turn
+	 * It goes in front of the camera as well, for the reason the ring turn
 	 * does below: the frame moves the model about the item's origin, and a
-	 * camera framed on the untouched box then looks at the wrong place - the
-	 * first picture taken of this had the model well above the floor plane and
-	 * the plane itself half out of the frame. The box is the DRAWN vertices'
+	 * camera framed on the untouched box then looks at the wrong place - a
+	 * picture taken without this fix had the model well above the floor plane and
+	 * the plane itself half out of the frame. The box is the drawn vertices'
 	 * own, through the fit and the frame, which is the same sweep the rule
 	 * measures its lowest point with. */
 	std::vector<float> framePose;
@@ -9585,9 +9570,9 @@ int main(int argc, char** argv)
 	float floorDeepest[3] = { 0.0f, 0.0f, 0.0f };
 	bool floorFitted = false;
 
-	/* THE POSE IS READ WHEREVER A FLOOR NUMBER IS PRINTED and not only for
+	/* The pose is read wherever a floor number is printed and not only for
 	 * -floor: -inventory prints the floor line too, and a number in the wrong
-	 * frame is what this fix round is about. Only the PICTURE - the node
+	 * frame is exactly the bug this reading fixes. Only the picture - the node
 	 * matrices, the camera and the plane - waits for -floor, so every other
 	 * switch's render is the bind pose it always was. */
 	if (here->slot >= 0 && ReadFramePose(level, *here, framePose) > 0)
@@ -9614,22 +9599,21 @@ int main(int argc, char** argv)
 				lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], floorDeepest[0],
 				floorDeepest[2]);
 
-			/* AND THE LIFT IS PART OF WHAT THE CAMERA HAS TO SEE (fix round 2,
-			 * the reviewer's finding). The box above is the model BEFORE the
+			/* And the lift is part of what the camera has to see. The box above is the model before the
 			 * rule moves it and the camera is built from it further down, so a
 			 * model that is lifted far walks out of the top of the picture:
-			 * RICH3's crossbow ammunition comes up 126.6 units and the first
-			 * render of it showed the bottom third of a quiver with the whole
+			 * RICH3's crossbow ammunition comes up 126.6 units, and without
+			 * this a render of it shows the bottom third of a quiver with the whole
 			 * top cut off - the one case where a picture is most wanted.
 			 *
-			 * The box is stretched UPWARD by the lift, which is the smaller y
+			 * The box is stretched upward by the lift, which is the smaller y
 			 * here, so that the camera frames the union of the two positions:
 			 * the plane stays at the classic mesh's own depth, the lifted
 			 * model stands on it, and both are in the picture.
 			 *
-			 * ALSO WHEN THE LIFT IS LEFT OFF, because -floor and -nofloorlift
-			 * are a PAIR and a pair is only readable on one camera: the pixel
-			 * proof of this round measures how much higher the silhouette
+			 * Also when the lift is left off, because -floor and -nofloorlift
+			 * are a pair and a pair is only readable on one camera: the pixel
+			 * proof measures how much higher the silhouette
 			 * stands in the one than in the other, and two different framings
 			 * would make that difference meaningless.
 			 *
@@ -9674,14 +9658,14 @@ int main(int argc, char** argv)
 
 	/* --- the turn in front of the model, before the camera --------------- */
 
-	/* WHATEVER GOES IN FRONT OF THE MODEL HAS TO GO IN FRONT OF THE CAMERA TOO
-	 * (#153, round M3, the fix round). Both turns below spin the model about
-	 * the ORIGIN, and a model whose box is off-centre - UZI_OPTION's is
+	/* Whatever goes in front of the model has to go in front of the camera too.
+	 * Both turns below spin the model about
+	 * the origin, and a model whose box is off-centre - UZI_OPTION's is
 	 * x -131..16, y -82..171, z -87..72, so its middle stands 73 units off -
 	 * then swings clean out of a frame that was computed from its untouched
-	 * box. That is why the round's own face-on render came out 100 % magenta
-	 * and the conclusion drawn from it ("no rotation of this file makes an X")
-	 * had nothing under it. The box corners are carried through the turn here
+	 * box. That is why a face-on render without this fix comes out 100 % magenta,
+	 * and any conclusion that no rotation of the file makes an X
+	 * has nothing under it. The box corners are carried through the turn here
 	 * and the camera frames what will really be drawn. */
 	float ringTurn[16];
 
@@ -9689,7 +9673,7 @@ int main(int argc, char** argv)
 
 	if (axisView)
 	{
-		/* THE MODEL FACE-ON TO ITS OWN PLANE. The vertex cloud's axes, longest
+		/* The model face-on to its own plane. The vertex cloud's axes, longest
 		 * first, are sent onto x, y and z - so the plane the shape runs in
 		 * lies in the screen and the direction it is flat in points at the
 		 * camera (yaw 180 looks down -z, so +z is the camera's side). Row
@@ -9713,9 +9697,9 @@ int main(int argc, char** argv)
 
 	if (invRotSet)
 	{
-		/* THE RING'S OWN PRESENTATION (-invrot). The ring puts the item's three
+		/* The ring's own presentation (-invrot). The ring puts the item's three
 		 * angles on the matrix stack with phd_RotYXZ - Y, then X, then Z, each
-		 * POST-multiplied into the column-vector stack - so in this tool's row
+		 * post-multiplied into the column-vector stack - so in this tool's row
 		 * vector matrices the model meets Z first, then X, then Y. Without this
 		 * a picture is the item's OWN frame and says nothing about what the
 		 * player sees. */
@@ -9735,13 +9719,12 @@ int main(int argc, char** argv)
 			invRot[2] * 360.0 / 65536.0);
 	}
 
-	/* AND NO PRESENTATION TURN IN A FLOOR PICTURE (#155b, fix round 1).
+	/* And no presentation turn in a floor picture.
 	 *
 	 * -axisview and -invrot exist to look at a model from an angle a person
 	 * chooses; the item's own frame is not a choice, it is where the thing
-	 * lies. Mixing the two produced the one bug of this kind the reviewer
-	 * found: the lift went onto a matrix with the ring turn in front of it, so
-	 * with -invrot it displaced the model in the TURNED frame. With the turn
+	 * lies. Mixing the two produces a bug of its own kind: the lift went onto a matrix with the ring turn in front of it, so
+	 * with -invrot it displaced the model in the turned frame. With the turn
 	 * forced out of a floor picture there is no such frame to be in. */
 	if (floorDraw && floorPose && (axisView || invRotSet))
 	{
@@ -9837,17 +9820,16 @@ int main(int argc, char** argv)
 
 	std::vector<float> matrices((size_t)here->nodes * 16);
 
-	/* THE FRAME THE LEVEL DRAWS IN, where -floor asked for it: the frame's own
-	 * matrices carry every translation AND every rotation of the item's
-	 * animation frame, so the bind-pose walk is not done at all (#155b, fix
-	 * round 1). The pose itself was read before the camera, which had to frame
+	/* The frame the level draws in, where -floor asked for it: the frame's own
+	 * matrices carry every translation and every rotation of the item's
+	 * animation frame, so the bind-pose walk is not done at all. The pose itself was read before the camera, which had to frame
 	 * it. */
 	BuildNodeMatrices(*here, view, turn, &matrices[0],
 		floorDraw ? floorPose : 0);
 
-	/* THE MATRIX PROOF OF THE OBJECT PATH (#123, stage S3-2), without the
-	 * game. A node matrix carries the node's ORIGIN into view space all by
-	 * itself - its translation IS that origin's view position - so the two
+	/* The matrix proof of the object path, without the
+	 * game. A node matrix carries the node's origin into view space all by
+	 * itself - its translation is that origin's view position - so the two
 	 * roads to a pixel can be compared on it directly:
 	 *
 	 *   classic   sx = vx * f_persp / vz + centre, as aTransformLightClipMesh
@@ -9856,7 +9838,7 @@ int main(int argc, char** argv)
 	 *             division, and the viewport this engine never sets - the
 	 *             whole back buffer, MinZ 0, MaxZ 1
 	 *
-	 * The engine runs the identical comparison on the FIRST HD item of every
+	 * The engine runs the identical comparison on the first HD item of every
 	 * level, on the matrices its own stack produced, and writes HDLOG
 	 * itemcheck. This is the same arithmetic on the same kind of matrices
 	 * with no game around it. */
@@ -9916,10 +9898,11 @@ int main(int argc, char** argv)
 			: "FAIL - the projection and the classic transform disagree");
 	}
 
-	/* THE RING PROOF (#123, fix round P, rebuilt in P2), without the game.
-	 * Two measurements, and the second is the one that failed the round.
+	/* The ring proof, without the game.
+	 * Two measurements, and the second is the one that failed on an earlier
+	 * version of the projection.
 	 *
-	 * ONE, THE PLACE. The model's BOUNDING RECTANGLE put on the screen twice
+	 * One, the place. The model's bounding rectangle put on the screen twice
 	 * at every place the ring puts an item:
 	 *
 	 *   classic  the eight corners through node 0's matrix into view space,
@@ -9933,21 +9916,22 @@ int main(int argc, char** argv)
 	 *            specific\hd\hd_object.cpp hands HDModelOffCentre for every
 	 *            ring item
 	 *
-	 * TWO, THE LIGHT, and it is the measurement that failed fix round P. The
+	 * Two, the light, the measurement that failed on the sheared-matrix
+	 * approach. The
 	 * ring's sun term over a sphere of sample normals, computed the way
 	 * hd_model.hlsl computes it - the normal through the node's 3x3,
 	 * renormalised, dotted with the ring's fixed direction - once on the
-	 * matrix the ENGINE hands the card and once on the SHEARED matrix fix
-	 * round P handed it. The first column cannot move at all, because the
+	 * matrix the engine hands the card and once on the sheared matrix an
+	 * earlier version of the projection handed it. The first column cannot move at all, because the
 	 * engine's matrix is the classic one and a rotation leaves a unit normal
-	 * a unit normal. The second is the round's own error kept as a number: it
-	 * is what the ring really looked like until P2 moved the offset into the
+	 * a unit normal. The second is that earlier approach's error kept as a number: it
+	 * is what the ring really looked like before the offset moved into the
 	 * projection, and a regression that put the shear back would make the
 	 * first column read like the second.
 	 *
-	 * Both the position and the SIZE of the rectangle have to agree: the ring
-	 * must not be 4/3 too wide on a 16:9 window, which is the mistake this
-	 * round's own notes name (TROne's "diary drawn buggy"). It cannot happen
+	 * Both the position and the size of the rectangle have to agree: the ring
+	 * must not be 4/3 too wide on a 16:9 window, a mistake TROne's own notes
+	 * describe as "diary drawn buggy". It cannot happen
 	 * here because TR5 computes f_persp from a 4:3 implied width whatever the
 	 * window is (specific\3dmath.cpp, AlterFOV) and the HD projection is built
 	 * from that very number - and the two aspect ratios below are that
@@ -10037,11 +10021,10 @@ int main(int argc, char** argv)
 					const double kx = (X - centreX) / p;
 					const double ky = (Y - centreY) / p;
 
-					/* THE ENGINE'S OWN OFF-CENTRE PROJECTION, out of the
+					/* The engine's own off-centre projection, out of the
 					 * engine's own file - hd_model.cpp is linked into this
 					 * tool, so this is HDModelOffCentre's arithmetic and not
-					 * a copy of it. The node matrices stay untouched, which
-					 * is the whole of fix round P2. */
+					 * a copy of it. The node matrices stay untouched. */
 					D3DMATRIX offProj;
 
 					HDModelOffCentreMatrix(&ringProj, (float)kx, (float)ky,
@@ -10049,7 +10032,7 @@ int main(int argc, char** argv)
 
 					const float* om = (const float*)&offProj;
 
-					/* And the matrix fix round P sheared instead, for the
+					/* And the matrix the earlier approach sheared instead, for the
 					 * light column below - never for the geometry. */
 					float sheared[16];
 
@@ -10119,12 +10102,12 @@ int main(int argc, char** argv)
 					if (dxw > worstX) worstX = dxw;
 					if (dyw > worstY) worstY = dyw;
 
-					/* THE LIGHT, the way hd_model.hlsl works it out: the
+					/* The light, the way hd_model.hlsl works it out: the
 					 * normal through the node's 3x3, renormalised, dotted
 					 * with the ring's sun and clamped at zero. Once on the
 					 * matrix the engine hands the card (which is the classic
-					 * one, untouched) and once on the sheared matrix fix
-					 * round P handed it. */
+					 * one, untouched) and once on the sheared matrix the
+					 * earlier approach handed it. */
 					double plain = 0.0, shear = 0.0, classic = 0.0;
 
 					for (int n = 0; n < normalCount; n++)
@@ -10202,14 +10185,13 @@ int main(int argc, char** argv)
 			  "projection disagree");
 	}
 
-	/* #123, fix round P (P2): -ring <x> <y> draws the model where the
+	/* -ring <x> <y> draws the model where the
 	 * inventory ring would put it, by the engine's own road - the node
-	 * matrices are left exactly as they are and the OFFSET goes into the
+	 * matrices are left exactly as they are and the offset goes into the
 	 * projection at the draw call below, which is what hd_object.cpp does per
 	 * ring item. So the picture shows what the ring really shows, light
 	 * included: -ringlight 160 at the middle of the ring and at the ammo row
-	 * has to come out at the same brightness as with no -ring at all, and
-	 * before P2 it did not. */
+	 * has to come out at the same brightness as with no -ring at all. */
 	double ringKx = 0.0, ringKy = 0.0;
 
 	if (ringSet)
@@ -10230,9 +10212,9 @@ int main(int argc, char** argv)
 	lighting.lightCount = lightCount;
 	/* 0.75 is the factor aTransformLightClipMesh gives a sun in the world and
 	 * 2.0 the one it gives it in the inventory ("fucking shit", says the
-	 * original comment) - so -ringlight sets the second (#123, fix round P). */
+	 * original comment) - so -ringlight sets the second. */
 	lighting.sunScale = ringLight ? 2.0f : 0.75f;
-	// #123 fix round D (D2): the sheen is Lara's alone; an object gets none.
+	// The sheen is Lara's alone; an object gets none.
 	lighting.specStrength = 0.0f;
 	lighting.specPower = 1.0f;
 
@@ -10267,17 +10249,17 @@ int main(int argc, char** argv)
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	HDModelFrameBegin(&projection, 0);
 
-	/* #123, fix round P2: the inventory ring's own screen centre, exactly as
+	/* The inventory ring's own screen centre, exactly as
 	 * hd_object.cpp hands it over per ring item. Zero without -ring, and then
 	 * the call writes nothing at all. */
 	HDModelOffCentre((float)ringKx, (float)ringKy);
 
-	/* A MOD'S OWN INVENTORY MODEL (#153, round M2b), drawn the way the ring
+	/* A mod's own inventory model, drawn the way the ring
 	 * draws it: the correction in front of the item's own node matrix, one
 	 * node, every node drawn. Same two calls hd_object.cpp makes. */
 	bool drew = false;
 
-	/* THE FLOOR PLANE THE PICTURE GETS (#155b), in the slot's own frame, and
+	/* The floor plane the picture gets, in the slot's own frame, and
 	 * whether it is known at all - a -name run has no level and so no classic
 	 * mesh to stand on. */
 	double floorPlaneAt = 0.0;
@@ -10287,10 +10269,10 @@ int main(int argc, char** argv)
 	{
 		float fix[16], placed[16];
 
-		/* THE DONOR GAME'S FRAME 0, FIRST (#155). The fit below
+		/* The donor game's frame 0, first. The fit below
 		 * measures the model the pose left behind, so the pose's own verdict
 		 * belongs above it - and a run where it did not happen has to say so,
-		 * or a box that looks like round M3's is a box nobody can explain. */
+		 * or an unexplained box is a box nobody can explain. */
 		{
 			HDModelClassicPose pose;
 
@@ -10336,16 +10318,14 @@ int main(int argc, char** argv)
 			HDModelBounds(optionSlot, srcMin, srcMax);
 			HDModelBounds(slot, dstMin, dstMax);
 
-			/* AND HOW FAR IT LEAVES THAT BOX (#153, round M2b, the second
-			 * fix round). The engine's own figure, from the engine's own
-			 * function - the scale matches the LONGEST axes only, so the
+			/* And how far it leaves that box. The engine's own figure, from the engine's own
+			 * function - the scale matches the longest axes only, so the
 			 * other two land where their proportions put them. */
 			int outAxis = -1;
 			const float over = HDModelRingFitOverflow(optionSlot, slot,
 				&outAxis);
-			/* THE TARGET'S OWN axes and not x/y/z (#153, round M3, the
-			 * review after the fix round). The fit pairs the two models'
-			 * SHAPES, so the axis handed back is one of the TARGET's
+			/* The target's own axes and not x/y/z. The fit pairs the two models'
+			 * shapes, so the axis handed back is one of the target's
 			 * principal axes, longest first - the same three words the
 			 * engine prints (hd_object.cpp, box_verdict). Naming it "z"
 			 * sent a reader to the model's z extent, which is a number
@@ -10366,10 +10346,10 @@ int main(int argc, char** argv)
 				fix[12], fix[13], fix[14], over,
 				outAxis >= 0 && outAxis < 3 ? kAxis[outAxis] : "?");
 
-			/* AND WHERE IT LIES ON THE FLOOR (#155b) - the engine's own
-			 * arithmetic, not a copy of it. Round #155 printed a refusal
-			 * here; the level pickup takes this model now and the number is
-			 * what it is LIFTED by, measured on the vertices through the fit
+			/* And where it lies on the floor - the engine's own
+			 * arithmetic, not a copy of it. The level pickup takes this model
+			 * and the number is
+			 * what it is lifted by, measured on the vertices through the fit
 			 * against the classic mesh's own deepest point. */
 			if (here && here->slot >= 0)
 			{
@@ -10393,11 +10373,11 @@ int main(int argc, char** argv)
 
 					if (floorDraw)
 					{
-						/* THE LIFT GOES STRAIGHT UP IN THE WORLD, at the view
+						/* The lift goes straight up in the world, at the view
 						 * end of the chain - LiftNodes, the same move the
-						 * engine makes and in the same space. It was on the
-						 * fit's own translation row until fix round 1, which
-						 * is the ITEM's frame: with -invrot that displaced the
+						 * engine makes and in the same space. An earlier build put it on the
+						 * fit's own translation row, which
+						 * is the item's frame: with -invrot that displaced the
 						 * model in the turned frame, and for a slot whose
 						 * animation frame stands the model on its head it was
 						 * the wrong direction altogether. */
@@ -10414,7 +10394,7 @@ int main(int argc, char** argv)
 						"kept no points\n");
 			}
 
-			/* WHERE THE FIT REALLY PUT IT (#153, round M3): the source's own
+			/* Where the fit really put it: the source's own
 			 * axes and box corners through the fit, so a picture that looks
 			 * wrong can be read as numbers. */
 			{
@@ -10546,23 +10526,23 @@ int main(int argc, char** argv)
 		OverlayPlane(view, persp, width, height, cxm, czm, floorPlaneAt,
 			halfX > 8.0 ? halfX : 8.0, 0.0, 0x0000C000u);
 
-		/* AND A PATCH UNDER THE DEEPEST POINT (#155b, fix round 1), which is
+		/* And a patch under the deepest point, which is
 		 * the one place on that plane where the model can touch it.
 		 *
 		 * The quad above spans the model's whole footprint, and at a low
 		 * camera its near edge stands well in front of the point the rule is
 		 * about - so a model resting exactly on the plane still shows a gap
-		 * there, and the first pictures of this fix round read as "floating"
+		 * there, and a picture without this patch reads as "floating"
 		 * when the numbers said the contact was exact.
 		 *
-		 * WHAT IT CAN AND CANNOT SHOW. Where the deepest point is also the
+		 * What it can and cannot show. Where the deepest point is also the
 		 * lowest thing on the screen - the crowbar's tip, the fitted pair of
 		 * Uzis - the model's outline meets the patch and the contact is
 		 * plain. Where it is not - a box whose far bottom corner is the
 		 * deepest and whose near face projects lower - the patch crosses the
-		 * silhouette, because the overlay is drawn into the pixels AFTER the
+		 * silhouette, because the overlay is drawn into the pixels after the
 		 * model and takes no part in the depth test. The picture is there to
-		 * show the FRAME the item is drawn in and how far the lift moved it;
+		 * show the frame the item is drawn in and how far the lift moved it;
 		 * that the lift lands exactly on the mesh is the numbers' work. */
 		OverlayPlane(view, persp, width, height, floorDeepest[0],
 			floorDeepest[2], floorPlaneAt, 24.0, 24.0, 0x0000FF00u);
@@ -10570,17 +10550,17 @@ int main(int argc, char** argv)
 
 	if (!drew)
 	{
-		/* EVERY NODE'S MATRIX AND NOT ONE (#155b). This handed HDModelDraw a
-		 * SINGLE float[16] with the slot's node COUNT beside it, so the draw
+		/* Every node's matrix and not one. An earlier version handed HDModelDraw a
+		 * single float[16] with the slot's node count beside it, so the draw
 		 * read past the end of a stack array for every node but the root and
 		 * skinned that node's vertices with whatever was there. A model whose
 		 * geometry sits on node 0 drew correctly and everything else vanished
-		 * - which is how this round came within one measurement of reporting
-		 * the user's MP5 mod (5478 vertices, all on node 1) as an invisible
-		 * FILE. It is the tool that was blind, since #153 round M3 put the
+		 * - which came within one measurement of reporting
+		 * an MP5 mod (5478 vertices, all on node 1) as an invisible
+		 * file. It was the tool that was blind, from putting the
 		 * turn in front of the matrix.
 		 *
-		 * The turn goes in front of EVERY node, so it turns the whole object
+		 * The turn goes in front of every node, so it turns the whole object
 		 * about the model origin. A one-node inventory model gets exactly what
 		 * it got before. */
 		std::vector<float> own((size_t)here->nodes * 16);
@@ -10614,7 +10594,7 @@ int main(int argc, char** argv)
 	ShotWrite(shot, path);
 	ShotEnd(shot);
 
-	/* THE PICKUP DISPLAY (#123, fix round P2), in three halves.
+	/* The pickup display, in three halves.
 	 *
 	 * The little turning object in the corner after Lara picks something up.
 	 * It is the SECOND caller of DrawInventoryItemMe and it goes through the
@@ -11015,7 +10995,7 @@ int main(int argc, char** argv)
 		 * land a hundredth of a pixel further along and come back one step of
 		 * 255 different. One step is the smallest difference a picture can
 		 * have; what is being ruled out is a light that depends on WHERE the
-		 * object stands, which the shear of fix round P had at 45 %. */
+		 * object stands, which the shear of the earlier projection had at 45 %. */
 		const long edges = onlyA + onlyB;
 		const bool pass = places && worstX <= 1.0 && worstY <= 1.0 &&
 			compared > 0 && diffPct < 2.0 && noisy * 200 <= compared &&

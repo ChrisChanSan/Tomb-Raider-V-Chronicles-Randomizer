@@ -1,10 +1,8 @@
-// SlotList - which moveable slots does a level carry?
+// SlotList - lists which moveable slots a level carries.
 //
-// Occasion: the randomizer scatters a consumable only where the level can
-// DRAW it - presentSlots comes from Tr5Level::moveableSlots (ApplyPatch.cpp
-// :120). A pickup without a model would be an invisible stumbling block. So
-// when something is missing in one section and nowhere else, this is the
-// first question to ask of the file.
+// The randomizer scatters a consumable only where the level can draw it -
+// presentSlots comes from Tr5Level::moveableSlots. A pickup without a model
+// would be an invisible stumbling block.
 //
 // Usage: SlotList <level.trc> [slot ...]
 //        without slots: how many there are, and the highest

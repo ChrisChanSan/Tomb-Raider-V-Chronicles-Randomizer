@@ -11,28 +11,26 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* MenuTest - the arithmetic of the options menu, checked without a game
- * (#161, round 161b1 step 1).
+/* MenuTest - the arithmetic of the options menu, checked without a game.
  *
  * Build with bmenu.bat, run with no arguments.
  *
- * WHY IT EXISTS. The menu's cursor used to be a one-hot bit mask shifted by
- * hand at five call sites, and every row added above a list meant recounting a
- * shift somewhere else - round 161a2 and round 161a2b each had to move two of
- * them, and the comments in specific\LoadSave.cpp say what went wrong when one
- * was missed. The arithmetic is now one header, game\menu_nav.h, and this file
- * INCLUDES THAT HEADER rather than a copy of it - the way InterpTest.cpp
- * includes game\interpolate_math.h. A change to the tree is a change this test
- * sees.
+ * The menu's cursor used to be a one-hot bit mask shifted by hand at five
+ * call sites, so every row added above a list meant recounting a shift
+ * somewhere else, and the comments in specific\LoadSave.cpp say what went
+ * wrong when one was missed. The arithmetic now lives in one header,
+ * game\menu_nav.h, and this file includes that header rather than a copy of
+ * it, the way InterpTest.cpp includes game\interpolate_math.h, so a change
+ * to the tree is a change this test sees.
  *
- * WHAT IT CHECKS. Every function of the header is swept over its whole small
- * range rather than sampled, because the interesting cases are the ends: a
- * disabled first row, a disabled last row, a page with exactly one enabled row,
- * runs of disabled rows, a list of one and a list of none. The paging cases are
+ * Every function of the header is swept over its whole small range rather
+ * than sampled, because the interesting cases are the ends: a disabled
+ * first row, a disabled last row, a page with exactly one enabled row, runs
+ * of disabled rows, a list of one and a list of none. The paging cases are
  * named after the two lists the engine really has: the keyboard's roles and
- * the pad's, and the balanced split the user asked for - 8+8 and 8+7 while
- * both lists were sixteen and fifteen long, and the keyboard's own three-page
- * split since the hotkey roles joined it (#161, round 161b2d).
+ * the pad's, with a balanced split (8+8 and 8+7 while both lists were
+ * sixteen and fifteen long) and the keyboard's own three-page split once
+ * the hotkey roles joined it.
  */
 
 #include <stdio.h>
@@ -149,11 +147,11 @@ static void cursor_disabled()
 	check(MenuCursorStep(0, 0, 0, +1), 0, "step on an empty page");
 	check(MenuFirstEnabled(0, 0), -1, "first enabled on an empty page");
 
-	/* WHICH WAY THE CLAMP MOVES when it really has a choice. The header says
+	/* Which way the clamp moves when it really has a choice: the header says
 	 * downward first, and every case above is satisfied by a clamp that
-	 * searched upward instead: the disabled row is at an end there, so only
-	 * one direction ever finds anything. The review round swapped the two
-	 * loops and MenuTest did not notice - these cases are what notices. */
+	 * searched upward instead, because the disabled row is at an end there,
+	 * so only one direction ever finds anything. These cases force the
+	 * choice. */
 	n = mask("1.1", m);
 	check(MenuClampCursor(m, n, 1), 2, "clamp prefers the row below");
 
@@ -188,7 +186,7 @@ static void cursor_disabled()
 
 static void paging_engine_cases()
 {
-	/* The two lists the engine really pages, at the maximum the brief names. */
+	/* The two lists the engine really pages, checked at a page maximum of 13. */
 	check(MenuPageCount(16, 13), 2, "16 keyboard roles at 13: two pages");
 	check(MenuRowsPerPage(16, 13), 8, "16 at 13: 8 per page");
 	check(MenuRowsOnPage(16, 13, 0), 8, "16 at 13: page 0 has 8");
@@ -209,11 +207,11 @@ static void paging_engine_cases()
 	check(MenuPageCount(15, 11), 2, "15 at 11: two pages");
 	check(MenuRowsPerPage(15, 11), 8, "15 at 11: still 8 per page");
 
-	/* AND THE KEYBOARD LIST AS ROUND 161b2d LEAVES IT (#161, item 2): sixteen
-	 * roles, the Secondary one only under "Separate", ten hotkeys, and the five
-	 * cheat rows only while Cheats are on - four lengths, all at the frame's
-	 * real maximum of 11, and all of them three pages. That is the "1/N" item 1
-	 * draws between the arrows, so the number is worth holding. */
+	/* The keyboard list: sixteen roles, the Secondary one only under
+	 * "Separate", ten hotkeys, and the five cheat rows only while Cheats are
+	 * on - four lengths, all at the frame's real maximum of 11, and all of
+	 * them three pages. That count is what the "1/N" indicator draws between
+	 * the arrows, so it is worth checking directly. */
 	check(MenuPageCount(26, 11), 3, "One key, cheats off: 26 rows, three pages");
 	check(MenuRowsPerPage(26, 11), 9, "26 at 11: 9 per page");
 	check(MenuRowsOnPage(26, 11, 2), 8, "26 at 11: the last page has 8");
@@ -230,13 +228,12 @@ static void paging_engine_cases()
 	check(MenuRowsPerPage(32, 11), 11, "32 at 11: 11 per page");
 	check(MenuRowsOnPage(32, 11, 2), 10, "32 at 11: the last page has 10");
 
-	/* AND THE PAD LIST AS ROUND 161b2d LEAVES IT (#161, item 3). It was fifteen
-	 * roles and one page-and-a-bit; it is sixteen roles with the Secondary one
-	 * only under "Separate", the Modifier, six weapons and five cheat rows only
-	 * while Cheats are on - 22, 23, 27 or 28 BODY rows, the centred Reset row
-	 * being fixed and on every page (menu_frame.cpp's `fixed`). Two pages at the
-	 * shortest and three at the other three, so "1/3" stays the widest string
-	 * the indicator of item 1 can draw anywhere in this tree. */
+	/* The pad list: sixteen roles with the Secondary one only under
+	 * "Separate", the Modifier, six weapons and five cheat rows only while
+	 * Cheats are on - 22, 23, 27 or 28 body rows, with the centred Reset row
+	 * fixed and present on every page (menu_frame.cpp's `fixed`). Two pages
+	 * at the shortest and three at the other three, so "1/3" is the widest
+	 * string the page indicator ever has to draw. */
 	check(MenuPageCount(22, 11), 2, "pad, One key, cheats off: 22 body rows, two pages");
 	check(MenuRowsPerPage(22, 11), 11, "22 at 11: 11 per page");
 	check(MenuRowsOnPage(22, 11, 1), 11, "22 at 11: the last page has 11");
@@ -253,12 +250,10 @@ static void paging_engine_cases()
 	check(MenuRowsPerPage(28, 11), 10, "28 at 11: 10 per page");
 	check(MenuRowsOnPage(28, 11, 2), 8, "28 at 11: the last page has 8");
 
-	/* AND THE TWO PAGES ROUND 161b2d ITEM 5 LEAVES BEHIND IT. The four mode
-	 * rows moved off the Controls page onto a sub-page of their own ("Die vier
-	 * Modi bitte auf eine Unterseite"), so Controls is ten rows where it was
-	 * twelve - three left, the "Modes" tab arrived - and Modes is four. Neither
-	 * has a fixed row, so both are asked at the full MENU_MAX_ROWS of 12, and
-	 * both are ONE page: no arrows, and therefore no "1/N" indicator on either. */
+	/* The Controls and Modes pages: the four mode rows sit on their own
+	 * sub-page, so Controls has ten rows and Modes has four. Neither has a
+	 * fixed row, so both are asked at the full MENU_MAX_ROWS of 12, and both
+	 * are one page: no arrows, and therefore no "1/N" indicator on either. */
 	check(MenuPageCount(10, 12), 1, "Controls: 10 rows at 12, one page");
 	check(MenuRowsOnPage(10, 12, 0), 10, "Controls: all ten on page 0");
 	check(MenuPageFirstRow(10, 12, 0), 0, "Controls: page 0 starts at 0");
@@ -268,8 +263,8 @@ static void paging_engine_cases()
 	check(MenuRowsOnPage(4, 12, 0), 4, "Modes: all four on page 0");
 	check(MenuRowsOnPage(4, 12, 1), 0, "Modes: there is no second page");
 
-	// And the row count the page LEFT behind is still a one-page count, so the
-	// move cannot have been what makes Controls page: it never did.
+	// Even the twelve rows Controls had before losing the mode rows still
+	// fit one page, so pagination was never the reason for the move.
 	check(MenuPageCount(12, 12), 1, "the twelve rows Controls had were one page too");
 }
 
@@ -380,19 +375,17 @@ static void page_step()
 }
 
 /* ------------------------------------------------------------ keyboard -- */
-/* game\key_scheme.h - the two keyboard sets (#161, round 161b2a, item 1).
- * Same rule as above: the ENGINE'S header, not a copy, so the row checked here
- * is the row a player gets. */
+/* game\key_scheme.h - the two keyboard sets. Same rule as above: the
+ * engine's header, not a copy, so the row checked here is the row a
+ * player gets. */
 
 static const short kModern[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
 
 /* A row that shares no key with the Modern one, to play the part of "some
- * other binding" wherever a second row is needed. The numbers are scan codes
- * of keys neither default row uses - letters, the two spare digits, the four F
- * keys the engine keeps for itself, the numeric keypad and Insert - and
- * nothing else about them matters. It had to be rewritten for round 161b2d:
- * its old numbers were the function keys, and the hotkey roles took eight of
- * them. */
+ * other binding" wherever a second row is needed. The numbers are scan
+ * codes of keys neither default row uses - letters, the two spare digits,
+ * the four F keys the engine keeps for itself, the numeric keypad and
+ * Insert - and nothing else about them matters. */
 static const short kOther[KEY_SCHEME_ROLES] =
 {
 	0x14, 0x15, 0x16, 0x17, 0x18,	/* T Y U I O           */
@@ -406,12 +399,11 @@ static const short kOther[KEY_SCHEME_ROLES] =
 	0xD2							/* Insert              */
 };
 
-/* THE SLOT NUMBERS THEMSELVES (#161, rounds 161b2c and 161b2d, item 2). Every
- * slot is addressed by number in the registry, so a number that moves is a
- * player's bindings silently meaning something else. Slot 18 is the Secondary
- * action and must stay 18 now that the hotkeys sit BEHIND it rather than
- * before it - it is no longer "the last slot" and no longer derivable from the
- * count, which is exactly why it is checked here. */
+/* Every slot is addressed by number in the registry, so a number that
+ * moves is a player's bindings silently meaning something else. Slot 18 is
+ * the Secondary action and must stay 18 now that the hotkeys sit behind it
+ * rather than before it - it is no longer "the last slot" and no longer
+ * derivable from the count, which is why it is checked directly. */
 static void key_secondary_slot()
 {
 	check(KEY_SCHEME_ROLES, 34, "thirty-four roles since the hotkeys");
@@ -425,15 +417,13 @@ static void key_secondary_slot()
 			check(kOther[i] == kModern[j], 0, "kOther shares no key with the Modern row");
 }
 
-/* THE FIFTEEN HOTKEY SLOTS (#161, round 161b2d, item 2). Two things are worth
- * a test rather than a comment: that the numbers are the fifteen consecutive
- * slots behind the Secondary one (a gap or an overlap would make one registry
- * name mean two roles), and that the Modern row's keys are the keys
- * specific\input.cpp used to read directly - which is this round's whole
- * byte-identity claim, since Key(role) reads that key for an untouched
- * registry. The engine's own static_asserts say the same thing against the
- * DIK_ names; this says it against the numbers, where a player's registry
- * lives. */
+/* Two things are worth a test rather than a comment: that the numbers are
+ * the fifteen consecutive slots behind the Secondary one (a gap or an
+ * overlap would make one registry name mean two roles), and that the
+ * Modern row's keys are the keys specific\input.cpp used to read directly,
+ * since Key(role) reads that key for an untouched registry. The engine's
+ * own static_asserts say the same thing against the DIK_ names; this says
+ * it against the numbers, where a player's registry lives. */
 static void key_hotkey_slots()
 {
 	const short want[15] =
@@ -508,8 +498,8 @@ static void key_conflicts()
 
 	// Nothing shared: every role keeps its default key as a second trigger.
 	// The last argument is "the Secondary role is live" (tomb5.action_split);
-	// these three sweeps pass 1, which is the whole table as round 161b2a
-	// wrote it. The inert case is the block below.
+	// these three sweeps pass 1, covering the whole table. The inert case
+	// is the block below.
 	KeySchemeConflicts(kOther, kModern, got, 1, 1);
 
 	for (i = 0; i < KEY_SCHEME_ROLES; i++)
@@ -537,11 +527,10 @@ static void key_conflicts()
 	}
 }
 
-/* AN INERT SECONDARY SLOT CLAIMS NOTHING (#161, round 161b2c, fix round - the
- * skeptical review's fifth finding). With "One key" the Secondary role cannot
- * produce a bit however it is bound, so its key must not silence another
- * role's default-key fallback; with "Separate" it is a binding like any other
- * and Core's rule applies to it unchanged. */
+/* An inert Secondary slot claims nothing. With "One key" the Secondary role
+ * cannot produce a bit however it is bound, so its key must not silence
+ * another role's default-key fallback; with "Separate" it is a binding like
+ * any other and Core's rule applies to it unchanged. */
 static void key_conflicts_inert()
 {
 	long got[KEY_SCHEME_ROLES];
@@ -581,7 +570,7 @@ static void key_conflicts_inert()
 
 	// The engine's own case: with the Secondary slot at its default key, the
 	// answer is the same in both settings, because neither default row holds
-	// that key. This is the byte-identity claim the fix round makes.
+	// that key, which is the byte-identity claim this test makes.
 	memcpy(active, kModern, sizeof(active));
 	KeySchemeConflicts(active, kModern, got, 1, 1);
 
@@ -594,11 +583,10 @@ static void key_conflicts_inert()
 	}
 }
 
-/* AND THE FIVE CHEAT SLOTS ARE INERT WITH CHEATS OFF (#161, round 161b2d, fix
- * round - the skeptical review's fifth finding). Same sentence as the block
- * above, one flag further: with Cheats off the five rows are not offered and
- * nothing reads them, so a key bound to one of them may not silence another
- * role's default-key fallback. */
+/* The five cheat slots are inert with Cheats off, one flag further than the
+ * block above: with Cheats off the five rows are not offered and nothing
+ * reads them, so a key bound to one of them may not silence another role's
+ * default-key fallback. */
 static void key_conflicts_cheats_inert()
 {
 	long got[KEY_SCHEME_ROLES];
@@ -704,12 +692,12 @@ static void key_seat()
 		check(active[i], kModern[i], "and it really swapped");
 }
 
-/* THE PAD'S TWO SETS (#161, round 161b2c, item 3). Two rows of sixteen that
- * are DELIBERATELY not copies of the engine's tables: the seat swaps whatever
- * it is given and has no business knowing what a number means, so a twin of
- * jDefPS5DInput here would only be a second place to keep in step. 100+ and
- * 200+ say "some binding" and nothing more; the -1 in each is the one value
- * with a meaning - an unbound role - and it has to travel like any other. */
+/* Two rows of sixteen that are deliberately not copies of the engine's
+ * tables: the seat swaps whatever it is given and has no business knowing
+ * what a number means, so a twin of jDefPS5DInput here would only be a
+ * second place to keep in step. 100+ and 200+ say "some binding" and
+ * nothing more; the -1 in each is the one value with a meaning - an
+ * unbound role - and it has to travel like any other. */
 static const long kPadOne[JOY_ROLES] =
 {
 	100, 101, 102, 103, 104, 105, 106, 107,
@@ -728,9 +716,9 @@ static void pad_seat()
 	long parked[JOY_ROLES];
 	int seated, i;
 
-	// The count and the Secondary slot moved to pad_role_slots() with round
-	// 161b2d (item 3): the Secondary role is no longer the last of them, so
-	// "the last slot" stopped being a way to say 15.
+	// The count and the Secondary slot are checked in pad_role_slots():
+	// the Secondary role is no longer the last of them, so "the last
+	// slot" is no longer a way to say 15.
 
 	// Asking for the setting already seated moves nothing - the Action row and
 	// the startup seat both call it and neither may double-swap.
@@ -775,17 +763,16 @@ static void pad_seat()
 		check((int)active[i], (int)kPadSep[i], "and it really swapped");
 }
 
-/* THE PAD'S TWELVE NEW ROLES AND THE ONE RULE THAT READS THEM (#161, round
- * 161b2d, item 3). The numbers are checked here for the reason KEY_ROLE_SECOND
- * is: they are what the registry addresses a stored binding by, so a slot that
- * moved would be a player's binding that moved with it. */
+/* The numbers are checked here for the reason KEY_ROLE_SECOND is: they are
+ * what the registry addresses a stored binding by, so a slot that moved
+ * would be a player's binding that moved with it. */
 static void pad_role_slots(void)
 {
 	check(JOY_ROLES, 28, "twenty-eight pad roles");
 	check(JOY_ROLE_SECOND, 15, "the Secondary pad role is still slot 15");
-	// Core's own three, named by the fix round so that the chord mask below is
-	// really written out of role names. A registry calls these slots JFlr/JSav/
-	// JLod and SJFlr/SJSav/SJLod, so the numbers are not ours to move.
+	// Core's own three: a registry calls these slots JFlr/JSav/JLod and
+	// SJFlr/SJSav/SJLod, so the numbers are not ours to move, and the
+	// chord mask below is written out of role names.
 	check(JOY_ROLE_FLARE, 6, "the flare is slot 6");
 	check(JOY_ROLE_SAVE, 11, "quick save is slot 11");
 	check(JOY_ROLE_LOAD, 12, "quick load is slot 12");
@@ -802,9 +789,9 @@ static void pad_role_slots(void)
 	check(JOY_BIT_MAX, 23, "23 is the highest bit either joystick path writes");
 }
 
-/* THE CHORD RULE, SWEPT RATHER THAN SAMPLED. The two ends are the interesting
- * cases here as everywhere else in this file: an unbound role, an unbound
- * Modifier, and the Modifier's own button. */
+/* The chord rule, swept rather than sampled: the two ends are the
+ * interesting cases here as everywhere else in this file - an unbound
+ * role, an unbound Modifier, and the Modifier's own button. */
 static void pad_chord_rule(void)
 {
 	long bit, other;
@@ -817,10 +804,10 @@ static void pad_chord_rule(void)
 		check(PadBitDown(0xFFFFFFFFUL, bit), (bit >= 0 && bit <= JOY_BIT_MAX) ? 1 : 0,
 			"PadBitDown answers only for a real button");
 
-	/* WITH NO MODIFIER BOUND THE RULE IS THE EXPRESSION IT REPLACED. This is
-	 * the round's byte-identity argument as a test: for every button, a plain
-	 * role fires exactly when its own button is down and nothing else does,
-	 * which is what Key(jLayout[n] + 256) answered. */
+	/* With no Modifier bound the rule is the expression it replaces: for
+	 * every button, a plain role fires exactly when its own button is
+	 * down and nothing else does, which is what Key(jLayout[n] + 256)
+	 * answered. */
 	for (bit = 0; bit <= JOY_BIT_MAX; bit++)
 	{
 		const unsigned long fire = 1UL << bit;
@@ -855,9 +842,8 @@ static void pad_chord_rule(void)
 	}
 }
 
-/* THE EIGHT DEFAULT TABLES, AGAINST THE ONE RULE THEY ALL HAVE TO KEEP (#161,
- * round 161b2d, item 3): no two roles on one PAIR, and no plain role on the
- * Modifier's own button.
+/* The eight default tables, against the one rule they all have to keep: no
+ * two roles on one pair, and no plain role on the Modifier's own button.
  *
  * The four Separate rows are the engine's, through the macros of
  * game\pad_scheme.h - this file instantiates what specific\input.cpp
@@ -875,9 +861,8 @@ static void pad_table_sound(const long* row, long chord, int modern, const char*
 	for (i = 0; i < JOY_ROLES; i++)
 		t[i] = row[i];
 
-	// JoyDefaultRecord's own Modern override, in one place there and in one
-	// place here: the medipacks move to the d-pad's own bits (the user's
-	// decision 8, round 161a2 step 3).
+	// JoyDefaultRecord's own Modern override, in one place there and in
+	// one place here: the medipacks move to the d-pad's own bits.
 	if (modern)
 	{
 		t[13] = 20;
@@ -928,12 +913,11 @@ static void pad_default_tables(void)
 	pad_table_sound(kSepXbox, JOY_SEP_CHORD_XINPUT, 0, "Separate Xbox, Tank");
 	pad_table_sound(kSepXbox, JOY_SEP_CHORD_XINPUT, 1, "Separate Xbox, Modern");
 
-	/* AND THE FOUR ONE-KEY ROWS BY THE CONSTRUCTION THAT BUILDS THEM. They
-	 * themselves are fifteen entries in specific\input.cpp and this round does
-	 * not touch them - the user's decision of 2026-09-16 keeps them as our pad
-	 * layout - so what there is to check is what JoyDefaultRecord puts BEHIND
-	 * them at "One key": every role from the Secondary on unbound, and a chord
-	 * mask of 0. With no Modifier bound the last two of the rules above are
+	/* The four one-key rows themselves are fifteen entries in
+	 * specific\input.cpp and are our own pad layout, not generated here, so
+	 * what there is to check is what JoyDefaultRecord puts behind them at
+	 * "One key": every role from the Secondary on unbound, and a chord mask
+	 * of 0. With no Modifier bound the last two of the rules above are
 	 * vacuous, which is the point: at One key no chord can exist at all. The
 	 * fifteen here stand in for whichever row the pad is on. */
 	for (i = 0; i < 15; i++)
@@ -946,10 +930,10 @@ static void pad_default_tables(void)
 	pad_table_sound(one, 0, 0, "One key, Tank");
 	pad_table_sound(one, 0, 1, "One key, Modern");
 
-	/* THE USER'S OWN SECOND BINDING PAGE, DECODED. The four Separate tables are
-	 * bit indices; these are the seven pairs he wrote down, read back out of
-	 * the DirectInput row by name (specific\input.cpp names the bits: 0 Square,
-	 * 1 Cross, 2 Circle, 3 Triangle, 5 R1, 10 L3, 11 R3, 13 Touchpad). */
+	/* The four Separate tables are bit indices; these are the seven bound
+	 * pairs, read back out of the DirectInput row by name (specific\input.cpp
+	 * names the bits: 0 Square, 1 Cross, 2 Circle, 3 Triangle, 5 R1, 10 L3,
+	 * 11 R3, 13 Touchpad). */
 	check((int)kSepPS5DInput[JOY_ROLE_MODIFIER], 13, "Modifier = the touchpad click");
 	check((int)kSepPS5DInput[11], 11, "quick save on R3");
 	check((int)kSepPS5DInput[12], 10, "quick load on L3");

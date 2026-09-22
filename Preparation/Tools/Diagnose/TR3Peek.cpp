@@ -1,7 +1,7 @@
 //----------------------------------------------------------------------------
 // TR3Peek - reads a TR3 level (.TR2 file format, uncompressed) far enough
-// for the moveable table to become visible. Feasibility test for the T-Rex
-// port (#88): first measure what is inside, then decide.
+// for the moveable table to become visible. Feasibility check for porting a
+// TR3 moveable: first measure what is inside, then decide.
 //
 // Usage: TR3Peek <level.TR2> [objectId]
 //

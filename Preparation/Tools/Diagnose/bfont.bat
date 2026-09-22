@@ -1,5 +1,5 @@
 @echo off
-rem bfont - build FontProbe (#123, fix round Q).
+rem bfont - build FontProbe.
 rem
 rem The tool compiles the engine's own font matcher and the engine's own BC7
 rem decoder, plus the two include files that carry the glyph table and the

@@ -11,49 +11,27 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* SaveDiff - COMPARE TWO SAVEGAMES AND NAME WHAT DIFFERS (#148, order 1).
+/* SaveDiff - compares two TOMB5 savegames field by field and names what
+ * differs.
  *
- * THE PROOF THIS TOOL EXISTS FOR. 60 frames a second changes how often the
- * picture is presented and nothing else: the logic still steps thirty times a
- * second, and the draw path has an RNG of its own (`rand_2`, GetRandomDraw)
- * that the simulation never reads. If that is true, then the same level with
- * the same randomizer seed and the same inputs must arrive at the same game
- * state at 30 and at 60 - and a savegame is that state written down. Two
- * files, byte for byte identical, is the whole proof.
+ * The simulation steps thirty times a second regardless of display rate,
+ * and the draw path's own RNG (`rand_2`, GetRandomDraw) never feeds back
+ * into it. So the same level, seed and inputs must reach the same game
+ * state at 30 and at 60 fps - a savegame is that state written down, and
+ * two savegames byte for byte identical is the proof. Recipe: play the same
+ * short, repeatable stretch at each frame rate into the same save slot,
+ * then run SaveDiff <save A> <save B> (full steps in docs\Engine-Manual.md).
  *
- * HOW THE USER RUNS IT (the recipe is in docs\Engine-Manual.md as well):
+ * "IDENTICAL" means the two runs matched; otherwise every differing field is
+ * printed by name with both values. A human replay never matches exactly -
+ * clock fields, `save_counter` and Lara's position drift a little - so what
+ * matters is whether the simulation's shape (kills, ammo, hit points,
+ * flags, secrets) held.
  *
- *   1. One randomized build, one seed, one level. Frame rate: 30.
- *      Play a short, repeatable stretch - a corridor, a fixed number of
- *      enemies, no timed pickups - and save in slot 1.
- *   2. Copy savegame\savegame.0 aside as save30.sav.
- *   3. Frame rate: 60 in the options. Start the SAME level from the SAME
- *      point and play the SAME stretch. Save in slot 1 again.
- *   4. Copy savegame\savegame.0 aside as save60.sav.
- *   5. SaveDiff save30.sav save60.sav
- *
- * WHAT IT PRINTS. "IDENTICAL" and nothing else when the two files match. When
- * they do not, one line per differing field, by name, with both values - so
- * that a difference in `Level.Timer` (played a little longer) can be told
- * apart at a glance from a difference in `Lara.air` (the simulation did not
- * run the same way), which is the one that would matter.
- *
- * WHAT A HUMAN WILL ALWAYS CHANGE. Nobody plays the same twenty seconds
- * twice, so expect `save_counter`, the clock fields, `Level.Timer`,
- * `Game.Timer` and Lara's position inside the savegame stream to differ a
- * little. The fields that must NOT differ under the same inputs are the ones
- * about the simulation's shape rather than its length: kills, ammo counts,
- * hit points, flags, secrets. The honest reading of a run is therefore "the
- * differences are all clock and position", not "the files match" - unless the
- * two runs really were input-identical, which is possible with a scripted
- * stretch and is the strongest form of the proof.
- *
- * THE LAYOUT COMES FROM THE ENGINE'S OWN HEADER, not from a copy. This file
- * includes global\types.h and takes every offset with offsetof, so a field
- * that moves in the engine moves here too and the tool cannot go stale. That
- * is also why it is built for Win32 (bsd.bat, vcvars32): the structs are
- * `#pragma pack(1)` but they carry pointers, and a pointer is four bytes in
- * the engine.
+ * The field table is built from the engine's own header (global\types.h)
+ * via offsetof, so it tracks the engine's layout; built for Win32 because
+ * the structs are `#pragma pack(1)` but carry pointers, four bytes in the
+ * engine.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -73,7 +51,7 @@
 
 #include "../../../TOMB5 Code/TOMB5/global/types.h"
 
-/* THE FILE, exactly as S_SaveGame writes it (specific\gamemain.cpp):
+/* The file layout, exactly as S_SaveGame writes it (specific\gamemain.cpp):
  *
  *   75  the level's name, zero padded
  *    4  SaveCounter
@@ -454,7 +432,7 @@ int main(int argc, char** argv)
 		named++;
 	}
 
-	/* THE SAVEGAME STREAM. SAVEGAME_INFO::buffer is not a struct: it is what
+	/* The savegame stream: SAVEGAME_INFO::buffer is not a struct, it is what
 	 * WriteSG (game\savegame.cpp) packed into it - the items, the flip maps,
 	 * the cameras, the spot cams, every item's position and flags, in a
 	 * variable-length and conditional order that only that file knows. There

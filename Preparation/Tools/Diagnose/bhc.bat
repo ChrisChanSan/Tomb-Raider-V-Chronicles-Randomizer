@@ -1,5 +1,5 @@
 @echo off
-rem Builds HeightCheck - headroom for every enemy model in a level (#141).
+rem Builds HeightCheck - headroom for every enemy model in a level.
 rem Randomizer.cpp comes along for Rando::enemyKinds(): the enemy list must
 rem not be a second, drifting copy.
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul

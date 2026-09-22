@@ -12,15 +12,14 @@
  */
 
 // TrgProbe - what a Remaster level's .TRG contains, and what its pages cost
-// to decode (#123, stage S0).
+// to decode.
 //
-// Occasion: stage S1 will draw the .TRG's rooms, one draw call per
-// (room, pass, page). Two numbers decide whether that plan holds, and neither
-// of them is a number anybody has: how many such draw calls a level really
-// needs, and how long our own BC7 decoder (specific\bc7.cpp) takes over every
-// page of a level with its whole mip chain. This measures both, over the real
-// files, with the SAME code the engine runs - hd_scan.cpp is compiled in, not
-// reimplemented.
+// The HD room renderer issues one draw call per (room, pass, page). Two
+// numbers decide whether that scales: how many such draw calls a level
+// really needs, and how long the engine's own BC7 decoder (specific\bc7.cpp)
+// takes over every page of a level with its whole mip chain. This measures
+// both, over the real files, with the same code the engine runs - hd_scan.cpp
+// is compiled in, not reimplemented.
 //
 // Usage:
 //   TrgProbe <path to the game 5 folder> [level ...]
@@ -28,7 +27,7 @@
 //   TrgProbe <path to the game 5 folder> -bc7 [threads]   decode timing only
 //   TrgProbe -find [override folder]                      run the discovery
 //
-// -find runs the ENGINE's own search for an installed Tomb Raider IV-VI
+// -find runs the engine's own search for an installed Tomb Raider IV-VI
 // Remastered (specific\hd\hd_install.cpp is compiled in): the registry
 // override first, then every Steam library. It prints what it found and the
 // diagnostics it would put in the log.
@@ -38,7 +37,7 @@
 // and nothing is copied - the asset rule stands (see docs\LEGAL of TROne and
 // THIRD-PARTY.md here): the Remaster's files stay where they are.
 //
-// The room count comes from a CLASSIC level folder handed in with -classic,
+// The room count comes from a classic level folder handed in with -classic,
 // read with the randomizer's own Tr5Level, so "groups against rooms" is
 // measured and not assumed. It cannot come out of the Remaster's own DATA
 // folder: the .TRC there is TRX5, a different container, and Tr5Level refuses
@@ -87,18 +86,15 @@ namespace
 		return w;
 	}
 
-	/* THE DISTINCT (MATERIAL, PARAM) TUPLES OF A LEVEL (#123, fix round E).
+	/* The distinct (material, param) tuples of a level.
 	 *
-	 * Every rule the HD path takes out of a .TRG part - the cut-out threshold
-	 * of fix round A2, the additive weight and period of R3a, the flipbook
-	 * layers of R3b - is a reading of one of the four floats beside the
-	 * material, and every one of them was argued from the DISTRIBUTION of
-	 * those floats over the fifteen files. Until fix round E that
-	 * distribution was measured by hand, once, and written into a comment.
-	 * This prints it, so the next reading can be checked against the file
-	 * rather than against the comment: one line per distinct tuple, with the
-	 * triangles it draws in each of the three passes and the groups it
-	 * appears in.
+	 * Every rule the HD path takes out of a .TRG part - a cut-out threshold,
+	 * an additive weight and period, a flipbook layer - is a reading of one
+	 * of the four floats beside the material, and each one is argued from
+	 * the distribution of those floats over the fifteen files. This prints
+	 * it, so a reading can be checked against the file rather than against a
+	 * comment: one line per distinct tuple, with the triangles it draws in
+	 * each of the three passes and the groups it appears in.
 	 *
 	 * It reads the .TRG straight - no page is decoded, nothing is uploaded,
 	 * so it runs in well under a second per level. */
@@ -186,20 +182,19 @@ namespace
 		}
 	}
 
-	/* THE BAKED LIGHT AT A PORTAL (#123, fix round E, E7).
+	/* The baked light at a portal.
 	 *
-	 * The player reports a step in the wall brightness along a straight
-	 * vertical line at a room boundary. Three things could put it there: a
-	 * dynamic light the HD path culls where the classic path keeps it, the
-	 * additive pass drawn in the wrong order (fix round E6), or the
-	 * remaster's own baked light, which is per room and could simply differ
-	 * on the two sides of the seam.
+	 * A step in the wall brightness along a straight vertical line at a
+	 * room boundary can come from three places: a dynamic light the HD path
+	 * culls where the classic path keeps it, the additive pass drawn in the
+	 * wrong order, or the remaster's own baked light, which is per room and
+	 * could simply differ on the two sides of the seam.
 	 *
 	 * This measures the third. Two groups and the world offset between their
 	 * room origins go in; every vertex of the first that lands on a vertex of
 	 * the second comes out, with what the two carry as light - colour1 +
 	 * colour2, which is what the shader multiplies the texel by. A seam whose
-	 * pairs agree cannot be the step; one whose pairs differ IS the step, and
+	 * pairs agree cannot be the step; one whose pairs differ is the step, and
 	 * it is the art's and not the engine's.
 	 *
 	 * The offset is the difference of the two classic room origins, which
@@ -281,10 +276,11 @@ namespace
 			total += d;
 
 			/* Above 1 the HD path and the classic path part company on
-			 * purpose (hd_room.hlsl, THE PARITY BLOCK): the classic one pins
+			 * purpose (hd_room.hlsl, the parity block): the classic one pins
 			 * its multiply at 1 and carries the rest as an add, ours goes on
 			 * multiplying. A seam whose sides straddle 1 therefore steps
-			 * further here than it did in 2000, and this counts those. */
+			 * further here than it did in the original game, and this counts
+			 * those. */
 			if (a > 1.0 || b > 1.0)
 				over++;
 			if (d > worst)
@@ -299,16 +295,15 @@ namespace
 			pairs ? total / pairs : 0.0, worst, over);
 	}
 
-	/* THE HORIZONTAL SURFACES OF ONE GROUP (#123, fix round H, H1).
+	/* The horizontal surfaces of one group.
 	 *
 	 * A TR5 water surface is a flat quad at the room's water height, and the
-	 * .TRG marks it as nothing at all - stage S5 measured that and fix round
-	 * R3b confirmed it. So the only way to ask "which page is our water
-	 * wearing" is to find the flat surfaces geometrically and read the page
-	 * off them.
+	 * .TRG marks it as nothing at all. So the only way to ask "which page is
+	 * our water wearing" is to find the flat surfaces geometrically and read
+	 * the page off them.
 	 *
 	 * One line per (height, page, material, pass): the triangles that lie in
-	 * that plane, their x/z box, and the LAYER the .TRG gave them - because
+	 * that plane, their x/z box, and the layer the .TRG gave them - because
 	 * layer 0 means "no page named" and the renderer then falls back to the
 	 * level's first page, which is a wall texture and not water. */
 	struct FlatKey
@@ -426,10 +421,10 @@ namespace
 			"to the level's first page)\n");
 	}
 
-	/* EVERY PART OF ONE GROUP (#123, fix round H, H1): material, parameters,
-	 * the page its first triangle wears, the triangles per pass and the
-	 * room-local box each pass covers. The -mat table says what a level's
-	 * materials are; this says where in ONE room they sit. */
+	/* Every part of one group: material, parameters, the page its first
+	 * triangle wears, the triangles per pass and the room-local box each
+	 * pass covers. The -mat table says what a level's materials are; this
+	 * says where in one room they sit. */
 	void dumpParts(const std::string& root, const std::string& stem, int group)
 	{
 		const std::string path = root + "\\DATA\\" + stem + ".TRG";
@@ -492,9 +487,9 @@ namespace
 					part.pass[pass].count / 3, page,
 					box[0], box[1], box[2], box[3], box[4], box[5]);
 
-				/* EVERY page the pass touches, not only its first (#123, fix
-				 * round H, H2). A part is one material, not one sheet: the
-				 * glass wall of ANDREA2 wears four. */
+				/* Every page the pass touches, not only its first. A part is
+				 * one material, not one sheet: the glass wall of ANDREA2 wears
+				 * four. */
 				{
 					std::map<int, long long> pages;
 
@@ -527,11 +522,11 @@ namespace
 		}
 	}
 
-	/* HOW MUCH OF A LEVEL IS ON LAYER 0 (#123, fix round H, H1). Per level:
-	 * vertices with layer 0, triangles whose FIRST corner carries it - which
-	 * is the corner hd_render.cpp reads - and the material those triangles
-	 * belong to. The renderer counts the triangles as fallbackPageTris; this
-	 * says which materials and which groups they are, without a device. */
+	/* How much of a level is on layer 0. Per level: vertices with layer 0,
+	 * triangles whose first corner carries it - which is the corner
+	 * hd_render.cpp reads - and the material those triangles belong to. The
+	 * renderer counts the triangles as fallbackPageTris; this says which
+	 * materials and which groups they are, without a device. */
 	void dumpLayer0(const std::string& root, const std::string& stem)
 	{
 		const std::string path = root + "\\DATA\\" + stem + ".TRG";
@@ -592,20 +587,19 @@ namespace
 				at->first, at->second);
 	}
 
-	/* ONE MATERIAL, PART BY PART, AGAINST THE CLASSIC ROOM (#123, the TROne
-	 * adjudication of 2026-09-07).
+	/* One material, part by part, against the classic room.
 	 *
 	 * Two trees read material 16 two ways: ours as an additive sheet whose
 	 * weight sits in param[2] (hd_render.cpp, MaterialAddWeight), TROne's as
 	 * the still-water surface with param[0..2] as noise scale, distortion
 	 * and time scale. Neither reading was ever held against the geometry,
 	 * and the geometry is the one thing that can decide it. A water surface
-	 * is ONE horizontal plane; it sits at the height the classic room draws
+	 * is one horizontal plane; it sits at the height the classic room draws
 	 * its water at; its normals point up; and it is tessellated far finer
 	 * than a wall needs to be, because a wave has to be able to move its
 	 * corners. A light shaft is none of those things.
 	 *
-	 * So this prints, per part of the material: the pass the FILE sorts it
+	 * So this prints, per part of the material: the pass the file sorts it
 	 * into, the triangle count, the y span and how many distinct heights are
 	 * in it, the world box, the normal directions, the pages, the sway, the
 	 * two baked colours, the UV range, and whether a single one of its
@@ -613,7 +607,7 @@ namespace
 	 * adds the room flags and every horizontal plane the classic room draws,
 	 * so "is the sheet in the water plane" is a subtraction and not an
 	 * impression - the water plane being the room's lowest horizontal one,
-	 * which is what drawroom.cpp:645 compares against as r->minfloor.
+	 * which is what drawroom.cpp compares against as r->minfloor.
 	 */
 	struct M16Pass
 	{
@@ -646,7 +640,7 @@ namespace
 			return;
 		}
 
-		/* WHICH MATERIALS TOUCH WHICH VERTEX, over the whole file: the
+		/* Which materials touch which vertex, over the whole file: the
 		 * "never shares a vertex with another material" claim is a fact
 		 * about the index buffer and nothing else, so it is read there. */
 		std::vector<unsigned char> firstMat(trg.vertices.size(), 0xFF);
@@ -839,12 +833,12 @@ namespace
 						std::printf("%s\n", planes > 8 ? " ..." : "");
 					}
 
-					/* NORMALS ARE NAMED THE WAY A PLAYER SEES THEM. The .TRG's
-					 * y counts DOWNWARDS, as the classic level's does, so a
+					/* Normals are named the way a player sees them. The .TRG's
+					 * y counts downwards, as the classic level's does, so a
 					 * normal whose y byte is above 127 points down in the
-					 * world - it is the UNDERSIDE of a surface, the face an
-					 * underwater camera sees. Proved on a floor: every one of
-					 * the 604 horizontal triangles in ANDREA1 group 59's
+					 * world - it is the underside of a surface, the face an
+					 * underwater camera sees. Measured on a floor: every one
+					 * of the 604 horizontal triangles in ANDREA1 group 59's
 					 * street plane (y = 256) has ny < 94. */
 					std::printf("            normals facing up %lld / down %lld / sideways %lld"
 						"   sway %d..%d (%lld non-zero)   shared verts with another material %lld of %lld\n",
@@ -869,7 +863,7 @@ namespace
 						std::printf("%s\n", s.pages.size() > 10 ? " ..." : "");
 					}
 
-					/* THE SECTOR AREA AND THE TESSELLATION. A plain remesh
+					/* The sector area and the tessellation. A plain remesh
 					 * gives two triangles per floor square; a wave grid gives
 					 * hundreds. */
 					{
@@ -957,30 +951,29 @@ namespace
 			stem.c_str(), wanted, partCount, total[0], total[1], total[2]);
 	}
 
-	/* WHICH ROOMS STAND INSIDE ONE ANOTHER, AND WHICH ART LEAVES ITS ROOM
-	 * (#123, fix round T, T1).
+	/* Which rooms stand inside one another, and which art leaves its room.
 	 *
-	 * Group M scissors EVERY HD room to the portal window the classic walk
-	 * gave it. That window is correct for geometry that stays inside the
-	 * room's own volume - which classic geometry always does, because a
-	 * classic room IS its sectors - and wrong for the remaster's, which
+	 * The renderer scissors every HD room to the portal window the classic
+	 * walk gave it. That window is correct for geometry that stays inside
+	 * the room's own volume - which classic geometry always does, because a
+	 * classic room is its sectors - and wrong for the remaster's, which
 	 * carves reliefs, cornices and pillars that stand out past the room's
-	 * outer wall. This is the measurement the fix rests on, and both halves
-	 * of it are computed from the same two boxes the engine has:
+	 * outer wall. Both halves of that measurement are computed from the same
+	 * two boxes the engine has:
 	 *
-	 *   THE FULL BOX      x .. x + numX * 1024, z .. z + numZ * 1024,
+	 *   the full box      x .. x + numX * 1024, z .. z + numZ * 1024,
 	 *                     maxceiling .. minfloor - the room including its
 	 *                     border ring of wall sectors.
-	 *   THE INNER BOX     the engine's own, game\draw.cpp:1977-1981:
+	 *   the inner box     the engine's own, game\draw.cpp:
 	 *                     x + 1024 .. x + (numX - 1) * 1024, likewise z,
 	 *                     the same y. It is the box TR5 itself asks "does
 	 *                     this item fit wholly inside the room" with, and
-	 *                     two rooms that are only NEIGHBOURS never overlap
+	 *                     two rooms that are only neighbours never overlap
 	 *                     in it - their border rings are what they share.
 	 *
-	 * The overlap list is asked of the INNER boxes, so a portal neighbour is
+	 * The overlap list is asked of the inner boxes, so a portal neighbour is
 	 * not on it and a room standing bodily inside another one is. The
-	 * overhang count is asked of the FULL box, because a wall's own art
+	 * overhang count is asked of the full box, because a wall's own art
 	 * belongs to its room and only what leaves the room's footprint is
 	 * overhang. */
 	struct RoomSpace
@@ -1055,7 +1048,7 @@ namespace
 			b.iz1 = b.z0 + (long)(rm.numZSectors - 1) * 1024;
 		}
 
-		/* THE OVERLAPPING PAIRS, ASKED OF THE ART AND NOT OF THE BOXES.
+		/* The overlapping pairs, asked of the art and not of the boxes.
 		 *
 		 * A box test cannot answer this. Two rooms next door reach one sector
 		 * into each other by construction - the wall ring of each stands in
@@ -1064,7 +1057,7 @@ namespace
 		 * of the boxes, 233 of ANDREA1's 242 rooms come out "overlapping",
 		 * which is no answer at all.
 		 *
-		 * So the question is asked of the geometry that is actually DRAWN:
+		 * So the question is asked of the geometry that is actually drawn:
 		 * every group's own triangles are dropped into 256-unit world cells -
 		 * a quarter of a floor square on a side, the same grid
 		 * HDRenderGroupHasGeometry already builds per group - and two rooms
@@ -1095,11 +1088,11 @@ namespace
 						if (first + 2 >= trg.indices.size())
 							break;
 
-						/* THE OVERHANG IS NOT ASKED ABOUT. A triangle whose
+						/* The overhang is not asked about. A triangle whose
 						 * centroid stands outside its own room's box is art
 						 * the remaster hung on the outside - a facade, a
-						 * cornice, a whole street front - and it is DRAWN
-						 * WITHOUT A WINDOW by the fix below. So it must not
+						 * cornice, a whole street front - and it is drawn
+						 * without a window by the fix below. So it must not
 						 * put its room on the overlap list either, or Rome's
 						 * facades would window half the level. */
 						long qx = 0, qy = 0, qz = 0;
@@ -1155,7 +1148,7 @@ namespace
 				outShell.end());
 		}
 
-		/* WHO IS NEXT DOOR. A room's own portal list, plus the vertical links
+		/* Who is next door. A room's own portal list, plus the vertical links
 		 * out of the floor data - a stacked pair is joined through those and
 		 * has no portal record at all. Both directions, because a portal is
 		 * written on both sides but a floor link need not be. */
@@ -1195,18 +1188,15 @@ namespace
 			}
 		}
 
-		/* THE TEST ITSELF (#123, fix round T2, T2-2): does a TRIANGLE of room
-		 * b stand inside the inside of room a, with no portal between the two
-		 * that would explain it?
+		/* The test itself: does a triangle of room b stand inside the inside
+		 * of room a, with no portal between the two that would explain it?
 		 *
-		 * ROUND T ASKED IT OF THE 256-UNIT CELLS, and that is where this tool
-		 * and the engine disagreed on the play test's own log - the engine
-		 * counted a cell that merely TOUCHED the box (`p + 255 < mins` is the
-		 * reject in HDRenderGroupCellsIn), this counted a cell whose own
-		 * corner lay inside it, and one ring of 256 units is 91 cells against
-		 * 45 in ANDREA1's air shaft and four pairs against one over the
-		 * level. The answer is a POINT - the triangle's centroid - and the
-		 * two agree on it exactly. Held here against the same box
+		 * The answer is asked of a point - the triangle's centroid - because
+		 * a cell-based test overcounts: counting a 256-unit cell that merely
+		 * touches the box (`p + 255 < mins` is the reject in
+		 * HDRenderGroupCellsIn) gives one ring of 256 units as 91 cells
+		 * against 45 in ANDREA1's air shaft, and four pairs against one over
+		 * the level. The centroid test agrees exactly with the same box
 		 * BuildRoomIntrusions (specific\hd\hd_level.cpp) hands the renderer:
 		 * TR5's own inside of a room, one sector further in on every side
 		 * because a room's border ring is one sector thick.
@@ -1216,18 +1206,17 @@ namespace
 		 * opening it belongs to. The portal list and the floor data's
 		 * vertical links say who is next door.
 		 *
-		 * AND ONLY THE INTRUDER IS WINDOWED. Round T gave the window to both
-		 * partners, which is what put a black band across ANDREA2's
-		 * courtyard: 134 and 203 are both holders and both were scissored to
+		 * Only the intruder is windowed: windowing both rooms of an
+		 * overlapping pair puts a black band across ANDREA2's courtyard,
+		 * where 134 and 203 are both holders and both would be scissored to
 		 * rectangles that meet along their shared boundary. */
-		/* ROOM LOCAL AND IN FLOATS, because that is what the engine holds
+		/* Room local and in floats, because that is what the engine holds
 		 * them in: hd_render.cpp averages the three .TRG vertices as floats
-		 * and compares them with a float box in the group's own frame. The
-		 * first cut of this loop averaged in world units with an integer
-		 * divide, and the two lists then differed by one triangle in
-		 * ANDREA1's 207/53 and by seven in ANDREA2's 58/175 - a truncation
-		 * against a box edge, and no more than that, but the point of this
-		 * measurement is that the two agree exactly. */
+		 * and compares them with a float box in the group's own frame. An
+		 * integer divide in world units disagrees with that by one triangle
+		 * in ANDREA1's 207/53 and by seven in ANDREA2's 58/175 - a
+		 * truncation against a box edge - so this averages in floats to
+		 * agree with the engine exactly. */
 		std::vector<std::vector<float> > centre(trg.groups.size());
 
 		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
@@ -1268,7 +1257,7 @@ namespace
 		int pairs = 0;
 		long long intruding = 0;
 		std::vector<unsigned char> windowed((size_t)rooms, 0);
-		/* ONE FLAG PER TRIANGLE and not a sum over the pairs: a triangle can
+		/* One flag per triangle and not a sum over the pairs: a triangle can
 		 * stand inside two holders at once - ANDY2 is full of them - and the
 		 * engine's own counter (HDGroup::intruding) counts the TRIANGLE once
 		 * however many boxes caught it. Summing the per-pair hits instead read
@@ -1299,26 +1288,26 @@ namespace
 					!boxOverlap(A.y0, A.y1, box[(size_t)b].y0, box[(size_t)b].y1))
 					continue;
 
-				/* A'S INSIDE, ONE SECTOR IN FROM ITS BORDER RING, and that
+				/* A's inside, one sector in from its border ring, and that
 				 * second sector is the whole of the rule's discrimination.
 				 *
 				 * A room's border ring is one sector thick, so two rooms that
 				 * merely share a wall with no door between them reach into
 				 * each other by construction. Asked with the ring counted
 				 * (-deep -1024) ANDREA1 comes out with 158 pairs, among them
-				 * 2 and 197 at the Piazza dell'Opera - the very corner the
-				 * play test of 2026-09-07 complained about. Asked one sector
-				 * further in it has SEVEN.
+				 * 2 and 197 at the Piazza dell'Opera. Asked one sector
+				 * further in it has seven.
 				 *
-				 * TRIED AND REJECTED: deciding the PAIR with this box and
-				 * then windowing every triangle of b inside a's plain inside.
-				 * It would have hidden the last 26 % of ANDREA1's 207/53
-				 * bleed (see the renders) - and it windows 7,250 triangles of
-				 * room 103 inside room 65, which is that pair's SHARED WALL
-				 * and is round T's own bug coming back through the other
-				 * door. What is left un-hidden is art of the intruder
-				 * standing within one sector of the holder's wall, and there
-				 * is no way to tell that from a shared wall with a box.
+				 * Rejected: deciding the pair with this box and then
+				 * windowing every triangle of b inside a's plain inside. It
+				 * would have hidden the last 26 % of ANDREA1's 207/53 bleed
+				 * (see the renders) - and it windows 7,250 triangles of room
+				 * 103 inside room 65, which is that pair's shared wall, seen
+				 * through the wrong side of the same overlap this rule is
+				 * meant to catch. What is left un-hidden is art of the
+				 * intruder standing within one sector of the holder's wall,
+				 * and there is no way to tell that from a shared wall with a
+				 * box.
 				 *
 				 * `deep` is an extra shrink for re-measuring the rule and is
 				 * 0 by default. */
@@ -1386,8 +1375,8 @@ namespace
 			}
 		}
 
-		/* THE OVERHANG. One triangle at a time, its centroid in world units
-		 * against its own room's FULL box; `far` is the largest distance any
+		/* The overhang. One triangle at a time, its centroid in world units
+		 * against its own room's full box; `far` is the largest distance any
 		 * corner of it reaches past that box. */
 		long long tris_total = 0, tris_out = 0;
 		long long win_total = 0, win_out = 0;	// windowed rooms alone
@@ -1489,13 +1478,13 @@ namespace
 			slack, win_out, win_total,
 			win_total ? 100.0 * (double)win_out / (double)win_total : 0.0);
 
-		/* A GROUP THAT DRAWS NOTHING INSIDE ITS OWN ROOM (#123, fix round T,
-		 * T2). The engine turns a room over to the HD path when its group has
-		 * ANY triangle at all (hd_level.cpp: `tris` non-zero). ANDREA2's room
-		 * 124 - the ground floor of the courtyard with the palm - has FOUR,
-		 * and all four of them stand outside the room. The classic roomlets
-		 * are dropped for it and nothing takes their place, which on the
-		 * screen is a black hole where the doorway should be. */
+		/* A group that draws nothing inside its own room. The engine turns a
+		 * room over to the HD path when its group has any triangle at all
+		 * (hd_level.cpp: `tris` non-zero). ANDREA2's room 124 - the ground
+		 * floor of the courtyard with the palm - has four, and all four of
+		 * them stand outside the room. The classic roomlets are dropped for
+		 * it and nothing takes their place, which on the screen is a black
+		 * hole where the doorway should be. */
 		{
 			int hollow = 0, thin = 0;
 
@@ -1549,17 +1538,17 @@ namespace
 					(int)windowed[(size_t)order[i].second]);
 		}
 
-		/* WHOSE ART STANDS AT A GIVEN PLACE IN THE WORLD (#123, fix round T2,
-		 * T2-3), -near <x> <y> <z> <radius>.
+		/* Whose art stands at a given place in the world, -near <x> <y> <z>
+		 * <radius>.
 		 *
-		 * The play test photographed a brick tower with a barred window at
-		 * the corner of the Piazza dell'Opera that is not in trview at all -
-		 * pure remaster art, standing far outside whatever room's box it
-		 * belongs to - and that pops into the picture as Lara walks up to it.
-		 * Before anything can be done about it the ROOM has to be named, and
-		 * a room's own box cannot name it: the art is nowhere near the box.
+		 * Pure remaster art can stand far outside whatever room's box it
+		 * belongs to and pop into the picture as Lara walks up to it - a
+		 * brick tower with a barred window at the corner of the Piazza
+		 * dell'Opera is not in trview at all. Before anything can be done
+		 * about it the room has to be named, and a room's own box cannot
+		 * name it: the art is nowhere near the box.
 		 *
-		 * So this asks the triangles. Every group's OVERHANG triangles - the
+		 * So this asks the triangles. Every group's overhang triangles - the
 		 * ones standing outside their own room - are held against a sphere in
 		 * world units, and what comes back is which room's group has art
 		 * there and how far that art is from its own room. */
@@ -1663,14 +1652,14 @@ namespace
 					found[i].tris, found[i].out, found[i].dist);
 		}
 
-		/* THE STATIC MESHES OF EVERY ROOM, and whether the .TRG draws
-		 * anything where each one stands (#123, fix round T, T4). The engine
-		 * asks exactly this question in hd_level.cpp, BuildStaticTables, and
-		 * suppresses the classic draw where the answer is yes; here it is
-		 * asked offline, out of the same two files, so "the palm is baked
-		 * into the room art" is a number rather than a guess.
+		/* The static meshes of every room, and whether the .TRG draws
+		 * anything where each one stands. The engine asks exactly this
+		 * question in hd_level.cpp, BuildStaticTables, and suppresses the
+		 * classic draw where the answer is yes; here it is asked offline,
+		 * out of the same two files, so "the palm is baked into the room
+		 * art" is a number rather than a guess.
 		 *
-		 * The room blob IS a ROOM_INFO written out (specific\alexstuff.cpp,
+		 * The room blob is a ROOM_INFO written out (specific\alexstuff.cpp,
 		 * aFixUpRoom), so `mesh` at +16 is the blob-relative offset of the
 		 * MESH_INFO array and `num_meshes` sits at +50. The visibility box of
 		 * a slot comes out of the level's own static block, which follows the
@@ -1816,11 +1805,11 @@ namespace
 			(size_t)focus < triPerGroup.size() ? triPerGroup[(size_t)focus] : -1,
 			(size_t)focus < outPerGroup.size() ? outPerGroup[(size_t)focus] : -1);
 
-		/* WHOSE ART STANDS INSIDE THIS ROOM. Every other room's cells held
-		 * against this room's INNER box - the volume TR5 itself calls the
-		 * inside of the room (game\draw.cpp:1977). A neighbour's doorway
-		 * reveal reaches a cell or two; a room that really stands inside
-		 * this one fills it. */
+		/* Whose art stands inside this room. Every other room's cells held
+		 * against this room's inner box - the volume TR5 itself calls the
+		 * inside of the room (game\draw.cpp). A neighbour's doorway reveal
+		 * reaches a cell or two; a room that really stands inside this one
+		 * fills it. */
 		{
 			std::printf("  art of other rooms inside room %d's inner box:\n", focus);
 
@@ -1896,16 +1885,16 @@ namespace
 		std::printf("\n");
 	}
 
-	/* THE CLASSIC ROOM'S FLAT FACES BESIDE THE .TRG's (#123, fix round H, H1).
+	/* The classic room's flat faces beside the .TRG's.
 	 *
-	 * The player's finding in trview is that a vanilla water face wears a wave
-	 * texture and the HD one "has no assignment". The two meshes can be held
-	 * against each other because a TR5 room vertex carries its y in WORLD
-	 * units (drawroom.cpp:531 compares pos.y with r->minfloor straight) and so
-	 * does a .TRG vertex - only x and z are room local, and the room's origin
-	 * is known. So both sides are listed as "horizontal faces per height", and
-	 * a height the classic side has and the HD side does not is a surface the
-	 * remaster did not build. */
+	 * In trview a vanilla water face wears a wave texture and the HD one has
+	 * no assignment. The two meshes can be held against each other because
+	 * a TR5 room vertex carries its y in world units (drawroom.cpp compares
+	 * pos.y with r->minfloor straight) and so does a .TRG vertex - only x
+	 * and z are room local, and the room's origin is known. So both sides
+	 * are listed as "horizontal faces per height", and a height the classic
+	 * side has and the HD side does not is a surface the remaster did not
+	 * build. */
 	void dumpSurface(const std::string& root, const std::string& stem,
 		const std::string& folder, int roomNr)
 	{
@@ -1996,7 +1985,7 @@ namespace
 			std::printf("%s\n", at->second.tex.size() > 8 ? " ..." : "");
 		}
 
-		/* And the same heights out of the .TRG, in WORLD x and z. */
+		/* And the same heights out of the .TRG, in world x and z. */
 		const std::string path = root + "\\DATA\\" + stem + ".TRG";
 		trf::remaster::Trg trg;
 
@@ -2071,12 +2060,12 @@ namespace
 		}
 	}
 
-	/* THE MISSING WATER SURFACE, OVER A WHOLE LEVEL (#123, fix round H, H1).
+	/* The missing water surface, over a whole level.
 	 *
 	 * The classic engine draws a water surface as ordinary room faces at the
 	 * room's own minfloor, and the shimmer branch that makes them move opens
 	 * with `pos.y == CurrentRoomPtr->minfloor` in a room carrying
-	 * ROOM_REFLECT or ROOM_MIST (drawroom.cpp:531-545). So for every such
+	 * ROOM_REFLECT or ROOM_MIST (drawroom.cpp). So for every such
 	 * room: the lowest plane of horizontal faces is the water, and the
 	 * question is whether the .TRG's group for that room draws anything
 	 * there. It is asked per plane, in world coordinates, and answered in
@@ -2487,7 +2476,7 @@ int main(int argc, char** argv)
 
 	if (list_pages)
 	{
-		// WHICH PAGE A LEVEL NAMES AND THE TEX FOLDER DOES NOT HAVE.
+		// Which page a level names and the TEX folder does not have.
 		// The .TEX sidecar of all 15 levels names only pages that
 		// exist - measured - but the .TRG names a wider set, and
 		// RICH3 was the level where the decode run reported a gap.

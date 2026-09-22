@@ -1,13 +1,11 @@
 //----------------------------------------------------------------------------
 // TR3Fetch - fetches a moveable from a TR3 level and recomputes it into the
-// TR5 layout. Step 1 of the T-Rex port (#88): first prove the format
-// bridge, then insert.
+// TR5 layout: first prove the format bridge, then insert.
 //
 // Usage: TR3Fetch <tr3level.TR2> <objectId> <target.bin>
 //          [-shiny]            give the meshes the TR4/TR5 environment map
 //          [-addcolor]         keep the source colours and add, do not replace
 //          [-recolor r,g,b=r,g,b]   swap one colour for another
-//        (the three switches were added after this header was first written)
 //
 // What is the same and simply travels along:
 //   - Mesh header: TR3 Centre(6) + CollRadius(4) = 10 bytes, TR5 reads
@@ -88,7 +86,7 @@ int main(int argc, char** argv)
     // of the model. The effects word behind each face carries it - bit 1
     // switches it on, bits 2..6 are the strength, and the drawer multiplies
     // by (word & 0x7C) << 1 before laying the environment texture over the
-    // face a second time (specific/output.cpp:1645ff).
+    // face a second time (specific/output.cpp).
     //
     // Textured is exactly the right set: a TR1-3 model wears its outfit as
     // textures and its SKIN as flat colours, so the suit shines and the skin
@@ -189,7 +187,7 @@ int main(int argc, char** argv)
                 wanted, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
                 z->animIndex, animEnd - 1, animCount);
 
-    // --- Continue to the object textures (for the texture work, #90) -------
+    // --- Continue to the object textures ------------------------------------
     // The disputed field sizes at the file end are again tried out instead
     // of guessed: right is the combination at which the last table ends
     // exactly at the file end. If none is found, objTexAt stays 0 and the
@@ -238,11 +236,11 @@ int main(int argc, char** argv)
 
     // Colored faces, collected across ALL meshes and resolved at the end.
     //
-    // TR5 has no colored faces, so they have to become textured ones. Until
-    // now every single one in the model got the SAME substitute - the first
-    // texture the model happened to use - and that is visible: on Lara's TR3
-    // body 61 of 442 triangles came out carrying skin or trouser colour where
-    // something else belonged (seen in game, #122).
+    // TR5 has no colored faces, so they have to become textured ones. Giving
+    // every one in the model the SAME substitute - the first texture the
+    // model happened to use - is visibly wrong: on Lara's TR3 body 61 of 442
+    // triangles would carry skin or trouser colour where something else
+    // belongs.
     //
     // They can be placed far better than that. The face names a palette
     // entry, and the palette is right there in the file; the object textures
@@ -292,9 +290,9 @@ int main(int argc, char** argv)
         // Colored faces: TR5 does not know them. They are taken over as
         // textured so the geometry stays closed - but NOT with texture 0.
         // That is something arbitrary in the source level; with the T-Rex
-        // it was a piece of Lara's leg, which then stuck under his jaw
-        // (seen in game). Instead the first texture the model itself uses
-        // - that one is guaranteed to belong to it.
+        // it was a piece of Lara's leg, which would then stick under his
+        // jaw. Instead the first texture the model itself uses - that one
+        // is guaranteed to belong to it.
         const int16_t nCQ = rs16(r.b, p); p += 2;
         std::vector<std::pair<size_t, uint16_t>> quadSpots, triSpots;
 
@@ -341,8 +339,8 @@ int main(int argc, char** argv)
     // --- Which object textures does this model need? ------------------------
     //
     // The faces still carry the TR3 indices; only the inserter reroutes
-    // them. For the texture work (#90) what counts is how many distinct
-    // entries and above all how many distinct TILES stand behind them -
+    // them. What counts is how many distinct entries and above all how many
+    // distinct TILES stand behind them -
     // every tile becomes a 256x256 page in the target.
     // -recolor r,g,b=r,g,b (repeatable): a flat colour of TR3's is written
     // to the page as a different one. Wanted for skin, where TR3 has one
@@ -714,15 +712,15 @@ int main(int argc, char** argv)
     // IDENTICAL (phd_RotYXZpack computes (angles >> 10) & 0x3FF, then << 6
     // in both games). The one-axis case is not:
     //
-    //   TR3 (draw.cpp:183):  (word & 1023)  << 6     10 bits
-    //   TR5 (draw.cpp:267):  (word & 0xFFF) << 4     12 bits
+    //   TR3 (draw.cpp:183):                  (word & 1023)  << 6   10 bits
+    //   TR5 (draw.cpp, gar_RotYXZsuperpack): (word & 0xFFF) << 4   12 bits
     //
     // A TR3 word taken over unchanged is thus read by TR5 with a quarter of
     // the angle - and because TR3 uses the overflow into the negative,
     // large values flip entirely. Affected are exactly the ONE-AXIS JOINTS:
-    // jaw, ankles, toes. Seen in game as twisted feet and an inside-out
-    // mouth while the torso was right - it rotates around all three axes
-    // and thereby runs through the identical two-word case.
+    // jaw, ankles, toes - producing twisted feet and an inside-out mouth,
+    // while the torso is unaffected because it rotates around all three
+    // axes and thereby runs through the identical two-word case.
     //
     // The conversion is lossless: TR5 shall yield v << 6 but computes
     // << 4, so v << 2 belongs into the 12-bit field (v <= 1023, fits).
@@ -782,9 +780,8 @@ int main(int argc, char** argv)
     // Dispatch table (AnimDispatch, 8 bytes: low, high, nextAnim,
     // nextFrame). Its nextAnim is a GLOBAL anim index of the source level -
     // exactly like the anims themselves it must be rebased to the slice, or
-    // it points anywhere in the target. That was the crash on the first
-    // attempt: the entries traveled unrebased, and as soon as the control
-    // code took a state change, the engine jumped into a foreign
+    // it points anywhere in the target: left unrebased, as soon as the
+    // control code takes a state change, the engine jumps into a foreign
     // animation. Entries outside the slice belong to other objects; they
     // are never read but get 0 so no wild value stands there.
     {
@@ -817,12 +814,13 @@ int main(int argc, char** argv)
     //   per tile: 131072 bytes ARGB1555 (TR3's 16-bit version)
     //
     // The UVs stay PIXELS here. Only the inserter shifts them left by 8
-    // bits - TR5 carries them as 8.8 fixed point (file.cpp:1096).
+    // bits - TR5 carries them as 8.8 fixed point (LoadTextureInfos,
+    // specific/file.cpp).
     {
         // Why cornerOrder exists.
         //
         // TR5 pulls every UV half a texel towards the middle of its own
-        // texture area while the level loads (AdjustUV, specific/file.cpp:198).
+        // texture area while the level loads (AdjustUV, specific/file.cpp).
         // Which direction that is for each corner it does not work out - it
         // reads it out of the texinfo: bit 15 of tpage says triangle or quad,
         // the low three bits of flag say in which order the corners run.
@@ -874,7 +872,7 @@ int main(int argc, char** argv)
                 const bool vPlus = (cy[v] < 128);
                 // Cross-check where the corners themselves say it plainly. A
                 // count above zero here would mean the byte does not mean what
-                // we read it to mean - so it is worth printing.
+                // this code assumes - so it is worth printing.
                 if (loU != hiU && (px[v] == loU || px[v] == hiU) && uPlus != (px[v] == loU)) ++orderDisagree;
                 if (loV != hiV && (py[v] == loV || py[v] == hiV) && vPlus != (py[v] == loV)) ++orderDisagree;
                 want |= ((uPlus ? 1 : 0) | (vPlus ? 2 : 0)) << (v * 2);

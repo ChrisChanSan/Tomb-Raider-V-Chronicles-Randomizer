@@ -1,27 +1,20 @@
 #----------------------------------------------------------------------------
 # Origin check for the preparation tools.
 #
-# The problem this stands against: a level info exported from an already
-# randomized level looks exactly like a genuine one. Same fields, same
-# structure, plausible numbers. Every tool behind it then quietly keeps
-# computing and delivers wrong zones without anything crashing anywhere.
-# Exactly that has happened once in this project and cost an hour of bug
-# hunting - the target folder of a GUI test was the same one being read
-# from.
+# A level info exported from an already randomized level looks exactly like
+# a genuine one - same fields, same structure, plausible numbers - so a tool
+# reading it would quietly keep computing and deliver wrong zones without
+# anything crashing.
 #
-# Since TombItemEdit2026 sets the origin stamp, every level info carries the
-# file name, the SHA-256 and the size of the .trc it came from. With that it
-# can be checked against VanillaLevelChecksums.csv whether it was an
-# untouched original file.
+# TombItemEdit2026 stamps every level info with the file name, SHA-256 and
+# size of the .trc it came from, which lets this check compare it against
+# VanillaLevelChecksums.csv to confirm it is an untouched original file.
 #
-# Deliberately a LOUD abort and no warning: a wrong result that looks
-# plausible is the most unpleasant kind of error. Better to deliver nothing
-# at all.
-#
-# Old level infos without a stamp no longer exist after the regeneration.
-# Should one turn up anyway, it is from an older tool state and its origin
-# simply unknown - then it aborts too, because "unknown" is not the same as
-# "fine" here.
+# It aborts loudly rather than warning: a wrong result that still looks
+# plausible is the worst kind of error, so it is better to deliver nothing
+# at all - including when a level info carries no stamp (an older tool made
+# it) or the stamp names a file the checksum list does not know, since
+# "unknown origin" is not the same as "confirmed vanilla".
 #----------------------------------------------------------------------------
 
 function Test-VanillaOrigin {

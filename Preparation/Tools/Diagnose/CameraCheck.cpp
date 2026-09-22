@@ -1,11 +1,11 @@
 // CameraCheck - lists the fixed cameras of a .trc with their flags.
 //
-// Occasion (2026-08-29): first person now pushes a trigger's Camera command
-// aside, but the sniper/game camera is exempt - flags & 3. The user found two
-// triggers in Andrea1 that look identical in trview (a Camera command plus a
-// Lara comment) and behave differently: trigger 31 -> camera 4 stays in first
-// person, trigger 11 -> camera 1 does not. From the trigger side that cannot
-// be told apart; the difference has to be in the camera table.
+// First person pushes a trigger's Camera command aside, but the
+// sniper/game camera is exempt - flags & 3. Two triggers can look
+// identical in trview (a Camera command plus a Lara comment) and still
+// behave differently - in Andrea1, trigger 31 -> camera 4 stays in first
+// person while trigger 11 -> camera 1 does not. From the trigger side that
+// cannot be told apart; the difference has to be in the camera table.
 //
 // Usage: CameraCheck <level.trc> [index ...]     without indices: all
 #include <cstdio>

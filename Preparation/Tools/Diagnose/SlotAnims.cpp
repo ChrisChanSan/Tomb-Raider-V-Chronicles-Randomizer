@@ -4,9 +4,8 @@
 // anim_index + N across the GLOBAL anim table, while the object table only
 // "owns" it up to the next object. If N is larger than the slice, the
 // model transfer's heuristic cuts off too early - in the target the engine
-// then reads past the table end (seen in game as the Imp's death flight
-// loop, and with the Hydra as the abort "frame pointer outside the frame
-// slice").
+// then reads past the table end: an animation loop (the Imp's death flight)
+// or an out-of-range frame-pointer abort (the Hydra).
 //
 // Usage: SlotAnims <slot> <level.trc> [level.trc ...]
 //

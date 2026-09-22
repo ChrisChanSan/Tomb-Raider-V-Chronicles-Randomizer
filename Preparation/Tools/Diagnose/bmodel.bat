@@ -10,17 +10,17 @@ rem
 rem It links the engine's own HD sources - no copy of them anywhere - so a
 rem picture out of this tool is a picture out of the engine's renderer:
 rem   hd_model.cpp      the object path under test
-rem   hd_lara.cpp       Lara's composite - the wardrobe (S4-1)
+rem   hd_lara.cpp       Lara's composite - the wardrobe
 rem   hd_render.cpp     the state bracket, the projection and the depth rule
 rem   hd_light.cpp      the parity formulas hd_render needs
 rem   hd_pagecache.cpp  BC7 -> A8R8G8B8 pages, shared by rooms and models
 rem   hd_trm.cpp        the .TRM reader
 rem   hd_scan / hd_bind slot -> model name, and where a page lives
 rem   hd_classic.cpp  the donor game's own mesh tree and frame 0, out of
-rem                   the classic level files of the I-III install
-rem                   (#155) - -classicpose prints it
-rem   hd_mods.cpp    the Mods folder - the resolver -mods drives (#153, M1)
-rem   hd_wardrobe.cpp the outfit scan -wardrobe prints (#153, M2)
+rem                   the classic level files of the I-III install -
+rem                   -classicpose prints it
+rem   hd_mods.cpp    the Mods folder - the resolver -mods drives
+rem   hd_wardrobe.cpp the outfit scan -wardrobe prints
 rem   hd_install.cpp  where the two remasters are, for that scan
 rem   bc7.cpp           the decoder
 rem   Trg.cpp           the vendored .TRG reader (hd_render needs it)

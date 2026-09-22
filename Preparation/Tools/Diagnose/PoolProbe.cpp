@@ -1,6 +1,6 @@
 /*
- * PoolProbe - what one page of the HD cache really costs a 32 bit process, and
- * the rule that spends it (#164).
+ * PoolProbe - what one page of the HD cache really costs a 32 bit process,
+ * and the rule that spends it.
  *
  * Modified 2026 by ChrisChanSan.
  *
@@ -13,13 +13,13 @@
  * Foundation, either version 3 of the License, or (at your option) any later
  * version. See the LICENSE file at the root of this source tree.
  *
- * THE POINT OF THIS TOOL. The engine is x86 with LARGEADDRESSAWARE: four
- * gigabytes of address space, whatever the card holds. The user's card holds
- * 16 GiB and his machine 96 GiB of RAM, and his log of 2026-09-15 shows the
- * outfit changer stopping him at "spent 52 of 64 MiB" with three gigabytes of
- * texture budget unused. Round 164 lifts that cap onto the address space - so
- * the first question is whether the address space is really the wall, and a
- * wall nobody has measured is a guess. This tool measures it.
+ * The engine is x86 with LARGEADDRESSAWARE: four gigabytes of address space,
+ * whatever the card holds. A card with 16 GiB of memory and a machine with
+ * 96 GiB of RAM can still stop the HD texture cache at "spent 52 of 64 MiB"
+ * with three gigabytes of texture budget unused, once the cache's own cap
+ * is raised onto the address space instead of the card. So the first
+ * question is whether the address space is really the wall, and a wall
+ * nobody has measured is a guess. This tool measures it.
  *
  *   -pool   makes a Direct3D 9 device and then real cache pages - DXT5 and
  *           A8R8G8B8, 4096 and 2048 a side, whole mip chains - in
@@ -27,14 +27,14 @@
  *           takes out of the address space: the sum (GlobalMemoryStatusEx),
  *           the largest free block (a VirtualQuery walk), the process's own
  *           commit, and what the card says it has left. It also prints the
- *           BLOCKS one page reserves, which is what the fragmentation
+ *           blocks one page reserves, which is what the fragmentation
  *           condition of the rule is asked against, and it releases
  *           everything again and says how much came back.
  *
- *   -grid   the rule itself, on a grid that contains the user's own numbers -
- *           no device, no data, no game. It calls HDRedressDecide, the very
- *           function the engine calls, so the table in MODIFICATIONS.md is
- *           not a description of the rule but the rule's own answers.
+ *   -grid   the rule itself, on a grid of representative numbers - no
+ *           device, no data, no game. It calls HDRedressDecide, the very
+ *           function the engine calls, so the table this prints is not a
+ *           description of the rule but the rule's own answers.
  *
  *   -walk   the VirtualQuery walk on its own, ten times, because the level
  *           build pays for it and a cost nobody timed is another guess.
@@ -43,11 +43,11 @@
  * so the walk this tool times and the rule this tool tabulates are the walk
  * and the rule the engine runs.
  *
- * IT TOUCHES NO GAME DATA AT ALL: no level, no .TRM, no .DDS, no registry.
+ * It touches no game data at all: no level, no .TRM, no .DDS, no registry.
  * A window that is never shown, a device, textures of the right shape filled
  * with nothing, and the process's own memory counters.
  *
- * USAGE
+ * Usage
  *
  *   PoolProbe -pool [-count N] [-side N] [-only managed|default|systemmem]
  *   PoolProbe -grid
@@ -59,7 +59,7 @@
  *     -only      only this pool
  *
  * Build: bpool.bat beside this file. x86, like the engine that has to live
- * with these numbers - the answer is a different one at 64 bit (#143).
+ * with these numbers - the answer is a different one at 64 bit.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -419,9 +419,9 @@ static void pool_run(int count, int onlySide, const char* onlyPool)
 				one_pool(D3DPOOL_MANAGED, "managed", format, formatName,
 					sides[s], count);
 
-			/* AND THE STAGING TEXTURE'S OWN POOL. The engine's pages are
+			/* And the staging texture's own pool. The engine's pages are
 			 * D3DPOOL_DEFAULT and cannot be locked, so every mip goes
-			 * through ONE reused D3DPOOL_SYSTEMMEM texture of the page's
+			 * through one reused D3DPOOL_SYSTEMMEM texture of the page's
 			 * whole size (hd_pagecache.cpp, ensure_staging). That single
 			 * texture is the biggest allocation a page load makes in the
 			 * address space, which is what the rule's fragmentation
@@ -471,7 +471,7 @@ static void walk_run(int count)
 	printf("\n  mean %.1f ms, worst %d ms\n",
 		count ? (double)sum / (double)count : 0.0, worst);
 
-	/* AND THE SAME WALK ON A CLOCK THAT CAN SEE IT. GetTickCount steps in
+	/* And the same walk on a clock that can see it. GetTickCount steps in
 	 * 15.6 ms, so the walk_ms the engine prints is 0 and 0 is not a
 	 * measurement - it only says "under a tick". A hundred walks between two
 	 * QueryPerformanceCounter reads say what it really costs, which is what
@@ -516,7 +516,7 @@ static void ask_of(HDRedressAsk& ask, double cacheMiB, double spentMiB,
 	ask.room.largestFree = largestMiB * kMiB;
 }
 
-// Round M3's rule, quoted from hd_level.cpp as it stood at 9948ca5:
+// The previous rule, kept here for comparison against the current one:
 // HDPageCacheBytes() - g_redress_bytes0 < HD_REDRESS_ALLOWANCE
 static bool old_rule(double spentMiB)
 {
@@ -534,10 +534,10 @@ static void grid_run()
 		HD_REDRESS_ALLOWANCE / kMiB, HD_REDRESS_WORST / kMiB,
 		HD_REDRESS_ADDRESS_RESERVE / kMiB, HDRedressPageBlock(0, 4096) / kMiB);
 
-	/* (i) THE USER'S OWN LEVEL, with room on both sides: the two rules agree
+	/* (i) A measured level, with room on both sides: the two rules agree
 	 * wherever the old one said yes, and the new one goes on saying yes where
-	 * the old one had stopped. budget 3878 MiB and a cache of 465 MiB are his
-	 * log of 2026-09-15. */
+	 * the old one had stopped. Budget 3878 MiB and a cache of 465 MiB are
+	 * measured values from a real run. */
 	printf("(i) his own numbers - budget 3878 MiB, cache 465 + spent, "
 		"avail_virtual 3000 MiB, largest free block 1000 MiB\n\n");
 	printf("  spent  card room  addr room   old   new   refused         fits\n");
@@ -556,17 +556,18 @@ static void grid_run()
 			HDRedressRefusalText(verdict.refused), verdict.fits);
 	}
 
-	/* (ii) THE CARD SIDE ON ITS OWN. A budget that is nearly spent is what the
-	 * old rule was really about, and the new rule may not be stricter there:
-	 * with the address space fine, every row the old rule allowed is allowed. */
+	/* (ii) The card side on its own. A budget that is nearly spent is what
+	 * the old rule was really about, and the new rule may not be stricter
+	 * there: with the address space fine, every row the old rule allowed is
+	 * allowed. */
 	printf("\n(ii) a small budget - cache 465 MiB, avail_virtual 3000 MiB, "
 		"largest free block 1000 MiB\n\n");
 	printf("  budget  spent  card room   old   new   refused\n");
 
 	/* 455 and 400 are the rows that matter most: there the card room is
-	 * SMALLER than one worst change, and the old rule still says yes - so the
-	 * new rule has to say yes too, or a player would be stopped earlier than
-	 * he was in round M3. */
+	 * smaller than one worst change, and the old rule still says yes - so
+	 * the new rule has to say yes too, or a player would be stopped earlier
+	 * than the old rule ever stopped them. */
 	static const double budgets[] = { 3878, 600, 500, 480, 470, 455, 400 };
 
 	for (int b = 0; b < (int)(sizeof(budgets) / sizeof(budgets[0])); b++)
@@ -586,7 +587,7 @@ static void grid_run()
 		}
 	}
 
-	/* (iii) THE ADDRESS SPACE, which is the wall this round was written for.
+	/* (iii) The address space, which is the wall this rule is written for.
 	 * The reserve is 512 MiB, so 532 MiB free is the last row that has room
 	 * for one worst change and 530 is the first that has not. */
 	printf("\n(iii) the address space - budget 3878 MiB, cache 465 MiB, "
@@ -606,7 +607,7 @@ static void grid_run()
 			HDRedressRefusalText(verdict.refused), verdict.fits);
 	}
 
-	/* (iv) FRAGMENTATION: the sum can be healthy while no single block can
+	/* (iv) Fragmentation: the sum can be healthy while no single block can
 	 * hold one 85.33 MiB page. */
 	printf("\n(iv) fragmentation - budget 3878 MiB, cache 465 MiB, spent 0, "
 		"avail_virtual 3000 MiB\n\n");
@@ -625,8 +626,8 @@ static void grid_run()
 			HDRedressRefusalText(verdict.refused), verdict.fits);
 	}
 
-	/* (v) AND WITH NOTHING MEASURED, which is what a failed
-	 * GlobalMemoryStatusEx leaves: round M3's rule and nothing else. */
+	/* (v) And with nothing measured, which is what a failed
+	 * GlobalMemoryStatusEx leaves: the old rule and nothing else. */
 	printf("\n(v) the measure failed (known=0) - the rule of round M3 and "
 		"nothing else\n\n");
 	printf("  spent   old   new   refused         fits\n");
@@ -642,8 +643,8 @@ static void grid_run()
 			HDRedressRefusalText(verdict.refused), verdict.fits);
 	}
 
-	/* (vi) HOW MANY CHANGES HIS OWN LEVEL HAS ROOM FOR, which is the question
-	 * he asked: 3000 MiB free, 512 of them reserved, 20 MiB a change. */
+	/* (vi) How many changes a level has room for: 3000 MiB free, 512 of them
+	 * reserved, 20 MiB a change. */
 	ask_of(ask, 465.0, 0.0, 3878.0, 3000.0, 1000.0, 1);
 	HDRedressDecide(&ask, &verdict);
 

@@ -1,6 +1,6 @@
 /*
  * RootProbe - the ROOT OFFSET of an animation, and what the sixty hertz
- * in-between frame draws it as (#157).
+ * in-between frame draws it as.
  *
  * Modified 2026 by ChrisChanSan.
  *
@@ -13,7 +13,7 @@
  * Foundation, either version 3 of the License, or (at your option) any later
  * version. See the LICENSE file at the root of this source tree.
  *
- * WHY IT EXISTS. Every stored frame of a TR5 animation carries a bounding box
+ * Why it exists. Every stored frame of a TR5 animation carries a bounding box
  * (six shorts) and then the ROOT OFFSET (three shorts, frm[6..8]) which the
  * draw applies AFTER the item's own rotation - game\draw.cpp,
  * DrawAnimatingItem, and game\delstuff.cpp for Lara. The vertical travel of a
@@ -25,13 +25,13 @@
  *
  * At sixty hertz the two halves of the interpolation disagree on exactly that
  * one frame: order 2 has blended item->pos half way across the wrap while
- * rule K6 refuses the pose blend (the frame stepped back to the animation's
- * own start) and the draw falls back to the CURRENT frame, whose offset is
- * the first frame's rather than the last frame's. Half the step is then
- * missing from the picture for one frame.
+ * the neighbour rule refuses the pose blend (the frame stepped back to the
+ * animation's own start) and the draw falls back to the CURRENT frame, whose
+ * offset is the first frame's rather than the last frame's. Half the step is
+ * then missing from the picture for one frame.
  *
- * This tool is the measurement that round 157 starts from, and the proof its
- * fix is checked against. It prints, for every animation named on the line:
+ * This tool measures exactly that gap and is the proof a fix for it is
+ * checked against. It prints, for every animation named on the line:
  *
  *   - the animation table row: rate, frame size, the frame window, where it
  *     continues (anim and FRAME - the field AnimCmd does not read), velocity,
@@ -46,19 +46,18 @@
  *     `<-- refused`, and it is only reached where the blend lands somewhere
  *     other than that frame's own offset - the test the engine makes in
  *     InterpRootNow and the thing root_fix counts;
- *   - and for that frame, THE -log LINE THE ENGINE WILL PRINT, in all three
- *     axes. A line written out by hand from the key table beside it is how
- *     the x and z of this round's first record came out wrong: the previous
- *     tick usually sits BETWEEN two keys, so its offset is a blend of the
- *     pair and not either key. The tool does that arithmetic here so that the
- *     record and the play test's log can be compared to the unit.
+ *   - and for that frame, the -log line the engine will print, in all three
+ *     axes. Computing this by hand from the key table beside it is
+ *     error-prone: the previous tick usually sits BETWEEN two keys, so its
+ *     offset is a blend of the pair and not either key. The tool does that
+ *     arithmetic here so the printed line can be compared directly against
+ *     the engine's own log.
  *
- * ROUND 157b added the NARROWED rule beside the other two rows - the blend
+ * The NARROWED rule appears as a third row beside the other two - the blend
  * that keeps only as much of the offset step as the tick's own POSITION step
- * pays for (InterpRootNarrow, same header) - and the -sweep mode, which walks
- * every wrap and every state change of Lara's in one level and says of each
- * one whether the file pays for its offset step in full, in part or not at
- * all. That table is the record of what the round changes.
+ * pays for (InterpRootNarrow, same header) - and the -sweep mode walks every
+ * wrap and every state change of Lara's in one level and says of each one
+ * whether the file pays for its offset step in full, in part or not at all.
  *
  * Usage:
  *   RootProbe <level.trc> [anim ...]        default: 96 161 164 165 168 169 173
@@ -155,7 +154,7 @@ static void keyFrame(const Tr5Level& l, const AnimRow& a, int key, short out[9])
 		out[i] = l.debugReadFrameShort(at + i);
 }
 
-/* THE OFFSET ONE GAME FRAME IS DRAWN WITH, by the engine's own arithmetic:
+/* The offset one game frame is drawn with, by the engine's own arithmetic:
  * GetFrames picks the key pair and shortens the rate on the last interval,
  * InterpKeyAlpha turns (frac, rate) into vanilla's factor, and InterpRootKey
  * blends the pair with it. game\draw.cpp GetRootAt is this function with the
@@ -264,7 +263,7 @@ static void printCommands(const Tr5Level& l, const AnimRow& a, long trans[3], bo
 	}
 }
 
-/* THE TranslateItem OF ONE ANIMATION, without printing anything - the sweep
+/* The TranslateItem of one animation, without printing anything - the sweep
  * and the -grab default both need the number and not the table. It is the
  * command that runs at the WRAP (AnimateLara, game\laramisc.cpp: the command
  * block is walked only where frame_number has passed frame_end), so a state
@@ -310,7 +309,7 @@ static bool readTranslate(const Tr5Level& l, const AnimRow& a, long trans[3])
 	return false;
 }
 
-/* WHERE A STATE CHANGE REALLY GOES. The change block is three shorts per
+/* Where a state change really goes. The change block is three shorts per
  * entry - the goal state, how many ranges, the first range - and the range
  * block four: the frame window it is allowed in, and the animation and FRAME
  * it jumps to (game\control.cpp, GetChange). Without this, "the grab goes to
@@ -399,7 +398,7 @@ static void printAnim(const Tr5Level& l, int index, long trans[3], bool& haveTra
 	}
 }
 
-/* THE WRAP, TICK BY TICK AND FRAME BY FRAME.
+/* The wrap, tick by tick and frame by frame.
  *
  * `posY` is a model of item->pos.y_pos: it does not move while the animation
  * runs (lara_col_climbing puts back what it took out on the continuing path)
@@ -438,8 +437,8 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 	/* `step` is the position step taken to REACH this tick, in the item's own
 	 * y_rot frame - which is the frame TranslateItem writes its three shorts
 	 * in (game\control.cpp), so the command's numbers go in unturned. It is
-	 * zero on every tick but the wrap, and it is what the narrowed rule of
-	 * round 157b weighs the offset step against. */
+	 * zero on every tick but the wrap, and it is what the narrowed rule
+	 * weighs the offset step against. */
 	struct Tick { int anim; int frame; long pos; long off[3]; long drawn; long step[3]; };
 	std::vector<Tick> ticks;
 
@@ -506,7 +505,7 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 
 			InterpRootLerp(p.off, t.off, 0.5F, fix);
 
-			/* ROUND 157b: the same blend, from the narrowed start offset -
+			/* The narrowed rule's own blend, from the narrowed start offset -
 			 * the engine's own InterpRootNarrow out of interpolate_math.h. */
 			InterpRootNarrow(p.off, t.off, t.step, start);
 			InterpRootLerp(start, t.off, 0.5F, narrow);
@@ -519,15 +518,15 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 			const bool nfires = refused &&
 				(narrow[0] != t.off[0] || narrow[1] != t.off[1] || narrow[2] != t.off[2]);
 
-			/* WHY TWO DIFFERENT MARKERS (second fix round of 157b). A row
-			 * that carries neither rule's blend used to say "rule does not
-			 * fire" for BOTH reasons at once - the frame was accepted by K6,
-			 * so neither rule is ever asked, and the rule was asked and landed
-			 * on the frame's own offset. The numbers on an ACCEPTED row still
-			 * differ (they are the arithmetic of a blend nobody performs), and
-			 * a reader who takes the shared marker for "the two agree" reads
-			 * them as a difference. So an accepted row says so in its own
-			 * words and only a refused one speaks of the rule at all. */
+			/* Two different markers, because a row that carries neither
+			 * rule's blend can mean two different things: the frame was
+			 * accepted by the neighbour rule, so neither rule is ever asked,
+			 * or the rule was asked and landed on the frame's own offset.
+			 * The numbers on an ACCEPTED row still differ (they are the
+			 * arithmetic of a blend nobody performs), and a reader who takes
+			 * the shared marker for "the two agree" reads them as a
+			 * difference. So an accepted row says so in its own words and
+			 * only a refused one speaks of the rule at all. */
 			const char* const fixMark = !refused ? "   (accepted frame - not drawn)"
 				: (fires ? "" : "   (rule does not fire)");
 			const char* const narMark = !refused ? "   (accepted frame - not drawn)"
@@ -544,18 +543,15 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 				posT + narrow[1] - lastDrawn, narMark);
 
 			if (fires || nfires)
-				/* THE d_off AND THE TWO VERDICTS ARE SPELLED OUT (fix round of
-				 * 157b). This line used to leave both to be inferred - d_off
-				 * from the offsets three rows up, "today fires" from the
-				 * ABSENCE of a marker on the fixed row - and the round's first
-				 * record then carried 164->164 as "does not fire" for both
-				 * when today's rule does fire there. A table column that has
-				 * to be inferred is a table column that gets read wrong. The
-				 * worst= pair is what the tween frames really cost: the blend
-				 * runs over the whole of alpha, and at alpha towards 0 today
-				 * draws prev while the narrowed rule stands at cur, so the
-				 * largest difference of the two pictures over the drawn frames
-				 * is the UNPAID part of d_off, axis by axis. */
+				/* d_off and both verdicts are spelled out explicitly rather
+				 * than left to be inferred from other columns, because a
+				 * table column that has to be inferred is a table column
+				 * that gets read wrong. The worst= pair is what the tween
+				 * frames really cost: the blend runs over the whole of
+				 * alpha, and at alpha towards 0 today draws prev while the
+				 * narrowed rule stands at cur, so the largest difference of
+				 * the two pictures over the drawn frames is the UNPAID part
+				 * of d_off, axis by axis. */
 				std::printf("    step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)"
 					"  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s"
 					"  d_off=(%ld,%ld,%ld) today=%s narrowed=%s"
@@ -574,11 +570,11 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 
 			if (nfires)
 			{
-				/* AND THE LINE THE ENGINE PRINTS FOR THIS FRAME, in full and
-				 * in all three axes, so that the record and the play test's
-				 * log can be held against the same numbers. pos_y is absolute
-				 * in the level, so only its step from the tick before the
-				 * wrap is knowable here; Y below stands for that tick's y. */
+				/* And the line the engine prints for this frame, in full and
+				 * in all three axes, so it can be compared directly against
+				 * the engine's own log. pos_y is absolute in the level, so
+				 * only its step from the tick before the wrap is knowable
+				 * here; Y below stands for that tick's y. */
 				std::printf("  the -log line this frame produces (Y = pos.y of the tick above):\n"
 					"  INTERPLOG root lara anim %d->%d frame %d->%d"
 					" offset_prev=(%ld,%ld,%ld) offset_cur=(%ld,%ld,%ld)"
@@ -604,7 +600,7 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 	}
 }
 
-/* THE SAME TABLE FOR A CHANGE FROM ONE ANIMATION TO ANOTHER - the ladder
+/* The same table for a change from one animation to another - the ladder
  * grab. There is no TranslateItem here; whatever moves item->pos is the
  * collision code, and that amount is the caller's to supply. */
 static void printChange(const Tr5Level& l, int from, int to, const long step[3])
@@ -641,9 +637,9 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 	std::printf("  tick  N+1    pos.y %6ld  off.y %6ld  drawn %8ld\n", posStep, off1[1], drawn1);
 	std::printf("  offsets x/z: last (%ld,%ld) -> first (%ld,%ld)\n",
 		off0[0], off0[2], off1[0], off1[2]);
-	/* Same three additions as the wrap table above (fix round of 157b): d_off,
-	 * which of the two rules blends at all, and what the difference of the two
-	 * pictures grows to over the tween frames. */
+	/* Same three additions as the wrap table above: d_off, which of the two
+	 * rules blends at all, and what the difference of the two pictures grows
+	 * to over the tween frames. */
 	std::printf("  step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)  fixed=(%ld,%ld,%ld) narrow=(%ld,%ld,%ld)%s"
 		"  d_off=(%ld,%ld,%ld) today=%s narrowed=%s worst=(%ld,%ld,%ld)\n",
 		step[0], step[1], step[2],
@@ -670,14 +666,12 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 }
 
 /* ==========================================================================
- * THE SWEEP (round 157b) - EVERY TRANSITION OF LARA'S IN ONE LEVEL, AND WHAT
- * PAYS FOR IT.
+ * THE SWEEP - EVERY TRANSITION OF LARA'S IN ONE LEVEL, AND WHAT PAYS FOR IT.
  * ==========================================================================
  *
  * The narrowed rule blends the offset step only as far as the tick's own
- * POSITION step pays for it, so the record of what this round changes is the
- * list of transitions with an offset step and the position step beside it.
- * Two kinds reach the draw:
+ * POSITION step pays for it, so this table lists every transition with an
+ * offset step and the position step beside it. Two kinds reach the draw:
  *
  *   WRAP    frame_number passed frame_end: AnimateLara runs the command block
  *           first, so a TranslateItem here IS the position step, and it is
@@ -692,7 +686,7 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
  *
  * A change is allowed over a whole frame range, so the offset step depends on
  * which frame it fired at; the row prints the frame of the range that gives
- * the LARGEST step, which is the worst case the play test could meet. */
+ * the LARGEST step, the worst case that could occur in play. */
 static void sweep(const Tr5Level& l, int first, int last, long least)
 {
 	size_t chAt = 0, rgAt = 0;
@@ -712,22 +706,20 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 	std::printf("kind    from            to             d off (x,y,z)      step (x,y,z)      "
 		"kept (x,y,z)      today  narrow  verdict\n");
 
-	/* `beyond` IS THE ROUND'S INVARIANT, AND THE TOOL COUNTS IT ITSELF (second
-	 * fix round of 157b). The claim the record rests on is that the narrowed
-	 * rule blends never MORE than today's and never in another direction. The
-	 * sweep always had the per-row columns a reader could derive it from, but
-	 * the summary printed only `stops`, and a number a reader has to derive is
-	 * a number nobody checks twice.
+	/* `beyond` is the invariant this table proves, counted here rather than
+	 * left for a reader to derive from the per-row columns: the claim is
+	 * that the narrowed rule blends never MORE than today's and never in
+	 * another direction.
 	 *
-	 * IT IS NOT COUNTED AS "blends where today does not", which the reviewer
-	 * asked for and which would be a DEAD counter here: a row only enters the
-	 * sweep when some axis moves by `least` units or more, so today's blend at
-	 * a half always lands off `cur` and the reverse case cannot arise whatever
-	 * the rule does. Measured against a mutated InterpRootNarrow it stayed 0.
-	 * What is counted instead is the invariant itself, axis by axis: the
-	 * narrowed draw must lie ON THE SEGMENT from `cur` to today's draw - same
-	 * side, no further - which has "blends where today stands down" inside it
-	 * as the case where that segment is a point. */
+	 * It is not counted as "blends where today does not", which would be a
+	 * DEAD counter here: a row only enters the sweep when some axis moves by
+	 * `least` units or more, so today's blend at a half always lands off
+	 * `cur` and the reverse case cannot arise whatever the rule does
+	 * (measured against a mutated InterpRootNarrow, it stayed 0). What is
+	 * counted instead is the invariant itself, axis by axis: the narrowed
+	 * draw must lie ON THE SEGMENT from `cur` to today's draw - same side,
+	 * no further - which has "blends where today stands down" inside it as
+	 * the case where that segment is a point. */
 	long rows = 0, full = 0, part = 0, none = 0, stops = 0, beyond = 0;
 
 	for (int i = first; i <= last; i++)
@@ -887,7 +879,7 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 		rows, least, full, part, none, stops, beyond);
 }
 
-/* LARA'S OWN SLICE OF THE ANIMATION TABLE. A TR5 moveable is 20 bytes with the
+/* Lara's own slice of the animation table. A TR5 moveable is 20 bytes with the
  * animation index a uint16 at +16 (the frame pointer is at +12); object 0 is
  * LARA, and her animations run up to the next moveable's first one. */
 static bool laraAnims(const Tr5Level& l, int& first, int& last)
@@ -982,11 +974,11 @@ int main(int argc, char** argv)
 		bool haveTrans = false;
 		AnimRow a;
 
-		/* THE STEP IS THE LEAVING ANIMATION'S OWN TranslateItem where the
-		 * change really is its wrap - anim 172, the one frame the ladder grab
-		 * passes through, carries (0,-190,0) and round 157 recorded it. An
-		 * explicit argument overrides it for a change that a state routine
-		 * moves by hand, which the file cannot know. */
+		/* The step is the leaving animation's own TranslateItem where the
+		 * change really is its wrap - anim 172, the one frame the ladder
+		 * grab passes through, carries (0,-190,0). An explicit argument
+		 * overrides it for a change that a state routine moves by hand,
+		 * which the file cannot know. */
 		if (readAnim(l, from, a) && a.nextAnim == to && readTranslate(l, a, trans))
 		{
 			step[0] = trans[0];

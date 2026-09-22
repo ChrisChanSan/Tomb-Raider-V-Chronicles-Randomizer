@@ -1,5 +1,5 @@
 @echo off
-rem broot - build RootProbe (#157).
+rem broot - build RootProbe.
 rem
 rem 64 bit like bam.bat: it reads a whole level file into memory through
 rem Tr5Level and nothing in it cares which target the engine is. It includes

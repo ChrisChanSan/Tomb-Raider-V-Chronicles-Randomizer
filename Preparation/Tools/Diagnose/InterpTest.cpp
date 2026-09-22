@@ -12,19 +12,16 @@
  */
 
 /* InterpTest - the arithmetic of the 60 FPS interpolation, checked without a
- * game (#148, order 2). Build with bit.bat, run with no arguments.
+ * game. Build with bit.bat, run with no arguments.
  *
- * WHAT IT CHECKS, and why these and not others: order 2 has exactly one part
- * that can be got wrong silently. The snapshot either works or the picture
- * shakes; the three call sites either compile or they do not; but a short
- * angle blended THE LONG WAY ROUND is invisible almost all the time and looks
- * like a rendering glitch when it is not - one enemy, facing roughly south,
- * spinning backwards for half a tick every second frame. It has to be proven
- * at the boundary, and the boundary is a wrap that a play test will not put a
- * body on when you want it to.
+ * What it checks, and why: a short angle blended the long way round is
+ * invisible almost all the time and looks like a rendering glitch when it is
+ * not - one enemy, facing roughly south, spinning backwards for half a tick
+ * every second frame. It has to be proven at the boundary, and the boundary
+ * is a wrap that ordinary play will not reliably put a body on.
  *
- * So this includes the ENGINE'S OWN HEADER - not a copy of the functions -
- * and asserts on it. There is no twin to keep in step.
+ * This includes the engine's own header - not a copy of the functions - and
+ * asserts on it, so there is no twin to keep in step.
  *
  * It is also the cadence proof: the alpha rule of DrawPhaseGame is four lines
  * of integer arithmetic on framecount and it can be run here for a whole
@@ -36,7 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <limits.h>		// LONG_MIN / LONG_MAX - the extremes of root_narrow (#157, round 157b)
+#include <limits.h>		// LONG_MIN / LONG_MAX - the extremes of root_narrow
 
 #include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
 
@@ -104,7 +101,7 @@ static void angles()
 	ok(InterpLerpAngle(12345, -20000, 1.0F) == -20000, "alpha 1 is the live state",
 		InterpLerpAngle(12345, -20000, 1.0F), -20000);
 
-	/* THE WRAP. 32000 to -32000 is 1536 units clockwise over the top, not
+	/* The wrap: 32000 to -32000 is 1536 units clockwise over the top, not
 	 * 64000 units anticlockwise through zero. Halfway is 32768, which is
 	 * -32768 as a short. */
 	ok(InterpLerpAngle(32000, -32000, 0.5F) == -32768, "32000 -> -32000 goes OVER 32767",
@@ -125,16 +122,16 @@ static void angles()
 	ok(InterpLerpAngle(-100, 100, 0.5F) == 0, "-100 -> 100 crosses zero",
 		InterpLerpAngle(-100, 100, 0.5F), 0);
 
-	/* EXACTLY HALF A TURN. 32768 as a short is -32768, so the wrap chooses
+	/* Exactly half a turn: 32768 as a short is -32768, so the wrap chooses
 	 * anticlockwise. Arbitrary, deterministic, and the only requirement. */
 	ok(InterpLerpAngle(0, -32768, 0.5F) == -16384, "half a turn is anticlockwise",
 		InterpLerpAngle(0, -32768, 0.5F), -16384);
 
-	/* FIX ROUND R (#148): a half turn is a SNAP for a node, not a blend -
-	 * InterpHalfTurn is the question ApplyNode (game\interpolate.cpp) asks
-	 * before it blends a rotation, and turn180_effect (game\effects.cpp) is
-	 * the one thing that makes the answer yes: y_rot -= 0x8000. Exactly half
-	 * a turn either way is one; a unit short of it is a turn like any other. */
+	/* A half turn is a snap for a node, not a blend - InterpHalfTurn is the
+	 * question ApplyNode (game\interpolate.cpp) asks before it blends a
+	 * rotation, and turn180_effect (game\effects.cpp) is the one thing that
+	 * makes the answer yes: y_rot -= 0x8000. Exactly half a turn either way
+	 * is one; a unit short of it is a turn like any other. */
 	ok(InterpHalfTurn(0, -32768), "0 -> -32768 is a half turn",
 		InterpHalfTurn(0, -32768), 1);
 	ok(InterpHalfTurn(-32768, 0), "-32768 -> 0 is a half turn",
@@ -165,7 +162,7 @@ static void angles()
 			missed, 0);
 	}
 
-	/* THE SWEEP. Every pair of angles on a 512-unit lattice - 16,384 pairs -
+	/* The sweep: every pair of angles on a 512-unit lattice - 16,384 pairs -
 	 * blended at a half, asserting three things at once:
 	 *
 	 *   the direction is the shorter one,
@@ -191,7 +188,7 @@ static void angles()
 				while (d > 32768) d -= 65536;
 				while (d < -32768) d += 65536;
 
-				/* EXACTLY HALF A TURN HAS NO SHORTER WAY, so there is
+				/* Exactly half a turn has no shorter way, so there is
 				 * nothing here for a sweep to assert - both directions are
 				 * equally right and the wrap picks one. Which one it picks
 				 * is asserted on its own above; here the pair is counted
@@ -227,12 +224,12 @@ static void angles()
 
 /* ---------------------------------------------------------- the positions -- */
 
-/* FIX ROUND W (#148): the ninth step of a screen fade. SetFade's arithmetic
- * as specific\specificfx.cpp does it - eight steps of (end - start) >> 3, the
+/* The ninth step of a screen fade. SetFade's arithmetic as
+ * specific\specificfx.cpp does it - eight steps of (end - start) >> 3, the
  * ninth call draws `end` - played through in both directions, once as the
- * thirty hertz ticks see it (the value read BEFORE the step, `end` on the
+ * thirty hertz ticks see it (the value read before the step, `end` on the
  * ninth) and once as an in-between frame between the eighth and the ninth
- * tick sees it (the value AFTER the eighth step). */
+ * tick sees it (the value after the eighth step). */
 static void fade()
 {
 	printf("fade - the ninth step of a screen fade\n");
@@ -286,7 +283,7 @@ static void fade()
 	ok(black == (long)0xFF000000, "-1 shifted into the colour is alpha 255 - the black tick", black, (long)0xFF000000);
 }
 
-/* FIX ROUND X (#148): which camera type changes are cuts. The numbers are
+/* Which camera type changes are cuts. The numbers are
  * camera_type's own (chase 0, fixed 1, look 2, combat 3, cinematic 4,
  * heavy 5); the engine static_asserts the three the rule names. */
 static void camera()
@@ -334,7 +331,7 @@ static void positions()
 	ok(InterpLerpLong(0, -1, 0.5F) == 0, "one unit backwards truncates to nothing",
 		InterpLerpLong(0, -1, 0.5F), 0);
 
-	/* THE WHOLE COORDINATE RANGE OF A TR5 LEVEL. A room grid is at most 100
+	/* The whole coordinate range of a TR5 level. A room grid is at most 100
 	 * sectors a side and y runs deep; this is well past anything a level
 	 * file holds, and it is here because the multiply is done in float and a
 	 * float has 24 bits of mantissa. At 2 million units the step between
@@ -372,9 +369,8 @@ static void thresholds()
 		InterpManhattan(3, -4, 5), 12);
 	ok(InterpManhattan(0, 0, 0) == 0, "manhattan of nothing", InterpManhattan(0, 0, 0), 0);
 
-	/* IT MAY SNAP SOONER THAN THE TRUE DISTANCE WOULD, NEVER LATER. That is
-	 * the whole licence for using a Manhattan sum in place of a length, and
-	 * it is worth an assertion rather than a claim. */
+	/* It may snap sooner than the true distance would, never later. That is
+	 * the whole licence for using a Manhattan sum in place of a length. */
 	{
 		int bad = 0;
 
@@ -391,7 +387,7 @@ static void thresholds()
 		ok(bad == 0, "manhattan is never smaller than the true distance", bad, 0);
 	}
 
-	/* THE CASES THE RULE IS FOR, at the engine's own numbers.
+	/* The cases the rule is for, at the engine's own numbers.
 	 *
 	 * Lara's terminal fall is 130-odd units a tick and a run is about 32 -
 	 * both far under the threshold, so ordinary movement always
@@ -488,7 +484,7 @@ static void cadence()
 		}
 	}
 
-	/* A HITCH. S_DumpScreen returns how many 1/60 s ticks the frame really
+	/* A hitch: S_DumpScreen returns how many 1/60 s ticks the frame really
 	 * took, so a frame that took four of them feeds four. The accumulator
 	 * must catch up rather than drift, and the alpha rule must not get stuck
 	 * on one side: after a hitch the cadence has to come back on its own. */
@@ -519,16 +515,16 @@ static void cadence()
 }
 
 
-/* ------------------------------------------------------- fix round R -- */
+/* ------------------------------------------------------- the camera aim -- */
 
-/* THE CAMERA'S TARGET, AND WHERE IT IS A DIRECTION (fix round R).
+/* The camera's target, and where it is a direction.
  *
  * The rule under test is InterpCamAimCut (game\interpolate_math.h) and the
  * fault it repairs is measurable without a game: FirstPersonCamera builds
  * camera.target at camera.pos + direction * 0x5100, so a head turn of a few
- * degrees between two logic ticks moved that point further than
- * INTERP_CAM_SNAP and order 2 declared a camera CUT. The user's log of
- * 2026-09-07 reads camcut=10..17 a second with Lara STANDING STILL.
+ * degrees between two logic ticks moves that point further than
+ * INTERP_CAM_SNAP, and the plain distance test then reads it as a camera cut
+ * - camcut=10..17 a second while Lara stands still.
  *
  * What is asserted, in this order:
  *
@@ -559,7 +555,7 @@ static void fp_camera(double yawDeg, double pitchDeg, long* p, long* t)
 	t[2] = p[2] + (long)(r * cos(pitch) * cos(yaw));
 }
 
-// The rule as it stood before fix round R: the target as an absolute place.
+// The plain rule: the target compared as an absolute place.
 static bool old_target_cut(const long* pt, const long* t)
 {
 	return InterpManhattan(t[0] - pt[0], t[1] - pt[1], t[2] - pt[2]) > INTERP_CAM_SNAP;
@@ -574,7 +570,7 @@ static void camera_aim()
 	ok(INTERP_CAM_DIR_RADIUS == 1024, "and it is measured on a sector's radius",
 		INTERP_CAM_DIR_RADIUS, 1024);
 
-	/* 1. THE FAULT. An idle animation turns Lara's head by a degree or two
+	/* 1. The fault: an idle animation turns Lara's head by a degree or two
 	 * between two ticks. On a target 20736 units away that is 362 units per
 	 * degree, so three degrees clears INTERP_CAM_SNAP and the old rule calls
 	 * it a cut. */
@@ -591,7 +587,7 @@ static void camera_aim()
 			"the new rule does not", 0, 0);
 	}
 
-	/* 2. EVERY TURN A BODY CAN MAKE IN ONE TICK. Lara's fastest turn on the
+	/* 2. Every turn a body can make in one tick: Lara's fastest turn on the
 	 * spot is under five degrees a tick and a roll is about fifteen; twenty
 	 * is taken as the ceiling and swept in both axes and in both directions,
 	 * with the eye moving as well. Not one of them may read as a cut. */
@@ -621,7 +617,7 @@ static void camera_aim()
 		ok(tried > 500, "and the sweep really ran", tried, 500);
 	}
 
-	/* 3. A REAL CUT IS STILL A CUT. A new view is not a turn: sixty degrees,
+	/* 3. A real cut is still a cut: a new view is not a turn - sixty degrees,
 	 * a right angle and a half turn all have to be caught. */
 	{
 		const double at[3] = { 60.0, 90.0, 180.0 };
@@ -639,9 +635,9 @@ static void camera_aim()
 		}
 	}
 
-	/* 4. THE CHASE CAMERA IS UNTOUCHED. Its target sits on Lara, 1536 from
+	/* 4. The chase camera is untouched: its target sits on Lara, 1536 from
 	 * the eye - under INTERP_CAM_FAR_TARGET - so InterpCamAim hands back the
-	 * offset itself and the comparison is the absolute one order 2 shipped. */
+	 * offset itself and the comparison is the plain absolute one. */
 	{
 		long p0[3] = { 84000, -4300, 72000 };
 		long t0[3] = { 84000, -5300, 73536 };		// 1536 ahead and 1000 up
@@ -658,7 +654,7 @@ static void camera_aim()
 			"a target jumping two sectors still cuts", 1, 1);
 	}
 
-	/* AND THE REDUCTION IS THE IDENTITY UNDER THE THRESHOLD. Whatever else
+	/* And the reduction is the identity under the threshold: whatever else
 	 * changes, a near target must come back as its own offset to the unit, or
 	 * the classic case would not be byte-identical. */
 	{
@@ -679,32 +675,32 @@ static void camera_aim()
 }
 
 
-/* ------------------------------------------------------- fix round S -- */
+/* ------------------------------------------------------- the pose blend -- */
 
-/* THE POSE, AND THE PAIR A MATRIX BLEND CANNOT SURVIVE (fix round S, S2).
+/* The pose, and the pair a matrix blend cannot survive.
  *
- * The play test's dive roll: one in-between frame with a leg fully extended
- * the wrong way. The first reading was a packed ten bit angle interpolated
- * the LONG way round - 1000 to 20 giving 510 where it should give 1022.
+ * A dive roll's known failure mode: one in-between frame with a leg fully
+ * extended the wrong way. The cause is a packed ten bit angle interpolated
+ * the long way round - 1000 to 20 giving 510 where it should give 1022.
  *
  * The first thing asserted here is that this cannot happen, and it is
  * asserted against the arithmetic the engine really runs: the two poses are
- * blended as MATRICES (game\draw.cpp, InterpolateMatrix), and an element-wise
- * lerp of two rotations always lands on the SHORT-way bisector. So the 1000
+ * blended as matrices (game\draw.cpp, InterpolateMatrix), and an element-wise
+ * lerp of two rotations always lands on the short-way bisector. So the 1000
  * to 20 case is run through it, on all three axes and in both directions, and
  * the angle that comes out is read back.
  *
- * The second is what really goes wrong: the same lerp SHRINKS by cos(D/2),
+ * The second is what really goes wrong: the same lerp shrinks by cos(D/2),
  * and at half a turn the frame is singular. InterpPoseFar is the rule that
  * refuses such a pair, and it is asserted to fire on a half turn, to leave a
- * quiet pair alone, and to answer per NODE rather than per frame. */
+ * quiet pair alone, and to answer per node rather than per frame. */
 
 static const double kPiS = 3.14159265358979323846;
 
 /* The angle a blended 3x3 comes back as, about the axis it was built on.
  * atan2 of the two elements that carry it, in the engine's 16 bit space and
- * then in the packed TEN bit one, which is the space the play test's own
- * numbers were in. */
+ * then in the packed ten bit one, which is the space a dive roll's angles
+ * are stored in. */
 static double blended_angle_10bit(short a10, short b10, int axis, float alpha)
 {
 	short ra[3] = { 0, 0, 0 }, rb[3] = { 0, 0, 0 };
@@ -749,9 +745,9 @@ static void pose_wrap()
 {
 	printf("the pose the short way round (fix round S)\n");
 
-	/* 1. THE PLAY TEST'S OWN CASE. 1000 and 20 are 44 units apart across the
-	 * wrap; the midpoint is 1022 and never 510. Run on all three axes and in
-	 * both directions - six cases - through the very blend the engine uses. */
+	/* 1. The known case: 1000 and 20 are 44 units apart across the wrap; the
+	 * midpoint is 1022 and never 510. Run on all three axes and in both
+	 * directions - six cases - through the very blend the engine uses. */
 	{
 		int bad = 0, ran = 0;
 
@@ -776,7 +772,7 @@ static void pose_wrap()
 		ok(bad == 0, "1000 and 20 blend to 1022 and never to 510", bad, 0);
 	}
 
-	/* 2. AND THE SHRINK IS REAL. The same blend at a half turn keeps nothing
+	/* 2. And the shrink is real: the same blend at a half turn keeps nothing
 	 * of the frame at all, which is the fault itself. */
 	{
 		/* 512 in the packed ten bit space IS half a turn; the rotation
@@ -806,7 +802,7 @@ static void pose_wrap()
 			(long)(len * 1000.0), 0);
 	}
 
-	/* 3. THE RULE. A frame is nine shorts of box and offset and then one
+	/* 3. The rule: a frame is nine shorts of box and offset and then one
 	 * packed rotation per node. Two frames are built by hand - node 0 quiet,
 	 * node 1 turned - and InterpPoseFar has to answer for the pair. */
 	{
@@ -844,7 +840,7 @@ static void pose_wrap()
 			"and a pose against itself never does", 0, 0);
 	}
 
-	/* 4. THE LIMIT IS WHERE IT SAYS IT IS. Ninety degrees is the last turn
+	/* 4. The limit is where it says it is: ninety degrees is the last turn
 	 * that passes; a hair over it is refused. The packed space is 1024 to the
 	 * circle, so ninety degrees is 256. */
 	{
@@ -870,18 +866,18 @@ static void pose_wrap()
 	}
 }
 
-/* THE CAMERA'S SHELL (fix round S, S3a).
+/* The camera's shell.
  *
- * Fix round R chose the far branch per CAMERA. A target hovering on the shell
- * at INTERP_CAM_FAR_TARGET therefore had one of the pair reduced to 1024 and
- * the other left at 4096, and the difference of the two was three thousand
- * units of nothing. The branch is chosen once for the pair now, and both
- * sides take the same scale. */
+ * Choosing the far branch per camera rather than per axis matters here: a
+ * target hovering on the shell at INTERP_CAM_FAR_TARGET would otherwise have
+ * one of the pair reduced to 1024 and the other left at 4096, a difference of
+ * three thousand units of nothing. The branch is chosen once for the pair,
+ * and both sides take the same scale. */
 static void camera_shell()
 {
 	printf("the camera's shell (fix round S)\n");
 
-	/* 1. A TARGET WALKING THROUGH THE SHELL. The eye stands still and the
+	/* 1. A target walking through the shell: the eye stands still and the
 	 * target moves out along its own ray from 3900 to 4400 in single units:
 	 * not one step of it may read as a cut. */
 	{
@@ -904,8 +900,8 @@ static void camera_shell()
 		ok(cuts == 0, "and no step of it reads as a cut", cuts, 0);
 	}
 
-	/* 2. A TARGET SITTING ON THE SHELL WITH ONE UNIT OF JITTER, thirty ticks
-	 * of it - the case that made the seam a fault and not a curiosity. */
+	/* 2. A target sitting on the shell with one unit of jitter, thirty ticks
+	 * of it - the case that makes the seam a fault and not a curiosity. */
 	{
 		int cuts = 0;
 		long p[3] = { 10000, -2000, 20000 };
@@ -925,8 +921,8 @@ static void camera_shell()
 		ok(cuts == 0, "a target jittering on the shell never cuts", cuts, 0);
 	}
 
-	/* 3. AND ROUND R'S OWN ANSWERS ARE UNCHANGED. The two cameras the engine
-	 * really has are nowhere near the shell, so everything camera_aim asserts
+	/* 3. And camera_aim's own answers are unchanged: the two cameras the
+	 * engine really has are nowhere near the shell, so everything it asserts
 	 * has to stand - that section runs before this one and would have failed
 	 * already; what is added here is the one case it could not see. */
 	{
@@ -947,22 +943,22 @@ static void camera_shell()
 	}
 }
 
-/* THE TITLE MENU'S OWN CADENCE (fix round R).
+/* The title menu's own cadence.
  *
- * The title and the inventory keep TWO ticks per present at every setting
- * (order 1b, GameFrameMinTicks). What that does to ControlPhase's accumulator
- * is arithmetic and can be run here:
+ * The title and the inventory keep two ticks per present at every setting
+ * (GameFrameMinTicks). What that does to ControlPhase's accumulator is
+ * arithmetic and can be run here:
  *
  *     framecount += 2; while (framecount > 0) { tick; framecount -= 2; }
  *
- * From 0 it returns to 0 - and from -1 it returns to -1, forever. So a title
- * entered on the odd half of the sixty hertz cadence read `framecount < 0` on
- * every single frame, and the rule as order 2 wrote it answered 0.5 to all of
- * them. Every frame of the title was an in-between frame, every counter order
- * 3 guards stood still, DoScreenFade never reached its ninth step, DoFade
- * never became 2, and a full screen black quad stood over the menu while
- * TitleOptions zeroed the input. That is the black screen of 2026-09-07, and
- * the parity it depends on is why the FIRST title of a session was fine.
+ * From 0 it returns to 0 - and from -1 it returns to -1, forever. A plain
+ * `framecount < 0` alpha rule would therefore read true on every single frame
+ * of a title entered on the odd half of the sixty hertz cadence, and answer
+ * 0.5 to all of them: every frame an in-between frame, every guarded counter
+ * standing still, DoScreenFade never reaching its ninth step, DoFade never
+ * becoming 2, and a full screen black quad standing over the menu while
+ * TitleOptions zeroes the input. The parity it depends on is why the first
+ * title of a session would be unaffected.
  *
  * Both halves of the fix are asserted: the rule (a classic-cadence frame is
  * never a tween frame, whatever the accumulator holds) and the clearing
@@ -978,8 +974,8 @@ static void title_cadence()
 
 		for (int i = 0; i < 300; i++)
 		{
-			/* the rule as order 2 wrote it, and the rule with fix round R's
-			 * test for a frame that is not a sixty hertz one */
+			/* the plain framecount-parity rule, and the rule with a test added
+			 * for a frame that is not a sixty hertz one */
 			const float alphaOld = framecount < 0 ? 0.5F : 1.0F;
 			const float alphaNew = 1.0F;		// GameFrameMinTicks() >= 2
 
@@ -1005,8 +1001,8 @@ static void title_cadence()
 			framecount, start);
 	}
 
-	/* AND WHAT DoTitle NOW DOES ABOUT IT. Clearing the accumulator on the way
-	 * in makes the parity even whatever the level left behind, which is the
+	/* And what DoTitle does about it: clearing the accumulator on the way in
+	 * makes the parity even whatever the level left behind, which is the
 	 * belt to the rule's braces. */
 	{
 		long framecount = 0;			// game\gameflow.cpp, DoTitle
@@ -1027,16 +1023,14 @@ static void title_cadence()
 
 /* -------------------------------------------------------- the counters -- */
 
-/* ORDER 3, and the whole of its claim in one table.
- *
- * Every counter in the build that used to step once per DRAWN frame now asks
+/* Every counter in the build that used to step once per drawn frame now asks
  * InterpIsTweenFrame() first, and the engine's rule for that is exactly
  *
  *     tween = (alpha < 1), and alpha = fps_mode && framecount < 0 ? 0.5 : 1
  *
  * latched once per frame at the top of DrawPhaseGame (game\interpolate.cpp).
- * What has to come out of it is that a whole simulated SECOND of wall-clock
- * time produces the SAME number of steps at thirty and at sixty - because a
+ * What has to come out of it is that a whole simulated second of wall-clock
+ * time produces the same number of steps at thirty and at sixty - because a
  * fade that takes 24 frames at thirty has to take 24 steps and 48 frames at
  * sixty, or the death screen would come half a second early.
  *
@@ -1144,7 +1138,7 @@ static void counters()
 		"the screen fade spans the same nine ticks - 2n-1 presents at sixty",
 		r[1].fadePresents, 2 * r[0].fadePresents - 1);
 
-	/* AND THE SAME AGAIN THROUGH A HITCH. A frame that took four ticks feeds
+	/* And the same again through a hitch: a frame that took four ticks feeds
 	 * four into the accumulator, which then runs two logic steps in one
 	 * ControlPhase and comes back to the cadence. A counter must not lose a
 	 * step over that: the number of guarded steps in the run has to be the
@@ -1166,7 +1160,7 @@ static void counters()
 				ticks++;
 		}
 
-		/* NOT EQUAL, and this is the one honest limit of the rule. Each of
+		/* Not equal, and this is the one honest limit of the rule. Each of
 		 * the two slow frames here fed four sixtieths into the accumulator
 		 * and therefore ran TWO logic ticks, while a counter that steps once
 		 * per drawn frame can only step once for it. So the counter ends two
@@ -1209,37 +1203,39 @@ static void counters()
 
 /* ---------------------------------------------------------------- the pose --
  *
- * ORDER 4 HAS TWO CLAIMS AND THIS IS WHERE BOTH ARE SETTLED.
+ * The single-factor pose blend has two claims, and this is where both are
+ * settled.
  *
- * CLAIM ONE: replacing four hard-wired branches with one float factor does
+ * Claim one: replacing four hard-wired branches with one float factor does
  * not change a single drawn frame at thirty hertz. The branches were
  * `IM_rate == 2 || (IM_frac == 2 && IM_rate == 4)` -> a half, `IM_frac == 1`
  * -> a quarter, otherwise three quarters, written out twelve times each in
  * four functions; they are transcribed here as the reference and the engine's
  * own header is asked for the same numbers. Both matrix stacks are checked,
  * because they round differently on purpose: the float stack keeps vanilla's
- * three EXPRESSIONS (a rearrangement of them would differ in the last bit)
- * and the integer stack keeps vanilla's SHIFTS (which floor, where a cast
+ * three expressions (a rearrangement of them would differ in the last bit)
+ * and the integer stack keeps vanilla's shifts (which floor, where a cast
  * would truncate - the two differ on every negative odd number).
  *
- * CLAIM TWO: the pose drawn between two logic ticks is the MIDPOINT of the
+ * Claim two: the pose drawn between two logic ticks is the midpoint of the
  * two poses the game draws at thirty, and never anything else. What is
  * asserted for that is monotonicity - `key + blend` may never go backwards
  * over a whole animation walked at sixty - and identity at the tick frames,
  * where it must be vanilla's own factor to the bit.
  *
- * WHICH (frac, rate) PAIRS ARE REAL. Measured 2026-09-07 by walking the
- * animation tables of all sixteen level files of the retail game: rates 1, 2,
- * 3, 4, 5, 6, 9 and 10 all occur (3619, 3350, 35, 5399, 3187, 2, 2 and 120
+ * Which (frac, rate) pairs are real: measured by walking the animation
+ * tables of all sixteen level files of the retail game. Rates 1, 2, 3, 4, 5,
+ * 6, 9 and 10 all occur (3619, 3350, 35, 5399, 3187, 2, 2 and 120
  * animations), and GetFrames can shorten any of them at an animation's last
  * interval. The counts are in the table below. They are the reason vanilla's
- * classification is KEPT rather than replaced by frac/rate: at rate 5 the two
+ * classification is kept rather than replaced by frac/rate: at rate 5 the two
  * disagree wildly - vanilla draws frames 1..4 of a five frame interval at
  * .25, .75, .75, .75 - and a third of every animation in TR5 would move
  * differently from the day it shipped. */
 
 /* Vanilla's own factor, transcribed from the branches of game\draw.cpp as
- * they stood before order 4. This is the reference, not the thing tested. */
+ * they stood before the single-factor form. This is the reference, not the
+ * thing tested. */
 static float vanilla_alpha(long frac, long rate)
 {
 	if (rate == 2 || (frac == 2 && rate == 4))
@@ -1380,7 +1376,7 @@ static void pose_factor()
 
 	ok(wider == 0, "every (frac, rate) up to 32: identical to the branches", wider, 0);
 
-	/* THE ARM MATRIX WROTE ITS HALF DIFFERENTLY. InterpolateArmMatrix's
+	/* The arm matrix wrote its half differently: InterpolateArmMatrix's
 	 * half branch is `(a + b) >> 1` where InterpolateMatrix's is
 	 * `a + ((b - a) >> 1)`, and the one loop now serves both, so the two have
 	 * to be the same expression for every pair of values - which they are,
@@ -1515,7 +1511,7 @@ static void pose_time()
 			"K6: an animation with no rate is not blended", 0, 0);
 	}
 
-	/* THE LAST INTERVAL OF AN ANIMATION IS SHORTER, and GetFrames says so by
+	/* The last interval of an animation is shorter, and GetFrames says so by
 	 * shortening the rate. The midpoint has to follow it rather than the
 	 * animation's nominal rate, or the pose would slow down at the end of
 	 * every animation in the game. */
@@ -1533,7 +1529,7 @@ static void pose_time()
 		okf(fabs(blend - 0.25) < 1e-6, "the shortened interval's midpoint", blend, 0.25);
 	}
 
-	/* THE BLEND IS ALWAYS INSIDE THE PAIR. A factor outside 0..1 would draw a
+	/* The blend is always inside the pair: a factor outside 0..1 would draw a
 	 * pose the animation never contains - an arm past its own extreme. Swept
 	 * over every rate and every frame of a long animation. */
 	{
@@ -1555,11 +1551,11 @@ static void pose_time()
 		ok(outside == 0, "the midpoint never leaves the key frame pair", outside, 0);
 	}
 
-	/* AND AT fps_mode 0 THERE IS NO MIDPOINT AT ALL. The engine's gate is
-	 * InterpPoseTime, which returns 0 unless the snapshot was applied - and
-	 * it is applied on no frame at all at thirty hertz (order 2's own proof).
-	 * With t = 0 the arithmetic itself also collapses onto the previous
-	 * tick's own pose, which is the belt to that braces. */
+	/* And at fps_mode 0 there is no midpoint at all: the engine's gate is
+	 * InterpPoseTime, which returns 0 unless the snapshot was applied, and
+	 * it is applied on no frame at all at thirty hertz. With t = 0 the
+	 * arithmetic itself also collapses onto the previous tick's own pose,
+	 * which is the belt to that braces. */
 	{
 		long key = 0;
 		float blend = 1.0F;
@@ -1572,7 +1568,8 @@ static void pose_time()
 
 /* ------------------------------------------- the display-bound cadence -- */
 
-/* ORDER 6, AND THE ONE THING ABOUT IT THAT CANNOT BE SEEN IN THE CODE.
+/* The blend factor bound to the display's own rate, and the one thing about
+ * it that cannot be seen in the code.
  *
  * At fps_mode 1 the frames land on the ticks and the blend factor is a parity
  * bit: half when the last ControlPhase ran a tick, one when it did not. Bind
@@ -1580,32 +1577,31 @@ static void pose_time()
  * at 144 Hz the frames come every 0.4167 ticks - so the factor comes out of
  * the clock, as `(framecount + subTick + 1) / 2`.
  *
- * What has to be true of that, and what a play test cannot show:
+ * What has to be true of that, and what cannot be judged by eye:
  *
- *   1. THE LOGIC IS STILL THIRTY. Ten simulated seconds must run 300 logic
+ *   1. the logic is still thirty. Ten simulated seconds must run 300 logic
  *      steps at 60, at 120 and at 144 Hz alike, and the frames must number
  *      600, 1200 and 1440.
- *   2. THE FACTOR NEVER LEAVES [0,1). Not "is clamped into it" - never
+ *   2. the factor never leaves [0,1) - not "is clamped into it", never
  *      leaves it. A clamp means the frame asked for a state the logic has
  *      not computed, and the picture stands still for that frame; one per
  *      logic step is a stutter at 30 Hz on top of a 144 Hz picture.
- *   3. WHAT IS DRAWN ADVANCES WITH THE WALL CLOCK, exactly. The content of
+ *   3. what is drawn advances with the wall clock, exactly. The content of
  *      frame i is `2(k-1) + 2 * alpha` in tick units, and the difference
  *      between that and the real time the frame was drawn at has to be a
- *      CONSTANT - the same constant on every frame of the run. Anything else
+ *      constant - the same constant on every frame of the run. Anything else
  *      is drift, and drift is what a fixed-step renderer bound to a free
  *      clock gets wrong.
- *   4. AT 60 Hz IT IS THE SIXTY HERTZ CADENCE AGAIN, alternating half a step
+ *   4. at 60 Hz it is the sixty hertz cadence again, alternating half a step
  *      per frame, which is what says the mode is not a different animation
  *      speed but the same one sampled more often.
  *
- * THE MODEL IS THE ENGINE'S LOOP, not an idealisation of it: the frame is
- * drawn, the flip waits for the panel, the clock is read AFTER the flip
- * (specific\output.cpp, S_DumpScreen - see the long note there for why it
- * has to be after), and ControlPhase is handed the whole ticks that came
- * back. The vblanks are put on their own grid at their own phase so that the
- * two clocks are genuinely independent, the way a 144 Hz panel and a 1/60 s
- * counter are. */
+ * The model is the engine's loop, not an idealisation of it: the frame is
+ * drawn, the flip waits for the panel, the clock is read after the flip
+ * (specific\output.cpp, S_DumpScreen), and ControlPhase is handed the whole
+ * ticks that came back. The vblanks are put on their own grid at their own
+ * phase so that the two clocks are genuinely independent, the way a 144 Hz
+ * panel and a 1/60 s counter are. */
 static void refresh()
 {
 	printf("display-bound cadence\n");
@@ -1642,8 +1638,8 @@ static void refresh()
 			const double subTick = now - (double)S;
 			const float alpha = InterpRefreshAlpha(framecount, subTick);
 
-			/* ORDER 3'S CRITERION AT A RATE THAT DOES NOT DIVIDE (order 6).
-			 * `alpha < 1` said "no tick on this frame" while the cadence was
+			/* The guarded-counter criterion at a rate that does not divide:
+			 * `alpha < 1` says "no tick on this frame" while the cadence is
 			 * two frames to a tick; here it would be true on nearly every
 			 * frame and every counter in the build would stand still. So the
 			 * ticks are counted and the frame that finds a new one claims
@@ -1717,7 +1713,7 @@ static void refresh()
 			offsetMax - offsetMin, 0.0);
 	}
 
-	/* AND AT SIXTY IT IS THE SIXTY HERTZ CADENCE. One tick of content per
+	/* And at sixty it is the sixty hertz cadence again: one tick of content per
 	 * frame - the same step fps_mode 1 draws - so the mode is the same motion
 	 * sampled at the panel's rate and not a different speed. */
 	{
@@ -1763,7 +1759,7 @@ static void refresh()
 			worst, 0.0);
 	}
 
-	/* A HITCH, and the clamp is what it is FOR. One frame takes 200 ms - the
+	/* A hitch, and the clamp is what it is for: one frame takes 200 ms - the
 	 * panel misses twenty-eight of its slots at 144 Hz - so the factor asks
 	 * for a state six logic steps ahead of the newest one there is. It is
 	 * given the newest instead, which is what thirty hertz shows on a slow
@@ -1807,20 +1803,17 @@ static void refresh()
 			}
 		}
 
-		/* THE INVARIANT, not a hand-counted total: every tick that was fed
+		/* The invariant, not a hand-counted total: every tick that was fed
 		 * to the accumulator was either spent on a logic step or is still
 		 * standing in it. Two steps of the priming ControlPhase(2) go in on
-		 * the left, and what the loop left behind comes off on the right.
-		 *
-		 * Written this way it says what it is for - no game time is lost
-		 * because a frame took long to draw, and none is invented either -
-		 * and it says it for whatever numbers the model happens to produce.
-		 */
+		 * the left, and what the loop left behind comes off on the right -
+		 * so no game time is lost because a frame took long to draw, and
+		 * none is invented either, whatever numbers the model produces. */
 		ok(2 * k == credited + 2 - framecount,
 			"a 200 ms hitch is caught up: no logic tick lost, none invented",
 			2 * k, (int)(credited + 2 - framecount));
 
-		/* And the ONE place a tick really does go missing is vanilla's own
+		/* And the one place a tick really does go missing is vanilla's own
 		 * `if (nframes > 10) nframes = 10` (game\control.cpp), which is what
 		 * stops a five-second stall from running the game forward for five
 		 * seconds when it comes back. The hitch fed twelve. */
@@ -1833,44 +1826,43 @@ static void refresh()
 
 /* ------------------------------------------------------------ particles -- */
 
-/* ORDER 5 (#148), AND ITS ONE CLAIM: a particle drawn from its own velocity
- * stands on EXACTLY the same time axis as a body drawn from the snapshot.
+/* The particle trail's one claim: a particle drawn from its own velocity
+ * stands on exactly the same time axis as a body drawn from the snapshot.
  *
- * The bodies of order 2 are drawn at `prev + (cur - prev) * alpha`, i.e. the
- * world at (tick - 1) + alpha. A particle has no `prev` - there are a thousand
- * sparks and two thousand raindrops and nobody is going to store two states
- * for each of them - but it has the thing the store would have held: every
- * particle simulation in this engine settles its velocity FIRST and steps its
- * position by it SECOND, so
+ * A body is drawn at `prev + (cur - prev) * alpha`, i.e. the world at
+ * (tick - 1) + alpha. A particle has no `prev` - there are a thousand sparks
+ * and two thousand raindrops and nobody is going to store two states for
+ * each of them - but it has the thing the store would have held: every
+ * particle simulation in this engine settles its velocity first and steps
+ * its position by it second, so
  *
  *     prev = cur - step
  *
  * is exact rather than approximate, and the engine draws
  * `InterpTrailLong(cur, step, alpha)`.
  *
- * WHAT COULD GO WRONG SILENTLY, and is therefore what is checked here:
+ * What could go wrong silently, and is therefore what is checked here:
  *
- *   1. THE SIGN. `cur + vel * alpha` - the obvious reading of "move it along
- *      a bit" - would run the particle a whole logic step AHEAD of everything
+ *   1. the sign. `cur + vel * alpha` - the obvious reading of "move it along
+ *      a bit" - would run the particle a whole logic step ahead of everything
  *      around it. Sparks would lead the gun that fired them. In a picture it
  *      looks like nothing at all; it looks like the game.
- *   2. THE ROUNDING. `cur - step * (1 - alpha)` is the same algebra and NOT
+ *   2. the rounding. `cur - step * (1 - alpha)` is the same algebra and not
  *      the same integer: a C cast truncates towards zero, so on odd steps the
  *      two forms differ by one unit and the particles would sit beside where
  *      the item machinery would have put them. Checked over every step a TR5
  *      particle can carry, and the count of what the wrong form would have
  *      got wrong is printed beside it.
- *   3. THE CADENCE. At fps_mode 2 the factor comes from a clock, reaches 0 on
+ *   3. the cadence. At fps_mode 2 the factor comes from a clock, reaches 0 on
  *      the frame after a tick and 1 where the next one is due, and the drawn
  *      particle must walk from prev to cur without ever leaving that interval
  *      or stepping backwards.
  *
  * Dead particles staying dead needs no arithmetic and gets none: every draw
  * site's `if (!On) continue;` is vanilla's and was not touched, and the
- * simulation that clears `On` runs on the tick (order 3). What IS modelled
- * below is the other half of that - a particle that was BORN on the last tick
- * is drawn between its birthplace and where the tick left it, never before
- * it. */
+ * simulation that clears `On` runs on the tick. What is modelled below is the
+ * other half of that - a particle that was born on the last tick is drawn
+ * between its birthplace and where the tick left it, never before it. */
 static void particles()
 {
 	printf("particles - the trail, and the axis it shares with the bodies\n");
@@ -1938,8 +1930,8 @@ static void particles()
 		for (int i = 0; i < 60; i++)
 		{
 			const float alpha = framecount < 0 ? 0.5F : 1.0F;
-			const long item = InterpLerpLong(prev, pos, alpha);	// order 2
-			const long part = InterpTrailLong(pos, step, alpha);	// order 5
+			const long item = InterpLerpLong(prev, pos, alpha);	// the snapshot form
+			const long part = InterpTrailLong(pos, step, alpha);	// the trail form
 
 			frames++;
 
@@ -1983,7 +1975,7 @@ static void particles()
 		ok(backwards == 0, "60 Hz: the fall never steps back up", backwards, 0);
 	}
 
-	/* 3. THE PANEL'S OWN RATE (order 6). The same particle at 144 Hz, with the
+	/* 3. The panel's own rate: the same particle at 144 Hz, with the
 	 * factor coming from the clock through InterpRefreshAlpha and the flip
 	 * paced by the display - the model of refresh() above, with a particle in
 	 * it. What is new here and not in the sixty hertz run is that alpha
@@ -2114,18 +2106,18 @@ static void particles()
 
 /* ------------------------------------------- the portal walk and the eye -- */
 
-/* THE ROOM OF THE INTERPOLATED EYE (#123, fix round T2, T2-1).
+/* The room the interpolated eye stands in.
  *
- * WHAT IS BEING PROVEN. On an in-between frame the eye is blended and the
+ * What is being proven: on an in-between frame the eye is blended and the
  * view matrix is rebuilt from it, while the portal walk of game\draw.cpp is
- * seeded with the LOGIC camera's room. Where the eye has crossed a portal
+ * seeded with the logic camera's room. Where the eye has crossed a portal
  * plane between two ticks, two pieces of arithmetic in GetRoomBounds /
  * SetRoomBounds throw the room behind that portal away for that one frame.
  *
  * The walk itself cannot be linked here - it reads room[], the matrix stack
  * and a dozen file-static globals of draw.cpp - so what is checked is the
- * ARITHMETIC of the two tests, copied line for line from the engine and run
- * on ANDREA1's OWN portal records, read out of the shipped level with
+ * arithmetic of the two tests, copied line for line from the engine and run
+ * on ANDREA1's own portal records, read out of the shipped level with
  * `TrgProbe -roomspace -room 2` and `-room 57`:
  *
  *   room 2  origin 45056 / 0 / 33792, portal -> room 57, normal -1/0/0,
@@ -2133,9 +2125,9 @@ static void particles()
  *   room 57 origin 47104 / 0 / 36864, portal -> room  2, normal  1/0/0,
  *           first corner (1023,   256, 1024) room local = world x 48127
  *
- * That wall at world x 48128 is the corner of the Piazza dell'Opera the play
- * test photographed. The camera walks east across it between two logic ticks;
- * the eye at the halfway point stands 72 units past it. */
+ * That wall at world x 48128 is the corner of the Piazza dell'Opera where a
+ * camera walking east across it between two logic ticks leaves the eye, at
+ * the halfway point, 72 units past it. */
 static bool portal_followed(long cornerWorld, long eyeWorld, long normal)
 {
 	/* game\draw.cpp, GetRoomBounds:
@@ -2172,20 +2164,20 @@ static int too_near(const long corner[4][3], const long eye[3], const double fwd
 }
 
 
-/* --------------------------------------------------- the reach (T4) ------ */
+/* -------------------------------------------------------- the reach ------ */
 
-/* THE SECOND RECTANGLE OF THE PORTAL WALK (#123, fix round T4).
+/* The second rectangle of the portal walk.
  *
- * WHAT IS BEING PROVEN. SetRoomBounds clips a child portal against the window
- * of the room it is seen through, and drops it when nothing is left. Where
- * the remaster has torn a wall open, the room behind that wall is seen far
- * wider than the classic doorway allows, and the child portal falls outside
- * the parent's window - so the room behind it is not drawn and the player
- * sees the clear colour through the hole.
+ * What is being proven: SetRoomBounds clips a child portal against the
+ * window of the room it is seen through, and drops it when nothing is left.
+ * Where an HD remaster has torn a wall open, the room behind that wall is
+ * seen far wider than the classic doorway allows, and the child portal falls
+ * outside the parent's window - so the room behind it is not drawn and the
+ * player sees the clear colour through the hole.
  *
- * THE NUMBERS ARE JOBY2'S OWN, off the play test's own eye. RoomProbe -walk,
- * seeded in room 114 at 40024/-3408/24107, yaw 335, pitch -10, 1280x720 -
- * the eye of the ROOMLIST dumps in the log of 2026-09-08:
+ * The numbers are measured off an eye in JOBY2's own geometry. RoomProbe
+ * -walk, seeded in room 114 at 40024/-3408/24107, yaw 335, pitch -10,
+ * 1280x720, dumps this from the room list:
  *
  *   room 124's window, through the classic doorway of room 123   0,0..535,719
  *   the portal 124 -> 99, its own projection on the screen     542,116..754,389
@@ -2195,8 +2187,8 @@ static int too_near(const long corner[4][3], const long eye[3], const double fwd
  * a float and 535 as the short it is kept in, and the child is clamped
  * against the short.)
  *
- * That last one has NO WIDTH, which is the `empty` of the walk and the black
- * hole of the play test: room 99's doorway begins six pixels to the right of
+ * That last one has no width, which is the `empty` of the walk and the black
+ * hole in the picture: room 99's doorway begins six pixels to the right of
  * where room 124's own window ends.
  *
  * The rectangle arithmetic of both rules is copied from game\draw.cpp here
@@ -2246,7 +2238,7 @@ static T4Rect t4_reach(const T4Rect& raw, float w, float h)
 	return q;
 }
 
-/* AND WHY THE REACH IS A SEEN-MARK. A ring of rooms whose portals all face
+/* And why the reach needs a seen-mark: a ring of rooms whose portals all face
  * the eye can be walked round for ever once the parent stops shrinking the
  * child's rectangle: each lap widens some room's classic window by a pixel
  * and earns another queue entry. This is that ring, four rooms round, with
@@ -2298,10 +2290,10 @@ static void reach_rect()
 		"212 by 273 pixels of room 99 that the classic walk does not draw",
 		(long)(reach.r - reach.l), 212);
 
-	/* THE INVARIANT THE WHOLE ROUND RESTS ON: the classic rectangle is
+	/* The invariant the whole approach rests on: the classic rectangle is
 	 * inside the reach's, always - it is the same projection with one more
 	 * clamp on it. So a portal the reach refuses is a portal the classic
-	 * rule refuses too, and switching the reach on can only ADD rooms. */
+	 * rule refuses too, and switching the reach on can only add rooms. */
 	{
 		int inside = 0, tried = 0;
 		unsigned seed = 12345;
@@ -2344,12 +2336,11 @@ static void reach_rect()
 			"2,000 random pairs", inside, tried);
 	}
 
-	/* THE RING, AND WHY THE MARK IS THE BRAKE. Measured in the tool before
-	 * it was written this way: with a second rectangle to widen instead of a
-	 * mark, ANDREA3's worst frame took over 20,000 dequeues against the
-	 * classic walk's 33, and ANDY2 and ANDREA3 ran RoomProbe out of memory.
-	 * With the mark the same survey's worst frame over the whole game is 319
-	 * (JOBY4). */
+	/* The ring, and why the seen-mark is the brake: with a second rectangle
+	 * to widen instead of a mark, ANDREA3's worst frame takes over 20,000
+	 * dequeues against the classic walk's 33, and ANDY2 and ANDREA3 run
+	 * RoomProbe out of memory. With the mark the same survey's worst frame
+	 * over the whole game is 319 (JOBY4). */
 	{
 		const long marked = t4_ring_walk(4, 500, true);
 		const long loose = t4_ring_walk(4, 500, false);
@@ -2360,13 +2351,13 @@ static void reach_rect()
 	}
 }
 
-/* ------------------------------------- the two capacities (T5) ----------- */
+/* ----------------------------------------- the two capacities ----------- */
 
-/* THE ARRAYS OF THE WALK, AND WHY NO LEVEL CAN FILL THEM (#123, fix round T5).
+/* The arrays of the portal walk, and why no level can fill them.
  *
- * These two mirror game\draw.cpp and have to be kept in step with it by hand -
- * that is what this section is here to make loud. What it proves is not that
- * the numbers are large; it is the ARITHMETIC that makes them enough:
+ * These two mirror game\draw.cpp and have to be kept in step with it by hand.
+ * What it proves is not that the numbers are large; it is the arithmetic
+ * that makes them enough:
  *
  *   1. the ring's size is a power of two, because the engine wraps with a
  *      mask (`room_list_end & (kRoomListRing - 1)`) on both the write side
@@ -2383,7 +2374,7 @@ static void reach_rect()
  *      capacity has only to be the room maximum. */
 static const long kT5DrawRoomsMax = 256;	// game\draw.cpp, draw_rooms
 static const long kT5RoomListRing = 512;	// game\draw.cpp, draw_room_list
-static const long kT5RoomMax = 256;		// game\setup.cpp:2418
+static const long kT5RoomMax = 256;		// game\setup.cpp, BuildOutsideTable's own bound
 
 /* The engine's queue, run on a level of `rooms` rooms in which every room has
  * a portal to every other. Returns the deepest the queue ever got, or -1 if
@@ -2480,9 +2471,9 @@ static void walk_capacity()
 		"draw_rooms holds every room a level may have", kT5DrawRoomsMax,
 		kT5RoomMax);
 
-	/* THE WORST GRAPH THERE IS, walked. 256 rooms all joined to all is not a
+	/* The worst graph there is, walked. 256 rooms all joined to all is not a
 	 * level anybody could build, and that is the point: if the queue cannot
-	 * pass the room count HERE it cannot pass it anywhere. */
+	 * pass the room count here it cannot pass it anywhere. */
 	{
 		long entries = 0;
 		const long deepest = t5_queue_depth(kT5RoomMax, kT5RoomListRing,
@@ -2498,9 +2489,9 @@ static void walk_capacity()
 			"room, no more", entries, kT5DrawRoomsMax);
 	}
 
-	/* AND THE COUNTER-CASE, so that the check above is not a tautology: a
-	 * ring of 128 - what the engine had before T5 - IS overrun by the same
-	 * level, and the guard is what catches it. */
+	/* And the counter-case, so that the check above is not a tautology: a
+	 * ring of 128 - what the engine had before this capacity was raised - is
+	 * overrun by the same level, and the guard is what catches it. */
 	{
 		long entries = 0;
 
@@ -2536,22 +2527,22 @@ static void portal_walk()
 	ok(portal_followed(wall, tickB, -1) == false,
 		"tick B (x 48400, room 57): room 2's portal is behind the eye", 0, 0);
 
-	/* AND THIS IS THE BUG. The tween frame draws from room 2 - the logic
+	/* And this is the fault: the tween frame draws from room 2 - the logic
 	 * camera has not stepped yet - with the eye already 72 units east of the
 	 * wall, and the sign test refuses the portal. Room 57, and everything the
 	 * walk would have reached through it, is missing for that one frame. */
 	ok(portal_followed(wall, eye, -1) == false,
 		"the tween frame seeded with room 2 DROPS the portal to 57", 0, 0);
 
-	/* WITH THE EYE'S OWN ROOM AS THE SEED the same frame keeps both rooms:
+	/* With the eye's own room as the seed the same frame keeps both rooms:
 	 * from room 57 the portal back to room 2 faces the camera, so the walk
 	 * reaches 2 as well and the picture is whole. */
 	ok(portal_followed(back, eye, 1) == true,
 		"seeded with room 57 the portal back to room 2 IS followed", 1, 1);
 
-	/* THE SECOND WAY THE SAME FRAME LOSES THE ROOM. Even where the sign test
+	/* The second way the same frame loses the room: even where the sign test
 	 * passes, SetRoomBounds drops a portal whose four corners all fall behind
-	 * the eye. The portal quad is the record's own, in room 2's frame:
+	 * the eye. The portal quad is the level file's own, in room 2's frame:
 	 * (3072,-1792,4096) (3072,256,4096) (3072,256,5120) (3072,-1792,5120)
 	 * plus the room origin 45056/0/33792. */
 	const long quad[4][3] =
@@ -2577,7 +2568,7 @@ static void portal_walk()
 		"one that fires there",
 		too_near(quad, eyeOut, west), 0);
 
-	/* THE WHOLE INTERVAL, and where in it the answer changes. The eye walks
+	/* The whole interval, and where in it the answer changes: the eye walks
 	 * from tick A to tick B; the portal is followed while it is west of the
 	 * wall and refused after it. At fps_mode 0 there is no point in between
 	 * to ask about, which is the player's first control - the flash is gone
@@ -2607,7 +2598,7 @@ static void portal_walk()
 			wall, refused);
 	}
 
-	/* THE SAME PAIR THE OTHER WAY. Walking west, the logic room is 57 while
+	/* The same pair the other way: walking west, the logic room is 57 while
 	 * the eye is already back in room 2, and it is room 57's own portal that
 	 * is refused - the flash is symmetric and neither room is special. */
 	{
@@ -2627,19 +2618,18 @@ static void portal_walk()
 
 /* ------------------------------------------------------------ the ring -- */
 
-/* ROUND 154 - THE INVENTORY RING AT THE FRAME RATE, AND ITS LOGIC AT THIRTY.
+/* The inventory ring at the frame rate, and its logic at thirty.
  *
  * The ring is a modal loop that never reaches ControlPhase, so it keeps an
  * accumulator of its own - InterpRingStep - and works its blend factor out of
  * it with InterpRingAlpha. Both live in the engine's own header, so what runs
  * below is the engine's arithmetic and not a transcription of it.
  *
- * WHAT THIS SECTION IS REALLY FOR. The order of the ring's loop is the other
- * way round from the game's: the game DRAWS and then ticks, the ring STEPS and
- * then draws. The design note handed down for the round said the in-between
- * frame should carry the blend, as it does in the game - and run that way
- * round, the picture walks BACKWARDS on every second frame. That is not
- * something a play test can be asked to judge, because 8.3 ms of backwards
+ * Why this section exists: the order of the ring's loop is the other way
+ * round from the game's - the game draws and then ticks, the ring steps and
+ * then draws. Carrying the blend on the in-between frame the way the game
+ * does, run in that order, walks the picture backwards on every second frame
+ * - not something that can be judged by eye, because 8.3 ms of backwards
  * spin looks exactly like a rendering glitch. So both arrangements are run
  * here on the same simulated ring, and the one that is even and monotone is
  * the one the engine implements. */
@@ -2698,7 +2688,7 @@ static void ring_cadence()
 			frames, steps, tween);
 	}
 
-	/* ---- the accumulator at 165 Hz, the user's own panel ----
+	/* ---- the accumulator at 165 Hz, an off-integer refresh rate ----
 	 *
 	 * The frames are paced by the display and the whole ticks come back from
 	 * Sync() on their own grid, so the returned counts are 0 and 1 in the
@@ -2944,7 +2934,7 @@ static void ring_cadence()
 					? InterpRingSlide(gen[1], gen[0], jumped, alpha)
 					: move;
 
-				/* THE PAIR. The slot the row is laid out from has to belong to
+				/* The pair: the slot the row is laid out from has to belong to
 				 * the same generation the offset came from - the reset moves
 				 * both in one breath, and a frame that took the new slot with
 				 * the old offset put the whole row seven eighths of a slot to
@@ -3042,33 +3032,30 @@ static void ring_cadence()
 
 /* ----------------------------------------------------- the title shadow -- */
 
-/* ROUND 154 - ONE TAP, ONE ROW.
+/* The title's input shadow: one tap moves one row.
  *
- * Order 1b's finding, as arithmetic. TitleOptions is called once per PRESENT
- * and reads dbinput, which ControlPhase writes once per TICK - and the write
- * is TWO statements in specific\input.cpp with the frame's own input read
- * between them:
+ * TitleOptions is called once per present and reads dbinput, which
+ * S_UpdateInput (specific\input.cpp) writes once per tick, in two statements
+ * with the frame's own input read between them:
  *
- *     if (debounce) dbinput = inputBusy;                    // :821, the
- *                                                           // PREVIOUS frame's
- *     inputBusy = linput;                                   // :869, this one's
- *     if (debounce) dbinput = inputBusy & (dbinput ^ inputBusy);   // :881
+ *     if (debounce) dbinput = inputBusy;              // the previous frame's
+ *     inputBusy = linput;                              // this one's
+ *     if (debounce) dbinput = inputBusy & (dbinput ^ inputBusy);
  *
- * so what comes out is the RISING EDGE against the previous frame's input, and
- * dbinput's own incoming value is overwritten by the first line before the
- * second ever reads it. A held key is one edge and then nothing. At two ticks
- * a present that edge is read exactly once. At one, every second ControlPhase
- * runs no tick, dbinput keeps standing, and the next call reads the same edge
- * a second time: one tap of Down moves two rows.
+ * so what comes out is the rising edge against the previous frame's input,
+ * and dbinput's own incoming value is overwritten by the first line before
+ * the second ever reads it. A held key is one edge and then nothing. At two
+ * ticks a present that edge is read exactly once. At one, every second
+ * ControlPhase runs no tick, dbinput keeps standing, and the next call reads
+ * the same edge a second time: one tap of Down moves two rows.
  *
- * WHICH CORRECTS THE RULE THIS ROUND WAS BRIEFED WITH. The brief said
- * dbinput's previous value is part of the next tick's answer, so that zeroing
- * it between ticks would make a held key a fresh press every tick. Measured
- * against the source, it is not: line 821 discards it. The shadow is still
- * restored, and for a reason the code really has - SetDebounce is cleared
- * inside the first tick of a ControlPhase call (game\control.cpp:314), so a
- * call that runs SEVERAL ticks rewrites dbinput on the first of them only, and
- * a zero left behind would then stand through the rest of the hitch. Both
+ * dbinput's previous value is not part of the next tick's answer - the first
+ * statement above discards it - so zeroing it between ticks and restoring it
+ * afterwards changes nothing about a held key's own edge. The restore still
+ * matters for a different reason: SetDebounce is cleared inside the first
+ * tick of a ControlPhase call (game\control.cpp, ControlPhase), so a call
+ * that runs several ticks rewrites dbinput on the first of them only, and a
+ * zero left behind would then stand through the rest of the hitch. Both
  * halves are asserted below.
  */
 static void title_shadow()
@@ -3102,7 +3089,7 @@ static void title_shadow()
 			const bool shadow = repeat && mode != 0;
 			const long before = dbinput;
 
-			// what the unshadowed build - order 1b's bug - would have acted on
+			// what an unshadowed build would have acted on
 			if (dbinput & DOWN)
 				actedRaw++;
 
@@ -3163,7 +3150,7 @@ static void title_shadow()
 		ok(restored == 40, "on all forty of them", restored, 40);
 	}
 
-	/* AND THE HELD KEY STAYS HELD. The whole reason the shadow is a shadow: a
+	/* And the held key stays held - the whole reason the shadow is a shadow: a
 	 * dbinput zeroed for good would put the edge back on every single tick,
 	 * because the formula reads its own previous value. */
 	{
@@ -3187,7 +3174,7 @@ static void title_shadow()
 		ok(edges == 1, "a held key is one edge and then nothing", edges, 1);
 	}
 
-	/* AND WHAT THE RESTORE REALLY BUYS. A ControlPhase that runs SEVERAL ticks
+	/* And what the restore really buys: a ControlPhase that runs several ticks
 	 * refreshes dbinput on the first of them only - SetDebounce is cleared
 	 * inside the tick body - so a zero left behind by an unrestored shadow
 	 * stands through the rest of that hitch and swallows the edge the first
@@ -3232,31 +3219,30 @@ static void title_shadow()
 	}
 }
 
-/* THE ROOT OFFSET ACROSS A HALF TURN (#169, round 161a3).
+/* The root offset across a half turn.
  *
- * The defect the user filmed, in numbers: on the tick the underwater roll
- * changes animation, turn180_effect fires on the very frame the change lands
- * on. ApplyNode (game\interpolate.cpp) then keeps the LIVE rotation for the
- * whole drawn frame - the half turn is a snap, fix round R - while
- * InterpRootNow blends the previous tick's ROOT OFFSET, which belongs to the
- * frame half a turn back, straight into this one. The blend walks through her
- * own pivot.
+ * The defect, in numbers: on the tick the underwater roll changes animation,
+ * turn180_effect fires on the very frame the change lands on. ApplyNode
+ * (game\interpolate.cpp) then keeps the live rotation for the whole drawn
+ * frame - a half turn is a snap, not a blend - while InterpRootNow blends the
+ * previous tick's root offset, which belongs to the frame half a turn back,
+ * straight into this one. The blend walks through her own pivot.
  *
- * THE FOUR NUMBERS ARE MEASURED and are not invented here:
+ * The numbers below are measured, not invented:
  *   - RootProbe over ANDREA1.TRC: animation 203's last frame 5330 carries
  *     (42,122,68); animation 205's frame 5423, the one the change lands on and
  *     the one FlipEffect 0 sits on, carries (-45,122,-67); and 205's own key 0
  *     (frame 5422, which the change skips) carries (42,122,68) again - the
  *     authors wrote the pre-flip offset and the post-flip offset as the same
  *     world point.
- *   - the user's log of 2026-09-20: drawn=(32,122,53), (17,122,29), (1,122,4),
- *     (-15,122,-20) on four in-between frames of one roll.
+ *   - one roll's own drawn offsets on four consecutive in-between frames:
+ *     (32,122,53), (17,122,29), (1,122,4), (-15,122,-20).
  *   - the ground roll's refused tick, from the same tool: offset_prev=
  *     (-14,-421,-7), offset_cur=(-8,-439,-7), and no flip on that tick - the
  *     effect fired one tick earlier, inside animation 48, where the frame
  *     steps by one and the pose is accepted.
  *
- * THE MEASURE. Both offsets are turned by the SAME rotation when they are
+ * The measure: both offsets are turned by the same rotation when they are
  * drawn - the live one - so the world error is the distance in the item's own
  * frame between the drawn offset and the segment the two ticks put it on, and
  * no rotation has to be built to check it. */
@@ -3290,7 +3276,7 @@ static void root_flip()
 {
 	printf("root offset across a half turn (#169)\n");
 
-	/* THE TWO SIGNS. Half a turn about y negates x and z and leaves y, and it
+	/* The two signs: half a turn about y negates x and z and leaves y, and it
 	 * is its own inverse - which is the one property the rule needs, because
 	 * the same function has to answer a flip either way round. */
 	{
@@ -3328,7 +3314,7 @@ static void root_flip()
 		ok(badBack == 0, "and is its own inverse", badBack, 0);
 	}
 
-	/* THE UNDERWATER ROLL, anim 203 frame 5330 -> anim 205 frame 5423. */
+	/* The underwater roll, anim 203 frame 5330 -> anim 205 frame 5423. */
 	{
 		const long prev[3] = { 42, 122, 68 };
 		const long cur[3] = { -45, 122, -67 };
@@ -3372,7 +3358,7 @@ static void root_flip()
 		okf(worstFixed <= 2.0, "turned first, it never leaves them by more than the truncation",
 			worstFixed, 2.0);
 
-		/* The four frames the user's log printed, against the same segment. */
+		/* One roll's own four measured frames, against the same segment. */
 		const long filmed[4][3] =
 		{
 			{ 32, 122, 53 }, { 17, 122, 29 }, { 1, 122, 4 }, { -15, 122, -20 }
@@ -3398,11 +3384,11 @@ static void root_flip()
 			filmedOut, 4);
 	}
 
-	/* AND A TICK WITHOUT A FLIP IS THE ARITHMETIC IT WAS. The ground roll's
-	 * refused tick is the worked example, and the sweep behind it is every
-	 * offset pair this file can think of: where the walk says no flip, the
-	 * engine hands InterpRootLerp the previous offset unchanged, so the two
-	 * lines below ARE the whole of the old rule. */
+	/* And a tick without a flip is the arithmetic it always was: the ground
+	 * roll's refused tick is the worked example, and the sweep behind it is
+	 * every offset pair this file can think of: where the walk says no flip,
+	 * the engine hands InterpRootLerp the previous offset unchanged, so the
+	 * two lines below are the whole of the plain rule. */
 	{
 		const long prev[3] = { -14, -421, -7 };
 		const long cur[3] = { -8, -439, -7 };
@@ -3430,7 +3416,7 @@ static void root_flip()
 			(long)(prev[0] * cur[0] > 0), 1);
 	}
 
-	/* THE PREDICATE IS ApplyNode'S OWN, so the engine cannot fire one rule
+	/* The predicate is ApplyNode's own, so the engine cannot fire one rule
 	 * without the other. Every half turn is a half turn either way round, and
 	 * nothing under a half turn is one. */
 	{
@@ -3459,16 +3445,16 @@ static void root_flip()
 	}
 }
 
-/* Round 157b: what a position step pays for, and nothing else. The engine's
- * own order is InterpRootFlip, then InterpRootKey, then InterpRootNarrow, then
+/* What a position step pays for, and nothing else. The engine's own order is
+ * InterpRootFlip, then InterpRootKey, then InterpRootNarrow, then
  * InterpRootLerp from the narrowed start offset - so every case below hands
- * InterpRootNarrow the offset the DRAW is in, and the last group proves that
+ * InterpRootNarrow the offset the draw is in, and the last group proves that
  * the order is not free. */
 static void root_narrow()
 {
 	printf("the root blends only what a position step pays for (#157, round 157b)\n");
 
-	/* THE LADDER, and it is the regression proof of the whole round: ANDREA1
+	/* The ladder, and it is the regression proof for the whole rule: ANDREA1
 	 * and JOBY5 both carry the wrap of anim 161 at these numbers, and the
 	 * TranslateItem that runs at it is (0,-512,0). 512 pays for 504, so the y
 	 * axis keeps its whole step and the start offset IS prev - which makes
@@ -3513,8 +3499,9 @@ static void root_narrow()
 		ok(movedXZ == 0, "and x and z never leave the frame's own offset", movedXZ, 0);
 	}
 
-	/* THE CRAWL, which is what the round is for: ANDREA1 anim 274 frame 6655
-	 * to anim 222 frame 5653, a y step of 61 units and item->pos does not move.
+	/* The crawl, which is the case this rule is for: ANDREA1 anim 274 frame
+	 * 6655 to anim 222 frame 5653, a y step of 61 units and item->pos does
+	 * not move.
 	 * Nothing is paid, the blend comes out at cur, and InterpRootNow's own
 	 * "blended == cur" exit then hands the draw nothing at all. */
 	{
@@ -3543,8 +3530,8 @@ static void root_narrow()
 		ok(moved == 0, "so the blend is cur at every alpha, and the rule stands down",
 			moved, 0);
 
-		/* And the picture it replaces, which is what the play test filmed: the
-		 * crouch pose drawn 30 units above the offset it was built for. */
+		/* And the picture it replaces: the old blend draws the crouch pose
+		 * 30 units above the offset it was built for. */
 		long today[3];
 
 		InterpRootLerp(prev, cur, 0.5F, today);
@@ -3553,7 +3540,7 @@ static void root_narrow()
 			cur[1] - today[1], 31);
 	}
 
-	/* A PARTIAL CASE, measured and not invented: ANDREA1's wrap of anim 174
+	/* A partial case, measured and not invented: ANDREA1's wrap of anim 174
 	 * into anim 102, whose TranslateItem is (-50,-512,0) against an offset step
 	 * of (+41,+514,+35). x is paid in full, y is two units short of its step,
 	 * and z is not paid at all - three verdicts on one transition. */
@@ -3580,8 +3567,8 @@ static void root_narrow()
 			"and z at its own 192 where today drags it to 174", narrow[2], 192);
 	}
 
-	/* THE INVARIANT, over a grid and not over an example: the start offset is
-	 * always between prev and cur INCLUSIVE, which is the whole of "never more
+	/* The invariant, over a grid and not over an example: the start offset is
+	 * always between prev and cur inclusive, which is the whole of "never more
 	 * than today and never in another direction"; a step that points the same
 	 * way as the offset step pays for nothing; and a step on one axis narrows
 	 * that axis alone. */
@@ -3630,7 +3617,7 @@ static void root_narrow()
 		ok(bled == 0, "a step on one axis narrows that axis and no other", bled, 0);
 	}
 
-	/* THE FLIP COMES FIRST (#169), and it is not a free choice. The underwater
+	/* The flip comes first, and it is not a free choice. The underwater
 	 * roll's own offsets: 203's last frame carries (42,122,68) and the frame
 	 * the change lands on carries (-45,122,-67), so the turned previous offset
 	 * is (-42,122,-68) and the step the narrowing weighs is -3 on x, not -87. */
@@ -3651,7 +3638,7 @@ static void root_narrow()
 			"taken in the old frame the same step pays for 4 of 87 and starts elsewhere",
 			wrong[0], cur[0] + 4);
 		/* The two must not agree; printing the pair is what tells a failing
-		 * run WHICH value both collapsed onto (fix round of 157b). */
+		 * run which value both collapsed onto. */
 		ok(right[0] != wrong[0], "so the order of the two is not free",
 			right[0], wrong[0]);
 
@@ -3665,7 +3652,7 @@ static void root_narrow()
 			idle[0], cur[0]);
 	}
 
-	/* EXTREMES. The offsets are shorts widened to long, so their difference is
+	/* Extremes: the offsets are shorts widened to long, so their difference is
 	 * at most 65535; `step` is a difference of two tick positions and could in
 	 * principle be anything a long holds. Nothing in InterpRootNarrow negates
 	 * it, so the whole range is safe - including the value that has no

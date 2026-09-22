@@ -1,5 +1,5 @@
 @echo off
-rem bit - build InterpTest (#148, order 2).
+rem bit - build InterpTest.
 rem
 rem vcvars32, like bsd.bat and for a related reason: the tool includes the
 rem engine's own game\interpolate_math.h and checks arithmetic on `short` and

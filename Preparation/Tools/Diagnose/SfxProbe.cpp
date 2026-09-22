@@ -14,24 +14,22 @@
  * Foundation, either version 3 of the License, or (at your option) any later
  * version. See the LICENSE file at the root of this source tree.
  *
- * THE POINT OF THIS TOOL (#153, round M1). The HQ sound bank used to be one
- * file in one place - audio\MAIN.SFX, put there by hand - and "is it there"
- * was the whole of the question. Round M1 made it a chain of three, gave a
- * mod the right to put its own recordings over whichever of them was opened,
- * and hung a plausibility rule on each substitution. None of that is visible
- * in the game: a sound that quietly kept Core's version sounds exactly like a
- * sound nobody tried to replace.
+ * This tool reports which sound bank the engine would open for a game
+ * folder, and how a level's sample numbers map onto that bank.
  *
- * So this tool walks the same chain the engine walks, through the same
- * parser - specific\sfxbank.cpp, linked here, not copied - and says out loud
- * what the engine would do silently.
+ * The HQ sound bank is a chain of up to three candidates (a mod's own bank,
+ * audio\MAIN.SFX, the remaster install read in place), tried in order; a
+ * mod can put its own recordings over whichever one opens, gated by a
+ * plausibility rule per substitution. None of that is visible in the game:
+ * a sound that quietly kept the original recording sounds exactly like one
+ * nobody tried to replace.
  *
- * THE SAME CHAIN LITERALLY, not the same chain by agreement: the order of the
- * candidates comes out of SfxBankChainLink in that shared file, which is the
- * call HQSfxOpen makes as well. The first cut of this tool kept its own copy
- * of the order, and a tool's copy of a rule is what drifts - ModelProbe's
- * page rule had drifted exactly that way and this round had to fix it. There
- * is nothing left here to keep in step by hand.
+ * The tool walks the same chain through the same parser -
+ * specific\sfxbank.cpp, linked here, not copied - and says out loud what
+ * the engine would do silently. The chain order itself comes from
+ * SfxBankChainLink in that shared file, the same call HQSfxOpen makes,
+ * rather than a private copy of the order: a tool's copy of an engine rule
+ * is what drifts out of step with it.
  *
  * USAGE
  *
@@ -51,16 +49,15 @@
  *     -id <n>          print the bridge for that sound id as well. Repeatable.
  *                      Without any, 0 (LARA_FEET) and 4 (the landing) are
  *                      printed, which are the two the footstep mods replace.
- *     -level <.trc>    THE BRIDGE'S OWN DECISION TABLE FOR A REAL LEVEL
- *                      (#153, round M3): the level's sound map read out of
- *                      the file, its <level>.hdm read beside it, and one
- *                      line per sound id saying what the engine would do -
- *                      paired, refused by length, refused as a randomizer
- *                      import, or paired while the bank's level mask says
- *                      no level of ours uses that sound. The three rules
- *                      are the engine's own functions and not a copy:
- *                      SfxBankLevelBit, SfxPairPlausible and
- *                      HDMarkersSoundImported.
+ *     -level <.trc>    the bridge's own decision table for a real level:
+ *                      the level's sound map read out of the file, its
+ *                      <level>.hdm read beside it, and one line per sound id
+ *                      saying what the engine would do - paired, refused by
+ *                      length, refused as a randomizer import, or paired
+ *                      while the bank's level mask says no level of ours
+ *                      uses that sound. The three rules are the engine's
+ *                      own functions and not a copy: SfxBankLevelBit,
+ *                      SfxPairPlausible and HDMarkersSoundImported.
  *     -all-ids         every sound id the chosen bank names, as a table.
  *     -wavs            the loose .wav overlay alone, without the bank tables.
  *     -samples         push every sample of the chosen bank (and of the
@@ -71,15 +68,13 @@
  *                      counts the samples whose format block is not the first
  *                      chunk; see below.
  *
- * WHERE THE FORMAT BLOCK LIES is printed for every accepted file, because it
- * is not always +20. The gate WALKS the chunks, so a wav with a JUNK block in
- * front of fmt - the RF64 headroom Reaper, Pro Tools and libsndfile all write
- * - passes it, and so does one with a LIST holding the title. The engine used
- * to read the format tag at a flat offset 20, find two bytes of that first
- * block's header there, and drop the file without a word while its own log
- * said the mod had supplied the sound. It takes the offset from this same
- * check now (#153, round M1, second fix round), so a "layout" line that does
- * not say +20 marks a file that only plays on a build from that round on.
+ * Where the format block lies is printed for every accepted file, because it
+ * is not always +20: the gate WALKS the chunks, so a wav with a JUNK block
+ * in front of fmt - the RF64 headroom Reaper, Pro Tools and libsndfile all
+ * write - passes it, and so does one with a LIST holding the title. The
+ * engine reads the format offset from this same check rather than a fixed
+ * +20, so a "layout" line that does not say +20 marks a file that needs
+ * that shared check to play at all.
  *
  * Everything goes to stdout, so a run can be pasted into a report as it
  * stands.
@@ -193,15 +188,14 @@ static void RiffLine(const char* riff, long bytes, const char* lead)
 		dataBytes, byteRate, (double)dataBytes / (double)byteRate);
 }
 
-/* WHERE THE ENGINE WILL READ IT (#153, round M1, second fix round).
+/* Where the engine will read it.
  *
  * The gate walks the chunks, so it accepts a file whose fmt block is not the
  * first one - a JUNK block for RF64 headroom, or a LIST with the title, both
- * of which editors write as a matter of course. LoadSamples() used to read
- * the format tag at a fixed offset 20 and so quietly threw such a file away
- * after this tool had called it accepted. It takes these offsets now, out of
- * the same check, which is why they are worth printing: a line that does not
- * say +20 is a file the old build would have dropped in silence. */
+ * of which editors write as a matter of course. LoadSamples() takes the
+ * format offset out of this same check rather than a fixed offset 20, which
+ * is why it is worth printing: a line that does not say +20 is a file that
+ * needs that shared offset to be read correctly at all. */
 static void PartsLine(const char* riff, long bytes, const char* lead)
 {
 	SfxRiffParts parts;
@@ -276,10 +270,8 @@ int main(int argc, char** argv)
 	printf("\n-- the bank chain, in the order HQSfxOpen walks it ------------\n");
 
 	/* The number is the link's POSITION in this machine's chain, not a fixed
-	 * tier: with no mod bank installed, audio\MAIN.SFX is link 1 and not
-	 * link 2. It moved with the shared order (#153, round M1, fix round) and
-	 * it is worth saying, because an older run of this tool printed the tier
-	 * and the two are easy to mistake for a changed chain. */
+	 * tier: with no mod bank installed, audio\MAIN.SFX is link 1, not
+	 * link 2 - position and tier are easy to mistake for each other. */
 	printf("  (numbered by position - the first mod bank, if any, is 1)\n");
 
 	SfxBank* bank = 0;
@@ -287,13 +279,10 @@ int main(int argc, char** argv)
 	int chosenMod = -1;		// the mod whose bank answered, or -1
 	std::vector<int> plainLinks;	// the links no mod owns, for the ruler
 
-	/* THE ENGINE'S OWN CHAIN, not a copy of it (#153, round M1, fix round).
-	 * This tool used to hold its own ordering - mods, then audio\, then the
-	 * install - which is exactly the arrangement that let ModelProbe's page
-	 * rule drift out of step with the cache until this round caught it. The
-	 * order now comes from SfxBankChainLink in specific\sfxbank.cpp, the same
-	 * call HQSfxOpen makes, so a later round that reorders the chain reorders
-	 * what this tool prints with it. */
+	/* The engine's own chain, not a copy of it: the order comes from
+	 * SfxBankChainLink in specific\sfxbank.cpp, the same call HQSfxOpen
+	 * makes, so a change to the engine's chain order changes what this tool
+	 * prints with it. */
 	for (int link = 0; ; link++)
 	{
 		char path[512], label[512], shown[560];
@@ -334,8 +323,7 @@ int main(int argc, char** argv)
 	 * whole of the reason is in hqsfx.cpp at the plausibility rule. This
 	 * section is what that decision rests on, per sound id: how long the
 	 * recording is in each of the two banks. A row where they differ is a
-	 * sample the mod really replaced, and it is exactly the row the old rule
-	 * would have thrown away. */
+	 * sample the mod really replaced. */
 	SfxBank* ruler = 0;
 	std::string rulerName;
 
@@ -368,15 +356,12 @@ int main(int argc, char** argv)
 
 	/* --- every sample through the engine's own gate ---------------------- *
 	 *
-	 * WHY THIS EXISTS (#153, round M1, fix round). HQSfxPayload used to judge
-	 * a bank's sample with a hand-rolled walk of the RIFF chunks that had no
-	 * bound on the lengths it read; it asks SfxRiffCheck now, which is the
-	 * same gate a loose .wav goes through and is bounds-checked. That is a
-	 * STRICTER gate than what stood there, so it has to be shown that the
-	 * player's real bank still passes it whole - a sound that quietly falls
-	 * back to Core's sample is exactly the kind of regression nobody hears
-	 * until much later. Every sample, not only the first take of each sound:
-	 * the bridge can land on any of them. */
+	 * HQSfxPayload judges a bank's sample through SfxRiffCheck, the same
+	 * bounds-checked gate a loose .wav goes through. Every sample is pushed
+	 * through it here, not only the first take of each sound - the bridge
+	 * can land on any of them - because a sample that fails this gate falls
+	 * back to the original recording, a regression nobody hears until much
+	 * later. */
 	if (samples)
 	{
 		int refused = 0;
@@ -394,9 +379,9 @@ int main(int argc, char** argv)
 			if (riff && SfxRiffCheck(riff, bytes, 0, 0, &why, &parts))
 			{
 				/* And where the gate found the format block. A sample whose
-				 * fmt is not the first chunk is one the build before the
-				 * second fix round would have accepted here and then thrown
-				 * away in LoadSamples(), which read offset 20 flat. */
+				 * fmt is not the first chunk only loads correctly when
+				 * LoadSamples() reads the format offset from this same
+				 * check instead of a flat offset 20. */
 				if (parts.fmtAt != 20)
 				{
 					notFirst++;
@@ -447,7 +432,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-	/* --- THE BRIDGE'S OWN DECISION FOR A REAL LEVEL (#153, round M3) ---- */
+	/* --- the bridge's own decision for a real level ---------------------- */
 	if (!level.empty() && bank)
 	{
 		Tr5Level lvl;
@@ -485,7 +470,7 @@ int main(int argc, char** argv)
 					levelLut[s] = v;
 				}
 
-			/* THE LEVEL'S OWN SAMPLE CHAIN, so that a pairing can be
+			/* The level's own sample chain, so that a pairing can be
 			 * judged by length the way the engine judges it: uncomp_size
 			 * of each sample is what HQSfxPayload is handed. */
 				std::vector<long> uncomp;
@@ -506,7 +491,7 @@ int main(int argc, char** argv)
 					}
 				}
 
-			/* AND THE SIDECAR BESIDE IT - the same file the engine reads,
+			/* And the sidecar beside it - the same file the engine reads,
 			 * through the same reader (hd_markers.cpp). */
 				const bool haveHdm = HDMarkersLoad(level.c_str());
 
@@ -558,10 +543,10 @@ int main(int argc, char** argv)
 
 					if (isImport)
 					{
-						/* AND WHETHER THE LENGTH WOULD HAVE LET IT THROUGH,
-						 * which is the whole point of the round: three of the
-						 * vulture's four were always refused by length, and it
-						 * is the ONE that was not that the player heard. */
+						/* And whether the length would have let it through:
+						 * three of the vulture's four variants are always
+						 * refused by length, and the one that is not is the
+						 * one that plays. */
 						verdict = plausible
 							? "REFUSED as a randomizer import - AND THE LENGTH WOULD HAVE LET IT THROUGH"
 							: "refused as a randomizer import (the length would have refused it too)";

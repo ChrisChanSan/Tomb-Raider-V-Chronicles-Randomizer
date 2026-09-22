@@ -11,8 +11,8 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-// HdmDump - the HD markers of a finished level (#123, stage S7): the header
-// block of the .trc and the .hdm sidecar beside it, in plain text.
+// HdmDump - the HD markers of a finished level: the header block of the
+// .trc and the .hdm sidecar beside it, in plain text.
 //
 // Written because both halves of the marker are invisible otherwise. data[3]
 // sits in 32 bytes the engine reads before it loads a single room, and no
@@ -20,23 +20,23 @@
 // by eye says nothing about whether it agrees with the file it belongs to.
 // This tool holds the two against each other in one line each.
 //
-// It doubles as the REFERENCE READER for the engine side (stage S7-2): the
-// parse loop in readHdm() below is the whole grammar, about fifty lines, and
-// the engine's own reader has to answer the same way on the same file.
+// It doubles as the reference reader for the engine side: the parse loop in
+// readHdm() below is the whole grammar, about fifty lines, and the engine's
+// own reader has to answer the same way on the same file.
 //
-// Two versions since #123 fix round Z. Version 1 could only name a whole
-// ROOM ("this room's shape changed, draw it classic"); version 2 adds the
-// `cut` line, a box in world units round ONE opening the run made, and the
-// engine drops the HD triangles inside that box out of every room's art and
-// keeps the rooms. Both are read here.
+// Two sidecar versions exist. Version 1 can only name a whole room ("this
+// room's shape changed, draw it classic"); version 2 adds the `cut` line, a
+// box in world units round one opening the run made, and the engine drops
+// the HD triangles inside that box out of every room's art and keeps the
+// rooms. Both are read here.
 //
 // What the header block means (specific\file.cpp, LoadLevel):
 //   data[0]  LaraDrawType - 1   (0 NORMAL, 1 YOUNG, 2 BUNHEAD, 3 CATSUIT,
 //                                4 DIVESUIT, 5 PONYTAIL)
-//   data[1]  WeatherType        (0 dry, 1 rain, 2 snow)            #144
+//   data[1]  WeatherType        (0 dry, 1 rain, 2 snow)
 //   data[2]  foreign speech heads, 1 = skip the cutscene head swap
 //   data[3]  HD outfit marker, HD_LARA_OUTFIT_* (0 none, 5 ANTARC,
-//            6 NEVADA, 7 COAST, 8 CATSUIT)                         #123
+//            6 NEVADA, 7 COAST, 8 CATSUIT)
 //   data[4..15]  free - 0 in all 17 shipped files, measured.
 //
 // Usage: HdmDump <level.trc> [more levels...]
@@ -76,9 +76,9 @@ struct HdMarkers
     int version = 0;
     int outfit = 0;
     std::vector<int> rooms;
-    // #123 fix round Z, version 2: one opening the run made, as a box in
-    // world units with ascending corners. Y grows downward, so mins[1] is
-    // the ceiling of the opening and maxs[1] its floor.
+    // Version 2: one opening the run made, as a box in world units with
+    // ascending corners. Y grows downward, so mins[1] is the ceiling of the
+    // opening and maxs[1] its floor.
     struct Cut { int mins[3], maxs[3]; };
     std::vector<Cut> cuts;
     struct Donor { int slot, fromSlot; std::string level; };
@@ -136,11 +136,11 @@ static bool readHdm(const std::string& path, HdMarkers& out, std::string& error)
     }
     std::fclose(f);
 
-    // Version 2 (#123, fix round Z) only ADDS the `cut` line and changes the
-    // meaning of nothing that was there before, so a version 1 file is a
-    // version 2 file with no cut in it and both are read the same way. The
-    // engine's own reader says the same in the same words - specific\hd\
-    // hd_markers.cpp, and these two have to answer alike on one file.
+    // Version 2 only adds the `cut` line and changes the meaning of nothing
+    // that was there before, so a version 1 file is a version 2 file with no
+    // cut in it and both are read the same way. The engine's own reader says
+    // the same in the same words - specific\hd\hd_markers.cpp, and these two
+    // have to answer alike on one file.
     if (out.version != 1 && out.version != 2)
     {
         error = "version " + std::to_string(out.version) +
@@ -181,9 +181,8 @@ static void report(const HdMarkers& m)
     // 2 * 512 = 1024: that is the opening's normal, and the raw box is flat
     // there - a window's four corners share their x or their z, @Clear only
     // accepts such faces, and a vertical link writes a zero-height plane.
-    // The other two are the opening's own size LESS 2 * 128, the inward
-    // step of fix round Z1 that keeps the passage's own floor and ceiling
-    // out of the box.
+    // The other two are the opening's own size less 2 * 128, the inward
+    // step that keeps the passage's own floor and ceiling out of the box.
     for (size_t i = 0; i < m.cuts.size(); ++i)
     {
         const HdMarkers::Cut& c = m.cuts[i];

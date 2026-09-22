@@ -1,12 +1,11 @@
 // SectorCheck - shows one sector in plain text: the raw 8 FLOOR_INFO bytes
 // and the decoded floordata chain.
 //
-// Built for #53/Make_Portal: before portals get WRITTEN, the working
-// neighbor sectors must be READABLE as templates - and the result checked
-// afterwards against exactly this display. No other tool shows the sector
-// level.
+// Built for Make_Portal: before portals get WRITTEN, the working neighbor
+// sectors must be READABLE as templates - and the result checked afterwards
+// against exactly this display. No other tool shows the sector level.
 //
-// FLOOR_INFO (global/types.h:633), 8 bytes per sector:
+// FLOOR_INFO (global/types.h), 8 bytes per sector:
 //   +0 u16  index      pointer into the floordata (0 = no chain)
 //   +2 u16  fx:4 | box:11 | stopper:1
 //   +4 u8   pit_room   room below the floor (255 = none)
@@ -102,12 +101,10 @@ static void showSector(const Tr5Level& lvl, const Tr5Room& r, int sx, int sz)
         }
         else if ((e.function == 2 || e.function == 3) && e.words.size() >= 2)
         {
-            // ATTENTION, Core's naming is twisted (control.cpp:1013):
+            // ATTENTION, Core's naming is twisted (control.cpp):
             //   xoff = word >> 8   (HIGH byte) and tilts along Z
             //   yoff = word & 0xFF (LOW byte) and tilts along X
             // What stands here is therefore what the tilt really ACTS on.
-            // It used to stand exactly the other way round and misled the
-            // analysis of the andy3 switch.
             const int alongZ = static_cast<int8_t>(e.words[1] >> 8);
             const int alongX = static_cast<int8_t>(e.words[1] & 0xFF);
             std::printf(" tilt X:%d Z:%d (%d resp. %d units per sector)",

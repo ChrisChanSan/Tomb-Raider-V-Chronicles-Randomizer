@@ -1,5 +1,5 @@
 @echo off
-rem bsfx - build SfxProbe, the sound overlay's proof (#153, round M1).
+rem bsfx - build SfxProbe, the sound overlay's proof.
 rem
 rem The name follows bmodel (ModelProbe), broom (RoomProbe) and btrg
 rem (TrgProbe): b + what the tool looks at.
@@ -12,7 +12,7 @@ rem the tool prints is what the engine does:
 rem   sfxbank.cpp       the MAIN.SFX parser and the RIFF plausibility rule
 rem   hd_mods.cpp       the Mods folder - the scan, the banks, the loose wavs
 rem   hd_install.cpp    where the installed remaster is, for the third link
-rem   hd_markers.cpp    the .hdm sidecar, for -level (#153, round M3)
+rem   hd_markers.cpp    the .hdm sidecar, for -level
 rem   Tr5Level.cpp      the randomizer's level reader, for the same switch
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
 cd /d "%~dp0"

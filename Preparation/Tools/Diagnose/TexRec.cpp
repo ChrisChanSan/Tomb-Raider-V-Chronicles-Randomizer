@@ -3,9 +3,8 @@
 //
 // Usage: TexRec <level.trc> [first] [count]
 //
-// Needed for #90: to build valid TR5 entries from TR3 object textures one
-// must know which values drawtype and flag take there at all - especially
-// how quads differ from triangles. Read off instead of guessing.
+// Needed to build valid TR5 entries from TR3 object textures: which values
+// drawtype and flag take there, and how quads differ from triangles.
 //
 // Layout from global/types.h and specific/file.cpp:1089ff:
 //   +0 drawtype, +2 tpage (bit 15 moves into the flag on load),
@@ -37,7 +36,7 @@ int main(int argc, char** argv)
     size_t at = 0; int32_t n = 0;
     if (!lvl.debugTexinfoBlock(at, n)) { std::printf("no texinfo block\n"); return 1; }
     std::printf("%s: %d texinfos\n\n", argv[1], n);
-    // Distribution over ALL entries: which values occur at all?
+    // Distribution over all entries: which values occur and how often.
     {
         int withBit15 = 0, withoutBit15 = 0, triangles = 0;
         std::vector<int> drawKinds, flagKinds;

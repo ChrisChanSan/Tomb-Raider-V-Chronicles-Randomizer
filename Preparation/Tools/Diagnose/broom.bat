@@ -16,7 +16,7 @@ rem   hd_light.cpp      the two parity formulas, on the processor
 rem   hd_pagecache.cpp  BC7 -> A8R8G8B8 pages, the texture budget
 rem   hd_dxt5.cpp       the DXT5 encoder of the format switch
 rem   hd_scan / hd_bind / hd_trm   HDScanPagePath and what it needs
-rem   hd_markers.cpp    the .hdm sidecar - the openings -hdm cuts (round Z)
+rem   hd_markers.cpp    the .hdm sidecar - the openings -hdm cuts
 rem   bc7.cpp           the decoder
 rem   Trg.cpp           the vendored .TRG reader
 rem   Tr5Level.cpp      the classic level, for the H1 water survey

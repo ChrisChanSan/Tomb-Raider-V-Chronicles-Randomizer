@@ -2,10 +2,10 @@
 // floordata (TO_OBJECT, TO_CAMERA, ..., TO_BODYBAG, ...), and lists, for a
 // chosen command type, every occurrence with room and sector.
 //
-// Occasion (#121, fifth measurement): TO_BODYBAG calls ResetGuards() -
-// makes ALL active thinkers invisible and teleports them based on fields
-// only vanilla guards carry. If andy3 carries such commands and Andrea1
-// does not, the imported soldiers' blinking is explained.
+// TO_BODYBAG calls ResetGuards(), which makes all active thinkers invisible
+// and teleports them based on fields only vanilla guards carry; a level
+// that carries such commands where another does not explains why imported
+// soldiers blink in and out.
 //
 // Usage: TriggerCommands <level.trc> [...]           count per level
 //        TriggerCommands -show <type> <level.trc>    occurrences of one type

@@ -1,46 +1,43 @@
 @echo off
 rem be - build the engine.
 rem
-rem THE SHADER GUARD (#123, fix round G, G2) runs first. The HD shaders have no
-rem runtime compiler behind them: their bytecode is checked in as .inc byte
-rem arrays beside the .hlsl they came from, and only bshader.bat regenerates
-rem it. Round R3b changed hd_room.hlsl, never ran bshader, and shipped a build
-rem whose source and whose picture disagreed - nothing in the tree could say
-rem so, and it took a play test and two rounds to find.
+rem Runs the shader guard first. The HD shaders have no runtime compiler
+rem behind them: their bytecode is checked in as .inc byte arrays beside the
+rem .hlsl they came from, and only bshader.bat regenerates it. Without a
+rem check, a changed .hlsl and a stale .inc can ship together with nothing in
+rem the tree to say so - the source and the picture would disagree silently.
 rem
-rem So every .inc carries the MD5 of its .hlsl on its last line (bshader.bat,
-rem :stamp) and this compares them. A CONTENT stamp and not a file date,
-rem because a fresh clone gives every file the same date and a date guard
-rem would then either cry wolf or say nothing at all.
+rem Every .inc carries the MD5 of its .hlsl on its last line (bshader.bat,
+rem :stamp) and this compares them. A content stamp, not a file date, because
+rem a fresh clone gives every file the same date and a date guard would then
+rem either cry wolf or say nothing at all.
 rem
-rem A content stamp is only as deterministic as the content, and audit round
-rem A1 (#172) found that the content was not: git's own Windows default,
-rem core.autocrlf=true, checked the HLSL out with carriage returns, and an MD5
-rem is taken over bytes. So in every fresh clone this guard fired on a shader
-rem that was perfectly in step, rebuilt it, and left two tracked files
-rem modified. .gitattributes now pins **/hd_shader/*.hlsl and *.inc to
-rem eol=lf, which is why the hash below means the same thing on every machine.
-rem A shader that is out of
-rem step is rebuilt on the spot rather than reported - a build that quietly
-rem draws the wrong thing is the failure this exists to stop, and asking the
-rem user to type one more command is not a safer answer than doing it.
+rem The MD5 is taken over bytes, so the checkout has to be byte-identical
+rem everywhere; git's core.autocrlf=true checks HLSL out with carriage
+rem returns on some machines and not others, which made the stamp mismatch on
+rem a shader that was perfectly in step. .gitattributes now pins
+rem **/hd_shader/*.hlsl and *.inc to eol=lf so the hash means the same thing
+rem on every machine.
+rem
+rem A shader that is out of step is rebuilt on the spot rather than reported:
+rem a build that quietly draws the wrong thing is the failure this exists to
+rem stop.
 call :shaderguard
 if errorlevel 1 exit /b 1
 
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul
 cd /d "%~dp0..\..\.."
 
-rem THE BUILD STAMP (#123, fix round U, U6). winmain.cpp writes the first line
-rem of every -log run, "PCtomb5 built <__DATE__ __TIME__>", and those two
-rem macros are fixed when THAT ONE FILE is compiled. In an incremental build it
-rem is not compiled: change a shader, or a file in specific\hd, and winmain.obj
-rem is still yesterday's, so the log stamps a build that never happened. A play
-rem test read 18:34 off a build made at 19:49, which is exactly the kind of
-rem thing that costs a round of "but I ran the new one".
+rem winmain.cpp writes the first line of every -log run, "PCtomb5 built
+rem <__DATE__ __TIME__>", and those two macros are fixed when that one file is
+rem compiled. In an incremental build it is not recompiled: change a shader,
+rem or a file under specific\hd, and winmain.obj is still the old one, so the
+rem log stamps a build that never happened.
 rem
-rem So its object file goes before msbuild does, and the linker gets a freshly
-rem compiled stamp every time. One file, a second of build time. setupdlg.cpp
-rem carries the same __DATE__ in the launcher's window and goes with it.
+rem Deleting its object file before msbuild runs forces a fresh compile every
+rem time, at the cost of one file and about a second of build time.
+rem setupdlg.cpp carries the same __DATE__ in the launcher's window and goes
+rem with it.
 del /q "TOMB5 Code\Win32\Release\winmain.obj" 2>nul
 del /q "TOMB5 Code\Win32\Release\setupdlg.obj" 2>nul
 

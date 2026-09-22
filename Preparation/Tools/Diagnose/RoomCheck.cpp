@@ -1,9 +1,8 @@
 // RoomCheck - shows flags and flipmap partners of rooms in a .trc.
 //
-// Occasion (#111 follow-up, the water-step phantom): SFXLOG names obj=51
-// in rooms 57/59 of Andrea1 with a "water only" step, and the user is sure
-// no water is reachable there. The question to the file: do these rooms
-// (or their flip variants) carry the water bit 0x1?
+// SFXLOG names obj=51 in rooms 57/59 of Andrea1 with a "water only" step,
+// although no water is reachable there. The question to the file: do these
+// rooms (or their flip variants) carry the water bit 0x1?
 //
 // Usage: RoomCheck <level.trc> [room ...]    without rooms: all with the water bit
 #include <cstdio>

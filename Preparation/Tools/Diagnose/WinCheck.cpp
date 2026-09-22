@@ -11,8 +11,8 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-// WinCheck - holds Tr5Level::wallWindow (#137) against the 32-byte view
-// windows Core actually shipped.
+// WinCheck - holds Tr5Level::wallWindow against the 32-byte view windows
+// Core actually shipped.
 //
 //   WinCheck <folder with the vanilla .trc>
 //
@@ -21,8 +21,8 @@
 // opening, and compares. The two height bytes of the portal square are
 // measured alongside, because that is what the old build wrote.
 //
-// Where the two differ, the DIRECTION matters: a window only clips
-// (SetRoomBounds, draw.cpp:1687), so a window larger than the opening costs
+// Where the two differ, the direction matters: a window only clips
+// (SetRoomBounds, draw.cpp), so a window larger than the opening costs
 // nothing and a smaller one blacks part of the neighbouring room out.
 //
 // Diagnostic scaffolding, not part of the shipped tools.

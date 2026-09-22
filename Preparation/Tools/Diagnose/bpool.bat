@@ -1,15 +1,15 @@
 @echo off
-rem bpool - build PoolProbe, the address space proof of round 164 (#164).
+rem bpool - build PoolProbe, the address space proof.
 rem
 rem The name follows be (the engine), bmodel (ModelProbe) and broom
 rem (RoomProbe): b + what the tool looks at.
 rem
-rem x86, NOT x64, and that is the whole point of the tool: the engine is a
+rem x86, not x64, and that is the whole point of the tool: the engine is a
 rem 32 bit process with LARGEADDRESSAWARE and the wall it runs into is four
 rem gigabytes of address space. Built for x64 this tool would measure a wall
-rem that is not there (#143).
+rem that is not there.
 rem
-rem AND /LARGEADDRESSAWARE, which the linker does NOT set on its own for an
+rem And /LARGEADDRESSAWARE, which the linker does not set on its own for an
 rem x86 executable: without it this tool would measure a two gigabyte address
 rem space and the engine lives in a four gigabyte one (tomb5.vcxproj,
 rem LargeAddressAware). Measured: 1995 MiB free without the switch and 3986

@@ -39,8 +39,7 @@
  *   DdsProbe -alpha <in.dds> <out.png>
  *                                   the ALPHA channel as a grey picture, with
  *                                   a histogram - an item page's alpha is a
- *                                   gloss mask, not coverage (#123, fix round
- *                                   D, D2)
+ *                                   gloss mask, not coverage
  *   DdsProbe -crop <logo.dds> <out.png>
  *                                   the title MENU's logo texture page, report,
  *                                   write (alpha over a checkerboard)
@@ -349,10 +348,10 @@ static void AlphaKind(const unsigned long* px, long w, long h)
 }
 
 
-/* -alpha: THE GLOSS MASK (#123, fix round D, D2).
+/* -alpha: the gloss mask.
  *
- * An ITEM page's alpha channel is not coverage. Fix round A2 measured that on
- * the room pages and TROne says the same about the item ones in so many words
+ * An item page's alpha channel is not coverage - measured on the room pages,
+ * and TROne says the same about the item ones in so many words
  * (host\render\game_renderer.cpp:373: "an opaque-pass tile's alpha channel
  * holds a sparkle/specular MASK, not coverage"). This mode reads that channel
  * out: a histogram in sixteen buckets, the mean, and the PNG written is the
@@ -575,9 +574,9 @@ static int CropLogo(const char* logoPath, const char* outPath)
 	return 0;
 }
 
-/* ROW AND COLUMN PROFILES OF A SHEET (#123, fix round H, H1).
+/* Row and column profiles of a sheet.
  *
- * EFFECT.DDS is an ATLAS: one 2048 x 2048 sheet holding two dozen unrelated
+ * EFFECT.DDS is an atlas: one 2048 x 2048 sheet holding two dozen unrelated
  * effect pictures on a black ground. Cutting a tile out of it by eye is a
  * guess; this makes it a measurement. Per row (and per column) it prints how
  * many texels are above a threshold and their mean brightness, so the runs of
@@ -644,9 +643,9 @@ static int Profile(const char* inPath, int step)
 	return 0;
 }
 
-/* ONE RECTANGLE OF A SHEET, as a picture (#123, fix round H, H1). The tile
- * the engine is about to cut out of an atlas, so that the numbers above and
- * the picture the player sees are the same rectangle. */
+/* One rectangle of a sheet, as a picture. The tile the engine is about to
+ * cut out of an atlas, so that the numbers above and the picture the player
+ * sees are the same rectangle. */
 static int Cut(const char* inPath, int cx, int cy, int cw, int ch, const char* outPath)
 {
 	unsigned char* file;

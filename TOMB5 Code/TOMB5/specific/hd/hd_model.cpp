@@ -22,8 +22,8 @@
 
 #include "hd_model.h"
 #include "hd_bind.h"
-#include "hd_classic.h"		// the donor game's own frame 0 (#155)
-#include "hd_mods.h"		// a mod's model beats the install's (#153, M1)
+#include "hd_classic.h"		// the donor game's own frame 0
+#include "hd_mods.h"		// a mod's model beats the install's
 #include "hd_trm.h"
 
 #include <algorithm>
@@ -41,16 +41,14 @@
 
 namespace
 {
-	/* THE VERTEX ON THE CARD IS THE VERTEX ON DISK - all 24 bytes of it, in
-	 * the same order, with the same meaning. A .TRM vertex needs no repacking
-	 * at all; it needs a declaration that reads its bytes right. The layout
-	 * is written out in hd_trm.h and again in hd_model.hlsl.
+	/* The vertex on the card is the vertex on disk - all 24 bytes of it, in
+	 * the same order, with the same meaning. A .TRM vertex needs no repacking,
+	 * only a declaration that reads its bytes right. The layout is written out
+	 * in hd_trm.h and again in hd_model.hlsl.
 	 *
-	 * The only reason this struct exists is the stride and the compiler's
-	 * assurance that it is 24. HDTrmVertex has exactly this shape, so the
-	 * fill below is a memcpy in disguise - but written out, because
-	 * HDTrmVertex belongs to the reader and its layout is the reader's
-	 * business, not ours. */
+	 * This struct fixes the stride at 24. HDTrmVertex has exactly this shape,
+	 * so the fill below is a memcpy in disguise - written out, because
+	 * HDTrmVertex's layout belongs to the reader. */
 	struct HDModelVertex
 	{
 		float x, y, z;
@@ -60,7 +58,7 @@ namespace
 	};
 
 	/* One draw call: a run of indices whose triangles all wear the same page
-	 * AND ride on the same node (#123, stage S3-2).
+	 * AND ride on the same node.
 	 *
 	 * The node is the second key because `item->mesh_bits` hides whole nodes -
 	 * the gladiator's shield, a body the game blows apart - and an index
@@ -70,28 +68,26 @@ namespace
 	 * It does not cost draw calls in the normal case: the ranges come off in
 	 * (page, node) order, so consecutive ones of the same page whose nodes are
 	 * all visible are merged back into one call before the draw. With
-	 * mesh_bits at -1, which is nearly always, the count is exactly the one
-	 * stage S3-1 had. */
+	 * mesh_bits at -1, which is nearly always, the count is one call per
+	 * page. */
 	struct Range
 	{
 		unsigned int start = 0;
 		unsigned int count = 0;
 		int pageSlot = -1;
 		int node = 0;
-		// The .DDS number behind pageSlot (#123, fix round I, I4): a material
-		// is named by PAGE and the cache slot is an allocation.
+		// The .DDS number behind pageSlot: a material is named by PAGE and
+		// the cache slot is an allocation.
 		int page = -1;
 	};
 
-	/* ONE MATERIAL, NAMED BY PAGE (#123, fix round I, I4).
+	/* One material, named by page.
 	 *
-	 * The sheen of fix round D is one number per DRAW, and that is right for
-	 * every model in the game but three: a HAND_ model is a hand AND the thing
-	 * it is holding, on two pages of one file, and one number makes either the
-	 * skin metal or the gun matt. The user's finding I4 is the second of those
-	 * - "the sheen is on the body and the head, the hands go empty" - and the
-	 * measurement behind it is that a Blinn-Phong exponent of 34 on a hand-
-	 * sized object is a highlight one pixel wide.
+	 * The sheen is one number per DRAW, and that is right for every model in
+	 * the game but three: a HAND_ model is a hand AND the thing it is
+	 * holding, on two pages of one file, and one number makes either the skin
+	 * metal or the gun matt - a Blinn-Phong exponent of 34 on a hand-sized
+	 * object is a highlight one pixel wide.
 	 *
 	 * A page is already the unit a draw call is cut to, so a per-page material
 	 * costs one constant write on the ranges that have one and nothing at all
@@ -109,8 +105,8 @@ namespace
 		IDirect3DIndexBuffer9* ib = 0;
 		std::vector<Range> pass[3];
 		std::vector<int> pages;			// .DDS numbers, distinct
-		// #123 fix round I (I4): a material per page, empty for every model
-		// but the ones a caller has spoken for.
+		// A material per page, empty for every model but the ones a caller
+		// has set one for.
 		std::vector<PageSheen> pageSheen;
 
 		std::string name;
@@ -119,7 +115,7 @@ namespace
 		int vertices = 0;
 		int indices = 0;
 		// How many vertices the measurements above actually saw - the same as
-		// `vertices`, except under the page cut of fix round D (D4).
+		// `vertices`, except under the page cut.
 		int vertexSeen = 0;
 		int nodes = 0;				// classic nmeshes
 		int nodeVertices[32] = { 0 };
@@ -135,24 +131,21 @@ namespace
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
 
-		/* THE VERTEX CLOUD'S OWN AXES (#153, round M3) - the principal axes of
-		 * the drawn vertices, longest first, with the cloud's extent along each.
-		 * Measured in the same loop the box is, because that is the one place the
-		 * vertices are in hand; a caller that wanted them later would have to read
-		 * the .TRM a second time.
+		/* The vertex cloud's own axes - the principal axes of the drawn
+		 * vertices, longest first, with the cloud's extent along each. Measured
+		 * in the same loop the box is, the one place the vertices are in hand.
 		 *
-		 * A BOX IS NOT A SHAPE. A pair of guns lying flat and one gun standing up
-		 * have the same kind of box and nothing else in common, and the ring's fit
-		 * had only the box to go on - which is how the mod's two Uzis came to lie
-		 * flat, one above the other. These say which way the SHAPE runs. */
+		 * A box is not a shape: a pair of guns lying flat and one gun standing
+		 * up have the same kind of box and nothing else in common. These say
+		 * which way the SHAPE runs, for the ring's fit. */
 		float axis[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 		float axisExtent[3] = { 0, 0, 0 };
 		bool hasAxes = false;
 
 		float bind[32][3] = { { 0, 0, 0 } };
 		bool hasBind = false;
-		/* The classic mesh tree, for the head pass (#123, fix round B, B4).
-		 * -1 everywhere when the caller handed none over. */
+		/* The classic mesh tree, for the head pass. -1 everywhere when the
+		 * caller handed none over. */
 		int parent[32] = { 0 };
 		bool hasTree = false;
 
@@ -162,35 +155,32 @@ namespace
 		int neckBone = -1;
 		int neckNode = -1;
 
-		// What the mirror fold moved on this file (#153, round M2b), for the
-		// caller's own log line - all zero for a slot that asked for none.
+		// What the mirror fold moved on this file, for the caller's own log
+		// line - all zero for a slot that asked for none.
 		HDTrmFoldCounts fold = { 0, 0, 0, 0, 0, 0 };
 
-		/* THE DRAWN VERTICES' POSITIONS, for a model that asked to keep them
-		 * (#155b) - three floats each, in the model's own frame, and the same
-		 * vertices the box above was taken over. Empty for everything else,
-		 * and emptied for everything by HDModelReleasePoints the moment the
-		 * level build has measured its floor rule.
+		/* The drawn vertices' positions, for a model that asked to keep them
+		 * - three floats each, in the model's own frame, the same vertices the
+		 * box above was taken over. Empty for everything else, and emptied by
+		 * HDModelReleasePoints once the level build has measured its floor
+		 * rule.
 		 *
 		 * The box cannot answer the fitted question: a rotation sends the box
 		 * corners somewhere no vertex of the model is. */
 		std::vector<float> points;
-		/* AND WHICH NODE EACH OF THEM RIDES ON (#155b, fix round 1). The box
-		 * needed no such thing: with every node's matrix a pure translation
-		 * equal to its own bind offset, (p - bind) * M is p again whatever
-		 * the weights are, so a vertex's position in the bind pose IS its
-		 * drawn position. The moment a node's matrix carries a ROTATION -
-		 * which the item's own animation frame puts there, and which is the
-		 * whole of this fix round - the two part company and the point has to
-		 * know which matrix to go through.
+		/* And which node each of them rides on. With every node's matrix a
+		 * pure translation equal to its own bind offset, (p - bind) * M is p
+		 * again whatever the weights are, so a vertex's bind-pose position IS
+		 * its drawn position. Once a node's matrix carries a ROTATION - which
+		 * the item's own animation frame puts there - the two part company
+		 * and the point has to know which matrix to go through.
 		 *
 		 * The vertex's HEAVIEST bone, one byte each. A vertex that rides on
 		 * two nodes at once is really drawn at the blend of both, and
 		 * `pointsBlended` counts them so that the log says how many of a
-		 * model's points this reads as rigid rather than leaving it to be
-		 * assumed. Every pickup file measured - the remaster's own and all
-		 * four of the user's mods - is rigid per node: weight (255, 0, 0) on
-		 * every vertex. */
+		 * model's points this reads as rigid. Every pickup file measured -
+		 * the remaster's own and four mods' - is rigid per node: weight
+		 * (255, 0, 0) on every vertex. */
 		std::vector<unsigned char> pointNode;
 		int pointsBlended = 0;
 		bool keepPoints = false;
@@ -206,22 +196,22 @@ namespace
 	std::map<int, Model> g_models;		// slot -> body
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
 	std::vector<std::string> g_notes;
-	/* What the classic pose decided, per slot that asked for one (#155). The
+	/* What the classic pose decided, per slot that asked for one. The
 	 * decision is taken while the file is open and the log line is written by
 	 * the caller, a level build later - so it is kept, not printed.
 	 * Cleared with everything else by HDModelLevelBegin. */
 	std::map<int, HDModelClassicPose> g_pose;
 	std::string g_install;
-	/* The other bundle's game 3 folder, for the four Tomb Raider III guests
-	 * (#123, stage S7-2). Empty unless the caller set it, and then no slot
-	 * can reach that bundle at all. */
+	/* The other bundle's game 3 folder, for the four Tomb Raider III guests.
+	 * Empty unless the caller set it, and then no slot can reach that bundle
+	 * at all. */
 	std::string g_install_tr3;
 	// A refusal whose wording is not a literal - it has to outlive the call
 	// that hands *why out. Never cleared by HDModelLevelEnd.
 	std::string g_error;
 
-	/* What the cache keys of this level build cost (#153, round M2, the fix
-	 * round). Accumulated here rather than passed down because build() is
+	/* What the cache keys of this level build cost. Accumulated here rather
+	 * than passed down because build() is
 	 * called once per model and the number belongs to the level; reset by
 	 * HDModelLevelBegin and read out of it into HDModelStats::keyMs. */
 	double g_key_ms = 0;
@@ -229,16 +219,16 @@ namespace
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
 	int g_frame_bulbs = 0;
-	// E6: which of the three passes this bracket draws - see
-	// HDModelFrameBegin and the HD_PASS_ note in hd_render.h.
+	// Which of the three passes this bracket draws - see HDModelFrameBegin
+	// and the HD_PASS_ note in hd_render.h.
 	unsigned int g_pass_mask = HD_PASS_ALL;
 
-	/* THE FRAME'S PROJECTION, KEPT (#123, fix round P2). The inventory ring
-	 * draws each item about a different screen centre, and the road it takes
-	 * is a projection of its own per item (HDModelOffCentre) - so the plain
-	 * one has to be here to build them from and to go back to. `g_off_centre`
-	 * says whether c0 currently holds a moved one, which is what lets the
-	 * ordinary case - every object in the world - upload nothing at all. */
+	/* The frame's projection, kept. The inventory ring draws each item about
+	 * a different screen centre with a projection of its own per item
+	 * (HDModelOffCentre), so the plain one is kept here to build them from
+	 * and to go back to. `g_off_centre` says whether c0 currently holds a
+	 * moved one, which lets the ordinary case - every object in the world -
+	 * upload nothing at all. */
 	float g_frame_proj[16] =
 	{
 		1.0f, 0.0f, 0.0f, 0.0f,
@@ -263,7 +253,7 @@ namespace
 	}
 
 	// The folder above the game 5 folder - the bundle that holds 4, 5 and 6;
-	// only 4 and 5 are ever searched (fix round C, C7).
+	// only 4 and 5 are ever searched.
 	std::string parent_of(const std::string& path)
 	{
 		std::string out = path;
@@ -281,7 +271,7 @@ namespace
 		return HDTrmExists(path.c_str());
 	}
 
-	/* WHICH MODS MAY ANSWER find_model (#153, round M1): kModsAny is every
+	/* Which mods may answer find_model: kModsAny is every
 	 * active one in their own order, kModsNone is the installs alone, and a
 	 * number is that mod and no other. The third case exists for a separate
 	 * HD face - see find_head_model.
@@ -295,8 +285,8 @@ namespace
 	const int kModsAny = -1;
 	const int kModsNone = -2;
 
-	/* WHERE A MODEL LIVES. Game 5 first, then the siblings - and the siblings
-	 * are not a courtesy: SAS, FIREROPE, BRIDGE_TILT1, RAISING_BLOCK1 and 2
+	/* Where a model lives. Game 5 first, then the siblings - and the siblings
+	 * are needed: SAS, FIREROPE, BRIDGE_TILT1, RAISING_BLOCK1 and 2
 	 * and EXPANDING_PLATFORM are in 4\ITEM and in no TR5 folder, because the
 	 * remaster ships one model per NAME across the bundle and TR5 inherited
 	 * those slots from TR4. Every substitution is written into the notes, so
@@ -309,29 +299,27 @@ namespace
 		if (modIndex)
 			*modIndex = -1;
 
-		/* A MOD BEFORE EVERYTHING ELSE (#153, round M1). The active mods in
-		 * order, each 5\ITEM then 4\ITEM; the first one that has the name
-		 * wins and the installs are not asked at all. It is a replacement by
-		 * RESOLUTION and never on disk - renaming the mod's folder with a
-		 * leading _ puts the install's own file back with nothing else to
-		 * undo.
+		/* A mod before everything else. The active mods in order, each
+		 * 5\ITEM then 4\ITEM; the first one that has the name wins and the
+		 * installs are not asked at all. It is a replacement by RESOLUTION
+		 * and never on disk - renaming the mod's folder with a leading _ puts
+		 * the install's own file back with nothing else to undo.
 		 *
-		 * Ahead of the fromTr3 branch on purpose: a mod that replaces one of
-		 * the four Tomb Raider III guests is the same kind of wish as one
-		 * that replaces a hand, and a guest whose model a mod supplies gets
-		 * that mod's page namespace like any other. HDModsFindModel refuses
-		 * OUTFIT_*.TRM by itself - the wardrobe is round M2. */
+		 * Ahead of the fromTr3 branch on purpose: a mod may replace one of
+		 * the four Tomb Raider III guests as well as a hand, and a guest
+		 * whose model a mod supplies gets that mod's page namespace like any
+		 * other. HDModsFindModel refuses OUTFIT_*.TRM by itself - outfits go
+		 * through the wardrobe. */
 		if (modOnly != kModsNone)
 		{
 			char path[512];
 			int mod = -1;
 
 			/* The wanted mod goes INTO the search rather than being checked
-			 * on the way out (#153, round M1, fix round). Sifting the answer
-			 * here meant the resolver had already written "model X <- mod0"
-			 * into the log for a file this call then dropped on the floor,
-			 * and its one-line-per-model memory made the correct line for
-			 * the same name unsayable afterwards. */
+			 * on the way out: the resolver writes "model X <- modN" into the
+			 * log once per model, so an answer dropped here would leave a
+			 * wrong line and make the correct one for the same name
+			 * unsayable. */
 			if (*HDModsFindModel(name.c_str(), &mod, path, sizeof(path),
 				modOnly == kModsAny ? -1 : modOnly))
 			{
@@ -345,7 +333,7 @@ namespace
 			}
 		}
 
-		/* THE OTHER BUNDLE, and only it (#123, stage S7-2). A Tomb Raider III
+		/* The other bundle, and only it. A Tomb Raider III
 		 * guest is looked for in game 3 and its siblings 1 and 2, and NEVER
 		 * in the IV-VI folders - a TR5 model that happened to carry the same
 		 * name would be the wrong enemy drawn with confidence. The other way
@@ -401,10 +389,9 @@ namespace
 			return path;
 		}
 
-		/* AND THEN 4, AND THEN NOTHING (#123, fix round C, user finding C7).
-		 * The bundle also holds a 6\ITEM, and until now it was searched last.
-		 * It has no business here: game 6 is Angel of Darkness, a different
-		 * engine with a different Lara and different objects, and a name that
+		/* Then 4, then nothing. The bundle also holds a 6\ITEM, which is
+		 * never searched: game 6 is Angel of Darkness, a different engine
+		 * with a different Lara and different objects, and a name that
 		 * matched there would be a wrong model rather than a missing one.
 		 * 5 for what TR5 draws, 4 for the shared base, then classic. */
 		path = join(join(join(bundle, "4"), "ITEM"), file.c_str());
@@ -422,26 +409,21 @@ namespace
 		return std::string();
 	}
 
-	/* WHICH FACE FILE BELONGS TO A BODY (#123, fix round D, D1).
+	/* Which face file belongs to a body.
 	 *
-	 * THE FINDING. In a cutscene every actor stood there without a head - the
-	 * user's picture of RICHCUT2 shows the man in the suit and the man in the
-	 * wheelchair, both headless, and the guard beside them wearing a cap and
-	 * nothing under it. Measured with ModelProbe: ANIMATING4_RICHCUT2 stops at
+	 * A cutscene body can end at the collar: ANIMATING4_RICHCUT2 stops at
 	 * y -234 with an open ring of 16 points at (0, -218, 6), radius 13, and no
-	 * vertex above it; the body really is a collar. Stage S3-2's rule then
-	 * does what it must - a node the .TRM does not cover is not drawn classic
-	 * either - and the result is a suit with a tie and no face.
+	 * vertex above it (ModelProbe). A node the .TRM does not cover is not
+	 * drawn classic either, so without its face the actor is headless.
 	 *
-	 * WHY THE NAME RULE MISSES THEM. A face is <MODEL>_HEAD.TRM, and that
-	 * answers for BLUE_GUARD, LARSON and PIERRE. It cannot answer for a
-	 * cutscene actor, because the remaster names his body after the LEVEL SLOT
-	 * it fills - ANIMATING4_RICHCUT2 - while his face keeps the person's name.
-	 * Game 5 ships twelve *_HEAD.TRM and only three of them are reachable by
-	 * name.
+	 * A face is <MODEL>_HEAD.TRM, and that name rule answers for BLUE_GUARD,
+	 * LARSON and PIERRE. It cannot answer for a cutscene actor, because the
+	 * remaster names his body after the LEVEL SLOT it fills -
+	 * ANIMATING4_RICHCUT2 - while his face keeps the person's name. Game 5
+	 * ships twelve *_HEAD.TRM and only three are reachable by name.
 	 *
-	 * TWO RULES ARE ADDED, both measured over all 1,335 model names of the 4
-	 * and 5 folders:
+	 * Two more rules, both measured over all 1,335 model names of the 4 and 5
+	 * folders:
 	 *
 	 *   the STRIP rule. A trailing _<QUALIFIER> is the remaster's way of
 	 *   saying "the same person, this level's paint": BLUE_GUARD_JOBY,
@@ -473,8 +455,7 @@ namespace
 	 * the top-hatted mourner of the title graveyard, who has his own face and
 	 * needs none. So every entry here is confirmed by a picture as well.
 	 *
-	 * LEFT UNPLACED, and named so the next pass does not start from nothing:
-	 * ADMIRAL, DEMON, HANGMAN, PATRICK_BROWN, PATRICK_WHITE, SERGIE and ZIP
+	 * Unplaced faces: ADMIRAL, DEMON, HANGMAN, PATRICK_BROWN, PATRICK_WHITE, SERGIE and ZIP
 	 * have no body among the models the fifteen .MAP files name that both
 	 * fits their neck and lacks a head. PATRICK_1 and PATRICK_2 are headless
 	 * and are plainly the two faces' bodies, but the remaster reaches them
@@ -506,7 +487,7 @@ namespace
 	/* The face file for a body, and by which of the three rules. `how` is for
 	 * the log and is never null on return; it says "name", "table" or "strip".
 	 * Empty when the model has no face anywhere. */
-	/* `bodyMod` (#153, round M1) is the mod the BODY came out of, or -1. The
+	/* `bodyMod` is the mod the BODY came out of, or -1. The
 	 * face is looked for in the same place and nowhere else: body and face
 	 * share one page bias, so a face out of a different source than its body
 	 * would ask the cache for its pages under the wrong namespace. Same mod,
@@ -525,7 +506,7 @@ namespace
 
 		*how = "name";
 
-		/* A FACE HAS NO FACE OF ITS OWN. Lara's wardrobe asks for the part
+		/* A face has no face of its own. Lara's wardrobe asks for the part
 		 * LARA_HEAD by name, and without this line the strip rule below cuts
 		 * "_HEAD" off it, finds LARA_HEAD again and hangs the face on itself -
 		 * the same triangles twice, fighting over the depth buffer. */
@@ -616,27 +597,26 @@ namespace
 			: 0.0;
 	}
 
-	/* --------------------------------- THE CLASSIC POSE (#155) --
+	/* ---------------------------------------------- the classic pose --
 	 *
 	 * A remaster inventory model is stored in the classic BIND POSE - node n's
 	 * vertices carry the mesh tree's offsets and no rotation at all - and the
-	 * game it came from puts the pose on when it draws. For the user's IMI
-	 * Uzis that is the difference between two guns standing side by side and
-	 * PARALLEL, which is what round M3 measured in our ring, and the two of
-	 * them CROSSED like an X, which is what he sees in the game the file came
-	 * from and what he asked for. hd_classic.h reads the frame; this puts it
-	 * on the vertices.
+	 * game it came from puts the pose on when it draws. For a mod's IMI Uzis
+	 * that is the difference between two guns standing side by side and
+	 * PARALLEL, and the two of them CROSSED like an X, as the game the file
+	 * came from shows them. hd_classic.h reads the frame; this puts it on the
+	 * vertices.
 	 *
-	 * BEFORE ANYTHING IS MEASURED OUT OF THEM. build() takes the box and the
+	 * Before anything is measured out of them: build() takes the box and the
 	 * principal axes in one pass over the vertices, and HDModelRingFit fits
 	 * the SHAPE those axes describe - so a pose applied afterwards would be a
 	 * pose the fit never saw. This runs where HDTrmFoldMirrored runs and for
 	 * the same reason: what is changed here is what the card is given, so
-	 * every number the log prints is a number about the model that is drawn.
+	 * every number the log prints is about the model that is drawn.
 	 *
-	 * IT IS SKINNING AND NOT A RIGID TURN, although every file this has met so
-	 * far is rigid: a vertex names three nodes with three weights, and posing
-	 * it on only the first would tear any file whose two parts share a seam. */
+	 * It is skinning and not a rigid turn, although every file met so far is
+	 * rigid: a vertex names three nodes with three weights, and posing it on
+	 * only the first would tear any file whose two parts share a seam. */
 	int trm_nodes(const HDTrmModel& trm)
 	{
 		int highest = -1;
@@ -724,11 +704,11 @@ namespace
 				}
 			}
 
-			/* A VERTEX THE POSE CANNOT REACH STAYS WHERE IT IS. It names only
+			/* A vertex the pose cannot reach stays where it is. It names only
 			 * nodes the classic object has not got, which the mesh-count guard
-			 * makes impossible for the files this runs on - but a caller is
-			 * not a proof, and a vertex quietly collapsed onto the origin is a
-			 * hole in the model nobody would trace back to here. */
+			 * rules out for the files this runs on - but a vertex quietly
+			 * collapsed onto the origin would be a hole in the model that is
+			 * hard to trace back to here. */
 			if (!share)
 				continue;
 
@@ -777,7 +757,7 @@ namespace
 		model.pass[1].clear();
 		model.pass[2].clear();
 		model.pages.clear();
-		model.points.clear();		// #155b
+		model.points.clear();
 	}
 
 	/* The three index runs of one part, in pass order. Measured over all 566
@@ -805,23 +785,22 @@ namespace
 	 * and the reason is the same - Direct3D 9 has no texture arrays. */
 	/* `pageBias` is what turns this model's raw page numbers into cache keys:
 	 * 0 for everything in this bundle, HD_PAGE_ALT_BASE for a model out of
-	 * the Tomb Raider I-III one (#123, S7-2) and the mod's own namespace for
-	 * a model a mod supplied (#153, round M1) - the .TRM's numbers are its
-	 * own game's, and the cache holds all of them at once.
+	 * the Tomb Raider I-III one and the mod's own namespace for a model a mod
+	 * supplied - the .TRM's numbers are its own game's, and the cache holds
+	 * all of them at once.
 	 *
 	 * It is offered rather than applied: HDPageCacheKeyOf takes the biased
 	 * number back down to the plain one where the two would open the same
 	 * file, so a mod that ships a model and no art of its own pays for that
-	 * art once (#153, round M2). */
-	/* WHICH PAGES OF A FILE ARE BUILT (#123, fix round D, D4; a SET and either
-	 * polarity since #153, round M2b).
+	 * art once. */
+	/* Which pages of a file are built - a set, kept or dropped.
 	 *
-	 * Round D cut ONE page out of a bigger model - the holster rig out of the
-	 * London catsuit. Round M2b needs the other polarity and more than one page
+	 * One use cuts ONE page out of a bigger model - the holster rig out of the
+	 * London catsuit. Another needs the other polarity and more than one page
 	 * at a time: a mod's hand keeps its gun and DROPS the pages that resolve
 	 * into another bundle, and the install's own file of the same name KEEPS
-	 * only the pages that are its skin. One mechanism does both, because two
-	 * would be two chances to disagree about what a page number means.
+	 * only the pages that are its skin. One mechanism does both, so the two
+	 * cannot disagree about what a page number means.
 	 *
 	 * The numbers are the FILE'S own, as the .TRM writes them, and never cache
 	 * keys - see HDModelSlot::cutPage. */
@@ -849,7 +828,7 @@ namespace
 		}
 	};
 
-	/* AND THE SAME THING BY NODE (#156) - see HDModelSlot::onlyNode. A mask
+	/* The same thing by node - see HDModelSlot::onlyNode. A mask
 	 * of 0 is the whole model and costs one test per triangle. */
 	struct NodeCut
 	{
@@ -861,22 +840,18 @@ namespace
 		}
 	};
 
-	/* WHICH NODE A TRIANGLE BELONGS TO: the node that carries the most weight
+	/* Which node a triangle belongs to: the node that carries the most weight
 	 * over its three corners. A triangle that straddles a joint has to fall on
-	 * one side of it, and the heavier side is the side it moves with - the
-	 * same rule the eye applies when it decides whether a polygon "is" the
-	 * upper arm or the forearm.
+	 * one side of it, and the heavier side is the side it moves with.
 	 *
-	 * The rigid case reads the vertex as it was WRITTEN, not as it arrived:
-	 * since fix round B a facial-rig file's neck bone lands on the head node's
-	 * parent, and a neck triangle belongs to that node when mesh_bits hides
-	 * one of the two.
+	 * The rigid case reads the vertex as it was WRITTEN, not as it arrived: a
+	 * facial-rig file's neck bone lands on the head node's parent, and a neck
+	 * triangle belongs to that node when mesh_bits hides one of the two.
 	 *
-	 * It was one block inside build()'s triangle loop until #156, which needs
-	 * the same answer in two more places - the vertex keep pass and the page
-	 * list - because a NODE cut has to drop exactly the triangles a node mask
-	 * would have hidden. One function, so the cut and the ranges cannot come
-	 * to disagree about which node a triangle is on. */
+	 * Used by the triangle loop, the vertex keep pass and the page list,
+	 * because a NODE cut has to drop exactly the triangles a node mask would
+	 * have hidden. One function, so the cut and the ranges cannot disagree
+	 * about which node a triangle is on. */
 	int dominant_node_of(const HDTrmModel& trm, int at, int rigidNode,
 		int neckBone, int neckNode)
 	{
@@ -912,11 +887,10 @@ namespace
 		return best;
 	}
 
-	/* THE AXES OF ONE SET OF EXTENTS, LONGEST FIRST. One function so that the
-	 * ring's fit, its overflow figure and the cloud's own axes in build() cannot
-	 * come to disagree about which axis is which - the whole rule is "k-th
-	 * longest to k-th longest", and a second copy of it would be a second thing
-	 * to keep in step. */
+	/* The axes of one set of extents, longest first. One function so that the
+	 * ring's fit, its overflow figure and the cloud's own axes in build()
+	 * cannot disagree about which axis is which - the rule is "k-th longest to
+	 * k-th longest". */
 	void sort_axes(const float* size, int* order)
 	{
 		order[0] = 0;
@@ -941,20 +915,19 @@ namespace
 
 		std::vector<HDModelVertex> buffer((size_t)vertices);
 
-		/* THE PAGE CUT (#123, fix round D, D4). With a cut in hand, a vertex
-		 * no kept triangle names takes no part in ANYTHING the loop below
-		 * measures - not the bounds, not the node coverage, not the bind
-		 * drift. Otherwise a holster cut out of an outfit would report that
-		 * it covers all fifteen nodes and reaches from her hair to her boots,
-		 * and the composite would hand it the whole body's work. The vertex
-		 * itself stays in the buffer: the index list is the file's own and
-		 * renumbering it would buy 400 KiB and a new class of bug. */
-		// #156: and the same for a NODE cut, which drops vertices the same way.
+		/* The page cut and the node cut. With a cut in hand, a vertex no kept
+		 * triangle names takes no part in ANYTHING the loop below measures -
+		 * not the bounds, not the node coverage, not the bind drift. Otherwise
+		 * a holster cut out of an outfit would report that it covers all
+		 * fifteen nodes and reaches from her hair to her boots, and the
+		 * composite would hand it the whole body's work. The vertex itself
+		 * stays in the buffer: the index list is the file's own, and
+		 * renumbering it would save 400 KiB at the cost of complexity. */
 		const bool whole = (cut.count <= 0 || !cut.page) && !nodeCut.nodes;
 		std::vector<bool> keep((size_t)vertices, whole);
 
-		// #155b: one allocation and not a ladder of them - the cut can only
-		// take vertices away, so the file's own count is the upper bound.
+		// One allocation: the cut can only take vertices away, so the file's
+		// own count is the upper bound.
 		if (model.keepPoints)
 		{
 			model.points.reserve((size_t)vertices * 3);
@@ -1003,12 +976,11 @@ namespace
 
 			if (rigidNode >= 0)
 			{
-				/* THE FACE'S NECK GOES ON THE PARENT NODE (#123, fix round
-				 * B, B4). Everything else of a facial-rig file hangs off the
-				 * head node, which is what "rigid" meant until now; the one
-				 * bone that reaches down into the collar hangs off the node
-				 * the head node hangs off - the torso. The weights are kept
-				 * as the file has them, so the seam between the two BLENDS
+				/* The face's neck goes on the parent node. Everything else
+				 * of a facial-rig file hangs off the head node; the one bone
+				 * that reaches down into the collar hangs off the node the
+				 * head node hangs off - the torso. The weights are kept as
+				 * the file has them, so the seam between the two BLENDS
 				 * instead of tearing. neck_bone_of says which bone that is
 				 * and how it was measured. */
 				const int b0 = model.neckBone >= 0 && (int)in.bone[0] == model.neckBone
@@ -1037,10 +1009,9 @@ namespace
 			}
 			else
 			{
-				/* The palette is 32 and the measurement says the highest
-				 * weighted bone over all of game 5 is 28, so this clamp never
-				 * fires on the remaster's own files. It is here for a
-				 * hand-made .TRM and for the day a sixth game ships. */
+				/* The palette is 32 and the highest weighted bone over all
+				 * of game 5 is 28, so this clamp never fires on the
+				 * remaster's own files. It guards a hand-made .TRM. */
 				out.bone0 = (unsigned char)(in.bone[0] < kJointBudget ? in.bone[0] : kJointBudget - 1);
 				out.bone1 = (unsigned char)(in.bone[1] < kJointBudget ? in.bone[1] : kJointBudget - 1);
 				out.bone2 = (unsigned char)(in.bone[2] < kJointBudget ? in.bone[2] : kJointBudget - 1);
@@ -1069,20 +1040,20 @@ namespace
 				}
 			}
 
-			/* AND THE POSITION ITSELF, for a model that asked (#155b). Here
-			 * and not in a second walk of the file: this is the one loop that
-			 * has the kept vertices in hand, and the floor rule has to see
-			 * exactly the vertices the box above was taken over or the two
-			 * numbers it compares are not about the same model. */
+			/* The position itself, for a model that asked. Here and not in a
+			 * second walk of the file: this is the one loop that has the kept
+			 * vertices in hand, and the floor rule has to see exactly the
+			 * vertices the box below is taken over or the two numbers it
+			 * compares are not about the same model. */
 			if (model.keepPoints)
 			{
 				model.points.push_back(in.x);
 				model.points.push_back(in.y);
 				model.points.push_back(in.z);
-				/* AND THE NODE IT RIDES ON (fix round 1), out of the bones
-				 * this loop has just written - `out` and not `in`, because a
-				 * rigid face's neck rule has already moved a bone of the file
-				 * onto another node of the object above. */
+				/* And the node it rides on, out of the bones this loop has
+				 * just written - `out` and not `in`, because a rigid face's
+				 * neck rule has already moved a bone of the file onto
+				 * another node of the object above. */
 				model.pointNode.push_back(out.bone0);
 
 				if (out.weight0 != 255)
@@ -1105,7 +1076,7 @@ namespace
 				if (in.z > model.maxs[2]) model.maxs[2] = in.z;
 			}
 
-			/* THE NODE COVERAGE, which is the whole of the mapping question:
+			/* The node coverage, which is the whole of the mapping question:
 			 * a bone index IS a classic mesh number, so what a slot needs is
 			 * not a permutation but the list of nodes the model has geometry
 			 * for. A weight of zero does not count - a vertex names three
@@ -1125,7 +1096,7 @@ namespace
 					model.covered |= 1u << node;
 				}
 
-				/* THE HIGHEST NODE THE MODEL NAMES, before the clamp above
+				/* The highest node the model names, before the clamp above
 				 * takes it down to the palette. This is the number that says
 				 * "this .TRM was drawn for a different mesh tree", and it has
 				 * to be the raw one - a clamped 31 would look like a
@@ -1134,7 +1105,7 @@ namespace
 					model.maxBone = (int)in.bone[b];
 			}
 
-			/* THE BIND DRIFT. Only the vertices that ride on ONE node count:
+			/* The bind drift. Only the vertices that ride on ONE node count:
 			 * a blended vertex sits between two nodes on purpose and would
 			 * make every elbow look like a mismatch. */
 			if (rigidNode < 0 && in.weight[0] == 255)
@@ -1150,8 +1121,8 @@ namespace
 			}
 		}
 
-		/* THE CLOUD'S OWN AXES, out of the moments gathered above (#153, round
-		 * M3). The covariance of the drawn vertices, diagonalised by Jacobi
+		/* The cloud's own axes, out of the moments gathered above. The
+		 * covariance of the drawn vertices, diagonalised by Jacobi
 		 * rotations - three of them are enough for a 3x3 to machine precision and
 		 * eight are taken, so a degenerate cloud costs a few microseconds and not
 		 * a wrong answer.
@@ -1239,7 +1210,7 @@ namespace
 
 				sort_axes(span, order);
 
-				/* AN EIGENVECTOR HAS NO SIGN, AND A GUN HAS TWO ENDS. Without a
+				/* An eigenvector has no sign, and a gun has two ends. Without a
 				 * rule for it the same file could come out muzzle-first or
 				 * grip-first from one build to the next, and a fit that pairs two
 				 * models' axes would pair them back to front half the time.
@@ -1264,7 +1235,7 @@ namespace
 						model.axis[k][r] = sign * (float)vec[r][a];
 				}
 
-				/* AND THE THIRD IS THE OTHER TWO. Taken as a cross product rather
+				/* The third axis is the cross product of the other two, rather
 				 * than kept from the solver, so the three are right handed BY
 				 * CONSTRUCTION: a frame built from them can rotate a model and can
 				 * never mirror it. The rule above has already settled the two that
@@ -1280,17 +1251,16 @@ namespace
 			}
 		}
 
-		/* THE BIND DRIFT, BETWEEN PAIRS OF NODES AND NOT AGAINST THE ORIGIN.
+		/* The bind drift, between pairs of nodes and not against the origin.
 		 *
-		 * The first version of this measured how far a node's own vertices sit
-		 * from that node in the classic bind pose, and it was wrong for
-		 * everything that is not a creature: a door is one node whose mesh
-		 * hangs 750 units off its hinge, so it looked like the worst mismatch
-		 * in the level - in VANILLA, where nothing can be mismatched at all.
-		 * What that number really measures is where a modeller put the origin,
-		 * which is the model's business and not the skeleton's.
+		 * How far a node's own vertices sit from that node in the classic bind
+		 * pose says nothing for anything that is not a creature: a door is one
+		 * node whose mesh hangs 750 units off its hinge, which would look like
+		 * the worst mismatch in a VANILLA level. That number measures where a
+		 * modeller put the origin, which is the model's business and not the
+		 * skeleton's.
 		 *
-		 * What the skeleton question actually asks is whether the DISTANCES
+		 * The skeleton question asks whether the DISTANCES
 		 * between the nodes agree. So: for every pair of nodes that both carry
 		 * geometry, the distance between their vertex centres against the
 		 * distance between their bind positions. Both sides then carry each
@@ -1318,7 +1288,7 @@ namespace
 				centres[nodes][1] = centre[node][1] / single[node];
 				centres[nodes][2] = centre[node][2] / single[node];
 
-				/* HOW BIG THE MESH ITSELF IS, as the root mean square
+				/* How big the mesh itself is, as the root mean square
 				 * distance of its vertices from their own centre. E[r^2] =
 				 * E[|v|^2] - |c|^2, so the sum of squares gathered above is
 				 * all it takes. */
@@ -1345,11 +1315,11 @@ namespace
 					const double by = model.bind[have[a]][1] - model.bind[have[b]][1];
 					const double bz = model.bind[have[a]][2] - model.bind[have[b]][2];
 
-					/* THE MESHES' OWN SIZE COMES OFF. A centre is not a
+					/* The meshes' own size comes off. A centre is not a
 					 * joint: a long bone's vertices average out at the
 					 * middle of the bone, so two long meshes disagree with
-					 * their joints by half their own length and a hammer
-					 * trap looked like a mismatch in VANILLA. What is left
+					 * their joints by half their own length, and a hammer
+					 * trap would look like a mismatch in VANILLA. What is left
 					 * after the two spreads are taken off is what neither
 					 * mesh can explain by its own shape - and that is the
 					 * skeleton. */
@@ -1385,21 +1355,17 @@ namespace
 		page_of_triangle.reserve((size_t)(trm.indices / 3));
 		node_of_triangle.reserve((size_t)(trm.indices / 3));
 
-		/* THE CACHE KEY OF EVERY PAGE THIS MODEL NAMES, WORKED OUT ONCE
-		 * (#153, round M2, the fix round).
+		/* The cache key of every page this model names, worked out once.
 		 *
-		 * A vertex names a page by its LAYER, which is an index into the
-		 * model's own short texture list - eight entries at the outside - so
-		 * there are exactly `trm.textures` different answers to give, however
-		 * many triangles wear them. Round M2 asked HDPageCacheKeyOf per
-		 * triangle CORNER instead, and for a model a mod supplied that
-		 * question opens files: measured at 30.8 microseconds a call, which
-		 * turned ANDREA1's model build from 672 ms into 25,656.
+		 * A vertex names a page by its LAYER, an index into the model's own
+		 * short texture list - eight entries at the outside - so there are
+		 * exactly `trm.textures` different answers, however many triangles
+		 * wear them. Asked per triangle CORNER, HDPageCacheKeyOf opens files
+		 * for a model a mod supplied: 30.8 microseconds a call, which takes
+		 * ANDREA1's model build from 672 ms to 25,656.
 		 *
-		 * The table below is the same question asked per texture slot. It is
-		 * not an approximation of the old loop: HDTrmPageOf IS
-		 * texture[layer-1], so a corner's key is this table at its layer, and
-		 * the two agree value for value. */
+		 * HDTrmPageOf IS texture[layer-1], so a corner's key is this table at
+		 * its layer, value for value. */
 		std::vector<int> key_of_layer((size_t)(trm.textures > 0 ? trm.textures : 0));
 
 		{
@@ -1435,16 +1401,15 @@ namespace
 
 			page_of_triangle.push_back(a);
 
-			/* WHICH NODE A TRIANGLE BELONGS TO - dominant_node_of above, and
-			 * it is worked out for every triangle whether or not anything
-			 * cuts by it. Only used to hide a node, so a wrong answer at a
-			 * seam costs at most one triangle at the cut edge of a blown-off
-			 * limb. */
+			/* Which node a triangle belongs to - dominant_node_of above,
+			 * worked out for every triangle whether or not anything cuts by
+			 * it. Only used to hide a node, so a wrong answer at a seam costs
+			 * at most one triangle at the cut edge of a blown-off limb. */
 			const int best = dominant_node_of(trm, i, rigidNode, model.neckBone,
 				model.neckNode);
 
-			// #156: the page list is the pages of the triangles that SURVIVE,
-			// so a node cut pays for its own pages and not for the file's.
+			// The page list is the pages of the triangles that SURVIVE, so a
+			// node cut pays for its own pages and not for the file's.
 			if (a >= 0 && cut.wants(rawA) && nodeCut.wants(best) &&
 				std::find(model.pages.begin(), model.pages.end(), a) == model.pages.end())
 				model.pages.push_back(a);
@@ -1477,13 +1442,13 @@ namespace
 					if (at + 2 >= (unsigned int)trm.indices)
 						continue;
 
-					// The page cut (#123, fix round D, D4).
+					// The page cut.
 					if (!cut.wants(HDTrmPageOf(&trm,
 						&trm.vertex[trm.index[at]])))
 						continue;
 
-					// And the node cut (#156), out of the answer the loop
-					// above has already worked out for this triangle.
+					// And the node cut, out of the answer the loop above has
+					// already worked out for this triangle.
 					if (!nodeCut.wants(node_of_triangle[(size_t)(at / 3)]))
 						continue;
 
@@ -1528,8 +1493,8 @@ namespace
 					range.start = (unsigned int)indices.size();
 					range.count = 0;
 					range.pageSlot = here < 0 ? -1 : HDPageCacheSlotOf(here);
-					// #123 fix round I (I4): the .DDS number as well, so a
-					// material can be named by page.
+					// The .DDS number as well, so a material can be named
+					// by page.
 					range.page = here;
 					range.node = on;
 					page = here;
@@ -1595,7 +1560,7 @@ namespace
 		return true;
 	}
 
-	/* WHICH NODE A SEPARATE HD FACE RIDES ON. The remaster ships some faces
+	/* Which node a separate HD face rides on. The remaster ships some faces
 	 * as their own file - VON_CROY.TRM is a body with an empty collar and its
 	 * face is VON_CROY_HEAD.TRM - and draws them rigidly on the creature's
 	 * head node. Which node that is, is measured and not hard coded: it is
@@ -1640,21 +1605,19 @@ namespace
 		return best;
 	}
 
-	/* WHICH BONE OF A SEPARATE HD FACE IS THE NECK (#123, fix round B, B4).
+	/* Which bone of a separate HD face is the neck.
 	 *
-	 * The user's report: "Pierre's neck and chest are wrong in his death
-	 * animation". Measured (scratch tool TrmBones over all twelve
-	 * <NAME>_HEAD.TRM of game 5, per bone bounding boxes in the model's own
-	 * bind pose):
+	 * Measured over all twelve <NAME>_HEAD.TRM of game 5, per bone bounding
+	 * boxes in the model's own bind pose:
 	 *
-	 *   - the file is not a face. PIERRE_HEAD.TRM spans y -376..-177 while
-	 *     PIERRE.TRM's whole body ends at -286 and the head node sits at
-	 *     -342: the file carries head, NECK and a piece of collar, reaching
-	 *     165 units below the joint it was being nailed to.
+	 *   - the file is not only a face. PIERRE_HEAD.TRM spans y -376..-177
+	 *     while PIERRE.TRM's whole body ends at -286 and the head node sits
+	 *     at -342: the file carries head, NECK and a piece of collar,
+	 *     reaching 165 units below the head joint.
 	 *   - it carries a facial rig, so its bone numbers mean nothing to the
-	 *     mesh tree and the whole file rode rigidly on the head node. Turn
-	 *     that node - which is what a death animation does - and the neck and
-	 *     the collar swing with the skull and tear a hole.
+	 *     mesh tree. Riding rigidly on the head node, the neck and the collar
+	 *     swing with the skull whenever that node turns - as in Pierre's
+	 *     death animation - and tear a hole in the chest.
 	 *   - the rig has a shape. Eight of the twelve files use BOTH base bones
 	 *     0 and 1, and in every one of the eight one of them is the body of
 	 *     the head (2305 to 7817 vertices) and the other a small strip
@@ -1710,7 +1673,7 @@ namespace
 
 	/* ---------------------------------------------------------- drawing -- */
 
-	/* THE BIND FOLD. A .TRM vertex is in the model's bind pose, so the node's
+	/* The bind fold. A .TRM vertex is in the model's bind pose, so the node's
 	 * own bind offset has to come off before the node matrix goes on:
 	 *
 	 *     (p - bind) * M  =  p * R + t - bind * R  =  p * M'
@@ -1756,10 +1719,10 @@ namespace
 	{
 		const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
 
-		/* ALL 32 JOINTS GO UP, not just the ones the caller has. A .TRM is
-		 * the remaster's file and the classic node count is ours, and the two
-		 * disagreeing by one would let a vertex read a joint left over from
-		 * the object before - a limb somewhere else in the room, and only
+		/* All 32 joints go up, not just the ones the caller has. A .TRM is
+		 * the remaster's file and the classic node count is the level's, and
+		 * the two disagreeing by one would let a vertex read a joint left over
+		 * from the object before - a limb somewhere else in the room, and only
 		 * sometimes. The nodes past the caller's count get the last one it
 		 * gave, which is TROne's rule for a node it never saw
 		 * (fill_unseen_joints, game_renderer.cpp:1389): a slightly wrong limb
@@ -1775,14 +1738,7 @@ namespace
 		/* One colour per node, in the classic 0..255 space. A caller with
 		 * nothing to say gets a flat 128, which is the classic path's own
 		 * "no light list" ambient and draws the model at its plain texture
-		 * brightness.
-		 *
-		 * THE FOURTH COMPONENT IS NOT READ (#123, fix round S, S1). From fix
-		 * round J to fix round L it carried the neck cut's node mask, because
-		 * the cut was a shape in the bind pose and a wrist had to be held out
-		 * of it. The cut is a plane under her chin now and no arm is ever
-		 * above it, so this goes back to the hard zero it was from stage S3 to
-		 * fix round I. */
+		 * brightness. The fourth component is not read and stays zero. */
 		float light[kJointBudget * 4];
 
 		for (int node = 0; node < kJointBudget; node++)
@@ -1797,11 +1753,10 @@ namespace
 
 		g_device->SetVertexShaderConstantF(104, light, (UINT)kJointBudget);
 
-		/* c162, THE HEAD CUT (#123, fix round U, U1): which node's weight
-		 * decides and how much of it sends a fragment away. Nothing in it is a
-		 * fact about the camera or the pose, so unlike fix round S's plane it
-		 * does not have to be rebuilt anywhere - the caller names the two
-		 * numbers and they are the same in every frame.
+		/* c162, the head cut: which node's weight decides and how much of it
+		 * sends a fragment away. Nothing in it depends on the camera or the
+		 * pose, so the caller names the two numbers and they are the same in
+		 * every frame.
 		 *
 		 * Written for every draw and not only for the one that cuts, for the
 		 * reason c161 is: a constant register keeps what it was last given,
@@ -1818,7 +1773,7 @@ namespace
 
 		g_device->SetVertexShaderConstantF(162, neck, 1);
 
-		/* THE OBJECT'S LIGHTS, in the VERTEX shader (c136) - the classic path
+		/* The object's lights, in the VERTEX shader (c136) - the classic path
 		 * lights per vertex out of the same list, so this is the same place
 		 * and not an approximation of it. See HDModelLighting in hd_model.h.
 		 *
@@ -1854,7 +1809,7 @@ namespace
 		g_device->SetVertexShaderConstantF(136, lights, HD_MAX_OBJ_LIGHTS * 2);
 		g_device->SetVertexShaderConstantF(160, info, 1);
 
-		/* c161, THE SHEEN (#123, fix round D, D2). Written for every draw
+		/* c161, the sheen. Written for every draw
 		 * and not only for the ones that shine: the register keeps the last
 		 * value the card was given, and Lara's catsuit would otherwise leave
 		 * its gloss on the next creature drawn. A power of 0 would make
@@ -1870,7 +1825,7 @@ namespace
 		g_device->SetVertexShaderConstantF(161, sheen, 1);
 
 		/* What is in the register now, so the per-range writes below can leave
-		 * it alone when nothing changes (#123, fix round I, I4). */
+		 * it alone when nothing changes. */
 		float sheenNow[2] = { sheen[0], sheen[1] };
 
 		/* c17, the PIXEL side: x is the per-pixel dynamic light loop, which
@@ -1885,27 +1840,19 @@ namespace
 		g_device->SetStreamSource(0, model.vb, 0, sizeof(HDModelVertex));
 		g_device->SetIndices(model.ib);
 
-		/* THE ONE MODEL THAT IS NOT DOUBLE SIDED. Set here and put back at
+		/* The one model that is not double sided. Set here and put back at
 		 * the bottom of this function, so that the state the bracket
 		 * installed (D3DCULL_NONE) is what every other draw finds. */
 		if (cull != HD_MODEL_CULL_NONE)
 			g_device->SetRenderState(D3DRS_CULLMODE,
 				cull == HD_MODEL_CULL_CW ? D3DCULL_CW : D3DCULL_CCW);
 
-		/* FIX ROUND R'S DEPTH TIE IS GONE WITH THE DRAW THAT NEEDED IT (#123,
-		 * fix round S). Round K's inner skin drew the body a second time and,
-		 * on a single layer of triangles - a strap, a flap - won the depth tie
-		 * against the outward face under D3DCMP_LESSEQUAL, which is what the
-		 * play test saw as torn edges. Round R answered it with a D3DCMP_LESS
-		 * for that one draw; round S closes the hole with a LID and the second
-		 * draw is gone, so the whole HD path is back to one depth rule. */
 
 		for (int pass = 0; pass < 3; pass++)
 		{
-			/* E6: the frame draws its solid work and its glows in two
-			 * brackets, and this is where a bracket leaves out what is not
-			 * its own. HD_PASS_ALL, which is what the diagnostic tool and
-			 * every caller before fix round E asks for, lets all three
+			/* The frame draws its solid work and its glows in two brackets,
+			 * and this is where a bracket leaves out what is not its own.
+			 * HD_PASS_ALL, which the diagnostic tool asks for, lets all three
 			 * through and this line costs a test. */
 			if (!(g_pass_mask & (1u << pass)))
 				continue;
@@ -1914,8 +1861,8 @@ namespace
 				continue;
 
 			/* gPass: x switches the alpha test on, y the additive weighting,
-			 * z the first person HEAD CUT (#123, fix round U - a flag, 1 or
-			 * 0; the two numbers it needs went up in c162 above, and a 0 here
+			 * z the first person HEAD CUT (a flag, 1 or 0; the two numbers
+			 * it needs went up in c162 above, and a 0 here
 			 * for every model but Lara's body makes the shader's clip discard
 			 * nothing), w the overbright add. The PIXEL constant
 			 * file only - the vertex shader does not read gPass and fxc has
@@ -1932,15 +1879,13 @@ namespace
 
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 
-			/* NO CUT-OUT ALPHA TEST IN THE OPAQUE PASS - MEASURED, NOT
-			 * ASSUMED (#123, fix round B, B2).
+			/* No cut-out alpha test in the opaque pass.
 			 *
-			 * The rooms got exactly that in fix round A (A2, hd_render.cpp's
-			 * draw_pass): the remaster puts its vegetation in the opaque
-			 * pass, where no alpha test runs, so a leaf sheet drew as a solid
-			 * rectangle until the test was switched on for the pages whose
-			 * alpha really is a coverage mask. The obvious next step was to
-			 * do the same for models. It is wrong, and the picture says so:
+			 * The rooms have one (hd_render.cpp's draw_pass): the remaster
+			 * puts its vegetation in the opaque pass, where no alpha test
+			 * runs, so a leaf sheet draws as a solid rectangle unless the
+			 * test is switched on for the pages whose alpha really is a
+			 * coverage mask. For models it is wrong:
 			 * ROMAN_GOD_ANDREA_SWORD's three body pages measure 64.1, 48.7
 			 * and 56.4 percent of texels below alpha 128, and with the test
 			 * on, half the statue is discarded (ModelProbe -name
@@ -1963,11 +1908,11 @@ namespace
 				g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 			}
 
-			/* THE RANGES, MERGED BACK TOGETHER. They come off in (page, node)
+			/* The ranges, merged back together. They come off in (page, node)
 			 * order and their index runs are contiguous, so a run of visible
 			 * neighbours that share a page is ONE draw call. With mesh_bits
-			 * at -1 that is the same number of calls stage S3-1 made; a
-			 * hidden node splits the run in two and costs one more. */
+			 * at -1 that is one call per page; a hidden node splits the run
+			 * in two and costs one more. */
 			for (size_t i = 0; i < model.pass[pass].size(); )
 			{
 				const Range& first = model.pass[pass][i];
@@ -1986,12 +1931,9 @@ namespace
 				{
 					const Range& more = model.pass[pass][next];
 
-					/* A RUN IS CUT BY THE PAGE, THE ORDER AND THE MASK
-					 * (#123; the note here named the inner skin, which fix
-					 * round S withdrew - corrected in fix round U, U5). Two
-					 * ranges join when they wear the same page, when the
-					 * second begins where the first ends, and when the mask
-					 * keeps the second's node. */
+					/* Two ranges join when they wear the same page, when
+					 * the second begins where the first ends, and when the
+					 * mask keeps the second's node. */
 					if (more.pageSlot != first.pageSlot ||
 						more.start != start + count ||
 						!(nodeMask & (1u << (more.node & 31))))
@@ -2005,8 +1947,8 @@ namespace
 					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot)
 					: 0);
 
-				/* THE MATERIAL OF THIS PAGE (#123, fix round I, I4). Only for
-				 * a model a caller has spoken for - and then only when the
+				/* The material of this page. Only for a model a caller has
+				 * set a table for - and then only when the
 				 * numbers really change, so a hand with a gun in it costs two
 				 * constant writes and a model without a table costs a test on
 				 * an empty vector. */
@@ -2047,7 +1989,7 @@ namespace
 			}
 		}
 
-		/* AND BACK TO DOUBLE SIDED. The bracket installed D3DCULL_NONE for
+		/* And back to double sided. The bracket installed D3DCULL_NONE for
 		 * the whole HD path and every other model on this frame's list
 		 * expects to find it; a cull mode left standing here would travel
 		 * from Lara's body to the next item on the list and take a face off
@@ -2064,15 +2006,13 @@ namespace
 		return at == where.end() ? 0 : &at->second;
 	}
 
-	/* WHAT TO CALL A SLOT IN A NOTE (#123, fix round B, B7).
+	/* What to call a slot in a note.
 	 *
 	 * HDSlotName knows the engine's 471 slots and nothing else, and this
 	 * module is handed PSEUDO slots as well - Lara's wardrobe parts
 	 * (hd_lara.h) and the alternative models of a mesh swap (hd_object.cpp).
-	 * For those it used to print "?", so a note read "? (slot 23041) asks for
-	 * LARA_HEAD.TRM", which names the file and hides who wanted it. The
-	 * model's own name is the honest label there, because a pseudo slot IS
-	 * its model. */
+	 * For those the model's own name is the label, because a pseudo slot IS
+	 * its model; "?" is left for a slot with neither. */
 	const char* slot_label(int slot, const char* model)
 	{
 		const char* name = HDSlotName(slot);
@@ -2197,8 +2137,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	double read_ms = 0;
 	double page_ms = 0;
 	double find_ms = 0;
-	// #153, round M2, the fix round - the phases of buildMs, and what the
-	// .TRM reader did between these two readings.
+	// The phases of buildMs, and what the .TRM reader did between these two
+	// readings.
 	double trm_opens0 = 0, trm_loads0 = 0, trm_bytes0 = 0;
 
 	g_key_ms = 0;
@@ -2207,8 +2147,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	if (stats)
 		stats->slots = count;
 
-	/* PASS ONE: read every slot's .TRM and build what does not need the
-	 * device. The pages are collected as we go, because they all have to be
+	/* Pass one: read every slot's .TRM and build what does not need the
+	 * device. The pages are collected on the way, because they all have to be
 	 * in the cache before a single range can name a page slot. */
 	struct Pending
 	{
@@ -2219,21 +2159,21 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		std::string name;
 		HDModelOrigin origin;
 		int pageBias;		// 0, HD_PAGE_ALT_BASE for a TR3 guest, or
-					// the mod's namespace (#153, round M1)
-		/* #123 fix round D (D4), a SET since #153 round M2b: which pages of
-		 * the file are built. Empty is the whole model. The numbers live here
-		 * rather than in the caller's slot because round M2b works two of
-		 * them out itself, while the file is open. */
+					// the mod's namespace
+		/* Which pages of the file are built, as a set kept or dropped. Empty
+		 * is the whole model. The numbers live here rather than in the
+		 * caller's slot because the hand-twin rule works some of them out
+		 * itself, while the file is open. */
 		std::vector<int> cutPage;
 		bool cutKeeps;
-		// #156: which NODES of the file are built, as a mask; 0 is all of
-		// them. See HDModelSlot::onlyNode.
+		// Which NODES of the file are built, as a mask; 0 is all of them.
+		// See HDModelSlot::onlyNode.
 		unsigned int cutNode;
-		/* #153 round M2b: the index in `slots` this entry borrows its skeleton
-		 * from, for a twin this module made up itself; -1 for every entry a
-		 * caller asked for. */
+		/* The index in `slots` this entry borrows its skeleton from, for a
+		 * twin this module made up itself; -1 for every entry a caller asked
+		 * for. */
 		int twinOf;
-		HDTrmFoldCounts fold;	// #153 round M2b: what the mirror fold did
+		HDTrmFoldCounts fold;	// what the mirror fold did
 	};
 
 	std::vector<Pending> pending;
@@ -2247,23 +2187,23 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* model = slots[i].name;
 
 		// A name the caller insists on is not asked about again - not even
-		// for Lara, whose composite is stage S4 but whose parts a diagnostic
-		// tool may well want to look at one at a time.
+		// for Lara, whose composite is hd_lara's but whose parts a diagnostic
+		// tool may want to look at one at a time.
 		if (!model && !slots[i].synth)
 		{
 			// Counted into find_ms: asking which file a slot means is the
 			// same walk of the same folders the search below does, and a
-			// mod adds two more places to walk (#153, round M2, fix round).
+			// mod adds two more places to walk.
 			const double bind_began = now_ms();
 
 			model = HDBindSlot(installRoot, slot, &kind, &fromMap, 0);
 			find_ms += now_ms() - bind_began;
 		}
 
-		/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3; back in
-		 * fix round S for the lid that closes the neck). It has no file, no
-		 * head and no origin; everything after this point is the same road a
-		 * read model takes. The source is looked up in what has already been
+		/* A model that is built and not read - the lid that closes the neck.
+		 * It has no file, no head and no origin; everything after this point
+		 * is the same road a read model takes. The source is looked up in what
+		 * has already been
 		 * read, which is why the maker's slot has to stand after its source in
 		 * the caller's array. */
 		if (slots[i].synth)
@@ -2296,7 +2236,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			made.origin = HD_MODEL_ORIGIN_5;
 			made.pageBias = 0;
 			made.cutKeeps = true;
-			// #156: a made model is whole. Pending is a plain struct with no
+			// A made model is whole. Pending is a plain struct with no
 			// constructor, so every field of it has to be written here.
 			made.cutNode = 0;
 			made.twinOf = -1;
@@ -2355,9 +2295,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		int mod = -1;
 		std::string path;
 
-		/* A FILE THE CALLER FOUND ITSELF (#153, round M2) - the wardrobe, and
-		 * nothing else today. No search at all, because there is nothing left
-		 * to search for; see HDModelSlot::path for why the wardrobe cannot go
+		/* A file the caller found itself - the wardrobe, and nothing else. No
+		 * search at all; see HDModelSlot::path for why the wardrobe cannot go
 		 * through find_model. */
 		if (slots[i].path && *slots[i].path)
 		{
@@ -2369,9 +2308,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		else
 		{
 			// Timed because it is the largest phase of a level build that is
-			// not reading or decoding anything (#153, round M2, the fix
-			// round): every slot with no .TRM costs a walk of the ITEM
-			// folders, and every active mod adds two more places to walk.
+			// not reading or decoding anything: every slot with no .TRM
+			// costs a walk of the ITEM folders, and every active mod adds
+			// two more places to walk.
 			const double find_began = now_ms();
 
 			path = find_model(model, tr3, &origin, &mod);
@@ -2400,7 +2339,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.hasHead = false;
 		here.name = model;
 		here.origin = origin;
-		/* WHOSE PAGE NUMBERS THESE ARE (#153, round M1). A mod's model
+		/* Whose page numbers these are. A mod's model
 		 * names its own mod's pages, and only the ones the mod does not
 		 * ship fall through to the install - see resolve_page. The mod's
 		 * namespace therefore wins over the guest's: a guest a mod
@@ -2409,7 +2348,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.pageBias = mod >= 0 ? HDPageModBase(mod)
 			: tr3 ? HD_PAGE_ALT_BASE : 0;
 		here.cutKeeps = true;
-		here.cutNode = slots[i].onlyNode;	// #156
+		here.cutNode = slots[i].onlyNode;
 		here.twinOf = -1;
 
 		if (slots[i].onlyPage >= 0)
@@ -2433,22 +2372,20 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			continue;
 		}
 
-		/* The caller's own look at the file (#123, fix round K, K1), before
-		 * anything here touches it. */
+		/* The caller's own look at the file, before anything here touches
+		 * it. */
 		if (slots[i].measure)
 			slots[i].measure(&here.trm);
 
-		/* THE MIRRORED WEIGHTS, FOLDED BACK (#153, round M2b) - before the
-		 * measure above?  No: after it, and deliberately. The measure looks at
-		 * the outfit's NECK and reads positions and pages, which this never
-		 * touches; putting the fold first would only mean the one caller with
-		 * a measure could no longer say what the file said. Everything that
-		 * builds out of the weights comes after this line. */
+		/* The mirrored weights, folded back - after the measure, on purpose.
+		 * The measure reads the outfit's NECK positions and pages, which the
+		 * fold never touches, and it sees the file as written. Everything
+		 * that builds out of the weights comes after this line. */
 		if (slots[i].mirror && slots[i].mirrors > 0)
 			HDTrmFoldMirrored(&here.trm, slots[i].mirror, slots[i].mirrors,
 				slots[i].mirrorBar, &here.fold);
 
-		/* THE DONOR GAME'S OWN FRAME 0 (#155). What this is and
+		/* The donor game's own frame 0. What this is and
 		 * what it needs is written out at HDModelSlot::classicPose; this is
 		 * where it happens, in the same place and for the same reason the
 		 * fold above does - before anything measures the vertices.
@@ -2482,22 +2419,19 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			else if (!said.object)
 				std::snprintf(said.why, sizeof(said.why),
 					"%s is no inventory model of game %d", model, said.game);
-			/* AND NO INSTALL IS NO INSTALL (#155b). `g_install_tr3` is the
-			 * I-III bundle's game 3 folder and the reader wants the bundle,
-			 * which is its parent - but parent_of("") is ".", so a machine
-			 * with only the IV-VI remaster sent the walk into <cwd>\1\DATA
-			 * and reported whatever it found or did not find there. A path
-			 * this module never had is a refusal and says so. */
+			/* No I-III install is a refusal. `g_install_tr3` is the I-III
+			 * bundle's game 3 folder and the reader wants the bundle, which
+			 * is its parent - but parent_of("") is ".", which would send the
+			 * walk into <cwd>\1\DATA on a machine with only the IV-VI
+			 * remaster. */
 			else if (g_install_tr3.empty())
 				std::snprintf(said.why, sizeof(said.why),
 					"there is no Tomb Raider I-III installation to read game "
 					"%d's levels from", said.game);
-			/* THE REASON ALONE, AND NOT THE OBJECT IT IS ABOUT (#155b). Every
-			 * caller of this field names the game and the object itself, and
-			 * naming them here as well printed "classic 1 object 102: game 1
-			 * object 102: ..." - one fact twice in one line. The one case that
-			 * still says "game %d" above is the one where the OBJECT is not
-			 * known, so nobody else can name it. */
+			/* The reason alone, not the object it is about: every caller of
+			 * this field names the game and the object itself. The one case
+			 * above that says "game %d" is the one where the OBJECT is not
+			 * known, so no caller can name it. */
 			else if (!HDClassicRead(parent_of(g_install_tr3).c_str(), said.game,
 				said.object, &object, &trouble))
 				std::snprintf(said.why, sizeof(said.why), "%s", trouble);
@@ -2506,7 +2440,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				said.meshes = object.meshes;
 				std::snprintf(said.level, sizeof(said.level), "%s", object.level);
 
-				/* THE MESH COUNT IS THE PROOF THAT THE TWO BELONG TOGETHER.
+				/* The mesh count is the proof that the two belong together.
 				 * A .TRM's bone numbers ARE the classic mesh numbers, so an
 				 * object with a different count is a different object and its
 				 * frame would put this model's parts anywhere at all. */
@@ -2527,7 +2461,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			g_pose[slot] = said;
 		}
 
-		/* MOD GUNS ON THE INSTALL'S HANDS (#153, round M2b). What this is and
+		/* Mod guns on the install's hands. What this is and
 		 * why it is decided here rather than by the caller is written out at
 		 * HDModelSlot::twinSlot; this is the arithmetic.
 		 *
@@ -2563,12 +2497,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				const char* skinTrouble = "";
 				const bool haveTwin = HDModelFindFile(model, false, false,
 					twinPath, sizeof(twinPath), 0);
-				/* THE REST HANDS' OWN READ IS IN read_ms TOO (#153, round M3).
-				 * The twin's read below has been counted since round M2b and
-				 * this one - a whole second .TRM off the disk, per hand part
-				 * with a mod's gun in it - was not, so the one line that says
-				 * how long a level spent reading models was short by exactly
-				 * the work this rule adds. */
+				/* The rest hands' own read is counted into read_ms, like the
+				 * twin's below: it is a whole second .TRM off the disk per
+				 * hand part with a mod's gun in it. */
 				const double skin_started = now_ms();
 				const bool haveSkin = slots[i].twinSkinOf &&
 					HDModelFindFile(slots[i].twinSkinOf, false, false, skinPath,
@@ -2596,7 +2527,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					twin.pageBias = 0;
 					twin.cutPage = keep;
 					twin.cutKeeps = true;
-					// #156: a hand twin is a whole model, never a node of one.
+					// A hand twin is a whole model, never a node of one.
 					twin.cutNode = 0;
 					twin.twinOf = i;
 					std::memset(&twin.fold, 0, sizeof(twin.fold));
@@ -2625,13 +2556,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 								slots[i].mirrors, slots[i].mirrorBar,
 								&twin.fold);
 
-						/* AND IF THE CALLER ALREADY ASKED FOR A CUT, THE TWO
-						 * BECOME ONE (#153, round M2b, the fix round). Only
-						 * one cut reaches build(), so writing this one over
-						 * the caller's would throw its rule away without a
-						 * word - and the two features were merged into one
-						 * mechanism precisely so that they could not disagree
-						 * about what a page number means.
+						/* If the caller already asked for a cut, the two
+						 * become one. Only one cut reaches build(), so writing
+						 * this one over the caller's would throw its rule away
+						 * without a word.
 						 *
 						 * They combine exactly, and as a DROP set: what the
 						 * caller's keep set leaves out is dropped anyway, so
@@ -2643,11 +2571,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 						 * Dropping every page of a file is representable;
 						 * keeping none of it is not.
 						 *
-						 * Nothing does both today - the one part with an
+						 * No current part does both - the one part with an
 						 * onlyPage is the holster rig, which is kind 4 and
-						 * never gets a twin - so this is the day after
-						 * tomorrow's bug, caught while the mechanism is fresh
-						 * and logged if it ever happens. */
+						 * never gets a twin - so the case is handled and
+						 * logged in case it ever happens. */
 						if (here.cutKeeps && !here.cutPage.empty())
 						{
 							std::vector<int> drop = foreign;
@@ -2700,9 +2627,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 						/* What the mod's file really keeps, asked of the cut
 						 * that reaches the build and not of `foreign` - the
 						 * two are the same list wherever the caller asked for
-						 * no cut of its own, which is every part today, and
-						 * where it did the log has to name what survives both
-						 * (#153, round M2b, the fix round). */
+						 * no cut of its own, and where it did the log has to
+						 * name what survives both. */
 						for (int t = 0; t < here.trm.textures; t++)
 						{
 							const int raw = (int)here.trm.texture[t];
@@ -2733,7 +2659,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 							guns ? gunList.c_str() : "none");
 
 						/* Only the pages the cut keeps are paid for, the same
-						 * rule the holster rig has had since fix round D. */
+						 * rule the holster rig follows. */
 						for (int t = 0; t < twin.trm.textures; t++)
 						{
 							const int raw = (int)twin.trm.texture[t];
@@ -2760,10 +2686,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		}
 
 		/* A file the caller found itself says WHERE, in the same shape the
-		 * three notes below use (#153, round M2). Without it the wardrobe's
-		 * body would be the one model in a level whose per-part note says
-		 * nothing - it used to say "comes from the sibling game 4", which was
-		 * find_model's answer and is no longer asked for. */
+		 * three notes below use, so the wardrobe's parts have a note like
+		 * every other model. */
 		if (slots[i].path && *slots[i].path)
 			note("%s (slot %d): %s.TRM comes from the wardrobe scan - %s",
 				slot_label(slot, model), slot, model, path.c_str());
@@ -2779,8 +2703,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				origin == HD_MODEL_ORIGIN_4 ? 4 : 6);
 
 		/* The separate HD face, if the remaster ships one for this model -
-		 * by name, by the measured table or by the strip rule (#123, fix
-		 * round D, D1; see find_head_model above). */
+		 * by name, by the measured table or by the strip rule (see
+		 * find_head_model above). */
 		HDModelOrigin head_origin = HD_MODEL_ORIGIN_NONE;
 		const char* head_how = "name";
 		std::string head_name;
@@ -2789,7 +2713,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			&head_how, &head_name, mod);
 
 		// The face is a second walk of the same folders, so it belongs in
-		// the same phase (#153, round M2, the fix round).
+		// the same phase.
 		find_ms += now_ms() - head_find_began;
 
 		if (!head_path.empty())
@@ -2808,15 +2732,14 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					slot_label(slot, model), slot, head_name.c_str(), head_how);
 		}
 
-		/* Only the page that is kept is paid for (#123, fix round D, D4):
-		 * the holster cut out of OUTFIT_TR3_CATSUIT wants one of that
-		 * model's ten pages, and loading the other nine for it would cost
-		 * more texture than the whole of Lara. */
-		/* Through HDPageCacheKeyOf, exactly as build() does above (#153, round
-		 * M2), because the list the cache is handed and the keys the ranges
-		 * carry have to be the same numbers - a page asked for under one key
-		 * and drawn under another is the white tile. Once per texture slot
-		 * here as well, which is all this loop ever asked for. */
+		/* Only the page that is kept is paid for: the holster cut out of
+		 * OUTFIT_TR3_CATSUIT wants one of that model's ten pages, and loading
+		 * the other nine for it would cost more texture than the whole of
+		 * Lara. */
+		/* Through HDPageCacheKeyOf, exactly as build() does above, because the
+		 * list the cache is handed and the keys the ranges carry have to be
+		 * the same numbers - a page asked for under one key and drawn under
+		 * another is a white tile. Once per texture slot here as well. */
 		const double keys_began = now_ms();
 
 		{
@@ -2826,21 +2749,20 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				(int)here.cutPage.size(), here.cutKeeps
 			};
 
-			/* AND THE NODE CUT PAYS FOR ITS OWN PAGES TOO (#156). A page cut
-			 * can be answered out of the texture list alone; a node cut
-			 * cannot - which pages a node wears is a fact about its
-			 * TRIANGLES. So they are walked once, here, where the .TRM is
-			 * open and the build has not run yet. Only a slot that asked for
-			 * a node cut pays for that walk, and what it buys is the whole
-			 * point of the cut: Lara's head out of OUTFIT_CLASSIC is two of
-			 * that model's seven pages, 2.7 MiB instead of 9.3. */
+			/* And the node cut pays for its own pages too. A page cut can be
+			 * answered out of the texture list alone; a node cut cannot -
+			 * which pages a node wears is a fact about its TRIANGLES. So they
+			 * are walked once, here, where the .TRM is open and the build has
+			 * not run yet. Only a slot that asked for a node cut pays for that
+			 * walk: Lara's head out of OUTFIT_CLASSIC is two of that model's
+			 * seven pages, 2.7 MiB instead of 9.3. */
 			bool wornByNode[256];
 			/* A SKINNED model only: dominant_node_of's answer for a facial rig
 			 * depends on the neck bone, and that is measured in pass two,
 			 * where there is a Model to keep it in. A rigid file with a node
-			 * cut would therefore be paid for whole - which is the safe way
-			 * round, since a page short is a white tile and a page over is
-			 * memory. Nothing asks for that combination today. */
+			 * cut is therefore paid for whole - the safe way round, since a
+			 * page short is a white tile and a page over is memory. No caller
+			 * asks for that combination. */
 			const bool byNode = here.cutNode != 0 && slots[i].rigidNode < 0;
 
 			if (byNode)
@@ -2893,7 +2815,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			(int)pages.size(), managedPages, threads, &page_stats, &page_why))
 		{
 			/* The pages did not load - the card ran out of video memory, or
-			 * it cannot make the format at all (#123, stage S6). Going on
+			 * it cannot make the format at all. Going on
 			 * would build models whose draw calls name page slots with no
 			 * texture behind them, and a draw call with no texture is
 			 * skipped, so the enemies would be INVISIBLE rather than classic.
@@ -2919,7 +2841,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	for (int i = 0; i < HDPageCacheNoteCount(); i++)
 		note("%s", HDPageCacheNote(i));
 
-	/* PASS TWO: the buffers. */
+	/* Pass two: the buffers. */
 	const double buffers_began = now_ms();
 	int mixed = 0;
 
@@ -2933,19 +2855,19 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		model.nodes = 0;
 
 		for (int k = 0; k < count; k++)
-			/* A TWIN TAKES ITS SKELETON FROM THE PART IT STANDS BESIDE (#153,
-			 * round M2b). It is not a slot the caller asked for - this module
-			 * made it - so `slots` has no row of its own for it, and without
-			 * this it would draw with no nodes and no bind fold at all: the
-			 * install's hands in their own bind pose while the mod's gun
-			 * follows the animation. */
+			/* A twin takes its skeleton from the part it stands beside. It is
+			 * not a slot the caller asked for - this module made it - so
+			 * `slots` has no row of its own for it, and without this it would
+			 * draw with no nodes and no bind fold at all: the install's hands
+			 * in their own bind pose while the mod's gun follows the
+			 * animation. */
 			if (slots[k].slot == here.slot ||
 				(here.twinOf >= 0 && k == here.twinOf))
 			{
 				model.nodes = slots[k].nodes;
 				model.rigidNode = slots[k].rigidNode;
-				// #155b: a twin inherits it with the rest of the row, which
-				// is right - it is drawn beside the model that asked.
+				// A twin inherits it with the rest of the row - it is drawn
+				// beside the model that asked.
 				model.keepPoints = slots[k].keepPoints;
 
 				if (slots[k].bind)
@@ -2962,7 +2884,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					model.hasBind = true;
 				}
 
-				/* The classic mesh TREE, for the head pass (B4). */
+				/* The classic mesh TREE, for the head pass. */
 				if (slots[k].parent)
 				{
 					const int use = model.nodes < kJointBudget ? model.nodes : kJointBudget;
@@ -2986,7 +2908,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			(int)here.cutPage.size(), here.cutKeeps
 		};
 
-		const NodeCut nodeCut = { here.cutNode };	// #156
+		const NodeCut nodeCut = { here.cutNode };
 
 		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed,
 			&trouble, cut, nodeCut))
@@ -3030,8 +2952,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	if (stats)
 		stats->mixedPageTriangles = mixed;
 
-	/* PASS THREE: the separate faces, rigidly on ONE node - measured, not
-	 * hard coded: the bind-pose node nearest the face geometry's own centre.
+	/* Pass three: the separate faces, rigidly on ONE node - the bind-pose
+	 * node nearest the face geometry's own centre.
 	 * Without a bind pose there is nothing to measure against and the face
 	 * rides on node 0, which is what the diagnostic tool sees when it is
 	 * pointed at a bare .TRM. */
@@ -3061,10 +2983,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		head.rigidNode = node < 0 ? 0 : node;
 
-		/* THE NECK (#123, fix round B, B4). It needs the classic TREE, which
-		 * only a caller that walked the mesh tree can hand over - without it
-		 * the face stays rigid the way it was, which is the old picture and
-		 * not a wrong one. */
+		/* The neck. It needs the classic TREE, which only a caller that
+		 * walked the mesh tree can hand over - without it the face stays
+		 * wholly rigid on the head node. */
 		if (body.hasTree)
 		{
 			const int neck = neck_bone_of(here.head);
@@ -3081,8 +3002,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* trouble = "";
 		int ignore = 0;
 
-		// The whole face: a page cut is the BODY's business (fix round D, D4),
-		// and so is a node cut (#156).
+		// The whole face: a page cut is the BODY's business, and so is a node
+		// cut.
 		const PageCut all = { 0, 0, true };
 		const NodeCut everyNode = { 0 };
 
@@ -3123,8 +3044,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	}
 
 	/* The coverage count. A slot whose model has geometry for every classic
-	 * node is FULL; one with a gap is PARTIAL, and stage S3-2 draws the gap
-	 * the classic way. */
+	 * node is FULL; one with a gap is PARTIAL. */
 	if (stats)
 	{
 		for (std::map<int, Model>::const_iterator at = g_models.begin();
@@ -3154,7 +3074,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		stats->readMs = read_ms;
 		stats->buildMs = now_ms() - started - read_ms;
 
-		/* The phases of buildMs (#153, round M2, the fix round). They do not
+		/* The phases of buildMs. They do not
 		 * add up to it and are not meant to - what is left over is the
 		 * bookkeeping between them - but a phase that has run away shows up
 		 * here as the number it is. bufferMs is taken last because pass two
@@ -3172,7 +3092,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 }
 
 /* Kept across a level, like the page cache's own alternate root: it names an
- * installation, not a level (#123, stage S7-2). */
+ * installation, not a level. */
 void HDModelTr3Root(const char* root)
 {
 	g_install_tr3 = root ? root : "";
@@ -3215,12 +3135,11 @@ void HDModelLevelEnd()
 	g_pose.clear();
 }
 
-/* THE WARM-UP (#148, order 1). A model's vertex and index buffer are
- * D3DPOOL_MANAGED, and a managed resource is a system-memory copy until
- * something DRAWS with it: Direct3D uploads it to the card the first time it
- * is bound, inside the first frame it appears in. That is one cause of the
- * warm-up the user measured - the first seconds of a level cost an upload per
- * model, per page and per room, and they are paid inside frames that were
+/* The warm-up. A model's vertex and index buffer are D3DPOOL_MANAGED, and a
+ * managed resource is a system-memory copy until something DRAWS with it:
+ * Direct3D uploads it to the card the first time it is bound, inside the
+ * first frame it appears in. Without a warm-up the first seconds of a level
+ * pay an upload per model, per page and per room inside frames that are
  * meant to draw.
  *
  * PreLoad is Direct3D's own answer to exactly that and costs nothing when the
@@ -3261,7 +3180,7 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 	if (projection)
 	{
 		// Kept, because HDModelOffCentre builds this frame's off-centre
-		// matrices out of it and has to put it back afterwards (P2).
+		// matrices out of it and has to put it back afterwards.
 		std::memcpy(g_frame_proj, projection, sizeof(g_frame_proj));
 		set_matrix_constant(0, g_frame_proj);
 	}
@@ -3296,7 +3215,7 @@ void HDModelOffCentre(float kx, float ky)
 	 * as - it is NOT cleared when a bracket closes, so it is not a test of
 	 * "am I inside one". That test is not needed: both callers -
 	 * HDObjectFrameDraw for the world and the ring, and hd_object.cpp's
-	 * pickup_draw for the display in the corner (P2) - sit between their
+	 * pickup_draw for the display in the corner - sit between their
 	 * own HDModelFrameBegin and the (0, 0) they end with, so c0 always
 	 * holds the plain frame projection
 	 * again by the time the bracket closes and neither the room path nor
@@ -3357,7 +3276,7 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	if (at == g_heads.end() || !at->second.vb)
 		return false;
 
-	/* THE FACE FOLLOWS ITS NODE'S BIT. A separate <NAME>_HEAD.TRM is built
+	/* The face follows its node's bit. A separate <NAME>_HEAD.TRM is built
 	 * rigidly on one node, so every one of its ranges carries that node
 	 * number and the same mask answers for it - a head shot away by
 	 * mesh_bits takes the HD face with it. */
@@ -3486,15 +3405,10 @@ int HDModelPage(int slot, int at)
 	return model->pages[(size_t)at];
 }
 
-/* THE CLOUD'S OWN AXES (#153, round M3), measured in build() - the note at
- * Model::axis says why they are taken there and not here. `axes` takes nine
- * floats, three unit row vectors, longest first and right handed; `extent`
- * takes the cloud's span along each of them. False for a model that has none
- * (fewer than three vertices).
- *
- * A BOX AND A CLOUD ANSWER DIFFERENT QUESTIONS. A box says how much room a
- * model needs; these say which way it RUNS. For a flat pair of guns the two
- * are nothing alike, which is the whole of the round M2b ring fault. */
+/* The cloud's own axes, measured in build() - the note at Model::axis says
+ * why they are taken there. `axes` takes nine floats, three unit row vectors,
+ * longest first and right handed; `extent` takes the cloud's span along each
+ * of them. False for a model that has none (fewer than three vertices). */
 bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
 {
 	const Model* model = find(g_models, slot);
@@ -3515,74 +3429,57 @@ bool HDModelPrincipalAxes(int slot, float* axes, float* extent)
 	return true;
 }
 
-/* THE CORRECTION, out of the two models' own SHAPES.
+/* The fit, out of the two models' own SHAPES.
  *
- * Round M2b built this out of the two bounding BOXES and the user's picture of
- * the result is why it does not any more: his Uzi mod's inventory model came
- * out lying flat, the two guns one above the other with a gap between them,
- * where the same file in the Tomb Raider I-III remaster's own ring stands up
- * facing the camera. A box cannot tell a flat pair of guns from one tall gun
- * standing up - 147 x 253 x 159 with y longest is what both measure.
+ * A fit by bounding BOXES cannot tell a flat pair of guns from one tall gun
+ * standing up - 147 x 253 x 159 with y longest is what both measure - and a
+ * mod's Uzi inventory model comes out lying flat, the two guns one above the
+ * other, where the same file in the Tomb Raider I-III remaster's own ring
+ * stands up facing the camera.
  *
- * THE SHAPE SAYS IT AND THE BOX CANNOT. The principal axes of the vertex cloud
- * (HDModelPrincipalAxes, measured while the model was read) are the directions
- * the model really runs in: the two largest span the plane the shape lies in
- * and the smallest is the way it is flat. Measured on the user's own files:
+ * The principal axes of the vertex cloud (HDModelPrincipalAxes, measured while
+ * the model was read) are the directions the model really runs in: the two
+ * largest span the plane the shape lies in and the smallest is the way it is
+ * flat. Measured on a mod's files:
  *
  *   install EXTRA_UZI_ITEM    cloud 256 x 236 x  42, flat along y
  *   mod     UZI_OPTION        cloud 242 x 240 x 132, flat along x
  *
- * - two flat things, each flat along a different axis, which the boxes could
- * not say. Sending the source's k-th axis onto the target's k-th therefore
- * lays the mod's pair into the plane the vanilla item lies in, and the ring's
- * own per-item rotation then presents it as it presents the vanilla one:
- * face-on to the camera, turning about the vertical like every other item in
- * the ring. Nothing about either game is written down - the two files say
- * which way round they are.
+ * Sending the source's k-th axis onto the target's k-th lays the mod's pair
+ * into the plane the vanilla item lies in, and the ring's own per-item
+ * rotation then presents it as it presents the vanilla one: face-on to the
+ * camera, turning about the vertical. Nothing about either game is written
+ * down - the two files say which way round they are.
  *
- * WHAT IT IS NOT, LOOKED AT AND MEASURED (the fix round of M3). The user asked
- * for the two Uzis CROSSED like an X, which is what the I-III remaster's own
- * display shows him. THE FILE IS NOT A CROSSED PAIR. Face-on to its own plane
- * and along both of that plane's axes - three renders, ModelProbe -name
- * UZI_OPTION -rigid -axisview - the two guns stand PARALLEL, side by side and
- * offset; the vanilla EXTRA_UZI_ITEM beside them is ONE gun, not two. A rigid
- * turn keeps the angle between two parts, so no rotation of this file can
- * cross them, and this fit does not pretend to. Where the remaster's X comes
- * from is not established here: the .TRM carries no node transforms at all
- * (specific\hd\hd_trm.h - per-vertex bone indices and weights, nothing else),
- * its 27449 vertices sit on two nodes of 13723 and 13726, and the ring loads a
- * mod's _OPTION model RIGIDLY on one node because there is no mesh tree of
- * ours behind another game's file. Placing those two nodes would mean reading
- * the donor game's own mesh tree and frame out of the user's I-III data, which
- * is a feature and not a fit - a decision for the project, not for this
- * function to take on its own.
+ * The fit does not CROSS two parallel guns. In UZI_OPTION's bind pose the two
+ * guns stand PARALLEL, side by side and offset (ModelProbe -name UZI_OPTION
+ * -rigid -axisview); the vanilla EXTRA_UZI_ITEM is ONE gun. A rigid turn keeps
+ * the angle between two parts. The .TRM carries no node transforms at all
+ * (hd_trm.h - per-vertex bone indices and weights, nothing else); its 27449
+ * vertices sit on two nodes of 13723 and 13726, and the cross comes from the
+ * donor game's classic frame, which HDModelSlot::classicPose applies before
+ * this fit measures anything.
  *
- * THE PLANE IS WELL CONDITIONED AND THE ANGLE IN IT IS NOT (measured; the
- * review after the fix round of M3). Which axis is the FLATTEST - and so which
- * plane faces the camera - is decided by a wide margin on both files: 132.3
- * against 239.5 for the mod's pair, 41.6 against 235.7 for the vanilla item,
- * which is a factor of nearly six. The two axes INSIDE that plane are decided
- * by 242.3 against 239.5 on the mod's file, a gap of 1.2 %, and sort_axes
- * orders them by that gap alone. So the ROLL inside the plane is deterministic
- * - the same file gives the same answer every time - but it is not meaningful:
- * a mod update that moved a few dozen vertices could swap the two and turn the
- * item a quarter turn in the ring. The brief asked for the in-plane angle to
- * put the pair's SYMMETRY axis where the vanilla item's is, and no symmetry
- * test is made here; a max-extent sweep in the plane is the next step if the
- * user dislikes an angle. It is written down rather than guessed at, because a
- * silent quarter turn after a mod update would otherwise look like a new bug.
+ * The plane is well conditioned and the angle in it is not. Which axis is the
+ * FLATTEST - and so which plane faces the camera - is decided by a wide margin
+ * on both files: 132.3 against 239.5 for the mod's pair, 41.6 against 235.7
+ * for the vanilla item, a factor of nearly six. The two axes INSIDE that plane
+ * are decided by 242.3 against 239.5 on the mod's file, a gap of 1.2 %, and
+ * sort_axes orders them by that gap alone. So the ROLL inside the plane is
+ * deterministic - the same file gives the same answer every time - but not
+ * meaningful: a mod update that moved a few dozen vertices could swap the two
+ * and turn the item a quarter turn in the ring. No symmetry test is made; a
+ * max-extent sweep in the plane would be the way to pin the angle.
  *
  * Both frames are right handed by construction (see the axes' own note), so
- * the map is a pure rotation and can never mirror a model - which the box
- * rule had to repair with a negated axis.
+ * the map is a pure rotation and can never mirror a model.
  *
  * The scale is uniform and is the ratio of the two longest extents, so the
  * mod's model is as long in the ring as the model it replaces. The longest
  * axis is always one of the two IN the plane, so the scale is decided by the
- * shape's own reach and never by how thick it is - which is the half of the
- * old rule that was right and is kept.
+ * shape's own reach and never by how thick it is.
  *
- * THE PRICE IS THAT THE FITTED MODEL CAN STILL STAND OUT OF THE TARGET'S BOX
+ * So the fitted model can still stand out of the target's box
  * on the axes the scale did not decide: the mod's pair of Uzis is 132 units
  * thick where the vanilla item is 42, and that is the mod's own geometry and
  * not a fault of the fit. HDModelRingFitOverflow puts the number on it and
@@ -3599,7 +3496,7 @@ bool HDModelRingFit(int model, int target, float* out)
 		srcExt[0] <= 0.0f)
 		return false;
 
-	/* THE TURN. Row vectors, as everywhere in this engine's matrices: the
+	/* The turn. Row vectors, as everywhere in this engine's matrices: the
 	 * sum of the three outer products u(k) x v(k) sends every u onto its own
 	 * v, because the u's are orthonormal. */
 	float turn[3][3];
@@ -3615,7 +3512,7 @@ bool HDModelRingFit(int model, int target, float* out)
 
 	const float scale = dstExt[0] / srcExt[0];
 
-	/* CENTRED ON THE TWO BOXES and not on the two clouds' centres of mass:
+	/* Centred on the two boxes and not on the two clouds' centres of mass:
 	 * the ring keeps a place for the item it draws and that place is the
 	 * vanilla model's box, so the middle of the box is where the middle of
 	 * the replacement belongs. */
@@ -3647,8 +3544,7 @@ bool HDModelRingFit(int model, int target, float* out)
 	return true;
 }
 
-/* HOW FAR THAT FIT LEAVES THE TARGET'S ROOM (#153, round M2b, the second fix
- * round; on the shape's own axes since round M3).
+/* How far that fit leaves the target's room, on the shape's own axes.
  *
  * The scale is the ratio of the two longest extents, so the longest axis lands
  * exactly and the other two land wherever their own proportions put them. This
@@ -3657,7 +3553,7 @@ bool HDModelRingFit(int model, int target, float* out)
  * that item and the 3.36 the Uzi mod reads means one of its axes is over three
  * times that room.
  *
- * It is a NUMBER FOR THE LOG and not a limit: nothing here refuses a fit, for
+ * It is a number for the log and not a limit: nothing here refuses a fit, for
  * the reason written at HDModelRingFit. `worstAxis` takes 0, 1 or 2 - WHICH OF
  * THE TARGET'S OWN axes, longest first, is the one overflowed; 0 when either
  * model has no axes. */
@@ -3698,14 +3594,12 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 	return worst;
 }
 
-/* ------------------------------ THE FRAME THE LEVEL DRAWS A SLOT IN (#155b,
+/* -------------------------------------- the frame the level draws a slot in --
  *
- * fix round 1) ---------------------------------------------------------------
- *
- * THE BIND POSE IS NOT THE POSE. A moveable's meshes are placed by its mesh
+ * The bind pose is not the pose. A moveable's meshes are placed by its mesh
  * tree AND turned by its animation frame: DrawAnimatingItem translates by the
  * frame's own offset, calls gar_RotYXZsuperpack for node 0 and then walks the
- * tree with a translation and a rotation per node (game\draw.cpp:955-1000).
+ * tree with a translation and a rotation per node (game\draw.cpp).
  * Six of ANDREA3's eighteen pickup slots carry a turn on node 0 that is not a
  * yaw - the Uzi item's is 180 degrees about z, which stands the model on its
  * head - so a rule that measures two models in the bind pose measures neither
@@ -3718,7 +3612,7 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
  * four longs a node after the first, flags, x, y, z. Either may be null: a
  * slot with no frame gets identity, which is what the bind pose was.
  *
- * TWO THINGS ARE LEFT OUT ON PURPOSE.
+ * Two things are left out on purpose.
  *
  * The frame's OFFSET, because it is one translation in front of the whole
  * walk: it moves every node of both models by the same vector, so it cancels
@@ -3726,17 +3620,15 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
  * at the origin where the bind numbers were.
  *
  * The ITEM's own rotation, because a pickup LYING THERE carries a yaw and a
- * yaw does not tilt the up axis - measured, not assumed: InitialiseItem
- * zeroes x_rot and z_rot (game\items.cpp:201-202), the level file gives an
- * item one angle, and the one place that tilts a pickup Lara is standing over
- * puts the three angles back before anything is drawn (PickUpCollision,
- * game\pickup.cpp:789-793 and 1124-1126).
+ * yaw does not tilt the up axis: InitialiseItem zeroes x_rot and z_rot
+ * (game\items.cpp), the level file gives an item one angle, and the one place
+ * that tilts a pickup Lara is standing over puts the three angles back before
+ * anything is drawn (PickUpCollision, game\pickup.cpp).
  *
- * TWO OF THE FAMILY DO TILT, and the claim above is not exhaustive without
- * them (fix round 2, the reviewer's finding): a THROWN one. FlareControl
- * turns a flare in flight by 546 about x and 910 about z every frame
- * (game\laraflar.cpp:31-37) and FlameTorchControl a falling torch by 910
- * about z (game\flmtorch.cpp:286-287), both outside PickUpCollision's
+ * Two of the family do tilt, while THROWN. FlareControl turns a flare in
+ * flight by 546 about x and 910 about z every frame (game\laraflar.cpp) and
+ * FlameTorchControl a falling torch by 910 about z (game\flmtorch.cpp),
+ * both outside PickUpCollision's
  * save-and-restore, and both zero the two angles again the moment the thing
  * comes to rest. So the frame this rule measures in is the frame those two
  * are drawn in for as long as they lie on the ground, which is when a floor
@@ -3756,7 +3648,7 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
 namespace
 {
 	/* The engine's own indices, so that the three rotations below can be read
-	 * against aRotX/aRotY/aRotZ (specific\3dmath.cpp:307-440) a line at a
+	 * against aRotX/aRotY/aRotZ (specific\3dmath.cpp) a line at a
 	 * time. This module is linked into ModelProbe, which has no engine
 	 * headers, so they are named here rather than included. */
 	enum
@@ -3842,7 +3734,7 @@ namespace
 		}
 	}
 
-	/* gar_RotYXZsuperpack with skip 0 (game\draw.cpp:398-439): either two
+	/* gar_RotYXZsuperpack with skip 0 (game\draw.cpp): either two
 	 * words holding three ten-bit angles - Y, then X, then Z, each shifted up
 	 * by six - or one word with the axis in its top two bits and twelve bits
 	 * of angle shifted up by four. The stream pointer is advanced by exactly
@@ -3926,7 +3818,7 @@ int HDFramePose(const short* frame, const long* tree, int nodes, float* out)
 		if (rot)
 			pose_superpack(current, &rot);
 
-		/* THE THREE EXTRA ROTATIONS A BONE CAN ASK FOR (flags 0x1C) are read
+		/* The three extra rotations a bone can ask for (flags 0x1C) are read
 		 * out of item->data, which is a CREATURE's head and torso stream. A
 		 * pickup has no data and the draw hands the walk `no_rotation`, all
 		 * zeroes, so they are identity here - and phd_RotY(0) is identity in
@@ -3938,16 +3830,14 @@ int HDFramePose(const short* frame, const long* tree, int nodes, float* out)
 	return nodes;
 }
 
-/* HOW DEEP A PICKUP MODEL REACHES, AND WHAT LIFTS IT OUT (#155b). The header
- * carries the rule; this is the arithmetic.
+/* How deep a pickup model reaches, and what lifts it out. The header carries
+ * the rule; this is the arithmetic.
  *
- * Round #155 pushed the eight CORNERS OF THE BOX through the fit and took the
- * deepest of them, which is a bound on the model and not the model: a box
- * corner of a pair of crossed guns is empty space. Measured on the user's own
- * posed `UZI_OPTION` against the classic mesh it stands in for: 33.9 units by
- * the corners, 11.5 by the vertices - a factor of three. A rule that lifted a
- * model by the corner number would hang it in the air, which is the same fault
- * the other way round.
+ * Every kept vertex and not the eight CORNERS OF THE BOX: a box corner of a
+ * pair of crossed guns is empty space. Measured on a mod's posed `UZI_OPTION`
+ * against the classic mesh it stands in for: 33.9 units by the corners, 11.5
+ * by the vertices - a factor of three. A rule that lifted a model by the
+ * corner number would hang it in the air.
  *
  * y is DOWN in this engine, so the deepest point is the LARGEST y, and the
  * lift is that minus the classic mesh's own deepest - clamped at zero, so a
@@ -3960,14 +3850,11 @@ bool HDModelFramedBox(int model, const float* fix, const float* pose,
 	if (!one || !one->vertexSeen)
 		return false;
 
-	/* THE POINTS OR NOTHING (fix round 1 made this the only way). Until the
-	 * frame's own turn came into the measurement, a model drawn as it stands
-	 * could be measured off the box: with every node's matrix a pure
-	 * translation equal to its own bind offset, a vertex is drawn exactly
-	 * where the bind pose has it, so the box of the bind positions IS the box
-	 * of the drawn ones. A ROTATION breaks that, and an answer off the box
-	 * would then be a bound and not the model - quietly, in a number that
-	 * looks like the others. */
+	/* The points or nothing. With every node's matrix a pure translation
+	 * equal to its own bind offset, the box of the bind positions would be
+	 * the box of the drawn ones; the frame's ROTATION breaks that, and an
+	 * answer off the box would be a bound and not the model - quietly, in a
+	 * number that looks like the others. */
 	if (one->points.empty() || one->points.size() / 3 != one->pointNode.size())
 		return false;
 
@@ -3989,7 +3876,7 @@ bool HDModelFramedBox(int model, const float* fix, const float* pose,
 
 		if (fix)
 		{
-			/* THE FITTED CASE is the ring's <BASE>_OPTION model, which stands
+			/* The fitted case is the ring's <BASE>_OPTION model, which stands
 			 * on ONE node and whose fit already puts it in the item's own
 			 * frame - so the fold has nothing to take off and the node is 0.
 			 * Row-major, row-vector, exactly as HDModelRingFit wrote it and
@@ -4002,7 +3889,7 @@ bool HDModelFramedBox(int model, const float* fix, const float* pose,
 		}
 		else
 		{
-			/* AND THE SLOT'S OWN MODEL THROUGH THE BIND FOLD, which is what
+			/* The slot's own model goes through the bind fold, which is what
 			 * the draw does to every vertex: the node's bind offset comes off
 			 * before the node's matrix goes on (set_joint above). */
 			node = (int)one->pointNode[i];
@@ -4017,10 +3904,9 @@ bool HDModelFramedBox(int model, const float* fix, const float* pose,
 			q[2] = bind ? p[2] - bind[2] : p[2];
 		}
 
-		/* AND THROUGH THE FRAME THE LEVEL DRAWS THAT NODE IN - HDFramePose's
+		/* Then through the frame the level draws that node in - HDFramePose's
 		 * 3x4, a point as a COLUMN. Without a pose the frame turns nothing
-		 * and the answer is the bind position, which is the number every
-		 * bind-pose measurement of this round printed. */
+		 * and the answer is the bind position. */
 		const float* m = pose ? pose + (size_t)node * 12 : 0;
 
 		if (m)
@@ -4031,8 +3917,8 @@ bool HDModelFramedBox(int model, const float* fix, const float* pose,
 			for (int r = 0; r < 3; r++)
 				out[r] = q[r];
 
-		/* AND WHERE THE DEEPEST POINT ITSELF IS (fix round 1), not only how
-		 * deep it reaches: a picture of the rule has to put the floor plane
+		/* And where the deepest point itself is, not only how deep it
+		 * reaches: a picture of the rule has to put the floor plane
 		 * UNDER that point, and a plane drawn under the box's middle is a
 		 * plane the eye cannot check the contact against. */
 		if (!i || out[1] > hi[1])
@@ -4074,22 +3960,20 @@ bool HDModelFloorLift(int model, const float* fix, const float* pose,
 	if (lift)
 		*lift = 0.0f;
 
-	/* ONE SWEEP FOR BOTH ANSWERS (fix round 1): the deepest point IS the
-	 * drawn box's largest y, and the tool needs the whole box to frame a
-	 * picture of the same thing. Two sweeps of the same points with two
-	 * copies of the same fold is one copy too many. */
+	/* One sweep for both answers: the deepest point IS the drawn box's
+	 * largest y, and the tool needs the whole box to frame a picture of the
+	 * same thing. */
 	if (!HDModelFramedBox(model, fix, pose, nodes, lo, hi))
 		return false;
 
 	const float deepest = hi[1];
 
-	/* THE SLACK. Half a unit, which is half a millimetre at this engine's
+	/* The slack. Half a unit, which is half a millimetre at this engine's
 	 * scale of 1024 units to a metre and well under the rounding of the
 	 * classic mesh's own SHORT coordinates. It keeps the rule from writing a
 	 * lift for a model that is modelled ON the classic mesh and misses it by
 	 * a float's last digit - which is every one of the remaster's own pickup
-	 * files, and a matrix touched for nothing is a matrix nobody can rule out
-	 * later. */
+	 * files - so their matrices stay untouched. */
 	const float slack = 0.5f;
 
 	if (lowest)
@@ -4100,7 +3984,7 @@ bool HDModelFloorLift(int model, const float* fix, const float* pose,
 	return true;
 }
 
-/* AND THE POINT LISTS BACK (#155b). Every model of the level at once, because
+/* Frees the point lists of every model of the level at once, because
  * the caller measures every slot of the family in one loop and there is no
  * case where one of them is kept and another dropped. */
 void HDModelReleasePoints()
@@ -4117,8 +4001,8 @@ void HDModelReleasePoints()
 	}
 }
 
-/* WHAT THE FLOOR RULE HAD TO MEASURE ON, for the caller's log (#155b, fix
- * round 1). `kept` is how many vertex positions are beside the model and
+/* What the floor rule had to measure on, for the caller's log. `kept` is how
+ * many vertex positions are beside the model and
  * `blended` how many of them ride on more than one node - a pickup file is
  * rigid per node in every file measured, and a number here other than zero
  * says that this one is not and that its deepest point is read off its
@@ -4156,7 +4040,7 @@ bool HDModelFoldCounts(int slot, HDTrmFoldCounts* out)
 	return true;
 }
 
-/* THE MATERIAL OF ONE PAGE (#123, fix round I, I4). See PageSheen at the top
+/* The material of one page. See PageSheen at the top
  * of this file for what it is for; the whole of it is a small table on the
  * model that draw_model consults per range. Setting the same page twice
  * replaces it, which is what a caller re-planning a level wants. */

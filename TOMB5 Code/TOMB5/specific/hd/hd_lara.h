@@ -28,26 +28,23 @@
 
 #include "hd_model.h"
 
-// LARA IN HD - THE COMPOSITE (#123, stage S4-1).
+// Lara in HD: the composite.
 //
-// Every other object in this game is ONE slot and ONE .TRM. Lara is not. The
+// Every other object in this game is one slot and one .TRM. Lara is not: the
 // engine draws her out of up to five classic slots at once - the skin from
 // LARA_SKIN, the seams from LARA_SKIN_JOINTS, the hands from whichever weapon
 // slot the mesh swap put there, the thigh straps from LARA_HOLSTERS* and the
-// braid from HAIR - and the remaster does the same thing with a wardrobe of
-// separate models. This module is the wardrobe: which files a level needs,
-// what each of them covers, and which of them the draw seam has to put on the
-// card for the frame it is looking at.
+// braid from HAIR - and the remaster does the same with a wardrobe of separate
+// models. This module is the wardrobe: which files a level needs, what each of
+// them covers, and which of them the draw seam puts on the card for a frame.
 //
-// THIS FILE IS THE WARDROBE AND NOT THE SEAM. It knows nothing about this
-// engine and is built into ModelProbe as well, which is how the pictures in
-// the report were made. What reads lara_matrices, lara.mesh_ptrs, hairs[0]
-// and LaraNodeAmbient and turns them into the calls below is
-// specific\hd\hd_laradraw.cpp (stage S4-2), and what calls THAT is
-// specific\drawlara.cpp.
+// This file is the wardrobe and not the seam. It knows nothing about the
+// engine and is built into ModelProbe as well. What reads lara_matrices,
+// lara.mesh_ptrs, hairs[0] and LaraNodeAmbient and turns them into the calls
+// below is specific\hd\hd_laradraw.cpp, called from specific\drawlara.cpp.
 //
-// THE TWO FACTS THE WHOLE MODULE RESTS ON, both measured over the remaster's
-// 4\ITEM (ModelProbe -name <NAME> -nodraw, the per node vertex counts):
+// Two facts the module rests on, both measured over the remaster's 4\ITEM
+// (ModelProbe -name <NAME> -nodraw, the per node vertex counts):
 //
 //   1. Every OUTFIT_ model skins to nodes 0..14 - the classic 15 node Lara
 //      mesh tree in LM_ order, hips, thighs, shins, feet, torso, arms, hands,
@@ -57,7 +54,7 @@
 //      The one exception is OUTFIT_SUBSUIT, which has no feet: the diving
 //      suit ends in flippers that are part of the shins.
 //   2. Each further part covers exactly the nodes it belongs on:
-//      LARA_HEAD is a FACIAL RIG (bones up to 31, which are not mesh tree
+//      LARA_HEAD is a facial rig (bones up to 31, which are not mesh tree
 //      nodes at all) and therefore rides RIGIDLY on node 14; HAIR_OG has six
 //      bones, which is exactly TR5's six braid links; HOLSTER_PISTOL and
 //      HOLSTER_UZI sit on 1 and 4 (the two thighs), HOLSTER_DEAGLE on 4
@@ -66,8 +63,7 @@
 //      covers 9 and 10 on the right and 12 and 13 on the left, and
 //      HAND_BARE_REST adds the two upper arm stubs 8 and 11.
 //
-// THE "REVOLVER" IS A DESERT EAGLE (#123, fix round C, user finding C1). The
-// slot kept its Tomb Raider IV name - REVOLVER_ANIM, LARA_REVOLVER_LASER,
+// The "revolver" is a Desert Eagle. The slot kept its Tomb Raider IV name - REVOLVER_ANIM, LARA_REVOLVER_LASER,
 // LARA_HOLSTERS_REVOLVER - and the weapon in it changed, exactly as
 // CROSSBOW_ANIM became the grappling gun. The remaster ships both guns side by
 // side in 4\ITEM and they are two different models, measured with ModelProbe:
@@ -76,44 +72,42 @@
 // HOLSTER_DEAGLE on the SAME node 4. TR5 draws the Desert Eagle, so every
 // part of the revolver slot takes the DEAGLE file: hand, laser hand, holster.
 //
-// WHAT IS NOT HERE, ON PURPOSE. Young Lara stays classic - the user's
-// decision (plan section 9). OUTFIT_YOUNG, LARA_YOUNG_HEAD and HAIR_PIGTAIL
-// all exist in 4\ITEM and TROne solved the two-pigtail flush for TR4, so the
-// day that decision changes the work is small; today the Irish levels simply
-// get HD_LARA_OUTFIT_NONE and a reason in the log.
+// Young Lara stays classic on purpose. OUTFIT_YOUNG, LARA_YOUNG_HEAD and
+// HAIR_PIGTAIL exist in 4\ITEM and TROne draws the two pigtails for TR4, but
+// the child body is not dressed here: it gets HD_LARA_OUTFIT_NONE and a
+// reason in the log.
 
 #define HD_LARA_NODES		15	// the classic mesh tree, LM_HIPS .. LM_HEAD
 #define HD_LARA_HAIR_NODES	6	// TR5's six braid links
 
-/* WHERE THE BRAID HANGS FROM, in the HEAD node's own frame and in classic
- * units. game\hair.cpp:397 walks the mesh tree to the head bone and then
+/* Where the braid hangs from, in the head node's own frame and in classic
+ * units. game\hair.cpp (HairControl) walks the mesh tree to the head bone and
  * translates by exactly this before it writes hairs[0][0], the root of the
  * simulation - up a little, a touch to her left, and 48 units behind the
  * joint, which is the back of the skull. (Young Lara's two pigtails and the
- * second braid use two other triples in the same three lines; neither reaches
- * the HD wardrobe, which has no young body.)
+ * second braid use two other triples; neither reaches the HD wardrobe, which
+ * has no young body.)
  *
  * It is spelled out here because two things outside hair.cpp have to agree
  * with it: the seam, which reads hairs[0][n] and needs to know what the first
- * of them MEANS, and ModelProbe, which has no simulation and builds its studio
- * braid from this point (#123, fix round C, user finding C4 - "the braid does
- * not grip the head properly"). */
+ * of them means, and ModelProbe, which has no simulation and builds its studio
+ * braid from this point. */
 #define HD_LARA_BRAID_ROOT_X	(-4)
 #define HD_LARA_BRAID_ROOT_Y	(-4)
 #define HD_LARA_BRAID_ROOT_Z	(-48)
 
-/* THE SAME POINT FOR AN HD LARA (#123, fix round D, D3a).
+/* The same point for an HD Lara.
  *
- * Fix round C measured the gap and left it: the braid hangs 15.2 units clear
- * of the skull, on every outfit, and TROne has it too. The cause is that the
- * two braids are built differently. The CLASSIC one draws its first link as a
- * SKINNED connector whose top ring is stashed vertices of the HEAD mesh
- * (game\hair.cpp, GetCorrectStashPoints), so it starts on the skull whatever
- * the root is; the HD one has a rigid HAIR_OG link 0 that starts at the root
- * and reaches only 1.7 units back out of it.
+ * From the classic root the HD braid hangs 15.2 units clear of the skull, on
+ * every outfit (TROne shows the same gap). The two braids are built
+ * differently: the classic one draws its first link as a skinned connector
+ * whose top ring is stashed vertices of the head mesh (game\hair.cpp,
+ * GetCorrectStashPoints), so it starts on the skull whatever the root is; the
+ * HD one has a rigid HAIR_OG link 0 that starts at the root and reaches only
+ * 1.7 units back out of it.
  *
- * The measurement, ModelProbe -braid, and it is the same for all eight bodies
- * because the skull is one mesh:
+ * Measured with ModelProbe -braid, the same for all eight bodies because the
+ * skull is one mesh:
  *
  *     head joint            1 / -247 / -12
  *     hair.cpp root        -3 / -251 / -60      = the joint plus (-4,-4,-48)
@@ -127,63 +121,45 @@
  * 48 units behind the head joint to 33, and link 0 then overlaps the skull by
  * 1.7 units instead of hanging 15.2 short of it.
  *
- * WITHDRAWN IN FIX ROUND F (F2) AND BACK IN FIX ROUND I (I2). What was wrong
- * in round D was not the number but two things around it:
+ * The root is -33 whenever the HD wardrobe draws and -48 otherwise, written
+ * in both halves of HairControl (the interpolated frame and the key frame)
+ * out of one flag read once per frame (game\hair.cpp, `pack.on`).
+ * hairs[0][0] seeds the whole chain and every link's velocity is how far it
+ * moved since the last frame, so a root that differed between the two halves
+ * would jump 15 units and back and feed the braid 15 units of velocity for
+ * ever - a restless braid, thrown out long on one frame and tucked short
+ * against her back on the next.
  *
- * 1. It was written into one of HairControl's two frame branches. The
- *    function has a half for an interpolated frame and a half for a key
- *    frame, and round D changed the second only, so the root of the
- *    simulation jumped between -48 and -33 from frame to frame. hairs[0][0]
- *    seeds the whole chain and every link's velocity is how far it moved
- *    since the last frame, so a root that moves 15 units and back feeds the
- *    braid 15 units of velocity for ever. That is the user's finding F2 -
- *    "it glitches about restlessly" - and his two video frames, one with the
- *    braid thrown out long and the next with it tucked short against her
- *    back.
- *
- * 2. And with round D's PACK it did not settle even applied to both halves.
- *    ModelProbe -braidsim, sixty steps in the bind pose, the busiest link's
- *    travel per step at the end: the classic root read 0, the root at -33
- *    still read 1 and never reached 0. At -33 the chain hangs near enough to
- *    her neck for the NECK SPHERE and a PACK SPHERE to push it in turn, and
- *    two spheres pushing a point in turn make a small limit cycle rather than
- *    a rest.
- *
- * FIX ROUND I (I2) ASKED THE SAME QUESTION AGAIN, because reason 2 was about
- * the pack being SPHERES and the pack is a box now. A box pushes a point out
- * of one flat face along one axis and leaves it there; there is no curved
- * surface for the neck sphere to slide it back down. Measured, the same
- * -braidsim, sixty steps, both torso anchors:
+ * The near root settles only against a box-shaped pack. At -33 the chain
+ * hangs near enough to her neck for the neck sphere and a pack sphere to push
+ * it in turn, and two spheres pushing a point in turn make a small limit cycle
+ * rather than a rest; a box pushes a point out of one flat face along one axis
+ * and leaves it there. ModelProbe -braidsim, sixty steps in the bind pose,
+ * both torso anchors - the busiest link's travel per step, and how deep the
+ * braid ends up inside the pack:
  *
  *     regime                          step 1  step 10  step 30  last  in pack
  *     classic: root -48, 6 spheres        14        1        0     0       38
- *     round D as meant: -33, spheres      34        4        1     1       41
- *     round F/G: root -48, spheres        14        1        0     0       38
- *     round I: root -48, the BOX          45       10        0     0        7
- *     round I: root -33, the BOX          63       18        0     0       12
+ *     root -33, pack as spheres           34        4        1     1       41
+ *     root -48, pack as spheres           14        1        0     0       38
+ *     root -48, pack as a box             45       10        0     0        7
+ *     root -33, pack as a box             63       18        0     0       12
  *
- * Both box lines reach zero and stay there, so the reason the root was
- * withdrawn is gone; and "in pack" is the finding itself - the braid stood 38
- * units inside the pack with the spheres and stands 7 with the box.
- *
- * So the root is -33 whenever the HD wardrobe is drawing and -48 otherwise,
- * written in BOTH halves of HairControl out of ONE flag that is read once per
- * frame (game\hair.cpp, `pack.on`), which is the shape round D's mistake asks
- * for. Under Lara's own animations (ModelProbe -braidanim, ANIM_BREATH) the
+ * Under Lara's own animations (ModelProbe -braidanim, ANIM_BREATH) the
  * near root costs a little liveliness and no jumps: the tip's worst travel in
  * a frame goes from 10 units to 14 and its mean from 1.04 to 1.41, with no
  * frame over 40 in either. */
 #define HD_LARA_BRAID_ROOT_Z_HD	(-33)
 
-/* THE BACKPACK, AS A COLLISION SPHERE (#123, fix round D, D3b).
+/* The backpack as two collision spheres. The engine uses the box below; these
+ * remain as the comparison ModelProbe measures against.
  *
- * The user's finding: the HD braid goes through the HD backpack. The classic
- * HairControl pushes the braid out of five spheres and all five are CLASSIC
- * Lara meshes - hips, torso, head, the two upper arms. The HD body is a
- * different one, and its pack stands 92 units behind the torso joint where
- * the classic torso sphere reaches nowhere near.
+ * The classic HairControl pushes the braid out of five spheres, all on classic
+ * Lara meshes - hips, torso, head, the two upper arms. The HD body's pack
+ * stands 92 units behind the torso joint, where the classic torso sphere does
+ * not reach, so without a pack collider the HD braid passes through it.
  *
- * Measured with ModelProbe -braid over the wardrobe, in the TORSO NODE's own
+ * Measured with ModelProbe -braid over the wardrobe, in the torso node's own
  * frame (the pack is every node 7 vertex more than 30 units behind the torso
  * joint - nothing else of a torso is back there):
  *
@@ -212,35 +188,27 @@
  * what sits behind ITS torso is the two thrusters and not a pack, and it
  * wears a helmet rather than a braid, so no braid ever meets them.
  *
- * WHAT IT IS WORTH, MEASURED (#123, fix round F, F2 - round D said "this is
- * the one change no offline picture can prove", and a picture cannot, but the
- * simulation can be run on its own). ModelProbe -braidsim, sixty steps in the
- * bind pose: without the pack the braid comes to rest 15 units inside it,
- * with the pack 9, and the chain settles either way. The pack does its work
- * and costs no calm. It has to be placed in BOTH halves of HairControl,
- * though; round D put it in one, and a pack that comes and goes from frame to
- * frame is a push that comes and goes with it. */
+ * ModelProbe -braidsim, sixty steps in the bind pose: without the pack the
+ * braid comes to rest 15 units inside it, with the two spheres 9, and the
+ * chain settles either way. Any pack collider is placed in both halves of
+ * HairControl; a pack that comes and goes from frame to frame is a push that
+ * comes and goes with it. */
 #define HD_LARA_PACK_X		(0)
 #define HD_LARA_PACK_Y_TOP	(-165)
 #define HD_LARA_PACK_Y_BOTTOM	(-100)
 #define HD_LARA_PACK_Z		(-52)
 #define HD_LARA_PACK_R		(36)
 
-/* THE SAME PACK AS A BOX, WHICH IS WHAT IT IS (#123, fix round I, I1).
+/* The same pack as a box, which is its real shape.
  *
- * The user's finding after round G: the braid still lies IN the pack. Round G
- * had already written down why and left it as a decision - "the braid lies in
- * the pack, not on it - round D's own measurement is a slab, and two spheres
- * touch it on the centre line only". A sphere of radius 36 tangent to a flat
- * rear face touches that face at ONE point; a hand's width to either side its
- * surface has already curved 10 units forward, and the plait is 35 units wide.
- * So the braid sinks in beside the centre line however many spheres are
- * stacked, and the pack has to be a box.
+ * A sphere of radius 36 tangent to the flat rear face touches that face at one
+ * point; a hand's width to either side its surface has already curved 10 units
+ * forward, and the plait is 35 units wide. So with spheres the braid sinks
+ * into the pack beside the centre line however many are stacked.
  *
- * MEASURED, ModelProbe -braid, "the backpack as a BOX": the node 7 vertices
- * more than 30 units behind the torso joint, in the torso node's own frame -
- * the same point set round D took its spheres from, now as six numbers rather
- * than three:
+ * Measured with ModelProbe -braid, "the backpack as a BOX": the node 7
+ * vertices more than 30 units behind the torso joint, in the torso node's own
+ * frame - the same point set as the spheres above, as six numbers:
  *
  *     outfit                x            y            z
  *     OUTFIT_CLASSIC       -57..59     -197..-68     -92..-30
@@ -251,7 +219,7 @@
  *     OUTFIT_TR3_COAST     -58..60     -197..-67     -92..-30
  *     OUTFIT_TR3_CATSUIT   -58..60     -197..-67     -92..-30
  *
- * ONE BOX FOR ALL SEVEN, and the table is why: the depth is the SAME number in
+ * One box serves all seven, and the table is why: the depth is the SAME number in
  * every one of them (-92 to -30), the width agrees to three units, and the top
  * to none at all. The bottom is the only column that moves, and the two that
  * move it - the Russia coat and the Antarctica parka - are not deeper packs
@@ -260,10 +228,10 @@
  * leaves the coat tail to the torso sphere, which for the Russia outfit is
  * nailed to radius 94 and covers it.
  *
- * The diving suit is left out here as it was left out of the spheres: what
- * stands behind ITS torso is two thrusters, it wears a helmet and no braid.
+ * The diving suit is left out as it is left out of the spheres: what stands
+ * behind its torso is two thrusters, and it wears a helmet and no braid.
  *
- * THE MARGIN IS THE PLAIT'S OWN RADIUS. HairControl moves POINTS and the braid
+ * The margin is the plait's own radius. HairControl moves POINTS and the braid
  * is a solid; a point pushed exactly onto the pack's surface leaves half the
  * plait inside it. Measured over HAIR_OG (ModelProbe -braid, "HAIR_OG
  * thickness"): the radius about each bone's own axis is 17.5, 17.5, 15.0,
@@ -284,29 +252,26 @@
  * want them and neither may own them. */
 #define HD_LARA_BRAID_RADII	{ 18, 18, 15, 13, 11, 9 }
 
-/* HOW MUCH THE REAR FACE IS PREFERRED when the link is pushed out along the
+/* How much the rear face is preferred when the link is pushed out along the
  * smallest penetration. It is the face the braid belongs on: everything else
- * is a way INTO her back or under the pack, and a tie between two faces that
+ * is a way into her back or under the pack, and a tie between two faces that
  * goes the wrong way is a plait that flips through the body for one frame.
  * The bias is a divisor on the rear face's own depth, so a rear push wins
  * unless another face is more than twice as close.
  *
- * MEASURED AND HONEST: over the three animations ModelProbe -braidanim runs -
- * breathing on the spot, the run loop and the walk loop - variant h ("the BOX,
- * no rear preference") comes out IDENTICAL to variant f in every column. The
- * braid approaches this pack from behind and the rear face is the nearest one
- * anyway, so the preference never fires there. It is kept because the tool
- * never bends Lara far forward and the faces it steers away from lead into her
- * back; a value of 1 would be the same picture in everything measured. */
+ * Over the three animations ModelProbe -braidanim runs - breathing on the
+ * spot, the run loop and the walk loop - the box with no rear preference gives
+ * identical results in every column: the braid approaches from behind and the
+ * rear face is the nearest one anyway. The preference is for poses the tool
+ * does not reach, with Lara bent far forward, where the other faces lead into
+ * her back; a value of 1 gives the same picture in everything measured. */
 #define HD_LARA_PACK_BOX_BIAS	(2)
 
-/* WHY THE DRAWN BRAID GETS A ROLL OF ITS OWN (#123, fix round G, G1).
+/* Why the drawn braid gets a roll of its own.
  *
- * The user's finding after round F: "the braid still trembles". Round F had
- * proved the SIMULATION calm and it is - the play test's own HAIRLOG says so
- * on 924 frames where the root did not move a unit, the tip moved less than
- * two on 728 of them and the two long standing stretches settle to exactly
- * zero and stay there. What nobody had measured was the ANGLE.
+ * The simulation itself is calm (HAIRLOG: over 924 frames where the root did
+ * not move a unit, the tip moved less than two on 728, and long standing
+ * stretches settle to exactly zero). What trembles is the angle.
  *
  * game\hair.cpp gives link n-1 the spherical angles of the vector to link n:
  *
@@ -326,31 +291,29 @@
  * of one plaited model (hd_laradraw.cpp, braid_matrices, out of TROne's
  * draw_hair), and a rigid plait turned about its own axis is visible.
  *
- * MEASURED, ModelProbe -braidanim over ANDREA2's own animation table, 110
- * frames of ANIM_BREATH - Lara standing at a door, which is where the user's
- * two video frames come from:
+ * Measured with ModelProbe -braidanim over ANDREA2's own animation table, 110
+ * frames of ANIM_BREATH (Lara standing at a door):
  *
  *     variant                      tip travel per frame   worst yaw jump
  *     the classic body alone       1 unit, never more     180 degrees on 18
- *     round F as shipped           1 unit, never more     180 degrees, frames
+ *     the HD body, no roll         1 unit, never more     180 degrees, frames
  *
  * The braid stands still to within a unit and spins half a turn on one frame
  * in six. That is the tremble.
  *
- * THE CURE has to leave the direction alone - the drawn bone's own +z IS the
+ * The cure has to leave the direction alone - the drawn bone's own +z IS the
  * link direction, and hd_laradraw's braidcheck proves that stepping one bone
  * length along it lands on the next link. A rotation about that same +z moves
  * nothing at all, so the roll is free: after RotY and RotX comes a RotZ that
  * takes the noise back out, and the braid's plait then keeps facing the way
  * Lara faces instead of the way two integers rounded.
  *
- * WHICH ANGLE TO PUT THERE INSTEAD was measured, not guessed: ModelProbe
- * -braidanim runs five candidates over the same three animations and counts
- * the worst one-frame turn of any bone, in degrees, over the worst of the
- * five physics variants:
+ * Which angle to put there instead: ModelProbe -braidanim runs the candidates
+ * over three animations and counts the worst one-frame turn of any bone, in
+ * degrees, over the worst of the five physics variants:
  *
  *     rule                                    standing   running   walking
- *     none - the raw yaw, as round F ships     180        7         7
+ *     none - the raw yaw                       180        7         7
  *     towards her facing, faded per link         0      167       179
  *     the whole chain's azimuth, every link     45        3         1
  *     the same, faded per link                  45        8         2
@@ -363,7 +326,7 @@
  * whenever the braid is thrown out sideways, which is the one case where the
  * yaw is a real angle.
  *
- * The last one is what ships. ONE reference for all six bones - a rigid plait
+ * The fifth rule is the one used. One reference for all six bones - a rigid plait
  * cannot hide two neighbours twisting against each other, and the classic
  * path's skinned connectors are exactly how TR5 hid it - and the reference is
  * the azimuth of the WHOLE braid, root to tip, because that vector is six
@@ -373,7 +336,7 @@
  * jumps when the link crosses the band, and a blend of two angles far apart
  * jumps with it.
  *
- * WHEN IT FOLLOWS. `flat` is the horizontal span of the whole braid, out of a
+ * When it follows: `flat` is the horizontal span of the whole braid, out of a
  * chain 336 units long. Below NEAR the reference does not move at all - a
  * braid hanging plumb has nothing to say about its own azimuth - above FAR it
  * follows completely, and between the two it follows part of the way, so
@@ -381,33 +344,34 @@
 #define HD_LARA_BRAID_ROLL_NEAR	16
 #define HD_LARA_BRAID_ROLL_FAR	48
 
-/* THE PSEUDO SLOTS. hd_model stores its models in a map keyed by slot number,
+/* The pseudo slots. hd_model stores its models in a map keyed by slot number,
  * and a wardrobe part has no slot of its own - LARA_SKIN is one slot and the
  * composite is twenty models. So each part gets a number of its own, far above
- * anything the engine will ever hand out (471 today, 32767 is the ceiling of
- * ITEM_INFO::object_number), and the wardrobe rides through hd_model's normal
- * machinery: the same page cache, the same skinning, the same draw call. */
+ * anything the engine hands out (the highest engine slot is 471; 32767 is the
+ * ceiling of ITEM_INFO::object_number), and the wardrobe rides through
+ * hd_model's normal machinery: the same page cache, the same skinning, the
+ * same draw call. */
 #define HD_LARA_SLOT_BASE	0x5A00
 
-/* AND THE INSTALL'S OWN HANDS BESIDE A MOD'S GUN (#153, round M2b) - a second
- * block of the same kind, one slot per part, holding the file of the same name
- * out of the INSTALL where a mod's hand model wears a foreign bundle's skin.
- * See HDLaraPartTwinSlot and the round's note in hd_lara.cpp. */
+/* A second block of the same kind for the install's own hands beside a mod's
+ * gun: one slot per part, holding the file of the same name out of the
+ * install where a mod's hand model wears a foreign bundle's skin. See
+ * HDLaraPartTwinSlot and the note in hd_lara.cpp. */
 #define HD_LARA_TWIN_SLOT_BASE	0x5B00
 
-/* THE MIRRORED HAND WEIGHTS, AND WHERE THE BAR SITS (#153, round M2b).
+/* The mirrored hand weights, and where the bar sits.
  *
  * A hand file is drawn once and mirrored, and an exporter that mirrors the
  * geometry without the bone names leaves vertices of one hand carrying weight
  * on the other. hd_trm.h has the rule; this is the one number in it, and it is
  * a measurement rather than a taste.
  *
- * Measured over EVERY hand file of the IV-VI install and every hand file of
- * the user's gun mods. The install's are all in 4\ITEM - games 5 and 6 hold
- * none at all - and there are 94: thirty HAND_BARE_, thirty HAND_GLOVES_,
- * thirty HAND_XRAY_ and the four HANDS_BARE_. The mods are three (HK USP, IMI
- * Uzis, Spas-12) and ship seven hand files between them. Over all 101, a
- * crossed vertex's share on the far hand is one of exactly two things:
+ * Measured over every hand file of the IV-VI install and of three gun mods.
+ * The install's are all in 4\ITEM - games 5 and 6 hold none at all - and
+ * there are 94: thirty HAND_BARE_, thirty HAND_GLOVES_, thirty HAND_XRAY_ and
+ * the four HANDS_BARE_. The mods (HK USP, IMI Uzis, Spas-12) ship seven hand
+ * files between them. Over all 101, a crossed vertex's share on the far hand
+ * is one of exactly two things:
  *
  *   4 per mille    ONE weight unit out of 255 - 3.92, which the share's own
  *                  arithmetic rounds to 4 - and nothing else, in every one of
@@ -415,16 +379,17 @@
  *                  (5,884 of them, out of 485,491 vertices) and of the Uzi,
  *                  Spas-12 and gloved-pistol mods (793). That is the
  *                  exporter's rounding and it is not a mirroring error.
- *   371..500       the 46 crossed vertices of the user's HK USP
+ *   371..500       the 46 crossed vertices of the HK USP mod's
  *                  HAND_BARE_PISTOL, four of them exactly 500 - half of the
- *                  vertex on the wrong hand. That is the sliver in his RICH2
- *                  screenshot. They are the only 46 in the whole set.
+ *                  vertex on the wrong hand. That is the sliver of one hand
+ *                  seen stretched to the other. They are the only 46 in the
+ *                  whole set.
  *
  * Nothing at all lies between the two, so the bar is an eighth: 31 times the
  * largest share the remaster's own files carry and a third of the smallest the
  * mod's do.
  *
- * AND WHAT IT BUYS, measured with ModelProbe -handfold, which skins every
+ * What the fold costs, measured with ModelProbe -handfold, which skins every
  * vertex twice through the same node matrices the card is given and takes the
  * distance between the two answers.
  *
@@ -432,10 +397,10 @@
  * sweep walks all thirteen classic levels and covers all ELEVEN hand parts of
  * the table in hd_lara.cpp. Four of them - REST, FLARE, TORCH, CROWBAR - have
  * no crossed vertex at all and never move. Folding the other seven at a bar of
- * 0 moves them, LARGEST OF THE SEVEN:
+ * 0 moves them, largest of the seven:
  *
- *   0.56 units   with both forearms turned 50 degrees out, which is the pose
- *                the round was asked to measure in. DEAGLE and DEAGLE_LASER;
+ *   0.56 units   with both forearms turned 50 degrees out. DEAGLE and
+ *                DEAGLE_LASER;
  *                PISTOL is 0.51, UZI 0.52, SHOTGUN, HK and GRAPPLE 0.53.
  *   0.84         with both upper arms straight out sideways (8 90 0, 11 -90 0),
  *                again DEAGLE and DEAGLE_LASER; the others 0.80 to 0.81.
@@ -445,9 +410,7 @@
  *                9 120 0 and their mirrors).
  *
  * Small - and pointless, because one weight unit on the far hand cannot make a
- * sliver. (Round M2b's second fix round: this said "at most 0.51", which is one
- * part's number written as the set's, and gave 0.97 to the sideways pose, which
- * is 0.84. The argument survives both; the numbers did not.)
+ * sliver.
  *
  * With the bar the remaster's own files come out of the reader byte for byte as
  * they went in - all 94 of them: not one carries a crossed vertex above the bar
@@ -456,75 +419,64 @@
  * all. */
 #define HD_LARA_HAND_FOLD_BAR	125
 
-/* THE TWO SIDES, as hd_trm's fold wants them: the RIGHT arm's bones first,
+/* The two sides, as hd_trm's fold wants them: the right arm's bones first,
  * because it is the side at positive x in Lara's own frame and that is what
  * breaks a vertex weighted exactly half and half. */
 const HDTrmMirrorPair* HDLaraHandMirror(int* pairs);
 
-/* THE BAR ITSELF, so that a BEFORE picture can be made by undoing the round
- * rather than by describing it (#153, round M2b). ModelProbe -nofold sets it
- * past a thousand, which no share can reach, and every hand part is then built
- * from the file exactly as it stands. The engine never calls this; the default
- * is HD_LARA_HAND_FOLD_BAR and it is read at HDLaraPlan. */
+/* The bar itself, settable for a comparison picture without the fold.
+ * ModelProbe -nofold sets it past a thousand, which no share can reach, and
+ * every hand part is then built from the file exactly as it stands. The engine
+ * never calls this; the default is HD_LARA_HAND_FOLD_BAR and it is read at
+ * HDLaraPlan. */
 void HDLaraHandFoldBar(int perMille);
 
-/* AND THE SAME FOR THE TWIN (#153, round M2b). Off makes a hand part ask for
- * no companion at all, which is the picture from before the round: a mod's
- * hands in a mod's own skin. The engine never calls this either. */
+/* The same switch for the twin. Off makes a hand part ask for no companion at
+ * all: a mod's hands in a mod's own skin. The engine never calls this either. */
 void HDLaraHandsFromInstall(bool on);
 
-/* AND THE SAME FOR THE HEAD RULE (#156). One of the HD_WARDROBE_HEAD_* makes
+/* The same switch for the head rule. One of the HD_WARDROBE_HEAD_* makes
  * every outfit wear that rule whatever the wardrobe decided, and -1 - the
  * default, and what the engine always leaves it at - gives the wardrobe back
- * its say. ModelProbe -head drives it, so that the picture from before the
- * round and the picture of a rule nobody has written into an outfit.txt yet
- * both come out of the very build the game runs. Read at HDLaraPlan and at
- * every draw, so it has to be set before the level build it is meant for. */
+ * its say. ModelProbe -head drives it, so that the picture without the rule
+ * and the picture of a rule no outfit.txt names yet both come out of the very
+ * build the game runs. Read at HDLaraPlan and at every draw, so it has to be
+ * set before the level build it is meant for. */
 void HDLaraHeadForce(int head);
 
-/* THE INSTALL'S HANDS UNDER A MOD'S GUN (#153, round M2b). The companion slot
- * of a hand part, or -1 for a part that is not a hand. Nothing is ever loaded
+/* The install's hands under a mod's gun: the companion slot of a hand part,
+ * or -1 for a part that is not a hand. Nothing is ever loaded
  * into it unless the part's own model came out of a mod whose skin pages are
  * another bundle's - hd_model decides that, because only it has the file open
  * and the pages resolved. */
 int HDLaraPartTwinSlot(int part);
 
-/* THE FIRST PERSON HEAD CUT (#123, stage S8; a sphere then, a cylinder in
- * fix rounds J to L, a plane in fix round S; ONE BONE WEIGHT since fix round
- * U, U1).
+/* The first person head cut.
  *
- * EVERY FRAGMENT WHOSE HEAD WEIGHT REACHES HD_LARA_HEAD_CUT_WEIGHT IS
- * DISCARDED while the first person view runs. That is the whole rule. There
- * is no shape, no plane, no radius, no near zone, no node mask and nothing
- * that depends on where the camera is or on what the animation is doing: a
- * vertex's three bone weights are written in the .TRM file and are the same
- * number in every pose, at every angle, in every level.
+ * Every fragment whose head weight reaches HD_LARA_HEAD_CUT_WEIGHT is
+ * discarded while the first person view runs. That is the whole rule. There
+ * is no shape, no plane, no radius, no node mask and nothing that depends on
+ * where the camera is or on what the animation is doing: a vertex's three bone
+ * weights are written in the .TRM file and are the same in every pose.
  *
- * WHY IT HAD TO STOP BEING A SHAPE, and this is the fourth answer to the same
- * question, so the argument is worth keeping whole:
+ * Why no shape in space works:
  *
- *   stage S8   a SPHERE about the eye. It took the stump and a bite out of
- *              her chest with it, and it chewed a wrist brought up to the
- *              camera.
- *   rounds J-L a CYLINDER about the neck axis in the BIND POSE, with a node
- *              mask to keep it off the arms. Three play tests running came
- *              back with the collar still standing, because a neck vertex is
- *              skinned to two nodes at once - the one under her chin is 55 %
- *              torso and 45 % head, measured - so the patch of skin a bind
- *              pose shape covers MOVES as the head turns.
- *   round S    a PLANE carried by the head node. It cannot be dodged by a
- *              turn about the neck axis, which is what it was chosen for -
- *              but it TILTS with the head, and a plane through the head joint
- *              tilted forty degrees runs through her chest and her shoulders.
- *              The play test: "the cutting away has got worse - in animations
- *              Lara is partly rendered away over her whole body", at thirty
- *              hertz and at sixty, with the HDLOG line counting four, five and
- *              nine of the fifteen joints on the discarded side where two -
- *              the head and nothing else - is the healthy reading.
+ *   a sphere about the eye takes a bite out of her chest and chews a wrist
+ *              brought up to the camera;
+ *   a cylinder about the bind pose neck axis leaves the collar standing,
+ *              because a neck vertex is skinned to two nodes at once - the
+ *              one under her chin is 55 % torso and 45 % head, measured - so
+ *              the patch of skin a bind pose shape covers moves as the head
+ *              turns;
+ *   a plane carried by the head node cannot be dodged by a turn about the
+ *              neck axis, but it tilts with the head, and tilted forty
+ *              degrees it runs through her chest and shoulders (HDLOG then
+ *              counts four to nine of the fifteen joints on the discarded
+ *              side, where two is the healthy reading).
  *
- * A WEIGHT HAS NEITHER FREEDOM. It is not measured in space at all.
+ * A weight is not measured in space at all.
  *
- * WHERE THE THRESHOLD COMES FROM (ModelProbe -headw, over the eight wardrobe
+ * Where the threshold comes from (ModelProbe -headw, over the eight wardrobe
  * bodies against ANDREA1's Lara skeleton). `drop` is how many vertices the
  * threshold takes, `r>s8` the widest of them below the chin - the collar
  * question - and `top` where the highest surviving vertex within a neck's own
@@ -539,9 +491,9 @@ int HDLaraPartTwinSlot(int part);
  *   0.25    6689 24.5 11.6   5006 24.5 10.5   8136 71.2 11.6    6689 24.5 12
  *   0.50    6645 24.5 -1.6   4818 24.5 -1.6   8086 71.2 -1.6    6638 24.5  0
  *
- * TWO THINGS IN THAT TABLE FIX THE NUMBER.
+ * Two things in that table fix the number.
  *
- *   ANY WEIGHT AT ALL IS TOO MUCH. The four TR3 guest bodies (#122) carry a
+ *   Any weight at all is too much. The four TR3 guest bodies carry a
  *   whisper of head weight - under 0.05 - over the WHOLE body, down to the
  *   feet: 9,622 vertices against the 6,729 that are really her head, the
  *   deepest of them 688 units down the axis. Take "any" and three quarters of
@@ -549,10 +501,9 @@ int HDLaraPartTwinSlot(int part);
  *   quietly: at "any" the widest thing taken below the chin is 57 units out
  *   on OUTFIT_CLASSIC, which is her shoulder.
  *
- *   HALF IS TOO LITTLE. At 0.50 the highest surviving vertex inside a neck's
- *   radius stands 1.6 units ABOVE the head joint on four of the bodies - a
- *   ring of neck around the camera, which is the tube the play test
- *   photographed.
+ *   Half is too little. At 0.50 the highest surviving vertex inside a neck's
+ *   radius stands 1.6 units above the head joint on four of the bodies - a
+ *   ring of neck, a tube, around the camera.
  *
  * Between 0.05 and 0.35 every one of the eight bodies reads the same 24.5 (25
  * on the Russia coat) for the widest thing taken below the chin, which is the
@@ -561,68 +512,57 @@ int HDLaraPartTwinSlot(int part);
  * the rim below is a SINGLE texture page on all eight bodies. */
 #define HD_LARA_HEAD_CUT_WEIGHT	0.15f	// of 1: a vertex the head owns this much of goes
 
-/* WHAT SURVIVES THE CUT, AND WHY THE VCI COLLAR RING DOES NOT. The catsuit's
- * collar ring stands at radius 70 and is skinned to the HEAD outright, so it
+/* What survives the cut, and why the VCI collar ring does not. The catsuit's
+ * collar ring stands at radius 70 and is skinned to the head outright, so it
  * goes with the head at every threshold in the table - it turns with her head
  * in the third person, which is what it is for, and in the first person there
  * is nothing left for it to sit on. The Russia coat's own collar is torso
  * skinned, carries no head weight anywhere, and stays.
  *
- * THE DIVING SUIT (OUTFIT_SUBSUIT) IS OUT OF THIS, as it has been since fix
- * round L: its helmet sits on the TORSO node and carries no head weight, so
- * the cut does not touch it. The user's decision stands - the suit neither
- * gets work of its own nor constrains the cut - and what it does is measured
- * and reported. What it does is nothing visible: the camera sits INSIDE the
+ * The diving suit (OUTFIT_SUBSUIT) is outside this and gets no handling of
+ * its own: its helmet sits on the torso node and carries no head weight, so
+ * the cut does not touch it. Nothing of it shows: the camera sits inside the
  * closed helmet, first person culls back faces, and a closed surface seen
  * from within is back facing everywhere. */
 
-/* THE LID THAT CLOSES IT (#123, fix round S, S1; rebuilt on the RIM in fix
- * round U, U1).
+/* The lid that closes the cut: a fan over the body's own rim.
  *
- * A FAN OVER THE BODY'S OWN RIM, and every word of that is the design.
- *
- * THE RIM is the set of vertices that do NOT reach the threshold but share a
+ * The rim is the set of vertices that do NOT reach the threshold but share a
  * triangle with one that does: the ring of skin the cut leaves standing, and
  * the exact boundary of the hole it opens. build_neck_cap finds it in the
  * .TRM while the file is still a file, sorts it by angle about the neck axis,
  * and builds a fan from the middle out to it.
  *
- * ITS RIM VERTICES ARE COPIES OF THE BODY'S, down to the three bones and the
+ * Its rim vertices are copies of the body's, down to the three bones and the
  * three weights. That is what makes the seal exact and permanent: the lid's
  * edge is skinned by the same sum over the same joints as the skin it meets,
- * so the two land on the same point in EVERY pose, to the bit. There is no
- * margin, no overlap and no gap to leave, and no animation can open one -
- * which is the failure of every lid before it, all of which were rigid on one
- * node while the skin they met was not.
+ * so the two land on the same point in every pose, to the bit. There is no
+ * margin, no overlap and no gap, and no animation can open one - which a lid
+ * rigid on one node cannot promise, because the skin it meets is only partly
+ * head.
  *
- * ITS COLOUR IS THE RIM'S OWN, AND IT INVENTS NO TEXEL ANYWHERE (U1b). Each
+ * Its colour is the rim's own, and it invents no texel anywhere. Each
  * spoke of the fan wears the texture coordinate of the rim vertex it hangs
  * from, unchanged all the way in, and the fan wears the page most of the rim
  * wears - so the lid is the top of whatever the outfit really has there: skin
  * on OUTFIT_CLASSIC (page 8001), the coat on OUTFIT_RUSSIA (8042), the suit on
- * OUTFIT_SUBSUIT (8047), the TR3 guests' own bodies (8201). The MIDDLE is a
+ * OUTFIT_SUBSUIT (8047), the TR3 guests' own bodies (8201). The middle is a
  * copy per spoke for that reason - one point, one normal, one skinning, one
  * texel each - so a triangle of the lid spans two texels that are neighbours
  * on her skin and samples nothing between them.
  *
- * THE FIRST CUT OF THIS ROUND GAVE THE MIDDLE THE AVERAGE of the rim's texels,
- * and the play test came back with "a dark point in the middle of the cap,
- * running dark towards it like a cone" - on the four TR3 guest bodies only.
- * Measured (ModelProbe -headw, the rim's texels at the shipping threshold):
- * every TR5 page has the neck as ONE COLUMN six texels wide (u 235..241 on
- * 8001, u 119..125 on 8042, u 16..40 on 8047), and the average of a column is
- * in the column. The TR3 guests' page has it as TWO BANDS (u 60..170, one at
- * v 198..202 and one at v 154..158) and the average lands in the gap between
- * them. Picking a better single texel would only make the lottery smaller,
- * because the interior interpolates towards whatever the middle wears; not
- * inventing one is the only rule with nothing left to measure.
+ * A single middle texel, such as the average of the rim's, fails: on the TR3
+ * guest bodies it shows as a dark point in the middle of the lid, darkening
+ * towards it like a cone. Measured (ModelProbe -headw, the rim's texels at the
+ * threshold used): every TR5 page has the neck as one column six texels wide
+ * (u 235..241 on 8001, u 119..125 on 8042, u 16..40 on 8047), and the average
+ * of a column is in the column. The TR3 guests' page has it as two bands (u
+ * 60..170, one at v 198..202 and one at v 154..158) and the average lands in
+ * the gap between them. Any single texel is a lottery, because the interior
+ * interpolates towards whatever the middle wears; not inventing one is the
+ * only rule with nothing left to measure.
  *
- * Fix round S's one measured THROAT texel was a better answer than round I's
- * "whatever page the rim happens to sit on", and this is better than both: it
- * is not one colour at all, and it joins the skin at the seam because it IS
- * the skin at the seam.
- *
- * THE RINGS. The fan is subdivided towards its middle until it carries at
+ * The rings. The fan is subdivided towards its middle until it carries at
  * least HD_LARA_NECK_CAP_SEGMENTS triangles. That is NOT about the outline -
  * the outline is the body's own rim and cannot be improved by adding points
  * to it, only spoilt - it is about the LIGHT: the HD path lights per vertex
@@ -630,70 +570,38 @@ int HDLaraPartTwinSlot(int part);
  * shades as twenty flat wedges. The subdivision is radial, so the boundary is
  * untouched.
  *
- * THE OUTLIER GUARD. A rim vertex further than HD_LARA_NECK_CAP_RMAX off the
+ * The outlier guard. A rim vertex further than HD_LARA_NECK_CAP_RMAX off the
  * neck axis is not part of a neck and is dropped before the sort - a patch of
  * head-weighted geometry somewhere else on the body would otherwise put a
  * spoke of the fan across her chest. Measured: at 0.15 the widest rim vertex
  * over all eight bodies is 27.6 (the diving suit's collar), so the guard
- * never fires on the wardrobe as it stands. It is there for the ninth body.
+ * never fires on the wardrobe as it stands. It is there for a further body.
  *
- * WHY A LID AT ALL, and the answer is the user's two photographs of fix round
- * S's test build with no cut of any kind: looking down into the open neck in
- * a dive roll one sees the undersides of her own collar and straps, and on a
- * landing the camera leaves the head and the nape fills the picture. Both are
- * reached THROUGH the open neck, and both stop existing when the hole is
- * closed. */
+ * Why a lid at all: looking down into the open neck in a dive roll one sees
+ * the undersides of her own collar and straps, and on a landing the camera
+ * leaves the head and the nape fills the picture. Both are seen through the
+ * open neck, and both stop existing when the hole is closed. */
 #define HD_LARA_NECK_CAP_SEGMENTS 48	// triangles in the fan, at least
 #define HD_LARA_NECK_CAP_RMAX	34.0	// a neck and never a collar: a rim stops here
 
-/* WHERE THE THROAT'S OWN TEXEL IS (#123, fix round K, K1; the inner skin it
- * was measured for is WITHDRAWN in fix round S, S1(4), and the lid stopped
- * needing it in fix round U, U1).
+/* Where the throat's own texel is.
  *
- * WHAT THE INNER SKIN WAS. Round K drew the whole body a SECOND time in first
- * person, keeping exactly the faces the first draw culls, so that a ray
- * through the neck hole met the far wall of her own chest rather than the
- * room. It wore ONE texel and a turned normal, because the inside of a catsuit
- * is black and "black inside it still" was the user's finding and not the fix.
+ * This measurement does not colour anything - the lid wears the rim's own
+ * texture - but it is the one line of the build log that says which page of an
+ * outfit is Lara's throat, which tells a lid that comes out on the coat rather
+ * than on her skin from a lid that came out wrong. The rule and the
+ * measurement behind it are at measure_neck_skin in hd_lara.cpp.
  *
- * WHY IT IS GONE. The LID closes the hole, and the second draw was measured
- * out rather than argued out. ModelProbe -firstperson, forty pictures: five
- * outfits at three pitches and both eyes the game uses, and on top of that the
- * head turned forty degrees each way, tilted thirty each way, and the torso
- * bent twenty-five each way and turned thirty - every one of them IDENTICAL TO
- * THE PIXEL with the inner draw and without it. Against that it cost a second
- * pass over 27,000 triangles per first person frame and one real fault: a
- * strap or a flap is a single layer of triangles whose two sides sit at the
- * same depth to the bit, and the inner draw won that tie, which is the torn
- * edges and missing shoulder pieces of fix round R.
- *
- * WHAT THE MEASUREMENT IS STILL FOR. It is no longer the lid's colour - the
- * lid wears the rim's own texture since fix round U - but it is still the one
- * line of the build log that says WHICH PAGE of an outfit is Lara's throat,
- * which is how a lid that comes out on the coat rather than on her skin can be
- * told from a lid that came out wrong. The rule, the two rules it replaced and
- * the measurement that killed them are at measure_neck_skin in hd_lara.cpp. */
+ * The first person view draws no second, inside-out pass of the body behind
+ * the neck hole: with the lid in place, ModelProbe -firstperson over forty
+ * pictures (five outfits, three pitches, both eyes the game uses, head turned
+ * and tilted, torso bent and turned) is identical to the pixel with and
+ * without it. Such a pass would cost a second draw of 27,000 triangles per
+ * frame and would win the depth tie on a strap or flap - a single layer of
+ * triangles whose two sides sit at the same depth - tearing its edges. */
 #define HD_LARA_NECK_SKIN_R	30.0	// off the axis: the stump and no shoulder
 #define HD_LARA_NECK_SKIN_S	30.0	// down it: where the shoulders join
 #define HD_LARA_NECK_SKIN_MIN	24	// vertices before a page may be the neck
-
-/* THE TWO LIDS THAT WERE THERE BEFORE (#123, fix round I, I3; re-aimed in fix
- * round J, J1; WITHDRAWN in fix round K, K1(b); a flat disc in fix round S,
- * S1; the RIM fan above since fix round U).
- *
- * Rounds I and J closed the hole with a DOME of 32 spokes and four rings, cut
- * from the outfit's own collar ring and sunk into the chest, and the play test
- * sent it back: with the eye on the head joint - where the first person camera
- * sits whenever a wall is in front of Lara - it was a GREAT FLAT
- * SKIN-COLOURED PLATE across the whole view, and on OUTFIT_RUSSIA it wore the
- * BACKPACK STRAPS, because the majority page of that outfit's collar ring is
- * 8018. It was as wide as her torso because the cut it closed was.
- *
- * Round S's was a flat DISC in the cut's plane, a neck wide and rigid on the
- * head node, wearing the one throat texel. It was the right size and the right
- * colour, and it went with the plane that defined it: a disc rigid on the head
- * meets skin that is only part head, so the two part company as she moves.
- * Fix round U's lid is not a shape at all - it is a copy of the rim. */
 
 /* The classic Lara mesh tree in LM_ order, spelled out so that the tables
  * below and a reader of them do not have to look it up. These are the numbers
@@ -711,13 +619,13 @@ enum HDLaraNode
 
 /* Which body Lara wears. The section table that picks one is in the .cpp.
  *
- * THESE NINE ARE THE LEVEL-FACTS PATH AND NOTHING MORE (#153, round M2). They
- * are the outfits HDLaraOutfitFor can reach out of what the level file says,
- * and their numbers are written into level headers (data[3]) and into .hdm
- * files, so they never move. The WARDROBE is bigger than they are and is a
- * scan now (hd_wardrobe.h): any entry of it can be worn, by the player's own
- * choice in the registry (hd_laradraw.cpp, hd_outfit), and such an outfit is
- * named HD_LARA_OUTFIT_WEAR + its scan index. */
+ * These nine are the level-facts path and nothing more. They are the outfits
+ * HDLaraOutfitFor can reach out of what the level file says, and their numbers
+ * are written into level headers (data[3]) and into .hdm files, so they never
+ * move. The wardrobe is bigger than they are and is a scan (hd_wardrobe.h):
+ * any entry of it can be worn, by the player's own choice in the registry
+ * (hd_laradraw.cpp, hd_outfit), and such an outfit is named
+ * HD_LARA_OUTFIT_WEAR + its scan index. */
 enum HDLaraOutfit
 {
 	HD_LARA_OUTFIT_NONE = 0,	// stay classic - and the log says why
@@ -725,14 +633,14 @@ enum HDLaraOutfit
 	HD_LARA_OUTFIT_RUSSIA,		// the Russian section: coat and cap
 	HD_LARA_OUTFIT_SUBSUIT,		// the diving suit of Deepsea Dive
 	HD_LARA_OUTFIT_VCI,		// the black catsuit of the VCI levels
-	HD_LARA_OUTFIT_TR3_ANTARC,	// the four guests the randomizer rolls (#122)
+	HD_LARA_OUTFIT_TR3_ANTARC,	// the four TR3 guests the randomizer rolls
 	HD_LARA_OUTFIT_TR3_NEVADA,
 	HD_LARA_OUTFIT_TR3_COAST,
 	HD_LARA_OUTFIT_TR3_CATSUIT,
 	HD_LARA_OUTFIT_COUNT
 };
 
-/* AN OUTFIT OUT OF THE SCAN (#153, round M2): this plus its index in
+/* An outfit out of the scan: this plus its index in
  * hd_wardrobe. Far above HD_LARA_OUTFIT_COUNT so that the two kinds cannot be
  * confused, and far below the end of an int. Every call below that takes an
  * `outfit` takes one of these as well. */
@@ -754,11 +662,11 @@ enum HDLaraPart
 {
 	HD_LARA_PART_BODY = 0,		// the OUTFIT_ model, nodes 0..14
 
-	/* TR5'S OWN HEAD, borrowed for a body that has none (#156): node 14 of
-	 * the install's OUTFIT_CLASSIC, cut out by node (HDModelSlot::onlyNode)
-	 * and skinned to node 14 exactly as the body's own head node is.
+	/* TR5's own head, borrowed for a body that has none: node 14 of the
+	 * install's OUTFIT_CLASSIC, cut out by node (HDModelSlot::onlyNode) and
+	 * skinned to node 14 exactly as the body's own head node is.
 	 *
-	 * WHAT IT IS, measured: 6,860 vertices and 9,485 triangles, 9,483 of them
+	 * What it is, measured: 6,860 vertices and 9,485 triangles, 9,483 of them
 	 * on page 8002 - which is HAIR. Two triangles of skin at the nape and
 	 * nothing else. The head node of a IV-VI outfit IS her hair, and the
 	 * separate LARA_HEAD that rides on the same node is the face and the
@@ -773,9 +681,8 @@ enum HDLaraPart
 	HD_LARA_PART_FACE,		// LARA_HEAD, rigid on node 14
 	HD_LARA_PART_BRAID,		// HAIR_OG, its own six node chain
 
-	/* Not a file: a fan built on the RIM the head cut leaves, skinned exactly
-	 * as that rim is (#123, fix round S, S1; rebuilt in fix round U, U1).
-	 * Drawn in first person only. */
+	/* Not a file: a fan built on the rim the head cut leaves, skinned exactly
+	 * as that rim is. Drawn in first person only. */
 	HD_LARA_PART_NECK_CAP,
 
 	HD_LARA_PART_HAND_REST,		// nothing in the hands
@@ -786,7 +693,7 @@ enum HDLaraPart
 	HD_LARA_PART_HAND_DEAGLE,	// TR5's "revolver" slot is a Desert Eagle
 	HD_LARA_PART_HAND_DEAGLE_LASER,
 	HD_LARA_PART_HAND_GRAPPLE,	// TR5's "crossbow" slot is the grappling gun, with
-								// or without the sight bit (fix round O2)
+								// or without the sight bit
 	HD_LARA_PART_HAND_FLARE,	// left hand only
 	HD_LARA_PART_HAND_TORCH,	// left hand only
 	HD_LARA_PART_HAND_CROWBAR,	// right hand only
@@ -795,9 +702,9 @@ enum HDLaraPart
 	HD_LARA_PART_HOLSTER_UZI,	// both thighs
 	HD_LARA_PART_HOLSTER_DEAGLE,	// the right thigh alone
 
-	/* THE POUCHES THE GUNS SIT IN (#123, fix round D, D4).
+	/* The pouches the guns sit in.
 	 *
-	 * A HOLSTER_ file is the WEAPON and nothing else - HOLSTER_PISTOL.TRM is
+	 * A HOLSTER_ file is the weapon and nothing else - HOLSTER_PISTOL.TRM is
 	 * two pistols, 4268 vertices, and no leather anywhere (ModelProbe -name
 	 * HOLSTER_PISTOL, a picture of two guns hanging in mid air). The pouch,
 	 * the thigh strap and the hip belt they hang from are built into the
@@ -807,9 +714,8 @@ enum HDLaraPart
 	 * Three of the eight wardrobe bodies have none - OUTFIT_VCI,
 	 * OUTFIT_TR3_ANTARC and OUTFIT_TR3_NEVADA - because vanilla TR5 gives
 	 * catsuit Lara no pistols and the two TR3 guests wear none in their own
-	 * game either. The randomizer hands her a gun in every level, so the
-	 * guns hung in the air beside her thigh: the user's finding D4, with
-	 * three photographs.
+	 * game either. The randomizer hands her a gun in every level, and
+	 * without a rig the guns hang in the air beside her thigh.
 	 *
 	 * This part is the missing rig, cut out of OUTFIT_TR3_CATSUIT by page
 	 * (HDModelSlot::onlyPage). The London catsuit is the donor rather than
@@ -817,11 +723,10 @@ enum HDLaraPart
 	 * is what the VCI catsuit is; OUTFIT_CLASSIC's is brown suede over bare
 	 * skin.
 	 *
-	 * WHO WEARS IT is a table and not a rule (fix round F, F1): OUTFIT_VCI
-	 * and nobody else. Round D gave it to all three bodies that carry no rig
-	 * of their own, and on the Antarctica parka and the Nevada vest the
-	 * straps clip through the coat - those two never wore a thigh rig in
-	 * TR3 and their geometry is finished without one. hd_lara.cpp's
+	 * Who wears it is a table and not a rule: OUTFIT_VCI and nobody else.
+	 * On the Antarctica parka and the Nevada vest the straps clip through
+	 * the coat - those two never wore a thigh rig in TR3 and their geometry
+	 * is finished without one. hd_lara.cpp's
 	 * Outfit::wearsRig carries the decision and the measurement behind it. */
 	HD_LARA_PART_HOLSTER_RIG,
 
@@ -844,7 +749,7 @@ enum HDLaraRole
 	HD_LARA_ROLE_SUPPRESS		// drawn classic today, drawn by nobody in HD
 };
 
-/* WHAT THE LEVEL HANDS OVER. The two bind poses are the engine's own: the
+/* What the level hands over. The two bind poses are the engine's own: the
  * accumulated offsets of the slot's mesh tree, three floats a node, in node
  * order - exactly what hd_object.cpp's bind_pose_of() produces for an
  * ordinary slot and what ModelProbe reads out of the .TRC. Without them a
@@ -857,7 +762,7 @@ struct HDLaraLevel
 	const float* hairBind;		// HD_LARA_HAIR_NODES * 3, from HAIR, or 0
 	int hairNodes;			// 0 when the level has no braid
 
-	/* WHICH OF LARA'S SLOTS THE LEVEL ACTUALLY LOADED, so that the wardrobe
+	/* Which of Lara's slots the level actually loaded, so that the wardrobe
 	 * is not loaded whole every time. The full set is 21 models, 3.4 MiB of
 	 * buffers and 30 MiB of texture pages, and most of it is weapons the
 	 * level file has no slot for: the VCI levels ship no LARA_HOLSTERS_UZIS,
@@ -878,9 +783,8 @@ struct HDLaraStats
 	int outfit;			// what was asked for
 	int wanted;			// parts planned
 	int loaded;			// parts on the card
-	/* #153 round M2b: of those, models that are not a part at all - the
-	 * install's own hands loaded beside a mod's gun. Counted with the rest in
-	 * EVERY field below - loaded, vertices, indices, ranges, pages and both
+	/* Of those, models that are not a part at all - the install's own hands
+	 * loaded beside a mod's gun. Counted with the rest in every field below - loaded, vertices, indices, ranges, pages and both
 	 * byte counts, because it is a model on the card like any other - and
 	 * named here so that a line saying "19 on the card" out of 18 parts is
 	 * not a puzzle. */
@@ -903,7 +807,7 @@ struct HDLaraStats
 	int driftParts;
 };
 
-/* THE FRAME. What the seam in DrawLara knows about this one frame, in the
+/* The frame: what the seam in DrawLara knows about this one frame, in the
  * engine's own terms - slot numbers, exactly the ones DrawLara already has in
  * its hands. HDLaraFrameParts turns them into the list of parts to draw.
  *
@@ -911,7 +815,7 @@ struct HDLaraStats
  * comes from. The engine keeps that in lara.mesh_ptrs[] as a POINTER, so the
  * seam has to compare it against meshes[objects[s].mesh_index + 2 * LM_xHAND]
  * for the handful of candidate slots - which is cheap and is what the classic
- * path itself does in larafire.cpp:331.
+ * path itself does in larafire.cpp.
  *
  * leftHolsterSlot / rightHolsterSlot: LHolster and lara.holster - the engine's
  * own two variables, already the slot number.
@@ -944,7 +848,7 @@ const char* HDLaraOutfitModel(int outfit);
 // outfit it is the wardrobe's display name ("TR2 Home", "AOD Wetsuit").
 const char* HDLaraOutfitLabel(int outfit);
 /* The wardrobe key of whatever this number stands for ("46/OUTFIT_VCI"), or
- * "" when this machine's scan has no entry for it (#153, round M2). Never
+ * "" when this machine's scan has no entry for it. Never
  * null. The nine have one as well, which is what lets the player's chosen key
  * and a level header's data[3] be compared as the same kind of thing. */
 const char* HDLaraOutfitKey(int outfit);
@@ -953,13 +857,13 @@ const char* HDLaraOutfitKey(int outfit);
 // ("46/OUTFIT_TR2_HOME"). HD_LARA_OUTFIT_NONE when the name is none of them.
 int HDLaraOutfitFromName(const char* name);
 
-/* WHICH OUTFIT THIS LEVEL WEARS, out of the engine's own facts and nothing
+/* Which outfit this level wears, out of the engine's own facts and nothing
  * else. The caller passes what it has:
  *
  *   laraDrawType  LaraDrawType, i.e. LARA_NORMAL .. LARA_PONYTAIL. It comes
  *                 from data[0] of the level header and the randomizer writes
  *                 it, so it is the outfit's own word and not the level's.
- *   russiaCap     the ENGINE'S OWN predicate for "she is wearing the cap":
+ *   russiaCap     the engine's own predicate for "she is wearing the cap":
  *                 (gfLevelId in the Russia range && LaraDrawType ==
  *                 LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD. That exact
  *                 expression already stands three times in game\hair.cpp and
@@ -969,24 +873,22 @@ int HDLaraOutfitFromName(const char* name);
  *                 engine's own test in rather than rebuilding it here is what
  *                 keeps the two from drifting apart.
  *   youngLara     (gfLevelFlags & GF_YOUNGLARA) || LaraDrawType ==
- *                 LARA_YOUNG. Either and Lara stays classic, by the user's
- *                 decision.
+ *                 LARA_YOUNG. Either and Lara stays classic.
  *
- *                 THE IRISH LEVEL RANGE IS NOT IN THAT TEST, and it was
- *                 (#123, stage S7-2, the spiel test's F1). The engine builds
- *                 the child body at exactly two places - LaraInitialiseMeshes
- *                 in game\laramisc.cpp and its twin in game\deltapak.cpp -
- *                 and both ask the range AND THE FLAG. The randomizer clears
- *                 GF_YOUNGLARA out of SCRIPT.DAT for all three Irish levels
- *                 (core\ScriptDat.cpp) and replaces Lara's skin with an
- *                 adult's, because young Lara can carry no weapon; the range
- *                 alone therefore said "child" about a grown Lara and drew
- *                 every Irish level classic. The flag and the LaraType byte
- *                 both flip with the change and neither has that hole.
+ *                 The Irish level range is deliberately not in that test.
+ *                 The engine builds the child body at exactly two places -
+ *                 LaraInitialiseMeshes in game\laramisc.cpp and its twin in
+ *                 game\deltapak.cpp - and both ask the range and the flag.
+ *                 The randomizer clears GF_YOUNGLARA out of SCRIPT.DAT for
+ *                 all three Irish levels (core\ScriptDat.cpp) and replaces
+ *                 Lara's skin with an adult's, because young Lara can carry
+ *                 no weapon; the range alone would call a grown Lara a child
+ *                 and draw every Irish level classic. The flag and the
+ *                 LaraType byte both flip with the change.
  *   tr3Outfit     one of the four HD_LARA_OUTFIT_TR3_* when the randomizer
  *                 dressed this level in a Tomb Raider III outfit, otherwise
- *                 HD_LARA_OUTFIT_NONE. It is data[3] of the level header
- *                 (#123, stage S7), passed in RAW: the randomizer writes the
+ *                 HD_LARA_OUTFIT_NONE. It is data[3] of the level header,
+ *                 passed in raw: the randomizer writes the
  *                 engine's own numbers so that neither side translates.
  *                 Anything but 5..8 is ignored - see the .cpp. It exists
  *                 because the wardrobe writes the SAME outfit byte
@@ -1040,21 +942,20 @@ void HDLaraLevelEnd();
 bool HDLaraActive();
 int HDLaraOutfitNow();
 
-/* WHOSE HEAD THE OUTFIT THAT IS ON WEARS (#156): one of the
- * HD_WARDROBE_HEAD_* of hd_wardrobe.h. Settled at level build out of the
- * wardrobe entry and asked for by the draw, which turns it into two bits and
- * nothing more - whether the body's own head node is drawn, and whether
- * HD_LARA_PART_HEAD is. */
+/* Whose head the outfit that is on wears: one of the HD_WARDROBE_HEAD_* of
+ * hd_wardrobe.h. Settled at level build out of the wardrobe entry and asked
+ * for by the draw, which turns it into two bits and nothing more - whether the
+ * body's own head node is drawn, and whether HD_LARA_PART_HEAD is. */
 int HDLaraHeadMode();
 
-/* AND THE NODE MASK THE BODY DRAWS WITH, which is every node but the head
- * node when that mode is `tr5`, and every node otherwise (#156). The caller
+/* The node mask the body draws with: every node but the head node when that
+ * mode is `tr5`, and every node otherwise. The caller
  * ANDs it into the frame's own mask. Settled at level build, so the draw does
  * not ask the wardrobe anything. */
 unsigned int HDLaraBodyMask();
 
 bool HDLaraHasPart(int part);
-/* THE INSTALL'S OWN HANDS BESIDE A MOD'S GUN (#153, round M2b). True when
+/* The install's own hands beside a mod's gun. True when
  * hd_model really loaded the twin for this part - which it does only for a mod
  * hand painted with another bundle's skin. The caller draws it with the SAME
  * matrices, the same node mask and the same light as the part itself; it is
@@ -1067,66 +968,60 @@ bool HDLaraPartPlanned(int part);
 // that is not on the card.
 unsigned int HDLaraPartCoverage(int part);
 
-/* THE FIRST PERSON HEAD CUT, IN THE ONLY TERMS IT HAS (#123, fix round U,
- * U1).
+/* The first person head cut, in the only terms it has.
  *
  * `node` comes back as the node whose weight decides - Lara's head, node 14 -
  * and `bar` as how much of that weight sends a fragment away. Neither is a
  * fact about the level, the pose or the camera: they are the two numbers the
- * shader needs, and the whole point of the round is that there is no third.
+ * shader needs, and there is no third. No bind pose is needed; a weight is
+ * written in the file.
  *
- * FALSE when there is no HD body to cut - no wardrobe, or the outfit was never
+ * False when there is no HD body to cut - no wardrobe, or the outfit was never
  * built - and then the caller draws with no cut at all, because half a cut is
- * worse than none.
- *
- * There is no bind pose in it any more. Fix round S's plane needed one (the
- * neck axis and a depth down it), and every shape before that needed one too;
- * a weight is written in the file. */
+ * worse than none. */
 bool HDLaraHeadCut(int* node, float* bar);
 
-/* THE SHEEN OF ONE PART (#123, fix round D, D2).
+/* The sheen of one part.
  *
  * The strength and the Blinn-Phong exponent HDModelLighting wants, for the
  * outfit that is on. Both 0 when the part does not shine, and then the shader
  * takes the branch that costs nothing.
  *
- * The numbers are a MATERIAL table and not a measurement, and hd_lara.cpp says
+ * The numbers are a material table and not a measurement, and hd_lara.cpp says
  * so at the table itself: there is no gloss mask in the art to read (measured
  * with DdsProbe -alpha - every wardrobe page is a flat 240..255 alpha), so
  * what a surface is made of has to be written down. They are logged per part
  * at level build so that a picture and a log line can be put side by side. */
 void HDLaraPartSheen(int part, float* strength, float* power);
 
-/* WHAT IS IN THE HAND, as opposed to the hand itself (#123, fix round I, I4).
+/* What is in the hand, as opposed to the hand itself.
  *
  * A HAND_ model is two things on two texture pages - the hand and the weapon -
  * and one sheen for the draw makes either the skin metal or the gun matt. So
- * HDLaraPartSheen answers with the HAND's material (skin, or leather for a
- * gloved outfit) and this one with the WEAPON's; HDLaraLevelBuild hangs the
+ * HDLaraPartSheen answers with the hand's material (skin, or leather for a
+ * gloved outfit) and this one with the weapon's; HDLaraLevelBuild hangs the
  * second on the pages the rest hands have not got, through
  * HDModelSetPageSheen. Both 0 for a part that is not a hand. */
 void HDLaraHeldSheen(int part, float* strength, float* power);
 
-/* AND LARA'S SKIN ITSELF (#123, fix round K, K1; this note corrected in fix
- * round U, U5), out of the same material table: what her SKIN shines like as
- * against the outfit she wears. It was written for the inner skin draw, which
- * fix round S withdrew; what asks for it now is the neck LID, whose whole
- * business is to be the top of her neck, and the hands, which is what made
- * the wrist seam one material instead of two. One function so that the number
- * is written down once. */
+/* Lara's skin itself, out of the same material table: what her skin shines
+ * like as against the outfit she wears. The neck lid asks for it, whose whole
+ * business is to be the top of her neck, and so do the hands, which makes the
+ * wrist seam one material instead of two. One function so that the number is
+ * written down once. */
 void HDLaraSkinSheen(float* strength, float* power);
 
-/* AND WHICH PAGES OF THE BODY WEAR IT (#123, fix round K, K2): true for a
+/* Which pages of the body wear it: true for a
  * .DDS page the outfit that is on names as Lara's own skin, which is what
  * makes the wrist seam one material instead of two. The table and the
  * measurement behind it are at kOutfit in hd_lara.cpp. */
 bool HDLaraSkinPage(int page);
 
-/* WHAT TO DRAW THIS FRAME, in draw order, after the body and the face. Returns
+/* What to draw this frame, in draw order, after the body and the face. Returns
  * how many entries were written (at most 6: two hands, two thigh holsters, the
  * back weapon and one spare).
  *
- * THE RULE, which is TROne's with one addition. TROne picks ONE hand model -
+ * The rule is TROne's with one addition. TROne picks ONE hand model -
  * the first of nodes 10 and 13 whose mesh came from a non-body slot - and
  * draws it whole. That is right for every two-handed frame and wrong for the
  * three TR5 frames where the hands differ: a flare or a torch is in the LEFT

@@ -4,7 +4,7 @@
  * Carried over from TROne (Copyright 2026 Todesengel, GPLv3) - see hd_lara.h
  * for the list of functions and THIRD-PARTY.md for the licence.
  *
- * WHAT IS NOT TROne'S, and must not be made to follow it: which outfit a
+ * What is not TROne's, and must not be made to follow it: which outfit a
  * section wears. TROne's TR5 glue (games\tr5\glue\hostglue_file5.cpp,
  * RegisterLaraWardrobe) gives OUTFIT_RUSSIA to the levels whose file names
  * begin with ANDY and treats the JOBY ones as young Lara. In this game it is
@@ -40,9 +40,9 @@ namespace
 {
 	/* ------------------------------------------------------- the wardrobe -- */
 
-	/* THE NINE THE LEVEL'S OWN FACTS CAN REACH. Every one of these files was
-	 * read and counted before it was written down here (ModelProbe -name
-	 * <NAME> -nodraw); the node column is the measurement, not the plan.
+	/* The nine outfits the level's own facts can reach. Every file was read
+	 * and counted with ModelProbe -name <NAME> -nodraw; the node column is the
+	 * measurement.
 	 *
 	 *   model              nodes with geometry                     vertices
 	 *   OUTFIT_CLASSIC     0..14                                     27349
@@ -54,15 +54,14 @@ namespace
 	 *   OUTFIT_TR3_COAST   0..14                                     15327
 	 *   OUTFIT_TR3_CATSUIT 0..14                                     18633
 	 *
-	 * WHAT THIS TABLE STILL IS, AND WHAT IT IS NOT (#153, round M2). It is the
-	 * enum's two words: which FILE an HD_LARA_OUTFIT_* number stands for and
-	 * what to call it in the log. It is no longer the list - the list is a
-	 * scan (hd_wardrobe.h) that finds a hundred outfits in the two installs
-	 * and whatever a mod brings - and it is no longer the properties either:
-	 * hands, braid, holsters, gloves, the holster rig, the sheen and the skin
-	 * pages moved to hd_wardrobe.cpp's table, with the measurements that
-	 * produced them, so that ONE answer serves the engine, the tools and the
-	 * randomizer. `props_of` below is how this file asks for them.
+	 * The table holds only the enum's two words: which file an HD_LARA_OUTFIT_*
+	 * number stands for and what to call it in the log. The list of outfits
+	 * is a scan (hd_wardrobe.h) that finds a hundred outfits in the two
+	 * installs and whatever a mod brings, and the properties - hands, braid,
+	 * holsters, gloves, the holster rig, the sheen and the skin pages - live
+	 * in hd_wardrobe.cpp's table with the measurements behind them, so that
+	 * one answer serves the engine, the tools and the randomizer. `props_of`
+	 * below is how this file asks for them.
 	 *
 	 * The nine numbers stay because they are written into level headers
 	 * (data[3]) and into .hdm files and because HDLaraOutfitFor reaches them
@@ -88,10 +87,10 @@ namespace
 		{ "OUTFIT_TR3_CATSUIT", "London (TR3)" }
 	};
 
-	/* THE PROPERTIES OF WHATEVER IS BEING WORN (#153, round M2).
+	/* The properties of whatever is being worn.
 	 *
 	 * One scan entry, found two ways: a wear number carries its index, and one
-	 * of the nine is matched to its entry BY FILE NAME out of the IV-VI
+	 * of the nine is matched to its entry by file name out of the IV-VI
 	 * install - which is where all eight bodies live and where their
 	 * measurements were made.
 	 *
@@ -100,21 +99,20 @@ namespace
 	 * wardrobe's own defaults are, because a body that draws with the right
 	 * geometry and a plain material is a picture and a body that draws nothing
 	 * is a hole. */
-	/* THE PAGE NUMBER BEHIND A CACHE KEY (#153, round M2).
+	/* The page number behind a cache key.
 	 *
 	 * A model's pages are offered to the cache under a key, not under the
 	 * number the .TRM wrote: a model out of the Tomb Raider I-III bundle
-	 * carries HD_PAGE_ALT_BASE (#123, S7-2) and one a mod supplied carries
-	 * that mod's namespace (#153, M1), because two bundles and any number of
-	 * mods each have a page 8001 and they are different pictures.
+	 * carries HD_PAGE_ALT_BASE and one a mod supplied carries that mod's
+	 * namespace, because two bundles and any number of mods each have a page
+	 * 8001 and they are different pictures.
 	 *
-	 * The namespace is an ALLOCATION; the number is the material's NAME, and
+	 * The namespace is an allocation; the number is the material's name, and
 	 * every rule in this file that asks "is this page her skin" or "is this
 	 * page the gun rather than the hand" is asking about the name. So the
-	 * allocation is stripped here, in one place, rather than in each of them:
-	 * the wardrobe's TRX outfits are the case that proved it - their pages
-	 * are 8415, 8001 and 8002 of THAT bundle, and a comparison against the
-	 * key found none of them. */
+	 * allocation is stripped here, in one place: the wardrobe's TRX outfits,
+	 * for one, wear pages 8415, 8001 and 8002 of their own bundle, and a
+	 * comparison against the key would find none of them. */
 	int page_number_of(int key)
 	{
 		if (HDPageModIndex(key) >= 0)
@@ -136,23 +134,20 @@ namespace
 		return HDWardrobeFindFile(kOutfit[outfit].model, HD_WARDROBE_SOURCE_46);
 	}
 
-	/* REMEMBERED, BECAUSE IT IS ASKED EVERY FRAME (#153, round M2b).
+	/* Remembered, because it is asked every frame.
 	 *
 	 * `wear_index_of` ends in HDWardrobeFindFile, which walks the whole scan -
-	 * 56 entries on this machine, more with mods - and builds a std::string
-	 * per entry to compare with. That is fine once a level; it is not fine
-	 * where it really sits, which is HDLaraPartSheen, called once per PART per
-	 * DRAW, and HDLaraSkinPage, called once per page of the body.
+	 * 56 entries in a typical install, more with mods - and builds a
+	 * std::string per entry to compare with. That is fine once a level, but
+	 * HDLaraPartSheen is called once per part per draw and HDLaraSkinPage once
+	 * per page of the body.
 	 *
-	 * One answer is remembered and it is keyed by the outfit, so a caller
-	 * asking about a different one gets the walk and the right answer. What it
-	 * rests on - the scan's list - is fixed for the session, and the memory is
-	 * dropped in HDLaraLevelEnd, which is the FIRST STATEMENT of
-	 * HDLaraLevelBuild below and is also what hd_laradraw's HDLaraDrawEnd
-	 * calls; so a tool that re-scans with another Mods folder between levels
-	 * is safe either way round. (Named that closely because the round M2b
-	 * review read this sentence, grepped for the call, found only the
-	 * hd_laradraw one and concluded no level build drops the memory.) */
+	 * One answer is remembered, keyed by the outfit, so a caller asking about
+	 * a different one gets the walk and the right answer. The scan's list is
+	 * fixed for the session, and the memory is dropped in HDLaraLevelEnd,
+	 * which is the first statement of HDLaraLevelBuild below and is also
+	 * called by hd_laradraw's HDLaraDrawEnd; so a tool that re-scans with
+	 * another Mods folder between levels is safe either way round. */
 	int g_props_outfit = HD_LARA_OUTFIT_NONE;
 	const HDWardrobeEntry* g_props = 0;
 
@@ -190,11 +185,11 @@ namespace
 		return model_of(outfit) != 0;
 	}
 
-	/* THE FIVE FLAGS AND THE TWO MATERIALS, from the scan where there is one
+	/* The five flags and the two materials, from the scan where there is one
 	 * and from the wardrobe's own defaults where there is not. The defaults
 	 * are repeated here rather than reached for, because this file must go on
 	 * drawing a body when hd_wardrobe has found no install to scan - and they
-	 * are the SAME defaults, which the one-line comment beside each says. */
+	 * are the same defaults, which the one-line comment beside each names. */
 	bool takes_hands(int outfit)
 	{
 		const HDWardrobeEntry* e = props_of(outfit);
@@ -216,31 +211,27 @@ namespace
 		return e ? e->holsters : true;	// kDefaultHolsters
 	}
 
-	/* THE GLOVES ARE NEVER WORN (#153, round M2b - the user's decision).
-	 *
-	 * "In every level with every outfit Lara has had TR5's bare hands for the
-	 * weapons; we never used the gloves - force it, then it is uniform."
+	/* The gloves are never worn: Lara wears TR5's bare hands with the weapons
+	 * in every level and every outfit, so the hands look the same throughout.
 	 *
 	 * So this answers false for everything and the wardrobe's `gloves` flag is
 	 * a value nothing reads: the table's column, `outfit.txt`'s gloves= line
-	 * and the default all go on being parsed, printed and logged - they are
-	 * what a reader of a wardrobe line sees and taking them out would only
-	 * make the line lie about what the file says - and none of them reaches a
-	 * model name any more. The one thing that changes on the screen is the
-	 * Russia outfit and the mods that inherit its row: JOBY1 to JOBY5 drew
-	 * HAND_GLOVES_ until this round.
+	 * and the default still go on being parsed, printed and logged, so that a
+	 * wardrobe line says what the file says, but none of them reaches a model
+	 * name. On screen this concerns the Russia outfit and the mods that
+	 * inherit its row (JOBY1 to JOBY5), which would otherwise draw
+	 * HAND_GLOVES_.
 	 *
-	 * The `gloves` column of kPart below is what stops being read, and it
-	 * stays there for the same reason: it is the wardrobe's measurement of
-	 * which file is which hand's twin, and it is true whether or not anything
-	 * asks for it. */
+	 * The `gloves` column of kPart below stays for the same reason: it is the
+	 * wardrobe's measurement of which file is which hand's twin, and it is
+	 * true whether or not anything asks for it. */
 	bool takes_gloves(int)
 	{
 		return false;
 	}
 
-	// What the wardrobe WOULD have said, for the one log line that reports the
-	// override (#153, round M2b).
+	// What the wardrobe would have said, for the one log line that reports the
+	// override.
 	bool asked_for_gloves(int outfit)
 	{
 		const HDWardrobeEntry* e = props_of(outfit);
@@ -255,20 +246,18 @@ namespace
 		return e ? e->wearsRig : false;	// kDefaultRig
 	}
 
-	// #156: -1 is "the wardrobe decides", which is what the engine always
-	// leaves it at. See HDLaraHeadForce.
+	// -1 is "the wardrobe decides", which is what the engine always leaves it
+	// at. See HDLaraHeadForce.
 	int g_head_force = -1;
 
-	/* WHOSE HEAD THIS BODY WEARS (#156). The wardrobe decided it - out of the
-	 * bundle the file was drawn for, or out of the mod's own outfit.txt - and
-	 * this file only asks. A body with no scan entry keeps its own head,
-	 * which is what every wardrobe this engine had before the round did. */
+	/* Whose head this body wears. The wardrobe decides it - out of the bundle
+	 * the file was drawn for, or out of the mod's own outfit.txt - and this
+	 * file only asks. A body with no scan entry keeps its own head. */
 	int head_mode(int outfit)
 	{
-		// #156: a diagnostic tool asking for one particular picture - the
-		// engine never sets it. Exactly the shape g_fold_bar and g_hand_twin
-		// have, and for the same reason: the BEFORE picture has to be made by
-		// undoing the round rather than by describing it.
+		// A diagnostic tool asking for one particular picture; the engine
+		// never sets it. The same shape as g_fold_bar and g_hand_twin, so a
+		// comparison picture comes out of the same build.
 		if (g_head_force >= 0)
 			return g_head_force;
 
@@ -285,7 +274,7 @@ namespace
 		return e ? e->fromHead : HD_WARDROBE_FROM_DEFAULT;
 	}
 
-	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
+	/* The other parts. `kind` decides which outfits take the part at all:
 	 *   0 always, 1 only an outfit with hands, 2 only one with a braid,
 	 *   3 only one with holsters, 4 only the outfits the table names.
 	 * `rigid` >= 0 means the file is not skinned to the mesh tree but nailed
@@ -294,19 +283,16 @@ namespace
 	 * `nodes` is the coverage measured over 4\ITEM, written down so that the
 	 * masks in HDLaraFrameParts can be read against it.
 	 * `gloves` is the same file for a gloved outfit, or 0 when the wardrobe
-	 * ships no gloved twin. There are ELEVEN hand parts below - REST, PISTOL,
+	 * ships no gloved twin. There are eleven hand parts below - REST, PISTOL,
 	 * UZI, SHOTGUN, HK, DEAGLE, DEAGLE_LASER, GRAPPLE, FLARE, TORCH, CROWBAR -
 	 * and the install ships a HAND_GLOVES_ file for every one of them, counted
-	 * in 4\ITEM. ("Twelve" stood here from #123 until round M2b and was never
-	 * the number of rows in this table.)
+	 * in 4\ITEM.
 	 *
-	 * NOTHING READS IT SINCE #153, ROUND M2b, and that is the user's decision
-	 * and not an oversight: the wardrobe wears the BARE hands in every level
-	 * with every outfit, so takes_gloves above answers false for everything
-	 * and HDLaraPartModel never reaches this column. It stays because it is a
-	 * measurement - which HAND_GLOVES_ file is which HAND_BARE_ file's twin -
-	 * and a measurement is true whether or not anything asks for it; the day
-	 * the decision is revisited, the column is what it needs. */
+	 * Nothing reads it, on purpose: the wardrobe wears the bare hands in every
+	 * level with every outfit, so takes_gloves above answers false for
+	 * everything and HDLaraPartModel never reaches this column. It stays
+	 * because it is a measurement - which HAND_GLOVES_ file is which
+	 * HAND_BARE_ file's twin - and is what gloved hands would need. */
 	struct Part
 	{
 		const char* model;
@@ -315,10 +301,10 @@ namespace
 		int kind;
 		int rigid;
 		const char* nodes;
-		// #123 fix round D (D4): -1 is the whole file, a .DDS number cuts the
-		// part out of a bigger model. See HDModelSlot::onlyPage.
+		// -1 is the whole file, a .DDS number cuts the part out of a bigger
+		// model. See HDModelSlot::onlyPage.
 		int onlyPage;
-		// #156: 0 is the whole file, a node mask cuts one node out of it -
+		// 0 is the whole file, a node mask cuts one node out of it -
 		// TR5's head out of OUTFIT_CLASSIC. See HDModelSlot::onlyNode.
 		unsigned int onlyNode;
 	};
@@ -328,7 +314,7 @@ namespace
 		{ 0,                          0,
 		  "the body",                 0, -1, "0..14", -1, 0 },
 
-		/* TR5's own head, cut out of the install's Rome body by node (#156).
+		/* TR5's own head, cut out of the install's Rome body by node.
 		 * kind 5 is "worn when the head rule says so" - see head_mode below
 		 * and hd_wardrobe.h for the rule and the measurement. */
 		{ "OUTFIT_CLASSIC",           0,
@@ -339,8 +325,8 @@ namespace
 		{ "HAIR_OG",                  0,
 		  "the braid",                2, -1, "0..5 of its own chain", -1, 0 },
 
-		/* Not a file: a disc built in the neck cut's own plane (#123, fix
-		 * round S, S1). The name is what the log and the plan call it. */
+		/* Not a file: a fan built on the rim the head cut leaves
+		 * (build_neck_cap). The name is what the log and the plan call it. */
 		{ "NECK_CAP",                 0,
 		  "the neck lid",             0, -1, "14 (rigid)", -1, 0 },
 
@@ -374,11 +360,11 @@ namespace
 		{ "HOLSTER_DEAGLE",           0,
 		  "the Desert Eagle holster", 3, -1, "4", -1, 0 },
 
-		/* The pouches themselves, cut out of the London catsuit by page (D4).
-		 * kind 4 is "worn by the outfits the table names" - today OUTFIT_VCI
-		 * and no other (fix round F, F1).
+		/* The pouches themselves, cut out of the London catsuit by page.
+		 * kind 4 is "worn by the outfits the table names" - OUTFIT_VCI and no
+		 * other.
 		 *
-		 * The nodes column is the TRIANGLES: 791, 526 and 505 vertices on
+		 * The nodes column is the triangles: 791, 526 and 505 vertices on
 		 * nodes 0, 1 and 4. The page also keeps 207 vertices whose dominant
 		 * bone is node 14, which no surviving triangle uses - they belong to
 		 * triangles the cut dropped because their other corners sit on
@@ -397,20 +383,18 @@ namespace
 		  "the grapple on the back",  3, -1, "7", -1, 0 }
 	};
 
-	/* THE SHEEN OF EVERY PART THAT IS NOT THE BODY (#123, fix round D, D2).
+	/* The sheen of every part that is not the body.
 	 *
-	 * WHAT THIS TABLE IS. TR5's own lighting has no specular term at all -
-	 * aTransformLightClipMesh adds an ambient and a diffuse cosine and stops -
-	 * so every HD outfit came out matt beside the remaster's own pictures,
-	 * where the VCI catsuit and the TR3 London one read as LATEX and the skin
-	 * carries a soft sheen. The user's finding D2, with the reference shots.
+	 * TR5's own lighting has no specular term at all - aTransformLightClipMesh
+	 * adds an ambient and a diffuse cosine and stops - so without this every
+	 * HD outfit comes out matt, where in the remaster the VCI catsuit and the
+	 * TR3 London one read as latex and the skin carries a soft sheen.
 	 *
-	 * WHY IT IS A TABLE AND NOT A MEASUREMENT, which matters because
-	 * everything else in this file is measured. The obvious source would have
-	 * been the pages' ALPHA channel: fix round A2 found it to be a gloss mask
-	 * on the room pages, and TROne says the same of the item ones in so many
-	 * words (host\render\game_renderer.cpp:373). It is not one here. Measured
-	 * with DdsProbe -alpha over the wardrobe's pages:
+	 * It is a table and not a measurement, unlike everything else in this
+	 * file. The obvious source would be the pages' alpha channel: on the room
+	 * pages it is a gloss mask, and TROne says the same of the item ones
+	 * (host\render\game_renderer.cpp:373). It is not one here. Measured with
+	 * DdsProbe -alpha over the wardrobe's pages:
 	 *
 	 *     page 8001 (skin trim)   mean 254.9   0 texels below 128
 	 *     page 8008 (leggings)    mean 254.8   0
@@ -423,11 +407,10 @@ namespace
 	 * Every one of them has 100 % of its texels in the 240..255 bucket: a
 	 * flat opaque channel with BC7 quantisation noise on it. There is no mask
 	 * to read. (The one page that is not flat is 8002, Lara's hair, 15.2 %
-	 * below 128 - and that is coverage.) So the material has to be named, and
-	 * naming it in one table with the numbers in it is the honest way to do
-	 * that: a picture the user does not like is one line to change.
+	 * below 128 - and that is coverage.) So the material has to be named, in
+	 * one table with the numbers in it, where a change is one line.
 	 *
-	 * THE NUMBERS. strength is how much white the highlight adds at its
+	 * The numbers: strength is how much white the highlight adds at its
 	 * brightest, power the Blinn-Phong exponent - low is a broad satin sheen,
 	 * high a tight wet point.
 	 *
@@ -441,31 +424,19 @@ namespace
 	 *
 	 * A part not named here takes 0 and does not shine.
 	 *
-	 * WHAT FIX ROUND I (I4) CHANGED, and why the numbers below did not.
+	 * On a hand the highlight is a line and not an area: ModelProbe
+	 * -onlypart, drawing one part with the sheen on and off and differencing
+	 * the pictures, finds it on the Desert Eagle's barrel and along the
+	 * fingers, one or two pixels wide - an exponent of 34 on a hand-sized
+	 * object at arm's length.
 	 *
-	 * The user's finding: "the sheen is on the body and the head; the hand
-	 * parts go empty". Measured with ModelProbe -onlypart, drawing one part
-	 * with the sheen on and off and differencing the two pictures: it is NOT
-	 * empty - the highlight is there, on the Desert Eagle's barrel and along
-	 * the fingers - it is a LINE. A Blinn-Phong exponent of 34 on a hand-sized
-	 * object at arm's length is a highlight one or two pixels wide, and beside
-	 * a catsuit whose whole chest lights up it reads as nothing.
-	 *
-	 * Two things really were wrong, and both are about ONE number having to
-	 * describe TWO materials:
-	 *
-	 *   1. A HAND_ model is a hand AND the thing in it, on two pages of one
-	 *      file (measured: HAND_BARE_REST has 1 page, HAND_BARE_DEAGLE 2,
-	 *      HAND_GLOVES_REST 3, HAND_GLOVES_DEAGLE 4 - the gun is always the
-	 *      page the rest hands have not got). The entries below are the
-	 *      WEAPON's material and were being worn by the skin as well. They are
-	 *      the weapon's alone now: the draw's own sheen is the HAND's and the
-	 *      pages that are not the rest hands' get these numbers through
-	 *      HDModelSetPageSheen.
-	 *   2. A gloved outfit wears HAND_GLOVES_ and shone like bare skin. The
-	 *      hand's material follows the outfit now - skin for a bare hand,
-	 *      leather for a gloved one - which is the same rule the BODY has had
-	 *      since fix round D.
+	 * A HAND_ model is a hand and the thing in it, on two pages of one file
+	 * (measured: HAND_BARE_REST has 1 page, HAND_BARE_DEAGLE 2,
+	 * HAND_GLOVES_REST 3, HAND_GLOVES_DEAGLE 4 - the gun is always the page
+	 * the rest hands have not got). The hand entries below are the weapon's
+	 * material alone: the draw's own sheen is the hand's (skin), and the
+	 * pages that are not the rest hands' get these numbers through
+	 * HDModelSetPageSheen.
 	 */
 	struct PartSheen
 	{
@@ -474,28 +445,26 @@ namespace
 		float power;
 	};
 
-	/* THE HAND'S MATERIAL, out of the table above. There were two of these
-	 * until #153 round M2b - skin for a bare hand, leather for a gloved one -
-	 * and the gloved one went with the gloves: the wardrobe wears bare hands
-	 * everywhere now, so the leather pair had no reader left. Leather is still
-	 * the holster rig's material and stands in kPartSheen below. */
+	/* The hand's material, out of the table above: skin, because the
+	 * wardrobe wears bare hands everywhere. Leather is the holster rig's
+	 * material and stands in kPartSheen below. */
 	const float kSheenSkin[2] = { 0.12f, 10.0f };
 
 	const PartSheen kPartSheen[] =
 	{
-		/* HER FACE AND THE LID ON HER NECK ARE READ OUT OF THE WARDROBE SINCE
-		 * #158, not out of these two rows: skin_sheen= / skin_exponent= of an
-		 * outfit.txt or of a list block name what SHE is made of in that
+		/* Her face and the lid on her neck are read out of the wardrobe, not
+		 * out of these two rows: skin_sheen= / skin_exponent= of an
+		 * outfit.txt or of a list block name what she is made of in that
 		 * outfit, and without a line the wardrobe's own default is this same
 		 * pair. The rows stay because they are what the material table says
-		 * skin is, and the table is the thing the default is taken from - see
-		 * skin_sheen() below and HDLaraPartSheen. */
+		 * skin is, and the default is taken from it - see skin_sheen() below
+		 * and HDLaraPartSheen. */
 		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
-		/* TR5's own head is 9,483 triangles of HAIR out of 9,485 (#156), so
-		 * it takes the braid's material and not the face's. */
+		/* TR5's own head is 9,483 triangles of hair out of 9,485, so it
+		 * takes the braid's material and not the face's. */
 		{ HD_LARA_PART_HEAD,               0.14f, 18.0f },	// hair
 		{ HD_LARA_PART_BRAID,              0.14f, 18.0f },	// hair
-		{ HD_LARA_PART_NECK_CAP,           0.12f, 10.0f },	// skin (S1)
+		{ HD_LARA_PART_NECK_CAP,           0.12f, 10.0f },	// skin
 
 		{ HD_LARA_PART_HAND_REST,          0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_HAND_PISTOL,        0.35f, 34.0f },	// gunmetal
@@ -519,41 +488,39 @@ namespace
 		{ HD_LARA_PART_BACK_GRAPPLE,       0.30f, 30.0f }
 	};
 
-	/* WHICH CLASSIC SLOT STANDS FOR WHICH PART. By NAME, out of hd_bind's
+	/* Which classic slot stands for which part. By name, out of hd_bind's
 	 * table, because a slot is a hand slot for being called PISTOLS_ANIM and
 	 * not for being number 1 - and because the tools have no engine enum.
 	 *
-	 * LARA_HOLSTERS is in here with no part on purpose. It is the EMPTY
+	 * LARA_HOLSTERS is in here with no part on purpose. It is the empty
 	 * holster - the game switches to it the moment a gun is drawn - and the
 	 * remaster ships no "empty holster" model, because the straps are painted
 	 * into every OUTFIT_ already. Drawing nothing there is therefore not a
 	 * gap; it is the picture. (TROne reaches the same result by registering
 	 * the slot as SUPPRESS with an empty model name.)
 	 *
-	 * TR5's REVOLVER_ANIM is a DESERT EAGLE for the same reason, and the
+	 * TR5's REVOLVER_ANIM is a Desert Eagle, and the
 	 * remaster ships both guns: HAND_BARE_REVOLVER / HOLSTER_REVOLVER are
 	 * Tomb Raider IV's six-shooter, HAND_BARE_DEAGLE / HOLSTER_DEAGLE the
 	 * automatic TR5 puts in that slot. Measured with ModelProbe -name: the
 	 * two holsters cover the same node 4 and differ only in the gun in them
 	 * (1703 against 1270 vertices), so the swap is a swap of names and
-	 * nothing else. Until fix round C the wardrobe drew the six-shooter -
-	 * user finding C1, "the revolver is unused in the rando".
+	 * nothing else.
 	 *
-	 * TR5's CROSSBOW_ANIM is the GRAPPLING GUN, not a crossbow - the slot
+	 * TR5's CROSSBOW_ANIM is the grappling gun, not a crossbow - the slot
 	 * kept its Tomb Raider IV name and the weapon changed. HAND_BARE_GRAPPLE
 	 * and HOLSTER_GRAPPLE are the models the remaster draws there, which is
-	 * also what TROne's TR5 glue picks. LARA_CROSSBOW_LASER is the SAME
-	 * gun (#123, fix round O2, user finding): TR5 has no laser sight for
+	 * also what TROne's TR5 glue picks. LARA_CROSSBOW_LASER is the same
+	 * gun: TR5 has no laser sight for
 	 * the grappling gun - the W_LASERSIGHT bit is a Tomb Raider IV leftover
 	 * that the engine forces onto the weapon at pickup in the VCI levels
 	 * (game\newinv2.cpp, CROSSBOW_ITEM: `W_PRESENT | W_LASERSIGHT |
 	 * W_AMMO1`; laramisc.cpp does the same at a level start) and the
 	 * combine that would clear it is never reachable, so in Lara's hand the
-	 * gun is ALWAYS drawn from LARA_CROSSBOW_LASER. Until this round that
-	 * slot wore HAND_BARE_CROSSBOW_LASER, Tomb Raider IV's crossbow with a
-	 * scope, because the wardrobe ships no grapple-with-sight model - the
-	 * play test saw the crossbow in her hand and the grappling gun on her
-	 * back and on the floor. Both slots now wear HAND_BARE_GRAPPLE. */
+	 * gun is always drawn from LARA_CROSSBOW_LASER. The wardrobe ships no
+	 * grapple-with-sight model, and HAND_BARE_CROSSBOW_LASER is Tomb Raider
+	 * IV's crossbow with a scope, which would put a crossbow in her hand and
+	 * the grappling gun on her back. Both slots wear HAND_BARE_GRAPPLE. */
 	struct SlotRole
 	{
 		const char* slot;
@@ -572,7 +539,7 @@ namespace
 		{ "REVOLVER_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_DEAGLE },
 		{ "LARA_REVOLVER_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_DEAGLE_LASER },
 		{ "CROSSBOW_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE },
-		{ "LARA_CROSSBOW_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE },	// fix round O2
+		{ "LARA_CROSSBOW_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE },	// the same gun
 		{ "FLARE_ANIM",           HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_FLARE },
 		{ "TORCH_ANIM",           HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_TORCH },
 		{ "CROWBAR_ANIM",         HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_CROWBAR },
@@ -592,7 +559,7 @@ namespace
 		{ "LARA_SPEECH_HEAD4",    HD_LARA_ROLE_SUPPRESS, -1 }
 	};
 
-	/* THE WEAPON ON THE BACK is the same slot seen a second time. lara.back_gun
+	/* The weapon on the back is the same slot seen a second time. lara.back_gun
 	 * holds SHOTGUN_ANIM, HK_ANIM or CROSSBOW_ANIM and DrawLara draws mesh 14
 	 * of that slot on the torso; the wardrobe answers with a HOLSTER_ model on
 	 * node 7. */
@@ -607,35 +574,34 @@ namespace
 
 	int g_outfit = HD_LARA_OUTFIT_NONE;
 	bool g_active = false;
-	// #153 round M2b: the mirror fold's bar, the engine's own unless a
-	// diagnostic tool has asked for the picture from before the round.
+	// The mirror fold's bar, the engine's own unless a diagnostic tool has
+	// asked for a picture without the fold.
 	int g_fold_bar = HD_LARA_HAND_FOLD_BAR;
-	// #153 round M2b: the install's hands under a mod's gun, unless a tool has
-	// asked for the picture from before the round.
+	// The install's hands under a mod's gun, unless a tool has asked for a
+	// picture without them.
 	bool g_hand_twin = true;
-	/* #156: which nodes of the BODY are drawn - every one of them, or every
+	/* Which nodes of the body are drawn - every one of them, or every
 	 * one but the head node for a body that has borrowed TR5's. Settled at
 	 * level build, because nothing about it can change inside a level. */
 	unsigned int g_body_mask = ~0u;
 	unsigned int g_coverage[HD_LARA_PART_COUNT] = { 0 };
 	bool g_has[HD_LARA_PART_COUNT] = { false };
-	// #153 round M2b: the install's own hands loaded beside a mod's gun.
+	// The install's own hands loaded beside a mod's gun.
 	bool g_twin[HD_LARA_PART_COUNT] = { false };
 	bool g_planned[HD_LARA_PART_COUNT] = { false };
 	std::vector<std::string> g_notes;
 
-	/* WHAT LARA HERSELF IS MADE OF, AND THE OUTFIT SAYS SO (#158).
+	/* What Lara herself is made of, as the outfit says.
 	 *
-	 * The BODY's sheen has belonged to the outfit since #123 fix round D,
-	 * because the same HD_LARA_PART_BODY is a Rome top in one level and a
-	 * catsuit in the next. Her SKIN was a constant - kSheenSkin - and the
-	 * user's wish of 2026-09-14 is the other half of the same thought: the
-	 * shine is her clothes, the glow is her, and an outfit decides how much of
-	 * her is showing and in what light. So the wardrobe carries the pair now
+	 * The body's sheen belongs to the outfit, because the same
+	 * HD_LARA_PART_BODY is a Rome top in one level and a catsuit in the next.
+	 * Her skin's sheen belongs to the outfit as well: the shine is her
+	 * clothes, the glow is her, and an outfit decides how much of her is
+	 * showing and in what light. So the wardrobe carries the pair
 	 * (skin_sheen= / skin_exponent= in an outfit.txt or in a list block) and
 	 * this is the one place that reads it back.
 	 *
-	 * WITHOUT A SCAN ENTRY IT IS kSheenSkin, which is the pair the wardrobe
+	 * Without a scan entry it is kSheenSkin, which is the pair the wardrobe
 	 * itself defaults to. The default is repeated in this file rather than
 	 * reached for, exactly as takes_hands and its neighbours repeat theirs and
 	 * for the same reason: this file has to go on drawing a body when there is
@@ -679,36 +645,35 @@ namespace
 		return !*a && !*b;
 	}
 
-	/* WHICH PARTS THIS LEVEL CAN ASK FOR. The body, the face, the braid, the
-	 * rest hands and everything WORN always; a HAND part only when the level
+	/* Which parts this level can ask for. The body, the face, the braid, the
+	 * rest hands and everything worn always; a hand part only when the level
 	 * really loaded the slot it hangs off. Without a slot list everything the
 	 * outfit takes is planned, which is what a diagnostic run with no level
 	 * wants.
 	 *
-	 * THE HANDS AND THE WORN PARTS ARE NOT THE SAME QUESTION (#123, fix round
-	 * C, user finding C3: "the VCI Lara's holsters are missing"). A hand part
-	 * is reachable only through lara.mesh_ptrs, and a mesh can only sit at the
+	 * The hands and the worn parts are not the same question. A hand part is
+	 * reachable only through lara.mesh_ptrs, and a mesh can only sit at the
 	 * hand node if its slot is loaded - so filtering hands by the slot list
 	 * throws nothing away. The holsters and the weapon on the back are named
-	 * by SLOT NUMBER in three of the engine's own variables (LHolster,
+	 * by slot number in three of the engine's own variables (LHolster,
 	 * lara.holster, lara.back_gun), and those numbers are written from the
-	 * INVENTORY, not from what the level loaded: setup.cpp:115 puts
+	 * inventory, not from what the level loaded: setup.cpp puts
 	 * LARA_HOLSTERS_PISTOLS on both thighs at every level start and
 	 * LaraInitialiseMeshes sets lara.back_gun from shotgun_type_carried.
 	 *
-	 * Measured over the shipped files: the three VCI levels load NO holster
+	 * Measured over the shipped files: the three VCI levels load no holster
 	 * slot at all (ModelProbe -lara RICH1/2/3 against vanilla: "holsters: left
 	 * -, right -", 6, 7 and 9 parts planned), because Core drew no thigh
 	 * holsters on the catsuit and left the objects out. The randomizer hands
-	 * that Lara pistols anyway, so the engine says "pistols on the thighs" and
-	 * the plan had loaded nothing to draw them with. Planning them by the
-	 * OUTFIT rather than by the slot list is the rule the user asked for - the
-	 * holster follows the weapon she carries, not the slot the level shipped -
-	 * and it costs three thigh models and three back models per level.
+	 * that Lara pistols anyway, so the engine says "pistols on the thighs".
+	 * So the worn parts are planned by the outfit rather than by the slot
+	 * list - the holster follows the weapon she carries, not the slot the
+	 * level shipped - at a cost of three thigh models and three back models
+	 * per level.
 	 *
 	 * It cannot invent a holster she has not got: a takeaway of the pistols
 	 * runs NailInvItem, which puts LARA_HOLSTERS back into both variables
-	 * (newinv2.cpp:2853), and an empty holster names no part.
+	 * (newinv2.cpp), and an empty holster names no part.
 	 *
 	 * Declared before its two callers so both plan the identical set - a
 	 * build that counted a part the plan never asked for would report it
@@ -721,7 +686,7 @@ namespace
 			useful[i] = all;
 
 		useful[HD_LARA_PART_BODY] = true;
-		/* TR5's head hangs off no slot either (#156): it is a node of a file
+		/* TR5's head hangs off no slot either: it is a node of a file
 		 * of the install, wanted wherever the head rule asks for it -
 		 * outfit_takes is what decides that, and HDLaraPartModel answers 0
 		 * for a body that keeps its own. */
@@ -729,12 +694,12 @@ namespace
 		useful[HD_LARA_PART_FACE] = true;
 		useful[HD_LARA_PART_BRAID] = true;
 		useful[HD_LARA_PART_HAND_REST] = true;	// LARA is always loaded
-		/* The lid hangs off no slot at all - it is cut out of the body's own
-		 * neck (#123, fix round S, S1), so it is wanted wherever the body is. */
+		/* The lid hangs off no slot at all - it is built on the body's own
+		 * neck, so it is wanted wherever the body is. */
 		useful[HD_LARA_PART_NECK_CAP] = true;
 
 		/* kind 3 is "worn": the three thigh holsters and the three weapons on
-		 * the back. outfit_takes still decides whether this outfit has any at
+		 * the back; kind 4 is the holster rig. outfit_takes still decides whether this outfit has any at
 		 * all - the diving suit has none - and HDLaraPartModel answers 0 for
 		 * a part the outfit does not take, so the plan loop skips it. */
 		for (int i = 0; i < HD_LARA_PART_COUNT; i++)
@@ -772,21 +737,17 @@ namespace
 		case 1: return takes_hands(outfit);
 		case 2: return takes_braid(outfit);
 		case 3: return takes_holsters(outfit);
-		/* The holster rig (#123, fix round D, D4; the rule corrected in fix
-		 * round F, F1): NAMED in the wardrobe's table, not derived from the
-		 * geometry. Round D asked "has this body a rig of its own?" and gave
-		 * the London rig to every body that had not - which put it on the
-		 * Antarctica parka and the Nevada vest, where it clips. See
-		 * hd_wardrobe.cpp's `wearsRig` for the measurement and for why it is
-		 * not the rule. The holsters test stays in front of it so that a table
-		 * entry alone can never dress an outfit that draws no holsters at
-		 * all. */
+		/* The holster rig: named in the wardrobe's table, not derived from
+		 * the geometry. "Has this body no rig of its own?" would also put the
+		 * London rig on the Antarctica parka and the Nevada vest, where it
+		 * clips; see hd_wardrobe.cpp's `wearsRig` for the measurement. The
+		 * holsters test stays in front of it so that a table entry alone can
+		 * never dress an outfit that draws no holsters at all. */
 		case 4: return takes_holsters(outfit) && takes_rig(outfit);
-		/* TR5's own head (#156): worn by a body the head rule says has none
-		 * of its own, and by one that keeps its own and wants the hair over
-		 * it. Never by a body in mode `outfit`, which is every body of the
-		 * IV-VI bundle and is exactly the picture this engine drew before
-		 * the round. */
+		/* TR5's own head: worn by a body the head rule says has none of its
+		 * own, and by one that keeps its own and wants the hair over it.
+		 * Never by a body in mode `outfit`, which is every body of the IV-VI
+		 * bundle. */
 		case 5: return head_mode(outfit) == HD_WARDROBE_HEAD_TR5 ||
 			head_mode(outfit) == HD_WARDROBE_HEAD_HAIR;
 		default: return true;
@@ -847,14 +808,14 @@ int HDLaraOutfitFromName(const char* name)
 		return HD_LARA_OUTFIT_NONE;
 
 	/* The randomizer's own guest ids, so that a wardrobe roll can be named
-	 * with the word the randomizer wrote into its report (#122,
-	 * TR5Randomizer\src\core\Tr3Source.cpp: outfits()).
+	 * with the word the randomizer wrote into its report
+	 * (TR5Randomizer\src\core\Tr3Source.cpp: outfits()).
 	 *
 	 * The two that are not word-for-word: the randomizer's "tr3_london" is
 	 * ROOFS.TR2, Lara's standard London outfit of that game, and the remaster
 	 * calls it OUTFIT_TR3_CATSUIT; "tr3_jungle" is CRASH.TR2, the South
-	 * Pacific outfit, which the remaster calls OUTFIT_TR3_COAST. Both are a
-	 * measurement by picture and the proof is in the report. */
+	 * Pacific outfit, which the remaster calls OUTFIT_TR3_COAST. Both pairings
+	 * were matched by comparing the rendered models. */
 	static const struct { const char* id; int outfit; } kGuest[] =
 	{
 		{ "tr3_london",     HD_LARA_OUTFIT_TR3_CATSUIT },
@@ -879,7 +840,7 @@ int HDLaraOutfitFromName(const char* name)
 			return i;
 	}
 
-	/* AND ANY ENTRY OF THE SCAN, BY ITS KEY (#153, round M2) - which is the
+	/* And any entry of the scan, by its key - which is the
 	 * one spelling that can name all hundred of them, because two of the
 	 * installs' files and any number of mods' may share a .TRM stem. Asked
 	 * last, so that the eight names above go on meaning the number the level
@@ -903,19 +864,18 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 	if (!why)
 		why = &dummy;
 
-	/* THE ORDER MATTERS, and it is the order of certainty.
+	/* The order matters, and it is the order of certainty.
 	 *
-	 * 1. Young Lara first, and before anything else can claim her. The user
-	 *    decided she stays classic (plan section 9), and the caller works the
-	 *    question out the way the ENGINE works it out - see the header, and
-	 *    the note there about the level range, which is the one answer that
-	 *    was wrong.
+	 * 1. Young Lara first, before anything else can claim her: she stays
+	 *    classic, and the caller works the question out the way the engine
+	 *    works it out - see the header, and the note there about the level
+	 *    range.
 	 * 2. A Tomb Raider III guest, out of data[3] of the level header, because
 	 *    the randomizer put it there and the LaraType byte cannot say which.
 	 * 3. The diving suit and the catsuit, which have a LaraType of their own
 	 *    and their own draw path in the engine (DrawLara__5 / __4).
-	 * 4. LARA_PONYTAIL, which used to mean two things and, with step 2 above
-	 *    it, now means one - see below.
+	 * 4. LARA_PONYTAIL, which means two things and, with step 2 above it,
+	 *    is left meaning one - see below.
 	 * 5. The cap, by the engine's own test - see the header.
 	 * 6. Everything else is the Rome outfit. */
 	if (youngLara)
@@ -924,14 +884,13 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 		return HD_LARA_OUTFIT_NONE;
 	}
 
-	/* 5..8 AND NOTHING ELSE. The four Tomb Raider III outfits are the top of
+	/* 5..8 and nothing else. The four Tomb Raider III outfits are the top of
 	 * the enum precisely so that this test can be a range: 1..4 are the
 	 * vanilla bodies, and a byte that says one of those did not come from the
 	 * randomizer's wardrobe - it came from a file written by something else,
 	 * or from a header word that was never meant to carry an outfit at all.
 	 * Letting such a byte through would let a stale file overrule the level's
-	 * own LaraType, which is the one mistake in this whole path that nobody
-	 * would be able to see the cause of. */
+	 * own LaraType, a mistake whose cause would be invisible. */
 	if (tr3Outfit >= HD_LARA_OUTFIT_TR3_ANTARC && tr3Outfit <= HD_LARA_OUTFIT_TR3_CATSUIT)
 	{
 		*why = "a Tomb Raider III outfit the randomizer rolled (data[3])";
@@ -948,7 +907,7 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 	 * without the engine so the tools can use it - so the two numbers stand
 	 * here with the enum written out beside them: LARA_NONE 0, LARA_NORMAL 1,
 	 * LARA_YOUNG 2, LARA_BUNHEAD 3, LARA_CATSUIT 4, LARA_DIVESUIT 5,
-	 * LARA_PONYTAIL 6. The level header's byte is one LESS than these
+	 * LARA_PONYTAIL 6. The level header's byte is one less than these
 	 * (file.cpp: LaraDrawType = data[0] + LARA_NORMAL), which is why the
 	 * caller passes LaraDrawType and not the byte. */
 	if (laraDrawType == 5)
@@ -963,29 +922,24 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 		return HD_LARA_OUTFIT_VCI;
 	}
 
-	/* LARA_PONYTAIL, THE BYTE THAT MEANT TWO THINGS. The randomizer writes 5
+	/* LARA_PONYTAIL, the byte that means two things. The randomizer writes 5
 	 * in two quite different cases (TR5Randomizer\src\core\Randomizer.cpp,
 	 * the wardrobe roll):
 	 *
 	 *   - the Rome body inside a Russia level, where LARA_NORMAL would send
 	 *     hair.cpp and laraskin.cpp down the cap's braid handling, and
-	 *   - EVERY Tomb Raider III guest outfit (#122), for the same reason -
-	 *     the guest's head comes from ANDREA1 and wants the standard braid.
+	 *   - every Tomb Raider III guest outfit, for the same reason - the
+	 *     guest's head comes from ANDREA1 and wants the standard braid.
 	 *
-	 * Until stage S7 nothing in the level file separated the two, so this
-	 * said "classic" for both: a right classic body beats a wrong HD one.
-	 * data[3] now says it, and it has already been read above - so by the
-	 * time execution reaches this line the guest case is gone and what is
-	 * left is the other one: the Rome body, wearing a ponytail because the
-	 * level around it is a Russia level. OUTFIT_CLASSIC is the body that
-	 * belongs to it (the user's decision, 2026-09-05).
+	 * data[3] separates the two and has already been read above, so what is
+	 * left here is the Rome body, wearing a ponytail because the level around
+	 * it is a Russia level. OUTFIT_CLASSIC is the body that belongs to it.
 	 *
-	 * THE ONE CASE THIS GETS WRONG, and it is worth naming: a level file
-	 * written by a run OLDER than stage S7-1 carries the ponytail byte and a
-	 * data[3] of 0 for a guest as well, and now shows a Rome Lara where that
-	 * run rolled a Nevada one. Nothing in the file can tell the two apart -
-	 * that is what the marker was added for - and a level randomized again
-	 * with the current version says it. */
+	 * The one case this gets wrong: a level file written by a randomizer
+	 * version that did not yet write the data[3] marker carries the ponytail
+	 * byte and a data[3] of 0 for a guest as well, and shows a Rome Lara where
+	 * that run rolled a guest. Nothing in the file can tell the two apart; a
+	 * level randomized again with the current version says it. */
 	if (laraDrawType == 6)
 	{
 		*why = "the ponytail byte with no Tomb Raider III marker beside it: "
@@ -1021,12 +975,12 @@ int HDLaraPartTwinSlot(int part)
 	return HD_LARA_TWIN_SLOT_BASE + part;
 }
 
-/* THE TWO SIDES OF A HAND FILE. The right arm's two bones against the left
+/* The two sides of a hand file. The right arm's two bones against the left
  * arm's two, in that order, because hd_trm breaks an exact tie by the sign of
  * the vertex's x and side `a` is the positive one - measured: the install's
  * HAND_BARE_REST carries 1,932 vertices on bones 9/10 at x 47..77 and 1,932 on
- * 12/13 at x -77..-47, and every hand file of both remasters and of the user's
- * mods is that way round. */
+ * 12/13 at x -77..-47, and every hand file of both remasters and of the three
+ * measured gun mods is that way round. */
 const HDTrmMirrorPair* HDLaraHandMirror(int* pairs)
 {
 	static const HDTrmMirrorPair kMirror[2] =
@@ -1064,16 +1018,13 @@ const char* HDLaraPartModel(int outfit, int part)
 	if (part == HD_LARA_PART_BODY)
 		return model_of(outfit);
 
-	/* THE GLOVED TWIN, AND WHY IT IS NEVER TAKEN (#123, fix round C, user
-	 * finding C2; dead by decision since #153, round M2b). A gloved outfit
-	 * WORE the HAND_GLOVES_ file. It does not any more: takes_gloves answers
-	 * false for every outfit, because the user's decision is that the wardrobe
-	 * wears the bare hands in every level with every outfit, so this branch is
-	 * never taken and the column below it is never read. The test is kept as
-	 * it stands - the field and not the kind, nothing but a hand part has a
-	 * twin - so that revisiting the decision is the one line takes_gloves is
-	 * and not a rebuild of this function. HDLaraLevelBuild writes one note per
-	 * level build when an outfit asked for gloves and got bare hands. */
+	/* The gloved twin, and why it is never taken. takes_gloves answers false
+	 * for every outfit, because the wardrobe wears the bare hands in every
+	 * level with every outfit, so this branch is never taken. The test is
+	 * kept - the field and not the kind, nothing but a hand part has a twin -
+	 * so that gloved hands are the one line in takes_gloves and not a rebuild
+	 * of this function. HDLaraLevelBuild writes one note per level build when
+	 * an outfit asked for gloves and got bare hands. */
 	if (takes_gloves(outfit) && kPart[part].gloves)
 		return kPart[part].gloves;
 
@@ -1133,15 +1084,11 @@ int HDLaraPartForSlot(int slot, int role)
 	return -1;
 }
 
-/* --------------------------------------------- the inner skin (K1) -- */
+/* ------------------------------------------ the neck and its lid -- */
 /*
- * WHAT CLOSES THE HOLE THE FIRST PERSON CUT OPENS. The draw is in
- * hd_laradraw.cpp and hd_model.cpp; this is the one thing it needs measured -
- * which texel of which page of the outfit is Lara's own throat.
- *
- * Fix rounds I and J built a CAP here instead, a dome of 32 spokes cut to the
- * outfit's collar ring, and the play test sent it back as a flat plate wearing
- * the backpack straps. hd_lara.h carries what it was and why it went.
+ * What the first person cut needs out of the body: which texel of which page
+ * of the outfit is Lara's own throat (for the log), and the lid that closes
+ * the hole the cut opens. The draw is in hd_laradraw.cpp and hd_model.cpp.
  */
 namespace
 {
@@ -1164,41 +1111,38 @@ namespace
 		return node;
 	}
 
-	/* --------------------------------------- her throat (K1) ----------- */
-	/* WHICH TEXEL IS LARA'S NECK. It was the one colour every fragment of fix
-	 * round K's inner skin wore; that draw is withdrawn (#123, fix round S,
-	 * S1(4)) and the LID wears the same texel now, for the same reason - what
-	 * closes the top of a neck should be the colour of that neck.
+	/* --------------------------------------------- her throat ----------- */
+	/* Which texel is Lara's neck. The build log reports it, which tells a lid
+	 * that comes out on the coat rather than on her skin from a lid that came
+	 * out wrong.
 	 *
-	 * WHERE IT IS TAKEN: THE PAGE THAT RUNS THE WHOLE HEIGHT OF THE NECK.
+	 * It is taken from the page that runs the whole height of the neck.
 	 * The node 7 vertices inside the cut's own cylinder are counted by texture
-	 * page, and the page whose vertices span the greatest DEPTH down the neck
+	 * page, and the page whose vertices span the greatest depth down the neck
 	 * axis wins, among those that carry at least HD_LARA_NECK_SKIN_MIN of them.
 	 * A throat runs from the head joint to the shoulders because it is the
-	 * neck; a collar, a zip and a hairline are BANDS across it.
+	 * neck; a collar, a zip and a hairline are bands across it.
 	 *
-	 * TWO SIMPLER RULES WERE TRIED AND ARE WRONG, and the table ModelProbe
-	 * -neck prints ("the neck stump BY PAGE") is why:
+	 * Two simpler rules are wrong, as the table ModelProbe -neck prints ("the
+	 * neck stump BY PAGE") shows:
 	 *
-	 *   the TOP RING answers 8002, which is Lara's HAIR - the nape hairline
+	 *   the top ring answers 8002, which is Lara's hair - the nape hairline
 	 *   sits on the torso node from s = -1.6 to 5.6 in every outfit and is the
 	 *   topmost thing on it;
-	 *   the MAJORITY OF THE STUMP answers 8042 for OUTFIT_RUSSIA (276 vertices
+	 *   the majority of the stump answers 8042 for OUTFIT_RUSSIA (276 vertices
 	 *   of coat against 51 of throat) and 8320 for the Antarctica parka (506
 	 *   against 75). A coat has more of it than a neck has.
 	 *
 	 * The span rule answers 8001 for the three game 5 bodies and 8201 for the
 	 * four Tomb Raider III guests - in every one of them the same throat
 	 * column, 51 to 78 vertices from s = 2.3 to s = 30 - and 8047 for the
-	 * diving suit, which has no throat at all and whose stump is the HELMET.
-	 * Grey is the honest answer there and the note says so.
+	 * diving suit, which has no throat at all and whose stump is the helmet.
+	 * Grey is the right answer there and the note says so.
 	 *
-	 * A PLACE INSIDE A PAINTED TRIANGLE, which is fix round J's finding (b)
-	 * carried one step further: not the mean of the coordinates (that is a
-	 * point in the middle of the atlas page, and the middle of a page is
-	 * empty), and not a real VERTEX either (that sits on the EDGE of its
-	 * texture island, where the paint stops - measured, it gave the four Tomb
-	 * Raider III guests a dark brown). The centroid of the biggest triangle
+	 * The texel is a place inside a painted triangle: not the mean of the
+	 * coordinates (a point in the middle of the atlas page, which is empty),
+	 * and not a real vertex either (that sits on the edge of its texture
+	 * island, where the paint stops). The centroid of the biggest triangle
 	 * whose three corners are all on the chosen page is inside the paint by
 	 * construction. */
 	int g_inner_page = -1;
@@ -1322,20 +1266,15 @@ namespace
 		if (best < 0)
 			return;
 
-		/* THE MIDDLE OF THE BIGGEST TRIANGLE ON THAT PAGE, and this is the
-		 * third rule of the three (fix round J's finding (b), one step
-		 * further).
+		/* The middle of the biggest triangle on that page.
 		 *
-		 * Round J learned not to use the MEAN of a set of texture
-		 * coordinates, because the mean of points scattered over an atlas is
-		 * a point in the middle of the page and the middle of a page is
-		 * usually empty. The obvious repair - the real VERTEX nearest that
-		 * mean - was what fix round K first shipped, and the picture said it
-		 * is not enough either: for the four Tomb Raider III guests it landed
-		 * on 8201 at 117/169, which reads (63, 38, 21), a dark brown. A
-		 * vertex sits on the EDGE of its texture island, where the artist's
-		 * paint stops and the atlas's black begins, and a bilinear sample
-		 * there is half black.
+		 * The mean of a set of texture coordinates scattered over an atlas is
+		 * a point in the middle of the page, which is usually empty. The real
+		 * vertex nearest that mean is not enough either: for the four Tomb
+		 * Raider III guests it lands on 8201 at 117/169, which reads (63, 38,
+		 * 21), a dark brown. A vertex sits on the edge of its texture island,
+		 * where the artist's paint stops and the atlas's black begins, and a
+		 * bilinear sample there is half black.
 		 *
 		 * The middle of a triangle is not. So the biggest triangle of the
 		 * neck whose three corners all sit on the chosen page is taken and
@@ -1390,31 +1329,27 @@ namespace
 		g_inner_span = bestSpan;
 	}
 
-	/* ------------------------------------------- the lid (S1, U1) ------ */
-	/* WHAT CLOSES THE HOLE THE HEAD CUT LEAVES (#123, fix round S, S1; built
-	 * on the RIM since fix round U, U1).
-	 *
-	 * A FAN OVER THE BODY'S OWN RIM. The cut discards every fragment whose
-	 * head weight reaches HD_LARA_HEAD_CUT_WEIGHT; the RIM is the ring of
+	/* ---------------------------------------------------- the lid ------ */
+	/* What closes the hole the head cut leaves: a fan over the body's own
+	 * rim. The cut discards every fragment whose head weight reaches
+	 * HD_LARA_HEAD_CUT_WEIGHT; the rim is the ring of
 	 * vertices that do not reach it but share a triangle with one that does,
 	 * and that ring is exactly the edge of the hole. This copies it - the
 	 * position, the three bones, the three weights and the texture coordinate
 	 * of every one of them - sorts it by angle about the neck axis and fills
 	 * it in from the middle.
 	 *
-	 * COPYING THE WEIGHTS IS THE WHOLE FIX. Every lid before this one was
-	 * rigid on ONE node while the skin it met was skinned to two, so the two
-	 * parted company as she moved and the round after had to chase the gap.
-	 * A lid whose edge is skinned by the same sum over the same joints as the
-	 * skin it meets lands on the same point in every pose, to the bit, and
-	 * there is nothing left to chase.
+	 * Copying the weights is what seals it. A lid rigid on one node meets skin
+	 * skinned to two, and the two part company as she moves. A lid whose edge
+	 * is skinned by the same sum over the same joints as the skin it meets
+	 * lands on the same point in every pose, to the bit.
 	 *
-	 * IT WEARS THE RIM'S OWN TEXTURE, page and coordinates both, so the lid is
+	 * It wears the rim's own texture, page and coordinates both, so the lid is
 	 * the top of whatever the outfit really has at the neck - skin, coat or
-	 * diving suit - and joins it at the seam without a line. The middle wears
-	 * the average of the rim.
+	 * diving suit - and joins it at the seam without a line. Each spoke keeps
+	 * its rim vertex's texel all the way in, the middle included.
 	 *
-	 * ITS NORMAL POINTS HEAD-WARD - up out of the neck, towards the camera
+	 * Its normal points head-ward - up out of the neck, towards the camera
 	 * that looks down at it - so it takes the light the top of her shoulders
 	 * takes and not the darkness of a face turned away. */
 	int g_cap_segments = 0;		// triangles, for the log
@@ -1459,7 +1394,7 @@ namespace
 			return false;
 		}
 
-		/* THE AXIS IS ONLY FOR THE SORT. Where the lid's points ARE comes out
+		/* The axis is only for the sort. Where the lid's points are comes out
 		 * of the model; the axis says in which order to walk round them and
 		 * which way is up. */
 		const double H[3] =
@@ -1569,11 +1504,11 @@ namespace
 			const double y = off[0] * w[0] + off[1] * w[1] + off[2] * w[2];
 			const double r = std::sqrt(x * x + y * y);
 
-			/* THE OUTLIER GUARD. Anything this far off the neck axis is not
+			/* The outlier guard. Anything this far off the neck axis is not
 			 * part of a neck, and a spoke of the fan reaching out to it would
 			 * lie across her chest. It never fires on the wardrobe as it
 			 * stands - the widest rim vertex over the eight bodies is 27.6 -
-			 * and it is there for the ninth. */
+			 * and it is there for any further body. */
 			if (r > HD_LARA_NECK_CAP_RMAX)
 				continue;
 
@@ -1608,8 +1543,8 @@ namespace
 		/* --- which page it wears ------------------------------------------ */
 		/* The one most of the rim wears. A .TRM part is one page and one page
 		 * only - measured over all 566 files of the remaster's game 5 - so
-		 * the lid has to pick one; at the threshold this round takes, all
-		 * eight wardrobe bodies have a rim that is on a single page anyway. */
+		 * the lid has to pick one; at the threshold used, all eight wardrobe
+		 * bodies have a rim that is on a single page anyway. */
 		int page = -1, best = 0;
 
 		for (size_t i = 0; i < ring.size(); i++)
@@ -1634,35 +1569,33 @@ namespace
 			return false;
 		}
 
-		/* --- EVERY SPOKE ITS OWN TEXEL (#123, fix round U, U1b) ----------- */
-		/* THE LID INVENTS NO TEXTURE COORDINATE ANYWHERE. Each spoke of the
-		 * fan wears the texel of the RIM vertex it hangs from, unchanged, all
-		 * the way in - the middle included, which is why the middle is a COPY
-		 * PER SPOKE and not one shared vertex. A triangle of the lid therefore
-		 * spans two texels that are NEIGHBOURS on her skin, and nothing on it
+		/* --- every spoke its own texel ------------------------------------ */
+		/* The lid invents no texture coordinate anywhere. Each spoke of the
+		 * fan wears the texel of the rim vertex it hangs from, unchanged, all
+		 * the way in - the middle included, which is why the middle is a copy
+		 * per spoke and not one shared vertex. A triangle of the lid therefore
+		 * spans two texels that are neighbours on her skin, and nothing on it
 		 * ever samples a part of the page the neck does not stand on.
 		 *
-		 * WHAT THAT REPLACES, AND WHY IT HAD TO GO. The first cut of this
-		 * round gave the one shared middle the AVERAGE of the rim's texels,
-		 * and the play test came back with "a dark point in the middle of the
-		 * cap, running dark towards it like a cone" - on the four TR3 guest
-		 * bodies only. Measured (ModelProbe -headw, the rim's texels at the
-		 * shipping threshold):
+		 * One shared middle wearing the average of the rim's texels would show
+		 * a dark point in the middle of the lid, darkening towards it like a
+		 * cone, on the four TR3 guest bodies. Measured (ModelProbe -headw, the
+		 * rim's texels at the threshold used):
 		 *
 		 *   OUTFIT_CLASSIC   page 8001   u 235..241  v  70..168   average 238/119
 		 *   OUTFIT_RUSSIA    page 8042   u 119..125  v  38..255   average 120/150
 		 *   OUTFIT_SUBSUIT   page 8047   u  16.. 40  v  48.. 84   average  28/68
 		 *   the four TR3      page 8201   u  60..170  v 154..202   average 112/178
 		 *
-		 * On every TR5 page the neck is ONE NARROW COLUMN six texels wide, and
+		 * On every TR5 page the neck is one narrow column six texels wide, and
 		 * the average of a column is in the column - skin. On the TR3 guests'
-		 * page it is TWO SEPARATE BANDS, one at v 198..202 and one at v
-		 * 154..158, and the average lands in the gap BETWEEN them, which is
+		 * page it is two separate bands, one at v 198..202 and one at v
+		 * 154..158, and the average lands in the gap between them, which is
 		 * whatever the page has there. That is the dark point exactly, and the
 		 * cone is the interpolation running into it.
 		 *
 		 * Picking a better single texel would only make the lottery smaller:
-		 * the interior of the lid interpolates from each rim texel TOWARDS the
+		 * the interior of the lid interpolates from each rim texel towards the
 		 * middle's, so a rim at u 60 and a middle at u 112 sweeps the fifty
 		 * texels between them whatever is written there. Not inventing one at
 		 * all is the only rule with nothing left to measure. */
@@ -1675,7 +1608,7 @@ namespace
 		/* --- how many rings ----------------------------------------------- */
 		/* Radially, and never round the outline: the outline is the body's own
 		 * rim and adding points to it can only spoil the match. What the
-		 * rings buy is LIGHT - the HD path lights per vertex, and a fan of one
+		 * rings buy is light - the HD path lights per vertex, and a fan of one
 		 * middle and twenty rim points shades as twenty flat wedges. */
 		const int spokes = (int)ring.size();
 		int rings = 1;
@@ -1683,12 +1616,12 @@ namespace
 		while (spokes + (rings - 1) * 2 * spokes < HD_LARA_NECK_CAP_SEGMENTS)
 			rings++;
 
-		/* THE MIDDLE IS `spokes` VERTICES AND NOT ONE (#123, fix round U,
-		 * U1b). They stand on the same point, carry the same normal and the
-		 * same skinning, so they move as one and no crack can open between
-		 * them; they differ in the TEXEL alone, each wearing its own spoke's.
-		 * The triangle count is unchanged - a fan is a fan - and the seam
-		 * between two neighbouring wedges at the exact centre is a POINT of
+		/* The middle is `spokes` vertices and not one. They stand on the same
+		 * point, carry the same normal and the same skinning, so they move as
+		 * one and no crack can open between them; they differ in the texel
+		 * alone, each wearing its own spoke's. The triangle count is the same
+		 * as with one middle - a fan is a fan - and the seam between two
+		 * neighbouring wedges at the exact centre is a point of
 		 * zero area between two texels that are neighbours on her skin. */
 		const int vertices = (rings + 1) * spokes;
 		const int triangles = spokes + (rings - 1) * 2 * spokes;
@@ -1711,14 +1644,13 @@ namespace
 		out->texture[0] = (unsigned short)page;
 
 		/* --- the middle, once per spoke ----------------------------------- */
-		/* THEIR SKINNING IS THE RIM'S AVERAGE - the same average for all of
+		/* Their skinning is the rim's average - the same average for all of
 		 * them - so they stay one point in every pose and the fan moves as a
 		 * piece rather than stretching between a fixed centre and a moving
 		 * edge. Two bones are enough for that average: the head, which is all
 		 * the rim has of the cut side, and the torso, which is the rest.
 		 *
-		 * They differ in the TEXEL and in nothing else (#123, fix round U,
-		 * U1b): copy number k wears spoke k's own rim texel, so the wedge
+		 * They differ in the texel and in nothing else: copy number k wears spoke k's own rim texel, so the wedge
 		 * between spoke k and spoke k+1 is bounded by two texels that are
 		 * neighbours on her skin and samples nothing between them. */
 		int meanHead = 0;
@@ -1734,9 +1666,9 @@ namespace
 		/* --- the rings ------------------------------------------------------ */
 		/* Ring `g` runs from the middle (g = 0, the copies above) out to the rim
 		 * (g = rings). Its points are the rim's, moved that fraction of the way
-		 * in; the SKINNING is the rim's own, unchanged, all the way in, so that
+		 * in; the skinning is the rim's own, unchanged, all the way in, so that
 		 * a spoke of the fan follows the rim vertex it belongs to exactly and
-		 * the fan cannot shear against the skin. The TEXEL is the rim's own too,
+		 * the fan cannot shear against the skin. The texel is the rim's own too,
 		 * unchanged all the way in, which is what leaves the lid nothing to
 		 * invent. */
 		for (int g = 0; g <= rings; g++)
@@ -1750,7 +1682,7 @@ namespace
 
 				std::memset(&v, 0, sizeof(v));
 
-				/* THE OUTERMOST RING IS THE RIM ITSELF, to the bit: it takes
+				/* The outermost ring is the rim itself, to the bit: it takes
 				 * the source vertex's own coordinates rather than a lerp that
 				 * would land a rounding away from them. That, and the copied
 				 * weights below, are what make the seal exact in every pose -
@@ -1775,12 +1707,12 @@ namespace
 
 				v.layer = 1;	// counted from one - the model's only page
 
-				/* A rim vertex on ANOTHER page cannot lend its texel, because
-				 * the lid is one page; it borrows the first rim vertex that IS
+				/* A rim vertex on another page cannot lend its texel, because
+				 * the lid is one page; it borrows the first rim vertex that is
 				 * on the page instead - a real texel of her neck and not an
-				 * invented one. At the threshold this round takes there are none
-				 * of those in the wardrobe: all eight bodies have a rim on a
-				 * single page. */
+				 * invented one. At the threshold used there are none of those
+				 * in the wardrobe: all eight bodies have a rim on a single
+				 * page. */
 				const HDTrmVertex& tex = HDTrmPageOf(source, &src) == page ? src
 					: source->vertex[ring[(size_t)fallbackAt].at];
 
@@ -1811,7 +1743,7 @@ namespace
 		}
 
 		/* --- the triangles --------------------------------------------------- */
-		/* The innermost band is a FAN and not a strip: its inner edge is the
+		/* The innermost band is a fan and not a strip: its inner edge is the
 		 * `spokes` copies of one point, so a strip would put a degenerate
 		 * triangle beside every real one. Wedge k takes middle copy k, which is
 		 * the copy wearing its own texel. */
@@ -1868,10 +1800,9 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 
 	plan_mask(level, useful);
 
-	/* The throat measurement and the LID both want this level's own bind pose
-	 * and neither is handed one (#123, fix round K, K1; fix round U, U1), so
-	 * it is kept here for them - once per level, before anything can call
-	 * either. */
+	/* The throat measurement and the lid both want this level's own bind pose
+	 * and neither is handed one, so it is kept here for them - once per level,
+	 * before anything can call either. */
 	std::memcpy(g_neck_bind, level->bodyBind, sizeof(g_neck_bind));
 	g_neck_bind_ok = true;
 
@@ -1901,9 +1832,9 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.name = model;
 		one.rigidNode = kPart[part].rigid;
 		one.onlyPage = kPart[part].onlyPage;
-		one.onlyNode = kPart[part].onlyNode;	// #156
+		one.onlyNode = kPart[part].onlyNode;
 
-		/* THE MIRRORED WEIGHTS OF A HAND FILE (#153, round M2b). Every part
+		/* The mirrored weights of a hand file. Every part
 		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
 		 * 12 and 13, and a file drawn once and mirrored is the only place the
 		 * two sides can be confused. The bar and the measurement behind it are
@@ -1913,10 +1844,10 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			one.mirror = HDLaraHandMirror(&one.mirrors);
 			one.mirrorBar = g_fold_bar;
 
-			/* AND THE INSTALL'S OWN HANDS UNDER A MOD'S GUN (#153, round
-			 * M2b). Offered for every hand part and taken for almost none:
-			 * hd_model loads the twin only when the part's own model came out
-			 * of a mod AND that mod paints the hands with a page of another
+			/* And the install's own hands under a mod's gun. Offered for every
+			 * hand part and taken for almost none: hd_model loads the twin
+			 * only when the part's own model came out of a mod and that mod
+			 * paints the hands with a page of another
 			 * bundle. The rest hands are what say which of the install's own
 			 * pages are skin - every page they have is skin and nothing else,
 			 * which is the measurement the held-item rule below rests on. */
@@ -1924,24 +1855,23 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			one.twinSkinOf = kPart[HD_LARA_PART_HAND_REST].model;
 		}
 
-		/* The BODY is looked at while it is still a file (#123, fix round K,
-		 * K1): the inner skin's texel is a place on a page of the outfit, and
-		 * after the build there is no page and no vertex left to ask. */
+		/* The body is looked at while it is still a file: the throat texel is
+		 * a place on a page of the outfit, and after the build there is no
+		 * page and no vertex left to ask. */
 		if (part == HD_LARA_PART_BODY)
 		{
 			one.measure = &measure_neck_skin;
 
-			/* AND THE SCAN SAYS WHERE IT IS (#153, round M2). The model
-			 * resolver could only ever have found the eight: an outfit of the
+			/* And the scan says where it is. The model resolver can only find
+			 * the eight known bodies: an outfit of the
 			 * Tomb Raider I-III bundle sits in its 1\ITEM, which is on no
 			 * search path, and a mod's outfit is refused by the resolver on
 			 * purpose. The wardrobe has the path and the namespace, so it
 			 * hands both over and nothing is searched for twice.
 			 *
 			 * Nothing happens when this machine has no scan entry - the eight
-			 * then resolve by name exactly as they did before this round,
-			 * which is what keeps an installation without the I-III bundle
-			 * drawing the same Lara it always did. */
+			 * then resolve by name, which keeps an installation without the
+			 * I-III bundle drawing the same Lara. */
 			const int at = wear_index_of(level->outfit);
 			const HDWardrobeEntry* e = HDWardrobeAt(at);
 
@@ -1953,7 +1883,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			}
 		}
 
-		/* And the LID is cut out of it (#123, fix round S, S1). It stands
+		/* And the lid is built from it. It stands
 		 * after the body in this array - the enum puts it there - which is
 		 * what lets hd_model hand the maker the body it has just read. */
 		if (part == HD_LARA_PART_NECK_CAP)
@@ -1987,7 +1917,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		return false;
 	}
 
-	/* THE GLOVES, ASKED FOR AND NOT GIVEN (#153, round M2b). One line per
+	/* The gloves, asked for and not given. One line per
 	 * level build, and only when something really asked - so a log with no
 	 * such line is a log in which nothing wanted gloves, rather than one in
 	 * which the question was never put. */
@@ -2015,14 +1945,10 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		if (stats)
 			stats->wanted++;
 
-		/* A HAND PART THE WARDROBE HAS NO GLOVED TWIN FOR - none today, and
-		 * the line is here so the day there is one it is in the log and not a
-		 * surprise in a screenshot. ITS GATE IS NOW WHAT WAS ASKED FOR (#153,
-		 * round M2b, the fix round): it used to be takes_gloves, which has
-		 * answered false for every outfit since round M2b, so the line could
-		 * not fire at all any more. asked_for_gloves is the same question the
-		 * line was written to answer - does this body want gloves - and one
-		 * that can still be yes, so the seam goes on saying what it said. */
+		/* A hand part the wardrobe has no gloved twin for - none at present,
+		 * and the line puts such a part in the log should one appear. Its gate
+		 * is what the outfit asked for, not takes_gloves (which always answers
+		 * false): does this body want gloves. */
 		if (asked_for_gloves(level->outfit) && kPart[part].kind == 1 &&
 			!kPart[part].gloves)
 			note("%s: no gloved variant in the wardrobe - %s is worn bare",
@@ -2042,21 +1968,19 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 
 		g_has[part] = true;
 
-		/* THE INSTALL'S OWN HANDS, IF hd_model LOADED THEM (#153, round M2b).
-		 * It decides - see HDModelSlot::twinSlot - and this is where the draw
-		 * finds out. Its own note says which pages went which way. */
+		/* The install's own hands, if hd_model loaded them. It decides - see
+		 * HDModelSlot::twinSlot - and this is where the draw finds out. Its
+		 * own note says which pages went which way. */
 		if (kPart[part].kind == 1 && HDModelHas(HDLaraPartTwinSlot(part)))
 		{
 			g_twin[part] = true;
 
-			/* AND IT IS IN EVERY COLUMN OF THE BUDGET, not only in the count
-			 * (#153, round M2b, the fix round). The twin is a second model on
-			 * the card with its own vertex and index buffer and its own page,
-			 * so a line that counted its vertices but not its bytes described
-			 * two different sets of models in one breath - about 155 KiB of
-			 * buffer for the install's HAND_BARE_UZI under the Uzi mod's gun.
-			 * The 24 and the 2 are hd_model's own vertex and index widths,
-			 * the same two numbers the part below is measured with. */
+			/* The twin is in every column of the budget, not only in the
+			 * count: it is a second model on the card with its own vertex and
+			 * index buffer and its own page - about 155 KiB of buffer for the
+			 * install's HAND_BARE_UZI under the Uzi mod's gun. The 24 and the
+			 * 2 are hd_model's own vertex and index widths, the same two
+			 * numbers the part below is measured with. */
 			if (stats)
 			{
 				const int twin = HDLaraPartTwinSlot(part);
@@ -2071,14 +1995,11 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				stats->indexBytes += (double)HDModelIndices(twin) * 2.0;
 			}
 
-			/* AND WHAT THE FOLD FOUND IN THE TWIN (#153, round M3). The
-			 * reader folds every file it reads, the twin included, and its
-			 * counters were worked out and thrown away - so the one model on
-			 * the card that a reader of this line cannot see the source of
-			 * was also the one whose fold nobody could check. The install's
-			 * own hands read 0 folded at the shipped bar, which is the
-			 * guarantee round M2b measured; a number here that is not 0 means
-			 * the bar or the file has moved. */
+			/* And what the fold found in the twin. The reader folds every
+			 * file it reads, the twin included, and this line makes that fold
+			 * checkable. The install's own hands read 0 folded at the default
+			 * bar (see HD_LARA_HAND_FOLD_BAR); a number here that is not 0
+			 * means the bar or the file has moved. */
 			HDTrmFoldCounts twinFold;
 
 			if (!HDModelFoldCounts(HDLaraPartTwinSlot(part), &twinFold))
@@ -2096,7 +2017,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				twinFold.renormed);
 		}
 
-		/* WHAT THE MIRROR FOLD FOUND IN THIS FILE (#153, round M2b). One line
+		/* What the mirror fold found in this file. One line
 		 * per hand part that had anything to fold, and silence for one that
 		 * had not - which is every file of the remaster's own wardrobe, whose
 		 * crossed vertices all sit below the bar. */
@@ -2116,32 +2037,27 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 					fold.folded, g_fold_bar, fold.tied, fold.renormed);
 		}
 
-		/* THE INNER SKIN'S ONE TEXEL (#123, fix round K, K1). Measured off
-		 * the outfit's own top neck ring while the .TRM was still a file;
-		 * this hands it to the draw. A model whose ring could not be found
-		 * gets none, and the inner draw then falls back to the plain cull -
-		 * which is the picture before this round and not a hole. */
 		if (part == HD_LARA_PART_BODY)
 		{
-			/* AND LARA'S OWN SKIN SHINES LIKE SKIN (#123, fix round K, K2).
+			/* Lara's own skin shines like skin.
 			 *
-			 * The body draws with ONE material and part of it is her, not her
-			 * clothes - so a bare forearm wore the outfit's sheen while the
-			 * hand model over it wore the skin's, and the difference between
-			 * the two was multiplied by the room's ambient. The pages are a
-			 * measured table on the outfit; hd_wardrobe.cpp carries it and the
-			 * measurement behind it. Nothing happens for an outfit that shows
-			 * no skin.
+			 * The body draws with one material and part of it is her, not her
+			 * clothes - so without this a bare forearm wears the outfit's
+			 * sheen while the hand model over it wears the skin's, and the
+			 * difference between the two is multiplied by the room's ambient.
+			 * The pages are a measured table on the outfit; hd_wardrobe.cpp
+			 * carries it and the measurement behind it. Nothing happens for an
+			 * outfit that shows no skin.
 			 *
-			 * AND FOR AN OUTFIT NOBODY HAS LOOKED AT, THE MEASUREMENT ANSWERS
-			 * (#153, round M2). The throat measured two paragraphs down is the
-			 * page that runs the whole height of the neck, and for seven of
-			 * the eight known bodies it IS the first page of the table's row -
-			 * checked one by one, the agreement and the two disagreements are
-			 * written out in hd_wardrobe.cpp. So a scanned entry the table has
-			 * no row for takes it, and one the table does have a row for keeps
-			 * the row: the diving suit's empty list is a decision and the
-			 * measurement would overrule it with the HELMET. */
+			 * For an outfit with no row in that table, the measurement
+			 * answers. The throat page (measure_neck_skin) is the page that
+			 * runs the whole height of the neck, and for seven of the eight
+			 * known bodies it is the first page of the table's row - the
+			 * agreement and the disagreements are written out in
+			 * hd_wardrobe.cpp. So a scanned entry the table has no row for
+			 * takes it, and one the table does have a row for keeps the row:
+			 * the diving suit's empty list is a decision and the measurement
+			 * would overrule it with the helmet. */
 			float skinS = 0.0f, skinP = 1.0f;
 			int named = 0;
 
@@ -2160,15 +2076,14 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				const int page = props->skin[i];
 				bool there = false;
 
-				/* THE PAGE NUMBER, NOT THE CACHE KEY (#153, round M2). A model
-				 * a mod supplied names its pages in that mod's own namespace
+				/* The page number, not the cache key. A model a mod supplied
+				 * names its pages in that mod's own namespace
 				 * (hd_pagecache.h), so HDModelPage gives back raw + pageBias
 				 * and a plain 8001 would match nothing at all - and the skin
-				 * would silently keep the body's material, which is the very
-				 * seam fix round K was about. The namespace is an allocation
-				 * and the page number is the material's name; the held-item
-				 * rule below strips it for the same reason and in the same
-				 * words. */
+				 * would silently keep the body's material, reopening the
+				 * wrist seam. The namespace is an allocation and the page
+				 * number is the material's name; the held-item rule below
+				 * strips it for the same reason. */
 				for (int j = 0; j < HDModelPageCount(slot); j++)
 				{
 					const int key = HDModelPage(slot, j);
@@ -2194,12 +2109,9 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 					"material and not two", named, named == 1 ? "" : "s",
 					model, named == 1 ? "takes" : "take", skinS, skinP);
 
-			/* The throat texel (#123, fix round K, K1). It closed the neck
-			 * hole from the inside until fix round S and was the lid's one
-			 * colour until fix round U; the lid wears the rim's own texture
-			 * now, and this stays as the line that says WHICH page of an
-			 * outfit is her throat - which is how a lid that came out on the
-			 * coat can be told from one that came out wrong. */
+			/* The throat texel: the line that says which page of an outfit
+			 * is her throat, which tells a lid that came out on the coat from
+			 * one that came out wrong. */
 			if (g_inner_page >= 0)
 				note("her throat: page %d at %d/%d, off the neck's "
 					"own column (%d vertices spanning %.0f down the neck "
@@ -2212,8 +2124,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 					model);
 		}
 
-		/* THE LID, IN NUMBERS (#123, fix round S, S1; the rim's own since fix
-		 * round U, U1). How many vertices the cut left standing on the edge of
+		/* The lid, in numbers. How many vertices the cut left standing on the edge of
 		 * its hole, where they are - off the neck axis and down it - and what
 		 * the fan built on them came to. A rim of three or four, or one whose
 		 * radius runs to the guard at 34, is a lid that has found something
@@ -2225,16 +2136,16 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				(double)HD_LARA_HEAD_CUT_WEIGHT, g_cap_segments, g_cap_rings,
 				g_cap_rings == 1 ? "" : "s", g_cap_page);
 
-		/* WHAT IS IN THE HAND GETS ITS OWN MATERIAL (#123, fix round I, I4).
+		/* What is in the hand gets its own material.
 		 *
 		 * The rule is a measurement and not a guess: HAND_BARE_REST is the
-		 * hands and NOTHING else, so every page a weapon-hand model has that
+		 * hands and nothing else, so every page a weapon-hand model has that
 		 * the rest hands have not got is the weapon. Measured over the
 		 * wardrobe: HAND_BARE_REST 1 page, HAND_BARE_DEAGLE 2,
 		 * HAND_GLOVES_REST 3, HAND_GLOVES_DEAGLE 4 - one extra page every
 		 * time, whichever gun and whether or not she wears gloves.
 		 *
-		 * The draw's own sheen stays the HAND's, so a page that is not named
+		 * The draw's own sheen stays the hand's, so a page that is not named
 		 * here keeps it. */
 		if (kPart[part].kind == 1 && part != HD_LARA_PART_HAND_REST)
 		{
@@ -2244,11 +2155,10 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 
 			HDLaraHeldSheen(part, &held, &heldPower);
 
-			/* THE PAGE NUMBER, NOT THE CACHE KEY (#153, round M1; the strip
-			 * itself moved into page_number_of in round M2). A model a mod
-			 * supplied names its pages in that mod's own namespace
+			/* The page number, not the cache key (see page_number_of). A
+			 * model a mod supplied names its pages in that mod's own namespace
 			 * (hd_pagecache.h), so mod2's 8001 and the install's 8001 are two
-			 * different keys - and this rule would then find NO page in
+			 * different keys - and this rule would then find no page in
 			 * common between a modded weapon hand and the vanilla rest hands
 			 * and hand the skin the gunmetal material along with the gun.
 			 *
@@ -2301,8 +2211,8 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 			stats->indexBytes += (double)HDModelIndices(slot) * 2.0;
 		}
 
-		/* THE DRIFT, the same measurement stage S3-2 judges a randomized
-		 * enemy slot by: the distances between the nodes of the model against
+		/* The drift, the same measurement a randomized enemy slot is judged
+		 * by: the distances between the nodes of the model against
 		 * the distances between the same nodes of the classic bind pose. A
 		 * wardrobe part that belongs on Lara's tree keeps it small; one that
 		 * does not - a TR4 outfit skinned to a TR5 skeleton, say - does not.
@@ -2340,14 +2250,14 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		return false;
 	}
 
-	/* THE HEAD RULE, SETTLED (#156). One line per level build, and the node
-	 * mask the body draws with settled with it - so the draw asks this file
-	 * two questions it has already answered and the wardrobe none at all.
+	/* The head rule, settled. One line per level build, and the node mask
+	 * the body draws with settled with it - so the draw asks this file two
+	 * questions it has already answered and the wardrobe none at all.
 	 *
-	 * THE FALLBACK. A body told to drop its own head and given no donor -
+	 * The fallback: a body told to drop its own head and given no donor -
 	 * the IV-VI install missing, or its OUTFIT_CLASSIC unreadable - would
-	 * come out with no head whatever, which is worse than the bald one the
-	 * round is about. So the mask stays whole and the line says so. */
+	 * come out with no head whatever, which is worse than a bald one. So the
+	 * mask stays whole and the line says so. */
 	{
 		const int mode = head_mode(level->outfit);
 		const bool donor = g_has[HD_LARA_PART_HEAD];
@@ -2361,7 +2271,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 			HDWardrobeHeadWord(mode),
 			/* A diagnostic tool may have overruled the wardrobe for one
 			 * picture, and then the entry's own provenance is not what this
-			 * line is about (#156). The engine never sets it. */
+			 * line is about. The engine never sets it. */
 			g_head_force >= 0 ? "a diagnostic override"
 				: HDWardrobeFromWord(head_from(level->outfit)),
 			donor ? "OUTFIT_CLASSIC#14"
@@ -2369,11 +2279,10 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				: "none - TR5's head did not load, so its own head stays");
 	}
 
-	/* HER SKIN'S OWN MATERIAL, IN ONE LINE (#158). Its neighbour above says
-	 * whose head she wears; this one says what she is made of under it, and
-	 * where that answer came from - so a face that has come out wet in a play
-	 * test is one grep away from the skin_sheen= line that made it, which is
-	 * the promise the wardrobe line and the part lines already make. */
+	/* Her skin's own material, in one line. Its neighbour above says whose
+	 * head she wears; this one says what she is made of under it, and where
+	 * that answer came from - so a face that comes out too glossy is one grep
+	 * away from the skin_sheen= line that made it. */
 	{
 		float strength = 0.0f, power = 1.0f;
 		const HDWardrobeEntry* e = props_of(level->outfit);
@@ -2397,12 +2306,12 @@ void HDLaraLevelEnd()
 	g_active = false;
 	g_notes.clear();
 
-	// #153 round M2b: the wardrobe entry props_of remembers. Dropped here and
-	// not in props_of, so that a re-scan between levels cannot be answered out
-	// of the old list.
+	// The wardrobe entry props_of remembers. Dropped here and not in
+	// props_of, so that a re-scan between levels cannot be answered out of
+	// the old list.
 	g_props_outfit = HD_LARA_OUTFIT_NONE;
 	g_props = 0;
-	g_body_mask = ~0u;	// #156
+	g_body_mask = ~0u;
 
 	for (int i = 0; i < HD_LARA_PART_COUNT; i++)
 	{
@@ -2459,7 +2368,7 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 	if (part < 0 || part >= HD_LARA_PART_COUNT)
 		return;
 
-	/* The BODY's sheen belongs to the outfit and not to the part: the same
+	/* The body's sheen belongs to the outfit and not to the part: the same
 	 * HD_LARA_PART_BODY is a Rome top in one level and a catsuit in the
 	 * next. */
 	if (part == HD_LARA_PART_BODY)
@@ -2478,27 +2387,15 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 		return;
 	}
 
-	/* AND A HAND PART'S SHEEN IS THE HAND'S, WHICH ALSO BELONGS TO THE OUTFIT
-	 * (#123, fix round I, I4). What is in the hand is a page of the same file
-	 * and gets its own material through HDModelSetPageSheen; this is the skin
-	 * or the glove around it, and until that round a gloved Lara's leather
-	 * shone like bare skin.
-	 *
-	 * AND IT IS ALWAYS THE SKIN'S (#153, round M2b). takes_gloves answers
-	 * false for every outfit now, so the leather branch this test used to have
-	 * could never be taken and the pair it read went with it. Leather is still
-	 * the holster rig's material and stands as 0.18/20 in kPartSheen.
-	 *
-	 * THE THREE KINDS OF PART THAT ARE LARA AND NOT HER CLOTHES (#158): her
-	 * face, the lid on her neck and her eleven bare hands. They were one
-	 * constant and two table rows saying the same numbers - kSheenSkin for the
-	 * hand parts, kPartSheen's own FACE and NECK_CAP rows for the other two -
-	 * and they are one answer now, out of the wardrobe entry, so that
-	 * skin_sheen= moves all of her at once. Without a line in a list or an
-	 * outfit.txt that answer is the same 0.12/10 all three places carried,
-	 * which is what makes this change nothing at all until somebody writes
-	 * one. (The pages of the BODY that are her skin take it too -
-	 * HDLaraSkinSheen, below, hangs it on them at level build.) */
+	/* The three kinds of part that are Lara and not her clothes: her face,
+	 * the lid on her neck and her eleven bare hands. They take one answer, out
+	 * of the wardrobe entry, so that skin_sheen= moves all of her at once;
+	 * without a line in a list or an outfit.txt it is 0.12/10, the skin row of
+	 * the material table. What is in a hand is a page of the same file and
+	 * gets its own material through HDModelSetPageSheen; this is the skin
+	 * around it (the wardrobe wears bare hands everywhere). The pages of the
+	 * body that are her skin take the same answer - HDLaraSkinSheen, below,
+	 * hangs it on them at level build. */
 	if (part == HD_LARA_PART_FACE || part == HD_LARA_PART_NECK_CAP ||
 		kPart[part].kind == 1)
 	{
@@ -2519,9 +2416,9 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 		}
 }
 
-/* LARA'S SKIN (#123, fix round K, K1), out of the material table at the top of
- * this file - and out of the OUTFIT since #158, which is the same answer until
- * an outfit.txt or a list block writes skin_sheen=. The pages of the body that
+/* Lara's skin, out of the outfit - which is the material table's skin row at
+ * the top of this file until an outfit.txt or a list block writes
+ * skin_sheen=. The pages of the body that
  * are her own skin shine like skin whatever the clothes over them are made of,
  * and they shine like the hands beside them, which is what makes the wrist
  * seam one material instead of two. */
@@ -2548,7 +2445,7 @@ bool HDLaraSkinPage(int page)
 	return false;
 }
 
-/* WHAT IS IN THE HAND, as opposed to the hand (#123, fix round I, I4): the
+/* What is in the hand, as opposed to the hand: the
  * kPartSheen entry, which is the weapon's own material. Both 0 for a part that
  * holds nothing. */
 void HDLaraHeldSheen(int part, float* strength, float* power)
@@ -2580,16 +2477,14 @@ unsigned int HDLaraPartCoverage(int part)
 	return part >= 0 && part < HD_LARA_PART_COUNT ? g_coverage[part] : 0u;
 }
 
-/* THE HEAD CUT, IN THE TWO NUMBERS THE SHADER NEEDS (#123, fix round U, U1).
+/* The head cut, in the two numbers the shader needs.
  *
  * One function, so that what the shader discards, what the lid is built on and
  * what the diagnostic tool draws cannot drift apart: all three ask here.
  *
- * There is nothing to work out. Fix round S's plane had to be measured against
- * this level's own bind pose - the neck axis and a depth down it - and every
- * shape before it had to as well; a bone weight is written in the .TRM and is
+ * There is nothing to work out: a bone weight is written in the .TRM and is
  * the same number in every pose, at every camera angle and in every level. So
- * the only question left is whether there is an HD body to cut at all. */
+ * the only question is whether there is an HD body to cut at all. */
 bool HDLaraHeadCut(int* node, float* bar)
 {
 	if (!node || !bar || !g_active)
@@ -2633,7 +2528,7 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 			} \
 		} while (0)
 
-	/* THE HANDS. Both sides are asked separately and only split into two
+	/* The hands. Both sides are asked separately and only split into two
 	 * draws when they disagree - see the rule in hd_lara.h. A slot that names
 	 * no part at all (a mesh swap the randomizer put there, say) falls back
 	 * to the rest hands, which is a hand and not a hole. */
@@ -2654,7 +2549,7 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 		HD_LARA_ADD(left, kLeftArm);
 	}
 
-	/* THE THIGH HOLSTERS. Left is node 1, right is node 4 - the two slots the
+	/* The thigh holsters. Left is node 1, right is node 4 - the two slots the
 	 * engine keeps in LHolster and lara.holster, and DrawLara puts them on
 	 * LMX_THIGH_L and LMX_THIGH_R in that order. An empty holster names no
 	 * part: the straps are painted into the outfit. */
@@ -2664,21 +2559,21 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 		HDLaraPartForSlot(now->rightHolsterSlot, HD_LARA_ROLE_HOLSTER);
 	int back = HDLaraPartForSlot(now->backGunSlot, HD_LARA_ROLE_BACK);
 
-	/* A GUN IN THE HAND IS NOT ON THE BODY (#123, fix round C, user finding
-	 * C1: "the revolver is in her hand AND in the holster at once").
+	/* A gun in the hand is not on the body - otherwise the revolver can be
+	 * in her hand and in the holster at once.
 	 *
 	 * The engine keeps three separate variables for what Lara wears -
 	 * LHolster, lara.holster, lara.back_gun - and they are bookkeeping, not
-	 * a fact: every draw and undraw animation writes them at its OWN frame,
-	 * and the paths do not agree with each other. Measured in this tree:
+	 * a fact: every draw and undraw animation writes them at its own frame,
+	 * and the paths do not agree with each other:
 	 *
-	 *   game\lara2gun.cpp:70 draw_pistol_meshes  clears lara.holster for
-	 *       every weapon and LHolster for all but the revolver;
-	 *   game\lara1gun.cpp:43 draw_shotgun_meshes clears lara.back_gun and
-	 *       NEITHER holster - and larafire.cpp:475 InitialiseNewWeapon sends
-	 *       the revolver down THAT path while the pistols go down the other,
-	 *       so a revolver drawn through it keeps the holster the undraw
-	 *       animation filled (undraw_pistol_mesh_right, lara2gun.cpp:107).
+	 *   game\lara2gun.cpp draw_pistol_meshes clears lara.holster for every
+	 *       weapon and LHolster for all but the revolver;
+	 *   game\lara1gun.cpp draw_shotgun_meshes clears lara.back_gun and
+	 *       neither holster - and larafire.cpp InitialiseNewWeapon sends the
+	 *       revolver down that path while the pistols go down the other, so
+	 *       a revolver drawn through it keeps the holster the undraw
+	 *       animation filled (lara2gun.cpp, undraw_pistol_mesh_right).
 	 *
 	 * Rather than reach into the engine's state machine - which the classic
 	 * path lives on too - the seam states the rule the picture needs: what
@@ -2722,7 +2617,7 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 		HD_LARA_ADD(rightHolster, 1u << HD_LARA_RTHIGH);
 	}
 
-	/* THE WEAPON ON THE BACK, on the torso node. */
+	/* The weapon on the back, on the torso node. */
 	HD_LARA_ADD(back, ~0u);
 
 	#undef HD_LARA_ADD

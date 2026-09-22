@@ -12,8 +12,8 @@
  */
 #include "../../tomb5/pch.h"
 #include "hd_level.h"
-#include "hd_memory.h"			// the address space, and the rule that spends it (#164)
-#include "hd_outfitmenu.h"		// the footsteps follow the outfit (#153, M3)
+#include "hd_memory.h"			// the address space, and the rule that spends it
+#include "hd_outfitmenu.h"		// the footsteps follow the outfit
 #include "hd_install.h"
 #include "hd_bind.h"
 #include "hd_lara.h"			// HD_LARA_OUTFIT_* - the data[3] agreement
@@ -23,13 +23,13 @@
 #include "hd_object.h"
 #include "hd_font.h"			// the HD font's texture goes with the device
 #include "../function_stubs.h"
-#include "../profile.h"			// PROFLOG phases (#148)
-#include "../output.h"			// gPresentMinTicks - the budget follows the present (#148)
+#include "../profile.h"			// PROFLOG phases
+#include "../output.h"			// gPresentMinTicks - the budget follows the present
 #include "../d3dmatrix.h"
 #include "../3dmath.h"
 #include "../winmain.h"
-#include "../dxshell.h"				// DXTextureMemoryAtStart (#123, S6)
-#include "../texture.h"				// nTextures (#123, S6)
+#include "../dxshell.h"				// DXTextureMemoryAtStart
+#include "../texture.h"				// nTextures
 #include "../../tomb5/tomb5.h"
 #include "../../game/objects.h"
 #include "../../game/control.h"		// number_rooms, room
@@ -37,38 +37,37 @@
 #include "../../game/draw.h"
 #include "../../game/effect2.h"		// dynamics, wibble
 #include "../../game/gameflow.h"		// gfLevelId
-#include "../../game/lara.h"		// GfHdOutfit - data[3] (#123, S7)
+#include "../../game/lara.h"		// GfHdOutfit - data[3]
 #include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
-#include "../file.h"				// textinfo, aranges, nAnimUVRanges (#123, N2)
+#include "../file.h"				// textinfo, aranges, nAnimUVRanges
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
 #include "hd_light.h"
 
 #include <vector>
 
 // The generated slot name table in hd_bind.cpp has to be the enum, entry for
-// entry. This is the line that notices when a slot was added to objects.h and
-// not to that table - at build time, not in a picture.
+// entry; this stops the build when a slot is added to objects.h and not to
+// that table.
 static_assert(HD_SLOT_COUNT == NUMBER_OBJECTS,
 	"hd_bind.cpp's slot name table and enum object_types have drifted apart - "
 	"regenerate the table (see the comment above it) and update HD_SLOT_COUNT");
 static_assert(HAIR == 30,
 	"HDSlotIsLara() covers slots 0..30 because HAIR is 30 - it no longer is");
 
-/* THE FOUR TOMB RAIDER III GUESTS (#92, #123 stage S7-2). hd_bind.cpp's
- * tr3_guests table maps these four slot NUMBERS to the .TRM names of the I-III
- * remaster, and it is built without the engine, so the numbers stand there as
- * numbers. These are the lines that notice when one of the four slots moves -
- * at build time, and not as a T-Rex wearing a soldier's model. The randomizer
- * picks the same four in TR5Randomizer\src\core\Tr3Source.cpp, dinos(). */
+/* The four Tomb Raider III guests. hd_bind.cpp's tr3_guests table maps these
+ * four slot numbers to the .TRM names of the I-III remaster, and it is built
+ * without the engine, so the numbers stand there as literals. This stops the
+ * build when one of the four slots moves, instead of a T-Rex wearing a
+ * soldier's model. The randomizer picks the same four in
+ * TR5Randomizer\src\core\Tr3Source.cpp, dinos(). */
 static_assert(SAS == 31 && CROW == 43 && SAILOR == 53 && REAPER == 75,
 	"the slots the randomizer imports the Tomb Raider III guests into have "
 	"moved - update tr3_guests in hd_bind.cpp with them");
 
-/* THE OUTFIT MARKER, data[3] of the level header (#123, stage S7). The
- * randomizer writes these very numbers - Patch::hdOutfitId in
- * TR5Randomizer\src\core\ApplyPatch.cpp - so that neither side translates.
- * Renumber the enum and this line stops the build; renumber it without this
- * line and a Nevada Lara quietly becomes an Antarctica one. */
+/* The outfit marker, data[3] of the level header. The randomizer writes these
+ * very numbers (Patch::hdOutfitId in TR5Randomizer\src\core\ApplyPatch.cpp),
+ * so neither side translates. Renumbering the enum stops the build here;
+ * without this line a Nevada Lara would quietly become an Antarctica one. */
 static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &&
 	HD_LARA_OUTFIT_TR3_COAST == 7 && HD_LARA_OUTFIT_TR3_CATSUIT == 8,
 	"data[3] of the level header carries HD_LARA_OUTFIT_* 5..8 by agreement "
@@ -79,16 +78,13 @@ static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &
  * arrays here rather than allocations, so that nothing in the frame path can
  * fail.
  *
- * T5: HD_MAX_FRAME follows draw_rooms' own capacity, which is now the
- * engine's room maximum of 256. It was 128 against a list of 100, which was
- * headroom; with the reach budget at 128 it would have been the exact worst
- * case and no headroom at all - the walk's own list is trimmed to 128
- * reach-wise, but a list of CLASSIC rooms is never trimmed and was measured
- * at 106 in one JOBY4 frame (RoomProbe -reachsurvey). One entry per listed
- * room reaches here, from InsertRoom (specific\drawroom.cpp:200), so 256 is
- * the true bound and this array can no longer be the thing that drops a room
- * the walk kept. The cost is static and named: sizeof(FrameRoom) is 380
- * bytes, so the array goes from 47.5 to 95 KiB of BSS. */
+ * HD_MAX_FRAME follows draw_rooms' own capacity, the engine's room maximum of
+ * 256. The walk's own list is trimmed to 128 by reach, but a list of classic
+ * rooms is never trimmed and was measured at 106 in one JOBY4 frame
+ * (RoomProbe -reachsurvey). One entry per listed room arrives here from
+ * InsertRoom (specific\drawroom.cpp), so 256 is the true bound and this array
+ * never drops a room the walk kept. sizeof(FrameRoom) is 380 bytes, so the
+ * array is 95 KiB of BSS. */
 #define HD_MAX_ROOMS	1024
 #define HD_MAX_FRAME	256
 
@@ -97,42 +93,38 @@ namespace
 	struct FrameRoom
 	{
 		int room;
-		int group;		// A1: the .TRG group that draws it right now
+		int group;		// the .TRG group that draws it right now
 		D3DMATRIX world;	// view * world, as the classic path set it
 
-		/* E6: THE ROOM'S LIGHTING, WORKED OUT ONCE AND KEPT. The frame draws
-		 * its rooms twice now - the solid passes in one phase, the glows in
-		 * another after the classic buckets - and FillRoomLighting counts the
-		 * lights it had to turn away as it goes, so running it a second time
-		 * would count this room's clipped lights twice. It runs in the solid
-		 * phase and the glow phase reads what it left. */
+		/* The room's lighting, worked out once and kept. The frame draws its
+		 * rooms twice - the solid passes in one phase, the glows in another
+		 * after the classic buckets - and FillRoomLighting counts the lights
+		 * it turns away, so a second run would count them twice. It runs in
+		 * the solid phase and the glow phase reads what it left. */
 		HDRoomLighting lighting;
 		HDLightSource lights[HD_MAX_LIGHTS];
 
-		/* GROUP M: THE PORTAL WINDOW, in backbuffer pixels, as the scissor
-		 * test wants it - `x0/y0` the first pixel drawn, `x1/y1` the first
-		 * one that is not. Worked out once, when the room is collected,
-		 * because that is when the engine's own `r->left..r->bottom` still
-		 * hold this room's answer: PrintObjects resets all four at the end
-		 * of the same frame.
+		/* The portal window, in backbuffer pixels, as the scissor test wants
+		 * it - `x0/y0` the first pixel drawn, `x1/y1` the first one that is
+		 * not. Worked out when the room is collected, because only then do
+		 * the engine's `r->left..r->bottom` hold this room's answer:
+		 * PrintObjects resets all four at the end of the frame.
 		 *
 		 * `full` is a window that covers the whole backbuffer - the camera's
-		 * own room, and any room the walk could see all of. Those are drawn
-		 * with the test off, which is both faster and exactly what a
-		 * rectangle covering everything would do. */
+		 * own room, and any room the walk sees all of. Those are drawn with
+		 * the test off, which is faster and gives the same picture. */
 		int x0, y0, x1, y1;
 		bool full;
 
-		/* FIX ROUND T (T1), narrowed in T2-2: whether the GROUP drawing this
-		 * room carries any art that stands inside another room. A group that
-		 * does not draws over the whole screen, which is what every room did
-		 * before group M and what the classic path does with a polygon that
-		 * straddles the window's rim. */
+		/* Whether the group drawing this room carries any art that stands
+		 * inside another room. A group that does not draws over the whole
+		 * screen, as the classic path does with a polygon that straddles the
+		 * window's rim. */
 		bool windowed;
 
-		/* WHICH CAMERA THIS ROOM WAS COLLECTED WITH (fix round R). ViewSerial
-		 * at the InsertRoom that put it here; see the note over it in
-		 * specific\3dmath.cpp. Read only by the log below. */
+		/* The camera this room was collected with: ViewSerial at the
+		 * InsertRoom that put it here (see specific\3dmath.cpp). Read only by
+		 * the log. */
 		long view;
 	};
 
@@ -140,103 +132,89 @@ namespace
 
 	// Set by HDLevelBuild and by nothing else. Every frame-path function
 	// tests it first, so switching hd_enable while a level runs changes
-	// nothing until the next level starts - which is what the option row
-	// says it does.
+	// nothing until the next level starts, as the option row says.
 	bool g_level_active = false;
 
-	/* WHICH .TRG GROUP DRAWS WHICH ROOM (#123, fix round A, A1).
+	/* Which .TRG group draws which room.
 	 *
-	 * Group i is room i - until FlipMap runs. FlipMap (game\control.cpp,
-	 * 2634) does not move a room, it SWAPS THE CONTENTS of two ROOM_INFO
-	 * records: after FlipMap(n) the record at index r holds the geometry, the
-	 * floor data, the statics and the lights of what used to be room
-	 * r->flipped_room. The engine goes on calling that room r, so InsertRoom
-	 * hands us r, and stage S1-2 drew group r - the art of the room that is
-	 * no longer there. That is the reported bug in its exact words: "the wall
-	 * is gone, but the HD texture is still standing".
+	 * Group i is room i until FlipMap runs. FlipMap (game\control.cpp) does
+	 * not move a room, it swaps the contents of two ROOM_INFO records: after
+	 * FlipMap(n) the ROOM_INFO at index r holds the geometry, floor data,
+	 * statics and lights of what was room r->flipped_room. The engine still
+	 * calls it room r, so drawing group r would show the art of the room no
+	 * longer there - a wall that is gone while its HD texture still stands.
 	 *
-	 * So the identity is replaced by a table, and the table is swapped in the
-	 * same breath as the ROOM_INFO records (HDFlipRoom, called from FlipMap
-	 * itself). Everything that is decided per room then has to be read
-	 * through it:
+	 * So a table maps room to group, swapped together with the ROOM_INFO
+	 * records (HDFlipRoom, called from FlipMap). Everything decided per room
+	 * is read through it:
 	 *
-	 *   g_group_hd    is per GROUP, not per room - "this art exists and may
-	 *                 be drawn" is a property of the .TRG, and it must travel
-	 *                 with the art. HDRoomIsHD, which also decides whether a
+	 *   g_group_hd    is per group, not per room - "this art exists and may
+	 *                 be drawn" is a property of the .TRG and travels with
+	 *                 the art. HDRoomIsHD, which also decides whether a
 	 *                 room's static meshes are suppressed, reads
 	 *                 g_group_hd[g_room_group[r]].
 	 *   water marks   are built once, before any flip, on the classic
-	 *                 vertices of every room INCLUDING the alternates, and
-	 *                 they are carried into the group of the room they were
-	 *                 found in. So they already sit on the right group and
-	 *                 need no second thought - they follow the art.
-	 *   lighting      reads the room's own flags (they were swapped with the
-	 *                 record, so they are the alternate's) and the GROUP's
-	 *                 bounding box.
+	 *                 vertices of every room including the alternates, and
+	 *                 carried into the group of the room they were found in,
+	 *                 so they follow the art.
+	 *   lighting      reads the room's own flags (swapped with ROOM_INFO, so
+	 *                 the alternate's) and the group's bounding box.
 	 *
 	 * A flip pair stands at the same place in the world - that is what makes
 	 * it a flip pair - so the world matrix the engine hands in is right for
 	 * either group of the pair, and nothing about the matrix changes here.
 	 *
 	 * The table survives a save: the engine restores a flip by calling
-	 * FlipMap once per set flip (game\savegame.cpp:684), so a loaded game
-	 * walks through the very same hook. A level starts with it as the
-	 * identity, which is what an unflipped level is. */
+	 * FlipMap once per set flip (game\savegame.cpp), so a loaded game walks
+	 * through the same hook. A level starts with the identity. */
 	unsigned char g_group_hd[HD_MAX_ROOMS];
-	/* FIX ROUND T (T1), REWRITTEN IN T2-2: which GROUPS carry art that
-	 * stands inside another room, and therefore have triangles to draw
-	 * inside their own portal window.
+	/* Which groups carry art that stands inside another room, and so have
+	 * triangles to draw inside their own portal window.
 	 *
-	 * Group M scissored EVERY HD room to the rectangle the portal walk gave
-	 * it, and the play test of 2026-09-07 says what that cost: "everything
-	 * that goes over portals does not go over its edges properly any more."
-	 * Round T narrowed it to the rooms of an overlapping pair - and the play
-	 * test of 2026-09-08 found the half that was still wrong: it gave the
-	 * window to the HOLDER as well, and to the whole of both partners' art.
-	 * BuildRoomIntrusions below measures the triangles instead, once per
-	 * level; every other triangle in the game draws over the whole screen,
-	 * as it did before group M.
+	 * Scissoring every HD room to its portal rectangle cuts everything that
+	 * reaches over a portal's edge, and so does windowing both partners of an
+	 * overlapping pair whole. BuildRoomIntrusions measures the intruding
+	 * triangles instead, once per level; every other triangle draws over the
+	 * whole screen, as on the classic path.
 	 *
-	 * PER GROUP AND NOT PER ROOM, like g_group_hd and for the same reason:
-	 * HDFrameFlip swaps which group draws which room, and the property
-	 * belongs to the art. */
+	 * Per group and not per room, like g_group_hd: HDFlipRoom swaps which
+	 * group draws which room, and the property belongs to the art. */
 	unsigned char g_group_windowed[HD_MAX_ROOMS];
 	short g_room_group[HD_MAX_ROOMS];
 	int g_room_count = 0;
 	int g_flips_done = 0;		// for the log, once per level
 
-	// Stage S2b. The marks are built once per level out of the classic
-	// roomlets and handed to the renderer; the counters below say once per
-	// level whether the shader's fixed maxima ever bit.
+	// Water marks, built once per level out of the classic roomlets and
+	// handed to the renderer; the counters below say once per level whether
+	// the shader's fixed maxima ever bit.
 	std::vector<HDWaterMark> g_water_marks;
 
-	/* THE WATER SURFACE THE REMASTER DOES NOT DRAW (#123, fix round H, H1).
+	/* The water surface the remaster does not draw.
 	 *
-	 * One entry per classic room face that IS a water surface and that the
+	 * One entry per classic room face that is a water surface and that the
 	 * .TRG has no art for. See BuildWaterSurfaces for the measurement; the
 	 * faces are kept sorted by roomlet so that drawroom.cpp transforms and
 	 * lights a roomlet once and then picks its water faces out of it. */
 	std::vector<HDRoomWaterFace> g_water_faces[HD_MAX_ROOMS];
 	int g_water_face_total = 0;
 	int g_water_face_rooms = 0;
-	int g_water_face_kept = 0;	// faces the .TRG DOES cover - left to it
+	int g_water_face_kept = 0;	// faces the .TRG does cover - left to it
 
-	/* STAGE S5: THE GAME CLOCK, IN SECONDS.
+	/* The game clock, in seconds.
 	 *
-	 * The UV scroll a .TRG part carries is a speed, and a speed needs a clock
-	 * that runs forward. The engine has exactly one counter that does:
-	 * GlobalCounter (control.cpp:262), incremented once per game update in
-	 * the same loop that steps `wibble`, so 30 a second, and standing still
-	 * whenever the game stands still - the inventory, the pause, a load.
+	 * The UV scroll a .TRG part carries is a speed and needs a clock that
+	 * runs forward. The engine has one counter that does: GlobalCounter
+	 * (control.cpp), incremented once per game update in the loop that steps
+	 * `wibble`, so 30 a second, and still whenever the game stands still -
+	 * the inventory, the pause, a load.
 	 *
 	 * It is a ushort and turns over every 36 minutes, which would put a jump
-	 * in the middle of a waterfall, so what is kept here is the DIFFERENCE
-	 * since the last frame, accumulated. The subtraction is done in ushort,
-	 * where the turn-over is exactly what unsigned arithmetic gives back.
+	 * in the middle of a waterfall, so the difference since the last frame is
+	 * accumulated instead. The subtraction is done in ushort, where the
+	 * turn-over is exactly what unsigned arithmetic gives back.
 	 *
-	 * Not a clock of our own: no timeGetTime, no steady_clock. A frame drawn
-	 * twice while the game is paused draws the same picture, which is what
-	 * the classic path does too. */
+	 * No wall clock (timeGetTime, steady_clock): a frame drawn twice while
+	 * the game is paused draws the same picture, as on the classic path. */
 	double g_clock = 0.0;
 	unsigned short g_clock_last = 0;
 	bool g_clock_started = false;
@@ -256,12 +234,11 @@ namespace
 		g_clock_last = now;
 	}
 
-	/* WHY THESE ARE TOTALS AND NOT A PER FRAME FLAG. The first version reset
-	 * them after every frame that clipped, so the "once per level" line came
-	 * out once per FRAME - 173 identical lines out of one title screen, which
-	 * is how the 6 bulb cap was found in the first place. They now count for
-	 * the whole level: the first frame that clips writes one line naming the
-	 * room, and the level's end writes one total. Nothing else logs them. */
+	/* Totals for the whole level, not a per-frame flag: a per-frame reset
+	 * would write the "once per level" line on every clipping frame (173
+	 * identical lines from one title screen). The first frame that clips
+	 * writes one line naming the room, and the level's end writes one total.
+	 * Nothing else logs them. */
 	int g_clipped_lights = 0;	// dynamic lights turned away, whole level
 	int g_clipped_bulbs = 0;	// fog bulbs turned away, whole level
 	int g_clip_frames = 0;		// frames in which either happened
@@ -273,12 +250,11 @@ namespace
 
 	/* ------------------------------------------------------ the frame clock --
 	 *
-	 * "It felt like the frame rate dropped below 30 sometimes" is not
-	 * something anybody can answer by looking at the picture, so the engine
+	 * A frame rate dip cannot be judged from the picture, so the engine
 	 * measures it: one FPSLOG line per second of wall clock, written from the
 	 * one place every presented frame goes through.
 	 *
-	 * WHERE IT IS TAKEN. HDFramePresented() is called from DXShowFrame
+	 * Where it is taken: HDFramePresented() is called from DXShowFrame
 	 * (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns.
 	 * That is the only function in this engine that presents anything, and
 	 * every path reaches it: the game frame (S_DumpScreen), the loading bar
@@ -287,7 +263,7 @@ namespace
 	 * would miss the loading bar and the movies; measuring in the main loop
 	 * would count message pumps that drew nothing.
 	 *
-	 * WHAT THE NUMBERS MEAN. The LOGIC is a fixed 30 Hz in every mode; what
+	 * What the numbers mean: the logic is a fixed 30 Hz in every mode; what
 	 * fps_mode changes is how often the same logic state is presented.
 	 * S_DumpScreen waits for gPresentMinTicks ticks of the engine's own 60 Hz
 	 * counter (specific\time.cpp) before it presents - two at fps_mode 0, one
@@ -295,65 +271,52 @@ namespace
 	 * on 33.3 ms, or `frames=60` with every interval on 16.7 ms. The line
 	 * carries both: `fps=` is the target the budget was taken from, and
 	 * `logic_ticks=` is what the simulation really ran, which must stay 30
-	 * whatever `frames=` says. That quantisation is why there are TWO
-	 * counters and not one:
+	 * whatever `frames=` says. That quantisation is why there are two
+	 * counters:
 	 *
 	 *   slow   intervals over the budget (33.3 ms after a two-tick present,
 	 *          16.7 after a one-tick one; the line prints which as `budget=`).
-	 *          Half a healthy second lands here on jitter alone, so a number
-	 *          here on its own means nothing - it is the budget line the
-	 *          brief asked for.
+	 *          Half a healthy second lands here on jitter alone, so this
+	 *          number means nothing on its own.
 	 *   late   intervals over the budget plus half a 60 Hz tick - 41.7 ms
 	 *          after two ticks, 25.0 after one. Jitter cannot reach it; a
-	 *          frame that MISSED its slot costs a whole tick and lands well
+	 *          frame that missed its slot costs a whole tick and lands well
 	 *          beyond. This is the number that says the frame rate really
 	 *          fell under the target.
 	 *
-	 * A SECOND SPENT IN A MODAL MENU is not a second of gameplay:
-	 * `logic_ticks=0`, `hd_rooms=0` and `frames=30` together mean the pause
-	 * menu, the load or save screen, the death menu or the level-change fade
-	 * was up, and those keep thirty by design at any setting. `budget=` says
-	 * so on the line itself. PROFLOG goes one step further and calls such an
-	 * interval a `pause` rather than a frame - FPSLOG cannot, because it never
-	 * sees where a frame came from.
+	 * A second spent in a modal menu is not gameplay: `logic_ticks=0`,
+	 * `hd_rooms=0` and `frames=30` together mean the pause menu, the load or
+	 * save screen, the death menu or the level-change fade was up, and those
+	 * keep thirty at any setting; `budget=` shows it. PROFLOG calls such an
+	 * interval a `pause` rather than a frame - FPSLOG cannot, because it
+	 * never sees where a frame came from.
 	 *
-	 * THE TITLE AND THE RING ARE NOT ON THAT LIST (corrected in audit round
-	 * A1; this paragraph named them until then, and they came off the list in
-	 * round 154). DoTitle calls ControlPhase like the game does, so a title
-	 * second reads `logic_ticks=30` and draws rooms; and the title and the
-	 * inventory ring both present at the rate the option asks for -
-	 * GameFrameMinTicks in specific\output.cpp for the one, InvFrameMinTicks
-	 * in game\inventory_interp.cpp for the other.
+	 * The title and the inventory ring are not on that list. DoTitle calls
+	 * ControlPhase like the game does, so a title second reads
+	 * `logic_ticks=30` and draws rooms, and both present at the option's
+	 * rate - GameFrameMinTicks in specific\output.cpp, InvFrameMinTicks in
+	 * game\inventory_interp.cpp.
 	 *
-	 * NOTHING HAPPENS WITHOUT -log. The first line of HDFramePresented is
-	 * `if (!gLogEnabled) return;` - one bool test per present, no counter
-	 * kept, no clock read. Nothing here allocates, ever: the accumulators are
-	 * plain integers and doubles in this file.
+	 * Nothing happens without -log: the first line of HDFramePresented is
+	 * `if (!gLogEnabled) return;` - no counter kept, no clock read. Nothing
+	 * here allocates: the accumulators are plain integers and doubles.
 	 */
-	/* #148, order 1b: THE BUDGET FOLLOWS THE PRESENT, NOT THE OPTION. It was
-	 * a pair of constants while thirty was the only rate there was; order 1
-	 * made it follow tomb5.fps_mode, and that was still wrong, because
-	 * fps_mode is not what a given frame waited for. Only DrawPhaseGame's own
-	 * present ever drops to one tick; the pause menu, the load/save screen,
-	 * the death menu and the level-change fade keep their two whatever the
-	 * option says. (The clause "and only outside the title", and the title
-	 * and the inventory in that list, were corrected out in audit round A1:
-	 * round 154 gave both of them the option's own rate - GameFrameMinTicks
-	 * and InvFrameMinTicks.) Judged against 16.7 ms they
-	 * reported a perfectly healthy menu second as thirty slow and a dozen
-	 * late frames, which is exactly what the 2026-09-07 log showed.
+	/* The budget follows the present, not the option: fps_mode is not what a
+	 * given frame waited for. Only DrawPhaseGame's own present drops to one
+	 * tick; the pause menu, the load/save screen, the death menu and the
+	 * level-change fade keep two whatever the option says, and judged against
+	 * 16.7 ms a healthy menu second would read as thirty slow and a dozen
+	 * late frames.
 	 *
-	 * gPresentMinTicks is the number the present that just returned waited
-	 * for, and HDFramePresented is called directly after that present - so
-	 * reading it here is reading this frame's own slot. The one present that
-	 * does not go through it is the loading bar's (S_DumpScreenFrame waits
-	 * for one tick of its own); it is measured against the default two, i.e.
-	 * exactly as generously as it always was. */
-	/* #148, order 6: and the third case is a frame that waited for NO tick,
-	 * because the present itself waited for the display. Its slot is the
-	 * panel's period - 6.9 ms on a 144 Hz monitor - and the definition now
-	 * lives in specific\output.cpp so that this line and PROFLOG's cannot
-	 * drift apart. */
+	 * gPresentMinTicks is what the present that just returned waited for, and
+	 * HDFramePresented runs directly after it, so this reads the frame's own
+	 * slot. The loading bar's present (S_DumpScreenFrame waits one tick of
+	 * its own) does not set it and is measured against the default two.
+	 *
+	 * A frame that waited for no tick, because the present itself waited for
+	 * the display, has the panel's period as its slot - 6.9 ms at 144 Hz. The
+	 * definition lives in specific\output.cpp so that this line and PROFLOG's
+	 * cannot drift apart. */
 	double FrameBudgetMs()
 	{
 		return PresentSlotMs();
@@ -377,15 +340,14 @@ namespace
 	double g_sec_sum = 0;
 	int g_sec_slow = 0;
 	int g_sec_late = 0;
-	int g_sec_rooms = 0;		// the HD counters, MAXIMUM over the second -
+	int g_sec_rooms = 0;		// the HD counters, maximum over the second -
 	int g_sec_items = 0;		// the heaviest frame is the one that explains
 	int g_sec_draws = 0;		// a drop, not the last one before the flush
 
-	/* #148, order 1: GlobalCounter when this second began. Its difference at
-	 * the flush is how many LOGIC ticks the second really ran, and that is
-	 * the proof the clock split did what it says: at fps_mode 1 the line has
-	 * to read frames=60 with logic_ticks=30. GlobalCounter is a ushort and
-	 * wraps; the subtraction is done in ushort and therefore wraps with it. */
+	/* GlobalCounter when this second began. Its difference at the flush is
+	 * how many logic ticks the second really ran: at fps_mode 1 the line must
+	 * read frames=60 with logic_ticks=30. GlobalCounter is a ushort and
+	 * wraps; the subtraction is done in ushort and wraps with it. */
 	unsigned short g_sec_counter = 0;
 
 	int g_lvl_seconds = 0;
@@ -413,13 +375,12 @@ namespace
 		if (g_sec_frames <= 0)
 			return;
 
-		/* #148, order 6: `fps=` is what the mode ASKS for - 30, 60, or the
-		 * panel's own refresh rate - and `real_fps=` is what the presents
-		 * actually came at, worked out from the mean interval rather than
-		 * from `frames=`, which is a count over a second that begins and ends
-		 * on a frame boundary and is therefore a frame out either way. On a
-		 * display-bound run the two have to agree with the monitor: 144 and
-		 * 143.8 is a healthy 144 Hz panel. */
+		/* `fps=` is what the mode asks for - 30, 60, or the panel's own
+		 * refresh rate - and `real_fps=` is the rate the presents came at,
+		 * from the mean interval rather than from `frames=`, which counts over
+		 * a second bounded by frames and is a frame out either way. On a
+		 * display-bound run both match the monitor: 144 and 143.8 is a
+		 * healthy 144 Hz panel. */
 		const double avg_ms = g_sec_sum / g_sec_frames;
 
 		Log("FPSLOG level=%s frames=%d logic_ticks=%d fps=%d real_fps=%.1f "
@@ -443,7 +404,7 @@ namespace
 
 	/* The end of a level, main thread: the frame clock's summary and the one
 	 * total of what the shader maxima turned away. Called from HDLevelBuild
-	 * (for the level BEFORE the one being built, after the load thread has
+	 * (for the level before the one being built, after the load thread has
 	 * joined) and from HDLevelDeviceLost, which is where DXClose comes
 	 * through at the end of the session - so the last level gets its line
 	 * too. Both counters start again afterwards. */
@@ -485,22 +446,21 @@ namespace
 	int g_frame_count = 0;
 	int g_frame_dropped = 0;
 
-	/* GROUP M: what the portal windows of this frame came to, for the log.
-	 * `full` drew over the whole backbuffer, `scissored` inside a rectangle,
-	 * `empty` were rooms the walk gave a window of no width or no height and
-	 * that are therefore not drawn at all. */
+	/* What the portal windows of this frame came to, for the log. `full`
+	 * drew over the whole backbuffer, `scissored` inside a rectangle, `empty`
+	 * were rooms the walk gave a window of no width or no height, which are
+	 * not drawn at all. */
 	int g_clip_full = 0;
 	int g_clip_scissored = 0;
 	int g_clip_empty = 0;
-	// T1: rooms with no art inside another room, drawn over the whole screen,
-	// and (T2-2) the triangles the rest of them really did draw inside their
-	// portal window - the only draw calls in the game the scissor is on for.
+	// Rooms with no art inside another room, drawn over the whole screen, and
+	// the triangles the rest really drew inside their portal window - the
+	// only draw calls in the game the scissor is on for.
 	int g_clip_open = 0;
 	int g_clip_windowed_tris = 0;
-	/* Fix round R: HD items whose own room's window is NOT the whole screen,
-	 * i.e. the ones group M used to cut and the classic path never does.
-	 * Counted per frame with -log and reported in the clip line, so that the
-	 * withdrawn rule can be judged by a number. */
+	/* HD items whose own room's window is not the whole screen - the ones a
+	 * per-room scissor would cut and the classic path never does. Counted per
+	 * frame with -log and reported in the clip line. */
 	int g_clip_items_spared = 0;
 	// Once per level, on the first frame that draws an HD room: one line per
 	// room with the window it got. Reset beside g_matrix_checked.
@@ -511,19 +471,19 @@ namespace
 	unsigned short g_clip_line_at = 0;
 	bool g_clip_line_ever = false;
 
-	/* THE ENGINE'S INCLUSIVE WINDOW AS A SCISSOR RECTANGLE (#123, group M).
+	/* The engine's inclusive window as a scissor rectangle.
 	 *
-	 * `r->left..r->bottom` are pixel INDICES and both ends belong to the room
+	 * `r->left..r->bottom` are pixel indices and both ends belong to the room
 	 * (game\draw.cpp, SetRoomBounds: the projected portal corner is widened
 	 * by a pixel on every side before it is written). Direct3D's rectangle is
 	 * half open, so the right and bottom edges gain one to reach the pixel
 	 * they name - and one more, with a matching one taken off the left and
-	 * the top, as the MARGIN.
+	 * the top, as a margin.
 	 *
-	 * The margin is not decoration. The classic path does not really clip a
-	 * polygon to this window: it drops a polygon all of whose corners lie
-	 * beyond one edge of it (specific\polyinsert.cpp, `c[v0] & c[v1] & ...`)
-	 * and clips whatever is left against the SCREEN. So a polygon that
+	 * The classic path does not really clip a polygon to this window: it
+	 * drops a polygon all of whose corners lie beyond one edge of it
+	 * (specific\polyinsert.cpp, `c[v0] & c[v1] & ...`) and clips whatever is
+	 * left against the screen. So a polygon that
 	 * straddles the window's edge is drawn whole by the classic path and
 	 * would be cut exactly at the edge by a scissor. One pixel of slack is
 	 * what makes the two agree along a portal's rim; everything wider than a
@@ -537,11 +497,10 @@ namespace
 		if (right <= left || bottom <= top || w <= 0 || h <= 0)
 		{
 			// A window of no width or no height. The walk cannot produce one
-			// for a room it put on the draw list (SetRoomBounds returns
-			// before it writes when tL >= tR), so this is the guard and not
-			// a case - but a room drawn over the whole screen because four
-			// numbers came out backwards is the bug this group exists to
-			// stop.
+			// for a room on the draw list (SetRoomBounds returns before it
+			// writes when tL >= tR), so this is a guard: a room must not be
+			// drawn over the whole screen because four numbers came out
+			// backwards.
 			entry.x0 = entry.y0 = entry.x1 = entry.y1 = 0;
 			entry.full = false;
 			return;
@@ -572,14 +531,12 @@ namespace
 		return entry.x1 <= entry.x0 || entry.y1 <= entry.y0;
 	}
 
-	/* ONE ROOM'S ART, IN AS MANY PIECES AS THE WINDOW NEEDS (#123, fix round
-	 * T, T1; fix round T2, T2-2).
+	/* One room's art, in as many pieces as the window needs.
 	 *
 	 * A room with no intruding art, or one whose window is the whole screen,
-	 * is one draw with the scissor test off - which is what every room was
-	 * before group M and what every room but a handful is again.
+	 * is one draw with the scissor test off - every room but a handful.
 	 *
-	 * A room that HAS intruding art is drawn twice: everything of it over the
+	 * A room that has intruding art is drawn twice: everything of it over the
 	 * whole screen first, then the triangles that stand inside another room
 	 * inside its own portal window. That second call is the only place in the
 	 * game the scissor test is ever on, and it covers a few dozen triangles
@@ -600,11 +557,9 @@ namespace
 		HDRenderRoomMask(entry.group, &entry.world, &entry.lighting, passes,
 			HD_WINDOW_OPEN);
 
-		/* AND AN EMPTY WINDOW NOW ONLY SILENCES THE INTRUDING HALF (T2-2).
-		 * Group M skipped the whole room when the walk left it a rectangle of
-		 * no width or height, which was safe while the window was the room -
-		 * but the open half is not windowed at all and must be drawn whatever
-		 * four numbers the walk came back with. */
+		/* An empty window silences only the intruding half: the open half is
+		 * not windowed and is drawn whatever four numbers the walk came back
+		 * with. */
 		if (!ClipEmpty(entry))
 		{
 			HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
@@ -618,7 +573,7 @@ namespace
 				HDRenderGroupIntrudingTriangles(entry.group);
 	}
 
-	/* E6: WHAT THE GLOW PHASE NEEDS AGAIN. The solid phase fills these and
+	/* What the glow phase needs again. The solid phase fills these and
 	 * HDFrameDrawGlow, which runs after the classic buckets and therefore
 	 * after HDFrameDraw has returned, reads them: the projection, the frame's
 	 * lighting block and the fog bulbs it points at. Filled per frame in
@@ -632,17 +587,16 @@ namespace
 	int g_frame_room_calls = 0;
 	bool g_frame_pending = false;
 
-	/* P2: THE PICKUP DISPLAY'S OWN TWO, and they are kept apart from the
-	 * frame's on purpose. The display is drawn in the middle of
-	 * S_OutputPolyList, after the frame's own bracket has been opened, drawn
-	 * and closed; writing its projection over g_frame_projection would take
-	 * the glow phase's copy away from it if the two ever met. They never do
-	 * today - the glow phase runs above the depth clear and the display below
-	 * it - and that is a reason to keep them apart, not to share them. */
+	/* The pickup display's own projection and lighting, kept apart from the
+	 * frame's. The display is drawn in the middle of S_OutputPolyList, after
+	 * the frame's bracket has been opened, drawn and closed; writing over
+	 * g_frame_projection would take the glow phase's copy away if the two
+	 * ever met. Today the glow phase runs above the depth clear and the
+	 * display below it, and separate copies keep it that way. */
 	D3DMATRIX g_pickup_projection;
 	HDFrameLighting g_pickup_light;
 
-	// The projection is taken WHEN THE ROOMS ARE COLLECTED, not when they are
+	// The projection is taken when the rooms are collected, not when they are
 	// drawn: AlterFOV moves f_persp inside a frame (the sky phase does it
 	// twice while the binoculars are up), and the rooms have to be projected
 	// with the same field of view the classic path transformed its vertices
@@ -657,13 +611,13 @@ namespace
 	float g_oneopersp = 0;
 
 	bool g_matrix_checked = false;
-	// R3a: one line per level about the sky dome, and only one.
+	// One line per level about the sky dome, and only one.
 	bool g_sky_logged = false;
-	// N1: the most water surfaces any frame of this level has drawn, which
-	// is what throttles the line about them - see HDFrameDrawWindowed.
+	// The most water surfaces any frame of this level has drawn, which
+	// throttles the line about them - see HDFrameDrawWindowed.
 	int g_water_calls_worst = 0;
 
-	// Whether THIS frame's projection has been taken yet - by the first HD
+	// Whether this frame's projection has been taken yet - by the first HD
 	// room or by the first HD item, whichever the engine reaches first.
 	bool g_projection_taken = false;
 
@@ -678,27 +632,26 @@ namespace
 	/* What HDLevelLoad measured of the .TRG, kept for the budget below: the
 	 * vertex and index buffers of this level have to come out of the card's
 	 * memory before a single page does, and this is the only place their size
-	 * is known BEFORE they are made. */
+	 * is known before they are made. */
 	int g_scan_vertices = 0;
 	int g_scan_indices = 0;
 
-	/* WHAT THE IN-LEVEL RE-DRESSES HAVE COST SO FAR (#153, round M3). The
-	 * cache's own byte count when this level was built, and how many times
-	 * the player has changed his outfit since. The cap is on the BYTES; the
-	 * count is for the log. Both are reset by the next level build. */
+	/* What the in-level re-dresses have cost so far: the cache's byte count
+	 * when this level was built, and how many outfit changes since. The cap
+	 * is on the bytes; the count is for the log. Both are reset by the next
+	 * level build. */
 	double g_redress_bytes0 = 0;
 	int g_redress_count = 0;
 
-	/* AND WHAT THE RULE ANSWERED WHEN IT WAS LAST ASKED (#164). The F4 window
-	 * asks whether another change is allowed on EVERY drawn frame it is open,
-	 * and the answer now costs a GlobalMemoryStatusEx and a walk of the whole
-	 * address space - 203 microseconds over 262 regions, measured with
-	 * PoolProbe -walk, which is nothing once and a great deal sixty times a
-	 * second. So it is worked out when something has CHANGED it: at the end
-	 * of the level build, after every completed change, and once when the
-	 * window opens. HDLevelRedressAllowed hands out what is stored here.
+	/* What the re-dress rule answered when it was last asked. The F4 window
+	 * asks on every drawn frame it is open, and the answer costs a
+	 * GlobalMemoryStatusEx and a walk of the whole address space - 203
+	 * microseconds over 262 regions (PoolProbe -walk), nothing once and a
+	 * great deal sixty times a second. So it is worked out when something has
+	 * changed it: at the end of the level build, after every completed change,
+	 * and once when the window opens. HDLevelRedressAllowed hands it out.
 	 *
-	 * NOTHING ELSE CAN CHANGE IT INSIDE A LEVEL. The only callers of
+	 * Nothing else changes it inside a level: the only callers of
 	 * HDPageCacheAppend are this level build - the rooms and the water frames
 	 * - and HDObjectLevelBuild, which runs in a level build or in a re-dress,
 	 * so the cache cannot grow behind the stored answer's back. */
@@ -706,35 +659,34 @@ namespace
 	HDMemoryRoom g_redress_room;
 	bool g_redress_said_unknown = false;
 
-	/* THE BIGGEST SINGLE ALLOCATION ONE PAGE OF THIS LEVEL MAKES, worked out
+	/* The biggest single allocation one page of this level makes, worked out
 	 * at the end of the level build, when the format and the device's own cap
-	 * are both settled. It is what the fragmentation condition asks the
-	 * largest free block against, and it is not a guess: the pages themselves
-	 * are D3DPOOL_DEFAULT and cost the process almost nothing (0.04 MiB
-	 * apiece, measured), but every mip of every one of them goes through ONE
-	 * reused D3DPOOL_SYSTEMMEM staging texture of the page's whole size
+	 * are both settled. The fragmentation condition asks the largest free
+	 * block against it. The pages themselves are D3DPOOL_DEFAULT and cost the
+	 * process almost nothing (0.04 MiB apiece, measured), but every mip of
+	 * every one goes through one reused D3DPOOL_SYSTEMMEM staging texture of
+	 * the page's whole size
 	 * (hd_pagecache.cpp, ensure_staging) - and that is an 85.33 MiB block for
 	 * a 4096 page in A8R8G8B8, measured at 85.34 in a single reserve. */
 	double g_redress_page_block = 0;
 
-	/* WHICH POOL THE PAGES LIVE IN, in one place instead of a literal at each
-	 * call (#164). D3DPOOL_DEFAULT: the texture is on the card and the
-	 * process keeps no copy of it, which is what makes the address space the
-	 * cheap side of the rule and the card the expensive one. hd_object.cpp
-	 * hands the models' pages the same answer, and there is no setting for it
-	 * anywhere - it is a property of the loader, not a taste. */
+	/* Which pool the pages live in, in one place instead of a literal at each
+	 * call. D3DPOOL_DEFAULT: the texture is on the card and the process keeps
+	 * no copy, which makes the address space the cheap side of the rule and
+	 * the card the expensive one. hd_object.cpp hands the models' pages the
+	 * same answer; it is a property of the loader, not a setting. */
 	const bool kPagesManaged = false;
 
-	/* THE WIDEST PAGE THE REMASTER HAS. Eleven of them are 4096x4096 and
+	/* The widest page the remaster has. Eleven of them are 4096x4096 and
 	 * nothing is wider (hd_render.cpp, where the device's own cap enters the
 	 * policy); a card that stops at 2048 clamps them, and the policy says so,
 	 * which is why the block below is worked out from both. */
 	const int kWidestPage = 4096;
 
-	/* THE AUTOMATIC TEXTURE BUDGET (#123, stage S6).
+	/* The automatic texture budget.
 	 *
-	 * hd_texture_budget_mb = 0 means "work it out", and this is the working
-	 * out. It starts from what the device said it had the moment it was made
+	 * hd_texture_budget_mb = 0 means "work it out", and this works it out. It
+	 * starts from what the device said it had the moment it was made
 	 * (dxshell.cpp, DXTextureMemoryAtStart) and takes off everything else
 	 * that has to live on the card while a level runs:
 	 *
@@ -750,7 +702,7 @@ namespace
 	 *   40 MiB, 64 at the ceiling;
 	 *
 	 *   this level's HD vertex and index buffers, which are D3DPOOL_DEFAULT
-	 *   and are made BEFORE the pages, so they are already spent by the time
+	 *   and are made before the pages, so they are already spent by the time
 	 *   the budget bites. 61 MiB on TITLE, the largest there is;
 	 *
 	 *   and 64 MiB of slack, because a driver keeps command buffers, shader
@@ -787,7 +739,7 @@ namespace
 		return budget;
 	}
 
-	/* THE RULE, ASKED AND STORED (#164). Everything it reads is a fact the
+	/* The re-dress rule, asked and stored. Everything it reads is a fact the
 	 * level already has - the cache's bytes, this level's mark, the policy's
 	 * budget - and one measurement of the process itself; HDRedressDecide
 	 * does the arithmetic and hd_memory.h carries the reasoning.
@@ -815,10 +767,9 @@ namespace
 
 		HDRedressDecide(&ask, &g_redress_verdict);
 
-		/* THE MEASURE ITSELF FAILING is a line of its own, because the rule
-		 * then falls back to the 64 MiB of round M3 and a log that did not
-		 * say so would read like a rule that had never been lifted. Once per
-		 * level: this is asked three times and more. */
+		/* A failed measurement gets a line of its own, because the rule then
+		 * falls back to the flat 64 MiB allowance and the log must say so.
+		 * Once per level: this is asked three times and more. */
 		if (!g_redress_room.known && !g_redress_said_unknown)
 		{
 			g_redress_said_unknown = true;
@@ -896,13 +847,13 @@ namespace
 		out[length] = 0;
 	}
 
-	/* THE PROOF THAT THE TWO PATHS PUT THE SAME POINT IN THE SAME PIXEL.
+	/* Checks that the two paths put the same point in the same pixel.
 	 *
 	 * The classic path transforms a room-local vertex with the matrix on the
 	 * stack and divides by z itself (specific\drawroom.cpp,
 	 * aRoomletTransformLight):
 	 *
-	 *     v  = pos * (view * world)          - a ROW vector, translation in row 3
+	 *     v  = pos * (view * world)          - a row vector, translation in row 3
 	 *     sx = v.x * f_persp / v.z + f_centerx
 	 *     sy = v.y * f_persp / v.z + f_centery
 	 *     sz = f_a - f_boo * (2048 / v.z)
@@ -911,11 +862,11 @@ namespace
 	 * lets the hardware divide. If the two disagree by so much as a pixel,
 	 * every HD wall stands beside its own floor. So they are compared here,
 	 * on the level's own vertices, with the level's own camera - once per
-	 * level, into the log, and the numbers are the acceptance of this stage.
+	 * level, into the log.
 	 *
-	 * Not a self-test of a formula: the classic side below is the three lines
-	 * of drawroom.cpp, and the HD side is the matrix that really goes to the
-	 * device, through the viewport rule the device really applies. */
+	 * The classic side below is the three lines of drawroom.cpp, and the HD
+	 * side is the matrix that really goes to the device, through the viewport
+	 * rule the device applies. */
 	void MatrixCheck(int roomIndex, int group, const D3DMATRIX& world,
 		const D3DMATRIX& projection)
 	{
@@ -931,7 +882,7 @@ namespace
 		/* world * projection, the general 4x4 the way hd_render.cpp builds it
 		 * and the way the vertex shader uses it - mul(float4(pos,1), wvp) with
 		 * the row convention. Written out in full rather than shortened with
-		 * "the projection is mostly zeroes", so that the proof would notice a
+		 * "the projection is mostly zeroes", so that the check notices a
 		 * projection that stops being mostly zeroes. */
 		const float* w = (const float*)&world;
 		const float* p = (const float*)&projection;
@@ -1017,9 +968,9 @@ namespace
 	}
 }
 
-/* --------------------------------------------------------- stage S2b -- */
+/* ---------------------------------------------------------- water marks -- */
 
-/* THE WATER MARKS, once per level.
+/* The water marks, once per level.
  *
  * Every classic room vertex is asked the three questions drawroom.cpp answers
  * per frame (aRoomVertexWaterMarks), and every vertex that answers yes to any
@@ -1091,10 +1042,10 @@ static void BuildWaterMarks()
 		(int)g_water_marks.size(), water_rooms);
 }
 
-/* THE ROOMS' OWN BOXES, FOR THE RENDERER (#123, fix round T, T1).
+/* The rooms' own boxes, for the renderer.
  *
- * The box TR5 itself calls the inside of a room, taken from the very lines
- * that ask whether an item fits inside one (game\draw.cpp:2248-2253):
+ * The box TR5 itself calls the inside of a room, taken from the lines that
+ * ask whether an item fits inside one (game\draw.cpp):
  *
  *     x    r->x + 1024  ..  r->x + (y_size - 1) * 1024
  *     z    r->z + 1024  ..  r->z + (x_size - 1) * 1024
@@ -1104,7 +1055,7 @@ static void BuildWaterMarks()
  * naming and not a slip: `r->floor[z_index + x_size * x_index]` says which
  * is which.
  *
- * Handed over ROOM LOCAL, because that is the frame the .TRG's vertices are
+ * Handed over room local, because that is the frame the .TRG's vertices are
  * in: x and z relative to the room's origin, y in world units (the file
  * stores it that way and every TR5 room has y 0 anyway - measured over the
  * fifteen files). */
@@ -1138,43 +1089,37 @@ static void BuildRoomBoxes()
 		HDRenderSetRoomBoxes(0, 0);
 }
 
-/* THE WATER SURFACE THE REMASTER DOES NOT DRAW (#123, fix round H, H1).
+/* The water surface the remaster does not draw.
  *
- * WHAT WAS MEASURED. The player's picture of a VCI pool shows dark washed-out
- * blotches where the remaster shows a moving surface, and his own look in
- * trview says why: "the vanilla water faces carry a wave texture, in HD the
- * assignment for the face is missing". The first reading of that - the .TRG
- * gives those faces texture layer 0 and the renderer falls back to the
- * level's first page - is WRONG, and the file says so: over all fifteen
- * levels, 0 of 12,247,000 vertices carry layer 0 (TrgProbe -layer0).
+ * In some HD rooms a pool shows dark washed-out blotches where the classic
+ * level has a moving water surface. It is not a missing texture layer: over
+ * all fifteen levels, 0 of 12,247,000 .TRG vertices carry layer 0 (TrgProbe
+ * -layer0).
  *
- * What is missing is the GEOMETRY. The classic engine draws a water surface
+ * What is missing is the geometry. The classic engine draws a water surface
  * as ordinary room faces at the room's own minfloor, and the shimmer branch
  * that makes them move opens with `pos.y == CurrentRoomPtr->minfloor` in a
- * room carrying ROOM_REFLECT or ROOM_MIST (drawroom.cpp:531-545). Held
- * against the .TRG plane by plane (TrgProbe -watergap), over 93 such rooms in
- * the fifteen files:
+ * room carrying ROOM_REFLECT or ROOM_MIST (drawroom.cpp). Held against the
+ * .TRG plane by plane (TrgProbe -watergap), over 93 such rooms in the fifteen
+ * files:
  *
- *     JOBY2   4 of 5 rooms have NO .TRG triangle in the classic water plane
+ *     JOBY2   4 of 5 rooms have no .TRG triangle in the classic water plane
  *     JOBY5  13 of 25          -   the whole VCI pool set
  *     ANDY3  23 of 23, ANDY1 5 of 6, ANDREA2 10 of 13, ANDREA1 3 of 3,
  *     JOBY4   1 of 1, RICH3 2 of 4
  *     ANDREA3, JOBY3, RICH2  0 of 15 - those rooms keep their surface
  *
- * JOBY2's room 66 is the pool of the player's picture: 24 classic faces of
- * ONE texinfo at y -1280, and 0 .TRG triangles in that plane. The HD room
- * therefore draws the pool FLOOR and nothing over it, which is exactly the
- * flat dark checkerboard the player photographed - there is no water there
- * at all, so no texture and no shader could have been wrong.
+ * JOBY2's room 66, for example: 24 classic faces of one texinfo at y -1280,
+ * and 0 .TRG triangles in that plane. The HD room draws the pool floor and
+ * nothing over it - a flat dark checkerboard with no water at all.
  *
- * WHAT IS DONE. Where the level has a water surface and the .TRG has not, the
+ * Where the level has a water surface and the .TRG has not, the
  * classic face is drawn on top of the HD room, by the classic path, with its
  * own texture, its own animated texture range, its own light and the shimmer
  * the classic path has always given it. Nothing is invented: the surface that
  * comes back is the one the level ships.
  *
- * The two tests a face has to pass are the engine's own, not a rule of ours:
- * every corner at the room's minfloor (the classic height test), and every
+ * The two tests a face has to pass are the engine's own: every corner at the room's minfloor (the classic height test), and every
  * corner marked by aRoomVertexWaterMarks as a shimmer-surface vertex (the
  * classic predicate, portal walk and all). A face the .TRG covers - asked per
  * face, in its own plane and its own box - is left to the .TRG, so a room
@@ -1207,11 +1152,9 @@ static void BuildWaterSurfaces()
 			continue;
 
 		/* Every classic water face of the room, and of those how many the
-		 * .TRG has ANY art for (fix round H's majority) and how many it lays
-		 * its OWN water over (N1, a material 16 sheet). See the note below;
-		 * the first two numbers are counted exactly as fix round H counted
-		 * them, sheeted faces and all, so that the majority it takes is the
-		 * same majority. */
+		 * .TRG has any art for (the majority below) and how many it lays its
+		 * own water over (a material 16 sheet). The first two count sheeted
+		 * faces too; see the note below. */
 		int inPlane = 0;
 		int covered = 0;
 		int sheeted = 0;
@@ -1277,12 +1220,10 @@ static void BuildWaterSurfaces()
 					(int)x0, (int)z0, (int)x1, (int)z1))
 					covered++;
 
-				/* N1: and does the .TRG lay its OWN water over this piece of
-				 * ground? Then the classic face is dropped here and now -
-				 * that ground has a surface already, and a second one one to
-				 * twenty units away from it is the one thing worse than
-				 * none. It is still counted above, because the majority
-				 * below is fix round H's and has to stay fix round H's. */
+				/* Does the .TRG lay its own water over this piece of ground?
+				 * Then the classic face is dropped: that ground has a surface
+				 * already, and a second one one to twenty units away is worse
+				 * than none. It is still counted above for the majority. */
 				if (HDRenderGroupWaterArt(i, (int)r->minfloor,
 					(int)x0, (int)z0, (int)x1, (int)z1))
 				{
@@ -1299,47 +1240,40 @@ static void BuildWaterSurfaces()
 			}
 		}
 
-		/* PER ROOM AND NOT PER FACE. A pool is one surface, and half of one
+		/* Per room and not per face. A pool is one surface, and half of one
 		 * is worse than either whole: JOBY2's room 66 has 24 water faces and
-		 * the remaster's art touches 3 of their sectors with the coping, so a
-		 * face-by-face rule would leave three square holes in the middle of
-		 * the pool. So the room decides, by majority - and a room whose
-		 * surface the remaster really did build (ANDREA3, JOBY3, RICH2, and
-		 * twelve of JOBY5's twenty-five) keeps every face out of the way. */
-		/* BUT THE REMASTER'S OWN WATER IS DROPPED PER FACE, AND ONLY THE FACE
-		 * (#123, fix round N, N1, and the audit of that round).
+		 * the remaster's coping touches 3 of their sectors, so a face-by-face
+		 * rule would leave three square holes in the pool. So the room
+		 * decides, by majority - and a room whose surface the remaster did
+		 * build (ANDREA3, JOBY3, RICH2, and twelve of JOBY5's twenty-five)
+		 * keeps every face out of the way. */
+		/* The remaster's own water, however, is dropped per face.
 		 *
-		 * Fix round H asked one question - does the .TRG draw ANY horizontal
-		 * art in this plane - and a stone coping answers it as readily as a
-		 * water surface. That is why the COPING question is a majority: a
-		 * coping is not water, so dropping the faces it touches one by one
-		 * would leave square holes in the middle of a pool.
+		 * "Does the .TRG draw any horizontal art in this plane" is answered
+		 * by a stone coping as readily as by water, which is why that
+		 * question is a majority: a coping is not water, and dropping the
+		 * faces it touches one by one would leave holes in a pool.
 		 *
-		 * Material 16 is a different answer: it IS the remaster's still
-		 * water, so where it stands the classic face is not a hole but a
-		 * DOUBLE - a second surface one to twenty units from the first.
-		 * Dropping exactly those faces leaves no hole anywhere; the pool
-		 * stays one continuous surface, part of it the level's own and part
-		 * of it the remaster's.
+		 * Material 16 is the remaster's still water, so where it stands the
+		 * classic face is not a hole but a double - a second surface one to
+		 * twenty units from the first. Dropping exactly those faces leaves no
+		 * hole; the pool stays one continuous surface, part the level's own
+		 * and part the remaster's.
 		 *
-		 * THE FIRST READING OF THIS ROUND handed the whole room over on one
-		 * sheet anywhere in the plane, and measured that is far too much:
-		 * JOBY5's room 184 has 29 classic faces in the plane and a sheet over
-		 * 2 of them, room 4 has 30 and a sheet over 6 - so 27 and 24 sectors
-		 * of pool would have gone bare to save a double over 2 and 6.
+		 * Handing the whole room over on one sheet anywhere in the plane is
+		 * far too much: JOBY5's room 184 has 29 classic faces in the plane
+		 * and a sheet over 2, room 4 has 30 and a sheet over 6 - 27 and 24
+		 * sectors of pool would go bare to save a double over 2 and 6.
 		 *
-		 * The other end is just as wrong. Leaving the sheeted faces out of
-		 * the majority as well turns rooms fix round H deliberately handed to
-		 * the .TRG back into restored ones - ANDREA2's 231 (26 faces, 14 of
-		 * them the .TRG's, all 14 the sheet) and eight more of JOBY5 - which
-		 * is a change nobody asked for and no measurement supports. So the
-		 * count above is fix round H's count, sheeted faces and all, and the
-		 * ONLY thing this round changes is that a sheeted face is not drawn.
+		 * Leaving the sheeted faces out of the majority is wrong the other
+		 * way: it turns rooms the majority hands to the .TRG back into
+		 * restored ones - ANDREA2's 231 (26 faces, 14 of them the .TRG's, all
+		 * 14 the sheet) and eight more of JOBY5. So the majority counts
+		 * sheeted faces too, and a sheeted face is simply not drawn.
 		 *
-		 * Measured over the fifteen levels that is six rooms and no others:
+		 * Over the fifteen levels that changes six rooms and no others:
 		 * JOBY5's 4 (30 -> 24), 27 (6 -> 5), 28 (7 -> 4), 83 (3 -> 2), 115
-		 * (6 -> 5) and 184 (29 -> 27). Every other room in the game restores
-		 * exactly what it restored before. */
+		 * (6 -> 5) and 184 (29 -> 27). */
 		if (inPlane && covered * 2 >= inPlane)
 		{
 			g_water_face_kept += inPlane;
@@ -1371,20 +1305,18 @@ static void BuildWaterSurfaces()
 }
 
 
-/* ------------------------------------- the HD water frames (N2) --------- */
+/* ----------------------------------------------- the HD water frames --- */
 
-/* THE REMASTER'S OWN PICTURE ON THE CLASSIC WATER SURFACE (#123, fix round
- * N, N2).
+/* The remaster's own picture on the classic water surface.
  *
- * WHAT FIX ROUND H LEFT. Where the .TRG builds no water, the level's own face
- * is drawn on top of the HD room by the classic path, with its own texinfo -
- * and therefore its own animated texture range, its own light and the classic
- * shimmer. That is right about the geometry and about the motion, and it puts
- * a 256-pixel classic tile in the middle of a room drawn from 512-pixel HD
- * pages. The player found the missing half himself: the remaster ships HD
- * pictures of those very animation frames in its TEX folder.
+ * Where the .TRG builds no water, the level's own face is drawn over the HD
+ * room by the classic path, with its own texinfo - its own animated texture
+ * range, light and shimmer. That is right about the geometry and the motion,
+ * but it puts a 256-pixel classic tile in a room drawn from 512-pixel HD
+ * pages. The remaster ships HD pictures of those animation frames in its TEX
+ * folder, and this uses them.
  *
- * MEASURED, over the fifteen levels (RoomProbe -watersurvey, whose
+ * Measured over the fifteen levels (RoomProbe -watersurvey, whose
  * `WaterFrames` is the offline twin of this file):
  *
  *     ANDREA1   1 range,  8 frames -> 171..177 and 236
@@ -1397,42 +1329,38 @@ static void BuildWaterSurfaces()
  *     the other seven levels: no restored water face is in an animated range
  *
  * and every one of those pages is in the TEX folder - `missing=0` in all
- * seven. The player's own list of what he found there is the same list, minus
- * the three eighth frames (236, 281, 935) and plus ANDREA's 149..153 and 170,
- * which are on tiles no water face names - ANDREA1's .TEX puts 149..153 on
- * five tiles and 170 on three, and not one of the eight is in the range the
- * fountain's own texinfo belongs to (its frames are tiles 2417..2423 and
- * 2665, which carry 171..177 and 236).
+ * seven. ANDREA's pages 149..153 and 170 are on tiles no water face names:
+ * ANDREA1's .TEX puts 149..153 on five tiles and 170 on three, and none of
+ * them is in the fountain's range (its frames are tiles 2417..2423 and 2665,
+ * which carry 171..177 and 236).
  *
- * HOW THE CLASSIC ANIMATION WORKS, because the substitution has to follow it:
+ * How the classic animation works, because the substitution follows it:
  * S_AnimateTextures (specific\output.cpp) does not change which texinfo a
- * face names. Every six game steps it ROTATES THE CONTENTS of the texinfos in
- * a range - textinfo[range[0]] = textinfo[range[1]] all the way along and the
- * first one round to the end. So the face keeps its number and the TILE it
- * shows walks along the range. What identifies the tile that is on screen
- * right now is therefore the CONTENT of its texinfo - its page and its own uv
- * corner - and that is what is matched below. The values are copied whole by
- * that rotation, so the comparison is on the same bits that were written at
- * load time; nothing is recomputed and nothing rounds.
+ * face names. Every six game steps it rotates the contents of the texinfos
+ * in a range - textinfo[range[0]] = textinfo[range[1]] all the way along and
+ * the first one round to the end. So the face keeps its number and the tile
+ * it shows walks along the range. The tile on screen right now is known by
+ * the content of its texinfo - its page and its own uv corner - and that is
+ * what is matched below. The rotation copies the values whole, so the
+ * comparison is on the bits written at load time; nothing rounds.
  *
- * WHAT AN HD PAGE IS: not a repaint of the tile but of the whole 64 by 64
- * CELL the tile sits in, at eight times the size (hd_scan.h has the
- * measurement). So the classic u of 0..1 over a 256 page becomes u * 4 minus
- * the cell's own column, and the tile lands where it belongs inside the 512
- * page. A tile that reaches ACROSS a cell edge would land outside it, so
- * those are dropped and keep the classic picture - 441 tiles in TR4 and TR5
- * are of that kind and none of them turned up in a water range here.
+ * An HD page is not a repaint of the tile but of the whole 64 by 64 cell the
+ * tile sits in, at eight times the size (hd_scan.h has the measurement). So
+ * the classic u of 0..1 over a 256 page becomes u * 4 minus the cell's own
+ * column, and the tile lands where it belongs inside the 512 page. A tile
+ * that reaches across a cell edge would land outside it, so those keep the
+ * classic picture - 441 tiles in TR4 and TR5 are of that kind and none of
+ * them is in a water range here.
  *
- * HOW IT IS DRAWN: through the classic path exactly as before. The face keeps
- * its light, its shimmer, its sort and its blend; the only thing that changes
- * is which texture the bucket binds and the four coordinates on it. The HD
- * page is borrowed into the classic Textures[] array ABOVE nTextures - never
- * by raising that count, because the font, the sky and the bar sprites are
- * addressed as nTextures minus a small number and every one of them would
- * move (specific\specificfx.cpp says so in the same words) - and the
- * reference is given back at the next level build, by POINTER and not by slot
- * number, because the array has been refilled for another level by then
- * (ReleaseWaterFramePages says how, and why the difference matters).
+ * It is drawn through the classic path as before: the face keeps its light,
+ * shimmer, sort and blend; only the texture the bucket binds and the four
+ * coordinates change. The HD page is borrowed into the classic Textures[]
+ * array above nTextures - never by raising that count, because the font, the
+ * sky and the bar sprites are addressed as nTextures minus a small number
+ * and would all move (specific\specificfx.cpp) - and the reference is given
+ * back at the next level build, by pointer and not by slot number, because
+ * the array has been refilled for another level by then (see
+ * ReleaseWaterFramePages).
  *
  * Nothing here runs with hd_enable off: the water face list is empty then,
  * and this function returns at its first line. */
@@ -1449,7 +1377,7 @@ struct HDWaterFrame
 // ceiling the reader is given and it is not a limit anything reaches.
 #define HD_TEX_MAX_TILES 8192
 
-/* ONE BORROWED PAGE: the slot in Textures[] and the reference that was put
+/* One borrowed page: the slot in Textures[] and the reference that was put
  * into it. Both, and not the slot alone - see ReleaseWaterFramePages. */
 struct HDBorrowedPage
 {
@@ -1464,20 +1392,19 @@ static std::vector<HDBorrowedPage> g_water_borrowed;
  * Direct3D objects, so it belongs beside HDObjectRelease and never in
  * HDLevelUnload - see the note there.
  *
- * AND THE SLOT NUMBER ALONE IS NOT ENOUGH TO GIVE ONE BACK (#123, fix round
- * N, the audit of that round). The pages are borrowed at the CURRENT level's
- * nTextures, and by the time this runs the level has changed under them:
- * FreeLevel calls FreeTextures, which walks 0..nTextures-1 of the OLD level
- * (specific\texture.cpp) and so does not touch a slot above it; then
- * nTextures goes back to 1 and LoadTextures fills Textures[1..] for the NEW
- * level (specific\file.cpp). Where the new level has more pages than the old
- * one, the slots this list names are by then the NEW level's own classic
- * pages - measured, JOBY4 has 13 and borrows 13..20 while JOBY5 has 19 and
- * puts its own pages in 1..18, so six of them would be released and NULLed
- * the moment the next level is built; and with the randomizer permuting the
- * order, every such pairing is reachable.
+ * The slot number alone is not enough to give one back. The pages are
+ * borrowed at the current level's nTextures, and by the time this runs the
+ * level has changed under them: FreeLevel calls FreeTextures, which walks
+ * 0..nTextures-1 of the old level (specific\texture.cpp) and does not touch a
+ * slot above it; then nTextures goes back to 1 and LoadTextures fills
+ * Textures[1..] for the new level (specific\file.cpp). Where the new level
+ * has more pages than the old one, the slots this list names are by then the
+ * new level's own classic pages - JOBY4 has 13 and borrows 13..20 while
+ * JOBY5 puts its own pages in 1..18, so six of them would be released and
+ * NULLed; with the randomizer permuting the order, every such pairing is
+ * reachable.
  *
- * So the reference is given back by POINTER, which is always ours, and the
+ * So the reference is given back by pointer, which is always ours, and the
  * slot is cleared only while it still holds that same pointer. A slot the
  * next level has taken over is left exactly as that level wrote it. */
 static void ReleaseWaterFramePages()
@@ -1490,8 +1417,8 @@ static void ReleaseWaterFramePages()
 		const int at = g_water_borrowed[i].at;
 		IDirect3DTexture9* tex = g_water_borrowed[i].tex;
 
-		// The slot first, and only while it is still the one we wrote - the
-		// comparison happens before the Release so that it is never made
+		// The slot first, and only while it still holds the borrowed
+		// pointer - compared before the Release so that it is never compared
 		// against a pointer whose object has just gone.
 		if (at > 0 && at < 256)
 		{
@@ -1533,7 +1460,7 @@ static void BuildWaterFrames()
 	if (!g_water_face_total || !aranges || !textinfo)
 		return;
 
-	/* 1. THE TEXINFOS THE RESTORED FACES NAME. The same walk InsertRoomWater
+	/* 1. The texinfos the restored faces name. The same walk InsertRoomWater
 	 * makes, over the same faces, so a face that is not drawn cannot ask for
 	 * a page. */
 	std::vector<int> want;
@@ -1572,9 +1499,9 @@ static void BuildWaterFrames()
 	if (want.empty())
 		return;
 
-	/* 2. THE .TEX TABLE. A randomized level carries more texinfos than the
-	 * table has entries - the randomizer only ever APPENDS them, which is
-	 * measured: JOBY2 vanilla has 2,820 texinfos and its table 2,820, and
+	/* 2. The .TEX table. A randomized level carries more texinfos than the
+	 * table has entries - the randomizer only ever appends them: JOBY2
+	 * vanilla has 2,820 texinfos and its table 2,820, and
 	 * the same level out of a run has 4,998 with the first 2,820 unmoved. So
 	 * a tile past the end of the table simply has no HD picture. */
 	std::vector<unsigned short> hd((size_t)HD_TEX_MAX_TILES, (unsigned short)0xFFFF);
@@ -1588,12 +1515,12 @@ static void BuildWaterFrames()
 		return;
 	}
 
-	/* 3. THE RANGES THAT CARRY ONE OF THOSE TEXINFOS. The walk is
+	/* 3. The ranges that carry one of those texinfos. The walk is
 	 * S_AnimateTextures' own: one short with the range count, then per range
-	 * one short with the number of frames MINUS ONE and that many plus one
+	 * one short with the number of frames minus one and that many plus one
 	 * texinfo numbers.
 	 *
-	 * The UV-ROTATE ranges are left out. Those are the level's waterfalls,
+	 * The UV-rotate ranges are left out. Those are the level's waterfalls,
 	 * and they do not rotate their contents at all - the engine scrolls
 	 * their v instead, once per frame (S_AnimateTextures again), so the tile
 	 * in such a texinfo stays put while its v walks out of the cell the HD
@@ -1654,13 +1581,12 @@ static void BuildWaterFrames()
 			 * inside it: u is 0..1 over the classic page, which is four
 			 * cells across, and the corner that reaches furthest decides.
 			 *
-			 * THREE CORNERS FOR A TRIANGLE. Bit 15 of the flag word says
-			 * triangle, and then the fourth pair is not a corner at all -
-			 * AdjustUV adjusts three of them and the draw reads three
-			 * (specific\file.cpp). Measured with the offline twin: counting
-			 * the fourth turns 127 of JOBY2's 382 tiles into cell crossers
-			 * that are nothing of the kind, and 27 remain, which is the
-			 * order TRForge measured over the two games. */
+			 * Three corners for a triangle: bit 15 of the flag word says
+			 * triangle, and then the fourth pair is not a corner - AdjustUV
+			 * adjusts three and the draw reads three (specific\file.cpp).
+			 * Measured with the offline twin: counting the fourth turns 127
+			 * of JOBY2's 382 tiles into false cell crossers; without it 27
+			 * remain, the same order TRForge measured over the two games. */
 			const int corners = (tex->flag & 0x8000) ? 2 : 3;
 			float u0 = tex->u1, u1 = tex->u1, v0 = tex->v1, v1 = tex->v1;
 			const float us[3] = { tex->u2, tex->u3, tex->u4 };
@@ -1727,9 +1653,8 @@ static void BuildWaterFrames()
 		return;
 	}
 
-	/* 4. THE PAGES THEMSELVES, appended to the cache the rooms filled - one
-	 * texture per page for the whole level, exactly as the models are added
-	 * (stage S3-1). */
+	/* 4. The pages themselves, appended to the cache the rooms filled - one
+	 * texture per page for the whole level, as the models are added. */
 	HDPageCacheStats stats;
 	const char* why = "";
 
@@ -1741,12 +1666,12 @@ static void BuildWaterFrames()
 		return;
 	}
 
-	/* 5. AND BORROWED INTO THE CLASSIC TEXTURE ARRAY, above nTextures. The
-	 * count is NOT raised: game\text.cpp reads the font as nTextures - 2,
+	/* 5. Borrowed into the classic texture array, above nTextures. The
+	 * count is not raised: game\text.cpp reads the font as nTextures - 2,
 	 * drawbars.cpp the sky as nTextures - 1 and specificfx.cpp the menu
 	 * pages as nTextures - 4 and - 5, and every one of them would move.
-	 * Textures[] holds 256 entries; measured from the .TRC headers, a VANILLA
-	 * level uses 10 to 22 of them and a RANDOMIZED one - the randomizer
+	 * Textures[] holds 256 entries; measured from the .TRC headers, a vanilla
+	 * level uses 10 to 22 of them and a randomized one - the randomizer
 	 * appends pages - 10 to 102, the worst being ANDY1 out of a run. So the
 	 * eight or nine pages of a water animation fit with room to spare either
 	 * way, and where they would not, the water keeps its classic tile. */
@@ -1816,7 +1741,7 @@ static void BuildWaterFrames()
 		(int)nTextures);
 }
 
-/* THE HD FRAME OF ONE WATER FACE, or false for "draw it classically".
+/* The HD frame of one water face, or false for "draw it classically".
  *
  * `tex` is the texinfo the face names, with whatever content the classic
  * rotation has left in it this moment; `out` comes back as the same record
@@ -1855,20 +1780,18 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out)
 	return false;
 }
 
-/* ---------------------------------------------- the statics (R3b) ------- */
+/* ------------------------------------------------------- the statics --- */
 
-/* THE TWO STATIC MESH TABLES OF AN HD LEVEL (#123, fix round R3b).
+/* The two static mesh tables of an HD level.
  *
- * Since stage S1-2 an HD room's whole MESH_INFO list is suppressed, because
- * the remaster bakes the static meshes into the room's art. Fix round B found
- * the two holes in that rule and left both named:
+ * An HD room's whole MESH_INFO list is suppressed, because the remaster bakes
+ * the static meshes into the room's art. That rule has two holes:
  *
- *   - 21 statics of ANDREA1 (rooms 121 and 221) sit in NO .TRG group at all.
+ *   - 21 statics of ANDREA1 (rooms 121 and 221) sit in no .TRG group at all.
  *     The room seam takes them away and puts nothing in their place, so they
- *     are simply gone from the level.
- *   - a static the game destroys at run time is gone from the classic list and
- *     goes on standing in the baked art. That is the player's "Static mashes
- *     sind nicht zerstoerbar".
+ *     would be gone from the level.
+ *   - a static the game destroys at run time is gone from the classic list
+ *     but goes on standing in the baked art, so it could not be destroyed.
  *
  * Both are answered here, once per level, against the .TRG's own geometry:
  *
@@ -1879,7 +1802,7 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out)
  *                     material carries bit 15 - paired with the classic
  *                     MESH_INFO standing inside their box. The engine clears
  *                     that mesh's Flags bit 0 when Lara shoots a static of
- *                     slot 50 to 57 (control.cpp:1935), and the piece goes
+ *                     slot 50 to 57 (control.cpp), and the piece goes
  *                     with it.
  *
  * The box of a static is its own visibility box (STATIC_INFO x_minp..z_maxp)
@@ -1935,76 +1858,63 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
 	maxs[1] = (float)(mesh->y - r->y + s->y_maxp);
 }
 
-/* WHOSE ART IS STANDING INSIDE WHOSE ROOM (#123, fix round T, T1; rewritten
- * in fix round T2, T2-2).
+/* Whose art stands inside whose room.
  *
- * WHAT THE WINDOW IS FOR, WHICH HAS NOT CHANGED. Rooms that stand INSIDE one
- * another. ANDREA1's 53 (an air shaft) has most of its art inside room 207,
- * with no portal between the two; from inside 207 that art comes through the
- * wall, and the depth buffer has nothing to say about it because both rooms
- * really are at that distance. The portal window - the rectangle the classic
- * walk left in `r->left .. r->bottom`, used as a scissor - is what hides it.
+ * Some rooms stand inside one another. ANDREA1's 53 (an air shaft) has most
+ * of its art inside room 207, with no portal between the two; from inside
+ * 207 that art comes through the wall, and the depth buffer cannot hide it
+ * because both rooms really are at that distance. The portal window - the
+ * rectangle the classic walk left in `r->left .. r->bottom`, used as a
+ * scissor - hides it.
  *
- * WHAT GROUP M GOT WRONG: it gave that window to EVERY HD room. A scissor is
- * strictly stricter than the classic clip it was copied from - the classic
- * path drops a polygon only when EVERY corner of it lies beyond one edge of
- * the window (specific\polyinsert.cpp:1213) and otherwise draws it whole,
- * while a scissor cuts it at the pixel - so the remaster's art near a doorway
- * came out sliced. The play test photographed a vertical strip of sky down
- * the edge of a brick wall at the Piazza dell'Opera.
+ * The window must not go to every HD room. A scissor is stricter than the
+ * classic clip: the classic path drops a polygon only when every corner lies
+ * beyond one edge of the window (specific\polyinsert.cpp) and otherwise draws
+ * it whole, while a scissor cuts it at the pixel - the remaster's art near a
+ * doorway comes out sliced (a vertical strip of sky down the edge of a brick
+ * wall at the Piazza dell'Opera).
  *
- * WHAT FIX ROUND T GOT HALF RIGHT: it measured which pairs of rooms really do
- * stand inside one another and left every other room alone. But it gave the
- * window to BOTH partners of a pair, and to the whole of each partner's art.
- * The play test of 2026-09-08 photographed what THAT costs: in ANDREA2's
- * courtyard rooms 134 (the ground, with the palm and the doorways) and 203
- * (the colonnade above it) are both HOLDERS - 134 holds art of 143, 203 holds
- * art of 248 - so both were scissored, and their two rectangles meet along
- * the courtyard's own room boundary. A BLACK BAND straight across the
- * picture, cutting the palm's trunk and the door lintels in half.
+ * Nor to both partners of a pair, whole: in ANDREA2's courtyard rooms 134
+ * (the ground, with the palm and the doorways) and 203 (the colonnade above
+ * it) are both holders - 134 holds art of 143, 203 holds art of 248 - and two
+ * scissored rectangles meeting along the courtyard's room boundary cut a
+ * black band across the picture, through the palm's trunk and the lintels.
  *
- * THE RULE NOW, AND IT IS A RULE ABOUT TRIANGLES:
+ * So the rule is about triangles:
  *
- *   a triangle of room b is WINDOWED when its centroid stands inside the
+ *   a triangle of room b is windowed when its centroid stands inside the
  *   inside of some other room a - and nothing else in the game ever is.
  *
- * The holder gets no window (nothing of ITS art is out of place). The
- * intruder gets one only for the triangles that are really standing in the
- * other room; the rest of its art, and all of its overhang, draws over the
- * whole screen like everything else.
+ * The holder gets no window (none of its art is out of place). The intruder
+ * gets one only for the triangles really standing in the other room; the
+ * rest of its art, overhang included, draws over the whole screen.
  *
- * WHAT COUNTS AS "INSIDE ROOM a", and every part of it was measured before it
- * was written:
+ * What counts as "inside room a", every part measured:
  *
- *   - the box is TR5's own (game\draw.cpp:2248-2253, the lines that ask
- *     whether an item fits wholly inside its room): x from r->x + 1024 over
- *     y_size sectors, z from r->z + 1024 over x_size, y from maxceiling to
- *     minfloor.
- *   - AND ONE SECTOR FURTHER IN. A room's border ring is one sector thick, so
- *     two rooms that merely share a wall reach into each other by
- *     construction - ANDREA1's 57 and 197 at the Piazza corner do exactly
- *     that with 60 cells of wall art. Round T measured the difference: with
- *     the wall's own sector counted ANDREA1 has 78 overlapping pairs, without
- *     it one.
- *   - not a neighbour. A room seen through a doorway reaches into the room it
- *     opens on, and that art is seen through the opening it belongs to. The
- *     portal list and the floor data's vertical links say who is next door.
+ *   - the box is TR5's own (game\draw.cpp, the lines that ask whether an
+ *     item fits wholly inside its room): x from r->x + 1024 over y_size
+ *     sectors, z from r->z + 1024 over x_size, y from maxceiling to minfloor.
+ *   - and one sector further in. A room's border ring is one sector thick,
+ *     so two rooms that merely share a wall reach into each other by
+ *     construction - ANDREA1's 57 and 197 at the Piazza corner do that with
+ *     60 cells of wall art. With the wall's own sector counted ANDREA1 has 78
+ *     overlapping pairs, without it one.
+ *   - not a neighbour. A room seen through a doorway reaches into the room
+ *     it opens on, and that art is seen through the opening it belongs to.
+ *     The portal list and the floor data's vertical links say who is next
+ *     door.
  *   - not a flipmap twin, which is the same room at two moments.
- *   - and the CENTROID, not a cell. Round T asked the question of the group's
- *     256-unit occupancy cells, and that is where the engine and TrgProbe
- *     disagreed on the play test's own log: the engine counted a cell that
- *     merely TOUCHED the box (`p + 255 < mins` is the reject in
- *     HDRenderGroupCellsIn) while the tool counted a cell whose own corner
- *     lay inside it. One 256-unit ring of difference, and in ANDREA1's air
- *     shaft it is 91 cells against 45 and four pairs against one. A centroid
- *     is a point; the two agree on it exactly.
+ *   - and the centroid, not a 256-unit occupancy cell. A cell test depends
+ *     on whether a cell that merely touches the box counts (`p + 255 < mins`
+ *     is the reject in HDRenderGroupCellsIn) or only one whose corner lies
+ *     inside - in ANDREA1's air shaft 91 cells against 45 and four pairs
+ *     against one. A centroid is a point; engine and TrgProbe agree on it
+ *     exactly.
  *
- * NO COUNT THRESHOLD, unlike round T's sixteen cells. That floor existed
- * because the answer was all-or-nothing for a whole room; a single stray
- * triangle must not scissor a facade. Now the answer IS the triangle, so a
- * stray one costs a stray one.
+ * No count threshold: the answer is per triangle, so a stray triangle costs
+ * only itself and cannot scissor a facade.
  *
- * IT RUNS BEFORE THE BUILD, beside BuildRoomBoxes, because the renderer tags
+ * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the
  * classic level - room boxes, portals, floor links - so TrgProbe -roomspace
  * answers with the very same list out of the .TRC and the .TRG. */
@@ -2086,13 +1996,13 @@ static void BuildRoomIntrusions()
 				room[b].minfloor <= ra->maxceiling)
 				continue;
 
-			/* a's INSIDE, one sector in from its border ring, put into b's
+			/* a's inside, one sector in from its border ring, put into b's
 			 * frame - the .TRG's vertices are room local and the two rooms
 			 * have different origins. y is world units in both.
 			 *
 			 * Group b is room b: this runs at level build, before any flip
-			 * has swapped a pair of ROOM_INFO records, which is the same
-			 * argument BuildStaticTables makes for its own query. */
+			 * has swapped a pair of ROOM_INFO records, as in
+			 * BuildStaticTables. */
 			HDIntrusion box;
 
 			box.group = b;
@@ -2118,15 +2028,14 @@ static void BuildRoomIntrusions()
 		HDRenderSetIntrusions(0, 0);
 }
 
-/* AND WHAT THE BUILD MADE OF IT (#123, fix round T2, T2-2). Run after
- * HDRenderLevelBegin, because the triangles are tagged while the index buffer
- * is filled and the counts do not exist before that.
+/* What the build made of the intrusions. Run after HDRenderLevelBegin,
+ * because the triangles are tagged while the index buffer is filled and the
+ * counts do not exist before that.
  *
- * THE FLAG IS PER GROUP AND IS ASKED OF THE GROUP. Round T kept it per ROOM
- * and HDFrameRoom read it by room index - but HDFrameFlip swaps which group
- * draws which room, so after a flipmap a windowed room's art could be drawn
- * with no window at all and its twin's art cut to a rectangle that was never
- * measured for it. The art carries the property, like g_group_hd. */
+ * The flag is per group and asked of the group: HDFlipRoom swaps which group
+ * draws which room, and a per-room flag would, after a flipmap, draw a
+ * windowed room's art with no window and cut its twin's art to a rectangle
+ * never measured for it. The art carries the property, like g_group_hd. */
 static void ReportRoomIntrusions()
 {
 	int pairs = 0;
@@ -2170,15 +2079,15 @@ static void ReportRoomIntrusions()
 	g_intrusions.clear();
 }
 
-/* THE OPENINGS THE RUN MADE, FOR THE RENDERER (#123, fix round Z).
+/* The openings the randomizer run made, for the renderer.
  *
- * The sidecar names them in WORLD units, one box per opening, and says
- * nothing about rooms - deliberately, because the art that shuts a doorway is
- * not always the art of the two rooms it joins. Fix round T measured that the
- * remaster's rooms reach into each other by construction: a wall's relief, a
- * corner pier, a doorway's reveal all stand in the neighbour's space, and
- * ANDREA2's courtyard has whole facades of one room drawn inside another. So
- * EVERY group is asked about EVERY box, and the triangle test decides.
+ * The sidecar names them in world units, one box per opening, and says
+ * nothing about rooms, because the art that shuts a doorway is not always
+ * the art of the two rooms it joins: the remaster's rooms reach into each
+ * other by construction - a wall's relief, a corner pier, a doorway's reveal
+ * stand in the neighbour's space, and ANDREA2's courtyard has whole facades
+ * of one room drawn inside another. So every group is asked about every box,
+ * and the triangle test decides.
  *
  * One entry per (group, box) pair, in the group's own frame: the .TRG's
  * vertices are room local in x and z and world in y, so the room's origin
@@ -2186,15 +2095,14 @@ static void ReportRoomIntrusions()
  * the same three lines BuildRoomBoxes and BuildRoomIntrusions use, and every
  * TR5 room has y 0 anyway (measured over the fifteen files).
  *
- * No pre-filter by the room's own box, and that is on purpose. A filter is a
- * second rule to get wrong, it would have to guess how far a group's art may
- * stand outside its room, and it would buy nothing measurable: the list is
- * rooms x boxes entries of 32 bytes - ANDY3 with the user's glitchless list
- * is 211 x 2 - and the triangle test runs once per triangle per box at level
- * build, never per frame.
+ * No pre-filter by the room's own box: it would be a second rule that has to
+ * guess how far a group's art may stand outside its room, and it would buy
+ * nothing measurable - the list is rooms x boxes entries of 32 bytes (ANDY3
+ * with the glitchless secret list is 211 x 2), and the triangle test runs
+ * once per triangle per box at level build, never per frame.
  *
- * Group i is room i while this runs: no flip has happened yet, which is the
- * same argument BuildRoomIntrusions and BuildStaticTables make. */
+ * Group i is room i while this runs: no flip has happened yet, as in
+ * BuildRoomIntrusions and BuildStaticTables. */
 static std::vector<HDCut> g_cuts;
 
 static void BuildRoomCuts()
@@ -2237,16 +2145,14 @@ static void BuildRoomCuts()
 		HDRenderSetCuts(0, 0);
 }
 
-/* AND WHAT THE BUILD MADE OF IT (#123, fix round Z). Run after
- * HDRenderLevelBegin for the same reason ReportRoomIntrusions is: the
- * triangles are tested while the index buffer is filled and the counts do not
- * exist before that.
+/* What the build made of the openings. Run after HDRenderLevelBegin, as
+ * ReportRoomIntrusions is: the triangles are tested while the index buffer is
+ * filled and the counts do not exist before that.
  *
- * ONE LINE PER BOX, naming the rooms whose art it took and how much of it,
- * and one line for the level. A box that caught nothing gets a line too -
- * that is the failure this round has to be able to see, an opening the
- * remaster's art never covered or a box in the wrong place, and a silent
- * zero would look exactly like a doorway that was already open. */
+ * One line per box, naming the rooms whose art it took and how much, and one
+ * line for the level. A box that caught nothing gets a line too - an opening
+ * the remaster's art never covered, or a box in the wrong place - because a
+ * silent zero would look like a doorway that was already open. */
 static void ReportRoomCuts()
 {
 	const int boxes = HDMarkersCutCount();
@@ -2339,20 +2245,18 @@ static void BuildStaticTables()
 
 			StaticBox(mesh, info, mins, maxs);
 
-			/* 1. Does the art really COVER this static, or does its box
+			/* 1. Does the art really cover this static, or does its box
 			 * merely catch a corner of something else?
 			 *
-			 * FIX ROUND T (T4). Round R3b asked "is there any HD geometry
-			 * here at all", and that turned out to be too weak a reason to
-			 * take a static away. ANDREA2's courtyard palm is TWO statics -
+			 * "Is there any HD geometry here at all" is too weak a reason to
+			 * take a static away. ANDREA2's courtyard palm is two statics -
 			 * the trunk (slot 8) in the ground room and the crown (slot 9)
-			 * in the room above - and the crown's box catches FOUR cells of
-			 * 768, which is the wall behind it and not a palm: the crown was
-			 * suppressed and the .TRG had nothing to put in its place, so
-			 * the play test saw a trunk with no fronds. The same level's
-			 * room 162 crown catches 380 of 768 and IS in the art.
+			 * in the room above - and the crown's box catches four cells of
+			 * 768, which is the wall behind it: suppressing the crown would
+			 * leave a trunk with no fronds. The same level's room 162 crown
+			 * catches 380 of 768 and is in the art.
 			 *
-			 * So the question is how MUCH, against the static's own box.
+			 * So the question is how much, against the static's own box.
 			 * Measured over the fifteen files and all 2,601 statics, the
 			 * coverage falls into 271 at nothing at all, 44 between nothing
 			 * and a twentieth, and 2,286 above a twentieth - a gap the
@@ -2385,7 +2289,7 @@ static void BuildStaticTables()
 
 			/* 2. And if the engine can destroy it, which piece of the art is
 			 * it? Slots 50 to 57 are the shatterable ones - the same test
-			 * control.cpp:1928 makes before it shatters one. */
+			 * control.cpp makes before it shatters one. */
 			if (mesh->static_number < 50 || mesh->static_number >= 58)
 				continue;
 
@@ -2456,7 +2360,7 @@ static void UpdateDestructibles()
 	}
 }
 
-/* WHAT THE WHOLE FRAME SHARES. Every one of these is the engine's own global,
+/* What the whole frame shares. Every one of these is the engine's own global,
  * read where the classic path reads it: the fog bulb list that draw.cpp built
  * behind `if (tomb5.fog)` - so with fog off the count is 0 and the HD rooms
  * lose their bulbs at exactly the same moment the classic ones do - the
@@ -2475,12 +2379,12 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	out.bulbs = bulbs;
 	out.bulbCount = 0;
 
-	// Stage S5. The clock is stepped once per frame, here, because this is
-	// the one function the frame path cannot skip.
+	// The clock is stepped once per frame, here, because this is the one
+	// function the frame path cannot skip.
 	AdvanceClock();
 	out.clock = (float)g_clock;
 	out.motion = tomb5.hd_motion ? 1 : 0;
-	out.reflect = tomb5.hd_reflect ? 1 : 0;		// R3b
+	out.reflect = tomb5.hd_reflect ? 1 : 0;
 
 	int offered = 0;
 
@@ -2521,15 +2425,15 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	}
 }
 
-/* WHAT ONE ROOM ADDS. The dynamic lights are culled against the room's own
- * bounding box with the very test aBuildRoomletLights uses on a roomlet's
- * (drawroom.cpp:967-969) - x and z only, as there. A room is bigger than a
+/* What one room adds. The dynamic lights are culled against the room's own
+ * bounding box with the test aBuildRoomletLights uses on a roomlet's
+ * (drawroom.cpp) - x and z only, as there. A room is bigger than a
  * roomlet, so this lets a light through that the classic path would have
  * dropped for one roomlet and kept for the next; the falloff test inside the
  * shader is a real distance test and throws it out again, so the pixel is the
  * same and only the constant upload is one longer.
  *
- * The shimmer branch of drawroom.cpp:451-475 is a decision about the ROOM,
+ * The shimmer branch of drawroom.cpp is a decision about the room,
  * and it is taken here, per frame, because r->flags can change while a level
  * runs (a room that floods). What the shader gets is which of the three baked
  * marks to look at. All three selectors are zero while tomb5.shimmer is off -
@@ -2571,8 +2475,8 @@ static void FillRoomLighting(int roomIndex, int group, HDRoomLighting& out,
 		}
 	}
 
-	/* The GROUP's box, not the room's number - after a flip the two are
-	 * different rooms of the same pair (A1). */
+	/* The group's box, not the room's number - after a flip the two are
+	 * different rooms of the same pair. */
 	if (!HDRenderGroupBounds(group, mins, maxs))
 		return;
 
@@ -2629,8 +2533,8 @@ static void FillRoomLighting(int roomIndex, int group, HDRoomLighting& out,
 bool HDEnabled()
 {
 	// The guard. With hd_enable off nothing below this line ever runs, no
-	// Remaster is looked for, no file is opened, and the frame is what it was
-	// before #123 existed - byte for byte.
+	// Remaster is looked for, no file is opened, and the frame is the classic
+	// one, byte for byte.
 	if (!tomb5.hd_enable)
 		return false;
 
@@ -2647,23 +2551,22 @@ void HDLevelLoad(const char* wadName)
 	g_scan_vertices = 0;
 	g_scan_indices = 0;
 
-	/* The name for the frame clock, taken BEFORE the HD guard and kept in its
+	/* The name for the frame clock, taken before the HD guard and kept in its
 	 * own buffer: FPSLOG has nothing to do with hd_enable and has to name the
 	 * level either way. This is the load thread, so nobody reads it here -
 	 * HDLevelBuild copies it across on the main thread once that thread has
 	 * joined (specific\file.cpp, S_LoadLevelFile). */
 	LevelStem(wadName, g_log_stem, sizeof(g_log_stem));
 
-	/* THE SIDECAR IS READ BEFORE THE HD GATE (#153, round M3, the fix round),
-	 * because one of its lines is not an HD fact at all.
+	/* The sidecar is read before the HD gate, because one of its lines is not
+	 * an HD fact.
 	 *
 	 * `sfximport` names the sound ids the run imported from another game, and
-	 * the thing that acts on it is the HQ bank bridge - which is deliberately
-	 * OUTSIDE this gate (round M1: "sound does not care whether hd_enable is
-	 * on", specific\hqsfx.cpp). With the load below the gate the refusal was
-	 * inert in exactly the build the engine ships, hd_enable off, and the
-	 * vulture went on dying in English there while every tool said it was
-	 * fixed - tools call HDMarkersLoad unconditionally and could not see it.
+	 * the HQ bank bridge that acts on it is deliberately outside this gate
+	 * (sound does not depend on hd_enable, specific\hqsfx.cpp). Read below the
+	 * gate, the list would be missing with hd_enable off - the default - and
+	 * an imported sound would be replaced by the wrong HQ sample (the
+	 * vulture's death cry in English).
 	 *
 	 * Reading it here costs one small text file and changes nothing else: the
 	 * rooms, the cuts and the donors below are read by HD code alone, and
@@ -2688,16 +2591,16 @@ void HDLevelLoad(const char* wadName)
 	if (!g_stem[0])
 		return;
 
-	/* WHAT THE RANDOMIZER CHANGED (#123, stage S7-2), before anything else is
-	 * measured: the sidecar names the rooms whose shape no longer matches the
-	 * Remaster's art and the slots whose model came out of another file, and
-	 * both decide what the rest of this load is allowed to do.
+	/* What the randomizer changed, before anything else is measured: the
+	 * sidecar names the rooms whose shape no longer matches the Remaster's art
+	 * and the slots whose model came out of another file, and both decide what
+	 * the rest of this load may do.
 	 *
 	 * The path is the .TRC's own with .hdm in its place, so the file is found
-	 * wherever the level is - a folder the user moved, a data folder beside a
-	 * second installation. A missing file is the normal case and not a fault;
-	 * an unreadable one falls back to the same answer and says so. It has
-	 * already been read, above the gate - see the note there. */
+	 * wherever the level is - a moved folder, a data folder beside a second
+	 * installation. A missing file is the normal case and not a fault; an
+	 * unreadable one falls back to the same answer and says so. It has been
+	 * read above the gate - see the note there. */
 	Log("HDLOG level=%s markers file=%s version=%d rooms=%d cuts=%d donors=%d "
 		"outfit=%d tr3_install=%s%s%s",
 		g_stem, markers ? HDMarkersPath() : "none", HDMarkersVersion(),
@@ -2705,7 +2608,7 @@ void HDLevelLoad(const char* wadName)
 		HDMarkersOutfit(), HDInstallRootTr3()[0] ? "found" : "absent",
 		markers ? "" : " reason=", markers ? "" : HDMarkersError());
 
-	/* data[3] and the sidecar's `outfit` line come out of ONE value in the
+	/* data[3] and the sidecar's `outfit` line come out of one value in the
 	 * randomizer and can only disagree when one of the two halves was written
 	 * by an older run. The header byte wins - it is the one the draw path
 	 * reads, and it is there before a room is loaded - so this is a line in
@@ -2714,15 +2617,11 @@ void HDLevelLoad(const char* wadName)
 		Log("HDLOG level=%s markers MISMATCH data[3]=%d, the sidecar says %d "
 			"- data[3] wins", g_stem, (int)GfHdOutfit, HDMarkersOutfit());
 
-	/* Round M2 briefly had a second way for a level file to name an outfit -
-	 * a `wear <key>` line of the sidecar, rolled by the randomizer - and this
-	 * is where the key and data[3] were read against each other. It is gone
-	 * (the fix round of M2): the extra outfits of the wardrobe scan are the
-	 * PLAYER'S choice and not the run's, so the key lives in the registry and
-	 * hd_laradraw.cpp is the only thing that reads it. A sidecar the M2 build
-	 * wrote still carries the line; it now reaches the log through the
-	 * unknown-line loop below, which is what an engine older than M2 always
-	 * did with it. */
+	/* A sidecar does not name a wardrobe outfit: the extra outfits of the
+	 * wardrobe scan are the player's choice and not the run's, so the key
+	 * lives in the registry and hd_laradraw.cpp is the only thing that reads
+	 * it. A `wear <key>` line in an older sidecar reaches the log through the
+	 * unknown-line loop below. */
 
 	for (int i = 0; i < HDMarkersUnknownCount(); i++)
 		Log("HDLOG level=%s markers line this engine has no rule for: %s",
@@ -2731,10 +2630,9 @@ void HDLevelLoad(const char* wadName)
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 		loaded[i] = objects[i].loaded ? 1 : 0;
 
-	// measureBc7 is off from stage S1-2 on: HDLevelBuild decodes every page
-	// for real a moment later and reports what that cost, so decoding them
-	// all a second time here would only make the level load twice as slow to
-	// measure the same thing.
+	// measureBc7 is off: HDLevelBuild decodes every page for real a moment
+	// later and reports what that cost, so decoding them here too would only
+	// make the level load twice as slow to measure the same thing.
 	if (!HDScanLevel(HDInstallRoot(), g_stem, number_rooms, loaded, NUMBER_OBJECTS,
 		false, 1, &stats, &why))
 	{
@@ -2769,35 +2667,30 @@ void HDLevelLoad(const char* wadName)
 
 static void HDLevelBuildHD();
 
-/* THE LEVEL'S HD BUILD, AND THE ONE THING THAT IS NOT PART OF IT (#153, round
- * M3, the review after the fix round).
+/* The level's HD build, and the one thing that is not part of it.
  *
- * The footsteps hang off the HD gate and off nothing else: the bare set is
- * built by HDFeetLevelBuild whenever hd_enable is on - in LoadSamples, on the
- * load thread, long before this - and the body it follows is decided by
- * HDLaraLevelBuild inside this build, on the MAIN thread after file.cpp has
- * joined the load thread. The build below has five ways to give
- * up (no rooms, no device, no page cache, no HD room, no stem), and NONE of
- * them takes the bare set away or takes the F4 row away. Asking the question
- * at the end of that build therefore left a player whose card cannot do shader
- * model 3 - the worst of the five, because it turns the whole session classic
- * while hd_enable stays 1 - with a footstep choice the menu applied inside the
- * level and the next level start silently dropped. It is asked here instead,
- * on every way out of the build and none of them able to skip it.
+ * The footsteps depend on the HD gate and nothing else: the bare set is built
+ * by HDFeetLevelBuild whenever hd_enable is on - in LoadSamples, on the load
+ * thread, long before this - and the body it follows is decided by
+ * HDLaraLevelBuild inside this build, on the main thread after file.cpp has
+ * joined the load thread. The build has five ways to give up (no rooms, no
+ * device, no page cache, no HD room, no stem), and none of them takes the
+ * bare set or the F4 row away. So the footsteps are decided here, on every
+ * way out of the build: decided only at its end, a card without shader model
+ * 3 (which turns the whole session classic while hd_enable stays 1) would
+ * keep whatever footstep choice the menu applied inside the previous level.
  *
- * WHAT IT ANSWERS ON THOSE WAYS OUT is the level's own body and not the
- * player's key, because on them there IS no HD body: HDLaraDrawBuild runs
- * inside HDObjectLevelBuild, which is past all five, so HDLaraDrawOutfit()
- * reads HD_LARA_OUTFIT_NONE and the key is empty. She is wearing Core's
- * outfit, Core's outfit has boots, and the line says exactly that. The point
- * of the fix is that the answer is now GIVEN and written down rather than left
- * to whatever the menu happened to set inside the level before. */
+ * On those ways out the answer is the level's own body and not the chosen
+ * key, because there is no HD body: HDLaraDrawBuild runs inside
+ * HDObjectLevelBuild, past all five, so HDLaraDrawOutfit() reads
+ * HD_LARA_OUTFIT_NONE and the key is empty. She wears Core's outfit, which
+ * has boots, and the log line says so. */
 void HDLevelBuild()
 {
 	HDLevelBuildHD();
 
-	/* Behind the gate, like everything else this round added: with hd_enable
-	 * off there is no bare set, no wardrobe and nothing to say about either. */
+	/* Behind the gate: with hd_enable off there is no bare set, no wardrobe
+	 * and nothing to say about either. */
 	if (HDEnabled())
 		HDOutfitMenuFollowFeet();
 }
@@ -2817,7 +2710,7 @@ static void HDLevelBuildHD()
 	g_matrix_checked = false;
 	g_sky_logged = false;
 	g_water_calls_worst = 0;
-	// GROUP M: the per-level window list is written again for this level.
+	// The per-level window list is written again for this level.
 	g_clip_listed = false;
 	g_clip_line_ever = false;
 	memset(g_group_hd, 0, sizeof(g_group_hd));
@@ -2830,19 +2723,19 @@ static void HDLevelBuildHD()
 	for (int i = 0; i < HD_MAX_ROOMS; i++)
 		g_room_group[i] = (short)i;
 
-	/* THE LEVEL BEFORE THIS ONE, for the two diagnostic counters: its frame
+	/* The level before this one, for the two diagnostic counters: its frame
 	 * clock summary and its one clipped total. Here and not in HDLevelUnload,
 	 * because this is the main thread and the load thread has joined - the
 	 * counters are written by the thread that presents frames, and reading
-	 * them from the load thread while it does would be a race for nothing.
-	 * NOT behind HDEnabled(): FPSLOG counts frames whatever hd_enable says. */
+	 * them from the load thread would be a race. Not behind HDEnabled():
+	 * FPSLOG counts frames whatever hd_enable says. */
 	LevelDiagnosticsEnd();
 	strcpy(g_fps_level, g_log_stem);
 
 	/* The level before this one, released here rather than in HDLevelUnload -
 	 * see the comment there. This is the main thread; that one is not.
 	 *
-	 * The water frames come first and OUTSIDE the group test: the reference
+	 * The water frames come first and outside the group test: the reference
 	 * they hold is on a texture of the cache HDRenderLevelEnd is about to
 	 * empty, so it has to be given back before that, and it has to be given
 	 * back even if the group list has somehow gone without it. The call is a
@@ -2880,14 +2773,14 @@ static void HDLevelBuildHD()
 		Log("HDLOG render init ok");
 	}
 
-	/* THE TEXTURE POLICY OF THIS LEVEL (#123, stage S6), set before anything
-	 * is loaded and in force for the rooms AND for the models and Lara's
-	 * wardrobe that follow them - it is one cache and one budget, not three.
+	/* The texture policy of this level, set before anything is loaded and in
+	 * force for the rooms and for the models and Lara's wardrobe that follow
+	 * them - one cache and one budget, not three.
 	 * The device's own size limit is added inside HDRenderLevelBegin, which
 	 * is the one place that has the caps in hand.
 	 *
-	 * Both settings are registry only and neither is in the options menu:
-	 * they are what a card that cannot hold the art needs, not a taste. */
+	 * Both settings are registry only and not in the options menu: they are
+	 * for a card that cannot hold the art. */
 	{
 		HDPageCachePolicy policy;
 
@@ -2900,11 +2793,10 @@ static void HDLevelBuildHD()
 
 		HDPageCacheConfigure(&policy);
 
-		/* AND WHAT THIS PROCESS HAS LEFT (#164), which the card's own number
-		 * above says nothing about: the pages are about to be made, and the
-		 * room they and the level's outfit changes are measured against is
-		 * the room a 32 bit process has. Once per level build, on the load
-		 * path, where 203 microseconds do not show. */
+		/* And what this process has left, which the card's number says
+		 * nothing about: the pages and the level's outfit changes are
+		 * measured against the room a 32 bit process has. Once per level
+		 * build, on the load path, where 203 microseconds do not show. */
 		HDMemoryRoom room;
 
 		HDMemoryMeasure(&room);
@@ -2931,19 +2823,18 @@ static void HDLevelBuildHD()
 	g_clock = 0.0;
 	g_clock_started = false;
 	BuildWaterMarks();
-	BuildRoomBoxes();		// T1, before the build like the marks
-	BuildRoomIntrusions();		// T2-2, the same contract
-	BuildRoomCuts();		// Z, the same contract again
+	BuildRoomBoxes();		// before the build, like the marks
+	BuildRoomIntrusions();		// the same contract
+	BuildRoomCuts();		// the same contract again
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms,
 		kPagesManaged, DecodeThreads(), &stats, &why))
 	{
 		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
 
-		/* The page cache's own notes BEFORE it is emptied - on the way out
-		 * they are the only place that says which page the card gave up on
-		 * (#123, stage S6). Without this the log names the failure and not
-		 * the cause. */
+		/* The page cache's own notes before it is emptied - on the way out
+		 * they are the only place that says which page the card gave up on.
+		 * Without this the log names the failure and not the cause. */
 		for (int i = 0; i < HDPageCacheNoteCount(); i++)
 			Log("HDLOG level=%s page note: %s", g_stem, HDPageCacheNote(i));
 
@@ -2959,17 +2850,17 @@ static void HDLevelBuildHD()
 	// The marks were only borrowed for the length of that call.
 	HDRenderSetWaterMarks(0, 0);
 	g_water_marks.clear();
-	HDRenderSetRoomBoxes(0, 0);	// T1, the same contract
+	HDRenderSetRoomBoxes(0, 0);	// the same contract
 
-	/* T2-2: what the build made of the intrusion list - which groups carry
-	 * art standing inside another room, and how much. It reads the counts the
+	/* What the build made of the intrusion list - which groups carry art
+	 * standing inside another room, and how much. It reads the counts the
 	 * build left behind and gives the borrowed list back. */
 	ReportRoomIntrusions();
-	// Z: and the same for the openings. Before the room lines below, so the
-	// log reads in the order the build ran.
+	// And the same for the openings. Before the room lines below, so the log
+	// reads in the order the build ran.
 	ReportRoomCuts();
 
-	/* E2: `flooded` is how many of the two shimmer sets no classic corner
+	/* `flooded` is how many of the two shimmer sets no classic corner
 	 * named and the plane answered for - the number that says whether a
 	 * level's water animates over its whole surface or over a sliver of it -
 	 * and `planes_dropped` must stay 0 (see HDRenderStats). */
@@ -2979,19 +2870,18 @@ static void HDLevelBuildHD()
 		stats.markedRoomShimmer, stats.markedFlooded,
 		stats.waterPlanesDropped, HDRenderPixelSlots());
 
-	// Stage S5. Everything that moves, counted out of the .TRG itself:
-	// scroll = material 1 parts and the draw calls they cost, sway =
-	// vertices with a wind weight, flipbook = material 13 parts. Of those,
-	// flipbook_pages is how many run as a four page flipbook (fix round R3b -
-	// their own page plus the three layers their material names, one per
-	// frame time), flipbook_dropped how many kept their own page because the
-	// file's numbers did not resolve, and flipbook_ranges the draw calls the
-	// running ones cost.
-	// cutout_parts (fix round A2) is the opaque parts of materials 6, 7 and
-	// 8 - the ones that draw with the alpha test on. Held against
-	// cutout_pages in the frame line below, the two say whether a page the
-	// alpha measurement calls a cut-out sheet is really used as one.
-	// add_weighted / add_min / add_swinging (fix round R3a) is the additive
+	// Everything that moves, counted out of the .TRG itself: scroll =
+	// material 1 parts and the draw calls they cost, sway = vertices with a
+	// wind weight, flipbook = material 13 parts. Of those, flipbook_pages is
+	// how many run as a four page flipbook (their own page plus the three
+	// layers their material names, one per frame time), flipbook_dropped how
+	// many kept their own page because the file's numbers did not resolve,
+	// and flipbook_ranges the draw calls the running ones cost.
+	// cutout_parts is the opaque parts of materials 6, 7 and 8 - the ones
+	// that draw with the alpha test on. Held against cutout_pages in the
+	// frame line below, the two say whether a page the alpha measurement
+	// calls a cut-out sheet is really used as one.
+	// add_weighted / add_min / add_swinging is the additive
 	// side of the same thing: how many parts the .TRG's own material
 	// parameters dimmed, how far the smallest of them was dimmed, and how
 	// many of them also swing on the clock.
@@ -3007,7 +2897,7 @@ static void HDLevelBuildHD()
 		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts,
 		stats.glossParts, tomb5.hd_reflect ? 1 : 0);
 
-	/* N1: THE STILL WATER SURFACES the .TRG builds itself - material 16.
+	/* The still water surfaces the .TRG builds itself - material 16.
 	 * Counted per part/pass block, which is how TrgProbe -matparts counts
 	 * them, so the two can be held against each other: ANDREA1 1 part /
 	 * 1,460 triangles, ANDREA2 1 / 2,048, ANDY2 2 / 2,384, JOBY3 1 / 128,
@@ -3033,47 +2923,42 @@ static void HDLevelBuildHD()
 	{
 		const int tris = HDRenderGroupTriangles(r, -1);
 		const bool has_group = r < HDRenderGroupCount();
-		/* THE FOURTH WAY A ROOM STAYS CLASSIC (#123, fix round T, T2).
+		/* The fourth way a room stays classic: a hollow group.
 		 *
-		 * A group can have triangles and still draw NOTHING INSIDE ITS OWN
-		 * ROOM. ANDREA2's room 124 - the ground floor of the courtyard with
-		 * the palms - has four, and all four of them stand outside the room
-		 * box; the test below it (`tris` non-zero) called that room HD, the
-		 * classic roomlets were dropped, and what the player saw was a black
-		 * hole where the doorways are. NINE rooms in the whole game answer
-		 * this way to the rule as it ships - with HD_OVERHANG_SLACK in it:
+		 * A group can have triangles and still draw nothing inside its own
+		 * room. ANDREA2's room 124 - the ground floor of the courtyard with
+		 * the palms - has four, and all four stand outside the room box;
+		 * called HD on `tris` alone, its classic roomlets would be dropped
+		 * and a black hole would show where the doorways are. Nine rooms in
+		 * the game are hollow under this rule with HD_OVERHANG_SLACK:
 		 * ANDREA2 124, JOBY2 19 and 21, RICHCUT2 2, 3 and 4, TITLE 70, 101
-		 * and 103. (ANDREA1's room 4 is hollow only with the slack taken
-		 * away: all 216 of its triangles stand within 128 units of the box
-		 * edge, so the shipped rule leaves that room HD - verified with
-		 * `RoomProbe -roombox <classic folder> -window inside`, which draws
-		 * the nine at 0 draw calls and room 4 at 1.)
+		 * and 103. (ANDREA1's room 4 is hollow only without the slack: all
+		 * 216 of its triangles stand within 128 units of the box edge, so it
+		 * stays HD - `RoomProbe -roombox <classic folder> -window inside`
+		 * draws the nine at 0 draw calls and room 4 at 1.)
 		 *
 		 * The classic geometry of such a room is the only geometry there
 		 * is, so it is drawn, exactly as for a room the .TRG never had. */
 		const bool hollow = tris > 0 &&
 			HDRenderGroupOverhangTriangles(r) >= tris;
 
-		/* THE THIRD WAY A ROOM STAYS CLASSIC (#123, stage S7-2, narrowed by
-		 * fix round Z). The first two are the .TRG's own: no group for this
-		 * room, or a group with no triangle in it - which is what a
-		 * Make_Room_Geometry room looks like and needs no marker at all.
-		 * This one is the randomizer's, and since fix round Z it is the
-		 * SMALL half of what the randomizer can do to a room: the run lifted
-		 * it with Move_Room, or built it a surface it never had. Neither
-		 * leaves anything of the remaster's art worth keeping, so the room
-		 * is drawn classic and the classic geometry IS the randomized
-		 * geometry - it is read out of the level file the run wrote.
+		/* The third way a room stays classic: a randomizer marker. The first
+		 * two are the .TRG's own: no group for this room, or a group with no
+		 * triangle in it - which is what a Make_Room_Geometry room looks like
+		 * and needs no marker. This one is the randomizer's: the run lifted
+		 * the room with Move_Room, or built it a surface it never had.
+		 * Neither leaves anything of the remaster's art worth keeping, so the
+		 * room is drawn classic, and the classic geometry is the randomized
+		 * geometry - read out of the level file the run wrote.
 		 *
-		 * The big half - a wall cut open, a window added, a floor or ceiling
-		 * opened - used to end up here too, and that is what the play test of
-		 * 2026-09-11 photographed: ANDY3 with the user's glitchless list
-		 * turned FOUR of 211 rooms classic for two doorways, and the seams
-		 * between HD and classic floors showed the void. Those rooms now
-		 * keep their art and lose only the box round the opening; see
+		 * A wall cut open, a window added, a floor or ceiling opened does not
+		 * turn a room classic: that would cost whole rooms for a doorway
+		 * (four of ANDY3's 211 rooms with the glitchless secret list) and the
+		 * seams between HD and classic floors would show the void. Those
+		 * rooms keep their art and lose only the box round the opening; see
 		 * BuildRoomCuts above. */
 		const bool marked = HDMarkersRoomTouched(r);
-		// Fix round Z: and how much art an opening took out of this room.
+		// And how much art an opening took out of this room.
 		const int cut_tris = HDRenderGroupCutTriangles(r);
 
 		const char* reason = !has_group ? "no_group"
@@ -3084,9 +2969,9 @@ static void HDLevelBuildHD()
 		if (marked && has_group && tris)
 			marked_rooms++;
 
-		/* Per GROUP, and the loop runs over rooms only because group i is
-		 * room i while this runs - no flip has happened yet, and the marker
-		 * that can take a group away is about the ROOM the randomizer
+		/* Per group; the loop runs over rooms only because group i is room i
+		 * while this runs - no flip has happened yet, and the marker that
+		 * can take a group away is about the room the randomizer
 		 * reshaped. A flipped room's alternate is a room of its own with a
 		 * group of its own, so both halves of a pair are decided here. */
 		g_group_hd[r] = (unsigned char)((has_group && tris && !hollow && !marked) ? 1 : 0);
@@ -3112,11 +2997,9 @@ static void HDLevelBuildHD()
 
 	g_level_active = hd_rooms > 0;
 
-	/* THE FLIP PAIRS OF THIS LEVEL (#123, fix round A, A1), one line each and
-	 * only with -log. A pair whose two halves disagree about HD is the one
-	 * that can still show the bug in a milder form: the room turns classic in
-	 * mid-level (or HD in mid-level), which is a picture change nobody asked
-	 * for, so it is named rather than left to be discovered. */
+	/* The flip pairs of this level, one line each and only with -log. A pair
+	 * whose two halves disagree about HD turns a room classic (or HD) in
+	 * mid-level, a visible change, so it is named in the log. */
 	if (gLogEnabled)
 	{
 		int pairs = 0, mixed = 0;
@@ -3145,8 +3028,8 @@ static void HDLevelBuildHD()
 	/* What the sidecar cost this level, in one line: how many rooms it named,
 	 * and how many of those really had HD art to give up. The two differ
 	 * whenever the run reshaped a room the .TRG had nothing for anyway.
-	 * `cuts` is fix round Z's half of it - openings, which cost a box of
-	 * triangles each and no room at all. */
+	 * `cuts` are the openings, which cost a box of triangles each and no
+	 * room at all. */
 	if (HDMarkersPresent())
 		Log("HDLOG level=%s markers version=%d rooms=%d of them classic now=%d "
 			"cuts=%d cut_tris=%d in %d rooms donors=%d outfit=%d",
@@ -3180,11 +3063,10 @@ static void HDLevelBuildHD()
 		stats.pages.threads, (int)(stats.pages.uploadMs + 0.5),
 		(int)(stats.pages.compressMs + 0.5));
 
-	/* THE BUDGET, in the words stage S6 promised: what was allowed, what the
-	 * rooms of this level wanted, and what it cost them to fit. `dropped_mip0`
-	 * is pages that gave up their largest level to the budget; `caps` is
-	 * pages the DEVICE could not hold at full size, which is a different
-	 * thing and not the user's to change. The models and Lara add their own
+	/* The budget: what was allowed, what the rooms of this level wanted, and
+	 * what it cost them to fit. `dropped_mip0` is pages that gave up their
+	 * largest level to the budget; `caps` is pages the device could not hold
+	 * at full size, which no setting changes. The models and Lara add their own
 	 * line to this from hd_object.cpp - one cache, two callers. */
 	Log("HDLOG level=%s rooms budget=%.0f need=%.0f have=%.0f got=%.0f MiB "
 		"dropped_mip0=%d levels=%d caps=%d max_side=%d format=%s oom=%d",
@@ -3203,29 +3085,30 @@ static void HDLevelBuildHD()
 	for (int i = 0; i < HDPageCacheNoteCount(); i++)
 		Log("HDLOG level=%s page note: %s", g_stem, HDPageCacheNote(i));
 
-	/* THE STATIC MESHES. A .TRG room has the level's static meshes baked into
-	 * its art, so DrawStaticObjects must not draw them a second time - that is
-	 * TROne's "double lantern" (game_renderer.cpp:3722-3736, a baked mesh
-	 * pointer passes only while the moveable that claims it is streaming).
+	/* The static meshes. A .TRG room has the level's static meshes baked into
+	 * its art, so DrawStaticObjects must not draw them a second time - the
+	 * "double lantern" TROne guards against (game_renderer.cpp:3722-3736, a
+	 * baked mesh pointer passes only while the moveable that claims it is
+	 * streaming).
 	 *
-	 * Our seam is narrower and the rule with it: we suppress a ROOM's own
-	 * MESH_INFO list, and only for a room that really draws HD. A moveable
-	 * that happens to share a static's MESH_DATA* goes through
+	 * This seam is narrower and the rule with it: a room's own MESH_INFO
+	 * list is suppressed, and only for a room that really draws HD. A
+	 * moveable that shares a static's MESH_DATA* goes through
 	 * DrawAnimatingItem and is never touched, and a room that stayed classic
-	 * keeps every static it had. The exception TROne needs cannot arise here.
+	 * keeps every static it had, so TROne's exception cannot arise here.
 	 *
-	 * What this does NOT solve is a static the game makes disappear at run
-	 * time - a shattered vase is gone from the classic list and still stands
-	 * in the baked art. TROne has the same hole; it belongs to the stage that
-	 * draws objects, not to this one. */
+	 * A static the game removes at run time - a shattered vase - is gone from
+	 * the classic list but still stands in the baked art; the destructible
+	 * pairs of BuildStaticTables hide its piece. BuildStaticTables also finds
+	 * the statics the .TRG does not cover. */
 	BuildStaticTables();
 
-	/* H1: and the water surface the remaster left out - see the long note
-	 * over BuildWaterSurfaces. It has to run after the loop above, because it
-	 * asks per room whether that room draws HD at all. */
+	/* The water surface the remaster left out - see the note over
+	 * BuildWaterSurfaces. After the loop above, because it asks per room
+	 * whether that room draws HD at all. */
 	BuildWaterSurfaces();
 
-	/* N2: and the HD pictures of that water's own animation frames. After
+	/* And the HD pictures of that water's own animation frames. After
 	 * BuildWaterSurfaces, because it asks which faces are really drawn. */
 	BuildWaterFrames();
 
@@ -3242,8 +3125,8 @@ static void HDLevelBuildHD()
 		return;
 	}
 
-	/* THE OBJECTS (#123, stage S3-2), after the rooms and never before them:
-	 * a model's pages are APPENDED to the cache the rooms built, and a page
+	/* The objects, after the rooms and never before them: a model's pages
+	 * are appended to the cache the rooms built, and a page
 	 * slot handed out before that cache exists points nowhere.
 	 *
 	 * They ride on the rooms in one more way. A level whose .TRG is missing
@@ -3251,12 +3134,12 @@ static void HDLevelBuildHD()
 	 * which is the same answer the rooms give and one line to explain. */
 	HDObjectLevelBuild(HDInstallRoot(), g_stem);
 
-	/* THE MARK THE RE-DRESS ALLOWANCE IS MEASURED FROM (#153, round M3):
-	 * what this level's own build left in the page cache. Everything above
-	 * it is what the player's own outfit changes have added. */
+	/* The mark the re-dress allowance is measured from: what this level's own
+	 * build left in the page cache. Everything above it is what outfit
+	 * changes have added. */
 	g_redress_bytes0 = HDPageCacheBytes();
 
-	/* AND THE FIRST ANSWER OF THE RULE (#164), after the mark and after every
+	/* And the rule's first answer, after the mark and after every
 	 * page this level is going to have of its own. The page block is worked
 	 * out here and not per question: the format is the policy's and the side
 	 * is the widest page there is, clamped by what the device said it can
@@ -3283,7 +3166,7 @@ bool HDLevelRedressAllowed()
 	if (!HDEnabled() || !g_level_active)
 		return false;
 
-	/* THE STORED ANSWER (#164) and not a fresh one: this is asked on every
+	/* The stored answer and not a fresh one: this is asked on every
 	 * drawn frame the F4 window is open. What changes it - a level build, a
 	 * completed change, the window opening - asks RefreshRedress itself. */
 	return g_redress_verdict.allowed != 0;
@@ -3311,9 +3194,9 @@ bool HDLevelRedress(const char* why)
 		return false;
 	}
 
-	/* MEASURED AFRESH, AND THIS MEASUREMENT IS THE DECISION (#164). The
-	 * stored answer is what the window has been showing the player; what the
-	 * change itself is allowed by is the room at the moment it is asked for. */
+	/* Measured afresh, and this measurement is the decision. The stored
+	 * answer is what the window has been showing; the change itself is
+	 * decided by the room at the moment it is asked for. */
 	RefreshRedress(why, false);
 
 	if (!g_redress_verdict.allowed)
@@ -3339,27 +3222,25 @@ bool HDLevelRedress(const char* why)
 	const double bytes0 = HDPageCacheBytes();
 	const double avail0 = g_redress_room.availVirtual;
 
-	/* THE SAME TWO CALLS A LEVEL CHANGE MAKES, in the same order and on the
+	/* The same two calls a level change makes, in the same order and on the
 	 * same thread. HDObjectRelease gives the models' vertex and index buffers
-	 * back and NOTHING of the page cache - it never shrinks until
+	 * back and nothing of the page cache - it never shrinks until
 	 * HDPageCacheDestroy, so no slot index another model holds can move,
-	 * which is what makes this safe; HDObjectLevelBuild reads the .MAP again, asks
-	 * hd_laradraw for the wardrobe (which reads the registry key the menu
-	 * has just written) and builds the lot. The ROOMS are not touched: their
-	 * cache is the one the new pages are appended to, exactly as at a level
-	 * build. */
+	 * which makes this safe. HDObjectLevelBuild reads the .MAP again, asks
+	 * hd_laradraw for the wardrobe (which reads the registry key the menu has
+	 * just written) and builds the lot. The rooms are not touched: their
+	 * cache is the one the new pages are appended to, as at a level build. */
 	HDObjectRelease();
 	HDObjectLevelBuild(HDInstallRoot(), g_stem);
 
 	g_redress_count++;
 
-	/* WHAT THIS CHANGE COST THE PROCESS, measured the same way and now
-	 * (#164). The drop in avail_virtual against the pages added is the pool's
-	 * real price in address space, and it is the number that says whether the
-	 * measurement this rule rests on still holds on the user's machine: with
-	 * D3DPOOL_DEFAULT pages it should be a rounding error beside the MiB of
-	 * pages, and if his log ever shows it tracking them, the pages are not in
-	 * the pool this rule was measured for. */
+	/* What this change cost the process, measured the same way. The drop in
+	 * avail_virtual against the pages added is the pool's real price in
+	 * address space, and it shows whether the measurement this rule rests on
+	 * holds on the running machine: with D3DPOOL_DEFAULT pages it is a
+	 * rounding error beside the MiB of pages; if the log shows it tracking
+	 * them, the pages are not in the pool the rule was measured for. */
 	RefreshRedress(why, false);
 
 	Log("HDLOG redress %d (%s) ms=%d pages %d -> %d (+%d), cache %.1f -> "
@@ -3386,14 +3267,14 @@ bool HDLevelRedress(const char* why)
 
 void HDLevelUnload()
 {
-	/* NOT behind HDEnabled(): a level built while HD was on has to come down
-	 * even when the player switched HD off in the options in the meantime.
-	 * Asking the setting here is how a vertex buffer outlives its level.
+	/* Not behind HDEnabled(): a level built while HD was on has to come down
+	 * even when HD was switched off in the options in the meantime; asking
+	 * the setting here would let a vertex buffer outlive its level.
 	 *
-	 * AND NOT A SINGLE DIRECT3D CALL HERE. FreeLevel runs at the top of
-	 * LoadLevel, on the LOAD thread, while the main thread is presenting the
-	 * loading bar - the two-threads-one-device window that froze this game
-	 * twice (specific\file.cpp, the comment at the end of LoadLevel). The
+	 * And not a single Direct3D call here. FreeLevel runs at the top of
+	 * LoadLevel, on the load thread, while the main thread presents the
+	 * loading bar - two threads on one device freeze the game
+	 * (specific\file.cpp, the comment at the end of LoadLevel). The
 	 * objects are released in HDLevelBuild instead, on the thread that owns
 	 * the device, immediately before the next level's are made; and DXClose
 	 * releases them through HDLevelDeviceLost when the device itself goes. */
@@ -3401,12 +3282,12 @@ void HDLevelUnload()
 	g_frame_count = 0;
 	g_room_count = 0;
 	g_stem[0] = 0;
-	/* R3b: the static tables point into THIS level's rooms. */
+	/* The static tables point into this level's rooms. */
 	g_static_classic.clear();
 	g_static_first.clear();
 	g_destruct_pairs.clear();
 
-	/* H1: and so does the water surface table - a roomlet number and a face
+	/* And so does the water surface table - a roomlet number and a face
 	 * number in the room that is being freed. */
 	for (int i = 0; i < HD_MAX_ROOMS; i++)
 		g_water_faces[i].clear();
@@ -3414,8 +3295,8 @@ void HDLevelUnload()
 	g_water_face_total = 0;
 	g_water_face_rooms = 0;
 	g_water_face_kept = 0;
-	/* N2: and the frame table with it - it names texinfos of the level being
-	 * freed. The PAGES those frames point at are Direct3D objects and are
+	/* And the frame table with it - it names texinfos of the level being
+	 * freed. The pages those frames point at are Direct3D objects and are
 	 * given back on the main thread instead, in HDLevelBuild and in
 	 * HDLevelDeviceLost (ReleaseWaterFramePages); clearing the list here is
 	 * what makes sure nothing looks at them in between. */
@@ -3428,21 +3309,21 @@ void HDLevelDeviceLost()
 {
 	/* The device is going away - a resolution change, Alt+Enter, or DXClose
 	 * at the end of the session. The last one is why the summary is flushed
-	 * here as well as in HDLevelBuild: without it the level the player quit
-	 * from would be the one level that never got its FPSLOG summary. Main
+	 * here as well as in HDLevelBuild: without it the level the game quit
+	 * from would never get its FPSLOG summary. Main
 	 * thread in every one of those cases. */
 	LevelDiagnosticsEnd();
 
 	g_level_active = false;
 	g_frame_count = 0;
 	g_room_count = 0;
-	// N2: the borrowed water frame pages are references on cache textures
-	// that HDRenderShutdown is about to drop.
+	// The borrowed water frame pages are references on cache textures that
+	// HDRenderShutdown is about to drop.
 	ReleaseWaterFramePages();
 	HDObjectDeviceLost();
 
-	// The font atlas was made on this device too (#123, fix round Q). Its
-	// match table survives; only the texture goes.
+	// The font atlas was made on this device too. Its match table survives;
+	// only the texture goes.
 	HDFontDeviceLost();
 
 	if (!HDRenderReady() && !HDRenderGroupCount())
@@ -3478,16 +3359,16 @@ bool HDRoomIsHD(int roomIndex)
 	return GroupOfRoom(roomIndex) >= 0;
 }
 
-/* T4: the one question the room walk asks of the HD path. g_level_active is
+/* The one question the room walk asks of the HD path. g_level_active is
  * false with hd_enable off, before a level is built, after HDLevelUnload and
  * in a level whose .TRG had no rooms - and in every one of those the walk in
- * game\draw.cpp carries no reach and is the function it has always been. */
+ * game\draw.cpp carries no reach and is the classic walk. */
 bool HDLevelActive()
 {
 	return g_level_active && HDEnabled();
 }
 
-/* THE CLASSIC WATER FACES OF ONE HD ROOM (#123, fix round H, H1). Read by
+/* The classic water faces of one HD room. Read by
  * drawroom.cpp's InsertRoom the moment the HD path has taken the room over -
  * see BuildWaterSurfaces for what is in the list and why. */
 int HDRoomWaterFaceCount(int roomIndex)
@@ -3507,7 +3388,7 @@ const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at)
 	return &g_water_faces[roomIndex][(size_t)at];
 }
 
-/* ONE HALF OF ONE FlipMap SWAP (#123, fix round A, A1).
+/* One FlipMap swap.
  *
  * Called from FlipMap (game\control.cpp) at the exact line where the two
  * ROOM_INFO records change places, once per pair, so the art follows the
@@ -3531,8 +3412,8 @@ void HDFlipRoom(int roomIndex, int otherIndex)
 	g_room_group[roomIndex] = g_room_group[otherIndex];
 	g_room_group[otherIndex] = keep;
 
-	/* H1: and the restored water faces with it. They are a roomlet number and
-	 * a face number INSIDE a ROOM_INFO, and FlipMap is the statement where
+	/* And the restored water faces with it. They are a roomlet number and a
+	 * face number inside a ROOM_INFO, and FlipMap is the statement where
 	 * two ROOM_INFO records change places - so the list has to travel with
 	 * the mesh it names, exactly as the art above travels with the geometry.
 	 * Both are empty in almost every room, so this is two empty vectors
@@ -3557,16 +3438,16 @@ void HDFrameReset()
 	g_frame_count = 0;
 	g_frame_dropped = 0;
 	g_projection_taken = false;
-	// E6: whatever glow phase was still owing belongs to a frame that is
-	// over. A new frame's HDFrameDraw sets it again.
+	// Whatever glow phase was still owing belongs to a frame that is over.
+	// A new frame's HDFrameDraw sets it again.
 	g_frame_pending = false;
 	HDObjectFrameReset();
 }
 
-/* THE PROJECTION OF THIS FRAME, taken the moment the first HD thing turns up -
+/* The projection of this frame, taken the moment the first HD thing turns up -
  * a room out of InsertRoom or an item out of DrawAnimatingItem, whichever the
- * engine reaches first, and never twice. It has to be taken while the world is
- * COLLECTED and not when it is drawn, because AlterFOV moves f_persp and the
+ * engine reaches first, and never twice. It is taken while the world is
+ * collected and not when it is drawn, because AlterFOV moves f_persp and the
  * centre inside a frame (the sky phase does it twice while the binoculars are
  * up) and the HD path has to project with the field of view the classic path
  * transformed its vertices with. */
@@ -3586,9 +3467,8 @@ void HDFrameCaptureProjection()
 	g_oneopersp = f_moneopersp;
 }
 
-/* #123, fix round P: the three numbers the frame's ONE projection is built
- * from, for the inventory ring's own screen centre. See the note in
- * hd_level.h. */
+/* The three numbers the frame's one projection is built from, for the
+ * inventory ring's own screen centre. See the note in hd_level.h. */
 void HDFrameProjectionInfo(float* persp, float* centerX, float* centerY)
 {
 	if (persp)
@@ -3601,10 +3481,9 @@ void HDFrameProjectionInfo(float* persp, float* centerX, float* centerY)
 		*centerY = g_centery;
 }
 
-/* THE PICKUP DISPLAY'S OWN BRACKET (#123, fix round P2). The whole argument -
- * why it is a bracket of its own rather than a place on the frame list, and
- * which two numbers are its own rather than the frame's - stands in hd_level.h
- * over the declaration. */
+/* The pickup display's own bracket. Why it is a bracket of its own rather
+ * than a place on the frame list, and which numbers are its own rather than
+ * the frame's, stands in hd_level.h over the declaration. */
 bool HDFramePickupBegin(float persp, float centreX, float centreY,
 	float za, float zb)
 {
@@ -3625,35 +3504,33 @@ bool HDFramePickupBegin(float persp, float centreX, float centreY,
 	frame.distanceFogStart = (float)tomb5.distance_fog * 1024.0f;
 	frame.wibbleTable = vert_wibble_table;
 
-	/* NO FOG BULBS, exactly as the ring has none and for the same reason -
-	 * see the block over HDFrameDraw. The distance fog is left in, again as
-	 * the ring leaves it in: the classic display runs the same subtraction
+	/* No fog bulbs, as the ring has none and for the same reason - see the
+	 * block over HDFrameDraw. The distance fog is left in, as the ring leaves
+	 * it in: the classic display runs the same subtraction
 	 * (aTransformLightClipMesh subtracts from every vertex past
 	 * DistanceFogStart whoever called it) and the object stands at
 	 * INVOBJ::scale1 - a few hundred to a couple of thousand units - where
-	 * neither path reaches the threshold. Both do the same nothing, and the
-	 * thing that would have to be explained is a difference. */
+	 * neither path reaches the threshold, so both paths agree. */
 	frame.bulbs = 0;
 	frame.bulbCount = 0;
 
-	/* THE CLOCK IS READ AND NEVER STEPPED. AdvanceClock is
-	 * FillFrameLighting's, once per frame; this bracket runs INSIDE a frame
+	/* The clock is read and never stepped. AdvanceClock is
+	 * FillFrameLighting's, once per frame; this bracket runs inside a frame
 	 * that has already had one, so stepping it here would count the frame
 	 * twice - and a material would run at double speed for as long as a
 	 * pickup icon is on the screen. */
 	frame.clock = (float)g_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
-	frame.reflect = tomb5.hd_reflect ? 1 : 0;		// R3b
+	frame.reflect = tomb5.hd_reflect ? 1 : 0;
 
 	HDRenderFrameBegin(&kIdentity, &g_pickup_projection, &frame);
 
-	/* HD_PASS_ALL and not the frame's two phases (#123, fix round E, E6). The
-	 * two phases exist so that no CLASSIC opaque draw can paint over a glow
+	/* HD_PASS_ALL and not the frame's two phases. The two phases exist so
+	 * that no classic opaque draw can paint over a glow
 	 * that wrote no depth; here there is nothing else in the section at all -
 	 * the depth buffer was cleared a few lines up and the display is the one
 	 * thing drawn into it - so the solid and the additive pass of the one
-	 * object follow each other in the one bracket, which is what ModelProbe
-	 * draws with too. */
+	 * object follow each other in the one bracket, as in ModelProbe. */
 	HDModelFrameBegin(&g_pickup_projection, 0, HD_PASS_ALL);
 	return true;
 }
@@ -3677,9 +3554,8 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	if (g_frame_count >= HD_MAX_FRAME)
 	{
 		// HD_MAX_FRAME is draw_rooms' own capacity (game\draw.cpp) and one
-		// entry lands here per listed room, so this cannot happen - but a
-		// silent overrun of a fixed array is not a thing to leave to a
-		// comment.
+		// entry lands here per listed room, so this cannot happen; the test
+		// guards the fixed array against a silent overrun.
 		g_frame_dropped++;
 		return false;
 	}
@@ -3689,50 +3565,39 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	FrameRoom& entry = g_frame[g_frame_count++];
 	entry.room = roomIndex;
 	entry.group = group;
-	entry.view = ViewSerial;	// fix round R
+	entry.view = ViewSerial;
 	SetD3DMatrix(&entry.world, (float*)viewWorld);
-	/* GROUP M: the portal window, taken HERE and not at draw time. These four
+	/* The portal window, taken here and not at draw time. These four
 	 * numbers are the engine's own `r->left..r->bottom` and they do not
 	 * survive the frame - PrintObjects (game\draw.cpp) resets all four of
 	 * them at the end of each room's items, which is before S_OutputPolyList
 	 * draws anything HD. */
 	ClipWindow(entry, left, top, right, bottom);
-	/* T1: and whether this room has art that needs the window. Asked of the
-	 * GROUP that is really drawing it and not of the room index (T2-2): after
-	 * a flipmap the two are different rooms' art, and round T's per-room flag
-	 * followed the wrong one of them. */
+	/* And whether this room has art that needs the window. Asked of the
+	 * group really drawing it and not of the room index: after a flipmap the
+	 * two are different rooms' art. */
 	entry.windowed = group >= 0 && group < HD_MAX_ROOMS &&
 		g_group_windowed[group] != 0;
 
 	return true;
 }
 
-/* AN ITEM IS NOT CUT BY ITS ROOM'S WINDOW (#123, group M; WITHDRAWN in fix
- * round R).
+/* An item is not cut by its room's window.
  *
- * WHAT GROUP M DID, AND WHY IT IS GONE FOR ITEMS. Round M gave every HD item
- * the portal window of its own room, on the reasoning that "an HD guard in a
- * room that overlaps another one in space came through the wall exactly as
- * the room's geometry did". The rooms needed it and keep it. The items never
- * did, and the round's own note beside this function says why without
- * following it: THE CLASSIC PATH HANDS EVERY ITEM THE WHOLE SCREEN -
- * PrintObjects (game\draw.cpp) sets phd_left = 0, phd_top = 0, phd_right =
- * phd_winxmax + 1, phd_bottom = phd_winymax + 1 before its item loop and puts
- * them back afterwards. Only the ROOM walk uses `r->left..r->bottom`.
+ * The classic path hands every item the whole screen: PrintObjects
+ * (game\draw.cpp) sets phd_left = 0, phd_top = 0, phd_right = phd_winxmax +
+ * 1, phd_bottom = phd_winymax + 1 before its item loop and puts them back
+ * afterwards. Only the room walk uses `r->left..r->bottom`. Cutting an item
+ * to its room's portal window would clip an enemy seen through a doorway,
+ * which the classic path draws whole - a soldier at the wall not drawn at all
+ * while his muzzle flash still fires, a creature near the camera visible only
+ * on one side of a straight edge.
  *
- * So round M invented a rule the engine has not got, and the play test of
- * 2026-09-07 found what it costs: an enemy in a neighbouring room, seen
- * through a doorway, is drawn WHOLE by the classic path and was cut to the
- * doorway rectangle here - a soldier at the wall who was not drawn at all
- * while his muzzle flash, which the classic path draws, still fired; a
- * creature close to the camera visible only on one side of a straight edge.
- *
- * The scissor test is switched OFF for every item, which is the classic
- * path's own answer. The frame list still carries the windows and the rooms
- * are still drawn inside them; what is left here is the counter, so that a
- * later round can see from the log how often the withdrawn rule WOULD have
- * cut an item, and decide with numbers whether the guard-through-the-wall it
- * was built for is worth a rule of its own. */
+ * So the scissor test is off for every item. The frame list still carries
+ * the windows and the rooms are still drawn inside them; with -log this
+ * counts how often a per-room item scissor would have cut an item (an HD
+ * item in a room that overlaps another could otherwise show through a
+ * wall). */
 void HDFrameScissorForRoom(int roomIndex)
 {
 	if (gLogEnabled && roomIndex >= 0)
@@ -3752,7 +3617,7 @@ void HDFrameScissorForRoom(int roomIndex)
 	HDRenderScissorOff();
 }
 
-/* THE HD SKY, IN THE CLASSIC HORIZON'S PLACE (#123, fix round R3a).
+/* The HD sky, in the classic horizon's place.
  *
  * Called from SkyDrawPhase (game\draw.cpp) at the line where the classic path
  * draws its HORIZON mesh, with the matrix that is on the engine's stack right
@@ -3762,15 +3627,14 @@ void HDFrameScissorForRoom(int roomIndex)
  * replaces. A level whose .TRG has no sky group (JOBY3, JOBY5) answers false
  * and keeps the classic sky whole.
  *
- * WHY HERE AND NOT IN HDFrameDraw, where the rooms are drawn. The classic sky
+ * Here and not in HDFrameDraw, where the rooms are drawn: the classic sky
  * writes no depth (OutputSky switches D3DRS_ZWRITEENABLE off), so the order
  * inside SkyDrawPhase is the order on the screen: the moon first, then the
  * sky, then the stars. Drawn with the rooms instead, the dome would paint
  * over the moon that was drawn a moment earlier. Here it takes the horizon
  * mesh's own place in that order and nothing else moves.
  *
- * THE PROJECTION IS TAKEN FRESH and HDFrameCaptureProjection is deliberately
- * not used: SkyDrawPhase moves f_persp itself while the binoculars are up
+ * The projection is taken fresh and HDFrameCaptureProjection is not used: SkyDrawPhase moves f_persp itself while the binoculars are up
  * (AlterFOV at its top and again at its bottom), so the sky is drawn with a
  * different field of view from the rooms, and the frame's one captured
  * projection belongs to the rooms.
@@ -3806,7 +3670,7 @@ bool HDFrameSky(const float* viewWorld)
 	frame.bulbCount = 0;
 	frame.clock = (float)g_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
-	frame.reflect = tomb5.hd_reflect ? 1 : 0;	// R3b
+	frame.reflect = tomb5.hd_reflect ? 1 : 0;
 
 	SetD3DMatrix(&world, (float*)viewWorld);
 
@@ -3825,25 +3689,19 @@ bool HDFrameSky(const float* viewWorld)
 	return drew;
 }
 
-/* THE FRAME IN TWO PHASES (#123, fix round E, E6).
+/* The frame in two phases.
  *
- * WHAT WAS WRONG. This function drew room-major: all three passes of the
- * first room, then all three of the second, then the objects, then the
- * classic buckets. The first two passes write depth and the third does not
- * (hd_render.cpp, draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE
- * FALSE), so every later draw that DOES write depth and stands BEHIND a glow
- * in the world passes the depth test - the glow left no depth to fail
- * against - and paints over it.
+ * The first two passes write depth and the third does not (hd_render.cpp,
+ * draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE FALSE). Drawn
+ * room-major - all passes of one room, then the next, then the objects, then
+ * the classic buckets - every later draw that writes depth and stands behind
+ * a glow passes the depth test (the glow left no depth to fail against) and
+ * paints over it: a RICH2 wall lamp whose cone hangs in a portal is cut off
+ * along the portal's edge by the far wall of the room beyond, and an
+ * object's glow disappears behind a classic crate.
  *
- * On the screen that is the player's picture: a wall lamp of RICH2 whose cone
- * hangs in a portal is cut off along the portal's edge, because the room
- * beyond the portal is drawn after it and its far wall is what fills the
- * opening. The same hole ate an object's glow behind a classic crate, and
- * hd_level.cpp's own note has named it since stage S1-2 as "worth a second
- * bracket only if a picture ever shows it". A picture shows it.
- *
- * THE ORDER NOW, which is the classic engine's own: everything that writes
- * depth first, whatever it belongs to, then everything that does not.
+ * So the order is the classic engine's own: everything that writes depth
+ * first, whatever it belongs to, then everything that does not.
  *
  *   HDFrameDraw       every room's passes 0 and 1, then every HD object and
  *                     Lara's passes 0 and 1
@@ -3851,11 +3709,11 @@ bool HDFrameSky(const float* viewWorld)
  *   HDFrameDrawGlow   every room's pass 2, then every object's pass 2
  *   DrawSortList      TR5's own see-through polygons, last of all
  *
- * so an HD glow is now behind the classic sort list and in front of every
- * opaque thing it should be in front of - which is what the classic path does
- * with its own additive polygons, and it needs no rule of its own.
+ * so an HD glow is behind the classic sort list and in front of every opaque
+ * thing it should be in front of - as the classic path does with its own
+ * additive polygons.
  *
- * THE COST is one more state bracket per frame (HDRenderFrameBegin does a
+ * The cost is one more state bracket per frame (HDRenderFrameBegin does a
  * GetRenderState and a SetRenderState for each state it owns) and one more
  * prepare per drawn room - two matrix multiplies and the room's light block.
  * The lighting itself is worked out once: FillRoomLighting counts the lights
@@ -3884,8 +3742,8 @@ void HDFrameDraw()
 
 	FillFrameLighting(frame, bulbs);
 
-	/* THE RING HAS NO FOG BULBS (#123, fix round P). ActiveFogBulbs holds
-	 * positions the game already turned into VIEW space, for the view the
+	/* The inventory ring has no fog bulbs. ActiveFogBulbs holds positions
+	 * the game already turned into view space, for the view the
 	 * last played frame had. The inventory draws through a view of its own -
 	 * an identity matrix with the item pushed a few hundred units down +z
 	 * (game\newinv2.cpp, DrawThreeDeeObject2D) - so those coordinates mean
@@ -3893,26 +3751,25 @@ void HDFrameDraw()
 	 * front of her medipacks and tint them. The classic ring has no bulbs
 	 * either: phd_PutPolygonsPickup runs no bulb pass at all.
 	 *
-	 * The distance fog is NOT taken away with them. The classic ring keeps it
+	 * The distance fog is not taken away with them. The classic ring keeps it
 	 * (aTransformLightClipMesh subtracts from every vertex past
 	 * DistanceFogStart whoever called it) and a ring item stands a few
 	 * hundred units from the camera, far short of the threshold on either
-	 * path - so both paths do the same nothing, and the one that would have
-	 * to be explained is a difference. */
+	 * path, so both paths agree. */
 	if (HDObjectRingFrame())
 		frame.bulbCount = 0;
 
-	// R3b: a destructible piece follows its own static's Flags bit.
+	// A destructible piece follows its own static's Flags bit.
 	UpdateDestructibles();
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 
-	// GROUP M: this frame's windows, counted for the log below.
+	// This frame's windows, counted for the log below.
 	g_clip_full = 0;
 	g_clip_scissored = 0;
 	g_clip_empty = 0;
 	g_clip_open = 0;
 	g_clip_windowed_tris = 0;
-	g_clip_items_spared = 0;	// fix round R, counted by HDFrameScissorForRoom
+	g_clip_items_spared = 0;	// counted by HDFrameScissorForRoom
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
@@ -3920,7 +3777,7 @@ void HDFrameDraw()
 		const bool empty = ClipEmpty(entry);
 
 		if (!entry.windowed)
-			g_clip_open++;			// T1: no window at all
+			g_clip_open++;			// no window at all
 		else if (empty)
 			g_clip_empty++;
 		else if (entry.full)
@@ -3928,12 +3785,9 @@ void HDFrameDraw()
 		else
 			g_clip_scissored++;
 
-		/* T2-2: EVERY COLLECTED ROOM IS DRAWN. Group M skipped a room whose
-		 * window came out empty, because the window WAS the room; round T
-		 * spared the rooms that were not windowed at all; and now no room's
-		 * ordinary art is windowed, so nothing may be skipped here. What an
-		 * empty window silences is the intruding half alone, inside
-		 * DrawRoomWindowed. */
+		/* Every collected room is drawn: no room's ordinary art is windowed,
+		 * so nothing may be skipped here. An empty window silences only the
+		 * intruding half, inside DrawRoomWindowed. */
 		(void)empty;
 
 		// PROF_HD_LIGHT is the light block alone, inside PROF_HD_DRAW: the
@@ -3946,14 +3800,13 @@ void HDFrameDraw()
 		DrawRoomWindowed(g_frame[i], HD_PASS_SOLID);
 	}
 
-	/* GROUP M: the rooms are done. The objects set their own window per item,
-	 * so this line is only for the frame that has none: without it the last
-	 * room's window would still be in force when the bracket closes, and the
-	 * one thing this group must never do is hand the classic path a device it
-	 * did not have. */
+	/* The rooms are done. The objects switch the scissor off per item, so
+	 * this line is for the frame that has none: without it the last room's
+	 * window would still be in force when the bracket closes, and the
+	 * classic path must get the device state it had. */
 	HDRenderScissorOff();
 
-	/* THE OBJECTS, AFTER THE ROOMS AND INSIDE THE SAME BRACKET (#123, S3-2).
+	/* The objects, after the rooms and inside the same bracket.
 	 *
 	 * One bracket a frame: hd_model sets its own shader, declaration and
 	 * stream and finds the rest of the device state exactly as the room path
@@ -3962,22 +3815,20 @@ void HDFrameDraw()
 	 * and the fog bulbs are already in their registers - a model reads the
 	 * very ones a room was just given.
 	 *
-	 * AFTER THE ROOMS AND BEFORE DrawBuckets, and here is the whole argument.
-	 * The depth buffer is shared and exact (hd_render.cpp, HDRenderSelfTest:
-	 * both paths write a - b/z for the same point), so an opaque HD guard and
-	 * an opaque classic crate sort themselves out by depth whatever order
-	 * they are drawn in - which covers every opaque pixel in the frame and
-	 * needs no rule at all. Only the pass that does NOT write depth cares:
+	 * After the rooms and before DrawBuckets. The depth buffer is shared and
+	 * exact (hd_render.cpp, HDRenderSelfTest: both paths write a - b/z for
+	 * the same point), so an opaque HD guard and an opaque classic crate sort
+	 * themselves out by depth whatever order they are drawn in. Only the pass
+	 * that does not write depth cares:
 	 *
-	 *   - A model's ALPHA pass writes depth (it is an alpha test, not a
+	 *   - A model's alpha pass writes depth (it is an alpha test, not a
 	 *     blend), so it behaves like the opaque one and travels with it.
-	 *   - A model's ADDITIVE pass does not, and fix round E took it out of
-	 *     this phase for that reason - it is drawn in HDFrameDrawGlow below,
-	 *     after the classic buckets, where nothing opaque can follow it. The
-	 *     classic sort list, which is where TR5 puts its own see-through
-	 *     polygons, still draws last of all and over both.
+	 *   - A model's additive pass does not, so it is drawn in
+	 *     HDFrameDrawGlow, after the classic buckets, where nothing opaque
+	 *     can follow it. The classic sort list, where TR5 puts its own
+	 *     see-through polygons, still draws last of all and over both.
 	 *
-	 * Drawing the objects INSIDE the room loop would be worse for a reason
+	 * Drawing the objects inside the room loop would be worse for a reason
 	 * that has nothing to do with depth: a model's state is not a room's, and
 	 * swapping shader, declaration and stream twice per room costs more than
 	 * the whole object path does. */
@@ -3985,16 +3836,16 @@ void HDFrameDraw()
 
 	HDRenderFrameEnd();
 
-	// E6: the glow phase is owing, and this is what the rooms cost so far -
+	// The glow phase is owing, and this is what the rooms cost so far -
 	// HDRenderFrameBegin zeroes the renderer's counter per bracket.
 	g_frame_room_calls = HDRenderDrawCalls();
 	g_frame_pending = true;
 }
 
-/* THE GLOW PHASE (#123, fix round E, E6). Called from S_OutputPolyList right
- * after DrawBuckets - see the long note over HDFrameDraw for the order and
- * the argument. Everything drawn here is additive, writes no depth and is
- * tested against a depth buffer that now holds the WHOLE opaque frame, HD and
+/* The glow phase. Called from S_OutputPolyList right after DrawBuckets - see
+ * the note over HDFrameDraw for the order. Everything drawn here writes no
+ * depth and is tested against a depth buffer that holds the whole opaque
+ * frame, HD and
  * classic alike, so no later opaque draw can take a glow away and no glow can
  * stand in front of something nearer than itself.
  *
@@ -4007,9 +3858,9 @@ void HDFrameDrawGlow()
 
 	g_frame_pending = false;
 
-	/* Fix round R: this phase walks the same items the solid one did, so the
-	 * count starts over here and the clip line below - which is written from
-	 * this phase - reports one frame's items and not two phases' worth. */
+	/* This phase walks the same items the solid one did, so the count starts
+	 * over here and the clip line below - written from this phase - reports
+	 * one frame's items and not two phases' worth. */
 	g_clip_items_spared = 0;
 
 	D3DMATRIX& projection = g_frame_projection;
@@ -4018,19 +3869,17 @@ void HDFrameDrawGlow()
 
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 
-	/* H2: the glass first and the glows after it. Both are drawn without a
-	 * depth write against a depth buffer that now holds the whole opaque
-	 * frame; the order between them is the classic path's own - a surface you
-	 * can see through is a surface, and a glow is painted on top of whatever
-	 * it shines through.
+	/* The glass first and the glows after it. Both are drawn without a depth
+	 * write against a depth buffer that holds the whole opaque frame; the
+	 * order between them is the classic path's own - a see-through surface
+	 * is a surface, and a glow is painted on top of whatever it shines
+	 * through.
 	 *
-	 * GROUP M: the same window per room in this phase as in the solid one. A
-	 * glow is a surface of its room like any other - the RICH2 lamp cone that
-	 * fix round E moved into this phase hangs inside a portal, and it has to
-	 * be cut by that portal's window and by no other. ClipEmpty asks the same
-	 * question of the same four numbers HDFrameDraw asked, so the two phases
-	 * skip the same rooms; a room skipped there had its light block left
-	 * unfilled and must not be drawn here either. */
+	 * The same window per room in this phase as in the solid one: a glow is
+	 * a surface of its room like any other - the RICH2 lamp cone hangs inside
+	 * a portal and is cut by that portal's window and no other.
+	 * DrawRoomWindowed asks ClipEmpty of the same four numbers HDFrameDraw
+	 * used, so both phases treat every room alike. */
 	for (int i = 0; i < g_frame_count; i++)
 	{
 		DrawRoomWindowed(g_frame[i], HD_PASS_BLEND);
@@ -4041,7 +3890,7 @@ void HDFrameDrawGlow()
 		DrawRoomWindowed(g_frame[i], HD_PASS_ADDITIVE);
 	}
 
-	// GROUP M: the rooms are done - see the same line in HDFrameDraw.
+	// The rooms are done - see the same line in HDFrameDraw.
 	HDRenderScissorOff();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
 	HDRenderFrameEnd();
@@ -4066,7 +3915,7 @@ void HDFrameDrawGlow()
 			HDRenderWaterCalls());
 	}
 
-	/* N1: AND HOW MANY WATER SURFACES ONE FRAME DREW. Throttled the way the
+	/* How many water surfaces one frame drew. Throttled the way the
 	 * clipped-light line is: only a frame that draws more of them than any
 	 * frame of this level before it writes anything, so a level with no
 	 * water writes nothing at all and the busiest view of a pool writes one
@@ -4079,16 +3928,16 @@ void HDFrameDrawGlow()
 			"level so far", g_water_calls_worst);
 	}
 
-	/* GROUP M, THE PORTAL WINDOWS OF THIS FRAME. Two lines, both behind -log
-	 * and both throttled, because this runs once per drawn frame:
+	/* The portal windows of this frame. Two lines, both behind -log and both
+	 * throttled, because this runs once per drawn frame:
 	 *
 	 *   once per level, at the first frame that drew an HD room, one line per
-	 *   room with the window it got - the numbers a picture of the bleed can
-	 *   be held against;
+	 *   room with the window it got - the numbers a picture of a bleed can be
+	 *   held against;
 	 *
 	 *   once a second after that, the tally. GlobalCounter ticks thirty times
-	 *   a second whatever the frame rate is (#148), so thirty of it is one
-	 *   second of game time. */
+	 *   a second whatever the frame rate is, so thirty of it is one second of
+	 *   game time. */
 	if (gLogEnabled && g_frame_count)
 	{
 		const unsigned short now = GlobalCounter;
@@ -4115,19 +3964,19 @@ void HDFrameDrawGlow()
 		{
 			g_clip_line_ever = true;
 			g_clip_line_at = now;
-			/* ONE CAMERA PER PICTURE, AS A NUMBER (fix round R).
+			/* One camera per picture, as a number.
 			 *
 			 * `view=` is the ViewSerial the rooms were collected with and
 			 * `view_obj=` the one the HD objects were. At sixty hertz the
 			 * view is rebuilt twice per in-between frame - the blended eye
 			 * on the way in, the live one on the way out - so anything
-			 * collected on the wrong side of either would be drawn from a
-			 * camera the rest of the frame does not share, and a room seam
-			 * that walks with Lara's breathing is what that looks like.
+			 * collected on the wrong side of either is drawn from a camera
+			 * the rest of the frame does not share (a room seam that walks
+			 * with Lara's breathing).
 			 *
-			 * A HEALTHY FRAME PRINTS ONE NUMBER FOR EACH, and the two are
-			 * equal. A range (`a..b`) is the bug, and it names the half of
-			 * the frame that was collected late. */
+			 * A healthy frame prints one number for each, and the two are
+			 * equal. A range (`a..b`) names the half of the frame that was
+			 * collected late. */
 			long ro_lo = 0, ro_hi = 0, ob_lo = 0, ob_hi = 0;
 
 			for (int i = 0; i < g_frame_count; i++)
@@ -4159,7 +4008,7 @@ void HDFrameDrawGlow()
 		}
 	}
 
-	/* THE FRAME'S HD COUNTERS, handed to the frame clock as MAXIMA over the
+	/* The frame's HD counters, handed to the frame clock as maxima over the
 	 * second (see FrameClockFlushSecond). Draw calls are rooms plus objects,
 	 * which is every call the HD path made in this frame. Costs three
 	 * comparisons and only when the log is on. */
@@ -4167,8 +4016,8 @@ void HDFrameDrawGlow()
 	{
 		/* g_frame_room_calls is the two brackets of this frame added up -
 		 * HDRenderDrawCalls is reset by HDRenderFrameBegin and would answer
-		 * for the glow phase alone (E6). HDObjectDrawCalls is not reset per
-		 * frame at all - hd_object.cpp resets it per LEVEL - so it is only
+		 * for the glow phase alone. HDObjectDrawCalls is not reset per frame
+		 * at all - hd_object.cpp resets it per level - so it is only
 		 * read when this frame actually had objects; otherwise it would carry
 		 * the last frame that did. */
 		const int draws = g_frame_room_calls +
@@ -4188,9 +4037,8 @@ void HDFrameDrawGlow()
 	{
 		g_clip_frames++;
 
-		/* ONCE PER LEVEL, at the first frame that clips - not once per frame,
-		 * which is what the old reset-every-frame version did (173 identical
-		 * lines out of one title screen). The total goes into the level's
+		/* Once per level, at the first frame that clips - not once per frame
+		 * (see the note over the counters). The total goes into the level's
 		 * summary in LevelDiagnosticsEnd. */
 		if (gLogEnabled && !g_clip_reported)
 		{
@@ -4206,12 +4054,12 @@ void HDFrameDrawGlow()
 	g_frame_count = 0;
 }
 
-/* ONE PRESENTED FRAME. Called from DXShowFrame (specific\dxshell.cpp) straight
- * after Present returns - the long note beside the frame clock's counters says
- * why that call site and no other. */
+/* One presented frame. Called from DXShowFrame (specific\dxshell.cpp) straight
+ * after Present returns - the note beside the frame clock's counters says why
+ * that call site and no other. */
 void HDFramePresented()
 {
-	// THE GUARD. Without -log this is a single bool test and a return: no
+	// The guard. Without -log this is a single bool test and a return: no
 	// clock is read, no counter moves, nothing is written.
 	if (!gLogEnabled)
 		return;
@@ -4270,7 +4118,7 @@ void HDFramePresented()
 
 	FrameClockFlushSecond();
 
-	/* The next second starts one second after this one UNLESS the gap was
+	/* The next second starts one second after this one unless the gap was
 	 * bigger than two - a level load presents nothing for a while, and a
 	 * catch-up loop would write a run of empty lines about a second nobody
 	 * drew in. Then it simply starts again here. */

@@ -12,46 +12,38 @@
  */
 #pragma once
 
-// THE WARDROBE (#153, round M2).
+// The wardrobe: the list of every outfit body Lara can wear, and what each
+// one takes of the rest of her (hands, braid, holsters, rig, sheen, skin).
 //
-// Until this round Lara's wardrobe was eight rows of a table in hd_lara.cpp,
-// and every one of them was a file somebody had opened, counted and written
-// down. The installs hold far more than eight - 24 OUTFIT_* files in the
-// IV-VI bundle's 4\ITEM and 78 in the I-III bundle's 1\ITEM - and a mod may
-// bring another. So the LIST is a scan now, and the table is what it still
-// is: measurements about particular files, which the scan wears where it has
-// them.
+// The list is a scan of the installs and the active mods (24 OUTFIT_* files
+// in the IV-VI bundle's 4\ITEM, 78 in the I-III bundle's 1\ITEM); the
+// built-in table in hd_wardrobe.cpp only adds measured properties of known
+// files. Four programs use it - the engine draws out of it, ModelProbe prints
+// it, Randomize.exe rolls out of it and the GUI shows it - so it is one
+// implementation, C-shaped outside, C++17 with <filesystem> inside, and free
+// of the engine. Two separate copies of the list would drift apart, and the
+// player would get another outfit than the one picked.
 //
-// ONE IMPLEMENTATION, four callers. The engine draws out of it, ModelProbe
-// prints it, Randomize.exe rolls out of it and the GUI shows it - so it is
-// built the way hd_install and hd_mods are: plain C-shaped on the outside,
-// C++17 with <filesystem> inside, and NOTHING of the engine in it. A list
-// that two programs work out separately is a list that will one day disagree
-// with itself, and the wardrobe is the one place where that would show up as
-// "the outfit I picked is not the outfit I got".
-//
-// WHAT IS SCANNED, in this order - the order IS the priority, because the
-// first entry of a file name wins the name:
+// Scan order; the first entry of a file name wins the name:
 //
 //   1. the IV-VI install, 4\ITEM and then 5\ITEM. OUTFIT_YOUNG* is skipped:
 //      young Lara carries no weapon and the randomizer hands her one in every
-//      level (the user's decision).
+//      level.
 //   2. the I-III install, 1\ITEM. OUTFIT_HANDS_*, OUTFIT_HAIR and
 //      OUTFIT_YOUNG* are skipped, and so is every name step 1 already found -
-//      the IV-VI bundle ships its OWN copies of the fourteen TR1/TR2/TR3
+//      the IV-VI bundle ships its own copies of the fourteen TR1/TR2/TR3
 //      outfits, with IV-VI page numbers and a higher vertex count
 //      (OUTFIT_TR1_CLASSIC: 14,515 vertices there against 8,382 here), so
 //      those copies need no alternate root and are the better model.
 //   3. every active mod, its 5\ITEM and then its 4\ITEM. A mod's outfit is an
-//      ADDITIONAL entry and never a replacement of a vanilla one of the same
-//      file name; its pages live in that mod's page namespace (hd_pagecache.h)
-//      and resolve through the M1 chain - the mod, its origin bundle, the
-//      install. The young filter does NOT apply to a mod: three of the four
-//      outfit mods the user runs are grown-up bodies sitting in the young
-//      slot, and refusing them would refuse the very thing the round is for.
+//      additional entry, never a replacement of a vanilla one of the same file
+//      name; its pages live in that mod's page namespace (hd_pagecache.h) and
+//      resolve through the chain mod, origin bundle, install. The young filter
+//      does not apply to a mod: outfit mods commonly put a grown-up body into
+//      the young slot.
 //
-// THE KEY is what survives a text line, a settings file and a log: the source
-// and the file, separated by a slash.
+// The key survives a text line, a settings file and a log: the source and the
+// file, separated by a slash.
 //
 //     46/OUTFIT_TR2_HOME                  the IV-VI install
 //     13/OUTFIT_TRX_WETSUIT_1             the I-III install
@@ -62,24 +54,21 @@
 // the key reads the same in a .hdm line, in the randomizer's settings file
 // and on a command line. It is compared case-insensitively.
 //
-// THE PROPERTIES of an entry - does it take the hands, the braid, the
-// holsters, the holster rig, is it gloved, how does it shine, how does her
-// skin shine, which of its pages are Lara's own skin - come from five places,
-// in this order, and every one of them is recorded so the log can say WHERE
-// each answer came from:
+// The properties of an entry (hands, braid, holsters, rig, gloves, body sheen,
+// skin sheen, skin pages) come from these tiers, highest first, and each is
+// recorded so the log can say where every answer came from:
 //
-//   1. a list file's block, Mods\...\*.txt          HD_WARDROBE_FROM_LIST
+//   1. a list file's block, Mods\...\*.txt         HD_WARDROBE_FROM_LIST
 //   2. the mod's outfit.txt, if it has one          HD_WARDROBE_FROM_MOD_TXT
 //   3. the built-in table, keyed by FILE NAME       HD_WARDROBE_FROM_TABLE
-//   4. measured out of the .TRM itself              HD_WARDROBE_FROM_MEASURED
-//   5. the defaults                                 HD_WARDROBE_FROM_DEFAULT
+//   4. the source bundle (head rule only)           HD_WARDROBE_FROM_ORIGIN
+//   5. measured out of the .TRM itself              HD_WARDROBE_FROM_MEASURED
+//   6. the defaults                                 HD_WARDROBE_FROM_DEFAULT
 //
-// THE LIST FILE (#159) is what an outfit of an INSTALL has instead of an
-// outfit.txt. A mod is a folder and can carry one; the 52 outfits of the two
-// bundles have no folder of their own, and a mod that ships seventeen bodies
-// under one outfit.txt has no way to say anything about ONE of them. So a
-// .txt beside the mod folders - hd_mods' HDModsListCount finds them - holds
-// blocks of the shape
+// A list file gives an outfit of an install - which has no folder of its own
+// for an outfit.txt - or one body of a mod shipping many, its own settings. It
+// is a .txt beside the mod folders (hd_mods' HDModsListCount finds them) and
+// holds blocks of the shape
 //
 //     Outfit: TRX_Wetsuit_3
 //     sheen=0.10
@@ -93,11 +82,10 @@
 // the value of the tier below.
 //
 // Only the skin pages have a measured tier; everything else is a judgement
-// about a picture, which is exactly why the table exists (hd_lara.cpp's own
-// note: geometry cannot tell skin from latex). The defaults are the ones the
-// randomizer needs: hands, braid and holsters ON, because she carries a gun
-// in every level of a randomized run and the TR5 braid is what the user wants
-// on every HD outfit.
+// about a picture, which is why the table exists (geometry cannot tell skin
+// from latex). The defaults suit a randomized run: hands, braid and holsters
+// on, because she carries a gun in every level and every HD outfit wears the
+// TR5 braid.
 
 // The .TRM stem, the display name and the key are all bounded, so an entry is
 // a plain struct with no ownership and a caller may keep a pointer to it for
@@ -118,54 +106,42 @@
 #define HD_WARDROBE_FROM_MEASURED	1
 #define HD_WARDROBE_FROM_TABLE		2
 #define HD_WARDROBE_FROM_MOD_TXT	3
-/* THE BUNDLE THE BODY CAME OUT OF (#156). A fifth tier, and it sits between
- * the default and the table: it is not a measurement of the file and not a
- * judgement about a picture, it is the one thing the SOURCE of an entry says
- * about it - a body of the Tomb Raider I-III bundle, or of a mod whose
- * mod.txt names that bundle with origin=, wears no hair. Only the head rule
- * below has it. */
+/* The bundle the body came out of. Not a measurement of the file and not a
+ * judgement about a picture, but what the source of an entry says about it:
+ * a body of the Tomb Raider I-III bundle, or of a mod whose mod.txt names
+ * that bundle with origin=, wears no hair. Only the head rule has it. */
 #define HD_WARDROBE_FROM_ORIGIN		4
-/* A BLOCK OF A LIST FILE (#159). The top tier: a player who writes a line
- * about one particular outfit has said the last word about it, over a mod's
- * own outfit.txt and over this file's table alike. */
+/* A block of a list file. The top tier: a line about one particular outfit
+ * overrides both a mod's own outfit.txt and the built-in table. */
 #define HD_WARDROBE_FROM_LIST		5
 
-/* WHOSE HEAD THIS BODY WEARS (#156).
+/* Whose head this body wears.
  *
- * WHAT WAS MEASURED, because the rule is nothing but the measurement. Every
- * outfit of the IV-VI bundle carries LARA'S WHOLE HEAD on its head node -
- * OUTFIT_CLASSIC 6,860 vertices and 9,485 triangles there, 9,483 of them on
- * page 8002, which is the HAIR; OUTFIT_TR2_HOME 6,830 the same way. The
- * separate LARA_HEAD.TRM that rides rigidly on that node is the FACE and the
- * front of the skull, and its back is open (a picture of it alone looks
- * through the back of her head at the inside of her own face): the two are
- * each other's halves by the remaster's own design.
+ * Measured on the installs: every outfit of the IV-VI bundle carries Lara's
+ * whole head on its head node - OUTFIT_CLASSIC 6,860 vertices and 9,485
+ * triangles there, 9,483 of them on page 8002, the hair; OUTFIT_TR2_HOME
+ * 6,830 the same way. The separate LARA_HEAD.TRM that rides rigidly on that
+ * node is the face and the front of the skull, and its back is open: the two
+ * are each other's halves.
  *
- * A body of the Tomb Raider I-III bundle is not built that way. Its head node
- * carries HEADGEAR and nothing else - the diving hood and goggles of
- * OUTFIT_TRX_WETSUIT_* (1,987 vertices, 998 triangles, all on the suit's own
- * page), the ice hood, the Greek headband - or, in six of the thirty, near
- * enough nothing at all (OUTFIT_TRX_BIKER_*: 10 vertices, 0 triangles). Not
- * one of the thirty wears page 8002. So the hair is simply not in the file,
- * the open back of LARA_HEAD stands in the picture, and what the player sees
- * is a bald skull with a face on it and the braid hanging off it. That is the
- * user's report of 2026-09-15 and his three photographs.
+ * A body of the Tomb Raider I-III bundle carries only headgear on its head
+ * node - the diving hood and goggles of OUTFIT_TRX_WETSUIT_* (1,987 vertices,
+ * 998 triangles, all on the suit's own page), the ice hood, the Greek
+ * headband - or, in six of the thirty, next to nothing (OUTFIT_TRX_BIKER_*:
+ * 10 vertices, 0 triangles). None of the thirty uses page 8002. Without a
+ * rule the open back of LARA_HEAD shows: a bald skull with a face on it and
+ * the braid hanging off it. Mods built out of such files inherit this.
  *
- * A mod built out of such a file inherits it, and the whole outfit folder the
- * user runs is built out of them.
- *
- * THE RULE IS THEREFORE ONE BIT AND ONE PART: whether the body's own head
- * node is drawn, and whether TR5's head - node 14 of the install's own
- * OUTFIT_CLASSIC - is drawn over it. Three combinations are worth having and
- * they are these three. */
+ * The rule is one bit and one part: whether the body's own head node is
+ * drawn, and whether TR5's head - node 14 of the install's own
+ * OUTFIT_CLASSIC - is drawn over it. */
 #define HD_WARDROBE_HEAD_OUTFIT		0	// its own head, as the file has it
 #define HD_WARDROBE_HEAD_TR5		1	// its own head dropped, TR5's instead
 #define HD_WARDROBE_HEAD_HAIR		2	// its own head AND TR5's hair over it
 
-/* THE FOOTSTEPS an outfit walks on (#153, round M2). Parsed and logged now,
- * acted on in round M3 - the barefoot sample set is that round's work. A
- * value of HD_WARDROBE_FEET_UNKNOWN means nobody has said, which is what
- * every entry is until a mod's outfit.txt or the table names one. */
+/* The footsteps an outfit walks on. Parsed and logged; no footstep sound
+ * reads it yet. HD_WARDROBE_FEET_UNKNOWN means neither a mod's outfit.txt
+ * nor the table names one. */
 #define HD_WARDROBE_FEET_UNKNOWN	0
 #define HD_WARDROBE_FEET_BARE		1
 #define HD_WARDROBE_FEET_BOOTS		2
@@ -182,39 +158,35 @@ struct HDWardrobeEntry
 	bool hands;
 	bool braid;
 	bool holsters;
-	/* What the wardrobe SAYS about this body's hands - and nothing reads it
-	 * since #153, round M2b: the wardrobe wears the bare hands in every level
-	 * with every outfit (the user's decision), so hd_lara.cpp's takes_gloves
-	 * answers false for everything. Still parsed, still printed, still logged,
-	 * because a line that reports a file has to go on reporting what the file
-	 * says. See the table's own note in hd_wardrobe.cpp. */
+	/* What the wardrobe says about this body's hands. The draw ignores it:
+	 * the bare hands are worn in every level with every outfit, so
+	 * hd_lara.cpp's takes_gloves answers false for everything. Still parsed,
+	 * printed and logged so that a report of the file stays complete. See
+	 * the table's note in hd_wardrobe.cpp. */
 	bool gloves;
 	bool wearsRig;			// the holster rig cut out of the London catsuit
 
 	float sheen;			// the body's Blinn-Phong strength ...
 	float sheenPower;		// ... and exponent
 
-	/* AND LARA'S OWN SKIN'S (#158). The body's sheen is what the CLOTHES are
-	 * made of; this is what SHE is made of - her face, the lid on her neck,
-	 * her bare hands and the pages of the body named in `skin` below, which
-	 * are drawn with one material so that the wrist seam is not two. It is a
-	 * property of the outfit because an outfit decides how much of her is
-	 * showing and in what light: a wetsuit wants a wet skin and a parka does
-	 * not. Nothing but a list block or an outfit.txt sets it - the eight
-	 * measured rows of the table never had the column - so without a line it
-	 * is the material table's own `skin` pair, which hd_lara.cpp carries as
-	 * kSheenSkin. */
+	/* Lara's own skin sheen. The body's sheen is the clothes; this is her
+	 * face, the lid on her neck, her bare hands and the body pages named in
+	 * `skin` below, drawn with one material so the wrist seam does not show.
+	 * It belongs to the outfit because a wetsuit wants a wet skin and a parka
+	 * does not. Only a list block or an outfit.txt sets it (the table has no
+	 * such column); otherwise it is the material table's `skin` pair, which
+	 * hd_lara.cpp carries as kSheenSkin. */
 	float skinSheen;
 	float skinSheenPower;
 
 	int skin[HD_WARDROBE_SKIN];	// pages that are Lara's own skin; 0 ends
 	int feet;			// HD_WARDROBE_FEET_*
-	int head;			// HD_WARDROBE_HEAD_* (#156)
+	int head;			// HD_WARDROBE_HEAD_*
 
 	// Where each of those came from, one HD_WARDROBE_FROM_* each.
 	int fromFlags;			// hands / braid / holsters / gloves / rig
 	int fromSheen;
-	int fromSkinSheen;		// #158
+	int fromSkinSheen;
 	int fromSkin;
 	int fromFeet;
 	int fromHead;
@@ -229,26 +201,19 @@ const char* HDWardrobeHeadWord(int head);
 const char* HDWardrobeHeadPhrase(int head);
 
 /* Where that answer came from, as a clause for a log line ("its mod.txt says
- * origin=tr1", "outfit.txt", "the default"). Never null.
- *
- * THE PHRASE FORM, and it is the one that belongs in PROSE: a sentence of the
- * log and every row of the F4 wardrobe window. */
+ * origin=tr1", "outfit.txt", "the default"). Never null. The phrase form, for
+ * prose: a sentence of the log and every row of the F4 wardrobe window. */
 const char* HDWardrobeFromWord(int from);
 
-/* The same answer as ONE WORD for a column of a table or a field of a log
- * line - "default", "measured", "table", "outfit.txt", "origin", "list".
- * Never null, and never an index into a caller's own array: two of those
- * existed until #159 and one of them was already a row short of the tiers
- * this header defines. Add a tier here and every reader says its name.
- *
- * THE FIELD FORM, and it belongs where the characters are counted: the
- * `key=value (tag)` fields of the level build line and the columns of
- * ModelProbe's tables. One window, one form - the F4 rows all use the phrase
- * above, because a player reading "the table" over "table" in two rows of one
- * window has to ask whether they mean the same tier. */
+/* The same answer as one word for a table column or a log field - "default",
+ * "measured", "table", "outfit.txt", "origin", "list". Never null. Callers use
+ * this instead of an array of their own, so a new tier gets its name in every
+ * reader. For the `key=value (tag)` fields of the level build line and the
+ * columns of ModelProbe's tables; the F4 window uses only the phrase form so
+ * that one tier never reads two ways in one window. */
 const char* HDWardrobeFromTag(int from);
 
-/* WHERE TO LOOK. Null or "" means "ask hd_install", which is what the engine
+/* Where to look. Null or "" means "ask hd_install", which is what the engine
  * wants; the diagnostic tools pass the folders on the command line so that a
  * measurement can be repeated on a copy. Has to be called before the first
  * scan to have any effect. The mods folder is hd_mods' own business -
@@ -275,15 +240,15 @@ int HDWardrobeFindFile(const char* file, int source);
 // The absolute path of an entry's .TRM. Never null; "" for a bad index.
 const char* HDWardrobePath(int index);
 
-/* A FILE THE SCAN LOOKED AT AND DID NOT LIST, with the reason - so that a
- * missing outfit is a line in the log and not a mystery. The _HD twins of the
- * I-III bundle are all in here; see hd_wardrobe.cpp for the measurement. */
+/* The files the scan looked at and did not list, each with the reason, so
+ * that a missing outfit is a line in the log. The _HD twins of the I-III
+ * bundle are all in here; see hd_wardrobe.cpp for the measurement. */
 int HDWardrobeRefusedCount();
 const char* HDWardrobeRefused(int at);
 
-/* THE MEASURED TIER, which needs a reader and a bind pose and therefore
- * cannot live in here (this file must build without hd_trm and without the
- * engine, so the randomizer can link it). hd_lara.cpp measures the throat page
+/* The measured tier. It needs a reader and a bind pose and therefore cannot
+ * live in here (this file builds without hd_trm and without the engine, so
+ * the randomizer can link it). hd_lara.cpp measures the throat page
  * off the model it has just read and hands it back; the entry takes it only
  * where neither outfit.txt nor the table named a skin page. Returns true when
  * it was taken. */

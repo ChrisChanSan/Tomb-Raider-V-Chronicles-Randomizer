@@ -1,9 +1,13 @@
 /*
  * Modified 2026 by ChrisChanSan.
  *
- * The eight rows of the table below are this project's own measurements, made
- * over rounds of #123; the composite they describe is carried over from TROne
- * (Copyright 2026 Todesengel, GPLv3) - see hd_lara.h and THIRD-PARTY.md.
+ * The wardrobe: scans the installs and the active mods for Lara's outfit
+ * bodies and resolves what each one takes of the rest of her. Shared by the
+ * engine, ModelProbe, Randomize.exe and the GUI; see hd_wardrobe.h.
+ *
+ * The eight rows of the table below are this project's own measurements; the
+ * composite they describe is carried over from TROne (Copyright 2026
+ * Todesengel, GPLv3) - see hd_lara.h and THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -35,8 +39,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-	// Wall clock, for the one measurement this file makes about itself
-	// (#153, round M2, the fix round - the scan's own line).
+	// Wall clock, for the scan's own timing line.
 	double clock_ms()
 	{
 		return std::chrono::duration<double, std::milli>(
@@ -45,97 +48,73 @@ namespace
 
 	/* ------------------------------------------------- the override table -- */
 
-	/* WHAT A PARTICULAR FILE IS, where somebody has looked at the picture.
+	/* The measured properties of particular files.
 	 *
-	 * These eight rows are the wardrobe as it stood before this round - the
-	 * table that used to be kOutfit in hd_lara.cpp - and every column of every
-	 * one of them is a measurement or a judgement made over a picture in the
-	 * rounds of #123. They are keyed by FILE NAME, which is also the honest
-	 * warning about them: the measurement was made on the INSTALL'S copy of
-	 * that file. A mod that replaces the name inherits the row, because a mod
-	 * that replaces OUTFIT_CLASSIC is nearly always a reskin of the Rome body
-	 * and wants exactly these answers - and where it is not, its outfit.txt
-	 * says so and wins (see resolve_properties below).
+	 * Every column of these eight rows is a measurement on the install's copy
+	 * of the file or a judgement made over its picture. They are keyed by
+	 * FILE NAME, so a mod that replaces the name inherits the row: a mod that
+	 * replaces OUTFIT_CLASSIC is nearly always a reskin of the Rome body and
+	 * wants exactly these answers, and where it is not, its outfit.txt wins
+	 * (see resolve_properties below).
 	 *
 	 * `hands`, `braid` and `holsters` say whether the body takes the rest of
 	 * the wardrobe. The diving suit takes none of it: its own nodes 10 and 13
-	 * carry 1352 vertices each - the gauntlets ARE the suit - it wears a
+	 * carry 1352 vertices each - the gauntlets are the suit - it wears a
 	 * helmet instead of a braid, and DrawLara__5 draws no holsters at all.
 	 *
-	 * `gloves` PICKED the HAND_GLOVES_ file instead of the HAND_BARE_ one
-	 * (#123, fix round C, user finding C2: "OUTFIT_RUSSIA wears gloves"). An
-	 * outfit model covers all fifteen nodes including the two hand nodes, but
-	 * what it carries THERE is the sleeve - the hand itself is the separate
-	 * HAND_ model, which is the whole reason the remaster ships three sets of
-	 * them.
+	 * `gloves` would pick the HAND_GLOVES_ file over the HAND_BARE_ one (an
+	 * outfit model carries only the sleeve on its two hand nodes; the hand is
+	 * the separate HAND_ model). The draw ignores it: the bare hands are worn
+	 * in every level with every outfit, so hd_lara.cpp's takes_gloves answers
+	 * false for everything. OUTFIT_RUSSIA's row still says true because the
+	 * outfit is gloved, and the flag is still parsed, printed and logged so
+	 * that a wardrobe line reports what was measured. takes_gloves is the one
+	 * line that would switch gloves back on.
 	 *
-	 *   AND NOTHING READS IT SINCE #153, ROUND M2b. The user's decision is
-	 *   that the wardrobe wears the BARE hands in every level with every
-	 *   outfit - "we never used the gloves - force it, then it is uniform" -
-	 *   so hd_lara.cpp's takes_gloves answers false for everything and this
-	 *   column reaches no model name any more. OUTFIT_RUSSIA's row below
-	 *   still says true because that is what the outfit is, and the flag is
-	 *   still parsed, printed and logged for the same reason: a wardrobe line
-	 *   has to go on saying what the wardrobe measured. What it no longer
-	 *   does is decide anything. The ONE line to change if the decision is
-	 *   ever revisited is takes_gloves.
-	 *
-	 * `wearsRig` is the separate HOLSTER RIG - the belt, the two pouches and
-	 * the two thigh straps cut out of the London catsuit by page (#123, fix
-	 * round D, D4; the rule corrected in fix round F, F1).
-	 *
-	 *   THE MEASUREMENT ROUND D MADE ITS RULE. Triangles on nodes 1 and 4 by
-	 *   texture page, over the eight wardrobe bodies - does the body carry a
-	 *   rig of its OWN?
+	 * `wearsRig` is the separate holster rig - the belt, the two pouches and
+	 * the two thigh straps cut out of the London catsuit by page. Triangles on
+	 * nodes 1 and 4 by texture page - does the body carry a rig of its own?
 	 *
 	 *     OUTFIT_CLASSIC      8017: 1090/1090   + 8018: 56/56    yes
 	 *     OUTFIT_RUSSIA       8017: 1106/1114   + 8018: 56/56    yes
 	 *     OUTFIT_TR3_COAST    8205:  354/354                     yes
 	 *     OUTFIT_TR3_CATSUIT  8205:  354/354                     yes
-	 *     OUTFIT_VCI          -                                  NO
-	 *     OUTFIT_TR3_ANTARC   -                                  NO
-	 *     OUTFIT_TR3_NEVADA   -                                  NO
+	 *     OUTFIT_VCI          -                                  no
+	 *     OUTFIT_TR3_ANTARC   -                                  no
+	 *     OUTFIT_TR3_NEVADA   -                                  no
 	 *     OUTFIT_SUBSUIT      -                          holsters none anyway
 	 *
-	 *   AND THE RULE WAS WRONG ON THE PICTURE. "No rig of its own, so wear the
-	 *   London one" put black leather straps over the Antarctica parka: the
-	 *   belt disappears inside the padded jacket, the two pouches stand off
-	 *   the hip at the width the London catsuit's thin thighs want, and the
-	 *   straps cut through the coat (user finding F1 of the play test of
-	 *   2026-09-06). Nevada is the same body shape and the same picture.
-	 *   OUTFIT_VCI has no rig because vanilla TR5 hangs pistols on that
+	 *   "No rig of its own, so wear the London one" is wrong on the picture:
+	 *   on the Antarctica parka the belt disappears inside the padded jacket,
+	 *   the pouches stand off the hip at the width of the catsuit's thin
+	 *   thighs, and the straps cut through the coat; Nevada is the same body
+	 *   shape. OUTFIT_VCI has no rig because vanilla TR5 hangs pistols on that
 	 *   catsuit and the remaster left the pouches to the holster file; the
-	 *   other two have none because in TR3 those outfits never wore a thigh
-	 *   rig at all. Only the first of the three is a hole. So this is a TABLE
-	 *   and not a rule derived from geometry - and an entry the scan finds
-	 *   gets `false` until somebody has looked at its picture.
+	 *   other two never wore a thigh rig in TR3. Only the first is a hole. So
+	 *   this is a table and not a rule derived from geometry, and an entry the
+	 *   scan finds gets `false` until somebody has looked at its picture.
 	 *
 	 * `sheen` and `sheenPower` are the body's Blinn-Phong strength and
-	 * exponent (#123, fix round D, D2). TR5's own lighting has no specular
-	 * term at all, so every HD outfit came out matt beside the remaster's own
-	 * pictures. The obvious source would have been the pages' ALPHA channel;
-	 * measured with DdsProbe -alpha over the wardrobe's pages it is flat
-	 * opaque (mean 254.6..255.0, not one texel below 128 on any of them), so
-	 * there is no mask to read and the material has to be named:
+	 * exponent. TR5's own lighting has no specular term, so every HD outfit
+	 * would come out matt. The pages' alpha channel carries no mask (DdsProbe
+	 * -alpha over the wardrobe's pages: mean 254.6..255.0, not one texel below
+	 * 128), so the material is named:
 	 *
 	 *   latex     0.45 / 26   the two catsuits, the reference look
 	 *   rubber    0.30 / 22   the diving suit
 	 *   cloth     0.10 / 14   the Rome top and the rest
 	 *
-	 * `skin` names the pages of the BODY that are Lara's own skin (#123, fix
-	 * round K, K2), so that a bare forearm and the hand model over it shine
-	 * with ONE material instead of two. Measured with ModelProbe -handlight
-	 * and -neck: 8001 is her skin in the three game 5 bodies, and the four
-	 * Tomb Raider III guests carry theirs on 8201 (the neck) and 8202 (the
-	 * arms) - the same two pages in all four, because it is the same Lara
-	 * underneath. OUTFIT_SUBSUIT has none ON PURPOSE: the diving suit shows no
-	 * skin anywhere and its throat page 8047 is the SUIT, so naming it would
-	 * make the whole suit matt. That row is also why the measured tier cannot
-	 * replace this table - see resolve_properties.
+	 * `skin` names the pages of the body that are Lara's own skin, so that a
+	 * bare forearm and the hand model over it shine with one material instead
+	 * of two. Measured with ModelProbe -handlight and -neck: 8001 is her skin
+	 * in the three game 5 bodies, and the four Tomb Raider III guests carry
+	 * theirs on 8201 (the neck) and 8202 (the arms) - the same two pages in
+	 * all four. OUTFIT_SUBSUIT has none on purpose: the diving suit shows no
+	 * skin and its throat page 8047 is the suit, so naming it would make the
+	 * whole suit matt. That row is also why the measured tier cannot replace
+	 * this table - see resolve_properties.
 	 *
-	 * `feet` is for round M3 and is unknown in every row today: which sample
-	 * set a body walks on is a decision about sound, and the barefoot set does
-	 * not exist yet. */
+	 * `feet` is unknown in every row: no barefoot sample set exists yet. */
 	struct Row
 	{
 		const char* file;
@@ -151,8 +130,8 @@ namespace
 	};
 
 	/*                            hands  braid  holst  glove  rig                   */
-	/*                                                 ^ read by nothing since
-	 *                                                   round M2b - see above  */
+	/*                                                 ^ not read by the draw
+	 *                                                   - see above            */
 	const Row kRow[] =
 	{
 		{ "OUTFIT_CLASSIC",     true,  true,  true,  false, false, 0.10f, 14.0f,
@@ -173,11 +152,10 @@ namespace
 			{ 8201, 8202, 0 }, HD_WARDROBE_FEET_UNKNOWN }
 	};
 
-	/* THE DEFAULTS, for a file nobody has looked at. They are not "nothing":
-	 * a randomized run puts a gun in Lara's hand in every level, so a body
-	 * that takes no holsters would hang its pistols in the air, and the user's
-	 * decision is that EVERY HD outfit wears the TR5 braid. `gloves` is the
-	 * one that defaults the other way: a bare hand under a sleeve reads as a
+	/* The defaults, for a file nobody has looked at. A randomized run puts a
+	 * gun in Lara's hand in every level, so a body without holsters would hang
+	 * its pistols in the air; and every HD outfit wears the TR5 braid.
+	 * `gloves` defaults the other way: a bare hand under a sleeve reads as a
 	 * long sleeve, a gloved hand under a bare arm reads as a fault. */
 	const bool kDefaultHands = true;
 	const bool kDefaultBraid = true;
@@ -187,15 +165,13 @@ namespace
 	const float kDefaultSheen = 0.10f;
 	const float kDefaultSheenPower = 14.0f;
 
-	/* AND HER SKIN'S OWN (#158): the `skin` row of the material table in
-	 * hd_lara.cpp - a soft wide sheen, never a point - which that file carries
-	 * as kSheenSkin and falls back to when there is no scan entry at all. The
-	 * two numbers are written in both places on purpose and the same way every
-	 * other default here is: this file has to answer without the engine and
-	 * that one has to draw without a scan. The table above has no column for
-	 * it, because none of the eight rows ever measured her skin separately
-	 * from her clothes - so the tier under a list block or an outfit.txt is
-	 * this pair and nothing in between. */
+	/* Her skin's default: the `skin` row of the material table in hd_lara.cpp
+	 * - a soft wide sheen, never a point - which that file carries as
+	 * kSheenSkin and falls back to when there is no scan entry at all. The two
+	 * numbers are written in both places on purpose: this file has to answer
+	 * without the engine and that one has to draw without a scan. The table
+	 * above has no skin-sheen column, so under a list block or an outfit.txt
+	 * comes this pair directly. */
 	const float kDefaultSkinSheen = 0.12f;
 	const float kDefaultSkinSheenPower = 10.0f;
 
@@ -206,7 +182,7 @@ namespace
 		HDWardrobeEntry out;
 		std::string path;
 		std::string sort;	// the key, lower cased
-		// How many list blocks have named this entry (#159), so that the
+		// How many list blocks have named this entry, so that the
 		// second one can say in its own line that it is overriding a first.
 		int named = 0;
 	};
@@ -319,7 +295,7 @@ namespace
 		std::snprintf(out, (size_t)size, "%s", in.c_str());
 	}
 
-	/* THE DISPLAY NAME out of the file name. "OUTFIT_" comes off, the
+	/* The display name out of the file name. "OUTFIT_" comes off, the
 	 * underscores become spaces, and a word is Title Cased UNLESS it is one
 	 * the eye reads as an abbreviation - one with a digit in it (TR2, TRX,
 	 * 1) or one of three letters or fewer (VCI, FMV, HK). So OUTFIT_TR2_HOME
@@ -363,13 +339,12 @@ namespace
 		return out.empty() ? file : out;
 	}
 
-	/* WHICH NAMES THE SCAN PASSES OVER, and why each of them.
+	/* Which names the scan passes over, and why.
 	 *
 	 * OUTFIT_YOUNG* - young Lara's bodies. A randomized run hands her a
-	 * weapon in every level and a child body cannot carry one (the user's
-	 * decision). It does NOT apply to a mod: three of the four outfit mods
-	 * the user runs are grown-up bodies that happen to sit in the young slot,
-	 * and that is the whole point of a mod.
+	 * weapon in every level and a child body does not carry one. It does not
+	 * apply to a mod: outfit mods commonly put a grown-up body into the young
+	 * slot.
 	 *
 	 * OUTFIT_HANDS_* and OUTFIT_HAIR - the I-III bundle's names for what the
 	 * IV-VI bundle calls HAND_BARE_* and HAIR_OG. They are PARTS of the
@@ -401,58 +376,53 @@ namespace
 
 	/* ------------------------------------------------------- outfit.txt -- */
 
-	/* A MOD MAY SAY WHAT ITS OUTFIT IS (#153, round M2): <mod>\outfit.txt,
-	 * one key=value per line, "#" starts a comment - exactly the shape of
-	 * mod.txt one folder up, so a modder learns one format and not two. It
-	 * applies to every OUTFIT_*.TRM that mod ships, which is one in all four
-	 * of the outfit mods the user runs.
+	/* What a mod says about its outfit: <mod>\outfit.txt, one key=value per
+	 * line, "#" starts a comment - the shape of mod.txt one folder up, so a
+	 * modder learns one format. It applies to every OUTFIT_*.TRM the mod
+	 * ships.
 	 *
-	 *   name=Sola's wetsuit      what the wardrobe window calls it - and a
-	 *                            list block's name= sets it over this one
-	 *                            (#159, pass 4), as it does every other key
+	 *   name=Sola's wetsuit      what the wardrobe window calls it; a list
+	 *                            block's name= overrides it, as it does every
+	 *                            other key
 	 *   hands=0|1                does it take the separate HAND_ models
-	 *   gloves=0|1               ... the gloved ones. READ AND IGNORED since
-	 *                            #153 round M2b: the wardrobe wears bare hands
-	 *                            everywhere (hd_lara.cpp, takes_gloves). The
-	 *                            line is still parsed and still shown, so that
-	 *                            a mod's file goes on saying what it says
+	 *   gloves=0|1               ... the gloved ones. Read and ignored: the
+	 *                            wardrobe wears bare hands everywhere
+	 *                            (hd_lara.cpp, takes_gloves); still parsed and
+	 *                            shown so the report of the file stays whole
 	 *   braid=0|1                does it wear the TR5 braid
 	 *   holsters=0|1             does it wear thigh holsters
 	 *   rig=0|1                  ... and the pouches they hang in
 	 *   sheen=0.45               the body's specular strength ...
 	 *   exponent=26              ... and its Blinn-Phong exponent
-	 *   skin_sheen=0.12          and LARA'S OWN skin's (#158) - her face, the
-	 *   skin_exponent=10         lid on her neck, her bare hands and the pages
-	 *                            named by skin= below. 0..2 and 1..128; a value
+	 *   skin_sheen=0.12          and Lara's own skin's - her face, the lid on
+	 *   skin_exponent=10         her neck, her bare hands and the pages named
+	 *                            by skin= below. 0..2 and 1..128; a value
 	 *                            outside that is a note and the default stands
 	 *   skin=8001,8201           which of its pages are Lara's own skin
-	 *   footsteps=bare|boots     round M3's business; read and logged now
-	 *   head=tr5|hair|outfit     whose head this body wears (#156) - see
-	 *                            HD_WARDROBE_HEAD_* in the header. It is the
-	 *                            ONE override of the origin rule, and it is
-	 *                            what a mod built out of a Tomb Raider I-III
-	 *                            body writes when its own head is finished
-	 *                            and wants keeping
+	 *   footsteps=bare|boots     read and logged; no footstep sound uses it yet
+	 *   head=tr5|hair|outfit     whose head this body wears - see
+	 *                            HD_WARDROBE_HEAD_* in the header. The one
+	 *                            override of the origin rule: a mod built out
+	 *                            of a Tomb Raider I-III body writes it when
+	 *                            its own head is finished and wants keeping
 	 *
-	 * An unknown key is a note and never a fault, for the same reason mod.txt
-	 * does it that way: a mod written for a later round has to stay loadable
-	 * by this one.
+	 * An unknown key is a note and never a fault, as in mod.txt: a mod
+	 * written for a later version has to stay loadable by this one.
 	 *
-	 * AND A LIST FILE'S BLOCK IS THE SAME KEYS (#159), which is why this
-	 * struct and take_key below are shared by both readers: two readers of one
-	 * format are two readers that will one day disagree about it. */
+	 * A list file's block takes the same keys, so this struct and take_key
+	 * below are shared by both readers and the two cannot drift apart. */
 	struct ModTxt
 	{
 		bool has = false;
 		std::string name;
 		int hands = -1, gloves = -1, braid = -1, holsters = -1, rig = -1;
 		float sheen = -1.0f, exponent = -1.0f;
-		float skinSheen = -1.0f, skinExponent = -1.0f;	// #158
+		float skinSheen = -1.0f, skinExponent = -1.0f;
 		bool hasSkin = false;
 		int skin[HD_WARDROBE_SKIN] = { 0, 0, 0 };
 		int feet = HD_WARDROBE_FEET_UNKNOWN;
-		int head = -1;		// #156: -1 is "the file did not say"
-		// The keys this one really took, for the line a list block logs (#159).
+		int head = -1;		// -1 is "the file did not say"
+		// The keys this one really took, for the line a list block logs.
 		std::string said;
 	};
 
@@ -468,7 +438,7 @@ namespace
 	}
 
 	// The keys a file really took, so that a list block's own log line can say
-	// what it changed rather than leaving it to be diffed (#159).
+	// what it changed rather than leaving it to be diffed.
 	void took(ModTxt& out, const char* key)
 	{
 		if (!out.said.empty())
@@ -477,20 +447,14 @@ namespace
 		out.said += key;
 	}
 
-	/* A YES OR A NO A PLAYER WROTE (the second fix round of #159), and the
-	 * same rule the four numbers got in the first one: a value this build
-	 * cannot read is a NOTE and the tier below stands, and the key is not
-	 * taken, because a block's own line may not name a key whose value never
-	 * arrived.
-	 *
-	 * MEASURED before this was written: `braid=maybe holsters=ja hands=2
-	 * rig=nonsense` in one block logged "braid holsters hands rig" as taken,
-	 * wrote no note of any kind, and drew a body byte for byte the one with no
-	 * list file at all - as_bool answered -1, apply_txt skipped on `>= 0`, and
-	 * nothing anywhere said so. The vocabulary is narrow on purpose (this is
-	 * a config file, not a language), so the note SPELLS IT OUT: a player who
-	 * writes `ja` or `y` learns the words from the log rather than by
-	 * guessing. */
+	/* A yes or a no a player wrote. As with the numbers below, a value this
+	 * build cannot read is a note and the tier below stands, and the key is
+	 * not taken, because a block's own line may not name a key whose value
+	 * never arrived. Without this check, `braid=maybe` or `hands=2` would be
+	 * logged as taken and silently change nothing (as_bool answers -1 and
+	 * apply_txt skips it). The vocabulary is narrow on purpose, so the note
+	 * spells it out: a player who writes `ja` or `y` learns the words from
+	 * the log. */
 	bool take_flag(const char* key, const std::string& value,
 		const std::string& low, const char* keeps, const std::string& where,
 		int* out)
@@ -509,28 +473,21 @@ namespace
 		return true;
 	}
 
-	/* A NUMBER A PLAYER WROTE, AND THE RANGE A PICTURE SURVIVES (#159, the fix
-	 * round). Four keys are numbers - sheen, exponent, skin_sheen,
-	 * skin_exponent - and all four come through here, because a rule that
-	 * holds for two of them and not for the other two is not a rule; it is the
-	 * half of the file the log tells the truth about.
+	/* A number a player wrote, and the range a picture survives. All four
+	 * numeric keys - sheen, exponent, skin_sheen, skin_exponent - come through
+	 * here.
 	 *
-	 * WHAT LEAVING IT OUT COST, measured before this was written:
-	 * `sheen=14 / exponent=0.10` - the user's own two lines transposed, which
-	 * is the typo this format invites - draws her top, her shorts, her
-	 * holsters and her hair PURE WHITE, and `sheen=1e40` draws them SOLID
-	 * BLACK. Neither said a word. The other way round, `sheen=-1` and
-	 * `exponent=0` were dropped by apply_txt in silence while the block's own
-	 * line named both keys as set.
+	 * Without the range, `sheen=14 / exponent=0.10` (the two values
+	 * transposed, the typo this format invites) draws her top, shorts,
+	 * holsters and hair pure white, and `sheen=1e40` draws them solid black;
+	 * `sheen=-1` and `exponent=0` would be dropped by apply_txt while the
+	 * block's line named them as set. 0..2 and 1..128 hold every value the
+	 * known files write: the built-in table tops out at 0.45/26, common outfit
+	 * mods write 1/50.
 	 *
-	 * 0..2 and 1..128 hold every value any file on this machine writes: the
-	 * built-in table tops out at 0.45/26, every one of the user's nine outfit
-	 * mods writes 1/50, and his own list writes 0.10/14 and 1/50.
-	 *
-	 * OUT OF RANGE IS A NOTE AND THE TIER BELOW STANDS - and it is NOT taken,
-	 * because a block's line may not name a key whose value never arrived. So
-	 * is a value that is no number at all: `sheen=shiny` used to be a silent
-	 * 0.0, which is matt cloth and nobody's intention. */
+	 * Out of range is a note and the tier below stands, and the key is not
+	 * taken. So is a value that is no number at all: `sheen=shiny` would
+	 * otherwise read as 0.0, matt cloth. */
 	bool take_number(const char* key, const std::string& value, float lo,
 		float hi, const char* range, const char* keeps,
 		const std::string& where, float* out)
@@ -559,11 +516,9 @@ namespace
 		return true;
 	}
 
-	/* ONE KEY OF ONE LINE, and there is exactly one reader of it (#159).
-	 *
-	 * A mod's outfit.txt and a block of a list file take the same keys - the
-	 * list file exists so that an outfit WITHOUT a mod folder can be given
-	 * them - so they are parsed here and nowhere else. `where` is the clause
+	/* One key of one line. A mod's outfit.txt and a block of a list file take
+	 * the same keys - the list file exists so that an outfit without a mod
+	 * folder can be given them - so they are parsed here and nowhere else. `where` is the clause
 	 * the notes put after MODLOG: "mod3 Outfits\Legend outfit.txt", or
 	 * "outfit_1-5.txt, Outfit TR2_Swim". */
 	void take_key(const std::string& key, const std::string& value,
@@ -573,23 +528,14 @@ namespace
 
 		if (key == "name")
 		{
-			/* WHAT THE WARDROBE WINDOW CALLS THIS BODY - and until the third
-			 * review of #159 this was the one key a LIST BLOCK could not set.
-			 * apply_txt had no name field at all: the display name was decided
-			 * once, as a mod was added, out of that mod's own outfit.txt. So a
-			 * block's name= was read, named as taken in the block's own log
-			 * line, and thrown away without a word. Measured: `name=My Own
-			 * Home` on 46/OUTFIT_TR2_HOME logged "-> 46/OUTFIT_TR2_HOME: name"
-			 * and the row went on reading "TR2 Home", while the same line in a
-			 * mod's outfit.txt renamed that mod's row. It is applied in
-			 * apply_txt now, where every other key of both files is applied.
+			/* What the wardrobe window calls this body. Applied in apply_txt
+			 * with every other key, so a list block renames an install's
+			 * outfit just as an outfit.txt renames a mod's.
 			 *
-			 * AN EMPTY NAME IS A NOTE AND NOT A NAME, for the reason the three
-			 * findings before it were fixed: `name=` with nothing after it, or
-			 * with nothing but spaces, would blank the row and leave a player
-			 * with a line in the window that has no title, while the block's
-			 * own line named a value that never arrived. The name it had
-			 * stands. */
+			 * An empty name is a note and not a name: `name=` with nothing
+			 * (or only spaces) after it would leave a row without a title
+			 * while the block's line named a value that never arrived. The
+			 * name it had stands. */
 			if (value.empty())
 			{
 				note("MODLOG %s: name= says nothing - ignored, the row keeps "
@@ -597,13 +543,10 @@ namespace
 				return;
 			}
 
-			/* The field is bounded, so a longer name is cut - and it is said
-			 * out loud, because a player who reads the window may not have to
-			 * guess where the rest of his line went. It quotes what it KEPT
-			 * and not what it was given: note() cuts at 512 bytes, and a note
-			 * that echoes a 900 character name in full is a note whose own
-			 * reason is the part that gets cut off (measured, with exactly
-			 * such a name). */
+			/* The field is bounded, so a longer name is cut, and the note
+			 * says so. It quotes what it kept and not what it was given:
+			 * note() cuts at 512 bytes, and echoing a 900 character name in
+			 * full would cut off the note's own reason. */
 			if (value.size() >= HD_WARDROBE_NAME)
 				note("MODLOG %s: name= is %d characters - the window shows the "
 					"first %d, \"%s\"", where.c_str(), (int)value.size(),
@@ -625,11 +568,9 @@ namespace
 				"either", where, &out.gloves))
 				took(out, "gloves");
 
-			/* #153, round M2b. Said here rather than passed over in silence,
-			 * because a modder who writes the line and sees no gloves is owed
-			 * the reason. It stands whatever the value was - a line that used
-			 * to write it may not stop writing it because the second fix
-			 * round of #159 taught the key to read its value. */
+			/* Said rather than passed over in silence, because a modder who
+			 * writes the line and sees no gloves is owed the reason. Written
+			 * whatever the value was, valid or not. */
 			note("MODLOG %s: gloves=%s is ignored - the wardrobe wears "
 				"bare hands everywhere (the user's decision, round M2b)",
 				where.c_str(), value.c_str());
@@ -652,7 +593,7 @@ namespace
 				where, &out.rig))
 				took(out, "rig");
 		}
-		/* WHAT THE CLOTH IS MADE OF, in the same two ranges her skin gets
+		/* What the cloth is made of, in the same two ranges her skin gets
 		 * below: a strength above 2 washes the material white in any light and
 		 * an exponent below 1 is not a highlight at all. */
 		else if (key == "sheen")
@@ -667,9 +608,9 @@ namespace
 				"her clothes keep the shine they had", where, &out.exponent))
 				took(out, "exponent");
 		}
-		/* THE SKIN'S OWN GLOW (#158). Out of range is a NOTE and the tier
-		 * below stands - the same rule head= and footsteps= get for a word
-		 * they do not know. */
+		/* The skin's own glow. Out of range is a note and the tier below
+		 * stands - the same rule head= and footsteps= get for a word they do
+		 * not know. */
 		else if (key == "skin_sheen")
 		{
 			if (take_number("skin_sheen", value, 0.0f, 2.0f, "0..2",
@@ -684,9 +625,9 @@ namespace
 		}
 		else if (key == "head")
 		{
-			/* #156. An unknown value is a NOTE and the default stands - the
-			 * same rule an unknown key gets, and for the same reason: a mod
-			 * written for a later round has to stay loadable by this one. */
+			/* An unknown value is a note and the default stands - the same
+			 * rule an unknown key gets: a mod written for a later version has
+			 * to stay loadable by this one. */
 			if (low == "tr5")
 				out.head = HD_WARDROBE_HEAD_TR5;
 			else if (low == "hair")
@@ -719,28 +660,18 @@ namespace
 		}
 		else if (key == "skin")
 		{
-			/* WHICH PAGES ARE HER OWN SKIN - PARSED FIRST, TAKEN AFTER (the
-			 * second fix round of #159).
+			/* Which pages are her own skin - parsed first, taken after. If the
+			 * key were taken before its value was read, an empty `skin=` (a
+			 * list file's commented `# skin=` line, uncommented) would copy an
+			 * empty array over the tier below and silently wipe the outfit's
+			 * skin pages - on OUTFIT_TR3_CATSUIT the catsuit's material would
+			 * then show at her neckline.
 			 *
-			 * WHAT DOING IT THE OTHER WAY ROUND COST, measured: `skin=` with
-			 * nothing after it set hasSkin and named the key as taken before a
-			 * single character was read, and apply_txt then copied the empty
-			 * array over the tier below - so ONE keystroke wiped an outfit's
-			 * skin pages, in silence, with the block's own line saying "skin".
-			 * The user's own outfit_1-5.txt carries `# skin=` ready-written in
-			 * 44 of its 52 blocks, so that keystroke is uncommenting a line he
-			 * was invited to uncomment: 46/OUTFIT_TR3_CATSUIT lost 8201,8202
-			 * and took the catsuit's own material at her neckline, which is
-			 * round K's seam fix undone on that body.
-			 *
-			 * `std::atoi` was the other half of it: it answers 0 for "abc" and
-			 * 0 is the terminator of this array, so `skin=8001,oops` quietly
-			 * became 8001 alone and `skin=abc,def` became nothing at all.
-			 * strtol, and a piece that is not a whole page number above zero
-			 * is a note. If NO page survives, the line is refused entirely and
-			 * the pages the entry had stand - there is no way to write "this
-			 * body has no skin pages", because no file on this machine wants
-			 * one and inventing a spelling for it is not this round's work. */
+			 * Each piece is read with strtol, not atoi: atoi answers 0 for
+			 * "abc", and 0 terminates this array. A piece that is not a whole
+			 * page number above zero is a note. If no page survives, the line
+			 * is refused and the pages the entry had stand; there is no
+			 * spelling for "this body has no skin pages". */
 			int page[HD_WARDROBE_SKIN] = { 0, 0, 0 };
 			int at = 0;
 			std::string one;
@@ -796,24 +727,16 @@ namespace
 				where.c_str(), key.c_str());
 	}
 
-	/* ONE WHOLE LINE, HOWEVER LONG THE PLAYER MADE IT (the second fix round of
-	 * #159). Both readers below use it, because both hand what they read to
-	 * take_key and a key is worth nothing if its value arrived in halves.
+	/* One whole line, however long the player made it. Both readers below use
+	 * it, because both hand what they read to take_key. A fixed buffer with
+	 * fgets would cut a long line in two and parse its head as a whole
+	 * key=value: a `sheen=` of 900 zeros and then `.25` would read as 0.0,
+	 * in range, accepted - a matt body out of a line that asked for 0.25.
 	 *
-	 * WHAT THE FIXED BUFFER COST, measured: `char raw[512]` + fgets cuts a
-	 * longer line in two and the HEAD of it was parsed as a whole key=value -
-	 * a `sheen=` line of 900 zeros and then `.25` was read as `sheen=000...0`,
-	 * which is 0.0, which is in range, which is accepted: a wholly matt body
-	 * out of a line that asked for 0.25, with the tail logged after it as a
-	 * line with no "=". A note would have been an improvement on silence; a
-	 * reader that does not cut the line is the answer.
-	 *
-	 * A NUL BYTE ends the line's text and the rest of that line is skipped -
-	 * which is exactly what the old reader did (std::string from a char* stops
-	 * at the NUL), kept deliberately so that a file saved as UTF-16 goes on
-	 * being the pile of unreadable lines it was rather than becoming
-	 * half-readable in a way nobody has looked at. Returns false only when
-	 * there was nothing left at all. */
+	 * A NUL byte ends the line's text and the rest of that line is skipped,
+	 * so that a file saved as UTF-16 stays a set of unreadable lines rather
+	 * than becoming half-readable. Returns false only when there was nothing
+	 * left at all. */
 	bool read_line(std::FILE* file, std::string& line)
 	{
 		bool nul = false;
@@ -843,10 +766,9 @@ namespace
 		if (!file)
 			return;
 
-		/* The clause every note of this file carries. It used to be spelled
-		 * out at each note ("mod%d %s: outfit.txt ..."); it is one string now
-		 * because take_key serves two kinds of file and only the caller knows
-		 * which one it is reading (#159). */
+		/* The clause every note of this file carries. It is passed in because
+		 * take_key serves two kinds of file and only the caller knows which
+		 * one it is reading. */
 		char where[256];
 
 		std::snprintf(where, sizeof(where), "mod%d %s outfit.txt", mod,
@@ -901,37 +823,27 @@ namespace
 		return 0;
 	}
 
-	/* A FILE'S OWN ANSWERS, LAID OVER WHAT THE TIERS BELOW HAD (#159).
+	/* A file's own answers, laid over what the tiers below had.
 	 *
 	 * `from` says which tier this is - a mod's outfit.txt or a block of a list
 	 * file - and the rule is the same either way: a key the file does not have
-	 * changes NOTHING, so a block of two lines is two lines and not a new
-	 * outfit. That is what lets a list say "this one shines a little less" and
-	 * leave the other twenty answers where the scan, the table and the
-	 * measurement put them.
-	 *
-	 * And it is why this is one function rather than one per caller: the rank
-	 * is only real if every tier writes the same fields in the same order. */
+	 * changes nothing, so a block of two lines changes two answers and leaves
+	 * the rest where the scan, the table and the measurement put them. One
+	 * function for both callers, because the rank only holds if every tier
+	 * writes the same fields in the same order. */
 	void apply_txt(HDWardrobeEntry& o, const ModTxt& txt, int from)
 	{
 		if (!txt.has)
 			return;
 
-		/* THE ROW'S OWN TITLE (#159, pass 4), applied here for the reason
-		 * every other key is applied here: the rank is only real if every tier
-		 * writes the same fields, and this was the one field only the mod-add
-		 * path could write - so a list block's name= did nothing at all while
-		 * its own log line said it had. An empty one never reaches this point;
-		 * take_key refuses it, so no file can blank a row.
+		/* The row's title, applied here like every other key so that a list
+		 * block's name= overrides a mod's. An empty one never reaches this
+		 * point; take_key refuses it, so no file can blank a row.
 		 *
-		 * IT CARRIES NO TIER WORD, and that is a decision. Every from-field of
-		 * this struct has a place where its word is shown - a row of the F4
-		 * window, a column of ModelProbe's table, a field of the level build
-		 * line - and the name has none of its own: it IS the label of the F4
-		 * row and the second column of that table, so a "(list)" after it
-		 * would displace something a player reads to make room for a word
-		 * nothing asked for. The block's own log line already names `name`
-		 * among the keys it set. */
+		 * The name carries no from-field on purpose: it is itself the label
+		 * of the F4 row and the second column of ModelProbe's table, so a
+		 * tier word after it would only displace what a player reads. The
+		 * block's own log line already names `name` among the keys it set. */
 		if (!txt.name.empty())
 			put(o.name, HD_WARDROBE_NAME, txt.name);
 
@@ -941,16 +853,14 @@ namespace
 		if (txt.gloves >= 0) { o.gloves = txt.gloves != 0; o.fromFlags = from; }
 		if (txt.rig >= 0) { o.wearsRig = txt.rig != 0; o.fromFlags = from; }
 
-		/* THE FOUR NUMBERS, and every test here is "did the file say it" and
-		 * nothing else: the sentinel is -1, and since the fix round of #159 a
-		 * value that reaches this point has already passed take_number's
-		 * range, so no test below can drop a value the block's own log line
-		 * named as taken. That is exactly what they used to do - `sheen=-1`
-		 * and `exponent=0` were logged as set and thrown away here. */
+		/* The four numbers. Every test here only asks "did the file say it":
+		 * the sentinel is -1, and a value that reaches this point has already
+		 * passed take_number's range, so no test below can drop a value the
+		 * block's own log line named as taken. */
 		if (txt.sheen >= 0.0f) { o.sheen = txt.sheen; o.fromSheen = from; }
 		if (txt.exponent > 0.0f) { o.sheenPower = txt.exponent; o.fromSheen = from; }
 
-		// #158
+		// Lara's own skin.
 		if (txt.skinSheen >= 0.0f) { o.skinSheen = txt.skinSheen; o.fromSkinSheen = from; }
 		if (txt.skinExponent > 0.0f) { o.skinSheenPower = txt.skinExponent; o.fromSkinSheen = from; }
 
@@ -975,18 +885,18 @@ namespace
 		}
 	}
 
-	/* THE FOUR TIERS, and the one thing they cannot do.
+	/* Resolves an entry's properties: defaults, then the head rule, then the
+	 * table, then the mod's outfit.txt. List blocks are laid over later.
 	 *
-	 * Tier 3, "measured out of the file", exists for exactly one property -
-	 * which of the body's pages are Lara's own skin - and it is NOT applied
-	 * here, because it needs the .TRM read against a level's own bind pose
-	 * (hd_lara.cpp's measure_neck_skin, the -neck machinery: the page whose
-	 * torso-node vertices inside the neck cylinder span the greatest depth
-	 * down the neck axis). hd_lara hands it back through
-	 * HDWardrobeSkinMeasured once it has one.
+	 * The measured tier exists for exactly one property - which of the body's
+	 * pages are Lara's own skin - and it is not applied here, because it needs
+	 * the .TRM read against a level's own bind pose (hd_lara.cpp's
+	 * measure_neck_skin, the -neck machinery: the page whose torso-node
+	 * vertices inside the neck cylinder span the greatest depth down the neck
+	 * axis). hd_lara hands it back through HDWardrobeSkinMeasured.
 	 *
-	 * WHAT THAT RULE ANSWERS, checked against all eight rows of the table
-	 * (ModelProbe -lara ANDREA1 -outfit <x> -nodraw, the "her throat" note):
+	 * What that rule answers against all eight rows of the table (ModelProbe
+	 * -lara ANDREA1 -outfit <x> -nodraw, the "her throat" note):
 	 *
 	 *     OUTFIT_CLASSIC      8001   the table says 8001            agrees
 	 *     OUTFIT_RUSSIA       8001   the table says 8001            agrees
@@ -997,26 +907,20 @@ namespace
 	 *     OUTFIT_TR3_CATSUIT  8201   the table says 8201 and 8202   the first
 	 *     OUTFIT_SUBSUIT      8047   the table says NOTHING         disagrees
 	 *
-	 * Seven of the eight, the rule finds the table's FIRST page and finds it
-	 * exactly. The two disagreements are both about the same limit and both
-	 * are real:
+	 * In seven of the eight the rule finds the table's first page exactly.
+	 * The disagreements show its limit:
 	 *
-	 *   - the four Tomb Raider III guests carry a SECOND skin page, 8202,
-	 *     which is their bare ARMS. A measurement taken at the neck cannot
-	 *     reach an arm, and no measurement anywhere can: the same page number
-	 *     is bare skin under the Antarctica parka and a latex sleeve under
-	 *     the London catsuit. Geometry cannot tell skin from latex - which is
-	 *     the sentence this whole table exists for.
-	 *   - the diving suit HAS a throat page, 8047, and it is the HELMET. The
-	 *     rule is not wrong about the file; it is right about the file and
-	 *     wrong about Lara. Naming it would hand the skin material to the
-	 *     whole suit.
+	 *   - the four Tomb Raider III guests carry a second skin page, 8202,
+	 *     their bare arms. A measurement at the neck cannot reach an arm, and
+	 *     no measurement can: the same page number is bare skin under the
+	 *     Antarctica parka and a latex sleeve under the London catsuit.
+	 *     Geometry cannot tell skin from latex.
+	 *   - the diving suit has a throat page, 8047, and it is the helmet.
+	 *     Naming it would hand the skin material to the whole suit.
 	 *
-	 * So the measured tier gives a NEW entry exactly one page - its throat,
-	 * which is the page the first person neck lid wears and the page a bare
-	 * neck needs - and everything beyond that is a picture somebody has to
-	 * look at. Which is what the table above is for, and what a mod's
-	 * outfit.txt is for. */
+	 * So the measured tier gives a new entry exactly one page - its throat,
+	 * the page the first person neck lid wears and a bare neck needs - and
+	 * everything beyond that is for the table or a mod's outfit.txt. */
 	void resolve_properties(Entry& e, const ModTxt& txt)
 	{
 		HDWardrobeEntry& o = e.out;
@@ -1040,22 +944,19 @@ namespace
 		o.fromSkin = HD_WARDROBE_FROM_DEFAULT;
 		o.fromFeet = HD_WARDROBE_FROM_DEFAULT;
 
-		/* THE HEAD RULE (#156), and it is a RULE and not a table.
+		/* The head rule. It asks one question - which bundle was this body
+		 * drawn for - of the two things that answer it without a picture: the
+		 * source of an install's entry, and mod.txt's origin= line for a mod.
+		 * A body of the Tomb Raider I-III bundle carries no hair on its head
+		 * node (the measurement is in the header) and therefore takes TR5's
+		 * head; everything else keeps its own.
 		 *
-		 * It asks ONE question - which bundle was this body drawn for - and
-		 * it asks it of the two things that answer it without anybody looking
-		 * at a picture: the source of an entry of an install, and mod.txt's
-		 * own origin= line for a mod. A body of the Tomb Raider I-III bundle
-		 * carries no hair on its head node (the measurement is in the header)
-		 * and therefore takes TR5's head; everything else keeps its own.
-		 *
-		 * A MOD WITHOUT A mod.txt KEEPS ITS OWN HEAD, whatever its file is
-		 * called. There is no name rule and no geometry rule here on purpose:
-		 * "OUTFIT_TR2_HOME" is the name of a IV-VI body with a full head AND
-		 * the name a mod gives a I-III conversion, and counting vertices to
-		 * tell a bald head from a hooded one is the kind of guess that comes
-		 * back as a picture nobody can explain. The mod says origin= or it
-		 * says head=, and until it does the log says which it is. */
+		 * A mod without a mod.txt keeps its own head, whatever its file is
+		 * called. There is no name rule and no geometry rule on purpose:
+		 * "OUTFIT_TR2_HOME" is the name of a IV-VI body with a full head and
+		 * also the name a mod gives a I-III conversion, and counting vertices
+		 * to tell a bald head from a hooded one is an unreliable guess. The
+		 * mod says origin= or head=, and the log says which applied. */
 		o.head = HD_WARDROBE_HEAD_OUTFIT;
 		o.fromHead = HD_WARDROBE_FROM_DEFAULT;
 
@@ -1085,7 +986,7 @@ namespace
 			o.fromFeet = row->feet != HD_WARDROBE_FEET_UNKNOWN
 				? HD_WARDROBE_FROM_TABLE : HD_WARDROBE_FROM_DEFAULT;
 
-			/* The diving suit's empty list is a DECISION and not a gap, so
+			/* The diving suit's empty list is a decision and not a gap, so
 			 * the table owns that property even when the list is empty - it
 			 * is what keeps the measured tier from making the suit matt. */
 			o.fromSkin = HD_WARDROBE_FROM_TABLE;
@@ -1150,43 +1051,37 @@ namespace
 		return false;
 	}
 
-	/* THE .TRM ITSELF DECIDES WHETHER IT IS LISTED. Two files are refused and
-	 * each for a measured reason:
+	/* The .TRM itself decides whether it is listed. Two kinds of file are
+	 * refused:
 	 *
 	 *   - one this reader cannot get past at all. There is nothing to wear.
-	 *   - one laid out with THIRTY byte vertices whose 24 byte twin is in the
+	 *   - one laid out with thirty byte vertices whose 24 byte twin is in the
 	 *     same folder. Both describe the same body; the wide one carries its
 	 *     texture coordinates as floats and this engine's vertex holds them
 	 *     as bytes, so wearing it would round nearly every coordinate by up
 	 *     to half a step of a 256 step axis (measured over
 	 *     OUTFIT_TRX_WETSUIT_1_HD: 14,208 of 14,262 coordinates lie off that
 	 *     grid, and off every other grid from 1/256 to 1/4096). The twin is
-	 *     the same Lara without the rounding. Measured over both bundles, all
-	 *     2,923 .TRM files: exactly thirty are laid out that way and every one
-	 *     of them is an OUTFIT_TRX_*_HD.TRM with its twin beside it - so this
-	 *     rule takes nothing off the list that the list has not got twice.
-	 *     A wide file with NO twin is listed and worn, with the rounding in
-	 *     the log, because a rounded picture beats no picture.
+	 *     the same Lara without the rounding. Over both bundles, all 2,923
+	 *     .TRM files: exactly thirty are laid out that way and every one is
+	 *     an OUTFIT_TRX_*_HD.TRM with its twin beside it, so this rule takes
+	 *     nothing off the list that the list has not got twice. A wide file
+	 *     with no twin is listed and worn, with the rounding in the log.
 	 *
-	 * AND IT READS THE WHOLE FILE TO LOOK AT THE HEADER, ON PURPOSE (#153,
-	 * round M2b). HDTrmProbe wants only the counts, and the scan puts 28.8 MiB
-	 * (read_kib=29525) through it once a session for the 112 headers it looks at. Reading less
-	 * was considered and refused, with the numbers:
+	 * It reads the whole file to look at the header, on purpose. HDTrmProbe
+	 * wants only the counts, and the scan puts 28.8 MiB (read_kib=29525)
+	 * through it once a session for the 112 headers it looks at. Reading only
+	 * a prefix is not worth it:
 	 *
-	 *   - what the header needs is everything up to the VERTEX block, and the
-	 *     index list is inside that. For an outfit of 14,000 vertices and
-	 *     70,000 indices the prefix is 140 KiB of a 480 KiB file, so the
-	 *     saving is two thirds of the bytes and not the file.
-	 *   - what it costs is a SECOND length inside hd_trm's parser: every one
-	 *     of its bounds checks tests against the file length, and a prefix
-	 *     read would make "how much is in the buffer" and "how long is the
-	 *     file" two different numbers in the one reader a downloaded mod's
-	 *     .TRM goes through. Round M1's fix round is what that kind of seam
-	 *     costs when it is got wrong.
-	 *   - and what it buys is measured: the whole scan is 24 to 36 ms, once
-	 *     per session, on this machine (HDLOG wardrobe scan, ms=).
-	 *
-	 * A few milliseconds once is not worth a second length in that parser. */
+	 *   - the header needs everything up to the vertex block, and the index
+	 *     list is inside that. For an outfit of 14,000 vertices and 70,000
+	 *     indices the prefix is 140 KiB of a 480 KiB file.
+	 *   - it would add a second length inside hd_trm's parser: every bounds
+	 *     check tests against the file length, and a prefix read would make
+	 *     "how much is in the buffer" and "how long is the file" two numbers
+	 *     in the reader a downloaded mod's .TRM goes through.
+	 *   - the whole scan takes 24 to 36 ms, once per session (HDLOG wardrobe
+	 *     scan, ms=). */
 	bool readable(const std::string& path, const std::string& file,
 		const std::string& folder, std::string& why, int* vertexBytes)
 	{
@@ -1271,11 +1166,11 @@ namespace
 				continue;
 			}
 
-			/* THE IV-VI BUNDLE'S COPY WINS THE NAME. It ships its own
+			/* The IV-VI bundle's copy wins the name. It ships its own
 			 * OUTFIT_TR1_* / TR2_* / TR3_* files with IV-VI page numbers, so
 			 * they need no alternate root at all, and they are the better
 			 * model: OUTFIT_TR1_CLASSIC has 14,515 vertices there against
-			 * 8,382 in the I-III bundle. Measured over both folders. */
+			 * 8,382 in the I-III bundle. */
 			if (source == HD_WARDROBE_SOURCE_13 && have_file(file, HD_WARDROBE_SOURCE_46))
 			{
 				refused.push_back("13/" + file + " - the IV-VI install has the "
@@ -1353,14 +1248,10 @@ namespace
 				 * after the folder's so that its two entries can be told apart
 				 * in the window.
 				 *
-				 * ITS outfit.txt's OWN name= LANDS IN apply_txt (#159, pass
-				 * 4), with every other key that file sets, and a list block's
-				 * name= lands over it. It used to be taken here instead, which
-				 * is precisely why a block's name= did nothing: the name was
-				 * the one property the tiers did not carry. The answer is the
-				 * same one either way round - a mod that names itself is
-				 * called what it says, whether it ships one body or
-				 * seventeen. */
+				 * The outfit.txt's own name= is applied in apply_txt with
+				 * every other key that file sets, and a list block's name=
+				 * lands over it. A mod that names itself is called what it
+				 * says, whether it ships one body or seventeen. */
 				std::string display = leaf_of(HDModsName(mod));
 
 				if (count > 1)
@@ -1381,15 +1272,14 @@ namespace
 
 	/* ------------------------------------------------------- the lists -- */
 
-	/* THE NAME A BLOCK NAMES, split into what has to match (#159).
+	/* The name a block names, split into what has to match.
 	 *
-	 * A name may carry a KEY PREFIX to pin one source - "13/TRX_Wetsuit_3",
+	 * A name may carry a key prefix to pin one source - "13/TRX_Wetsuit_3",
 	 * "46/Classic", "mod/outfits/legend/Black_1" - because the same .TRM stem
-	 * is in the wardrobe more than once: the 4-5 Barefoot mod ships an
-	 * OUTFIT_CLASSIC beside the install's. Without a prefix the block applies
-	 * to EVERY entry with that stem, install and mods alike, which is what a
-	 * player who writes "Outfit: Classic" means and what makes one line about
-	 * a body cover the mod that reskinned it.
+	 * can be in the wardrobe more than once (a mod may ship an OUTFIT_CLASSIC
+	 * beside the install's). Without a prefix the block applies to every
+	 * entry with that stem, install and mods alike, so one line about a body
+	 * also covers the mod that reskinned it.
 	 *
 	 * The stem itself is matched the way a player writes it and not the way
 	 * the file system spells it: case does not count, "OUTFIT_" may be left
@@ -1423,15 +1313,14 @@ namespace
 		stem = up;
 	}
 
-	/* ONE BLOCK, APPLIED (#159). Every entry the name reaches takes it, and
-	 * the line says which they were and what the block set on them - so a
-	 * picture the user does not like is one grep away from the line that made
-	 * it, which is the promise every other wardrobe line makes.
+	/* One block, applied. Every entry the name reaches takes it, and the log
+	 * line says which entries they were and what the block set on them, so an
+	 * unexpected picture is one grep away from the line that made it.
 	 *
-	 * A BLOCK THAT REACHES NOTHING IS A LINE AND NOT A FAULT: a list written
-	 * on a machine with both bundles installed is read on one with a single
-	 * bundle, and the twenty-odd names that are not there have to be a note
-	 * rather than a refusal of the whole file. */
+	 * A block that reaches nothing is a note and not a fault: a list written
+	 * on a machine with both bundles installed may be read on one with a
+	 * single bundle, and the names that are not there must not refuse the
+	 * whole file. */
 	bool apply_block(const std::string& leaf, const std::string& name,
 		const std::string& prefix, const std::string& stem, const ModTxt& txt)
 	{
@@ -1478,19 +1367,13 @@ namespace
 		return true;
 	}
 
-	/* A BLOCK ENDS, AND THE FILE'S OWN TALLY MOVES WITH IT (#159, the fix
-	 * round). Three things close a block - an empty line, the next "Outfit:"
-	 * line and the end of the file - so the counting sits here and not at
-	 * three call sites.
+	/* A block ends, and the file's tally moves with it. Three things close a
+	 * block - an empty line, the next "Outfit:" line and the end of the file -
+	 * so the counting sits here and not at three call sites.
 	 *
-	 * It counts what apply_block RETURNED. It used to count by reading the
-	 * notes apply_block had just written back, looking for "-> no such
-	 * outfit" in the text - and note() cuts at 512 bytes. Measured: a block
-	 * named with 912 characters writes a note of exactly 512, ending in the
-	 * middle of the name, with no tail to find, so it counted as MATCHED. On
-	 * a file of six blocks the old summary read "4 matched, 2 unmatched"
-	 * where the lines under it said three and three. A number, and not a grep
-	 * of one's own prose. */
+	 * It counts what apply_block returned, never the text of its notes:
+	 * note() cuts at 512 bytes, so a note about a very long block name loses
+	 * its "-> no such outfit" tail and a text search would miscount it. */
 	void close_block(const std::string& leaf, const std::string& name,
 		const std::string& prefix, const std::string& stem, ModTxt& open,
 		int* hit, int* gone)
@@ -1506,17 +1389,17 @@ namespace
 		open = ModTxt();
 	}
 
-	/* A LIST FILE (#159). Read line by line, and the SHAPE is the whole of it:
+	/* A list file, read line by line:
 	 *
-	 *   "#..."            a comment, and it closes nothing - the user's own
-	 *                     file puts one under every "Outfit:" line
+	 *   "#..."            a comment; it closes nothing, so a comment under an
+	 *                     "Outfit:" line stays inside the block
 	 *   "Outfit: <name>"  opens a block and closes the one before it
 	 *   "key=value"       belongs to the open block
 	 *   an empty line     closes the block
 	 *
 	 * A key outside a block, a block with no name and a line with no "=" are
-	 * each a note and the file goes on being read: one bad line in a file of
-	 * fifty-two blocks may not cost the other fifty-one. */
+	 * each a note and the file goes on being read: one bad line may not cost
+	 * the other blocks. */
 	void read_list(const std::string& path, int* blocks, int* hit, int* gone)
 	{
 		std::FILE* file = std::fopen(path.c_str(), "rb");
@@ -1536,11 +1419,10 @@ namespace
 
 		while (read_line(file, line))
 		{
-			/* A BYTE ORDER MARK OFF THE FRONT OF THE FIRST LINE. This is a
-			 * file a player writes in an editor, and Windows Notepad's "UTF-8"
-			 * puts three bytes there; on an "Outfit:" line they would cost him
-			 * the block and the reason would be invisible in the file. Only
-			 * the first line can carry one. */
+			/* A byte order mark off the front of the first line. A player
+			 * writes this file in an editor, and Windows Notepad's "UTF-8"
+			 * puts three bytes there; on an "Outfit:" line they would cost
+			 * the block for a reason invisible in the file. */
 			if (first)
 			{
 				first = false;
@@ -1555,10 +1437,10 @@ namespace
 				line.erase(line.size() - 1);
 
 			const size_t hash = line.find('#');
-			/* A WHOLE-LINE COMMENT IS NOT AN EMPTY LINE. Cutting the comment
-			 * off first and then testing for empty would let the comment under
-			 * every "Outfit:" line of the user's own file close the block it
-			 * belongs to, and every key after it would stand outside one. */
+			/* A whole-line comment is not an empty line. Cutting the comment
+			 * off first and then testing for empty would let a comment under
+			 * an "Outfit:" line close the block it belongs to, and every key
+			 * after it would stand outside one. */
 			const bool comment = hash != std::string::npos &&
 				trim(line.substr(0, hash)).empty();
 
@@ -1621,13 +1503,12 @@ namespace
 		std::fclose(file);
 	}
 
-	/* EVERY LIST, IN PATH ORDER, AFTER EVERYTHING ELSE (#159). After, because
-	 * this is the top tier: an entry has to have its mod's outfit.txt, its
-	 * table row and its defaults on it before a block may overwrite any of
-	 * them. In path order - hd_mods sorts them by their lower-cased full path,
-	 * so the folder decides before the file name does - because two files may
-	 * name one outfit and the later one wins, which is only a rule if the
-	 * order is written down. */
+	/* Every list, in path order, after everything else. After, because this
+	 * is the top tier: an entry has to have its mod's outfit.txt, its table
+	 * row and its defaults on it before a block may overwrite any of them. In
+	 * path order - hd_mods sorts them by their lower-cased full path, so the
+	 * folder decides before the file name does - because two files may name
+	 * one outfit and the later one wins. */
 	void apply_lists(int* files, int* blocks, int* matched, int* missed)
 	{
 		*files = HDModsListCount();
@@ -1640,10 +1521,9 @@ namespace
 			const std::string path = HDModsListPath(i);
 			int mine = 0, hit = 0, gone = 0;
 
-			/* WHAT THE FILE'S OWN LINE COUNTS: the blocks it opened, and of
-			 * those the ones that reached an entry - counted by close_block
-			 * from what apply_block returned, so the summary cannot claim
-			 * something the lines under it do not say. */
+			/* The file's own line counts the blocks it opened and, of those,
+			 * the ones that reached an entry - counted by close_block from
+			 * what apply_block returned. */
 			read_list(path, &mine, &hit, &gone);
 
 			note("HDLOG wardrobe list %s: %d blocks, %d matched, %d unmatched",
@@ -1657,14 +1537,11 @@ namespace
 
 	void scan()
 	{
-		/* WHAT THE SCAN COSTS, IN NUMBERS (#153, round M2, the fix round).
-		 * The user's question was whether the engine "tries to load every
-		 * outfit at every level change", and the honest answer is a counter
-		 * and not a promise: this reports the files it opened, the bytes it
-		 * read and the models it loaded WITH geometry - and that last number
-		 * is zero, because the scan probes headers and the geometry of the
-		 * one outfit that is worn is read by hd_model's own pass one. The
-		 * whole thing runs once per session; a second level build finds
+		/* What the scan costs, as counters in its log line: the files it
+		 * opened, the bytes it read and the models it loaded with geometry.
+		 * The last is zero - the scan probes headers only, and the geometry
+		 * of the one outfit that is worn is read by hd_model's own pass one.
+		 * The scan runs once per session; a second level build finds
 		 * `scanned` set and adds none of it. */
 		double opens0 = 0, loads0 = 0, bytes0 = 0;
 
@@ -1679,12 +1556,11 @@ namespace
 		used46 = !want46.empty() ? want46 : HDInstallRoot();
 		used13 = !want13.empty() ? want13 : HDInstallRootTr3();
 
-		/* 4\ITEM BEFORE 5\ITEM, which is the other way round from the model
-		 * resolver, and on purpose: every outfit of the IV-VI bundle lives in
-		 * 4\ITEM and 5\ITEM has none at all (measured: 21 upper case plus the
-		 * three the remaster spells in lower case, against 0). 5 is asked all
-		 * the same, because a name that turns up there one day is a TR5 outfit
-		 * and belongs at the head of the list. */
+		/* 4\ITEM before 5\ITEM, the other way round from the model resolver:
+		 * every outfit of the IV-VI bundle lives in 4\ITEM and 5\ITEM has none
+		 * (21 upper case plus three spelled in lower case, against 0). 5 is
+		 * asked all the same, because a name that turns up there is a TR5
+		 * outfit. */
 		if (!used46.empty())
 		{
 			add_from_install(used46, 4, HD_WARDROBE_SOURCE_46);
@@ -1704,7 +1580,7 @@ namespace
 
 		add_from_mods();
 
-		/* AND THE LISTS LAST (#159), because they are the top tier: a block
+		/* The lists last, because they are the top tier: a block
 		 * may only overwrite what the scan, a mod's outfit.txt, the table and
 		 * the defaults have already put on an entry. */
 		int listFiles = 0, listBlocks = 0, listHit = 0, listMissed = 0;
@@ -1723,8 +1599,7 @@ namespace
 			default: modded++; break;
 			}
 
-			// #156: the head rule over the whole list, so that "they are all
-			// still bald" and "one of them is" are different lines.
+			// The head rule tallied over the whole list, for the scan line.
 			switch (entries[i].out.head)
 			{
 			case HD_WARDROBE_HEAD_TR5: tr5Head++; break;
@@ -1775,7 +1650,7 @@ void HDWardrobeForget()
 	entries.clear();
 	refused.clear();
 	// The lists are hd_mods' own list and are dropped with its scan; nothing
-	// of them is kept here past the entries they were applied to (#159).
+	// of them is kept here past the entries they were applied to.
 	notes.clear();
 	notes_flushed = 0;
 }
@@ -1842,13 +1717,11 @@ const char* HDWardrobeFromWord(int from)
 	}
 }
 
-/* THE ONE-WORD FORM, for a column of a table or a field of a log line (#159).
+/* The one-word form, for a column of a table or a field of a log line.
  *
- * It is a SWITCH and not an array on purpose. Two callers kept an array of
- * these words and indexed it with the entry's own from-number; round 156 added
- * a fifth tier and one of those arrays still had four rows, so the head column
- * of the level build line would have read whatever lay after it. A tier added
- * here is a word here, and a caller that asks gets one or gets "?". */
+ * A switch and not an array on purpose: an array indexed by the from-number
+ * reads past its end when a tier is added and the array is not. A tier added
+ * here is a word here, and any other number answers "?". */
 const char* HDWardrobeFromTag(int from)
 {
 	switch (from)

@@ -25,35 +25,29 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* THE HD ROOM SHADER (#123, stages S1, S2 and S5).
+/* The HD room shader: draws the geometry of a remaster .TRG room with the
+ * classic engine's own room lighting, fog, fog bulbs and water effects.
  *
- * HOW IT IS BUILT. There is no fxc step in tomb5.vcxproj on purpose - the
- * project must build on a machine with nothing but the Visual Studio C++
- * toolset. The bytecode is checked in beside this file as two C headers, and
- * this file is the source GPLv3 requires to sit next to them. Rebuild them
- * with
- *
- *     Preparation\Tools\Diagnose\bshader.bat
- *
- * which is exactly these two calls:
+ * Build. tomb5.vcxproj has no fxc step, so the project builds with the Visual
+ * Studio C++ toolset alone. The bytecode is checked in beside this file as two
+ * C headers, and this file is their source. Preparation\Tools\Diagnose\
+ * bshader.bat rebuilds them with exactly these two calls:
  *
  *     fxc /nologo /T vs_3_0 /E RoomVS /O3 /Vn kHDRoomVS /Fh hd_room_vs.inc hd_room.hlsl
  *     fxc /nologo /T ps_3_0 /E RoomPS /O3 /Vn kHDRoomPS /Fh hd_room_ps.inc hd_room.hlsl
  *
  * fxc.exe comes from the Windows SDK (Windows Kits\10\bin\<version>\x86).
- * Nothing of it is linked in: /Fh writes a plain byte array, and
- * CreateVertexShader / CreatePixelShader take it as it is. No d3dx, no
- * runtime compiler, no extra DLL in the package.
+ * /Fh writes a plain byte array that CreateVertexShader / CreatePixelShader
+ * take as it is: no d3dx, no runtime compiler, no extra DLL in the package.
  *
- * THE VERTEX IS THE ONE ON DISK PLUS FOUR FLAG BYTES. A .TRG vertex is 20
- * bytes (Trg.h) and it keeps that size and that meaning on the card - only
- * the three colour bytes of each pair are written back to front, for the
- * reason below. Stage S2 appends a fifth element, four bytes the .TRG does
- * not have: the water marks the classic path keeps in its roomlets.
+ * The vertex is the 20-byte .TRG vertex (Trg.h) unchanged in size and meaning,
+ * except that the three colour bytes of each pair are stored back to front,
+ * plus a fifth element of four bytes: the water marks the classic path keeps
+ * in its roomlets.
  *
  *   +0   SHORT4    x, y, z, sway     POSITION   room local, classic units;
  *                                              sway is the remaster's wind
- *                                              weight and stage S5 reads it
+ *                                              weight
  *   +8   UBYTE4    nx, ny, nz, layer NORMAL     biased by 127; layer unused
  *                                               here (one page per draw call)
  *   +12  D3DCOLOR  b, g, r, u        COLOR0     first light triple + u
@@ -61,103 +55,90 @@
  *   +20  UBYTE4    w, s, r, 1        TEXCOORD0  three water marks, then a 1
  *
  * D3DDECLTYPE_D3DCOLOR reads the four bytes as one little-endian DWORD in
- * 0xAARRGGBB order and hands the shader (R, G, B, A) - so the byte at +0 is
- * BLUE, the byte at +3 is alpha, and the shader gets the triple as .rgb the
- * right way round. hd_render.cpp writes the pair in that order (c1b, c1g,
- * c1r, u) and this file reads .rgb: exactly ONE swap between the file and
- * the pixel. Two swaps - the tempting "the bytes arrive as .bgra, so read
- * .bgr" - cancel out and paint the whole level with red and blue exchanged,
- * which looks like a plausible picture and is the reason this paragraph is
- * this long.
+ * 0xAARRGGBB order and hands the shader (R, G, B, A): the byte at +0 is blue,
+ * the byte at +3 is alpha. hd_render.cpp writes the pair as (c1b, c1g, c1r, u)
+ * and this file reads .rgb - exactly one swap between the file and the pixel.
+ * Reading .bgr as well would swap twice and paint the whole level with red and
+ * blue exchanged, a plausible-looking but wrong picture.
  *
- * The alpha byte, .a, is the texture coordinate, already divided by 255,
- * which is exactly the scale it wants (TROne: u / 255.0f). That the two
- * coordinates sit in two different colours' alpha bytes is the remaster's
- * own packing, not ours. D3DDECLTYPE_UBYTE4 is NOT normalised, so the flag
- * bytes arrive as 0.0 or 1.0 exactly as they were written.
+ * The alpha byte, .a, is the texture coordinate already divided by 255, the
+ * scale it needs (TROne: u / 255.0f). The two coordinates sitting in two
+ * different colours' alpha bytes is the remaster's own packing.
+ * D3DDECLTYPE_UBYTE4 is not normalised, so the flag bytes arrive as 0.0 or
+ * 1.0 exactly as written.
  *
- * THE LIGHT. light = colour1 * gPass.z + colour2, and the pixel is
+ * The light. light = colour1 * gPass.z + colour2, and the pixel is
  * texel * light. A SUM, not a product - as TRForge's MIT reader adds the
  * two triples (trf_remaster/HdMesh.cpp, colour_of). gPass.z is a spare
  * scale on the first colour that this build always sets to 1; nothing
  * computes it.
  *
- * THE THREE PASSES are the three index runs of a .TRG part, in this order:
+ * The three passes are the three index runs of a .TRG part, in this order:
  *
- *   0 opaque    no alpha test, EXCEPT on the three cut-out materials 6, 7
- *               and 8, whose param[0] is the reference (#123, fix round A2 -
- *               hd_render.cpp, MaterialAlphaRef). On every other material
- *               the alpha channel of an opaque tile carries a gloss/wetness
- *               MASK, not coverage, and testing on it blanks whole floors
- *               and facades (TROne on a TR1 snow floor; ANDREA1's stucco,
- *               JOBY2's snow and JOBY3's bulkheads in this game).
+ *   0 opaque    no alpha test, except on the three cut-out materials 6, 7
+ *               and 8, whose param[0] is the reference (hd_render.cpp,
+ *               MaterialAlphaRef). On every other material the alpha
+ *               channel of an opaque tile carries a gloss/wetness MASK, not
+ *               coverage, and testing on it blanks whole floors and facades
+ *               (TROne on a TR1 snow floor; ANDREA1's stucco, JOBY2's snow
+ *               and JOBY3's bulkheads here).
  *   1 alpha     clip(a - 0.5), the punch-through pass.
  *   2 additive  colour * alpha, blended ONE/ONE with the depth write off.
  *
  * All three switches ride in one constant so the shader never branches:
- * gPass.x is the ALPHA REFERENCE - 0.5 in the alpha pass, the material's own
- * in the opaque pass of a cut-out part, 0 everywhere else, and a texel alpha
- * is never below 0 so a zero reference discards nothing -
- * gPass.y is 1 in the additive pass and 0 otherwise, gPass.w is 0 in the
- * additive pass and 1 otherwise - the classic path switches
- * D3DRS_SPECULARENABLE off for its additive draw type (polyinsert.cpp:72)
- * and the overbright term below has to go off with it.
+ * gPass.x is the alpha reference - 0.5 in the alpha pass, the material's own
+ * in the opaque pass of a cut-out part, 0 everywhere else (a texel alpha is
+ * never below 0, so a zero reference discards nothing). gPass.y is 1 in the
+ * additive pass and 0 otherwise; gPass.w is 0 in the additive pass and 1
+ * otherwise, because the classic path switches D3DRS_SPECULARENABLE off for
+ * its additive draw type (polyinsert.cpp) and the overbright term below goes
+ * off with it.
  *
  * -------------------------------------------------------- THE PARITY BLOCK
  *
- * WHY THERE IS A 127.5, AND WHY THE 128 SPLIT IS NOT HERE. The classic path
- * computes a room vertex colour in 0..255 and then splits it
- * (drawroom.cpp:520-545): up to 128 it DOUBLES the value into the diffuse
- * colour, above 128 it pins the diffuse at 255 and puts the excess, halved,
- * into the SPECULAR colour, which the fixed function pipeline adds after the
- * texture modulation. So the classic pixel is
+ * Why there is a 127.5 and no 128 split. The classic path computes a room
+ * vertex colour in 0..255 and then splits it (drawroom.cpp): up to 128 it
+ * doubles the value into the diffuse colour, above 128 it pins the diffuse at
+ * 255 and puts the excess, halved, into the SPECULAR colour, which the fixed
+ * function pipeline adds after the texture modulation. So the classic pixel is
  *
  *     texel * (c / 255) + (s / 255),  c, s from that split,
  *
  * the multiply on the texel never passes 1, and the rest arrives as an ADD.
  * The remaster's baked light covers the same total range - 0..2, TRForge over
- * 144 .TRG files, colour1 + colour2 - but as a straight MULTIPLY, and stage
- * S1 draws it that way.
+ * 144 .TRG files, colour1 + colour2 - but as a straight MULTIPLY.
  *
- * The two meet exactly in the region below 128, and that is where the bridge
- * is built:
+ * The two agree exactly below 128, and the bridge between them is
  *
  *     f = light * 127.5     light = f * 2 / 255
  *
  * Every contribution below is computed in the classic path's own 0..255
  * units, in the same order, and converted back with that one line. Below 128
- * the result is the classic colour to the last bit; above it, the multiply
+ * the result is the classic colour to the last bit; above it the multiply
  * keeps going instead of turning into an add.
  *
- * That is a DELIBERATE deviation, and it is the one place stage S2 does not
- * follow the classic path. The split is a hardware workaround - a way to fit
- * a brightness of 2 into a diffuse byte and a specular byte on a fixed
- * function pipeline - and a shader has floats and does not need it. Following
- * it here would have dulled every bright surface the remaster bakes: measured
- * over ANDREA1 and RICH1, up to 29 % of the vertex light channels of a room
- * are above 1, RICH1 room 12 reaches the full 2.0, and applying the split to
- * them would have turned "texel x 1.5" into "texel x 1 + 0.25" - a visibly
- * flatter room, and a silent change to a picture that was already judged
- * good. RoomProbe -paritycheck measures both: the contribution in the classic
- * path's own units (budget 2 of 255) and the final brightness, where the
- * deviation shows as a number.
+ * That is a deliberate deviation from the classic path. The split is a fixed
+ * function workaround for fitting a brightness of 2 into a diffuse byte and a
+ * specular byte; a shader has floats. Applying it would dull every bright
+ * surface the remaster bakes: over ANDREA1 and RICH1 up to 29 % of the vertex
+ * light channels of a room are above 1, RICH1 room 12 reaches the full 2.0,
+ * and the split would turn "texel x 1.5" into "texel x 1 + 0.25" - a visibly
+ * flatter room. RoomProbe -paritycheck measures both the contribution in the
+ * classic path's own units (budget 2 of 255) and the final brightness.
  *
- * The fog bulbs are the exception that keeps its split, because for them it
- * is not a workaround: a bulb is haze BETWEEN the eye and the surface, so its
- * density has to darken the multiply and its colour has to be added on top,
- * or a bulb in front of a black wall would not glow.
+ * The fog bulbs keep the split, because for them it is not a workaround: a
+ * bulb is haze BETWEEN the eye and the surface, so its density darkens the
+ * multiply and its colour is added on top, or a bulb in front of a black wall
+ * would not glow.
  *
- * WHAT IS PER PIXEL AND WHAT IS PER VERTEX, AND WHY. The dynamic lights, the
- * fog bulbs and the distance fog are smooth functions of a position and are
- * computed PER PIXEL - a classic roomlet is a handful of vertices and a torch
- * on a long wall was a Gouraud smear; an HD room has the geometry to have
- * done it per vertex too, but per pixel is both better and cheaper to reason
- * about. The WaterTable effects (choppy, shimmer, the underwater darkening,
- * the Red Alert gas) stay PER VERTEX because they are not smooth: the table
- * is indexed by the vertex position quantised to 64 x 64 x 128 units, so per
- * pixel would paint visible 64-unit blocks where the classic path has a
- * smooth interpolation between corners. Same for the underwater screen
- * wobble, which is a per-vertex screen offset by construction.
+ * Per pixel and per vertex. The dynamic lights, the fog bulbs and the distance
+ * fog are smooth functions of a position and are computed per pixel, which
+ * avoids the Gouraud smear of a torch on a long classic wall. The WaterTable
+ * effects (choppy, shimmer, the underwater darkening, the Red Alert gas) stay
+ * per vertex because they are not smooth: the table is indexed by the vertex
+ * position quantised to 64 x 64 x 128 units, so per pixel would paint visible
+ * 64-unit blocks where the classic path interpolates smoothly between corners.
+ * The underwater screen wobble is a per-vertex screen offset by construction.
  */
 
 /* ------------------------------------------------- constants, vertex side --
@@ -171,10 +152,9 @@
  * c10         gRoomOrigin         per room
  * c11         gWaterMode          per room
  * c12         gSel1               per room
- * c13         gMotion             per DRAW CALL (#123, stage S5)
- * c14         gFlat               per DRAW CALL (#123, fix round R3a; .w is
- *                                 fix round H, H4 - the flat-surface gate)
- * c15         gWaterBox           per room   (#123, fix round E)
+ * c13         gMotion             per DRAW CALL
+ * c14         gFlat               per DRAW CALL (.w is the flat-surface gate)
+ * c15         gWaterBox           per room
  * c32 - c95   gWaterTable[64]     per room, only when the row changes
  * c96 - c127  gWibbleTable[32]    per level (it never changes)
  */
@@ -184,11 +164,10 @@ float4x4 gWorldViewProj : register(c0);
  * w = specular (overbright) on/off.
  *
  * hd_model.hlsl shares this register and shares x, y and w with it; only z
- * differs, and there it is the first person near cut of stage S8. The two do
- * not collide because this file's z is read in the VERTEX half and written
+ * differs, and there it switches the first person head cut. The two do not
+ * collide because this file's z is read in the VERTEX half and written
  * through SetVertexShaderConstantF, while hd_model.cpp writes c4 to the PIXEL
- * constant file alone - and a room is drawn before a model in every frame
- * anyway. */
+ * constant file alone - and a room is drawn before a model in every frame. */
 float4 gPass : register(c4);
 
 /* float4x3, not float4x4, and three registers rather than four: only the
@@ -205,10 +184,10 @@ float4 gScreen : register(c9);
 /* xyz = the room's origin in world units (r->x, r->y, r->z), w = the room's
  * minfloor made room local (minfloor - r->y) - the water surface plane.
  *
- * The one constant this file uploads to BOTH register files (#123, fix round
- * R3b): the vertex half needs it for the WaterTable's world space hash, and
- * the pixel half for the caustic's world position. Same number, same
- * register, two SetShaderConstantF calls per room. */
+ * The one constant this file uploads to BOTH register files: the vertex half
+ * needs it for the WaterTable's world space hash, the pixel half for the
+ * caustic's world position. Same number, same register, two
+ * SetShaderConstantF calls per room. */
 float4 gRoomOrigin : register(c10);
 
 /* x = 1 when the room carries ROOM_UNDERWATER, y = 1 when the choppy
@@ -217,18 +196,17 @@ float4 gRoomOrigin : register(c10);
 float4 gWaterMode : register(c11);
 
 /* Which of the baked marks decides "flags |= 1" in this room this frame. The
- * room flag branch of drawroom.cpp:451-475 is a per room decision and it is
- * taken on the processor; what is left for the shader is one dot product. All
- * zero while tomb5.shimmer is off - that is where the option switch lands.
+ * room flag branch of drawroom.cpp (the shimmer selection) is a per room
+ * decision taken on the processor; what is left for the shader is one dot
+ * product. All zero while tomb5.shimmer is off - that is the option switch.
  *
- * The FOURTH component pairs with the vertex's fourth flag byte, which is the
- * constant 1 - so a selector can turn a whole room on without a mark on every
- * vertex. The engine never uses it; the diagnostic tool's -shimmer does, and
- * that is a picture with no classic level behind it. */
+ * The fourth component pairs with the vertex's fourth flag byte, the constant
+ * 1, so a selector can turn a whole room on without a mark on every vertex.
+ * The engine never uses it; the diagnostic tool's -shimmer does. */
 float4 gSel1 : register(c12);
 
-/* WHAT MOVES (#123, stage S5). Three motions, all of them the .TRG's own data
- * and none of them a clock of this file's making:
+/* What moves. Three motions, all driven by the .TRG's own data and the
+ * engine's own clock:
  *
  *   x, y  the UV offset of THIS draw call in THIS frame. A .TRG part carries
  *         a material and four parameters (Trg.h), and material 1 is a UV
@@ -236,8 +214,8 @@ float4 gSel1 : register(c12);
  *         over all 15 levels, and calibrated against the classic path in
  *         RICH2, the one level where both exist: the classic UVROT tile moves
  *         7.5 tile heights a second there, the remaster's own scroll on the
- *         same surface 4.0. The offset itself is computed on the processor,
- *         wrapped, so this is one add.
+ *         same surface 4.0. The offset is computed and wrapped on the
+ *         processor, so this is one add.
  *   z     the game clock in seconds, counted from the engine's own
  *         GlobalCounter (30 Hz, stops when the game stops).
  *   w     1 while tomb5.hd_motion is on, 0 otherwise - the one switch for all
@@ -245,9 +223,8 @@ float4 gSel1 : register(c12);
  */
 float4 gMotion : register(c13);
 
-/* THE WIND AND THE WATER WOBBLE, in classic units and radians per second.
- * These five numbers are the only ones in this file that are a judgement
- * rather than a measurement, and they are here, named, for that reason. The
+/* The wind, in classic units and radians per second. These numbers are a
+ * judgement rather than a measurement, which is why they are named here. The
  * shape is TROne's (game_renderer.cpp, k_hd_vert: a sine of x + z, a second
  * one across it); 24 units of travel and a wavelength of about 1.4 blocks is
  * what that shader uses for its own water, and grass, ivy and kelp are the
@@ -256,28 +233,26 @@ float4 gMotion : register(c13);
 #define HD_WIND_WAVELENGTH 0.0045f
 #define HD_WIND_SPEED      2.1f
 
-/* THE WATER SURFACE (#123, fix round R3b), carried over from TROne
+/* The water surface, carried over from TROne
  * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, k_hd_vert
  * 153-172 and k_hd_frag 211-223 - the shape of the swell, the UV wobble and
  * the caustic are his; see THIRD-PARTY.md).
  *
- * WHY IT IS HERE AT ALL. Stage S5 refused the caustic on the grounds that
- * "TR5 has one, the WaterTable shimmer, and a second would count it twice".
- * The refusal was right about the brightness and wrong about the motion: the
- * WaterTable term is computed PER VERTEX, and a remaster water surface is a
- * few large quads whose corners are the only vertices it has, so what reaches
- * the screen is a slow blotch and not a shimmer. TROne hit exactly this and
- * says so in the same words ("a vertex-interpolated shimmer stayed flat and
- * the surface looked still"). So the WaterTable term stays where it is,
- * untouched, parity and all - and the caustic is added as a ZERO MEAN
- * MODULATION on top of it: it carries no average brightness of its own, only
- * the movement the classic term cannot carry at this vertex count.
+ * Why a caustic on top of the classic shimmer. TR5's own shimmer is the
+ * WaterTable term, computed PER VERTEX, and a remaster water surface is a few
+ * large quads whose corners are its only vertices, so that term reaches the
+ * screen as a slow blotch, not a shimmer. TROne notes the same ("a
+ * vertex-interpolated shimmer stayed flat and the surface looked still"). The
+ * WaterTable term therefore stays untouched, parity and all, and the caustic
+ * is added as a ZERO MEAN MODULATION on top of it: no average brightness of
+ * its own, only the movement the classic term cannot carry at this vertex
+ * count - so the shimmer's brightness is not counted twice.
  *
- * The three amplitudes are TROne's own; the strength is held against the
- * player's two reference shots of the same VCI pool: over the water region
- * the two frames differ by 8.4 of 255 on average, with 17 percent of the
- * pixels more than 16 apart against a mean of 34 - a swing of a third to a
- * half of the local value, which 0.32 either way meets. */
+ * The three amplitudes are TROne's own. The strength is matched to two
+ * reference shots of the same VCI pool from the remaster: over the water
+ * region the two frames differ by 8.4 of 255 on average, with 17 percent of
+ * the pixels more than 16 apart against a mean of 34 - a swing of a third to
+ * a half of the local value, which 0.32 either way meets. */
 #define HD_WATER_UV        (6.0f / 512.0f)
 #define HD_WATER_WAVE      0.0045f
 #define HD_WATER_SWELL     24.0f
@@ -288,41 +263,42 @@ float4 gMotion : register(c13);
 
 /* WaterTable[room->MeshEffect], 64 entries: x = shimmer, y = choppy,
  * z = random, w = abs. The engine hands over its OWN table rather than a
- * rebuilt one: init_water_table (gamemain.cpp:59) seeds rand() with 121197
- * and draws from it in a rejection loop, and a second implementation of that
- * is a second chance to be subtly wrong. */
+ * rebuilt one: init_water_table (gamemain.cpp) seeds rand() with 121197 and
+ * draws from it in a rejection loop, and a second implementation of that
+ * would be a second chance to be subtly wrong. */
 float4 gWaterTable[64] : register(c32);
 
-/* vert_wibble_table (gamemain.cpp:109), 32 entries, one per register - the
+/* vert_wibble_table (gamemain.cpp), 32 entries, one per register - the
  * index is computed at run time and a float4 would need a component select
  * on top of the relative address. 32 registers of a 256 register file. */
 float4 gWibbleTable[32] : register(c96);
 
-/* THE SKY BAND'S FLAT LIGHT (#123, fix round R3a).
+/* The sky band's flat light.
  *
  * x is 1 for a draw call whose .TRG part carries no baked light anywhere and
- * whose page is the whole picture - the band of sky, measured at exactly zero
- * on all 1,280 of its triangles in every level, because the remaster's own
- * sky shader does not read the vertex colour. Through the room formula it
- * would come out black. 0 for every other draw call in the game, where the
- * baked light is the light. See hd_render.cpp, PartIsUnlit. */
+ * whose page is the whole picture - the band of sky, whose vertex light is
+ * exactly zero on all 1,280 of its triangles in every level, because the
+ * remaster's own sky shader does not read the vertex colour. Through the room
+ * formula it would come out black. 0 for every other draw call, where the
+ * baked light is the light. See hd_render.cpp, PartIsUnlit.
+ *
+ * w switches the flat-surface gate of the water motion (see "only where the
+ * surface is flat" in RoomVS). */
 float4 gFlat : register(c14);
 
-/* WHERE THIS ROOM'S WATER STOPS (#123, fix round E, E3).
+/* Where this room's water stops.
  *
  * xy the smallest and zw the largest x and z, room local, of the box the
  * surface bit was flooded into (hd_render.cpp, "THE SHORE OF EACH ROOM'S
  * WATER"). A room with no water gets a box so large that nothing is ever
  * near its edge, and the taper below is then exactly 1.
  *
- * WHAT IT IS FOR. Fix round R3b lifts every marked vertex by up to one and a
- * half times HD_WATER_SWELL, and 36 of those units are UPWARDS - y counts
- * downwards here. The vertices at the water's own edge carry the mark like
- * every other, so the surface climbed over the coping it should meet and
- * covered it with dark water: the player's two shots of the Rome cistern show
- * a dark band standing exactly where the lit coping is, and the band MOVES
- * between the two shots with the wave. Water does not do that. It goes flat
- * where it meets the land, and so does this. */
+ * What it is for. The swell lifts every marked vertex by up to one and a half
+ * times HD_WATER_SWELL, 36 units of it UPWARDS (y counts downwards). The
+ * vertices at the water's own edge carry the mark too, so without the taper
+ * the surface climbs over the coping it should meet and covers it with a
+ * moving band of dark water (visible on the Rome cistern). Real water goes
+ * flat where it meets the land, and so does this. */
 float4 gWaterBox : register(c15);
 
 /* How far in from the shore the swell reaches its full height: one square. A
@@ -336,11 +312,11 @@ float4 gWaterBox : register(c15);
  * c4          gPass               per pass  (the same one)
  * c16         gFog                per frame
  * c17         gCounts             per room
- * c18         gAdd                per DRAW CALL (#123, fix round R3a)
- * c19         gSpec               per DRAW CALL (#123, fix round R3b; .w is
- *                                 fix round H, H2 - the see-through weight)
+ * c18         gAdd                per DRAW CALL
+ * c19         gSpec               per DRAW CALL (.w is the see-through
+ *                                 weight)
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
- * c36         gRipple             per DRAW CALL (#123, fix round N)
+ * c36         gRipple             per DRAW CALL
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
  * Deliberately disjoint from the vertex numbers although the two constant
@@ -350,115 +326,97 @@ float4 gWaterBox : register(c15);
 
 /* x = tomb5.distance_fog * 1024, y = 255 / that. No on/off switch beside it:
  * the classic path has none either - the option is a distance in blocks,
- * 3..30 (troyestuff.cpp:582-596), and it always subtracts. */
+ * 3..30 (troyestuff.cpp), and it always subtracts. */
 float4 gFog : register(c16);
 
 /* x = dynamic lights, y = fog bulbs. */
 float4 gCounts : register(c17);
 
-/* THE ADDITIVE PASS'S OWN CONSTANT (#123, fix round R3a).
+/* The additive pass's own constant.
  *
  * x = the weight of THIS draw call, out of the .TRG part's own material
- *     parameters (hd_render.cpp, MaterialAddWeight, which carries the
- *     measurement that says which slot it is per material). 1 in the opaque
- *     and alpha passes, and 1 for every additive part whose material names
- *     no weight, so this line costs those a multiply by one.
+ *     parameters (hd_render.cpp, MaterialAddWeight, which says which slot it
+ *     is per material). 1 in the opaque and alpha passes, and 1 for every
+ *     additive part whose material names no weight.
  * y = the game clock in seconds - gMotion.z on the pixel side.
  * z = the swing time in seconds, 0 for a part that stands still.
  * w = tomb5.hd_motion, so hd_motion 0 draws the still picture the weight
  *     alone gives.
  *
- * THE SWING. The player's two reference shots of one VCI corridor, three
- * seconds apart, show the same streaks standing in different places. The
- * remaster's own shader is not readable here, so what is drawn is the
- * smallest thing that answers the picture: the weight breathes by
- * HD_RAY_SWING about its own value, once per gAdd.z seconds, with a phase
- * taken from the surface point so that neighbouring parts of one fan are out
- * of step and the bright places travel along the shaft instead of the whole
- * room pulsing at once. The wave has the same shape as the wind of stage S5
- * two screens up - (x + z) times a wavelength plus clock times a speed -
- * because that is this file's idiom for "a slow travelling wave", not
- * because the two are the same effect. */
+ * The swing. Two reference shots of one VCI corridor from the remaster, three
+ * seconds apart, show the same light streaks standing in different places.
+ * What is drawn is the smallest thing that reproduces that: the weight
+ * breathes by HD_RAY_SWING about its own value, once per gAdd.z seconds, with
+ * a phase taken from the surface point so that neighbouring parts of one fan
+ * are out of step and the bright places travel along the shaft instead of the
+ * whole room pulsing at once. The wave has the same shape as the wind -
+ * (x + z) times a wavelength plus clock times a speed - as this file's idiom
+ * for a slow travelling wave, not because the two are the same effect. */
 float4 gAdd : register(c18);
 
 /* How far the swing carries, either side of the part's own weight, and over
- * what distance one wave of it fits. The .TRG gives the PERIOD and nothing
- * else, so neither is read out of the file - but the first one is now MEASURED
- * against the remaster's own two shots rather than chosen (#123, fix round E,
- * E1).
+ * what distance one wave of it fits. The .TRG gives only the PERIOD, so
+ * neither is read from the file; the amplitude is measured, the wavelength
+ * chosen.
  *
- * WHAT WAS WRONG. Fix round R3a put a quarter either way here, and the player
- * called the result pulsing. Measured on his own two shots of the ANDREA
- * church, the two candle glows move by +7.8 and -9.3 percent of the WHOLE
- * pixel between one moment and the next - and those are two arbitrary
- * moments of a sine that carries half again as much.
- *
- * WHAT THE REFERENCE SAYS. The remaster's own two shots of the VCI corridor,
- * three seconds apart, measured over the shaft band on the far wall (108
- * columns, x 470 to 900, y 240 to 430):
+ * The amplitude. Two remaster shots of the VCI corridor, three seconds apart,
+ * over the shaft band on the far wall (108 columns, x 470 to 900, y 240 to
+ * 430):
  *
  *     shot t1   band mean 124.6   column sd 17.9  =  14.3 % of the mean
  *     shot t4   band mean 130.1   column sd 21.5  =  16.5 % of the mean
  *
  * The pattern keeps its strength and the level barely moves: 4.4 percent
- * between the two, and the camera moved between them as well, so 4.4 is an
- * upper bound. The remaster's shafts TRAVEL; they do not brighten and dim.
- * That is what the travelling wave below is for, and the amplitude is what
- * was four to six times too large.
+ * between the two, an upper bound since the camera moved as well. The
+ * remaster's shafts TRAVEL; they do not brighten and dim, which is what the
+ * travelling wave is for. A swing of a quarter either way reads as pulsing
+ * (the ANDREA church candle glows then move by +7.8 and -9.3 percent of the
+ * whole pixel).
  *
  * 0.06 is that 4.4 percent with the head-room a WEIGHT has over a lit
  * surface: the swing multiplies the additive share of a pixel and not the
  * pixel, so a part whose glow is the whole of what is on screen moves by 6
- * percent at the very most and one drawn over a lit wall by less. Measured
- * back through RoomProbe on RICH2 room 25, eight seconds at one second
- * against the -nomotion still picture: the worst pixel moved 17.0 percent
- * before and 5.4 after, and the share of pixels moving more than 5 percent
- * went from 0.82 to none.
+ * percent at most and one drawn over a lit wall by less. RoomProbe on RICH2
+ * room 25, eight seconds at one second against the -nomotion still picture:
+ * the worst pixel moves 5.4 percent (17.0 with a quarter), and the share of
+ * pixels moving more than 5 percent is none (0.82 with a quarter).
  *
- * The wavelength is unchanged and still chosen: about three squares, so that
- * neighbouring parts of one fan are out of step. */
+ * The wavelength is about three squares, so that neighbouring parts of one
+ * fan are out of step. */
 #define HD_RAY_SWING       0.06f
 #define HD_RAY_WAVELENGTH  0.0021f
 
-/* THE GLOSS OF A SURFACE (#123, fix round R3b).
+/* The gloss of a surface.
  *
  * x = the part's own strength out of its .TRG material (0 = matt, and that is
  *     every part of the game but the 183,350 triangles of materials 3 and 17),
- * y = its exponent, an integer 1..191,
- * z = tomb5.hd_reflect.
+ * y = its exponent, an integer 1..191 (read but unused, see the light loop),
+ * z = tomb5.hd_reflect,
+ * w = the see-through weight of the blend phase (see the end of RoomPS).
  *
- * WHAT IS DRAWN, AND WHAT IS NOT. Not a mirror: nothing here renders the room
- * a second time, and a planar reflection would need a pass, a target and a
- * clip plane that the classic path shares its depth buffer with. What is drawn
- * is the two things a polished floor does that a matt one does not:
+ * Not a mirror: nothing here renders the room a second time, and a planar
+ * reflection would need a pass, a target and a clip plane that the classic
+ * path shares its depth buffer with. What is drawn is what a polished floor
+ * does that a matt one does not: it gets BRIGHTER AT A GRAZING ANGLE, where a
+ * surface reflects most of what is in front of it. There is no environment to
+ * sample, so what is reflected is the light the surface already carries -
+ * Schlick's fifth power of one minus N.V, times the material's strength. A
+ * floor seen from above is unchanged; the same floor down a long hall lifts
+ * towards its own lit colour.
  *
- *   - it throws a HIGHLIGHT back at a light that is actually there. The room
- *     shader already carries the engine's dynamic lights - flare, torch,
- *     muzzle flash - with their positions and their falloff, so the highlight
- *     is Blinn's, with the material's own exponent, inside the loop that is
- *     already running.
- *   - it gets BRIGHTER AT A GRAZING ANGLE, because that is where a surface
- *     reflects most of what is in front of it. There is no environment to
- *     sample, so what is reflected is the light the surface already carries -
- *     Schlick's fifth power of one minus N.V, times the material's strength.
- *     A floor seen from above is unchanged; the same floor down a long hall
- *     lifts towards its own lit colour.
- *
- * Both are the material's numbers and the room's own lights, and neither is a
- * constant chosen to make a screenshot look right. The two below are the
- * exception and are named as such: how much of the surface's own light the
- * grazing angle may lift, and the ceiling on it. */
+ * The two constants below are chosen, not measured: how much of the surface's
+ * own light the grazing angle may lift, and the ceiling on it. */
 float4 gSpec : register(c19);
 
 #define HD_FRESNEL_LIFT    0.6f
 #define HD_FRESNEL_MAX     0.9f
 
-/* THE RIPPLE OF A STILL WATER SURFACE (#123, fix round N, N1).
+/* The ripple of a still water surface.
  *
  * x  how tight the waves are, in WAVES per world unit
  * y  how far the coordinate travels, in page units - 0 for every draw call
- *    in the game that is not a material 16 water surface, and that zero is
- *    the switch: the whole of this costs one compare everywhere else
+ *    that is not a material 16 water surface, and that zero is the switch:
+ *    everywhere else this costs one compare
  * z  how fast, in waves a second
  *
  * All three come out of the .TRG part's own three numbers, and where those
@@ -466,61 +424,54 @@ float4 gSpec : register(c19);
  * reading of the remaster's shaders - is written out over MaterialRipple in
  * hd_render.cpp.
  *
- * THE SHAPE IS THIS FILE'S OWN: two sheets travelling across each other, and
+ * The shape is this file's own: two sheets travelling across each other, and
  * a finer, faster octave over them so that the pattern does not read as one
  * moving grid. They are written on the WORLD position (roomPos plus
  * gRoomOrigin) rather than on the UV, so a sheet built out of a handful of
- * huge triangles ripples as finely as a small basin does and the pattern does
- * not slide when the camera does - the same reason the caustic below is per
- * pixel.
+ * huge triangles ripples as finely as a small basin and the pattern does not
+ * slide when the camera moves.
  *
- * AND THE WAVE IS NOT A SINE, which is worth saying out loud. It is the
- * smoothstep of a triangle - abs(frac(p) * 2 - 1), then 3f^2 - 2f^3, then
- * doubled and centred - a periodic curve that agrees with a cosine to within
- * 6 % of its own amplitude and has the same zero mean, zero derivative at
- * both turning points and continuous slope everywhere. Why: four sines here
- * take this shader from 453 instruction slots to 512, which is exactly the
- * number shader model 3 guarantees and leaves the next round nowhere to
- * stand. Four of these take it to 476. The difference is not visible on a
- * texture offset of four texels; the ceiling is.
+ * The wave is not a sine but the smoothstep of a triangle - abs(frac(p) * 2
+ * - 1), then 3f^2 - 2f^3, then doubled and centred - a periodic curve that
+ * agrees with a cosine to within 6 % of its own amplitude and has the same
+ * zero mean, zero derivative at both turning points and continuous slope
+ * everywhere. Four sines take this shader from 453 instruction slots to 512,
+ * exactly the number shader model 3 guarantees; four of these take it to 476.
+ * On a texture offset of four texels the difference is not visible.
  *
- * NOTHING MOVES IN THE VERTEX. `sway` is 0 on 27 of the material's 28 parts,
+ * Nothing moves in the vertex. `sway` is 0 on 27 of the material's 28 parts,
  * so the sheet itself does not bob: a surface that bobbed would tear away
  * from the stone rim it is let into. This is a texture ripple only.
  *
  * The 1/1.5 puts the sum of the two amplitudes back on 1, so gRipple.y IS
  * the largest offset the sampler can ever be asked for - which is what makes
- * the tenth-of-a-span cap in hd_render.cpp a cap and not a hope. */
+ * the tenth-of-a-span cap in hd_render.cpp a hard cap. */
 #define HD_RIPPLE_OCTAVE   2.3f
 #define HD_RIPPLE_NORM     (1.0f / 1.5f)
 
-/* HOW MANY, AND WHY THE TWO LOOPS ARE UNROLLED. ps_3_0 has no relative
+/* How many, and why the light loop is unrolled. ps_3_0 has no relative
  * addressing of constant registers - only vs_3_0 has. Written as a loop over
  * a run time count, fxc emulates gLights[i] with a chain of 32 cmp
- * instructions PER ACCESS: measured, 285 slots that execute about 140
- * instructions per light per pixel. Unrolled against a compile time maximum,
- * with the run time count as a dynamic if inside, every access is a literal
- * register and an unused slot costs a branch. That is why these two numbers
- * are here rather than 32 and 16.
+ * instructions PER ACCESS: 285 slots that execute about 140 instructions per
+ * light per pixel. Unrolled against a compile time maximum, with the run time
+ * count as a dynamic if inside, every access is a literal register and an
+ * unused slot costs a branch.
  *
- * 8 lights: the engine holds 32 dynamics (drawroom.cpp:952) but they are
- * flare, torch, muzzle flash and explosions, and a single room seeing more
- * than eight of them at once does not happen in TR5.
+ * 8 lights: the engine holds 32 dynamics (drawroom.cpp) but they are flare,
+ * torch, muzzle flash and explosions, and a single room seeing more than
+ * eight of them at once does not happen in TR5.
  *
- * 8 bulbs, raised from 6 because the title screen was visibly losing one. The
- * count is MEASURED, out of all sixteen vanilla .TRC files: a level holds up
- * to 17 fog bulbs (ANDREA2, TITLE), a single room up to 5 (ANDY3), and - over
- * a sweep of every camera position a level allows - up to 16 of them fall
- * inside the 20480-unit circle aBuildFogBulbList keeps around the camera at
- * once (drawroom.cpp:800): 16 ANDREA2, 14 RICH2, 13 ANDY1, 11 TITLE, 10
- * RICH1. So eight is NOT the engine's ceiling; it is where the title screen
- * stops visibly losing one. 16 is the ceiling, and the classic path agrees
- * without meaning to: RoomletFogBulbs is 16 and is filled with no bound check
- * at all. Each further bulb costs about 4.5 instruction slots in each of the
- * two pixel shaders (6 -> 310/295, 8 -> 319/304, 16 -> 355/340 of the 512
- * ps_3_0 guarantees), so 16 would fit as well - it needs c40-c71 here, in
- * hd_model.hlsl and in hd_render.h, and nothing else. The `clipped` line in
- * the log says when eight bit, once per level. */
+ * 16 bulbs, the measured ceiling over all sixteen vanilla .TRC files: a level
+ * holds up to 17 fog bulbs (ANDREA2, TITLE), a single room up to 5 (ANDY3),
+ * and - over a sweep of every camera position a level allows - up to 16 of
+ * them fall inside the 20480-unit circle aBuildFogBulbList keeps around the
+ * camera at once (drawroom.cpp): 16 ANDREA2, 14 RICH2, 13 ANDY1, 11 TITLE, 10
+ * RICH1. The classic path has the same ceiling: RoomletFogBulbs is 16 and is
+ * filled with no bound check. Each bulb costs about 4.5 instruction slots in
+ * each of the two pixel shaders (6 -> 310/295, 8 -> 319/304, 16 -> 355/340 of
+ * the 512 ps_3_0 guarantees). The count must match hd_model.hlsl and
+ * hd_render.h, which share registers c40-c71. The `clipped` line in the log
+ * says when the limit bites, once per level. */
 #define HD_MAX_LIGHTS 8
 #define HD_MAX_BULBS  16
 
@@ -551,8 +502,8 @@ struct VS_OUT
 	float3 viewPos  : TEXCOORD2;	// the classic "stash"
 	float3 roomPos  : TEXCOORD3;	// room local, what the dynamic lights use
 	/* xyz the WaterTable term in 0..255 units, w the water surface weight of
-	 * this vertex (#123, fix round R3b) - 0 everywhere but on a marked water
-	 * surface, and 0 there too while hd_motion is off. It rides in the fourth
+	 * this vertex - 0 everywhere but on a marked water surface, and 0 there
+	 * too while hd_motion is off. It rides in the fourth
 	 * component rather than in an interpolator of its own because ps_3_0 has
 	 * ten of those and this file already spends six. */
 	float4 waterAdd : TEXCOORD4;
@@ -576,7 +527,7 @@ float WrapIndex(float v, float count)
 	return v - floor(v / count) * count;
 }
 
-/* The WaterTable's spatial hash (drawroom.cpp:357-360): the world position
+/* The WaterTable's spatial hash (drawroom.cpp): the world position
  * quantised to 64 x 64 x 128 units, summed, wrapped to 64. */
 int WaterHash(float3 world)
 {
@@ -602,13 +553,13 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 
 	float3 pos = inPos.xyz;
 
-	/* 1. THE CHOPPY DISPLACEMENT (drawroom.cpp:357-362). The classic path
+	/* 1. The choppy displacement (drawroom.cpp). The classic path
 	 * moves the first nWVtx vertices of every roomlet; inFlags.x is that
 	 * same set, matched by position at level build. */
 	if (gWaterMode.y * inFlags.x > 0.5f)
 		pos.y += gWaterTable[WaterPhase(pos + gRoomOrigin.xyz, 4.0f)].y;
 
-	/* 2. THE WATERTABLE COLOUR TERMS (drawroom.cpp:451-517), in the classic
+	/* 2. The WaterTable colour terms (drawroom.cpp), in the classic
 	 * path's own order: underwater first, then the shimmer, then the Red
 	 * Alert gas. Every one of them reads the position AFTER the
 	 * displacement, which is why this block sits below it. */
@@ -635,21 +586,20 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		waterAdd = float3(0.0f, abs((e.x + e.w) * 8.0f), 0.0f);
 	}
 
-	/* 2b. THE WIND (#123, stage S5). The fourth SHORT of the position is
-	 * TrgVertex::sway, the remaster's own per vertex weight for what moves in
-	 * the wind or the current - a wind and water weight over 32767. That is
-	 * the .TRG field layout as TRForge's MIT format description gives it, and
-	 * the range is re-measured on the player's own files (hd_render.h,
-	 * HDStats::swayMax). Measured over the 15
-	 * levels it is the ivy and the banners of Rome, the grass of Ireland and
-	 * the kelp of the Deepsea Dive, and it is disjoint from the classic
-	 * engine's water vertices except in JOBY4, where the kelp stands in the
-	 * water. The classic path has NO counterpart, so the weight is the
+	/* 2b. The wind. The fourth SHORT of the position is TrgVertex::sway, the
+	 * remaster's own per vertex weight for what moves in the wind or the
+	 * current - a wind and water weight over 32767. That is the .TRG field
+	 * layout as TRForge's MIT format description gives it, and the range is
+	 * re-measured on the player's own files (hd_render.h, HDStats::swayMax).
+	 * Over the 15 levels it is the ivy and the banners of Rome, the grass of
+	 * Ireland and the kelp of the Deepsea Dive, and it is disjoint from the
+	 * classic engine's water vertices except in JOBY4, where the kelp stands
+	 * in the water. The classic path has NO counterpart, so the weight is the
 	 * remaster's and the wave is ours.
 	 *
 	 * It moves `drawn`, not `pos`: everything above - the water hash, the
-	 * surface test, the WaterTable - reads the position the .TRG stores, and
-	 * stage S2's parity is measured against exactly that. */
+	 * surface test, the WaterTable - reads the position the .TRG stores, which
+	 * is what the parity with the classic path is measured against. */
 	float wind = inPos.w * (1.0f / 32767.0f) * gMotion.w;
 	float3 drawn = pos;
 
@@ -661,46 +611,41 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		drawn.z += wind * HD_WIND_TRAVEL * 0.6f * sin(phase * 0.73f + 1.3f);
 	}
 
-	/* 2c. THE SWELL (#123, fix round R3b). The same water weight the UV wobble
-	 * of stage S5 rides on, now also lifting the surface - TROne's shape, and
-	 * one wave over about a block and a half. Like the wind it moves `drawn`
-	 * and not `pos`: the water hash, the surface test and the WaterTable above
-	 * all read the position the .TRG stores, which is what stage S2's parity
-	 * is measured against, and the classic path's own choppy displacement -
-	 * which is in `pos` - is untouched by this. */
-	/* WHAT MOVES IS THE SURFACE, NOT THE ROOM (#123, fix round E, E2).
+	/* 2c. The swell. The same water weight the UV wobble rides on also lifts
+	 * the surface - TROne's shape, one wave over about a block and a half.
+	 * Like the wind it moves `drawn` and not `pos`, so the water hash, the
+	 * surface test, the WaterTable and the classic choppy displacement (which
+	 * is in `pos`) are untouched by it. */
+	/* What moves is the surface, not the room.
 	 *
 	 * `shimmerOn` is the classic path's WaterTable COLOUR selector, and in a
 	 * ROOM_REFLECT + ROOM_REFLECT_CEILING room it says yes to almost every
 	 * vertex there is - walls, ceiling, pillars - because that is what the
-	 * classic room shimmer does (drawroom.cpp:534). Stage S5 and fix round R3b
-	 * hung the UV wobble and the swell on it, so in Rome those two moved the
-	 * WALLS. The classic path displaces nothing but its own nWVtx set and
-	 * that set is empty in all of TR5, so nothing in this engine has ever
-	 * moved a wall.
+	 * classic room shimmer does (drawroom.cpp). Hanging the UV wobble and the
+	 * swell on it would move the WALLS (in Rome, for instance). The classic
+	 * path displaces nothing but its own nWVtx set, and that set is empty in
+	 * all of TR5, so no wall ever moves.
 	 *
 	 * Geometry and UV therefore ride on the marked set AT THE SURFACE PLANE -
 	 * gRoomOrigin.w, the room's own minfloor. In a surface-bit room that is
 	 * what `shimmerOn` already is (gWaterMode.z carries the same height test);
 	 * in a whole-room-bit room it is the pool and nothing else. The colour
-	 * term below keeps `shimmerOn` whole, so the room still shimmers exactly
-	 * as it did. */
-	/* AND ONLY WHERE THE SURFACE IS FLAT (#123, fix round H, H4).
+	 * term above keeps `shimmerOn` whole, so the room shimmers exactly as the
+	 * classic one does. */
+	/* And only where the surface is flat.
 	 *
 	 * The mark is carried from the classic mesh BY POSITION, and a wall
 	 * vertex standing at exactly the water's height inside the pool's box
-	 * answers yes to it - the corner match and the plane flood both. It then
-	 * gets the UV wobble and the caustic below, and on a wall triangle whose
-	 * other two corners are lower that is a sheared, darkened triangle
-	 * standing on the waterline: the player's "black wedge at the edge
-	 * between the water and the wall".
+	 * answers yes to it - the corner match and the plane flood both. With the
+	 * UV wobble and the caustic, a wall triangle whose other two corners are
+	 * lower becomes a sheared, darkened wedge standing on the waterline.
 	 *
 	 * A water surface is flat, so its normal is vertical and a wall's is not.
 	 * The test is on the GEOMETRY half alone; the colour term above keeps
 	 * `shimmerOn` whole, because the classic path asks the height and not the
-	 * normal (drawroom.cpp:537) and stage S2's parity is measured against it.
-	 * 0.6 is 53 degrees off the horizontal - a bank steep enough to be a wall
-	 * fails it and no floor in the game comes near it. */
+	 * normal (drawroom.cpp). 0.6 is 53 degrees off the horizontal - a bank
+	 * steep enough to be a wall fails it and no floor in the game comes near
+	 * it. gFlat.w switches the gate. */
 	float upright = lerp(1.0f, step(0.6f,
 		abs((inNormal.y - 127.0f) * (1.0f / 128.0f))), gFlat.w);
 	float surfaceOn = dot(inFlags, gSel1) * atSurface * upright;
@@ -708,7 +653,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float wavA = (pos.x + pos.z) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_A;
 	float wavB = (pos.z - pos.y) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_B;
 
-	/* E3: AND NOTHING OF IT AT THE SHORE. How far this vertex stands inside
+	/* And none of it at the shore. How far this vertex stands inside
 	 * the flood box, in squares, clamped to one - see gWaterBox. It multiplies
 	 * the SWELL only: the UV wobble and the caustic are a picture on the
 	 * surface and may run right up to the bank, it is the geometry that must
@@ -720,19 +665,18 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		drawn.y += water * shore * HD_WATER_SWELL *
 			(sin(wavA) + 0.5f * cos(wavB * 1.7f + gMotion.z));
 
-	/* 3. THE TRANSFORM. */
+	/* 3. The transform. */
 	float4 clip = mul(float4(drawn, 1.0f), gWorldViewProj);
 	float3 view = mul(float4(drawn, 1.0f), gWorldView);
 
-	/* 4. THE UNDERWATER SCREEN WOBBLE (drawroom.cpp:381-387). A pixel offset
+	/* 4. The underwater screen wobble (drawroom.cpp). A pixel offset
 	 * on the projected position, so it is added in clip space scaled by w:
 	 * screen x = ndc * centerx + centerx, hence d(clip.x) = dx * w / centerx,
 	 * and y the other way round because screen y counts downwards.
 	 *
 	 * The second lookup reads the ALREADY OFFSET screen x where the first
-	 * reads the view space y - that is not a typo here, it is the order the
-	 * classic path writes the two lines in, and the sequence is visible in
-	 * the picture. */
+	 * reads the view space y - not a typo, but the order the classic path
+	 * writes the two lines in, and the sequence is visible in the picture. */
 	if (gScreen.w > 0.5f && clip.w > 1.0f)
 	{
 		float invw = 1.0f / clip.w;
@@ -748,29 +692,22 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 
 	o.pos = clip;
 
-	/* 5. THE UV (#123, stage S5). Two terms, both zero without stage S5:
+	/* 5. The UV: the texture coordinate plus two motion terms.
 	 *
 	 * gMotion.xy is this draw call's own scroll - the .TRG part's material 1,
 	 * already turned into an offset on the processor. It is the HD twin of
-	 * S_AnimateTextures' UVROT branch (output.cpp:909-931), which scrolls the
-	 * water tile of ANDY3 and RICH2 vertically, and it is wider than that
+	 * S_AnimateTextures' UVROT branch (output.cpp), which scrolls the water
+	 * tile of ANDY3 and RICH2 vertically, and it reaches further than that
 	 * branch: the remaster authored a scroll on 14 of the 15 levels, on
 	 * waterfalls, drifting sky and light shafts as well.
 	 *
-	 * The wobble is the remainder of TROne's water_effect: where the classic
-	 * path marks a water surface but the remaster authored no scroll, the
-	 * surface's own UV moves a little, so an HD water plane is not a mirror.
-	 * It dies with tomb5.shimmer, because gSel1 does, and with hd_motion,
-	 * because gMotion.w does. Stage S5 wrote no caustic beside it: TR5 has its
-	 * own, it is the WaterTable shimmer in step 2 above, and a second one on
-	 * top would count it twice.
-	 *
-	 * R3b: the wobble now rides on the SAME two waves as the swell above - one
-	 * clock, one shape, so the picture and the geometry agree - and it is six
-	 * texels rather than four, which is TROne's own figure. The caustic that
-	 * stage S5 refused is in the pixel half, as a zero mean modulation; the
-	 * note beside HD_WATER_UV says why that answers the refusal instead of
-	 * overturning it. */
+	 * The wobble is TROne's water_effect: on a marked water surface the UV
+	 * moves a little, so an HD water plane is not a mirror. It rides on the
+	 * SAME two waves as the swell - one clock, one shape, so the picture and
+	 * the geometry agree - six texels, TROne's own figure. It dies with
+	 * tomb5.shimmer, because gSel1 does, and with hd_motion, because gMotion.w
+	 * does. The caustic is in the pixel half; the note beside HD_WATER_UV says
+	 * why it does not count the classic shimmer twice. */
 	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + water * HD_WATER_UV *
 		float2(sin(wavA), cos(wavB));
 
@@ -790,7 +727,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 /* ---------------------------------------------------------------- pixel -- */
 
 /* One fog bulb's contribution: the length of the piece of the eye ray that
- * lies inside the bulb's sphere, times its density (drawroom.cpp:553-668).
+ * lies inside the bulb's sphere, times its density (drawroom.cpp).
  * All of it in view space, where both the bulb centre (aBuildFogBulbList
  * puts it there once per frame) and the surface point live.
  *
@@ -800,8 +737,9 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * projection, `vec` is left holding the UNIT direction and `vec2` the
  * origin, so the length comes out as 1 and the intensity as one density,
  * about 0.02. The classic path truncates that to zero on the way into a
- * long. Kept rather than tidied away: this function is checked against that
- * one, number for number.
+ * long. Kept rather than tidied away, so that this function can be checked
+ * against that one number for number. Two deliberate differences follow: the
+ * classic cone cull is reduced to its exact part, and the rim is softened.
  */
 float BulbIntensity(float3 stash, float4 a, float4 b)
 {
@@ -810,39 +748,33 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 	float sqrad = rad * rad;
 	float sqlen = dot(P, P);
 
-	/* THE CLASSIC PATH'S CULL, AND WHY IT CANNOT COME ALONG (#123, fix round
-	 * A2's follow-up, R2).
+	/* The classic path's cull, and why only part of it is kept.
 	 *
-	 * drawroom.cpp:632 opens this loop with
+	 * drawroom.cpp opens this loop with
 	 *
 	 *     stash.z + rad > 0 && |stash.x| - rad < |stash.z| &&
 	 *                          |stash.y| - rad < |stash.z|
 	 *
 	 * on the VERTEX, and it is a cull, not a rule: a cone of 45 degrees
 	 * about the view axis, widened by the bulb's radius, thrown in front of
-	 * the expensive arithmetic below. Core could afford a hard edge on it
-	 * because the game shipped at 4:3, where the frame reaches 40 degrees to
+	 * the expensive arithmetic below. At 4:3 the frame reaches 40 degrees to
 	 * the side and the cone never crosses the picture.
 	 *
-	 * It does now. AlterFOV (3dmath.cpp:77) builds the perspective from
+	 * Wider views cross it. AlterFOV (3dmath.cpp) builds the perspective from
 	 * height * 320/240 and uses that same value across, so 16:9 turns the
 	 * nominal 80 into about 96 degrees wide - 48 to the side - and the first
-	 * person view of #134 runs at 90 to 100 nominal, which is 107 to 118
-	 * across, 53 to 59 to the side. Past 45 the cone cuts INTO the frame,
-	 * and a per-pixel shader draws that cut as what it is: a hard line down
-	 * the side of the screen with the fog on one side of it and none on the
-	 * other, moving with the camera. That is the reported bug - "in first
-	 * person a fog bulb at the edge jumps away as soon as something leaves
-	 * the field of view".
+	 * person view at 90 to 100 nominal is 107 to 118 across, 53 to 59 to the
+	 * side. Past 45 the cone cuts INTO the frame, and per pixel that cut is a
+	 * hard line down the side of the screen with fog on one side and none on
+	 * the other, moving with the camera.
 	 *
-	 * A cull whose job is to skip pixels that are not drawn has nothing to
-	 * do in a pixel shader, where every pixel IS drawn. What is left of it
-	 * is the one part that is exact rather than conservative: a sphere whose
-	 * every point lies behind the camera plane cannot be crossed by any ray
-	 * leaving the eye forwards, so it contributes nothing. P.z + rad <= 0
-	 * says exactly that, and it also settles the camera-inside-the-bulb case
-	 * on its own - a camera inside means |P| < rad, and then P.z >= -|P| >
-	 * -rad. */
+	 * A cull whose job is to skip vertices has nothing to do in a pixel
+	 * shader. What is kept is the one part that is exact rather than
+	 * conservative: a sphere whose every point lies behind the camera plane
+	 * cannot be crossed by any ray leaving the eye forwards, so it contributes
+	 * nothing. P.z + rad <= 0 says exactly that, and it also settles the
+	 * camera-inside-the-bulb case on its own - a camera inside means
+	 * |P| < rad, and then P.z >= -|P| > -rad. */
 	if (P.z + rad <= 0.0f)
 		return 0.0f;
 
@@ -900,47 +832,36 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 		}
 	}
 
-	/* THE RIM (#123, fix round A, A4).
+	/* The rim.
 	 *
 	 * `chord` above is the exact length of the piece of the eye ray inside
 	 * the sphere, and exact is the trouble. For a ray that passes the centre
 	 * at distance d it is 2*sqrt(rad^2 - d^2), whose DERIVATIVE against d is
 	 * infinite at d = rad. So the intensity does not fade in at the
-	 * silhouette, it stands up vertically out of nothing, and what the player
-	 * sees is the outline of a sphere - the reported bug, "the fog is a
-	 * sphere with different intensities inside it".
+	 * silhouette, it stands up vertically out of nothing, and the fog shows
+	 * the hard outline of a sphere.
 	 *
-	 * The classic path has the identical formula and does not show it, for a
-	 * reason that is not in the formula: it evaluates it once per VERTEX and
-	 * lets the rasteriser interpolate, and a room vertex is up to a whole
-	 * block away from the next one, so the cusp is smeared over a polygon
-	 * before anybody sees it. A per-pixel version cannot borrow that, and
-	 * rebuilding it (evaluate at the three corners, interpolate) would throw
-	 * away the one thing the per-pixel version is better at - a bulb inside a
-	 * four-vertex room looks like a lit quad in the classic path.
+	 * The classic path has the identical formula and does not show it because
+	 * it evaluates it once per VERTEX and lets the rasteriser interpolate; a
+	 * room vertex is up to a whole block from the next, so the cusp is
+	 * smeared over a polygon. Rebuilding that here (evaluate at the three
+	 * corners, interpolate) would throw away what per pixel is better at - a
+	 * bulb inside a four-vertex room looks like a lit quad in the classic
+	 * path.
 	 *
-	 * So the cusp is taken out where it is, by weighting the chord with a
-	 * smoothstep over the OUTER THIRD of its own range. `t` is the chord as a
-	 * fraction of the sphere's diameter, which is 1 through the centre and 0
-	 * at the silhouette; at t >= kRim - which is the whole core of the bulb -
-	 * the weight is exactly 1 and this function answers what it always
-	 * answered, to the bit. Below it the sqrt is replaced by a curve that
-	 * leaves zero with zero slope, which is what a fog bank does.
+	 * So the cusp is removed by weighting the chord with a smoothstep over the
+	 * OUTER part of its own range. `t` is the chord as a fraction of the
+	 * sphere's diameter, 1 through the centre and 0 at the silhouette; at
+	 * t >= kRim - the whole core of the bulb - the weight is exactly 1 and
+	 * the result is the classic one to the bit. Below it the sqrt becomes a
+	 * curve that leaves zero with zero slope, which is what a fog bank does.
 	 *
 	 * kRim 0.35 is the smallest value that hides the outline at the sizes
 	 * TR5 uses (bulb radii 1024 to 8192): a third of the diameter of a
-	 * 4096-unit bulb is 2.7 metres of game world to fade over, which is the
-	 * same order as the vertex spacing the classic path smeared it over.
-	 *
-	 * IT SAID 0.35 AND THE CODE SAID 1.0 (#123, fix round A2's follow-up).
-	 * Fix round A shipped `const float kRim = 1.0f`, which is not the
-	 * paragraph above: with 1.0 the weight is below one over the WHOLE bulb
-	 * - 0.5 of it halfway along the diameter - so the promise two paragraphs
-	 * up, "at t >= kRim this function answers what it always answered, to
-	 * the bit", held at the single ray through the exact centre and nowhere
-	 * else, and every bulb in the game came out roughly half as thick as the
-	 * classic path draws it. The number the note measured is the one that
-	 * stands. */
+	 * 4096-unit bulb is 2.7 metres of game world to fade over, the same order
+	 * as the classic vertex spacing. A larger value thins the whole bulb:
+	 * at 1.0 the weight is 0.5 halfway along the diameter and every bulb
+	 * comes out roughly half as thick as the classic path draws it. */
 	const float kRim = 0.35f;
 
 	float chord = length(vec2 - vec);
@@ -953,10 +874,10 @@ float4 RoomPS(VS_OUT input) : COLOR0
 {
 	float2 uv = input.uv;
 
-	/* N1: THE RIPPLE OF A STILL WATER SURFACE - see the note over
-	 * HD_RIPPLE_OCTAVE. gRipple.y is 0 for every draw call in the game that
-	 * is not one of material 16's 28 parts, so this is one compare there and
-	 * nothing else. gAdd.y is the game clock in seconds and gAdd.w the
+	/* The ripple of a still water surface - see the note over
+	 * HD_RIPPLE_OCTAVE. gRipple.y is 0 for every draw call that is not one of
+	 * material 16's 28 parts, so this is one compare there and nothing else.
+	 * gAdd.y is the game clock in seconds and gAdd.w the
 	 * hd_motion switch, exactly as the ray swing at the end of this function
 	 * reads them, so a paused game and hd_motion 0 both stand still. */
 	if (gRipple.y > 0.0f)
@@ -977,16 +898,16 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	float4 texel = tex2D(sPage, uv);
 
-	/* THE ALPHA TEST. gPass.x is the reference, and it is zero wherever
+	/* The alpha test. gPass.x is the reference, and it is zero wherever
 	 * there is no test to run - an alpha is never below zero, so this line
-	 * costs one subtract and discards nothing (#123, fix round A2; the note
-	 * about the gloss mask above says why per material and not per page). */
+	 * then costs one subtract and discards nothing (the note on the three
+	 * passes at the top says why the reference is per material). */
 	clip(texel.a - gPass.x);
 
 	/* Into the classic path's 0..255 space. */
 	float3 f = input.light * 127.5f;
 
-	/* THE DYNAMIC LIGHTS (drawroom.cpp:415-436). Torch, flare, muzzle flash,
+	/* The dynamic lights (drawroom.cpp). Torch, flare, muzzle flash,
 	 * every explosion - the engine's `dynamics` array, culled against this
 	 * room's bounding box on the processor exactly as aBuildRoomletLights
 	 * culls against a roomlet's.
@@ -996,7 +917,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * turns with the camera. It is Core's own arithmetic and reproducing it
 	 * is the whole point - a "corrected" dot product lights the wall
 	 * differently from the roomlet next to it. */
-	/* R3b: the gloss of this draw call, once, outside the loop. Zero for every
+	/* The gloss of this draw call, once, outside the loop. Zero for every
 	 * part the .TRG does not call glossy, and zero with hd_reflect off. */
 	float gloss = gSpec.x * gSpec.z;
 
@@ -1020,26 +941,23 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 			f += b.rgb * (ramp * (1.0f - (t.x + t.y + t.z)) * 255.0f);
 
-			/* R3b: AND WHERE THE HIGHLIGHT WOULD GO, if there were room for
-			 * it. Blinn's half vector against this light raised to gSpec.y is
-			 * the obvious second half of a gloss, and it was written, compiled
-			 * and MEASURED: inside this loop, which ps_3_0 forces to be
-			 * unrolled eight times because it has no relative constant
-			 * addressing, one pow per light takes the shader from 319
-			 * instruction slots to 636 - past the 512 that shader model 3
-			 * guarantees, on a path whose whole point is that it runs on the
-			 * cards this engine ships to. So the gloss is the grazing angle
-			 * alone, at the end of this function, where it costs eleven slots
-			 * and no loop. The exponent is read, logged and unused; that is
-			 * said out loud in MODIFICATIONS.md rather than hidden. */
+			/* No specular highlight here. Blinn's half vector against this
+			 * light raised to gSpec.y would be the second half of a gloss, but
+			 * inside this loop, which ps_3_0 forces to be unrolled eight times
+			 * because it has no relative constant addressing, one pow per
+			 * light takes the shader from 319 instruction slots to 636 - past
+			 * the 512 that shader model 3 guarantees. So the gloss is the
+			 * grazing angle alone, at the end of this function, where it costs
+			 * eleven slots and no loop. The exponent is read, logged and
+			 * unused. */
 		}
 	}
 
-	/* THE WATERTABLE TERM, computed per vertex above. Its fourth component is
+	/* The WaterTable term, computed per vertex above. Its fourth component is
 	 * the water weight, which the caustic below reads, not this line. */
 	f += input.waterAdd.xyz;
 
-	/* THE DISTANCE FOG (drawroom.cpp:519-524). Linear in the view depth from
+	/* The distance fog (drawroom.cpp). Linear in the view depth from
 	 * tomb5.distance_fog blocks onwards, subtracted from all three channels -
 	 * TR5's fog darkens, it does not blend towards a colour, and there is no
 	 * fog colour anywhere in the classic path to take one from.
@@ -1049,28 +967,27 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	if (input.viewPos.z > gFog.x)
 		f -= (input.viewPos.z - gFog.x) * gFog.y;
 
-	/* BACK INTO THE REMASTER'S SCALE. This is the classic path's split
-	 * (drawroom.cpp:526-545) with its ceiling taken off - see the long note
+	/* Back into the remaster's scale. This is the classic path's split
+	 * (drawroom.cpp) with its ceiling taken off - see the long note
 	 * at the top. Below f = 128 the two are the same line. */
 	float3 c = f * (2.0f / 255.0f);
 
-	/* AND WHERE THE CEILING IS NOT OPTIONAL (#123, fix round A, A3).
+	/* Where the ceiling is not optional.
 	 *
-	 * The paragraph above gives a reason for letting the multiply pass 1 in
-	 * the OPAQUE pass: a shader has floats, and a surface the remaster baked
-	 * at 1.5 really is meant to be brighter than its texture. That reason
-	 * dies in the ADDITIVE pass, and here is why.
+	 * The multiply may pass 1 in the OPAQUE pass: a surface the remaster
+	 * baked at 1.5 really is meant to be brighter than its texture. In the
+	 * ADDITIVE pass it may not.
 	 *
 	 * The classic path splits at 128 into a diffuse that stops at 255 and a
 	 * SPECULAR that carries the rest, and for its additive draw type it
-	 * switches the specular off (polyinsert.cpp:72, D3DRS_SPECULARENABLE
+	 * switches the specular off (polyinsert.cpp, D3DRS_SPECULARENABLE
 	 * FALSE). So a classic additive polygon is texel * 1 at the very most -
-	 * the excess is not carried anywhere, it is dropped. Ours went on
-	 * multiplying, up to texel * 2, and then blended it ONE / ONE over a
-	 * floor that was already lit. That is the reported bug: light shafts,
-	 * window glows and material 2's glow as flat white surfaces.
+	 * the excess is dropped. Without the ceiling the multiply reaches
+	 * texel * 2 and is blended ONE / ONE over a floor that is already lit,
+	 * which turns light shafts, window glows and material 2's glow into flat
+	 * white surfaces.
 	 *
-	 * MEASURED over the remaster's own vertices, channels of colour1+colour2
+	 * Measured over the remaster's own vertices, channels of colour1+colour2
 	 * above 1.0 in the ADDITIVE pass:
 	 *
 	 *     RICH1    56.3 % of them, mean 1.26, max 2.00
@@ -1085,15 +1002,14 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * stops it.
 	 *
 	 * gPass.y is 1 in the additive pass and 0 in the other two, so the
-	 * opaque pass keeps the deviation the paragraph above argues for and
-	 * stage S2 measured, to the bit. Before the fog bulbs, because that is
-	 * where the classic path splits (drawroom.cpp:599-621, and the bulbs are
-	 * at 623). */
+	 * opaque pass keeps the deviation argued for at the top, to the bit.
+	 * Before the fog bulbs, because the classic path splits before it adds
+	 * them (drawroom.cpp). */
 	c = lerp(c, min(c, 1.0f), gPass.y);
 
 	float3 s = 0.0f;
 
-	/* THE FOG BULBS (drawroom.cpp:547-676). These DO keep the classic split:
+	/* The fog bulbs (drawroom.cpp). These DO keep the classic split:
 	 * the density darkens the multiply and the bulb's own colour is added on
 	 * top, which is what makes a bulb glow in front of a dark wall instead of
 	 * tinting it. The classic path works in 0..255 there, so both terms are
@@ -1112,25 +1028,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	c = max(c, 0.0f);
 	s = saturate(s);
 
-	/* THE CAUSTIC (#123, fix round R3b; TROne's formula, see the note beside
-	 * HD_WATER_UV and THIRD-PARTY.md).
-	 *
-	 * Per PIXEL and out of the WORLD position, which is the whole point: a
-	 * remaster water quad has its corners and nothing between them, so a
-	 * shimmer carried down the interpolators is a slow blotch however fast its
-	 * clock runs. From the world position the same net is fine wherever the
-	 * surface is coarse, and it does not slide when the camera does.
-	 *
-	 * ZERO MEAN, so it adds no brightness of its own: the sum of the two sine
-	 * products averages out over any patch bigger than its own wavelength, and
-	 * what is left is the movement. It is clamped at zero rather than allowed
-	 * to invert the multiply.
-	 *
-	 * gAdd.y is the game clock in seconds on the pixel side and gAdd.w is
-	 * hd_motion, so a paused game stands still and hd_motion 0 draws the
-	 * picture fix round R3a drew - the weight is already zero there, because
-	 * the vertex half multiplied it by gMotion.w. */
-	/* THE GRAZING ANGLE (#123, fix round R3b) - see the note beside gSpec.
+	/* The grazing angle - see the note beside gSpec.
 	 * Applied to `c`, the multiply, so what the surface lifts towards is its
 	 * own lit colour and never a colour of this shader's making; and after the
 	 * fog bulbs, so a bulb's haze is not multiplied up with it. */
@@ -1143,6 +1041,23 @@ float4 RoomPS(VS_OUT input) : COLOR0
 		c *= 1.0f + min(HD_FRESNEL_MAX, gloss * grazing * HD_FRESNEL_LIFT);
 	}
 
+	/* The caustic (TROne's formula, see the note beside HD_WATER_UV and
+	 * THIRD-PARTY.md).
+	 *
+	 * Per PIXEL and out of the WORLD position: a remaster water quad has its
+	 * corners and nothing between them, so a shimmer carried down the
+	 * interpolators is a slow blotch however fast its clock runs. From the
+	 * world position the net is fine wherever the surface is coarse, and it
+	 * does not slide when the camera moves.
+	 *
+	 * ZERO MEAN, so it adds no brightness of its own: the sum of the two sine
+	 * products averages out over any patch bigger than its own wavelength, and
+	 * what is left is the movement. It is clamped at zero rather than allowed
+	 * to invert the multiply.
+	 *
+	 * gAdd.y is the game clock in seconds on the pixel side. With hd_motion 0
+	 * the weight waterAdd.w is already zero, because the vertex half
+	 * multiplied it by gMotion.w. */
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
@@ -1156,16 +1071,15 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
 	 * classic path draws through, with D3DRS_SPECULARENABLE on
-	 * (function_table.cpp:104) except for its additive draw type
-	 * (polyinsert.cpp:72), which is what gPass.w carries. With no fog bulb in
-	 * sight `s` is zero and this is stage S1's line unchanged. */
+	 * (function_table.cpp) except for its additive draw type
+	 * (polyinsert.cpp), which is what gPass.w carries. With no fog bulb in
+	 * sight `s` is zero and this is the plain texel * light. */
 	float3 lit = texel.rgb * c + s * gPass.w;
 
 	/* Additive pass only: an unweighted glow washes the whole frame out. */
 	lit *= lerp(1.0f, texel.a, gPass.y);
 
-	/* AND THE PART'S OWN WEIGHT, with its swing (#123, fix round R3a - see
-	 * gAdd above). gPass.y is 1 in the additive pass and 0 in the other two,
+	/* And the part's own weight, with its swing (see gAdd above). gPass.y is 1 in the additive pass and 0 in the other two,
 	 * so the two surface passes multiply by exactly one and keep their
 	 * picture to the bit. */
 	float weight = gAdd.x;
@@ -1177,9 +1091,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	lit *= lerp(1.0f, weight, gPass.y);
 
-	/* H2: THE GLASS. gSpec.w is this draw call's own see-through weight -
-	 * material 14's param[1], and exactly 1 for every other draw call in the
-	 * game, so the two solid passes and the additive one carry their picture
+	/* The glass. gSpec.w is this draw call's own see-through weight -
+	 * material 14's param[1], and exactly 1 for every other draw call, so
+	 * the two solid passes and the additive one carry their picture
 	 * through this line untouched (they do not look at alpha at all: their
 	 * blend is off or ONE / ONE). In the blend phase it is the pane's
 	 * opacity times the page's own alpha, which is what makes a texel at 0.45

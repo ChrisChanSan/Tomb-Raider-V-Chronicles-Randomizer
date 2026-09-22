@@ -86,7 +86,8 @@
  * threshold of 1024. At speed 100 the yaw moves 2184 units (12 degrees) and
  * the pitch 6 degrees a tick, so Preparation\Tools\Diagnose\ModernTest.cpp
  * sweeps the whole sphere at both ends of the slider (camera_camcut) against
- * INTERP_CAM_SNAP itself; its swept test measures 309 Manhattan at most.
+ * INTERP_CAM_SNAP itself; its swept test measures 309 Manhattan at the
+ * default speed and 616 at speed 100, both under 1024.
  *
  * MoveCamera's damping adds no margin: "pos += (ideal - pos) / speed" is a
  * first-order lag, and a lag fed a constant velocity settles at that same

@@ -24,10 +24,12 @@
  * Origin: the design is re-derived from TROne (GPLv3) by Todesengel1931 -
  * https://github.com/todesengel1931 (the version of 2026-09-13), whose own
  * docs\CONTROLS.md sets out the arithmetic and proves the held-heading rule
- * with a recording of its own. Units, state list and wording here are TR5's
- * own; ModernTest.cpp takes over TROne's test expectations. Of the 32
- * constants, 16 carry a stated origin, 9 are measured in play of this game,
- * 5 do not apply and 2 of unknown origin are not used. The only fact from the
+ * with a recording of its own. TROne's modern control is its own design, not
+ * a reading of any program - its input code cites no disassembler or
+ * decompilation - and no code of TROne's is copied here. Units, state list and
+ * wording here are TR5's own; ModernTest.cpp takes over TROne's test
+ * expectations. Of the 32 constants, 16 carry a stated origin, 9 are measured
+ * in play of this game, 5 do not apply and 2 of unknown origin are not used. The only fact from the
  * Remaster is a set of option names read from the player's own COMMON.TXT; no
  * Remaster program is used, and the Remaster's modern control is rebuilt only
  * from how it plays.
@@ -215,7 +217,7 @@ enum modern_constants
 	/* TROne's rule: standing still, the classic state machine can express a
 	 * turn only without IN_FORWARD (lara_as_stop turns IN_LEFT/IN_RIGHT into
 	 * AS_TURN_L/AS_TURN_R, and IN_FORWARD overwrites that goal with run or
-	 * walk), so with a wall ahead she would stop responding altogether. Our
+	 * walk), so with a wall ahead she would stop responding altogether. TR5's
 	 * game\lara.cpp has the same cause. 67.5 degrees, half that to leave. */
 	MODERN_STAND_SPIN = 0x3000,
 
@@ -258,9 +260,10 @@ enum modern_constants
 	 * The Remaster, timed from video of it: one revolution on the spot in about
 	 * 0.42 s (about 28 degrees a tick at 30 ticks a second) and a half turn while
 	 * running in 6 ticks (30). 65536/12 = 5461.33, so 5461: a half turn takes
-	 * six ticks and a seventh of two units. The older candidates stay named so
-	 * a swap is a one-word edit; MODERNLOG prints the rate in its init line and
-	 * each tick's turn in yawd. */
+	 * six ticks and a seventh of two units. 5462 would land it in six exactly;
+	 * 5461 keeps the timed 30.000 degrees, and two units are a fiftieth of a
+	 * degree. The older candidates stay named so a swap is a one-word edit;
+	 * MODERNLOG prints the rate in its init line and each tick's turn in yawd. */
 	MODERN_TURN_RATE = 5461,	// 30 deg/tick, the Remaster's rate timed from video
 	MODERN_TURN_RATE_VANILLA = 1456,
 	MODERN_TURN_RATE_MIDDLE = 2184,
@@ -339,7 +342,7 @@ enum modern_constants
 	 * The bank: the roll is 546 a tick against LaraUnderWater's 364 of decay,
 	 * so she leans by 182 a tick at any rate; a faster turn finishes before the
 	 * +-4004 clamp (13 ticks of 182 is 2366), a shallower lean with no snap. */
-	MODERN_SWIM_TURN_RATE = 2730,	// 15 deg/tick; the old 1092 was SwimTurn's accumulator ceiling
+	MODERN_SWIM_TURN_RATE = 2730,	// 15 deg/tick; 1092 is SwimTurn's accumulator ceiling, not a rate
 	MODERN_SURF_TURN_RATE = 728,	// lara_as_surftread / lara_as_surfswim - a real rate, not a lid
 	MODERN_SURF_SIDE_RATE = 364,	// lara_as_surfback / surfleft / surfright
 
@@ -417,23 +420,23 @@ struct MODERN_CFG
 	long steer_step;	// stick movement under which the course does not move
 	long recenter;		// stick movement at which the course re-seats
 	long aim_sector;	// the forward/back quadrant boundary
-	long block_frames;	//ticks of not moving that count as blocked
-	long block_eps;		//world units that still count as not moving
-	long turn_rate;		//the direct turn, units per tick
-	long direct_turn;	//the direct turn's own gate
-	long snap_forward;	//error under which IN_FORWARD comes back
-	long snap_forward_stand;//the same, in the four turn-on-the-spot states
+	long block_frames;	// ticks of not moving that count as blocked
+	long block_eps;		// world units that still count as not moving
+	long turn_rate;		// the direct turn, units per tick
+	long direct_turn;	// the direct turn's own gate
+	long snap_forward;	// error under which IN_FORWARD comes back
+	long snap_forward_stand;// the same, in the four turn-on-the-spot states
 	long stand_forward_ticks;// ticks of a standing turn that arrives nowhere; 0 switches it off
 	long air_turn_rate;	// the forward jump's own turn, units per tick; 0 switches it off
 	long stick_full;	// full deflection in this tree's units
-	long swim_turn_rate;//the direct turn under water, units per tick
-	long surf_turn_rate;//the same on the surface, treading and swimming
-	long surf_side_rate;//and in the back and side strokes
-	long swim_pitch_rate;//how fast x_rot follows the orbit's elevation
-	long swim_pitch_min;//the engine's own clamp on x_rot
+	long swim_turn_rate;// the direct turn under water, units per tick
+	long surf_turn_rate;// the same on the surface, treading and swimming
+	long surf_side_rate;// and in the back and side strokes
+	long swim_pitch_rate;// how fast x_rot follows the orbit's elevation
+	long swim_pitch_min;// the engine's own clamp on x_rot
 	long swim_pitch_max;
-	long swim_roll_rate;//the bank the turn bits would have made
-	long water_auto_stroke;//the stroke is held while the stick is out
+	long swim_roll_rate;// the bank the turn bits would have made
+	long water_auto_stroke;// the stroke is held while the stick is out
 	long hold_course;	// hold a world course instead of following the camera
 	long back_turns;	// back on the stick turns her around
 	long aim_strafe;	// strafe instead of turning while aiming

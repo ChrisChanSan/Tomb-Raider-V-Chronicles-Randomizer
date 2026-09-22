@@ -11,14 +11,15 @@
  * subtracted in the shader; not a line of the original is copied. See
  * THIRD-PARTY.md.
  *
- * The lighting below the line "THE PARITY BLOCK" is ours: TROne lights an
+ * The lighting below the line "the parity block" is ours: TROne lights an
  * item with a flat ambient blown up into a six-face cube and up to four point
  * lights of its own, while this engine has the classic path's own
  * per-object light list, its distance fog and its fog bulbs - and a torch has
  * to reach an HD guard exactly as far as it reaches the classic wall behind
  * him. So the ambient comes from the engine's own CalculateObjectLighting, the
  * engine's own light LIST is evaluated per vertex below with the classic
- * formulas, and the fog and bulb terms are the very ones hd_room.hlsl runs.
+ * formulas. The fog term is hd_room.hlsl's; the bulb term is the classic one,
+ * with its cone cull and without hd_room's softened rim.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -213,7 +214,7 @@ float4 gSpec : register(c161);
  * model (hd_lara.h, HD_LARA_NECK_CAP_SEGMENTS). */
 float4 gNeckCut : register(c162);
 
-/* --------------------------------------------------- THE PARITY BLOCK ------
+/* --------------------------------------------------- the parity block ------
  *
  * constants, pixel side
  *
@@ -466,7 +467,7 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * cull and the classic quirk: when the bulb is behind the camera `vec` is
  * left holding the unit direction and the length comes out as one, which the
  * classic path truncates to zero on the way into a long. The two shader files
- * keep their own copy rather than share an include, because Direct3D 9 shader
+ * keep their own function rather than share an include, because Direct3D 9 shader
  * bytecode is compiled per entry point anyway and an include would put a
  * second file between the source and the .inc that GPLv3 asks to sit beside
  * it. */

@@ -8,7 +8,7 @@
  * shaders k_hd_vert / k_hd_frag). Translated to HLSL for Direct3D 9; not a
  * line of the original is copied. See THIRD-PARTY.md.
  *
- * Everything below the line "THE PARITY BLOCK" is ours and has no counterpart
+ * Everything below the line "the parity block" is ours and has no counterpart
  * in TROne: TROne has no fog of any kind (its set_fog is a logged stub), no
  * fog bulbs (it parses Trg::fog_boxes and drops them), no dynamic lights in
  * rooms, and its water is an invented wave rather than the engine's own
@@ -94,7 +94,7 @@
  * its additive draw type (polyinsert.cpp) and the overbright term below goes
  * off with it.
  *
- * -------------------------------------------------------- THE PARITY BLOCK
+ * -------------------------------------------------------- the parity block
  *
  * Why there is a 127.5 and no 128 split. The classic path computes a room
  * vertex colour in 0..255 and then splits it (drawroom.cpp): up to 128 it
@@ -277,8 +277,7 @@ float4 gWibbleTable[32] : register(c96);
  *
  * x is 1 for a draw call whose .TRG part carries no baked light anywhere and
  * whose page is the whole picture - the band of sky, whose vertex light is
- * exactly zero on all 1,280 of its triangles in every level, because the
- * remaster's own sky shader does not read the vertex colour. Through the room
+ * exactly zero on all 1,280 of its triangles in every level. Through the room
  * formula it would come out black. 0 for every other draw call, where the
  * baked light is the light. See hd_render.cpp, PartIsUnlit.
  *
@@ -289,8 +288,8 @@ float4 gFlat : register(c14);
 /* Where this room's water stops.
  *
  * xy the smallest and zw the largest x and z, room local, of the box the
- * surface bit was flooded into (hd_render.cpp, "THE SHORE OF EACH ROOM'S
- * WATER"). A room with no water gets a box so large that nothing is ever
+ * surface bit was flooded into (hd_render.cpp, "The shore of each room's
+ * water"). A room with no water gets a box so large that nothing is ever
  * near its edge, and the taper below is then exactly 1.
  *
  * What it is for. The swell lifts every marked vertex by up to one and a half
@@ -419,10 +418,9 @@ float4 gSpec : register(c19);
  *    everywhere else this costs one compare
  * z  how fast, in waves a second
  *
- * All three come out of the .TRG part's own three numbers, and where those
- * numbers come from - our own measurement of the material, not TROne's
- * reading of the remaster's shaders - is written out over MaterialRipple in
- * hd_render.cpp.
+ * All three come out of the .TRG part's own three numbers. Where those
+ * numbers come from is our own measurement of the material; nothing of
+ * TROne's is used - see MaterialRipple in hd_render.cpp.
  *
  * The shape is this file's own: two sheets travelling across each other, and
  * a finer, faster octave over them so that the pattern does not read as one
@@ -945,11 +943,11 @@ float4 RoomPS(VS_OUT input) : COLOR0
 			 * light raised to gSpec.y would be the second half of a gloss, but
 			 * inside this loop, which ps_3_0 forces to be unrolled eight times
 			 * because it has no relative constant addressing, one pow per
-			 * light takes the shader from 319 instruction slots to 636 - past
-			 * the 512 that shader model 3 guarantees. So the gloss is the
-			 * grazing angle alone, at the end of this function, where it costs
-			 * eleven slots and no loop. The exponent is read, logged and
-			 * unused. */
+			 * light adds about 317 instruction slots to the 476 of this
+			 * shader - far past the 512 that shader model 3 guarantees. So the
+			 * gloss is the grazing angle alone, at the end of this function,
+			 * where it costs eleven slots and no loop. The exponent is read,
+			 * logged and unused. */
 		}
 	}
 

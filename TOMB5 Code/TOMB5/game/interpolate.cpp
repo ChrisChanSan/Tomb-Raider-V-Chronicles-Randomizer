@@ -168,9 +168,10 @@ namespace
 	 * the snap test would measure half the distance).
 	 *
 	 * POSE_ROOT is the side channel of the root rule: GetFramesNow sets it on
-	 * a slot whose pose K6 refused, and the draw then blends the slot's root
-	 * offset in time. One byte per slot, cleared every drawn frame, and zero
-	 * for a snapped slot, a frame carrying the tick and all of fps_mode 0. */
+	 * a slot whose pose the neighbour rule refused, and the draw then blends
+	 * the slot's root offset in time. One byte per slot, cleared every drawn
+	 * frame, and zero for a snapped slot, a frame carrying the tick and all of
+	 * fps_mode 0. */
 	enum { POSE_NO = 0, POSE_OK = 1, POSE_ROOT = 2 };
 
 	unsigned char g_poseOk[MAX_ITEMS];
@@ -312,7 +313,7 @@ namespace
 	int g_cutEye = 0;		// the eye jumped further than CAM_SNAP
 	int g_cutAim = 0;		// the view DIRECTION jumped (see InterpCamAimCut)
 	int g_secPose = 0;		// items drawn with a blended pose
-	int g_secPoseSkip = 0;		// ... and refused one by rule K6
+	int g_secPoseSkip = 0;		// ... and refused one by the neighbour rule
 	int g_secPoseFar = 0;		// ... refused because the pair is too far apart
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
@@ -664,8 +665,8 @@ namespace
 	 *                changes that leave the family.
 	 *   pose_items   items whose pose was blended, per drawn frame; zero at
 	 *                fps_mode 0.
-	 *   pose_skips   blends K6 refused (animation changed or frame did not
-	 *                step by one). A few per second is normal; near
+	 *   pose_skips   blends the neighbour rule refused (animation changed or
+	 *                frame did not step by one). A few per second is normal; near
 	 *                pose_items means snapshot and animation clock are out of
 	 *                step.
 	 *   pose_far     rate 1 pairs refused because a node turns more than 90
@@ -1202,8 +1203,8 @@ void InterpBeginFrame(float alpha)
 
 		/* Set before ApplyNode overwrites the position. The slot has a
 		 * previous state, the same object and no jump, so its pose may blend;
-		 * GetFramesAt still applies K6. An item that did not move gets it too:
-		 * a machine animating on the spot has only its pose to blend. */
+		 * GetFramesAt still applies the neighbour rule. An item that did not
+		 * move gets it too: a machine animating on the spot has only its pose to blend. */
 		g_poseOk[i] = 1;
 
 		/* ApplyNode's own half-turn test, so the two agree: a rotation that
@@ -1534,8 +1535,8 @@ void InterpInvalidate(const char* why)
 
 	/* The arms' snapshot too: g_prevArm.base points into the level's frame
 	 * data, which FreeLevel returns to the game_malloc pool and the next level
-	 * allocates over; a stale pool pointer of that kind has crashed a level
-	 * load before. */
+	 * allocates over, so a stale g_prevArm.base would read the next level's
+	 * data as frame data. */
 	g_prevArm.valid = 0;
 	g_lastDrawnValid = false;
 
@@ -1685,8 +1686,8 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 	InterpRootLerp(start, cur, g_alpha, blended);
 
 	/* The draw is only told where the blend lands elsewhere. GetFramesNow
-	 * raises the latch on every K6 refusal, and every item standing still is
-	 * refused on every tween frame (about twenty per drawn frame in an
+	 * raises the latch on every refusal by the neighbour rule, and every item
+	 * standing still is refused on every tween frame (about twenty per drawn frame in an
 	 * ordinary room). Their prev and cur come from the same (animation,
 	 * frame) pair, so they blend to the offset they carry and go back to the
 	 * draw site's own float path, unchanged by even one unit. root_fix
@@ -1803,9 +1804,9 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 }
 
 /* The arm's previous frame (see interpolate.h). Gated by g_applied like the
- * body pose; the rest is K6 for the arm. A pistol arm counts down as well as
- * up (larafire.cpp draws and holsters through the same table), so steps of
- * -1, 0 and +1 are neighbours. */
+ * body pose; the rest is the neighbour rule for the arm. A pistol arm counts
+ * down as well as up (larafire.cpp draws and holsters through the same
+ * table), so steps of -1, 0 and +1 are neighbours. */
 bool InterpArmPrev(int which, InterpArmPose* prev, float* alpha)
 {
 	if (!prev || !alpha || which < 0 || which > 1)

@@ -1153,9 +1153,9 @@ namespace
 
 	/* --- the classic per-vertex light terms ---------------------------- */
 
-	// WATERTAB (global	ypes.h:2485). Two signed bytes and two unsigned ones,
+	// WATERTAB (global\types.h). Two signed bytes and two unsigned ones,
 	// and the mixture is not an accident: init_water_table writes -3 into the
-	// unsigned `abs` (gamemain.cpp:79), aRoomletTransformLight reads it back
+	// unsigned `abs` (gamemain.cpp), aRoomletTransformLight reads it back
 	// as 253, and the shimmer is 253 brighter for that table row. Copied, not
 	// corrected.
 	struct HDWaterTab
@@ -1640,7 +1640,7 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
-	/* The room shader is 313 ps_3_0 instruction slots. Shader model 3
+	/* The room shader is 476 ps_3_0 instruction slots. Shader model 3
 	 * guarantees 512 and every card that reports ps_3_0 has to, but a device
 	 * that answers less would fail CreatePixelShader below with nothing but
 	 * an HRESULT, so the number is read here and named in the log instead. */
@@ -1996,7 +1996,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * its water is the animated texture range.
 		 *
 		 * The rule. The classic answer for the surface bit is a decision about
-		 * a plane: drawroom.cpp:537 opens the whole branch with
+		 * a plane: aRoomletTransformLight (drawroom.cpp) opens the whole branch with
 		 * `pos.y == CurrentRoomPtr->minfloor`, and the portal walk under it
 		 * asks whether that square of that plane has water below. So the
 		 * answer for an HD vertex the classic mesh never had is the answer of
@@ -2023,7 +2023,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * flooding the surface bit alone would leave the Rome water with the
 		 * sliver of marks the classic corners give it, standing still.
 		 *
-		 * The classic predicate behind the whole-room bit (drawroom.cpp:373)
+		 * The classic predicate behind the whole-room bit (drawroom.cpp,
+		 * aRoomletTransformLight)
 		 * is `!IsMistVert(pos) || |y - minfloor| > 1536`, and IsMistVert asks
 		 * whether the vertex is shared with the room above through the ceiling
 		 * portal - a question about the classic mesh's topology, which an HD
@@ -2292,7 +2293,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			 * The vertex's own normal tells the two apart - a water surface
 			 * is flat and its normal is vertical - and the shader takes that
 			 * road, because the colour term must keep the classic answer for
-			 * exactly these vertices (drawroom.cpp:537 asks the height and
+			 * exactly these vertices (aRoomletTransformLight asks the height and
 			 * not the normal) and only the geometry half may drop them. This
 			 * counts them, so the log says how much of a level it is. */
 			if (bits & 6)
@@ -3755,7 +3756,7 @@ namespace
 		 * scale on the first vertex colour that is always 1 here and that
 		 * nothing computes, w the specular add - the
 		 * classic path switches D3DRS_SPECULARENABLE off for its additive
-		 * draw type (polyinsert.cpp:72) and the overbright half of the room
+		 * draw type (HWR_DrawSortList, polyinsert.cpp) and the overbright half of the room
 		 * colour goes off with it.
 		 *
 		 * The alpha pass's 0.5 is the classic path's own reference
@@ -3892,7 +3893,8 @@ namespace
 				continue;
 
 			/* A destructible piece Lara has shot away. The classic path
-			 * clears MESH_INFO::Flags bit 0 (control.cpp:1935) and stops
+			 * clears MESH_INFO::Flags bit 0 where it shatters a static (for a
+			 * shot, GetTargetOnLOS in control.cpp) and stops
 			 * drawing the static; this stops drawing the art that was baked in
 			 * its place. -1, which is every draw call in the game but 69
 			 * parts of six levels, skips the test. */
@@ -4685,8 +4687,9 @@ double HDRenderSelfTest(double mznear, double mzfar, double persp,
 		const double inv = (1.0 / mznear) + t * ((1.0 / mzfar) - (1.0 / mznear));
 		const double z = 1.0 / inv;
 
-		// The classic path, in its own arithmetic (drawroom.cpp:379 for the
-		// rhw, polyinsert.cpp:434 for the sz).
+		// The classic path, in its own arithmetic (aRoomletTransformLight in
+		// drawroom.cpp for the rhw, the clip routines of polyinsert.cpp for
+		// the sz).
 		const float zv = f_persp / (float)z;
 		const float rhw = zv * f_moneopersp;
 		const float classic = f_a - f_boo * rhw;

@@ -43,9 +43,9 @@ inline short InterpLerpAngle(short a, short b, float alpha)
  * 451 - rolls and the twist of the jump back), and the animation's root bone
  * turns the other half so the 30 Hz picture is continuous. Blended, the root
  * would take InterpLerpAngle's arbitrary half while the pose is already the
- * new one (refused by K6 or InterpPoseFar), and Lara would stand sideways for
- * one frame. So a node whose y difference is exactly half a turn keeps its
- * live rotation and only its position blends. TROne blends finished node
+ * new one (refused by the neighbour rule or InterpPoseFar), and Lara would
+ * stand sideways for one frame. So a node whose y difference is exactly half
+ * a turn keeps its live rotation and only its position blends. TROne blends finished node
  * matrices, where the two halves cancel before the blend, and needs no such
  * rule; nothing of its code is used here. */
 inline bool InterpHalfTurn(short a, short b)
@@ -322,7 +322,8 @@ inline long InterpKeyRate(long rate, long key, long frameEnd)
 
 /* The midpoint of the two tick poses, as a key frame index and a factor.
  *
- * `t` is the drawn frame's time alpha. Returns false (rule K6) when:
+ * `t` is the drawn frame's time alpha. Returns false (the neighbour rule of
+ * interpolate.h) when:
  *
  *   the frame did not step by exactly one   a jump, a loop wrapping to its
  *                                           start, an item standing still, a
@@ -333,7 +334,8 @@ inline long InterpKeyRate(long rate, long key, long frameEnd)
  *   the current frame is the animation's    the previous pose belongs to
  *   first                                   another animation.
  *
- * A change of animation number is also K6 and is tested by the caller
+ * A change of animation number also breaks the neighbour rule and is tested
+ * by the caller
  * (draw.cpp, GetFramesAt). */
 inline bool InterpPoseAt(long prevFrame, long curFrame, long frameBase, long rate,
 	long frameEnd, float t, long* key, float* blend)
@@ -422,8 +424,8 @@ inline long InterpBlendLong(long a, long b, long alpha8)
  * offsets and TranslateItem (laramisc.cpp, AnimateLara) moves item->pos by
  * the same amount at the wrap, so at 30 Hz the drawn root is continuous. On
  * the tween frame item->pos is blended half way (at most 512 units, not a
- * snap) while K6 refuses the pose and the draw uses the current frame's
- * offset: drawn = Y + D/2 where both neighbours drew Y + D. On a 165 Hz
+ * snap) while the neighbour rule refuses the pose and the draw uses the
+ * current frame's offset: drawn = Y + D/2 where both neighbours drew Y + D. On a 165 Hz
  * display that tween state is shown four or five times in a row.
  *
  * So on a refused tween frame the offset is blended in time as well, and the

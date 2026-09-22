@@ -1302,9 +1302,9 @@ long S_UpdateInput()
 	 *
 	 * The bit does reach these ticks, by two roads: the IN_TARGET swallow below
 	 * lets it through from the seventh tick of a hold (LookCnt 100), and
-	 * game\control.cpp:527 sets `input |= IN_LOOK` on every tick of a binocular
-	 * or lasersight session. On those ticks the classic direction bits are what
-	 * LookUpDown (game\lara.cpp:887) and LookLeftRight (:920) consume to aim
+	 * ControlPhase (game\control.cpp) sets `input |= IN_LOOK` on every tick of
+	 * a binocular or lasersight session. On those ticks the classic direction bits are what
+	 * LookUpDown and LookLeftRight (game\lara.cpp) consume to aim
 	 * the head, the binoculars and the crosshair, and a sector that lets one
 	 * axis through would make a diagonal impossible.
 	 *
@@ -1395,7 +1395,7 @@ long S_UpdateInput()
 	 * `modern_tank` has two terms. The latch (ModernLookTankActive) answers
 	 * when the block below the IN_TARGET swallow has taken the bit out of the
 	 * word. The word answers during a binocular or lasersight session, where
-	 * game\control.cpp:527 holds IN_LOOK on whether the key is pressed or not;
+	 * ControlPhase (game\control.cpp) holds IN_LOOK on whether the key is pressed or not;
 	 * that session is LG_READY, so the block below leaves the bit alone. */
 	if (modern_seam && !modern_tank)
 	{
@@ -1678,16 +1678,17 @@ long S_UpdateInput()
 	 * the stick's own IN_LEFT / IN_RIGHT / IN_FORWARD / IN_BACK stand as at
 	 * Tank. But the engine answers the look key, and the answer eats exactly
 	 * those bits:
-	 *   game\lara.cpp:4911   LaraAboveWater calls LookLeftRight() while the bit
-	 *                        is held, and LookLeftRight (:920) sets
+	 *   game\lara.cpp        LaraAboveWater calls LookLeftRight() while the bit
+	 *                        is held, and LookLeftRight sets
 	 *                        camera.type = LOOK_CAMERA and SUBTRACTS IN_LEFT or
 	 *                        IN_RIGHT from the word for the head's own yaw.
-	 *   game\lara.cpp:1428+  fifteen state routines call LookUpDown() (:887),
+	 *   game\lara.cpp        fifteen state routines call LookUpDown(),
 	 *                        which does the same to IN_FORWARD / IN_BACK.
-	 *   game\laraswim.cpp:554, game\larasurf.cpp:168/308, game\laraclmb.cpp:48
-	 *                        the same in the water, on the surface and on a
-	 *                        ladder - the surface one RETURNS, so nothing else
-	 *                        of that tick runs at all.
+	 *   game\laraswim.cpp, game\larasurf.cpp, game\laraclmb.cpp
+	 *                        the same in the water (LaraUnderWater), on the
+	 *                        surface (LaraSurface, lara_as_surftread) and on a
+	 *                        ladder (lara_as_climbstnc) - lara_as_surftread
+	 *                        RETURNS, so nothing else of that tick runs at all.
 	 * Left alone, she turns with no animation: measured, 140 ticks of 18
 	 * degrees in AS_STOP with the state never leaving 2.
 	 *
@@ -1699,11 +1700,11 @@ long S_UpdateInput()
 	 *
 	 * Not with a weapon ready: there the look key is the six-tick IN_TARGET
 	 * swallow just above, and the seventh tick opens the binoculars and the
-	 * lasersight (game\control.cpp:462, which asks for LG_READY and the
+	 * lasersight (ControlPhase in game\control.cpp, which asks for LG_READY and the
 	 * revolver, the crossbow or the HK). That case keeps the classic look.
 	 *
 	 * Known side effect, left unbranched: DOZY ends on IN_WALK "without look"
-	 * (game\laramisc.cpp:132), so in Modern the walk key ends the cheat even
+	 * (LaraCheat in game\laramisc.cpp), so in Modern the walk key ends the cheat even
 	 * while the look key is held. It is a cheat behind tomb5.enable_cheats. */
 	if (tomb5.control_modern)
 	{
@@ -1866,7 +1867,7 @@ long S_UpdateInput()
 		 *
 		 * The other terms are what the sprint and duck bits need:
 		 * - dead: lara_as_dash and lara_as_duckl/duckr all end on hit_points
-		 *   <= 0 (game\lara.cpp:1746, :4487, :4497), so the engine drops both
+		 *   <= 0 (game\lara.cpp), so the engine drops both
 		 *   anyway and a latch that outlived her would be the only thing left
 		 *   holding a key.
 		 * - the water: every IN_DUCK reader in game\lara.cpp excludes LW_WADE
@@ -1875,18 +1876,18 @@ long S_UpdateInput()
 		 *   So anything but LW_ABOVE_WATER is a tick the bits mean nothing on.
 		 * - LG_HANDS_BUSY stands for "ladder and vehicle": a ladder, a rope,
 		 *   the water and a pickup all leave gun_status there
-		 *   (game\lara.cpp:1156, :1168 among others), and LARA_INFO has no
+		 *   (TestLaraVault in game\lara.cpp among others), and LARA_INFO has no
 		 *   Vehicle field (the name does not occur in global\types.h).
 		 * - the binoculars and the lasersight read IN_SPRINT and IN_DUCK out of
-		 *   `inputBusy` as ZOOM IN and ZOOM OUT (game\camera.cpp:3520/:3529).
+		 *   `inputBusy` as ZOOM IN and ZOOM OUT (BinocularCamera, game\camera.cpp).
 		 *   The zoom steps once per tick while held, so the sight is a drop,
 		 *   and a drop tick hands the raw key through untouched.
 		 *
 		 * `mode_drop` adds bUseSpotCam for the sprint and duck; the grab asks
 		 * only `mode_base`. InitialiseSpotCam sets bDisableLaraControl to 0 and
-		 * raises it again only for SP_NOLARACONTROL (game\spotcam.cpp:148,
-		 * :176), so an ordinary flyby leaves Lara playable with bUseSpotCam up;
-		 * and game\control.cpp:647 holds bUseSpotCam at 1 while a GF_OFFICE
+		 * raises it again only for SP_NOLARACONTROL (game\spotcam.cpp), so an
+		 * ordinary flyby leaves Lara playable with bUseSpotCam up;
+		 * and ControlPhase (game\control.cpp) holds bUseSpotCam at 1 while a GF_OFFICE
 		 * level's flipmap is above 10, with full control throughout. There a
 		 * grab drop would make a Toggle player let go of the ledge while a Hold
 		 * player hangs on. `!lara_item` stays first, guarding the hit_points
@@ -1907,7 +1908,7 @@ long S_UpdateInput()
 
 		/* The sprint latch also drops when no direction is pushed (this word's
 		 * six direction bits) or the dash bar is empty: lara_as_dash leaves
-		 * AS_DASH on `!DashTimer` and game\laramisc.cpp:502 refills it the moment
+		 * AS_DASH on `!DashTimer` and LaraControl (game\laramisc.cpp) refills it the moment
 		 * she is out of AS_DASH, so a latch that sat through an empty bar would
 		 * put her back into a sprint on the single unit of the refill. Both
 		 * belong to the sprint alone; a duck holds her standing still on
@@ -1919,12 +1920,12 @@ long S_UpdateInput()
 
 		/* The duck asks LG_HANDS_BUSY together with where Lara is: entering the
 		 * crawl runs ANIM_DUCK_TO_ALL4S, which sets LG_HANDS_BUSY itself
-		 * (game\lara.cpp:3691), so the plain term would end the duck latch when
+		 * (lara_as_all4s in game\lara.cpp), so the plain term would end the duck latch when
 		 * she starts crawling. Inside the duck-and-crawl family LG_HANDS_BUSY
 		 * means "she is crawling"; a ladder, a rope and the crawl-to-hang still
 		 * end the latch. ModernStateIsDuck (game\modern_move.cpp) is that
 		 * family, checked there against the engine's own list in
-		 * game\newinv2.cpp:2827. */
+		 * use_current_item (game\newinv2.cpp). */
 		const long duck_drop = mode_drop || mode_water || mode_sight ||
 			(mode_hands && !ModernStateIsDuck(mode_state));
 
@@ -1933,7 +1934,8 @@ long S_UpdateInput()
 		 * bUseSpotCam is left out for the reason given above mode_base. The
 		 * other terms are left out as well:
 		 * - LG_HANDS_BUSY is the family. A hang, a ladder, a rope and a pole
-		 *   all leave gun_status there (game\lara.cpp:2465, :2546, :2918), so
+		 *   all leave gun_status there (lara_col_reach and lara_col_upjump in
+		 *   game\lara.cpp), so
 		 *   the term would drop the latch on every tick it was meant to stand.
 		 * - the water: she can climb a ladder out of shallow water, where
 		 *   water_status is LW_WADE, and must not be dropped off it. No family
@@ -1958,9 +1960,10 @@ long S_UpdateInput()
 		 * there is no other exit.
 		 *
 		 * Under "Separate" IN_INTERACT comes from a different physical key, so
-		 * the mask stays IN_ACTION alone - the distinction game\lara.cpp:5003
-		 * makes too. IN_SELECT is never in it: it confirms in menus, and no menu
-		 * is open while she hangs.
+		 * the mask stays IN_ACTION alone - the distinction the crossbow line at
+		 * the end of LaraAboveWater (game\lara.cpp) makes too. IN_SELECT is
+		 * never in it: it confirms in menus, and no menu is open while she
+		 * hangs.
 		 *
 		 * The delivery stays IN_ACTION alone: every state that asks ANY is
 		 * satisfied by it, and an IN_INTERACT handed out without a key would
@@ -2008,8 +2011,8 @@ long S_UpdateInput()
 	 * The input word has no edge for the draw key: Key(9) is a level read of
 	 * keymap[], `input` is `linput` unlatched, and nobody asks dbinput about
 	 * IN_DRAW. Lara's state machine is the debounce: LaraGun
-	 * (game\larafire.cpp) asks about IN_DRAW only at LG_NO_ARMS (:229) and
-	 * LG_READY (:290), and in LG_DRAW_GUNS / LG_UNDRAW_GUNS the animation runs.
+	 * (game\larafire.cpp) asks about IN_DRAW only at LG_NO_ARMS and
+	 * LG_READY, and in LG_DRAW_GUNS / LG_UNDRAW_GUNS the animation runs.
 	 * (A held key in Core draws and holsters without end; a tap is shorter than
 	 * the animation.) So ModernWeaponBits asks for the disagreement, not the
 	 * key: one request per tick on which the state and the key disagree, none
@@ -2018,7 +2021,7 @@ long S_UpdateInput()
 	 *
 	 * The guard excludes the states in which nobody would consume the request,
 	 * where it would sit in the word while the state stands still.
-	 * specific\fmv.cpp:263 skips a video on a rising edge of
+	 * PlayFmv (specific\fmv.cpp) skips a video on a rising edge of
 	 * IN_OPTION|IN_DRAW|IN_SELECT, so a bit on for every frame of the outro FMV
 	 * (LG_READY at the level's end, key up) would make the video unskippable -
 	 * hence App.fmv. The other terms mean what they mean in modern_seam: a
@@ -2033,14 +2036,14 @@ long S_UpdateInput()
 	 * the binocular and lasersight sessions.
 	 *
 	 * The torch is a guard term, not part of `ready`: a burning torch sits at
-	 * LG_READY with gun_type WEAPON_TORCH (game\flmtorch.cpp:196), LaraGun
-	 * returns before its chain for it (:221), and DoFlameTorch (:117) reads the
-	 * bit to throw the torch. Only making `ready` false would still clear the
-	 * key's bit, and the torch could never be thrown in Hold. The term clears
-	 * itself: gun_type goes back to last_gun_type or WEAPON_NONE when the torch
-	 * leaves her (:147, :169).
+	 * LG_READY with gun_type WEAPON_TORCH (DoFlameTorch, game\flmtorch.cpp),
+	 * LaraGun (game\larafire.cpp) returns before its chain for it, and
+	 * DoFlameTorch reads the bit to throw the torch. Only making `ready` false
+	 * would still clear the key's bit, and the torch could never be thrown in
+	 * Hold. The term clears itself: DoFlameTorch sets gun_type back to
+	 * last_gun_type or WEAPON_NONE when the torch leaves her.
 	 *
-	 * The flare needs no exception: ready_flare() (game\laraflar.cpp:175)
+	 * The flare needs no exception: ready_flare() (game\laraflar.cpp)
 	 * parks a burning flare at LG_NO_ARMS, not LG_READY, so it reads as
 	 * `holstered`. With the key up she keeps it; with the key down LaraGun
 	 * throws the flare and draws the gun, as a draw-key press does in Core. */

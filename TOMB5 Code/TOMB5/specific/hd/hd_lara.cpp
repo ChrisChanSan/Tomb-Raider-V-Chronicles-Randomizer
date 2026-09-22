@@ -326,7 +326,7 @@ namespace
 		  "the braid",                2, -1, "0..5 of its own chain", -1, 0 },
 
 		/* Not a file: a fan built on the rim the head cut leaves
-		 * (build_neck_cap). The name is what the log and the plan call it. */
+		 * (build_neck_cap). The name is what the log calls it. */
 		{ "NECK_CAP",                 0,
 		  "the neck lid",             0, -1, "14 (rigid)", -1, 0 },
 

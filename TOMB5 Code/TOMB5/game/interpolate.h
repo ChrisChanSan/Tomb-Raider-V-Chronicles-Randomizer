@@ -123,8 +123,8 @@ unsigned long InterpTickSerial();
  * the animation frame it wore at the previous tick. Returns 0 (draw the pose
  * live) when the frame is not a tween frame, the snapshot was not applied,
  * the item is not an items[] entry, or its slot has no previous state,
- * changed hands or snapped. Rule K6 (same animation, frame stepped by exactly
- * one) is tested where the frames are: GetFramesAt (draw.cpp) and
+ * changed hands or snapped. The neighbour rule (same animation, frame stepped
+ * by exactly one) is tested where the frames are: GetFramesAt (draw.cpp) and
  * InterpPoseAt (interpolate_math.h).
  *
  * The snap verdict is recorded in InterpBeginFrame before item->pos is
@@ -133,7 +133,8 @@ unsigned long InterpTickSerial();
 float InterpPoseTime(const ITEM_INFO* item, short* prevAnim, short* prevFrame);
 
 /* INTERPLOG's pose counters: an item drawn with its pose blended in time, one
- * drawn with the current tick's pose because K6 refused the blend, and one
+ * drawn with the current tick's pose because the neighbour rule refused the
+ * blend, and one
  * whose blended pose went through the HD path. Counted only with -log. */
 void InterpNotePose(const ITEM_INFO* item);
 void InterpNotePoseSkip();
@@ -142,13 +143,14 @@ void InterpNotePoseHD();
  * blend. */
 void InterpNotePoseFar();
 
-/* K6 refuses the pose, never the root.
+/* The neighbour rule refuses the pose, never the root.
  *
  * A stored frame carries the root offset in frm[6..8]. A climb carries its
  * vertical travel there (animation 161 walks -375 to -879 over 59 frames) and
  * the wrap moves item->pos by TranslateItem(0, -512, 0), so at 30 Hz the drawn
  * root is -879 before the wrap and -887 after. On the tween frame item->pos is
- * blended half way while K6 refuses the pose (the frame stepped back to the
+ * blended half way while the neighbour rule refuses the pose (the frame
+ * stepped back to the
  * start) and the draw uses the current frame's offset: -631, a drop of 248
  * units once per climb cycle (measured with RootProbe on JOBY5).
  *
@@ -164,15 +166,16 @@ void InterpNotePoseFar();
  * changes. INTERPLOG's root_fix counts those frames, not the refusals (about
  * twenty per drawn frame in an ordinary room).
  *
- * GetFramesNow (draw.cpp) returns 0 both for "on a stored pose" and for "K6
- * refused", and its callers branch on that value, so the refusal travels in
- * g_poseOk[] (cleared per slot every drawn frame) with the previous offset in
- * g_rootPrev[]. `prev` is the offset the previous tick drew, or null where a
- * draw keeps its own frame's offset (Lara's hit reaction, the first person
- * still body). `prev` is in the previous tick's frame of reference; where
- * turn180_effect fired on the refused tick (the underwater roll) it is half a
- * turn behind and drew the root up to 140 units off. InterpRootNow turns it
- * into this tick's frame first (InterpRootFlip). */
+ * GetFramesNow (draw.cpp) returns 0 both for "on a stored pose" and for
+ * "refused by the neighbour rule", and its callers branch on that value, so
+ * the refusal travels in g_poseOk[] (cleared per slot every drawn frame)
+ * with the previous offset in g_rootPrev[]. `prev` is the offset the
+ * previous tick drew, or null where a draw keeps its own frame's offset
+ * (Lara's hit reaction, the first person still body). `prev` is in the
+ * previous tick's frame of reference; where turn180_effect fired on the
+ * refused tick (the underwater roll) it is half a turn behind and drew the
+ * root up to 140 units off. InterpRootNow turns it into this tick's frame
+ * first (InterpRootFlip). */
 void InterpRootRefused(const ITEM_INFO* item, const long prev[3]);
 
 /* The root offset this draw should translate by, or false with `out`

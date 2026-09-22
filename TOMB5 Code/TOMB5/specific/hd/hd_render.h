@@ -66,7 +66,7 @@ typedef struct _D3DMATRIX D3DMATRIX;
 #define HD_MAX_BULBS	16
 
 // One entry of the engine's `dynamics` array, made room local and scaled the
-// way aBuildRoomletLights scales it (drawroom.cpp:952-978).
+// way aBuildRoomletLights scales it (drawroom.cpp).
 struct HDLightSource
 {
 	float x, y, z;		// room local
@@ -75,7 +75,7 @@ struct HDLightSource
 };
 
 // One entry of ActiveFogBulbs, already in VIEW space - aBuildFogBulbList puts
-// it there once per frame (drawroom.cpp:738-745) and the shader wants it in
+// it there once per frame (drawroom.cpp) and the shader wants it in
 // exactly that space, because the surface point arrives there too.
 struct HDFogBulb
 {
@@ -131,10 +131,11 @@ struct HDRoomLighting
  * surface" or "this one shimmers". The classic path knows, because a roomlet
  * keeps its water vertices first (ROOMLET::nWVtx) and because the shimmer
  * predicate walks the neighbouring rooms through the portals
- * (drawroom.cpp:141-320). So the answer is computed once, at level build, on
- * the classic vertices, and carried to the HD vertices by position - the same
- * road TROne takes for its own water flag (game_renderer.cpp:2127-2188, a per
- * room hash of packed int16 x/y/z).
+ * (IsMistVert, IsReflectionVert and IsShoreVert in drawroom.cpp). So the
+ * answer is computed once, at level build, on the classic vertices, and
+ * carried to the HD vertices by position - the same road TROne takes for its
+ * own water flag (game_renderer.cpp:2127-2188, a per room hash of packed
+ * int16 x/y/z).
  *
  *   bit 0  the vertex is one of the roomlet's nWVtx water vertices - it gets
  *          the choppy displacement
@@ -182,8 +183,9 @@ struct HDWaterMark
 
 /* The room's own box, room local.
  *
- * The box TR5 itself calls the inside of a room - game\draw.cpp:2248-2253,
- * where an item is asked whether it fits wholly inside the room it is in:
+ * The box TR5 itself calls the inside of a room - game\draw.cpp,
+ * calc_animating_item_clip_window, where an item is asked whether it fits
+ * wholly inside the room it is in:
  * `r->x + 1024 .. r->x + (y_size - 1) * 1024` across, the same in z out of
  * `x_size`, and `maxceiling .. minfloor` in height. The border ring of wall
  * sectors is not in it on purpose: the art the remaster puts in that ring - a
@@ -214,10 +216,11 @@ struct HDRoomBox
  * picture where the two rectangles meet.
  *
  * The box is the holder's inside - the volume TR5 itself calls the inside of
- * a room (game\draw.cpp:2248-2253), one sector further in on each side
- * because a room's border ring is one sector thick and two rooms that merely
- * share a wall reach into each other by construction. Handed in the GROUP's
- * own local frame, like the room boxes above, and on the same contract: call
+ * a room (game\draw.cpp, calc_animating_item_clip_window), one sector
+ * further in on each side because a room's border ring is one sector thick
+ * and two rooms that merely share a wall reach into each other by
+ * construction. Handed in the GROUP's own local frame, like the room boxes
+ * above, and on the same contract: call
  * HDRenderSetIntrusions before HDRenderLevelBegin, the pointer is not kept.
  * Without it nothing is ever tagged and no room is ever windowed. */
 struct HDIntrusion
@@ -758,7 +761,7 @@ void HDRenderDepthTruth(IDirect3DDevice9* device, unsigned long* zenable,
 	unsigned long* zfunc, unsigned long* zwrite, float* minZ, float* maxZ);
 
 // How many instruction slots the card allows a ps_3_0 shader. The room shader
-// is 319 of them and shader model 3 guarantees 512, but a card that reports
+// is 476 of them and shader model 3 guarantees 512, but a card that reports
 // less would refuse CreatePixelShader with no useful message, so the number is
 // read and logged rather than assumed.
 unsigned long HDRenderPixelSlots();

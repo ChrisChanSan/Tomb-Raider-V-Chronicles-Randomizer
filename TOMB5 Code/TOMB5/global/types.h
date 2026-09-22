@@ -54,38 +54,34 @@
 #define MALLOC_SIZE	20000000	//20MB
 #define GAME_FOV	(80 * 182)
 
-// #134: the first person view gets a wider one of its own. 80 degrees suits
-// a camera behind Lara, but from her own eyes it reads as a tunnel - the
-// body that tells you how wide the world is has gone.
+// The first-person view gets a wider FOV of its own: 80 degrees suits a
+// camera behind Lara, but from her own eyes it reads as a tunnel, since
+// the body that tells you how wide the world is has gone.
 //
-// The number is NOMINAL, for a 4:3 frame: AlterFOV (3dmath.cpp:77) builds
+// The number is nominal, for a 4:3 frame: AlterFOV (3dmath.cpp:77) builds
 // the perspective from phd_winheight * 320 / 240 and then uses the same
 // value for x and y, so a wider screen shows more to the sides. On 16:9,
 // 80 comes out as roughly 96 across and 64 down, 100 as roughly 118 and 79.
 //
-// Which one is right is a matter of taste and nothing else - the user likes
-// 100, others who tried it preferred 80 - so it is a setting, on the third
-// page of the tomb5 options. 90 is the default because it is the middle of
-// the range and leaves both camps one step away.
+// Which value looks right is a matter of taste, so it is a setting on the
+// third page of the tomb5 options; 90 is the default, the middle of the
+// range.
 #define FIRST_PERSON_FOV	(tomb5.first_person_fov * 182)
 // How many AI enemies can be active at once (baddie_slots, lot.cpp).
 // Upstream 5: the sixth triggered enemy displaced the active one farthest
-// from the camera (EnableBaddieAI sets it ITEM_INVISIBLE) - with the
+// from the camera (EnableBaddieAI sets it ITEM_INVISIBLE), and with the
 // randomizer's 10-20 extra enemies, frozen enemies then regularly stood
 // around. 16 only costs memory in the game_malloc pool (per slot
 // sizeof(CREATURE_INFO) + num_boxes * sizeof(BOX_NODE), roughly 25 KB per
-// slot in the largest level).
-// The displacement stays as the fallback for the 17th enemy.
+// slot in the largest level); the displacement stays as the fallback for
+// the 17th enemy.
 //
-// Stood at 48 between 2026-08-23 and 2026-08-25, raised while #121 was
-// still thought to be a shortage of slots. The very next measurement
-// disproved that ("#121 measurement sheet: MAX_LOT was not it"), the real
-// cause turned out to be dead inherited animations in the rich1 guard set,
-// and the raise stayed behind unused. It then made a second bug worse: the
-// stale baddie_slots pointer in ShutThatDoor (see FreeLevel in
-// specific/file.cpp) scattered three times as far through the freshly
-// loaded level and killed joby3 while loading. Back to 16 - user's call,
-// and a value nobody has evidence against.
+// Raising this value further widens the blast radius of the stale
+// baddie_slots pointer in ShutThatDoor (see FreeLevel in
+// specific/file.cpp): a higher MAX_LOT lets that stale write scatter
+// further through a freshly loaded level. 16 is a value with no evidence
+// against it; a larger one needs the FreeLevel/ShutThatDoor issue fixed
+// first.
 #define MAX_LOT		16
 
 // Lara's targeting collects up to MAX_LOT targetable enemies plus an end
@@ -219,12 +215,12 @@ enum lara_draw_type
 	LARA_CATSUIT,
 	LARA_DIVESUIT,
 
-	// Randomizer marker (LaraType byte 5 in the level file): standard
-	// outfit with a ponytail in a RUSSIA level. Needed because hair.cpp and
-	// laraskin.cpp key the Russia special handling of the braid on "Russia
-	// level AND LARA_NORMAL" - an Andrea outfit there needs a value that is
-	// NOT LARA_NORMAL, or the braid stuck to the cap's head vertex numbers.
-	// Drawn like LARA_NORMAL.
+	// Randomizer marker (LaraType byte 5 in the level file): the standard
+	// outfit with a ponytail in a Russia level. Needed because hair.cpp
+	// and laraskin.cpp key the Russia special handling of the braid on
+	// "Russia level and LARA_NORMAL" - an Andrea outfit there needs a
+	// value that is not LARA_NORMAL, or the braid sticks to the cap's
+	// head vertex numbers. Drawn like LARA_NORMAL.
 	LARA_PONYTAIL
 };
 
@@ -349,22 +345,19 @@ enum input_buttons
 	IN_RSTEP =			0x800,
 	IN_ROLL =			0x1000,
 	IN_PAUSE =			0x2000,
-	/* THE INTERACTION BIT (#161, round 161b2c, item 1). It is Core's own
-	 * `IN_A`, renamed rather than added beside: 0x4000 was declared and read
-	 * by nothing at all in the tree (grep over game\, specific\, tomb5\ and
-	 * global\ - the only line naming it was this one), so an alias would only
-	 * be a second name for a bit no caller has. Retired, not kept.
+	/* This is Core's own IN_A, renamed rather than added beside: 0x4000
+	 * was declared and read by nothing at all in the tree (grep over
+	 * game\, specific\, tomb5\ and global\ found only this line), so an
+	 * alias would only be a second name for a bit no caller has.
 	 *
-	 * WHAT IT MEANS, in the user's own division: "Aktion ist aufheben,
-	 * Schalter und Keys. Die sekundaere Aktion ist fuer das Klettern, Greifen
-	 * und Schiessen". So IN_INTERACT is the world-object key - switches,
-	 * pickups, doors, pushblocks - and IN_ACTION stays the grab-climb-shoot
-	 * key that Lara's own automaton and every weapon already read.
+	 * IN_INTERACT is the world-object key - switches, pickups, doors,
+	 * pushblocks - while IN_ACTION stays the grab-climb-shoot key that
+	 * Lara's own automaton and every weapon already read.
 	 *
-	 * WITH "One key" THE TWO ARE NEVER APART. specific\input.cpp sets them in
-	 * the same statement at both producers, and nothing between there and any
-	 * reader separates them, so every site below behaves byte for byte as at
-	 * base - by construction and not by inspection. */
+	 * Under "One key" the two are never apart: specific\input.cpp sets
+	 * them in the same statement at both producers, and nothing between
+	 * there and any reader separates them, so every site below behaves
+	 * byte for byte as at base - by construction, not by inspection. */
 	IN_INTERACT =		0x4000,
 	IN_B =				0x8000,
 	IN_CHEAT =			0x10000,
@@ -385,17 +378,15 @@ enum input_buttons
 	IN_TARGET =			0x80000000,
 	IN_ALL =			0xFFFFFFFF,
 
-	/* EITHER KEY WILL DO (#161, round 161b2c, item 1). A composite like
-	 * IN_ALL above, not a bit of its own. TWENTY sites read it (counted in
-	 * audit round A1, where this comment still announced eight and then
-	 * listed seven): the eight the design named - the pole, the tightrope,
-	 * the parallel bars, the rope catch, the death slide, the jump switch and
-	 * the ceiling trapdoor - because they are the places where "grab" and
-	 * "use the thing" are the same press to a player and under "Separate"
-	 * neither key may be the wrong one there; and the twelve HOLD states
-	 * those grabs lead into, which have to read the same mask or the catch
-	 * would be a lie - one key grabs, the next tick lets go (the argument is
-	 * written out over lara_as_deathslide, game\lara.cpp). */
+	/* Either key will do: a composite like IN_ALL above, not a bit of its
+	 * own. Twenty sites read it: the eight places where "grab" and "use
+	 * the thing" are the same press to a player - the pole, the
+	 * tightrope, the parallel bars, the rope catch, the death slide, the
+	 * jump switch and the ceiling trapdoor - where under "Separate"
+	 * neither key may be the wrong one; and the twelve hold states those
+	 * grabs lead into, which have to read the same mask or the catch
+	 * would be a lie, with one key grabbing and the next tick letting go
+	 * (the argument is written out over lara_as_deathslide, game\lara.cpp). */
 	IN_ACTION_ANY =		IN_ACTION | IN_INTERACT
 };
 
@@ -1325,17 +1316,16 @@ struct LARA_INFO
 	char bottle;
 	char puzzleitems[12];
 	ushort puzzleitemscombo;
-	// KEY_ITEM1..8 used to be a 16-bit flag field here (one bit per key),
-	// while puzzleitems[] above has always been a counter. That asymmetry
-	// silently ate every second copy of a key: DEL_picked_up_object() ORed
-	// the bit in, AddDisplayPickup()/KillItem() removed the pickup either
-	// way, and a key already held was gone for good. Vanilla joby2 places
-	// two Key 7 for two separate locks; the randomizer can put both of them
-	// in front of the first door, which turned the level into a softlock.
-	// Since 2026-09-04 keys are counted exactly like puzzle items (one
-	// unsigned byte per slot, 0..255, increments capped, decrements floored).
-	// There is deliberately no flag field left in parallel - one source of
-	// truth, so nothing can drift out of sync.
+	// Keys are counted exactly like puzzle items (one unsigned byte per
+	// slot, 0..255, increments capped, decrements floored), not held as
+	// a 16-bit flag field as before: a flag field silently ate every
+	// second copy of a key, because DEL_picked_up_object() only ORed the
+	// bit in while AddDisplayPickup()/KillItem() removed the pickup
+	// either way, so a key already held was lost for good. Vanilla joby2
+	// places two Key 7 for two separate locks; the randomizer can put
+	// both of them in front of the first door, which turned the level
+	// into a softlock. There is deliberately no flag field left in
+	// parallel - one source of truth, so nothing can drift out of sync.
 	//
 	// This changes sizeof(LARA_INFO) and therefore sizeof(SAVEGAME_INFO),
 	// which savegame.cpp serializes raw by sizeof(): saves written before
@@ -1384,19 +1374,16 @@ struct SAVEGAME_INFO
 	uchar CurrentLevel;
 	uchar CampaignSecrets[4];
 	uchar TLCount;
-	// Doubled from the original 7245 to give the Randomizer's higher item/
-	// enemy counts real headroom (WriteSG in game/savegame.cpp fails fast on
-	// overflow rather than silently corrupting past this, but that's a safety
-	// net, not a substitute for the buffer actually being big enough). This
-	// resize changes sizeof(SAVEGAME_INFO), which breaks binary compatibility
-	// with save files written before this change - see savegame_bytes_read
-	// and the format/checksum validation in sgRestoreGame() (game/savegame.cpp),
-	// which detects and cleanly rejects old-format saves instead of silently
-	// restoring from a garbage-filled tail.
-	// 7245 upstream, 14490 since the buffer round of 2026-08-02, 28980
-	// since the MAX_ITEMS doubling: the item part of the savegame grows
-	// with the item count. Old savegames are cleanly rejected on load
-	// (short-read detection in sgRestoreGame, see savegame.cpp).
+	// 7245 upstream, 28980 now: the item part of the savegame grows with
+	// MAX_ITEMS, and the Randomizer's higher item/enemy counts need real
+	// headroom (WriteSG in game/savegame.cpp fails fast on overflow
+	// rather than silently corrupting past this, but that is a safety
+	// net, not a substitute for the buffer being big enough). This
+	// resize changes sizeof(SAVEGAME_INFO), which breaks binary
+	// compatibility with save files written before it; sgRestoreGame()
+	// (game/savegame.cpp) detects the size and checksum mismatch and
+	// cleanly rejects old-format saves instead of restoring from a
+	// garbage-filled tail.
 	char buffer[28980];
 };
 
@@ -1930,11 +1917,11 @@ struct DXPTR
 #if (DIRECTINPUT_VERSION >= 0x800)
 	LPDIRECTINPUT8 lpDirectInput;
 	LPDIRECTINPUTDEVICE8 Keyboard;
-	// Fallback controller path for devices that don't present themselves as XInput
-	// (e.g. a PS4/PS5 controller with no wrapper like Steam Input/DS4Windows active -
-	// those show up to Windows as a plain DirectInput/HID gamepad instead) - see
-	// DXUpdateJoystick(). Was present in the pre-DirectInput8 branch below only; the
-	// upgrade to DirectInput8 apparently dropped it without replacing it.
+	// Fallback controller path for devices that don't present themselves
+	// as XInput (e.g. a PS4/PS5 controller with no wrapper like Steam
+	// Input/DS4Windows active - those show up to Windows as a plain
+	// DirectInput/HID gamepad instead); see DXUpdateJoystick(). Without
+	// it such a controller is invisible to the DirectInput8 path below.
 	LPDIRECTINPUTDEVICE8 Joystick;
 #else
 	IDirectInput7* lpDirectInput;
@@ -2683,182 +2670,172 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool look_transparency;		//on off
 	bool static_lighting;		//on off
 	ulong uw_dust;				//1-> off, 2-> original, 3-> TR4
-	bool first_person;			//on off, first-person camera at Lara's head (#126)
-	ulong first_person_fov;		//60..100 nominal, the third options page (#134)
-	bool first_person_death;	//on off, stay at Lara's eyes when she dies (#134)
-	bool first_person_head;		//on off, view hangs on the head BONE (#134)
-	ulong first_person_smooth;	//0 off, 1 light, 2 medium, 3 strong (#134)
-	bool first_person_body_still;	//on off, hold the body on one frame while she stands still (#123, fix round U)
-	bool level_select;			//on off, shows the "Level Select" row in the title menu (#32)
-	bool hd_enable;				//on off, HD art from an installed Remaster (#123). The PATH is a
+	bool first_person;			//on off, first-person camera at Lara's head
+	ulong first_person_fov;		//60..100 nominal, the third options page
+	bool first_person_death;	//on off, stay at Lara's eyes when she dies
+	bool first_person_head;		//on off, view hangs on the head bone
+	ulong first_person_smooth;	//0 off, 1 light, 2 medium, 3 strong
+	bool first_person_body_still;	//on off, hold the body on one frame while she stands still
+	bool level_select;			//on off, shows the "Level Select" row in the title menu
+	bool hd_enable;				//on off, HD art from an installed Remaster. The path is a
 								//string and therefore not in here - see tomb5_hd_install.
-	bool hd_objects;			//on off, HD models for enemies, doors and switches (#123, S3-2).
-								//Registry only and ON by default: it is not a taste but a way
+	bool hd_objects;			//on off, HD models for enemies, doors and switches.
+								//Registry only and on by default: it is not a taste but a way
 								//back for one level whose objects go wrong, and it does nothing
 								//at all while hd_enable is off.
-	bool hd_motion;				//on off, what MOVES in an HD room (#123, S5): the UV scroll a
+	bool hd_motion;				//on off, what moves in an HD room: the UV scroll a
 								//.TRG part carries itself, the wind weight of its vertices and
-								//the water surface wobble. Registry only and ON by default, for
+								//the water surface wobble. Registry only and on by default, for
 								//the same reason as hd_objects, and equally dead while
 								//hd_enable is off.
 	bool hd_reflect;			//on off, the gloss the .TRG materials 3 and 17 carry
-								//themselves (#123, fix round R3b): a marble floor or a
+								//themselves: a marble floor or a
 								//painted steel bulkhead gets brighter at a grazing
-								//angle instead of staying matt. Registry only and ON
+								//angle instead of staying matt. Registry only and on
 								//by default, for the same reason as hd_motion, and
 								//equally dead while hd_enable is off.
-	/* HOW MANY FRAMES A SECOND ARE PRESENTED (#148). The GAME's own clock is
-	 * a fixed 30 Hz in every mode - one logic step, one animation frame, one
-	 * timer tick, exactly as Core wrote it - and this only says how often the
-	 * picture is handed to the card:
+	/* How many frames a second are presented. The game's own clock is a
+	 * fixed 30 Hz in every mode - one logic step, one animation frame,
+	 * one timer tick, exactly as Core wrote it - and this only says how
+	 * often the picture is handed to the card:
 	 *
 	 *   0  30, classic. S_DumpScreen waits two ticks, as it always did.
 	 *   1  60, the default. One tick per present; ControlPhase's own
-	 *      accumulator spends two of them per logic step and therefore runs
-	 *      the game at thirty out of sixty presents.
-	 *   2  the display's own refresh rate (#148, order 6). The present waits
-	 *      for the panel instead of for a tick, so the picture rate is 60,
-	 *      120 or 144 - whatever the monitor runs at - while the game keeps
-	 *      its thirty steps. It needs VSync: without a blocking present
-	 *      nothing would bound the loop, so it falls back to 1 and says so
-	 *      in the log. There is no uncapped mode.
+	 *      accumulator spends two of them per logic step and therefore
+	 *      runs the game at thirty out of sixty presents.
+	 *   2  the display's own refresh rate. The present waits for the
+	 *      panel instead of for a tick, so the picture rate is 60, 120 or
+	 *      144 - whatever the monitor runs at - while the game keeps its
+	 *      thirty steps. It needs VSync: without a blocking present
+	 *      nothing would bound the loop, so it falls back to 1 and says
+	 *      so in the log. There is no uncapped mode.
 	 *
 	 * Takes effect at the next frame - no level restart, nothing reloaded. */
 	ulong fps_mode;
 
-	/* WHETHER THE PRESENT WAITS FOR THE DISPLAY (#148, order 6). On by
-	 * default. It ends the tearing, and it takes the busy-wait out of
-	 * S_DumpScreen - at fps_mode 2 the present itself is the pacing and the
+	/* Whether the present waits for the display. On by default. It ends
+	 * the tearing, and it takes the busy-wait out of S_DumpScreen - at
+	 * fps_mode 2 the present itself is the pacing and the
 	 * `while (!Sync());` spin is not entered at all.
 	 *
-	 * Unlike every other row on the options pages, this one is read when the
-	 * DEVICE IS MADE (specific\dxshell.cpp, DXCreate): at startup, on
-	 * Alt+Enter and on a resolution change. Changing it mid-game writes the
-	 * registry and takes effect the next time the game starts. */
+	 * Unlike every other row on the options pages, this one is read when
+	 * the device is made (specific\dxshell.cpp, DXCreate): at startup, on
+	 * Alt+Enter and on a resolution change. Changing it mid-game writes
+	 * the registry and takes effect the next time the game starts. */
 	ulong vsync;
-	ulong hd_texture_budget_mb;	//0 = work it out from the card's own texture memory (#123, S6),
+	ulong hd_texture_budget_mb;	//0 = work it out from the card's own texture memory,
 								//otherwise the cap in mebibytes. Over it, the largest pages
 								//give up their largest mip level - never a whole page.
-								//The FORMAT is a string and therefore not in here - see
+								//The format is a string and therefore not in here - see
 								//tomb5_hd_texture_format.
 
-	/* THE MODERN CONTROL (#161). Off = Tank, the scheme this engine has
+	/* The modern control scheme. Off = Tank, the scheme this engine has
 	 * always had, and the default: with it off the translation in
 	 * game\modern_move.cpp is not called at all and the input word is
 	 * assembled exactly as it was. On, the left stick's direction is read
 	 * against the camera and becomes the same four direction bits.
 	 *
-	 * Zero before anything reads it whatever the registry does, because
-	 * `tomb5_options tomb5` is a global and a global starts zeroed - which is
-	 * what keeps the default Tank even on a machine with no key yet. Round
-	 * 161a step 4 added the field because the seam needs it; step 6 adds the
-	 * registry name beside it, and the two rows that go with it on the
-	 * Controls page (combat mode, action) come with that step. */
+	 * Zero before anything reads it, whatever the registry does, because
+	 * `tomb5_options tomb5` is a global and a global starts zeroed -
+	 * which is what keeps the default Tank even on a machine with no key
+	 * yet. */
 	bool control_modern;
 
-	/* COMBAT MODE (#161). Off = Toggle, the engine's own behaviour today: one
-	 * press of the draw key brings the weapon out, another puts it away. On =
-	 * Hold: the weapon comes out while the key is held and goes back the
-	 * moment it is released (design section 1.5). `game\modern_move.cpp`'s
+	/* Combat mode. Off = Toggle, the engine's own behaviour today: one
+	 * press of the draw key brings the weapon out, another puts it away.
+	 * On = Hold: the weapon comes out while the key is held and goes back
+	 * the moment it is released. `game\modern_move.cpp`'s
 	 * `ModernWeaponBits` already takes this bit as its first argument and
-	 * returns the classic bits untouched at 0 - so Toggle needs nothing more
-	 * from this round. Drawn and saved on the Controls page from round 161a
-	 * step 7 (decision 1); round 161b2a gave it its caller, the weapon seam at
-	 * the end of `S_UpdateInput` (specific\input.cpp), which passes this bit
-	 * and the two truths - the weapon is out, the key is down - so that one
-	 * request goes out per tick on which the two disagree. It is read on both
-	 * control types and for keyboard and pad alike, by the user's decision. */
+	 * returns the classic bits untouched at 0, so Toggle needs nothing
+	 * more. Its caller is the weapon seam at the end of `S_UpdateInput`
+	 * (specific\input.cpp), which passes this bit and the two truths -
+	 * the weapon is out, the key is down - so that one request goes out
+	 * per tick on which the two disagree. It is read on both control
+	 * types and for keyboard and pad alike. */
 	bool combat_hold;
 
-	/* ACTION KEY (#161). Off = One key, the engine's own behaviour today: the
-	 * one Action button both interacts with the world and fires. On =
-	 * Separate: the Action role keeps `IN_INTERACT` - the 41 "interact with a
-	 * world object" sites of design section 5.8, 33 of them exclusively - and
-	 * the new Secondary role takes `IN_ACTION`, which is climbing, grabbing
-	 * and firing. Drawn and saved on the Controls page from round 161a step 7
-	 * (decision 1); round 161b2c gave it its readers - the two producers in
-	 * specific\input.cpp, and the Key bindings page, which offers the
-	 * Secondary row only while this bit is on (game\menu_frame.cpp). Off, both
-	 * bits leave every producer together and the engine is base. */
+	/* Action key mode. Off = One key, the engine's own behaviour today:
+	 * the one Action button both interacts with the world and fires. On
+	 * = Separate: the Action role keeps `IN_INTERACT` - the 41 "interact
+	 * with a world object" sites, 33 of them exclusively - and the new
+	 * Secondary role takes `IN_ACTION`, which is climbing, grabbing and
+	 * firing. Its readers are the two producers in specific\input.cpp,
+	 * and the Key bindings page, which offers the Secondary row only
+	 * while this bit is on (game\menu_frame.cpp). Off, both bits leave
+	 * every producer together and the engine is base. */
 	bool action_split;
 
-	/* SPRINT MODE AND DUCK MODE (#161, round 161b2c, item 4 - the user: "
-	 * 'Sprintmodus' und 'Duckmodus' kann auch mit rein"). Off = Hold, the
-	 * engine's own behaviour: the bit is in the word for exactly as long as the
-	 * key or button is down. On = Toggle: a press latches the bit and the next
-	 * press releases it, `ModernModeLatch` (game\modern_move.cpp) being the
-	 * whole of the arithmetic and specific\input.cpp's mode seam its one caller.
+	/* Sprint mode and duck mode. Off = Hold, the engine's own behaviour:
+	 * the bit is in the word for exactly as long as the key or button is
+	 * down. On = Toggle: a press latches the bit and the next press
+	 * releases it, `ModernModeLatch` (game\modern_move.cpp) being the
+	 * whole of the arithmetic and specific\input.cpp's mode seam its one
+	 * caller.
 	 *
-	 * Read on both control types and for keyboard and pad alike, like the two
-	 * rows above, and each on its own bit - a player may well want a latched
-	 * sprint and a held duck. Off, the seam is not entered at all and the two
-	 * bits leave S_UpdateInput exactly as their producers wrote them.
+	 * Read on both control types and for keyboard and pad alike, and
+	 * each on its own bit - a player may want a latched sprint and a
+	 * held duck. Off, the seam is not entered at all and the two bits
+	 * leave S_UpdateInput exactly as their producers wrote them.
 	 * Registry: sprint_toggle, duck_toggle. */
 	bool sprint_toggle;
 	bool duck_toggle;
 
-	/* GRAB MODE (#161, round 161b2d, item 5 - the user: "Es gibt im Remaster
-	 * eine Funktion fuer die moderne Steuerung, dass Lara sich nicht
-	 * festhalten muss, sie bleibt nach dem Greifen haengen und mit noch mal
-	 * druecken laesst sie los"). Off = Hold, the engine's own behaviour: she
-	 * holds on for exactly as long as the key or button is down. On = Toggle:
-	 * while she is in one of the states a cleared IN_ACTION would drop her
-	 * from - a hang, a shimmy, a corner, a monkey swing, a ladder, a pole, a
-	 * rope, the zip line, the parallel bars - the bit is delivered without the
-	 * key, and a fresh press is what lets go.
+	/* Grab mode. Off = Hold, the engine's own behaviour: she holds on for
+	 * exactly as long as the key or button is down. On = Toggle: while
+	 * she is in one of the states a cleared IN_ACTION would drop her
+	 * from - a hang, a shimmy, a corner, a monkey swing, a ladder, a
+	 * pole, a rope, the zip line, the parallel bars - the bit is
+	 * delivered without the key, and a fresh press is what lets go.
 	 *
-	 * `ModernGrabLatch` (game\modern_move.cpp) is the whole of the arithmetic
-	 * and `ModernStateIsGrab` beside it is the family; specific\input.cpp's
-	 * mode seam is their one caller, on both control types and for keyboard
-	 * and pad alike, exactly like the three rows above. The bit it DELIVERS is
-	 * IN_ACTION and only IN_ACTION, so a pushblock is pushed with the key
-	 * held, as it always was, and nothing is operated by a latch. WITH ONE
-	 * QUALIFICATION, written in during audit round A1 because the sentence
-	 * stood bare: under "One key" the let-go press takes IN_INTERACT away with
-	 * IN_ACTION, so a block will not move under that one held press until the
-	 * key has been off once (game\modern_move.cpp says it in full).
+	 * `ModernGrabLatch` (game\modern_move.cpp) is the whole of the
+	 * arithmetic and `ModernStateIsGrab` beside it is the family;
+	 * specific\input.cpp's mode seam is their one caller, on both
+	 * control types and for keyboard and pad alike. The bit it delivers
+	 * is IN_ACTION and only IN_ACTION, so a pushblock is pushed with the
+	 * key held, as it always was, and nothing is operated by a latch,
+	 * with one qualification: under "One key" the let-go press takes
+	 * IN_INTERACT away with IN_ACTION, so a block will not move under
+	 * that one held press until the key has been off once
+	 * (game\modern_move.cpp says it in full).
 	 *
-	 * The bit it CLEARS on a let-go press is wider, and it has to be (round
-	 * 161b2d, fix 3): thirteen family states - pole, rope, zip line, parallel
-	 * bars - read IN_ACTION_ANY, and under "One key" the one action key raises
-	 * IN_INTERACT with IN_ACTION, so IN_ACTION alone left them reading "still
-	 * held" and the press was inert. The seam therefore hands the latch
-	 * IN_ACTION_ANY under "One key" and IN_ACTION under "Separate", where
-	 * IN_INTERACT is a different physical key. IN_SELECT is never cleared.
-	 * Registry: grab_toggle. */
+	 * The bit it clears on a let-go press is wider, and has to be:
+	 * thirteen family states - pole, rope, zip line, parallel bars -
+	 * read IN_ACTION_ANY, and under "One key" the one action key raises
+	 * IN_INTERACT with IN_ACTION, so IN_ACTION alone would leave them
+	 * reading "still held" and the press inert. The seam therefore hands
+	 * the latch IN_ACTION_ANY under "One key" and IN_ACTION under
+	 * "Separate", where IN_INTERACT is a different physical key.
+	 * IN_SELECT is never cleared. Registry: grab_toggle. */
 	bool grab_toggle;
 
-	/* THE CAMERA SPEED SLIDER (#161, round 161a2b, item 5). "Der rechte Stick
-	 * muss noch schneller werden, der ist viel zu langsam. Am besten ein
-	 * Slider wie die SFX und Musik." - so this is a row on the Controls page,
-	 * 0..100, drawn and driven exactly like those two (specific\LoadSave.cpp).
-	 * The NUMBER means nothing by itself; game\modern_camera.cpp's
-	 * ModernCameraSpeedRates(speed, &yaw_rate, &pitch_rate) is the one place
-	 * that turns it into the orbit's actual yaw and pitch rates, so this
-	 * field only ever has to be stored and clamped, never interpreted.
+	/* The camera speed slider: a row on the Controls page, 0..100, drawn
+	 * and driven like the SFX and Music sliders (specific\LoadSave.cpp).
+	 * The number means nothing by itself; game\modern_camera.cpp's
+	 * ModernCameraSpeedRates(speed, &yaw_rate, &pitch_rate) is the one
+	 * place that turns it into the orbit's actual yaw and pitch rates,
+	 * so this field only ever has to be stored and clamped, never
+	 * interpreted.
 	 *
-	 * Zero before anything reads it, like every field above - which would
-	 * read as "60 deg/s", the slider's own bottom end, on a machine with no
-	 * key yet. That is why init_tomb5_stuff() seats it at
-	 * MODERN_CAMERA_SPEED_DEFAULT (40) on a first run rather than leaving the
-	 * zero default stand, exactly as the three bools above it do not leave
-	 * their own zero unexamined either. Registry: cam_speed. */
+	 * Zero before anything reads it, like every field above - which
+	 * would read as "60 deg/s", the slider's own bottom end, on a
+	 * machine with no key yet. init_tomb5_stuff() therefore seats it at
+	 * MODERN_CAMERA_SPEED_DEFAULT (40) on a first run rather than
+	 * leaving the zero default stand. Registry: cam_speed. */
 	ulong camera_speed;
 
-	/* THE DEAD ZONE SLIDER (#161, round 161b1, item 5). "Das ist bei uns
-	 * momentan noch ein fester Wert, den wie im Remaster toggelbar fuer den
-	 * User hier einbinden." - a second Controls-page slider beside camera_speed
-	 * and driven exactly like it, 0..100.
+	/* The dead zone slider: a second Controls-page slider beside
+	 * camera_speed and driven exactly like it, 0..100.
 	 *
-	 * The NUMBER is a per cent of the tuned zone and not a zone itself:
-	 * game\modern_move.cpp's ModernDeadZoneUser(base, user) is the one place
-	 * that turns it into a width, and it is built so that 50 reproduces every
-	 * one of the eight MODERN_DEAD_* constants EXACTLY. So the default is 50
-	 * and the default engine is round 161a3's own tuning, unchanged; 0 is no
-	 * zone at all and 100 is twice the zone. Like camera_speed this field only
-	 * ever has to be stored and clamped, never interpreted, and like it a bare
-	 * zero would be a real setting rather than "unset" - which is why
-	 * init_tomb5_stuff() seats it at 50 on a first run. Registry: dead_zone. */
+	 * The number is a percentage of the tuned zone, not a zone itself:
+	 * game\modern_move.cpp's ModernDeadZoneUser(base, user) is the one
+	 * place that turns it into a width, built so that 50 reproduces
+	 * every one of the eight MODERN_DEAD_* constants exactly. So the
+	 * default is 50, unchanged from the engine's own tuning; 0 is no
+	 * zone at all and 100 is twice the zone. Like camera_speed this
+	 * field only ever has to be stored and clamped, never interpreted,
+	 * and like it a bare zero would be a real setting rather than
+	 * "unset" - which is why init_tomb5_stuff() seats it at 50 on a
+	 * first run. Registry: dead_zone. */
 	ulong dead_zone;
 };
 #pragma pack(pop)

@@ -18,24 +18,23 @@
 #include "tomb5.h"
 #include "../specific/input.h"
 
-/* THE PAGE FUNCTIONS THAT USED TO LIVE HERE - TroyeMenu/TroyeMenuPage,
+/* The page functions that used to live here - TroyeMenu/TroyeMenuPage,
  * Page0, Page1, PageDisplay, Page2, and the paging state TroyePage - are
- * gone as of #161, round 161b1 step 2. Every row they drew is now a table
- * of game\menu_frame.cpp ("tomb5 options", "Display", "View", "HUD"), its
- * logic carried over verbatim (see the row ledger this round wrote before
- * touching any code). Only CreditsScreen stayed its own screen, because it
- * always was one on purpose - see the comment at its definition below. */
+ * gone. Every row they drew is now a table of game\menu_frame.cpp ("tomb5
+ * options", "Display", "View", "HUD"), its logic carried over verbatim.
+ * Only CreditsScreen stayed its own screen, because it always was one on
+ * purpose - see the comment at its definition below. */
 
-// Credits (#33). GPLv3 courtesy and user requirement: the names without
-// which this project would not exist belong IN THE GAME, not only in the
-// README. Text only - no URLs, the game font does not carry every glyph
-// (PrintString guard); the links stand in the README.
+// Credits: a GPLv3 courtesy - the names without which this project would
+// not exist belong in the game, not only in the README. Text only - no
+// URLs, the game font does not carry every glyph (PrintString guard); the
+// links stand in the README.
 //
-// A SCREEN OF ITS OWN, not a page of the tomb5 options. It was one at
+// A screen of its own, not a page of the tomb5 options. It was one at
 // first, and that was wrong twice over: paging left/right through the
 // settings ran into the credits unasked, and TroyeMenu draws its paging
 // arrows at a fixed row below the last option - on a page of pure text
-// they landed ACROSS a line of names ("Dear ImGui by Omar Cornut" wore
+// they landed across a line of names ("Dear ImGui by Omar Cornut" wore
 // two orange arrows). Nothing here is selectable and nothing pages, so
 // the only input this screen takes is "back".
 void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak)
@@ -44,7 +43,7 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 
 	PrintString(phd_centerx, font_height, 6, "Credits", FF_CENTER);
 
-	// GROUPS ARE SEPARATED BY COLOUR, NOT BY BLANK LINES - and that is a
+	// Groups are separated by colour, not by blank lines - and that is a
 	// space decision, not a taste one. The screen holds fifteen rows
 	// (y = 2..16, font_height apart, the last one ending just above the
 	// bottom edge). Fifteen are names; four blank separators would eat
@@ -66,10 +65,9 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 	PrintString(phd_centerx, textY + y++ * font_height, 6, "Randomizer and Windows 11 Port", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "ChrisChanSan", FF_CENTER);
 
-	// The AI belongs HERE, next to the person who directed it - not under
-	// Contributors, where it sat among people who played the seeds and
-	// reported what broke. It did neither, and that placement understated
-	// what it actually did. This is the last free row on the screen.
+	// The AI belongs here, next to the person who directed it, and not
+	// under Contributors among people who played the seeds and reported
+	// what broke - it did neither.
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "with Claude AI by Anthropic", FF_CENTER);
 
 	// Testing, findings and ideas - the people who played the seeds and

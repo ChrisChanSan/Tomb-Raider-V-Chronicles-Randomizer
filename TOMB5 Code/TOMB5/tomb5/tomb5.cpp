@@ -20,17 +20,15 @@
 // Two reasons, each sufficient on its own:
 //
 // 1. The application ID below belongs to the original project
-//    (Trxyebeep/TOMB5). Shipped like that, our users would appear in
-//    Discord under his application - that is not our identity and does
-//    not belong to us.
+//    (Trxyebeep/TOMB5). Shipped like that, players would appear in
+//    Discord under that application, which is not this fork's identity.
 // 2. The bundled discord-rpc.lib is built against the dynamic C runtime
 //    (/MD). While it is linked in, the game cannot be linked statically,
-//    and the EXE needs the Visual C++ runtime on the target machine.
-//    Exactly what we want to spare the user: one file that simply starts.
+//    and the EXE needs the Visual C++ runtime on the target machine -
+//    exactly the dependency a single-file EXE is meant to avoid.
 //
-// The code stays in place and can be re-enabled via this one switch - but
-// then please with an own application ID and the knowledge that static
-// linking falls with it again.
+// The code stays in place and can be re-enabled via this one switch, with
+// an application ID of its own; static linking falls with it again.
 //----------------------------------------------------------------------------
 #define TOMB5_DISCORD_RPC 0
 
@@ -43,32 +41,32 @@
 
 tomb5_options tomb5;
 
-// The path of the installed Tomb Raider IV-VI Remastered, or an empty string
-// (#123). A path is a string and tomb5_options holds only what the registry
+// The path of the installed Tomb Raider IV-VI Remastered, or an empty
+// string. A path is a string and tomb5_options holds only what the registry
 // likes as a DWORD, so it lives beside the struct rather than inside it.
 // Empty means: let the Steam discovery in specific\hd\hd_install.cpp look.
 char tomb5_hd_install[260];
 
-// The same for Tomb Raider I-III Remastered (#123, stage S7-2), which holds
-// the HD models of the four Tomb Raider III guests the randomizer can import.
-// Empty means: let the same Steam discovery look for it too.
+// The same for Tomb Raider I-III Remastered, which holds the HD models of
+// the four Tomb Raider III guests the randomizer can import. Empty means:
+// let the same Steam discovery look for it too.
 char tomb5_hd_install_tr3[260];
 
-// "rgba" or "dxt5" (#123, stage S6). A word rather than a number because a
-// reader of the registry should be able to tell what it says without a
-// table, and because there may one day be a third answer.
+// "rgba" or "dxt5". A word rather than a number because a reader of the
+// registry should be able to tell what it says without a table, and because
+// there may one day be a third answer.
 char tomb5_hd_texture_format[16];
 
-/* THE ONE OPTION THE DEVICE NEEDS BEFORE THERE ARE OPTIONS (#148, order 6).
+/* The one option the device needs before there are options.
  *
- * D3DPRESENT_INTERVAL_ONE is a device-CREATION parameter, and the first
+ * D3DPRESENT_INTERVAL_ONE is a device-creation parameter, and the first
  * device is created in WinMain (specific\winmain.cpp) - while
  * init_tomb5_stuff, which reads every tomb5 option, runs on the game thread
  * that is started afterwards. So at the moment the first device is made,
  * tomb5.vsync still holds the zero it was loaded with, and the option would
  * only take hold on an Alt+Enter.
  *
- * This reads that one value ahead of time, READ-ONLY: REG_PeekLong creates no
+ * This reads that one value ahead of time, read-only: REG_PeekLong creates no
  * key, which is the whole point - OpenRegistry would create the tomb5 key
  * here and init_tomb5_stuff's first-run branch, which writes every default
  * there is, would never run again. On a first start the key is not there, the
@@ -193,65 +191,64 @@ void init_tomb5_stuff()
 		REG_WriteLong(buf, tomb5.uw_dust);
 
 		sprintf(buf, "ego_cam");
-		tomb5.first_person = 0;							//off (#126)
+		tomb5.first_person = 0;							//off
 		REG_WriteBool(buf, tomb5.first_person);
 
 		sprintf(buf, "ego_fov");
-		tomb5.first_person_fov = 90;					//middle of 60..100 (#134)
+		tomb5.first_person_fov = 90;					//middle of 60..100
 		REG_WriteLong(buf, tomb5.first_person_fov);
 
 		sprintf(buf, "ego_death");
-		tomb5.first_person_death = 0;					//off, pull back as before (#134)
+		tomb5.first_person_death = 0;					//off, pull back as before
 		REG_WriteBool(buf, tomb5.first_person_death);
 
 		sprintf(buf, "ego_head");
-		tomb5.first_person_head = 0;					//off (#134)
+		tomb5.first_person_head = 0;					//off
 		REG_WriteBool(buf, tomb5.first_person_head);
 
 		sprintf(buf, "ego_smooth");
-		tomb5.first_person_smooth = 1;					//light (#134)
+		tomb5.first_person_smooth = 1;					//light
 		REG_WriteLong(buf, tomb5.first_person_smooth);
 
 		sprintf(buf, "ego_body_still");
-		tomb5.first_person_body_still = 0;				//animated (#123, fix round U)
+		tomb5.first_person_body_still = 0;				//animated
 		REG_WriteBool(buf, tomb5.first_person_body_still);
 
 		sprintf(buf, "level_select");
-		tomb5.level_select = 0;							//off (#32)
+		tomb5.level_select = 0;							//off
 		REG_WriteBool(buf, tomb5.level_select);
 
 		sprintf(buf, "hd_enable");
-		tomb5.hd_enable = 0;							//off (#123)
+		tomb5.hd_enable = 0;							//off
 		REG_WriteBool(buf, tomb5.hd_enable);
 
 		sprintf(buf, "hd_objects");
-		tomb5.hd_objects = 1;							//on (#123, S3-2)
+		tomb5.hd_objects = 1;							//on
 		REG_WriteBool(buf, tomb5.hd_objects);
 
 		sprintf(buf, "hd_motion");
-		tomb5.hd_motion = 1;							//on (#123, S5)
+		tomb5.hd_motion = 1;							//on
 		REG_WriteBool(buf, tomb5.hd_motion);
 
 		sprintf(buf, "hd_reflect");
-		tomb5.hd_reflect = 1;							//on (#123, fix round R3b)
+		tomb5.hd_reflect = 1;							//on
 		REG_WriteBool(buf, tomb5.hd_reflect);
 
 		sprintf(buf, "fps_mode");
-		tomb5.fps_mode = 1;								//60, the default (#148)
+		tomb5.fps_mode = 1;								//60, the default
 		REG_WriteLong(buf, tomb5.fps_mode);
 
 		sprintf(buf, "vsync");
-		tomb5.vsync = 1;								//on (#148, order 6)
+		tomb5.vsync = 1;								//on
 		REG_WriteLong(buf, tomb5.vsync);
 
 		sprintf(buf, "hd_texture_budget_mb");
-		tomb5.hd_texture_budget_mb = 0;					//work it out (#123, S6)
+		tomb5.hd_texture_budget_mb = 0;					//work it out
 		REG_WriteLong(buf, tomb5.hd_texture_budget_mb);
 
-		// The three Controls-page rows (#161, round 161a step 6): Tank,
-		// Toggle, One key. All three are 0 and all three keep the engine
-		// exactly as it was before this round - see their comments in
-		// tomb5_options (global\types.h).
+		// The three Controls-page rows: Tank, Toggle, One key. All three
+		// are 0 and all three keep the engine's original behaviour - see
+		// their comments in tomb5_options (global\types.h).
 		sprintf(buf, "ctrl_modern");
 		tomb5.control_modern = 0;						//off, Tank
 		REG_WriteBool(buf, tomb5.control_modern);
@@ -264,10 +261,9 @@ void init_tomb5_stuff()
 		tomb5.action_split = 0;							//off, One key
 		REG_WriteBool(buf, tomb5.action_split);
 
-		// #161, round 161b2c item 4 - the two mode rows under Combat mode.
-		// Both 0 = Hold, which is the engine's own behaviour: the bit lasts as
-		// long as the key is down (their comments in tomb5_options,
-		// global\types.h).
+		// The two mode rows under Combat mode. Both 0 = Hold, which is the
+		// engine's own behaviour: the bit lasts as long as the key is down
+		// (their comments in tomb5_options, global\types.h).
 		sprintf(buf, "sprint_toggle");
 		tomb5.sprint_toggle = 0;						//off, Hold
 		REG_WriteBool(buf, tomb5.sprint_toggle);
@@ -276,26 +272,23 @@ void init_tomb5_stuff()
 		tomb5.duck_toggle = 0;							//off, Hold
 		REG_WriteBool(buf, tomb5.duck_toggle);
 
-		// #161, round 161b2d item 5 - the fourth mode row, on the new Modes
-		// sub-page with the other three. 0 = Hold again, which is the engine
-		// holding on for as long as the key is down (its comment in
-		// tomb5_options, global\types.h).
+		// The fourth mode row, on the Modes sub-page with the other three.
+		// 0 = Hold again, which is the engine holding on for as long as the
+		// key is down (its comment in tomb5_options, global\types.h).
 		sprintf(buf, "grab_toggle");
 		tomb5.grab_toggle = 0;							//off, Hold
 		REG_WriteBool(buf, tomb5.grab_toggle);
 
-		// #161, round 161a2b step 5: the fourth Controls-page row, a slider
-		// rather than a toggle - 40, MODERN_CAMERA_SPEED_DEFAULT
-		// (game/modern_camera.h), the rate round 161a2 already shipped
-		// before this row could change it.
+		// The fourth Controls-page row, a slider rather than a toggle - 40,
+		// MODERN_CAMERA_SPEED_DEFAULT (game/modern_camera.h).
 		sprintf(buf, "cam_speed");
 		tomb5.camera_speed = 40;
 		REG_WriteLong(buf, tomb5.camera_speed);
 
-		// #161, round 161b1 step 3: the fifth Controls-page row, the second
-		// slider. 50 is the middle of the bar and the one value at which
-		// ModernDeadZoneUser reproduces every MODERN_DEAD_* constant exactly
-		// (game/modern_move.h), so a first run ships round 161a3's tuning.
+		// The fifth Controls-page row, the second slider. 50 is the middle
+		// of the bar and the one value at which ModernDeadZoneUser
+		// reproduces every MODERN_DEAD_* constant exactly
+		// (game/modern_move.h).
 		sprintf(buf, "dead_zone");
 		tomb5.dead_zone = 50;
 		REG_WriteLong(buf, tomb5.dead_zone);
@@ -307,14 +300,14 @@ void init_tomb5_stuff()
 		tomb5_hd_install[0] = 0;
 		REG_WriteString(buf, tomb5_hd_install);
 
-		// The I-III bundle, for the Tomb Raider III guests (#123, S7-2).
-		// Same rule: empty means "look for it yourself".
+		// The I-III bundle, for the Tomb Raider III guests. Same rule:
+		// empty means "look for it yourself".
 		sprintf(buf, "hd_install_tr3");
 		tomb5_hd_install_tr3[0] = 0;
 		REG_WriteString(buf, tomb5_hd_install_tr3);
 
 		sprintf(buf, "hd_texture_format");
-		strcpy(tomb5_hd_texture_format, "rgba");		//lossless (#123, S6)
+		strcpy(tomb5_hd_texture_format, "rgba");		//lossless
 		REG_WriteString(buf, tomb5_hd_texture_format);
 	}
 	else	//Key already exists, settings already written, read them. also falls back to default if a smartass manually deletes a single value
@@ -430,16 +423,16 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_reflect");
 		REG_ReadBool(buf, tomb5.hd_reflect, 1);
 
-		/* #148: 0 is 30, 1 is 60 and 2 is the display's own refresh rate
-		 * (order 6). Anything above 2 is not a mode that exists and reads
-		 * back as the default. */
+		/* 0 is 30, 1 is 60 and 2 is the display's own refresh rate.
+		 * Anything above 2 is not a mode that exists and reads back as the
+		 * default. */
 		sprintf(buf, "fps_mode");
 		REG_ReadLong(buf, tomb5.fps_mode, 1);
 		if (tomb5.fps_mode > 2)
 			tomb5.fps_mode = 1;
 
-		/* #148, order 6. Read BEFORE the device is made - DXCreate takes the
-		 * present interval from it (specific\dxshell.cpp) and load_new_tomb5_
+		/* Read before the device is made - DXCreate takes the present
+		 * interval from it (specific\dxshell.cpp) and load_new_tomb5_
 		 * settings runs in WinMain ahead of the first DXCreate. */
 		sprintf(buf, "vsync");
 		REG_ReadLong(buf, tomb5.vsync, 1);
@@ -449,18 +442,16 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_texture_budget_mb");
 		REG_ReadLong(buf, tomb5.hd_texture_budget_mb, 0);
 
-		// #161, round 161a step 6 - same three, same defaults as the
-		// first-run branch above. This runs once at process startup, before
-		// there is a Lara to steer, so it needs no ModernResetControls()
-		// call of its own: game\modern_state.cpp's statics start zeroed by
-		// the loader exactly as tomb5.control_modern does, and its own tick
-		// guard treats the very first tick as a break in the chain (see its
-		// comment) and resets itself. The calls that ARE needed are elsewhere
-		// and both have a level in front of them: the Controls page, where the
-		// row is switched at runtime with a level already loaded (round 161a
-		// step 7), and the level start itself (game\gameflow.cpp - added in
-		// that round's second review pass, where the tick guard turned out not
-		// to be able to see a level change at all).
+		// Same three, same defaults as the first-run branch above. This runs
+		// once at process startup, before there is a Lara to steer, so it
+		// needs no ModernResetControls() call of its own: game\modern_state.
+		// cpp's statics start zeroed by the loader exactly as
+		// tomb5.control_modern does, and its own tick guard treats the very
+		// first tick as a break in the chain (see its comment) and resets
+		// itself. The calls that are needed are elsewhere and both have a
+		// level in front of them: the Controls page, where the row is
+		// switched at runtime with a level already loaded, and the level
+		// start itself (game\gameflow.cpp).
 		sprintf(buf, "ctrl_modern");
 		REG_ReadBool(buf, tomb5.control_modern, 0);
 
@@ -470,39 +461,38 @@ void init_tomb5_stuff()
 		sprintf(buf, "action_split");
 		REG_ReadBool(buf, tomb5.action_split, 0);
 
-		// #161, round 161b2c item 4. Absent - every registry older than this
-		// round - reads as 0, Hold, so an existing installation keeps the
-		// behaviour it had; REG_ReadBool writes the default back, so the two
-		// names exist from the first launch of this build.
+		// Absent - every older registry - reads as 0, Hold, so an existing
+		// installation keeps the behaviour it had; REG_ReadBool writes the
+		// default back, so the two names exist from the first launch of
+		// this build.
 		sprintf(buf, "sprint_toggle");
 		REG_ReadBool(buf, tomb5.sprint_toggle, 0);
 
 		sprintf(buf, "duck_toggle");
 		REG_ReadBool(buf, tomb5.duck_toggle, 0);
 
-		// #161, round 161b2d item 5. Same rule as the two above: absent - every
-		// registry older than this round - reads as 0, Hold, so an existing
-		// installation holds on exactly as it did.
+		// Same rule as the two above: absent - every older registry - reads
+		// as 0, Hold, so an existing installation holds on exactly as it
+		// did.
 		sprintf(buf, "grab_toggle");
 		REG_ReadBool(buf, tomb5.grab_toggle, 0);
 
-		// #161, round 161a2b step 5. Same clamp discipline as ego_fov/fps_mode
-		// above: a value from an older build (there was none before this
-		// round) or a hand-edited one must not hand the orbit a rate past
-		// what the slider itself can ask for.
+		// Same clamp discipline as ego_fov/fps_mode above: a value from an
+		// older build or a hand-edited one must not hand the orbit a rate
+		// past what the slider itself can ask for.
 		sprintf(buf, "cam_speed");
 		REG_ReadLong(buf, tomb5.camera_speed, 40);
 		if (tomb5.camera_speed > 100)
 			tomb5.camera_speed = 100;
 
-		// #161, round 161b1 step 3. Guarded like cam_speed above but landing
-		// on the DEFAULT rather than on the nearest end, because an
-		// out-of-range value here says nothing about which end was meant and
-		// the middle is the only value with a known feel: a hand-edited 400
-		// would multiply
-		// every dead zone by eight and leave the sticks dead in their whole
-		// travel. Missing or out of range is 50, the value that reproduces the
-		// tuned constants (the field is a ulong, so a negative cannot arrive).
+		// Guarded like cam_speed above but landing on the default rather
+		// than on the nearest end, because an out-of-range value here says
+		// nothing about which end was meant and the middle is the only
+		// value with a known feel: a hand-edited 400 would multiply every
+		// dead zone by eight and leave the sticks dead in their whole
+		// travel. Missing or out of range is 50, the value that reproduces
+		// the tuned constants (the field is a ulong, so a negative cannot
+		// arrive).
 		sprintf(buf, "dead_zone");
 		REG_ReadLong(buf, tomb5.dead_zone, 50);
 		if (tomb5.dead_zone > 100)
@@ -645,7 +635,7 @@ void save_new_tomb5_settings()
 	sprintf(buf, "vsync");
 	REG_WriteLong(buf, tomb5.vsync);
 
-	// #161, round 161a step 6 - the three Controls-page rows.
+	// The three Controls-page rows.
 	sprintf(buf, "ctrl_modern");
 	REG_WriteBool(buf, tomb5.control_modern);
 
@@ -655,22 +645,22 @@ void save_new_tomb5_settings()
 	sprintf(buf, "action_split");
 	REG_WriteBool(buf, tomb5.action_split);
 
-	// #161, round 161b2c item 4 - the two mode rows.
+	// The two mode rows.
 	sprintf(buf, "sprint_toggle");
 	REG_WriteBool(buf, tomb5.sprint_toggle);
 
 	sprintf(buf, "duck_toggle");
 	REG_WriteBool(buf, tomb5.duck_toggle);
 
-	// #161, round 161b2d item 5 - the fourth mode row.
+	// The fourth mode row.
 	sprintf(buf, "grab_toggle");
 	REG_WriteBool(buf, tomb5.grab_toggle);
 
-	// #161, round 161a2b step 5 - the fourth Controls-page row.
+	// The fourth Controls-page row.
 	sprintf(buf, "cam_speed");
 	REG_WriteLong(buf, tomb5.camera_speed);
 
-	// #161, round 161b1 step 3 - the fifth, the dead zone slider.
+	// The fifth, the dead zone slider.
 	sprintf(buf, "dead_zone");
 	REG_WriteLong(buf, tomb5.dead_zone);
 

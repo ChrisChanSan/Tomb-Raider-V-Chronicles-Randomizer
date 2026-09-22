@@ -37,18 +37,10 @@
 namespace
 {
 	/* The scrolling window: how many outfits one page of the F4 list holds.
-	 * Nine of them plus the title, the footsteps row and the hint line was
-	 * what fitted between font_height*3 and the bottom of a 4:3 screen at the
-	 * default font - the same room the options page uses.
-	 *
-	 * EIGHT SINCE #156, because the HEAD row came in under the footsteps one
-	 * and the page was held to the eleven lines it had.
-	 *
-	 * AND THE PAGE IS THIRTEEN LINES SINCE #159 (the second fix round, which
-	 * is where this comment was caught still claiming eleven): the Shine and
-	 * the Skin glow rows came in under the Head one and kWindow was NOT cut
-	 * again. So the count below is no longer "whatever keeps the page eleven
-	 * lines" and the arithmetic has to be written out instead:
+	 * The page also carries a title, footsteps, head, shine and skin glow
+	 * rows and a hint line. font_height is GetFixedScale(28) against a
+	 * 640x480 reference (game\text.cpp), a ratio held at every resolution
+	 * 4:3 or wider, so a 480-tall screen holds 480 / 28 = 17.1 lines of it:
 	 *
 	 *     title        1.0 * font_height
 	 *     the window   3.0 .. 3.0 + (kWindow - 1) = 10.0
@@ -58,15 +50,9 @@ namespace
 	 *     skin glow   14.5
 	 *     hint        15.5, so the page ends at 16.5
 	 *
-	 * and the screen holds 480 / 28 = 17.1 of them, because font_height is
-	 * GetFixedScale(28) against a 640x480 reference (game\text.cpp) and that
-	 * ratio is the same at every resolution 4:3 or wider. Two lines of room
-	 * are left. A THIRD value row is one line too many, and the next one that
-	 * comes in pays for itself out of kWindow: 7 rows, 12.5 lines of page.
-	 *
-	 * NOBODY HAS SEEN THIS PAGE since #156 - the rules of these rounds forbid
-	 * starting the game - so the arithmetic above is the whole of what is
-	 * known about it. */
+	 * which leaves two lines of room. A third value row would not fit; the
+	 * next one added has to come out of kWindow instead: 7 rows, 12.5 lines
+	 * of page. */
 	const int kWindow = 8;
 
 	// The registry: the outfit is one REG_SZ under the game's own settings
@@ -231,11 +217,11 @@ bool HDOutfitMenuWanted()
 {
 	static bool held;
 
-	/* ONE PRESS, ONE MENU. The key is read on its own edge here rather than
+	/* One press, one menu: the key is read on its own edge here rather than
 	 * through the input bits, because F4 has no gameplay meaning and no
-	 * binding: giving it one would mean a new IN_ bit for the sake of a
+	 * binding - giving it one would mean a new IN_ bit for the sake of a
 	 * keyboard key the pad cannot reach anyway. The menu's own inputs are
-	 * dbinput's, which is what makes the pad work INSIDE it. */
+	 * dbinput's, which is what makes the pad work inside it. */
 	if (!keymap[DIK_F4])
 	{
 		held = false;
@@ -247,7 +233,7 @@ bool HDOutfitMenuWanted()
 
 	held = true;
 
-	/* WITH THE HD PATH OFF THERE IS NOTHING TO CHANGE, and the player is
+	/* With the HD path off there is nothing to change, and the player is
 	 * told once per session rather than left pressing a dead key. Everything
 	 * the menu can do - the wardrobe, the re-dress, the barefoot set - lives
 	 * inside that gate. */
@@ -294,11 +280,11 @@ void HDOutfitMenu()
 		row_count(), *chosen ? chosen : "what the level says",
 		HDLaraOutfitLabel(HDLaraDrawOutfit()));
 
-	/* AND HOW MUCH ROOM THERE IS FOR ANOTHER CHANGE, worked out ONCE, here
-	 * (#164). The row below the list asks HDLevelRedressAllowed on every
-	 * drawn frame this window is up, and that answer now stands on a walk of
-	 * the address space - so it is measured as the window opens and the
-	 * frames read what it left. */
+	/* How much room there is for another change is worked out once, here:
+	 * the row below the list asks HDLevelRedressAllowed on every drawn frame
+	 * this window is up, and that answer stands on a walk of the address
+	 * space, so it is measured as the window opens and the frames read what
+	 * it left. */
 	HDLevelRedressRefresh("the F4 window opened");
 
 	CreateMonoScreen();
@@ -311,7 +297,7 @@ void HDOutfitMenu()
 		S_UpdateInput();
 		S_DisplayMonoScreen();
 
-		/* THE SAME TWO COLUMNS AND THE SAME STEP the options page draws in
+		/* The same two columns and the same step the options page draws in
 		 * (specific\LoadSave.cpp): the label at a quarter of the screen, the
 		 * value three quarters across, one font_height per row. A literal
 		 * with no string id goes through CustomText, exactly as the
@@ -344,17 +330,16 @@ void HDOutfitMenu()
 
 			if (!e)
 			{
-				/* THE FIRST ROW IS NO OUTFIT AT ALL. It is what clears the
+				/* The first row is no outfit at all - it is what clears the
 				 * registry value, and with it cleared every level dresses
-				 * her out of its own facts and the randomizer's - which is
+				 * her out of its own facts and the randomizer's, which is
 				 * what a player who has never opened this menu has.
 				 *
-				 * AND IT WEARS THE MARK LIKE ANY OTHER ROW (the review after
-				 * the fix round of M3). It is the row in force for everyone
-				 * who has never opened this menu, which is the commonest
-				 * state there is, and the mark was drawn on wardrobe rows
-				 * alone - so the first thing most players saw was a list with
-				 * nothing marked at all. */
+				 * It carries the mark like any other row: it is the row in
+				 * force for everyone who has never opened this menu, which
+				 * is the commonest state there is, so marking wardrobe rows
+				 * alone would leave the commonest case with nothing marked
+				 * at all. */
 				snprintf(buffer, sizeof(buffer), "%s%s",
 					CustomText("Level facts"), row == was ? " *" : "");
 				PrintString(phd_centerx >> 2, y, colour, buffer, 0);
@@ -372,16 +357,14 @@ void HDOutfitMenu()
 			}
 		}
 
-		/* THE FOOTSTEPS ROW belongs to the HIGHLIGHTED outfit and not to the
+		/* The footsteps row belongs to the highlighted outfit and not to the
 		 * menu, so it stands under the list and says whose it is. Left and
-		 * right change it, which is the same gesture every value row in this
-		 * game answers to.
+		 * right change it, the same gesture every value row in this game
+		 * answers to.
 		 *
-		 * ON THE FIRST ROW THERE IS NOTHING TO CHANGE (the fix round of M3).
-		 * "Level facts" is the absence of a choice, so there is no key to hang
-		 * one on: the menu used to let left and right flip the value there, it
-		 * was heard at once, nothing was written, and the next level build put
-		 * it back without a word. The row says what will decide instead. */
+		 * On the first row there is nothing to change: "Level facts" is the
+		 * absence of a choice, so there is no key to hang one on. The row
+		 * says what will decide instead. */
 		y = f + kWindow * font_height + (font_height >> 1);
 
 		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Footsteps"), 0);
@@ -397,17 +380,17 @@ void HDOutfitMenu()
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
 				(char*)CustomText(bare ? "Bare" : "Boots"), 0);
 
-		/* AND WHOSE HEAD THE HIGHLIGHTED BODY WEARS (#156).
+		/* Whose head the highlighted body wears.
 		 *
 		 * The footsteps row's neighbour and its opposite: that one is a
-		 * CHOICE and left and right change it, this one is a FACT and nothing
-		 * in this menu can change it - it is decided by the bundle the body
-		 * was drawn for, or by the mod's own outfit.txt. It stands here all
-		 * the same, because the question it answers is asked of the picture
-		 * on the screen: an outfit of Tomb Raider I-III carries headgear on
-		 * its head node and no hair, so it wears TR5's head instead, and a
+		 * choice and left and right change it, this one is a fact and
+		 * nothing in this menu can change it - it is decided by the bundle
+		 * the body was drawn for, or by the mod's own outfit.txt. It stands
+		 * here because the question it answers is asked of the picture on
+		 * the screen: an outfit of Tomb Raider I-III carries headgear on its
+		 * head node and no hair, so it wears TR5's head instead, and a
 		 * player who does not know that sees a body change more than he
-		 * chose. The clause after it says WHO decided, which is also how a
+		 * chose. The clause after it says who decided, which is also how a
 		 * mod without a mod.txt is told from one with an origin= line. */
 		y += font_height;
 
@@ -425,20 +408,20 @@ void HDOutfitMenu()
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
-		/* AND WHAT IT IS MADE OF (#158, #159). Two more facts of the
-		 * highlighted body and its neighbours' opposite in the same way the
-		 * head row is: nothing in this menu changes them. They stand here
-		 * because they are the two the player can now change HIMSELF, in a
-		 * list file, and a value he has written is worth nothing if the game
-		 * will not say whether it arrived - so the clause after each says
-		 * which tier answered, and "the list" is the one that means his own
-		 * line was read. Shine is the clothes, glow is her skin.
+		/* What the body is made of: two more facts of the highlighted body
+		 * and its neighbours' opposite in the same way the head row is -
+		 * nothing in this menu changes them. They stand here because they
+		 * are the two the player can change himself, in a list file, and a
+		 * value he has written is worth nothing if the game will not say
+		 * whether it arrived, so the clause after each says which tier
+		 * answered, and "the list" is the one that means his own line was
+		 * read. Shine is the clothes, glow is her skin.
 		 *
-		 * THE PHRASE FORM, HDWardrobeFromWord, and not the one-word tag - the
-		 * same the Head row above uses. Two spellings of one tier in three
-		 * rows of one window ("the table" over "table") is a player being
-		 * asked whether they mean the same thing. The tag belongs where a
-		 * column or a log field is counted in characters. */
+		 * The phrase form, HDWardrobeFromWord, is used rather than the
+		 * one-word tag, the same the head row above uses, so that one tier
+		 * does not read as two different things across the three rows of
+		 * one window. The tag belongs where a column or a log field is
+		 * counted in characters. */
 		y += font_height;
 
 		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Shine"), 0);
@@ -471,10 +454,10 @@ void HDOutfitMenu()
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
-		/* AND WHAT PRESSING SELECT WILL DO, because the answer is not always
-		 * "now": the page cache never gives a page back, so a level in which
-		 * the player has already changed his mind a great many times says so
-		 * instead of growing without end. */
+		/* What pressing select will do is not always "now": the page cache
+		 * never gives a page back, so a level in which the player has
+		 * already changed his mind a great many times says so instead of
+		 * growing without end. */
 		y += font_height;
 
 		if (!HDLevelRedressAllowed())
@@ -485,9 +468,8 @@ void HDOutfitMenu()
 		{
 			SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 
-			/* A FLIP BELONGS TO THE ROW IT WAS MADE ON (the third review of
-			 * M3): it is written when that row is left, not when some other
-			 * row is chosen. */
+			/* A flip belongs to the row it was made on: it is written when
+			 * that row is left, not when some other row is chosen. */
 			if (feetTouched && *key_of(selection))
 			{
 				write_feet(key_of(selection), bare);
@@ -531,9 +513,9 @@ void HDOutfitMenu()
 			feetTouched = true;
 		}
 
-		/* NOT ON ALT+ENTER, the fullscreen toggle - the pause menu's own
-		 * guard (LoadSave.cpp), so that toggling the display inside the menu
-		 * does not also choose a row (the third review of M3). */
+		/* Not on Alt+Enter, the fullscreen toggle - the pause menu's own
+		 * guard (LoadSave.cpp) - so that toggling the display inside the
+		 * menu does not also choose a row. */
 		if ((dbinput & IN_SELECT) && !keymap[DIK_LALT])
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_DEFAULT);
@@ -556,10 +538,9 @@ void HDOutfitMenu()
 	FreeMonoScreen();
 	InventoryActive = 0;
 
-	/* THE WINDOW CLOSING COUNTS AS CANCEL (the third review of M3): the loop
-	 * above ends on MainThread.ended too, and falling through from there
-	 * wrote the highlighted row as a choice and ran a re-dress during
-	 * shutdown. */
+	/* The window closing counts as cancel: the loop above ends on
+	 * MainThread.ended too, and falling through from there would write the
+	 * highlighted row as a choice and run a re-dress during shutdown. */
 	if (cancelled || MainThread.ended)
 	{
 		TIME_Init();
@@ -568,11 +549,11 @@ void HDOutfitMenu()
 		return;
 	}
 
-	/* THE CHOICE IS WRITTEN BEFORE IT IS WORN, so that a level build which
+	/* The choice is written before it is worn, so that a level build which
 	 * happens for any reason afterwards reads the same answer this one did.
-	 * "Level facts" writes an EMPTY value rather than deleting the name: the
+	 * "Level facts" writes an empty value rather than deleting the name: the
 	 * reader treats empty and absent alike (REG_PeekString returns false for
-	 * both) and an empty value is one a player can see in regedit. */
+	 * both), and an empty value is one a player can see in regedit. */
 	const char* key = key_of(selection);
 	const bool changed = was != selection;
 
@@ -584,20 +565,20 @@ void HDOutfitMenu()
 		feetWritten = true;
 	}
 
-	/* AND WORN AT ONCE (#153, round M3). HDLevelRedress is the level's own
-	 * model build run again on the main thread with the game stopped; it says
-	 * in the log what it cost and whether it ran at all, and it ends by asking
-	 * HDOutfitMenuFollowFeet which of the two sets the NEW body walks on - so
-	 * the footsteps are not applied here when a body change is.
+	/* And worn at once: HDLevelRedress is the level's own model build run
+	 * again on the main thread with the game stopped; it says in the log
+	 * what it cost and whether it ran at all, and it ends by asking
+	 * HDOutfitMenuFollowFeet which of the two sets the new body walks on -
+	 * so the footsteps are not applied here when a body change is.
 	 *
-	 * AND THEY WAIT WITH IT WHEN IT DEFERS (the fix round of M3). A deferred
-	 * change leaves the OLD body on the screen; giving it the new one's
-	 * footsteps would be one half of a change without the other, and the menu
-	 * had already told the player the body waits. Both halves are written to
-	 * the registry either way, so the next level wears both. */
+	 * They wait with it when it defers: a deferred change leaves the old
+	 * body on the screen; giving it the new one's footsteps would be one
+	 * half of a change without the other, and the menu had already told the
+	 * player the body waits. Both halves are written to the registry either
+	 * way, so the next level wears both. */
 	const bool worn = !changed || HDLevelRedress("the F4 outfit changer");
 
-	/* A FOOTSTEP CHANGE ON ITS OWN needs no re-dress: the body it belongs to
+	/* A footstep change on its own needs no re-dress: the body it belongs to
 	 * is already on her and this is two shorts in the level's sound map. */
 	if (!changed && HDFeetAvailable() && bare != HDFeetIsBare())
 		HDFeetBare(bare);
@@ -608,9 +589,9 @@ void HDOutfitMenu()
 		HDFeetAvailable() ? (HDFeetIsBare() ? "bare" : "boots") : "unavailable",
 		feetWritten ? " (the player's own choice, remembered)" : "");
 
-	/* THE CLOCK RESTARTS AFTER THE RE-DRESS and not before it (the third
-	 * review of M3): with TIME_Init above the re-dress, its cost went onto
-	 * the game clock and ControlPhase ran up to five catch-up ticks of game
-	 * logic the moment the menu closed. */
+	/* The clock restarts after the re-dress and not before it: with
+	 * TIME_Init above the re-dress, its cost would go onto the game clock
+	 * and ControlPhase would run up to five catch-up ticks of game logic
+	 * the moment the menu closed. */
 	TIME_Init();
 }

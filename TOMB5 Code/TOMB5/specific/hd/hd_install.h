@@ -16,14 +16,13 @@
  */
 #pragma once
 
-// WHERE THE HD ART COMES FROM (#123).
+// Where the HD art comes from.
 //
 // Nothing of the remaster is shipped with this project and nothing is copied
-// out of it - the user's decision for way (a) of the plan: find the installed
-// "Tomb Raider IV-VI Remastered" and read it where it lies. The only thing
-// this project stores is a path - two of them since stage S7-2, because the
-// four Tomb Raider III guests the randomizer imports have their HD models in
-// the OTHER bundle, "Tomb Raider I-III Remastered".
+// out of it: the installed "Tomb Raider IV-VI Remastered" is found and read
+// where it lies. The only thing this project stores is a path - two of them,
+// because the four Tomb Raider III guests the randomizer imports have their
+// HD models in the OTHER bundle, "Tomb Raider I-III Remastered".
 //
 // Two sources, in this order:
 //
@@ -53,7 +52,7 @@ const char* HDInstallRoot();
  * "<bundle>\3", with DATA, TEX and (normally) ITEM inside it. Empty string
  * when nothing was found, which is not a fault: it is needed for exactly one
  * thing, the HD models of the four Tomb Raider III guests the randomizer
- * imports (#92, T-Rex, vulture, Compsognathus, raptor), and without it those
+ * imports (T-Rex, vulture, Compsognathus, raptor), and without it those
  * four draw classic while everything else in the level is HD.
  *
  * Found the same way and in the SAME WALK as the IV-VI bundle: recognised by

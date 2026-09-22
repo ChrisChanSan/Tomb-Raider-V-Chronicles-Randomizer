@@ -38,7 +38,7 @@ namespace
 			out[i] = (px[i] >> 24) >= HD_FONT_INK ? 1 : 0;
 	}
 
-	/* THE PREFILTER. A summed area table over the atlas ink, so that the ink
+	/* The prefilter: a summed area table over the atlas ink, so that the ink
 	 * count of any window is three additions instead of w * h reads. TROne
 	 * measured that a window whose ink count is nowhere near the template's
 	 * cannot reach 0.94 anyway and prefilters on 0.85 .. 1.20 of it; the
@@ -222,12 +222,12 @@ HDFontCell HDFontCellOf(float u, float v, short w, short h)
 {
 	HDFontCell cell;
 
-	/* n/255 AND NOT n/256 - measured over all 106 rows of game\chardef.inc,
+	/* n/255, not n/256 - measured over all 106 rows of game\chardef.inc,
 	 * the largest distance from u * 255 to a whole number is 0.000133, so
 	 * this rounding is exact and not a guess. Read as n/256 the rectangles
 	 * would sit up to one texel too far left and up, and the templates would
 	 * carry a slice of the neighbouring glyph: the 106 cells cover 8 669 ink
-	 * texels, which is EVERY ink texel of the page, and they only do that
+	 * texels, which is every ink texel of the page, and they only do that
 	 * when they sit where the artist put them. */
 	cell.x = (short)floor((double)u * 255.0 + 0.5);
 	cell.y = (short)floor((double)v * 255.0 + 0.5);
@@ -427,9 +427,9 @@ void HDFontMargins(const unsigned long* hd, long side, const unsigned long* page
 
 	for (int i = 0; i < count; i++)
 	{
-		/* WHAT IS NOT THIS LETTER, on the picture that is actually drawn.
+		/* What is not this letter, on the picture that is actually drawn.
 		 *
-		 * Not the ink but the WHITE ink: alpha alone runs the letter and its
+		 * Not the ink but the white ink: alpha alone runs the letter and its
 		 * drop shadow together, and a flood fill over that walks from one
 		 * mark straight into the next one - measured, it does exactly that
 		 * between the two ticks of the double quote, and the margin then
@@ -443,7 +443,7 @@ void HDFontMargins(const unsigned long* hd, long side, const unsigned long* page
 		 *
 		 * It cannot be measured on the _OG picture either, tempting as that
 		 * is (there, ink outside the matched rectangle is somebody else's by
-		 * construction). The 2048 is a NEW drawing and its letters are bigger
+		 * construction). The 2048 is a new drawing and its letters are bigger
 		 * than the small ones times eight - measured, up to three classic
 		 * texels bigger - so the room the small picture has is not the room
 		 * the big one has. */
@@ -486,14 +486,14 @@ void HDFontMargins(const unsigned long* hd, long side, const unsigned long* page
 			continue;
 		}
 
-		/* THE SEEDS, and they are NOT simply "white inside the rectangle".
+		/* The seeds, and they are not simply "white inside the rectangle".
 		 * The big picture's letters are larger than the small picture's times
-		 * eight, so the neighbour can reach a texel or two INTO the matched
+		 * eight, so the neighbour can reach a texel or two into the matched
 		 * rectangle - measured, the second tick of the double quote does
 		 * exactly that - and seeding the whole rectangle would then flood the
 		 * neighbour as well and call it part of this letter.
 		 *
-		 * So the seeds come from the CLASSIC page: a texel of the glyph's own
+		 * So the seeds come from the classic page: a texel of the glyph's own
 		 * rectangle that carries ink there is this letter beyond doubt - that
 		 * is what the match established - and the eight by eight block under
 		 * it on the atlas is this letter's white. */

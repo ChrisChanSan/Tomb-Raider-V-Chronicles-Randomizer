@@ -12,15 +12,15 @@
  */
 #pragma once
 
-// THE MODS FOLDER (#153, round M1).
+// The mods folder.
 //
 // A folder "Mods" beside the executable, in the remaster's own drop-in
 // layout: Mods\<Category>\<Mod>\{4,5}\{ITEM,TEX,DATA}. Nothing of it is ever
 // shipped by this project and nothing is copied anywhere - it is the player's
-// own data, read where it lies, exactly like the HD art of #123 and the HQ
-// sound bank.
+// own data, read where it lies, exactly like the HD art and the HQ sound
+// bank.
 //
-// WHAT COUNTS AS A MOD. A folder directly under Mods, or one level deeper
+// What counts as a mod. A folder directly under Mods, or one level deeper
 // (Category\Mod), that has a "4" or a "5" subfolder or a mod.txt. A folder
 // whose name begins with "_" is disabled, and everything under it with it -
 // which is how a player turns one off without deleting it and gets vanilla
@@ -28,7 +28,7 @@
 // case-insensitive ASCII, and that order is the priority: the first active
 // mod that has a file wins.
 //
-// WHAT IT ANSWERS. Two questions and nothing else:
+// What it answers. Two questions and nothing else:
 //
 //   - where is <NAME>.TRM   (HDModsFindModel)
 //   - where is page <n>.DDS for a model that came out of mod i
@@ -36,17 +36,17 @@
 //
 // plus the two sound answers, which are independent of the HD path because
 // they are audio: the bank a mod ships (HDModsBank) and a loose NNNN.wav
-// anywhere under it (HDModsWav) - and, since #159, the loose .txt files that
-// lie BESIDE the mod folders rather than inside one (HDModsListCount). This
-// walk is the only one that knows which folder is a mod, so it is the only
-// one that can tell a list from a mod's own outfit.txt.
+// anywhere under it (HDModsWav) - and the loose .txt files that lie BESIDE
+// the mod folders rather than inside one (HDModsListCount). This walk is the
+// only one that knows which folder is a mod, so it is the only one that can
+// tell a list from a mod's own outfit.txt.
 //
-// A MOD NEVER TOUCHES A PAGE OF A MODEL IT DID NOT SUPPLY. That is the whole
-// safety rule of this round and it is the user's: a page asked for by a
-// vanilla model resolves exactly as it did before this file existed, so
-// corruption of the vanilla look is impossible by construction rather than by
-// care. The mechanism is the page namespace in hd_pagecache.h - a mod's 6111
-// and the install's 6111 are two different cache slots.
+// A mod never touches a page of a model it did not supply. That is the whole
+// safety rule: a page asked for by a vanilla model resolves exactly as it did
+// before this file existed, so corruption of the vanilla look is impossible
+// by construction rather than by care. The mechanism is the page namespace in
+// hd_pagecache.h - a mod's 6111 and the install's 6111 are two different
+// cache slots.
 //
 // Engine-free like hd_install: built as C++17 with <filesystem>, plain
 // C-shaped on the outside, so the diagnostic tools link the very same file
@@ -78,7 +78,7 @@ int HDModsOrigin(int index);
 struct HDModShips
 {
 	int models;	// .TRM files under 5\ITEM and 4\ITEM, outfits included
-	int outfits;	// of those, OUTFIT_*.TRM - a wardrobe entry each (M2)
+	int outfits;	// of those, OUTFIT_*.TRM - a wardrobe entry each
 	int pages;	// .DDS files under 5\TEX and 4\TEX
 	int bank;	// 1 = it ships 5\DATA\MAIN.SFX
 	int wavs;	// loose NNNN.wav, at any depth
@@ -86,7 +86,7 @@ struct HDModShips
 
 void HDModsShipsOf(int index, HDModShips* out);
 
-/* THE OUTFITS A MOD SHIPS, BY NAME (#153, round M2). The wardrobe reads this
+/* The outfits a mod ships, by name. The wardrobe reads this
  * list; HDModsFindModel still refuses OUTFIT_*.TRM, and deliberately, because
  * a mod's outfit is an ADDITIONAL wardrobe entry and never a replacement of
  * the install's file of the same name - the player picks it, the level does
@@ -97,7 +97,7 @@ const char* HDModsOutfitName(int index, int at);	// the .TRM stem, upper case
 const char* HDModsOutfitPath(int index, int at);	// absolute
 int HDModsOutfitGame(int index, int at);		// 5 or 4
 
-/* THE LOOSE LISTS (#159). A .txt file that lies BESIDE the mod folders -
+/* The loose lists. A .txt file that lies BESIDE the mod folders -
  * directly in Mods, or directly in a category folder - and not INSIDE a mod.
  * The wardrobe reads them (hd_wardrobe.h): they are where an outfit that has
  * no mod folder, and therefore no outfit.txt of its own, is given the same
@@ -114,14 +114,11 @@ const char* HDModsListPath(int at);	// absolute
  * Writes the path into `buffer` and returns it; an empty string means no
  * active mod has that name and the caller resolves as it always did.
  *
- * OUTFIT_*.TRM IS STILL REFUSED HERE, and now for a second reason (round M2).
- * It was refused in round M1 because Lara's wardrobe was a hand-written table
- * and a stranger's outfit would have been dressed by somebody else's
- * measurements. It stays refused because the wardrobe is now a SCAN
- * (hd_wardrobe.h) in which a mod's outfit is an ENTRY OF ITS OWN beside the
- * install's file of the same name: the player picks it, and a level that asks
- * for OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC.
- * The list of what a mod ships is HDModsOutfitCount and its two neighbours
+ * OUTFIT_*.TRM IS STILL REFUSED HERE. The wardrobe is a SCAN (hd_wardrobe.h)
+ * in which a mod's outfit is an ENTRY OF ITS OWN beside the install's file
+ * of the same name: the player picks it, and a level that asks for
+ * OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC. The
+ * list of what a mod ships is HDModsOutfitCount and its two neighbours
  * below.
  *
  * `modIndex` gets the mod that answered, or -1.
@@ -134,7 +131,7 @@ const char* HDModsListPath(int at);	// absolute
 const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int size,
 	int wantMod = -1);
 
-/* THE PAGE RESOLVER, first tier: mod `modIndex`'s own 5\TEX, then its 4\TEX.
+/* The page resolver, first tier: mod `modIndex`'s own 5\TEX, then its 4\TEX.
  * Empty when the mod does not ship that page - the caller then tries the
  * mod's origin bundle and finally the install, which is where a mod that
  * ships only models finds its art. */
@@ -152,7 +149,7 @@ const char* HDModsBank(int index);
  * Empty when no mod has that number. */
 const char* HDModsWav(int number, int* modIndex, char* buffer, int size);
 
-/* WHERE THE NOTES GO. The engine hands Log()'s one-string form in once, at
+/* Where the notes go. The engine hands Log()'s one-string form in once, at
  * startup; the diagnostic tools hand in their own printer. Notes made before
  * a sink was installed are flushed to it on the spot, so the order of the two
  * calls does not matter. Without a sink they are simply kept and can be read

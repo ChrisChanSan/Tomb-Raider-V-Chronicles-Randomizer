@@ -11,16 +11,15 @@
  * TRForge's own level library - see vendor\trforge\VERSION.txt - so what
  * stands here was written against the description instead.
  *
- * One passage is the exception, and audit round A1 corrected this notice to
- * say so: the line splitter and KEY=VALUE parser inside read_map_file follow
- * TRForge's own load_object_map closely. What differs is that the file is read
- * in chunks here rather than in one piece, and that a tab joins the characters
- * stripped from the end of a line. That is lawful, TRForge being MIT, and its
- * notice travels with this tree in vendor\trforge\LICENSE; the blanket
- * "rather than copied" that used to stand here was not true of that loop.
+ * One passage is the exception: the line splitter and KEY=VALUE parser
+ * inside read_map_file follow TRForge's own load_object_map closely. What
+ * differs is that the file is read in chunks here rather than in one piece,
+ * and that a tab joins the characters stripped from the end of a line. That
+ * is lawful, TRForge being MIT, and its notice travels with this tree in
+ * vendor\trforge\LICENSE.
  *
- * bind_against's third rule, the EXTRA prefix (fix round O, #123), is written
- * against a description of two things neither of which is copied: TRForge's
+ * bind_against's third rule, the EXTRA prefix, is written against a
+ * description of two things neither of which is copied: TRForge's
  * generic slot binding (MIT, vendor\trforge\src\trf_remaster\ItemModels.cpp,
  * bind_level_items) and TROne's EXTRA<game>_/EXTRA_ prefix pass and its
  * Effect-category exclusion (Copyright 2026 Todesengel, GPLv3,
@@ -36,7 +35,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "hd_bind.h"
-#include "hd_mods.h"		// the EXTRA prefix rule counts a mod's file (#153)
+#include "hd_mods.h"		// the EXTRA prefix rule counts a mod's file
 
 #include <cstdio>
 #include <cstdlib>
@@ -148,15 +147,15 @@ namespace
 	static_assert(sizeof(slot_names) / sizeof(slot_names[0]) == HD_SLOT_COUNT,
 		"HD_SLOT_COUNT and the generated slot name table have drifted apart");
 
-	/* THE HAND TABLE - eleven slots this project added beyond the original 460
-	 * (#105, #111, #146) and three vanilla slots the remaster leaves unnamed:
-	 * ROMAN_GOD and, since fix round C, the two revolver pickups.
+	/* The hand table: eleven slots this project added beyond the original
+	 * 460 and three vanilla slots the remaster leaves unnamed: ROMAN_GOD and
+	 * the two revolver pickups.
 	 *
 	 * For the eleven the remaster has all the models; what it does not have is
 	 * our slot numbers, because no vanilla level uses them. Each of those
-	 * lines is a measurement waiting to be confirmed by picture in stage S7 -
-	 * which model the remaster really draws for them is only certain once it
-	 * is on screen. Two are already certain from the shipped .MAP files: the
+	 * lines is a measurement that can only be confirmed by picture - which
+	 * model the remaster really draws for them is only certain once it is
+	 * on screen. Two are already certain from the shipped .MAP files: the
 	 * joby levels say BLUE_GUARD=BLUE_GUARD_JOBY, ANDREA3 says
 	 * ROMAN_GOD=ROMAN_GOD_ANDREA_HAMMER.
 	 *
@@ -164,9 +163,9 @@ namespace
 	 * a mesh swap takes single meshes out of them. Binding them to the model
 	 * of the family they belong to is what makes those meshes findable at
 	 * all; whether the HD model's mesh numbering lines up with the classic
-	 * one is a stage S3 question and is not answered here.
+	 * one is a separate question and is not answered here.
 	 *
-	 * THE TWELFTH LINE IS A DIFFERENT ANIMAL: ROMAN_GOD, slot 61, is vanilla,
+	 * The twelfth line is a different animal: ROMAN_GOD, slot 61, is vanilla,
 	 * and there is no ROMAN_GOD.TRM. Measured over the shipped files: 5\ITEM
 	 * has ROMAN_GOD_ANDREA_SWORD and ROMAN_GOD_ANDREA_HAMMER (and eight
 	 * numbered ROMAN_GOD_ANDREA2_n / ANDREA3_n), and of the fifteen .MAP
@@ -178,23 +177,23 @@ namespace
 	 * where the vanilla game first shows him.
 	 *
 	 * The rule this line follows, and the reason it can live in the same
-	 * table: the hand table is only ever asked WHEN THE LEVEL'S .MAP IS
-	 * SILENT. ANDREA2 and ANDREA3 still get their own answer. */
+	 * table: the hand table is only ever asked when the level's .MAP is
+	 * silent. ANDREA2 and ANDREA3 still get their own answer. */
 	struct HandBound
 	{
 		const char* slot;
 		const char* model;
-		/* WHERE THE LINE HOLDS (#123, fix round O3): 0 for every level, else
-		 * the stems of the levels it is for, space-separated ("RICH1 RICH2
-		 * RICH3"), spelled as the .MAP files are and compared
-		 * without regard to case - the engine hands the stem in as the
-		 * sidecar spells it ("Rich2"), a tool as typed. A line for a level the
-		 * bind is not asked for is skipped, and the search goes on to the next
-		 * line and then to rules 3 and 4 as if the line were not there. */
+		/* Where the line holds: 0 for every level, else the stems of the
+		 * levels it is for, space-separated ("RICH1 RICH2 RICH3"), spelled
+		 * as the .MAP files are and compared without regard to case - the
+		 * engine hands the stem in as the sidecar spells it ("Rich2"), a
+		 * tool as typed. A line for a level the bind is not asked for is
+		 * skipped, and the search goes on to the next line and then to
+		 * rules 3 and 4 as if the line were not there. */
 		const char* levels;
 	};
 
-	/* THE THREE PREFIXES, in trial order (#123, fix round O). See hd_bind.h. */
+	/* The three prefixes, in trial order. See hd_bind.h. */
 	struct PrefixRule { const char* prefix; HDBindVia via; };
 
 	const PrefixRule extra_prefixes[] =
@@ -220,43 +219,40 @@ namespace
 
 		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD",  0 },
 
-		/* THE DESERT EAGLE PICKUP (#123, fix round C, user finding C1). Two
-		 * more slots whose model exists under no plain name: the remaster
-		 * puts every pickup under an EXTRA prefix - EXTRA5_REVOLVER_ITEM,
-		 * EXTRA5_REVOLVER_ITEM_JOBY, EXTRA5_REVOLVER_AMMO_ITEM - and not one
-		 * of the fifteen .MAP files mentions either slot, so both fall
-		 * through to their own name, find nothing and draw classic.
+		/* The Desert Eagle pickup. Two more slots whose model exists under no
+		 * plain name: the remaster puts every pickup under an EXTRA prefix -
+		 * EXTRA5_REVOLVER_ITEM, EXTRA5_REVOLVER_ITEM_JOBY,
+		 * EXTRA5_REVOLVER_AMMO_ITEM - and not one of the fifteen .MAP files
+		 * mentions either slot, so both fall through to their own name, find
+		 * nothing and draw classic.
 		 *
 		 * The JOBY file and not the plain one, measured twice: the picture
 		 * (EXTRA5_REVOLVER_ITEM is Tomb Raider IV's six-shooter with a laser
 		 * sight, EXTRA5_REVOLVER_ITEM_JOBY the Desert Eagle) and the
 		 * randomizer, which copies JOBY2's slots 6, 12, 16, 347 and 348 into
-		 * EVERY level and REPLACES what is there - the user's decision of
-		 * 2026-08-23, "replace the revolver with the Desert Eagle entirely"
-		 * (TR5Randomizer\src\core\Randomizer.cpp, kWeaponRules). A level
-		 * played without that copy - the randomizer's "all weapons" switch
-		 * off, or a vanilla file - keeps its six-shooter classic and gets the
-		 * Deagle in HD; that is the one case this line is wrong in, and it is
-		 * the same case the wardrobe's DEAGLE hands are wrong in.
+		 * every level and replaces what is there, by rule
+		 * (TR5Randomizer\src\core\Randomizer.cpp, kWeaponRules): the revolver
+		 * is replaced with the Desert Eagle entirely. A level played without
+		 * that copy - the randomizer's "all weapons" switch off, or a
+		 * vanilla file - keeps its six-shooter classic and gets the Deagle
+		 * in HD; that is the one case this line is wrong in, and it is the
+		 * same case the wardrobe's DEAGLE hands are wrong in.
 		 *
 		 * The rest of the EXTRA family - the pistols, uzi, shotgun, HK,
-		 * grapple, medipack, flare, lasersight, binocular and crowbar pickups
-		 * - got that round of its own: fix round O below reaches all of them
-		 * generically, by trying the EXTRA5_/EXTRA_/EXTRA4_ prefix in front of
-		 * the plain slot name whenever this table and the .MAP are both
-		 * silent. It cannot reach REVOLVER_ITEM's Deagle variant, which is
-		 * why these two lines stay - the generic rule finds
-		 * EXTRA5_REVOLVER_ITEM (Tomb Raider IV's six-shooter) first and never
-		 * gets to try the _JOBY suffix, and the hand table is asked BEFORE
-		 * the generic rule for exactly that reason (see bind_against). */
+		 * grapple, medipack, flare, lasersight, binocular and crowbar
+		 * pickups - is reached generically below: the EXTRA prefix rule
+		 * tries the EXTRA5_/EXTRA_/EXTRA4_ prefix in front of the plain slot
+		 * name whenever this table and the .MAP are both silent. It cannot
+		 * reach REVOLVER_ITEM's Deagle variant, which is why these two
+		 * lines stay - the generic rule finds EXTRA5_REVOLVER_ITEM (Tomb
+		 * Raider IV's six-shooter) first and never gets to try the _JOBY
+		 * suffix, and the hand table is asked before the generic rule for
+		 * exactly that reason (see bind_against). */
 		{ "REVOLVER_ITEM",           "EXTRA5_REVOLVER_ITEM_JOBY", 0 },
 		{ "REVOLVER_AMMO_ITEM",      "EXTRA5_REVOLVER_AMMO_ITEM", 0 },
 
-		/* THE VCI LEVELS' OWN PICKUPS (#123, fix round O3; two user findings from
-		 * the fix round P play test: "for the Rich levels he still has to fetch
-		 * the headset instead of the binoculars", and "Rich2 has a special HK -
-		 * here the wrong one was used, it has a strange rotation in that level
-		 * only"). Two slots whose remaster model is not the one rule 3 finds.
+		/* The VCI levels' own pickups: two slots whose remaster model is not
+		 * the one rule 3 finds.
 		 *
 		 * BINOCULARS_ITEM is the HEADSET in the VCI levels - the same slot and
 		 * the same classic mesh name, renamed by the inventory alone
@@ -271,18 +267,18 @@ namespace
 		 * LVL5_ESCAPE_WITH_THE_IRIS, and the pickup display lifts it 70 units
 		 * there). Rule 3 finds EXTRA5_HK_ITEM.TRM, every other level's HK,
 		 * modelled in the other levels' frame - which RICH2's ring then turns
-		 * by RICH2's angles: the user's "strange rotation". The remaster ships
-		 * that mesh's own HD twin as EXTRA5_HK_ITEM_RICH2.TRM. (It ships an
-		 * EXTRA5_HK_ITEM_RICH2_CUT.TRM as well, which no line here uses:
-		 * RICHCUT2 carries no HK_ITEM slot at all, only Lara's HK_ANIM, and
-		 * that one is the wardrobe's - measured with ModelProbe -all, which
-		 * lists no BINOCULARS_ITEM there either.)
+		 * by RICH2's angles, producing a visibly wrong rotation. The
+		 * remaster ships that mesh's own HD twin as EXTRA5_HK_ITEM_RICH2.TRM.
+		 * (It ships an EXTRA5_HK_ITEM_RICH2_CUT.TRM as well, which no line
+		 * here uses: RICHCUT2 carries no HK_ITEM slot at all, only Lara's
+		 * HK_ANIM, and that one is the wardrobe's - measured with
+		 * ModelProbe -all, which lists no BINOCULARS_ITEM there either.)
 		 *
 		 * Hand-table lines rather than a fourth prefix rule, because the
 		 * suffixes follow no one pattern (_RICH for three levels, _RICH2 for
 		 * one) and the .MAP files are silent on both slots in all fifteen
-		 * levels (measured, fix round O3). The lines hold in the named levels
-		 * only; everywhere else both slots take rule 3 as before. */
+		 * levels (measured). The lines hold in the named levels only;
+		 * everywhere else both slots take rule 3 as before. */
 		{ "BINOCULARS_ITEM",         "EXTRA5_BINOCULARS_ITEM_RICH", "RICH1 RICH2 RICH3" },
 		{ "HK_ITEM",                 "EXTRA5_HK_ITEM_RICH2",        "RICH2" }
 	};
@@ -339,15 +335,15 @@ namespace
 		return dot ? std::string(name, dot) : std::string(name);
 	}
 
-	/* THE EXTRA PREFIX EXCLUSIONS (#123, fix round O). Every one of these sits
-	 * in the same block of the object enum as the two shell casings
-	 * (game\objects.h, SMOKE_EMITTER_WHITE .. LENS_FLARE) but, unlike them, is
-	 * never a standalone level item with its own picture: it is a light, a
-	 * smoke or mist puff, or a sprite drawn as part of another draw call.
-	 * GUN_FLASH is the one line here that is a MEASUREMENT and not caution -
+	/* The EXTRA prefix exclusions. Every one of these sits in the same
+	 * block of the object enum as the two shell casings (game\objects.h,
+	 * SMOKE_EMITTER_WHITE .. LENS_FLARE) but, unlike them, is never a
+	 * standalone level item with its own picture: it is a light, a smoke or
+	 * mist puff, or a sprite drawn as part of another draw call.
+	 * GUN_FLASH is the one line here that is a measurement and not caution -
 	 * 4\ITEM\EXTRA_GUN_FLASH.TRM exists, and TROne's own source calls this
 	 * whole family "Effect category". The measurement is not a bracket to
-	 * tear, though: SetGunFlash (game\tomb4fx.cpp) only ever RECORDS a
+	 * tear, though: SetGunFlash (game\tomb4fx.cpp) only ever records a
 	 * matrix, called from draw.cpp after DrawLara's own node walk has
 	 * already returned, and the flash itself is painted afterwards by
 	 * DrawGunflashes - a flat phd_PutPolygons call against the classic
@@ -360,7 +356,7 @@ namespace
 	 * beside it: nothing here reads Lara's draw code to notice if a future
 	 * engine change ever routed the flash through an item bracket, and the
 	 * cost of excluding a slot that would have been harmless is one unused
-	 * page, not a bug. The shell casings (GUNSHELL, SHOTGUNSHELL) are NOT
+	 * page, not a bug. The shell casings (GUNSHELL, SHOTGUNSHELL) are not
 	 * here - they have their own EXTRA_ model (4\ITEM\EXTRA_GUNSHELL.TRM,
 	 * EXTRA_SHOTGUNSHELL.TRM, both measured) and stay in the pool. Measured
 	 * with the same care as GUN_FLASH, though, and the same answer comes
@@ -376,13 +372,12 @@ namespace
 	 * bundle, no page of its own - EXTRA_GUNSHELL shares page 8523 with the
 	 * uzi, EXTRA_SHOTGUNSHELL page 8534 with the shotgun ammo and the
 	 * crowbar, EXTRA_FLARE_ITEM page 8519 with EXTRA_FLARE_INV_ITEM, which
-	 * IS an ordinary pickup and does draw. Left in the pool as this round
-	 * found them; moving them here is a behaviour change and belongs to
-	 * whoever decides it, not to a comment. Nothing below GUN_FLASH had a
-	 * matching file on the
-	 * installed bundle at the time of this measurement; they are excluded
-	 * anyway so that a future remaster patch adding one does not silently
-	 * start drawing something nobody asked for. */
+	 * is an ordinary pickup and does draw. Left in the pool: moving them
+	 * here would be a behaviour change. Nothing below GUN_FLASH had a
+	 * matching file on the installed bundle at the time of this
+	 * measurement; they are excluded anyway so that a future remaster
+	 * patch adding one does not silently start drawing something nobody
+	 * asked for. */
 	const char* const extra_excluded[] =
 	{
 		"GUN_FLASH",
@@ -445,7 +440,7 @@ namespace
 	 * carries its EXTRA5_/EXTRA_/EXTRA4_ prefix. */
 	bool extra_model_exists(const std::string& installRoot, const std::string& name)
 	{
-		/* A MOD COUNTS AS THERE (#153, round M1). This rule picks the prefix
+		/* A mod counts as there. This rule picks the prefix
 		 * tier a pickup's model is named under, and it picks by whether the
 		 * file exists - so a mod that brings an EXTRA_ model the install does
 		 * not have would be looked for under the wrong name without this.
@@ -474,28 +469,28 @@ namespace
 		return file_exists(path);
 	}
 
-	/* THE ANSWER'S STORAGE, for the one rule (3, the EXTRA prefix) whose
+	/* The answer's storage, for the one rule (3, the EXTRA prefix) whose
 	 * result is not a pointer into something that already lives somewhere -
 	 * the level's map, the hand table, the slot name table.
 	 *
-	 * Fix round O first answered this with ONE shared std::string,
-	 * overwritten on every call. That is safe for a caller who reads the
-	 * pointer before asking again, which is what HDLOG bind and every probe
-	 * tool do - but HDObjectLevelBuild's donor pass does not: it resolves
-	 * EVERY donor slot's `DonorPlan::model` first and reads them all back
-	 * later, once bind poses are built (hd_object.cpp). By then the shared
-	 * buffer held whichever slot was asked last, and any donor slot that hit
-	 * rule 3 anywhere in between (which is what an undonated pickup like
-	 * PISTOLS_ITEM always does - no shipped .MAP names a weapon pickup) had
-	 * its name silently swapped for a different slot's. A cache keyed by
-	 * slot fixes this the same way rules 1, 2 and 4 were already safe: each
-	 * slot's answer lives in its own map node, which - unlike a
+	 * A single shared std::string, overwritten on every call, would be
+	 * safe for a caller who reads the pointer before asking again, which is
+	 * what HDLOG bind and every probe tool do - but HDObjectLevelBuild's
+	 * donor pass does not: it resolves every donor slot's
+	 * `DonorPlan::model` first and reads them all back later, once bind
+	 * poses are built (hd_object.cpp). A shared buffer would then hold
+	 * whichever slot was asked last, and any donor slot that hit rule 3
+	 * anywhere in between (which is what an undonated pickup like
+	 * PISTOLS_ITEM always does - no shipped .MAP names a weapon pickup)
+	 * would have its name silently swapped for a different slot's. A cache
+	 * keyed by slot avoids this the same way rules 1, 2 and 4 are already
+	 * safe: each slot's answer lives in its own map node, which - unlike a
 	 * std::string's - std::map never moves or reuses once written, so a
-	 * pointer taken from it stays correct no matter how many OTHER slots are
-	 * asked afterwards. `root` records which installRoot the entry was
+	 * pointer taken from it stays correct no matter how many other slots
+	 * are asked afterwards. `root` records which installRoot the entry was
 	 * computed for, since the disk it was asked against could in principle
 	 * change; a mismatch recomputes rather than trusting a stale answer.
-	 * Deliberately NOT cleared by HDMapFree/HDDonorMapsFree: rule 3 never
+	 * Deliberately not cleared by HDMapFree/HDDonorMapsFree: rule 3 never
 	 * reads the level's or a donor's .MAP, only the slot's fixed name and
 	 * the fixed set of files under installRoot, so the same answer is
 	 * correct for the next level too and there is no reason to re-stat the
@@ -508,20 +503,20 @@ namespace
 	};
 	std::map<int, AltAnswer> g_alt_cache;
 
-	/* THE GUESTS OUT OF TOMB RAIDER III (#92). The header says what this is
-	 * and how the four names were arrived at; the numbers on the left are TR5
+	/* The guests out of Tomb Raider III. The header says what this is and
+	 * how the four names were arrived at; the numbers on the left are TR5
 	 * slots the randomizer installs a guest into, chosen because no vanilla
 	 * level uses them.
 	 *
-	 * THE BIRD IS THE ONE THAT NEEDED A SECOND LOOK (#123, fix round C, user
-	 * finding C5). The randomizer takes it out of THE LOST ARTIFACT's
-	 * chunnel.TR2, not out of Tomb Raider III itself - the game's own vulture
-	 * flies in the desert levels and the one the randomizer ships is the Gold
-	 * bird (TR5Randomizer\src\core\Randomizer.cpp:1824, donor "tr3gold", and
-	 * Config.h: "chunnel.TR2 carries the vulture"). The remaster keeps the two
-	 * apart under exactly that rule: 3\ITEM of the fresh Tomb Raider I-III
-	 * Remastered has VULTURE.TRM and VULTURE_CHUNNEL.TRM side by side, and it
-	 * is the second that belongs to this guest. */
+	 * The bird needs a second look: the randomizer takes it out of THE LOST
+	 * ARTIFACT's chunnel.TR2, not out of Tomb Raider III itself - the
+	 * game's own vulture flies in the desert levels and the one the
+	 * randomizer ships is the Gold bird
+	 * (TR5Randomizer\src\core\Randomizer.cpp, donor "tr3gold", and
+	 * Config.h: "chunnel.TR2 carries the vulture"). The remaster keeps the
+	 * two apart under exactly that rule: 3\ITEM of the fresh Tomb Raider
+	 * I-III Remastered has VULTURE.TRM and VULTURE_CHUNNEL.TRM side by
+	 * side, and it is the second that belongs to this guest. */
 	struct Tr3Guest { int slot; const char* model; };
 
 	const Tr3Guest tr3_guests[] =
@@ -537,9 +532,9 @@ namespace
 
 	struct MapEntry { std::string key, value; };
 	std::vector<MapEntry> map_entries;
-	std::string map_level;	// the stem map_entries belong to, "" for none (fix round O3)
+	std::string map_level;	// the stem map_entries belong to, "" for none
 
-	/* THE DONOR MAPS (#123, stage S7-2), kept apart from the level's own -
+	/* The donor maps, kept apart from the level's own -
 	 * the level's is asked for every slot of every frame's worth of building,
 	 * and a donor's only for the handful of slots the sidecar names. One
 	 * entry per donor level, read once and kept until the level ends. */
@@ -641,11 +636,11 @@ namespace
 	 * HDBindSlot asks it with the level's map and HDBindDonorSlot with a
 	 * donor's, which is the whole of what those two differ in.
 	 *
-	 * `installRoot` may be empty - every caller before fix round O passed
-	 * none, and still gets rules 1, 2 and 4 exactly as before; only rule 3
-	 * needs a disk to ask. `level` is the stem `entries` belong to - the
-	 * level's own or the donor's - and may be 0 or empty, in which case every
-	 * level-bound hand-table line misses (fix round O3). */
+	 * `installRoot` may be empty - passing none still gets rules 1, 2 and 4
+	 * exactly as before; only rule 3 needs a disk to ask. `level` is the
+	 * stem `entries` belong to - the level's own or the donor's - and may
+	 * be 0 or empty, in which case every level-bound hand-table line
+	 * misses. */
 	const char* bind_against(const std::vector<MapEntry>& entries,
 		const std::string& installRoot, const char* level, int slot,
 		HDBindKind* kind, bool* fromMap, HDBindVia* via)
@@ -695,19 +690,18 @@ namespace
 						break;
 					}
 
-				/* RULE 3, THE EXTRA PREFIX (#123, fix round O) - only when
-				 * neither the map nor the hand table had an answer, the slot
-				 * is not one of the excluded ones, and a disk was given to
-				 * ask. See hd_bind.h for the order and hd_bind.cpp's
-				 * extra_excluded table for what is left out and why.
+				/* Rule 3, the EXTRA prefix - only when neither the map nor
+				 * the hand table had an answer, the slot is not one of the
+				 * excluded ones, and a disk was given to ask. See
+				 * hd_bind.h for the order and hd_bind.cpp's extra_excluded
+				 * table for what is left out and why.
 				 *
 				 * Answered from `g_alt_cache`, one entry per slot, kept for
 				 * as long as the process runs rather than rebuilt on every
-				 * call - see the cache's own comment above for why a shared
-				 * scratch buffer here was wrong (fix round O found this a
-				 * stale-pointer bug in a caller that keeps the answer past
-				 * the next bind_against call, which the donor pass always
-				 * does). */
+				 * call - see the cache's own comment above for why a
+				 * shared scratch buffer would be a stale-pointer bug in a
+				 * caller that keeps the answer past the next bind_against
+				 * call, which the donor pass always does. */
 				if (!hand_hit && !installRoot.empty() && !extra_is_excluded(name))
 				{
 					auto found = g_alt_cache.find(slot);
@@ -766,9 +760,9 @@ bool HDSlotIsLara(int slot)
 	return slot >= 0 && slot <= lara_block_last;
 }
 
-/* #155b. The test HDBindModOption made inline until now; hd_bind.h carries the
- * rule. A name that is only "_ITEM" has no base to build an OPTION name on and
- * is no slot of this engine either, so it is refused here as it was there. */
+/* hd_bind.h carries the rule; HDBindModOption asks the same test. A name
+ * that is only "_ITEM" has no base to build an OPTION name on and is no
+ * slot of this engine either, so it is refused here as well. */
 bool HDSlotIsPickup(int slot)
 {
 	const char* name = HDSlotName(slot);
@@ -937,9 +931,9 @@ const char* HDBindModOption(int slot, char* buffer, int size)
 
 	*buffer = 0;
 
-	/* THE ENDING IS THE WHOLE RULE - HDSlotIsPickup, which is where it is
-	 * written down since #155b, because the floor rule asks the same question
-	 * of the same slots and two spellings of one rule are one too many. */
+	/* The ending is the whole rule - HDSlotIsPickup, which is where it is
+	 * written down, because the floor rule asks the same question of the
+	 * same slots and two spellings of one rule are one too many. */
 	if (!HDSlotIsPickup(slot))
 		return nothing;
 
@@ -948,17 +942,17 @@ const char* HDBindModOption(int slot, char* buffer, int size)
 	const size_t length = strlen(name);
 	const size_t tail = sizeof(kItem) - 1;
 
-	/* THE OPTION MODEL IS ASKED FOR FIRST, and the order is a measurement.
+	/* The option model is asked for first, and the order is a measurement.
 	 *
 	 * Each of these questions walks every active mod's 5\ITEM and 4\ITEM, and
 	 * this function is asked of every loaded slot at every level build - the
-	 * shape of thing that turned round M2's level build into twenty-five
-	 * seconds. Asking the three EXTRA prefixes first meant four walks for every
+	 * shape of thing that can turn a level build into twenty-five seconds.
+	 * Asking the three EXTRA prefixes first meant four walks for every
 	 * _ITEM slot in the level; asking the one name that decides anything first
 	 * means one walk for all but the handful that really have an OPTION model.
-	 * Measured over ANDREA1's 130 slots with the user's nine mods: 24.6 ms the
-	 * other way round, 7.7 ms this way (the median of five), and 0.11 ms with
-	 * no mods at all. */
+	 * Measured over ANDREA1's 130 slots with nine mods installed: 24.6 ms
+	 * the other way round, 7.7 ms this way (the median of five), and 0.11 ms
+	 * with no mods at all. */
 	std::string option(name, length - tail);
 	char found[512];
 	int mod = -1;
@@ -968,7 +962,7 @@ const char* HDBindModOption(int slot, char* buffer, int size)
 	if (!*HDModsFindModel(option.c_str(), &mod, found, sizeof(found)))
 		return nothing;
 
-	/* AND A MOD'S OWN EXTRA_ MODEL WINS. It is the IV-VI name, so a mod that
+	/* A mod's own EXTRA_ model wins. It is the IV-VI name, so a mod that
 	 * ships one has said which of the two conventions it is written in, and
 	 * the ordinary resolver already draws it - here and on the floor. */
 	for (const PrefixRule& one : extra_prefixes)

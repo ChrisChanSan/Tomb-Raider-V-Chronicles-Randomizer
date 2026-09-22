@@ -12,7 +12,7 @@
  */
 #pragma once
 
-// WHAT THE RANDOMIZER CHANGED, IN THE LEVEL'S OWN WORDS (#123, stage S7-2).
+// What the randomizer changed, in the level's own words.
 //
 // The Remaster's art describes the VANILLA level. Two kinds of change make it
 // wrong and neither fits in the level header: a room whose SHAPE the run
@@ -23,47 +23,44 @@
 // would need up to 254 bits and a donor list is unbounded, so both go into a
 // text sidecar beside the .TRC: data\<LEVEL>.hdm.
 //
-// THE GRAMMAR, one fact per line, and the whole of it:
+// The grammar, one fact per line, and the whole of it:
 //
 //     hdm 2                      the version, first line; this reader knows
 //                                1 and 2
 //     outfit 6                   repeats data[3] - for a person reading the
-//                                file. The ENGINE reads the header byte
-//                                (round M2 briefly had a `wear <key>` line
-//                                here, for an outfit out of the wardrobe
-//                                scan. It is gone: a seed and its settings
-//                                travel between players and an installation
-//                                does not, so the extra outfits are the
-//                                player's choice and live in the registry -
-//                                see hd_laradraw.cpp, hd_outfit. A sidecar
-//                                the M2 build wrote still carries the line,
-//                                and this reader now treats it as what it is:
-//                                a line it has no rule for, kept for the log)
+//                                file. The engine reads the header byte
+//                                instead, which is there before a room is
+//                                loaded; the extra outfits are the player's
+//                                choice and live in the registry (see
+//                                hd_laradraw.cpp, hd_outfit). A `wear <key>`
+//                                line is not part of this grammar; if a
+//                                sidecar carries one, it is a line this
+//                                reader has no rule for, kept for the log.
 //     room 34                    that room's shape changed past keeping ->
 //                                draw it classic
 //     cut x0 y0 z0 x1 y1 z1      an OPENING the run made, as a box in world
 //                                units -> drop the HD art inside it and keep
-//                                the room (version 2, #123 fix round Z)
+//                                the room (version 2)
 //     donor 386 Andrea1 386      slot 386 of this level holds the model that
 //                                is slot 386 in Andrea1
 //     donor 31 TR3 31            ... or a guest out of Tomb Raider I-III
 //
 // `room` lines ascend, `cut` lines ascend by their six numbers, `donor` lines
-// ascend by slot, so the same seed gives the same file byte for byte. A LINE
-// THIS READER DOES NOT KNOW IS IGNORED and counted, so a later version of the
-// randomizer can add a fact without this engine refusing the file. A MISSING
-// FILE MEANS "NO MARKERS" and is not an error - it is what a vanilla
+// ascend by slot, so the same seed gives the same file byte for byte. A line
+// this reader does not know is ignored and counted, so a later version of the
+// randomizer can add a fact without this engine refusing the file. A missing
+// file means "no markers" and is not an error - it is what a vanilla
 // installation looks like.
 //
-// THE TWO VERSIONS, AND WHY BOTH ARE STILL HERE. Version 1 had only the
-// whole-room mark, and the play test of 2026-09-11 showed what that costs: an
-// ANDY3 run whose secret list opens two doorways turned FOUR of 211 rooms
-// classic, and the player saw HD floors running into classic ones with the
-// void showing in the seam. Version 2 says where the opening IS, so the room
-// keeps its art and only the box is taken out of it. The randomizer writes
-// the LOWEST version that can express what is in the file - a run that opened
-// nothing still writes `hdm 1` - so a sidecar and an engine from either side
-// of this fix round go on working together wherever they can.
+// The two versions, and why both are still here. Version 1 had only the
+// whole-room mark: an ANDY3 run whose secret list opens two doorways turned
+// four of 211 rooms classic, and the player saw HD floors running into
+// classic ones with the void showing in the seam. Version 2 says where the
+// opening is, so the room keeps its art and only the box is taken out of it.
+// The randomizer writes the lowest version that can express what is in the
+// file - a run that opened nothing still writes `hdm 1` - so a sidecar and
+// an engine on either side of this change go on working together wherever
+// they can.
 //
 // The randomizer writes the file on EVERY run for EVERY level, even when it
 // has nothing to say (then it is the version line alone), and deletes it
@@ -88,7 +85,7 @@ struct HDMarkerDonor
 	const char* level;	// the donor's level stem, or "TR3"
 };
 
-/* ONE OPENING THE RUN MADE, AS A BOX (#123, fix round Z).
+/* One opening the run made, as a box.
  *
  * World units, ascending corners, and Y GROWS DOWNWARD as everywhere else in
  * this format - mins[1] is the opening's ceiling and maxs[1] its floor. The
@@ -99,26 +96,25 @@ struct HDMarkerDonor
  * because the remaster builds a wall as a thick solid whose faces do not sit
  * on the classic wall plane - and 128 INWARD along the other two.
  *
- * Inward, since fix round Z1. A cut room keeps its HD art and an HD room
+ * The inward step matters because a cut room keeps its HD art and an HD room
  * never draws its classic roomlets (drawroom.cpp, InsertRoom), so whatever
  * this box takes is replaced by NOTHING; it may hold only what stands inside
  * the opening. A view window runs from its sector's ceiling to its floor by
- * construction, so an outward step there takes the passage's own floor and
- * ceiling quads - which lie exactly in the box's boundary plane - and leaves
- * the void showing. That was measured at 400,950 clear pixels in one frame
- * of ANDY3 before the sign was turned round. The triangle test below is a
- * real intersection, so a wall triangle crossing the opening still meets the
- * smaller box. ApplyPatch.h carries the same description from the writing
- * side.
+ * construction, so an outward step on that axis too would take the passage's
+ * own floor and ceiling quads - which lie exactly in the box's boundary
+ * plane - and leave the void showing: measured at 400,950 clear pixels in
+ * one frame of ANDY3 with an outward step on all three axes. The triangle
+ * test below is a real intersection, so a wall triangle crossing the opening
+ * still meets the smaller box. ApplyPatch.h carries the same description
+ * from the writing side.
  *
- * Nothing here had to change for it: the reader takes the box as it comes,
- * and a version 2 file written before fix round Z1 is read exactly as it
- * always was - it simply names a box 256 units wider on two axes.
+ * The reader needs no separate version check for this: the box is fully
+ * described by its own six numbers, whichever margin convention wrote them.
  *
  * The box belongs to the LEVEL and not to a room. hd_level.cpp asks it of
  * EVERY group, because a neighbour's overhang can stand in a doorway as
- * surely as the room's own wall can - and fix round T measured that the
- * remaster's rooms reach into each other by construction. */
+ * surely as the room's own wall can, and the remaster's rooms reach into
+ * each other by construction. */
 struct HDMarkerCut
 {
 	int mins[3];
@@ -144,7 +140,7 @@ const char* HDMarkersError();
 // The path the last HDMarkersLoad looked at. Never null.
 const char* HDMarkersPath();
 
-// The `outfit` line, or 0. FOR THE LOG ONLY: the engine draws from data[3] of
+// The `outfit` line, or 0. For the log only: the engine draws from data[3] of
 // the level header, which is there before a room is loaded. The two come out
 // of one value in the randomizer and can only disagree when one of the two
 // halves was written by an older run - which is worth a line and nothing more.
@@ -155,12 +151,12 @@ bool HDMarkersRoomTouched(int room);
 int HDMarkersRoomCount();
 int HDMarkersRoom(int at);
 
-// The openings the run made (#123, fix round Z). Empty for a version 1 file,
-// which had no way of saying it.
+// The openings the run made. Empty for a version 1 file, which had no way of
+// saying it.
 int HDMarkersCutCount();
 const HDMarkerCut* HDMarkersCut(int at);
 
-/* THE SOUND IDS THIS RUN IMPORTED FROM ANOTHER GAME (#153, round M3).
+/* The sound ids this run imported from another game.
  *
  * The randomizer's Tomb Raider III guests bring their own recordings into
  * free slots of the TR5 soundmap - the vulture on 420..423, the Compy on
@@ -169,12 +165,12 @@ const HDMarkerCut* HDMarkersCut(int at);
  * of the vulture's four are RICH1's VCI scientist voice lines.
  *
  * The HQ bridge pairs a level sample with a bank sample BY SOUND ID and
- * judges the pairing by length. Measured on the randomized ANDREA1 of seed
- * 380: the vulture's id 422 is a 604 ms screech and the bank's id 422 a 624 ms
- * voice line, which is well inside the fifth the rule allows - so the bird
- * died saying something in English, which is what the user heard and reported.
- * (Its other three ids are refused by length anyway: 322, 425 and 406 ms
- * against 624, 624 and 1037.)
+ * judges the pairing by length. Measured on a randomized ANDREA1 (seed 380):
+ * the vulture's id 422 is a 604 ms screech and the bank's id 422 a 624 ms
+ * voice line, which is well inside the fifth the rule allows - so without
+ * this list the bird would die saying an English voice line instead of its
+ * own screech. (Its other three ids are refused by length anyway: 322, 425
+ * and 406 ms against 624, 624 and 1037.)
  *
  * A length cannot decide this and a NAME can. The run knows which ids it
  * wrote and says so here; hqsfx.cpp refuses to pair them. An id the run

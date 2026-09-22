@@ -12,12 +12,12 @@
  */
 #pragma once
 
-// WHAT A LEVEL'S HD SIDE CONTAINS (#123, stage S0).
+// What a level's HD side contains.
 //
 // Reads <5>\DATA\<STEM>.TRG and <5>\DATA\<STEM>.MAP, counts what is in them,
 // binds every loaded slot to its .TRM and looks whether that file is there.
-// It draws NOTHING and builds no GPU object - that is stage S1 - and it frees
-// everything again before it returns.
+// It draws nothing and builds no GPU object, and it frees everything again
+// before it returns.
 //
 // Engine-free on purpose: this is the translation unit the vendored TRForge
 // reader lives in (C++17, <filesystem>), and it is the same code the
@@ -47,7 +47,7 @@ struct HDScanStats
 	int  trmBound;			// a model name that exists on disk
 	int  trmMissing;		// a model name with no file
 	int  trmDummy;			// the level says DUMMY on purpose
-	int  trmLara;			// Lara's composite - stage S4
+	int  trmLara;			// Lara's composite
 	int  headsBound;		// <name>_HEAD.TRM found beside the model
 
 	int  bc7Pages;			// pages actually decoded for the measurement
@@ -59,8 +59,8 @@ struct HDScanStats
 // numRooms is the classic level's room count. slotLoaded is one byte per slot
 // (objects[i].loaded), slotCount its length - pass 0 to bind nothing.
 // measureBc7 decodes every page of the level with its whole mip chain and
-// times it; that is the point of stage S0 and it costs seconds, so the engine
-// only does it with -log. threads is 0 or 1 for one core, otherwise that many.
+// times it; that costs seconds, so the engine only does it with -log.
+// threads is 0 or 1 for one core, otherwise that many.
 bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	const unsigned char* slotLoaded, int slotCount,
 	bool measureBc7, int threads, HDScanStats* out, const char** why);
@@ -86,10 +86,10 @@ const char* HDScanPagePath(const char* installRoot, int page, char* buffer, int 
 double HDScanDecodePages(const char* installRoot, const int* pages, int count,
 	int threads, double* texels, int* mips, int* failed);
 
-/* THE .TEX TABLE OF ONE LEVEL (#123, fix round N, N2).
+/* The .TEX table of one level.
  *
  * <install>\DATA\<STEM>.TEX, and it is the one file that says which HD
- * picture belongs to which CLASSIC TILE:
+ * picture belongs to which classic tile:
  *
  *     uint16              how many HD pages this level uses
  *     uint16 * that many  their numbers in <install>\TEX
@@ -98,17 +98,17 @@ double HDScanDecodePages(const char* installRoot, const int* pages, int count,
  *                         or 0xFFFF for a tile the remaster leaves classic
  *
  * The format is TRForge's measurement - its trf_remaster/Remaster.h writes it
- * down, and trf_remaster/HdPages.h writes down what a page IS. NEITHER OF
- * THOSE TWO FILES IS VENDORED HERE: vendor/trforge holds only what this tree
+ * down, and trf_remaster/HdPages.h writes down what a page is. Neither of
+ * those two files is vendored here: vendor/trforge holds only what this tree
  * compiles (trf_core and Trg.cpp/.h), and both of those headers pull in
- * TRForge's own asset and level libraries, so they were used as a DESCRIPTION
- * and nothing else - exactly as ItemModels.h was for the .TRM format. See
- * THIRD-PARTY.md, which says the same. This reader is written from that
- * description, not copied from it.
+ * TRForge's own asset and level libraries, so they were used as a
+ * description and nothing else - exactly as ItemModels.h was for the .TRM
+ * format. See THIRD-PARTY.md, which says the same. This reader is written
+ * from that description, not copied from it.
  *
- * WHAT A PAGE IS, because the number alone is misleading: an HD page is NOT
+ * What a page is, because the number alone is misleading: an HD page is not
  * a repaint of the tile's rectangle. It is a repaint of the whole 64 by 64
- * CELL the rectangle sits in, at eight times the size - one 512 by 512 file
+ * cell the rectangle sits in, at eight times the size - one 512 by 512 file
  * per cell. TRForge measured that over the shipped games: of 17,164 tiles
  * with HD art not one crosses a cell boundary, and of 4,335 occupied cells
  * not one wants two files. So the way from a classic tile to its HD texels
@@ -119,15 +119,14 @@ double HDScanDecodePages(const char* installRoot, const int* pages, int count,
  *
  * and that is all the arithmetic there is to it.
  *
- * WHAT IT IS GOOD FOR, AND WHAT IT IS NOT. The classic engine never opens
+ * What it is good for, and what it is not. The classic engine never opens
  * this file at all - nothing in this tree reads it but the function below -
  * and it names a page for only about a seventh of a level's tiles, so it is
- * NOT a way to draw a level in HD (the .TRG is, and that is what the room
- * renderer uses).
- * It is exactly right for the one question fix round N asks: the classic
- * water surfaces the .TRG has no geometry for are drawn from the classic
- * level, with the classic level's own animated texture range - and those
- * frames are among the tiles the .TEX does name.
+ * not a way to draw a level in HD (the .TRG is, and that is what the room
+ * renderer uses). It is exactly right for one question: the classic water
+ * surfaces the .TRG has no geometry for are drawn from the classic level,
+ * with the classic level's own animated texture range - and those frames are
+ * among the tiles the .TEX does name.
  *
  * `out` takes one entry per tile, each the .DDS number or 0xFFFF; the return
  * is how many were written, 0 for a level whose file is missing or short

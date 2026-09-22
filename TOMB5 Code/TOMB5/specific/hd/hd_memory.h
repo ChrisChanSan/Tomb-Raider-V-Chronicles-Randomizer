@@ -12,26 +12,26 @@
  */
 #pragma once
 
-/* WHAT THIS PROCESS HAS LEFT, AND THE RULE THAT SPENDS IT (#164).
+/* What this process has left, and the rule that spends it.
  *
  * The HD page cache never gives a page back inside a level, so every outfit
  * the player puts on in one level stays in it (hd_pagecache.cpp, the A2 note).
- * Round M3 (#153) capped that growth at a flat 64 MiB, which was the slack
- * AutoBudgetBytes already held back on the card. The user's log of 2026-09-15
- * shows what that costs him: a budget of 3878 MiB, a cache of 465 to 517 MiB
- * and six changes of 4 to 13 MiB each - and the menu stopping him at
- * "spent 52 of 64 MiB", with the card three gigabytes from being full.
+ * A flat 64 MiB cap on that growth is the slack AutoBudgetBytes already held
+ * back on the card - but a real budget of 3878 MiB, a cache of 465 to 517
+ * MiB and six changes of 4 to 13 MiB each can still hit "spent 52 of 64 MiB"
+ * and stop the player there, with the card three gigabytes from being full.
+ * That number alone is not the wall that matters.
  *
- * SO THE QUESTION IS WHICH WALL IS REALLY IN FRONT OF HIM, and it is not the
- * card. This engine is a 32 BIT process with LARGEADDRESSAWARE set (specific\
- * alexstuff.cpp and the .vcxproj): four gigabytes of user address space,
- * whatever the machine has. His card holds 16 GiB and answers 4068 MiB to
- * GetAvailableTextureMem because that is the largest number the 32 bit call
- * can say; his machine has 96 GiB of RAM. Nothing in the engine measured the
- * address space until this round, and nothing may spend what it has not
+ * The wall that matters is not the card. This engine is a 32 BIT process
+ * with LARGEADDRESSAWARE set (specific\alexstuff.cpp and the .vcxproj): four
+ * gigabytes of user address space, whatever the machine has. A card can hold
+ * 16 GiB and still answer only 4068 MiB to GetAvailableTextureMem, because
+ * that is the largest number the 32 bit call can say, on a machine with far
+ * more RAM than that besides. Nothing in the engine measured the address
+ * space before this rule existed, and nothing may spend what it has not
  * measured.
  *
- * TWO NUMBERS SAY IT AND THEY ARE NOT THE SAME NUMBER:
+ * Two numbers say it and they are not the same number:
  *
  *   availVirtual  the free user address space ADDED UP - what
  *                 GlobalMemoryStatusEx puts in ullAvailVirtual. One call.
@@ -41,7 +41,7 @@
  *                 cannot make an 85 MiB texture, and the sum would have said
  *                 it could.
  *
- * NEITHER IS ASKED PER FRAME. The walk is thousands of system calls and the
+ * Neither is asked per frame. The walk is thousands of system calls and the
  * F4 window asks whether another change is allowed on every drawn frame, so
  * the answer is measured when something has CHANGED it - at the end of a
  * level build, after a re-dress, and once when the window opens - and stored
@@ -59,44 +59,41 @@ struct HDMemoryRoom
 };
 
 /* Measures both, now. Costs one GlobalMemoryStatusEx and one VirtualQuery per
- * region of the address space; measured on the user's machine with PoolProbe,
- * and the number is in MODIFICATIONS.md and in the log of every level build.
+ * region of the address space; measured with PoolProbe, and the walk's own
+ * cost is printed in the log of every level build.
  * A null pointer is ignored; a failed GlobalMemoryStatusEx leaves known at 0
  * and the walk is not made at all, because a caller that cannot have the sum
  * has no use for the largest block either. */
 void HDMemoryMeasure(HDMemoryRoom* out);
 
-/* THE ALLOWANCE (#153, round M3; #164). The 64 MiB of slack AutoBudgetBytes
- * holds back on the card, which is what a level was allowed to spend on
- * outfit changes before this round. It is still the FLOOR of the card side of
- * the rule: whatever the address space says, a level that has not yet spent
- * this much is never refused for the card's sake, so no player is stopped
- * earlier than he was in round M3. */
+/* The allowance: the 64 MiB of slack AutoBudgetBytes holds back on the card,
+ * which is what a level is allowed to spend on outfit changes on the card's
+ * account alone. It is the FLOOR of the card side of the rule: whatever the
+ * address space says, a level that has not yet spent this much is never
+ * refused for the card's sake. */
 #define HD_REDRESS_ALLOWANCE		(64.0 * 1048576.0)
 
-/* THE DEAREST SINGLE CHANGE, measured (#153, round M3, with ModelProbe
- * -pagelist over ANDREA1 and the user's own wardrobe of 55 outfits): one
- * outfit's OWN pages - the ones the rest of the wardrobe has not got - come
- * to at most 20.00 MiB, and the dearest change measured between two of them
- * added 13.33 MiB. The rule asks whether THIS much room is left, not whether
- * the chosen outfit fits, and the reason is in hd_level.h. */
+/* The dearest single change, measured with ModelProbe -pagelist over ANDREA1
+ * and a wardrobe of 55 outfits: one outfit's OWN pages - the ones the rest of
+ * the wardrobe has not got - come to at most 20.00 MiB, and the dearest
+ * change measured between two of them added 13.33 MiB. The rule asks whether
+ * THIS much room is left, not whether the chosen outfit fits, and the reason
+ * is in hd_level.h. */
 #define HD_REDRESS_WORST		(20.0 * 1048576.0)
 
-/* WHAT IS NOT OURS TO SPEND. A level load, a Bink film, the save screenshot
+/* What is not ours to spend. A level load, a Bink film, the save screenshot
  * and the driver's own transient allocations all come out of the same address
  * space, and a re-dress that left them nothing would trade a change of outfit
- * for a crash in the next corridor. This is a FIRST SETTING and is meant to
- * be read against the user's next log, where every level build prints it
- * beside what was actually free. */
+ * for a crash in the next corridor. This is a FIRST SETTING: every level
+ * build prints it in the log beside what was actually free, for comparison. */
 #define HD_REDRESS_ADDRESS_RESERVE	(512.0 * 1048576.0)
 
-/* THE BIGGEST SINGLE ALLOCATION ONE PAGE COSTS: one texture of `side` by
+/* The biggest single allocation one page costs: one texture of `side` by
  * `side` with its whole mip chain, four bytes a texel or one when dxt5 is set.
  * Eleven pages of the remaster are 4096x4096 (hd_render.cpp, where the
  * device's own cap enters the policy), which is 85.33 MiB in A8R8G8B8 and
  * 21.33 MiB in BC3 - the two numbers the fragmentation condition is asked
- * against. Measured against the real thing with PoolProbe -pool; what the
- * driver puts on top of it is in MODIFICATIONS.md. */
+ * against. Measured against the real thing with PoolProbe -pool. */
 double HDRedressPageBlock(int dxt5, int side);
 
 // Which of the three conditions refused, for the log and for the grid.
@@ -108,8 +105,8 @@ double HDRedressPageBlock(int dxt5, int side);
 const char* HDRedressRefusalText(int refused);
 
 /* Everything the rule reads, so that it reads NOTHING else: no globals, no
- * device, no clock. That is what lets PoolProbe -grid put the user's own
- * numbers through the very function the engine runs. */
+ * device, no clock. That is what lets PoolProbe -grid put any set of numbers
+ * through the very function the engine runs. */
 struct HDRedressAsk
 {
 	double cacheBytes;	// HDPageCacheBytes() now
@@ -132,15 +129,15 @@ struct HDRedressVerdict
 	int fits;		// how many more changes of worstBytes there is room for
 };
 
-/* THE RULE. Pure: the same inputs give the same verdict on any machine, and
+/* The rule. Pure: the same inputs give the same verdict on any machine, and
  * the arithmetic is in doubles because four gigabytes do not fit a signed
  * 32 bit int.
  *
- *   spent      cacheBytes - bytes0, as in round M3
+ *   spent      cacheBytes - bytes0
  *   cardRoom   budgetBytes + allowance - cacheBytes. The allowance is added
  *              because it IS the slack the budget holds back: the 64 MiB of
- *              round M3 and the 64 MiB of AutoBudgetBytes are the same bytes,
- *              and spending them once is not spending them twice.
+ *              the allowance and the 64 MiB of AutoBudgetBytes are the same
+ *              bytes, and spending them once is not spending them twice.
  *   addrRoom   availVirtual - reserve
  *
  *   allowed = (cardRoom >= worst || spent < allowance)   the card, with the
@@ -148,6 +145,6 @@ struct HDRedressVerdict
  *          && addrRoom >= worst                          the address space
  *          && largestFree >= pageBytes                   one block for one page
  *
- * WITH NOTHING MEASURED it is exactly the rule of round M3 - spent < allowance
- * and nothing else. A rule may not be loosened on an answer it did not get. */
+ * WITH NOTHING MEASURED it is exactly the old rule - spent < allowance and
+ * nothing else. A rule may not be loosened on an answer it did not get. */
 void HDRedressDecide(const HDRedressAsk* ask, HDRedressVerdict* out);

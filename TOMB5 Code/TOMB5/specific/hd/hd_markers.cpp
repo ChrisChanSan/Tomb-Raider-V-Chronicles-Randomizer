@@ -39,7 +39,7 @@ namespace
 	std::vector<HDMarkerCut> g_cuts;
 	std::vector<Donor> g_donors;
 	std::vector<std::string> g_unknown;
-	// The sound ids this run imported from another game (#153, round M3).
+	// The sound ids this run imported from another game.
 	std::vector<int> g_sfx_imports;
 
 	// Exported through HDMarkersDonor as a plain struct, so the strings the
@@ -130,7 +130,7 @@ bool HDMarkersLoad(const char* levelPath)
 			continue;
 		}
 
-		/* Fix round Z. Six integers, ascending corners already - but sorted
+		/* Six integers, ascending corners already - but sorted
 		 * here all the same, because a box the wrong way round would match
 		 * no triangle at all and would do it silently, and the one thing
 		 * this reader must never do is turn a marker into nothing. */
@@ -155,13 +155,12 @@ bool HDMarkersLoad(const char* levelPath)
 			}
 		}
 
-		/* THE SOUND IDS THIS RUN IMPORTED (#153, round M3), all on one line
-		 * because they belong to one fact - "these numbers are not the
-		 * remaster's sounds" - and a line per id would say the same thing
-		 * twenty-one times in a run with all four guests. The count is not
-		 * written down anywhere: the line is read until it stops holding
-		 * numbers, which is what lets a later round add a fifth guest
-		 * without this reader knowing about it. */
+		/* The sound ids this run imported, all on one line because they belong
+		 * to one fact - "these numbers are not the remaster's sounds" - and a
+		 * line per id would say the same thing twenty-one times in a run with
+		 * all four guests. The count is not written down anywhere: the line is
+		 * read until it stops holding numbers, which lets a future import add
+		 * a fifth guest without this reader knowing about it. */
 		if (!std::strncmp(line, "sfximport ", 10))
 		{
 			const char* at = line + 10;
@@ -202,7 +201,7 @@ bool HDMarkersLoad(const char* levelPath)
 
 	std::fclose(file);
 
-	/* THE VERSION IS A REFUSAL AND NOT A WARNING. An unknown line can be
+	/* The version is a refusal and not a warning. An unknown line can be
 	 * ignored safely - it says something this engine does not act on - but an
 	 * unknown VERSION may have changed the meaning of the lines that are
 	 * there, and acting on a room number that no longer means a room number
@@ -210,11 +209,11 @@ bool HDMarkersLoad(const char* levelPath)
 	 * back to "no markers", which is exactly what an engine older than the
 	 * run should do.
 	 *
-	 * TWO NUMBERS PASS SINCE FIX ROUND Z, and both are read the same way: 2
-	 * only adds the `cut` line, it changes the meaning of nothing that was
-	 * there before, so a version 1 file is a version 2 file with no cut in
-	 * it. Levels the user randomized before this fix round therefore go on
-	 * working exactly as they did. */
+	 * Two versions pass, and both are read the same way: 2 only adds the
+	 * `cut` line, it changes the meaning of nothing that was there before, so
+	 * a version 1 file is a version 2 file with no cut in it. Sidecars
+	 * written before the `cut` line existed therefore go on working exactly
+	 * as they did. */
 	if (g_version != 1 && g_version != 2)
 	{
 		char why[96];

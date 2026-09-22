@@ -14,13 +14,13 @@
  * neither their sprite scan nor their "is this an alphabet" gate, because we
  * know which 106 rectangles are glyphs (game\chardef.inc). See THIRD-PARTY.md.
  *
- * THE CITATION CARRIES NO LINE NUMBERS ANY MORE (audit round A1). It used to
- * read ":7367-7870", and those numbers belong to a later TROne version than
- * the public copy: neither TROne as published (game_renderer.cpp, 4,782
- * lines) nor the version of 2026-09-13 has the block at those lines. The
- * block's own marker "hdtext" names it in every version, so the marker is
- * what this header cites. The same applies to the ":11211-11269" the font
- * files below used to give for the widening rule.
+ * The citation carries no line numbers. A prior line range, ":7367-7870",
+ * belonged to a later TROne version than the public copy: neither TROne as
+ * published (game_renderer.cpp, 4,782 lines) nor the version of 2026-09-13
+ * has the block at those lines. The block's own marker "hdtext" names it in
+ * every version, so the marker is what this header cites instead. The same
+ * applies to the ":11211-11269" the font files below used to cite for the
+ * widening rule.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software
@@ -29,7 +29,7 @@
  */
 #pragma once
 
-// WHERE A CLASSIC GLYPH LIVES IN THE REMASTER'S ATLAS (#123, fix round Q).
+// Where a classic glyph lives in the remaster's atlas.
 //
 // This file is written against the .DDS definition and deliberately has no
 // engine dependencies - not even a Log() - so that the same code can be
@@ -38,7 +38,7 @@
 // What the tool proves about the matcher is therefore true of the engine's
 // matcher as well. bc7.cpp and hdscreen.cpp already have that deal.
 //
-// THE TWO PICTURES.
+// The two pictures:
 //
 //   the classic font page   256 x 256, A8R8G8B8, the second of the three
 //                           0x40000 blocks at the end of LoadTextures
@@ -65,8 +65,8 @@
 // TROne's number for it.
 #define HD_FONT_INK	96
 
-/* HOW MUCH ROOM THE HD GLYPH MAY TAKE AROUND THE CLASSIC RECTANGLE, in
- * classic texels (#123, fix round Q).
+/* How much room the HD glyph may take around the classic rectangle, in
+ * classic texels.
  *
  * The classic UV arithmetic samples the glyph rectangle inset by half a texel
  * on each side - the classic page packs its glyphs with no gap at all, and
@@ -78,7 +78,7 @@
  * (game_renderer.cpp, its "hdtext" glyph draw) - the letter neither moves
  * nor grows, only more of the atlas around it becomes visible.
  *
- * THIS IS THE CEILING, NOT THE MARGIN. A uniform margin was tried first and
+ * This is the ceiling, not the margin. A uniform margin was tried first and
  * looked wrong: the atlas packs the small marks close together, so the same
  * one texel that a capital letter has to spare pulls a slice of the
  * neighbouring tick in beside an apostrophe and beside a comma - plainly
@@ -140,7 +140,7 @@ void HDFontMd5(const void* data, unsigned long size, char* out33);
 int HDFontMatchAll(const unsigned long* atlas, const unsigned long* page,
 	const HDFontCell* cells, int count, float accept, HDFontHit* hits);
 
-/* WHITE INK, as against the dark rim and the drop shadow around it. The
+/* White ink, as against the dark rim and the drop shadow around it. The
  * remaster's big atlas is a redrawn font with a shadow baked in: measured
  * over the 93 matched glyphs, its fully opaque texels have a mean brightness
  * of 224 of 255 and its half-transparent ones a mean of 44. Halfway between
@@ -152,7 +152,7 @@ inline bool HDFontIsWhite(unsigned long argb)
 		((((argb >> 16) & 255) + ((argb >> 8) & 255) + (argb & 255)) / 3) >= 128;
 }
 
-/* HOW FAR EACH GLYPH'S WINDOW MAY BE OPENED, in classic texels.
+/* How far each glyph's window may be opened, in classic texels.
  *
  * `hd` is the decoded FONT<n>.DDS at `side` x `side` (2048), `page` the
  * classic font page, `cells` and `hits` what the match produced. For every

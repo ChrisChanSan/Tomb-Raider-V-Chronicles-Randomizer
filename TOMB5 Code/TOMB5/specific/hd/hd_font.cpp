@@ -36,7 +36,7 @@
 
 namespace
 {
-	/* THE 106 RECTANGLES, unscaled. The same include game\text.cpp fills
+	/* The 106 rectangles, unscaled. The same include game\text.cpp fills
 	 * CharDef[106] from, so the two cannot drift apart - and it has to be
 	 * this file's own copy and not CharDef itself, because InitFont
 	 * overwrites CharDef's w, h and YOffset in place with the values for the
@@ -108,7 +108,7 @@ namespace
 		return path;
 	}
 
-	/* THE MATCH, and which of the two alphabets wins.
+	/* The match, and which of the two alphabets wins.
 	 *
 	 * Measured over the shipped bundle: FONT0 finds 93 of the 106 rectangles
 	 * and FONT1 finds 22 - so FONT1 is a different alphabet (its 22 are the
@@ -181,7 +181,7 @@ namespace
 		std::free(atlas[0]);
 		std::free(atlas[1]);
 
-		/* AND THE NUMBER THE DRAW SEAM NEEDS: the offset from the classic
+		/* And the number the draw seam needs: the offset from the classic
 		 * rectangle to the atlas, in normalised page units. The atlas is the
 		 * classic page times eight, so 256ths of the page are the same
 		 * fraction of it - which is why DrawChar can add this to a classic UV
@@ -239,7 +239,7 @@ void HDFontLevelPage(const void* page)
 	std::memcpy(g_page, page, (size_t)HD_FONT_SIDE * HD_FONT_SIDE * 4);
 	HDFontMd5(g_page, (unsigned long)HD_FONT_SIDE * HD_FONT_SIDE * 4, md5);
 
-	/* ALL SIXTEEN SHIPPED LEVEL FILES CARRY THE SAME FONT PAGE - measured
+	/* All sixteen shipped level files carry the same font page - measured
 	 * with FontProbe -pages, md5 191cfc2fdba5b4c54024361c463d7537 for every
 	 * one of them including the title. So the match runs once in a session
 	 * and every further level load is this comparison. It is keyed on the
@@ -287,7 +287,7 @@ void HDFontBuild()
 		return;
 	}
 
-	/* THE WHOLE MIP CHAIN, and it is not optional. At 1920 x 1080 a
+	/* The whole mip chain, and it is not optional. At 1920 x 1080 a
 	 * thirteen-texel glyph is drawn 58 pixels high out of 104 atlas texels -
 	 * the atlas is MINIFIED by 1.8, and at 1280 x 720 by 2.7. Without mips
 	 * that is a bilinear undersample and thin strokes crawl; with them and
@@ -319,7 +319,7 @@ void HDFontBuild()
 		if (!px)
 			break;			// the chain ends where whole 4x4 blocks end
 
-		/* THE PER-GLYPH MARGIN, and this is the one place that can work it
+		/* The per-glyph margin, and this is the one place that can work it
 		 * out: it needs the big picture, and the big picture exists here and
 		 * nowhere else. A uniform margin was tried first and was wrong - the
 		 * atlas packs the small marks close together, so the one texel a

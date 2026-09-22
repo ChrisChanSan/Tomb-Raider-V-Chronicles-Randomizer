@@ -73,9 +73,9 @@ namespace
 		return out;
 	}
 
-	/* THE PAGE OF A TRIANGLE.
+	/* The page of a triangle.
 	 *
-	 * A .TRG vertex names its texture as a layer counted from ONE into the
+	 * A .TRG vertex names its texture as a layer counted from one into the
 	 * file's own texture list - reading it from zero gave 0 of 273 faces the
 	 * page the .TEX names and reading it from one gave 249 (TRForge's
 	 * measurement, Trg.h). Layer 0 means the vertex names no page at all. */
@@ -255,10 +255,10 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	for (const trf::remaster::TrgGroup& group : trg.groups)
 		out->pointLights += (int)group.volumes.size();
 
-	/* THE RANGES. One draw call per (group, pass, page): the index stream is
+	/* The ranges. One draw call per (group, pass, page): the index stream is
 	 * not sorted by page, so the triangles are bucketed by that key and the
-	 * number of buckets that hold anything is the number of draws stage S1
-	 * will issue. pageChanges is what the same walk costs WITHOUT the sort -
+	 * number of buckets that hold anything is the number of draws the level
+	 * will issue. pageChanges is what the same walk costs without the sort -
 	 * the number the sort is there to bring down.
 	 *
 	 * Only groups below numRooms are counted: group i is room i, and anything
@@ -291,7 +291,7 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 					if (a != b || b != c)
 						out->mixedPageTriangles++;
 
-					/* Only a CHANGE is remembered. Two triangles in a row on
+					/* Only a change is remembered. Two triangles in a row on
 					 * the same page carry the same key, so collapsing them
 					 * here leaves the set of distinct keys - and therefore
 					 * the range count - exactly as it was, at a thirtieth of
@@ -326,7 +326,7 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	for (unsigned short page : trg.textures)
 		scan_pages.push_back((int)page);
 
-	/* THE MODELS. The level's own .MAP first, then our hand table for the
+	/* The models. The level's own .MAP first, then the hand table for the
 	 * slots beyond the original 460, then the slot's own name - see
 	 * hd_bind.h. Existence only: nothing of a model is read here beyond its
 	 * header, and nothing at all is built. */
@@ -424,8 +424,8 @@ int HDScanPage(int at)
 	return scan_pages[(size_t)at];
 }
 
-/* THE .TEX TABLE OF ONE LEVEL (#123, fix round N, N2) - see hd_scan.h for
- * the format and for what it is good for.
+/* The .TEX table of one level - see hd_scan.h for the format and for what
+ * it is good for.
  *
  * Refusing rather than half believing: a table whose page indices point past
  * its own page list is not this level's table, and a file too short to hold

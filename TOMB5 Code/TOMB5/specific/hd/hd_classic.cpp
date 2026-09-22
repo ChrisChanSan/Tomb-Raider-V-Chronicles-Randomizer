@@ -30,7 +30,7 @@ namespace
 	 *
 	 * The published TR1/TR2/TR3 level layouts (TRosettaStone), as far as the
 	 * moveable table - which is all this module wants. Everything before it
-	 * is length prefixed, so the blocks only have to be SKIPPED in the right
+	 * is length prefixed, so the blocks only have to be skipped in the right
 	 * order; the room header is the one place where the three games differ in
 	 * a way that has to be known rather than read.
 	 *
@@ -49,8 +49,8 @@ namespace
 	 *            u32 mesh tree words + 4 B each; u32 frame words + 2 B each;
 	 *            u32 moveables + 18 B each
 	 *
-	 * A MOVEABLE is u32 object id, u16 meshes, u16 first mesh, u32 mesh tree
-	 * (the INDEX of its first i32 word), u32 frame offset (BYTES into the
+	 * A moveable is u32 object id, u16 meshes, u16 first mesh, u32 mesh tree
+	 * (the index of its first i32 word), u32 frame offset (bytes into the
 	 * frame block), u16 animation. */
 	struct Variant
 	{
@@ -92,10 +92,10 @@ namespace
 		return false;
 	}
 
-	/* A READ THAT CANNOT WALK OFF THE FILE. Every count in a level file is a
+	/* A read that cannot walk off the file. Every count in a level file is a
 	 * number this module did not write, so `left()` is checked before each
 	 * one is believed and `bad` is sticky: the first impossible number ends
-	 * the walk and every read after it is a no-op. The file is STREAMED - a
+	 * the walk and every read after it is a no-op. The file is streamed - a
 	 * TR3 level is twelve megabytes and eleven of them are texture pages the
 	 * walk only has to seek past. */
 	struct Reader
@@ -118,11 +118,11 @@ namespace
 			at = 0;
 			bad = size <= 0;
 
-			/* AND AN EMPTY FILE IS CLOSED HERE (#155b). The caller's rule is
-			 * "open failed, nothing to close" - every one of them returns on
-			 * false without a close() - so a handle left standing on a
-			 * zero-byte file was leaked for the length of the session, once
-			 * per such file in the walk. */
+			/* An empty file is closed here. The caller's rule is "open
+			 * failed, nothing to close" - every one of them returns on
+			 * false without a close() - so without this, a handle left
+			 * standing on a zero-byte file would leak for the length of the
+			 * session, once per such file in the walk. */
 			if (bad)
 				close();
 
@@ -202,16 +202,16 @@ namespace
 		unsigned short anim;
 	};
 
-	/* THE FRAME'S ROTATIONS.
+	/* The frame's rotations.
 	 *
 	 * TR2 and TR3 pack one mesh into one or two words: the top two bits of the
-	 * first word are 00 for a three-axis rotation in TWO words and 01 / 10 / 11
+	 * first word are 00 for a three-axis rotation in two words and 01 / 10 / 11
 	 * for a single axis x / y / z in the low ten bits of that one word. With
 	 * the pair read as one 32 bit value, high word first, the three axes are
 	 * bits 20..29, 10..19 and 0..9.
 	 *
 	 * TR1 has no single-axis form: every mesh is two words, and the pair is
-	 * read with the SECOND word as the high half. That is the measured half of
+	 * read with the second word as the high half. That is the measured half of
 	 * the layout - see the note in hd_classic.h for the numbers. */
 	void read_rotations(const unsigned char* frame, long long bytes, int game,
 		int meshes, short rot[HD_CLASSIC_NODES][3], bool* ok)
@@ -268,12 +268,12 @@ namespace
 		*ok = true;
 	}
 
-	/* ONE LEVEL FILE, walked to its moveable table and then to the object.
+	/* One level file, walked to its moveable table and then to the object.
 	 *
 	 * The mesh tree and the frame block are the only two things read whole -
 	 * a few kilobytes each in TR1 and a few hundred in TR3 - because the
 	 * object's bones and its frame sit at offsets the moveable table only
-	 * names AFTER both blocks have gone past. */
+	 * names after both blocks have gone past. */
 	bool read_level(const std::string& path, int id, HDClassicObject* out)
 	{
 		Reader r;
@@ -429,20 +429,20 @@ namespace
 	 *
 	 * The classic object id of each weapon and each ammunition box, per game.
 	 *
-	 * THE SOURCE, named because a number nobody can check is a number nobody
-	 * should trust. Tomb Raider III: the user's copy of the GPL tomb3 sources,
+	 * The source, named because a number nobody can check is a number nobody
+	 * should trust. Tomb Raider III: the GPL tomb3 sources,
 	 * game/objects.h, enum object_types, counted through and verified against
 	 * 3\DATA\JUNGLE.TR2. Tomb Raider I and II: the GPL project TRX
 	 * (LostArtefacts), data/trx/ship/games/tr1|tr2|tr3/catalog_objects.csv,
 	 * branch develop, fetched 2026-09-14 - its TR3 column agrees with tomb3 on
 	 * every id here, which is what makes its TR1 and TR2 columns worth having.
-	 * Every id below was then looked for in the user's own installation and
+	 * Every id below was then looked for in the player's own installation and
 	 * found: game 1 in 1\DATA\GYM.PHD, game 2 in 2\DATA\BOAT.TR2, game 3 in
 	 * 3\DATA\ANTARC.TR2.
 	 *
-	 * TWO SPELLINGS OF THE SAME WEAPON. The donor game's ITEM folder calls the
+	 * Two spellings of the same weapon. The donor game's ITEM folder calls the
 	 * pistols GUN_OPTION and the magnum-shaped gun MAGNUM_OPTION; a mod for
-	 * THIS engine names its file after the TR5 slot it replaces, so the same
+	 * this engine names its file after the TR5 slot it replaces, so the same
 	 * two models reach us as PISTOLS_OPTION and REVOLVER_OPTION. Both rows
 	 * point at the same object. Nothing is guessed here: a name that is in
 	 * neither column gets no pose and says so.
@@ -505,14 +505,14 @@ namespace
 	float turn_sin(int a) { return std::sin((float)a * 6.283185307f / 1024.0f); }
 	float turn_cos(int a) { return std::cos((float)a * 6.283185307f / 1024.0f); }
 
-	/* THE ROTATION OF ONE MESH, in the classic engines' own convention.
+	/* The rotation of one mesh, in the classic engines' own convention.
 	 *
 	 * phd_RotYXZ turns about y, then x, then z, and the classic matrix takes a
-	 * point as a COLUMN - so the composed matrix is Ry * Rx * Rz and a vertex
+	 * point as a column - so the composed matrix is Ry * Rx * Rz and a vertex
 	 * is M * v. It is returned that way here and transposed once at the end of
 	 * HDClassicNodeMatrix, where this module's row-vector convention starts.
 	 *
-	 * MEASURED, NOT ASSUMED. A frame carries the bounding box of the pose it
+	 * Measured, not assumed. A frame carries the bounding box of the pose it
 	 * describes, so the walk has an answer to check itself against. Over
 	 * eleven weapon objects of all three games this order, this side and this
 	 * sign reproduce those boxes to 2.1 units at worst; the next best of the
@@ -547,7 +547,7 @@ namespace
 			}
 	}
 
-	/* THE MESH TREE WALK, both poses at once.
+	/* The mesh tree walk, both poses at once.
 	 *
 	 * The classic walk starts at mesh 0 with the frame's own offset and mesh
 	 * 0's rotation; for every mesh after it the bone says pop (take the saved
@@ -555,7 +555,7 @@ namespace
 	 * then translates by the bone's offset and rotates by that mesh's frame
 	 * angles.
 	 *
-	 * The BIND POSE the .TRM is stored in is the same walk with every rotation
+	 * The bind pose the .TRM is stored in is the same walk with every rotation
 	 * zero and no frame offset, which makes it a sum of the bone offsets along
 	 * the node's chain. So node n's stored vertices sit around `pivot[n]`, and
 	 * posing one means (v - pivot[n]) * rotation[n] + place[n]. */
@@ -739,16 +739,16 @@ bool HDClassicRead(const char* bundleRoot, int game, int id,
 
 		std::sort(leaves.begin(), leaves.end());
 
-		/* THE FIRST LEVEL IN NAME ORDER THAT HOLDS IT, and no table of level
+		/* The first level in name order that holds it, and no table of level
 		 * names anywhere: a bundle with a level pack in it, or a game whose
 		 * first level has no weapons in it, must still answer.
 		 *
-		 * MEASURED, because "any level will do" is a claim and not a fact
-		 * (#155): over the eight weapon and ammunition objects of
-		 * game 1 and of game 2 every level file that holds the object holds
-		 * exactly the SAME mesh count, bones and frame 0 - 16 levels and 17
-		 * levels respectively. Game 3 agrees on 17 of its 20, and the three
-		 * that differ are TITLE.TR2 and AREA51.TR2 carrying a stub or a
+		 * Measured, because "any level will do" is a claim and not a fact:
+		 * over the eight weapon and ammunition objects of game 1 and of
+		 * game 2 every level file that holds the object holds exactly the
+		 * same mesh count, bones and frame 0 - 16 levels and 17 levels
+		 * respectively. Game 3 agrees on 17 of its 20, and the three that
+		 * differ are TITLE.TR2 and AREA51.TR2 carrying a stub or a
 		 * left-over of the game before; name order lands on ANTARC.TR2, which
 		 * agrees with every other real level of that game. */
 		for (const std::string& leaf : leaves)
@@ -812,7 +812,7 @@ bool HDClassicNodeMatrix(const HDClassicObject* object, int node, float* out16)
 
 	walk(object, &w);
 
-	/* THE TRANSPOSE IS THE CONVENTION CHANGE. The walk is done the classic
+	/* The transpose is the convention change. The walk is done the classic
 	 * way, v' = M * v with v a column; every matrix this engine hands about is
 	 * v' = v * M with v a row. The rotation's transpose is that same rotation
 	 * written the other way round, and the translation moves into row 3. */
@@ -824,7 +824,7 @@ bool HDClassicNodeMatrix(const HDClassicObject* object, int node, float* out16)
 		out16[r * 4 + 3] = 0.0f;
 	}
 
-	/* The model's vertices are stored around the BIND pivot, so that point
+	/* The model's vertices are stored around the bind pivot, so that point
 	 * goes to the origin before the turn and the posed place puts it back. */
 	for (int c = 0; c < 3; c++)
 	{

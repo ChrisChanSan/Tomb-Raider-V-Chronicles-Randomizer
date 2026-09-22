@@ -21,7 +21,7 @@
 struct IDirect3DDevice9;
 struct IDirect3DTexture9;
 
-// THE HD TEXTURE PAGES OF ONE LEVEL (#123, stage S1).
+// The HD texture pages of one level.
 //
 // One Direct3D texture per .DDS page the level names - no atlas and no array.
 // That is a measurement, not a compromise: over 1,590,768 triangles of RICH1
@@ -39,16 +39,16 @@ struct IDirect3DTexture9;
 // page numbers, and it says what it did through the numbers and notes below
 // instead of writing a log line itself.
 
-/* THE POLICY (#123, stage S6). Three answers to "the card is smaller than the
- * art", set once per level out of the registry and in force until the next
- * call. They are NOT parameters of Create/Append because they are not
- * properties of one call: a level's rooms and its models go through this cache
- * one after the other and must obey ONE budget and ONE format, or the second
- * call would happily spend what the first one saved. */
+/* The policy: three answers to "the card is smaller than the art", set once
+ * per level out of the registry and in force until the next call. They are
+ * not parameters of Create/Append because they are not properties of one
+ * call: a level's rooms and its models go through this cache one after the
+ * other and must obey one budget and one format, or the second call would
+ * happily spend what the first one saved. */
 #define HD_PAGE_FORMAT_RGBA	0	// A8R8G8B8, lossless - the default
 #define HD_PAGE_FORMAT_DXT5	1	// BC3 on the processor - a quarter of it
 
-/* A PAGE OUT OF THE OTHER BUNDLE (#123, stage S7-2).
+/* A page out of the other bundle.
  *
  * A page number is a file name, <n>.DDS in a TEX folder, and the remaster
  * keeps ONE texture pool per game: page 12 of Tomb Raider III and page 12 of
@@ -67,10 +67,10 @@ struct IDirect3DTexture9;
  * is the same answer as any other missing page. */
 #define HD_PAGE_ALT_BASE	0x40000000
 
-/* A PAGE OUT OF A MOD (#153, round M1).
+/* A page out of a mod.
  *
  * The same problem one step further on. A mod ships its own <n>.DDS files and
- * numbers them as it likes: the user's Uzi mod ships 6111 and 6112, and the
+ * numbers them as it likes: an Uzi mod may ship 6111 and 6112, and the
  * install has a 6111 and a 6112 of its own that other models wear. One key
  * per number would mean the first of the two to be loaded wins the slot and
  * the other model silently gets the wrong picture - which is exactly the
@@ -87,7 +87,7 @@ struct IDirect3DTexture9;
  * the alternate bundle, and takes it apart again at the one place a number
  * becomes a file name.
  *
- * THE THREE NAMESPACES MUST NOT MEET. Plain pages are 0..65535, the alternate
+ * The three namespaces must not meet: plain pages are 0..65535, the alternate
  * bundle is HD_PAGE_ALT_BASE + 0..65535, and the mods start above that and
  * end below the end of an int. The static_assert below is the proof, not a
  * hope: change any one of the four numbers and a build that cannot hold them
@@ -133,7 +133,7 @@ struct HDPageCachePolicy
 
 // Sets the policy. A null pointer puts back the defaults (RGBA, no budget, no
 // size limit), which is also what the cache starts with, so an engine that
-// never calls this behaves exactly as it did in stage S1.
+// never calls this gets the unbudgeted, lossless behaviour.
 void HDPageCacheConfigure(const HDPageCachePolicy* policy);
 void HDPageCachePolicyNow(HDPageCachePolicy* out);
 
@@ -156,9 +156,9 @@ struct HDPageCacheStats
 	int slots;		// distinct pages actually kept (duplicates folded)
 	int fromGame5;		// found in <install>\TEX
 	int fromGame4;		// found in the sibling 4\TEX (three RICH3 pages)
-	int fromTr3;		// found in the OTHER bundle, 3\TEX or its siblings
-				// (#123, S7-2 - the Tomb Raider III guests)
-	int fromMod;		// found in a mod's own TEX folder (#153, M1)
+	int fromTr3;		// found in the other bundle, 3\TEX or its siblings
+				// (the Tomb Raider III guests)
+	int fromMod;		// found in a mod's own TEX folder
 	int fromWhite;		// no file anywhere - WHITE.DDS, the remaster's slot 0
 	int failed;		// not even WHITE.DDS - that slot has no texture
 	int mipLevels;		// mip levels uploaded over all pages
@@ -173,7 +173,7 @@ struct HDPageCacheStats
 	int managed;		// 1 = D3DPOOL_MANAGED, 0 = D3DPOOL_DEFAULT
 	int threads;
 
-	/* --- stage S6, the budget ---------------------------------------- */
+	/* --- the budget ---------------------------------------------------- */
 	double needBytes;	// what this call's pages cost at full size
 	double budgetBytes;	// the cap in force, 0 = none
 	double haveBytes;	// what the cache already held when this call began
@@ -183,8 +183,8 @@ struct HDPageCacheStats
 	int clampedByCaps;	// pages shrunk because the device cannot hold them
 	int outOfMemory;	// 1 = the device ran out of video memory mid-level
 
-	/* --- fix round A ------------------------------------------------- */
-	int cutoutPages;	// pages whose alpha really cuts (A2, see the .cpp)
+	/* --- cutout pages ---------------------------------------------------- */
+	int cutoutPages;	// pages whose alpha really cuts (see the .cpp)
 };
 
 // Builds the cache. `installRoot` is the remaster's game 5 folder (the one
@@ -194,8 +194,7 @@ struct HDPageCacheStats
 // through ONE reused system-memory staging texture, so the address space of
 // the process never holds more than a single page at a time; managed = true
 // lets Direct3D keep its own system-memory copy of everything, which survives
-// a device reset but doubles the footprint. Measured numbers for both ways
-// are in the report of stage S1-1 and in Preparation\Tools\README.md.
+// a device reset but doubles the footprint.
 //
 // threads is 0 or 1 for one core, otherwise that many decoding threads. The
 // decode runs in batches so that only a batch's worth of decoded pages is in
@@ -207,7 +206,7 @@ bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
 	const int* pages, int count, bool managed, int threads,
 	HDPageCacheStats* stats, const char** why);
 
-// The same, but keeping what is already there (#123, stage S3-1). The models
+// The same, but keeping what is already there. The models
 // of a level name their own pages and a good many of them are pages the rooms
 // already wear - a level's item pages and room pages overlap - so the models
 // are ADDED to the cache rather than given a cache of their own: one texture
@@ -231,12 +230,12 @@ int HDPageCacheSlots();
 int HDPageCacheSlotOf(int page);			// -1 when unknown
 int HDPageCachePageOfSlot(int slot);			// -1 when out of range
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot);
-/* IS THE PAGE IN THAT SLOT A CUT-OUT SHEET (#123, fix round A, A2)? True when
- * at least 2 % of its top mip's texels have an alpha below 128 - a sheet of
- * leaves, a grating, a net. False for every ordinary page, whose alpha
- * channel is a flat 255 or a gloss mask, and for a slot that has no texture.
+/* Is the page in that slot a cut-out sheet? True when at least 2 % of its
+ * top mip's texels have an alpha below 128 - a sheet of leaves, a grating, a
+ * net. False for every ordinary page, whose alpha channel is a flat 255 or a
+ * gloss mask, and for a slot that has no texture.
  *
- * The room renderer switches the alpha test on for the OPAQUE pass of a draw
+ * The room renderer switches the alpha test on for the opaque pass of a draw
  * call that lands on such a page, and only there: the remaster puts its
  * vegetation (material 8, and materials 3, 6 and 17 with it) in the opaque
  * pass, and without the test the kelp of JOBY4 and the trees of ANDY1 draw as
@@ -244,63 +243,63 @@ IDirect3DTexture9* HDPageCacheSlotTexture(int slot);
  * a page with nothing to cut cannot lose a pixel - see hd_pagecache.cpp. */
 bool HDPageCacheSlotCutout(int slot);
 // The measured hole share of that page, in per mille of the texels looked
-// at (#123, fix round B). The bool above is this against
-// HD_CUTOUT_PERMILLE; the number is for the diagnostic tools.
+// at. The bool above is this against HD_CUTOUT_PERMILLE; the number is for
+// the diagnostic tools.
 int HDPageCacheSlotCutoutPermille(int slot);
 // How many of the cache's slots answered true - for the level's log line.
 int HDPageCacheCutoutPages();
 
-/* WHERE THAT SLOT'S .DDS WAS FOUND (#153, round M1): 0 for the white tile,
- * 1..3 for a game folder of the Tomb Raider I-III bundle, 4 or 5 for the
- * IV-VI games, 100 + the mod's index for a mod's own TEX folder, and -1 for a
- * slot that has no texture. HDPageCacheOriginText turns one into a word for a
- * log or a tool; the pointer it returns is a static buffer, so print it
- * before asking again. */
+/* Where that slot's .DDS was found: 0 for the white tile, 1..3 for a game
+ * folder of the Tomb Raider I-III bundle, 4 or 5 for the IV-VI games, 100 +
+ * the mod's index for a mod's own TEX folder, and -1 for a slot that has no
+ * texture. HDPageCacheOriginText turns one into a word for a log or a tool;
+ * the pointer it returns is a static buffer, so print it before asking
+ * again. */
 int HDPageCacheSlotOrigin(int slot);
 const char* HDPageCacheOriginText(int origin);
 
-/* THE SAME ANSWER BEFORE THE PAGE IS LOADED (#153, round M2b) - the very chain
- * the append walks, asked about one key and loading nothing at all. `root5` is
- * the game 5 folder, as HDPageCacheAppend takes it.
+/* The same answer before the page is loaded - the very chain the append
+ * walks, asked about one key and loading nothing at all. `root5` is the
+ * game 5 folder, as HDPageCacheAppend takes it.
  *
  * It exists for a decision that has to be made while a model is still being
- * READ: whether a mod's hand model wears another bundle's skin, which is what
+ * read: whether a mod's hand model wears another bundle's skin, which is what
  * puts the install's own hands under the mod's gun (hd_model.cpp, the twin).
  * Asking resolve_page rather than keeping a copy of its chain is the whole
- * point - a second copy of that order is how ModelProbe's page rule went out of
- * step with the cache until round M1 caught it. */
+ * point - a second copy of that order is how a page rule elsewhere could go
+ * out of step with the cache without anyone noticing. */
 int HDPageCacheOriginOf(const char* root5, int key);
 
-/* THE KEY A PAGE REALLY BELONGS UNDER (#153, round M2).
+/* The key a page really belongs under.
  *
- * Round M1 gave every mod a namespace so that a mod's 6111 and the install's
- * 6111 could not be the same cache slot. The cost it did not remove: a page a
- * mod's MODEL asks for but the mod does not SHIP falls through to the
- * install, and the install's file was then decoded a second time under the
- * mod's key. Measured on ANDREA1's wardrobe with the user's four gun and
- * outfit mods: 25 slots and 33.3 MiB against 21 and 28.0 without them, and
- * one of the four extra slots was the install's 8001 held twice.
+ * Every mod has a namespace of its own, so that a mod's 6111 and the
+ * install's 6111 cannot be the same cache slot (see HD_PAGE_MOD_BASE above).
+ * The cost that leaves: a page a mod's model asks for but the mod does not
+ * ship falls through to the install, and the install's file is then decoded
+ * a second time under the mod's key. Measured on ANDREA1's wardrobe with
+ * four gun and outfit mods installed: 25 slots and 33.3 MiB against 21 and
+ * 28.0 without them, and one of the four extra slots was the install's 8001
+ * held twice.
  *
  * This folds exactly that case and no other: a mod key whose mod has no such
- * .DDS and whose origin bundle has none either becomes the plain number.
- * THE MERGE IS SAFE BY CONSTRUCTION AND NOT BY CARE - in that case
- * resolve_page itself does `page = real` and runs the ordinary chain, so the
- * two keys open THE SAME FILE, byte for byte, and everything the cache
- * measures on it (the cutout share, the format, the size) is measured on the
- * same bytes. A mod key whose page the mod or its bundle does have is left
- * alone, which is the rule round M1 rests on.
+ * .DDS and whose origin bundle has none either becomes the plain number. The
+ * merge is safe by construction: in that case resolve_page itself does
+ * `page = real` and runs the ordinary chain, so the two keys open the same
+ * file, byte for byte, and everything the cache measures on it (the cutout
+ * share, the format, the size) is measured on the same bytes. A mod key
+ * whose page the mod or its bundle does have is left alone.
  *
  * A plain or alternate-bundle key comes back unchanged. Needs the mods
  * scanned and the alternate root set, which is what every caller has done
  * before it loads a model.
  *
- * THE ANSWER IS REMEMBERED per key (#153, round M2, the fix round), because
- * working it out costs up to five file system probes and a caller on a hot
- * path would otherwise pay them again for every triangle. What it rests on -
- * the mods scan and the alternate root - is fixed for a level, and the memory
- * is dropped in HDPageCacheAltRoot and HDPageCacheDestroy. A caller that
- * re-scans the mods (HDModsForget) mid-session has to call HDPageCacheAltRoot
- * again before it asks; nothing in the engine does either. */
+ * The answer is remembered per key, because working it out costs up to five
+ * file system probes and a caller on a hot path would otherwise pay them
+ * again for every triangle. What it rests on - the mods scan and the
+ * alternate root - is fixed for a level, and the memory is dropped in
+ * HDPageCacheAltRoot and HDPageCacheDestroy. A caller that re-scans the mods
+ * (HDModsForget) mid-session has to call HDPageCacheAltRoot again before it
+ * asks; nothing in the engine does either. */
 int HDPageCacheKeyOf(int key);
 
 // Everything that was not found where it should have been, in words, for the

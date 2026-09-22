@@ -47,7 +47,7 @@ namespace
 		std::string path;
 	};
 
-	/* One OUTFIT_*.TRM a mod ships (#153, round M2). Kept by the scan rather
+	/* One OUTFIT_*.TRM a mod ships. Kept by the scan rather
 	 * than looked for again, because the wardrobe wants the LIST and the
 	 * resolver answers only "where is the file called X" - and a mod's outfit
 	 * is an ADDITIONAL entry in the wardrobe, never a replacement of the
@@ -77,7 +77,7 @@ namespace
 	std::vector<Mod> mods;
 	std::vector<Wav> wavs;
 
-	/* THE LOOSE LISTS (#159), absolute paths in the same order the mods are
+	/* The loose lists: absolute paths in the same order the mods are
 	 * in. A .txt that lies BESIDE the mod folders and not inside one; what is
 	 * in it is the wardrobe's business and none of this file's. */
 	std::vector<std::string> lists;
@@ -91,7 +91,7 @@ namespace
 	 * log gets one line per replaced model for the whole run rather than one
 	 * per level.
 	 *
-	 * KEYED BY THE PAIR, not by the name alone (#153, round M1, fix round):
+	 * KEYED BY THE PAIR, not by the name alone:
 	 * the same name can be answered by two different mods in two different
 	 * calls - once for whoever asks first and once for a caller that wants
 	 * one particular mod's copy - and a key of the name alone would let the
@@ -212,7 +212,7 @@ namespace
 
 			count++;
 
-			/* The outfits by name, not only by count (#153, round M2). The
+			/* The outfits by name, not only by count. The
 			 * 5 folder is walked before the 4 one, so a mod that ships the
 			 * same outfit in both is listed once, out of 5 - the order the
 			 * model resolver uses for everything else. */
@@ -242,8 +242,9 @@ namespace
 	}
 
 	/* mod.txt: one key=value per line, "#" starts a comment. The only key
-	 * round M1 knows is origin. An unknown key is a note and never a fault -
-	 * a mod written for a later round has to stay loadable by this one. */
+	 * this build knows is origin. An unknown key is a note and never a
+	 * fault - a mod written for a later build has to stay loadable by this
+	 * one. */
 	void read_mod_txt(Mod& mod, int index)
 	{
 		const std::string path = join(mod.path, "mod.txt");
@@ -413,12 +414,12 @@ namespace
 
 			const std::string leaf = it->path().filename().string();
 
-			/* A LOOSE .txt IS A LIST, NOT A MOD (#159). It lies beside the mod
+			/* A loose .txt is a list, not a mod. It lies beside the mod
 			 * folders - Mods\outfit.txt, Mods\Outfits\outfit_1-5.txt - and the
 			 * wardrobe reads it for the outfits that have no mod folder of
 			 * their own and therefore no outfit.txt to be named in.
 			 *
-			 * COLLECTED HERE because this is the one walk that knows which
+			 * Collected here because this is the one walk that knows which
 			 * folder is a mod: it never steps INTO one, so a mod's own mod.txt
 			 * or outfit.txt can never be picked up as a list. The leading "_"
 			 * switches a list off exactly as it switches a mod off. */
@@ -471,12 +472,11 @@ namespace
 
 		if (!folder_there(folder_used))
 		{
-			/* mods=0 is written out rather than left to be inferred (#153,
-			 * round M1, fix round): the line above the one below carried the
-			 * field and this one did not, so a reader counting mods= across a
-			 * fleet of logs found no line at all for the machines without a
-			 * Mods folder - the one case he most wants to tell apart from a
-			 * missing log. Same shape in both branches now. */
+			/* mods=0 is written out rather than left to be inferred: without
+			 * it, a reader counting mods= across a fleet of logs finds no
+			 * line at all for a machine with no Mods folder - the one case
+			 * that most needs to be told apart from a missing log. Same
+			 * shape in both branches. */
 			note("MODLOG folder=%s present=no mods=0 lists=0 - nothing is overlaid",
 				folder_used.c_str());
 			return;
@@ -491,7 +491,7 @@ namespace
 			[](const Mod& a, const Mod& b) { return a.sort < b.sort; });
 
 		// The file system's own order is not a promise and a list that
-		// overrides another has to do it in a written-down order (#159).
+		// overrides another has to do it in a written-down order.
 		std::sort(lists.begin(), lists.end(),
 			[](const std::string& a, const std::string& b)
 			{ return lower(a) < lower(b); });
@@ -504,7 +504,7 @@ namespace
 			found.resize((size_t)HD_PAGE_MOD_MAX);
 		}
 
-		/* `lists=` is the loose .txt count (#159): a file the wardrobe may read
+		/* `lists=` is the loose .txt count: a file the wardrobe may read
 		 * and this file may not, so the one line that says the folder was
 		 * walked says whether it was seen at all. */
 		note("MODLOG folder=%s present=yes mods=%d lists=%d", folder_used.c_str(),
@@ -549,7 +549,7 @@ namespace
 				index, mod.name.c_str(), origin, mod.ships.models,
 				mod.ships.pages, mod.ships.bank ? "yes" : "no", mod.ships.wavs);
 
-			/* The wardrobe takes them from here (#153, round M2). They are
+			/* The wardrobe takes them from here. They are
 			 * still refused by HDModsFindModel - a mod's outfit is an extra
 			 * entry in the wardrobe and never a replacement of the install's
 			 * file of the same name - so the line says where they went. */
@@ -602,7 +602,7 @@ int HDModsOrigin(int index)
 	return index >= 0 && index < (int)mods.size() ? mods[(size_t)index].origin : 0;
 }
 
-/* THE OUTFITS A MOD SHIPS (#153, round M2). Not a resolver question - the
+/* The outfits a mod ships. Not a resolver question - the
  * wardrobe wants the list and there is no name to ask about, because a mod's
  * outfit stands beside the install's file of the same name rather than in
  * place of it. */
@@ -686,8 +686,8 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 	const std::string upper_name = upper(name);
 
-	/* THE ONE NAME THIS RESOLVER REFUSES, and round M2 is why it goes on
-	 * refusing it. A mod's outfit is an ENTRY OF ITS OWN in the wardrobe scan
+	/* THE ONE NAME THIS RESOLVER REFUSES. A mod's outfit is an ENTRY OF ITS
+	 * OWN in the wardrobe scan
 	 * (hd_wardrobe.h), which the player picks from; it is never a replacement
 	 * of the install's file of the same name, so a level that asks for
 	 * OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC. The
@@ -701,14 +701,13 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 	for (size_t i = 0; i < mods.size(); i++)
 	{
-		/* ONE PARTICULAR MOD, WHEN THE CALLER WANTS ONE (#153, round M1, fix
-		 * round). A face is looked up with the body's mod named, because a
-		 * head from one mod on a body from another is two namespaces on one
-		 * model; find_model in hd_model.cpp used to throw the answer away
-		 * afterwards when it came from anybody else, and the note below had
-		 * already been written by then - the log claimed a replacement that
-		 * was never drawn, once and permanently. The filter belongs in the
-		 * search, so that what is reported is what is handed back. */
+		/* ONE PARTICULAR MOD, WHEN THE CALLER WANTS ONE. A face is looked up
+		 * with the body's mod named, because a head from one mod on a body
+		 * from another is two namespaces on one model. The filter belongs
+		 * here, in the search, and not in a check the caller applies to the
+		 * answer afterwards: applying it after the note below is written
+		 * would let the log claim a replacement that was never drawn, once
+		 * and permanently. */
 		if (wantMod >= 0 && (int)i != wantMod)
 			continue;
 

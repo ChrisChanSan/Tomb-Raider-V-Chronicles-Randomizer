@@ -39,10 +39,10 @@
 // own. The definition lives in tomb5\tomb5.cpp.
 extern char tomb5_hd_install[260];
 
-// The same for the OTHER bundle, Tomb Raider I-III Remastered (#123, stage
-// S7-2). Only the four Tomb Raider III guests the randomizer imports need it,
-// and only their models - so an installation without it loses those four
-// enemies' HD models and nothing else. Registry value: hd_install_tr3.
+// The same for the OTHER bundle, Tomb Raider I-III Remastered. Only the four
+// Tomb Raider III guests the randomizer imports need it, and only their
+// models - so an installation without it loses those four enemies' HD models
+// and nothing else. Registry value: hd_install_tr3.
 extern char tomb5_hd_install_tr3[260];
 
 namespace fs = std::filesystem;
@@ -129,7 +129,7 @@ namespace
 	 * zero that REG_SZ does not. RRF_SUBKEY_WOW6432KEY is not needed here the
 	 * way it is in TROne - this build is 32 bit and already lands in the
 	 * WOW6432Node branch by itself - but it is left in for the HKLM read so
-	 * that an x64 build of this engine (#143) finds the same key. */
+	 * that a 64 bit build of this engine finds the same key. */
 	std::string registry_string(HKEY hive, const char* key, const char* value, DWORD extra_flags)
 	{
 		char buffer[MAX_PATH * 2] = { 0 };
@@ -143,9 +143,9 @@ namespace
 	}
 
 	/* The folder Steam itself lives in, or empty; `why_not` then says what went
-	 * wrong. The user hive first: it says which Steam installation THIS user
-	 * actually runs. The machine hive is the fallback for the case that Steam
-	 * never ran under this account. */
+	 * wrong. HKEY_CURRENT_USER first: it says which Steam installation this
+	 * account actually runs. HKEY_LOCAL_MACHINE is the fallback for the case
+	 * that Steam never ran under this account. */
 	std::string steam_root(std::string& why_not)
 	{
 		std::string path = registry_string(HKEY_CURRENT_USER,
@@ -335,9 +335,9 @@ namespace
 		return sub.string();
 	}
 
-	/* THE OTHER BUNDLE (#123, stage S7-2): Tomb Raider I-III Remastered, for
-	 * the four Tomb Raider III guests the randomizer imports (#92). Same rule
-	 * as above and the same source - TROne's discovery table names
+	/* The other bundle: Tomb Raider I-III Remastered, for the four Tomb
+	 * Raider III guests the randomizer imports. Same rule as above and the
+	 * same source - TROne's discovery table names
 	 * tomb123.exe beside subfolders 1..3 with DATA and TEX
 	 * (host\fs\discovery.cpp) - with the game folder being "3" instead of
 	 * "5".
@@ -383,9 +383,9 @@ namespace
 		std::error_code ec;
 		std::vector<fs::path> scan_roots;
 
-		/* The user's own folders first, so they win. Either may be the bundle
-		 * folder itself or a folder containing it - both are scanned, the
-		 * user should not have to guess which one is meant. Both overrides go
+		/* The configured override folders first, so they win. Either may be the
+		 * bundle folder itself or a folder containing it - both are scanned, so
+		 * a player does not have to guess which one is meant. Both overrides go
 		 * into the same list: a folder that is not the bundle it was named
 		 * for simply does not classify as one, and naming the other one is
 		 * then a kindness rather than a mistake. */
@@ -423,7 +423,7 @@ namespace
 			return;
 		}
 
-		/* ONE WALK FOR BOTH BUNDLES. The two live side by side in the same
+		/* One walk for both bundles. The two live side by side in the same
 		 * Steam library in every normal installation, so walking the tree
 		 * twice would open the same directories twice for nothing. The loop
 		 * ends when both are found; a missing I-III is not a reason to keep

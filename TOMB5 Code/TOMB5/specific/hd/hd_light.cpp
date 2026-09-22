@@ -76,8 +76,8 @@ namespace
 	 * original's own shape - including the branch that leaves `vec` holding
 	 * the unit direction and so returns one density for a bulb behind the
 	 * camera. */
-	/* `soften` is the shader's rim weight of fix round A (A4) and NOTHING the
-	 * classic path has: false gives the classic answer to the bit, true gives
+	/* `soften` is the shader's rim weight and NOTHING the classic path has:
+	 * false gives the classic answer to the bit, true gives
 	 * what hd_room.hlsl now computes. The two call sites below pass one each,
 	 * which is what makes -paritycheck able to say how far the deviation
 	 * reaches - see the note in the shader for why it is there. */
@@ -92,9 +92,9 @@ namespace
 		/* The classic path's 45 degree cull (drawroom.cpp:632) belongs to the
 		 * classic answer and to nothing else: in a pixel shader it draws a
 		 * hard line down the side of a 16:9 or first person frame - see the
-		 * long note beside it in hd_room.hlsl (#123, fix round A2's
-		 * follow-up, R2). What the shader keeps of it is the exact half: a
-		 * sphere entirely behind the camera plane meets no forward ray. */
+		 * long note beside it in hd_room.hlsl. What the shader keeps of it is
+		 * the exact half: a sphere entirely behind the camera plane meets no
+		 * forward ray. */
 		if (soften)
 		{
 			if (P[2] + rad <= 0)
@@ -195,9 +195,9 @@ namespace
 		if (!soften)
 			return chord * bulb.density;
 
-		// A4, the same three lines the shader runs - see hd_room.hlsl, where
-		// the note beside kRim says why it is 0.35 and not the 1.0 fix
-		// round A shipped.
+		// The same three lines the shader runs - see hd_room.hlsl, where
+		// the note beside kRim says why it is 0.35 and not the 1.0 first
+		// tried.
 		const float kRim = 0.35f;
 		const float span = 2.0f * rad > 1e-4f ? 2.0f * rad : 1e-4f;
 		float t = chord / span;

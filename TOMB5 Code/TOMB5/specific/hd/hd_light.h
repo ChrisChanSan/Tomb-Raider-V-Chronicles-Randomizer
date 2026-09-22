@@ -14,7 +14,7 @@
 
 #include "hd_render.h"
 
-// THE PARITY PROOF (#123, stage S2b).
+// The parity block.
 //
 // Two implementations of the same room vertex colour, on the processor,
 // beside each other:
@@ -35,8 +35,8 @@
 // the classic path stops multiplying the texture and starts ADDING, because a
 // fixed function pipeline has one diffuse byte and one specular byte to fit a
 // brightness of 2 into. A shader has floats and keeps multiplying, which is
-// what stage S1 already drew and what the remaster's own art expects. So the
-// result carries BOTH numbers:
+// what the HD render path already draws and what the remaster's own art
+// expects. So the result carries BOTH numbers:
 //
 //   HDLightResult::f          the contribution sum in the classic path's own
 //                             0..255, before its split and before the bulbs.

@@ -19,23 +19,22 @@
  */
 #pragma once
 
-// EVERY LINE OF TEXT THE GAME DRAWS, OUT OF THE REMASTER'S FONT ATLAS
-// (#123, fix round Q).
+// Every line of text the game draws, out of the remaster's font atlas.
 //
 // The engine has exactly one font: a 256 x 256 page at the end of Textures[]
 // and a table of 106 rectangles on it (game\text.cpp). Title menu, inventory
 // ring, options, load and save lists, statistics, HUD counters, item names
-// and subtitles all go through PrintString -> DrawChar, so ONE branch in
+// and subtitles all go through PrintString -> DrawChar, so one branch in
 // DrawChar covers all of them - there is no second text path anywhere.
 //
-// WHAT THE REMASTER SHIPS (measured, FontProbe -atlas):
+// What the remaster ships (measured, FontProbe -atlas):
 //
 //   <install>\5\TEX\FONT0_OG.DDS    256 x 256, uncompressed B8G8R8A8. The
 //                                   classic glyph bitmaps, re-typeset in
 //                                   ASCII order.
 //   <install>\5\TEX\FONT0.DDS       2048 x 2048, BC7, six mip levels. The
 //                                   same alphabet in the same places at eight
-//                                   times the size, REDRAWN - white letters
+//                                   times the size, redrawn - white letters
 //                                   with a dark rim and a drop shadow baked
 //                                   in. Shrunk back to 256 it differs from
 //                                   the _OG picture in 12.6 % of the texels
@@ -47,7 +46,7 @@
 //                                   used is decided by that count, per run,
 //                                   not by its name.
 //
-// HOW A GLYPH IS FOUND: the classic rectangle's ink mask is slid over the
+// How a glyph is found: the classic rectangle's ink mask is slid over the
 // _OG atlas and scored intersection over union (specific\hd\hd_fontmatch.cpp).
 // 93 of the 106 rectangles are found, 92 of them at score 1.000 - the
 // remaster took the glyph bitmaps over texel for texel. The thirteen that are
@@ -55,10 +54,10 @@
 // does not have at all, and the c-cedilla at 0.895; each of those keeps the
 // classic picture, on its own, without affecting any other letter.
 //
-// HOW IT IS DRAWN: the atlas is the classic page times eight, so in
-// NORMALISED texture coordinates the same glyph sits at the same place plus a
+// How it is drawn: the atlas is the classic page times eight, so in
+// normalised texture coordinates the same glyph sits at the same place plus a
 // whole number of classic texels. DrawChar therefore does not recompute its
-// UVs - it SHIFTS them, which is why nothing can move or change size. The
+// UVs - it shifts them, which is why nothing can move or change size. The
 // quad and the window are then both widened by HD_FONT_MARGIN in the same
 // ratio, so that the drop shadow is not cut off at the rectangle's edge.
 //
@@ -68,14 +67,14 @@
 
 struct IDirect3DTexture9;
 
-/* THE TPAGE OF A TEXT QUAD DRAWN FROM THE ATLAS.
+/* The tpage of a text quad drawn from the atlas.
  *
  * A quad names its texture by an index into Textures[], which holds 256
  * entries, and the sort list carries that index in a `short`. The HD font is
  * NOT in that array - it must not be, because the font, the sky and the two
  * title pages are addressed as nTextures minus a small number and every one
- * of them would move if the count grew (MODIFICATIONS.md, and the same note
- * over the water frame pages in hd_level.cpp).
+ * of them would move if the count grew (see the same note over the water
+ * frame pages in hd_level.cpp).
  *
  * So the quad carries a number that is not an index at all, and
  * HWR_DrawSortList (specific\polyinsert.cpp) turns it into this texture

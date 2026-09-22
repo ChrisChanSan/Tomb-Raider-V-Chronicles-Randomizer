@@ -12,25 +12,24 @@
  */
 #pragma once
 
-// A8R8G8B8 -> DXT5 (BC3) ON THE PROCESSOR (#123, stage S6).
+// A8R8G8B8 -> DXT5 (BC3) compression on the CPU.
 //
-// The user's decision for stage S1 was lossless: every remaster page is
-// decoded from BC7 and handed to the card as A8R8G8B8, which for TITLE's 220
-// pages is 376 MiB of video memory. This file is the other end of the switch
-// hd_texture_format: the same pixels compressed to BC3, which is a quarter of
-// that, at the cost of a measurable amount of quality. It is not the default
-// and it is not a recommendation - it is what a card with too little memory
-// can still show, next to the alternative of dropping mip 0 (which the budget
-// does on its own) or of no HD art at all.
+// The normal path decodes every remaster page from BC7 to A8R8G8B8 losslessly
+// and hands it to the card as-is, which for TITLE's 220 pages is 376 MiB of
+// video memory. This file is the other end of the hd_texture_format switch:
+// the same pixels compressed to BC3, a quarter of that size, at the cost of a
+// measurable amount of quality. It is not the default - it is what a card
+// with too little memory can still show, next to the alternative of dropping
+// mip 0 (which the budget does on its own) or of no HD art at all.
 //
-// WHY AN ENCODER OF OUR OWN AND NOT D3DX. D3DXCompressShader and friends live
+// Why an encoder of our own and not D3DX: D3DXCompressShader and friends live
 // in d3dx9_XX.dll, which this port deliberately does not ship and does not
-// depend on - the whole D3D9 port was written to run against nothing but
-// d3d9.dll. The encoder below is about a hundred and fifty lines of the plain
-// range fit every BC1..BC3 encoder starts from, and its quality is a number
-// in the report, not a claim: RoomProbe -format dxt5 -psnr measures peak
-// signal to noise over a whole page through DXT5Decode, which is this file's
-// own inverse and follows the block layout the card decodes in hardware.
+// depend on - the whole D3D9 port runs against nothing but d3d9.dll. The
+// encoder below is about a hundred and fifty lines of the plain range fit
+// every BC1..BC3 encoder starts from; its quality is a number, not a claim:
+// RoomProbe -format dxt5 -psnr measures peak signal to noise over a whole
+// page through DXT5Decode, which is this file's own inverse and follows the
+// block layout the card decodes in hardware.
 //
 // Engine-free like the rest of the decoders: no Direct3D type, no Log, so the
 // diagnostic tool compiles the same code the engine runs.

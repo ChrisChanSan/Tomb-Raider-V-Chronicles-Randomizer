@@ -22,7 +22,7 @@
 
 #include "hd_pagecache.h"
 #include "hd_dxt5.h"
-#include "hd_mods.h"		// where a mod's own page lives (#153, round M1)
+#include "hd_mods.h"		// where a mod's own page lives
 #include "hd_scan.h"
 #include "../bc7.h"
 
@@ -39,12 +39,12 @@
 
 namespace
 {
-	/* ONE DECODED PAGE, mip chain and all. The pixels are malloc'd by
+	/* One decoded page, mip chain and all. The pixels are malloc'd by
 	 * BC7DecodeDDSMip and freed here; nothing of a page survives its
-	 * upload. In the DXT5 case (#123, stage S6) the compression happens on
-	 * the same worker thread that decoded the level, and the pixels are let
-	 * go the moment the blocks exist - so the batch below holds a quarter of
-	 * what it would otherwise carry into the upload. */
+	 * upload. In the DXT5 case the compression happens on the same worker
+	 * thread that decoded the level, and the pixels are let go the moment
+	 * the blocks exist - so the batch below holds a quarter of what it
+	 * would otherwise carry into the upload. */
 	struct DecodedMip
 	{
 		unsigned long* pixels = 0;
@@ -58,14 +58,14 @@ namespace
 		int page = 0;
 		int slot = 0;
 		int origin = 0;			// 5, 4, or 0 for WHITE.DDS
-		int firstMip = 0;		// the level this page starts at - stage S6
+		int firstMip = 0;		// the level this page starts at
 		double compressMs = 0;		// this page's share of the DXT5 work
 		bool white = false;
 		bool ok = false;
-		/* IS THIS A CUT-OUT PAGE (#123, fix round A, A2)? Set while the top
-		 * mip is still in A8R8G8B8, which is the only moment it can be: with
-		 * -format dxt5 the pixels are thrown away three lines later, and the
-		 * device surface is write-only. See the long note beside
+		/* Is this a cut-out page? Set while the top mip is still in
+		 * A8R8G8B8, which is the only moment it can be: with -format dxt5
+		 * the pixels are thrown away three lines later, and the device
+		 * surface is write-only. See the long note beside
 		 * measure_cutout. */
 		bool cutout = false;
 		int cutoutLow = 0;		// texels below the threshold
@@ -84,10 +84,10 @@ namespace
 		}
 	};
 
-	/* WHAT ONE PAGE WILL COST, worked out from its 148 byte header before a
-	 * single block is decoded (#123, stage S6). `firstMip` is the level the
-	 * page will start at: 0 normally, 1 or more when the device cannot hold
-	 * the full size or when the budget said no. */
+	/* What one page will cost, worked out from its 148 byte header before a
+	 * single block is decoded. `firstMip` is the level the page will start
+	 * at: 0 normally, 1 or more when the device cannot hold the full size or
+	 * when the budget said no. */
 	struct PagePlan
 	{
 		std::string path;
@@ -104,21 +104,20 @@ namespace
 
 	IDirect3DDevice9* g_device = 0;
 	std::vector<IDirect3DTexture9*> g_textures;
-	// A2, one byte per slot: 1 = this page has real cut-out holes in its
-	// alpha channel, so a draw call on it wants the alpha test even in the
-	// opaque pass. Grown and cleared exactly with g_textures.
+	// One byte per slot: 1 = this page has real cut-out holes in its alpha
+	// channel, so a draw call on it wants the alpha test even in the opaque
+	// pass. Grown and cleared exactly with g_textures.
 	std::vector<unsigned char> g_cutout;
-	/* The measured share itself, in per mille (#123, fix round B). The bool
-	 * above is that number against HD_CUTOUT_PERMILLE; the number itself is
-	 * what a diagnostic tool needs to say WHY a page counts as a cut-out
-	 * sheet - and it is how fix round B established that an ITEM page's
-	 * alpha is not a cut-out mask at all. */
+	/* The measured share itself, in per mille. The bool above is that number
+	 * against HD_CUTOUT_PERMILLE; the number itself is what a diagnostic
+	 * tool needs to say why a page counts as a cut-out sheet, and it is how
+	 * an item page's alpha was shown not to be a cut-out mask at all. */
 	std::vector<short> g_cutout_share;
-	/* WHERE EACH SLOT'S FILE WAS FOUND (#153, round M1), in resolve_page's
-	 * own encoding. Kept per slot rather than only in the notes because the
-	 * notes report the odd cases and a tool has to be able to ask about
-	 * EVERY page - which is what proves that a mod replaced the two it
-	 * brought and none of the others. */
+	/* Where each slot's file was found, in resolve_page's own encoding.
+	 * Kept per slot rather than only in the notes because the notes report
+	 * the odd cases and a tool has to be able to ask about every page -
+	 * which is what proves that a mod replaced the two it brought and none
+	 * of the others. */
 	std::vector<short> g_origin;
 	std::vector<int> g_page_of_slot;
 	std::unordered_map<int, int> g_slot_of_page;
@@ -132,35 +131,34 @@ namespace
 	long g_staging_w = 0, g_staging_h = 0, g_staging_levels = 0;
 	int g_staging_format = HD_PAGE_FORMAT_RGBA;
 
-	/* THE POLICY AND THE RUNNING TOTAL (#123, stage S6). Both outlive a
-	 * single call: a level fills this cache twice - once for its rooms and
-	 * once for its models and Lara's wardrobe - and one budget has to cover
-	 * the two of them. `g_bytes` is what is on the device now, `g_format_used`
-	 * what the device let us have after CheckDeviceFormat had its say. */
+	/* The policy and the running total. Both outlive a single call: a level
+	 * fills this cache twice - once for its rooms and once for its models
+	 * and Lara's wardrobe - and one budget has to cover the two of them.
+	 * `g_bytes` is what is on the device now, `g_format_used` what the
+	 * device let us have after CheckDeviceFormat had its say. */
 	HDPageCachePolicy g_policy = { HD_PAGE_FORMAT_RGBA, 0.0, 0 };
 	double g_bytes = 0;
 	int g_format_used = HD_PAGE_FORMAT_RGBA;
 
-	/* The other bundle's game folder (#123, stage S7-2) - see
-	 * HD_PAGE_ALT_BASE. Outlives Destroy for the same reason the policy
-	 * does: it is a property of the installation, not of a level. */
+	/* The other bundle's game folder - see HD_PAGE_ALT_BASE. Outlives
+	 * Destroy for the same reason the policy does: it is a property of the
+	 * installation, not of a level. */
 	std::string g_alt_root;
 
-	/* WHAT HDPageCacheKeyOf ANSWERED LAST TIME (#153, round M2, the fix
-	 * round). Its answer costs up to five file system probes - two into the
-	 * mod's own TEX folder and three into its origin bundle - and round M2
-	 * put it on the hottest path this module has: once per CORNER of every
-	 * triangle of every model a mod supplied. Measured on the user's Mods
-	 * folder, 30.8 microseconds a call over 25,058 calls.
+	/* What HDPageCacheKeyOf answered last time. Its answer costs up to five
+	 * file system probes - two into the mod's own TEX folder and three into
+	 * its origin bundle - and it sits on the hottest path this module has:
+	 * once per corner of every triangle of every model a mod supplied.
+	 * Measured with several gun and outfit mods installed: 30.8
+	 * microseconds a call over 25,058 calls.
 	 *
 	 * The answer depends on the mods scan, which happens once per session,
 	 * and on g_alt_root, which is set once per level - so it is a pure
 	 * function of the key between two of those events, and this is the
 	 * memory of it. Cleared where either can change: HDPageCacheAltRoot and
-	 * HDPageCacheDestroy. The real fix is in hd_model.cpp, which now asks
-	 * once per texture slot instead of once per corner; this makes the
-	 * question cheap for every OTHER caller as well, which is what stops the
-	 * same cost from growing back somewhere else. */
+	 * HDPageCacheDestroy. hd_model.cpp asks once per texture slot instead of
+	 * once per corner, which keeps the question cheap for every other
+	 * caller too. */
 	std::unordered_map<int, int> g_key_of;
 
 	double now_ms()
@@ -213,11 +211,10 @@ namespace
 		return file_size(path) > 0;
 	}
 
-	/* THE SHAPE OF A PAGE WITHOUT DECODING IT (#123, stage S6). 148 bytes off
-	 * the front of the file say how wide it is and how many levels it
-	 * carries, and that is the whole basis of the budget: four times the
-	 * file's length used to be the estimate the batching ran on, and an
-	 * estimate is not a thing to promise a card with two gigabytes. */
+	/* The shape of a page without decoding it. 148 bytes off the front of
+	 * the file say how wide it is and how many levels it carries, and that
+	 * is the whole basis of the budget: a length-based estimate is not a
+	 * thing to promise a card with two gigabytes. */
 	bool page_shape(const std::string& path, long* w, long* h, long* mips)
 	{
 		unsigned char header[148];
@@ -237,11 +234,11 @@ namespace
 		return BC7DDSShape(header, (unsigned long)sizeof(header), w, h, mips);
 	}
 
-	/* HOW MANY LEVELS OF A PAGE CAN ACTUALLY BE DECODED, starting at `first`.
-	 * The rule is the decoder's own and not a guess: BC7DecodeDDSMip refuses
-	 * a level that is not a whole number of 4x4 blocks, so the chain stops
-	 * where that stops - which for a remaster page is 16x16, its sixth
-	 * level. */
+	/* How many levels of a page can actually be decoded, starting at
+	 * `first`. The rule is the decoder's own and not a guess: BC7DecodeDDSMip
+	 * refuses a level that is not a whole number of 4x4 blocks, so the chain
+	 * stops where that stops - which for a remaster page is 16x16, its
+	 * sixth level. */
 	long usable_levels(long w, long h, long mips, int first)
 	{
 		long levels = 0;
@@ -331,15 +328,14 @@ namespace
 		return got == (size_t)length;
 	}
 
-	/* WHERE A PAGE LIVES. The level's own game folder first, then the two
+	/* Where a page lives. The level's own game folder first, then the two
 	 * siblings, then the remaster's own white tile.
 	 *
 	 * The siblings are not a nicety: RICH3 names three pages that ship only
-	 * in the bundle's 4\TEX (measured in stage S0), because the remaster
-	 * keeps one texture pool per game and the level's art was moved between
-	 * them. Without the fallback those three pages are black holes in the
-	 * middle of the level. Six item models are in the same position, which is
-	 * stage S3's problem and the same rule.
+	 * in the bundle's 4\TEX, because the remaster keeps one texture pool per
+	 * game and the level's art was moved between them. Without the fallback
+	 * those three pages are black holes in the middle of the level. Six item
+	 * models are in the same position and follow the same rule.
 	 *
 	 * WHITE.DDS is slot 0 of the remaster's own page table - a plain white
 	 * tile. A missing page painted white shows the room's baked light and
@@ -349,8 +345,8 @@ namespace
 	/* A page number as a note should show it: plain, "TR3 12" for one out of
 	 * the other bundle, and "mod3:6111" for one out of a mod - the namespace
 	 * and the number the mod's own file is called, so a reader can tell a
-	 * mod's 6111 from the install's at a glance (#153, round M1). A note that
-	 * printed 1342183535 would be true and unreadable. */
+	 * mod's 6111 from the install's at a glance. A note that printed
+	 * 1342183535 would be true and unreadable. */
 	std::string page_text(int page)
 	{
 		const int mod = HDPageModIndex(page);
@@ -383,11 +379,11 @@ namespace
 		HDScanPagePath(root.c_str(), page, buffer, size);
 	}
 
-	/* WHERE A PAGE CAME FROM, as resolve_page reports it: 0 is the white tile,
-	 * 1..3 a game folder of the I-III bundle, 4 and 5 the IV-VI games, and
-	 * this plus the mod's index is "out of that mod's own TEX folder" (#153,
-	 * round M1). Far enough above 5 that no game number can be mistaken for
-	 * it and the notes below can say which mod without a second field. */
+	/* Where a page came from, as resolve_page reports it: 0 is the white
+	 * tile, 1..3 a game folder of the I-III bundle, 4 and 5 the IV-VI games,
+	 * and this plus the mod's index is "out of that mod's own TEX folder".
+	 * Far enough above 5 that no game number can be mistaken for it and the
+	 * notes below can say which mod without a second field. */
 #define HD_PAGE_ORIGIN_MOD	100
 
 	std::string resolve_page(const std::string& root5, const std::string& bundle,
@@ -397,17 +393,17 @@ namespace
 
 		*white = false;
 
-		/* A MOD'S OWN PAGE FIRST OF ALL (#153, round M1). The key says which
-		 * mod asked, so the chain is that mod's 5\TEX, its 4\TEX, then - only
-		 * if the mod's mod.txt named one - the game folder of the Tomb Raider
-		 * I-III bundle its models were drawn for and that folder's two
-		 * siblings, and then the ordinary IV-VI chain below with the page
-		 * number as it stands.
+		/* A mod's own page first of all. The key says which mod asked, so
+		 * the chain is that mod's 5\TEX, its 4\TEX, then - only if the mod's
+		 * mod.txt named one - the game folder of the Tomb Raider I-III
+		 * bundle its models were drawn for and that folder's two siblings,
+		 * and then the ordinary IV-VI chain below with the page number as it
+		 * stands.
 		 *
 		 * The fall-through to the ordinary chain is what lets a mod ship
 		 * models and no art at all: every page it does not bring is the
-		 * install's own, resolved exactly as it always was. And the other way
-		 * round is the rule this round rests on - a page a VANILLA model asks
+		 * install's own, resolved exactly as it always was. And the other
+		 * way round is the rule this rests on - a page a vanilla model asks
 		 * for never carries a mod key, so it never enters this branch and
 		 * cannot be replaced by a mod. */
 		const int mod = HDPageModIndex(page);
@@ -425,8 +421,8 @@ namespace
 			 * other two in number order - the same courtesy the guests get,
 			 * and needed for the same reason: the I-III remaster keeps one
 			 * texture per page number across the bundle and moved art between
-			 * the three games. Lara's skin pages of that bundle are what the
-			 * user's Uzi mod reaches for. */
+			 * the three games. Lara's skin pages of that bundle are what a
+			 * skin-swapping mod reaches for. */
 			const int from = HDModsOrigin(mod);
 
 			if (from >= 1 && from <= 3 && !g_alt_root.empty())
@@ -456,12 +452,12 @@ namespace
 			*origin = 5;
 		}
 
-		/* THE OTHER BUNDLE FIRST, because a page above the base is not a page
-		 * of this game at all (#123, stage S7-2). Game 3 of the I-III
-		 * remaster, then its siblings 1 and 2 - the same courtesy the IV-VI
-		 * games do each other below, and needed for the same reason: the
-		 * remaster ships one texture per page number across a bundle, and the
-		 * guests' art was moved between the three games. */
+		/* The other bundle first, because a page above the base is not a
+		 * page of this game at all. Game 3 of the I-III remaster, then its
+		 * siblings 1 and 2 - the same courtesy the IV-VI games do each other
+		 * below, and needed for the same reason: the remaster ships one
+		 * texture per page number across a bundle, and the guests' art was
+		 * moved between the three games. */
 		if (page >= HD_PAGE_ALT_BASE)
 		{
 			const int real = page - HD_PAGE_ALT_BASE;
@@ -506,8 +502,8 @@ namespace
 			if (file_there(path))
 				return path;
 
-			/* 5, THEN 4, THEN NOTHING - game 6 is Angel of Darkness and is not
-			 * searched (#123, fix round C, user finding C7). */
+			/* 5, then 4, then nothing - game 6 is Angel of Darkness and is
+			 * not searched. */
 			if (!bundle.empty())
 			{
 				const std::string other = join(bundle, std::string("4"));
@@ -541,27 +537,27 @@ namespace
 		return std::string();
 	}
 
-	/* `first` is the level the page starts at (#123, stage S6): 0 is the whole
-	 * picture, 1 halves it in both directions and quarters what it costs on
-	 * the card. The texture coordinates never notice - they are 0..1 of
-	 * whatever the texture turns out to be - so a dropped level is a blurrier
-	 * wall and nothing else.
+	/* `first` is the level the page starts at: 0 is the whole picture, 1
+	 * halves it in both directions and quarters what it costs on the card.
+	 * The texture coordinates never notice - they are 0..1 of whatever the
+	 * texture turns out to be - so a dropped level is a blurrier wall and
+	 * nothing else.
 	 *
 	 * `format` decides whether the pixels stay as they are or are compressed
 	 * here, on this worker thread, and let go straight away. */
-	/* A WHITE TILE MADE HERE, out of nothing (#123, stage S6).
+	/* A white tile made here, out of nothing.
 	 *
 	 * TROne's rule is that a page which cannot be found is white and never
-	 * black, and stage S1 followed it by reaching for the remaster's own
-	 * TEX\WHITE.DDS. Measured in stage S6: that file exists in 4\TEX ONLY -
-	 * not in 5\TEX and not in 6\TEX - so an installation without the fourth
-	 * game (or one where the file has been deleted) had no white tile at all,
-	 * and the page ended up with no texture. A draw call with no texture is
-	 * skipped, so the surface did not go white - it went AWAY, and a wall you
-	 * can see through reads as a rendering fault rather than as a missing
-	 * file. Four white texels cost 64 bytes and remove the whole class of
-	 * failure. WHITE.DDS is still preferred when it is there: it is the
-	 * remaster's own tile, and using it keeps the two paths agreeing. */
+	 * black, followed here by reaching for the remaster's own TEX\WHITE.DDS.
+	 * But that file exists in 4\TEX only - not in 5\TEX and not in 6\TEX -
+	 * so an installation without the fourth game (or one where the file has
+	 * been deleted) had no white tile at all, and the page ended up with no
+	 * texture. A draw call with no texture is skipped, so the surface did
+	 * not go white - it went away, and a wall you can see through reads as a
+	 * rendering fault rather than as a missing file. Four white texels cost
+	 * 64 bytes and remove the whole class of failure. WHITE.DDS is still
+	 * preferred when it is there: it is the remaster's own tile, and using
+	 * it keeps the two paths agreeing. */
 	void make_white(DecodedPage& out, int format)
 	{
 		DecodedMip level;
@@ -598,19 +594,19 @@ namespace
 		out.ok = true;
 	}
 
-/* --------------------------------------------- THE CUT-OUT PAGES (A2) -----
+/* ------------------------------------------------- THE CUT-OUT PAGES -----
  *
- * THE BUG. The kelp of JOBY4 and the vegetation of ANDY1 draw as solid green
- * rectangles with hard edges. They are material 8 in the .TRG, and material 8
- * sits in the OPAQUE pass - 23,040 triangles of it in JOBY4, 260,756 in
- * ANDY1 - while the alpha test lives in the alpha pass and nowhere else.
- * That rule is right and was measured (TROne, a TR1 snow floor: an opaque
- * tile's alpha channel carries a gloss mask, and clipping on it blanked the
- * floor), but it is right about the pages the OPAQUE pass usually gets, not
- * about these.
+ * Without this, the kelp of JOBY4 and the vegetation of ANDY1 draw as solid
+ * green rectangles with hard edges. They are material 8 in the .TRG, and
+ * material 8 sits in the opaque pass - 23,040 triangles of it in JOBY4,
+ * 260,756 in ANDY1 - while the alpha test lives in the alpha pass and
+ * nowhere else. That rule is right in general (TROne, a TR1 snow floor: an
+ * opaque tile's alpha channel carries a gloss mask, and clipping on it
+ * blanked the floor), but it is right about the pages the opaque pass
+ * usually gets, not about these.
  *
- * THE MEASUREMENT, over the remaster's own files, counting texels of the top
- * mip whose alpha is below 128:
+ * Measured over the remaster's own files, counting texels of the top mip
+ * whose alpha is below 128:
  *
  *   JOBY4  material 8   pages 3198, 3257     52 % / 95 % of the blocks
  *   JOBY4  material 17  page 3212            51 %
@@ -621,7 +617,7 @@ namespace
  *
  * So the .TRG's opaque pass carries two kinds of page in TR5: the ordinary
  * ones, whose alpha channel is a flat 255 and on which an alpha test changes
- * NOTHING, and a handful of cut-out sheets of leaves. That is what makes the
+ * nothing, and a handful of cut-out sheets of leaves. That is what makes the
  * per-page answer safe: a page with no low-alpha texel cannot lose a pixel to
  * a test it always passes, so the test is switched on exactly where it has
  * something to do and the gloss-mask trap is never entered.
@@ -630,10 +626,11 @@ namespace
  * carry 0.5 in param[0] in every level of the game, which is the remaster's
  * own alpha reference for the material.
  *
- * WHY 2 % AND NOT ONE TEXEL. A page that is a gloss mask has a few dark
- * corners; a page that is a cut-out sheet is half hole. The measured gap is
- * between 0 % and 51 %, so anything in between decides the same way, and 2 %
- * is picked because it is the smallest number that no rounding can reach. */
+ * The cutoff is 2 % and not one texel: a page that is a gloss mask has a few
+ * dark corners; a page that is a cut-out sheet is half hole. The measured gap
+ * is between 0 % and 51 %, so anything in between decides the same way, and
+ * 2 % is picked because it is the smallest number that no rounding can
+ * reach. */
 #define HD_CUTOUT_ALPHA		128	// the shader clips at 0.5
 #define HD_CUTOUT_PERMILLE	20	// 2 % of the page below it
 
@@ -690,8 +687,9 @@ namespace
 			if (!level.pixels)
 				break;		// the chain ends where whole 4x4 blocks end
 
-			// A2: on the first level this page keeps, and while it is still
-			// A8R8G8B8. The DXT5 branch below frees these pixels.
+			// The cutout share is measured on the first level this page
+			// keeps, and while it is still A8R8G8B8. The DXT5 branch below
+			// frees these pixels.
 			if (out.mips.empty())
 				measure_cutout(out, level);
 
@@ -766,7 +764,7 @@ namespace
 
 			if (format == HD_PAGE_FORMAT_DXT5)
 			{
-				/* A compressed surface is locked in ROWS OF BLOCKS: the pitch
+				/* A compressed surface is locked in rows of blocks: the pitch
 				 * is the bytes of one row of 4x4 blocks, and there are h/4 of
 				 * them. Copying it as h rows would write four times too much
 				 * and off the end of the surface. */
@@ -797,7 +795,7 @@ namespace
 	}
 }
 
-/* THE ONE BUILDER. Create empties the cache first and Append does not; every
+/* The one builder. Create empties the cache first and Append does not; every
  * other line is the same, and a second copy of the batching, the decoding and
  * the two upload paths would be a second place for the 4096x4096 budget to be
  * got wrong. `append` is the whole difference, and it shows up in exactly
@@ -824,8 +822,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 	g_device = device;
 
-	/* WHAT THE DEVICE WILL ACTUALLY MAKE (#123, stage S6), asked once per
-	 * call rather than assumed. A8R8G8B8 as a texture is the floor the whole
+	/* What the device will actually make, asked once per call rather than
+	 * assumed. A8R8G8B8 as a texture is the floor the whole
 	 * HD path stands on and a device without it has no business trying;
 	 * DXT5 is a switch, so a device without it goes quietly back to the
 	 * lossless default with a line in the log rather than failing 220 times
@@ -871,7 +869,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	}
 
 	g_textures.resize(slot_base + unique.size(), (IDirect3DTexture9*)0);
-	// A2. resize, not assign: HDPageCacheAppend keeps the slots that are
+	// resize, not assign: HDPageCacheAppend keeps the slots that are
 	// already there, and their answer with them.
 	g_cutout.resize(g_textures.size(), 0);
 	g_origin.resize(g_textures.size(), (short)-1);
@@ -971,7 +969,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			continue;
 		}
 
-		/* THE DEVICE'S OWN LIMIT FIRST, before the budget gets a say. Eleven
+		/* The device's own limit first, before the budget gets a say. Eleven
 		 * remaster pages are 4096x4096, and a card whose MaxTextureWidth is
 		 * 2048 cannot hold one of them at all - the CreateTexture would fail
 		 * and the page would be a hole. Starting it one level down is not a
@@ -1001,13 +999,13 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			HD_PAGE_FORMAT_RGBA);
 	}
 
-	/* --- THE BUDGET (#123, stage S6) ----------------------------------
+	/* --- the budget ----------------------------------------------------
 	 *
-	 * The rule the user chose: never leave a page out - a missing page is a
-	 * white hole in the middle of a wall and reads as a rendering fault - but
-	 * give up the largest level of the largest pages until what is left fits.
-	 * A page that starts at level 1 is half as wide and a quarter as dear,
-	 * and it costs nothing anywhere else: the texture coordinates are 0..1 of
+	 * The rule: never leave a page out - a missing page is a white hole in
+	 * the middle of a wall and reads as a rendering fault - but give up the
+	 * largest level of the largest pages until what is left fits. A page
+	 * that starts at level 1 is half as wide and a quarter as dear, and it
+	 * costs nothing anywhere else: the texture coordinates are 0..1 of
 	 * whatever the texture is, so the wall is simply softer.
 	 *
 	 * Biggest first, and repeatedly: one pass takes the top level off every
@@ -1015,7 +1013,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	 * still not enough the next pass takes the next one. The loop ends when
 	 * it fits or when no page can give anything more - it cannot spin.
 	 *
-	 * The budget covers the WHOLE cache, not this call: `have` is what the
+	 * The budget covers the whole cache, not this call: `have` is what the
 	 * rooms already put there when the models arrive. */
 	double need = 0;
 
@@ -1043,7 +1041,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		{
 			gave = false;
 
-			/* STABLE, and that is not a nicety: 2391 of the remaster's 2406
+			/* Stable, and that is not a nicety: 2391 of the remaster's 2406
 			 * pages are the same size, so almost every comparison here is a
 			 * tie, and an unstable sort would break those ties differently
 			 * from one run to the next. The same level with the same budget
@@ -1098,15 +1096,15 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		}
 	}
 
-	/* THE BATCH. Decoding everything first and uploading afterwards would
+	/* The batch. Decoding everything first and uploading afterwards would
 	 * hold 376 MiB of pixels at once for TITLE's 220 pages - a large part of
 	 * what a 32 bit process can address, and all of it transient. So the
 	 * pages go through in batches, and the address space never holds more
 	 * than one batch.
 	 *
-	 * The batch is measured in BYTES, not in pages, and that is not a
+	 * The batch is measured in bytes, not in pages, and that is not a
 	 * refinement. The remaster's pages are not one size: 2391 of them are
-	 * 512x512 and decode to 1.4 MiB, but ELEVEN are 4096x4096 and decode to
+	 * 512x512 and decode to 1.4 MiB, but eleven are 4096x4096 and decode to
 	 * 85 MiB each. A batch of "threads * 2 + 2" pages that happened to catch
 	 * several of those would ask for one and a half gigabytes in a process
 	 * that has three, and it would do it rarely enough to look like a random
@@ -1114,8 +1112,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	 * always holds at least one page, however big.
 	 *
 	 * It is the A8R8G8B8 size that is budgeted even when the pages end up as
-	 * DXT5 (#123, stage S6): the decode goes through the full pixels either
-	 * way, and it is the transient peak that has to fit, not the result. */
+	 * DXT5: the decode goes through the full pixels either way, and it is
+	 * the transient peak that has to fit, not the result. */
 	const size_t batch_pages = (size_t)threads * 2 + 2;
 	const double batch_budget = 96.0 * 1048576.0;
 
@@ -1301,11 +1299,11 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 					if (page.white)
 						stats->fromWhite++;
 					else if (page.origin >= HD_PAGE_ORIGIN_MOD)
-						stats->fromMod++;	// a mod's own TEX (#153, M1)
+						stats->fromMod++;	// a mod's own TEX
 					else if (page.origin == 4)
 						stats->fromGame4++;
 					else if (page.origin >= 1 && page.origin <= 3)
-						stats->fromTr3++;	// the other bundle (S7-2)
+						stats->fromTr3++;	// the other bundle
 					else
 						stats->fromGame5++;
 				}
@@ -1315,23 +1313,22 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 				if (stats)
 					stats->failed++;
 
-				/* OUT OF VIDEO MEMORY IN THE MIDDLE OF A LEVEL (#123, stage
-				 * S6). Every other refusal is one page's business - a broken
-				 * file, a page that is not BC7 - and the level goes on with a
-				 * hole where that page was. This one is not: the card is
-				 * full, every page after this would fail the same way, and
-				 * half a level in HD is worse than none. Stop here, say why,
-				 * and let the caller put the whole level back on classic. */
+				/* Out of video memory in the middle of a level. Every other
+				 * refusal is one page's business - a broken file, a page
+				 * that is not BC7 - and the level goes on with a hole where
+				 * that page was. This one is not: the card is full, every
+				 * page after this would fail the same way, and half a level
+				 * in HD is worse than none. Stop here, say why, and let the
+				 * caller put the whole level back on classic. */
 				if (out_of_memory(hr))
 				{
 					char line[200];
 
-					/* page_text, not %d (#153, round M1, fix round). This is
-					 * the one line in the file that still printed the cache
-					 * KEY, which for a mod's page reads "page 1342183535" -
-					 * exactly the unreadable line page_text exists to
-					 * prevent, on the one path where a player most needs to
-					 * know which mod filled his card. */
+					/* page_text, not %d: printing the cache key directly
+					 * would read "page 1342183535" for a mod's page - exactly
+					 * the unreadable line page_text exists to prevent, on the
+					 * one path where a player most needs to know which mod
+					 * filled his card. */
 					std::snprintf(line, sizeof(line),
 						"page %s: the card ran out of video memory after "
 						"%.0f MiB - the level goes back to classic",
@@ -1443,10 +1440,9 @@ void HDPageCacheDestroy()
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
 	g_notes.clear();
-	// #153, round M2, the fix round: the remembered answers of
-	// HDPageCacheKeyOf. Nothing behind them changes at a level end, so this
-	// is housekeeping and not correctness - the AltRoot call below is the one
-	// that has to clear them.
+	// The remembered answers of HDPageCacheKeyOf. Nothing behind them
+	// changes at a level end, so this is housekeeping and not correctness -
+	// the AltRoot call below is the one that has to clear them.
 	g_key_of.clear();
 
 	if (g_staging)
@@ -1461,9 +1457,9 @@ void HDPageCacheDestroy()
 	g_device = 0;
 }
 
-/* The policy is NOT reset by Destroy: it is the user's setting for the run,
- * and a level change must not quietly put a card that was given a budget back
- * on to no budget at all. HDPageCacheConfigure(0) is the way back. */
+/* The policy is not reset by Destroy: it is the setting for the run, and a
+ * level change must not quietly put a card that was given a budget back on
+ * to no budget at all. HDPageCacheConfigure(0) is the way back. */
 void HDPageCacheConfigure(const HDPageCachePolicy* policy)
 {
 	if (policy)
@@ -1500,9 +1496,9 @@ void HDPageCacheAltRoot(const char* root)
 {
 	g_alt_root = root ? root : "";
 	/* HDPageCacheKeyOf asks the other bundle whether it has a page, so every
-	 * answer it remembered was given under the OLD root (#153, round M2, the
-	 * fix round). Forget them here rather than in Destroy, because this is
-	 * the call that can change one. */
+	 * answer it remembered was given under the old root. Forget them here
+	 * rather than in Destroy, because this is the call that can change
+	 * one. */
 	g_key_of.clear();
 }
 

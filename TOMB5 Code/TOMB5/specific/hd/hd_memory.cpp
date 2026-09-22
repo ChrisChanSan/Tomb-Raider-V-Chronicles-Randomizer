@@ -43,7 +43,7 @@ void HDMemoryMeasure(HDMemoryRoom* out)
 	out->availVirtual = (double)status.ullAvailVirtual;
 	out->known = 1;
 
-	/* THE WALK, and what it is for. ullAvailVirtual above is a SUM, and an
+	/* The walk, and what it is for. ullAvailVirtual above is a SUM, and an
 	 * allocation is not made out of a sum: one page of the cache needs one
 	 * free block of its whole size. So every region of this process's user
 	 * address space is stepped through once and the biggest free one is
@@ -139,17 +139,17 @@ void HDRedressDecide(const HDRedressAsk* ask, HDRedressVerdict* out)
 	out->spent = ask->cacheBytes - ask->bytes0;
 	out->cardRoom = ask->budgetBytes + ask->allowanceBytes - ask->cacheBytes;
 
-	/* THE OLD RULE, which is the FLOOR of the card side and not the ceiling
-	 * (#153, round M3): a level that has not yet spent the allowance is
-	 * allowed on the card's account whatever the budget says, exactly as it
-	 * was before this round. Nobody is stopped earlier than he used to be. */
+	/* The old rule, which is the FLOOR of the card side and not the ceiling: a
+	 * level that has not yet spent the allowance is allowed on the card's
+	 * account whatever the budget says. Nobody is stopped earlier than the
+	 * old rule alone would stop them. */
 	const bool old_rule = out->spent < ask->allowanceBytes;
 
 	if (!ask->room.known)
 	{
-		/* NOTHING MEASURED, NOTHING LOOSENED. The measure failed, so this is
-		 * round M3's rule and only that: a rule may not spend an answer it
-		 * did not get. The log says which line this was. */
+		/* Nothing measured, nothing loosened. The measure failed, so only the
+		 * old rule applies: a rule may not spend an answer it did not get.
+		 * The log says which line this was. */
 		out->allowed = old_rule ? 1 : 0;
 		out->refused = old_rule ? HD_REDRESS_OK : HD_REDRESS_NO_CARD;
 
@@ -168,16 +168,16 @@ void HDRedressDecide(const HDRedressAsk* ask, HDRedressVerdict* out)
 
 	out->allowed = (card_ok && addr_ok && block_ok) ? 1 : 0;
 
-	/* WHICH WALL, in the order in which they are walls. The address space is
+	/* Which wall, in the order in which they are walls. The address space is
 	 * the hard one - past it nothing can be allocated at all; fragmentation
 	 * is the one that stops a single big page while the sum still looks
-	 * healthy; the card is the one that was there before this round. */
+	 * healthy; the card is the original budget check. */
 	out->refused = out->allowed ? HD_REDRESS_OK
 		: !addr_ok ? HD_REDRESS_NO_ADDRESS
 		: !block_ok ? HD_REDRESS_NO_BLOCK
 		: HD_REDRESS_NO_CARD;
 
-	/* HOW MANY MORE FIT, for the log: the smaller of the two rooms divided by
+	/* How many more fit, for the log: the smaller of the two rooms divided by
 	 * one worst change. The card side counts the allowance it has not spent
 	 * yet when that is the larger of the two, because that is what the old
 	 * rule lets it spend. */

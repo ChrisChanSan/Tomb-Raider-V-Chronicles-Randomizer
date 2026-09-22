@@ -21,7 +21,7 @@
 
 #include "hd_lara.h"
 
-// THE SEAM BETWEEN DrawLara AND THE HD MODEL PATH (#123, stage S4-2).
+// The seam between DrawLara and the HD model path.
 //
 // hd_lara.cpp knows the wardrobe and nothing about this engine - it is built
 // into ModelProbe as well, which is how the pictures were made. This file is
@@ -44,18 +44,18 @@
 //                  per node through LaraNodeAmbient and the light list is the
 //                  one an HD object gets (hd_object.h, HDObjectLights).
 //
-// WHAT STAYS CLASSIC, and why, all of it visible in the log:
+// What stays classic, and why, all of it visible in the log:
 //
-//   young Lara            the user's decision (plan section 9). Recognised
-//                         three ways over, because the randomizer moves
-//                         outfits between levels.
+//   young Lara            stays classic; there is no HD wardrobe entry for
+//                         her. Recognised three ways over, because the
+//                         randomizer moves outfits between levels.
 //   LARA_PONYTAIL         the randomizer writes that outfit byte BOTH for the
 //                         Rome body inside a Russia level AND for every Tomb
-//                         Raider III guest (#122), and nothing else in the
-//                         level tells the two apart. Until the marker of
-//                         stage S7 arrives in the level header, such a level
-//                         draws the classic Lara - a right classic body beats
-//                         a wrong HD one.
+//                         Raider III guest, and nothing else in the level
+//                         tells the two apart. Until a distinguishing marker
+//                         is added to the level header, such a level draws
+//                         the classic Lara - a right classic body beats a
+//                         wrong HD one.
 //   the skeleton cheat    lara.skelebob goes through DrawLara__6, which this
 //                         file does not touch at all.
 //   the muzzle flash,     drawn by their own routines outside DrawLara
@@ -68,7 +68,7 @@
 //   the inventory         newinv2.cpp draws its own ring of objects with
 //                         DrawInventoryItem and never calls DrawLara.
 //
-// THE SWITCH is hd_objects, the same one the creatures use. Lara is a model
+// The switch is hd_objects, the same one the creatures use. Lara is a model
 // like the rest of them and a level's models are one buffer; a second key
 // would be a second way to get half a picture.
 
@@ -93,7 +93,7 @@ void HDLaraDrawEnd();
 // either draws the whole composite or the whole classic body - never a mix.
 bool HDLaraDrawActive();
 
-/* WHICH OUTFIT THIS LEVEL ENDED UP IN (#153, round M3), as the
+/* Which outfit this level ended up in, as the
  * HD_LARA_OUTFIT_* number outfit_of_level worked out - the registry key
  * where the player set one, the level's own facts where he did not, and
  * HD_LARA_OUTFIT_NONE when Lara is drawn classic here. The footsteps ask
@@ -101,12 +101,11 @@ bool HDLaraDrawActive();
  * only this call knows which body that is. */
 int HDLaraDrawOutfit();
 
-/* THE DRAWN BRAID'S ROLL (#123, fix round G, G1), six angles for
- * hairs[0][0..5] - one per drawn bone, about the bone's own axis, so no
- * position and no direction changes at all. Why there has to be one is at
- * HD_LARA_BRAID_ROLL_NEAR in hd_lara.h.
+/* The drawn braid's roll: six angles for hairs[0][0..5] - one per drawn bone,
+ * about the bone's own axis, so no position and no direction changes at all.
+ * Why there has to be one is at HD_LARA_BRAID_ROLL_NEAR in hd_lara.h.
  *
- * TWO CALLS AND NOT ONE, because the rule holds a value from frame to frame
+ * Two calls and not one, because the rule holds a value from frame to frame
  * and a held value must be advanced exactly once:
  *
  *   HDLaraBraidRollStep   game\hair.cpp calls this at the end of HairControl,
@@ -117,9 +116,9 @@ int HDLaraDrawOutfit();
  *                         second time in the same frame without moving
  *                         anything on. Fills six angles, returns how many.
  *
- * It is public because HAIRLOG prints what it did: a play test that sees the
- * braid tremble again has to be able to say whether the yaw jumped and
- * whether this took the jump out of the picture. */
+ * It is public because HAIRLOG prints what it did: diagnosing a braid that
+ * trembles again needs to be able to say whether the yaw jumped and whether
+ * this took the jump out of the picture. */
 void HDLaraBraidReset();
 void HDLaraBraidRollStep();
 int HDLaraBraidRolls(short* out);
@@ -128,7 +127,7 @@ int HDLaraBraidRolls(short* out);
 
 void HDLaraDrawFrameReset();
 
-/* THE SEAM ITSELF, called from the three DrawLara variants in place of the
+/* The seam itself, called from the three DrawLara variants in place of the
  * skin loop, the joints, the braid, the holsters and the weapon on the back.
  * It puts Lara's parts on the frame list hd_object.cpp keeps, and they are
  * drawn where every HD model is drawn.

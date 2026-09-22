@@ -8,14 +8,12 @@
  * would drag it in - see vendor\trforge\VERSION.txt - so the reader below is
  * written against the description instead.
  *
- * Two passages are the exception, and audit round A1 corrected this notice to
- * say so: the facial-rig rescan further down and the little byte reader beside
- * it (Reader, have / u32 / f32) follow TRForge's own code closely - the same
- * loop, the same bounds, the same order of the arithmetic, with the names and
- * the brace style changed. That is lawful, TRForge being MIT, and its notice
- * travels with this tree in vendor\trforge\LICENSE. What was not true is the
- * blanket sentence that used to stand here: "written against that description
- * rather than copied" holds for the rest of the file but not for those two.
+ * Two passages are the exception: the facial-rig rescan further down and the
+ * little byte reader beside it (Reader, have / u32 / f32) follow TRForge's
+ * own code closely - the same loop, the same bounds, the same order of the
+ * arithmetic, with the names and the brace style changed. That is lawful,
+ * TRForge being MIT, and its notice travels with this tree in
+ * vendor\trforge\LICENSE.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software
@@ -34,10 +32,10 @@ namespace
 	const size_t TrmPartBytes = 44;
 	const size_t TrmVertexBytes = 24;
 
-	/* THE SECOND VERTEX LAYOUT (#153, round M2). Thirty bytes instead of
-	 * twenty-four, and the difference is the two texture coordinates: they
-	 * leave the gaps in the bone and weight block and stand at the end as
-	 * FLOATS, which closes the block up by three bytes each and adds eight.
+	/* The second vertex layout. Thirty bytes instead of twenty-four, and the
+	 * difference is the two texture coordinates: they leave the gaps in the
+	 * bone and weight block and stand at the end as floats, which closes the
+	 * block up by three bytes each and adds eight.
 	 *
 	 *     +0   float x, y, z            as in the 24 byte layout
 	 *     +12  u8 nx, ny, nz            ... and biased the same way
@@ -47,8 +45,8 @@ namespace
 	 *     +22  float u
 	 *     +26  float v
 	 *
-	 * MEASURED over all 2,923 .TRM files of both remasters (six ITEM folders:
-	 * 882 + 566 + 0 in IV-VI, 379 + 476 + 620 in I-III). Exactly THIRTY of
+	 * Measured over all 2,923 .TRM files of both remasters (six ITEM folders:
+	 * 882 + 566 + 0 in IV-VI, 379 + 476 + 620 in I-III). Exactly thirty of
 	 * them are laid out this way and every one is an OUTFIT_TRX_*_HD.TRM in
 	 * the I-III bundle's 1\ITEM; nothing else in either bundle, in any game
 	 * folder, at any name. The proof of the layout is arithmetic and then
@@ -59,7 +57,7 @@ namespace
 	 * OUTFIT_TRX_WETSUIT_1_HD: u of vertex 0 reads 0.33084 where the twin
 	 * carries 84/255 = 0.32941.
 	 *
-	 * THE ENGINE'S OWN VERTEX HOLDS u AND v AS BYTES (hd_model.cpp, the
+	 * The engine's own vertex holds u and v as bytes (hd_model.cpp, the
 	 * UBYTE4 lanes of the declaration), so reading one of these files means
 	 * rounding its coordinates onto the 1/255 grid. That is a real loss and
 	 * it is written down rather than hidden: measured over
@@ -70,7 +68,7 @@ namespace
 	 * twin's vertices the two disagree by as much as half a step in both
 	 * directions, spread, not by a constant half-texel offset.
 	 *
-	 * So a file of this layout is READ - a mod that ships one and no 24 byte
+	 * So a file of this layout is read - a mod that ships one and no 24 byte
 	 * twin is better drawn with rounded coordinates than not drawn at all -
 	 * but the wardrobe wears the 24 byte twin wherever there is one, and says
 	 * in the log why (hd_wardrobe.cpp). */
@@ -115,10 +113,10 @@ namespace
 		void align4() { at = (at + 3) & ~(size_t)3; }
 	};
 
-	/* THE READING THIS MODULE HAS DONE (#153, round M2, the fix round) - see
-	 * HDTrmCounters in the header for what each one answers. Doubles rather
-	 * than counters of a fixed width because `bytes` runs into the hundreds
-	 * of millions over a session and the three are printed together. */
+	/* The reading this module has done - see HDTrmCounters in the header
+	 * for what each one answers. Doubles rather than counters of a fixed
+	 * width because `bytes` runs into the hundreds of millions over a
+	 * session and the three are printed together. */
 	double g_opens = 0, g_loads = 0, g_bytes = 0;
 
 	bool read_whole(const char* path, std::vector<unsigned char>& out)
@@ -141,7 +139,7 @@ namespace
 		return got == (size_t)length;
 	}
 
-	/* THE ONE READER. HDTrmProbe wants the counts and nothing else - it runs
+	/* The one reader. HDTrmProbe wants the counts and nothing else - it runs
 	 * over every slot of every level in the diagnostic tools and over all of
 	 * them again in the engine's -log scan - while HDTrmLoad wants the
 	 * geometry as well. Two readers would be two chances to disagree about
@@ -264,7 +262,7 @@ namespace
 		bool facial_rig = false;
 		if (reader.u32() != 0)
 		{
-			// A HEAD. In place of the zero it carries a joint count and that
+			// A head. In place of the zero it carries a joint count and that
 			// many 3x4 matrices, then a joint order and several hundred
 			// kilobytes of facial animation. None of that has to be understood
 			// to get past it: look for the index count the part table already
@@ -321,12 +319,12 @@ namespace
 		reader.at += (size_t)indices * 2;
 		reader.align4();
 
-		/* WHICH OF THE TWO LAYOUTS (#153, round M2). The file itself says so
-		 * by its length: the vertex block runs to the last byte, so what is
-		 * left over divided by the vertex count IS the stride, and 24 and 30
-		 * are the only two the remasters use. Asked in that order because 24
-		 * is what all but thirty of the 2,923 files carry - and because a
-		 * file that fits neither gets the message it always got. */
+		/* Which of the two layouts. The file itself says so by its length:
+		 * the vertex block runs to the last byte, so what is left over
+		 * divided by the vertex count is the stride, and 24 and 30 are the
+		 * only two the remasters use. Asked in that order because 24 is what
+		 * all but thirty of the 2,923 files carry - and because a file that
+		 * fits neither gets the message it always got. */
 		const size_t rest = size - reader.at;
 		size_t stride = 0;
 
@@ -363,7 +361,7 @@ namespace
 		if (!model)
 			return true;
 
-		/* THE GEOMETRY. An index past the vertex count would be a read out of
+		/* The geometry. An index past the vertex count would be a read out of
 		 * the vertex buffer on the card, which is a driver reset and not a
 		 * wrong picture, so it is refused here rather than clamped. Over all
 		 * 566 files of game 5 this never fires; it is the guard for the
@@ -437,11 +435,11 @@ namespace
 				}
 				else
 				{
-					/* The wide layout (#153, round M2). The weights close the
-					 * two gaps the coordinates left and the coordinates stand
-					 * at the end as floats; rounded onto the byte grid here,
-					 * which is the loss the note at the top of this file
-					 * measures. Clamped, because nothing in the format says a
+					/* The wide layout. The weights close the two gaps the
+					 * coordinates left and the coordinates stand at the end
+					 * as floats; rounded onto the byte grid here, which is
+					 * the loss the note at the top of this file measures.
+					 * Clamped, because nothing in the format says a
 					 * coordinate stays inside 0..1 and a wrap would paint the
 					 * far edge of the atlas onto the model. */
 					float u = 0.0f, v = 0.0f;
@@ -543,8 +541,8 @@ void HDTrmCounters(double* opens, double* loads, double* bytes)
 		*bytes = g_bytes;
 }
 
-/* THE MIRRORED WEIGHTS, FOLDED BACK (#153, round M2b). What the rule is and
- * why it exists is in hd_trm.h; this is the arithmetic.
+/* The mirrored weights, folded back. What the rule is and why it exists is
+ * in hd_trm.h; this is the arithmetic.
  *
  * It works on the three bone and weight bytes alone and never on a position, so
  * nothing here can move a vertex that is not skinned across the two sides - and
@@ -568,7 +566,7 @@ void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs
 		HDTrmVertex& v = model->vertex[i];
 		int sum = (int)v.weight[0] + (int)v.weight[1] + (int)v.weight[2];
 
-		/* WHICH SIDE THIS VERTEX IS ON, in its own weights. `side` is 0 for
+		/* Which side this vertex is on, in its own weights. `side` is 0 for
 		 * the a-bones and 1 for the b-bones; a bone on neither side belongs
 		 * to neither sum and takes no part in the decision. */
 		int onSide[2] = { 0, 0 };
@@ -598,15 +596,15 @@ void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs
 			if (share > local.worstPermille)
 				local.worstPermille = share;
 
-			/* AN EXACT TIE IS BROKEN BY THE MODEL'S OWN X AXIS, and that is
+			/* An exact tie is broken by the model's own x axis, and that is
 			 * not a second rule but the same one read off the geometry: side
 			 * a is the +x side, and over every crossed vertex of all 94 hand
-			 * files of the install and all seven of the user's three gun
-			 * mods - 6,723 of them - the 6,719 that have a majority agree
-			 * with the sign of x 6,719 times and disagree not once. The four
-			 * that do not have one are the user's HK USP vertices weighted
-			 * exactly 128/128, and without this they would be the one piece
-			 * of the sliver the fold left behind. */
+			 * files of the install and all seven files of three gun mods -
+			 * 6,723 of them - the 6,719 that have a majority agree with the
+			 * sign of x 6,719 times and disagree not once. The four that do
+			 * not have one are HK USP vertices weighted exactly 128/128, and
+			 * without this they would be the one piece of the sliver the
+			 * fold left behind. */
 			if (onSide[0] == onSide[1])
 				local.tied++;
 
@@ -664,11 +662,11 @@ void HDTrmFoldMirrored(HDTrmModel* model, const HDTrmMirrorPair* pair, int pairs
 			sum = (int)v.weight[0] + (int)v.weight[1] + (int)v.weight[2];
 		}
 
-		/* AND THE THREE SUM TO 255. The merge above can lose a unit to its
-		 * own clamp, and a file may simply be written that way - the user's
-		 * HK USP mod has 24 vertices summing to 254 or 256. The shader takes
-		 * the weights as they stand, so a sum that is not 255 is a vertex
-		 * drawn slightly off its own skin. */
+		/* And the three sum to 255. The merge above can lose a unit to its
+		 * own clamp, and a file may simply be written that way - the HK USP
+		 * mod has 24 vertices summing to 254 or 256. The shader takes the
+		 * weights as they stand, so a sum that is not 255 is a vertex drawn
+		 * slightly off its own skin. */
 		if (sum > 0 && sum != 255)
 		{
 			int most = 0;

@@ -38,14 +38,14 @@
 //
 // For the edits every field except index is optional - whatever is absent
 // stays unchanged. That is why a moved item keeps its angle and its
-// lighting: we only write what we actually mean.
+// lighting: only what is actually meant gets written.
 //
 // triggerMoves takes the trigger entry out of the source sector and appends
 // it to the target sector's chain - one operation, not two. It exists for
 // the coupled move: when an item travels whose pickup trigger also fires
 // something else, the trigger travels along so the effect is preserved.
 //
-// The trigger's new sector is mirrored into the flipmap partner (#147b) the
+// The trigger's new sector is mirrored into the flipmap partner the
 // same way a waker is, and by the same rules - no flag is needed, because a
 // travelling trigger always wants to be reachable in both variants. Only
 // the writing side is mirrored: the source sector loses its entry alone,
@@ -57,7 +57,7 @@
 // the standard values because that is exactly a "wake this enemy" trigger.
 // oneShot is no fine detail either - see Tr5Level::addTrigger.
 //
-// mirrorFlip (#147) asks for the second copy in the flipmap partner room.
+// mirrorFlip asks for the second copy in the flipmap partner room.
 // The flag is set by whoever knows that the trigger is a plain enemy waker
 // and may exist twice; the curated triggers of the secret lists do NOT
 // carry it, because those are bound to one particular object at one
@@ -85,15 +85,15 @@ struct PatchReport
     int added = 0;
     int triggersMoved = 0;
     int triggersAdded = 0;
-    // #147: a new trigger in a room that owns a flipmap partner is written
-    // into the partner as well - after the flip the base room reads the
-    // PARTNER's floordata, and a trigger that lives in only one of the two
+    // A new trigger in a room that owns a flipmap partner is written into
+    // the partner as well - after the flip the base room reads the
+    // partner's floordata, and a trigger that lives in only one of the two
     // never fires again. Mirrored counts the copies, mirrorSkipped the
     // cases where the partner tile is a wall, sits at another height or
     // already carries floordata that must not be touched.
     int triggersMirrored = 0;
     int triggersMirrorSkipped = 0;
-    // #147b: the same for a trigger that TRAVELS with its item
+    // The same for a trigger that travels with its item
     // (triggerMoves). Counted apart from the wakers on purpose - the two
     // cases weigh differently. A waker that misses its copy costs one
     // sleeping enemy; a key whose pickup trigger ends up in the wrong
@@ -105,13 +105,13 @@ struct PatchReport
     int weaponsCopied = 0;               // weapon slots taken over
     int moveablesCopied = 0;             // cross-enemy slots taken over
     std::string outfitFrom;              // empty = outfit unchanged
-    // Weather (#144): what the file carried and what was written into it.
-    // Both -1 as long as the patch carries no "weather" field - that is the
-    // signal for "not touched", and it is what every caller tests.
+    // Weather: what the file carried and what was written into it. Both -1
+    // as long as the patch carries no "weather" field - that is the signal
+    // for "not touched", and it is what every caller tests.
     int weatherFrom = -1;
     int weatherTo = -1;
-    // HD outfit marker (#123, stage S7): which Tomb Raider III outfit this
-    // pass put on the level, as the engine's HD_LARA_OUTFIT_* number. 0 =
+    // HD outfit marker: which Tomb Raider III outfit this pass put on the
+    // level, as the engine's HD_LARA_OUTFIT_* number. 0 =
     // none. Written into the level header (data[3]) by apply() itself; it
     // stands here as well so the sidecar and the status lines can name it
     // without reading the file back.
@@ -129,17 +129,17 @@ namespace Patch
     // levelSource is only needed for soundAdds. Without it, any soundAdds
     // present are reported as warnings and skipped - the patch does not fail
     // on that, because a mute enemy is not a broken level.
-    // tr3Dir/tr3GoldDir: the user's installations for the Tomb Raider 3
-    // guests (#92). They are parameters and NOT part of the patch: a patch
-    // is kept around for reproducing things and must not carry machine
-    // paths. If they stay empty, no guest appears in the patch anyway - the
+    // tr3Dir/tr3GoldDir: the player's installations for the Tomb Raider 3
+    // guests. They are parameters and NOT part of the patch: a patch is
+    // kept around for reproducing things and must not carry machine paths.
+    // If they stay empty, no guest appears in the patch anyway - the
     // randomizer then never puts them into the pool in the first place.
     bool apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
                LevelSourceFn levelSource = nullptr, void* levelSourceUser = nullptr,
                const std::wstring& tr3Dir = std::wstring(),
                const std::wstring& tr3GoldDir = std::wstring(),
-               // Cache for the extracted packages (#103). Empty means
-               // "extract anew every time" - slower, but always correct.
+               // Cache for the extracted packages. Empty means "extract
+               // anew every time" - slower, but always correct.
                const std::wstring& cacheDir = std::wstring());
 
     // Records in the input which sectors can accept a traveling trigger.
@@ -155,15 +155,15 @@ namespace Patch
     // Without coupled items and without enemy types it does nothing.
     void markTriggerSafeSectors(const Tr5Level& level, RandoInput& in);
 
-    // The height reader for models the level does NOT carry yet (#141,
-    // RandoInput::modelHeight). A cross enemy's model still lies in its
+    // The height reader for models the level does NOT carry yet
+    // (RandoInput::modelHeight). A cross enemy's model still lies in its
     // donor file while the placement decides whether it fits under the
     // ceiling somewhere - so the height has to be fetched from there, and
     // exactly where the import fetches the model itself.
     //
     // Same arguments as apply(), and for the same reasons: levelSource
     // resolves a TR5 donor's name to a path, tr3Dir/tr3GoldDir/cacheDir
-    // reach the user's Tomb Raider 3 installation for the guests. Whatever
+    // reach the player's Tomb Raider 3 installation for the guests. Whatever
     // is missing simply yields no height, and an unmeasured kind passes.
     //
     // Donor levels are loaded at most ONCE per process and then kept - in a
@@ -174,7 +174,7 @@ namespace Patch
                   const std::wstring& tr3GoldDir = std::wstring(),
                   const std::wstring& cacheDir = std::wstring());
 
-    // --- HD markers (#123, stage S7) ------------------------------------
+    // HD markers.
     //
     // The engine can draw a level with the Remaster's own geometry and
     // models. That data describes the VANILLA level, so the randomizer has
@@ -185,7 +185,7 @@ namespace Patch
     //   2. THE TOUCHED ROOMS - every room whose SHAPE changed so far that
     //      none of its HD art is worth keeping: a room lifted by moveRoom,
     //      a room that had no faces at all and was given some.
-    //   3. THE CUT BOXES (#123, fix round Z) - every OPENING the run made:
+    //   3. THE CUT BOXES - every OPENING the run made:
     //      a wall cut through, a floor or ceiling opened, a wall face taken
     //      away. Those change one sector's worth of a room and nothing
     //      else, so the room keeps its HD art and only the box around the
@@ -210,9 +210,9 @@ namespace Patch
     //
     // The first line is the version, and it is the LOWEST one that can say
     // what the file holds: a file with a `cut` line in it declares 2, a
-    // file without one declares 1 and stays readable by an engine older
-    // than fix round Z. `outfit` repeats data[3] for a reader that has the
-    // sidecar open anyway (both come out of the same value, so they cannot
+    // file without one declares 1 and stays readable by an engine that
+    // predates cut-line support. `outfit` repeats data[3] for a reader
+    // that has the sidecar open anyway (both come out of the same value, so they cannot
     // drift); the engine reads the header byte, which is there before a room
     // is loaded. `room` lines are ascending, `cut` lines ascending by their
     // six numbers, `donor` lines ascending by slot, so the same seed gives
@@ -240,8 +240,7 @@ namespace Patch
     //     classic roomlets, so art the box takes is replaced by nothing;
     //     the box may hold only what stands INSIDE the opening. Stepping
     //     outward there took the passage's own floor and ceiling quads with
-    //     it and left the void showing - the measurement is in
-    //     MODIFICATIONS.md, fix round Z1.
+    //     it and left the void showing.
     //
     // So the example above reads: normal axis x (span 1024), an opening
     // 1280 tall and 768 wide, which is one sector's doorway less the two
@@ -278,7 +277,7 @@ namespace Patch
     // roomsOut/donorsOut/cutsOut receive what actually went INTO the file,
     // not what the level recorded - the two differ by the slots filtered out
     // above, and a status line that prints the larger number would not match
-    // the file the user then opens.
+    // the file that was actually written.
     bool writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
                         std::string& error,
                         int* roomsOut = nullptr, int* donorsOut = nullptr,

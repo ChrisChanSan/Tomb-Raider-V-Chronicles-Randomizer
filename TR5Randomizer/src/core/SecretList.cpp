@@ -51,7 +51,7 @@ namespace
         enum Kind { ITEM, TRIGGER, REPLACE, PORTAL, CLIMB, WATER, MOVEROOM,
                     GEOMETRY } kind = ITEM;
         long moveX = 0, moveY = 0, moveZ = 0;         // MOVEROOM only
-        // GEOMETRY only (#137). -1 everywhere means "not given": geomLike
+        // GEOMETRY only. -1 everywhere means "not given": geomLike
         // is the room the textures are copied from, the six tex fields are
         // explicit texinfos, and room/sx/sz/band narrow a rule down to one
         // square or one band of a wall. Lines add up - the first sets the
@@ -71,8 +71,8 @@ namespace
         // 2 = A opens at its FLOOR into B. Told apart by NAME rather than
         // worked out from the geometry - the guess got andy1 wrong.
         int portalKind = 0;
-        // #136: the wall is a drawn face and stays put unless it is dealt
-        // with. @Clear takes it away, @LikeWall gives it another texture.
+        // The wall is a drawn face and stays put unless it is dealt with.
+        // @Clear takes it away, @LikeWall gives it another texture.
         bool portalClear = false;
         int  likeWallRoom = -1, likeWallSx = -1, likeWallSz = -1;
         bool hasOcb = false, hasAngle = false, hasHeight = false;
@@ -144,8 +144,8 @@ namespace
         // andy1. "Celing" is tolerated too - the author writes it that way.
         static const std::regex reMoveRoom(R"(Move_Room(\d+)\s*\(([^)]*)\))", std::regex::icase);
         static const std::regex reAxis(R"(([xyz])\s*=\s*([+-]?\d+))", std::regex::icase);
-        // #137. The room number hangs on the verb the way Move_Room does,
-        // and the body is a key=value list the way Move_Room's is.
+        // The room number hangs on the verb the way Move_Room does, and the
+        // body is a key=value list the way Move_Room's is.
         static const std::regex reGeom(R"(Make_Room_?Geometry\s*(\d+)\s*\(([^)]*)\))", std::regex::icase);
         static const std::regex reGeomKey(R"((\w+)\s*=\s*(?:Room)?(\d+))", std::regex::icase);
         static const std::regex reClear(R"(@\s*Clear)", std::regex::icase);
@@ -244,9 +244,8 @@ namespace
             // Optionally with a move: @Room relocates the item to the sector
             // center (floor computed, @Height on top). Without @Room the
             // position stays - that used to be the ONLY case, and a @Room
-            // written anyway was silently swallowed (noticed by the user:
-            // the joby5 trapdoor was meant to move into the lower room and
-            // nothing happened).
+            // written anyway was silently swallowed: the joby5 trapdoor was
+            // meant to move into the lower room and nothing happened.
             std::smatch r;
             if (std::regex_search(raw, r, reRoom))
             { e.room = std::stoi(r[1]); e.sx = std::stoi(r[2]); e.sz = std::stoi(r[3]); }
@@ -495,8 +494,8 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         // OCB describes the OLD spot and does not survive the move.
         // Andrea3's secret 75 carried OCB 4 (pedestal, vanilla room 81); at
         // the new spot PickUpCollision looks for a pedestal via FindPlinth
-        // that is not there - the secret lay in plain sight and was forever
-        // unpickable (found by the user, first blamed on the push block).
+        // that is not there - the secret would lie in plain sight and be
+        // forever unpickable.
         e.set("ocb", JsonValue::makeInt(0));
         edits.push(e);
         ++secretsMoved;
@@ -631,12 +630,12 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             e.set("index", JsonValue::makeInt(o.index));
             e.set("typeId", JsonValue::makeInt(o.typeId));
             // With @Room the item moves: sector center, floor computed.
-            // Needed for the joby5 trapdoor (#53): a trapdoor MUST stand on
-            // the portal plane of its sector (CloseTrapDoor seals nothing
+            // Needed for the joby5 trapdoor: a trapdoor MUST stand on the
+            // portal plane of its sector (CloseTrapDoor seals nothing
             // otherwise), and the ceiling trapdoor belongs in the LOWER
             // room at its ceiling for that - so a room change plus @Height.
-            // A @Room here used to be silently swallowed; the user expected
-            // the move and nothing happened.
+            // A @Room here used to be silently swallowed, leaving the move
+            // without effect.
             if (o.room >= 0)
             {
                 if (!roomOk(o.room))
@@ -680,9 +679,9 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         // heights depending on where she stands and never hits the one -
         // the object is then unusable, without a crash and without a
         // message. Cross-checked across all 13 levels: all 72 vanilla
-        // switches stand on flat ground, not a single exception. Found at
-        // the andy3 switch the user could not operate (room 202 sector 1,1
-        // carries TILT).
+        // switches stand on flat ground, not a single exception. The andy3
+        // switch in room 202 sector 1,1 carries TILT and cannot be operated
+        // for the same reason.
         if ((o.typeId >= 258 && o.typeId <= 274) && o.room >= 0)
         {
             SlopeInfo si;

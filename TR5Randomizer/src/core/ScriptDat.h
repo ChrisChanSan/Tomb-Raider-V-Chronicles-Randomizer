@@ -29,10 +29,9 @@
 // hang off this behavior, among them setup.cpp:111, larafire.cpp:221,
 // drawlara.cpp:227/429 and laraskin.cpp:424.
 //
-// For the randomizer that is unacceptable: the user decreed that the andy
-// levels must always have weapons ("with cross-level enemies, facing a
-// TwoGun without weapons would be really nasty"). So the bit is cleared
-// when randomizing.
+// For the randomizer that is unacceptable: with cross-level enemies placed
+// into these levels, an unarmed Lara facing one of them would have no way
+// to fight back. So the bit is cleared when randomizing.
 //
 // LAYOUT (from LoadGameflow, game/gameflow.cpp:956, and struct GAMEFLOW,
 // global/types.h:573):
@@ -78,7 +77,7 @@ public:
     // TXT_Load (newinv2.cpp:325ff - all eight key items carry the same
     // placeholder, in vanilla always overwritten by the script).
     //
-    // That is exactly what hits us once a model travels into a foreign
+    // That is exactly what happens once a model travels into a foreign
     // level: joby3 receives Key Item 8 but has no CMD_KEY8. Vanilla never
     // notices, because joby2 runs right before it and sets the entry - after
     // a save and load in joby3 the key would read "Load".
@@ -186,8 +185,7 @@ public:
     // from the backup anyway).
     bool shuffleMusic(uint64_t seed, int& swapped, std::string& error);
 
-    // Shuffle the level sections (stage 1 of the plan in Level Infos\
-    // Level-Order-Plan.md): the four story sections Rome (ANDREA*),
+    // Shuffle the level sections: the four story sections Rome (ANDREA*),
     // Russia (JOBY*), Ireland (ANDY*) and VCI (RICH*, incl. RICHCUT2) are
     // permuted as indivisible blocks. ONLY the offset table of the level
     // blocks changes - the blocks themselves (FMVs, cutscenes, flags,

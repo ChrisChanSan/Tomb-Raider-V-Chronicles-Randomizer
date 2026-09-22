@@ -122,12 +122,8 @@ int main(int argc, char** argv)
     // door like rich2's 171, so the antitrigger skips it. Those entries have
     // no x/y/z, and reading one as a position yields 0,0,0: it then looks
     // like an item lying on another at the world origin, on no valid
-    // sector, and not a pickup.
-    //
-    // That is exactly what the FAILs on Andy2, rich1 and rich2 were. The
-    // suite has been crying wolf on those three levels since the immunity
-    // was introduced, and a test that is always red is worse than none: it
-    // teaches whoever runs it to look away.
+    // sector, and not a pickup - a false failure on every level that uses
+    // this flag.
     auto isMove = [](const JsonValue& e) { return e.has("x"); };
 
     // --- Rule 2: no location-bound item was touched ---
@@ -331,33 +327,24 @@ int main(int argc, char** argv)
     std::printf("  %d pickups land at a carrier, %d of them with OCB != 0\n", carried, carriedBad);
     check(carriedBad == 0, "every carried pickup has OCB 0");
 
-    // --- Extra enemies must not be set down on a pickup (#121 side finding) ---
+    // --- Extra enemies must not be set down on a pickup ---
     //
-    // The run above leaves enemies OFF, because that is RandoOptions'
-    // default - and that is exactly why this class could hide here: the
-    // whole enemy placement was never exercised by the self-test, and the
-    // stacking check further up compares moved items only with each other,
-    // never with what the run newly SETS DOWN.
+    // RandoOptions defaults to enemies OFF, so the run above never
+    // exercises enemy placement, and the stacking check above only compares
+    // moved items with each other, never with what a run newly sets down.
     //
-    // What makes it more than a cosmetic overlap is GetCarriedItems
-    // (setup.cpp): at level start it hands every pickup inside an
-    // intelligent enemy's box to that enemy - RemoveDrawnItem, room_number
-    // = NO_ROOM - and the item only drops out again when he dies. Our extra
-    // enemies stand behind a OneShot trigger and are invisible until it is
-    // crossed, so such a pickup is gone from the first frame. On a key item
-    // that is the playthrough, and on a fleeing Larson or Pierre it leaves
-    // the level for good - the very reason their sectors are already barred
-    // for items at the top of Rando::run.
+    // GetCarriedItems (setup.cpp) hands every pickup inside an intelligent
+    // enemy's box to that enemy at level start (RemoveDrawnItem, room_number
+    // = NO_ROOM); the item only drops again when the enemy dies. An extra
+    // enemy stands behind a OneShot trigger and is invisible until crossed,
+    // so a swallowed pickup is gone from the first frame - unreachable on a
+    // key item, lost for good on a fleeing Larson or Pierre. Their sectors
+    // are barred for items at the top of Rando::run for the same reason.
     //
-    // Only checkable WITH the level file, and this program has none. The
-    // approach sector an enemy trigger goes on has to tolerate a trigger,
-    // and that is decided by the real floordata - ApplyPatch fills
-    // triggerSafeSectors from it, the zone export does not know it. Without
-    // that set the placement finds no spot at all and puts down nothing.
-    //
-    // Reported instead of quietly passing: a check that cannot fail is
-    // worse than none, because it reads like cover. Whoever hands this
-    // program a level one day gets the check for free.
+    // Only checkable with the real level's floordata (ApplyPatch fills
+    // triggerSafeSectors from it; the zone export does not carry it), so
+    // without a level file this reports untestable rather than passing - a
+    // check that cannot fail would read as cover.
     std::printf("\nExtra enemies\n");
     if (in.triggerSafeSectors.empty())
     {

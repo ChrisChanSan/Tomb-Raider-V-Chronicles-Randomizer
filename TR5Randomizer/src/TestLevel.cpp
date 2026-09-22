@@ -53,13 +53,12 @@ int main(int argc, char** argv)
         }
 
         // The main block should make up practically the whole remaining
-        // file - nothing big comes after it. If that deviates strongly, we
-        // misread the header.
-        // R8: which items carry bits OUTSIDE the lower six? The old export
-        // masked with 0x3F, so 0x80 (regenerating pickup) and 0x100 (mesh
-        // invisible) were not visible. Our reader delivers the field
-        // completely - so the question can simply be answered instead of
-        // guessed.
+        // file - nothing big comes after it; a strong deviation means the
+        // header was misread.
+        // Lists items whose trigger flags carry bits outside the lower six.
+        // The old exporter masked with 0x3F, so 0x80 (regenerating pickup)
+        // and 0x100 (mesh invisible) were never visible; this reader
+        // delivers the field unmasked.
         int withHigh = 0;
         std::string detail;
         for (int i = 0; i < lvl.itemCount(); ++i)

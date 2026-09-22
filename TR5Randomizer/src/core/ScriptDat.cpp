@@ -42,14 +42,13 @@ namespace
     //
     // The object commands (0x92..0xD8: key/puzzle/pickup/examine and the
     // combos) carry 14 payload bytes - name index, yoff, size and three
-    // rotations plus flags. Exactly those were missing here before: the old
-    // parser gave them, like everything unknown, 2 payload bytes. That it
-    // still reached its goal was luck - an object command is 15 bytes, and
-    // 15 is divisible by 3, so the too-short stride happened to find the
-    // beat again after five hops. It would have torn as soon as one of the
-    // jumped-into payload bytes (offset 3, 6, 9 or 12 in the command)
-    // landed on an opcode with a different length, say 0x80 from a rotation
-    // of 0x8000.
+    // rotations plus flags. Getting this length wrong is dangerous but not
+    // obviously so: an object command is 15 bytes total, and 15 is
+    // divisible by 3, so a wrong stride of 2 payload bytes would still
+    // resynchronize with the real command boundaries after five hops, by
+    // coincidence. It only tears once one of the jumped-into payload bytes
+    // (offset 3, 6, 9 or 12 in the command) lands on an opcode with a
+    // different length, say 0x80 from a rotation value of 0x8000.
     int payload(uint8_t cmd)
     {
         switch (cmd)
@@ -309,7 +308,7 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
 
 
 //----------------------------------------------------------------------------
-// Put a CMD_TAKEOBJ into a level's script block (#53).
+// Put a CMD_TAKEOBJ into a level's script block.
 //
 // The command is 3 bytes: opcode 0xDA and two payload bytes, the first of
 // which carries the INVENTORY object number (enum invobj_types,
@@ -406,8 +405,7 @@ bool ScriptDat::shuffleMusic(uint64_t seed, int& swapped, std::string& error)
         // dev entries GIBBY/TOM out, which sit in the script WITHOUT the
         // NOLEVEL flag and (like DEL) carry the cutscene audio
         // 110/xa14_joby6 - via the flags alone the pot was contaminated:
-        // Andrea1 drew the cutscene as background music (heard by the
-        // user).
+        // Andrea1 would draw the cutscene track as its background music.
         const uint8_t t = m_bytes[audioAt];
         const bool atmo = t == 117 || t == 118 || t == 121 || (t >= 123 && t <= 130);
         if (!atmo)
@@ -571,8 +569,8 @@ bool ScriptDat::shuffleLevels(uint64_t seed, bool freeMode, std::string& orderTe
         std::sort(targets.begin(), targets.end());
 
         // Here too: no identity as long as there is something to swap (with
-        // three levels every sixth permutation would be vanilla - the user
-        // had the impression the checkbox did not engage).
+        // three levels every sixth permutation would be vanilla, making the
+        // option appear to do nothing).
         {
             const std::vector<std::vector<int>> before = units[a];
             for (int attempt = 0; attempt < 16; ++attempt)
@@ -627,10 +625,8 @@ bool ScriptDat::resolveChains(std::vector<std::string>& notes, std::string& erro
         if (sn < 0 || ss < 0) continue;                      // level not in the script: nothing to do
 
         // Since the per-level-start inventory reset (LevelChains.h) no key
-        // travels between levels anymore - the grant is therefore
-        // UNCONDITIONAL, wherever the donor lies. The old case distinction
-        // (donor before / a level in between takes it away) is thereby
-        // obsolete.
+        // travels between levels anymore, the grant is UNCONDITIONAL,
+        // wherever the donor lies.
         bool ch = false;
         if (!addGiveObject(k.taker, k.inv, ch, error))
         { error = std::string(k.name) + ": " + error; return false; }
@@ -657,9 +653,8 @@ void ScriptDat::randomizerChanges(Changes& e)
     // 1. Strip the Ireland levels of the young-Lara bit.
     //
     // GF_YOUNGLARA disables the weapon system at eight places in the engine
-    // - Lara travels there as a child and can carry nothing. User
-    // requirement: the andy levels must always have weapons, or Lara faces
-    // a TwoGun empty-handed.
+    // - Lara travels there as a child and can carry nothing. The andy
+    // levels must always have weapons, or Lara faces a TwoGun empty-handed.
     static const char* kIreland[] = { "andy1", "andy2", "andy3" };
     for (const char* lv : kIreland)
     {
@@ -699,9 +694,8 @@ void ScriptDat::randomizerChanges(Changes& e)
     // own anims with KillItem and shot sounds - richcut2 carries the same
     // slot). The randomizer therefore keeps PISTOLS_ITEM out of rich2, but
     // that is not enough: Lara BRINGS the pistols from the previous level,
-    // and drawn, her arms run over the scripted HK anims. Seen by the user
-    // in game ("the pistols are bugged in rich2, Lara herself and the
-    // inventory item").
+    // and drawn, her arms run over the scripted HK anims instead - both
+    // Lara's own arms and the inventory icon are affected.
     //
     // Vanilla already takes three things from rich2 (inventory objects 78,
     // 59, 60) and grants two (7, 30) - the pistols just are not among them.
@@ -721,10 +715,9 @@ void ScriptDat::randomizerChanges(Changes& e)
     //
     // Vanilla disarms Lara in this level (Uzi, pistols, revolver,
     // lasersight): she is brought aboard as a prisoner, and the only enemy
-    // up to the armory is the chef - who used to be immortal, because
-    // ChefControl never queried his hit points. Neither fits anymore: the
-    // randomizer places enemies everywhere, and the chef now has his death
-    // handling (chef.cpp). So away with the four take-aways.
+    // up to the armory is the chef, whose death handling lives in
+    // chef.cpp. With the randomizer placing enemies everywhere, an unarmed
+    // Lara here no longer fits. So away with the four take-aways.
     static const int kJoby3Weapons[] = { 0 /*Uzi*/, INV_PISTOLS, 3 /*revolver*/, 20 /*lasersight*/ };
 
     for (int obj : kJoby3Weapons)
@@ -744,8 +737,7 @@ void ScriptDat::randomizerChanges(Changes& e)
     // invisible: Andrea1 is the first level, there is nothing to carry in,
     // and nobody misses a weapon that was never there. With a rolled level
     // order Andrea1 can come sixth, and the take-away then eats an Uzi the
-    // player earned three levels ago. Seen by the user in a full playthrough
-    // ("Andrea1: Uzi is still removed at the start").
+    // player earned three levels ago.
     //
     // Only the TAKE goes. The GIVE stays: an Uzi at the start of Streets of
     // Rome is Core's intent, and the weapon scatter is built on top of it.
@@ -850,8 +842,8 @@ bool ScriptDat::cleanupInventory(std::vector<std::string>& notes, std::string& e
         const std::string name = shortU(m_levels[idx].fileName);
         if (!isCampaign(name)) continue;
 
-        // Full reset of the level-bound families at EVERY level start (user
-        // decision): puzzles 1-8 with halves, keys 1-8 with halves, pickups
+        // Full reset of the level-bound families at EVERY level start:
+        // puzzles 1-8 with halves, keys 1-8 with halves, pickups
         // 1-4 with halves, crowbar, burning torch, the three examine objects
         // and the chloroform set - and the crossbow family everywhere except
         // rich3. Whatever a level's own block grants (the vanilla Iris in
@@ -859,12 +851,11 @@ bool ScriptDat::cleanupInventory(std::vector<std::string>& notes, std::string& e
         // would cancel the grant (setup.cpp applies grants first, then
         // take-aways).
         //
-        // Pickup 4 - the secret rose - used to be exempt here, and the
-        // examine objects, the torch and the chloroform were never in the
-        // list at all. All of them travelled: the rose sat in the ring of a
-        // fresh level before a single secret had been found there, and
-        // rich1's chloroform went on into rich2 and rich3. Both seen by the
-        // user in a full playthrough.
+        // Without pickup 4 (the secret rose), the examine objects, the
+        // torch and the chloroform in this reset, all of them would
+        // travel: the rose would sit in the ring of a fresh level before a
+        // single secret had been found there, and rich1's chloroform would
+        // go on into rich2 and rich3.
         //
         // Taking the rose does NOT touch the secret count. The engine keeps
         // that in savegame.Level.Secrets and resets it itself at every level
@@ -878,8 +869,8 @@ bool ScriptDat::cleanupInventory(std::vector<std::string>& notes, std::string& e
             // granted anew afterwards. The engine applies grants behind
             // take-aways in a third phase (gameflow.cpp/setup.cpp), so the
             // amount comes out to exactly one. Without this, a carried-in
-            // copy survived, and a counted puzzle item stood twice in the
-            // inventory ("2 x catapult", seen by the user).
+            // copy would survive, and a counted puzzle item would show
+            // doubled in the inventory (e.g. "2 x catapult").
             if (givesObject(idx, inv) && !givesObjectAfterTake(idx, inv)) regive.push_back(inv);
             if (std::find(takeList.begin(), takeList.end(), inv) == takeList.end()) takeList.push_back(inv);
         };

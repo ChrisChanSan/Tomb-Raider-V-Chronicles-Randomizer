@@ -56,7 +56,7 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
 {
     m_bytes.clear();
     m_mainOffset = m_mainSize = 0;
-    // #123 S7: a fresh file has had nothing done to it yet. Without this a
+    // A fresh file has had nothing done to it yet. Without this a
     // second load() into the same object would inherit the first level's
     // touched rooms - and the GUI does reuse level objects.
     m_hdRooms.clear();
@@ -537,12 +537,12 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
                     if (i >= limit) return false;
                     e.words.push_back(word(i++));
 
-                    // KNOWN DIVERGENCE FROM THE ENGINE, deliberately left in
+                    // Known divergence from the engine, deliberately left in
                     // place. For a camera the engine overwrites its loop
                     // variable with this extra word - "case TO_CAMERA: trigger
                     // = *data++" at control.cpp:2477 - and the loop below it
                     // then tests THAT word's end bit (control.cpp:2619, :2744).
-                    // We test the command word instead, three lines down.
+                    // The command word is tested instead, three lines down.
                     //
                     // In the 16 vanilla levels the two agree everywhere the
                     // result is used: no caller of readChain reads camera or
@@ -983,10 +983,9 @@ bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& ou
 
     // And the BLOCK MAP along with it. Mesh, anim, frame and object blocks
     // also lie behind the floordata inside the main block; without this
-    // correction they point off after the first appended trigger. It went
-    // unnoticed for a long time, because nobody read these blocks after a
-    // floordata append - only the anim check did, and promptly reported
-    // that Lara's animations were "missing" (#53).
+    // correction they point off after the first appended trigger - only the
+    // anim check reads these blocks after a floordata append, and reports
+    // Lara's animations as "missing" when the offset is wrong.
     auto adjustBlock = [&](Block& b) {
         if (b.countAt >= at) b.countAt += raw.size();
         if (b.dataAt  >= at) b.dataAt  += raw.size();
@@ -1109,7 +1108,7 @@ bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
 }
 
 //----------------------------------------------------------------------------
-// Take a single object command out of a trigger (2026-08-29).
+// Take a single object command out of a trigger.
 //
 // Occasion: rich1 room 71. Its one-shot trigger names a music track, the
 // sword statue and two doors. Door 129 is REVERSE-ACTIVATED - its item
@@ -1125,20 +1124,20 @@ bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
 // belong to the scene.
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
-// Rewrite a whole trigger in place (2026-08-29).
+// Rewrite a whole trigger in place.
 //
-// Occasion: andy1's heart (item 8, type 172). Its PICKUP trigger opens a
-// door the user calls useless and starts a cutscene that can teleport Lara
-// into a softlock. On top of that the randomizer pins the heart where it
-// lies, because the trigger does more than play music
-// (Randomizer.cpp, findTriggerPinnedItems) - so the finished KeyItemRange
-// for type 172 never came into play.
+// Occasion: andy1's heart (item 8, type 172). Its PICKUP trigger opens an
+// unneeded door and starts a cutscene that can teleport Lara into a
+// softlock. On top of that the randomizer pins the heart where it lies,
+// because the trigger does more than play music (Randomizer.cpp,
+// findTriggerPinnedItems) - so the curated placement range for type 172
+// never comes into play.
 //
 // Taking only the commands out would not be enough: as a PICKUP trigger it
 // keeps its reference word, and that word IS the pointer at the heart. The
-// user's own suggestion is the clean one - make it a plain TRIGGER. Then
-// there is no reference word at all, and findTriggerPinnedItems skips the
-// entry outright instead of being talked round.
+// clean fix is to make it a plain TRIGGER instead. Then there is no
+// reference word at all, and findTriggerPinnedItems skips the entry
+// outright.
 //----------------------------------------------------------------------------
 bool Tr5Level::setTrigger(int room, int sx, int sz, int kind, int timer,
                           bool oneShot, int mask,
@@ -1357,11 +1356,10 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool on
     // reads it three times the same way (control.cpp:2251/2266/2274,
     // "value = *(data++) & 0x3FF") and does NOT treat it as a command.
     //
-    // A refusal used to stand here - such a trigger is not one you place
-    // freely but one bound to an existing object. With the secret lists
-    // (#53) that case now exists: the user places a keyhole plus the key
-    // trigger that connects it to a door. Whoever passes refItem thereby
-    // says explicitly which object the trigger is bound to.
+    // Such a trigger is not one placed freely but one bound to an existing
+    // object: a secret list places a keyhole plus the key trigger that
+    // connects it to a door. Whoever passes refItem thereby says explicitly
+    // which object the trigger is bound to.
     if (hasRefWord(kind))
     {
         if (refItem < 0)
@@ -1399,7 +1397,7 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool on
 }
 
 //----------------------------------------------------------------------------
-// Turn a wall sector into a portal (#53, the andy3 double door).
+// Turn a wall sector into a portal (the andy3 double door).
 //
 // What a portal sector is was measured with SectorCheck on the working
 // neighbors in andy3 (room 34 column x0, room 36 column x4):
@@ -1414,14 +1412,13 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool on
 //     (36(4,4) vanilla: [TILT][SPLIT4][DOOR]).
 //
 // The VIEW WINDOW (the room list's 32-byte portal entry) is built by
-// addViewWindow when it is missing. It used to be a hard error, which was
-// right while nothing could create one: in andy3, Core had built both
-// windows in completely and only sealed the sectors, so that was the only
-// case that could work. Three secret lists later asked for walls Core never
-// prepared (#132), so now the window is made rather than demanded.
+// addViewWindow when it is missing, rather than demanded as a precondition:
+// in andy3, Core built both windows in completely and only sealed the
+// sectors, but other secret lists ask for walls opened where Core never
+// prepared a window at all.
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
-// Create the view window between two rooms (#132).
+// Create the view window between two rooms.
 //
 // A room blob is laid out as
 //
@@ -1475,8 +1472,8 @@ bool Tr5Level::portalRecords(int room, std::vector<PortalRecord>& out, std::stri
  * The fixed camera table. Sixteen bytes per record: three int32
  * coordinates, then the room as int16 and the flags as int16.
  *
- * Written for one question (2026-08-29): first person pushes a trigger's
- * Camera command aside, but not where the camera carries flags & 3 -
+ * First person pushes a trigger's Camera command aside, but not where the
+ * camera carries flags & 3 -
  * that is the sniper/game camera, and its overlay is drawn inside
  * FixedCamera. From the outside two such triggers look identical, so the
  * flag has to be readable.
@@ -1518,7 +1515,7 @@ bool Tr5Level::cameraRecords(std::vector<CameraRecord>& out, std::string& error)
 }
 
 //----------------------------------------------------------------------------
-// Every drawn face of a room, in world coordinates (#136).
+// Every drawn face of a room, in world coordinates.
 //
 // The layout comes from the engine, not from guesswork. ROOM_INFO is the
 // 208-byte room header, and three of its fields matter here:
@@ -1637,20 +1634,20 @@ bool faceOnSectorWall(const Tr5Level::FaceInfo& f, long x0, long x1, long z0, lo
 }  // namespace
 
 //----------------------------------------------------------------------------
-// Take the wall away from a sector (#136, option "@Clear").
+// Take the wall away from a sector (option "@Clear").
 //
 // A genuine portal carries NO face at all - measured: andy1's room 0 at its
 // door to room 70 has none, and neither has either side of joby3's opening.
 // No editor of the old days could put a texture on a portal, which is why
-// they were always "something special" (the user). Andrea3's room 1 at
+// they were always something special to work around. Andrea3's room 1 at
 // (x6,z2) has exactly one quad, and that is the wall one still bumps into.
 //
 // The face is DEGENERATED rather than removed: all four corner indices are
 // set to the first one, so the quad has no area and nothing is drawn. That
 // keeps every count, every offset and the file length exactly as they are.
 // Cutting the twelve bytes out would match a real portal to the byte, but it
-// means shifting the face stream and nine header offsets with it - the very
-// arithmetic that went wrong twice on 2026-08-27 - and it looks no different.
+// means shifting the face stream and nine header offsets with it - arithmetic
+// that is easy to get wrong - and it looks no different.
 bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::string& error)
 {
     cleared = 0;
@@ -1666,7 +1663,7 @@ bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::strin
     const long x0 = r.originX + static_cast<long>(sx) * 1024, x1 = x0 + 1024;
     const long z0 = r.originZ + static_cast<long>(sz) * 1024, z1 = z0 + 1024;
 
-    // #123 fix round Z: the box over the faces this call really took away.
+    // The box over the faces this call really took away.
     long lo[3] = { 0, 0, 0 }, hi[3] = { 0, 0, 0 };
 
     for (size_t i = 0; i < faces.size(); ++i)
@@ -1687,11 +1684,9 @@ bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::strin
         ++cleared;
     }
 
-    // #123 S7, rewritten for fix round Z. The room used to be marked here
-    // whether or not a face had been found, on the argument that the sector
-    // was NAMED as an opening either way. That argument belonged to a
-    // whole-room mark; a cut box has to be the box of something, and the
-    // only thing this call knows about is the faces it degenerated.
+    // The room is marked here only when a face was actually found and
+    // degenerated: a cut box has to be the box of something, and the only
+    // thing this call knows about is the faces it changed.
     //
     // Nothing is lost by staying quiet when there were none. @Clear is
     // reachable from one place only (Patch::apply's portalAdds loop), and
@@ -1719,7 +1714,7 @@ bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::strin
 }
 
 //----------------------------------------------------------------------------
-// Give a wall the texture of another one (#136, option "@LikeWall").
+// Give a wall the texture of another one (option "@LikeWall").
 //
 // For the case where the opening should NOT be a hole but a pane of glass.
 // A texinfo number says nothing to a human, so the source is a sector one
@@ -1942,11 +1937,11 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
 
     // ONE plane for both windows of a horizontal portal.
     //
-    // Each side used to take its own: the room below opened at its ceiling,
-    // the room above at its floor. In a hand-built level those coincide -
-    // in andy1 room 227's ceiling and room 93's floor sit 256 units apart,
-    // and the two windows then described different holes. The engine took
-    // it and drew a void to slide through; trview refused the level.
+    // Taking each side's own value - the room below its ceiling, the room
+    // above its floor - fails whenever they do not coincide: andy1 room
+    // 227's ceiling and room 93's floor sit 256 units apart, so two windows
+    // built that way describe different holes. The engine draws a void to
+    // slide through, and trview refuses the level.
     //
     // Filled in below, before anything is inserted, because the second
     // insertion reparses and moves the rooms.
@@ -1955,16 +1950,17 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
 
     // And one HEIGHT for both windows of a wall opening.
     //
-    // Each side used to take the floor and ceiling of the sector across from
-    // it - and those are two different columns of the world, so on sloping
-    // ground they disagree. Andrea3 came out with one window spanning
-    // -5120..0 and its partner -3072..-768: two windows describing different
-    // holes. Core's pairs always match (joby3's 76 <-> 10 are both
-    // -2048..-1536), and a mismatch is what made trview refuse the level.
+    // Taking the floor and ceiling of the sector across from each side
+    // fails too: those are two different columns of the world, so on
+    // sloping ground they disagree. Built that way, Andrea3 came out with
+    // one window spanning -5120..0 and its partner -3072..-768 - two
+    // windows describing different holes. Core's own pairs always match
+    // (joby3's 76 <-> 10 are both -2048..-1536), and a mismatch is what
+    // makes trview refuse the level.
     //
-    // Both windows therefore get ONE rectangle - and since #137 that is the
-    // corner-exact one out of the floordata (wallWindow), not the two height
-    // bytes. The bytes are one number for a whole square, and the engine
+    // Both windows therefore get ONE rectangle - the corner-exact one out
+    // of the floordata (wallWindow), not the two height bytes. The bytes
+    // are one number for a whole square, and the engine
     // CLIPS the neighbouring room to this rectangle (SetRoomBounds,
     // draw.cpp:1687-1820, unioned over all portals by GetRoomBounds:1877).
     // Andrea3's new opening reaches down to -4096 while the bytes said
@@ -2346,8 +2342,8 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
     { error = "after inserting the view window " + std::to_string(m_roomMismatch) +
               " rooms no longer parse - the layout arithmetic is off"; return false; }
 
-    // #123 S7, rewritten for fix round Z: both rooms now carry a window the
-    // Remaster's geometry knows nothing about - but only where the window
+    // Both rooms now carry a window the Remaster's geometry knows nothing
+    // about - but only where the window
     // is. The box is read back out of the two records that were just
     // written, one per room, so the SAME code answers here and in
     // makePortal, and the two sides of one opening are two readings of the
@@ -2360,9 +2356,9 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
 //----------------------------------------------------------------------------
 // A vertical opening: ceiling into the room above, floor into the room below.
 //
-// This is NOT makePortal with a different direction, and confusing the two
-// cost two sessions. The horizontal kind writes a floordata DOOR (function 1)
-// and the height query follows it into the neighbour at the same x/z. Two
+// This is NOT makePortal with a different direction. The horizontal kind
+// writes a floordata DOOR (function 1) and the height query follows it
+// into the neighbour at the same x/z. Two
 // rooms stacked on each other cover the SAME x/z, so a door in each sends the
 // query 227 -> 93 -> 227 -> ... forever: the game froze the moment Lara came
 // near it ("Game Thread appeared stuck, skipping suspend to avoid a deadlock").
@@ -2370,8 +2366,8 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
 // The vertical connection lives in the sector's own bytes instead:
 //   byte 4  room below
 //   byte 6  room above
-// Measured against a level the user built by hand in FexInspect, where the
-// same opening works. There, room 227's sector reads "below 222, above 93"
+// Measured against a hand-built level in FexInspect, where the same
+// opening works. There, room 227's sector reads "below 222, above 93"
 // and room 93's reads "below 227" - and NOTHING else differs from vanilla:
 // same box, same floor and ceiling heights, floordata index still 0, and no
 // view window in either room's portal list.
@@ -2380,7 +2376,7 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
 // link byte stays - overwriting room 227's "below 222" tore out a connection
 // Core had put there.
 //----------------------------------------------------------------------------
-// Shift a whole room (#136, "Move_Room").
+// Shift a whole room ("Move_Room").
 //
 // What has to move, and why each of them:
 //
@@ -2509,7 +2505,7 @@ bool Tr5Level::moveRoom(int room, long dx, long dy, long dz, std::string& error)
         }
     }
 
-    // #123 S7: only a VERTICAL move breaks the Remaster's geometry. A TRG's
+    // Only a VERTICAL move breaks the Remaster's geometry. A TRG's
     // vertices are room-local and ride along with the origin, so dx and dz
     // change nothing about them - dy is written into every vertex above and
     // is exactly what the HD art would not follow.
@@ -2585,9 +2581,9 @@ bool Tr5Level::makeVerticalPortal(int room, int sx, int sz, int targetRoom,
 
     m_bytes[at] = static_cast<uint8_t>(targetRoom);
 
-    // #123 S7, rewritten for fix round Z: a floor or ceiling one can now
-    // pass through, and the face that used to close it is still drawn in the
-    // Remaster's geometry - over THIS sector and nowhere else.
+    // A floor or ceiling opening can now be passed through, and the face
+    // that used to close it is still drawn in the Remaster's geometry -
+    // over THIS sector and nowhere else.
     //
     // The vertical kind writes no view window and no portal record, so there
     // is nothing to read the plane back out of. It comes from the sector's
@@ -2620,16 +2616,13 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
     if (targetRoom < 0 || targetRoom >= static_cast<int>(m_rooms.size()))
     { error = "target room " + std::to_string(targetRoom) + " does not exist"; return false; }
 
-    // #123 S7 used to mark both rooms HERE, at the top. Fix round Z records
-    // the opening instead, and an opening cannot be recorded before it
-    // exists - so the mark moved down, to the line after the window has been
-    // proven to be there. Everything the old comment argued for still holds:
-    // the recording sits on the one path every successful call takes,
-    // whether the window had to be built or was already in the file, and a
-    // failed call aborts the whole run so nothing half-recorded is written
-    // out.
+    // The opening is marked once the window is proven to exist, not before:
+    // an opening cannot be recorded before it exists. The mark sits on the
+    // one path every successful call takes, whether the window had to be
+    // built or was already in the file, and a failed call aborts the whole
+    // run so nothing half-recorded is written out.
 
-    // No view window yet? Then build one, in both directions (#132). This
+    // No view window yet? Then build one, in both directions. This
     // happens FIRST, before any reference into m_rooms is taken: creating a
     // window reparses the file, and every reference would dangle after it.
     {
@@ -2668,8 +2661,8 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
         return false;
     }
 
-    // #123 fix round Z, and the reason the check above is worth its
-    // comparison twice over: the window is there, so the box of the opening
+    // And the reason the check above is worth its comparison twice over:
+    // the window is there, so the box of the opening
     // can be read out of it. Only this room's side - the caller opens the
     // other direction with its own call, and addViewWindow has already
     // recorded both sides where it built them. All three readings of one
@@ -2770,7 +2763,7 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
 }
 
 //----------------------------------------------------------------------------
-// Make a sector climbable (#53, Make_Climb).
+// Make a sector climbable (Make_Climb).
 //
 // A CLIMB entry is ONE word: function 6 in bits 0-4, the climbable wall
 // sides in bits 8-11. The engine checks in _TestTriggers
@@ -2848,7 +2841,7 @@ bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& err
 }
 
 //----------------------------------------------------------------------------
-// Set or clear a room's water bit (#53, Make_Room_Water / Make_Room_Nowater).
+// Set or clear a room's water bit (Make_Room_Water / Make_Room_Nowater).
 //
 // ROOM_UNDERWATER is bit 0 of the room flags (global/types.h:281), in the
 // room header at +78. 44 engine sites hang off it: Lara's swim state,
@@ -3072,7 +3065,7 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
     // the old reading here copied the NEIGHBOR infos' samples (= foreign
     // sounds) along as "variants" - in the target the engine then rolled
     // between the right sound and foreign ones, with the right one's flags
-    // (heard in game, #76: TwoGun randomly plays his shot instead of the
+    // (heard in game: TwoGun randomly plays his shot instead of the
     // footsteps while walking, gladiator/Roman god a high-pitch scream on
     // being hit - all multi-variant sounds).
     int16_t flags = 0;
@@ -3403,7 +3396,7 @@ bool Tr5Level::setForeignTalkHeads(int value)
 }
 
 //----------------------------------------------------------------------------
-// data[3] of the same 32 bytes: the HD outfit marker (#123, stage S7).
+// data[3] of the same 32 bytes: the HD outfit marker.
 //
 // The engine's HD path needs to know which Tomb Raider III outfit the
 // wardrobe rolled, and data[0] cannot tell it: LARA_PONYTAIL is written both
@@ -3436,9 +3429,9 @@ bool Tr5Level::setHdOutfit(int value)
 }
 
 //----------------------------------------------------------------------------
-// The three marker lists (#123, stage S7; the cut boxes are fix round Z).
-// All three are plain recording - the judgement about which of them the
-// engine may use lives in Patch::writeHdMarkers, so that this class keeps
+// The three marker lists. All three are plain recording - the judgement
+// about which of them the engine may use lives in Patch::writeHdMarkers,
+// so that this class keeps
 // saying only what happened.
 //----------------------------------------------------------------------------
 void Tr5Level::hdMarkRoom(int room)
@@ -3447,7 +3440,7 @@ void Tr5Level::hdMarkRoom(int room)
 }
 
 //----------------------------------------------------------------------------
-// ONE OPENING, AS A BOX (#123, fix round Z).
+// One opening, as a box.
 //
 // The raw box is whatever the edit itself wrote - a view window's four
 // corners, a sector square at the height a link was opened, the corners of
@@ -3463,8 +3456,8 @@ void Tr5Level::hdMarkRoom(int room)
 //                 thickness and its faces are not on the classic wall
 //                 plane. The other two shrink INWARD by
 //                 HD_CUT_IN_PLANE; see the long note in Tr5Level.h for why
-//                 that step has to point inward, and what fix round Z
-//                 measured when it pointed outward.
+//                 that step has to point inward, and what was measured
+//                 when it pointed outward.
 //   -1            the raw box is not a plane at all but a volume of art
 //                 that the edit really took away (two walls of a corner
 //                 sector degenerated in one call, say). Then there is no
@@ -3574,7 +3567,7 @@ void Tr5Level::hdMarkCutFromWindow(int room, int sx, int sz, int targetRoom)
         const int axis = p.nx ? 0 : (p.ny ? 1 : (p.nz ? 2 : -1));
         const int nrm  = p.nx ? p.nx : (p.ny ? p.ny : p.nz);
 
-        // THE ONE UNIT BACK. A window does not sit ON its plane: where its
+        // The one unit back: a window does not sit ON its plane. Where its
         // normal component is +1 it sits one unit in FRONT of it, and where
         // it is -1 it sits on it - measured off vanilla andy1 and written
         // down in addViewWindow's own comment, which is the rule this
@@ -3625,7 +3618,7 @@ void Tr5Level::hdMarkDonor(int slot, int fromSlot, const std::string& level)
 }
 
 //----------------------------------------------------------------------------
-// data[1] of the same 32 bytes: the weather (#144). 0 dry, 1 rain, 2 snow.
+// data[1] of the same 32 bytes: the weather. 0 dry, 1 rain, 2 snow.
 //
 // LoadLevel reads the block as "short data[16]" and takes
 // WeatherType = (char)data[1] (specific\file.cpp) - so the value sits two
@@ -3651,7 +3644,7 @@ bool Tr5Level::setWeatherType(int value)
 }
 
 //----------------------------------------------------------------------------
-// In how many rooms could weather be seen at all (#144)?
+// In how many rooms weather could be seen at all.
 //
 // Two conditions have to meet in ONE room, and both are the engine's, not
 // an assumption:
@@ -3762,7 +3755,7 @@ bool Tr5Level::save(const std::wstring& path, std::string& error) const
 {
     if (m_bytes.empty()) { error = "no level loaded"; return false; }
 
-    // Texture workshop (#104): as long as it is dirty and open, the texture
+    // Texture workshop: as long as it is dirty and open, the texture
     // blocks in m_bytes carry the OLD state. Rather fail loudly than
     // silently write a level with stale pages (the TR3Insert lesson: nobody
     // reads a warning). Patch::apply closes at the end itself.
@@ -3785,7 +3778,7 @@ bool Tr5Level::save(const std::wstring& path, std::string& error) const
 }
 
 //----------------------------------------------------------------------------
-// Give a room that has none a drawn surface (#137, "Make_Room_Geometry").
+// Give a room that has none a drawn surface ("Make_Room_Geometry").
 //
 // 89 rooms in Chronicles have no faces at all. Andrea3's room 74 is one of
 // them: five by five sectors, four roomlets, and pRmVtx == pRmFace, which
@@ -3838,8 +3831,8 @@ bool Tr5Level::save(const std::wstring& path, std::string& error) const
 // insertion point, and pRmVtx, pRmFace and pRmPrelight are the same number, so
 // it would move all three and leave pRmFace pointing into the middle of the
 // vertices. Three equal numbers cannot be told apart by a comparison - the
-// difference between them is what they mean, not what they are. That is the
-// same stretch of data that has already been got wrong twice.
+// difference between them is what they mean, not what they are - reusing
+// the RELOC loop here would silently corrupt the room.
 bool Tr5Level::buildRoomGeometry(int room, int likeRoom,
                                  const std::vector<RoomTexRule>& rules,
                                  std::string& error)
@@ -3851,7 +3844,7 @@ bool Tr5Level::buildRoomGeometry(int room, int likeRoom,
     if (!r.headerOffset || !r.sectorsOffset)
     { error = "room " + std::to_string(room) + " did not parse"; return false; }
 
-    // #123 S7: marked at the top, before the idempotent way out below. A
+    // Marked at the top, before the idempotent way out below. A
     // room named by Make_Room_Geometry has no drawn surface in the vanilla
     // file - which is why the command exists at all - so the Remaster's
     // group for it is empty too and the engine falls back to classic there
@@ -4178,10 +4171,10 @@ bool Tr5Level::buildRoomGeometry(int room, int likeRoom,
                            cornerCeiling(room, sx, sz, ix * 1024, iz * 1024, cC[ix][iz]);
             if (!have) continue;                        // unreadable chain: hands off
 
-            // No head room at ANY corner closes the sector. This used to be
-            // the byte-wise test "floor byte <= ceiling byte", and that threw
+            // No head room at ANY corner closes the sector - not the
+            // byte-wise test "floor byte <= ceiling byte", which throws
             // away 7 core sectors in 3 rooms (rich3 214, Andrea2 102, rich3
-            // 206) which are shut by the bytes and half open at the corners.
+            // 206) that are shut by the bytes and half open at the corners.
             bool anyOpen = false;
             for (int ix = 0; ix < 2; ++ix)
                 for (int iz = 0; iz < 2; ++iz)

@@ -23,7 +23,7 @@ class Tr5Level;
 class JsonValue;
 
 //----------------------------------------------------------------------------
-// Secret lists (#53): hand-written hiding spots per author and category.
+// Secret lists: hand-written hiding spots per author and category.
 //
 // One file = one dropdown entry, file name Author_Category.txt in the folder
 // data\secrets. The syntax is that of the curation lists (three forms plus
@@ -52,13 +52,13 @@ std::vector<SecretSource> findSecretSources(const std::wstring& folder);
 
 // Builds a patch (itemEdits/itemAdds/triggerAdds/portalAdds) from the
 // level's line. A line without new spots and without extras leaves the patch
-// empty - the level stays vanilla, exactly as agreed in the template.
-// Parts that are not understood are reported, never silently swallowed.
+// empty - the level stays vanilla, matching the template. Parts that are
+// not understood are reported, never silently swallowed.
 //
 // secretsMoved counts ONLY the relocated secrets themselves. The patch also
-// carries extras (keys, switches, retypings), and whoever displays the
-// report's edited+added instead tells the user "6 secrets" in a level that
-// has three - which is exactly what happened in the UI once.
+// carries extras (keys, switches, retypings); displaying the report's
+// edited+added count instead would show "6 secrets" for a level that only
+// has three.
 bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName,
                       const Tr5Level& lvl, JsonValue& patchOut,
                       int& secretsMoved,

@@ -38,7 +38,7 @@ namespace
     }
 
     //------------------------------------------------------------------------
-    // #147 - the flipmap partner of a room.
+    // The flipmap partner of a room.
     //
     // FlipMap() (game/control.cpp:2634) swaps the two ROOM_INFO structs
     // wholesale and then hands the base room its own item list back. So the
@@ -83,10 +83,9 @@ namespace
     }
 
     // How far the partner tile's floor may sit away from the base tile's
-    // before the copy is refused. One sector height is the measured room:
-    // in joby5 - the level the whole thing was found in - all nine cases
-    // of the user's run come out at exactly dy = 0, and a flip that lifts
-    // a tile by more than a full sector no longer shows the same place.
+    // before the copy is refused. Measured in joby5: all nine flip cases
+    // come out at exactly dy = 0, and a flip that lifts a tile by more
+    // than a full sector no longer shows the same place.
     const long kFlipFloorTolerance = 1024;
 
     // May the flipmap partner take a second copy of a trigger on this
@@ -146,12 +145,12 @@ namespace
 
 long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
 {
-    // GLOBAL (user wish): no level-internal permutation of the existing
-    // tracks, but ONE seed permutation over a fixed catalog (below) that
-    // every level applies the same way - jingles thus travel across level
-    // borders (rich3 sounds in joby2), yet the same track sounds the same
-    // everywhere. And the CLI needs no collection phase over foreign levels
-    // it does not even know.
+    // One GLOBAL seed permutation over a fixed catalog (below), not a
+    // level-internal permutation of the existing tracks: every level
+    // applies the same mapping, so jingles travel across level borders
+    // (rich3 sounds in joby2) while the same track always sounds the same.
+    // The CLI also needs no collection phase over foreign levels it does
+    // not even know.
     //
     // The atmospheres stay their own pot, because the engine treats them
     // differently (TriggerNormalCDTrack, control.cpp: 117/118/121/123..130
@@ -164,13 +163,13 @@ long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
 
     // The jingle pot is NOT the whole track space, but only what some
     // trigger in the game actually fires - measured with MusicCheck over
-    // all 15 vanilla levels (2026-08-22, union of the TO_CD tracks, minus
-    // the atmospheres). That keeps cutscene dialogue, title music, credits
+    // all 15 vanilla levels (union of the TO_CD tracks, minus the
+    // atmospheres). That keeps cutscene dialogue, title music, credits
     // lead-in, FMV-adjacent tracks and the tutorial voice lines (TL_*, they
-    // only run via flipeffects anyway) out: a jingle trigger never plays a
-    // 70-second dialogue (heard and requested by the user). The few voice
-    // lines triggered inside levels (1, 26, 42, 47, 48, 52, 54, 59, 67, 79,
-    // 90, 100) are in - those are level content, not cutscenes.
+    // only run via flipeffects anyway) out: a jingle trigger must never
+    // play a 70-second dialogue. The few voice lines triggered inside
+    // levels (1, 26, 42, 47, 48, 52, 54, 59, 67, 79, 90, 100) are in -
+    // those are level content, not cutscenes.
     static const int kJingles[] =
     {
         1, 8, 10, 11, 14, 15, 16, 17, 18, 21, 24, 25, 26, 27, 28, 29, 31, 32,
@@ -230,7 +229,7 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         in.presentSlots.insert(slots.begin(), slots.end());
     }
 
-    // Weather (#144). Both numbers come out of the file for the same reason
+    // Weather. Both numbers come out of the file for the same reason
     // the slots above do: the level itself is the only honest source, and a
     // typed table would drift the moment a level is edited.
     in.weatherRooms = level.weatherRooms();
@@ -251,7 +250,7 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         }
     }
 
-    // Headroom for enemies (#141, RandoInput::sectorCeiling / typeHeight).
+    // Headroom for enemies (RandoInput::sectorCeiling / typeHeight).
     // Also ALWAYS, for the same reason as the slopes above: this is the one
     // place where the real level file and the placement input are both at
     // hand, and both halves of the height rule have to come out of files.
@@ -303,13 +302,13 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
 }
 
 //----------------------------------------------------------------------------
-// The height reader for models that are not in the level yet (#141).
+// The height reader for models that are not in the level yet.
 //
 // Deliberately no table of numbers anywhere: the donor file is opened and
 // the model measured, exactly as the import will read it a moment later. The
 // two caches are what makes that affordable - a full run asks thirteen
 // levels about the same handful of donors, and the guests from Tomb Raider 3
-// come out of the package cache the import fills anyway (#103).
+// come out of the package cache the import fills anyway.
 //----------------------------------------------------------------------------
 std::function<bool(const char*, const char*, int, int&)>
 Patch::modelHeightFn(LevelSourceFn levelSource, void* levelSourceUser,
@@ -358,7 +357,7 @@ Patch::modelHeightFn(LevelSourceFn levelSource, void* levelSourceUser,
             return true;
         }
 
-        // --- A donor level of our own ---------------------------------------
+        // --- A donor level from this project ---------------------------------
         if (!fromLevel || !*fromLevel || !levelSource) return false;
 
         const std::string key(fromLevel);
@@ -552,7 +551,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // the backup.
     const JsonValue& outfit = patch["outfit"];
 
-    // #123 S7: the HD outfit marker starts at "none" for every run that
+    // The HD outfit marker starts at "none" for every run that
     // decides an outfit at all, and the guest branch far below sets it.
     // Guarded by has("outfit") for the same reason the weather is: apply()
     // runs a SECOND time for the secret list, and that patch carries no
@@ -625,7 +624,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 level.hdMarkDonor(slot, slot, from);
             }
 
-            // The LaraType byte is our outfit marker for the engine:
+            // The LaraType byte is the outfit marker for the engine:
             // hair.cpp and laraskin.cpp key the braid special-handling
             // (anchoring AND the weld table of the braid base) off it -
             // Core had both hanging off the level name, because in vanilla
@@ -644,7 +643,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- An outfit from Tomb Raider 1-3 (#122) -----------------------------
+    // --- An outfit from Tomb Raider 1-3 -------------------------------------
     //
     // Beside the vanilla path above this one is small, and deliberately so:
     // ONLY the skin (slot 8) is replaced, and even there the HEAD stays the
@@ -713,7 +712,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // braid's special handling, and the braid hangs on the head - which
         // is the level's own. Whatever was right before is still right.
         //
-        // But data[3] IS written (#123, stage S7), and it exists because of
+        // But data[3] IS written, and it exists because of
         // exactly that: LaraType says LARA_PONYTAIL here, and it says the
         // same for the Rome body in a Russia level. The engine's HD path
         // cannot tell the two apart from the file and stays classic for
@@ -758,7 +757,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             }
     }
 
-    // --- Weather (#144) ---------------------------------------------------
+    // --- Weather -------------------------------------------------------------
     //
     // Two bytes in the header block between the texture blocks and the main
     // block, right beside the LaraType byte written above - which is why it
@@ -803,9 +802,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // weaponAdds and moveableAdds are the same operation - both are
     // resolved copy lists {slot, fromLevel, replace} from the randomizer,
     // they merely count separately (weapons resp. cross enemies).
-    // Fetches a guest from Tomb Raider 3 and installs it (#92).
+    // Fetches a guest from Tomb Raider 3 and installs it.
     //
-    // Everything happens here and now on the user's machine: extract,
+    // Everything happens here and now on the player's machine: extract,
     // convert, install. None of it lies around prepared, because prepared
     // packages would be third-party game data.
     auto buildTr3Guest = [&](Tr5Level& lvl, int slot, PatchReport& rep, std::string& err) -> bool
@@ -815,7 +814,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         for (const Tr3Source::DinoSource& k : all) if (k.slot == slot) { d = &k; break; }
         if (!d) { err = "no guest known for slot " + std::to_string(slot); return false; }
 
-        // Via the cache (#103): extract once instead of per level.
+        // Via the cache: extract once instead of per level.
         std::vector<uint8_t> model, sounds;
         std::string f;
         if (!Tr3Source::fetchCached(*d, tr3Dir, tr3GoldDir, cacheDir, model, sounds, f))
@@ -826,7 +825,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (!lvl.addSoundsFromTr3(sounds, d->soundBase, mapping, f, &d->volumes))
         { err = std::string(d->name) + " (installing sounds): " + f; return false; }
 
-        // #153 round M3: every id this guest just took over is written into
+        // Every id this guest just took over is written into
         // the sidecar, so that the engine's HQ bridge does not pair it with
         // whatever the remaster's own bank keeps on that number. The reason
         // in full is at Tr5Level::hdMarkSoundImport.
@@ -848,7 +847,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
 
         // 3. APPEND textures, never shift - otherwise the level collapses
-        //    (user requirement, see the texture page rule).
+        //    (see the texture page rule).
         std::map<int,int> texMap;
         if (!lvl.addTexturesFromTr3(model, texMap, f))
         { err = std::string(d->name) + " (textures): " + f; return false; }
@@ -863,7 +862,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (!lvl.addMoveableFromTr3(model, slot, -1, f))
         { err = std::string(d->name) + " (model): " + f; return false; }
 
-        // #123 S7: the Remaster has no TR5 model for this slot at all, and
+        // The Remaster has no TR5 model for this slot at all, and
         // the engine is told where it really comes from - the guests have
         // their own HD models in the Tomb Raider I-III Remaster.
         lvl.hdMarkDonor(slot, slot, "TR3");
@@ -886,11 +885,11 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const JsonValue& w = list[i];
             const int slot = static_cast<int>(w["slot"].asInt(-1));
 
-            // --- Guest from Tomb Raider 3 (#92) -----------------------------
+            // --- Guest from Tomb Raider 3 -------------------------------------
             //
-            // No donor level: everything is fetched NOW from the user's
-            // installation. That is exactly what this path is for - we ship
-            // no game data, so nothing may be prepared.
+            // No donor level: everything is fetched NOW from the player's
+            // installation. That is exactly what this path is for - no game
+            // data ships with the tool, so nothing may be prepared.
             //
             // The order is a rule, not taste (see the recipe):
             // SOUNDS -> TEXTURES -> MODEL. Only then is it fixed what the
@@ -906,9 +905,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const std::string from = w["fromLevel"].asString();
             const bool replace = w["replace"].asBool(false);
             // Diverging target slot (fallback slots of the cross enemy mix:
-            // the donor's MESHSWAP1 405 lands in the ENEMY'S slot, since
-            // #111 401-404 resp. 462-467), and whether only the meshes
-            // travel (mesh stores without their own animations).
+            // the donor's MESHSWAP1 405 lands in the ENEMY'S slot, since the
+            // enemy occupies 401-404 resp. 462-467), and whether only the
+            // meshes travel (mesh stores without their own animations).
             const int to = static_cast<int>(w["toSlot"].asInt(-1));
             const int targetSlot = (to < 0) ? slot : to;
             const bool meshesOnly = w["onlyMeshes"].asBool(false);
@@ -933,7 +932,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 error = std::string(what) + " slot " + std::to_string(slot) + " from " + from + ": " + wErr;
                 return false;
             }
-            // #123 S7: BOTH slot numbers. A mesh store travels into the
+            // BOTH slot numbers are recorded. A mesh store travels into the
             // enemy's own slot (MESHSWAP1 405 -> 462..467), and only the
             // slot it came FROM says what the model actually is.
             level.hdMarkDonor(targetSlot, slot, from);
@@ -952,7 +951,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // Repair: +2 adopts frame data, rate and shot command of the healthy
     // guard fire anim (+2 of its own set) in the same level. Any guard set
     // works as the source: the classic one on 37 or the joby guard on 460
-    // (BLUE_GUARD2, #105) - both fire via state 3, their sets carry the
+    // (BLUE_GUARD2) - both fire via state 3, their sets carry the
     // anim healthy.
     {
         Tr5Level::MoveableInfo swat, guard;
@@ -1016,7 +1015,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // fixed before anything is written to the items. It is not mandatory -
     // appendChain adjusts the item offset itself - but it keeps the flow
     // unambiguous when reading back.
-    // --- Lara anims from donor levels (#53) ------------------------------
+    // --- Lara anims from donor levels --------------------------------------
     //
     // {"anim": 437, "fromLevel": "joby2"} implants a single Lara anim with
     // frames, commands and sounds. Needed for ANIM_KEYCARD: the slot exists
@@ -1045,7 +1044,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Water rooms (#53) -----------------------------------------------
+    // --- Water rooms ---------------------------------------------------------
     //
     // {"room": N, "on": true|false} sets resp. clears ROOM_UNDERWATER. A
     // hard error like portal and climbing wall: a half-switched room would
@@ -1062,7 +1061,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Climbing walls (#53) --------------------------------------------
+    // --- Climbing walls -------------------------------------------------------
     //
     // {"room","sectorX","sectorZ","dirBits"}: the sector becomes climbable.
     // dirBits per the engine convention (control.cpp:2189), computed by the
@@ -1083,7 +1082,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Room moves (#136) -----------------------------------------------
+    // --- Room moves ------------------------------------------------------------
     //
     // BEFORE the portals, deliberately: a window takes its height from the
     // two rooms as they stand, so the room has to be where it belongs first.
@@ -1104,7 +1103,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Portals (#53) ---------------------------------------------------
+    // --- Portals ---------------------------------------------------------------
     //
     // One entry opens BOTH sides of a sealed wall: the named sector of
     // roomA becomes a portal to roomB and vice versa. The view windows (the
@@ -1143,7 +1142,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             return false;
         }
 
-        // #136: the passage is open, but the WALL is a drawn face of its own
+        // The passage is open, but the WALL is a drawn face of its own
         // and would still stand in the way. Both sides are treated - where a
         // sector has no wall, and that is what most portals look like,
         // nothing happens and nothing is reported.
@@ -1167,7 +1166,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Room geometry (#137) --------------------------------------------
+    // --- Room geometry ----------------------------------------------------------
     //
     // Last of the room work, and that order is the whole point. It runs
     // AFTER roomMoves, so the sector bytes already carry the shift and the
@@ -1227,7 +1226,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
     const JsonValue& tadds = patch["triggerAdds"];
 
-    // Compensate the offset between planning and file (#107): the planning
+    // Compensate the offset between planning and file: the planning
     // numbers new items from the LEVEL JSON's item count (itemBase), but
     // the itemAdds append to the REAL file. If the source file carries more
     // items than the JSON (the weapon base was created after the JSON
@@ -1289,7 +1288,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
         ++report.triggersAdded;
 
-        // --- The same trigger into the flipmap partner room (#147) --------
+        // --- The same trigger into the flipmap partner room ------------------
         //
         // Only for the entries that ask for it. An enemy waker may exist
         // twice without doing any harm: it wakes the same item, and the
@@ -1364,9 +1363,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (e.has("y"))      it.y = static_cast<int32_t>(e["y"].asInt());
         if (e.has("z"))      it.z = static_cast<int32_t>(e["z"].asInt());
 
-        // "yAuto" also when moving (#53): the same computation as for the
+        // "yAuto" also when moving: the same computation as for the
         // additions further down. Needed by producers that only know room
-        // and sector - the user's secret lists state exactly that.
+        // and sector - a secret list states exactly that.
         if (e["yAuto"].asBool(false) &&
             it.roomNumber >= 0 && static_cast<size_t>(it.roomNumber) < level.rooms().size())
         {
@@ -1409,18 +1408,18 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // to fire at all.
             //
             // 0x80 additionally marks a regenerating pickup
-            // (game/init.cpp:492). If we cleared it, several ammo piles
-            // would quietly stop refilling - Andrea1 items 66 and 78,
+            // (game/init.cpp:492). Clearing it would quietly stop several
+            // ammo piles from refilling - Andrea1 items 66 and 78,
             // Andrea2 item 69, joby2 item 8.
             //
-            // 0x40 used to be described here as "a pure editor artifact, no
-            // code path reads it" and was cleared. That was wrong and muted
-            // the coupled trigger move of Andrea1 item 107: the item
-            // arrived at its new spot without 0x40, was killed on pickup,
-            // and the trigger that traveled along never found the condition
-            // to wake dog and flame emitter. It was visible nowhere,
-            // because every tool displays the OCB masked to 0x3F - item 107
-            // shows as "OCB 0" everywhere, raw it is 0x0040.
+            // 0x40 must be preserved too, even though no code path reads it
+            // directly: clearing it mutes the coupled trigger move of
+            // Andrea1 item 107 - the item arrives at its new spot without
+            // 0x40, is killed on pickup, and the trigger that travels along
+            // with it never finds the condition to wake dog and flame
+            // emitter. This is invisible in most tools, because the OCB is
+            // usually displayed masked to 0x3F - item 107 then shows as
+            // "OCB 0" everywhere, though raw it is 0x0040.
             //
             // Cross-check: all seven items pinned via a pickup trigger
             // carry this bit (Andrea1 107 and 94, Andrea3 68, andy1 8,
@@ -1477,9 +1476,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         it.z = static_cast<int32_t>(a["z"].asInt());
 
         // "yAuto": compute the true floor height at this spot instead of
-        // taking it from the caller (#61). On a slope the sector base value
+        // taking it from the caller. On a slope the sector base value
         // is the HIGHEST corner - an item in the middle of the sector would
-        // hang up to half a sector in the air (#86). The same computation
+        // hang up to half a sector in the air. The same computation
         // the engine uses to find the floor: floorSlope + floorPosAt.
         //
         // Needed by producers that have no slope data (the wall test script
@@ -1553,16 +1552,16 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Backfill Lara's interaction anims (#53) --------------------------
+    // --- Backfill Lara's interaction anims ----------------------------------
     //
     // Lara's anim table is the same length in every level, but the IMAGE
     // DATA is level-specific. Where a level never needs a movement, Core
     // leaves the entry as a stub (FrameSize 0) - what plays is a frozen
-    // pose or a far too short movement. It hit the user twice: the keycard
-    // in joby3 (22 seconds frozen) and a switch in andy3 ("does a switch
-    // animation, just not the right one - far too fast"). The second is
-    // worse than ugly: Lara finishes before the OBJECT animation ends,
-    // leaves the sector, and the trigger never engages.
+    // pose or a far too short movement: the keycard gesture in joby3 stayed
+    // frozen for 22 seconds, and a switch in andy3 played the wrong,
+    // too-fast animation. The second case is worse than ugly: Lara finishes
+    // before the OBJECT animation ends, leaves the sector, and the trigger
+    // never engages.
     //
     // Hence here, AFTER all object changes: look up which interactions even
     // occur in the finished level, and fetch the corresponding anim from a
@@ -1602,29 +1601,29 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         static const char* kDonors[] = { "joby4", "andy1", "Andy3", "joby3", "Andrea3", "joby5", "Andy2", "joby2", "rich2" };
 
         // These movements hang off no object but off Lara's controls - they
-        // must exist in EVERY level. Found by the user: the crawl roll
-        // (duck + sprint, lara.cpp:3288 sets anim 218) is a stub in rich1,
-        // and already in vanilla - Lara is pushed forward without anything
-        // moving. Measured with LaraAnim: rich1 is the ONLY level with
-        // FrameSize 0 there.
+        // must exist in EVERY level. The crawl roll (duck + sprint,
+        // lara.cpp:3288 sets anim 218) is a stub in rich1, and already in
+        // vanilla - Lara is pushed forward without anything moving.
+        // Measured with LaraAnim: rich1 is the ONLY level with FrameSize 0
+        // there.
         static const int kAlways[] = {
             218,   // AS_DUCKROLL - crawl roll
             421,   // ANIM_CRAWLJUMP - crawl jump
-            // Handling a flare. Found by the user once the rich levels had
-            // flares at all, and measured with LaraAnim: all four are stubs
-            // (size 0) in rich1, rich2 and rich3, and sound in Andrea1 and
-            // joby4. Core left them out because those levels carry no flare
-            // - which is exactly what we changed.
+            // Handling a flare, needed once the rich levels carry flares at
+            // all: measured with LaraAnim, all four are stubs (size 0) in
+            // rich1, rich2 and rich3, and present in Andrea1 and joby4.
+            // Core left them out because those levels carried no flare -
+            // which the randomizer now adds.
             189,   // ANIM_THROWFLARE  - throwing one away
             204,   // ANIM_PICKUPF     - picking one off the floor
             206,   // ANIM_PICKUPF_UW  - the same under water
             312,   // ANIM_DUCKPICKUPF - the same while crouched
-            // Picking an item up UNDER WATER. Found by the user in Andrea1
-            // (2026-09-13) and measured with LaraAnim: ANIM_PICKUP_UW is a
-            // Core stub (FrameSize 0) in Andrea1, joby3, joby5, rich1, rich2,
-            // rich3 and richcut2 - every level whose vanilla layout has no
-            // pickup under water, which the randomizer changes. The flare's
-            // twin (206) was already here; the plain one was not.
+            // Picking an item up UNDER WATER. Measured with LaraAnim:
+            // ANIM_PICKUP_UW is a Core stub (FrameSize 0) in Andrea1, joby3,
+            // joby5, rich1, rich2, rich3 and richcut2 - every level whose
+            // vanilla layout has no pickup under water, which the
+            // randomizer changes. The flare's twin (206) was already here;
+            // the plain one was not.
             130,   // ANIM_PICKUP_UW   - picking an item up under water
         };
         std::set<int> needed(std::begin(kAlways), std::end(kAlways));
@@ -1645,9 +1644,8 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // case Core stubs the WHOLE chain (in rich1, 218 through 221 point
         // at the same frame pointer). Repairing only the first link is
         // therefore not enough: Lara starts the roll and falls back into
-        // the crawl pose after six frames - exactly what the user saw. The
-        // need is therefore expanded along next_animation before anything
-        // is fetched.
+        // the crawl pose after six frames. The need is therefore expanded
+        // along next_animation before anything is fetched.
         {
             std::set<int> open = needed;
             while (!open.empty())
@@ -1689,7 +1687,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // Close the texture workshop (#104): all page imports of this run are
+    // Close the texture workshop: all page imports of this run are
     // now packed ONCE and put into the file. save() refuses to write a
     // dirty open workshop - forgetting therefore shows up loudly, not as a
     // broken level.
@@ -1703,7 +1701,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 }
 
 //----------------------------------------------------------------------------
-// HD markers (#123, stage S7). What they are and why, see ApplyPatch.h.
+// HD markers. What they are and why, see ApplyPatch.h.
 //----------------------------------------------------------------------------
 int Patch::hdOutfitId(const std::string& wardrobeId)
 {
@@ -1726,8 +1724,9 @@ int Patch::hdOutfitId(const std::string& wardrobeId)
         if (wardrobeId == r.id) return r.hd;
 
     // An outfit the engine has no HD twin for. 0 means "no marker", and the
-    // engine then dresses her the way it would have without stage S7 - the
-    // level's own classic body. A right classic body beats a wrong HD one.
+    // engine then dresses her the way it would have without HD outfit
+    // markers at all - the level's own classic body. A right classic body
+    // beats a wrong HD one.
     return 0;
 }
 
@@ -1761,15 +1760,15 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
         return false;
     }
 
-    // THE VERSION IS THE LOWEST ONE THAT CAN SAY WHAT IS IN THE FILE
-    // (#123, fix round Z). `cut` lines were added in version 2, so a file
-    // that carries one declares 2 and an engine older than fix round Z
-    // refuses the whole of it - which is the right answer, because that
-    // engine would draw a closed HD wall across an opening it cannot cut.
-    // A file with no cut line is a valid version 1 file to the last byte,
-    // so it says 1 and an older engine goes on reading it. The user runs
-    // intermediate builds out of release\ beside finished levels; a format
-    // number is no reason to break the ones that still work.
+    // The version is the lowest one that can say what is in the file.
+    // `cut` lines were added in version 2, so a file that carries one
+    // declares 2 and an engine that predates cut-line support refuses the
+    // whole of it - the right answer, because that engine would draw a
+    // closed HD wall across an opening it cannot cut. A file with no cut
+    // line is a valid version 1 file to the last byte, so it says 1 and an
+    // older engine goes on reading it: intermediate builds run beside
+    // finished levels, and a format number is no reason to break the ones
+    // that still work.
     //
     // Deterministic all the same: the same seed writes the same lines, so
     // it writes the same version.
@@ -1806,12 +1805,12 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
         if (cutsOut) ++*cutsOut;
     }
 
-    /* THE SOUND IDS THIS RUN IMPORTED FROM ANOTHER GAME (#153, round M3),
-     * one line, ascending because a std::set is - so the same seed writes the
-     * same file. An engine older than round M3 has no rule for the word and
-     * ignores the line, which is exactly what the format was built for; a run
-     * that imported nothing writes no line at all, so every sidecar of every
-     * older run stays byte for byte what it was. */
+    /* The sound ids this run imported from another game, one line,
+     * ascending because a std::set is - so the same seed writes the same
+     * file. An engine that predates this line has no rule for the word and
+     * ignores it, which is exactly what the format was built for; a run
+     * that imported nothing writes no line at all, so every sidecar of
+     * every older run stays byte for byte what it was. */
     const std::set<int>& imports = level.hdSoundImports();
 
     if (!imports.empty())

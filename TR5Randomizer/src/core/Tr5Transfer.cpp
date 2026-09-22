@@ -20,45 +20,44 @@
 // Model transfer between TR5 levels: Tr5Level::copyMoveableFrom.
 //
 // This is the key piece for three things at once - weapons in all levels,
-// random outfits and the cross enemy mix. It used to live only in the
-// workshop tool TombItemEdit2026 (vImportFromMVB / -copymvb), and that is
-// never shipped: game data must not leave the house, so the transfer has to
-// happen at runtime on the user's files.
+// random outfits and the cross enemy mix. Game data must not leave the
+// house, so the transfer has to happen at runtime on the player's own
+// files.
 //
 // Every format statement here was read off the engine, not off documentation:
 //
-//   header            specific/file.cpp:1339 - version u32, RT/OT/BT u16 each
-//   texture blocks    LoadTextures (:416) - 32-bit and 16-bit block, each
+//   header            specific/file.cpp - version u32, RT/OT/BT u16 each
+//   texture blocks    LoadTextures - 32-bit and 16-bit block, each
 //                     u32 uncompressed + u32 compressed + zlib stream; the
 //                     engine reads ONLY ONE of them depending on the screen
 //                     format, so both must grow in sync
 //   page order        room (RT), then object (OT), then bump (BT); index 0
-//                     is reserved, usable 1..RT+OT+BT, limit 256 (:438)
-//   bump              Textures[n].bumptpage = n + BT/2 (:593) - pure runtime
+//                     is reserved, usable 1..RT+OT+BT, limit 256
+//   bump              Textures[n].bumptpage = n + BT/2 - pure runtime
 //                     arithmetic. Inserting new pages at the OT end is safe
 //                     as long as all STORED tile numbers >= RT+OT rise by
 //                     the insertion count
 //   texinfo           40 bytes, tile as u16 at offset 2, 0-based in bits
-//                     0-14, bit 15 is a flag (LoadTextureInfos :1093)
+//                     0-14, bit 15 is a flag (LoadTextureInfos)
 //   sprites           16 bytes, tile as u16 at offset 0, 0-based, the
-//                     loader adds +1 (:903)
-//   mesh              drawroom.cpp ProcessMeshData (:740): x,y,z,r,flags,
+//                     loader adds +1
+//   mesh              drawroom.cpp ProcessMeshData: x,y,z,r,flags,
 //                     nVerts word; vertices 3 shorts; nNorms short, then
 //                     normals (3 per vertex) or prelight (1 per vertex);
 //                     ngt4 + quads of 6 shorts {v0..v3, texinfo, attr};
 //                     ngt3 + tris of 5 shorts. The engine masks the face
-//                     texinfo with & 0x7FFF (output.cpp:1575)
-//   mesh pointers     byte offsets into the mesh data block (file.cpp:775)
+//                     texinfo with & 0x7FFF (output.cpp)
+//   mesh pointers     byte offsets into the mesh data block (file.cpp)
 //   anims             40 bytes; frame_ptr is a BYTE OFFSET into the frame
-//                     block (fixup :810); jump_anim, change_index and
+//                     block (fixup); jump_anim, change_index and
 //                     command_index are level-wide absolute; frame_base and
 //                     frame_end are logical numbers and stay untouched
 //   object entry      slot u32, nmeshes s16, mesh_index s16 (pointer index,
-//                     the doubling only happens at load :835),
+//                     the doubling only happens at load),
 //                     bone_index s32, frame_offset u32, anim_index u16
-//                     (0xFFFF = none), 2 bytes padding (:814)
+//                     (0xFFFF = none), 2 bytes padding
 //
-// Three rules from the weapon work (#58), learned dearly there:
+// Three hard rules, learned the hard way:
 //   1. Never copy slot 0 (LARA) - it carries the level's animations.
 //   2. Mesh offset 0 is NOT a null pointer; Lara's right hand lives there.
 //      Harmless here, because offsets are never treated as truth values -
@@ -81,7 +80,7 @@ namespace
 {
     constexpr size_t PAGE32 = 256 * 256 * 4;
     constexpr size_t PAGE16 = 256 * 256 * 2;
-    constexpr int    MAX_PAGES = 256;        // Textures[], file.cpp:438
+    constexpr int    MAX_PAGES = 256;        // Textures[], file.cpp
     constexpr int    SZ_OBJ = 20;
     constexpr int    SZ_ANIM = 40;
     constexpr int    SZ_CHANGE = 6;
@@ -169,13 +168,12 @@ namespace
     {
         uLongf bound = compressBound(static_cast<uLong>(raw.size()));
         std::vector<uint8_t> buffer(bound);
-        // Z_BEST_SPEED instead of Z_BEST_COMPRESSION (#104): this call used
-        // to run ONCE per imported type over the target's complete texture
-        // block - under allsanity ten times per level on 30+ MB, and this is
-        // exactly where the measured 5-10 seconds of the enemy mix lived
-        // (loading a level costs only 15 ms by comparison). The engine does
-        // not care about the level, the file gets a bit bigger, the time
-        // drops many-fold.
+        // Z_BEST_SPEED instead of Z_BEST_COMPRESSION: packing runs once per
+        // imported type over the target's complete texture block - under
+        // allsanity ten times per level on 30+ MB, and that is where several
+        // seconds of the enemy mix went (loading a level costs only 15 ms
+        // by comparison). The engine does not care about the level, the
+        // file gets a bit bigger, the time drops many-fold.
         compress2(buffer.data(), &bound, raw.data(), static_cast<uLong>(raw.size()), Z_BEST_SPEED);
         out.clear();
         push32(out, static_cast<uint32_t>(raw.size()));
@@ -201,7 +199,7 @@ namespace
         if (nVerts == 0)
         {
             // Empty mesh: ProcessMeshData skips (6*num)+1 shorts, num sits
-            // in the high byte (drawroom.cpp:790/869).
+            // in the high byte (drawroom.cpp).
             const int num = (vertsWord >> 8) & 0xFF;
             p += (static_cast<size_t>(num) * 6 + 1) * 2;
         }
@@ -211,7 +209,7 @@ namespace
             int16_t nNorms; if (!s16(nNorms)) { err = "mesh normals truncated"; return false; }
             // CAUTION, zero means NORMALS: ProcessMeshData sets
             // "if (!nNorms) nNorms = nVerts" BEFORE the branch
-            // (drawroom.cpp:833) - only NEGATIVE values mean prelight.
+            // (drawroom.cpp) - only NEGATIVE values mean prelight.
             // Whoever reads 0 as prelight copies the mesh short, and the
             // faces behind it are garbage. That is what joby2's braid
             // looked like after copying: a spike through the body, while
@@ -301,14 +299,13 @@ bool Tr5Level::debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
 }
 
 //----------------------------------------------------------------------------
-// Insert the textures of a TR3 package (#90).
+// Insert the textures of a TR3 package.
 //
 // Deliberately HERE and not in Tr5Tr3Import.cpp: the page management is the
-// most dangerous spot of the whole tool (user requirement: "at the texture
-// pages only append as before, shift nothing - otherwise the level
-// collapses"). The proven helpers for it live in this file; rebuilding them
-// a second time would be exactly the mistake the requirement is meant to
-// prevent. Attached, not rebuilt - copyMoveableFrom stays untouched.
+// most dangerous spot of the whole tool - at the texture pages, only append
+// as before and shift nothing, or the level collapses. The proven helpers
+// for it live in this file; rebuilding them a second time risks exactly
+// that mistake. Attached, not rebuilt - copyMoveableFrom stays untouched.
 //
 // Returned in "mapping": TR3 object texture number -> new texinfo index.
 // With it the caller then redirects the faces' texture words.
@@ -319,15 +316,11 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
     char buf[256];
     mapping.clear();
 
-    // Fetch a fresh block map (#104) - third entrance of the same kind.
-    // On the TR3 path the sounds run BEFORE the textures (the order is a
-    // rule: sounds -> SFX -> textures -> faces -> model), and
-    // addSoundsFromTr3 shifts the main block without updating the map.
-    // Until the texture workshop, the rebuild in phase B healed that;
-    // without it, phase C spliced the texinfos to an outdated position and
-    // the main block was gone ("item count 2926"). Noticed only at seed 3
-    // WITHOUT items20 - the #104 sweep always ran with it, proof that a
-    // sweep only tests the parameters it drives.
+    // Fetch a fresh block map. On the TR3 path the sounds run BEFORE the
+    // textures (the order is a rule: sounds -> SFX -> textures -> faces ->
+    // model), and addSoundsFromTr3 shifts the main block without updating
+    // the map. Without this reparse, phase C splices the texinfos to an
+    // outdated position and the main block size ends up wrong.
     if (!reparse(error)) { error = "block map: " + error; return false; }
 
     if (package.size() < 48 || std::memcmp(package.data(), "T35H", 4) != 0)
@@ -378,8 +371,8 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
     TexHeader dstTex;
     if (!parseTexHeader(m_bytes, dstTex, error)) return false;
 
-    // Target via the texture workshop (#104): unpacked once, every import
-    // works on the open blocks, packing happens at closing.
+    // Target via the texture workshop: unpacked once, every import works
+    // on the open blocks, packing happens at closing.
     if (!texWorkshopOpen(error)) return false;
     std::vector<uint8_t>& dst32 = m_tex32;
     std::vector<uint8_t>& dst16 = m_tex16;
@@ -464,7 +457,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
 
     if (newPages > 0)
     {
-        // Workshop (#104): only the page counter in the header moves along
+        // Workshop: only the page counter in the header moves along
         // immediately - packing and reassembly happen ONCE at closing. The
         // main block does not shift through this, the block offsets for the
         // adjustment below stay valid without a reparse.
@@ -491,13 +484,13 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
 
     // --- Create the texinfos ------------------------------------------------
     //
-    // Layout from global/types.h and specific/file.cpp:1089ff, read off:
+    // Layout from global/types.h and specific/file.cpp, read off:
     //   +0 drawtype, +2 tpage, +4 flag, then u1,v1,u2,v2,u3,v3,u4,v4
     //   as 8.8 fixed point. TR3 stores the same four corners as pixels.
     //
-    // AdjustUV (file.cpp:198) shifts every UV by half a texel at load time -
+    // AdjustUV (file.cpp) shifts every UV by half a texel at load time -
     // always, for every texinfo. What the two fields decide is only WHICH
-    // WAY: bit 15 of tpage (the loader moves it into flag, file.cpp:1157)
+    // WAY: bit 15 of tpage (the loader moves it into flag, file.cpp)
     // picks the triangle table over the quad one, and flag's low three bits
     // pick the corner order inside that table. TR3Fetch worked both out from
     // TR3's own edge bytes and put them in the package as cornerOrder; here
@@ -572,7 +565,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
 }
 
 //----------------------------------------------------------------------------
-// Texture workshop (#104) - see Tr5Level.h. Opening unpacks both target
+// Texture workshop - see Tr5Level.h. Opening unpacks both target
 // blocks once, closing packs them once and reassembles the file ONCE. In
 // between, header and main block of m_bytes stay untouched, only the page
 // counter in the header (word 6) moves along per import - the MAX_PAGES
@@ -630,13 +623,13 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 {
     char buf[256];
 
-    // Fetch a fresh block map (#104). Whoever wrote into the main block
-    // before us without updating the map - addTrigger appends floordata,
-    // say - leaves outdated dataAt values behind, and the splices below
-    // would land off. Chance used to heal this: phase B rebuilt the file
-    // per import and called reparse BEFORE phase C used the map. With the
-    // texture workshop that rebuild is gone - the map must be fetched
-    // fresh at the entrance itself, not as a side effect.
+    // Fetch a fresh block map. Whoever wrote into the main block before
+    // us without updating the map - addTrigger appends floordata, say -
+    // leaves outdated dataAt values behind, and the splices below would
+    // land off. Phase B used to rebuild the file per import and call
+    // reparse before phase C used the map; with the texture workshop that
+    // rebuild is gone, so the map must be fetched fresh at the entrance
+    // itself, not as a side effect.
     if (!reparse(error)) { error = "block map: " + error; return false; }
 
     // The slot under which the copy is registered in the target. Divergent
@@ -808,9 +801,8 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
         // Core's own voicing mistakes in donor sets, straightened only in
         // the COPY - the original stays byte-true, because at home the
-        // mistake does not show (or belongs to the scenery). So far one
-        // documented case, found via the extended SFXLOG (anim=886
-        // type=0x4000 in a dry room, #113):
+        // mistake does not show (or belongs to the scenery). One
+        // documented case:
         //  - joby3, Mafia2 (51), anim +17 frame 589: the water step
         //    (sfx 17) is the ONLY one in the set marked "land only" - all
         //    its siblings are "water only". In dry target levels it
@@ -928,7 +920,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
     // --- Meshes: slices via the pointer table -------------------------------
     // Several pointers can point at the same mesh (the engine deduplicates
-    // at load, drawroom.cpp:764). The mapping source offset -> new mesh is
+    // at load, drawroom.cpp). The mapping source offset -> new mesh is
     // therefore kept, instead of copying every occurrence individually.
     const size_t srcMeshBytes = static_cast<size_t>(src.m_meshData.count) * 2;
     std::vector<uint32_t> srcPtrs;
@@ -983,8 +975,8 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     if (!inflateBlock(src.m_bytes, srcTex.block32At, src32, error)) { error = "source: " + error; return false; }
     if (!inflateBlock(src.m_bytes, srcTex.block16At, src16, error)) { error = "source: " + error; return false; }
 
-    // Target via the texture workshop (#104): unpacked once, every import
-    // works on the open blocks, packing happens at closing.
+    // Target via the texture workshop: unpacked once, every import works
+    // on the open blocks, packing happens at closing.
     if (!texWorkshopOpen(error)) { error = "target: " + error; return false; }
     std::vector<uint8_t>& dst32 = m_tex32;
     std::vector<uint8_t>& dst16 = m_tex16;
@@ -1035,7 +1027,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
     if (newPages > 0)
     {
-        // Workshop (#104): only the page counter in the header moves along
+        // Workshop: only the page counter in the header moves along
         // immediately - packing and reassembly happen ONCE at closing. The
         // main block does not shift through this, the block offsets for the
         // adjustment below stay valid without a reparse.
@@ -1239,8 +1231,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // Phase D: sounds. The anim commands name their PlaySound numbers
     // themselves; the weapons' shot and stop sounds appear in NO anim data
     // at all but in hard-wired SoundEffect() calls of the engine. Without
-    // this table the HK stayed mute back then - the bug, until it was found
-    // (see Plan.md of the weapon work).
+    // this table the HK stayed mute.
     //========================================================================
     struct WeaponSfx { const int* slots; int nSlots; const int* sfx; int nSfx; };
     static const int sPistols[] = { 1, 334, 335 },         fPistols[] = { 8 };
@@ -1278,7 +1269,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 }
 
 //----------------------------------------------------------------------------
-// Implant a single Lara animation from a donor level (#53).
+// Implant a single Lara animation from a donor level.
 //
 // Occasion: ANIM_KEYCARD (437), the card-swipe move at Key Hole 8. The anim
 // SLOT exists in every level - Lara's table is the same length everywhere -

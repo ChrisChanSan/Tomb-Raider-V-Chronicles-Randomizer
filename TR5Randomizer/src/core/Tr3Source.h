@@ -16,26 +16,24 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 //----------------------------------------------------------------------------
-// Extraction from a Tomb Raider 3 level (#92).
+// Extraction from a Tomb Raider 3 level.
 //
-// WHY THIS LIVES HERE AND NOT IN A TOOL
-//
-// This project ships no game data. Whoever wants the dinosaurs must own
-// Tomb Raider 3 - and then the run must fetch them ITSELF from that
-// installation, on the user's machine, while it runs. As long as the
-// extraction only exists in a standalone tool, we would have to distribute
-// finished packages, and those contain third-party game data. Moving these
+// Why this lives here and not in a standalone tool: this project ships no
+// game data. Whoever wants the dinosaurs must own Tomb Raider 3, and the
+// run must fetch them ITSELF from that installation, on the local machine,
+// while it runs. A standalone tool alone would mean distributing finished
+// packages, and those would contain third-party game data. Moving these
 // functions into the core is therefore not housekeeping but the very
 // condition under which the dinosaurs may be shipped at all.
 //
 // The other direction - inserting into a TR5 level - already lives in the
 // core: Tr5Level::addMoveableFromTr3, addSoundsFromTr3, addTexturesFromTr3.
 //
-// After the port, the tools TR3Fetch and TR3Sound only call these functions.
-// There must be no second reader: the format bridge (single-axis rotations
-// 10 bit -> 12 bit, jump table with GLOBAL anim indices, faces with the TR5
-// effect word, colored faces onto a real texture) is correct in exactly one
-// place, and it should stay that way.
+// The tools TR3Fetch and TR3Sound only call these functions. There must be
+// no second reader: the format bridge (single-axis rotations 10 bit -> 12
+// bit, jump table with GLOBAL anim indices, faces with the TR5 effect word,
+// colored faces onto a real texture) is correct in exactly one place, and
+// it should stay that way.
 //----------------------------------------------------------------------------
 #pragma once
 
@@ -101,7 +99,7 @@ namespace Tr3Source
     // resolved from the level tables: for the Gold levels, the route via
     // SoundMap/SoundDetails/SampleIndices demonstrably yields wrong waves,
     // and the self-calibration does not notice. The numbers come from the
-    // TRsound tool and were auditioned by the user.
+    // TRsound tool and were manually auditioned.
     struct SoundRequest { int tr3Id; std::vector<int> waves; };
 
     // Cuts the requested waves out of MAIN.SFX and stores them in the sound
@@ -116,7 +114,7 @@ namespace Tr3Source
                      std::vector<uint8_t>& package,
                      std::string& error);
 
-    // An outfit from Tomb Raider 1-3, fully described (#122).
+    // An outfit from Tomb Raider 1-3, fully described.
     //
     // Same idea as DinoSource below: ONE place that knows everything about a
     // donor, so no detail can rot in a call line. Every number here was
@@ -124,7 +122,7 @@ namespace Tr3Source
     struct OutfitSource
     {
         const char* id;          // stable key for config, patch and cache
-        const char* name;        // what the user reads
+        const char* name;        // label shown in the UI
         const char* source;      // "tr3" or "tr3gold": which installation
         const char* file;        // level name within it
         int         object;      // NOT 0 - in TR1-3 object 0 is a placeholder.
@@ -133,8 +131,8 @@ namespace Tr3Source
         // Brings TR3's flat skin onto TR5's 5 bit level. The two tones look
         // identical as numbers and are not: 224 falls on level 28 and comes
         // back as 231, TR5's own arm sits on 27 and comes back as 222. That
-        // one step is a visible seam wherever imported skin meets the head,
-        // which we keep from the target level.
+        // one step is a visible seam wherever imported skin meets the head
+        // kept from the target level.
         std::vector<Recolor> recolors;
 
         // The TR4/TR5 environment map on every textured face. 0x0042 is what
@@ -156,7 +154,7 @@ namespace Tr3Source
         std::vector<SeamColor> seamColors;
     };
 
-    // Every outfit we can fetch. The order is the order the user sees.
+    // Every outfit that can be fetched, in the order shown in the UI.
     std::vector<OutfitSource> outfits();
 
     // Like fetchCached below, for an outfit: no sounds, and the treatment
@@ -167,12 +165,11 @@ namespace Tr3Source
                            std::vector<uint8_t>& model,
                            std::string& error);
 
-    // A guest from Tomb Raider 3, fully described (#92).
+    // A guest from Tomb Raider 3, fully described.
     //
     // This is the ONLY truth about the four dinosaurs - randomizer and patch
-    // path both read from here. These details used to be scattered across
-    // the tools' call lines, and that is exactly how half of the Compy's
-    // sound mapping slipped past me.
+    // path both read from here, so no detail can rot in a call line or
+    // drift out of step between the two paths.
     struct DinoSource
     {
         int         slot;        // target slot in TR5 - occupied in NO level
@@ -202,7 +199,7 @@ namespace Tr3Source
     std::wstring levelPath(const DinoSource& d,
                            const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
 
-    // Fetches a guest's model and sounds - with a CACHE (#103).
+    // Fetches a guest's model and sounds - with a CACHE.
     //
     // Extraction costs around eleven seconds per call: it re-reads the TR3
     // level (3.3 MB) and MAIN.SFX (11.6 MB). Across thirteen levels the same
@@ -224,7 +221,7 @@ namespace Tr3Source
                       std::string& error);
 
     // The rest-pose bounding box of a model package - minX, maxX, minY,
-    // maxY, minZ, maxZ, the same six int16 a TR5 frame starts with (#141).
+    // maxY, minZ, maxZ, the same six int16 a TR5 frame starts with.
     //
     // The package's frame block starts with exactly the frame the installed
     // moveable will point at: addMoveableFromTr3 writes the block's start as

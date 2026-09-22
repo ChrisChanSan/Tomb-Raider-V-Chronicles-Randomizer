@@ -20,7 +20,7 @@
 #include <string>
 #include <unordered_map>
 
-bool gGermanUi = false;   // default English (user decision 2026-08-24)
+bool gGermanUi = false;   // default English
 
 // English -> German. The KEY is exactly the string from the source (for
 // multi-line help texts, the complete concatenated text). The table was
@@ -300,7 +300,7 @@ static const std::unordered_map<std::string, const char*>& table()
         { "Random outfits", "Zufaellige Outfits" },
         { "TR1 outfit", "TR1 Outfit" },
 
-        // --- The wardrobe (#122) -----------------------------------------
+        // --- The wardrobe -------------------------------------------------
         { "Wardrobe", "Kleiderschrank" },
         { "Wardrobe...", "Kleiderschrank..." },
         { "Which outfits the random draw may pick. Everything is on by "

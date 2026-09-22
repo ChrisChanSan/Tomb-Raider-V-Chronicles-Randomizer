@@ -20,28 +20,26 @@
 #include <cstddef>
 
 //----------------------------------------------------------------------------
-// Level chains and inventory cleanup (stages 2/3 of the plan in Level Infos\
-// Level-Order-Plan.md).
+// Level chains and inventory cleanup.
 //
-// THE INSIGHT BEHIND ALL OF IT (name resolution of the object commands,
-// 2026-08-22): the inventory slots are GENERIC. PUZZLE_ITEM1 is called
-// "Garden Key" in Andrea1, "Chaff flares" in joby4, "Heart" in andy1 and
-// "Helipad access key" in rich3 - every level renames the same slot. A
-// Garden Key carried along BECOMES Chaff flares in joby4. Therefore:
+// Inventory slots are generic: PUZZLE_ITEM1 is called "Garden Key" in
+// Andrea1, "Chaff flares" in joby4, "Heart" in andy1 and "Helipad access
+// key" in rich3 - every level renames the same slot, so a Garden Key
+// carried along becomes Chaff flares in joby4. Therefore:
 //
 //   1. Chains (kLevelChains): what one level genuinely needs from another.
 //      If the donor comes after the taker (or a level in between takes the
 //      item away), the script hands it over via GIVEOBJ (give = true) -
 //      including the name command and the model. give = false means: just
 //      don't clean it up while it travels (story items whose absence
-//      probably blocks nothing - playtesting decides).
+//      probably blocks nothing).
 //   2. Cleanup (cleanupInventory in ScriptDat.cpp): at the start of every
 //      level, TAKEOBJ removes everything from the key family that an
-//      EARLIER level could have offered and that neither this level nor
+//      earlier level could have offered and that neither this level nor
 //      a later one imports via a chain. Plus the "Grappling Gun" - the
 //      CROSSBOW slot (95 + ammo), which only has a model and anims in
-//      rich3 (hard crash when equipping it anywhere else, seen by the
-//      user in rich2). Roses (PICKUP_ITEM4) are left untouched.
+//      rich3; equipping it in any other level crashes. Roses
+//      (PICKUP_ITEM4) are left untouched.
 //
 // Sources: the key matrix (ItemCheck) and the object commands per block.
 // Curation happens here, not in the UI.
@@ -74,44 +72,43 @@ constexpr int INV_EXAMINE(int n) { return 91 + (n - 1); }   // 91..93
 
 // The chloroform set from rich1 (13th Floor): the bottle, the cloth, and the
 // soaked cloth the two combine into. Three inventory slots of their own,
-// sitting behind the examine objects - which is why a sweep over the puzzle,
-// key and pickup families never touched them, and why they travelled on into
-// rich2 and rich3. Seen by the user in a full playthrough.
+// sitting behind the examine objects, which is why a sweep over the puzzle,
+// key and pickup families never touches them, and why they travel on into
+// rich2 and rich3.
 static const int kChloroform[] = { 94 /*wet cloth*/, 97 /*cloth*/, 98 /*bottle*/, 0 };
 
-// ARCHITECTURE (user decision after the playtest, 2026-08-22):
-// keys/puzzles/pickups NEVER travel between levels - at every level start
-// the whole family is reset (cleanupInventory). Only weapons, ammo,
+// Keys, puzzles and pickups never travel between levels - at every level
+// start the whole family is reset (cleanupInventory). Only weapons, ammo,
 // medipacks and flares are kept. Whatever a level needs from another one it
-// therefore ALWAYS receives via GIVEOBJ, regardless of the order - "give"
-// is no longer a condition here but the list of grants. Exceptions from the
-// reset take care of themselves: what a level's own block grants (the Iris
-// in rich2 via the vanilla script, the grants below) is never taken away.
+// therefore always receives via GIVEOBJ, regardless of order - "give" is
+// not a condition here but the list of grants. Exceptions from the reset
+// take care of themselves: what a level's own block grants (the Iris in
+// rich2 via the vanilla script, the grants below) is never taken away.
 static const LevelChain kLevelChains[] =
 {
     { "joby3",   "joby2",   203, INV_KEY(8), chainCmdKey(8), true, "Swipe Card / Key 8 (joby2 -> joby3)" },
     { "Andrea3", "Andrea2", 240, INV_CROWBAR, 0,              true, "Crowbar (Andrea2 -> Andrea3)" },
 
-    // TWO entries that must NOT appear here - both times I had concluded
-    // "lock present, item missing, so it must be an import". The level
-    // matrix cannot decide that:
+    // Two entries that must NOT appear here, even though a lock with no
+    // matching item in the level might look like an import - the level
+    // matrix cannot decide that by itself:
     //
     // joby5 / Key 7: the cutscene joby9 grants the silver key inside the
     //   level (deltapak.cpp: joby9_end -> AddDisplayPickup(KEY_ITEM7), the
     //   admiral hands it over). Cutscenes are the second item source - as
-    //   is PICKUP_ITEM1 in Andrea3 (deltapak.cpp:1767).
+    //   is PICKUP_ITEM1 in Andrea3 (also deltapak.cpp).
     //
     // Andy2 / Puzzle 2 (catapult): Andy2 does have Puzzle Hole 2 in room 9,
     // and its trigger_flags 1058 (>1024) mean, according to
     // PuzzleHoleCollision, "start cutscene 34 on solving" - which per the
     // cutsel table belongs to LVL5_LABYRINTH. Still, the lock is
-    // REPURPOSED: it runs in the background, Lara does not use a catapult
-    // there (checked in game, user statement). A catapult in the starting
-    // inventory would just be a pointless item.
+    // repurposed: it runs in the background, Lara does not use a catapult
+    // there. A catapult in the starting inventory would just be a
+    // pointless item.
     //
-    // Rule of thumb: a lock without a matching item in the level proves
-    // nothing. Before any new chain, ask "who else grants it?" - cutscene,
-    // enemy drop, script - and when in doubt, playtest.
+    // A lock without a matching item in the level proves nothing by
+    // itself; check whether a cutscene, enemy drop or script grants it
+    // before adding a chain.
 };
 
 constexpr size_t kLevelChainCount = sizeof(kLevelChains) / sizeof(kLevelChains[0]);

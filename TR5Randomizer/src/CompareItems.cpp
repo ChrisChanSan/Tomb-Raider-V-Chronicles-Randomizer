@@ -16,12 +16,9 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 // Compares the item lists of both readers: our own Tr5Level against the old
-// exporter's level-info JSON. Compared position by position - type, room and
-// coordinates.
-//
-// Occasion: in rich1 the old exporter reported item 27 in room 15, our
-// reader and trview show room 45. Since the whole curation runs over item
-// indices, it must be settled whether that is an isolated case or a pattern.
+// exporter's level-info JSON, position by position - type, room and
+// coordinates - since the whole curation runs over item indices and the two
+// readers must agree on what each index is.
 //
 // Usage: CompareItems.exe <data folder> <level-info folder>
 #include "core/Json.h"

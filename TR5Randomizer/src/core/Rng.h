@@ -34,11 +34,11 @@
 // version. A user report "seed 12345 is unwinnable" would then not be
 // reproducible as soon as the build was made with a different toolset.
 //
-// Hence: our own generator (xoshiro256** with splitmix64 initialization,
-// both Public Domain by Blackman/Vigna and Steele et al.), our own bias-free
-// range reduction and our own Fisher-Yates. Everything here is pinned down
-// exactly, so one seed gives the same result across compiler and version
-// boundaries.
+// Hence: a purpose-built generator (xoshiro256** with splitmix64
+// initialization, both Public Domain by Blackman/Vigna and Steele et al.),
+// its own bias-free range reduction and its own Fisher-Yates. Everything
+// here is pinned down exactly, so one seed gives the same result across
+// compiler and version boundaries.
 //----------------------------------------------------------------------------
 class Rng
 {
@@ -88,15 +88,15 @@ private:
 //----------------------------------------------------------------------------
 // Seed representation for the UI.
 //
-// A seed is shown to the user as text and entered by them as text - that is
-// the path a bug report travels back on. Purely numeric it would be a
-// 20-digit number nobody can retype without mistakes. Hence Base32 with an
-// alphabet that avoids the look-alike pairs 0/O and 1/I/L: 13 characters,
-// readable regardless of case.
+// A seed is shown as text and typed back in as text - that is the path a
+// bug report travels on. Purely numeric it would be a 20-digit number
+// nobody can retype without mistakes. Hence Base32 with an alphabet that
+// avoids the look-alike pairs 0/O and 1/I/L: 13 characters, readable
+// regardless of case.
 //
 // Every seed text is valid: if it cannot be read as Base32, it is hashed as
-// a string instead. That way a user can simply type "Christmas" and
-// reproducibly gets the same level.
+// a string instead. That way typing "Christmas" reproducibly gets the same
+// level.
 //----------------------------------------------------------------------------
 namespace SeedText
 {

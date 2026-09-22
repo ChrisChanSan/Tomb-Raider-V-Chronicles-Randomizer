@@ -194,9 +194,9 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         s.floorY = static_cast<int>(secs[i]["floorY"].asInt());
         s.clearance = static_cast<int>(secs[i]["clearance"].asInt(0));
 
-        // Wall edges (#61). Older exports do not know the field - then the
-        // list stays empty, and wall pickups find no place instead of
-        // landing in a wrong one.
+        // Wall edges. Older exports do not know the field - then the list
+        // stays empty, and wall pickups find no place instead of landing
+        // in a wrong one.
         const JsonValue& wa = secs[i]["wallAngles"];
         for (size_t w = 0; w < wa.size(); ++w)
             s.wallAngles.push_back(static_cast<int>(wa[w].asInt()));
@@ -280,9 +280,9 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     const JsonValue& ko = zoneExport["keepOcbTypes"];
     for (size_t i = 0; i < ko.size(); ++i) out.keepOcbTypes.insert(static_cast<int>(ko[i].asInt()));
 
-    // Sectors behind a deadstop (#61), as "room,x,z" like the approach
-    // sectors. If the field is missing (older export), the set stays empty
-    // and nothing changes.
+    // Sectors behind a deadstop, as "room,x,z" like the approach sectors.
+    // If the field is missing (older export), the set stays empty and
+    // nothing changes.
     const JsonValue& fp = zoneExport["flagPresets"];
     for (size_t i = 0; i < fp.size(); ++i)
         out.flagPresets[static_cast<int>(fp[i]["item"].asInt())] = static_cast<int>(fp[i]["flags"].asInt());
@@ -348,7 +348,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             for (size_t r = 0; r < rl.size(); ++r)
                 out.typeNoRooms[type].insert(static_cast<int>(rl[r].asInt(-1)));
         }
-        // Per-SECTOR type bans (#61). Same purpose as typeNoRooms, only
+        // Per-sector type bans. Same purpose as typeNoRooms, only
         // finer - and like there outside the constraint branch, so it also
         // hits types without a pickup: andy3's chalk and crowbar have no
         // constraint, the constraints' bannedSectors never reach them.
@@ -480,11 +480,11 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
                              bool mustBeOnIsland,
                              int itemOcb)
 {
-    // Wall grabs (#61): OCB 2 (crowbar) and OCB 9 (joby crow) demand a wall
-    // and standing height. Both are engine rules, not optics:
-    //  - PickUpCollision:803 explicitly checks !lara.IsDucked, so in the
-    //    crawl the grab is impossible. Lara's standing collision height is
-    //    762 (game\lara.cpp), 768 is the next step above it.
+    // Wall grabs: OCB 2 (crowbar) and OCB 9 (joby crow) demand a wall and
+    // standing height. Both are engine rules, not optics:
+    //  - PickUpCollision (pickup.cpp) explicitly checks !lara.IsDucked, so
+    //    in the crawl the grab is impossible. Lara's standing collision
+    //    height is 762 (game\lara.cpp), 768 is the next step above it.
     //  - The wall itself the engine NEVER checks - it is optics and
     //    reachability. Without a wall edge there would be no sensible
     //    angle, though, and the model (mesh at ~+470 in model Z) would
@@ -494,12 +494,12 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         if (s.wallAngles.empty()) return false;
         if (s.clearance < 768) return false;
 
-        // And only on a COMPLETELY FLAT sector (user, 2026-08-29). The wall
-        // grab ends with a step BACKWARDS, and that step does not come off
-        // over a sloped field - Lara hangs at its edge. This is the one
-        // difference to an ordinary pickup: walkable slopes up to slope 2
-        // are fully valid spots for those (#86, Core places pickups there
-        // itself), because they are only picked UP, not stepped away from.
+        // And only on a completely flat sector. The wall grab ends with a
+        // step backwards, and that step does not come off over a sloped
+        // field - Lara hangs at its edge. This is the one difference to an
+        // ordinary pickup: walkable slopes up to slope 2 are fully valid
+        // spots for those, since the game itself places pickups there,
+        // because they are only picked up, not stepped away from.
         //
         // Flat means: the same floor height at all four corners, each of
         // them walkable. A sector without a slope entry is flat by
@@ -507,7 +507,7 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         // common case costs a single map lookup.
         //
         // The rule hangs off the OCB, not off a level: the animation is the
-        // same everywhere. Wall grabs exist in four levels (#61).
+        // same everywhere. Wall grabs exist in four levels.
         {
             int flatY = 0;
             if (!floorAt(in, s, 0, 0, flatY)) return false;
@@ -522,22 +522,21 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         }
 
         // And never under water: PickUpCollision only runs at water_status
-        // LW_ABOVE_WATER or LW_WADE (pickup.cpp:766). Applies ONLY to
-        // these grabs - ordinary pickups and puzzle pieces may very well
-        // lie in water (user requirement 2026-08-19: "only this special
-        // kind with the anim must not").
+        // LW_ABOVE_WATER or LW_WADE (pickup.cpp). Applies only to these
+        // grabs - ordinary pickups and puzzle pieces may very well lie in
+        // water; only this special kind, with its wall-grab animation,
+        // must not.
         if (in.waterRooms.count(s.room)) return false;
 
-        // No wall grab within a carrier's reach (test run 2026-08-20,
-        // joby3): GetCarriedItems (setup.cpp:2085) attaches every pickup in
-        // the box |dx|<512, |dy|<256, |dz|<512 to the nearest enemy or
-        // searchable at level start. A carried wall grab is lost after the
-        // carrier's death: DropBaddyPickups puts it on open floor, where
-        // its pickup style (wall + angle) can never be satisfied again.
-        // The box is widened to sector size because the final wall position
-        // is only rolled at write time - every point of the sector must be
-        // safe. The reverse direction (new enemy next to a finished wall
-        // grab) bars the enemy placement.
+        // No wall grab within a carrier's reach: GetCarriedItems (setup.cpp)
+        // attaches every pickup in the box |dx|<512, |dy|<256, |dz|<512 to
+        // the nearest enemy or searchable at level start. A carried wall
+        // grab is lost after the carrier's death: DropBaddyPickups puts it
+        // on open floor, where its pickup style (wall + angle) can never be
+        // satisfied again. The box is widened to sector size because the
+        // final wall position is only rolled at write time - every point of
+        // the sector must be safe. The reverse direction (new enemy next to
+        // a finished wall grab) bars the enemy placement.
         const RoomOrigin* wro = nullptr;
         for (const RoomOrigin& r : in.roomOrigins)
             if (r.room == s.room) { wro = &r; break; }
@@ -555,13 +554,12 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         }
     }
 
-    // No item on a fire's sector (test run 2026-08-20, joby5: shotgun ammo
-    // lay in the flame). The flame family 120..125 - Flame, the three flame
-    // emitters, the gas cooker (COOKER_FLAME, #114) and Burning Roots -
-    // burns in place; a pickup there is a trap, not a find. Steam emitters
-    // (365) stay deliberately allowed: the vertical ones are harmless
-    // scenery, and a blanket ban would bar half the corridors in the ship
-    // levels.
+    // No item on a fire's sector: without this, a pickup can land inside a
+    // flame. The flame family 120..125 - Flame, the three flame emitters,
+    // the gas cooker (COOKER_FLAME) and Burning Roots - burns in place; a
+    // pickup there is a trap, not a find. Steam emitters (365) stay
+    // deliberately allowed: the vertical ones are harmless scenery, and a
+    // blanket ban would bar half the corridors in the ship levels.
     for (const LevelItem& fb : in.items)
     {
         if (fb.typeId < 120 || fb.typeId > 125) continue;
@@ -570,11 +568,11 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     }
 
 
-    // Behind a deadstop lies nothing that could be a key. Applies to EVERY
+    // Behind a deadstop lies nothing that could be a key. Applies to every
     // type with a constraint and additionally to the wall grabs, which have
-    // no constraint (#61).
-    // Exempt types (#61) pass by here: the island is meant FOR other types,
-    // and the exempt one needs the opposite. Its own bound stands elsewhere
+    // no constraint.
+    // Exempt types pass by here: the island is meant for other types, and
+    // the exempt one needs the opposite. Its own bound stands elsewhere
     // (ISLAND_GROUP / bannedSectors).
     if ((k != nullptr || itemOcb == 2 || itemOcb == 9) &&
         !in.keyBarredExemptTypes.count(typeId) &&
@@ -680,12 +678,12 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
     // Layer 2: per constraint type its own, narrower area. Checked with the
     // same function the placement uses.
     //
-    // If a type has a requireInIsland, the MANDATORY area is drawn, i.e.
-    // the usual area AND the island. Formally a second instance of the same
+    // If a type has a requireInIsland, the mandatory area is drawn, i.e.
+    // the usual area and the island. Formally a second instance of the same
     // type could also lie outside - requireInIsland only says "one of them
-    // there". The narrower set is drawn anyway: it is the one the user laid
-    // down and wants to check, and that is exactly what the PowerShell tool
-    // does, against which he has compared his curation so far. Two tools
+    // there". The narrower set is drawn anyway: it is the one that was
+    // curated and needs checking, and it is exactly what the PowerShell
+    // tool draws too, against which the curation is compared. Two tools
     // drawing the same level differently would be worse than a formal
     // fuzziness.
     for (const KeyConstraint& k : in.constraints)
@@ -705,16 +703,16 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         perType.push_back(mc);
     }
 
-    // Layer 3: types WITHOUT a constraint that still have their own
-    // placement rules - the WALL GRABS (OCB 2 and 9).
+    // Layer 3: types without a constraint that still have their own
+    // placement rules - the wall grabs (OCB 2 and 9).
     //
     // andy3's chalk (172) and crowbar (174) are the case: tools without a
     // pickup, so ZoneAnalysis derives no zone border for them and they stand
     // in no constraint. Layer 2 therefore never drew them - in the debug
     // level they were missing entirely, although they very much have their
     // own rules (wall edge, standing height 768, no water) and the deadstop
-    // hits them via the OCB branch as well. That is exactly what the user
-    // wanted to be able to see: "so we know we built no break".
+    // hits them via the OCB branch as well. Drawing them here shows that no
+    // break was built for these types either.
     //
     // Their OCB comes from the vanilla items - it is what triggers the rule
     // in the first place; checked with the same function as the real
@@ -726,11 +724,11 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         // curation plus trigger pinning, minus the coupled triggers and the
         // preset code bits.
         //
-        // Two cases from the game that require it (user find 2026-08-24):
-        // Andrea3's typeId 220 hangs on the LevelEnd trigger and is held
-        // via triggerPinned - it stands NEITHER in VANILLA_TYPES nor in
-        // fixedItems, so a type list would not have found it. joby3's
-        // crowbar (172), by contrast, stands in both.
+        // Two cases from the game require it: Andrea3's typeId 220 hangs on
+        // the LevelEnd trigger and is held via triggerPinned - it stands in
+        // neither VANILLA_TYPES nor fixedItems, so a type list would not
+        // have found it. joby3's crowbar (172), by contrast, stands in
+        // both.
         std::set<int> nailedDown(in.triggerPinned);
         for (int i : in.fixedItems) nailedDown.insert(i);
 
@@ -746,11 +744,10 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         for (const LevelItem& it : in.items)
         {
             if (nailedDown.count(it.index)) continue;
-            // ONLY pickable items. OCB 2 and 9 are no marker for wall
+            // Only pickable items. OCB 2 and 9 are no marker for wall
             // grabs but ordinary values that doors, enemies and scenery
-            // carry too - without this check the debug marker filled half
-            // the level (user find 2026-08-24: "it now fills not just
-            // items/keys/puzzles but everything").
+            // carry too - without this check the debug marker fills half
+            // the level, well past items, keys and puzzles.
             if (!isPickupType(it.typeId)) continue;
             if (it.ocb != 2 && it.ocb != 9) continue;
 
@@ -797,14 +794,13 @@ bool Rando::run(const RandoInput& in,
     std::string lowerName;
     for (char c : in.level) lowerName.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
 
-    // Every level gets its own dice stream. Before, the SAME global seed
-    // fed every level run the same draw sequence - and because the
-    // allsanity pools are nearly identical, all levels got nearly the same
-    // enemy types in the same order ("as if it had picked one set and
-    // applied it to all equally", user observation in game). FNV-1a over
-    // the level name decouples the streams; everything stays deterministic:
-    // the same seed still produces the same game, just a different one per
-    // level.
+    // Every level gets its own dice stream. A single global seed feeding
+    // every level run the same draw sequence would, since the enemy pools
+    // are nearly identical, give all levels nearly the same enemy types in
+    // the same order, as if one set had been picked and applied to all of
+    // them equally. FNV-1a over the level name decouples the streams;
+    // everything stays deterministic: the same seed still produces the
+    // same game, just a different one per level.
     uint64_t levelSeed = seed;
     for (char c : lowerName)
     {
@@ -827,7 +823,7 @@ bool Rando::run(const RandoInput& in,
     // (fixedItems) stays untouched by that - whoever stands there stays
     // put, whatever might work for its trigger.
     // Preset code bits lift the pinning too: the condition the trigger
-    // would have satisfied is thereby already satisfied (#61).
+    // would have satisfied is thereby already satisfied.
     for (std::map<int, int>::const_iterator f = in.flagPresets.begin(); f != in.flagPresets.end(); ++f)
         if (std::find(in.fixedItems.begin(), in.fixedItems.end(), f->first) == in.fixedItems.end())
             pinned.erase(f->first);
@@ -842,21 +838,21 @@ bool Rando::run(const RandoInput& in,
     }
 
     // OCB 5 and 10: such pickups cannot be picked up in vanilla at all.
-    // InitialisePickup (game/init.cpp:470) sets an OCB-5 item to
-    // ITEM_INVISIBLE and returns; PickUpCollision (game/pickup.cpp:737)
-    // bails out immediately at ocb 5 and 10. They are only unlocked by
-    // something else. If we moved them and - as with every moved item -
-    // set the OCB to 0, they would lie there visible and pickable from
-    // then on. That is no longer a change of place but a change of
-    // behavior, and when in doubt we bar instead of unlock.
+    // InitialisePickup (game/init.cpp) sets an OCB-5 item to ITEM_INVISIBLE
+    // and returns; PickUpCollision (game/pickup.cpp) bails out immediately
+    // at ocb 5 and 10. They are only unlocked by something else. Moving
+    // them and, as with every moved item, setting the OCB to 0 would leave
+    // them lying there visible and pickable from then on. That is no
+    // longer a change of place but a change of behavior, so in doubt they
+    // are barred instead of unlocked.
     //
     // Exactly this bar is lifted by a flagPresets entry, and only by it:
-    // there the curation looked up WHAT would have unlocked the item and
+    // there the curation looked up what would have unlocked the item and
     // relieved it of the condition (Andrea2 item 62 - the HeavyTrigger
-    // under it hangs on the Guardian's death, see #61). With preset code
-    // bits and a zeroed OCB it lies visible from the start, which is
-    // otherwise exactly what is being prevented here - hence it is a hand
-    // decision and no derived rule.
+    // under it hangs on the Guardian's death). With preset code bits and a
+    // zeroed OCB it lies visible from the start, which is otherwise
+    // exactly what is being prevented here - hence it is a hand decision
+    // and no derived rule.
     for (const LevelItem& it : in.items)
     {
         const int ocb = it.ocb & 0x3F;
@@ -877,8 +873,8 @@ bool Rando::run(const RandoInput& in,
 
     // --- Bar the sectors of enemies that can vanish with cargo ---
     //
-    // GetCarriedItems (setup.cpp:1962) attaches every pickup within 512
-    // units to the nearest enemy at level start: RemoveDrawnItem,
+    // GetCarriedItems (setup.cpp) attaches every pickup within 512 units
+    // to the nearest enemy at level start: RemoveDrawnItem,
     // room_number = NO_ROOM - the item is then nothing but its cargo and
     // only drops out again at its death.
     //
@@ -985,7 +981,7 @@ bool Rando::run(const RandoInput& in,
         const int px = ro.originX + s.sectorX * 1024 + 512 + po.dx;
         // The true floor height at the landing point instead of the sector
         // base value: on a walkable slope the item would hang in the air
-        // otherwise (#86/#87).
+        // otherwise.
         int pyFloor = 0;
         Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, pyFloor);
         const int py = pyFloor + po.dy;
@@ -1018,13 +1014,13 @@ bool Rando::run(const RandoInput& in,
         e.set("ocb", JsonValue::makeInt(newOcb));
 
         // Write the preset code bits along, or the item would again depend
-        // on its old trigger at the new place (#61).
+        // on its old trigger at the new place.
         {
             std::map<int, int>::const_iterator fp = in.flagPresets.find(it.index);
             if (fp != in.flagPresets.end()) e.set("flags", JsonValue::makeInt(fp->second));
         }
 
-        // Wall grabs need the angle TOWARDS the wall (#61). Otherwise a
+        // Wall grabs need the angle towards the wall. Otherwise a
         // moved item keeps its old orientation - which is right for
         // ordinary pickups (the engine turns them onto Lara when picking
         // up anyway), but not for OCB 2 and 9: there PickUpCollision
@@ -1066,15 +1062,15 @@ bool Rando::run(const RandoInput& in,
         }
     };
 
-    // A minimum distance between the IMPORTANT finds - keys, puzzle pieces
-    // and weapons (user wish 2026-08-19: "a bit more spread on the keys,
-    // puzzles and the weapons would be cool").
+    // A minimum distance between the important finds - keys, puzzle pieces
+    // and weapons.
     //
-    // Before, the pick drew uniformly from all allowed sectors without
-    // looking at the ones already placed. Measured over 20 Andrea2 seeds, 6
-    // of 200 pairs landed closer than three sectors and 2 in the same room
-    // - about chance expectation, but it stands out in play, because a
-    // close pair sticks in memory and the well-spread pairs do not.
+    // Drawing uniformly from all allowed sectors without looking at the
+    // ones already placed leaves finds clustered too often. Measured over
+    // 20 Andrea2 seeds, 6 of 200 pairs landed closer than three sectors and
+    // 2 in the same room - about chance expectation, but it stands out in
+    // play, because a close pair sticks in memory and the well-spread
+    // pairs do not.
     //
     // No hard ban, but stages: first try 5 sectors of distance, then 3,
     // then 2, finally none. A tight zone thus stays placeable - a run
@@ -1246,12 +1242,11 @@ bool Rando::run(const RandoInput& in,
 
     // --- Scatter weapons ---
     //
-    // Random scattering (user decision): the seed determines WHICH of the
-    // weapons made usable by the import a level additionally receives as a
-    // pickup, and how much ammo with it. Only weapons the level does not
-    // lay out as an item anyway - existing ones are mixed normally, and
-    // more ammo for existing weapons is the business of item abundance
-    // (#36).
+    // The seed determines which of the weapons made usable by the import a
+    // level additionally receives as a pickup, and how much ammo with it.
+    // Only weapons the level does not lay out as an item anyway - existing
+    // ones are mixed normally, and more ammo for existing weapons is the
+    // business of item abundance.
     //
     // Pistols (334) are missing on purpose: Lara starts with them
     // everywhere as soon as the model slot is there - and rich2 must not
@@ -1339,7 +1334,7 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
-    // --- Item abundance: scatter extra equipment (#36) ---
+    // --- Item abundance: scatter extra equipment ---
     //
     // Some levels are decidedly sparse: Andy2 has all of ten pickups across
     // 254 rooms, three of them secrets - with 348 valid spots after the
@@ -1359,7 +1354,7 @@ bool Rando::run(const RandoInput& in,
     // single piece of it lies in any of the 15 levels. For rich2, pistols
     // and their ammo are barred entirely - its slot 1 carries Core's
     // scripted second HK, and the mere presence of the pistol item would
-    // give Lara starting pistols (setup.cpp:111).
+    // give Lara starting pistols (InitialiseLara, setup.cpp).
     //
     // The weapons themselves only enter the pot if the level lays them out
     // nowhere yet: the scattering above tosses a coin per weapon, and with
@@ -1385,10 +1380,9 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back("item abundance: joby4 stays vanilla (diving suit).");
     else if (opt.extraPickups > 0)
     {
-        // All weapons and ammo kinds TR5 knows as pickups (user
-        // requirement: everything into the pot the level can carry). For
-        // every weapon its ammo - a weapon without supplies is dead weight
-        // after two fights.
+        // All weapons and ammo kinds TR5 knows as pickups go into the pot,
+        // whatever the level can carry. For every weapon its ammo - a
+        // weapon without supplies is dead weight after two fights.
         struct ScatterWeapon { int weapon; int ammo[2]; };
         static const ScatterWeapon kWeaponGoods[] = {
             { 336, { 337,  -1 } },     // Uzi
@@ -1398,12 +1392,12 @@ bool Rando::run(const RandoInput& in,
             { 347, { 348,  -1 } },     // Deagle
         };
         // Consumables without an associated weapon.
-        // 355 and NOT 354. The two look alike in the catalogue - "Flare
+        // 355 and not 354. The two look alike in the catalogue - "Flare
         // Item" and "Flare Inv Item" - but in the level they are different
-        // things, and the user named it: 354 is the SINGLE flare that fires
-        // the animation off by itself, 355 are the flares one picks up.
-        // Vanilla Andrea1 carries one 354 and several 355, which says the
-        // same. Scattering 354 hands the player a flare that lights itself.
+        // things: 354 is the single flare that fires the animation off by
+        // itself, 355 are the flares one picks up. Vanilla Andrea1 carries
+        // one 354 and several 355, which says the same. Scattering 354
+        // hands the player a flare that lights itself.
         static const int kMisc[] = { 349, 350, 355 };   // big medi, small medi, flares
 
         // What lies in the level - vanilla stock plus what weapon
@@ -1421,10 +1415,9 @@ bool Rando::run(const RandoInput& in,
         const bool weaponSetHere = opt.allWeapons && lowerName != "joby4";
         // The flare goes into the rich levels further down in this same
         // run (slots 7, 354, 355 from Andrea1). presentSlots is the state
-        // BEFORE the patch, so without this the scatter would still refuse
-        // to lay a flare it is about to make drawable - which is exactly
-        // what happened on the first attempt: the slots arrived and not one
-        // flare with them.
+        // before the patch, so without this check the scatter would refuse
+        // to lay a flare it is about to make drawable, leaving the slots
+        // present but no flares among them.
         const bool flareComesHere =
             (lowerName == "rich1" || lowerName == "rich2" || lowerName == "rich3");
 
@@ -1464,8 +1457,8 @@ bool Rando::run(const RandoInput& in,
         // A level that carries flares in vanilla brings its own count into
         // the lots on top of the base weight. The rich levels carry none, so
         // on the base weight alone they would draw far more rarely than
-        // everywhere else - with twenty extra pickups, often not at all. The
-        // user needs them there for the glitched secrets, so the weight
+        // everywhere else - with twenty extra pickups, often not at all.
+        // Flares are needed there for the glitched secrets, so the weight
         // stands in for the stock the level never had.
         for (int t : kMisc)
             offer(t, (t == 355 && flareComesHere) ? 8 : 2);
@@ -1540,15 +1533,12 @@ bool Rando::run(const RandoInput& in,
     //
     // --- Cross enemy mix: extend the pool with foreign types ---
     //
-    // The global pool table is the user's list "Enemy Pools.txt", per type
-    // with the donor level that carries it WITH vanilla instances - only
-    // there do model AND samples lie together. The sound entries are the
-    // known exceptions whose samples even the donor lacks (Larson's death
-    // sounds, Pierre's never-shipped shot - both picked by the user in the
-    // soundboard and checked in game).
-    //
-    // The Hydra (63) has been in since 2026-08-15 - reasoning at its row.
-    // The chef (87) has been in since #124 - reasoning at his row.
+    // The global pool table lists, per type, the donor level that carries
+    // it with vanilla instances - only there do model and samples lie
+    // together. The sound entries are the known exceptions whose samples
+    // even the donor lacks (Larson's death sounds, Pierre's never-shipped
+    // shot), matched by hand from the wider soundboard. The Hydra (63) and
+    // the chef (87) are in the pool for the reasons noted at their rows.
     // Scientist and Guardian stand nowhere in the pool for known reasons.
     //
     // Per level at most THREE foreign types, chosen by the seed: every type
@@ -1557,9 +1547,9 @@ bool Rando::run(const RandoInput& in,
     // replace, so that even an existing but never-played slot (joby5's
     // guard without samples) comes completely from the donor.
     // "companions": slots the type must bring along. Mafia2 carries his
-    // upper body as a swap half from MESHSWAP2 = slot 406 (setup.cpp:1443:
-    // meshes 7/10/13, meshswap_meshbits 0x2400 already from Initialise) -
-    // without the slot the torso is invisible (seen in game). Nobody else
+    // upper body as a swap half from MESHSWAP2 = slot 406 (BaddyObjects in
+    // setup.cpp: meshes 7/10/13, meshswap_meshbits 0x2400 already from
+    // Initialise) - without the slot the torso is invisible. Nobody else
     // uses MESHSWAP2, the import is conflict-free.
     //
     // MESHSWAP1, by contrast, is a SHARED slot with level-dependent content
@@ -1567,16 +1557,16 @@ bool Rando::run(const RandoInput& in,
     // Roman god: 0-16; Hitman: 0-19) - it cannot simply be replaced without
     // breaking the target's native users. The consequences show at the Imp
     // head and the statues' damage meshes; the solution (own fallback slots
-    // in the engine or mesh-exact insertion) is noted as a task and NOT
-    // part of this table.
+    // in the engine or mesh-exact insertion) remains open and is not part
+    // of this table.
     // "swapFrom"/"swapDst": the type's swap halves. MESHSWAP1 (405) is
-    // filled per level with the content of its OWN enemies - a foreign
-    // enemy needs the set of a level that REALLY carries him, and that
-    // lands under the fallback slot swapDst at import. Since #111 EVERY
-    // enemy has his own (soldier family 462-467 beyond the file boundary,
-    // loners 401-404) - before, the families shared one slot per donor, and
-    // native users of the same slot drew foreign hands (joby2 item 69). The
-    // engine prefers it (MeshSwapSource in setup.cpp, mapping as
+    // filled per level with the content of its own enemies - a foreign
+    // enemy needs the set of a level that really carries him, and that
+    // lands under the fallback slot swapDst at import. Every enemy has his
+    // own fallback slot (soldier family 462-467 beyond the file boundary,
+    // loners 401-404): sharing one slot per donor would let native users of
+    // the same slot draw foreign hands (joby2 item 69). The engine prefers
+    // it (MeshSwapSource in setup.cpp, mapping as
     // MESHSWAP_CROSS_* in objects.h - both sides must agree). swapFrom can
     // differ from the model donor: rich1 (model for guard and TwoGun) has
     // NO MESHSWAP1 itself - the guard hands come from joby3, TwoGun's
@@ -1589,24 +1579,23 @@ bool Rando::run(const RandoInput& in,
     // baseSlot (0 = none): the soldier family's anim base type. SWAT+ and
     // Mafia carry only a one-frame stub in the files - the engine fetches
     // their anims at runtime from the base type (setup.cpp: anim_index is
-    // bent onto SWAT's set, else guard 460, else guard 37 - the middle
-    // stage is the #121 addendum). Whoever imports such a type MUST bring
-    // the base type along, or he runs without a valid set. Import with
-    // replace=false: if the target already has the base type (native or as
-    // its own cross import), it stays. The stubs' base has been the guard
-    // (460) since the #121 addendum: he ALWAYS carries the clean joby3 set,
-    // while slot 37 may carry a different model per level (rich!) -
-    // measurement data at row 37.
+    // bent onto SWAT's set, else guard 460, else guard 37). Whoever imports
+    // such a type must bring the base type along, or he runs without a
+    // valid set. Import with replace=false: if the target already has the
+    // base type (native or as its own cross import), it stays. The stubs'
+    // base is the guard (460): he always carries the clean joby3 set, while
+    // slot 37 may carry a different model per level (rich!) - measurement
+    // data at row 37.
     // "tr3" (0 = from TR5 itself): the foreign-source tag from
     // Tr3Source::dinos(). If set, "from" is empty - the model does not come
-    // from a TR5 level but at runtime from the user's installation.
-    // Everything else stands in the dino table, so there is only ONE truth.
+    // from a TR5 level but at runtime from the installed Tomb Raider I-III
+    // Remaster files. Everything else stands in the dino table, so there is
+    // only one truth.
     // "sourceSlot" (0 = same as typeId): the slot under which the model
-    // lies AT THE DONOR. Needed for the new engine slots beyond 460 (#105):
-    // the joby guard lies under 37 in every donor but lives under 460 in
-    // the target - only that way can both guard models exist side by side.
-    // Such levels run ONLY on our engine (which ships via #31 anyway);
-    // trview copes with them, checked against its source 2026-08-17.
+    // lies at the donor. Needed for the engine slots beyond 460: the joby
+    // guard lies under 37 in every donor but lives under 460 in the target
+    // - only that way can both guard models exist side by side. Such
+    // levels run only on this engine; trview copes with them as well.
     struct CrossEnemy { int typeId; const char* from; CrossSound sounds[2];
                          int companions[2]; const char* swapFrom; int swapDst;
                          int animCount; int baseSlot; const char* tr3;
@@ -1614,26 +1603,23 @@ bool Rando::run(const RandoInput& in,
     static const CrossEnemy kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   462, 0, 0 },  // SWAT
         // Sound 88 (BIO_BREATHE_OUT): the SWAT+'s gas mask breathing in
-        // dark rooms (sas.cpp:155, hard-wired - it stands in no anim
-        // command and therefore does not travel by itself). Without the
-        // entry he breathes mutely in foreign levels (#111 part 3).
+        // dark rooms (SasControl, sas.cpp, hard-wired - it stands in no
+        // anim command and therefore does not travel by itself). Without
+        // the entry he breathes mutely in foreign levels.
         { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (anims from SWAT)
-        // Slot 37 again carries the RICH model (blue vest, rich1) - the
-        // #121 addendum of 2026-08-23. The first fix had set the donor to
-        // joby3, because that set was then the anim base of the whole stub
-        // family and Core's sets carry different DEAD HEIRS per level:
-        // anims that share their frame pointer with a neighbor anim but
-        // read it with their own (wrong) stride. With the native owner it
-        // never shows, because he does not play those states - the stub
-        // family does.
+        // Slot 37 carries the RICH model (blue vest, rich1). Core's sets
+        // carry different DEAD HEIRS per level: anims that share their
+        // frame pointer with a neighbor anim but read it with their own
+        // (wrong) stride. With the native owner it never shows, because he
+        // does not play those states - the stub family does.
         //
-        // Consequence of the first fix (user find, trview screenshots):
-        // guard (37) and guard (460) were twins, and in levels with a
-        // native rich guard the import even overwrote the native model.
-        // Hence the family now hangs on the guard 460 (the stubs' baseSlot,
-        // alias chain in setup.cpp) - and 37 may be rich again.
+        // Using joby3 as the family's anim base instead would make guard
+        // (37) and guard (460) twins, and in levels with a native rich
+        // guard the import would overwrite the native model. Hence the
+        // family hangs on the guard 460 instead (the stubs' baseSlot,
+        // alias chain in setup.cpp), and 37 stays free to be rich.
         //
-        // Why the rich model is safe ON ITS OWN (AnimMap measurement):
+        // Why the rich model is safe on its own (AnimMap measurement):
         //   rich1 guard sick: +19..23, +24..30, +34/35, +41..45, +50..56 -
         //     the SPECIAL POSES (states 26-31) and state 35, Mafia's shot
         //     pose. The guard HIMSELF plays none of it: his own shot anim
@@ -1647,22 +1633,21 @@ bool Rando::run(const RandoInput& in,
         //     only +23..28/+30..32/+34f/+57f. Field proof: the guard (460)
         //     carries exactly this set and is flawless in all poses.
         { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard, rich model)
-        // The second guard (#83/#105, engine slot 460 = BLUE_GUARD2): the
-        // joby model from joby3 - there the guard is the family's anim
-        // anchor and carries the full own set (Mafia fetches his anims from
-        // him). joby2's guard CANNOT be copied (frame pointers, see Crane
-        // Guy). No base type: he brings everything along and keeps his set
-        // even next to SWAT/guard (#111 part 2, no bending anymore). Since
-        // the #121 addendum HE is the stub family's anim base (baseSlot 460
-        // at Mafia and Crane Guy) - exactly because his set is ALWAYS the
-        // clean one from joby3. Swap halves (fire hands 10/13) like the
+        // The second guard (engine slot 460 = BLUE_GUARD2): the joby model
+        // from joby3 - there the guard is the family's anim anchor and
+        // carries the full own set (Mafia fetches his anims from him).
+        // joby2's guard cannot be copied (frame pointers, see Crane Guy).
+        // No base type: he brings everything along and keeps his set even
+        // next to SWAT/guard. He is the stub family's anim base (baseSlot
+        // 460 at Mafia and Crane Guy), exactly because his set is always
+        // the clean one from joby3. Swap halves (fire hands 10/13) like the
         // guard from joby3.
         { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Guard (Joby)
-        // Laser shot (193) and impact (167): hard-wired in twogun.cpp:616f,
-        // in no anim command - without the entries the laser fires mutely
-        // in foreign levels (#111 part 3). Both samples are byte-identical
-        // in rich1 and rich3; the Hydra (from Andrea2) also sets the 167,
-        // likewise identical content.
+        // Laser shot (193) and impact (167): hard-wired in twogun.cpp, in
+        // no anim command - without the entries the laser fires mutely in
+        // foreign levels. Both samples are byte-identical in rich1 and
+        // rich3; the Hydra (from Andrea2) also sets the 167, likewise
+        // identical content.
         { 39, "rich1",   { {167,"rich3",167}, {193,"rich3",193} }, {-1,-1}, "rich3",  464, 0, 0 },  // Two Gun
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
@@ -1670,19 +1655,19 @@ bool Rando::run(const RandoInput& in,
         { 49, "joby3",   {},                                    {-1,-1},  "joby3",   466, 0, 460 }, // Soldier MG (Mafia, anims from the guard)
         { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
         // Crane Guy: the only TR5 enemy with a complete model that Core
-        // NEVER placed as an item - the same situation as Pierre. Model
+        // never placed as an item - the same situation as Pierre. Model
         // only in joby2 (15 meshes, own anims), the control is SasControl,
-        // he fires via state 3 like the Blue Guard (sas.cpp:344 names him
-        // there explicitly). Confirmed in the test level.
+        // he fires via state 3 like the Blue Guard (sas.cpp names him there
+        // explicitly).
         //
         // baseSlot 460: he fetches his anim set at runtime from SWAT, else
-        // from the guard (#121 addendum) - stub family like Mafia and
-        // SWAT+. The base slot is fetched via HIS own kCross row, i.e. from
-        // joby3. That matters: the guard from joby2 CANNOT be copied
-        // ("frame pointer outside the frame slice").
+        // from the guard - stub family like Mafia and SWAT+. The base slot
+        // is fetched via his own kCross row, i.e. from joby3. That matters:
+        // the guard from joby2 cannot be copied ("frame pointer outside the
+        // frame slice").
         //
-        // Swap halves 405 -> 470 (#146): he was the LAST enemy still
-        // hanging raw on MESHSWAP1 (setup.cpp:1367f, meshes 10 and 13 - the
+        // Swap halves 405 -> 470: he was the last enemy still hanging raw
+        // on MESHSWAP1 (setup.cpp, meshes 10 and 13 - the
         // fire hands of the soldier family). The case was dormant and
         // therefore never noticed: the halves show only at OCB 3 (fall
         // through the window), OCB 4 (rappel) and SasControl state 37 (the
@@ -1703,20 +1688,19 @@ bool Rando::run(const RandoInput& in,
         //
         // One gap stays open, deliberately: in joby2 his model is native,
         // so the emission takes the modelAlreadyHere branch and copies
-        // NOTHING - not even the halves. There he keeps the old picture.
+        // nothing - not even the halves. There he keeps the old picture.
         // It costs nothing as long as the pool sets OCB 0, and the guard
-        // (465 in rich1) has stood the same way since #111.
+        // (465 in rich1) stands the same way.
         { 55, "joby2",   {},                                    {-1,-1},  "joby3",   470, 0, 460 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
-        // The Roman god, TWO versions, two slots (#84, user idea).
+        // The Roman god, two versions, two slots.
         //
         // In vanilla they share slot 61 and thereby exclude each other:
-        // Andrea2 carries the SWORD there (item 108, OCB 1 - ranged, green
-        // lightning), Andrea3 the HAMMER (item 79, OCB 0 - melee, blue).
-        // The ITEM's OCB picks the weapon, the slot the look - if they do
-        // not match, he wields the blade like a hammer (photographed by the
-        // user in game).
+        // Andrea2 carries the sword there (item 108, OCB 1 - ranged, green
+        // lightning), Andrea3 the hammer (item 79, OCB 0 - melee, blue).
+        // The item's OCB picks the weapon, the slot the look - if they do
+        // not match, he wields the blade like a hammer.
         //
         // With the own slot 461 for the hammer, BOTH now fit into the same
         // level. The spawn OCB for it stands in kSpawnOcb.
@@ -1728,26 +1712,25 @@ bool Rando::run(const RandoInput& in,
         //
         // Companion BUBBLES (367): the SWORD version's projectile is, as
         // with the Hydra, no sprite but a mesh from this slot
-        // (romangod.cpp:119 and 228). Without it something wrong flies in
-        // foreign levels.
+        // (TriggerRomanGodMissile in romangod.cpp). Without it something
+        // wrong flies in foreign levels.
         { 61,  "Andrea2", {},                                   {367,-1}, "Andrea2", 403 }, // Roman god (sword)
         // Death sound 204 (SGOD_SWD_DIE1_Q): the hammer version's death
         // anim +16 calls it, but only Andrea2 fills the number - at home in
         // Andrea3 the statue died mutely (a Core hole). With the entry it
-        // squeals everywhere like its sword brother (user decision
-        // 2026-08-19: "then both are complete").
+        // squeals everywhere like its sword brother.
         { 461, "Andrea3", { {204,"Andrea2",204} },              {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman god (hammer)
         // Hydra: long deliberately out ("three items on one position, the
-        // OCB picks the chain link"). Taken in after the review on
-        // 2026-08-15 - the OCB is harmless, everything else holds:
+        // OCB picks the chain link"). Taken in once checked - the OCB is
+        // harmless, everything else holds:
         //  - InitialiseHydra uses trigger_flags ONLY for the start frame
         //    (30 * OCB, so the three heads do not twitch in sync) and an
         //    offset of +-384 in z. With OCB 0 both drop away, and the pool
         //    only ever sets OCB 0.
-        //  - Killable despite objects[].undead: HydraControl computes its
-        //    damage ITSELF (hydra.cpp:154 and 175) - in flame state 2 at
-        //    range, in the attack states up close, threefold with the
-        //    shotgun. 30 hit points.
+        //  - Killable despite objects[].undead: HydraControl (hydra.cpp)
+        //    computes its damage itself - in flame state 2 at range, in
+        //    the attack states up close, threefold with the shotgun. 30
+        //    hit points.
         //  - It cleans up after itself: death anim +15 carries cmd 4
         //    (KillItem), before that it blasts itself apart node by node.
         //  - Its control only reaches anim_index+15, so no access beyond
@@ -1756,44 +1739,42 @@ bool Rando::run(const RandoInput& in,
         //  - Its four anim sounds (406-409) travel automatically, phase D
         //    of the transfer fetches them from the anim commands. The only
         //    hard-wired sound is SFX_SMASH_ROCK on shattering - it stands
-        //    in NO anim command and therefore needs this entry. Its number
-        //    is 167, not 168: proven in game via "Non present sample:167"
-        //    in the log after a count in sound.h's enum was off by one.
-        //    Andrea2 has it itself, so the donor is the same as for the
-        //    model.
+        //    in no anim command and therefore needs this entry. Its number
+        //    is 167, not 168, after a count in sound.h's enum was off by
+        //    one and the log showed "Non present sample:167". Andrea2 has
+        //    it itself, so the donor is the same as for the model.
         // The three vanilla specimens in Andrea2 (items 91/92/93) are
         // protected via fixedItems and stay untouched.
         //  - animCount 17: the object table grants it less than its control
         //    needs (anim_index+15 is the death anim) - the same pattern as
         //    the Imp. Without the explicit length the transfer aborts with
         //    "frame pointer outside the frame slice".
-        //  - Companion slot BUBBLES (367): its fire projectile is NO
-        //    sprite but the 17th mesh of this slot (hydra.cpp:280,
+        //  - Companion slot BUBBLES (367): its fire projectile is no
+        //    sprite but the 17th mesh of this slot (hydra.cpp,
         //    objects[BUBBLES].mesh_index + 16). If the target carries other
-        //    meshes there, something wrong flies through the air - seen in
-        //    game in Andrea1. Andrea2 carries in 367 exactly the projectile
-        //    core with flame wings (looked up by the user in the object
-        //    tree). Replacing is safe: the BUBBLES in water have nothing to
-        //    do with this slot, they run via their own particle system
-        //    (Bubbles[40], CreateBubble in tomb4fx.cpp:1438). Andrea2
+        //    meshes there, something wrong flies through the air, as seen
+        //    in Andrea1. Andrea2 carries in 367 exactly the projectile core
+        //    with flame wings. Replacing is safe: the BUBBLES in water have
+        //    nothing to do with this slot, they run via their own particle
+        //    system (Bubbles[40], CreateBubble in tomb4fx.cpp). Andrea2
         //    itself has water too and still the projectile core in 367 -
         //    the best proof of that.
         { 63, "Andrea2", { {167,"Andrea2",167} },               {367,-1}, nullptr,   -1, 17 },  // Hydra
-        // The VCI cyborg (#146) - Core's HITMAN, the armoured android from
-        // rich3. The nimblest human in the game: the ONLY enemy with
-        // can_monkey (lot.cpp), vault and drop of four clicks, long jump,
-        // five-shot bursts, sparks instead of blood on a hit.
+        // The VCI cyborg - Core's HITMAN, the armoured android from rich3.
+        // The nimblest human in the game: the only enemy with can_monkey
+        // (lot.cpp), vault and drop of four clicks, long jump, five-shot
+        // bursts, sparks instead of blood on a hit.
         //
-        // Why his OWN engine slot 469 and not the vanilla 67:
+        // Why his own engine slot 469 and not the vanilla 67:
         // objects[HITMAN].undead is set, so no weapon of Lara's ever
         // reaches his hit points - in vanilla he dies only through rich3's
-        // LEVEL GEOMETRY (the gas rooms with room flag 0x80, which exist in
+        // level geometry (the gas rooms with room flag 0x80, which exist in
         // no other level, and a short circuit in water). One-to-one he
-        // would therefore be immortal in twelve of thirteen levels. The
-        // engine half of #146 gives 469 a mortal control of his own; the
-        // two vanilla specimens in rich3 (items 183 and 200, each carrying
-        // a puzzle half) keep slot 67, keep their immortality and stay
-        // exactly the puzzle Core built. They stand in fixedItems anyway.
+        // would therefore be immortal in twelve of thirteen levels. Slot
+        // 469 gives him a mortal control of his own; the two vanilla
+        // specimens in rich3 (items 183 and 200, each carrying a puzzle
+        // half) keep slot 67, keep their immortality and stay exactly the
+        // puzzle Core built. They stand in fixedItems anyway.
         //
         // Donor rich3, sourceSlot 67: only rich3 carries the model at all
         // (20 meshes, 72 anims in one piece from 577). Through the
@@ -1842,8 +1823,7 @@ bool Rando::run(const RandoInput& in,
         // joby2's own three huskies (items 4, 86, 153) do not stand in its
         // curated list - they stay vanilla, joby2 only gives away.
         { 85, "joby2",   {},                                    {-1,-1},  nullptr,   -1 },  // Huskie
-        // The chef (#124, user decision 2026-08-23: "he can simply join the
-        // pool"). A pure melee fighter (knife), model only in joby3. His
+        // The chef: a pure melee fighter (knife), model only in joby3. His
         // set carries only +0..+11 real anims (the rest are dead heirs his
         // states 1-6 never touch); his death is a 1-frame stub, so in the
         // engine he borrows the soldier death +16 - skeleton bone-identical
@@ -1863,26 +1843,26 @@ bool Rando::run(const RandoInput& in,
         // of +0..+11 stay within the 12-slice (0 wrong ones), more his
         // control never plays.
         { 87, "joby3",   {},                                    {-1,-1},  nullptr,   -1, 12, 460 }, // Chef
-        // Imp: donor andy3, NOT andy1. andy1's Imp anim set is gutted: the
+        // Imp: donor andy3, not andy1. andy1's Imp anim set is gutted: the
         // death animation +45 (ImpControl sets it fixed at hit_points<=0)
         // is a one-frame dummy there without a KillItem command - the Imp
-        // can never die (state flicker 9<->0, no fade, garbage pose; seen
-        // in game). Core never noticed, because young Lara in andy1 has no
-        // weapons. andy3 carries the full set (+45 = frames 45..66 with
-        // KillItem -> after_death -> fade); anims 0-12, geometry and the
-        // MESHSWAP1 swap set are identical in both (measured with the anim
-        // and model tools, 2026-08-15). animCount 46: the object table grants
+        // can never die (state flicker 9<->0, no fade, garbage pose). Core
+        // never noticed, because young Lara in andy1 has no weapons. andy3
+        // carries the full set (+45 = frames 45..66 with KillItem ->
+        // after_death -> fade); anims 0-12, geometry and the MESHSWAP1 swap
+        // set are identical in both (measured with the anim and model
+        // tools). animCount 46: the object table grants
         // the Imp only 18 anims, +19..+45 lie physically in the ranges of
         // scenery slots - without the explicit length the death anim was
         // missing from the import and the engine read past the table end
         // (the observed death flight loop).
         { 89, "andy3",   {},                                    {-1,-1},  "andy3",   402, 46 }, // Imp
 
-        // --- Guests from Tomb Raider 3 (#92) --------------------------------
+        // --- Guests from Tomb Raider 3 -----------------------------------
         //
         // No donor level: "from" stays empty, the model comes at runtime
-        // from the user's installation. All details - file, object, sounds,
-        // volumes - stand in Tr3Source::dinos().
+        // from the installed Tomb Raider III files. All details - file,
+        // object, sounds, volumes - stand in Tr3Source::dinos().
         //
         // The four target slots carry a model in NONE of the 16 TR5 levels
         // (measured with ModelOffset against all of them), so they take nothing
@@ -1902,16 +1882,17 @@ bool Rando::run(const RandoInput& in,
         if (!in.forbiddenTypes.count(t) && !opt.disabledEnemies.count(t))
             enemyPool.push_back(t);
 
-    // The emergency brake for "everything deselected" DELIBERATELY stands
-    // behind the cross pool (#109) - it used to stand here and was thus the
-    // reason a targeted selection never got through.
+    // The emergency brake for "everything deselected" deliberately stands
+    // behind the cross pool: in front of it, it would refill an
+    // intentionally narrow selection before the cross pool gets a chance to
+    // satisfy it.
     std::map<int, const CrossEnemy*> crossChosen;
     std::set<int> crossUsed;
 
-    // Does this row's model already lie NATIVELY in the level? Exactly when
-    // this level IS the donor and the model lives there under the same
+    // Does this row's model already lie natively in the level? Exactly when
+    // this level is the donor and the model lives there under the same
     // number (no sourceSlot). Then there is nothing to copy - the type is
-    // only placed (#124). Guests from TR3 have no donor level.
+    // only placed. Guests from TR3 have no donor level.
     auto modelAlreadyHere = [&lowerName](const CrossEnemy& c) -> bool {
         if (!c.from || c.sourceSlot > 0) return false;
         std::string k;
@@ -1927,11 +1908,11 @@ bool Rando::run(const RandoInput& in,
         {
             if (own.count(c.typeId)) continue;            // already in the level pool
             if (in.forbiddenTypes.count(c.typeId)) continue;   // the level cannot take him
-            if (opt.disabledEnemies.count(c.typeId)) continue; // deselected by the user
+            if (opt.disabledEnemies.count(c.typeId)) continue; // deselected in options
 
-            // Guests from Tomb Raider 3 (#92): they need the user's
-            // installation. If it is missing, they drop out SILENTLY - a
-            // run must never fail because someone does not own the games.
+            // Guests from Tomb Raider 3: they need the installed game
+            // files. If those are missing, they drop out silently - a run
+            // must never fail because someone does not own the games.
             if (c.tr3)
             {
                 const bool gold = (std::strcmp(c.tr3, "tr3gold") == 0);
@@ -1944,11 +1925,9 @@ bool Rando::run(const RandoInput& in,
             }
 
             // "Nobody donates to himself" - that is a reason to skip the
-            // IMPORT, but NO reason to exclude the type (#124, user
-            // question 2026-08-24: "he is contained after all, so the rando
-            // should just get on with add+OCB"). Whoever's model already
-            // lies in the level can be placed without any copy - the brake
-            // belongs at the emission, not at the selection.
+            // import, but no reason to exclude the type. Whoever's model
+            // already lies in the level can be placed without any copy -
+            // the brake belongs at the emission, not at the selection.
             //
             // The occasion is the chef in joby3: the slot is there, Core's
             // curation only uses it for a single item. The same silently
@@ -1984,17 +1963,17 @@ bool Rando::run(const RandoInput& in,
                                        static_cast<int>(enemyPool.size())));
     }
 
-    // Emergency brake for "the user deselected EVERYTHING" (#109).
+    // Emergency brake for "everything deselected".
     //
-    // It stands down here and no longer before the cross pool - and exactly
-    // that was the bug the user reported: whoever ticks only the dinos in
-    // the "Enemy types" window thereby deselects all native types. Up
-    // there the pool was then empty, the brake refilled it with the
-    // COMPLETE vanilla list (thus ignoring the deselection), and the dinos
-    // only came on top. Result: half the level stayed vanilla although
-    // "dinos only" was chosen.
+    // It stands down here and not before the cross pool: whoever ticks
+    // only the dinos in the "Enemy types" window thereby deselects all
+    // native types. Placed earlier, the pool would already be empty at
+    // that point, the brake would refill it with the complete vanilla list
+    // (thus ignoring the deselection), and the dinos would only come on
+    // top - half the level staying vanilla although "dinos only" was
+    // chosen.
     //
-    // Now what REALLY lies in the pot at the end counts. A selection
+    // Now what really lies in the pot at the end counts. A selection
     // satisfiable through cross types passes unchanged. The brake only
     // engages in a true emergency - say, someone picks exclusively dinos
     // but the TR3 paths are missing and they silently drop out. Then a
@@ -2020,11 +1999,10 @@ bool Rando::run(const RandoInput& in,
     //
     // Swapping happens only among the level's curated types. Scientist,
     // Guardian and the scripted cases are thereby out by themselves - they
-    // do not stand in there. The chef (87) has been a normal cross type
-    // since #124; his ONE native item (joby3, 186) still stays vanilla
-    // because the curation nails it down (stealth cutscene). With the cross
-    // enemy mix, individual roles additionally go to the chosen foreign
-    // types.
+    // do not stand in there. The chef (87) is a normal cross type; his one
+    // native item (joby3, 186) still stays vanilla because the curation
+    // nails it down (stealth cutscene). With the cross enemy mix,
+    // individual roles additionally go to the chosen foreign types.
     std::set<int> immuneSet;         // items already made immune during the swap
     // Space needs: some enemies need an arena, not a closet.
     //
@@ -2052,23 +2030,21 @@ bool Rando::run(const RandoInput& in,
     // all three battlegrounds in Andrea2 (items 91/92/93): in the 3x3
     // window 9 of 9 tiles free, in the 7x7 exactly 40 of 49.
     //
-    // The threshold has since been loosened twice, both times by the user:
-    //
-    //  - 7x7 with 40 of 49 was the first measure and would have been the
-    //    hall. Only 255 sectors game-wide met it, five levels would never
-    //    have seen the Hydra.
-    //  - 3x3 with all nine tiles was the second: not a single neighbouring
-    //    tile built up. Measured over twenty seeds it threw away 93 percent
-    //    of the placement spots - 0.65 Hydras per full run, not one of them
-    //    through the swap, and in the Andy levels practically never.
-    //  - 3x3 with 5 of 9 is what stands here (user decision 2026-09-03).
-    //    At that threshold almost every level lands between 30 and 70
-    //    percent usable sectors - Andrea1 60.5, rich1 40.4, joby3 32.4,
-    //    Andy2 30.0 - and a full run is expected to carry about 4.7
-    //    Hydras. The arena idea behind the nine is expressly given up
-    //    ("that was only a rough guideline", user 2026-09-03); what the
-    //    measure still keeps out is the closet - a place whose
-    //    neighbourhood is more wall than floor.
+    // The threshold rules out two simpler alternatives, both measured and
+    // discarded:
+    //  - 7x7 with 40 of 49 (matching the hall) leaves only 255 sectors
+    //    game-wide, and five levels would never see the Hydra.
+    //  - 3x3 with all nine tiles free (no neighbouring tile built up) still
+    //    throws away 93 percent of the placement spots, measured over
+    //    twenty seeds - 0.65 Hydras per full run, none of them through the
+    //    swap, and in the Andy levels practically none at all.
+    //  - 3x3 with 5 of 9 is what stands here. At that threshold almost
+    //    every level lands between 30 and 70 percent usable sectors -
+    //    Andrea1 60.5, rich1 40.4, joby3 32.4, Andy2 30.0 - and a full run
+    //    is expected to carry about 4.7 Hydras. The nine-tile arena idea is
+    //    given up as only a rough guideline; what the measure still keeps
+    //    out is the closet - a place whose neighbourhood is more wall than
+    //    floor.
     //
     // The zone export is a PLACEMENT pool in this, not a walkability
     // raster: it only carries sectors on which something may really stand.
@@ -2087,23 +2063,23 @@ bool Rando::run(const RandoInput& in,
 
     // Draw weight: how many tickets a kind holds in the lottery.
     //
-    // Every roll below picks uniformly among the kinds that fit AT THAT
-    // SPOT. That is fair per spot but not per run: a kind barred almost
+    // Every roll below picks uniformly among the kinds that fit at that
+    // spot. That is fair per spot but not per run: a kind barred almost
     // everywhere by the space rule above only ever enters the few lists it
     // qualifies for, while a kind with no rule at all is in every single
-    // one. Measured over ten seeds and the twelve campaign levels on
-    // 2026-09-04, the Hydra came out at 4.2 placements per run (spread 1 to
-    // 9, Andrea2's three vanilla heads not counted) against 32 to 64
-    // Compsognathi - close to what the 5-of-9 threshold predicted (about
-    // 4.7), so the space rule works as designed; she is simply rare because
-    // she is only ever a candidate on open ground.
+    // one. Measured over ten seeds and the twelve campaign levels, the
+    // Hydra came out at 4.2 placements per run (spread 1 to 9, Andrea2's
+    // three vanilla heads not counted) against 32 to 64 Compsognathi -
+    // close to what the 5-of-9 threshold predicted (about 4.7), so the
+    // space rule works as designed; she is simply rare because she is only
+    // ever a candidate on open ground.
     //
-    // The user decided (2026-09-04) to double her. Measured over the same
-    // ten seeds afterwards: 9.1 per run (spread 6 to 14), and no other kind
-    // moved by more than about 8 percent - the tickets come out of the same
-    // pot, so the loss spreads over everyone. This changes no PLACE: a kind
-    // only wins more often where it already qualified, and where it is not
-    // in the list nothing about the list, the roll or the seed changes -
+    // Doubling her ticket count: measured over the same ten seeds
+    // afterwards, 9.1 per run (spread 6 to 14), and no other kind moved by
+    // more than about 8 percent - the tickets come out of the same pot, so
+    // the loss spreads over everyone. This changes no place: a kind only
+    // wins more often where it already qualified, and where it is not in
+    // the list nothing about the list, the roll or the seed changes -
     // proved by a run with the Hydra deselected coming out byte for byte
     // as before, over ten seeds and twelve levels.
     struct DrawWeight { int typeId; int weight; };
@@ -2117,16 +2093,15 @@ bool Rando::run(const RandoInput& in,
         return 1;
     };
 
-    // Pack enemies: types that do not work alone (#98).
+    // Pack enemies: types that do not work alone.
     //
     // The Compsognathus is the occasion. His control is built entirely on
     // the group: `bits = 512 * (item_number & 7) - 1792` (compy.cpp)
-    // distributes the animals by their ITEM NUMBER onto eight angles of a
+    // distributes the animals by their item number onto eight angles of a
     // circle around the target, and the decision to attack hangs on two
-    // GLOBAL counters (compy_scared_timer, compys_attack_lara) all compys
+    // global counters (compy_scared_timer, compys_attack_lara) all compys
     // share. A single compy therefore only circles Lara and almost never
-    // dares approach - seen in game as "the AI is going crazy" (user find
-    // 2026-08-17).
+    // dares approach.
     //
     // Four consecutive item numbers yield four different angles - exactly
     // what our appending delivers by itself.
@@ -2143,37 +2118,37 @@ bool Rando::run(const RandoInput& in,
     // Spawn OCB: some enemies read their OCB as BEHAVIOR, not as a place
     // statement - for them "always 0" is wrong.
     //
-    // The Roman god is the occasion (photographed by the user in game). His
-    // control reads trigger_flags as the WEAPON KIND:
-    //   trigger_flags == 1 -> ranged, throws a projectile  (romangod.cpp:415)
-    //   trigger_flags == 0 -> melee with the hammer        (romangod.cpp:417)
-    // even the color of his lightning hangs on it (romangod.cpp:516).
+    // The Roman god is the occasion. His control, RomangodControl in
+    // romangod.cpp, reads trigger_flags as the weapon kind:
+    //   trigger_flags == 1 -> ranged, throws a projectile
+    //   trigger_flags == 0 -> melee with the hammer
+    // even the color of his lightning hangs on it.
     //
-    // And the versions differ per level: Andrea2 carries him with the SWORD
-    // (item 108, OCB 1 - green, shoots), Andrea3 with the HAMMER (item 79,
-    // OCB 0 - blue, strikes). With our default OCB 0, a Roman god placed in
-    // Andrea2 got the hammer behavior on the sword model: he held the blade
-    // like a hammer and the lightning was blue instead of green. Exactly
-    // what the user saw - only the vanilla item 108 was right.
+    // And the versions differ per level: Andrea2 carries him with the sword
+    // (item 108, OCB 1 - green, shoots), Andrea3 with the hammer (item 79,
+    // OCB 0 - blue, strikes). With the default OCB 0, a Roman god placed in
+    // Andrea2 would get the hammer behavior on the sword model: holding the
+    // blade like a hammer, with blue lightning instead of green - only the
+    // vanilla item 108 was right.
     //
-    // The rule follows the MODEL, not the level as such: where the own
+    // The rule follows the model, not the level as such: where the own
     // sword model stands, OCB 1 must go. All other levels get the hammer
     // model imported from Andrea3 and stay at 0.
-    // Since both versions have their own slot (user idea), the OCB follows
-    // the SLOT instead of the level - with one exception: Andrea3 carries
-    // the hammer in its own slot 61, not the sword. The level-specific row
-    // therefore stands BEFORE the general one, first hit wins.
+    // Since both versions have their own slot, the OCB follows the slot
+    // instead of the level - with one exception: Andrea3 carries the
+    // hammer in its own slot 61, not the sword. The level-specific row
+    // therefore stands before the general one, first hit wins.
     struct SpawnOcb { int typeId; const char* level; int ocb; };  // level 0 = everywhere
     static const SpawnOcb kSpawnOcb[] = {
         {  61, "andrea3", 0 },  // Andrea3's own slot 61 IS the hammer
         {  61, nullptr,   1 },  // otherwise sword version: ranged
         { 461, nullptr,   0 },  // hammer version: melee
-        // The chef (#124, user find in the playtest): state 1 is his
-        // vegetable chopping, and in vanilla he only leaves it when Lara
-        // comes within one and a half sectors (chef.cpp). For an enemy we
-        // place anywhere that is wrong - he should seek like anyone else.
-        // OCB 1 switches chef.cpp to the hunt; the vanilla chef in joby3
-        // (item 186, OCB 0) stays untouched at his work.
+        // The chef: state 1 is his vegetable chopping, and in vanilla he
+        // only leaves it when Lara comes within one and a half sectors
+        // (chef.cpp). For an enemy placed anywhere that is wrong - he
+        // should seek like anyone else. OCB 1 switches chef.cpp to the
+        // hunt; the vanilla chef in joby3 (item 186, OCB 0) stays untouched
+        // at his work.
         {  87, nullptr,   1 },  // chef: hunt instead of kitchen work
     };
     auto spawnOcbFor = [&lowerName](int typeId) -> int {
@@ -2240,13 +2215,13 @@ bool Rando::run(const RandoInput& in,
         return free >= b->free;
     };
 
-    // --- Headroom: does the kind fit UNDER THE CEILING here? (#141) ---------
+    // --- Headroom: does the kind fit under the ceiling here? -------------
     //
-    // The user's find: a soldier statue, 1546 units tall, ended up in rich1
-    // room 12, where floor and ceiling are 1024 apart - the head stuck
-    // through the ceiling. The rule is the plain comparison, without a safety
-    // margin, because a 1024 room has to stay open to an 809 unit human
-    // (user decision).
+    // Without this rule a soldier statue, 1546 units tall, can end up in
+    // rich1 room 12, where floor and ceiling are 1024 apart - the head
+    // sticks through the ceiling. The rule is the plain comparison, without
+    // a safety margin, because a 1024 room has to stay open to an 809 unit
+    // human.
     //
     // Neither number is typed anywhere. The height is the model's rest pose
     // out of the file that carries it (Tr5Level::frameBounds), the clearance
@@ -2309,9 +2284,8 @@ bool Rando::run(const RandoInput& in,
     // notes at the end of both enemy passes).
     int heightRejectedSwaps = 0;      // swap places with no fitting kind left
     int heightRejectedSpots = 0;      // extra-enemy spots the same happened to
-    // The same two numbers for the space rule (kSpaceNeeds), which since
-    // 2026-09-03 sifts the swap candidates before the roll just as the
-    // height rule does.
+    // The same two numbers for the space rule (kSpaceNeeds), which sifts
+    // the swap candidates before the roll just as the height rule does.
     int spaceRejectedSwaps = 0;       // swap places no kind finds room on
     int spaceNetSwaps = 0;            // safety net AFTER the roll - must stay 0
 
@@ -2331,44 +2305,38 @@ bool Rando::run(const RandoInput& in,
             // Antitrigger targets may join the swap: the swapped enemy gets
             // the antitrigger immunity below (see there).
             // OCB != 0 usually means: a type-specific special spawn. The
-            // OCB drives Initialise/Control of the ORIGINAL type (Imp
-            // 1/2/3/11/12: climb/throw states on wall ledges, imp.cpp:82) -
-            // a foreign type does not understand it and then stands in the
-            // wall (seen in game: andy3 items 2/3, cliff imps OCB 3 became
-            // SWAT/guard - graphics hole, target lock flickers).
+            // OCB drives Initialise/Control of the original type (Imp
+            // 1/2/3/11/12: climb/throw states on wall ledges, InitialiseImp
+            // in imp.cpp) - a foreign type does not understand it and then
+            // stands in the wall.
             //
             // Larson and Pierre (45/47) are the reasoned exception: with
-            // them the OCB describes NO special environment, only three
-            // harmless things (pierre.cpp:70-83 and 124-135) - the tag of
-            // their flee marker (item_flags[3]), an offset of 384 units
-            // within the same sector and the start in guard mode. None of
-            // it sits in the geometry. A foreign type may thus move in, as
-            // long as the OCB drops to 0 in the process - otherwise he
-            // reads it as his own.
+            // them the OCB describes no special environment, only three
+            // harmless things (InitialisePierre and PierreControl in
+            // pierre.cpp) - the tag of their flee marker (item_flags[3]),
+            // an offset of 384 units within the same sector and the start
+            // in guard mode. None of it sits in the geometry. A foreign
+            // type may thus move in, as long as the OCB drops to 0 in the
+            // process - otherwise he reads it as his own.
             //
             // Three items in the whole game are affected: Andrea1 34
             // (OCB 1) and 35 (OCB 2), both with their own AI_AMBUSH marker
             // in room 89 resp. 169, plus Andrea2 76 - the scripted
             // miniboss, protected via fixedItems and already sorted out
             // above.
-            // ADDENDUM 2026-08-17 (#109), user review item by item: the
-            // bar was too broad. With the soldier family the OCB only
-            // picks the SPAWN POSE (InitialiseSas: climb in through the
-            // window, rappel from the ledge, get up from sitting) - that
-            // does not sit in the geometry, the new type simply stands
-            // there normally afterwards.
             //
-            // And the Imp is NOT the special case I took him for: the user
-            // classified the old find as a false alarm ("they landed there
-            // wrongly, that was a false flag due to another bug"). The
-            // graphics bug in andy3 described above came from elsewhere. On
-            // andy1 explicitly: "that will rather be fun when suddenly they
-            // all spawn."
+            // The soldier family is exempt in the same way: the OCB there
+            // only picks the spawn pose (InitialiseSas: climb in through
+            // the window, rappel from the ledge, get up from sitting) -
+            // that does not sit in the geometry either, the new type simply
+            // stands there normally afterwards. The Imp's OCB, by contrast,
+            // does sit in the geometry (climb/throw states on wall ledges)
+            // and is not exempt.
             //
             // What does NOT run via this list but via fixedItems (a type
             // rule cannot protect a single item):
             //   rich3 53 and 54 - hang on the rope and stay for now
-            //   joby2 69        - waits for the slot decoupling (#111)
+            //   joby2 69        - waits for its own slot
             const int ot = it.typeId;
             const bool ocbOnlyPose =
                    ot == 45 || ot == 47            // Larson/Pierre: marker tag
@@ -2393,33 +2361,30 @@ bool Rando::run(const RandoInput& in,
                 std::swap(kinds[i], kinds[j]);
             }
 
-            // Allsanity: every role rolls freely from the FULL pool -
-            // maximum variety, the level may lose its face (user wish).
-            // Cross mix, by contrast, stays restrained: about every fourth
-            // role goes to one of the up to three chosen foreign types,
-            // the level feels mixed through, not exchanged.
-            // Pack enemies do NOT take part in the swap (#98). A swap only
+            // Allsanity: every role rolls freely from the full pool -
+            // maximum variety, the level may lose its face. Cross mix, by
+            // contrast, stays restrained: about every fourth role goes to
+            // one of the up to three chosen foreign types, the level feels
+            // mixed through, not exchanged.
+            // Pack enemies do not take part in the swap. A swap only
             // changes an existing item's kind - companions could only be
             // fitted by drilling open Core's existing trigger chain, and a
             // single compy does not work (see kHerds). They only enter the
-            // level as extra enemies, where the trigger is ours. Filtered
-            // already at the draw: otherwise rolls would land on a type
-            // repeatedly that is rejected afterwards, and the role would
-            // stay vanilla.
+            // level as extra enemies, where the trigger belongs to this
+            // tool. Filtered already at the draw: otherwise rolls would
+            // land on a type repeatedly that is rejected afterwards, and
+            // the role would stay vanilla.
             std::vector<int> swapPool;
             for (int t : enemyPool)
                 if (herdSize(t) == 1) swapPool.push_back(t);
 
-            // Where role i stands, and which kinds fit under THAT ceiling
-            // (#141) and find enough free space around it (kSpaceNeeds).
-            // BOTH filters run BEFORE the roll, the same pattern the extra
-            // enemies use below - the user's requirement is that a place
-            // gets a swap wherever any kind at all fits, instead of rolling
-            // blindly and falling back to vanilla on a miss. The space rule
-            // joined the height rule here on 2026-09-03: it used to be
-            // asked only after the roll, and a Hydra rolled onto a tight
-            // place then cost the place its swap altogether - 72 places in
-            // twenty seeds.
+            // Where role i stands, and which kinds fit under that ceiling
+            // and find enough free space around it (kSpaceNeeds). Both
+            // filters run before the roll, so a place gets a swap wherever
+            // any kind at all fits, instead of rolling blindly and falling
+            // back to vanilla on a miss - asking the space rule only after
+            // the roll let a Hydra rolled onto a tight place cost the place
+            // its swap altogether, 72 places in twenty seeds.
             auto placeOf = [&](size_t i) -> const LevelItem*
             {
                 std::map<int, LevelItem>::const_iterator f = finalOf.find(indices[i]);
@@ -2475,12 +2440,11 @@ bool Rando::run(const RandoInput& in,
                 std::map<int, LevelItem>::iterator f = finalOf.find(indices[i]);
                 if (f == finalOf.end() || f->second.typeId == kinds[i]) continue;
 
-                // Headroom (#141) and free space (kSpaceNeeds). Where the draw
+                // Headroom and free space (kSpaceNeeds). Where the draw
                 // above already came out of a filtered list this never fires;
                 // it catches the plain permutation, which deals out the level's
-                // own kinds without ever asking about a place. Then a kind that
-                // DOES fit is drawn instead of giving the place up - "we must
-                // try everything to make the switch succeed" (user, 2026-09-03).
+                // own kinds without ever asking about a place. A kind that does
+                // fit is then drawn instead of giving the place up entirely.
                 // Only if not a single pool kind fits does the vanilla enemy
                 // stay: he has stood there since 2000 and fits by measurement
                 // (0 of Core's 101 enemies fail the height rule).
@@ -2539,7 +2503,7 @@ bool Rando::run(const RandoInput& in,
                 }
 
                 // If this enemy stands at an operable fixture, he keeps his
-                // vanilla type (#120).
+                // vanilla type.
                 //
                 // The bar for EXTRA enemies alone does not suffice: here no
                 // place changes, but a kind. Whoever stands next to a
@@ -2604,9 +2568,8 @@ bool Rando::run(const RandoInput& in,
                 ++report.enemiesSwapped;
             }
 
-            // The one number the user asked for by name: how many of Core's
-            // enemy places the height rule left at vanilla because nothing in
-            // the pool fits under their ceiling (#141).
+            // How many of Core's enemy places the height rule left at
+            // vanilla because nothing in the pool fits under their ceiling.
             report.notes.push_back(fmt("headroom: %d of %d swap places kept their vanilla kind - no pool kind fits under their ceiling.",
                                        heightRejectedSwaps, static_cast<int>(indices.size())));
             // The same for the space rule, plus the proof that its safety
@@ -2622,13 +2585,13 @@ bool Rando::run(const RandoInput& in,
 
     // --- Antitrigger immunity for EVERY affected enemy ---
     //
-    // The item loss is the real reason, and it does NOT hang on the type
-    // swap: GetCarriedItems (setup.cpp:1962) attaches every pickup within
+    // The item loss is the real reason, and it does not hang on the type
+    // swap: GetCarriedItems (setup.cpp) attaches every pickup within
     // 512 units to the nearest enemy at level start - RemoveDrawnItem,
     // room_number = NO_ROOM, the item is then nothing but his cargo. If he
     // dies normally, CreatureDie releases it via DropBaddyPickups
-    // (box.cpp:880). The antitrigger, by contrast, calls KillItem directly
-    // (control.cpp:2422) - enemy AND cargo are gone.
+    // (box.cpp). The antitrigger, by contrast, calls KillItem directly
+    // (control.cpp) - enemy and cargo are gone.
     //
     // In vanilla that has no consequences, because Core lays nothing next
     // to such enemies. As soon as the items travel, a key item can lie
@@ -2638,8 +2601,8 @@ bool Rando::run(const RandoInput& in,
     // Hence every affected enemy gets the immunity bit, the unswapped one
     // too. Effect like "taking the pointer out of the antitrigger", only at
     // the item instead of the floordata: the antitrigger still lists him
-    // but skips him (control.cpp:2378), and all other pointers of the same
-    // trigger keep working unchanged.
+    // but skips him (_TestTriggers, control.cpp), and all other pointers of
+    // the same trigger keep working unchanged.
     //
     // Only if items travel at all: with pure enemy randomization there is
     // nothing to lose, and a vanilla run should stay vanilla.
@@ -2702,8 +2665,8 @@ bool Rando::run(const RandoInput& in,
     // answer arrives here.
     //
     // The trigger gets OneShot. That is no formality: _TestTriggers
-    // (control.cpp:2415) passes the bit on to the item as IFL_INVISIBLE,
-    // and Larson cannot be killed at all without it (pierre.cpp:68).
+    // (control.cpp) passes the bit on to the item as IFL_INVISIBLE, and
+    // Larson cannot be killed at all without it (PierreCanFlee, pierre.cpp).
     JsonValue trigAdds = JsonValue::makeArray();
     if (opt.addEnemies && opt.enemiesPerLevel > 0 && !enemyPool.empty())
     {
@@ -2729,7 +2692,7 @@ bool Rando::run(const RandoInput& in,
             const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
             if (used.count(sk)) continue;
             if (!origin.count(s.room)) continue;
-            // User requirement: no enemy into a room with the water flag.
+            // No enemy into a room with the water flag.
             if (in.waterRooms.count(s.room)) continue;
 
             // No new enemy where he would swallow a pickup.
@@ -2744,15 +2707,12 @@ bool Rando::run(const RandoInput& in,
             // of the level for good (the same reason their own sectors are
             // barred for items at the top of this function).
             //
-            // First found on a wall grab (test run 2026-08-20, joby3: the
-            // Imp carried the freshly placed crowbar spot away and the item
-            // then floated unpickable in the air), and the rule stayed
-            // narrowed to OCB 2 and 9 from then on. That was too narrow:
-            // `used` covers everything this run SETS DOWN, but not what
-            // STAYS. A pinned or simply unmoved pickup never enters the set,
-            // and the enemy then lands exactly on it - measured 2026-08-25
-            // over 39 runs, 3 hits, every one at distance 0/0/0 and every
-            // one a PICKUP_ITEM4 that had not moved (#121 side finding).
+            // A rule narrowed to OCB 2 and 9 alone is too narrow: `used`
+            // covers everything this run sets down, but not what stays. A
+            // pinned or simply unmoved pickup never enters the set, and the
+            // enemy can then land exactly on it - measured over 39 runs, 3
+            // hits, every one at distance 0/0/0 and every one a
+            // PICKUP_ITEM4 that had not moved.
             //
             // Distances as the engine computes them, 512/256, but WITHOUT
             // its room test: two rooms can occupy the same place (flip
@@ -2782,13 +2742,13 @@ bool Rando::run(const RandoInput& in,
                 if (pickupNear) continue;
             }
 
-            // No new enemy at an OPERABLE FIXTURE (#120).
+            // No new enemy at an operable fixture.
             //
-            // The user showed the case on joby5: the lock for door 177 and
-            // the valve for 127 sit directly at their door. If a big enemy
-            // stands there - statue, T-Rex, TwoGun - his hitbox pushes Lara
-            // away before the operating animation can start. The door can
-            // then never be opened, and the level is lost.
+            // The case in joby5: the lock for door 177 and the valve for
+            // 127 sit directly at their door. If a big enemy stands there -
+            // statue, T-Rex, TwoGun - his hitbox pushes Lara away before
+            // the operating animation can start. The door can then never be
+            // opened, and the level is lost.
             //
             // Barred for EVERY enemy type, not only big ones. Where exactly
             // the line between "pushes away" and "does not disturb" lies
@@ -2857,23 +2817,23 @@ bool Rando::run(const RandoInput& in,
             // sector deep. Walkability is no condition for him, hence only
             // the height.
             //
-            // It is computed BEFORE the choice, because the headroom rule
-            // needs the y the enemy will really stand at (#141).
+            // It is computed before the choice, because the headroom rule
+            // needs the y the enemy will really stand at.
             int gyFloor = 0;
             Rando::floorAt(in, *p.s, 512, 512, gyFloor);
 
             // First sift the types that find enough space here (see
-            // kSpaceNeeds) and fit under the ceiling (#141), then roll among
-            // them. The other way round - roll and discard on mismatch -
-            // would steal the Hydra a spot every time that another type
-            // could have used.
+            // kSpaceNeeds) and fit under the ceiling, then roll among them.
+            // The other way round - roll and discard on mismatch - would
+            // steal the Hydra a spot every time that another type could
+            // have used.
             std::vector<int> fitting;
             int wouldFitButTooTall = 0;
             for (int t : enemyPool)
             {
                 if (!enoughSpace(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY)) continue;
-                // A pack must fit COMPLETELY into the item budget (#98) -
-                // rather no compys at all than three without the fourth.
+                // A pack must fit completely into the item budget - rather
+                // no compys at all than three without the fourth.
                 if (herdSize(t) > howMany - placed) continue;
                 if (!fitsHeight(t, p.s->room, p.s->sectorX, p.s->sectorZ, gyFloor))
                 { ++wouldFitButTooTall; continue; }
@@ -2923,10 +2883,10 @@ bool Rando::run(const RandoInput& in,
                 a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
                 // OCB 0 as the default: with Larson an OCB != 0 sets
                 // ai_bits = GUARD, and then he looks for AI objects that do
-                // not stand at a new place (pierre.cpp:84). Types whose OCB
-                // picks a BEHAVIOR instead of an environment are the
-                // exception - they stand with their value in kSpawnOcb
-                // (Roman god: weapon kind, see there).
+                // not stand at a new place (InitialisePierre, pierre.cpp).
+                // Types whose OCB picks a behavior instead of an
+                // environment are the exception - they stand with their
+                // value in kSpawnOcb (Roman god: weapon kind, see there).
                 a.set("ocb", JsonValue::makeInt(spawnOcbFor(typeId)));
                 a.set("angle", JsonValue::makeInt(static_cast<int64_t>(rng.below(4)) * 16384 - 32768));
                 adds.push(a);
@@ -2946,14 +2906,15 @@ bool Rando::run(const RandoInput& in,
             t.set("sectorX", JsonValue::makeInt(tx));
             t.set("sectorZ", JsonValue::makeInt(tz));
             t.set("commands", cmdList);
-            // #147: the waker also belongs into the flipmap partner of this
-            // room. The trigger sector always comes out of the zone export,
-            // and that lists BASE rooms only - so as soon as the level flips
+            // The waker also belongs into the flipmap partner of this room.
+            // The trigger sector always comes out of the zone export, and
+            // that lists base rooms only - so as soon as the level flips
             // that group, the base room reads the alternate's floordata and
             // the waker is gone. In joby5 the intro cutscene switches group
-            // 0 on before Lara can move (PLAYCUT 32 -> joby8, deltapak.cpp:
-            // 1802/1852 fire the FLIPMAP(0) heavy trigger in room 40), and
-            // nothing in the level ever switches it back: without the copy
+            // 0 on before Lara can move (PLAYCUT 32 -> joby8, whose
+            // joby8_init and joby8_control in deltapak.cpp fire the
+            // FLIPMAP(0) heavy trigger in room 40), and nothing in the
+            // level ever switches it back: without the copy
             // nine of twenty-two enemies never wake up. The mirror itself,
             // with its wall and height test, sits in ApplyPatch.
             t.set("mirrorFlip", JsonValue::makeInt(1));
@@ -2985,14 +2946,13 @@ bool Rando::run(const RandoInput& in,
 
     // --- Who carries what in the end? ---
     //
-    // GetCarriedItems (game/setup.cpp:1925) runs over all items at level
+    // GetCarriedItems (game/setup.cpp) runs over all items at level
     // start and gives every carrier the pickups lying close enough to him.
-    // That is intended and expressly approved by the user: a key at an
-    // enemy is a good find.
+    // That is intended: a key at an enemy is a good find.
     //
-    // But there is one condition. DropBaddyPickups (game/box.cpp:833) puts
+    // But there is one condition. DropBaddyPickups (game/box.cpp) puts
     // the item on the enemy's sector center at death, and PickUpCollision
-    // (game/pickup.cpp:734) fans out via the OCB into special cases that
+    // (game/pickup.cpp) fans out via the OCB into special cases that
     // align Lara at a prop via TestLaraPosition - at a prop that does not
     // stand at the drop site. A carried pickup with OCB != 0 lies there
     // forever unpickable afterwards, without a crash and without a message.
@@ -3104,13 +3064,12 @@ bool Rando::run(const RandoInput& in,
     JsonValue laraAnims = JsonValue::makeArray();
     std::set<int> swapEmitted;
 
-    // FIRST the soldier family's anim base types, BEFORE the types that
-    // need them (#96). Standing at the back, the import aborted as soon as
-    // the base type really had to be loaded instead of already being
-    // there: "cannot walk the main block - mesh pointers". It only showed
-    // with the "Enemy types" window, because the base type can now be
-    // deselected specifically - before, the seed almost always drew it
-    // itself, and then it was already there.
+    // The soldier family's anim base types are emitted first, before the
+    // types that need them. Standing at the back, the import aborts as
+    // soon as the base type really has to be loaded instead of already
+    // being there: "cannot walk the main block - mesh pointers". This
+    // matters because the "Enemy types" window can deselect the base type
+    // specifically while a dependent type is still chosen.
     //
     // Whoever is himself in the run is skipped here: he comes below with
     // replace=true and thereby more completely from the donor.
@@ -3122,12 +3081,11 @@ bool Rando::run(const RandoInput& in,
         if (crossUsed.count(c->baseSlot)) continue;
         if (!baseEmitted.insert(c->baseSlot).second) continue;
 
-        // The base type comes from HIS OWN row, not from the donor level of
-        // the one requesting him. c->from used to stand here - with the
-        // Crane Guy that fetched the guard from joby2, and he cannot be
-        // copied ("frame pointer outside the frame slice"); from rich1 he
-        // works. With Mafia and SWAT+ it never showed, because their donors
-        // happen to carry a usable base type.
+        // The base type comes from his own row, not from the donor level of
+        // the one requesting him: with the Crane Guy, fetching the guard
+        // from joby2 fails ("frame pointer outside the frame slice"), while
+        // from rich1 it works. With Mafia and SWAT+ this never matters,
+        // because their donors happen to carry a usable base type.
         const char* baseFrom = c->from;
         int baseSource = c->baseSlot;
         for (const CrossEnemy& b : kCross)
@@ -3158,9 +3116,9 @@ bool Rando::run(const RandoInput& in,
     {
         const CrossEnemy* c = crossChosen[t];
 
-        // Guest from Tomb Raider 3 (#92): no donor level but an instruction
-        // to the patch path to fetch him at runtime from the user's
-        // installation. All details stand in Tr3Source::dinos() - the slot
+        // Guest from Tomb Raider 3: no donor level, but an instruction to
+        // the patch path to fetch him at runtime from the installed game
+        // files. All details stand in Tr3Source::dinos() - the slot
         // suffices here, since the table is findable via it.
         if (c->tr3)
         {
@@ -3172,7 +3130,7 @@ bool Rando::run(const RandoInput& in,
             continue;
         }
 
-        // Native type (#124): this level IS the donor, so the model already
+        // Native type: this level is the donor, so the model already
         // stands under the right number - with meshes, swap halves and
         // samples, because this is exactly where the other levels fetch
         // them from. Nothing is copied, placing happens all the same: the
@@ -3191,7 +3149,7 @@ bool Rando::run(const RandoInput& in,
         }
 
         JsonValue e = JsonValue::makeObject();
-        // Engine slots beyond 460 (#105): the model lies at the donor under
+        // Engine slots beyond 460: the model lies at the donor under
         // sourceSlot and travels via toSlot into the new slot.
         e.set("slot", JsonValue::makeInt(c->sourceSlot > 0 ? c->sourceSlot : t));
         if (c->sourceSlot > 0)
@@ -3213,11 +3171,11 @@ bool Rando::run(const RandoInput& in,
         }
 
         // The family's anim base type already stands above in the list - he
-        // MUST come before the type that needs him (#96).
+        // must come before the type that needs him.
 
         // Swap halves: the swap donor's MESHSWAP1 (swapFrom, may differ
-        // from the model donor) into the type's fallback slot. Since #111
-        // it is unique per enemy; the set remains as protection against a
+        // from the model donor) into the type's fallback slot. This is
+        // unique per enemy; the set remains as protection against a
         // double emission, should a slot ever be shared again.
         if (c->swapDst >= 0 && c->swapFrom && !swapEmitted.count(c->swapDst))
         {
@@ -3273,9 +3231,8 @@ bool Rando::run(const RandoInput& in,
     // its model slot from the donor - regardless of the order, because
     // whether SCRIPT.DAT grants the item via GIVEOBJ is only decided in the
     // script step, and the level step does not know the order (CLI!). One
-    // slot too many costs nothing; an inventory item without a model is the
-    // bug the user saw with cheat items. Without "replace": existing slots
-    // stay.
+    // slot too many costs nothing; an inventory item without a model shows
+    // as a broken cheat item. Without "replace": existing slots stay.
     for (size_t ki = 0; ki < kLevelChainCount; ++ki)
     {
         const LevelChain& k = kLevelChains[ki];
@@ -3293,16 +3250,16 @@ bool Rando::run(const RandoInput& in,
 
     // --- rich: the flare is missing entirely ---
     //
-    // The user's finding: every section gets a full set of flares scattered
-    // except the rich levels. The cause is not the scatter but the file -
-    // consumables are only laid down where the level can DRAW them
-    // (presentSlots, from Tr5Level::moveableSlots), and measured with
-    // SlotList the three rich levels carry none of the three slots a flare
-    // needs, while Andrea1 carries all three:
+    // Every section gets a full set of flares scattered except the rich
+    // levels. The cause is not the scatter but the file - consumables are
+    // only laid down where the level can draw them (presentSlots, from
+    // Tr5Level::moveableSlots), and measured with SlotList the three rich
+    // levels carry none of the three slots a flare needs, while Andrea1
+    // carries all three:
     //
-    //     7   FLARE_ANIM   Lara's own flare animations AND the mesh in her
-    //                      hand (laraflar.cpp:194 and :201 read both from
-    //                      this object) - the user pointed this one out
+    //     7   FLARE_ANIM   Lara's own flare animations and the mesh in her
+    //                      hand (draw_flare_meshes and set_flare_arm in
+    //                      laraflar.cpp read both from this object)
     //   354   Flare Item   the pickup lying in the level
     //   355   Flare Inv    the model shown in the inventory
     //
@@ -3330,23 +3287,21 @@ bool Rando::run(const RandoInput& in,
 
     // --- joby3: Key Item 8 (203) must lie in the level ---
     //
-    // A user requirement for a secret spot in joby3 (#53): the slot should
-    // be PRESENT so a secret patch can later place an item of this type. It
-    // is expressly NOT rolled here - only the model travels along. joby3
-    // does not have the slot in vanilla (checked with SlotAnims: joby2 = 1
-    // mesh from anim 618, joby3 = no model), joby2 lies as the donor in the
-    // same section.
+    // A secret spot in joby3 needs the slot present so a secret patch can
+    // later place an item of this type. It is expressly not rolled here -
+    // only the model travels along. joby3 does not have the slot in
+    // vanilla (checked with SlotAnims: joby2 = 1 mesh from anim 618, joby3
+    // = no model), joby2 lies as the donor in the same section.
     //
     // Without "replace": if the slot is already there (say, because a
     // secret patch brought it itself), the existing one stays.
     //
-    // CAUTION for the day the item is really collected: a key item's name
-    // and inventory pose stand NOT in the level but in the CMD_KEY8 entry
-    // of joby3's level block in SCRIPT.DAT (gameflow.cpp:371ff).
+    // For the day the item is really collected: a key item's name and
+    // inventory pose stand not in the level but in the CMD_KEY8 entry of
+    // joby3's level block in SCRIPT.DAT (DoGameflow, gameflow.cpp).
     // inventry_objects_list is never reset between levels - if joby3 lacks
     // the entry, the key carries the name and pose whichever other level
-    // set last. Our ScriptDat path used to only clear level flags, no
-    // object names.
+    // set last.
     if (lowerName == "joby3")
     {
         JsonValue e = JsonValue::makeObject();
@@ -3359,8 +3314,8 @@ bool Rando::run(const RandoInput& in,
         // slot exists in every level, only joby2 has real image data - in
         // joby3 the extra anims are Core stubs (436-439 point at the same
         // frame offset), and the engine otherwise only plays the substitute
-        // key anim at Key Hole 8 ("looks weird", user 2026-08-21). The card
-        // sound (sfx 316) travels along in the same move.
+        // key anim at Key Hole 8, which does not match the card model. The
+        // card sound (sfx 316) travels along in the same move.
         JsonValue la = JsonValue::makeObject();
         la.set("anim", JsonValue::makeInt(437));
         la.set("fromLevel", JsonValue::makeString("joby2"));
@@ -3372,15 +3327,14 @@ bool Rando::run(const RandoInput& in,
     //
     // Both flee from 40 hit points to an AI_AMBUSH marker with matching OCB
     // and despawn there (GetAITarget/FindAITargetObject, box.cpp;
-    // PierreControl clamps the hit points at 40 until then). The randomizer
-    // used to set such markers itself for a while so the flight finds its
-    // target - that was the wrong direction:
+    // PierreControl clamps the hit points at 40 until then). Setting such a
+    // marker for them would be the wrong direction, for two reasons:
     //
-    //  1. User requirement: as pool enemies, the two shall ALWAYS fight and
-    //     die. That is exactly what Larson's fade-out (#65) and Pierre's
-    //     loop-proof death animation were built for.
+    //  1. As pool enemies, the two should always fight and die. That is
+    //     exactly what Larson's fade-out and Pierre's loop-proof death
+    //     animation were built for.
     //  2. The despawn takes carried items along. GetCarriedItems
-    //     (setup.cpp:1962) attaches every pickup within 512 units to the
+    //     (setup.cpp) attaches every pickup within 512 units to the
     //     nearest enemy - a key item next to a fleeing Larson would be gone
     //     after his flight.
     //
@@ -3391,8 +3345,8 @@ bool Rando::run(const RandoInput& in,
     // (see the swap loop) and thus finds no marker anymore anyway.
     //
     // Tr5Level::addAiObject and the patch field "aiAdds" remain - the
-    // mechanics are proven and will be needed as soon as we want to place
-    // AI objects for something else.
+    // mechanics are proven and stay ready for placing AI objects for
+    // something else.
     JsonValue aiAdds = JsonValue::makeArray();
 
     // --- Roll the outfit ---
@@ -3424,7 +3378,7 @@ bool Rando::run(const RandoInput& in,
         //
         // Deselected outfits fall out here, and guests fall out entirely
         // while the TR3 switch is off - the wardrobe must not be able to
-        // reach into an installation the user has not enabled.
+        // reach into an installation that option leaves disabled.
         struct Cand { int vanilla; std::string id; };
         std::vector<Cand> cand;
         {
@@ -3581,13 +3535,12 @@ bool Rando::run(const RandoInput& in,
     //    joby2 thus means: the Deagle sits properly in the holster, but
     //    Rome and catsuit Lara wear joby2's camo-trousers thighs meanwhile.
     //
-    //    For a while Andrea3 also stood here for 16, with the reverse
-    //    price: consistent thighs but the old revolver in the holster. The
-    //    user expressly decided for the weapon on 2026-08-23 ("we wanted to
-    //    replace the revolver with the Desert Eagle entirely") - he sees
-    //    the weapon, the thighs he accepts. Drawn (6), with laser (12), as
-    //    a pickup (347) and in the inventory the Deagle was everywhere
-    //    already anyway.
+    //    Andrea3 as the donor for 16 instead would have the reverse price:
+    //    consistent thighs but the old revolver in the holster. The weapon
+    //    wins, and the mismatched thighs are accepted, since the goal is to
+    //    replace the revolver with the Desert Eagle everywhere: drawn (6),
+    //    with laser (12), as a pickup (347) and in the inventory the Deagle
+    //    was already everywhere else anyway.
     // 2. Andrea3 additionally supplies 352/456/457 (the binoculars
     //    inventory object and the overlays for binoculars and scope) -
     //    only the andy levels lack those, and without 457 the view through
@@ -3628,9 +3581,9 @@ bool Rando::run(const RandoInput& in,
             // (mesh-identical to slot 5, own anims with KILLITEM and shot
             // sounds - sequence material, richcut2 carries the same slot).
             // The slot stays untouched, and with it the pistol item must
-            // not enter the level either: setup.cpp:111 gives Lara starting
-            // pistols as soon as PISTOLS_ITEM is loaded, and drawn, her
-            // arms would run over the scripted HK anims.
+            // not enter the level either: InitialiseLara (setup.cpp) gives
+            // Lara starting pistols as soon as PISTOLS_ITEM is loaded, and
+            // drawn, her arms would run over the scripted HK anims.
             if (lowerName == "rich2" && (r.slot == 334 || r.slot == 335)) continue;
 
             JsonValue e = JsonValue::makeObject();
@@ -3646,14 +3599,14 @@ bool Rando::run(const RandoInput& in,
     else if (opt.allWeapons)
         report.notes.push_back("weapons: joby4 stays vanilla (diving suit).");
 
-    // --- Weather (#144) ---------------------------------------------------
+    // --- Weather -----------------------------------------------------------
     //
-    // DELIBERATELY THE LAST DRAW OF THE RUN. Everything above has already
+    // Deliberately the last draw of the run. Everything above has already
     // pulled its numbers, so the extra draw cannot shift a single other
-    // result: for the SAME seed, on and off give the same items, enemies,
+    // result: for the same seed, on and off give the same items, enemies,
     // weapons and outfit, and differ in exactly the one weather byte.
-    // Measured over ten seeds and fifteen levels, plus five seeds against
-    // the previous build with the option off, byte for byte.
+    // Measured over ten seeds and fifteen levels, plus five seeds against a
+    // build with the option off, byte for byte.
     //
     // (The GUI checkbox is still part of effectiveSeed, as every option is -
     // so ticking it in the window does change the game. That is the seed
@@ -3699,28 +3652,27 @@ bool Rando::run(const RandoInput& in,
     if (adds.size() > 0) patchOut.set("itemAdds", adds);
     if (trigMoves.size() > 0) patchOut.set("triggerMoves", trigMoves);
     if (trigAdds.size() > 0) patchOut.set("triggerAdds", trigAdds);
-    // The item count from which the planning numbered new items (#107). If
-    // the source file carries MORE items than the level JSON (the weapon
-    // base was created AFTER the JSON export), the itemAdds land further
-    // back than planned - and every trigger woke the item TWO BEFORE its
-    // enemy (seen in Andrea1: JSON 151, file 153, all wakers off by 2, the
-    // last two enemies without a trigger). ApplyPatch shifts all TO_OBJECT
-    // targets >= itemBase by the true difference with this number.
+    // The item count from which the planning numbered new items. If the
+    // source file carries more items than the level JSON (the weapon base
+    // was created after the JSON export), the itemAdds land further back
+    // than planned, and every trigger would wake the item two before its
+    // enemy. ApplyPatch shifts all TO_OBJECT targets >= itemBase by the
+    // true difference with this number.
     patchOut.set("itemBase", JsonValue::makeInt(static_cast<int64_t>(in.items.size())));
     // Deliberately NO itemRemoves - see rule 1 in the header.
     return true;
 }
 
-// The selectable enemy kinds with display names (#95). Order and content
-// follow the pool table kCross further up - whoever adds a row there adds
-// one here. The names are English for the international release; the
-// German UI translates them via the Language table (see gui\Language.cpp).
+// The selectable enemy kinds with display names. Order and content follow
+// the pool table kCross further up - whoever adds a row there adds one
+// here. The names are English for the international release; the German UI
+// translates them via the Language table (see gui\Language.cpp).
 std::vector<OutfitKind> Rando::outfitKinds()
 {
     std::vector<OutfitKind> v;
 
     // The three TR5 brings itself. The ids are what the config and the patch
-    // speak; the names are what the user reads.
+    // speak; the names are the ones shown in the outfit picker.
     v.push_back({ "andrea", "Lara Andrea", "" });
     v.push_back({ "joby",   "Lara Joby",   "" });
     v.push_back({ "rich",   "Lara Rich (catsuit)", "" });
@@ -3740,10 +3692,10 @@ std::vector<EnemyKind> Rando::enemyKinds()
         { 33, "SWAT",              nullptr },
         { 35, "SWAT (heavy)",      nullptr },
         { 37, "Guard",             nullptr },
-        // Engine slot 460 (BLUE_GUARD2, #105): the guard's joby model. In
+        // Engine slot 460 (BLUE_GUARD2): the guard's joby model. In
         // vanilla both models share slot 37 and exclude each other - the
-        // new slot makes them possible at the same time. Runs only on our
-        // engine (which ships via #31).
+        // new slot makes them possible at the same time. Runs only on this
+        // engine.
         { 460, "Guard (Joby)",     nullptr },
         { 39, "Two Gun",           nullptr },
         { 41, "Dog",               nullptr },
@@ -3755,12 +3707,12 @@ std::vector<EnemyKind> Rando::enemyKinds()
         { 57, "Lion",              nullptr },
         { 59, "Gladiator",         nullptr },
         { 61, "Soldier statue (sword)", nullptr },
-        // Engine slot 461 (ROMAN_GOD2, #84): the hammer version from
-        // Andrea3. In vanilla it shares slot 61 with the sword and
-        // excludes it; with the own slot both can stand in the same level.
+        // Engine slot 461 (ROMAN_GOD2): the hammer version from Andrea3.
+        // In vanilla it shares slot 61 with the sword and excludes it;
+        // with its own slot both can stand in the same level.
         { 461, "Soldier statue (hammer)", nullptr },
         { 63, "Hydra",             nullptr },
-        // Engine slot 469 (CYBORG, #146): the VCI cyborg from rich3. In
+        // Engine slot 469 (CYBORG): the VCI cyborg from rich3. In
         // vanilla he sits on slot 67 and is immortal there by design (his
         // object flag undead, he dies only through rich3's own geometry) -
         // the new slot carries a mortal version, while the two puzzle
@@ -3770,7 +3722,7 @@ std::vector<EnemyKind> Rando::enemyKinds()
         // The dog from joby2 - its own enemy type with its own control,
         // not to be confused with "Dog" (41) from Andrea1.
         { 85, "Huskie",            nullptr },
-        // The chef from joby3 (#124) - melee fighter with a knife.
+        // The chef from joby3 - melee fighter with a knife.
         { 87, "Chef",              nullptr },
         { 89, "Imp",               nullptr },
 

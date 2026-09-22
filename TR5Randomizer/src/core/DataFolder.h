@@ -23,14 +23,13 @@
 //----------------------------------------------------------------------------
 // Management of the game data.
 //
-// Fundamental decision (user, 2026-08-05): the randomizer does NOT write
-// into the Steam folder. It asks once for its path, checks the levels
-// against the bundled checksum list, and copies them into its own game
-// folder next to the engine. Reasons:
+// Design: the randomizer does NOT write into the Steam folder. It asks once
+// for its path, checks the levels against the bundled checksum list, and
+// copies them into its own game folder next to the engine. Reasons:
 //  - Steam's "verify files" silently restores changed files; a randomized
 //    playthrough would be vanilla again without warning.
 //  - A game update collides with our changes.
-//  - A tool that writes into a purchased folder rightly makes users
+//  - A tool that writes into a purchased folder rightly makes players
 //    nervous.
 //  - "Restore to default" becomes trivial: the Steam folder IS the
 //    original, restoring means copying anew.

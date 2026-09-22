@@ -144,10 +144,10 @@ struct Tr5TriggerCmd
 };
 
 //----------------------------------------------------------------------------
-// The three rules for walking a floordata chain. They used to sit in an
-// anonymous namespace inside Tr5Level.cpp, which meant a second reader had to
-// copy them - and a copied bit layout is a second chance to get it wrong.
-// Each one names the engine line it was taken from; see Tr5Level.cpp.
+// The three rules for walking a floordata chain, kept as free functions
+// rather than duplicated by every reader - a copied bit layout is a
+// second chance to get it wrong. Each one names the engine line it was
+// taken from; see Tr5Level.cpp.
 //----------------------------------------------------------------------------
 namespace Tr5Floor
 {
@@ -465,10 +465,11 @@ public:
     //
     // Repeatable: if the chain already points at targetRoom, nothing
     // happens.
-    // Both sectors are NAMED by the caller. The far one used to be worked
-    // out from the world position, which lands on the neighbour's INTERIOR
-    // sector rather than its border ring - and an interior sector is read as
-    // "stacked", so Andrea3's room 74 got a window facing the floor.
+    // Both sectors are NAMED by the caller rather than derived from world
+    // position: deriving the far one lands on the neighbour's INTERIOR
+    // sector rather than its border ring, and an interior sector is read as
+    // "stacked" - Andrea3's room 74 got a window facing the floor from
+    // exactly that mistake.
     bool    makePortal(int room, int sx, int sz,
                        int targetRoom, int tsx, int tsz, std::string& error);
 
@@ -489,7 +490,7 @@ public:
     bool    addViewWindow(int roomA, int sxA, int szA,
                           int roomB, int sxB, int szB, std::string& error);
 
-    // #137: what a wall window has to describe, worked out from the
+    // What a wall window has to describe, worked out from the
     // floordata instead of from the two height bytes.
     //
     // (sx,sz) is the sector of roomA that hands over to roomB - the very one
@@ -531,7 +532,7 @@ public:
 
     // One drawn face of a room. The wall you look at IS one of these - the
     // portal underneath does not hide it, which is why a new opening still
-    // shows the old wall (#136). Corners are WORLD coordinates.
+    // shows the old wall. Corners are WORLD coordinates.
     struct FaceInfo
     {
         int  roomlet;
@@ -546,7 +547,7 @@ public:
     };
     bool    roomFaces(int room, std::vector<FaceInfo>& out, std::string& error) const;
 
-    // #137: one texture rule for buildRoomGeometry. -1 in a field means "does
+    // One texture rule for buildRoomGeometry. -1 in a field means "does
     // not apply", so a rule with sx, sz and band all -1 is the room-wide
     // default and every later rule refines what an earlier one set. band is
     // counted from the floor upward, which is how a person looks at a wall;
@@ -570,7 +571,7 @@ public:
     };
 
     // Give a room that has no drawn surface one, built from its own floor
-    // data (#137). likeRoom < 0 means the textures come from the rules alone.
+    // data. likeRoom < 0 means the textures come from the rules alone.
     // Idempotent: a room that already carries faces is left untouched.
     bool    buildRoomGeometry(int room, int likeRoom,
                               const std::vector<RoomTexRule>& rules,
@@ -580,8 +581,6 @@ public:
     // reads a structure through a stored offset and our own parser does not.
     bool    headerField(int room, int offset, unsigned& value, std::string& error) const;
 
-    // #136: a new opening still shows the old wall, because the wall is a
-    // drawn face and the portal underneath does not hide it.
     // Shift a whole room. dx/dz in whole sectors, dy in whole height steps -
     // the caller has already rounded, this one refuses anything else.
     bool    moveRoom(int room, long dx, long dy, long dz, std::string& error);
@@ -685,7 +684,7 @@ public:
                              int srcOffset, std::string& error);
 
     // Implants a single Lara anim including frame data, commands and sounds
-    // from a DONOR level (ANIM_KEYCARD 437, #53). The anim slot exists
+    // from a DONOR level (ANIM_KEYCARD 437). The anim slot exists
     // everywhere, the image data is level-specific - reasoning and limits
     // at the body in Tr5Transfer.cpp.
     bool copyLaraAnimFrom(const Tr5Level& src, int animNr, std::string& error);
@@ -767,10 +766,10 @@ public:
     const std::vector<uint8_t>& debugBytes() const { return m_bytes; }
     int32_t debugTexinfoCount() const { return m_texinfos.count; }
     bool debugTexinfoBlock(size_t& dataAt, int32_t& n) const { dataAt = m_texinfos.dataAt; n = m_texinfos.count; return m_texinfos.count > 0; }
-    /* The ANIMATED TEXTURE ranges, for the diagnostic tools (#123, fix round
-     * N): where the block lies and how many SHORTS it holds. The layout is
-     * the engine's own `aranges` (specific\output.cpp, S_AnimateTextures):
-     * one short with the number of ranges, then per range one short with the
+    /* The ANIMATED TEXTURE ranges, for the diagnostic tools: where the block
+     * lies and how many SHORTS it holds. The layout is the engine's own
+     * `aranges` (specific\output.cpp, S_AnimateTextures): one short with
+     * the number of ranges, then per range one short with the
      * number of FRAMES MINUS ONE followed by that many plus one texinfo
      * numbers. Reading it here rather than in the tool keeps the one walk of
      * the main block the one place that knows where anything is. */
@@ -829,7 +828,7 @@ public:
     bool setForeignTalkHeads(int value);
 
     // data[3] of the same header block: which Tomb Raider III outfit the
-    // randomizer put on this level (#123, stage S7). 0 means "none" - the
+    // randomizer put on this level. 0 means "none" - the
     // body is whatever data[0] says.
     //
     // It exists because data[0] cannot say it. The wardrobe writes
@@ -850,19 +849,19 @@ public:
     int  hdOutfit() const;
     bool setHdOutfit(int value);
 
-    // The weather byte in the same header block (#144): 0 dry, 1 rain,
+    // The weather byte in the same header block: 0 dry, 1 rain,
     // 2 snow. Read by the engine in specific\file.cpp (data[1]) and by
     // nothing else than DoWeather (specific\specificfx.cpp).
     int  weatherType() const;
     bool setWeatherType(int value);
 
-    // How many rooms of this level could show rain or snow at all (#144).
+    // How many rooms of this level could show rain or snow at all.
     // The engine's own criterion, not a guess - see the definition in
     // Tr5Level.cpp for the two conditions and where they come from.
     // 0 means: a weather byte would be written into the void.
     int  weatherRooms() const;
 
-    // --- HD markers (#123, stage S7) -----------------------------------
+    // --- HD markers ------------------------------------------------------
     //
     // The engine can draw a level with the Remaster's own geometry, and
     // that geometry describes the VANILLA level. Wherever this randomizer
@@ -888,8 +887,8 @@ public:
     // and ride along with the origin), room flags (water, climb), items,
     // triggers and floordata - none of them is geometry.
     //
-    // TWO KINDS OF MARK SINCE FIX ROUND Z (#123), and the difference is
-    // how much of the room's HD art the change makes wrong:
+    // Two kinds of mark, and the difference is how much of the room's HD
+    // art the change makes wrong:
     //
     //   THE WHOLE ROOM (hdMarkRoom) - moveRoom with dy and
     //   buildRoomGeometry. A room that was lifted, or that had no faces at
@@ -900,11 +899,10 @@ public:
     //   makeVerticalPortal and clearWallFaces. Those change ONE sector's
     //   worth of wall, floor or ceiling; the rest of the room is exactly
     //   what the Remaster drew. Marking the whole room for it turned four
-    //   of ANDY3's 211 rooms classic in the middle of an HD level, and the
-    //   play test of 2026-09-11 photographed the result: HD floors running
-    //   into classic ones with the void showing in the seam. So the edit
-    //   records the BOX its opening lives in instead, and the engine drops
-    //   the HD triangles inside that box and keeps the room.
+    //   of ANDY3's 211 rooms classic in the middle of an HD level, with HD
+    //   floors running into classic ones and the void showing in the seam.
+    //   So the edit records the BOX its opening lives in instead, and the
+    //   engine drops the HD triangles inside that box and keeps the room.
     struct HdDonor
     {
         int         slot;       // the slot in THIS level
@@ -920,33 +918,30 @@ public:
     //
     // Y GROWS DOWNWARD in this format, so lo[1] is the opening's CEILING
     // and hi[1] its FLOOR. The box grows along ONE axis and shrinks along
-    // the other two, and fix round Z1 had to be measured before that was
-    // believable:
+    // the other two:
     //   - HD_CUT_OUT_NORMAL (512, half a sector) OUTWARD along the
     //     opening's own normal, both ways. The Remaster's walls are built
     //     thick and their faces do not sit on the classic wall plane; half
     //     a sector reaches the art on both sides of it.
     //   - HD_CUT_IN_PLANE (128) INWARD along the other two axes.
     //
-    // The inward step is the correction of fix round Z1 and it is not a
-    // nicety. A cut room KEEPS its HD art (that is the whole point of the
-    // round) and an HD room never draws its classic roomlets, so whatever
-    // the box takes out is replaced by NOTHING - it is void, not a repair.
-    // The box may therefore only ever hold art that stands INSIDE the
-    // opening. A view window runs from its sector's ceiling to its floor by
-    // construction, so an outward step of even one unit reaches the floor
-    // and the ceiling of the passage itself, and those are flat quads lying
-    // exactly in the box's boundary plane: round Z measured 400,950 pixels
-    // of ANDY3's room 143 - 43.5 % of the frame - turning into clear colour
-    // for that one reason, and 41,687 more around the village gate outside
-    // the doorway. One step INWARD and the same quads miss the box, while
-    // every wall triangle that crosses the opening still meets it, because
-    // the engine's test is a real triangle/box intersection and not a
-    // corner-inside test.
+    // The inward step matters because a cut room KEEPS its HD art and an
+    // HD room never draws its classic roomlets, so whatever the box takes
+    // out is replaced by NOTHING - it is void, not a repair. The box may
+    // therefore only ever hold art that stands INSIDE the opening. A view
+    // window runs from its sector's ceiling to its floor by construction, so
+    // an outward step of even one unit reaches the floor and the ceiling of
+    // the passage itself, and those are flat quads lying exactly in the
+    // box's boundary plane: measured 400,950 pixels of ANDY3's room 143 -
+    // 43.5 % of the frame - turning into clear colour for that one reason,
+    // and 41,687 more around the village gate outside the doorway. One step
+    // INWARD and the same quads miss the box, while every wall triangle
+    // that crosses the opening still meets it, because the engine's test is
+    // a real triangle/box intersection and not a corner-inside test.
     //
     // The price is honest and small: a triangle that lives wholly inside
     // the outer 128 units of the opening survives as a rim. Measured on
-    // ANDY3's two doorways, no such triangle exists - see MODIFICATIONS.md.
+    // ANDY3's two doorways, no such triangle exists.
     //
     // The inward step is clamped to half the extent, so a narrow opening
     // collapses to a plane through its own middle rather than inverting.
@@ -971,7 +966,7 @@ public:
 
     void hdMarkRoom(int room);
     void hdMarkDonor(int slot, int fromSlot, const std::string& level);
-    // A SOUND ID THIS RUN IMPORTED FROM ANOTHER GAME (#153, round M3).
+    // A sound id this run imported from another game.
     //
     // The Tomb Raider III guests bring their own recordings and those go
     // into free slots of the TR5 soundmap - the vulture on 420..423, the
@@ -1002,7 +997,7 @@ public:
     // and a second edit over the same opening costs no second line.
     const std::set<HdCut>& hdCuts() const { return m_hdCuts; }
 
-    // --- Texture workshop (#104) ---------------------------------------
+    // --- Texture workshop -------------------------------------------------
     //
     // The level's two texture blocks are unpacked ONCE at the first page
     // import and kept open; every further import only appends. Packing and
@@ -1020,7 +1015,7 @@ public:
     bool texWorkshopClose(std::string& error);
 
 private:
-    // #123 S7: what the run changed about the geometry and where foreign
+    // What the run changed about the geometry and where foreign
     // models came from. Cleared by load(), so a reused object never carries
     // the previous level's marks.
     std::set<int>        m_hdRooms;
@@ -1029,7 +1024,7 @@ private:
     // A std::set again, so the same seed writes the same line.
     std::set<int>        m_hdSoundImports;
 
-    // Record the box around one opening (#123, fix round Z). Both are
+    // Record the box around one opening. Both are
     // private: an opening is recorded by the edit that made it, out of the
     // bytes that edit wrote, and never by a caller guessing at coordinates.
     //

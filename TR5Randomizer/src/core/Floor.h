@@ -21,23 +21,23 @@
 // floordata), the randomizer (places items) and FloorCheck (verifies
 // finished levels).
 //
-// Everything here is ported VERBATIM from the engine, nothing invented:
-//  - GetHeight, control.cpp:1013-1035 (TILT) and 1078-1160 (splits):
-//    the floor height at a point within the sector.
-//  - CheckNoColFloorTriangle, control.cpp:2960-3009: which triangle of a
-//    NOCOLF sector has no floor collision.
+// Ported verbatim from the engine, nothing invented:
+//  - GetHeight (control.cpp): the floor height at a point within the
+//    sector, both the TILT case and the split-sector case.
+//  - CheckNoColFloorTriangle (control.cpp): which triangle of a NOCOLF
+//    sector has no floor collision.
 //  - The walkability limit: |slope| > 2 sets height_type to BIG_SLOPE or
-//    DIAGONAL (control.cpp:1019-1022 and 1148-1149), and that is exactly
-//    what Lara's standing, walking and sliding paths check (lara.cpp:1428,
-//    collide.cpp:160ff). Up to slope 2 Lara stands and walks normally -
-//    such slopes are fully valid item spots, Core itself places pickups
-//    there (with a hand-set y on the true floor height).
+//    DIAGONAL in GetHeight, and that is exactly what Lara's standing,
+//    walking and sliding paths check in lara.cpp and collide.cpp. Up to
+//    slope 2 Lara stands and walks normally - such slopes are fully valid
+//    item spots, and the game itself places pickups there, with a
+//    hand-set y on the true floor height.
 //
 // Why this is needed: a placed item is drawn by the engine at exactly its y.
 // On a slope, however, the sector's base value (floor byte << 8) is the
 // HIGHEST corner - an item in the middle of the sector would hang up to half
-// a sector in the air (seen in game, #86). Whoever wants to place on slopes
-// must compute the y with the same formula the engine uses to find the floor.
+// a sector in the air. Placing on slopes needs the y computed with the same
+// formula the engine uses to find the floor.
 //----------------------------------------------------------------------------
 #include <cstdint>
 
@@ -80,16 +80,16 @@ inline FloorPos floorPosAt(const SlopeInfo& si, int baseY, int localX, int local
 
     if (fn == 2)                                        // TILT_TYPE
     {
-        // control.cpp:1014-1015: signed bytes of the data word.
+        // Signed bytes of the data word, as GetHeight reads them.
         xoff = static_cast<int16_t>(si.dataWord) >> 8;
         yoff = static_cast<int8_t>(si.dataWord & 0xFF);
     }
     else if (fn == 7 || fn == 8 || (fn >= 11 && fn <= 14))   // SPLIT1/2, NOCOLF*
     {
-        // control.cpp:1084-1143. Family 1 (SPLIT1/NOCOLF1*) splits along one
-        // diagonal, family 2 along the other; each triangle has its own
-        // slopes (from the corner nibbles) and its own height adjustment
-        // (hadj, 5 signed bits in the type word).
+        // Family 1 (SPLIT1/NOCOLF1*) splits along one diagonal, family 2
+        // along the other; each triangle has its own slopes (from the
+        // corner nibbles) and its own height adjustment (hadj, 5 signed
+        // bits in the type word), as GetHeight computes them.
         const int t0 = si.dataWord & 0xF;
         const int t1 = (si.dataWord >> 4) & 0xF;
         const int t2 = (si.dataWord >> 8) & 0xF;
@@ -115,8 +115,8 @@ inline FloorPos floorPosAt(const SlopeInfo& si, int baseY, int localX, int local
         }
         out.y += hadj << 8;
 
-        // CheckNoColFloorTriangle (control.cpp:2976-3002): if the point lies
-        // in the collision-free triangle, there is no floor there.
+        // CheckNoColFloorTriangle: if the point lies in the collision-free
+        // triangle, there is no floor there.
         if ((fn == 11 && dx <= 1024 - dz) ||    // NOCOLF1T
             (fn == 12 && dx >  1024 - dz) ||    // NOCOLF1B
             (fn == 13 && dx <= dz)         ||   // NOCOLF2T
@@ -126,7 +126,7 @@ inline FloorPos floorPosAt(const SlopeInfo& si, int baseY, int localX, int local
     else
         return out;                              // no floor entry: flat
 
-    // control.cpp:1024-1032 and 1151-1159, taken over character for character.
+    // Taken over from GetHeight character for character.
     if (xoff < 0) out.y -= (xoff * dz) >> 2;
     else          out.y += (xoff * ((-1 - dz) & 1023)) >> 2;
     if (yoff < 0) out.y -= (yoff * dx) >> 2;

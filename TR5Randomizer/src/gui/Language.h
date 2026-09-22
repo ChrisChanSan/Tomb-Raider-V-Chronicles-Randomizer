@@ -17,13 +17,13 @@
  */
 #pragma once
 
-// GUI language (#128, inverted for #129). The sources carry the ENGLISH
-// original strings; with German selected, T() returns the translation from
-// the table in Language.cpp. Unknown strings come back unchanged - a gap
-// thus shows up in the picture immediately instead of breaking the program.
+// GUI language switch. The sources carry the ENGLISH original strings;
+// with German selected, T() returns the translation from the table in
+// Language.cpp. Unknown strings come back unchanged - a gap thus shows up
+// in the picture immediately instead of breaking the program.
 //
-// The default is ENGLISH (user decision 2026-08-24); the switch sits next to
-// the Debug button and lands in TR5Randomizer.cfg.
+// The default is ENGLISH; the switch sits next to the Debug button and
+// lands in TR5Randomizer.cfg.
 
 extern bool gGermanUi;
 

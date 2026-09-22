@@ -17,9 +17,9 @@
 
 namespace
 {
-	/* THE NAMES, in the order of the enum. They are what the log line is read
-	 * with, so they are short and they never change once a report has quoted
-	 * them. */
+	/* The names, in the order of the enum. They are what the log line is
+	 * read with, so they are short and they never change once a report has
+	 * quoted them. */
 	const char* kName[PROF_COUNT] =
 	{
 		"logic",
@@ -99,16 +99,17 @@ namespace
 		return (double)ticks * 1000.0 / (double)g_freq;
 	}
 
-	/* EVERYTHING CLASSIC THE OUTPUT PHASE DID: the buckets, the sort list,
+	/* Everything classic the output phase did: the buckets, the sort list,
 	 * the binocular mask, the pickup display and the fade. HD_DRAW and
 	 * HD_GLOW are the only two phases that run inside S_OutputPolyList and
-	 * NOWHERE else, so they are the only two that may be taken off it -
-	 * BUCKETS, SORT and SORTDRAW are whole-frame totals that also cover the
-	 * sky phase, and subtracting them would make this read zero in every
-	 * outdoor level.
+	 * nowhere else, so they are the only two that may be taken off it -
+	 * BUCKETS, SORT and SORTDRAW are whole-frame totals that also cover
+	 * the sky phase, and subtracting them would make this read zero in
+	 * every outdoor level.
 	 * HD_OBJDRAW and HD_LIGHT sit inside HD_DRAW and are not subtracted
-	 * twice. Clamped because the three clocks are read at different moments
-	 * and a rounding of a few microseconds must not print a negative. */
+	 * twice. Clamped because the three clocks are read at different
+	 * moments and a rounding of a few microseconds must not print a
+	 * negative. */
 	double OutRest(const double* p)
 	{
 		double rest = p[PROF_OUTPUT] - p[PROF_HD_DRAW] - p[PROF_HD_GLOW];
@@ -131,18 +132,19 @@ namespace
 				OutRest(p), (int)g_sort_max);
 	}
 
-	/* THE SLOT THIS FRAME ASKED FOR, in milliseconds. gPresentMinTicks is how
-	 * many 1/60 s ticks the present that just ran waited for, so this is the
-	 * frame's OWN budget and not the mode's: one tick for a game frame at
-	 * fps_mode 1, two for every modal loop in the build whatever the mode
-	 * says. DrawPhaseGame deliberately puts the variable back to two only
-	 * AFTER ProfileFrameEnd, so this reads the policy of the frame being
-	 * judged (#148, order 1b).
+	/* The slot this frame asked for, in milliseconds. gPresentMinTicks is
+	 * how many 1/60 s ticks the present that just ran waited for, so this
+	 * is the frame's own budget and not the mode's: one tick for a game
+	 * frame at fps_mode 1, two for every modal loop in the build whatever
+	 * the mode says. DrawPhaseGame deliberately puts the variable back to
+	 * two only after ProfileFrameEnd, so this reads the policy of the
+	 * frame being judged.
 	 *
-	 * The definition itself moved into specific\output.cpp with order 6,
-	 * because a third case arrived - the display-bound frame, whose slot is
-	 * the panel's period rather than a whole number of ticks - and FPSLOG and
-	 * PROFLOG must not be able to disagree about it. */
+	 * The definition lives in specific/output.cpp (PresentSlotMs) rather
+	 * than here, because a third case exists - the display-bound frame,
+	 * whose slot is the panel's period rather than a whole number of
+	 * ticks - and FPSLOG and PROFLOG must not be able to disagree about
+	 * it. */
 	double BudgetMs()
 	{
 		return PresentSlotMs();
@@ -193,12 +195,12 @@ namespace
 
 		OneSecondLine(buf, sizeof(buf), g_sec_frames);
 
-		/* logic_ticks IS THE PROOF OF THE CLOCK SPLIT (#148, order 1).
-		 * GlobalCounter steps once per logic tick (game\control.cpp) and
-		 * nowhere else, so its difference over one wall-clock second is the
-		 * simulation's own rate. At fps_mode 1 this line must read
-		 * `frames=60 logic_ticks=30`: sixty presents, thirty ticks, and the
-		 * game running at exactly the speed it always did. */
+		/* logic_ticks is the proof of the clock split. GlobalCounter steps
+		 * once per logic tick (game/control.cpp) and nowhere else, so its
+		 * difference over one wall-clock second is the simulation's own
+		 * rate. At fps_mode 1 this line must read `frames=60
+		 * logic_ticks=30`: sixty presents, thirty ticks, and the game
+		 * running at exactly the speed it always did. */
 		Log("PROFLOG level=%s at=%ds frames=%d logic_ticks=%d fps=%d "
 			"budget=%.1f late=%d pauses=%d frame=%.2f/%.2f work=%.2f/%.2f %s",
 			g_level[0] ? g_level : "?", at_s, g_sec_frames,
@@ -266,11 +268,11 @@ void ProfileLevel(const char* fileName)
 	g_qpc_level = now.QuadPart;
 	g_qpc_second = now.QuadPart;
 
-	/* NOT the previous present: the load has just eaten several seconds and
-	 * an interval measured across it would say nothing. The first frame of a
-	 * level therefore has no interval, only its own work - which is exactly
-	 * the number the warm-up question is about, and why it gets a line of its
-	 * own. */
+	/* Not the previous present: the load has just eaten several seconds and
+	 * an interval measured across it would say nothing. The first frame of
+	 * a level therefore has no interval, only its own work - which is the
+	 * number that shows the level's warm-up cost, and why it gets a line
+	 * of its own. */
 	g_qpc_frame = 0;
 	g_level_second = 0;
 	g_level_frames = 0;
@@ -289,10 +291,11 @@ void ProfileLevel(const char* fileName)
 	NewSecond();
 }
 
-/* ONE PRESENT. Every present in the engine that goes through S_DumpScreen or
- * S_DumpScreenFrame lands here; ProfileFrameEnd reads the count and expects
- * exactly one - its own. More than that means a modal loop drew frames in
- * between and the interval it is about to measure is not a game frame's. */
+/* Marks one present. Every present in the engine that goes through
+ * S_DumpScreen or S_DumpScreenFrame lands here; ProfileFrameEnd reads the
+ * count and expects exactly one - its own. More than that means a modal
+ * loop drew frames in between and the interval it is about to measure is
+ * not a game frame's. */
 void ProfileNotePresent()
 {
 	g_presents++;
@@ -311,11 +314,11 @@ void ProfileFrameBegin()
 	if (!gLogEnabled || !ClockReady())
 		return;
 
-	/* PROF_LOGIC IS NOT CLEARED HERE. ControlPhase runs between the present
-	 * and this call, so its milliseconds are already in the accumulator and
-	 * belong to the frame that is starting - see the note in profile.h.
-	 * ProfileFrameEnd clears it once it has reported it; clearing it in
-	 * neither place is what made `logic` grow without bound in order 1.
+	/* PROF_LOGIC is not cleared here. ControlPhase runs between the present
+	 * and this call, so its milliseconds are already in the accumulator
+	 * and belong to the frame that is starting - see the note in
+	 * profile.h. ProfileFrameEnd clears it once it has reported it;
+	 * clearing it in neither place would let `logic` grow without bound.
 	 * Everything else is this frame's own and starts at nothing. */
 	for (int i = 0; i < PROF_COUNT; i++)
 	{
@@ -354,29 +357,29 @@ void ProfileFrameEnd()
 	g_qpc_frame = now.QuadPart;
 	g_level_frames++;
 
-	/* THE BUDGET FOLLOWS THE PRESENT, not the option (#148, order 1b). A
-	 * frame is late when its interval ran over the slot its OWN present asked
-	 * for plus half a 60 Hz tick - 25.0 ms after a one-tick present, 41.7 ms
-	 * after a two-tick one. Order 1 took the slot from tomb5.fps_mode, and so
-	 * measured the inventory, the pause menu and the title - all of which
-	 * keep their two ticks at any setting - against 16.7 ms, and reported a
+	/* The budget follows the present, not the option. A frame is late when
+	 * its interval ran over the slot its own present asked for plus half
+	 * a 60 Hz tick - 25.0 ms after a one-tick present, 41.7 ms after a
+	 * two-tick one. Taking the slot from tomb5.fps_mode directly would
+	 * measure the inventory, the pause menu and the title - all of which
+	 * keep their two ticks at any setting - against 16.7 ms, and report a
 	 * healthy menu second as thirty late frames.
 	 *
-	 * AND AN INTERVAL IS NOT LATE WHEN THE MAIN LOOP WAS SOMEWHERE ELSE.
-	 * g_presents is this frame's own present and nothing else in the normal
-	 * case; anything above one means a modal loop drew between this frame and
-	 * the last. The second half of the rule catches what has no present at
-	 * all - an alt-tab, a window drag, a breakpoint - by the one thing those
-	 * always look like: an interval a full second longer than the work in
-	 * it. */
+	 * And an interval is not late when the main loop was somewhere else.
+	 * g_presents is this frame's own present and nothing else in the
+	 * normal case; anything above one means a modal loop drew between
+	 * this frame and the last. The second half of the rule catches what
+	 * has no present at all - an alt-tab, a window drag, a breakpoint - by
+	 * the one thing those always look like: an interval a full second
+	 * longer than the work in it. */
 	missed = BudgetMs() + 1000.0 / 120.0;
 	paused = g_presents > 1 || frame_ms - work_ms > 1000.0;
 
 	if (g_first_frame)
 	{
-		/* THE FIRST FRAME OF A LEVEL, always written and never counted as
-		 * late: there is no interval behind it, and it is the frame the
-		 * warm-up question is about. */
+		/* The first frame of a level, always written and never counted as
+		 * late: there is no interval behind it, and it is the frame that
+		 * shows the level's warm-up cost. */
 		g_first_frame = false;
 		OneFrameLine(buf, sizeof(buf), g_frame);
 		Log("PROFLOG level=%s first_frame fps=%d work=%.2f %s",
@@ -408,11 +411,11 @@ void ProfileFrameEnd()
 			g_max[i] = g_frame[i];
 	}
 
-	/* THE LOGIC ACCUMULATOR IS EMPTIED HERE and nowhere else. It has just
-	 * been reported and just been added to the second; the ControlPhase that
-	 * runs next fills it again for the next frame. Without this line it is
-	 * never cleared at all and every PROFLOG second reads a running total
-	 * (#148, order 1b). */
+	/* The logic accumulator is emptied here and nowhere else. It has just
+	 * been reported and just been added to the second; the ControlPhase
+	 * that runs next fills it again for the next frame. Without this line
+	 * it is never cleared at all and every PROFLOG second reads a running
+	 * total. */
 	g_frame[PROF_LOGIC] = 0;
 
 	g_work_sum += work_ms;
@@ -420,7 +423,7 @@ void ProfileFrameEnd()
 	if (work_ms > g_work_max)
 		g_work_max = work_ms;
 
-	/* Only a REAL interval goes into the frame clock: not the first frame of
+	/* Only a real interval goes into the frame clock: not the first frame of
 	 * a level, which has none, and not one that waited out a menu - a single
 	 * five-second pause would otherwise own both the mean and the maximum of
 	 * its second and say nothing about the frame rate. */

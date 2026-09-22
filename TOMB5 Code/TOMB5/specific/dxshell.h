@@ -13,10 +13,10 @@
 #pragma once
 #include "../global/types.h"
 
-/* The texture memory the device offered the moment it was made, in bytes
- * (#123, stage S6). Zero when the device did not answer. The HD texture
- * budget is worked out from it; nothing else reads it. See the note in
- * DXCreateD3DDevice for why it is taken there and not later. */
+/* The texture memory the device offered the moment it was made, in bytes.
+ * Zero when the device did not answer. The HD texture budget is worked out
+ * from it; nothing else reads it. See the note in DXCreateD3DDevice for
+ * why it is taken there and not later. */
 extern ulong DXTextureMemoryAtStart;
 
 void DXReadKeyboard(char* KeyMap);
@@ -30,9 +30,7 @@ HRESULT DXShowFrame();
 void DXMove(long x, long y);
 void DXClose();
 long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, long WindowStyle);
-/* THE PRESENT AND THE PANEL (#148, order 6).
- *
- * DXVSyncActive() is 1 only when the device that exists was really made with
+/* DXVSyncActive() is 1 only when the device that exists was really made with
  * D3DPRESENT_INTERVAL_ONE - the option asked for it AND the adapter offered
  * it. The refresh-bound frame rate hangs on this and not on tomb5.vsync,
  * because without a blocking present nothing would bound the loop.

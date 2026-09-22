@@ -17,51 +17,51 @@
 #include "input.h"
 #include "setupdlg.h"
 #include "../game/gameflow.h"	// LanguageChoice
-#include "../game/key_scheme.h"	// KEY_SCHEME_ROLES - the two keyboard sets (#161, round 161b2a)
+#include "../game/key_scheme.h"	// KEY_SCHEME_ROLES - the two keyboard sets
 
 static HKEY phkResult;
 static DWORD dwDisposition;
 static bool REG_Setup;
 
-/* SEPARATE'S OWN PAD SET, BY NAME (#161, round 161b2c, item 3). The same
- * fifteen suffixes the One-key set has carried since base, with an S in front
- * and the Secondary role appended - so a reader of either set can see at a
- * glance which is which, and the 161b2a build, which looks for none of them,
- * reads a registry written here exactly as it read one written by itself.
+/* The Separate pad set's own names: the same fifteen suffixes the One-key
+ * set carries, with an S in front and the Secondary role appended, so a
+ * reader of either set can see at a glance which is which, and an older
+ * build that looks for none of them reads a registry written here exactly
+ * as it reads one written by itself.
  *
- * A table and a loop rather than sixteen unrolled lines like the J* block
- * below: those keep the shape of Core's original, these are new, and one loop
- * is one place for a typo instead of sixteen. */
+ * A table and a loop rather than unrolled lines like the J* block below:
+ * those keep the shape of Core's original, these are new, and one loop is
+ * one place for a typo instead of sixteen. */
 static const char* const JoySplitRegNames[JOY_ROLES] =
 {
 	"SJDck", "SJDsh", "SJWlk", "SJJmp", "SJAct", "SJDrw", "SJFlr", "SJLok",
 	"SJRol", "SJInv", "SJPau", "SJSav", "SJLod", "SJSmd", "SJBmd", "SJSec",
-	// The twelve of round 161b2d (item 3), appended: the Modifier, the six
-	// weapon hotkeys in DoWeaponHotkey's order, the five cheats.
+	// Appended: the Modifier, the six weapon hotkeys in DoWeaponHotkey's
+	// order, the five cheats.
 	"SJMod", "SJWp1", "SJWp2", "SJWp3", "SJWp4", "SJWp5", "SJWp6",
 	"SJCt1", "SJCt2", "SJCt3", "SJCt4", "SJCt5"
 };
 
-/* AND THE SAME TWELVE FOR THE ONE-KEY SET (#161, round 161b2d, item 3). JDck..
- * JSec are Core's own suffixes and stay sixteen unrolled REG_ReadLong lines
- * below, because that is the shape they have had since base; the twelve behind
- * them are new, so they get a table and a loop - one place for a typo instead
- * of twelve. They are the One-key names, which is why they have no S. */
+/* The same twelve for the One-key set. JDck..JSec are Core's own suffixes
+ * and stay unrolled REG_ReadLong lines below, because that is the shape
+ * they have had since base; the twelve behind them are new, so they get a
+ * table and a loop - one place for a typo instead of twelve. They are the
+ * One-key names, which is why they have no S. */
 static const char* const JoyOneRegNames[JOY_ROLES - JOY_ROLE_MODIFIER] =
 {
 	"JMod", "JWp1", "JWp2", "JWp3", "JWp4", "JWp5", "JWp6",
 	"JCt1", "JCt2", "JCt3", "JCt4", "JCt5"
 };
 
-/* THE CHORD FLAGS ARE ONE VALUE PER SET (#161, round 161b2d, item 3) - twenty-
- * eight roles fit in a long, so a mask says it all and the registry gains two
- * names rather than twenty-eight.
+/* The chord flags are one value per set: 28 roles fit in a long, so a mask
+ * says it all and the registry gains two names rather than 28.
  *
- * NAMES OF THEIR OWN, AND NOT A BIT HIDDEN IN A BINDING. Every J* and SJ* value
- * keeps its plain meaning - a button bit index, or -1 - so a registry written by
- * this build loads in the accepted 161b2c build without harm: that build never
- * asks for these two names, reads every binding exactly as it wrote it, and has
- * no chord to be wrong about. */
+ * Each set's chord mask has a name of its own rather than a bit hidden in
+ * a binding. Every J* and SJ* value keeps its plain meaning - a button bit
+ * index, or -1 - so a registry written by this build loads in an older
+ * build without harm: that build never asks for these two names, reads
+ * every binding exactly as it wrote it, and has no chord to be wrong
+ * about. */
 static const char* const JoyChordRegNames[2] = { "JChord", "SJChord" };
 
 bool REG_OpenKey(LPCSTR lpSubKey)
@@ -95,19 +95,19 @@ bool REG_KeyWasCreated()
 	return dwDisposition == REG_CREATED_NEW_KEY;
 }
 
-/* READ ONE VALUE WITHOUT OPENING THE DOOR (#148, order 6).
+/* Reads one value without opening the door that OpenRegistry opens.
  *
  * Every other reader here goes through OpenRegistry, and OpenRegistry
- * CREATES the key it is handed (RegCreateKeyEx above) and records in
+ * creates the key it is handed (RegCreateKeyEx above) and records in
  * dwDisposition whether it had to - which is how init_tomb5_stuff knows to
- * write the whole set of defaults on a first run. So a second reader that
- * opened the tomb5 key EARLIER would silently take that first run away, and
- * the player would be left with a key holding one value and no defaults.
+ * write the whole set of defaults on a first run. A second reader that
+ * opened the tomb5 key earlier would silently take that first run away,
+ * leaving the player with a key holding one value and no defaults.
  *
- * This is that second reader: it opens read-only, creates nothing, touches
- * neither phkResult nor dwDisposition, and answers false when the key or the
- * value is not there. One caller - the VSync option, which the device needs
- * before the options are read (specific\winmain.cpp, DXCreate). */
+ * This reader opens read-only, creates nothing, touches neither phkResult
+ * nor dwDisposition, and answers false when the key or the value is not
+ * there. One caller: the VSync option, which the device needs before the
+ * options are read (specific/winmain.cpp, DXCreate). */
 bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value)
 {
 	char buffer[256];
@@ -130,20 +130,21 @@ bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value)
 	return got;
 }
 
-/* THE SAME DOOR, FOR ONE REG_SZ (#153, round M2, the fix round).
+/* The same read-only approach, for one REG_SZ.
  *
- * REG_ReadString is the ordinary reader and writes its default into the key
- * on a miss, which is right for a setting the options menu owns. hd_outfit is
- * not one: it is written by the in-game outfit changer and read at every
- * level build, an absent value means "dress her by the level's own facts",
- * and writing an empty string there on the first level of a fresh install
- * would take away init_tomb5_stuff's first run exactly as REG_PeekLong's note
- * describes. So this one opens read-only, creates nothing, touches neither
- * phkResult nor dwDisposition, and hands back "" when there is nothing there.
+ * REG_ReadString is the ordinary reader and writes its default into the
+ * key on a miss, which is right for a setting the options menu owns.
+ * hd_outfit is not one: it is written by the in-game outfit changer and
+ * read at every level build, an absent value means "dress her by the
+ * level's own facts", and writing an empty string there on the first
+ * level of a fresh install would take away init_tomb5_stuff's first run
+ * exactly as REG_PeekLong's note describes. So this one opens read-only,
+ * creates nothing, touches neither phkResult nor dwDisposition, and hands
+ * back "" when there is nothing there.
  *
- * Only a REG_SZ counts. A value of another type is a value somebody put there
- * by hand for another purpose, and reading its bytes as a string is how a
- * registry reader ends up printing a page of rubbish into a log. */
+ * Only a REG_SZ counts. A value of another type is a value somebody put
+ * there by hand for another purpose, and reading its bytes as a string is
+ * how a registry reader ends up printing a page of rubbish into a log. */
 bool REG_PeekString(LPCSTR SubKeyName, LPCSTR ValueName, char* value, ulong size)
 {
 	char buffer[256];
@@ -419,21 +420,21 @@ bool LoadSettings()
 	REG_ReadLong((char*)"Key17", key, layout[0][17]);
 	layout[1][17] = (short)key;
 
-	/* THE SECONDARY ACTION (#161, round 161b2c, item 2). A nineteenth name in
-	 * the same shape as the eighteen above, and a NEW one: a registry written
-	 * by the 161b2a build has no Key18, so it reads as the Tank default row's
-	 * own slot 18 - never touched, which is true - and a registry written here
-	 * carries one value that the older build simply does not look for. */
+	/* The Secondary action: a nineteenth name in the same shape as the
+	 * eighteen above, and a new one. A registry written by an older build
+	 * has no Key18, so it reads as the Tank default row's own slot 18 -
+	 * never touched, which is true - and a registry written here carries
+	 * one value that the older build simply does not look for. */
 	REG_ReadLong((char*)"Key18", key, layout[0][18]);
 	layout[1][18] = (short)key;
 
-	/* THE FIFTEEN HOTKEY SLOTS (#161, round 161b2d, item 2), in the same shape
-	 * again and for the same reason: a registry written by the 161b2c build has
-	 * no Key19..Key33, so each one reads as its row's default - which IS the
-	 * key specific\input.cpp used to read directly, so an untouched registry
-	 * answers to exactly the keys it answered to before. A loop and not fifteen
-	 * unrolled lines, like the MKey block below: the names are new, so there is
-	 * no Core original whose shape has to be kept. */
+	/* The fifteen hotkey slots, in the same shape again and for the same
+	 * reason: a registry written by an older build has no Key19..Key33, so
+	 * each one reads as its row's default - which is the key
+	 * specific/input.cpp used to read directly, so an untouched registry
+	 * answers to exactly the keys it answered to before. A loop and not
+	 * unrolled lines, like the MKey block below: the names are new, so
+	 * there is no Core original whose shape has to be kept. */
 	{
 		short* cset = KeySchemeSet(0);
 
@@ -447,22 +448,23 @@ bool LoadSettings()
 		}
 	}
 
-	/* THE SECOND SET (#161, round 161b2a, item 1). Key0..Key18 above keep
-	 * their meaning exactly - they are the CLASSIC set, whichever scheme the
-	 * game was in when it last shut down - and the Modern set gets names of its
-	 * own beside them. Missing means the Modern defaults (layout[2]), so a
-	 * registry written by any earlier build reads as "never touched the Modern
-	 * keys", which is true.
+	/* The second (Modern) key set. Key0..Key18 above keep their meaning
+	 * exactly - they are the classic set, whichever scheme the game was in
+	 * when it last shut down - and the Modern set gets names of its own
+	 * beside them. Missing means the Modern defaults (layout[2]), so a
+	 * registry written by an earlier build reads as "never touched the
+	 * Modern keys", which is true.
 	 *
-	 * THE SET GOES IN BY SCHEME AND NOT BY ROW, because the seat has not
-	 * happened yet and must not be assumed either way: LoadSettings runs in
-	 * WinMain (specific\winmain.cpp) and init_tomb5_stuff - which is what reads
-	 * tomb5.control_modern out of the OTHER registry key - runs later, on the
-	 * game thread (specific\gamemain.cpp). That is where ApplyKeyScheme() is
-	 * called, one line after it, and until then Tank is seated.
+	 * The set goes in by scheme and not by row, because the seat has not
+	 * happened yet and must not be assumed either way: LoadSettings runs
+	 * in WinMain (specific/winmain.cpp) and init_tomb5_stuff - which is
+	 * what reads tomb5.control_modern out of the other registry key - runs
+	 * later, on the game thread (specific/gamemain.cpp). That is where
+	 * ApplyKeyScheme() is called, one line after it, and until then Tank
+	 * is seated.
 	 *
-	 * A loop and not nineteen unrolled lines like the block above: the names
-	 * are new, so there is no Core original to keep the shape of, and one loop
+	 * A loop and not unrolled lines like the block above: the names are
+	 * new, so there is no Core original to keep the shape of, and one loop
 	 * is one place for a typo instead of nineteen. */
 	{
 		short* mset = KeySchemeSet(1);
@@ -497,13 +499,12 @@ bool LoadSettings()
 	// pad set is where a sixteenth button belongs (specific\input.cpp).
 	REG_ReadLong((char*)"JSec", (ulong&)jLayout[JOY_ROLE_SECOND], (ulong)-1);
 
-	/* THE TWELVE NEW ONE-KEY ROLES (#161, round 161b2d, item 3), and every one
-	 * of them defaults to UNBOUND. That is the user's own rule for this set -
-	 * "One key: all twelve unbound on every path" - and it is also what makes
-	 * the whole round byte-identical at the default: with no Modifier bound no
-	 * chord can fire, and PadRoleFires collapses to the bit test every producer
-	 * used before (game\pad_scheme.h). A registry written by the 161b2c build
-	 * carries none of these names, so it reads as exactly that. */
+	/* The twelve new One-key roles, and every one of them defaults to
+	 * unbound. That also makes this set byte-identical at the default:
+	 * with no Modifier bound no chord can fire, and PadRoleFires collapses
+	 * to the bit test every producer used before (game/pad_scheme.h). A
+	 * registry written by an older build carries none of these names, so
+	 * it reads as exactly that. */
 	for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
 		REG_ReadLong((char*)JoyOneRegNames[i - JOY_ROLE_MODIFIER], (ulong&)jLayout[i], (ulong)-1);
 
@@ -511,24 +512,25 @@ bool LoadSettings()
 	// build, which is the same sentence one line up in mask form.
 	REG_ReadLong((char*)JoyChordRegNames[0], (ulong&)*JoyChordSet(0), 0);
 
-	/* AND SEPARATE'S OWN SET BESIDE IT (#161, round 161b2c, item 3). The
-	 * fifteen lines above keep their meaning exactly - they are the ONE-KEY
-	 * set, whichever setting the game was in when it last shut down - and they
-	 * go straight into jLayout for the same reason the classic keyboard set
-	 * goes straight into layout[1]: the seat has not happened yet and must not
-	 * be assumed either way, so at this moment One key is seated and jLayout IS
-	 * JoySplitSet(0).
+	/* Separate's own set beside it. The fifteen lines above keep their
+	 * meaning exactly - they are the One-key set, whichever setting the
+	 * game was in when it last shut down - and they go straight into
+	 * jLayout for the same reason the classic keyboard set goes straight
+	 * into layout[1]: the seat has not happened yet and must not be
+	 * assumed either way, so at this moment One key is seated and jLayout
+	 * is JoySplitSet(0).
 	 *
-	 * MISSING MEANS THE DEFAULTS, and the defaults are asked for rather than
-	 * written out a second time here (specific\input.cpp holds the four tables).
-	 * They are this path's best answer at THIS moment and not the final one -
-	 * JoyStyle is read forty lines further down, tomb5.control_modern comes out
-	 * of the other registry key later still, and joystick_is_xinput is answered
-	 * by the first poll - which is the same approximation the J* defaults above
-	 * have always been (they are the PS5 DirectInput numbers, literally). What
-	 * makes it harmless is that a binding the active scheme cannot honour is
-	 * repaired when the scheme is seated for real (ApplyJoyScheme), and that a
-	 * player who rebinds anything overwrites the guess with his own choice. */
+	 * Missing means the defaults, asked for rather than written out a
+	 * second time here (specific/input.cpp holds the four tables). They
+	 * are this path's best answer at this moment and not the final one -
+	 * JoyStyle is read further down, tomb5.control_modern comes out of the
+	 * other registry key later still, and joystick_is_xinput is answered
+	 * by the first poll - which is the same approximation the J* defaults
+	 * above have always been (they are the PS5 DirectInput numbers,
+	 * literally). What makes it harmless is that a binding the active
+	 * scheme cannot honour is repaired when the scheme is seated for real
+	 * (ApplyJoyScheme), and that a player who rebinds anything overwrites
+	 * the guess with their own choice. */
 	{
 		long* sset = JoySplitSet(1);
 		long* schord = JoyChordSet(1);
@@ -536,47 +538,42 @@ bool LoadSettings()
 
 		JoySplitDefaults(sset, schord);
 
-		// The sixteen names the 161b2c build already wrote. REG_ReadLong says
-		// whether it found one, which is the only question that cannot be
-		// answered from the value itself.
+		// The sixteen names an older build may already have written.
+		// REG_ReadLong says whether it found one, which is the only
+		// question that cannot be answered from the value itself.
 		for (long i = 0; i < JOY_ROLE_MODIFIER; i++)
 			if (REG_ReadLong((char*)JoySplitRegNames[i], (ulong&)sset[i], (ulong)sset[i]))
 				stored = 1;
 
-		/* A STORED SEPARATE SET KEEPS ITS OLD BINDINGS, AND GETS NO CHORD
-		 * GRAFTED ONTO THEM (#161, round 161b2d, item 3). A registry written by
-		 * the 161b2c build has all sixteen SJ* values and no SJChord, so the
-		 * loop above takes the player's own buttons - and if the new row's
-		 * chord mask were then laid over them, three things would break at
-		 * once, measured on that build's own defaults: his flare would move
-		 * from a plain R1 to Modifier+R1, his quick save from the PS button to
-		 * Modifier+PS, and his small medipack would fall silent altogether,
-		 * because it sits on bit 13, which the new Modifier would have taken.
-		 * His bindings were a choice; the chords were never asked. So this set
-		 * comes up as the 161b2c build left it - no chord, no Modifier - and
-		 * "Reset to defaults" once gives him the new row whole.
+		/* A stored Separate set keeps its old bindings, and gets no chord
+		 * grafted onto them. An older build's registry has all sixteen
+		 * SJ* values and no SJChord, so the loop above takes the player's
+		 * own buttons - and if the new row's chord mask were then laid
+		 * over them, several bindings would silently change meaning: a
+		 * flare bound to plain R1 would become Modifier+R1, a quick save
+		 * on the PS button would become Modifier+PS, and a binding on the
+		 * bit the new Modifier occupies would fall silent altogether. The
+		 * player's bindings were a deliberate choice; the chords were
+		 * never asked for. So a stored set comes up exactly as the older
+		 * build left it - no chord, no Modifier - and "Reset to defaults"
+		 * once gives the whole new row.
 		 *
-		 * The correction is written back at once rather than left to the next
-		 * clean exit, so that the read above (which writes its default when it
-		 * misses) cannot leave a mask behind that outlives this run.
+		 * The correction is written back at once rather than left to the
+		 * next clean exit, so the read above (which writes its default on
+		 * a miss) cannot leave a mask behind that outlives this run.
 		 *
-		 * AND THE READ MUST NOT SIT BEHIND `stored &&` (#161, round 161b2d,
-		 * fix round - the review's one high finding, measured before it was
-		 * believed). REG_ReadLong WRITES its default when the name is missing,
-		 * so the loop above CREATES all sixteen SJ* names on a virgin registry
-		 * - and winmain.cpp calls LoadSettings a SECOND time in the same
-		 * process whenever the first call returns REG_Setup 0, which a virgin
-		 * registry always does (the setup dialog in between writes nothing but
-		 * the System key). Short-circuited, the first pass never wrote SJChord;
-		 * the second pass then found sixteen SJ* names, missed the SJChord
-		 * nobody had written, and took this branch against a set THIS build had
-		 * just created - stripping the fresh Separate row of the very chords it
-		 * had been given one pass earlier, while line 571's read handed the
-		 * Modifier straight back. The result was the case item 3 forbids: six
-		 * buttons doing two things at once (look and quick save both plain on
-		 * R3, dash and quick load both on L3, jump and pistols both on Cross).
-		 * Read unconditionally, and `stored` decides only what the ABSENCE
-		 * means. */
+		 * The SJChord read below must not be conditioned on `stored`.
+		 * REG_ReadLong writes its default when a name is missing, so the
+		 * loop above creates all sixteen SJ* names even on a virgin
+		 * registry - and LoadSettings can run a second time in the same
+		 * process whenever the first call leaves REG_Setup false, which a
+		 * virgin registry always does. Short-circuited on `stored`, a
+		 * second pass would see sixteen SJ* names it had just created
+		 * itself, miss the SJChord nobody had written, and strip the
+		 * fresh Separate row of the chords it had just been given -
+		 * leaving several buttons doing two things at once. Reading
+		 * unconditionally avoids this: `stored` then decides only what
+		 * the absence of SJChord means. */
 		const bool chord_stored = REG_ReadLong((char*)JoyChordRegNames[1], (ulong&)*schord, (ulong)*schord);
 
 		if (stored && !chord_stored)
@@ -617,12 +614,12 @@ void SaveSettings()
 {
 	OpenRegistry("Game");
 
-	/* BOTH SETS, WHICHEVER ONE IS ACTIVE (#161, round 161b2a, item 1).
-	 * Key0..Key18 are the CLASSIC set BY NAME and must keep being it, so they
-	 * can no longer be written from layout[1]: under Modern that row holds the
-	 * other set. At Tank KeySchemeSet(0) IS layout[1], and the first eighteen
-	 * of these lines write byte for byte what they wrote at base; Key18 is the
-	 * Secondary action, new with round 161b2c and new in the registry. */
+	/* Both key sets are written, whichever one is active. Key0..Key18 are
+	 * the classic set by name and must keep being it, so they can no
+	 * longer be written from layout[1]: under Modern that row holds the
+	 * other set. At Tank, KeySchemeSet(0) is layout[1], and the first
+	 * eighteen of these lines write byte for byte what they wrote at
+	 * base; Key18 is the Secondary action, new in the registry. */
 	const short* cset = KeySchemeSet(0);
 	const short* mset = KeySchemeSet(1);
 
@@ -644,12 +641,12 @@ void SaveSettings()
 	REG_WriteLong((char*)"Key15", cset[15]);
 	REG_WriteLong((char*)"Key16", cset[16]);
 	REG_WriteLong((char*)"Key17", cset[17]);
-	REG_WriteLong((char*)"Key18", cset[18]);	// the Secondary action (#161, round 161b2c)
+	REG_WriteLong((char*)"Key18", cset[18]);	// the Secondary action
 
-	// And the fifteen hotkey slots beside them (#161, round 161b2d, item 2),
-	// under names the 161b2c build does not look for - so a registry this build
-	// writes still loads there, with the hotkeys back to hard-wired keys, which
-	// is what that build does anyway.
+	// And the fifteen hotkey slots beside them, under names an older build
+	// does not look for - so a registry this build writes still loads
+	// there, with the hotkeys back to hard-wired keys, which is what that
+	// build does anyway.
 	for (long i = KEY_ROLE_SECOND + 1; i < KEY_SCHEME_ROLES; i++)
 	{
 		char name[12];
@@ -659,8 +656,8 @@ void SaveSettings()
 	}
 
 	// And the Modern set beside it, under names of its own. Written at Tank
-	// too, and harmlessly: nothing at Tank reads MKey*, and the accepted 161b1
-	// build ignores values it does not know.
+	// too, and harmlessly: nothing at Tank reads MKey*, and an older build
+	// ignores values it does not know.
 	for (long i = 0; i < KEY_SCHEME_ROLES; i++)
 	{
 		char name[12];
@@ -669,12 +666,12 @@ void SaveSettings()
 		REG_WriteLong(name, mset[i]);
 	}
 
-	/* BOTH PAD SETS, WHICHEVER ONE IS ACTIVE (#161, round 161b2c, item 3) -
-	 * word for word the keyboard's sentence above, one array lower. JDck..JSec
-	 * are the ONE-KEY set BY NAME and must keep being it, so they can no longer
-	 * be written from jLayout: under Separate that array holds the other set.
-	 * At One key JoySplitSet(0) IS jLayout and these sixteen lines write byte
-	 * for byte what they wrote at base. */
+	/* Both pad sets are written, whichever one is active - the same
+	 * principle as the keyboard sets above, one array lower. JDck..JSec
+	 * are the One-key set by name and must keep being it, so they can no
+	 * longer be written from jLayout: under Separate that array holds the
+	 * other set. At One key, JoySplitSet(0) is jLayout and these sixteen
+	 * lines write byte for byte what they wrote at base. */
 	const long* oneset = JoySplitSet(0);
 	const long* sepset = JoySplitSet(1);
 
@@ -695,20 +692,20 @@ void SaveSettings()
 	REG_WriteLong((char*)"JBmd", oneset[14]);
 	REG_WriteLong((char*)"JSec", oneset[JOY_ROLE_SECOND]);
 
-	// The twelve of round 161b2d (item 3) behind them, from the same set. A
-	// loop and not twelve lines for the reason the table above gives.
+	// The twelve new roles behind them, from the same set. A loop and not
+	// twelve lines for the reason the table above gives.
 	for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
 		REG_WriteLong((char*)JoyOneRegNames[i - JOY_ROLE_MODIFIER], oneset[i]);
 
 	// And Separate's set under names of its own. Written at One key too, and
-	// harmlessly: nothing at One key reads SJ*, and the accepted 161b2a build
-	// ignores values it does not know.
+	// harmlessly: nothing at One key reads SJ*, and an older build ignores
+	// values it does not know.
 	for (long i = 0; i < JOY_ROLES; i++)
 		REG_WriteLong((char*)JoySplitRegNames[i], sepset[i]);
 
-	// The two chord masks, one per set (#161, round 161b2d, item 3). Written
-	// beside their bindings and never inside them, so every J*/SJ* value on
-	// disk stays the plain button number the 161b2c build reads it as.
+	// The two chord masks, one per set. Written beside their bindings and
+	// never inside them, so every J*/SJ* value on disk stays the plain
+	// button number an older build reads it as.
 	REG_WriteLong((char*)JoyChordRegNames[0], *JoyChordSet(0));
 	REG_WriteLong((char*)JoyChordRegNames[1], *JoyChordSet(1));
 

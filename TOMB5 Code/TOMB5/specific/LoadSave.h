@@ -46,8 +46,8 @@ long S_PauseMenu();
 void DoFrontEndOneShotStuff();
 long FindSFCursor(long in, long selection);
 
-// #161, round 161b1: the Special Features page, one frame of it. It stays in
-// LoadSave.cpp because it reads three file-statics there; the menu frame
+// The Special Features page, one frame of it. It stays in LoadSave.cpp
+// because it reads three file-statics there; the menu frame
 // (game\menu_frame.cpp) runs it as a page of the tree. 1 = the player left it.
 long SpecialFeaturesPageRun();
 void CalculateNumSpecialFeatures();

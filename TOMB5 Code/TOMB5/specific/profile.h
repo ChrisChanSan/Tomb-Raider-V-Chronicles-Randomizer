@@ -13,46 +13,47 @@
 #pragma once
 #include "function_stubs.h"	// gLogEnabled - the one bool this whole file hangs on
 
-/* THE FRAME PROFILE (#148, order 1) - WHERE A FRAME'S MILLISECONDS GO.
+/* The frame profile: where a frame's milliseconds go.
  *
- * FPSLOG (specific\hd\hd_level.cpp) says HOW LONG a frame took. It cannot say
- * WHY, and the two numbers the user brought back from a real session - the
- * title screen falling to 23 frames a second, and about three seconds of
- * warm-up at the start of every level - are exactly the questions FPSLOG
- * cannot answer. This file answers them: every drawn frame is broken into the
- * phases below, and a frame that missed its slot writes down what each of its
- * phases cost.
+ * FPSLOG (specific/hd/hd_level.cpp) says how long a frame took. It cannot
+ * say why, and two measured symptoms - the title screen falling to 23
+ * frames a second, and about three seconds of warm-up at the start of
+ * every level - are exactly the questions FPSLOG cannot answer. This file
+ * answers them: every drawn frame is broken into the phases below, and a
+ * frame that missed its slot writes down what each of its phases cost.
  *
- * THE PHASES, in the order the frame walks them:
+ * The phases, in the order the frame walks them:
  *
- *   LOGIC       ControlPhase - the game's own tick or ticks. Measured at the
- *               call site (game\gameflow.cpp) and NOT inside ControlPhase,
- *               which has early returns. It is the ControlPhase that ran
- *               BEFORE this frame's draw: the loop is draw, present, logic,
- *               so the logic of iteration n falls between present n and
- *               present n+1 and belongs to frame n+1's interval. That is a
- *               definition, not an approximation - ProfileFrameBegin must
- *               not clear this one accumulator, because by the time it runs
- *               the milliseconds it is about to report are already in it.
+ *   LOGIC       ControlPhase - the game's own tick or ticks. Measured at
+ *               the call site (game/gameflow.cpp) and not inside
+ *               ControlPhase, which has early returns. It is the
+ *               ControlPhase that ran before this frame's draw: the loop
+ *               is draw, present, logic, so the logic of iteration n falls
+ *               between present n and present n+1 and belongs to frame
+ *               n+1's interval. That is a definition, not an
+ *               approximation - ProfileFrameBegin must not clear this
+ *               accumulator, because by the time it runs the milliseconds
+ *               it is about to report are already in it.
  *
- *               It is cleared by ProfileFrameEnd instead, AFTER the line has
- *               been written and the second's totals have taken it (#148,
- *               order 1b). Order 1 cleared it in neither place, so it added
- *               up for the whole level: `logic` grew by a few tenths of a
- *               millisecond every frame and had passed `work` after two
- *               seconds. Whoever reads a PROFLOG can tell the fixed build
- *               from the broken one at a glance - `logic` has to stand
- *               still from second to second, and it has to be small.
+ *               It is cleared by ProfileFrameEnd instead, after the line
+ *               has been written and the second's totals have taken it.
+ *               Clearing it in neither place lets it accumulate for the
+ *               whole level instead: `logic` would grow by a few tenths of
+ *               a millisecond every frame and pass `work` after two
+ *               seconds. A PROFLOG reader can tell a correct build from a
+ *               broken one at a glance - `logic` has to stand still from
+ *               second to second, and it has to be small.
  *
  *   GATHER      DrawPhaseGame from its first line to just before
  *               S_OutputPolyList: Lara's matrices, the room walk, every
  *               item, the sprites, the game info. Almost nothing is drawn
- *               here - the classic path fills buckets and the sort list, the
- *               HD path writes down rooms, items and Lara for later. The one
- *               exception is the sky, which draws itself; hence SKY.
+ *               here - the classic path fills buckets and the sort list,
+ *               the HD path writes down rooms, items and Lara for later.
+ *               The one exception is the sky, which draws itself; hence
+ *               SKY.
  *     ROOMS       DrawRooms inside it, which is nearly all of it.
  *     SKY         SkyDrawPhase inside ROOMS - the horizon, the moon, the
- *                 stars, the lightning. It is the ONE place in the frame
+ *                 stars, the lightning. It is the one place in the frame
  *                 that draws buckets and a sort list outside
  *                 S_OutputPolyList, which is why it is called out.
  *     HD_ROOM     the HDFrameRoom calls of this frame, added up.
@@ -60,79 +61,82 @@
  *     HD_LARA     HDLaraDrawFrame.
  *
  *   OUTPUT      S_OutputPolyList - the whole draw.
- *     HD_DRAW     HDFrameDraw: the HD rooms' and objects' depth-writing pass.
+ *     HD_DRAW     HDFrameDraw: the HD rooms' and objects' depth-writing
+ *                 pass.
  *       HD_LIGHT    FillRoomLighting inside it, per room.
  *       HD_OBJDRAW  HDObjectFrameDraw inside it (and inside HD_GLOW).
  *     HD_GLOW     HDFrameDrawGlow - the HD additive pass.
- *     outrest     NOT a phase: printed as OUTPUT minus HD_DRAW and HD_GLOW,
- *                 i.e. everything CLASSIC the output phase did - the buckets,
- *                 the sort list, the binoculars, the pickup display and the
- *                 fade.
+ *     outrest     not a phase: printed as OUTPUT minus HD_DRAW and
+ *                 HD_GLOW, i.e. everything classic the output phase did -
+ *                 the buckets, the sort list, the binoculars, the pickup
+ *                 display and the fade.
  *
  *   BUCKETS     DrawBuckets, wherever it was called from, added up.
- *   SORT        SortPolyList of the frame, added up - the quicksort itself
- *               and nothing else, so a big number here is CPU work on the
- *               sort list and can be read against sortn (below).
- *   SORTDRAW    every DrawSortList of the frame, added up - walking the sort
- *               buffer into the bucket vertices and handing them to the
- *               device. The two were one number in order 1; they are apart
- *               since 1b because the question the title's first frame asked
- *               - 22 ms in this pair, 0.03 ms in every frame after it - has
- *               two completely different answers depending on which half
- *               spent them.
+ *   SORT        SortPolyList of the frame, added up - the quicksort
+ *               itself and nothing else, so a big number here is CPU work
+ *               on the sort list and can be read against sortn (below).
+ *   SORTDRAW    every DrawSortList of the frame, added up - walking the
+ *               sort buffer into the bucket vertices and handing them to
+ *               the device. SORT and SORTDRAW are kept apart because a
+ *               slow first frame can be either: the qsort itself, or the
+ *               submission that follows it, and the two point at
+ *               different problems.
  *
- *               These three are WHOLE-FRAME totals on purpose: all of them
- *               are called from three or more places (S_OutputPolyList, the
- *               sky phase, the binocular and pickup blocks), and measuring
- *               them at the callee is the only way to catch all of them. So
- *               they overlap SKY and OUTREST and must not be added to the
- *               others - they are there to say how the classic work splits,
- *               not to make a total.
+ *               These three are whole-frame totals on purpose: all of
+ *               them are called from three or more places
+ *               (S_OutputPolyList, the sky phase, the binocular and
+ *               pickup blocks), and measuring them at the callee is the
+ *               only way to catch all of them. So they overlap SKY and
+ *               outrest and must not be added to the others - they are
+ *               there to say how the classic work splits, not to make a
+ *               total.
  *
  *   SPIN        S_DumpScreen's `while (n < gPresentMinTicks)` busy wait -
- *               the time the frame was FINISHED and waiting for its slot. A
- *               big number here means the machine is fast and the cap is
- *               holding it back; a zero means the frame was late.
+ *               the time the frame was finished and waiting for its slot.
+ *               A big number here means the machine is fast and the cap
+ *               is holding it back; a zero means the frame was late.
  *   FLIP        _EndScene + DXShowFrame - Present itself, and whatever the
  *               driver does inside it.
  *
- * THE THREE NUMBERS THAT ARE NOT PHASES, on the first_frame and late lines:
+ * The three numbers that are not phases, on the first_frame and late
+ * lines:
  *
- *   work        ProfileFrameBegin to ProfileFrameEnd - the drawing half of
- *               the frame and nothing else. LOGIC is NOT in it, because the
- *               logic ran outside that bracket by the definition above. The
- *               invariant to check a log against is `work + logic <= frame`,
- *               never `logic <= work`.
- *   frame       the interval from the previous ProfileFrameEnd to this one:
- *               work, plus the logic, plus anything else the main loop did.
- *   sortn       how many entries the sort list held this frame, the largest
- *               of the frame's SortPolyList calls. It is there so that a big
- *               SORT can be told from a first-touch SORT without a second
- *               session (#148, order 1b).
+ *   work        ProfileFrameBegin to ProfileFrameEnd - the drawing half
+ *               of the frame and nothing else. LOGIC is not in it,
+ *               because the logic ran outside that bracket by the
+ *               definition above. The invariant to check a log against is
+ *               `work + logic <= frame`, never `logic <= work`.
+ *   frame       the interval from the previous ProfileFrameEnd to this
+ *               one: work, plus the logic, plus anything else the main
+ *               loop did.
+ *   sortn       how many entries the sort list held this frame, the
+ *               largest of the frame's SortPolyList calls. It is there so
+ *               a big SORT can be told from a first-touch SORT without a
+ *               second session.
  *
- * LATE, AND PAUSE (#148, order 1b). A frame is late when its INTERVAL ran
- * over the slot its own present asked for - gPresentMinTicks ticks of 1/60 s
- * plus half a tick of slack, so 25.0 ms for a frame that waited one tick and
- * 41.7 ms for one that waited two. The budget follows the PRESENT, not
+ * Late, and pause. A frame is late when its interval ran over the slot
+ * its own present asked for - gPresentMinTicks ticks of 1/60 s plus half
+ * a tick of slack, so 25.0 ms for a frame that waited one tick and 41.7
+ * ms for one that waited two. The budget follows the present, not
  * tomb5.fps_mode: with fps_mode 1 the game frame waits one tick but every
- * modal loop still waits two, and judging the menus against 16.7 ms called a
- * perfectly healthy inventory thirty late frames a second.
+ * modal loop still waits two, and judging the menus against 16.7 ms would
+ * call a perfectly healthy inventory thirty late frames a second.
  *
  * An interval is not late at all when the main loop was somewhere else: a
- * modal loop presented frames of its own between this frame and the last one
- * (the inventory, the pause menu, the load/save screen, the title's options,
- * the death menu, the level-change fade), or the whole process was stopped
- * for more than a second - an alt-tab, a window drag, a debugger. Those are
- * counted and printed as `pauses`, they never touch `late`, and they get one
- * short line of their own instead of a full late line with seventeen phases
- * that would all be meaningless.
+ * modal loop presented frames of its own between this frame and the last
+ * one (the inventory, the pause menu, the load/save screen, the title's
+ * options, the death menu, the level-change fade), or the whole process
+ * was stopped for more than a second - an alt-tab, a window drag, a
+ * debugger. Those are counted and printed as `pauses`, they never touch
+ * `late`, and they get one short line of their own instead of a full late
+ * line with seventeen phases that would all be meaningless.
  *
- * NOTHING HAPPENS WITHOUT -log. Every seam in the engine is `ProfBegin(...)`
- * / `ProfEnd(...)`, and both are one test of gLogEnabled around a call. With
- * the log off not one QueryPerformanceCounter is issued, no accumulator
- * moves and no string is built. That is the same guard HDFramePresented
- * uses, and it is why these seams can stay in for good
- * (feedback_diagnosenaehte_bleiben).
+ * Nothing happens without -log. Every seam in the engine is
+ * `ProfBegin(...)` / `ProfEnd(...)`, and both are one test of
+ * gLogEnabled around a call. With the log off not one
+ * QueryPerformanceCounter is issued, no accumulator moves and no string
+ * is built - the same guard HDFramePresented uses, which is what lets
+ * these seams stay in permanently.
  */
 
 enum ProfPhase
@@ -164,10 +168,10 @@ void ProfileEndPhase(int phase);
 void ProfileNotePresent();
 void ProfileNoteSort(long count);
 
-/* A NEW LEVEL. Called from S_LoadLevelFile once the load thread has joined
- * and the HD build is done, with the level's file name - the profile prints
- * the seconds since this call, so "the three warm-up seconds" have a number
- * to be counted in. Also writes the previous level's summary. */
+/* Marks a new level. Called from S_LoadLevelFile once the load thread has
+ * joined and the HD build is done, with the level's file name - the
+ * profile prints the seconds since this call, so a warm-up period has a
+ * number to be counted in. Also writes the previous level's summary. */
 void ProfileLevel(const char* fileName);
 
 // The frame bracket. Begin is the first line of DrawPhaseGame, End the last;
@@ -187,21 +191,21 @@ inline void ProfEnd(int phase)
 		ProfileEndPhase(phase);
 }
 
-/* ONE PRESENT HAPPENED. Called from both present functions in
- * specific\output.cpp, so the profile can tell its own present apart from the
- * ones a modal loop made behind its back - that, and not a threshold on the
- * clock, is what makes an inventory visit a `pause` and not a late frame. An
- * FMV presents through fmv.cpp and is not counted here; it does not have to
- * be, because it stops the main loop for far longer than the one second the
- * pause rule's other half asks for. */
+/* Marks that one present happened. Called from both present functions in
+ * specific/output.cpp, so the profile can tell its own present apart from
+ * the ones a modal loop made behind its back - that, and not a threshold
+ * on the clock, is what makes an inventory visit a `pause` and not a late
+ * frame. An FMV presents through fmv.cpp and is not counted here; it does
+ * not have to be, because it stops the main loop for far longer than the
+ * one second the pause rule's other half asks for. */
 inline void ProfPresent()
 {
 	if (gLogEnabled)
 		ProfileNotePresent();
 }
 
-// HOW LONG THE SORT LIST WAS. One call from SortPolyList; the frame keeps the
-// largest it was handed.
+// How long the sort list was. One call from SortPolyList; the frame keeps
+// the largest it was handed.
 inline void ProfSort(long count)
 {
 	if (gLogEnabled)

@@ -58,10 +58,9 @@ struct SfxBank
 {
 	std::FILE* file;
 	short lut[SFX_LUT_ENTRIES];
-	/* WHICH LEVELS EACH SOUND ID BELONGS TO (#153, round M3), one bit per
-	 * level file. The block was skipped over until this round; the bridge
-	 * reads it now to say when a pairing names a sound no level of ours
-	 * uses - see SfxBankMask in the header. */
+	/* Which levels each sound id belongs to, one bit per level file. The
+	 * bridge reads it to say when a pairing names a sound no level of
+	 * ours uses - see SfxBankMask in the header. */
 	long long mask[SFX_LUT_ENTRIES];
 	unsigned char* infos;		// kInfoBytes each
 	int infoCount;
@@ -150,9 +149,9 @@ SfxBank* SfxBankOpen(const char* path, const char** why)
 		return 0;
 	}
 
-	/* AND THE LEVEL MASKS, which lie directly behind the infos. Read rather
-	 * than skipped since round M3; a bank too short to hold them was refused
-	 * above, and headerEnd below is the same arithmetic this uses. */
+	/* The level masks, which lie directly behind the infos. A bank too
+	 * short to hold them was refused above, and headerEnd below is the
+	 * same arithmetic this uses. */
 	{
 		unsigned char masks[kLevelMaskBytes];
 
@@ -469,17 +468,15 @@ bool SfxRiffCheck(const char* riff, long bytes, long* dataBytes, long* byteRate,
 	{
 		const long len = read_long(raw + at + 4);
 
-		/* NEVER ADD IN ORDER TO COMPARE (#153, round M1, fix round).
-		 *
-		 * This guard was written as `at + 8 + len > bytes`, which is the
-		 * obvious form and is wrong. `long` is 32 bit in this build, so a
-		 * chunk length near LONG_MAX makes that sum overflow to a NEGATIVE
-		 * number, the test comes out false, the very chunk the guard exists
-		 * to catch is accepted, `at += 8 + len` drives `at` negative, and
-		 * the loop's own condition stays true while the next read lands
-		 * about two gigabytes below the buffer. Proven with a 60 byte file
-		 * that ends the process, and it is a MOD'S file that reaches here
-		 * (HQSfxWavFor), so the crafted length is not a theoretical one.
+		/* Never add in order to compare. The obvious guard `at + 8 + len >
+		 * bytes` is wrong: `long` is 32 bit in this build, so a chunk
+		 * length near LONG_MAX makes that sum overflow to a negative
+		 * number, the test comes out false, the chunk the guard exists to
+		 * catch is accepted, `at += 8 + len` drives `at` negative, and the
+		 * loop's own condition stays true while the next read lands about
+		 * two gigabytes below the buffer - demonstrated with a 60 byte
+		 * file that ends the process. A mod's file reaches here
+		 * (HQSfxWavFor), so a crafted length is not a theoretical concern.
 		 *
 		 * The subtraction cannot overflow: the loop condition above is
 		 * at + 8 <= bytes, so bytes - at - 8 is >= 0 by construction, and
@@ -627,9 +624,9 @@ char* SfxWavLoad(const char* path, long cap, long* bytes, const char** why)
 }
 
 /* --------------------------------------------------------------------------
- * THE CHAIN. The header says what it is and why it lives here rather than in
- * hqsfx.cpp: hqsfx.cpp is the engine's half and a tool cannot link it, and a
- * second copy of an order is a drift waiting to happen.
+ * The chain. The header says what it is and why it lives here rather than
+ * in hqsfx.cpp: hqsfx.cpp is the engine's half and a tool cannot link it,
+ * and a second copy of an order is a drift waiting to happen.
  * ----------------------------------------------------------------------- */
 namespace
 {
@@ -666,9 +663,8 @@ bool SfxBankChainLink(int link, const char* gameFolder, const char* install,
 	if (modIndex)
 		*modIndex = -1;
 
-	/* THE MODS FIRST, in the scan's order and only those that ship a bank.
-	 * A mod without one is not a candidate and earns no line - the same as
-	 * the loop this replaced. */
+	/* The mods first, in the scan's order and only those that ship a bank.
+	 * A mod without one is not a candidate and earns no line. */
 	int seen = 0;
 
 	for (int i = 0; i < HDModsCount(); i++)
@@ -700,10 +696,10 @@ bool SfxBankChainLink(int link, const char* gameFolder, const char* install,
 		return true;
 	}
 
-	/* The installed remaster's own, read where it lies - which is what makes
-	 * the hand copy unnecessary from this round on. HDInstallRoot() is the
-	 * game 5 folder, so the bank is DATA\MAIN.SFX under it, and asking for it
-	 * is the expensive step this whole function is lazy for. */
+	/* The installed remaster's own, read where it lies - which is what
+	 * makes the hand copy unnecessary. HDInstallRoot() is the game 5
+	 * folder, so the bank is DATA\MAIN.SFX under it, and asking for it is
+	 * the expensive step this whole function is lazy for. */
 	if (link == seen + 1)
 	{
 		const char* root = (install && *install) ? install : HDInstallRoot();

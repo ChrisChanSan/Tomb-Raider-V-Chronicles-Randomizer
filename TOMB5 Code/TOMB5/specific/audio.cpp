@@ -26,8 +26,8 @@
 // the German ones for German, else the English; if the file is missing,
 // the original WAV runs as always. The files are 44.1 kHz stereo - exactly
 // the MusicVoice's PCM format, so the same queue suffices.
-// Decoder: stb_vorbis (public domain, Sean Barrett et al.). NEVER ship
-// them - the OGGs are the user's data, the engine only checks whether
+// Decoder: stb_vorbis (public domain, Sean Barrett et al.). Never ship
+// them - the OGGs are the player's own data, the engine only checks whether
 // they are there.
 #pragma warning(push, 0)
 #define STB_VORBIS_NO_PUSHDATA_API
@@ -190,7 +190,7 @@ bool acm_ready;
 
 long XATrack = -1;
 
-// Music via XAudio2 instead of DirectSound (#100, A3 of the porting plan).
+// Music via XAudio2 instead of DirectSound.
 //
 // The ACM decoding (MS-ADPCM -> PCM) and the file logic - looping via
 // fseek to byte 90, EOF tail, return to the atmosphere - stay 1:1.
@@ -495,7 +495,7 @@ void ACMEmulateCDPlay(long track, long mode)
 	// is missing, audio\HQ EN\<nr>.OGG steps in, and if that is missing
 	// too, the original WAV runs. Italian has no set of its own (yet); the
 	// JP set only becomes reachable once a real Japanese language file is
-	// selectable (#116).
+	// selectable.
 	// S_CDPlay called S_CDStop beforehand, OggStream is always 0 here.
 	if (track >= 0 && track < 136)
 	{

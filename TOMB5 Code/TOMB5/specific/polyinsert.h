@@ -18,7 +18,7 @@ void DrawSortList();
 void CalcColorSplit(D3DCOLOR s, D3DCOLOR* d);
 void InitialiseSortList();
 // The sort buffer, the sort list and the buckets, faulted in at level load
-// instead of in the level's first drawn frame (#148, order 1b).
+// instead of in the level's first drawn frame.
 void PreTouchDrawBuffers();
 void DoSort(long left, long right, SORTLIST** list);
 void SortPolyList(long count, SORTLIST** list);

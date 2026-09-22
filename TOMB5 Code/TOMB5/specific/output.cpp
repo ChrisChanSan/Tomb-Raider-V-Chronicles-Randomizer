@@ -22,7 +22,7 @@
 #include "specificfx.h"
 #include "drawroom.h"
 #include "function_stubs.h"
-#include "profile.h"			// PROFLOG's present phases (#148)
+#include "profile.h"			// present-phase timing (PROFLOG)
 #include "hd/hd_level.h"
 #include "time.h"
 #include "dxshell.h"
@@ -43,7 +43,7 @@
 #include "../game/draw.h"
 #include "../game/health.h"
 #include "../game/text.h"
-#include "../game/interpolate.h"	// the in-between frame's counters (#148, order 3)
+#include "../game/interpolate.h"	// the in-between (tween) frame counters
 #include "../tomb5/tomb5.h"
 
 D3DTLVERTEX aVertexBuffer[1024];
@@ -932,14 +932,13 @@ void S_AnimateTextures(long n)
 	}
 }
 
-// MESHLOG counter (#121, back under -log with #125): how often did
-// aCheckMeshClip discard a mesh COMPLETELY? DrawAnimatingItem reads it
-// before and after drawing a thinker - if it rose, the body died here and
-// not at the bounds check.
+// MESHLOG counter: how often aCheckMeshClip discards a mesh completely.
+// DrawAnimatingItem reads it before and after drawing a thinker; if it rose,
+// the body died here rather than at the bounds check.
 long aMeshClipRejects;
 
-// Set by DrawAnimatingItem while a THINKER is being drawn - only then does
-// the discard branch write its CLIPDETAIL. -1 = off.
+// Set by DrawAnimatingItem while a thinker is being drawn; only then does
+// the discard branch below write its CLIPDETAIL line. -1 = off.
 long aClipReportObj = -1;
 
 long aCheckMeshClip(MESH_DATA* mesh)
@@ -1034,14 +1033,15 @@ long aCheckMeshClip(MESH_DATA* mesh)
 
 	if (tooNear == 8 || left > f_right || right < f_left || top > f_bottom || bottom < f_top)
 	{
-		// CLIPDETAIL (#121): MESHLOG proved that whole bodies die here at a
-		// FULL-SCREEN window. So the projection itself must be delivering
-		// nonsense - this line says which: where the eight corners were
-		// projected, how many lay in front of the near plane, and where the
-		// mesh sits relative to the camera per the view matrix.
+		// CLIPDETAIL: when a mesh is discarded here at a full-screen clip
+		// window, the projection is delivering bad values rather than a
+		// genuine off-screen case. This line records where the eight
+		// corners projected to, how many lay in front of the near plane,
+		// and where the mesh sits relative to the camera per the view
+		// matrix.
 		//
-		// The counter only counts while logging is on, or MESHLOG's
-		// before/after comparison would drift over a long session for
+		// The counter only increments while logging is on, so MESHLOG's
+		// before/after comparison does not drift over a long session for
 		// nothing.
 		if (gLogEnabled)
 		{
@@ -1054,9 +1054,9 @@ long aCheckMeshClip(MESH_DATA* mesh)
 				if (GlobalCounter - lastDetail > 15 || GlobalCounter < lastDetail)
 				{
 					lastDetail = GlobalCounter;
-					// aMXPtr[M23] alongside: S_GetObjectBounds judges with
-					// the a-stack, this test with D3DMView. If the two
-					// disagree, here it is number against number.
+					// aMXPtr[M23] is logged alongside for comparison:
+					// S_GetObjectBounds judges visibility from the
+					// a-stack, this test from D3DMView.
 					Log("CLIPDETAIL obj=%d near=%d L=%d R=%d T=%d B=%d front=%d back=%d camera=%d/%d/%d aM23=%d box=%d,%d,%d..%d,%d,%d",
 						(int)aClipReportObj, (int)tooNear, (int)left, (int)right,
 						(int)top, (int)bottom, (int)front, (int)back,
@@ -1276,38 +1276,34 @@ void aCalcColorSplit(long col, long* pC, long* pS)
 	*pS = RGBONLY(sR, sG, sB);
 }
 
-/* #148, order 1: the 30 Hz cap, and the only thing that ever was one.
- *
- * Sync() (specific\time.cpp) counts whole 1/60 s ticks - there is no thirty
- * anywhere in that file. The `< 2` below is what turns sixty into thirty, and
- * gPresentMinTicks is that constant given a name so that DrawPhaseGame can
- * lower it to one for its own present and nobody else's. The long note in
- * output.h says why the default has to stay two. */
+/* The 30 Hz cap. Sync() (specific/time.cpp) counts whole 1/60 s ticks -
+ * there is no "thirty" anywhere in that file. The `< 2` below is what turns
+ * sixty into thirty; gPresentMinTicks names that constant so DrawPhaseGame
+ * can lower it to one for its own present and nobody else's. See the note
+ * in output.h for why the default has to stay two. */
 long gPresentMinTicks = 2;
 
-/* THE DISPLAY-BOUND RATE, AND THE TWO WAYS IT CANNOT BE HONOURED (#148,
- * order 6).
+/* The display-bound rate (fps_mode 2), and the two ways it can fail.
  *
  * fps_mode 2 means "as often as the panel refreshes". The engine does not
- * MEASURE that rate and then wait for it - it hands the waiting to
- * Direct3D: with D3DPRESENT_INTERVAL_ONE the present itself blocks until the
- * display is ready, so the loop runs at 60, 120 or 144 by itself and the
- * `while (!Sync());` spin is not entered at all.
+ * measure that rate and wait for it - it hands the waiting to Direct3D:
+ * with D3DPRESENT_INTERVAL_ONE the present itself blocks until the display
+ * is ready, so the loop runs at 60, 120 or 144 by itself and the
+ * `while (!Sync());` spin is never entered.
  *
- * Which is why the mode is only ever active with a device that really has
- * that interval. Two things can take it away:
+ * The mode is therefore only active with a device that really honours that
+ * interval. Two things can take it away:
  *
- *   THE OPTION IS OFF, or the adapter did not offer the interval. DXCreate
+ *   The option is off, or the adapter does not offer the interval. DXCreate
  *   knows this and DXVSyncActive() answers it. Without a blocking present
- *   there would be nothing to bound the loop at all, and an uncapped frame
- *   rate is exactly what the user ruled out ("it can damage the GPU"), so
- *   the mode falls back to fps_mode 1 - the sixty hertz spin - and says so
- *   in the log, once.
+ *   there is nothing left to bound the loop, and an uncapped frame rate can
+ *   damage the GPU, so the mode falls back to fps_mode 1 (the 60 Hz spin)
+ *   and logs that once.
  *
- *   THE DRIVER OVERRODE IT. A control panel set to "vsync off, application
+ *   The driver overrides it. A control panel set to "vsync off, application
  *   controlled: no" leaves the device claiming the interval while Present
- *   returns at once. That cannot be asked - it can only be measured, which
- *   is what the watchdog below does, and the fallback is the same one. */
+ *   returns at once. That cannot be asked, only measured - which is what
+ *   the watchdog below does, with the same fallback. */
 static bool g_vsyncSaidOnce = false;	// the "needs VSync" line, once a session
 static bool g_vsyncBroken = false;	// measured: the present does not wait
 static __int64 g_wdFreq = 0;
@@ -1343,14 +1339,14 @@ long TargetPresentHz()
 	return mode == 1 ? 60 : 30;
 }
 
-/* THE SLOT THE PRESENT THAT JUST RAN ASKED FOR, in milliseconds - the one
- * definition, so that FPSLOG (specific\hd\hd_level.cpp) and PROFLOG
- * (specific\profile.cpp) cannot drift apart on it.
+/* The slot the present that just ran asked for, in milliseconds - the one
+ * definition, so FPSLOG (specific/hd/hd_level.cpp) and PROFLOG
+ * (specific/profile.cpp) cannot drift apart on it.
  *
  * gPresentMinTicks is how many 1/60 s ticks S_DumpScreen waited for, so two
- * ticks is 33.3 ms and one is 16.7. ZERO is the display-bound frame: it
- * waited for no tick at all because the present waited for the panel, and its
- * slot is therefore the panel's own period. */
+ * ticks is 33.3 ms and one is 16.7. Zero is the display-bound frame: it
+ * waited for no tick at all because the present waited for the panel, so
+ * its slot is the panel's own period. */
 double PresentSlotMs()
 {
 	if (gPresentMinTicks <= 0)
@@ -1363,29 +1359,30 @@ double PresentSlotMs()
 	return (double)gPresentMinTicks * 1000.0 / 60.0;
 }
 
-/* IS THE PRESENT REALLY WAITING? Called once per display-bound present.
+/* Is the present really waiting? Called once per display-bound present.
  *
- * A present that returns in less than HALF the panel's period did not wait for
- * the panel: with the interval honoured they land on the period, and half of
- * it is far outside anything jitter can reach. One of those means nothing;
- * six hundred in a row is a driver that has overridden the interval, and then
- * the engine is running uncapped without ever having asked to. Ten seconds'
- * worth at 60 Hz, four at 144 - long enough that nothing normal trips it,
- * short enough that this is a moment and not a session.
+ * A present that returns in less than half the panel's period did not wait
+ * for the panel: with the interval honoured they land on the period, and
+ * half of it is far outside anything jitter can reach. One of those means
+ * nothing; six hundred in a row means the driver has overridden the
+ * interval and the engine is running uncapped without ever having asked to.
+ * That is ten seconds' worth at 60 Hz, four at 144 Hz - long enough that
+ * nothing normal trips it, short enough to stay a moment rather than a
+ * session.
  *
- * ONCE IT HAS FIRED IT STAYS FIRED, for the session. The fallback takes the
- * frame back to the sixty hertz spin, and the spin means this function is not
- * called again - so there is nothing that could measure a recovery, and a
- * flag that could go back and forth would spend hundreds of frames uncapped
- * on every swing. A restart is the way back, and the log line says so.
+ * Once it has fired it stays fired for the session: the fallback takes the
+ * frame back to the 60 Hz spin, and the spin means this function is not
+ * called again, so nothing could measure a recovery, and a flag that went
+ * back and forth would spend hundreds of frames uncapped on every swing. A
+ * restart is the way back.
  *
- * A MINIMISED WINDOW IS NOT A BROKEN DRIVER. Present on an iconic window can
- * return at once with nothing to compose against; the run is dropped rather
- * than counted, so coming back from the taskbar does not cost the player
- * their setting.
+ * A minimised window is not a broken driver: present on an iconic window
+ * can return at once with nothing to compose against, so that run is
+ * dropped rather than counted, and coming back from the taskbar does not
+ * cost the player their setting.
  *
- * It costs one QueryPerformanceCounter and one IsIconic per present, and only
- * in this mode. */
+ * Costs one QueryPerformanceCounter and one IsIconic call per present, and
+ * only in this mode. */
 static void NoteDisplayBoundPresent()
 {
 	__int64 now;
@@ -1424,58 +1421,38 @@ static void NoteDisplayBoundPresent()
 	g_wdLast = now;
 }
 
-/* WHAT DRAWPHASEGAME'S OWN PRESENT MAY WAIT FOR (#148, order 1b).
+/* How many ticks DrawPhaseGame's own present may wait for.
  *
- * Sixty is for a PLAYED frame and for nothing else. Two states go through
- * DrawPhaseGame that are not one:
+ * Two ticks (30 Hz) is required by any menu drawn once per present while
+ * walked with debounced input written once per tick: the title screen,
+ * level select, the whole options tree and the Tomb5 pages in
+ * tomb5/troyestuff.cpp all read dbinput once per call inside DoTitle's
+ * `TitleOptions(); DrawPhaseGame(); ControlPhase(nframes);` loop
+ * (game/gameflow.cpp), against dbinput's own once-per-tick refresh in
+ * ControlPhase's `for (framecount += nframes; framecount > 0; framecount -=
+ * 2)` loop (game/control.cpp). At one tick per present every second
+ * ControlPhase runs no tick at all, dbinput keeps standing, and the next
+ * TitleOptions reads the same press a second time: one tap of Down moves
+ * the cursor two rows.
  *
- *   THE TITLE. DoTitle's loop (game\gameflow.cpp) is `TitleOptions();
- *   DrawPhaseGame(); ControlPhase(nframes);` - so the menu is walked once per
- *   PRESENT while the debounced input it walks with, dbinput, is written once
- *   per TICK inside ControlPhase's `for (framecount += nframes; framecount >
- *   0; framecount -= 2)` loop (game\control.cpp). At two ticks per present
- *   the two rates are the same and every edge is read exactly once. At one,
- *   every second ControlPhase runs no tick at all, dbinput keeps standing,
- *   and the next TitleOptions reads the same press a second time: one tap of
- *   Down moved the cursor two rows and New Game could not be reached. The
- *   same doubling hits everything TitleOptions reaches - the level select,
- *   the whole options tree and the Tomb5 pages in tomb5\troyestuff.cpp, all
- *   of which read dbinput per call.
+ * The title now shields itself from this instead of needing the slow rate:
+ * on the call that would read an edge for the second time, its input is
+ * shadowed to zero for the duration (game/gameflow.cpp, TitleInputShadow),
+ * and the debounce formula in specific/input.cpp keeps dbinput's own
+ * previous value because the shadow is put back the moment TitleOptions
+ * returns. The title can therefore run at any present rate.
  *
- *   THE RING. The inventory is a modal loop of its own (game\newinv2.cpp)
- *   that calls S_UpdateInput once per present and is therefore consistent at
- *   any rate. (It kept thirty through the default gPresentMinTicks when this
- *   note was written; since round 154 it paces its own present through
- *   InvFrameMinTicks, game\inventory_interp.cpp, and follows the option like
- *   the game does - corrected in audit round A1, and said correctly at
- *   GameFrameMinTicks below.) DrawPhaseGame is not reached while it is up, so this
- *   test never fires today - it is here so that the rule reads as the rule,
- *   and so that a future path into DrawPhaseGame from a menu cannot pick up
- *   sixty by accident.
+ * `InventoryActive` stays as a guard even though the inventory's own modal
+ * loop (game/newinv2.cpp) no longer reaches DrawPhaseGame - it paces its
+ * own present through InvFrameMinTicks (game/inventory_interp.cpp) instead.
+ * The check here is what keeps a future path into DrawPhaseGame from a menu
+ * from picking up 60 Hz by accident.
  *
- * Everything else in the game loop is safe by construction: DoLevel reads no
- * input at all outside ControlPhase, and every other menu in the build - the
- * pause menu, the death menu, the load/save screen, the special features -
- * runs its own modal loop with its own S_UpdateInput at the default two
- * ticks.
- *
- * ROUND 154 TOOK THE TITLE OUT OF THIS TEST (#154), and it is worth saying
- * exactly what changed and what did not. The DOUBLE READ above is real and is
- * still the whole of the problem; what 1b had not got to was that the cure
- * need not cost the title its frame rate. A menu drawn once per present and
- * walked with an input written once per tick only has to be told which of its
- * calls is reading an edge for the second time - and on that call its input
- * is shadowed to zero for the duration (game\gameflow.cpp, TitleInputShadow).
- * The debounce formula in specific\input.cpp keeps dbinput's own previous
- * value, because the shadow is put back byte for byte the moment TitleOptions
- * returns; one tap moves one row; and the title's flyby is drawn at sixty or
- * at the panel's rate with order 2 underneath it, which it always could have
- * been - DoTitle goes through DrawPhaseGame like the game does.
- *
- * `InventoryActive` stays. The ring still never reaches DrawPhaseGame; it
- * paces its own present now (InvFrameMinTicks, game\inventory_interp.cpp) and
- * this test remains what it has been since 1b - the guard for a future path
- * into DrawPhaseGame from a menu. */
+ * Everything else in the game loop is safe by construction: DoLevel reads
+ * no input at all outside ControlPhase, and every other menu in the build -
+ * the pause menu, the death menu, the load/save screen, the special
+ * features - runs its own modal loop with its own S_UpdateInput at the
+ * default two ticks. */
 long GameFrameMinTicks()
 {
 	const long mode = ActiveFpsMode();
@@ -1486,14 +1463,14 @@ long GameFrameMinTicks()
 	if (InventoryActive)
 		return 2;
 
-	/* ZERO IS NOT "AS FAST AS POSSIBLE" (#148, order 6). It is "do not wait
-	 * for a tick, because the PRESENT waits" - fps_mode 2 is only ever
-	 * active with a device that blocks in Present (see ActiveFpsMode), so
-	 * the spin below has nothing left to do and the frame is paced by the
-	 * panel. At 144 Hz two frames out of three then come back from Sync()
-	 * with no whole tick at all, which is exactly right: ControlPhase(0)
-	 * runs no logic step and the frame is drawn from the clock instead
-	 * (game\interpolate.cpp, InterpTickFraction). */
+	/* Zero does not mean "as fast as possible" - it means "do not wait for a
+	 * tick, because the present already waits". fps_mode 2 is only active
+	 * with a device that blocks in Present (see ActiveFpsMode), so the spin
+	 * below has nothing left to do and the frame is paced by the panel. At
+	 * 144 Hz, two frames out of three come back from Sync() with no whole
+	 * tick at all, which is correct: ControlPhase(0) runs no logic step and
+	 * the frame is drawn from the clock instead (game/interpolate.cpp,
+	 * InterpTickFraction). */
 	return mode == 2 ? 0 : 1;
 }
 
@@ -1501,66 +1478,65 @@ long S_DumpScreen()
 {
 	long n;
 
-	/* #148, order 3: WAS THIS A THIRTY HERTZ PRESENT?
+	/* Was this a 30 Hz present?
 	 *
 	 * Every modal loop in the build comes through here with the default two
 	 * ticks - the inventory, the load/save screen, the death menu, the load
 	 * screen's fade loop - and so does DrawPhaseGame at the title. Their
-	 * per-present counters step once per present and always have, so the
-	 * in-between-frame latch must be down while they run. It is put down
-	 * here, at the one place every present in the game passes through,
-	 * rather than at each loop.
+	 * per-present counters step once per present, so the in-between-frame
+	 * latch must be down while they run. It is put down here, at the one
+	 * place every present in the game passes through, rather than at each
+	 * loop.
 	 *
-	 * Before the spin and not after it: a modal loop's counters run in
-	 * S_OutputPolyList, i.e. BEFORE this call, so putting it down here
-	 * clears the way for the loop's second iteration onwards. The very
-	 * first iteration can still inherit a `true` from the last game frame
-	 * and skip one step - one sixtieth of a second on a loading screen -
-	 * which is the whole of the imprecision this costs. */
+	 * Set before the spin, not after: a modal loop's counters run in
+	 * S_OutputPolyList, i.e. before this call, so clearing it here opens
+	 * the way from the loop's second iteration onwards. The first
+	 * iteration can still inherit `true` from the last game frame and skip
+	 * one step - one sixtieth of a second on a loading screen. */
 	if (gPresentMinTicks >= 2)
 		InterpNoteClassicPresent();
 
-	/* R12 (#148, order 3). GnFrameCounter is read as a CLOCK, not as a
-	 * frame number: game\text.cpp blinks a string on `GnFrameCounter & 8`,
-	 * S_DrawPickup spins the pickup on `(GnFrameCounter & 0x7F) << 9` and
-	 * the inventory reads it too. At sixty, unguarded, every one of those
-	 * would run at double speed. In a modal loop the latch is down (see
-	 * above) and this steps once per present exactly as it did. */
+	/* GnFrameCounter is read as a clock, not as a frame number:
+	 * game/text.cpp blinks a string on `GnFrameCounter & 8`, S_DrawPickup
+	 * spins the pickup on `(GnFrameCounter & 0x7F) << 9`, and the inventory
+	 * reads it too. At 60 Hz, unguarded, every one of those would run at
+	 * double speed. In a modal loop the latch is down (see above) and this
+	 * steps once per present exactly as before. */
 	if (!InterpIsTweenFrame())
 		GnFrameCounter++;
 
 	if (gPresentMinTicks <= 0)
 	{
-		/* THE DISPLAY-BOUND PRESENT (#148, order 6), AND THE CLOCK IS READ
-		 * ON THE OTHER SIDE OF IT.
+		/* The display-bound present: the clock is read on the other side
+		 * of it, not before.
 		 *
 		 * Every other present in the engine reads the clock first and then
-		 * flips, because the WAIT is the read: `while (n < min) while
+		 * flips, because the wait is the read: `while (n < min) while
 		 * (!Sync());` is the pacing and the measurement in one. Here the
 		 * wait is inside Present - D3DPRESENT_INTERVAL_ONE holds it until
-		 * the panel is ready - and a Sync() taken BEFORE it would miss the
-		 * whole of that wait. The ticks spent waiting would be credited to
-		 * the NEXT frame instead, a frame late, and ControlPhase would run
+		 * the panel is ready - so a Sync() taken before it would miss the
+		 * whole of that wait: the ticks spent waiting would be credited to
+		 * the next frame instead, a frame late, and ControlPhase would run
 		 * its logic step a frame after the tick it belongs to.
 		 *
 		 * That is not a rounding error, it is the difference between a
 		 * smooth mode and a stuttering one. The blend factor is
-		 * `(framecount + subTick + 1) / 2` (interpolate_math.h) and it stays
-		 * inside [0,1) - never clamped to the newest state, i.e. never
-		 * stalling - exactly as long as the accumulator and the sub-tick
-		 * remainder are read from the SAME moment. Reading the clock after
-		 * the flip is what makes them so: every whole tick that has passed
-		 * is in the accumulator and what is left over is under one tick.
-		 * Read before the flip, up to a whole frame's worth of time sits in
-		 * neither of them, the factor asks for a state the logic has not
-		 * reached, and the picture stands still for a frame at every logic
-		 * step.
+		 * `(framecount + subTick + 1) / 2` (interpolate_math.h) and it
+		 * stays inside [0,1) - never clamped to the newest state, i.e.
+		 * never stalling - exactly as long as the accumulator and the
+		 * sub-tick remainder are read from the same moment. Reading the
+		 * clock after the flip makes them so: every whole tick that has
+		 * passed is in the accumulator and what is left over is under one
+		 * tick. Read before the flip, up to a whole frame's worth of time
+		 * would sit in neither of them, the factor would ask for a state
+		 * the logic has not reached, and the picture would stand still for
+		 * a frame at every logic step.
 		 *
-		 * The watchdog is here for the reason it exists: this branch is the
-		 * one place in the engine that waits for nothing of its own, so if
-		 * the present is not really waiting either, nothing bounds the loop.
+		 * The watchdog runs here because this branch is the one place in
+		 * the engine that waits for nothing of its own: if the present is
+		 * not really waiting either, nothing bounds the loop.
 		 *
-		 * PROF_SPIN IS EMPTY IN THIS MODE and PROF_FLIP carries the wait,
+		 * PROF_SPIN stays empty in this mode; PROF_FLIP carries the wait,
 		 * which is the honest place for it - the CPU is inside the driver,
 		 * not burning a core in a loop of ours. */
 		NoteDisplayBoundPresent();
@@ -1604,9 +1580,8 @@ long S_DumpScreenFrame()
 {
 	long n;
 
-	// The loading bar's own present, which has always run at up to sixty
-	// (see the plan, F8). It is not a game frame at all, so the in-between
-	// latch goes down here too (#148, order 3).
+	// The loading bar's own present, which runs at up to 60. It is not a
+	// game frame, so the in-between latch goes down here too.
 	InterpNoteClassicPresent();
 
 	n = Sync();
@@ -1736,23 +1711,22 @@ void S_InitialisePolyList()
 	r.y2 = App.dx.rViewport.top + App.dx.rViewport.bottom;
 	r.x2 = App.dx.rViewport.left + App.dx.rViewport.right;
 
-	// Clear the DEPTH BUFFER here too, at the START of the frame (#127).
+	// Clear the depth buffer here too, at the start of the frame.
 	//
-	// Before, it was cleared only ONCE per frame, namely in
-	// S_OutputPolyList - and BEFORE the scope mask. The mask then wrote
-	// its depths in, and nobody cleared them until the next frame. The
-	// next frame's world was thus tested against YESTERDAY's mask depths
-	// and discarded wherever the mask lay.
+	// Without this, the depth buffer was cleared only once per frame, in
+	// S_OutputPolyList, before the scope mask. The mask then wrote its
+	// depths in and nobody cleared them until the next frame, so the next
+	// frame's world was tested against the previous frame's mask depths
+	// and discarded wherever the mask had been.
 	//
-	// While the scope is on, it goes unnoticed: the mask arrives anew at
-	// the same spot every frame and covers exactly what it blocks. Only in
-	// the one frame where it DROPS AWAY do you see its imprint - the world
-	// appears only inside the circle, outside the sky remains (it is drawn
-	// without a depth test). Exactly one frame, exactly in the mask's
-	// shape; documented by the user with the frame capture.
+	// While the scope stays on this goes unnoticed, because the mask
+	// arrives anew at the same spot every frame and covers exactly what it
+	// blocks. Only in the one frame where it drops away does the imprint
+	// show: the world appears only inside the circle, while outside it the
+	// sky remains, since the sky is drawn without a depth test.
 	//
-	// The clear in S_OutputPolyList stays where it is: it makes sure mask,
-	// recording overlay and fade lie above the scene.
+	// The clear in S_OutputPolyList stays where it is: it keeps the mask,
+	// the recording overlay and the fade above the scene.
 	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r,
 		(App.dx.Flags & DXF_ZBUFFER) ? (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) : D3DCLEAR_TARGET,
 		0, 1.0F, 0));
@@ -1761,8 +1735,8 @@ void S_InitialisePolyList()
 	InitBuckets();
 	InitialiseSortList();
 
-	// #123: the HD rooms of this frame are collected in InsertRoom and drawn
-	// in S_OutputPolyList, so their list is emptied here beside the buckets
+	// The HD rooms of this frame are collected in InsertRoom and drawn in
+	// S_OutputPolyList, so their list is emptied here beside the buckets
 	// and the sort list, by the same function and for the same reason.
 	HDFrameReset();
 }
@@ -1783,23 +1757,19 @@ void S_OutputPolyList()
 	{
 		sprintf(buf, "%dx%d", App.dx.dwRenderWidth, App.dx.dwRenderHeight);
 		PrintString(8, App.dx.dwRenderHeight - 8, 6, buf, 0);
-		/* R15, AND IT IS A TICK COUNTER NOW (#148, orders 1 and 6).
+		/* This counts logic ticks, not drawn frames.
 		 *
-		 * Vanilla counted 120 DRAWN frames, which was four seconds because
-		 * thirty was the only rate there was. Order 1 kept the frames and
-		 * scaled the step by the measured rate - `TargetPresentHz() /
-		 * App.fps` - which holds at 30 and at 60 but has a hole in it that
-		 * the display-bound rate would fall straight into: the ratio is an
-		 * integer division, so a measured rate a hair ABOVE the target
-		 * truncates the step to zero and the caption never leaves the
-		 * screen. With the panel pacing the frames that is not a corner
-		 * case, it is every second reading.
+		 * A rate-scaled step (`TargetPresentHz() / App.fps`) breaks at the
+		 * display-bound rate: the ratio is an integer division, so a
+		 * measured rate a hair above the target truncates the step to zero
+		 * and the caption never leaves the screen - with the panel pacing
+		 * the frames, that is not a corner case, it happens every second
+		 * reading.
 		 *
-		 * So it counts what it always meant: 120 LOGIC TICKS, the same
-		 * criterion as every other duration in order 3. Four seconds at any
-		 * frame rate, no measured rate in it at all, and at fps_mode 0 - one
-		 * step per frame at thirty frames a second - it is vanilla's own
-		 * 120 frames to the tick. */
+		 * Counting 120 logic ticks instead avoids the problem: it is four
+		 * seconds at any frame rate, with no measured rate in the
+		 * calculation, and at fps_mode 0 (one step per frame at 30 fps) it
+		 * is the same 120 frames vanilla counted. */
 		if (!InterpIsTweenFrame())
 			resChangeCounter--;
 
@@ -1807,36 +1777,34 @@ void S_OutputPolyList()
 			resChangeCounter = 0;
 	}
 
-	/* #123: THE HD ROOMS OF THIS FRAME, AND WHY THEY GO HERE.
+	/* The HD rooms of this frame, and why they go here.
 	 *
-	 * The frame's depth buffer is cleared in S_InitialisePolyList (#127) and
+	 * The frame's depth buffer is cleared in S_InitialisePolyList, and
 	 * nothing has drawn into it since except the sky, which SkyDrawPhase
-	 * draws with ZWRITEENABLE off (specific\specificfx.cpp, OutputSky) - so
+	 * draws with ZWRITEENABLE off (specific/specificfx.cpp, OutputSky) - so
 	 * the sky owns no depth and the HD walls paint over it, exactly as the
 	 * classic room polygons did.
 	 *
-	 * Then come the classic buckets: opaque items, Lara, the statics of every
-	 * room that stayed classic. They are depth tested against the HD walls
-	 * that are now in the buffer, and the projection matrix behind those
-	 * walls writes the same sz the classic path writes for the same point in
+	 * Then come the classic buckets: opaque items, Lara, the statics of
+	 * every room that stayed classic. They are depth tested against the HD
+	 * walls now in the buffer, and the projection matrix behind those walls
+	 * writes the same sz the classic path writes for the same point in
 	 * space, so the test is exact and needs no bias (hd_render.cpp,
-	 * HDRenderSelfTest). After the buckets the sort list draws the see-through
-	 * polygons over both.
+	 * HDRenderSelfTest). After the buckets, the sort list draws the
+	 * see-through polygons over both.
 	 *
-	 * THE FRAME IS DRAWN IN TWO PHASES (#123, fix round E, E6). HDFrameDraw
-	 * is everything of the HD path that WRITES DEPTH - every room's opaque
-	 * and alpha-tested passes and every HD object's - and it goes before the
-	 * buckets, where the whole HD block used to go. HDFrameDrawGlow is the
-	 * additive pass of the same rooms and objects; it writes no depth, so it
-	 * has to come after every opaque draw in the frame or the last opaque
-	 * thing drawn paints over it - a wall lamp's cone cut off along a portal
-	 * was the picture that said so. hd_level.cpp's own note over HDFrameDraw
-	 * carries the argument and the order.
+	 * The frame draws in two phases. HDFrameDraw is everything of the HD
+	 * path that writes depth - every room's opaque and alpha-tested passes
+	 * and every HD object's - and it goes before the buckets. HDFrameDrawGlow
+	 * is the additive pass of the same rooms and objects; it writes no
+	 * depth, so it has to come after every opaque draw in the frame, or the
+	 * last opaque thing drawn paints over it - without this ordering a wall
+	 * lamp's glow cone is cut off along a portal. hd_level.cpp's own note
+	 * over HDFrameDraw carries the full argument and the order.
 	 *
-	 * The OTHER depth clear, the one further down this function, is the one
-	 * #127 kept: it separates the world from the binocular mask, the pickup
-	 * display and the fade, and it still runs after everything above it -
-	 * including this block. */
+	 * The other depth clear, further down this function, separates the
+	 * world from the binocular mask, the pickup display and the fade, and
+	 * still runs after everything above it, including this block. */
 	ProfBegin(PROF_HD_DRAW);
 	HDFrameDraw();
 	ProfEnd(PROF_HD_DRAW);
@@ -1900,11 +1868,10 @@ void S_OutputPolyList()
 		{
 			DrawFlash();
 
-			/* R3 (#148, order 3): the white flash a weapon and a pickup
-			 * throw over the screen. FlashFader is its brightness and it
-			 * walks down by two per DRAWN frame, so at sixty the flash
-			 * would be over in half the time. The flash itself is drawn
-			 * above on every frame. */
+			/* The white flash a weapon or a pickup throws over the screen.
+			 * FlashFader is its brightness and it walks down by two per
+			 * drawn frame, so at 60 Hz the flash would be over in half the
+			 * time; the flash itself is still drawn on every frame. */
 			if (FlashFader && !InterpIsTweenFrame())
 				FlashFader -= 2;
 		}
@@ -1919,10 +1886,10 @@ void S_OutputPolyList()
 		DrawSortList();
 	}
 
-	// The F12 bump-mapping toggle's own debounce - every second DRAWN frame,
-	// which at sixty would flip it twice as fast while the key is held. A
-	// debug key and nothing more, but it is a per-frame counter and it costs
-	// one test to keep it at the rate it was written for (#148, order 3).
+	// The F12 bump-mapping toggle's own debounce - every second drawn
+	// frame, which at 60 Hz would flip it twice as fast while the key is
+	// held. A debug key, but still a per-frame counter, and it costs one
+	// test to keep it at the rate it was written for.
 	if (!InterpIsTweenFrame())
 		c++;
 

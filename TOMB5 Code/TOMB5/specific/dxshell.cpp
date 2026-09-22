@@ -17,7 +17,7 @@
 #include "hd/hd_level.h"
 #include "winmain.h"
 #include "input.h"
-#include "../tomb5/tomb5.h"	// tomb5.vsync (#148, order 6)
+#include "../tomb5/tomb5.h"	// tomb5.vsync
 #include <Xinput.h>
 #include <process.h>	// _beginthreadex - joystick init runs in the background
 
@@ -26,19 +26,19 @@ DXINFO* G_dxinfo;
 LPDIRECT3D9 G_d3d;
 HWND G_hwnd;
 char keymap[256];
-ulong DXTextureMemoryAtStart = 0;	// see dxshell.h (#123, stage S6)
+ulong DXTextureMemoryAtStart = 0;	// see dxshell.h
 
-/* VSYNC, AND WHAT THE DISPLAY RUNS AT (#148, order 6).
+/* VSync state and the display's refresh rate.
  *
  * Both are written by DXCreate and read by the present policy in
- * specific\output.cpp. They are answers about the DEVICE THAT EXISTS, not
+ * specific\output.cpp. They are answers about the device that exists, not
  * about what the player asked for: `tomb5.vsync` is the wish, and
  * g_vsyncActive is whether the device was really made with
  * D3DPRESENT_INTERVAL_ONE - a card that does not offer the interval, or a
  * driver panel that overrides it, must not leave the engine believing the
  * present blocks when it does not.
  *
- * The refresh rate is the adapter's CURRENT display mode
+ * The refresh rate is the adapter's current display mode
  * (D3DDISPLAYMODE.RefreshRate). Zero and absurd values are turned into 60, so
  * every reader downstream gets a number it can divide by. */
 static long g_vsyncActive = 0;
@@ -132,8 +132,8 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 	// officially supported way to share one device across threads like this.
 	flags |= D3DCREATE_MULTITHREADED;
 
-	/* VSYNC, ASKED OF THE CARD BEFORE IT IS ASKED OF THE DEVICE (#148, order
-	 * 6). DXCreate has already put D3DPRESENT_INTERVAL_ONE or
+	/* VSync is asked of the card before it is asked of the device.
+	 * DXCreate has already put D3DPRESENT_INTERVAL_ONE or
 	 * D3DPRESENT_INTERVAL_IMMEDIATE into pp from tomb5.vsync; this is the one
 	 * place that holds the caps, so it is the one place that can say whether
 	 * the interval asked for exists at all. D3D9 promises ONE in windowed
@@ -142,10 +142,9 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 	 * because of a present interval would be a black screen with no message,
 	 * and this turns it into a log line and a running game.
 	 *
-	 * g_vsyncActive records what we ended up with. The refresh-bound frame
-	 * rate (fps_mode 2) hangs on it: without a blocking present there is
-	 * nothing to bound the rate, and an uncapped loop is exactly what the
-	 * user ruled out. */
+	 * g_vsyncActive records what the device ended up with. The refresh-bound
+	 * frame rate (fps_mode 2) hangs on it: without a blocking present there
+	 * is nothing to bound the rate, and the loop would run uncapped. */
 	if (pp->PresentationInterval == D3DPRESENT_INTERVAL_ONE &&
 		!(caps.PresentationIntervals & D3DPRESENT_INTERVAL_ONE))
 	{
@@ -161,9 +160,9 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 
 	g_vsyncActive = pp->PresentationInterval == D3DPRESENT_INTERVAL_ONE ? 1 : 0;
 
-	/* HOW MUCH TEXTURE MEMORY THIS CARD HAS (#123, stage S6). Asked HERE and
-	 * nowhere else, because this is the only moment the answer means what it
-	 * says: the device is one instruction old, it owns its back buffer and
+	/* How much texture memory this card has. Asked here and nowhere else,
+	 * because this is the only moment the answer means what it says: the
+	 * device is one instruction old, it owns its back buffer and
 	 * its depth buffer and nothing else, and no level has been loaded. Asked
 	 * later - at a level start, say - the number is already reduced by
 	 * whatever the last level left on the card, and a budget built on it
@@ -176,7 +175,7 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 	 * deciding whether a level's pages fit with room to spare.
 	 *
 	 * Zero when the device does not answer; the budget then falls back to
-	 * "no limit", which is stage S1's behaviour. */
+	 * "no limit". */
 	DXTextureMemoryAtStart = *device ? (*device)->GetAvailableTextureMem() : 0;
 
 	Log("DXCreateD3DDevice Successful - the device offers %.0f MiB of texture memory",
@@ -210,13 +209,12 @@ void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
 	{
 		// 24-bit TGA. Core's version wrote 16 bits and read the surface in
 		// short strides - that dates from the DirectDraw era, when the back
-		// buffer really was 16 bits. Our D3D9 port creates it as
+		// buffer really was 16 bits. The D3D9 port creates it as
 		// D3DFMT_X8R8G8B8, i.e. 32 bits; the old math thus read nonsense.
 		// On top came a row bug: the start pointer stood at Height * Pitch,
-		// one ROW BEHIND the buffer - the first pass read out of bounds
+		// one row behind the buffer - the first pass read out of bounds
 		// every time. The engine's apostrophe snapshot would thus always
-		// have crashed; it only surfaced when the frame capture for #127
-		// used it.
+		// have crashed.
 		tga_header[16] = 24;
 		*(short*)&tga_header[12] = (short)desc.Width;
 		*(short*)&tga_header[14] = (short)desc.Height;
@@ -225,7 +223,7 @@ void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
 		pDest = (uchar*)pM;
 
 		// TGA has its origin at the bottom left, the surface at the top
-		// left - hence backwards from the LAST row.
+		// left - hence backwards from the last row.
 		pSurf += (desc.Height - 1) * rect.Pitch;
 
 		for (ulong h = 0; h < desc.Height; h++)
@@ -277,11 +275,11 @@ HRESULT DXShowFrame()
 
 	hr = G_dxptr->lpD3DDevice->Present(0, 0, 0, 0);
 
-	/* THE FRAME CLOCK, and the only place it can be taken. This function is
+	/* The frame clock, and the only place it can be taken. This function is
 	 * the whole engine's one present: S_DumpScreen (the game frame, the
 	 * inventory, the title menu), S_DumpScreenFrame (the loading bar and the
 	 * credits) and fmv.cpp all end here and nowhere else, so one call here
-	 * counts every frame the player ever sees, once. It is deliberately AFTER
+	 * counts every frame the player ever sees, once. It is deliberately after
 	 * Present and before the device-lost branch below - the interval it
 	 * measures is present-to-present, which is the frame rate as felt, wait
 	 * and driver time included. Without -log it is a bool test and a return
@@ -302,7 +300,7 @@ HRESULT DXShowFrame()
 		{
 			Log("Device lost, resetting");
 
-			// #123: Reset() refuses point blank while any D3DPOOL_DEFAULT
+			// Reset() refuses point blank while any D3DPOOL_DEFAULT
 			// object is alive, and the HD path's vertex buffer, index buffer
 			// and page textures all are (that pool is the whole point - it
 			// keeps 300 MB of decoded pages out of the process's address
@@ -350,8 +348,8 @@ void DXClose()
 
 	if (G_dxptr->lpD3DDevice)
 	{
-		// #123: every HD object - both buffers, the page textures, the two
-		// shaders, the vertex declaration - was made on THIS device, and a
+		// Every HD object - both buffers, the page textures, the two
+		// shaders, the vertex declaration - was made on this device, and a
 		// resolution change or Alt+Enter comes through here (DXChangeVideoMode
 		// / DXToggleFullScreen call DXCreate, which calls DXClose first).
 		// Letting them outlive the device would leave the HD path drawing
@@ -493,7 +491,7 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	G_dxptr->PresentParams.BackBufferFormat = D3DFMT_X8R8G8B8;
 	G_dxptr->PresentParams.BackBufferCount = 1;
 
-	/* VSYNC (#148, order 6), and the one line the whole option is.
+	/* VSync, and the one line the whole option is.
 	 *
 	 * The engine presented with D3DPRESENT_INTERVAL_IMMEDIATE from the day it
 	 * was ported, and the thirty frames a second came from the busy-wait in
@@ -501,14 +499,14 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	 * the rest of every frame's slot. With the interval at ONE the present
 	 * itself waits for the display and the picture is whole rather than torn.
 	 *
-	 * WHERE THIS TAKES EFFECT, AND WHERE IT DOES NOT. PresentationInterval is
-	 * a device-creation parameter: it is read here, and this function runs at
+	 * Where this takes effect, and where it does not: PresentationInterval is
+	 * a device-creation parameter, read here, and this function runs at
 	 * startup, on Alt+Enter and on a resolution change (DXToggleFullScreen
 	 * and DXChangeVideoMode both call DXCreate). The device-lost path in
-	 * DXShowFrame resets with THIS SAME G_dxptr->PresentParams, so it follows
-	 * too. What it means is that switching the menu row over does NOT change
-	 * a running device - the row says so, and the setting is picked up the
-	 * next time the game starts. Resetting the device on the spot would work
+	 * DXShowFrame resets with this same G_dxptr->PresentParams, so it follows
+	 * too. Switching the menu row over does not change a running device -
+	 * the row says so, and the setting is picked up the next time the game
+	 * starts. Resetting the device on the spot would work
 	 * with the HD art switched off and would tear down every D3DPOOL_DEFAULT
 	 * page of it when it is on (see HDLevelDeviceLost), which is a heavy
 	 * price for a switch that is set once.
@@ -550,9 +548,9 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	return 1;
 }
 
-/* Whether the device that EXISTS presents with D3DPRESENT_INTERVAL_ONE
- * (#148, order 6) - not whether the option is on. Zero before the first
- * DXCreate, which is also the honest answer then. */
+/* Whether the device that exists presents with D3DPRESENT_INTERVAL_ONE -
+ * not whether the option is on. Zero before the first DXCreate, which is
+ * also the honest answer then. */
 long DXVSyncActive()
 {
 	return g_vsyncActive;
@@ -709,7 +707,7 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 
 		nModes = G_d3d->GetAdapterModeCount(i, D3DFMT_X8R8G8B8);
 
-		// One entry per RESOLUTION, not per mode. EnumAdapterModes reports every
+		// One entry per resolution, not per mode. EnumAdapterModes reports every
 		// resolution once per refresh rate the monitor can drive it at, so a
 		// 165 Hz screen produced seven identical "2560x1440" lines in the setup
 		// dialog - it only ever printed width and height.
@@ -872,14 +870,13 @@ static long DXUpdateJoystickDirectInput()
 	long lx = js.lX;
 	long ly = js.lY;
 
-	// THE STICK ALONE AND BEFORE ITS PER-AXIS ZONE (#161, round 161a2b, item
-	// 6; the "alone" half is round 161a2's fix round 2 - see the twin lines on
-	// the XInput path for why the POV block below makes it necessary). Modern
-	// reads THIS pair and applies its own RADIAL zone to it
-	// (ModernStickDeadZone, specific\input.cpp), because the per-axis zeroing
-	// two lines down snaps a nearly-axial push onto the axis and loses the
-	// direction the thumb was holding. Written on every poll, read only under
-	// tomb5.control_modern.
+	// The stick's raw pair, taken before its per-axis zone. Modern reads
+	// this pair and applies its own radial zone to it (ModernStickDeadZone,
+	// specific\input.cpp), because the per-axis zeroing two lines down
+	// snaps a nearly-axial push onto the axis and loses the direction the
+	// thumb was holding - see the matching comment on the XInput path below
+	// for why the d-pad handling makes keeping this pair necessary. Written
+	// on every poll, read only under tomb5.control_modern.
 	joystick_raw_lx = lx / 8;
 	joystick_raw_ly = ly / 8;	// DirectInput joystick Y is already "up = negative", like the read pair below
 
@@ -891,7 +888,7 @@ static long DXUpdateJoystickDirectInput()
 	joystick_read_x = lx / 8;
 	joystick_read_y = ly / 8;	// DirectInput joystick Y is already "up = negative", matching S_UpdateInput()'s joy_y<0=forward - no invert needed here (unlike the XInput thumbstick above)
 
-	long fire = 0;	// moved up from below the POV block (#161, round 161a2, step 3) - the new d-pad button bits inside that block need it to already exist
+	long fire = 0;	// declared before the POV block below, whose d-pad button bits need it to already exist
 
 	if (LOWORD(js.rgdwPOV[0]) != 0xFFFF)	// POV hat centered reports as -1/0xFFFFFFFF
 	{
@@ -908,8 +905,8 @@ static long DXUpdateJoystickDirectInput()
 		if (pov >= 22500 && pov <= 31500) joystick_read_x = -20;
 
 		// The d-pad as 4 more digital buttons too (bits 20-23) - same bands,
-		// same idea as the XInput path's own twin block below (see its
-		// comment for why: the user's decision 8, round 161a2 step 3).
+		// same idea as the XInput path's own twin block below; see its
+		// comment for why.
 		if (pov <= 4500 || pov >= 31500) fire |= 1 << 20;	// D-Pad Up
 		if (pov >= 13500 && pov <= 22500) fire |= 1 << 21;	// D-Pad Down
 		if (pov >= 22500 && pov <= 31500) fire |= 1 << 22;	// D-Pad Left
@@ -929,30 +926,21 @@ static long DXUpdateJoystickDirectInput()
 	long rrx = js.lZ;
 	long rry = js.lRz;
 
-	// And as axes for the modern camera (#161, round 161a2, step 2), divided
-	// by 8 like this path's left stick and with no invert, because Rz is
-	// already up-negative here - which is what the four bits below say too.
+	// Also read as axes for the modern camera, divided by 8 like this
+	// path's left stick and with no invert, because Rz is already
+	// up-negative here - which is what the four bits below say too.
 	//
-	// BEFORE THE ZONE, since round 161a2b's item 6: the camera's zone is
-	// radial and lives at the seam (ModernStickDeadZone, specific\input.cpp).
-	// The per-axis 500 below stays exactly where it was and keeps meaning what
-	// it meant - it is the four BINDABLE BITS' threshold, and item 6 does not
-	// touch those. What the camera loses by leaving it behind is the axis
-	// snap; what it must not lose is the reason the number is 500 and not 150,
-	// namely that this controller's Z/Rz were believed to rest OFF CENTRE.
-	//
-	// AND THAT BELIEF HAS NOW BEEN MEASURED (#161, round 161a3, item 7). The
-	// pad line of eight MODERNLOG sessions read this stick resting at rx 2..5,
-	// ry -6..2 of 128, so the 500 was never absorbing a real offset - it was a
-	// guess wide enough to cover one. The modern zone on this path is
-	// MODERN_DEAD_RIGHT_DINPUT 24 with its per-axis square 20 now, not 62, and
-	// game\modern_move.h carries the measurement beside both numbers.
-	//
-	// THE ORDER IS THE POINT OF THIS PARAGRAPH, and it is why item 7 needed no
-	// line here: the two assignments below come BEFORE the 500, and the left
-	// stick's own pair above comes before the 150, so what the modern seam
-	// reads is the raw axis in both cases and neither per-axis gate has ever
-	// been in its way. The four bindable bits keep theirs.
+	// Taken before the zone: the camera's own zone is radial and lives at
+	// the seam (ModernStickDeadZone, specific\input.cpp). The per-axis 500
+	// below is the four bindable bits' own threshold and stays as it is; it
+	// was originally set wide to cover a belief that this controller's
+	// Z/Rz rest off-centre. Measured (MODERNLOG): the stick rests at rx
+	// 2..5, ry -6..2 of 128, close enough to zero that the modern zone on
+	// this path uses MODERN_DEAD_RIGHT_DINPUT 24 with a per-axis square of
+	// 20, not 62; game\modern_move.h carries the measurement beside both
+	// numbers. The two assignments below come before the 500, and the left
+	// stick's own pair above comes before the 150, so the modern seam
+	// always reads the raw axis; neither per-axis gate is ever in its way.
 	joystick_raw_rx = rrx / 8;
 	joystick_raw_ry = rry / 8;
 
@@ -979,7 +967,7 @@ long DXUpdateJoystick()
 	joystick_read_x = 0;
 	joystick_read_y = 0;
 	joystick_read_fire = 0;
-	joystick_raw_rx = 0;	// the right stick's axes, raw (#161, round 161a2, 161a2b) - see below
+	joystick_raw_rx = 0;	// the right stick's axes, raw - see below
 	joystick_raw_ry = 0;
 	joystick_raw_lx = 0;	// the left stick's own axes, without the d-pad and raw - see below
 	joystick_raw_ly = 0;
@@ -993,28 +981,27 @@ long DXUpdateJoystick()
 	long lx = state.Gamepad.sThumbLX;
 	long ly = state.Gamepad.sThumbLY;
 
-	// THE STICK ALONE, BESIDE THE PAIR THE D-PAD WRITES OVER (#161, round
-	// 161a2, fix round 2 - the skeptical review's first finding). The four
-	// d-pad lines below do not OR the d-pad into these axes, they ASSIGN: a
-	// direction press replaces whatever the stick was saying with +-20. Under
-	// Tank that is right and is Core's own idea - the d-pad is a second way to
-	// push the same stick, and a direction bit has no size. Under Modern the
-	// size IS the speed and the direction IS a course, and step 3 has just put
-	// the medipacks on the d-pad: tapping one while running overwrote the
-	// stick with a quarter-push, which stopped her outright when she ran
-	// straight and veered her course when she did not. No erasure downstream
-	// can undo that, because the stick's own value is already gone by then -
-	// so it is KEPT here instead, and the movement seam reads this pair
-	// (specific\input.cpp). Written on every poll and read only under the
-	// option, exactly like the right stick's own axes below; nothing in this
-	// file needs to know which scheme is running.
+	// The stick's raw pair, kept beside the axes the d-pad lines below
+	// overwrite. Those four lines do not OR the d-pad into these axes, they
+	// assign: a direction press replaces whatever the stick was saying with
+	// +-20. Under Tank that is right and is Core's own idea - the d-pad is
+	// a second way to push the same stick, and a direction bit has no
+	// size. Under Modern the size is the speed and the direction is a
+	// course, and an action bound to the d-pad would overwrite the stick
+	// with a quarter-push while tapped during a run, stopping her outright
+	// when she ran straight and veering her course otherwise. No erasure
+	// downstream can undo that, because the stick's own value is already
+	// gone by then - so it is kept here instead, and the movement seam
+	// reads this pair (specific\input.cpp). Written on every poll and read
+	// only under the option, exactly like the right stick's own axes
+	// below; nothing in this file needs to know which scheme is running.
 	//
-	// AND BEFORE THE PER-AXIS ZONE, since round 161a2b's item 6: that zeroing
-	// snaps a nearly-axial push onto the axis, because it judges each
-	// component on its own. Modern puts this raw pair through a RADIAL zone
-	// instead (ModernStickDeadZone), at the same 7849 of 32767 XInput asks
-	// for, so the zone is as wide as it ever was and the direction survives
-	// it. joystick_read_x/y below keep the per-axis zone unchanged - they are
+	// Taken before the per-axis zone: that zeroing snaps a nearly-axial
+	// push onto the axis, because it judges each component on its own.
+	// Modern puts this raw pair through a radial zone instead
+	// (ModernStickDeadZone), at the same 7849 of 32767 XInput asks for, so
+	// the zone is as wide as it ever was and the direction survives it.
+	// joystick_read_x/y below keep the per-axis zone unchanged - they are
 	// what Tank, the menus and the binding screen read.
 	joystick_raw_lx = lx / 256;
 	joystick_raw_ly = -ly / 256;	// inverted for the same reason as the read pair below
@@ -1028,7 +1015,7 @@ long DXUpdateJoystick()
 	joystick_read_x = lx / 256;	// -32768..32767 -> ~-128..127
 	joystick_read_y = -ly / 256;	// inverted: stick pushed up (ly>0) means forward, which S_UpdateInput() reads as joy_y<0
 
-	long fire = 0;	// moved up from below the d-pad block (#161, round 161a2, step 3) - the new d-pad button bits right after it need it to already exist
+	long fire = 0;	// declared before the d-pad block below, whose button bits need it to already exist
 
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)  joystick_read_x = -20;
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) joystick_read_x = 20;
@@ -1038,11 +1025,10 @@ long DXUpdateJoystick()
 	// The d-pad as 4 more digital buttons too (bits 20-23, past the right
 	// stick's own 16-19 below), same idea as that block and written the
 	// same unconditional way - so it can be bound to anything once Modern
-	// frees it from moving her (the user's decision 8: "das D-Pad wird
-	// [...] fuer die Binds frei", round 161a2 step 3). Tank's own default
-	// tables never point at these bits, so nothing here changes what Tank
-	// does by default; a player is free to bind onto them in either
-	// scheme, same as the right stick's own bits already are.
+	// frees the d-pad from moving her. Tank's own default tables never
+	// point at these bits, so nothing here changes what Tank does by
+	// default; a player is free to bind onto them in either scheme, same
+	// as the right stick's own bits already are.
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP)    fire |= 1 << 20;	// D-Pad Up
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN)  fire |= 1 << 21;	// D-Pad Down
 	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)  fire |= 1 << 22;	// D-Pad Left
@@ -1067,20 +1053,20 @@ long DXUpdateJoystick()
 	long rx = state.Gamepad.sThumbRX;
 	long ry = state.Gamepad.sThumbRY;
 
-	// AND THE SAME TWO AXES AS AXES (#161, round 161a2, step 2): the modern
-	// camera is a rate and not four directions, so it needs the deflection
-	// and not the bits below. Scaled exactly like the left stick a few lines
-	// up - divided by 256 into roughly -128..127, y inverted so that forward
-	// is negative, which is the convention every reader in this tree already
-	// uses (S_UpdateInput's joy_y, game\modern_move.h's stick_y).
+	// The same two axes, also read as axes: the modern camera is a rate
+	// and not four directions, so it needs the deflection and not the bits
+	// below. Scaled exactly like the left stick a few lines up - divided by
+	// 256 into roughly -128..127, y inverted so that forward is negative,
+	// which is the convention every reader in this tree already uses
+	// (S_UpdateInput's joy_y, game\modern_move.h's stick_y).
 	//
 	// Written unconditionally and read by nobody at Tank: only the modern
 	// camera's seam in specific\input.cpp touches them, and only under
-	// tomb5.control_modern. Taken BEFORE the per-axis zone since round
-	// 161a2b's item 6 - the seam applies XInput's own 8689 of 32767 radially
-	// instead (MODERN_DEAD_RIGHT), which is the same width without the axis
-	// snap. The zeroing below is left exactly as it was: it belongs to the
-	// four bindable bits, which item 6 does not touch.
+	// tomb5.control_modern. Taken before the per-axis zone - the seam
+	// applies XInput's own 8689 of 32767 radially instead
+	// (MODERN_DEAD_RIGHT), which is the same width without the axis snap.
+	// The zeroing below is left exactly as it was: it belongs to the four
+	// bindable bits.
 	joystick_raw_rx = rx / 256;
 	joystick_raw_ry = -ry / 256;
 
@@ -1131,19 +1117,18 @@ static BOOL CALLBACK DIEnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstanc
 // Runs in its own thread because EnumDevices takes very long with certain
 // device constellations and the game otherwise sits on a black screen.
 //
-// Measured on the developer's machine: exactly 10 seconds, reproducible
-// three times, and identical in a standalone 40-line program with no
-// relation to this engine - so it is no bug of ours but a timeout inside
-// DirectInput itself. The cause there: the controller hangs on the USB
-// cable but is ADDITIONALLY still paired via Bluetooth, and that paired
-// entry does not answer. DirectInput waits it out.
+// Measured: exactly 10 seconds, reproducible three times, and identical in
+// a standalone 40-line program with no relation to this engine - a timeout
+// inside DirectInput itself, not a bug in this code. Cause: the controller
+// hangs on the USB cable but is also still paired via Bluetooth, and that
+// paired entry does not answer; DirectInput waits it out.
 //
-// We cannot control a user's Bluetooth situation, and skipping the
-// enumeration is not an option: a DualSense is no XInput device, without
-// DirectInput it would have no controller at all. So this simply must not
-// lie in the startup path. The game starts immediately, the controller
-// comes on as soon as the enumeration is through - on an unremarkable
-// system that is milliseconds.
+// A player's Bluetooth pairing cannot be controlled from here, and
+// skipping the enumeration is not an option: a DualSense is no XInput
+// device, and without DirectInput it would have no controller at all. So
+// this must not sit in the startup path. The game starts immediately, and
+// the controller comes on as soon as the enumeration finishes - on an
+// unremarkable system that is milliseconds.
 //----------------------------------------------------------------------------
 static void DXInitJoystick(HWND hwnd)
 {
@@ -1257,8 +1242,8 @@ void DXInitInput(HWND hwnd, HINSTANCE hinstance)
 	memset(keymap, 0, sizeof(keymap));
 
 	// Do not call directly: see the comment at DXInitJoystick. Depending on
-	// the device situation the call can take ten seconds, which the user
-	// would experience as a black screen before the first video.
+	// the device situation the call can take ten seconds, which would show
+	// as a black screen before the first video.
 	G_dxptr->Joystick = 0;
 	g_joystickThread = (HANDLE)_beginthreadex(0, 0, JoystickInitThread, (void*)hwnd, 0, 0);
 

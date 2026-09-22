@@ -15,10 +15,9 @@
 
 long Sync();
 
-/* How far past the last tick Sync() gave away the clock stands, as a fraction
- * of a 1/60 s tick (#148, order 6). It CONSUMES nothing, it is not clamped to
- * below one, and it is the only sub-tick reading in the engine. The long note
- * over the definition says what it is relied on for. */
+/* How far past the last tick Sync() gave away the clock stands, as a
+ * fraction of a 1/60 s tick. Reads the remainder without consuming it, is
+ * not clamped below one, and is the only sub-tick reading in the engine. */
 double TIME_SubTick();
 
 void TIME_Reset();

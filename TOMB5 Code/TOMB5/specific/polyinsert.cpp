@@ -20,10 +20,10 @@
 #include "winmain.h"
 #include "texture.h"
 #include "function_stubs.h"
-#include "profile.h"			// PROFLOG phases (#148)
+#include "profile.h"			// profiling phases (PROFLOG)
 #include "3dmath.h"
 #include "gamemain.h"
-#include "hd/hd_font.h"			// the HD font's own tpage (#123, fix round Q)
+#include "hd/hd_font.h"			// the HD font's own tpage
 
 SORTLIST* SortList[65536];
 long SortCount;
@@ -37,44 +37,45 @@ D3DTLBUMPVERTEX zClipperBuffer[20];
 
 void HWR_DrawSortList(D3DTLBUMPVERTEX* info, short num_verts, short texture, short type)
 {
-	/* THE ONE TPAGE THAT IS NOT AN INDEX INTO Textures[] (#123, fix round Q).
+	/* The one tpage that is not an index into Textures[].
 	 *
 	 * Every case below reads Textures[texture], so a quad drawn from the HD
 	 * font atlas has to be caught before any of them. It carries
 	 * HD_FONT_TPAGE, which no other quad in the engine can carry: a tpage is
-	 * otherwise always an index into Textures[], LoadTextures refuses a level
-	 * with more than the 256 entries that array has (specific\file.cpp), and
-	 * the three pages addressed from the end - font, sky, the title pages -
-	 * are nTextures minus a small number. 4096 is outside that by two orders
-	 * of magnitude and still fits the short the sort list keeps it in.
+	 * otherwise always an index into Textures[], LoadTextures refuses a
+	 * level with more than the 256 entries that array has
+	 * (specific/file.cpp), and the three pages addressed from the end -
+	 * font, sky, the title pages - are nTextures minus a small number. 4096
+	 * is outside that by two orders of magnitude and still fits the short
+	 * the sort list keeps it in.
 	 *
 	 * Batching needs no thought: the sort list already groups by tpage, so
 	 * every glyph of a frame that comes from the atlas ends up in one call.
 	 *
-	 * THE STATE. Only two things differ from the classic case 1 that draws
-	 * text today, and both of them are measured:
+	 * Only two things differ from the classic case 1 that draws text, and
+	 * both are measured:
 	 *
-	 *  - LINEAR mip filtering with a LOD bias. At 1920 x 1080 a thirteen
+	 *  - Linear mip filtering with a LOD bias. At 1920 x 1080 a thirteen
 	 *    texel glyph is drawn 58 pixels high out of 104 atlas texels, so the
-	 *    atlas is MINIFIED by 1.8 (by 2.7 at 1280 x 720, by 1.35 at 2560 x
+	 *    atlas is minified by 1.8 (by 2.7 at 1280 x 720, by 1.35 at 2560 x
 	 *    1440). Without mips that is an undersample and thin strokes crawl;
 	 *    with them the bias pulls the level back under one so the picture
-	 *    stays sharp instead of going soft. -0.7 is TROne's number, for this
-	 *    very reason and said so in its own words (Copyright 2026 Todesengel,
+	 *    stays sharp instead of going soft. -0.7 is TROne's number, for the
+	 *    same reason and in its own words (Copyright 2026 Todesengel,
 	 *    GPLv3, host\render\game_renderer.cpp:2100-2106 of the TROne version
-	 *    of 2026-09-13; audit round A1 read the line there). It lands at
-	 *    level 0.14 at 1080p and at 0 at 1440p, which is ours: the
-	 *    minification above is measured on this engine's own output.
-	 *  - LINEAR min and mag whatever App.Filtering says. Point sampling an
-	 *    eightfold atlas down to a sixth of its size is not "crisp", it is
-	 *    noise; the HD room path makes the same decision for the same reason
-	 *    (hd_render.cpp).
+	 *    of 2026-09-13). It lands at level 0.14 at 1080p and at 0 at 1440p,
+	 *    which is ours: the minification above is measured on this engine's
+	 *    own output.
+	 *  - Linear min and mag filtering regardless of App.Filtering. Point
+	 *    sampling an eightfold atlas down to a sixth of its size is not
+	 *    crisp, it is noise; the HD room path makes the same decision for
+	 *    the same reason (hd_render.cpp).
 	 *
-	 * What is NOT changed is the alpha test, and that is a measurement too:
-	 * this engine sets D3DRS_ALPHAREF 0 with D3DCMP_NOTEQUAL
-	 * (specific\function_table.cpp), so the test throws away only what is
-	 * completely transparent and every antialiased edge texel passes. There
-	 * are no stairs to avoid here - the classic path already blends. */
+	 * The alpha test is not changed, and that is a measurement too: this
+	 * engine sets D3DRS_ALPHAREF 0 with D3DCMP_NOTEQUAL
+	 * (specific/function_table.cpp), so the test throws away only what is
+	 * completely transparent and every antialiased edge texel passes.
+	 * There are no stairs to avoid here - the classic path already blends. */
 	if (texture == HD_FONT_TPAGE)
 	{
 		IDirect3DTexture9* font = HDFontTexture();
@@ -441,29 +442,29 @@ void InitialiseSortList()
 	SortCount = 0;
 }
 
-/* THE CLASSIC DRAW BUFFERS, TOUCHED ONCE (#148, order 1b).
+/* The classic draw buffers, touched once at level load.
  *
  * SortBuffer (2.5 MB), SortList (256 KB of pointers) and Bucket (30 x 2080
  * vertices, 2.4 MB) are plain statics, so the linker puts them in .bss and
  * Windows hands them out as demand-zero pages: the page is not really there
  * until something writes to it, and the first write to each of the ~1300
- * pages costs a soft fault. Every one of those faults falls in the FIRST
- * frame that draws anything - which is the frame the title screen's 22 ms in
- * the sort phase was measured in, and the same frame the warm-up question is
- * about.
+ * pages costs a soft fault. Every one of those faults falls in the first
+ * frame that draws anything, which is where a title screen's sort phase can
+ * cost an extra 22 ms.
  *
  * Doing it here costs one memset of about 5 MB - well under a millisecond,
- * once per level, while the loading bar is on screen - and it is safe by the
- * shape of all three: InitialiseSortList and InitBuckets reset the write
- * pointers every frame, and nothing reads a byte of any of them that was not
- * written in the same frame first. Zeroing them can therefore not change one
- * pixel.
+ * once per level, while the loading bar is on screen - and it is safe by
+ * the shape of all three: InitialiseSortList and InitBuckets reset the
+ * write pointers every frame, and nothing reads a byte of any of them that
+ * was not written in the same frame first. Zeroing them can therefore not
+ * change one pixel.
  *
- * It is NOT the answer if the 22 ms turn out to be the device's - the first
- * DrawPrimitiveUP of a session, the first SetTexture on a managed page. That
- * is what the sort/sortdraw split in the profile is for: the qsort is `sort`
- * and the submission is `sortdraw`, and the next first_frame line says which
- * of the two kept the milliseconds. */
+ * This is not the fix if a slow first frame turns out to be the device's
+ * doing instead - the first DrawPrimitiveUP of a session, the first
+ * SetTexture on a managed page. The sort/sortdraw split in the profile
+ * separates the two: the qsort is `sort` and the submission is `sortdraw`,
+ * and the first_frame line for each says which of the two kept the
+ * milliseconds. */
 void PreTouchDrawBuffers()
 {
 	memset(SortBuffer, 0, sizeof(SortBuffer));

@@ -27,7 +27,7 @@
 #include "../game/savegame.h"
 #include "../game/balance.h"
 #include "../game/secretreward.h"
-#include "input.h"			// ApplyKeyScheme - the one-time keyboard seat (#161, round 161b2a)
+#include "input.h"			// ApplyKeyScheme - the one-time keyboard seat
 #include "../tomb5/tomb5.h"
 
 WATERTAB WaterTable[22][64];
@@ -202,16 +202,14 @@ long S_LoadGame(long slot_num)
 		ReadFile(file, &savegame, sizeof(SAVEGAME_INFO), &bytes, 0);
 		savegame_bytes_read = bytes; // see sgRestoreGame() - detects an old-format (pre-resize) save
 
-		// Compute the checksum IMMEDIATELY, while the bytes are still
-		// exactly those from the file. sgRestoreGame() only runs after the
-		// fade and the level reload - by then the game loop has long since
-		// kept computing and incremented savegame.Level.Timer
-		// (control.cpp:642, runs while gfGameMode is 0). Exactly that hit
-		// the user when loading during Lara's death animation: the loop
-		// kept running behind the menu, the sum no longer matched, and the
-		// load aborted with "incompatible or corrupted savegame" - with
-		// bytes_read == expected, i.e. a provably fully read file. After a
-		// restart the same file worked, because no frames lay in between.
+		// Computed immediately, while the bytes are still exactly those
+		// from the file. sgRestoreGame() only runs after the fade and the
+		// level reload - by then ControlPhase (control.cpp), which keeps
+		// incrementing savegame.Level.Timer while gfGameMode is 0, may have
+		// run behind the menu. A load started in that window (for example
+		// during Lara's death animation) then finds a checksum that no
+		// longer matches a fully and correctly read file, and aborts with
+		// "incompatible or corrupted savegame".
 		{
 			const short stored = savegame.Checksum;
 			savegame.Checksum = 0;
@@ -271,18 +269,17 @@ unsigned int __stdcall GameMain(void* ptr)
 
 		RPC_Init();
 		init_tomb5_stuff();
-		/* AND ONLY NOW CAN THE KEYBOARD KNOW WHICH SCHEME IT IS IN (#161,
-		 * round 161b2a, item 1). LoadSettings() read both key sets back in
-		 * WinMain, long before this - specific\winmain.cpp - and the line
-		 * above is what reads tomb5.control_modern out of the other registry
-		 * key, so the seat belongs here and nowhere earlier. At Tank the
-		 * scheme already seated is the one wanted and the call returns without
-		 * touching anything (specific\input.cpp). */
+		/* The first point in startup where the keyboard scheme can be
+		 * seated. LoadSettings() (winmain.cpp) reads both key sets from the
+		 * registry early in WinMain, but init_tomb5_stuff() just above is
+		 * what reads tomb5.control_modern to tell them apart, so the seat
+		 * cannot happen any earlier. If the scheme already active is the
+		 * one selected, ApplyKeyScheme (input.cpp) returns without
+		 * touching anything. */
 		ApplyKeyScheme();
-		/* AND THE PAD ITS ACTION SETTING (#161, round 161b2c, item 3), for the
-		 * same reason one line up: tomb5.action_split is in the other registry
-		 * key too, so this is the first moment the two pad sets can be told
-		 * apart. At One key the setting already seated is the one wanted and
+		/* Same reasoning for the pad: tomb5.action_split lives in the same
+		 * registry key, so this is the first point the two pad sets can be
+		 * told apart. If the setting already active is the one selected,
 		 * the call returns without touching anything. */
 		ApplyJoySplit();
 		DoGameflow();

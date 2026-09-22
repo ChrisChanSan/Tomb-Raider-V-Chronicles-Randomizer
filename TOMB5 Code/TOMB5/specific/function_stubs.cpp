@@ -13,16 +13,13 @@
 #include "../tomb5/pch.h"
 #include "function_stubs.h"
 
-// Log() is COMPILED IN, but silent unless the game is started with -log
-// (#125). Upstream compiled it out entirely, which meant a player who hit
-// something could never produce a log - the only way was a special build.
-// One executable that can be asked for a log is worth more than a second
-// executable nobody has.
+// Keeps the logging code compiled in; gLogEnabled below controls whether
+// Log() actually does anything at runtime.
 #define DO_LOG
 
-// The gate. Off until the command line says otherwise; see
-// WinCheckLogFlag in winmain.cpp, which reads the flag before ANY other
-// startup step so no early line is lost.
+// Off until the command line says otherwise. WinCheckLogFlag in
+// winmain.cpp reads the flag before any other startup step, so no early
+// log line is lost.
 bool gLogEnabled = 0;
 
 FILE* logF = 0;
@@ -79,8 +76,7 @@ void SeedRandomControl(long seed)
 	rand_1 = seed;
 }
 
-// #148, order 3 - the note is in function_stubs.h. Read only, and only by
-// game\interpolate.cpp.
+// Read-only, and used only by interpolate.cpp; see function_stubs.h for why.
 long GetRandomControlSeed()
 {
 	return rand_1;
@@ -103,13 +99,11 @@ void Log(const char* s, ...)
 	va_list list;
 	char buf[4096];
 
-	// THE FIRST THING IN THE FUNCTION, before the format buffer is even
-	// touched. Without -log this costs a call and a branch per line and
-	// nothing else: no file is opened, nothing is formatted, no log.txt
-	// appears next to the executable. That matters because the seams this
-	// gate exists for (sound, clipping, slots) sit in per-frame code -
-	// with the old unconditional version a long session wrote a file that
-	// grew without end and flushed on every single line.
+	// Checked before anything else in the function. Without -log this costs
+	// only a call and a branch per line: no file is opened, nothing is
+	// formatted, no log.txt appears next to the executable. The seams that
+	// call Log() (sound, clipping, slots) sit in per-frame code, so the
+	// check has to stay this cheap.
 	if (!gLogEnabled)
 		return;
 
@@ -121,11 +115,10 @@ void Log(const char* s, ...)
 	strcat(buf, "\n");
 	va_end(list);
 
-	// Milliseconds since the first log entry. Without this a startup delay
-	// cannot be localized - you see the order but not WHERE the time is
-	// lost. Deliberately relative and not a clock time: what is sought are
-	// gaps between two lines, not the moment. Costs one GetTickCount call
-	// per line.
+	// Milliseconds since the first log entry, not a clock time: this shows
+	// the gap between two lines, which localizes a startup delay, where a
+	// plain ordering of lines would not. Costs one GetTickCount call per
+	// line.
 	{
 		static DWORD firstTick = 0;
 		DWORD now = GetTickCount();

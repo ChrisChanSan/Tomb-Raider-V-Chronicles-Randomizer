@@ -29,38 +29,23 @@ long Sync()
 	return n;
 }
 
-/* WHAT IS LEFT OVER OF A TICK (#148, order 6).
+/* Time since Sync() last consumed a whole 1/60 s tick, as a fraction of one
+ * tick, read without consuming it. Sync() hands out whole ticks and leaves
+ * the remainder standing on the last tick boundary in `counter`, so
+ * ControlPhase and S_AnimateTextures keep seeing a fixed thirty hertz
+ * simulation; this fraction lets a refresh rate not locked to 60 Hz blend
+ * between ticks (see InterpTickFraction in game/interpolate.cpp), since at a
+ * higher rate most presents fall inside one tick and Sync() alone answers 0
+ * for them.
  *
- * Sync() above hands out WHOLE 1/60 s ticks and keeps the remainder in
- * `counter`, which is left standing on the last tick boundary it gave away.
- * That is the whole contract of this file and it does not change: ControlPhase
- * and S_AnimateTextures are fed whole ticks and the simulation stays a thirty
- * hertz simulation.
- *
- * This reads the remainder WITHOUT consuming it: how far past that last
- * boundary the clock stands right now, as a fraction of a tick. Nothing else
- * in the engine needs it - a frame rate bound to the display's refresh does,
- * because at 144 Hz two presents out of three fall inside one tick and Sync()
- * answers 0 for both of them. See InterpTickFraction (game\interpolate.cpp)
- * for what is built on top of it.
- *
- * PROPERTIES IT IS RELIED ON FOR:
- *
- *   monotone   between two Sync() calls it only ever grows - it is one
- *              subtraction from a monotone counter.
- *   continuous when Sync() consumes k ticks, this drops by exactly k and the
- *              caller's tick count rises by exactly k, so their SUM is
- *              continuous across the call. That is what makes the blend
- *              factor built from the pair free of steps and free of drift.
- *   unbounded  it is NOT clamped to below one. Sync() is called once per
- *              frame at the END of the frame, so at the top of the next
- *              frame more than a whole tick may well have passed - and on a
- *              hitch, many. The caller clamps, because only the caller knows
- *              what it may not extrapolate past.
- *
- * Zero before TIME_Init, and zero rather than negative if the clock is ever
- * read behind the boundary (it cannot be, but a QPC that jumps backwards on a
- * broken driver would otherwise hand out a negative blend factor). */
+ * Grows monotonically between Sync() calls; its sum with the tick count is
+ * continuous across a Sync() call, which keeps a blend built from the two
+ * free of steps and drift. Not clamped below one, since more than a tick can
+ * pass before the next Sync() - the caller clamps, since only it knows what
+ * it may not extrapolate past. Zero before TIME_Init, and zero rather than
+ * negative if the clock is ever read behind the boundary (a QPC that jumps
+ * backwards on a broken driver would otherwise hand out a negative blend
+ * factor). */
 double TIME_SubTick()
 {
 	__int64 PerformanceCount, d;

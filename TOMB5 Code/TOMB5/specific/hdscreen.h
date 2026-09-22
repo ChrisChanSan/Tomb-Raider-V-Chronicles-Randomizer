@@ -55,7 +55,7 @@ long HDScreenAlphaBox(const ulong* px, long w, long h, long* x0, long* y0, long*
 #define HD_LOGO_PAGE_MAX_H	512
 
 // How big the wordmark of a logo picture comes out once it has been shrunk to
-// fit maxW x maxH. The mark is NEVER enlarged - one that already fits keeps
+// fit maxW x maxH. The mark is never enlarged - one that already fits keeps
 // every pixel it has - and it is shrunk by the tighter of the two ratios, so
 // it keeps its shape. Returns 0 for a picture that draws nothing at all.
 long HDScreenLogoSize(const ulong* logo, long lw, long lh, long maxW, long maxH, long* outW, long* outH);
@@ -63,7 +63,7 @@ long HDScreenLogoSize(const ulong* logo, long lw, long lh, long maxW, long maxH,
 // Cuts the wordmark out of a logo picture and writes it, resampled to
 // outW x outH, into the top left corner of a buffer dstPitch pixels wide.
 // Pass the pair HDScreenLogoSize() worked out. Returns 0 for a picture that
-// draws nothing. The result is 0xAARRGGBB with STRAIGHT alpha, ready for a
+// draws nothing. The result is 0xAARRGGBB with straight alpha, ready for a
 // SRCALPHA / INVSRCALPHA blend; see hdscreen.cpp.
 long HDScreenCutLogo(const ulong* logo, long lw, long lh, ulong* dst, long dstPitch, long outW, long outH);
 
@@ -71,6 +71,6 @@ long HDScreenCutLogo(const ulong* logo, long lw, long lh, ulong* dst, long dstPi
 // horizontally centred (leftAlign 0) or in the top left corner (leftAlign 1,
 // the US emblem) near the top edge; base is written in place.
 // Returns 0 when the logo picture carries no wordmark, and then leaves the
-// base picture untouched. Both pictures are 0xAARRGGBB, alpha NOT
+// base picture untouched. Both pictures are 0xAARRGGBB, alpha not
 // premultiplied. See hdscreen.cpp for the placement and why it is what it is.
 long HDScreenComposeLogo(ulong* base, long bw, long bh, const ulong* logo, long lw, long lh, long leftAlign);

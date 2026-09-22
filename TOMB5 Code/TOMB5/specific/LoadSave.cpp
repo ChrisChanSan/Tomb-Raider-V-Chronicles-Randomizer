@@ -34,8 +34,8 @@
 #include "fmv.h"
 #include "../game/newinv2.h"
 #include "../game/control.h"
-#include "../game/menu_frame.h"	// #161, round 161b1: the options menu, one table-driven frame for every page
-#include "../game/key_scheme.h"	// #161, round 161b2a: KeySchemeConflicts - the conflict rule, as arithmetic
+#include "../game/menu_frame.h"	// the options menu, one table-driven frame for every page
+#include "../game/key_scheme.h"	// KeySchemeConflicts - the conflict rule, as arithmetic
 #include "3dmath.h"
 #include "../tomb5/troyestuff.h"
 #include "../tomb5/tomb5.h"
@@ -77,15 +77,14 @@ static const char* screen_paths[5] =
 	"SCREENS\\SCREENS.STR"
 };
 
-/* Unchanged arithmetic in a new place (#161, round 161b2a, item 1): the double
- * loop moved into game\key_scheme.h so that MenuTest can hold it, and the row
- * it compares against is now the ACTIVE scheme's default row instead of
- * layout[0] - which at Tank IS layout[0].
+/* The conflict-marking double loop lives in game\key_scheme.h now, so
+ * MenuTest can call it too; it compares against the ACTIVE scheme's default
+ * row rather than layout[0] - which for Tank IS layout[0], so the result is
+ * unchanged there.
  *
- * The third argument is #161, round 161b2c's fix round: the Secondary slot may
- * only claim a key while the role is live. The fourth is the same sentence for
- * the five cheat roles (#161, round 161b2d's fix round) - with Cheats off they
- * are not offered and nothing reads them. See KeySchemeConflicts. */
+ * The third argument lets the Secondary slot claim a key only while that role
+ * is live. The fourth does the same for the five cheat roles: with Cheats off
+ * they are not offered and nothing reads them. See KeySchemeConflicts. */
 void CheckKeyConflicts()
 {
 	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict, tomb5.action_split ? 1 : 0, tomb5.enable_cheats ? 1 : 0);
@@ -305,14 +304,11 @@ long GetCampaignCheatValue()
 	return jump;
 }
 
-/* THE OPTIONS MENU IS A TABLE NOW, IN game\menu_frame.cpp (#161, round 161b1).
- *
- * What stood here was one function of nine hundred lines: a `menu` of
- * 0/1/100/200/201 (menu-map R8), a one-hot bit mask for a cursor (R2), five
- * hand-written copies of the same cursor walk (R1) and a Controls page that
- * shrank the global font_height to fit its rows (R7). Every page is a table of
- * rows now and one piece of code draws and drives all of them; every row's own
- * logic went across statement for statement. This is still the entry point,
+/* The options menu is a table now, driven from game\menu_frame.cpp. Each page
+ * is a row table walked and drawn by one shared piece of code, in place of a
+ * `menu` state of 0/1/100/200/201, a one-hot cursor bit mask, a separate
+ * hand-written cursor walk per page, and a Controls page that shrank the
+ * global font_height to fit its rows. This function stays the entry point,
  * called from the title screen (game\gameflow.cpp) and from the pause menu
  * (S_DisplayPauseMenu, below).
  */
@@ -321,12 +317,12 @@ void DoOptions()
 	MenuFrameRun();
 }
 
-/* THE SPECIAL FEATURES PAGE stays here and stays as it was. It reads three
- * file-statics of this file (SpecialFeaturesPage, NumSpecialFeatures,
- * SpecialFeaturesNum) and the round leaves its inside untouched: it is a page
- * of the new tree like any other, only what happens inside it is still its
- * own. Returns 1 when the player has left it - the frame then walks back to
- * the Options page and puts the cursor on the row that opened this one.
+/* The special features page stays as it was: it reads three file-statics of
+ * this file (SpecialFeaturesPage, NumSpecialFeatures, SpecialFeaturesNum),
+ * unchanged. It is a page of the table-driven menu like any other, only its
+ * inside logic remains its own. Returns 1 once the player has left it, and
+ * the frame then walks back to the Options page and puts the cursor on the
+ * row that opened this one.
  */
 long SpecialFeaturesPageRun()
 {
@@ -806,21 +802,19 @@ long S_LoadSave(long load_or_save, long mono, long inv_active)
 			break;
 		}
 
-		// Circle/B backs out of here too (#133), the convention every other
-		// menu screen follows. Escape keeps its own path below: it carries
+		// Circle/B backs out of here too, the convention every other menu
+		// screen follows. Escape keeps its own path below: it carries
 		// IN_OPTION as well, and that is read raw exactly as before.
 		//
 		// Acted on the RELEASE, not the press, for two reasons:
 		//
-		//  - the press that OPENED this screen must not close it again. A
+		//  - the press that opened this screen must not close it again. A
 		//    button already down when the loop starts never sets the
-		//    debounce, so its release does nothing. That is the trap #115
-		//    walked into twice.
-		//  - this screen usually sits INSIDE the inventory ring, and the
-		//    ring also closes on the release of Circle
-		//    (newinv2.cpp:873ff). Leaving on the press would hand the ring
-		//    the release a frame later and shut it behind us - one press,
-		//    two consumers.
+		//    debounce, so its release does nothing.
+		//  - this screen usually sits inside the inventory ring, and the
+		//    ring also closes on the release of Circle (newinv2.cpp).
+		//    Leaving on the press would hand the ring the release a frame
+		//    later and shut it behind us - one press, two consumers.
 		//
 		// Not while fading: a load is already under way then, and a release
 		// arriving mid-fade would cancel it.
@@ -1032,11 +1026,11 @@ long LoadScreenHD(const char* name)
 //
 // The remaster keeps the two apart - TITLE.DDS is Lara in front of the
 // lightning with no lettering at all, and the wordmark sits alone on a
-// transparent frame in LOGO_DE/EU/FR/US.DDS - so before this the logo screen
-// showed the wordmark on black. Putting them together is what the user did by
-// hand in an image editor; his file cannot be shipped, because it is remaster
-// material, so the engine does the same job at load time from the player's own
-// two files. Whatever is missing simply drops out of the result.
+// transparent frame in LOGO_DE/EU/FR/US.DDS - so without this the logo screen
+// would show the wordmark on black. A manually composited file cannot be
+// shipped, since it is remaster material, so the engine performs the same
+// composition at load time from the player's own two files. Whatever is
+// missing simply drops out of the result.
 long LoadScreenHDLogo()
 {
 	const char* logoName;

@@ -43,12 +43,12 @@ unsigned long* BC7DecodeDDS(const void* file, unsigned long size, long maxSide,
 // field says. The remaster's 512x512 pages carry six (512..16).
 long BC7DDSMipCount(const void* file, unsigned long size);
 
-// The shape of the picture WITHOUT decoding it: width, height and mip count
-// out of the 148 byte header alone (#123, stage S6). The texture budget has
-// to know what a page will cost before it spends a millisecond on it, and the
-// only honest answer is the one in the file - four times the file's length is
-// an estimate, this is the number. Reads nothing past the header, so 148
-// bytes of the file are enough. False when it is not a BC7 DDS.
+// The shape of the picture without decoding it: width, height and mip count
+// out of the 148 byte header alone. The texture budget has to know what a
+// page will cost before it spends a millisecond on it, and the only honest
+// answer is the one in the file - four times the file's length is an
+// estimate, this is the number. Reads nothing past the header, so 148 bytes
+// of the file are enough. False when it is not a BC7 DDS.
 bool BC7DDSShape(const void* file, unsigned long size, long* width, long* height,
 	long* mips);
 

@@ -248,11 +248,11 @@ long PlayFmv(long num)
 		BinkDoFrame(Bink);
 		S_UpdateInput();
 
-		// Skip only on the EDGE: the key that skipped the previous video
+		// Skip only on the edge: the key that skipped the previous video
 		// (Eidos logo) is usually still held when the next one (intro)
-		// starts - with a level check the intro flew out with it (seen by
-		// the user). Hence only a press that comes AFTER a release counts;
-		// on entry the key counts as held.
+		// starts - with a plain level check the intro skipped along with
+		// it. Only a press that comes after a release counts; on entry the
+		// key counts as held.
 		long skipHeld = 1;
 
 		for (int i = 0; i != nFmvFrames[num]; i++)

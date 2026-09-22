@@ -41,8 +41,8 @@
 #include "../tomb5/tomb5.h"
 #include "../game/lara_states.h"
 #include "../game/deltapak.h"
-#include "../game/interpolate.h"	// the in-between frame's counters (#148, order 3)
-#include "../game/interpolate_math.h"	// InterpTrailLong - the particles (#148, order 5)
+#include "../game/interpolate.h"	// the in-between frame's counters
+#include "../game/interpolate_math.h"	// InterpTrailLong - the particles
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -966,8 +966,8 @@ void OutputSky()
 // magenta for "transparent", cut into two 256x256 texture pages and drawn as
 // two quads (see below). The remaster redrew the same wordmark at 1920x1080
 // with a real alpha channel, one file per language - screens\HD\LOGO_DE,
-// LOGO_FR, LOGO_US, LOGO_EU - and the loading screens already read those
-// (#149). If the player has them, the title menu can have them too, and the
+// LOGO_FR, LOGO_US, LOGO_EU - and the loading screens already read those.
+// If the player has them, the title menu can have them too, and the
 // languages the CDs never shipped a logo512 for finally get their own
 // lettering: "DIE CHRONIK", "SUR LES TRACES DE LARA CROFT", the flaming US
 // emblem.
@@ -1274,21 +1274,21 @@ void DoScreenFade()
 
 	a = FadeVal << 24;
 
-	/* R2 (#148, order 3): THE FADE THAT THE ENGINE WAITS ON.
+	/* The fade the engine waits on.
 	 *
 	 * Nine steps from SetFade's start value to its end - FadeCnt counts them
-	 * and DoFade goes to 2 on the ninth - and this is called once per DRAWN
+	 * and DoFade goes to 2 on the ninth - and this is called once per drawn
 	 * frame from S_OutputPolyList. Three places wait on that 2 and none of
 	 * them counts frames itself: DoLevel's death path (game\gameflow.cpp),
 	 * the level change beside it, and RenderLoadPic's `do { ... } while
 	 * (DoFade != 2)` (specific\output.cpp). At sixty, unguarded, the death
 	 * fade and the level fade would take half as long in wall-clock time.
 	 *
-	 * The in-between frame draws the SAME grey - `a` is read before the
+	 * The in-between frame draws the same grey - `a` is read before the
 	 * step, so it is what the frame before it drew - and the tile below is
 	 * built and drawn on every frame. Except once: after the eighth step the
-	 * walked value has overshot the end, and until fix round W the
-	 * in-between frames drew THAT - see the clamp below.
+	 * walked value has overshot the end, and without the clamp below the
+	 * in-between frames would draw that overshoot.
 	 *
 	 * RenderLoadPic's loop is also the reason the tween latch has to be put
 	 * down by a thirty hertz present: it is the one loop in the build that
@@ -1299,16 +1299,15 @@ void DoScreenFade()
 		FadeCnt++;
 		InterpNoteStep(INTERP_STEP_SCREENFADE);
 
-		/* THE NINTH STEP (#148, fix round W). Eight steps of (end - start)
-		 * >> 3 overshoot the end: 255 -> 0 walks in -32s and lands on -1,
-		 * which is alpha 255 once shifted into `a`. At thirty this never
-		 * shows - the ninth call reads `a` first and then puts FadeEnd over
-		 * it below - but every in-between frame between the eighth and the
-		 * ninth tick read the overshoot as it stood: a whole tick of black
-		 * in the middle of every level's fade-in, the play test's "flickers
-		 * black when I load" and the video's two black frames. Clamped to
-		 * the end once past it; the ninth tick drew FadeEnd anyway, so no
-		 * thirty hertz picture changes. See InterpFadeClamp. */
+		/* The ninth step. Eight steps of (end - start) >> 3 overshoot the
+		 * end: 255 -> 0 walks in -32s and lands on -1, which is alpha 255
+		 * once shifted into `a`. At thirty this never shows - the ninth
+		 * call reads `a` first and then puts FadeEnd over it below - but
+		 * every in-between frame between the eighth and the ninth tick
+		 * read the overshoot as it stood: a whole tick of black in the
+		 * middle of every level's fade-in. Clamped to the end once past
+		 * it; the ninth tick drew FadeEnd anyway, so no thirty hertz
+		 * picture changes. See InterpFadeClamp. */
 		FadeVal = InterpFadeClamp(FadeVal, FadeStep, FadeEnd);
 	}
 
@@ -1378,22 +1377,17 @@ void DoRain()
 
 	num_alive = 0;
 
-	/* R8 (#148, order 3): THE WEATHER SIMULATES ON A TICK AND DRAWS ON EVERY
-	 * FRAME.
+	/* The weather simulates on a tick and draws on every frame.
 	 *
-	 * This function is in two halves, and they are the two halves the whole
-	 * order is about. The loop below is the SIMULATION: it spawns drops
-	 * around the camera, moves them by their velocity, blows them with the
-	 * wind, splashes them on the floor and ages them (`rptr->life -= 2`).
-	 * The second loop, further down, is the DRAWING. Only the first is
-	 * guarded, so at sixty the rain falls at exactly the speed it falls at
-	 * thirty and each drop lives exactly as long - the in-between frame
-	 * simply draws the drops where the tick left them.
-	 *
-	 * That the drops themselves do not move on the in-between frame is
-	 * order 5's question, not this one's; the plan's recommendation is to
-	 * leave them and let the user's eye decide. What matters here is the
-	 * RATE, and the rate is now the tick's. */
+	 * This function is in two halves. The loop below is the simulation: it
+	 * spawns drops around the camera, moves them by their velocity, blows
+	 * them with the wind, splashes them on the floor and ages them
+	 * (`rptr->life -= 2`). The second loop, further down, is the drawing.
+	 * Only the first is guarded, so at sixty the rain falls at exactly the
+	 * speed it falls at thirty and each drop lives exactly as long - the
+	 * in-between frame simply draws the drops where the tick left them,
+	 * without moving them further. What matters here is the rate, and the
+	 * rate is now the tick's. */
 	if (!InterpIsTweenFrame())
 	{
 		InterpNoteStep(INTERP_STEP_WEATHER);
@@ -1510,14 +1504,12 @@ void DoRain()
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 	aSetViewMatrix();
 
-	/* #148, ORDER 5 - AND THE RAIN IS WHERE THE USER'S EYE WILL GO FIRST.
-	 *
-	 * A drop is drawn as a STREAK from where it was to where it is, so it
+	/* A drop is drawn as a streak from where it was to where it is, so it
 	 * already carries its own step twice over: the simulation moves it by
 	 * `xv + 4 * SmokeWindX`, `yv << 3` and `zv + 4 * SmokeWindZ`, and the
-	 * tail below is that same step subtracted again. Order 5 slides the WHOLE
-	 * streak back along its own travel by the part of the step this frame has
-	 * not reached yet - the shape and the length are vanilla's, only the
+	 * tail below is that same step subtracted again. This slides the whole
+	 * streak back along its own travel by the part of the step this frame
+	 * has not reached yet - the shape and the length are vanilla's, only the
 	 * place is between two ticks - so the rain falls in sixty even steps
 	 * instead of thirty double ones, and no drop appears before its tick or
 	 * outlives its death. */
@@ -1654,12 +1646,11 @@ void DoSnow()
 
 	num_alive = 0;
 
-	/* R8 (#148, order 3): the snow, and the same two halves as the rain -
-	 * the loop below spawns the flakes, blows them with the wind, settles
-	 * them on the floor and ages them; the loop after it draws them. Only
-	 * the first is a clock, so only the first is guarded. Unguarded at
-	 * sixty the snow would fall at twice the speed and each flake would
-	 * live half as long. */
+	/* The snow, in the same two halves as the rain - the loop below spawns
+	 * the flakes, blows them with the wind, settles them on the floor and
+	 * ages them; the loop after it draws them. Only the first is a clock,
+	 * so only the first is guarded. Unguarded at sixty the snow would fall
+	 * at twice the speed and each flake would live half as long. */
 	if (!InterpIsTweenFrame())
 	{
 		InterpNoteStep(INTERP_STEP_WEATHER);
@@ -1787,14 +1778,14 @@ void DoSnow()
 	clipflags[2] = 0;
 	clipflags[3] = 0;
 
-	/* #148, order 5: the snow, and it is the rain's argument again with one
-	 * difference worth writing down. A flake's sideways drift is ramped
-	 * towards the wind by two units a tick AFTER it has moved, and its fall
-	 * speed is stepped by one on the same line, so the walk back is a couple
-	 * of units out on a flake that is still catching the wind - out of a
-	 * fall of some sixty units, on a sprite four pixels wide. A flake that
-	 * has SETTLED (`stopped`) took no step at all and is given none, which
-	 * falls out of the same field the simulation reads. */
+	/* The snow, on the rain's argument again with one difference worth
+	 * writing down. A flake's sideways drift is ramped towards the wind by
+	 * two units a tick after it has moved, and its fall speed is stepped by
+	 * one on the same line, so the walk back is a couple of units out on a
+	 * flake that is still catching the wind - out of a fall of some sixty
+	 * units, on a sprite four pixels wide. A flake that has settled
+	 * (`stopped`) took no step at all and is given none, which falls out of
+	 * the same field the simulation reads. */
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
@@ -2095,13 +2086,14 @@ void S_DrawSparks()
 	float p[8];
 	long x, y, z, smallest_size, r, g, b, c0, c1;
 
-	/* #148, ORDER 5: THE SPARKS BETWEEN TWO TICKS.
+	/* The sparks between two ticks.
 	 *
-	 * UpdateSparks (game\effect2.cpp) settles the velocity and THEN steps the
-	 * position by it - `sptr->x += sptr->Xvel >> 5` - so the shift below is
-	 * exactly the step the last tick took and `x - step` is exactly where the
-	 * spark stood before it. No snapshot, no restore, and the same instant as
-	 * the bodies around it (game\interpolate_math.h, InterpTrailLong).
+	 * UpdateSparks (game\effect2.cpp) settles the velocity and then steps
+	 * the position by it - `sptr->x += sptr->Xvel >> 5` - so the shift
+	 * below is exactly the step the last tick took and `x - step` is
+	 * exactly where the spark stood before it. No snapshot, no restore, and
+	 * the same instant as the bodies around it (game\interpolate_math.h,
+	 * InterpTrailLong).
 	 *
 	 * At thirty, and on the frame that carries the tick, `pa` is 1 and not
 	 * one of these lines runs. */
@@ -2135,26 +2127,26 @@ void S_DrawSparks()
 			y = sptr->y + fx->pos.y_pos;
 			z = sptr->z + fx->pos.z_pos;
 
-			/* R11 (#148, order 3): A SPARK LETS GO OF THE THING IT CAME
-			 * OFF. Up to here the spark's x/y/z are an OFFSET from the
-			 * effect that threw it; past a random age it is written out as
-			 * a world position and the tie is cut. The threshold is rolled
-			 * afresh on every DRAWN frame, so at sixty it would be rolled
-			 * twice per tick and sparks would let go sooner on average.
-			 * Nothing breaks either way - it is a one-shot with a random
-			 * time - but it is a rate, so it belongs on the tick.
+			/* A spark lets go of the thing it came off. Up to here the
+			 * spark's x/y/z are an offset from the effect that threw it;
+			 * past a random age it is written out as a world position and
+			 * the tie is cut. The threshold is rolled afresh on every drawn
+			 * frame, so at sixty it would be rolled twice per tick and
+			 * sparks would let go sooner on average. Nothing breaks either
+			 * way - it is a one-shot with a random time - but it is a rate,
+			 * so it belongs on the tick.
 			 *
-			 * ONE KNOWN INEXACTNESS, MEASURED AND LEFT (#148, order 5). At
-			 * fps_mode 2 the frame that carries the tick can still have a
-			 * blend factor below one, so the `fx->pos` this reads is the
-			 * INTERPOLATED effect position and the world position written
-			 * below is out by the part of the effect's step this frame has
-			 * not reached - at most one tick of a grenade's travel, once, on
-			 * the single frame a spark lets go. Nothing in the savegame and
-			 * nothing in the simulation reads spark[], the rate above is
-			 * unaffected, and the alternative is handing the draw a second
-			 * copy of every effect's live position. Written down rather than
-			 * traded for that. */
+			 * One known inexactness, measured and left: at fps_mode 2 the
+			 * frame that carries the tick can still have a blend factor
+			 * below one, so the `fx->pos` this reads is the interpolated
+			 * effect position and the world position written below is out
+			 * by the part of the effect's step this frame has not reached -
+			 * at most one tick of a grenade's travel, once, on the single
+			 * frame a spark lets go. Nothing in the savegame and nothing in
+			 * the simulation reads spark[], the rate above is unaffected,
+			 * and the alternative is handing the draw a second copy of
+			 * every effect's live position. Written down rather than traded
+			 * for that. */
 			if (!InterpIsTweenFrame() && sptr->sLife - sptr->Life > (GetRandomDraw() & 7) + 4)
 			{
 				sptr->x = x;
@@ -2196,8 +2188,8 @@ void S_DrawSparks()
 				y = sptr->y + pos.y;
 				z = sptr->z + pos.z;
 
-				// R11 again, for a spark hanging off a BONE rather than off
-				// an effect - see the note a few lines above.
+				// The same letting-go, for a spark hanging off a bone rather
+				// than off an effect - see the note a few lines above.
 				if (!InterpIsTweenFrame() && sptr->sLife - sptr->Life > (GetRandomDraw() & 3) + 8)
 				{
 					sptr->x = x;
@@ -2220,16 +2212,15 @@ void S_DrawSparks()
 			z = sptr->z;
 		}
 
-		/* AND THE WHOLE OF ORDER 5, FOR A THOUSAND SPARKS.
-		 *
-		 * It is applied to the WORLD position and not to the spark's stored
-		 * one, which matters for the two thirds of the array that hang off an
-		 * item or an effect: their x/y/z is an offset from a body that has
-		 * ALREADY been blended by order 2, and shifting the sum by the
-		 * offset's own step is the same number as blending both halves - the
-		 * anchor is added to either side identically. Doing it here also
-		 * keeps the detach above writing the LIVE position, which is game
-		 * state and must not have a half-step in it. */
+		/* Applied to a thousand sparks at once, to the world position and
+		 * not to the spark's stored one, which matters for the two thirds
+		 * of the array that hang off an item or an effect: their x/y/z is
+		 * an offset from a body whose own position has already been
+		 * interpolated, and shifting the sum by the offset's own step is
+		 * the same number as blending both halves - the anchor is added to
+		 * either side identically. Doing it here also keeps the detach
+		 * above writing the live position, which is game state and must
+		 * not have a half-step in it. */
 		if (trail)
 		{
 			long sx = sptr->Xvel >> 5;
@@ -2466,11 +2457,11 @@ void S_DrawFireSparks(long size, long life)
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
-	/* #148, order 5: the flames of every fire in the game. Same shape as the
-	 * sparks - UpdateFireSparks (game\tomb4fx.cpp) steps `x += Xvel >> 5`
-	 * after the velocity is settled - except that a fire spark's x/y/z is an
-	 * OFFSET from the fire, in shorts, and is shifted down by the size before
-	 * it is projected. So the walk back has to happen first, on the offset
+	/* The flames of every fire in the game. Same shape as the sparks -
+	 * UpdateFireSparks (game\tomb4fx.cpp) steps `x += Xvel >> 5` after the
+	 * velocity is settled - except that a fire spark's x/y/z is an offset
+	 * from the fire, in shorts, and is shifted down by the size before it
+	 * is projected. So the walk back has to happen first, on the offset
 	 * itself, and the shift then applies to what came out. */
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
@@ -2624,9 +2615,9 @@ void S_DrawSmokeSparks()
 	is_mirror = 0;
 	sptr = &smoke_spark[0];
 
-	// #148, order 5: the smoke, and it is the sparks' own step - see
-	// UpdateSmokeSparks (game\tomb4fx.cpp), which is UpdateSparks' twin down
-	// to the shift and the outdoor wind.
+	// The smoke, on the sparks' own step - see UpdateSmokeSparks
+	// (game\tomb4fx.cpp), which is UpdateSparks' twin down to the shift and
+	// the outdoor wind.
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
@@ -2888,16 +2879,17 @@ void DrawDebris()
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
-	/* #148, order 5: THE FLYING SHARDS OF A SMASHED OBJECT.
+	/* The flying shards of a smashed object.
 	 *
 	 * UpdateDebris (game\debris.cpp) settles the fall speed and the drag and
-	 * then steps the position by them, so the three components below are the
-	 * step that was taken. Only the POSITION is walked back: a shard also
-	 * tumbles, and its two rotations are unsigned bytes shifted up by eight
-	 * to make an angle, i.e. a turn of about one and a half degrees per unit.
-	 * Blending those as bytes would wrap the wrong way half the time, and a
-	 * shard that flies smoothly while spinning in thirty hertz steps is not a
-	 * picture anybody can pick apart at the speed these things move. */
+	 * then steps the position by them, so the three components below are
+	 * the step that was taken. Only the position is walked back: a shard
+	 * also tumbles, and its two rotations are unsigned bytes shifted up by
+	 * eight to make an angle, i.e. a turn of about one and a half degrees
+	 * per unit. Blending those as bytes would wrap the wrong way half the
+	 * time, and a shard that flies smoothly while spinning in thirty hertz
+	 * steps is not a picture anybody can pick apart at the speed these
+	 * things move. */
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
@@ -3047,8 +3039,8 @@ void DrawBlood()
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
-	// #148, order 5. UpdateBlood (game\tomb4fx.cpp) is the sparks' shape once
-	// more: gravity and friction first, `x += Xvel >> 5` second.
+	// UpdateBlood (game\tomb4fx.cpp) is the sparks' shape once more: gravity
+	// and friction first, `x += Xvel >> 5` second.
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
@@ -3169,13 +3161,13 @@ void DrawDrips()
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 
-	/* #148, order 5: THE WATERFALL AND THE CEILING DRIPS.
+	/* The waterfall and the ceiling drips.
 	 *
 	 * UpdateDrips (game\tomb4fx.cpp) blows an outdoor drip sideways by the
-	 * wind and drops it by `Yvel >> 5`, in that order and with the fall speed
-	 * already settled - so all three steps are exactly known. The tail of the
-	 * streak below is built from pos[] a few lines further down and therefore
-	 * follows the head without a second correction. */
+	 * wind and drops it by `Yvel >> 5`, in that order and with the fall
+	 * speed already settled - so all three steps are exactly known. The
+	 * tail of the streak below is built from pos[] a few lines further down
+	 * and therefore follows the head without a second correction. */
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
@@ -3301,12 +3293,12 @@ void DoUwEffect()
 	v = aVertexBuffer;
 	num_alive = 0;
 
-	/* #148, order 3 (sweep): THE UNDERWATER DUST IS THE THIRD WEATHER, and
-	 * it was not on the plan's list. Same shape as the rain and the snow -
-	 * the loop below spawns motes around Lara, drifts them (`p->x += p->xv`)
-	 * and ages them (`p->life--`), the loop after it draws them - and the
-	 * same doubling at sixty if it is not guarded: the dust would drift
-	 * twice as fast through every flooded room in the game. */
+	/* The underwater dust is a third kind of weather. Same shape as the
+	 * rain and the snow - the loop below spawns motes around Lara, drifts
+	 * them (`p->x += p->xv`) and ages them (`p->life--`), the loop after it
+	 * draws them - and the same doubling at sixty if it is not guarded: the
+	 * dust would drift twice as fast through every flooded room in the
+	 * game. */
 	if (!InterpIsTweenFrame())
 	{
 		InterpNoteStep(INTERP_STEP_WEATHER);
@@ -3375,15 +3367,15 @@ void DoUwEffect()
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 
-	/* #148, order 5: the motes drift by `p->x += p->xv` and sink by
-	 * `(p->yv & ~7) >> 6`, which is one or two units a tick - so what this
-	 * buys is small, and it is here because the dust is the one thing on
-	 * screen in a flooded room and a mote that stands still for one frame in
-	 * two is exactly what an eye picks out of an otherwise smooth picture.
+	/* The motes drift by `p->x += p->xv` and sink by `(p->yv & ~7) >> 6`,
+	 * which is one or two units a tick - so what this buys is small, and it
+	 * is here because the dust is the one thing on screen in a flooded room
+	 * and a mote that stands still for one frame in two is exactly what an
+	 * eye picks out of an otherwise smooth picture.
 	 *
-	 * The sink is a QUANTISED reading of yv and yv is stepped after the move,
-	 * so the walk back is a unit out on the tick where yv crosses a multiple
-	 * of eight. One unit, on a mote four pixels wide. */
+	 * The sink is a quantised reading of yv and yv is stepped after the
+	 * move, so the walk back is a unit out on the tick where yv crosses a
+	 * multiple of eight. One unit, on a mote four pixels wide. */
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
@@ -3615,13 +3607,13 @@ void DrawShockwaves()
 	sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index + 8];
 	offsets = (long*)&tsv_buffer[1024];
 
-	/* #148, order 5: A SHOCKWAVE HAS NO VELOCITY BUT ITS RADIUS DOES.
+	/* A shockwave has no velocity, but its radius does.
 	 *
-	 * The ring stands still and GROWS: UpdateShockwaves (game\tomb4fx.cpp)
+	 * The ring stands still and grows: UpdateShockwaves (game\tomb4fx.cpp)
 	 * does `OuterRad += Speed; InnerRad += Speed >> 1;` and only then decays
 	 * the speed, so the two radii walk back exactly like a position does.
-	 * That is the whole of the movement in this effect - a ring expanding in
-	 * thirty hertz steps under a sixty hertz picture is the most obvious
+	 * That is the whole of the movement in this effect - a ring expanding
+	 * in thirty hertz steps under a sixty hertz picture is the most obvious
 	 * stutter left in the game after the weather. */
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
@@ -3757,15 +3749,15 @@ void DrawShockwaves()
 	InterpNoteParticles(INTERP_PART_SHOCKWAVE, moved);
 }
 
-/* THE LIGHTNING IS LEFT AT THIRTY, AND IT IS NOT AN OVERSIGHT (#148, order 5).
+/* The lightning is left at thirty, and it is not an oversight.
  *
- * UpdateLightning (game\tomb4fx.cpp) does not MOVE its segments; it re-rolls
- * them out of the random generator on every tick. There is nothing between
- * two of them to be halfway between - a bolt's previous shape is not a
- * neighbour of its current one, it is a different bolt - and blending them
- * would draw a shape that the game never draws at thirty, which is the one
- * thing this whole order is not allowed to do. So the flicker keeps its
- * thirty hertz, which is what a flicker is. */
+ * UpdateLightning (game\tomb4fx.cpp) does not move its segments; it
+ * re-rolls them out of the random generator on every tick. There is
+ * nothing between two of them to be halfway between - a bolt's previous
+ * shape is not a neighbour of its current one, it is a different bolt -
+ * and blending them would draw a shape the game never draws at thirty,
+ * which is the one thing interpolation must never do. So the flicker
+ * keeps its thirty hertz, which is what a flicker is. */
 void DrawLightning()
 {
 	LIGHTNING_STRUCT* l;
@@ -3785,7 +3777,7 @@ void DrawLightning()
 	short clip[32];
 	short clipFlag;
 
-	/* #148, order 3 (sweep): THE BOLT'S JITTER IS A FRAME RATE.
+	/* The bolt's jitter is a frame rate.
 	 *
 	 * The shape of every electric bolt in the game is regenerated from
 	 * scratch on each drawn frame: `rand` is a private generator of this
@@ -3793,9 +3785,9 @@ void DrawLightning()
 	 * what it ends on is kept for the next frame. That is what makes
 	 * lightning look alive - and at sixty it would shake twice as fast.
 	 *
-	 * So the in-between frame is given back the value the LIVE frame before
-	 * it started from, and therefore draws exactly the same bolt. Not one
-	 * line of the generator below changes. At fps_mode 0 this is
+	 * So the in-between frame is given back the value the live frame
+	 * before it started from, and therefore draws exactly the same bolt.
+	 * Not one line of the generator below changes. At fps_mode 0 this is
 	 * `randTickStart = rand` on every call and nothing else. */
 	if (InterpIsTweenFrame())
 		rand = randTickStart;
@@ -5325,14 +5317,14 @@ void S_DrawFloorLasers(ITEM_INFO* item)
 			vtx->y = (float)y;
 			vtx->z = (float)z;
 
-			/* #148, order 3 (sweep): the water-contact pulse is rolled per
-			 * DRAWN frame and it is rolled out of the LOGIC generator, so
-			 * at sixty it would flicker at double speed AND take twice as
-			 * much of the simulation's random stream per tick. The value is
-			 * kept in laser->Pulse, so the in-between frame simply draws
-			 * the one the tick produced. (The `else` branch below is safe
-			 * already - it is a sine of GlobalCounter, which steps on the
-			 * tick, and comes out the same on both frames.) */
+			/* The water-contact pulse is rolled per drawn frame and it is
+			 * rolled out of the logic generator, so at sixty it would
+			 * flicker at double speed and take twice as much of the
+			 * simulation's random stream per tick. The value is kept in
+			 * laser->Pulse, so the in-between frame simply draws the one
+			 * the tick produced. (The `else` branch below is safe already -
+			 * it is a sine of GlobalCounter, which steps on the tick, and
+			 * comes out the same on both frames.) */
 			if (item->trigger_flags)
 			{
 				if (!InterpIsTweenFrame())
@@ -5681,14 +5673,14 @@ void DrawGasCloud(ITEM_INFO* item)
 
 	TriggerFogBulbFX(0, 196, 0, item->pos.x_pos, long(item->pos.y_pos + cloud->yo), item->pos.z_pos, 2048, 40);
 
-	/* #148, order 3 (sweep): THE GAS CLOUD ANIMATES ITSELF FROM THE DRAW.
+	/* The gas cloud animates itself from the draw.
 	 *
-	 * Three counters live in the cloud's own struct and all three step once
-	 * per DRAWN frame: yo is how far it has risen, sTime drives the wandering
-	 * secondary puff and mTime is its age. At sixty the cloud would climb
-	 * and pulse at twice the speed. Only the steps are guarded - the fog
-	 * bulbs are triggered on every frame, or the cloud would flicker in and
-	 * out at thirty hertz inside a sixty hertz picture. */
+	 * Three counters live in the cloud's own struct and all three step
+	 * once per drawn frame: yo is how far it has risen, sTime drives the
+	 * wandering secondary puff and mTime is its age. At sixty the cloud
+	 * would climb and pulse at twice the speed. Only the steps are guarded
+	 * - the fog bulbs are triggered on every frame, or the cloud would
+	 * flicker in and out at thirty hertz inside a sixty hertz picture. */
 	const bool cloudTween = InterpIsTweenFrame();
 
 	if (cloud->yo < -3584.0F)
@@ -5977,29 +5969,27 @@ void DrawStars()
 		fz = star->pos.z;
 		col = star->col;
 
-		/* #148, order 3 (sweep): THE STAR TWINKLE, AND THE ONE FIND THAT
-		 * WOULD HAVE MOVED THE GAME ITSELF.
+		/* The star twinkle, and the one find that would have moved the
+		 * game itself.
 		 *
 		 * Two things are wrong with this block at sixty and only the first
-		 * of them is cosmetic. Cosmetic: `star->col` is WRITTEN BACK, so
-		 * the twinkle is state and unguarded it would change twice per tick
-		 * - the whole sky would shimmer at double speed. Not cosmetic: it
-		 * calls GetRandomControl, which is the SIMULATION's generator and
-		 * not the draw's, twice for each of two thousand stars. That is
-		 * four thousand draws out of the logic stream on every drawn frame,
-		 * and at sixty the stream would run twice as far per tick - two
-		 * runs of the same level with the same input would diverge between
-		 * the frame rates.
+		 * of them is cosmetic. Cosmetic: `star->col` is written back, so
+		 * the twinkle is state and unguarded it would change twice per
+		 * tick - the whole sky would shimmer at double speed. Not
+		 * cosmetic: it calls GetRandomControl, which is the simulation's
+		 * generator and not the draw's, twice for each of two thousand
+		 * stars. That is four thousand draws out of the logic stream on
+		 * every drawn frame, and at sixty the stream would run twice as
+		 * far per tick - two runs of the same level with the same input
+		 * would diverge between the frame rates.
 		 *
-		 * The plan (0.4) said the two generators were separate and that
-		 * extra frames could therefore not touch the game. This is where
-		 * that is not true, and it is not the only place: the floor
-		 * lasers, the enemy muzzle flash, the steel door's lens flare and
-		 * the cutscene speech head all take from the logic stream in the
-		 * draw. game\interpolate.cpp now rolls rand_1 back over an
-		 * in-between frame, which covers all of them; this guard is here as
-		 * well because of the write-back, and because the twinkle rate is
-		 * itself a thing the eye can see. */
+		 * This is not the only place the draw takes from the logic stream:
+		 * the floor lasers, the enemy muzzle flash, the steel door's lens
+		 * flare and the cutscene speech head all do the same.
+		 * game\interpolate.cpp rolls rand_1 back over an in-between frame,
+		 * which covers all of them; this guard is here as well because of
+		 * the write-back, and because the twinkle rate is itself a thing
+		 * the eye can see. */
 		if ((GlobalCounter & 1) && !InterpIsTweenFrame())
 		{
 			r = CLRR(col);

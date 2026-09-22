@@ -29,8 +29,8 @@
 #include "larafire.h"
 #include "../specific/input.h"
 #include "../specific/audio.h"
-#include "modern_camera.h"		// the orbit's arithmetic (#161, round 161a2)
-#include "modern_state.h"		// and the one question the orbit asks it (round 161a3, item 5)
+#include "modern_camera.h"		// the orbit camera's arithmetic
+#include "modern_state.h"		// Lara's heading as the modern control left it
 #include "lara.h"
 #include "tomb4fx.h"
 #include "savegame.h"
@@ -56,112 +56,64 @@ long InfraRed = 0;
 char SniperOverlay = 0;
 char SniperCamActive = 0;
 
-// First person view (#126): marker whether WE hid Lara's head, and the
-// question whether the view may run at all. Both stand up here because
-// CalculateCamera needs them - the camera itself lives further down next to
+// First person view: whether this code hid Lara's head, whether it set the
+// field of view, and the head bone's roll. They stand up here because
+// CalculateCamera needs them; the camera itself lives further down next to
 // its template BinocularCamera.
 static long fpHeadHidden = 0;
 static long fpFovSet = 0;
 static short fpRoll = 0;
 
-// The smoothed view direction and up vector of the head bone camera (#134).
+// The smoothed view direction and up vector of the head bone camera.
 //
-// Lara's head bobs with every step and breathes on the spot. As long as the
-// camera only took the head's PLACE that hardly showed; now that it turns
-// with the bone as well, the bob became a jolt ("very rough" - the user).
+// Lara's head bobs with every step and breathes on the spot; a camera that
+// turns with the bone turns that bob into a jolt. The two VECTORS are
+// filtered, not the angles: an angle wraps at half a turn and a filter would
+// jump the long way round the moment Lara crosses it.
 //
-// Filtered are the two VECTORS, not the angles: an angle wraps at half a
-// turn and a filter would jump the long way round the moment Lara crosses it.
+// One fixed strength cannot serve both a shiver (a fraction of a degree) and
+// a somersault (a quarter turn in a frame), so the strength slides with the
+// size of the movement: small movement, heavy filter; large movement, none.
 //
-// How hard depends on HOW BIG the movement is, and that is the whole point.
-// One fixed strength cannot serve both: enough to still the tremble and the
-// somersault turns to treacle, enough for the somersault and the tremble
-// stays. They differ in size, not in kind - a shiver is a fraction of a
-// degree, a backflip is a quarter turn in a frame - so the strength is read
-// off the angle between where the view stands and where the bone points.
-//
-// Small movement, heavy filter; large movement, almost none. Between the two
-// it slides, so nothing snaps as Lara goes from standing to tumbling.
-// Retuned once the filters actually ran and could be measured. With 0.08 the
-// view trailed the truth by nine degrees while walking and by twenty-seven in
-// fast motion - "a bit sluggish", and no wonder.
-//
-// The slow setting no longer has to be near-zero, because the shiver it has
-// to hold back is small: 0.34 degrees a frame, reversing every other frame.
-// A filter at 0.30 passes under a fifth of an alternation of that speed -
-// well under a pixel - while trailing a steady turn by only about three
-// frames.
-// The strong end is now the player's to set, because which of the two
-// nuisances weighs more is a matter of taste and could not be settled by
-// argument: damping harder hides a shake, and lengthens the tail the camera
-// drags behind a movement that has stopped. One of those is more annoying
-// than the other, and only the person looking at it knows which.
-//
+// The slow setting damps a shiver of 0.34 degrees a frame, reversing every
+// other frame: a filter at 0.30 passes under a fifth of it - well under a
+// pixel - while trailing a steady turn by only about three frames. The
+// strength is the player's option, because damping harder hides a shake but
+// lengthens the tail the camera drags behind a movement that has stopped.
 // Off means no damping at all - the bone as it comes.
 static const float fpSmoothSlow[4] = { 1.00F, 0.30F, 0.18F, 0.10F };
 #define FP_SMOOTH_SLOW	(fpSmoothSlow[tomb5.first_person_smooth & 3])
-// A large movement is passed through WHOLE. At 0.75 the camera went
-// three-quarters of the way on the jump and crept the rest afterwards, and
-// that crawl is heard as the second beat of the "bub bub bub" at the end of
-// every animation. The filter is there to kill small jitter; nothing about a
-// real turn needs holding back.
+// A large movement is passed through whole. A partial factor (0.75) would go
+// most of the way on the jump and creep the rest afterwards, which shows as a
+// second beat at the end of every animation.
 #define FP_SMOOTH_FAST	1.00F		// a somersault: followed outright
-// Read off the head bone's own trace (-log, FPHEAD), which is what finally
-// told the two apart. Per frame, the bone's direction moves:
+// The strength is read off how fast the bone itself moves, not off how far
+// the view has fallen behind: a slowly drifting but noisy signal keeps that
+// distance moderate the whole time. Measured off the head bone's trace (-log,
+// FPHEAD), the bone's direction moves per frame:
 //
 //   standing (anim 103)   0.60 degrees, and it hardly ever reverses
 //   walking  (anim 0)     0.70 degrees typical, one hard step of 1.53
 //   running  (anim 75)   32     degrees
 //
-// A factor of forty between the wobble and the real turn. So the strength is
-// read off HOW FAST THE BONE ITSELF MOVES, not off how far the view has
-// fallen behind - that was the earlier mistake, and it measured the wrong
-// thing: a slowly drifting but noisy signal keeps that distance moderate the
-// whole time, so the filter never chose either setting properly.
-// And the thresholds came down, because they had the player's own looking
-// about on the wrong side of the line. Measured: the shiver moves the bone
-// 0.34 degrees a frame, looking around moves it 2 to 7. Two degrees was
-// therefore exactly the wrong place to put the boundary.
+// The shiver moves the bone 0.34 degrees a frame, the player looking around
+// moves it 2 to 7, so the boundaries sit at 1 and 6 degrees.
 #define FP_RATE_SLOW	0.00015F	// 1 - cos(1 degree): only the shiver below
 #define FP_RATE_FAST	0.0055F		// 1 - cos(6 degrees): looking about, follow
-// The same for the eye's own travel, and for the same reason. Off the trace,
-// the head's offset inside Lara moves up to 8 units a frame while walking and
-// reverses constantly - some 8 pixels on screen, which is a shimmer. A jump
-// or a fall moves it far further, and that has to come through.
+// The same for the eye's own travel. The head's offset inside Lara moves up
+// to 8 units a frame while walking and reverses constantly - some 8 pixels on
+// screen, a shimmer. A jump or a fall moves it far further and comes through.
 #define FP_MOVE_SLOW	1.0F		// units per frame: only the bob below
 #define FP_MOVE_FAST	12.0F		// units per frame: a real move, follow
 static float fpDir[3] = { 0, 0, 0 };
 static float fpUp[3] = { 0, 0, 0 };
 static float fpRel[3] = { 0, 0, 0 };
 
-// The PREVIOUS frame's raw reading, to measure how fast the bone is moving.
-//
-// It used to be averaged with the current one as well, meant against an
-// alternation from frame to frame. The later measurement found no such thing
-// - the walk is a noisy curve, not a clean alternation - and the average
-// cost more than it bought: at every jump it stepped half way and then the
-// rest, which is the first beat of the "bub bub bub" heard at the end of
-// every animation. Removed; only the comparison is kept.
-//
-// Measured off the user's second recording, which he was good enough to
-// record as standing still first and then walking straight: standing, the
-// picture drifts smoothly and does not shiver at all. Walking, it jumps
-// between two places EVERY logic frame - thirty pixels apart, fifteen times
-// a second. A real step bob would be a soft wave over some fifteen frames;
-// something alternating frame by frame is not animation.
-//
-// And the filter could not catch it, because it was built the wrong way
-// round for this: its strength grows with the distance between where the
-// view stands and where the bone points, and for a movement that reverses
-// every frame that distance is ALWAYS large. So it ran permanently at its
-// fast setting and chased the shiver instead of damping it - worse than the
-// fixed strength it replaced.
-//
-// The average of two neighbouring frames cancels an alternation of exactly
-// this rate to nothing, while a somersault - smooth over about a second -
-// passes almost untouched, half a frame late. So the raw reading is paired
-// with the one before it BEFORE the filter sees it, and the filter then does
-// what it is good at: the slow drift.
+// The previous frame's raw reading, to measure how fast the bone is moving.
+// It is only compared, not averaged in: an average of two frames steps half
+// way on every jump and then the rest, a visible stutter at the end of every
+// animation, and the walk is a noisy curve rather than a clean frame-by-frame
+// alternation such an average would cancel.
 static float fpPrevDir[3] = { 0, 0, 0 };
 static float fpPrevUp[3] = { 0, 0, 0 };
 static float fpPrevRel[3] = { 0, 0, 0 };
@@ -173,11 +125,9 @@ static short fpPrevEyeRoom = 0;
 // all. Their ratio says whether a movement is GOING somewhere or merely
 // shaking: a somersault turns one way for the better part of a second, so
 // the two agree and the ratio is near one; a stutter reverses, the signed
-// part cancels itself, and the ratio falls towards nothing.
-//
-// Speed alone cannot tell them apart, and that is what was missing. Speed
-// said "large, follow it" to the three-beat stumble at the end of an
-// animation just as readily as to a real turn.
+// part cancels itself, and the ratio falls towards nothing. Speed alone
+// cannot tell them apart: it reads the stumble at the end of an animation
+// as large as a real turn.
 #define FP_TREND	0.30F		// how quickly the trend follows
 static float fpVel[3] = { 0, 0, 0 };
 static float fpSpd = 0;
@@ -217,61 +167,50 @@ static char TargetSnaps = 0;
 static char CameraSnaps = 0;
 
 /* ==========================================================================
- * THE MODERN CAMERA'S SEAM (#161, round 161a2, step 2; the log added step 5).
+ * The modern (orbit) camera: the engine's side.
  *
  * The orbit itself is game\modern_camera.cpp: two remembered angles and three
- * rules, no engine in it at all, checked number by number by
- * Preparation\Tools\Diagnose\ModernTest.cpp. What lives here is the eight
- * places the engine touches it, and deliberately nothing else - because the
- * modern camera is not a new camera, it is OUR chase camera with its angle
- * taken from a state instead of from Lara alone:
+ * rules, no engine in it, checked by Preparation\Tools\Diagnose\ModernTest.cpp.
+ * The modern camera is the chase camera with its angle taken from that state
+ * instead of from Lara alone; these are the places the engine touches it:
  *
  *   the axes    specific\input.cpp hands the right stick over on every
- *               S_UpdateInput (ModernCameraStick); the orbit reads them once
- *               per LOGIC tick, which is not the same thing - the menus and
- *               the FMV loop call that function in loops of their own
+ *               S_UpdateInput (ModernCameraStick); the orbit reads it once
+ *               per logic tick - the menus and the FMV loop call
+ *               S_UpdateInput in loops of their own
  *   the tick    ModernCameraOrbit, from ChaseCamera and from CombatCamera,
  *               exactly one of which runs per tick
  *   the angle   camera.target_angle = offset_yaw, which UpdateCameraElevation
- *               already adds to her heading (camera.cpp:855) - the brief's
- *               "yaw = lara.y_rot + offset_yaw" written into the engine's own
- *               slot rather than beside it
- *   the height  camera.target_elevation = offset_pitch, REPLACING the two
+ *               already adds to her heading - "yaw = y_rot + offset_yaw"
+ *               written into the engine's own slot
+ *   the height  camera.target_elevation = offset_pitch, replacing the two
  *               lines ChaseCamera opens with (ModernCameraOrbit says why)
- *   the wall    the candidate loop's own answer (round 161a2b, item 3): in
- *               Modern there is ONE candidate, the angle the player dialled,
- *               clipped by mgLOS at any distance - so the distance shrinks
- *               where the angle used to jump, and "clipped" is what mgLOS
- *               returned rather than anything measured back out of a position
+ *   the wall    the candidate loop's answer: in Modern there is one
+ *               candidate, the angle the player dialled, clipped by mgLOS at
+ *               any distance - the distance shrinks where the angle used to
+ *               jump, and "clipped" is what mgLOS returned
  *   the lead    ModernCameraLeadEye, the last thing before MoveCamera: the
  *               eye is turned by this tick's own stick step so that the
- *               damping cannot hold the player's input back (item 2)
+ *               damping cannot hold the player's input back
  *   the draw    ModernLaraHidden, asked once per frame in game\draw.cpp
  *   the water   ModernCameraSwimTarget, asked by game\modern_state.cpp once
- *               per tick while she swims: down there the orbit is the pointer
- *               her body follows, not only the view (step 4)
- *   the log     ModernCameraLogState / ModernCameraLogConfig, asked by
- *               game\modern_state.cpp's own MODERNLOG (step 5) - read-only,
- *               and reached only from behind that file's own gLogEnabled, so
- *               they add no per-tick cost when nobody is watching the seam
+ *               per tick while she swims: the orbit is the pointer her body
+ *               follows, not only the view
+ *   the log     ModernCameraLogState / ModernCameraLogConfig, read-only, for
+ *               game\modern_state.cpp's MODERNLOG, reached only behind its
+ *               gLogEnabled so they cost nothing without -log
  *
- * WITH tomb5.control_modern OFF, ModernCameraActive() is false at its first
- * term and every one of the first seven is the line it was: the orbit is not
- * ticked, both slots keep the values vanilla puts in them, and the draw
- * predicate returns false before it measures anything. The eighth needs no
- * term of its own here - MODERNLOG's lines never run without the option on,
- * so game\modern_state.cpp's own guard keeps the log out of Tank the same
- * way it always kept the other seven out before this file existed.
+ * With tomb5.control_modern off, ModernCameraActive() is false at its first
+ * term and every one of these is the vanilla line: the orbit is not ticked,
+ * both slots keep the vanilla values, and the draw predicate returns false
+ * before it measures anything. MODERNLOG never runs without the option on.
  *
- * The level cameras: discarded exactly as first person discards them, sniper
- * excepted (CalculateCamera). Flybys and cutscenes are untouched in every
- * mode - CalculateCamera is not even called during a flyby. */
-
-/* MODERN_CAMERA_LEAD_MAX, the outer bound ModernCameraLeadEye needs, used to
- * be a #define here. It moved into game\modern_camera.h in this round's second
- * review pass so that Preparation\Tools\Diagnose\ModernTest reads the tree's own
- * number instead of a hand-copied one; the header says the whole of why, and
- * nothing else about the bound changed. */
+ * The level cameras are discarded exactly as first person discards them,
+ * sniper excepted (CalculateCamera). Flybys and cutscenes are untouched in
+ * every mode - CalculateCamera is not called during a flyby.
+ *
+ * MODERN_CAMERA_LEAD_MAX, the bound ModernCameraLeadEye needs, lives in
+ * game\modern_camera.h so that ModernTest reads the same number. */
 
 static MODERN_CAMERA_CFG modern_cam_cfg;
 static MODERN_CAMERA_STATE modern_cam_state;
@@ -295,31 +234,25 @@ static void ModernCameraArm()
 		modern_cam_armed = 1;
 	}
 
-	/* THE SPEED SLIDER TAKES HOLD EVERY TIME THIS RUNS, NOT ONLY WHILE ARMING
-	 * (#161, round 161a2b, item 5). Every accessor below calls this function
-	 * first, so a row on the Controls page moved from the pause menu, with a
-	 * level already loaded, is felt on the very next tick - the way Music and
-	 * SFX already are - rather than waiting for a level start or a scheme
-	 * switch to re-arm the cfg. tomb5.camera_speed is the row's own stored
-	 * 0..100 and ModernCameraSpeedRates (game\modern_camera.cpp) is the one
-	 * place that number means anything; this is the only place that hands it
-	 * in, and it touches nothing else of the cfg the four calls above seat. */
+	/* The speed slider is applied on every call, not only while arming. Every
+	 * accessor below calls this function first, so the Controls row moved from
+	 * the pause menu takes hold on the very next tick, like Music and SFX,
+	 * rather than at the next level start or scheme switch. tomb5.camera_speed
+	 * is the row's stored 0..100; ModernCameraSpeedRates (game\modern_camera.cpp)
+	 * turns it into the two rates and touches nothing else of the cfg. */
 	ModernCameraSpeedRates(tomb5.camera_speed, &modern_cam_cfg.yaw_rate, &modern_cam_cfg.pitch_rate);
 }
 
-/* FORGET THE ORBIT. Called from InitialiseCamera below - once per level, and
- * that one call takes every savegame restore with it, because a restore is a
- * level start in this engine (game\gameflow.cpp) - and from
- * specific\LoadSave.cpp when the scheme is switched, because an offset seated
- * under Tank is no offset at all.
+/* Forgets the orbit. Called from InitialiseCamera below - once per level,
+ * which covers every savegame restore, because a restore is a level start in
+ * this engine (game\gameflow.cpp) - and from specific\LoadSave.cpp when the
+ * control scheme is switched, because an offset seated under Tank means
+ * nothing.
  *
- * IT IS DELIBERATELY NOT HUNG ON ModernResetControls(), although the brief
- * names that function: the modern control resets itself on every break in its
- * own tick chain (game\modern_state.cpp), and one of those breaks is the LOOK
- * KEY. Releasing look would then fling the camera back behind her, which is
- * the one thing observation 2 says must not happen. The three resets the
- * brief actually lists - level start, savegame load, scheme change - are the
- * two call sites above. */
+ * It is not hung on ModernResetControls(): the modern control resets itself
+ * on every break in its own tick chain (game\modern_state.cpp), and one of
+ * those breaks is the look key. Releasing look would then fling the camera
+ * back behind her, while a standing Lara must keep the angle the player set. */
 void ModernCameraResetOrbit()
 {
 	modern_cam_armed = 0;
@@ -354,10 +287,10 @@ bool ModernCameraActive()
 	if (!lara_item)
 		return false;
 
-	/* The same three FirstPersonEnabled() refuses, for the same reasons it
-	 * found them (#126, fix round R): the title's camera runs one whole pass
-	 * out of InitialiseCamera before the flyby is armed, and a flyby or a
-	 * cutscene is not the player's view to steer. */
+	/* The same three FirstPersonEnabled() refuses, for the same reasons: the
+	 * title's camera runs one whole pass out of InitialiseCamera before the
+	 * flyby is armed, and a flyby or a cutscene is not the player's view to
+	 * steer. */
 	if (gfLevelId == LVL5_TITLE || bUseSpotCam || GLOBAL_playing_cutseq)
 		return false;
 
@@ -371,16 +304,14 @@ bool ModernCameraActive()
 	return true;
 }
 
-/* IS SHE GETTING ANYWHERE? The one thing the orbit cannot work out for
- * itself, and the whole of the difference between observation 2 (standing,
- * the offset is kept) and observation 3 (moving, it falls back behind her).
+/* Whether Lara is moving: the one thing the orbit cannot work out for itself.
+ * Standing, the player's offset is kept; moving, it falls back behind her.
  *
- * Measured from her position and from nothing else, so that running, sliding,
- * falling, climbing and being pushed all count the same and no collision
- * internals are involved. FOUR UNITS, which is the camera code's own answer
- * to "has this moved": CalculateCamera treats a target within 4 of the last
- * one as the same target (camera.cpp:495). Her idle animations move meshes
- * and not the item, so standing still reads exactly zero. */
+ * Measured from her position alone, so that running, sliding, falling,
+ * climbing and being pushed all count the same and no collision internals are
+ * involved. Four units is the camera code's own threshold: CalculateCamera
+ * treats a target within 4 of the last one as the same target. Her idle
+ * animations move meshes and not the item, so standing still reads zero. */
 static long ModernCameraLaraMoving()
 {
 	long dx, dy, dz, moving;
@@ -398,41 +329,30 @@ static long ModernCameraLaraMoving()
 	return moving;
 }
 
-/* AN ANIMATION TURNED HER AND THE CAMERA OWES HER A SWING (#161, round 161a3,
- * item 5, and the user's word 6: "Im Remaster dreht sich die Kamera automatisch
- * mit Lara mit und richtet sich hinter ihr wieder aus ... Bei uns bleibt die
- * Kamera in jedem Fall immer da, wo sie war").
+/* Swings the camera after something other than the stick turned Lara, so that
+ * the camera turns with her and settles behind her again instead of staying
+ * where it was.
  *
- * WHAT IS MEASURED IS THE PART OF THE TICK THE STICK CANNOT ACCOUNT FOR, and
- * both ends of that subtraction are this tick's own. game\modern_state.cpp runs
- * at the top of the tick body and publishes her heading as IT left it; by the
- * time this runs, AnimateLara and the collision have been and gone. So the
- * difference is exactly what the ANIMATION did, and the brief's "yawd of that
- * tick is not the cause" is a subtraction rather than a comparison - which also
- * survives a later round adding a second way for the stick to turn her, because
- * the published heading is read back off the item and not composed.
+ * The measure is the part of her turn this tick that the modern control did
+ * not make. game\modern_state.cpp runs at the top of the tick body and
+ * publishes her heading as it left it; by the time this runs, AnimateLara and
+ * the collision have run. The published heading is read back off the item,
+ * so a second way for the stick to turn her would still be subtracted.
  *
- * AND IT IS NOT ONLY ANIMATIONS THAT REACH IT, which is a measurement and not a
- * slip (round 161a3, fix pass - the reviewer of this round found the first of
- * these). The subtraction asks what turned her that the modern turn did not,
- * and beside the animation flips the tree has four writers of
- * lara_item->pos.y_rot that can land after the publish: game\box.cpp:1526,
- * where a creature seizes her for the kill and snaps her onto its own heading;
- * game\lifts.cpp:114 and game\tomb4fx.cpp:559, which seat her on an object's
- * heading half a turn round; and game\traps.cpp:1101, the ceiling trapdoor's
- * own half turn. Every one of them is the same defect the item is about - her
- * heading jumps in a single tick and the eye is left standing in front of her
- * face - so every one of them gets the same cure, and the rule is deliberately
- * "a heading change this turn did not make" rather than "an animation". The two
- * writers that cannot reach it are named for completeness: game\mirror.cpp
- * negates y_rot and puts it back inside one DrawLara, long after
- * CalculateCamera has run, and game\laraswim.cpp's own 910 is five degrees, a
- * fiftieth of the threshold.
+ * Not only animations reach it. Beside the animation flips, four writers of
+ * lara_item->pos.y_rot can land after the publish: game\box.cpp, where a
+ * creature seizes her for the kill and snaps her onto its own heading;
+ * game\lifts.cpp and game\tomb4fx.cpp, which seat her on an object's heading
+ * half a turn round; and game\traps.cpp, the ceiling trapdoor's half turn.
+ * Each leaves the eye in front of her face after a one-tick jump, so each gets
+ * the same cure. Two writers cannot reach it: game\mirror.cpp negates y_rot
+ * and restores it inside one DrawLara, long after CalculateCamera, and
+ * game\laraswim.cpp's 910 is five degrees, a fiftieth of the threshold.
  *
- * It is seated BEFORE ModernCameraUpdate below, so the swing's first instalment
- * is paid out on the same tick the flip happened on; the threshold, the side and
- * the profile are ModernCameraCarry's, in game\modern_camera.cpp, where they can
- * be measured. A tick with no published heading seats nothing - see there. */
+ * It runs before ModernCameraUpdate, so the swing's first instalment is paid
+ * out on the tick of the flip; the threshold, the side and the profile are
+ * ModernCameraCarry's (game\modern_camera.cpp). A tick with no published
+ * heading seats nothing. */
 static void ModernCameraCarryFromAnim()
 {
 	short turned;
@@ -444,7 +364,7 @@ static void ModernCameraCarryFromAnim()
 		(short)(lara_item->pos.y_rot - turned));
 }
 
-/* ONE TICK OF THE ORBIT, AND THE TWO SLOTS IT WRITES. */
+/* One tick of the orbit, and the two camera slots it writes. */
 static void ModernCameraOrbit()
 {
 	short yaw;
@@ -456,36 +376,30 @@ static void ModernCameraOrbit()
 
 	ModernCameraArm();
 
-	/* THE ANIMATION'S OWN TURN, BEFORE THE TICK IS PAID OUT (item 5). It needs
+	/* The turn something else gave her, before the tick is paid out. It needs
 	 * the cfg, so it comes after the arming; it changes only the three carry
-	 * fields of the state, so it changes nothing the three reads below want. */
+	 * fields of the state, nothing the three reads below want. */
 	ModernCameraCarryFromAnim();
 
-	/* A WALL IS WORTH ONE TICK AND NOT ONE INTERRUPTION (#161, round 161a2, fix
-	 * round - the review's third finding). It is measured at the end of one
-	 * orbit tick and answered at the start of the next, which is exactly right
-	 * while the orbit ticks every tick - and the orbit does not. It stands still
-	 * through a flyby, a cutscene, first person, the look key and the four
-	 * rich2 sniper cameras, and a wall seen on the tick before such a break
-	 * would otherwise be answered on the tick after it, against a camera and a
-	 * world that are no longer there. Since round 161a2b that costs one fast
-	 * return step rather than an angle out of nowhere, and the discipline is
-	 * kept anyway: what it guards against has not changed.
+	/* A wall counts for one tick, not across an interruption. It is measured
+	 * at the end of one orbit tick and answered at the start of the next, but
+	 * the orbit stands still through a flyby, a cutscene, first person, the look
+	 * key and the four rich2 sniper cameras; a wall seen before such a break
+	 * must not be answered after it, against a camera and a world that are no
+	 * longer there.
 	 *
-	 * GlobalCounter is the honest stamp: game\control.cpp steps it once per
-	 * logic tick (:292) and calls CalculateCamera once in the same tick body
-	 * (:677), so two consecutive orbit ticks are exactly one apart and anything
-	 * else is a gap. The arithmetic of "exactly one apart" is
-	 * ModernCameraTickFollows in game\modern_camera.cpp, shared with the orbit's
-	 * own stamp at the end of this function so that the two cannot disagree; the
-	 * wrap at 65536 costs nothing and that file says why. */
+	 * GlobalCounter is the stamp: game\control.cpp steps it once per logic
+	 * tick and calls CalculateCamera once in the same tick body, so two
+	 * consecutive orbit ticks are exactly one apart and anything else is a gap.
+	 * ModernCameraTickFollows (game\modern_camera.cpp) does that arithmetic,
+	 * shared with the orbit's own stamp at the end of this function so the two
+	 * cannot disagree; the wrap at 65536 is harmless, as that file explains. */
 	clipped = ModernCameraTickFollows(GlobalCounter, modern_cam_clipped_at) ? modern_cam_clipped : 0;
 
-	/* HER HEADING IS HANDED IN, and it is what makes the orbit a WORLD angle
-	 * (round 161a2b, item 1): the state holds where the eye stands in the
-	 * world, and the offset this writes into camera.target_angle is that angle
-	 * measured against her y_rot of this tick. ModernCameraActive() has already
-	 * refused a missing lara_item, so the read is safe here. */
+	/* Her heading is handed in, which makes the orbit a world angle: the state
+	 * holds where the eye stands in the world, and the offset written into
+	 * camera.target_angle is that angle measured against her y_rot of this
+	 * tick. ModernCameraActive() has already refused a missing lara_item. */
 	was_world = modern_cam_state.world_yaw;
 	was_pitch = modern_cam_state.offset_pitch;
 	was_seated = modern_cam_state.seated;
@@ -495,29 +409,23 @@ static void ModernCameraOrbit()
 		&yaw, &pitch);
 	modern_cam_clipped = 0;		// answered; the candidate loop writes this tick's own
 
-	/* WHAT THE STICK MOVED, AND ONLY THE STICK (#161, round 161a2b, item 2).
-	 * The eye is damped towards its ideal by MoveCamera and the elevation by
-	 * UpdateCameraElevation's >> 3, which is right for her running, for a wall
-	 * and for the return - and wrong for the thumb: measured on the play test,
-	 * the eye needed 18 ticks of a fully pushed stick to reach 90 per cent of
-	 * the rate the orbit was already turning at (M1, "der ist viel zu langsam").
-	 * So the stick's own share of this tick is taken out and handed to the eye
-	 * whole, below, while everything else stays damped.
+	/* What the stick moved, and only the stick. The eye is damped towards its
+	 * ideal by MoveCamera and the elevation by UpdateCameraElevation's >> 3,
+	 * which is right for her running, for a wall and for the return, and wrong
+	 * for the thumb: damped, the eye needs 18 ticks of a fully pushed stick to
+	 * reach 90 per cent of the rate the orbit already turns at. So the stick's
+	 * share of this tick is handed to the eye whole, below.
 	 *
-	 * IT IS A DIFFERENCE AND NOT A SECOND SUM, so that the orbit stays the one
-	 * place the rules live: the world yaw moved by the stick and by the return,
-	 * and the return's step is what the state already publishes as `ret`.
-	 * Neither can be the other - the return only runs while the stick rests
-	 * (game\modern_camera.cpp) - so subtracting it leaves exactly the stick.
+	 * It is a difference, not a second sum, so the orbit stays the one place
+	 * the rules live: the world yaw moved by the stick and by the return, and
+	 * the return's step is published as `ret`. The return only runs while the
+	 * stick rests (game\modern_camera.cpp), so subtracting it leaves the stick.
+	 * With cfg.pitch_return on (it ships off, MODERN_CAMERA_PITCH_RETURN) the
+	 * pitch's fall home would be led as well, making it instant, not damped.
 	 *
-	 * The pitch is a plain difference for the same reason and with one honest
-	 * caveat: with cfg.pitch_return on - it ships OFF, MODERN_CAMERA_PITCH_RETURN
-	 * - the elevation's own fall home would be led as well, which would only
-	 * make that fall instant instead of damped.
-	 *
-	 * AND NOT ON THE SEATING TICK. The first update after a reset ties the world
-	 * yaw to her heading (item 1), so the difference there is her heading and not
-	 * a stick step; leading the eye by it would fling it half a turn. */
+	 * Not on the seating tick: the first update after a reset ties the world
+	 * yaw to her heading, so the difference there is her heading and not a
+	 * stick step; leading the eye by it would fling it half a turn. */
 	if (was_seated)
 	{
 		modern_cam_lead_yaw = (short)(modern_cam_state.world_yaw - was_world) - modern_cam_state.ret;
@@ -530,27 +438,24 @@ static void ModernCameraOrbit()
 	}
 
 	/* target_angle is 0 all game unless a trigger camera has just written one,
-	 * and CalculateCamera takes that back at its own end (camera.cpp:601). So
-	 * the offset goes in there rather than into a second angle path nobody
-	 * else would read - and every reader of the camera's heading, this file's
-	 * own and game\modern_state.cpp's, keeps reading the one it reads today.
-	 * A camera hint an animation wrote for the classic camera (game\lara.cpp)
-	 * is simply overwritten: in Modern the view is the player's.
+	 * and CalculateCamera takes that back at its own end. So the offset goes in
+	 * there rather than into a second angle path, and every reader of the
+	 * camera's heading (this file and game\modern_state.cpp) keeps reading the
+	 * same slot. A camera hint an animation wrote for the classic camera
+	 * (game\lara.cpp) is overwritten: in Modern the view is the player's.
 	 *
-	 * THE ELEVATION IS REPLACED AND NOT ADDED TO, and that is the one thing
-	 * here that has to be said out loud. ChaseCamera seats -1820 into
-	 * target_elevation whenever it reads 0 and then ADDS item->pos.x_rot on
-	 * every single tick (camera.cpp:1006-1009), so in vanilla it accumulates
-	 * her own pitch while she is on a slope - absorbed there by the >> 3
-	 * damping and the +-15470 clamp. In Modern the height of the camera is
-	 * the player's and her slope may not push it about. The orbit's pitch is
-	 * also never 0, which is the value that line reads as "nobody has set
-	 * this" (game\modern_camera.cpp seats it at -1820 instead). */
+	 * The elevation is replaced, not added to. ChaseCamera seats -1820 into
+	 * target_elevation whenever it reads 0 and then adds item->pos.x_rot on
+	 * every tick, so in vanilla it accumulates her own pitch on a slope -
+	 * absorbed by the >> 3 damping and the +-15470 clamp. In Modern the camera
+	 * height is the player's and her slope may not push it about. The orbit's
+	 * pitch is also never 0, the value that line reads as "unset"
+	 * (game\modern_camera.cpp seats it at -1820 instead). */
 	camera.target_angle = yaw;
 	camera.target_elevation = pitch;
 
-	/* AND THE PITCH STEP GOES PAST THE DAMPING ON THE SPOT (item 2, the second
-	 * half). UpdateCameraElevation runs a few lines below this call in both
+	/* The pitch step bypasses the damping on the spot. UpdateCameraElevation
+	 * runs a few lines below this call in both
 	 * orbit cameras and closes an eighth of whatever gap it finds, so a stick
 	 * step of 546 units would arrive as 68 this tick. Adding the step to the
 	 * DAMPED angle as well leaves the gap exactly as it was, which means the
@@ -558,80 +463,49 @@ static void ModernCameraOrbit()
 	 * does nothing at all to the thumb. */
 	camera.actual_elevation = (short)(camera.actual_elevation + modern_cam_lead_pitch);
 
-	/* AND THE ORBIT SAYS THAT IT RAN (#161, round 161a2b, the second review
-	 * pass). game\modern_state.cpp builds her course against the world angle
-	 * this function keeps, and that angle is only the player's view while this
-	 * function is the camera. It is not always: a rich2 sniper camera is the one
-	 * level camera Modern does NOT discard, so FixedCamera runs instead of
-	 * ChaseCamera and the orbit stands still while the player is still steering
-	 * her. The stamp is what ModernCameraWorldYaw asks before it answers - see
-	 * there for what the stale angle cost - and it is the clip flag's own
-	 * discipline, one tick apart, from the same function. */
+	/* The orbit stamps that it ran. game\modern_state.cpp builds her course
+	 * against the world angle this function keeps, and that angle is only the
+	 * player's view while this function is the camera. Under a rich2 sniper
+	 * camera - the one level camera Modern does not discard - FixedCamera runs
+	 * instead and the orbit stands still while the player still steers her.
+	 * ModernCameraWorldYaw checks this stamp, one tick apart, like the clip
+	 * flag. */
 	modern_cam_orbit_at = GlobalCounter;
 }
 
-/* THE STICK REACHES THE EYE IN THE SAME TICK (#161, round 161a2b, item 2).
+/* Turns the eye by this tick's stick step before MoveCamera's lag sees it.
  *
  * MoveCamera is a first order lag - "camera.pos += (ideal - pos) / speed", with
- * speed 10 behind her and 8 with a weapon out - and the measurement of what that
- * costs the player is M1 of this round's brief: the orbit was already turning at
- * 1066 units a tick and the picture needed 18 ticks, six tenths of a second, to
- * reach nine tenths of it. "Der rechte Stick muss noch schneller werden, der ist
- * viel zu langsam." Half of that complaint is the rate, which item 5's slider
- * answers; this is the other half, and no rate cures it - a lag costs the same
- * fraction of a fast push as of a slow one.
+ * speed 10 behind her and 8 with a weapon out. With the orbit turning at 1066
+ * units a tick, the picture needs 18 ticks (0.6 s) to reach nine tenths of it,
+ * and no rate cures that: a lag costs the same fraction of a fast push as of a
+ * slow one. A faster `speed` would also stop damping her running, the wall's
+ * pull and the return, since it is one number for the whole vector. Turning
+ * the eye instead moves the lag's starting point by exactly what the ideal
+ * moved: the error it closes is untouched, and the stick's step arrives whole.
+ * Measured in Preparation\Tools\Diagnose\ModernTest (camera_lead): the first
+ * tick of a push moves the eye 99.9 per cent of the orbit's step, against 9.5
+ * (speed 10) and 12.0 (speed 8) without the lead.
  *
- * SO THE EYE IS TURNED BY THIS TICK'S STICK STEP BEFORE THE LAG SEES IT, rather
- * than the lag being given a faster `speed` while the player steers. Both would
- * put the step on screen; only this one leaves everything else damped. `speed`
- * is one number for the whole vector, so raising it would also stop damping her
- * running, the wall's own pull and the return - the three motions the damping
- * was put there for - and it would do it in a way the player switches on and off
- * with his thumb. Turning the eye instead moves the lag's STARTING POINT by
- * exactly what the ideal moved: the error it is closing is untouched, so the
- * fraction it closes this tick is untouched too, and the stick's step arrives
- * whole because it was never part of that error.
+ * This file cannot be linked without a level, so ModernTest's lead_run()
+ * mirrors the body below - the two bounds, the scale, the pitch-then-yaw order
+ * and the truncating divisions. Only MODERN_CAMERA_LEAD_MAX is shared
+ * (game\modern_camera.h); change one, change the other.
  *
- * MEASURED, both in the arithmetic and in Preparation\Tools\Diagnose\ModernTest
- * (camera_lead): the first tick of a push moved the eye 9.5 per cent of the
- * orbit's step at speed 10 and 12.0 at speed 8; it moves 99.9 per cent now, at
- * both speeds and at both ends of the slider.
+ * The pitch is the same rotation about the horizontal axis through her; its
+ * other half goes into camera.actual_elevation in ModernCameraOrbit. It is
+ * not applied to an eye that is not orbiting her (MODERN_CAMERA_LEAD_MAX) or
+ * to a horizontal radius of nothing, which has no direction to turn.
  *
- * AND WHOEVER EDITS THIS FUNCTION HAS A SECOND FILE TO EDIT (#161, round 161a2b,
- * the second review pass). This file cannot be linked without a level, so
- * ModernTest's lead_run() MODELS the body below - the two bounds, the scale, the
- * pitch-then-yaw order and the truncating divisions - and every number the round
- * publishes about the lead is measured on that model. The bound is shared for
- * real now (MODERN_CAMERA_LEAD_MAX, game\modern_camera.h, so deleting it breaks
- * the test's build); the rest is a mirror and nothing but this sentence and the
- * one at the other end keeps the two in step. Change one, change the other.
- *
- * THE PITCH IS THE SAME ROTATION about the horizontal axis through her, and it
- * is the second half of the same tick - the first half went into
- * camera.actual_elevation up in ModernCameraOrbit, where it gets the step past
- * the elevation's own >> 3. Here it moves the EYE, because the elevation only
- * decides where the ideal is.
- *
- * WHAT IT IS NOT ALLOWED TO TOUCH is an eye that is not orbiting her at all
- * (MODERN_CAMERA_LEAD_MAX), and a horizontal radius of nothing: a camera standing
- * on her own axis has no direction to turn, which is the same degeneracy
- * MODERN_CAMERA_PITCH_MIN cut out of the sphere.
- *
- * AND WHAT IT MAY NOT DO IS OUTRUN THE IDEAL (this round's fix round). Turning
- * by an angle moves the eye along a chord of 2 * r * sin(step / 2), so the same
- * stick step moves a far eye further than a near one - and the whole promise
- * this lead makes to the 60 fps interpolator is that it never moves the eye
- * further than the orbit's own step, which was measured at the orbit's own
- * radius and nowhere else. An eye arriving from a cut or a released fixed
- * camera walks in with camera.speed 10 from thousands of units away, and a
- * player already holding the stick would have had those ticks turned at that
- * radius: past 3460 units the chord alone passes INTERP_CAM_SNAP and the
- * interpolator would cut instead of interpolating.
- * So past camera.target_distance the STEP is scaled down by the same ratio the
- * radius is up, which leaves the arc exactly what it is at the orbit's own
- * radius - the one the sweep in Preparation\Tools\Diagnose\ModernTest
- * (camera_camcut) measures. Inside that radius, which is where the eye lives
- * whenever a wall has pulled it in, nothing changes at all. */
+ * It may not outrun the ideal. Turning by an angle moves the eye along a
+ * chord of 2 * r * sin(step / 2), so a far eye moves further than a near one,
+ * and the 60 fps interpolator relies on the eye never moving further than the
+ * orbit's own step at the orbit's own radius. An eye arriving from a cut or a
+ * released fixed camera comes in from thousands of units away; past 3460
+ * units the chord alone passes INTERP_CAM_SNAP and the interpolator would cut.
+ * So past camera.target_distance the step is scaled down by the ratio the
+ * radius is up, which keeps the arc what it is at the orbit's radius (swept in
+ * ModernTest, camera_camcut). Inside that radius nothing changes. */
 static void ModernCameraLeadEye()
 {
 	long dx, dy, dz, h, nh, c, s, r, lim, lead_yaw, lead_pitch;
@@ -652,7 +526,7 @@ static void ModernCameraLeadEye()
 
 	h = (long)phd_sqrt((ulong)(SQUARE(dx) + SQUARE(dz)));
 
-	/* NEVER FURTHER THAN THE IDEAL ITSELF MOVED. r is the whole radius because
+	/* Never further than the ideal itself moved. r is the whole radius because
 	 * the pitch turns about her in the vertical plane and the yaw in the
 	 * horizontal one, and r bounds both; the truncation of the two divisions
 	 * falls on the safe side of the threshold. lim guards a target_distance of
@@ -666,7 +540,7 @@ static void ModernCameraLeadEye()
 		lead_pitch = lead_pitch * lim / r;
 	}
 
-	/* THE PITCH, and it is the engine's own arithmetic read backwards: the
+	/* The pitch, the engine's own arithmetic read backwards: the
 	 * candidates are built as y = target.y + R * sin(elevation) and a radius of
 	 * R * cos(elevation), so raising the elevation by a step turns (h, dy)
 	 * through that step and the horizontal pair follows its own length. */
@@ -698,44 +572,28 @@ static void ModernCameraLeadEye()
 	camera.pos.z = camera.target.z + dz;
 }
 
-/* WHERE THE PLAYER HAS PUT THE CAMERA, IN THE WORLD (#161, round 161a2b,
- * item 4b), for game\modern_state.cpp and nothing else.
+/* Where the player has put the camera, in the world, for
+ * game\modern_state.cpp's movement reference.
  *
- * That file has always taken her movement reference from the measured vector
- * eye -> target, which is the honest reading of "where the camera is looking"
- * for a camera nobody steers. Under the orbit it stops being honest twice over,
- * and the play test measured both: at a steep pitch the horizontal radius is a
- * few dozen units while the eye trails her run by hundreds, so the measured yaw
- * becomes her own running direction and her course runs away from her; and a
- * wall that pulls the eye in does the same thing at any pitch - 57 jumps of more
- * than 45 degrees in one tick, her course after them at 3154 -> 17126 -> 26721
- * (M4 of the round's brief). Item 3 brings the eye close far more often, which
- * is why this is answered in the same step.
+ * The measured vector eye -> target is right for a camera nobody steers, but
+ * fails twice under the orbit: at a steep pitch the horizontal radius is a
+ * few dozen units while the eye trails her run by hundreds, so the measured
+ * yaw becomes her own running direction and her course runs away from her;
+ * and a wall that pulls the eye in does the same at any pitch (measured: 57
+ * jumps of more than 45 degrees in one tick, her course 3154 -> 17126 ->
+ * 26721). The world yaw is what the player dialled, exact at any pitch, and
+ * does not move when geometry moves the eye.
  *
- * The world yaw has neither failure: it is what the player dialled, it is exact
- * at any pitch, and it does not move when geometry moves the eye. `seated` is
- * one case it cannot answer - the tick before the orbit's first - and there the
- * measured vector is still the right fallback.
- *
- * AND SO IS A TICK THE ORBIT DID NOT RUN, which is the other one, and it is not
- * hypothetical (#161, round 161a2b, the second review pass). ModernCameraActive()
- * does not mean "the orbit is the camera": it reads the option, lara_item, the
- * title, the spotcam, the cutscene and first person, and none of those is the
- * one level camera Modern deliberately keeps. A rich2 sniper camera is exactly
- * that - CalculateCamera's modernDiscard holds sniperCam back on purpose - so
- * FixedCamera runs, ChaseCamera and CombatCamera do not, the orbit stands still,
- * and the player is STILL steering her. Without the stamp this function went on
- * answering the world angle the orbit had been left at, frozen at the tick the
- * camera took over, and her course was built against a camera that is no longer
- * on screen: pushing forward would walk her along the angle the chase camera had
- * before the cut rather than away from the sniper's own view. The brief's own
- * sentence for item 4b says the other thing - "without the orbit (the rich2
- * sniper camera, anything that makes ModernCameraActive() false) the measured
- * vector stays" - and now it does. The look key is not in this list because
- * there the seam does not run at all (specific\input.cpp's own !(input &
- * IN_LOOK)), and a flyby, a cutscene, the title and first person are not in it
- * because ModernCameraActive() already refuses them; the stamp is what catches
- * whatever else stops the orbit without stopping her. */
+ * It answers 0, and the caller falls back to the measured vector, in two
+ * cases: before the orbit's first tick (`seated`), and on a tick the orbit
+ * did not run. ModernCameraActive() does not mean "the orbit is the camera":
+ * under a rich2 sniper camera (CalculateCamera's modernDiscard keeps sniperCam
+ * on purpose) FixedCamera runs, the orbit stands still, and the player still
+ * steers her. A frozen world angle would walk her along the chase camera's
+ * angle from before the cut instead of relative to the sniper view. The look
+ * key needs no case, because the seam does not run under it
+ * (specific\input.cpp's !(input & IN_LOOK)); a flyby, a cutscene, the title
+ * and first person are refused by ModernCameraActive(). */
 long ModernCameraWorldYaw(short* yaw)
 {
 	ModernCameraArm();
@@ -744,8 +602,8 @@ long ModernCameraWorldYaw(short* yaw)
 		return 0;
 
 	/* The caller is game\modern_state.cpp, reached from S_UpdateInput, which
-	 * game\control.cpp runs at :296 of the same tick body whose CalculateCamera
-	 * runs at :677 - so the orbit's own most recent tick is the PREVIOUS one and
+	 * game\control.cpp runs before CalculateCamera in the same tick body - so
+	 * the orbit's own most recent tick is the previous one and
 	 * "one apart" is what a live orbit looks like from here, exactly as it is
 	 * from the clip flag's side. */
 	if (!ModernCameraTickFollows(GlobalCounter, modern_cam_orbit_at))
@@ -757,29 +615,22 @@ long ModernCameraWorldYaw(short* yaw)
 	return 1;
 }
 
-/* AND HOW FAR THE PLAYER'S OWN THUMB MOVED IT (#161, round 161a3b, item 2).
+/* How far the player's own stick moved the orbit last tick.
  *
- * The same two gates as the world yaw above, for the same two reasons and in
- * the same order: an orbit that is not seated has no step to give, and an orbit
- * that did not tick on the previous tick would be handing out the step of some
- * earlier tick - under a rich2 sniper camera, through a flyby, through the look
- * key - which the translation would then add to her course a second time.
+ * The same two gates as the world yaw above: an unseated orbit has no step to
+ * give, and an orbit that did not tick on the previous tick would hand out the
+ * step of some earlier tick, which would be added to her course twice.
  *
- * WHAT IT IS NOT is the whole of what the orbit moved. modern_cam_lead_yaw
- * above looks like this number and is the world yaw's step less the return,
- * so an animation about-turn's swing (item 5 of the round before) is inside
- * it. That is right for leading the EYE and wrong here: the protection this
- * item must keep is that a camera moving BY ITSELF - the slow return home, the
- * carried swing - leaves her course alone, and only a camera the player is
- * turning takes it with him. So the number is the orbit's own `stick_step`,
- * which game\modern_camera.cpp takes from rule 1 before either of the other
- * two has run.
+ * It is not modern_cam_lead_yaw, which is the world yaw's step less the
+ * return and so contains the carried swing after an about-turn. That is right
+ * for leading the eye and wrong here: a camera moving by itself - the return
+ * home, the carried swing - must leave her course alone, and only a camera the
+ * player turns takes it along. So the number is the orbit's `stick_step`,
+ * which game\modern_camera.cpp takes from rule 1 before the other two run.
  *
- * It is one tick behind, exactly as the world yaw is and for the same reason:
- * game\control.cpp runs S_UpdateInput at :296 and CalculateCamera at :677, so
- * the orbit's most recent tick is the previous one. That is also why adding it
- * to the course is right rather than double counting - the course was last
- * read against the world yaw of that same previous tick. */
+ * It is one tick behind, like the world yaw, because game\control.cpp runs
+ * S_UpdateInput before CalculateCamera. Adding it to the course is not double
+ * counting: the course was last read against that same previous tick. */
 long ModernCameraPlayerStep(short* step)
 {
 	ModernCameraArm();
@@ -796,24 +647,19 @@ long ModernCameraPlayerStep(short* step)
 	return 1;
 }
 
-/* HOW FAR THE EYE IS FROM HER, MEASURED WITH THE CAMERA'S OWN TWO POINTS.
+/* How far the eye is from her, measured with the camera's own two points.
  *
- * camera.target is the point the camera looks at, and for both orbit cameras
- * that point is Lara: her chest for the chase camera (ConfirmCameraTargetPos),
- * her own position for the combat one. So the distance from camera.pos to it
- * is the camera's own idea of how far away she is - it wants to be 1536, and
- * it goes to nothing exactly when geometry has pushed the eye into her.
- * Nothing new is measured and no second notion of "where Lara is" is
- * invented, which is what makes MODERN_CAMERA_HIDE_DIST's origin hold: the
- * near plane is 20 units and her body a cylinder of radius 102, so 122 is the
+ * camera.target is Lara for both orbit cameras: her chest for the chase
+ * camera (ConfirmCameraTargetPos), her position for the combat one. So the
+ * distance from camera.pos to it is the camera's own idea of how far away she
+ * is - it wants to be 1536, and it goes to nothing when geometry has pushed
+ * the eye into her. That is what MODERN_CAMERA_HIDE_DIST rests on: the near
+ * plane is 20 units and her body a cylinder of radius 102, so 122 is the
  * eye-to-centre distance at which that plane stops being in front of her.
  *
- * IT IS THE SIMULATION PAIR AND NOT THE DRAWN ONE, deliberately. The answer
- * is a hard cut - the user measured the Remaster cutting her within a twelfth
- * of a second, not fading - so at 60 or 165 Hz the interpolated frames either
- * side of the threshold can only ever show her one frame longer. A per-frame
- * eye would buy that one frame and would have to answer what the target does
- * between two ticks. */
+ * It uses the simulation pair, not the interpolated one. The answer is a hard
+ * cut, not a fade, so at 60 or 165 Hz the interpolated frames either side of
+ * the threshold can only show her one frame longer. */
 long ModernLaraEyeDistance()
 {
 	const long dx = camera.pos.x - camera.target.x;
@@ -823,17 +669,14 @@ long ModernLaraEyeDistance()
 	return (long)phd_sqrt((ulong)(SQUARE(dx) + SQUARE(dy) + SQUARE(dz)));
 }
 
-/* WHERE THE POINTER IS POINTING, for the water (round 161a2 step 4). The
- * orbit's elevation, turned into the body attitude it belongs to by
- * game\modern_camera.cpp - the camera owns both the number and the conversion,
- * so game\modern_state.cpp asks one question and keeps no second copy of
- * either.
+/* The swimming attitude the orbit points at: the orbit's elevation, turned
+ * into the body attitude it belongs to by game\modern_camera.cpp. The camera
+ * owns both the number and the conversion, so game\modern_state.cpp keeps no
+ * copy of either.
  *
- * It is the value the LAST tick's camera left, exactly as the camera HEADING
- * that file already reads is: game\control.cpp runs the input before
- * CalculateCamera, so the orbit of this tick has not run yet when the water
- * asks. A thirtieth of a second behind the thumb, on the same axis and for
- * the same reason as the yaw. */
+ * It is the value the last tick's camera left, like the heading:
+ * game\control.cpp runs the input before CalculateCamera, so a thirtieth of a
+ * second behind the thumb. */
 short ModernCameraSwimTarget()
 {
 	ModernCameraArm();
@@ -846,43 +689,33 @@ bool ModernLaraHidden()
 	ModernCameraArm();
 
 	/* First person asks the opposite question and asks it first: there the eye
-	 * really IS inside her head, and her arms are what the player aims with.
-	 * It hides her head itself and draws the rest (specific\drawlara.cpp), so
-	 * this predicate must not answer at all while it runs. ModernCameraActive
-	 * already refuses first person on the CAMERA's side; FirstPersonActive is
-	 * the DRAW's own question, and this is a draw, so both are asked. */
+	 * is inside her head, and her arms are what the player aims with. It hides
+	 * her head itself and draws the rest (specific\drawlara.cpp), so this
+	 * predicate must not answer while it runs. ModernCameraActive refuses first
+	 * person on the camera's side; FirstPersonActive is the draw's question,
+	 * and this is a draw, so both are asked. */
 	if (!ModernCameraActive() || FirstPersonActive())
 		return false;
 
 	return ModernCameraHidesLara(&modern_cam_cfg, ModernLaraEyeDistance()) != 0;
 }
 
-/* WHAT MODERNLOG'S TICK LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5;
- * widened round 161a2b, step 5; widened again round 161a3, step 5). Raw
- * reads of this file's own statics and nothing computed from them, so a play
- * test can watch the curve MODERN_CAMERA_RETURN and MODERN_CAMERA_WALL_FACTOR
- * promise instead of taking the header's own arithmetic on faith.
+/* The orbit's fields on MODERNLOG's tick line: raw reads of this file's
+ * statics, nothing computed from them, so the log shows the curve
+ * MODERN_CAMERA_RETURN and MODERN_CAMERA_WALL_FACTOR produce.
  *
- * ONE TICK BEHIND FOR THE STATE, LIKE camera_yaw ABOVE IT AND FOR THE SAME
- * REASON: game\modern_state.cpp's own tick line runs before CalculateCamera
- * (game\control.cpp calls the input first), so offset_yaw, offset_pitch,
- * ret, world_yaw, wall and carry are still what the orbit's LAST tick left,
- * not this one's - the reset values (0, MODERN_CAMERA_PITCH_HOME, 0, 0, 0, 0)
- * on the first line after a cut. rs_x/rs_y are the one exception and are
- * already this tick's own: specific\input.cpp calls ModernCameraStick()
- * earlier in the same S_UpdateInput, before ModernUpdateInput runs.
+ * The state is one tick behind, like camera_yaw: game\modern_state.cpp's
+ * tick line runs before CalculateCamera, so offset_yaw, offset_pitch, ret,
+ * world_yaw, wall and carry are what the orbit's last tick left - the reset
+ * values (0, MODERN_CAMERA_PITCH_HOME, 0, 0, 0, 0) on the first line after a
+ * cut. rs_x/rs_y are this tick's: specific\input.cpp calls
+ * ModernCameraStick() earlier in the same S_UpdateInput.
  *
- * world_yaw AND wall ARE THE TWO READS ROUND 161a2b ADDED (items 1 and 3):
- * MODERNLOG's cam_world= is this file's own world_yaw exactly, 0 before the
- * first seating exactly as a fresh MODERN_CAMERA_STATE reads (ModernCameraReset);
- * clip= is state->wall, the SAME flag the return rate itself multiplies by
- * MODERN_CAMERA_WALL_FACTOR while it is set - "the eye was clipped this
- * tick", not a second measurement of it.
- *
- * carry IS THE ONE ROUND 161a3 ADDS (item 5): MODERN_CAMERA_STATE::carry
- * itself, the swing an animation about-turn still owes the offset - signed,
- * 0 whenever nothing is paying out, and read back rather than kept anywhere
- * else, the same discipline every other field on this line already keeps. */
+ * cam_world= is world_yaw, 0 before the first seating (ModernCameraReset);
+ * clip= is state->wall, the same flag the return rate is multiplied by
+ * MODERN_CAMERA_WALL_FACTOR for - "the eye was clipped this tick"; carry is
+ * the swing an about-turn still owes the offset, signed, 0 when nothing is
+ * paying out. */
 void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
 	short* world_yaw, long* wall, long* carry)
 {
@@ -913,46 +746,22 @@ void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_
 		*carry = modern_cam_state.carry;
 }
 
-/* WHAT MODERNLOG'S INIT LINE PRINTS ABOUT THE ORBIT (round 161a2, step 5;
- * widened round 161a2b, step 5). The live cfg this file actually seats, not
- * the raw enum in game\modern_camera.h - the same discipline
- * game\modern_state.cpp already keeps for its own five init fields, because
- * a number nobody can read back is a number nobody can confirm was really
- * running. The first six are the constants steps 1, 2 and 4's own reports
- * named BY NAME as the play test's to move (MODERN_CAMERA_RETURN and
- * _RETURN_MIN, _WALL_FACTOR, _HIDE_DIST, _INVERT_PITCH, _PITCH_RETURN).
- * pitch_min and pitch_max were left out for want of the same kind of naming
- * (no report asked a log to hold the camera's own clamp to account) - until
- * round 161a2b cut the sphere's top cap (item 4a) and gave the bottom one a
- * new neighbour worth reading back beside it; yaw_rate stays a genuine
- * omission (cam_speed already answers "why", so printing the same number
- * twice under two names would only invite them to disagree after a hand
- * edit of the registry).
+/* The orbit's fields on MODERNLOG's init line: the live cfg this file
+ * seats, not the raw enum in game\modern_camera.h, so the log shows what was
+ * really running. Every camera number MODERNLOG prints comes through this
+ * file.
  *
- * A SEVENTH WENT OUT WITH THE MECHANISM IT DESCRIBED (round 161a2b, item 3):
- * cam_angle_radius printed MODERN_CAM_ANGLE_RADIUS, the radius under which
- * ModernCameraNoteWall stopped believing its own measurement of the eye's
- * displacement - and that whole way of reading a wall is what this round removed
- * as refuted. A log field for a constant nothing computes any more is worse than
- * no field at all, so it goes with it, here and in game\modern_state.cpp's init
- * line.
- *
- * speed, yaw_rate, pitch_min AND pitch_max ARE THE FOUR NEW READS (round
- * 161a2b, item 5). speed is tomb5.camera_speed itself - the row's raw
- * 0..100, read here rather than by game\modern_state.cpp reaching into
- * tomb5 directly, so every camera number MODERNLOG prints still comes
- * through this one file. yaw_rate is what ModernCameraArm's own call to
- * ModernCameraSpeedRates just seated from it, i.e. the derived rate rather
- * than the setting - the two together are what let a play test tell "the
- * slider is at the wrong number" from "the mapping came out wrong" without
- * running the arithmetic by hand.
- *
- * pull_steps AND pull_push ARE ROUND 161a3's OWN (item 1): the two
- * constants ModernCameraRayBounds walks the clipped candidate back along
- * the ray by, MODERN_CAMERA_PULL_STEPS and MODERN_CAMERA_PULL_PUSH - read
- * back here rather than printed from game\modern_state.cpp's own include
- * of a header it has never needed, keeping the same rule as every field
- * above it: every camera number MODERNLOG prints comes through this file. */
+ *   return_rate, return_min, wall_factor, hide_dist, invert_pitch,
+ *   pitch_return   the tunable constants MODERN_CAMERA_RETURN, _RETURN_MIN,
+ *                  _WALL_FACTOR, _HIDE_DIST, _INVERT_PITCH, _PITCH_RETURN
+ *   speed          tomb5.camera_speed, the slider's raw 0..100
+ *   yaw_rate       the rate ModernCameraSpeedRates derived from it - the two
+ *                  together tell a wrong slider value from a wrong mapping
+ *   pitch_min/max  the sphere's clamp
+ *   pull_steps,
+ *   pull_push      MODERN_CAMERA_PULL_STEPS / _PULL_PUSH, by which
+ *                  ModernCameraRayBounds walks a clipped candidate back
+ *                  along the ray */
 void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
 	long* hide_dist, long* invert_pitch, long* pitch_return,
 	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max,
@@ -999,22 +808,12 @@ void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_facto
 
 void InitialiseCamera()
 {
-	// EVERYTHING the first person camera remembers is forgotten here.
-	//
-	// These are statics, and a static outlives a level. fpFovSet is still
-	// standing from the last frame of the level just left, so the guard that
-	// starts the filters afresh never fires - and fpPrevEyeRoom then carries
-	// a room number from the OLD level into the new one. GetFloor is handed
-	// it as its starting room and reads room[] out of range.
-	//
-	// Five crash logs from the user's playthrough, all of them a level
-	// CHANGE - back to the title, Andy1 to Andy3, loading a save, the end of
-	// rich3 - and every one of them stops at the same place: the two
-	// AlterFOV lines of the fresh level, then nothing. First person was on
-	// in all five.
-	//
-	// InitialiseCamera runs once per level, which is exactly the moment
-	// nothing may be carried over.
+	// Everything the first person camera remembers is forgotten here, once
+	// per level. These statics outlive a level: fpFovSet still standing from
+	// the level just left would keep the filters from restarting, and
+	// fpPrevEyeRoom would carry a room number from the old level into the new
+	// one, where GetFloor takes it as its starting room and reads room[] out
+	// of range - a crash on a level change with first person on.
 	fpFovSet = 0;
 	fpRanLast = 0;
 	fpSmoothValid = 0;
@@ -1023,16 +822,12 @@ void InitialiseCamera()
 	fpSpd = 0;
 	fpRoll = 0;
 
-	// And the modern camera's orbit with them (#161, round 161a2): an offset
-	// seated in the level just left is no offset at all, and the position the
-	// "is she moving" test measures against is a position in a world that has
-	// been thrown away.
-	//
-	// Unconditional, like the eight lines above it and for the same reason:
-	// these are one module's own statics, nothing at Tank reads them
-	// (ModernCameraActive is false at its first term), and a reset that
-	// depends on the option would leave a stale orbit behind for a player who
-	// switches the scheme on in the middle of a level.
+	// And the modern camera's orbit: an offset seated in the level just left
+	// means nothing, and the position the "is she moving" test measures
+	// against belongs to a world that has been thrown away. Unconditional:
+	// nothing under Tank reads these statics, and a reset that depended on the
+	// option would leave a stale orbit for a player who switches the scheme on
+	// in the middle of a level.
 	ModernCameraResetOrbit();
 
 	last_target.x = lara_item->pos.x_pos;
@@ -1064,18 +859,12 @@ void InitialiseCamera()
 	CalculateCamera();
 }
 
-// FixedCamera's own countdown, verbatim and only where it would have run.
-// It has to keep ticking whenever a view of ours has passed that camera over
-// in silence: the reset at the end of CalculateCamera leaves a HEAVY_CAMERA
-// alone while its timer is not -1, so a heavy trigger camera skipped in
-// silence would stay nailed for good - invisible while our view lasts, and
-// waiting to spring the moment it ends.
-//
-// One function since #161 round 161a2, because there are now two views that
-// pass those cameras over - first person and the modern camera - and one
-// countdown they both owe. The lines are the first person hunk's own, moved
-// and not changed; both callers reach them on exactly the frames the single
-// copy reached them on.
+// FixedCamera's own countdown, verbatim, run where FixedCamera would have
+// run. It has to keep ticking whenever first person or the modern camera
+// passes a level camera over: the reset at the end of CalculateCamera leaves
+// a HEAVY_CAMERA alone while its timer is not -1, so a skipped heavy trigger
+// camera would stay nailed for good - invisible while the other view lasts,
+// and springing the moment it ends.
 static void DiscardedFixedCameraTimer(long wouldFix)
 {
 	if (wouldFix && camera.timer)
@@ -1103,32 +892,24 @@ void CalculateCamera()
 	SniperOverlay = 0;
 	SniperCamActive = 0;
 
-	// First person view (#126): reset the marker EVERY FRAME. It is only
-	// set again when FirstPersonCamera below really runs - otherwise Lara
+	// First person view: the head-hidden marker is reset every frame and set
+	// again only when FirstPersonCamera below really runs - otherwise Lara
 	// would stand headless in every fixed camera and every cutscene.
-	// CalculateCamera runs before drawing, the frame always sees this
-	// pass's state.
+	// CalculateCamera runs before drawing, so the frame sees this pass's state.
 	fpHeadHidden = 0;
 
-	// And the field of view goes back the same way (#134). It has to be
-	// given back whenever the view ends - the option can be switched off,
-	// the binoculars take over, Lara can die - and none of those tell us.
-	// So it is handed back here every frame and taken again below, only
-	// when the first person camera really runs.
+	// The field of view is given back the same way: the view can end without
+	// notice - the option switched off, the binoculars taking over, Lara
+	// dying - so it is handed back here every frame and taken again below only
+	// when the first person camera runs. The binoculars set theirs during
+	// drawing, after this, and a flyby never reaches this function
+	// (control.cpp calls CalculateSpotCams instead).
 	//
-	// Safe against the other users of AlterFOV: the binoculars set theirs
-	// during DRAWING, which is after this, and a flyby never reaches this
-	// function at all (control.cpp calls CalculateSpotCams instead).
-	// Did the first person camera run LAST frame? That, and not the handing
-	// back of the field of view, is what the filters need to know.
-	//
-	// The reset used to sit inside the block below, and the block runs every
-	// frame the view is on - fpFovSet is set at the end of every one. So the
-	// filters were cleared on every single frame and never filtered anything
-	// at all: they loaded the raw reading afresh each time and handed it
-	// straight on. Proved by the trace, where the filtered numbers came out
-	// exactly equal to the raw ones and k read 0.000 throughout. Every
-	// attempt at the shiver before this was dead code.
+	// fpRanLast records whether the first person camera ran last frame, which
+	// is what the filters need to know. It is taken here, before the reset:
+	// fpFovSet is set at the end of every first person frame, so a reset
+	// inside the block below would clear the filters every frame and they
+	// would never filter anything.
 	fpRanLast = fpFovSet;
 
 	if (fpFovSet)
@@ -1151,11 +932,10 @@ void CalculateCamera()
 
 	// A forced fixed camera is Core's cinematic hand-off: it nails the view
 	// a couple of squares away and shows Lara from OUTSIDE for the length
-	// of an animation. Three places still use it - lifting a floor trapdoor
+	// of an animation. Three places use it - lifting a floor trapdoor
 	// (traps.cpp), the ceiling trapdoor, and the turn switch (switch.cpp).
-	// In first person each of them threw the player out of Lara's eyes and
-	// back in again (user finding: "lifting floor trapdoors is third
-	// person").
+	// In first person each of them would throw the player out of Lara's eyes
+	// and back in again, so first person overrides it.
 	//
 	// The fourth setter, CreatureKill (box.cpp), is dead code - TR5 has no
 	// Lara animation for it and nothing calls it. Were it ever revived,
@@ -1199,38 +979,28 @@ void CalculateCamera()
 		return;
 	}
 
-	// THE MODERN DISCARD IS DECIDED HERE, AND THAT IS THE WHOLE POINT OF IT
-	// (#161, round 161a2, fix round - the skeptical review's first finding).
+	// The modern camera's discard of level cameras is decided here, before the
+	// target is built. A trigger that carries a Camera and a Target command
+	// makes control.cpp set camera.item, and the lines below then build the
+	// whole shot around that item: its bounds, its height, its heading, and no
+	// ConfirmCameraTargetPos because it is not Lara. ChaseCamera reads only
+	// camera.target, so a discard decided later would orbit the door at 1536
+	// units and leave Lara out of the picture.
 	//
-	// A trigger that carries a Camera AND a Target command makes control.cpp
-	// set camera.item (:2707, :2836), and the three lines below then build the
-	// whole shot around THAT item: its bounds, its height, its heading, and
-	// ConfirmCameraTargetPos skipped because it is not Lara. ChaseCamera reads
-	// camera.target and nothing else, so the first version of this discard -
-	// which took its decision two hundred lines further down, after the target
-	// was already the door's - orbited the DOOR at 1536 units and left Lara out
-	// of the picture entirely. That is the cutaway observation 5 asks to be
-	// discarded, wearing the orbit's clothes.
+	// Twenty floor triggers in the campaign carry both commands on one tile -
+	// Andrea1 4, Andrea2 1, joby2 1, rich1 4, rich2 3, rich3 7 (CamTargetPairs
+	// over the player's .trc files).
 	//
-	// MEASURED, not feared: twenty floor triggers in the shipped campaign carry
-	// both commands on one tile - Andrea1 4, Andrea2 1, joby2 1, rich1 4, rich2
-	// 3, rich3 7 (CamTargetPairs over the user's own .trc files, the review's
-	// count and this round's own re-run of it with the TO_CAMERA continuation
-	// word skipped as well; both walks agree).
-	//
-	// So the decision moves up here, where "discarded" can mean what it says:
-	// the camera is built as if the trigger had never fired at all. item is
-	// Lara, fixed_camera stays 0 (no SniperCount, no camera.speed of 1, no
+	// Discarded, the camera is built as if the trigger had never fired: item
+	// is Lara, fixed_camera stays 0 (no SniperCount, no camera.speed of 1, no
 	// fixed_camera flip for the interpolator to read as a cut), and the target
 	// block below is the ordinary one, ConfirmCameraTargetPos included.
 	//
-	// wouldFix and sniperCam are the two tests the branch further down used to
-	// compute for itself, hoisted unchanged. They read camera.type, camera.flags,
-	// camera.number and camera.fixed[], and not one of those is written between
-	// here and there: the only assignment in between is camera.type = LOOK_CAMERA
-	// in the target-item block below, and that assignment makes the branch
-	// unreachable (it sits inside "camera.type != LOOK_CAMERA"). The values are
-	// therefore the same two values, computed earlier.
+	// wouldFix and sniperCam are also used by the branch further down. They
+	// read camera.type, camera.flags, camera.number and camera.fixed[], none of
+	// which is written in between: the only assignment is camera.type =
+	// LOOK_CAMERA in the target-item block below, and that makes the branch
+	// unreachable (it sits inside "camera.type != LOOK_CAMERA").
 	const long wouldFix = (camera.type != CHASE_CAMERA && camera.flags != 3);
 	const long sniperCam = wouldFix && camera.number >= 0 &&
 							   (camera.fixed[camera.number].flags & 2);
@@ -1250,16 +1020,14 @@ void CalculateCamera()
 	bounds = GetBoundsAccurate(item);
 	y = ((bounds[2] + bounds[3]) >> 1) + item->pos.y_pos - 256;
 
-	// AND THE HEAD TURN THAT COMES WITH IT IS DISCARDED TOO (#161, round 161a2,
-	// fix round). This block is vanilla's answer to a Target command WITHOUT a
-	// Camera command: turn her head at the thing and, if it is in front of her,
-	// hand the view to LOOK_CAMERA. With the discard above clearing
-	// fixed_camera, a trigger that carries both commands would now fall in here
-	// for the first time and take the view away through that door instead of
-	// through the fixed camera - the same cutaway by another name, and the one
-	// thing the discard exists to prevent. A trigger carrying only a Target is
-	// untouched: modernDiscard needs wouldFix, and a Target alone leaves the
-	// camera CHASE.
+	// The head turn that comes with it is discarded too. This block is
+	// vanilla's answer to a Target command without a Camera command: turn her
+	// head at the thing and, if it is in front of her, hand the view to
+	// LOOK_CAMERA. With the discard above clearing fixed_camera, a trigger that
+	// carries both commands would otherwise fall in here and take the view away
+	// through the look camera instead - the same cutaway. A trigger carrying
+	// only a Target is untouched: modernDiscard needs wouldFix, and a Target
+	// alone leaves the camera CHASE.
 	if (camera.item && !fixed_camera && !modernDiscard)
 	{
 		shift = phd_sqrt(SQUARE(camera.item->pos.z_pos - item->pos.z_pos) + SQUARE(camera.item->pos.x_pos - item->pos.x_pos));
@@ -1368,36 +1136,30 @@ void CalculateCamera()
 		// to a camera placed in the level and shows Lara from outside. That is
 		// the same yank out of her eyes as the forced fixed camera further up,
 		// only here the level asks for it - and it happens a lot: every door
-		// shown opening, every lever with a payoff somewhere else (user
-		// finding, Andrea1 triggers 7 and 31).
+		// shown opening, every lever with a payoff somewhere else (Andrea1
+		// triggers 7 and 31, for example). First person wins here, as it does
+		// on the look/combat path below.
 		//
-		// The look/combat path below has always let first person win. This
-		// branch was the odd one out; the two agree now.
-		//
-		// EXCEPT the real sniper camera - and that is bit 1 alone, not the
-		// flags & 3 this first read. The two bits are different things:
+		// Except the real sniper camera, which is bit 1 alone, not flags & 3.
+		// The two bits are different things:
 		//
 		//   bit 1  the sniper view. FixedCamera aims it at Lara's torso and
 		//          sets SniperOverlay, which draws the scope. Skipping the
 		//          call would leave the player aiming through nothing.
-		//          Measured with CameraCheck: FOUR cameras in the whole game,
+		//          Measured with CameraCheck: four cameras in the whole game,
 		//          all in rich2.
 		//   bit 0  only feeds SniperCamActive, which locks the look key and
 		//          the inventory (control.cpp, newinv2.cpp). No overlay, no
 		//          special targeting - and it is everywhere: 54 cameras, 11 of
 		//          andy1's 12 alone.
 		//
-		// Testing flags & 3 therefore spared 58 of the game's 92 cameras when
-		// four needed it. The user found it in one glance: two Andrea1
-		// triggers that look identical in trview, camera 4 (0x0000) behaving
-		// and camera 1 (0x0001) not. SniperCamActive keeps its own job either
+		// Testing flags & 3 would spare 58 of the game's 92 cameras when four
+		// need it (Andrea1 camera 4, flags 0x0000, and camera 1, flags 0x0001,
+		// look identical in trview). SniperCamActive keeps its own job either
 		// way - it is assigned further up and the locks stay.
 		//
-		// wouldFix and sniperCam are computed at the TOP of this function since
-		// round 161a2's fix round: the modern discard needs them before the
-		// target is built, and there is only one copy of each. The same two
-		// expressions, and the comment up there says why they cannot have
-		// changed on the way down.
+		// wouldFix and sniperCam are computed at the top of this function,
+		// because the modern discard needs them before the target is built.
 
 		if (FirstPersonEnabled() && !sniperCam)
 		{
@@ -1406,23 +1168,14 @@ void CalculateCamera()
 		}
 		else if (modernDiscard)
 		{
-			// THE MODERN CAMERA DISCARDS THEM TOO, AND FOR THE SAME REASON
-			// (#161, round 161a2, the user's observation 5: "wie in unserer
-			// Ego werden alle anderen verworfen bis auf der Sniper in Rich2,
-			// wie bei uns").
+			// The modern camera discards level cameras too, with the same
+			// sniper exception: a trigger's Camera command would take the
+			// orbit out of the player's hands mid-stride.
 			//
-			// A trigger's Camera command yanks the view to a camera placed in
-			// the level, and in Modern that takes the orbit out of the
-			// player's hands mid-stride - the same complaint first person
-			// already answered two paragraphs up, with the same sniper
-			// exception (bit 1 alone, four cameras in the whole game).
-			//
-			// The chase camera is what runs instead, which is the orbit:
-			// ChaseCamera reads camera.target_angle and target_elevation, and
-			// ModernCameraOrbit has just written both. `item` is lara_item here
-			// by construction - the discard was taken at the top of this
-			// function precisely so that it would be, and the call is written
-			// the same way as the plain chase branch below to say so.
+			// The chase camera runs instead, which is the orbit: ChaseCamera
+			// reads camera.target_angle and target_elevation, which
+			// ModernCameraOrbit writes. `item` is lara_item here, because the
+			// discard was decided at the top of this function.
 			ChaseCamera(item);
 			DiscardedFixedCameraTimer(wouldFix);
 		}
@@ -1707,11 +1460,10 @@ long CameraCollisionBounds(GAME_VECTOR* ideal, long push, long yfirst)
 	return 0;
 }
 
-/* IS THERE A ROOM AT THIS POINT AT ALL - the five terms CameraCollisionBounds
- * asks five times over, in one place so that the two below cannot spell them
- * differently. They are its own, in its own order (camera.cpp:1587); the four
- * probes it runs earlier ask the same five with two of them swapped, which is
- * the same question. */
+/* Whether there is a room at this point at all: the five terms
+ * CameraCollisionBounds asks five times over, in one place so the two
+ * functions below cannot spell them differently. They are its final test, in
+ * its order; its four probes ask the same five with two of them swapped. */
 static long ModernCameraEyeInRoom(long wx, long wy, long wz, short room)
 {
 	FLOOR_INFO* floor;
@@ -1729,10 +1481,10 @@ static long ModernCameraEyeInRoom(long wx, long wy, long wz, short room)
 	return 1;
 }
 
-/* AND THE HALF OF CameraCollisionBounds THAT STAYS: the floor and the ceiling,
- * verbatim from its yfirst block (camera.cpp:1520-1533), returning the y rather
- * than writing it. A ceiling may push the eye down and a floor may push it up -
- * that has never moved the picture round her and item 1 does not touch it. */
+/* The half of CameraCollisionBounds the orbit keeps: the floor and the
+ * ceiling, verbatim from its yfirst block, returning the y rather than
+ * writing it. A ceiling may push the eye down and a floor may push it up;
+ * neither moves the picture round her. */
 static long ModernCameraEyeY(long wx, long wy, long wz, short room)
 {
 	FLOOR_INFO* floor;
@@ -1756,68 +1508,50 @@ static long ModernCameraEyeY(long wx, long wy, long wz, short room)
 	return wy;
 }
 
-/* THE EYE COMES IN ALONG THE RAY, AND NEVER ROUND HER (#161, round 161a3,
- * item 1, and the user's word 1: "Ich lenke nach rechts, sie geht aber nach
- * links ... Als waeren Stick, Kamera und Laras Position out of sync").
+/* Brings a clipped eye in along the ray, never round her - so that the
+ * picture, the stick and her movement stay in step next to a wall.
  *
- * WHAT CameraCollisionBounds ABOVE DOES TO A CLIPPED IDEAL, measured in the
- * tree before a line of this was written. Both orbit cameras call it with push
- * 384 and yfirst 1, so its !yfirst half never runs for them:
+ * Both orbit cameras call CameraCollisionBounds with push 384 and yfirst 1:
  *
- *   :1520-1533  the y, against the floor and the ceiling AT the point
- *   :1536-1541  (wx - 384) has no room  ->  wx = (wx & ~1023) + 384
- *   :1543-1549  (wz - 384) has no room  ->  wz = (wz & ~1023) + 384
- *   :1551-1557  (wx + 384) has no room  ->  wx = (wx | 1023) - 384
- *   :1559-1565  (wz + 384) has no room  ->  wz = (wz | 1023) - 384
- *   :1587       the point itself has no room -> return 1, ideal untouched
+ *   the y against the floor and the ceiling at the point
+ *   (wx - 384) has no room  ->  wx = (wx & ~1023) + 384
+ *   (wz - 384) has no room  ->  wz = (wz & ~1023) + 384
+ *   (wx + 384) has no room  ->  wx = (wx | 1023) - 384
+ *   (wz + 384) has no room  ->  wz = (wz | 1023) - 384
+ *   the point itself has no room -> return 1, ideal untouched
  *
- * The four middle branches are the defect, and it is not that they push too
- * far: they do not push ALONG anything. Each destination is an absolute world
- * coordinate with nothing of the old one left in it - the near or the far edge
- * of whichever sector the point happens to be in, plus or minus the push - so a
- * point at the wrong edge of its sector moves 1023 - 384 = 639 units SIDEWAYS,
- * x and z can both fire in one call, and the +x probe reads the wx the -x probe
- * has already moved. At the orbit's own radius of 1536 that is up to 23 degrees
- * an axis. At the 200 to 400 units a wall leaves when the eye has been pulled
- * in it is any angle at all, and M1 counted the bill: 481 of 930 pushed ticks
- * with the picture and the movement reference more than 60 degrees apart, EVERY
- * one of them on a tick mgLOS had clipped, median 124 degrees at 200 to 400 and
- * 146 under 200. He steers by the picture and she runs by the orbit's angle.
+ * The four middle branches do not push along anything: each destination is
+ * the near or far edge of the point's sector plus or minus the push, so a
+ * point at the wrong edge moves 1023 - 384 = 639 units sideways, x and z can
+ * both fire, and the +x probe reads the wx the -x probe already moved. At the
+ * orbit's radius of 1536 that is up to 23 degrees an axis; at the 200 to 400
+ * units a wall leaves it is any angle. Measured: 481 of 930 pushed ticks had
+ * the picture and the movement reference more than 60 degrees apart, every
+ * one on a tick mgLOS had clipped, median 124 degrees at 200 to 400 units
+ * and 146 under 200.
  *
- * SO IN MODERN THE SIDEWAYS HALF GOES AND THE RAY STAYS. mgLOS has already put
- * the eye on the ray at the angle the player dialled (round 161a2b, item 3);
- * this walks it further in along that SAME ray, an eighth at a time, until the
- * point has the clearance the four probes were asking for - and keeps the y
- * correction on whatever it settles on. A floor or a ceiling may move the eye.
- * A wall may only bring it closer.
+ * So in Modern the sideways half goes. mgLOS has already put the eye on the
+ * ray at the dialled angle; this walks it further in along the same ray, an
+ * eighth at a time, until the point has the clearance the four probes ask
+ * for, and keeps the y correction. A floor or a ceiling may move the eye; a
+ * wall may only bring it closer.
  *
- * AND IF NOTHING ON THE RAY CLEARS, THE RAY WINS. She can stand with her back
- * to a wall, and then no point between her and the eye is 384 from it; the
- * classic's answer there is the snap, and the snap is the thing being removed.
- * The mgLOS point stands instead, with its y correction - mgLOS's own push of
- * 200 is what kept it inside a room in the first place, and
- * MODERN_CAMERA_HIDE_DIST takes her out of the picture long before the eye is
- * inside her.
+ * If nothing on the ray clears - her back to a wall - the mgLOS point stands,
+ * with its y correction: mgLOS's push of 200 kept it inside a room, and
+ * MODERN_CAMERA_HIDE_DIST hides her long before the eye is inside her.
  *
- * AND THE EYE NEVER ENDS UP STANDING ON HER OWN AXIS, which is a degeneracy
- * mgLOS hands out rather than one this invents, and it is not rare: when the
- * FIRST of its eight steps is already in the wall it steps back onto the start
- * point and returns the TARGET (camera.cpp:1495 - `if (lp)` is true at lp 1 and
- * the one step it undoes is the only one there was). M1 counted the band it
- * lives in, 22 pushed ticks under 200 units with a median error of 146 degrees.
- * An eye there has no direction at all: the picture has no angle to be right or
- * wrong about and ModernCameraLeadEye's own `h` guard would refuse to turn it.
- * The classic answers it with the snap, so the ray answers it with the shortest
- * distance at which there is still a picture - MODERN_CAMERA_HIDE_DIST, the
- * eye-to-centre distance at which she stops being drawn at all
- * (game\modern_camera.h has where 122 comes from) - measured along the DIALLED
- * candidate, which is what `want` is for and why it is passed in unclipped. Her
- * own collision radius is 102, so that point is at most 20 units past a wall
- * face she could ever be that close to, and the near plane is 20.
+ * The eye never ends on her own axis. mgLOS returns the target itself when
+ * the first of its eight steps is already in the wall (`if (lp)` undoes the
+ * only step there was); measured: 22 pushed ticks under 200 units, median
+ * error 146 degrees. Such an eye has no direction, and ModernCameraLeadEye's
+ * `h` guard would refuse to turn it. The ray then answers with
+ * MODERN_CAMERA_HIDE_DIST (122, see game\modern_camera.h) along the dialled
+ * candidate `want`, passed in unclipped for that. Her collision radius is
+ * 102, so that point is at most 20 units past a wall face, and the near plane
+ * is 20.
  *
- * The return value is CameraCollisionBounds' own contract - 1 means "no point
- * was usable, ideal is untouched" - kept although neither call site reads it,
- * because a reader comparing the two functions should not have to check. */
+ * The return value keeps CameraCollisionBounds' contract - 1 means "no point
+ * was usable, ideal is untouched" - although neither call site reads it. */
 static long ModernCameraRayBounds(GAME_VECTOR* ideal, const GAME_VECTOR* want, long push)
 {
 	long bx, by, bz, wx, wy, wz, step, dist;
@@ -1895,25 +1629,16 @@ void UpdateCameraElevation()
 	PHD_VECTOR pos;
 	PHD_VECTOR pos1;
 
-	/* IN MODERN THE ANGLE IS MEASURED AGAINST HER HEADING AND NOTHING ELSE
-	 * (#161, round 161a2b, item 1, and the defect step 1's report left open).
+	/* In Modern the angle is measured against her heading and nothing else.
 	 *
 	 * camera.lara_node is the classic camera's way of following an animation
 	 * instead of the item: a roll, a corner climb, a pushable block and the
-	 * climb out of water set it (game\lara.cpp:2790, 3077, 4250, 4510ff) and
-	 * CalculateCamera clears it again at the end of the tick. While it is set the
-	 * line below adds the direction of that JOINT to camera.target_angle instead
-	 * of her y_rot - so the view swings with the animation, which is exactly what
-	 * the classic camera wants and exactly what item 1 takes out: the orbit keeps
-	 * a WORLD angle and hands over world minus her heading, so the engine has to
-	 * add her heading back or the camera stands somewhere else for as long as
-	 * that animation runs. Round 161a2 was equally wrong here and nobody could
-	 * see it, because there the offset moved with her anyway.
-	 *
-	 * The same three lines below write camera.target_angle and target_elevation
-	 * for the classic camera, and the orbit already overwrites both (the view is
-	 * the player's in Modern); this is the third thing they write, and it is the
-	 * only one that was still getting through. */
+	 * climb out of water set it (game\lara.cpp) and CalculateCamera clears it at
+	 * the end of the tick. While it is set the line below adds the direction of
+	 * that joint to camera.target_angle instead of her y_rot, so the view swings
+	 * with the animation. The orbit keeps a world angle and hands over world
+	 * minus her heading, so the engine must add her heading back, or the camera
+	 * stands somewhere else for as long as that animation runs. */
 	if (camera.lara_node != -1 && !ModernCameraActive())
 	{
 		pos.x = 0;
@@ -2079,22 +1804,20 @@ void ChaseCamera(ITEM_INFO* item)
 	GAME_VECTOR ideal;
 	GAME_VECTOR ideals[5];
 	GAME_VECTOR temp[2];
-	GAME_VECTOR want;	// the dialled candidate, kept unclipped for item 1
+	GAME_VECTOR want;	// the dialled candidate, kept unclipped for ModernCameraRayBounds
 	long distance, dx, dz, farthest, farthestnum, h, c, wx, wy, wz, angle, lp;
 	long modern_orbit;
 	short room_number;
 
-	// THE ORBIT, OR THE CAMERA'S OWN TWO LINES (#161, round 161a2). Under the
-	// option the height of the camera is the player's and comes out of the
-	// orbit's state; the two lines below are what the classic camera does
-	// instead, and they are REPLACED rather than added to - see
-	// ModernCameraOrbit for why that matters (the second of them accumulates
-	// her slope pitch, the first reads 0 as "unset").
+	// The orbit, or the classic camera's own two lines. Under the option the
+	// camera height is the player's and comes out of the orbit's state; the
+	// two classic lines are replaced rather than added to (ModernCameraOrbit
+	// says why: the second accumulates her slope pitch, the first reads 0 as
+	// "unset").
 	//
-	// ASKED ONCE AND KEPT (round 161a2b, step 2), because this function now has
-	// three places that need the answer and nothing between them can change it:
-	// the predicate reads the option, lara_item, the level id, the spotcam and
-	// first person, and this function touches none of the five.
+	// Asked once and kept: three places below need the answer, and this
+	// function touches none of what the predicate reads (the option,
+	// lara_item, the level id, the spotcam and first person).
 	modern_orbit = ModernCameraActive() ? 1 : 0;
 
 	if (modern_orbit)
@@ -2152,39 +1875,30 @@ void ChaseCamera(ITEM_INFO* item)
 		ideals[lp].z = camera.target.z - (distance * phd_cos(angle) >> W2V_SHIFT);
 		ideals[lp].room_number = camera.target.room_number;
 
-		/* IN MODERN THE ANGLE STAYS AND THE DISTANCE GOES (#161, round 161a2b,
-		 * item 3, and the user's own word 2: "dann schmiegt sich die Kamera an
-		 * der Wand entlang und ich kann dynamisch weiter um Lara drehen, bei uns
-		 * ist die Kamera in so einem Fall nicht zu bewegen").
+		/* In Modern the angle stays and the distance goes, so the camera slides
+		 * along a wall and the player can keep turning around Lara.
 		 *
-		 * The four candidates this skips are the four WORLD cardinals, and what
-		 * they do to a player steering the camera was measured on the play test:
-		 * a blocked angle is answered with a quadrant, so the view snaps to
-		 * north, east, south or west and stays there while the thumb pushes
-		 * against it - 290 of 855 fully pushed ticks did not advance or ran
-		 * backwards, in 14 episodes of up to 37 ticks (M3). Round 161a2 then
-		 * wrote that snap back into the orbit, which is the assumption this round
-		 * removed; this is the other half of the same cure, and it is the half
-		 * that stops producing the snap at all.
+		 * The four candidates this skips are the four world cardinals: a
+		 * blocked angle is answered with a quadrant, so the view snaps to north,
+		 * east, south or west and stays there while the stick pushes against it
+		 * - measured: 290 of 855 fully pushed ticks did not advance or ran
+		 * backwards, in 14 episodes of up to 37 ticks.
 		 *
-		 * mgLOS has already done the whole of the work by the time this is read:
-		 * it walks the line from her to the wanted eye position in eight steps
-		 * and leaves the LAST step that was still in the room, so a wall does not
-		 * move the eye sideways, it brings it in. That is what the user filmed in
-		 * the Remaster - the distance shrinking to a close-up, Lara hidden for
-		 * about a second per revolution, then out to full distance again - and
-		 * the hide predicate (MODERN_CAMERA_HIDE_DIST) is already waiting for it.
+		 * mgLOS walks the line from her to the wanted eye position in eight
+		 * steps and leaves the last step still in the room, so a wall does not
+		 * move the eye sideways, it brings it in: the distance shrinks to a
+		 * close-up, the hide predicate (MODERN_CAMERA_HIDE_DIST) takes Lara out,
+		 * and the eye goes back out to full distance past the wall.
 		 *
-		 * Its return value IS the wall now: "the eye was clipped this tick", the
-		 * one signal the orbit still wants, and no longer an angle read back out
-		 * of a position. The stamp goes with it because the ORBIT reads the flag
-		 * a tick later and may not run for many ticks in between - ModernCameraOrbit
-		 * says what that costs. CameraCollisionBounds below is untouched. */
+		 * Its return value is the wall: "the eye was clipped this tick", the
+		 * signal the orbit reads. The stamp goes with it because the orbit reads
+		 * the flag a tick later and may not run for many ticks in between
+		 * (ModernCameraOrbit). */
 		if (!lp && modern_orbit)
 		{
-			// The dialled point, before mgLOS cuts it back: item 1's own
-			// answer to a ray with nothing on it needs a direction, and after
-			// the call below there is none left in ideals[0].
+			// The dialled point, before mgLOS cuts it back: ModernCameraRayBounds
+			// needs a direction for a ray with nothing on it, and after the
+			// call below there is none left in ideals[0].
 			want.x = ideals[lp].x;
 			want.y = ideals[lp].y;
 			want.z = ideals[lp].z;
@@ -2256,18 +1970,17 @@ void ChaseCamera(ITEM_INFO* item)
 	ideal.z = ideals[farthestnum].z;
 	ideal.room_number = ideals[farthestnum].room_number;
 
-	// AND THE EYE IS RESOLVED ALONG THE RAY IN MODERN (#161, round 161a3,
-	// item 1). Same question, same 384, same y correction; the answer no longer
-	// moves the eye round her. ModernCameraRayBounds carries the measurement of
-	// what the classic one did instead.
+	// In Modern the eye is resolved along the ray: the same clearance and y
+	// correction, but the answer never moves the eye round her
+	// (ModernCameraRayBounds).
 	if (modern_orbit)
 		ModernCameraRayBounds(&ideal, &want, MODERN_CAMERA_PULL_PUSH);
 	else
 		CameraCollisionBounds(&ideal, 384, 1);
 
-	// THE STICK'S OWN STEP, HANDED TO THE EYE (#161, round 161a2b, item 2).
-	// After the resolution, so that nothing of it is changed, and immediately
-	// before MoveCamera, whose damping is the thing being got past.
+	// The stick's own step, handed to the eye: after the resolution, so none
+	// of it is changed, and immediately before MoveCamera, whose damping it
+	// bypasses.
 	if (modern_orbit)
 		ModernCameraLeadEye();
 
@@ -2283,7 +1996,7 @@ void CombatCamera(ITEM_INFO* item)
 	GAME_VECTOR ideal;
 	GAME_VECTOR ideals[9];
 	GAME_VECTOR temp[2];
-	GAME_VECTOR want;	// the dialled candidate, kept unclipped for item 1
+	GAME_VECTOR want;	// the dialled candidate, kept unclipped for ModernCameraRayBounds
 	long distance, dx, dz, farthest, farthestnum, h, c, wx, wy, wz, angle, lp;
 	long modern_orbit;
 	short room_number;
@@ -2291,23 +2004,17 @@ void CombatCamera(ITEM_INFO* item)
 	camera.target.x = item->pos.x_pos;
 	camera.target.z = item->pos.z_pos;
 
-	/* THE ORBIT HAS TO BE HERE TOO, and that is a measurement and not a
-	 * preference (#161, round 161a2, step 2). The brief names the chase
-	 * camera; reading game\larafire.cpp shows that the chase camera is not
-	 * what runs with a weapon out. LG_READY sets camera.type = COMBAT_CAMERA
-	 * on EVERY tick a gun is ready, and LG_DRAW_GUNS does it while she draws
-	 * (larafire.cpp:352, :362, :410), so an orbit built into ChaseCamera alone
-	 * would die the moment the player armed himself - the right stick would
-	 * stop moving the camera and the two lines below would aim it down her
-	 * gun barrel instead. First person overrides this same camera for the same
-	 * reason (CalculateCamera's else branch calls FirstPersonCamera where this
-	 * one would have run).
+	/* The orbit runs here too, because the chase camera is not what runs with
+	 * a weapon out: game\larafire.cpp sets camera.type = COMBAT_CAMERA on every
+	 * tick a gun is ready (LG_READY) and while she draws (LG_DRAW_GUNS). An
+	 * orbit in ChaseCamera alone would stop the moment she armed herself, and
+	 * the classic lines below would aim the camera down her gun barrel. First
+	 * person overrides this camera for the same reason.
 	 *
-	 * Only the two angles change. Everything else about this function - her
-	 * own position as the target instead of the shifted bounds centre, the
-	 * ceiling squeeze that may still zero the elevation below, camera.speed 8
-	 * - is the combat camera's own and stays, which is why a weapon out still
-	 * feels a little closer and quicker than a weapon away. */
+	 * Only the two angles change. Her own position as the target, the ceiling
+	 * squeeze that may still zero the elevation below and camera.speed 8 stay
+	 * the combat camera's own, so a weapon out still feels a little closer and
+	 * quicker than a weapon away. */
 	modern_orbit = ModernCameraActive() ? 1 : 0;	// once, as in ChaseCamera and for the same reason
 
 	if (modern_orbit)
@@ -2387,10 +2094,9 @@ void CombatCamera(ITEM_INFO* item)
 		ideals[lp].z = camera.target.z - (distance * phd_cos(angle) >> W2V_SHIFT);
 		ideals[lp].room_number = camera.target.room_number;
 
-		// The same wall, resolved the same way (#161, round 161a2b, item 3):
-		// this loop and ChaseCamera's are the same five candidates and the same
-		// collision, so a weapon out may not mean a different camera at a wall.
-		// ChaseCamera carries the reasoning and the measurement, `want` included.
+		// The same wall, resolved the same way: this loop and ChaseCamera's are
+		// the same five candidates and the same collision, so a weapon out does
+		// not mean a different camera at a wall. ChaseCamera explains it.
 		if (!lp && modern_orbit)
 		{
 			want.x = ideals[lp].x;
@@ -2464,17 +2170,15 @@ void CombatCamera(ITEM_INFO* item)
 	ideal.z = ideals[farthestnum].z;
 	ideal.room_number = ideals[farthestnum].room_number;
 
-	// And the same ray (item 1): a weapon out may not mean a different eye at a
-	// wall, for the reason the candidate loop above gives.
+	// And the same ray, for the same reason.
 	if (modern_orbit)
 		ModernCameraRayBounds(&ideal, &want, MODERN_CAMERA_PULL_PUSH);
 	else
 		CameraCollisionBounds(&ideal, 384, 1);
 
-	// And the same lead (item 2). The damping here is camera.speed 8 rather than
-	// 10 - the combat camera has always been the quicker of the two - so the
-	// stick reached the eye a little sooner with a weapon out and still only a
-	// tenth of the way: 12.0 per cent of its own step on the first tick.
+	// And the same lead. The damping here is camera.speed 8 rather than 10,
+	// which without the lead still passes only 12.0 per cent of the stick's
+	// step on the first tick.
 	if (modern_orbit)
 		ModernCameraLeadEye();
 
@@ -2636,34 +2340,28 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 }
 
 /*
- * First person view (#126): the camera hangs on Lara's head instead of
- * behind her.
+ * First person view: the camera hangs on Lara's head instead of behind her.
  *
  * The template is BinocularCamera right below - the binoculars are the same
- * idea, so Core already built it. Three differences:
+ * idea. Three differences:
  *
- *  - Lara stays MOVABLE. The binoculars set lara.Busy and freeze her; here
+ *  - Lara stays movable. The binoculars set lara.Busy and freeze her; here
  *    only the view is replaced, the controls stay as they are.
- *  - ONLY THE HEAD disappears, not the whole body (user requirement): the
- *    binoculars set mesh_bits = 0 and hide everything - but then the frame
- *    lacks the arms she grabs and shoots with.
+ *  - Only the head disappears, not the whole body: the binoculars set
+ *    mesh_bits = 0 and hide everything, but then the frame lacks the arms
+ *    she grabs and shoots with.
  *  - The eye point comes from the real head joint (GetLaraJointPos) instead
- *    of a fixed offset. That way it follows crouching, crawling, swimming
- *    and every animation on its own.
- *
- * A first attempt, deliberately plain: no collision check for the camera
- * (it sits in Lara's head, which never sticks in a wall anyway) and no
- * smoothing - it is nailed to the head, that was the intent.
+ *    of a fixed offset, so it follows crouching, crawling, swimming and
+ *    every animation on its own.
  */
 bool FirstPersonActive()
 {
-	// Flybys SHOW Lara - her head must be there.
+	// Flybys show Lara - her head must be there.
 	//
-	// And they are the one case where the marker alone does not suffice:
-	// during a flyby, control.cpp does not call CalculateCamera at all but
-	// CalculateSpotCams. The reset above thus never runs, and the marker
-	// would stay at the last normal frame's state - Lara sat headless in
-	// exactly the cameras that present her (photographed by the user).
+	// They are the one case where the marker alone does not suffice: during
+	// a flyby control.cpp calls CalculateSpotCams instead of CalculateCamera,
+	// so the reset there never runs and the marker would keep the last normal
+	// frame's state - Lara headless in exactly the cameras that present her.
 	// Cutscenes do go through CalculateCamera (CINEMATIC_CAMERA branch,
 	// behind the reset), but stand here for clarity.
 	if (bUseSpotCam || GLOBAL_playing_cutseq)
@@ -2672,18 +2370,17 @@ bool FirstPersonActive()
 	return fpHeadHidden != 0;
 }
 
-/* THE HEAD'S OWN ROLL (#148, order 2, risk K3).
+/* The head's own roll, for the frame interpolator.
  *
- * fpRoll is worked out from the head bone's up vector once per LOGIC tick,
+ * fpRoll is worked out from the head bone's up vector once per logic tick,
  * inside FirstPersonCamera, and the filters that produce it (fpVel, fpSpd,
- * fpRel, #134) are tuned as per-tick exponentials and must not be moved or
- * run twice. The interpolator therefore leaves the whole camera alone and
- * takes only its OUTPUT - camera.pos, camera.target and this - to blend
- * between two ticks. It is a short and it wraps, so it is blended the short
- * way round like any other angle.
+ * fpRel) are tuned as per-tick exponentials and must not be moved or run
+ * twice. The interpolator therefore leaves the camera alone and blends only
+ * its output - camera.pos, camera.target and this - between two ticks. It is
+ * a short and it wraps, so it is blended the short way round.
  *
- * A getter and not an extern, because fpRoll is deliberately private to this
- * file: everything that writes it lives here. */
+ * A getter and not an extern, because everything that writes fpRoll lives in
+ * this file. */
 short GetFirstPersonRoll()
 {
 	return fpRoll;
@@ -2694,27 +2391,22 @@ static bool FirstPersonEnabled()
 	if (!tomb5.first_person)
 		return false;
 
-	/* THE VIEW IS THE PLAYED GAME'S AND NOTHING ELSE'S (#126, fix round R).
+	/* The view belongs to the played game only. FirstPersonActive() - what
+	 * the draw asks - refuses a flyby and a cutscene, because those show Lara
+	 * and she must have a head in them; this is whether the camera itself runs.
 	 *
-	 * FirstPersonActive() - which is what the DRAW asks - already refuses a
-	 * flyby and a cutscene, because those SHOW Lara and she must have a head
-	 * in them. This is the other half of the same rule and it was missing:
-	 * whether the camera itself RUNS.
+	 * The title needs its own test. DoTitle calls InitialiseCamera, which ends
+	 * in CalculateCamera while bUseSpotCam is still 0 - the flyby is triggered
+	 * two lines later. One pass of FirstPersonCamera there would move
+	 * camera.pos onto the title Lara's head, take the field of view and leave
+	 * fpFovSet and fpHeadHidden standing, and nothing would clear them: from
+	 * the next frame on the title is a flyby, and control.cpp calls
+	 * CalculateSpotCams instead of CalculateCamera, the one place either flag
+	 * is handed back.
 	 *
-	 * It ran in the title. DoTitle calls InitialiseCamera, InitialiseCamera
-	 * ends in CalculateCamera, and at that moment bUseSpotCam is still 0 -
-	 * the flyby is triggered two lines later. So one full pass of
-	 * FirstPersonCamera ran on the title level's Lara: it moved camera.pos
-	 * onto her head, took the field of view with AlterFOV, and left fpFovSet
-	 * and fpHeadHidden standing. Nothing ever cleared them again, because
-	 * from the next frame on the title is a flyby and control.cpp calls
-	 * CalculateSpotCams instead of CalculateCamera - the one place either
-	 * flag is handed back. One FPHEAD line and two ALTERFOV lines in the
-	 * user's log of 2026-09-07, at the title, with first person on.
-	 *
-	 * gfLevelId is the title's own marker (DoTitle sets it first of all), and
-	 * the two below are the same pair FirstPersonActive tests, so the camera
-	 * and the draw now answer the same question. */
+	 * gfLevelId is the title's marker (DoTitle sets it first of all), and the
+	 * other two are the pair FirstPersonActive tests, so the camera and the
+	 * draw answer the same question. */
 	if (gfLevelId == LVL5_TITLE || bUseSpotCam || GLOBAL_playing_cutseq)
 		return false;
 
@@ -2722,11 +2414,10 @@ static bool FirstPersonEnabled()
 	// their own exit path (ExittingBinos, mesh_bits restore). Interfering
 	// in between would break both.
 	//
-	// ONLY while they really run (BinocularRange). The tail afterwards
-	// (BinocularOn < 0, eight frames) used to belong here too - then Lara
-	// was briefly seen from outside after leaving the scope (user finding:
-	// "1-2 frames in third person"). The tail is just the normal camera's
-	// approach; a nailed-on camera does not need one.
+	// Only while they really run (BinocularRange). The tail afterwards
+	// (BinocularOn < 0, eight frames) is the normal camera's approach; a
+	// nailed-on camera does not need one, and refusing during it would show
+	// Lara from outside for a frame or two after leaving the scope.
 	if (BinocularRange)
 		return false;
 
@@ -2734,9 +2425,9 @@ static bool FirstPersonEnabled()
 		return false;
 
 	// On death the camera pulls back by default and shows what happened -
-	// from Lara's own eyes her death is a pan into nothing. But the user
-	// asked to be able to stay in there, so it is a choice ("Death camera"
-	// on the first person page), and off keeps the old behaviour.
+	// from Lara's own eyes her death is a pan into nothing. Staying inside
+	// is an option ("Death camera" on the first person page); off keeps the
+	// vanilla behaviour.
 	if (lara_item->hit_points <= 0 && !tomb5.first_person_death)
 		return false;
 
@@ -2787,16 +2478,14 @@ void FirstPersonCamera(ITEM_INFO* item)
 	xrot += item->pos.x_rot;
 	yrot += item->pos.y_rot;
 
-	// REFRESH the joint matrices before asking for the head.
+	// Refresh the joint matrices before asking for the head.
 	//
-	// Without this the camera lags one frame behind: CalcLaraMatrices is
-	// the first thing in DrawPhaseGame (draw.cpp), i.e. AFTER
-	// CalculateCamera - lara_joint_matrices normally still carries the
-	// PREVIOUS frame's state here. In calm walking it goes unnoticed, in
-	// fast movement it does not: the camera stayed briefly behind Lara, her
-	// body pushed through the frame, then it caught up again (seen by the
-	// user). Flag 1 is the set GetLaraJointPos reads, and it wants a unit
-	// matrix on the stack - exactly as in DrawPhaseGame.
+	// Without this the camera lags one frame behind: CalcLaraMatrices is the
+	// first thing in DrawPhaseGame (draw.cpp), after CalculateCamera, so
+	// lara_joint_matrices still carries the previous frame's state here. In
+	// fast movement the camera would fall briefly behind Lara and her body
+	// would push through the frame. Flag 1 is the set GetLaraJointPos reads,
+	// and it wants a unit matrix on the stack, exactly as in DrawPhaseGame.
 	phd_PushUnitMatrix();
 	CalcLaraMatrices(1);
 	phd_PopMatrix();
@@ -2808,32 +2497,28 @@ void FirstPersonCamera(ITEM_INFO* item)
 	head.z = 0;
 	GetLaraJointPos(&head, LMX_HEAD);
 
-	// The RAW reading, kept for the trace at the end. Everything below
-	// filters it, and a trace of filtered numbers says nothing about where
-	// the movement comes from.
+	// The raw reading, kept for the FPHEAD trace at the end: everything below
+	// filters it, and filtered numbers do not show where a movement comes from.
 	fpRawX = head.x - item->pos.x_pos;
 	fpRawY = head.y - item->pos.y_pos;
 	fpRawZ = head.z - item->pos.z_pos;
 
-	// Damp the bob in POSITION too, when the camera hangs on the bone.
+	// Damp the bob in position too, when the camera hangs on the bone.
 	//
-	// Measured off the user's recording (60 fps, the logic at 30, which the
-	// doubled values in the trace show): the horizon moves two to eight
-	// pixels per logic frame and turns round on three out of five - a
-	// shiver at about fifteen a second, "as if Lara were cold". The
-	// rotation filter cannot be what is left of that; at its slow setting
-	// it holds an alternation of that speed down to a few per cent. What is
-	// left is the eye itself. It sits on the head joint and walks up and
-	// down with every step, and nothing was damping that.
+	// The eye sits on the head joint and walks up and down with every step:
+	// the horizon moves two to eight pixels per logic frame and reverses on
+	// three out of five, a shiver at about fifteen a second. The rotation
+	// filter holds an alternation of that speed down to a few per cent, so
+	// what remains is the eye's position.
 	//
-	// Smoothed is the head's OFFSET INSIDE LARA, not its place in the
-	// world. That offset never leaves her body, so the damped eye stays
-	// within a body's width of where it belongs and cannot lag into a wall
-	// - her collision radius is 102 - while walking and falling carry it
-	// along untouched. The forward offset below still asks mgLOS as before.
+	// The head's offset inside Lara is smoothed, not its place in the world.
+	// That offset never leaves her body, so the damped eye stays within a
+	// body's width of where it belongs and cannot lag into a wall - her
+	// collision radius is 102 - while walking and falling carry it along
+	// untouched. The forward offset below still asks mgLOS.
 	//
-	// Only with the bone camera: plain first person had this bob all along
-	// and nobody minded, because the view did not turn with it.
+	// Only with the bone camera: without it the view does not turn with the
+	// head, and the bob does not show.
 	if (tomb5.first_person_head)
 	{
 		float rx, ry, rz, d, k;
@@ -2849,10 +2534,10 @@ void FirstPersonCamera(ITEM_INFO* item)
 		}
 		else
 		{
-			// How far the HEAD moved since last frame - not how far the
-			// filtered eye has fallen behind it. Same correction as for the
-			// direction: a bobbing signal keeps that lag moderate the whole
-			// time and the filter then never chooses properly.
+			// How far the head moved since last frame - not how far the
+			// filtered eye has fallen behind it: a bobbing signal keeps that
+			// lag moderate the whole time and the filter never chooses
+			// properly.
 			d = sqrtf((rx - fpPrevRel[0]) * (rx - fpPrevRel[0]) +
 			          (ry - fpPrevRel[1]) * (ry - fpPrevRel[1]) +
 			          (rz - fpPrevRel[2]) * (rz - fpPrevRel[2]));
@@ -2874,15 +2559,14 @@ void FirstPersonCamera(ITEM_INFO* item)
 			fpRel[2] += (rz - fpRel[2]) * k;
 		}
 
-		// The damped point has to be REACHABLE from the real head.
+		// The damped point has to be reachable from the real head.
 		//
 		// Damping means lagging, and on a fast move the lag lands the eye
 		// where the head no longer is. Pulling up over a ledge is the worst
-		// of them: the head shoots up past the edge in a couple of frames
-		// while the damped point is still below it - inside the floor. The
-		// room then resolves to whatever lies under or beyond that surface
-		// and the camera is drawn from outside the level. Two frames of the
-		// building seen from the void, in the user's recording.
+		// case: the head shoots up past the edge in a couple of frames while
+		// the damped point is still below it, inside the floor. The room then
+		// resolves to whatever lies beyond that surface and the camera is
+		// drawn from outside the level.
 		//
 		// mgLOS walks the short way from the real head to the damped point,
 		// stops in front of anything solid and hands back a place that is
@@ -2913,103 +2597,55 @@ void FirstPersonCamera(ITEM_INFO* item)
 		}
 	}
 
-	// The forward offset must ASK THE WALL. If Lara stands close to one and
-	// looks around, the eye swings around her head - and 48 units are
-	// enough to land inside the wall. Then the room number is wrong too
-	// (GetFloor finds the room BEYOND the wall), and the renderer draws
-	// from there: you see through the wall (found by the user, "with the
-	// look key at the right tilt").
-	//
-	// mgLOS probes the short path from the head center to the eye, pulls
-	// the point back in front of the obstacle AND sets the room number
-	// correctly while at it - it walks the portals instead of guessing. The
-	// head center itself is always a valid room: it sits inside Lara.
 	eye.x = head.x;
 	eye.y = head.y - 16;
 	eye.z = head.z;
 
-	// WHICH ROOM the eye is in has to be worked out, not assumed to be
-	// Lara's.
+	// Which room the eye is in has to be worked out, not assumed to be
+	// Lara's. Pulling up over a ledge, her item is still in the lower room
+	// while her head is already above the edge in the upper one; taking her
+	// room would make the wall probe start from a room the eye is not in and
+	// the floor clamp hold the camera above the floor of the room below
+	// (Andrea1, room 89).
 	//
-	// The two part company exactly where this went wrong. Pulling up over a
-	// ledge, Lara still hangs below and her item sits in the LOWER room
-	// while her head is already above the edge, in the upper one. Taking her
-	// room for the eye then had everything after it reckoning in the wrong
-	// place: the probe walked from a room the eye is not in, and the floor
-	// clamp obligingly held the camera forty-eight units above the floor of
-	// the room BELOW - which is where the user found it, one storey under
-	// her (Andrea1, room 89).
+	// The head can also end up in no room at all: in a handstand at a ledge
+	// it reaches -2194 while the room it resolves to has its ceiling at
+	// -1280, and no other room contains the point. From there the renderer
+	// draws the void and every height that comes back belongs somewhere else.
+	// Her own position always sits in a real room, so in that case mgLOS
+	// walks from her body towards the head, following the portals, and hands
+	// back a place that exists and the room it is in.
 	//
-	// GetFloor walks there properly. Starting from Lara's room it follows
-	// the portals and the room-above and room-below links to whatever
-	// actually contains the point, which is the whole purpose of the
-	// function.
-	// The eye is reached FROM LARA, not placed and then asked where it is.
-	//
-	// The head can end up nowhere at all. The trace caught it during a
-	// handstand at a ledge: the head at -2194 while the room it resolves to
-	// has its ceiling at -1280, so the point lies outside that room
-	// altogether - and outside any other. Her head swings over a place the
-	// engine cannot assign. From there the renderer draws the void, and no
-	// amount of correcting afterwards helps, because every height that comes
-	// back belongs somewhere else.
-	//
-	// Her own position always sits in a real room; the engine keeps it so.
-	// mgLOS therefore walks from her body up to the head, follows the
-	// portals on the way and stops in front of anything solid, handing back
-	// a place that exists AND the room it is in. Where the head is fine, and
-	// that is nearly always, it arrives untouched; where it is not, the eye
-	// stays a little lower, inside her, which is somewhere real.
-	//
-	// This replaces asking GetFloor about a point that may not be in any
-	// room - a question with no honest answer.
-	// mgLOS is a QUESTION, not a placement. It always steps one eighth back
-	// from the target at the end and overwrites it, clear path or not:
-	//
-	//     if (lp) { x -= dx; y -= dy; z -= dz; }
-	//     target->x = x; ...
-	//
-	// Handing it the eye directly therefore parked the camera a good fifty
-	// units short of the head - at her chin, with her chest in the picture.
-	// The older code beside this uses it as a yes-or-no for exactly that
-	// reason and works out the point itself; that is what it is for.
+	// mgLOS is a question, not a placement: it always steps one eighth back
+	// from the target at the end and overwrites it, clear path or not
+	// (`if (lp) { x -= dx; ... } target->x = x;`). Handed the eye directly it
+	// would park the camera some fifty units short of the head - at her chin,
+	// with her chest in the picture - so it is used only where being short of
+	// the head is intended.
 	{
 		FLOOR_INFO* fl;
 		long h, c;
 		short rn;
 
-		// The question is whether the head is somewhere REAL, and that is
-		// not the same as whether one can see it from her chest.
-		//
-		// Asking the sight line was wrong, and pulling up over a ledge shows
-		// why: her chest is below the edge and her head above it, so the
-		// straight line between them goes through the stone. The probe said
-		// "blocked" and threw the eye back to her chest - the camera came
-		// over the edge for a moment and was yanked back down, every time.
+		// The test is whether the head is somewhere real, not whether it can
+		// be seen from her chest: pulling up over a ledge, the straight line
+		// from chest to head goes through the stone, and a sight-line test
+		// would throw the eye back to her chest every time.
 		//
 		// A room contains the head when the head lies between that room's
-		// ceiling and its floor. That is the whole test, and it separates
-		// the two cases cleanly: pulling up, the head really is inside the
-		// room above and is kept; in a handstand it sits above the ceiling
-		// of the only room going, and is not.
-		// Asked from TWO starting rooms, because GetFloor can only walk the
-		// links it is given, and from Lara's room there is not always a way.
+		// ceiling and its floor. Pulling up, the head is inside the room
+		// above and is kept; in a handstand it sits above the ceiling of the
+		// only room going, and is not.
 		//
-		// Traced during a pull-up: the eye stands at -2210, room 89 runs
-		// from -4096 to -2048, so it is plainly inside. But the walk starts
-		// at Lara's room 88, and at that x/z room 88 has nothing above it -
-		// solid stone under the ledge - so it hands back 88's own surfaces,
-		// -1280 to -254. The eye is above those, the test says "not inside",
-		// and it is right about the answer it was given.
+		// Two starting rooms are tried, because GetFloor can only walk the
+		// links it is given. In a pull-up the eye stands at -2210 inside room
+		// 89 (-4096 to -2048), but from Lara's room 88 at that x/z there is
+		// nothing above - solid stone under the ledge - so the walk hands back
+		// 88's own surfaces, -1280 to -254. The eye's previous room is tried
+		// first, Lara's second; between them they cover the crossing.
 		//
-		// One frame earlier the eye WAS in room 89. A camera has continuity
-		// and may use it: the previous room is tried first, Lara's second.
-		// Either may fail at the edge of its reach; between them they cover
-		// the moment of crossing.
-		// Belt and braces: a starting room out of range would read room[]
-		// past its end. It cannot happen now that InitialiseCamera clears
-		// the memory, but a camera must not be the thing that brings a
-		// level down.
+		// A starting room out of range would read room[] past its end; the
+		// guard keeps a stale room number from bringing a level down.
 		if (fpPrevEyeRoom < 0 || fpPrevEyeRoom >= number_rooms)
 			fpPrevEyeRoom = item->room_number;
 
@@ -3037,10 +2673,8 @@ void FirstPersonCamera(ITEM_INFO* item)
 		}
 		else
 		{
-			// Nowhere real. Then back towards her, as far as one can get -
-			// and mgLOS is a question, not a placement, so what it hands
-			// back is only used HERE, where being short of the head is the
-			// point.
+			// Nowhere real: back towards her, as far as mgLOS gets. Here
+			// being short of the head is the point.
 			GAME_VECTOR from;
 
 			from.x = item->pos.x_pos;
@@ -3059,14 +2693,15 @@ void FirstPersonCamera(ITEM_INFO* item)
 	fpLogERoom = eye.room_number;
 	fpLogHeadY = head.y;
 
-	// Probe with a SAFETY MARGIN first, only then commit.
+	// The forward offset asks the wall, with a safety margin, before it is
+	// applied. Close to a wall the eye swings around her head, and 48 units
+	// are enough to land inside the wall; GetFloor then finds the room beyond
+	// it and the renderer draws from there, through the wall.
 	//
 	// mgLOS walks in eight steps and steps one back - with a 48-unit offset
-	// that leaves only six units of distance to the wall. But the
-	// renderer's NEAR PLANE lies at 20 (InitWindow in gamemain.cpp), and it
-	// is a surface, not a point: at its corners it reaches even further
-	// out. Six units were not enough, with some effort you could still see
-	// through the wall (user finding).
+	// that leaves only six units to the wall. The renderer's near plane lies
+	// at 20 (InitWindow in gamemain.cpp), and it is a surface, not a point:
+	// its corners reach further out still.
 	//
 	// So the probe runs over FP_EYE_OFFSET + FP_MARGIN. If the path is
 	// free, the eye gets its normal offset; if something is in the way, it
@@ -3081,7 +2716,7 @@ void FirstPersonCamera(ITEM_INFO* item)
 
 	fpLogLos = dist;
 
-	// Second pass onto the REAL point: it supplies the room number. With
+	// Second pass onto the real point: it supplies the room number. With
 	// dist 0 it falls back to the head center (start equals target), which
 	// also yields the right room.
 	dest.x = eye.x + (phd_sin(yrot) * dist >> W2V_SHIFT);
@@ -3103,19 +2738,18 @@ void FirstPersonCamera(ITEM_INFO* item)
 	camera.target.z = camera.pos.z + (phd_cos(yrot) * dist >> W2V_SHIFT);
 	camera.target.room_number = camera.pos.room_number;
 
-	// The somersault (#134). Body rotation plus head rotation is not the
-	// whole truth: item->pos.x_rot does NOT turn over during a backflip -
+	// The head bone camera. Body rotation plus head rotation is not the
+	// whole truth: item->pos.x_rot does not turn over during a backflip -
 	// that rotation lives in the animation alone - so the view above stays
-	// level while Lara goes over. The head BONE carries it, and hanging the
+	// level while Lara goes over. The head bone carries it, and hanging the
 	// camera on the bone lets the world turn with her.
 	//
-	// The matrix is a 3x4 with the local axes in its COLUMNS (see
-	// GetLaraJointPos, delstuff.cpp:25ff, and what phd_TranslateRel does
-	// with it): local +Z - the way a TR mesh faces - is (M02, M12, M22),
-	// and local -Y is up, Y growing downward.
+	// The matrix is a 3x4 with the local axes in its columns (see
+	// GetLaraJointPos in delstuff.cpp, and what phd_TranslateRel does with
+	// it): local +Z - the way a TR mesh faces - is (M02, M12, M22), and
+	// local -Y is up, Y growing downward.
 	//
-	// Off by default and on its own switch, because whether it PLAYS well
-	// is a matter of taste and can only be judged in motion.
+	// Off by default and on its own option, since it is a matter of taste.
 	fpRoll = 0;
 
 	if (tomb5.first_person_head)
@@ -3141,8 +2775,8 @@ void FirstPersonCamera(ITEM_INFO* item)
 				ux /= len; uy /= len; uz /= len;
 			}
 
-			// Damp the bob. First frame there is nothing to damp against,
-			// so the filter is simply loaded with where we are.
+			// Damp the bob. On the first frame there is nothing to damp
+			// against, so the filter is loaded with the current reading.
 			if (!fpSmoothValid)
 			{
 				fpDir[0] = fx; fpDir[1] = fy; fpDir[2] = fz;
@@ -3155,14 +2789,10 @@ void FirstPersonCamera(ITEM_INFO* item)
 			{
 				float k, d, mx, my, mz;
 
-				// How far the BONE moved since last frame, and IN WHICH
-				// DIRECTION - both taken before fpPrevDir is written, which
-				// is where this went wrong the first time: the difference
-				// was computed against a value already overwritten with the
-				// current one, so it was always zero, the consistency term
-				// was always zero with it, and k sat at its slow setting in
-				// every animation. Measured: 0.300 even at seven degrees a
-				// frame with two per cent reversals.
+				// How far the bone moved since last frame, and in which
+				// direction - both taken before fpPrevDir is overwritten with
+				// the current reading; afterwards the difference would always
+				// be zero and k would sit at its slow setting.
 				d = 1.0F - (fpPrevDir[0] * fx + fpPrevDir[1] * fy + fpPrevDir[2] * fz);
 
 				mx = fx - fpPrevDir[0];
@@ -3173,10 +2803,10 @@ void FirstPersonCamera(ITEM_INFO* item)
 				fpPrevUp[0] = ux; fpPrevUp[1] = uy; fpPrevUp[2] = uz;
 
 
-				// How consistent the recent movement has been. The step
-				// itself is folded into a running average of the SIGNED
-				// movement and one of its SIZE; where the two agree the
-				// movement is going somewhere.
+				// How consistent the recent movement has been. The step is
+				// folded into a running average of the signed movement and
+				// one of its size; where the two agree the movement is going
+				// somewhere.
 				{
 					float ml, t;
 
@@ -3198,8 +2828,8 @@ void FirstPersonCamera(ITEM_INFO* item)
 
 					if (k > 1.0F) k = 1.0F;
 
-					// BOTH must speak for it: large AND going somewhere.
-					// Large alone was what let the stutter through.
+					// Both must hold: large and going somewhere. Large
+					// alone lets a stutter through.
 					k = FP_SMOOTH_SLOW + (FP_SMOOTH_FAST - FP_SMOOTH_SLOW) * k * t;
 					fpLogK = k;
 				}
@@ -3235,7 +2865,7 @@ void FirstPersonCamera(ITEM_INFO* item)
 			camera.target.z = camera.pos.z + long(fz * 0x5100);
 			camera.target.room_number = camera.pos.room_number;
 
-			// How far the head is tilted SIDEWAYS, measured against the
+			// How far the head is tilted sideways, measured against the
 			// horizon: cross the view direction with world up to get the
 			// horizon's right, and read the head's own up against it.
 			// Looking straight up or down there is no horizon to measure
@@ -3275,31 +2905,28 @@ void FirstPersonCamera(ITEM_INFO* item)
 	}
 
 	// Remember that first person really ran this frame. Hiding head and
-	// braid hangs on this (drawlara.cpp) - mesh_bits is DELIBERATELY NOT
-	// TOUCHED here:
+	// braid hangs on this (drawlara.cpp); mesh_bits is deliberately not
+	// touched here:
 	//
 	//  - Lara's skin is skinned. A mesh hidden via mesh_bits no longer
 	//    stashes its rim points (both stand in the same bracket), and the
-	//    neighbor then skins from stale memory: the stretched triangle the
-	//    user saw as a "third arm".
+	//    neighbour then skins from stale memory: a stretched triangle like
+	//    a third arm.
 	//  - Binoculars and laser sight write mesh_bits as well (0 on entry,
-	//    -1 on leaving). Two writers on the same field were the reason the
-	//    bug persisted after the scope until a restart.
+	//    -1 on leaving); a second writer on the same field would leave the
+	//    fault standing after the scope until a restart.
 	//
-	// Who gets hidden is now decided solely by the draw routine.
+	// Who gets hidden is decided solely by the draw routine.
 	fpHeadHidden = 1;
 	AlterFOV(FIRST_PERSON_FOV);
 	fpFovSet = 1;
 
 	// Hold the eye clear of floor and ceiling.
 	//
-	// The probe further up guards the way AHEAD; nothing guarded up and
-	// down. Pulling up over a ledge puts the eye a few units above the floor
-	// it is rising past, and the near plane is a SURFACE at twenty units,
-	// not a point - at its lower corners it reaches further still, and it
-	// then reaches through the floor. Which is why it depends so much on the
-	// room: where the ledge is thick or the floor below far away nothing
-	// shows, and elsewhere it does.
+	// The probe further up guards the way ahead, not up and down. Pulling up
+	// over a ledge puts the eye a few units above the floor it is rising
+	// past, and the near plane is a surface at twenty units, not a point -
+	// its lower corners then reach through the floor.
 	//
 	// Only where there is room for it. In a crawlspace the two clamps would
 	// fight each other, and being pushed about is worse than the odd glimpse
@@ -3318,24 +2945,16 @@ void FirstPersonCamera(ITEM_INFO* item)
 		fpLogYBefore = camera.pos.y;
 		fpLogClamp = 0;
 
-		// A clamp may nudge; it may never MOVE the camera.
+		// A clamp may nudge; it may never move the camera far. In a handstand
+		// at a ledge the eye sits at -2210, the room resolves back from 89 to
+		// 88, and 88's ceiling there reads -1280 - an unbounded clamp would
+		// push the camera to -1232, nearly a thousand units down, through the
+		// floor into the room below. The head is above that ceiling, in no
+		// room at all, so the heights that come back belong somewhere else.
 		//
-		// Measured during a handstand at a ledge: the eye sat correctly at
-		// -2210, the room resolved back from 89 to 88, and 88's ceiling
-		// there reads -1280 - so this pushed the camera to -1232, nearly a
-		// thousand units down, through the floor and into the room below.
-		// Which is exactly what the user saw, and it was this line doing it.
-		//
-		// The head was at -2194, ABOVE that ceiling, so the point is not in
-		// room 88 at all: during the handstand her head swings out over a
-		// place the engine cannot assign to any room, and the heights that
-		// come back then belong somewhere else.
-		//
-		// So a correction is allowed to be small. Grazing a surface is worth
-		// a nudge; anything larger means the reading does not describe where
-		// the eye is, and then the honest thing is to leave the camera where
-		// the head put it. A little geometry seen oddly beats a camera that
-		// jumps a room.
+		// Grazing a surface is worth a nudge (FP_CLAMP_MAX); anything larger
+		// means the reading does not describe where the eye is, and the
+		// camera stays where the head put it.
 		if (h != NO_HEIGHT && c != NO_HEIGHT && h - c > 2 * FP_CLEAR)
 		{
 			if (camera.pos.y > h - FP_CLEAR && camera.pos.y - (h - FP_CLEAR) <= FP_CLAMP_MAX)
@@ -3353,10 +2972,10 @@ void FirstPersonCamera(ITEM_INFO* item)
 	}
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
-	// FPHEAD: one line per frame under -log, and only in first person (#134).
+	// FPHEAD: one line per frame under -log, only in first person.
 	//
-	// BOTH the raw reading and what the camera was actually given, because a
-	// trace of one alone cannot say whether a filter is working. Read it so:
+	// Both the raw reading and what the camera was given, because one alone
+	// cannot show whether a filter is working:
 	//
 	//   rel / fwd   the bone as the animation delivers it, untouched
 	//   srel / sfwd what came out of the filters and reached the camera
@@ -3382,12 +3001,6 @@ void FirstPersonCamera(ITEM_INFO* item)
 		    (int)fpRel[0], (int)fpRel[1], (int)fpRel[2],
 		    sx / sl, sy / sl, sz / sl,
 		    fpLogK, (int)fpRoll, (int)fpLogLos);
-
-		// FPROOM was a second line here while the eye's room, the floor clamp
-		// and the field of view were all in question. All three are settled,
-		// so it is gone: two lines a frame is a lot for a log the user reads
-		// for other things. What it measured is written down in the memory
-		// note for this camera, and it is a dozen lines to put back.
 	}
 
 	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, fpRoll);

@@ -17,9 +17,9 @@
 #include "camera.h"			// camera.pos / camera.target - the heading of the tick
 #include "lara.h"			// lara, lara_item
 #include "../specific/3dmath.h"		// phd_atan - the engine's own angle
-#include "../specific/function_stubs.h"	// Log, gLogEnabled - MODERNLOG (step 5)
-#include "../specific/input.h"	// joystick_raw_lx/ly/rx/ry, joystick_is_xinput - the MODERNLOG pad line (round 161a2b, step 5)
-#include "../tomb5/tomb5.h"	// tomb5.dead_zone - the effective zones and dead_user= (round 161b1, item 5)
+#include "../specific/function_stubs.h"	// Log, gLogEnabled - MODERNLOG
+#include "../specific/input.h"	// joystick_raw_lx/ly/rx/ry, joystick_is_xinput - the MODERNLOG pad line
+#include "../tomb5/tomb5.h"	// tomb5.dead_zone - the effective zones and dead_user=
 
 /* game\modern_move.h mirrors input_buttons by value, because it must compile
  * without the Direct3D type set behind global\types.h. This is the first file
@@ -34,7 +34,7 @@ static_assert(IN_FORWARD == MODERN_IN_FORWARD && IN_BACK == MODERN_IN_BACK &&
 	IN_INTERACT == MODERN_IN_INTERACT && IN_SELECT == MODERN_IN_SELECT,
 	"input_buttons moved - update game\\modern_move.h");
 
-/* THE ONE STATE. There is exactly one Lara and one stick, so this is a file
+/* The one state. There is exactly one Lara and one stick, so this is a file
  * of statics rather than a struct somebody has to own and pass around. */
 static MODERN_CFG modern_cfg;
 static MODERN_STATE modern_state;
@@ -51,9 +51,9 @@ static long modern_last_x;
 static long modern_last_z;
 static long modern_want_move;
 
-/* WHERE THE MODERN HALF OF THIS TICK LEFT HER HEADING, and the tick it was
- * left on (round 161a3, item 5). game\camera.cpp reads it a few hundred lines
- * of the SAME tick later and subtracts it from her heading as it stands then;
+/* Where the modern half of this tick left her heading, and the tick it was
+ * left on. game\camera.cpp reads it later in the same tick and subtracts it
+ * from her heading as it stands then;
  * what is left over is the part of the tick no stick asked for - the roll, the
  * jump twist, the underwater roll - which is exactly the flip the camera owes
  * a swing for. `modern_turned_seen` keeps a stamp of 0 from answering. */
@@ -77,12 +77,12 @@ void ModernResetControls()
 	modern_turned_seen = 0;
 }
 
-/* AND THE ONE QUESTION game\camera.cpp ASKS OF IT (round 161a3, item 5).
+/* The heading ModernUpdateInput publishes, asked by game\camera.cpp.
  *
- * The stamp is an equality and not the orbit's own "one tick apart", because
- * this is not a tick behind: game\control.cpp runs S_UpdateInput at :296 and
- * CalculateCamera at :677 of the SAME tick body, with GlobalCounter stepped
- * once before both (:292). So the answer is this tick's own or there is none.
+ * The stamp is an equality and not the orbit's "one tick apart", because this
+ * is not a tick behind: game\control.cpp runs S_UpdateInput and then
+ * CalculateCamera in the same tick body, with GlobalCounter stepped once
+ * before both. So the answer is this tick's own or there is none.
  *
  * There is none whenever ModernUpdateInput did not get as far as the turn:
  * no Lara, a repeat call inside one logic tick (the menus and the FMV loop
@@ -102,40 +102,19 @@ long ModernHeadingAfterInput(short* yaw)
 	return 1;
 }
 
-/* THE D-PAD, RETIRED (the user's decision 3, superseded by decision 8:
- * "das D-Pad wird [...] fuer die Binds frei", round 161a2 step 3).
- *
- * A1's `ModernDPadToStick` used to live here: the pad's cross reached this
- * function as the same two axes the stick does (specific\dxshell.cpp writes
- * +-20 into joystick_read_x/y for an XInput D-pad direction or a DirectInput
- * POV hat, OVER whatever the stick said), and since 20 of 128 is under
- * MODERN_WALK_BELOW (62), it boosted a vector that could only be the cross
- * to full deflection so a D-pad push ran rather than walked.
- *
- * Once the medipacks default onto the d-pad and its four directions become
- * bindable buttons (specific\input.cpp, specific\dxshell.cpp), the cross
- * must not ALSO still read as a movement stick, boosted or not - the user's
- * own words are "free for the binds", not "free for the binds AND still
- * walks her". The fix is upstream of this file rather than in it:
- * specific\dxshell.cpp keeps the left stick's OWN two axes beside the pair
- * the d-pad writes over, and specific\input.cpp's seam hands those to the
- * classic assembly and to ModernUpdateInput below, so nothing of the cross
- * reaches here for this function to boost in the first place, and the boost
- * itself is gone with it rather than left dead behind a call that no longer
- * exists.
- *
- * Step 3 put that upstream fix in the wrong file (it erased the +-20
- * signature in specific\input.cpp instead of keeping the stick), and the
- * second fix round moved it: the d-pad OVERWRITES the axes rather than
- * adding to them, so an erasure downstream stopped her outright when the
- * press happened to match the signature and veered her course when it did
- * not - which the medipacks on the d-pad made a thing a player does while
- * running. */
+/* The d-pad does not move Lara in Modern: its four directions are bindable
+ * buttons (the medipacks by default). specific\dxshell.cpp writes +-20 into
+ * joystick_read_x/y for a d-pad direction or a DirectInput POV hat, over
+ * whatever the stick said, so it keeps the left stick's own two axes beside
+ * that pair, and specific\input.cpp hands those to the classic assembly and to
+ * ModernUpdateInput. Nothing of the cross reaches this file. Erasing the +-20
+ * signature downstream instead would stop her outright when a press matches
+ * it and veer her course when it does not, because the d-pad overwrites the
+ * axes rather than adding to them. */
 
-/* THE MODE NAME FOR MODERNLOG's `mode=` (step 5). Nothing else in the tree
- * ever turns a modern_mode into text - the tests compare the number (design
- * section 1.9) - so the mapping lives here, beside the one place that
- * prints it. */
+/* The mode name for MODERNLOG's `mode=`. Nothing else turns a modern_mode
+ * into text - the tests compare the number - so the mapping lives beside the
+ * one place that prints it. */
 static const char* ModernModeName(long mode)
 {
 	switch (mode)
@@ -153,45 +132,41 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	MODERN_SITUATION sit;
 	MODERN_RESULT out;
 	short camera_yaw;	// the measured eye -> target vector - MODERNLOG's `cam=`
-	short ref_yaw;		// and what the course is really seated on (161a2b, item 4b) - `ref=`
+	short ref_yaw;		// and what the course is really seated on - `ref=`
 	short lara_yaw;		// her heading before the direct turn can change it - MODERNLOG's `lara=`
 	long cam_dx, cam_dz;
 	long dx, dz;
 	long moved;
 	long yaw;
-	long water;		// round 161a2 step 4: the state's own swim turn rate, 0 on land
+	long water;		// the state's own swim turn rate, 0 on land
 	long xrot;		// her attitude after the pointer has had its say
 	long stroke;		// 1 = hold the stroke key this tick (water_auto_stroke)
-	long air;		// round 161a3 item 4: the step the air turn applied - MODERNLOG's `air=`
+	long air;		// the step the air turn applied - MODERNLOG's `air=`
 
 	if (!lara_item)
 		return bits;
 
-	/* ONE CALL PER LOGIC TICK, AND ONLY THE GAME'S OWN.
+	/* One call per logic tick, and only the game's own.
 	 *
 	 * S_UpdateInput is not only the game's input function. The game-over menu
 	 * (game\control.cpp), the inventory (game\newinv2.cpp), the FMV player
 	 * (specific\fmv.cpp), the options and save screens (specific\LoadSave.cpp)
 	 * and the wardrobe window (specific\hd\hd_outfitmenu.cpp) all call it in
-	 * loops of their own, and in those loops the direction bits steer a MENU.
-	 * A translation there would answer the menu with a heading, and the direct
-	 * turn would turn Lara behind the picture.
+	 * loops of their own, where the direction bits steer a menu. A translation
+	 * there would answer the menu with a heading, and the direct turn would
+	 * turn Lara behind the picture.
 	 *
-	 * The honest test is the game's own tick counter: game\control.cpp raises
+	 * The test is the game's own tick counter: game\control.cpp raises
 	 * GlobalCounter once per logic step, immediately before it calls
-	 * S_UpdateInput, and nothing else in the tree touches it. So a call that
-	 * does not follow a fresh count is not the game's tick and is left alone.
+	 * S_UpdateInput, and nothing else touches it. A call that does not follow
+	 * a fresh count is not the game's tick and is left alone.
 	 *
-	 * A BREAK IN THE CHAIN IS A RESET - BUT ONLY THE BREAKS THIS COUNTER CAN
-	 * SEE, AND IT CANNOT SEE ALL OF THEM (corrected in the second review pass
-	 * of this round, where the claim that stood here was measured and found
-	 * false). It sees every break in which ticks really ran while the seam
-	 * stood aside: the title screen, first person, a cutscene, a spotcam, the
-	 * look key. There the counter runs away from modern_tick while this
-	 * function is not being called, and the difference on the way back is more
-	 * than one.
+	 * A break in the chain is a reset, but the counter sees only the breaks in
+	 * which ticks ran while the seam stood aside: the title screen, first
+	 * person, a cutscene, a spotcam, the look key. There the counter runs away
+	 * from modern_tick, and the difference on the way back is more than one.
 	 *
-	 * IT CANNOT SEE A LEVEL CHANGE OR A SAVEGAME RESTORE, because between two
+	 * It cannot see a level change or a savegame restore, because between two
 	 * levels not one tick runs - game\gameflow.cpp leaves its loop at
 	 * gfLevelComplete and the next level's priming ControlPhase is the next
 	 * tick there is - so the counter stands still and the boundary arrives
@@ -201,11 +176,10 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * that holds state from the previous tick and has to be told the same
 	 * news.
 	 *
-	 * AND THE INVENTORY IS DELIBERATELY NOT A RESET. The ring has no clock of
-	 * its own either, so the tick after it is also a step of one - but the
-	 * world did not move while it was open and her held course is still the
-	 * course she was on, so carrying on is the right answer here rather than a
-	 * hole in the guard.
+	 * The inventory is deliberately not a reset. The ring has no clock of its
+	 * own either, so the tick after it is also a step of one - but the world
+	 * did not move while it was open and her held course is still valid, so
+	 * carrying on is right.
 	 *
 	 * The tick after a break is skipped as well (a thirtieth of a second), so
 	 * that the first tick back is measured against a position from this level
@@ -217,74 +191,40 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	{
 		ModernResetControls();
 
-		/* MODERNLOG INIT (step 5), once per break in the chain. A level start
-		 * reaches this branch too, and through the front door rather than by
-		 * luck: game\gameflow.cpp calls ModernResetControls() before the
-		 * level's priming tick, which puts modern_seen back to 0, and the
-		 * first test above is then the one that answers. The other breaks -
-		 * first person, a cutscene, the look key - trip the second test
-		 * instead (see the guard's own comment) - a config worth
-		 * naming once rather than folding into every tick line below.
-		 * `scheme=modern` is written out rather than left implied: this line
-		 * only ever runs from inside the seam's tomb5.control_modern guard,
-		 * so it could only ever say "modern", but a log read without the
-		 * source open should not have to know that. `rate` and `direct` are
-		 * the two numbers the user's play test picks between (decision 5) -
-		 * control_modern is the gate on the whole scheme, MODERN_DIRECT_TURN
-		 * the second gate on this one mechanism inside it, and direct is the
-		 * one of the two that can change without a rebuild.
-		 * `walk_below`, `recenter` and `jump_dir` (round 161a-fix, #161 item
-		 * 4) are the first play test's own numbers: walk_below and recenter
-		 * are the two the test's log moved off their TROne defaults at all
-		 * (game\modern_move.h), so a later log is worth reading back rather
-		 * than trusted from memory, and jump_dir is worth the same read now
-		 * that it also decides whether AS_COMPRESS can reach mode RUN (item
-		 * 3) and therefore whether ModernStateAllowsDirectTurn's tenth state
-		 * ever answers - a play test that asks "why did she not turn in the
-		 * crouch" has the switch on the same line as the rate that would have
-		 * turned her.
+		/* MODERNLOG init, once per break in the chain. A level start reaches
+		 * this branch because game\gameflow.cpp calls ModernResetControls()
+		 * before the level's priming tick, which puts modern_seen back to 0;
+		 * the other breaks - first person, a cutscene, the look key - trip the
+		 * second test. The config is printed once here rather than in every
+		 * tick line below.
 		 *
-		 * `cam_speed`, `cam_yaw_rate`, `cam_pitch_min`, `cam_pitch_max`,
-		 * `aim_strafe`, `dead_l` AND `dead_r` ARE ROUND 161a2b's OWN (item 5,
-		 * the play test's second round): the Camera speed slider and its
-		 * derived rate, the sphere's two poles now that item 4a moved one of
-		 * them, whether firing still runs (item 8, ships off - "off" is the
-		 * value, not the absence of the field), and the two radial dead
-		 * zones item 6 gave the sticks. `dead_l` and `dead_r` print the ONE
-		 * the engine is actually using this session - MODERN_DEAD_LEFT /
+		 * Fields: `scheme=modern` is written out so a log reads without the
+		 * source (this only runs inside the tomb5.control_modern guard).
+		 * `rate` is the turn rate and `direct` the direct-turn switch
+		 * (MODERN_DIRECT_TURN), the second gate inside control_modern.
+		 * `walk_below`, `recenter` and `jump_dir` are tuned values of
+		 * game\modern_move.h; walk_below and recenter differ from their TROne
+		 * defaults, and jump_dir also decides whether AS_COMPRESS can reach mode
+		 * RUN and so whether ModernStateAllowsDirectTurn's tenth state answers.
+		 * `cam_speed`, `cam_yaw_rate`, `cam_pitch_min` and `cam_pitch_max` are
+		 * the camera speed slider, its derived rate and the sphere's two poles.
+		 * `aim_strafe` says whether firing still runs (off by default; "0" is
+		 * the value, not an absent field). `dead_l` and `dead_r` are the radial
+		 * dead zones the engine uses this session - MODERN_DEAD_LEFT /
 		 * MODERN_DEAD_RIGHT on XInput, MODERN_DEAD_LEFT_DINPUT /
-		 * MODERN_DEAD_RIGHT_DINPUT on the DirectInput fallback this user's
-		 * own pad takes (round 161a3 gave dead_l its own DirectInput
-		 * constant, item 7 - before that this line always printed the
-		 * XInput one, which is why dead_l never moved with M9's own
-		 * measurement until now) - which is also why the MODERNLOG pad line
-		 * beside this one carries the raw axes: the DirectInput zone was
-		 * never measured against this pad's real rest position, only
-		 * guessed wide enough, and the pad line is what the next play test
-		 * reads to say whether it can come down.
-		 *
-		 * air_rate, swim_rate AND swim_pitch_rate ARE ROUND 161a3's OWN
-		 * (items 4 and 6): the live cfg's own air_turn_rate, swim_turn_rate
-		 * and swim_pitch_rate, read back rather than trusted from the header
-		 * for the same reason rate already is - a measure ourselves constant
-		 * is only honest in a log if a hand edit of the registry would show
-		 * up in it too. */
+		 * MODERN_DEAD_RIGHT_DINPUT on the DirectInput fallback. `air_rate`,
+		 * `swim_rate` and `swim_pitch_rate` are the live cfg's air_turn_rate,
+		 * swim_turn_rate and swim_pitch_rate. Every value is read from the live
+		 * cfg rather than the header, so a hand edit of the registry shows up. */
 		if (gLogEnabled)
 		{
-			/* THE ORBIT'S OWN TWELVE NOW (round 161a2, step 5; four more in
-			 * round 161a2b, step 5; two more in round 161a3, step 5), the same
-			 * discipline as the five above: the live cfg game\camera.cpp seats,
-			 * not the raw enum in game\modern_camera.h, and only the numbers
-			 * steps 1, 2, 4 and 5's own reports named as the play test's to move
-			 * or to read back - cam_return / cam_return_min, cam_wall_factor,
-			 * cam_hide_dist, cam_invert, cam_pitch_return, cam_speed /
-			 * cam_yaw_rate / cam_pitch_min / cam_pitch_max, and now
-			 * cam_pull_steps / cam_pull_push - item 1's own ray walk, constants
-			 * rather than measure ourselves numbers, printed anyway because a
-			 * play test that asks why the eye still pumps in and out has the
-			 * granularity on the same line as everything else about the orbit.
-			 * game\camera.h says which of MODERN_CAMERA_CFG's remaining fields
-			 * were left out and why. */
+			/* The orbit's twelve, from the live cfg game\camera.cpp seats rather
+			 * than the enum in game\modern_camera.h: cam_return /
+			 * cam_return_min, cam_wall_factor, cam_hide_dist, cam_invert,
+			 * cam_pitch_return, cam_speed / cam_yaw_rate / cam_pitch_min /
+			 * cam_pitch_max, and cam_pull_steps / cam_pull_push, the ray walk's
+			 * granularity. game\camera.h says which of MODERN_CAMERA_CFG's
+			 * remaining fields are left out and why. */
 			long cam_return, cam_return_min, cam_wall_factor, cam_hide_dist;
 			long cam_invert, cam_pitch_return;
 			long cam_speed, cam_yaw_rate, cam_pitch_min, cam_pitch_max;
@@ -296,13 +236,10 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 				&cam_speed, &cam_yaw_rate, &cam_pitch_min, &cam_pitch_max,
 				&cam_pull_steps, &cam_pull_push);
 
-			/* AND THEY PRINT THE EFFECTIVE WIDTH SINCE ROUND 161b1 (item 5),
-			 * not the constant: the slider scales both at the seam
-			 * (specific\input.cpp), so a line that kept printing 31 and 34
-			 * would be describing an engine the player no longer has. What he
-			 * set is on the same line as what it did - `dead_user` at the end.
-			 * Only the RADIAL pair is printed, as before; the square beside it
-			 * moves with the same per cent and has never had a field. */
+			/* The effective width, not the constant: the dead zone slider
+			 * scales both at the seam (specific\input.cpp), and the slider's
+			 * own value is `dead_user` at the end of the line. Only the radial
+			 * pair is printed; the square zone moves with the same per cent. */
 			dead_l = ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
 				(long)tomb5.dead_zone);
 			dead_r = ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
@@ -315,7 +252,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 				"aim_strafe=%d dead_l=%d dead_r=%d "
 				"air_rate=%d swim_rate=%d swim_pitch_rate=%d "
 				"cam_pull_steps=%d cam_pull_push=%d stand_ticks=%d "
-				"dead_user=%d",	// #161, round 161b1 item 5 - appended at the END, nothing above reworded
+				"dead_user=%d",	// appended at the end, so the fields before it keep their places
 				modern_cfg.turn_rate, modern_cfg.direct_turn, modern_cfg.walk_below,
 				modern_cfg.recenter, modern_cfg.jump_dir, cam_return, cam_return_min,
 				cam_wall_factor, cam_hide_dist, cam_invert, cam_pitch_return,
@@ -325,19 +262,13 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 				cam_pull_steps, cam_pull_push, modern_cfg.stand_forward_ticks,
 				(long)tomb5.dead_zone);
 
-			/* MODERNLOG PAD (round 161a2b, item 6 and item 5's own log
-			 * obligation), once beside the init line above and for the same
-			 * reason: the DirectInput right stick's zone (dead_r above) was
-			 * sized from a comment's claim ("500 of 1000 is wide enough"),
-			 * never from a measurement of where that axis actually rests -
-			 * these four are that measurement, raw and unrounded, in the
-			 * same /256 or /8 units dead_l/dead_r are already in
-			 * (specific\input.h). `xinput` says which pair of units they are
-			 * in without the reader having to cross-check against dead_r's
-			 * own choice above. A resting stick reads near 0 on a well
-			 * centred pad; a value near MODERN_DEAD_RIGHT_DINPUT's own 62 on
-			 * the DirectInput axes is the off-centre rest that constant was
-			 * sized for, and is the number to compare it against. */
+			/* MODERNLOG pad, once beside the init line: the raw axes at rest,
+			 * unrounded, in the same /256 or /8 units as dead_l/dead_r
+			 * (specific\input.h), so the dead zones can be checked against
+			 * where the sticks really rest. `xinput` says which units apply. A
+			 * resting stick reads near 0 on a well centred pad; a value near
+			 * MODERN_DEAD_RIGHT_DINPUT's 62 on the DirectInput axes is the
+			 * off-centre rest that constant is sized for. */
 			Log("MODERNLOG pad lx=%ld ly=%ld rx=%ld ry=%ld xinput=%ld",
 				joystick_raw_lx, joystick_raw_ly, joystick_raw_rx, joystick_raw_ry,
 				joystick_is_xinput);
@@ -350,25 +281,20 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	modern_tick = GlobalCounter;
 
-	// ModernDPadToStick used to sit here (round 161a, decision 3) - see the
-	// retirement note above this function for why it is gone rather than
-	// merely unused: stick_x/stick_y are the left stick's own axes in
-	// Modern (specific\dxshell.cpp keeps them beside the pair the d-pad
-	// writes over, specific\input.cpp hands them here), so the cross never
-	// reaches this call at all and it would never have fired again anyway.
+	// stick_x/stick_y are the left stick's own axes; the d-pad never reaches
+	// here (see the note above ModernModeName).
 
-	/* THE CAMERA HEADING OF THIS TICK (design section 5.3).
+	/* The camera heading of this tick.
 	 *
 	 * From the camera's own two points, not from camera.actual_angle: that
 	 * one is lara_item->pos.y_rot plus an offset, so taking it as the
-	 * reference would feed her own heading back into her heading - the
-	 * feedback loop that made the first draft of this scheme run in circles.
+	 * reference would feed her own heading back into her heading and make
+	 * her run in circles.
 	 *
-	 * It is the SIMULATION's camera and not the drawn one, for two reasons
-	 * that hold without any help from us: game\control.cpp calls
-	 * CalculateCamera after the input, so this reads the camera as the last
-	 * tick left it, and game\interpolate.cpp puts the unblended pair back
-	 * before the tick begins.
+	 * It is the simulation's camera and not the drawn one, for two reasons:
+	 * game\control.cpp calls CalculateCamera after the input, so this reads
+	 * the camera as the last tick left it, and game\interpolate.cpp puts the
+	 * unblended pair back before the tick begins.
 	 *
 	 * A camera sitting exactly on its own target has no heading. That happens
 	 * for a frame after a cut; falling back to Lara's own heading makes the
@@ -378,51 +304,43 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	cam_dz = camera.target.z - camera.pos.z;
 	camera_yaw = (cam_dx || cam_dz) ? (short)phd_atan(cam_dz, cam_dx) : lara_item->pos.y_rot;
 
-	/* AND UNDER THE ORBIT THE REFERENCE IS WHAT THE PLAYER DIALLED, not what
-	 * the eye happens to have been pushed to (round 161a2b, item 4b).
+	/* Under the orbit the reference is the angle the player dialled, not where
+	 * the eye has been pushed to.
 	 *
-	 * The two lines above are the honest reading for a camera nobody steers, and
-	 * they stay the fallback. They stop being honest as soon as the eye is CLOSE
-	 * to her, and the play test measured it twice over: at a steep pitch the
+	 * The measured vector above is right for a camera nobody steers and stays
+	 * the fallback. It fails once the eye is close to her: at a steep pitch the
 	 * horizontal radius is a few dozen units while the eye trails her run by
-	 * hundreds, so "eye -> target" becomes her own running direction, the course
-	 * runs away from her and she turns 3277 units every tick the stick is off
-	 * centre; and a wall that pulls the eye in does the same at any pitch - 57
-	 * jumps of more than 45 degrees in a single tick, her course after them
-	 * reading 3154, 17126, 26721, -22504 (M4 of the round's brief). Item 3 of
-	 * this round brings the eye close far more often, by design, so this is not a
-	 * refinement - it is what makes item 3 safe.
+	 * hundreds, so "eye -> target" becomes her own running direction and she
+	 * turns 3277 units every tick the stick is off centre; and a wall that
+	 * pulls the eye in does the same at any pitch - 57 jumps of more than 45
+	 * degrees in a single tick, her course after them reading 3154, 17126,
+	 * 26721, -22504. The wall resolution in game\camera.cpp brings the eye
+	 * close often, by design, so this reference is what makes it safe.
 	 *
-	 * The world yaw has neither failure: it is the angle the ideal is built from,
-	 * it is exact at every pitch, and geometry cannot move it. It is one tick
-	 * behind, exactly as camera_yaw is and for the same reason (game\control.cpp
-	 * runs the input before CalculateCamera).
+	 * The world yaw has neither failure: it is the angle the ideal is built
+	 * from, exact at every pitch, and geometry cannot move it. It is one tick
+	 * behind, as camera_yaw is (game\control.cpp runs the input before
+	 * CalculateCamera).
 	 *
-	 * WITHOUT THE ORBIT NOTHING CHANGES: a flyby, a cutscene, first person, the
-	 * title - ModernCameraActive() is false in every one of them and the measured
-	 * vector is the reference, as it has been since A1. So is the one tick before
-	 * the orbit's first, where it is not seated yet and has no world angle to
-	 * give.
+	 * Without the orbit - a flyby, a cutscene, first person, the title -
+	 * ModernCameraActive() is false and the measured vector is the reference;
+	 * so is the one tick before the orbit's first, when it is not seated yet.
 	 *
-	 * AND THE RICH2 SNIPER CAMERA IS IN THAT LIST TOO, but it does not get there
-	 * through ModernCameraActive() and the first version of this comment said it
-	 * did (#161, round 161a2b, the second review pass). That predicate reads the
-	 * option, lara_item, the title, the spotcam, the cutscene and first person -
-	 * not the camera the engine is actually running. The sniper is the one level
-	 * camera Modern keeps rather than discards, so FixedCamera runs, the orbit
-	 * does not tick, and ModernCameraActive() is true through all of it. What
-	 * answers it is game\camera.cpp's own stamp: ModernCameraWorldYaw declines
-	 * unless the orbit ran on the tick before this one, so the line below falls
-	 * back to the measured vector for as long as the sniper has the view - which
-	 * is the right reference there, being the camera the player can see.
+	 * The rich2 sniper camera falls back as well, but not through
+	 * ModernCameraActive(), which reads the option, lara_item, the title, the
+	 * spotcam, the cutscene and first person, not the running camera. The
+	 * sniper is the one level camera Modern keeps, so FixedCamera runs, the
+	 * orbit does not tick, and ModernCameraActive() stays true. game\camera.cpp's
+	 * stamp answers it: ModernCameraWorldYaw declines unless the orbit ran on
+	 * the tick before, so the measured vector - the camera the player sees - is
+	 * the reference while the sniper has the view.
 	 *
-	 * MODERNLOG keeps printing BOTH: `cam=` is the measured vector above and
-	 * `ref=` is what the translation really used (out.reference), so a play test
-	 * can see the two part company at a wall instead of having to believe it. */
+	 * MODERNLOG prints both: `cam=` is the measured vector and `ref=` what the
+	 * translation used (out.reference). */
 	if (!(ModernCameraActive() && ModernCameraWorldYaw(&ref_yaw)))
 		ref_yaw = camera_yaw;
 
-	/* IS FORWARD GETTING HER ANYWHERE (design section 1.3, finding A).
+	/* Whether forward is getting her anywhere.
 	 *
 	 * Measured from her position and from nothing else, so that a wall, a
 	 * crate, a railing and a corner all count the same and no collision
@@ -451,22 +369,18 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	sit.anim_state = lara_item->current_anim_state;
 
-	/* WADING IS CLASSIC, AND SO IS A DEAD LARA - and the water itself is not,
-	 * any more (round 161a2 step 4). A1 wrote this line as "anything but
-	 * LW_ABOVE_WATER", because it had no camera pitch to swim by; the orbit is
-	 * there now, so LW_UNDERWATER and LW_SURFACE fall through to the state
-	 * table, which names the eight states the water really steers and the four
-	 * handovers it does not (game\modern_move.cpp).
+	/* Wading is classic, and so is a dead Lara. LW_UNDERWATER and LW_SURFACE
+	 * fall through to the state table, which names the eight states the water
+	 * steers by the orbit's pitch and the four handovers it does not
+	 * (game\modern_move.cpp).
 	 *
-	 * LW_WADE stays exactly as A1 left it and is named rather than implied:
-	 * there LaraAboveWater runs and the states are the ordinary ground ones,
-	 * so letting it through would change the feel of walking in shin-deep
-	 * water - a change nobody asked for, in a round that is about the water
-	 * she swims in. LW_FLYCHEAT needs no term at all: DOZY forces
-	 * AS_SWIMCHEAT (118) and the state table already calls that classic.
+	 * In LW_WADE LaraAboveWater runs and the states are the ordinary ground
+	 * ones, so letting it through would change the feel of walking in
+	 * shin-deep water. LW_FLYCHEAT needs no term: DOZY forces AS_SWIMCHEAT
+	 * (118) and the state table already calls that classic.
 	 *
-	 * The hit points are the death case the brief asks for: the automaton
-	 * stops answering there, and her last pose is the animation's to keep. */
+	 * At zero hit points the automaton stops answering, and her last pose is
+	 * the animation's to keep. */
 	sit.classic = (lara.water_status == LW_WADE || lara_item->hit_points <= 0) ? 1 : 0;
 
 	/* A weapon out and shootable. A torch is held in the same hand and is not
@@ -477,24 +391,22 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	sit.blocked = (modern_cfg.block_frames > 0 &&
 		modern_state.blocked_count >= modern_cfg.block_frames) ? 1 : 0;
 
-	/* AND WHAT HIS RIGHT THUMB DID TO THE VIEW LAST TICK (#161, round 161a3b,
-	 * item 2). Asked exactly as `ref_yaw` above is, of the same file and behind
-	 * the same two gates - ModernCameraActive() for "may the orbit steer the
-	 * view at all" and the orbit's own tick stamp inside the accessor for "did
-	 * it really run" - so the two answers cannot disagree about which camera
-	 * this tick had. Where either says no the step is 0 and the held course is
-	 * exactly what it was before this round: a flyby, a cutscene, first person,
-	 * the title, the rich2 sniper camera, the tick before the orbit's first.
-	 * The accessor gives back the STICK's own term and not the orbit's whole
-	 * step, which is what keeps the return and the carried swing out of her
-	 * course. */
+	/* What the right stick did to the view last tick. Asked as `ref_yaw` above
+	 * is, behind the same two gates - ModernCameraActive() for "may the orbit
+	 * steer the view at all" and the orbit's tick stamp inside the accessor for
+	 * "did it really run" - so the two answers cannot disagree about which
+	 * camera this tick had. Where either says no the step is 0 and the held
+	 * course is left alone: a flyby, a cutscene, first person, the title, the
+	 * rich2 sniper camera, the tick before the orbit's first. The accessor
+	 * returns the stick's own term and not the orbit's whole step, which keeps
+	 * the return and the carried swing out of her course. */
 	sit.cam_player_step = 0;
 
 	if (ModernCameraActive())
 		ModernCameraPlayerStep(&sit.cam_player_step);
 
-	/* IS THIS TICK THE WATER'S, and at what rate (round 161a2 step 4)? Asked
-	 * once, here, from the state alone, and answered by the same table the
+	/* Whether this tick is the water's, and at what rate. Asked once, here,
+	 * from the state alone, and answered by the same table the
 	 * translation asks - so the branch below and the two rules the water
 	 * switches off inside ModernTranslate cannot drift apart. The other two
 	 * start as "nothing happened": the water is the only thing that writes
@@ -510,27 +422,25 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	ModernTranslate(&modern_cfg, &modern_state, stick_x, stick_y, ref_yaw,
 		lara_yaw, &sit, &out);
 
-	/* THE DIRECT TURN (the user's decision 5). The decision is arithmetic and
-	 * lives with the rest of it; this is the one line of engine it needs.
+	/* The direct turn. The decision is arithmetic and lives in
+	 * game\modern_move.cpp; this is the one line of engine it needs.
 	 * lara.turn_rate goes to zero because game\lara.cpp adds it to y_rot a
 	 * moment later in LaraAboveWater - without that, she would turn twice.
 	 *
-	 * The order is the order of the tick: S_UpdateInput runs before
-	 * AnimateLara and before the collision, so a heading written here is the
-	 * heading she animates and collides with this tick, not next. The picture
-	 * glides on its own - game\interpolate.cpp snapshots her position BEFORE
-	 * the input runs and blends y_rot with LerpAngle, so nothing had to be
-	 * added there for 60 or 165 Hz.
+	 * S_UpdateInput runs before AnimateLara and before the collision, so a
+	 * heading written here is the heading she animates and collides with this
+	 * tick. game\interpolate.cpp snapshots her position before the input runs
+	 * and blends y_rot with LerpAngle, so the picture glides at 60 or 165 Hz
+	 * without anything added there.
 	 *
-	 * IN THE WATER IT IS THE WATER'S OWN MOVE INSTEAD, and the two are an
-	 * either/or rather than one calling the other (round 161a2 step 4): the
-	 * water turns at the rate the state it is in turns at, takes no instant
-	 * about-turn, sends out no IN_FORWARD under water - down there that bit is
-	 * SwimTurn's pitch - and answers two things the land has no notion of, the
-	 * attitude and the stroke. `water` is the state's rate and the question
-	 * "is this the water?" in one, so the branch cannot drift from the table.
+	 * In the water it is the water's own move instead, an either/or: the water
+	 * turns at the rate of the state it is in, takes no instant about-turn,
+	 * sends no IN_FORWARD under water - down there that bit is SwimTurn's
+	 * pitch - and answers two things the land has no notion of, the attitude
+	 * and the stroke. `water` is the state's rate and the question "is this
+	 * the water?" in one, so the branch cannot drift from the table.
 	 *
-	 * THE POINTER IS ONLY A POINTER WHILE THE ORBIT IS STEERING THE VIEW. Where
+	 * The pointer is only a pointer while the orbit steers the view. Where
 	 * it is not - first person, and nowhere else the seam is reachable from -
 	 * her own attitude goes in as the target, which asks for no change at all
 	 * and leaves the third axis hers. The flat circle and the stroke still
@@ -546,10 +456,10 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			lara.turn_rate = 0;
 			lara_item->pos.x_rot = (short)xrot;
 
-			/* THE BANK THE TURN BITS WOULD HAVE MADE. SwimTurn rolls her by
+			/* The bank the turn bits would have made. SwimTurn rolls her by
 			 * this much on every tick a turn bit is held (game\laraswim.cpp),
-			 * and we have just taken those bits away - so the roll is owed,
-			 * not optional, or the modern swimmer would corner flat where the
+			 * and the translation has taken those bits away - so the roll is
+			 * owed here, or the modern swimmer would corner flat where the
 			 * classic one leans. The decay and the +-4004 clamp are still
 			 * LaraUnderWater's own, a few lines later in the same tick, so a
 			 * held turn settles exactly where the classic one settles. The
@@ -565,13 +475,12 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + yaw);
 		lara.turn_rate = 0;
 	}
-	/* AND IN THE AIR THE SAME LINE AGAIN, AT THE JUMP'S OWN RATE (round 161a3,
-	 * item 4). "Im Remaster kann sie auch nach dem Sprung in der Luft weiterhin
-	 * nach links und rechts lenken. ... Lara kann dadurch einen viel weiteren
-	 * Radius um eine Kante springen."
+	/* In the air the same line again, at the jump's own rate: she can still
+	 * steer left and right after take-off, as in the Remaster, and so jump a
+	 * much wider arc round an edge.
 	 *
-	 * A THIRD ARM OF THE SAME EITHER/OR, and it can be one because the three
-	 * lists do not overlap: ModernWaterTurnRate answers only the eight swim and
+	 * A third arm of the same either/or, possible because the three lists do
+	 * not overlap: ModernWaterTurnRate answers only the eight swim and
 	 * surface states, ModernStateAllowsDirectTurn the ten on the ground, and
 	 * ModernStateAllowsAirTurn the one in the air (3, AS_FORWARDJUMP - the only
 	 * airborne routine in game\lara.cpp that reads a turn bit at all).
@@ -581,48 +490,45 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * turn_rate goes to zero for the same reason as on the ground:
 	 * lara_as_forwardjump ramps it from IN_LEFT / IN_RIGHT and LaraAboveWater
 	 * adds it to y_rot a moment later, so without this she would turn twice -
-	 * once at our rate and once at the classic's 182 units. ModernAirTurn has
+	 * once at the modern rate and once at the classic's 182 units. ModernAirTurn has
 	 * already taken those two bits out of out.bits, which is what the write
 	 * below hands on.
 	 *
-	 * IT IS BEFORE THE PUBLISH LINE ON PURPOSE. game\camera.cpp subtracts the
-	 * heading published three lines down from her heading after the animation,
-	 * and calls what is left an animation about-turn worth a camera swing (item
-	 * 5). A turn written after the publish would be read as exactly that. */
+	 * It comes before the publish line on purpose. game\camera.cpp subtracts
+	 * the heading published below from her heading after the animation, and
+	 * treats what is left as an animation about-turn worth a camera swing. A
+	 * turn written after the publish would be read as exactly that. */
 	else if (ModernAirTurn(&modern_cfg, &modern_state, &sit, &out, &air))
 	{
 		lara_item->pos.y_rot = ModernWrap((long)lara_item->pos.y_rot + air);
 		lara.turn_rate = 0;
 	}
 
-	/* AND THE HEADING THE STICK IS ACCOUNTABLE FOR IS PUBLISHED HERE (round
-	 * 161a3, item 5). It is READ BACK OFF THE ITEM rather than composed out of
-	 * lara_yaw and `yaw`, so that a branch above which turns her some other way
-	 * - the water's own move, and whatever a later round adds beside it -
-	 * cannot drift away from it: whatever this file did to her heading this
-	 * tick, this is where it ended. Everything that happens to it AFTER this
-	 * line happens in AnimateLara and the collision, which is what
-	 * game\camera.cpp is left holding. */
+	/* The heading the stick is accountable for is published here. It is read
+	 * back off the item rather than composed out of lara_yaw and `yaw`, so
+	 * that any branch above that turns her another way - the water's own move
+	 * - cannot drift from it: whatever this file did to her heading this tick,
+	 * this is where it ended. Everything that happens to it after this line
+	 * happens in AnimateLara and the collision, which is what game\camera.cpp
+	 * measures. */
 	modern_turned_yaw = lara_item->pos.y_rot;
 	modern_turned_at = GlobalCounter;
 	modern_turned_seen = 1;
 
-	/* THE ONLY WRITE TO THE INPUT WORD. When the translation says it is not
+	/* The only write to the input word. When the translation says it is not
 	 * responsible - a classic state, the stick at rest - the bits the stick
 	 * and the keyboard wrote simply stand, which is why the pad still moves
-	 * her on a ladder and up a rope without a line of code for it. (The water
-	 * used to be in that list; round 161a2 step 4 gave it its own.) */
+	 * her on a ladder and up a rope without a line of code for it. */
 	if (out.active)
 		bits = (bits & ~(long)MODERN_MOVE_MASK) | out.bits;
 	else
 		modern_state.blocked_count = 0;
 
-	/* THE STROKE IS ADDED AND NEVER TAKEN AWAY (round 161a2 step 4). It is
-	 * IN_JUMP, which is not in MODERN_MOVE_MASK and so was not cleared by the
-	 * line above - deliberately: the player's own jump key must keep working
-	 * as the stroke it has always been, with water_auto_stroke on or off, and
-	 * a mask that swallowed it would have made the switch a trap. So this can
-	 * only ever turn the bit ON, on the ticks the stick is out under water. */
+	/* The stroke is added and never taken away. It is IN_JUMP, which is not in
+	 * MODERN_MOVE_MASK and so is not cleared by the line above - deliberately:
+	 * the player's own jump key keeps working as the stroke, with
+	 * water_auto_stroke on or off. This only ever turns the bit on, on the
+	 * ticks the stick is out under water. */
 	if (stroke)
 		bits |= MODERN_IN_JUMP;
 
@@ -636,106 +542,60 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	modern_want_move = (out.active && (out.bits & MODERN_IN_FORWARD) != 0 &&
 		(out.bits & (MODERN_IN_LEFT | MODERN_IN_RIGHT)) != 0) ? 1 : 0;
 
-	/* MODERNLOG (step 5, design section 7 step 5). One line per real tick,
-	 * whether or not the translation ended up responsible for it - `mode=off`
-	 * is itself the answer to "why did nothing happen here" and earns a line
-	 * exactly as much as a running one does, which is also why this sits
-	 * after every early return above rather than being reachable from one of
-	 * them: 30 a second while the seam runs, at every fps_mode, because it
-	 * hangs on the logic tick and not on a drawn frame.
+	/* MODERNLOG: one line per real tick, whether or not the translation was
+	 * responsible for it - `mode=off` is itself the answer to "why did nothing
+	 * happen here". It sits after every early return above and hangs on the
+	 * logic tick, not on a drawn frame: 30 lines a second at every fps_mode.
 	 *
-	 * NEVER MORE - BUT IT CAN BE FEWER, AND A LINE COUNT HAS TO EXPECT THAT.
-	 * The reset branch above returns before this line, so the first tick back
-	 * from a level start, a savegame, first person, a cutscene or the look key
-	 * shows its `init` line and no tick line. The inventory is the one break
-	 * that is NOT in that list, because nothing resets for it (the guard's own
-	 * comment says why): the tick after the ring closes is an ordinary tick
-	 * line. And while the look key is down, or the ring is open, or a cutscene
-	 * is playing, the seam is not called at all and neither line appears. So a
-	 * gap in `f=` is
-	 * the scheme standing aside, not a dropped line - count against the `f=`
-	 * numbers, which are GlobalCounter and never lie, rather than against the
-	 * wall clock.
+	 * Never more, but it can be fewer. The reset branch above returns before
+	 * this line, so the first tick back from a level start, a savegame, first
+	 * person, a cutscene or the look key shows its `init` line and no tick
+	 * line; the tick after the inventory closes is an ordinary tick line,
+	 * because nothing resets for it. While the look key is down, the ring is
+	 * open or a cutscene plays, the seam is not called and neither line
+	 * appears. A gap in `f=` (GlobalCounter) is the scheme standing aside,
+	 * not a dropped line.
 	 *
-	 * `src` says which half produced the bits this tick (design section 5.9):
-	 * "pad" is the stick driving `out`, "keys" is `out` stepping aside and
-	 * the base assembly's bits - the classic stick scaling, the keyboard, or
-	 * Steam Input's own synthetic arrow keys - standing untouched, so a
-	 * Steam report is one grep away.
+	 * `src`: "pad" is the stick driving `out`; "keys" is `out` stepping aside
+	 * and the base assembly's bits - the classic stick scaling, the keyboard,
+	 * or Steam Input's synthetic arrow keys - standing untouched.
 	 *
-	 * `bits` is `out.bits`, the translation's OWN contribution (0 whenever
-	 * `mode=off`) - not the merged word this function returns. A classic
-	 * tick or a dead stick can still show movement in the game from the
-	 * untouched base bits, and that is finding B (section 1.3), not a
-	 * contradiction of this line. `lara` reads the local captured above the
-	 * direct turn, because by the time this line runs the direct turn may
-	 * already have written a new heading.
+	 * `bits` is `out.bits`, the translation's own contribution (0 whenever
+	 * `mode=off`), not the merged word this function returns; a classic tick
+	 * or a dead stick can still move her through the untouched base bits.
+	 * `lara` is the heading captured before the direct turn wrote a new one.
 	 *
-	 * `cstep` is how far the COURSE itself moved this tick (round 161a2b, #161
-	 * item 7b). It was the instant about-turn's second condition until round
-	 * 161a3 deleted that rule (item 2b - a reversal is turned at the rate like
-	 * everything else now), and it stays as a LOG FIELD, because it is still
-	 * the one number that separates a flick of the thumb from error that piled
-	 * up while the stick outran her turn: a smooth circle holds `cstep` near
-	 * the stick's own step a tick, and only a flick shows a figure over 16384.
+	 * `cstep` is how far the course itself moved this tick: a smooth circle
+	 * holds it near the stick's own step a tick, and only a flick of the
+	 * thumb shows a figure over 16384.
 	 *
-	 * `cam_world` AND `clip` ARE THE LINE'S LAST TWO, AFTER `cstep` AND NOT
-	 * BEFORE IT (round 161a2b, items 1 and 3): cstep already sat at the tick
-	 * line's own end when this step started, and both of these read the SAME
-	 * one-tick-behind state cam_off/cam_pitch/cam_ret already do, for the
-	 * same reason (this line runs before CalculateCamera). `cam_world` is
-	 * the orbit's own remembered angle - what item 1 keeps fixed while she
-	 * turns under it - 0 before its first seating exactly as `ref=` falls
-	 * back to the measured vector until then. `clip` is the flag item 3's
-	 * candidate loop writes and the return's own wall_factor reads, not a
-	 * second measurement of a wall: 1 on a tick the eye was clipped, which
-	 * is also the tick the return runs eight times as fast.
+	 * `cam_world` is the orbit's remembered world angle, 0 before its first
+	 * seating. `clip` is the flag the wall resolution writes and the return's
+	 * wall_factor reads: 1 on a tick the eye was clipped, the tick the return
+	 * runs eight times as fast.
 	 *
-	 * THREE MORE AFTER `clip` (round 161a3, step 5), each owed by one of the
-	 * round's own items and appended rather than worked into any of the seven
-	 * above, so a reader who does not know about them still finds the line
-	 * exactly where it always ended:
-	 * `view_err` is item 1's own proof read back every tick rather than only
-	 * inside ModernTest - abs(camera_yaw - cam_world) wrapped the short way
-	 * exactly as `err` above already is, in the SAME raw units (0 == on the
-	 * ray, 32768 == pointing the opposite way) rather than converted to
-	 * degrees, so it reads beside `cam`/`cam_world`/`err`/`yawd` in the unit
-	 * they already share instead of a unit of its own.
-	 * `air` is item 4's own local, already in this function's scope (0
-	 * whenever ModernAirTurn did not run this tick, which is every tick but
-	 * the ones in AS_FORWARDJUMP with the stick held off centre).
-	 * `carry` is item 5's swing still pending, MODERN_CAMERA_STATE::carry read
-	 * back from game\camera.cpp for the same reason cam_off and its
-	 * neighbours are - one tick behind, because this line runs before
-	 * CalculateCamera pays any of it out.
+	 * `view_err` is abs(camera_yaw - cam_world), wrapped the short way like
+	 * `err`, in raw units (0 == on the ray, 32768 == pointing the opposite
+	 * way): it shows every tick that the eye stays on the dialled angle.
+	 * `air` is the air turn's step (0 on every tick but those in
+	 * AS_FORWARDJUMP with the stick off centre). `carry` is the camera swing
+	 * still pending, MODERN_CAMERA_STATE::carry.
 	 *
-	 * AND `cam_step` IS THE LINE'S LAST, appended by round 161a3b's item 2 as
-	 * every round appends its own: the step the player's right thumb gave the
-	 * orbit on the previous tick, which is exactly what was added to her held
-	 * course a few lines above. It is the situation's own field read back and
-	 * not a second measurement, so a play test can hold `cam_step` against
-	 * `cstep` and see the course following the view tick for tick instead of
-	 * standing still and then jumping - which is the whole of what M2
-	 * measured. 0 on every tick the orbit did not tick, and on every tick the
-	 * camera moved by itself. */
+	 * `cam_step` is the step the right stick gave the orbit on the previous
+	 * tick, exactly what was added to her held course above; held against
+	 * `cstep` it shows the course following the view tick for tick. 0 on every
+	 * tick the orbit did not tick, and on every tick the camera moved by
+	 * itself. New fields are appended at the end, so the older ones keep
+	 * their places. */
 	if (gLogEnabled)
 	{
-		/* THE ORBIT'S OWN EIGHT NOW (round 161a2, step 5; two more in round
-		 * 161a2b, step 5; one more in round 161a3, step 5), read back rather
-		 * than kept in a local of this function's own: game\camera.cpp owns the
-		 * one instance of both, the same division of labour camera_yaw above
-		 * already keeps with that file. cam_off/cam_pitch/cam_ret/cam_world/
-		 * clip/carry are one tick behind, exactly as camera_yaw is and for the
-		 * same reason (this line runs before CalculateCamera); rs_x/rs_y are
-		 * already this tick's own (game\camera.cpp's own comment on
-		 * ModernCameraLogState says why).
-		 * `hide` is the raw measured distance and not a flag, so a play test
-		 * can watch it close on MODERN_CAMERA_HIDE_DIST rather than only
-		 * learn that it crossed - and it is one tick behind WITH the others
-		 * (round 161a2's fix round says so here because the first version of
-		 * this comment named only three): it is camera.pos against
-		 * camera.target, which are the points the LAST CalculateCamera
-		 * left. */
+		/* The orbit's eight, read back from game\camera.cpp, which owns the
+		 * one instance. cam_off/cam_pitch/cam_ret/cam_world/clip/carry and
+		 * `hide` are one tick behind, as camera_yaw is, because this line runs
+		 * before CalculateCamera; rs_x/rs_y are this tick's own (see
+		 * game\camera.cpp's comment on ModernCameraLogState). `hide` is the raw
+		 * eye distance, camera.pos against camera.target, not a flag, so it can
+		 * be watched closing on MODERN_CAMERA_HIDE_DIST. */
 		short cam_off, cam_pitch, cam_world;
 		long cam_ret, cam_rs_x, cam_rs_y, clip, carry;
 		long view_err;

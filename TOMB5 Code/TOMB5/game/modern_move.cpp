@@ -13,31 +13,17 @@
 #include "modern_move.h"
 #include <math.h>	// atan2, floor, sqrt - the stick's direction and its length
 
-/* The arithmetic of the modern control (#161, round 161a, step 1). The
- * header says what this is and where the design comes from; this file is the
- * decision tree and nothing else. No engine header, no global, no side
- * effect outside the two structs the caller hands in. */
+/* The arithmetic of the modern control, the movement half: the decision tree
+ * only. The header says what it is and where the design comes from. No engine
+ * header, no global, no side effect outside the structs the caller hands in. */
 
-/* THE ARC TANGENT, AND WHY IT IS NOT phd_atan.
- *
- * The engine's own is phd_atan (specific\3dmath.cpp), and the CAMERA HEADING
- * this file works against is built with it: game\modern_state.cpp computes
- * phd_atan(camera.target.z - camera.pos.z, camera.target.x - camera.pos.x)
- * and hands the result in. So the number that has to agree with the engine's
- * own angles is the engine's own.
- *
- * It cannot be called from HERE. specific\3dmath.h pulls global\types.h
- * behind it and that needs windows.h and d3d9.h - including it would stop
- * this file compiling outside the engine, and with it ModernTest, which is
- * the whole point of keeping the translation in a file of its own.
- *
- * So the stick's own direction is taken with the C library's atan2, scaled to
- * the same 16-bit units. Measured over all 131769 integer stick pairs in
- * -181..181 (full deflection on a diagonal is 181), the largest disagreement
- * between this function and (short)phd_atan(z, x) is 5 of 65536 - 0.03
- * degrees, and that is the tan table's own resolution, not an error. The
- * smallest threshold anything below compares against is steer_step, 384 units
- * or 2.1 degrees, so the difference cannot reach a decision. */
+/* The stick's direction in the engine's 16-bit angle units. The camera
+ * heading it is compared with comes from phd_atan (game\modern_state.cpp),
+ * but specific\3dmath.h needs windows.h and d3d9.h and would stop this file
+ * compiling for ModernTest, so the C library's atan2 is scaled instead.
+ * Measured over all 131769 integer pairs in -181..181, it differs from
+ * (short)phd_atan(z, x) by at most 5 of 65536 (0.03 degrees, the tan table's
+ * resolution) - far under the smallest threshold, steer_step's 384. */
 short ModernAngle(long x, long z)
 {
 	if (!x && !z)
@@ -66,8 +52,8 @@ static long ModernAbs(long v)
 }
 
 /* How far the stick is out, 0..stick_full. The clamp is TROne's and changes
- * no decision - a diagonal reaches 181 in our units and every threshold below
- * is under 128 - but it keeps `mag` a number the log can be read against. */
+ * no decision - a diagonal reaches 181 and every threshold is under 128 - but
+ * it keeps `mag` a number the log can be read against. */
 static long ModernMagnitude(const MODERN_CFG* cfg, long x, long y)
 {
 	const double m = sqrt((double)(x * x + y * y));
@@ -75,45 +61,33 @@ static long ModernMagnitude(const MODERN_CFG* cfg, long x, long y)
 	return (m > (double)cfg->stick_full) ? cfg->stick_full : (long)m;
 }
 
-/* To the nearest, away from zero at a half - so the scaling below is ODD, and
- * a stick pushed the other way reads the same distance the other way instead
- * of picking up a bias from the sign of its own components. */
+/* To the nearest, away from zero at a half, so the scaling below is odd: a
+ * stick pushed the other way reads the same distance with no bias from the
+ * sign of its components. */
 static long ModernRound(double v)
 {
 	return (v < 0.0) ? -(long)floor(-v + 0.5) : (long)floor(v + 0.5);
 }
 
-/* THE RADIAL DEAD ZONE - the one piece of stick arithmetic both sticks share
- * (#161, round 161a2b, item 6; the numbers and what they are for are in
- * game\modern_move.h beside MODERN_DEAD_LEFT).
+/* The radial dead zone, shared by both sticks (the numbers are in
+ * game\modern_move.h beside MODERN_DEAD_LEFT). Pure, so that ModernTest's
+ * `deadzone` group can check that the direction the thumb holds is the
+ * direction that comes out.
  *
- * Pure on purpose. What it has to promise is a promise about ANGLES - the
- * direction the thumb holds is the direction that comes out - and no play
- * test can read an angle off a screen, so the promise is kept in ModernTest's
- * `deadzone` group instead.
- *
- * Four rules, in the order the code takes them:
- *   inside the SQUARE the hardware's own per-axis zone held, nothing at all
- *                     (`axis_zone`, round 161a2b's fix round - the header
- *                     beside MODERN_DEAD_AXIS_LEFT says why a disc alone let a
- *                     resting pad through in that square's corners);
- *   inside the zone   nothing at all, so a stick at rest cannot creep;
+ *   inside the square the hardware's per-axis zone held (`axis_zone`):
+ *                     nothing, so a pad resting in its corners stays dead;
+ *   inside the zone   nothing, so a stick at rest cannot creep;
  *   past its rim      the length starts again at nothing and eases up to full
  *                     at the stick's own rim, so crossing it is not a step;
- *   in every case     the output is the INPUT VECTOR scaled, so the angle
- *                     survives to whatever the integer grid can hold.
+ *   in every case     the output is the input vector scaled, so the angle
+ *                     survives as far as the integer grid allows.
  *
- * The clamp at the end is the one ModernMagnitude already makes and for the
- * same reason: a diagonal push reads about 181 in our units, because the two
- * axes are gated as a square and not as a circle, and a rate 1.4 times bigger
- * on the diagonal is a camera that turns faster while it also tilts. Clamping
- * the LENGTH and keeping the direction makes the stick round, which is what
- * every caller already takes it to be.
+ * The length is clamped to full: the axes are gated as a square, so a diagonal
+ * reads about 181, and a 1.4 times faster rate on the diagonal would be a
+ * camera that turns faster while it tilts. `axis_zone` 0 is no square (no
+ * per-axis hardware zone, or a test of the radial rules alone).
  *
- * `axis_zone` 0 is no square at all: what a caller with no per-axis hardware
- * zone behind it passes, and what the tests of the radial rules alone pass.
- *
- * Returns that length, 0..MODERN_STICK_FULL. */
+ * Returns the length, 0..MODERN_STICK_FULL. */
 long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* out_x, long* out_y)
 {
 	const double full = (double)MODERN_STICK_FULL;
@@ -125,12 +99,12 @@ long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* 
 	if (zone < 0)
 		zone = 0;
 
-	/* THE HARDWARE'S OWN SQUARE, AND IT IS ASKED FIRST because in the corners it
-	 * reaches further than the disc does: both components inside it is exactly
-	 * the pair specific\dxshell.cpp used to zero outright, and nothing that was
-	 * dead at rest before this round may come alive now. It costs the axis snap
-	 * nothing - a snapped push is one the per-axis zone let THROUGH, so it
-	 * always has a component outside the square and never meets this gate. */
+	/* The hardware's square is asked first, because in the corners it reaches
+	 * further than the disc: both components inside it is the pair
+	 * specific\dxshell.cpp's per-axis zone zeroes, and a stick dead at rest there
+	 * must stay dead. A push the per-axis zone lets through always has a
+	 * component outside the square, so this gate does not bring the axis snap
+	 * back. */
 	if (axis_zone > 0 && ModernAbs(in_x) <= axis_zone && ModernAbs(in_y) <= axis_zone)
 		return 0;
 
@@ -155,31 +129,20 @@ long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* 
 	return ModernRound(want);
 }
 
-/* THE PLAYER'S OWN SHARE OF THAT ZONE (#161, round 161b1, item 5) - "den wie im
- * Remaster toggelbar fuer den User hier einbinden".
+/* The player's dead-zone setting applied to one tuned width. `base` is one of
+ * the eight MODERN_DEAD_* widths (game\modern_move.h), `user` is
+ * tomb5.dead_zone, 0..100; the answer is the width the seam applies.
  *
- * `base` is one of the eight tuned MODERN_DEAD_* widths (game\modern_move.h),
- * `user` is tomb5.dead_zone, 0..100, and the answer is the width the seam
- * really applies. The whole point of the formula is its MIDDLE:
+ *   (base * 50 + 25) / 50 = base, exactly, for every base,
  *
- *   (base * 50 + 25) / 50 = base + 25/50 = base, exactly, for every base,
+ * because integer division drops the remainder, so the default of 50 is the
+ * tuned width itself. The +25 rounds the rest of the bar to nearest (31 at 40
+ * per cent is 24.8 -> 25). 0 gives no zone, 100 twice the base; the result is
+ * monotone in `user`. ModernTest checks all three.
  *
- * because integer division throws the remainder away. So the default setting is
- * not "close to" round 161a3's tuning, it IS that tuning, and a player who never
- * touches the row plays the engine the play tests were run on. The +25 is the
- * half-divisor that makes the rest of the bar round to nearest rather than
- * always down: 31 at 40 per cent is 24.8, which answers 25 and not 24.
- *
- * 0 answers 0 for every base - no zone at all - and 100 answers twice the base.
- * The function is monotone in `user` because the numerator is, and it is pure
- * for the same reason ModernStickDeadZone above is: ModernTest is where the
- * three promises are kept, not a play test.
- *
- * Both arguments are guarded rather than trusted. `user` arrives from the
- * registry, which a hand can edit (tomb5\tomb5.cpp clamps it too, but the
- * clamp belongs where the value is USED as well as where it is read), and a
- * negative `base` has no meaning as a width - ModernStickDeadZone reads 0 and
- * below as "no zone", so that is what a caller gets back here. */
+ * Both arguments are guarded: `user` comes from the registry, which can be
+ * edited by hand (tomb5\tomb5.cpp clamps it on reading too), and a negative
+ * `base` means "no zone" to ModernStickDeadZone, so 0 is returned. */
 long ModernDeadZoneUser(long base, long user)
 {
 	if (base <= 0)
@@ -194,35 +157,22 @@ long ModernDeadZoneUser(long base, long user)
 	return (base * user + 25) / 50;
 }
 
-/* THE LOOK KEY'S TANK, READ BY SECTOR (#161, round 161a3b, item 1).
+/* The look key's tank control, read by sector. On the bypass ticks the stick
+ * goes to the classic assembly in specific\input.cpp, whose two per-axis
+ * thresholds of 8 are, behind the radial zone, a window of +-3.6 degrees round
+ * the horizontal; a thumb pushing "left" sits 10 to 16 degrees low, and the
+ * back bit then overwrites the turn goal in lara_as_stop (see
+ * MODERN_TANK_TURN_SECTOR). So exactly one axis comes out of here.
  *
- * On the bypass ticks - and on no others - the stick is handed to the CLASSIC
- * assembly in specific\input.cpp, which reads it as two independent per-axis
- * thresholds of 8. That is Core's own arithmetic and it is right behind the
- * hardware's per-axis zone; behind the modern RADIAL zone it is a window of
- * +-3.6 degrees round the exact horizontal, and M1 measured what a thumb does
- * with that: 680 of 962 pushed tank ticks came out LEFT+BACK, because the
- * natural arc of a thumb pushing "left" sits ten to sixteen degrees low.
- * lara_as_stop lets the back bit overwrite the turn goal, so the user's own
- * "ich kann nur mit einem genauen Winkel die Drehung starten ... und sie macht
- * den Schritt zurueck" is that window and nothing about the camera.
+ * The decision is made on the stick's angle, which the thumb controls, and the
+ * value handed on is the stick's magnitude on the surviving axis - not its
+ * component, which would shrink towards the sector's edge and could fall back
+ * under the classic 8. The previous sector is an argument, not a static:
+ * specific\input.cpp knows when the bypass begins and ends and clears it, and
+ * the function stays pure for the tests.
  *
- * So exactly one axis comes out of here. The decision is made on the stick's
- * ANGLE, which is the number the thumb actually controls, and the value handed
- * on is the stick's own MAGNITUDE on the surviving axis - not its component,
- * which would shrink towards the sector's edge and could fall back under the
- * classic 8 that this function exists to get past.
- *
- * WHY THE PREVIOUS SECTOR IS AN ARGUMENT AND NOT A STATIC OF THIS FILE: it is
- * one thumb's history on one pad, and the file it lives in is the one that
- * knows when the bypass began and ended (specific\input.cpp clears it there).
- * Keeping it here would make this function a state machine that every test
- * would have to reset, for a memory of exactly one tick.
- *
- * Returns the sector it chose, MODERN_TANK_SECTOR_*, which is MODERNLOG's own
- * `sector=`. 0/0 in is 0/0 out and no sector: the radial dead zone one step
- * earlier is what makes a resting stick that pair, and this function must not
- * invent a direction for it. */
+ * Returns the sector chosen, MODERN_TANK_SECTOR_* (MODERNLOG's `sector=`). 0/0
+ * in is 0/0 out and no sector - a resting stick gets no invented direction. */
 long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long* out_y)
 {
 	long bound = MODERN_TANK_TURN_SECTOR;
@@ -239,23 +189,19 @@ long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long*
 	if (!in_x && !in_y)
 		return MODERN_TANK_SECTOR_NONE;
 
-	/* The stick's own heading, in the convention the whole of this file uses:
-	 * 0 is straight forward, +0x4000 is right, and stick_y is forward-negative
-	 * (specific\dxshell.cpp), which is why it goes in negated - exactly as
-	 * ModernTranslate takes it. */
+	/* The stick's heading: 0 is straight forward, +0x4000 is right. stick_y
+	 * is forward-negative (specific\dxshell.cpp), hence the negation, exactly as
+	 * in ModernTranslate. */
 	heading = ModernAngle(in_x, -in_y);
 
-	/* ... and how far that is from the HORIZONTAL, which is the axis this
-	 * decision is about: 0x4000 either side of forward. Folding the sign away
-	 * first makes left and right one case, which they are. */
+	/* How far that is from the horizontal (0x4000 either side of forward).
+	 * Folding the sign away first makes left and right one case. */
 	off_h = ModernAbs(ModernAbs(heading) - 0x4000L);
 
-	/* THE HYSTERESIS, AND IT ONLY EVER WIDENS THE SECTOR THE THUMB IS ALREADY
-	 * IN. A thumb resting ON the boundary crosses it with noise otherwise, and
-	 * at 30 ticks a second that is the turn and the step alternating in the
-	 * hand - the one failure this item exists to avoid repeating in another
-	 * shape. With no previous sector (the first tick of a hold) the plain
-	 * boundary answers, so a fresh push is never biased. */
+	/* The hysteresis only ever widens the sector the thumb is already in. A
+	 * thumb resting on the boundary would otherwise cross it with noise, and
+	 * the turn and the step would alternate at tick rate. With no previous
+	 * sector (the first tick of a hold) the plain boundary answers. */
 	if (prev_sector == MODERN_TANK_SECTOR_TURN)
 		bound += MODERN_TANK_SECTOR_HYST;
 	else if (prev_sector == MODERN_TANK_SECTOR_STEP)
@@ -273,7 +219,7 @@ long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long*
 	return MODERN_TANK_SECTOR_STEP;
 }
 
-/* A world course, in LARA'S OWN frame, as one direction bit. Four sectors:
+/* A world course, in Lara's own frame, as one direction bit. Four sectors:
  * forward, back, and the two sides. `sector` is the boundary to the front and
  * to the back; `step_bits` picks the side step instead of the turn, which is
  * what aiming wants. */
@@ -294,7 +240,7 @@ static long ModernRelativeBits(short rel, long sector, long step_bits)
 }
 
 /* The stick came back to rest, or this tick is not ours: forget the held
- * course so that the next push seats a fresh one. The blocked counter is NOT
+ * course so that the next push seats a fresh one. The blocked counter is not
  * cleared here - it is the caller's, it is measured from Lara's position and
  * it has its own rule in game\modern_state.cpp. */
 static void ModernRelease(MODERN_STATE* state)
@@ -364,64 +310,36 @@ void ModernResetState(MODERN_STATE* state)
 	state->stand_hold = 0;
 }
 
-/* THE STATES THAT STAY CLASSIC (round 161a step 3).
- *
- * Design sections 1.7 and 6.1 of MODERN-CONTROLS-DESIGN.md, checked state by
- * state against game\lara_states.h and against the routine each one runs in
- * game\lara.cpp:40-181 (lara_control_routines[]). TROne's own list stops at
- * 104; TR5 runs to 138, and section 6.1 measured what the extra 34 states do.
- * The rule in one line: a direction bit stays classic wherever the routine
- * reads it as something other than "where do I want to go" - which way to
- * shimmy, whether to let go of a rope, which way to push a block - and
+/* The states that stay classic, checked state by state against
+ * game\lara_states.h and the routine each runs (lara_control_routines[] in
+ * game\lara.cpp). TROne's list stops at 104; TR5 runs to 138, and the extra
+ * states were checked one by one. A direction bit stays classic wherever the
+ * routine reads it as something other than "where do I want to go" - which
+ * way to shimmy, whether to let go of a rope, which way to push a block;
  * everything else (standing, running, walking, the jumps, ducking, crawling)
- * gets the translation, which is why the switch below lists the classic
- * states one by one and lets `default` answer modern for the rest.
+ * is translated, so the switch lists the classic states and `default`
+ * answers modern.
  *
- * THE WATER STATES USED TO STAND HERE WITH "modern in A2 (camera pitch)"
- * AGAINST THEM, AND ROUND 161a2 STEP 4 TOOK THEM OUT. A1 had no camera pitch
- * to swim by; the orbit is there now, so the eight states the player really
- * steers in the water - 13/17/18 under it and 33/34/47/48/49 on it - are
- * translated like any other, and ModernWaterMove below is what they get
- * instead of ModernDirectTurn. The six that LOOK like water and are still
- * listed as classic are named where they sit: the three dives and the
- * climb-out are the handover and not the swim, the underwater roll is a fixed
- * maneuver and the underwater death is not steered at all. DOZY's flight
- * (118) makes seven and sits with TR5's own later states, where it reads the
- * direction bits as a direction to fly.
+ * The eight states steered in the water (13/17/18 under it, 33/34/47/48/49
+ * on it) are translated and get ModernWaterMove instead of ModernDirectTurn.
+ * Those that only look like water stay classic, each for its reason below;
+ * DOZY's flight (118) reads the bits as a direction to fly.
  *
- * ONE DIVERGENCE FROM THIS ROUND'S OWN BUILD BRIEF, MEASURED AND REPORTED IN
- * THE STEP 3 RECORD: the brief's step 3 paragraph lists 25-29 as modern, but
- * design section 1.7 lists TROne's 25/26/27 ("back flip and side flips",
- * added after THEY measured the translation turning Lara onto the stick
- * heading mid-flip) as classic, and ModernTest.cpp already carried a second,
- * independent TROne expectation saying the same thing
- * (modern.shared_state_numbers: "is_classic 10/17/25/26/27/36/57/76"). Rather
- * than trust either text over the other, I read the routines themselves:
- * lara_as_leftjump (:765) sets AS_TWIST when IN_RIGHT is held, lara_as_
- * rightjump (:781) sets it the same way on IN_LEFT, and lara_as_backjump
- * (:799) reads IN_FORWARD | IN_ROLL to end the flip early - exactly the
- * mid-flip redirect TROne's own document says 25/26/27 were added to stop.
- * So 25/26/27 are classic here, matching TROne and not the brief's summary
- * sentence. 28 and 29 (lara_as_upjump, lara_as_fallback) read no direction
- * bit at all and stay modern as the brief says. */
+ * 25/26/27, the back flip and the side flips, are classic as in TROne (which
+ * added them after the translation turned Lara onto the stick heading
+ * mid-flip): lara_as_leftjump sets AS_TWIST on IN_RIGHT, lara_as_rightjump on
+ * IN_LEFT, and lara_as_backjump reads IN_FORWARD | IN_ROLL to end the flip
+ * early. 28 and 29 (lara_as_upjump, lara_as_fallback) read no direction bit
+ * and stay modern. */
 long ModernStateIsClassic(short anim_state)
 {
 	switch (anim_state)
 	{
-	/* THE WATER'S OWN HANDOVERS, which look like swimming and are not
-	 * steered like it. Round 161a2 step 4 took 13/17/18 and 33/34/47/48/49
-	 * out of this list; these four and the two below them stayed, and each
-	 * one has a reason of its own.
-	 *
-	 * 52/53/55 are the entry and the way out: a dive is how she gets INTO
-	 * the water and the climb-out is how she leaves it, so both belong to
-	 * the handover rather than to the swim. (They are OUR reason and not
-	 * TROne's - the second review pass of round 161a measured that their
-	 * trone_modern_state_is_classic has 52, 53 and 55 in neither the list
-	 * nor the prose above it.) 35 joins them for the same reason and for a
-	 * measured one on top: lara_as_dive reads IN_FORWARD as "steepen the
-	 * dive" (laraswim.cpp:468), which is a pitch and not a direction, and
-	 * the animation is over in a handful of ticks. */
+	/* The water's handovers, which look like swimming and are not steered
+	 * like it. 52/53/55 are the way into the water and out of it (this list's
+	 * own choice; TROne's classic list does not name them). 35 also: lara_as_dive
+	 * reads IN_FORWARD as "steepen the dive" (laraswim.cpp), a pitch and not a
+	 * direction, and the animation is over in a handful of ticks. */
 	case 35:	// AS_DIVE, lara_as_dive - the entry, not the swim
 	case 52:	// AS_SWANDIVE, lara_as_swandive - the entry, not the swim
 	case 53:	// AS_FASTDIVE, lara_as_fastdive - the entry, not the swim
@@ -430,9 +348,8 @@ long ModernStateIsClassic(short anim_state)
 
 	/* The underwater 180 and the underwater death. The roll is a short fixed
 	 * maneuver on its own animation, not the held swim/glide loop the orbit
-	 * steers; the death is not steered by anybody (the seam's own
-	 * hit_points test in game\modern_state.cpp says the same thing a tick
-	 * earlier, and this is the state's half of it). */
+	 * steers; the death is not steered at all (the seam's hit_points test in
+	 * game\modern_state.cpp catches it a tick earlier). */
 	case 44:	// AS_UWDEATH, lara_as_uwdeath - her last pose is the animation's
 	case 66:	// AS_WATERROLL, lara_as_waterroll
 		return 1;
@@ -448,7 +365,7 @@ long ModernStateIsClassic(short anim_state)
 	case 88:	// AS_CRAWL2HANG, lara_as_null - crawl-to-hang transition
 		return 1;
 
-	/* The overhead hang and the monkey swing (1.7's "75-79") - the same
+	/* The overhead hang and the monkey swing - the same
 	 * family as the one above, at arm's reach instead of chest height. */
 	case 75:	// AS_HANG2, lara_as_hang2
 	case 76:	// AS_MONKEYSWING, lara_as_monkeyswing
@@ -480,10 +397,9 @@ long ModernStateIsClassic(short anim_state)
 	case 61:	// AS_CLIMBDOWN, lara_as_climbdown
 		return 1;
 
-	/* Section 6.1: during these Lara is Busy and the input mask already
-	 * strips everything but the four direction bits, so the choice is
-	 * harmless either way - named here so nobody "fixes" a gap that was
-	 * never a bug. 98 shares AS_PICKUP's own routine. */
+	/* During these Lara is Busy and the input mask already strips everything
+	 * but the four direction bits, so the choice is harmless either way; they
+	 * are listed so the list is complete. 98 shares AS_PICKUP's routine. */
 	case 39:	// AS_PICKUP, lara_as_pickup - Busy
 	case 40:	// AS_SWITCHON, lara_as_switchon - Busy
 	case 41:	// AS_SWITCHOFF, lara_as_switchoff - Busy
@@ -516,8 +432,7 @@ long ModernStateIsClassic(short anim_state)
 	case 104:	// AS_PULLEY, lara_as_pulley
 		return 1;
 
-	/* Section 6.1 - everything TR5 added past TROne's own 104, measured one
-	 * by one. 105/106 are the exception, not listed here: a crouch turn,
+	/* Everything TR5 has past TROne's 104, checked one by one. 105/106 are the exception, not listed here: a crouch turn,
 	 * where the direction bits mean "which way" exactly as they do standing,
 	 * so they fall through to `default` and come out modern. */
 	case 107:	// AS_CORNEREXTL, lara_as_extcornerl - corner shimmy, family of 30/31/82/83
@@ -539,7 +454,7 @@ long ModernStateIsClassic(short anim_state)
 	case 123:	// AS_TROPEFALL_R, lara_as_trfall
 	case 124:	// AS_TROPEGETON, lara_as_null
 	case 125:	// AS_TROPEGETOFF, lara_as_null
-	case 126:	// AS_CROWDOVE, lara_as_switchon - tightrope family (6.1's "119-127")
+	case 126:	// AS_CROWDOVE, lara_as_switchon - tightrope family (119-127)
 	case 127:	// AS_TROPEUNDOFALL, lara_as_null
 	case 128:	// AS_PBSPIN, lara_as_parallelbars - horizontal bar
 	case 129:	// AS_PBLEAP, lara_as_pbleapoff
@@ -564,93 +479,73 @@ long ModernStateIsClassic(short anim_state)
 	}
 }
 
-/* UNDER THE WATER OR ON IT (round 161a2 step 4). The three states in which
- * she is really swimming: 13 AS_TREAD, 17 AS_SWIM, 18 AS_GLIDE, all three
- * running SwimTurn out of game\laraswim.cpp. They are the ones where the
- * direction bits mean a PITCH and a turn rather than a direction, which is
- * why the water's own move clears them and drives x_rot instead - and they
- * are the ones where the stroke is the jump key. The five surface states are
- * the other half of the water and behave like the land: forward is forward.
+/* The three states in which she swims under water: 13 AS_TREAD, 17 AS_SWIM,
+ * 18 AS_GLIDE, all running SwimTurn (game\laraswim.cpp). There the direction
+ * bits mean a pitch and a turn rather than a direction, so the water's move
+ * clears them and drives x_rot, and the stroke is the jump key. The five
+ * surface states behave like the land: forward is forward.
  */
 long ModernStateIsSwim(short anim_state)
 {
 	return (anim_state == 13 || anim_state == 17 || anim_state == 18) ? 1 : 0;
 }
 
-/* THE HOLD-ON FAMILY (#161, round 161b2d, item 5; the user: "Es gibt im
- * Remaster eine Funktion fuer die moderne Steuerung, dass Lara sich nicht
- * festhalten muss, sie bleibt nach dem Greifen haengen und mit noch mal
- * druecken laesst sie los").
+/* The hold-on family for Grab mode (Lara stays hanging after a grab and lets
+ * go on the next press): every state in which a cleared IN_ACTION makes her
+ * let go, and no other - every routine that reads the bit as "still holding
+ * on", found by searching for IN_ACTION and IN_ACTION_ANY.
  *
- * Every state in which a CLEARED IN_ACTION makes her let go, and no other. The
- * list was not taken from the design: it is every routine in the tree that
- * reads the bit as "still holding on", found by grep on IN_ACTION and
- * IN_ACTION_ANY and then read one by one.
- *
- *   10  lara_col_hang      -> LaraHangTest       game\lara.cpp:2307, :5230
- *   30  lara_col_hangleft  -> LaraHangTest       game\lara.cpp:3034
- *   31  lara_col_hangright -> LaraHangTest       game\lara.cpp:3053
- *   75  lara_as_hang2      IN_ACTION             game\lara.cpp:3387
- *       lara_col_hang2     -> LaraHangTest       game\lara.cpp:3432
- *   76  lara_col_monkeyswing                     game\lara.cpp:3506
- *   77  lara_col_monkeyl                         game\lara.cpp:3573
- *   78  lara_col_monkeyr                         game\lara.cpp:3613
- *   79  lara_col_monkey180 -> lara_col_monkeyswing  game\lara.cpp:3639
- *   82  lara_col_hangturnlr                      game\lara.cpp:3980
+ *   10  lara_col_hang      -> LaraHangTest       game\lara.cpp
+ *   30  lara_col_hangleft  -> LaraHangTest       game\lara.cpp
+ *   31  lara_col_hangright -> LaraHangTest       game\lara.cpp
+ *   75  lara_as_hang2      IN_ACTION             game\lara.cpp
+ *       lara_col_hang2     -> LaraHangTest       game\lara.cpp
+ *   76  lara_col_monkeyswing                     game\lara.cpp
+ *   77  lara_col_monkeyl                         game\lara.cpp
+ *   78  lara_col_monkeyr                         game\lara.cpp
+ *   79  lara_col_monkey180 -> lara_col_monkeyswing  game\lara.cpp
+ *   82  lara_col_hangturnlr                      game\lara.cpp
  *   83  the same routine
- *   56  lara_col_climbstnc -> LaraCheckForLetGo  game\laraclmb.cpp:76, :23
- *   57  lara_col_climbing  -> the same           game\laraclmb.cpp:181
- *   58  lara_col_climbleft -> the same           game\laraclmb.cpp:254
- *   60  lara_col_climbright-> the same           game\laraclmb.cpp:277
- *   61  lara_col_climbdown -> the same           game\laraclmb.cpp:309
- *   99  lara_col_polestat  IN_ACTION_ANY         game\lara.cpp:4371
- *  100  lara_col_poleup                          game\lara.cpp:4421
- *  101  lara_col_poledown                        game\lara.cpp:4452
- *  102  lara_as_poleleft                         game\lara.cpp:4328
- *  103  lara_as_poleright                        game\lara.cpp:4339
- *   90  lara_as_ropel                            game\lara.cpp:4736
- *   91  lara_as_roper                            game\lara.cpp:4746
- *  111  lara_as_rope / lara_col_rope             game\lara.cpp:4623, :4632
- *  114  lara_as_rope (AS_ROPEFWD shares it)      game\lara.cpp:4623
- *  115  lara_as_rope (AS_ROPEBACK)               game\lara.cpp:4623
- *  113  lara_as_climbroped -> LaraClimbRope      game\rope.cpp:596
- *   70  lara_as_deathslide - the zip line        game\lara.cpp:4292
- *  128  lara_as_parallelbars                     game\lara.cpp:4897
+ *   56  lara_col_climbstnc -> LaraCheckForLetGo  game\laraclmb.cpp
+ *   57  lara_col_climbing  -> the same           game\laraclmb.cpp
+ *   58  lara_col_climbleft -> the same           game\laraclmb.cpp
+ *   60  lara_col_climbright-> the same           game\laraclmb.cpp
+ *   61  lara_col_climbdown -> the same           game\laraclmb.cpp
+ *   99  lara_col_polestat  IN_ACTION_ANY         game\lara.cpp
+ *  100  lara_col_poleup                          game\lara.cpp
+ *  101  lara_col_poledown                        game\lara.cpp
+ *  102  lara_as_poleleft                         game\lara.cpp
+ *  103  lara_as_poleright                        game\lara.cpp
+ *   90  lara_as_ropel                            game\lara.cpp
+ *   91  lara_as_roper                            game\lara.cpp
+ *  111  lara_as_rope / lara_col_rope             game\lara.cpp
+ *  114  lara_as_rope (AS_ROPEFWD shares it)      game\lara.cpp
+ *  115  lara_as_rope (AS_ROPEBACK)               game\lara.cpp
+ *  113  lara_as_climbroped -> LaraClimbRope      game\rope.cpp
+ *   70  lara_as_deathslide - the zip line        game\lara.cpp
+ *  128  lara_as_parallelbars                     game\lara.cpp
  *
- * AND SIX STATES THAT READ NOTHING AND ARE IN THE FAMILY ANYWAY (the word said
- * "five" until fix 3 counted the list it introduces), because they
- * are transitions INSIDE it and the bit must not blink off while one runs: 59
- * AS_CLIMBEND (the half rung at the top of a ladder), 112 AS_CLIMBROPE (the
- * pull up the rope, which reads IN_ROLL and hands her back to 111), and the
- * four corner shimmies 107-110, whose four routines (lara_as_extcornerl and
- * its three sisters) call SetCornerAnim (game\lara.cpp:5327) and put her back
- * into AS_HANG or AS_CLIMBSTNC - both of which ARE in the list above.
+ * Six states read nothing and are in the family because they are transitions
+ * inside it, where the bit must not blink off: 59 AS_CLIMBEND (the half rung
+ * at the top of a ladder), 112 AS_CLIMBROPE (the pull up the rope, which reads
+ * IN_ROLL and hands her back to 111), and the corner shimmies 107-110, whose
+ * routines call SetCornerAnim and return her to AS_HANG or AS_CLIMBSTNC.
  *
- * WHAT IS DELIBERATELY NOT IN IT, each measured:
+ * Not in it:
  * - the catches. 11 AS_REACH, 28 AS_UPJUMP, 29 AS_FALLBACK, 2 AS_STOP and the
- *   rest read IN_ACTION as "grab this", not as "keep holding" (game\lara.cpp:
- *   708, :858, :1126, :2450, :2907, game\objects.cpp, game\switch.cpp,
- *   game\rope.cpp:183, game\traps.cpp:1099, game\deathsld.cpp:36). A latched
- *   bit there would make her grab everything she fell past.
- * - 80 AS_ALL4S, where IN_ACTION and IN_BACK together start the crawl-to-hang
- *   (game\lara.cpp:3768, :3790). That is a catch too, and it is the one the
- *   family list would have broken most visibly.
+ *   rest read IN_ACTION as "grab this" (game\lara.cpp, game\objects.cpp,
+ *   game\switch.cpp, game\rope.cpp, game\traps.cpp, game\deathsld.cpp). A
+ *   latched bit there would make her grab everything she fell past.
+ * - 80 AS_ALL4S, where IN_ACTION with IN_BACK starts the crawl-to-hang: a
+ *   catch too.
  * - 87 AS_HANG2DUCK and 88 AS_CRAWL2HANG: one-way transitions across the
- *   family's edge whose routines read no input at all (lara_as_null /
- *   lara_col_crawl2hang), so membership would change nothing either way.
- * - 129 AS_PBLEAP, the leap OFF the bar: she has already let go.
- * - pushing and pulling a block (36/37/38). It is not a question of the
- *   family: game\moveblok.cpp:158, :220 and :268 read IN_INTERACT and not
- *   IN_ACTION at all since round 161b2c, and the latch DELIVERS only
- *   IN_ACTION. Under "Separate" they are two different keys; under "One key"
- *   they are the same key but still two bits, and the one this function
- *   governs is not the one the push loop asks for. So a block is pushed
- *   exactly as it is today, with the key held, at either setting.
- *   Fix 3 widened what a let-go press CLEARS to the whole action word under
- *   "One key", and it reaches this loop too - but only for the rest of that
- *   one press, which by then began inside the family and has to be let go
- *   before anything is grasped again. The press that starts a push is a
- *   press of its own, and it pushes. */
+ *   family's edge that read no input, so membership would change nothing.
+ * - 129 AS_PBLEAP, the leap off the bar: she has already let go.
+ * - pushing and pulling a block (36/37/38): game\moveblok.cpp reads
+ *   IN_INTERACT, not IN_ACTION, and the latch delivers only IN_ACTION, so a
+ *   block is pushed with the key held at either setting. Under "One key" a
+ *   let-go press clears the whole action word, but only for the rest of that
+ *   press; the press that starts a push is a new one, and it pushes. */
 long ModernStateIsGrab(short anim_state)
 {
 	switch (anim_state)
@@ -706,38 +601,24 @@ long ModernStateIsGrab(short anim_state)
 	}
 }
 
-/* THE DUCK-AND-CRAWL FAMILY (#161, round 161b2d, item 5b, after the user's play
- * test of round 161b2c: "Bis auf das Ducken geht alles. Problem beim Ducken
- * ist, sie haelt es so lange automatisch fest, bis ich in die
- * nach-vorne-kriechen-Animation wechsle, dann bricht sie ab").
+/* The duck-and-crawl family for Duck mode. The duck latch drops on
+ * lara.gun_status == LG_HANDS_BUSY (ladder, rope, a crawl-to-hang), but
+ * lara_as_all4s sets LG_HANDS_BUSY itself as ANIM_DUCK_TO_ALL4S runs, so the
+ * latch would fall the moment she starts to crawl. Inside this family the flag
+ * means "she is crawling" and the latch stands; outside it, it still drops.
  *
- * MEASURED CAUSE, and it is one line: the duck latch's drop list carries
- * lara.gun_status == LG_HANDS_BUSY, which round 161b2c wrote as "ladder and
- * vehicle" - but lara_as_all4s sets LG_HANDS_BUSY itself the moment
- * ANIM_DUCK_TO_ALL4S runs (game\lara.cpp:3691), which is exactly the animation
- * he named. So the latch fell where a Toggle player needs it most. The fix is
- * not to drop the term but to ask WHERE she is when it is true: inside this
- * family it says "she is crawling", outside it still says "ladder, rope, a
- * crawl-to-hang", and there it still drops the latch.
+ * The list is the engine's own "crouched or crawling" (game\newinv2.cpp
+ * refuses a long gun in exactly these states) with two differences:
+ * - AS_DUCKROLL (72) is added: the roll out of a duck ends in a duck.
+ * - AS_CRAWL2HANG (88) is not in it: game\lara.cpp sets LG_HANDS_BUSY there
+ *   because she is leaving the floor, and the grab family takes over.
  *
- * The list is the engine's OWN spelling of "she is crouched or crawling" -
- * game\newinv2.cpp:2827 refuses a long gun in exactly these states - with two
- * differences, both deliberate:
- * - AS_DUCKROLL (72) is added. The roll out of a duck is part of the family by
- *   the user's own sentence ("the roll out of a duck") and it ends in a duck.
- * - AS_CRAWL2HANG (88) is NOT in it. The brief names it as a drop and the code
- *   agrees: game\lara.cpp:4197 sets LG_HANDS_BUSY for a reason there, she is
- *   leaving the floor, and the grab family above takes over.
- *
- * The three pickup states are in it because a pickup made from the crouch or
- * the crawl sets LG_HANDS_BUSY too (game\pickup.cpp) and must not stand her up
- * afterwards. They cost nothing when she picks something up standing: the
- * latch can only be standing if she is crouched, and during a pickup lara.Busy
- * strips IN_DUCK from the word anyway (specific\input.cpp).
- *
- * 89 AS_CONTROLLED is NOT in it: the crawl jump (game\lara.cpp:3674) borrows a
- * scripted state that a dozen other objects use, so membership would hand the
- * latch to a pulley or a trapdoor animation as well. */
+ * The three pickup states are in it because a pickup from the crouch or the
+ * crawl sets LG_HANDS_BUSY too (game\pickup.cpp) and must not stand her up.
+ * Standing they cost nothing: the latch stands only while she is crouched, and
+ * lara.Busy strips IN_DUCK during a pickup anyway (specific\input.cpp).
+ * 89 AS_CONTROLLED is not in it: the crawl jump borrows a scripted state that
+ * a dozen other objects use (a pulley, a trapdoor). */
 long ModernStateIsDuck(short anim_state)
 {
 	switch (anim_state)
@@ -765,12 +646,10 @@ long ModernStateIsDuck(short anim_state)
 	}
 }
 
-/* THE WATER'S TURN TABLE, and the predicate that says "this tick is the
- * water's" at the same time: 0 means no water state, anything else is the
- * rate that state turns at in TR5 itself (see the constants in the header for
- * where each number was read out of). One function rather than a bool and a
- * rate, because the seam asks both questions on the same tick and a state
- * that can be steered without a rate does not exist. */
+/* The water's turn table, and at the same time the test "this tick is the
+ * water's": 0 means no water state, anything else is that state's rate (the
+ * header's constants say where each comes from). One function, because the
+ * seam asks both questions on the same tick. */
 long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state)
 {
 	MODERN_CFG spare_cfg;
@@ -802,7 +681,7 @@ long ModernWaterTurnRate(const MODERN_CFG* cfg, short anim_state)
 	}
 }
 
-/* Standing still, or turning on the spot. Here a turn is ONLY reachable
+/* Standing still, or turning on the spot. Here a turn is only reachable
  * without IN_FORWARD (game\lara.cpp - lara_as_stop makes AS_TURN_L/AS_TURN_R
  * out of IN_LEFT/IN_RIGHT and a simultaneous IN_FORWARD overwrites the goal
  * with run or walk; lara_as_turn_r does the same), so the spin threshold is
@@ -825,104 +704,65 @@ long ModernStateIsStanding(short anim_state)
 	return (anim_state == 2 || anim_state == 14 || anim_state == 15) ? 1 : 0;
 }
 
-/* IS SHE ALREADY RUNNING (round 161a2b, #161 item 7a)? Two states and no more:
- * 1 AS_RUN and 73 AS_DASH, the sprint - the two the direct turn is allowed in
- * where her feet are already carrying her forward at speed.
- *
- * It exists for one rule and one only: there, the direct turn stops withholding
- * IN_FORWARD while the turn finishes. The user played the withholding as a
- * stutter - "sie macht ihre Stumble-Anim, als wuerde ich den Stick nur einmal
- * fuer einen Schritt von Lara nach vorne druecken" - and the log said why: with
- * the stick circling faster than she turns, the error stands over snap_forward
- * for single ticks, the bit drops out, and game\lara.cpp's lara_as_run sees no
- * forward and goes to AS_STOP for that one tick (203 of 937 running ticks in
- * play test 2, 25 visible drops). While she is RUNNING the argument the
- * withholding was built on does not hold anyway: the step it is trying to
- * prevent is a step she is taking regardless, and the turn happens under it.
- * 0 AS_WALK is deliberately NOT here - a walk is slow enough to place a foot
- * wrong - and neither is any standing state, where the withholding is exactly
- * right and keeps its own comment in ModernDirectTurn. */
+/* Is she already running? 1 AS_RUN and 73 AS_DASH (the sprint), the two
+ * direct-turn states where her feet already carry her forward at speed.
+ * There the direct turn does not withhold IN_FORWARD: with the stick circling
+ * faster than she turns, the error stands over snap_forward for single ticks,
+ * the bit drops out and lara_as_run goes to AS_STOP for that tick, a visible
+ * stumble (measured on 203 of 937 running ticks). The step the gate would
+ * prevent is one she is taking anyway. 0 AS_WALK is not here - a walk is slow
+ * enough to place a foot wrong - and neither is any standing state. */
 long ModernStateIsRunning(short anim_state)
 {
 	return (anim_state == 1 || anim_state == 73) ? 1 : 0;
 }
 
-/* IS SHE TURNING ON THE SPOT (round 161a3, #161 item 2c)? The four states in
- * which the classic automaton's own turn-on-the-spot lives and nothing is
- * carrying her anywhere: 2 AS_STOP, 6 AS_TURN_R, 7 AS_TURN_L, 20 AS_FASTTURN.
+/* Is she turning on the spot? The four states of the classic turn on the
+ * spot, where nothing carries her anywhere: 2 AS_STOP, 6 AS_TURN_R,
+ * 7 AS_TURN_L, 20 AS_FASTTURN. They get the wider IN_FORWARD gate
+ * (snap_forward_stand, see MODERN_SNAP_FORWARD_STAND): at 45 degrees a
+ * circling stick keeps her spinning in AS_STOP without the run animation; at
+ * 90 she runs within a few ticks of any reversal and the run turns her.
  *
- * They are the four that get the WIDER IN_FORWARD gate (snap_forward_stand).
- * M4 measured why: 232 ticks in AS_STOP stepping 18 degrees a tick with no
- * direction bit at all, because a circling stick kept more than 45 degrees
- * between her and the bit that starts the run - "dreht sie sich zwar 360 Grad
- * im Kreis, aber ohne ihre echte Animation". With 90 degrees she is running
- * within a few ticks of any reversal, and the run animation is what turns.
- *
- * IT IS NOT ModernStateIsGroundIdle, which also holds 12 AS_SPLAT and 14
- * AS_LAND: those two are a wall and a landing, one or two ticks each with her
- * weight still being caught, and the narrow 45 degrees is right there - the
- * step she would take is a step out of a pose she has not finished. Nor is it
- * ModernStateIsStanding (2/14/15), which answers a different question, "can
- * she jump from here". Three predicates, three questions. */
+ * Not the same as ModernStateIsGroundIdle, which also holds 12 AS_SPLAT and
+ * 14 AS_LAND - a wall and a landing, a tick or two with her weight still being
+ * caught, where the narrow 45 is right. Nor ModernStateIsStanding (2/14/15),
+ * which asks "can she jump from here". */
 long ModernStateIsSpotTurn(short anim_state)
 {
 	return (anim_state == 2 || anim_state == 6 || anim_state == 7 ||
 		anim_state == 20) ? 1 : 0;
 }
 
-/* WHICH AIRBORNE STATE SHE MAY STEER IN (round 161a3, #161 item 4). One: 3
- * AS_FORWARDJUMP, because it is the one the classic engine itself steers -
- * lara_as_forwardjump is the only routine in game\lara.cpp that reads IN_LEFT
- * or IN_RIGHT while she is off the ground (see MODERN_AIR_TURN_RATE in the
- * header for the measurement, routine by routine, and for why the reach, the
- * dives and the falls are deliberately not here). Widening what the engine
- * already does is item 4; giving her a new ability in a state that never had
- * one is not. */
+/* The airborne state she may steer in: only 3 AS_FORWARDJUMP, the one the
+ * classic engine itself steers - lara_as_forwardjump is the only routine in
+ * game\lara.cpp that reads IN_LEFT or IN_RIGHT off the ground. The air turn
+ * widens what the engine already does and gives no state a new ability (see
+ * MODERN_AIR_TURN_RATE for the reach, the dives and the falls). */
 long ModernStateAllowsAirTurn(short anim_state)
 {
 	return (anim_state == 3) ? 1 : 0;	// AS_FORWARDJUMP, lara_as_forwardjump
 }
 
-/* THE DIRECT TURN, THE ARITHMETIC HALF (design section 1.4 step 6, and the
- * user's decision 5). Everything below is numbers; the one line that writes
- * lara_item->pos.y_rot is game\modern_state.cpp.
+/* The states the direct turn may write y_rot in. The rest of the scheme
+ * sets a turn bit and lets the state machine turn her, but its fastest rate is
+ * 1456 a tick, so a half turn on the spot costs about 23 ticks; the direct
+ * turn writes the heading itself (the write is in game\modern_state.cpp).
  *
- * WHY IT EXISTS AT ALL. The rest of the scheme sets a turn BIT and lets the
- * automaton turn her, which is what makes the whole idea survive a 1:1
- * engine. The automaton's fastest rate is 1456 units a tick, and a half turn
- * on the spot therefore costs about 23 ticks even once AS_FASTTURN is
- * reached. That is the one place where "set the bit and wait" does not feel
- * like the Remaster, so here - and only here - we turn her ourselves.
+ * TROne allows the write in 0/1/2/6/7/12/14/20/73: standing, walking,
+ * running, the turns on the spot, the walk into a wall, the landing and the
+ * sprint. Never airborne, on a ladder or rope, in the water or in an
+ * interaction pose - there y_rot belongs to the animation, and an outside
+ * write makes the pose go crooked. Checked against game\lara_states.h and the
+ * routine each runs (TR5's sprint is AS_DASH / lara_as_dash; AS_LAND has no
+ * routine, lara_control_routines[14] is lara_void_func).
  *
- * WHICH STATES. TROne allow the write in 0/1/2/6/7/12/14/20/73 and nowhere
- * else: standing, walking, running, the three turns on the spot, the walk
- * into a wall, the landing and the sprint. Never airborne, never on a ladder
- * or a rope, never in the water, never in an interaction pose - in all of
- * those y_rot is the animation's to own, and an outside hand on it is how a
- * pose goes crooked. The numbers below are OUR state list's, checked one by
- * one against game\lara_states.h and the routine each runs:
- *   0 AS_WALK   1 AS_RUN   2 AS_STOP   6 AS_TURN_R   7 AS_TURN_L
- *  12 AS_SPLAT  14 AS_LAND 20 AS_FASTTURN          73 AS_DASH
- * (The first pass of this round wrote 73 as "AS_SPRINT, lara_as_sprint" and
- * 14 as "lara_as_land"; the review's own parse of the two files caught both.
- * TR5 calls the sprint AS_DASH / lara_as_dash, and AS_LAND has no routine of
- * its own at all - lara_control_routines[14] is lara_void_func. Neither
- * changed a classification, and the names are right here now because the
- * comment IS the evidence that the nine were checked.)
- *
- * THE TENTH, ADDED IN ROUND 161a-fix (#161 item 3). TROne's own list stops at
- * these nine ground states and never reaches 15 AS_COMPRESS - in their design
- * the crouch before a standing jump always resolves as a jump, never as
- * running, so there was nothing there for the direct turn to do. Ours can now
- * reach AS_COMPRESS with mode RUN as well: unarmed, ModernTranslate's rule 4
- * above steps aside for rule 6 (the user's decision - no weapon, no flip,
- * just the ordinary turn-and-run), so she can still be turning when the
- * crouch begins, and letting the write continue through it keeps her
- * aligning to the stick into the takeoff instead of freezing her heading for
- * the two or three ticks the crouch lasts. This does NOT reopen the door for
- * an armed flip: ModernDirectTurn below already refuses anything whose mode
- * is not MODERN_MODE_RUN, and AS_COMPRESS is mode JUMP whenever a weapon is
- * drawn (rule 4), so the two cases never overlap. */
+ * 15 AS_COMPRESS is added: unarmed, ModernTranslate's rule 4 steps aside for
+ * rule 6 and the crouch before a jump can arrive with mode RUN, so the write
+ * continuing through it keeps her aligning into the takeoff instead of
+ * freezing her heading for the two or three ticks of the crouch. An armed flip
+ * is not affected: AS_COMPRESS is mode JUMP with a weapon drawn, and
+ * ModernDirectTurn refuses every mode but MODERN_MODE_RUN. */
 long ModernStateAllowsDirectTurn(short anim_state)
 {
 	switch (anim_state)
@@ -944,16 +784,12 @@ long ModernStateAllowsDirectTurn(short anim_state)
 	}
 }
 
-/* HOW FAR AN ANGLE MAY MOVE THIS TICK: the error, folded the short way round
- * and clamped to the rate. Both turns in this file are that one sentence -
- * the land's ModernGroundTurn just below and the water's ModernWaterMove
- * further down - so it is written once here and they differ only in which
- * states they allow and which rate they hand it (round 161a2 step 4; the
- * arithmetic is A1's, moved and not changed).
+/* How far an angle may move this tick: the error, folded the short way round
+ * and clamped to the rate. The land's, the air's and the water's turns all use
+ * it and differ only in the states they allow and the rate they pass.
  *
- * The rate is clamped to half a turn as well. Nothing sets it that high, but
- * a rate over 0x8000 would make "clamp the error to the rate" meaningless
- * and the clamp costs one comparison. */
+ * The rate is clamped as well. Nothing sets it that high, but a rate over
+ * half a turn would make "clamp the error to the rate" meaningless. */
 static long ModernStepTowardBiased(long delta, long rate, long bias)
 {
 	delta = ModernWrap(delta);
@@ -961,14 +797,11 @@ static long ModernStepTowardBiased(long delta, long rate, long bias)
 	if (rate > 0x4000L)
 		rate = 0x4000L;
 
-	/* EXACTLY HALF A TURN IS THE SAME ANGLE EITHER WAY ROUND (round 161a3,
-	 * item 2b), and ModernWrap has to answer one of them: it answers -32768,
-	 * because that is the only one a short can hold. Left is therefore what
-	 * every exact reversal would take by arithmetic accident rather than by a
-	 * decision - so the caller's bias, which is the turn's own last direction
-	 * (MODERN_STATE::last_turn), gets the casting vote here and the reversal
-	 * stays monotone. With no bias at all the arithmetic keeps its answer,
-	 * which is a fixed side and is all a tie needs. */
+	/* Exactly half a turn is the same angle either way round, and ModernWrap
+	 * answers -32768, the only one a short can hold - so every exact reversal
+	 * would go left by accident. The caller's bias, the turn's own last
+	 * direction (MODERN_STATE::last_turn), decides the tie and the reversal
+	 * stays in one direction. With no bias the fixed side stands. */
 	if (delta == -0x8000L && bias > 0)
 		return rate;
 
@@ -996,12 +829,10 @@ long ModernGroundTurn(short anim_state, long delta, long rate)
 	return ModernGroundTurnBiased(anim_state, delta, rate, 0);
 }
 
-/* The same, with the tie at exactly half a turn handed to a side (round 161a3,
- * item 2b - see ModernStepTowardBiased for why a tie exists at all). It is a
- * second function rather than a fourth argument on the first because
- * ModernGroundTurn is the shape TROne's own expectations are written in, and a
- * test that has to pass a bias it does not care about is a test about the
- * wrong thing. */
+/* The same, with the tie at exactly half a turn handed to a side (see
+ * ModernStepTowardBiased). A second function rather than a fourth argument,
+ * because ModernGroundTurn is the shape TROne's test expectations are written
+ * in. */
 long ModernGroundTurnBiased(short anim_state, long delta, long rate, long bias)
 {
 	if (rate <= 0 || !ModernStateAllowsDirectTurn(anim_state))
@@ -1010,50 +841,25 @@ long ModernGroundTurnBiased(short anim_state, long delta, long rate, long bias)
 	return ModernStepTowardBiased(delta, rate, bias);
 }
 
-/* THE DIRECT TURN'S WHOLE DECISION, in one place so that a test can drive it
- * exactly as the seam does. Returns 1 when it has taken charge of the turning
- * this tick - then `yaw_delta` is what the caller adds to y_rot, the caller
- * zeroes lara.turn_rate so the automaton does not turn her a second time, and
- * `out->bits` has been rewritten below. Returns 0 and a yaw_delta of 0
- * otherwise, and then `out` is untouched and the turn bits stand.
+/* The direct turn's whole decision, in one place so that a test can drive it
+ * exactly as the seam does. Returns 1 when it takes the turning this tick:
+ * `yaw_delta` is what the caller adds to y_rot, the caller zeroes
+ * lara.turn_rate so the state machine does not turn her a second time, and
+ * `out->bits` is rewritten. Otherwise returns 0 with a yaw_delta of 0 and
+ * `out` untouched.
  *
- * WHY THE BITS ARE REWRITTEN. Once we turn her ourselves, a turn bit would
- * turn her twice and would also put her in AS_TURN_L/AS_TURN_R instead of
- * running. So all six direction bits go (IN_WALK stays - the stick still says
- * how fast she is going) and IN_FORWARD comes back only when 45 degrees or
- * less of the turn are left. That last part is not tidiness: with IN_FORWARD
- * set through the whole of a half turn she would take real steps sideways
- * across a ledge before the turn finished.
+ * With the heading written directly, a turn bit would turn her twice and put
+ * her in AS_TURN_L/AS_TURN_R instead of running, so all six direction bits go
+ * (IN_WALK stays). IN_FORWARD comes back only when snap_forward or less of the
+ * turn is left, or she would take real steps sideways across a ledge during a
+ * half turn. Running states always keep it (ModernStateIsRunning); the four
+ * turn-on-the-spot states use the wider gate (ModernStateIsSpotTurn) plus a
+ * way out counted in ticks (MODERN_STAND_FORWARD_TICKS).
  *
- * ...AND SINCE ROUND 161a2b (#161 item 7a) NOT WHILE SHE IS RUNNING. See
- * ModernStateIsRunning above for the measurement: there the withheld bit was
- * costing her a one-tick AS_STOP every time the stick outran her turn, which
- * the player sees as a stumble. Every other allowed state keeps the rule, and
- * the four turn-on-the-spot states keep it at twice the width
- * (ModernStateIsSpotTurn, round 161a3 item 2c) plus a second way out that is
- * counted in ticks rather than degrees (MODERN_STAND_FORWARD_TICKS, the fix
- * pass of the same round), for the standing turn that arrives nowhere at all
- * because the thumb is circling at exactly her own rate.
- *
- * THE INSTANT ABOUT-TURN IS GONE (round 161a3, #161 item 2b), and this is
- * where it used to be: past 90 degrees of error, on a tick where the course
- * itself had jumped that far, the whole turn was taken in ONE tick. TROne
- * built it, round 161a2b put the course's own step in front of it so that a
- * circling stick could not trigger it by accumulation, and the second play
- * test then measured what was left and it was still the user's complaint - 36
- * one-tick steps over 30 degrees, 24 of them over 90, "es ist A unnatuerlich
- * und B selbst das Interpolating kommt nicht hinterher". His Remaster video
- * turns the same half circle over six ticks with the run animation playing.
- *
- * SO A REVERSAL IS NOW TURNED AT THE RATE LIKE EVERYTHING ELSE, which needed
- * exactly two things beside deleting the branch: the rate is the Remaster's
- * own 5461 (item 2a), so a half turn costs six ticks and not eighteen, and the
- * tie at exactly 180 degrees is decided rather than left to the wrap
- * (ModernStepTowardBiased and MODERN_STATE::last_turn). What the deletion
- * cannot take away is that a turn now takes TIME: the back flip out of a stand
- * is easier to reach than it was, not harder, because she no longer arrives
- * before the player has BACK and JUMP down - which is the case TROne built the
- * whole rule for in the first place. */
+ * A reversal turns at the rate like everything else - 5461, a half turn in
+ * six ticks, with the tie at exactly 180 degrees decided by
+ * MODERN_STATE::last_turn - and never in one tick, which looks unnatural and
+ * outruns the frame interpolation. */
 long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
 	MODERN_RESULT* out, long* yaw_delta)
 {
@@ -1067,16 +873,13 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	if (yaw_delta)
 		*yaw_delta = 0;
 
-	/* THE STANDING STALL'S COUNTER BELONGS TO ONE UNBROKEN TURN (round 161a3,
-	 * fix pass, MODERN_STAND_FORWARD_TICKS). It is taken out of the state here
-	 * and written back only on the path that really turns her, so every early
-	 * return below - the stick at rest, a classic tick, a state this turn does
-	 * not own - ends the episode by simply not writing it again. A count left
-	 * standing would otherwise hand IN_FORWARD to the FIRST tick of the next
-	 * push, and that one tick is what the 90 degree gate exists for. With no
-	 * state at all (a caller that passes none) the local starts at 0 every call
-	 * and the rule can never fire, which is the same answer the tie-break gives
-	 * such a caller. */
+	/* The standing-stall counter belongs to one unbroken turn
+	 * (MODERN_STAND_FORWARD_TICKS). It is taken out of the state here and
+	 * written back only on the path that really turns her, so every early
+	 * return below ends the count. A count left standing would hand IN_FORWARD
+	 * to the first tick of the next push, the very tick the 90 degree gate is
+	 * for. Without a state the count starts at 0 on every call and the rule
+	 * never fires. */
 	hold = state ? state->stand_hold : 0;
 
 	if (state)
@@ -1097,21 +900,13 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	if (!sit || sit->classic)
 		return 0;
 
-	/* THE AIMING GUARD THAT USED TO BE HERE IS GONE (round 161a2b, #161 item
-	 * 8), and it is gone because it was wrong rather than because the user
-	 * wanted it gone. It refused the write whenever `sit->drawn && sit->action`
-	 * on the stated ground that "the game is already turning her onto her
-	 * target - two hands on the same heading". The brief asked for that to be
-	 * measured before anything moved, and the measurement says nothing of the
-	 * sort happens: game\larafire.cpp, game\lara1gun.cpp and game\lara2gun.cpp
-	 * never write lara_item->pos.y_rot at all. What aiming writes is
-	 * lara.left_arm.y_rot, lara.right_arm.y_rot, lara.torso_y_rot and
-	 * lara.head_y_rot - her arms, her chest and her head. Her HEADING moves
-	 * only through lara.turn_rate, added in game\lara.cpp's LaraAboveWater, and
-	 * that is the turn BITS' own path, which the direct turn replaces in
-	 * exactly the same way armed or not. So there was never a second hand on
-	 * the heading, and with aim_strafe now off (item 8) this guard would have
-	 * left her unable to turn at all while the trigger is held. */
+	/* No aiming guard: aiming does not write the heading.
+	 * game\larafire.cpp, game\lara1gun.cpp and game\lara2gun.cpp never write
+	 * lara_item->pos.y_rot; they write lara.left_arm.y_rot,
+	 * lara.right_arm.y_rot, lara.torso_y_rot and lara.head_y_rot. Her heading
+	 * moves only through lara.turn_rate in LaraAboveWater, the turn bits' path
+	 * that the direct turn replaces armed or not. With aim_strafe off, a guard
+	 * would leave her unable to turn while the trigger is held. */
 
 	if (!cfg->direct_turn || cfg->turn_rate <= 0)
 		return 0;
@@ -1122,11 +917,10 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	yaw = ModernGroundTurnBiased(sit->anim_state, out->delta, cfg->turn_rate,
 		state ? state->last_turn : 0);
 
-	/* WRAPPED, and it has to be since the tie-break exists: with a delta of
-	 * exactly -32768 taken to the RIGHT, delta minus yaw is 38229, which is
-	 * not 150 degrees of anything - it is 210 degrees measured the long way
-	 * round. Every other tick has yaw on delta's own side and the wrap costs
-	 * nothing. */
+	/* Wrapped because of the tie-break: a delta of exactly -32768 taken to the
+	 * right leaves delta minus yaw at 38229, 210 degrees the long way round
+	 * rather than 150. On every other tick yaw is on delta's side and the wrap
+	 * changes nothing. */
 	remaining = ModernAbs(ModernWrap((long)out->delta - yaw));
 
 	out->bits &= ~(long)MODERN_DIR_MASK;
@@ -1135,15 +929,12 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	forward = ModernStateIsRunning(sit->anim_state) ||
 		remaining <= (spot ? cfg->snap_forward_stand : cfg->snap_forward);
 
-	/* AND THE SECOND QUESTION, ASKED IN TICKS (round 161a3, fix pass,
-	 * MODERN_STAND_FORWARD_TICKS - the reviewer of this round confirmed the
-	 * case the gate alone leaves standing). Only the turn-on-the-spot states
-	 * count: everywhere else she is already moving, so a withheld IN_FORWARD
-	 * costs her a step and not an animation, and a state that is not this
-	 * turn's own falls through to AS_STOP within a tick or two and is counted
-	 * there. The counter is sticky by construction - the tick after it opens,
-	 * the gate is still shut, so it counts one higher and stays open until the
-	 * run begins or the turn arrives. */
+	/* The second question, asked in ticks (MODERN_STAND_FORWARD_TICKS). Only
+	 * the turn-on-the-spot states count: elsewhere she is already moving, so a
+	 * withheld IN_FORWARD costs a step and not an animation, and any other
+	 * state falls through to AS_STOP within a tick or two and is counted there.
+	 * Once open it stays open - the gate is still shut on the next tick, so the
+	 * count only rises - until the run begins or the turn arrives. */
 	if (spot && !forward)
 	{
 		hold++;
@@ -1160,8 +951,8 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 
 	out->turning = (remaining > 0) ? 1 : 0;
 
-	/* The spin is the automaton's way of turning on the spot and we have
-	 * just taken the turning away from it. Leaving the flag set would keep
+	/* The spin is the state machine's way of turning on the spot, and the
+	 * direct turn has just taken the turning over. Leaving the flag set would keep
 	 * IN_FORWARD off for ticks after the turn is done. */
 	if (state)
 	{
@@ -1175,33 +966,21 @@ long ModernDirectTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_S
 	return 1;
 }
 
-/* THE SAME THING IN THE AIR (round 161a3, #161 item 4, the user's word 5).
- *
- * "Im Remaster kann sie auch nach dem Sprung in der Luft weiterhin nach links
- * und rechts lenken. Bei uns ist das noch wie in der Panzersteuerung sehr
- * starr. ... Lara kann dadurch einen viel weiteren Radius um eine Kante
- * springen."
- *
- * It is ModernDirectTurn's shape with three differences, and each of them is a
- * measurement rather than a taste:
- *   THE STATE LIST is one state long (ModernStateAllowsAirTurn), because the
- *					classic steers exactly one airborne state and item 4 widens
- *					what the engine does rather than inventing a new ability.
- *   THE BITS		only IN_LEFT and IN_RIGHT go. In the air the rest of the
- *					word is not a direction at all: lara_as_forwardjump reads
+/* The direct turn in the air, so she can keep steering left and right after
+ * a jump and reach round a ledge. ModernDirectTurn's shape with three
+ * differences:
+ *   the state list	is one state long (ModernStateAllowsAirTurn): the
+ *					classic steers exactly one airborne state.
+ *   the bits		only IN_LEFT and IN_RIGHT go. lara_as_forwardjump reads
  *					IN_BACK as the twist, IN_WALK as the swan dive and
- *					IN_ACTION as the grab, and the user asked for none of them
- *					to change. IN_FORWARD it does not read at all, so leaving
- *					it costs nothing and keeps the bits the same shape the
- *					ground tick before the jump had.
- *   NO FORWARD		there is no step to withhold and nothing to withhold it
- *		GATE		from - her feet are not on anything.
+ *					IN_ACTION as the grab, and those stay as they are;
+ *					IN_FORWARD it does not read at all.
+ *   no forward		there is no step to withhold - her feet are not on
+ *		gate		anything.
  *
- * The gate is the rate: air_turn_rate 0 is the feature switched off and the
- * classic 1 degree a tick back in charge, which is how a play test bisects
- * "is the jump wrong, or is the steering wrong". Returns 1 when it has taken
- * the tick; then the caller adds `yaw_delta` to y_rot and zeroes
- * lara.turn_rate, exactly as it does on the ground. */
+ * air_turn_rate 0 switches it off and the classic 1 degree a tick is back.
+ * Returns 1 when it takes the tick; the caller then adds `yaw_delta` to y_rot
+ * and zeroes lara.turn_rate, as on the ground. */
 long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITUATION* sit,
 	MODERN_RESULT* out, long* yaw_delta)
 {
@@ -1246,52 +1025,29 @@ long ModernAirTurn(const MODERN_CFG* cfg, MODERN_STATE* state, const MODERN_SITU
 	return 1;
 }
 
-/* THE WATER'S OWN MOVE (round 161a2 step 4, the user's observation 7).
+/* The water's move. Under water the left stick moves her in a direction on a
+ * flat circle and the right stick points the way in three dimensions; the two
+ * halves are independent:
+ *   the flat circle	ModernTranslate has turned the left stick into a world
+ *						course as on land, and out->delta is how far she is
+ *						from it. This turns her onto it at that state's rate.
+ *   the 3D pointer		`target_pitch` is where the orbit points, converted to
+ *						a body attitude by ModernCameraSwimPitch. x_rot walks
+ *						towards it while the stick is out and stays when it is
+ *						let go, so she keeps her attitude and glides.
  *
- * "Unter Wasser ist der linke Stick wie ein D-Pad, was in alle Richtungen 360
- * Grad auf einem flachen Kreis Lara in die Richtung bewegt. Die Aenderungen im
- * dreidimensionalen Raum gehen ueber den rechten Stick, der ist wie ein
- * 3D-Pointer in eine Richtung, der Lara dann folgt. Beide zusammen ergeben
- * eine fluessige Bewegung durch den Raum."
+ * A counterpart of ModernDirectTurn rather than an extension: under water
+ * IN_FORWARD is SwimTurn's pitch (x_rot -= 364) and the pitch is the orbit's,
+ * and there is a stroke the land has no notion of. Both share ModernStepToward.
+ * On the surface IN_FORWARD is forward (lara_as_surftread -> AS_SURFSWIM), so
+ * the bits come out as on foot and x_rot is left alone - larasurf.cpp writes
+ * x_rot only to dive. No MODERN_STATE: the bits are rewritten in full every
+ * tick and nothing reads spin in the water.
  *
- * So the water is two independent halves, and this is both of them:
- *   the flat circle	ModernTranslate has already turned the left stick into
- *						a WORLD course, exactly as it does on land, and
- *						out->delta is how far she is from it. This turns her
- *						onto it at the rate TR5 turns at in that state.
- *   the 3D pointer		`target_pitch` is where the orbit is pointing,
- *						converted to a body attitude by the camera's own
- *						ModernCameraSwimPitch. x_rot walks towards it at the
- *						classic rate while the stick is out, and stops where
- *						she is when it is let go - she keeps her attitude and
- *						glides, which is observation 2's rule applied to the
- *						third axis.
- *
- * IT IS ModernDirectTurn's COUNTERPART AND NOT AN EXTENSION OF IT, because
- * the two differ in every line that matters: no instant about-turn (a one-tick
- * half turn under water is the AS_WATERROLL animation's job and looks wrong
- * without it), no IN_FORWARD under water (down there that bit is the PITCH -
- * SwimTurn reads it as x_rot -= 364 - and the pitch is the orbit's now), and
- * a stroke that the land has no notion of. What they share is the one line
- * both of them turn her with, ModernStepToward above.
- *
- * THE SURFACE IS THE LAND WITH A DIFFERENT RATE. There IN_FORWARD really is
- * forward - lara_as_surftread turns it into AS_SURFSWIM - so the bits come
- * out exactly as they do on foot, the stroke is that same bit, and nothing
- * touches x_rot: "auf der Oberflaeche ist der Kurs flach", and the engine
- * keeps her there anyway (larasurf.cpp never writes x_rot except to dive).
- *
- * WHAT IT DOES NOT TAKE: the MODERN_STATE. The land's turn clears state->spin
- * on its way out because the automaton's own turn-on-the-spot would otherwise
- * keep IN_FORWARD off for ticks afterwards; here the bits are rewritten in
- * full every tick and nothing reads spin in the water at all, and rule 6
- * recomputes it from the error on the next tick either way.
- *
- * Returns 1 when it has taken the tick - then `yaw_delta` is what the caller
- * adds to y_rot (and lara.turn_rate goes to zero, exactly as on land),
- * `new_x_rot` is her new attitude, `stroke` says whether to hold the stroke
- * key, and `out->bits` has been rewritten. Returns 0 with everything left as
- * it was found otherwise, and then this is not a water tick at all. */
+ * Returns 1 when it takes the tick: `yaw_delta` is added to y_rot by the
+ * caller (lara.turn_rate zeroed, as on land), `new_x_rot` is her new attitude,
+ * `stroke` says whether to hold the stroke key, and `out->bits` is rewritten.
+ * Returns 0 with everything as found when this is not a water tick. */
 long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_RESULT* out,
 	long target_pitch, long x_rot, long* yaw_delta, long* new_x_rot, long* stroke)
 {
@@ -1337,32 +1093,27 @@ long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_
 	yaw = ModernStepToward(out->delta, rate);
 	remaining = ModernAbs((long)out->delta - yaw);
 
-	/* The turn bits go for the same reason they go on land - we are turning
-	 * her ourselves and a bit would turn her twice - and under water they
-	 * would do a second wrong thing as well: IN_FORWARD and IN_BACK are
-	 * SwimTurn's pitch. IN_WALK is left alone in both, as it is on land. */
+	/* The turn bits go as on land - the heading is written directly and a bit
+	 * would turn her twice - and under water IN_FORWARD and IN_BACK would also
+	 * pitch her through SwimTurn. IN_WALK is left alone, as on land. */
 	out->bits &= ~(long)MODERN_DIR_MASK;
 
 	if (ModernStateIsSwim(sit->anim_state))
 	{
-		/* THE STROKE. Held for as long as the stick is out, so that "der
-		 * linke Stick bewegt Lara" is true without a second key: AS_TREAD and
-		 * AS_GLIDE both take IN_JUMP into AS_SWIM and AS_SWIM stays there
-		 * while it is held (game\laraswim.cpp:393, :420, :456). With
-		 * water_auto_stroke off nothing is held and the player's own jump key
-		 * is the stroke again, which is what TR5 has always done. */
+		/* The stroke, held for as long as the stick is out, so the stick moves
+		 * her without a second key: AS_TREAD and AS_GLIDE take IN_JUMP into
+		 * AS_SWIM, and AS_SWIM stays while it is held (game\laraswim.cpp). With
+		 * water_auto_stroke off the player's jump key is the stroke, as in TR5. */
 		if (cfg->water_auto_stroke)
 		{
 			if (stroke)
 				*stroke = 1;
 		}
 
-		/* THE POINTER. The target is clamped first and the step taken
-		 * afterwards, so that the clamp is a place she can be rather than a
-		 * wall the step stops at - and so that the difference below can never
-		 * approach half a turn, which is what would make a wrap necessary. An
-		 * attitude is not a heading: it is bounded by construction (the
-		 * engine's own +-15470) and must never be folded. */
+		/* The pointer. The target is clamped first and the step taken after,
+		 * so the clamp is a place she can be rather than a wall the step stops
+		 * at, and the difference never nears half a turn. An attitude is not a
+		 * heading: it is bounded (the engine's +-15470) and is never folded. */
 		pitch = target_pitch;
 
 		if (pitch < cfg->swim_pitch_min)
@@ -1396,9 +1147,8 @@ long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_
 	return 1;
 }
 
-/* THE WEAPON HALF (combat mode), design section 1.5. A1 only ADDS it -
- * nothing calls it yet. Workflow B wires it at the second seam of
- * specific\input.cpp and puts tomb5.combat_hold on its first argument.
+/* The weapon half (combat mode), called at the second seam of
+ * specific\input.cpp with tomb5.combat_hold as its first argument.
  *
  * Two truths come in. `ready` is a weapon out and shootable (gun_status ==
  * LG_READY, no torch), `holstered` is the hands empty (LG_NO_ARMS). BOTH
@@ -1406,10 +1156,10 @@ long ModernWaterMove(const MODERN_CFG* cfg, const MODERN_SITUATION* sit, MODERN_
  * on a ladder or in the water - and then no IN_DRAW goes out in either mode,
  * so an impossible request cannot queue up and fire a second later.
  *
- * Toggle hands the bits back untouched, and that is not a shortcut: our draw
- * key already IS the toggle, because game\larafire.cpp turns any IN_DRAW at
- * LG_READY into LG_UNDRAW_GUNS. The original behaviour is the Toggle
- * behaviour, bit for bit, which is why Toggle is the default.
+ * Toggle hands the bits back untouched: the draw key already is a toggle,
+ * because game\larafire.cpp turns any IN_DRAW at LG_READY into
+ * LG_UNDRAW_GUNS. The original behaviour is the Toggle behaviour, bit for bit,
+ * which is why Toggle is the default.
  *
  * Hold asks for the one transition that is missing: draw while the key is
  * down and the guns are away, holster when the key comes up and they are
@@ -1428,29 +1178,20 @@ long ModernWeaponBits(long combat_hold, long ready, long holstered, long held, l
 	return bits;
 }
 
-/* SPRINT MODE AND DUCK MODE (#161, round 161b2c, item 4; the user's own
- * sentence, "'Sprintmodus' und 'Duckmodus' kann auch mit rein"). One latch,
- * used twice, and deliberately not two functions: the two modes differ in
- * nothing but which bit they carry and what counts as a tick the latch may not
- * stand on, and both of those come in as arguments.
+/* Sprint mode and Duck mode (Hold or Toggle). One latch used for both: the
+ * modes differ only in the bit they carry and in the ticks the latch may not
+ * stand on, and both come in as arguments.
  *
- * HOLD IS THE DEFAULT AND HANDS THE WORD BACK UNTOUCHED - the first branch, and
- * the whole of "byte-identical at the defaults" for this function. The memory
- * is cleared on the way past, so that switching the row to Toggle and back
- * cannot leave a latch standing behind the player's back.
+ * Hold is the default and hands the word back untouched; the memory is cleared
+ * on the way, so switching to Toggle and back cannot leave a latch standing.
  *
- * `down` is the key or button as the input assembly has it THIS tick, and
- * `drop` is the caller's answer to "may a latch stand at all right now" - dead,
- * in the water, in a menu, and for the sprint also the empty dash bar and a
- * thumb pushing nothing. A DROP TICK IS A HOLD TICK, bit for bit: the latch
- * falls, and the raw key goes through exactly as it would at Hold. That is the
- * conservative answer and it is also the useful one - the binocular zoom reads
- * IN_SPRINT and IN_DUCK out of `inputBusy` (game\camera.cpp), and a rule that
- * forced those bits off while the sight was up would take the zoom away.
- *
- * The key memory is tracked on the drop ticks too, which is the whole of case
- * three in the record: a key still held when a level starts or a menu closes is
- * not a fresh press, and must not latch. */
+ * `down` is the key as the input assembly has it this tick; `drop` says a
+ * latch may not stand now - dead, in the water, in a menu, and for the sprint
+ * an empty dash bar or a stick pushing nothing. A drop tick is a Hold tick bit
+ * for bit: the latch falls and the raw key goes through. That also keeps the
+ * binocular zoom, which reads IN_SPRINT and IN_DUCK from `inputBusy`
+ * (game\camera.cpp). The key memory is tracked on drop ticks too, so a key
+ * still held when a level starts or a menu closes does not latch. */
 long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, long bits)
 {
 	long s;
@@ -1489,69 +1230,34 @@ long ModernModeLatch(long toggle, long down, long drop, long* state, long bit, l
 	return bits;
 }
 
-/* GRAB MODE (#161, round 161b2d, item 5). The third latch, and it is NOT
- * ModernModeLatch with another bit, because what the player asked for is not a
- * toggle at all: "sie bleibt nach dem Greifen haengen und mit noch mal
- * druecken laesst sie los". She hangs because she is HANGING - the state says
- * so, and `family` is ModernStateIsGrab's answer about it. There is nothing to
- * remember about the holding; the only memory this needs is the opposite one,
- * which press was the letting go.
+/* Grab mode: she stays hanging after a grab and a second press lets go. Not
+ * a toggle: she holds on because her state is a hanging one (`family`, from
+ * ModernStateIsGrab), so the only memory needed is which press let go.
  *
- * HOLD IS THE DEFAULT AND HANDS THE WORD BACK UNTOUCHED, the same first branch
- * and the same clearing as the mode latch above: that is the whole of
- * "byte-identical at the defaults" for this function.
+ * Hold is the default and hands the word back untouched, clearing the memory,
+ * as the mode latch does. Otherwise, in the order the code asks:
+ * - a press inside the family is a let-go: MODERN_GRAB_RELEASE goes up and the
+ *   bits are taken out of the word, so the routine sees a released key.
+ * - while that press lasts `release` stays clear wherever she is, or the same
+ *   press would catch the next ledge she falls past. Under "One key" the held
+ *   let-go press also picks up and operates nothing until the key was up once.
+ * - inside the family with no such press, the bit is delivered whether the
+ *   key is down or not (a savegame restored in a hang needs no key).
+ * - outside the family the word goes through as it came.
+ * `drop` (a cutscene, a menu, the title screen, death) is a Hold tick bit for
+ * bit; the key memory is tracked across it, so a key still down when a menu
+ * closes lets go of nothing.
  *
- * THE FOUR ANSWERS, in the order the code asks them:
- * - a press INSIDE the family is a let-go: MODERN_GRAB_RELEASE goes up and the
- *   bit is taken out of the word, so the state routine sees what it sees when
- *   a player lets the key go.
- * - while THAT press lasts `release` stays clear, wherever she is by then.
- *   This is the one place where "outside the family the key is the key" bends,
- *   and it bends on purpose: without it the very press that let go of the ledge
- *   would still be down two ticks later, when she is falling past the next
- *   one, and she would catch it. No instant re-grab - and under "One key",
- *   where `release` is the whole action word, the held let-go press also picks
- *   nothing up and operates nothing until the key was up once. That is the
- *   same rule as "fires no weapon and catches nothing", one key wide.
- * - inside the family with no such press, the bit is DELIVERED whether the key
- *   is down or not. A savegame restored in a hang needs no key at all, which
- *   is the case the user will test first.
- * - outside the family, with no let-go press standing, the word goes through
- *   as it came: the catch is the key, the vault is the key, firing is the key.
- *
- * `drop` is a tick on which no latch may stand - a cutscene, a menu, the title
- * screen, death - and like the mode latch a drop tick is a Hold tick bit for
- * bit. The key memory is tracked across drops too, so a key still down when a
- * menu closes is not a fresh press and cannot let go of anything by itself.
- *
- * `bit` IS THE DELIVERY AND `release` IS THE LETTING GO, AND THEY ARE NOT THE
- * SAME WORD (#161, round 161b2d, fix 3 - measured, and it refutes the design
- * sentence that said one mask would do).
- *
- * Thirteen of the family's thirty-four states do not ask IN_ACTION but
- * IN_ACTION_ANY - the pole, the rope, the zip line and the parallel bars
- * (game\lara.cpp:4292, :4328, :4339, :4371, :4421, :4452, :4623, :4632, :4736,
- * :4746, :4897 and game\rope.cpp:596). Under "One key" the one action key
- * raises IN_ACTION and IN_INTERACT in the same statement
- * (specific\input.cpp's action_bits), so clearing IN_ACTION alone left the
- * other bit standing, the state still read "held", and the let-go press was
- * inert. On the rope and on the bars that is a trap: their only exit is the
- * cleared test.
- *
- * So the caller hands in BOTH words and this function stays pure - it knows
- * nothing about settings, only that one mask goes out and one comes in:
- * - `release` is every bit the grab key raises in the active Action setting.
- *   specific\input.cpp composes it the way game\lara.cpp:5003 already spells
- *   that same distinction: IN_ACTION_ANY under "One key", IN_ACTION alone
- *   under "Separate", where IN_INTERACT belongs to a different physical key
- *   and this latch has nothing to say about it.
- * - `bit` is what is DELIVERED inside the family, and it stays IN_ACTION
- *   alone: every state that asks IN_ACTION_ANY is satisfied by it, since ANY
- *   is the OR of the two, and an IN_INTERACT delivered without a key would be
- *   an interaction nobody asked for.
- * With Grab mode off the first branch still hands the word back before either
- * mask is looked at, so "Hold" is byte-identical as before; with "Separate"
- * the two words are the same value and so is every tick. */
+ * `bit` is the delivery and `release` the letting go, two words: thirteen of
+ * the family's states ask IN_ACTION_ANY (the pole, the rope, the zip line,
+ * the parallel bars - game\lara.cpp, game\rope.cpp), and under "One key" the
+ * action key raises IN_ACTION and IN_INTERACT together (specific\input.cpp's
+ * action_bits). Clearing IN_ACTION alone would leave the state reading "held",
+ * and on the rope and the bars the cleared test is the only exit. So the
+ * caller composes `release` as game\lara.cpp spells the distinction -
+ * IN_ACTION_ANY under "One key", IN_ACTION under "Separate" - and `bit` stays
+ * IN_ACTION, which satisfies IN_ACTION_ANY without delivering an unasked
+ * IN_INTERACT. Under "Separate" the two words are the same value. */
 long ModernGrabLatch(long toggle, long down, long family, long drop, long* state, long bit,
 	long release, long bits)
 {
@@ -1592,36 +1298,24 @@ long ModernGrabLatch(long toggle, long down, long family, long drop, long* state
 	return bits;
 }
 
-/* AND THE ONE THING THE ENGINE HAS TO BE ABLE TO SAY FROM OUTSIDE A TICK: this
- * latch is off now. A level start and a savegame restore go through it
- * (game\gameflow.cpp), and so does flipping the row itself
- * (game\menu_frame.cpp), which is the only way the state could otherwise
- * survive its own option being switched off.
- *
- * It clears the LATCH only and leaves the key memory alone, on purpose - see
- * the paragraph above. Round 161b2d gave it the grab latch's release bit as
- * well: the three latches are three longs of the same shape, the two bits are
- * both "a decision that must not outlive a level change", and a caller that
- * had to know which kind of latch it was holding would be the only place in
- * this file that did. */
+/* Switches a latch off from outside a tick: on a level start and a savegame
+ * restore (game\gameflow.cpp) and when the option itself is changed
+ * (game\menu_frame.cpp). It clears the latch and the grab latch's release bit
+ * - both are decisions that must not outlive a level change, and all three
+ * latches share the shape - and leaves the key memory alone, so a held key is
+ * still not a fresh press. */
 void ModernModeLatchDrop(long* state)
 {
 	if (state)
 		*state &= ~(long)(MODERN_LATCH_ON | MODERN_GRAB_RELEASE);
 }
 
-/* WHAT AN ACTIVE TICK LEAVES BEHIND (round 161a2b, #161 item 7b). Four of the
- * translation's branches below end with a course in hand - aiming, the
- * directional jump, the step back and the ordinary run - and all four have to
- * leave the same two traces: the mode, for the log, which they each wrote for
- * themselves before, and now the COURSE, so that the next tick can say how far
- * it jumped. One place, because a branch that forgot would look to the direct
- * turn like a thumb holding perfectly still.
- *
- * The two branches that do NOT come through here are rule 0 (a classic state)
- * and rule 1 (the stick at rest). Neither has a course of its own, and neither
- * may wipe the one that is remembered - see MODERN_STATE::last_course for why
- * the memory has to outlive a release. */
+/* What an active tick leaves behind. The four branches that end with a
+ * course in hand - aiming, the directional jump, the step back and the run -
+ * record the mode for the log and the course, so the next tick can say how far
+ * the course jumped (course_step). Rule 0 (a classic state) and rule 1 (the
+ * stick at rest) do not come through here: they have no course and must not
+ * wipe the remembered one (see MODERN_STATE::last_course). */
 static void ModernFinish(MODERN_STATE* state, MODERN_RESULT* out)
 {
 	out->course_step = state->have_course ?
@@ -1632,19 +1326,18 @@ static void ModernFinish(MODERN_STATE* state, MODERN_RESULT* out)
 	state->last_mode = out->mode;
 }
 
-/* THE TRANSLATION (design sections 1.1 to 1.3).
+/* The translation.
  *
- * stick_x is right-positive and stick_y is FORWARD-NEGATIVE - that is how
+ * stick_x is right-positive and stick_y is forward-negative - that is how
  * specific\dxshell.cpp hands the axes over ("joystick_read_y = -ly / 256")
  * and how specific\input.cpp reads them for the classic bits. So the stick's
  * own angle is taken from (stick_x, -stick_y).
  *
- * THE HELD COURSE is the heart of it, and it is the part that is not
- * obvious. The chase camera hangs rigidly behind Lara, so its heading IS her
- * heading; take it as the reference of every tick and she turns, the camera
- * follows, the target walks on, and she circles forever. TROne measured 600
- * frames of exactly that. So the state carries a WORLD course instead, and
- * the camera is only consulted when the player changes his mind:
+ * The held course is the core. The chase camera hangs behind Lara, so its
+ * heading is her heading; taken as the reference of every tick, she turns, the
+ * camera follows, the target walks on and she circles forever (TROne recorded
+ * 600 frames of it). So the state carries a world course, and the camera is
+ * consulted only when the player changes direction:
  *   stick pushed from rest		course = camera + stick angle. This is the
  *								camera-relative part - the same stick means a
  *								different world heading under a different
@@ -1654,14 +1347,15 @@ static void ModernFinish(MODERN_STATE* state, MODERN_RESULT* out)
  *   stick held, angle moved
  *   at least steer_step but
  *   under recenter				the course turns by exactly that much. The
- *								camera is NOT read, which is what makes a
- *								camera cut leave her path alone.
+ *								camera is not read, so a camera cut leaves her
+ *								path alone.
  *   stick angle moved at
  *   least recenter				a new direction was meant: seat the course on
- *								the camera of THIS tick.
+ *								the camera of this tick.
  *   stick back at rest			forget it all; the next push starts fresh.
+ * (Shipped, recenter equals steer_step, so the middle band is empty.)
  *
- * The order of the tree below is the order of the design and it matters: the
+ * The order of the tree below matters: the
  * classic states get out before anything is remembered, the dead zone before
  * an angle is taken from noise, aiming before the course is used (aiming does
  * not hold a course at all - the game turns her onto her target itself and a
@@ -1726,17 +1420,15 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 
 	out->mag = ModernMagnitude(cfg, stick_x, stick_y);
 
-	/* IS THIS A TICK IN THE WATER (round 161a2 step 4)? Zero on land, and the
-	 * state's own turn rate in the eight states the water steers. Two of the
-	 * rules below ask, because each of them would otherwise send out a bit
-	 * that means something else in the water; the rest of the translation is
-	 * the same function it is on foot, which is the whole point of the user's
-	 * "die Steuerung unter Wasser ist genau gleich wie ausserhalb". */
+	/* Is this a tick in the water? Zero on land, the state's turn rate in the
+	 * eight states the water steers. Two rules below ask, because each would
+	 * otherwise send a bit that means something else in the water; the rest of
+	 * the translation is the same as on foot. */
 	water = ModernWaterTurnRate(cfg, sit->anim_state);
 
 	/* 0. Hanging, the ladder, the monkey swing, a block, a vehicle, the
 	 * object states: there a direction bit does not mean "where do I go",
-	 * so the classic input stays and we report that we did nothing. The seam
+	 * so the classic input stays and the result reports nothing done. The seam
 	 * leaves the base bits standing when active is 0. */
 	if (sit->classic || ModernStateIsClassic(sit->anim_state))
 	{
@@ -1746,8 +1438,8 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	}
 
 	/* 1. The dead zone. The stick at rest is asked for by name and not left
-	 * to the threshold: ours starts at 0 because the hardware zone is already
-	 * applied one step earlier, and "mag < 0" is never true - without this
+	 * to the threshold: cfg->dead is 0 because the radial zone is applied one
+	 * step earlier, and "mag < 0" is never true - without this
 	 * line a centred stick would read as a push straight forward. */
 	if ((!stick_x && !stick_y) || out->mag < cfg->dead)
 	{
@@ -1759,39 +1451,20 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	/* 2. The stick's own direction, and the held world course. */
 	offset = ModernAngle(stick_x, -stick_y);
 
-	/* 2a. AND THE CAMERA HE TURNED TAKES THE COURSE WITH IT (round 161a3b,
-	 * item 2), before the course is read and before the tree below can decide
-	 * anything about it.
-	 *
-	 * The held course is the rule that stops her circling, and it does that by
-	 * NOT consulting the camera between re-latches. That is right for a camera
-	 * that moves by itself - the slow return home, an animation's carried
-	 * swing, a cut - and it was wrong for the one camera movement that IS an
-	 * instruction: the player's own right thumb. M2 measured what it cost.
-	 * Steering with the camera while the left stick is held, her course stood
-	 * still for as long as his left thumb did and then paid the whole
-	 * accumulated angle in a single tick, because the re-latch seats on the
-	 * camera of THAT tick: 34 such jumps in the water over 423 ticks, median
-	 * 13.6 degrees, and 57 on foot over 617, median 13.2 - each one the turn
-	 * rate's whole allowance in one frame. Round 161a3 did not create them; at
-	 * the old 6 deg/tick each jump was smeared over several ticks.
-	 *
-	 * BOTH THE REFERENCE AND THE COURSE, because they are one angle seen twice:
-	 * the reference is the camera the course was seated on, and a reference
-	 * left behind would make the next re-latch a jump of exactly what this line
-	 * just paid. With both carried, a re-latch finds nothing left to jump.
-	 *
-	 * THE PROTECTION IS UNTOUCHED. `cam_player_step` is the stick's own term
-	 * and nothing else (game\modern_camera.cpp keeps it before the swing and
-	 * the return run), so a camera moved by the return or by a carried swing
-	 * still moves no course at all - which is what the camera-cut sweep and
-	 * the return case in ModernTest hold. And the re-latch rule itself is not
-	 * touched either: `last_off` is the STICK's own direction and this line
-	 * does not go near it.
-	 *
-	 * ONLY WITH A COURSE IN HAND. Before the first push there is nothing to
-	 * carry, and with hold_course off the camera of every tick is the
-	 * reference anyway - the branch below seats it fresh. */
+	/* 2a. A camera the player turns takes the course with it, before the
+	 * course is read. The held course ignores the camera between re-seats,
+	 * which is right for a camera that moves by itself (the return home, a
+	 * carried swing, a cut) and wrong for the player's own right thumb: the
+	 * course would stand still and then pay the whole angle in one tick at the
+	 * next re-seat (measured: 34 jumps in 423 water ticks, median 13.6 degrees;
+	 * 57 in 617 on foot, median 13.2).
+	 * The reference and the course move together - they are one angle seen
+	 * twice, and a reference left behind would make the next re-seat jump by
+	 * the same amount. `cam_player_step` is the stick's term only
+	 * (game\modern_camera.cpp takes it before the swing and the return), so a
+	 * camera moving by itself still moves no course, and `last_off`, the
+	 * stick's own direction, is untouched. Only with a course in hand and
+	 * hold_course on; otherwise the branch below seats it fresh. */
 	if (state->have_ref && cfg->hold_course && sit->cam_player_step)
 	{
 		state->ref = ModernWrap((long)state->ref + sit->cam_player_step);
@@ -1808,9 +1481,8 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	else if (!cfg->hold_course)
 	{
 		/* The course switched off: the camera of every tick is the
-		 * reference. This is the version that circles, and it is here so
-		 * that a play test can show the difference in one setting rather
-		 * than in an argument. */
+		 * reference. This is the version that circles, kept so the difference
+		 * can be shown with one switch. */
 		state->ref = camera_yaw;
 		state->course = ModernWrap((long)camera_yaw + offset);
 		state->last_off = offset;
@@ -1840,39 +1512,26 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	 * turn back at once, so a shot in passing does not lock the movement for
 	 * longer than the shot.
 	 *
-	 * ... BUT NOT ON THE TICK SHE JUMPS. Aiming comes before the directional
-	 * jump below, so with a gun ready and the action held a side flip or a
-	 * back flip would come out as a side STEP: game\lara.cpp's lara_as_compress
-	 * reads only IN_FORWARD/IN_BACK/IN_LEFT/IN_RIGHT, so IN_LSTEP/IN_RSTEP is
-	 * no direction at all and the flip while firing becomes a jump straight up.
-	 * TROne answer this one tick before the translation, by clearing aim_strafe
-	 * in their glue whenever the situation is a jump (trone_modern_glue.h:473,
-	 * OUTSIDE the Remaster profile block above it - which is why their own
-	 * expectation passes on a plain glue). aim_strafe is read exactly here and
-	 * nowhere else, so clearing it for the call and asking for it here are the
-	 * same rule; it is asked here because our seam keeps ONE config and never
-	 * copies it, and a copy per tick would be work outside the translation for
-	 * a rule the translation can simply state. A tap is enough: the direction
-	 * lara_as_compress writes into goal_anim_state on this tick is never taken
-	 * back by a later one, so the flip survives the ticks in which she is back
-	 * to aiming.
+	 * Not on the tick she jumps: aiming comes before the directional jump, and
+	 * lara_as_compress reads only IN_FORWARD/IN_BACK/IN_LEFT/IN_RIGHT, so a side
+	 * step bit would turn a flip while firing into a jump straight up. TROne
+	 * clears aim_strafe in its glue whenever the situation is a jump
+	 * (trone_modern_glue.h:473); aim_strafe is read only here, so asking here is
+	 * the same rule without copying the config every tick. A tap is enough: the
+	 * direction lara_as_compress writes into goal_anim_state is not taken back
+	 * on the following ticks.
 	 *
-	 * AND NEVER IN THE WATER (round 161a2 step 4). There is no aiming down
-	 * there - she cannot draw a weapon in the water at all - but sit->drawn
-	 * can still be 1, because a FLARE is held at LG_READY and the seam's own
-	 * test only excludes the torch. The branch's whole reason ("the game
-	 * turns her onto her target itself") has no counterpart in the water
-	 * either, and the side step it produces is nothing at all under water.
-	 * So the question is asked here, once, rather than left to surprise the
-	 * water's own move with a mode it cannot take. */
+	 * Never in the water: she cannot draw a weapon there, but sit->drawn can be
+	 * 1 because a flare is held at LG_READY, and a side step means nothing under
+	 * water. */
 	state->aiming = (cfg->aim_strafe && sit->drawn && sit->action && !sit->jump && !water) ? 1 : 0;
 
 	if (state->aiming)
 	{
 		/* No held course here. While she aims, the game turns her onto her
-		 * target itself; a course of ours would fight it. So the direction is
+		 * target itself and a held course would fight it, so the direction is
 		 * read fresh against the camera every tick and comes out as a side
-		 * step - the stick pushes her AROUND the target. */
+		 * step - the stick pushes her around the target. */
 		target = ModernWrap((long)camera_yaw + offset);
 		state->course = target;
 		state->last_off = offset;
@@ -1898,21 +1557,12 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	delta = ModernWrap((long)target - lara_yaw);
 	adelta = ModernAbs(delta);
 
-	/* 4. The directional jump out of a stand - BUT ONLY WITH A WEAPON DRAWN
-	 * (round 161a-fix, #161 item 3, the user's own decision from his
-	 * Remaster recording, jumps with and without weapons):
-	 * "Wenn Lara die Waffen in der Hand hat (Kampfmodus) ist das jetzige
-	 * Verhalten richtig. Wenn sie nicht im Kampfmodus ist, macht sie egal wie
-	 * ich sie drehe den normalen Sprung aus dem Stand in die angegebene
-	 * Richtung." Armed, AS_COMPRESS reads the direction bits as the jump -
-	 * forward, the back flip, a side flip - and nothing turns at all.
-	 * Unarmed, sit->drawn is 0 and this whole branch steps aside for rule 6
-	 * below: she turns onto the held course and runs, so the jump key gets
-	 * whatever the classic automaton makes of IN_FORWARD together with
-	 * IN_JUMP - the "normal standing jump in the indicated direction" the
-	 * user asked for, and it is also what lets him circle her on the stick
-	 * and break out of the circle with a jump instead of only ever flipping
-	 * sideways.
+	/* 4. The directional jump out of a stand, only with a weapon drawn, as in
+	 * the Remaster. Armed, AS_COMPRESS reads the direction bits as the jump -
+	 * forward, the back flip, a side flip - and nothing turns. Unarmed, this
+	 * branch steps aside for rule 6: she turns onto the held course and runs,
+	 * and the jump key gives the normal standing jump in the stick's direction,
+	 * so she can break out of a circle with a jump instead of a side flip.
 	 *
 	 * The jump key may already be let go by then: AS_COMPRESS lasts several
 	 * ticks and a tap is only in the first of them, so the state alone is
@@ -1938,10 +1588,8 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 
 	/* 5. Back on the stick as a step backwards instead of an about-turn -
 	 * only when back_turns is switched off, and never in the water: IN_BACK
-	 * there is SwimTurn's "pitch her nose up" and not a step at all (round
-	 * 161a2 step 4). Nothing ships with back_turns off, so this term changes
-	 * no shipping behaviour - it keeps the switch honest for the play test
-	 * and for the tests that drive it explicitly. */
+	 * there is SwimTurn's "pitch her nose up" and not a step at all.
+	 * back_turns ships on; the switch is for the tests that drive it. */
 	if (!cfg->back_turns && !water && adelta >= 0x8000L - cfg->aim_sector)
 	{
 		bits = MODERN_IN_BACK;
@@ -1998,8 +1646,8 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	/* She runs unless she is turning on the spot - otherwise a half turn
 	 * would carry her a long way the wrong side first - and unless forward is
 	 * going nowhere. The second half is the wall case: with something in the
-	 * way, IN_FORWARD keeps the classic automaton in AS_STOP or AS_SPLAT and
-	 * the turn never happens, so a blocked tick sends the turn bit ALONE and
+	 * way, IN_FORWARD keeps the classic state machine in AS_STOP or AS_SPLAT
+	 * and the turn never happens, so a blocked tick sends the turn bit alone and
 	 * she turns in front of the wall exactly as she does in Tank. Once she is
 	 * aligned the rule lapses - pressing against a wall is classic behaviour
 	 * and not a control that has stopped answering. */

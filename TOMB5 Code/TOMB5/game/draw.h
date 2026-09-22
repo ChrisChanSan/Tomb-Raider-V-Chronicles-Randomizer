@@ -17,9 +17,9 @@ short* GetBoundsAccurate(ITEM_INFO* item);
 short* GetBestFrame(ITEM_INFO* item);
 void InitInterpolate(long frac, long rate);
 
-/* The same set-up with a factor of its own (#148, order 4) - the time
- * interpolation asks for the midpoint of two poses, which no (frac, rate)
- * names. See the note over InitInterpolate in game\draw.cpp. */
+/* The same set-up with a factor of its own - the time interpolation asks for
+ * the midpoint of two poses, which no (frac, rate) names. See the note over
+ * InitInterpolateAlpha in game\draw.cpp. */
 void InitInterpolateAlpha(float alpha);
 void phd_PopMatrix_I();
 void phd_PushMatrix_I();
@@ -40,7 +40,7 @@ void CalculateObjectLighting(ITEM_INFO* item, short* frame);
 void DrawAnimatingItem(ITEM_INFO* item);
 void PrintObjects(short room_number);
 
-/* The corpse fade, once per logic tick (#148, order 3, R6). PrintObjects
+/* The corpse fade, once per logic tick. PrintObjects
  * marks the bodies it drew; this counts them up and kills the ones that are
  * done. ControlPhase calls it - it is game state and belongs on the tick. */
 void StepAfterDeathFade();
@@ -49,28 +49,29 @@ void DrawRooms(short current_room);
 void CalculateObjectLightingLara();
 long GetFrames(ITEM_INFO* item, short* frm[], long* rate);
 
-/* THE POSE IN TIME (#148, order 4).
+/* The pose in time.
  *
  * GetFramesAt is GetFrames' neighbour for the frame that falls between two
  * logic ticks: given what the item wore before the last tick it returns the
- * key frame pair and the float factor whose blend is the MIDPOINT of the two
- * poses the game draws at thirty. 0 means there is nothing to blend (rule
- * K6) and nothing was written.
+ * key frame pair and the float factor whose blend is the midpoint of the two
+ * poses the game draws at thirty. 0 means there is nothing to blend (the
+ * animation changed or the frame did not step by exactly one) and nothing
+ * was written.
  *
  * GetFramesNow is what the draw sites call: GetFrames on a tick frame and at
  * fps_mode 0, the midpoint on a tween frame. 0 = one frame, 1 = vanilla's
  * key frame blend, 2 = a blend in time.
  *
- * IT STILL RETURNS 0 FOR BOTH REASONS (#157). "This frame sits on a stored
- * pose" and "K6 refused the blend" come back as the same number on purpose -
- * the call sites branch on it and a third value would send a refused frame
- * down the interpolated path with a pair it has no factor for. What round 157
- * added travels beside it instead: on the refused frame GetFramesNow leaves
- * the previous tick's ROOT OFFSET in the slot's own byte of g_poseOk, and the
- * draw picks it up through InterpRootNow (game\interpolate.h). */
-/* THE ARM CHAIN'S OWN BLEND (#123, fix round U, U3): collapse the two matrix
- * stacks to the body's blended joint and carry on with the ARM's own factor.
- * The note at the definition says why an arm needs a second factor at all. */
+ * "This frame sits on a stored pose" and "the pose blend was refused" both
+ * return 0 on purpose - the call sites branch on it, and a third value would
+ * send a refused frame down the interpolated path with a pair it has no
+ * factor for. The refused frame's root offset travels beside it instead:
+ * GetFramesNow leaves the previous tick's root offset in the slot's own byte
+ * of g_poseOk, and the draw picks it up through InterpRootNow
+ * (game\interpolate.h). */
+/* The arm chain's own blend: collapse the two matrix stacks to the body's
+ * blended joint and carry on with the arm's own factor. The note at the
+ * definition says why an arm needs a second factor at all. */
 void InterpArmStack(float alpha);
 
 long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
@@ -99,7 +100,7 @@ extern long IMstack[768];
 extern long IM_rate;
 extern long IM_frac;
 
-/* The blend between the two matrix stacks as ONE number (#148, order 4), and
+/* The blend between the two matrix stacks as one number, and
  * the same number in eighths for the integer stack, which rounds by shifting.
  * Set by InitInterpolate / InitInterpolateAlpha / InitInterpolate2. */
 extern float IM_alpha;

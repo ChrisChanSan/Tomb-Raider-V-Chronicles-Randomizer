@@ -13,19 +13,16 @@
 #include "modern_camera.h"
 #include "modern_move.h"	// ModernWrap and MODERN_STICK_FULL - see below
 
-/* The arithmetic of the modern camera (#161, round 161a2, step 1). The header
- * says what the orbit is, whose model it is and where every number came from;
- * this file is the three rules and nothing else. No engine header, no global,
- * no side effect outside the state the caller hands in.
+/* The arithmetic of the modern camera. The header says what the orbit is and
+ * where every number comes from; this file is the three rules. No engine
+ * header, no global, no side effect outside the state the caller hands in.
  *
- * WHY game\modern_move.h IS THE ONE INCLUDE. It is pure too - that is its
- * whole point - so it costs this file nothing, and it already owns the two
- * facts this one would otherwise have had to copy: ModernWrap, the fold of an
- * angle into the shorter way round (written out rather than cast, because a
- * cast of a value over 32767 to short is implementation-defined before C++20
- * and two different build scripts compile these files), and
- * MODERN_STICK_FULL, the hardware fact that specific\dxshell.cpp scales the
- * axes down by 256. Two copies of a wrap is two wraps to keep in step. */
+ * game\modern_move.h is the one include: it is pure too, and it already owns
+ * two facts this file needs - ModernWrap, the fold of an angle into the
+ * shorter way round (written out rather than cast, because a cast of a value
+ * over 32767 to short is implementation-defined before C++20 and two build
+ * scripts compile these files), and MODERN_STICK_FULL, the fact that
+ * specific\dxshell.cpp scales the axes down by 256. */
 
 /* An angle's magnitude has to be taken as a long: |delta| where delta is
  * -32768 does not fit in a short, and -32768 is exactly the half turn an
@@ -35,11 +32,11 @@ static long ModernCameraAbs(long v)
 	return (v < 0) ? -v : v;
 }
 
-/* Is this axis out of its rest position at all? Asked separately from the
- * rate below, because "the player is steering" has to be true for an axis
+/* Whether this axis is out of its rest position at all. Asked separately from
+ * the rate below, because "the player is steering" has to be true for an axis
  * whose rate has rounded down to nothing - one unit of stick is 8 units of
- * yaw, so that cannot happen at the shipping numbers, but a cfg with a slow
- * rate would otherwise let the return run under the player's thumb. */
+ * yaw at the default numbers, but a cfg with a slow rate would otherwise let
+ * the return run under the player's thumb. */
 static long ModernCameraAxisOut(const MODERN_CAMERA_CFG* cfg, long axis)
 {
 	return (axis > cfg->dead || axis < -cfg->dead) ? 1 : 0;
@@ -47,7 +44,7 @@ static long ModernCameraAxisOut(const MODERN_CAMERA_CFG* cfg, long axis)
 
 /* One axis of the stick as a rate of turn: the axis IS the rate, scaled so
  * that full deflection is the whole constant. The clamp is not cosmetic - a
- * diagonal reads about 181 in our units (the two axes are not scaled as a
+ * diagonal reads about 181 in stick units (the two axes are not scaled as a
  * vector, see MODERN_STICK_FULL) and an unclamped axis would hand the orbit
  * 1.4 times the rate the header promises for a push it cannot tell from any
  * other. */
@@ -70,15 +67,13 @@ static long ModernCameraRate(const MODERN_CAMERA_CFG* cfg, long axis, long rate)
 }
 
 /* One tick of a fall towards `home`, the short way round, by a fraction of
- * what is left. Returns the signed step it took, which is what MODERNLOG
- * prints as cam_ret.
+ * what is left. Returns the signed step it took, which MODERNLOG prints as
+ * cam_ret.
  *
- * THE PRODUCT IS THE ONE THING TO WATCH. What is left is at most 32768 and
- * the rate is a fraction of 65536, so mag * rate reaches 2147450880 at the
- * widest rate a caller can ask for - eleven counts under what a signed long
- * holds. That is the reason for the guard below rather than a clamp to
- * MODERN_CAMERA_RETURN_ONE itself: at the full fraction the answer is "all of
- * it" and no multiply is needed, and every fraction under it fits. */
+ * What is left is at most 32768 and the rate is a fraction of 65536, so
+ * mag * rate stays under what a signed long holds for every rate below
+ * MODERN_CAMERA_RETURN_ONE. At the full fraction or above the answer is "all
+ * of it" and no multiply is needed, hence the guard. */
 static long ModernCameraFall(long* value, long home, long rate, long min_step)
 {
 	const long delta = ModernWrap(home - *value);
@@ -107,21 +102,18 @@ static long ModernCameraFall(long* value, long home, long rate, long min_step)
 	return step;
 }
 
-/* THE SPEED SLIDER, AS ONE MULTIPLY (round 161a2b, item 5). "Der rechte Stick
- * muss noch schneller werden, der ist viel zu langsam. Am besten ein Slider wie
- * die SFX und Musik." The ROW is specific\LoadSave.cpp's and the stored value
- * is tomb5's (step 5); what lives here is the whole of what the number MEANS,
- * so that the options page, the registry and the test all ask one function.
+/* The camera speed slider, as one multiply. The options row lives in
+ * specific\LoadSave.cpp and the stored value in tomb5; this function is the
+ * whole of what the number means, so that the options page, the registry and
+ * the test all ask one place.
  *
- * Linear between the two ends, in the orbit's own units, and the division is by
- * the slider's own top so that the arithmetic comes out exact at the default:
- * 364 + 40 * 1820 / 100 = 1092, the rate round 161a2 shipped. The pitch is half
- * the yaw, as it has been since the orbit was written.
+ * Linear between the two ends, in the orbit's units, divided by the slider's
+ * top so the arithmetic is exact at the default: 364 + 40 * 1820 / 100 =
+ * 1092. The pitch is half the yaw.
  *
- * THE CLAMP IS NOT DECORATION. The value arrives from the registry, and a
- * registry key a user can edit is a key that can hold 5000; an unclamped
- * multiply would hand the orbit a rate that trips the 60 fps cut detection on
- * its own steps, which is the one thing the header promises it cannot do. */
+ * The clamp matters: the value arrives from the registry, which a player can
+ * edit to hold 5000, and an unclamped rate would trip the 60 fps cut
+ * detection on the orbit's own steps. */
 void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate)
 {
 	long yaw;
@@ -163,27 +155,18 @@ void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
 	cfg->carry_ticks = MODERN_CAMERA_CARRY_TICKS;
 }
 
-/* HOW MUCH OF A SWING HAS BEEN PAID AFTER `tick` OF cfg->carry_ticks (round
- * 161a3, item 5), by the eased profile 3u^2 - 2u^3: nothing at 0, the whole of
- * it at the last tick, and its steepest in the middle. It is the CUMULATIVE
- * figure and not a step, because a sum of rounded steps is not the total it
- * was meant to add up to - the caller takes the difference of two of these and
- * the rounding cancels itself.
+/* How much of a swing has been paid after `tick` of cfg->carry_ticks, by the
+ * eased profile 3u^2 - 2u^3: nothing at 0, the whole at the last tick, and
+ * steepest in the middle. It is the cumulative figure and not a step, because
+ * a sum of rounded steps does not add up to the total - the caller takes the
+ * difference of two of these and the rounding cancels.
  *
  * The profile is computed in 4096ths first and the total scaled by it second,
- * so the RESULT is at most one whole (4096) whatever carry_ticks is, and a
- * swing is at most a full turn.
+ * so the fraction is at most one whole (4096) and a swing at most a full turn.
  *
- * THE WAY THERE NEEDS 64 BITS, THOUGH, AND THE MEASUREMENT IS WHY (round 161a3,
- * fix pass; the reviewer of this round did the arithmetic). This paragraph used
- * to say that nothing here could leave a long at any carry_ticks, and that was
- * false: the numerator 3 * n^3 * 4096 passes 2^31 at n = 56, so a later round
- * that made carry_ticks a menu setting and a player who picked 60 would have
- * got a NEGATIVE fraction and a swing running backwards. Nothing is near it at
- * the shipped 20 and carry_ticks is not a setting yet - but a comment that
- * licenses a value the arithmetic cannot hold is worse than the value. One
- * multiplication in 64 bits costs nothing here and camera_carry() sweeps
- * carry_ticks to 120 against it. */
+ * The profile needs 64 bits: the numerator 3 * n^3 * 4096 passes 2^31 at
+ * n = 56, and a 32-bit product would give a negative fraction and a swing
+ * running backwards. ModernTest's camera_carry() sweeps carry_ticks to 120. */
 long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick)
 {
 	MODERN_CAMERA_CFG spare_cfg;
@@ -209,24 +192,22 @@ long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick)
 	return total * u / MODERN_CAMERA_CARRY_ONE;
 }
 
-/* HER HEADING FLIPPED AND THE CAMERA OWES HER A SWING (round 161a3, item 5).
- * The engine calls this with the heading change of the tick whenever an
- * ANIMATION made it - a roll, a jump twist, an underwater roll - and never for
- * a turn the stick asked for. Under the threshold nothing happens at all, so
- * an over-eager caller costs nothing but the comparison.
+/* Her heading flipped, and the camera owes her a swing. The engine calls this
+ * with the heading change of the tick whenever an animation made it - a roll,
+ * a jump twist, an underwater roll - and never for a turn the stick asked for.
+ * Under the threshold nothing happens, so an over-eager caller costs only the
+ * comparison.
  *
- * THE SWING IS THE FLIP ITSELF, which is what puts her offset back where it
- * was: the offset is world yaw minus her heading, so a heading that moved by
- * f needs a world yaw that moves by f as well. WHICH WAY ROUND it goes is a
- * free choice - both ways end on the same world angle - and it goes to the
- * side the camera is already leaning, because that is the shorter way for the
- * PICTURE even when it is the longer way for the arithmetic. A camera sitting
- * dead behind her (offset 0) has no lean and takes the right, a fixed side.
+ * The swing is the flip itself, which puts her offset back where it was: the
+ * offset is world yaw minus her heading, so a heading that moved by f needs a
+ * world yaw that moves by f. Both directions end on the same world angle; the
+ * swing goes to the side the camera already leans to, the shorter way for the
+ * picture. A camera dead behind her (offset 0) has no lean and takes the
+ * right, a fixed side.
  *
- * A SECOND FLIP WHILE ONE IS STILL RUNNING adds what is left to the new swing
- * and starts the profile again - the user's "Saltos" are two twists in a row,
- * and the alternative, letting the second one queue behind the first, would
- * leave the camera arriving behind her a second after she landed. */
+ * A second flip while one is still running (two twists in a row) adds what is
+ * left to the new swing and restarts the profile; queueing it would leave the
+ * camera arriving behind her a second after she landed. */
 void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state, long flip)
 {
 	MODERN_CAMERA_CFG spare_cfg;
@@ -259,25 +240,22 @@ void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
 	state->carry_tick = 0;
 }
 
-/* ONE COORDINATE OF THE EYE, PULLED `step` OF `steps` ALONG THE RAY BACK
- * TOWARD HER (round 161a3, item 1).
+/* One coordinate of the eye, pulled `step` of `steps` along the ray back
+ * toward her.
  *
  * step == steps is the eye where it stands, step == 0 is the target itself,
- * and everything between is the straight line joining them. THAT is the whole
- * of the rule, and the reason it is a function at all rather than three lines
- * in game\camera.cpp: the yaw the player sees is only preserved while x and z
- * are moved by the SAME fraction, so the fraction belongs in one place where
- * Preparation\Tools\Diagnose\ModernTest can measure what the truncation of it
- * costs (camera_pull). The round-161a2b defect this replaces is precisely a
- * pair of coordinates moved by different amounts - CameraCollisionBounds
- * snapping wx and wz onto the sector grid one at a time.
+ * and everything between is the straight line joining them. It is a function
+ * rather than three lines in game\camera.cpp because the yaw the player sees
+ * is only preserved while x and z move by the same fraction, so the fraction
+ * belongs in one place where Preparation\Tools\Diagnose\ModernTest can
+ * measure what its truncation costs (camera_pull). Moving the two coordinates
+ * by different amounts - as CameraCollisionBounds does when it snaps wx and wz
+ * onto the sector grid one at a time - turns the view.
  *
- * THE MULTIPLICATION COMES FIRST so that the fraction is taken of the whole
- * distance rather than of a truncated eighth of it; (eye - target) is at most
- * a few thousand units and steps a handful, so the product is nowhere near a
- * long. The division truncates toward the target for a positive difference and
- * away from it for a negative one, which is C and which ModernTest prints - it
- * is under a unit either way and no angle can be built out of it. */
+ * The multiplication comes first so that the fraction is taken of the whole
+ * distance; (eye - target) is at most a few thousand units and steps a
+ * handful, so the product is nowhere near a long's limit. The division
+ * truncates toward zero, under a unit either way. */
 long ModernCameraPullAxis(long target, long eye, long step, long steps)
 {
 	if (steps <= 0 || step >= steps)
@@ -289,19 +267,16 @@ long ModernCameraPullAxis(long target, long eye, long step, long steps)
 	return target + (eye - target) * step / steps;
 }
 
-/* BEHIND HER BACK, AND AT THE HEIGHT THE GAME HAS ALWAYS USED.
+/* Behind her back, at the game's resting height.
  *
- * The OFFSET goes to zero because zero is behind her, and the world yaw goes
- * with it unseated: this function has no Lara to ask, so "behind her" is a
- * promise the first update keeps, on the heading it is handed (round 161a2b,
- * item 1). The pitch does not go to zero, and that is not an oversight: the
- * pitch is the elevation itself, so zero would be dead level, ten degrees
- * below where ChaseCamera puts an untouched camera, and it would land on the
- * very value that function reads as "nobody has set this" (camera.cpp:1006).
- * MODERN_CAMERA_PITCH_HOME is that resting elevation, and a cfg that moves
- * pitch_home somewhere else has to seat the state itself - the same division
- * of labour as A1's ModernResetState, which is a state function and takes no
- * cfg either. */
+ * The offset goes to zero because zero is behind her, and the world yaw is
+ * left unseated: this function has no Lara to ask, so the first update seats
+ * it on the heading it is handed. The pitch is the elevation itself, so zero
+ * would be dead level, ten degrees below where ChaseCamera puts an untouched
+ * camera, and the value ChaseCamera reads as "unset".
+ * MODERN_CAMERA_PITCH_HOME is that resting elevation; a cfg that moves
+ * pitch_home elsewhere seats the state itself, as with ModernResetState,
+ * which takes no cfg either. */
 void ModernCameraReset(MODERN_CAMERA_STATE* state)
 {
 	if (!state)
@@ -320,34 +295,24 @@ void ModernCameraReset(MODERN_CAMERA_STATE* state)
 	state->stick_step = 0;
 }
 
-/* THE WHOLE ORBIT, IN THE ORDER THE THREE RULES HAPPEN AND FOR A REASON.
+/* One tick of the orbit: the stick, the swing, the return, in that order.
  *
- * `lara_heading` is her y_rot, and it is the only thing that turns this file's
- * world yaw into the offset the engine's slot wants. It is handed in on every
- * tick rather than remembered, because a state that keeps its own copy of her
- * heading is a state that can quietly disagree with her.
+ * `lara_heading` is her y_rot, the only thing that turns the world yaw into
+ * the offset the engine's slot wants. It is handed in on every tick rather
+ * than remembered, so the state cannot disagree with her.
  *
- * HER TURNING MOVES NOTHING HERE, and that is item 1 of round 161a2b: the
- * world yaw is not touched by the heading at all, so a quarter turn under a
- * resting stick leaves the camera standing exactly where it stood, and only
- * the DERIVED offset changes - by minus her turn, which is precisely what
- * keeps the view still while she spins. "Die Kamera richtet sich auch nicht
- * selbstaendig wieder hinter Lara."
+ * Her turning moves nothing here: the heading never touches the world yaw, so
+ * a quarter turn under a resting stick leaves the camera where it stood, and
+ * only the derived offset changes - by minus her turn, which keeps the view
+ * still while she spins.
  *
- * `wall_clipped` is the engine's word for "geometry took the eye off the ideal
- * this tick". It is a FLAG and no longer an angle (item 3): the camera keeps
- * the angle the player dialled and loses DISTANCE instead, so there is nothing
- * left to absorb - only the return to speed up while it lasts, which is
- * observation 3's "dann geht sie mit dem Winkel der Wand schneller zum
- * Ursprung hinter Lara".
+ * `wall_clipped` means geometry took the eye off the ideal this tick. The
+ * camera keeps the dialled angle and loses distance instead, so the flag only
+ * speeds up the return while it lasts.
  *
- * `lara_moving` is the caller's word for "she is going somewhere", and the
- * return is the only thing that reads it: standing, the camera is kept (2);
- * moving, it falls back behind her (3). The return also stands still while
- * the player is STEERING, which is the one thing neither sentence covers - he
- * turned the camera and THEN ran - and the honest reading of both: a camera
- * that pulls against the thumb holding it is a camera fighting the player for
- * nine per cent of his own input. */
+ * `lara_moving` is read by the return alone: standing, the camera is kept;
+ * moving, it falls back behind her. The return also stands still while the
+ * player steers, so the camera never pulls against the thumb holding it. */
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
 	long rs_x, long rs_y, long lara_heading, long lara_moving, long wall_clipped,
 	short* out_yaw_offset, short* out_pitch)
@@ -363,10 +328,9 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 
 	heading = ModernWrap(lara_heading);
 
-	/* THE SEATING, and it happens here rather than in the reset because the
-	 * reset has no Lara to ask: whatever offset the state is holding becomes
-	 * an offset from THIS heading, once. After that the world yaw is the state
-	 * and the offset is only ever an output of it. */
+	/* The seating happens here because the reset has no Lara to ask: whatever
+	 * offset the state holds becomes an offset from this heading, once. After
+	 * that the world yaw is the state and the offset only an output of it. */
 	if (!state->seated)
 	{
 		state->world_yaw = ModernWrap(heading + state->offset_yaw);
@@ -378,21 +342,19 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	state->wall = wall_clipped ? 1 : 0;
 	state->ret = 0;
 
-	/* 1. THE STICK. The yaw wraps - it is 360 degrees either way, observation
-	 * 1 - and the pitch clamps, because over the cap the camera sits on her
-	 * own axis, where nothing measured from the eye has a direction left
+	/* 1. The stick. The yaw wraps - 360 degrees either way - and the pitch
+	 * clamps, because over the cap the camera sits on her own axis, where
+	 * nothing measured from the eye has a direction left
 	 * (MODERN_CAMERA_PITCH_MIN). */
 	state->steering = (ModernCameraAxisOut(cfg, rs_x) || ModernCameraAxisOut(cfg, rs_y)) ? 1 : 0;
 
-	/* AND THE STICK'S OWN YAW STEP IS KEPT (round 161a3b, item 2), here, where
-	 * it is the term and not yet a difference of two angles. Taken after this
-	 * line and before 1b and 2 below, so the swing and the return cannot get
-	 * into it: game\modern_state.cpp adds exactly this to her held course, and
-	 * "a camera the player turns takes her course with it, one that moves by
-	 * itself does not" is only true if the number is the thumb's alone.
-	 * game\camera.cpp's own modern_cam_lead_yaw looks like the same quantity
-	 * and is NOT - it is the world yaw's whole step less the return, so the
-	 * swing is in it, which is right for leading the EYE and wrong here. */
+	/* The stick's own yaw step is kept here, where it is a term and not yet a
+	 * difference of two angles, before 1b and 2 below, so the swing and the
+	 * return cannot get into it: game\modern_state.cpp adds exactly this to
+	 * her held course, so that only a camera the player turns takes her course
+	 * with it. game\camera.cpp's modern_cam_lead_yaw is a different quantity -
+	 * the world yaw's whole step less the return, swing included - which is
+	 * right for leading the eye and wrong here. */
 	state->stick_step = ModernWrap(ModernCameraRate(cfg, rs_x, cfg->yaw_rate));
 
 	world = ModernWrap(world + state->stick_step);
@@ -402,22 +364,19 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	else
 		pitch -= ModernCameraRate(cfg, rs_y, cfg->pitch_rate);
 
-	/* 1b. THE SWING AN ANIMATION ABOUT-TURN OWED (round 161a3, item 5), paid
-	 * out here because ModernCameraCarry only seats it - the world yaw is this
-	 * function's to move, whoever asked.
+	/* 1b. The swing an animation about-turn owes, paid out here because
+	 * ModernCameraCarry only seats it - the world yaw is this function's to
+	 * move.
 	 *
-	 * THE STICK CANCELS IT, the moment it is pushed and not at the end of the
-	 * tick: "Der rechte Stick ist die Kamera des Spielers" is item 1's whole
-	 * rule, and a swing still paying out under a thumb that has taken the
-	 * camera back is the camera fighting him, which is the complaint this
-	 * round exists to answer in its other half. What is left is dropped, not
-	 * remembered - she is where she is, and the offset he is dialling now is
-	 * the one he wants.
+	 * The stick cancels it the moment it is pushed: the right stick is the
+	 * player's camera, and a swing paying out under a thumb that has taken the
+	 * camera back would fight it. What is left is dropped, not remembered; the
+	 * offset the player dials now is the one wanted.
 	 *
-	 * AND THE RETURN STANDS STILL WHILE IT RUNS, for the same reason it stands
-	 * still while he steers: two hands moving the same angle at once would make
-	 * the swing end somewhere other than where it promised, and the swing is
-	 * the fast one of the two anyway. It resumes on the tick after the last. */
+	 * The return stands still while the swing runs, as it does while the
+	 * player steers: two rules moving the same angle at once would end the
+	 * swing somewhere other than promised. It resumes on the tick after the
+	 * last. */
 	if (state->steering)
 	{
 		state->carry = 0;
@@ -444,8 +403,7 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 		}
 	}
 
-	/* 2. THE RETURN, whose home is HER HEADING now and no longer an offset of
-	 * zero: the same fall, written where the state really lives. */
+	/* 2. The return: the world yaw falls towards her heading. */
 	if (lara_moving && !state->steering && !swinging)
 	{
 		rate = cfg->return_rate;
@@ -481,13 +439,12 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 		*out_pitch = state->offset_pitch;
 }
 
-/* IS SHE TOO CLOSE TO DRAW? Observation 4, and one line, because the whole
- * difficulty of it is in step 2: WHICH distance is measured, once per frame,
- * and every path that draws her (game\draw.cpp, specific\hd\hd_laradraw.cpp,
- * the braid, the shadow) asking the same question. What belongs here is only
- * the comparison, so that MODERN_CAMERA_HIDE_DIST stays a number a test can
- * hold to its origin. A hard answer and not a fade: the user measured the
- * Remaster cutting her within a twelfth of a second. */
+/* Whether she is too close to draw. Only the comparison lives here, so that
+ * MODERN_CAMERA_HIDE_DIST stays a number a test can hold to its origin; which
+ * distance is measured, once per frame, and every path that draws her
+ * (game\draw.cpp, specific\hd\hd_laradraw.cpp, the braid, the shadow) asking
+ * the same question, is the engine's side. A hard cut and not a fade: the
+ * Remaster's camera cuts her within a twelfth of a second. */
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance)
 {
 	if (!cfg)
@@ -496,23 +453,18 @@ long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance)
 	return (distance < cfg->hide_dist) ? 1 : 0;
 }
 
-/* WHAT ATTITUDE IS THE ORBIT POINTING AT (round 161a2 step 4, the water)?
+/* The swimming attitude the orbit points at. Under water the right stick is a
+ * 3D pointer Lara follows, so the water needs the orbit's pitch as a body
+ * pitch, and the two differ: the chase camera sits pitch_home above her own
+ * axis. ChaseCamera's own line gives the arithmetic - "camera.target_elevation
+ * = -1820 + item->pos.x_rot" (game\camera.cpp) - so the attitude that belongs
+ * to an elevation is elevation - home, and a camera left alone points at
+ * level swimming.
  *
- * The user's observation 7 calls the right stick a 3D pointer "der Lara dann
- * folgt", so the water needs the orbit's pitch as a BODY pitch, and the two
- * are not the same number: the chase camera has always sat pitch_home above
- * her own axis. ChaseCamera's own line is the proof and the arithmetic -
- * "camera.target_elevation = -1820 + item->pos.x_rot" (game\camera.cpp), so
- * the elevation that belongs to an attitude is home + x_rot, and the attitude
- * that belongs to an elevation is elevation - home. Inverting the engine's own
- * line rather than picking a number means a camera left alone points exactly
- * at level swimming, which is where TR5 has pointed it since 1999.
- *
- * It is NOT clamped here. The orbit's own limits are the chase camera's
- * (+-15470) and the water's are LaraUnderWater's (the same +-15470), but they
- * are offset from one another by home, so the top of the range really is out
- * of her reach by 1820 units and the water's own move is where that is
- * answered - with its own constants, in the file the play test would tune. */
+ * Not clamped here. The orbit's limits are the chase camera's and the water's
+ * are LaraUnderWater's (both +-15470), but offset from one another by home, so
+ * the top of the range is out of her reach by 1820 units; the water's own
+ * move answers that with its own constants. */
 short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch)
 {
 	MODERN_CAMERA_CFG spare_cfg;
@@ -526,33 +478,25 @@ short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch)
 	return (short)(pitch - cfg->pitch_home);
 }
 
-/* DID THE TICK THAT STAMPED THIS ONE RUN IMMEDIATELY BEFORE THIS ONE (#161,
- * round 161a2b, the second review pass)?
+/* Whether the tick that wrote `stamp` ran immediately before `now`.
  *
- * game\camera.cpp keeps two answers that are only worth anything while the
- * orbit is really ticking every tick - whether mgLOS clipped the eye, and what
- * world angle the player has dialled - and the orbit does NOT tick every tick.
- * It stands still through a flyby, a cutscene, first person, the look key and
- * the four rich2 sniper cameras, and an answer carried across such a break is
- * an answer about a camera and a world that are no longer there. So each is
- * stamped with GlobalCounter when it is written and asked through this
- * function when it is read.
+ * game\camera.cpp keeps two answers that are only valid while the orbit ticks
+ * every tick - whether mgLOS clipped the eye, and the world angle the player
+ * has dialled - and the orbit stands still through a flyby, a cutscene, first
+ * person, the look key and the four rich2 sniper cameras. An answer carried
+ * across such a break describes a camera that is no longer there, so each is
+ * stamped with GlobalCounter when written and checked here when read.
  *
- * WHY "EXACTLY ONE" AND NOT "AT MOST ONE". game\control.cpp steps GlobalCounter
- * once per logic tick (:292) and everything that reads or writes those two
- * answers runs once inside that same tick body - S_UpdateInput at :296,
- * CalculateCamera at :677 - so two consecutive ticks are exactly one apart and
- * any other distance is a gap by construction. Zero would mean the same tick
- * asking twice, which no caller does and which would hide a doubled call rather
- * than report it.
+ * Exactly one, not at most one: game\control.cpp steps GlobalCounter once per
+ * logic tick, and S_UpdateInput and CalculateCamera both run once inside that
+ * tick body, so consecutive ticks are exactly one apart. Zero would mean the
+ * same tick asking twice, which no caller does; accepting it would hide a
+ * doubled call.
  *
- * THE WRAP COSTS NOTHING because the subtraction is done in the counter's own
- * unsigned width: a gap is only mistaken for a neighbour if it is exactly
- * 65,537 ticks long, which is thirty-six minutes of one unbroken sniper camera.
- *
- * It is here, in the pure file, rather than written out twice in the engine
- * one: it is arithmetic, it has an edge that a test can reach and an engine
- * cannot, and the two call sites must not be allowed to disagree. */
+ * The subtraction is done in the counter's own unsigned width, so a gap is
+ * only mistaken for a neighbour if it is exactly 65,537 ticks long - 36
+ * minutes of one unbroken sniper camera. It lives in this pure file so a test
+ * can reach the edge and the two call sites cannot disagree. */
 long ModernCameraTickFollows(unsigned short now, unsigned short stamp)
 {
 	return ((unsigned short)(now - stamp) == 1) ? 1 : 0;

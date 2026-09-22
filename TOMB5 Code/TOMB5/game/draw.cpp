@@ -25,9 +25,9 @@
 #include "../specific/drawroom.h"
 #include "../specific/polyinsert.h"
 #include "../specific/function_stubs.h"
-#include "../specific/profile.h"		// PROFLOG's frame bracket (#148)
-#include "interpolate.h"		// the frame between two logic ticks (#148, order 2)
-#include "interpolate_math.h"		// the pose midpoint and the one blend factor (#148, order 4)
+#include "../specific/profile.h"		// PROFLOG's frame bracket
+#include "interpolate.h"		// the frame between two logic ticks
+#include "interpolate_math.h"		// the pose midpoint and the one blend factor
 #include "../specific/hd/hd_level.h"
 #include "../specific/hd/hd_object.h"
 #include "../specific/lighting.h"
@@ -63,15 +63,14 @@ long IMstack[768];
 long IM_rate;
 long IM_frac;
 
-/* THE ONE FACTOR (#148, order 4).
+/* The blend factor between the two matrix stacks.
  *
- * Until this order the blend between the two matrix stacks was three
- * hard-wired branches, written out twelve times each in four functions, and
- * chosen by the pair (IM_frac, IM_rate). IM_alpha is that choice as a number:
- * InitInterpolate computes it from the pair exactly as the branches did, so
- * every animation in the game blends the way it always has, and
- * InitInterpolateAlpha lets the TIME interpolation ask for a factor no pair
- * of integers can name - the midpoint of two poses (see interpolate_math.h).
+ * The pair (IM_frac, IM_rate) selects one of three fixed blends; IM_alpha is
+ * that choice as a number. InitInterpolate computes it from the pair exactly
+ * as the original three-way branches did, so every key frame blend is
+ * unchanged, and InitInterpolateAlpha lets the time interpolation ask for a
+ * factor no pair of integers can name - the midpoint of two poses (see
+ * interpolate_math.h).
  *
  * IM_alpha8 is the same factor in eighths, for the integer stack, which
  * rounds by shifting and has to keep doing so to the bit. */
@@ -90,12 +89,12 @@ static short dLightningRand;
 static short LightningSFXDelay = 0;
 short no_rotation[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-/* R6 (#148, order 3): WHICH BODIES THE DRAW SAW THIS FRAME.
+/* Which dead bodies the draw saw this frame.
  *
  * PrintObjects sets a byte per item; StepAfterDeathFade, called once per
  * logic tick from ControlPhase, counts them up and kills the ones that
- * reached 128. One byte per item slot and no allocation, and the two long
- * notes at the two ends say why the counting had to leave the draw at all. */
+ * reached 128. One byte per item slot and no allocation; the notes at
+ * PrintObjects and StepAfterDeathFade say why the counting is not in the draw. */
 static unsigned char g_afterDeathSeen[MAX_ITEMS];
 
 static long outside_top;
@@ -107,45 +106,32 @@ static short* skelly_rhandbak;
 static short* skelly_lhandbak;
 static short skelly_backgunbak;
 
-/* T5: THE TWO ARRAYS OF THE PORTAL WALK, AT THE ENGINE'S OWN MAXIMUM (#123).
+/* The two arrays of the portal walk, sized to the engine's own maximum.
  *
- * They were short[100] and long[128] and fix round T4 put a counted guard on
- * each of them, because neither had ever been counted at all. The guards did
- * their job and they stay - but the play test of 2026-09-09 says the numbers
- * were too small rather than the guards too loose: with the reach on, JOBY2's
- * stairs and the courtyard of ANDREA2 sat at the budget for twenty seconds at
- * a stretch, and the walk's own classic list was already measured at 106
- * rooms in one JOBY4 frame - six past the hundred.
+ * The original short[100] and long[128] were too small: the classic list
+ * alone reaches 106 rooms in one JOBY4 frame, and with the reach on JOBY2's
+ * stairs and ANDREA2's courtyard sit at the limit for seconds at a time. Both
+ * arrays keep a counted guard against overflow.
  *
- * WHY THESE TWO NUMBERS AND NOT A ROUNDER PAIR.
+ * kDrawRoomsMax is the engine's room maximum: BuildOutsideTable
+ * (game\setup.cpp) refuses a level with more than 256 rooms, and a room
+ * enters draw_rooms at most once per frame - the `bound_active & 1` test in
+ * GetRoomBounds guarantees that. No loadable level can fill this array.
  *
- * kDrawRoomsMax is the engine's own room maximum: BuildOutsideTable
- * (game\setup.cpp:2418) refuses a level with more than 256 rooms outright, and
- * a room enters draw_rooms exactly once per frame - the `bound_active & 1`
- * test in GetRoomBounds is what makes that true. So no loadable level can
- * fill this array, and a classic room can no longer be refused for want of a
- * place. That is a property of the arithmetic, not of a measurement.
+ * kRoomListRing is the queue. A room is queued only while `bound_active & 2`
+ * is clear, queueing sets that bit and the dequeue in GetRoomBounds clears it,
+ * so at most one pending entry per room exists and the depth cannot pass 256.
+ * A room may be queued again after its dequeue, so a frame can take more
+ * dequeues than it has rooms (worst measured: 319, JOBY4), but the depth stays
+ * bounded. 512 is that bound with a factor of two, and a power of two so the
+ * wrap is a mask. Deepest queue measured over the fifteen levels: 70
+ * (RoomProbe -reachsurvey).
  *
- * kRoomListRing is the queue, and its depth is bounded by the same interlock
- * one bit over: a room is queued only when `bound_active & 2` is clear and
- * queueing sets that bit, which the dequeue in GetRoomBounds clears again -
- * so at most ONE pending entry per room exists at any moment, and the deepest
- * the queue can ever get is 256. A room may of course be queued again after
- * it has been dequeued, which is why a frame can take more dequeues than it
- * has rooms (319 is the worst measured, JOBY4); the DEPTH cannot pass the
- * room count. 512 is that bound with a factor of two over it, and a power of
- * two so the wrap below is a mask. Measured against it, the deepest queue
- * over the fifteen levels is 70 (RoomProbe -reachsurvey).
- *
- * THESE TWO SIZES, AND THE SHAPE OF THE WRAP BELOW, ARE THE WHOLE OF WHAT
- * THIS ROUND CHANGES IN THE CODE THE CLASSIC PATH ALSO RUNS. The wrap is
- * written `& (kRoomListRing - 1)` where it was `% 128`: room_list_start and
- * room_list_end are set to 0 at the top of every walk and only ever counted
- * up, so neither is ever negative and the mask is the modulo. The guards of
- * fix round T4 are otherwise untouched, and kReachBudget is not in this
- * paragraph at all - it lives in ReachTrimRooms, which only runs while
- * g_reach_on. Nothing about the walk itself moves: bigger arrays refuse fewer
- * rooms and do nothing else. */
+ * The wrap is `& (kRoomListRing - 1)`: room_list_start and room_list_end are
+ * set to 0 at the top of every walk and only count up, so neither is ever
+ * negative and the mask equals the modulo. The walk itself is the original;
+ * bigger arrays only refuse fewer rooms. kReachBudget lives in ReachTrimRooms,
+ * which only runs while g_reach_on. */
 static const int kDrawRoomsMax = 256;
 static const long kRoomListRing = 512;
 
@@ -157,37 +143,35 @@ static long draw_room_list[kRoomListRing];
 static long camera_underwater;
 static short ClipRoomNum;
 
-/* THE REACH: A SECOND ANSWER PER ROOM IN THE HD PATH (#123, fix round T4).
+/* The reach: a second answer per room in the HD path.
  *
- * WHAT IT IS FOR. The remaster's art opens walls the classic level keeps
- * shut - JOBY2's torn wall beside the stairs, where room 124 is seen far
- * wider than the classic doorway of 123 allows - and behind such a hole the
- * player sees the clear colour, because SetRoomBounds clips the CHILD portal
- * against the parent's window and drops what falls outside it as `empty`.
- * The same arithmetic keeps ANDREA2's tower (room 222) out of the list at
- * every level view direction, which is the popping of fix round T3.
+ * The remaster's art opens walls the classic level keeps shut - JOBY2's torn
+ * wall beside the stairs, where room 124 is seen far wider than the classic
+ * doorway of 123 allows - and behind such a hole the player would see the
+ * clear colour, because SetRoomBounds clips the child portal against the
+ * parent's window and drops what falls outside it as `empty`. The same
+ * arithmetic drops ANDREA2's tower (room 222) from the list at some view
+ * directions, which makes it pop in and out.
  *
- * THE RULE. In the HD path every room carries a second answer beside its
- * window: whether the walk REACHES it at all. A portal reaches the room
- * behind it when it faces the eye and lands on the SCREEN - the parent's
- * window does not enter that question. The classic window is computed beside
- * it exactly as before and stays the scissor for the intruding triangles of
- * fix round T2, and it is now allowed to be empty: a room the reach alone
- * brought in draws all of its art over the whole screen and none of its
- * intruding art at all, which is T2's bleed guard kept to the letter.
+ * In the HD path every room therefore also records whether the walk reaches
+ * it at all. A portal reaches the room behind it when it faces the eye and
+ * lands on the screen - the parent's window does not enter that question.
+ * The classic window is computed beside it as before and stays the scissor
+ * for the intruding triangles, and it may now be empty: a room the reach
+ * alone brought in draws all of its art over the whole screen and none of its
+ * intruding art, so the bleed guard for intruding triangles still holds.
  *
- * WHY A SEEN-MARK AND NOT A SECOND RECTANGLE TO WIDEN. The reach rectangle
- * of a portal does not depend on how the walk got to it, so one visit per
- * room is the whole of it. Measured, because the first version did keep a
- * second union: ANDREA3 and ANDY2 then walk rings of rooms round and round -
- * over 20,000 dequeues in a frame against the classic walk's 33 - because
- * nothing shrinks along the chain any more. With the mark, the worst frame
- * of the fifteen levels takes 319 dequeues (RoomProbe -reachsurvey).
+ * A seen-mark rather than a second rectangle to widen: the reach rectangle of
+ * a portal does not depend on how the walk got to it, so one visit per room
+ * suffices. A second widening union makes ANDREA3 and ANDY2 walk rings of
+ * rooms over and over - over 20,000 dequeues in a frame against the classic
+ * walk's 33 - because nothing shrinks along the chain. With the mark the
+ * worst frame of the fifteen levels takes 319 dequeues (RoomProbe
+ * -reachsurvey).
  *
- * WITH hd_enable OFF, or in a level the .TRG has nothing for, HDLevelActive()
- * is false, g_reach_on stays false and every line below is the walk that
- * shipped: the classic SetRoomBounds is the function called, the classic
- * accumulation is the accumulation done, and no room is trimmed. */
+ * With hd_enable off, or in a level the .TRG has nothing for, HDLevelActive()
+ * is false, g_reach_on stays false and the walk is the original one: the
+ * classic SetRoomBounds, the classic accumulation, and no room trimmed. */
 static bool g_reach_on = false;
 // Per room, and only while g_reach_on: the pending queue entry's classic
 // rectangle exists (bit 0) and the reach has visited this room (bit 1).
@@ -237,12 +221,12 @@ short* GetBestFrame(ITEM_INFO* item)
 
 void InitInterpolate(long frac, long rate)
 {
-	/* The pair still stands, because InitInterpolate2 (game\sphere.cpp) and
-	 * every reader of IM_frac / IM_rate outside this file expect it, and
-	 * because a pair of integers says WHERE IN AN ANIMATION the blend is,
-	 * which the factor alone no longer does once order 4 hands in midpoints.
+	/* The pair is kept because InitInterpolate2 (game\sphere.cpp) and every
+	 * reader of IM_frac / IM_rate outside this file expect it, and because a
+	 * pair of integers says where in an animation the blend is, which the
+	 * factor alone does not once the time interpolation hands in midpoints.
 	 * The factor is derived from the pair by the same three-way test the four
-	 * blend functions used to make twelve times each. */
+	 * blend functions originally made inline. */
 	IM_rate = rate;
 	IM_frac = frac;
 	IM_alpha = InterpKeyAlpha(frac, rate);
@@ -253,10 +237,10 @@ void InitInterpolate(long frac, long rate)
 	memcpy(aIFMStack, aMXPtr, 48);
 }
 
-/* THE SAME SET-UP WITH A FACTOR THAT IS NOT A KEY FRAME FRACTION (#148, order
- * 4). The time interpolation asks for the MIDPOINT of the two poses the two
- * neighbouring logic ticks draw, which is an eighth of a key frame interval
- * as often as not and has no (frac, rate) that names it.
+/* The same set-up with a factor that is not a key frame fraction. The time
+ * interpolation asks for the midpoint of the two poses the two neighbouring
+ * logic ticks draw, which is an eighth of a key frame interval as often as
+ * not and has no (frac, rate) that names it.
  *
  * IM_frac and IM_rate are set to what the factor is worth as a fraction of
  * eight, so that anything still reading the pair - InitInterpolate2's
@@ -451,13 +435,11 @@ void aInterpolateMatrix()
 	float* matrixp = aMXPtr;
 	float* iMatrixp = aIMXPtr;
 
-	/* ONE FACTOR, TWELVE ELEMENTS (#148, order 4). What stood here was three
-	 * branches on (IM_frac, IM_rate), each of them writing out all twelve
-	 * matrix elements by hand - a hundred and eight lines for three numbers.
-	 * InterpBlendFloat is those three numbers' own arithmetic, expression for
-	 * expression, so this loop produces the same floats to the last bit as
-	 * the branches did (interpolate_math.h says why the expressions and not
-	 * an algebraic rearrangement of them). */
+	/* One factor for all twelve elements. InterpBlendFloat reproduces the
+	 * original three branches on (IM_frac, IM_rate) expression for
+	 * expression, so this loop produces the same floats to the last bit
+	 * (interpolate_math.h says why the expressions and not an algebraic
+	 * rearrangement of them). */
 	for (int i = 0; i < 12; i++)
 		matrixp[i] = InterpBlendFloat(matrixp[i], iMatrixp[i], IM_alpha);
 }
@@ -466,28 +448,23 @@ long DrawPhaseGame()
 {
 	ProfileFrameBegin();
 
-	/* THE IN-BETWEEN FRAME (#148, order 2).
+	/* The in-between frame. At sixty presents and thirty logic ticks every
+	 * second frame falls between two ticks; this writes the halfway point
+	 * between the last two ticks into items[], effects[], the braid and the
+	 * camera, and everything below draws from those globals unchanged.
+	 * InterpEndFrame, at the bottom of this function, puts the original bytes
+	 * back before the next tick reads them.
 	 *
-	 * Order 1 left every second frame a duplicate of the one before it -
-	 * sixty presents of thirty distinct pictures. This is the line that
-	 * fills them in: it writes the halfway point between the last two logic
-	 * ticks into items[], effects[], the braid and the camera, and
-	 * everything below draws from those globals without knowing anything
-	 * has happened. InterpEndFrame, at the bottom of this function, puts the
-	 * original bytes back before the next tick reads them.
+	 * It stands above CalcLaraMatrices because that is the first reader of
+	 * lara_item->pos in the frame, and the HD seam takes Lara's matrices from
+	 * what it produces - so specific\hd\ needs no change of its own.
 	 *
-	 * It stands ABOVE CalcLaraMatrices on purpose - that is the first thing
-	 * in the frame that reads lara_item->pos, and the HD seam takes Lara's
-	 * matrices from what it produces. The whole of specific\hd\ therefore
-	 * follows this order with not one line changed in it.
-	 *
-	 * At fps_mode 0, InterpAlphaNow returns 1 and this call writes nothing
-	 * at all. */
+	 * At fps_mode 0, InterpAlphaNow returns 1 and this call writes nothing. */
 	InterpBeginFrame(InterpAlphaNow());
 
 	ProfBegin(PROF_GATHER);
 	CalcLaraMatrices(0);
-	InterpArmLogFrame();	// ARMLOG: the view set, once per drawn frame (fix round Y)
+	InterpArmLogFrame();	// ARMLOG: the view set, once per drawn frame
 	phd_PushUnitMatrix();
 	CalcLaraMatrices(1);
 	phd_PopMatrix();
@@ -506,44 +483,38 @@ long DrawPhaseGame()
 	S_OutputPolyList();
 	ProfEnd(PROF_OUTPUT);
 
-	/* THE CLOCK SPLIT (#148, order 1). THIS present, and no other, may run at
-	 * sixty; every modal loop in the game keeps two ticks and therefore keeps
-	 * its per-present animation counters at the speed they were written for
-	 * (see the note over gPresentMinTicks in specific\output.h).
+	/* The clock split. This present, and no other, may run at sixty; every
+	 * modal loop in the game keeps two ticks and therefore keeps its
+	 * per-present animation counters at the speed they were written for (see
+	 * the note over gPresentMinTicks in specific\output.h).
 	 *
-	 * Nothing else has to change for the game to stay at thirty. S_DumpScreen
+	 * The game logic stays at thirty without further change. S_DumpScreen
 	 * returns how many 1/60 s ticks the frame really took, DoLevel hands that
-	 * straight to ControlPhase as nframes, and ControlPhase's own accumulator
+	 * to ControlPhase as nframes, and ControlPhase's accumulator
 	 * - `for (framecount += nframes; framecount > 0; framecount -= 2)`
-	 * (game\control.cpp) - was already counting in 1/60 s units and already
-	 * spending two of them on a logic step. Feed it one per frame and it runs
-	 * a tick on every second call: sixty presents, thirty ticks, and not one
-	 * line of the simulation touched.
+	 * (game\control.cpp) - already counts in 1/60 s units and spends two of
+	 * them on a logic step. Fed one per frame, it runs a tick on every second
+	 * call: sixty presents, thirty ticks, the simulation untouched.
 	 *
-	 * Until order 2 there is no interpolation, so every second frame is a
-	 * duplicate of the one before it. That is not a shortcoming of this
-	 * order, it IS this order's proof: the picture stands still for two
-	 * frames while the clock runs at sixty.
-	 *
-	 * NOT EVERY FRAME THAT COMES THROUGH HERE IS A PLAYED ONE (#148, order
-	 * 1b). The title menu draws through this function too, and its menu code
-	 * reads input once per present while the input itself is written once per
-	 * tick - at sixty it therefore read every keypress twice and walked two
-	 * rows at a time. GameFrameMinTicks() is that rule; the measurement is
-	 * written out over it in specific\output.cpp. */
+	 * Not every frame through here is a played one: the title menu draws
+	 * through this function too, and its menu code reads input once per
+	 * present while input is written once per tick - at sixty it would read
+	 * every keypress twice and move two rows at a time. GameFrameMinTicks()
+	 * holds that rule; the measurement is written over it in
+	 * specific\output.cpp. */
 	gPresentMinTicks = GameFrameMinTicks();
 	camera.number_frames = S_DumpScreen();
 
 	S_AnimateTextures(camera.number_frames);
 
-	/* AND THE INTERPOLATION IS PUT BACK (#148, order 2), inside the profile
-	 * bracket so that what it costs is in `work` like everything else the
-	 * frame did. Every value InterpBeginFrame overwrote goes back to the
-	 * byte, and the view matrix is rebuilt from the live camera - the next
-	 * ControlPhase may run no tick at all, and then nothing else would. */
+	/* The interpolation is undone inside the profile bracket, so its cost is
+	 * counted in `work` like everything else the frame did. Every value
+	 * InterpBeginFrame overwrote goes back to the byte, and the view matrix
+	 * is rebuilt from the live camera - the next ControlPhase may run no tick
+	 * at all, and then nothing else would rebuild it. */
 	InterpEndFrame();
 
-	/* ProfileFrameEnd BEFORE the restore, on purpose: it judges this frame
+	/* ProfileFrameEnd comes before the restore: it judges this frame
 	 * against the slot this frame actually asked for, and gPresentMinTicks is
 	 * where that number lives. Nothing between the present and here presents
 	 * anything, so the window costs nothing. */
@@ -554,11 +525,11 @@ long DrawPhaseGame()
 
 void SkyDrawPhase()
 {
-	// A phase of its own (#148) and not part of `output`: this is the one
+	// A profile phase of its own and not part of `output`: this is the one
 	// place in the frame that fills and draws the classic buckets and the
-	// sort list OUTSIDE S_OutputPolyList, so without it the two would look
-	// like output that output never spent. It also carries the sky
-	// lightning machine, which is one of the counters order 3 has to guard.
+	// sort list outside S_OutputPolyList, so without it that time would be
+	// counted as output. It also runs the sky lightning state, which must
+	// advance on logic ticks only (see below).
 	ProfScope prof(PROF_SKY);
 
 	if (outside)
@@ -578,8 +549,8 @@ void SkyDrawPhase()
 		phd_PushMatrix();
 		phd_TranslateAbs(camera.pos.x, camera.pos.y, camera.pos.z);
 
-		/* R7 (#148, order 3): THE STORM IS A CLOCK, so it runs on logic
-		 * ticks and not on drawn frames.
+		/* The storm is a clock, so it runs on logic ticks and not on drawn
+		 * frames.
 		 *
 		 * Everything in this block is state: how many flashes are left in
 		 * the strike (LightningCount), how bright it is right now
@@ -620,23 +591,22 @@ void SkyDrawPhase()
 		DrawBuckets();
 		DrawSortList();
 
-		/* #123 (fix round R3a): THE HD SKY DOME, in the classic horizon's own
-		 * place in this phase - after the moon that was drawn a moment ago
-		 * and before the stars below, because none of the three writes depth
-		 * and the order in this function is the order on the screen.
+		/* The HD sky dome, in the classic horizon's place - after the moon
+		 * and before the stars, because none of the three writes depth and
+		 * the order in this function is the order on the screen.
 		 *
 		 * The .TRG carries a sky group of its own past the last room: a
 		 * panorama band on a sphere plus its own scrolling cloud discs. Where
-		 * it exists it replaces BOTH things the classic path draws here - the
+		 * it exists it replaces both things the classic path draws here - the
 		 * two flat colour layers and the HORIZON mesh - because it already
-		 * contains them. What it does NOT contain, and what therefore still
+		 * contains them. What it does not contain, and what therefore still
 		 * runs below, is the weather: the moon, the stars and the lightning
-		 * flash, which the game paints THROUGH layer 1 in the lightning's own
+		 * flash, which the game paints through layer 1 in the lightning's own
 		 * colour and which would otherwise be lost with the layer.
 		 *
 		 * With hd_enable off, before a level is built, or in a level whose
 		 * .TRG has no sky group, HDFrameSky returns false on its first test
-		 * and every line below runs exactly as it did. */
+		 * and the classic sky is drawn unchanged. */
 		const bool hdSky = HDFrameSky(aMXPtr);
 		const bool lightning = (gfLevelFlags & GF_LIGHTNING) != 0;
 		const bool layer1 = (gfLevelFlags & GF_LAYER1) && (!hdSky || lightning);
@@ -756,13 +726,12 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	long frac, clip, bit;
 	float blend = 0.0F;
 
-	/* #148, order 4: the same call as before at thirty hertz and on every
-	 * frame that carries a logic tick - GetFrames, the same pair, the same
-	 * factor. On the frame between two ticks it is the midpoint of the two
-	 * poses those ticks draw, and `frac` is then 1 for animations that never
-	 * interpolated at all in vanilla (rate 1 - 3619 of them across the
-	 * sixteen level files), which is what makes a rate-1 walk cycle move on
-	 * every drawn frame instead of every second one. */
+	/* At thirty hertz and on every frame that carries a logic tick this is
+	 * GetFrames - the same pair, the same factor. On the frame between two
+	 * ticks it is the midpoint of the two poses those ticks draw, and `frac`
+	 * is then nonzero even for animations that never interpolate in vanilla
+	 * (rate 1 - 3619 of them across the sixteen level files), so a rate-1
+	 * walk cycle moves on every drawn frame instead of every second one. */
 	frac = GetFramesNow(item, frm, &blend);
 	obj = &objects[item->object_number];
 
@@ -773,55 +742,51 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	phd_TranslateAbs(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
 	phd_RotYXZ(item->pos.y_rot, item->pos.x_rot, item->pos.z_rot);
 
-	/* #123 (S3-2): IS THIS ITEM DRAWN BY THE HD PATH?
+	/* Is this item drawn by the HD path?
 	 *
 	 * The answer costs one array lookup and is false for the whole game
 	 * unless hd_enable and hd_objects are both on and the level built its
-	 * models. When it is true, not one classic polygon of this item goes into
-	 * the buckets: the walk below runs exactly as it always did - the same
-	 * animation, the same frames, the same interpolation, the same mesh tree
-	 * - and instead of handing each node's mesh to phd_PutPolygons it hands
-	 * the node's MATRIX to hd_object, which is what a skinned model wants.
+	 * models. When it is true, no classic polygon of this item goes into the
+	 * buckets: the walk below runs unchanged - the same animation, frames,
+	 * interpolation and mesh tree - but instead of handing each node's mesh
+	 * to phd_PutPolygons it hands the node's matrix to hd_object, which is
+	 * what a skinned model needs.
 	 *
-	 * Taken here and not further down because the distance model right below
-	 * has to know: an HD item never switches to its MIP slot. The remaster
-	 * ships no reduced model, the MIP slot's own name would bind a different
-	 * .TRM or none at all, and a door that turned from HD to classic at five
-	 * sectors would pop in front of the player every time he walked away from
-	 * it. Enemies already skip the MIP for their own reason; HD items now
-	 * join them, and everything else keeps it. */
+	 * Decided here because the distance model right below depends on it: an
+	 * HD item never switches to its MIP slot. The remaster ships no reduced
+	 * model, the MIP slot's own name would bind a different .TRM or none at
+	 * all, and a door that turned from HD to classic at five sectors would
+	 * pop every time the player walked away from it. Enemies skip the MIP
+	 * for their own reason (below); everything else keeps it. */
 	const bool hd = HDObjectBegin(item, obj);
 
-	/* #148, order 4, and it is the plan's own proof for this order's HD half:
-	 * an item drawn by the HD path with a pose blended in TIME goes through
-	 * HDObjectNode's `interpolated` branch (specific\hd\hd_object.cpp), which
-	 * records the matrix phd_PutPolygons_I would have drawn the classic mesh
-	 * with. Not one line of specific\hd\ changed for this order; the counter
-	 * is here, where both facts are known, and reaches INTERPLOG as pose_hd. */
+	/* An HD item with a pose blended in time goes through HDObjectNode's
+	 * `interpolated` branch (specific\hd\hd_object.cpp), which records the
+	 * matrix phd_PutPolygons_I would have drawn the classic mesh with. The
+	 * counter sits here, where both facts are known, and reaches INTERPLOG
+	 * as pose_hd. */
 	if (hd && frac == 2)
 		InterpNotePoseHD();
 
-	// Distance models (MIP/LOD) are switched off for ENEMIES - they are
+	// Distance models (MIP/LOD) are switched off for enemies - they are
 	// always drawn at full resolution.
 	//
-	// The reason is not looks but safety: the slot behind it is taken
-	// BLINDLY here as soon as anything is loaded at all. In vanilla that
-	// works out because level and enemies were built together; for the
-	// randomizer it does not - it puts enemies into levels whose MIP slot
-	// carries entirely foreign material. From 5120 units on, the enemy
-	// would be drawn as that foreign material, with ITS bones and ITS
-	// frame, i.e. as a torn-up lump. Measured across all 13 levels
-	// (SlotAnims): 51 such combinations are possible.
+	// The reason is safety, not looks: the slot after the object's own is
+	// taken blindly as soon as anything is loaded in it. In vanilla that
+	// works because level and enemies were built together; the randomizer
+	// puts enemies into levels whose MIP slot carries unrelated material.
+	// From 5120 units on, the enemy would be drawn as that material, with
+	// its bones and its frame, i.e. as a torn-up lump. Measured across all
+	// 13 levels (SlotAnims): 51 such combinations are possible.
 	//
-	// What is lost is almost nothing: MIPs are barely used in TR5. There
-	// are exactly SEVEN real cases - SWAT, SWAT+, guard and Two Gun in the
-	// three rich levels -, all with the same mesh count as the original
-	// (15/15), i.e. practically the same silhouette at five sectors'
-	// distance. Nobody needs the render savings of 2000 anymore.
+	// Almost nothing is lost: TR5 has exactly seven real MIP cases - SWAT,
+	// SWAT+, guard and Two Gun in the three rich levels - all with the same
+	// mesh count as the original (15/15), i.e. practically the same
+	// silhouette at five sectors' distance.
 	//
 	// "intelligent" separates cleanly: all enemies with object_mip carry
-	// it (verified), doors and bridges (mip 2048-4096) do not and keep
-	// their distance model.
+	// it, doors and bridges (mip 2048-4096) do not and keep their distance
+	// model.
 	if (!hd && obj->object_mip && !obj->intelligent && (obj + 1)->loaded &&
 		phd_mxptr[M23] >> 16 > obj->object_mip)
 		obj++;
@@ -829,14 +794,11 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	calc_animating_item_clip_window(item, frm[0]);
 	clip = S_GetObjectBounds(frm[0]);
 
-	// CLIPLOG (#121), second version. The first wrote only at clip == 0 and
-	// stayed EMPTY for the blinking soldier. That ruled out the bounds check
-	// as the culprit and moved the question: does this function RUN at all
-	// during the invisible frames, and if so with which anim and which clip?
-	// Hence every NEW (slot, anim) pair of every thinking enemy, with clip,
-	// room and status. If an anim never shows up in the log, the enemy is
-	// not drawn in it at all - then the fault lies before this function
-	// (room list, status), not inside it.
+	// CLIPLOG: one line for every new (slot, anim) pair of every thinking
+	// enemy, with clip, room and status. It answers whether this function
+	// runs at all for an enemy that is invisible on screen: if an anim never
+	// shows up in the log, the enemy is not drawn in it, and the fault lies
+	// before this function (room list, status), not inside it.
 	if (gLogEnabled && obj->intelligent)
 	{
 		static long seen[128];
@@ -858,14 +820,14 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 	}
 
-	// MESHLOG (#121, sixth measurement): aCheckMeshClip discards meshes
-	// whose box lies entirely outside the current window f_left..f_bottom.
-	// The counter says, after drawing, whether the body died THERE - and the
-	// window says which cutout it was tested against.
+	// MESHLOG: aCheckMeshClip discards meshes whose box lies entirely
+	// outside the current window f_left..f_bottom. The counter says, after
+	// drawing, whether the body's meshes were discarded there - and the
+	// window says which cutout they were tested against.
 	const long rejectsBefore = gLogEnabled ? aMeshClipRejects : 0;
 
-	// Arm CLIPDETAIL for THIS thinker only - the global throttle otherwise
-	// also caught legitimate clip-aways (doors behind the camera) and made
+	// Arm CLIPDETAIL for this thinker only - otherwise the global throttle
+	// also catches legitimate clip-aways (doors behind the camera) and makes
 	// the lines ambiguous.
 	if (gLogEnabled)
 		aClipReportObj = obj->intelligent ? item->object_number : -1;
@@ -883,12 +845,13 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		meshpp = &meshes[obj->mesh_index];
 		bone = &bones[obj->bone_index];
 
-		/* #157: THE ROOT ON A FRAME WHOSE POSE K6 REFUSED. False on every
-		 * other frame - a frame that carries the tick, an accepted blend, the
-		 * whole of fps_mode 0 - and then `root` is not written and the two
-		 * branches below are the lines that have always stood there. Asked
-		 * inside `clip` because an item that is not drawn has no root to fix
-		 * and must not be counted as one. */
+		/* The root offset on a frame whose pose blend was refused (the
+		 * animation changed or the frame did not step by exactly one - see
+		 * GetFramesAt). False on every other frame - a frame that carries the
+		 * tick, an accepted blend, the whole of fps_mode 0 - and then `root` is
+		 * not written and the two branches below take the frame's own root.
+		 * Asked inside `clip` because an item that is not drawn has no root to
+		 * fix and must not be counted as one. */
 		long root[3];
 		const bool rootFix = InterpRootNow(item, frm, frac, blend, root);
 
@@ -905,12 +868,11 @@ void DrawAnimatingItem(ITEM_INFO* item)
 			rot2 = frm[1] + 9;
 			gar_RotYXZsuperpack_I(&rot, &rot2, 0);
 
-			/* #123 (S3-2): THE SEAM. Either the node's matrix goes to the
-			 * HD path or its mesh goes into the buckets - never both. A node
-			 * the HD model does not cover is drawn by NOBODY: TROne tried
-			 * the classic fallback there and took it out again after user
-			 * reports of classic patches sitting on an HD body
-			 * (game_renderer.cpp:1825-1830).
+			/* The HD seam. Either the node's matrix goes to the HD path or
+			 * its mesh goes into the buckets - never both. A node the HD
+			 * model does not cover is not drawn at all: TROne tried a classic
+			 * fallback there and removed it again because it left classic
+			 * patches on an HD body (game_renderer.cpp:1825-1830).
 			 *
 			 * The matrix is recorded whether or not mesh_bits shows the node,
 			 * because a hidden node still carries the ones below it - the
@@ -1024,7 +986,7 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 	}
 
-	/* #123 (S3-2): the item's node walk is over. HDObjectEnd works out the
+	/* The item's node walk is over. HDObjectEnd works out the
 	 * light out of the engine's own light lists and puts the item on the
 	 * frame's list; with clip == 0 above, no node was recorded and it drops
 	 * the item again. Outside `if (clip)` so that the bracket HDObjectBegin
@@ -1085,17 +1047,12 @@ void PrintObjects(short room_number)
 		item = &items[i];
 		obj = &objects[item->object_number];
 
-		// SKIPLOG (#121, third measurement): the blinking soldier (Mafia2,
-		// slot 51) NEVER turned up in the CLIPLOG - so he does not even
-		// reach DrawAnimatingItem. The only branch before it is this one.
-		// One line per (item, status, anim), thinkers only: then it is in
-		// black and white which status sorts him out and what his control
-		// code is playing at that moment.
-		// Second version: no longer ONCE per (item, anim) but per item
-		// again every 30 frames - the first version saw only the very first
-		// entry of the blink cycle and was blind afterwards. data is logged
-		// along: if the AI slot survives the invisibility, the status change
-		// does NOT come from slot allocation.
+		// SKIPLOG: a thinking enemy skipped here as ITEM_INVISIBLE never
+		// reaches DrawAnimatingItem, so CLIPLOG cannot see it; this is the
+		// only branch before it. One line per item at most every 30 frames,
+		// thinkers only, with the anim its control code is playing. `data`
+		// says whether the AI slot survives the invisibility - if it does, the
+		// status change does not come from slot allocation.
 		if (gLogEnabled && obj->intelligent && item->status == ITEM_INVISIBLE)
 		{
 			static long lastSkip[64];
@@ -1131,11 +1088,9 @@ void PrintObjects(short room_number)
 			GlobalAlpha = 0xFF000000;
 		}
 
-		/* R6 (#148, order 3): THE CORPSE FADE IS GAME STATE, so the DRAW
-		 * only writes down that it saw the body and the LOGIC TICK does the
-		 * counting. StepAfterDeathFade(), below, is the other half.
-		 *
-		 * What stood here was
+		/* The corpse fade is game state, so the draw only records that it
+		 * saw the body and the logic tick does the counting
+		 * (StepAfterDeathFade, below). The original code here was
 		 *
 		 *     if (item->after_death < 128 && item->after_death > 0 &&
 		 *         !(wibble & 3))
@@ -1144,45 +1099,33 @@ void PrintObjects(short room_number)
 		 *     if (item->after_death == 128)
 		 *             KillItem(i);
 		 *
-		 * and it has three separate problems, only one of which is about
-		 * the frame rate:
+		 * It counted per drawn frame, so at sixty every body would fade out
+		 * in half the time. And it called KillItem inside the walk of the
+		 * room's item list: for a spawned item (item_num >= level_items)
+		 * KillItem ends with `item->next_item = next_item_free;
+		 * next_item_free = item_num;` (game\items.cpp), rewriting the very
+		 * link the loop follows next, so the walk would wander into the free
+		 * list, drawing and ageing whatever it finds there. On the tick,
+		 * after the walk, the kill cannot do that.
 		 *
-		 * ONE. It counts per drawn frame, so at sixty every body would fade
-		 * out and be deleted in half the time.
+		 * `!(wibble & 3)` is always true: ControlPhase steps `wibble =
+		 * (wibble + 4) & 0xFC` (game\control.cpp), so the low two bits are
+		 * always zero. It was evidently meant to make the fade a quarter as
+		 * fast (seventeen seconds instead of 4.3); it is dropped rather than
+		 * repaired, because repairing it would change how long every body
+		 * lies there.
 		 *
-		 * TWO. `!(wibble & 3)` is DEAD and has been for as long as this
-		 * source has existed. ControlPhase steps `wibble = (wibble + 4) &
-		 * 0xFC` (game\control.cpp), so the low two bits are always zero and
-		 * the test is always true. It was plainly meant to make the fade a
-		 * quarter as fast - 128 steps at 30 Hz would be seventeen seconds
-		 * instead of the 4.3 it actually takes. It is left dead on purpose:
-		 * repairing it would change how long every body in the game lies
-		 * there, which is a game change and not a frame-rate change.
+		 * Only bodies in a room that is actually drawn age, as in the
+		 * original; that is why the draw marks and the tick does not sweep
+		 * all slots - a corpse in a room the camera never sees stays until
+		 * the player comes back.
 		 *
-		 * THREE, and this is a real bug that the move happens to remove.
-		 * KillItem was being called from inside the walk of the room's own
-		 * item list, `for (i = r->item_number; i != NO_ITEM; i =
-		 * items[i].next_item)`. For a SPAWNED item (item_num >=
-		 * level_items) KillItem ends with `item->next_item = next_item_free;
-		 * next_item_free = item_num;` (game\items.cpp) - it hands the slot
-		 * to the free list and REWRITES the very link the loop is about to
-		 * follow. The walk then leaves the room and wanders into the free
-		 * list, drawing and ageing whatever it finds there. Doing the kill
-		 * on the tick, after the walk is over, cannot do that.
-		 *
-		 * WHAT DOES NOT CHANGE: only bodies in a room that was actually
-		 * DRAWN age, exactly as before. That is why the draw marks and the
-		 * tick does not simply sweep all 512 slots - a corpse in a room the
-		 * camera never sees must still be lying there when the player comes
-		 * back, which is what happens at thirty today.
-		 *
-		 * THE MARK IS WIDER THAN THE INCREMENT on purpose: `after_death > 0`
-		 * and not `> 0 && < 128`, because the second `if` above also fired
-		 * on a body that was ALREADY at 128 without being counted up to it.
-		 * The skeleton writes the field directly (`item->after_death =
-		 * (short)(phd_sqrt(info.distance) >> 4)`, game\skeleton.cpp), so
-		 * that case is reachable. StepAfterDeathFade carries both tests
-		 * over unchanged. */
+		 * The mark is `after_death > 0`, wider than the increment, because
+		 * the original kill test also fired on a body already at 128 without
+		 * being counted up to it: the skeleton writes the field directly
+		 * (`item->after_death = (short)(phd_sqrt(info.distance) >> 4)`,
+		 * game\skeleton.cpp). StepAfterDeathFade carries both tests over
+		 * unchanged. */
 		if (item->after_death > 0)
 			g_afterDeathSeen[i] = 1;
 	}
@@ -1199,21 +1142,19 @@ void PrintObjects(short room_number)
 	r->bottom = 0;
 }
 
-/* R6 (#148, order 3): THE CORPSE FADE, ON THE LOGIC TICK.
+/* The corpse fade, on the logic tick.
  *
  * The other half of the mark PrintObjects leaves. Called once per tick from
- * ControlPhase, which is what makes a body take the same 4.3 seconds to
- * vanish at sixty frames a second as it does at thirty; and after the room
- * walk rather than inside it, which is what makes KillItem safe (the long
- * note in PrintObjects has the three reasons).
+ * ControlPhase, so a body takes the same 4.3 seconds to vanish at sixty
+ * frames a second as at thirty; and after the room walk rather than inside
+ * it, which makes KillItem safe (the note in PrintObjects gives the reasons).
  *
- * The two tests are carried over from that code word for word, including the
- * `< 128` that stops the count and the `== 128` that kills, so that the only
- * thing that changed is WHEN they run. The dead `!(wibble & 3)` is gone with
- * its own note there; it was always true and dropping it changes nothing.
+ * The two tests are the original ones word for word, including the `< 128`
+ * that stops the count and the `== 128` that kills; only when they run
+ * differs. The always-true `!(wibble & 3)` is dropped, which changes nothing.
  *
  * The marks are cleared as they are read, so a body whose room is not drawn
- * for a while simply does not age - which is exactly what happens today. */
+ * for a while does not age, as in the original. */
 void StepAfterDeathFade()
 {
 	for (int i = 0; i < MAX_ITEMS; i++)
@@ -1236,36 +1177,28 @@ void StepAfterDeathFade()
 	}
 }
 
-/* ROOMFLASH - A ROOM THAT IS THERE, GONE AND THERE AGAIN (#123, fix round T2,
- * T2-1). Behind -log, and it stays in the build like every other seam.
+/* ROOMFLASH - a room that is in the draw list, gone for one frame, and back.
+ * Behind -log.
  *
- * WHY A SEAM AND NOT AN EYE. What T2-1 repairs lasts ONE FRAME out of sixty.
- * The per-frame HDLOG line is throttled to one a second on purpose, so the
- * frame that flashes is exactly the frame the log does not write - the play
- * test of 2026-09-08 has 41 INTERPLOG lines from ANDREA1 and not one of them
- * can say whether the sky came through. A missing room, on the other hand,
- * has a shape no throttle can miss: it is in the list on the frame before and
- * on the frame after and not on the one in between.
+ * Such a hole lasts one frame out of sixty, and the per-frame HDLOG line is
+ * throttled to one a second, so it would almost never be caught there. A
+ * missing room has a shape no throttle can miss, though: it is in the list on
+ * the frame before and on the frame after and not on the one in between.
  *
  * So three frames of the room list are kept - three notes of about 4.7 KiB
- * each since T5 widened their room arrays to draw_rooms' own capacity - and
- * the MIDDLE one is judged as soon as the third arrives. Rooms in both
- * neighbours and not in the middle are named. That is the whole test, and it needs no knowledge of
- * portals, cameras or geometry: a room the walk can see on either side of a
- * frame and not on it is a hole, whatever made it.
+ * each at draw_rooms' full capacity - and the middle one is judged as soon as
+ * the third arrives. Rooms in both neighbours and not in the middle are
+ * named. The test needs no knowledge of portals, cameras or geometry: a room
+ * the walk sees on either side of a frame and not on it is a hole, whatever
+ * made it.
  *
- * It is not silenced by the fix. After T2-1 the line must stop appearing, and
- * the ROOMWALK line beside it says how much work the fix did to make that
- * true - `corrections=N of M tween frames`. A run with corrections=0 in the
- * alley would mean the fix never fired and the flash came from somewhere
- * else, which is a thing worth being able to tell apart.
- *
- * AND WHAT A REMAINING LINE WOULD MEAN. The shape is a hole, not a cause: a
- * portal seen exactly edge-on for one frame, or a door closing, leaves the
- * same three-frame trace and always has, at thirty as well as at sixty. So a
- * ROOMFLASH line that survives this round is a hole to be looked at with its
- * own `tween` and `corrected` columns - the frame it names says whether it
- * was an in-between frame at all - and not by itself a verdict on T2-1. */
+ * The ROOMWALK line beside it says how often the walk started from the
+ * blended eye's room instead of the logic camera's (`corrections=N of M
+ * tween frames`, see the note in DrawRooms), so a flash with corrections=0
+ * points elsewhere. The shape is a hole, not a cause: a portal seen exactly
+ * edge-on for one frame, or a door closing, leaves the same three-frame trace
+ * at thirty as well as at sixty, so a ROOMFLASH line is judged with its own
+ * `tween` and `corrected` columns. */
 namespace
 {
 	struct RoomWalkNote
@@ -1273,27 +1206,25 @@ namespace
 		unsigned int serial;
 		int level;
 		int count;
-		/* T5: as wide as draw_rooms itself. It was 100 while the list was,
-		 * and NoteRoomWalk clamped `count` to it - so a list longer than
-		 * the note truncated silently, and ROOMFLASH would have called the
-		 * rooms past the hundred missing on every frame in a row. The three
-		 * notes are static and copied only while -log is on. */
+		/* As wide as draw_rooms itself: NoteRoomWalk clamps `count` to it,
+		 * and a narrower note would truncate the list silently and make
+		 * ROOMFLASH report the rooms past its end as missing on every frame.
+		 * The three notes are static and copied only while -log is on. */
 		short rooms[kDrawRoomsMax];
 
-		/* T3-1: and each of those rooms' own window, as the walk left
-		 * it. PrintObjects wipes all four at the end of the frame
-		 * (:1135), so a frame that is judged one frame later has to have
-		 * kept them. This is `left..bottom`, the UNION of every window a
-		 * room was dequeued with, which is the widest of them - so the
-		 * reason worked out from it below is the conservative one: it can
-		 * say "reached" where the walk said "empty", never the other way
-		 * about. */
+		/* Each of those rooms' own window, as the walk left it.
+		 * PrintObjects wipes all four at the end of the frame, so a frame
+		 * that is judged one frame later has to keep them. This is
+		 * `left..bottom`, the union of every window a room was dequeued
+		 * with, which is the widest of them - so the reason worked out from
+		 * it below is the conservative one: it can say "reached" where the
+		 * walk said "empty", never the other way round. */
 		short win[kDrawRoomsMax][4];
 
-		/* T4: and the rectangle the REACH gave each of them, so that a
-		 * ROOMLIST line can say which rooms are in the picture on the
-		 * strength of the reach alone - those are the ones whose window is
-		 * empty and whose reach is not. */
+		/* The rectangle the reach gave each of them, so that a ROOMLIST
+		 * line can say which rooms are in the picture on the strength of
+		 * the reach alone - those whose window is empty and whose reach is
+		 * not. */
 		short reach[kDrawRoomsMax][4];
 		int reach_only;			// how many of them there are
 		int trimmed;			// and how many the budget dropped
@@ -1301,12 +1232,11 @@ namespace
 		short logic;
 		short eye;
 		short prev;
-		long x, y, z;			// the LOGIC camera
+		long x, y, z;			// the logic camera
 
-		/* T3-1: the eye the walk really used. On a tween frame of the
-		 * sixty hertz cadence this is the BLENDED eye and camera.pos is
-		 * half a step behind it - which is the whole of what T2-1 is
-		 * about, and the old line printed the wrong one of the two. */
+		/* The eye the walk really used. On a tween frame of the sixty
+		 * hertz cadence this is the blended eye, and camera.pos is half a
+		 * step behind it. */
 		long wx, wy, wz;
 		float mx[indices_count];	// aW2VMx, for the reason below
 
@@ -1324,7 +1254,7 @@ namespace
 	int g_walkHeld = 0;
 	unsigned int g_walkSerial = 0;
 
-	/* T4-4: rooms per frame, classic and reach, over the second the ROOMWALK
+	/* Rooms per frame, classic and reach, over the second the ROOMWALK
 	 * line covers. `classic` here is the count of listed rooms that have a
 	 * window of their own - the list the walk would have had without the
 	 * reach - and `reach` the ones that have none. */
@@ -1345,31 +1275,27 @@ namespace
 	unsigned short g_walkLineAt = 0;
 	bool g_walkLineEver = false;
 
-	/* ROOMLIST (#123, fix round T3, T3-1b): the membership of
-	 * draw_rooms, every time it changes, and the whole of it with each
-	 * room's window and distance every five seconds.
+	/* ROOMLIST: the membership of draw_rooms every time it changes, and
+	 * the whole of it with each room's window and distance every five
+	 * seconds.
 	 *
-	 * MEASURED FIRST, because a seam that fills a log is a seam that
-	 * gets turned off. RoomProbe -walk was run over a full turn on the
-	 * spot at one degree a frame - a pan of sixty degrees a second at
-	 * sixty frames - from the play test's own eyes in JOBY2 room 130
-	 * and ANDREA2 room 210: 16 % of frames see a change at all, and the
-	 * change is 0.24 and 0.33 rooms added-or-removed per frame. That is
-	 * about ten lines a second while the camera is swinging hard and
-	 * none at all while it is still, so at 110 bytes a line ten minutes
-	 * of hard panning is about 640 KiB. The cap below is the safety
-	 * valve for a case worse than the one that was measured, and it is
-	 * set so that even a frame-by-frame change cannot pass 2 MiB in ten
-	 * minutes: 20 lines a second is 1.3 MiB, and the five second dump
-	 * of a forty room list is another 340 KiB. */
+	 * Volume, measured with RoomProbe -walk over a full turn on the spot
+	 * at one degree a frame (sixty degrees a second at sixty frames) from
+	 * JOBY2 room 130 and ANDREA2 room 210: 16 % of frames see a change,
+	 * 0.24 and 0.33 rooms added-or-removed per frame. That is about ten
+	 * lines a second while the camera swings hard and none while it is
+	 * still - at 110 bytes a line, about 640 KiB for ten minutes of hard
+	 * panning. The cap below keeps even a change on every frame under
+	 * 2 MiB in ten minutes: 20 lines a second is 1.3 MiB, and the five
+	 * second dump of a forty room list another 340 KiB. */
 	const int kListLines = 20;
 	const int kListDumpSeconds = 5;
 	int g_listLines = 0;
 	unsigned short g_listDumpAt = 0;
 	bool g_listEver = false;
 
-	/* ROOMPOP (#123, fix round T2, T2-3): a room that JOINS the draw list
-	 * while it is a long way off. See the note over the report below. Four
+	/* ROOMPOP: a room that joins the draw list while it is a long way
+	 * off. See the note over the report below. Four
 	 * lines a second at most - a walk through Rome joins a room every few
 	 * frames and the ones that matter are the far ones. */
 	const long kPopFar = 8192;		// eight sectors
@@ -1400,41 +1326,38 @@ namespace
 		return false;
 	}
 
-	/* WHAT REFUSED A ROOM (#123, fix round T3, T3-1).
+	/* What refused a room.
 	 *
 	 * The walk is arithmetic on the level's own portal records, and a
-	 * line that says a room is missing without saying which piece of
-	 * that arithmetic dropped it is a line that costs a play test. So
-	 * the two tests are worked out again HERE, out of the note - the
-	 * eye, the view matrix and every listed room's own window - and the
-	 * walk itself is not touched, not read and not slowed: this runs
-	 * only on the frame a ROOMFLASH is already being written, and only
-	 * under -log.
+	 * line that says a room is missing is only useful if it says which
+	 * piece of that arithmetic dropped it. So the walk's tests are worked
+	 * out again here, from the note - the eye, the view matrix and every
+	 * listed room's own window - and the walk itself is not touched, read
+	 * or slowed: this runs only on the frame a ROOMFLASH is being
+	 * written, and only under -log.
 	 *
-	 * The four answers this can give are the four places a portal to a
-	 * room that is NOT in the list can have been dropped:
+	 * The four answers are the four places a portal to a room that is
+	 * not in the list can have been dropped:
 	 *
 	 *   side     the eye is on the far side of the portal's own plane -
 	 *            `if (x && (x ^ p->normal[0]) < 0)` in GetRoomBounds
 	 *   toonear  all four corners fell behind the eye, `tooNear == 4`
 	 *   empty    the rectangle came out with no width or no height
 	 *            after the clamp against the room it was seen through
-	 *   noportal no portal to it out of ANY listed room. That answer is
-	 *            the interesting one: it is what the remaster's art
-	 *            looks like from the inside when it opens a wall the
-	 *            classic level keeps shut.
+	 *   noportal no portal to it from any listed room. This is what the
+	 *            remaster's art looks like from the inside when it opens
+	 *            a wall the classic level keeps shut.
 	 *
 	 * SetRoomBounds' fifth exit, the early out at its top where the room's
-	 * window already covers what this portal would give it, cannot be the
-	 * answer here and so is not tested for: it only ever fires for a room
-	 * that is in the list ALREADY, and this runs on missing rooms alone.
-	 * RoomProbe -walk, which judges every portal and not only the missing
-	 * ones, does report it, as `covered`.
+	 * window already covers what this portal would give it, is not tested
+	 * for: it only fires for a room that is already in the list, and this
+	 * runs on missing rooms alone. RoomProbe -walk, which judges every
+	 * portal, reports it as `covered`.
 	 *
-	 * It is CONSERVATIVE by construction, and the note over `win` says
-	 * why: the window it clamps against is the union of every window
-	 * the room was dequeued with, so it can answer "reached" where the
-	 * walk answered "empty" and never the other way about. */
+	 * It is conservative by construction (see the note over `win`): the
+	 * window it clamps against is the union of every window the room was
+	 * dequeued with, so it can answer "reached" where the walk answered
+	 * "empty" and never the other way round. */
 	void WhyRoomMissing(const RoomWalkNote& note, short which,
 		char* out, int room_for)
 	{
@@ -1460,7 +1383,7 @@ namespace
 			if (!door)
 				continue;
 
-			// aTranslateAbs (specific\3dmath.cpp:281) for this room.
+			// aTranslateAbs (specific\3dmath.cpp) for this room.
 			{
 				const float fx = (float)r->x - note.mx[M03];
 				const float fy = (float)r->y - note.mx[M13];
@@ -1474,11 +1397,11 @@ namespace
 				mx[M23] = fx * mx[M20] + fy * mx[M21] + fz * mx[M22];
 			}
 
-			/* SIXTEEN, not the fifteen GetRoomBounds writes (:3679): a
-			 * ROOM_PORTAL is sixteen shorts, and the walk's own loop steps
-			 * past `rn` inside its body while this one reads the record
-			 * where it stands. calc_animating_item_clip_window (:3011)
-			 * counts the same way this does, corners at door[4] and all. */
+			/* Sixteen, not the fifteen GetRoomBounds steps: a ROOM_PORTAL
+			 * is sixteen shorts, and the walk's own loop steps past `rn`
+			 * inside its body while this one reads the portal record where it
+			 * stands. calc_animating_item_clip_window counts the same way,
+			 * corners at door[4] and all. */
 			for (drn = *door++; drn > 0; drn--, door += 16)
 			{
 				ROOM_PORTAL* p = (ROOM_PORTAL*)door;
@@ -1487,7 +1410,7 @@ namespace
 				double a = 0, b = 0, c = 0, d = 0;
 				float vx[4], vy[4], vz[4];
 				float tooNear = 0, tL, tR, tT, tB;
-				// T4: the portal's own projection, the reach's rectangle.
+				// The portal's own projection, the reach's rectangle.
 				float rawL = 1e30f, rawR = -1e30f, rawT = 1e30f, rawB = -1e30f;
 
 				if (p->rn != which)
@@ -1532,7 +1455,7 @@ namespace
 					}
 				}
 
-				// SetRoomBounds (:3147) on the note's own numbers.
+				// SetRoomBounds on the note's own numbers.
 				if (!why)
 				{
 					tL = (float)note.win[i][2];
@@ -1567,10 +1490,10 @@ namespace
 							}
 							else
 							{
-								// SetRoomBounds' own degenerate branch (:3191). phd_left
-								// and phd_right are still what DrawRooms set them to when
-								// this note is read - 0 and phd_winxmax (:2186), and
-								// nothing between the walk and here touches them.
+								// SetRoomBounds' own degenerate branch. phd_left and
+								// phd_right are still what DrawRooms set them to when
+								// this note is read - 0 and phd_winxmax - and nothing
+								// between the walk and here touches them.
 								x = x < 0 ? 0.0f : (float)phd_winxmax;
 								y = y < 0 ? 0.0f : (float)phd_winymax;
 							}
@@ -1580,7 +1503,7 @@ namespace
 							if (y - 1 < tT) tT = y - 1;
 							if (y + 1 > tB) tB = y + 1;
 
-							// T4: and the same four without the parent in them.
+							// The same four without the parent's window.
 							if (x - 1 < rawL) rawL = x - 1;
 							if (x + 1 > rawR) rawR = x + 1;
 							if (y - 1 < rawT) rawT = y - 1;
@@ -1632,10 +1555,9 @@ namespace
 						c = tR;
 						d = tB;
 
-						/* T4: and what the REACH makes of the same portal -
-						 * its own projection against the screen, with the
-						 * parent's window left out. Three answers, and they
-						 * are the three cases of this round:
+						/* What the reach makes of the same portal - its own
+						 * projection against the screen, with the parent's
+						 * window left out:
 						 *
 						 *   offscreen   the portal is not on the screen at
 						 *               all; the reach refuses it too, and
@@ -1643,7 +1565,7 @@ namespace
 						 *   reach       the classic window came out empty and
 						 *               the reach carries the room - so with
 						 *               the reach on, a room that is missing
-						 *               for THIS reason was dropped by the
+						 *               for this reason was dropped by the
 						 *               budget or the cap, not by the walk.
 						 *   reached     both rules have it. */
 						if (g_reach_on)
@@ -1690,12 +1612,12 @@ namespace
 	}
 }
 
-/* T4-2: THE WALK'S REACH STATE, WIPED AND SEEDED (#123, fix round T4).
+/* The walk's reach state, wiped and seeded.
  *
  * Called from DrawRooms and RenderIt - the two places that start a walk -
  * and only while g_reach_on. The root gets both answers: the whole screen as
- * its window, which is what the four lines above this call set, and its one
- * reach visit, so that no portal can come back and hand it a second. */
+ * its window, which the caller has just set, and its one reach visit, so
+ * that no portal can come back and hand it a second. */
 static void ReachBeginWalk(short seed)
 {
 	memset(g_reach_state, 0, sizeof(g_reach_state));
@@ -1713,18 +1635,15 @@ static void ReachBeginWalk(short seed)
 	}
 }
 
-/* T4-4: THE SAFETY VALVE, AND ITS NUMBER IS MEASURED (#123, fix round T4;
- * raised from 64 to 128 in fix round T5).
+/* The safety valve on the reach, with a measured budget.
  *
- * A frame that the reach fills with a hundred rooms is a frame of a hundred
- * HD draw calls, and the survey says it happens: with the eye at the middle
- * of every room of a level in turn and a fan of forty directions from each
- * (RoomProbe -reachsurvey, 2560x1440, yaw every 45 degrees and pitch -30 to
- * +30 every 15 - 280 to 10,200 frames a level), the reach passes 100 rooms in
- * 0.6 % of ANDREA1's frames, 0.4 % of JOBY2's and 2.0 % of JOBY4's. The whole
- * distribution, as the share of frames over a budget of 32 / 40 / 48 / 56 /
- * 64 / 80 / 96 / 112 / 128 rooms - the last three measured in T5, the rest
- * unchanged from T4 and reproduced number for number by the same run:
+ * A frame the reach fills with a hundred rooms is a frame of a hundred HD
+ * draw calls, and it happens: with the eye at the middle of every room of a
+ * level in turn and a fan of forty directions from each (RoomProbe
+ * -reachsurvey, 2560x1440, yaw every 45 degrees and pitch -30 to +30 every
+ * 15 - 280 to 10,200 frames a level), the reach passes 100 rooms in 0.6 % of
+ * ANDREA1's frames, 0.4 % of JOBY2's and 2.0 % of JOBY4's. The share of
+ * frames over a budget of 32 / 40 / 48 / 56 / 64 / 80 / 96 / 112 / 128 rooms:
  *
  *   ANDREA1  13.7  9.6  7.0  5.3  4.0  1.8  0.7  0.4  0.1 %
  *   ANDREA2  13.3  9.7  7.0  5.2  3.5  1.2  0.3    0    0 %
@@ -1741,35 +1660,25 @@ static void ReachBeginWalk(short seed)
  *   ANDY2     1.3  0.5  0.1    0    0    0    0    0    0 %
  *   RICH2 and RICHCUT2 are 0 in every column.
  *
- * 64 WAS WHERE THE TWO FAMILIES PART, and it held for one play test. It was
- * also, as the review of T4 said in as many words, a number out of room-count
- * distributions and not out of frame times. The play test of 2026-09-09 gave
- * the frame times: at 64 rooms and up to 754 HD draws, FPSLOG on a 165 Hz
- * panel reads real_fps 165.0, avg_ms 6.1, late=0 - display-bound, with the
- * work of the frame at about 6.0 ms of a 6.1 ms budget of which 5.35 is the
- * flip. And it gave the cost of the valve being shut too far: in JOBY2 (log
- * seconds 49 to 72) and in the courtyard of Trajan's Markets the list sat at
- * exactly 64 for twenty seconds at a stretch with up to 30 reach-only rooms
- * dropped per FRAME, and ROOMFLASH named three rooms of ANDREA2 - 230, 47 and
- * 229 - missing with a reach of their own, which is distant art popping.
+ * Cost at a budget of 64: with up to 754 HD draws, FPSLOG on a 165 Hz panel
+ * reads real_fps 165.0, avg_ms 6.1, late=0 - display-bound, the frame's work
+ * about 6.0 ms of a 6.1 ms budget of which 5.35 is the flip. But 64 is too
+ * tight: in JOBY2 and in the courtyard of Trajan's Markets the list sits at
+ * 64 for seconds at a time with up to 30 reach-only rooms dropped per frame,
+ * and distant art pops (ANDREA2 rooms 230, 47 and 229).
  *
- * So 128, and the column says what it buys: the frames that still hit it are
- * ANDREA1's 0.1 % and nothing else in the game. The two places the play test
- * complained about are both well under it - JOBY2's eye at 54410/-5104/43819
- * looking 216.4/8.0 walks 66 rooms (37 classic, 29 the reach's) and ANDREA2's
- * at 86922/-1231/43587 looking 271.3/15.9 walks 75 (39 and 36), so at 64 the
- * valve dropped 2 and 11 rooms there and at 128 it drops none.
+ * At 128 only ANDREA1's 0.1 % of frames still hit the valve. JOBY2's eye at
+ * 54410/-5104/43819 looking 216.4/8.0 walks 66 rooms (37 classic, 29 the
+ * reach's) and ANDREA2's at 86922/-1231/43587 looking 271.3/15.9 walks 75
+ * (39 and 36): at 64 the valve drops 2 and 11 rooms there, at 128 none. The
+ * cost of a 128-room frame is not measured (the 6.1 ms above is a frame of
+ * 64); if such frames prove too expensive, this constant is the one place to
+ * lower it.
  *
- * WHAT IS NOT MEASURED, and it is the play test that decides it: what a frame
- * of 128 rooms COSTS. The 6.1 ms above is a frame of 64. The distribution says
- * such frames are rare and the FPSLOG line of the play test says whether they
- * are affordable; if they are not, this number is the one place to turn it
- * back down.
- *
- * The valve only ever drops rooms THE REACH BROUGHT IN, farthest first; a room
- * with a classic window of its own is a room the walk has always drawn and is
- * never trimmed, which is why JOBY4's own classic frames of 72 and 106 rooms
- * are untouched by this.
+ * The valve only drops rooms the reach brought in, farthest first; a room
+ * with a classic window of its own is one the classic walk draws and is
+ * never trimmed, which is why JOBY4's classic frames of 72 and 106 rooms are
+ * untouched by this.
  *
  * The room's bound_active goes back to zero with it, because PrintObjects -
  * which is what clears that byte at the end of a drawn room - will not run
@@ -1778,18 +1687,18 @@ static const long kReachBudget = 128;
 
 static void ReachTrimRooms(long ex, long ey, long ez)
 {
-	/* FIRST, THE ROOMS THE REACH CANNOT HELP. What a reach-only room shows
+	/* First, the rooms the reach cannot help. What a reach-only room shows
 	 * is its HD art: its classic geometry is clipped away by its own empty
-	 * window - `phd_left = r->left` in DrawStaticObjects (:2830) and
-	 * `clip_left = r->left` in InsertRoom (specific\drawroom.cpp), both of
-	 * which reject everything when left > right - so a room the .TRG has
-	 * nothing for would be in the list with nothing of itself in the
-	 * picture, and only its ITEMS would be drawn (PrintObjects hands every
-	 * item the whole screen). An enemy standing in a room that is not there
-	 * is not a fix; so such a room comes straight back out of the list.
+	 * window - `phd_left = r->left` in DrawStaticObjects and `clip_left =
+	 * r->left` in InsertRoom (specific\drawroom.cpp) both reject everything
+	 * when left > right - so a room the .TRG has nothing for would be in the
+	 * list with nothing of itself in the picture, and only its items would
+	 * be drawn (PrintObjects hands every item the whole screen), leaving
+	 * enemies standing in a room that is not there. Such a room comes
+	 * straight back out of the list.
 	 *
-	 * That is also what makes the reach unable to touch the classic picture
-	 * at all: everything it adds is .TRG art. */
+	 * This also keeps the reach from touching the classic picture at all:
+	 * everything it adds is .TRG art. */
 	for (int i = 0; i < number_draw_rooms; )
 	{
 		const short which = draw_rooms[i];
@@ -1831,7 +1740,7 @@ static void ReachTrimRooms(long ex, long ey, long ez)
 			const ROOM_INFO* rr = &room[draw_rooms[i]];
 			long d;
 
-			// A classic window means the walk has always drawn it.
+			// A classic window means the classic walk draws it too.
 			if (rr->left < rr->right && rr->top < rr->bottom)
 				continue;
 
@@ -1885,8 +1794,8 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	{
 		note.rooms[i] = draw_rooms[i];
 
-		/* T3-1: and the window the walk left that room with, because
-		 * PrintObjects wipes all four before this note is ever read. */
+		/* The window the walk left that room with, because PrintObjects
+		 * wipes all four before this note is read. */
 		{
 			const ROOM_INFO* rr = &room[draw_rooms[i]];
 
@@ -1908,9 +1817,9 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	note.y = camera.pos.y;
 	note.z = camera.pos.z;
 
-	/* T3-1: the eye the walk really used, and the matrix it used it
-	 * with. w2v_matrix M03/M13/M23 are the camera POSITION and not a
-	 * translation term (specific\\3dmath.cpp:725), which is why the
+	/* The eye the walk really used, and the matrix it used it with.
+	 * w2v_matrix M03/M13/M23 are the camera position and not a
+	 * translation term (specific\\3dmath.cpp), which is why the
 	 * side test in GetRoomBounds can subtract them straight off a
 	 * portal corner. */
 	note.wx = w2v_matrix[M03];
@@ -1934,9 +1843,9 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	note.reach_only = g_reach_added;
 	note.trimmed = g_reach_trimmed;
 
-	/* T4-4: the frame's own cost, for the once-a-second line. The rooms of
-	 * the list are the rooms the HD path draws - it has no visibility test of
-	 * its own, measured in fix round T2 and unchanged since. */
+	/* The frame's own cost, for the once-a-second line. The rooms of the
+	 * list are the rooms the HD path draws - it has no visibility test of
+	 * its own. */
 	g_walkRoomsSum += note.count;
 	g_walkRoomsFrames++;
 	g_walkReachSum += g_reach_added;
@@ -1955,7 +1864,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	if (g_walkHeld < 3)
 		g_walkHeld++;
 
-	/* THE MIDDLE FRAME IS THE ONE ON TRIAL, and only while the three really
+	/* The middle frame is the one judged, and only while the three really
 	 * are three consecutive frames of one level - a level change, a savegame
 	 * or a menu leaves a note behind that is no neighbour of anything. */
 	if (g_walkHeld >= 3 &&
@@ -1989,12 +1898,11 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 
 			g_walkFlashes++;
 
-			/* T3-1: the walk eye beside the logic one, the camera that
-			 * chose it and what it was aimed at. Two of those three are
-			 * new: the old line printed camera.pos, which on a tween frame
-			 * is half a step behind the eye the walk really used, and it
-			 * printed no camera state at all - so a flash under a fixed
-			 * camera or on the frame of a cut looked like any other. */
+			/* The walk eye beside the logic one (on a tween frame
+			 * camera.pos is half a step behind the eye the walk used), the
+			 * camera state that chose it and what it was aimed at, so a
+			 * flash under a fixed camera or on the frame of a cut can be
+			 * told apart. */
 			Log("ROOMFLASH frame=%u tween=%d alpha=%.2f logic_room=%d "
 				"eye_room=%d prev_cam_room=%d eye=(%d,%d,%d) "
 				"walk_eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d "
@@ -2024,37 +1932,32 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		}
 	}
 
-	/* ROOMPOP - A ROOM THAT TURNS UP FROM A LONG WAY OFF (#123, fix round T2,
-	 * T2-3). Behind -log, and it stays in the build.
+	/* ROOMPOP - a room that turns up from a long way off. Behind -log.
 	 *
-	 * WHAT IT IS FOR. The play test of 2026-09-08 photographed a brick tower
-	 * with a barred window at the corner of the Piazza dell'Opera that is not
-	 * in trview at all - pure remaster art - and that is missing from a
-	 * distance and "pops into the picture" as she walks up to it. Two things
-	 * can do that and they need telling apart:
+	 * Remaster art that is missing from a distance and pops into the
+	 * picture as Lara walks up to it (such as the brick tower with a barred
+	 * window at the corner of ANDREA1's Piazza dell'Opera, which exists only
+	 * in the remaster art) has two possible causes, and this line tells
+	 * them apart:
 	 *
-	 *   the ROOM was not in the draw list. The HD path has no visibility
+	 *   the room was not in the draw list. The HD path has no visibility
 	 *      test of its own - there is no view frustum anywhere in
-	 *      specific\hd (the only culling in it is BACK FACE culling on
-	 *      Lara's model), and the
-	 *      `dropped=` of its frame line counts only the fixed array's
-	 *      overflow and read 0 through the whole play test - so the rooms it
-	 *      draws are exactly the rooms this walk hands it. A room the portal
-	 *      chain does not reach is not drawn, in the classic path just the
-	 *      same, and that is vanilla behaviour that the remaster's taller art
-	 *      makes visible.
-	 *   the FAR PLANE. InitWindow sets it at 20480 units, twenty sectors
-	 *      (specific\gamemain.cpp:261), and both paths project with the same
+	 *      specific\hd (the only culling in it is back face culling on
+	 *      Lara's model), and the `dropped=` of its frame line counts only
+	 *      the fixed array's overflow - so the rooms it draws are exactly
+	 *      the rooms this walk hands it. A room the portal chain does not
+	 *      reach is not drawn in the classic path either; that is vanilla
+	 *      behaviour the remaster's taller art makes visible.
+	 *   the far plane. InitWindow sets it at 20480 units, twenty sectors
+	 *      (specific\gamemain.cpp), and both paths project with the same
 	 *      constants, so art past it is clipped in both.
 	 *
-	 * This line separates the two in one play test: if the tower appears on a
-	 * frame that also joins its room to the list, it is the walk; if the room
-	 * was there all along, it is the far plane. Measured offline first, with
-	 * TrgProbe -near over the whole corner: ANDREA1 has NO remaster art more
-	 * than 936 units outside its own room's box anywhere within 8,000 units
-	 * of that corner, so the tower is ordinary art of some room and not
-	 * something hung far outside one. Which room it is, only the game can
-	 * say, and this is the line that will say it. */
+	 * If the art appears on a frame that also joins its room to the list,
+	 * it is the walk; if the room was there all along, it is the far plane.
+	 * Measured with TrgProbe -near over that corner: ANDREA1 has no remaster
+	 * art more than 936 units outside its own room's box anywhere within
+	 * 8,000 units of it, so the tower is ordinary art of some room and not
+	 * something hung far outside one; this line names the room. */
 	if (gLogEnabled && g_walkHeld >= 2 &&
 		g_walkNote[1].level == g_walkNote[2].level &&
 		g_walkNote[2].serial == g_walkNote[1].serial + 1)
@@ -2081,24 +1984,19 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		}
 	}
 
-	/* ROOMLIST - WHAT THE WALK HANDS THE PICTURE, AND WHAT IT DOES NOT
-	 * (#123, fix round T3, T3-1b). Behind -log, and it stays.
+	/* ROOMLIST - what the walk hands the picture, and what it does not.
+	 * Behind -log.
 	 *
-	 * WHY. The HD path has no visibility test of its own - fix round T2
-	 * measured that and the frame line's dropped= has read 0 through
-	 * every play test since - so the rooms it draws ARE draw_rooms, and
-	 * anything the player sees as black through a hole is a room this
-	 * list has not got. ROOMFLASH names a room that comes and goes
+	 * The HD path has no visibility test of its own, so the rooms it draws
+	 * are draw_rooms, and anything seen as black through a hole is a room
+	 * this list does not hold. ROOMFLASH names a room that comes and goes
 	 * between two frames; this names the list itself.
 	 *
-	 * THE FIVE SECOND DUMP CARRIES THE ONE LINE THAT WILL NAME THE
-	 * TORN WALL. Beside each drawn room it lists that room's portal
-	 * neighbours that are NOT drawn, with the reason - and "noportal"
-	 * for the rooms whose art stands inside a drawn room with no portal
-	 * to it at all, which is what the remaster's opened-up wall looks
-	 * like from the inside. A player standing at the hole and seeing
-	 * black is standing in a room whose shadow list holds the room he
-	 * cannot see. */
+	 * The five second dump lists, beside each drawn room, that room's
+	 * portal neighbours that are not drawn (`shadow=`). A player standing
+	 * at a hole in the remaster's opened-up wall and seeing black is
+	 * standing in a room whose shadow list holds the room that cannot be
+	 * seen. */
 	if (gLogEnabled && g_walkHeld >= 2 &&
 		g_walkNote[1].level == g_walkNote[2].level &&
 		g_walkNote[2].serial == g_walkNote[1].serial + 1)
@@ -2136,9 +2034,9 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			g_listDumpAt = GlobalCounter;
 			g_listEver = true;
 
-			/* T4: and the TARGET beside the eye, which T3's dump did not
-			 * carry - a room list without the direction it was walked in
-			 * cannot be handed to RoomProbe -walk as it stands. */
+			/* The target beside the eye: a room list without the
+			 * direction it was walked in cannot be replayed with
+			 * RoomProbe -walk. */
 			Log("ROOMLIST frame=%u the whole list, %d room(s), "
 				"eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d cam=%d/%d "
 				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d",
@@ -2177,7 +2075,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 							(int)p->rn);
 					}
 
-				/* T4: window= is the classic rectangle and the scissor
+				/* window= is the classic rectangle and the scissor
 				 * the intruding triangles get; reach= is what the walk
 				 * carried the room in on. A room whose window is empty and
 				 * whose reach is not is a room of the reach alone: all its
@@ -2205,17 +2103,16 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 				"flashes=%d, far rooms joined=%d", g_walkCorrections,
 				g_walkTweens, g_walkFlashes, g_walkPops);
 
-		/* T4-4: what the reach costs, once a second. rooms= is the whole
-		 * list, classic= the part of it that has a window of its own - the
-		 * list the walk would have had without this round - and reach= the
-		 * rooms the reach alone brought in. cap hit= counts the rooms
-		 * refused because draw_rooms (kDrawRoomsMax) or the queue ring
-		 * (kRoomListRing) was full - since T5 neither can happen in a
-		 * loadable level, so this column is now a zero that has to stay
-		 * zero; trimmed= the ones the budget dropped again, farthest first.
-		 * What each of those rooms COSTS is on the FPSLOG line of the same
-		 * second, which already carries hd_rooms / hd_items / hd_draws as
-		 * the maxima over it (specific\hd\hd_level.cpp:402). */
+		/* What the reach costs, once a second. rooms= is the whole list,
+		 * classic= the part of it that has a window of its own - the list
+		 * the walk would have without the reach - and reach= the rooms the
+		 * reach alone brought in. cap hit= counts the rooms refused because
+		 * draw_rooms (kDrawRoomsMax) or the queue ring (kRoomListRing) was
+		 * full - neither can happen in a loadable level, so this column must
+		 * stay zero; trimmed= the ones the budget dropped again, farthest
+		 * first. What those rooms cost is on the FPSLOG line of the same
+		 * second, which carries hd_rooms / hd_items / hd_draws as the maxima
+		 * over it (specific\hd\hd_level.cpp). */
 		if (g_walkLineEver && g_reach_on && g_walkRoomsFrames)
 			Log("ROOMWALK reach rooms added=%d of %d (mean %.1f of %.1f, max "
 				"%d classic %d reach %d), budget=%d trimmed=%d no_art=%d "
@@ -2253,29 +2150,27 @@ void DrawRooms(short current_room)
 
 	DoMonitorScreen();
 
-	/* THE WALK STARTS WHERE THE EYE IS (#123, fix round T2, T2-1).
+	/* The walk starts where the eye is.
 	 *
 	 * On an in-between frame of the sixty hertz cadence the eye has been
 	 * blended and the view matrix rebuilt from it, while `current_room` is
-	 * still the LOGIC camera's room. Where the two disagree - the chase
+	 * still the logic camera's room. Where the two disagree - the chase
 	 * camera swinging around a corner crosses a portal plane between two
-	 * ticks - GetRoomBounds below refuses to follow the portal the eye has
-	 * just stepped through and the whole room behind it is missing for one
-	 * frame. See the note over InterpEyeRoom (game\interpolate.h) for the two
-	 * lines that do it and for the player's own two controls.
+	 * ticks - GetRoomBounds would refuse to follow the portal the eye has
+	 * just stepped through and the whole room behind it would be missing for
+	 * one frame. See the note over InterpEyeRoom (game\interpolate.h) for how
+	 * the eye's room is found and for the player's two controls.
 	 *
 	 * InterpEyeRoom returns `current_room` unchanged on every frame that was
 	 * not blended - fps_mode 0, the frame that carries the tick, a cutscene,
-	 * a camera cut, a level start - so at thirty hertz this line is the
-	 * identity and nothing below it moves.
+	 * a camera cut, a level start - so at thirty hertz this is the identity.
 	 *
-	 * WHAT IT SEEDS AND WHAT IT DOES NOT. The portal walk, and only that.
-	 * `outside` and `camera_underwater` are read from the LOGIC room, exactly
-	 * as they were before this round: they are the frame's own flags rather
-	 * than a property of the room list, the live frames on either side of a
-	 * tween one read them from the logic room, and a tween frame that took
-	 * them from a room half a step away could put one frame of underwater
-	 * tint or one frame of weather into a run that has neither. `outside` is
+	 * It seeds the portal walk and nothing else. `outside` and
+	 * `camera_underwater` are read from the logic room: they are the frame's
+	 * own flags rather than a property of the room list, the live frames on
+	 * either side of a tween one read them from the logic room, and a tween
+	 * frame that took them from a room half a step away could put one frame
+	 * of underwater tint or weather into a run that has neither. `outside` is
 	 * widened by the walk itself in any case - GetRoomBounds sets it from
 	 * every ROOM_OUTSIDE room it reaches. */
 	const short walk_room = InterpEyeRoom(current_room);
@@ -2315,9 +2210,9 @@ void DrawRooms(short current_room)
 		outside_bottom = 0;
 	}
 
-	/* T4: the reach, and only where there is HD art to reach. HDLevelActive()
-	 * is false with hd_enable off and in a level the .TRG had nothing for, and
-	 * then every line of the walk below is the walk that shipped. */
+	/* The reach, and only where there is HD art to reach. HDLevelActive()
+	 * is false with hd_enable off and in a level the .TRG had nothing for,
+	 * and then the walk below is the original one. */
 	g_reach_on = HDLevelActive();
 
 	if (g_reach_on)
@@ -2326,7 +2221,7 @@ void DrawRooms(short current_room)
 	GetRoomBounds();
 
 	/* And the budget, over the eye the walk really used - w2v_matrix M03/M13/
-	 * M23 is the camera position (specific\3dmath.cpp:725), the same three
+	 * M23 is the camera position (specific\3dmath.cpp), the same three
 	 * numbers the side test subtracts from a portal corner. */
 	if (g_reach_on)
 		ReachTrimRooms((long)w2v_matrix[M03], (long)w2v_matrix[M13],
@@ -2342,21 +2237,19 @@ void DrawRooms(short current_room)
 	{
 		nPolyType = 4;
 
-		/* TOO CLOSE TO DRAW HER AT ALL (#161, round 161a2, step 2, the user's
-		 * observation 4: "ist Lara zu nah, wird sie komplett ausgeblendet").
+		/* Lara is hidden completely when the camera is too close to her.
 		 *
-		 * ONE TERM, AND IT IS THE WHOLE OF THE HIDE. This block is every path
-		 * that draws her: the classic composite and its braid and her shadow
+		 * This one term hides her entirely, because this block is every path
+		 * that draws her: the classic composite with its braid and shadow
 		 * (specific\drawlara.cpp - S_PrintShadow and DrawHair are inside the
 		 * four variants), the remaster's wardrobe (HDLaraDrawFrame, called
 		 * from those same variants) and the muzzle flash's matrices below.
-		 * objects[LARA].draw_routine is 0 (game\setup.cpp:1024), so the room's
-		 * item loop never draws her either, and the binoculars have been
-		 * proving the whole arrangement since 1999: they set mesh_bits = 0 and
-		 * she disappears completely, shadow and all, through this same
-		 * condition.
+		 * objects[LARA].draw_routine is 0 (game\setup.cpp), so the room's
+		 * item loop never draws her either; the binoculars rely on the same
+		 * arrangement - they set mesh_bits = 0 and she disappears
+		 * completely, shadow and all, through this same condition.
 		 *
-		 * Her MIRROR image stays, which is why the term is here and not
+		 * Her mirror image stays, which is why the term is here and not
 		 * inside DrawLara: Draw_Mirror_Lara is below this block, and the
 		 * reflection of a camera stuck inside her is not stuck inside
 		 * anything - it is a Lara at twice the distance to the glass.
@@ -2503,12 +2396,11 @@ void DrawRooms(short current_room)
 	for (int i = 0; i < number_draw_rooms; i++)
 		PrintObjects(draw_rooms[i]);
 
-	/* R9 (#148, order 3): aUpdate is `aWibble++` and nothing else
-	 * (specific\alexstuff.cpp). aWibble is a UV scroll read by the water
-	 * surfaces and the flat sky (specific\specificfx.cpp), so at sixty it
-	 * would scroll at double speed. The guard is at the call and not inside
-	 * aUpdate so that the counter and its rule stand on the same page as
-	 * the rest of the frame. */
+	/* aUpdate is `aWibble++` and nothing else (specific\alexstuff.cpp).
+	 * aWibble is a UV scroll read by the water surfaces and the flat sky
+	 * (specific\specificfx.cpp), so at sixty it would scroll at double
+	 * speed; it advances on logic ticks only. The guard is at the call so
+	 * that it stands beside the rest of the frame's tick guards. */
 	if (!InterpIsTweenFrame())
 		aUpdate();
 }
@@ -2574,29 +2466,26 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate)
 	return frac;
 }
 
-/* THE POSE THIS DRAWN FRAME WEARS, when the frame falls between two logic
- * ticks (#148, order 4).
+/* The pose this drawn frame wears when it falls between two logic ticks.
  *
  * `prevAnim` and `prevFrame` are what the item wore before the last tick -
  * the snapshot game\interpolate.cpp keeps - and `t` is how far this frame
  * stands between then and now, a half at sixty hertz. What comes back is the
- * key frame PAIR and the factor whose blend is the MIDPOINT OF THE TWO POSES
- * THE GAME DRAWS AT THIRTY; interpolate_math.h derives it and says why it is
+ * key frame pair and the factor whose blend is the midpoint of the two poses
+ * the game draws at thirty; interpolate_math.h derives it and says why it is
  * a midpoint and not a freshly computed "correct" fraction.
  *
  * Returns 0 when there is nothing to blend, and then nothing has been
- * written: the caller falls back to GetFrames and the POSE is the one thirty
- * hertz draws. That is rule K6 of the plan and it covers the animation NUMBER
- * changing, which is tested here because only the caller's side knows it, as
- * well as every frame-number case InterpPoseAt names.
+ * written: the caller falls back to GetFrames and the pose is the one thirty
+ * hertz draws. The pose rule refuses the blend when the animation number
+ * changed (tested here, because only this side knows it) and in every
+ * frame-number case InterpPoseAt names (the frame did not step by exactly
+ * one).
  *
- * THE POSE, AND NOT THE PLACE (#157). "Drawn exactly as thirty hertz draws
- * it" is what this note used to claim, and it was not true of the ROOT: the
- * position under the pose has already been blended by order 2, so a refused
- * frame of an animation that carries its own travel - a ladder climb - drew
- * half of pos's step and none of the offset's. The root is now blended in
- * time on the refused frame as well, in InterpRootNow; here nothing about the
- * pose has changed. */
+ * This refuses the pose, not the place: the position under the pose is
+ * already blended, so on a refused frame of an animation that carries its
+ * own travel - a ladder climb - the root offset has to be blended in time as
+ * well, which InterpRootNow does. */
 long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	short* frm[], float* blend)
 {
@@ -2616,23 +2505,23 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	frm[0] = anim->frame_ptr + size * key;
 	frm[1] = frm[0] + size;
 
-	/* AND THE PAIR A MATRIX BLEND CANNOT SURVIVE (#123, fix round S, S2).
+	/* And the pair a matrix blend cannot survive.
 	 *
-	 * An element-wise lerp of two rotations is a SHRINK - cos(D/2) of the
+	 * An element-wise lerp of two rotations shrinks - to cos(D/2) of the
 	 * bone's own frame at the midpoint - and at half a turn the frame is
-	 * singular and whatever hangs off it lands nowhere real. That is the leg
-	 * pointing the wrong way in the play test's dive roll.
+	 * singular and whatever hangs off it lands nowhere real (a leg pointing
+	 * the wrong way in the dive roll).
 	 *
-	 * ONLY FOR RATE 1, and the reason is the whole rule: every other rate
-	 * puts the tween frame INSIDE the very segment vanilla blends the two
-	 * tick frames on, so it is no worse than its own neighbours and refusing
-	 * it would be a jump. A rate 1 pair is two adjacent stored frames a whole
-	 * game frame apart that vanilla NEVER blends at all - which is the one
-	 * thing order 4 added, and the one place a pose can be too far.
+	 * Only for rate 1: every other rate puts the tween frame inside the very
+	 * segment vanilla blends the two tick frames on, so it is no worse than
+	 * its own neighbours and refusing it would be a jump. A rate 1 pair is two
+	 * adjacent stored frames a whole game frame apart that vanilla never
+	 * blends at all - the one place the time interpolation can meet a pose
+	 * too far apart.
 	 *
-	 * Measured, ModelProbe -poserisk: over ANDREA1's 319 Lara animations this
-	 * refuses animation 205 - whose HIPS turn 179.9 degrees between key 0 and
-	 * key 1 - and nothing else. interpolate_math.h carries the arithmetic. */
+	 * Measured with ModelProbe -poserisk: over ANDREA1's 319 Lara animations
+	 * this refuses animation 205 - whose hips turn 179.9 degrees between key 0
+	 * and key 1 - and nothing else. interpolate_math.h carries the arithmetic. */
 	if (rate == 1 && InterpPoseFar(frm[0], frm[1],
 		objects[item->object_number].nmeshes, INTERP_POSE_TURN_COS))
 	{
@@ -2646,35 +2535,32 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	return 1;
 }
 
-/* THE ROOT OFFSET THE PREVIOUS TICK DREW (#157).
+/* The root offset the previous tick drew.
  *
- * The same six lines GetFrames spends on the key pair, run on an animation
- * and a frame that are no longer the item's - which is why it is a function
- * of its own and not a second path through GetFrames: nothing here may write
- * into frm[] or into anything the caller is about to draw from.
+ * The same lines GetFrames spends on the key pair, run on an animation and a
+ * frame that are no longer the item's - a function of its own and not a
+ * second path through GetFrames, because nothing here may write into frm[]
+ * or into anything the caller is about to draw from.
  *
- * It is exactly the arithmetic that tick used on itself, so what comes back
- * is bit for bit the offset the player saw one thirtieth of a second ago:
- * the key index and the remainder from the animation's own rate, the last
- * interval shortened by InterpKeyRate the way GetFrames shortens it, and
- * InterpKeyAlpha's factor over the pair.
+ * It is exactly the arithmetic that tick used, so what comes back is bit for
+ * bit the offset drawn one thirtieth of a second ago: the key index and the
+ * remainder from the animation's own rate, the last interval shortened by
+ * InterpKeyRate the way GetFrames shortens it, and InterpKeyAlpha's factor
+ * over the pair.
  *
- * Returns 0 - and then the caller blends no root at all and the frame is
- * drawn exactly as it is today - for an animation with no frames behind it, a
- * rate or a frame size that cannot index one, and a frame OUTSIDE the
- * animation it is claimed to be in. That last one is not hypothetical: a
- * level's transition table can name a frame that belongs to another
- * animation's numbering, and the key index off such a frame walks out of the
- * animation's own block of frames.
+ * Returns 0 - and then the caller blends no root and the frame is drawn with
+ * its own offset - for an animation with no frames behind it, a rate or a
+ * frame size that cannot index one, and a frame outside the animation it is
+ * claimed to be in. A level's transition table can name a frame that belongs
+ * to another animation's numbering, and the key index off such a frame would
+ * walk out of the animation's own block of frames.
  *
- * THE ANIMATION NUMBER IS NOT BOUNDED ABOVE, and this is the one guard that
- * is not here rather than one the reader should look for. The level's
- * animation count is a local of the loader (specific\file.cpp) and no global
- * keeps it, so there is nothing to compare against; the number itself comes
- * out of a snapshot of THIS item, is the same short item->anim_number carries,
- * and every GetFrames in the engine dereferences it unguarded. A slot whose
- * object changed under it is stopped by SNAP_OBJECT before a tween frame of
- * it is ever drawn. */
+ * The animation number is not bounded above: the level's animation count is
+ * a local of the loader (specific\file.cpp) and no global keeps it, so there
+ * is nothing to compare against. The number comes from a snapshot of this
+ * item, is the same short item->anim_number carries, and every GetFrames in
+ * the engine dereferences it unguarded. A slot whose object changed under it
+ * is stopped by SNAP_OBJECT before a tween frame of it is drawn. */
 static long GetRootAt(short animNumber, short frameNumber, long out[3])
 {
 	if (!anims || animNumber < 0)
@@ -2702,19 +2588,19 @@ static long GetRootAt(short animNumber, short frameNumber, long out[3])
 	return 1;
 }
 
-/* WHAT THE THREE DRAW SITES ASK FOR (#148, order 4): the pose, whatever frame
- * rate the game is running at.
+/* What the three draw sites ask for: the pose, whatever frame rate the game
+ * is running at.
  *
  * On a frame that carries a logic tick, and at fps_mode 0 always, this is
  * GetFrames and nothing else - the same pair, the same factor, the same
- * picture, and InterpPoseTime returns zero before a single line of order 4 is
- * reached. On the frame between two ticks it is the midpoint of the poses
- * those two ticks draw.
+ * picture; InterpPoseTime returns zero before any time blending is reached.
+ * On the frame between two ticks it is the midpoint of the poses those two
+ * ticks draw.
  *
  * Returns 0 for "no blend, the pose is frm[0]", 1 for vanilla's own key frame
- * blend and 2 for a blend in TIME. That is the same shape GetFrames has, so
- * every call site keeps its own `if (frac)` exactly as it was written, and
- * the two reasons stay apart for the log line and for the HD counter. */
+ * blend and 2 for a blend in time. That is the same shape GetFrames has, so
+ * every call site keeps its own `if (frac)`, and the two kinds of blend stay
+ * apart for the log line and for the HD counter. */
 long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 {
 	short prevAnim = 0;
@@ -2723,11 +2609,10 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 
 	if (t > 0.0F)
 	{
-		/* #157: the root latch is put DOWN first and raised only by the
-		 * refusal below, so its whole life is from here to the draw two
-		 * statements away. An item whose pose is blended, or whose pose was
-		 * refused for a reason that leaves no previous offset, is drawn with
-		 * its own frame's offset exactly as before. */
+		/* The root latch is cleared first and raised only by the refusal
+		 * below, so it lives only from here to the draw. An item whose pose
+		 * is blended, or whose pose was refused for a reason that leaves no
+		 * previous offset, is drawn with its own frame's offset. */
 		InterpRootRefused(item, 0);
 
 		if (GetFramesAt(item, prevAnim, prevFrame, t, frm, blend))
@@ -2737,21 +2622,19 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 			return 2;
 		}
 
-		/* K6: the animation changed, or the frame did not step by one. The
-		 * pose of the CURRENT tick is drawn, which is one frame of thirty
-		 * hertz inside a sixty hertz run and is invisible - but it is counted,
-		 * because a skip count that is not tiny means the snapshot and the
-		 * animation clock have fallen out of step with each other.
+		/* Pose refused: the animation changed, or the frame did not step by
+		 * one. The pose of the current tick is drawn, which is one frame of
+		 * thirty hertz inside a sixty hertz run and is invisible - but it is
+		 * counted, because a skip count that is not tiny means the snapshot
+		 * and the animation clock have fallen out of step.
 		 *
-		 * INVISIBLE ONLY IF THE ROOT AGREES, which is what round 157 found on
-		 * a ladder and what the lines below are for: K6 refuses the POSE and
-		 * never the ROOT, so the offset the previous tick drew is handed to
-		 * the draw and blended in time with this tick's. Where the two are
-		 * equal - which is nearly every refusal there is, because an item that
-		 * did not step its frame has not changed its offset either -
-		 * InterpRootNow says so, hands the draw nothing and is not counted,
-		 * and the picture is the one this comment promises.
-		 * See the note over InterpRootRefused in game\interpolate.h. */
+		 * It is invisible only if the root agrees (a ladder climb is where it
+		 * does not): the refusal covers the pose and never the root, so the
+		 * offset the previous tick drew is handed to the draw and blended in
+		 * time with this tick's. Where the two are equal - nearly every
+		 * refusal, because an item that did not step its frame has not changed
+		 * its offset either - InterpRootNow hands the draw nothing and counts
+		 * nothing. See the note over InterpRootRefused in game\interpolate.h. */
 		InterpNotePoseSkip();
 
 		long prevRoot[3];
@@ -2851,7 +2734,7 @@ void RenderIt(short current_room)
 		outside_right = 0;
 	}
 
-	// T4: the cutscene walk starts the same way the game's does.
+	// The cutscene walk starts the same way the game's does.
 	g_reach_on = HDLevelActive();
 
 	if (g_reach_on)
@@ -3008,32 +2891,27 @@ void DrawStaticObjects(short room_number)
 	nPolyType = 1;
 	r = &room[room_number];
 
-	/* #123 (S1-2): the static meshes of an HD room are already IN its art -
-	 * the Remaster baked them into the .TRG - so drawing them again would put
-	 * a second lantern inside the first one, which is the bug report TROne
-	 * fixed with its baked-mesh rule (game_renderer.cpp:3722-3736).
+	/* The static meshes of an HD room are already in its art - the Remaster
+	 * baked them into the .TRG - so drawing them again would put a second
+	 * lantern inside the first one; TROne avoids the same doubling with its
+	 * baked-mesh rule (game_renderer.cpp:3722-3736).
 	 *
-	 * TROne suppresses by mesh POINTER and needs an exception for the case
-	 * where a moveable claims that same pointer. Our seam is narrower: this
-	 * skips a ROOM's own MESH_INFO list and nothing else, so a moveable
+	 * TROne suppresses by mesh pointer and needs an exception for the case
+	 * where a moveable claims that same pointer. This seam is narrower: it
+	 * skips a room's own MESH_INFO list and nothing else, so a moveable
 	 * sharing the mesh still draws (it comes through DrawAnimatingItem, not
-	 * through here), and a room that stayed classic keeps every static it
-	 * ever had. The exception cannot arise.
+	 * through here), and a room that stayed classic keeps every static. The
+	 * exception cannot arise.
 	 *
-	 * TWO STATICS OF AN HD ROOM ARE STILL DRAWN HERE (#123, fix round R3b).
+	 * A static of an HD room that the .TRG has nothing for is still drawn
+	 * here (21 of them in ANDREA1's rooms 121 and 221, in no group at all).
+	 * hd_level asks the renderer, once per level, whether the room's art
+	 * draws anything where the static stands, and the answer comes back
+	 * through HDStaticIsClassic.
 	 *
-	 * The first is the one the .TRG has nothing for. Fix round B measured 21
-	 * of them in ANDREA1's rooms 121 and 221: they are in no group at all, so
-	 * the seam above took them away and put nothing in their place. hd_level
-	 * asks the renderer, once per level, whether the room's art draws anything
-	 * where the static stands, and the answer comes back through
-	 * HDStaticIsClassic.
-	 *
-	 * The second used to be the hole this comment named: a static the game
-	 * destroys at run time was gone from the classic list and went on standing
-	 * in the baked art. It is closed on the other side now - the .TRG's own
-	 * destructible pieces are switched off with their MESH_INFO's Flags bit -
-	 * so nothing has to be drawn here for it. */
+	 * A static the game destroys at run time is handled on the other side:
+	 * the .TRG's own destructible pieces are switched off with their
+	 * MESH_INFO's Flags bit, so nothing has to be drawn here for it. */
 	const bool hd = HDRoomIsHD(room_number);
 
 	phd_PushMatrix();
@@ -3085,64 +2963,47 @@ void InterpolateMatrix()
 {
 	aInterpolateMatrix();
 
-	/* The integer stack, and it rounds by SHIFTING - which is a floor and not
-	 * a truncation. InterpBlendLong keeps that exactly, in eighths, with no
-	 * float and no rounding call in it: the three shifts the branches used
-	 * are the same expression at alpha8 2, 4 and 6. */
+	/* The integer stack rounds by shifting - which is a floor and not a
+	 * truncation. InterpBlendLong keeps that exactly, in eighths, with no
+	 * float and no rounding call in it: the three original shifts are the
+	 * same expression at alpha8 2, 4 and 6. */
 	for (int i = 0; i < 12; i++)
 		phd_mxptr[i] = InterpBlendLong(phd_mxptr[i], IMptr[i], IM_alpha8);
 }
 
-/* THE ARM CHAIN'S OWN BLEND STARTS HERE (#123, fix round U, U3).
+/* The arm chain's own blend starts here.
  *
- * WHAT IT IS FOR. From the shoulder on, an arm holding a weapon is not driven
- * by Lara's animation at all but by the WEAPON slot's, read through
- * lara.right_arm / lara.left_arm - and with the HK in state 0 to 4 the TORSO
- * and the HEAD are read from it as well. Order 4 blended her body's key frame
- * pair in time and wrote those frames RAW, so at sixty the world glides and
- * the weapon in her hands, which in first person is most of the picture,
- * stands still and jumps once per logic tick.
+ * From the shoulder on, an arm holding a weapon is driven not by Lara's
+ * animation but by the weapon slot's, read through lara.right_arm /
+ * lara.left_arm - and with the HK in state 0 to 4 the torso and the head are
+ * read from it as well. Blending only the body's key frame pair in time would
+ * leave those frames raw, so at sixty the world glides while the weapon in
+ * her hands, most of the picture in first person, jumps once per logic tick.
  *
- * WHAT THIS DOES. The two matrix stacks below this point carry the body's two
- * key frames, and their blend at the body's own factor is the joint the arm
- * hangs from. This collapses them to exactly that - both stacks, integer and
- * float - and then sets the ARM's factor, which is the time fraction of the
- * drawn frame and not the body's key frame factor. From here the ordinary _I
- * machinery does the rest: stack one is walked with the arm's PREVIOUS frame,
- * stack two with this tick's, and every InterpolateMatrix below is the
- * midpoint of the two poses the ticks either side of this frame draw.
+ * The two matrix stacks below this point carry the body's two key frames,
+ * and their blend at the body's own factor is the joint the arm hangs from.
+ * This collapses both stacks, integer and float, to exactly that and then
+ * sets the arm's factor, the time fraction of the drawn frame. From here the
+ * ordinary _I functions do the rest: stack one is walked with the arm's
+ * previous frame, stack two with this tick's, and every InterpolateMatrix
+ * below is the midpoint of the two poses the ticks either side of this frame
+ * draw.
  *
- * WHAT THE SECOND CALL REALLY DOES, with the HK in state 0 to 4 (this
- * paragraph corrected in U7; the sentence that stood here said the second call
- * blended two stacks that were already equal, and that is only true where
- * nothing walked them apart in between). There the TORSO collapses first, at
- * bone[25..27], and the two stacks are then walked APART again - the head and
- * the torso are turned by the arm's previous frame on one stack and by this
- * tick's on the other, which is the whole point of collapsing there. By the
- * time case WEAPON_HK reaches its own call the two stacks hold two different
- * poses, so the second collapse is not free: it takes the SHOULDER to its
- * midpoint in time and hangs both arm chains off that one joint, instead of
- * letting each chain descend from its own tick's shoulder and blending them
- * at every node below.
+ * With the HK in state 0 to 4 it is called twice. The torso collapses first,
+ * at bone[25..27], and the two stacks are then walked apart again - head and
+ * torso turned by the arm's previous frame on one stack and this tick's on
+ * the other. By the time case WEAPON_HK reaches its own call the stacks hold
+ * two different poses, so the second collapse takes the shoulder to its
+ * midpoint in time and hangs both arm chains off that one joint. The arm is
+ * then built once, from a shoulder already where the drawn body has it, so
+ * the hand cannot drift off a forearm blended elsewhere. The factor is the
+ * arm's in both calls. For the shotgun and the crossbow, which do not
+ * collapse at the torso, the arm branch's call is the only one.
  *
- * THAT IS THE ORDER THIS WANTS. Both readings are a midpoint of the same two
- * poses; collapsing first means the arm is built ONCE, from a shoulder that is
- * already where the drawn body has it, so the hand cannot drift off a forearm
- * that was blended somewhere else - and the alternative would have to blend
- * two chains that no longer share a root. The factor is the arm's in both
- * calls, so the second sets nothing the first did not.
- *
- * EVERYWHERE ELSE THE SECOND CALL IS THE ONLY ONE: the shotgun and the
- * crossbow do not collapse at the torso, so their arm branch collapses the
- * body's two key frames itself, which is what it is for.
- *
- * WHERE THE SECOND CALL SITS (fix round Y2). On the torso level, before
- * either arm is pushed - U3 had it inside the right arm's push, on a pushed
- * copy, and the pop after that arm handed the left arm the uncollapsed
- * level, blended from there on at the arm's factor this function sets and
- * nothing sets back. The paragraph above was true of the right arm only
- * until then; ARMLOG (game\interpolate.cpp) measured the left hand's
- * sawtooth and MODIFICATIONS.md has the numbers.
+ * That second call sits on the torso level, before either arm is pushed: on
+ * a pushed copy inside the right arm, the pop after that arm would hand the
+ * left arm the uncollapsed level, blended at the arm's factor from there on,
+ * and the left hand would sawtooth (ARMLOG, game\interpolate.cpp, shows it).
  *
  * The caller reaches it only when InterpArmPrev said yes, which is never at
  * fps_mode 0 and never on a frame that carries a tick. */
@@ -3159,7 +3020,7 @@ void InterpArmStack(float alpha)
 	IM_frac = IM_alpha8;
 }
 
-/* THE ARM MATRICES take the ROTATION whole from the matrix they are handed -
+/* The arm matrices take the rotation whole from the matrix they are handed -
  * the arm chain leaves the second stack behind at the shoulder and is drawn
  * from one stack from there on - and blend only the three translation
  * elements, which is what keeps the hand on the end of a blended forearm. */
@@ -3497,20 +3358,15 @@ void SetRoomBounds(short* door, long rn, ROOM_INFO* actualRoom)
 	}
 	else
 	{
-		/* T4-3: THE RING HAD 128 PLACES AND NOTHING COUNTED THEM.
+		/* The ring guard. Without it, a walk with more entries queued at once
+		 * than the ring holds would overwrite an entry not yet dequeued and
+		 * walk one room twice while losing another. It is unconditional, so
+		 * the classic path is guarded as well as the HD path.
 		 *
-		 * room_list_end has always been written into the ring with no test at
-		 * all, so a walk that ever had more places queued at once than the
-		 * ring holds would overwrite an entry that had not been dequeued and
-		 * walk a room twice while losing another. This guard is what stops
-		 * that, and it is unconditional on purpose - a guard that only ran in
-		 * the HD path would leave the classic path with the hole.
-		 *
-		 * T5 made it a backstop rather than a limit: with kRoomListRing at
-		 * 512 against a queue that cannot be deeper than the 256 rooms a
-		 * level may hold - see the note over the two arrays - no loadable
-		 * level can reach this line. It stays counted all the same, because
-		 * "cannot happen" and "is not counted" are how the hole got here. */
+		 * It is a backstop rather than a limit: with kRoomListRing at 512
+		 * against a queue that cannot be deeper than the 256 rooms a level may
+		 * hold - see the note over the two arrays - no loadable level reaches
+		 * this line. It is still counted (cap hit= on the ROOMWALK line). */
 		if (room_list_end - room_list_start >= kRoomListRing)
 		{
 			g_reach_capped++;
@@ -3528,10 +3384,10 @@ void SetRoomBounds(short* door, long rn, ROOM_INFO* actualRoom)
 	}
 }
 
-/* SetRoomBounds WITH THE REACH (#123, fix round T4, T4-2).
+/* SetRoomBounds with the reach.
  *
  * The same arithmetic on the same four corners of the same portal record,
- * carried into TWO answers instead of one - see the long note over
+ * carried into two answers instead of one - see the note over
  * g_reach_on at the top of this file for what they are and why.
  *
  * The corner projection is done once and the classic rectangle is formed out
@@ -3559,9 +3415,9 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
 	const long parent = (long)(actualRoom - room);
 
 	/* Out of the reach's fixed arrays. A level of more than 256 rooms does
-	 * not load at all (game\setup.cpp:2418) and a portal names a room of the
-	 * level it is in, so this is the guard and not a case - and the fallback
-	 * is the walk as it was. */
+	 * not load at all (game\setup.cpp) and a portal names a room of the
+	 * level it is in, so this is a guard and not a case - and the fallback
+	 * is the classic walk. */
 	if (rn < 0 || rn >= 256 || parent < 0 || parent >= 256)
 	{
 		SetRoomBounds(door, rn, actualRoom);
@@ -3768,7 +3624,7 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
 		return;
 	}
 
-	// T4-3: the ring, exactly as in the classic function above.
+	// The ring guard, exactly as in the classic function above.
 	if (room_list_end - room_list_start >= kRoomListRing)
 	{
 		g_reach_capped++;
@@ -3779,7 +3635,7 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
 	room_list_end++;
 	r->bound_active |= 2;
 
-	/* AND HERE is where the one reach visit is spent - after the ring guard,
+	/* Here the one reach visit is spent - after the ring guard,
 	 * so that a room refused for want of a queue place can still be reached
 	 * by a later portal of the same frame. */
 	g_reach_state[rn] |= REACH_SEEN;
@@ -3796,8 +3652,8 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
 		g_reach_state[rn] &= ~REACH_CLASSIC;
 }
 
-/* T4: which of the two SetRoomBounds this walk is using. Off the HD path
- * g_reach_on is false and this is a call to the function that shipped. */
+/* Which of the two SetRoomBounds this walk is using. Off the HD path
+ * g_reach_on is false and this calls the classic function. */
 static void FollowPortal(short* door, long rn, ROOM_INFO* r)
 {
 	if (g_reach_on)
@@ -3820,18 +3676,17 @@ void GetRoomBounds()
 		r = &room[rn];
 		r->bound_active -= 2;
 
-		/* T4: THE CLASSIC HALF OF THIS DEQUEUE, and everything that hangs
-		 * off it. `classicHere` is true for every room the walk would have
-		 * listed without this round - and with g_reach_on false it is true
-		 * full stop, so every line under it is the line that shipped.
+		/* The classic half of this dequeue, and everything that hangs off
+		 * it. `classicHere` is true for every room the classic walk would
+		 * list - and with g_reach_on false it is always true, so the walk is
+		 * the classic one.
 		 *
 		 * What hangs off it is not only the window. `outside`, the outside
 		 * rectangle and `snow_outside` decide whether the sky and the
 		 * weather are drawn at all, and a room the reach alone brought in
-		 * must not be allowed to turn them on: that would put one frame of
-		 * sky into a room the walk has always called indoors, which is the
-		 * flash of fix round T2 coming back through another door. So the
-		 * reach adds .TRG art to the picture and nothing else. */
+		 * must not turn them on: that would flash sky into a room the classic
+		 * walk calls indoors. So the reach adds .TRG art to the picture and
+		 * nothing else. */
 		const bool classicHere = !g_reach_on || rn < 0 || rn >= 256 ||
 			(g_reach_state[rn] & REACH_CLASSIC) != 0;
 
@@ -3852,22 +3707,18 @@ void GetRoomBounds()
 
 		if (!(r->bound_active & 1))
 		{
-			/* T4-3: draw_rooms had a hundred places and nothing counted
-			 * them either, and the classic walk was measured at 106 rooms in
-			 * one JOBY4 frame (RoomProbe -reachsurvey, the eye at a room's
-			 * own centre) - already over the hundred. A room refused here is
-			 * not drawn; the alternative is writing past the array.
+			/* The draw_rooms guard: a room refused here is not drawn; the
+			 * alternative is writing past the array. The classic walk alone
+			 * reaches 106 rooms in one JOBY4 frame (RoomProbe -reachsurvey,
+			 * the eye at a room's own centre).
 			 *
-			 * T5: and since the array holds kDrawRoomsMax = 256, which is
-			 * the most rooms a level may have and every room enters it once
-			 * (that is the `bound_active & 1` test right below), this line
-			 * can no longer be reached by any level the engine will load. It
-			 * is kept, and kept counted, as the backstop it now is: the
-			 * review of T4 pointed out that this guard fires DURING the walk
-			 * while ReachTrimRooms only runs after it, so at a full array a
-			 * CLASSIC room could have been refused while reach-only rooms
-			 * held places. Widening the array answers that by arithmetic
-			 * instead of by an eviction rule. */
+			 * With the array at kDrawRoomsMax = 256, the most rooms a level
+			 * may have, and every room entering it once (the `bound_active &
+			 * 1` test above), no loadable level reaches this line; it stays
+			 * as a counted backstop. The array size matters because this
+			 * guard fires during the walk while ReachTrimRooms runs only after
+			 * it, so at a full array a classic room could be refused while
+			 * reach-only rooms held places. */
 			if (number_draw_rooms >= (long)(sizeof(draw_rooms) /
 				sizeof(draw_rooms[0])))
 			{

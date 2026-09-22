@@ -32,17 +32,17 @@ static BITE_INFO hitman_gun = { 0,300,64, 7 };
  * Eleven of the sixteen entries below are real damage panels; the rest are
  * padding. The routine further down counts them out one per hit into
  * meshswap_meshbits, so eleven is also the cap it stops at - HITMAN_PANELS
- * in hitman.h, which is also where the array is declared for the HD object
- * path (#123, fix round B).
+ * in hitman.h, which also declares this array for the HD object path.
  */
 char hitman_nodes[16] = { 15, 14, 13, 6, 5, 12, 7, 4, 10, 11, 19, 0, 0, 0, 0, 0 };
 
 /*
- * How long the cyborg (#146) lies in his electrocution before the body is
+ * How long the cyborg lies in his electrocution before the body is
  * released. The chain +69 (57 frames) -> +70 (35) -> +71 (25, looping)
  * measures 92 frames before it starts repeating, so 150 shows the whole
  * thing once and holds the loop for another two seconds - five seconds at
- * the engine's 30 frames. Only then does CreatureDie hand him to the fade.
+ * the engine's 30 frames per second. Only then does CreatureDie hand him
+ * to the fade.
  */
 #define CYBORG_DEATH_FRAMES	150
 
@@ -131,12 +131,13 @@ void HitmanControl(short item_number)
 
 	if (item->object_number == CYBORG)
 	{
-		/* The pool cyborg opens his panels with the health he has lost, not
-		 * by the agent's one-in-eight roll per hit frame. That roll fits a
-		 * body that takes fifty to seventy hits; a mortal one with fifty
-		 * health died with a single hand open and every other panel bursting
-		 * at zero (seen in game, 2026-09-04). Same order as the agent's, one
-		 * panel per eleventh of the health bar, all eleven at the end. */
+		/* The pool cyborg opens his panels in proportion to the health he
+		 * has lost, not by the agent's one-in-eight roll per hit frame.
+		 * That roll fits a body that takes fifty to seventy hits; a mortal
+		 * one with fifty health would die with a single panel open and
+		 * every other one bursting open at the same instant. Same order as
+		 * the agent's, one panel per eleventh of the health bar, all eleven
+		 * open by the time he dies. */
 		const int maxHp = objects[item->object_number].hit_points;
 		int hp = item->hit_points;
 		if (hp < 0) hp = 0;
@@ -184,9 +185,9 @@ void HitmanControl(short item_number)
 				GetJointAbsPosition(item, &pos2, 6);
 
 				// The water short circuit is Red Alert's puzzle, so slot 67
-				// only (#146). It is not a death but a state: the chain it
-				// starts carries no KillItem, the body stays active for the
-				// rest of the level, and the branch further down makes the
+				// only. It is not a death but a state: the chain it starts
+				// carries no KillItem, the body stays active for the rest
+				// of the level, and the branch further down makes the
 				// water lethal for Lara from then on. That is the point in
 				// rich3 and a trap anywhere else - a cyborg the randomizer
 				// happens to place near water would poison the lake and
@@ -212,15 +213,15 @@ void HitmanControl(short item_number)
 	if (item->hit_points <= 0)
 	{
 		/*
-		 * The pool cyborg's death (#146). Slot 67 never gets here through
-		 * gunfire - setup.cpp marks him undead and larafire.cpp drops the
-		 * damage on the floor - so this whole branch belongs to 469 alone
-		 * and cannot touch Red Alert.
+		 * The pool cyborg's death. Slot 67 never gets here through gunfire
+		 * - setup.cpp marks him undead and larafire.cpp drops the damage
+		 * on the floor - so this whole branch belongs to 469 alone and
+		 * cannot touch Red Alert.
 		 *
 		 * He dies the way the level kills him: the electrocution chain
 		 * +69 -> +70 -> +71, all eleven damage panels torn open at once
 		 * and the spark counter pinned at its maximum, so the body crackles
-		 * while it lies. What the chain does NOT carry is a KillItem
+		 * while it lies. What the chain does not carry is a KillItem
 		 * command - Core never needed one, because in rich3 the body is
 		 * meant to stay. Hence the frame counter and CreatureDie at the
 		 * end of it; without that the item would loop in +71 forever and
@@ -304,9 +305,9 @@ void HitmanControl(short item_number)
 
 		GetCreatureMood(item, &info, hitman->enemy != lara_item);
 
-		// The gas, slot 67 only (#146). Core borrows the "no lens flare"
-		// room flag as Red Alert's gas marker; it means nothing of the sort
-		// in the other fifteen levels, where rooms carry it for the reason
+		// The gas, slot 67 only. Core borrows the "no lens flare" room
+		// flag as Red Alert's gas marker; it means nothing of the sort in
+		// the other fifteen levels, where rooms carry it for the reason
 		// its name says. A pool cyborg walking through one of those would
 		// bleed a hit point every eighth frame and drop dead of nothing.
 		// He also could not use the death it starts: +68 ends in KillItem,
@@ -546,8 +547,8 @@ void HitmanControl(short item_number)
 			{
 				item->fired_weapon = 1;
 
-				// Two tuning lines for one weapon (#146): the agent in Red
-				// Alert keeps DMG_Hitman_Shot, the pool cyborg has his own
+				// Two tuning values for one weapon: the agent in Red Alert
+				// keeps balance.dmgHitmanShot, the pool cyborg has his own
 				// so a player can weaken the one he meets everywhere
 				// without touching the scripted encounter.
 				ShotLara(item, &info, &hitman_gun, larainfo.angle >> 1,

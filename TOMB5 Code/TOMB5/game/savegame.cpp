@@ -20,7 +20,7 @@
 #include "pickup.h"
 #include "lot.h"
 #include "gameflow.h"
-#include "interpolate.h"		// the loaded world is no neighbour of the old one (#148, order 2)
+#include "interpolate.h"		// the loaded world is no neighbour of the old one
 #include "newinv2.h"
 #include "../specific/file.h"
 #include "camera.h"
@@ -893,14 +893,14 @@ void RestoreLevelData(long FullSave)
 						ReadSG(creature, 22);
 						creature->enemy = (ITEM_INFO*)((long)creature->enemy + (long)malloc_buffer);
 
-						// HERE STOOD `if (creature->enemy < 0) creature->enemy = 0;`
-						// and it never did anything. Measured with the compiler
-						// this engine is built with: `pointer < 0` is a
-						// comparison against the NULL POINTER CONSTANT, which
-						// MSVC compiles as an UNSIGNED compare - false for every
-						// address there is, including 0x90000000. The guard the
-						// original C had was `(long)creature->enemy < 0`, and the
-						// cast was lost in the decompilation.
+						// `if (creature->enemy < 0) creature->enemy = 0;` never
+						// did anything here: with the compiler this engine is
+						// built with, `pointer < 0` compares against the null
+						// pointer constant, which MSVC compiles as an unsigned
+						// compare - false for every address there is, including
+						// 0x90000000. The guard the original C had was
+						// `(long)creature->enemy < 0`, and the cast was lost in
+						// the decompilation.
 						//
 						// Removed rather than repaired, for two reasons.
 						//
@@ -908,11 +908,11 @@ void RestoreLevelData(long FullSave)
 						//    enemy - malloc_buffer, so a null enemy comes back as
 						//    exactly 0 through the line above, and nothing
 						//    measured says any other value arrives here.
-						// 2. Repairing it would BREAK the game under
-						//    /LARGEADDRESSAWARE (#123): with the cast back in,
-						//    `(long)pointer < 0` is TRUE for every address above
+						// 2. Repairing it would break the game under
+						//    /LARGEADDRESSAWARE: with the cast back in,
+						//    `(long)pointer < 0` is true for every address above
 						//    2 GB - also measured - and every enemy pointer in a
-						//    reloaded save would be blanked. That is exactly the
+						//    reloaded save would be blanked, which is exactly the
 						//    kind of address this executable may now be handed.
 						//
 						// If a guard is ever wanted here, it has to be written
@@ -1112,11 +1112,11 @@ void RestoreLevelData(long FullSave)
 
 	JustLoaded = 1;
 
-	/* THE WHOLE WORLD JUST MOVED (#148, order 2). Every item, the braid and
-	 * the camera have been written out of the save file; the state the
-	 * interpolator holds is from wherever the player was standing when they
-	 * pressed load, and blending into the loaded position would draw one
-	 * frame of the entire level sliding into place. */
+	/* The whole world just moved. Every item, the braid and the camera have
+	 * been written out of the save file; the state the interpolator holds
+	 * is from wherever the player was standing when they pressed load, and
+	 * blending into the loaded position would draw one frame of the entire
+	 * level sliding into place. */
 	InterpInvalidate("savegame loaded");
 }
 
@@ -1166,21 +1166,19 @@ void sgRestoreGame()
 	//     char (-sum), so its high byte is 0xFF whenever that char is
 	//     negative - summing that byte as its own signed char (0xFF -> -1)
 	//     instead of accounting for the sign-extension gives the wrong total
-	//     about half the time. Hit exactly this bug during testing (a
-	//     same-build save/load round-trip was wrongly rejected) before
-	//     switching to this comparison.
+	//     about half the time, wrongly rejecting a healthy save.
 	// Both failure modes are unrecoverable here - DoLevel() (game\gameflow.cpp,
 	// the only caller) has no error-recovery path for a save-load failure at
 	// all, so - matching WriteSG's own overflow guard - this fails loudly and
 	// immediately rather than attempt an unproven partial recovery.
 	bool boValid = (savegame_bytes_read >= sizeof(SAVEGAME_INFO));
 
-	// The sum is NO LONGER computed here but in S_LoadGame right after
+	// The sum is no longer computed here but in S_LoadGame right after
 	// reading (specific\gamemain.cpp) - there the bytes are still the
 	// file's. Between reading and this point lie the fade and the level
-	// reload, and the game loop keeps writing into savegame during that
-	// time (control.cpp:642). Whoever computes the sum here discards
-	// healthy savegames.
+	// reload, and the game loop (ControlPhase) keeps writing into savegame
+	// during that time. Computing the sum here would discard healthy
+	// savegames.
 	if (boValid)
 		boValid = savegame_checksum_ok;
 

@@ -32,9 +32,9 @@
 #include "../specific/dxsound.h"
 #include "../specific/function_table.h"
 #include "../specific/function_stubs.h"
-#include "../specific/profile.h"		// PROFLOG's logic phase (#148)
-#include "interpolate.h"			// the interpolator's level boundary (#148, order 2)
-#include "modern_state.h"			// the modern control's level boundary (#161)
+#include "../specific/profile.h"		// PROFLOG's logic phase
+#include "interpolate.h"			// the interpolator's level boundary
+#include "modern_state.h"			// the modern control's level boundary
 #include "../specific/audio.h"
 #include "../specific/fmv.h"
 #include "../specific/polyinsert.h"
@@ -68,7 +68,7 @@ uchar gfSlotFromId[18];
 uchar gfIdFromSlot[18];
 uchar gfLastSlot = LVL5_RED_ALERT;
 
-// The videos hang on the SECTIONS, not on slots: intro before a section's
+// The videos hang on the sections, not on slots: intro before a section's
 // first level, outro after its last. In vanilla the pairs (outro, next
 // intro) lay as CMD_FMV in the block of the section end, and the Rome intro
 // sat hard-wired in the title code - after a permutation the Russia intro
@@ -412,15 +412,13 @@ void DoGameflow()
 			break;
 
 		case CMD_GIVEOBJ:
-			// A GIVEOBJ standing in the block BEHIND a TAKEOBJ is also
-			// applied AFTER the takeaways (third phase in setup.cpp) -
-			// otherwise there would be no "take everything first, then give
-			// deliberately": the takeaways deliberately run last there,
-			// because among other things they must remove the pistols that
-			// setup.cpp presses back into the hands of every level with a
-			// loaded pistol model. In vanilla all gifts stand BEFORE all
-			// takeaways (Andrea1: gives Uzi, takes Uzi) - nothing changes
-			// there.
+			// A GIVEOBJ standing in the block behind a TAKEOBJ is also
+			// applied after the takeaways (third phase in setup.cpp): the
+			// takeaways deliberately run last there, because among other
+			// things they must remove the pistols that setup.cpp presses
+			// back into the hands of every level with a loaded pistol
+			// model. In vanilla all gifts stand before all takeaways
+			// (Andrea1: gives Uzi, takes Uzi) - nothing changes there.
 			if (gfNumTakeaways)
 			{
 				if (gfNumLateGives < 128) gfLateGives[gfNumLateGives++] = *gf;
@@ -610,7 +608,7 @@ long TitleOptions()
 
 		font_height = GetFixedScale(36);
 
-		// #32: the level select is a development shortcut - it lets anyone jump
+		// The level select is a development shortcut - it lets anyone jump
 		// straight to the finale. It stays in the build, but the player has to
 		// switch it on first ("Level select" in the Tomb5 options, off by
 		// default). Hidden, the row does not exist at all: the remaining four
@@ -723,7 +721,7 @@ long TitleOptions()
 
 			case 8:
 
-				// With the level select hidden (#32) this bit belongs to Exit -
+				// With the level select hidden, this bit belongs to Exit -
 				// it is the fourth and last row then.
 				if (!tomb5.level_select)
 				{
@@ -776,49 +774,34 @@ long TitleOptions()
 	return ret;
 }
 
-/* THE TITLE MENU'S INPUT, ON A FRAME WHOSE CONTROLPHASE RAN NO TICK (#154).
+/* Shadows the title menu's debounced input on a present whose ControlPhase
+ * call advanced no logic tick.
  *
- * WHAT ORDER 1b FOUND AND WHAT IT COST. DoTitle's loop is `TitleOptions();
- * DrawPhaseGame(); ControlPhase(nframes);` - the menu is walked once per
- * PRESENT while the debounced input it walks with, dbinput, is written once
- * per TICK, inside ControlPhase's `for (framecount += nframes; framecount > 0;
- * framecount -= 2)` loop and nowhere else (specific\input.cpp). At two ticks a
- * present the two rates are the same and every edge is read exactly once. At
- * one, every second ControlPhase runs no tick, dbinput keeps standing, and the
- * next TitleOptions reads the same press again: one tap of Down moved the
- * cursor two rows. Order 1b's answer was to hold the title at thirty
- * (GameFrameMinTicks); this round's is to tell the menu which of its calls is
- * reading an edge for the second time, and to shadow its input for the length
- * of that one call.
+ * DoTitle's loop calls TitleOptions once per present, but the debounced
+ * input it reads (dbinput) is written once per logic tick, inside
+ * ControlPhase's tick loop (specific/input.cpp) and nowhere else. At two
+ * ticks per present the rates match and every edge is read once. At one
+ * tick per present, every second ControlPhase call advances no tick,
+ * dbinput is left standing, and the next TitleOptions reads the same edge
+ * again - one key tap then moves the cursor by two rows.
  *
- * THE QUESTION IS ASKED OF THE ENGINE'S OWN TICK COUNTER and not of a clock of
- * its own. g_tickSerial steps once per logic tick at every frame rate
- * (game\interpolate.cpp, InterpCapturePrev), so "has a tick run since I last
- * read dbinput" is one comparison and it is right at fps_mode 1, at fps_mode 2
- * where four or five frames fall inside one tick, on the first iteration after
- * DoTitle's own priming ControlPhase, and through a hitch that runs several
- * ticks in one call.
+ * The fix asks the engine's tick counter (g_tickSerial, stepped once per
+ * logic tick at any frame rate by InterpCapturePrev in interpolate.cpp)
+ * whether a tick ran since input was last read; if not, input and dbinput
+ * are zeroed for that one TitleOptions call and restored right after.
  *
- * AND IT IS A SHADOW, NOT A CLEARING - for a reason that had to be MEASURED
- * rather than assumed. The debounce is two statements in specific\input.cpp
- * with the frame's own read between them: `if (debounce) dbinput = inputBusy;`
- * (:821, the PREVIOUS frame's), `inputBusy = linput;` (:869), then `if
- * (debounce) dbinput = inputBusy & (dbinput ^ inputBusy);` (:881). So what
- * comes out is the rising edge against the previous frame's input, and
- * dbinput's own incoming value is thrown away by the first line - a dbinput
- * left at zero would NOT turn a held key into a press, which is what this
- * round was briefed to expect.
+ * A shadow, not a clear: the debounce logic in specific/input.cpp discards
+ * dbinput's incoming value before computing the new edge, so zeroing it
+ * cannot turn an already-held key into a spurious press. The value is
+ * restored afterward because SetDebounce clears only on a ControlPhase
+ * call's first tick (control.cpp); a call spanning several ticks writes
+ * dbinput once, and an unrestored zero would swallow the edge found later
+ * in the same hitch. `input` is restored for the same reason: nothing else
+ * rewrites it on a tick-less frame.
  *
- * What the restore really buys is the hitch. SetDebounce is cleared inside the
- * FIRST tick of a ControlPhase call (game\control.cpp:314), so a call that
- * runs several ticks writes dbinput on that one tick only; a zero left behind
- * by an unrestored shadow would then stand through the rest of the hitch and
- * swallow the edge that tick found. InterpTest runs both builds side by side.
- * `input` is restored for a plainer reason: nothing rewrites it on a frame
- * with no tick at all.
- *
- * At fps_mode 0 it returns false on every frame - one tick per present, the
- * serial always moved - and the title runs the sequence it always ran. */
+ * At a frame rate where one tick always matches one present, the tick
+ * serial always advances, this always returns false, and the title
+ * behaves exactly as before. */
 static bool TitleInputShadow()
 {
 	static unsigned long seen = 0;
@@ -888,19 +871,19 @@ void DoTitle(uchar name, uchar audio)
 	gfGameMode = 1;
 	gfLevelComplete = 0;
 	nframes = 2;
-	/* AND THE ACCUMULATOR STARTS LEVEL, exactly as DoLevel starts it (#148,
-	 * fix round R). framecount survives a level change and the sixty hertz
-	 * game loop leaves it at 0 or -1 by turns; a title entered on -1 then
-	 * stayed on -1 for every frame it drew, because at two ticks a present
-	 * `framecount += 2; while (> 0) tick, -= 2` returns to where it started.
-	 * Every title frame was then read as an in-between frame, the fade never
-	 * stepped, DoFade never reached 2, a black quad stood over the menu and
-	 * TitleOptions swallowed the input. The rule that makes this line
-	 * unnecessary is in InterpAlphaNow (game\interpolate.cpp); the line is
-	 * here anyway, because a picture must not hang on the parity of an
-	 * accumulator. */
+	/* The accumulator starts at level start, exactly as DoLevel starts it.
+	 * framecount survives a level change and the sixty-hertz game loop
+	 * leaves it at 0 or -1 by turns; a title entered on -1 then stayed on
+	 * -1 for every frame it drew, because at two ticks a present
+	 * `framecount += 2; while (> 0) tick, -= 2` returns to where it
+	 * started. Every title frame was then read as an in-between frame, the
+	 * fade never stepped, DoFade never reached 2, a black quad stood over
+	 * the menu and TitleOptions swallowed the input. The rule that makes
+	 * this line unnecessary is in InterpAlphaNow (interpolate.cpp); the
+	 * line is here anyway, because a picture must not hang on the parity
+	 * of an accumulator. */
 	framecount = 0;
-	InterpInvalidate("title start");	// #148, order 2
+	InterpInvalidate("title start");
 	gfStatus = ControlPhase(2, 0);
 	JustLoaded = 0;
 
@@ -909,10 +892,10 @@ void DoTitle(uchar name, uchar audio)
 		S_InitialisePolyList();
 		SkyDrawPhase();
 
-		/* #154: the menu is walked on every present, as it always was, but
-		 * the call that would read an edge for the second time is handed a
-		 * zeroed input and gets its own back the moment it returns. The note
-		 * is over TitleInputShadow above. */
+		/* The menu is walked on every present, as it always was, but the
+		 * call that would read an edge for the second time is handed a
+		 * zeroed input and gets its own back the moment it returns. See
+		 * TitleInputShadow above. */
 		{
 			const bool shadow = TitleInputShadow();
 			const long savedInput = input;
@@ -1100,39 +1083,39 @@ void DoLevel(uchar Name, uchar Audio)
 	gfLevelComplete = 0;
 	nframes = 2;
 	framecount = 0;
-	InterpInvalidate("level start");	// nothing before this tick belongs to this level (#148, order 2)
+	InterpInvalidate("level start");	// nothing before this tick belongs to this level
 
-	/* AND THE MODERN CONTROL'S HELD COURSE IS NOT A COURSE IN THIS WORLD
-	 * EITHER (#161, round 161a, second review pass).
+	/* The modern control's held course is not a course in this world
+	 * either.
 	 *
-	 * What it holds is a WORLD heading, kept across ticks so that the camera
-	 * swinging does not bend her path; the world that heading was measured in
-	 * has just been thrown away. Its own guard cannot notice that, and the
-	 * reason is worth writing down because it is the same reason the line
-	 * above exists: the only clock the guard has is GlobalCounter, and
-	 * GlobalCounter stops with the game. Between two levels not one tick runs
-	 * - the loop below leaves at `gfLevelComplete`, and the priming
-	 * ControlPhase two lines down is the next tick there is - so a level
-	 * boundary reaches the guard as an ordinary step of one and reads as
-	 * "game time flowed". So it is hung here, where the level really starts,
-	 * rather than inferred from a counter.
+	 * What it holds is a world heading, kept across ticks so that camera
+	 * swinging does not bend her path; the world that heading was
+	 * measured in has just been thrown away. Its own guard cannot notice
+	 * that, for the same reason the line above exists: the only clock the
+	 * guard has is GlobalCounter, and GlobalCounter stops with the game.
+	 * Between two levels not one tick runs - the loop below leaves at
+	 * `gfLevelComplete`, and the priming ControlPhase two lines down is
+	 * the next tick there is - so a level boundary reaches the guard as
+	 * an ordinary step of one and reads as "game time flowed". So it is
+	 * reset here, where the level really starts, rather than inferred
+	 * from a counter.
 	 *
-	 * This one line also takes every savegame restore with it: sgRestoreGame
-	 * has exactly one caller and it is sixty lines above this one, in this
-	 * same function, whether the player loaded from the title or out of the
-	 * ring. Under the option because at Tank nothing has written that state
-	 * and nothing will read it - and the Controls page resets it itself the
+	 * This one line also takes every savegame restore with it:
+	 * sgRestoreGame has exactly one caller, in this same function,
+	 * whether the player loaded from the title or from the ring. It sits
+	 * under the option because at Tank nothing has written that state and
+	 * nothing will read it - and the Controls page resets it itself the
 	 * moment the scheme is switched. */
 	if (tomb5.control_modern)
 		ModernResetControls();
 
-	/* AND THE TWO MODE LATCHES LET GO HERE TOO (#161, round 161b2c, item 4).
-	 * The same line, the same reason and the same reach - a level start and,
-	 * through sgRestoreGame's one caller sixty lines above, every savegame
-	 * restore. NOT under tomb5.control_modern, unlike the call above it: Sprint
-	 * mode and Duck mode are read in both control types, so a latch left
-	 * standing at Tank would be a key nobody is holding in the next level.
-	 * Inert at the defaults, where the two statics it clears are already 0. */
+	/* The two mode latches let go here too, for the same reason and the
+	 * same reach - a level start and, through sgRestoreGame's one caller,
+	 * every savegame restore. Not under tomb5.control_modern like the call
+	 * above: Sprint mode and Duck mode are read by both control types, so
+	 * a latch left standing at Tank would be a key nobody is holding in
+	 * the next level. Inert at the defaults, where the two statics it
+	 * clears are already 0. */
 	InputModeLatchReset();
 
 	gfStatus = ControlPhase(2, 0);
@@ -1150,16 +1133,16 @@ void DoLevel(uchar Name, uchar Audio)
 		{
 			PrintString(phd_winwidth >> 1, phd_winymax - font_height, 2, SCRIPT_TEXT(gfLegend), FF_CENTER);
 
-			/* R16 (#148, order 3): the level's name at the bottom of the
-			 * screen stands for gfLegendTime frames and the count is per
-			 * DRAWN frame, so at sixty the caption would be gone in half
-			 * the time. It is printed every frame either way - only the
-			 * clock is a tick's.
+			/* The level's name at the bottom of the screen stands for
+			 * gfLegendTime frames and the count is per drawn frame, so at
+			 * a higher frame rate the caption would be gone in half the
+			 * time. It is printed every frame either way - only the clock
+			 * is a tick's.
 			 *
-			 * This is the one guarded counter that sits BEFORE
+			 * This is the one guarded counter that sits before
 			 * DrawPhaseGame in the loop, so it reads the latch the last
 			 * frame set rather than this one's. The two alternate all the
-			 * same, which is all the rule needs. */
+			 * same, which is all that matters. */
 			if (!InterpIsTweenFrame())
 			{
 				gfLegendTime--;
@@ -1219,7 +1202,7 @@ void DoLevel(uchar Name, uchar Audio)
 	S_SoundStopAllSamples();
 	S_CDStop();
 
-	// Videos by IDENTITY instead of from the block (see IntroFmv/OutroFmv):
+	// Videos by identity instead of from the block (see IntroFmv/OutroFmv):
 	// first the outro of the section ending here - at the last campaign
 	// slot the finale instead -, then the intro of the section starting on
 	// the next slot. In vanilla this yields exactly the old pairs (3+4
@@ -1252,7 +1235,7 @@ void DoLevel(uchar Name, uchar Audio)
 	if (tomb5.tr4_loadscreens)
 		RenderLoadPic(0);
 
-	// Credits after the LAST campaign slot - in vanilla that is Red Alert,
+	// Credits after the last campaign slot - in vanilla that is Red Alert,
 	// after a permutation whatever level the randomizer put at the end.
 	// Hang this on the identity, and the credits would come mid-game.
 	if (gfStatus == 3 && gfCurrentLevel == gfLastSlot)
@@ -1268,11 +1251,11 @@ void DoLevel(uchar Name, uchar Audio)
 //----------------------------------------------------------------------------
 // Language switching at runtime: SCRIPT.DAT carries a list of language file
 // names at its end (NUL-separated up to the end of the file). The original
-// stubbornly takes the FIRST file that loads - regional versions differed
-// only in the files they shipped. We remember the list and can switch to any
-// other present file at any time; SCRIPT_TEXT resolves every text live via
-// gfStringOffset/gfStringWad, so the switch takes effect immediately and
-// without a restart.
+// stubbornly takes the first file that loads - regional versions differed
+// only in the files they shipped. This keeps the whole list and can switch
+// to any other present file at any time; SCRIPT_TEXT resolves every text
+// live via gfStringOffset/gfStringWad, so the switch takes effect
+// immediately and without a restart.
 char* gfLanguageList;	// first name in the list (points into gfScriptFile)
 long gfLanguageCount;
 long LanguageChoice = -1;	// registry "Language": -1 = automatic (first loadable file)
@@ -1311,11 +1294,28 @@ const char* LanguageName(long idx)
 }
 
 // Self-added menu rows ("Language", "Level Select", ...) have no string ID
-// in the language wad - a small own table per loaded language. Only
-// characters the game font can draw without escape codes (ASCII). Note: the
-// Steam edition's ITALIAN.DAT is just an English copy - whoever still has
-// it sees five Italian rows in an English menu; with a real translation
-// (the user owns one) everything lines up.
+// in the language wad, so each gets its own row in the table below. Only
+// German carries a real translation; French/Italian/Spanish repeat the
+// English literal on purpose, because the function only returns
+// table[i][column] once engl has matched a row at all - an empty string
+// there would print blank, not fall back to English the way an absent row
+// does. Rows with no German entry (PSX/TR4/TR5, "Display"/"Display (60)",
+// "Original") are left out of the table for the same reason: CustomText
+// falls back to the English literal on its own when nothing matches.
+//
+// Only characters the game font can draw without escape codes (ASCII) are
+// written directly. German umlauts are Latin-1 hex escapes (\xE4/\xF6/\xFC
+// for a/o/u-umlaut), keeping this file itself ASCII: AccentToCode
+// (text.cpp) maps those bytes to codes 128+4/128+20/128+1, which
+// PrintString composes from CharDef plus AccentTable's rows (accent.inc) -
+// the same path the German language file's own umlauts take. Every escape
+// below is followed by a letter that is not a hex digit, or by the end of
+// the string, so it ends where it should - keep it that way when editing.
+// The sharp s has no accent row, so no string here needs one.
+//
+// The Steam edition's ITALIAN.DAT is just an English copy - whoever still
+// has it sees five Italian rows in an English menu; with a real
+// translation everything lines up.
 const char* CustomText(const char* engl)
 {
 	static const char* table[][5] =
@@ -1326,12 +1326,6 @@ const char* CustomText(const char* engl)
 		{ "Gallery",         "Galerie",         "Galerie",        "Galleria",           "Galeria" },
 		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opzioni tomb5",      "Opciones tomb5" },
 		{ "Credits",         "Credits",         "Credits",        "Crediti",            "Creditos" },
-		// #161, round 161a step 7 - the Controls page (decision 1). Only the
-		// German column carries a real translation (the brief's own words);
-		// French/Italian/Spanish repeat the English literal on purpose -
-		// the function only returns table[i][column] once engl has matched
-		// a row at all, so an empty string here would print blank, not
-		// fall back to English the way an absent row does.
 		{ "Controls",        "Controls",        "Steuerung",      "Controls",           "Controls" },
 		{ "Control type",    "Control type",    "Steuerungsart",  "Control type",       "Control type" },
 		{ "Tank",            "Tank",            "Panzer",         "Tank",               "Tank" },
@@ -1342,95 +1336,53 @@ const char* CustomText(const char* engl)
 		{ "Action",          "Action",          "Aktion",         "Action",             "Action" },
 		{ "One key",         "One key",         "Eine Taste",     "One key",            "One key" },
 		{ "Separate",        "Separate",        "Getrennt",       "Separate",           "Separate" },
-		// #161, round 161b2c step 1 - the Secondary action's bind row, which
-		// the Key bindings page offers only while "Action" says Separate. The
-		// umlaut is the Latin-1 byte 0xE4 as a hex escape, the way every
-		// German string in this table carries one; the 'r' after it is no hex
-		// digit, so the escape ends where it should.
+		// The Secondary action's bind row: the Key bindings page offers it
+		// only while "Action" says Separate.
 		{ "Secondary",       "Secondary",       "Sekund\xE4r",    "Secondary",          "Secondary" },
-		// #161, round 161b2c step 3 - the two mode rows under Combat mode. Only
-		// the labels are new: their two values, Hold and Toggle, are the rows
-		// above's own words and are already in this table.
+		// The two mode rows under Combat mode; only the labels are new,
+		// their values Hold and Toggle are already in this table above.
 		{ "Sprint mode",     "Sprint mode",     "Sprintmodus",    "Sprint mode",        "Sprint mode" },
 		{ "Duck mode",       "Duck mode",       "Duckmodus",      "Duck mode",          "Duck mode" },
-		// #161, round 161b2d step 4 - the fourth mode row and the sub-page the
-		// four of them moved to ("Die vier Modi bitte auf eine Unterseite").
-		// "Modi" is both the page title and the tab's label: one literal, one
-		// row, exactly as "Key bindings" and "Credits" are above.
+		// "Modi" is both the page title for these four mode rows and the
+		// tab's own label: one literal, one row, exactly as "Key bindings"
+		// and "Credits" are above.
 		{ "Grab mode",       "Grab mode",       "Greifmodus",     "Grab mode",          "Grab mode" },
 		{ "Modes",           "Modes",           "Modi",           "Modes",              "Modes" },
-		// #161, round 161b2d step 1 - the bind rows of the hotkeys that used to
-		// be hard-wired keys. Only six of the sixteen new rows are here: the
-		// other ten take the string wad's own names through SCRIPT_TEXT (the
-		// medipacks, save, load and four of the weapons), exactly as the pad's
-		// list already does. Same rule as every block above - German is the only
-		// real translation, the other three repeat the English literal, because
-		// an empty column would print blank rather than fall back.
+		// Bind rows for hotkeys that used to be hard-wired keys. Only six
+		// of the sixteen new rows are here: the other ten take the string
+		// wad's own names through SCRIPT_TEXT (the medipacks, save, load
+		// and four of the weapons), exactly as the pad's list already does.
 		//
-		// "Level \xFC" "berspringen" is ONE string in two pieces on purpose: the
-		// letter after the umlaut is 'b', which IS a hex digit, so "\xFCb" would
-		// be read as one enormous escape. Every other umlaut in this table is
-		// followed by a letter that is not, which is why none of them needs the
-		// split (the comment at the big block below says to keep it that way).
+		// "Level \xFC" "berspringen" is one string split into two pieces
+		// on purpose: the letter after the umlaut is 'b', which is a hex
+		// digit, so "\xFCb" would be read as one oversized escape. Every
+		// other umlaut in this table is followed by a letter that is not,
+		// which is why none of them needs the split.
 		{ "Crossbow",        "Crossbow",        "Armbrust",       "Crossbow",           "Crossbow" },
 		{ "Fly mode",        "Fly mode",        "Flugmodus",      "Fly mode",           "Fly mode" },
 		{ "All weapons",     "All weapons",     "Alle Waffen",    "All weapons",        "All weapons" },
 		{ "All items",       "All items",       "Alle Gegenst\xE4nde", "All items",     "All items" },
 		{ "Heal",            "Heal",            "Heilen",         "Heal",               "Heal" },
 		{ "Skip level",      "Skip level",      "Level \xFC" "berspringen", "Skip level", "Skip level" },
-		// #161, round 161b2d item 3 - the pad's Modifier row, the only label of
-		// that step the keyboard list has no twin for. "Modifikator" reads as
-		// what it is on a German keyboard page; the value column beside it
-		// prints the button's own name, so the word never has to carry which
-		// button it is.
+		// The pad's Modifier row, which the keyboard list has no twin for.
+		// "Modifikator" reads as what it is on a German keyboard page; the
+		// value column beside it prints the button's own name, so the word
+		// never has to carry which button it is.
 		{ "Modifier",        "Modifier",        "Modifikator",    "Modifier",           "Modifier" },
-		// #161, round 161a2b step 5 - the Camera speed row (item 5). Same
-		// rule as the block above: only German is a real translation, the
-		// other three repeat the English literal on purpose.
 		{ "Camera speed",    "Camera speed",    "Kamerageschwindigkeit", "Camera speed", "Camera speed" },
-		// #161, round 161b1 step 1 - the pages of the new tree that step 1
-		// builds, and the two rows it renames. Same rule again: German is the
-		// only real translation, the other three repeat the English literal.
-		// The rest of the words arrive with step 2.
-		//
-		// "Standard wiederherstellen" is longer than the value column allows
-		// for a LABEL - it is a centred action row, where the whole width of
-		// the screen is its own, so the rule about "Kamerageschwindigkeit"
-		// being the widest label does not reach it.
+		// "Standard wiederherstellen" is longer than the value column
+		// allows for a label, but it is a centred action row where the
+		// whole width of the screen is its own, so the width limit that
+		// "Kamerageschwindigkeit" sets for labels does not reach it.
 		{ "Audio",           "Audio",           "Audio",          "Audio",              "Audio" },
 		{ "Graphics",        "Graphics",        "Grafik",         "Graphics",           "Graphics" },
 		{ "Display",         "Display",         "Display",        "Display",            "Display" },
 		{ "Key bindings",    "Key bindings",    "Tastenbelegung", "Key bindings",       "Key bindings" },
 		{ "Reset to defaults", "Reset to defaults", "Standard wiederherstellen", "Reset to defaults", "Reset to defaults" },
 		{ "Control layout",  "Control layout",  "Steuerungslayout", "Control layout",   "Control layout" },
-		// #161, round 161b1 step 3 - the Dead zone row (item 5). German keeps
-		// the borrowed word the user himself used ("Deadzone"), which is also
-		// the shorter label of the two.
+		// German keeps the borrowed loanword "Deadzone", which is also the
+		// shorter of the two.
 		{ "Dead zone",       "Dead zone",       "Deadzone",       "Dead zone",          "Dead zone" },
-		// #161, round 161b1 step 2 - the right half of the tree (item 4):
-		// Graphics, HUD, View and tomb5 options, plus Ammotype hotkeys moving
-		// into Controls. Same rule as every block above: only German is a
-		// real translation, French/Italian/Spanish repeat the English
-		// literal on purpose (an empty string would print blank, not fall
-		// back to English). Umlauts are the Latin-1 bytes 0xE4 / 0xF6 / 0xFC,
-		// written as hex escapes so this file stays ASCII: AccentToCode
-		// (game\text.cpp:187) maps them to codes 128+4 / 128+20 / 128+1 and
-		// PrintString composes those from CharDef plus AccentTable's rows
-		// (game\accent.inc) - the path the German language file's own
-		// umlauts take. The round first wrote "~u"/"~o"/"~a", the way
-		// GermanKeyboard[] (specific\input.cpp) labels its keys, because the
-		// round's brief prescribed it; PrintString has no escape for '~', so
-		// the menu would have shown a tilde and a plain vowel. The brief was
-		// wrong there, the review round measured the real path, and the
-		// project manager corrected the three strings after acceptance. Only
-		// the sharp s has no accent row, so none of these strings has one.
-		// Every escape below is followed by a letter that is no hex digit, or
-		// by the end of the string - keep it that way when editing.
-		//
-		// Rows with no German entry (PSX/TR4/TR5, "Display"/"Display (60)",
-		// "Original") are not listed here - CustomText already falls back to
-		// the English literal on its own when nothing matches, which is
-		// exactly what the brief's word table means by "stay".
 		{ "HUD",             "HUD",             "HUD",            "HUD",                "HUD" },
 		{ "View",            "View",            "Ansicht",        "View",               "View" },
 		{ "First person view", "First person view", "Ego-Sicht",  "First person view",  "First person view" },
@@ -1467,8 +1419,8 @@ const char* CustomText(const char* engl)
 		{ "Distance fog",    "Distance fog",    "Distanznebel",   "Distance fog",       "Distance fog" },
 		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
 		// Values, not row labels - "on/off", "Circle" etc. reused across many
-		// rows (Values line of the brief's table). "PSX"/"TR4"/"TR5" and
-		// "Original" are not here for the same reason as above: they stay.
+		// rows. "PSX"/"TR4"/"TR5" and "Original" are not here for the same
+		// reason as above: they fall back to English.
 		{ "on",              "on",              "an",             "on",                 "on" },
 		{ "off",             "off",             "aus",            "off",                "off" },
 		{ "Circle",          "Circle",          "Kreis",          "Circle",             "Circle" },
@@ -1515,19 +1467,19 @@ const char* CustomText(const char* engl)
 
 // Build the pointer table and un-XOR the strings (0xA5).
 //
-// CAUTION, legacy: the original compacted the buffer with TXT_NUM_STRINGS
-// (309) as the FIXED size of the offset table. But that is only right for
-// ENGLISH/US/FRENCH/ITALIAN/SPANISH (195 main + 56 PSX + 58 PC = 309).
-// GERMAN carries 58 PSX entries (311 total), JAPAN/DUTCH even 204+96+58
-// (358) - there the text wad began in the middle of the offset table, every
-// string read shifted, and the garbage glyphs tore the renderer down (hard
-// crash when switching the language to German). Vanilla never noticed
-// because each regional version only shipped files with a matching count.
+// The original compacted the buffer using TXT_NUM_STRINGS (309) as the
+// fixed size of the offset table, which is only right for ENGLISH/US/
+// FRENCH/ITALIAN/SPANISH (195 main + 56 PSX + 58 PC = 309). GERMAN carries
+// 58 PSX entries (311 total), JAPAN/DUTCH even 204+96+58 (358) - there the
+// text wad began in the middle of the offset table, every string read
+// shifted, and the garbage glyphs crashed the renderer on switching the
+// language to German. Vanilla never noticed because each regional version
+// only shipped files with a matching count.
 //
-// Hence now: block boundaries from the FILE HEADER, and the enum indices
-// are assigned block-wise (the enum follows the English split 195/56/58).
-// Every file carries at least that many entries per block - surplus ones
-// hang at the block's end and simply stay unused.
+// Block boundaries are read from the file header instead, and the enum
+// indices are assigned block-wise (the enum follows the English split
+// 195/56/58). Every file carries at least that many entries per block -
+// surplus ones hang at the block's end and simply stay unused.
 static void PrepareLanguageBuffer(char* d)
 {
 	STRINGHEADER sh;
@@ -1561,7 +1513,7 @@ static void PrepareLanguageBuffer(char* d)
 	gfStringOffset = table;
 	gfStringWad = wad;
 
-	// Decoding runs over the FILE offsets (all nFile strings), so the
+	// Decoding runs over the file offsets (all nFile strings), so the
 	// entries beyond the enum stay consistent too. As in the original, each
 	// string's last byte (the unencrypted NUL terminator) stays untouched,
 	// and the file's very last string stays encoded - it lies outside any
@@ -1592,14 +1544,14 @@ long SwitchLanguage(long idx)
 		return 0;
 
 	// Only files in the TR5 PC layout (195 main / 58 PC strings) can be
-	// mapped to the enum. JAPAN.DAT and DUTCH.DAT are in EVERY TR5 edition
-	// (Steam and the Japanese PC CD alike) in truth TOMB RAIDER 4 files:
-	// layout 204/96 like TR4's English.dat, TR4 item names ("Hathor
-	// Effigy") and TR4 PSX serial numbers (SLES-02238/-02243) in the middle
-	// of the text. A Japanese or Dutch TR5 PC text package never existed -
-	// even the Japanese CD fell back to ENGLISH.DAT at startup. The HEADER
-	// is checked, not the name: a real edition in the TR5 layout (like the
-	// ITALIAN.DAT the user tracked down) still works.
+	// mapped to the enum. JAPAN.DAT and DUTCH.DAT ship in every TR5
+	// edition (Steam and the Japanese PC CD alike) but are in truth
+	// Tomb Raider 4 files: layout 204/96 like TR4's English.dat, TR4 item
+	// names ("Hathor Effigy") and TR4 PSX serial numbers (SLES-02238/
+	// -02243) in the middle of the text. A Japanese or Dutch TR5 PC text
+	// package never existed - even the Japanese CD fell back to
+	// ENGLISH.DAT at startup. The header is checked, not the file name, so
+	// a real edition in the TR5 layout still works under any name.
 	memcpy(&sh, d, sizeof(STRINGHEADER));
 
 	if (sh.nStrings != 195 || sh.nPCStrings != 58)
@@ -1652,9 +1604,9 @@ void LoadGameflow()
 	for (char* p = s; p < (char*)gfScriptFile + scriptSize && *p; p += strlen(p) + 1)
 		gfLanguageCount++;
 
-	// Like the original: take the first file that loads. The user's saved
-	// choice (LanguageChoice) is applied by WinMain after the LoadSettings
-	// call - the registry has not been read here yet.
+	// Like the original: take the first file that loads. The player's
+	// saved choice (LanguageChoice) is applied by WinMain after the
+	// LoadSettings call - the registry has not been read here yet.
 	for (l = 0;; l++)
 	{
 		d = 0;

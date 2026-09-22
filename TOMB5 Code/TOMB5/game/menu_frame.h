@@ -13,34 +13,28 @@
 #pragma once
 #include "../global/types.h"
 
-/* THE OPTIONS MENU AS A TABLE (#161, round 161b1).
+/* The options menu as a table.
  *
- * "Das Remaster ist viel cleaner, unser sehr durcheinander." The old menu was
- * five hand-written state machines (menu-map R1) with a one-hot bit mask for a
- * cursor (R2), magic page numbers 0/1/100/200/201 (R8) and one page that
- * shrank the global font_height to fit (R7). What replaces it is a list of
- * PAGES, each a title and an array of ROWS, and one piece of code that draws
- * and drives all of them. Adding a row is a line in a table; adding a page is
- * a table plus a line in the page list.
+ * The menu is a list of pages, each a title and an array of rows, drawn
+ * and driven by one piece of shared code, rather than a separate
+ * hand-written state machine per page. Adding a row is a line in a
+ * table; adding a page is a table plus a line in the page list.
  *
- * THE SHAPE COMES FROM THE USER'S SCREEN, not from anyone's binary: "In den
- * Menues wird alles, was da definiert wird, linksbuendig wie es jetzt ist;
- * Hauptreiter wie Keybinds in Steuerung werden aber weiterhin mittig
- * angeboten, dann haben wir eine Abhebung, was sind Untermenues und was sind
- * Funktions-Toggle-Switche." So: a row that OPENS something is centred; a row
- * that IS a setting has its label at the left and its value in the right-hand
- * column. That difference is the whole navigation aid, and it is the only
- * thing the kinds below really encode.
+ * The row layout is a navigation aid, not a binary constraint: a row
+ * that opens something is centred; a row that is a setting has its
+ * label at the left and its value in the right-hand column. That
+ * difference is the only thing the row kinds below really encode.
  *
- * THE ARITHMETIC IS NOT HERE. Cursor walking, clamping and the balanced
- * paging live in game\menu_nav.h, which has no engine in it and is checked by
- * Preparation\Tools\Diagnose\MenuTest.cpp. This file is the drawing, the
- * tables and the rows' own logic - all of which came over from
- * specific\LoadSave.cpp and tomb5\troyestuff.cpp unchanged, row by row.
+ * The arithmetic is not here. Cursor walking, clamping and the balanced
+ * paging live in game/menu_nav.h, which has no engine dependency and is
+ * checked by Preparation/Tools/Diagnose/MenuTest.cpp. This file is the
+ * drawing, the tables and the rows' own logic - carried over from
+ * specific/LoadSave.cpp and tomb5/troyestuff.cpp row by row.
  */
 
-/* WHAT A ROW IS. The kind decides where it is drawn and which of the callbacks
- * below are asked for anything; everything a kind does not use stays null. */
+/* What a row is. The kind decides where it is drawn and which of the
+ * callbacks below are asked for anything; everything a kind does not
+ * use stays null. */
 enum menu_row_kind
 {
 	MROW_TAB,		// centred - opens another page
@@ -51,48 +45,46 @@ enum menu_row_kind
 				// (the arrow row is not a kind - the frame appends it itself)
 };
 
-/* NAMED PAGES instead of 0/1/100/200/201 (menu-map R8). The order is the order
- * of the user's tree; MENU_PAGE_OPTIONS must stay 0, it is the root the menu
- * always opens on. */
+/* Named pages instead of magic numbers. MENU_PAGE_OPTIONS must stay 0,
+ * it is the root the menu always opens on. */
 enum menu_page_id
 {
 	MENU_PAGE_OPTIONS = 0,
 	MENU_PAGE_AUDIO,
 	MENU_PAGE_CONTROLS,
 	MENU_PAGE_KEYBINDS,
-	MENU_PAGE_VIEW,		// step 2: the six first-person rows, always offered
+	MENU_PAGE_VIEW,		// the six first-person rows, always offered
 	MENU_PAGE_GRAPHICS,
 	MENU_PAGE_DISPLAY,
-	MENU_PAGE_HUD,		// step 2
-	MENU_PAGE_TOMB5,	// step 2: a table now, no longer the old TroyeMenu
+	MENU_PAGE_HUD,
+	MENU_PAGE_TOMB5,	// a table now, no longer the old TroyeMenu
 	MENU_PAGE_SPECIAL,	// the existing Special Features screen, untouched inside
 	MENU_PAGE_CREDITS,	// the existing Credits screen, untouched inside
-	/* #161, round 161b2d item 5 - the four mode rows on a sub-page of their
-	 * own ("Die vier Modi bitte auf eine Unterseite. Macht es uebersichtlicher").
-	 * APPENDED rather than slotted in after MENU_PAGE_CONTROLS where it belongs
-	 * in the tree, so that no existing id changes its number: menu_pages[] below
-	 * is positional to this enum, and the frame's cursor and page memories are
-	 * indexed by it. The tree's ORDER is the Controls page's tab row, not this
-	 * list. */
+	/* The four mode rows live on a sub-page of their own. Appended here
+	 * rather than inserted after MENU_PAGE_CONTROLS where it logically
+	 * belongs, so that no existing id changes its number: menu_pages[]
+	 * below is positional to this enum, and the frame's cursor and page
+	 * memories are indexed by it. The visible tab order is the Controls
+	 * page's own tab row, not this list order. */
 	MENU_PAGE_MODES,
 	MENU_PAGE_COUNT
 };
 
-/* WHICH REGISTRY BLOCK A CHANGE BELONGS TO (menu-map section 6). Block A is
- * written whole on every edit, as it always was; block B was only written at a
- * clean exit until this round (R4) and is now written when a page on which one
- * of its values changed is left. */
+/* Which registry block a change belongs to. Block A is written whole
+ * on every edit, as it always was; block B is now written when a page
+ * on which one of its values changed is left, rather than only at a
+ * clean program exit. */
 #define MENU_SAVE_NONE	0
 #define MENU_SAVE_TOMB5	1	// save_new_tomb5_settings()
 #define MENU_SAVE_GAME	2	// SaveSettings()
 
-/* Every callback gets the row's own `param`, so one set of functions can serve
- * a whole list of rows - which is what the sixteen key bindings are: one
- * value function, one select function, and the role index in the table. That
- * index is also what retires the two shift-then-count blocks of the old
- * Controls page (specific\LoadSave.cpp:633 and :680 at base), which turned a
- * selection BIT back into an array index and had to be recounted every time a
- * row was added above the list. */
+/* Every callback gets the row's own `param`, so one set of functions
+ * can serve a whole list of rows - which is what the sixteen key
+ * bindings are: one value function, one select function, and the role
+ * index in the table. That index also retires the old Controls page's
+ * shift-then-count blocks (specific/LoadSave.cpp at base), which turned
+ * a selection bit back into an array index and had to be recounted
+ * every time a row was added above the list. */
 typedef bool (*menu_pred)(long param);			// may the cursor stand here?
 typedef bool (*menu_step)(long param, long dir);	// LEFT/RIGHT; true when the setting really changed
 typedef void (*menu_act)(long param);			// SELECT
@@ -102,7 +94,7 @@ typedef long (*menu_num)(long param);			// a slider's 0..100
 struct menu_row
 {
 	long kind;
-	const char* label;	// the ENGLISH literal: the CustomText key, the log's name, or a glyph
+	const char* label;	// the English literal: the CustomText key, the log's name, or a glyph
 	long text_id;		// a SCRIPT_TEXT id to draw instead of the literal, else -1
 	menu_text value;
 	menu_step step;
@@ -124,17 +116,18 @@ struct menu_page
 	void (*resolve)(const menu_row** rows, long* num);	// null for a page whose rows never change
 };
 
-/* ONE GEOMETRY FOR EVERY PAGE, and font_height is never touched (R7).
+/* One geometry for every page; font_height is never touched.
  *
- * font_height is GetFixedScale(28) (game\text.cpp:528), which scales with the
- * window, so the number of rows that fit is the same at every resolution:
- * 640x480 is the tightest case and phd_winymax is 479 there. An ordinary
- * capital's glyph cell reaches 4 pixels below its anchor (game\chardef.inc
- * h=13/YOffset=-11, rescaled by phd_winymax/240 in game\text.cpp:518-525), so
- * the last usable anchor is 16 * 28 = 448, bottom 452. That line is the arrow
- * row's, pinned there ("die Pfeile am unteren Bildschirmrand"), and the rows
- * run from 4 to 15 - twelve of them, which is exactly what the fullest page of
- * the user's tree needs (Graphics: the Display tab and eleven settings). */
+ * font_height is GetFixedScale(28) (game/text.cpp), which scales with
+ * the window, so the number of rows that fit is the same at every
+ * resolution: 640x480 is the tightest case and phd_winymax is 479
+ * there. An ordinary capital's glyph cell reaches 4 pixels below its
+ * anchor (game/chardef.inc h=13/YOffset=-11, rescaled by
+ * phd_winymax/240 in game/text.cpp), so the last usable anchor is
+ * 16 * 28 = 448, bottom 452. That line is the arrow row's, pinned
+ * there, and the rows run from 4 to 15 - twelve of them, which is
+ * exactly what the fullest page (Graphics: the Display tab and eleven
+ * settings) needs. */
 #define MENU_TITLE_ROW	2
 #define MENU_FIRST_ROW	4
 #define MENU_MAX_ROWS	12

@@ -165,13 +165,12 @@ void MazeMonsterControl(short item_number)
 
 		if (item->hit_points <= 0)
 		{
-			// Shred instead of a death animation (user wish 2026-08-20,
-			// like the Imp - reasoning there). Here it also replaces the
-			// fade stopgap: Core never finished this death (the lying pose
-			// sinks into the floor, no KillItem in the anim), we first
-			// faded him like Larson. Now CreatureDie(1) takes over,
-			// including ExplodingDeath2 - KillItem, DropBaddyPickups, AI
-			// off, IFL_INVISIBLE, all in one go. The sound is his own: the
+			// Shreds instead of playing a death animation, as with the
+			// Imp: Core never finished this death - the lying pose sinks
+			// into the floor and the animation never calls KillItem.
+			// CreatureDie(item_number, 1) takes over, including
+			// ExplodingDeath2 - KillItem, DropBaddyPickups, AI off,
+			// IFL_INVISIBLE, all in one go. The sound is its own: the
 			// data lists the maze monster as "werewolf".
 			SoundEffect(SFX_WEREWOLF_DIE, &item->pos, 0);
 			CreatureDie(item_number, 1);
@@ -222,13 +221,13 @@ void MazeMonsterControl(short item_number)
 					item->goal_anim_state = 1;
 
 				// No running sound. Core called SFX_IMP_BARREL_ROLL (250)
-				// here every frame - but Andy2 does not fill the number,
-				// at home the call always ran into the void and the
-				// monster was mute while running. In andy1, the imps'
-				// barrel rolling lies under 250, play mode 0 (stacks): a
-				// new play on top every frame, audible as a metallic
-				// screech (SFXLOG: 125x sfx=250, user find 2026-08-18).
-				// The vanilla behavior is the silence.
+				// here every frame, but Andy2 does not fill that slot, so
+				// at home the call ran into the void and the monster was
+				// mute while running. In andy1 the same slot holds the
+				// imps' barrel-rolling sound at play mode 0 (stacks): a
+				// new play stacked on top every frame there, audible as a
+				// metallic screech (SFXLOG: 125x sfx=250). Silence is the
+				// vanilla behavior for this monster.
 				break;
 
 			case 4:

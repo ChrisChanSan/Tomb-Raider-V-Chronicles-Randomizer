@@ -24,8 +24,8 @@
 #include "deltapak.h"
 #include "lara.h"
 #include "effect2.h"
-#include "../specific/hd/hd_lara.h"		// #123 fix round D (D3): the braid root and the pack
-#include "../specific/hd/hd_laradraw.h"	// #123 fix round D (D3): HDLaraDrawActive
+#include "../specific/hd/hd_lara.h"		// the braid root and the pack
+#include "../specific/hd/hd_laradraw.h"	// HDLaraDrawActive
 
 static char HairRotScratchVertNums[5][12] =
 {
@@ -38,12 +38,12 @@ static char HairRotScratchVertNums[5][12] =
 
 HAIR_STRUCT hairs[2][7];
 
-/* WHAT THE LAST FRAME LOOKED LIKE, for HAIRLOG's four difference fields
- * (#123, fix round G, G1). A log line that says where the braid IS answers
- * half the question; the play test's finding is about how far it MOVED, and
- * counting that by hand out of a thousand lines is what fix round G had to do
- * once. `seen` is cleared with the simulation, so the frame after a level
- * load prints no difference rather than a wrong one. */
+/* What the last frame looked like, for HAIRLOG's four difference fields.
+ * A log line that says where the braid is answers only half the question;
+ * these let it also say how far the braid moved between frames instead of
+ * that having to be counted by hand out of a thousand log lines. `seen` is
+ * cleared with the simulation, so the frame after a level load prints no
+ * difference rather than a wrong one. */
 static long hair_log_root[2][3];
 static long hair_log_tip[2][3];
 static short hair_log_yaw[2][6];
@@ -104,43 +104,37 @@ void DrawHair()
 }
 
 /*
- * THE HD BACKPACK, AS A BOX (#123, fix round I, I1; two collision spheres
- * from fix round D, D3b until this round, in both frame branches since fix
- * round F, F2).
+ * The HD backpack, modeled as a box.
  *
- * The user's finding of round D: the HD braid goes straight through the HD
- * pack. It has to - the five spheres HairControl pushes it out of are CLASSIC
- * Lara meshes, and the pack of an HD outfit stands 92 units behind the torso
- * joint where the classic torso sphere reaches 40.
+ * The braid used to pass straight through the HD backpack: the six
+ * classic collision spheres HairControl pushes it out of are classic Lara
+ * meshes, and the pack of an HD outfit stands 92 units behind the torso
+ * joint where the classic torso sphere only reaches 40. Two stacked
+ * spheres were tried first, but the pack is a flat slab and two spheres
+ * only touch that slab along its centre line, so it still clipped. The
+ * pack is a box instead, six measured numbers instead of three, and the
+ * braid is pushed out along the smallest penetration with its rear face
+ * preferred. The numbers, the seven outfits they came from and the
+ * plait's own radius are in hd_lara.h.
  *
- * The user's finding after round G: it STILL lies in the pack, and round G had
- * already written down why and left it as a decision - the pack is a flat slab
- * and two stacked spheres touch that slab on its centre line alone. So the
- * pack is a BOX now, six measured numbers instead of three, and the braid is
- * pushed out of it along the smallest penetration with its rear face
- * preferred. The numbers, the seven outfits they came from and the plait's own
- * radius are in hd_lara.h.
+ * It lives in the torso node's frame - the frame the caller stands in
+ * when it calls this, after the torso's own rotation, so the pack turns
+ * with her chest the way its geometry does. That is why the frame is
+ * captured here (a rotation and an origin) rather than a handful of world
+ * points: a box has an orientation and a sphere has not.
  *
- * IT LIVES IN THE TORSO NODE'S FRAME, which is the frame the caller stands in
- * when it calls this - after the torso's own rotation, so the pack turns with
- * her chest the way its geometry does. That is why the frame is CAPTURED here
- * (a rotation and an origin) rather than a handful of world points: a box has
- * an orientation and a sphere has not.
+ * Only used when the HD wardrobe is drawing: the classic body's pack is
+ * part of the classic torso mesh and sphere[1] already covers it, so
+ * pushing the classic braid out of this box too would lift it off her
+ * back for no reason. With the HD path off, HdPackFrame returns false at
+ * its first line and HdPackPush is never reached.
  *
- * ONLY when the HD wardrobe is drawing. The classic body's pack is part of
- * the classic torso mesh and sphere[1] already covers it; pushing the classic
- * braid out of this box would lift it off her back for no reason. With the HD
- * path off, HairControl is the file it was before #123 - HdPackFrame returns
- * false at its first line and HdPackPush is never reached.
- *
- * WHY IT TAKES A FLAG. HairControl has two halves - one for a frame the
- * animation interpolates and one for a frame it does not - and they walk the
- * mesh tree with two different sets of matrix calls. Round D wrote its block
- * into the second half only, so the pack came and went from frame to frame
- * and the braid was pushed out of it on some frames and not on others. That
- * was half of the tremble of user finding F2, and it is why this is a
- * function with a switch rather than a block that can be forgotten in one
- * place. ModelProbe -braidsim and -braidanim measure both.
+ * It takes a flag because HairControl has two halves - one for a frame
+ * the animation interpolates and one for a frame it does not - which walk
+ * the mesh tree with two different sets of matrix calls; both must agree
+ * on the box, or the pack would come and go from frame to frame and the
+ * braid would be pushed out of it on some frames and not on others.
+ * ModelProbe -braidsim and -braidanim measure both.
  */
 struct HD_PACK_FRAME
 {
@@ -186,10 +180,10 @@ static bool HdPackFrame(HD_PACK_FRAME* box, bool interpolate)
 }
 
 /*
- * ONE LINK OUT OF THE BOX. `link` is 1..6, the moving points of hairs[0];
- * `x`, `y`, `z` its position in the world, changed in place.
+ * Pushes one link out of the box. `link` is 1..6, the moving points of
+ * hairs[0]; `x`, `y`, `z` its position in the world, changed in place.
  *
- * The frame is a pure rotation - HairControl builds its matrices on a UNIT
+ * The frame is a pure rotation - HairControl builds its matrices on a unit
  * matrix (phd_PushUnitMatrix) and puts nothing but rotations and translations
  * on it, so the 3x3 is orthonormal and the way back into the torso's own
  * coordinates is its transpose. World = R * local + origin, so local =
@@ -197,7 +191,7 @@ static bool HdPackFrame(HD_PACK_FRAME* box, bool interpolate)
  *
  * Six faces, six penetrations, and the smallest of them wins - which is what
  * makes the push a push and not a teleport: a link that has just crept a unit
- * into the pack comes back out a unit. The REAR face is preferred because it
+ * into the pack comes back out a unit. The rear face is preferred because it
  * is the face the braid belongs on; every other one leads into her back, under
  * the pack or out at the side. The preference is a divisor and not a rule, so
  * a link that is genuinely nearer another face still leaves by it.
@@ -280,14 +274,13 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	HAIR_STRUCT* hair;
 	FLOOR_INFO* floor;
 	PHD_VECTOR pos;
-	/* SIX SPHERES ARE THE CLASSIC BODY and all the braid ever meets; the HD
-	 * backpack is the BOX beside them (#123, fix round I, I1 - two more
-	 * spheres from fix round D, D3b until then). `spheres` stays a count so
-	 * that the log can say the classic braid met exactly what it always met. */
+	/* Six spheres are the classic body and all the braid ever meets; the HD
+	 * backpack is the box beside them. `spheres` stays a count so that the
+	 * log can say the classic braid met exactly what it always met. */
 	SPHERE sphere[6];
 	int spheres = 6;
 	HD_PACK_FRAME pack;
-	int pack_hits = 0;	// #123 fix round F (F2): for the HAIRLOG line
+	int pack_hits = 0;	// for the HAIRLOG line
 	long root_z = HD_LARA_BRAID_ROOT_Z;	// which root the frame really used
 	long* bone;
 	short* rot[2];
@@ -373,7 +366,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PushMatrix_I();
 		objptr = lara.mesh_ptrs[LM_TORSO];
 
-		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// The braid's special anchoring belongs to the Russia outfit (cap,
 		// bomber jacket), not to the level - Core equated the two because
 		// the outfit never changes section in vanilla. For the Joby outfit
 		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
@@ -391,7 +384,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[1].y = (long)aMXPtr[M13];
 		sphere[1].z = (long)aMXPtr[M23];
 
-		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// The braid's special anchoring belongs to the Russia outfit (cap,
 		// bomber jacket), not to the level - Core equated the two because
 		// the outfit never changes section in vanilla. For the Joby outfit
 		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
@@ -409,8 +402,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 
 		phd_PopMatrix_I();
 
-		// The HD backpack, in the torso frame (#123, fix round D D3b, in this
-		// branch as well since fix round F, F2; a box since fix round I, I1).
+		// The HD backpack, in the torso frame - see HdPackFrame above.
 		if (!pigtail)
 			HdPackFrame(&pack, true);
 
@@ -463,8 +455,8 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[5].z = (2 * sphere[2].z + sphere[1].z) / 3;
 		sphere[5].r = gfLevelFlags & GF_YOUNGLARA ? 0 : 5 * sphere[2].r / 4;
 
-		/* THE BRAID ROOT, the same three lines as the other branch has -
-		 * which is the point (#123, fix round F, F2). */
+		/* The braid root - the same three lines the other branch below has,
+		 * which is the point: both frame paths must agree on it. */
 		if (pigtail)
 		{
 			root_z = -50;
@@ -477,13 +469,12 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		}
 		else
 		{
-			/* AND IT MOVES INTO THE HAIR KNOT FOR AN HD LARA AGAIN (#123, fix
-			 * round I, I2) - see HD_LARA_BRAID_ROOT_Z_HD in hd_lara.h for the
-			 * measurement, the withdrawal in fix round F and why the box lets
-			 * it come back. `pack.on` and not a second call to
-			 * HDLaraDrawActive(): it is one answer read once per frame, so the
-			 * two halves of this function cannot disagree about it - which is
-			 * exactly what went wrong in round D. */
+			/* The root moves into the hair knot for an HD Lara - see
+			 * HD_LARA_BRAID_ROOT_Z_HD in hd_lara.h for the measurement and
+			 * why the box lets it sit there. `pack.on` is read rather than
+			 * calling HDLaraDrawActive() a second time: it is one answer
+			 * read once per frame, so the two halves of this function
+			 * cannot disagree about it. */
 			root_z = pack.on ? HD_LARA_BRAID_ROOT_Z_HD : HD_LARA_BRAID_ROOT_Z;
 			phd_TranslateRel_I(HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y,
 				root_z);
@@ -528,7 +519,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PushMatrix();
 		objptr = lara.mesh_ptrs[LM_TORSO];
 
-		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// The braid's special anchoring belongs to the Russia outfit (cap,
 		// bomber jacket), not to the level - Core equated the two because
 		// the outfit never changes section in vanilla. For the Joby outfit
 		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
@@ -545,7 +536,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[1].y = (long)aMXPtr[M13];
 		sphere[1].z = (long)aMXPtr[M23];
 
-		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// The braid's special anchoring belongs to the Russia outfit (cap,
 		// bomber jacket), not to the level - Core equated the two because
 		// the outfit never changes section in vanilla. For the Joby outfit
 		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
@@ -563,9 +554,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 
 		phd_PopMatrix();
 
-		// The HD backpack, in the torso frame - see HdPackFrame above
-		// (#123, fix round D D3b, both branches since fix round F, F2; a box
-		// since fix round I, I1).
+		// The HD backpack, in the torso frame - see HdPackFrame above.
 		if (!pigtail)
 			HdPackFrame(&pack, false);
 
@@ -615,9 +604,9 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[5].z = (2 * sphere[2].z + sphere[1].z) / 3;
 		sphere[5].r = gfLevelFlags & GF_YOUNGLARA ? 0 : 5 * sphere[2].r / 4;
 
-		/* THE BRAID ROOT. The classic one for a classic Lara and the near one
-		 * for an HD Lara (#123, fix round I, I2) - the same three lines the
-		 * other half has, which is the point (fix round F, F2). */
+		/* The braid root: the classic position for a classic Lara, the
+		 * nearer one for an HD Lara - the same three lines the other half
+		 * above has, which is the point: both frame paths must agree. */
 		if (pigtail)
 		{
 			root_z = -50;
@@ -670,7 +659,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		hair_wind = 0;
 		hair_dwind_angle = 2048;
 		hair_wind_angle = 2048;
-		hair_log_seen[pigtail] = false;	// #123 fix round G (G1)
+		hair_log_seen[pigtail] = false;
 		return;
 	}
 
@@ -770,12 +759,12 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 			}
 		}
 
-		/* AND OUT OF THE HD BACKPACK (#123, fix round I, I1). After the
-		 * classic spheres and not among them, because it is a box and they are
-		 * spheres - and last, so that a link the torso sphere has just pushed
-		 * INTO the pack still leaves it. `pack.on` is false for the classic
-		 * braid and for young Lara's pigtails, and then this line is the test
-		 * that reads it. */
+		/* And out of the HD backpack. After the classic spheres and not
+		 * among them, because it is a box and they are spheres - and last,
+		 * so that a link the torso sphere has just pushed into the pack
+		 * still leaves it. `pack.on` is false for the classic braid and
+		 * for young Lara's pigtails, and this call is the test that reads
+		 * it. */
 		if (HdPackPush(&pack, i, &hair->pos.x_pos, &hair->pos.y_pos,
 			&hair->pos.z_pos))
 			pack_hits++;
@@ -826,61 +815,54 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		hair++;
 	}
 
-	/* THE DRAWN BRAID'S ROLL (#123, fix round G, G1). Worked out HERE and not
-	 * in the draw, because the rule holds a value from frame to frame and
-	 * this is the one place per frame where the chain is new - the draw may
-	 * run twice (the mirror) or not at all (first person). The second braid
-	 * is young Lara's and never meets the HD wardrobe. */
+	/* The drawn braid's roll is worked out here and not in the draw,
+	 * because the rule holds a value from frame to frame and this is the
+	 * one place per frame where the chain is new - the draw may run twice
+	 * (the mirror) or not at all (first person). The second braid is young
+	 * Lara's and never meets the HD wardrobe. */
 	if (!pigtail)
 		HDLaraBraidRollStep();
 
-	/* HAIRLOG (#123, fix round F, F2; the four difference fields are fix
-	 * round G, G1): one line per braid per frame under -log, so that the play
-	 * test can say what the braid was standing on and how far it moved.
+	/* HAIRLOG: one line per braid per frame under -log, so it can be read
+	 * off what the braid was standing on and how far it moved.
 	 *
-	 *   rootz     WHICH root offset the frame used - the tremble of finding
-	 *             F2 was two of these taking turns. It has to read the same
-	 *             number on every line of a run; a line where it changes is
-	 *             the bug back again.
+	 *   rootz     which root offset the frame used. It has to read the
+	 *             same number on every line of a run; a line where it
+	 *             changes means the two frame branches disagree about it.
 	 *   root      where hairs[0][0] landed, in the room.
-	 *   spheres   how many collision SPHERES this frame tested. Six, always -
-	 *             they are the classic body and nothing else. (It read 8 with
-	 *             the HD wardrobe between fix rounds D and G, when the pack
-	 *             was two spheres of its own.)
-	 *   pack      whether the HD backpack BOX was placed this frame (#123,
-	 *             fix round I, I1). It has to read the same number on every
-	 *             line of a run: 1 for an HD Lara, 0 for a classic one, and a
-	 *             line where it changes is the trouble of finding F2 back
-	 *             again in a new coat.
+	 *   spheres   how many collision spheres this frame tested. Six,
+	 *             always - they are the classic body and nothing else.
+	 *   pack      whether the HD backpack box was placed this frame. It
+	 *             has to read the same number on every line of a run: 1
+	 *             for an HD Lara, 0 for a classic one, and a line where it
+	 *             changes means the two frame branches disagree.
 	 *   packhits  how many links the box pushed out this frame - at most six,
 	 *             one per link. A steady small number is the pack doing its
 	 *             work; a zero on an HD Lara who is not in the water means the
 	 *             braid never reaches the pack at all.
 	 *   tip       the last link, so that a braid that is somewhere it should
 	 *             not be can be found without a screenshot.
-	 *   rootstep  how far the ROOT moved since the last frame, |dx|+|dy|+|dz|
+	 *   rootstep  how far the root moved since the last frame, |dx|+|dy|+|dz|
 	 *             in classic units. This is Lara herself; the braid is
-	 *             ALLOWED to move this much and more.
-	 *   tipstep   the same for the tip. Fix round G counted the play test's
-	 *             own log by hand: on the 924 frames where rootstep was 0,
-	 *             tipstep was under 2 on 728 of them and the two long
-	 *             standing stretches read exactly 0 for fifty frames on end.
-	 *             A tipstep over 40 with a rootstep of 0 is a real fault; one
-	 *             with a rootstep of 40 is Lara running.
-	 *   dyaw      the worst one-frame change of any link's YAW, in degrees.
-	 *             This is the tremble of finding G: the yaw is read off two
-	 *             single-digit integers and jumps half a turn while the braid
-	 *             stands still. Expect large numbers here - they are the
-	 *             disease, not the cure.
-	 *   droll     the same after the drawn braid's own roll has taken the
-	 *             noise back out (hd_laradraw.cpp, HDLaraBraidRolls). THIS is
-	 *             what the picture shows, and on a Lara standing still it has
-	 *             to stay in single digits. -1 means the classic braid, which
-	 *             has no roll of its own and never had this trouble, because
-	 *             its connectors are skinned.
+	 *             allowed to move this much and more.
+	 *   tipstep   the same for the tip. Measured over 924 frames where
+	 *             rootstep was 0: tipstep stayed under 2 on 728 of them,
+	 *             with two stretches reading exactly 0 for fifty frames
+	 *             straight. A tipstep over 40 with a rootstep of 0 is a
+	 *             real fault; one with a rootstep of 40 is Lara running.
+	 *   dyaw      the worst one-frame change of any link's yaw, in degrees.
+	 *             The yaw is read off two single-digit integers and can
+	 *             jump half a turn while the braid stands still - expect
+	 *             large numbers here, they are the disease, not the cure.
+	 *   droll     the same after the drawn braid's own roll has taken that
+	 *             noise back out (hd_laradraw.cpp, HDLaraBraidRolls). This
+	 *             is what the picture shows, and on a Lara standing still
+	 *             it has to stay in single digits. -1 means the classic
+	 *             braid, which has no roll of its own and never had this
+	 *             trouble, because its connectors are skinned.
 	 *
-	 * It stays in for good, like every other seam (feedback: the diagnostic
-	 * seams stay). Two lines a frame at most, and only with -log. */
+	 * Stays in for good, like every other diagnostic seam. Two lines a
+	 * frame at most, and only with -log. */
 	if (!gLogEnabled)
 		return;
 

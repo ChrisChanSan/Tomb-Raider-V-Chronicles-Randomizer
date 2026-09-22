@@ -2,7 +2,7 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The rule DrawChar's HD branch rests on - widen the sampled window and
- * the quad in the SAME ratio, so that a letter drawn from the remaster's
+ * the quad in the same ratio, so that a letter drawn from the remaster's
  * glyph atlas neither moves nor grows - is TROne's (Copyright 2026
  * Todesengel, GPLv3, host\render\game_renderer.cpp, its "hdtext" glyph
  * draw; specific\hd\hd_fontmatch.h says why the citation carries no line
@@ -28,7 +28,7 @@
 #include "../specific/function_stubs.h"
 #include "../specific/3dmath.h"
 #include "../specific/gamemain.h"
-#include "../specific/hd/hd_font.h"		// the HD font (#123, fix round Q)
+#include "../specific/hd/hd_font.h"		// the HD font
 
 CVECTOR FontShades[10][32];
 long font_height;
@@ -39,9 +39,8 @@ uchar ScaleFlag;
 char AccentTable[46][2] =
 {
 	/* The rows themselves live in game\accent.inc, so that the diagnostic
-	 * tool FontProbe (#123, fix round Q) composes its umlauts from exactly
-	 * this table instead of a copy of it. Nothing about it changed when it
-	 * moved. */
+	 * tool FontProbe composes its umlauts from exactly this table instead
+	 * of a copy of it. Nothing about it changed when it moved. */
 #include "accent.inc"
 };
 
@@ -66,9 +65,9 @@ static CVECTOR ShadeFromTo[10][2] =
 CHARDEF CharDef[106] =
 {
 	/* The rows themselves live in game\chardef.inc, so that the HD font
-	 * (#123, fix round Q) and the diagnostic tool FontProbe read exactly
-	 * these numbers instead of a copy of them. Nothing about the table
-	 * changed when it moved. */
+	 * and the diagnostic tool FontProbe read exactly these numbers
+	 * instead of a copy of them. Nothing about the table changed when it
+	 * moved. */
 #include "chardef.inc"
 };
 
@@ -117,46 +116,42 @@ void DrawChar(long x, long y, ushort col, CHARDEF* def)
 	tex.tpage = ushort(nTextures - 2);
 	tex.flag = 0;
 
-	/* AND THE SAME LETTER OUT OF THE REMASTER'S ATLAS, WHEN THERE IS ONE
-	 * (#123, fix round Q). Everything above this line is untouched, and with
-	 * hd_enable off HDFontGlyphAt returns nothing at its first test, so the
-	 * quad that leaves here is the quad that left here before - the same
-	 * position, the same size, the same FontShades colour and specular, the
-	 * same page. This is the whole seam: every line of text in the game -
-	 * title menu, ring, options, save list, statistics, HUD, item names,
-	 * subtitles - comes through PrintString and therefore through here.
+	/* Draws the same letter out of the remaster's atlas instead, when one
+	 * exists. With hd_enable off, HDFontGlyphAt returns nothing and the
+	 * quad below is the same as without this branch - same position,
+	 * size, FontShades colour and specular, same page. Every line of text
+	 * in the game (title menu, ring, options, save list, statistics, HUD,
+	 * item names, subtitles) goes through PrintString and therefore here.
 	 *
-	 * WHY THE UV IS SHIFTED AND NOT RECOMPUTED. The remaster's atlas is the
-	 * classic page at eight times the size, so a normalised coordinate on the
-	 * one is a normalised coordinate on the other, and the glyph sits at the
-	 * same place plus a whole number of classic texels (hd_font.cpp works
-	 * that number out once per session). Adding it moves the window and
-	 * changes nothing else: the letter cannot grow, shrink or slide, because
-	 * no factor was touched. Measured with FontProbe -sample: the texels a
-	 * screen pixel walks are the same number to the last bit.
+	 * The UV is shifted, not recomputed: the remaster's atlas is the
+	 * classic page at eight times the size, so a normalised coordinate on
+	 * one is a normalised coordinate on the other, and the glyph sits at
+	 * the same place plus a whole number of classic texels (hd_font.cpp
+	 * works that number out once per session). Shifting only the window
+	 * changes nothing else: the letter cannot grow, shrink or slide,
+	 * because no factor was touched. Measured with FontProbe -sample: the
+	 * texels a screen pixel walks are the same number to the last bit.
 	 *
-	 * WHY THE QUAD GROWS. The classic arithmetic samples the rectangle inset
-	 * by half a texel on each side - the classic page packs its glyphs with
-	 * no gap at all, and without that inset a letter would bleed into its
-	 * neighbour. At eight times the size that inset is four HD texels, and it
-	 * would cut off exactly the antialiased rim and the drop shadow the
-	 * remaster painted around every letter (measured: 12.6 % of the glyph's
-	 * ink). So the window is widened AND the quad is widened by the same
-	 * fraction of itself, which is TROne's rule: more of the atlas becomes
-	 * visible, and the letter still stands on the same pixel at the same
-	 * size.
+	 * The quad is widened by the same fraction as the window, which is
+	 * TROne's rule: the classic arithmetic samples the rectangle inset by
+	 * half a texel on each side, needed because the classic page packs
+	 * its glyphs with no gap, and without that inset a letter would bleed
+	 * into its neighbour. At eight times the size that inset is four HD
+	 * texels, which would cut off the antialiased rim and drop shadow the
+	 * remaster paints around every letter (measured: 12.6% of the glyph's
+	 * ink). Widening window and quad together keeps that rim visible
+	 * while the letter still stands on the same pixel at the same size.
 	 *
-	 * By how much is hd->mu, and it is per glyph on purpose. A uniform margin
-	 * was tried first and was wrong: the atlas packs the small marks close
-	 * together, so the same texel a capital letter has to spare pulls a slice
-	 * of the neighbouring tick in beside an apostrophe and beside a comma -
-	 * plainly visible in a rendered line. HDFontMargins gives every glyph as
-	 * much room as it can have and no more (specific\hd\hd_fontmatch.cpp).
+	 * The margin (hd->mu) is per glyph, from HDFontMargins
+	 * (specific\hd\hd_fontmatch.cpp): a uniform margin pulls a slice of
+	 * the neighbouring glyph in beside tightly packed marks such as an
+	 * apostrophe or a comma, which HDFontMargins avoids by giving each
+	 * glyph as much room as it can have and no more.
 	 *
-	 * The clip flags stay the ones setXY4 computed for the CLASSIC quad. That
-	 * is deliberate: a letter that was wholly on screen stays wholly on
-	 * screen, the widened edge is a pixel or two of nearly transparent atlas,
-	 * and the rasteriser clips it at the viewport anyway. */
+	 * The clip flags stay the ones setXY4 computed for the classic quad:
+	 * a letter that was wholly on screen stays wholly on screen, the
+	 * widened edge is a pixel or two of nearly transparent atlas, and the
+	 * rasteriser clips it at the viewport regardless. */
 	hd = HDFontGlyphAt((int)(def - CharDef));
 
 	if (hd)
@@ -428,11 +423,11 @@ void PrintString(long x, long y, uchar col, const char* string, ushort flags)
 			else
 			{
 				// Glyph outside the PC font: CharDef has 106 entries plus
-				// the accent codes 128..173 above - everything beyond
-				// (e.g. the kana indices of the Japanese PSX language
-				// file, bytes up to 181) used to read unchecked past the
-				// table here. Skip instead of crash; what the font can
-				// show is shown.
+				// the accent codes 128..173 above; without this check,
+				// anything beyond (e.g. the kana indices of the Japanese
+				// PSX language file, bytes up to 181) reads past the
+				// table. Skip instead of crash; what the font can show
+				// is shown.
 				s = *string++;
 				continue;
 			}

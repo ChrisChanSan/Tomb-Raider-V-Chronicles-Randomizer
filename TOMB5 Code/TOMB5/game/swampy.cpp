@@ -52,20 +52,16 @@ void SwampyControl(short item_number)
 	torso_y = 0;
 	head = 0;
 
-	// The swamp witch was IMMORTAL (#61, user finding 2026-08-24): she has
-	// 100 hit points and takes damage (HitEffect in setup.cpp), but
-	// SwampyControl never queried hit_points - there was no exit from
-	// states 1-3. Exactly the same gap as with the chef (#124).
-	//
-	// In vanilla it goes unnoticed: she only wakes at all once Lara HAS
-	// the coin (the check right below), and after that the level is as
-	// good as over. Since the coin may travel, Lara can face her long and
-	// armed.
-	//
-	// She has no death animation - hence shred instead of die, like Imp
-	// and maze monster (user wish): CreatureDie(1) throws her own meshes
-	// as BODY_PART scraps and handles KillItem, loot, AI and the invisible
-	// flag for the savegame in one go.
+	// The swamp witch has 100 hit points and takes damage (HitEffect in
+	// setup.cpp), but SwampyControl never checked hit_points, so there
+	// was no exit from states 1-3 and she could not die. In vanilla she
+	// only wakes once Lara has the coin (the check right below), and the
+	// level is nearly over by then; since the coin can travel, Lara may
+	// face her much earlier and armed. She has no death animation, so
+	// CreatureDie(item_number, 1) shreds her instead, like the Imp and
+	// the maze monster: it throws her own meshes as BODY_PART scraps and
+	// handles KillItem, loot, AI and the invisible flag for the savegame
+	// in one go.
 	if (item->hit_points <= 0)
 	{
 		CreatureDie(item_number, 1);

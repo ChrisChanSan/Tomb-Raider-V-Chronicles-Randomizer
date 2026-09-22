@@ -13,7 +13,7 @@
 #include "../tomb5/pch.h"
 #include "sphere.h"
 #include "draw.h"
-#include "interpolate_math.h"		// InterpKeyAlpha - vanilla's own factor (#148, order 4)
+#include "interpolate_math.h"		// InterpKeyAlpha - vanilla's own key frame factor
 #include "../specific/3dmath.h"
 #include "control.h"
 #include "objects.h"
@@ -151,11 +151,11 @@ void GetJointAbsPositionMatrix(ITEM_INFO* item, float* matrix, long node)
 
 void InitInterpolate2(long frac, long rate)
 {
-	/* The second half of the stack, for the code that asks where a joint IS
-	 * rather than what it looks like - collision spheres, GetJointAbsPosition.
-	 * It runs on the LOGIC tick and must therefore keep vanilla's own key
-	 * frame factor whatever the frame rate is: the same three-way test
-	 * InitInterpolate uses (#148, order 4), and never a midpoint in time. */
+	/* The second half of the stack, for code that asks where a joint is
+	 * rather than what it looks like - collision spheres,
+	 * GetJointAbsPosition. It runs on the logic tick and must therefore
+	 * keep vanilla's own key frame factor whatever the frame rate is: the
+	 * same three-way test InitInterpolate uses, never a midpoint in time. */
 	IM_rate = rate;
 	IM_frac = frac;
 	IM_alpha = InterpKeyAlpha(frac, rate);

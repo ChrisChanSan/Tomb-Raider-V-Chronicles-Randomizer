@@ -30,7 +30,7 @@
 #include "spotcam.h"
 #include "lara.h"
 #include "effects.h"
-#include "interpolate.h"		// InterpIsTweenFrame - the fade steps on a tick (#148, order 3)
+#include "interpolate.h"		// InterpIsTweenFrame - the fade steps on a logic tick
 
 LIGHTNING_STRUCT Lightning[16];
 SHOCKWAVE_STRUCT ShockWaves[16];
@@ -1320,20 +1320,19 @@ void Fade()
 
 	oldfucker = ScreenFade;
 
-	/* R1 (#148, order 3): THE FADE STEPS ON A LOGIC TICK, IT DRAWS ON EVERY
-	 * FRAME.
+	/* The fade steps on a logic tick, but Fade() is called once per
+	 * drawn frame (from S_OutputPolyList). ScreenFade is a level of grey
+	 * that walks towards dScreenFade by ScreenFadeSpeed once per call;
+	 * unguarded at sixty frames per second, every fade in the game -
+	 * into a level, out of it, either side of a cutscene - would take
+	 * half as long in wall-clock time, and ScreenFadedOut would be
+	 * raised half a beat early, which is what the cutscene wind-up and
+	 * the level change wait on.
 	 *
-	 * ScreenFade is a level of grey that walks towards dScreenFade by
-	 * ScreenFadeSpeed, once per call, and this is called once per DRAWN
-	 * frame from S_OutputPolyList. Unguarded at sixty, every fade in the
-	 * game - the one into a level, the one out of it, the one either side of
-	 * a cutscene - would take half as long in wall-clock time, and
-	 * ScreenFadedOut would be raised half a beat early with it, which is
-	 * what the cutscene wind-up and the level change wait on.
-	 *
-	 * Only the walk is guarded. The tile below is drawn every frame from
-	 * whatever ScreenFade stands at, so the in-between frame shows the same
-	 * grey as the frame before it and the picture keeps its sixty. */
+	 * Only the walk towards dScreenFade is guarded; the tile below is
+	 * still drawn every frame from whatever ScreenFade stands at, so an
+	 * in-between frame shows the same grey as the frame before it and
+	 * the picture keeps its frame rate. */
 	if (!InterpIsTweenFrame())
 	{
 		if (dScreenFade && dScreenFade >= ScreenFade)

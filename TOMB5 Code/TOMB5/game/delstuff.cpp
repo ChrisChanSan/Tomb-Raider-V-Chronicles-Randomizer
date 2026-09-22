@@ -18,10 +18,10 @@
 #include "control.h"
 #include "objects.h"
 #include "lara.h"
-#include "interpolate.h"		// InterpNotePoseHD (#148, order 4 / fix round R)
-#include "interpolate_math.h"		// InterpBlendFloat - the arm's own blend (fix round U)
+#include "interpolate.h"		// InterpNotePoseHD - counts Lara's own HD pose blends
+#include "interpolate_math.h"		// InterpBlendFloat - blends the arm matrices in time
 #include "../specific/hd/hd_laradraw.h"	// HDLaraDrawActive - which body wears that pose
-#include "camera.h"			// FirstPersonActive - the still body (fix round U)
+#include "camera.h"			// FirstPersonActive - whether the still-body option applies
 #include "../tomb5/tomb5.h"
 
 short* GLaraShadowframe;
@@ -63,56 +63,50 @@ void GetLaraJointPos(PHD_VECTOR* pos, long node)
 	phd_PopMatrix();
 }
 
-/* THE FIRST PERSON BODY, HELD STILL (#123, fix round U, U4).
+/* Optionally holds the first-person body still, keeping the camera (which
+ * hangs in Lara's head joint) from picking up her idle animation's breathing
+ * while the player stands still reading the view. The option is "First
+ * person view / Body": `animated` (as before) or `still`.
  *
- * THE USER'S WORDS: "mute the animations except the head movement". In first
- * person the camera hangs in her head joint, so every breath of her idle
- * animation is a movement of the WHOLE PICTURE - and a picture that breathes
- * while the player is standing still reading a room is the one thing about
- * the view that cannot be turned off by looking away from it. The option is
- * "First person view / Body", `animated` (as before) or `still`.
+ * The body's pose alone is held, and only while she is standing, crouching
+ * or kneeling still on the ground:
  *
- * WHAT IS HELD, AND FOR HOW LONG. The body's pose alone, and only while she
- * is standing, crouching or kneeling STILL on the ground:
- *
- *   AS_STOP    standing, and aiming while standing, which keeps the same
- *              state - so a rifle held on a target stops breathing too.
+ *   AS_STOP    standing, and aiming while standing (same state) - so a
+ *              rifle held on a target stops breathing too.
  *   AS_POSE    the hands-on-hips idle.
  *   AS_DUCK    crouched still.
  *   AS_ALL4S   on all fours, not crawling.
  *
- * BY STATE AND NOT BY ANIMATION NUMBER. The animation Lara wears while
- * standing depends on what she is holding and on what she did last -
- * ANIM_STOP, ANIM_BREATH, a weapon's own idle, the duck idle - and a list of
- * numbers would be wrong in the first level that reaches a state by a
- * different road. `current_anim_state == goal_anim_state` is the second half
- * of the test: a state that is already on its way somewhere else is not an
- * idle, and holding it would freeze the frame a step BEFORE she moves.
+ * Matched by state and not by animation number, because the animation Lara
+ * wears while standing depends on what she is holding and on what she did
+ * last (ANIM_STOP, ANIM_BREATH, a weapon's own idle, the duck idle), and a
+ * fixed list of animation numbers would miss any level that reaches the
+ * state by a different one. `current_anim_state == goal_anim_state` is the
+ * other half of the test: a state already transitioning elsewhere is not an
+ * idle, and holding it would freeze the frame a step before she moves.
  *
- * WHAT IS NOT HELD. The head's own look angles (lara.head_?_rot) are not in
- * the frame at all - they are applied on top of it - so the player turns and
- * tilts the view exactly as before. The ARMS are driven by the weapon slot's
- * animation, not by hers, so drawing, aiming, firing and reloading are
- * untouched - and they keep U3's blend in time as well, which is why the hold
- * is applied WITHOUT leaving the interpolated draw (see CalcLaraMatrices).
- * Every state that is not in the list above is untouched, which is every step,
- * jump, climb, pull, roll and swim.
+ * Not held: the head's own look angles (lara.head_?_rot) are applied on top
+ * of the pose, not inside it, so the player still turns and tilts the view
+ * freely. The arms are driven by the weapon slot's animation, not by the
+ * body's, so drawing, aiming, firing and reloading are untouched, and they
+ * keep their own time blend, which is why the hold is applied without
+ * leaving the interpolated draw path (see CalcLaraMatrices). Every other
+ * state - every step, jump, climb, pull, roll and swim - is untouched.
  *
- * ONE STORED FRAME, AND WHICH ONE. The key frame the idle began on: the pose
- * is a frame that really exists in the file rather than a blend, so nothing
- * about it can drift, and it is the pose she was already wearing on the frame
- * the hold started - so switching INTO the hold cannot jump at all. Leaving it
- * costs at most what the idle animation travels in one cycle, which is the
- * breath: measured over ANDREA1's ANIM_BREATH (103, 44 frames at rate 4) with
- * ModelProbe, and it is the smallest movement Lara has.
+ * The held pose is the key frame the idle began on: a frame that exists in
+ * the file rather than a blend, so it cannot drift, and it is the pose she
+ * was already wearing when the hold started, so entering the hold cannot
+ * jump. Leaving it costs at most one cycle of the idle animation - measured
+ * over ANDREA1's ANIM_BREATH (animation 103, 44 frames at rate 4), the
+ * smallest movement Lara has.
  *
  * The hold is dropped the moment the state stops being an idle one, the
- * animation changes underneath it, or the view leaves first person - so a
- * savegame, a cutscene or a death cannot leave her frozen. Dropped and taken
- * again, that is: an idle state she keeps while the ANIMATION under it changes
- * (ANIM_STOP giving way to ANIM_BREATH, both of them AS_STOP) re-arms the latch
- * on the new animation's own frame, which is one step of the body on the frame
- * the engine changed the animation on and then still again. */
+ * animation underneath it changes, or the view leaves first person, so a
+ * savegame, a cutscene or a death cannot leave her frozen. An idle state
+ * that keeps running while its animation changes underneath it (ANIM_STOP
+ * giving way to ANIM_BREATH, both AS_STOP) drops and re-arms the hold on
+ * the new animation's own frame - one step of the body on the frame the
+ * animation changed, then still again. */
 static short g_stillAnim = -1;
 static short g_stillFrame = -1;
 
@@ -177,51 +171,49 @@ void CalcLaraMatrices(long flag)
 
 	bone = &bones[objects[lara_item->object_number].bone_index];
 
-	/* #148, order 4. GetFrames on a frame that carries a logic tick and at
-	 * fps_mode 0 - the same pair and the same factor as ever. On the frame
-	 * between two ticks, the midpoint of the two poses those ticks draw, at
-	 * which point `frac` is non-zero for animations that never interpolated
-	 * at all in vanilla, so LARA COMES THROUGH THE INTERPOLATED BRANCH ON
-	 * EVERY TWEEN FRAME - which is the one thing this order had to achieve
-	 * for her.
+	/* GetFrames on a frame that carries a logic tick, or at fps_mode 0,
+	 * returns the same pair and factor as before. On the frame between two
+	 * ticks it returns the midpoint of the two poses those ticks draw, so
+	 * `frac` is non-zero even for animations that never interpolated in
+	 * vanilla - Lara takes the interpolated branch on every tween frame,
+	 * which is what this ordering needs to achieve for her.
 	 *
 	 * The hit reaction below is untouched: it is not an animation the item
-	 * walks but a frame index picked by hand out of a spaz animation, and it
-	 * keeps thirty hertz's own picture. */
+	 * walks but a frame index picked by hand out of a spaz animation, and
+	 * it keeps its original, non-interpolated picture. */
 	frac = GetFramesNow(lara_item, frmptr, &blend);
 
-	/* AND THE BODY THE PLAYER ASKED TO STAND STILL (#123, fix round U, U4,
-	 * corrected in U7).
+	/* Applies the still-body hold from LaraBodyStillFrame, if any, without
+	 * leaving the interpolated draw path.
 	 *
-	 * ONE STORED FRAME IN BOTH SLOTS, and the draw keeps the path it would
-	 * have taken. A blend of a pose with itself is that pose - InterpBlendFloat
-	 * and InterpBlendLong both return their argument exactly when the two ends
-	 * are equal - so the BODY is frozen whichever branch runs.
+	 * Putting the same stored frame in both slots makes the draw keep the
+	 * branch it would already be taking: a blend of a pose with itself is
+	 * that pose (InterpBlendFloat and InterpBlendLong both return their
+	 * argument exactly when the two ends are equal), so the body is frozen
+	 * whichever branch runs.
 	 *
-	 * WHY NOT `frac = 0`, WHICH IS WHAT U4 WROTE. Zero forces the draw down
-	 * Rich_CalcLaraMatrices_Normal, and that function reads lara.right_arm and
-	 * lara.left_arm RAW in all six of its weapon branches - there is no
-	 * InterpArmPrev and no InterpArmStack anywhere in it. At sixty hertz that
-	 * switched U3's arm blend back off in exactly the case U3 was built for:
-	 * standing still in first person with a weapon in hand, which keeps AS_STOP
-	 * right through drawing, aiming, firing and reloading, so the hold stays
-	 * armed the whole time. The interpolated branch has to stay REACHABLE for
-	 * the arms; the only thing done to `frac` is to make it non-zero on a frame
-	 * that had no pair of its own (a frame carrying a tick, or fps_mode 0),
-	 * where the two identical frames make it a blend of the held pose with
-	 * itself. Nothing is blended in TIME there either: InterpArmPrev answers
-	 * false on a tick frame and at fps_mode 0, so the arms are read raw, out
-	 * of the branch vanilla itself takes whenever `frac` is not zero.
+	 * `frac` is forced non-zero rather than left at zero, because zero
+	 * would send the draw down Rich_CalcLaraMatrices_Normal, which reads
+	 * lara.right_arm and lara.left_arm raw in all six of its weapon
+	 * branches - it has no InterpArmPrev or InterpArmStack call at all. At
+	 * a higher frame rate that would turn off the arms' own time blend in
+	 * exactly the case it exists for: standing still in first person with
+	 * a weapon in hand, an AS_STOP state that persists through drawing,
+	 * aiming, firing and reloading. Forcing `frac` non-zero only on a
+	 * frame that had no pair of its own (a tick frame, or fps_mode 0)
+	 * keeps the interpolated branch reachable for the arms and blends
+	 * nothing extra in time either: InterpArmPrev answers false on such a
+	 * frame, so the arms are still read raw, out of the same branch
+	 * vanilla takes whenever `frac` is not zero.
 	 *
-	 * THE SHADOW keeps the held frame's own bounds below, which is what the
-	 * non-interpolated draw did with `GLaraShadowframe = frame`.
+	 * GLaraShadowframe below keeps the held frame's own bounds, matching
+	 * what the non-interpolated draw did with `GLaraShadowframe = frame`.
+	 * The interpolation diagnostic log still counts these frames as
+	 * interpolated, since the path really is; its stretch reading is 1.00
+	 * on a held pose, a stored frame being rigid by definition.
 	 *
-	 * INTERPLOG still counts these frames in lara_pose and pose_hd, because
-	 * the path really is the interpolated one; stretch= reads 1.00 on a held
-	 * pose, a stored frame being rigid by definition.
-	 *
-	 * Off by default and never outside first person, so nothing here changes
-	 * any other picture. */
+	 * Off by default, and never applied outside first person, so nothing
+	 * here changes any other view. */
 	{
 		short* held = 0;
 
@@ -237,39 +229,36 @@ void CalcLaraMatrices(long flag)
 		}
 	}
 
-	/* AND THE TWO DRAWS OF HERS THAT KEEP THEIR OWN FRAME'S ROOT (#157).
+	/* Refuses the root-offset time blend for Lara's own view/joint draws
+	 * on the two frames that do not come from a neighbouring tick of the
+	 * animation the item is walking, and so have no previous tick to blend
+	 * the offset with:
 	 *
-	 * Round 157 lets the draw blend the ROOT OFFSET in time on a frame whose
-	 * POSE rule K6 refused, which is what takes the half rung out of a ladder
-	 * climb at sixty. Both of these wear a frame that is not the one the item
-	 * is walking, so there is no previous tick of theirs to blend with:
-	 *
-	 *   the HIT REACTION is a frame index picked by hand out of a spaz
-	 *   animation below, and it already keeps thirty hertz's own picture;
-	 *   the STILL BODY of fix round U is a frame the player asked to be held,
-	 *   and blending it towards the live animation's last offset would be
+	 *   the hit reaction is a frame index picked by hand out of a spaz
+	 *   animation, and keeps its original, non-interpolated picture;
+	 *   the still body above is a frame the player asked to be held, and
+	 *   blending its root toward the live animation's last offset would be
 	 *   exactly the breathing that option exists to stop.
 	 *
-	 * The latch is a byte per slot and standing it down is one write; the
-	 * whole of the rest of this function then draws as it did. */
+	 * The refusal is a one-byte-per-slot latch; the rest of this function
+	 * then draws exactly as it did before the root offset could be
+	 * time-blended at all. */
 	if (still || lara.hit_direction >= 0)
 		InterpRootRefused(lara_item, 0);
 
-	/* AND LARA'S OWN HD BODY IS COUNTED (#148, order 4; added in fix round R).
+	/* Counts a pose blended in time (frac == 2) as belonging to Lara's own
+	 * HD composite body for the interpolation diagnostic log's pose_hd
+	 * count, which otherwise only counted HD items (see DrawAnimatingItem
+	 * in draw.cpp) and so could not tell a first-person view - where the
+	 * only HD body in the scene is hers - apart from a frame with no HD
+	 * item at all.
 	 *
-	 * INTERPLOG's pose_hd used to count HD ITEMS alone (game\draw.cpp,
-	 * DrawAnimatingItem), so a play test in first person - where the only HD
-	 * body that matters is hers - read pose_hd=0.0 and could not tell "the HD
-	 * Lara is not getting the blended pose" from "no HD item happened to move
-	 * this second". It is the same fact for her as for an item: the pose was
-	 * blended in TIME (frac == 2) and the body that wears it is the HD
-	 * composite.
-	 *
-	 * flag 0 alone. CalcLaraMatrices runs two or three times a frame - the
-	 * VIEW set, the joint set, a mirror - and flag 0 is the one whose output
-	 * (lara_matrices) HDLaraDrawFrame reads. Counting the others would
-	 * multiply the number by how many cameras happened to look at her. */
-	// ARMLOG (fix round Y): which path the view set takes this frame.
+	 * Checked with flag == 0 only: CalcLaraMatrices runs two or three
+	 * times a frame (the view set, the joint set, a mirror), and flag 0 is
+	 * the one whose output (lara_matrices) HDLaraDrawFrame reads; counting
+	 * the others would multiply the reading by how many cameras looked at
+	 * her. */
+	// Diagnostic log of which path the view set takes this frame.
 	if (flag == 0)
 		InterpArmLogPath(frac, blend, still != 0, HDLaraDrawActive());
 
@@ -280,18 +269,20 @@ void CalcLaraMatrices(long flag)
 	{
 		if (frac)
 		{
-			/* The held pose's own bounds, when there is one: the interpolated
-			 * branch takes them from the live animation, which is the one
-			 * thing about the still body that would still breathe (U4,
-			 * corrected in U7). Bounds are the first six shorts of a frame. */
+			/* The held pose's own bounds, when there is one: the
+			 * interpolated branch otherwise takes them from the live
+			 * animation, which is the one thing about the still body that
+			 * would still move. Bounds are the first six shorts of a
+			 * frame. */
 			GLaraShadowframe = still ? still : GetBoundsAccurate(lara_item);
 			Rich_CalcLaraMatrices_Interpolated(frmptr[0], frmptr[1], blend, bone, flag);
 
-			/* WHAT THE BLEND LEFT OF HER BONES (#123, fix round U, U2). Only
-			 * the VIEW set, and only on a frame blended in TIME: the joint
-			 * set and the mirror set carry the same pose, and counting them
-			 * would multiply the reading by how many cameras looked at her.
-			 * -log only, and the whole of it is fifteen subtractions. */
+			/* Logs how far the blend moved her bones. View set only, and
+			 * only on a frame blended in time: the joint set and the
+			 * mirror set carry the same pose, and counting them would
+			 * multiply the reading by how many cameras looked at her.
+			 * Diagnostic log only; the computation itself is fifteen
+			 * subtractions. */
 			if (frac == 2 && flag == 0)
 				InterpNoteLaraStretch(lara_matrices, bone,
 					objects[lara_item->object_number].nmeshes,
@@ -353,14 +344,15 @@ void Rich_CalcLaraMatrices_Normal(short* frame, long* bone, long flag)
 	phd_PushMatrix();
 	rot = &frame[9];
 
-	/* #157: THE ROOT ON A FRAME WHOSE POSE K6 REFUSED, and this is the branch
-	 * the ladder really comes through: the frame after a climb animation
-	 * wraps is the animation's FIRST, so GetFrames finds no remainder, `frac`
-	 * is zero and Lara is built here rather than in the interpolated half.
-	 * False on every frame that is not a refused tween frame of hers - the
-	 * cutscene decoder's own call to this function among them, where the
-	 * snapshot was never applied - and then the line below it is the one that
-	 * has always stood here. */
+	/* The root offset on a frame whose pose the neighbour rule refused -
+	 * and this is the branch the ladder climb really comes through: the
+	 * frame after a climb animation wraps is the animation's first, so
+	 * GetFrames finds no remainder, `frac` is zero, and Lara is built here
+	 * rather than in the interpolated half. InterpRootNow answers false on
+	 * every frame that is not a refused tween frame of hers, including the
+	 * cutscene decoder's own call to this function, where no snapshot was
+	 * captured, and then the line below is the one that has always stood
+	 * here. */
 	{
 		short* pair[2] = { frame, frame };
 		long root[3];
@@ -662,24 +654,26 @@ void Rich_CalcLaraMatrices_Normal(short* frame, long* bone, long flag)
 	GLaraShadowframe = frame;
 }
 
-/* #148, order 4: `frac` and `rate` became one float. The two integers only
- * ever reached InitInterpolate, which turned them into a factor by a
- * three-way test; the factor is now what is handed in, because the time
- * interpolation asks for midpoints that no pair of integers names. */
-/* WHERE AN ARM'S ROTATION STREAM STARTS (#123, fix round U, U3).
+/* `frac` and `rate` are combined into a single float factor. The pair of
+ * integers only ever reached InitInterpolate, which turned them into a
+ * factor by a three-way test; the factor is now passed in directly,
+ * because time-based interpolation asks for midpoints no pair of integers
+ * can name. */
+/* Finds where an arm's rotation stream starts in the frame data.
  *
- * TWO WAYS ROUND THE SAME FRAME, and both are Core's. The pistol, uzi,
- * revolver and flare branches index the frame data by the frame number
- * RELATIVE to the animation's own first frame; the shotgun, HK and crossbow
- * branch indexes it by the frame number as it stands. This function is given
- * which, so that a previous frame is read exactly where the current one would
- * have been read from - a stream that starts one frame's worth of shorts away
- * from the right place is a pose out of another animation.
+ * Two addressing schemes are used for the same kind of frame, both from
+ * the original engine: the pistol, uzi, revolver and flare branches index
+ * the frame data by the frame number relative to the animation's own
+ * first frame; the shotgun, HK and crossbow branch indexes it by the raw
+ * frame number. This function is told which, so a previous frame is read
+ * from exactly where the current one would be read from - a stream offset
+ * by one frame's worth of shorts reads a pose from another animation
+ * entirely.
  *
- * Whichever it is, the step is one STORED frame per game frame: the arm chain
- * indexes by frame and not by key, so a weapon animation of rate 4 is read as
- * if it were rate 1. Measured over the six weapon slots of ANDREA1 (AnimMap),
- * where the rates run 1, 2, 3 and 4. */
+ * Either way the step is one stored frame per game frame: the arm chain
+ * indexes by frame, not by key frame, so a weapon animation of rate 4 is
+ * read as if it were rate 1. Measured over the six weapon slots of
+ * ANDREA1, where the rates run 1, 2, 3 and 4. */
 static short* LaraArmStream(const InterpArmPose* pose, bool absolute)
 {
 	const long size = anims[pose->anim_number].interpolation >> 8;
@@ -689,11 +683,11 @@ static short* LaraArmStream(const InterpArmPose* pose, bool absolute)
 	return &pose->frame_base[size * at + 9];
 }
 
-/* THE MIDPOINT OF TWO ARM POSES (#123, fix round U, U3). `out` holds this
- * tick's three matrices and `prev` the previous tick's, both built from the
- * same joint; twelve floats each, exactly what memcpy(mx, aMXPtr, 48) wrote.
- * InterpBlendFloat is the engine's own lerp, expression for expression, so
- * this is the same arithmetic InterpolateMatrix does to the body. */
+/* Blends two arm poses toward their midpoint in time. `out` holds this
+ * tick's three matrices and `prev` the previous tick's, both built from
+ * the same joint - twelve floats each, exactly what memcpy(mx, aMXPtr, 48)
+ * writes. InterpBlendFloat is the same lerp, expression for expression,
+ * that InterpolateMatrix applies to the body. */
 static void LaraArmBlend(float* out, const float* prev, float alpha)
 {
 	for (int i = 0; i < 36; i++)
@@ -702,11 +696,11 @@ static void LaraArmBlend(float* out, const float* prev, float alpha)
 
 void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alpha, long* bone, long flag)
 {
-	/* THE ARMS' OWN TIME BLEND (#123, fix round U, U3). Asked once per arm
-	 * per call, before anything is drawn, because the answer decides which
-	 * shape the arm branches below take. False for both at fps_mode 0 and on
-	 * every frame that carries a logic tick, which is what keeps thirty hertz
-	 * byte for byte what it was. */
+	/* Reads the previous tick's arm pose once per arm, before anything is
+	 * drawn, since the answer decides which shape the arm branches below
+	 * take. Both answer false at fps_mode 0 and on every frame that
+	 * carries a logic tick, which keeps the original 30 Hz output
+	 * unchanged byte for byte. */
 	InterpArmPose armPose[2] = { { 0, 0, 0 }, { 0, 0, 0 } };
 	float armAlpha[2] = { 0.0F, 0.0F };
 	bool armOk[2];
@@ -754,11 +748,11 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	rot2 = frame2 + 9;
 	InitInterpolateAlpha(alpha);
 
-	/* #157, and the same rule as in the branch above: on a frame whose POSE
-	 * K6 refused, the root offset is blended in TIME instead. The one value
-	 * goes to BOTH stacks - they carry the same translation and differ only
-	 * in the rotations hung off it, so InterpolateMatrix gives it back
-	 * unchanged and the pose stays this tick's. */
+	/* The same rule as in the branch above: on a frame whose pose the
+	 * neighbour rule refused, the root offset is blended in time instead.
+	 * The one value goes to both stacks - they carry the same translation
+	 * and differ only in the rotations hung off it, so InterpolateMatrix
+	 * gives it back unchanged and the pose stays this tick's. */
 	{
 		short* pair[2] = { frame1, frame2 };
 		long root[3];
@@ -836,15 +830,15 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 			items[lara.weapon_item].current_anim_state == 2 || items[lara.weapon_item].current_anim_state == 3 ||
 			items[lara.weapon_item].current_anim_state == 4))
 	{
-		/* WITH THE HK IN HAND THE TORSO AND THE HEAD COME OUT OF THE WEAPON'S
-		 * ANIMATION, not out of hers, and from here down the body's own two
-		 * key frames have nothing more to say (#123, fix round U, U3). So the
-		 * two stacks are collapsed to their blend at the BODY's factor - which
-		 * is the joint everything below hangs from - and walked on with the
-		 * ARM's: stack one with the previous tick's weapon frame, stack two
-		 * with this tick's. Everything below this line, the head and both
-		 * arms included, is then blended in TIME by the machinery that is
-		 * already there. */
+		/* With the HK in hand, the torso and the head come out of the
+		 * weapon's animation, not out of hers, so from here down the
+		 * body's own two key frames have nothing more to say. The two
+		 * stacks are collapsed to their blend at the body's factor - the
+		 * joint everything below hangs from - and walked on with the arm's
+		 * factor instead: stack one with the previous tick's weapon frame,
+		 * stack two with this tick's. Everything below this line, the head
+		 * and both arms included, is then blended in time by the
+		 * machinery already there. */
 		rot2 = &lara.right_arm.frame_base[lara.right_arm.frame_number * (anims[lara.right_arm.anim_number].interpolation >> 8) + 9];
 		rot = rot2;
 
@@ -884,25 +878,26 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	if (lara.gun_status == LG_READY || lara.gun_status == LG_FLARE || lara.gun_status == LG_DRAW_GUNS || lara.gun_status == LG_UNDRAW_GUNS)
 		gun = lara.gun_type;
 
-	/* AND THE ARMS' COUNTER IS ASKED HERE, WHERE `gun` IS KNOWN (#123, fix
-	 * round U, U3, corrected in U7).
+	/* The blended-arms counter is checked here, once `gun` is known.
 	 *
-	 * InterpArmPrev answers out of lara.right_arm / lara.left_arm alone, and
-	 * those fields keep their last values while her hands are empty: larafire.cpp
-	 * parks frame_base on objects[PISTOLS_ANIM].frame_base, a constant, and
-	 * nothing clears anim_number - so base, animation and frame all stand still,
-	 * the rule says yes, and every tween frame of an unarmed Lara used to be
-	 * counted as "blended" although the branch below is WEAPON_NONE, where the
-	 * arms come out of HER OWN key frames and nothing is blended at all.
+	 * InterpArmPrev answers purely from lara.right_arm / lara.left_arm,
+	 * and those fields keep their last values while her hands are empty:
+	 * larafire.cpp parks frame_base on objects[PISTOLS_ANIM].frame_base, a
+	 * constant, and nothing clears anim_number, so base, animation and
+	 * frame all stand still and the answer comes back yes - every tween
+	 * frame of an unarmed Lara would be counted as blended, although the
+	 * branch below is WEAPON_NONE, where the arms come out of her own key
+	 * frames and nothing is blended at all.
 	 *
-	 * So the counter is asked only where an arm really is driven by a weapon
-	 * slot. The flare and the torch are left out with the empty hand on
-	 * purpose: their one driven arm is still drawn from a single frame (see
-	 * the flare block below), so there is nothing there to count either. */
+	 * The counter is therefore checked only where an arm really is driven
+	 * by a weapon slot. The flare and the torch are left out with the
+	 * empty hand on purpose: their one driven arm is still drawn from a
+	 * single frame (see the flare block below), so there is nothing there
+	 * to count either. */
 	if (flag == 0 && gun != WEAPON_NONE && gun != WEAPON_FLARE && gun != WEAPON_TORCH)
 		InterpNoteArm(armOk[INTERP_ARM_RIGHT] && armOk[INTERP_ARM_LEFT]);
 
-	// ARMLOG (fix round Y): what this build did with the two arms.
+	// Diagnostic log of what this build did with the two arms.
 	if (flag == 0)
 		InterpArmLogNote(gun, armOk[INTERP_ARM_RIGHT], armOk[INTERP_ARM_LEFT],
 			armAlpha[INTERP_ARM_RIGHT], armAlpha[INTERP_ARM_LEFT],
@@ -980,13 +975,14 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 		phd_PushMatrix_I();
 		phd_TranslateRel_I(bone[29], bone[30], bone[31]);
 
-		/* THE SAME ARM, ONE TICK AGO (#123, fix round U, U3). This branch
-		 * leaves the second stack behind at the shoulder - aInterpolateArmMatrix
-		 * takes the rotation whole from the outer matrix and blends only the
-		 * three translation elements - so there is no second stack to walk the
-		 * previous frame on. It is walked TWICE from the same joint instead,
-		 * on a pushed copy, and the two are blended element by element by the
-		 * arm's own factor. Three nodes, on the tween frame only. */
+		/* Builds the same arm as it stood one tick ago. This branch leaves
+		 * the second stack behind at the shoulder - aInterpolateArmMatrix
+		 * takes the rotation whole from the outer matrix and blends only
+		 * the three translation elements - so there is no second stack to
+		 * walk the previous frame on. It is walked twice from the same
+		 * joint instead, on a pushed copy, and the two are blended element
+		 * by element by the arm's own factor. Three nodes, on the tween
+		 * frame only. */
 		if (armOk[INTERP_ARM_RIGHT])
 		{
 			phd_PushMatrix();
@@ -1078,9 +1074,9 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 		phd_PushMatrix_I();
 		phd_TranslateRel_I(bone[29], bone[30], bone[31]);
 
-		/* The same two walks as the pistol branch above, with the revolver's
-		 * own pre-rotation - the TORSO's angles and not the arm's aim
-		 * (#123, fix round U, U3). */
+		/* The same two walks as the pistol branch above, with the
+		 * revolver's own pre-rotation - the torso's angles, not the
+		 * arm's aim. */
 		if (armOk[INTERP_ARM_RIGHT])
 		{
 			phd_PushMatrix();
@@ -1171,35 +1167,34 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alph
 	case WEAPON_SHOTGUN:
 	case WEAPON_HK:
 	case WEAPON_CROSSBOW:
-		/* BOTH STACKS ARE ALREADY THE WEAPON'S HERE - this branch fed them the
-		 * same frame and blended a pose with itself. Stack one takes the
-		 * PREVIOUS tick's frame instead and the factor becomes the arm's own,
-		 * so the InterpolateMatrix at each node below is the midpoint in TIME
-		 * (#123, fix round U, U3).
+		/* Both stacks are already the weapon's here - this branch would
+		 * otherwise feed them the same frame and blend a pose with itself.
+		 * Stack one takes the previous tick's frame instead and the
+		 * factor becomes the arm's own, so the InterpolateMatrix call at
+		 * each node below finds the midpoint in time.
 		 *
-		 * COLLAPSED ON THE TORSO LEVEL ITSELF, BEFORE EITHER ARM IS PUSHED
-		 * (fix round Y2). U3 collapsed a pushed copy inside the right arm's
-		 * own push, and the pop after that arm handed the LEFT arm the torso
-		 * level as it had been: two stacks holding the body's two key frames,
-		 * from there on blended at the ARM's factor instead of the body's,
-		 * because InterpArmStack had set the factor and nothing sets it back.
-		 * For a rate 1 animation the two factors are one and the same; for
-		 * every other rate the left shoulder drifted off the drawn torso
-		 * through the tick and snapped back on the next. ARMLOG measured it:
-		 * the left hand travelling up to seventy units inside one tick and
-		 * jumping the same way back, in a third of all ticks with the shotgun
-		 * in hand, while the right hand moved five a frame with no jump at
-		 * all - the shake the user saw at 60 and 165 and not at 30.
+		 * The collapse happens on the torso level itself, before either
+		 * arm is pushed. Collapsing a pushed copy inside the right arm's
+		 * own push instead, and letting the pop after that arm hand the
+		 * left arm the torso level as it had been, leaves two stacks
+		 * holding the body's two key frames there, blended from then on
+		 * at the arm's factor instead of the body's, because
+		 * InterpArmStack had set the factor and nothing set it back. For
+		 * a rate 1 animation the two factors are equal; for every other
+		 * rate the left shoulder would drift off the drawn torso through
+		 * the tick and snap back on the next - measured at up to seventy
+		 * units of travel and snap-back in a third of all ticks with the
+		 * shotgun in hand, while the right hand moved five units a frame
+		 * with no jump at all.
 		 *
-		 * Collapsing here gives both chains the same root, the torso the
-		 * drawn body has. For the right arm it is the joint it had before: a
-		 * translation applied to both stacks alike commutes with their blend.
-		 * With the HK in state 0 to 4 the torso collapsed once already and
-		 * then walked the two stacks apart through the torso and the head, so
-		 * this takes the TORSO to its midpoint in time and hangs both arms off
-		 * that one joint - the order the note over InterpArmStack
-		 * (game\draw.cpp) describes, which until Y2 the code had for the
-		 * right arm only. */
+		 * Collapsing here instead gives both chains the same root, the
+		 * torso the drawn body has. For the right arm it is the joint it
+		 * had before: a translation applied to both stacks alike commutes
+		 * with their blend. With the HK in state 0 to 4 the torso
+		 * collapses once already and then walks the two stacks apart
+		 * through the torso and the head, so this takes the torso to its
+		 * midpoint in time and hangs both arms off that one joint, the
+		 * order the note over InterpArmStack in draw.cpp describes. */
 		rot2 = &lara.right_arm.frame_base[lara.right_arm.frame_number *
 			(anims[lara.right_arm.anim_number].interpolation >> 8) + 9];
 		rot = rot2;

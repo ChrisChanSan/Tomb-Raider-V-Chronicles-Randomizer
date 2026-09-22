@@ -1080,10 +1080,10 @@ void FloorTrapDoorCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 		ObjectCollision(item_number, l, coll);
 }
 
-/* THE TWO TRAPDOORS PART HERE (#161, round 161b2c, item 1). The floor one
- * above is IN_INTERACT - she stands on the floor in AS_STOP and opens it. This
- * one is read in AS_UPJUMP with gravity under her, i.e. the grab press, so it
- * takes IN_ACTION_ANY and either key opens it. See global\types.h. */
+/* The floor trapdoor above reads IN_INTERACT: Lara stands on the floor in
+ * AS_STOP and opens it. This ceiling trapdoor is read in AS_UPJUMP with
+ * gravity under her, i.e. the grab press, so it takes IN_ACTION_ANY and
+ * either key opens it. */
 void CeilingTrapDoorCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ITEM_INFO* item;

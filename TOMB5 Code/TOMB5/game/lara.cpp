@@ -3088,15 +3088,15 @@ void lara_as_pullblock(ITEM_INFO* item, COLL_INFO* coll)
 	camera.lara_node = LMX_TORSO;
 }
 
-/* A HELD STATE ANSWERS TO THE KEY THAT PUT HER IN IT (#161, round 161b2c,
- * item 1). This is the ready pose in front of a pushable block, and the only
- * thing that enters it is MovableBlockCollision (game\moveblok.cpp, measured
- * by grep on AS_PPREADY) - a world object, so the Action key under "Separate"
- * and IN_INTERACT here. Reading IN_ACTION would have let her take the pose
- * with one key and dropped her out of it because the other one was not down.
- * lara_as_pulley below is the same sentence for the pulley
- * (game\switch.cpp's PulleyCollision, likewise its only entry). Both are
- * byte-identical under "One key", where the two bits are never apart. */
+/* This is the ready pose in front of a pushable block; its only entry is
+ * MovableBlockCollision (game/moveblok.cpp), a world-object grab. With the
+ * Action and Secondary keys split, a held state must answer only to the
+ * key that put her into it, so this reads IN_INTERACT rather than
+ * IN_ACTION - IN_ACTION would let her enter the pose on one key and drop
+ * out again because the other key is not held. lara_as_pulley below applies
+ * the same rule to the pulley (switch.cpp's PulleyCollision, likewise its
+ * only entry). With the keys not split, IN_INTERACT and IN_ACTION are
+ * always down together, so both behave identically. */
 void lara_as_ppready(ITEM_INFO* item, COLL_INFO* coll)
 {
 	coll->enable_baddie_push = 0;
@@ -4259,25 +4259,18 @@ void lara_as_waterout(ITEM_INFO* item, COLL_INFO* coll)
 	camera.lara_node = LMX_HIPS;
 }
 
-/* THE FOUR EITHER-KEY OBJECTS AND THEIR HOLD (#161, round 161b2c, item 1).
- * The death slide here, the pole (lara_as_poleleft through lara_col_poledown),
- * the rope (lara_as_rope through lara_as_roper) and the parallel bars
- * (lara_as_parallelbars) are caught by collision routines that take EITHER key
- * - they are grabs made in mid-air, where a player may well press the one he
- * thinks of as "use" (game\deathsld.cpp, game\objects.cpp, game\rope.cpp,
- * IN_ACTION_ANY in global\types.h). Each of these states then drops her the
- * moment the key is not down, and grep on AS_DEATHSLIDE / AS_POLESTAT /
- * AS_ROPE / ANIM_PB_GRAB says the collision routine is their ONLY entry - so
- * they read the same either-key mask, or the catch would be a lie: one key
- * grabs, the next tick lets go. The design's 8-site list did not carry these
- * twelve; the measurement did, and they cost nothing under "One key", where
- * the two bits leave every producer together.
+/* The death slide (below), the pole (lara_as_poleleft through
+ * lara_col_poledown), the rope (lara_as_rope through lara_as_roper) and
+ * the parallel bars (lara_as_parallelbars) are grabbed in mid-air, so a
+ * player may press either the Action or the Secondary key. Each state's
+ * collision routine is its only entry (deathsld.cpp, objects.cpp,
+ * rope.cpp), so all of them read IN_ACTION_ANY rather than one key -
+ * otherwise the grab could be taken on one key and dropped the instant
+ * the other is not held.
  *
- * Lara's OWN automaton is untouched and stays on IN_ACTION - the ledge grab,
- * the vault, hang, monkey swing, the crawl and the swim-surface climb-out are
- * not entered from any of the 41 sites, and under "Separate" they are the
- * Secondary key, which is what the user asked for: "Die sekundaere Aktion ist
- * fuer das Klettern, Greifen und Schiessen". */
+ * Lara's own automaton - ledge grab, vault, hang, monkey swing, crawl,
+ * swim-surface climb-out - stays on IN_ACTION alone: with Action and
+ * Secondary split, climbing and grabbing are the Secondary key. */
 void lara_as_deathslide(ITEM_INFO* item, COLL_INFO* coll)
 {
 	FLOOR_INFO* floor;
@@ -4439,16 +4432,13 @@ void lara_col_poledown(ITEM_INFO* item, COLL_INFO* coll)
 	if (input & IN_LOOK)
 		LookUpDown();
 
-	/* A MASK AND NOT AN EQUALITY, WHICH IS WHY THIS LINE LOOKS UNLIKE CORE'S
-	 * (#161, round 161b2c, fix round). Core wrote `(input & (IN_BACK |
-	 * IN_ACTION)) != (IN_BACK | IN_ACTION)` - sound while the right-hand side
-	 * is ONE bit, wrong the moment it is two. IN_ACTION_ANY is two, and under
-	 * "Separate" only ever one of them is in the word (the Action role sets
-	 * IN_INTERACT, the Secondary role IN_ACTION), so the equality could never
-	 * hold and this test was true on every tick: sliding down a pole would
-	 * have been reachable by no key at all. Written as two mask tests it is
-	 * the same statement at "One key", where both bits arrive together, and it
-	 * is the shape lara_col_poleup one function above already uses. */
+	/* Written as two separate mask tests rather than an equality test
+	 * against the OR of both bits: (input & (IN_BACK|IN_ACTION_ANY)) !=
+	 * (IN_BACK|IN_ACTION_ANY) only works when IN_ACTION_ANY is a single
+	 * bit. With Action and Secondary split, only one of IN_INTERACT/
+	 * IN_ACTION is ever set at once, so that equality could never hold and
+	 * the pole would be reachable by no key at all. Matches the shape
+	 * lara_col_poleup above already uses. */
 	if (!(input & IN_ACTION_ANY) || !(input & IN_BACK) || item->hit_points <= 0)
 		item->goal_anim_state = AS_POLESTAT;
 
@@ -4979,26 +4969,16 @@ void LaraAboveWater(ITEM_INFO* item, COLL_INFO* coll)
 	lara_collision_routines[item->current_anim_state](item, coll);
 	UpdateLaraRoom(item, -381);
 
-	/* THE ONE MASK, AND IT HAS TO CLEAR BOTH BITS AT THE DEFAULT (#161, round
-	 * 161b2c, item 1 - measured, and it refutes the design's fourth identity
-	 * step, which said "the mask only concerns firing").
-	 *
-	 * It sits after the collision routines, so none of the 41 world-object
-	 * sites can see it. But `TestTriggers` on the next line does, and its
-	 * TO_CUTSCENE case reaches NeatAndTidyTriggerCutscene (game\control.cpp),
-	 * whose five "use this item here" triggers are five of those 41. At base
-	 * they read IN_ACTION and this line had just cleared it, so in a VCI level
-	 * with the crossbow as the selected weapon and no laser sight - the gun
-	 * holstered, which those five all require - they could not fire. Core
-	 * meant the line for LaraGun() below; the reach into TestTriggers is an
-	 * accident of the order. Accident or not, it is what the engine does
-	 * today, and "One key" must be the engine of today: so IN_ACTION_ANY, both
-	 * bits, exactly what base cleared.
-	 *
-	 * Under "Separate" only IN_ACTION goes, because there the two are
-	 * different physical keys and the rule the line exists for - this crossbow
-	 * cannot fire without its sight - has nothing to say about the key that
-	 * opens doors. */
+	/* Under the default (unsplit) key binding this clears both input bits,
+	 * not just IN_ACTION, because TestTriggers on the next line also reads
+	 * the input word: its TO_CUTSCENE case reaches
+	 * NeatAndTidyTriggerCutscene (game/control.cpp), whose "use this item
+	 * here" triggers read IN_ACTION too. In a VCI level with the crossbow
+	 * selected and no laser sight, clearing only IN_ACTION would leave
+	 * IN_INTERACT down and let such a trigger fire on the same key and
+	 * tick that just holstered the crossbow. With Action and Secondary
+	 * split, only IN_ACTION is cleared, since the rule here - no firing
+	 * without the sight - says nothing about the key that opens doors. */
 	if (lara.gun_type == WEAPON_CROSSBOW && !LaserSight && gfLevelFlags & GF_OFFICE)
 		input &= ~(tomb5.action_split ? IN_ACTION : IN_ACTION_ANY);
 

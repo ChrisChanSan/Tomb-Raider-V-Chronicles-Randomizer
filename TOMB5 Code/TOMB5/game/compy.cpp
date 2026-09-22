@@ -11,7 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 /*
- * Compsognathus from Tomb Raider 3, ported to TOMB5 in 2026 (#99).
+ * Compsognathus from Tomb Raider 3, ported to TOMB5.
  *
  * Taken from tomb3 by Troye <https://github.com/Trxyebeep/tomb3>
  * (game/compy.cpp, GPLv3) - the same license as TOMB5 and
@@ -24,53 +24,52 @@
  * any later version. See the LICENSE file at the root of this source tree.
  *
  * ----------------------------------------------------------------------------
- * In TR5 the Compy sits on slot SAILOR (53). Until now the slot hung on
- * InitialiseSas/SasControl and fetched its anims from SWAT - nobody ever
- * used it: none of the 16 levels carries a model there (measured with
- * ModelOffset against all of them, cross-checked via the dog). Fourth dead slot
- * after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75 (Raptor).
+ * In TR5 the Compy sits on slot SAILOR (53). The slot previously hung on
+ * InitialiseSas/SasControl and fetched its anims from SWAT, but none of the
+ * 16 levels carries a model there (measured with ModelOffset against all of
+ * them, cross-checked via the dog). Fourth dead slot after SAS 31 (T-Rex),
+ * CROW 43 (vulture) and REAPER 75 (Raptor).
  *
- * FOUR DEVIATIONS from tomb3, all justified here:
+ * Four deviations from tomb3:
  *
- * 1. THE CARCASS SEARCH IS DROPPED. tomb3 searches the room for an object
+ * 1. The carcass search is dropped. tomb3 searches the room for an object
  *    of type ANIMATING6 - in TR3 that is the dead raptor the pack gathers
- *    around and gnaws on. In TR5, ANIMATING6 is a perfectly normal scenery
- *    slot that REALLY is occupied in levels. Taken over, the compys would
- *    swarm around decoration.
+ *    around and gnaws on. In TR5, ANIMATING6 is a normal scenery slot that
+ *    really is occupied in levels, so taking the search over would make
+ *    the compys swarm around decoration.
  *
- *    What hangs on it, checked rather than dropped blindly (lesson from
- *    the T-Rex):
+ *    What hangs on the carcass, checked individually rather than dropped
+ *    wholesale:
  *      - In BORED_MOOD the carcass was their gathering point. Without it
  *        they roam instead of gathering.
  *      - In state COMPY_STOP it led to jump/bite out of boredom. The
  *        branch is dropped; the fallback to COMPY_RUN still carries.
  *      - In COMPY_JUMP/COMPY_ATTACK it triggered the blood splatter while
  *        gnawing.
- *    The attack on Lara hangs on NONE of these spots and stays complete.
+ *    The attack on Lara hangs on none of these spots and stays intact.
  *
- * 2. non_lot STAYS OFF. tomb3 sets the bit on the Compy so it bypasses the
+ * 2. non_lot stays off. tomb3 sets the bit on the Compy so it bypasses the
  *    box pathfinding and swarms freely. TR5 carries the bit in OBJECT_INFO
- *    but reads it NOWHERE - the checks vanished from box.cpp in TR4/TR5.
- *    Rebuilding them would be an intervention into the shared code of ALL
- *    enemies; the user decided the compys may move like normal enemies.
- *    box.cpp thus stays untouched.
+ *    but reads it nowhere - the checks were removed from box.cpp in
+ *    TR4/TR5. Rebuilding them would touch the shared pathfinding code of
+ *    every enemy, so the compys move like any other enemy and box.cpp
+ *    stays untouched.
  *
- * 3. compy_scared_timer is reset ALONG on initialization. tomb3 only
- *    resets compys_attack_lara. Both are globals that survive a level
- *    change - this engine reloads a lot (level select), and a leftover
- *    scare counter would make the first pack in the next level flee for
- *    no reason.
+ * 3. compy_scared_timer is reset along with compys_attack_lara on
+ *    initialization; tomb3 resets only the latter. Both are globals that
+ *    survive a level change - this engine reloads a lot (level select),
+ *    and a leftover scare counter would make the first pack in the next
+ *    level flee for no reason.
  *
- * 4. TIMIDITY HALVED (user decision 2026-08-17). All three cowardice
- *    delays cut in half:
+ * 4. Timidity halved. All three cowardice delays cut in half:
  *      - flight duration    compy_scared_timer  280 -> 140  (~9.3 -> ~4.7 s)
  *      - pre-attack lockout item->timer > 180   -> 90       (~6   -> ~3   s)
  *      - the same under fire    > 200           -> 100      (~6.7 -> ~3.3 s)
- *    Reason: TR3 gives the pack plenty of time because whole swarms live
- *    in wide jungle sections there and Lara accompanies them for long.
- *    With us, ONE pack of four animals stands somewhere in the level -
- *    nine seconds of flight there means Lara is long gone before anything
- *    happens. Cowardice as behavior stays, it just lasts half as long.
+ *    TR3 gives the pack plenty of time because whole swarms live in wide
+ *    jungle sections there and Lara accompanies them for long. Here, one
+ *    pack of four animals stands somewhere in the level, so nine seconds
+ *    of flight would leave Lara long gone before anything happens.
+ *    Cowardice as behavior stays, it just lasts half as long.
  *
  * Sounds come via the model's anim commands, no call is needed here.
  */
@@ -136,12 +135,11 @@ void CompyControl(short item_number)
 		if (!compy_scared_timer && !compys_attack_lara && (info.enemy_facing < 0x3000 && info.enemy_facing > -0x3000 && lara_item->speed > 15 || lara_item->current_anim_state == AS_ROLL || item->hit_status))
 		{
 			item->item_flags[0] = (bits + 1792) >> 7;
-			// DEVIATION 4 (user decision 2026-08-17): all three timidity
-			// delays halved. TR3 gave the pack plenty of time because
-			// whole swarms live in wide jungle sections there; with us,
-			// ONE pack of four animals stands in a TR5 level, and nine
-			// seconds of flight are simply boring there. Original: 280
-			// (~9.3 s at 30 frames/s).
+			// Deviation 4: all three timidity delays halved. TR3 gave the
+			// pack plenty of time because whole swarms live in wide
+			// jungle sections there; here, one pack of four animals
+			// stands in a TR5 level, and nine seconds of flight would
+			// simply be boring. Original: 280 (~9.3 s at 30 frames/s).
 			compy_scared_timer = 140;
 		}
 		else if (compy_scared_timer)

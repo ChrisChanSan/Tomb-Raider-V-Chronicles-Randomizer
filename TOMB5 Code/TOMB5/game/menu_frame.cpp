@@ -16,7 +16,7 @@
 #include "text.h"
 #include "gameflow.h"
 #include "sound.h"
-#include "camera.h"			// ModernCameraResetOrbit - the Control type row (round 161a2)
+#include "camera.h"			// ModernCameraResetOrbit - the Control type row
 #include "modern_state.h"		// ModernResetControls - the same row
 #include "savegame.h"
 #include "../specific/input.h"
@@ -38,14 +38,15 @@
  * carried over statement for statement - the sounds included, because several
  * rows play one even when the value does not move and that is what the player
  * hears today. The return value is the one thing that is new: true when the
- * SETTING really changed, which is what decides whether anything is written
+ * setting really changed, which is what decides whether anything is written
  * and whether MENULOG prints a line.
  *
- * THE FRAME CALLS step() ON EVERY FRAME THE CURSOR STANDS ON THE ROW, with dir
- * 0 when no direction is held. That is deliberate: base's rows are written as
- * "if (sel & bit) { ... }" blocks and several of them do work with no input at
- * all (Music volume calls ACMSetVolume, Targeting mirrors into savegame), so a
- * block that only ran on a keypress would not be the same block.            */
+ * The frame calls step() on every frame the cursor stands on the row, with
+ * dir 0 when no direction is held. That is deliberate: base's rows are
+ * written as "if (sel & bit) { ... }" blocks and several of them do work with
+ * no input at all (Music volume calls ACMSetVolume, Targeting mirrors into
+ * savegame), so a block that only ran on a keypress would not be the same
+ * block.                                                                    */
 /* ========================================================================= */
 
 /* Backed up once per session, exactly as base's DoOptions did with its
@@ -182,7 +183,7 @@ static bool MenuStepLanguage(long, long dir)
 	if (!dir)
 		return 0;
 
-	// The next EXISTING language file in the chosen direction - missing
+	// The next existing language file in the chosen direction - missing
 	// ones are skipped (SwitchLanguage would fail silently otherwise).
 	for (long n = Gameflow->Language + dir; n >= 0 && n < gfLanguageCount; n += dir)
 	{
@@ -213,17 +214,18 @@ static bool MenuStepControlType(long, long dir)
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.control_modern = !tomb5.control_modern;
 	ModernResetControls();		// a stale held course/spin/blocked-counter must not survive a scheme change (game/modern_state.h)
-	ModernCameraResetOrbit();	// nor a camera offset seated under the other scheme (#161, round 161a2)
-	// AND NOR MAY A BINDING THE NEW SCHEME CANNOT HONOUR: Modern takes the
-	// right stick for the camera and Tank keeps the d-pad moving her, so the
-	// two roles the schemes disagree about - the medipacks - move with the
-	// switch. Deliberately NOT ApplyJoyDefaults(): a player who customised
-	// his pad must not lose it for trying the other scheme.
+	ModernCameraResetOrbit();	// nor a camera offset seated under the other scheme
+	// A binding the new scheme cannot honour must not survive either:
+	// Modern takes the right stick for the camera and Tank keeps the
+	// d-pad moving her, so the two roles the schemes disagree about -
+	// the medipacks - move with the switch. Deliberately not
+	// ApplyJoyDefaults(): a player who customised his pad must not lose
+	// it for trying the other scheme.
 	ApplyJoyScheme();
-	// The keyboard's half of the same sentence (#161, round 161b2a, item 1):
-	// each scheme keeps its OWN set, so the two change places instead of one
-	// being repaired. It recomputes conflict[] as well, because both rows the
-	// table is derived from have just moved (specific\input.cpp).
+	// The keyboard's half of the same switch: each scheme keeps its own
+	// set, so the two change places instead of one being repaired. It
+	// recomputes conflict[] as well, because both rows the table is
+	// derived from have just moved (specific/input.cpp).
 	ApplyKeyScheme();
 	return 1;
 }
@@ -239,23 +241,22 @@ static bool MenuStepCombatMode(long, long dir)
 	if (!dir)
 		return 0;
 
-	// Hold is wired since round 161b2a: S_UpdateInput's weapon seam reads this
-	// bit every tick (specific\input.cpp), so flipping the row changes the draw
-	// key's meaning at once, with no reload and nothing else to keep in step.
+	// S_UpdateInput's weapon seam reads this bit every tick
+	// (specific/input.cpp), so flipping the row changes the draw key's
+	// meaning at once, with no reload and nothing else to keep in step.
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.combat_hold = !tomb5.combat_hold;
 	return 1;
 }
 
-/* SPRINT MODE AND DUCK MODE (#161, round 161b2c, item 4). Two rows of the same
- * shape as Combat mode above, and directly under it because that is where the
- * user's sentence puts them - "'Sprintmodus' und 'Duckmodus' kann auch mit
- * rein", said in one breath with the Action split.
+/* Sprint mode and Duck mode: two rows of the same shape as Combat mode
+ * above, placed directly under it alongside the Action split setting.
  *
- * The value words are the other way round from Combat mode's on purpose: there
- * 0 is Toggle, because the engine's own draw key already IS a toggle; here 0 is
- * Hold, because the engine's own sprint and duck keys are held. Both rows say
- * "off = what the engine does today", which is the rule, not the word. */
+ * The value words are the other way round from Combat mode's on
+ * purpose: there 0 is Toggle, because the engine's own draw key is
+ * already a toggle; here 0 is Hold, because the engine's own sprint and
+ * duck keys are held. Both rows say "off = what the engine does today",
+ * which is the rule, not the word. */
 static const char* MenuValSprintMode(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.sprint_toggle ? "Toggle" : "Hold"));
@@ -293,13 +294,12 @@ static bool MenuStepDuckMode(long, long dir)
 	return 1;
 }
 
-/* GRAB MODE (#161, round 161b2d, item 5). The fourth row of the same shape, and
- * the reason the three above it moved to a sub-page of their own: "Die vier
- * Modi bitte auf eine Unterseite. Macht es uebersichtlicher."
+/* Grab mode: the fourth row of the same shape, on the mode sub-page
+ * along with the three above it.
  *
  * 0 is Hold here too, and for the same reason as the two rows above: the
- * engine's own grab is held. What Toggle buys is the state doing the holding
- * instead of the thumb - see ModernGrabLatch (game\modern_move.cpp). */
+ * engine's own grab is held. What Toggle buys is the state doing the
+ * holding instead of the thumb - see ModernGrabLatch (game/modern_move.cpp). */
 static const char* MenuValGrabMode(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.grab_toggle ? "Toggle" : "Hold"));
@@ -330,39 +330,38 @@ static bool MenuStepAction(long, long dir)
 	if (!dir)
 		return 0;
 
-	// Wired since round 161b2c: S_UpdateInput builds the Action role's whole
-	// word from this bit every tick, and the Secondary role only exists while
-	// it is set (specific\input.cpp), so the row changes the keys' meaning at
-	// once with nothing else to keep in step.
+	// S_UpdateInput builds the Action role's whole word from this bit
+	// every tick, and the Secondary role only exists while it is set
+	// (specific/input.cpp), so the row changes the keys' meaning at once
+	// with nothing else to keep in step.
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.action_split = !tomb5.action_split;
-	/* AND THE PAD HAS A SET PER SETTING (item 3): the flip seats the other one
-	 * and parks this one, so neither is ever rewritten by the other - the
+	/* The pad has a set per setting: the flip seats the other one and
+	 * parks this one, so neither is ever rewritten by the other - the
 	 * player's own One-key layout is still there when he comes back. The
-	 * keyboard needs no call of its own here: its slot 18 lives in both key
-	 * sets already and is simply not offered under One key
+	 * keyboard needs no call of its own here: its slot 18 lives in both
+	 * key sets already and is simply not offered under One key
 	 * (MenuResolveKeybinds below). */
 	ApplyJoySplit();
-	/* AND THE CONFLICT ANSWER DEPENDS ON THIS ROW (#161, round 161b2c, fix
-	 * round). KeySchemeConflicts now lets the Secondary slot claim a key only
-	 * while the role is live, so the row that makes it live - or inert - has
-	 * to recompute the table, exactly as Reset and a capture do. Without this
-	 * the freed default key would stay silent until the next capture. */
+	/* The conflict table depends on this row too: KeySchemeConflicts
+	 * lets the Secondary slot claim a key only while the role is live,
+	 * so the row that makes it live - or inert - has to recompute the
+	 * table, exactly as Reset and a capture do. Without this, the freed
+	 * default key would stay silent until the next capture. */
 	CheckKeyConflicts();
 	return 1;
 }
 
-/* "Art der Steuerung ... Schlecht zu differenzieren wegen der neuen modernen
- * Steuerung" - so the row is called Control layout now, and it says what it
- * always meant: which set of button names and defaults the bindings below it
- * are written in. Internally ControlMethod is still 0/1 (keyboard/joystick)
- * and the three controller positions are method 1 with JoyStyle 0/1/2, so
- * every "ControlMethod == 1" in the game keeps running unchanged.
+/* The row is called Control layout, and it says what it always meant:
+ * which set of button names and defaults the bindings below it are
+ * written in. Internally ControlMethod is still 0/1 (keyboard/joystick)
+ * and the three controller positions are method 1 with JoyStyle 0/1/2,
+ * so every "ControlMethod == 1" in the game keeps running unchanged.
  *
- * THE FIFTH POSITION IS GONE. "Reset" was a menu action wearing a setting's
- * clothes; it is the centred action on the Key bindings page now, and with it
- * go base's reset_row flag and the nMask pin that kept the cursor on this row
- * while it was showing. */
+ * The fifth position is gone: "Reset" was a menu action wearing a
+ * setting's clothes; it is the centred action on the Key bindings page
+ * now, and with it go base's reset_row flag and the nMask pin that kept
+ * the cursor on this row while it was showing. */
 static const char* MenuValControlLayout(long, char* buf)
 {
 	if (!ControlMethod)
@@ -372,7 +371,7 @@ static const char* MenuValControlLayout(long, char* buf)
 	}
 
 	// The joystick positions carry the chosen page's name. The page only
-	// changes the DISPLAY of the button names (and the defaults on reset) -
+	// changes the display of the button names (and the defaults on reset) -
 	// the bit order comes from the active input path, see input.cpp.
 	switch (ActiveJoyStyle())
 	{
@@ -400,17 +399,18 @@ static bool MenuStepControlLayout(long, long)
 	was_style = JoyStyle;
 	pos = ControlMethod ? 1 + ActiveJoyStyle() : 0;
 
-	// THIS ROW IGNORES THE FRAME'S OWN DIRECTION on purpose. On the keyboard
-	// position the pad delivers no direction bits at all - every use of the
-	// stick in input.cpp hangs on ControlMethod - so whoever paged over here
-	// with the controller could not page back with it. So the stick is read
-	// directly, on BOTH positions: if only on the keyboard one, a single
-	// deflection counts twice (JoyMenuStep takes the step, ControlMethod
-	// flips to the pad, and next frame the direction still being held reaches
-	// dbinput for the first time and its edge detection calls that a fresh
-	// press - one push, two pages, seen in game). While the stick is
-	// deflected the step belongs to JoyMenuStep alone; the arrow keys keep
-	// working through dbinput whenever the stick rests.
+	// This row ignores the frame's own direction on purpose. On the
+	// keyboard position the pad delivers no direction bits at all -
+	// every use of the stick in input.cpp hangs on ControlMethod - so
+	// whoever paged over here with the controller could not page back
+	// with it. So the stick is read directly, on both positions: if only
+	// on the keyboard one, a single deflection counts twice (JoyMenuStep
+	// takes the step, ControlMethod flips to the pad, and next frame the
+	// direction still being held reaches dbinput for the first time and
+	// its edge detection calls that a fresh press - one push, two
+	// pages). While the stick is deflected the step belongs to
+	// JoyMenuStep alone; the arrow keys keep working through dbinput
+	// whenever the stick rests.
 	padStep = JoyMenuStep();
 
 	if ((dbinput & IN_LEFT && !JoyMenuDeflected()) || padStep < 0)
@@ -442,8 +442,8 @@ static bool MenuStepControlLayout(long, long)
 	return ControlMethod != was_method || JoyStyle != was_style;
 }
 
-/* Camera speed and (from step 3) Dead zone are the modern control's own feel,
- * and under Tank neither number is read by anything. A row that cannot do
+/* Camera speed and Dead zone are the modern control's own feel, and
+ * under Tank neither number is read by anything. A row that cannot do
  * anything is offered in colour 3 and skipped rather than silently ignored. */
 static bool MenuEnabledModern(long)
 {
@@ -457,10 +457,9 @@ static long MenuNumCameraSpeed(long)
 
 static bool MenuStepCameraSpeed(long, long dir)
 {
-	// "Der rechte Stick muss noch schneller werden, der ist viel zu langsam.
-	// Am besten ein Slider wie die SFX und Musik." The NUMBER only ever means
-	// anything through game\modern_camera.cpp's ModernCameraSpeedRates - this
-	// row just stores and clamps it.
+	// The number only ever means anything through
+	// game/modern_camera.cpp's ModernCameraSpeedRates - this row just
+	// stores and clamps it.
 	ulong old = tomb5.camera_speed;
 
 	if (dir < 0 && tomb5.camera_speed > 0)
@@ -479,10 +478,9 @@ static long MenuNumDeadZone(long)
 
 static bool MenuStepDeadZone(long, long dir)
 {
-	// "Das ist bei uns momentan noch ein fester Wert, den wie im Remaster
-	// toggelbar fuer den User hier einbinden." Stored and clamped here like the
-	// row above it; the eight widths it scales, and why 50 is the tuned engine
-	// unchanged, live at ModernDeadZoneUser (game\modern_move.cpp).
+	// Stored and clamped here like the row above it; the eight widths it
+	// scales, and why 50 is the tuned engine unchanged, live at
+	// ModernDeadZoneUser (game/modern_move.cpp).
 	ulong old = tomb5.dead_zone;
 
 	if (dir < 0 && tomb5.dead_zone > 0)
@@ -552,8 +550,8 @@ static const char* MenuValFrameRate(long, char* buf)
 	 * blocking present that paces it - so with VSync off it runs at 60 and
 	 * the row says which of the two the player is really getting. "30"/"60"
 	 * are digits, not words, and stay unwrapped; "Display"/"Display (60)"
-	 * have no German entry (the brief's table says they stay) - CustomText
-	 * falls back to the English literal on its own when nothing matches. */
+	 * have no German entry - CustomText falls back to the English
+	 * literal on its own when nothing matches. */
 	strcpy(buf, tomb5.fps_mode == 2 ? CustomText(tomb5.vsync ? "Display" : "Display (60)") :
 	            tomb5.fps_mode == 1 ? "60" : "30");
 	return buf;
@@ -601,13 +599,14 @@ static bool MenuStepVSync(long, long dir)
 }
 
 /* -------------------------------------------------------------- Graphics -- */
-/* Every row below is a case of base's Page0 or Page1 (tomb5\troyestuff.cpp),
- * one function each instead of one shared switch - the row ledger names the
- * base line for each. Toggle rows return `!dir` unconditionally, exactly as
- * the model Display page's VSync row does, because base toggled on EITHER
- * direction (`dbinput & IN_LEFT || dbinput & IN_RIGHT`); wrapping/clamping
- * rows keep base's own per-direction shape, "changed" included where base
- * set it unconditionally inside a direction's block (Distance fog). */
+/* Every row below is a case of base's Page0 or Page1
+ * (tomb5/troyestuff.cpp), one function each instead of one shared
+ * switch. Toggle rows return `!dir` unconditionally, exactly as the
+ * Display page's VSync row does, because base toggled on either
+ * direction (`dbinput & IN_LEFT || dbinput & IN_RIGHT`);
+ * wrapping/clamping rows keep base's own per-direction shape, "changed"
+ * included where base set it unconditionally inside a direction's block
+ * (Distance fog). */
 
 static const char* MenuValFootprints(long, char* buf)
 {
@@ -678,9 +677,9 @@ static bool MenuStepHdTextures(long, long dir)
 	if (!dir)
 		return 0;
 
-	// #123: the Remaster's room art, read from the player's own installation.
-	// It is taken at the START of a level (base troyestuff.cpp Page0), so
-	// this row shows what the NEXT level will do, not the level on screen.
+	// The Remaster's room art, read from the player's own installation.
+	// It is taken at the start of a level (base troyestuff.cpp Page0), so
+	// this row shows what the next level will do, not the level on screen.
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.hd_enable = !tomb5.hd_enable;
 	return 1;
@@ -752,8 +751,8 @@ static const char* MenuValDistanceFog(long, char* buf)
 static bool MenuStepDistanceFog(long, long dir)
 {
 	// changed=1 fires even at the clamp, as it did at base (troyestuff.cpp
-	// Page1 case 1<<7) - the save it triggers writes the same value again,
-	// harmless, and this round leaves that quirk exactly where base put it.
+	// Page1 case 1<<7) - the save it triggers writes the same value
+	// again, harmless, and this quirk is left exactly where base put it.
 	bool changed = 0;
 
 	if (dir > 0)
@@ -839,10 +838,10 @@ static bool MenuStepUwEffect(long, long dir)
 }
 
 /* ------------------------------------------------------------------ View -- */
-/* All six rows of base's Page2 (troyestuff.cpp), offered on their own tab now
- * and no longer gated by "First person view" (ledger row 26 - "ohne den
- * Switch mit on oder off"). "First person view" itself moves in from Page1
- * as a normal toggle row, first on the tab as the brief's tree has it. */
+/* All six rows of base's Page2 (troyestuff.cpp), offered on their own
+ * tab now and no longer gated by "First person view". "First person
+ * view" itself moves in from Page1 as a normal toggle row, first on
+ * the tab. */
 
 static const char* MenuValFirstPersonView(long, char* buf)
 {
@@ -949,9 +948,9 @@ static bool MenuStepCameraDamping(long, long dir)
 
 static const char* MenuValBody(long, char* buf)
 {
-	// #123, fix round U/U4: "still" holds her body on one frame while she is
-	// standing, crouching or kneeling still - the head still turns with the
-	// look, the arms still aim and fire, and every step, jump, climb and pull
+	// "still" holds her body on one frame while she is standing,
+	// crouching or kneeling still - the head still turns with the look,
+	// the arms still aim and fire, and every step, jump, climb and pull
 	// stays animated as before.
 	strcpy(buf, CustomText(tomb5.first_person_body_still ? "still" : "animated"));
 	return buf;
@@ -968,9 +967,8 @@ static bool MenuStepBody(long, long dir)
 }
 
 /* ------------------------------------------------------------------- HUD -- */
-/* Base's Page0 rows that are about the heads-up display and the load screens,
- * grouped on their own tab so Graphics keeps its headroom (deliberate choice,
- * brief section "The tree he wants"). */
+/* Base's Page0 rows that are about the heads-up display and the load
+ * screens, grouped on their own tab so Graphics keeps its headroom. */
 
 static const char* MenuValBarMode(long, char* buf)
 {
@@ -1183,11 +1181,11 @@ static bool MenuStepCheats(long, long dir)
 
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.enable_cheats = !tomb5.enable_cheats;
-	/* AND THE CONFLICT ANSWER DEPENDS ON THIS ROW TOO (#161, round 161b2d, fix
-	 * round). KeySchemeConflicts lets the five cheat slots claim a key only
-	 * while they are live, so the row that makes them live - or inert - has to
-	 * recompute the table, exactly as Reset, a capture and the Action row do.
-	 * Without this the freed default key would stay silent until the next
+	/* The conflict table depends on this row too: KeySchemeConflicts
+	 * lets the five cheat slots claim a key only while they are live, so
+	 * the row that makes them live - or inert - has to recompute the
+	 * table, exactly as Reset, a capture and the Action row do. Without
+	 * this, the freed default key would stay silent until the next
 	 * capture. */
 	CheckKeyConflicts();
 	return 1;
@@ -1206,7 +1204,7 @@ static bool MenuStepLevelSelect(long, long dir)
 
 	// Adds/removes the title menu's own "Level Select" row (gameflow.cpp) -
 	// a side effect of the variable, not of this handler; carried over
-	// unchanged (ledger row 27).
+	// unchanged.
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.level_select = !tomb5.level_select;
 	return 1;
@@ -1230,10 +1228,11 @@ static bool MenuStepCrawlTilting(long, long dir)
 
 /* --------------------------------------------------------- Key bindings -- */
 
-/* Waiting for the player to press the thing he wants bound. One role at a
- * time, and the role is the ROW'S OWN param - base had to shift the selection
- * bit back down into an array index at two places and recount the shift every
- * time a row moved (specific\LoadSave.cpp:619-633 and :667-680 at base). */
+/* Waiting for the player to press the thing he wants bound. One role
+ * at a time, and the role is the row's own param - base had to shift
+ * the selection bit back down into an array index at two places and
+ * recount the shift every time a row moved (specific/LoadSave.cpp at
+ * base). */
 static bool menu_waiting_for_key;
 static long menu_wait_role;
 // The action button still pinned the row selection when the wait was entered.
@@ -1260,25 +1259,25 @@ static const char* MenuValBinding(long role, char* buf)
 	if (jLayout[role] == -1)
 		return "---";
 
-	/* A CHORD PRINTS AS A PAIR (#161, round 161b2d, item 3): the Modifier, a
-	 * plus, the button.
+	/* A chord prints as a pair: the Modifier, a plus, the button.
 	 *
-	 * AND THE MODIFIER'S HALF IS THE WORD "Mod" AND NOT ITS BUTTON'S NAME,
-	 * which is the brief's own fallback and it is needed. Measured on the real
-	 * font (game\chardef.inc, the widths GetStringLength adds up): the value
-	 * column is left-aligned at phd_centerx + (phd_centerx >> 2), which leaves
-	 * 240 px to the right edge at 640x480, and "Touchpad+Stick R Down" - the
-	 * longest pair a player can really make on the PS5 DirectInput page, where
-	 * the Modifier's own default lives - is 273 px. It would run off the
-	 * screen. "Mod+Stick R Down" is 215 px, twenty-five clear, and the scale is
-	 * phd_winxmax / 512 on both sides at every other resolution (657 of 720 at
-	 * 1920x1080). The Modifier's OWN row still shows the button's real name, so
-	 * the player is never left guessing which button "Mod" is.
+	 * The Modifier's half is the word "Mod" rather than its button's
+	 * name. Measured on the real font (game/chardef.inc, the widths
+	 * GetStringLength adds up): the value column is left-aligned at
+	 * phd_centerx + (phd_centerx >> 2), which leaves 240 px to the
+	 * right edge at 640x480, and "Touchpad+Stick R Down" - the longest
+	 * pair a player can really make on the PS5 DirectInput page, where
+	 * the Modifier's own default lives - is 273 px. It would run off
+	 * the screen. "Mod+Stick R Down" is 215 px, twenty-five clear, and
+	 * the scale is phd_winxmax / 512 on both sides at every other
+	 * resolution (657 of 720 at 1920x1080). The Modifier's own row
+	 * still shows the button's real name, so the player is never left
+	 * guessing which button "Mod" is.
 	 *
-	 * AN UNBOUND MODIFIER WITH A CHORD STORED reads "---+R3": the same "---"
-	 * that means unbound one line above, in the half that is unbound. It is
-	 * honest - that binding cannot fire - and it fits (198 px at its widest,
-	 * "---+Stick R Down"). */
+	 * An unbound Modifier with a chord stored reads "---+R3": the same
+	 * "---" that means unbound one line above, in the half that is
+	 * unbound. It is honest - that binding cannot fire - and it fits
+	 * (198 px at its widest, "---+Stick R Down"). */
 	if (JoyRoleIsChord(role))
 	{
 		sprintf(buf, "%s+%s", jLayout[JOY_ROLE_MODIFIER] == -1 ? "---" : "Mod",
@@ -1294,46 +1293,48 @@ static void MenuSelectBinding(long role)
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	menu_wait_role = role;
 	menu_waiting_for_key = 1;
-	// The hold guard below (do not immediately capture the action button as
-	// the new binding) only applies when the row was REALLY selected with the
-	// pad button. If the selection came from the keyboard (Enter), the guard
-	// used to PERMANENTLY block any attempt to bind the action button itself.
+	// The hold guard below (do not immediately capture the action button
+	// as the new binding) only applies when the row was actually
+	// selected with the pad button. If the selection came from the
+	// keyboard (Enter), the guard used to permanently block any attempt
+	// to bind the action button itself.
 	menu_action_still_held = ControlMethod == 1 && Key(jLayout[4] + 256);
 	memset(keymap, 0, sizeof(keymap));
 }
 
-/* "Reset to defaults", the centred action above the list. It is exactly what
- * the Method row's fifth position did: the compiled-in keyboard table AND the
- * pad defaults matching the chosen page and the active input path - and since
- * round 161b2a (item 1) the keyboard table it restores is the ACTIVE SCHEME'S,
- * which at Tank is the row it always was. Reset means "the defaults of the
- * scheme I am playing in", not "Core's defaults whatever I am playing in". */
+/* "Reset to defaults", the centred action above the list. It is
+ * exactly what the Method row's fifth position did: the compiled-in
+ * keyboard table and the pad defaults matching the chosen page and the
+ * active input path - and the keyboard table it restores is the active
+ * scheme's, which at Tank is the row it always was. Reset means "the
+ * defaults of the scheme I am playing in", not "Core's defaults
+ * whatever I am playing in". */
 static void MenuResetBindings(long)
 {
 	SoundEffect(SFX_MENU_SELECT, 0, 2);
-	// THE COPY BASE GOT WRONG (menu-map R3). "memcpy(layout[1], layout, 72)"
-	// copied 72 bytes into a destination that starts 36 bytes into a 72-byte
-	// object: `short layout[2][18]` is 36 shorts altogether, so the write
-	// spanned bytes [36,108) of it and the last 36 landed past the end
-	// entirely - `long conflict[18]` is the next global declared in the same
-	// file (specific\input.cpp:427), which makes it the plausible target. Source
-	// and destination overlapped as well ([0,72) against [36,108)), which is
-	// undefined for memcpy on its own. The intent was always "put the
-	// compiled-in defaults over the active bindings", and that is one row of
-	// the array: 36 bytes, from layout[0] at Tank and from the Modern default
-	// row under Modern (KeyDefaultRow, #161 round 161b2a). sizeof(layout[0])
-	// is one row whatever the array grows to, which is why it is written that
-	// way rather than as 36.
+	// The copy base got wrong: "memcpy(layout[1], layout, 72)" copied 72
+	// bytes into a destination that starts 36 bytes into a 72-byte
+	// object: `short layout[2][18]` is 36 shorts altogether, so the
+	// write spanned bytes [36,108) of it and the last 36 landed past
+	// the end entirely - `long conflict[18]` is the next global
+	// declared in the same file (specific/input.cpp), which makes it
+	// the plausible target. Source and destination overlapped as well
+	// ([0,72) against [36,108)), which is undefined for memcpy on its
+	// own. The intent was always "put the compiled-in defaults over the
+	// active bindings", and that is one row of the array: 36 bytes,
+	// from layout[0] at Tank and from the Modern default row under
+	// Modern (KeyDefaultRow). sizeof(layout[0]) is one row whatever the
+	// array grows to, which is why it is written that way rather than
+	// as 36.
 	memmove(layout[1], KeyDefaultRow(), sizeof(layout[0]));
 	ApplyJoyDefaults();	// defaults matching page AND input path (input.cpp)
-	/* AND THE CONFLICT TABLE IS RECOMPUTED (#161, round 161b2a, item 1 - the
-	 * base defect round 161b1 reported and deliberately left alone). Reset
-	 * changes every active binding, and conflict[] is derived from them: which
-	 * roles may still answer to their default key. Without this it kept the
-	 * answer computed for the bindings the player just discarded, until the
-	 * next capture happened to recompute it - so a role whose default key had
-	 * been claimed stayed silent after a Reset that had freed it again. This is
-	 * the one behaviour of this round that a Tank player can see. */
+	/* The conflict table is recomputed as well. Reset changes every
+	 * active binding, and conflict[] is derived from them: which roles
+	 * may still answer to their default key. Without this it kept the
+	 * answer computed for the bindings the player just discarded, until
+	 * the next capture happened to recompute it - so a role whose
+	 * default key had been claimed stayed silent after a Reset that had
+	 * freed it again. */
 	CheckKeyConflicts();
 }
 
@@ -1378,15 +1379,12 @@ static const menu_row menu_rows_audio[] =
 	MENU_VALUE("Language", MenuValLanguage, MenuStepLanguage, MENU_SAVE_GAME)
 };
 
-/* THE MODES SUB-PAGE (#161, round 161b2d, item 5; the user, after this round
- * was launched: "Die vier Modi bitte auf eine Unterseite. Macht es
- * uebersichtlicher").
- *
- * The three rows that were on the Controls page moved here as the one table
- * line each they are - same callbacks, same save class, same labels, so the
- * MENULOG line each of them writes is word for word the one it wrote before
- * except for `page=Modes` in place of `page=Controls`. Grab mode is the fourth
- * and new. Four rows: one page, no arrows (MENU_MAX_ROWS is 12). */
+/* The three rows that were on the Controls page moved here as the one
+ * table line each they are - same callbacks, same save class, same
+ * labels, so the MENULOG line each of them writes is word for word the
+ * one it wrote before except for `page=Modes` in place of
+ * `page=Controls`. Grab mode is the fourth and new. Four rows: one
+ * page, no arrows (MENU_MAX_ROWS is 12). */
 static const menu_row menu_rows_modes[] =
 {
 	MENU_VALUE("Combat mode", MenuValCombatMode, MenuStepCombatMode, MENU_SAVE_TOMB5),
@@ -1399,22 +1397,21 @@ static const menu_row menu_rows_controls[] =
 {
 	MENU_TAB("Key bindings", MENU_PAGE_KEYBINDS),
 	MENU_TAB("View", MENU_PAGE_VIEW),
-	// #161, round 161b2d item 5 - the third tab, directly after "View", where
-	// the four mode rows now live. The page is ten rows with it and stays on
-	// one page: it was twelve, three left and this one arrived.
+	// The third tab, directly after "View", where the four mode rows now
+	// live. The page is ten rows with it and stays on one page: it was
+	// twelve, three left and this one arrived.
 	MENU_TAB("Modes", MENU_PAGE_MODES),
 	MENU_VALUE("Control type", MenuValControlType, MenuStepControlType, MENU_SAVE_TOMB5),
 	MENU_VALUE("Action", MenuValAction, MenuStepAction, MENU_SAVE_TOMB5),
 	MENU_VALUE("Control layout", MenuValControlLayout, MenuStepControlLayout, MENU_SAVE_GAME),
 	MENU_SLIDER("Camera speed", -1, MenuNumCameraSpeed, MenuStepCameraSpeed, MENU_SAVE_TOMB5, MenuEnabledModern),
-	// #161, round 161b1 item 5 - the same slider, the same predicate, in the
-	// place the user's tree gives it: right after Camera speed.
+	// The same slider, the same predicate, right after Camera speed.
 	MENU_SLIDER("Dead zone", -1, MenuNumDeadZone, MenuStepDeadZone, MENU_SAVE_TOMB5, MenuEnabledModern),
 	MENU_VALUE_TXT("Targeting", TXT_Targeting, MenuValTargeting, MenuStepTargeting, MENU_SAVE_GAME),
 	MENU_VALUE("Ammotype hotkeys", MenuValAmmotypeHotkeys, MenuStepAmmotypeHotkeys, MENU_SAVE_TOMB5)
 };
 
-// All six always offered, not gated by tomb5.first_person (ledger row 26).
+// All six always offered, not gated by tomb5.first_person.
 static const menu_row menu_rows_view[] =
 {
 	MENU_VALUE("First person view", MenuValFirstPersonView, MenuStepFirstPersonView, MENU_SAVE_TOMB5),
@@ -1463,18 +1460,18 @@ static const menu_row menu_rows_tomb5[] =
 {
 	MENU_VALUE("Cutscene skipper", MenuValCutsceneSkipper, MenuStepCutsceneSkipper, MENU_SAVE_TOMB5),
 	MENU_VALUE("Cheats", MenuValCheats, MenuStepCheats, MENU_SAVE_TOMB5),
-	// ONE literal for the two places this option is named (brief item 4): the
-	// title screen's own row has said "Level Select" since round 161a, and a
-	// second spelling would have been a second CustomText key for one setting.
+	// One literal for the two places this option is named: the title
+	// screen's own row has said "Level Select", and a second spelling
+	// would have been a second CustomText key for one setting.
 	MENU_VALUE("Level Select", MenuValLevelSelect, MenuStepLevelSelect, MENU_SAVE_TOMB5),
 	MENU_VALUE("Fix climb up delay", MenuValFixClimbUpDelay, MenuStepFixClimbUpDelay, MENU_SAVE_TOMB5),
 	MENU_VALUE("Flexible crawling", MenuValFlexibleCrawling, MenuStepFlexibleCrawling, MENU_SAVE_TOMB5),
 	MENU_VALUE("Crawl Tilting", MenuValCrawlTilting, MenuStepCrawlTilting, MENU_SAVE_TOMB5)
 };
 
-/* The two bindable lists. Row 0 of each is the centred reset action, and it is
- * the page's one FIXED row - it is repeated on every page of the split list,
- * above it, which is where the user's screen has it.
+/* The two bindable lists. Row 0 of each is the centred reset action,
+ * and it is the page's one fixed row - it is repeated on every page of
+ * the split list, above it.
  *
  * The keyboard list's first four rows are glyphs rather than words (up, down,
  * left, right) exactly as at base: they are layout slots 0-3, Lara's Tank
@@ -1500,23 +1497,22 @@ static const menu_row menu_rows_keybinds_kbd[] =
 	MENU_BIND("Inventory", TXT_Inventory, 13),
 	MENU_BIND("Step Left", TXT_Step_Left, 14),
 	MENU_BIND("Step Right", TXT_Step_Right, 15),
-	// The Secondary row is still offered only under "Separate" (#161, round
-	// 161b2c, item 2), but it is no longer the LAST row of the list, so it can
-	// no longer be dropped by counting one row fewer - MenuResolveKeybinds
-	// builds the list instead. The pad list below still ends with it and still
+	// The Secondary row is still offered only under "Separate", but it
+	// is no longer the last row of the list, so it can no longer be
+	// dropped by counting one row fewer - MenuResolveKeybinds builds
+	// the list instead. The pad list below still ends with it and still
 	// uses the count.
 	MENU_BIND("Secondary", -1, KEY_ROLE_SECOND),
-	/* THE HOTKEYS, ONE LIST WITH THE REST (#161, round 161b2d, item 2) - the
-	 * user's own decision: "Ich wuerde es nicht als zweite Liste machen, dann
-	 * kann alles mit in die Keybinds rein, da koennen wir ja die Seiten
-	 * umschalten." They were hard-wired scan codes in specific\input.cpp until
-	 * this round; the rows below are the same keys, now bindable.
+	/* The hotkeys are one list with the rest, rather than a separate
+	 * one, so every binding lives on the same Keybinds pages. They were
+	 * hard-wired scan codes in specific/input.cpp; the rows below are
+	 * the same keys, now bindable.
 	 *
-	 * The four weapon names the string wad has are taken from it rather than
-	 * invented (the inventory calls them by these ids); the HK's name is the
-	 * id its own inventory entry carries. The crossbow has no weapon-name
-	 * string of its own - TXT_GRAP2 sits on the AMMO rows - so it goes through
-	 * CustomText like the cheat rows. */
+	 * The four weapon names the string wad has are taken from it rather
+	 * than invented (the inventory calls them by these ids); the HK's
+	 * name is the id its own inventory entry carries. The crossbow has
+	 * no weapon-name string of its own - TXT_GRAP2 sits on the ammo
+	 * rows - so it goes through CustomText like the cheat rows. */
 	MENU_BIND("Small Medipack", TXT_Small_Medipack, KEY_ROLE_MEDI_SMALL),
 	MENU_BIND("Large Medipack", TXT_Large_Medipack, KEY_ROLE_MEDI_LARGE),
 	MENU_BIND("Save", TXT_Save, KEY_ROLE_SAVE),
@@ -1527,11 +1523,10 @@ static const menu_row menu_rows_keybinds_kbd[] =
 	MENU_BIND("Revolver", TXT_Revolver, KEY_ROLE_WEAPON_FIRST + 3),
 	MENU_BIND("HK", TXT_HKSTRING0, KEY_ROLE_WEAPON_FIRST + 4),
 	MENU_BIND("Crossbow", -1, KEY_ROLE_WEAPON_FIRST + 5),
-	/* AND THE FIVE CHEAT ROLES, WHICH THE PAGE SHOWS ONLY WHILE CHEATS ARE ON
-	 * (#161, round 161b2d, item 2). A hidden role is inert - not even asked -
-	 * exactly like Secondary under "One key", so a player with Cheats off sees
-	 * the page he saw before. Their consumers arrive with item 4; until then
-	 * these five roles are bound to nothing that reads them. */
+	/* The five cheat roles are shown only while Cheats are on. A hidden
+	 * role is inert - not even asked - exactly like Secondary under
+	 * "One key", so a player with Cheats off sees the page he saw
+	 * before. Their consumer is LaraCheatHotkeys (game/laramisc.cpp). */
 	MENU_BIND("Fly mode", -1, KEY_ROLE_CHEAT_FLY),
 	MENU_BIND("All weapons", -1, KEY_ROLE_CHEAT_GUNS),
 	MENU_BIND("All items", -1, KEY_ROLE_CHEAT_ITEMS),
@@ -1559,14 +1554,14 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("Large Medipack", TXT_Large_Medipack, 14),
 	MENU_BIND("Secondary", -1, JOY_ROLE_SECOND),
 
-	/* THE TWELVE OF ROUND 161b2d (#161, item 3), in the order of the four
-	 * Separate default tables. The Modifier comes first because it is what the
-	 * eleven below can be chorded against: with it unbound, every row under it
+	/* These twelve rows are in the order of the four Separate default
+	 * tables. The Modifier comes first because it is what the eleven
+	 * below can be chorded against: with it unbound, every row under it
 	 * can still be bound plainly, and no chord exists anywhere.
 	 *
-	 * The labels are the keyboard list's own - the same CustomText and the same
-	 * script ids - because they name the same eleven things. Only "Modifier" is
-	 * new, and only the pad has it. */
+	 * The labels are the keyboard list's own - the same CustomText and
+	 * the same script ids - because they name the same eleven things.
+	 * Only "Modifier" is new, and only the pad has it. */
 	MENU_BIND("Modifier", -1, JOY_ROLE_MODIFIER),
 	MENU_BIND("Pistols", TXT_Pistols, JOY_ROLE_WEAPON_FIRST + 0),
 	MENU_BIND("Shotgun", TXT_Shotgun, JOY_ROLE_WEAPON_FIRST + 1),
@@ -1581,24 +1576,26 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("Skip level", -1, JOY_ROLE_CHEAT_SKIP)
 };
 
-/* THE KEYBOARD'S LIST IS BUILT NOW (#161, round 161b2d, item 2). Two roles are
- * hidden rather than shown grey: Secondary unless "Action" says Separate (round
- * 161b2c, item 2 - with "One key" the role produces nothing at all, so a row
- * that let the player bind it would be a row that does nothing), and the five
- * cheat roles unless Cheats are on. A HIDDEN ROW IS INERT: the drive loop can
- * only reach rows this function hands out, so a hidden role is never even
- * asked to be bound, which is exactly what "the page looks as it did before"
- * means for a player with both settings off.
+/* The keyboard's list is built at runtime rather than kept static. Two
+ * roles are hidden rather than shown grey: Secondary unless "Action"
+ * says Separate (with "One key" the role produces nothing at all, so a
+ * row that let the player bind it would be a row that does nothing),
+ * and the five cheat roles unless Cheats are on. A hidden row is
+ * inert: the drive loop can only reach rows this function hands out,
+ * so a hidden role is never even asked to be bound, which is exactly
+ * what "the page looks as it did before" means for a player with both
+ * settings off.
  *
- * Dropping the LAST row by counting one fewer - which is all this function did
- * while Secondary was last - no longer works, because the hotkeys sit behind
- * it. THE PAD'S LIST IS BUILT THE SAME WAY SINCE ITEM 3, and for the same
- * reason: Secondary is no longer last there either. The Modifier and the six
- * weapons are always offered - the Modifier is how a chord is made at all, and
- * a weapon role the player has not bound simply says "---".
+ * Dropping the last row by counting one fewer - which is all this
+ * function did while Secondary was last - no longer works, because the
+ * hotkeys sit behind it. The pad's list is built the same way, and for
+ * the same reason: Secondary is no longer last there either. The
+ * Modifier and the six weapons are always offered - the Modifier is how
+ * a chord is made at all, and a weapon role the player has not bound
+ * simply says "---".
  *
- * ONE BUFFER FOR BOTH LISTS, sized by the longer of the two so that neither can
- * outgrow it whichever way the tables move. */
+ * One buffer serves both lists, sized by the longer of the two so that
+ * neither can outgrow it whichever way the tables move. */
 #define MENU_KEYBINDS_KBD_ROWS	(sizeof(menu_rows_keybinds_kbd) / sizeof(menu_rows_keybinds_kbd[0]))
 #define MENU_KEYBINDS_JOY_ROWS	(sizeof(menu_rows_keybinds_joy) / sizeof(menu_rows_keybinds_joy[0]))
 
@@ -1663,7 +1660,7 @@ static const menu_page menu_pages[MENU_PAGE_COUNT] =
 	{ "tomb5 options", -1,         MENU_ROWS(menu_rows_tomb5),    0, 0 },
 	{ "Special Features", -1,      0, 0,                          0, 0 },	// the existing screen
 	{ "Credits",      -1,          0, 0,                          0, 0 },	// the existing screen
-	{ "Modes",        -1,          MENU_ROWS(menu_rows_modes),    0, 0 }	// #161, round 161b2d item 5
+	{ "Modes",        -1,          MENU_ROWS(menu_rows_modes),    0, 0 }
 };
 
 /* ========================================================================= */
@@ -1681,13 +1678,14 @@ static bool menu_open;
 static long menu_cursor[MENU_PAGE_COUNT];
 static long menu_page_no[MENU_PAGE_COUNT];
 
-/* ITEM 3: the "Game" registry block is written when it changes. Until this
- * round every key rebind, volume drag, sound quality change, targeting toggle,
- * language switch and control layout change lived in memory until a clean exit
- * (menu-map R4) - a crash threw the lot away while every tomb5 toggle was
- * already on disk. The flag is set by the rows whose save is MENU_SAVE_GAME
- * and cleared by the one call, when the page carrying them is left. Never per
- * frame: SaveSettings() opens the key and writes about forty values. */
+/* The "Game" registry block is written when it changes. Previously
+ * every key rebind, volume drag, sound quality change, targeting
+ * toggle, language switch and control layout change lived in memory
+ * until a clean exit - a crash threw the lot away while every tomb5
+ * toggle was already on disk. The flag is set by the rows whose save
+ * is MENU_SAVE_GAME and cleared by the one call, when the page carrying
+ * them is left. Never per frame: SaveSettings() opens the key and
+ * writes about forty values. */
 static bool menu_game_dirty;
 
 // A slider is held down on purpose, so it is written when it stops moving, not
@@ -1726,9 +1724,9 @@ static void MenuFlushGame()
 
 	menu_game_dirty = 0;
 	// SaveSettings() also writes the window position and the display mode
-	// (specific\registry.cpp:462-468). Both are live values at any moment, so
-	// writing them mid-session writes exactly what a clean exit would have
-	// written then - measured before this call was added.
+	// (specific/registry.cpp). Both are live values at any moment, so
+	// writing them mid-session writes exactly what a clean exit would
+	// have written then.
 	SaveSettings();
 }
 
@@ -1773,8 +1771,8 @@ static void MenuBack()
 
 // Leaving Options altogether: the next entry starts on the Options page, from
 // the title screen and from the pause menu alike. DoOptions() itself is one
-// function shared by both callers (menu-map R1), so without this the menu
-// would resume wherever the last session left it.
+// function shared by both callers, so without this the menu would resume
+// wherever the last session left it.
 static void MenuLeave()
 {
 	MenuSettleSlider(menu_stack[menu_depth]);
@@ -1815,9 +1813,9 @@ static long MenuStepDir()
 /* A finished rebind is a value change like any other, so it goes through the
  * frame's own path: the seam names it and the Game block is marked. It used to
  * set menu_game_dirty by hand, which saved correctly but left MENULOG silent on
- * the one page whose whole purpose is changing values (found by review). The
- * role's row is looked up rather than passed, because the capture runs from the
- * drive loop's head, before the row under the cursor is fetched. */
+ * the one page whose whole purpose is changing values. The role's row is
+ * looked up rather than passed, because the capture runs from the drive
+ * loop's head, before the row under the cursor is fetched. */
 static void MenuBindingChanged()
 {
 	const menu_row* rows;
@@ -1844,9 +1842,9 @@ static void MenuBindingChanged()
 }
 
 /* Waiting for a key or a button. Carried over from base's DoOptions()
- * (specific\LoadSave.cpp:596-730) with one change: the role is
- * menu_wait_role, so the two shift-then-count blocks that turned the
- * selection bit back into an array index are gone. */
+ * (specific/LoadSave.cpp) with one change: the role is menu_wait_role,
+ * so the two shift-then-count blocks that turned the selection bit
+ * back into an array index are gone. */
 static void MenuCaptureBinding()
 {
 	long jread, jx, jy, lp, lp2, i;
@@ -1884,28 +1882,29 @@ static void MenuCaptureBinding()
 		jread = ReadJoystick(jx, jy);
 
 		// Drop the hold guard as soon as the button is actually up, and check
-		// that on EVERY frame of the wait - it used to sit inside "if (jread)"
-		// below, and jread is zero exactly when the user lets go, so the
+		// that on every frame of the wait - it used to sit inside "if (jread)"
+		// below, and jread is zero exactly when the player lets go, so the
 		// release was never seen and the Action button could not be bound to
 		// itself at all.
 		if (!Key(jLayout[4] + 256))
 			menu_action_still_held = 0;
 
-		/* THE MODIFIER MAKES THE NEXT PRESS A CHORD (#161, round 161b2d, item
-		 * 3). The raw reading is what this capture has always used, and it is
-		 * still raw here - PadRoleFires is the rule for PLAY, and a capture that
-		 * went through it could never record a chord at all (a plain read is
+		/* The Modifier makes the next press a chord. The raw reading is
+		 * what this capture has always used, and it is still raw here -
+		 * PadRoleFires is the rule for play, and a capture that went
+		 * through it could never record a chord at all (a plain read is
 		 * suppressed while the Modifier is held, which is the point).
 		 *
-		 * THE MODIFIER'S OWN BIT IS TAKEN OUT OF THE READING FIRST, or the
-		 * highest-bit search below would find IT and not the button the player
-		 * pressed with it - bit 13, the DualSense's touchpad click, is above
-		 * every face button on that page. With the bit gone, `jread` is zero
-		 * until a second button really arrives, and the `if` below simply waits,
-		 * which is exactly "the Modifier alone is not a binding".
+		 * The Modifier's own bit is taken out of the reading first, or
+		 * the highest-bit search below would find it instead of the
+		 * button the player pressed with it - bit 13, the DualSense's
+		 * touchpad click, is above every face button on that page. With
+		 * the bit gone, `jread` is zero until a second button really
+		 * arrives, and the `if` below simply waits, which is exactly
+		 * "the Modifier alone is not a binding".
 		 *
-		 * EXCEPT ON THE MODIFIER'S OWN ROW, where it is the one thing that CAN
-		 * be bound and must therefore stay in the reading. */
+		 * Except on the Modifier's own row, where it is the one thing
+		 * that can be bound and must therefore stay in the reading. */
 		const long mbit = jLayout[JOY_ROLE_MODIFIER];
 		const long chord = (menu_wait_role != JOY_ROLE_MODIFIER && PadBitDown((unsigned long)jread, mbit)) ? 1 : 0;
 
@@ -1924,7 +1923,7 @@ static void MenuCaptureBinding()
 			}
 
 			// Ignore the button currently bound to Action/Select - it is what
-			// the user just pressed to select this row, and is very likely
+			// the player just pressed to select this row, and is very likely
 			// still physically held on this very next frame (this capture
 			// reads the raw, non-debounced joystick state). The keyboard loop
 			// above excludes DIK_RETURN for exactly the same reason.
@@ -1933,22 +1932,23 @@ static void MenuCaptureBinding()
 				jLayout[menu_wait_role] = lp2;
 				JoyRoleSetChord(menu_wait_role, chord);
 
-				/* THE CONFLICT IS THE PAIR AND NOT THE BUTTON (#161, round
-				 * 161b2d, item 3). R3 and Modifier+R3 are two bindings and
-				 * coexist - that is what a chord is for - so only a role on the
-				 * SAME button AND the same side of the Modifier is the one that
-				 * has to give way. Without the second term the user's own
-				 * default row would unbind half of itself the first time
-				 * anything was rebound onto it.
+				/* The conflict is the pair and not the button. R3 and
+				 * Modifier+R3 are two bindings and coexist - that is what
+				 * a chord is for - so only a role on the same button
+				 * and the same side of the Modifier is the one that has
+				 * to give way. Without the second term, a default row
+				 * would unbind half of itself the first time anything
+				 * was rebound onto it.
 				 *
-				 * BINDING THE MODIFIER ONTO A USED BUTTON CLEARS THAT BUTTON
-				 * WHOLE. Its own chord flag is 0, so the pair test above already
-				 * takes every PLAIN role sitting there; the second term takes
-				 * the chord ones too, which the pair test would have left. They
-				 * are just as broken: a chord on the Modifier's own button would
-				 * fire when the Modifier alone is pressed, and PadRoleFires
-				 * refuses it anyway - this is the same answer said where the
-				 * player can see it happen. */
+				 * Binding the Modifier onto a used button clears that
+				 * button whole. Its own chord flag is 0, so the pair
+				 * test above already takes every plain role sitting
+				 * there; the second term takes the chord ones too,
+				 * which the pair test would have left. They are just as
+				 * broken: a chord on the Modifier's own button would
+				 * fire when the Modifier alone is pressed, and
+				 * PadRoleFires refuses it anyway - this is the same
+				 * answer said where the player can see it happen. */
 				for (i = 0; i < JOY_ROLES; i++)
 					if (i != menu_wait_role && jLayout[i] == lp2 &&
 						(JoyRoleIsChord(i) == chord || menu_wait_role == JOY_ROLE_MODIFIER))
@@ -1967,10 +1967,10 @@ static void MenuCaptureBinding()
 	dbinput = 0;
 }
 
-/* The two screens that still keep their own code: Special Features and the
- * Credits (troyestuff.cpp). "tomb5 options" left this list in step 2 - it is
- * a table like any other page now. They are pages of the tree like any
- * other; only what happens INSIDE them is still theirs. */
+/* The two screens that still keep their own code: Special Features and
+ * the Credits (troyestuff.cpp). "tomb5 options" became a table like any
+ * other page. They are pages of the tree like any other; only what
+ * happens inside them is still theirs. */
 static ulong menu_legacy_sel;
 
 static bool MenuRunLegacy(long page)
@@ -2037,9 +2037,9 @@ void MenuFrameRun()
 		// and the two legacy screens do not consume it (CreditsScreen takes
 		// only IN_DESELECT|IN_SELECT) - so without this the caller would shut
 		// Options while the frame still had Credits on its stack, and the next
-		// visit would open straight into it. Found by review; the same line
-		// stands at the end of the ordinary path below, so a legacy page now
-		// leaves the tree exactly the way every other page does.
+		// visit would open straight into it. The same line stands at the end
+		// of the ordinary path below, so a legacy page now leaves the tree
+		// exactly the way every other page does.
 		if (dbinput & IN_PAUSE)
 			MenuLeave();
 
@@ -2056,11 +2056,9 @@ void MenuFrameRun()
 		num = pg->num_rows;
 	}
 
-	/* WHICH ROWS THIS PAGE SHOWS. The fixed rows come first and are on every
-	 * page of a split list; the rest is paged in balanced halves
-	 * (game\menu_nav.h). "Wenn nicht alle Keybinds auf eine Seite passen,
-	 * machen wir das wie in den Tomb-Optionen mit mehreren Seiten nach links
-	 * und rechts mit den Pfeilen am unteren Bildschirmrand." */
+	/* Which rows this page shows. The fixed rows come first and are on
+	 * every page of a split list; the rest is paged in balanced halves
+	 * (game/menu_nav.h). */
 	fixed = pg->fixed_rows;
 	body = num - fixed;
 	body_max = MENU_MAX_ROWS - fixed;
@@ -2130,7 +2128,7 @@ void MenuFrameRun()
 		{
 			// x = 400 and the "+ 4 - (font_height >> 1)" centring term inside
 			// a taller text row are the options page's own slider geometry,
-			// kept rather than re-derived (specific\LoadSave.cpp:1021 at base).
+			// kept rather than re-derived (specific/LoadSave.cpp at base).
 			DoSlider(400, y + 4 - (font_height >> 1), 200, 16, row->slider ? row->slider(row->param) : 0,
 				0x1F1F1F, 0x3F3FFF, cur == i && enabled[i] ? 0x7F7F7F : 0x3F3F3F);
 			continue;
@@ -2147,26 +2145,25 @@ void MenuFrameRun()
 		// MENU_BOTTOM_ROW, never after the last drawn row - and drawn only
 		// while the list really has more than one page, which is the `if`
 		// above. The glyphs are the ones the tomb5 options already page with
-		// (tomb5\troyestuff.cpp:120-121).
+		// (tomb5/troyestuff.cpp).
 		col = (uchar)(cur == nvis ? 1 : 6);
 		PrintString(phd_centerx - (phd_centerx >> 3), MENU_BOTTOM_ROW * font_height, col, "\x19", 0);
 		PrintString(phd_centerx + (phd_centerx >> 3), MENU_BOTTOM_ROW * font_height, col, "\x1B", 0);
-		/* AND WHICH PAGE OF HOW MANY, BETWEEN THEM (#161, round 161b2d, item
-		 * 1): "Ich wuerde auch gerne in der Mitte zwischen den beiden Pfeilen
-		 * eine Seitenangabe haben '1/N', dann ist das ein bisschen sauberer."
-		 * In the arrows' own colour, and inside the same `if` - it says
-		 * nothing on a page that does not page.
+		/* Between the two arrows, which page of how many ("1/N"), in the
+		 * arrows' own colour, and inside the same `if` - it says nothing
+		 * on a page that does not page.
 		 *
-		 * IT FITS, measured on the real font rather than assumed. The arrows
-		 * sit at phd_centerx -/+ (phd_centerx >> 3), left-aligned, and the
-		 * left/right glyphs (CharDef[99] and [101], game\chardef.inc) are 13
-		 * wide before the resolution scale of phd_winxmax / 512 - 16 at
-		 * 640x480. So the gap between the two glyphs runs from centerx - 24 to
-		 * centerx + 40, and "1/3", the widest string any list of this tree
-		 * produces (the longest is the keyboard's at 3 pages), is 6 + 9 + 8 =
-		 * 23 before the scale and 27 after it, centred: centerx - 13 to
-		 * centerx + 14. Ten pixels of air on the tight side at 4:3, and the
-		 * scale multiplies both sides alike at every other resolution. */
+		 * It fits, measured on the real font rather than assumed. The
+		 * arrows sit at phd_centerx -/+ (phd_centerx >> 3), left-aligned,
+		 * and the left/right glyphs (CharDef[99] and [101],
+		 * game/chardef.inc) are 13 wide before the resolution scale of
+		 * phd_winxmax / 512 - 16 at 640x480. So the gap between the two
+		 * glyphs runs from centerx - 24 to centerx + 40, and "1/3", the
+		 * widest string any list of this tree produces (the longest is
+		 * the keyboard's at 3 pages), is 6 + 9 + 8 = 23 before the scale
+		 * and 27 after it, centred: centerx - 13 to centerx + 14. Ten
+		 * pixels of air on the tight side at 4:3, and the scale
+		 * multiplies both sides alike at every other resolution. */
 		sprintf(buf, "%ld/%ld", page_no + 1, pages);
 		PrintString(phd_centerx, MENU_BOTTOM_ROW * font_height, col, buf, FF_CENTER);
 	}

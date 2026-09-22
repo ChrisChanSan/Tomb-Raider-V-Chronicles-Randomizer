@@ -28,7 +28,7 @@
 #include "../specific/input.h"
 #include "../tomb5/tomb5.h"
 #include "../specific/drawbars.h"
-#include "interpolate.h"		// the in-between frame's counters (#148, order 3)
+#include "interpolate.h"		// interpolated in-between frame detection
 
 DISPLAYPU pickups[8];
 long PickupX;
@@ -44,11 +44,12 @@ long FlashIt()
 	static long flash_state;
 	static long flash_count;
 
-	/* R4 (#148, order 3): the health and air bars blink on this, five frames
-	 * on and five off, counted per DRAWN frame from DrawGameInfo. At sixty
-	 * it would blink twice as fast. The in-between frame is handed the state
-	 * the last tick left, so the bar keeps showing whatever it was showing
-	 * and the blink keeps its speed. */
+	/* The health and air bars blink on this counter, five frames on and
+	 * five off, counted once per drawn (logic) frame from DrawGameInfo.
+	 * Counting it on every rendered frame instead would double the blink
+	 * rate at a higher frame rate, so an interpolated in-between frame just
+	 * returns the state the last logic tick left, keeping the blink speed
+	 * independent of the frame rate. */
 	if (InterpIsTweenFrame())
 		return flash_state;
 
@@ -116,9 +117,9 @@ void DrawGameInfo(long timed)
 
 		if (ammo_change_timer)
 		{
-			// #148, order 3 (sweep): the "ammo changed" caption stands for
-			// ammo_change_timer DRAWN frames. Same class as R4 and R5, and
-			// it was not in the plan's list.
+			// The "ammo changed" caption stays up for ammo_change_timer
+			// drawn (logic) frames; counting it down only on drawn frames
+			// keeps its on-screen time independent of the render rate.
 			if (!InterpIsTweenFrame())
 				ammo_change_timer--;
 
@@ -161,11 +162,10 @@ void DrawHealthBar(long flash_state)
 	else if (health_bar_timer > 0 || lara.gun_status == LG_READY && lara.gun_type != WEAPON_TORCH || lara.poisoned >= 256)
 			S_DrawHealthBar(hitpoints / 10);
 
-	// #148, order 3 (sweep): PoisonFlag is set to 16 by the poison damage in
-	// ControlPhase and counted down here, once per DRAWN frame. Nothing in
-	// the build ever READS it - it is dead state - and this is guarded only
-	// so that the number stays what it is at thirty for whoever reads it
-	// next.
+	// PoisonFlag is set to 16 by the poison damage in ControlPhase and
+	// counted down here once per drawn (logic) frame, so its rate stays
+	// independent of the render rate. Nothing currently reads the counter,
+	// but the guard keeps its value correct for anything that does.
 	if (PoisonFlag && !InterpIsTweenFrame())
 		PoisonFlag--;
 }
@@ -214,14 +214,13 @@ void DrawPickups(long timed)
 	DISPLAYPU* pu;
 	long lp;
 
-	/* R5 (#148, order 3): DESPITE THE NAME, THIS DRAWS NOTHING.
-	 *
-	 * It is the pickup display's whole animation - how long the icon stays
-	 * (pu->life), how far it has slid in from the right (PickupX), how fast
-	 * it is sliding (PickupVel) and which of the eight queued pickups is up.
-	 * The drawing is S_DrawPickup in S_OutputPolyList, out of PickupX. So
-	 * the in-between frame leaves this alone entirely and the icon slides in
-	 * over the same fraction of a second at either rate. */
+	/* Despite the name, this function draws nothing itself: it advances the
+	 * pickup display's animation state - how long the icon stays (pu->life),
+	 * how far it has slid in from the right (PickupX), how fast it is
+	 * sliding (PickupVel), and which of the eight queued pickups is shown.
+	 * The actual drawing is S_DrawPickup in S_OutputPolyList, driven by
+	 * PickupX. An interpolated in-between frame skips this entirely, so the
+	 * icon slides in over the same real time regardless of frame rate. */
 	if (InterpIsTweenFrame())
 		return;
 

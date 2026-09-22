@@ -700,12 +700,11 @@ void RailSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	}
 }
 
-/* THE ONE SWITCH IN THIS FILE THAT TAKES EITHER KEY (#161, round 161b2c, item
- * 1). The other thirteen are IN_INTERACT: Lara is standing in front of a thing
- * and using it. This one is caught IN MID-JUMP, out of AS_REACH or AS_UPJUMP
- * with gravity under her - the same press and the same instant as grabbing a
- * ledge - so IN_ACTION_ANY, and under "Separate" a player who reaches for it
- * with either key hits it. See IN_ACTION_ANY in global\types.h. */
+/* The other thirteen switches in this file are IN_INTERACT: Lara is
+ * standing in front of a thing and using it. This one is caught mid-jump,
+ * out of AS_REACH or AS_UPJUMP with gravity under her - the same press and
+ * the same instant as grabbing a ledge - so it takes IN_ACTION_ANY, and
+ * under "Separate" controls either action key hits it. */
 void JumpSwitchCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ITEM_INFO* item;

@@ -200,7 +200,7 @@ extern char LaraDrawType;
 extern char WeatherType;
 extern char GfForeignSpeechHeads;
 
-/* data[3] of the level header (#123, stage S7). 0 in every vanilla file and
+/* data[3] of the level header. 0 in every vanilla file and
  * in every run that rolled a vanilla outfit; otherwise one of the engine's
  * own HD_LARA_OUTFIT_* numbers, 5 to 8, naming the Tomb Raider III outfit
  * the randomizer's wardrobe put on this level.

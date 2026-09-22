@@ -45,7 +45,7 @@
 // CreatureAnimation exist word for word in TOMB5's box.cpp. That is why
 // the state machine could be taken over unchanged.
 //
-// THREE SPOTS were deliberately left out because TR5 has no counterpart:
+// Three spots were deliberately left out because TR5 has no counterpart:
 //
 // 1. The prey search. TR3 searches the neighboring rooms via
 //    GetNearByRooms/draw_rooms for RAPTOR and FLARE_ITEM, so the T-Rex
@@ -115,16 +115,15 @@ void DinoControl(short item_number)
             rex->flags = 1;
 
         // This bracket decides whether the T-Rex settles down. TR3 demands:
-        // no flare, Lara stands or crouches AND holds the state, no hit.
+        // no flare, Lara stands or crouches and holds the state, no hit.
         // Only then does the counter run down; as soon as Lara moves it
         // jumps back to 120 and the dino stays awake.
         //
-        // On the first attempt I had left out the standstill because TR5
-        // has different state numbers - the counter thereby ALWAYS drained,
-        // the dino was permanently BORED_MOOD and just trotted around
-        // instead of hunting Lara (seen in game). Instead of the state
-        // numbers, Lara's speed is now checked: the same statement ("she is
-        // not moving") and stable across game boundaries.
+        // TR5's state numbers differ from TR3's, so checking Lara's stance
+        // state directly would leave the counter always draining and the
+        // dino permanently BORED_MOOD, trotting instead of hunting. Lara's
+        // speed is checked instead: the same statement ("she is not
+        // moving") and stable across game boundaries.
         if (lara.gun_type != LG_FLARE && !lara_item->speed && !item->hit_status)
         {
             if (item->item_flags[0] > 0)
@@ -222,7 +221,7 @@ void DinoControl(short item_number)
             // shell like the SAS slot. Without the animation the engine
             // falls back to a plain fall.
             //
-            // The SOUND hangs on exactly that animation in TR3 and would
+            // The sound hangs on exactly that animation in TR3 and would
             // thus stay mute. It is therefore triggered directly here: the
             // snap is heard even though the special animation is missing.
             if (item->touch_bits & 0x3000)

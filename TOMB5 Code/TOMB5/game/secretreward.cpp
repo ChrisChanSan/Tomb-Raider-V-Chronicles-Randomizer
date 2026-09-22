@@ -22,10 +22,10 @@
  * What a level awards for finding every secret in it.
  *
  * This used to be a table compiled into the game (newinv2.cpp), which was
- * fine while it was one fixed reward. The randomizer wants to roll it - the
- * user asked for four to eight items, drawn from weapons, ammunition and
- * medipacks - and a player may want to set it himself. Neither can reach a
- * table inside the executable.
+ * fine while it was one fixed reward. The randomizer rolls a set of four to
+ * eight items, drawn from weapons, ammunition and medipacks, and a player
+ * may want to set it himself. Neither can reach a table inside the
+ * executable.
  *
  * SCRIPT.DAT would have been the other candidate and is deliberately not
  * used: its layout is Core's, fixed and undocumented, and writing our own
@@ -35,7 +35,7 @@
  * file is written from the defaults, a file that lacks lines is completed
  * after reading, and the player's own numbers survive that.
  *
- * WHAT MAY BE A REWARD is the list kRewardNames below and nothing else -
+ * What may be a reward is the list kRewardNames below and nothing else -
  * that list is the whole permission, so there is only ever one place to
  * change it. Anything else in the file is refused by name in the log rather
  * than silently dropped.
@@ -47,14 +47,13 @@ struct RewardName
 	short object_number;
 };
 
-/* Everything the reward may contain, and nothing else. This IS the guard -
+/* Everything the reward may contain, and nothing else. This is the guard -
  * a name or a number outside this list is refused.
  *
- * Struck off by the user, who named each of them: pistols and their ammo
- * (she always has them), the whole crossbow family, lasersight, binoculars
- * and silencer, and both flares. Some would cause trouble, the rest are
- * simply pointless as a prize. What is left is what a player is actually
- * pleased to find.
+ * Left out on purpose: pistols and their ammo (Lara always has them), the
+ * whole crossbow family, lasersight, binoculars and silencer, and both
+ * flares. Some would cause trouble, the rest are simply pointless as a
+ * prize. What is left is what a player is actually pleased to find.
  *
  * Keys and puzzle items were never in it: handing out a key the level did
  * not intend opens a door out of order, and in a randomized run that can

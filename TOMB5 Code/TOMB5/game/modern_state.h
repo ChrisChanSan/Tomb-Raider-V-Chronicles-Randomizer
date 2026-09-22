@@ -12,43 +12,44 @@
  */
 #pragma once
 
-/* THE MODERN CONTROL - THE PART THAT KNOWS THE ENGINE (#161, round 161a).
+/* The part of the modern control scheme that knows the engine.
  *
- * game\modern_move.cpp is the arithmetic and has no engine in it at all. This
- * is the other half: it owns the one state the scheme remembers, it measures
- * the three things the arithmetic cannot work out for itself - the camera's
- * heading, where the orbit is pointing and whether Lara is getting anywhere -
- * and it is the only place in the tree that writes Lara's own angles from the
- * input function (her heading everywhere, and in the water her attitude and
- * her bank as well - round 161a2 step 4).
+ * game/modern_move.cpp is the arithmetic and has no engine dependency at
+ * all. This is the other half: it owns the state the scheme remembers,
+ * measures the three things the arithmetic cannot work out for itself -
+ * the camera's heading, where the orbit is pointing, and whether Lara is
+ * getting anywhere - and is the only place in the tree that writes
+ * Lara's own angles from the input function (her heading everywhere,
+ * and in the water her attitude and bank as well).
  *
- * The tick below is called from ONE place, the seam in specific\input.cpp
- * between the block that puts the stick on the four direction bits and the
- * block that reads the key roles, and only inside that seam's guard; the reset
- * below it is called from two more, both of them under the same option (the
- * Controls page when the scheme is switched, and the level start). With
- * tomb5.control_modern off nothing here runs at all, which is how the engine
- * stays what it was at the default (Tank). */
+ * The tick below is called from one place, the seam in
+ * specific/input.cpp between the block that puts the stick on the four
+ * direction bits and the block that reads the key roles, and only
+ * inside that seam's guard; the reset below it is called from two more
+ * places, both under the same option (the Controls page when the scheme
+ * is switched, and level start). With tomb5.control_modern off, nothing
+ * here runs, so the engine stays what it was at the default (Tank). */
 
-/* One logic tick of the modern control. `bits` is the input word as the stick
- * and the keyboard have left it; the return value is what the seam puts back.
- * `stick_x` is right-positive and `stick_y` is FORWARD-NEGATIVE, exactly as
- * specific\input.cpp reads joy_x/joy_y for the classic bits. `action` and
- * `jump` are the two key roles the scheme needs to know about before they are
- * read into the word - the caller reads them, because the caller is the file
- * that knows which key and which pad button they are.
+/* One logic tick of the modern control. `bits` is the input word as the
+ * stick and the keyboard have left it; the return value is what the
+ * seam puts back. `stick_x` is right-positive and `stick_y` is
+ * forward-negative, exactly as specific/input.cpp reads joy_x/joy_y for
+ * the classic bits. `action` and `jump` are the two key roles the
+ * scheme needs to know about before they are read into the word - the
+ * caller reads them, because the caller is the file that knows which
+ * key and which pad button they are.
  *
- * Returns `bits` unchanged whenever the scheme is not responsible: a state
- * that stays classic, the stick at rest, and every call that is not the
- * game's own logic tick (the menus and the FMV loop call S_UpdateInput too -
- * see the tick guard in the .cpp). */
+ * Returns `bits` unchanged whenever the scheme is not responsible: a
+ * state that stays classic, the stick at rest, and every call that is
+ * not the game's own logic tick (the menus and the FMV loop call
+ * S_UpdateInput too - see the tick guard in the .cpp). */
 long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump);
 
-/* Her heading as the function above left it THIS tick, for game\camera.cpp and
- * nothing else (round 161a3, item 5). Returns 0 when the modern input did not
- * run this tick at all, and then writes nothing: the camera has no baseline on
- * such a tick and must not seat a swing. The .cpp says which four ticks those
- * are and why the stamp is an equality. */
+/* Her heading as the function above left it this tick, for
+ * game/camera.cpp and nothing else. Returns 0 when the modern input did
+ * not run this tick at all, and then writes nothing: the camera has no
+ * baseline on such a tick and must not seat a swing. The .cpp says
+ * which four ticks those are and why the stamp is an equality. */
 long ModernHeadingAfterInput(short* yaw);
 
 /* Forget everything remembered: the held course, the spin, the blocked

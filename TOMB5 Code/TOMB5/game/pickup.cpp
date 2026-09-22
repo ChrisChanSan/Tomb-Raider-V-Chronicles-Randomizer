@@ -653,20 +653,19 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 				// The card-swipe animation (ANIM_KEYCARD, 437) exists only
 				// where the level build placed its frame data. Lara's anim
-				// table is the same length everywhere, the DATA is not -
-				// Core leaves unused entries standing as stubs.
+				// table is the same length everywhere, the data is not -
+				// unused entries stand as stubs.
 				//
-				// Hence the DATA is asked, not the level: the high byte of
+				// Hence the data is asked, not the level: the high byte of
 				// "interpolation" is the FrameSize, and at zero the engine
 				// computes frame_ptr[n * 0] and shows the same frame
-				// forever (in joby3 that was 22 seconds of frozen pose).
-				// Vanilla carries it in joby2, joby4, joby5 and rich1; the
+				// forever (22 seconds of frozen pose in joby3). Vanilla
+				// carries it in joby2, joby4, joby5 and rich1; the
 				// randomizer implants it into further levels as needed
 				// (laraAnimAdds), and those automatically take this path.
 				//
-				// A level list stood here before. It was too narrow: rich1
-				// has the animation but used the key-turning gesture (seen
-				// by the user in game).
+				// A per-level list is not enough: rich1 has the animation
+				// data but the key-turning gesture plays there instead.
 				if (item->object_number == KEY_HOLE8 &&
 					(anims[ANIM_KEYCARD].interpolation >> 8) != 0)
 					l->anim_number = ANIM_KEYCARD;
@@ -682,24 +681,24 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				lara.torso_y_rot = 0;
 				lara.gun_status = LG_HANDS_BUSY;
 				item->status = ITEM_ACTIVE;
-				// Was "flags &= IFL_TRIGGERED" - that clears ALL bits when
+				// "flags &= IFL_TRIGGERED" clears all bits when
 				// IFL_TRIGGERED is not already set, and a fresh keyhole
-				// carries flags 0 in the level file. But the savegame
-				// writer only stores an item when one of
-				// CODEBITS/INVISIBLE/TRIGGERED is set (savegame.cpp:305):
-				// the lock thus fell out of the savegame with flags 0 and
-				// came back as "not used" on loading - while the key (the
-				// inventory IS saved) was already gone. The door never
-				// opened again because KeyTrigger (above, line 140) demands
-				// ITEM_ACTIVE. Reproduced by the user in VANILLA Andrea1,
-				// item 25 (Keyhole1): start the anim, save immediately,
-				// load.
-				// In the whole engine this is the ONLY spot with "&=" - the
-				// 26 others set the bit with "|=". The assignment keeps
-				// Core's intent ("all other bits away") and only makes sure
-				// the bit really stands. The puzzle hole does it right
-				// (line 317) and has therefore survived save/load forever
-				// (savegame.cpp:924 restores it).
+				// carries flags 0 in the level file. The savegame writer
+				// only stores an item when one of CODEBITS/INVISIBLE/
+				// TRIGGERED is set (SaveLevelData): the lock thus fell out
+				// of the savegame with flags 0 and came back as "not used"
+				// on loading, while the key (the inventory is saved) was
+				// already gone - the door never opened again, since
+				// KeyTrigger above demands ITEM_ACTIVE. Reproducible in
+				// vanilla Andrea1, item 25 (Keyhole1): start the anim, save
+				// immediately, load.
+				//
+				// This is the only "&=" of its kind in the engine - the
+				// other 26 set the bit with "|=". The assignment keeps the
+				// original intent ("all other bits away") while making sure
+				// the bit really stands. The puzzle hole's equivalent
+				// assignment does this correctly and has survived save/load
+				// (RestoreLevelData restores it).
 				item->flags = IFL_TRIGGERED;
 
 				if (item->trigger_flags == 1 && item->object_number == KEY_HOLE8)

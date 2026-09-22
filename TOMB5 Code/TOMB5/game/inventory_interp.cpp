@@ -19,8 +19,8 @@
 #include "../specific/output.h"		// ActiveFpsMode, PresentSlotMs
 #include "../specific/time.h"		// TIME_SubTick - the display-bound blend factor
 
-/* The whole of this file is #154. The design note is in the header; what is
- * written down here is the arithmetic and the log. */
+/* The design note for this whole file is in the header; what is written
+ * down here is the arithmetic and the log. */
 
 namespace
 {
@@ -28,12 +28,12 @@ namespace
 	const int SLOT_COUNT = 100;	// RINGME::current_object_list[100]
 	const int AMMO_COUNT = 3;	// ammo_object_list[3] (game\newinv2.cpp)
 
-	/* ONE SLOT OF THE SNAPSHOT. `invitem` is not interpolated - it is there
-	 * so that a REBUILT list can be told from a MOVED one, which is the same
-	 * job object_number does in order 2's own snapshot: the combine ring and
-	 * every separate/combine put different items in the same slots, and a
-	 * spin blended across that would be a different object turning from
-	 * where the old one stood. */
+	/* One slot of the snapshot. `invitem` is not interpolated - it is there
+	 * so that a rebuilt list can be told from a moved one, the same job
+	 * object_number does in the main interpolation snapshot: the combine
+	 * ring and every separate/combine put different items in the same
+	 * slots, and a spin blended across that would show a different object
+	 * turning from where the old one stood. */
 	struct SlotState
 	{
 		short invitem;
@@ -45,7 +45,7 @@ namespace
 	{
 		SlotState slot[SLOT_COUNT];
 		long move;		// objlistmovement
-		long cur;		// curobjinlist - the JUMP marker, never blended
+		long cur;		// curobjinlist - the jump marker, never blended
 	};
 
 	struct Snapshot
@@ -62,20 +62,20 @@ namespace
 	InvInterpSource g_src = { { 0, 0 }, 0, 0, 0, 0, 0 };
 	bool g_open = false;
 
-	/* TWO GENERATIONS, AND THE HEADER SAYS WHY. g_gen[0] is the state before
-	 * the step this frame ran, g_gen[1] the state before the one before it.
-	 * g_gens counts how many of them are real, so that the first step after a
-	 * cut draws live and the second draws live for the fields that need the
-	 * older pair. */
+	/* Two generations; see the header comment above for why. g_gen[0] is
+	 * the state before the step this frame ran, g_gen[1] the state before
+	 * the one before it. g_gens counts how many of them are real, so that
+	 * the first step after a cut draws live and the second draws live for
+	 * the fields that need the older pair. */
 	Snapshot g_gen[2];
 	int g_gens = 0;
 
-	/* THE ACCUMULATOR, IN 1/60 s TICKS, AND IT IS CONTROLPHASE'S OWN SHAPE.
+	/* The accumulator, in 1/60s ticks, is ControlPhase's own shape.
 	 *
 	 * `for (framecount += nframes; framecount > 0; framecount -= 2)`
-	 * (game\control.cpp) spends two ticks on a logic step and runs one as
-	 * soon as the accumulator is positive. This is that loop with the body
-	 * run at most ONCE, because the ring's body draws as it steps and a
+	 * (control.cpp) spends two ticks on a logic step and runs one as soon
+	 * as the accumulator is positive. This is that loop with the body run
+	 * at most once, because the ring's body draws as it steps and a
 	 * second pass in one frame would draw into a poly list that is already
 	 * being filled. A frame slower than one logic step therefore steps the
 	 * ring once, which is exactly what thirty hertz does when a frame runs
@@ -86,8 +86,8 @@ namespace
 	bool g_step = true;
 	float g_alpha = 1.0F;
 
-	// INVLOG. The second is a LOGIC second - thirty ring steps - because the
-	// ring stops GlobalCounter and there is no other clock in it.
+	// INVLOG. The second here is a logic second - thirty ring steps - because
+	// the ring stops GlobalCounter and there is no other clock in it.
 	int g_secFrames = 0;
 	int g_secSteps = 0;
 	int g_secTween = 0;
@@ -99,11 +99,12 @@ namespace
 	int g_totalSteps = 0;
 	int g_totalFrames = 0;
 
-	/* WHAT REALLY MOVED ON THE IN-BETWEEN FRAMES, BY KIND - INVLOG's
-	 * `blend=` mask. The same reasoning as INTERPLOG's particle_kinds: a kind
-	 * that is plainly on screen and missing from the mask is an accessor
-	 * whose guard never fires, and there is no other way to see that from the
-	 * picture, because a field that never blends simply looks like thirty. */
+	/* What really moved on the in-between frames, by kind - INVLOG's
+	 * `blend=` mask. The same reasoning as INTERPLOG's particle_kinds: a
+	 * kind that is plainly on screen and missing from the mask is an
+	 * accessor whose guard never fires, and there is no other way to see
+	 * that from the picture, because a field that never blends simply
+	 * looks like thirty. */
 	enum
 	{
 		KIND_SPIN = 0,
@@ -131,12 +132,11 @@ namespace
 
 	void LogSecond();
 
-	/* ONE FRAME, COUNTED - AND IT IS COUNTED AT fps_mode 0 TOO.
-	 *
-	 * That run is the COMPARISON: a thirty hertz second of the ring must read
-	 * frames=30 steps=30 tween=0 against a sixty hertz second's frames=60
-	 * steps=30 tween=30, and a line that only exists in one of the two modes
-	 * cannot say so. It is the same rule INTERPLOG's counters follow. Behind
+	/* One frame, counted - and it is counted at fps_mode 0 too, for
+	 * comparison: a thirty hertz second of the ring must read frames=30
+	 * steps=30 tween=0 against a sixty hertz second's frames=60 steps=30
+	 * tween=30, and a line that only exists in one of the two modes cannot
+	 * say so. It is the same rule INTERPLOG's counters follow. Behind
 	 * gLogEnabled, so without -log nothing here moves. */
 	void NoteFrame()
 	{
@@ -164,13 +164,14 @@ namespace
 			LogSecond();
 	}
 
-	/* THE SLOT THE RING'S PRESENT ASKS FOR, in milliseconds, for the log
+	/* The slot the ring's present asks for, in milliseconds, for the log
 	 * lines alone. PresentSlotMs is the engine's single definition of "how
-	 * long a frame of this kind is allowed to take" and it reads
-	 * gPresentMinTicks, which is at its default two everywhere except inside
-	 * the ring's own present - so the number is asked for with the ring's
-	 * value briefly in place rather than worked out a second time here. A
-	 * second derivation is exactly what 1b's budget bug was made of.
+	 * long a frame of this kind is allowed to take", and it reads
+	 * gPresentMinTicks, which is at its default two everywhere except
+	 * inside the ring's own present - so the number is asked for with the
+	 * ring's value briefly in place rather than worked out a second time
+	 * here, where a second derivation could drift from the engine's own
+	 * definition.
 	 *
 	 * -log only, and nothing else ever runs between the two assignments. */
 	double RingSlotMs()
@@ -185,25 +186,25 @@ namespace
 		return ms;
 	}
 
-	/* IS THERE ANYTHING TO BLEND AT ALL. `gens` is how many generations the
+	/* Is there anything to blend at all. `gens` is how many generations the
 	 * field needs - one for what vanilla steps before its draw, two for what
 	 * it steps after it (see the header). At fps_mode 0 the count never
 	 * leaves zero, because InvInterpBeginFrame returns before it captures,
-	 * and the mode is asked as well so that a rate changed while the ring
+	 * and the mode is checked as well so that a rate changed while the ring
 	 * stands open cannot leave a stale generation driving the picture. */
 	bool Blending(int gens)
 	{
 		return g_open && g_gens >= gens && ActiveFpsMode() != 0;
 	}
 
-	/* AND FOR A FIELD THAT VANILLA STEPS BEFORE ITS DRAW, a frame at alpha 1
-	 * is the live one and the blend has nothing to add: `live` is already the
+	/* For a field that vanilla steps before its draw, a frame at alpha 1 is
+	 * the live one and the blend has nothing to add: `live` is already the
 	 * value this frame is meant to show. Saying so here rather than leaving
-	 * it to the lerp is what keeps INVLOG's `blend=` honest - a kind is named
-	 * only on a frame where the picture really was moved. A field vanilla
-	 * steps AFTER its draw has no such frame: at alpha 1 it wants the LAST
-	 * step's value and not the live one, which is the whole of why it carries
-	 * a second generation. */
+	 * it to the lerp keeps INVLOG's `blend=` honest - a kind is named only
+	 * on a frame where the picture really was moved. A field vanilla steps
+	 * after its draw has no such frame: at alpha 1 it wants the last
+	 * step's value and not the live one, which is why it carries a second
+	 * generation. */
 	bool BlendingAhead()
 	{
 		return g_alpha < 1.0F;
@@ -329,7 +330,7 @@ void InvInterpClose()
 	g_step = true;
 	g_alpha = 1.0F;
 
-	/* AND THE LATCH GOES DOWN ON THE WAY OUT. The ring may have been on a
+	/* The latch goes down on the way out. The ring may have been on a
 	 * tween frame when it was closed, and what follows it is a return into
 	 * ControlPhase - whose next drawn frame sets the latch for itself - or, on
 	 * the MainThread.ended path, whatever the shutdown draws. Neither should
@@ -354,7 +355,7 @@ long InvFrameMinTicks()
 
 bool InvInterpBeginFrame()
 {
-	/* fps_mode 0 IS THE RING AS IT WAS. One test, and nothing below this
+	/* fps_mode 0 is the ring as it was. One test, and nothing below this
 	 * line runs: no accumulator, no snapshot, no latch. The present waits its
 	 * two ticks (InvFrameMinTicks above), S_DumpScreen puts the tween latch
 	 * down through InterpNoteClassicPresent exactly as it always did, and
@@ -367,18 +368,18 @@ bool InvInterpBeginFrame()
 		return true;
 	}
 
-	/* THE ACCUMULATOR AND THE FACTOR ARE BOTH IN interpolate_math.h, with the
-	 * rest of the arithmetic of this task, so that InterpTest runs the engine's
-	 * own functions and not a copy of them. What is left here is the state
-	 * they are handed and what the answer is used for. */
+	/* The accumulator and the factor are both in interpolate_math.h, along
+	 * with the rest of this feature's arithmetic, so that InterpTest runs
+	 * the engine's own functions and not a copy of them. What is left here
+	 * is the state they are handed and what the answer is used for. */
 	g_step = InterpRingStep(&g_acc, g_pending);
 	g_pending = 0;
 
-	/* WHAT THE FRAME IS DRAWN AT.
+	/* What the frame is drawn at.
 	 *
 	 * At fps_mode 2 it comes from the clock, through the same derivation
-	 * order 6 wrote for the game (InterpRefreshAlpha, interpolate_math.h):
-	 * the accumulator as it stands after this frame's step has been taken out
+	 * used for the game (InterpRefreshAlpha, interpolate_math.h): the
+	 * accumulator as it stands after this frame's step has been taken out
 	 * of it, plus the remainder in the engine's own clock. The phase is the
 	 * game's own - the last Sync() was inside the previous present, which is
 	 * where DrawPhaseGame's is too.
@@ -389,13 +390,13 @@ bool InvInterpBeginFrame()
 	 * on the frame between. InterpTest asserts that the two agree. */
 	g_alpha = InterpRingAlpha(ActiveFpsMode(), g_acc, TIME_SubTick(), g_step);
 
-	/* THE TWEEN LATCH. The ring's present no longer waits two ticks, so
+	/* The tween latch. The ring's present no longer waits two ticks, so
 	 * S_DumpScreen's InterpNoteClassicPresent does not fire for it any more
-	 * and nothing else would set this. Raised HERE, at the top of the body
-	 * and before S_OutputPolyList, because that is where the guarded counters
-	 * of order 3 the ring reaches really run - GnFrameCounter (which the
-	 * keypad's flash and the blinking text read), the screen fade, the weapon
-	 * flash and the F12 debounce. */
+	 * and nothing else would set this. Raised here, at the top of the body
+	 * and before S_OutputPolyList, because that is where the guarded
+	 * counters the ring reaches really run - GnFrameCounter (which the
+	 * keypad's flash and the blinking text read), the screen fade, the
+	 * weapon flash and the F12 debounce. */
 	InterpNoteMenuFrame(!g_step);
 
 	if (g_step)
@@ -430,19 +431,16 @@ void InvInterpCut(const char* why)
 	g_gens = 0;
 }
 
-/* ==========================================================================
- * WHAT THIS FRAME DRAWS.
+/* What this frame draws.
  *
- * SIX of the nine take the pair (previous, live) - the icon's spin and its
+ * Six of the nine take the pair (previous, live) - the icon's spin and its
  * brightness, the ammo spin, and the combine, normal and examine fades -
- * because vanilla steps them BEFORE the icon is drawn and the live value is
- * therefore the one this frame would have shown. The other THREE - the row
- * slide, the current slot and the ammo fade, the three behind Blending(2) -
- * take the two previous generations, because vanilla steps them AFTER the
- * draw and the live value belongs to the next frame. They do not stand in
- * that order below, which is what this banner's old "the first five / the
- * last three" got wrong until audit round A1 - see the header.
- * ======================================================================== */
+ * because vanilla steps them before the icon is drawn, so the live value
+ * is the one this frame would have shown. The other three - the row
+ * slide, the current slot and the ammo fade, behind Blending(2) - take
+ * the two previous generations, because vanilla steps them after the draw
+ * and the live value belongs to the next frame. They do not stand in that
+ * order below; see the header comment for the full picture. */
 
 ushort InvDrawSpin(long ring, long n, short invitem, ushort live)
 {
@@ -482,7 +480,7 @@ long InvDrawMove(long ring, long live)
 	const long a = g_gen[1].ring[ring].move;
 	const long b = g_gen[0].ring[ring].move;
 
-	/* THE JUMP. objlistmovement walks to 65536 in eight steps and is then set
+	/* The jump: objlistmovement walks to 65536 in eight steps and is then set
 	 * straight back to 0 with curobjinlist moved on by one - a reset, not a
 	 * motion, and blending across it would slide the whole row halfway back
 	 * for one frame. The pair that straddles it draws the value the step
@@ -501,7 +499,7 @@ long InvDrawCur(long ring, long live, long count)
 	/* The same gate InvDrawMove uses, and it has to be the same one: when the
 	 * slide is drawn from the snapshot the slot must be, and when it is drawn
 	 * live the slot must be. Nothing is interpolated here - a slot is a slot -
-	 * it is only a question of WHICH of the two a frame shows. */
+	 * it is only a question of which of the two a frame shows. */
 	if (!Blending(2) || ring < 0 || ring >= RING_COUNT)
 		return live;
 
@@ -553,7 +551,7 @@ long InvDrawExamine(long live)
 		return live;
 
 	/* The examine screen opens at 0 and ramps to 128 in sixteen steps. A
-	 * frame whose previous generation was the closed state is the OPENING
+	 * frame whose previous generation was the closed state is the opening
 	 * and is a cut of its own (the ring calls InvInterpCut for it), so what
 	 * is left here is the ramp and its ceiling, both of which blend. */
 	NoteKind(KIND_EXAMINE);

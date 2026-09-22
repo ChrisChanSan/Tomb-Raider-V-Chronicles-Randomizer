@@ -12,37 +12,39 @@
  */
 #pragma once
 
-/* THE OPTIONS MENU - THE PART THAT IS PURE ARITHMETIC (#161, round 161b1).
+/* The options menu's row and paging arithmetic, kept free of drawing.
  *
- * Where a row sits, whether the cursor may stand on it, and which rows a page
- * shows when there are more of them than fit on the screen. Six small
- * questions, and every one of them used to be answered by hand at five
- * different call sites (menu-map risk R1), each with its own bit shift and its
- * own clamp - which is how the Controls page ended up with two shift-by-two
- * blocks that had to be recounted every time a row was added above them.
+ * Where a row sits, whether the cursor may stand on it, and which rows a
+ * page shows when there are more of them than fit on the screen. These
+ * were previously answered by hand at each call site, each with its own
+ * bit shift and its own clamp, which made them easy to get out of step
+ * with each other as rows were added.
  *
- * It includes NO engine header on purpose. It has to compile on its own,
- * because Preparation\Tools\Diagnose\MenuTest.cpp includes THIS FILE - not a
- * copy of it - and asserts on it, exactly as InterpTest.cpp does with
- * game\interpolate_math.h. There is no twin to keep in step.
+ * Includes no engine header on purpose: it has to compile on its own,
+ * because Preparation/Tools/Diagnose/MenuTest.cpp includes this file
+ * directly - not a copy of it - and asserts on it, the same way
+ * InterpTest.cpp does with game/interpolate_math.h. There is no twin to
+ * keep in step.
  *
- * WHAT IS NOT HERE: pixels. The row pitch, the title line and the bottom line
- * are the drawing's business (game\menu_frame.cpp) and they need font_height,
- * which needs the engine. This file counts rows, not pixels.
+ * Deliberately excludes pixels: the row pitch, the title line and the
+ * bottom line are the drawing's business (game/menu_frame.cpp) and need
+ * font_height, which needs the engine. This file counts rows, not
+ * pixels.
  *
- * THE ENABLED MASK. Every function below takes the page's rows as an array of
- * one byte per row: nonzero = the cursor may stand there. A null pointer means
- * "every row is enabled", which is the common case and saves the caller a
- * buffer. A row that is disabled is still DRAWN (in colour 3) - it is only the
- * cursor that skips it, which is how "Special Features" outside the title
- * screen and "Camera speed" under Tank are expressed.
+ * The enabled mask: every function below takes the page's rows as an
+ * array of one byte per row, nonzero meaning the cursor may stand
+ * there. A null pointer means every row is enabled, the common case,
+ * saving the caller a buffer. A disabled row is still drawn (in colour
+ * 3); only the cursor skips it, which is how "Special Features" outside
+ * the title screen and "Camera speed" under Tank are expressed.
  */
 
-/* THE CURSOR STEPS AND STOPS - it does not wrap. That is the behaviour of
- * every page at base ("if (!sel) sel = 1;" / "if (sel > 1<<(n-1)) sel = ...",
- * specific\LoadSave.cpp), and a menu whose cursor runs off the bottom back to
- * the top is a different menu, not a tidier one. A step that finds no enabled
- * row in its direction leaves the cursor exactly where it was. */
+/* The cursor steps and stops; it does not wrap. That matches the base
+ * behaviour of every page ("if (!sel) sel = 1;" / "if (sel >
+ * 1<<(n-1)) sel = ...", specific/LoadSave.cpp): a menu whose cursor
+ * runs off the bottom back to the top is a different menu, not a
+ * tidier one. A step that finds no enabled row in its direction leaves
+ * the cursor exactly where it was. */
 inline int MenuCursorStep(const unsigned char* enabled, int n, int cur, int dir)
 {
 	int i;
@@ -73,11 +75,12 @@ inline int MenuFirstEnabled(const unsigned char* enabled, int n)
 	return -1;
 }
 
-/* A cursor that was remembered from an earlier visit is not to be trusted: the
- * page may have fewer rows now, or the row it stands on may have been switched
- * off since (Camera speed the moment the Control type row above it goes back to
- * Tank). Into range first, then onto the nearest enabled row - DOWNWARD first,
- * because that is the direction base's own clamp moved the cursor. */
+/* A cursor remembered from an earlier visit is not to be trusted: the
+ * page may have fewer rows now, or the row it stands on may have been
+ * switched off since (Camera speed the moment the Control type row
+ * above it goes back to Tank). Clamps into range first, then onto the
+ * nearest enabled row, searching downward first, since that is the
+ * direction base's own clamp moved the cursor. */
 inline int MenuClampCursor(const unsigned char* enabled, int n, int cur)
 {
 	int i;
@@ -105,13 +108,13 @@ inline int MenuClampCursor(const unsigned char* enabled, int n, int cur)
 	return cur;
 }
 
-/* HOW MANY PAGES, and BALANCED. Sixteen rows at a maximum of thirteen is two
- * pages, and two pages of thirteen and three would be an ugly answer to a
- * question nobody asked - so the count is decided first (ceil(n / max)) and the
- * rows are then spread evenly over it (ceil(n / pages)), which gives 8 + 8.
- * Fifteen gives 8 + 7. That is the shape the user asked for, and it is the same
- * arithmetic whether the list is the sixteen keyboard roles or the fifteen pad
- * ones. A page always exists, even for an empty list. */
+/* How many pages, and balanced. Sixteen rows at a maximum of thirteen
+ * is two pages, and splitting them as thirteen and three would be
+ * uneven - so the page count is decided first (ceil(n / max)) and the
+ * rows are then spread evenly over it (ceil(n / pages)), giving 8 + 8.
+ * Fifteen gives 8 + 7. Same arithmetic whether the list is the sixteen
+ * keyboard roles or the fifteen pad ones. A page always exists, even
+ * for an empty list. */
 inline int MenuPageCount(int n, int max)
 {
 	if (max < 1 || n <= 0)
@@ -152,10 +155,10 @@ inline int MenuRowsOnPage(int n, int max, int page)
 	return left < per ? left : per;
 }
 
-/* The arrow row wraps in BOTH directions - unlike base's tomb5-options paging,
- * where either arrow advanced and neither went back (tomb5\troyestuff.cpp:152).
- * With two pages that is the same thing; with three it is not, and the user
- * asked for "nach links und rechts mit den Pfeilen". */
+/* The arrow row wraps in both directions - unlike base's tomb5-options
+ * paging, where either arrow advanced and neither went back
+ * (tomb5/troyestuff.cpp). With two pages that is the same thing; with
+ * three it is not. */
 inline int MenuPageStep(int page, int pages, int dir)
 {
 	if (pages < 1)

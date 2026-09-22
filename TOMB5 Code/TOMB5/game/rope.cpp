@@ -177,13 +177,12 @@ void RopeControl(short item_number)
 		currope->Active = 0;
 }
 
-/* THE CATCH TAKES EITHER KEY - AND SO MUST THE HOLD (#161, round 161b2c,
- * item 1). This is the jump onto the rope, out of AS_REACH or AS_UPJUMP with
- * gravity under her, which is a grab, so IN_ACTION_ANY. LaraClimbRope() below
- * had to follow: it drops her the moment the key is not down, so a catch with
- * one key and a hold on the other would have thrown her off on the very next
- * tick under "Separate". The design's list did not have it; the measurement
- * did. See IN_ACTION_ANY in global\types.h. */
+/* The catch takes either key, and so must the hold. This is the jump onto
+ * the rope, out of AS_REACH or AS_UPJUMP with gravity under her, which is a
+ * grab, so IN_ACTION_ANY. LaraClimbRope() below has to follow: it drops her
+ * the moment the key is not down, so a catch with one key and a hold on the
+ * other would throw her off on the very next tick under "Separate". See
+ * IN_ACTION_ANY in global\types.h. */
 void RopeCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ROPE_STRUCT* rope;

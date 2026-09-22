@@ -15,7 +15,7 @@
 /*
  * Balance.txt - a plain text file next to PCtomb5.exe that lets players tune
  * every weapon, every enemy and every level hazard individually without
- * recompiling the source (task #108).
+ * recompiling the source.
  *
  * If the file is missing, the game creates it at startup with the original
  * values and explanations. If a single line is missing, the original value

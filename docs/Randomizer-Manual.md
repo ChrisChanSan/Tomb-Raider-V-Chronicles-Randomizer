@@ -76,13 +76,10 @@ That is the whole thing. Every option below is optional; with none of them
 touched you still get the full weapon set in every level.
 
 > **A note on which folder.** Either works: the program looks for
-> `PCtomb5.exe` and, if it is not where you pointed, one level up. That
-> matters because `SCRIPT.DAT` lives beside the executable and never in
-> `data\` — until 2026-08-30 choosing `data\` meant the whole script step
-> was skipped in silence, and the only trace was a line in `spoiler.txt`
-> reading *"SCRIPT.DAT not found — the Andy levels keep young Lara"*. If
-> you see that line, the folder is not the problem any more — the file is
-> genuinely missing.
+> `PCtomb5.exe` and, if it is not where you pointed, one level up, because
+> `SCRIPT.DAT` lives beside the executable and never in `data\`. If
+> `spoiler.txt` reads *"SCRIPT.DAT not found — the Andy levels keep young
+> Lara"*, the file is genuinely missing.
 
 ---
 
@@ -482,7 +479,7 @@ with the level options off puts the original order back.
 
 ### The `.hdm` files beside your levels
 
-From build 2026-09-05 a run leaves one small text file per level in `data\`,
+A run leaves one small text file per level in `data\`,
 next to the `.trc` it belongs to: `Andrea1.hdm`, `joby2.hdm` and so on, a
 handful of lines each.
 
@@ -500,10 +497,11 @@ written down as the box it lives in, and the engine leaves out just the HD
 artwork inside that box. The room round it stays HD. Only a room the run
 **lifted** (`Move_Room`) or **built a surface for** (`Make_Room_Geometry`)
 falls back to the classic look entirely, because nothing of the Remaster's
-artwork for it is worth keeping. Up to build 2026-09-10 an opening cost its
-whole room as well, and in ANDY3 two new doorways turned four rooms — the
-whole village courtyard among them — classic in the middle of an HD level,
-with the seam between the two showing the void. That is what the boxes fixed.
+artwork for it is worth keeping. Marking just the box, rather than the whole
+room, matters: in ANDY3 two new doorways touch four rooms — the whole village
+courtyard among them — and falling back the whole room there would turn them
+classic in the middle of an HD level, with the seam between the two showing
+the void.
 
 You never have to do anything with them:
 

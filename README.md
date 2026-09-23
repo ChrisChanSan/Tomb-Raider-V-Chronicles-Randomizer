@@ -242,15 +242,13 @@ at the same time.
 body while the game stands still; the rooms, the inventory, her weapons and
 everything classic are untouched. The page cache never gives a page back
 inside a level, so there is a limit on what one level may spend on outfits —
-and since #164 that limit is what your machine really has instead of one flat
-number. Before every change the game asks three questions: is there room in
-the **texture budget** this level was given, is there room in the **address
-space** of the program, and is there a single free **block** big enough for
-one page. All three have to say yes; otherwise the row under the list says
-*applies at the next level*, exactly as it did before. The old **64 MiB** is
-still the floor of the first question, so nothing is refused earlier than it
-used to be: a level that has spent less than that is never stopped on the
-card's account.
+and that limit is what your machine really has. Before every change the game
+asks three questions: is there room in the **texture budget** this level was
+given, is there room in the **address space** of the program, and is there a
+single free **block** big enough for one page. All three have to say yes;
+otherwise the row under the list says *applies at the next level*. **64 MiB**
+is the floor of the first question, so a level that has spent less than that
+is never stopped on the card's account.
 
 **Why the address space, on a machine with 16 GiB of video memory?** Because
 `PCtomb5.exe` is a 32 bit program: four gigabytes of address space and no
@@ -258,7 +256,7 @@ more, whatever the card and the RAM hold. Measured with `PoolProbe`, the
 pages themselves live on the CARD and cost the program almost nothing of it —
 0.04 MiB for a page of 85.25 — so in practice it is the texture budget that
 decides, and on a big card's automatic budget a level has room for well over
-a hundred changes where it used to have three or four. A **Save and Load**
+a hundred changes. A **Save and Load**
 starts a fresh page cache and gives all of it back, and so does the next
 level.
 
@@ -285,9 +283,9 @@ A step in this engine is **two sounds on one frame**: her own foot (sound id
 a boot on mud, on metal, on wood, chosen by the sector). The floor layer is
 the loud half.
 
-**Boots** is the level's own footstep sound, and from now on it is the sound
-the **installed remaster** has for it — a sound mod that replaces the
-footsteps no longer makes every outfit barefoot. **Bare** is a second set of
+**Boots** is the level's own footstep sound: it is the sound
+the **installed remaster** has for it, so a sound mod that replaces the
+footsteps does not make every outfit barefoot. **Bare** is a second set of
 recordings the level loads beside its own: the barefoot steps the remaster's
 own bank carries (sound id 417, five recordings that no level uses), or your
 sound mod's own footsteps when a mod really replaces sound id 0 — most sound
@@ -394,8 +392,8 @@ in that one respect. (It is the Russia levels that change: they used to draw
 the gloved set.)
 
 **A mod's hand may keep its gun and give back the hands.** A hand model painted
-with pages of the I-III bundle — `origin=tr1` below — used to give Lara that
-game's skin tone and its glove seams. Those pages are dropped now and your
+with pages of the I-III bundle — `origin=tr1` below — would give Lara that
+game's skin tone and its glove seams. Those pages are dropped, and your
 installation's own hands are drawn under the mod's gun instead. A mod with no
 `origin=` line is untouched.
 
@@ -810,7 +808,7 @@ you are running, and nothing else.
   re-derived here in our own units and our own voice, with the ported test
   suite's expectations taken across verbatim and credited by name in
   `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header. The
-  HD-at-run-time path (#123) is different: it **carries TROne's own code
+  HD-at-run-time path is different: it **carries TROne's own code
   over**. Twenty-one source files in this tree name Todesengel's copyright in
   their own headers, and [THIRD-PARTY.md](THIRD-PARTY.md) lists what came
   from where, file by file.

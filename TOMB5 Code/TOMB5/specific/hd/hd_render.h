@@ -760,8 +760,9 @@ double HDRenderSelfTest(double mznear, double mzfar, double persp,
 void HDRenderDepthTruth(IDirect3DDevice9* device, unsigned long* zenable,
 	unsigned long* zfunc, unsigned long* zwrite, float* minZ, float* maxZ);
 
-// How many instruction slots the card allows a ps_3_0 shader. The room shader
-// is 476 of them and shader model 3 guarantees 512, but a card that reports
-// less would refuse CreatePixelShader with no useful message, so the number is
-// read and logged rather than assumed.
+// How many instruction slots the card allows a ps_3_0 shader
+// (D3DCAPS9::MaxPixelShader30InstructionSlots). The room shader is 476 of them
+// and shader model 3 guarantees 512, but a card that reports less would refuse
+// CreatePixelShader with no useful message, so the number is read and logged
+// rather than assumed.
 unsigned long HDRenderPixelSlots();

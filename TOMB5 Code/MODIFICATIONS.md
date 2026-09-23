@@ -1228,8 +1228,8 @@ out of step on the spot.
 
 **Why.** GPLv3 is why the source sits next to the bytecode: a reader of the history gets
 the form he can change, not only the form the card runs. The shaders are written against
-what shader model 3 guarantees - 512 instruction slots - and the device's actual figure
-is read at start-up and refused below 320 rather than letting `CreatePixelShader` fail
+what shader model 3 guarantees - 512 instruction slots - and the device's `ps_3_0` figure
+is read at start-up and refused below 512 rather than letting `CreatePixelShader` fail
 with an HRESULT. `ps_3_0` has no relative addressing of constant registers, only
 `vs_3_0` has, so the dynamic-light loop is unrolled against a compile-time maximum with
 the run-time count as a dynamic `if`; written as a plain loop, `fxc` emulates

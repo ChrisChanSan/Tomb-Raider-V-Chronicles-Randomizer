@@ -1640,12 +1640,16 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
-	/* The room shader is 476 ps_3_0 instruction slots. Shader model 3
-	 * guarantees 512 and every card that reports ps_3_0 has to, but a device
-	 * that answers less would fail CreatePixelShader below with nothing but
-	 * an HRESULT, so the number is read here and named in the log instead. */
-	if (g_caps.PS20Caps.NumInstructionSlots &&
-		g_caps.PS20Caps.NumInstructionSlots < 320)
+	/* bshader.bat compiles both pixel shaders for ps_3_0, the room shader at
+	 * 476 instruction slots and the model shader at 348. The ps_3_0 figure is
+	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
+	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512, the
+	 * same limit fxc compiles ps_3_0 against. A device that answers less
+	 * would fail CreatePixelShader below with nothing but an HRESULT, so it
+	 * is refused here with a reason in the log. A device that leaves the
+	 * field at 0 is not refused here; CreatePixelShader then decides. */
+	if (g_caps.MaxPixelShader30InstructionSlots &&
+		g_caps.MaxPixelShader30InstructionSlots < D3DMIN30SHADERINSTRUCTIONS)
 	{
 		*why = "the device allows too few pixel shader instruction slots";
 		g_device = 0;
@@ -4718,7 +4722,7 @@ double HDRenderSelfTest(double mznear, double mzfar, double persp,
 
 unsigned long HDRenderPixelSlots()
 {
-	return (unsigned long)g_caps.PS20Caps.NumInstructionSlots;
+	return (unsigned long)g_caps.MaxPixelShader30InstructionSlots;
 }
 
 void HDRenderDepthTruth(IDirect3DDevice9* device, unsigned long* zenable,

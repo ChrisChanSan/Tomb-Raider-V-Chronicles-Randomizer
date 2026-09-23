@@ -154,20 +154,19 @@ Special cases - own rules
 	  place that could take some kind is not left at vanilla just because
 	  the roll happened to hit the Hydra.
 
-	  With the 5-of-9 threshold she comes out at 4.2 per run
-	  (ten seeds over the twelve campaign levels, spread 1 to 9, Andrea2's
-	  three vanilla heads not counted) against 32 to 64 Compsognathi. The
-	  reason is not the threshold but the roll: every draw picks uniformly
-	  among the kinds that fit AT THAT SPOT, and the Hydra is only ever a
-	  candidate on open ground while a kind with no space rule is in every
-	  single list. She therefore has a draw weight of 2
-	  (kDrawWeights in Randomizer.cpp): she stands twice in the candidate
-	  list and wins about twice as often WHERE SHE ALREADY QUALIFIED. No
-	  place changes by it, and a run in which she is deselected is bit for
-	  bit the run it is without her - both measured on the same ten seeds:
-	  9.1 Hydras a run when she is included (spread 6 to 14, no other kind
-	  moved by more than about 8 percent), and with enemiesoff=63 all 120
-	  outputs byte-identical to a build lacking her.
+	  With the 5-of-9 threshold and a draw weight of 1 she comes out at
+	  4.2 per run (ten seeds over the twelve campaign levels, spread 1 to
+	  9, Andrea2's three vanilla heads not counted) against 32 to 64
+	  Compsognathi. The reason is not the threshold but the roll: every
+	  draw picks uniformly among the kinds that fit AT THAT SPOT, and the
+	  Hydra is only ever a candidate on open ground while a kind with no
+	  space rule is in every single list. She therefore has a draw weight
+	  of 2 (kDrawWeights in Randomizer.cpp): she stands twice in the
+	  candidate list and wins about twice as often WHERE SHE ALREADY
+	  QUALIFIED. No place changes by it: at weight 2 she comes out at 9.1
+	  Hydras a run (spread 6 to 14, no other kind moved by more than
+	  about 8 percent, same ten seeds), and with enemiesoff=63 all 120
+	  outputs are byte-identical to the same code at weight 1.
 
 	4 CHEF (chef.cpp, type 87) - NOT A SPECIAL CASE. An ordinary pool
 	  enemy.

@@ -5,19 +5,19 @@ taken from community documentation.
 
 > **On the tools named below.** `FloorTool`, `DumpItems` and
 > `TRFile_RandomizerExport.cpp` appear in this text and nowhere else in
-> the repository. They belong to a separate program,
-> TombItemEdit2026. What they measured is
-> measured today by the tools in `Preparation\Tools\Diagnose` -
+> the repository. They belong to the workflow around TombItemEdit2026,
+> a separate program; they are not in this repository. What they
+> measured is measured today by the tools in `Preparation\Tools\Diagnose` -
 > `ItemCheck` for items and OCBs, `SectorCheck` and `FloorCheck` for
 > floordata, `TriggerCommands` for trigger chains.
 
 > **On the line numbers.** They drift with every edit to the engine.
 > **The symbol name is what is
 > authoritative here, not the number** - search for it rather than jumping
-> to the line. Measured: everything in `global/types.h` has moved
-> down by exactly 60 lines, while `game/control.cpp` has drifted
-> unevenly (+1 for `GetHeight`, +23 for `_TestTriggers`), so there is no
-> single offset to apply. The structure and the reasoning below are
+> to the line. Measured: the line numbers below are 60 too low for
+> `global/types.h`, while `game/control.cpp` has drifted unevenly (+1
+> for `GetHeight`, +23 for `_TestTriggers`), so there is no single
+> offset to apply. The structure and the reasoning below are
 > checked against the source.
 
 The decisive places:
@@ -276,7 +276,7 @@ circumstances:
 Together that is over 400 of the 2057 triggers. They stay where they are,
 and the item on them stays pinned.
 
-**These items stay vanilla:**
+**The eleven items first kept vanilla:**
 
 > Of the eleven, only rich1 item 27 (the CD) is still pinned, and joby3
 > item 41 survives indirectly as typeId 172. Andrea2's valve 128 is
@@ -454,8 +454,9 @@ Releasing it needs three things, all in place:
 
 1. A **sector with a wall neighbor**. The sector export carries `isWall`
    per sector, so the four neighbors in the same room are checkable.
-2. Setting the **angle to match the wall**. The level export delivers the
-   item angle.
+2. Setting the **angle to match the wall**. The zone export carries
+   `wallAngles` per sector; no item angle is read from the level
+   export.
 3. Being able to **write** the angle. The patch format carries `angle`
    for moved and for added items and writes it into the item's yRot; the
    placement picks the wall edge and the matching angle itself, while
@@ -661,5 +662,5 @@ That is the same discipline that applies to the item indices, and the
 same with which the weapon imports were secured: do not look at the
 result, look at what must **not** have changed.
 
-The check runs via `SectorCheck` and `FloorCheck`, before any write to
-floordata.
+No tool checks this rule automatically. `SectorCheck` shows a sector's
+index and chain, so compare the vanilla and the randomized level with it.

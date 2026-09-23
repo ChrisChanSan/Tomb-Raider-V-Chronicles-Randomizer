@@ -22,8 +22,7 @@ into nothing.
 **The mesh-swap fallback slots**
 `MESHSWAP_CROSS_*` in `game/objects.h` name the SMASH_OBJECT slots the engine
 uses as fallback mesh warehouses; the randomizer fills them. The ids must be
-the same on both sides, and the document that got this wrong for weeks said
-3..6 while the header said 5..8. That is 401-404, 462-468 and 470;
+the same on both sides: 401-404, 462-468 and 470;
 the full assignment is written down in
 `Preparation\Enemies\Cross Enemy Pool.txt`.
 *Both sides:* `game/objects.h` and the swap columns in `core/Randomizer.cpp`.

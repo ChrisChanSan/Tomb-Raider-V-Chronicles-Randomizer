@@ -122,8 +122,9 @@ Four small tables decide what a placed enemy needs:
   kDrawWeights  how many tickets a kind holds in the roll. Only the Hydra
                 (63), with 2. Each roll picks
                 uniformly among the kinds that fit at that very spot, so a
-                kind the space rule keeps off most spots stays rare - she
-                measures 4.2 a run against 32 to 64 Compsognathi. The
+                kind the space rule keeps off most spots stays rare - at
+                weight 1 she measured 4.2 a run against 32 to 64
+                Compsognathi (9.1 at weight 2, see Enemy Pools.txt). The
                 weight only makes her win more often where she already
                 qualified; it opens no new place, and a kind with weight 1
                 keeps its single entry and its order.

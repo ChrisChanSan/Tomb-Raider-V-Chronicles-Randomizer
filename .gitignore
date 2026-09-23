@@ -96,8 +96,8 @@ Tomb Raider 5 Italy/
 Preparation/stb-master/
 
 # The player's game installation - never belongs in the repo. One rule is
-# enough. Nothing of ours lives in there any more - the setup
-# launcher moved to TR5Randomizer\setup.bat.
+# enough. Nothing of ours lives in there; the setup launcher is
+# TR5Randomizer\setup.bat.
 Tomb5 Steam Version/
 
 # Backup bundles of the history - they contain old states, never upload

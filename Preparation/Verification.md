@@ -103,8 +103,8 @@ beside it, and says so when the two disagree.
   and those are the ones to compare. The run names the result in its own
   notes.
 - **The cyborg in the cross pool.** One more foreign kind to draw
-  from, so a `cross` run places a different set. Byte-identity with a build
-  lacking the cyborg holds when the two new rows are
+  from, so a `cross` run places a different set. Byte-identity with a
+  build lacking the cyborg is claimed when the two new rows are
   deselected - the case to run when checking that claim.
 
 In every one of these the difference is EXPECTED. What still has to hold

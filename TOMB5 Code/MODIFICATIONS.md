@@ -5910,6 +5910,91 @@ Code/MODIFICATIONS.md`, are `e069d1d`, `3c1fd9b`, `1400796`, `300c98f`, `f5814b5
 `fdd7508`, `f4530f1`, `3bde4b1`, `e069d1d`, `3c1fd9b`, `1400796`, `300c98f`, `f5814b5`,
 `33153c8`, `a740567`, `3c7345d`, `2f5376f`, `1823f98`, `31b0e7d`, `3ba8600`
 
+## 2.9 The cleanup before the public push
+
+Before the repository was shared again the record and the project's own comments were
+rewritten a second time, separately from section 2.8's push audit: the record was condensed
+from a diary into a licence document, and every comment this project had added or changed was
+rewritten to state facts instead of narrating the work. The origin facts already in place -
+TRForge (MIT), TROne (GPLv3) by Todesengel1931, and measurement made here on the player's own
+files - stand as before; nothing changed about what the code does.
+
+### The record: from an eighteen-thousand-line diary to a licence document
+2026-09-22
+
+**What.** `TOMB5 Code/MODIFICATIONS.md` was rewritten from 18,338 lines to its current form
+of 6,090: one head with one dated ledger, the changes grouped by area, a single entry form
+(What, Why, How, Commits) for every topic, and the appendix that maps task numbers to entries.
+
+**Why.** GPLv3 section 5(a) asks only for the date and the nature of a change; a reader of the
+record needs what was done and why, not how the change was found, discussed or reviewed.
+
+**How.** The old record was condensed area by area, one entry per topic. A script compared
+the old text against the new and confirmed that every commit hash and every task number the
+old record carried is present in the new one.
+
+**Commits.** `edd305e`
+
+### Comments in the engine, the randomizer and the tools say what, why and what for
+2026-09-22 - 2026-09-23
+
+**What.** Every comment this project added or changed in the engine, the randomizer and the
+tools now states what the code does, why, and what it is for. Task numbers, round and stage
+names, dates and play-test narration are gone. Measured facts, failure modes and origin
+sentences (TROne, TRForge, tomb3, or a measurement made here) stand as facts. Line numbers
+that pointed into another file of this project were dropped; file and function names stayed.
+
+**Why.** The same reader GPLv3 section 5(a) and the record itself serve needs what a comment
+states now, not the round, the stage or the question that produced it.
+
+**How.** Files were rewritten in batches by folder - `game`, `specific`, `specific/hd`,
+`specific/hd/hd_shader`, `tomb5` and the global headers, `TR5Randomizer/src`,
+`Preparation/Tools` - each batch checked before its commit by a script that strips comments
+and collapses whitespace from the old and the new version of every file and finds the rest
+identical: line endings, high bytes, the modification notice and every upstream comment of
+Core's and Troye's stayed untouched. After the batches the engine and the tools were rebuilt,
+the three test suites (ModernTest, MenuTest, InterpTest) were run, and a review pass went back
+over the result and fixed what it found. In all 272 distinct files changed: 165 under
+`TOMB5 Code`, 39 under `TR5Randomizer/src`, 68 under `Preparation/Tools` and the level reports
+beside them.
+
+**Commits.** `9f25965`, `2c0fb40`, `8ecc379`, `533e9f3`, `83ce380`, `4d3f21f`, `838070c`,
+`b6ca3b1`, `926df57`, `39a1a3c`, `0d1c6b6`, `af0a11d`, `023b7c4`
+
+### String literals, a build script's working directory, and two open questions
+2026-09-23
+
+**What.** String literals that still named a round or stated the project owner's own decision
+were reworded to what they mean, in the engine's log lines and menu text and in the
+diagnostic tools' banners and check names. `Preparation/Tools/Diagnose/bpr.bat` gained the
+`cd /d "%~dp0"` line the project's other build scripts already carry. The device check in
+`specific/hd/hd_render.cpp` now reads the ps_3_0 instruction slot cap
+(`D3DCAPS9::MaxPixelShader30InstructionSlots`) and refuses a device below 512 slots, in place
+of the ps_2_x cap (`PS20Caps.NumInstructionSlots`) tested against a stale floor of 320. A
+comment at `HDRenderGroupSampleCount` states that the function has no caller. The fog-bulb
+cost table in `specific/hd/hd_shader/hd_room.hlsl` was re-measured: 6 bulbs cost 431 pixel
+shader instruction slots and 303 vertex shader slots, 8 bulbs cost 440/312, 16 bulbs cost
+476/348.
+
+**Why.** `bpr.bat` run from another folder failed to find its source file and left a stray
+object file behind; the build scripts it now matches already avoid that. The ps_2_x cap and
+the number 320 described neither the device the project requires nor the shader it ships,
+which had grown past both. The bulb table's own numbers were last measured against an earlier
+shader and no longer matched the one shipped today.
+
+**How.** Two questions the comment pass raised were measured and left unchanged: the first
+person camera tests its own conditions in the same priority order the engine's own binocular
+camera already used, so nothing there needed changing; and the model shader's fog-bulb term
+is written differently from the room shader's own, a difference neither file's history
+explains, so a comment states the fact rather than the code being changed to match. A review
+pass over this round then found and corrected a further set of gaps: the device floor's
+number restated in `TOMB5 Code/MODIFICATIONS.md` and `docs/Engine-Manual.md`, the regenerated
+`.inc` shader files, a comment naming what `RoomProbe.cpp` actually prints, and the last
+round, plan and project-owner references left in `hd_pagecache.h`, `game/accent.inc`,
+`game/chardef.inc` and ten level reports.
+
+**Commits.** `bc0b13c`, `6a1854d`, `9c7d1e5`, `d28d251`, `bcdbc7d`, `e041c3f`
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -6088,3 +6173,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
+| #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |

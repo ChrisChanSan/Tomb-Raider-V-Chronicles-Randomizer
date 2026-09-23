@@ -251,7 +251,7 @@ namespace Patch
     // neighbour's overhang can block a doorway as surely as the room's own
     // wall can.
     //
-    // WRITTEN ON EVERY RUN FOR EVERY LEVEL, even when there is nothing to
+    // Written on every run for every level, even when there is nothing to
     // say - then it is the version line alone. A missing file means "no
     // markers", so a level that once had markers and now has none must
     // still get a file, or the old one would keep talking.

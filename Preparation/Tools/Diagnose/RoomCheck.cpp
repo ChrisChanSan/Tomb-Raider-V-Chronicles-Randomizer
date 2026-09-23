@@ -37,7 +37,7 @@ static void line(const Tr5Level& lvl, int r)
     {
         // The engine does NOT find the portal list where we do: it follows
         // the stored offset door (header +4), and an ODD value is its mark
-        // for "this room has none" (alexstuff.cpp:158). A room that gained
+        // for "this room has none" (aFixUpRoom, alexstuff.cpp). A room that gained
         // its first portal keeps that mark unless it is written, and then
         // the engine sees no neighbour at all.
         unsigned d = 0, fl = 0; std::string herr;

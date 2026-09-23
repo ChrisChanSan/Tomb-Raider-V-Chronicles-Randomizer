@@ -46,9 +46,9 @@ long S_DumpScreenFrame();
  * The title is one of them: it does not present itself - DoTitle draws
  * through DrawPhaseGame like the game does - but TitleOptions runs once
  * per present while dbinput is refreshed once per tick, so at 60 every
- * keypress was read twice and the menu walked two rows at a time.
- * GameFrameMinTicks() below is the rule that keeps the title at two ticks;
- * see the long note over its definition in output.cpp.
+ * keypress would be read twice and the menu would walk two rows at a time.
+ * The title guards against that itself (TitleInputShadow, game/gameflow.cpp);
+ * the note over GameFrameMinTicks in output.cpp has the whole rule.
  *
  * It is also the frame budget. FPSLOG and PROFLOG judge a frame late
  * against gPresentMinTicks * 1/60 s plus half a tick of slack, read at the

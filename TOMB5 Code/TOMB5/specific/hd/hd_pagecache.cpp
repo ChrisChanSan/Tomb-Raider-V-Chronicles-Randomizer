@@ -149,7 +149,7 @@ namespace
 	 * file system probes - two into the mod's own TEX folder and three into
 	 * its origin bundle - and it sits on the hottest path this module has:
 	 * once per corner of every triangle of every model a mod supplied.
-	 * Measured with several gun and outfit mods installed: 30.8
+	 * Measured on a real Mods folder: 30.8
 	 * microseconds a call over 25,058 calls.
 	 *
 	 * The answer depends on the mods scan, which happens once per session,
@@ -422,7 +422,7 @@ namespace
 			 * and needed for the same reason: the I-III remaster keeps one
 			 * texture per page number across the bundle and moved art between
 			 * the three games. Lara's skin pages of that bundle are what a
-			 * skin-swapping mod reaches for. */
+			 * weapon mod's models reach for (an Uzi mod, for one). */
 			const int from = HDModsOrigin(mod);
 
 			if (from >= 1 && from <= 3 && !g_alt_root.empty())
@@ -594,7 +594,7 @@ namespace
 		out.ok = true;
 	}
 
-/* ------------------------------------------------- THE CUT-OUT PAGES -----
+/* ------------------------------------------------- the cut-out pages -----
  *
  * Without this, the kelp of JOBY4 and the vegetation of ANDY1 draw as solid
  * green rectangles with hard edges. They are material 8 in the .TRG, and
@@ -1395,7 +1395,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		stats->budgetBytes = budget;
 		stats->haveBytes = have;
 		stats->formatUsed = g_format_used;
-		stats->cutoutPages = HDPageCacheCutoutPages();	// A2
+		stats->cutoutPages = HDPageCacheCutoutPages();	// cut-out pages
 	}
 
 	g_bytes += loaded_bytes;

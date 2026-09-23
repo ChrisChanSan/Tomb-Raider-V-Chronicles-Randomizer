@@ -500,7 +500,7 @@ if ($AsPatch -ne "") {
             continue
         }
         # Climbing wall: angle (degrees, Lara's look at the wall) into the
-        # engine bits (control.cpp:2189): 0->0x100, 90->0x200, 180->0x400,
+        # engine bits (_TestTriggers, control.cpp): 0->0x100, 90->0x200, 180->0x400,
         # 270->0x800. Odd angles round to the nearest quarter.
         if ($e.kind -eq 'climb') {
             if ($null -eq $e.angle) { Write-Output "  WARNING: Make_Climb without @Angle - skipped."; continue }

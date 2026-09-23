@@ -73,11 +73,11 @@ struct Tr5Item
 };
 
 //----------------------------------------------------------------------------
-// An AI object (AIOBJECT, global/types.h:2295, 24 bytes in the block right
+// An AI object (AIOBJECT, global/types.h, 24 bytes in the block right
 // behind the items). Markers like AI_AMBUSH (slot 379): Larson/Pierre flee
 // from 40 HP to an AIAmbush with matching OCB in their zone and despawn
 // there (GetAITarget/FindAITargetObject, box.cpp). boxNumber may be 0 - the
-// engine computes it itself at runtime (box.cpp:1640).
+// engine computes it itself at runtime (box.cpp).
 //----------------------------------------------------------------------------
 struct Tr5AiObject
 {
@@ -134,7 +134,7 @@ struct Tr5FloorEntry
 
 //----------------------------------------------------------------------------
 // A trigger command. type is the 4-bit command kind (enum trigobj_types,
-// global/types.h:435): 0 = TO_OBJECT, 1 = TO_CAMERA, 3 = TO_FLIPMAP,
+// global/types.h): 0 = TO_OBJECT, 1 = TO_CAMERA, 3 = TO_FLIPMAP,
 // 8 = TO_CD, 13 = TO_CUTSCENE and so on.
 //----------------------------------------------------------------------------
 struct Tr5TriggerCmd
@@ -207,7 +207,7 @@ public:
     // the flee marker of Larson/Pierre: ONE AI_AMBUSH per level at Lara's
     // start position - the 40-HP flight leads towards the level entrance
     // and despawns out of sight. NEVER put it on an enemy's spawn sector:
-    // GetAIPickups (setup.cpp:2024) turns AI objects within 512 units into
+    // GetAIPickups (setup.cpp) turns AI objects within 512 units into
     // the enemy's start behavior order (permanent AMBUSH, it never aims)
     // and consumes them afterwards (room_number = NO_ROOM).
     bool    addAiObject(const Tr5AiObject& in, std::string& error);
@@ -389,10 +389,10 @@ public:
     // kind is the trigger kind (0 = TRIGGER, 1 = PAD, 5 = HEAVY, ...), mask
     // the five code bits (31 = all, the usual value). oneShot sets bit 8 of
     // the setup word - and that is more than "only once": _TestTriggers
-    // (control.cpp:2415) then sets IFL_INVISIBLE on the woken item, which
+    // (control.cpp) then sets IFL_INVISIBLE on the woken item, which
     // changes the behavior of some enemies. Larson, for instance, flees at
     // 40 hit points without this bit and cannot be killed at all
-    // (pierre.cpp:68).
+    // (PierreControl, pierre.cpp).
     bool    addTrigger(int room, int sx, int sz, int kind, int timer, bool oneShot,
                        int mask, const std::vector<Tr5TriggerCmd>& cmds,
                        std::string& error, int refItem = -1);
@@ -507,7 +507,7 @@ public:
     // 2622 (96.3 %) are exactly this box against 1715 (63.0 %) for the height
     // bytes. Of the 100 that differ, 99 have Core's window LARGER - the
     // harmless direction, since the window only clips (SetRoomBounds,
-    // draw.cpp:1687). The one the other way round is rich2 room 73 (x3,z0),
+    // draw.cpp). The one the other way round is rich2 room 73 (x3,z0),
     // where room 73's own floor drops to +256 at the shared edge and this box
     // comes out 1280 units taller than Core's; a larger window clips less,
     // never more.
@@ -739,7 +739,7 @@ public:
     //
     //  1. It follows the CEILING PORTALS first. GetCeiling walks up through
     //     sky_room (offset +6 of the FLOOR_INFO, 255 = none) before it even
-    //     looks at a ceiling byte - control.cpp:1340-1349 - because a
+    //     looks at a ceiling byte - because a
     //     sector whose ceiling is a portal carries the room BOUNDARY there,
     //     not a ceiling. Reading that boundary as a ceiling calls ten of
     //     Core's own vanilla enemies too tall for their spot (measured with
@@ -984,7 +984,7 @@ public:
     // 406 ms against 624, 624 and 1037) are refused by length and the bug
     // looked like a one-off.
     //
-    // A LENGTH CANNOT DECIDE THIS AND A NAME CAN. The run knows exactly
+    // A length cannot decide this and a name can. The run knows exactly
     // which ids it wrote; the engine cannot know. So the run says so, in
     // one line of the sidecar, and the engine's bridge passes those ids
     // over. Ids the run MOVED between TR5 levels are not imports and are

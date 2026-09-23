@@ -1337,8 +1337,7 @@ void CalculateNumSpecialFeatures()
 /* The accented letters of the French and German rows are hex escapes on purpose:
  * the engine's own font takes the single CP-1252 bytes E9 and FC (AccentToCode,
  * game\text.cpp), and an editor that saves this file as UTF-8 turns them into the
- * replacement character - which is what happened here and was undone in audit round
- * A1. The literal is split where a hex digit follows the escape ("Zur\xFC" "ck"),
+ * replacement character. The literal is split where a hex digit follows the escape ("Zur\xFC" "ck"),
  * because "\xFCc" would be read as a single escape. */
 static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 {

@@ -176,7 +176,7 @@ void CalcLaraMatrices(long flag)
 	 * ticks it returns the midpoint of the two poses those ticks draw, so
 	 * `frac` is non-zero even for animations that never interpolated in
 	 * vanilla - Lara takes the interpolated branch on every tween frame,
-	 * which is what this ordering needs to achieve for her.
+	 * which is what the time interpolation needs from her pose.
 	 *
 	 * The hit reaction below is untouched: it is not an animation the item
 	 * walks but a frame index picked by hand out of a spaz animation, and

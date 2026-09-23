@@ -162,7 +162,7 @@ namespace
 		}
 	}
 
-	/* ONE 4x4 ALWAYS-EIGHT-VALUE ALPHA BLOCK. a0 above a1 selects the eight
+	/* One 4x4 always-eight-value alpha block. a0 above a1 selects the eight
 	 * value interpolation; the six value mode with its hard 0 and 255 buys
 	 * nothing on a page whose alpha is a gloss mask or a cut-out edge. */
 	void encode_alpha(const unsigned long* block, unsigned char* out)

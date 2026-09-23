@@ -6,7 +6,7 @@
 // Needed to build valid TR5 entries from TR3 object textures: which values
 // drawtype and flag take there, and how quads differ from triangles.
 //
-// Layout from global/types.h and specific/file.cpp:1089ff:
+// Layout from global/types.h and specific/file.cpp:
 //   +0 drawtype, +2 tpage (bit 15 moves into the flag on load),
 //   +4 flag, then u1,v1,u2,v2,u3,v3,u4,v4 as 8.8 fixed point.
 //----------------------------------------------------------------------------

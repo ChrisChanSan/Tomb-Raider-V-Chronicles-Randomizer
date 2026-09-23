@@ -24,7 +24,8 @@
  * across the wrap.
  *
  * At sixty hertz the two halves of the interpolation disagree on exactly that
- * one frame: order 2 has blended item->pos half way across the wrap while
+ * one frame: the time interpolation (InterpBeginFrame, game\interpolate.cpp)
+ * has blended item->pos half way across the wrap while
  * the neighbour rule refuses the pose blend (the frame stepped back to the
  * animation's own start) and the draw falls back to the CURRENT frame, whose
  * offset is the first frame's rather than the last frame's. Half the step is
@@ -666,7 +667,7 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 }
 
 /* ==========================================================================
- * THE SWEEP - EVERY TRANSITION OF LARA'S IN ONE LEVEL, AND WHAT PAYS FOR IT.
+ * The sweep - every transition of Lara's in one level, and what pays for it.
  * ==========================================================================
  *
  * The narrowed rule blends the offset step only as far as the tick's own

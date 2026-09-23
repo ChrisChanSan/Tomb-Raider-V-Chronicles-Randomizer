@@ -35,7 +35,7 @@
 //   the parts      lara.mesh_ptrs[LM_RHAND] / [LM_LHAND] say which slot owns
 //                  each hand THIS frame - as a pointer, so the seam compares
 //                  it against meshes[objects[s].mesh_index + 2 * LM_xHAND]
-//                  for Lara's own slots, which is what game\larafire.cpp:331
+//                  for Lara's own slots, which is what game\larafire.cpp
 //                  does itself. LHolster, lara.holster and lara.back_gun are
 //                  already slot numbers.
 //   the braid      hairs[0][0..5], six links the simulation writes as

@@ -44,7 +44,7 @@ namespace
 		return table ? (const WaterTab*)table : zero;
 	}
 
-	// The WaterTable's two step lookup (drawroom.cpp:357-361). `wibbleShift`
+	// The WaterTable's two step lookup (drawroom.cpp). `wibbleShift`
 	// is 2 for everything but the Red Alert gas rooms, which use 3.
 	const WaterTab& Sample(const HDParityScene* s, float x, float y, float z, int wibbleShift)
 	{
@@ -72,7 +72,7 @@ namespace
 		out[2] = x * m[2] + y * m[6] + z * m[10];
 	}
 
-	/* The classic path's fog bulb intensity (drawroom.cpp:553-668), in the
+	/* The classic path's fog bulb intensity (drawroom.cpp), in the
 	 * original's own shape - including the branch that leaves `vec` holding
 	 * the unit direction and so returns one density for a bulb behind the
 	 * camera. */
@@ -89,7 +89,7 @@ namespace
 		const float P[3] = { bulb.x, bulb.y, bulb.z };
 		const float sqlen = Square(P[0]) + Square(P[1]) + Square(P[2]);
 
-		/* The classic path's 45 degree cull (drawroom.cpp:632) belongs to the
+		/* The classic path's 45 degree cull (drawroom.cpp) belongs to the
 		 * classic answer and to nothing else: in a pixel shader it draws a
 		 * hard line down the side of a 16:9 or first person frame - see the
 		 * long note beside it in hd_room.hlsl. What the shader keeps of it is
@@ -196,8 +196,8 @@ namespace
 			return chord * bulb.density;
 
 		// The same three lines the shader runs - see hd_room.hlsl, where
-		// the note beside kRim says why it is 0.35 and not the 1.0 first
-		// tried.
+		// the note beside kRim says why it is 0.35 and not
+		// 1.0.
 		const float kRim = 0.35f;
 		const float span = 2.0f * rad > 1e-4f ? 2.0f * rad : 1e-4f;
 		float t = chord / span;
@@ -471,7 +471,7 @@ void HDLightShader(const HDParityScene* scene, const HDParityVertex* v,
 
 	for (int j = 0; j < scene->bulbCount && j < HD_MAX_BULBS; j++)
 	{
-		// The SHADER's answer, so with the A4 rim weight.
+		// The SHADER's answer, so with the shader's rim weight (kRim).
 		const float intensity = BulbIntensity(view, scene->bulbs[j], true);
 
 		out->bulbDensity += intensity;
@@ -552,7 +552,7 @@ void HDLightBuildWaterTable(void* dst)
 
 	for (int i = 0; i < 64; i++)
 	{
-		/* rcossin_tbl (global\math_tbls.h:269) is sin and cos interleaved,
+		/* rcossin_tbl (global\math_tbls.h) is sin and cos interleaved,
 		 * scaled by 4096 - NOT by 32767, which is the scale a 16 bit sine
 		 * table usually has and the one this line had first. The difference
 		 * is a factor of eight on every water effect: the choppy column runs

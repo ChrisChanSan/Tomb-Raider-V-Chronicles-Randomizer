@@ -126,8 +126,8 @@ static void InitDialogBox(HWND hwnd)
 	// no preparation.
 	InitDDDevice(hwnd, GetDlgItem(hwnd, IDC_GRAPHICS_ADAPTER));
 
-	// The corner used to read "tomb5 V4.0" - a version this build has not been
-	// for a long time. The build date says something true and needs nobody to
+	// The corner shows the build date rather than a fixed version string
+	// such as "tomb5 V4.0": the build date says something true and needs nobody to
 	// remember to raise it, and it is the same stamp the log writes, so a
 	// screenshot of this dialog and a log.txt can be matched up.
 	{

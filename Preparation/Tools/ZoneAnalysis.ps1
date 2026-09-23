@@ -26,7 +26,7 @@ param(
     [string]$DebugPathTo = "",
     [string]$ExportZonesJson = "",
     # Maximum climb Lara manages without tools. An engine value, not an
-    # estimate: TestLaraVault (game/lara.cpp:1107) handles hdif down to -1920
+    # estimate: TestLaraVault (game/lara.cpp) handles hdif down to -1920
     # (Vault2/Vault3/high jump) and above that falls into
     # "if (!lara.climb_status) return 0;" - higher only works at climbable
     # walls. Matches the in-game limit: the Andrea1 wall at 2048 is
@@ -36,7 +36,7 @@ param(
     # Direction-dependent climb rule + jump edges, parked: it closes real
     # leaks (the Andrea1 wall) but tears multi-story levels apart, because
     # the sector-data semantics do not suffice for it. GetFloor
-    # (game/control.cpp:1206): the descent through pit_room happens ONLY when
+    # (game/control.cpp): the descent through pit_room happens ONLY when
     # y >= floor level - the floor byte is thus real, solid ground EVEN when
     # roomBelow is set (stacked stories, Andrea2 room 211 above 54: both
     # levels walkable). A "standing-height resolution downwards" is therefore
@@ -552,8 +552,8 @@ $NO_ITEM_ROOMS = @{
     # stand here as a safety net in case that rule is ever loosened - then
     # the trap rooms must not silently come back.
     'Andy2' = @(7,29,31,41,132,134,143,144,145,173,174,175,176,177,179,180,181,248,250)
-    # andy3 is a different beast among the bar lists than the other levels,
-    # with well over a hundred rooms.
+    # andy3 is a different beast among the bar lists - an estimated hundred
+    # rooms or more, listed here as they are checked.
     #
     # rich1. Five of the named rooms (46, 47, 87, 90, 92) already had no
     # spot before - they stand here anyway so the list is complete.
@@ -866,7 +866,7 @@ $REQUIRED_INJECTIONS = @{
         # NOT lie together here - each line rolls its own spot.
         #
         # Amount: the Deagle brings 6 shots on pickup, each magazine another
-        # 6 (newinv2.cpp:2550 and 2622) - with three magazines that is 24
+        # 6 (newinv2.cpp) - with three magazines that is 24
         # shots total.
         @{ typeId = 347; rooms = $RICH2_START_ISLAND; reason = 'Deagle - the start island is enemy-rich, pistols alone do not suffice' }
         @{ typeId = 348; rooms = $RICH2_START_ISLAND; reason = 'Deagle ammo for the start island (6 shots)' }
@@ -960,7 +960,7 @@ $TYPE_OFFSET = @{
 # Measured and recorded here in case the object ever returns to the pool:
 # it then needs dz -512 (mesh origin offset by half a sector) and dy +512,
 # because the engine does the automatic floor correction only for OCB 0, 3,
-# 4, 7, 8 and 11 (init.cpp:477) and OCB 2 is exempt from it.
+# 4, 7, 8 and 11 (InitialisePickup, init.cpp) and OCB 2 is exempt from it.
 #
 # The mechanism stays, it is built and tested - there is just currently no
 # type for which it would be right.
@@ -1019,7 +1019,7 @@ $FIXED_ITEMS = @{
         # enemy type at this index would mean: the cutscene wakes nobody.
         76 = 'Larson - scripted miniboss, hangs on cutscenes 8 and 7'
         # The Hydra is THREE items on one position; the OCB picks the chain
-        # link (hydra.cpp:18). Tearing them apart destroys the boss.
+        # link (hydra.cpp). Tearing them apart destroys the boss.
         91 = 'Hydra chain link (room 116) - stays vanilla (user list)'
         92 = 'Hydra chain link (room 116) - stays vanilla (user list)'
         93 = 'Hydra chain link (room 116) - stays vanilla (user list)'
@@ -1252,7 +1252,7 @@ $ENEMY_TYPES = @{
         59 = 'Gladiator'
         61 = 'Roman god (Soldier Statue, Hammer_blue)'
     }
-    # Imp checked in game (andy1): falls somewhat oddly to the ground but
+    # Imp (andy1): falls somewhat oddly to the ground but
     # fades out. The odd fall is explained by the data - his death
     # animation is anim_index + 45 (imp.cpp) and in andy1 a stub with
     # frames 0..0 and no commands.
@@ -1644,7 +1644,7 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 #
 # joby4 is a diving level; measured in game, Lara gets nowhere higher than
 # about y 13200. That is no engine limit - for vertical force the code only
-# knows the sinks (laraswim.cpp:721, they pull Lara to their own height) -
+# knows the sinks (laraswim.cpp, they pull Lara to their own height) -
 # but the water surface. Above it, at yBottom 13056, the next room layer
 # begins, into which she no longer ascends from the water: 21 rooms there,
 # another 27 above.
@@ -1700,7 +1700,7 @@ if ($MIN_CLEARANCE.ContainsKey($LevelName)) { $levelMinClearance = [int]$MIN_CLE
 # at <= 32 (game/joby.cpp, ControlElectricalCables).
 #
 # The reach is not the cable's room - decisive is the FlipNumber of the
-# touched water mass, see joby.cpp:191. Which rooms those are therefore
+# touched water mass, see joby.cpp. Which rooms those are therefore
 # does not stand in the level data; the mapping is:
 # cable 91 -> room 128, cable 136 -> 126 and 127, cable 206 -> 183,
 # cable 165 -> 158.
@@ -1740,7 +1740,7 @@ $TYPE_NO_ROOMS = @{
 #----------------------------------------------------------------------------
 # Items that should become immune to their antitrigger (flag bit 0x80,
 # IFL_ANTITRIGGER_ONESHOT - TestTriggers then skips them,
-# control.cpp:2378). The trigger stays fully intact and keeps acting on
+# control.cpp). The trigger stays fully intact and keeps acting on
 # all other targets.
 #
 # rich2 door 171 (room 118, type 300): opened by a HeavyTrigger in room
@@ -2315,7 +2315,7 @@ if ($ISLAND_YBAND.ContainsKey($LevelName)) {
 }
 
 # Keys that are NOT consumed. The normal case in TR is: key or puzzle item
-# goes into the lock and is gone - KeyHoleCollision (game/pickup.cpp:594)
+# goes into the lock and is gone - KeyHoleCollision (game/pickup.cpp)
 # calls remove_inventory_item for that. ONE single hard exception stands in
 # the code itself, not in level data: "if (item->object_number != KEY_HOLE8)
 # remove_inventory_item(...)" - Key Hole 8 (typeId 265) and with it Key Item8
@@ -2516,7 +2516,7 @@ foreach($r in $d.rooms){
 }
 
 # Teleporters move Lara to the position of the teleporter item itself.
-# ControlTeleporter (game/tomb4fx.cpp:531ff): at trigger_flags == 666 only
+# ControlTeleporter (game/tomb4fx.cpp): at trigger_flags == 666 only
 # the effect runs, in ALL other cases the else branch applies and sets
 # lara_item->pos to item->pos plus ItemNewRoom. So the teleporter is the
 # TARGET and its trigger the source - the edge is directed, from the trigger
@@ -2550,7 +2550,7 @@ foreach($i in $d.items){
     # then says "Flags 11111". joby2 item 138 is exactly such a case - it
     # looked like an unswitchable door but is open from the beginning.
     if (([int]$i.flags -band 0x3E00) -eq 0x3E00) { $openAtStart += ,[int]$i.index; continue }
-    # Crowbar door: DoorCollision (game/door.cpp:313) checks
+    # Crowbar door: DoorCollision (game/door.cpp) checks
     # item->trigger_flags == 2, i.e. OCB 2, and after prying sets
     # item->flags |= IFL_CODEBITS - the same mechanism as above, only
     # triggered by hand. No trigger in the level switches such a door,
@@ -2642,7 +2642,7 @@ function Get-TriggerRequirement($t) {
                 $n = $ht - $PUZZLE_HOLE_BASE; $needType = $PUZZLE_ITEM_BASE + $n; $label = "Puzzle Item$($n+1)"
             }
             # Operable, as with the switch: KeyHoleCollision
-            # (game/pickup.cpp:594) checks a proximity/alignment zone
+            # (game/pickup.cpp) checks a proximity/alignment zone
             # (TestLaraPosition with KeyHoleBounds), Lara does not have to
             # stand on the lock's exact sector. Without this, every lock
             # sitting on the same sector as its own door deadlocks
@@ -3617,7 +3617,7 @@ if ($ExportZonesJson -ne "") {
     # Wall edges per sector. Needed for the OCB pickups that must hang on a
     # wall (crowbar OCB 2, Joby crow OCB 9).
     #
-    # The ANGLE POINTS AT THE WALL, not away from it - measured at vanilla
+    # The angle points at the wall, not away from it - measured at vanilla
     # Andrea2 item 121: sector (2,1) in room 166, wall at -Z, item angle
     # -32768 (180 degrees, facing -Z). That fits how the models are built:
     # their mesh sits around +450..500 in model Z, so it lands on the wall

@@ -58,7 +58,7 @@
 // camera behind Lara, but from her own eyes it reads as a tunnel, since
 // the body that tells you how wide the world is has gone.
 //
-// The number is nominal, for a 4:3 frame: AlterFOV (3dmath.cpp:77) builds
+// The number is nominal, for a 4:3 frame: AlterFOV (3dmath.cpp) builds
 // the perspective from phd_winheight * 320 / 240 and then uses the same
 // value for x and y, so a wider screen shows more to the sides. On 16:9,
 // 80 comes out as roughly 96 across and 64 down, 100 as roughly 118 and 79.

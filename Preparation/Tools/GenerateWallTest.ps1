@@ -12,7 +12,7 @@
 #     (X/Z = room origin + sector index*1024 + 512).
 #   - Y      : floor height of the sector. OCB 2 and 9 get NO floor
 #              correction in InitialisePickup - the value applies literally.
-#   - Angle  : POINTS AT THE WALL. Measured at Andrea2 item 121: wall at
+#   - Angle  : points at the wall. Measured at Andrea2 item 121: wall at
 #              -Z, angle -32768 (facing -Z). The models' mesh sits around
 #              +450..500 in model Z and thereby lands on the wall face;
 #              Lara moves in at +215 in between.
@@ -75,7 +75,7 @@ foreach ($lvl in $Levels) {
     # --- Placement bars -----------------------------------------------------
     #
     # (a) Water rooms: PickUpCollision only runs at water_status
-    #     LW_ABOVE_WATER or LW_WADE (game\pickup.cpp:766) - under water the
+    #     LW_ABOVE_WATER or LW_WADE (game\pickup.cpp) - under water the
     #     grab is impossible, so a wall item there would be unreachable.
     $waterRoom = @{}
     foreach ($r in $d.rooms) { if ($r.waterRoom) { $waterRoom[[int]$r.index] = $true } }
@@ -142,7 +142,7 @@ foreach ($lvl in $Levels) {
         if ($blocker.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $outOccupied++; continue }
         if ($barred.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $outDeadstop++; continue }
         # Standing height. PickUpCollision expressly demands !lara.IsDucked
-        # at OCB 2 (game\pickup.cpp:803) - in the crawl the grab is
+        # at OCB 2 (game\pickup.cpp) - in the crawl the grab is
         # impossible, the item would be unreachable. That is a hard engine
         # rule like the water bar, not looks.
         #

@@ -176,7 +176,7 @@ $lic = "$OutDir\Licenses"
 New-Item -ItemType Directory -Path $lic -Force | Out-Null
 Copy-Item "$EngineSrc\LICENSE" "$lic\TOMB5-GPLv3.txt" -Force
 if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearImGui-MIT.txt" -Force }
-# discord-rpc is NOT linked into PCtomb5.exe - tomb5.cpp:35 sets
+# discord-rpc is NOT linked into PCtomb5.exe - tomb5.cpp sets
 # TOMB5_DISCORD_RPC to 0 and every call sits inside the #if. Its notice
 # still has to travel, because the .lib files and headers are part of the
 # source tree this package distributes. See THIRD-PARTY.md.

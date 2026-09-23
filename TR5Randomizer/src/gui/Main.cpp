@@ -1214,8 +1214,8 @@ static std::wstring cacheDir(const App& a)
     //------------------------------------------------------------------------
     // Write spoiler.txt next to the program.
     //
-    // This used to live in a third table column per level. That cost half
-    // the window width for one line of text read once - and the line was too
+    // A file rather than a table column: a column would cost half the
+    // window width for one line of text read once, and that line is too
     // short for everything one really wants to know. The file has room for
     // the seed, all settings and what SCRIPT.DAT received.
     //------------------------------------------------------------------------
@@ -1622,8 +1622,8 @@ static void drawPathsWindow(App& a, HWND hwnd)
     }
 
     ImGui::Spacing();
-    // This used to read "In each case, choose the data folder" - which is
-    // right for the two Tomb Raider 3 rows and WRONG for the first one.
+    // Not "In each case, choose the data folder" - that is right for the
+    // two Tomb Raider 3 rows and WRONG for the first one.
     // Choosing data\ for Chronicles still finds the levels, so nothing
     // looks amiss, but SCRIPT.DAT is only looked for in the chosen folder
     // and one data\ below it - the whole script step then vanishes in
@@ -2049,9 +2049,9 @@ static void drawUi(App& a, HWND hwnd)
     }                            // it shows all three rows and what each is for
 
 
-    // "Choose folder..." used to sit here as well and did exactly what the
-    // first row of the paths window does. One place for paths - and that
-    // window is where Tomb Raider 1, 2 and 4 will be added.
+    // No "Choose folder..." here: the first row of the paths window does
+    // exactly that. One place for paths - and that window is where Tomb
+    // Raider 1, 2 and 4 will be added.
     if (ImGui::Button(T("Installation paths..."))) a.pathsOpen = true;
     ImGui::SameLine();
     if (ImGui::Button(T("Check again"))) inspectSource(a);
@@ -2297,8 +2297,8 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::EndDisabled();
     ImGui::Unindent();
 
-    // Formerly "vanilla enemy mix" - the name sounded like the pool tier
-    // "level pool only" and caused confusion between the two. The checkbox
+    // Not called "vanilla enemy mix": that name sounds like the pool tier
+    // "level pool only". The checkbox
     // says WHETHER existing enemies swap roles; the pool choice below says
     // WHAT swap and extra enemies roll from.
     ImGui::Checkbox(T("Swap existing enemies"), &a.optEnemySwap);
@@ -2494,10 +2494,9 @@ static void drawUi(App& a, HWND hwnd)
     //------------------------------------------------------------------------
     // 9. In preparation - its own row under column 1.
     //
-    // Used to stand under the enemy box. There it prevented the four columns
-    // of the top row from reaching a common bottom edge: the column was
-    // always the longest. As its own row below, it bothers nobody, and the
-    // top row closes flush.
+    // Not under the enemy box: there it would keep the four columns of the
+    // top row from reaching a common bottom edge, as that column is always
+    // the longest. As its own row below, the top row closes flush.
     //------------------------------------------------------------------------
     ImGui::Spacing();
     // --- Placeholders, all still inert --------------------------------------
@@ -2534,7 +2533,7 @@ static void drawUi(App& a, HWND hwnd)
     //------------------------------------------------------------------------
     // 10. Levels - centered under the four columns.
     //
-    // The table has been narrow since the spoiler. Left-aligned under a wide
+    // The table is narrow (the details go to spoiler.txt). Left-aligned under a wide
     // window it would look lost; centered it stands as its own block and
     // leaves the background free left and right.
     //------------------------------------------------------------------------

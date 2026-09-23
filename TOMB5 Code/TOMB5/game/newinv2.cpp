@@ -1261,7 +1261,7 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 
 	/* The node walk is over. For a RING item HDInvEnd puts it on the frame's
 	 * list - the very list the world's HD objects go on, drawn in the same
-	 * bracket by the same HDObjectFrameDraw; for the PICKUP DISPLAY (P2) it
+	 * bracket by the same HDObjectFrameDraw; for the pickup display it
 	 * draws the one object on the spot, in a bracket of its own, because the
 	 * frame's list has been drawn and closed by the time S_DrawPickup runs.
 	 * Called on the one road out of this function, as HDObjectEnd is in

@@ -22,27 +22,22 @@
 //----------------------------------------------------------------------------
 // Level chains and inventory cleanup.
 //
-// Inventory slots are generic: PUZZLE_ITEM1 is called "Garden Key" in
-// Andrea1, "Chaff flares" in joby4, "Heart" in andy1 and "Helipad access
-// key" in rich3 - every level renames the same slot, so a Garden Key
-// carried along becomes Chaff flares in joby4. Therefore:
+// Inventory slots are generic: PUZZLE_ITEM1 is "Garden Key" in Andrea1,
+// "Chaff flares" in joby4, "Heart" in andy1 and "Helipad access key" in
+// rich3, so a key carried along changes its name. Therefore:
 //
 //   1. Chains (kLevelChains): what one level genuinely needs from another.
 //      If the donor comes after the taker (or a level in between takes the
-//      item away), the script hands it over via GIVEOBJ (give = true) -
-//      including the name command and the model. give = false means: just
-//      don't clean it up while it travels (story items whose absence
-//      probably blocks nothing).
-//   2. Cleanup (cleanupInventory in ScriptDat.cpp): at the start of every
-//      level, TAKEOBJ removes everything from the key family that an
-//      earlier level could have offered and that neither this level nor
-//      a later one imports via a chain. Plus the "Grappling Gun" - the
-//      CROSSBOW slot (95 + ammo), which only has a model and anims in
-//      rich3; equipping it in any other level crashes. Roses
+//      item away), the script hands it over via GIVEOBJ (give = true) with
+//      the name command and the model; give = false only keeps it from
+//      being cleaned up while it travels.
+//   2. Cleanup (cleanupInventory in ScriptDat.cpp): every level start
+//      TAKEOBJs the key family an earlier level could have offered and no
+//      chain imports, plus the "Grappling Gun" (CROSSBOW slot 95 + ammo,
+//      model and anims only in rich3; equipped elsewhere it crashes). Roses
 //      (PICKUP_ITEM4) are left untouched.
 //
 // Sources: the key matrix (ItemCheck) and the object commands per block.
-// Curation happens here, not in the UI.
 //----------------------------------------------------------------------------
 struct LevelChain
 {

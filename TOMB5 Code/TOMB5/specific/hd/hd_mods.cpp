@@ -91,7 +91,7 @@ namespace
 	 * log gets one line per replaced model for the whole run rather than one
 	 * per level.
 	 *
-	 * KEYED BY THE PAIR, not by the name alone:
+	 * Keyed by the pair, not by the name alone:
 	 * the same name can be answered by two different mods in two different
 	 * calls - once for whoever asks first and once for a caller that wants
 	 * one particular mod's copy - and a key of the name alone would let the
@@ -686,8 +686,8 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 	const std::string upper_name = upper(name);
 
-	/* THE ONE NAME THIS RESOLVER REFUSES. A mod's outfit is an ENTRY OF ITS
-	 * OWN in the wardrobe scan
+	/* The one name this resolver refuses. A mod's outfit is an entry of its
+	 * own in the wardrobe scan
 	 * (hd_wardrobe.h), which the player picks from; it is never a replacement
 	 * of the install's file of the same name, so a level that asks for
 	 * OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC. The
@@ -701,7 +701,7 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 
 	for (size_t i = 0; i < mods.size(); i++)
 	{
-		/* ONE PARTICULAR MOD, WHEN THE CALLER WANTS ONE. A face is looked up
+		/* One particular mod, when the caller wants one. A face is looked up
 		 * with the body's mod named, because a head from one mod on a body
 		 * from another is two namespaces on one model. The filter belongs
 		 * here, in the search, and not in a check the caller applies to the

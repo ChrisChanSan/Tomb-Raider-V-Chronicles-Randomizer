@@ -1255,8 +1255,8 @@ bool Rando::run(const RandoInput& in,
     //
     // The sector choice runs via sectorAllowedFor without a constraint: so
     // exactly one rule applies, the per-room weapon ban (noWeaponRooms,
-    // rich1's Scientist). Budget: MAX_ITEMS is 512 since the doubling, we
-    // stop at 500 here, and the extra enemies placed later are already
+    // rich1's Scientist). Budget: MAX_ITEMS is 512; the run stops at 500
+    // here, and the extra enemies placed later are already
     // subtracted.
     // A free sector admissible for this type. Without a constraint, so
     // exactly one rule applies: the per-room weapon ban (noWeaponRooms,
@@ -1588,8 +1588,9 @@ bool Rando::run(const RandoInput& in,
     // data at row 37.
     // "tr3" (0 = from TR5 itself): the foreign-source tag from
     // Tr3Source::dinos(). If set, "from" is empty - the model does not come
-    // from a TR5 level but at runtime from the installed Tomb Raider I-III
-    // Remaster files. Everything else stands in the dino table, so there is
+    // from a TR5 level but at runtime from the player's own Tomb Raider 3
+    // (or The Lost Artifact) installation. Everything else stands in the
+    // dino table, so there is
     // only one truth.
     // "sourceSlot" (0 = same as typeId): the slot under which the model
     // lies at the donor. Needed for the engine slots beyond 460: the joby
@@ -2305,10 +2306,9 @@ bool Rando::run(const RandoInput& in,
             // Antitrigger targets may join the swap: the swapped enemy gets
             // the antitrigger immunity below (see there).
             // OCB != 0 usually means: a type-specific special spawn. The
-            // OCB drives Initialise/Control of the original type (Imp
-            // 1/2/3/11/12: climb/throw states on wall ledges, InitialiseImp
-            // in imp.cpp) - a foreign type does not understand it and then
-            // stands in the wall.
+            // OCB drives Initialise/Control of the original type - a
+            // foreign type does not understand it and may end up in the
+            // geometry that special spawn was placed for.
             //
             // Larson and Pierre (45/47) are the reasoned exception: with
             // them the OCB describes no special environment, only three
@@ -2329,9 +2329,13 @@ bool Rando::run(const RandoInput& in,
             // only picks the spawn pose (InitialiseSas: climb in through
             // the window, rappel from the ledge, get up from sitting) -
             // that does not sit in the geometry either, the new type simply
-            // stands there normally afterwards. The Imp's OCB, by contrast,
-            // does sit in the geometry (climb/throw states on wall ledges)
-            // and is not exempt.
+            // stands there normally afterwards.
+            //
+            // The Imp is exempt as well: its climb/throw OCBs (1/2/3/11/12,
+            // InitialiseImp in imp.cpp) pick a spawn behaviour, and a
+            // swapped-in type simply spawns normally. The soldiers once seen
+            // in the wall at andy3's cliff imps (items 2/3) came from a
+            // different bug.
             //
             // What does NOT run via this list but via fixedItems (a type
             // rule cannot protect a single item):
@@ -2671,7 +2675,7 @@ bool Rando::run(const RandoInput& in,
     if (opt.addEnemies && opt.enemiesPerLevel > 0 && !enemyPool.empty())
     {
         // The engine holds items[] as a fixed field of 512 entries
-        // (MAX_ITEMS, global/types.h - since the doubling; Tr5Level checks
+        // (MAX_ITEMS, global/types.h; Tr5Level checks
         // it when appending). Capped instead of hoped - a rejected patch
         // mid-run would be worse than one enemy fewer.
         const int slotsFree = 512 - static_cast<int>(in.items.size()) - static_cast<int>(adds.size());
@@ -2979,7 +2983,7 @@ bool Rando::run(const RandoInput& in,
                 // value can only mean that item AND carrier both lie
                 // unchanged where vanilla put them. This run is innocent of
                 // that, and letting a run fail on a vanilla constellation
-                // has already proven wrong twice in this project.
+                // would fail seeds that are fine.
                 //
                 // As soon as enemies themselves are moved, that changes:
                 // then a carrier can land on a pinned pickup, and that
@@ -3448,10 +3452,10 @@ bool Rando::run(const RandoInput& in,
                 // engine's word for "an untouched vanilla level, so she is
                 // wearing the cap": hair.cpp and laraskin.cpp then weld the
                 // braid to the CAP head's vertex numbers, which the Andrea1
-                // head we put there does not have. The braid came away from
-                // its four points and stood off the back of her head - seen
-                // in joby2, and only in the Russia section, which is what
-                // gave it away.
+                // head placed there does not have. The braid then comes away
+                // from its four points and stands off the back of her head -
+                // only in the Russia section, where the level's own head is
+                // the cap head.
                 //
                 // LARA_PONYTAIL exists for exactly this and is drawn like
                 // LARA_NORMAL; it says "standard head with a ponytail" so
@@ -3472,7 +3476,7 @@ bool Rando::run(const RandoInput& in,
             if (choice == own)
             {
                 report.notes.push_back(fmt("outfit: %s keeps its own.", in.level.c_str()));
-                // The own catsuit shall carry holsters too (user wish) -
+                // The own catsuit carries holsters too -
                 // the rich levels do not have objects 13-16 in vanilla, and
                 // only with them does the engine draw holsters there.
                 if (own == 2)

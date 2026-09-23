@@ -51,6 +51,6 @@ void DXT5Decode(const unsigned char* blocks, long width, long height,
 	unsigned long* pixels);
 
 // Peak signal to noise ratio in decibels between two A8R8G8B8 pictures over
-// all four channels, or 999 when they are identical. The measure the report
-// quotes for the switch.
+// all four channels, or 999 when they are identical. The measure used
+// to judge the DXT5 switch.
 double DXT5Psnr(const unsigned long* a, const unsigned long* b, long count);

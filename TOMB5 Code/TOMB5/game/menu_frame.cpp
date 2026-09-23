@@ -1296,7 +1296,7 @@ static void MenuSelectBinding(long role)
 	// The hold guard below (do not immediately capture the action button
 	// as the new binding) only applies when the row was actually
 	// selected with the pad button. If the selection came from the
-	// keyboard (Enter), the guard used to permanently block any attempt
+	// keyboard (Enter), the guard would permanently block any attempt
 	// to bind the action button itself.
 	menu_action_still_held = ControlMethod == 1 && Key(jLayout[4] + 256);
 	memset(keymap, 0, sizeof(keymap));
@@ -1354,7 +1354,7 @@ static void MenuResetBindings(long)
 // Special Features is a title-screen thing: gfGameMode is 1 only there, and
 // the pause menu cannot reach it at all (game\control.cpp gates the pause key
 // on !gfGameMode). Offered in colour 3 in a pause session rather than silently
-// missing, which is what the old page did.
+// missing.
 static bool MenuEnabledSpecialFeatures(long)
 {
 	return gfGameMode == 1;
@@ -1678,11 +1678,11 @@ static bool menu_open;
 static long menu_cursor[MENU_PAGE_COUNT];
 static long menu_page_no[MENU_PAGE_COUNT];
 
-/* The "Game" registry block is written when it changes. Previously
+/* The "Game" registry block is written when it changes. Without it,
  * every key rebind, volume drag, sound quality change, targeting
- * toggle, language switch and control layout change lived in memory
- * until a clean exit - a crash threw the lot away while every tomb5
- * toggle was already on disk. The flag is set by the rows whose save
+ * toggle, language switch and control layout change would live in memory
+ * until a clean exit - a crash would throw the lot away while every tomb5
+ * toggle is already on disk. The flag is set by the rows whose save
  * is MENU_SAVE_GAME and cleared by the one call, when the page carrying
  * them is left. Never per frame: SaveSettings() opens the key and
  * writes about forty values. */
@@ -1811,8 +1811,8 @@ static long MenuStepDir()
 }
 
 /* A finished rebind is a value change like any other, so it goes through the
- * frame's own path: the seam names it and the Game block is marked. It used to
- * set menu_game_dirty by hand, which saved correctly but left MENULOG silent on
+ * frame's own path: the seam names it and the Game block is marked. Setting
+ * menu_game_dirty by hand would save correctly but leave MENULOG silent on
  * the one page whose whole purpose is changing values. The role's row is
  * looked up rather than passed, because the capture runs from the drive
  * loop's head, before the row under the cursor is fetched. */
@@ -1882,10 +1882,10 @@ static void MenuCaptureBinding()
 		jread = ReadJoystick(jx, jy);
 
 		// Drop the hold guard as soon as the button is actually up, and check
-		// that on every frame of the wait - it used to sit inside "if (jread)"
-		// below, and jread is zero exactly when the player lets go, so the
-		// release was never seen and the Action button could not be bound to
-		// itself at all.
+		// that on every frame of the wait - not inside "if (jread)"
+		// below: jread is zero exactly when the player lets go, so the
+		// release would never be seen and the Action button could not be bound
+		// to itself at all.
 		if (!Key(jLayout[4] + 256))
 			menu_action_still_held = 0;
 

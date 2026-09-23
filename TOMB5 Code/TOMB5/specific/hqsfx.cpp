@@ -96,7 +96,7 @@ static char hq_source[300];	// what was opened, for the log and file.cpp
 
 /* The unmodded bank beside it, opened only when the chosen one came out of
  * a mod. It is not played from - it is the ruler the bridge is measured
- * with. Why that is needed is written out in full at HQSfxBridgeOk; the
+ * with. Why that is needed is written out in full at the bridgeOk test in HQSfxPayload; the
  * short of it is that a sound mod's whole purpose is to put a different
  * recording in, and the length rule below cannot tell a different
  * recording from a wrong pairing. */

@@ -19,22 +19,17 @@
 //----------------------------------------------------------------------------
 // Installing a TR3 moveable into a TR5 level.
 //
-// DELIBERATELY its own file: Tr5Transfer.cpp carries the proven TR5->TR5
-// path the whole enemy mix hangs on. The foreign import has different
-// preconditions (the slices are already cut, the pointers already rebased
-// to the slice start) and is therefore laid down next to it instead of
-// rebuilding the existing flow.
+// Its own file beside Tr5Transfer.cpp (the TR5->TR5 path of the enemy mix),
+// because the preconditions differ: the package (built by Tr3Source, or by
+// the TR3Fetch tool) is already in the TR5 layout, its slices cut and its
+// pointers rebased to the slice start. Only what concerns the TARGET happens here - raise all indices by
+// the target's counters and append everything in one stroke.
 //
-// The package comes from TR3Fetch: faces, anims and frames were already
-// brought into the TR5 layout there. Only what concerns the TARGET happens
-// here - raise all indices by the target's counters and append everything
-// in one stroke.
-//
-// TEXTURES: this path does NOT touch the texture pages. Every face points
-// at the same texinfo that already exists in the target afterwards. The
-// enemy looks wrong, but no page is inserted and no number shifts - exactly
-// the spot where a level otherwise falls apart. Real textures come later
-// via Tr5Transfer.cpp.
+// This path does not touch the texture pages. The caller appends the
+// textures first (Tr5Level::addTexturesFromTr3, then
+// Tr3Source::remapTextures); with texinfoIndex -1 the faces keep that
+// mapping, and a texinfoIndex >= 0 points every face at one existing
+// texinfo (a test aid).
 //----------------------------------------------------------------------------
 #include "Tr5Level.h"
 

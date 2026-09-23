@@ -22,27 +22,19 @@
 
 //----------------------------------------------------------------------------
 // Precomputed data (zone exports, checksum lists) baked into the executable
-// as a fallback, the same pattern the engine uses for the HQ music and HQ
-// sound packs: a file on disk always wins, the baked copy is used only when
-// data\ is missing or does not contain it, so the tool keeps working even
-// when the data folder was not carried along with the EXE. Every read logs
-// which source was used - "external" with the path, or "embedded" - since
-// the two cases are otherwise indistinguishable from the outside, and a
-// stale file in data\ would silently outrank a corrected baked one.
+// as a fallback, like the engine's HQ music and sound packs: a file in
+// data\ always wins, the baked copy is used only when it is missing. Every
+// read logs its source ("external" with the path, or "embedded"), because a
+// stale file in data\ would otherwise silently outrank a corrected baked one.
 //
-// Baked: zones_*.json, VanillaLevelChecksums.csv, Tr3Checksums.csv.
-// Not baked: data\secrets\*.txt, a hand-edited list that grows over time;
-// making it a build product would turn an open format into a closed one.
+// Baked: zones_*.json, VanillaLevelChecksums.csv, Tr3Checksums.csv. Not
+// baked: data\secrets\*.txt, a hand-edited list in an open format.
 //
-// EmbeddedData.cpp is generated and versioned. Regenerate it after any
-// re-curation with
-//
+// EmbeddedData.cpp is generated and versioned. After any re-curation run
 //     powershell -File "Preparation\Tools\EmbedData.ps1"
-//
-// which reads TR5Randomizer\build\data and rewrites EmbeddedData.cpp, then
-// rebuild and commit the generated file. The build itself never calls the
-// generator, so the shipped binary stays buildable from the shipped source
-// with nothing but a compiler, as GPLv3 requires.
+// (it reads TR5Randomizer\build\data), then rebuild and commit the file. The
+// build never calls the generator, so the shipped binary stays buildable
+// from the shipped source with nothing but a compiler, as GPLv3 requires.
 //----------------------------------------------------------------------------
 
 namespace EmbeddedData

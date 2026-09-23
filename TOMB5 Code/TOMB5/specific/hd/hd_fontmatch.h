@@ -11,16 +11,11 @@
  * glyph atlas, score intersection over union and refuse anything under a
  * high threshold, because "a similar character is the wrong character". The
  * code here is written against that description, not copied - and it needs
- * neither their sprite scan nor their "is this an alphabet" gate, because we
- * know which 106 rectangles are glyphs (game\chardef.inc). See THIRD-PARTY.md.
+ * neither their sprite scan nor their "is this an alphabet" gate, because the
+ * 106 glyph rectangles are known (game\chardef.inc). See THIRD-PARTY.md.
  *
- * The citation carries no line numbers. A prior line range, ":7367-7870",
- * belonged to a later TROne version than the public copy: neither TROne as
- * published (game_renderer.cpp, 4,782 lines) nor the version of 2026-09-13
- * has the block at those lines. The block's own marker "hdtext" names it in
- * every version, so the marker is what this header cites instead. The same
- * applies to the ":11211-11269" the font files below used to cite for the
- * widening rule.
+ * The citation names the block by its marker "hdtext", which names it in every
+ * TROne version.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software

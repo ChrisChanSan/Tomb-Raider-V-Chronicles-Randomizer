@@ -74,7 +74,7 @@ struct IDirect3DTexture9;
  * install has a 6111 and a 6112 of its own that other models wear. One key
  * per number would mean the first of the two to be loaded wins the slot and
  * the other model silently gets the wrong picture - which is exactly the
- * corruption of the vanilla look this round is not allowed to risk.
+ * corruption of the vanilla look that must not be risked.
  *
  * So every mod gets a namespace of its own, one stride wide, and a page is
  * offered to the cache as

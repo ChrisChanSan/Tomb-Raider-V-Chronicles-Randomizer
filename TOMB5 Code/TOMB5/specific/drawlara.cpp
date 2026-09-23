@@ -397,8 +397,8 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	 * pass and the remaster's OUTFIT_VCI carries its own shading in its
 	 * textures, so the HD catsuit is matte where the classic one glints.
 	 * Named here and in the manual rather than faked: inventing a specular
-	 * term would be inventing a look, and the remaster's own picture is the
-	 * one this stage is trying to draw. */
+	 * term would be inventing a look, and the remaster's own picture is what
+	 * this path draws. */
 	if (HDLaraDrawActive())
 	{
 		HDLaraDrawFrame(mirror, false);

@@ -15,7 +15,7 @@
 /* What this process has left, and the rule that spends it.
  *
  * The HD page cache never gives a page back inside a level, so every outfit
- * the player puts on in one level stays in it (hd_pagecache.cpp, the A2 note).
+ * the player puts on in one level stays in it (see HDPageCacheAppend, hd_pagecache.h).
  * A flat 64 MiB cap on that growth is the slack AutoBudgetBytes already held
  * back on the card - but a real budget of 3878 MiB, a cache of 465 to 517
  * MiB and six changes of 4 to 13 MiB each can still hit "spent 52 of 64 MiB"

@@ -26,15 +26,15 @@
 // Exactly one bit is needed: GF_YOUNGLARA. It is set in the three Ireland
 // levels (andy1, Andy2, andy3) and disables the entire weapon system there -
 // Lara travels as a child and can carry nothing. Eight places in the engine
-// hang off this behavior, among them setup.cpp:111, larafire.cpp:221,
-// drawlara.cpp:227/429 and laraskin.cpp:424.
+// hang off this behavior, among them InitialiseLara (setup.cpp), LaraGun (larafire.cpp),
+// DrawLara__1/__4 (drawlara.cpp) and CreateSkinningData (laraskin.cpp).
 //
 // For the randomizer that is unacceptable: with cross-level enemies placed
 // into these levels, an unarmed Lara facing one of them would have no way
 // to fight back. So the bit is cleared when randomizing.
 //
-// LAYOUT (from LoadGameflow, game/gameflow.cpp:956, and struct GAMEFLOW,
-// global/types.h:573):
+// LAYOUT (from LoadGameflow, game/gameflow.cpp, and struct GAMEFLOW,
+// global/types.h):
 //   GAMEFLOW   16 bytes
 //   char       40 bytes  "[PCExtensions]"
 //   ushort     nFileNames file name offsets
@@ -44,7 +44,7 @@
 //
 // The script wad holds one command sequence per level. CMD_LEVEL (0x81)
 // carries five payload bytes: [0] title string, [1..2] gfLevelFlags (16 bit
-// LE), [3] file name, [4] argument. See gameflow.cpp:155 -
+// LE), [3] file name, [4] argument. See DoGameflow in gameflow.cpp -
 // "gfLevelFlags = gf[1] | (gf[2] << 8)".
 //
 // Levels are looked up by their FILE NAME, not by their position in the
@@ -70,11 +70,11 @@ public:
     //
     // This information is NOT in the level but in the level's script block.
     // One command with 14 payload bytes per object: name index, yoff, size,
-    // three rotations, flags. gameflow.cpp:371 writes them into
+    // three rotations, flags. DoGameflow (gameflow.cpp) writes them into
     // inventry_objects_list - and that table is NEVER reset between levels.
     // If a level lacks the command, the item carries the name and pose of
     // whichever level set them last; on a fresh start the factory value
-    // TXT_Load (newinv2.cpp:325ff - all eight key items carry the same
+    // TXT_Load (inventry_objects_list in newinv2.cpp - all eight key items carry the same
     // placeholder, in vanilla always overwritten by the script).
     //
     // That is exactly what happens once a model travels into a foreign
@@ -96,25 +96,25 @@ public:
     //
     // The insertion lengthens the file: the script wad grows by 15 bytes,
     // and all level offsets behind it plus ScriptLen are adjusted. Harmless,
-    // because LoadGameflow (gameflow.cpp:980) walks the file strictly
+    // because LoadGameflow (gameflow.cpp) walks the file strictly
     // sequentially and the texts live in separate language files - there are
     // no absolute offsets that could dangle.
     bool copyObjectCommand(const std::string& fromLevel, const std::string& toLevel,
                            uint8_t cmd, bool& changed, std::string& error);
 
-    // Inventory numbers (enum invobj_types, newinv2.h:121), as needed.
+    // Inventory numbers (enum invobj_types, newinv2.h), as needed.
     static constexpr int INV_PISTOLS      = 1;
     static constexpr int INV_PISTOLS_AMMO = 19;
     static constexpr int TAKEOBJ_BYTES     = 3;   // opcode + 2 payload bytes
 
     // Inserts a CMD_TAKEOBJ into a level's block: Lara no longer has the
-    // inventory object on entering (setup.cpp:160, NailInvItem).
+    // inventory object on entering (InitialiseLara in setup.cpp, NailInvItem).
     // Repeatable - if it is already there, nothing happens.
     bool addTakeObject(const std::string& levelName, int invObject,
                        bool& changed, std::string& error);
 
     // The counterpart: CMD_GIVEOBJ - Lara has the inventory object on
-    // entering (setup.cpp:122, DEL_picked_up_object). Repeatable.
+    // entering (InitialiseLara in setup.cpp, DEL_picked_up_object). Repeatable.
     bool addGiveObject(const std::string& levelName, int invObject,
                        bool& changed, std::string& error);
 

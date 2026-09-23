@@ -23,22 +23,16 @@
 //----------------------------------------------------------------------------
 // Deterministic random number generator for the randomizer.
 //
-// Why not std::mt19937 with std::shuffle/std::uniform_int_distribution?
-// Because the seed would then NOT be reproducible, and that is precisely the
-// requirement: if a user reports a bug for seed X, the same seed must
-// produce exactly the same level here. std::mt19937 itself is specified
-// bit-exactly by the standard, but std::uniform_int_distribution and
-// std::shuffle explicitly are NOT - their distribution and shuffling
-// algorithms are left to the implementation. The same seed thus yields a
-// different result depending on compiler, standard library or even its
-// version. A user report "seed 12345 is unwinnable" would then not be
-// reproducible as soon as the build was made with a different toolset.
+// A seed must produce exactly the same level on every build, or a report
+// "seed 12345 is unwinnable" cannot be reproduced. std::mt19937 is
+// specified bit-exactly, but std::uniform_int_distribution and std::shuffle
+// are NOT - their algorithms are left to the implementation, so the same
+// seed would give different results across compilers and library versions.
 //
-// Hence: a purpose-built generator (xoshiro256** with splitmix64
+// Hence a purpose-built generator (xoshiro256** with splitmix64
 // initialization, both Public Domain by Blackman/Vigna and Steele et al.),
-// its own bias-free range reduction and its own Fisher-Yates. Everything
-// here is pinned down exactly, so one seed gives the same result across
-// compiler and version boundaries.
+// its own bias-free range reduction and its own Fisher-Yates, all pinned
+// down exactly.
 //----------------------------------------------------------------------------
 class Rng
 {

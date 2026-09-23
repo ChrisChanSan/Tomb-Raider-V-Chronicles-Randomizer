@@ -489,7 +489,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // in both games). The single-axis case is not:
     //
     //   TR3 (draw.cpp:183):  (word & 1023)  << 6     10 bits
-    //   TR5 (draw.cpp:267):  (word & 0xFFF) << 4     12 bits
+    //   TR5 (draw.cpp):      (word & 0xFFF) << 4     12 bits
     //
     // A TR3 word taken over unchanged is thus read by TR5 with a quarter of
     // the angle - and because TR3 uses the overflow into negative, large
@@ -590,12 +590,12 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     //   per tile: 131072 bytes ARGB1555 (TR3's 16-bit version)
     //
     // The UVs stay PIXELS here. Only the installer shifts them 8 bits to
-    // the left - TR5 stores them as 8.8 fixed point (file.cpp:1096).
+    // the left - TR5 stores them as 8.8 fixed point (LoadTextureInfos, file.cpp).
     {
         // Why cornerOrder exists.
         //
         // TR5 pulls every UV half a texel towards the middle of its own
-        // texture area while the level loads (AdjustUV, specific/file.cpp:198).
+        // texture area while the level loads (AdjustUV, specific/file.cpp).
         // Which direction that is per corner it does not work out - it reads
         // it out of the texinfo: bit 15 of tpage picks the triangle table
         // over the quad one, the low three bits of flag pick the corner order

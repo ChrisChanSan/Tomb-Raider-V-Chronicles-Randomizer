@@ -1023,7 +1023,7 @@ static void title_cadence()
 
 /* -------------------------------------------------------- the counters -- */
 
-/* Every counter in the build that used to step once per drawn frame now asks
+/* Every counter in the build that would step once per drawn frame asks
  * InterpIsTweenFrame() first, and the engine's rule for that is exactly
  *
  *     tween = (alpha < 1), and alpha = fps_mode && framecount < 0 ? 0.5 : 1
@@ -1131,7 +1131,7 @@ static void counters()
 	 * sixty the nine steps are spread over nine live frames with eight
 	 * in-between frames wedged between them - seventeen presents, not
 	 * eighteen. It lasts nine LOGIC TICKS in both modes, which is what the
-	 * user's rule asks for; in wall-clock time the sixty hertz fade ends one
+	 * rule asks for; in wall-clock time the sixty hertz fade ends one
 	 * sixtieth of a second sooner because it does not sit through a trailing
 	 * in-between frame it has nothing left to draw on. */
 	ok(r[1].fadePresents == 2 * r[0].fadePresents - 1,
@@ -1180,10 +1180,10 @@ static void counters()
 			"the cadence comes back after the hitch", framecount, 0);
 	}
 
-	/* fps_mode 0 TAKES THE WHOLE THING OUT. At thirty the accumulator never
+	/* fps_mode 0 takes the whole thing out. At thirty the accumulator never
 	 * ends a call below zero, so the latch is never set and every guard in
 	 * the build reads false on every frame - which is the byte-identical
-	 * claim (plan, proof 6 / K11) said as arithmetic. */
+	 * claim said as arithmetic. */
 	{
 		long framecount = 0;
 		int tween = 0;
@@ -1490,7 +1490,7 @@ static void pose_time()
 		}
 	}
 
-	/* RULE K6 - every way the blend is refused. Each of these is a pose that
+	/* The neighbour rule - every way the blend is refused. Each of these is a pose that
 	 * has no neighbour, and each is drawn live for one frame, which is what
 	 * thirty hertz shows anyway. */
 	{
@@ -2058,7 +2058,7 @@ static void particles()
 			atPrev, 0);
 	}
 
-	/* 4. THIRTY HERTZ TAKES NO BRANCH AT ALL. InterpParticleAlpha returns 1
+	/* 4. Thirty hertz takes no branch at all. InterpParticleAlpha returns 1
 	 * there and every draw site keeps vanilla's own expression - but if one
 	 * of them ever computed the trail anyway, a factor of 1 has to be the
 	 * identity or proof 6 (a byte-identical 30 Hz frame) would fail on a
@@ -2074,7 +2074,7 @@ static void particles()
 			wrong, 0);
 	}
 
-	/* 5. A PARTICLE THAT WAS BORN ON THE LAST TICK - the "no pre-run" rule.
+	/* 5. A particle that was born on the last tick - the "no pre-run" rule.
 	 *
 	 * Everything that spawns a particle in this engine runs inside the tick
 	 * loop and BEFORE the simulation walk (game\control.cpp), so a spark
@@ -3070,7 +3070,7 @@ static void title_shadow()
 		const long perPresent = mode ? 1 : 2;
 		long framecount = 0;
 		long dbinput = 0;
-		long inputBusyPrev = 0;		// what line 821 hands the edge test
+		long inputBusyPrev = 0;		// what the debounce formula in specific/input.cpp hands the edge test
 		unsigned long serial = 0;	// g_tickSerial
 		unsigned long seen = 0;		// the menu's own latch
 		int actedRaw = 0, actedShadow = 0, restored = 0, mismatched = 0;
@@ -3112,7 +3112,7 @@ static void title_shadow()
 
 			/* DrawPhaseGame, then ControlPhase - and S_UpdateInput's two
 			 * writes in their own order, with SetDebounce true only for the
-			 * first tick of the call (game\control.cpp:259 and :314). */
+			 * first tick of the call (game\control.cpp). */
 			bool debounce = true;
 
 			for (framecount += perPresent; framecount > 0; framecount -= 2)

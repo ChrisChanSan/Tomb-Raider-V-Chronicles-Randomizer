@@ -19,7 +19,7 @@ rem   hd_scan / hd_bind / hd_trm   HDScanPagePath and what it needs
 rem   hd_markers.cpp    the .hdm sidecar - the openings -hdm cuts
 rem   bc7.cpp           the decoder
 rem   Trg.cpp           the vendored .TRG reader
-rem   Tr5Level.cpp      the classic level, for the H1 water survey
+rem   Tr5Level.cpp      the classic level, for the water survey
 rem   zlib              only for the PNG's deflate
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul
 cd /d "%~dp0"

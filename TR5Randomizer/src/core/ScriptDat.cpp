@@ -37,7 +37,7 @@ namespace
     };
 #pragma pack(pop)
 
-    // Payload length per command, 1:1 from DoGameflow (game/gameflow.cpp:160ff).
+    // Payload length per command, 1:1 from DoGameflow (game/gameflow.cpp).
     // Opcodes from enum gf_commands (game/gameflow.h), CMD_FMV = 0x80.
     //
     // The object commands (0x92..0xD8: key/puzzle/pickup/examine and the
@@ -312,8 +312,8 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
 //
 // The command is 3 bytes: opcode 0xDA and two payload bytes, the first of
 // which carries the INVENTORY object number (enum invobj_types,
-// newinv2.h:121 - 0 = Uzi, 1 = pistols, 19 = pistol ammo). At level start,
-// setup.cpp:160 walks the list and calls NailInvItem: whatever is listed,
+// newinv2.h - 0 = Uzi, 1 = pistols, 19 = pistol ammo). At level start,
+// InitialiseLara (setup.cpp) walks the list and calls NailInvItem: whatever is listed,
 // Lara no longer has on entering.
 //
 // Inserted right BEFORE CMD_LEVEL, where the existing TAKEOBJ already stand

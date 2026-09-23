@@ -95,7 +95,7 @@
  *     -flare / -torch     the LEFT hand alone, as laraflar.cpp / flmtorch.cpp
  *                         set it.
  *     -back <what>        shotgun, hk or grapple on her back.
- *     -lara-nodes         the table this stage owes the report: every classic
+ *     -lara-nodes         the node table: every classic
  *                         node 0..14 against every source, and which .TRM
  *                         part covers it.
  *     -lara-pose <node> <yaw> <pitch>
@@ -176,8 +176,8 @@
  *                         OUTFIT_CLASSIC - Lara's hair - stands in its place;
  *                         hair = its own head AND that hair over it, for a
  *                         body whose hat or hood is worth keeping; outfit =
- *                         its own head alone, which is the picture from
- *                         before the round. Without the switch the wardrobe
+ *                         its own head alone, the classic head swap.
+ *                         Without the switch the wardrobe
  *                         answers, exactly as it does in the game: tr5 for
  *                         every outfit of the Tomb Raider I-III install and
  *                         for every mod whose mod.txt says origin=, outfit
@@ -228,7 +228,7 @@
  *                         stands inside the backpack - measured against the
  *                         pack box whether or not the regime
  *                         has it, so the shipped spheres say how far into the
- *                         pack the braid used to go. A settled braid reads
+ *                         pack the braid may go. A settled braid reads
  *                         zero and stays there; the regimes that read
  *                         anything else are the ones the game had. Default
  *                         60 steps, which is a second of game time.
@@ -363,8 +363,8 @@
  *                         place and the size have to agree, at 4:3 and at
  *                         16:9; the budget is 1 pixel. The light: the ring's
  *                         sun term over 26 sample normals, on the matrix the
- *                         engine hands the card and on a sheared matrix an
- *                         earlier version of this projection handed it - the first must not move at all,
+ *                         engine hands the card and on a sheared matrix (a
+ *                         constant pixel offset put in as a shear) - the first must not move at all,
  *                         and the second is the shear error, kept as a
  *                         number. Needs the camera, so it does not combine
  *                         with -nodraw - same as -itemcheck and -laracheck.
@@ -581,9 +581,9 @@ static void PngChunk(FILE* f, const char* tag, const unsigned char* data, unsign
 	fwrite(head, 1, 4, f);
 }
 
-/* ------------------------------------------ WHAT IS DRAWN OVER THE PICTURE --
+/* ------------------------------------------ What is drawn over the picture --
  *
- * THE FLOOR A PICKUP LIES ON (#155b). A render of a gun lying on the ground is
+ * The floor a pickup lies on. A render of a gun lying on the ground is
  * not a proof of the floor rule on its own: the eye cannot see where the floor
  * IS. So the classic mesh's own lowest point is drawn into the picture as a
  * square in that plane, projected with the same arithmetic the renderer uses -
@@ -630,7 +630,7 @@ static bool OverlayProject(const float* view, double persp, long w, long h,
 /* A rectangle in the plane y = `at`, centred on (cx, cz), as four projected
  * edges.
  *
- * A NARROW STRIP AND NOT A BIG SQUARE. A square as wide as the model is deep
+ * A narrow strip and not a big square. A square as wide as the model is deep
  * puts its near edge a long way down the picture and its far edge through the
  * model, and the eye then reads the model against whichever line it happens to
  * meet - which says nothing at all. Keeping the depth small puts the two edges
@@ -782,7 +782,7 @@ static void LookAt(double ex, double ey, double ez, double yawDeg, double pitchD
 	out[15] = 1;
 }
 
-/* AlterFOV (3dmath.cpp:78-98) without the engine: the field of view is
+/* AlterFOV (3dmath.cpp) without the engine: the field of view is
  * measured against a 4:3 width whatever the window really is. */
 static double EnginePersp(long height, double fovDeg)
 {
@@ -862,9 +862,9 @@ static void MatRotX(double deg, float* m)
  *
  * has to be put somewhere. It can be put into the ITEM'S MATRIX as a shear -
  * vx' = vx + kx * vz, which survives the projection's division by vz as a
- * constant pixel offset, which an earlier version of the HD path did. This function is
+ * constant pixel offset. This function is
  * that shear, and it is kept for ONE purpose: -ringcheck measures what it does
- * to the LIGHT, which is why the engine no longer does it. hd_model.hlsl skins
+ * to the LIGHT, which is why the engine does not do it. hd_model.hlsl skins
  * the vertex NORMAL through the same matrix and renormalises, so a sheared
  * matrix tilts and rescales every normal of the item.
  *
@@ -1071,10 +1071,10 @@ static bool ShotWrite(Shot& shot, const char* path)
 
 	shot.readback->UnlockRect();
 
-	/* AND THE FLOOR OVER IT (#155b). After the background count above and
+	/* And the floor over it. After the background count above and
 	 * before the file: the percentages beside every picture this tool writes
 	 * are about what the RENDERER drew, and lines counted into them would
-	 * change a number two rounds of proofs already compare. */
+	 * change a number other proofs already compare. */
 	for (size_t i = 0; i < g_overlay.size(); i++)
 		OverlayStroke(pixels, shot.w, shot.h, g_overlay[i]);
 
@@ -1301,7 +1301,7 @@ static void ShotEnd(Shot& shot)
 
 /* ------------------------------------------------------- the classic side -- */
 
-/* THE BIND POSE AND THE HIERARCHY of one slot, straight out of the .TRC.
+/* The bind pose and the hierarchy of one slot, straight out of the .TRC.
  *
  * A TR5 mesh tree is four longs per node after the first - flags, x, y, z -
  * and the flags carry the matrix stack: bit 0 pops, bit 1 pushes, and the
@@ -1384,7 +1384,7 @@ static bool ReadClassicSlot(const Tr5Level& level, int slot, ClassicSlot& out)
 	return true;
 }
 
-/* THE CLASSIC MESH'S OWN DEEPEST POINT (#155b), in the slot's frame.
+/* The classic mesh's own deepest point, in the slot's frame.
  *
  * The reference the floor rule measures an HD pickup model against: a pickup
  * is drawn at its animation frame's own offset, so where the ground meets it
@@ -1492,7 +1492,7 @@ static int ReadFramePose(const Tr5Level& level, const ClassicSlot& here,
 	if (here.slot < 0 || here.nodes < 1 || !level.moveableInfo(here.slot, info))
 		return 0;
 
-	/* THE WORDS THE WALK CAN READ AT MOST: nine of box and offset, then two
+	/* The words the walk can read at most: nine of box and offset, then two
 	 * per node - a single-axis rotation takes one word and a three-axis one
 	 * takes two, so twice the node count is the bound. */
 	std::vector<short> frame((size_t)(9 + 2 * here.nodes), 0);
@@ -1539,8 +1539,8 @@ static void PoseToRowMajor(const float* pose, float* out)
  * turned, nothing moved sideways.
  *
  * At the view end of the chain, which is what makes it "up" in the picture
- * whatever is prepended in front of the model afterwards. An earlier build
- * wrote it onto the fit's own translation row in one branch and
+ * whatever is prepended in front of the model afterwards. Written
+ * onto the fit's own translation row in one branch and
  * onto the node matrix's y row in the other, so -invrot displaced the model
  * in the TURNED frame and a slot whose animation frame stands the model on
  * its head was pushed further into the ground. */
@@ -1665,17 +1665,15 @@ static std::string ParentOf(const std::string& path)
 
 /* Whether a page has a .DDS of its own anywhere in the bundle. The page cache
  * puts WHITE.DDS in its place when it has none, which is a picture and not an
- * error - but for the report the two have to be told apart. */
+ * error - but for the table the two have to be told apart. */
 /* Where a page really came from, asked of the cache that loaded it rather
- * than worked out again here. This used to be a copy of the
- * 5-then-4 rule with a root and a page number, and a copy of a rule is a rule
- * that goes out of step: it knew nothing of the other bundle's namespace and
- * nothing of the mods', so it reported every page of a Tomb Raider III guest
+ * than worked out again here. A copy of the 5-then-4 rule with a root and a
+ * page number would go out of step: it would know nothing of the other
+ * bundle's namespace and nothing of the mods', so it would report every page of a Tomb Raider III guest
  * and every page of a mod's model as missing while the engine had them on the
  * card. The cache answers for the key it was handed, which is the only thing
  * that can be right for all three namespaces.
- *
- * `root5` is no longer needed and the parameter is gone with it. */
+ */
 static const char* PageFrom(int page)
 {
 	const int slot = HDPageCacheSlotOf(page);
@@ -1790,7 +1788,7 @@ static std::string TrmPath(const std::string& root5, const char* stem)
  * The three things that have to meet, all in the classic bind pose, which is
  * the pose every .TRM vertex is written in:
  *
- *   1. The root the game hangs the braid from. game\hair.cpp:397 walks the
+ *   1. The root the game hangs the braid from. HairControl (game\hair.cpp) walks the
  *      mesh tree to the head bone and translates by (-4, -4, -48) in its own
  *      frame; the result is hairs[0][0], and the seam puts HAIR_OG's bone 0
  *      there. In the bind pose the head frame is axis aligned with the world,
@@ -1979,8 +1977,8 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 
 	/* --- Where the hair knot is ------------------------------------------ */
 	/* The braid starts
-	 * behind the skull beside the pack instead of coming out of the knot when the anchor is measured against the wrong surface: an earlier
-	 * version measured the gap against the skull, which is the outfit's own
+	 * behind the skull beside the pack instead of coming out of the knot when the anchor is measured against the wrong surface: measuring
+	 * the gap against the skull, which is the outfit's own
 	 * node 14; the knot is on LARA_HEAD, and the two are not the same surface.
 	 * So the head file is measured on its own: its box, its rearmost point,
 	 * and the nearest of its vertices BEHIND the head joint - which is the
@@ -2230,8 +2228,8 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 /*
  * Why a third neck table.
  *
- * An earlier cut of the neck used a sphere around the eye and closed what it
- * opened with a dome whose rim was the body's own outline at s = 50. Both halves are wrong in the picture: the dome is a plate
+ * A cut of the neck by a sphere around the eye, closed with a dome whose rim
+ * is the body's own outline at s = 50, is wrong in both halves: the dome is a plate
  * the size of her whole chest, it pokes out through the collar, its middle is
  * a black smear, and the strips between its spokes are long slivers. The
  * cause is in the two numbers this table replaces: at s = 50 the body is no
@@ -2605,7 +2603,7 @@ static const char* Num(double v)
 
 /* Where the collar that survived the cylinder cut actually sits.
  *
- * An earlier measurement left 94 collar vertices standing on
+ * One cylinder leaves 94 collar vertices standing on
  * OUTFIT_RUSSIA and 110 on the
  * parka: one cylinder cannot take a collar of
  * radius 31 and leave shoulders of radius 67 at what the five-unit bins call
@@ -2749,9 +2747,9 @@ static void PrintCollarShape(const std::string& root5, const ClassicSlot& body)
 
 /* What a candidate cut really leaves in the camera.
  *
- * An earlier table of the same measurement was blind in one eye, and that is why its collar
- * survived a cut that ought to have taken it. Two rules of the engine were
- * missing from it:
+ * A table of this measurement that leaves out two rules of the engine is
+ * blind in one eye and lets a collar survive a cut that ought to take it.
+ * The two rules:
  *
  *   1. A vertex is cut only if all of its weight sits on nodes the cut may
  *      touch. The shader adds (1 - cuttable) * 1000 to the keep value, and
@@ -2844,7 +2842,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 		for (int i = 0; i < 3; i++)
 			axis[i] /= len > 1.0e-6 ? len : 1.0;
 
-		/* WHICH VERTICES A FIRST PERSON FRAME DRAWS. hd_model.cpp gives a
+		/* Which vertices a first person frame draws. hd_model.cpp gives a
 		 * triangle to the node with the most weight over its three corners
 		 * and hides a whole range by that node; so a vertex is drawn when any
 		 * triangle that is not the head's uses it. */
@@ -2888,7 +2886,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 				if (!drawn[i])
 					continue;
 
-				/* THE SHADER'S OWN ARITHMETIC, and not a simplification of
+				/* The shader's own arithmetic, and not a simplification of
 				 * it. A vertex goes when
 				 *
 				 *     keep + (1 - cuttable) * 1000 < 0
@@ -2932,7 +2930,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 					s - kRoundLCutS > r - wide
 						? s - kRoundLCutS : r - wide;
 
-				/* THE NEAR ZONE FOLLOWS THE CAMERA, so it is worked out once
+				/* The near zone follows the camera, so it is worked out once
 				 * per eye - which is the whole point of it living in view
 				 * space in the shader. Everything else about the cut is the
 				 * same at both. */
@@ -2987,7 +2985,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 			printf("%-19s %-22s %7d %7d %7d   %8.1f %8.1f\n", c ? "" : stem,
 				kCand[c].what, cut, ring, chest, nearest[0], nearest[1]);
 
-			/* WHAT THE NEAREST SURVIVOR IS, and it is the whole reason this
+			/* What the nearest survivor is, and it is the whole reason this
 			 * table exists: a number alone cannot say whether the thing at the
 			 * eye is a neck the cut should have taken or a chest it must
 			 * leave. Its bones and weights say which, and its depth and radius
@@ -3250,7 +3248,7 @@ static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
 			}
 
 			/* The sheen the engine's own tables give it: the outfit's for the
-			 * body, the hand's for the hand - and, since this round, the SKIN's
+			 * body, the hand's for the hand - and the SKIN's
 			 * for whichever page of the body is Lara's own skin. */
 			float bodyS = 0.0f, bodyP = 1.0f, handS = 0.0f, handP = 1.0f;
 			float skinS = 0.0f, skinP = 1.0f;
@@ -3281,8 +3279,8 @@ static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
 		}
 	}
 
-	/* THE SEAM ITSELF, as one number. The body's page with the most geometry
-	 * ON THE HAND NODES is the surface the HAND model continues, so the two
+	/* The seam itself, as one number. The body's page with the most geometry
+	 * on the hand nodes is the surface the HAND model continues, so the two
 	 * whites beside each other are what a pixel row across the wrist sees. */
 	{
 		const char* stem = HDLaraOutfitModel(outfit);
@@ -3742,7 +3740,7 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		return;
 	}
 
-	/* THE TWO EYES. game/camera.cpp asks mgLOS whether it may put the eye
+	/* The two eyes. game/camera.cpp asks mgLOS whether it may put the eye
 	 * FP_EYE_OFFSET = 48 units in front of the head joint, and takes 0 when
 	 * something is in the way - a wall, a ledge, a doorway. Both are ordinary
 	 * play, and the cut has to hold at both, so both are measured. The
@@ -4286,9 +4284,9 @@ static long BraidStep(long pos[7][3], long vel[7][3], const long root[3],
 /* Where the simulation leaves the braid, so that the picture can be the
  * simulation's and not a studio pose.
  *
- * The braid this tool used to draw was a chain of the tool's own invention -
+ * A braid drawn as a chain of the tool's own invention -
  * turned out of its bind direction to point downwards and a little
- * backwards - which is fine for proving that six bones move independently and
+ * backwards - is fine for proving that six bones move independently and
  * useless for the one question that matters: does the plait lie on the
  * pack or in it. -braidrest names one of the regimes below, runs it in the
  * bind pose, and hands the settled positions to the draw, which then builds
@@ -4320,7 +4318,7 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		return;
 	}
 
-	/* THE FIVE CLASSIC SPHERES plus the neck one, exactly as HairControl
+	/* The five classic spheres plus the neck one, exactly as HairControl
 	 * builds them: a mesh's own centre and radius, in the frame of its node.
 	 * In the bind pose the node frames carry no rotation, so a node's origin
 	 * is ClassicSlot::bind and the mesh offset is a plain addition. The three
@@ -4339,7 +4337,7 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 			return;
 		}
 
-	/* THE TORSO SPHERE HAS TWO SETTINGS and they are not the same size, so
+	/* The torso sphere has two settings and they are not the same size, so
 	 * both are run. HairControl anchors the braid differently for the Russia
 	 * outfit - the cap and the bomber jacket - than for every other: the
 	 * sphere moves 11 left, 16 up and its radius is nailed to 94 instead of
@@ -4484,7 +4482,7 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 
 		memset(vel, 0, sizeof(vel));
 
-		/* THE SEED IS THE GAME'S OWN first frame: first_hair hangs the chain
+		/* The seed is the game's own first frame: first_hair hangs the chain
 		 * straight down from the root, every velocity zero. */
 		const long rootBase[3] =
 		{
@@ -4539,7 +4537,7 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		printf("%-34s %8ld %8ld %8ld %8ld %9ld %8d\n", kRegime[r].label, at1,
 			at10, at30, last, worstDeepest, worstHits);
 
-		/* The ordinary anchor's settled chain, for the picture (I1). */
+		/* The ordinary anchor's settled chain, for the picture. */
 		if (!anchor && r == g_braidRestWant)
 		{
 			memcpy(g_braidRest, pos, sizeof(g_braidRest));
@@ -5005,7 +5003,7 @@ static long BraidAnimStep(long pos[7][3], long vel[7][3], const long root[3],
 		labs(pos[6][2] - tipWas[2]);
 }
 
-/* THE TWO ANGLES HairControl WRITES for a link, in degrees.
+/* The two angles HairControl writes for a link, in degrees.
  *
  * game\hair.cpp gives link n-1 the spherical angles of the vector from it to
  * link n - phd_atan(dz, dx) around y and -phd_atan(sqrt(dz^2+dx^2), dy) around
@@ -5583,7 +5581,7 @@ static void Tween60Build(const Tr5Level& level, const ClassicSlot& body,
 	}
 }
 
-/* THE ENGINE'S OWN BLEND, expression for expression - the three cases of
+/* The engine's own blend, expression for expression - the three cases of
  * InterpBlendFloat (game\interpolate_math.h) over the twelve elements
  * aInterpolateMatrix walks. The tool's matrices are the transpose of the
  * engine's, so the twelve are the 3x3 in rows 0..2 and the translation in
@@ -5702,7 +5700,7 @@ static void PrintTween60(const Tr5Level& level, const ClassicSlot& body,
 
 		const int keys = (a.end - a.start) / a.rate + 1;
 
-		/* ONE CHAIN PER STORED KEY, AND ONE PAST THEM. The one past is not a
+		/* One chain per stored key, and one past them. The one past is not a
 		 * mistake: an animation whose frame count is not a whole number of
 		 * segments has a last frame whose pair reaches beyond its own stored
 		 * frames, and the engine reads it - so the tool reads it too, out of
@@ -5844,7 +5842,7 @@ static void PrintTween60(const Tr5Level& level, const ClassicSlot& body,
 	printf("\ntween frames whose pair reaches past the animation's own stored "
 		"keys: %d\n", reached);
 
-	/* AND HOW MANY ANIMATIONS THAT WAS REALLY (corrected in U7). Laras anims
+	/* And how many animations that was really. Lara's anims
 	 * are level-specific and a level stubs the ones it does not use, so a run
 	 * over the whole range 0..473 replays fewer than 474 of them - and a
 	 * verdict quoted as "over all 474" says more than the run did. The two
@@ -6552,13 +6550,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 *   LVL5_BASE .. LVL5_SINKING_SUBMARINE, which are the four JOBY
 		 *   files.
 		 *
-		 *   Young Lara is the byte and nothing else. An earlier reading
-		 *   used "an ANDY file, or the byte", which was the same
-		 *   mistake the engine's own seam carried: the engine builds the
+		 *   Young Lara is the byte and nothing else. Reading it as "an
+		 *   ANDY file, or the byte" goes wrong: the engine builds the
 		 *   child body only where the Irish range AND the script flag
 		 *   GF_YOUNGLARA meet (game\laramisc.cpp, LaraInitialiseMeshes), the
 		 *   randomizer clears that flag and puts an adult skin in the level,
-		 *   and every randomized ANDY level was therefore reported classic
+		 *   and every randomized ANDY level would be reported classic
 		 *   with a grown Lara standing in it. This tool reads the level FILE
 		 *   and no SCRIPT.DAT, so the byte is the one fact it has - and it is
 		 *   a true one: the randomizer writes the outfit byte and the flag in
@@ -6818,7 +6815,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			 * lara.holster both go back to LARA_HOLSTERS).
 			 *
 			 * Unless the caller said otherwise. A -holsters spelled out ON
-			 * THE COMMAND LINE beats this, because the engine's bookkeeping
+			 * The command line beats this, because the engine's bookkeeping
 			 * really can end up in the contradictory state and the seam's
 			 * rule against it needs a way to be shown: -guns revolver
 			 * -holsters revolver is the frame where the gun is
@@ -7095,9 +7092,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			"16 up and %.0f forward", ex, ey, ez, classic14[0], classic14[1],
 			classic14[2], o.fpForward);
 
-		/* And where -eye moved it from there. An earlier version of this line used
-		 * to name the default derivation whatever the switches said, so a run
-		 * with the eye taken out of the skull - the LANDING case - printed the
+		/* And where -eye moved it from there. Naming the default derivation
+		 * whatever the switches said would let a run with the eye taken out
+		 * of the skull - the LANDING case - print the
 		 * right coordinates under a description of a placement it was not
 		 * using. */
 		if (o.eyeOff[0] != 0.0 || o.eyeOff[1] != 0.0 || o.eyeOff[2] != 0.0)
@@ -7117,7 +7114,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * cheapest such matrix there is, and the picture that comes back says
 	 * whether the HD path minds. It does not - hd_render's state bracket sets
 	 * D3DCULL_NONE, the same thing the classic engine does globally
-	 * (specific\function_table.cpp:105), and TR5's own mirror does not even
+	 * (specific\function_table.cpp), and TR5's own mirror does not even
 	 * need it: game\mirror.cpp mirrors Lara by MOVING her (z_pos = plane - z,
 	 * the three angles negated), which is a rotation with determinant +1, and
 	 * switches the SOFTWARE backface test with SetCullCW/SetCullCCW. */
@@ -7227,7 +7224,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 			HDTrmFoldMirrored(&folded, mirror, pairs, o.handFold, &counts);
 
-			/* THE SKINNING, exactly as hd_model.hlsl does it: the weighted sum
+			/* The skinning, exactly as hd_model.hlsl does it: the weighted sum
 			 * over the three bones of (p - bind[bone]) * M[bone]. The bind
 			 * fold is in set_joint in the engine and written out here. */
 			double moved = 0.0, worstMove = 0.0;
@@ -7304,7 +7301,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			"own x)\n");
 	}
 
-	/* THE BRAID. In the game the six links come from hairs[0][n], which the
+	/* The braid. In the game the six links come from hairs[0][n], which the
 	 * simulation writes as ABSOLUTE world positions and angles - there is no
 	 * mesh tree walk for the braid at all, which is why the classic HAIR
 	 * object's own tree is a straight line along +z (measured: 0, 56, 112,
@@ -7332,7 +7329,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		float rest[16], anchor[16], base[16];
 
 		/* The root is not the head joint.
-		 * game\hair.cpp:397 walks to the head bone and then translates by
+		 * HairControl (game\hair.cpp) walks to the head bone and then translates by
 		 * (-4, -4, -48) in the head's own frame before it writes hairs[0][0];
 		 * that offset - up a little and 48 units behind the joint, which is
 		 * the back of the skull - is where the braid hangs from. Only the two
@@ -7484,7 +7481,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			? "PASS - both roads put every joint origin in the same pixel"
 			: "FAIL - the projection and the classic transform disagree");
 
-		/* THE BRAID'S CHAIN RULE, which is the one thing about this seam that
+		/* The braid's chain rule, which is the one thing about this seam that
 		 * a still picture cannot show. TR5 builds a matrix for links 1, 3 and
 		 * 5 only (game\hair.cpp, DrawHair) and draws 0, 2 and 4 as skinned
 		 * connectors out of stashed vertices; HAIR_OG.TRM has six bones, so
@@ -7494,7 +7491,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 * They are usable, and this is the proof. HairControl derives every
 		 * link's POSITION by putting the link before it at its own position
 		 * and angles - phd_SetTrans, then phd_RotYXZ(y_rot, x_rot, 0), which
-		 * is phd_RotY followed by phd_RotX (specific\3dmath.cpp:435) - and
+		 * is phd_RotY followed by phd_RotX (specific\3dmath.cpp) - and
 		 * stepping one bone offset along that frame. The seam builds the same
 		 * frame with phd_TranslateAbs, phd_RotY, phd_RotX, in that order. So
 		 * frame(n) stepped by the offset must land on position(n + 1).
@@ -8589,11 +8586,11 @@ int main(int argc, char** argv)
 			const HDWardrobeEntry* e = HDWardrobeAt(i);
 			/* snprintf and not sprintf, and the buffers are wide enough for a
 			 * number no file should hold. A sheen of 3e38 - a float's largest
-			 * - is 42 characters before the "/14 (list)" is added, which an
-			 * earlier version printed into 48 bytes with sprintf:
+			 * - is 42 characters before the "/14 (list)" is added, and
+			 * sprintf into 48 bytes would give
 			 * a table visibly corrupted and a write past the end of a stack
-			 * array. The engine now refuses such a value,
-			 * so nothing can hand it one any more; a tool that prints
+			 * array. The engine refuses such a value,
+			 * so nothing hands it one; a tool that prints
 			 * what it is given may not depend on that. */
 			char flags[32], sheen[96], glow[96], skin[64], head[64];
 
@@ -8937,7 +8934,7 @@ int main(int argc, char** argv)
 				"the ring and the floor draw the slot's own\n");
 	}
 
-	/* AND THE SAME PLAN FOR EVERY PICKUP SLOT OF THE LEVEL (#155b), which is
+	/* And the same plan for every pickup slot of the level, which is
 	 * what -floorcheck needs: the floor draws a mod's <BASE>_OPTION model
 	 * where there is one, so a table about the floor has to have those models
 	 * on the card as well. Exactly hd_object.cpp's ring plan, slot for slot. */
@@ -9899,8 +9896,8 @@ int main(int argc, char** argv)
 	}
 
 	/* The ring proof, without the game.
-	 * Two measurements, and the second is the one that failed on an earlier
-	 * version of the projection.
+	 * Two measurements; the second catches a projection that shears the
+	 * item's matrix.
 	 *
 	 * One, the place. The model's bounding rectangle put on the screen twice
 	 * at every place the ring puts an item:
@@ -9921,10 +9918,10 @@ int main(int argc, char** argv)
 	 * ring's sun term over a sphere of sample normals, computed the way
 	 * hd_model.hlsl computes it - the normal through the node's 3x3,
 	 * renormalised, dotted with the ring's fixed direction - once on the
-	 * matrix the engine hands the card and once on the sheared matrix an
-	 * earlier version of the projection handed it. The first column cannot move at all, because the
+	 * matrix the engine hands the card and once on a sheared matrix (a
+	 * constant pixel offset put in as a shear). The first column cannot move at all, because the
 	 * engine's matrix is the classic one and a rotation leaves a unit normal
-	 * a unit normal. The second is that earlier approach's error kept as a number: it
+	 * a unit normal. The second is the shear's error kept as a number: it
 	 * is what the ring really looked like before the offset moved into the
 	 * projection, and a regression that put the shear back would make the
 	 * first column read like the second.
@@ -9958,7 +9955,7 @@ int main(int argc, char** argv)
 					corner[c][2] = mx * m0[2] + my * m0[6] + mz * m0[10] + m0[14];
 				}
 
-		/* THE SAMPLE NORMALS for the light half: the 26 directions of a
+		/* The sample normals for the light half: the 26 directions of a
 		 * 3x3x3 grid without its centre, normalised. Any spread of unit
 		 * normals does - the point is that the engine's road leaves every
 		 * one of them alone and the shear does not. */
@@ -10286,9 +10283,9 @@ int main(int argc, char** argv)
 						pose.game, pose.level, pose.nodes, pose.before[0],
 						pose.before[1], pose.before[2], pose.after[0],
 						pose.after[1], pose.after[2]);
-				/* AND WHICH OBJECT IT WAS ABOUT (#155b). The reason no longer
-				 * names the game and the object - it named them twice in the
-				 * engine's own line - so the printer names them, here as
+				/* And which object it was about. The reason does not
+				 * name the game and the object - that would name them twice in
+				 * the engine's own line - so the printer names them, here as
 				 * there, and only where they are known. */
 				else if (pose.game && pose.object)
 					printf("\nclassic pose: NOT applied to %s - game %d object "
@@ -10300,7 +10297,7 @@ int main(int argc, char** argv)
 						"as the file stands.\n", HDModelName(optionSlot),
 						pose.why);
 			}
-			/* AND A RUN THAT TOOK THE POSE OFF SAYS SO (#155b). -noclassicpose
+			/* And a run that took the pose off says so. -noclassicpose
 			 * asks for no pose at all, so hd_model keeps no decision for this
 			 * slot and the block above printed nothing - which left the two
 			 * runs the switch exists to compare telling apart only by a box
@@ -10375,12 +10372,12 @@ int main(int argc, char** argv)
 					{
 						/* The lift goes straight up in the world, at the view
 						 * end of the chain - LiftNodes, the same move the
-						 * engine makes and in the same space. An earlier build put it on the
-						 * fit's own translation row, which
-						 * is the item's frame: with -invrot that displaced the
+						 * engine makes and in the same space. On the fit's own
+						 * translation row, which
+						 * is the item's frame, -invrot would displace the
 						 * model in the turned frame, and for a slot whose
-						 * animation frame stands the model on its head it was
-						 * the wrong direction altogether. */
+						 * animation frame stands the model on its head it would
+						 * be the wrong direction altogether. */
 						if (!noFloorLift)
 							LiftNodes(&matrices[0], here->nodes, lift, view);
 
@@ -10462,7 +10459,7 @@ int main(int argc, char** argv)
 				"own model is drawn\n", HDModelName(optionSlot));
 	}
 
-	/* AND THE SLOT'S OWN MODEL ON THE FLOOR (#155b), which is the other half
+	/* And the slot's own model on the floor, which is the other half
 	 * of the rule: no fit, no OPTION file, just the model the slot is bound to
 	 * against the classic mesh it replaces. Both lowest points are taken in
 	 * the frame the level draws the item in and the lift goes straight up in
@@ -10497,13 +10494,13 @@ int main(int argc, char** argv)
 				"with vertices in it\n");
 	}
 
-	/* THE PLANE ITSELF, over the picture (#155b): a square in the floor plane,
+	/* The plane itself, over the picture: a square in the floor plane,
 	 * as wide as the model's own box, so that a gun lying on the ground can be
 	 * SEEN to be lying on it. It is drawn into the pixels after the render -
 	 * see OverlayPlane - and never counted into the background percentage. */
 	if (floorDraw && floorPlaneKnown)
 	{
-		/* THE MODEL'S OWN FOOTPRINT, and not a bigger square (#155b).
+		/* The model's own footprint, and not a bigger square.
 		 *
 		 * A plane seen from a low camera is not a line: a point ON it but
 		 * nearer the eye projects further down the picture than one at the
@@ -10550,8 +10547,8 @@ int main(int argc, char** argv)
 
 	if (!drew)
 	{
-		/* Every node's matrix and not one. An earlier version handed HDModelDraw a
-		 * single float[16] with the slot's node count beside it, so the draw
+		/* Every node's matrix and not one. A single float[16] handed to
+		 * HDModelDraw with the slot's node count beside it would make the draw
 		 * read past the end of a stack array for every node but the root and
 		 * skinned that node's vertices with whatever was there. A model whose
 		 * geometry sits on node 0 drew correctly and everything else vanished
@@ -10612,7 +10609,7 @@ int main(int argc, char** argv)
 	 * ends are measured because the slide is exactly what moves the display
 	 * about the screen.
 	 *
-	 * WHAT IS DIFFERENT FROM THE RING, and it is one number: the sun's scale.
+	 * What is different from the ring, and it is one number: the sun's scale.
 	 * aTransformLightClipMesh doubles a sun while InventoryActive and takes
 	 * three quarters of it otherwise, and the display is drawn with
 	 * InventoryActive at 0 - so the light half below uses 0.75 where
@@ -10658,7 +10655,7 @@ int main(int argc, char** argv)
 			for (int si = 0; si < 2; si++)
 				for (int ri = 0; ri < 2; ri++)
 				{
-					/* THE ROTATION IS IN THE MATRICES, not in the offset:
+					/* The rotation is in the matrices, not in the offset:
 					 * S_DrawPickup spins the object on
 					 * (GnFrameCounter & 0x7F) << 9, which reaches
 					 * DrawInventoryItemMe as item->pos.y_rot and goes onto
@@ -10708,7 +10705,7 @@ int main(int argc, char** argv)
 									break;
 								}
 
-								/* THE CLASSIC ROAD: aTransformLightClipMesh
+								/* The classic road: aTransformLightClipMesh
 								 * with f_centerx / f_centery moved to the
 								 * display's own x / y for the length of one
 								 * mesh, which is what phd_PutPolygonsPickup
@@ -10722,7 +10719,7 @@ int main(int argc, char** argv)
 								if (cy2 < ct) ct = cy2;
 								if (cy2 > cb) cb = cy2;
 
-								/* THE ENGINE'S ROAD: the same untouched
+								/* The engine's road: the same untouched
 								 * corner through HDModelOffCentreMatrix -
 								 * the engine's own line, linked into this
 								 * tool, not a copy of it - and the viewport.
@@ -10773,7 +10770,7 @@ int main(int argc, char** argv)
 			"worst dx %.5f px, worst dy %.5f px\n", places, skipped,
 			worstX, worstY);
 
-		/* --- THE LIGHT, end to end ---------------------------------------
+		/* --- The light, end to end ---------------------------------------
 		 *
 		 * The same object drawn twice at 1920x1080 with the display's own
 		 * light - once about the screen CENTRE and once about the display's
@@ -10805,7 +10802,7 @@ int main(int argc, char** argv)
 
 		BuildNodeMatrices(*here, lview, turn, &lmat[0]);
 
-		/* THE DISPLAY'S OWN LIGHT, which is phd_PutPolygonsPickup's: an
+		/* The display's own light, which is phd_PutPolygonsPickup's: an
 		 * ambient of 8/8/8, one sun of pcbright - and pcbright is 0x7F7F7F
 		 * here, because S_DrawPickup passes `bright` 0 and
 		 * DrawThreeDeeObject2D turns that into 0x7F7F7F - pointing along
@@ -10894,7 +10891,7 @@ int main(int argc, char** argv)
 
 		double meanCentre = 0.0, meanCorner = 0.0, diffPct = 0.0;
 		long compared = 0, lost = 0, onlyA = 0, onlyB = 0, worstChannel = 0;
-		/* HOW MANY pixels differ at all, and how many by more than a step or
+		/* How many pixels differ at all, and how many by more than a step or
 		 * two - a worst value alone cannot tell one stray texel apart from a
 		 * picture that is lit differently. */
 		long moved = 0, noisy = 0;
@@ -10986,7 +10983,7 @@ int main(int argc, char** argv)
 				"bracket\n", broken,
 				kWatchedStateCount + kWatchedSamplerCount + kWatchedStageCount + 8);
 
-		/* THE BUDGETS, and the light's is not zero on purpose. The place is
+		/* The budgets, and the light's is not zero on purpose. The place is
 		 * arithmetic and its budget is the same 1 px -ringcheck uses. The
 		 * light is a RASTERISED picture: the two draws put the same triangles
 		 * on the same pixel grid a whole number of pixels apart, but the

@@ -71,7 +71,7 @@ namespace
 
 	bool g_saidNothingToDo;		// the one line an unarmed F4 gets
 
-	/* WHAT THE MENU SHOWS, one row per line: the first is "Level facts" and
+	/* What the menu shows, one row per line: the first is "Level facts" and
 	 * the rest are the wardrobe scan in its own order. Held as an index
 	 * rather than as a key, so that nothing here keeps a pointer into a scan
 	 * that could be redone under it. */

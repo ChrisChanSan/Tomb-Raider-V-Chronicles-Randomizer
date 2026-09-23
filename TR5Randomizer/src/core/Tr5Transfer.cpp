@@ -57,11 +57,10 @@
 //                     bone_index s32, frame_offset u32, anim_index u16
 //                     (0xFFFF = none), 2 bytes padding
 //
-// Three hard rules, learned the hard way:
+// Three hard rules:
 //   1. Never copy slot 0 (LARA) - it carries the level's animations.
 //   2. Mesh offset 0 is NOT a null pointer; Lara's right hand lives there.
-//      Harmless here, because offsets are never treated as truth values -
-//      the tool's mistake is simply not rebuilt.
+//      Offsets are therefore never treated as truth values here.
 //   3. The tile numbers must be adjusted completely, or something points at
 //      the wrong page (the pixelated gunsmoke).
 //----------------------------------------------------------------------------

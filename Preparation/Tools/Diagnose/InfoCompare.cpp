@@ -196,7 +196,7 @@ int main(int argc, char** argv)
             const std::string xt = x["type"].asString(), yt = y["type"].asString();
 
             // Only two command names are ever compared downstream: "Object"
-            // (Randomizer.cpp:121, :384, :440) and "PlaySoundtrack" (:144).
+            // and "PlaySoundtrack" (both read in Randomizer.cpp).
             // Where the two readings disagree on a name that is neither, the
             // difference cannot reach a decision - report it, but do not
             // count it as a defect of this code.

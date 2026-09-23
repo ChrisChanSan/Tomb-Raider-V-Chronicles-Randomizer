@@ -103,7 +103,7 @@ int HDLightParity(const HDParityScene* scene, const HDParityVertex* verts, int c
 // A stand-in for the engine's WaterTable, for a tool that has no engine.
 // `dst` takes 22 * 64 records of four bytes, the same layout WATERTAB has.
 //
-// NOT byte identical with the engine's: init_water_table (gamemain.cpp:59)
+// NOT byte identical with the engine's: init_water_table (gamemain.cpp)
 // draws its random column out of the C runtime's rand() in a rejection loop,
 // and reproducing that would be reproducing a particular CRT. The shape is
 // the same - the same sine, the same four shimmer / choppy / abs ladders - and

@@ -18,22 +18,17 @@
 //----------------------------------------------------------------------------
 // Extraction from a Tomb Raider 3 level.
 //
-// Why this lives here and not in a standalone tool: this project ships no
-// game data. Whoever wants the dinosaurs must own Tomb Raider 3, and the
-// run must fetch them ITSELF from that installation, on the local machine,
-// while it runs. A standalone tool alone would mean distributing finished
-// packages, and those would contain third-party game data. Moving these
-// functions into the core is therefore not housekeeping but the very
-// condition under which the dinosaurs may be shipped at all.
+// This project ships no game data: whoever wants the dinosaurs must own
+// Tomb Raider 3, and the run fetches them itself from that installation on
+// the local machine. A standalone tool would mean distributing finished
+// packages containing third-party game data, so this reader lives in the
+// core. The other direction - inserting into a TR5 level - is
+// Tr5Level::addMoveableFromTr3, addSoundsFromTr3 and addTexturesFromTr3.
 //
-// The other direction - inserting into a TR5 level - already lives in the
-// core: Tr5Level::addMoveableFromTr3, addSoundsFromTr3, addTexturesFromTr3.
-//
-// The tools TR3Fetch and TR3Sound only call these functions. There must be
-// no second reader: the format bridge (single-axis rotations 10 bit -> 12
-// bit, jump table with GLOBAL anim indices, faces with the TR5 effect word,
-// colored faces onto a real texture) is correct in exactly one place, and
-// it should stay that way.
+// The tools TR3Fetch and TR3Sound only call these functions. There is no
+// second reader: the format bridge (single-axis rotations 10 bit -> 12 bit,
+// jump table with GLOBAL anim indices, faces with the TR5 effect word,
+// colored faces onto a real texture) is correct in exactly one place.
 //----------------------------------------------------------------------------
 #pragma once
 
@@ -64,7 +59,7 @@ namespace Tr3Source
     //
     // shinyWord: the effects word behind every TEXTURED face. Bit 1 switches
     // the TR4/TR5 environment map on, bits 2..6 are its strength
-    // (specific/output.cpp:1645ff). 0x0042 is what TR5's own catsuit wears in
+    // (specific/output.cpp). 0x0042 is what TR5's own catsuit wears in
     // rich1. Textured only, and that is exactly right: a TR1-3 model wears
     // its outfit as textures and its SKIN as flat colours, so the suit shines
     // and the skin stays matt without naming a single face.
@@ -208,7 +203,7 @@ namespace Tr3Source
     // If "cacheDir" is given, the finished packages are stored there and
     // reused next time. That is fine license-wise: the files come into being
     // on the machine of the person who owns the games, and they stay there.
-    // THIS FOLDER IS NEVER SHIPPED - it carries a warning text file so that
+    // This folder is never shipped - it carries a warning text file so that
     // this stands out even while packaging.
     //
     // A stale entry is recognized by size and modification time of the

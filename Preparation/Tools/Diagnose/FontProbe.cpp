@@ -145,7 +145,7 @@ static unsigned long Rd32(const unsigned char* p)
 		((unsigned long)p[2] << 16) | ((unsigned long)p[3] << 24);
 }
 
-/* THE FONT PAGE OF A LEVEL FILE.
+/* The font page of a level file.
  *
  * A .TRC opens with an int32 version, three int16 page counts and then THREE
  * zlib blocks, each of them an int32 unpacked size, an int32 packed size and
@@ -759,7 +759,7 @@ static int ModeAtlas(int argc, char** argv)
 
 		measured++;
 
-		/* IS THE BIG PICTURE THE SMALL ONE TIMES EIGHT? The direct test:
+		/* Is the big picture the small one times eight? The direct test:
 		 * shrink the 2048 back down to 256 with an 8 x 8 box filter over the
 		 * matched rectangle and compare the ink mask with the _OG's own. */
 		for (long y = 0; y < cells[i].h; y++)
@@ -783,7 +783,7 @@ static int ModeAtlas(int argc, char** argv)
 			}
 		}
 
-		/* THE GLYPH'S OWN INK ON THE 2048, and only its own. The atlas packs
+		/* The glyph's own ink on the 2048, and only its own. The atlas packs
 		 * the letters two or three classic texels apart, so a window that
 		 * takes every ink texel in it measures the neighbour as well. A flood
 		 * fill from inside the matched rectangle cannot cross the transparent
@@ -882,7 +882,7 @@ static int ModeAtlas(int argc, char** argv)
 			if (hdY1 - cellY1 > overBottom) { overBottom = hdY1 - cellY1; strcpy(overWho[3], GlyphName(i)); }
 		}
 
-		/* AND THE NUMBER THE MARGIN IS PICKED FROM. The classic UV samples
+		/* And the number the margin is picked from. The classic UV samples
 		 * the glyph rectangle inset by half a texel on each side, which at
 		 * eight times the size is four HD texels; widening that window by m
 		 * classic texels lets more of the atlas through. Three things are
@@ -914,7 +914,7 @@ static int ModeAtlas(int argc, char** argv)
 			for (int m = 0; m < MARGINS; m++)
 			{
 				const double pad = marginOf[m] * HD_FONT_SCALE;
-				/* THE WINDOW THE ENGINE REALLY SAMPLES, drift and all. u is
+				/* The window the engine really samples, drift and all. u is
 				 * stored as n/255 and DrawChar reads it as n/256, so the
 				 * classic window does not start at the left edge of the
 				 * rectangle but up to a whole texel to the right of it - at
@@ -1026,7 +1026,7 @@ static int ModeAtlas(int argc, char** argv)
 			marginOwnAll[m] > 0.0 ? 100.0 * marginForeign[m] / marginOwnAll[m] : 0.0,
 			100.0 * marginWorstForeign[m], marginForeignWho[m]);
 
-	/* AND WHAT THE ENGINE ACTUALLY GIVES EACH GLYPH. The table above is the
+	/* And what the engine actually gives each glyph. The table above is the
 	 * trade-off a UNIFORM margin would make and the reason there is not one;
 	 * this is the per-glyph answer HDFontMargins works out, which is what
 	 * DrawChar uses. */

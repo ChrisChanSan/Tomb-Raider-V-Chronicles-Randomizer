@@ -29,35 +29,26 @@
 //----------------------------------------------------------------------------
 // Placement logic.
 //
-// Ground rules, all earned from earlier findings of this project and not
-// negotiable:
+// Ground rules, not negotiable:
 //
-// 1. NO removing of items. TR item indices are pure array positions; a
-//    removed item shifts all following ones up and the triggers' "Object N"
-//    references then point at the wrong object. Randomizing therefore
-//    means: REWRITE existing items at their index (itemEdits). itemAdds
-//    exists only for mandatory injections like Andrea3's crowbar, and those
-//    append at the end, shifting nothing.
+// 1. No item is removed. Item indices are array positions that the
+//    triggers' "Object N" references point at, so items are rewritten at
+//    their index (itemEdits); itemAdds only appends mandatory injections
+//    like Andrea3's crowbar at the end.
 //
-// 2. A pickup trigger sticks to the sector, not to the item. If an item is
-//    moved, its trigger stays behind and never fires again. Affected items
-//    are DERIVED from the level data (see findTriggerPinnedItems), not
-//    maintained by hand. Excepted are triggers whose only further effect is
-//    PlaySoundtrack - a missing music cue is a deliberately accepted
-//    sacrifice; anything else would interfere with
-//    progress, geometry or enemies.
-//    Moving the trigger along later is planned, but requires floordata
-//    editing and is explicitly scheduled after the basic framework.
+// 2. A pickup trigger sticks to the sector, not to the item: moved alone,
+//    the item leaves it behind. Such items are derived from the level data
+//    (findTriggerPinnedItems) and pinned, except where the only further
+//    effect is PlaySoundtrack (a lost music cue is accepted). A trigger that
+//    must stay with its item travels with it (triggerMoves, curated per item
+//    in COUPLED_TRIGGERS).
 //
-// 3. OCB is set to 0 when moving. A pickup with a pedestal OCB (3/4/7/8) or
-//    a hiding OCB (1) needs a matching special environment at the target;
-//    without it, the item QUIETLY CANNOT BE PICKED UP - no crash, no
-//    message, it just lies there forever. Confirmed empirically in this
-//    project (Andrea3, item 101). Only OCB 0 reliably survives a move.
+// 3. OCB is set to 0 when moving. A pedestal OCB (3/4/7/8) or a hiding OCB
+//    (1) needs its special environment at the target; without it the item
+//    quietly cannot be picked up (Andrea3, item 101).
 //
-// 4. Everything is seed-driven and order-stable: item and sector lists are
-//    sorted before every random decision, so the same seed yields the same
-//    result regardless of file or map ordering.
+// 4. Everything is seed-driven and order-stable: lists are sorted before
+//    every random decision, so the same seed yields the same result.
 //----------------------------------------------------------------------------
 
 // Pickup type ranges, read straight from game/setup.cpp: exactly these two
@@ -110,7 +101,7 @@ inline bool isDespawningSwarm(int typeId)
     return typeId >= 93 && typeId <= 96;   // Bat, Rat, Spider, Spider Generator
 }
 
-// Carriers in the sense of GetCarriedItems (game/setup.cpp:1925): an item
+// Carriers in the sense of GetCarriedItems (game/setup.cpp): an item
 // that at level start collects the pickups in its immediate vicinity. They
 // vanish from the room (room_number = NO_ROOM) and only reappear when the
 // enemy dies or the crate is searched.
@@ -368,7 +359,7 @@ struct RandoInput
     // Items an AntiTrigger or HeavyAntiTrigger points at. If such a trigger
     // points at an ACTIVE intelligent enemy, it deletes it from the level
     // without dying and without fading (hit_points = -16384,
-    // DisableBaddieAI, KillItem - control.cpp:2422). In vanilla that is
+    // DisableBaddieAI, KillItem - control.cpp). In vanilla that is
     // intentional, because the enemy is supposed to be done there; a
     // swapped one may still be fighting and vanished mid-fight (seen in
     // game: Andrea1 item 34 under allsanity, antitrigger 46 in room 88).

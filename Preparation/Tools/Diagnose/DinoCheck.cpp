@@ -15,7 +15,7 @@ static bool readAll(const std::string& p, std::vector<uint8_t>& b)
 static std::wstring W(const std::string& s) { return std::wstring(s.begin(), s.end()); }
 
 // The three header words per sound (volume, chance, chars) are SKIPPED by
-// the inserter - Tr5Tr3Import.cpp:117 jumps over them with "p += 8" and
+// the inserter - Tr5Tr3Import.cpp jumps over them with "p += 8" and
 // rebuilds the SAMPLE_INFOs. The older T-Rex package comes from the tool's
 // table mode and there still carries values from the source level; the
 // library writes zeros like the wave mode. For the comparison they are

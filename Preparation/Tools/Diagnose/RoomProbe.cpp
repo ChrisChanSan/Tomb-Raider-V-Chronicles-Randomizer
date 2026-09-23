@@ -105,16 +105,16 @@
  *     -bulb <x y z radius density [r g b]>
  *                     one fog bulb, room-local; density is the engine's own
  *                     bulb->d (1 / den, so 0.02 is a thick one). Colour
- *                     defaults to white. Up to HD_MAX_BULBS (8 since the cap
- *                     was raised from 6), repeat the switch.
+ *                     defaults to white. Up to HD_MAX_BULBS (8), repeat
+ *                     the switch.
  *     -fog <start end r g b>
  *                     distance fog. Only `start` reaches the picture, in
  *                     WORLD units - TR5's fog has no end and no colour: the
  *                     classic path subtracts a linear ramp of 255 over the
  *                     same distance again from the vertex colour and never
- *                     blends towards anything (drawroom.cpp:519). The other
- *                     four are read and reported so the switch matches the
- *                     brief rather than silently meaning something else.
+ *                     blends towards anything (drawroom.cpp). The other
+ *                     four are read and reported so the switch means what
+ *                     it says rather than silently something else.
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
@@ -230,12 +230,12 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
-/* Z: the .hdm sidecar - the engine's own reader, not a copy of it. The tool
- * has to answer a version 2 file the way the game does or the pictures of
- * this round prove nothing. */
+/* The .hdm sidecar reader - the engine's own, not a copy of it. The tool
+ * has to answer a version 2 file the way the game does or its pictures
+ * cannot be compared with the game's. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
 #include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
-/* H1: the randomizer's own reader for the CLASSIC level, so that the water
+/* The randomizer's own reader for the CLASSIC level, so that the water
  * survey can hold the level's own faces against the .TRG's art through the
  * engine's own gate. Nothing else in this tool needs a classic level. */
 #include "core/Tr5Level.h"
@@ -382,7 +382,7 @@ static void LookAt(double ex, double ey, double ez, double yawDeg, double pitchD
 	out[15] = 1;
 }
 
-/* AlterFOV (3dmath.cpp:78-98), without the engine: the field of view is
+/* AlterFOV (3dmath.cpp), without the engine: the field of view is
  * measured against a 4:3 width whatever the window really is, which is why a
  * 16:9 picture is horizontally wider and not vertically shorter. Reproduced
  * rather than approximated, so the probe frames a room the way the game
@@ -551,7 +551,7 @@ static void PrintDepthTruth(const char* when)
  * promise is not a proof, so this reads the device twice.
  *
  * The list is deliberately WIDER than the one hd_render saves: every render
- * state the classic path is known to set (function_table.cpp:95-128,
+ * state the classic path is known to set (function_table.cpp,
  * polyinsert.cpp per bucket, LoadSave.cpp for the filter switch), plus a few
  * it never touches, so that a state hd_render changes and forgets to save is
  * caught here rather than in the game.
@@ -743,7 +743,7 @@ static int Diff(const Snapshot& before, const Snapshot& after)
 	return broken;
 }
 
-/* The device as the classic path leaves it (function_table.cpp:95-128), so
+/* The device as the classic path leaves it (function_table.cpp), so
  * that the bracket is tested against the real caller's state and not against
  * Direct3D's fresh defaults - the two are not the same in a single one of
  * these lines. */
@@ -1146,7 +1146,7 @@ static void MatrixProof(int room, const float* view, const D3DMATRIX& projection
 		: "FAIL - the two paths disagree, an HD room would not line up");
 }
 
-/* ------------------------------------------------------- the S2b state -- */
+/* ---------------------------------------------- the light and fog state -- */
 
 static HDLightSource g_lights[HD_MAX_LIGHTS];
 static int g_light_count = 0;
@@ -1363,7 +1363,7 @@ namespace walkoff
 		g_verdict.push_back(v);
 	}
 
-	/* SetRoomBounds (game\draw.cpp:3147), with `aMXPtr` handed in as the nine
+	/* SetRoomBounds (game\draw.cpp), with `aMXPtr` handed in as the nine
 	 * rotation terms plus the three translation ones that phd_TranslateAbs
 	 * works out for the room the portal is seen FROM. */
 	static void SetRoomBounds(const Tr5Level::PortalRecord& p, int rn,
@@ -1745,7 +1745,7 @@ namespace walkoff
 			SetRoomBounds(p, to, r, mx, fromRoom);
 	}
 
-	/* GetRoomBounds (game\draw.cpp:3590). ROOM_OUTSIDE and the snow flag are
+	/* GetRoomBounds (game\draw.cpp). ROOM_OUTSIDE and the snow flag are
 	 * left out - they change no room list. */
 	static void GetRoomBounds()
 	{
@@ -1932,7 +1932,7 @@ namespace walkoff
 		{
 			Room& r = g_room[i];
 
-			// What PrintObjects (game\draw.cpp:1135) leaves behind.
+			// What PrintObjects (game\draw.cpp) leaves behind.
 			r.left = g_winxmax;
 			r.top = g_winymax;
 			r.right = 0;
@@ -2927,7 +2927,7 @@ static void WaterFrames(const Tr5Level& level, const char* install,
 	printf("  %s: %d texinfo(s), the .TEX names %d of them\n",
 		stem, texCount, got);
 
-	/* THE PER-CELL RULE, checked on this level rather than believed. TRForge
+	/* The per-cell rule, checked on this level rather than believed. TRForge
 	 * measured over the shipped games that every tile with HD art lies wholly
 	 * inside one 64x64 cell and that no cell ever wants two different files;
 	 * the substitution rests on both, so both are counted here. */
@@ -3064,7 +3064,7 @@ static void WaterFrames(const Tr5Level& level, const char* install,
 		waterRanges++;
 		printf("  range %2d: %d frame(s)\n", r, frames);
 
-		// N2: the HD page of each frame, in the range's own order, for the
+		// The HD page of each frame, in the range's own order, for the
 		// rotation below.
 		std::vector<int> framePage((size_t)frames, -1);
 
@@ -3139,7 +3139,7 @@ static void WaterFrames(const Tr5Level& level, const char* install,
 			framePage[(size_t)f] = page;
 		}
 
-		/* AND THE RUNTIME HALF, run rather than believed. The engine does not
+		/* And the runtime half, run rather than believed. The engine does not
 		 * know which frame a texinfo is showing: it matches the CONTENT that
 		 * is in it right now against the frames it recorded at load
 		 * (hd_level.cpp, HDWaterFrameFor). So the classic rotation is

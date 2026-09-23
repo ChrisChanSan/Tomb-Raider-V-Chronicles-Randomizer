@@ -114,8 +114,8 @@ const char* HDModsListPath(int at);	// absolute
  * Writes the path into `buffer` and returns it; an empty string means no
  * active mod has that name and the caller resolves as it always did.
  *
- * OUTFIT_*.TRM IS STILL REFUSED HERE. The wardrobe is a SCAN (hd_wardrobe.h)
- * in which a mod's outfit is an ENTRY OF ITS OWN beside the install's file
+ * OUTFIT_*.TRM is still refused here. The wardrobe is a SCAN (hd_wardrobe.h)
+ * in which a mod's outfit is an entry of its own beside the install's file
  * of the same name: the player picks it, and a level that asks for
  * OUTFIT_CLASSIC by name goes on getting the install's OUTFIT_CLASSIC. The
  * list of what a mod ships is HDModsOutfitCount and its two neighbours

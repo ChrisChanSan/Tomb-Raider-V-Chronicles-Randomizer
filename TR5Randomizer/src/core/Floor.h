@@ -17,27 +17,20 @@
  */
 #pragma once
 //----------------------------------------------------------------------------
-// Floor slope of a sector - shared knowledge between ApplyPatch (reads the
-// floordata), the randomizer (places items) and FloorCheck (verifies
-// finished levels).
+// Floor slope of a sector - shared by ApplyPatch (reads the floordata), the
+// randomizer (places items) and FloorCheck (verifies finished levels).
 //
-// Ported verbatim from the engine, nothing invented:
-//  - GetHeight (control.cpp): the floor height at a point within the
-//    sector, both the TILT case and the split-sector case.
-//  - CheckNoColFloorTriangle (control.cpp): which triangle of a NOCOLF
-//    sector has no floor collision.
-//  - The walkability limit: |slope| > 2 sets height_type to BIG_SLOPE or
-//    DIAGONAL in GetHeight, and that is exactly what Lara's standing,
-//    walking and sliding paths check in lara.cpp and collide.cpp. Up to
-//    slope 2 Lara stands and walks normally - such slopes are fully valid
-//    item spots, and the game itself places pickups there, with a
-//    hand-set y on the true floor height.
+// Ported verbatim from the engine (control.cpp): GetHeight - the floor
+// height at a point within the sector, TILT and split sectors alike - and
+// CheckNoColFloorTriangle - which triangle of a NOCOLF sector has no floor
+// collision. |slope| > 2 is the walkability limit: GetHeight then sets
+// BIG_SLOPE or DIAGONAL, which Lara's standing, walking and sliding paths
+// check (lara.cpp, collide.cpp). Up to slope 2 she stands and walks
+// normally, and the game itself places pickups there.
 //
-// Why this is needed: a placed item is drawn by the engine at exactly its y.
-// On a slope, however, the sector's base value (floor byte << 8) is the
-// HIGHEST corner - an item in the middle of the sector would hang up to half
-// a sector in the air. Placing on slopes needs the y computed with the same
-// formula the engine uses to find the floor.
+// Why: the engine draws an item at exactly its y, and on a slope the
+// sector's base value (floor byte << 8) is the HIGHEST corner - an item in
+// the middle of the sector would hang up to half a sector in the air.
 //----------------------------------------------------------------------------
 #include <cstdint>
 

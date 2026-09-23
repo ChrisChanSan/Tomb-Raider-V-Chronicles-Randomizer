@@ -17,7 +17,7 @@
 //       clip window). A box of all zeros means: the pointer runs into the
 //       void, the enemy is invisible for this anim.
 //
-// Anim entry in the main block, 40 bytes (verified at Tr5Level.cpp:1190/1213):
+// Anim entry in the main block, 40 bytes (as Tr5Level.cpp reads it):
 //   +0  u32 frameOffset (BYTE offset into the frames block)
 //   +4  u8  frameRate   +5 u8 frameSize   +6 u16 state
 //   +24 s16 frameStart  +26 s16 frameEnd  +28 s16 nextAnim

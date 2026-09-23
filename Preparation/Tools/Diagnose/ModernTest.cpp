@@ -130,8 +130,7 @@ static void angles()
 		absl(ModernAngle(0, -1000)), 0x8000);
 
 	/* TROne: modern.diagonal_is_45_degrees. A diagonal has to be exactly 45
-	 * degrees or a synthetic stick - workflow B's WASD, and formerly the
-	 * D-pad (see the block at the end of sweeps) - sends Lara slightly
+	 * degrees or a synthetic stick - workflow B's WASD - sends Lara slightly
 	 * askew on every diagonal. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
@@ -220,9 +219,8 @@ static void bit_values()
 	ok(ModernStateIsStanding(14) == 1, "AS_LAND stands", ModernStateIsStanding(14), 1);
 	ok(ModernStateIsStanding(1) == 0, "AS_RUN does not", ModernStateIsStanding(1), 0);
 
-	/* The constants of the scheme, as ModernDefaults hands them out. The play
-	 * test changes MODERN_TURN_RATE and possibly MODERN_WALK_BELOW and
-	 * MODERN_DEAD (design section 3, the three "measure" rows); everything
+	/* The constants of the scheme, as ModernDefaults hands them out. MODERN_TURN_RATE,
+	 * MODERN_WALK_BELOW and MODERN_DEAD are the tuning values; everything
 	 * else is frozen here so that a change to one of them is a change somebody
 	 * had to mean. */
 	{
@@ -264,8 +262,8 @@ static void bit_values()
 		 * else now, which reversal() below measures tick by tick. */
 		ok(cfg.snap_forward == 0x2000, "forward returns at 45 degrees left",
 			cfg.snap_forward, 0x2000);
-		/* Item 2c: standing it is twice as wide, because M4 measured a standing
-		 * pose spinning on the spot for 232 ticks behind the narrow one. */
+		/* Standing it is twice as wide: behind the narrow one a standing pose
+		 * spins on the spot for 232 ticks (measured). */
 		ok(cfg.snap_forward_stand == 0x4000, "...and at 90 while she turns on the spot",
 			cfg.snap_forward_stand, 0x4000);
 		/* A standing turn that is getting nowhere - the thumb circling at
@@ -274,10 +272,10 @@ static void bit_values()
 		 * both halves. */
 		ok(cfg.stand_forward_ticks == 8, "...and a standing turn that arrives nowhere"
 			" runs after eight ticks", cfg.stand_forward_ticks, 8);
-		/* Item 4: the forward jump's own rate, four times the classic's 182. */
+		/* The forward jump's own rate, four times the classic's 182. */
 		ok(cfg.air_turn_rate == 728, "the air turn is 4 degrees a tick", cfg.air_turn_rate, 728);
 		ok(cfg.stick_full == 128, "full deflection in our units", cfg.stick_full, 128);
-		/* aim_strafe ships OFF: firing no longer puts her into the strafing
+		/* aim_strafe ships OFF: firing does not put her into the strafing
 		 * walk on its own. The rule is still built and still tested, behind
 		 * an explicit cfg; this line is what it ships as. */
 		ok(cfg.hold_course == 1 && cfg.back_turns == 1 && cfg.aim_strafe == 0 &&
@@ -286,8 +284,8 @@ static void bit_values()
 			cfg.block_turn, 4);
 
 		/* Three turn-rate candidates, all named so swapping one back in is a
-		 * one-word edit (design section 3.1, row 16). 3277 is what shipped
-		 * before the Remaster-measured 5461 replaced it. */
+		 * one-word edit. The default is the Remaster-measured 5461; 3277 is
+		 * TROne's 18 degrees. */
 		ok(MODERN_TURN_RATE_VANILLA == 1456, "vanilla's fastest turn, for the play test",
 			MODERN_TURN_RATE_VANILLA, 1456);
 		ok(MODERN_TURN_RATE_MIDDLE == 2184, "and the one in between",
@@ -328,7 +326,7 @@ static void bit_values()
 
 /* --------------------------------------------------- the stick's own zone -- */
 
-/* The zone the two pad paths applied previously, so that the new one can be
+/* The per-axis zone the square zone replaces, kept so that the new one can be
  * measured against it rather than only asserted about: each component
  * judged on its own, which is the whole defect. */
 static void old_axis_zone(long zone, long in_x, long in_y, long* out_x, long* out_y)
@@ -699,7 +697,7 @@ static void deadzone()
 		printf("    through the new 24/20 -> length %ld of %d; M9 measured the real rest"
 			" inside (10,10)\n", m, (int)MODERN_STICK_FULL);
 
-		/* EVERY POINT THE HARDWARE ZEROED IS STILL ZERO - the whole claim, swept
+		/* Every point the hardware zeroed is still zero - the whole claim, swept
 		 * over the domain rather than argued, for each of the four pairs. */
 		for (k = 0; k < 4; k++)
 		{
@@ -730,7 +728,7 @@ static void deadzone()
 				name2[k], leaked, lost);
 		}
 
-		/* AND THE SNAP IS STILL CURED, which is what the square must not cost:
+		/* And the snap is still cured, which is what the square must not cost:
 		 * with both gates in place a 360-direction sweep still lands on a
 		 * cardinal four times and nowhere else, and the direction still
 		 * survives to the integer grid's own limit. */
@@ -856,7 +854,7 @@ static void deadzone()
 				ModernDeadZoneUser(MODERN_DEAD_LEFT, 40), 25);
 		}
 
-		/* THE ARGUMENTS ARE GUARDED, not trusted - the value comes from the
+		/* The arguments are guarded, not trusted - the value comes from the
 		 * registry and a hand can edit it. Out of range is pinned to the ends,
 		 * and a base of 0 or less is no width to scale. */
 		ok(ModernDeadZoneUser(MODERN_DEAD_LEFT, -5) == 0,
@@ -988,7 +986,7 @@ static void held_course()
 	 * unaffected by which number recenter has - but it is pinned explicitly
 	 * anyway so a future default change cannot silently make it mean less
 	 * than TROne measured: the old three-band behaviour stays provable under
-	 * an explicit cfg even though it no longer ships. The new default's own
+	 * an explicit cfg even though it is not the default. The new default's own
 	 * tests are at the end of this function. */
 	cfg.recenter = 0x1000;
 	ModernResetState(&state);
@@ -1039,7 +1037,7 @@ static void held_course()
 	ok(out.target > 0 && out.target < cfg.recenter,
 		"a small stick change steers the course itself", out.target, cfg.recenter / 2);
 
-	/* Ours: THE NOISE FLOOR ITSELF, which is the third of the four rules and
+	/* Ours: the noise floor itself, which is the third of the four rules and
 	 * the only one TROne's own cases never put a number on - a mutation of the
 	 * tree that deletes it passed every other check in this file, which is how
 	 * this block came to be written. A thumb is never still: below steer_step
@@ -1506,7 +1504,7 @@ static void jumping()
 	 * at all, see rule 4's own comment in modern_move.cpp - so every
 	 * TROne-ported case below sets sit.drawn = 1 to stay inside that case;
 	 * jumping()'s own two-case split for the unarmed answer is further
-	 * down, where TROne's side-flip expectation used to be the only one.
+	 * down, beside TROne's side-flip expectation.
 	 * aim_strafe is set by hand: one case in this group - "firing without
 	 * the jump key aims again" - is about the aim coming back after the
 	 * flip, which has no meaning unless the rule is on. The flips
@@ -1541,8 +1539,8 @@ static void jumping()
 		out.mode, MODERN_MODE_RUN);
 
 	/* TROne: modern.back_and_jump_from_a_stand_is_a_backflip. The same case
-	 * from a clean state, because it is the one the whole repair round was
-	 * about: back plus jump must NOT become "turn round and jump forward". */
+	 * from a clean state, because it is the case that matters most:
+	 * back plus jump must NOT become "turn round and jump forward". */
 	ModernResetState(&state);
 	sit.anim_state = 2;
 	tick(&cfg, &state, 0, S(30000), 0, 0, &sit, &out);
@@ -1588,9 +1586,9 @@ static void jumping()
 		out.bits, MODERN_IN_RIGHT);
 
 	/* Unarmed: a moderate offset so the one tick can show both halves of the
-	 * user's sentence at once - turning AND the forward jump together -
+	 * rule at once - turning AND the forward jump together -
 	 * rather than only the first few ticks of a wide turn, where stand_spin
-	 * (0x3000, design row 10, unchanged by this round) would still suppress
+	 * (0x3000) would still suppress
 	 * IN_FORWARD on its own merits. That hysteresis is not what this test is
 	 * about; it only has to stay clear of it to show rule 6's ordinary
 	 * answer. */
@@ -1707,8 +1705,8 @@ static void classic_states()
 	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
 	ok(state.have_ref == 0, "the veto forgets it again", state.have_ref, 0);
 
-	/* THE STATE TABLE ITSELF: an explicit switch in game\modern_move.cpp,
-	 * every classic entry named after design sections 1.7 and 6.1 and the
+	/* The state table itself: an explicit switch in game\modern_move.cpp,
+	 * every classic entry named after the
 	 * routine it runs in game\lara.cpp. Checked here by name against the
 	 * TROne expectations this file was waiting on, and then as a full sweep
 	 * against a reference table of our own, so "all 139 states classified"
@@ -1716,7 +1714,7 @@ static void classic_states()
 
 	/* TROne: modern.shared_state_numbers. Standing (2/15) is already
 	 * ModernStateIsStanding's own job; this is the classic/modern
-	 * half. Note on 25/26/27: TROne's own list (design section 1.7) and this
+	 * half. Note on 25/26/27: TROne's own list and this
 	 * very expectation both call them classic - the back flip and the two
 	 * side flips read a direction bit as "end the flip", not "where to go"
 	 * (game\lara.cpp's AS_TWIST reads IN_RIGHT, its mirror reads IN_LEFT,
@@ -1781,7 +1779,7 @@ static void classic_states()
 	ok(out.mode == MODERN_MODE_RUN, "...and it is the ordinary run branch",
 		out.mode, MODERN_MODE_RUN);
 
-	/* THE WATER GROUP, SPLIT THE WAY STEP 4 SPLIT IT. The eight states the
+	/* The water group. The eight states the
 	 * player really steers in the water are translated like anything on foot
 	 * - the same held course, the same run branch - and what makes them the
 	 * water is ModernWaterMove afterwards, not a different translation. */
@@ -1826,7 +1824,7 @@ static void classic_states()
 		}
 	}
 
-	/* Design section 6.1's "harmless but listed": Busy states where the input
+	/* Harmless but listed: Busy states where the input
 	 * mask already strips everything but the four direction bits, so this is
 	 * measured to be inconsequential either way and named so nobody removes
 	 * it later thinking it was missed. 98 shares AS_PICKUP's own routine. */
@@ -1838,15 +1836,15 @@ static void classic_states()
 				ModernStateIsClassic(busy[i]), 1);
 	}
 
-	/* ALL 139, AGAINST A REFERENCE OF OUR OWN. Not a sample: every index
-	 * 0..138 against a frozen array built from the same two design sections
-	 * the switch in modern_move.cpp was built from, so a slip in either one
+	/* All 139, against a reference of our own. Not a sample: every index
+	 * 0..138 against a frozen array written separately from the same state list
+	 * as the switch in modern_move.cpp, so a slip in either one
 	 * shows up as a mismatch here rather than as the same mistake made twice
 	 * and agreeing with itself.
 	 *
-	 * ROUND 161a2 STEP 4 TOOK EIGHT OUT OF IT: 13/17/18 under the water and
-	 * 33/34/47/48/49 on it. 35, 44, 52, 53, 55 and 66 stayed (see the two
-	 * groups above), so the count moves from 95 to 87. */
+	 * The water group takes eight states: 13/17/18 under the water and
+	 * 33/34/47/48/49 on it. 35, 44, 52, 53, 55 and 66 stay classic (see the
+	 * two groups above), so the count is 87 and not 95. */
 	{
 		const short classic[] =
 		{
@@ -1896,7 +1894,7 @@ static void water_out(MODERN_RESULT* out, long delta, long bits)
 	out->turning = 0;
 }
 
-/* THE WATER. TROne have no expectation here at all - their water is the
+/* The water. TROne have no expectation here at all - their water is the
  * classic input - so every number below is our own measurement of
  * game\laraswim.cpp and game\larasurf.cpp, and the point of the group is
  * that the modern swimmer moves at TR5's own speeds and only the scheme
@@ -1929,7 +1927,7 @@ static void water_move()
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
 
-	/* THE TABLE. Two of the three rates are still the engine's own - 728 is
+	/* The table. Two of the three rates are still the engine's own - 728 is
 	 * what lara_as_surftread and lara_as_surfswim write into y_rot themselves
 	 * and 364 is what the three side and back strokes write - and the third
 	 * is not any more. 1092 was LaraUnderWater's ceiling on lara.turn_rate,
@@ -1979,7 +1977,7 @@ static void water_move()
 		}
 	}
 
-	/* A STATE THE WATER DOES NOT OWN IS NOT TOUCHED. The seam branches on the
+	/* A state the water does not own is not touched. The seam branches on the
 	 * same table, so this can only ever be reached by a caller that has not,
 	 * and then the honest answer is "not mine". */
 	sit.anim_state = 1;		// AS_RUN
@@ -1989,7 +1987,7 @@ static void water_move()
 	ok(out.bits == MODERN_IN_FORWARD, "...and its bits stand", out.bits, MODERN_IN_FORWARD);
 	ok(yaw == 0, "...no turn", yaw, 0);
 
-	/* THE STICK AT REST IS NOT A COURSE. She keeps heading, attitude and
+	/* The stick at rest is not a course. She keeps heading, attitude and
 	 * speed, and the classic bits of specific\input.cpp stand - the same
 	 * answer the translation gives on land when it is not responsible. */
 	sit.anim_state = 17;
@@ -2001,7 +1999,7 @@ static void water_move()
 	ok(stroke == 0, "...and no stroke is held", stroke, 0);
 	ok(out.bits == MODERN_IN_BACK, "...and not one bit written", out.bits, MODERN_IN_BACK);
 
-	/* THE TURN. Clamped to the state's rate, exact under it, and the sign is
+	/* The turn. Clamped to the state's rate, exact under it, and the sign is
 	 * the error's - the same ModernStepToward the land's turn uses. */
 	water_out(&out, 0x4000, 0);
 	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
@@ -2021,7 +2019,7 @@ static void water_move()
 	ok(out.turning == 1, "with 90 degrees to go she is still turning",
 		out.turning, 1);
 
-	/* NO INSTANT ABOUT-TURN IN THE WATER, which is the one rule of the land's
+	/* No instant about-turn in the water, which is the one rule of the land's
 	 * turn that is deliberately not here: past 90 degrees the land takes the
 	 * whole error in one tick, and under water a one-tick half turn is the
 	 * AS_WATERROLL animation's job and looks wrong without it. */
@@ -2029,7 +2027,7 @@ static void water_move()
 	ModernWaterMove(&cfg, &sit, &out, 0, 0, &yaw, &xrot, &stroke);
 	ok(yaw == 2730, "half a turn away: still only one tick's worth", yaw, 2730);
 
-	/* THE BITS. Under water IN_FORWARD is SwimTurn's PITCH (x_rot -= 364), so
+	/* The bits. Under water IN_FORWARD is SwimTurn's PITCH (x_rot -= 364), so
 	 * it may never go out down there however well she is aligned; on the
 	 * surface it really is forward and it is also the stroke. IN_WALK is
 	 * untouched in both, exactly as on land. */
@@ -2057,7 +2055,7 @@ static void water_move()
 	ok(out.bits == MODERN_IN_FORWARD, "...it comes back at the last 45 degrees",
 		out.bits, MODERN_IN_FORWARD);
 
-	/* THE STROKE: the left stick moves Lara in the direction held, so the
+	/* The stroke: the left stick moves Lara in the direction held, so the
 	 * stroke is held for as long as the stick is out. Under water only - on
 	 * the surface the stroke IS the forward bit, and IN_JUMP there means
 	 * "dive" (ten ticks of it, larasurf.cpp). */
@@ -2117,7 +2115,7 @@ static void water_move()
 	ModernWaterMove(&cfg, &sit, &out, 100, 0, &yaw, &xrot, &stroke);
 	ok(xrot == 100, "under the rate she arrives in one tick", xrot, 100);
 
-	/* THE LIMITS ARE LaraUnderWater's OWN (+-15470), and the target is clamped
+	/* The limits are LaraUnderWater's own (+-15470), and the target is clamped
 	 * BEFORE the step, so the clamp is a place she can sit rather than a wall
 	 * the step stops at. It bites at the top by exactly pitch_home: the orbit
 	 * may ask for 17290 and her body stops at 15470. */
@@ -2135,7 +2133,7 @@ static void water_move()
 	ModernWaterMove(&cfg, &sit, &out, -20000, -15470, &yaw, &xrot, &stroke);
 	ok(xrot == -15470, "...nor the other way", xrot, -15470);
 
-	/* THE SURFACE IS FLAT: the course on it stays flat, so
+	/* The surface is flat: the course on it stays flat, so
 	 * nothing there writes x_rot at all, whatever the orbit is pointing at,
 	 * and the engine keeps her level anyway. */
 	sit.anim_state = 33;
@@ -2187,7 +2185,7 @@ static void water_move()
 		out.mode, MODERN_MODE_BACK);
 	ModernDefaults(&cfg);
 
-	/* WHAT IT COSTS, MEASURED BY RUNNING IT. A half turn under water and the
+	/* What it costs, measured by running it. A half turn under water and the
 	 * same on the surface, tick by tick through the function itself rather
 	 * than by dividing two numbers. */
 	sit.anim_state = 17;
@@ -2273,7 +2271,7 @@ static void back_input()
 
 	/* TROne: modern.remaster_back_input_distinguishes_running_from_armed_hopback
 	 * rides on this switch - their Remaster profile sets back_turns from
-	 * "is a weapon held". Ours is a constant (MODERN_BACK_TURNS), because A1
+	 * "is a weapon held". Ours is a constant (MODERN_BACK_TURNS), because this scheme
 	 * has no pointer aiming to hop away from; the switch is here and workflow
 	 * B decides whether to drive it. The sector the rule fires in is asserted
 	 * either side, because it is the one place a half turn and a step apart
@@ -2350,7 +2348,7 @@ static void blocked()
 	 * Stick right (0x4000) under a camera on -0x3800 gives the world course
 	 * 0x0800; Lara faces 0, so the error is 0x0800 - over the aligned window,
 	 * far under the spin threshold. That is exactly the band where forward AND
-	 * a turn used to go out together. */
+	 * a turn could go out together. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
 	sit.anim_state = 2;					/* AS_STOP */
@@ -2446,8 +2444,8 @@ static void direct_turn()
 
 	/* Their twelve states less one: airborne, hanging, climbing, swimming, in
 	 * an interaction pose. There y_rot is the animation's and nothing outside
-	 * may touch it. 15 AS_COMPRESS used to be the twelfth; it moves to
-	 * `allowed` below, because ours can now reach it with mode RUN (unarmed)
+	 * may touch it. 15 AS_COMPRESS, their twelfth, is in
+	 * `allowed` below, because ours can reach it with mode RUN (unarmed)
 	 * where TROne's design never could. */
 	for (i = 0; i < (int)(sizeof(airborne) / sizeof(airborne[0])); i++)
 		ok(ModernGroundTurn(airborne[i], 0x4000, 3277) == 0,
@@ -2584,7 +2582,7 @@ static void direct_turn()
 	ok(absl(yaw) == MODERN_TURN_RATE, "...bounded, as every tick is now",
 		absl(yaw), MODERN_TURN_RATE);
 
-	/* AND A REAL FLICK GOES THROUGH THE CENTRE OF THE STICK, which is why the
+	/* And a real flick goes through the centre of the stick, which is why the
 	 * course memory outlives a release (MODERN_STATE::last_course). Forward,
 	 * one tick of nothing at all as the thumb crosses over, then fully back:
 	 * the flick is still SEEN as a flick, and is now turned like anything
@@ -2611,7 +2609,7 @@ static void direct_turn()
 		out.bits & MODERN_IN_FORWARD, 0);
 
 	/* TROne: modern.ground_reversal_turns_without_a_step_in_the_wrong_
-	 * direction, all twelve ticks. Step 2 already asserted the first tick's
+	 * direction, all twelve ticks. A check above already asserted the first tick's
 	 * "no step"; this is the rest of it - she arrives, and only then does
 	 * forward come back. (At 5461 she is round after seven of the twelve and
 	 * the last five turn nothing, which is what "and stays there" is worth;
@@ -2779,7 +2777,7 @@ static void direct_turn()
 	ok(absl(yaw) == MODERN_TURN_RATE, "...and the reversal still happens, at the rate",
 		absl(yaw), MODERN_TURN_RATE);
 
-	/* THE LEVEL BOUNDARY: what the reset at the level start is worth.
+	/* The level boundary: what the reset at the level start is worth.
 	 *
 	 * The held course is a world heading and a level change throws that
 	 * world away. game\modern_state.cpp's tick guard cannot notice: no tick
@@ -2888,7 +2886,7 @@ static void direct_turn()
 
 /* ------------------------------------------------- the spin on the spot ---- */
 
-/* THE RULE REPLACED, written in the pieces the header still exports so that
+/* The rule replaced, written in the pieces the header still exports so that
  * the sweep below can be run against both and the difference is a number
  * rather than an argument. Two lines are the whole of it: the instant
  * about-turn fired on the error alone, and IN_FORWARD was withheld until
@@ -2947,8 +2945,8 @@ struct SPIN_RUN
  *   0  what ships - both parts of the replacement together
  *   1  the previous shipped rule - the error-only snap, forward withheld
  *   2  the first part without the second, which is why they ship together:
- *      keep her running and the error-only snap starts firing, because she is
- *      no longer stuttering into a standing state where it was disabled */
+ *      keep her running and the error-only snap starts firing, because she
+ *      never stutters into the standing state where it is disabled */
 static void spin_run(long step_units, long ticks, int rule, long rate, SPIN_RUN* r)
 {
 	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
@@ -3071,7 +3069,7 @@ static void circling()
 	ok(now.not_run == 0, "...she never leaves MODE RUN", now.not_run, 0);
 
 	/* The course's own step is what MODERNLOG's cstep= prints, and a circle
-	 * never comes near what used to be the flick threshold. It is not exactly
+	 * never comes near a flick threshold. It is not exactly
 	 * the stick's 3822 because a stick is a pair of whole numbers: 120 units of
 	 * deflection quantise the angle by up to half a degree a tick. */
 	ok(absl(now.worst_cstep - 3822) <= 128, "...the course steps with the stick and no further",
@@ -3586,9 +3584,9 @@ static void spin_sweep()
 			"   (3277 and 45 deg: %3ld, %ld never)\n",
 			names[i], new_worst, new_never, old_worst, old_never);
 
-		/* This holds at every speed now. Five of these 36 starts at 30
-		 * deg/tick used to never reach the run at all. The tick-counted way
-		 * out is what closed the gap, and it closes it at 35 as well, where
+		/* This holds at every speed. Without the tick-counted way out, five
+		 * of these 36 starts at 30 deg/tick never reach the run at all; it
+		 * closes the gap at 35 as well, where
 		 * she can never catch the thumb by turning. */
 		ok(new_never == 0, "every start reaches the run, at every speed the thumb was"
 			" measured at", new_never, 0);
@@ -3618,9 +3616,9 @@ static void spin_sweep()
 	 * her turn rate moves the course by as much as she turns, so whatever
 	 * error the first push seated is the error she keeps - that is what
 	 * "turn toward the course at a fixed rate" means and no rule can take it
-	 * away. What can be taken away is the consequence - she used to stand in
-	 * AS_STOP turning with no animation for as long as the thumb kept it up,
-	 * and the old rate had the same lock twelve degrees a tick lower down,
+	 * away. What can be taken away is the consequence - without the way out she stands in
+	 * AS_STOP turning with no animation for as long as the thumb keeps it up,
+	 * and a slower rate has the same lock twelve degrees a tick lower down,
 	 * inside the measured 15 to 30 degree range.
 	 *
 	 * So the error still holds and she runs it out: the tick-counted way out
@@ -3827,7 +3825,7 @@ static void air_turn()
  * game\modern_state.cpp turns her in three places and they are one chain of
  * else-ifs: the water's move, the ground's direct turn, the air turn. That is
  * only honest while no state can answer two of them - otherwise the ORDER of
- * the arms would silently be a rule, and a later round that reorders them
+ * the arms would silently be a rule, and reordering them
  * would change her turning without touching a rate. So the exclusivity is
  * asserted here over every state number the engine can put in, rather than
  * argued from three lists nobody has laid side by side. */
@@ -3874,7 +3872,7 @@ static void turn_chain()
 
 /* ------------------------------------------------- the look key as Tank ----- */
 
-/* THE SEAM'S OWN TAIL, MODELLED. The engine side of it is two statements in
+/* The seam's own tail, modelled. The engine side of it is two statements in
  * specific\input.cpp and one of them clears the very bit the other one is
  * gated on - the sort of thing that reads correctly and flickers at 30 Hz in
  * the hand. So the tail is modelled here, in the order the file has it, and
@@ -3910,7 +3908,7 @@ static long look_tick(LOOK_SEAM* s, long look_key, long gun_ready, long seam_on,
 
 	/* 1. the seam, gated on BOTH halves of the previous tick: the word the
 	 * engine was handed - which game\control.cpp can put the bit into on its
-	 * own, for the binoculars - and the latch this round added beside it. */
+	 * own, for the binoculars - and the latch beside it. */
 	*translated = (seam_on && !(s->word & LOOK_BIT) && !s->latch) ? 1 : 0;
 	*targeted = 0;
 
@@ -4166,7 +4164,7 @@ static void tank_sector()
 {
 	/* Four measured thumb positions: the medians of thumb pushes left and
 	 * right at full deflection, ten to sixteen degrees below the horizontal.
-	 * Every one of them used to come out of the classic assembly as a turn
+	 * Every one of them comes out of the classic assembly as a turn
 	 * and a step together. */
 	const double thumb[4] = { -100.0, -106.0, 112.0, 116.0 };
 	const double turn_deg = (double)MODERN_TANK_TURN_SECTOR * 180.0 / 32768.0;
@@ -4492,7 +4490,7 @@ static void cam_steer()
 				s.biggest, rates[r]);
 
 			/* 2. And with the left thumb shifting every eight ticks, which is
-			 * what used to make the old re-latch fire and pay the whole
+			 * what makes a re-latch rule fire and pay the whole
 			 * accumulated angle in one frame - measured as 34 such impulses in
 			 * the water and 57 on foot. Here there are none. */
 			steer_run(rates[r], 8, anims[w], w == 0, 1, &s);
@@ -4600,7 +4598,7 @@ static void camera_carry()
 		printf("  the swing: first tick %ld, middle %ld, last %ld, biggest %ld units\n",
 			first, middle, last, worst);
 
-		/* AND IT IS NOT A CUT. The eye rides a circle of camera.target_distance
+		/* And it is not a cut. The eye rides a circle of camera.target_distance
 		 * around her, so the biggest one-tick step of the swing has to stay
 		 * under the interpolator's own threshold or the picture jumps instead
 		 * of swinging (game\interpolate_math.h, INTERP_CAM_SNAP). */
@@ -4844,7 +4842,7 @@ static void firing_run()
 			"empty hands answer exactly the same", unarmed.bits, out.bits);
 	}
 
-	/* AND THE RULE IS STILL THERE, one cfg field away, with TROne's own
+	/* And the rule is still there, one cfg field away, with TROne's own
 	 * answer - which is what makes this a default and not a deletion. */
 	cfg.aim_strafe = 1;
 	ModernResetState(&state);
@@ -5021,7 +5019,7 @@ static void mode_latch()
 
 	printf("the two mode latches - Hold is the original, bit for bit\n");
 
-	/* HOLD IS THE DEFAULT, and this is the whole of "byte-identical at the
+	/* Hold is the default, and this is the whole of "byte-identical at the
 	 * defaults" for this function: every combination of key, drop and word
 	 * comes back exactly as it went in, and the state is left at 0 so that a
 	 * trip through Toggle and back cannot resurrect a latch. */
@@ -5050,7 +5048,7 @@ static void mode_latch()
 		ok(stuck == 0, "Hold clears the memory on every one of them", stuck, 0);
 	}
 
-	/* THE PRESS LATCHES AND THE NEXT PRESS RELEASES. Four ticks: press, hold,
+	/* The press latches and the next press releases. Four ticks: press, hold,
 	 * release, press again - the shortest script that says "toggle". */
 	state = 0;
 	bits = latch_tick(1, 1, 0, &state, MODERN_IN_DUCK, 0);
@@ -5070,7 +5068,7 @@ static void mode_latch()
 		"Toggle: and the key still down afterwards does not latch it again",
 		bits & MODERN_IN_DUCK, 0);
 
-	/* A LATCHED BIT STANDS FOR AS LONG AS NOBODY ASKS IT TO GO. Thirty ticks
+	/* A latched bit stands for as long as nobody asks it to go. Thirty ticks
 	 * with the key up - a second of play - and it is still there. */
 	{
 		int lost = 0;
@@ -5085,7 +5083,7 @@ static void mode_latch()
 		ok(lost == 0, "Toggle: a latched bit holds for thirty ticks", lost, 0);
 	}
 
-	/* THE DROP. It clears the latch, and a drop tick is a Hold tick bit for
+	/* The drop. It clears the latch, and a drop tick is a Hold tick bit for
 	 * bit: whatever the key says goes through untouched. That is what lets the
 	 * binocular zoom keep reading IN_SPRINT and IN_DUCK while the sight is up
 	 * (game\camera.cpp), which is the one reader that needs a held key. */
@@ -5102,7 +5100,7 @@ static void mode_latch()
 	ok((state & MODERN_LATCH_ON) == 0, "and a press on a drop tick latches nothing",
 		state & MODERN_LATCH_ON, 0);
 
-	/* THE KEY HELD ACROSS A DROP - the level change, and the menu. The key
+	/* The key held across a drop - the level change, and the menu. The key
 	 * memory is tracked on drop ticks too, so the tick the drop ends is not a
 	 * fresh press and nothing latches by itself. */
 	{
@@ -5130,7 +5128,7 @@ static void mode_latch()
 			bits & MODERN_IN_DUCK, MODERN_IN_DUCK);
 	}
 
-	/* EVERY OTHER BIT IS LEFT ALONE, latched, unlatched and dropped. */
+	/* Every other bit is left alone, latched, unlatched and dropped. */
 	{
 		const long extra = MODERN_IN_FORWARD | MODERN_IN_WALK;
 		int hurt = 0;
@@ -5148,7 +5146,7 @@ static void mode_latch()
 		ok(hurt == 0, "the other bits come through all six ticks untouched", hurt, 0);
 	}
 
-	/* AND THE TWO MODES DO NOT SHARE A THING. Each carries its own state and
+	/* And the two modes do not share a thing. Each carries its own state and
 	 * its own bit, which is how one row can say Toggle while the other says
 	 * Hold - the case the options page makes possible and the seam has to
 	 * honour. */
@@ -5173,7 +5171,7 @@ static void mode_latch()
 		ok(duck == 0, "the Hold mode keeps no memory at all", duck, 0);
 	}
 
-	/* THE BITS THEMSELVES, like bit_values() does for the other nine: the
+	/* The bits themselves, like bit_values() does for the other nine: the
 	 * mirrors in game\modern_move.h are what specific\input.cpp passes in, and
 	 * global\types.h is checked against them by the static_assert in
 	 * game\modern_state.cpp - which this tool cannot compile, so the numbers are
@@ -5192,8 +5190,8 @@ static void mode_latch()
 /* The two family tables, each against a reference of its own, the way
  * classic_states() does it for ModernStateIsClassic: every index 0..138, so a
  * slip in the switch shows up as a mismatch rather than as the same mistake
- * made twice. The reference lists are the measurement in the report, written
- * out by hand from the routines. */
+ * made twice. The reference lists are written out by hand from the
+ * routines. */
 static void grab_family()
 {
 	int i;
@@ -5224,8 +5222,8 @@ static void grab_family()
 			"...34 of 139 states hold on", (int)(sizeof(grab) / sizeof(grab[0])), 34);
 	}
 
-	/* THE FOUR THE REPORT ARGUES ABOUT, named one by one so that a later round
-	 * that changes one of them has to change a check with a sentence on it. */
+	/* The four borderline states, named one by one so that a change
+	 * to one of them has to change a check with a sentence on it. */
 	ok(ModernStateIsGrab(11) == 0, "AS_REACH is a catch, not a hold", ModernStateIsGrab(11), 0);
 	ok(ModernStateIsGrab(28) == 0, "AS_UPJUMP likewise", ModernStateIsGrab(28), 0);
 	ok(ModernStateIsGrab(80) == 0, "AS_ALL4S is where the crawl-to-hang STARTS",
@@ -5312,7 +5310,7 @@ static void grab_latch()
 
 	printf("Grab mode - Hold is the original, Toggle hangs on the state\n");
 
-	/* HOLD IS THE DEFAULT, over every combination of key, family, drop and
+	/* Hold is the default, over every combination of key, family, drop and
 	 * word: the word comes back exactly as it went in and the memory is left at
 	 * 0, so a trip through Toggle and back cannot resurrect anything.
 	 *
@@ -5393,16 +5391,16 @@ static void grab_latch()
 	ok((bits & MODERN_IN_ACTION) != 0, "and the next press catches the lower ledge",
 		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
 
-	/* THE SAVEGAME RESTORED IN A HANG: no key was ever pressed, the state says
+	/* The savegame restored in a hang: no key was ever pressed, the state says
 	 * she is hanging, and the bit is there. */
 	state = 0;
 	bits = grab_tick(1, 0, 1, 0, &state, 0);
 	ok((bits & MODERN_IN_ACTION) != 0, "a restore in a hang needs no key",
 		bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
 
-	/* A PRESS THAT BEGAN OUTSIDE THE FAMILY IS NOT A LET-GO. She jumps for the
+	/* A press that began outside the family is not a let-go. She jumps for the
 	 * ledge with the key down and holds it through the whole hang - the case
-	 * the brief asks about first. */
+	 * that matters most. */
 	{
 		int dropped = 0;
 
@@ -5421,7 +5419,7 @@ static void grab_latch()
 			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
 	}
 
-	/* THE DROP. It is a Hold tick bit for bit, it clears a standing release,
+	/* The drop. It is a Hold tick bit for bit, it clears a standing release,
 	 * and a press on one lets go of nothing. */
 	state = 0;
 	bits = grab_tick(1, 0, 1, 1, &state, 0);
@@ -5433,7 +5431,7 @@ static void grab_latch()
 	ok((state & MODERN_GRAB_RELEASE) == 0, "and a press on a drop tick is no let-go",
 		state & MODERN_GRAB_RELEASE, 0);
 
-	/* THE KEY HELD ACROSS A DROP - out of a menu, into a level. The key memory
+	/* The key held across a drop - out of a menu, into a level. The key memory
 	 * is tracked on drop ticks too, so the tick the drop ends is not a fresh
 	 * press and she does not let go by herself. */
 	{
@@ -5492,7 +5490,7 @@ static void grab_latch()
 	ok(bits == GRAB_ONEKEY_WORD, "and the next press is the whole action word again",
 		bits, GRAB_ONEKEY_WORD);
 
-	/* "Separate" IS UNTOUCHED BY ALL OF THAT, and this is the check that says
+	/* "Separate" is untouched by all of that, and this is the check that says
 	 * so: there IN_INTERACT comes from the OTHER key, so a player holding it
 	 * to push at a door while he lets go of a ledge keeps it through the
 	 * let-go press. grab_tick is the "Separate" call, mask IN_ACTION alone. */
@@ -5513,7 +5511,7 @@ static void grab_latch()
 			bits & MODERN_IN_INTERACT, MODERN_IN_INTERACT);
 	}
 
-	/* EVERY OTHER BIT IS LEFT ALONE, in the family and out of it - which is
+	/* Every other bit is left alone, in the family and out of it - which is
 	 * what keeps IN_SELECT the Action button's own under "One key", and what
 	 * keeps a pushblock being pushed by a held key: the latch delivers
 	 * IN_ACTION and nothing else, and IN_INTERACT is only ever taken away, and
@@ -5553,7 +5551,7 @@ static void grab_latch()
 		GRAB_ONEKEY_RELEASE, MODERN_IN_ACTION | MODERN_IN_INTERACT);
 }
 
-/* LARA'S OWN GUN CYCLE, as a model. The truth table above says what the
+/* Lara's own gun cycle, as a model. The truth table above says what the
  * function answers to one tick; the sequences below say what a player gets,
  * and for that the answer has to be fed back into the state that produced
  * it. This is that feedback, and it is the engine's own chain and nothing
@@ -5635,7 +5633,7 @@ static void weapon_sequences()
 
 	printf("the weapon half - press, hold, release, fed back through her own state\n");
 
-	/* THE ITEM'S OWN SENTENCE: a press-hold-release script over the three gun
+	/* The gun cycle's rule: a press-hold-release script over the three gun
 	 * states gives exactly one draw and one holster. Thirty ticks held is
 	 * nearly four draw animations long, so anything that repeated its request
 	 * would show up here at once. */
@@ -5646,7 +5644,7 @@ static void weapon_sequences()
 	ok(run.requests == 2, "Hold: two ticks of the whole script carried the bit",
 		run.requests, 2);
 
-	/* THE MEASUREMENT THE SEAM RESTS ON, asserted rather than asserted about:
+	/* The measurement the seam rests on, asserted rather than asserted about:
 	 * the SAME script in Toggle really does cycle, because Key(9) is a level
 	 * read and larafire turns every tick of it into the next transition. Base
 	 * does this today; a player never sees it because a tap is shorter than
@@ -5712,7 +5710,7 @@ static void weapon_sequences()
 	ok(run.requests == 1, "Hold: exactly one tick carried it", run.requests, 1);
 	ok(run.state == GUN_AWAY, "Hold: and she settles with empty hands", run.state, GUN_AWAY);
 
-	/* AND THE SCRIPT THAT WOULD CATCH A LATCH: press, release, press again.
+	/* And the script that would catch a latch: press, release, press again.
 	 * Two presses, two draws, two holsters - a function that remembered
 	 * anything between them would come out odd. */
 	run = gun_script(1, GUN_AWAY, "############............############............");
@@ -5906,7 +5904,7 @@ static void sweeps()
 	}
 	ok(bad == 0, "(c) a camera cut of 180 degrees never bends the held course", bad, 0);
 
-	/* (d) THE D-PAD, AND WHAT THE MEDIPACKS ON IT COST.
+	/* (d) The D-pad, and what the medipacks on it cost.
 	 *
 	 * specific\dxshell.cpp does not OR the D-pad into the stick's two axes, it
 	 * ASSIGNS: a direction press REPLACES whatever the stick was saying with
@@ -5918,7 +5916,7 @@ static void sweeps()
 	 * The D-pad now carries the medipacks instead, and the movement seam
 	 * reads the left stick's own two axes (joystick_raw_lx/ly) ahead of the
 	 * overwritten pair, so the cross costs the movement nothing at all: a
-	 * medipack press no longer touches her course or speed, even while
+	 * medipack press does not touch her course or speed, even while
 	 * running.
 	 *
 	 * Nothing linked here can run any of that - it is engine code, in two
@@ -5946,7 +5944,7 @@ static void sweeps()
 		cfg.walk_below = 62;	/* explicit: the shipped default is 0 */
 		sit.anim_state = 2;
 
-		/* THE SIZE OF THE DEFECT, over the whole square of stick positions
+		/* The size of the defect, over the whole square of stick positions
 		 * with D-Pad Up held. dxshell assigns joystick_read_y = -20 and leaves
 		 * x alone; the old seam then erased the pair when both axes were in
 		 * {0, +20, -20} and not both zero. What the player asked for is the
@@ -5956,7 +5954,7 @@ static void sweeps()
 			for (sy = -MODERN_STICK_FULL; sy <= MODERN_STICK_FULL; sy++)
 			{
 				MODERN_RESULT mine;		/* the stick, which is what she asked for */
-				MODERN_RESULT then;		/* what the press used to leave of it */
+				MODERN_RESULT then;		/* what dxshell's assignment leaves of it */
 				long ox = sx;			/* dxshell's own assignment, transcribed */
 				long oy = -dpad;
 
@@ -6046,7 +6044,7 @@ static void sweeps()
 
 /* ----------------------------------------------------- the modern camera --- */
 
-/* THE ORBIT: game\modern_camera.cpp, compiled beside this file exactly the
+/* The orbit: game\modern_camera.cpp, compiled beside this file exactly the
  * way the translation is, for exactly the same reason - a feel number
  * nobody can re-measure is a number nobody can change.
  *
@@ -6261,7 +6259,7 @@ static void camera_orbit()
 		st.wall + st.ret + st.steering, 0);
 }
 
-/* THE SPEED SLIDER'S MAPPING: a right-stick speed felt far too slow next to
+/* The speed slider's mapping: a right-stick speed felt far too slow next to
  * the left one, calling for a slider like the SFX and music ones. The row is
  * specific\LoadSave.cpp's and arrives from a menu; what can be checked
  * without a menu is the whole of what the number means, and that is one
@@ -6311,7 +6309,7 @@ static void camera_speed()
 		"and past the Remaster's own 125 deg/s, so the slider has room over it",
 		yaw * 30 * 360 / 65536, 125);
 
-	/* THE CLAMP. The value comes out of the registry, and a key a user can edit
+	/* The clamp. The value comes out of the registry, and a key a user can edit
 	 * is a key that can hold anything. */
 	ModernCameraSpeedRates(-1, &yaw, &pitch);
 	ok(yaw == 364, "under the bottom is the bottom", yaw, 364);
@@ -6348,7 +6346,7 @@ static void camera_pitch()
 
 	ModernCameraDefaults(&cfg);
 
-	/* WHICH WAY IS UP is not taste here: the classic look camera answered it
+	/* Which way is up is not taste here: the classic look camera answered it
 	 * once and for all. LookUpDown (game\lara.cpp) turns IN_FORWARD into
 	 * head_x_rot -= 364, and a negative x_rot is looking up; looking up from an
 	 * orbit means the camera sits BELOW her, which is a positive elevation. */
@@ -6501,7 +6499,7 @@ static void camera_wall()
 		"a quarter turn of stick at a wall arrives in full, tick for tick",
 		yaw, 0x2000 + 15 * cfg.yaw_rate);
 
-	/* THE RATE, ISOLATED: the two runs start from the same offset and differ in
+	/* The rate, isolated: the two runs start from the same offset and differ in
 	 * one thing only, whether the eye was clipped. */
 	ModernCameraReset(&st);
 	st.offset_yaw = 0x4000;
@@ -6570,7 +6568,7 @@ static void camera_hide()
 		"at the camera collision's own push: drawn", ModernCameraHidesLara(&cfg, 384), 0);
 }
 
-/* THE SEAM'S OWN ARITHMETIC: everything the engine side does that is not a
+/* The seam's own arithmetic: everything the engine side does that is not a
  * call into the engine, checked here so that the identities the seam rests
  * on are numbers and not paragraphs.
  *
@@ -6588,11 +6586,7 @@ static void camera_hide()
  * are inverses of one another at every heading - because if they are not, the
  * camera points somewhere else entirely for exactly the headings nobody tries
  * by hand, and this is the compiler the engine is built with, so the answer
- * here is the answer there.
- *
- * An earlier second identity checked whether an absorbed displacement really
- * named the angle the camera had been pushed to; nothing absorbs a
- * displacement any more, so that question has no subject left. */
+ * here is the answer there. */
 static void camera_seam()
 {
 	MODERN_CAMERA_CFG cfg;
@@ -6659,9 +6653,9 @@ static void camera_seam()
 	}
 
 	/* 4. And geometry cannot move it, which is what makes it safe for her
-	 * movement to be steered by it. game\modern_state.cpp used to seat her
-	 * course on the measured vector eye -> target, and a wall that pulls the
-	 * eye in turns that vector into anything at all - measured as 57 jumps
+	 * movement to be steered by it. Seating her course on
+	 * the measured vector eye -> target would let a wall that pulls the
+	 * eye in turn that vector into anything at all - measured as 57 jumps
 	 * of more than 45 degrees in one tick, her course jumping with them. It
 	 * reads the world yaw under the orbit now. The whole point of it is the
 	 * two ticks below: a clipped eye is an input to this function and it
@@ -6893,7 +6887,7 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
 	}
 }
 
-/* THE STAMP THAT SAYS THE ORBIT IS STILL THE CAMERA.
+/* The stamp that says the orbit is still the camera.
  *
  * game\camera.cpp keeps two answers that are only worth anything while the orbit
  * really ticks every tick - whether mgLOS clipped the eye, and what world angle
@@ -6901,12 +6895,12 @@ static void lead_run(long speed, long yaw_rate, long pitch_rate, long lead,
  * cost something was the second: ModernCameraActive() reads the option, Lara,
  * the title, the spotcam, the cutscene and first person, but not which camera
  * the engine is running, so through a rich2 sniper camera - the one level camera
- * Modern deliberately keeps - it stayed true while FixedCamera had the view and
- * the orbit stood still. game\modern_state.cpp went on building her course
- * against the world angle the orbit had been frozen at, which is a camera that
- * is no longer on screen.
+ * Modern deliberately keeps - it stays true while FixedCamera has the view and
+ * the orbit stands still. game\modern_state.cpp would go on building her course
+ * against the world angle the orbit was frozen at, which is a camera that
+ * is not on screen.
  *
- * Both answers now go through ModernCameraTickFollows, which is the whole of the
+ * Both answers go through ModernCameraTickFollows, which is the whole of the
  * rule and is checked here: the engine side is two stamps and two calls, and
  * this is the arithmetic under them - including the wrap, which the engine
  * reaches once every thirty-six minutes and a test reaches in a line. */
@@ -6930,7 +6924,7 @@ static void camera_stamp()
 	ok(ModernCameraTickFollows(1000, 1001) == 0, "a stamp from the FUTURE answers nothing",
 		ModernCameraTickFollows(1000, 1001), 0);
 
-	/* THE WRAP, which is why the subtraction is done in the counter's own width.
+	/* The wrap, which is why the subtraction is done in the counter's own width.
 	 * GlobalCounter is a ushort and the level it counts runs for hours. */
 	ok(ModernCameraTickFollows(0, 65535) == 1, "over the wrap 65535 -> 0 is still one apart",
 		ModernCameraTickFollows(0, 65535), 1);
@@ -6939,7 +6933,7 @@ static void camera_stamp()
 	ok(ModernCameraTickFollows(0, 0) == 0, "a reset leaves both at 0, which answers nothing",
 		ModernCameraTickFollows(0, 0), 0);
 
-	/* EXACTLY ONE STAMP IN THE WHOLE COUNTER IS LIVE for any given tick, which is
+	/* Exactly one stamp in the whole counter is live for any given tick, which is
 	 * the property the engine leans on: the flag cannot survive a break of any
 	 * length, so nothing it guards has to be cleared on the way out of one. */
 	live = 0;
@@ -6950,7 +6944,7 @@ static void camera_stamp()
 	ok(live == 1, "of all 65536 possible stamps, exactly one is a live answer at any tick",
 		live, 1);
 
-	/* AND WALKED AS THE ENGINE WALKS IT: the orbit stamps every tick it runs, so
+	/* And walked as the engine walks it: the orbit stamps every tick it runs, so
 	 * the seam's reference is live on every one of them; the moment a camera
 	 * takes over, the very next tick declines and every tick after it declines
 	 * too - the stale angle can never come back without the orbit coming back. */
@@ -6974,7 +6968,7 @@ static void camera_stamp()
 static void camera_lead()
 {
 	MODERN_CAMERA_CFG cfg;
-	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
+	const double radius = 1536.0;		// camera.target_distance, camera.cpp
 	LEAD_RUN slow, fast;
 	long yaw_max, pitch_max;
 	long speed;
@@ -6984,7 +6978,7 @@ static void camera_lead()
 	ModernCameraDefaults(&cfg);
 	ModernCameraSpeedRates(MODERN_CAMERA_SPEED_FULL, &yaw_max, &pitch_max);
 
-	/* THE YAW, AT BOTH DAMPINGS AND AT BOTH ENDS OF THE SLIDER. The first run of
+	/* The yaw, at both dampings and at both ends of the slider. The first run of
 	 * each pair is what shipped, and it is here to be printed rather than
 	 * asserted: a test that only proves the cure cannot say how large the defect
 	 * was. */
@@ -7021,7 +7015,7 @@ static void camera_lead()
 			roundl2(0.9 * (double)yaw_max));
 	}
 
-	/* THE PITCH HAS TWO DAMPINGS IN SERIES, the elevation's own >> 3 and then
+	/* The pitch has two dampings in series, the elevation's own >> 3 and then
 	 * MoveCamera's, so it was the worse of the two: an eighth of a tenth. Both
 	 * are led past - the elevation in ModernCameraOrbit, the eye in
 	 * ModernCameraLeadEye - and the check is the same shape as the yaw's. */
@@ -7059,8 +7053,8 @@ static void camera_lead()
  * pitch_rate, so the worst case is the largest step that pair can make
  * anywhere on the sphere, and it is swept rather than argued.
  *
- * The real eye moves this much and not less, correcting an earlier claim
- * that MoveCamera's damping makes it smaller: `pos += (ideal - pos) /
+ * The real eye moves this much and not less; MoveCamera's damping does
+ * not make it smaller: `pos += (ideal - pos) /
  * speed` is a first order lag, and a lag filter fed a constant velocity
  * settles at that same velocity. It is smaller for the first few ticks of
  * a push and equal for as long as the push lasts. The margin below is
@@ -7115,7 +7109,7 @@ static void camera_camcut()
 {
 	MODERN_CAMERA_CFG cfg;
 	const double turn = 2.0 * 3.14159265358979323846 / 65536.0;
-	const double radius = 1536.0;		// camera.target_distance, camera.cpp:258
+	const double radius = 1536.0;		// camera.target_distance, camera.cpp
 	long worst_eye;
 	long cuts = 0;
 	long yaw_rate;
@@ -7283,7 +7277,7 @@ static void camera_camcut()
 			worst_broken, INTERP_CAM_SNAP);
 	}
 
-	/* The one thing that used to cut at a wall was vanilla's, and it is worth
+	/* The one thing that cuts at a wall is vanilla's, and it is worth
 	 * a number so that nobody hunts for it in the orbit: the five candidate
 	 * positions of ChaseCamera are the wanted angle and the four world
 	 * cardinals, so the ideal can jump a whole quadrant in one tick. That is
@@ -7292,8 +7286,8 @@ static void camera_camcut()
 	 * the stick was swallowed (camera_wall above) - so this file stops
 	 * producing it in Modern: the candidate loop keeps only the angle the
 	 * player asked for, clipped by mgLOS, which shrinks the distance rather
-	 * than jumping the angle. The jump below is therefore Tank's alone now,
-	 * and it is measured here so that the thing Modern no longer does has a
+	 * than jumping the angle. The jump below is therefore Tank's alone,
+	 * and it is measured here so that the thing Modern does not do has a
 	 * size. */
 	{
 		const long x1 = roundl2(-radius * sin(0.0));
@@ -7476,7 +7470,7 @@ static void h_new(long tx, long tz, long bx, long bz, long wantx, long wantz,
 
 /* The dialled angle read back out of a resolved eye, in the engine's own
    convention: the candidates are built as target - d * sin(a) in x and
-   target - d * cos(a) in z (camera.cpp:1854), so the angle is the atan2 of the
+   target - d * cos(a) in z (camera.cpp), so the angle is the atan2 of the
    negated pair - exactly the reading lead_run() already uses. */
 static double h_yaw(long tx, long tz, long ex, long ez)
 {
@@ -7496,7 +7490,7 @@ static double h_wrap(double units)
 
 struct PULL_RUN
 {
-	double worst_new;	// biggest |dialled - resolved| in units, under item 1's rule
+	double worst_new;	// biggest |dialled - resolved| in units, under the Modern rule
 	double worst_old;	// and the same for the classic sector snap
 	long over_60_new;	// how many of the swept angles are 60 degrees out
 	long over_60_old;
@@ -7684,7 +7678,7 @@ static void camera_pull()
 	   in play - 481 of 930 pushed ticks 60 degrees out, all of them clipped,
 	   median 124 between 200 and 400 units; these two maps reproduce the shape
 	   of it out of nothing but the geometry, and what the shape is is a picture
-	   that no longer shows the angle she is running at. */
+	   that does not show the angle she is running at. */
 	ok(c.over_60_old > 0 && n.over_60_old > 0,
 		"ray: the sector snap DID throw the picture 60 degrees out, on both maps",
 		c.over_60_old + n.over_60_old, 1);
@@ -7724,7 +7718,7 @@ static void camera_flip()
 
 			/* a. The stick alone. The animation left her heading where the
 			   input put it, so the subtraction is nothing at all - whatever
-			   rate a later round picks for the turn. */
+			   rate the turn uses. */
 			after = published;
 			ModernCameraReset(&st);
 			ModernCameraCarry(&cfg, &st, ModernWrap((long)after - published));
@@ -7748,7 +7742,7 @@ static void camera_flip()
 		}
 	}
 
-	/* c. THE SWING IN TICKS, through the engine's own two functions: seated by
+	/* c. The swing in ticks, through the engine's own two functions: seated by
 	   the subtraction above, paid out by the eased profile, arriving whole. */
 	{
 		MODERN_CAMERA_STATE st;

@@ -563,7 +563,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         {
             if (!o.hasAngle)
             { error = levelName + ": Make_Climb needs @Angle (Lara's view onto the wall)"; return false; }
-            // Engine convention control.cpp:2189: quad = (yRot+0x2000)/0x4000,
+            // Engine convention (_TestTriggers, control.cpp): quad = (yRot+0x2000)/0x4000,
             // bit = 1 << (quad+8). In degrees: 0->0x100, 90->0x200, 180->0x400,
             // 270->0x800. Odd angles round to the nearest quarter.
             const int deg = ((o.angleDeg % 360) + 360) % 360;
@@ -675,7 +675,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         // Their position window has width zero in Y (SwitchBounds and
         // KeyHoleBounds: bounds[2] == bounds[3] == 0), so TestLaraPosition
         // demands Lara's y_pos EXACTLY equal to the item height
-        // (collide.cpp:1455). On a slope Lara takes on arbitrarily many
+        // (collide.cpp). On a slope Lara takes on arbitrarily many
         // heights depending on where she stands and never hits the one -
         // the object is then unusable, without a crash and without a
         // message. Cross-checked across all 13 levels: all 72 vanilla

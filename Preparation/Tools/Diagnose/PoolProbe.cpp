@@ -301,7 +301,7 @@ static void one_pool(D3DPOOL pool, const char* poolName, D3DFORMAT format,
 	row.largestFree0 = room0.largestFree;
 	row.walkMs = room0.walkMs;
 
-	/* THE FIRST PAGE ON ITS OWN, because the two questions are different: what
+	/* The first page on its own, because the two questions are different: what
 	 * ONE page costs is the fragmentation condition's number, what the NEXT
 	 * seven cost is the price the rule spends. */
 	for (int i = 0; i < count; i++)

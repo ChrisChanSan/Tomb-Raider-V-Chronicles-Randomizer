@@ -1091,11 +1091,18 @@ void BaddyObjects()
 		//
 		// In vanilla this never shows, because every family member has an
 		// anchor loaded in its own level; it only happens when the
-		// randomizer places one alone in a foreign level, and BLUE_GUARD
-		// (37) and SWAT (33) never share a level in vanilla data either.
-		// Without a loaded anchor the slot now keeps its own animation set
+		// randomizer places one alone in a foreign level.
+		// Without a loaded anchor the slot keeps its own animation set
 		// instead, which is exactly what the randomizer needs; vanilla
 		// behavior does not change since an anchor is always loaded there.
+		//
+		// The guard does not take SWAT's set either: in vanilla the two
+		// never share a level (SWAT 33 only in rich3, the guard 37 in
+		// joby2/3/5 and rich1/2), so the alias only fires in a randomized
+		// level. There a SWAT imported into rich1 would move every guard
+		// onto rich3's set, whose anims 28..32 share one frame block read
+		// with strides 37/37/36/37/39 - the chair guard's pose (item 110,
+		// OCB 4, anim +30) then discards all 15 meshes.
 
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
@@ -1829,9 +1836,8 @@ void BaddyObjects()
 		obj->control = TwogunControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 90; // raised for the cross-mix enemy pool, so a
-		                      // melee-range gunman survives more than a
-		                      // few hits.
+		obj->hit_points = 90; // raised from vanilla's 24 for the cross-mix enemy
+		                      // pool; the in-game value comes from Balance.txt
 		obj->pivot_length = 50;
 		obj->radius = 128;
 		obj->explodable_meshbits = 4;

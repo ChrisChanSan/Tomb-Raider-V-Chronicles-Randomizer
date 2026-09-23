@@ -40,7 +40,7 @@ namespace
     //------------------------------------------------------------------------
     // The flipmap partner of a room.
     //
-    // FlipMap() (game/control.cpp:2634) swaps the two ROOM_INFO structs
+    // FlipMap() (game/control.cpp) swaps the two ROOM_INFO structs
     // wholesale and then hands the base room its own item list back. So the
     // ITEMS stay where they are, but the FLOORDATA is exchanged: after the
     // flip the base room index reads the alternate's sector chains. A
@@ -442,7 +442,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
         ++report.triggersMoved;
 
-        // --- The travelling trigger into the flipmap partner too (#147b) ---
+        // --- The travelling trigger into the flipmap partner too ---
         //
         // The same reasoning as for the enemy waker below, only sharper: a
         // waker that never fires costs one sleeping enemy, a KEY whose
@@ -583,7 +583,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             //
             // Holsters (13-16): with adult Lara, DrawLara__1 draws the two
             // thighs ADDITIONALLY from the holster objects
-            // (drawlara.cpp:227ff). The rich and andy levels do not even
+            // (drawlara.cpp). The rich and andy levels do not even
             // have these objects - objects[].mesh_index is 0 then, and a
             // foreign mesh lands on the left thigh, slightly offset (seen
             // in game). The catsuit path (DrawLara__4) needs no holsters,
@@ -651,10 +651,10 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     //
     // That is not tidiness, it is necessary. TR5 rewrites
     // lara.mesh_ptrs[LM_HEAD] at RUNTIME - the scream head in
-    // larafire.cpp:405, the speech heads out of the cutscene pak - so a
+    // LaraGun (larafire.cpp), the speech heads out of the cutscene pak - so a
     // foreign head pops out mid-game the moment Lara screams. And the braid
     // takes its anchor point AND its collision radius from the bounding
-    // sphere of whatever mesh sits there (hair.cpp:245). Keeping the head
+    // sphere of whatever mesh sits there (HairControl, hair.cpp). Keeping the head
     // keeps six heads and the braid right by itself, and joints, holsters
     // and speech heads never have to be touched at all.
     //
@@ -1064,7 +1064,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // --- Climbing walls -------------------------------------------------------
     //
     // {"room","sectorX","sectorZ","dirBits"}: the sector becomes climbable.
-    // dirBits per the engine convention (control.cpp:2189), computed by the
+    // dirBits per the engine convention (_TestTriggers, control.cpp), computed by the
     // list reader from @Angle. Hard error like the portal - nobody would
     // ever find half a climbing wall.
     const JsonValue& climbs = patch["climbAdds"];
@@ -1393,7 +1393,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // PickUpCollision and InitialisePickup evaluate as the OCB.
             //
             // Bits 0x40 AND 0x80 are preserved. PickUpCollision evaluates
-            // both together (game/pickup.cpp:989):
+            // both together (game/pickup.cpp):
             //
             //     if (!(item->trigger_flags & 0xC0))
             //         KillItem(item_number);
@@ -1404,16 +1404,16 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // Without one of these bits the picked-up item is simply
             // killed. With them it stays as ITEM_INVISIBLE and gets
             // item_flags[3] = 1 - and those are exactly the two conditions
-            // PickupTrigger (pickup.cpp:158) requires for a pickup trigger
+            // PickupTrigger (pickup.cpp) requires for a pickup trigger
             // to fire at all.
             //
             // 0x80 additionally marks a regenerating pickup
-            // (game/init.cpp:492). Clearing it would quietly stop several
+            // (InitialisePickup in game/init.cpp). Clearing it would quietly stop several
             // ammo piles from refilling - Andrea1 items 66 and 78,
             // Andrea2 item 69, joby2 item 8.
             //
-            // 0x40 must be preserved too, even though no code path reads it
-            // directly: clearing it mutes the coupled trigger move of
+            // 0x40 matters on its own: it is half of the 0xC0 test above,
+            // and clearing it mutes the coupled trigger move of
             // Andrea1 item 107 - the item arrives at its new spot without
             // 0x40, is killed on pickup, and the trigger that travels along
             // with it never finds the condition to wake dog and flame
@@ -1436,14 +1436,14 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // "antitriggerImmune" sets IFL_ANTITRIGGER_ONESHOT (0x80) in the
         // flag word. An antitrigger pointing at an ACTIVE intelligent enemy
         // kills it without detour: hit_points = -16384, DisableBaddieAI,
-        // KillItem (control.cpp:2422) - no dying, no fading, it is simply
+        // KillItem (control.cpp) - no dying, no fading, it is simply
         // gone. In vanilla that is intentional, because the enemy is
         // supposed to be long done at that point; after a type swap that
         // assumption no longer holds and the new enemy vanishes mid-fight
         // (seen in game: Andrea1 item 34).
         //
         // Core's own brake against that is this bit: if it is set,
-        // TestTriggers leaves the item alone (control.cpp:2378) - meant as
+        // TestTriggers leaves the item alone (control.cpp) - meant as
         // "antitriggered once, never again". We set it from the start, then
         // the antitrigger bounces off and the enemy fights and dies
         // normally. This acts per ITEM, not per trigger: if several enemies
@@ -1574,7 +1574,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     {
         struct Need { int typeFrom, typeTo; int ocbFrom, ocbTo; int anim; const char* what; };
         static const Need kNeeds[] = {
-            // Switches 266..271: the OCB picks Lara's movement (switch.cpp:246ff)
+            // Switches 266..271: the OCB picks Lara's movement (SwitchCollision, switch.cpp)
             { 266, 271,  0,  0,  64, "switch" },
             { 266, 271,  1,  2, 325, "switch (hidden)" },
             { 266, 271,  3,  3, 413, "switch (small)" },
@@ -1602,7 +1602,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
         // These movements hang off no object but off Lara's controls - they
         // must exist in EVERY level. The crawl roll (duck + sprint,
-        // lara.cpp:3288 sets anim 218) is a stub in rich1, and already in
+        // lara_as_duck in lara.cpp sets anim 218) is a stub in rich1, and already in
         // vanilla - Lara is pushed forward without anything moving.
         // Measured with LaraAnim: rich1 is the ONLY level with FrameSize 0
         // there.

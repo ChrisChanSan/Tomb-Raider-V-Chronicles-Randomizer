@@ -355,7 +355,7 @@ namespace
 
 		if (source != HD_WARDROBE_SOURCE_MOD && up.compare(0, 12, "OUTFIT_YOUNG") == 0)
 		{
-			*why = "young Lara carries no weapon - the user's decision";
+			*why = "young Lara's body carries no weapon, and a randomized run hands her one";
 			return true;
 		}
 
@@ -572,7 +572,7 @@ namespace
 			 * writes the line and sees no gloves is owed the reason. Written
 			 * whatever the value was, valid or not. */
 			note("MODLOG %s: gloves=%s is ignored - the wardrobe wears "
-				"bare hands everywhere (the user's decision, round M2b)",
+				"bare hands everywhere",
 				where.c_str(), value.c_str());
 		}
 		else if (key == "braid")

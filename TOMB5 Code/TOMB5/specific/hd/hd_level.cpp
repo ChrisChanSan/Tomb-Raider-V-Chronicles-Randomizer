@@ -774,8 +774,8 @@ namespace
 		{
 			g_redress_said_unknown = true;
 			Log("HDLOG redress: GlobalMemoryStatusEx refused - the address "
-				"space is unknown, so the allowance is the %.0f MiB of round "
-				"M3 and nothing more", HD_REDRESS_ALLOWANCE / 1048576.0);
+				"space is unknown, so the allowance is the flat %.0f MiB "
+				"and nothing more", HD_REDRESS_ALLOWANCE / 1048576.0);
 		}
 
 		if (!say)

@@ -196,7 +196,7 @@ static const BALANCE_LINE balanceLines[] =
 		"\r\n"
 		";  The supernatural and heavy machinery:\r\n"),
 
-	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the pool since #124 - was 80"),
+	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the enemy pool - was 80"),
 	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	400,	0),
 	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 200,	120,	0),
 	DAMAGE("DMG_God_Strike",	dmgGodStrike,		60,	40,		"  Roman god in melee"),

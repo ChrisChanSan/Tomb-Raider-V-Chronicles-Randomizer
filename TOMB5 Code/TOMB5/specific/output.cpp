@@ -1320,7 +1320,7 @@ long ActiveFpsMode()
 		if (!g_vsyncSaidOnce)
 		{
 			g_vsyncSaidOnce = true;
-			Log("#148: frame rate \"Display\" needs VSync and the present does not wait - running at 60");
+			Log("frame rate: \"Display\" needs VSync and the present does not wait - running at 60");
 		}
 
 		return 1;
@@ -1413,7 +1413,7 @@ static void NoteDisplayBoundPresent()
 		if (g_wdFast > 600 && !g_vsyncBroken)
 		{
 			g_vsyncBroken = true;
-			Log("#148: the present is not waiting for the display (%.2f ms against %.2f) "
+			Log("frame rate: the present is not waiting for the display (%.2f ms against %.2f) "
 				"- the frame rate falls back to 60 for this session", ms, period);
 		}
 	}

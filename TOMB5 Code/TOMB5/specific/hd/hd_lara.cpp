@@ -880,7 +880,7 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 	 * 6. Everything else is the Rome outfit. */
 	if (youngLara)
 	{
-		*why = "young Lara stays classic (the user's decision)";
+		*why = "young Lara keeps the classic outfit";
 		return HD_LARA_OUTFIT_NONE;
 	}
 
@@ -1923,8 +1923,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 	 * which the question was never put. */
 	if (asked_for_gloves(level->outfit))
 		note("%s asks for gloves and wears the bare hands anyway - the "
-			"wardrobe wears bare hands everywhere (the user's decision, "
-			"round M2b)", HDLaraOutfitLabel(level->outfit));
+			"wardrobe wears bare hands everywhere", HDLaraOutfitLabel(level->outfit));
 
 	double drift_sum = 0;
 	float drift_worst = 0;

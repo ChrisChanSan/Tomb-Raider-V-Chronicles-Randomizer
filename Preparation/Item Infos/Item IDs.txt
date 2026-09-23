@@ -39,7 +39,7 @@ Revolver/Deagle_Ammo	348
 
 // Six enemy slots the randomizer itself uses, and a
 // warning. Four vanilla slots were repurposed for the Tomb Raider III
-// guests, so their enum NAME no longer says what stands there. Read the
+// guests, so their enum NAME does not say what stands there. Read the
 // number, not the name - and see Preparation\Enemies\Enemy Pools.txt.
 //   31  = T-Rex        (enum name SAS)
 //   43  = Vulture      (enum name CROW)

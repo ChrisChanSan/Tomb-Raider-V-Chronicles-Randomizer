@@ -14,10 +14,10 @@ taken from community documentation.
 > **On the line numbers.** They drift with every edit to the engine.
 > **The symbol name is what is
 > authoritative here, not the number** - search for it rather than jumping
-> to the line. Measured: the line numbers below are 60 too low for
-> `global/types.h`, while `game/control.cpp` has drifted unevenly (+1
-> for `GetHeight`, +23 for `_TestTriggers`), so there is no single
-> offset to apply. The structure and the reasoning below are
+> to the line. Measured: the line numbers below are 80 too low for
+> `global/types.h` (56 for the `IFL_INVISIBLE` comment), while
+> `game/control.cpp` has drifted unevenly (+80 for `GetHeight`, +102 for
+> `_TestTriggers`), so there is no single offset to apply. The structure and the reasoning below are
 > checked against the source.
 
 The decisive places:
@@ -244,9 +244,9 @@ hangs on the trigger besides the enemy (a door, a flipmap, a cutscene).
 The value lies with the **enemy pool** and with **adding** enemies: 269
 triggers are the mass to work with.
 
-## 4b. Rules for moving (the user's requirement)
+## 4b. Rules for moving
 
-### Decided on 2026-08-13: the items stay as curated
+### The items stay as curated
 
 Of 2044 items only **two** would be freed by trigger moving. The items
 stay as hand-curated; the triggers are used only for new enemies added to

@@ -1,6 +1,6 @@
 TOMB5 (TR5/Chronicles) - enemy AI pool for the randomizer
 =============================================================
-As of 2026-08-01, determined from the TOMB5 engine source code
+Determined from the TOMB5 engine source code
 (TOMB5 Code\TOMB5\game\*.cpp)
 
 Background
@@ -27,25 +27,25 @@ Pool A - supports patrol/ambush AI markers (calls GetAITarget)
 Object kind(s)                             control function     file
 BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA,        SasControl           sas.cpp
   SCIENTIST, CRANE_GUY, BLUE_GUARD2
-  (2026-08-30: SAS and SAILOR left this family - the TR3 guests took
-   their slots. BLUE_GUARD2 = engine slot 460, added by this project.)
+  (SAS and SAILOR are not in this family: the TR3 guests hold their
+   slots. BLUE_GUARD2 = engine slot 460, added by this project.)
 MAFIA2                                     MafiaControl          mafia2.cpp
 PIERRE, LARSON                             PierreControl         pierre.cpp
 HITMAN                                     HitmanControl         hitman.cpp
 HUSKIE                                     HuskieControl         huskie.cpp
 IMP                                        ImpControl            imp.cpp
-ATTACK_SUB                                 MinisubControl        minisub.cpp (line ~427-428)
+ATTACK_SUB                                 MinisubControl        minisub.cpp (line ~440-441)
 REAPER = Raptor (TR3)                      RaptorControl         raptor.cpp
-  (2026-08-30: slot 75 is the raptor. JellyControl still exists in
-   minisub.cpp but is assigned to no object at all.)
+  (slot 75 is the raptor. JellyControl exists in minisub.cpp but is
+   assigned to no object at all.)
 CHEF                                       ChefControl           chef.cpp
 SNIPER                                     SniperControl         sniper.cpp
 GREEN_TEETH                                SwampyControl         swampy.cpp
 SKELETON                                   SkeletonControl       skeleton.cpp
 TWOGUN                                     TwogunControl         twogun.cpp
 HYDRA                                      HydraControl          hydra.cpp
-WILLOWISP                                  WillOWispControl      willwisp.cpp (line ~47/56-57, sets ai_bits=FOLLOW)
-MAZE_MONSTER                               MazeMonsterControl    willwisp.cpp (line ~166-167)
+WILLOWISP                                  WillOWispControl      willwisp.cpp (line ~60/69-70, sets ai_bits=FOLLOW)
+MAZE_MONSTER                               MazeMonsterControl    willwisp.cpp (line ~181-182)
 GLADIATOR                                  GladiatorControl      gladiatr.cpp
 
 Pool B - NO patrol/ambush support (always direct Lara tracking)
@@ -53,8 +53,8 @@ Pool B - NO patrol/ambush support (always direct Lara tracking)
 Object kind    control function    file           reasoning
 DOG             DogControl          dog.cpp        CreatureAIInfo/GetCreatureMood/CreatureMood, no ai_bits use
 LION            LionControl         lion.cpp       ditto
-CROW = Vulture  CrowControl         crow.cpp       ditto (2026-08-30: slot 43
-  (TR3)                                            is the TR3 vulture now)
+CROW = Vulture  CrowControl         crow.cpp       ditto (slot 43 is the
+  (TR3)                                            TR3 vulture)
 ROMAN_GOD       RomangodControl     romangod.cpp    only checks "ai_bits & GUARD" for a random attack roll,
                                                      NEVER calls GetAITarget -> the patrol/guard bit has no
                                                      waypoint effect, the enemy always aims straight at Lara
@@ -76,17 +76,16 @@ No obj->intelligent, no CreatureCollision, no AI system involved.
 Generally not relevant for the position pool logic - they are not
 treated like normal enemy items.
 
-A related topic, investigated separately: plinth/hidden OCB pickups
-(OCB 1, 3, 4, 7, 8) that are automatically collected as an enemy's
-carried_item via GetCarriedItems() (game/setup.cpp) when placed too
-close (512 units X/Z, 256 Y) - they are floor-dropped after the
-enemy's death but keep their old OCB and thereby become permanently
-uncollectable. The engine now clears the low OCB bits on the drop
-itself (DropBaddyPickups, game\box.cpp), so such an item lands as an
-ordinary floor pickup.
+A related topic, investigated separately: a pickup placed too close
+to an enemy (512 units X/Z, 256 Y) is collected as his carried_item via
+GetCarriedItems() (game/setup.cpp) and floor-dropped after his death.
+On the drop (DropBaddyPickups, game\box.cpp) the engine clears the low
+OCB bits of the wall pickups, OCB 2 and 9, so those land as ordinary
+floor pickups. Every other OCB is kept as it is - a plinth/hidden
+pickup (OCB 1, 3, 4, 7, 8) dropped that way stays permanently
+uncollectable.
 
-For the randomizer the rule used to be "normalize everything to OCB 0".
-CORRECTION 2026-08-30: that is no longer true in general - there are two
+For the randomizer the rule is "normalize everything to OCB 0", with two
 exception tables, and both matter.
   KEEP_OCB keeps the OCB for wall pickups, where it encodes the pickup
   STYLE rather than a leftover of the old spot (Andrea2 and andy3 items

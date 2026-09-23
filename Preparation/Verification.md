@@ -11,7 +11,8 @@ only trustworthy if you know how it fails.
 
 ## 1. Did a change alter what the randomizer produces?
 
-The only answer that counts is a byte comparison against the previous build.
+The only answer that counts is a byte comparison against a build of the
+commit before the change.
 Reading the diff is not enough; the point of the check is the things you did
 not think of.
 
@@ -125,7 +126,7 @@ corners.
 
 ---
 
-## 1b. Does every enemy still fit under its ceiling? (#141)
+## 1b. Does every enemy still fit under its ceiling?
 
 `Diagnose\HeightCheck` reads a FINISHED level and compares, for every enemy
 item, the model's rest-pose height (anim 0 / frame 0) against the clearance
@@ -175,8 +176,9 @@ object that occurs seventeen times in three levels.
 **Why by hand fails:** the enum has explicit assignments, `_MIP` twins and
 comments between entries. Counting lines gives a plausible wrong number.
 
-**And the trap behind the trap:** four slots no longer mean what their enum
-NAME says. 31 is the T-Rex while still being called `SAS`. Read the number.
+**And the trap behind the trap:** four slots do not mean what their enum
+NAME says - 31, 43, 53 and 75 hold the Tomb Raider III guests. 31 is the
+T-Rex while still being called `SAS`. Read the number.
 
 ---
 
@@ -188,9 +190,11 @@ A hit is not proof. It can sit in a comment, in a dead branch, in a string,
 or in the other of two number spaces - object slots and inventory slots look
 identical as integers and are not.
 
-**Line numbers rot.** Everything in `global/types.h` has moved down by sixty
-lines since the trigger document was written, while `control.cpp` drifted
-unevenly. Cite the symbol; treat the number as an anchor with a date.
+**Line numbers rot.** The trigger document cites `struct FLOOR_INFO` at
+`global/types.h:603`; it stands at line 683, and the same document's
+`control.cpp` citations are off by different amounts (`GetHeight` by 80,
+`_TestTriggers` by 102). Cite the symbol; treat the number as an anchor with
+a date.
 
 **What this caught:** a header promising a version check between engine and
 randomizer that was never built - `grep -r RANDO_BUILD_ID "TOMB5 Code"` finds
@@ -223,8 +227,8 @@ untouched and surfaces only in the identifier pass, through the single word
 `Ordner` - four unambiguous German words in one line, invisible to the
 detector that is supposed to find exactly that. It was the launcher's
 folder-picker title (`TR5Randomizer/src/gui/Main.cpp`), the one UI string
-that went round the translation table instead of through it; it is now
-routed through `Language.cpp` like the rest. Scan `L"` and `u8"` literals in
+that went round the translation table instead of through it; `pickFolder`
+passes it through `T()` and `Language.cpp` like the rest. Scan `L"` and `u8"` literals in
 their own pass, and treat a string that bypasses the translation table as a
 finding in itself - it is where German hides.
 
@@ -247,8 +251,8 @@ def byte_exact(data):
 
 **What this cost once:** every accented character in `AccentToCode` was
 replaced by the Unicode replacement character, turning thirty-four branches
-into thirty-four comparisons against the same value. It compiled, it ran, and
-it sat there for weeks.
+into thirty-four comparisons against the same value. It compiled and it
+ran.
 
 **How to find it:** `grep -c $'\xef\xbf\xbd'` over the sources, plus a check
 for control characters that are not CR, LF or TAB.

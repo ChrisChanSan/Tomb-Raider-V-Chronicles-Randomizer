@@ -13,7 +13,7 @@ What is in here
                       folder has a note in it.
   screens\            Where the remaster's loading screens go; there is
                       a note in it.
-  savegame\           Savegames live here now, not loose in the folder.
+  savegame\           Savegames live here, not loose in the folder.
   data\               Precomputed data. The randomizer carries the same
                       data inside itself, so these files are optional -
                       but any one of them that IS there is used instead
@@ -99,10 +99,10 @@ If you own the Tomb Raider 4-6 Remaster, three things from it can be
 used here. Nothing of it is included - the engine reads your own
 files where they lie, and copies nothing out of them.
 
-Sound effects: there is nothing to copy any more. The engine reads
-MAIN.SFX out of your installed remaster (it sits there in 5\DATA)
-where it lies. A copy of that file in the audio folder, keeping the
-name, is still used first - for players who made one already.
+Sound effects: there is nothing to copy. The engine reads MAIN.SFX
+out of your installed remaster (it sits there in 5\DATA) where it
+lies. If you put a copy of that file in the audio folder, under the
+same name, that copy is used instead.
 
 The original stores its sounds as 22 kHz ADPCM inside every level
 file; the remaster's are 44.1 kHz, and they are not the old ones
@@ -174,8 +174,8 @@ not at all, for four different reasons:
     id is 452.
   - Two (85, 61) trview does know but cannot tell apart: it calls both
     41 and 85 "Dog" although only one is the husky, and "Soldier
-    Statue" is no longer enough now that two Roman gods can stand in
-    one level.
+    Statue" is not enough when two Roman gods can stand in one
+    level.
 
 Nothing here is needed to play. It is worth having if you ever report
 something odd: a viewer that shows "Crow" where a vulture stands turns

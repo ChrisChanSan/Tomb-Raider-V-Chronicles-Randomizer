@@ -2,15 +2,15 @@ TypeID		Old name			New name
 
 31			SAS					T-Rex (done)
 43			Crow				Pterodactylus_Vulture (done)
-53			Sailor				open (planned for Compsognathus)
+53			Sailor				Compsognathus (done)
 75			Reaper				Raptor (done)
 
-Outcome, 2026-08-30: all four are done and shipping. The names above were
+All four are done and shipping. The names above were
 working titles; what the programs actually show is
   31  "T-Rex"      (trview: "T-Rex (TR3) // was SAS")
   43  "Vulture"    (randomizer list: "Vulture (TR3 LA)";
                     trview: "Pterodactylus (TR3 LA)")
-  53  "Compy"      - no longer open, finished as #99
+  53  "Compy"      (randomizer list and trview: "Compy (TR3)")
   75  "Raptor"     (trview: "Raptor (TR3) // was REAPER")
 Read the slot NUMBER in a level dump: the enum name still says SAS, CROW,
 SAILOR, REAPER.

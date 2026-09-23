@@ -1,6 +1,7 @@
 TOMB5 engine limits: fixed buffers and arrays that are filled from level data.
-Re-measured against the source on 2026-08-30; every number below was read out
-of the file named beside it, not remembered.
+Every number below was read out of the file named beside it, not remembered.
+The line numbers drift with every edit to the engine; the symbol name beside
+each one is what to search for.
 
 All of these spots have a bounds check, so a level that exceeds one aborts with
 an error message instead of silently corrupting memory. Where this project
@@ -9,8 +10,8 @@ putting more into a level than Core ever did.
 
 To see the checks themselves:
    git log --oneline --all -- "TOMB5 Code/TOMB5/global/types.h"
-(This document used to name a commit hash. The history has been rewritten
-twice since, so written-down hashes do not survive here.)
+(No commit hash is written down here: a hash does not survive a rewrite of
+the history.)
 
 
 1# Items per level: 512  (MAX_ITEMS, global\types.h:45)
@@ -18,7 +19,7 @@ twice since, so written-down hashes do not survive here.)
    vanilla and joby3 at 244, so with extra enemies and scattered weapons the
    old ceiling was reached in normal play. items[] is game_malloc'd at
    MAX_ITEMS and the free list is parametric, so nothing else re-imposes 256.
-   The guard is "num_items > MAX_ITEMS" (specific\file.cpp:1243), i.e. 512
+   The guard is "num_items > MAX_ITEMS" (specific\file.cpp:1291), i.e. 512
    items still load, 513 abort.
 
 2# Texture pages: 256  (Textures[256], specific\texture.cpp:25 and texture.h:20)
@@ -27,53 +28,54 @@ twice since, so written-down hashes do not survive here.)
    in Trigger\Floordata and Triggers.md before moving any page around.
 
 3# Spot cameras per level: 256  (SpotCam[256], game\spotcam.cpp:28)
-   Check only, size unchanged. NOTE: this document used to place the array in
-   specific\file.cpp - that is where it is READ, not where it lives.
+   Check only, size unchanged. The array lives in spotcam.cpp; it is READ, and
+   checked ("number_spotcams > 256"), in specific\file.cpp:1063.
 
 4# Animated UV texture ranges: 16 ranges x 8 entries
-   (AnimatingTexturesV[16][8][3], specific\file.cpp, S_GetUVRotateTextures)
+   (AnimatingTexturesV[16][8][3], specific\output.cpp:54; filled by
+   S_GetUVRotateTextures in specific\file.cpp)
    Check only, size unchanged. Both halves are checked separately
-   (specific\file.cpp:368 and :386).
+   (specific\file.cpp:386 and :404).
 
-5# Sound samples per level: 450  (MAX_SAMPLES, global\types.h;
-   DS_Buffers[MAX_SAMPLES], specific\dxsound.cpp:55)
+5# Sound samples per level: 450  (MAX_SAMPLES, global\types.h:46;
+   DS_Buffers[MAX_SAMPLES], specific\dxsound.cpp:54)
    RAISED by this project, from a hard 256. The rest of the sound system - the
    sample_lut in particular - always assumed up to 450, so the playback buffer
-   was the odd one out and the tighter of the two. It now matches. This is the
+   was the odd one out and the tighter of the two. The two match. This is the
    limit to watch when the randomizer brings an enemy's own SFX into a level.
 
-6# Rooms per level: 256  (char flipped[256], game\setup.cpp:2336,
+6# Rooms per level: 256  (char flipped[256], game\setup.cpp:2371,
    BuildOutsideTable - a STACK array, not heap)
    Check only, size unchanged. Concerns number_rooms, not items or enemies -
    relevant only if level geometry is ever merged or extended.
 
-7# Room-change queue: 512  (ItemNewRooms[MAX_ITEMS][2], game\control.cpp:113)
-   Deliberately hung on MAX_ITEMS, so it grew with entry 1# and can never be
-   smaller than the item array it serves. A RUNTIME limit, not a load-time
+7# Room-change queue: 512  (ItemNewRooms[MAX_ITEMS][2], game\control.cpp:116)
+   Deliberately hung on MAX_ITEMS, so it has the size of entry 1# and can never
+   be smaller than the item array it serves. A RUNTIME limit, not a load-time
    one: it would take more than 512 simultaneous room changes or deaths in a
    single tick to overflow. Secured with a soft skip plus log rather than an
-   abort.
+   abort (the "ItemNewRoomNo < MAX_ITEMS" guards in game\items.cpp).
 
-8# Savegame buffer: 28980 bytes  (SAVEGAME_INFO::buffer, global\types.h:1354)
-   Doubled twice: 7245 upstream -> 14490 -> 28980 when MAX_ITEMS went to 512,
-   because the per-item section of a savegame grows with the item count
+8# Savegame buffer: 28980 bytes  (SAVEGAME_INFO::buffer, global\types.h:1387)
+   RAISED by this project, from 7245 upstream to four times that, because
+   the per-item section of a savegame grows with the item count
    (roughly 90-110 bytes per fully active AI enemy). Overflow guard plus a
    checksum taken at read time; see the savegame entry in
    TOMB5 Code\MODIFICATIONS.md.
 
 9# Regenerating pickups: 16  (RPickups[16], game\pickup.cpp:41)
    Items with trigger_flags & 0x80. Soft skip instead of abort - overflowing
-   costs a respawn effect, not memory.
+   costs a respawn effect, not memory (the "NumRPickups < 16" guard in
+   game\init.cpp:504).
 
-10# Active AI enemies: 16  (MAX_LOT, global\types.h:89; MAX_TARGETS is
-    MAX_LOT + 1)
+10# Active AI enemies: 16  (MAX_LOT, global\types.h:85; MAX_TARGETS is
+    MAX_LOT + 1, global\types.h:91)
     RAISED by this project, from 5. Five was enough for Core's levels and is
-    not enough once the randomizer adds enemies to a room. NOTE: this document
-    used to give 5 and to place the constant in game\lot.cpp - lot.cpp only
-    uses it. Raising it has a reach that is easy to underestimate: it widened
-    a pre-existing pointer bug in the engine into a load crash. That story is
-    in MODIFICATIONS.md, and it is the reason this entry is no longer filed
-    under "not checked yet".
+    not enough once the randomizer adds enemies to a room. The constant is
+    set in global\types.h; game\lot.cpp only uses it (baddie_slots). Raising
+    it has a reach that is easy to underestimate: it widened a pre-existing
+    pointer bug in the engine into a load crash. That story is in
+    MODIFICATIONS.md.
 
 11# Engine memory pool: 20 MB  (MALLOC_SIZE, global\types.h:54)
     Everything a level allocates through game_malloc comes out of this one
@@ -82,12 +84,12 @@ twice since, so written-down hashes do not survive here.)
     into a pool that has been handed out again.
 
 12# Object slots: ids beyond 460 are ours  (SLOT_FILE_BOUNDARY,
-    game\objects.h)
+    game\objects.h:390)
     Not a buffer limit but the same kind of ceiling. Slots below the boundary
     come out of the level file; above it are slots this project adds at
     runtime. The theoretical ceiling is 32767, because object_number is a
     short.
 
-Still not measured the same way: boxes and pathfinding, and the particle and
+Not measured the same way: boxes and pathfinding, and the particle and
 sound pools. All three recycle themselves rather than growing, so none of them
 can overflow from level data - but none of them has been counted either.

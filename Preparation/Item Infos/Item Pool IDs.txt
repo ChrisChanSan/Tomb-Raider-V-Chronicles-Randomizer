@@ -1,10 +1,7 @@
 Which items the randomizer may move, and what governs each kind.
 
-Re-measured against the source on 2026-08-30. This file was written on
-2026-08-02 as a scaffold with three empty categories to be filled in later.
-They were filled in - but in code and curation tables, not here, so the file
-had been telling readers that finished work was still open. It now says where
-each category actually lives.
+The three categories below live in code and curation tables, not in this
+file. This file says where each one lives.
 
 
 ================================================================
@@ -20,9 +17,8 @@ Weapons, ammunition, medipacks, flares. Freely placeable.
 	      once it is used up, a throw/deco object with no pickup logic.
 	      trview's type column shows the difference: "Flare" vs "Flares".
 
-THE OCB RULE, corrected 2026-08-30. This file used to say: set every item in
-this category to OCB 0 across the board. That is no longer what happens, and
-the exception matters.
+THE OCB RULE. A moved item does NOT always get OCB 0, and the exception
+matters.
 
 	A moved item gets OCB 0 only if its type is NOT in keepOcbTypes. The
 	KEEP_OCB table (Preparation\Tools\ZoneAnalysis.ps1, reaching the
@@ -31,19 +27,19 @@ the exception matters.
 	pickups with OCB 2 (crowbar grip) and OCB 9 (fence) in Andrea2 and
 	andy3. Zeroed, those cannot be picked up at all. See #61.
 
-	The old warning is still right and still worth heeding: this rule
-	applies only to real pickup objects. On an enemy item the OCB means
+	A warning worth heeding: this rule applies only to real pickup
+	objects. On an enemy item the OCB means
 	something else entirely - the Hydra's chain position, for instance.
 	Always filter by object_number first.
 
-	The plinth/OCB bug this file was built around: an item with OCB 1, 3,
-	4, 7 or 8 placed within 512 units X/Z and 256 Y of an enemy is picked
-	up by GetCarriedItems() as that enemy's carried_item, dropped on its
-	death, and used to keep its old OCB - permanently uncollectable.
-	CORRECTED 2026-08-30: DropBaddyPickups (game\box.cpp) now clears the
-	low OCB bits on the drop, so such an item lands as an ordinary floor
-	pickup. The case that forced the fix was an Imp carrying a crowbar
-	away in joby3.
+	Carried pickups: an item placed within 512 units X/Z and 256 Y of an
+	enemy is picked up by GetCarriedItems() (game\setup.cpp) as that
+	enemy's carried_item and dropped on its death. DropBaddyPickups
+	(game\box.cpp) clears the low OCB bits of a wall pickup (OCB 2 or 9)
+	on the drop, so it lands as an ordinary floor pickup - the case
+	behind that was an Imp carrying a crowbar away in joby3. Every other
+	OCB is kept, so a plinth/hidden pickup (OCB 1, 3, 4, 7 or 8) dropped
+	that way stays permanently uncollectable.
 
 
 ================================================================
@@ -89,12 +85,12 @@ the level data on every run.
 	Where a trigger genuinely must travel with its item, LevelFix.cpp
 	rewrites it rather than pinning the item in place.
 
-	The example this file was built around, now resolved from the repo's
-	own export (Level Infos\rich1.json) instead of guessed:
+	The example this file was built around, resolved from the repo's own
+	export (Level Infos\rich1.json):
 	  rich1 item 14 = PICKUP_ITEM2 (221), room 11, OCB 8, sector (5,5) -
 	  the Iris. The pickup trigger on that sector fires items 14, 15 and
 	  206:
 	    item 14  = itself, i.e. the deactivation
 	    item 15  = typeId 156, XRAY_CONTROLLER, room 11
-	    item 206 = typeId 304, CLOSED_DOOR3, room 155 - not the "end door"
-	               this file guessed, but the gate from zone 4 to zone 5.
+	    item 206 = typeId 304, CLOSED_DOOR3, room 155 - the gate from
+	               zone 4 to zone 5.

@@ -6834,6 +6834,10 @@ void LaraLedgeLoad(long phase, long have_phase, short heading, long have_heading
 	 * the edge. */
 	memset(&coll, 0, sizeof(coll));
 	coll.radius = 100;
+	/* GetCollidedObjects takes its rooms from the camera, and a restore runs
+	 * before InitialiseCamera seats it in this level; InitialiseCamera writes
+	 * the same value right after. */
+	camera.pos.room_number = item->room_number;
 	refusals = LaraLedgeRefusals(item, &coll, LedgeHeading) & ~LEDGE_REFUSE_LARA;
 
 	if (!refusals && LaraLedgeToHang(item, LedgeHeading))

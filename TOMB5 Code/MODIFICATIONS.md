@@ -5394,7 +5394,7 @@ held (`IN_ACTION` — the action key under *One key*, the Secondary key under
 the spot, and lowers her into the settled hang by playing Tomb Raider 5's own
 pull-up animation (97) backwards, instead of letting her run off. The turn is
 `MODERN_LEDGE_TURN_TICKS` (8) ticks of `MODERN_LEDGE_HALF_TURN` (0x8000) spread
-evenly (`game/modern_move.h:417`, `:415`); the lowering steps the pull-up down
+evenly (`game/modern_move.h:417`, `:418`); the lowering steps the pull-up down
 `MODERN_LEDGE_FRAME_STEP` (3) frames a tick (`:419`); the standing line sits
 `MODERN_LEDGE_STAND_IN` (99) units inside the sector's edge and the hang
 `MODERN_LEDGE_HANG_OUT` (100) units past it, the engine's own catch-snap
@@ -5412,13 +5412,14 @@ in the way; `CLIMB` a climbable wall sits under the edge; `CEILING` the hang
 position's ceiling is too low or would catch her into the monkey hang instead;
 `CATCH` the heading is outside the cardinal window, there is no floor, or the
 engine's own edge catch itself fails; `WATER` water, lava, or a death floor
-lies below; `TRIGGER` there is floor-data under the hang; `LARA` her weapons
+lies below; `TRIGGER` the floor data at the bottom of the drop carries a trigger, climb,
+or monkey entry (`coll->trigger` at the hang position); `LARA` her weapons
 are drawn, she is dead, a creature hit her this tick, or a cutscene holds her.
-With the option on, holding the grab key while running off an edge no longer
-reaches for a ledge below the way `lara_as_forwardjump` still does when it is
-off (`game/lara.cpp:864`-`872`: the action key sets `goal_anim_state =
-AS_REACH` once she is already falling) — the new trigger now catches her
-before she leaves the ledge at all. The phase (`modern_ledge_phase`) and the
+With the option on, holding the grab key while running off an edge the move
+accepts no longer reaches for a ledge below the way `lara_as_forwardjump` does
+(`game/lara.cpp:864`-`872`: the action key sets `goal_anim_state =
+AS_REACH` once she is already falling) — the new trigger catches her before
+she leaves the ledge; a sprint and a refused edge still reach below. The phase (`modern_ledge_phase`) and the
 heading she hangs with are appended to `tomb5_save_info` as `ledge_phase` and
 `ledge_heading` (`global/types.h:1399`-`1400`) and written/read only while she
 is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
@@ -5427,28 +5428,24 @@ on this way is settled once by the same refusal test into the hang or a fall.
 refusal set changes while the key is held near an edge
 (`game/lara.cpp:6394`-`6432`, `:6697`-`6710`).
 
-**Why.** The owner asked for the move after watching it on his own screen; the
-design is this project's own and reuses Tomb Raider 5's own pull-up rather
-than anything from the Remaster. The pull-up can be played backwards because
+**Why.** The design is this project's own and plays Tomb Raider 5's own
+pull-up, animation 97, backwards. The pull-up can be played backwards because
 during it `item->pos` never moves — only the root offsets do, and the whole
 climb resolves in the one `TranslateItem` at the animation's wrap — so
 counting the frame down and undoing that one translate at the start
-reconstructs it exactly (`PLAN-171-build.md` measured this against
-`game/laramisc.cpp`'s `AnimateLara`, which is why the state's own guard is
-enough: `laramisc.cpp:502`-`505`). The option defaults off because it changes
+reconstructs it exactly, which is why the state's own guard in
+`game/laramisc.cpp`'s `AnimateLara` is enough (`laramisc.cpp:502`-`505`). The option defaults off because it changes
 what holding the grab key while running off an edge already does — the
 `AS_REACH` catch below — and a player who relies on that should not have it
 silently replaced. It is Modern-controls only because the turn leans on the
 Modern camera swinging behind her (`ModernCameraCarryHalfTurn`,
-`game/camera.cpp:367`-`382`, called once on the turn's first tick and gated on
+`game/camera.cpp:367`-`383`, called once on the turn's first tick and gated on
 `ModernCameraActive()` so a swing is never seated while nothing pays it out);
-Tank stays byte-identical by not being asked at all. The move's poses are
-still drawn at 30 Hz for now: the interpolator's neighbour rule
-(`curFrame != prevFrame + 1`) refuses every backwards-stepped frame, so a
-30 Hz-only branch was accepted for this round rather than widening that rule;
-giving the lowering 60 Hz poses is left to a later round.
+Tank stays byte-identical by not being asked at all. The lowering is posed at
+30 Hz: the interpolator's neighbour rule (`curFrame != prevFrame + 1`,
+`game/interpolate_math.h:346`) refuses every backwards-stepped frame.
 
-**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1781`) is the pure
+**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1773`) is the pure
 decision for one tick of the move — the turn's ramp and its abort tests, the
 lowering's frame step and its hand-over — read by `lara_as_ledgehang`
 (`game/lara.cpp:6530`-`6638`), the routine for the new state

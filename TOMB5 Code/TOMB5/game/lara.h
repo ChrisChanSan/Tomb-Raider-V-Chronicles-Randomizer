@@ -202,7 +202,7 @@ enum lara_ledge_refusal
 	LEDGE_REFUSE_CEILING =	0x20,	// a ceiling at the hang that the hang cannot take
 	LEDGE_REFUSE_CATCH =	0x40,	// the engine's own catch would not take this edge
 	LEDGE_REFUSE_WATER =	0x80,	// water, lava or a death floor below
-	LEDGE_REFUSE_TRIGGER =	0x100,	// a trigger under the hang
+	LEDGE_REFUSE_TRIGGER =	0x100,	// a trigger, climb or monkey entry in the floor below the hang
 	LEDGE_REFUSE_LARA =	0x200	// weapons out, dead, hit, or not the player's to steer
 };
 

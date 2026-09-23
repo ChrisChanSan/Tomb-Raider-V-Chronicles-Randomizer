@@ -499,9 +499,12 @@ the Controls page's camera sliders are.
 With it on, run or walk at an edge with the grab key held (the action key
 under *One key*, the Secondary key under *Separate*) — or stand right at one
 and push toward it — and instead of running off, she stops at the edge, turns
-to face it, and lowers herself backward into a hang, the same pose a manual
-catch below a ledge leaves her in. Let go of the key, press Jump, or draw a
-weapon while she is turning and she stands back up where she is instead.
+round to face the ledge, and lowers herself backward into a hang, the same pose
+a manual catch below a ledge leaves her in. Let go of the key, press Jump, or
+draw a weapon while she is turning and she stands back up where she is instead.
+A running jump off the edge needs the grab key released: with the key held,
+Jump pressed in the last step before the edge comes too late, because she is
+stopped first and the Jump then only stands her back up.
 
 It will not fire at all when:
 
@@ -511,15 +514,17 @@ It will not fire at all when:
 - there is a ladder in the wall below the edge;
 - the ceiling above the hang is too low;
 - there is an item or a static mesh at the edge or in the hang;
-- there is a trigger on the floor right at the edge;
+- there is a trigger (or a climb or monkey-swing marker) in the floor at the
+  bottom of the drop;
 - your weapons are drawn;
 - or you approach more than about 35 degrees off a straight, square angle to
   the edge.
 
-With it on, holding the grab key while running off an edge no longer reaches
-for a ledge below the way it does with the option off — she is stopped at the
-near edge instead, so if you relied on catching a drop that way, turn this
-back off.
+With it on, holding the grab key while running off an edge the move accepts no
+longer reaches for a ledge below the way it does with the option off — she is
+stopped at the near edge instead, so if you relied on catching a drop that way,
+turn this back off. A sprint is never stopped, and an edge the move refuses
+still lets her reach for a ledge below as before.
 
 A savegame made in the middle of the move loads correctly only in this build
 or a later one. And for now, while a setting of 60 or more frames a second

@@ -1657,7 +1657,7 @@ that shows what the seen-mark is for) and `walk_capacity` (eight checks over the
 power of two, the queue depth over 256 rooms each with a portal to every other, and the
 same level against a ring of 128 tripping the guard); `HdmDump` and `MapProbe` read
 version 2 and print the boxes with their spans, `MapProbe` through the engine's own
-reader. The eye-room finding is also written out in `Preparation/60FPS-Plan.md`. One
+reader. One
 consequence that was measured and left as it is: a triangle crossing a cut box may reach
 far outside it and is dropped whole, which at one measured doorway costs a lintel band
 of 6,567 pixels; clipping triangles against the box was not attempted.
@@ -3681,7 +3681,7 @@ every counter that used to measure time in drawn frames was put on the logic tic
 instead. The setting is `tomb5.fps_mode`, default 1 (sixty); `fps_mode 0` is the engine
 as it was, and every rule below is guarded so that at that setting no line of it is
 reached. Engine paths are relative to `TOMB5 Code/TOMB5`; the design is written out in
-`Preparation/60FPS-Plan.md`. Where TROne (GPLv3) by Todesengel1931 -
+the 60 fps plan (not part of the repository). Where TROne (GPLv3) by Todesengel1931 -
 https://github.com/todesengel1931 - solves the same problem differently, its idea was
 re-derived and credited in the header rather than taken, and nothing of it is copied;
 nothing here comes from the Remaster's programs.
@@ -3883,7 +3883,7 @@ the bucket sorter, the shadows, the lighting, `HDFrameRoom`, `HDObjectNode` and
 `specific/hd/` changed, because the HD seam takes its matrices off the engine's own
 stack; `HDLOG frame lara` gained `interp=`, what the frame was drawn at, and `INTERPLOG`
 gains `halfturn=N` per second (the braid's flips show as `HAIRLOG dyaw 180` on the same
-seconds). Nothing of TROne's blend was taken (`Preparation/60FPS-Plan.md`, 0.5): TROne
+seconds). Nothing of TROne's blend was taken: TROne
 records a tick's finished view-space node matrices and replays them blended, in which an
 item's half turn and the animation's opposite half have already cancelled, so it needs
 no such rule; two larger ways were priced and set aside - blending the composite yaw of

@@ -364,6 +364,16 @@ static void ModernCameraCarryFromAnim()
 		(short)(lara_item->pos.y_rot - turned));
 }
 
+/* The ledge hang turns her half round in eight steps of 22.5 degrees, each
+ * far under carry_flip, so ModernCameraCarryFromAnim never sees a flip and
+ * she would turn under a standing camera. lara_as_ledgehang asks for the
+ * half-turn swing itself, once, on the first tick of the turn. */
+void ModernCameraCarryHalfTurn()
+{
+	ModernCameraArm();
+	ModernCameraCarry(&modern_cam_cfg, &modern_cam_state, 0x8000);
+}
+
 /* One tick of the orbit, and the two camera slots it writes. */
 static void ModernCameraOrbit()
 {

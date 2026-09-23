@@ -100,6 +100,7 @@ static void save_tomb5_data()
 {
 	tomb5_save.LHolster = LHolster;
 	tomb5_save.dash_timer = DashTimer;
+	LaraLedgeSave(&tomb5_save.ledge_phase, &tomb5_save.ledge_heading);
 }
 
 static void load_tomb5_data()
@@ -111,6 +112,9 @@ static void load_tomb5_data()
 
 	if (tomb5_save_size > offsetof(tomb5_save_info, dash_timer))
 		DashTimer = tomb5_save.dash_timer;
+
+	LaraLedgeLoad(tomb5_save.ledge_phase, tomb5_save_size > offsetof(tomb5_save_info, ledge_phase),
+		tomb5_save.ledge_heading, tomb5_save_size > offsetof(tomb5_save_info, ledge_heading));
 }
 
 void SaveLaraData()

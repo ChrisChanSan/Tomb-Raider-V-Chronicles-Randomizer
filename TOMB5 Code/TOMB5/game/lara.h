@@ -207,6 +207,10 @@ enum lara_ledge_refusal
 };
 
 long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir);
+void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll);
+long LaraLedgeReversing(ITEM_INFO* item);
+void LaraLedgeSave(uchar* phase, short* heading);
+void LaraLedgeLoad(long phase, long have_phase, short heading, long have_heading);
 
 extern void (*lara_control_routines[])(ITEM_INFO* item, COLL_INFO* coll);
 extern void (*lara_collision_routines[])(ITEM_INFO* item, COLL_INFO* coll);
@@ -214,6 +218,8 @@ extern void (*lara_collision_routines[])(ITEM_INFO* item, COLL_INFO* coll);
 extern LARA_INFO lara;
 extern ITEM_INFO* lara_item;
 extern short DashTimer;
+extern long LedgePhase;
+extern short LedgeHeading;
 extern char LaraDrawType;
 extern char WeatherType;
 extern char GfForeignSpeechHeads;

@@ -1391,6 +1391,13 @@ struct tomb5_save_info
 {
 	ushort LHolster;
 	ushort dash_timer;
+
+	/* The ledge hang in mid move (game\lara.cpp's LedgePhase and
+	 * LedgeHeading): the phase, and the heading she hangs with. Appended
+	 * and read length-checked (game\savegame.cpp); LaraLedgeLoad settles a
+	 * save without them. */
+	uchar ledge_phase;
+	short ledge_heading;
 };
 
 struct DYNAMIC

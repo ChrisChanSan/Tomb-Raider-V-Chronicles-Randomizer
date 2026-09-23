@@ -181,8 +181,7 @@ void(*lara_control_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* co
 	lara_as_null,
 	lara_as_null,
 	lara_as_null,
-	// AS_LEDGEHANG: nothing dispatches into it yet, so its own routines follow later.
-	lara_void_func
+	lara_as_ledgehang
 };
 
 void(*lara_collision_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* coll) =
@@ -326,13 +325,20 @@ void(*lara_collision_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* 
 	lara_void_func,
 	lara_void_func,
 	lara_void_func,
-	// AS_LEDGEHANG: nothing dispatches into it yet, so its own routines follow later.
+	// AS_LEDGEHANG: the pull-up's own collision routine, which only fills coll.
 	lara_default_col
 };
 
 LARA_INFO lara;
 ITEM_INFO* lara_item;
 short DashTimer;
+
+/* The ledge hang's phase (modern_ledge_phase) and the heading she hangs with,
+ * both kept in tomb5_save_info by a savegame. Read only while she is in
+ * AS_LEDGEHANG. */
+long LedgePhase;
+short LedgeHeading;
+
 char LaraDrawType;
 char WeatherType;
 char GfForeignSpeechHeads;
@@ -6295,4 +6301,423 @@ long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir)
 	tiltyoff = saved_tilty;
 	OnObject = saved_on_object;
 	return bits;
+}
+
+/* Animation 97: the pull-up from the hang to a stand (state AS_NULL, 74
+ * frames at rate 4 in every campaign level, no state changes, continuing in
+ * animation 102). The lowering plays it from its last frame to its first. The
+ * anim enum has no name for it; its frames are read from anims[] each time,
+ * because the frame base differs from level to level. */
+#define LEDGE_PULLUP_ANIM	97
+
+/* hit_points on the first tick of the turn: the turn ends in a stand when
+ * she has lost any since. A savegame restored in the turn starts it anew. */
+static long ledge_entry_hp;
+
+/* The option's gate: on, and Modern controls. Under Tank the move does
+ * nothing even with the option on. */
+static long LaraLedgeGate()
+{
+	return tomb5.ledge_hang && tomb5.control_modern;
+}
+
+/* True while the lowering runs: AnimateLara (game\laramisc.cpp) leaves the
+ * frame and the animation commands to lara_as_ledgehang then. */
+long LaraLedgeReversing(ITEM_INFO* item)
+{
+	return item->current_anim_state == AS_LEDGEHANG && LedgePhase == MODERN_LEDGE_LOWER;
+}
+
+/* LEDGELOG's distance: units from her position to the outermost unit of the
+ * ledge, measured along the heading she hangs with - positive on the ledge
+ * (99 on the standing line), negative over the drop (-101 at the hang
+ * position). `over` says which side of the edge she is on. */
+static long LaraLedgeDist(ITEM_INFO* item, short heading, long over)
+{
+	long x, z;
+
+	x = item->pos.x_pos;
+	z = item->pos.z_pos;
+
+	switch (ushort(heading + 0x2000) / 0x4000)
+	{
+	case NORTH:
+		return z - (over ? (z | 1023) + 1 : z & ~1023);
+
+	case EAST:
+		return x - (over ? (x | 1023) + 1 : x & ~1023);
+
+	case SOUTH:
+		return (over ? (z & ~1023) - 1 : z | 1023) - z;
+
+	default:
+		return (over ? (x & ~1023) - 1 : x | 1023) - x;
+	}
+}
+
+static const char* LaraLedgePhaseName(long phase)
+{
+	switch (phase)
+	{
+	case MODERN_LEDGE_NONE:
+		return "none";
+
+	case MODERN_LEDGE_TURN:
+		return "turn";
+
+	case MODERN_LEDGE_LOWER:
+		return "lower";
+
+	default:
+		return "bad";
+	}
+}
+
+/* LEDGELOG, one line per phase change, behind -log:
+ *   phase   from>to: none, turn, lower, and the two ends stand and hang, fall
+ *           on a restore that finds the edge refused; bad is a phase byte
+ *           the state does not know
+ *   tick    the phase's tick as the decision saw it, 0 its first
+ *   dist    LaraLedgeDist: 99 on the standing line, -101 at the hang position
+ *   yrot    her heading now, snap the cardinal nearest to it
+ *   anim, frame, pos   the item at the change
+ *   before, after      the lowering's first tick: her position before and
+ *                      after the move to the hang position
+ *   refuse  an abort in the turn: LaraLedgeRefusals' bits (LEDGE_REFUSE_*)
+ *   load    1 on a savegame restore */
+static void LaraLedgeLog(ITEM_INFO* item, long from, const char* to, long tick, long over,
+	const PHD_3DPOS* before, long refusals, long load)
+{
+	char extra[128];
+	long n;
+
+	if (!gLogEnabled)
+		return;
+
+	n = 0;
+	extra[0] = 0;
+
+	if (before)
+		n += sprintf(extra + n, " before=%ld,%ld,%ld after=%ld,%ld,%ld", before->x_pos, before->y_pos,
+			before->z_pos, item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
+
+	if (refusals >= 0)
+		n += sprintf(extra + n, " refuse=0x%lX", refusals);
+
+	if (load)
+		sprintf(extra + n, " load=1");
+
+	Log("LEDGELOG phase=%s>%s tick=%ld dist=%ld yrot=%d snap=%d anim=%d frame=%d pos=%ld,%ld,%ld%s",
+		LaraLedgePhaseName(from), to, tick, LaraLedgeDist(item, LedgeHeading, over), item->pos.y_rot,
+		(short)((ushort)(item->pos.y_rot + 0x2000) & 0xC000), item->anim_number, item->frame_number,
+		item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, extra);
+}
+
+/* The abort: she stands where she is, as LaraHitCeiling stands her. */
+static void LaraLedgeStand(ITEM_INFO* item)
+{
+	item->anim_number = ANIM_STOP;
+	item->frame_number = anims[ANIM_STOP].frame_base;
+	item->current_anim_state = AS_STOP;
+	item->goal_anim_state = AS_STOP;
+	item->speed = 0;
+	item->fallspeed = 0;
+	item->gravity_status = 0;
+	LedgePhase = MODERN_LEDGE_NONE;
+}
+
+/* The hand-over: exactly the engine's own settled hang, the frame
+ * lara_col_hang and LaraHangTest wait for before they read input, with
+ * lara_as_hang's camera. LaraHangTest corrects pos.y on the next tick
+ * (within its own 60 units). */
+static void LaraLedgeHang(ITEM_INFO* item)
+{
+	item->anim_number = ANIM_GRABLEDGE;
+	item->frame_number = anims[ANIM_GRABLEDGE].frame_base + 21;
+	item->current_anim_state = AS_HANG;
+	item->goal_anim_state = AS_HANG;
+	item->speed = 0;
+	item->fallspeed = 0;
+	item->gravity_status = 0;
+	lara.gun_status = LG_HANDS_BUSY;
+	camera.target_angle = 0;
+	camera.target_elevation = -8190;
+	LedgePhase = MODERN_LEDGE_NONE;
+}
+
+/* A restore that cannot take the edge: she falls, as lara_col_run lets her
+ * fall when she runs off (LaraFallen). */
+static void LaraLedgeFall(ITEM_INFO* item)
+{
+	item->anim_number = ANIM_FALLDOWN;
+	item->frame_number = anims[ANIM_FALLDOWN].frame_base;
+	item->current_anim_state = AS_FORWARDJUMP;
+	item->goal_anim_state = AS_FORWARDJUMP;
+	item->speed = 0;
+	item->fallspeed = 0;
+	item->gravity_status = 1;
+	lara.gun_status = LG_NO_ARMS;
+	LedgePhase = MODERN_LEDGE_NONE;
+}
+
+/* Puts her at the hang position for the ledge sector she stands in: x and z
+ * by the catch's own snap (LaraLedgeSpots), y the settled hang's, 726 below
+ * the ledge top (LaraLedgeHangBound), facing `heading`, her room updated as
+ * AnimateLara updates it after a TranslateItem. Returns 0, and moves nothing,
+ * when there is no floor under her to measure the ledge top by. */
+static long LaraLedgeToHang(ITEM_INFO* item, short heading)
+{
+	long sx, sz, hx, hz, ledge;
+
+	ledge = LaraFloorFront(item, heading, 0);
+
+	if (ledge == NO_HEIGHT)
+		return 0;
+
+	LaraLedgeSpots(item->pos.x_pos, item->pos.z_pos, ushort(heading + 0x2000) / 0x4000, &sx, &sz, &hx, &hz);
+	item->pos.x_pos = hx;
+	item->pos.y_pos += ledge - LaraLedgeHangBound(item);
+	item->pos.z_pos = hz;
+	item->pos.y_rot = heading;
+	UpdateLaraRoom(item, -381);
+	return 1;
+}
+
+/* The ledge hang, AS_LEDGEHANG. Entered (from the run, the walk or the stand)
+ * with: pos on the standing line, MODERN_LEDGE_STAND_IN units inside the edge
+ * of the sector she stands in; y_rot on the cardinal she approached on (the
+ * catch's window at most, the first step takes the rest out); LedgeHeading the
+ * cardinal opposite, facing away from the drop; LedgePhase MODERN_LEDGE_TURN;
+ * ANIM_BREATH at its frame_base, whose frame counts the turn's ticks (44
+ * frames, never wrapping in the 8); goal_anim_state AS_LEDGEHANG; speed,
+ * fallspeed and gravity 0.
+ *
+ * The turn: she stands on the line in the idle - authored round the item
+ * position, root x and z within 8 units of it, where the pull-up's poses are
+ * authored round the hang position and would swing her out over the drop -
+ * and y_rot steps half round; the refusals are asked again each tick. On its
+ * first tick the Modern camera is asked for its half-turn swing, which the
+ * ramp's small steps would never set off. The lowering: on its first tick
+ * she moves to the hang position (200 units across and 726 down, over the
+ * interpolation's 512 and so drawn as a snap) and takes the pull-up's last
+ * frame; then
+ * each tick the frame steps down, and AnimateLara, stopped by
+ * LaraLedgeReversing, neither steps it nor fires the animation's sounds and
+ * effects (FlipEffect 12 at frame 59 is lara_hands_free, which would free her
+ * hands in mid move). At the first frame she is handed to the engine's hang.
+ *
+ * The player's own weapons are held back in the lowering (LG_HANDS_BUSY, as
+ * in every hang); creatures neither push her nor set off the flinch, which
+ * would change her animation under the state. */
+void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll)
+{
+	MODERN_LEDGE_SITUATION sit;
+	MODERN_LEDGE_RESULT res;
+	PHD_3DPOS before;
+	long from, entered;
+	short cardinal;
+
+	coll->enable_baddie_push = 0;
+	coll->enable_spaz = 0;
+	lara.turn_rate = 0;
+	item->goal_anim_state = AS_LEDGEHANG;
+	item->speed = 0;
+	item->fallspeed = 0;
+	item->gravity_status = 0;
+	from = LedgePhase;
+	entered = 0;
+
+	if (LaraLedgeGate() && from == MODERN_LEDGE_LOWER && item->anim_number != LEDGE_PULLUP_ANIM)
+	{
+		before = item->pos;
+
+		if ((LedgeHeading & 0x3FFF) || !LaraLedgeToHang(item, LedgeHeading))
+		{
+			LaraLedgeStand(item);
+			LaraLedgeLog(item, from, "stand", 0, 0, 0, -1, 0);
+			return;
+		}
+
+		item->anim_number = LEDGE_PULLUP_ANIM;
+		item->frame_number = anims[LEDGE_PULLUP_ANIM].frame_end;
+		lara.gun_status = LG_HANDS_BUSY;
+		entered = 1;
+		LaraLedgeLog(item, MODERN_LEDGE_TURN, "lower", MODERN_LEDGE_TURN_TICKS, 1, &before, -1, 0);
+	}
+
+	cardinal = (short)((ushort)(item->pos.y_rot + 0x2000) & 0xC000);
+	sit.option = LaraLedgeGate();
+	sit.phase = from;
+	sit.tick = 0;
+
+	if (from == MODERN_LEDGE_TURN)
+		sit.tick = (item->anim_number == ANIM_BREATH) ? item->frame_number - anims[ANIM_BREATH].frame_base :
+			MODERN_LEDGE_TURN_TICKS;
+	else if (from == MODERN_LEDGE_LOWER && !entered)
+		sit.tick = 1 + (anims[LEDGE_PULLUP_ANIM].frame_end - item->frame_number) / MODERN_LEDGE_FRAME_STEP;
+
+	sit.frame = item->frame_number;
+	sit.frame_base = anims[LEDGE_PULLUP_ANIM].frame_base;
+	sit.frame_end = anims[LEDGE_PULLUP_ANIM].frame_end;
+	sit.step = MODERN_LEDGE_FRAME_STEP;
+	sit.y_rot = item->pos.y_rot;
+	sit.target = LedgeHeading;
+	sit.cardinal_off = ModernWrap((long)item->pos.y_rot - cardinal);
+	sit.refusals = (sit.option && from == MODERN_LEDGE_TURN) ? LaraLedgeRefusals(item, coll, LedgeHeading) : 0;
+	sit.key = (input & IN_ACTION) ? 1 : 0;
+	sit.jump = (input & IN_JUMP) ? 1 : 0;
+	sit.hands_free = (lara.gun_status == LG_NO_ARMS);
+	sit.hit_points = item->hit_points;
+
+	if (from == MODERN_LEDGE_TURN && sit.tick == 0)
+		ledge_entry_hp = item->hit_points;
+
+	sit.entry_hit_points = ledge_entry_hp;
+	sit.control_taken = (GLOBAL_playing_cutseq || bDisableLaraControl) ? 1 : 0;
+
+	switch (ModernLedgeDecide(&sit, &res))
+	{
+	case MODERN_LEDGE_CONTINUE:
+
+		if (from == MODERN_LEDGE_TURN && sit.tick == 0)
+		{
+			ModernCameraCarryHalfTurn();
+			LaraLedgeLog(item, MODERN_LEDGE_NONE, "turn", 0, 0, 0, -1, 0);
+		}
+
+		item->pos.y_rot = ModernWrap((long)item->pos.y_rot + res.yaw_step);
+		item->frame_number -= (short)res.frame_step;
+		LedgePhase = res.phase;
+		break;
+
+	case MODERN_LEDGE_HANG:
+		LaraLedgeHang(item);
+		LaraLedgeLog(item, from, "hang", sit.tick, 1, 0, -1, 0);
+		break;
+
+	case MODERN_LEDGE_STAND:
+		LaraLedgeStand(item);
+		LaraLedgeLog(item, from, "stand", sit.tick, 0, 0, sit.refusals, 0);
+		break;
+
+	default:
+
+		/* The gate went off (the option or Tank chosen in the pause menu) or the
+		 * phase is none: she is left where she physically is. */
+		if (item->anim_number == LEDGE_PULLUP_ANIM)
+		{
+			LaraLedgeHang(item);
+			LaraLedgeLog(item, from, "hang", sit.tick, 1, 0, -1, 0);
+		}
+		else
+		{
+			LaraLedgeStand(item);
+			LaraLedgeLog(item, from, "stand", sit.tick, 0, 0, -1, 0);
+		}
+
+		break;
+	}
+}
+
+/* The two fields a savegame keeps: the phase only while she is in the state,
+ * so a phase left from an interrupted move is never written. */
+void LaraLedgeSave(uchar* phase, short* heading)
+{
+	if (lara_item && lara_item->current_anim_state == AS_LEDGEHANG)
+	{
+		*phase = (uchar)LedgePhase;
+		*heading = LedgeHeading;
+	}
+	else
+	{
+		*phase = MODERN_LEDGE_NONE;
+		*heading = 0;
+	}
+}
+
+/* A savegame restored in AS_LEDGEHANG. It goes on where it stood when the
+ * gate is open, both fields were in the file, the heading is a cardinal and
+ * the animation fits the phase: the turn in ANIM_BREATH within its ticks, the
+ * lowering in the pull-up or, on the tick between the two, still in
+ * ANIM_BREATH. Anything else - a save from a build without the fields, a
+ * phase byte it does not know, a frame outside both animations, the option
+ * or Modern controls off - is settled at once: the edge is asked once for the
+ * stored heading, or for her own if that is none, and she is put in the
+ * engine's settled hang when nothing refuses it, or falls when something
+ * does. Placed in the pull-up she is at the hang position, 200 units off the
+ * ledge and 726 below its top, so the edge is asked from the standing line. */
+void LaraLedgeLoad(long phase, long have_phase, short heading, long have_heading)
+{
+	ITEM_INFO* item;
+	COLL_INFO coll;
+	PHD_3DPOS pos;
+	long valid, refusals, at_hang;
+
+	item = lara_item;
+	LedgePhase = have_phase ? phase : MODERN_LEDGE_NONE;
+	LedgeHeading = have_heading ? heading : 0;
+
+	if (!item || item->current_anim_state != AS_LEDGEHANG)
+	{
+		LedgePhase = MODERN_LEDGE_NONE;
+		return;
+	}
+
+	at_hang = (item->anim_number == LEDGE_PULLUP_ANIM);
+	valid = LaraLedgeGate() && have_phase && have_heading && !(LedgeHeading & 0x3FFF);
+
+	if (valid)
+	{
+		if (LedgePhase == MODERN_LEDGE_TURN)
+			valid = item->anim_number == ANIM_BREATH && item->frame_number >= anims[ANIM_BREATH].frame_base &&
+				item->frame_number < anims[ANIM_BREATH].frame_base + MODERN_LEDGE_TURN_TICKS;
+		else if (LedgePhase == MODERN_LEDGE_LOWER)
+			valid = (at_hang && item->frame_number >= anims[LEDGE_PULLUP_ANIM].frame_base &&
+				item->frame_number <= anims[LEDGE_PULLUP_ANIM].frame_end) ||
+				(item->anim_number == ANIM_BREATH && item->frame_number >= anims[ANIM_BREATH].frame_base &&
+				item->frame_number <= anims[ANIM_BREATH].frame_end);
+		else
+			valid = 0;
+	}
+
+	if (valid)
+	{
+		ledge_entry_hp = item->hit_points;
+		LaraLedgeLog(item, LedgePhase, LaraLedgePhaseName(LedgePhase), 0, at_hang, 0, -1, 1);
+		return;
+	}
+
+	if (!have_heading || (LaraLedgeCardinal(LedgeHeading) & 0x3FFF))
+		LedgeHeading = LaraLedgeCardinal(item->pos.y_rot);
+	else
+		LedgeHeading = LaraLedgeCardinal(LedgeHeading);
+
+	pos = item->pos;
+
+	if (at_hang && !(LedgeHeading & 0x3FFF))
+	{
+		item->pos.x_pos += (MODERN_LEDGE_STAND_IN + MODERN_LEDGE_HANG_OUT + 1) * phd_sin(LedgeHeading) >> W2V_SHIFT;
+		item->pos.z_pos += (MODERN_LEDGE_STAND_IN + MODERN_LEDGE_HANG_OUT + 1) * phd_cos(LedgeHeading) >> W2V_SHIFT;
+		item->pos.y_pos += LaraLedgeHangBound(item);
+		UpdateLaraRoom(item, -381);
+	}
+
+	/* The row about Lara herself is left out: in the lowering her hands are
+	 * busy by design, and the rest of it is about a tick of play, not about
+	 * the edge. */
+	memset(&coll, 0, sizeof(coll));
+	coll.radius = 100;
+	refusals = LaraLedgeRefusals(item, &coll, LedgeHeading) & ~LEDGE_REFUSE_LARA;
+
+	if (!refusals && LaraLedgeToHang(item, LedgeHeading))
+	{
+		LaraLedgeHang(item);
+		LaraLedgeLog(item, phase, "hang", 0, 1, 0, refusals, 1);
+		return;
+	}
+
+	item->pos = pos;
+	UpdateLaraRoom(item, -381);
+	LaraLedgeFall(item);
+	LaraLedgeLog(item, phase, "fall", 0, at_hang, 0, refusals, 1);
 }

@@ -499,6 +499,12 @@ void AnimateLara(ITEM_INFO* item)
 	short* cmd;
 	long speed, speed2;
 
+	/* The ledge hang's lowering steps the pull-up down itself
+	 * (lara_as_ledgehang); going down, none of the animation's commands may
+	 * fire and the frame must not move up. Every other state passes. */
+	if (LaraLedgeReversing(item))
+		return;
+
 	item->frame_number++;
 	anim = &anims[item->anim_number];
 	

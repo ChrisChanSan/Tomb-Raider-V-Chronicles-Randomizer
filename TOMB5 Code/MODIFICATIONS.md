@@ -5378,6 +5378,105 @@ rows.
 `39efaa2`, `b448d37`, `cb55d72`, `da66ba8`, `9a26fbc`, `83e56f7`, `c50ffae`, `e0c9651`,
 `8747fe6`
 
+### Ledge hang: an automatic turn and lowering at an edge
+2026-09-24
+
+**What.** A fifth row, *Ledge hang*, on the *Modes* sub-page alongside Combat,
+Sprint, Duck and Grab mode (`game/menu_frame.cpp:1419`, `MENU_VALUE_IF`, a new
+macro beside `MENU_VALUE`/`MENU_SLIDER` that puts a predicate in a value row's
+`enabled` slot), registry name `ledge_hang`, default Off, read and written at
+the same three sites `grab_toggle` is (`tomb5/tomb5.cpp:284`, `:488`,
+`:671`), greyed under Tank controls by the same `MenuEnabledModern` predicate
+the Controls-page camera sliders use. With it on and Modern controls active,
+running, walking, or standing and pushing toward an edge with the grab key
+held (`IN_ACTION` — the action key under *One key*, the Secondary key under
+*Separate*) stops her on the sector's standing line, turns her half round on
+the spot, and lowers her into the settled hang by playing Tomb Raider 5's own
+pull-up animation (97) backwards, instead of letting her run off. The turn is
+`MODERN_LEDGE_TURN_TICKS` (8) ticks of `MODERN_LEDGE_HALF_TURN` (0x8000) spread
+evenly (`game/modern_move.h:417`, `:415`); the lowering steps the pull-up down
+`MODERN_LEDGE_FRAME_STEP` (3) frames a tick (`:419`); the standing line sits
+`MODERN_LEDGE_STAND_IN` (99) units inside the sector's edge and the hang
+`MODERN_LEDGE_HANG_OUT` (100) units past it, the engine's own catch-snap
+distances; `MODERN_LEDGE_RESIDUAL` (15) is the most a walk or a stand may lie
+off the line and still start the move; `MODERN_LEDGE_SNAP` (0x18E2) is the
+catch's own 34.6-degree cardinal window (`:424`, `:434`-`:436`);
+`MODERN_LEDGE_NEAR` (512) is how close an edge has to be before `LEDGELOG`
+reports the refusal set (`:440`). The ten refusals, each one engine test asked the way its
+own site asks it (`LaraLedgeRefusals`, `game/lara.cpp:6152`-`6321`, with the
+legend at `:6115`-`6144` and the bit values at `game/lara.h:197`-`206`):
+`SHALLOW` the drop is 768 units or less; `SLOPE` the ledge floor's two front
+corners differ by 120 or more; `SLIDE` the floor there would start
+`TestLaraSlide`; `OBJECT` an item, static, or the catch's own `hit_static` is
+in the way; `CLIMB` a climbable wall sits under the edge; `CEILING` the hang
+position's ceiling is too low or would catch her into the monkey hang instead;
+`CATCH` the heading is outside the cardinal window, there is no floor, or the
+engine's own edge catch itself fails; `WATER` water, lava, or a death floor
+lies below; `TRIGGER` there is floor-data under the hang; `LARA` her weapons
+are drawn, she is dead, a creature hit her this tick, or a cutscene holds her.
+With the option on, holding the grab key while running off an edge no longer
+reaches for a ledge below the way `lara_as_forwardjump` still does when it is
+off (`game/lara.cpp:864`-`872`: the action key sets `goal_anim_state =
+AS_REACH` once she is already falling) — the new trigger now catches her
+before she leaves the ledge at all. The phase (`modern_ledge_phase`) and the
+heading she hangs with are appended to `tomb5_save_info` as `ledge_phase` and
+`ledge_heading` (`global/types.h:1399`-`1400`) and written/read only while she
+is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
+on this way is settled once by the same refusal test into the hang or a fall.
+`LEDGELOG` behind `-log` prints one line per phase change plus a line when the
+refusal set changes while the key is held near an edge
+(`game/lara.cpp:6394`-`6432`, `:6697`-`6710`).
+
+**Why.** The owner asked for the move after watching it on his own screen; the
+design is this project's own and reuses Tomb Raider 5's own pull-up rather
+than anything from the Remaster. The pull-up can be played backwards because
+during it `item->pos` never moves — only the root offsets do, and the whole
+climb resolves in the one `TranslateItem` at the animation's wrap — so
+counting the frame down and undoing that one translate at the start
+reconstructs it exactly (`PLAN-171-build.md` measured this against
+`game/laramisc.cpp`'s `AnimateLara`, which is why the state's own guard is
+enough: `laramisc.cpp:502`-`505`). The option defaults off because it changes
+what holding the grab key while running off an edge already does — the
+`AS_REACH` catch below — and a player who relies on that should not have it
+silently replaced. It is Modern-controls only because the turn leans on the
+Modern camera swinging behind her (`ModernCameraCarryHalfTurn`,
+`game/camera.cpp:367`-`382`, called once on the turn's first tick and gated on
+`ModernCameraActive()` so a swing is never seated while nothing pays it out);
+Tank stays byte-identical by not being asked at all. The move's poses are
+still drawn at 30 Hz for now: the interpolator's neighbour rule
+(`curFrame != prevFrame + 1`) refuses every backwards-stepped frame, so a
+30 Hz-only branch was accepted for this round rather than widening that rule;
+giving the lowering 60 Hz poses is left to a later round.
+
+**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1781`) is the pure
+decision for one tick of the move — the turn's ramp and its abort tests, the
+lowering's frame step and its hand-over — read by `lara_as_ledgehang`
+(`game/lara.cpp:6530`-`6638`), the routine for the new state
+`AS_LEDGEHANG = 139` (`game/lara_states.h:147`); its collision row stays
+`lara_default_col`, since the state itself fills `coll` for `TestTriggers` and
+`LaraGun` and never moves her by walking. `ModernTest`'s `ledge_hang()` block
+(`Preparation/Tools/Diagnose/ModernTest.cpp:7817`) and `ledge_trigger()` block
+(`:8122`) check the arithmetic; together with the rest of the suite the count
+grew from 5788 to 8203, 0 failed. One guard at the head of `AnimateLara`
+(`game/laramisc.cpp:502`-`505`, `LaraLedgeReversing`) holds the frame and
+skips every animation command while the lowering plays backwards, for
+`AS_LEDGEHANG` only. The hand-over is exactly the engine's own settled hang —
+`ANIM_GRABLEDGE` at `frame_base + 21`, `AS_HANG`, `LG_HANDS_BUSY`
+(`LaraLedgeHang`, `game/lara.cpp:6451`-`6464`) — so `lara_col_hang` and
+`LaraHangTest` take over from there exactly as they do from any other catch.
+The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6655`-`6747`) is asked from
+`lara_col_run`, `lara_col_walk`, and `lara_col_stop`, right after each
+routine's own ceiling test and after `GetLaraCollisionInfo` has measured this
+tick's movement, so a state change and a position write there land inside the
+tick order between `AnimateLara` and `TestTriggers`/`LaraGun` exactly once. A
+run needs no forward input (so braking with the key held is still caught) and
+is put on the standing line by a shift that is always forward and at most one
+ordinary step; a standing state that became a run or a walk this tick is
+judged at `coll->old`, where she actually stood, so the start of a run's own
+23-unit hop never counts.
+
+**Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`
+
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20
 
@@ -6172,5 +6271,6 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #161 | Modern control: the stick turned into the classic direction bits; The options menu as one table-driven frame; The modern camera: a free orbit on the right stick; The pad: radial dead zones, a second binding set and a Modifier for chords; The -log switch and the diagnostic seams; The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot; Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; Combat, Sprint, Duck and Grab: hold or toggle; Two action keys: the interaction bit and the Secondary role; The cheats: DOZY as a toggle, and five bindable hotkeys |
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |
+| #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |

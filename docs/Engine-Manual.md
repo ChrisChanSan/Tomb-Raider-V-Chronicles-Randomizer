@@ -427,9 +427,9 @@ number, so both rows are drawn greyed out and the cursor skips them.
 Both are sliders, and a slider is written the moment it stops moving rather
 than on every step while you hold the key down.
 
-### The Modes sub-page: Combat, Sprint, Duck and Grab
+### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 
-These four rows sit together on their own sub-page, **Modes** (German
+These five rows sit together on their own sub-page, **Modes** (German
 *Modi*), reached by a centred tab on *Controls* right after *View* — the same
 tabbed style *Key bindings* and *View* use. Each keeps its own variable,
 registry name, default and effect; the sub-page only groups them.
@@ -489,6 +489,42 @@ finger:
   straight out of shallow water. Neither does a flyby camera or one of the
   office security cameras: those hand you the controls back, so they leave
   the grab alone as well.
+
+### Ledge hang: an automatic turn and lowering at an edge
+
+*Ledge hang* is the fifth row on the *Modes* sub-page, **Off** by default and
+**Modern controls only** — it is greyed out under Tank controls, the same way
+the Controls page's camera sliders are.
+
+With it on, run or walk at an edge with the grab key held (the action key
+under *One key*, the Secondary key under *Separate*) — or stand right at one
+and push toward it — and instead of running off, she stops at the edge, turns
+to face it, and lowers herself backward into a hang, the same pose a manual
+catch below a ledge leaves her in. Let go of the key, press Jump, or draw a
+weapon while she is turning and she stands back up where she is instead.
+
+It will not fire at all when:
+
+- the drop behind the edge is too shallow to hang from;
+- the ledge floor slopes, or would start her sliding;
+- water, lava, or a death floor lies below;
+- there is a ladder in the wall below the edge;
+- the ceiling above the hang is too low;
+- there is an item or a static mesh at the edge or in the hang;
+- there is a trigger on the floor right at the edge;
+- your weapons are drawn;
+- or you approach more than about 35 degrees off a straight, square angle to
+  the edge.
+
+With it on, holding the grab key while running off an edge no longer reaches
+for a ledge below the way it does with the option off — she is stopped at the
+near edge instead, so if you relied on catching a drop that way, turn this
+back off.
+
+A savegame made in the middle of the move loads correctly only in this build
+or a later one. And for now, while a setting of 60 or more frames a second
+draws everything else at that rate, the lowering itself is still drawn at 30
+frames a second.
 
 ---
 

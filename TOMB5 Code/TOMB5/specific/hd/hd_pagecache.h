@@ -31,8 +31,8 @@ struct IDirect3DTexture9;
 // texture coordinates.
 //
 // The pages are BC7, which Direct3D 9 does not know, so every one of them is
-// decoded on the processor (specific\bc7.cpp) and uploaded as A8R8G8B8 - the
-// user's decision: lossless, whatever it costs in video memory. The whole mip
+// decoded on the processor (specific\bc7.cpp) and uploaded as A8R8G8B8 - a
+// deliberate choice: lossless, whatever it costs in video memory. The whole mip
 // chain comes along; without it a wall at a distance sparkles.
 //
 // Engine-free like the rest of specific\hd: it takes a device and a list of

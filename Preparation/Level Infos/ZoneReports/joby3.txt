@@ -42,7 +42,7 @@ never reached: 33 walkable sectors
 hand-barred (EXCLUDE_ROOMS): 51 sectors in 13 rooms - intended, not counted as a gap
 stay vanilla (VANILLA_TYPES) - not in the pool: 172, 201, 334
 untouchable items (FIXED_ITEMS) - must not be moved:
-  item  186 - chef (room 120) - only killable via the stealth cutscene, stays vanilla (user list) (room 120, typeId 87)
+  item  186 - chef (room 120) - only killable via the stealth cutscene, stays vanilla (room 120, typeId 87)
   item    8 - secret - stays in place until the dedicated secret list (room 5, typeId 223)
   item   26 - secret - stays in place until the dedicated secret list (room 15, typeId 223)
   item   29 - secret - stays in place until the dedicated secret list (room 19, typeId 223)

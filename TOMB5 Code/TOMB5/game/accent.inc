@@ -12,7 +12,7 @@
  */
 
 /* THE 46 ACCENTED LETTERS, and nothing else: the body of an initialiser
- * list, moved out of game\text.cpp unchanged (#123, fix round Q).
+ * list, moved out of game\text.cpp unchanged.
  *
  * Each row is the two characters an accented letter is built from - the
  * base letter and the accent mark, both of them ordinary glyphs of the font

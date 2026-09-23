@@ -130,8 +130,8 @@ static void angles()
 		absl(ModernAngle(0, -1000)), 0x8000);
 
 	/* TROne: modern.diagonal_is_45_degrees. A diagonal has to be exactly 45
-	 * degrees or a synthetic stick - the keyboard and mouse scheme's WASD - sends Lara slightly
-	 * askew on every diagonal. */
+	 * degrees or a synthetic stick, such as WASD keys would make, sends Lara
+	 * slightly askew on every diagonal. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
 	tick(&cfg, &state, S(32000), -S(32000), 0, 0, 0, &out);	/* TROne 32000/-32000 */
@@ -2271,11 +2271,11 @@ static void back_input()
 
 	/* TROne: modern.remaster_back_input_distinguishes_running_from_armed_hopback
 	 * rides on this switch - their Remaster profile sets back_turns from
-	 * "is a weapon held". Ours is a constant (MODERN_BACK_TURNS), because this scheme
-	 * has no pointer aiming to hop away from; the switch is here and the keyboard
-	 * and mouse scheme decides whether to drive it. The sector the rule fires in is asserted
-	 * either side, because it is the one place a half turn and a step apart
-	 * differ by a single unit. */
+	 * "is a weapon held". Ours is a constant (MODERN_BACK_TURNS), because this
+	 * engine has no pointer aiming to hop away from; the switch is here for a
+	 * profile that aims with a pointer, which this engine does not have. The
+	 * sector the rule fires in is asserted either side, because it is the one
+	 * place a half turn and a step apart differ by a single unit. */
 	state.have_ref = 0;
 	tick(&cfg, &state, 0, S(30000), 0, (short)0x1FFF, 0, &out);
 	ok(out.mode == MODERN_MODE_BACK, "45 degrees off straight back is still back",
@@ -4882,9 +4882,9 @@ static void weapons()
 	/* ModernWeaponBits(combat_hold, ready, holstered, held, bits). TROne's is
 	 * trone_modern_weapon_bits(glue, bits, ready, holstered) with the mode and
 	 * the key inside the glue struct; ours takes both, because a pure function
-	 * cannot ask a struct which mode it is in. Nothing calls it yet - the keyboard
-	 * and mouse scheme wires it at the second seam of specific\input.cpp and puts
-	 * tomb5.combat_hold on the first argument. */
+	 * cannot ask a struct which mode it is in. specific\input.cpp calls it at
+	 * the Combat mode Hold seam - inside if (tomb5.combat_hold), with 1 as its
+	 * first argument - for keyboard and pad alike. */
 
 	/* TROne: combatmode.toggle_leaves_the_tank_bits_exactly_as_the_game_wrote_them.
 	 * This is the byte-identity case and the reason Toggle is our default: our
@@ -4953,8 +4953,8 @@ static void weapons()
 		MODERN_IN_FORWARD | MODERN_IN_WALK);
 
 	/* TROne: modern.held_equip_draws_once_and_interaction_does_not_fire, the
-	 * half that is the weapon bits. (The interact and shoot halves are
-	 * the keyboard and mouse scheme's IN_ACTION2 and are not in this function at all.) */
+	 * half that is the weapon bits. (The interact half is the Action split's
+	 * IN_INTERACT and the shoot half IN_ACTION; neither is in this function.) */
 	ok((ModernWeaponBits(1, 0, 1, 1, 0) & MODERN_IN_DRAW) != 0,
 		"Hold, held: the draw goes out", ModernWeaponBits(1, 0, 1, 1, 0) & MODERN_IN_DRAW,
 		MODERN_IN_DRAW);
@@ -4987,8 +4987,9 @@ static void weapons()
 	/* TROne: combatmode.toggle_pulses_once_per_press_in_the_modern_profile.
 	 * That is the POINTER profile - one frame of IN_DRAW per press edge - and
 	 * it needs an edge memory this function deliberately does not have: in our
-	 * Tank profile Toggle IS the original and needs none. The keyboard and mouse scheme owns the
-	 * edge, together with the pointer keys it belongs to. What is ours here is
+	 * Tank profile Toggle IS the original and needs none. A pointer profile
+	 * would own the edge, together with the pointer keys it belongs to; this
+	 * engine has none. What is ours here is
 	 * the other side of the same coin, asserted above: Toggle never invents a
 	 * bit and never swallows one. */
 
@@ -7782,13 +7783,16 @@ static void camera_flip()
 static void deferred()
 {
 	printf("\nnot ours yet - TROne expectations still owed, by name\n");
-	printf("(k+m: the keyboard and mouse scheme owes it):\n");
-	printf("  k+m     modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
+	printf("(ptr: needs a pointer profile, which this engine does not have;\n");
+	printf(" seam: the missing half is in specific\\input.cpp, which cannot be linked here):\n");
+	printf("  ptr     modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
 	printf("  none    modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
 	printf("          - the degenerate camera falls back to Lara's yaw in game\\modern_state.cpp,\n");
 	printf("            which needs the engine's own camera and cannot be linked here\n");
-	printf("  k+m     combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
-	printf("  k+m     modern.held_equip_draws_once_and_interaction_does_not_fire (IN_ACTION2)\n");
+	printf("  ptr     combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
+	printf("  seam    modern.held_equip_draws_once_and_interaction_does_not_fire\n");
+	printf("          - the draw half is checked above (Hold); the interaction half is the\n");
+	printf("            Action split's IN_INTERACT, a key of its own in specific\\input.cpp\n");
 	printf("\none came OFF that list:\n");
 	printf("  modern.orbit_stays_in_world_space_and_accepts_mouse_while_running - both halves\n");
 	printf("  are ours now. The stick moves the camera while she runs, and what it moves is a\n");

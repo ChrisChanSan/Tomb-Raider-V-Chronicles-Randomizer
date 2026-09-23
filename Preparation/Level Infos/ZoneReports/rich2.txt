@@ -67,9 +67,9 @@ required injections (REQUIRED_INJECTIONS) - missing in vanilla:
   typeId  348 -> room      (Deagle ammo for the start island (6 shots); present in the level: 0)
   typeId  348 -> room      (Deagle ammo for the start island (6 shots); present in the level: 0)
 untouchable items (FIXED_ITEMS) - must not be moved:
-  item  219 - guard (USSR, room 156) - stays vanilla (user list) (room 156, typeId 37)
-  item  155 - guard (USSR, room 84) - stays vanilla (user list) (room 84, typeId 37)
-  item  154 - guard (USSR, room 84) - stays vanilla (user requirement) (room 84, typeId 37)
+  item  219 - guard (USSR, room 156) - stays vanilla (room 156, typeId 37)
+  item  155 - guard (USSR, room 84) - stays vanilla (room 84, typeId 37)
+  item  154 - guard (USSR, room 84) - stays vanilla (room 84, typeId 37)
   item  209 - secret - stays in place until the dedicated secret list (room 148, typeId 223)
   item  242 - secret - stays in place until the dedicated secret list (room 167, typeId 223)
   item  244 - secret - stays in place until the dedicated secret list (room 174, typeId 223)

@@ -64,8 +64,8 @@ never reached: 106 walkable sectors
 stay vanilla (VANILLA_TYPES) - not in the pool: 174
 untouchable items (FIXED_ITEMS) - must not be moved:
   item   27 - CD - invisible, revealed from the suit by a switch (room 15, typeId 174)
-  item  180 - Twogun (room 130) - stealth-kill sequence, stays vanilla (user list) (room 130, typeId 39)
-  item   85 - scientist (room 34) - aim-at cutscene, stays vanilla (user list) (room 34, typeId 69)
+  item  180 - Twogun (room 130) - stealth-kill sequence, stays vanilla (room 130, typeId 39)
+  item   85 - scientist (room 34) - aim-at cutscene, stays vanilla (room 34, typeId 69)
   item    8 - secret - stays in place until the dedicated secret list (room 6, typeId 223)
   item  184 - secret - stays in place until the dedicated secret list (room 136, typeId 223)
   item  197 - secret - stays in place until the dedicated secret list (room 143, typeId 223)

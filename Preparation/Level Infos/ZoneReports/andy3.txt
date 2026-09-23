@@ -19,7 +19,7 @@ zone 0:  4887 sectors in 203 rooms
 zone 1:     2 sectors in   2 rooms
 never reached: 111 walkable sectors
 untouchable items (FIXED_ITEMS) - must not be moved:
-  item   20 - Green Teeth (room 99) - stays vanilla (user list) (room 99, typeId 79)
+  item   20 - Green Teeth (room 99) - stays vanilla (room 99, typeId 79)
   item   54 - secret - stays in place until the dedicated secret list (room 188, typeId 223)
   item   58 - secret - stays in place until the dedicated secret list (room 197, typeId 223)
   item   59 - secret - stays in place until the dedicated secret list (room 199, typeId 223)

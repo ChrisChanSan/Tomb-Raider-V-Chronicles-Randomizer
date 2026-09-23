@@ -12,8 +12,8 @@
  */
 
 /* THE 106 GLYPH RECTANGLES OF THE PC FONT PAGE, and nothing else: the body of
- * an initialiser list, moved out of game\text.cpp unchanged (#123, fix round
- * Q). Each row is  u, v, width, height, y offset, top shade, bottom shade.
+ * an initialiser list, moved out of game\text.cpp unchanged.
+ * Each row is  u, v, width, height, y offset, top shade, bottom shade.
  *
  * It lives in its own file because two programs have to agree on it to the
  * last digit: game\text.cpp fills CharDef[106] with it, and the HD font

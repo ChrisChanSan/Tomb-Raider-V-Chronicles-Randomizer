@@ -1386,7 +1386,7 @@ functions counting what they turn away instead of stopping at the cap - `HDLOG
 creaturelight` once a game second for up to six `objects[].intelligent` items with the
 classic colour, the HD colour, their difference, the distance to the lens, the ambient
 and the light counts, and the level's `motion=` line with the weighted parts, the
-smallest weight and the swinging parts. Tools: `RoomProbe` (`-paritycheck`, the `R3a:`
+smallest weight and the swinging parts. Tools: `RoomProbe` (`-paritycheck`, the `additive:`
 line, a bulb dropped at the new maximum) and `ModelProbe -name SWAT -shade N`.
 
 **Commits.** `1087750`, `80e070b`, `791d844`, `36c068a`, `c0f9ede`, `a1dbf32`
@@ -1810,7 +1810,7 @@ JOBY3 is `LVL5_SUBMARINE` and JOBY4 `LVL5_DEEPSEA_DIVE`, ANDREA2 is
 `RoomProbe` (`-noshore`, `-noupright`, `-roomplane`, `-plane`, `-watersurvey`, which
 prints per room how much of the `.TRG`'s cover is the Remaster's own water sheet, how
 many faces the room restores, the level's water frames, their cells, HD pages and
-rectangles, and a simulation of the classic rotation, `-flatart`, and the `R3b:` line
+rectangles, and a simulation of the classic rotation, `-flatart`, and the `water:` line
 with the water marks and the flooded count), `TrgProbe` (`-layer0`, `-surface`,
 `-watergap`, `-matparts`), `DdsProbe` (`-rows`, `-cut`), `Tr5Level`
 (`debugAnimTexBlock`).
@@ -1829,7 +1829,7 @@ ceiling out from the card) and `hd_texture_format` (string, default `rgba` = A8R
 lossless; `dxt5` = BC3, a quarter of the memory). When the pages do not fit the budget
 the biggest pages give up their top mip level, repeatedly if one pass is not enough and
 never past a page's last level; pages themselves are never dropped. The device's own
-limits are asked and answered: no `vs_3_0`/`ps_3_0`, fewer than 320 pixel-shader slots,
+limits are asked and answered: no `vs_3_0`/`ps_3_0`, fewer than 512 `ps_3_0` pixel-shader slots,
 no `UBYTE4` vertex element or no `A8R8G8B8` texture put the session on the classic path
 with one line in the log; no `DXT5` while `dxt5` is asked for falls quietly back to
 `rgba`; a `MaxTextureWidth/Height` below a page starts that page far enough down to fit;

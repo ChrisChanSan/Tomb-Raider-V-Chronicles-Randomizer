@@ -20,11 +20,11 @@ zone 1:  1622 sectors in 106 rooms
 zone 2:   564 sectors in  80 rooms
 never reached: 1577 walkable sectors
 untouchable items (FIXED_ITEMS) - must not be moved:
-  item   11 - skeleton (room 6) - scripted riser (user list) (room 6, typeId 73)
-  item    5 - skeleton (room 5) - scripted riser (user list) (room 5, typeId 73)
-  item    4 - skeleton (room 5) - scripted riser (user list) (room 5, typeId 73)
-  item   10 - skeleton (room 6) - scripted riser (user list) (room 6, typeId 73)
-  item    0 - skeleton (room 0) - scripted riser (user list) (room 0, typeId 73)
+  item   11 - skeleton (room 6) - scripted riser (room 6, typeId 73)
+  item    5 - skeleton (room 5) - scripted riser (room 5, typeId 73)
+  item    4 - skeleton (room 5) - scripted riser (room 5, typeId 73)
+  item   10 - skeleton (room 6) - scripted riser (room 6, typeId 73)
+  item    0 - skeleton (room 0) - scripted riser (room 0, typeId 73)
   item  107 - secret - stays in place until the dedicated secret list (room 103, typeId 223)
   item  142 - secret - stays in place until the dedicated secret list (room 163, typeId 223)
   item  156 - secret - stays in place until the dedicated secret list (room 251, typeId 223)

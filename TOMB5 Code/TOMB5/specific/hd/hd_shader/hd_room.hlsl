@@ -467,7 +467,7 @@ float4 gSpec : register(c19);
  * RICH1. The classic path has the same ceiling: RoomletFogBulbs is 16 and is
  * filled with no bound check. Each bulb costs about 4.5 instruction slots in
  * each of the two pixel shaders, room/model (6 -> 431/303, 8 -> 440/312,
- * 16 -> 476/348 of the 512 ps_3_0 guarantees; fxc 10.0.26100, 2026-09-23).
+ * 16 -> 476/348 of the 512 ps_3_0 guarantees; fxc 10.0.26100).
  * The count must match hd_model.hlsl and hd_render.h, which share registers
  * c40-c71. The `clipped` line in the log says when the limit bites, once per
  * level. */

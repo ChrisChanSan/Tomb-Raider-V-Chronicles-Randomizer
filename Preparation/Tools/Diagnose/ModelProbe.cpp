@@ -4374,9 +4374,9 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 
 	/* The regimes.
 	 *
-	 * The two "as built" lines are the ones that matter: an earlier engine
-	 * version
-	 * put both of its root/pack changes into the else half of HairControl - the half
+	 * The two "mixed" lines are the ones that matter: an earlier engine
+	 * version put both of its root/pack changes into the else half of
+	 * HairControl - the half
 	 * that runs on a frame the animation does not interpolate - and left the
 	 * interpolating half untouched. The engine takes one branch or the other
 	 * from frame to frame, so what the braid really saw was a root that

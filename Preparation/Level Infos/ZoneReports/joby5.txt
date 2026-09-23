@@ -30,7 +30,7 @@ zone 2:   101 sectors in  18 rooms
 never reached: 40 walkable sectors
 hand-barred (EXCLUDE_ROOMS): 10 sectors in 5 rooms - intended, not counted as a gap
 untouchable items (FIXED_ITEMS) - must not be moved:
-  item  145 - Crane Guy MIP (room 121) - cutscene double, stays vanilla (user list) (room 121, typeId 56)
+  item  145 - Crane Guy MIP (room 121) - cutscene double, stays vanilla (room 121, typeId 56)
   item   94 - secret - stays in place until the dedicated secret list (room 54, typeId 223)
   item  150 - secret - stays in place until the dedicated secret list (room 126, typeId 223)
 

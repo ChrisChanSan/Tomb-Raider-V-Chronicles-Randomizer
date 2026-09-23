@@ -1643,10 +1643,14 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	/* bshader.bat compiles both pixel shaders for ps_3_0, the room shader at
 	 * 476 instruction slots and the model shader at 348. The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
-	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512, the
-	 * same limit fxc compiles ps_3_0 against. A device that answers less
-	 * would fail CreatePixelShader below with nothing but an HRESULT, so it
-	 * is refused here with a reason in the log. A device that leaves the
+	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
+	 * does not hold a ps_3_0 shader to 512: a 24-bulb room shader compiles
+	 * at 524 slots without a warning. The two shaders stay inside the
+	 * guarantee only because of their own size, 476 and 348, so anyone who
+	 * grows one has to read the "instruction slots used" line of its .inc.
+	 * A device that answers less than 512 could fail CreatePixelShader below
+	 * with nothing but an HRESULT, so it is refused here with a reason in
+	 * the log. A device that leaves the
 	 * field at 0 is not refused here; CreatePixelShader then decides. */
 	if (g_caps.MaxPixelShader30InstructionSlots &&
 		g_caps.MaxPixelShader30InstructionSlots < D3DMIN30SHADERINSTRUCTIONS)

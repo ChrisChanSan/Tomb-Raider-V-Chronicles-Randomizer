@@ -1505,8 +1505,8 @@ values, in the same key as every other setting
 
 The floor is 2004 hardware, and there are four things the device itself has to
 have: **vertex and pixel shader 3.0** (a GeForce 6 or a Radeon X1000 and
-anything since), at least **320 pixel shader instruction slots** (shader model
-3 guarantees 512, and the room shader is 313), the **UBYTE4** vertex element
+anything since), at least **512 pixel shader 3.0 instruction slots** (what shader
+model 3 guarantees; the room shader uses 476), the **UBYTE4** vertex element
 the 20-byte vertex is built out of, and **A8R8G8B8 textures**. Miss one of
 those and the game runs classic for the rest of the session, with the reason in
 the log — nothing crashes and no message box appears. Textures up to **4096

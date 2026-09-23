@@ -37,8 +37,8 @@ zone 2:   140 sectors in   6 rooms
 never reached: 578 walkable sectors
 hand-barred (EXCLUDE_ROOMS): 2219 sectors in 25 rooms - intended, not counted as a gap
 untouchable items (FIXED_ITEMS) - must not be moved:
-  item   20 - sniper (room 19) - scripted, stays vanilla (user list) (room 19, typeId 83)
-  item   21 - sniper (room 21) - scripted, stays vanilla (user list) (room 21, typeId 83)
+  item   20 - sniper (room 19) - scripted, stays vanilla (room 19, typeId 83)
+  item   21 - sniper (room 21) - scripted, stays vanilla (room 21, typeId 83)
   item   22 - secret - stays in place until the dedicated secret list (room 23, typeId 223)
   item  108 - secret - stays in place until the dedicated secret list (room 76, typeId 223)
   item  172 - secret - stays in place until the dedicated secret list (room 146, typeId 223)

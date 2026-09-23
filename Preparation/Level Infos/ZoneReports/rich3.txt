@@ -57,8 +57,8 @@ stay vanilla (VANILLA_TYPES) - not in the pool: 342
 untouchable items (FIXED_ITEMS) - must not be moved:
   item   53 - SWAT+ (room 68) - hangs on the rope, stays vanilla for now (room 68, typeId 35)
   item   54 - SWAT (room 68) - hangs on the rope, stays vanilla for now (room 68, typeId 33)
-  item  200 - Hitman (room 183) - stays vanilla (user list) (room 183, typeId 67)
-  item  183 - Hitman (room 152) - stays vanilla (user list) (room 152, typeId 67)
+  item  200 - Hitman (room 183) - stays vanilla (room 183, typeId 67)
+  item  183 - Hitman (room 152) - stays vanilla (room 152, typeId 67)
   item   74 - secret - stays in place until the dedicated secret list (room 78, typeId 223)
   item  218 - secret - stays in place until the dedicated secret list (room 206, typeId 223)
   item  223 - secret - stays in place until the dedicated secret list (room 216, typeId 223)

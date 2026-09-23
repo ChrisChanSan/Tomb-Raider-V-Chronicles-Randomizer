@@ -52,7 +52,7 @@ Preparation/imgui-*/
 
 # Our own trview build (chreden/trview 2.9.1, GPL) plus a source copy - the
 # history lives with the upstream project, the EXE is a build artifact.
-# Build recipe see the task #105 context: 8.3 short path (spaces!),
+# Build recipe: 8.3 short path (spaces!),
 # DirectXTK shaders once by hand with fxc, PreBuildEvent quotes.
 Preparation/TRView for Tomb5 Rando/
 
@@ -60,7 +60,7 @@ Preparation/TRView for Tomb5 Rando/
 #
 # This project is under GPLv3 and ships no game data. Whoever wants the
 # dinosaurs must own Tomb Raider 3; the randomizer fetches them at runtime
-# from THEIR installation (#92). Everything lying around here while
+# from THEIR installation. Everything lying around here while
 # developing belongs to somebody else and must not enter the repository.
 #
 # See also the "Import-Export" folder next to the program - for the same
@@ -83,10 +83,10 @@ Outfit Test/
 *.bin
 Compy Sounds/
 
-# Generated WallTest levels (#61): derived game data, for trview only
+# Generated WallTest levels: derived game data, for trview only
 Preparation/WallTest/
 
-# Generated secret test levels (#53): derived game data
+# Generated secret test levels: derived game data
 Preparation/SecretTest/
 
 # Game data and third-party downloads - never version these
@@ -95,9 +95,8 @@ Tomb Raider 5 (I).iso
 Tomb Raider 5 Italy/
 Preparation/stb-master/
 
-# The user's game installation - never belongs in the repo. One rule is
-# enough; the eleven narrower ones that used to stand further up said the
-# same thing again. Nothing of ours lives in there any more - the setup
+# The player's game installation - never belongs in the repo. One rule is
+# enough. Nothing of ours lives in there any more - the setup
 # launcher moved to TR5Randomizer\setup.bat.
 Tomb5 Steam Version/
 

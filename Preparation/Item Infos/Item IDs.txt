@@ -37,7 +37,7 @@ Revolver 				347
 Revolver/Deagle_Ammo	348
 }
 
-// Added 2026-08-30: six enemy slots the randomizer itself uses, and a
+// Six enemy slots the randomizer itself uses, and a
 // warning. Four vanilla slots were repurposed for the Tomb Raider III
 // guests, so their enum NAME no longer says what stands there. Read the
 // number, not the name - and see Preparation\Enemies\Enemy Pools.txt.
@@ -48,7 +48,7 @@ Revolver/Deagle_Ammo	348
 //   460 = Guard (Joby) BLUE_GUARD2, an engine slot added by this project
 //   461 = Hammer statue ROMAN_GOD2, likewise - so 61 is the SWORD statue
 //         only
-//   469 = Cyborg CYBORG, likewise (#146) - the mortal version of the
+//   469 = Cyborg CYBORG, likewise - the mortal version of the
 //         HITMAN on 67, which stays immortal for rich3's puzzle. 468 and
 //         470 beside it are not enemies but mesh warehouses (the cyborg's
 //         and the crane guy's swap halves), see

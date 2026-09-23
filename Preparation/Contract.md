@@ -1,6 +1,6 @@
 # What the engine and the randomizer owe each other
 
-Written 2026-08-30. The two live in separate trees, `TOMB5 Code` and
+The two live in separate trees, `TOMB5 Code` and
 `TR5Randomizer`, and they are coupled in eight places. **Nothing
 enforces any of it.** Each coupling is described where its own half happens
 to sit, so changing one side and forgetting the other compiles cleanly, ships
@@ -23,7 +23,7 @@ into nothing.
 `MESHSWAP_CROSS_*` in `game/objects.h` name the SMASH_OBJECT slots the engine
 uses as fallback mesh warehouses; the randomizer fills them. The ids must be
 the same on both sides, and the document that got this wrong for weeks said
-3..6 while the header said 5..8. Since #146 that is 401-404, 462-468 and 470;
+3..6 while the header said 5..8. That is 401-404, 462-468 and 470;
 the full assignment is written down in
 `Preparation\Enemies\Cross Enemy Pool.txt`.
 *Both sides:* `game/objects.h` and the swap columns in `core/Randomizer.cpp`.
@@ -54,9 +54,9 @@ single room. Four of the sixteen words are in use; all seventeen shipped
 | word | written by | read by | meaning |
 |---|---|---|---|
 | `data[0]` | `Tr5Level::setLaraType` | `LaraDrawType = data[0] + LARA_NORMAL` | the outfit byte, and with it the braid handling in `hair.cpp` / `laraskin.cpp` |
-| `data[1]` | `setWeatherType` | `WeatherType`, read only by `DoWeather` | 0 dry, 1 rain, 2 snow (#144) |
+| `data[1]` | `setWeatherType` | `WeatherType`, read only by `DoWeather` | 0 dry, 1 rain, 2 snow |
 | `data[2]` | `setForeignTalkHeads` | `GfForeignSpeechHeads` | 1 = the outfit donor has no `LARA_SPEECH_HEAD1-4`, skip the cutscene head swap |
-| `data[3]` | `setHdOutfit`, value from `Patch::hdOutfitId` | `HDLaraOutfitFor`'s `tr3Outfit` argument (#123, stage S7-2) | which Tomb Raider III outfit the wardrobe rolled |
+| `data[3]` | `setHdOutfit`, value from `Patch::hdOutfitId` | `HDLaraOutfitFor`'s `tr3Outfit` argument | which Tomb Raider III outfit the wardrobe rolled |
 
 `data[3]` carries the engine's own `HD_LARA_OUTFIT_*` numbers so that neither
 side translates: 0 none, 5 `TR3_ANTARC`, 6 `TR3_NEVADA`, 7 `TR3_COAST`, 8
@@ -66,7 +66,7 @@ guest, and nothing else in the file tells the two apart. **If the enum in
 `specific\hd\hd_lara.h` is ever renumbered, `Patch::hdOutfitId` in
 `core/ApplyPatch.cpp` has to be renumbered with it.**
 
-**The engine's half is built (stage S7-2)**, and this is one of the few
+**The engine's half is built**, and this is one of the few
 couplings here that a build now catches: `specific/file.cpp` reads `data[3]`
 into `GfHdOutfit` beside `data[0..2]`, `specific/hd/hd_laradraw.cpp` hands it
 to `HDLaraOutfitFor` **unchanged**, and `specific/hd/hd_level.cpp` carries a
@@ -85,7 +85,7 @@ unbounded, so they go into `data\<LEVEL>.hdm` - plain text, first line
 even when empty; a missing file means "no markers". The grammar and the
 reference reader are `Tools\Diagnose\HdmDump.cpp`.
 
-**The engine's half is built (stage S7-2):** `specific/hd/hd_markers.cpp` is
+**The engine's half is built:** `specific/hd/hd_markers.cpp` is
 the engine's reader and answers the way `readHdm()` does on the same file -
 version 1 or the file is refused, a stray `\r` tolerated, an unknown line
 ignored and counted so a newer randomizer is visible rather than silent, a

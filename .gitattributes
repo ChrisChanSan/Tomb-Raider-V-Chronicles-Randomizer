@@ -27,12 +27,12 @@
 **/src/libs/stb/**           linguist-vendored
 
 # Generated, not written: 780 KB of zlib-packed level zones and checksum
-# lists as hex, produced by Preparation/Tools/EmbedData.ps1 (#142). Counted
+# lists as hex, produced by Preparation/Tools/EmbedData.ps1. Counted
 # as C++ it would swamp the language bar the same way zlib's contrib did.
 **/src/core/EmbeddedData.cpp linguist-generated
 
-# The HD shaders check out with LINE FEEDS on every machine (audit round A1,
-# #172). The engine has no runtime shader compiler: the bytecode travels as
+# The HD shaders check out with LINE FEEDS on every machine. The engine has
+# no runtime shader compiler: the bytecode travels as
 # .inc byte arrays beside the .hlsl it came from, and every .inc carries the
 # MD5 of that .hlsl on its last line so that be.bat can tell, without a build,
 # whether the two still belong together (bshader.bat, :stamp).

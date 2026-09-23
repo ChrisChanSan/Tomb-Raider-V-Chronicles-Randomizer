@@ -4,7 +4,7 @@ In TR5 he shall fill the Crow slot, with a view to the flight controls.
 
 Sounds I could find in TRview: Sample 104/map182(wing beat), Sample105/map183(Attack?), Sample106/map183(Attack?), Sample107/map184(Death), Sample108/map185(random sound when flying)
 
-Outcome, 2026-08-30: done as #103, slot 43, and the vulture is the ONLY
+Outcome: done, slot 43, and the vulture is the ONLY
 one of the four guests that does not come from Tomb Raider III. chunnel.tr2
 belongs to TR3 Gold / The Lost Artifact, which the randomizer treats as a
 separate installation with its own configured folder (tr3GoldDir) - without

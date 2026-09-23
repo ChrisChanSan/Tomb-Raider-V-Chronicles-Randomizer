@@ -3,22 +3,22 @@
 Everything here was read off the engine code (`TOMB5 Code\TOMB5`), not
 taken from community documentation.
 
-> **On the tools named below, 2026-08-30.** `FloorTool`, `DumpItems` and
+> **On the tools named below.** `FloorTool`, `DumpItems` and
 > `TRFile_RandomizerExport.cpp` appear in this text and nowhere else in
-> the repository. They belonged to an earlier workflow around
-> TombItemEdit2026, which is a separate program. What they measured is
+> the repository. They belong to a separate program,
+> TombItemEdit2026. What they measured is
 > measured today by the tools in `Preparation\Tools\Diagnose` -
 > `ItemCheck` for items and OCBs, `SectorCheck` and `FloorCheck` for
 > floordata, `TriggerCommands` for trigger chains.
 
-> **On the line numbers, 2026-08-30.** They were right when written and
-> they drift with every edit to the engine. **The symbol name is what is
+> **On the line numbers.** They drift with every edit to the engine.
+> **The symbol name is what is
 > authoritative here, not the number** - search for it rather than jumping
-> to the line. Measured today: everything in `global/types.h` has moved
+> to the line. Measured: everything in `global/types.h` has moved
 > down by exactly 60 lines, while `game/control.cpp` has drifted
 > unevenly (+1 for `GetHeight`, +23 for `_TestTriggers`), so there is no
-> single offset to apply. The structure and the reasoning below were
-> re-checked against the source and are unchanged.
+> single offset to apply. The structure and the reasoning below are
+> checked against the source.
 
 The decisive places:
 `GetHeight` (`game/control.cpp:960`) walks the chain,
@@ -146,7 +146,7 @@ FloorTool.
 
 ## 4. How changes are made: only append and repoint
 
-The user's requirement, the same as with the items: **add and replace, no
+The requirement, the same as with the items: **add and replace, no
 remove.** Here that is not a restriction but the solution.
 
 Floordata is a shared block that all sectors point into. Removing bytes
@@ -199,7 +199,7 @@ trigger yields a random trigger kind with random commands.
 
 Portals and tilts **alone**, by contrast, are harmless: they stand before
 the pointer, not behind it. A sector with pure geometry floordata is thus
-a valid target. The randomizer checks this in `canAppendTrigger` (`Tr5Level.cpp`). **2026-08-30:** this used to name a tool `FloorTool` and a function `darfAnhaengen()`; neither exists - the tool was never in the repository and the function was renamed when the project went English.
+a valid target. The randomizer checks this in `canAppendTrigger` (`Tr5Level.cpp`).
 
 ### There is enough room
 
@@ -248,21 +248,16 @@ triggers are the mass to work with.
 
 ### Decided on 2026-08-13: the items stay as curated
 
-After the count had shown that of 2044 items only **two** would be freed
-by trigger moving, the user closed the item branch:
-
-> "Ok dann lass die Items so lassen wie wir die manuell kurratiert haben.
-> Dann nutzen wir die Trigger nur für neue Gegner die wir dem Level
-> hinzufügen." (Leave the items as we hand-curated them; we use the
-> triggers only for new enemies added to the level.)
+Of 2044 items only **two** would be freed by trigger moving. The items
+stay as hand-curated; the triggers are used only for new enemies added to
+the level.
 
 Therefore:
 
 - The **general coupled move** of item and trigger is **not** pursued.
   The curation stays the yardstick.
-- **One exception**, also the user's requirement: **Andrea1 key 107** may
-  enter the pool, its pickup trigger travels along ("we only have to move
-  the trigger with it"). See 4e.
+- **One exception: Andrea1 key 107** may
+  enter the pool, its pickup trigger travels along. See 4e.
 - The actual purpose of the trigger work is **adding new enemies**. For
   that, no existing chain is touched — see 4f.
 
@@ -281,13 +276,12 @@ circumstances:
 Together that is over 400 of the 2057 triggers. They stay where they are,
 and the item on them stays pinned.
 
-**These items stay vanilla for now** (user decision):
+**These items stay vanilla:**
 
-> **Corrected 2026-08-30: nearly all of these have since been released.**
 > Of the eleven, only rich1 item 27 (the CD) is still pinned, and joby3
 > item 41 survives indirectly as typeId 172. Andrea2's valve 128 is
 > explicitly retired in `$FIXED_ITEMS` with the reason that the placement
-> does that job itself since #61. The authoritative list is
+> does that job itself. The authoritative list is
 > `$FIXED_ITEMS` in `ZoneAnalysis.ps1`, not this table.
 
 | Level | Items |
@@ -410,12 +404,13 @@ sectors before): he stays, pursues Lara across room borders, goes down to
 - **Andrea2's Larson (item 76) must never be moved.** The death check
   follows his placement, but the cutscene trigger lies fixed on `72,2,2`
   — otherwise the death cutscene never happens.
-- **His corpse used to remain standing.** His death animation (slot 45,
+- **In vanilla his corpse remains standing.** His death animation (slot 45,
   relative 15, frames 281..488) carries seven `PlaySound` commands and no
   anim command 4 (`KillItem`) — the dog has it, Larson does not, because
-  in vanilla his corpse is only cleaned up by the Andrea2 cutscene. Fixed
-  in our engine: `pierre.cpp` sets `after_death = 1` on the last frame,
-  the rest is done by `draw.cpp:742`. Recorded in `MODIFICATIONS.md`.
+  in vanilla his corpse is only cleaned up by the Andrea2 cutscene. The
+  engine sets it right: `pierre.cpp` sets `after_death = 1` on the last
+  frame, the rest is done by `draw.cpp:742`. Recorded in
+  `MODIFICATIONS.md`.
 
 ## 4c. What the OCB values really demand
 
@@ -455,22 +450,16 @@ before `TestLaraPosition` checks (`pickup.cpp:783` resp. `:872`). The
 angle thus determines from which direction Lara must approach. Floating
 freely it is collectable but looks wrong.
 
-Releasing it needs **three things, two of which were still missing**:
+Releasing it needs three things, all in place:
 
-> **Closed 2026-08-30.** Both gaps were filled when the wall-pickup work
-> (#61) shipped: the patch format carries `angle` for moved and for added
-> items and writes it into the item's yRot, and the placement picks the
-> wall edge and the matching angle itself, while KEEP_OCB preserves OCB 2
-> and 9. This section reads as an open to-do for a finished feature; it is
-> kept because the reasoning is still the reasoning.
-
-1. A **sector with a wall neighbor**. Data situation: present — the
-   sector export carries `isWall` per sector, the four neighbors in the
-   same room are checkable.
-2. Setting the **angle to match the wall**. **Missing:** the level export
-   delivered no item angle at all back then.
-3. Being able to **write** the angle. **Missing:** the patch format knew
-   no `angle`; a moved item deliberately kept its orientation.
+1. A **sector with a wall neighbor**. The sector export carries `isWall`
+   per sector, so the four neighbors in the same room are checkable.
+2. Setting the **angle to match the wall**. The level export delivers the
+   item angle.
+3. Being able to **write** the angle. The patch format carries `angle`
+   for moved and for added items and writes it into the item's yRot; the
+   placement picks the wall edge and the matching angle itself, while
+   KEEP_OCB preserves OCB 2 and 9.
 
 ## 4e. The one coupled move: Andrea1 key 107
 
@@ -518,7 +507,7 @@ sectors — more than enough for a single key.
 fixed place, just triggered at the new spot. That is accepted
 deliberately, because the trigger travels as a whole.
 
-**The flipmap copy (#147b).** The travelling trigger is written into the
+**The flipmap copy.** The travelling trigger is written into the
 flipmap partner of its NEW room too, by the same rules and the same
 `canAppendTrigger` guard as an enemy waker (section 4g, point 5) — a key
 whose pickup trigger sits in the variant of the room that is currently
@@ -530,7 +519,7 @@ the key.
 
 **Only the writing side is mirrored.** The trigger is taken out of the
 source sector alone, even when that room has a partner. Measured over all
-fifteen vanilla levels (2026-09-04): **not one** pickup trigger lying in a
+fifteen vanilla levels: **not one** pickup trigger lying in a
 room with a flipmap partner has a word-identical twin on the partner's same
 sector. The only pickup that exists in both variants at all is Andy2's item
 29 (rooms 30/113, sector 4,5), and the two entries differ — the base one
@@ -545,16 +534,13 @@ notes instead of leaving it to be found in game.
 ## 4f. New enemies: the strictest variant suffices
 
 For the actual purpose — **adding** enemies to the level — no existing
-chain is touched at all. New enemy triggers were meant to go exclusively
-onto sectors with `index == 0`: append a fresh chain at the end, repoint
-the sector, done.
-
-> **Corrected 2026-08-30.** The shipping rule is wider. A sector qualifies
-> when its chain passes `canAppendTrigger` - no trigger, lava, climb,
-> monkey or TrigTrigger entry in it. Sectors that already carry portals,
-> tilts, roof entries or NOCOL/SPLIT entries ARE accepted: their chain is
-> read out and rebuilt with the new trigger appended. Empty sectors are
-> the simple case, not the only one.
+chain is touched at all. A sector qualifies
+when its chain passes `canAppendTrigger` - no trigger, lava, climb,
+monkey or TrigTrigger entry in it. Sectors that already carry portals,
+tilts, roof entries or NOCOL/SPLIT entries ARE accepted: their chain is
+read out and rebuilt with the new trigger appended. Sectors with
+`index == 0` are the simple case, not the only one: append a fresh chain
+at the end, repoint the sector, done.
 
 That makes the check rule from section 5 trivial: **every sector with
 `index != 0` must stay byte-identical.** No decomposing, no reassigning
@@ -582,7 +568,7 @@ Room is plentiful — walkable sectors entirely without floordata:
 Even joby5 at the bottom has 190 free places. So the restriction costs
 nothing.
 
-**Placement** (the user's requirement): from the enemy, walk the flood
+**Placement:** from the enemy, walk the flood
 path backwards about 3 sectors. By construction that guarantees
 reachability, the right zone and that Lara crosses the trigger — and
 keeps the needed distance: if the trigger lies on the enemy's sector,
@@ -590,18 +576,17 @@ the enemy spawns into Lara.
 
 ## 4g. How a new enemy enters the level
 
-The path has stood end to end since 2026-08-13. Four stations:
+The path has four stations, end to end:
 
 **1. Curation** — `$ENEMY_TYPES` in `ZoneAnalysis.ps1`, per level a list
-of typeIds with a reason. It was deliberately empty until an enemy had
+of typeIds with a reason. An entry is added only once an enemy has
 proven in game that it works without a level script. Lands in the zone
 export as `enemyTypes`.
 
-> **2026-08-30: it has not been empty for a long time.** Essentially every
-> campaign level carries reasoned entries now - dog and Larson in Andrea1,
-> Pierre and the Roman god in Andrea2 and Andrea3, the Imp in the andy
-> levels, the Maze Monster in Andy2, guard and husky in joby2, and so on.
-> Read the table itself; it is the record.
+> Essentially every campaign level carries reasoned entries -
+> dog and Larson in Andrea1, Pierre and the Roman god in Andrea2 and
+> Andrea3, the Imp in the andy levels, the Maze Monster in Andy2, guard
+> and husky in joby2, and so on. Read the table itself; it is the record.
 
 **2. Approach sectors** — also `ZoneAnalysis.ps1`. For every item-capable
 sector, up to three sectors are provided that Lara steps on shortly
@@ -625,7 +610,7 @@ trigtrigger). The enemy comes as `itemAdds`, its trigger as
 
 **4. Writing** — `Tr5Level::addTrigger`, purely additive.
 
-**5. Flipmap copy (#147)** — every waker is written a second time, into the
+**5. Flipmap copy** — every waker is written a second time, into the
 flipmap partner of its room. `FlipMap()` (`game/control.cpp:2634`) swaps the
 two `ROOM_INFO` structs whole and then hands the base room its own item list
 back: the **items stay**, the **floordata is exchanged**. A trigger that
@@ -647,7 +632,7 @@ copied; the curated triggers of the secret lists are not.
 |---|---|
 | Never a trigger on the enemy's sector | otherwise the enemy spawns into Lara |
 | The trigger on the approach path | otherwise he never wakes up |
-| The trigger in **both** flip variants | after a flip the base room reads the partner's floordata (#147) |
+| The trigger in **both** flip variants | after a flip the base room reads the partner's floordata |
 | OneShot set | see 4b-ter — for Larson it decides over life and death |
 | OCB 0 | otherwise `ai_bits = GUARD` and he looks for AI objects that are not there |
 | At most 512 items | `MAX_ITEMS` (doubled from 256 - see Tomb5 Limits\Limits.txt); rich2 sits at 248 |
@@ -659,7 +644,7 @@ were rebuilt, 4 were added fresh. Items 151 → 157, file +202 bytes.
 
 ## 5. Check rule: the others' indices must stay in place
 
-The user's requirement, and the actual danger of the whole thing: **if
+The actual danger of the whole thing: **if
 the list shifts, everything is broken** — and silently at that, because a
 wrong index simply reads a different chain.
 
@@ -676,5 +661,5 @@ That is the same discipline that applies to the item indices, and the
 same with which the weapon imports were secured: do not look at the
 result, look at what must **not** have changed.
 
-A tool for this was still missing — it was the first thing to build,
-**before** the first write attempt.
+The check runs via `SectorCheck` and `FloorCheck`, before any write to
+floordata.

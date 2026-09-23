@@ -1,9 +1,7 @@
 Which enemies may be swapped for which, and which may not.
 
-Re-measured against the source on 2026-08-30. The original survey is from
-2026-08-02; everything the TR3 port, the cross pool and the balance file
-changed since then has been corrected here, and the entries that were right
-are unchanged.
+Measured against the source directly. Corrections from the TR3 port, the
+cross pool and the balance file are folded in here.
 
 The categories below are about TRIGGER WIRING, not difficulty. Whether an
 enemy may stand somewhere is decided by the pool tables in
@@ -12,7 +10,7 @@ kSpawnOcb) and by the per-level lists in Preparation\Tools\ZoneAnalysis.ps1.
 This document explains WHY those tables look the way they do.
 
 Independent of type: an added enemy's waker is written into the flipmap
-partner of its room as well (#147), because after a flip the base room reads
+partner of its room as well, because after a flip the base room reads
 the partner's floordata and a one-sided trigger never fires again. See
 Preparation\Trigger\Floordata and Triggers.md, section 4g.
 
@@ -47,16 +45,14 @@ Pool A enemy when the spot has patrol/ambush markers in range.
 
 	1 The soldier family, all on InitialiseSas/SasControl (sas.cpp):
 	  BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA, SCIENTIST, CRANE_GUY, BLUE_GUARD2
-	  CORRECTION 2026-08-30: this line used to begin with SAS and end with
-	  SAILOR. Both left the family when the TR3 guests took their slots.
-	  BLUE_GUARD2 (engine slot 460, added by this project) joined it: the
-	  joby guard model, so both guard models can exist in one level. It is
-	  also the animation anchor the rest of the family falls back to, and
-	  the chef borrows its death - see MODIFICATIONS.md.
+	  BLUE_GUARD2 (engine slot 460, added by this project) is also in the
+	  family: the joby guard model, so both guard models can exist in one
+	  level. It is also the animation anchor the rest of the family falls
+	  back to, and the chef borrows its death - see MODIFICATIONS.md.
 	2 MAFIA2 (mafia2.cpp)
 	3 PIERRE, LARSON (pierre.cpp)
 	4 HITMAN (hitman.cpp) - and with him engine slot 469, the cyborg this
-	  project added under #146: same control, same rules, but mortal. See
+	  project added: same control, same rules, but mortal. See
 	  the special cases below for why he needed a slot of his own.
 	5 HUSKIE (huskie.cpp) - slot 85, the husky. Not to be confused with
 	  DOG (41); upstream calls both "Dog".
@@ -68,29 +64,25 @@ Pool A enemy when the spot has patrol/ambush markers in range.
 	11 TWOGUN (twogun.cpp)
 	12 WILLOWISP, MAZE_MONSTER (willwisp.cpp)
 	13 GLADIATOR (gladiatr.cpp)
-	14 CHEF (chef.cpp) - moved here from the special cases on 2026-08-30,
-	  see below.
+	14 CHEF (chef.cpp) - see below.
 
-	REAPER used to stand in this list as "minisub.cpp, JellyControl". Slot
-	75 is the raptor now. JellyControl still exists in minisub.cpp but is
+	JellyControl still exists in minisub.cpp but is
 	assigned to no object at all - the jellyfish is gone from the game.
+	Slot 75 (REAPER) is the raptor now; see below.
 
-	TWOGUN, a note that is still true: he appears in the same deltapak.cpp
+	TWOGUN: he appears in the same deltapak.cpp
 	cutscene logic as the chef (stealth3_start/end), but TwogunControl has
 	a perfectly normal hit_points <= 0 check with its own death animation.
 	The cutscene is an optional stealth-kill bonus for him, not a
-	requirement. He was also once immune to normal weapon damage through
-	obj->undead = 1; that was removed and confirmed in game.
-	CORRECTION 2026-08-30: his health is 90, not the 60 this document gave
-	- raised again after the cross-mix playtest of 2026-08-15. And it is no
-	longer a constant to look up here: since #108 every enemy's health
-	comes from Balance.txt, where HP_TwoGun ships with 90.
+	requirement. obj->undead is not set for him, so normal weapon damage
+	applies. Health is not a constant to look up here: every enemy's
+	health comes from Balance.txt, where HP_TwoGun ships with 90.
 
 
 ================================================================
 The four TR3 guests
 ================================================================
-Added by this project (#88, #97, #99, #103). They occupy four object slots
+Added by this project. They occupy four object slots
 whose vanilla contents TR5 never used, so nothing was displaced:
 
 	SAS    (31) -> T-Rex,        InitialiseCreature / DinoControl
@@ -123,8 +115,8 @@ Special cases - own rules
 	  The pool gives it OCB 1 outside Andrea3 (kSpawnOcb) so it behaves as
 	  the sword version; the hammer version (461) gets OCB 0.
 
-	2 Guardian (guardian.cpp) - EXCLUDED FROM THE POOL, still, and this has
-	  not changed since 2026-08-02. The actual enemy is only the head with
+	2 Guardian (guardian.cpp) - EXCLUDED FROM THE POOL. The actual enemy is
+	  only the head with
 	  its two eyes; the cage parts around it are separate ANIMATING objects.
 	  InitialiseGuardian links them by searching the ENTIRE item list for
 	  the first object of a matching type - ANIMATING12 for the centre,
@@ -144,9 +136,7 @@ Special cases - own rules
 	    (always additionally X -= 256, y_rot fixed at 0x4000, and the start
 	    frame offset by 30*OCB so the heads do not move in lockstep)
 
-	  CORRECTION 2026-08-30: this document used to warn that the Hydra must
-	  never be caught by the blanket "OCB to 0" rule. What the code does is
-	  the opposite, and it is deliberate. Type 63 is not in KEEP_OCB, so a
+	  Type 63 is not in KEEP_OCB, so a
 	  placed Hydra gets OCB 0 and stands as a single centre head; the pool
 	  never moves a trio, because kHerds contains only the Compy. What the
 	  code demands instead is space: kSpaceNeeds gives type 63 a 3x3 window
@@ -154,34 +144,33 @@ Special cases - own rules
 	  vanilla Hydras are in fixedItems and are never touched, so the
 	  original chain of three stays intact wherever it already is.
 
-	  CORRECTION 2026-09-03: the threshold was all nine tiles until then,
-	  and measured over twenty seeds that discarded 93 percent of the
-	  placement spots - 0.65 Hydras per full run, not one of them through
-	  the swap, and in the Andy levels practically never. The user set it
-	  to 5 of 9 and gave up the arena idea behind the nine ("that was only
-	  a rough guideline"). At the same time the space rule moved into the
-	  swap's pre-filter: candidates are sifted BEFORE the roll, as the
-	  height rule already was, so a place that could take some kind is no
-	  longer left at vanilla just because the roll happened to hit the
-	  Hydra.
+	  A stricter threshold (all nine tiles) discards 93 percent of the
+	  placement spots, measured over twenty seeds: 0.65 Hydras per full
+	  run, not one of them through the swap, and in the Andy levels
+	  practically never. The nine-tile arena idea behind that stricter
+	  threshold is only a rough guideline, not a rule the placement has to
+	  satisfy. The space rule sits in the swap's pre-filter: candidates
+	  are sifted BEFORE the roll, as the height rule already is, so a
+	  place that could take some kind is not left at vanilla just because
+	  the roll happened to hit the Hydra.
 
-	  ADDITION 2026-09-04: with that threshold she came out at 4.2 per run
+	  With the 5-of-9 threshold she comes out at 4.2 per run
 	  (ten seeds over the twelve campaign levels, spread 1 to 9, Andrea2's
 	  three vanilla heads not counted) against 32 to 64 Compsognathi. The
 	  reason is not the threshold but the roll: every draw picks uniformly
 	  among the kinds that fit AT THAT SPOT, and the Hydra is only ever a
 	  candidate on open ground while a kind with no space rule is in every
-	  single list. The user therefore gave her a draw weight of 2
+	  single list. She therefore has a draw weight of 2
 	  (kDrawWeights in Randomizer.cpp): she stands twice in the candidate
 	  list and wins about twice as often WHERE SHE ALREADY QUALIFIED. No
 	  place changes by it, and a run in which she is deselected is bit for
-	  bit the run it was before - both measured on the same ten seeds:
-	  9.1 Hydras a run afterwards (spread 6 to 14, no other kind moved by
-	  more than about 8 percent), and with enemiesoff=63 all 120 outputs
-	  byte-identical to the old build.
+	  bit the run it is without her - both measured on the same ten seeds:
+	  9.1 Hydras a run when she is included (spread 6 to 14, no other kind
+	  moved by more than about 8 percent), and with enemiesoff=63 all 120
+	  outputs byte-identical to a build lacking her.
 
-	4 CHEF (chef.cpp, type 87) - NO LONGER A SPECIAL CASE. Fixed under #124
-	  and now an ordinary pool enemy.
+	4 CHEF (chef.cpp, type 87) - NOT A SPECIAL CASE. An ordinary pool
+	  enemy.
 	  What was true and is worth keeping: ChefControl never read hit_points,
 	  so weapon damage drained his health bar while his own logic ignored
 	  it - he stayed active forever. The only real death ran through the
@@ -202,7 +191,7 @@ Special cases - own rules
 	  were found this way - chef, skeleton, swamp witch. The check is one
 	  grep: hit_points in the enemy's own .cpp.
 
-	5 CYBORG (hitman.cpp, engine slot 469) - added under #146. The VCI
+	5 CYBORG (hitman.cpp, engine slot 469) - added by this project. The VCI
 	  android from rich3, Core's HITMAN. He is the SECOND road into the
 	  immortality bug above, and the grep for hit_points does not find it:
 	  HitmanControl reads them properly, but setup.cpp sets

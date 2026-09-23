@@ -1,9 +1,7 @@
 The cross-level enemy pool - what governs it
 
-Written 2026-08-30. Until then this folder answered only the question of
-2026-08-01: which enemies may be swapped for which WITHIN a level. The
-feature that actually ships is larger - an enemy can be fetched out of
-another level entirely - and nothing here described it.
+This document covers the larger feature: an enemy can be fetched out of
+another level entirely, not only swapped for another WITHIN a level.
 
 This file deliberately does NOT reproduce the pool table. That table is
 TR5Randomizer\src\core\Randomizer.cpp (kCross and its neighbours), it changes
@@ -29,7 +27,7 @@ one. Imported anywhere, he shoots in silence.
 So each pool row names a donor level, and each donor was chosen because the
 enemy really stands in it.
 
-The cyborg (#146) is the clean counter-example, and worth stating because it
+The cyborg is the clean counter-example, and worth stating because it
 shows what the rule buys. Only rich3 carries his model, and rich3 also holds
 his two vanilla instances - so his samples are packed there, all six of them,
 and every one hangs on an animation command. Phase D of the transfer picks
@@ -52,7 +50,7 @@ expensive to debug and worth stating here.
 The import brings the base with replace=false: if the target already has it,
 natively or from its own cross import, it stays.
 
-Since the #121 addendum the base is the guard 460, not 37. 460 always carries
+The base is the guard 460, not 37. 460 always carries
 the clean joby3 set, while slot 37 may hold a different model per level - the
 rich levels being the case that forced the change.
 
@@ -66,7 +64,7 @@ content of THAT level's own enemies, so an imported enemy would draw whatever
 the target happens to keep there, or, in the five levels without a 405, slot
 0, which is Lara.
 
-Since #111 each such type therefore has a fallback slot of his own, which the
+Each such type therefore has a fallback slot of his own, which the
 randomizer fills from a level that really carries his set (the swapFrom and
 swapDst columns of the pool table) and which the engine prefers over 405
 (MeshSwapSource in setup.cpp, named MESHSWAP_CROSS_* in objects.h). Both
@@ -85,9 +83,9 @@ family 10 and 13, the imp 10, Two Gun 2, the gladiator 0 to 15, the Roman god
 0 to 16, and the cyborg all twenty. He is the largest case in the project -
 his damage skin is the whole model over again.
 
-The crane guy (470) was the last type still hanging raw on 405. The case had
-gone unnoticed for months because his halves are only ever shown at OCB 3,
-OCB 4 and SasControl state 37, and the pool places every enemy with OCB 0.
+The crane guy (470) is a case that is easy to miss: his halves are only ever
+shown at OCB 3, OCB 4 and SasControl state 37, while the pool places every
+enemy with OCB 0.
 
 Two donors here differ from the model donor, and for the same reason both
 times - the model level has no MESHSWAP1 at all: the guard's hands come from
@@ -118,14 +116,14 @@ PLACING
 Four small tables decide what a placed enemy needs:
 
   kSpaceNeeds   how much free room. The Hydra (63) needs a 3x3 window
-                around her with at least 5 of its 9 tiles free (user
-                decision 2026-09-03; it used to be all nine, and that
-                threw away 93 percent of the spots).
+                around her with at least 5 of its 9 tiles free (a
+                stricter threshold of all nine tiles throws away 93
+                percent of the spots).
   kDrawWeights  how many tickets a kind holds in the roll. Only the Hydra
-                (63), with 2 (user decision 2026-09-04). Each roll picks
+                (63), with 2. Each roll picks
                 uniformly among the kinds that fit at that very spot, so a
                 kind the space rule keeps off most spots stays rare - she
-                measured 4.2 a run against 32 to 64 Compsognathi. The
+                measures 4.2 a run against 32 to 64 Compsognathi. The
                 weight only makes her win more often where she already
                 qualified; it opens no new place, and a kind with weight 1
                 keeps its single entry and its order.
@@ -165,7 +163,7 @@ Four checks, each of which has caught something:
    does not find it: objects[...].undead in setup.cpp. The flag makes
    larafire.cpp skip the damage entirely (the grenade checks it too), so
    the control may read hit_points as diligently as it likes - nothing ever
-   subtracts from them. The cyborg (#146) is the case: in vanilla he dies
+   subtracts from them. The cyborg is the case: in vanilla he dies
    only through rich3's own geometry, its gas rooms and a short circuit in
    water, neither of which exists in another level. Two enemies carried the
    flag; Two Gun's was removed and confirmed in game, and for the cyborg
@@ -174,5 +172,5 @@ Four checks, each of which has caught something:
    the control, and undead in setup.cpp.
 3. Does it need AI markers (Pool A) or not (Pool B)? See Enemy Pools.txt.
 4. Does it hang on a level script or a cutscene? The chef did, through
-   deltapak.cpp, and that is why he was excluded for weeks. The other
+   deltapak.cpp, which is why he was excluded. The other
    functions in that file have never been gone through the same way.

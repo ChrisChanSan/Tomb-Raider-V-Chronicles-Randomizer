@@ -1,10 +1,9 @@
 Special Thanks to all of these awesome people. All of these made It possible to build this randomizer.
 
 Tomb5 Decompile: https://github.com/Trxyebeep/TOMB5
-  Troye (Trxyebeep), ChocolateFan, thatguyfrombb and Raildex.
-  (Corrected 2026-08-30: this line named only Trxyebeep. The credits
+  Troye (Trxyebeep), ChocolateFan, thatguyfrombb and Raildex. The credits
   screen in the game and README.md both name all four, and their code is
-  in every binary built here.)
+  in every binary built here.
 
 tomb3 Decompile: https://github.com/Trxyebeep/tomb3 (Trxyebeep) - the TR3 enemies (T-Rex, Raptor, Compy, Vulture) come from there
 
@@ -14,8 +13,6 @@ TROne (GPLv3): https://github.com/todesengel1931 (Todesengel1931) - the
   here name his copyright beside ours; THIRD-PARTY.md lists what was taken,
   file by file. He is in the contributors list below as well, because he
   played and reported too.
-  (Added in audit round A1, 2026-09-21: until then he appeared only as a
-  play tester, which is not what the code says.)
 
 Trview: https://github.com/chreden/trview (Chreden)
 
@@ -35,8 +32,6 @@ TRForge (MIT, TRForge contributors): five files are vendored byte for byte
   geometry and the helpers it needs. TRForge's own format descriptions are
   where several more of the HD path's rules come from. Licence and
   provenance: TOMB5 Code\TOMB5\vendor\trforge\.
-  (Added in audit round A1, 2026-09-21: it was compiled in and named
-  nowhere here.)
 
 discord-rpc: https://github.com/discord/discord-rpc (Discord, Inc.) - in
   the source tree as upstream TOMB5 shipped it, and switched off here:
@@ -45,11 +40,8 @@ discord-rpc: https://github.com/discord/discord-rpc (Discord, Inc.) - in
   no symbol referenced nothing of them is pulled in - the shipped
   PCtomb5.exe carries no occurrence of the word Discord at all. Its
   notice travels all the same, because this project distributes the files.
-  (Corrected in audit round A1, 2026-09-21: this entry used to say the
-  library was linked and that tomb5.cpp called it. Neither has been true
-  since 2026-08-05.)
-  (zlib and discord-rpc were both added 2026-08-30. See THIRD-PARTY.md at
-  the repository root for the licences and where each full text lives.)
+  See THIRD-PARTY.md at
+  the repository root for the licences and where each full text lives.
 
 Tomb Raider Chronicles(2000): https://core-design.com/
 

@@ -8096,6 +8096,196 @@ static void ledge_hang()
 	ok(ModernStateAllowsAirTurn(139) == 0, "ledge: ...no air turn", ModernStateAllowsAirTurn(139), 0);
 }
 
+/* The ledge hang's trigger: the quad she hangs with, the distance to the
+ * edge per cardinal, the step onto the standing line, and the fire rule of
+ * the direct stop - the arithmetic lara.cpp's LaraLedgeTrigger applies. The
+ * engine's own formulas (LaraLedgeSpots' standing line, LaraLedgeDist) are
+ * written out here as the reference. */
+static long ledge_line_ref(long quad, long c)
+{
+	switch (quad)
+	{
+	case 0:
+	case 1:
+		return (c & ~1023L) + MODERN_LEDGE_STAND_IN;
+
+	default:
+		return (c | 1023L) - MODERN_LEDGE_STAND_IN;
+	}
+}
+
+static long ledge_dist_ref(long quad, long c)
+{
+	return (quad < 2) ? c - (c & ~1023L) : (c | 1023L) - c;
+}
+
+static void ledge_trigger()
+{
+	const short cardinals[4] = { 0, 0x4000, -0x8000, -0x4000 };
+	const long want_quad[4] = { 2, 3, 0, 1 };
+	const long bases[3] = { 0, 5 * 1024, 37 * 1024 };
+	const long speeds[5] = { 0, 15, 23, 38, 47 };
+	long q, b, o, i, d, sp, shift, fired, bad, total;
+
+	printf("\nthe ledge hang - the trigger\n");
+
+	ok(MODERN_LEDGE_NEAR == 512, "ledge trigger: LEDGELOG's reach is half a sector", MODERN_LEDGE_NEAR, 512);
+
+	/* The quad she hangs with is two round from the approach, and it is the
+	 * quad of the approach turned half round. */
+	for (i = 0; i < 4; i++)
+	{
+		const short hang = (short)(cardinals[i] + 0x8000);
+
+		ok(ModernLedgeHangQuad(cardinals[i]) == want_quad[i], "ledge trigger: hang quad of each approach",
+			ModernLedgeHangQuad(cardinals[i]), want_quad[i]);
+		ok(ModernLedgeHangQuad(cardinals[i]) == (long)((unsigned short)(hang + 0x2000) / 0x4000),
+			"ledge trigger: ...the quad of the heading turned half round", ModernLedgeHangQuad(cardinals[i]),
+			(long)((unsigned short)(hang + 0x2000) / 0x4000));
+	}
+
+	/* The distance, every unit of a sector in three sectors, per quad, against
+	 * the engine's formula; the other coordinate does not count. */
+	bad = 0;
+	total = 0;
+
+	for (q = 0; q < 4; q++)
+		for (b = 0; b < 3; b++)
+			for (o = 0; o < 1024; o++)
+			{
+				const long c = bases[b] + o;
+				const long x = (q & 1) ? c : 777 + o;
+				const long z = (q & 1) ? 777 + o : c;
+				const long want = ledge_dist_ref(q, c);
+
+				total++;
+
+				if (ModernLedgeEdgeDist(q, x, z) != want || want != ((q < 2) ? o : 1023 - o))
+					bad++;
+			}
+
+	ok(bad == 0, "ledge trigger: edge distance per quad = the engine's, 0 on the edge unit", bad, 0);
+	ok(total == 4 * 3 * 1024, "ledge trigger: ...over every unit of three sectors", total, 4 * 3 * 1024);
+	ok(ModernLedgeEdgeDist(4, 100, 100) == -1, "ledge trigger: a quad outside the four has no distance",
+		ModernLedgeEdgeDist(4, 100, 100), -1);
+
+	/* The fire rule and the step, per quad, for every unit of a sector and
+	 * each speed: it fires exactly from 15 past the line to one step short of
+	 * it; a point short of the line lands on the engine's standing line, one
+	 * past it is not moved; the move is toward the drop only and at most one
+	 * step; the other coordinate is kept. */
+	bad = 0;
+	total = 0;
+
+	for (q = 0; q < 4; q++)
+		for (i = 0; i < 5; i++)
+			for (o = 0; o < 1024; o++)
+			{
+				const long c = bases[1] + o;
+				long x = (q & 1) ? c : 3000;
+				long z = (q & 1) ? 3000 : c;
+				const long step = (speeds[i] > MODERN_LEDGE_RESIDUAL) ? speeds[i] : MODERN_LEDGE_RESIDUAL;
+				long moved, other, after;
+
+				sp = speeds[i];
+				d = ModernLedgeEdgeDist(q, x, z);
+				fired = ModernLedgeFire(d, sp, &shift);
+				total++;
+
+				if (fired != (d >= MODERN_LEDGE_STAND_IN - MODERN_LEDGE_RESIDUAL && d <= MODERN_LEDGE_STAND_IN + step))
+				{
+					bad++;
+					continue;
+				}
+
+				if (!fired)
+				{
+					if (shift != 0)
+						bad++;
+
+					continue;
+				}
+
+				if (shift < 0 || shift > step)
+					bad++;
+
+				ModernLedgeStep(q, shift, &x, &z);
+				moved = (q & 1) ? x : z;
+				other = (q & 1) ? z : x;
+				after = ModernLedgeEdgeDist(q, x, z);
+
+				if (other != 3000 || d - after != shift)
+					bad++;
+
+				if (d >= MODERN_LEDGE_STAND_IN && (moved != ledge_line_ref(q, c) || after != MODERN_LEDGE_STAND_IN))
+					bad++;
+
+				if (d < MODERN_LEDGE_STAND_IN && moved != c)
+					bad++;
+			}
+
+	ok(bad == 0, "ledge trigger: fire window, step onto the line, never backwards", bad, 0);
+	ok(total == 4 * 5 * 1024, "ledge trigger: ...every unit of a sector, five speeds, four quads", total,
+		4 * 5 * 1024);
+
+	/* The run at 47 a tick, the table: arriving at 0..146 units from the edge
+	 * after the tick's movement. */
+	for (d = 0; d <= 146; d++)
+	{
+		fired = ModernLedgeFire(d, 47, &shift);
+
+		if (d < 84)
+			ok(!fired, "ledge trigger: run past the line by more than the residual does not start", d, -1);
+		else
+		{
+			ok(fired, "ledge trigger: run inside the window starts", d, 1);
+			ok(shift == ((d > MODERN_LEDGE_STAND_IN) ? d - MODERN_LEDGE_STAND_IN : 0),
+				"ledge trigger: run shift is what is left to the line", shift,
+				(d > MODERN_LEDGE_STAND_IN) ? d - MODERN_LEDGE_STAND_IN : 0);
+		}
+	}
+
+	ok(!ModernLedgeFire(147, 47, &shift), "ledge trigger: a run one step and a unit short waits a tick", 147, 0);
+
+	/* A steady approach never passes the window: from every start far enough
+	 * out, stepping `speed` a tick, the first tick that fires lies between the
+	 * line and one step short of it. 38 is a run at the edge of the catch's
+	 * window (47 cos 34.6 degrees). */
+	for (i = 1; i < 5; i++)
+	{
+		sp = speeds[i];
+		bad = 0;
+
+		for (o = MODERN_LEDGE_STAND_IN + sp + 1; o <= 1023; o++)
+		{
+			d = o;
+			fired = 0;
+
+			while (d >= 0 && !(fired = ModernLedgeFire(d, sp, &shift)))
+				d -= sp;
+
+			if (!fired || d < MODERN_LEDGE_STAND_IN || shift != d - MODERN_LEDGE_STAND_IN || shift > sp)
+				bad++;
+		}
+
+		ok(bad == 0, "ledge trigger: a steady approach starts between the line and one step short", bad, 0);
+	}
+
+	/* The stand and the walk's own edge stop, 101 units out: 2 forward. */
+	ok(ModernLedgeFire(101, 0, &shift) && shift == 2, "ledge trigger: from the walk's own stop, 2 forward",
+		shift, 2);
+	ok(ModernLedgeFire(MODERN_LEDGE_STAND_IN + MODERN_LEDGE_RESIDUAL, 0, &shift) && shift == MODERN_LEDGE_RESIDUAL,
+		"ledge trigger: a stand a walk step short of the line", shift, MODERN_LEDGE_RESIDUAL);
+	ok(!ModernLedgeFire(MODERN_LEDGE_STAND_IN + MODERN_LEDGE_RESIDUAL + 1, 0, &shift),
+		"ledge trigger: ...and not a unit farther", shift, 0);
+	ok(ModernLedgeFire(MODERN_LEDGE_STAND_IN - MODERN_LEDGE_RESIDUAL, 0, &shift) && shift == 0,
+		"ledge trigger: a stand a walk step past the line starts where she is", shift, 0);
+	ok(!ModernLedgeFire(MODERN_LEDGE_STAND_IN - MODERN_LEDGE_RESIDUAL - 1, 0, &shift),
+		"ledge trigger: ...and not a unit past that", shift, 0);
+	ok(!ModernLedgeFire(-1, 47, &shift) && !ModernLedgeFire(1024, 47, &shift),
+		"ledge trigger: a distance outside the sector never starts", shift, 0);
+}
+
 /* ------------------------------------------------------ what is not ours --- */
 
 static void deferred()
@@ -8169,6 +8359,7 @@ int main()
 	camera_pull();
 	camera_flip();
 	ledge_hang();
+	ledge_trigger();
 	deferred();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

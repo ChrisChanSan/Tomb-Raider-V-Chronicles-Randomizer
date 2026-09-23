@@ -433,7 +433,11 @@ enum modern_constants
 	 * a walk or a stand lies off it. */
 	MODERN_LEDGE_HANG_OUT = 100,		// the catch's own snap, outside the boundary
 	MODERN_LEDGE_STAND_IN = 99,		// the standing line, inside the boundary
-	MODERN_LEDGE_RESIDUAL = 15		// a walk step: the most a walk or a stand lies off the line
+	MODERN_LEDGE_RESIDUAL = 15,		// a walk step: the most a walk or a stand lies off the line
+
+	/* How near the edge ahead LEDGELOG reports the refusal set while the grab
+	 * key is held: half a sector, about eleven run steps. */
+	MODERN_LEDGE_NEAR = 512
 };
 
 /* The thresholds, in one place, filled by ModernDefaults(). Every field is a
@@ -636,3 +640,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out);
 long ModernLedgeTurnStep(long tick);
 long ModernLedgeDecide(const MODERN_LEDGE_SITUATION* sit, MODERN_LEDGE_RESULT* out);
+long ModernLedgeHangQuad(short approach);
+long ModernLedgeEdgeDist(long quad, long x, long z);
+void ModernLedgeStep(long quad, long shift, long* x, long* z);
+long ModernLedgeFire(long dist, long speed, long* shift);

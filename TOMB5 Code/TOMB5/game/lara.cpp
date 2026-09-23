@@ -1053,6 +1053,12 @@ void lara_col_walk(ITEM_INFO* item, COLL_INFO* coll)
 	if (LaraHitCeiling(item, coll))
 		return;
 
+	/* The ledge hang (option and Modern controls): at an edge ahead she is
+	 * stopped on the standing line and the move takes over; the rest of the
+	 * routine would shift her back from the edge. */
+	if (tomb5.ledge_hang && tomb5.control_modern && LaraLedgeTrigger(item, coll, LEDGE_FROM_WALK))
+		return;
+
 	if (TestLaraVault(item, coll))
 		return;
 
@@ -1346,6 +1352,12 @@ void lara_col_run(ITEM_INFO* item, COLL_INFO* coll)
 	if (LaraHitCeiling(item, coll))
 		return;
 
+	/* The ledge hang (option and Modern controls): at an edge ahead she is
+	 * stopped on the standing line and the move takes over; the rest of the
+	 * routine would let her run off. */
+	if (tomb5.ledge_hang && tomb5.control_modern && LaraLedgeTrigger(item, coll, LEDGE_FROM_RUN))
+		return;
+
 	if (TestLaraVault(item, coll))
 		return;
 
@@ -1555,6 +1567,12 @@ void lara_col_stop(ITEM_INFO* item, COLL_INFO* coll)
 	GetLaraCollisionInfo(item, coll);
 
 	if (LaraHitCeiling(item, coll))
+		return;
+
+	/* The ledge hang (option and Modern controls): standing at an edge and
+	 * pushing toward it, she is put on the standing line and the move takes
+	 * over; the rest of the routine would shift her back from the edge. */
+	if (tomb5.ledge_hang && tomb5.control_modern && LaraLedgeTrigger(item, coll, LEDGE_FROM_STAND))
 		return;
 
 	if (LaraFallen(item, coll))
@@ -6617,6 +6635,115 @@ void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll)
 
 		break;
 	}
+}
+
+/* The trigger, asked by lara_col_run, lara_col_walk and lara_col_stop after
+ * their GetLaraCollisionInfo and ceiling test, when this tick's AnimateLara
+ * has moved her. It starts the move when the grab key is held (IN_ACTION:
+ * the action key under "One key", the Secondary under "Separate"; on the
+ * ground Grab mode Toggle passes the key as it is) without Jump, she heads
+ * within the catch's window of a cardinal, stands on the ledge's floor, the
+ * line is near by ModernLedgeFire and LaraLedgeRefusals finds nothing (its
+ * LARA row keeps the weapons away). A walk and a stand need the stick
+ * pushed; a run does not, so braking is caught too. A standing state that
+ * became a run or a walk this tick is judged at coll->old, where she stood:
+ * the start of a run carries her 23 units in a position never drawn.
+ * On a start she is put on the line, never behind where the last tick left
+ * her (past it she stays where she is), faces the cardinal and
+ * enters AS_LEDGEHANG; the caller returns at once. Otherwise item, coll and
+ * the probe globals are left as they were. */
+long LaraLedgeTrigger(ITEM_INFO* item, COLL_INFO* coll, long from)
+{
+	static long near_logged = -1;
+	PHD_3DPOS moved;
+	long stood, quad, dist, refusals, speed, shift;
+	short approach;
+
+	if (!LaraLedgeGate() || (from == LEDGE_FROM_STAND && item->current_anim_state != AS_STOP))
+		return 0;
+
+	approach = LaraLedgeCardinal(item->pos.y_rot);
+
+	if (!(input & IN_ACTION) || (approach & 0x3FFF) || coll->mid_floor == NO_HEIGHT || coll->mid_floor > 384)
+	{
+		near_logged = -1;
+		return 0;
+	}
+
+	/* The four states LaraCollideStop treats as standing. */
+	stood = from == LEDGE_FROM_STAND || coll->old_anim_state == AS_STOP || coll->old_anim_state == AS_TURN_L ||
+		coll->old_anim_state == AS_TURN_R || coll->old_anim_state == AS_FASTTURN;
+	moved = item->pos;
+
+	if (stood && from != LEDGE_FROM_STAND)
+	{
+		item->pos.x_pos = coll->old.x;
+		item->pos.y_pos = coll->old.y;
+		item->pos.z_pos = coll->old.z;
+	}
+
+	quad = ModernLedgeHangQuad(approach);
+	dist = ModernLedgeEdgeDist(quad, item->pos.x_pos, item->pos.z_pos);
+
+	if (dist > MODERN_LEDGE_NEAR)
+	{
+		item->pos = moved;
+		near_logged = -1;
+		return 0;
+	}
+
+	refusals = LaraLedgeRefusals(item, coll, (short)(approach + 0x8000));
+
+	/* LEDGELOG near edge, behind -log, on a change of the refusal set while
+	 * the key is held and an edge (a drop the SHALLOW row accepts) lies within
+	 * MODERN_LEDGE_NEAR ahead:
+	 *   dist    units to the outermost unit of the ledge, 99 on the line
+	 *   refuse  LaraLedgeRefusals' bits (LEDGE_REFUSE_*), 0x0 = it would start */
+	if (refusals & LEDGE_REFUSE_SHALLOW)
+		near_logged = -1;
+	else if (refusals != near_logged)
+	{
+		near_logged = refusals;
+
+		if (gLogEnabled)
+			Log("LEDGELOG near edge dist=%ld refuse=0x%lX", dist, refusals);
+	}
+
+	speed = stood ? 0 : item->speed * phd_cos((short)(item->pos.y_rot - approach)) >> W2V_SHIFT;
+
+	if ((input & IN_JUMP) || ((stood || from == LEDGE_FROM_WALK) && !(input & IN_FORWARD)) || refusals ||
+		!ModernLedgeFire(dist, speed, &shift))
+	{
+		item->pos = moved;
+		return 0;
+	}
+
+	ModernLedgeStep(quad, shift, &item->pos.x_pos, &item->pos.z_pos);
+	item->pos.y_rot = approach;
+	LedgeHeading = (short)(approach + 0x8000);
+	LedgePhase = MODERN_LEDGE_TURN;
+	item->anim_number = ANIM_BREATH;
+	item->frame_number = anims[ANIM_BREATH].frame_base;
+	item->current_anim_state = AS_LEDGEHANG;
+	item->goal_anim_state = AS_LEDGEHANG;
+	item->speed = 0;
+	item->fallspeed = 0;
+	item->gravity_status = 0;
+	near_logged = -1;
+
+	/* LEDGELOG fire, behind -log, once per start:
+	 *   from    the routine that started it: run, walk, stand (a standing
+	 *           state judged at coll->old counts as stand)
+	 *   dist    ModernLedgeEdgeDist before the shift, 99 on the line
+	 *   speed   her speed along the axis the fire rule was given
+	 *   shift   units she was put forward onto the line
+	 *   pos     where she starts the turn */
+	if (gLogEnabled)
+		Log("LEDGELOG fire from=%s dist=%ld speed=%ld shift=%ld pos=%ld,%ld,%ld",
+			stood ? "stand" : (from == LEDGE_FROM_WALK ? "walk" : "run"), dist, speed, shift,
+			item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
+
+	return 1;
 }
 
 /* The two fields a savegame keeps: the phase only while she is in the state,

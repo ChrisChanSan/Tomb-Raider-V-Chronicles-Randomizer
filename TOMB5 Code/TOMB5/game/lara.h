@@ -207,6 +207,16 @@ enum lara_ledge_refusal
 };
 
 long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir);
+
+/* Which collision routine asks LaraLedgeTrigger. */
+enum lara_ledge_from
+{
+	LEDGE_FROM_RUN,		// lara_col_run
+	LEDGE_FROM_WALK,	// lara_col_walk
+	LEDGE_FROM_STAND	// lara_col_stop
+};
+
+long LaraLedgeTrigger(ITEM_INFO* item, COLL_INFO* coll, long from);
 void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll);
 long LaraLedgeReversing(ITEM_INFO* item);
 void LaraLedgeSave(uchar* phase, short* heading);

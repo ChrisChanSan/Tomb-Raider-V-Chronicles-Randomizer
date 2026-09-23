@@ -1771,3 +1771,93 @@ long ModernLedgeDecide(const MODERN_LEDGE_SITUATION* sit, MODERN_LEDGE_RESULT* o
 	out->verdict = MODERN_LEDGE_STAND;
 	return out->verdict;
 }
+
+/* The ledge hang's trigger, the arithmetic of it. A quad is the engine's
+ * quadrant number of a heading, (ushort)(y_rot + 0x2000) / 0x4000: 0 facing
+ * +z, 1 facing +x, 2 facing -z, 3 facing -x (NORTH, EAST, SOUTH, WEST in
+ * global\types.h). The quad a ledge function takes is always the heading she
+ * hangs with, which faces away from the drop.
+ *
+ * She runs toward the drop on the cardinal `approach`, and hangs facing the
+ * other way: the quad two round from the approach's. */
+long ModernLedgeHangQuad(short approach)
+{
+	return (((unsigned short)(approach + 0x2000) / 0x4000) + 2) & 3;
+}
+
+/* Units from (x, z) to the outermost unit of its sector on the drop side,
+ * along the axis: 0 on that unit, 1023 on the far one. The drop lies at -z
+ * for quad 0, at -x for 1, at +z for 2 and at +x for 3. The standing line is
+ * at MODERN_LEDGE_STAND_IN; a quad outside the four gives -1. */
+long ModernLedgeEdgeDist(long quad, long x, long z)
+{
+	switch (quad)
+	{
+	case 0:
+		return z & 1023;
+
+	case 1:
+		return x & 1023;
+
+	case 2:
+		return 1023 - (z & 1023);
+
+	case 3:
+		return 1023 - (x & 1023);
+	}
+
+	return -1;
+}
+
+/* Moves (x, z) `shift` units along the axis toward the drop, the direction
+ * she runs in; the other coordinate is kept. With the shift ModernLedgeFire
+ * returns, a point short of the standing line lands on it exactly. */
+void ModernLedgeStep(long quad, long shift, long* x, long* z)
+{
+	switch (quad)
+	{
+	case 0:
+		*z -= shift;
+		break;
+
+	case 1:
+		*x -= shift;
+		break;
+
+	case 2:
+		*z += shift;
+		break;
+
+	case 3:
+		*x += shift;
+		break;
+	}
+}
+
+/* The direct stop: whether the move starts on this tick, and how far forward
+ * to put her. `dist` is ModernLedgeEdgeDist of her position after this
+ * tick's movement, `speed` her speed along the axis - a run's 47, a walk's
+ * 15, 0 for a stand.
+ *
+ * A moving Lara starts when she would reach the standing line on the next
+ * tick (dist - MODERN_LEDGE_STAND_IN <= speed) and is put on it: the shift
+ * is what is left to the line, 0 to one step, and never backwards. A stand
+ * starts within MODERN_LEDGE_RESIDUAL of the line either side (the walk's own
+ * edge stop leaves her 2 short of it). Past the line by more than the
+ * residual she does not start, and past the edge is not this sector's edge
+ * at all. */
+long ModernLedgeFire(long dist, long speed, long* shift)
+{
+	const long step = (speed > MODERN_LEDGE_RESIDUAL) ? speed : MODERN_LEDGE_RESIDUAL;
+	const long off = dist - MODERN_LEDGE_STAND_IN;
+
+	*shift = 0;
+
+	if (dist < 0 || dist > 1023 || off < -MODERN_LEDGE_RESIDUAL || off > step)
+		return 0;
+
+	if (off > 0)
+		*shift = off;
+
+	return 1;
+}

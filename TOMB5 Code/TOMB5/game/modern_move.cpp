@@ -469,6 +469,11 @@ long ModernStateIsClassic(short anim_state)
 	case 138:	// AS_CLIMB2DUCK, lara_as_null - ladder to crouch
 		return 1;
 
+	/* The ledge hang: the move turns her and lowers her itself (ModernLedgeDecide);
+	 * a stick steering her heading would pull the turn off its cardinal. */
+	case 139:	// AS_LEDGEHANG, lara_as_ledgehang
+		return 1;
+
 	/* Everything else gets the translation: standing, running, walking, the
 	 * jumps other than the three flips above (3, 28, 29), turning, falling,
 	 * ducking (71/72/105/106), crawling (80/81/84-86), stepping (21/22) and a
@@ -1666,4 +1671,103 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	out->delta = delta;
 	out->mode = MODERN_MODE_RUN;
 	ModernFinish(state, out);
+}
+
+/* One tick of the ledge hang's half turn: the ramp HALF_TURN * t / TICKS in
+ * whole units, differenced, so the steps add up to the half turn exactly for
+ * any tick count (8 ticks give 4096 each). The turn goes the positive way,
+ * which is the way IN_RIGHT turns her. 0 outside the turn. */
+long ModernLedgeTurnStep(long tick)
+{
+	if (tick < 0 || tick >= MODERN_LEDGE_TURN_TICKS)
+		return 0;
+
+	return (long)MODERN_LEDGE_HALF_TURN * (tick + 1) / MODERN_LEDGE_TURN_TICKS -
+		(long)MODERN_LEDGE_HALF_TURN * tick / MODERN_LEDGE_TURN_TICKS;
+}
+
+/* The ledge hang, one tick: which phase comes next, how far to turn her, how
+ * many frames to step the pull-up down, and whether the move goes on, ends
+ * in a stand or hands her to the engine's hang. The state in game\lara.cpp
+ * measures and applies; nothing here reads the engine.
+ *
+ * The turn can be left on every tick: the key released, the jump key, weapons
+ * drawn, damage since the first tick, death, a cutscene, or a refusal that
+ * turned true (the edge test is asked again each tick). Any of them ends it in
+ * a stand where she is. On the first tick a bad entry ends it the same way:
+ * a heading farther than the catch's window from a cardinal, or a target that
+ * is not the cardinal opposite. Within the window the first step also takes
+ * the offset out, so the turn ends on the target to the unit.
+ *
+ * The lowering is never left half way: she already hangs over the drop by
+ * position, and standing her up there would drop her. It runs down to the
+ * first frame and hands over; death or a cutscene hands over at once, and the
+ * hang's own routines deal with them from there. Its first tick is the one
+ * the caller moved her to the hang position on, and shows the last frame
+ * unstepped. */
+long ModernLedgeDecide(const MODERN_LEDGE_SITUATION* sit, MODERN_LEDGE_RESULT* out)
+{
+	out->phase = MODERN_LEDGE_NONE;
+	out->yaw_step = 0;
+	out->frame_step = 0;
+	out->verdict = MODERN_LEDGE_QUIET;
+
+	if (!sit->option || sit->phase == MODERN_LEDGE_NONE)
+		return out->verdict;
+
+	if (sit->phase == MODERN_LEDGE_TURN)
+	{
+		out->verdict = MODERN_LEDGE_STAND;
+
+		if ((sit->target & 0x3FFF) || sit->tick < 0 || sit->tick >= MODERN_LEDGE_TURN_TICKS)
+			return out->verdict;
+
+		if (sit->tick == 0)
+		{
+			if (ModernAbs(sit->cardinal_off) > MODERN_LEDGE_SNAP)
+				return out->verdict;
+
+			/* The cardinal she starts from, turned half round, is the target. */
+			if (ModernWrap((long)sit->y_rot - sit->cardinal_off + MODERN_LEDGE_HALF_TURN - sit->target))
+				return out->verdict;
+		}
+
+		if (!sit->key || sit->jump || !sit->hands_free || sit->hit_points <= 0 ||
+			sit->hit_points < sit->entry_hit_points || sit->control_taken || sit->refusals)
+			return out->verdict;
+
+		out->yaw_step = ModernLedgeTurnStep(sit->tick);
+
+		if (sit->tick == 0)
+			out->yaw_step -= sit->cardinal_off;
+
+		out->phase = (sit->tick == MODERN_LEDGE_TURN_TICKS - 1) ? MODERN_LEDGE_LOWER : MODERN_LEDGE_TURN;
+		out->verdict = MODERN_LEDGE_CONTINUE;
+		return out->verdict;
+	}
+
+	if (sit->phase == MODERN_LEDGE_LOWER)
+	{
+		out->verdict = MODERN_LEDGE_HANG;
+
+		if (sit->hit_points <= 0 || sit->control_taken ||
+			sit->frame <= sit->frame_base || sit->frame > sit->frame_end)
+			return out->verdict;
+
+		if (sit->tick > 0)
+		{
+			out->frame_step = sit->frame - sit->frame_base;
+
+			if (out->frame_step > sit->step && sit->step > 0)
+				out->frame_step = sit->step;
+		}
+
+		out->phase = MODERN_LEDGE_LOWER;
+		out->verdict = MODERN_LEDGE_CONTINUE;
+		return out->verdict;
+	}
+
+	/* A phase this function does not know. */
+	out->verdict = MODERN_LEDGE_STAND;
+	return out->verdict;
 }

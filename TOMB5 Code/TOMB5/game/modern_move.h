@@ -108,7 +108,7 @@ enum modern_mode
 };
 
 /* Every constant of the scheme, with where it comes from. ModernDefaults() is
- * the only reader. */
+ * the only reader, except for the ledge hang's group at the end. */
 enum modern_constants
 {
 	/* TROne's dead zone is 8000 of 32767 (24 per cent). Here it is 0:
@@ -402,7 +402,38 @@ enum modern_constants
 	MODERN_BACK_TURNS = 1,
 	MODERN_AIM_STRAFE = 0,
 	MODERN_JUMP_DIR = 1,
-	MODERN_BLOCK_TURN = 1
+	MODERN_BLOCK_TURN = 1,
+
+	/* The ledge hang (the option tomb5.ledge_hang, the state AS_LEDGEHANG in
+	 * game\lara.cpp). These are not cfg fields: ModernLedgeDecide and the
+	 * state in game\lara.cpp read them by name, ModernDefaults does not.
+	 *
+	 * The move turns her half round on the standing line and then plays
+	 * TR5's own pull-up (animation 97, 74 frames at rate 4, the same in all
+	 * thirteen campaign levels) backwards into the settled hang. The turn is
+	 * 8 ticks (22.5 degrees a tick, 0.27 s); the lowering steps 3 frames a
+	 * tick, so the 73 frames from the last to the first take 25 ticks (0.83 s)
+	 * with the last step cut short to land on the first frame exactly. */
+	MODERN_LEDGE_TURN_TICKS = 8,		// the half turn, in ticks
+	MODERN_LEDGE_HALF_TURN = 0x8000,	// what the turn covers: she ends facing the wall
+	MODERN_LEDGE_FRAME_STEP = 3,		// frames down per tick in the lowering
+
+	/* The angle window of the engine's own catch (lara_col_reach and
+	 * lara_col_crawl2hang snap y_rot to a cardinal inside +-0x18E2, 34.6
+	 * degrees, and refuse outside it). Every hang routine is cardinal only. */
+	MODERN_LEDGE_SNAP = 0x18E2,
+
+	/* The two lines of the move, in units from the sector boundary at the
+	 * edge. The catch snaps the hang to `(z | 1023) - 100` / `(z & ~1023) +
+	 * 100`: 100 units from the last unit of the sector she hangs in, so 101
+	 * from the first unit of the ledge. The pull-up ends 200 units further on
+	 * (animation 102's translate), 99 units inside the ledge: the standing
+	 * line. A walk stops by itself 101 units short of the edge (the walk's own
+	 * edge stop), two units off the line; one walk step, 15 units, is the most
+	 * a walk or a stand lies off it. */
+	MODERN_LEDGE_HANG_OUT = 100,		// the catch's own snap, outside the boundary
+	MODERN_LEDGE_STAND_IN = 99,		// the standing line, inside the boundary
+	MODERN_LEDGE_RESIDUAL = 15		// a walk step: the most a walk or a stand lies off the line
 };
 
 /* The thresholds, in one place, filled by ModernDefaults(). Every field is a
@@ -520,6 +551,56 @@ struct MODERN_RESULT
 	short course_step;	// how far the course itself moved this tick - MODERNLOG's `cstep=`
 };
 
+/* The ledge hang's phases. The value is what tomb5_save_info keeps, so a
+ * savegame made in the middle of the move knows where it stood; a number
+ * outside the three is a phase the state does not know. */
+enum modern_ledge_phase
+{
+	MODERN_LEDGE_NONE = 0,	// not in the move
+	MODERN_LEDGE_TURN = 1,	// standing on the line, turning half round
+	MODERN_LEDGE_LOWER = 2	// at the hang position, the pull-up running backwards
+};
+
+/* What ModernLedgeDecide says to do with the tick. */
+enum modern_ledge_verdict
+{
+	MODERN_LEDGE_QUIET = 0,		// nothing to say: the option is off or she is not in the move
+	MODERN_LEDGE_CONTINUE = 1,	// apply the two steps and stay in `phase`
+	MODERN_LEDGE_STAND = 2,		// abort: she stands where she is
+	MODERN_LEDGE_HANG = 3		// hand over to the engine's settled hang
+};
+
+/* What the state knows this tick. The caller measures, the function decides;
+ * no field is an engine type. */
+struct MODERN_LEDGE_SITUATION
+{
+	long option;		// tomb5.ledge_hang && tomb5.control_modern - 0 and nothing is reported
+	long phase;			// modern_ledge_phase, as stored
+	long tick;			// ticks already spent in the phase; 0 is its first tick
+	long frame;			// the lowering: the current frame of the pull-up
+	long frame_base;	// and its first and last frame (anims[97] of the level)
+	long frame_end;
+	long step;			// frames down per tick: MODERN_LEDGE_FRAME_STEP (a field, so a test can try others)
+	short y_rot;		// her heading now
+	short target;		// the heading she hangs with, stored at entry (a cardinal)
+	short cardinal_off;	// y_rot minus the cardinal nearest to it, signed
+	long refusals;		// the refusal bits the caller measured this tick, 0 = none
+	long key;			// the grab key is held
+	long jump;			// the jump key is down
+	long hands_free;	// lara.gun_status == LG_NO_ARMS
+	long hit_points;	// now
+	long entry_hit_points;// on the turn's first tick
+	long control_taken;	// a cutscene or the engine holds her (the player does not steer)
+};
+
+struct MODERN_LEDGE_RESULT
+{
+	long phase;			// the phase to be in after this tick
+	long yaw_step;		// add to y_rot this tick (ModernWrap)
+	long frame_step;	// frames to step DOWN this tick, 0 or more
+	long verdict;		// modern_ledge_verdict, also the return value
+};
+
 void ModernDefaults(MODERN_CFG* cfg);
 void ModernResetState(MODERN_STATE* state);
 short ModernWrap(long angle);
@@ -553,3 +634,5 @@ long ModernGrabLatch(long toggle, long down, long family, long drop, long* state
 void ModernModeLatchDrop(long* state);
 void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, long stick_y,
 	short camera_yaw, short lara_yaw, const MODERN_SITUATION* sit, MODERN_RESULT* out);
+long ModernLedgeTurnStep(long tick);
+long ModernLedgeDecide(const MODERN_LEDGE_SITUATION* sit, MODERN_LEDGE_RESULT* out);

@@ -7778,6 +7778,324 @@ static void camera_flip()
 	}
 }
 
+/* ---------------------------------------------------------- the ledge hang --- */
+
+/* A turn-phase situation that goes on: the option on, the key held, hands
+ * free, unhurt, nothing refused. Each check below changes one field of it. */
+static void ledge_turn_sit(MODERN_LEDGE_SITUATION* s, short start, long tick)
+{
+	s->option = 1;
+	s->phase = MODERN_LEDGE_TURN;
+	s->tick = tick;
+	s->frame = 0;
+	s->frame_base = 0;
+	s->frame_end = 0;
+	s->step = MODERN_LEDGE_FRAME_STEP;
+	s->y_rot = start;
+	s->target = ModernWrap((long)start + MODERN_LEDGE_HALF_TURN);
+	s->cardinal_off = 0;
+	s->refusals = 0;
+	s->key = 1;
+	s->jump = 0;
+	s->hands_free = 1;
+	s->hit_points = 1000;
+	s->entry_hit_points = 1000;
+	s->control_taken = 0;
+}
+
+/* The same for the lowering, on the pull-up of one level. */
+static void ledge_lower_sit(MODERN_LEDGE_SITUATION* s, long base, long end, long frame, long tick)
+{
+	ledge_turn_sit(s, 0, 0);
+	s->phase = MODERN_LEDGE_LOWER;
+	s->tick = tick;
+	s->frame = frame;
+	s->frame_base = base;
+	s->frame_end = end;
+}
+
+static void ledge_hang()
+{
+	const short cardinals[4] = { 0, 0x4000, -0x8000, -0x4000 };
+	MODERN_LEDGE_SITUATION s;
+	MODERN_LEDGE_RESULT r;
+	long i, t, sum;
+
+	printf("\nthe ledge hang - ModernLedgeDecide\n");
+
+	/* The numbers by name. The standing line and the hang position lie 200
+	 * units apart along the heading, which is animation 102's translate; the
+	 * catch's window is the engine's 0x18E2. */
+	ok(MODERN_LEDGE_STAND_IN + MODERN_LEDGE_HANG_OUT + 1 == 200,
+		"ledge: standing line and hang position are the pull-up's 200 apart",
+		MODERN_LEDGE_STAND_IN + MODERN_LEDGE_HANG_OUT + 1, 200);
+	ok(MODERN_LEDGE_SNAP == 0x18E2, "ledge: the catch's own angle window", MODERN_LEDGE_SNAP, 0x18E2);
+	ok(MODERN_LEDGE_HALF_TURN == 0x8000, "ledge: the turn is half a turn", MODERN_LEDGE_HALF_TURN, 0x8000);
+
+	sum = 0;
+
+	for (t = 0; t < MODERN_LEDGE_TURN_TICKS; t++)
+	{
+		sum += ModernLedgeTurnStep(t);
+		ok(ModernLedgeTurnStep(t) == MODERN_LEDGE_HALF_TURN / MODERN_LEDGE_TURN_TICKS,
+			"ledge: every tick of the turn is the same step", ModernLedgeTurnStep(t),
+			MODERN_LEDGE_HALF_TURN / MODERN_LEDGE_TURN_TICKS);
+	}
+
+	ok(sum == MODERN_LEDGE_HALF_TURN, "ledge: the steps add up to the half turn", sum, MODERN_LEDGE_HALF_TURN);
+	ok(ModernLedgeTurnStep(-1) == 0 && ModernLedgeTurnStep(MODERN_LEDGE_TURN_TICKS) == 0,
+		"ledge: no step outside the turn", ModernLedgeTurnStep(MODERN_LEDGE_TURN_TICKS), 0);
+
+	/* The turn ends on the opposite cardinal, to the unit, from all four
+	 * cardinals and from every entry offset inside the window: the first
+	 * step takes the offset out. */
+	for (i = 0; i < 4; i++)
+	{
+		long off;
+
+		for (off = -MODERN_LEDGE_SNAP; off <= MODERN_LEDGE_SNAP; off += 97)
+		{
+			const long o = (off > MODERN_LEDGE_SNAP - 97) ? MODERN_LEDGE_SNAP : off;
+			short y = ModernWrap((long)cardinals[i] + o);
+			long ended = 0, ticks = 0;
+
+			for (t = 0; t < MODERN_LEDGE_TURN_TICKS + 2 && !ended; t++)
+			{
+				ledge_turn_sit(&s, cardinals[i], t);
+				s.y_rot = y;
+				s.cardinal_off = (t == 0) ? (short)o : 0;
+				ModernLedgeDecide(&s, &r);
+
+				if (r.verdict != MODERN_LEDGE_CONTINUE)
+					break;
+
+				y = ModernWrap((long)y + r.yaw_step);
+				ticks++;
+
+				if (r.phase == MODERN_LEDGE_LOWER)
+					ended = 1;
+			}
+
+			ok(ended == 1, "ledge: the turn hands on to the lowering", ended, 1);
+			ok(ticks == MODERN_LEDGE_TURN_TICKS, "ledge: after exactly TURN_TICKS ticks",
+				ticks, MODERN_LEDGE_TURN_TICKS);
+			ok(y == ModernWrap((long)cardinals[i] + MODERN_LEDGE_HALF_TURN),
+				"ledge: and she faces the opposite cardinal to the unit",
+				y, ModernWrap((long)cardinals[i] + MODERN_LEDGE_HALF_TURN));
+		}
+	}
+
+	/* The window: 0x18E2 is taken, 0x18E3 is a bad entry, either side. */
+	ledge_turn_sit(&s, 0x4000, 0);
+	s.cardinal_off = MODERN_LEDGE_SNAP;
+	s.y_rot = 0x4000 + MODERN_LEDGE_SNAP;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_CONTINUE, "ledge: 0x18E2 off the cardinal is taken",
+		r.verdict, MODERN_LEDGE_CONTINUE);
+	s.cardinal_off = -MODERN_LEDGE_SNAP;
+	s.y_rot = 0x4000 - MODERN_LEDGE_SNAP;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_CONTINUE, "ledge: -0x18E2 likewise",
+		r.verdict, MODERN_LEDGE_CONTINUE);
+	s.cardinal_off = MODERN_LEDGE_SNAP + 1;
+	s.y_rot = 0x4000 + MODERN_LEDGE_SNAP + 1;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: 0x18E3 is refused with a stand",
+		r.verdict, MODERN_LEDGE_STAND);
+	ok(r.yaw_step == 0 && r.phase == MODERN_LEDGE_NONE, "ledge: ...no turn, phase cleared", r.yaw_step, 0);
+	s.cardinal_off = -(MODERN_LEDGE_SNAP + 1);
+	s.y_rot = 0x4000 - MODERN_LEDGE_SNAP - 1;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: -0x18E3 likewise",
+		r.verdict, MODERN_LEDGE_STAND);
+
+	/* Other bad entries: a target that is not a cardinal, or not the one
+	 * opposite, a tick past the turn, a phase nobody knows. */
+	ledge_turn_sit(&s, 0, 0);
+	s.target = 0x4000;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: a target a quarter round is a bad entry",
+		r.verdict, MODERN_LEDGE_STAND);
+	s.target = -0x7FFF;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: a target off the cardinals likewise",
+		r.verdict, MODERN_LEDGE_STAND);
+	ledge_turn_sit(&s, 0, MODERN_LEDGE_TURN_TICKS);
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: a tick past the turn likewise",
+		r.verdict, MODERN_LEDGE_STAND);
+	ledge_turn_sit(&s, 0, 0);
+	s.phase = 3;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: a phase it does not know ends in a stand",
+		r.verdict, MODERN_LEDGE_STAND);
+	s.phase = 255;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: ...the byte's top value too",
+		r.verdict, MODERN_LEDGE_STAND);
+
+	/* Every single refusal bit stops the turn, on its first tick and on every
+	 * later one. */
+	for (i = 0; i < 32; i++)
+	{
+		for (t = 0; t < MODERN_LEDGE_TURN_TICKS; t++)
+		{
+			ledge_turn_sit(&s, -0x4000, t);
+			s.refusals = (long)(1ul << i);
+			ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_STAND, "ledge: each refusal bit alone ends the turn",
+				r.verdict, MODERN_LEDGE_STAND);
+		}
+	}
+
+	/* The aborts: each one alone ends the turn in a stand on every tick, and
+	 * none of them stands her up in the lowering - she goes on, or is handed
+	 * to the hang. */
+	for (i = 0; i < 7; i++)
+	{
+		for (t = 0; t < MODERN_LEDGE_TURN_TICKS + 30; t++)
+		{
+			const long lower = (t >= MODERN_LEDGE_TURN_TICKS);
+
+			if (lower)
+				ledge_lower_sit(&s, 1388, 1461, 1461 - (t - MODERN_LEDGE_TURN_TICKS), t - MODERN_LEDGE_TURN_TICKS);
+			else
+				ledge_turn_sit(&s, 0, t);
+
+			switch (i)
+			{
+			case 0: s.key = 0; break;
+			case 1: s.jump = 1; break;
+			case 2: s.hands_free = 0; break;
+			case 3: s.hit_points = 999; break;
+			case 4: s.hit_points = 0; break;
+			case 5: s.control_taken = 1; break;
+			case 6: s.refusals = 1; break;
+			}
+
+			ModernLedgeDecide(&s, &r);
+
+			if (!lower)
+				ok(r.verdict == MODERN_LEDGE_STAND && r.phase == MODERN_LEDGE_NONE && r.yaw_step == 0,
+					"ledge: key up, jump, weapons, damage, death, cutscene, refusal: a stand in the turn",
+					r.verdict, MODERN_LEDGE_STAND);
+			else if (i == 4 || i == 5)
+				ok(r.verdict == MODERN_LEDGE_HANG && r.phase == MODERN_LEDGE_NONE,
+					"ledge: death or a cutscene in the lowering hand over at once",
+					r.verdict, MODERN_LEDGE_HANG);
+			else
+				ok(r.verdict != MODERN_LEDGE_STAND,
+					"ledge: nothing stands her up in the lowering", r.verdict, MODERN_LEDGE_CONTINUE);
+		}
+	}
+
+	/* The lowering on the real pull-up: animation 97 is frames 1388..1461 in
+	 * rich1 and 1516..1589 in the Andrea and andy levels - 74 frames in every
+	 * campaign level. At steps 1 to 4 it takes ceil(73 / step) steps after the
+	 * unstepped first tick, lands on the first frame exactly, never below it,
+	 * and hands over on the tick after. */
+	{
+		const long bases[2] = { 1388, 1516 };
+		const long want[5] = { 0, 73, 37, 25, 19 };
+		long b, step;
+
+		for (b = 0; b < 2; b++)
+		{
+			const long base = bases[b], end = bases[b] + 73;
+
+			for (step = 1; step <= 4; step++)
+			{
+				long frame = end, steps = 0, below = 0, verdict = 0;
+
+				for (t = 0; t < 200; t++)
+				{
+					ledge_lower_sit(&s, base, end, frame, t);
+					s.step = step;
+					verdict = ModernLedgeDecide(&s, &r);
+
+					if (verdict != MODERN_LEDGE_CONTINUE)
+						break;
+
+					if (t == 0 && r.frame_step != 0)
+						below++;
+
+					if (r.frame_step)
+						steps++;
+
+					frame -= r.frame_step;
+
+					if (frame < base)
+						below++;
+				}
+
+				ok(steps == want[step], "ledge: the lowering's step count at steps 1..4", steps, want[step]);
+				ok(frame == base, "ledge: ...lands on frame_base exactly", frame, base);
+				ok(below == 0, "ledge: ...never below it, and the first tick is not stepped", below, 0);
+				ok(verdict == MODERN_LEDGE_HANG, "ledge: ...then hands over to the hang", verdict, MODERN_LEDGE_HANG);
+				ok(t == want[step] + 1, "ledge: ...on the tick after it landed", t, want[step] + 1);
+			}
+		}
+
+		ok(want[MODERN_LEDGE_FRAME_STEP] == 25, "ledge: at the shipped step the lowering is 25 steps",
+			want[MODERN_LEDGE_FRAME_STEP], 25);
+	}
+
+	/* A lowering frame outside the pull-up hands over at once. */
+	ledge_lower_sit(&s, 1388, 1461, 1462, 5);
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_HANG, "ledge: a frame past the end hands over",
+		r.verdict, MODERN_LEDGE_HANG);
+	ledge_lower_sit(&s, 1388, 1461, 1300, 5);
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_HANG, "ledge: a frame before the start likewise",
+		r.verdict, MODERN_LEDGE_HANG);
+
+	/* The option off: nothing is reported, whatever the phase and the input -
+	 * no verdict, no phase, no step. */
+	{
+		long phase, combo, quiet = 0, total = 0;
+
+		for (phase = -1; phase <= 4; phase++)
+		{
+			for (combo = 0; combo < 256; combo++)
+			{
+				for (t = -1; t <= MODERN_LEDGE_TURN_TICKS + 1; t++)
+				{
+					ledge_lower_sit(&s, 1388, 1461, 1388 + (combo % 80), t);
+					s.option = 0;
+					s.phase = (phase == 4) ? 255 : phase;
+					s.y_rot = (short)(combo * 257);
+					s.target = (short)(combo * 4096);
+					s.cardinal_off = (short)((combo % 16) * 1000 - 8000);
+					s.key = combo & 1;
+					s.jump = (combo >> 1) & 1;
+					s.hands_free = (combo >> 2) & 1;
+					s.hit_points = (combo & 8) ? 0 : 1000;
+					s.entry_hit_points = (combo & 16) ? 1001 : 1000;
+					s.control_taken = (combo >> 5) & 1;
+					s.refusals = (combo & 64) ? 0x7FF : 0;
+					s.step = (combo & 128) ? 4 : 1;
+					r.phase = 9;
+					r.yaw_step = 9;
+					r.frame_step = 9;
+					r.verdict = 9;
+					total++;
+
+					if (ModernLedgeDecide(&s, &r) == MODERN_LEDGE_QUIET && r.verdict == MODERN_LEDGE_QUIET &&
+						r.phase == MODERN_LEDGE_NONE && r.yaw_step == 0 && r.frame_step == 0)
+						quiet++;
+				}
+			}
+		}
+
+		printf("  measured: %ld of %ld option-off situations report nothing\n", quiet, total);
+		ok(quiet == total, "ledge: with the option off it reports nothing at all", quiet, total);
+	}
+
+	/* And with the option on, the phase none is not the move either. */
+	ledge_turn_sit(&s, 0, 0);
+	s.phase = MODERN_LEDGE_NONE;
+	ok(ModernLedgeDecide(&s, &r) == MODERN_LEDGE_QUIET, "ledge: phase none reports nothing",
+		r.verdict, MODERN_LEDGE_QUIET);
+
+	/* The state is classic for the translation - the stick must not steer the
+	 * turn - and in no other family. */
+	ok(ModernStateIsClassic(139) == 1, "ledge: AS_LEDGEHANG stays classic", ModernStateIsClassic(139), 1);
+	ok(ModernStateIsGrab(139) == 0, "ledge: ...not in the hold-on family", ModernStateIsGrab(139), 0);
+	ok(ModernStateIsDuck(139) == 0, "ledge: ...not a crouch", ModernStateIsDuck(139), 0);
+	ok(ModernStateIsSwim(139) == 0, "ledge: ...not a swim", ModernStateIsSwim(139), 0);
+	ok(ModernStateAllowsDirectTurn(139) == 0, "ledge: ...no direct turn", ModernStateAllowsDirectTurn(139), 0);
+	ok(ModernStateAllowsAirTurn(139) == 0, "ledge: ...no air turn", ModernStateAllowsAirTurn(139), 0);
+}
+
 /* ------------------------------------------------------ what is not ours --- */
 
 static void deferred()
@@ -7850,6 +8168,7 @@ int main()
 	camera_carry();
 	camera_pull();
 	camera_flip();
+	ledge_hang();
 	deferred();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

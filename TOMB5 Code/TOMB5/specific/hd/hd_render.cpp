@@ -4314,6 +4314,7 @@ int HDRenderGroupSampleData(int group, HDRenderSample* out, int maxVerts)
 	return count;
 }
 
+// No caller. The / 3 dates from samples as 3 shorts per vertex: this returns a third.
 int HDRenderGroupSampleCount(int group)
 {
 	if (group < 0 || group >= (int)g_groups.size())

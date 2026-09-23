@@ -14,8 +14,8 @@ authority; this page only points at it.
 its own folder, so a fresh clone builds them. They need Visual Studio with
 the C++ workload; the path to `vcvars` is the one absolute thing in them.
 
-`bmap.bat` and `btrg.bat`, the two that link the most engine files, are no
-exception: every path in them is the `%~dp0` form as well.
+`bmap.bat` and `btrg.bat` are no exception: every path in them is the
+`%~dp0` form as well.
 
 **The one prerequisite, said once here:** the `vcvars` line names a specific
 Visual Studio installation. If yours sits elsewhere - a different edition, a

@@ -81,9 +81,10 @@ to an enemy (512 units X/Z, 256 Y) is collected as his carried_item via
 GetCarriedItems() (game/setup.cpp) and floor-dropped after his death.
 On the drop (DropBaddyPickups, game\box.cpp) the engine clears the low
 OCB bits of the wall pickups, OCB 2 and 9, so those land as ordinary
-floor pickups. Every other OCB is kept as it is - a plinth/hidden
-pickup (OCB 1, 3, 4, 7, 8) dropped that way stays permanently
-uncollectable.
+floor pickups. Every other OCB is kept as it is: a hidden pickup (OCB 1)
+dropped that way keeps its hidden-pickup manner, but a plinth pickup
+(OCB 3, 4, 7, 8) dropped that way stays permanently uncollectable -
+FindPlinth (game\pickup.cpp) finds no plinth at the drop spot.
 
 For the randomizer the rule is "normalize everything to OCB 0", with two
 exception tables, and both matter.

@@ -38,8 +38,10 @@ matters.
 	(game\box.cpp) clears the low OCB bits of a wall pickup (OCB 2 or 9)
 	on the drop, so it lands as an ordinary floor pickup - the case
 	behind that was an Imp carrying a crowbar away in joby3. Every other
-	OCB is kept, so a plinth/hidden pickup (OCB 1, 3, 4, 7 or 8) dropped
-	that way stays permanently uncollectable.
+	OCB is kept, so a hidden pickup (OCB 1) dropped that way keeps its
+	hidden-pickup manner, but a plinth pickup (OCB 3, 4, 7 or 8) dropped
+	that way stays permanently uncollectable - FindPlinth (game\pickup.cpp)
+	finds no plinth at the drop spot.
 
 
 ================================================================

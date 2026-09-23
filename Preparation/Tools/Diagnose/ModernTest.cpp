@@ -130,7 +130,7 @@ static void angles()
 		absl(ModernAngle(0, -1000)), 0x8000);
 
 	/* TROne: modern.diagonal_is_45_degrees. A diagonal has to be exactly 45
-	 * degrees or a synthetic stick - workflow B's WASD - sends Lara slightly
+	 * degrees or a synthetic stick - the keyboard and mouse scheme's WASD - sends Lara slightly
 	 * askew on every diagonal. */
 	ModernDefaults(&cfg);
 	ModernResetState(&state);
@@ -2272,8 +2272,8 @@ static void back_input()
 	/* TROne: modern.remaster_back_input_distinguishes_running_from_armed_hopback
 	 * rides on this switch - their Remaster profile sets back_turns from
 	 * "is a weapon held". Ours is a constant (MODERN_BACK_TURNS), because this scheme
-	 * has no pointer aiming to hop away from; the switch is here and workflow
-	 * B decides whether to drive it. The sector the rule fires in is asserted
+	 * has no pointer aiming to hop away from; the switch is here and the keyboard
+	 * and mouse scheme decides whether to drive it. The sector the rule fires in is asserted
 	 * either side, because it is the one place a half turn and a step apart
 	 * differ by a single unit. */
 	state.have_ref = 0;
@@ -4882,8 +4882,8 @@ static void weapons()
 	/* ModernWeaponBits(combat_hold, ready, holstered, held, bits). TROne's is
 	 * trone_modern_weapon_bits(glue, bits, ready, holstered) with the mode and
 	 * the key inside the glue struct; ours takes both, because a pure function
-	 * cannot ask a struct which mode it is in. Nothing calls it yet - workflow
-	 * B wires it at the second seam of specific\input.cpp and puts
+	 * cannot ask a struct which mode it is in. Nothing calls it yet - the keyboard
+	 * and mouse scheme wires it at the second seam of specific\input.cpp and puts
 	 * tomb5.combat_hold on the first argument. */
 
 	/* TROne: combatmode.toggle_leaves_the_tank_bits_exactly_as_the_game_wrote_them.
@@ -4954,7 +4954,7 @@ static void weapons()
 
 	/* TROne: modern.held_equip_draws_once_and_interaction_does_not_fire, the
 	 * half that is the weapon bits. (The interact and shoot halves are
-	 * workflow B's IN_ACTION2 and are not in this function at all.) */
+	 * the keyboard and mouse scheme's IN_ACTION2 and are not in this function at all.) */
 	ok((ModernWeaponBits(1, 0, 1, 1, 0) & MODERN_IN_DRAW) != 0,
 		"Hold, held: the draw goes out", ModernWeaponBits(1, 0, 1, 1, 0) & MODERN_IN_DRAW,
 		MODERN_IN_DRAW);
@@ -4987,7 +4987,7 @@ static void weapons()
 	/* TROne: combatmode.toggle_pulses_once_per_press_in_the_modern_profile.
 	 * That is the POINTER profile - one frame of IN_DRAW per press edge - and
 	 * it needs an edge memory this function deliberately does not have: in our
-	 * Tank profile Toggle IS the original and needs none. Workflow B owns the
+	 * Tank profile Toggle IS the original and needs none. The keyboard and mouse scheme owns the
 	 * edge, together with the pointer keys it belongs to. What is ours here is
 	 * the other side of the same coin, asserted above: Toggle never invents a
 	 * bit and never swallows one. */

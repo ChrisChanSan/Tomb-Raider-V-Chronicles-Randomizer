@@ -3634,7 +3634,7 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis)
  * are drawn in for as long as they lie on the ground, which is when a floor
  * rule is about them at all, and their sink is small either way -
  * FLARE_ITEM 1.0 units and BURNING_TORCH_ITEM 2.9. A tumbling flare is
- * lifted by that same amount STRAIGHT UP IN THE WORLD, because that is where
+ * lifted by that same amount straight up in the world, because that is where
  * the lift is applied (hd_object.cpp, world_up_in_view) and not along the
  * model's own axis: a tilt changes what the number would have been, never
  * which way it goes.
@@ -3833,7 +3833,7 @@ int HDFramePose(const short* frame, const long* tree, int nodes, float* out)
 /* How deep a pickup model reaches, and what lifts it out. The header carries
  * the rule; this is the arithmetic.
  *
- * Every kept vertex and not the eight CORNERS OF THE BOX: a box corner of a
+ * Every kept vertex and not the eight corners of the box: a box corner of a
  * pair of crossed guns is empty space. Measured on a mod's posed `UZI_OPTION`
  * against the classic mesh it stands in for: 33.9 units by the corners, 11.5
  * by the vertices - a factor of three. A rule that lifted a model by the

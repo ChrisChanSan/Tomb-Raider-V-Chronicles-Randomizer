@@ -115,7 +115,7 @@ struct HDModelSlot
 	 * that page is loaded into the cache - the rest of the file is read,
 	 * measured and dropped.
 	 *
-	 * A piece of Lara's kit can be PART OF AN OUTFIT MODEL rather than a file
+	 * A piece of Lara's kit can be part of an outfit model rather than a file
 	 * of its own: the thigh holsters. HOLSTER_PISTOL.TRM holds the two guns
 	 * and nothing else, and the pouches they sit in are built into
 	 * OUTFIT_CLASSIC and OUTFIT_RUSSIA (page 8017) and into the two TR3
@@ -766,8 +766,8 @@ float HDModelRingFitOverflow(int model, int target, int* worstAxis);
 
 /* The frame the level really draws a slot in.
  *
- * A moveable's meshes are placed by its mesh tree AND TURNED BY ITS ANIMATION
- * FRAME - DrawAnimatingItem calls gar_RotYXZsuperpack for node 0 before the
+ * A moveable's meshes are placed by its mesh tree and turned by its animation
+ * frame - DrawAnimatingItem calls gar_RotYXZsuperpack for node 0 before the
  * first mesh is drawn and once more for every node below it. The bind pose,
  * which is that walk with the rotations left out, is the frame a .TRM's
  * vertices are measured against; it is NOT the frame the item stands in on

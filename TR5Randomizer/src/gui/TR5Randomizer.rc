@@ -1,4 +1,4 @@
-// The randomizer's program icon. The logo comes from the user (Logos\),
+// The randomizer's program icon. The logo comes from the player (Logos\),
 // TR5Randomizer.ico carries it in six sizes (16 to 256) as PNG entries -
 // Windows picks the fitting one depending on the display.
 //
@@ -8,7 +8,7 @@
 #define IDI_APPICON 101
 IDI_APPICON ICON "TR5Randomizer.ico"
 
-// The interface's background image - the user's same banner, from
+// The interface's background image - the player's same banner, from
 // Logos\Tomb5 Rando Logo 1920x1080.png. Embedded as JPEG and not as PNG:
 // this image is photo-like, PNG needs 3.1 MB for it, JPEG at quality 88
 // only 0.5 MB. The difference is not visible because the image lies

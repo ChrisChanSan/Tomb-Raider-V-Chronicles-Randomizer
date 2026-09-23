@@ -624,7 +624,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * path displaces nothing but its own nWVtx set, and that set is empty in
 	 * all of TR5, so no wall ever moves.
 	 *
-	 * Geometry and UV therefore ride on the marked set AT THE SURFACE PLANE -
+	 * Geometry and UV therefore ride on the marked set at the surface plane -
 	 * gRoomOrigin.w, the room's own minfloor. In a surface-bit room that is
 	 * what `shimmerOn` already is (gWaterMode.z carries the same height test);
 	 * in a whole-room-bit room it is the pool and nothing else. The colour

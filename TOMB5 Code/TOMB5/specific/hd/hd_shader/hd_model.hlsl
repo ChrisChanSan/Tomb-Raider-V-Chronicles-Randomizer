@@ -121,7 +121,7 @@ float4x4 gProj : register(c0);
  *
  * Read by the pixel shader only, and that matters. The room shader
  * reads gPass in both halves; this one does not need it in the vertex half,
- * so fxc drops it there and puts TWO OF ITS OWN def constants in c4 and c5 of
+ * so fxc drops it there and puts two of its own def constants in c4 and c5 of
  * the vertex shader (visible in the /Fc listing). Writing gPass to the vertex
  * constant file would silently overwrite a literal. hd_model.cpp therefore
  * sets it through SetPixelShaderConstantF alone. */

@@ -30,3 +30,25 @@
 # lists as hex, produced by Preparation/Tools/EmbedData.ps1 (#142). Counted
 # as C++ it would swamp the language bar the same way zlib's contrib did.
 **/src/core/EmbeddedData.cpp linguist-generated
+
+# The HD shaders check out with LINE FEEDS on every machine (audit round A1,
+# #172). The engine has no runtime shader compiler: the bytecode travels as
+# .inc byte arrays beside the .hlsl it came from, and every .inc carries the
+# MD5 of that .hlsl on its last line so that be.bat can tell, without a build,
+# whether the two still belong together (bshader.bat, :stamp).
+#
+# An MD5 is taken over BYTES, and line endings are bytes. On Windows git's own
+# default, core.autocrlf=true, checks a text file out with carriage returns,
+# while the file the stamp was taken over here had none - so the guard fired
+# on a fresh clone, rebuilt shaders that were perfectly in step, and left the
+# clone with two files modified that nobody had touched. It was worse than
+# that: hd_room's stamp was the hash of an LF file and hd_model's the hash of
+# a CRLF one, so whichever machine you stood on, one of the two pairs lied.
+#
+# eol=lf pins the checkout instead of teaching the batch file to normalise:
+# one line of rule rather than a second hashing path in two scripts that would
+# have to agree forever. These six files are C source and HLSL - no tool in
+# this project cares which ending they carry, only that every machine sees the
+# same one.
+**/hd_shader/*.hlsl eol=lf
+**/hd_shader/*.inc  eol=lf

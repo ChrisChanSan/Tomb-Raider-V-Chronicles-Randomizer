@@ -200,7 +200,7 @@ void PuzzleHoleCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	else if (item->trigger_flags && item->trigger_flags != 999 && item->trigger_flags != 998)
 		PuzzleType = 3;
 
-	if (((input & IN_ACTION || GLOBAL_inventoryitemchosen != NO_ITEM) &&
+	if (((input & IN_INTERACT || GLOBAL_inventoryitemchosen != NO_ITEM) &&
 		(!BinocularRange && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && GetKeyTrigger(item))) ||
 		(lara.IsMoving && lara.GeneralPtr == (void*)item_num))
 	{
@@ -451,7 +451,7 @@ void SearchObjectCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	item = &items[item_num];
 	ObjNum = 3 - ((SEARCH_OBJECT4 - item->object_number) >> 1);
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS &&
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS &&
 		(item->status == ITEM_INACTIVE && ObjNum != 3 || !item->item_flags[0]) || lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		bounds = GetBoundsAccurate(item);
@@ -520,7 +520,7 @@ void MonitorScreenCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	if (l->anim_number == ANIM_ONEHANDPUSHSW && l->frame_number == anims[l->anim_number].frame_base + 24)
 		TestTriggersAtXYZ(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, item->room_number, 1, 0);
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS &&
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS &&
 		item->status == ITEM_INACTIVE || lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		bounds = GetBoundsAccurate(item);
@@ -621,7 +621,7 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 		}
 	}
 
-	if ((input & IN_ACTION || GLOBAL_inventoryitemchosen != NO_ITEM) && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+	if ((input & IN_INTERACT || GLOBAL_inventoryitemchosen != NO_ITEM) && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 		l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH || lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 	{
 		key = GLOBAL_inventoryitemchosen - KEY_ITEM1;
@@ -653,20 +653,19 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 				// The card-swipe animation (ANIM_KEYCARD, 437) exists only
 				// where the level build placed its frame data. Lara's anim
-				// table is the same length everywhere, the DATA is not -
-				// Core leaves unused entries standing as stubs.
+				// table is the same length everywhere, the data is not -
+				// unused entries stand as stubs.
 				//
-				// Hence the DATA is asked, not the level: the high byte of
+				// Hence the data is asked, not the level: the high byte of
 				// "interpolation" is the FrameSize, and at zero the engine
 				// computes frame_ptr[n * 0] and shows the same frame
-				// forever (in joby3 that was 22 seconds of frozen pose).
-				// Vanilla carries it in joby2, joby4, joby5 and rich1; the
+				// forever (22 seconds of frozen pose in joby3). Vanilla
+				// carries it in joby2, joby4, joby5 and rich1; the
 				// randomizer implants it into further levels as needed
 				// (laraAnimAdds), and those automatically take this path.
 				//
-				// A level list stood here before. It was too narrow: rich1
-				// has the animation but used the key-turning gesture (seen
-				// by the user in game).
+				// A per-level list is not enough: rich1 has the animation
+				// data but the key-turning gesture plays there instead.
 				if (item->object_number == KEY_HOLE8 &&
 					(anims[ANIM_KEYCARD].interpolation >> 8) != 0)
 					l->anim_number = ANIM_KEYCARD;
@@ -682,24 +681,24 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				lara.torso_y_rot = 0;
 				lara.gun_status = LG_HANDS_BUSY;
 				item->status = ITEM_ACTIVE;
-				// Was "flags &= IFL_TRIGGERED" - that clears ALL bits when
+				// "flags &= IFL_TRIGGERED" clears all bits when
 				// IFL_TRIGGERED is not already set, and a fresh keyhole
-				// carries flags 0 in the level file. But the savegame
-				// writer only stores an item when one of
-				// CODEBITS/INVISIBLE/TRIGGERED is set (savegame.cpp:305):
-				// the lock thus fell out of the savegame with flags 0 and
-				// came back as "not used" on loading - while the key (the
-				// inventory IS saved) was already gone. The door never
-				// opened again because KeyTrigger (above, line 140) demands
-				// ITEM_ACTIVE. Reproduced by the user in VANILLA Andrea1,
-				// item 25 (Keyhole1): start the anim, save immediately,
-				// load.
-				// In the whole engine this is the ONLY spot with "&=" - the
-				// 26 others set the bit with "|=". The assignment keeps
-				// Core's intent ("all other bits away") and only makes sure
-				// the bit really stands. The puzzle hole does it right
-				// (line 317) and has therefore survived save/load forever
-				// (savegame.cpp:924 restores it).
+				// carries flags 0 in the level file. The savegame writer
+				// only stores an item when one of CODEBITS/INVISIBLE/
+				// TRIGGERED is set (SaveLevelData): the lock thus fell out
+				// of the savegame with flags 0 and came back as "not used"
+				// on loading, while the key (the inventory is saved) was
+				// already gone - the door never opened again, since
+				// KeyTrigger above demands ITEM_ACTIVE. Reproducible in
+				// vanilla Andrea1, item 25 (Keyhole1): start the anim, save
+				// immediately, load.
+				//
+				// This is the only "&=" of its kind in the engine - the
+				// other 26 set the bit with "|=". The assignment keeps the
+				// original intent ("all other bits away") while making sure
+				// the bit really stands. The puzzle hole's equivalent
+				// assignment does this correctly and has survived save/load
+				// (RestoreLevelData restores it).
 				item->flags = IFL_TRIGGERED;
 
 				if (item->trigger_flags == 1 && item->object_number == KEY_HOLE8)
@@ -794,7 +793,7 @@ void PickUpCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	if (lara.water_status == LW_ABOVE_WATER || lara.water_status == LW_WADE)
 	{
-		if ((input & IN_ACTION || (GLOBAL_inventoryitemchosen != NO_ITEM && ocb == 2)) && !BinocularRange &&
+		if ((input & IN_INTERACT || (GLOBAL_inventoryitemchosen != NO_ITEM && ocb == 2)) && !BinocularRange &&
 			((l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && lara.gun_status == LG_NO_ARMS) ||
 				(l->current_anim_state == AS_DUCK && l->anim_number == ANIM_DUCKBREATHE && lara.gun_status == LG_NO_ARMS) ||
 				(l->current_anim_state == AS_ALL4S && l->anim_number == ANIM_ALL4S)) ||
@@ -1062,7 +1061,7 @@ void PickUpCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	{
 		item->pos.x_rot = -4550;
 
-		if (input & IN_ACTION && item->object_number != BURNING_TORCH_ITEM && l->current_anim_state == AS_TREAD &&
+		if (input & IN_INTERACT && item->object_number != BURNING_TORCH_ITEM && l->current_anim_state == AS_TREAD &&
 			lara.gun_status == LG_NO_ARMS && TestLaraPosition(PickUpBoundsUW, item, l) ||
 			lara.IsMoving && lara.GeneralPtr == (void*)item_number)
 		{

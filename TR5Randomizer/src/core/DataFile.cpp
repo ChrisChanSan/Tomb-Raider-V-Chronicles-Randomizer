@@ -42,8 +42,8 @@ namespace
         return s;
     }
 
-    // The file name out of a full path. The command line hands us whatever
-    // the user typed; the baked copies are keyed by name alone.
+    // The file name out of a full path. The command line may hand over any
+    // path; the baked copies are keyed by name alone.
     std::string fileNameOf(const std::wstring& path)
     {
         const size_t pos = path.find_last_of(L"\\/");

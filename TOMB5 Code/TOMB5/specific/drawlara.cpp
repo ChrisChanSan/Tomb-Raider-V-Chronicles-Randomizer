@@ -28,6 +28,7 @@
 #include "../game/subsuit.h"
 #include "../game/savegame.h"
 #include "../game/lara2gun.h"
+#include "hd/hd_laradraw.h"
 #include "../tomb5/tomb5.h"
 
 static long lara_mesh_sweetness_table[15] =	//LM_ in LMX_ order for drawing
@@ -130,6 +131,29 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	if (!mirror)
 		CalculateObjectLightingLara();
 
+	/* The seam: either this function draws the classic composite - the skin,
+	 * the fourteen seam pieces, the braid, the two thigh holsters and the
+	 * weapon on the back - or hd_laradraw puts the remaster's wardrobe on the
+	 * frame's list. Never both, and never half of each: a classic seam piece
+	 * on an HD body is the very thing TROne tried and took out again.
+	 *
+	 * True for the mesh bits, because this variant reads them: `mesh_bits >>
+	 * 0x10 & 1 << (15 - i)` above, which the two other variants do not have.
+	 *
+	 * The single push at the top of this function is popped here, and the
+	 * clipping window is restored exactly as the tail restores it. */
+	if (HDLaraDrawActive())
+	{
+		HDLaraDrawFrame(mirror, true);
+		phd_PopMatrix();
+		bLaraUnderWater = 0;
+		phd_top = top;
+		phd_bottom = bottom;
+		phd_left = left;
+		phd_right = right;
+		return;
+	}
+
 	for (int i = 0; i < 15; i++)//skin
 	{
 		aMXPtr[M00] = lara_matrices[i * indices_count + M00];
@@ -152,18 +176,17 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 		if (lara_item->mesh_bits >> 0x10 & 1 << (15 - i))
 		{
-			// First person (#126): do NOT DRAW the head - but very much
-			// stash its vertices (the loop below).
+			// First person: do not draw the head, but still stash its
+			// vertices (the loop below).
 			//
-			// That is why this stands here and not in mesh_bits: Lara's
-			// skin is SKINNED, the neighboring parts pull their rim points
-			// from this mesh's stash. Hide the head via mesh_bits and the
-			// stashing drops away with it (it sits in the same bracket),
-			// and the neck joint skins from stale memory: a huge stretched
-			// triangle across the frame - photographed by the user as a
-			// "third arm". After the scope it even stayed permanently,
-			// because the binoculars' mesh_bits restore pushed against it
-			// on top.
+			// That is why this stands here and not in mesh_bits: Lara's skin
+			// is skinned, the neighboring parts pull their rim points from
+			// this mesh's stash. Hiding the head via mesh_bits would drop the
+			// stashing with it (it sits in the same bracket), and the neck
+			// joint would then skin from stale memory - a huge stretched
+			// triangle across the frame, appearing as a "third arm" and
+			// staying permanently once the binoculars' mesh_bits restore
+			// pushed against it on top.
 			if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
 				phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
@@ -182,10 +205,10 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	phd_PopMatrix();
 	bLaraUnderWater = LaraNodeUnderwater[8] != 0 ? 8 : -1;
 
-	// First person (#126): with the head, the BRAID must go too. It hangs
-	// on the head joint - exactly where the camera sits - and blew through
-	// the player's view. The body's mesh bits do not catch it, it is drawn
-	// separately.
+	// First person: with the head hidden, the braid must go too. It hangs on
+	// the head joint - exactly where the camera sits - and would blow through
+	// the player's view. The body's mesh bits do not catch it, so it is
+	// suppressed separately.
 	if (!FirstPersonActive())
 		DrawHair();
 	phd_PushMatrix();
@@ -197,10 +220,10 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	{
 		// Leave out a joint whose seam found nothing to sew. CreateSkinningData
 		// pairs joint and skin vertices by coordinate, so with a skin the
-		// joints were not built for a seam can come up completely empty - and
-		// then the stashed positions it would be drawn from are meaningless.
+		// joints were not built for can come up completely empty - and then
+		// the stashed positions it would be drawn from are meaningless.
 		// Drawing it anyway drops a lump of geometry wherever the rest pose
-		// happens to be (seen with a Tomb Raider III body in LARA_SKIN, #122).
+		// happens to be, as with a Tomb Raider III body in LARA_SKIN.
 		if (!SkinJointUsable[i])
 			continue;
 
@@ -358,6 +381,36 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	if (!mirror)
 		CalculateObjectLightingLara();
 
+	/* The seam, and here it is one road or the other. Everything below - the
+	 * skin, the fourteen seam pieces, the braid, the thigh holsters and the
+	 * weapon on the back - is the classic composite; the HD one is the same
+	 * composite out of the remaster's own models and is put on the frame's
+	 * list in one call. Not a polygon of the classic body may go into the
+	 * buckets beside it, so this leaves the function.
+	 *
+	 * The one push above is the one pop here, and the clipping window is put
+	 * back exactly as the tail of this function does it.
+	 *
+	 * The catsuit's sheen is the known loss here. This variant draws Lara
+	 * through phd_PutPolygonsSpcEnvmap, which lays the engine's environment
+	 * map over her as a second, view-dependent pass. An HD model has no such
+	 * pass and the remaster's OUTFIT_VCI carries its own shading in its
+	 * textures, so the HD catsuit is matte where the classic one glints.
+	 * Named here and in the manual rather than faked: inventing a specular
+	 * term would be inventing a look, and the remaster's own picture is what
+	 * this path draws. */
+	if (HDLaraDrawActive())
+	{
+		HDLaraDrawFrame(mirror, false);
+		phd_PopMatrix();
+		bLaraUnderWater = 0;
+		phd_top = top;
+		phd_bottom = bottom;
+		phd_left = left;
+		phd_right = right;
+		return;
+	}
+
 	for (int i = 0; i < 15; i++)//skin
 	{
 		aMXPtr[M00] = lara_matrices[i * indices_count + M00];
@@ -380,9 +433,9 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 		aSetViewMatrix();
 
-		// First person (#126): do not draw the head, stash the vertices
-		// anyway - reasoning as in DrawLara__1. This version does not even
-		// check mesh_bits, it would have kept drawing the head otherwise.
+		// First person: do not draw the head, stash the vertices anyway -
+		// reasoning as in DrawLara__1. This version does not even check
+		// mesh_bits, it would have kept drawing the head otherwise.
 		if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
 			phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
@@ -401,10 +454,10 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	phd_PopMatrix();
 	bLaraUnderWater = LaraNodeUnderwater[8] != 0 ? 8 : -1;
 
-	// First person (#126): with the head, the BRAID must go too. It hangs
-	// on the head joint - exactly where the camera sits - and blew through
-	// the player's view. The body's mesh bits do not catch it, it is drawn
-	// separately.
+	// First person: with the head hidden, the braid must go too. It hangs on
+	// the head joint - exactly where the camera sits - and would blow through
+	// the player's view. The body's mesh bits do not catch it, so it is
+	// suppressed separately.
 	if (!FirstPersonActive())
 		DrawHair();
 	phd_PushMatrix();
@@ -416,10 +469,10 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	{
 		// Leave out a joint whose seam found nothing to sew. CreateSkinningData
 		// pairs joint and skin vertices by coordinate, so with a skin the
-		// joints were not built for a seam can come up completely empty - and
-		// then the stashed positions it would be drawn from are meaningless.
+		// joints were not built for can come up completely empty - and then
+		// the stashed positions it would be drawn from are meaningless.
 		// Drawing it anyway drops a lump of geometry wherever the rest pose
-		// happens to be (seen with a Tomb Raider III body in LARA_SKIN, #122).
+		// happens to be, as with a Tomb Raider III body in LARA_SKIN.
 		if (!SkinJointUsable[i])
 			continue;
 
@@ -585,7 +638,26 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 	CalculateObjectLightingLara();
 
-	for (int i = 0; i < 15; i++)//skin
+	/* The seam, and the one of the three that does not leave the function.
+	 * The diving suit is drawn out of two objects: her body, which the
+	 * wardrobe has as OUTFIT_SUBSUIT, and the two propulsion units below,
+	 * which are LARA_EXTRA_MESH1 turned by subsuit.XRot and which the
+	 * remaster's wardrobe has no model for.
+	 *
+	 * They are not a node of the body - they are a separate object on the
+	 * torso's matrix - so drawing them classically over an HD suit is not the
+	 * patchwork the object path refuses. It is two small classic meshes where
+	 * the alternative is a diving suit with no thrusters at all. Named in the
+	 * manual; the day the wardrobe grows a model for them this becomes one
+	 * more part.
+	 *
+	 * False for the mesh bits: this variant does not read them either. */
+	const bool hd = HDLaraDrawActive();
+
+	if (hd)
+		HDLaraDrawFrame(mirror, false);
+
+	for (int i = 0; i < 15 && !hd; i++)//skin
 	{
 		aMXPtr[M00] = lara_matrices[i * indices_count + M00];
 		aMXPtr[M01] = lara_matrices[i * indices_count + M01];
@@ -729,10 +801,10 @@ static void DrawLara__6(ITEM_INFO* item, long mirror)
 	{
 		// Leave out a joint whose seam found nothing to sew. CreateSkinningData
 		// pairs joint and skin vertices by coordinate, so with a skin the
-		// joints were not built for a seam can come up completely empty - and
-		// then the stashed positions it would be drawn from are meaningless.
+		// joints were not built for can come up completely empty - and then
+		// the stashed positions it would be drawn from are meaningless.
 		// Drawing it anyway drops a lump of geometry wherever the rest pose
-		// happens to be (seen with a Tomb Raider III body in LARA_SKIN, #122).
+		// happens to be, as with a Tomb Raider III body in LARA_SKIN.
 		if (!SkinJointUsable[i])
 			continue;
 

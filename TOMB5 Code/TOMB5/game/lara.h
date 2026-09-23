@@ -199,3 +199,15 @@ extern short DashTimer;
 extern char LaraDrawType;
 extern char WeatherType;
 extern char GfForeignSpeechHeads;
+
+/* data[3] of the level header. 0 in every vanilla file and
+ * in every run that rolled a vanilla outfit; otherwise one of the engine's
+ * own HD_LARA_OUTFIT_* numbers, 5 to 8, naming the Tomb Raider III outfit
+ * the randomizer's wardrobe put on this level.
+ *
+ * It exists because data[0] cannot say it: the wardrobe writes LARA_PONYTAIL
+ * both for the Rome body inside a Russia level and for every one of the four
+ * guests, and nothing else in the file tells the two apart. Read by the HD
+ * path alone (specific\hd\hd_laradraw.cpp) - the classic draw path does not
+ * look at it, and with hd_enable off it changes nothing at all. */
+extern char GfHdOutfit;

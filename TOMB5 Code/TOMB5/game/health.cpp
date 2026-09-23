@@ -28,6 +28,7 @@
 #include "../specific/input.h"
 #include "../tomb5/tomb5.h"
 #include "../specific/drawbars.h"
+#include "interpolate.h"		// interpolated in-between frame detection
 
 DISPLAYPU pickups[8];
 long PickupX;
@@ -42,6 +43,15 @@ long FlashIt()
 {
 	static long flash_state;
 	static long flash_count;
+
+	/* The health and air bars blink on this counter, five frames on and
+	 * five off, counted once per drawn (logic) frame from DrawGameInfo.
+	 * Counting it on every rendered frame instead would double the blink
+	 * rate at a higher frame rate, so an interpolated in-between frame just
+	 * returns the state the last logic tick left, keeping the blink speed
+	 * independent of the frame rate. */
+	if (InterpIsTweenFrame())
+		return flash_state;
 
 	if (flash_count)
 		flash_count--;
@@ -107,7 +117,12 @@ void DrawGameInfo(long timed)
 
 		if (ammo_change_timer)
 		{
-			ammo_change_timer--;
+			// The "ammo changed" caption stays up for ammo_change_timer
+			// drawn (logic) frames; counting it down only on drawn frames
+			// keeps its on-screen time independent of the render rate.
+			if (!InterpIsTweenFrame())
+				ammo_change_timer--;
+
 			PrintString(phd_winwidth >> 1, font_height, 5, ammo_change_buf, FF_CENTER);
 
 			if (ammo_change_timer <= 0)
@@ -147,7 +162,11 @@ void DrawHealthBar(long flash_state)
 	else if (health_bar_timer > 0 || lara.gun_status == LG_READY && lara.gun_type != WEAPON_TORCH || lara.poisoned >= 256)
 			S_DrawHealthBar(hitpoints / 10);
 
-	if (PoisonFlag)
+	// PoisonFlag is set to 16 by the poison damage in ControlPhase and
+	// counted down here once per drawn (logic) frame, so its rate stays
+	// independent of the render rate. Nothing currently reads the counter,
+	// but the guard keeps its value correct for anything that does.
+	if (PoisonFlag && !InterpIsTweenFrame())
 		PoisonFlag--;
 }
 
@@ -194,6 +213,16 @@ void DrawPickups(long timed)
 {
 	DISPLAYPU* pu;
 	long lp;
+
+	/* Despite the name, this function draws nothing itself: it advances the
+	 * pickup display's animation state - how long the icon stays (pu->life),
+	 * how far it has slid in from the right (PickupX), how fast it is
+	 * sliding (PickupVel), and which of the eight queued pickups is shown.
+	 * The actual drawing is S_DrawPickup in S_OutputPolyList, driven by
+	 * PickupX. An interpolated in-between frame skips this entirely, so the
+	 * icon slides in over the same real time regardless of frame rate. */
+	if (InterpIsTweenFrame())
+		return;
 
 	pu = &pickups[CurrentPickup];
 

@@ -42,6 +42,81 @@ code proves nothing. When the change was to the TR3 cache keys, the test had
 to place a TR3 guest - and the proof was that the new build re-extracted from
 Tomb Raider III and produced files byte-identical to the old cache.
 
+**The one difference that is allowed, from 2026-09-05 (#123, stage S7).**
+Every randomized level now carries the HD outfit marker in `data[3]` of its
+header block, and a sidecar `<level>.hdm` beside it. Comparing across that
+commit:
+
+- With no Tomb Raider III outfit in the run, every `.trc` must still be
+  **byte-identical**. That was measured over all thirteen levels of seed 380
+  with `mix cross allsanity 8 weapons`, once plain and once with the glitched
+  secret list - the second one because the marker's recording sits inside
+  `makePortal`, `clearWallFaces` and `moveRoom`, and a run that never opens a
+  portal would not have touched the changed code at all.
+- With a guest outfit rolled, **exactly one byte** per level may differ, and
+  it is `data[3]`: `cmp -l` shows a single line with a value of 5, 6, 7 or 8
+  (octal `10`). Anything else is a regression. Seven of thirteen levels came
+  out identical in that run because their roll landed on a vanilla outfit.
+- The `.hdm` files are part of the reproducibility: the same seed twice must
+  give the same sidecar byte for byte, not only the same level.
+
+**The `.hdm` changed shape on 2026-09-11 (#123, fix round Z), and the `.trc`
+did not.** From that commit an OPENING (`Make_Portal`, `Make_Ceiling_Portal`,
+`Make_Floor_Portal`, `@Clear`, a view window) writes a `cut <x0> <y0> <z0>
+<x1> <y1> <z1>` box instead of two `room` lines, and the version line reads
+`hdm 2` whenever such a box is in the file. Only `Move_Room` and
+`Make_Room_Geometry` still write `room`. So comparing across that commit:
+every `.trc` must still be **byte-identical** - it was measured over the eight
+levels whose secret-list lines carry geometry edits at all (ANDREA3, ANDY1,
+JOBY3, JOBY5, RICH1, RICH2, RICH3, ANDY3, seed 380, `mix cross allsanity 8
+weapons`, glitched list) - and the `.hdm` must NOT be, which is the point of
+the round. `HdmDump <level.trc>` prints both kinds of line.
+
+**The box's own numbers changed once more on 2026-09-11 (fix round Z1), and
+the `.trc` again did not.** The step of 128 in the plane of the opening turned
+from an outset into an INSET, so every `cut` line written before that commit
+has its two non-normal axes 256 units wider than the one written after it.
+Comparing across it: the eight `.trc` must be byte-identical again (they were,
+SHA-256 per file, plus ANDY3 with the glitchless list), and every `cut` line
+must have moved by exactly +128 on its two smaller-span axes' lower corner and
+-128 on their upper. The span along the normal, the only one that reads 1024,
+must not have moved at all. That is a two-line check with `HdmDump` and it is
+the whole difference.
+
+`HdmDump <level.trc>` prints `data[3]` with its meaning and the sidecar
+beside it, and says so when the two disagree.
+
+**Four more changes that are allowed to move the bytes** (written down in
+audit round A1, 2026-09-21, after a bare `rich2` run across Beta 1.0 and
+today's head came out different and the list here gave no way to recognise
+it as expected):
+
+- **#153, Round M3 - the underwater pickup animation.** The randomizer
+  backfills Lara's anim 130 (`ANIM_PICKUP_UW`) into every level whose own
+  copy of it is a stub, so items can be picked up under water everywhere.
+  This one fires with NO switches at all: the smallest case is
+  `Randomize <level> 380` on a level that lacks the animation - six of the
+  thirteen did - and the run says so itself, `note: Lara anim 130
+  backfilled from joby4`. The seven levels that carry the animation stay
+  byte-identical.
+- **#141, the headroom rule (see 1b).** Enemy placement now asks whether the
+  model's rest-pose height fits under the ceiling, and the Hydra asks for
+  five of its nine tiles; both change WHICH candidate a draw lands on, so
+  the RNG's own order moves with it. Any run with `mix` or `cross` can
+  differ from before.
+- **#144, weather.** With the weather option on, a level that has a room
+  which can show rain or snow gets a new draw - six of the thirteen can,
+  and those are the ones to compare. The run names the result in its own
+  notes.
+- **#146, the cyborg in the cross pool.** One more foreign kind to draw
+  from, so a `cross` run places a different set. Its own commit claims
+  byte-identity with the previous build when the two new rows are
+  deselected - the case to run when checking that claim.
+
+In every one of these the difference is EXPECTED. What still has to hold
+is the other half of the recipe: the same seed twice must give the same
+bytes, and a level the change cannot reach must not move at all.
+
 **A known break in the chain, 2026-09-03 (#137).** From the commit that
 builds geometry for rooms that have none, `Make_Portal` writes its view
 windows corner-exact out of the floordata instead of out of the sector's two
@@ -147,6 +222,17 @@ identifier and a runtime log line.
 **What a word list can never find:** identifiers (`ziel`, `ton`, `Wofuer`),
 data tokens (cache suffixes, ImGui ids), and file names. Those need their own
 pass.
+
+**And a fourth detector the sweep of audit round A1 had to add: the WIDE
+string literal.** A German sentence inside `L"..."` went through a line scan
+untouched and surfaced only in the identifier pass, through the single word
+`Ordner` - four unambiguous German words in one line, invisible to the
+detector that was supposed to find exactly that. It was the launcher's
+folder-picker title (`TR5Randomizer/src/gui/Main.cpp`), the one UI string
+that went round the translation table instead of through it; round A1 routed
+it through `Language.cpp` like the rest. Scan `L"` and `u8"` literals in
+their own pass, and treat a string that bypasses the translation table as a
+finding in itself - it is where German hides.
 
 **Expect false positives and name them.** The licence header contains
 "native Windows 11 port", which matches a search for the old work-tree folder

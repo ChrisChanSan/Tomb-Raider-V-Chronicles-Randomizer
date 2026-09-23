@@ -1,34 +1,38 @@
+# Modified 2026 by ChrisChanSan.
+#
+# Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+# TR5 Randomizer project. The individual changes are recorded in the git
+# history of this source tree.
+#
+# TOMB5 is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version. See the LICENSE file at the root of this source tree.
+#
+
 # Bakes the precomputed data into the randomizer's source code.
 #
-# WHAT IT MAKES. TR5Randomizer\src\core\EmbeddedData.cpp - one zlib stream
-# per file, as a byte table, plus an index. The randomizer unpacks them with
-# the zlib it links anyway (DataFile.cpp). The rule at run time is: a file in
-# data\ beside the EXE wins, the baked copy is the floor. The reasoning
-# stands in EmbeddedData.h.
+# Produces TR5Randomizer\src\core\EmbeddedData.cpp: one zlib stream per file
+# as a byte table, plus an index, unpacked at run time with the zlib the
+# randomizer already links (DataFile.cpp). A file in data\ beside the EXE
+# always wins over the baked copy, which is only the floor - see
+# EmbeddedData.h.
 #
-# WHEN TO RUN IT. After every re-curation, that is: whenever the zone exports
-# in build\data were regenerated (ZoneAnalysis.ps1, or BuildRelease.ps1 which
-# does all fifteen). Then rebuild with b1.bat/b2.bat and commit the generated
-# file. The generated file IS tracked - that is the whole point of the
-# change, the repository now carries the data that build\data used to carry
-# alone, gitignored and covered by nothing.
+# Run after every re-curation, once the zone exports in build\data changed
+# (ZoneAnalysis.ps1, or BuildRelease.ps1 which regenerates all fifteen), then
+# rebuild with b1.bat/b2.bat. The generated .cpp is tracked in the
+# repository rather than left gitignored like build\data.
 #
-# THE BUILD NEVER CALLS THIS SCRIPT. GPLv3 asks that the shipped binary be
-# buildable from the shipped source; b1.bat and b2.bat therefore need a
-# compiler and nothing else. A player never runs PowerShell, and neither does
-# anyone rebuilding from the package.
+# The build itself never calls this script, so b1.bat/b2.bat need only a
+# compiler and no PowerShell, which GPLv3's buildable-from-source
+# requirement demands.
 #
-# WHY POWERSHELL AND NOT A SMALL C++ TOOL. What this script consumes is made
-# by PowerShell - ZoneAnalysis.ps1 writes the zone exports, BuildRelease.ps1
-# drives it for all fifteen levels - so the step after a re-curation stays
-# one command in the same language, with nothing to compile first that could
-# be stale against the data it packs. The price is the one thing .NET does
-# not give us: its DeflateStream writes RAW deflate, while zlib's
-# uncompress() wants the RFC 1950 wrapper. So the two header bytes and the
-# Adler-32 trailer are written here by hand, below. That is fifteen lines,
-# and it is not taken on trust: the mandatory check runs the built EXE with
-# data\ renamed away, which reads every one of these streams back through
-# uncompress() - a wrong header or a wrong checksum fails there loudly.
+# PowerShell rather than a small C++ tool, because the files it reads are
+# themselves produced by PowerShell. The one cost is that .NET's
+# DeflateStream writes raw deflate while zlib's uncompress() wants the RFC
+# 1950 wrapper, so the two header bytes and the Adler-32 trailer below are
+# written by hand; a build with data\ renamed away round-trips every stream
+# through uncompress() and fails loudly on a wrong header or checksum.
 param(
     # Where the files to bake lie. The developer mirror, not the release
     # folder: build\data is what b1/b2 run against.
@@ -84,8 +88,8 @@ function ConvertTo-ZlibStream([byte[]]$raw) {
     $mem.Dispose()
 
     # Adler-32. $sumA and $sumB spelled out on purpose: PowerShell does not
-    # tell $a from $A, and a pair of one-letter variables is exactly how a
-    # measurement script once returned plausible zeros.
+    # tell $a from $A, and a pair of one-letter variables risks silently
+    # returning plausible zeros.
     $sumA = 1
     $sumB = 0
     foreach ($byte in $raw) {

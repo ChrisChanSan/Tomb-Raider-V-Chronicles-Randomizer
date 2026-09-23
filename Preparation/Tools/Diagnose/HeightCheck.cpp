@@ -1,8 +1,22 @@
-// HeightCheck - does every enemy in a level have headroom for its model? (#141)
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+
+// HeightCheck - checks whether every enemy in a level has headroom for its
+// model.
 //
 // The randomizer used to put enemies into rooms lower than the model, and the
-// head then stuck through the ceiling (user find in game: rich1 item 259, a
-// soldier statue of 1546 units under a ceiling 1024 above the floor). This
+// head then stuck through the ceiling (rich1 item 259: a soldier statue of
+// 1546 units under a ceiling 1024 above the floor). This
 // tool is the independent witness for the rule that fixes it - it reads the
 // FINISHED level file and knows nothing about the placement code:
 //
@@ -14,15 +28,15 @@
 //                      been followed upward the way GetCeiling does)
 //
 // A violation is clearance < height. No safety margin: a 1024 room has to
-// stay open to an 809 unit human, that is the user's decision.
+// stay open to an 809 unit human.
 //
 // Both numbers come out of the level under test, so an imported foreign
 // model is measured as it really arrived, not as some table claims.
 //
-// CALIBRATION: on the 15 VANILLA levels the tool must report 0 violations.
-// Core's own placements are the yardstick - if the measure calls them
-// wrong, the measure is wrong. It did, once: without the sky_room walk, ten
-// vanilla enemies came out too tall for their spot.
+// On the 15 vanilla levels the tool must report 0 violations. Core's own
+// placements are the yardstick - if the measure calls them wrong, the
+// measure is wrong. It did, once: without the sky_room walk, ten vanilla
+// enemies came out too tall for their spot.
 //
 // Usage:
 //   HeightCheck <level.trc> [<level.trc> ...]   - enemy items, violations, totals

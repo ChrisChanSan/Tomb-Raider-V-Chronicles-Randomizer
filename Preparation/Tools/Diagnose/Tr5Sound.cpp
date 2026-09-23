@@ -1,7 +1,7 @@
 // Tr5Sound - reads a TR5 level's sound chain: soundmap entry, SAMPLE_INFO
 // and the wave headers of the samples belonging to it.
 //
-// Occasions (#111 run-up, user finds 2026-08-18):
+// Symptoms this tool investigates:
 //  - Maze Monster runs in andy1 with a metallic screech, stacked
 //    (SFXLOG: sfx=250 map=84 sample=97 of 1 variants "once").
 //  - Guard (460) and Crane Guy (55) die with the wrong family's scream
@@ -203,7 +203,7 @@ int main(int argc, char** argv)
         if (m < 0) continue;
         Info f = info(m);
         // rad in sectors as in the file; the engine turns it into
-        // (radius + 1) << 10 units as the hard hearing limit (sound.cpp:203).
+        // (radius + 1) << 10 units as the hard hearing limit (sound.cpp).
         std::printf("%4d %4d %7d %5d %4u %4d %4u %6d  %s\n",
                     sfx, (int)m, (int)f.number, (f.flags >> 2) & 0xF,
                     f.volume, (int)f.radius, f.chance, f.flags & 3,

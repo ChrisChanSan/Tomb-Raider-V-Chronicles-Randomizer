@@ -300,8 +300,8 @@ void ResetTest(ITEM_INFO* item)
 			else if (objects[BLUE_GUARD].loaded)
 				target_item->anim_number = objects[BLUE_GUARD].anim_index + 0;
 			else
-				// Randomizer (#105): last anchor for the second guard, see
-				// the same chain in control.cpp.
+				// Last animation anchor for the second guard model; the
+				// same fallback chain is used in control.cpp.
 				target_item->anim_number = objects[BLUE_GUARD2].anim_index + 0;
 
 			target_item->current_anim_state = 1;
@@ -485,8 +485,8 @@ void SoundEffects()
 	OBJECT_VECTOR* sound;
 	SoundSlot* slot;
 	
-	// Everything in this loop is fixed level scenery - sound.cpp hangs the
-	// range brake and the stacking guard on it (#114).
+	// Marks these as fixed level scenery sounds so sound.cpp can apply the
+	// ambient range limit and the stacking guard to them.
 	SfxSourceAmbient = 1;
 
 	for (int i = 0; i < number_sound_effects; i++)

@@ -1,11 +1,11 @@
 // AnimCmd - lists an object slot's anim commands, above all the sound
-// commands (type 5). Needed for #111 part 2: which death scream does the
-// soldier family really call, and do the SFX numbers differ between the
-// donors (rich3 SWAT vs joby3 Guard)?
+// commands (type 5). Used to compare which SFX an animation calls across
+// different donor slots (e.g. the soldier family's death scream between
+// rich3's SWAT and joby3's Guard).
 //
 // The command loop counts COMMANDS, not words - one command occupies 1 to
 // 4 words (type 1: 3 operands, type 2: 2, type 3/4: none, type 5/6: 2).
-// Exactly this counting is what TR3Insert once failed at (the Compy case).
+// A word-based count misreads the block past the first multi-word command.
 //
 // Usage: AnimCmd <level.trc> <slot> [slot ...]
 #include <cstdio>

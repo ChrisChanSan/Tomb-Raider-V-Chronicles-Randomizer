@@ -1,4 +1,4 @@
-// Cross-check for sound extraction and SFX rerouting (#92).
+// Cross-check for sound extraction and SFX rerouting.
 #include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>
@@ -13,7 +13,6 @@ static bool readAll(const char* p, std::vector<uint8_t>& b)
 
 int main(int argc, char** argv)
 {
-    // TR3SoundCheck <MAIN.SFX> <tool_sound.bin> <id:wave[,wave]> ...
     if (argc < 4) { std::printf("usage: TR3SoundCheck <MAIN.SFX> <tool.bin> <id:wave,...> ...\n"); return 2; }
     std::string p(argv[1]); std::wstring wp(p.begin(), p.end());
 

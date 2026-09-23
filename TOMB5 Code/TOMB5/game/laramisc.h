@@ -23,5 +23,6 @@ void LaraCheatGetStuff();
 void AnimateLara(ITEM_INFO* item);
 void LaraCheatyBits();
 void LaraControl(short item_number);
+void CheatLog(const char* what, const char* src);	// single logging point for every cheat activation, records which cheat fired and its source
 
 extern COLL_INFO mycoll;

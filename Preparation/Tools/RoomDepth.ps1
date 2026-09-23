@@ -4,13 +4,13 @@
 # portalTarget/roomBelow/roomAbove, regardless of whether a door stands in
 # the way or a sector is a wall.
 #
-# Purpose: if a room is reachable here but my sector-wise flood in
-# ZoneAnalysis.ps1 reports it as unreached, that shows a REAL blockage
+# Purpose: if a room is reachable here but the sector-wise flood in
+# ZoneAnalysis.ps1 reports it as unreached, that shows a real blockage
 # (door, wall, missing sector connection) - not just a gap in the portal
-# graph connectivity. This distinguishes whether a level area like the air
-# shaft in joby3 is reached by movement (climbing/crawling) that does not
-# appear as a portal in the sector data at all, or whether it simply lies
-# behind a (still closed) door.
+# graph's connectivity. This distinguishes whether a level area like the air
+# shaft in joby3 is reached by movement (climbing/crawling) that never
+# appears as a portal in the sector data, or whether it simply lies behind a
+# still-closed door.
 param(
     [string]$LevelJson,
     [string]$LevelName = "Level",

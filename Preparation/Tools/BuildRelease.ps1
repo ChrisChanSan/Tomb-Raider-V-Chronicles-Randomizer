@@ -10,9 +10,9 @@
 # demands a clear notice of the modification including a date: that is
 # TOMB5 Code\MODIFICATIONS.md.
 #
-# What DELIBERATELY does NOT go in here: game data. Neither levels nor
+# What deliberately does NOT go in here: game data. Neither levels nor
 # music, videos or language files. Tomb Raider Chronicles belongs to its
-# rights holders; the user brings their own installation, and the
+# rights holders; a player brings their own installation, and the
 # randomizer copies what it needs on first start by itself.
 param(
     [string]$OutDir = "",
@@ -21,8 +21,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Everything relative to the script location (Tools -> two levels up = repo
-# root), so the script runs on any machine and carries no developer paths
-# (#72).
+# root), so the script runs on any machine and carries no developer paths.
 $Root      = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($OutDir -eq "") { $OutDir = Join-Path $Root "Release Package" }
 $EngineSrc = "$Root\TOMB5 Code"
@@ -85,9 +84,9 @@ foreach ($f in (Get-ChildItem "$LevelInfo\*.json" | Sort-Object Name)) {
 # ZoneAnalysis reads the sector grid from them.
 Say "Data          : $zones zone exports + checksum list"
 
-# The secret lists (#53). The GUI looks for them in data\secrets next to the
-# EXE (findSecretSources) - without them both dropdowns stay empty and the
-# whole secret feature silently does not exist for anyone but us. They are
+# The secret lists. The GUI looks for them in data\secrets next to the EXE
+# (findSecretSources) - without them both dropdowns stay empty and the whole
+# secret feature silently does not exist for anyone but us. They are
 # hand-maintained text, not generated, so they are copied, not rebuilt.
 $secretsOut = "$dataOut\secrets"
 New-Item -ItemType Directory -Path $secretsOut -Force | Out-Null
@@ -100,13 +99,13 @@ foreach ($f in (Get-ChildItem "$secretsIn\*.txt" | Sort-Object Name)) {
 Say "Secret lists  : $lists files (data\secrets)"
 
 # --- 3b. trview type names ---------------------------------------------------
-# Ten slots that a level viewer would otherwise name wrongly or not at all:
+# Eleven slots that a level viewer would otherwise name wrongly or not at all:
 # four (31/43/53/75) carry different contents afterwards - the TR3 guests
 # overwrite SAS, CROW, SAILOR and REAPER; two (47/55) are ordinary Chronicles
-# slots trview has no entry for; two (460/461) lie beyond trview's list, which
-# ends at id 452; and two it knows but cannot tell apart - 41 and 85 are both
-# called "Dog" although only one is the husky, and "Soldier Statue" no longer
-# suffices now that two Roman gods can stand in one level.
+# slots trview has no entry for; three (460/461/469) lie beyond trview's list,
+# which ends at id 452; and two it knows but cannot tell apart - 41 and 85 are
+# both called "Dog" although only one is the husky, and "Soldier Statue" no
+# longer suffices now that two Roman gods can stand in one level.
 #
 # Not needed to play. It is here because anyone reporting an oddity is asked
 # to look at the level, and a viewer showing "Crow" where a vulture stands
@@ -140,16 +139,16 @@ Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
 # The randomizer is a standalone program that reads and writes data files.
 # It is not a fork of the engine, but it is not wholly independent of it
 # either: src\core\Floor.h ports GetHeight and CheckNoColFloorTriangle
-# VERBATIM from control.cpp, and says so in its own header. Both are
+# verbatim from control.cpp, and says so in its own header. Both are
 # GPLv3, so the combination is fine - but the source has to come along for
 # that reason, not merely as a courtesy.
-# src\ ALONE IS NOT ENOUGH. The binary also links Dear ImGui, and the GPL
-# counts "the scripts used to control compilation" as part of the source -
-# so b1.bat and b2.bat travel too, and imgui brings its own MIT licence.
-# Without these a recipient holds source that cannot rebuild the program,
-# which is exactly what the obligation exists to prevent. zlib is not
-# repeated here: the build scripts read it out of the engine source, which
-# this package already ships in full.
+# The src folder alone is not enough: the binary also links Dear ImGui, and
+# the GPL counts "the scripts used to control compilation" as part of the
+# source - so b1.bat and b2.bat travel too, and imgui brings its own MIT
+# licence. Without these a recipient holds source that cannot rebuild the
+# program, which is exactly what the obligation exists to prevent. zlib is
+# not repeated here: the build scripts read it out of the engine source,
+# which this package already ships in full.
 $rsOut = "$OutDir\Source\TR5Randomizer"
 New-Item -ItemType Directory -Path $rsOut -Force | Out-Null
 Copy-Item "$RandoRoot\src" $rsOut -Recurse -Force
@@ -177,12 +176,17 @@ $lic = "$OutDir\Licenses"
 New-Item -ItemType Directory -Path $lic -Force | Out-Null
 Copy-Item "$EngineSrc\LICENSE" "$lic\TOMB5-GPLv3.txt" -Force
 if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearImGui-MIT.txt" -Force }
-# discord-rpc is NOT linked into PCtomb5.exe - tomb5.cpp:35 sets
+# discord-rpc is NOT linked into PCtomb5.exe - tomb5.cpp sets
 # TOMB5_DISCORD_RPC to 0 and every call sits inside the #if. Its notice
 # still has to travel, because the .lib files and headers are part of the
 # source tree this package distributes. See THIRD-PARTY.md.
 $drpc = "$EngineSrc\TOMB5\tomb5\libs\discordRPC\LICENSE"
 if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
+# TRForge: five files are vendored verbatim under TOMB5\vendor\trforge and
+# its .TRG reader is compiled into PCtomb5.exe, so unlike discord-rpc this
+# notice has to travel with the binary, not only with the source.
+$trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"
+if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
 # zlib and stb_vorbis keep their notice inside their own source. It is lifted
 # from there rather than copied into a second file, so the package cannot end
 # up shipping a stale version of someone else's licence.
@@ -210,7 +214,7 @@ $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](TOMB5-GPLv3.txt)')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
-Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb)"
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb, TRForge)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at

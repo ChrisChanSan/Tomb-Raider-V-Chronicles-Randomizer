@@ -394,7 +394,7 @@ void PoleCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 	
 	item = &items[item_num];
 
-	if (input & IN_ACTION && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH ||
+	if (input & IN_ACTION_ANY && lara.gun_status == LG_NO_ARMS && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH ||
 		lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		roty = item->pos.y_rot;
@@ -421,7 +421,7 @@ void PoleCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 
 		item->pos.y_rot = roty;
 	}
-	else if (input & IN_ACTION && lara.gun_status == LG_NO_ARMS && l->gravity_status != 0 && l->fallspeed > 0 &&
+	else if (input & IN_ACTION_ANY && lara.gun_status == LG_NO_ARMS && l->gravity_status != 0 && l->fallspeed > 0 &&
 		(l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP))
 	{
 		if (TestBoundsCollide(item, l, 100) && TestCollision(item, l))
@@ -563,7 +563,7 @@ void TightRopeCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_num];
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->gravity_status &&
+	if (input & IN_ACTION_ANY && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->gravity_status &&
 		lara.gun_status == LG_NO_ARMS || lara.IsMoving && lara.GeneralPtr == (void*)item_num)
 	{
 		item->pos.y_rot += 0x8000;
@@ -606,7 +606,7 @@ void ParallelBarsCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 
 	item = &items[item_num];
 
-	if (!(input & IN_ACTION) || l->current_anim_state != AS_REACH || l->anim_number != ANIM_GRABLOOP)
+	if (!(input & IN_ACTION_ANY) || l->current_anim_state != AS_REACH || l->anim_number != ANIM_GRABLOOP)
 	{
 		if (l->current_anim_state != AS_PBSPIN)
 			ObjectCollision(item_num, l, coll);

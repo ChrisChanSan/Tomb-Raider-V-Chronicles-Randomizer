@@ -1,4 +1,17 @@
 /*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+
+/*
  * DdsProbe - decode a BC7 .DDS with the engine's own decoder and write a PNG.
  *
  * Direct3D 9 cannot sample BC7, so the engine unpacks the remaster's HD
@@ -23,6 +36,10 @@
  *   DdsProbe <in.dds> <out.png>     decode, report, write
  *   DdsProbe -logo <title.dds> <logo.dds> <out.png>
  *                                   compose the title screen, report, write
+ *   DdsProbe -alpha <in.dds> <out.png>
+ *                                   the ALPHA channel as a grey picture, with
+ *                                   a histogram - an item page's alpha is a
+ *                                   gloss mask, not coverage
  *   DdsProbe -crop <logo.dds> <out.png>
  *                                   the title MENU's logo texture page, report,
  *                                   write (alpha over a checkerboard)
@@ -330,6 +347,70 @@ static void AlphaKind(const unsigned long* px, long w, long h)
 	printf("  -> stored as     : %s\n", notPre ? "straight alpha (premultiply before blending)" : "premultiplied or too flat to tell");
 }
 
+
+/* -alpha: the gloss mask.
+ *
+ * An item page's alpha channel is not coverage - measured on the room pages,
+ * and TROne says the same about the item ones in so many words
+ * (host\render\game_renderer.cpp:373: "an opaque-pass tile's alpha channel
+ * holds a sparkle/specular MASK, not coverage"). This mode reads that channel
+ * out: a histogram in sixteen buckets, the mean, and the PNG written is the
+ * alpha as a grey picture, so a person can see whether the bright parts sit
+ * where a highlight belongs.
+ */
+static int AlphaMask(const char* inPath, const char* outPath)
+{
+	long w = 0, h = 0;
+	unsigned long* px = Decode(inPath, &w, &h);
+
+	if (!px)
+		return 2;
+
+	const long texels = w * h;
+	long bucket[16] = { 0 };
+	double sum = 0.0;
+	long below128 = 0, exactly255 = 0;
+
+	for (long i = 0; i < texels; i++)
+	{
+		const long a = (long)((px[i] >> 24) & 0xFF);
+
+		bucket[a >> 4]++;
+		sum += (double)a;
+
+		if (a < 128)
+			below128++;
+
+		if (a == 255)
+			exactly255++;
+	}
+
+	printf("file             : %s, %ld x %ld\n", inPath, w, h);
+	printf("  alpha mean       : %.1f of 255\n", sum / (double)texels);
+	printf("  alpha < 128      : %ld texels (%.1f %%)\n", below128,
+		100.0 * below128 / (double)texels);
+	printf("  alpha == 255     : %ld texels (%.1f %%)\n", exactly255,
+		100.0 * exactly255 / (double)texels);
+	printf("  histogram, 16 buckets of 16:\n");
+
+	for (int b = 0; b < 16; b++)
+		printf("    %3d..%3d       : %8ld  %5.1f %%\n", b * 16, b * 16 + 15,
+			bucket[b], 100.0 * bucket[b] / (double)texels);
+
+	// The alpha as a grey picture.
+	for (long i = 0; i < texels; i++)
+	{
+		const unsigned long a = (px[i] >> 24) & 0xFF;
+
+		px[i] = 0xFF000000u | (a << 16) | (a << 8) | a;
+	}
+
+	const int ok = WritePng(outPath, px, w, h);
+
+	free(px);
+	return ok ? 0 : 2;
+}
+
 // -logo: title picture + wordmark -> PNG, through the engine's own routine.
 static int ComposeLogo(const char* titlePath, const char* logoPath, const char* outPath)
 {
@@ -493,6 +574,160 @@ static int CropLogo(const char* logoPath, const char* outPath)
 	return 0;
 }
 
+/* Row and column profiles of a sheet.
+ *
+ * EFFECT.DDS is an atlas: one 2048 x 2048 sheet holding two dozen unrelated
+ * effect pictures on a black ground. Cutting a tile out of it by eye is a
+ * guess; this makes it a measurement. Per row (and per column) it prints how
+ * many texels are above a threshold and their mean brightness, so the runs of
+ * black between the pictures - and therefore each picture's own rectangle -
+ * can be read off numbers instead of off a screenshot. */
+static int Profile(const char* inPath, int step)
+{
+	unsigned char* file;
+	unsigned long size;
+	unsigned long* px;
+	const char* why;
+	long w, h, x, y;
+
+	file = ReadWhole(inPath, &size);
+
+	if (!file)
+	{
+		printf("cannot read %s\n", inPath);
+		return 1;
+	}
+
+	px = BC7DecodeDDS(file, size, 4096, &w, &h, &why);
+	free(file);
+
+	if (!px)
+	{
+		printf("REFUSED: %s\n", why);
+		return 1;
+	}
+
+	printf("size             : %ld x %ld, step %d\n", w, h, step);
+	printf("  row   lit  mean  peak      col   lit  mean  peak\n");
+
+	for (y = 0; y < h; y += step)
+	{
+		long lit = 0, sum = 0, peak = 0;
+		long clit = 0, csum = 0, cpeak = 0;
+
+		for (x = 0; x < w; x++)
+		{
+			const unsigned long v = px[y * w + x];
+			const long lum = (long)(((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)) / 3;
+
+			if (lum > 16) lit++;
+			sum += lum;
+			if (lum > peak) peak = lum;
+		}
+
+		for (x = 0; x < h && y < w; x++)
+		{
+			const unsigned long v = px[x * w + y];
+			const long lum = (long)(((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)) / 3;
+
+			if (lum > 16) clit++;
+			csum += lum;
+			if (lum > cpeak) cpeak = lum;
+		}
+
+		printf("%5ld %5ld %5ld %5ld    %5ld %5ld %5ld %5ld\n",
+			y, lit, sum / w, peak, y, clit, csum / h, cpeak);
+	}
+
+	free(px);
+	return 0;
+}
+
+/* One rectangle of a sheet, as a picture. The tile the engine is about to
+ * cut out of an atlas, so that the numbers above and the picture the player
+ * sees are the same rectangle. */
+static int Cut(const char* inPath, int cx, int cy, int cw, int ch, const char* outPath)
+{
+	unsigned char* file;
+	unsigned long size;
+	unsigned long* px;
+	unsigned long* out;
+	const char* why;
+	long w, h, x, y;
+
+	file = ReadWhole(inPath, &size);
+
+	if (!file)
+	{
+		printf("cannot read %s\n", inPath);
+		return 1;
+	}
+
+	px = BC7DecodeDDS(file, size, 4096, &w, &h, &why);
+	free(file);
+
+	if (!px)
+	{
+		printf("REFUSED: %s\n", why);
+		return 1;
+	}
+
+	if (cx < 0 || cy < 0 || cw <= 0 || ch <= 0 || cx + cw > w || cy + ch > h)
+	{
+		printf("rectangle %d %d %d %d is not inside %ld x %ld\n", cx, cy, cw, ch, w, h);
+		free(px);
+		return 1;
+	}
+
+	out = (unsigned long*)malloc((size_t)cw * (size_t)ch * sizeof(unsigned long));
+
+	if (!out)
+	{
+		free(px);
+		return 1;
+	}
+
+	for (y = 0; y < ch; y++)
+		for (x = 0; x < cw; x++)
+			out[y * cw + x] = px[(cy + y) * w + cx + x];
+
+	{
+		double sum[3] = { 0, 0, 0 };
+		long lo = 255, hi = 0;
+
+		for (y = 0; y < ch; y++)
+			for (x = 0; x < cw; x++)
+			{
+				const unsigned long v = out[y * cw + x];
+				const long lum = (long)(((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)) / 3;
+
+				sum[0] += (double)((v >> 16) & 255);
+				sum[1] += (double)((v >> 8) & 255);
+				sum[2] += (double)(v & 255);
+
+				if (lum < lo) lo = lum;
+				if (lum > hi) hi = lum;
+			}
+
+		printf("cut              : %d %d %d %d of %ld x %ld\n", cx, cy, cw, ch, w, h);
+		printf("  mean RGB         : %.1f %.1f %.1f, luminance %ld..%ld\n",
+			sum[0] / (cw * ch), sum[1] / (cw * ch), sum[2] / (cw * ch), lo, hi);
+	}
+
+	if (!WritePng(outPath, out, cw, ch))
+	{
+		printf("cannot write %s\n", outPath);
+		free(out);
+		free(px);
+		return 1;
+	}
+
+	printf("wrote            : %s\n", outPath);
+	free(out);
+	free(px);
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* file;
@@ -517,6 +752,16 @@ int main(int argc, char** argv)
 
 	if (argc == 4 && !strcmp(argv[1], "-crop"))
 		return CropLogo(argv[2], argv[3]);
+
+	if (argc == 4 && !strcmp(argv[1], "-alpha"))
+		return AlphaMask(argv[2], argv[3]);
+
+	if ((argc == 3 || argc == 4) && !strcmp(argv[1], "-rows"))
+		return Profile(argv[2], argc == 4 ? atoi(argv[3]) : 1);
+
+	if (argc == 8 && !strcmp(argv[1], "-cut"))
+		return Cut(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]),
+			atoi(argv[6]), argv[7]);
 
 	if (argc != 3)
 	{

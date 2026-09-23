@@ -20,7 +20,7 @@
 #include <string>
 #include <unordered_map>
 
-bool gGermanUi = false;   // default English (user decision 2026-08-24)
+bool gGermanUi = false;   // default English
 
 // English -> German. The KEY is exactly the string from the source (for
 // multi-line help texts, the complete concatenated text). The table was
@@ -84,6 +84,8 @@ static const std::unordered_map<std::string, const char*>& table()
         { "the vulture", "der Geier" },
         { "(not selected)", "(nicht gewaehlt)" },
         { "Choose folder...", "Ordner waehlen..." },
+        { "Choose the folder of your Tomb Raider Chronicles installation",
+          "Ordner der Tomb Raider Chronicles-Installation waehlen" },
         { "Clear", "Leeren" },
         { "OK", "in Ordnung" },
         { "%s not found", "%s nicht gefunden" },
@@ -298,7 +300,7 @@ static const std::unordered_map<std::string, const char*>& table()
         { "Random outfits", "Zufaellige Outfits" },
         { "TR1 outfit", "TR1 Outfit" },
 
-        // --- The wardrobe (#122) -----------------------------------------
+        // --- The wardrobe -------------------------------------------------
         { "Wardrobe", "Kleiderschrank" },
         { "Wardrobe...", "Kleiderschrank..." },
         { "Which outfits the random draw may pick. Everything is on by "
@@ -537,7 +539,6 @@ static const std::unordered_map<std::string, const char*>& table()
         { "Textures", "Texturen" },
         { "RGB vanilla textures", "RGB Vanilla Texturen" },
         { "Mix across levels", "Leveluebergreifend mixen" },
-        { "Patch remaster textures", "Remaster-Texturen patchen" },
         { "Rooms", "Raeume" },
         { "Include backdrop areas", "Kulissen einbinden" },
         { "Make neighboring rooms walkable", "Nachbar-Raeume begehbar machen" },
@@ -549,10 +550,6 @@ static const std::unordered_map<std::string, const char*>& table()
           "Russia, the submarine in Ireland.",
           "Kommt noch: Texturseiten zwischen den Leveln tauschen - Rom in "
           "Russland, U-Boot in Irland." },
-        { "Coming later: patch remaster textures (if the player owns "
-          "them) into the classic levels.",
-          "Kommt noch: Remaster-Texturen (sofern der Spieler sie hat) in "
-          "die klassischen Level patchen." },
         { "Coming later: bring pure backdrop areas into play so items "
           "and enemies can be placed there.",
           "Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "

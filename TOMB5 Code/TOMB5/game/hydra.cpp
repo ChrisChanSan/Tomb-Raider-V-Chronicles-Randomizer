@@ -292,23 +292,19 @@ void TriggerHydraMissile(PHD_3DPOS* pos, short room_number, short num)
 		fx->speed = (GetRandomControl() & 0x1F) + 64;
 		fx->flag1 = 0;
 
-		// OPEN (user find): the projectile is a SPRITE, and Core fetches it
-		// sixteen frames behind the start of the BUBBLES sequence. That
-		// only works out as long as the sprite list looks like in Trajan
-		// Markets, the only level with a Hydra - elsewhere a different
-		// image lies there, and she spits a color streak.
+		// The projectile is a sprite, and Core fetches it sixteen frames
+		// into the BUBBLES sequence. That only works when the sprite list
+		// matches Trajan Markets, the only level with a Hydra - elsewhere a
+		// different image lies there and she spits a color streak instead
+		// of fire.
 		//
-		// An attempt with DEFAULT_SPRITES as object_number was WRONG and
-		// is withdrawn: object_number decides WHETHER the engine draws a
-		// sprite or a mesh - with a moveable slot it lands in the mesh
-		// branch and renders its meshes (seen in game: two leg pieces
-		// instead of fire). Only frame_number is the pure sprite index;
-		// object_number must stay a sprite object.
-		//
-		// The clean solution thus needs either the right sprite index per
-		// level or a sprite transfer in the copier. Until then Core's
-		// original stands: the Hydra works, only her projectile looks
-		// wrong outside Trajan Markets.
+		// object_number decides whether the engine draws a sprite or a
+		// mesh; with a moveable slot it takes the mesh branch and renders
+		// its meshes instead (seen in game as two leg pieces). frame_number
+		// alone is the sprite index, so object_number must stay a sprite
+		// object. A fix needs either the right sprite index per level or a
+		// sprite transfer in the copier; until then the projectile only
+		// looks correct in Trajan Markets.
 		fx->object_number = BUBBLES;
 		fx->frame_number = objects[BUBBLES].mesh_index + 16;
 	}

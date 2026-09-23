@@ -29,6 +29,9 @@
 #include "file.h"
 #include "fmv.h"
 #include "setupdlg.h"
+#include "../tomb5/tomb5.h"	// load_tomb5_present_settings
+#include "hd/hd_mods.h"		// the mods folder's log sink
+#include "hd/hd_wardrobe.h"	// and the wardrobe scan's
 
 WINAPP App;
 long resChangeCounter;
@@ -39,15 +42,15 @@ static COMMANDLINES commandlines[] =
 	{ "NOFMV", 0, &CLNoFMV }
 };
 
-// -log (#125): switch the log on for this run.
+// -log: switch the log on for this run.
 //
-// This flag DELIBERATELY does not go through the commandlines table above.
-// That table is worked off inside WinProcessCommandLine, and by then the
-// run check and the gameflow load have already run and logged - exactly
-// the startup lines a diagnosis needs most would be missing. It is
-// therefore read by hand as the first thing WinMain does.
+// Deliberately does not go through the commandlines table above. That
+// table is worked off inside WinProcessCommandLine, and by then the run
+// check and the gameflow load have already run and logged - exactly the
+// startup lines a diagnosis needs most would be missing. It is therefore
+// read by hand as the first thing WinMain does.
 //
-// Matched as a WHOLE WORD, unlike the table entries, which use a plain
+// Matched as a whole word, unlike the table entries, which use a plain
 // strstr: a stray "log" inside some path would otherwise silently turn on
 // per-frame logging, which is the one thing this gate exists to prevent.
 static bool WinCheckLogFlag(LPSTR cmd)
@@ -280,6 +283,10 @@ void WinProcessCommands(long cmd)
 		ResumeThread((HANDLE)MainThread.handle);
 		App.dx.WaitAtBeginScene = 0;
 		Log("Game Thread Resumed");
+		/* Four seconds of the resolution caption, counted in logic ticks,
+		 * which are thirty a second at every frame rate, so this is
+		 * vanilla's own 120 again and needs no rate baked into it - see the
+		 * note beside the countdown in S_OutputPolyList. */
 		resChangeCounter = 120;
 	}
 }
@@ -411,15 +418,15 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 				{
 					// Bounded wait: the game thread can occasionally stall for
 					// several seconds inside the graphics driver's Present()
-					// call (observed via cdb: stuck in nvd3dum during the
-					// level-load progress bar, unrelated to focus changes).
-					// These used to be plain while(){} spins - if the game
-					// thread never reached a safe point, this handler (running
-					// synchronously on the window procedure) would spin here
-					// forever, freezing the entire application with no way to
-					// recover short of killing the process. Give it a couple
-					// seconds, then leave the game thread running unpaused
-					// rather than deadlock the whole app over a driver hiccup.
+					// call (e.g. stuck in nvd3dum during the level-load
+					// progress bar, unrelated to focus changes). This handler
+					// runs synchronously on the window procedure, so an
+					// unbounded spin here while the game thread never reaches
+					// a safe point would freeze the whole application with no
+					// way to recover short of killing the process. Give it a
+					// couple of seconds, then leave the game thread running
+					// unpaused rather than deadlock the app over a driver
+					// hiccup.
 					DWORD waitStart = GetTickCount();
 					bool safeToSuspend = true;
 
@@ -587,6 +594,14 @@ void WinSetStyle(bool fullscreen, ulong& set)
 		set = style;
 }
 
+// One MODLOG line. Log() takes a format, so the note goes through %s
+// rather than as the format itself - a mod folder called "100%" would
+// otherwise be read as a conversion.
+static void ModsLogLine(const char* line)
+{
+	Log("%s", line);
+}
+
 int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nShowCmd)
 {
 	DXDISPLAYMODE* dm;
@@ -594,18 +609,29 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	HDC hdc;
 	DEVMODE devmode;
 
-	// Before EVERYTHING else (#125): the run check and the gameflow load
-	// below both log, and the regular command line parser only runs after
-	// them. Reading the flag here is what makes "start with -log,
-	// reproduce, send log.txt" cover the startup as well.
+	// Before everything else: the run check and the gameflow load below
+	// both log, and the regular command line parser only runs after them.
+	// Reading the flag here is what makes "start with -log, reproduce, send
+	// log.txt" cover the startup as well.
 	gLogEnabled = WinCheckLogFlag(lpCmdLine);
 
 	// The build date identifies the executable in a log somebody sends in.
 	// The seed and the curation stamp belong here too, but the engine does
 	// not know them yet - they arrive with the level data, so the seams
-	// that need them have to print them themselves (#125).
+	// that need them have to print them themselves.
 	if (gLogEnabled)
 		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__);
+
+	/* Where the mods folder's notes go: hd_mods.cpp is engine-free - the
+	 * diagnostic tools link the very same file - so it does not know Log()
+	 * and keeps its notes until somebody says where to put them. Installed
+	 * here, before anything can scan, so that every MODLOG line lands in
+	 * the log in the order it was made. */
+	HDModsLogSink(ModsLogLine);
+
+	// The wardrobe scan keeps its notes the same way and for the same
+	// reason. One sink, because both land in the same log.
+	HDWardrobeLogSink(ModsLogLine);
 
 	start_setup = 0;
 	App.mmx = 0;
@@ -672,6 +698,12 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	App.dx.InScene = 0;
 	App.fmv = 0;
 	dm = &G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].DisplayModes[G_dxinfo->nDisplayMode];
+
+	/* The present interval is a device-creation parameter, so the VSync
+	 * option has to be known one line before the device is made - and
+	 * init_tomb5_stuff, which reads all the others, runs on the game thread
+	 * that is only started at the bottom of this function. */
+	load_tomb5_present_settings();
 
 	if (!DXCreate(dm->w, dm->h, dm->bpp, App.StartFlags, &App.dx, App.hWnd, WS_OVERLAPPEDWINDOW))
 	{

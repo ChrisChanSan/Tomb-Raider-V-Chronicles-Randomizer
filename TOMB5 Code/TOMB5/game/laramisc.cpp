@@ -32,6 +32,7 @@
 #include "spotcam.h"
 #include "effect2.h"
 #include "../specific/input.h"
+#include "../specific/LoadSave.h"	// ControlMethod - the cheat hotkeys ask the pad only while a pad is the control method
 #include "savegame.h"
 #include "newinv2.h"
 #include "../specific/dxshell.h"
@@ -91,17 +92,14 @@ void InitialiseLaraLoad(short item_num)
 	lara_item = &items[item_num];
 }
 
-// Back from fly mode into the normal state.
+// Returns Lara from fly mode to the normal state. Shared by LaraCheat's
+// walk-key exit and LaraCheatyBits' toggle exit, so both paths do the
+// same thing.
 //
-// Used to stand word for word in LaraCheat and was only reachable via the
-// walk key. Since the key combination toggles (LaraCheatyBits) there are
-// two ways out, and both should do the same - hence here in one place.
-//
-// current_anim_state and goal_anim_state are set along; in the original
-// they still stood at AS_SWIMCHEAT and were only caught up by AnimateLara
-// in the next frame. That had no consequences, but a state that does not
-// match the animation for one frame's length is exactly what you stumble
-// over while debugging.
+// Sets current_anim_state and goal_anim_state directly rather than
+// leaving them at AS_SWIMCHEAT for AnimateLara to catch up one frame
+// later: a state that does not match its animation, even for one frame,
+// is misleading when inspecting item state.
 void LaraCheatEnd(ITEM_INFO* item)
 {
 	lara.water_status = LW_ABOVE_WATER;
@@ -121,15 +119,47 @@ void LaraCheatEnd(ITEM_INFO* item)
 	item->hit_points = 1000;
 }
 
+/* Under the Modern control scheme, the step-left key is Z (key_scheme.h,
+ * slot 14) and carries IN_WALK alongside its direction (input.cpp,
+ * Key(14) -> IN_WALK | IN_LEFT); Modern also strips the look bit before
+ * Lara sees it. So holding D-O-Z-Y under Modern makes LaraCheatyBits
+ * switch fly mode on and LaraCheat's walk-key exit switch it off again
+ * in the same tick, from the chord's own Z: flight lasts only as long as
+ * the four letters are held.
+ *
+ * The fix ignores the walk-key exit while any of the four letters is
+ * physically down; it still ends flight normally otherwise. Under
+ * Classic none of D, O, Z, Y is a bound key (input.cpp, layout[0]), so
+ * this only matters while a cheat letter happens to be held.
+ *
+ * Reads keymap directly, not Key(): the chord itself reads the raw
+ * keyboard because it is a fixed word and not a rebindable role, and
+ * this exit must ask about the same keys the chord asks about. */
+static long LaraCheatLetterDown()
+{
+	return keymap[DIK_D] || keymap[DIK_O] || keymap[DIK_Z] || keymap[DIK_Y];
+}
+
+/* Logs behind -log, once per cheat activation rather than per tick, and
+ * covers both the inventory-word cheats and the hotkey cheats: separates
+ * "the cheat never fired" from "it fired and something else undid it"
+ * when a cheat appears to do nothing. */
+void CheatLog(const char* what, const char* src)
+{
+	if (gLogEnabled)
+		Log("CHEATLOG f=%ld what=%s src=%s", (long)GlobalCounter, what, src);
+}
+
 void LaraCheat(ITEM_INFO* item, COLL_INFO* coll)
 {
 	lara.death_count = 0;
 	lara_item->hit_points = 1000;
 	LaraUnderWater(item, coll);
 
-	// Vanilla exit: walk without look. Stays, even though the key
-	// combination now leads out as well.
-	if (input & IN_WALK && !(input & IN_LOOK))
+	// Vanilla exit: walk without look, except while one of the four cheat
+	// letters is still down (LaraCheatLetterDown) - in Modern the chord's
+	// own Z key is also a walk key and would otherwise retrigger this exit.
+	if (input & IN_WALK && !(input & IN_LOOK) && !LaraCheatLetterDown())
 		LaraCheatEnd(item);
 }
 
@@ -143,11 +173,11 @@ void LaraInitialiseMeshes()
 
 	// The child torso (green vest, white shirt) is stored in the Ireland
 	// levels in the ANIMATING6_MIP slot and is laid over the skin mesh
-	// here. Originally this hung on the level name alone - whoever clears
-	// GF_YOUNGLARA via SCRIPT.DAT to play adult Lara there thereby kept the
-	// child ribcage, and the head floated above the too-small torso. Hence
-	// additionally bound to the flag: with the flag set (vanilla) nothing
-	// changes.
+	// here, gated on GF_YOUNGLARA as well as the level id: keying only on
+	// the level id would keep the child ribcage under an adult body when
+	// GF_YOUNGLARA is cleared via SCRIPT.DAT to play grown Lara there,
+	// floating the head above a too-small torso. With the flag set
+	// (vanilla), nothing changes.
 	if (gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL &&
 		(gfLevelFlags & GF_YOUNGLARA))
 		lara.mesh_ptrs[LM_TORSO] = meshes[objects[ANIMATING6_MIP].mesh_index + 2 * LM_TORSO];
@@ -222,24 +252,175 @@ void LaraCheatGetStuff()
 	dels_give_lara_items_cheat();
 }
 
+#ifndef _DEBUG	/* the public-release cheat path; the _DEBUG branch of
+				 * LaraCheatyBits keeps Core's own hard-wired F keys unchanged,
+				 * so these four functions are only called from this path */
+
+/* Sets up fly-mode state. The 128-unit lift stays with the caller: the
+ * chord repeats it every tick it is held so Lara clears the floor, while
+ * the hotkey applies it exactly once. */
+static void LaraCheatFlyStart()
+{
+	lara_item->anim_number = ANIM_SWIMCHEAT;
+	lara_item->frame_number = anims[ANIM_SWIMCHEAT].frame_base;
+	lara_item->current_anim_state = AS_SWIMCHEAT;
+	lara_item->goal_anim_state = AS_SWIMCHEAT;
+	lara.water_status = LW_FLYCHEAT;
+	lara_item->gravity_status = 0;
+	lara_item->pos.x_rot = 5460;
+	lara_item->fallspeed = 30;
+	lara.air = 1800;
+	lara.death_count = 0;
+	lara.torso_x_rot = 0;
+	lara.torso_y_rot = 0;
+	lara.head_x_rot = 0;
+	lara.head_y_rot = 0;
+}
+
+/* Toggles fly mode on or off, shared by the chord and the hotkey so
+ * neither owns half the switch on its own. `src` is only for the log: it
+ * records which door the cheat came through. */
+static void LaraCheatFlyToggle(const char* src)
+{
+	if (lara.water_status == LW_FLYCHEAT)
+	{
+		LaraCheatEnd(lara_item);
+		CheatLog("fly_off", src);
+	}
+	else
+	{
+		lara_item->pos.y_pos -= 128;	// the chord's own first lift, once
+		LaraCheatFlyStart();
+		CheatLog("fly_on", src);
+	}
+}
+
+/* Is a cheat role held this tick? Same shape as the medipack and
+ * save/load hotkeys (input.cpp): the role's key, or the role's pad
+ * button while a pad is the control method. JoyRole() applies the
+ * Modifier+button chord rule (pad_scheme.h), so a cheat bound as
+ * Modifier+button needs both, while one bound to a plain button stays
+ * silent while the Modifier is held. With every cheat role unbound (the
+ * default), Key() of an unbound slot answers to its default F key and
+ * JoyRole(-1) is 0. */
+static long CheatRoleDown(long key_role, long joy_role)
+{
+	if (Key(key_role))
+		return 1;
+
+	return (ControlMethod == 1 && JoyRole(joy_role)) ? 1 : 0;
+}
+
+/* Five hotkeys mirror four of the five inventory-word cheats, reachable
+ * from the keyboard or the pad, because the words themselves are hard to
+ * type under the Modern control scheme: S, A, E and P sit on movement
+ * and the ring's own navigation, so G.U.N.S and S.K.I.P fight the cursor
+ * while typed. The words stay as they are - this is a second way in, not
+ * a replacement - and BITS gets no hotkey.
+ *
+ * Relies on guards the caller already provides: LaraCheatyBits runs from
+ * LaraControl behind tomb5.enable_cheats, and control.cpp calls
+ * LaraControl only while `!GLOBAL_playing_cutseq && !gfGameMode` - in
+ * game, not the title screen, not a cutscene - with lara_item as hers.
+ * The one guard added here checks that she is alive: with Lara dead the
+ * ring is the game-over menu, and a level skip or heal out of a death
+ * animation is unwanted. bDisableLaraControl is deliberately not
+ * checked, since clearing it is the skip cheat's own job.
+ *
+ * Fires on the press edge, one bit per role: at 30 logic steps a second,
+ * a held key would otherwise fire 30 times a second. The held state is
+ * tracked even on ticks where the action itself is skipped, so reviving
+ * with the key still down does not hand back a stored edge. */
+static void LaraCheatHotkeys()
+{
+	static const short cheat_key[5] =
+	{
+		KEY_ROLE_CHEAT_FLY, KEY_ROLE_CHEAT_GUNS, KEY_ROLE_CHEAT_ITEMS, KEY_ROLE_CHEAT_HEAL, KEY_ROLE_CHEAT_SKIP
+	};
+
+	static const short cheat_joy[5] =
+	{
+		JOY_ROLE_CHEAT_FLY, JOY_ROLE_CHEAT_GUNS, JOY_ROLE_CHEAT_ITEMS, JOY_ROLE_CHEAT_HEAL, JOY_ROLE_CHEAT_SKIP
+	};
+
+	static long cheat_held = 0;
+	const long alive = lara_item->hit_points > 0;
+
+	for (long i = 0; i < 5; i++)
+	{
+		const long down = CheatRoleDown(cheat_key[i], cheat_joy[i]);
+		const long edge = down && !(cheat_held & (1L << i));
+
+		if (down)
+			cheat_held |= 1L << i;
+		else
+			cheat_held &= ~(1L << i);
+
+		if (!edge || !alive)
+			continue;
+
+		switch (i)
+		{
+		case 0:
+			LaraCheatFlyToggle("hotkey");
+			break;
+
+		case 1:
+			/* dels_give_lara_guns_cheat was written for the ring, touching
+			 * only LARA_INFO and objects[].loaded, so nothing extra is
+			 * needed here. The ring is rebuilt when it opens
+			 * (construct_object_list, newinv2.cpp), which happens after
+			 * this call, so the new weapons show up in it. */
+			dels_give_lara_guns_cheat();
+			CheatLog("weapons", "hotkey");
+			break;
+
+		case 2:
+			// items, same shape: the crowbar, the eight puzzles, the eight
+			// keys through add_key_item's counter, the three pickups.
+			dels_give_lara_items_cheat();
+			CheatLog("items", "hotkey");
+			break;
+
+		case 3:
+			// heal, the ring's own single statement: poison is left alone
+			// there, and left alone here too.
+			lara_item->hit_points = 1000;
+			CheatLog("heal", "hotkey");
+			break;
+
+		case 4:
+			/* skip, the ring's three statements: control.cpp reads
+			 * gfLevelComplete at the top of its loop, so the level changes
+			 * one pass later; the two flags cleared here would otherwise
+			 * carry a spot cam's "Lara is not drawn and not driving" state
+			 * across the level change. */
+			gfLevelComplete = gfCurrentLevel + 1;
+			SCNoDrawLara = 0;
+			bDisableLaraControl = 0;
+			CheatLog("skip", "hotkey");
+			break;
+		}
+	}
+}
+#endif
+
 void LaraCheatyBits()
 {
 #ifndef _DEBUG	//public releases have cheats in inventory, except for DOZY
-	// D+O+Z+Y TOGGLES fly mode, not just on.
+	// D+O+Z+Y toggles fly mode rather than only turning it on.
 	//
-	// Vanilla only knew the way in; out you came exclusively via the walk
-	// key in LaraCheat - and nobody figures that out on their own (the user
-	// did not, and while testing, a stuck fly mode is annoying exactly when
-	// you are in a hurry).
+	// The vanilla chord only entered flight; leaving it required the walk
+	// key in LaraCheat, which is not obvious and leaves flight stuck on
+	// until the player finds it.
 	//
-	// The reaction is on the EDGE, not on holding: at 30 frames per second
-	// a held key set would otherwise switch back and forth thirty times a
-	// second.
+	// Reacts on the press edge, not on holding: at 30 logic steps a
+	// second, a held key combination would otherwise switch back and
+	// forth thirty times a second.
 	//
-	// The 128-unit lift, however, stays tied to HOLDING and only on
-	// switching on - that way Lara comes out of the floor as usual when the
-	// keys are held for a moment. On switching off, a lift would be
-	// pointless.
+	// The 128-unit lift stays tied to holding, and only fires when
+	// switching on, so Lara still clears the floor as usual when the keys
+	// are pressed. A lift on switching off would be pointless.
 	static bool dozyHeld = false;
 	static bool dozyLifts = false;
 
@@ -249,7 +430,7 @@ void LaraCheatyBits()
 	{
 		if (lara.water_status == LW_FLYCHEAT)
 		{
-			LaraCheatEnd(lara_item);
+			LaraCheatFlyToggle("word");	// ends it, and says so in the seam
 			dozyLifts = false;
 		}
 		else
@@ -263,26 +444,16 @@ void LaraCheatyBits()
 
 	if (dozyNow && dozyLifts)
 	{
-		lara_item->pos.y_pos -= 128;
-
+		/* Lifts once per pass through this branch: if she is not flying
+		 * yet, LaraCheatFlyToggle both lifts and starts the flight; if she
+		 * already is, the lift alone applies here directly. */
 		if (lara.water_status != LW_FLYCHEAT)
-		{
-			lara_item->anim_number = ANIM_SWIMCHEAT;
-			lara_item->frame_number = anims[ANIM_SWIMCHEAT].frame_base;
-			lara_item->current_anim_state = AS_SWIMCHEAT;
-			lara_item->goal_anim_state = AS_SWIMCHEAT;
-			lara.water_status = LW_FLYCHEAT;
-			lara_item->gravity_status = 0;
-			lara_item->pos.x_rot = 5460;
-			lara_item->fallspeed = 30;
-			lara.air = 1800;
-			lara.death_count = 0;
-			lara.torso_x_rot = 0;
-			lara.torso_y_rot = 0;
-			lara.head_x_rot = 0;
-			lara.head_y_rot = 0;
-		}
+			LaraCheatFlyToggle("word");
+		else
+			lara_item->pos.y_pos -= 128;
 	}
+
+	LaraCheatHotkeys();
 #else
 	if (keymap[DIK_F1])
 	{

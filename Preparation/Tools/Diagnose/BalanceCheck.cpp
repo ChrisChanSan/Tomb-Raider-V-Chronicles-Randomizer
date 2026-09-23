@@ -1,7 +1,7 @@
-// BalanceCheck - test rig for game\balance.cpp (task #108). Compiles the
-// real source file along and only supplies the symbols it otherwise pulls
-// from the engine: weapons[], objects[], gfLevelId, Log(). Briefly creates
-// a Balance.txt in the working directory and cleans it up again.
+// BalanceCheck - test rig for game\balance.cpp. Compiles the real source
+// file along and only supplies the symbols it otherwise pulls from the
+// engine: weapons[], objects[], gfLevelId, Log(). Briefly creates a
+// Balance.txt in the working directory and cleans it up again.
 //
 // Build (32 bit): bbc.bat next to this file, which runs
 //   set E=..\..\..\TOMB5 Code\TOMB5

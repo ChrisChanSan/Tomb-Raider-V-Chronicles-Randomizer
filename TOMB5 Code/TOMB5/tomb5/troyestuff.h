@@ -13,12 +13,11 @@
 #pragma once
 #include "../global/types.h"
 
-void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak);
-ulong TroyeMenuPage(long page);
-bool Page0(long& num, long textY, ulong selection);
-bool Page1(long& num, long textY, ulong selection);
-bool Page2(long& num, long textY, ulong selection);
-
-// Credits (#33): a screen of its own, deliberately NOT a page of the tomb5
+// TroyeMenu/TroyeMenuPage/Page0/Page1/Page2/PageDisplay are gone - "tomb5
+// options", "Display", "View" and "HUD" are tables of the frame now
+// (game\menu_frame.cpp), their rows' logic carried over verbatim. Only the
+// credits stayed their own screen, unchanged.
+//
+// Credits: a screen of its own, deliberately not a page of the tomb5
 // options - see the comment at the definition.
 void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak);

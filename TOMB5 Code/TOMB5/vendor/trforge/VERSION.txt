@@ -1,0 +1,53 @@
+Verbatim copies of selected TRForge modules (MIT licensed, see LICENSE).
+
+DO NOT EDIT THESE FILES. The first three header lines of a TRForge module
+carry a hidden signature (an acrostic); reformatting destroys it. Anything
+this project needs differently is written in our own wrappers under
+TOMB5\specific\hd\, never in here.
+
+Source : TROne's own vendor copy of TRForge (TROne, GPLv3, by Todesengel1931 -
+         https://github.com/todesengel1931), which states: TRForge_Remastered,
+         remastered 030ed51fed4f73914bd91c36ed9a7598ea9da711, 2026-08-31
+Taken  : 2026-09-05, for #123 stage S0 (HD at run time)
+Files  : 5
+
+    src\trf_core\trf_types.h      shared scalar types and result codes
+    src\trf_core\trf_file.h       whole-file helpers
+    src\trf_core\trf_file.c       ditto
+    src\trf_remaster\Trg.h        LEVELn.TRG - the remaster's room geometry
+    src\trf_remaster\Trg.cpp      ditto
+
+SHA-256, first 12 hex digits, measured against the source on the day of the
+copy (both sides identical, byte counts equal):
+
+    trf_types.h  680FA5F01431   1290 bytes
+    trf_file.h   E3480EA66570    668 bytes
+    trf_file.c   74686DFB52C4   1801 bytes
+    Trg.h        7046FEA1D02C   8395 bytes
+    Trg.cpp      12A20F61ACB8  10593 bytes
+
+WHAT WAS DELIBERATELY NOT TAKEN, and why
+
+    Dds.cpp / Dds.h        we have our own BC7 decoder, specific\bc7.cpp,
+                           which the diagnostic tool DdsProbe already proves.
+    ItemModels.h / .cpp    the .TRM reader. Its header includes
+                           trf_level\Level.h (for bind_level_items) and
+                           trf_remaster\Remaster.h, so a verbatim copy drags
+                           in the whole trf_level branch - which #123's plan
+                           rules out. The .TRM side therefore lives in our
+                           own translation unit, specific\hd\hd_trm.cpp,
+                           which credits TRForge for the format.
+    Remaster.h / .cpp      same case: the header includes trf_assets\Image.h
+                           and trf_remaster\Dds.h, the source includes
+                           trf_level\Level.h and TrgTiles.h. The three parts
+                           we need (install layout, LEVELn.MAP, sidecar
+                           names) are a few dozen lines and are written in
+                           specific\hd\hd_install.cpp and hd_bind.cpp.
+    trf_level, trf_assets, trf_editor
+                           not needed: our engine already holds the classic
+                           level in memory, in its randomized state.
+
+LANGUAGE STANDARD. Trg.cpp uses <filesystem>, so these files are compiled as
+C++17 (per-file <LanguageStandard> in tomb5.vcxproj); the rest of the engine
+keeps the project default. Nothing here crosses a translation unit boundary
+with an STL type - specific\hd\hd_level.h is plain C-shaped on purpose.

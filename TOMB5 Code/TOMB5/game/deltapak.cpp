@@ -19,6 +19,7 @@
 #include "lara2gun.h"
 #include "effect2.h"
 #include "control.h"
+#include "interpolate.h"	// InterpIsTweenFrame - paces the cutscene wind-up counter
 #include "lot.h"
 #include "tomb4fx.h"
 #include "camera.h"
@@ -43,6 +44,9 @@
 #include "lara.h"
 #include "savegame.h"
 #include "../tomb5/tomb5.h"
+#include "../specific/hd/hd_object.h"	// draws cutscene actors in HD
+#include "../specific/hd/hd_model.h"	// finds an actor's HD face model
+#include "../specific/hd/hd_bind.h"	// slot names for the diagnostic log
 
 ushort old_lara_LHolster;
 
@@ -66,6 +70,8 @@ static PACKNODE* camera_pnodes;
 static PACKNODE* actor_pnodes[10];
 static camera_type GLOBAL_oldcamtype;
 static char* GLOBAL_resident_depack_buffers;
+// Limits the actor diagnostic log below to one line per actor per cutscene.
+static bool cutseq_actors_logged = false;
 static ulong cutseq_meshswapbits[10];
 static ulong cutseq_meshbits[10];
 static long cut_seethrough = 128;
@@ -2113,7 +2119,19 @@ void handle_cutseq_triggering(long name)
 			return;
 
 		goin = 0;
-		cutseq_busy_timeout--;
+
+		/* The wind-up before a cutscene: fifty counts from the trigger, and
+		 * Lara is given until then to get her hands free by herself before
+		 * the scene takes them; the `||` below is the other way out, so
+		 * nothing hangs either way. The count is per drawn frame -
+		 * handle_cutseq_triggering runs once per frame from DoLevel and
+		 * from DoTitle - so at a higher frame rate the scene would start
+		 * early; skipping interpolated frames keeps the fifty-count pace
+		 * constant. This call sits after DrawPhaseGame in the frame loop,
+		 * so InterpIsTweenFrame() reads the flag already latched for the
+		 * current frame. */
+		if (!InterpIsTweenFrame())
+			cutseq_busy_timeout--;
 
 		if (cutseq_busy_timeout <= 0)
 		{
@@ -3191,16 +3209,64 @@ void DrawCutSeqActors()
 			rot = &temp_rotation_buffer[9];
 			gar_RotYXZsuperpack(&rot, 0);
 
-			if (cutseq_meshbits[i] & 1)
+			/* Cutscene actors are not drawn through DrawAnimatingItem: they
+			 * are packed nodes played back here, with their own frame
+			 * buffer and their own light, so they never went through the
+			 * HD object drawing path - every actor except Lara (drawn
+			 * separately by DrawLara, in HD) kept its classic mesh, so an
+			 * HD Lara could end up opposite a classic-mesh actor.
+			 *
+			 * The node walk below is unchanged; it hands its matrix to the
+			 * HD path instead of its mesh. duff_item is the lighting
+			 * stand-in this function already fills through
+			 * CalcActorLighting; it also needs the slot number and the mesh
+			 * bits, since that is what the HD path reads an item for.
+			 *
+			 * Actor 1 with the see-through fade stays classic: cut_seethrough
+			 * fades it in and out with phd_PutPolygons_seethrough, and an HD
+			 * model has no such pass - a fade that jumped straight to solid
+			 * would be worse than keeping the classic model. */
+			ITEM_INFO* actor = &duff_item[i - 1];
+			const bool fading = (i == 1 && cut_seethrough != 128);
+
+			actor->object_number = (short)GLOBAL_cutme->actor_data[i].objslot;
+			actor->mesh_bits = (long)cutseq_meshbits[i];
+			actor->meshswap_meshbits = (long)cutseq_meshswapbits[i];
+
+			const bool hd = !fading && HDObjectBegin(actor, obj);
+
+			/* Logs one line per actor, once per cutscene, whenever logging
+			 * is enabled. A cutscene actor's face file is named after the
+			 * character (VON_CROY_SENIOR_HEAD) while its body is named
+			 * after the level slot (ANIMATING4_RICHCUT2), so a rule that
+			 * looks for <MODEL>_HEAD finds nothing; hd_model.cpp resolves
+			 * this mapping instead. This line records which actor is drawn
+			 * in HD and whether a face was found for its slot. */
+			if (gLogEnabled && !cutseq_actors_logged)
+				Log("HDLOG cutseq actor=%d slot=%d name=%s model=%s hd=%d "
+					"head=%d fading=%d bits=%08X swapbits=%08X",
+					i, (int)actor->object_number,
+					HDSlotName(actor->object_number)
+						? HDSlotName(actor->object_number) : "?",
+					HDModelName(actor->object_number)
+						? HDModelName(actor->object_number) : "-",
+					(int)hd,
+					HDModelHasHead(actor->object_number)
+						? HDModelHeadNode(actor->object_number) : -1,
+					(int)fading, cutseq_meshbits[i], cutseq_meshswapbits[i]);
+
+			if (hd)
+				HDObjectNode(0, false);
+			else if (cutseq_meshbits[i] & 1)
 			{
 				if (cutseq_meshswapbits[i] & 1)
 				{
-					if (i != 1 || cut_seethrough == 128)
+					if (!fading)
 						phd_PutPolygons(mesh[1], -1);
 					else
 						phd_PutPolygons_seethrough(mesh[1], cut_seethrough);
 				}
-				else if (i != 1 || cut_seethrough == 128)
+				else if (!fading)
 					phd_PutPolygons(mesh[0], -1);
 				else
 					phd_PutPolygons_seethrough(mesh[0], cut_seethrough);
@@ -3220,25 +3286,32 @@ void DrawCutSeqActors()
 				gar_RotYXZsuperpack(&rot, 0);
 				n <<= 1;
 
-				if (cutseq_meshbits[i] & n)
+				if (hd)
+					HDObjectNode(j + 1, false);
+				else if (cutseq_meshbits[i] & n)
 				{
 					if (n & cutseq_meshswapbits[i])
 					{
-						if (i != 1 || cut_seethrough == 128)
+						if (!fading)
 							phd_PutPolygons(mesh[1], -1);
 						else
 							phd_PutPolygons_seethrough(mesh[1], cut_seethrough);
 					}
-					else if (i != 1 || cut_seethrough == 128)
+					else if (!fading)
 						phd_PutPolygons(mesh[0], -1);
 					else
 						phd_PutPolygons_seethrough(mesh[0], cut_seethrough);
 				}
 			}
+
+			if (hd)
+				HDObjectEnd();
 		}
 
 		phd_PopMatrix();
 	}
+
+	cutseq_actors_logged = true;
 
 	phd_PopMatrix();
 }
@@ -3589,6 +3662,7 @@ void init_cutseq_actors(char* data, long resident)
 	InitPackNodes(nlheader, camera_pnodes, packed, pda_nodes + 1);
 	GLOBAL_playing_cutseq = 1;
 	GLOBAL_cutseq_frame = 0;
+	cutseq_actors_logged = false;
 	DelsHandyTeleportLara(GLOBAL_cutme->orgx, GLOBAL_cutme->orgy, GLOBAL_cutme->orgz, 0);
 	camera.pos.x = lara_item->pos.x_pos;
 	camera.pos.y = lara_item->pos.y_pos;

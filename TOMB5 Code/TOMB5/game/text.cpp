@@ -1,6 +1,15 @@
 /*
  * Modified 2026 by ChrisChanSan.
  *
+ * The rule DrawChar's HD branch rests on - widen the sampled window and
+ * the quad in the same ratio, so that a letter drawn from the remaster's
+ * glyph atlas neither moves nor grows - is TROne's (Copyright 2026
+ * Todesengel, GPLv3, host\render\game_renderer.cpp, its "hdtext" glyph
+ * draw; specific\hd\hd_fontmatch.h says why the citation carries no line
+ * numbers). Written against that description, not copied; everything else
+ * in this file, the glyph table and PrintString included, is TR5's own. See
+ * THIRD-PARTY.md.
+ *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
  * history of this source tree.
@@ -19,6 +28,7 @@
 #include "../specific/function_stubs.h"
 #include "../specific/3dmath.h"
 #include "../specific/gamemain.h"
+#include "../specific/hd/hd_font.h"		// the HD font
 
 CVECTOR FontShades[10][32];
 long font_height;
@@ -28,52 +38,10 @@ uchar ScaleFlag;
 
 char AccentTable[46][2] =
 {
-	{'{', ' '},		//ç
-	{'u', '^'},		//ü
-	{'e', '\\'},	//é
-	{'a', ']'},		//â
-	{'a', '^'},		//ä
-	{'a', '['},		//à
-	{'a', '\\'},	//á
-	{'{', ' '},		//ç
-	{'e', ']'},		//ê
-	{'e', '^'},		//ë
-	{'e', '['},		//è
-	{'|', '^'},		//ï
-	{'|', ']'},		//î
-	{'|', '['},		//ì
-	{'A', '^'},		//Ä
-	{'A', ']'},		//Â
-	{'E', '\\'},	//É
-	{'A', '\\'},	//Á			//NEW
-	{' ', ' '},		//empty
-	{'o', ']'},		//ô
-	{'o', '^'},		//ö
-	{'o', '['},		//ò
-	{'u', ']'},		//û
-	{'u', '['},		//ù
-	{'y', '^'},		//ÿ
-	{'O', '^'},		//Ö
-	{'U', '^'},		//Ü
-	{' ', ' '},		//empty
-	{'O', '\\'},	//Ó
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{'a', '\\'},	//á
-	{'|', '\\'},	//í
-	{'o', '\\'},	//ó
-	{'u', '\\'},	//ú
-	{'n', '_'},		//ñ
-	{'N', '_'},		//Ñ
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{'}', ' '},		//¿
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{'~', ' '}		//¡
+	/* The rows themselves live in game\accent.inc, so that the diagnostic
+	 * tool FontProbe composes its umlauts from exactly this table instead
+	 * of a copy of it. Nothing about it changed when it moved. */
+#include "accent.inc"
 };
 
 #pragma warning(push)
@@ -96,118 +64,18 @@ static CVECTOR ShadeFromTo[10][2] =
 
 CHARDEF CharDef[106] =
 {
-	{0.68235302F, 0.203922F, 4, 13, -11, 0, 11},
-	{0.384314F, 0.227451F, 7, 5, -10, 1, 5},
-	{0.321569F, 0.101961F, 14, 12, -10, 1, 11},
-	{0.30588201F, 0.14902F, 10, 14, -10, 1, 13},
-	{0.83921599F, 0.050980002F, 15, 12, -9, 2, 12},
-	{0.156863F, 0.101961F, 14, 12, -10, 1, 11},
-	{0.61960799F, 0.223529F, 5, 5, -11, 0, 4},
-	{0.80000001F, 0.152941F, 6, 16, -12, 0, 13},
-	{0.133333F, 0.156863F, 6, 16, -11, 0, 14},
-	{0.721569F, 0.231373F, 5, 5, -11, 0, 4},
-	{0.086274996F, 0.156863F, 11, 11, -9, 2, 11},
-	{0.698039F, 0.231373F, 5, 5, -2, 8, 12},
-	{0.41568601F, 0.235294F, 8, 3, -4, 6, 9},
-	{0.44705901F, 0.235294F, 5, 4, -2, 8, 11},
-	{0.83137298F, 0.14902F, 9, 15, -12, 0, 12},
-	{0.34509799F, 0.192157F, 10, 10, -8, 3, 11},
-	{0.78431398F, 0.21568599F, 6, 10, -8, 3, 11},
-	{0.180392F, 0.203922F, 9, 10, -8, 3, 11},
-	{0.34509799F, 0.14902F, 8, 11, -8, 3, 12},
-	{0.243137F, 0.156863F, 11, 11, -8, 3, 12},
-	{0.55686301F, 0.188235F, 9, 12, -9, 2, 12},
-	{0.90980399F, 0.196078F, 9, 11, -9, 2, 11},
-	{0.470588F, 0.184314F, 9, 12, -9, 2, 12},
-	{0.086274996F, 0.2F, 9, 11, -9, 2, 11},
-	{0.431373F, 0.192157F, 9, 11, -8, 3, 12},
-	{0.59607798F, 0.223529F, 5, 9, -7, 4, 11},
-	{0.533333F, 0.223529F, 5, 10, -7, 4, 12},
-	{0.698039F, 0.156863F, 12, 10, -8, 3, 11},
-	{0.82352901F, 0.20784301F, 11, 7, -7, 4, 9},
-	{0.941176F, 0.156863F, 12, 10, -8, 3, 11},
-	{0.047059F, 0.152941F, 10, 13, -11, 0, 11},
-	{0.25882399F, 0.050980002F, 16, 14, -10, 1, 13},
-	{0.50980401F, 0.050980002F, 14, 13, -11, 0, 11},
-	{0.83921599F, 0.098039001F, 13, 13, -11, 0, 11},
-	{0.51764703F, 0.137255F, 11, 13, -11, 0, 11},
-	{0, 0.101961F, 13, 13, -11, 0, 11},
-	{0.054901998F, 0.101961F, 13, 13, -11, 0, 11},
-	{0.25882399F, 0.105882F, 12, 13, -11, 0, 11},
-	{0.71372497F, 0.105882F, 12, 13, -11, 0, 11},
-	{0.78431398F, 0.050980002F, 14, 13, -11, 0, 11},
-	{0.870588F, 0.21176501F, 5, 13, -11, 0, 11},
-	{0.21960799F, 0.203922F, 5, 16, -11, 0, 14},
-	{0.90196103F, 0.058823999F, 13, 13, -11, 0, 11},
-	{0.56470603F, 0.137255F, 11, 13, -11, 0, 11},
-	{0.188235F, 0.050980002F, 18, 13, -11, 0, 11},
-	{0.56470603F, 0.050980002F, 14, 13, -11, 0, 11},
-	{0.21176501F, 0.101961F, 12, 13, -11, 0, 11},
-	{0.78431398F, 0.101961F, 12, 13, -11, 0, 11},
-	{0.941176F, 0, 14, 15, -11, 0, 13},
-	{0.61960799F, 0.050980002F, 14, 13, -11, 0, 11},
-	{0.61176503F, 0.137255F, 11, 13, -11, 0, 11},
-	{0.67451F, 0.050980002F, 14, 13, -11, 0, 11},
-	{0.384314F, 0.050980002F, 15, 13, -11, 0, 11},
-	{0.321569F, 0.050980002F, 15, 13, -11, 0, 11},
-	{0.094117999F, 0.050980002F, 23, 13, -11, 0, 11},
-	{0.72941202F, 0.050980002F, 13, 14, -11, 0, 12},
-	{0.44705901F, 0.050980002F, 15, 13, -11, 0, 11},
-	{0.89411801F, 0.109804F, 12, 13, -11, 0, 11},
-	{0.243137F, 0.235294F, 6, 4, -4, 6, 9},
-	{0.97254902F, 0.231373F, 6, 4, -4, 6, 9},
-	{0.34509799F, 0.231373F, 8, 4, -4, 6, 9},
-	{0.55686301F, 0.235294F, 7, 3, -3, 7, 9},
-	{0.470588F, 0.231373F, 8, 4, -4, 6, 9},
-	{0.94902003F, 0.231373F, 5, 5, -11, 0, 4},
-	{0.384314F, 0.192157F, 11, 9, -7, 4, 11},
-	{0.37647101F, 0.137255F, 11, 14, -12, 0, 11},
-	{0.28235301F, 0.203922F, 9, 9, -7, 4, 11},
-	{0, 0.152941F, 11, 12, -10, 1, 11},
-	{0.64313698F, 0.203922F, 9, 9, -7, 4, 11},
-	{0.65882403F, 0.14902F, 10, 14, -12, 0, 11},
-	{0.470588F, 0.137255F, 12, 12, -7, 4, 14},
-	{0.423529F, 0.137255F, 11, 14, -12, 0, 11},
-	{0.76078397F, 0.105882F, 6, 12, -10, 1, 11},
-	{0.156863F, 0.2F, 6, 16, -10, 1, 14},
-	{0.109804F, 0.101961F, 12, 14, -12, 0, 11},
-	{0.321569F, 0.203922F, 6, 13, -11, 0, 11},
-	{0.37647101F, 0.101961F, 18, 9, -7, 4, 11},
-	{0.59607798F, 0.188235F, 12, 9, -7, 4, 11},
-	{0.243137F, 0.2F, 10, 9, -7, 4, 11},
-	{0.95686299F, 0.058823999F, 11, 13, -7, 4, 14},
-	{0.203922F, 0.152941F, 10, 13, -7, 4, 14},
-	{0.039216001F, 0.203922F, 10, 9, -7, 4, 11},
-	{0.74509799F, 0.203922F, 9, 9, -7, 4, 11},
-	{0, 0.2F, 9, 11, -9, 2, 11},
-	{0.698039F, 0.196078F, 11, 9, -7, 4, 11},
-	{0.50980401F, 0.188235F, 12, 9, -7, 4, 11},
-	{0.51764703F, 0.101961F, 18, 9, -7, 4, 11},
-	{0.94902003F, 0.196078F, 11, 9, -7, 4, 11},
-	{0.156863F, 0.14902F, 11, 13, -7, 4, 14},
-	{0.90980399F, 0.16078401F, 8, 9, -7, 4, 11},
-	{0.870588F, 0.16078401F, 9, 13, -7, 4, 14},
-	{0.50980401F, 0.223529F, 6, 9, -7, 4, 11},
-	{0.76078397F, 0.152941F, 10, 13, -10, 1, 12},
-	{0.12548999F, 0.21960799F, 5, 12, -10, 1, 11},
-	{0, 0.050980002F, 24, 13, -10, 6, 11},
-	{0.75294101F, 0, 24, 13, -10, 6, 11},
-	{0.65882403F, 0, 24, 13, -10, 6, 11},
-	{0.84705901F, 0, 24, 13, -10, 6, 11},
-	{0.58823502F, 0.101961F, 18, 9, -8, 6, 11},
-	{0.65882403F, 0.101961F, 13, 12, -9, 6, 11},
-	{0.44705901F, 0.101961F, 18, 9, -8, 6, 11},
-	{0.941176F, 0.109804F, 13, 12, -9, 6, 11},
-	{0, 0, 41, 13, -10, 6, 11},
-	{0.32941201F, 0, 41, 13, -10, 6, 11},
-	{0.16470601F, 0, 41, 13, -10, 6, 11},
-	{0.49411801F, 0, 41, 13, -10, 6, 11}
+	/* The rows themselves live in game\chardef.inc, so that the HD font
+	 * and the diagnostic tool FontProbe read exactly these numbers
+	 * instead of a copy of them. Nothing about the table changed when it
+	 * moved. */
+#include "chardef.inc"
 };
 
 void DrawChar(long x, long y, ushort col, CHARDEF* def)
 {
 	D3DTLVERTEX v[4];
 	TEXTURESTRUCT tex;
+	const HDFontGlyph* hd;
 	float u1, v1, u2, v2;
 	long x1, y1, x2, y2, top, bottom;
 
@@ -247,6 +115,67 @@ void DrawChar(long x, long y, ushort col, CHARDEF* def)
 	tex.drawtype = 1;
 	tex.tpage = ushort(nTextures - 2);
 	tex.flag = 0;
+
+	/* Draws the same letter out of the remaster's atlas instead, when one
+	 * exists. With hd_enable off, HDFontGlyphAt returns nothing and the
+	 * quad below is the same as without this branch - same position,
+	 * size, FontShades colour and specular, same page. Every line of text
+	 * in the game (title menu, ring, options, save list, statistics, HUD,
+	 * item names, subtitles) goes through PrintString and therefore here.
+	 *
+	 * The UV is shifted, not recomputed: the remaster's atlas is the
+	 * classic page at eight times the size, so a normalised coordinate on
+	 * one is a normalised coordinate on the other, and the glyph sits at
+	 * the same place plus a whole number of classic texels (hd_font.cpp
+	 * works that number out once per session). Shifting only the window
+	 * changes nothing else: the letter cannot grow, shrink or slide,
+	 * because no factor was touched. Measured with FontProbe -sample: the
+	 * texels a screen pixel walks are the same number to the last bit.
+	 *
+	 * The quad is widened by the same fraction as the window, which is
+	 * TROne's rule: the classic arithmetic samples the rectangle inset by
+	 * half a texel on each side, needed because the classic page packs
+	 * its glyphs with no gap, and without that inset a letter would bleed
+	 * into its neighbour. At eight times the size that inset is four HD
+	 * texels, which would cut off the antialiased rim and drop shadow the
+	 * remaster paints around every letter (measured: 12.6% of the glyph's
+	 * ink). Widening window and quad together keeps that rim visible
+	 * while the letter still stands on the same pixel at the same size.
+	 *
+	 * The margin (hd->mu) is per glyph, from HDFontMargins
+	 * (specific\hd\hd_fontmatch.cpp): a uniform margin pulls a slice of
+	 * the neighbouring glyph in beside tightly packed marks such as an
+	 * apostrophe or a comma, which HDFontMargins avoids by giving each
+	 * glyph as much room as it can have and no more.
+	 *
+	 * The clip flags stay the ones setXY4 computed for the classic quad:
+	 * a letter that was wholly on screen stays wholly on screen, the
+	 * widened edge is a pixel or two of nearly transparent atlas, and the
+	 * rasteriser clips it at the viewport regardless. */
+	hd = HDFontGlyphAt((int)(def - CharDef));
+
+	if (hd)
+	{
+		const float mu = hd->mu;
+		const float mx = (u2 - u1) > 0.0F ? float(x2 - x1) * mu / (u2 - u1) : 0.0F;
+		const float my = (v2 - v1) > 0.0F ? float(y2 - y1) * mu / (v2 - v1) : 0.0F;
+
+		v[0].sx -= mx;	v[0].sy -= my;
+		v[1].sx += mx;	v[1].sy -= my;
+		v[2].sx += mx;	v[2].sy += my;
+		v[3].sx -= mx;	v[3].sy += my;
+
+		tex.u1 = u1 + hd->du - mu;
+		tex.v1 = v1 + hd->dv - mu;
+		tex.u2 = u2 + hd->du + mu;
+		tex.v2 = v1 + hd->dv - mu;
+		tex.u3 = u2 + hd->du + mu;
+		tex.v3 = v2 + hd->dv + mu;
+		tex.u4 = u1 + hd->du - mu;
+		tex.v4 = v2 + hd->dv + mu;
+		tex.tpage = HD_FONT_TPAGE;
+	}
+
 	nPolyType = 4;
 	AddQuadClippedSorted(v, 0, 1, 2, 3, &tex, 0);
 }
@@ -494,11 +423,11 @@ void PrintString(long x, long y, uchar col, const char* string, ushort flags)
 			else
 			{
 				// Glyph outside the PC font: CharDef has 106 entries plus
-				// the accent codes 128..173 above - everything beyond
-				// (e.g. the kana indices of the Japanese PSX language
-				// file, bytes up to 181) used to read unchecked past the
-				// table here. Skip instead of crash; what the font can
-				// show is shown.
+				// the accent codes 128..173 above; without this check,
+				// anything beyond (e.g. the kana indices of the Japanese
+				// PSX language file, bytes up to 181) reads past the
+				// table. Skip instead of crash; what the font can show
+				// is shown.
 				s = *string++;
 				continue;
 			}

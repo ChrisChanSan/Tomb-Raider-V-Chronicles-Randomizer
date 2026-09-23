@@ -29,6 +29,28 @@ void BinocularCamera(ITEM_INFO* item);
 void LookCamera(ITEM_INFO* item);
 void FirstPersonCamera(ITEM_INFO* item);
 bool FirstPersonActive();		// is first person running right now? (head and braid stay hidden then)
+short GetFirstPersonRoll();		// the head bone's roll, for the frame interpolator
+
+/* The modern (orbit) camera: the engine's side of it. The orbit's arithmetic
+ * is game\modern_camera.h; the comment above these definitions in
+ * game\camera.cpp says which accessor serves which caller. The last two are
+ * read-only, for MODERNLOG under -log. */
+bool ModernCameraActive();		// may the orbit steer the view - not "does it": see ModernCameraWorldYaw
+void ModernCameraResetOrbit();		// level start, savegame load, scheme change
+void ModernCameraStick(long rs_x, long rs_y);	// the right stick, from specific\input.cpp
+short ModernCameraSwimTarget();		// the swimming attitude the orbit points at
+long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world - 0 = not seated
+					// yet, or the orbit did not tick last tick and the angle is
+					// stale (under a rich2 sniper camera)
+long ModernCameraPlayerStep(short* step);	// how far the player's own stick moved it last tick
+long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points
+bool ModernLaraHidden();		// too close to draw her at all
+void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
+	short* world_yaw, long* wall, long* carry);	// MODERNLOG tick line
+void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,
+	long* hide_dist, long* invert_pitch, long* pitch_return,
+	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max,
+	long* pull_steps, long* pull_push);	// MODERNLOG init line
 
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;

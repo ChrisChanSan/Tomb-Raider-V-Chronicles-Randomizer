@@ -1,5 +1,18 @@
-// GeomTest - tries buildRoomGeometry (#137) on one room of one level and
-// reports what it did. Diagnostic scaffolding, not part of the shipped tools.
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+
+// GeomTest - tries buildRoomGeometry on one room of one level and reports
+// what it did. Diagnostic scaffolding, not part of the shipped tools.
 //
 //   GeomTest <level.trc> <room> [likeRoom] [out.trc]
 #include "core/Tr5Level.h"

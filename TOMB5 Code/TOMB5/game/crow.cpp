@@ -28,22 +28,22 @@ void InitialiseCrow(short item_number)
 	InitialiseCreature(item_number);
 	item = &items[item_number];
 
-	// VULTURE offset, not crow (#91).
+	// This slot plays the vulture animation set, not the crow's.
 	//
 	// The knowledge below is read off tomb3, Troye's Tomb Raider III
 	// decompilation <https://github.com/Trxyebeep/tomb3> (GPLv3, the same
 	// license as this project).
 	//
-	// In Tomb Raider 3, ONE function controls both birds and distinguishes
+	// In Tomb Raider 3, one function controls both birds and distinguishes
 	// by object_number (tomb3 bird.cpp:19-32): the crow starts with
 	// anim_index + 14 in the feeding state, the vulture with + 5 in the
 	// standing state. TR5 only kept the crow branch - there is no vulture
 	// there.
 	//
-	// The slot is still safe to repurpose: CROW has a model in NONE of the
-	// 16 TR5 levels (measured against all files). This function thus runs
-	// exclusively for the imported TR3 vulture, which has only 12
-	// animations - with + 14 it would run into the void.
+	// The slot is safe to repurpose: CROW has a model in none of the 16 TR5
+	// levels (measured against all level files). This function runs only
+	// for the imported TR3 vulture, which has just 12 animations - with
+	// + 14 it would index past the end of that set.
 	item->anim_number = objects[CROW].anim_index + 5;
 	item->frame_number = anims[item->anim_number].frame_base;
 	item->goal_anim_state = 1;                 // BIRD_STOP

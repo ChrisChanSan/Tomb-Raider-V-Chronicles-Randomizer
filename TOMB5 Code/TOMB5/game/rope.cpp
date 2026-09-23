@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "rope.h"
 #include "control.h"
@@ -165,6 +177,12 @@ void RopeControl(short item_number)
 		currope->Active = 0;
 }
 
+/* The catch takes either key, and so must the hold. This is the jump onto
+ * the rope, out of AS_REACH or AS_UPJUMP with gravity under her, which is a
+ * grab, so IN_ACTION_ANY. LaraClimbRope() below has to follow: it drops her
+ * the moment the key is not down, so a catch with one key and a hold on the
+ * other would throw her off on the very next tick under "Separate". See
+ * IN_ACTION_ANY in global\types.h. */
 void RopeCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 {
 	ROPE_STRUCT* rope;
@@ -173,7 +191,7 @@ void RopeCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 
 	rope = &RopeList[items[item_number].trigger_flags];
 
-	if (input & IN_ACTION && lara.gun_status == LG_NO_ARMS && (l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP) &&
+	if (input & IN_ACTION_ANY && lara.gun_status == LG_NO_ARMS && (l->current_anim_state == AS_REACH || l->current_anim_state == AS_UPJUMP) &&
 		l->gravity_status && l->fallspeed > 0 && rope->Active)
 	{
 		bounds = GetBoundsAccurate(l);
@@ -586,7 +604,7 @@ void AlignLaraToRope(ITEM_INFO* l)
 
 void LaraClimbRope(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 	{
 		FallFromRope(item);
 		return;

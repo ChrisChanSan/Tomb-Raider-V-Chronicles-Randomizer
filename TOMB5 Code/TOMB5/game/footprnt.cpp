@@ -14,12 +14,14 @@
 #include "footprnt.h"
 #include "delstuff.h"
 #include "control.h"
+#include "interpolate.h"		// InterpIsTweenFrame - paces a footprint's lifetime
 #include "sound.h"
 #include "gameflow.h"
 #include "../specific/file.h"
 #include "lara.h"
 #include "../specific/gamemain.h"
 #include "../specific/3dmath.h"
+#include "../specific/hd/hd_feet.h"	// HDFeetSurfaceQuiet - whether the HD foot layer already covers the surface sound
 #include "../specific/specificfx.h"
 #include "objects.h"
 #include "../specific/function_table.h"
@@ -47,7 +49,18 @@ void AddFootprint(ITEM_INFO* item)
 	room_num = item->room_number;
 	floor = GetFloor(pos.x, pos.y, pos.z, &room_num);
 
-	if (floor->fx != 6 && floor->fx != 5 && floor->fx != 11)
+	/* The footstep sound is skipped when the HD outfit's own foot layer
+	 * already covers the surface. Some of Lara's animations carry a boot
+	 * sound recording (FlipEffect 32) on the same frame as the plain
+	 * footstep (PlaySound 0) - e.g. ANDREA1's id 288 runs 274 ms against
+	 * id 0's 41 ms (AnimCmd: 121 of this slot's 148 sfx-0 frames carry
+	 * both; lara.cpp also calls AddFootprint directly on three more).
+	 * Without the check, the plain surface sound would play a second time
+	 * under the boot recording. HDFeetSurfaceQuiet() is false whenever
+	 * hd_enable is off, boots are worn, or the level has no barefoot set,
+	 * so the line below behaves exactly as before in every other case. */
+	if (floor->fx != 6 && floor->fx != 5 && floor->fx != 11 &&
+		!HDFeetSurfaceQuiet())
 		SoundEffect(footsounds[floor->fx] + SFX_FOOTSTEPS_MUD, &lara_item->pos, 0);
 
 	if (tomb5.footprints && floor->fx < 3 && (gfLevelId == LVL5_BASE || !OnObject))
@@ -93,7 +106,14 @@ void S_DrawFootPrints()
 				continue;
 			}
 
-			print->Active--;
+			/* A footprint's Active counter starts at 512 and drops by one
+			 * per call, called once per drawn frame from DrawRooms; at a
+			 * higher frame rate that would fade and remove every footprint
+			 * in less time than at the original 30 fps. Skipping the
+			 * interpolated in-between frames keeps the fade rate constant.
+			 * The colour fade below still reads Active on every frame. */
+			if (!InterpIsTweenFrame())
+				print->Active--;
 
 			if (print->Active < 29)
 				col = print->Active << 2;

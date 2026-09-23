@@ -8,7 +8,7 @@
  * any later version. See the LICENSE file at the root of this source tree.
  */
 //----------------------------------------------------------------------------
-// Extraction from a TR3 level - implementation of Tr3Source.h (#92).
+// Extraction from a TR3 level - implementation of Tr3Source.h.
 //
 // Taken over word for word from the TR3Fetch tool; only the frame changed
 // (main -> library function), loading via a wide path, and the error exits,
@@ -159,7 +159,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                 wanted, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
                 z->animIndex, animEnd - 1, animCount);
 
-    // --- On to the object textures (for the texture work, #90) -------------
+    // --- On to the object textures --------------------------------------
     // The contested field sizes at the file end are again tried out instead
     // of guessed: the right combination is the one where the last table
     // ends exactly at the end of the file. If none is found, objTexAt stays
@@ -288,7 +288,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // --- Which object textures does this model need? ------------------------
     //
     // The faces still carry the TR3 indices; only the installer redirects
-    // them. For the texture work (#90) what counts is how many distinct
+    // them. What counts is how many distinct
     // entries and above all how many distinct TILES lie behind them - every
     // tile becomes a 256x256 page in the target.
     std::vector<int> texIdx;      // used TR3 object textures, in discovery order
@@ -489,7 +489,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // in both games). The single-axis case is not:
     //
     //   TR3 (draw.cpp:183):  (word & 1023)  << 6     10 bits
-    //   TR5 (draw.cpp:267):  (word & 0xFFF) << 4     12 bits
+    //   TR5 (draw.cpp):      (word & 0xFFF) << 4     12 bits
     //
     // A TR3 word taken over unchanged is thus read by TR5 with a quarter of
     // the angle - and because TR3 uses the overflow into negative, large
@@ -590,12 +590,12 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     //   per tile: 131072 bytes ARGB1555 (TR3's 16-bit version)
     //
     // The UVs stay PIXELS here. Only the installer shifts them 8 bits to
-    // the left - TR5 stores them as 8.8 fixed point (file.cpp:1096).
+    // the left - TR5 stores them as 8.8 fixed point (LoadTextureInfos, file.cpp).
     {
         // Why cornerOrder exists.
         //
         // TR5 pulls every UV half a texel towards the middle of its own
-        // texture area while the level loads (AdjustUV, specific/file.cpp:198).
+        // texture area while the level loads (AdjustUV, specific/file.cpp).
         // Which direction that is per corner it does not work out - it reads
         // it out of the texinfo: bit 15 of tpage picks the triangle table
         // over the quad one, the low three bits of flag pick the corner order
@@ -831,9 +831,9 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                     written, tiles.size() + (flatColors.empty() ? 0 : 1));
     }
 
-    // A file used to be written here. As a library we return the package -
-    // the caller decides whether it goes to disk (tool) or is processed
-    // directly (randomizer run).
+    // Returned as a package rather than written to a file - the caller
+    // decides whether it goes to disk (tool) or is processed directly
+    // (randomizer run).
     package = out;
 
     // --- Cross-check: does the TR5 walker run through cleanly? --------------
@@ -884,7 +884,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
 }
 
 //----------------------------------------------------------------------------
-// Sound extraction from MAIN.SFX (#92, taken over from TR3Sound).
+// Sound extraction from MAIN.SFX, taken over from TR3Sound.
 //----------------------------------------------------------------------------
 namespace
 {
@@ -966,9 +966,9 @@ bool Tr3Source::fetchSounds(const std::wstring& sfxPath,
 }
 
 //----------------------------------------------------------------------------
-// Rewrite the SFX numbers of the anim commands (#92, taken over from TR3Insert).
+// Rewrite the SFX numbers of the anim commands, taken over from TR3Insert.
 //
-// TWO TRAPS LIVE IN HERE, both paid for dearly:
+// Two traps to watch for here:
 //
 // 1. "count" in the anim header counts COMMANDS, not words. A command takes
 //    1 to 4 words depending on its kind. Whoever runs the loop up to
@@ -1065,16 +1065,16 @@ bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
 }
 
 //----------------------------------------------------------------------------
-// The four guests from Tomb Raider 3 (#92).
+// The four guests from Tomb Raider 3.
 //
 // All numbers are MEASURED, not assumed:
 //   - object numbers from the tomb3 enum, cross-checked (VULTURE is 29
-//     there and matches the user's note)
+//     there)
 //   - target slots checked with ModelOffset against all 16 TR5 levels: none
 //     carries a model there
 //   - wave numbers auditioned in the TRsound tool and recovered from the
 //     finished sound packages by finding the wave data in MAIN.SFX again
-//   - volumes tuned by the user in game
+//   - volumes tuned by ear in game
 //----------------------------------------------------------------------------
 std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
 {
@@ -1082,7 +1082,7 @@ std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
 
     {   // T-Rex on SAS. The footstep is the exception: the anim commands
         // call 88, but the sound heard in game is the dull two-variant one
-        // of 250 - cross-checked by the user against the original.
+        // of 250 - cross-checked against the original.
         DinoSource t;
         t.slot = 31; t.name = "T-Rex"; t.source = "tr3";
         t.file = "CRASH.TR2"; t.object = 287; t.soundBase = 445;
@@ -1147,7 +1147,7 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
 
     // Tomb Raider 3, London rooftops. Lara's standard outfit of that game.
     //
-    // dropSeams: judged in game by the user. The two ankles (2, 5) sit in
+    // dropSeams: judged in game. The two ankles (2, 5) sit in
     // the boot and the two shoulders (7, 10) did not fit. TR1-3 segments
     // overlap on their own, so a missing seam there costs less than a wrong
     // one.
@@ -1166,8 +1166,8 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     // The tone is COUNTED, not averaged. The average said 48,48,40, a warm
     // grey; counted, the hips are 23,24,40 and the thigh 39,44,47 - the
     // outfit is dark blue-grey. Averaging a colour against its own shadow
-    // produces something that is in the texture nowhere, which is what the
-    // user saw as patches on the jeans of the Nevada outfit too.
+    // produces something that is in the texture nowhere, which shows up as
+    // patches on the jeans of the Nevada outfit too.
     OutfitSource roofs;
     roofs.id        = "tr3_london";
     roofs.name      = "London (TR3)";
@@ -1209,10 +1209,10 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     // away from TR5's own 222,165,99. Since a recolour now also rewrites the
     // imported tiles, the same line fixes it.
     //
-    // dropSeams: the hips, judged by the user from the joint textures alone -
-    // "the outfit will not be able to wear them" - and the two shoulders,
-    // which came out glitchy in game. The WAIST is deliberately not among
-    // them: it binds the back to the backside.
+    // dropSeams: the hips, judged from the joint textures alone - the outfit
+    // cannot wear them - and the two shoulders, which came out glitchy in
+    // game. The WAIST is deliberately not among them: it binds the back to
+    // the backside.
     OutfitSource crash;
     crash.id        = "tr3_jungle";
     crash.name      = "Jungle (TR3)";
@@ -1256,7 +1256,7 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     antarc.dropSeams.push_back(10);   // the opposite rim in every outfit
     antarc.dropSeams.push_back(2);    // ankles, inside the boot
     antarc.dropSeams.push_back(5);
-    antarc.dropSeams.push_back(6);    // waist - the user saw it wrong in game
+    antarc.dropSeams.push_back(6);    // waist - wrong in game
     antarc.dropSeams.push_back(0);    // hips, see the note on the pelvis below
     antarc.dropSeams.push_back(3);
     // Clothed all over, so the pelvis and knees are painted rather than
@@ -1294,7 +1294,7 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     nevada.source    = "tr3";
     nevada.file      = "NEVADA.TR2";
     nevada.object    = 315;
-    // The shine was tried and the user threw it out: the split that carried
+    // The shine was tried and rejected: the split that carried
     // London does hold here, but the clothes came out looking greasy rather
     // than worn. So the rule is not general after all - it hung on London's
     // leather look.
@@ -1309,8 +1309,8 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     nevada.dropSeams.push_back(0);    // hips, see the note on the pelvis below
     nevada.dropSeams.push_back(3);
     // Hips and knees sit in the jeans, and here the mesh AVERAGE was the
-    // wrong adviser: it came out 66,58,58, a warm grey, and the user saw
-    // exactly that - grey patches at the crotch and the knee.
+    // wrong adviser: it came out 66,58,58, a warm grey, visible as grey
+    // patches at the crotch and the knee.
     //
     // The jeans are dark blue. Counted rather than averaged, the hips are
     // 47 percent 3,10,11 with 40,50,75 and 11,20,45 behind it, the thigh
@@ -1340,7 +1340,7 @@ std::wstring Tr3Source::levelPath(const DinoSource& d,
 }
 
 //----------------------------------------------------------------------------
-// Redirect the faces' texture words to the new texinfos (#92, from TR3Insert).
+// Redirect the faces' texture words to the new texinfos, from TR3Insert.
 //
 // The same walker as everywhere: mesh header 10 bytes, then the vertex
 // word; 0 normals means NORMALS. Bit 15 of the texture word is a flag and
@@ -1348,8 +1348,7 @@ std::wstring Tr3Source::levelPath(const DinoSource& d,
 //
 // (What it is NOT: it does not decide whether AdjustUV runs the half-texel
 // correction. That correction runs for every texinfo, always. Which WAY it
-// pushes is what the texinfo's own fields decide - see cornerOrder above.
-// This comment claimed otherwise for a long time.)
+// pushes is what the texinfo's own fields decide - see cornerOrder above.)
 //----------------------------------------------------------------------------
 bool Tr3Source::packageFrameBounds(const std::vector<uint8_t>& package, int16_t out[6])
 {
@@ -1422,7 +1421,7 @@ int Tr3Source::remapTextures(std::vector<uint8_t>& package, const std::map<int,i
 }
 
 //----------------------------------------------------------------------------
-// Cache for the extracted packages (#103).
+// Cache for the extracted packages.
 //----------------------------------------------------------------------------
 namespace
 {
@@ -1596,10 +1595,9 @@ bool Tr3Source::fetchCached(const DinoSource& d,
     // never be the reason something does not work.
     if (!cacheDir.empty() && !stamp.empty())
     {
-        // Create the folder if it is missing. This used to sit with the
-        // caller - and the command line did not have it, so every store
-        // silently failed and the cache stayed empty. A function that uses
-        // a folder should be able to create it.
+        // Create the folder if it is missing: a function that uses a folder
+        // should be able to create it, rather than depend on every caller
+        // (including the command line) doing so first.
         _wmkdir(cacheDir.c_str());
         writeFile(mFile, model);
         writeFile(kFile, sounds);

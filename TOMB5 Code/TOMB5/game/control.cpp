@@ -14,6 +14,7 @@
 #include "control.h"
 #include "pickup.h"
 #include "../specific/input.h"
+#include "../specific/hd/hd_outfitmenu.h"	// F4, the outfit changer
 #include "newinv2.h"
 #include "lara_states.h"
 #include "camera.h"
@@ -54,9 +55,11 @@
 #include "health.h"
 #include "lara.h"
 #include "savegame.h"
+#include "interpolate.h"	// captures the tick's own snapshot for interpolation
 #include "deltapak.h"
 #include "../specific/output.h"
 #include "../specific/gamemain.h"
+#include "../specific/hd/hd_level.h"
 #include "../tomb5/tomb5.h"
 
 uchar ShatterSounds[18][10] =
@@ -247,8 +250,6 @@ long ControlPhase(long nframes, long demo_mode)
 	FLOOR_INFO* floor;
 	short item_num, nex, fx_num;
 
-	RegeneratePickups();
-
 	if (nframes > 10)
 		nframes = 10;
 
@@ -259,6 +260,32 @@ long ControlPhase(long nframes, long demo_mode)
 
 	for (framecount += nframes; framecount > 0; framecount -= 2)
 	{
+		/* Captures the state before this tick runs: the first statement of
+		 * the tick body, before GlobalCounter++, so it holds the state the
+		 * tick is about to leave behind. interpolate.cpp draws the frames
+		 * between this snapshot and the state the tick produces.
+		 *
+		 * When this loop runs several ticks in one call (a hitch, or the
+		 * two priming ticks at a level start), each call overwrites the
+		 * last, which is correct: the drawn state's only neighbour is the
+		 * one before the final tick. */
+		InterpCapturePrev();
+
+		/* RegeneratePickups used to run once per ControlPhase call - once
+		 * per drawn frame, twice per logic tick at 60 fps - instead of once
+		 * per tick. It is idempotent (it only re-arms an ammo pickup whose
+		 * ammo has been spent), so the doubling was harmless, but it
+		 * belongs on the tick: here it also runs once per tick when a
+		 * hitch makes ControlPhase run several ticks at once. */
+		RegeneratePickups();
+
+		/* Counts the fading corpses PrintObjects marked as drawn and kills
+		 * the ones done fading. Moved out of the draw path and placed here
+		 * with the other item housekeeping, before the item control loop;
+		 * see the notes in draw.cpp for why it had to leave the draw path
+		 * and the KillItem issue that comes with it. */
+		StepAfterDeathFade();
+
 		GlobalCounter++;
 		UpdateSky();
 		RPC_Update();
@@ -276,26 +303,27 @@ long ControlPhase(long nframes, long demo_mode)
 
 		if (cutseq_trig)
 		{
-			// Cross added alongside Escape, same reasoning as the FMV skip fix -
-			// Cross is already the confirm button everywhere else. Checked via
-			// Key(257) (raw joy_fire bit 1, Cross on this controller's DirectInput
-			// mapping), not input & IN_SELECT - bDisableLaraControl above already
-			// masks input down to IN_LOOK only during cutscenes (that masking is
-			// exactly why the original code checked keymap[DIK_ESCAPE] directly
-			// instead of input & IN_DESELECT too).
+			// Cross is added alongside Escape - Cross is already the
+			// confirm button everywhere else. Checked via Key(257) (raw
+			// joy_fire bit 1, Cross on this controller's DirectInput
+			// mapping), not input & IN_SELECT, because bDisableLaraControl
+			// above already masks input down to IN_LOOK only during
+			// cutscenes (the same reason the original code checked
+			// keymap[DIK_ESCAPE] directly instead of input & IN_DESELECT).
 			//
-			// Skip ONLY while the scene really runs (cutseq_trig == 2, set
-			// after Load_and_Init_Cutseq). Before, the skipper also fired
-			// in the START PHASE (trig 1): whoever ran into the trigger
-			// while shooting still held Cross (= fire key), the skipper
-			// choked the scene BEFORE Load_and_Init - the playback lock
-			// (SetCutPlayed, deltapak.cpp:3409) was thus never set, the
-			// floor trigger fired anew the next frame: an endless loop of
-			// wind-up and abort, Alt+F4 required (seen in game, #78).
-			// Cross additionally skips only on the EDGE (freshly pressed),
-			// so the key still held from firing does not instantly skip
-			// the scene that just started - Escape keeps the original's
-			// held behavior.
+			// The skip fires only while the scene is actually running
+			// (cutseq_trig == 2, set after Load_and_Init_Cutseq). Firing it
+			// during the start phase (trig 1) let a player who ran into the
+			// trigger while still holding Cross from firing choke the scene
+			// before Load_and_Init ran: the playback lock (SetCutPlayed,
+			// deltapak.cpp) was never set, the floor trigger fired again
+			// the next frame, and the result was an endless wind-up/abort
+			// loop that only Alt+F4 could end.
+			//
+			// Cross skips only on the rising edge (freshly pressed), so the
+			// key still held from firing the weapon does not instantly
+			// skip the scene that just started; Escape keeps its original
+			// held-key behavior.
 			{
 				static char crossWasHeld = 0;
 				const char crossNow = (ControlMethod == 1 && Key(256 + JoyBitConfirm())) ? 1 : 0;	// Cross or A - the bit hangs on the input path (input.cpp)
@@ -316,8 +344,19 @@ long ControlPhase(long nframes, long demo_mode)
 		{
 			S_SoundStopAllSamples();
 
-			if (S_CallInventory2())
-				return 2;
+			/* The inventory ring is a modal loop with its own present
+			 * calls; when it returns, the tick before it is wall-clock
+			 * minutes old and not a neighbour of the tick about to run.
+			 * The next frame is drawn live and interpolation restarts on
+			 * the tick after it. */
+			{
+				const long fromInventory = S_CallInventory2();
+
+				InterpInvalidate("inventory");
+
+				if (fromInventory)
+					return 2;
+			}
 		}
 
 		if (gfLevelComplete)
@@ -356,18 +395,58 @@ long ControlPhase(long nframes, long demo_mode)
 
 		if (!FadeScreenHeight)
 		{
+			// Each of these three stops the world the way the inventory
+			// does, so each also ends the run of ticks the interpolator
+			// was blending between.
 			if (input & IN_SAVE && lara_item->hit_points > 0)
+			{
 				S_LoadSave(IN_SAVE, 0, 0);
+				InterpInvalidate("save menu");
+			}
 			else if (input & IN_LOAD)
 			{
-				if (S_LoadSave(IN_LOAD, 0, 0) >= 0)
+				const long fromLoad = S_LoadSave(IN_LOAD, 0, 0);
+
+				InterpInvalidate("load menu");
+
+				if (fromLoad >= 0)
 					return 2;
 			}
 
 			if (dbinput & IN_PAUSE && !gfGameMode && lara_item->hit_points > 0)
 			{
-				if (S_PauseMenu() == 8)
+				const long fromPause = S_PauseMenu();
+
+				InterpInvalidate("pause menu");
+
+				if (fromPause == 8)
 					return 1;
+			}
+
+			/* The outfit changer sits beside the pause menu because it is
+			 * one: F4 stops the world exactly as S_PauseMenu does and holds
+			 * InventoryActive for its duration, so the press that closes it
+			 * cannot also move Lara. Its conditions match the pause menu's
+			 * (not the title screen, not with Lara dead) plus two more: not
+			 * with the binoculars or laser sight up, where a frozen menu
+			 * over the lens view would show nothing useful, and not during
+			 * a cutscene, whose actors are bound - a re-dress mid-scene
+			 * would rebuild them underneath it (the inventory carries the
+			 * same `&& !cutseq_trig` for the same reason). The inventory
+			 * and pause menu cannot themselves be open here: both run their
+			 * own frame loop and this line is not in it. */
+			/* The key's edge is read first: as the last operand of the
+			 * condition below, it would otherwise be short-circuited away
+			 * during a cutscene or behind the lens, so its edge latch would
+			 * never see the key go down, and F4 held through such a spell
+			 * would open the menu the instant the spell ended. */
+			const bool f4 = HDOutfitMenuWanted();
+
+			if (f4 && !gfGameMode && !cutseq_trig && lara_item->hit_points > 0 &&
+				!BinocularRange)
+			{
+				HDOutfitMenu();
+				InterpInvalidate("outfit menu");
 			}
 		}
 
@@ -806,7 +885,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 	{
 		inv_item_stealth_frigggggs = value == 2 ? CROWBAR_ITEM : WET_CLOTH;
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object((short)inv_item_stealth_frigggggs))
 		{
@@ -839,7 +918,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 39:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_TREAD && lara_item->anim_number == ANIM_TREAD &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(PUZZLE_ITEM2))
 			GLOBAL_enterinventory = PUZZLE_ITEM2;
@@ -853,7 +932,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 38:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(PUZZLE_ITEM1))
 			GLOBAL_enterinventory = PUZZLE_ITEM1;
@@ -894,7 +973,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 20:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(KEY_ITEM7))
 			GLOBAL_enterinventory = KEY_ITEM7;
@@ -908,7 +987,7 @@ void NeatAndTidyTriggerCutscene(long value, long timer)
 
 	case 14:
 
-		if (input & IN_ACTION && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
+		if (input & IN_INTERACT && !BinocularRange && lara.gun_status == LG_NO_ARMS &&
 			lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH &&
 			GLOBAL_inventoryitemchosen == NO_ITEM && have_i_got_object(PUZZLE_ITEM2))
 			GLOBAL_enterinventory = PUZZLE_ITEM2;
@@ -2649,6 +2728,17 @@ void FlipMap(long FlipNumber)
 
 			RemoveRoomFlipItems(r);
 			flipped = &room[r->flipped_room];
+
+			/* The three memcpy lines below swap the contents of two rooms
+			 * and leave their numbers where they are, so from here on room
+			 * i is drawn out of what used to be room r->flipped_room. The
+			 * HD path draws a room out of a .TRG group keyed to the room
+			 * number, so without this call group i would stay nailed to
+			 * room i and the old art would be left standing in front of
+			 * the new geometry. This moves the HD art along with the flip;
+			 * with HD off it returns immediately. */
+			HDFlipRoom(i, r->flipped_room);
+
 			memcpy(&temp, r, sizeof(temp));
 			memcpy(r, flipped, sizeof(ROOM_INFO));
 			memcpy(flipped, &temp, sizeof(ROOM_INFO));
@@ -3291,31 +3381,26 @@ void AnimateItem(ITEM_INFO* item)
 					num = cmd[1] & 0x3FFF;
 					type = cmd[1] & 0xC000;
 
-					// Joby characters on a foreign anim set (#111 part 2):
-					// Crane Guy and Mafia run on SWAT's set at runtime as
-					// soon as it is loaded - but its death anim +11 calls
-					// SWAT's own scream (377, SFX_SWAT_DIE). The Joby sets
-					// call the guard scream (84, SFX_BLUEG_HIT_DIE) at the
-					// same spot - that one belongs to these figures (user
-					// sign-off: Mafia soundscape != rich soundscape). The
-					// sample under 84 is byte-identical in all levels and
-					// travels with every soldier set; should it be missing
-					// after all, SoundEffect bails out silently as always.
-					// In vanilla the switch never fires: no Joby character
-					// stands next to a SWAT there.
+					// Crane Guy and Mafia run on SWAT's animation set once it
+					// is loaded, but its death animation +11 calls SWAT's
+					// own scream (377, SFX_SWAT_DIE). The Joby sets call the
+					// guard scream (84, SFX_BLUEG_HIT_DIE) at the same spot
+					// instead, since that sound fits these figures. The
+					// sample under 84 is byte-identical in every level and
+					// travels with every soldier set; if it were ever
+					// missing, SoundEffect stays silent, as always. In
+					// vanilla this substitution never triggers: no Joby
+					// character stands next to a SWAT there.
 					if (num == SFX_SWAT_DIE &&
 						(item->object_number == BLUE_GUARD2 ||
 						 item->object_number == CRANE_GUY ||
 						 item->object_number == MAFIA))
 						num = SFX_BLUEG_HIT_DIE;
 
-					// For the SFXLOG: who calls here? (diagnosis, see
-					// sound.cpp) Anim, type bits and room flags added since
-					// the water-step phantom hunt: the file is clean, the
-					// rooms are dry, the switch reads tight - so the next
-					// recurrence must show WHICH value lies at runtime
-					// (anim outside the slice? type bits gone? room flags
-					// different from the file?).
+					// Exposes the current sound-effect call's context (item
+					// slot, room, animation, command type bits, and the
+					// room's flags word, or -1 where none applies) for the
+					// SFXLOG diagnostic line in sound.cpp.
 					SfxCommandCaller = item->object_number;
 					SfxCommandRoom = item->room_number;
 					SfxCommandAnim = item->anim_number;
@@ -3724,42 +3809,40 @@ void ResetGuards()
 		object_number = item->object_number;
 
 		/*
-		 * Every reset enemy goes back to its OWN animation set (2026-09-04,
-		 * #146). Upstream picked one animation index for the whole room -
-		 * SWAT's if loaded, else the mini sub's, else the guard's - and
-		 * wrote it into every thinking item there is. That works in the
-		 * four levels where a body bag exists, because everything standing
-		 * in them belongs to the soldier family and shares that family's
-		 * set anyway; it breaks the moment the enemy pool puts a hydra, a
-		 * lion or a dinosaur in the same room, since an absolute animation
-		 * number from a foreign slot streams the wrong frame data over the
-		 * wrong bone tree.
+		 * Every reset enemy goes back to its own animation set. The old
+		 * code picked one animation index for the whole room - SWAT's if
+		 * loaded, else the mini sub's, else the guard's - and wrote it into
+		 * every thinking item there. That works in the four levels where a
+		 * body bag exists, because everything standing in them belongs to
+		 * the soldier family and shares that family's set anyway; it breaks
+		 * once the enemy pool puts a hydra, a lion or a dinosaur in the same
+		 * room, since an absolute animation number from a foreign slot
+		 * streams the wrong frame data over the wrong bone tree.
 		 *
-		 * Two vanilla situations change, both of them broken before:
-		 *   Andy2  - the level loads NO anchor at all, so the chain fell
+		 * Two vanilla situations change, both broken before:
+		 *   Andy2  - the level loads no anchor at all, so the old chain fell
 		 *            through to its last case and handed the skeletons
 		 *            animation 0, which is Lara's first animation.
-		 *   joby3  - Mafia 2 carries a 58-animation set of his own and got
+		 *   joby3  - Mafia 2 carries a 58-animation set of its own and got
 		 *            the guard's instead.
 		 * Everything else resolves to the same number as before: the four
 		 * stub soldiers (SWAT+, Mafia, scientist, crane guy) have no set of
-		 * their own, and setup.cpp already aliases their anim_index onto
-		 * the very anchor this chain used to pick.
+		 * their own, and setup.cpp already aliases their anim_index onto the
+		 * anchor the old chain used to pick.
 		 *
-		 * The three former exceptions (chef, maze monster, will-o'-wisp)
+		 * The three former special cases (chef, maze monster, will-o'-wisp)
 		 * asked for objects[object_number].anim_index, which is what the
 		 * general case now does, so they need no branch. Two Gun keeps his:
-		 * his +0 is a walk (state 2), +6 is the idle - measured.
+		 * his +0 is a walk (state 2), +6 is the idle.
 		 *
-		 * The forced states below stay exactly as Core wrote them. Measured
-		 * over all thirteen levels, seven types carry something other than
-		 * state 1 in their own +0 (agent 2, husky 8, hydra/imp/mini
-		 * sub/compy 0, Pierre 0 in Trajan's Markets). That mismatch is not
-		 * new and not harmful - the mini sub has it in vanilla joby4 today
-		 * - because AnimateItem takes the state from the animation table
-		 * again when the animation runs out. Forcing the state from the
-		 * table instead would change three vanilla resets, so it is not
-		 * done here.
+		 * The forced states below are unchanged. Measured over all thirteen
+		 * levels, seven types carry something other than state 1 in their
+		 * own +0 (agent 2, husky 8, hydra/imp/mini sub/compy 0, Pierre 0 in
+		 * Trajan's Markets). That mismatch is harmless - the mini sub has it
+		 * in vanilla joby4 too - because AnimateItem takes the state from
+		 * the animation table again once the animation runs out. Forcing
+		 * the state from the table here instead would change three vanilla
+		 * resets, so it is left as is.
 		 */
 		if (object_number == TWOGUN)
 			item->anim_number = objects[object_number].anim_index + 6;

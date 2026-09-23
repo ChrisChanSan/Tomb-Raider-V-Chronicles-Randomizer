@@ -56,25 +56,22 @@ void ChefControl(short item_number)
 	torso_y = 0;
 	torso_x = 0;
 
-	// The chef was immortal: he has hit points and takes damage (HitEffect
-	// in setup.cpp), but ChefControl never queried hit_points - there was
-	// no way out of states 1-5. In vanilla it goes unnoticed because joby3
-	// takes all of Lara's weapons beforehand; with the randomizer, enemies
-	// stand there and Lara is armed, so he needs a death.
+	// The chef has hit points and takes damage (HitEffect in setup.cpp),
+	// but ChefControl never checked them, so states 1-5 had no way out.
+	// Vanilla never exposes this because joby3 disarms Lara before he can
+	// be shot; the randomizer can leave enemies armed against him, so a
+	// death path is needed here.
 	//
-	// His own set, however, has no REAL death animation: +11 (state 6) is
-	// a 1-frame stub with KillItem - he collapsed without a transition
-	// (#124, user find). His skeleton is bone-identical with the soldier
-	// family (BoneCheck: 0 of 14 bones deviating), so he borrows their
-	// gunshot death: anim +16, state 8, 64 frames including the death
-	// scream and KillItem at the end - the corpse stays down like any
-	// soldier's. The same alias mechanics with which the stub family
-	// borrows its whole set, only limited to the death; the chain is the
-	// same as in setup.cpp: SWAT -> guard (460) -> guard (37), and +16 is
-	// healthy in all three sets (AnimMap; the rich set's dead heirs only
-	// begin at +19). As a pool enemy the randomizer always brings the
-	// guard along (kCross baseSlot 460); with no donor at all, the vanilla
-	// stub remains.
+	// His own animation set has no death animation: +11 (state 6) is a
+	// 1-frame stub that calls KillItem with no transition. His skeleton is
+	// bone-identical with the soldier family (0 of 14 bones deviating), so
+	// he borrows their gunshot death instead: anim +16, state 8, 64 frames
+	// including the death scream and a final KillItem, so the corpse stays
+	// down like any soldier's. The donor chain matches the one in
+	// setup.cpp - SWAT, then guard 460, then guard 37 - and +16 exists in
+	// all three sets (the rich set's dead animations only start at +19).
+	// The randomizer always includes a guard when the chef is placed as a
+	// pool enemy; with no donor loaded at all, the vanilla stub is used.
 	if (item->hit_points <= 0)
 	{
 		item->hit_points = 0;
@@ -140,23 +137,21 @@ void ChefControl(short item_number)
 	{
 	case 1:
 
-		// State 1 is his WORK at the cutting board. In vanilla he only
+		// State 1 is him working at the cutting board. In vanilla he only
 		// puts the knife down when Lara comes within one and a half
 		// sectors (0x240000 is the square of 1536), stands at the same
-		// height and becomes visible, loud or physical in the process -
-		// the kitchen in joby3 is built exactly for this moment.
+		// height, and becomes visible, loud, or physical in the process -
+		// the kitchen in joby3 is built for exactly that moment.
 		//
-		// OCB 1 (#124): HUNTING CHEF. Whoever the randomizer places
-		// somewhere in a level has no kitchen and no reason to wait - he
-		// leaves his work animation as soon as his trigger wakes him and
-		// seeks Lara like any other enemy. He needs no target delivered
-		// for that: CreatureAIInfo enters Lara by itself when the enemy
-		// has no foe (box.cpp:74).
+		// OCB 1 makes him a hunting chef: placed outside his kitchen by
+		// the randomizer, he has no reason to wait, so he leaves the work
+		// animation as soon as his trigger wakes him and seeks Lara like
+		// any other enemy. No target needs to be delivered for that -
+		// CreatureAIInfo targets Lara by itself when the enemy has no foe.
 		//
-		// The vanilla chef (joby3 item 186) carries OCB 0 - checked at the
-		// source and with ItemCheck - and thus stays with his vegetables.
-		// The curation nails him down anyway (FIXED_ITEMS), so he cannot
-		// lose his OCB at all.
+		// The vanilla chef (joby3 item 186) carries OCB 0 and stays with
+		// his vegetables; curation keeps him fixed in place regardless, so
+		// he can never lose that OCB.
 		if ((item->trigger_flags & 1) ||
 			(abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
 			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo))))

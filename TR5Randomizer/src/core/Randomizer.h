@@ -29,35 +29,26 @@
 //----------------------------------------------------------------------------
 // Placement logic.
 //
-// Ground rules, all earned from earlier findings of this project and not
-// negotiable:
+// Ground rules, not negotiable:
 //
-// 1. NO removing of items. TR item indices are pure array positions; a
-//    removed item shifts all following ones up and the triggers' "Object N"
-//    references then point at the wrong object. Randomizing therefore
-//    means: REWRITE existing items at their index (itemEdits). itemAdds
-//    exists only for mandatory injections like Andrea3's crowbar, and those
-//    append at the end, shifting nothing.
+// 1. No item is removed. Item indices are array positions that the
+//    triggers' "Object N" references point at, so items are rewritten at
+//    their index (itemEdits); itemAdds only appends mandatory injections
+//    like Andrea3's crowbar at the end.
 //
-// 2. A pickup trigger sticks to the sector, not to the item. If an item is
-//    moved, its trigger stays behind and never fires again. Affected items
-//    are DERIVED from the level data (see findTriggerPinnedItems), not
-//    maintained by hand. Excepted are triggers whose only further effect is
-//    PlaySoundtrack - a missing music cue is a deliberately accepted
-//    sacrifice (user decision); anything else would interfere with
-//    progress, geometry or enemies.
-//    Moving the trigger along later is planned, but requires floordata
-//    editing and is explicitly scheduled after the basic framework.
+// 2. A pickup trigger sticks to the sector, not to the item: moved alone,
+//    the item leaves it behind. Such items are derived from the level data
+//    (findTriggerPinnedItems) and pinned, except where the only further
+//    effect is PlaySoundtrack (a lost music cue is accepted). A trigger that
+//    must stay with its item travels with it (triggerMoves, curated per item
+//    in COUPLED_TRIGGERS).
 //
-// 3. OCB is set to 0 when moving. A pickup with a pedestal OCB (3/4/7/8) or
-//    a hiding OCB (1) needs a matching special environment at the target;
-//    without it, the item QUIETLY CANNOT BE PICKED UP - no crash, no
-//    message, it just lies there forever. Confirmed empirically in this
-//    project (Andrea3, item 101). Only OCB 0 reliably survives a move.
+// 3. OCB is set to 0 when moving. A pedestal OCB (3/4/7/8) or a hiding OCB
+//    (1) needs its special environment at the target; without it the item
+//    quietly cannot be picked up (Andrea3, item 101).
 //
-// 4. Everything is seed-driven and order-stable: item and sector lists are
-//    sorted before every random decision, so the same seed yields the same
-//    result regardless of file or map ordering.
+// 4. Everything is seed-driven and order-stable: lists are sorted before
+//    every random decision, so the same seed yields the same result.
 //----------------------------------------------------------------------------
 
 // Pickup type ranges, read straight from game/setup.cpp: exactly these two
@@ -74,7 +65,7 @@ inline bool isPickupType(int typeId)
 }
 
 // Operable fixtures: everything Lara must stand in front of and play an
-// animation at (#120). An enemy must not stand there - its hitbox pushes
+// animation at. An enemy must not stand there - its hitbox pushes
 // her away, the animation never starts, and a door hanging off it stays
 // closed forever.
 //
@@ -97,10 +88,9 @@ inline bool isOperableFixture(int typeId)
 // Swarm critters: bat, rat, spider and the spider generator. If a pickup
 // trigger fires only one of these, it does NOT pin the item.
 //
-// The user's reasoning: these critters chase Lara for a few seconds and
-// then despawn on their own. Losing them changes nothing about the flow of
-// the game. A dog or a SWAT does not disappear - which is why Andrea1's key
-// item stays in place, and that was exactly the requirement.
+// These critters chase Lara for a few seconds and then despawn on their
+// own; losing them changes nothing about the flow of the game. A dog or a
+// SWAT does not disappear, which is why Andrea1's key item stays in place.
 //
 // Across all 16 levels this exception hits exactly one case: Andrea2's item
 // 121 (Puzzle Item3), whose pickup spawns a rat. Everything else that
@@ -111,7 +101,7 @@ inline bool isDespawningSwarm(int typeId)
     return typeId >= 93 && typeId <= 96;   // Bat, Rat, Spider, Spider Generator
 }
 
-// Carriers in the sense of GetCarriedItems (game/setup.cpp:1925): an item
+// Carriers in the sense of GetCarriedItems (game/setup.cpp): an item
 // that at level start collects the pickups in its immediate vicinity. They
 // vanish from the room (room_number = NO_ROOM) and only reappear when the
 // enemy dies or the crate is searched.
@@ -162,7 +152,7 @@ struct ZoneSector
     int zone = 0;
     int floorY = 0;
 
-    // Clearance between floor and ceiling (#61). Below 768 Lara cannot
+    // Clearance between floor and ceiling. Below 768 Lara cannot
     // stand - her collision height is 762 (game\lara.cpp) - and
     // PickUpCollision explicitly refuses the wall grab in the duck state.
     int clearance = 0;
@@ -247,13 +237,13 @@ struct Injection
     // A selection instead of ONE room: the seed picks a free valid sector
     // from all listed rooms. Meant for requirements of the kind "this must
     // lie somewhere in this part of the level" - rich2's mandatory Deagle
-    // in the start island is the case (user wish: weapon guaranteed, place
-    // different every time). If the list is empty, "room" applies.
+    // in the start island is the case: a weapon guaranteed, placed
+    // differently every time. If the list is empty, "room" applies.
     std::vector<int> rooms;
     // Optional fixed sector. Without it, the injection picks any free valid
     // sector of the room - right for Andrea3's crowbar, which may lie
     // anywhere in room 120. rich2 needs the opposite: three items on
-    // exactly one tile, because the user picked the spot. A fixed sector
+    // exactly one tile, at one deliberately chosen spot. A fixed sector
     // therefore does NOT occupy it for the next injection either -
     // stacking is intended here.
     bool        hasSector = false;
@@ -332,10 +322,10 @@ struct RandoInput
     std::vector<RoomOrigin>  roomOrigins;
     std::set<int>            triggerPinned;  // derived, see rule 2
 
-    // Rooms with the water flag (waterRoom from the level export). User
-    // requirement 2026-08-14: no enemies may be placed there - land enemies
-    // can neither walk nor attack under water and would just stand there
-    // helplessly. Affects the extra-enemy spots; swapped enemies stand at
+    // Rooms with the water flag (waterRoom from the level export). No
+    // enemies may be placed there: land enemies can neither walk nor
+    // attack under water and would just stand there helplessly. Affects
+    // the extra-enemy spots; swapped enemies stand at
     // Core's own positions and remain untouched.
     std::set<int>            waterRooms;
 
@@ -352,8 +342,8 @@ struct RandoInput
     // would have to be survived with pistols alone.
     std::map<int, std::set<int>> typeNoRooms;
 
-    // The same one level finer: individual SECTORS per type (#61,
-    // typeNoSectors in the export). Needed when a room mostly suits a type
+    // The same one level finer: individual SECTORS per type (typeNoSectors
+    // in the export). Needed when a room mostly suits a type
     // and only a few tiles in it do not - and above all for types WITHOUT a
     // constraint: andy3's chalk and crowbar are tools without a pickup, the
     // key constraints' bannedSectors never reach them. Checked outside the
@@ -369,7 +359,7 @@ struct RandoInput
     // Items an AntiTrigger or HeavyAntiTrigger points at. If such a trigger
     // points at an ACTIVE intelligent enemy, it deletes it from the level
     // without dying and without fading (hit_points = -16384,
-    // DisableBaddieAI, KillItem - control.cpp:2422). In vanilla that is
+    // DisableBaddieAI, KillItem - control.cpp). In vanilla that is
     // intentional, because the enemy is supposed to be done there; a
     // swapped one may still be fighting and vanished mid-fight (seen in
     // game: Andrea1 item 34 under allsanity, antitrigger 46 in room 88).
@@ -390,7 +380,7 @@ struct RandoInput
     // brings in comes on top - that is not in this list then.
     std::set<int>            presentSlots;
 
-    // Weather (#144), both read out of the level file by the same level
+    // Weather, both read out of the level file by the same level
     // check as presentSlots (markTriggerSafeSectors).
     //
     //   weatherRooms   how many rooms could show rain or snow at all -
@@ -450,10 +440,10 @@ struct RandoInput
     // a key constraint, and those only exist for types with a pickup.
     // andy3's chalk and crowbar are tools without a pickup - ZoneAnalysis
     // derives no border for them at all, so the deadstop never reached
-    // them (#61).
+    // them.
     std::set<long long>      keyBarredSectors;
 
-    // Types EXEMPT from keyBarredSectors (#61, keyBarredExemptTypes in the
+    // Types EXEMPT from keyBarredSectors (keyBarredExemptTypes in the
     // export). Needed as soon as an island is meant FOR certain types and
     // another type needs the opposite: andy3's island keeps chalk and
     // crowbar on the start island and bars everything else from it - but
@@ -461,7 +451,7 @@ struct RandoInput
     // rules applied, and a single room was left over.
     std::set<int>            keyBarredExemptTypes;
 
-    // Items whose code bits are preset (#61). The third way besides "leave
+    // Items whose code bits are preset. The third way besides "leave
     // it be" and "take the trigger along": a HeavyTrigger cannot be taken
     // along, so the curation relieves the item of its condition. Whoever is
     // listed here is thereby also freed from trigger pinning.
@@ -475,10 +465,10 @@ struct RandoInput
     // Needed for two things, both in floorPosAt (Floor.h):
     //  1. The ITEM y. An item is drawn by the engine at exactly its y; on a
     //     slope the sector's floorY is the highest corner - without the
-    //     conversion the item hangs in the air (seen in game, #86).
+    //     conversion the item hangs in the air.
     //     Walkable slopes (up to slope 2) are fully valid item spots, Core
     //     itself places pickups there - a blanket ban cost andy1-3 almost
-    //     all sectors (user find).
+    //     all sectors.
     //  2. Barring the true exceptions: slides (slope > 2, Lara cannot pick
     //     anything up there) and the collision-free triangle of the NOCOLF
     //     sectors (there is no floor there).
@@ -487,14 +477,14 @@ struct RandoInput
     // anyway, so they do not drop in half a sector deep.
     std::map<long long, SlopeInfo> slopes;
 
-    // --- Headroom for enemies (#141) ---------------------------------------
+    // --- Headroom for enemies -----------------------------------------
     //
-    // The randomizer put enemies into rooms lower than the model, and the
-    // head stuck through the ceiling (user find in game: a soldier statue of
-    // 1546 units in rich1 room 12, where floor and ceiling are 1024 apart).
-    // The rule: a kind may only stand where the sector's clearance reaches
-    // its REST POSE HEIGHT. No safety margin - a 1024 room has to stay open
-    // to an 809 unit human (user decision).
+    // Without this check, an enemy placed into a room lower than its model
+    // has its head stick through the ceiling (e.g. a soldier statue of
+    // 1546 units in rich1 room 12, where floor and ceiling are only 1024
+    // apart). The rule: a kind may only stand where the sector's clearance
+    // reaches its REST POSE HEIGHT. No safety margin - a 1024 room has to
+    // stay open to an 809 unit human.
     //
     // Both halves of the comparison come out of level files, never out of a
     // typed table: the height is the bounding box of anim 0 / frame 0
@@ -515,7 +505,7 @@ struct RandoInput
 
     // And for the ones it does not: a cross enemy's model is still sitting
     // in its donor file while the placement decides. This reads it from
-    // there - fromLevel for a TR5 donor, tr3 for a guest from the user's
+    // there - fromLevel for a TR5 donor, tr3 for a guest from the local
     // Tomb Raider 3 installation (exactly one of the two is set). false
     // means the model could not be reached; the kind then passes unmeasured,
     // as it does with an unknown ceiling. Empty function = nobody supplied
@@ -543,7 +533,7 @@ struct RandoOptions
 
     // Cross enemy mix: the pool for swapping and extra enemies is extended
     // with types from OTHER levels (global pool table in Randomizer.cpp,
-    // from the user's list "Enemy Pools.txt"). At most three foreign types
+    // from the curated list "Enemy Pools.txt"). At most three foreign types
     // per level - each costs texture pages and sample memory in the
     // target. Models and sounds travel along during patching via the
     // native transfer (moveableAdds/soundAdds); whatever the level already
@@ -554,13 +544,13 @@ struct RandoOptions
     // Allsanity: like crossEnemies but WITHOUT the three-type limit - the
     // whole pool is available to the level, and when swapping, every role
     // rolls freely from the full pool instead of only every fourth.
-    // Maximum variety (user wish). Still only what the run actually uses
+    // Maximum variety. Still only what the run actually uses
     // is imported - so the texture page budget stays in bounds (measured:
     // 3 foreign types +15..25 pages of 256; even the full pool stays well
     // below the limit together with weapons and outfit).
     bool allsanity = false;
 
-    // Enemy types deselected by the user (window "Enemy types", #95).
+    // Enemy types deselected in the "Enemy types" window.
     // The DESELECTION is what gets saved, not the selection: that way any
     // type added later is automatically on, without old settings files
     // silently excluding it.
@@ -573,11 +563,10 @@ struct RandoOptions
     // without its animation set.
     std::set<int> disabledEnemies;
 
-    // Third-party installations for the guests from Tomb Raider 3 (#92,
-    // #102).
+    // Third-party installations for the guests from Tomb Raider 3.
     //
-    // We ship no game data - the run fetches model, textures and sounds at
-    // runtime from HERE. If a path is missing, the corresponding types
+    // No game data is shipped - the run fetches model, textures and sounds
+    // at runtime from HERE. If a path is missing, the corresponding types
     // silently drop out of the pool. The run must NEVER fail because
     // someone does not own the games.
     std::wstring tr3Dir;
@@ -604,17 +593,16 @@ struct RandoOptions
     std::set<std::string> outfitsOff;
 
     // Guest outfits from Tomb Raider 3 may be drawn at all. Separate from the
-    // pool because it also decides whether the user's TR3 installation is
+    // pool because it also decides whether the local TR3 installation is
     // read during a run.
     bool tr3Outfits = false;
 
     // Every level gets the full weapon set (pistols, Uzi, shotgun, Desert
-    // Eagle, HK including ammo and inventory slots). The donor rules come
-    // from the weapon work and are built and checked in all 13 levels
-    // one by one: Andrea3 fills only what is
-    // missing; joby2 always replaces the revolver with the Desert Eagle
-    // (user requirement); rich1 supplies the HK except to rich2, which
-    // keeps its own special pose. joby4 stays vanilla (user decision).
+    // Eagle, HK including ammo and inventory slots). The donor rules are
+    // measured per level: Andrea3 fills only what is
+    // missing; joby2 always replaces the revolver with the Desert Eagle;
+    // rich1 supplies the HK except to rich2, which keeps its own special
+    // pose. joby4 stays vanilla.
     bool allWeapons = false;
 
     // Item abundance: scatter this many extra consumables per level
@@ -628,7 +616,7 @@ struct RandoOptions
     // reference of the triggers.
     int  extraPickups = 0;
 
-    // Roll the weather per level (#144): dry, rain or snow, one draw from
+    // Roll the weather per level: dry, rain or snow, one draw from
     // the level's own stream. Only levels that could show it at all take
     // part (RandoInput::weatherRooms); everyone else keeps the vanilla
     // byte. The draw sits at the very END of the run, behind every other
@@ -652,18 +640,18 @@ struct RandoReport
     std::string error;
 };
 
-// One selectable enemy kind in the pool, for the "Enemy types" window (#95).
+// One selectable enemy kind in the pool, for the "Enemy types" window.
 //
-// "source" says which game the kind comes from (#102):
+// "source" says which game the kind comes from:
 //   nullptr    lives in Tomb Raider 5 itself
 //   "tr3"      needs a Tomb Raider 3 installation
 //   "tr3gold"  needs The Lost Artifact
 //
-// We ship no game data. Without the matching path the kind stays grayed out
-// in the UI instead of failing during the run.
+// No game data is shipped. Without the matching path the kind stays grayed
+// out in the UI instead of failing during the run.
 struct EnemyKind { int typeId; const char* name; const char* source; };
 
-// One entry of the wardrobe (#122). source is "" for the three outfits TR5
+// One entry of the wardrobe. source is "" for the three outfits TR5
 // brings itself and the installation key ("tr3") for a guest - the window
 // greys out a guest whose game is not there, exactly as it does with the
 // animals.
@@ -679,7 +667,7 @@ namespace Rando
     // checkbox without effect.
     std::vector<EnemyKind> enemyKinds();
 
-    // Every outfit that can be drawn, in the order the user sees. ONE list
+    // Every outfit that can be drawn, in the order shown in the UI. ONE list
     // for the window and for the roll - the enemy list had to be kept in
     // step with its pool table by hand, and this one is built from the same
     // sources the roll reads, so it cannot fall out of step at all.
@@ -716,7 +704,7 @@ namespace Rando
     // the run forces in.
     // itemOcb: the OCB of the item to be placed. Only 2 and 9 change
     // anything - those are the wall grabs (crowbar and joby crow), and they
-    // need a wall edge and standing height (#61). 0 for everything else and
+    // need a wall edge and standing height. 0 for everything else and
     // for paths without a concrete item (injections).
     bool sectorAllowedFor(const RandoInput& in,
                           const KeyConstraint* k,

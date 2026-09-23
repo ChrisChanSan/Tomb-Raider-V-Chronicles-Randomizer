@@ -3,10 +3,10 @@
 # data: the text names enemies and objects, here stands in which room they
 # lie and whether the analyser reaches that room.
 #
-# IMPORTANT: TRCatalog2.xml contains all games. The TR5 section must be
-# chosen explicitly - a bare //moveable delivers TR4 names and with them
-# silently wrong results (typeId 105 came back as "Magnum ammo" that way,
-# in TR5 it is "Crumbling Floor").
+# TRCatalog2.xml contains all games; the TR5 section must be chosen
+# explicitly - a bare //moveable delivers TR4 names and with them silently
+# wrong results (typeId 105 came back as "Magnum ammo" that way, in TR5 it
+# is "Crumbling Floor").
 param(
     [string]$LevelName,
     [string]$InfoDir  = "$PSScriptRoot\..\Level Infos",

@@ -162,15 +162,12 @@ void InitialiseSlot(short item_number, long slot)
 
 	switch (item->object_number)
 	{
-	// SAILOR stood here while the slot was the sailor: human group with
-	// step 1024, jumping ability and HUMAN_ZONE. As the Compsognathus
-	// (#99) he belongs in the default group - he is knee-high and does not
-	// jump over ledges. Nothing to do for that except taking him out here;
-	// the defaults above (step 256, drop -512, BASIC_ZONE) are the same
-	// ones the Raptor already gets.
+	// The Compsognathus, ported into the sailor slot, is knee-high and
+	// does not jump over ledges, so it falls through to the default group
+	// below (step 256, drop -512, BASIC_ZONE) instead of this human case.
 	case SAS:
 	case BLUE_GUARD:
-	case BLUE_GUARD2:	// second guard (#105): walks and jumps like his template
+	case BLUE_GUARD2:	// shares the human movement group with its template guard
 	case MAFIA2:
 		creature->LOT.step = 1024;
 		creature->LOT.drop = -1024;
@@ -178,11 +175,10 @@ void InitialiseSlot(short item_number, long slot)
 		creature->LOT.zone = HUMAN_ZONE;
 		break;
 
-	// REAPER stood here while the slot was the water jellyfish: fly zone,
-	// step 20480, fly 16. As the Raptor (#97) he belongs on the ground -
-	// and nothing to do for that except taking him out here. The default
-	// values above (step 256, drop -512, fly 0, BASIC_ZONE) are exactly
-	// what tomb3 gives the Raptor: he stands in no special case there.
+	// The Raptor, ported into the water-jellyfish slot, moves on the
+	// ground rather than through the flyer zone, so it falls through to
+	// the default group below (step 256, drop -512, fly 0, BASIC_ZONE) -
+	// the same values tomb3 gives it, where it has no special case.
 	case CROW:
 	case WILLOWISP:
 	case GREEN_TEETH:
@@ -193,9 +189,9 @@ void InitialiseSlot(short item_number, long slot)
 		creature->LOT.zone = FLYER_ZONE;
 		break;
 
-	// The pool cyborg (#146) moves exactly like the agent - same model,
-	// same animations, and he is the only enemy in the game that can use a
-	// monkey swing, which is what can_monkey below is for.
+	// The cyborg moves exactly like the agent - same model, same
+	// animations - and is the only enemy that uses a monkey swing, which
+	// is what can_monkey below sets up.
 	case HITMAN:
 	case CYBORG:
 		creature->LOT.step = 1024;
@@ -239,16 +235,14 @@ long EnableBaddieAI(short item_number, long Always)
 		}
 	}
 
-	// SLOTLOG (#121, fourth measurement): SKIPLOG showed six rejections in
-	// the same tick although the level carries at most ~35 creatures and 48
-	// slots exist. Here stands what the allocation REALLY sees: the counter
-	// and the actually free slots. If the two disagree, the bookkeeping is
-	// the culprit, not a shortage of slots.
+	// SLOTLOG: on enemy activation, logs the slot-count bookkeeping
+	// (slots_used) against an actual scan of free baddie_slots entries,
+	// throttled to once per 30 game ticks. If the two disagree, the
+	// bookkeeping is wrong rather than the slots being short.
 	//
-	// The gate sits at the call site on purpose: this seam COUNTS - it walks
-	// all MAX_LOT slots before it has anything to say. The gate inside Log()
-	// would have saved the writing but not that walk, and this runs from
-	// enemy activation.
+	// The check sits at the call site rather than inside Log() because it
+	// has to walk all MAX_LOT slots to produce free_slots; gating only the
+	// write inside Log() would not save that walk.
 	if (gLogEnabled)
 	{
 		static long lastSlotLog = -1000;

@@ -90,8 +90,8 @@ void Config::load()
         {
             // Comma separated ids. An unknown id is KEPT rather than dropped:
             // it may belong to an outfit that is switched off right now, and
-            // silently forgetting the user's choice is worse than carrying a
-            // name nobody reads.
+            // silently forgetting that choice is worse than carrying a name
+            // nobody reads.
             outfitsDisabled.clear();
             std::string cur;
             for (size_t i = 0; i <= val.size(); ++i)
@@ -144,10 +144,8 @@ bool Config::save() const
 
     // UTF-8 without BOM, so paths with umlauts come back unharmed.
     //
-    // The keys here MUST match the ones load() reads - the #129 rename
-    // once broke exactly this round trip (load read the new English keys,
-    // save still wrote the old German ones, and a restart silently reset
-    // half the settings).
+    // The keys here MUST match the ones load() reads: if the two diverge,
+    // a restart silently resets whichever settings use the mismatched key.
     const std::string dir = PathUtil::narrow(sourceDir);
     std::fprintf(f, "sourceDir=%s\n", dir.c_str());
     std::fprintf(f, "tr3Dir=%s\n", PathUtil::narrow(tr3Dir).c_str());
@@ -181,8 +179,6 @@ bool Config::save() const
     std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);
     std::fprintf(f, "secretRewards=%d\n", secretRewards ? 1 : 0);
-    // Was read but never written once - the author choice used to be lost
-    // on every program start.
     std::fprintf(f, "secretAuthor=%s\n", secretAuthor.c_str());
     std::fprintf(f, "musicSwitch=%d\n", optMusicSwitch ? 1 : 0);
     std::fprintf(f, "musicTrigger=%d\n", optMusicTrigger ? 1 : 0);

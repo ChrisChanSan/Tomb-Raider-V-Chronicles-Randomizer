@@ -42,14 +42,13 @@ extern long gfStatus;
 extern long gfMirrorZPlane;
 extern short gfLevelFlags;
 extern uchar gfCurrentLevel;
-// Level order (plan: Preparation\Level Infos\
-// Level-Order-Plan.md): gfCurrentLevel is the SLOT in SCRIPT.DAT
-// (order, savegame, names), gfLevelId the IDENTITY of the loaded level
-// (LVL5_*, from the file name). In vanilla both are equal; as soon as the
-// randomizer permutes the blocks, everything that wants to know "am I on
-// the 13th floor?" asks gfLevelId. gfSlotFromId is the inverse for jumps to
-// a specific identity (cheat, cutscene selection); gfLastSlot the highest
-// campaign slot - the credits come there, not at "Red Alert".
+// gfCurrentLevel is the SLOT in SCRIPT.DAT (order, savegame, names);
+// gfLevelId is the IDENTITY of the loaded level (LVL5_*, from the file
+// name). In vanilla both are equal; once the level order is shuffled,
+// anything that needs to know which level is actually loaded reads
+// gfLevelId. gfSlotFromId is the inverse, for jumps to a specific identity
+// (cheats, cutscene selection); gfLastSlot is the highest campaign slot -
+// the credits play there, not necessarily after "Red Alert".
 extern uchar gfLevelId;
 extern uchar gfSlotFromId[18];	// NUM_TR5_LEVELS - the enum stands further down
 extern uchar gfIdFromSlot[18];	// the reverse direction: which identity lies on slot n

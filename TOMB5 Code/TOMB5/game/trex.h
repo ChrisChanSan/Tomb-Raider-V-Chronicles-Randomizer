@@ -14,7 +14,7 @@
 #include "../global/types.h"
 
 //----------------------------------------------------------------------------
-// T-Rex from Tomb Raider 3 (#88). Ported from the tomb3 decompilation
+// T-Rex from Tomb Raider 3. Ported from the tomb3 decompilation
 // (game/trex.cpp), which like TOMB5 stands under GPLv3.
 //
 // The state numbers are the TR3 model's and must stay so - they are baked

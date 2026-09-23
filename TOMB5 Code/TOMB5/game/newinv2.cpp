@@ -41,6 +41,11 @@
 #include "spotcam.h"
 #include "../specific/dxshell.h"
 #include "savegame.h"
+#include "../specific/hd/hd_object.h"	// draws the ring's items through the HD path
+#include "inventory_interp.h"		// the ring's frame-rate interpolation
+#include "laramisc.h"			// CheatLog - shares the seam with the hotkey cheats
+#include "../tomb5/tomb5.h"			// tomb5.action_split, for the ring's confirm key
+#include "interpolate.h"		// InterpIsTweenFrame, the tween-frame latch
 
 static RINGME* rings[2];
 static RINGME pcring1;
@@ -484,6 +489,97 @@ COMBINELIST dels_handy_combine_table[24] =
 	{combine_clothbottle, INV_CLOTH, INV_BOTTLE, INV_WET_CLOTH}
 };
 
+/* The ring's input on a frame that carries no logic step.
+ *
+ * The same shadow the title menu puts over TitleOptions, for the same reason
+ * and with the same rule: the input is put aside, zeroed for the length of the
+ * frame and put back byte for byte. Nothing the body reaches can then act on
+ * a press twice, and nothing downstream sees a cleared debounce.
+ *
+ * A shadow rather than a clearing, following the same reasoning as
+ * TitleInputShadow (game\gameflow.cpp): the debounce throws dbinput's own
+ * incoming value away, so a clearing would not turn a held key into a press -
+ * but SetDebounce is cleared inside the first tick of a ControlPhase call, so
+ * a zero left behind would stand through a hitch that runs several ticks and
+ * swallow the edge the first of them found. The six go_ flags are in the
+ * shadow as well: do_debounced_joystick_poo rebuilds all six from `input` at
+ * the top of every step frame and does not run on a tween frame at all, so on
+ * such a frame they would otherwise still be standing from the step before
+ * and the ring would act on one press twice.
+ *
+ * `input` is in it too for one test at the bottom of the loop:
+ * `use_the_bitch && !input` waits for the button that used an item to be
+ * released, and a zeroed input is a released one. */
+struct InvInputShadow
+{
+	long input;
+	long dbinput;
+	uchar left, right, up, down, select, deselect;
+	bool down_now;
+};
+
+static void ShadowRingInput(InvInputShadow* s)
+{
+	s->input = input;
+	s->dbinput = dbinput;
+	s->left = go_left;
+	s->right = go_right;
+	s->up = go_up;
+	s->down = go_down;
+	s->select = go_select;
+	s->deselect = go_deselect;
+	s->down_now = true;
+
+	input = 0;
+	dbinput = 0;
+	go_left = 0;
+	go_right = 0;
+	go_up = 0;
+	go_down = 0;
+	go_select = 0;
+	go_deselect = 0;
+}
+
+static void RestoreRingInput(InvInputShadow* s)
+{
+	if (!s->down_now)
+		return;
+
+	input = s->input;
+	dbinput = s->dbinput;
+	go_left = s->left;
+	go_right = s->right;
+	go_up = s->up;
+	go_down = s->down;
+	go_select = s->select;
+	go_deselect = s->deselect;
+	s->down_now = false;
+}
+
+/* The words' half of the cheat seam. The four word cheats fire on every
+ * logic step their four letters are held - that is their own behaviour and
+ * none of it changes here (three are idempotent and the fourth plays a
+ * sound). The log line does not follow suit: a line per step would be
+ * thirty a second, so only the log is put on the press edge; nothing the
+ * cheat does hangs on the answer. One bit per word, in the order they stand
+ * below.
+ *
+ * The bits are cleared only while the ring is open, so a word held as the
+ * ring closes stays "held" until it is asked again - which costs at most one
+ * missing log line and no game behaviour. */
+static long CheatWordEdge(long bit, long down)
+{
+	static long word_held = 0;
+	const long was = (word_held >> bit) & 1;
+
+	if (down)
+		word_held |= 1L << bit;
+	else
+		word_held &= ~(1L << bit);
+
+	return down && !was;
+}
+
 long S_CallInventory2()
 {
 	FLOOR_INFO* floor;
@@ -539,11 +635,11 @@ long S_CallInventory2()
 	if (input & IN_SELECT)
 		friggrimmer = 1;
 
-	// The same swallow for deselect, and it is needed now: Escape carries
-	// IN_DESELECT and IN_OPTION together (specific/input.cpp). IN_OPTION opens
-	// the ring, and since the ring learned to close on a left-over deselect,
-	// the RELEASE of that very press shut it again in the same breath - one
-	// press, two consumers, the third time today.
+	// The same swallow for deselect: Escape carries IN_DESELECT and
+	// IN_OPTION together (specific/input.cpp). IN_OPTION opens the ring, and
+	// since the ring closes on a left-over deselect, the release of that
+	// very press would shut it again in the same breath - one press, two
+	// consumers.
 	//
 	// friggrimmer2 makes the ring ignore the deselect belonging to the press
 	// that opened it. The flag clears itself on the first frame the button is
@@ -563,15 +659,51 @@ long S_CallInventory2()
 	return_value = 0;
 	val = 0;
 
+	/* The ring follows the frame rate from here on. The wiring is one call
+	 * because game\inventory_interp.cpp owns the snapshot and the
+	 * accumulator but not one of the ring's own fields - every one of them
+	 * is a static of this file, and they stay that way. */
+	{
+		InvInterpSource src;
+
+		src.ring[RING_INVENTORY] = rings[RING_INVENTORY];
+		src.ring[RING_AMMO] = rings[RING_AMMO];
+		src.ammo = ammo_object_list;
+		src.ammoFade = &ammo_selector_fade_val;
+		src.combineFade = &combine_ring_fade_val;
+		src.normalFade = &normal_ring_fade_val;
+		src.examine = &examine_mode;
+		InvInterpOpen(&src, "open");
+	}
+
 	while (!reset_flag && !val)
 	{
+		/* The ring's own cadence. This is the first statement of the body
+		 * for the same reason InterpCapturePrev is the first statement of
+		 * ControlPhase's tick body: what the snapshot has to remember is
+		 * the state this frame's step is about to leave behind.
+		 *
+		 * `invStep` is true on every frame at fps_mode 0 and on every
+		 * second one at fps_mode 1, so the whole body below reads as the
+		 * body it has always been, with the logic behind one test. */
+		const bool invStep = InvInterpBeginFrame();
+		InvInputShadow shadow;
+
+		shadow.down_now = false;
+
 		OBJLIST_SPACING = phd_centerx >> 1;
 		S_InitialisePolyList();
-		SetDebounce = 1;
-		S_UpdateInput();
-		input = inputBusy;
-		UpdatePulseColour();
-		GameTimer++;
+
+		if (invStep)
+		{
+			SetDebounce = 1;
+			S_UpdateInput();
+			input = inputBusy;
+			UpdatePulseColour();
+			GameTimer++;
+		}
+		else
+			ShadowRingInput(&shadow);
 
 		if (dbinput & IN_OPTION)
 		{
@@ -582,7 +714,11 @@ long S_CallInventory2()
 		return_value = MainThread.ended;
 
 		if (return_value)
+		{
+			RestoreRingInput(&shadow);
+			InvInterpClose();
 			return return_value;
+		}
 
 		S_DisplayMonoScreen();
 
@@ -592,33 +728,63 @@ long S_CallInventory2()
 			val = 1;
 		}
 
-		do_debounced_joystick_poo();
+		if (invStep)
+			do_debounced_joystick_poo();
 
 		item = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 
-		if (item == INV_COMPASS_ITEM && keymap[DIK_G] && keymap[DIK_U] && keymap[DIK_N] && keymap[DIK_S])//GUNS
-			dels_give_lara_guns_cheat();
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_B] && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_S])//BITS
+		/* The four cheats read keymap directly rather than through `input`,
+		 * so the shadow above does not reach them and they would fire at
+		 * the frame rate. They are put on the logic step with everything
+		 * else; three of the four are idempotent and the fourth plays a
+		 * sound. */
+		if (invStep)
 		{
-			savegame.CampaignSecrets[0] = 9;
-			savegame.CampaignSecrets[1] = 9;
-			savegame.CampaignSecrets[2] = 9;
-			savegame.CampaignSecrets[3] = 9;
+			/* The five conditions match the five original cheats letter for
+			 * letter; each still runs exactly where and when it did. The
+			 * four that have a hotkey role also log through the seam below
+			 * (CheatWordEdge above; BITS gets neither a role nor a line). */
+			const long word_guns = item == INV_COMPASS_ITEM && keymap[DIK_G] && keymap[DIK_U] && keymap[DIK_N] && keymap[DIK_S];
+			const long word_item = item == INV_COMPASS_ITEM && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_E] && keymap[DIK_M];
+			const long word_skip = item == INV_COMPASS_ITEM && keymap[DIK_S] && keymap[DIK_K] && keymap[DIK_I] && keymap[DIK_P];
+			const long word_heal = item == INV_COMPASS_ITEM && keymap[DIK_H] && keymap[DIK_E] && keymap[DIK_A] && keymap[DIK_L];
+
+			if (word_guns)//GUNS
+				dels_give_lara_guns_cheat();
+
+			if (CheatWordEdge(0, word_guns))
+				CheatLog("weapons", "word");
+
+			if (item == INV_COMPASS_ITEM && keymap[DIK_B] && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_S])//BITS
+			{
+				savegame.CampaignSecrets[0] = 9;
+				savegame.CampaignSecrets[1] = 9;
+				savegame.CampaignSecrets[2] = 9;
+				savegame.CampaignSecrets[3] = 9;
+			}
+
+			if (word_item)	//ITEM
+				dels_give_lara_items_cheat();
+
+			if (CheatWordEdge(1, word_item))
+				CheatLog("items", "word");
+
+			if (word_skip)	//SKIP
+			{
+				gfLevelComplete = gfCurrentLevel + 1;
+				SCNoDrawLara = 0;
+				bDisableLaraControl = 0;
+			}
+
+			if (CheatWordEdge(2, word_skip))
+				CheatLog("skip", "word");
+
+			if (word_heal)	//heal
+				lara_item->hit_points = 1000;
+
+			if (CheatWordEdge(3, word_heal))
+				CheatLog("heal", "word");
 		}
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_I] && keymap[DIK_T] && keymap[DIK_E] && keymap[DIK_M])	//ITEM
-			dels_give_lara_items_cheat();
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_S] && keymap[DIK_K] && keymap[DIK_I] && keymap[DIK_P])	//SKIP
-		{
-			gfLevelComplete = gfCurrentLevel + 1;
-			SCNoDrawLara = 0;
-			bDisableLaraControl = 0;
-		}
-
-		if (item == INV_COMPASS_ITEM && keymap[DIK_H] && keymap[DIK_E] && keymap[DIK_A] && keymap[DIK_L])	//heal
-			lara_item->hit_points = 1000;
 
 		if (GLOBAL_invkeypadmode)
 			do_keypad_mode();
@@ -657,14 +823,35 @@ long S_CallInventory2()
 			val = 1;
 		}
 
-		if (use_the_bitch && !input)
+		if (invStep && use_the_bitch && !input)
 			val = 1;
 
 		S_OutputPolyList();
+
+		/* The ring's present follows DrawPhaseGame's own pattern to the line
+		 * (game\draw.cpp): raise the rate around this present only, put the
+		 * default two back straight afterwards, and let the frame be judged
+		 * against the slot it really asked for - HDFramePresented reads
+		 * gPresentMinTicks from inside DXShowFrame, so FPSLOG's `budget=` is
+		 * the ring's own 6.1 ms at fps_mode 2 and not the 33.3 of the
+		 * default. */
+		RestoreRingInput(&shadow);
+		gPresentMinTicks = InvFrameMinTicks();
 		camera.number_frames = S_DumpScreen();
+		gPresentMinTicks = 2;
+		InvInterpPresent(camera.number_frames);
 
 		if (loading_or_saving)
 		{
+			/* The load/save screen is a modal loop of its own at two ticks,
+			 * and what comes back from it is minutes of wall-clock time away
+			 * from the frame that went in. The latch goes down with the same
+			 * movement: that loop's counters step once per present and
+			 * always have, and its first iteration runs before its first
+			 * S_DumpScreen puts the latch down for itself. */
+			InvInterpCut("loadsave");
+			InterpNoteMenuFrame(false);
+
 			while (1)
 			{
 				flag = 0;
@@ -701,6 +888,7 @@ long S_CallInventory2()
 		}
 	}
 
+	InvInterpClose();	// end the ring's frame-rate interpolation for this session
 	InitialisePickUpDisplay();
 	GLOBAL_lastinvitem = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 	update_laras_weapons_status();
@@ -877,7 +1065,16 @@ void do_debounced_joystick_poo()
 	else
 		down_debounce = 0;
 
-	if (input & IN_ACTION || input & IN_SELECT)
+	/* The ring confirms on the Action key, not on the Secondary one.
+	 * IN_SELECT belongs to the Action role in both control schemes, so it
+	 * always confirms; the IN_ACTION term is Core's and is kept for
+	 * "One key" alone, where it is the same press and the same word. Under
+	 * "Separate" IN_ACTION is the Secondary role - the fire key - and a
+	 * trigger pull in the ring would equip whatever the cursor sat on. The
+	 * guard is written out rather than the term simply dropped so that the
+	 * "One key" default is byte-identical by construction and not by an
+	 * argument about which bits travel together. */
+	if (input & IN_SELECT || (!tomb5.action_split && input & IN_ACTION))
 		select_debounce = 1;
 	else
 	{
@@ -975,13 +1172,49 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 	meshpp = &meshes[object->mesh_index];
 	bone = &bones[object->bone_index];
 
+	/* Is this item drawn by the HD path?
+	 *
+	 * The same seam DrawAnimatingItem uses, in the one other place in this
+	 * engine that walks a mesh tree and hands each node's mesh to the
+	 * renderer. When the answer is true not one classic polygon of this item
+	 * goes into the sort list: the walk below runs exactly as it always did -
+	 * the same frame, the same bones, the same mesh bits - and instead of
+	 * handing each node's mesh to phd_PutPolygonsPickup it hands the node's
+	 * matrix to hd_object, which is what a skinned model wants.
+	 *
+	 * xoffset/yoffset are the item's place on the screen, which is what the
+	 * classic call passes as the temporary projection centre; pcbright is the
+	 * brightness for this item, which is the classic sun's colour. hd_object
+	 * carries the first to the item's own draw, where it moves the
+	 * projection, and takes the second as its one light.
+	 *
+	 * Both callers of this function come through here: the inventory's four
+	 * (the ring, the ammo selector, the keypad, the examine screen) and
+	 * S_DrawPickup's one - the little turning object in the corner after a
+	 * pickup, drawn on the spot rather than through the classic path. Which
+	 * of the two this is, and what hd_object does about it, is decided in
+	 * HDInvBegin and nowhere else: these four call sites are one seam and
+	 * stay one seam.
+	 *
+	 * False for an item the remaster ships no model for, for a slot whose
+	 * skeleton the model does not fit, and with the HD path off. Then it is
+	 * drawn exactly as it was, item by item, and the ring never has a hole in
+	 * it. */
+	const bool hd = HDInvBegin(item, object, (float)xoffset, (float)yoffset, pcbright);
+
 	if (!shagflag)
 		phd_TranslateRel(frmptr[6], frmptr[7], frmptr[8]);
 
 	rotation1 = &frmptr[9];
 	gar_RotYXZsuperpack(&rotation1, 0);
 
-	if (item->mesh_bits & 1)
+	/* The matrix is recorded whether or not mesh_bits shows the node, because
+	 * a hidden node still carries the ones below it - the mask reaches the
+	 * model as a mask and hides its triangles there instead, so the ring
+	 * needs no flag of its own where TROne needed TRONE_LIGHT_EXACT_NODES. */
+	if (hd)
+		HDInvNode(0);
+	else if (item->mesh_bits & 1)
 	{
 		if (overlay)
 			phd_PutPolygonsPickup(*meshpp, (float)xoffset, (float)yoffset, pcbright);
@@ -1010,7 +1243,9 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 		gar_RotYXZsuperpack(&rotation1, 0);
 		bit <<= 1;
 
-		if (item->mesh_bits & bit)
+		if (hd)
+			HDInvNode(i + 1);
+		else if (item->mesh_bits & bit)
 		{
 			if (overlay)
 				phd_PutPolygonsPickup(*meshpp, (float)xoffset, (float)yoffset, pcbright);
@@ -1023,6 +1258,16 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 			}
 		}
 	}
+
+	/* The node walk is over. For a RING item HDInvEnd puts it on the frame's
+	 * list - the very list the world's HD objects go on, drawn in the same
+	 * bracket by the same HDObjectFrameDraw; for the pickup display it
+	 * draws the one object on the spot, in a bracket of its own, because the
+	 * frame's list has been drawn and closed by the time S_DrawPickup runs.
+	 * Called on the one road out of this function, as HDObjectEnd is in
+	 * game\draw.cpp. */
+	if (hd)
+		HDInvEnd();
 
 	phd_PopMatrix();
 }
@@ -1113,6 +1358,13 @@ void insert_object_into_list_v2(long num)
 
 void construct_object_list()
 {
+	/* The list is being rebuilt, so every slot in the ring's snapshot may
+	 * mean a different object a line from now. Called from init_new_inventry
+	 * before the ring is even open (where it does nothing but clear a counter
+	 * that is already clear), from a combine and a separate, and from the
+	 * weapon hot keys. */
+	InvInterpCut("rebuild");
+
 	rings[RING_INVENTORY]->numobjectsinlist = 0;
 
 	for (int i = 0; i < NUM_INVOBJ; i++)
@@ -1311,15 +1563,14 @@ void insert_object_into_list(long num)
 	rings[RING_INVENTORY]->numobjectsinlist++;
 }
 
-void draw_current_object_list(long ringnum)
+/* The two ring fades, split out of draw_current_object_list unchanged so
+ * that the ring's logic step can gate the whole of it with one test instead
+ * of a brace around forty lines. It steps the combine ring's fade in and out
+ * and the inventory ring's, and hands the ring over when one of them reaches
+ * its end - which is state, and state moves on the logic step and on no
+ * other frame. */
+static void step_ring_fades(long ringnum)
 {
-	long n, maxobj, xoff, shade, minobj, objmeup, nummeup, activenum, ymeup, x, y;
-	short yrot;
-	char textbufme[128];
-
-	if (rings[ringnum]->numobjectsinlist <= 0)
-		return;
-
 	if (ringnum == RING_AMMO)
 	{
 		ammo_selector_fade_val = 0;
@@ -1393,6 +1644,52 @@ void draw_current_object_list(long ringnum)
 			handle_object_changeover(RING_INVENTORY);
 		}
 	}
+}
+
+void draw_current_object_list(long ringnum)
+{
+	long n, maxobj, xoff, shade, minobj, objmeup, nummeup, activenum, ymeup, x, y;
+	short yrot;
+	char textbufme[128];
+
+	if (rings[ringnum]->numobjectsinlist <= 0)
+		return;
+
+	/* Every step in this function is on the ring's logic frame, gated by the
+	 * tween latch, which the ring raises for itself (game\inventory_interp.cpp)
+	 * now that its present no longer waits two ticks. At fps_mode 0 it is
+	 * false on every frame, step_ring_fades below runs from the same point
+	 * in the function, and this function runs as it always has. */
+	const bool invStep = !InterpIsTweenFrame();
+
+	if (invStep)
+		step_ring_fades(ringnum);
+
+	/* Where the row stands in this picture. objlistmovement is the slide, 0
+	 * to 65536 in eight steps of 8192, and it is the one field of the ring
+	 * that vanilla steps after it has drawn with it - the block at the
+	 * bottom of this function. So the value the picture wants is not the
+	 * live one but the blend of the two the last two steps produced, and it
+	 * is read once, here, rather than at each of the eight places below that
+	 * would otherwise reach for the field directly. The stepping block at
+	 * the bottom keeps the live field, which is the logic; this is the
+	 * picture.
+	 *
+	 * The two small decisions that hang off it follow the picture too: which
+	 * icon spins rather than spins back, and which one the brightness ramp
+	 * walks towards, are read from `move` and not from the field. At fps_mode
+	 * 0 they are the same number. At fps_mode 1 they are the same answer: the
+	 * step frame's factor is a half, and half of a pair whose newer half is
+	 * the live value keeps its sign and keeps being zero or not. At fps_mode
+	 * 2 the factor starts near nothing, so `move` can lag the field by up to
+	 * one step when a turn begins - and then the icon centred in the picture
+	 * is the one that spins and brightens, matching what the eye sees.
+	 * Nothing of the ring's own state is read from it: the slide, the
+	 * selected slot and the sound of a turn are all below, off the live
+	 * field. */
+	const long move = InvDrawMove(ringnum, rings[ringnum]->objlistmovement);
+	const long curDrawn = InvDrawCur(ringnum, rings[ringnum]->curobjinlist,
+		rings[ringnum]->numobjectsinlist);
 
 	minobj = 0;
 	maxobj = 0;
@@ -1400,65 +1697,67 @@ void draw_current_object_list(long ringnum)
 	n = 0;
 
 	if (rings[ringnum]->numobjectsinlist != 1)
-		xoff = (OBJLIST_SPACING * rings[ringnum]->objlistmovement) >> 16;
+		xoff = (OBJLIST_SPACING * move) >> 16;
 
 	if (rings[ringnum]->numobjectsinlist == 2)
 	{
 		minobj = -1;
 		maxobj = 0;
-		n = rings[ringnum]->curobjinlist - 1;
+		n = curDrawn - 1;
 	}
 
 	if (rings[ringnum]->numobjectsinlist == 3 || rings[ringnum]->numobjectsinlist == 4)
 	{
 		minobj = -2;
 		maxobj = 1;
-		n = rings[ringnum]->curobjinlist - 2;
+		n = curDrawn - 2;
 	}
 
 	if (rings[ringnum]->numobjectsinlist >= 5)
 	{
 		minobj = -3;
 		maxobj = 2;
-		n = rings[ringnum]->curobjinlist - 3;
+		n = curDrawn - 3;
 	}
 
 	if (n < 0)
 		n += rings[ringnum]->numobjectsinlist;
 
-	if (rings[ringnum]->objlistmovement < 0)
+	if (move < 0)
 		maxobj++;
 
 	for (int i = minobj; i <= maxobj; i++)
 	{
 		if (i == minobj)
 		{
-			if (rings[ringnum]->objlistmovement < 0)
+			if (move < 0)
 				shade = 0;
 			else
-				shade = rings[ringnum]->objlistmovement >> 9;
+				shade = move >> 9;
 		}
 		else if (i == minobj + 1 && maxobj != minobj + 1)
 		{
-			if (rings[ringnum]->objlistmovement < 0)
-				shade = 128 - ((-128 * rings[ringnum]->objlistmovement) >> 16);
+			if (move < 0)
+				shade = 128 - ((-128 * move) >> 16);
 			else
 				shade = 128;
 		}
 		else if (i != maxobj)
 			shade = 128;
-		else if (rings[ringnum]->objlistmovement < 0)
-			shade = (-128 * rings[ringnum]->objlistmovement) >> 16;
+		else if (move < 0)
+			shade = (-128 * move) >> 16;
 		else
-			shade = 128 - short(rings[ringnum]->objlistmovement >> 9);
+			shade = 128 - short(move >> 9);
 
 		if (!minobj && !maxobj)
 			shade = 128;
 
+		// The two ring fades are stepped before the icon is drawn, so their
+		// pair is (previous, live) and the blend is asked for here.
 		if (ringnum == RING_AMMO && combine_ring_fade_val < 128 && shade)
-			shade = combine_ring_fade_val;
+			shade = InvDrawCombineFade(combine_ring_fade_val);
 		else if (ringnum == RING_INVENTORY && normal_ring_fade_val < 128 && shade)
-			shade = normal_ring_fade_val;
+			shade = InvDrawNormalFade(normal_ring_fade_val);
 
 		if (!i)
 		{
@@ -1478,11 +1777,11 @@ void draw_current_object_list(long ringnum)
 				if (nummeup <= 1)
 					nummeup = 0;
 			}
-			// Keys are counted since 2026-09-04 (see LARA_INFO::keyitems in
-			// global\types.h), so they get the same "x N" label as puzzle
-			// items - a single copy stays unlabelled, two or more show the
-			// number. Without this the second key was invisible to the
-			// player even though the engine now keeps it.
+			// Keys are counted (see LARA_INFO::keyitems in global\types.h),
+			// so they get the same "x N" label as puzzle items - a single
+			// copy stays unlabelled, two or more show the number. Without
+			// this a second copy of a key would be invisible to the player
+			// even though the engine keeps it.
 			else if (objmeup >= KEY_ITEM1 && objmeup <= KEY_ITEM8)
 			{
 				nummeup = lara.keyitems[objmeup - KEY_ITEM1];
@@ -1526,43 +1825,54 @@ void draw_current_object_list(long ringnum)
 			PrintString(phd_centerx, ymeup, 8, textbufme, FF_CENTER);
 		}
 
-		if (!i && !rings[ringnum]->objlistmovement)
+		// The spin and the brightness are stepped on the logic frame and
+		// drawn from the blend on every frame.
+		if (invStep)
 		{
-			if (inventry_objects_list[rings[ringnum]->current_object_list[n].invitem].flags & 2)
-				rings[ringnum]->current_object_list[n].yrot += 1022;
+			if (!i && !move)
+			{
+				if (inventry_objects_list[rings[ringnum]->current_object_list[n].invitem].flags & 2)
+					rings[ringnum]->current_object_list[n].yrot += 1022;
+			}
+			else
+				spinback(&rings[ringnum]->current_object_list[n].yrot);
 		}
-		else
-			spinback(&rings[ringnum]->current_object_list[n].yrot);
 
-		yrot = rings[ringnum]->current_object_list[n].yrot;
+		yrot = (short)InvDrawSpin(ringnum, n, rings[ringnum]->current_object_list[n].invitem,
+			rings[ringnum]->current_object_list[n].yrot);
 
-		if (!rings[ringnum]->objlistmovement)
+		if (!move)
 			activenum = 0;
-		else if (rings[ringnum]->objlistmovement > 0)
+		else if (move > 0)
 			activenum = -1;
 		else
 			activenum = 1;
 
-		if (i == activenum)
+		if (invStep)
 		{
-			if (rings[ringnum]->current_object_list[n].bright < 160)
-				rings[ringnum]->current_object_list[n].bright += 16;
+			if (i == activenum)
+			{
+				if (rings[ringnum]->current_object_list[n].bright < 160)
+					rings[ringnum]->current_object_list[n].bright += 16;
 
-			if (rings[ringnum]->current_object_list[n].bright > 160)
-				rings[ringnum]->current_object_list[n].bright = 160;
-		}
-		else
-		{
-			if (rings[ringnum]->current_object_list[n].bright > 32)
-				rings[ringnum]->current_object_list[n].bright -= 16;
+				if (rings[ringnum]->current_object_list[n].bright > 160)
+					rings[ringnum]->current_object_list[n].bright = 160;
+			}
+			else
+			{
+				if (rings[ringnum]->current_object_list[n].bright > 32)
+					rings[ringnum]->current_object_list[n].bright -= 16;
 
-			if (rings[ringnum]->current_object_list[n].bright < 32)
-				rings[ringnum]->current_object_list[n].bright = 32;
+				if (rings[ringnum]->current_object_list[n].bright < 32)
+					rings[ringnum]->current_object_list[n].bright = 32;
+			}
 		}
 
 		x = xoff + phd_centerx + i * OBJLIST_SPACING;
 		y = ringnum == RING_INVENTORY ? GetFixedScale(84) : GetFixedScale(380);
-		DrawThreeDeeObject2D(x, y, rings[ringnum]->current_object_list[n].invitem, shade, 0, yrot, 0, rings[ringnum]->current_object_list[n].bright, 0);
+		DrawThreeDeeObject2D(x, y, rings[ringnum]->current_object_list[n].invitem, shade, 0, yrot, 0,
+			InvDrawBright(ringnum, n, rings[ringnum]->current_object_list[n].invitem,
+				rings[ringnum]->current_object_list[n].bright), 0);
 
 		n++;
 
@@ -1570,7 +1880,12 @@ void draw_current_object_list(long ringnum)
 			n = 0;
 	}
 
-	if (rings[ringnum]->ringactive)
+	/* The slide is stepped last, where vanilla steps it. It is the ring's
+	 * own state - the row's place, the selected slot, the sound of a turn -
+	 * so it moves on the logic frame and on no other. What the picture above
+	 * drew with is `move`, the blend of the two steps before this one, for
+	 * the reason given above. */
+	if (rings[ringnum]->ringactive && invStep)
 	{
 		if (rings[ringnum]->numobjectsinlist != 1 && (ringnum != 1 || combine_ring_fade_val == 128))
 		{
@@ -1821,6 +2136,15 @@ void handle_inventry_menu()
 			if (current_options[current_selected_option].type != ITYPE_EQUIP && current_options[current_selected_option].type != ITYPE_USE)
 				SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 
+			/* Every one of these is a cut: a mode opening, the ammo ring
+			 * taking over, the combine ring being built, the load or save
+			 * screen. What is on screen after one of them is not a neighbour
+			 * of what was on screen before it, so the ring's snapshot is
+			 * dropped and the next step frame draws live. One call at the
+			 * head of the switch covers all of them. */
+			if (current_options[current_selected_option].type != ITYPE_EMPTY)
+				InvInterpCut("menu");
+
 			switch (current_options[current_selected_option].type)
 			{
 			case ITYPE_CHOOSEAMMO:
@@ -1883,6 +2207,7 @@ void handle_inventry_menu()
 		if (go_deselect && ammo_active)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			InvInterpCut("ammo_close");	// closing the ammo selector is a cut, not a step
 			go_deselect = 0;
 			ammo_active = 0;
 			rings[RING_INVENTORY]->ringactive = 1;
@@ -1986,6 +2311,12 @@ void setup_ammo_selector()
 
 void fade_ammo_selector()
 {
+	/* The ammo selector's fade is stepped here, after draw_ammo_selector has
+	 * already drawn with it - so its pair is the two previous generations
+	 * and the step is on the logic frame. */
+	if (InterpIsTweenFrame())
+		return;
+
 	if (rings[RING_INVENTORY]->ringactive && (right_repeat >= 8 || left_repeat >= 8))
 		ammo_selector_fade_val = 0;
 	else if (ammo_selector_fade_dir == 1)
@@ -2029,20 +2360,27 @@ void draw_ammo_selector()
 	else if (num_ammo_slots == 3)
 		xpos -= OBJLIST_SPACING;
 
+	// Stepped on the logic frame, drawn from the blend on every frame.
+	const bool invStep = !InterpIsTweenFrame();
+	const long fade = InvDrawAmmoFade(ammo_selector_fade_val);
+
 	for (int i = 0; i < num_ammo_slots; i++)
 	{
 		invitem = ammo_object_list[i].invitem;
 		objme = &inventry_objects_list[invitem];
 
-		if (i == current_ammo_type[0])
+		if (invStep)
 		{
-			if (objme->flags & 2)
-				ammo_object_list[i].yrot += 1022;
+			if (i == current_ammo_type[0])
+			{
+				if (objme->flags & 2)
+					ammo_object_list[i].yrot += 1022;
+			}
+			else
+				spinback(&ammo_object_list[i].yrot);
 		}
-		else
-			spinback(&ammo_object_list[i].yrot);
 
-		yrot = ammo_object_list[i].yrot;
+		yrot = (short)InvDrawAmmoSpin(i, invitem, ammo_object_list[i].yrot);
 
 		if (i == current_ammo_type[0])
 		{
@@ -2054,10 +2392,10 @@ void draw_ammo_selector()
 			if (ammo_selector_fade_val)
 				PrintString(phd_centerx, phd_centery + 3 * font_height - 9, 8, cunter, FF_CENTER);
 		}
-		
+
 		x = xpos + GetFixedScale(80);
 		y = GetFixedScale(380);
-		DrawThreeDeeObject2D(x, y, invitem, ammo_selector_fade_val, 0, yrot, 0, (i == current_ammo_type[0]) ? 0 : 1, 0);
+		DrawThreeDeeObject2D(x, y, invitem, fade, 0, yrot, 0, (i == current_ammo_type[0]) ? 0 : 1, 0);
 		xpos += OBJLIST_SPACING;
 	}
 }
@@ -2830,7 +3168,7 @@ void DEL_picked_up_object(short objnum)
 		else if (objnum >= PICKUP_ITEM1_COMBO1 && objnum <= PICKUP_ITEM4_COMBO2)
 			lara.pickupitemscombo |= 1 << (objnum - PICKUP_ITEM1_COMBO1);
 		else if (objnum >= KEY_ITEM1 && objnum <= KEY_ITEM8)
-			add_key_item(objnum - KEY_ITEM1);	// count it, the second copy used to be dropped here
+			add_key_item(objnum - KEY_ITEM1);	// count it; a second copy of the same key would otherwise be silently dropped
 		else if (objnum >= KEY_ITEM1_COMBO1 && objnum <= KEY_ITEM8_COMBO2)
 			lara.keyitemscombo |= 1 << (objnum - KEY_ITEM1_COMBO1);
 		else if (objnum >= PUZZLE_ITEM1 && objnum <= PUZZLE_ITEM8)
@@ -2992,9 +3330,9 @@ void remove_inventory_item(short object_number)
 
 	// One copy, not the whole stack - this is the lock swallowing a key
 	// (game\pickup.cpp, KeyHole handling), the exact mirror of the
-	// puzzleitems[]-- two blocks up. The old line's "+ 60" was Core relying
-	// on the x86 shift masking the count to 5 bits; with a counter the slot
-	// index is simply written out.
+	// puzzleitems[]-- two blocks up. A counter needs only the plain slot
+	// index; the bit field's equivalent relied on the x86 shift masking the
+	// count to 5 bits.
 	if (object_number >= KEY_ITEM1 && object_number <= KEY_ITEM8)
 		sub_key_item(object_number - KEY_ITEM1);
 
@@ -3090,22 +3428,31 @@ void do_keypad_mode()
 
 	if (keypadpause)
 	{
-		x = keypadinputs[0] * 1000 + keypadinputs[1] * 100 + keypadinputs[2] * 10 + keypadinputs[3];
-
-		if (GLOBAL_invkeypadcombination == x)
+		/* keypadpause is a one-second countdown in presents - thirty of them
+		 * - and the values it is tested against below are the moments it
+		 * plays a tone on. Both halves are inside the ring's logic frame: the
+		 * countdown so that the second stays a second at any frame rate, and
+		 * the tones so that one of them is not played again on every frame of
+		 * the step it belongs to. */
+		if (!InterpIsTweenFrame())
 		{
-			if (keypadpause == 30 || keypadpause == 20 || keypadpause == 10)
-				SoundEffect(SFX_KEYPAD_ENTRY_YES, 0, SFX_ALWAYS);
-		}
-		else if (keypadpause == 30 || keypadpause == 25 || keypadpause == 20 || keypadpause == 15 || keypadpause == 10 || keypadpause == 5)
-			SoundEffect(SFX_KEYPAD_ENTRY_NO, 0, SFX_ALWAYS | SFX_SETVOL | 0x1000);
+			x = keypadinputs[0] * 1000 + keypadinputs[1] * 100 + keypadinputs[2] * 10 + keypadinputs[3];
 
-		keypadpause--;
+			if (GLOBAL_invkeypadcombination == x)
+			{
+				if (keypadpause == 30 || keypadpause == 20 || keypadpause == 10)
+					SoundEffect(SFX_KEYPAD_ENTRY_YES, 0, SFX_ALWAYS);
+			}
+			else if (keypadpause == 30 || keypadpause == 25 || keypadpause == 20 || keypadpause == 15 || keypadpause == 10 || keypadpause == 5)
+				SoundEffect(SFX_KEYPAD_ENTRY_NO, 0, SFX_ALWAYS | SFX_SETVOL | 0x1000);
 
-		if (!keypadpause)
-		{
-			menu_active = 0;
-			use_the_bitch = 1;
+			keypadpause--;
+
+			if (!keypadpause)
+			{
+				menu_active = 0;
+				use_the_bitch = 1;
+			}
 		}
 
 		return;
@@ -3172,15 +3519,20 @@ void do_examine_mode()
 	invitem = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 	objme = &inventry_objects_list[invitem];
 	scale = objme->scale1;
-	examine_mode += 8;
 
-	if (examine_mode > 128)
-		examine_mode = 128;
+	// The zoom steps on the logic frame and is drawn from the blend.
+	if (!InterpIsTweenFrame())
+	{
+		examine_mode += 8;
+
+		if (examine_mode > 128)
+			examine_mode = 128;
+	}
 
 	objme->scale1 = 300;
 	x = phd_centerx;
 	y = GetFixedScale(256);
-	DrawThreeDeeObject2D(x, y, invitem, examine_mode, 0x8000, 0x4000, 0x4000, 96, 0);
+	DrawThreeDeeObject2D(x, y, invitem, InvDrawExamine(examine_mode), 0x8000, 0x4000, 0x4000, 96, 0);
 	objme->scale1 = scale;
 
 	if (go_deselect)
@@ -3188,15 +3540,23 @@ void do_examine_mode()
 		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 		go_deselect = 0;
 		examine_mode = 0;
+		InvInterpCut("examine_close");	// closing the examine view is a cut, not a step
 	}
 }
 
 void do_stats_mode()
 {
-	stats_mode += 8;
+	/* stats_mode is a counter and nothing reads it as a value - the stats
+	 * page is drawn from the savegame, not from a fade - so it is held on a
+	 * tween frame rather than blended. It steps once per logic frame, which
+	 * is the rate it was written for. */
+	if (!InterpIsTweenFrame())
+	{
+		stats_mode += 8;
 
-	if (stats_mode > 128)
-		stats_mode = 128;
+		if (stats_mode > 128)
+			stats_mode = 128;
+	}
 
 	DisplayStatsUCunt();
 
@@ -3205,6 +3565,7 @@ void do_stats_mode()
 		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 		go_deselect = 0;
 		stats_mode = 0;
+		InvInterpCut("stats_close");	// closing the stats page is a cut, not a step
 	}
 }
 

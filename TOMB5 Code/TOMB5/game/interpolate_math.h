@@ -1,0 +1,797 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+#pragma once
+#include <stdlib.h>	// labs
+#include <math.h>	// sqrt - the camera aim rule
+
+/* The arithmetic of the time interpolation, and nothing else.
+ *
+ * This header includes no engine header on purpose:
+ * `Preparation\Tools\Diagnose\InterpTest.cpp` includes this file itself, not
+ * a copy, and asserts on the functions below without a game, a level or a
+ * device. game\interpolate.cpp holds the snapshot, the snap rules, the call
+ * sites and the log. */
+
+/* Angle blend the short way round. A TR angle is a signed short and a full
+ * turn is its range, so the difference taken as a short is already the
+ * shorter way: 32000 to -32000 is +1536 (as an int, -64000 would spin the
+ * body backwards through zero). Exactly half a turn comes out as -32768,
+ * anticlockwise; that case is a snap, not a rotation, and ApplyNode
+ * (interpolate.cpp) does not blend it (InterpHalfTurn). */
+inline short InterpLerpAngle(short a, short b, float alpha)
+{
+	const short d = (short)(b - a);
+
+	return (short)(a + (short)((float)d * alpha));
+}
+
+/* A half turn in one tick is a snap.
+ *
+ * turn180_effect (game\effects.cpp) turns an item by exactly 32768 between two
+ * ticks (`y_rot -= 0x8000`, x_rot negated). Seven of Lara's animations fire
+ * it (AnimCmd over ANDREA1: 48, 147, 205, 207, 210, 212 and the level's own
+ * 451 - rolls and the twist of the jump back), and the animation's root bone
+ * turns the other half so the 30 Hz picture is continuous. Blended, the root
+ * would take InterpLerpAngle's arbitrary half while the pose is already the
+ * new one (refused by the neighbour rule or InterpPoseFar), and Lara would
+ * stand sideways for one frame. So a node whose y difference is exactly half
+ * a turn keeps its live rotation and only its position blends. TROne blends finished node
+ * matrices, where the two halves cancel before the blend, and needs no such
+ * rule; nothing of its code is used here. */
+inline bool InterpHalfTurn(short a, short b)
+{
+	return (short)(b - a) == (short)-32768;
+}
+
+/* Clamps a screen fade value that overshot its end.
+ *
+ * SetFade (specific\specificfx.cpp) walks FadeVal from `start` to `end` in
+ * eight steps of (end - start) >> 3; DoScreenFade reads the value before it
+ * steps and puts `end` over it on the ninth call. For 255 -> 0 the step is
+ * -32 and eight steps land on -1, which is alpha 255 in the colour: at 30 Hz
+ * the ninth call overrides it, but a tween frame between the eighth and ninth
+ * tick would draw a black frame in every level's fade-in. The ninth tick draws
+ * `end` anyway, so no 30 Hz picture changes; a walk that does not overshoot
+ * (0 -> 255 lands on 248) is untouched. */
+inline long InterpFadeClamp(long val, long step, long end)
+{
+	if (step < 0 && val < end)
+		return end;
+	if (step > 0 && val > end)
+		return end;
+	return val;
+}
+
+/* Camera type changes that are hand-overs, not cuts.
+ *
+ * camera_type values from game\global\types.h (CHASE_CAMERA 0, FIXED_CAMERA
+ * 1, LOOK_CAMERA 2, COMBAT_CAMERA 3, CINEMATIC_CAMERA 4, HEAVY_CAMERA 5);
+ * interpolate.cpp static_asserts the three below against the enum, because
+ * this file is built without the engine for InterpTest.
+ *
+ * Chase, look and combat hand the view over smoothly: the eye moves towards
+ * the new place at camera.speed and the target stays Lara's (drawing a weapon
+ * is chase -> combat, game\larafire.cpp). Treated as cuts, every such change
+ * would draw one tick live and the next half a tick back, a visible jerk. A
+ * type change is a cut only when it leaves that family; the eye and aim tests
+ * still catch a real jump, and a change of camera.fixed_camera is a cut on
+ * its own. */
+#define INTERP_CAM_CHASE	0
+#define INTERP_CAM_LOOK		2
+#define INTERP_CAM_COMBAT	3
+
+inline bool InterpCamSmoothType(int type)
+{
+	return type == INTERP_CAM_CHASE || type == INTERP_CAM_LOOK || type == INTERP_CAM_COMBAT;
+}
+
+/* True when the change from `prevType` to `type`, or from `prevOld` to
+ * `oldType`, is a cut. An unchanged pair never is. */
+inline bool InterpCamTypeCut(int prevType, int type, int prevOld, int oldType)
+{
+	if (prevType != type && !(InterpCamSmoothType(prevType) && InterpCamSmoothType(type)))
+		return true;
+	if (prevOld != oldType && !(InterpCamSmoothType(prevOld) && InterpCamSmoothType(oldType)))
+		return true;
+	return false;
+}
+
+/* Positions are integers in this engine and stay integers: the truncation is
+ * at most one unit, a TR sector is 1024 of them, and handing a float position
+ * to a matrix stack that works in longs would only move the rounding
+ * somewhere less visible. */
+inline long InterpLerpLong(long a, long b, float alpha)
+{
+	return a + (long)((float)(b - a) * alpha);
+}
+
+/* The distance the snap rules measure: the sum of the absolute components.
+ * No square root, and never smaller than the true distance, so it can only
+ * snap sooner, never later. */
+inline long InterpManhattan(long dx, long dy, long dz)
+{
+	return labs(dx) + labs(dy) + labs(dz);
+}
+
+/* Snap thresholds.
+ *
+ * INTERP_ITEM_SNAP: nothing in TR5 crosses half a sector in one tick under
+ * its own power (Lara's terminal fall is about 130 units a tick, a vehicle
+ * under 100). What does is a teleport - TranslateItem (game\control.cpp), a
+ * flipmap move, a randomizer spawn, an item taken and given back - and it is
+ * drawn where it is, not as a streak across the room.
+ *
+ * INTERP_CAM_SNAP is looser because a camera legitimately travels faster than
+ * what it films (MoveCamera, flyby splines); it catches cuts: a fixed camera
+ * taking over, a spot cam jumping nodes, the binoculars going up. */
+#define INTERP_ITEM_SNAP	512L
+#define INTERP_CAM_SNAP		1024L
+
+/* ==========================================================================
+ * The blend factor when the display sets the pace (fps_mode 2).
+ *
+ * At fps_mode 1 frames land on the ticks and `framecount < 0 ? 0.5 : 1` is
+ * exact (InterpAlphaNow). Bound to e.g. a 144 Hz display, frames land anywhere
+ * inside a tick, so the factor comes from the clock:
+ *
+ *   framecount  ControlPhase's accumulator (game\control.h) in 1/60 s ticks,
+ *               as the top of DrawPhaseGame finds it: -1 or 0.
+ *   subTick     how far past the last tick boundary handed out by Sync() the
+ *               clock stands (TIME_SubTick, specific\time.cpp). Not capped at
+ *               1: Sync() runs at the end of a frame.
+ *
+ * With S the whole ticks handed out and k the logic steps run, framecount =
+ * S - 2k. Step k runs at S = 2k-1 and its state stays newest until S = 2k+1;
+ * reading it as the world at S = 2k+1 makes every frame in that window an
+ * interpolation rather than an extrapolation:
+ *
+ *     alpha = (S + subTick - 2k + 1) / 2 = (framecount + subTick + 1) / 2
+ *
+ * It walks 0 -> 1 across every step at any refresh rate. At 60 Hz subTick is
+ * 1, so (-1, 1) gives 0.5 and (0, 1) gives 1.0, the fps_mode 1 parity rule
+ * exactly; InterpTest asserts it. The clamp covers hitches: a factor past 1
+ * would ask for a state not yet computed, so the newest state is drawn and
+ * ControlPhase catches up afterwards. */
+inline float InterpRefreshAlpha(long framecount, double subTick)
+{
+	double a = ((double)framecount + subTick + 1.0) * 0.5;
+
+	if (a < 0.0)
+		a = 0.0;
+
+	if (a > 1.0)
+		a = 1.0;
+
+	return (float)a;
+}
+
+/* ==========================================================================
+ * The inventory ring's own cadence.
+ *
+ * The ring is a modal loop with its own present and never reaches
+ * ControlPhase, so it keeps an accumulator of the same shape (1/60 s ticks,
+ * two per logic step). The arithmetic lives here so InterpTest can run it;
+ * game\inventory_interp.cpp holds the snapshot, the wiring and the log.
+ * ======================================================================== */
+
+/* Spends the ticks the last present returned and says whether this frame
+ * carries the ring's logic step: ControlPhase's loop with the body run at
+ * most once, because the ring draws as it steps and a second pass would draw
+ * twice into one poly list. The credit is clamped to one step, because this
+ * loop cannot pay off a hitch in one call; unclamped, it would step on every
+ * frame until the debt was gone and the ring would run at the frame rate. */
+inline bool InterpRingStep(long* acc, long ticks)
+{
+	*acc += ticks;
+
+	if (*acc > 2)
+		*acc = 2;
+
+	if (*acc > 0)
+	{
+		*acc -= 2;
+		return true;
+	}
+
+	return false;
+}
+
+/* The blend factor of a ring frame. At fps_mode 2 it is the clock through
+ * InterpRefreshAlpha with the ring's accumulator (same phase: the last Sync()
+ * was inside the previous present in both loops). At fps_mode 1 that formula
+ * gives exactly 0.5 on the step frame (acc -1, subTick 1) and 1 on the frame
+ * between (acc 0, subTick 1), so the parity is used directly; InterpTest
+ * asserts the two agree.
+ *
+ * The half is on the step frame because in the ring the step comes before
+ * the draw: the game's arrangement would draw C1, mid(C0,C1), C2, mid(C1,C2),
+ * walking backwards every second frame. This yields the monotone mid(C0,C1),
+ * C1, mid(C1,C2), C2. */
+inline float InterpRingAlpha(long mode, long acc, double subTick, bool step)
+{
+	// fps_mode 0: every frame carries its step and is drawn live.
+	// InvInterpBeginFrame returns before reaching this; the line keeps the
+	// rule complete.
+	if (mode == 0)
+		return 1.0F;
+
+	if (mode == 2)
+		return InterpRefreshAlpha(acc, subTick);
+
+	return step ? 0.5F : 1.0F;
+}
+
+/* The ring's slide offset. objlistmovement walks to 65536 in eight steps of
+ * 8192 and is then reset to 0 with curobjinlist moved on by one; blended
+ * across that reset the row would slide halfway back for one frame, so a
+ * straddling pair draws the newer value. `older` and `newer` are the two
+ * previous generations, not the live field, because vanilla steps this field
+ * after drawing with it (game\inventory_interp.h). */
+inline long InterpRingSlide(long older, long newer, bool jumped, float alpha)
+{
+	if (jumped)
+		return newer;
+
+	return InterpLerpLong(older, newer, alpha);
+}
+
+/* The slot the slide belongs to. curobjinlist is never blended, but it must
+ * come from the same generation as the slide: the reset moves both at once,
+ * and the new slot with the old offset would put the row seven eighths of a
+ * slot to the side for one frame. `count` is the current numobjectsinlist; a
+ * snapshot slot past the end of a rebuilt list falls back to the live one. */
+inline long InterpRingSlot(long snapCur, long liveCur, long count)
+{
+	if (snapCur < 0 || snapCur >= count)
+		return liveCur;
+
+	return snapCur;
+}
+
+/* ==========================================================================
+ * The pose.
+ *
+ * An animation stores every rate-th frame and the engine blends two stored
+ * key frames (game\draw.cpp, GetFrames) with a factor of a quarter, a half or
+ * three quarters chosen by three hard-wired branches:
+ *
+ *     pose(f) = lerp(K[k], K[k+1], alpha_vanilla(f mod rate, rate))
+ *
+ * The tween frame draws the midpoint of the two poses the game really draws
+ * at 30 Hz, not a newly computed "correct" one. Vanilla's factor is coarse
+ * (rate 5 draws frames 1..4 at 0.25, 0.75, 0.75, 0.75), but frac/rate would
+ * change how a third of all TR5 animations move: over all sixteen level
+ * files 3187 animations carry rate 5, 3350 rate 2, 5399 rate 4 and 35 rate 3,
+ * 6, 9 or 10.
+ *
+ * Both tick poses lie on the same key frame pair, so the midpoint is one
+ * factor on that pair:
+ *
+ *   same interval   pose(f-1) = lerp(K, K', ap), pose(f) = lerp(K, K', ac)
+ *                   -> midpoint = lerp(K, K', (ap + ac) / 2)
+ *   crossing one    f mod rate == 0, so pose(f) IS K' exactly
+ *                   -> midpoint = lerp(K, K', (ap + 1) / 2)
+ *
+ * No third matrix stack is needed. Rate 1 animations (3619, including every
+ * weapon-aim animation), never blended by vanilla, now blend their two
+ * adjacent stored frames at a half. */
+
+/* Vanilla's key frame factor, exactly as InterpolateMatrix,
+ * aInterpolateMatrix and the two arm matrix functions (draw.cpp) classify
+ * (frac, rate). frac == 0: the item sits on a stored frame, nothing blends. */
+inline float InterpKeyAlpha(long frac, long rate)
+{
+	if (!frac)
+		return 0.0F;
+
+	if (rate == 2 || (frac == 2 && rate == 4))
+		return 0.5F;
+
+	if (frac == 1)
+		return 0.25F;
+
+	return 0.75F;
+}
+
+/* The shortened rate of an animation's last interval, transcribed from
+ * GetFrames:
+ *
+ *     num = rate * (key + 1);
+ *     if (num > anim->frame_end) rate += anim->frame_end - num;
+ *
+ * It compares a frame counted from the animation's start against a frame_end
+ * counted from the level's, so it only fires where frame_base is small. That
+ * mismatch is vanilla's and decides vanilla's factor, so it is reproduced,
+ * not repaired. */
+inline long InterpKeyRate(long rate, long key, long frameEnd)
+{
+	const long num = rate * (key + 1);
+
+	return num > frameEnd ? rate + frameEnd - num : rate;
+}
+
+/* The midpoint of the two tick poses, as a key frame index and a factor.
+ *
+ * `t` is the drawn frame's time alpha. Returns false (the neighbour rule of
+ * interpolate.h) when:
+ *
+ *   the frame did not step by exactly one   a jump, a loop wrapping to its
+ *                                           start, an item standing still, a
+ *                                           frame set by hand: the current
+ *                                           pose is drawn; the root offset is
+ *                                           still blended (InterpRootKey).
+ *   the animation has no rate               nothing to walk.
+ *   the current frame is the animation's    the previous pose belongs to
+ *   first                                   another animation.
+ *
+ * A change of animation number also breaks the neighbour rule and is tested
+ * by the caller
+ * (draw.cpp, GetFramesAt). */
+inline bool InterpPoseAt(long prevFrame, long curFrame, long frameBase, long rate,
+	long frameEnd, float t, long* key, float* blend)
+{
+	if (rate < 1)
+		return false;
+
+	if (curFrame != prevFrame + 1)
+		return false;
+
+	const long f = curFrame - frameBase;
+	const long p = prevFrame - frameBase;
+
+	if (p < 0 || f < 1)
+		return false;
+
+	const long kp = p / rate;
+	const long kc = f / rate;
+	const float ap = InterpKeyAlpha(p % rate, InterpKeyRate(rate, kp, frameEnd));
+	const float ac = (kc == kp) ? InterpKeyAlpha(f % rate, InterpKeyRate(rate, kc, frameEnd)) : 1.0F;
+
+	*key = kp;
+	*blend = ap + (ac - ap) * t;
+
+	return true;
+}
+
+/* ---------------------------------------------------------- the blend itself
+ *
+ * One factor in place of vanilla's hard-wired branches, bit-exact with them
+ * so the 30 Hz picture is unchanged. The float form keeps vanilla's three
+ * expressions (`(a + b) * 0.5`, `a + (b - a) * 0.25`, `b - (b - a) * 0.25`),
+ * which round differently in the last bit than one rearranged formula; like
+ * the integer form it works from whichever end is nearer. */
+inline float InterpBlendFloat(float a, float b, float alpha)
+{
+	if (alpha == 0.5F)
+		return (a + b) * 0.5F;
+
+	if (alpha > 0.5F)
+		return b - (b - a) * (1.0F - alpha);
+
+	return a + (b - a) * alpha;
+}
+
+/* The integer stack rounds by shifting, a floor rather than a truncation
+ * (`(-3) >> 2` is -1, `(long)(-3 * 0.25f)` is 0). Vanilla's branches `a + (d
+ * >> 1)`, `a + (d >> 2)` and `b - (d >> 2)` are, in eighths,
+ *
+ *     alpha8 <= 4 :  a + ((d * alpha8) >> 3)
+ *     alpha8 >  4 :  b - ((d * (8 - alpha8)) >> 3)
+ *
+ * since `(d * 4) >> 3` is `d >> 1` and `(d * 2) >> 3` is `d >> 2` for every
+ * value including negatives: exact, with no float. Vanilla's factors are
+ * quarters and their midpoints eighths. A variable time alpha (fps_mode 2)
+ * is rounded here to the nearest eighth of a key frame interval, about
+ * 1/240 s of animation. */
+inline long InterpEighths(float alpha)
+{
+	long e = (long)(alpha * 8.0F + 0.5F);
+
+	if (e < 0)
+		e = 0;
+
+	if (e > 8)
+		e = 8;
+
+	return e;
+}
+
+inline long InterpBlendLong(long a, long b, long alpha8)
+{
+	const long d = b - a;
+
+	return alpha8 <= 4 ? a + ((d * alpha8) >> 3) : b - ((d * (8 - alpha8)) >> 3);
+}
+
+
+/* ==========================================================================
+ * The root offset under a refused pose.
+ * ==========================================================================
+ *
+ * Every stored frame carries a bounding box and then the root offset
+ * frm[6..8], applied after the item's rotation (draw.cpp DrawAnimatingItem,
+ * delstuff.cpp for Lara). A climb carries its vertical travel in those
+ * offsets and TranslateItem (laramisc.cpp, AnimateLara) moves item->pos by
+ * the same amount at the wrap, so at 30 Hz the drawn root is continuous. On
+ * the tween frame item->pos is blended half way (at most 512 units, not a
+ * snap) while the neighbour rule refuses the pose and the draw uses the
+ * current frame's offset: drawn = Y + D/2 where both neighbours drew Y + D. On a 165 Hz
+ * display that tween state is shown four or five times in a row.
+ *
+ * So on a refused tween frame the offset is blended in time as well, and the
+ * two halves add up to the whole step (narrowed by InterpRootNarrow). Where
+ * the two ticks' offsets are equal the blend equals the offset and
+ * InterpRootNow hands the draw nothing, so vanilla's line runs.
+ *
+ * The current tick's offset is vanilla's pair: frm[0] alone on a stored
+ * frame, else the key pair at `keyAlpha` (already chosen by GetFramesNow). It
+ * is computed in integers, within one unit of the draw's float path; that
+ * unit reaches only the frames InterpRootNow actually changes. frm1 is not
+ * read at frac zero: `frm[0] + size` may then lie past the level's frame
+ * block, and vanilla never reads it either. */
+inline void InterpRootKey(const short* frm0, const short* frm1, long frac, float keyAlpha,
+	long out[3])
+{
+	const long alpha8 = InterpEighths(keyAlpha);
+
+	for (int i = 0; i < 3; i++)
+		out[i] = frac
+			? InterpBlendLong(frm0[6 + i], frm1[6 + i], alpha8)
+			: (long)frm0[6 + i];
+}
+
+/* The two ticks' offsets blended at the frame's time `t` itself, through
+ * InterpLerpLong and not rounded to an eighth. The drawn root is pos plus the
+ * offset, and ApplyNode (interpolate.cpp) blends pos with InterpLerpLong at
+ * this alpha; only the same primitive at the same alpha makes the two halves
+ * sum to the lerp of the drawn roots. Sweeping alpha in 1/256 steps over the
+ * wrap of animation 161, the worst error is 504 units without this blend, 31
+ * with eighths and 1 (two truncations) at the alpha itself. At fps_mode 1
+ * (alpha 0.5) all agree; the exactness matters for fps_mode 2. The key pair
+ * blend above keeps eighths without loss: its factors are quarters. */
+inline void InterpRootLerp(const long prev[3], const long cur[3], float t, long out[3])
+{
+	for (int i = 0; i < 3; i++)
+		out[i] = InterpLerpLong(prev[i], cur[i], t);
+}
+
+/* Turns the previous tick's root offset through a half turn.
+ *
+ * The offsets InterpRootLerp blends are in the item's own frame; on a tick
+ * where turn180_effect fired, the two frames are half a turn apart and the
+ * draw uses the new one (ApplyNode keeps the live rotation), so a straight
+ * blend drags the root through the pivot. Underwater roll (RootProbe over
+ * ANDREA1): animation 203's last frame 5330 carries (42,122,68), 205's frame
+ * 5423 where FlipEffect 0 fires carries (-45,122,-67), and the drawn offset
+ * walked (32,122,53) ... (-15,122,-20): up to 140 units off.
+ *
+ * turn180_effect is `y_rot -= 0x8000` and `x_rot = -x_rot`, so the offset is
+ * carried by Rcur^-1 * Rprev in the engine's Y*X*Z order:
+ *
+ *     Rz(-z) * Rx(x) * Ry(180) * Rx(x) * Rz(z)
+ *
+ * Rx(a) * Ry(180) * Rx(a) is diag(-1, 1, -1) for every a, and with the lean z
+ * equal at both ticks the Rz cancel: negate x and z, keep y. Animation 205's
+ * key 0 (42,122,68) against key 1 (-45,122,-67) confirms it. A lean z would
+ * add a turn of 2z in x/y that the animation itself carries at 30 Hz too, so
+ * it is not corrected.
+ *
+ * The approach is re-derived from TROne (GPLv3) by Todesengel1931 -
+ * https://github.com/todesengel1931, which blends whole node matrices with
+ * the previous frame expressed in the current one. This engine blends Euler
+ * angles and a separate offset, so that step is done by hand; for half a
+ * turn it is two signs. No TROne source is in this file. */
+inline void InterpRootFlip(const long in[3], long out[3])
+{
+	out[0] = -in[0];
+	out[1] = in[1];
+	out[2] = -in[2];
+}
+
+/* Narrows the root blend to what a position step pays for.
+ *
+ * At a ladder wrap the offset step (+504) and the position step (-512) cancel:
+ * ApplyNode blends one half, the root blend the other, and the drawn root is
+ * continuous. Crawl to crouch (274->222) has an offset step, (0,-204,-37) to
+ * (0,-143,-37), and no position step, so a full blend would draw the crouch
+ * pose 54, 45, 33 and 21 units too high over four frames at 165 Hz. A refused
+ * tween frame draws the new pose, which belongs at its own offset unless a
+ * position step says otherwise.
+ *
+ * Per axis, with d = cur - prev (prev already turned by InterpRootFlip) and
+ * `step` this tick's position step in the same frame, the paid part is
+ * min(|d|, |step|) where the two point against each other and zero otherwise;
+ * the blend starts from cur minus that part. The ladder wrap keeps its whole
+ * step (drawn y unchanged); crawl to crouch keeps none and draws cur. The rule
+ * can only blend less, never more or in another direction. RootProbe -sweep
+ * over Lara's 474 animations in ANDREA1: 433 transitions carry an offset step
+ * of 8 units or more; the 31 paid by a TranslateItem at a wrap keep their paid
+ * axis, and in none of the 433 does the narrowed draw leave the segment from
+ * the frame's own offset to the full blend. The other 402 are state changes
+ * whose real motion comes from the state routine (lara_col_reach,
+ * TestLaraVault, SnapLaraToEdgeOfBlock, LaraDoClimbLeftRight, SetCornerAnim),
+ * which this sees because it measures item->pos.
+ *
+ * The steps are compared in the y_rot frame alone: TranslateItem
+ * (control.cpp) and the state routines that move her by hand turn x/z by
+ * y_rot and add y straight. The draw applies d through the full phd_RotYXZ,
+ * so with x_rot or z_rot non-zero this is an approximation, bounded by the
+ * clamp to |d|: the start offset always lies between cur and prev. None of
+ * the 31 paid transitions is a pitched state (states 0, 1, 2, 10, 19, 25, 36,
+ * 37, 54, 56, 57, 61, 87, 88, 89, 117; no AS_TREAD 13, AS_SWIM 17 or AS_GLIDE
+ * 18), and LaraUnderWater (laraswim.cpp) also steps in the y_rot frame.
+ *
+ * InterpRootNow runs for every drawn item in DrawAnimatingItem (draw.cpp),
+ * enemies, doors and machines included; the same clamp keeps it safe for
+ * them, though the -log line prints Lara only.
+ *
+ * `step[i]` is negated only on the branch where it and d have opposite signs
+ * and |step[i]| < |d|; d is a difference of two shorts, so LONG_MIN never
+ * reaches the negation. The magnitudes are compared by carrying the sign to
+ * the other side, which holds over the whole range of the type. */
+inline void InterpRootNarrow(const long prev[3], const long cur[3], const long step[3],
+	long out[3])
+{
+	for (int i = 0; i < 3; i++)
+	{
+		const long d = cur[i] - prev[i];
+
+		if (d > 0 && step[i] < 0)
+			out[i] = cur[i] - (step[i] <= -d ? d : -step[i]);
+		else if (d < 0 && step[i] > 0)
+			out[i] = cur[i] + (step[i] >= -d ? -d : step[i]);
+		else
+			out[i] = cur[i];
+	}
+}
+
+
+/* ==========================================================================
+ * The pair a matrix blend cannot survive.
+ * ==========================================================================
+ *
+ * The pose blend is vanilla's InterpolateMatrix (draw.cpp): an element-wise
+ * lerp of two 3x4 matrices, which always takes the short way, so no angle
+ * wraps. It shrinks instead: for node frames A and B a relative rotation of D
+ * apart,
+ *
+ *     (A + B) / 2  =  A * (I + R(D)) / 2
+ *
+ * is the identity on the axis and cos(D/2) times a rotation of D/2 across it:
+ * 13 % shrink at 60 degrees, 29 % at 90, and at 180 the frame is singular and
+ * whatever hangs off the bone lands on neither pose (a leg pointing the wrong
+ * way).
+ *
+ * Vanilla blends only animations of rate > 1, where the tween frame lies in
+ * the same segment as its neighbours. Rate 1 pairs are new: two adjacent
+ * stored frames at a half. ModelProbe -poserisk over ANDREA1 (319 Lara
+ * animations, 23 at rate 1): 22 turn at most 52.7 degrees at any node; the
+ * hips (node 0) of animation 205 turn 179.9 degrees between key 0 and key 1.
+ *
+ * A rate 1 pair turning more than 90 degrees (the last turn whose midpoint
+ * keeps over seventy per cent of the frame) is not blended; in ANDREA1 that
+ * is animation 205 alone. Vanilla never draws such a pair blended either, and
+ * nothing here runs at fps_mode 0. */
+#define INTERP_POSE_TURN_COS	0.0F	/* cos 90 degrees: trace = 1 + 2*cos */
+
+/* One node's packed rotation, with the cursor stepped past it (draw.cpp,
+ * gar_RotYXZsuperpack): two words holding three 10-bit angles when the top
+ * two bits are zero, otherwise one word naming a single axis with 12 bits.
+ * The angles come back in the engine's 16-bit space. */
+inline void InterpUnpackRot(const short*& p, short* xyz)
+{
+	const unsigned short w = (unsigned short)*p;
+
+	xyz[0] = xyz[1] = xyz[2] = 0;
+
+	if ((w & 0xC000) == 0)
+	{
+		const unsigned short w2 = (unsigned short)p[1];
+		const unsigned long packed = ((unsigned long)w << 16) | (unsigned long)w2;
+
+		xyz[0] = (short)((short)((packed >> 20) & 0x3FF) << 6);
+		xyz[1] = (short)((short)((packed >> 10) & 0x3FF) << 6);
+		xyz[2] = (short)((short)(packed & 0x3FF) << 6);
+		p += 2;
+		return;
+	}
+
+	xyz[(w >> 14) == 1 ? 0 : (w >> 14) == 2 ? 1 : 2] =
+		(short)((short)(w & 0xFFF) << 4);
+	p++;
+}
+
+/* The node's rotation from its three angles, row major 3x3, in phd_RotYXZ's
+ * order (Y, then X, then Z) so it matches the frames the engine builds. */
+inline void InterpPoseRot(const short* xyz, float* m)
+{
+	const float k = 3.14159265358979323846F / 32768.0F;
+	const float sy = sinf((float)xyz[1] * k), cy = cosf((float)xyz[1] * k);
+	const float sx = sinf((float)xyz[0] * k), cx = cosf((float)xyz[0] * k);
+	const float sz = sinf((float)xyz[2] * k), cz = cosf((float)xyz[2] * k);
+
+	/* Ry then Rx then Rz, composed as Rz * Rx * Ry. */
+	m[0] = cz * cy + sz * sx * sy;
+	m[1] = sz * cx;
+	m[2] = cz * -sy + sz * sx * cy;
+
+	m[3] = -sz * cy + cz * sx * sy;
+	m[4] = cz * cx;
+	m[5] = sz * sy + cz * sx * cy;
+
+	m[6] = cx * sy;
+	m[7] = -sx;
+	m[8] = cx * cy;
+}
+
+/* cos of the angle between two node frames: trace(A^T B) = 1 + 2 cos. */
+inline float InterpPoseTurnCos(const float* a, const float* b)
+{
+	float t = 0.0F;
+
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 3; k++)
+			t += a[i * 3 + k] * b[i * 3 + k];
+
+	return (t - 1.0F) * 0.5F;
+}
+
+/* True when the two frames are too far apart at any node for an element-wise
+ * matrix blend; shared by draw.cpp and InterpTest. `nodes` is the model's
+ * mesh count; the nine shorts of bounding box and offset are skipped here. */
+inline bool InterpPoseFar(const short* frameA, const short* frameB, int nodes,
+	float cosLimit)
+{
+	const short* a = frameA + 9;
+	const short* b = frameB + 9;
+
+	for (int node = 0; node < nodes; node++)
+	{
+		short ra[3], rb[3];
+		float ma[9], mb[9];
+
+		InterpUnpackRot(a, ra);
+		InterpUnpackRot(b, rb);
+
+		if (ra[0] == rb[0] && ra[1] == rb[1] && ra[2] == rb[2])
+			continue;
+
+		InterpPoseRot(ra, ma);
+		InterpPoseRot(rb, mb);
+
+		if (InterpPoseTurnCos(ma, mb) < cosLimit)
+			return true;
+	}
+
+	return false;
+}
+
+/* ==========================================================================
+ * Particles.
+ *
+ * Every particle simulation in this engine settles the velocity first and
+ * moves by it second:
+ *
+ *     sptr->Yvel += sptr->Gravity;       // whatever changes the velocity
+ *     sptr->x += sptr->Xvel >> 5;        // ... then the step it takes
+ *
+ * so the stored velocity is exactly the last tick's step and the previous
+ * position is `cur - step`, with no snapshot. The particle is walked
+ * backwards from the current state, not forwards (`cur + vel * alpha` would
+ * show the world one logic step ahead of the bodies around it):
+ *
+ *     InterpTrailLong(cur, step, alpha) == InterpLerpLong(cur - step, cur, alpha)
+ *
+ * It is written as that lerp rather than `cur - step * (1 - alpha)`, which
+ * truncates differently by one unit on odd differences; InterpTest asserts
+ * the identity at both frame rates. Not called at fps_mode 0; at alpha 1 it
+ * returns `cur`. */
+inline long InterpTrailLong(long cur, long step, float alpha)
+{
+	return InterpLerpLong(cur - step, cur, alpha);
+}
+
+/* ==========================================================================
+ * Where a camera target is a place and where it is a direction.
+ *
+ * A camera cut is declared when the eye or the target moves more than
+ * INTERP_CAM_SNAP in one tick. For the chase and fixed cameras the target is
+ * a place a couple of sectors away. FirstPersonCamera (camera.cpp) sets
+ *
+ *     camera.target = camera.pos + direction * 0x5100
+ *
+ * 20736 units down the line of sight, to express a direction; there a turn of
+ * 2.8 degrees moves the target a whole sector, and Lara's idle head motion
+ * would fire 10 to 17 false cuts a second, each drawing the camera live
+ * against a half-step-back world.
+ *
+ * Beyond INTERP_CAM_FAR_TARGET both targets are pulled onto a sphere of
+ * INTERP_CAM_DIR_RADIUS about their own eye and the threshold is applied to
+ * the change of direction alone (the eye's travel has its own test). At
+ * radius 1024 a Manhattan sum of 1024 is a turn of 41 to 57 degrees in one
+ * tick (1200 to 1700 degrees a second); a 90 degree cut measures 1448, a half
+ * turn 2048. The chase camera's target, about a sector and a half away, stays
+ * under the shell and keeps the absolute test. */
+#define INTERP_CAM_FAR_TARGET	4096L
+#define INTERP_CAM_DIR_RADIUS	1024L
+
+/* One camera's target relative to its own eye: the offset itself while the
+ * target is a place, scaled onto the sphere while it is a direction.
+ *
+ * The engine does not call this; InterpCamAimCut chooses the branch once for
+ * the pair, because a per-camera choice puts a cliff on the shell (4095 a
+ * place, 4097 a direction). InterpTest (Preparation\Tools\Diagnose) compares
+ * the two rules and needs it, and it states what an aim offset is. */
+inline void InterpCamAim(long px, long py, long pz, long tx, long ty, long tz,
+	long* ax, long* ay, long* az)
+{
+	const double dx = (double)(tx - px);
+	const double dy = (double)(ty - py);
+	const double dz = (double)(tz - pz);
+	const double len = sqrt(dx * dx + dy * dy + dz * dz);
+
+	if (len <= (double)INTERP_CAM_FAR_TARGET)
+	{
+		*ax = tx - px;
+		*ay = ty - py;
+		*az = tz - pz;
+		return;
+	}
+
+	const double k = (double)INTERP_CAM_DIR_RADIUS / len;
+
+	*ax = (long)(dx * k);
+	*ay = (long)(dy * k);
+	*az = (long)(dz * k);
+}
+
+/* True when the view direction cut between the two cameras; shared by
+ * interpolate.cpp and InterpTest.
+ *
+ * The branch is chosen once for the pair: far if either target is beyond
+ * INTERP_CAM_FAR_TARGET, and then both offsets are scaled by the same k,
+ * INTERP_CAM_DIR_RADIUS over the longer length. Choosing per camera would
+ * compare a target at 4095 as a place and one at 4097 as a direction, a jump
+ * of three thousand units from nothing; two different k's would hide a
+ * target that really jumped along its own ray. Under the shell nothing is
+ * scaled and the test is absolute. */
+inline bool InterpCamAimCut(long ppx, long ppy, long ppz, long ptx, long pty, long ptz,
+	long px, long py, long pz, long tx, long ty, long tz, long snap)
+{
+	const double adx = (double)(ptx - ppx);
+	const double ady = (double)(pty - ppy);
+	const double adz = (double)(ptz - ppz);
+	const double bdx = (double)(tx - px);
+	const double bdy = (double)(ty - py);
+	const double bdz = (double)(tz - pz);
+	const double alen = sqrt(adx * adx + ady * ady + adz * adz);
+	const double blen = sqrt(bdx * bdx + bdy * bdy + bdz * bdz);
+	const double longer = alen > blen ? alen : blen;
+
+	long a[3] = { ptx - ppx, pty - ppy, ptz - ppz };
+	long b[3] = { tx - px, ty - py, tz - pz };
+
+	if (longer > (double)INTERP_CAM_FAR_TARGET)
+	{
+		const double k = (double)INTERP_CAM_DIR_RADIUS / longer;
+
+		a[0] = (long)(adx * k);
+		a[1] = (long)(ady * k);
+		a[2] = (long)(adz * k);
+		b[0] = (long)(bdx * k);
+		b[1] = (long)(bdy * k);
+		b[2] = (long)(bdz * k);
+	}
+
+	return InterpManhattan(b[0] - a[0], b[1] - a[1], b[2] - a[2]) > snap;
+}

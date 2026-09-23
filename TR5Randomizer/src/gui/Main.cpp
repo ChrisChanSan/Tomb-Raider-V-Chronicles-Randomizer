@@ -89,7 +89,7 @@ namespace
     bool                    g_windowDragged = false;   // WM_EXITSIZEMOVE seen
     ID3D11RenderTargetView* g_rtv = nullptr;
 
-    // Background image: the user's banner, as JPEG inside the EXE
+    // Background image: the banner, as JPEG inside the EXE
     // (TR5Randomizer.rc, IDR_BACKGROUND). Unpacked once at startup, then
     // drawn at window size every frame.
     ID3D11ShaderResourceView* g_background = nullptr;
@@ -240,8 +240,8 @@ namespace
             if (wp == SIZE_MAXIMIZED || wp == SIZE_RESTORED) g_windowDragged = true;
             return 0;
         case WM_EXITSIZEMOVE:
-            // The user dragged the window - the main loop then writes the
-            // settings file (user wish: remember the size).
+            // The window was resized or moved - the main loop then writes
+            // the settings file so the size is remembered.
             g_windowDragged = true;
             return 0;
         case WM_GETMINMAXINFO:
@@ -275,9 +275,8 @@ namespace
             DWORD opts = 0;
             dlg->GetOptions(&opts);
             dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-            dlg->SetTitle(gGermanUi
-                ? L"Ordner der Tomb Raider Chronicles-Installation waehlen"
-                : L"Choose the folder of your Tomb Raider Chronicles installation");
+            const std::wstring title = PathUtil::widen(T("Choose the folder of your Tomb Raider Chronicles installation"));
+            dlg->SetTitle(title.c_str());
             if (SUCCEEDED(dlg->Show(owner)))
             {
                 IShellItem* item = nullptr;
@@ -337,7 +336,7 @@ namespace
         char                     seedBuf[64] = {};
         bool                     busy = false;
 
-        // The tool works directly in the user's installation. The originals
+        // The tool works directly in the game installation. The originals
         // lie next to it in data\Backup and are the yardstick from then on -
         // see ensureBackup().
         std::wstring dataDir() const
@@ -347,30 +346,15 @@ namespace
         }
         std::wstring backupDir() const { return PathUtil::join(dataDir(), L"Backup"); }
 
-        // In a real installation, SCRIPT.DAT lies in the GAME FOLDER next to
-        // the EXE, NOT in data\ - only the levels lie there. But because
-        // dataDir() points at data\ as soon as that folder exists,
-        // doScriptDat looked for it in the wrong place for ages, did not
-        // find it and silently bailed out ("SCRIPT.DAT not found"). The
-        // whole script step therefore never ran in a single GUI run: no
-        // young-Lara bit, no KEY8 for joby3, no pistol removal for rich2.
-        // Found by the user - the pistols kept coming along from rich1
-        // despite the fix, and his SCRIPT.DAT was nine days old.
-        //
-        // Hence both places are searched, game folder first.
-        // SCRIPT.DAT lies in the GAME folder, next to PCtomb5.exe - never in
-        // data\, where only the levels are. Ask gameDir() for it, because
-        // that is the one place that copes with the user having picked the
-        // data folder: it walks one level up when PCtomb5.exe is not where
-        // it was pointed.
-        //
-        // 2026-08-30: this used to search sourceDir and then dataDir(), and
-        // with the data folder chosen BOTH of those are the same wrong
-        // place. The whole script step then bailed out with "SCRIPT.DAT not
-        // found" - no young-Lara bit, no Key 8 for joby3, no pistol removal
-        // for rich2 - and the only trace was one line in spoiler.txt.
-        // gameDir() already knew how to find it; scriptPath() just never
-        // asked it.
+        // SCRIPT.DAT lies in the GAME folder, next to PCtomb5.exe, never in
+        // data\, where only the levels are. dataDir() points at data\ as
+        // soon as that folder exists, so scriptPath() asks gameDir() for
+        // the game folder instead - gameDir() copes with the data folder
+        // having been chosen by walking one level up when PCtomb5.exe is
+        // not where it was pointed. Both places are searched, game folder
+        // first, so the script step (young-Lara bit, Key 8 for joby3,
+        // pistol removal for rich2) does not silently fail to find the
+        // file.
         std::wstring scriptPath() const
         {
             const std::wstring inGame = PathUtil::join(gameDir(), L"SCRIPT.DAT");
@@ -410,9 +394,9 @@ namespace
 
         // A run does not go through in one piece but step by step: one level
         // per frame. Otherwise the window freezes for the duration of all 15
-        // levels, Windows reports "not responding", and the user takes it
-        // for a crash - although everything is running. The progress bar
-        // needs the same split, or it would have nothing to show.
+        // levels, Windows reports "not responding", and it looks like a
+        // crash although everything is running. The progress bar needs the
+        // same split, or it would have nothing to show.
         enum class Phase { Idle, Copy, Levels, Finish, Debug };
         Phase phase = Phase::Idle;
         size_t stepIndex = 0;
@@ -445,22 +429,22 @@ namespace
         // Random outfits (Lara_Andrea/Lara_Joby/Lara_Rich) per section.
         bool optOutfits = false;
         bool optOutfitsTr3 = false;     // guest outfits from Tomb Raider 3
-        // The wardrobe (#122): which outfits the roll may NOT draw. Held is
+        // The wardrobe: which outfits the roll may NOT draw. Held is
         // the DESELECTION, as with the enemy types - an outfit added later is
         // then automatically on.
         std::set<std::string> optOutfitsOff;
         bool wardrobeOpen = false;
-        // The full weapon set in every level is STANDARD (user decision, no
-        // checkbox): opt.allWeapons is hard-set to true on every run. Hence
+        // The full weapon set in every level is STANDARD, with no
+        // checkbox: opt.allWeapons is hard-set to true on every run. Hence
         // no seed bit for it either - a constant distinguishes no games.
 
-        // Secrets (#53): 0 vanilla, 1 normal item pool, 2 glitchless list,
+        // Secrets: 0 vanilla, 1 normal item pool, 2 glitchless list,
         // 3 glitched list. The lists themselves are read by SecretList.cpp
         // from data\secrets; they are applied as a second patch pass in
         // doLevel. No seed bit: the lists are deterministic, the same seed
         // stays comparable with and without secrets.
         int optSecrets = 0;
-        // Roll what a level awards for every secret found (#53). Off by
+        // Roll what a level awards for every secret found. Off by
         // default: it writes SecretRewards.txt beside the game, and a file
         // the player may have set himself is not something to overwrite
         // without being asked.
@@ -470,19 +454,17 @@ namespace
         std::vector<SecretSource> secretSources;
         std::string secretAuthor;
 
-        // Further PLACEHOLDERS (user wish 2026-08-14), all without effect,
-        // without a seed bit and without persistence until the respective
-        // logic exists.
-        int  optItemAmount = 0;         // 0 vanilla amount, 1 more, 2 a lot more (#36)
+        // Further PLACEHOLDERS, all without effect, without a seed bit and
+        // without persistence until the respective logic exists.
+        int  optItemAmount = 0;         // 0 vanilla amount, 1 more, 2 a lot more
         bool phTexRgb = false;          // color dice over vanilla textures
         bool phTexMix = false;          // mix textures across levels
-        bool phTexRemaster = false;     // patch remaster textures
         bool phRoomBackdrops = false;   // include backdrop areas
         bool phRoomNeighbors = false;   // open locked neighboring rooms
         bool phJoby4NoWater = false;    // Deepsea Dive without water
         bool phLevelSections = false;   // shuffle sections (Rome/Russia/...)
         int  optLevelOrder = 0;         // 0 off, 1 within the sections (tier 2), 2 free across everything (tier 3)
-        // Weather per level (#144): dry, rain or snow instead of what Core
+        // Weather per level: dry, rain or snow instead of what Core
         // set. Only the six levels that can show it take part - which ones
         // is read out of the level files, not listed here.
         bool optWeather = false;
@@ -496,7 +478,7 @@ namespace
         // different checkboxes produces a different game, and a bug report
         // "seed X is unplayable" would not be reproducible - exactly what
         // the seed mechanism is supposed to prevent. That is also why the
-        // user sees the effective value below, not just the entered text.
+        // effective value is shown below, not just the entered text.
         uint64_t effectiveSeed() const
         {
             uint64_t flags = 0;
@@ -513,9 +495,9 @@ namespace
             // The count belongs in the seed just like the checkboxes: with 3
             // and with 12 enemies it is not the same game.
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
-            // The same for the item amount (#36).
+            // The same for the item amount.
             flags |= static_cast<uint64_t>(optItemAmount & 0x3) << 16;
-            // Weather (#144). Bits 0-7 are the checkboxes above, 8-15 the
+            // Weather. Bits 0-7 are the checkboxes above, 8-15 the
             // enemy count, 16-17 the item amount - so 18 is the next free
             // one. Whoever adds an option next takes bit 19.
             if (optWeather) flags |= 1ull << 18;
@@ -551,11 +533,11 @@ namespace
         // does not show - that is how the leak from the ground floor into
         // the elevator shaft was found in rich2.
         bool dbgOpen = false;
-        // Window "Enemy types" (#95): which kinds may the pool draw? What is
+        // Window "Enemy types": which kinds may the pool draw? What is
         // held is the DESELECTION - see Config::enemiesDisabled.
         bool kindsOpen = false;
 
-        // Sliders for Balance.txt (#108). Held as a factor because the GUI
+        // Sliders for Balance.txt. Held as a factor because the GUI
         // shows "1.25x"; the file holds percentages.
         float balWeapons        = 1.0f;
         float balEnemyHealth   = 1.0f;
@@ -570,7 +552,7 @@ namespace
 
         std::string balNote;   // last feedback below the sliders
 
-        // Measured intrinsic heights of the top-row boxes (#GUI). Needed to
+        // Measured intrinsic heights of the top-row boxes. Needed to
         // bring all four columns to the same bottom edge: a box's height is
         // only known after it has been drawn, so it is remembered here from
         // one frame to the next. In the first frame all are 0 - the row then
@@ -582,7 +564,7 @@ namespace
             float install = 0, items = 0, enemies = 0, level = 0, music = 0;
         } heights;
         std::set<int> optEnemiesOff;
-        // Window "Installation paths" (#102).
+        // Window "Installation paths".
         bool pathsOpen = false;
         bool dbgUseFill = true;
         int  dbgFillType = 223;          // Pickup Item4 - rare in the game, stands out
@@ -593,16 +575,13 @@ namespace
 
 // Where does the wanted file really lie?
 //
-// The user picks the GAME FOLDER in the file dialog - that is the natural
-// thing, and exactly what he did. The level files, however, lie in the
-// subfolder "data". Instead of lecturing him with a hint, the tool searches
-// both places. Returned is the folder that really contains the file, or
-// empty.
+// Picking the GAME FOLDER in the file dialog is the natural thing to do.
+// The level files, however, lie in the subfolder "data". Instead of
+// requiring a hint, the tool searches both places. Returned is the folder
+// that really contains the file, or empty.
 //
 // Case does not matter on Windows, so "Data" and "DATA" are covered too.
-// Moved into Tr3Source (2026-08-30) so the command line gets the same
-// answer - it had no such handling at all and refused paths this
-// accepted.
+// Lives in Tr3Source so the command line gets the same answer as the GUI.
 static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file)
 { return Tr3Source::resolveFolder(chosen, file); }
 
@@ -610,7 +589,7 @@ static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* fil
 static std::wstring tr3Folder(const App& a)  { return resolveFolder(a.cfg.tr3Dir, L"CRASH.TR2"); }
 static std::wstring goldFolder(const App& a) { return resolveFolder(a.cfg.tr3GoldDir, L"chunnel.TR2"); }
 
-// Cache for the packages extracted from Tomb Raider 3 (#103).
+// Cache for the packages extracted from Tomb Raider 3.
 //
 // Lies next to the program. The files are created on the machine of whoever
 // owns the games, and they stay there - unobjectionable license-wise. NEVER
@@ -710,9 +689,8 @@ static std::wstring cacheDir(const App& a)
     //
     // Without that, Lara runs around as a child in andy1, Andy2 and andy3
     // and cannot carry any weapon at all - GF_YOUNGLARA switches the weapon
-    // system off in eight places in the engine. User requirement: the Andy
-    // levels must always have weapons, or Lara faces a Two Gun with empty
-    // hands.
+    // system off in eight places in the engine. The Andy levels must always
+    // have weapons, or Lara faces a Two Gun with empty hands.
     //
     // Unconditional and repeatable: clearing an already cleared bit changes
     // nothing, and the randomizer runs over the same installation several
@@ -884,7 +862,7 @@ static std::wstring cacheDir(const App& a)
         // always the backup, never data\ - already randomized levels can lie
         // there, and pulling samples from those would no longer be
         // reproducible from the seed. Defined BEFORE the placement, because
-        // the headroom rule (#141) has to measure a cross enemy in its donor
+        // the headroom rule has to measure a cross enemy in its donor
         // file while it decides.
         static std::wstring soundSource;
         soundSource = a.haveBackup ? a.backupDir() : a.dataDir();
@@ -896,7 +874,7 @@ static std::wstring cacheDir(const App& a)
         in.modelHeight = Patch::modelHeightFn(source, nullptr,
                                               tr3Folder(a), goldFolder(a), cacheDir(a));
 
-        // Secrets into the pool (#53, kind 1): hand curation pins every
+        // Secrets into the pool (kind 1): hand curation pins every
         // secret via fixedItems. Exactly those pins are taken out in this
         // mode - type 223 then rolls as an ordinary pickup. Only the secret
         // pins fall, all other hand curations stay.
@@ -939,13 +917,13 @@ static std::wstring cacheDir(const App& a)
 
         PatchReport pr;
         // Pass the foreign installations through: only with them can apply()
-        // fetch the guests from Tomb Raider 3 at runtime (#92). If they are
+        // fetch the guests from Tomb Raider 3 at runtime. If they are
         // missing, the randomizer never put them into the pool.
         if (!Patch::apply(lvl, patch, pr, err, source, nullptr,
                           tr3Folder(a), goldFolder(a), cacheDir(a))) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
 
-        // Secrets from a user list (#53, kinds 2/3): a SECOND pass with the
+        // Secrets from a user list (kinds 2/3): a SECOND pass with the
         // same apply machinery, against the real state after the first.
         // Without "itemBase" in the patch, apply shifts nothing - the
         // list's New<k> references point exactly at the items this patch
@@ -979,8 +957,8 @@ static std::wstring cacheDir(const App& a)
                 for (const std::string& w : spr.warnings) rep.notes.push_back("secrets: " + w);
                 // Count ONLY the relocated secrets. The report's
                 // edited+added contains the extras (keys, switches,
-                // retypings) - the status line reported "6 secrets" in a
-                // level with three because of that (seen by the user).
+                // retypings), which would otherwise inflate the number
+                // shown on the status line.
                 secretsPlaced = sCount;
                 extras = (spr.edited + spr.added) - sCount;
             }
@@ -997,13 +975,22 @@ static std::wstring cacheDir(const App& a)
 
         if (!lvl.save(target, err)) return false;
 
+        // HD markers: the sidecar beside the finished
+        // level. AFTER the save, and for EVERY level - one with nothing to
+        // mark gets the version line alone, so a file left over from an
+        // earlier run can never keep talking about rooms this run did not
+        // touch.
+        int hdRooms = 0, hdDonors = 0, hdCuts = 0;
+        if (!Patch::writeHdMarkers(lvl, target, err, &hdRooms, &hdDonors, &hdCuts))
+            return false;
+
         // 320 and not 200: with everything switched on the pieces below
         // already added up to just over 200, and snprintf returns the length
         // it WOULD have written - so "sizeof(buf) - len" turned negative and,
-        // as a size_t, into a huge number. The weather line (#144) is the one
-        // that pushed it over; the room is added here rather than juggling
-        // the pieces.
-        char buf[320];
+        // as a size_t, into a huge number. The weather line is the one that
+        // pushed it over; the room is added here rather than juggling the
+        // pieces. The HD markers got another 64.
+        char buf[384];
         int len = std::snprintf(buf, sizeof(buf), "%d moved, %d new", pr.edited, pr.added);
         if (rep.enemiesAdded > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d enemies", rep.enemiesAdded);
@@ -1027,9 +1014,18 @@ static std::wstring cacheDir(const App& a)
         {
             static const char* kW[3] = { "dry", "rain", "snow" };
             const int was = (pr.weatherFrom >= 0 && pr.weatherFrom <= 2) ? pr.weatherFrom : 0;
-            std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
-                          ", weather: %s (vanilla %s)", kW[pr.weatherTo], kW[was]);
+            len += std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
+                                 ", weather: %s (vanilla %s)", kW[pr.weatherTo], kW[was]);
         }
+        // The HD markers, so the spoiler says what the sidecar beside
+        // the level carries. Only when there is something to say - in a run
+        // without secret lists and without a guest outfit that is nothing
+        // but donor slots, and those are in the file for whoever wants them.
+        if ((lvl.hdOutfit() > 0 || hdRooms > 0 || hdCuts > 0) &&
+            len >= 0 && len < static_cast<int>(sizeof(buf)))
+            std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
+                          ", HD: outfit %d, %d rooms, %d cuts, %d donors",
+                          lvl.hdOutfit(), hdRooms, hdCuts, hdDonors);
         row.result = buf;
         return true;
     }
@@ -1038,7 +1034,7 @@ static std::wstring cacheDir(const App& a)
     // covered with a marker. The basis is always the ORIGINAL - if a backup
     // exists, the file comes from there, else from data\. An already
     // randomized level as the template would be geometrically identical, but
-    // the item list in the result would not be the one the user expects.
+    // its item list would not match what the real run produces.
     //
     // Written exclusively to "Debug Level" next to the EXE. These files are
     // not playable (several thousand items), so they have no business in
@@ -1073,19 +1069,15 @@ static std::wstring cacheDir(const App& a)
         // floordata. Without that map every sector answers "flat"
         // (Randomizer.cpp, floorAt: no entry means flat), so every rule
         // that hangs on the floor shape was blind here: the slide and
-        // NoCol bans of #86 and, since 2026-08-29, the flatness rule for
-        // the wall grabs. The debug level then showed sectors as valid
-        // that the real placement rejects - which is the opposite of what
-        // it is for.
+        // NoCol bans, and the flatness rule for the wall grabs. The debug
+        // level then showed sectors as valid that the real placement
+        // rejects - which is the opposite of what it is for. A diagonally
+        // split sector can end up marked this way (andy3, room 54).
         //
-        // Found by the user in andy3: four markers on split sectors, his
-        // example room 54, a diagonally split field with a marker on it.
-        //
-        // The level fixes belong here for the very same reason (second find,
-        // the same evening): a rewritten pickup trigger changes the
-        // floordata AND releases the item it used to pin. Without this the
-        // debug level went on showing andy1's heart nailed down while the
-        // real run had long let it go.
+        // The level fixes belong here for the same reason: a rewritten
+        // pickup trigger changes the floordata AND releases the item it
+        // used to pin. Without this the debug level would go on showing a
+        // pinned item that the real run had long since let go.
         {
             std::vector<std::string> dbgFixNotes;
             std::vector<int> dbgFreed;
@@ -1174,7 +1166,7 @@ static std::wstring cacheDir(const App& a)
     // Starts a run. The work itself happens in advanceRun(), so the GUI can
     // draw in between.
     //------------------------------------------------------------------------
-    // Roll the checked balance sliders from the seed (#108).
+    // Roll the checked balance sliders from the seed.
     //
     // Rolled in steps of five from 0.50x to 2.00x - weapon damage too,
     // although its slider reaches down to 0.00x. A seed that puts Lara's
@@ -1222,8 +1214,8 @@ static std::wstring cacheDir(const App& a)
     //------------------------------------------------------------------------
     // Write spoiler.txt next to the program.
     //
-    // This used to live in a third table column per level. That cost half
-    // the window width for one line of text read once - and the line was too
+    // A file rather than a table column: a column would cost half the
+    // window width for one line of text read once, and that line is too
     // short for everything one really wants to know. The file has room for
     // the seed, all settings and what SCRIPT.DAT received.
     //------------------------------------------------------------------------
@@ -1307,9 +1299,9 @@ static std::wstring cacheDir(const App& a)
         // (EmbeddedData.h). Two runs of the same seed give different results
         // if one of them found a hand-dropped export and the other did not -
         // and from the outside the two are indistinguishable. So the choice
-        // goes on the record, one line per file. Repeated reads of the same
-        // file collapse; the startup stamp check reads them all once before
-        // the run does.
+        // is logged, one line per file. Repeated reads of the same file
+        // collapse; the startup stamp check reads them all once before the
+        // run does.
         //--------------------------------------------------------------------
         {
             line("DATA");
@@ -1347,7 +1339,7 @@ static std::wstring cacheDir(const App& a)
         a.stepIndex = 0;
 
         // Roll the checked sliders anew from the seed and write the position
-        // into the installation (#108). The sliders already write when
+        // into the installation. The sliders already write when
         // released; this is about the roll, and about a run in a freshly
         // chosen game folder not standing there without a Balance.txt.
         rollBalance(a);
@@ -1498,6 +1490,19 @@ static std::wstring cacheDir(const App& a)
             setStatus(a, T("Restore failed: ") + err, true);
         else
         {
+            // The HD marker sidecars go with them. They describe changes
+            // that no longer exist, and the engine reads a
+            // missing file as "nothing to report" - which is exactly the
+            // truth about a restored original. Levels are not RE-randomized
+            // here, so nothing rewrites them; they have to be removed.
+            // A file that is not there is not an error.
+            for (const LevelRow& r : a.levels)
+            {
+                const size_t dot = r.name.find_last_of('.');
+                const std::string stem = (dot == std::string::npos) ? r.name : r.name.substr(0, dot);
+                DeleteFileW(PathUtil::join(a.dataDir(), PathUtil::widen(stem + ".hdm")).c_str());
+            }
+
             for (LevelRow& r : a.levels) r.result.clear();
             char buf[128];
             std::snprintf(buf, sizeof(buf), T("%d levels restored to their original state."), copied);
@@ -1520,7 +1525,7 @@ static std::wstring cacheDir(const App& a)
 // is what the randomizer really does - not a second description of it.
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
-// Is the foreign installation behind an EnemyKind usable? (#102)
+// Is the foreign installation behind an EnemyKind usable?
 //
 // Checked is not the folder but the file that is REALLY needed - a folder
 // can exist and still be empty. CRASH.TR2 carries T-Rex, Raptor and Compy,
@@ -1546,7 +1551,7 @@ static bool dinoSourcePresent(const App& a, const char* source)
 }
 
 //----------------------------------------------------------------------------
-// Window "Installation paths" (#102).
+// Window "Installation paths".
 //
 // The dinosaurs come from Tomb Raider 3 and The Lost Artifact. We ship NO
 // game data - whoever wants them must own the games. The run fetches model,
@@ -1617,8 +1622,8 @@ static void drawPathsWindow(App& a, HWND hwnd)
     }
 
     ImGui::Spacing();
-    // This used to read "In each case, choose the data folder" - which is
-    // right for the two Tomb Raider 3 rows and WRONG for the first one.
+    // Not "In each case, choose the data folder" - that is right for the
+    // two Tomb Raider 3 rows and WRONG for the first one.
     // Choosing data\ for Chronicles still finds the levels, so nothing
     // looks amiss, but SCRIPT.DAT is only looked for in the chosen folder
     // and one data\ below it - the whole script step then vanishes in
@@ -1629,7 +1634,7 @@ static void drawPathsWindow(App& a, HWND hwnd)
 }
 
 //----------------------------------------------------------------------------
-// Window "Wardrobe" (#122): which outfits may the roll draw?
+// Window "Wardrobe": which outfits may the roll draw?
 //
 // Same idea as the enemy types window, and for the same two reasons: someone
 // wants to see a favourite outfit more often, and a test wants exactly one -
@@ -1703,7 +1708,7 @@ static void drawWardrobeWindow(App& a)
 }
 
 //----------------------------------------------------------------------------
-// Window "Enemy types" (#95): which kinds may the pool draw at all?
+// Window "Enemy types": which kinds may the pool draw at all?
 //
 // Good for the player who wants to see favorite enemies more often, and good
 // for testing a single kind - deselect everything but one, and the run only
@@ -1757,8 +1762,8 @@ static void drawEnemyKindsWindow(App& a)
     for (const EnemyKind& g : kinds)
     {
         // Kinds from another game stay grayed out as long as the path to it
-        // is missing (#102). The checkbox state is kept - if the user adds
-        // the path later, his selection is still there.
+        // is missing. The checkbox state is kept, so a selection made now
+        // survives adding the path later.
         const bool present = dinoSourcePresent(a, g.source);
         ImGui::BeginDisabled(!present);
 
@@ -1894,7 +1899,7 @@ static void drawUi(App& a, HWND hwnd)
         // GetContentRegionMax is gone in the docking branch (imconfig with
         // IMGUI_DISABLE_OBSOLETE_FUNCTIONS); cursor X at line start plus
         // available width yields the same right edge.
-        // Two buttons: language on the left (#128), Debug on the right.
+        // Two buttons: language on the left, Debug on the right.
         ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
                         - 2.0f * w - ImGui::GetStyle().ItemSpacing.x);
         if (ImGui::Button(gGermanUi ? "Sprache: DE###language" : "Language: EN###language", ImVec2(w, 0)))
@@ -1918,11 +1923,11 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Separator();
 
     //------------------------------------------------------------------------
-    // Layout of the upper area (user wish): four equally wide columns with
-    // bordered boxes instead of one long column. Before, the separators ran
-    // across the full window width and the content stood as a narrow band on
-    // the far left - on a wide screen that was a lot of distance for little
-    // content.
+    // Layout of the upper area: four equally wide columns with bordered
+    // boxes instead of one long column. A single long column runs its
+    // separators across the full window width, leaving the content a
+    // narrow band on the far left - on a wide screen that is a lot of
+    // distance for little content.
     //
     // The split is chosen so the four columns come out roughly equally
     // tall: installation+seed, items+outfits, enemies+preparation,
@@ -1931,8 +1936,8 @@ static void drawUi(App& a, HWND hwnd)
     const float gapX = ImGui::GetStyle().ItemSpacing.x;
     const float columnWidth = (ImGui::GetContentRegionAvail().x - 3.0f * gapX) / 4.0f;
 
-    // Each area gets its own color (user wish), so the boxes stand apart
-    // from each other. The surface stays very weakly tinted - it should mark
+    // Each area gets its own color, so the boxes stand apart from each
+    // other. The surface stays very weakly tinted - it should mark
     // the area and lift the text off the background image, not stand out
     // itself. Border and heading carry the same color more strongly.
     // height == 0 means self-growing. Only the boxes that stretch a column
@@ -1964,9 +1969,9 @@ static void drawUi(App& a, HWND hwnd)
     //------------------------------------------------------------------------
     // Common bottom edge of the top row.
     //
-    // The enemy box sets the target height (user wish: "everything to the
-    // size of the enemy block"). Stretched are the LAST boxes of the other
-    // columns - seed, outfits, secrets - and via a FIXED height.
+    // The enemy box sets the target height that the other columns stretch
+    // to. Stretched are the LAST boxes of the other columns - seed,
+    // outfits, secrets - and via a FIXED height.
     //
     // What matters is what does NOT happen here: measured are exclusively
     // boxes that are themselves never stretched. A first attempt appended
@@ -1975,8 +1980,8 @@ static void drawUi(App& a, HWND hwnd)
     // loop, because ImGui always takes a self-growing child window's size
     // from the PREVIOUS frame. The computation thereby mixed two frames,
     // the error entered the target height, and the boxes grew frame by
-    // frame into nothing (seen by the user). Fixed height for the
-    // stretched, measure only the free ones - then nothing can feed back.
+    // frame into nothing. Fixed height for the stretched, measure only the
+    // free ones - then nothing can feed back.
     //------------------------------------------------------------------------
     const float gapY = ImGui::GetStyle().ItemSpacing.y;
     const float targetHeight = a.heights.enemies;    // 0 in the very first frame
@@ -2044,9 +2049,9 @@ static void drawUi(App& a, HWND hwnd)
     }                            // it shows all three rows and what each is for
 
 
-    // "Choose folder..." used to sit here as well and did exactly what the
-    // first row of the paths window does. One place for paths - and that
-    // window is where Tomb Raider 1, 2 and 4 will be added.
+    // No "Choose folder..." here: the first row of the paths window does
+    // exactly that. One place for paths - and that window is where Tomb
+    // Raider 1, 2 and 4 will be added.
     if (ImGui::Button(T("Installation paths..."))) a.pathsOpen = true;
     ImGui::SameLine();
     if (ImGui::Button(T("Check again"))) inspectSource(a);
@@ -2086,8 +2091,8 @@ static void drawUi(App& a, HWND hwnd)
     // --- 3. What should be rolled - thematic areas -----------------------
 
     // The explanations hang on the checkbox as a floating box: lingering
-    // with the mouse fades them in, moving away fades them out (user wish -
-    // the list stays compact, the texts are not lost). AllowWhenDisabled so
+    // with the mouse fades them in, moving away fades them out, so the
+    // list stays compact without losing the texts. AllowWhenDisabled so
     // the grayed-out cross enemy mix shows its explanation too.
     auto hoverHelp = [](const char* text)
     {
@@ -2101,10 +2106,10 @@ static void drawUi(App& a, HWND hwnd)
         }
     };
 
-    // --- Sliders for Balance.txt (#108) ----------------------------------
+    // --- Sliders for Balance.txt -------------------------------------------
     //
     // Written only when the slider is RELEASED - while dragging, the loop
-    // runs at 60 frames per second, which would be 60 writes into the user's
+    // runs at 60 frames per second, which would be 60 writes into the game
     // installation per second.
     //
     // Only the three percentage lines are touched. The damage per weapon,
@@ -2115,8 +2120,8 @@ static void drawUi(App& a, HWND hwnd)
     auto balanceSlider = [&](const char* label, float* value, bool* random,
                              float from, float to, const char* help)
     {
-        // Language (#128): translate once at the entrance, then the whole
-        // slider works with the visible text.
+        // Translate once at the entrance, then the whole slider works with
+        // the visible text.
         label = T(label);
         help = T(help);
         // Two lines instead of one: label with checkbox on top, the slider
@@ -2143,7 +2148,7 @@ static void drawUi(App& a, HWND hwnd)
         if (ImGui::Checkbox(tag, random))
         {
             // Roll immediately, so the slider does not stay on the old
-            // value and the user sees right away what the seed gives.
+            // value and shows right away what the seed gives.
             rollBalance(a);
             writeBalance();
         }
@@ -2183,7 +2188,7 @@ static void drawUi(App& a, HWND hwnd)
     openBlock("k_items", "3. Items", fItems);
 
     ImGui::Checkbox(T("Equipment (weapons, ammo, medipacks)"), &a.optOtherPickups);
-    // Item abundance (#36): scatter additional consumables. Less than
+    // Item abundance: scatter additional consumables. Less than
     // vanilla deliberately does not exist - removing items would shift all
     // following indices and break every "Object N" reference of the
     // triggers.
@@ -2205,7 +2210,7 @@ static void drawUi(App& a, HWND hwnd)
 
     ImGui::Checkbox(T("Keys & puzzles"), &a.optKeyItems);
 
-    // No checkbox anymore: the full weapon set is standard (user decision).
+    // No checkbox: the full weapon set is standard.
     ImGui::TextDisabled(T("All weapons everywhere is standard and always included."));
     hoverHelp("Every level gets the full weapon set on every run: pistols, Uzi, "
               "shotgun, Desert Eagle (replaces the revolver, in the joby levels "
@@ -2238,7 +2243,7 @@ static void drawUi(App& a, HWND hwnd)
               "animations. joby4 keeps the diving suit; the andy levels always "
               "get an adult Lara (young Lara cannot carry weapons).");
 
-    // TR3 outfits are real (#122). They need the player's own Tomb Raider 3
+    // TR3 outfits are real. They need the player's own Tomb Raider 3
     // installation - no game data of ours travels, the model is fetched at
     // runtime, exactly as with the four animals.
     const bool tr3Ready = !tr3Folder(a).empty();
@@ -2292,8 +2297,8 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::EndDisabled();
     ImGui::Unindent();
 
-    // Formerly "vanilla enemy mix" - the name sounded like the pool tier
-    // "level pool only" and caused confusion (user question). The checkbox
+    // Not called "vanilla enemy mix": that name sounds like the pool tier
+    // "level pool only". The checkbox
     // says WHETHER existing enemies swap roles; the pool choice below says
     // WHAT swap and extra enemies roll from.
     ImGui::Checkbox(T("Swap existing enemies"), &a.optEnemySwap);
@@ -2327,7 +2332,7 @@ static void drawUi(App& a, HWND hwnd)
               "mode.");
 
     // Fine selection in its own window: the list is too long for the main
-    // page and the user rarely touches it.
+    // page and is opened only occasionally.
     if (ImGui::Button(T("Enemy types..."))) a.kindsOpen = true;
     hoverHelp("Which enemy types the random draw may pick at all. Good for "
               "seeing favorite enemies more often - or for testing a single "
@@ -2424,7 +2429,7 @@ static void drawUi(App& a, HWND hwnd)
               "mood change. The hard-coded cutscene and tutorial triggering "
               "is not affected.");
 
-    // --- Secrets (#53) ---------------------------------------------------
+    // --- Secrets -----------------------------------------------------------
     //
     // Four kinds: vanilla (off), the normal pool, and two user-list
     // categories with an author dropdown. The lists lie as
@@ -2487,15 +2492,14 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::EndGroup();
 
     //------------------------------------------------------------------------
-    // 9. In preparation - its own row under column 1 (user wish).
+    // 9. In preparation - its own row under column 1.
     //
-    // Used to stand under the enemy box. There it prevented the four columns
-    // of the top row from reaching a common bottom edge: the column was
-    // always the longest. As its own row below, it bothers nobody, and the
-    // top row closes flush.
+    // Not under the enemy box: there it would keep the four columns of the
+    // top row from reaching a common bottom edge, as that column is always
+    // the longest. As its own row below, the top row closes flush.
     //------------------------------------------------------------------------
     ImGui::Spacing();
-    // --- Placeholders (user wish, all still inert) -----------------------
+    // --- Placeholders, all still inert --------------------------------------
     //
     // Visible so the GUI shows its final shape; grayed out until the
     // respective logic exists. Explanations as hover help. Textures and
@@ -2511,9 +2515,6 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Checkbox(T("Mix across levels"), &a.phTexMix);
     hoverHelp("Coming later: swap texture pages between levels - Rome in "
               "Russia, the submarine in Ireland.");
-    ImGui::Checkbox(T("Patch remaster textures"), &a.phTexRemaster);
-    hoverHelp("Coming later: patch remaster textures (if the player owns "
-              "them) into the classic levels.");
 
     ImGui::TextDisabled(T("Rooms"));
     ImGui::Checkbox(T("Include backdrop areas"), &a.phRoomBackdrops);
@@ -2530,9 +2531,9 @@ static void drawUi(App& a, HWND hwnd)
     closeBlock();
 
     //------------------------------------------------------------------------
-    // 10. Levels - centered under the four columns (user wish).
+    // 10. Levels - centered under the four columns.
     //
-    // The table has been narrow since the spoiler. Left-aligned under a wide
+    // The table is narrow (the details go to spoiler.txt). Left-aligned under a wide
     // window it would look lost; centered it stands as its own block and
     // leaves the background free left and right.
     //------------------------------------------------------------------------
@@ -2558,8 +2559,8 @@ static void drawUi(App& a, HWND hwnd)
     if (a.skippedNonPlayable > 0)
         ImGui::TextWrapped(T("%d non-playable files (Title, del, richcut2) are checked, "
                              "but never touched."), a.skippedNonPlayable);
-    // Fixed height by level count instead of a scrollbar (user wish):
-    // without ScrollY and without a height, the table grows exactly to its
+    // Fixed height by level count instead of a scrollbar: without ScrollY
+    // and without a height, the table grows exactly to its
     // rows - manageable with 13 playable levels.
     // Two columns instead of three: what a run did in detail has been in
     // spoiler.txt since the spoiler. The third column cost half the window
@@ -2689,7 +2690,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    // Program icon from the resources (TR5Randomizer.rc, the user's logo).
+    // Program icon from the resources (TR5Randomizer.rc, the app's logo).
     // LoadIconW takes the fitting size from the ICO file per field: hIcon
     // the large one (Alt-Tab, window properties), hIconSm the small one
     // (title bar, taskbar). Without these two lines, Windows shows the
@@ -2704,8 +2705,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     RegisterClassExW(&wc);
 
     // Window size from the settings file; a generous default on first start
-    // (user wish - the old 820x780 was too small). Lower bounds catch a
-    // hand-mangled file.
+    // (the old 820x780 was too small). Lower bounds catch a hand-mangled
+    // file.
     Config pre;
     pre.load();
     const int windowW = (pre.winW >= 500) ? pre.winW : 1000;
@@ -2731,8 +2732,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     ImGui::GetIO().IniFilename = nullptr;   // leave no window-layout file behind
 
     // Sub-windows (the sector markers, say) should be draggable out of the
-    // main window, even onto a second screen (user wish). Hence the docking
-    // branch of Dear ImGui with viewports: as soon as a window leaves the
+    // main window, even onto a second screen. Hence the docking branch of
+    // Dear ImGui with viewports: as soon as a window leaves the
     // edge, it gets its own operating-system window. WindowRounding 0 and
     // full opacity, because free-standing windows cannot have round,
     // translucent corners.
@@ -2749,13 +2750,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
     App app;
     app.cfg.load();
-    gGermanUi = app.cfg.germanUi;   // language (#128), default English
+    gGermanUi = app.cfg.germanUi;   // language, default English
     std::snprintf(app.seedBuf, sizeof(app.seedBuf), "%s",
                   app.cfg.seedText.empty() ? SeedText::format(SeedText::random()).c_str()
                                            : app.cfg.seedText.c_str());
 
-    // Restore the saved selection - the user should find his checkboxes
-    // again on the next start.
+    // Restore the saved selection, so the checkboxes are the same again
+    // on the next start.
     app.optOtherPickups = app.cfg.optOtherPickups;
     app.optKeyItems     = app.cfg.optKeyItems;
     app.optEnemies      = app.cfg.optEnemies;
@@ -2776,10 +2777,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optLevelOrder     = app.cfg.optLevelOrder;
     app.optWeather        = app.cfg.optWeather;
 
-    // Balance.txt (#108): if it already exists in the installation, IT is
-    // right and not our cfg - the user may have changed it in Notepad, and
-    // then the sliders should show what really applies. Only if nothing
-    // stands there does the last remembered slider position apply.
+    // Balance.txt: if it already exists in the installation, IT is right
+    // and not our cfg - it may have been hand-edited in Notepad, and then
+    // the sliders should show what really applies. Only if nothing stands
+    // there does the last remembered slider position apply.
     {
         app.balWeaponsRandom        = app.cfg.balWeaponsRandom;
         app.balEnemyHealthRandom   = app.cfg.balEnemyHealthRandom;
@@ -2794,8 +2795,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.balEnemyDamage = (present ? vals.enemyDamage : app.cfg.balEnemyDamage) / 100.0f;
 
         // Cranked further by hand than the sliders reach? Then the slider
-        // clamps onto its track - but nothing is written until the user
-        // touches it, the file stays untouched until then.
+        // clamps onto its track - but nothing is written until the slider
+        // is touched, the file stays untouched until then.
         auto clamp = [](float& v, float from, float to)
         { if (v < from) v = from; if (v > to) v = to; };
 
@@ -2872,13 +2873,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     // only the zones_<level>.json generated from them. If the table is
     // changed and not regenerated, it silently keeps working with the old
     // curation - and the folder data\ is a build product, so there is no
-    // commit that would make it visible either.
-    //
-    // Exactly that blew up on 2026-08-23: five exports dated from Aug
-    // 13/14 and still carried the refuted global HK offset, while the
-    // table had known it only for rich2 since Aug 19. The user had noticed
-    // it in game as "only partially effective", without the cause being
-    // visible.
+    // commit that would make it visible either. A stale export can then
+    // apply an already-refuted rule to only some levels, which shows up in
+    // game as a fix that is "only partially effective" with no visible
+    // cause.
     //
     // The check is not against the script - the player does not even have
     // it - but the exports AGAINST EACH OTHER. A mixed state means for
@@ -2965,9 +2963,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
         drawUi(app, hwnd);
 
-        // One work step per frame, AFTER drawing. That way the user first
-        // sees the new bar state and then the next step happens - the other
-        // way round, the last step would stay invisible.
+        // One work step per frame, AFTER drawing. That way the new bar
+        // state is shown before the next step happens - the other way
+        // round, the last step would stay invisible.
         advanceRun(app);
 
         // Persist the settings: after dragging the window, and whenever a

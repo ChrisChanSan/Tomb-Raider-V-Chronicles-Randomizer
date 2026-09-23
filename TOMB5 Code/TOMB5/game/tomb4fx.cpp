@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "tomb4fx.h"
 #include "control.h"
@@ -18,6 +30,7 @@
 #include "spotcam.h"
 #include "lara.h"
 #include "effects.h"
+#include "interpolate.h"		// InterpIsTweenFrame - the fade steps on a logic tick
 
 LIGHTNING_STRUCT Lightning[16];
 SHOCKWAVE_STRUCT ShockWaves[16];
@@ -1307,37 +1320,59 @@ void Fade()
 
 	oldfucker = ScreenFade;
 
-	if (dScreenFade && dScreenFade >= ScreenFade)
+	/* The fade steps on a logic tick, but Fade() is called once per
+	 * drawn frame (from S_OutputPolyList). ScreenFade is a level of grey
+	 * that walks towards dScreenFade by ScreenFadeSpeed once per call;
+	 * unguarded at sixty frames per second, every fade in the game -
+	 * into a level, out of it, either side of a cutscene - would take
+	 * half as long in wall-clock time, and ScreenFadedOut would be
+	 * raised half a beat early, which is what the cutscene wind-up and
+	 * the level change wait on.
+	 *
+	 * Only the walk towards dScreenFade is guarded; the tile below is
+	 * still drawn every frame from whatever ScreenFade stands at, so an
+	 * in-between frame shows the same grey as the frame before it and
+	 * the picture keeps its frame rate. */
+	if (!InterpIsTweenFrame())
 	{
-		ScreenFade += ScreenFadeSpeed;
-
-		if (ScreenFade > dScreenFade)
+		if (dScreenFade && dScreenFade >= ScreenFade)
 		{
-			ScreenFade = dScreenFade;
+			ScreenFade += ScreenFadeSpeed;
 
-			if (oldfucker >= dScreenFade)
+			if (ScreenFade > dScreenFade)
 			{
-				ScreenFadedOut = 1;
+				ScreenFade = dScreenFade;
 
-				if (ScreenFadeBack)
+				if (oldfucker >= dScreenFade)
 				{
-					dScreenFade = 0;
-					ScreenFadeBack = 0;
+					ScreenFadedOut = 1;
+
+					if (ScreenFadeBack)
+					{
+						dScreenFade = 0;
+						ScreenFadeBack = 0;
+					}
+					else
+						ScreenFading = 0;
 				}
-				else
-					ScreenFading = 0;
 			}
 		}
-	}
-	else if (dScreenFade < ScreenFade)
-	{
-		ScreenFade -= ScreenFadeSpeed;
-
-		if (ScreenFade < dScreenFade)
+		else if (dScreenFade < ScreenFade)
 		{
-			ScreenFade = dScreenFade;
-			ScreenFading = 0;
+			ScreenFade -= ScreenFadeSpeed;
+
+			if (ScreenFade < dScreenFade)
+			{
+				ScreenFade = dScreenFade;
+				ScreenFading = 0;
+			}
 		}
+
+		// TICKLOG counts the grey steps that really happened, not the
+		// calls - so the number says how far a fade got in that second and
+		// has to be the same at both frame rates.
+		if (ScreenFade != oldfucker)
+			InterpNoteStep(INTERP_STEP_FADE);
 	}
 
 	if (ScreenFade || dScreenFade)

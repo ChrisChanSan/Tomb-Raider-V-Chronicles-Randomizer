@@ -30,11 +30,11 @@ never reached: 134 walkable sectors
 hand-barred (EXCLUDE_ROOMS): 802 sectors in 29 rooms - intended, not counted as a gap
 untouchable items (FIXED_ITEMS) - must not be moved:
   item   76 - Larson - scripted miniboss, hangs on cutscenes 8 and 7 (room 72, typeId 45)
-  item  108 - Roman god (room 131) - stays vanilla (user list) (room 131, typeId 61)
-  item   93 - Hydra chain link (room 116) - stays vanilla (user list) (room 116, typeId 63)
-  item   92 - Hydra chain link (room 116) - stays vanilla (user list) (room 116, typeId 63)
-  item   91 - Hydra chain link (room 116) - stays vanilla (user list) (room 116, typeId 63)
-  item   65 - type 420 (room 69) - scripted, stays vanilla (user list) (room 69, typeId 420)
+  item  108 - Roman god (room 131) - stays vanilla (room 131, typeId 61)
+  item   93 - Hydra chain link (room 116) - stays vanilla (room 116, typeId 63)
+  item   92 - Hydra chain link (room 116) - stays vanilla (room 116, typeId 63)
+  item   91 - Hydra chain link (room 116) - stays vanilla (room 116, typeId 63)
+  item   65 - type 420 (room 69) - scripted, stays vanilla (room 69, typeId 420)
   item   14 - secret - stays in place until the dedicated secret list (room 22, typeId 223)
   item   87 - secret - stays in place until the dedicated secret list (room 101, typeId 223)
   item  138 - secret - stays in place until the dedicated secret list (room 219, typeId 223)

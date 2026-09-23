@@ -329,6 +329,7 @@ short DashTimer;
 char LaraDrawType;
 char WeatherType;
 char GfForeignSpeechHeads;
+char GfHdOutfit;
 
 static short LeftClimbTab[4] = { 512, 1024, 2048, 256 };
 static short RightClimbTab[4] = { 2048, 256, 512, 1024 };
@@ -3087,13 +3088,22 @@ void lara_as_pullblock(ITEM_INFO* item, COLL_INFO* coll)
 	camera.lara_node = LMX_TORSO;
 }
 
+/* This is the ready pose in front of a pushable block; its only entry is
+ * MovableBlockCollision (game/moveblok.cpp), a world-object grab. With the
+ * Action and Secondary keys split, a held state must answer only to the
+ * key that put her into it, so this reads IN_INTERACT rather than
+ * IN_ACTION - IN_ACTION would let her enter the pose on one key and drop
+ * out again because the other key is not held. lara_as_pulley below applies
+ * the same rule to the pulley (switch.cpp's PulleyCollision, likewise its
+ * only entry). With the keys not split, IN_INTERACT and IN_ACTION are
+ * always down together, so both behave identically. */
 void lara_as_ppready(ITEM_INFO* item, COLL_INFO* coll)
 {
 	coll->enable_baddie_push = 0;
 	coll->enable_spaz = 0;
 	camera.target_angle = 13650;
 
-	if (!(input & IN_ACTION))
+	if (!(input & IN_INTERACT))
 		item->goal_anim_state = AS_STOP;
 }
 
@@ -4249,6 +4259,18 @@ void lara_as_waterout(ITEM_INFO* item, COLL_INFO* coll)
 	camera.lara_node = LMX_HIPS;
 }
 
+/* The death slide (below), the pole (lara_as_poleleft through
+ * lara_col_poledown), the rope (lara_as_rope through lara_as_roper) and
+ * the parallel bars (lara_as_parallelbars) are grabbed in mid-air, so a
+ * player may press either the Action or the Secondary key. Each state's
+ * collision routine is its only entry (deathsld.cpp, objects.cpp,
+ * rope.cpp), so all of them read IN_ACTION_ANY rather than one key -
+ * otherwise the grab could be taken on one key and dropped the instant
+ * the other is not held.
+ *
+ * Lara's own automaton - ledge grab, vault, hang, monkey swing, crawl,
+ * swim-surface climb-out - stays on IN_ACTION alone: with Action and
+ * Secondary split, climbing and grabbing are the Secondary key. */
 void lara_as_deathslide(ITEM_INFO* item, COLL_INFO* coll)
 {
 	FLOOR_INFO* floor;
@@ -4260,7 +4282,7 @@ void lara_as_deathslide(ITEM_INFO* item, COLL_INFO* coll)
 	GetHeight(floor, item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
 	coll->trigger = trigger_index;
 
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 	{
 		item->goal_anim_state = AS_FORWARDJUMP;
 		AnimateLara(item);
@@ -4296,7 +4318,7 @@ void lara_as_poleleft(ITEM_INFO* item, COLL_INFO* coll)
 	coll->enable_baddie_push = 0;
 	coll->enable_spaz = 0;
 
-	if (!(input & IN_LEFT) || !(input & IN_ACTION) || input & (IN_FORWARD | IN_BACK) || item->hit_points <= 0)
+	if (!(input & IN_LEFT) || !(input & IN_ACTION_ANY) || input & (IN_FORWARD | IN_BACK) || item->hit_points <= 0)
 		item->goal_anim_state = AS_POLESTAT;
 	else
 		item->pos.y_rot += 256;
@@ -4307,7 +4329,7 @@ void lara_as_poleright(ITEM_INFO* item, COLL_INFO* coll)
 	coll->enable_baddie_push = 0;
 	coll->enable_spaz = 0;
 
-	if (!(input & IN_RIGHT) || !(input & IN_ACTION) || input & (IN_FORWARD | IN_BACK) || item->hit_points <= 0)
+	if (!(input & IN_RIGHT) || !(input & IN_ACTION_ANY) || input & (IN_FORWARD | IN_BACK) || item->hit_points <= 0)
 		item->goal_anim_state = AS_POLESTAT;
 	else
 		item->pos.y_rot -= 256;
@@ -4339,7 +4361,7 @@ void lara_col_polestat(ITEM_INFO* item, COLL_INFO* coll)
 	coll->slopes_are_walls = 1;
 	GetLaraCollisionInfo(item, coll);
 
-	if (input & IN_ACTION)
+	if (input & IN_ACTION_ANY)
 	{
 		item->goal_anim_state = AS_POLESTAT;
 
@@ -4389,7 +4411,7 @@ void lara_col_poleup(ITEM_INFO* item, COLL_INFO* coll)
 	if (input & IN_LOOK)
 		LookUpDown();
 
-	if (!(input & IN_ACTION) || !(input & IN_FORWARD) || item->hit_points <= 0)
+	if (!(input & IN_ACTION_ANY) || !(input & IN_FORWARD) || item->hit_points <= 0)
 		item->goal_anim_state = AS_POLESTAT;
 
 	room_num = item->room_number;
@@ -4410,7 +4432,14 @@ void lara_col_poledown(ITEM_INFO* item, COLL_INFO* coll)
 	if (input & IN_LOOK)
 		LookUpDown();
 
-	if ((input & (IN_BACK | IN_ACTION)) != (IN_BACK | IN_ACTION) || item->hit_points <= 0)
+	/* Written as two separate mask tests rather than an equality test
+	 * against the OR of both bits: (input & (IN_BACK|IN_ACTION_ANY)) !=
+	 * (IN_BACK|IN_ACTION_ANY) only works when IN_ACTION_ANY is a single
+	 * bit. With Action and Secondary split, only one of IN_INTERACT/
+	 * IN_ACTION is ever set at once, so that equality could never hold and
+	 * the pole would be reachable by no key at all. Matches the shape
+	 * lara_col_poleup above already uses. */
+	if (!(input & IN_ACTION_ANY) || !(input & IN_BACK) || item->hit_points <= 0)
 		item->goal_anim_state = AS_POLESTAT;
 
 	coll->bad_pos = -NO_HEIGHT;
@@ -4541,7 +4570,7 @@ void lara_as_pulley(ITEM_INFO* item, COLL_INFO* coll)
 	coll->enable_spaz = 0;
 	coll->enable_baddie_push = 0;
 
-	if (input & IN_ACTION && p->trigger_flags)
+	if (input & IN_INTERACT && p->trigger_flags)
 		item->goal_anim_state = AS_PULLEY;
 	else
 		item->goal_anim_state = AS_STOP;
@@ -4581,7 +4610,7 @@ void lara_as_pulley(ITEM_INFO* item, COLL_INFO* coll)
 
 void lara_as_rope(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 		FallFromRope(item);
 
 	if (input & IN_LOOK)
@@ -4590,7 +4619,7 @@ void lara_as_rope(ITEM_INFO* item, COLL_INFO* coll)
 
 void lara_col_rope(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (input & IN_ACTION)
+	if (input & IN_ACTION_ANY)
 	{
 		UpdateRopeSwing(item);
 
@@ -4694,7 +4723,7 @@ void lara_col_ropefwd(ITEM_INFO* item, COLL_INFO* coll)
 
 void lara_as_ropel(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 		FallFromRope(item);
 	else if (input & IN_LEFT)
 		lara.RopeY += 256;
@@ -4704,7 +4733,7 @@ void lara_as_ropel(ITEM_INFO* item, COLL_INFO* coll)
 
 void lara_as_roper(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 		FallFromRope(item);
 	else if (input & IN_RIGHT)
 		lara.RopeY -= 256;
@@ -4855,7 +4884,7 @@ void lara_as_trfall(ITEM_INFO* item, COLL_INFO* coll)
 
 void lara_as_parallelbars(ITEM_INFO* item, COLL_INFO* coll)
 {
-	if (!(input & IN_ACTION))
+	if (!(input & IN_ACTION_ANY))
 		item->goal_anim_state = AS_PBLEAP;
 }
 
@@ -4940,8 +4969,18 @@ void LaraAboveWater(ITEM_INFO* item, COLL_INFO* coll)
 	lara_collision_routines[item->current_anim_state](item, coll);
 	UpdateLaraRoom(item, -381);
 
+	/* Under the default (unsplit) key binding this clears both input bits,
+	 * not just IN_ACTION, because TestTriggers on the next line also reads
+	 * the input word: its TO_CUTSCENE case reaches
+	 * NeatAndTidyTriggerCutscene (game/control.cpp), whose "use this item
+	 * here" triggers read IN_ACTION too. In a VCI level with the crossbow
+	 * selected and no laser sight, clearing only IN_ACTION would leave
+	 * IN_INTERACT down and let such a trigger fire on the same key and
+	 * tick that just holstered the crossbow. With Action and Secondary
+	 * split, only IN_ACTION is cleared, since the rule here - no firing
+	 * without the sight - says nothing about the key that opens doors. */
 	if (lara.gun_type == WEAPON_CROSSBOW && !LaserSight && gfLevelFlags & GF_OFFICE)
-		input &= ~IN_ACTION;
+		input &= ~(tomb5.action_split ? IN_ACTION : IN_ACTION_ANY);
 
 	LaraGun();
 	TestTriggers(coll->trigger, 0, 0);

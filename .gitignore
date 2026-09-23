@@ -65,6 +65,12 @@ Preparation/TRView for Tomb5 Rando/
 #
 # See also the "Import-Export" folder next to the program - for the same
 # reason it carries a file "DO NOT REDISTRIBUTE.txt".
+#
+# "Spiel/" is German for "game" and is kept deliberately: it is the name of a
+# local folder on the author's machine that holds an installed copy of the
+# game. The rule stays because renaming it here would stop protecting that
+# folder, and game data must never enter this repository. The pattern is the
+# one thing in this file that is not English; this comment is why.
 Spiel/
 New Checksums/
 Import Export/
@@ -102,7 +108,11 @@ Tomb5 Steam Version/
 Preparation/Level Infos/ZoneReports/**/*.jpg
 Preparation/Level Infos/ZoneReports/**/*.png
 
-# Fresh upstream downloads for comparisons - never version these
+# Fresh upstream downloads for comparisons - never version these.
+# "frisch" is German for "fresh" and is kept for the same reason as
+# "Spiel/" above: it is the name of local folders on the author's machine,
+# and an English pattern here would stop matching them. The comment is the
+# English part.
 Tomb5 frisch*/
 
 # Artwork drafts. The one logo that ships lives in docs/banner.jpg;

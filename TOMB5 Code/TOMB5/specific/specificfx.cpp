@@ -41,6 +41,8 @@
 #include "../tomb5/tomb5.h"
 #include "../game/lara_states.h"
 #include "../game/deltapak.h"
+#include "../game/interpolate.h"	// the in-between frame's counters
+#include "../game/interpolate_math.h"	// InterpTrailLong - the particles
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -964,8 +966,8 @@ void OutputSky()
 // magenta for "transparent", cut into two 256x256 texture pages and drawn as
 // two quads (see below). The remaster redrew the same wordmark at 1920x1080
 // with a real alpha channel, one file per language - screens\HD\LOGO_DE,
-// LOGO_FR, LOGO_US, LOGO_EU - and the loading screens already read those
-// (#149). If the player has them, the title menu can have them too, and the
+// LOGO_FR, LOGO_US, LOGO_EU - and the loading screens already read those.
+// If the player has them, the title menu can have them too, and the
 // languages the CDs never shipped a logo512 for finally get their own
 // lettering: "DIE CHRONIK", "SUR LES TRACES DE LARA CROFT", the flaming US
 // emblem.
@@ -1271,8 +1273,43 @@ void DoScreenFade()
 	long a;
 
 	a = FadeVal << 24;
-	FadeVal += FadeStep;
-	FadeCnt++;
+
+	/* The fade the engine waits on.
+	 *
+	 * Nine steps from SetFade's start value to its end - FadeCnt counts them
+	 * and DoFade goes to 2 on the ninth - and this is called once per drawn
+	 * frame from S_OutputPolyList. Three places wait on that 2 and none of
+	 * them counts frames itself: DoLevel's death path (game\gameflow.cpp),
+	 * the level change beside it, and RenderLoadPic's `do { ... } while
+	 * (DoFade != 2)` (specific\output.cpp). At sixty, unguarded, the death
+	 * fade and the level fade would take half as long in wall-clock time.
+	 *
+	 * The in-between frame draws the same grey - `a` is read before the
+	 * step, so it is what the frame before it drew - and the tile below is
+	 * built and drawn on every frame. Except once: after the eighth step the
+	 * walked value has overshot the end, and without the clamp below the
+	 * in-between frames would draw that overshoot.
+	 *
+	 * RenderLoadPic's loop is also the reason the tween latch has to be put
+	 * down by a thirty hertz present: it is the one loop in the build that
+	 * cannot end until this counter moves. See InterpNoteClassicPresent. */
+	if (!InterpIsTweenFrame())
+	{
+		FadeVal += FadeStep;
+		FadeCnt++;
+		InterpNoteStep(INTERP_STEP_SCREENFADE);
+
+		/* The ninth step. Eight steps of (end - start) >> 3 overshoot the
+		 * end: 255 -> 0 walks in -32s and lands on -1, which is alpha 255
+		 * once shifted into `a`. At thirty this never shows - the ninth
+		 * call reads `a` first and then puts FadeEnd over it below - but
+		 * every in-between frame between the eighth and the ninth tick
+		 * read the overshoot as it stood: a whole tick of black in the
+		 * middle of every level's fade-in. Clamped to the end once past
+		 * it; the ninth tick drew FadeEnd anyway, so no thirty hertz
+		 * picture changes. See InterpFadeClamp. */
+		FadeVal = InterpFadeClamp(FadeVal, FadeStep, FadeEnd);
+	}
 
 	if (FadeCnt > 8)
 	{
@@ -1340,103 +1377,119 @@ void DoRain()
 
 	num_alive = 0;
 
-	for (int i = 0; i < rain_count; i++)
+	/* The weather simulates on a tick and draws on every frame.
+	 *
+	 * This function is in two halves. The loop below is the simulation: it
+	 * spawns drops around the camera, moves them by their velocity, blows
+	 * them with the wind, splashes them on the floor and ages them
+	 * (`rptr->life -= 2`). The second loop, further down, is the drawing.
+	 * Only the first is guarded, so at sixty the rain falls at exactly the
+	 * speed it falls at thirty and each drop lives exactly as long - the
+	 * in-between frame simply draws the drops where the tick left them,
+	 * without moving them further. What matters here is the rate, and the
+	 * rate is now the tick's. */
+	if (!InterpIsTweenFrame())
 	{
-		rptr = &Rain[i];
+		InterpNoteStep(INTERP_STEP_WEATHER);
 
-		if (outside && !rptr->x && num_alive < max_rain)
+		for (int i = 0; i < rain_count; i++)
 		{
-			num_alive++;
-			rad = GetRandomDraw() & 8191;
-			angle = GetRandomDraw() & 8190;
-			rptr->x = camera.pos.x + (rad * rcossin_tbl[angle] >> (W2V_SHIFT - 2));
-			rptr->y = camera.pos.y + -1024 - (GetRandomDraw() & 0x7FF);
-			rptr->z = camera.pos.z + (rad * rcossin_tbl[angle + 1] >> (W2V_SHIFT - 2));
+			rptr = &Rain[i];
 
-			if (IsRoomOutside(rptr->x, rptr->y, rptr->z) < 0)
+			if (outside && !rptr->x && num_alive < max_rain)
 			{
-				rptr->x = 0;
-				continue;
-			}
+				num_alive++;
+				rad = GetRandomDraw() & 8191;
+				angle = GetRandomDraw() & 8190;
+				rptr->x = camera.pos.x + (rad * rcossin_tbl[angle] >> (W2V_SHIFT - 2));
+				rptr->y = camera.pos.y + -1024 - (GetRandomDraw() & 0x7FF);
+				rptr->z = camera.pos.z + (rad * rcossin_tbl[angle + 1] >> (W2V_SHIFT - 2));
 
-			if (room[IsRoomOutsideNo].flags & ROOM_UNDERWATER)
-			{
-				rptr->x = 0;
-				continue;
-			}
-
-			rptr->xv = (GetRandomDraw() & 7) - 4;
-			rptr->yv = uchar((GetRandomDraw() & 3) + GetFixedScale(8));
-			rptr->zv = (GetRandomDraw() & 7) - 4;
-			rptr->room_number = IsRoomOutsideNo;
-			rptr->life = 64 - rptr->yv;
-		}
-
-		if (rptr->x)
-		{
-			if (rptr->life > 240 || abs(CamPos.x - rptr->x) > 6000 || abs(CamPos.z - rptr->z) > 6000)
-			{
-				rptr->x = 0;
-				continue;
-			}
-
-			rptr->x += rptr->xv + 4 * SmokeWindX;
-			rptr->y += rptr->yv << 3;
-			rptr->z += rptr->zv + 4 * SmokeWindZ;
-			r = &room[rptr->room_number];
-			x = r->x + 1024;
-			z = r->z + 1024;
-			x_size = r->x_size - 1;
-			y_size = r->y_size - 1;
-
-			if (rptr->y <= r->maxceiling || rptr->y >= r->minfloor || rptr->z <= z ||
-				rptr->z >= r->z + (x_size << 10) || rptr->x <= x || rptr->x >= r->x + (y_size << 10))
-			{
-				room_number = rptr->room_number;
-				floor = GetFloor(rptr->x, rptr->y, rptr->z, &room_number);
-
-				if (room_number == rptr->room_number || room[room_number].flags & ROOM_UNDERWATER)
+				if (IsRoomOutside(rptr->x, rptr->y, rptr->z) < 0)
 				{
-					if (room[room_number].flags & ROOM_UNDERWATER && (i & 7) == 7)
-						SetupRipple(rptr->x, GetWaterHeight(rptr->x, rptr->y, rptr->z, room_number), rptr->z, 3, 0);
-					else
-						TriggerSmallSplash(rptr->x, GetHeight(floor, rptr->x, rptr->y, rptr->z), rptr->z, 1);
-
 					rptr->x = 0;
 					continue;
 				}
-				else
-					rptr->room_number = room_number;
+
+				if (room[IsRoomOutsideNo].flags & ROOM_UNDERWATER)
+				{
+					rptr->x = 0;
+					continue;
+				}
+
+				rptr->xv = (GetRandomDraw() & 7) - 4;
+				rptr->yv = uchar((GetRandomDraw() & 3) + GetFixedScale(8));
+				rptr->zv = (GetRandomDraw() & 7) - 4;
+				rptr->room_number = IsRoomOutsideNo;
+				rptr->life = 64 - rptr->yv;
 			}
 
-			rnd = GetRandomDraw();
-
-			if ((rnd & 3) != 3)
+			if (rptr->x)
 			{
-				rptr->xv += (rnd & 3) - 1;
+				if (rptr->life > 240 || abs(CamPos.x - rptr->x) > 6000 || abs(CamPos.z - rptr->z) > 6000)
+				{
+					rptr->x = 0;
+					continue;
+				}
 
-				if (rptr->xv < -4)
-					rptr->xv = -4;
-				else if (rptr->xv > 4)
-					rptr->xv = 4;
+				rptr->x += rptr->xv + 4 * SmokeWindX;
+				rptr->y += rptr->yv << 3;
+				rptr->z += rptr->zv + 4 * SmokeWindZ;
+				r = &room[rptr->room_number];
+				x = r->x + 1024;
+				z = r->z + 1024;
+				x_size = r->x_size - 1;
+				y_size = r->y_size - 1;
+
+				if (rptr->y <= r->maxceiling || rptr->y >= r->minfloor || rptr->z <= z ||
+					rptr->z >= r->z + (x_size << 10) || rptr->x <= x || rptr->x >= r->x + (y_size << 10))
+				{
+					room_number = rptr->room_number;
+					floor = GetFloor(rptr->x, rptr->y, rptr->z, &room_number);
+
+					if (room_number == rptr->room_number || room[room_number].flags & ROOM_UNDERWATER)
+					{
+						if (room[room_number].flags & ROOM_UNDERWATER && (i & 7) == 7)
+							SetupRipple(rptr->x, GetWaterHeight(rptr->x, rptr->y, rptr->z, room_number), rptr->z, 3, 0);
+						else
+							TriggerSmallSplash(rptr->x, GetHeight(floor, rptr->x, rptr->y, rptr->z), rptr->z, 1);
+
+						rptr->x = 0;
+						continue;
+					}
+					else
+						rptr->room_number = room_number;
+				}
+
+				rnd = GetRandomDraw();
+
+				if ((rnd & 3) != 3)
+				{
+					rptr->xv += (rnd & 3) - 1;
+
+					if (rptr->xv < -4)
+						rptr->xv = -4;
+					else if (rptr->xv > 4)
+						rptr->xv = 4;
+				}
+
+				rnd = (rnd >> 2) & 3;
+
+				if (rnd != 3)
+				{
+					rptr->zv += (char)(rnd - 1);
+
+					if (rptr->zv < -4)
+						rptr->zv = -4;
+					else if (rptr->zv > 4)
+						rptr->zv = 4;
+				}
+
+				rptr->life -= 2;
+
+				if (rptr->life > 240)
+					rptr->x = 0;
 			}
-
-			rnd = (rnd >> 2) & 3;
-
-			if (rnd != 3)
-			{
-				rptr->zv += (char)(rnd - 1);
-
-				if (rptr->zv < -4)
-					rptr->zv = -4;
-				else if (rptr->zv > 4)
-					rptr->zv = 4;
-			}
-
-			rptr->life -= 2;
-
-			if (rptr->life > 240)
-				rptr->x = 0;
 		}
 	}
 
@@ -1451,17 +1504,42 @@ void DoRain()
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 	aSetViewMatrix();
 
+	/* A drop is drawn as a streak from where it was to where it is, so it
+	 * already carries its own step twice over: the simulation moves it by
+	 * `xv + 4 * SmokeWindX`, `yv << 3` and `zv + 4 * SmokeWindZ`, and the
+	 * tail below is that same step subtracted again. This slides the whole
+	 * streak back along its own travel by the part of the step this frame
+	 * has not reached yet - the shape and the length are vanilla's, only the
+	 * place is between two ticks - so the rain falls in sixty even steps
+	 * instead of thirty double ones, and no drop appears before its tick or
+	 * outlives its death. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < rain_count; i++)
 	{
 		rptr = &Rain[i];
 
 		if (rptr->x)
 		{
+			long rx = rptr->x;
+			long ry = rptr->y;
+			long rz = rptr->z;
+
+			if (trail)
+			{
+				rx = InterpTrailLong(rx, rptr->xv + 4 * SmokeWindX, pa);
+				ry = InterpTrailLong(ry, rptr->yv << 3, pa);
+				rz = InterpTrailLong(rz, rptr->zv + 4 * SmokeWindZ, pa);
+				moved++;
+			}
+
 			clipFlag = 0;
 			clip = clipflags;
-			fx = float(rptr->x - lara_item->pos.x_pos - (SmokeWindX << 2));
-			fy = float(rptr->y - (rptr->yv << 3) - lara_item->pos.y_pos);
-			fz = float(rptr->z - lara_item->pos.z_pos - (SmokeWindZ << 2));
+			fx = float(rx - lara_item->pos.x_pos - (SmokeWindX << 2));
+			fy = float(ry - (rptr->yv << 3) - lara_item->pos.y_pos);
+			fz = float(rz - lara_item->pos.z_pos - (SmokeWindZ << 2));
 			mx = fx * D3DMView._11 + fy * D3DMView._21 + fz * D3DMView._31 + D3DMView._41;
 			my = fx * D3DMView._12 + fy * D3DMView._22 + fz * D3DMView._32 + D3DMView._42;
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
@@ -1502,9 +1580,9 @@ void DoRain()
 			*clip++ = clipFlag;
 			clipFlag = 0;
 
-			fx = float(rptr->x - lara_item->pos.x_pos);
-			fy = float(rptr->y - lara_item->pos.y_pos);
-			fz = float(rptr->z - lara_item->pos.z_pos);
+			fx = float(rx - lara_item->pos.x_pos);
+			fy = float(ry - lara_item->pos.y_pos);
+			fz = float(rz - lara_item->pos.z_pos);
 			mx = fx * D3DMView._11 + fy * D3DMView._21 + fz * D3DMView._31 + D3DMView._41;
 			my = fx * D3DMView._12 + fy * D3DMView._22 + fz * D3DMView._32 + D3DMView._42;
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
@@ -1551,6 +1629,7 @@ void DoRain()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_RAIN, moved);
 }
 
 void DoSnow()
@@ -1567,104 +1646,114 @@ void DoSnow()
 
 	num_alive = 0;
 
-	for (int i = 0; i < snow_count; i++)
+	/* The snow, in the same two halves as the rain - the loop below spawns
+	 * the flakes, blows them with the wind, settles them on the floor and
+	 * ages them; the loop after it draws them. Only the first is a clock,
+	 * so only the first is guarded. Unguarded at sixty the snow would fall
+	 * at twice the speed and each flake would live half as long. */
+	if (!InterpIsTweenFrame())
 	{
-		snow = &Snow[i];
+		InterpNoteStep(INTERP_STEP_WEATHER);
 
-		if (!snow->x)
+		for (int i = 0; i < snow_count; i++)
 		{
-			if (!snow_outside || num_alive >= max_snow)
-				continue;
+			snow = &Snow[i];
 
-			num_alive++;
-			rad = GetRandomDraw() & 0x1FFF;
-			angle = (GetRandomDraw() & 0xFFF) << 1;
-			snow->x = camera.pos.x + (rad * rcossin_tbl[angle] >> (W2V_SHIFT - 2));
-			snow->y = camera.pos.y - 1024 - (GetRandomDraw() & 0x7FF);
-			snow->z = camera.pos.z + (rad * rcossin_tbl[angle + 1] >> (W2V_SHIFT - 2));
-
-			if (IsRoomOutside(snow->x, snow->y, snow->z) < 0)
+			if (!snow->x)
 			{
-				snow->x = 0;
-				continue;
-			}
+				if (!snow_outside || num_alive >= max_snow)
+					continue;
 
-			if (room[IsRoomOutsideNo].flags & ROOM_UNDERWATER)
-			{
-				snow->x = 0;
-				continue;
-			}
+				num_alive++;
+				rad = GetRandomDraw() & 0x1FFF;
+				angle = (GetRandomDraw() & 0xFFF) << 1;
+				snow->x = camera.pos.x + (rad * rcossin_tbl[angle] >> (W2V_SHIFT - 2));
+				snow->y = camera.pos.y - 1024 - (GetRandomDraw() & 0x7FF);
+				snow->z = camera.pos.z + (rad * rcossin_tbl[angle + 1] >> (W2V_SHIFT - 2));
 
-			snow->stopped = 0;
-			snow->xv = (GetRandomDraw() & 7) - 4;
-			snow->yv = ((GetRandomDraw() & 0xF) + 8) << 3;
-			snow->zv = (GetRandomDraw() & 7) - 4;
-			snow->room_number = IsRoomOutsideNo;
-			snow->life = 112 - (snow->yv >> 2);
-		}
-
-		ox = snow->x;
-		oy = snow->y;
-		oz = snow->z;
-
-		if (!snow->stopped)
-		{
-			snow->x += snow->xv;
-			snow->y += (snow->yv >> 1) & 0xFC;
-			snow->z += snow->zv;
-			r = &room[snow->room_number];
-
-			if (snow->y <= r->maxceiling || snow->y >= r->minfloor ||
-				snow->z <= r->z + 1024 || snow->z >= (r->x_size << 10) + r->z - 1024 ||
-				snow->x <= r->x + 1024 || snow->x >= (r->y_size << 10) + r->x - 1024)
-			{
-				room_number = snow->room_number;
-				GetFloor(snow->x, snow->y, snow->z, &room_number);
-
-				if (room_number == snow->room_number)
+				if (IsRoomOutside(snow->x, snow->y, snow->z) < 0)
 				{
 					snow->x = 0;
 					continue;
 				}
 
-				if (room[room_number].flags & ROOM_UNDERWATER)
+				if (room[IsRoomOutsideNo].flags & ROOM_UNDERWATER)
 				{
-					snow->stopped = 1;
-					snow->x = ox;
-					snow->y = oy;
-					snow->z = oz;
-
-					if (snow->life > 16)
-						snow->life = 16;
+					snow->x = 0;
+					continue;
 				}
-				else
-					snow->room_number = room_number;
+
+				snow->stopped = 0;
+				snow->xv = (GetRandomDraw() & 7) - 4;
+				snow->yv = ((GetRandomDraw() & 0xF) + 8) << 3;
+				snow->zv = (GetRandomDraw() & 7) - 4;
+				snow->room_number = IsRoomOutsideNo;
+				snow->life = 112 - (snow->yv >> 2);
 			}
+
+			ox = snow->x;
+			oy = snow->y;
+			oz = snow->z;
+
+			if (!snow->stopped)
+			{
+				snow->x += snow->xv;
+				snow->y += (snow->yv >> 1) & 0xFC;
+				snow->z += snow->zv;
+				r = &room[snow->room_number];
+
+				if (snow->y <= r->maxceiling || snow->y >= r->minfloor ||
+					snow->z <= r->z + 1024 || snow->z >= (r->x_size << 10) + r->z - 1024 ||
+					snow->x <= r->x + 1024 || snow->x >= (r->y_size << 10) + r->x - 1024)
+				{
+					room_number = snow->room_number;
+					GetFloor(snow->x, snow->y, snow->z, &room_number);
+
+					if (room_number == snow->room_number)
+					{
+						snow->x = 0;
+						continue;
+					}
+
+					if (room[room_number].flags & ROOM_UNDERWATER)
+					{
+						snow->stopped = 1;
+						snow->x = ox;
+						snow->y = oy;
+						snow->z = oz;
+
+						if (snow->life > 16)
+							snow->life = 16;
+					}
+					else
+						snow->room_number = room_number;
+				}
+			}
+
+			if (!snow->life)
+			{
+				snow->x = 0;
+				continue;
+			}
+
+			if ((abs(CamPos.x - snow->x) > 6000 || abs(CamPos.z - snow->z) > 6000) && snow->life > 16)
+				snow->life = 16;
+
+			if (snow->xv < SmokeWindX << 2)
+				snow->xv += 2;
+			else if (snow->xv > SmokeWindX << 2)
+				snow->xv -= 2;
+
+			if (snow->zv < SmokeWindZ << 2)
+				snow->zv += 2;
+			else if (snow->zv > SmokeWindZ << 2)
+				snow->zv -= 2;
+
+			snow->life -= 2;
+
+			if ((snow->yv & 7) != 7)
+				snow->yv++;
 		}
-
-		if (!snow->life)
-		{
-			snow->x = 0;
-			continue;
-		}
-
-		if ((abs(CamPos.x - snow->x) > 6000 || abs(CamPos.z - snow->z) > 6000) && snow->life > 16)
-			snow->life = 16;
-
-		if (snow->xv < SmokeWindX << 2)
-			snow->xv += 2;
-		else if (snow->xv > SmokeWindX << 2)
-			snow->xv -= 2;
-
-		if (snow->zv < SmokeWindZ << 2)
-			snow->zv += 2;
-		else if (snow->zv > SmokeWindZ << 2)
-			snow->zv -= 2;
-
-		snow->life -= 2;
-
-		if ((snow->yv & 7) != 7)
-			snow->yv++;
 	}
 
 	sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index + 10];
@@ -1689,6 +1778,18 @@ void DoSnow()
 	clipflags[2] = 0;
 	clipflags[3] = 0;
 
+	/* The snow, on the rain's argument again with one difference worth
+	 * writing down. A flake's sideways drift is ramped towards the wind by
+	 * two units a tick after it has moved, and its fall speed is stepped by
+	 * one on the same line, so the walk back is a couple of units out on a
+	 * flake that is still catching the wind - out of a fall of some sixty
+	 * units, on a sprite four pixels wide. A flake that has settled
+	 * (`stopped`) took no step at all and is given none, which falls out of
+	 * the same field the simulation reads. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < snow_count; i++)
 	{
 		snow = &Snow[i];
@@ -1696,9 +1797,19 @@ void DoSnow()
 		if (!snow->x)
 			continue;
 
-		x = float(snow->x - camera.pos.x);
-		y = float(snow->y - camera.pos.y);
-		z = float(snow->z - camera.pos.z);
+		if (trail && !snow->stopped)
+		{
+			x = float(InterpTrailLong(snow->x, snow->xv, pa) - camera.pos.x);
+			y = float(InterpTrailLong(snow->y, (snow->yv >> 1) & 0xFC, pa) - camera.pos.y);
+			z = float(InterpTrailLong(snow->z, snow->zv, pa) - camera.pos.z);
+			moved++;
+		}
+		else
+		{
+			x = float(snow->x - camera.pos.x);
+			y = float(snow->y - camera.pos.y);
+			z = float(snow->z - camera.pos.z);
+		}
 		zv = x * D3DMView._13 + y * D3DMView._23 + z * D3DMView._33 + D3DMView._43;
 
 		if (zv < f_mznear)
@@ -1753,6 +1864,7 @@ void DoSnow()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_SNOW, moved);
 }
 
 void DrawBinoculars()
@@ -1974,6 +2086,21 @@ void S_DrawSparks()
 	float p[8];
 	long x, y, z, smallest_size, r, g, b, c0, c1;
 
+	/* The sparks between two ticks.
+	 *
+	 * UpdateSparks (game\effect2.cpp) settles the velocity and then steps
+	 * the position by it - `sptr->x += sptr->Xvel >> 5` - so the shift
+	 * below is exactly the step the last tick took and `x - step` is
+	 * exactly where the spark stood before it. No snapshot, no restore, and
+	 * the same instant as the bodies around it (game\interpolate_math.h,
+	 * InterpTrailLong).
+	 *
+	 * At thirty, and on the frame that carries the tick, `pa` is 1 and not
+	 * one of these lines runs. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	smallest_size = 0;	//uninitialized
 	tex.drawtype = 2;
 	tex.tpage = 0;
@@ -2000,7 +2127,27 @@ void S_DrawSparks()
 			y = sptr->y + fx->pos.y_pos;
 			z = sptr->z + fx->pos.z_pos;
 
-			if (sptr->sLife - sptr->Life > (GetRandomDraw() & 7) + 4)
+			/* A spark lets go of the thing it came off. Up to here the
+			 * spark's x/y/z are an offset from the effect that threw it;
+			 * past a random age it is written out as a world position and
+			 * the tie is cut. The threshold is rolled afresh on every drawn
+			 * frame, so at sixty it would be rolled twice per tick and
+			 * sparks would let go sooner on average. Nothing breaks either
+			 * way - it is a one-shot with a random time - but it is a rate,
+			 * so it belongs on the tick.
+			 *
+			 * One known inexactness, measured and left: at fps_mode 2 the
+			 * frame that carries the tick can still have a blend factor
+			 * below one, so the `fx->pos` this reads is the interpolated
+			 * effect position and the world position written below is out
+			 * by the part of the effect's step this frame has not reached -
+			 * at most one tick of a grenade's travel, once, on the single
+			 * frame a spark lets go. Nothing in the savegame and nothing in
+			 * the simulation reads spark[], the rate above is unaffected,
+			 * and the alternative is handing the draw a second copy of
+			 * every effect's live position. Written down rather than traded
+			 * for that. */
+			if (!InterpIsTweenFrame() && sptr->sLife - sptr->Life > (GetRandomDraw() & 7) + 4)
 			{
 				sptr->x = x;
 				sptr->y = y;
@@ -2041,7 +2188,9 @@ void S_DrawSparks()
 				y = sptr->y + pos.y;
 				z = sptr->z + pos.z;
 
-				if (sptr->sLife - sptr->Life > (GetRandomDraw() & 3) + 8)
+				// The same letting-go, for a spark hanging off a bone rather
+				// than off an effect - see the note a few lines above.
+				if (!InterpIsTweenFrame() && sptr->sLife - sptr->Life > (GetRandomDraw() & 3) + 8)
 				{
 					sptr->x = x;
 					sptr->y = y;
@@ -2061,6 +2210,35 @@ void S_DrawSparks()
 			x = sptr->x;
 			y = sptr->y;
 			z = sptr->z;
+		}
+
+		/* Applied to a thousand sparks at once, to the world position and
+		 * not to the spark's stored one, which matters for the two thirds
+		 * of the array that hang off an item or an effect: their x/y/z is
+		 * an offset from a body whose own position has already been
+		 * interpolated, and shifting the sum by the offset's own step is
+		 * the same number as blending both halves - the anchor is added to
+		 * either side identically. Doing it here also keeps the detach
+		 * above writing the live position, which is game state and must
+		 * not have a half-step in it. */
+		if (trail)
+		{
+			long sx = sptr->Xvel >> 5;
+			long sy = sptr->Yvel >> 5;
+			long sz = sptr->Zvel >> 5;
+
+			// The wind is part of the step for an outdoor spark, and it is
+			// added after the velocity in UpdateSparks.
+			if (sptr->Flags & SF_OUTSIDE)
+			{
+				sx += SmokeWindX >> 1;
+				sz += SmokeWindZ >> 1;
+			}
+
+			x = InterpTrailLong(x, sx, pa);
+			y = InterpTrailLong(y, sy, pa);
+			z = InterpTrailLong(z, sz, pa);
+			moved++;
 		}
 
 		fX = float(x - lara_item->pos.x_pos);
@@ -2151,6 +2329,7 @@ void S_DrawSparks()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_SPARK, moved);
 }
 
 void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
@@ -2278,6 +2457,16 @@ void S_DrawFireSparks(long size, long life)
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
+	/* The flames of every fire in the game. Same shape as the sparks -
+	 * UpdateFireSparks (game\tomb4fx.cpp) steps `x += Xvel >> 5` after the
+	 * velocity is settled - except that a fire spark's x/y/z is an offset
+	 * from the fire, in shorts, and is shifted down by the size before it
+	 * is projected. So the walk back has to happen first, on the offset
+	 * itself, and the shift then applies to what came out. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 20; i++)
 	{
 		sptr = &fire_spark[i];
@@ -2285,9 +2474,19 @@ void S_DrawFireSparks(long size, long life)
 		if (!sptr->On)
 			continue;
 
-		dx = sptr->x >> (2 - size);
-		dy = sptr->y >> (2 - size);
-		dz = sptr->z >> (2 - size);
+		if (trail)
+		{
+			dx = InterpTrailLong(sptr->x, sptr->Xvel >> 5, pa) >> (2 - size);
+			dy = InterpTrailLong(sptr->y, sptr->Yvel >> 5, pa) >> (2 - size);
+			dz = InterpTrailLong(sptr->z, sptr->Zvel >> 5, pa) >> (2 - size);
+			moved++;
+		}
+		else
+		{
+			dx = sptr->x >> (2 - size);
+			dy = sptr->y >> (2 - size);
+			dz = sptr->z >> (2 - size);
+		}
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 			continue;
@@ -2389,6 +2588,8 @@ void S_DrawFireSparks(long size, long life)
 		AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
 		AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
 	}
+
+	InterpNoteParticles(INTERP_PART_FIRE, moved);
 }
 
 void S_DrawSmokeSparks()
@@ -2414,6 +2615,13 @@ void S_DrawSmokeSparks()
 	is_mirror = 0;
 	sptr = &smoke_spark[0];
 
+	// The smoke, on the sparks' own step - see UpdateSmokeSparks
+	// (game\tomb4fx.cpp), which is UpdateSparks' twin down to the shift and
+	// the outdoor wind.
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		if (!sptr->On)
@@ -2427,12 +2635,38 @@ void S_DrawSmokeSparks()
 		else
 			is_mirror = 0;
 
-		dx = sptr->x - lara_item->pos.x_pos;
-		dy = sptr->y - lara_item->pos.y_pos;
-		dz = sptr->z - lara_item->pos.z_pos;
+		long px = sptr->x;
+		long py = sptr->y;
+		long pz = sptr->z;
+
+		if (trail)
+		{
+			long sx = sptr->Xvel >> 5;
+			long sy = sptr->Yvel >> 5;
+			long sz = sptr->Zvel >> 5;
+
+			if (sptr->Flags & SF_OUTSIDE)
+			{
+				sx += SmokeWindX >> 1;
+				sz += SmokeWindZ >> 1;
+			}
+
+			px = InterpTrailLong(px, sx, pa);
+			py = InterpTrailLong(py, sy, pa);
+			pz = InterpTrailLong(pz, sz, pa);
+
+			// A mirrored puff is the same puff drawn twice; it is counted
+			// where the array is walked, which is once.
+			if (!is_mirror)
+				moved++;
+		}
+
+		dx = px - lara_item->pos.x_pos;
+		dy = py - lara_item->pos.y_pos;
+		dz = pz - lara_item->pos.z_pos;
 
 		if (is_mirror)
-			dz = 2 * gfMirrorZPlane - lara_item->pos.z_pos - sptr->z;
+			dz = 2 * gfMirrorZPlane - lara_item->pos.z_pos - pz;
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
@@ -2541,6 +2775,7 @@ void S_DrawSmokeSparks()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_SMOKE, moved);
 }
 
 void DrawPsxTile(long x_y, long height_width, long color, long u0, long u1)
@@ -2644,6 +2879,21 @@ void DrawDebris()
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
+	/* The flying shards of a smashed object.
+	 *
+	 * UpdateDebris (game\debris.cpp) settles the fall speed and the drag and
+	 * then steps the position by them, so the three components below are
+	 * the step that was taken. Only the position is walked back: a shard
+	 * also tumbles, and its two rotations are unsigned bytes shifted up by
+	 * eight to make an angle, i.e. a turn of about one and a half degrees
+	 * per unit. Blending those as bytes would wrap the wrong way half the
+	 * time, and a shard that flies smoothly while spinning in thirty hertz
+	 * steps is not a picture anybody can pick apart at the speed these
+	 * things move. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 256; i++)
 	{
 		dptr = &debris[i];
@@ -2652,7 +2902,18 @@ void DrawDebris()
 			continue;
 
 		phd_PushMatrix();
-		phd_TranslateAbs(dptr->x, dptr->y, dptr->z);
+
+		if (trail)
+		{
+			phd_TranslateAbs(
+				InterpTrailLong(dptr->x, dptr->Speed * phd_sin(dptr->Dir) >> W2V_SHIFT, pa),
+				InterpTrailLong(dptr->y, dptr->Yvel >> 4, pa),
+				InterpTrailLong(dptr->z, dptr->Speed * phd_cos(dptr->Dir) >> W2V_SHIFT, pa));
+			moved++;
+		}
+		else
+			phd_TranslateAbs(dptr->x, dptr->y, dptr->z);
+
 		phd_RotY(dptr->YRot << 8);
 		phd_RotX(dptr->XRot << 8);
 
@@ -2751,6 +3012,8 @@ void DrawDebris()
 
 		tex->drawtype = drawbak;
 	}
+
+	InterpNoteParticles(INTERP_PART_DEBRIS, moved);
 }
 
 void DrawBlood()
@@ -2776,6 +3039,12 @@ void DrawBlood()
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
+	// UpdateBlood (game\tomb4fx.cpp) is the sparks' shape once more: gravity
+	// and friction first, `x += Xvel >> 5` second.
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		bptr = &blood[i];
@@ -2783,9 +3052,19 @@ void DrawBlood()
 		if (!bptr->On)
 			continue;
 
-		dx = bptr->x - lara_item->pos.x_pos;
-		dy = bptr->y - lara_item->pos.y_pos;
-		dz = bptr->z - lara_item->pos.z_pos;
+		if (trail)
+		{
+			dx = InterpTrailLong(bptr->x, bptr->Xvel >> 5, pa) - lara_item->pos.x_pos;
+			dy = InterpTrailLong(bptr->y, bptr->Yvel >> 5, pa) - lara_item->pos.y_pos;
+			dz = InterpTrailLong(bptr->z, bptr->Zvel >> 5, pa) - lara_item->pos.z_pos;
+			moved++;
+		}
+		else
+		{
+			dx = bptr->x - lara_item->pos.x_pos;
+			dy = bptr->y - lara_item->pos.y_pos;
+			dz = bptr->z - lara_item->pos.z_pos;
+		}
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 			continue;
@@ -2856,6 +3135,7 @@ void DrawBlood()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_BLOOD, moved);
 }
 
 void DrawDrips()
@@ -2881,6 +3161,17 @@ void DrawDrips()
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 
+	/* The waterfall and the ceiling drips.
+	 *
+	 * UpdateDrips (game\tomb4fx.cpp) blows an outdoor drip sideways by the
+	 * wind and drops it by `Yvel >> 5`, in that order and with the fall
+	 * speed already settled - so all three steps are exactly known. The
+	 * tail of the streak below is built from pos[] a few lines further down
+	 * and therefore follows the head without a second correction. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		drip = &Drips[i];
@@ -2891,6 +3182,16 @@ void DrawDrips()
 		pos[0] = drip->x - lara_item->pos.x_pos;
 		pos[1] = drip->y - lara_item->pos.y_pos;
 		pos[2] = drip->z - lara_item->pos.z_pos;
+
+		if (trail)
+		{
+			const bool outside = (room[drip->RoomNumber].flags & ROOM_NOT_INSIDE) != 0;
+
+			pos[0] = InterpTrailLong(pos[0], outside ? SmokeWindX >> 1 : 0, pa);
+			pos[1] = InterpTrailLong(pos[1], drip->Yvel >> 5, pa);
+			pos[2] = InterpTrailLong(pos[2], outside ? SmokeWindZ >> 1 : 0, pa);
+			moved++;
+		}
 
 		if (pos[0] < -0x5000 || pos[0] > 0x5000 || pos[1] < -0x5000 || pos[1] > 0x5000 || pos[2] < -0x5000 || pos[2] > 0x5000)
 			continue;
@@ -2970,6 +3271,7 @@ void DrawDrips()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_DRIP, moved);
 }
 
 void DoUwEffect()
@@ -2991,56 +3293,67 @@ void DoUwEffect()
 	v = aVertexBuffer;
 	num_alive = 0;
 
-	for (int i = 0; i < 256; i++)
+	/* The underwater dust is a third kind of weather. Same shape as the
+	 * rain and the snow - the loop below spawns motes around Lara, drifts
+	 * them (`p->x += p->xv`) and ages them (`p->life--`), the loop after it
+	 * draws them - and the same doubling at sixty if it is not guarded: the
+	 * dust would drift twice as fast through every flooded room in the
+	 * game. */
+	if (!InterpIsTweenFrame())
 	{
-		p = &uwdust[i];
+		InterpNoteStep(INTERP_STEP_WEATHER);
 
-		if (!p->x && num_alive < 16)
+		for (int i = 0; i < 256; i++)
 		{
-			num_alive++;
-			rad = GetRandomDraw() & 0xFFF;
-			ang = GetRandomDraw() & 0x1FFE;
-			x = (rad * rcossin_tbl[ang]) >> (W2V_SHIFT - 2);
-			y = (GetRandomDraw() & 0x7FF) - 1024;
-			z = (rad * rcossin_tbl[ang + 1]) >> (W2V_SHIFT - 2);
-			p->x = lara_item->pos.x_pos + x;
-			p->y = lara_item->pos.y_pos + y;
-			p->z = lara_item->pos.z_pos + z;
+			p = &uwdust[i];
 
-			if (IsRoomOutside(p->x, p->y, p->z) < 0 || !(room[IsRoomOutsideNo].flags & ROOM_UNDERWATER))
+			if (!p->x && num_alive < 16)
+			{
+				num_alive++;
+				rad = GetRandomDraw() & 0xFFF;
+				ang = GetRandomDraw() & 0x1FFE;
+				x = (rad * rcossin_tbl[ang]) >> (W2V_SHIFT - 2);
+				y = (GetRandomDraw() & 0x7FF) - 1024;
+				z = (rad * rcossin_tbl[ang + 1]) >> (W2V_SHIFT - 2);
+				p->x = lara_item->pos.x_pos + x;
+				p->y = lara_item->pos.y_pos + y;
+				p->z = lara_item->pos.z_pos + z;
+
+				if (IsRoomOutside(p->x, p->y, p->z) < 0 || !(room[IsRoomOutsideNo].flags & ROOM_UNDERWATER))
+				{
+					p->x = 0;
+					continue;
+				}
+
+				p->stopped = 1;
+				p->life = (GetRandomDraw() & 7) + 16;
+				p->xv = GetRandomDraw() & 3;
+
+				if (p->xv == 2)
+					p->xv = -1;
+
+				p->yv = ((GetRandomDraw() & 7) + 8) << 3;
+				p->zv = GetRandomDraw() & 3;
+
+				if (p->zv == 2)
+					p->zv = -1;
+			}
+
+			p->x += p->xv;
+			p->y += (p->yv & ~7) >> 6;
+			p->z += p->zv;
+
+			if (!p->life)
 			{
 				p->x = 0;
 				continue;
 			}
 
-			p->stopped = 1;
-			p->life = (GetRandomDraw() & 7) + 16;
-			p->xv = GetRandomDraw() & 3;
+			p->life--;
 
-			if (p->xv == 2)
-				p->xv = -1;
-
-			p->yv = ((GetRandomDraw() & 7) + 8) << 3;
-			p->zv = GetRandomDraw() & 3;
-
-			if (p->zv == 2)
-				p->zv = -1;
+			if ((p->yv & 7) < 7)
+				p->yv++;
 		}
-
-		p->x += p->xv;
-		p->y += (p->yv & ~7) >> 6;
-		p->z += p->zv;
-
-		if (!p->life)
-		{
-			p->x = 0;
-			continue;
-		}
-
-		p->life--;
-
-		if ((p->yv & 7) < 7)
-			p->yv++;
 	}
 
 	if (tomb5.uw_dust == 2)
@@ -3054,6 +3367,19 @@ void DoUwEffect()
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 
+	/* The motes drift by `p->x += p->xv` and sink by `(p->yv & ~7) >> 6`,
+	 * which is one or two units a tick - so what this buys is small, and it
+	 * is here because the dust is the one thing on screen in a flooded room
+	 * and a mote that stands still for one frame in two is exactly what an
+	 * eye picks out of an otherwise smooth picture.
+	 *
+	 * The sink is a quantised reading of yv and yv is stepped after the
+	 * move, so the walk back is a unit out on the tick where yv crosses a
+	 * multiple of eight. One unit, on a mote four pixels wide. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 256; i++)
 	{
 		p = &uwdust[i];
@@ -3064,6 +3390,14 @@ void DoUwEffect()
 		x = p->x - lara_item->pos.x_pos;
 		y = p->y - lara_item->pos.y_pos;
 		z = p->z - lara_item->pos.z_pos;
+
+		if (trail)
+		{
+			x = InterpTrailLong(x, p->xv, pa);
+			y = InterpTrailLong(y, (p->yv & ~7) >> 6, pa);
+			z = InterpTrailLong(z, p->zv, pa);
+			moved++;
+		}
 		offsets[0] = x;
 		offsets[1] = y;
 		offsets[2] = z;
@@ -3138,6 +3472,7 @@ void DoUwEffect()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_DUST, moved);
 }
 
 void DrawBubbles()
@@ -3272,6 +3607,18 @@ void DrawShockwaves()
 	sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index + 8];
 	offsets = (long*)&tsv_buffer[1024];
 
+	/* A shockwave has no velocity, but its radius does.
+	 *
+	 * The ring stands still and grows: UpdateShockwaves (game\tomb4fx.cpp)
+	 * does `OuterRad += Speed; InnerRad += Speed >> 1;` and only then decays
+	 * the speed, so the two radii walk back exactly like a position does.
+	 * That is the whole of the movement in this effect - a ring expanding
+	 * in thirty hertz steps under a sixty hertz picture is the most obvious
+	 * stutter left in the game after the weather. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 16; i++)
 	{
 		wave = &ShockWaves[i];
@@ -3287,7 +3634,10 @@ void DrawShockwaves()
 		offsets[1] = 0;
 		offsets[5] = 0;
 		offsets[9] = 0;
-		rad = wave->OuterRad;
+		rad = trail ? (short)InterpTrailLong(wave->OuterRad, wave->Speed, pa) : wave->OuterRad;
+
+		if (trail)
+			moved++;
 
 		for (int j = 0; j < 2; j++)
 		{
@@ -3337,7 +3687,8 @@ void DrawShockwaves()
 				Z += 3;
 			}
 
-			rad = wave->InnerRad;
+			rad = trail ? (short)InterpTrailLong(wave->InnerRad, wave->Speed >> 1, pa)
+				: wave->InnerRad;
 		}
 
 		phd_PopMatrix();
@@ -3394,8 +3745,19 @@ void DrawShockwaves()
 			Z++;
 		}
 	}
+
+	InterpNoteParticles(INTERP_PART_SHOCKWAVE, moved);
 }
 
+/* The lightning is left at thirty, and it is not an oversight.
+ *
+ * UpdateLightning (game\tomb4fx.cpp) does not move its segments; it
+ * re-rolls them out of the random generator on every tick. There is
+ * nothing between two of them to be halfway between - a bolt's previous
+ * shape is not a neighbour of its current one, it is a different bolt -
+ * and blending them would draw a shape the game never draws at thirty,
+ * which is the one thing interpolation must never do. So the flicker
+ * keeps its thirty hertz, which is what a flicker is. */
 void DrawLightning()
 {
 	LIGHTNING_STRUCT* l;
@@ -3411,8 +3773,26 @@ void DrawLightning()
 	float mx, my, mz, zv, size, size2, step, s, c, uAdd;
 	long r1, r2, r3, col, r, g, b, lp;
 	static long rand = 0xD371F947;
+	static long randTickStart = 0xD371F947;
 	short clip[32];
 	short clipFlag;
+
+	/* The bolt's jitter is a frame rate.
+	 *
+	 * The shape of every electric bolt in the game is regenerated from
+	 * scratch on each drawn frame: `rand` is a private generator of this
+	 * function, it is walked once per bolt segment to shake the curve, and
+	 * what it ends on is kept for the next frame. That is what makes
+	 * lightning look alive - and at sixty it would shake twice as fast.
+	 *
+	 * So the in-between frame is given back the value the live frame
+	 * before it started from, and therefore draws exactly the same bolt.
+	 * Not one line of the generator below changes. At fps_mode 0 this is
+	 * `randTickStart = rand` on every call and nothing else. */
+	if (InterpIsTweenFrame())
+		rand = randTickStart;
+	else
+		randTickStart = rand;
 
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
@@ -4937,8 +5317,19 @@ void S_DrawFloorLasers(ITEM_INFO* item)
 			vtx->y = (float)y;
 			vtx->z = (float)z;
 
+			/* The water-contact pulse is rolled per drawn frame and it is
+			 * rolled out of the logic generator, so at sixty it would
+			 * flicker at double speed and take twice as much of the
+			 * simulation's random stream per tick. The value is kept in
+			 * laser->Pulse, so the in-between frame simply draws the one
+			 * the tick produced. (The `else` branch below is safe already -
+			 * it is a sine of GlobalCounter, which steps on the tick, and
+			 * comes out the same on both frames.) */
 			if (item->trigger_flags)
-				*pulse = (GetRandomControl() & item->trigger_flags) << 1;	//contact with water, pulse randomly
+			{
+				if (!InterpIsTweenFrame())
+					*pulse = (GetRandomControl() & item->trigger_flags) << 1;	//contact with water, pulse randomly
+			}
 			else
 			{
 				f = *rand + (GlobalCounter << 9);
@@ -5282,14 +5673,30 @@ void DrawGasCloud(ITEM_INFO* item)
 
 	TriggerFogBulbFX(0, 196, 0, item->pos.x_pos, long(item->pos.y_pos + cloud->yo), item->pos.z_pos, 2048, 40);
 
+	/* The gas cloud animates itself from the draw.
+	 *
+	 * Three counters live in the cloud's own struct and all three step
+	 * once per drawn frame: yo is how far it has risen, sTime drives the
+	 * wandering secondary puff and mTime is its age. At sixty the cloud
+	 * would climb and pulse at twice the speed. Only the steps are guarded
+	 * - the fog bulbs are triggered on every frame, or the cloud would
+	 * flicker in and out at thirty hertz inside a sixty hertz picture. */
+	const bool cloudTween = InterpIsTweenFrame();
+
 	if (cloud->yo < -3584.0F)
-		cloud->yo += 12.0F;
+	{
+		if (!cloudTween)
+			cloud->yo += 12.0F;
+	}
 	else
 	{
 		if (cloud->sTime == 32)
 		{
-			do num = rand() & 7; while (num == cloud->num);
-			cloud->num = num;
+			if (!cloudTween)
+			{
+				do num = rand() & 7; while (num == cloud->num);
+				cloud->num = num;
+			}
 		}
 		else if (cloud->sTime > 32)
 		{
@@ -5299,7 +5706,7 @@ void DrawGasCloud(ITEM_INFO* item)
 			{
 				num = 256 - num;
 
-				if (!num)
+				if (!num && !cloudTween)
 					cloud->sTime = 0;
 			}
 
@@ -5312,10 +5719,12 @@ void DrawGasCloud(ITEM_INFO* item)
 			TriggerFogBulbFX(0, 196, 0, item->pos.x_pos + sec->t.x, item->pos.y_pos + sec->t.y, item->pos.z_pos + sec->t.z, 1536, num);
 		}
 
-		cloud->sTime++;
+		if (!cloudTween)
+			cloud->sTime++;
 	}
 
-	cloud->mTime++;
+	if (!cloudTween)
+		cloud->mTime++;
 
 	for (int i = 0; i < 8; i++, cloud++)
 		S_DrawGasCloud(item, cloud);
@@ -5560,7 +5969,28 @@ void DrawStars()
 		fz = star->pos.z;
 		col = star->col;
 
-		if (GlobalCounter & 1)
+		/* The star twinkle, and the one find that would have moved the
+		 * game itself.
+		 *
+		 * Two things are wrong with this block at sixty and only the first
+		 * of them is cosmetic. Cosmetic: `star->col` is written back, so
+		 * the twinkle is state and unguarded it would change twice per
+		 * tick - the whole sky would shimmer at double speed. Not
+		 * cosmetic: it calls GetRandomControl, which is the simulation's
+		 * generator and not the draw's, twice for each of two thousand
+		 * stars. That is four thousand draws out of the logic stream on
+		 * every drawn frame, and at sixty the stream would run twice as
+		 * far per tick - two runs of the same level with the same input
+		 * would diverge between the frame rates.
+		 *
+		 * This is not the only place the draw takes from the logic stream:
+		 * the floor lasers, the enemy muzzle flash, the steel door's lens
+		 * flare and the cutscene speech head all do the same.
+		 * game\interpolate.cpp rolls rand_1 back over an in-between frame,
+		 * which covers all of them; this guard is here as well because of
+		 * the write-back, and because the twinkle rate is itself a thing
+		 * the eye can see. */
+		if ((GlobalCounter & 1) && !InterpIsTweenFrame())
 		{
 			r = CLRR(col);
 			g = CLRG(col);

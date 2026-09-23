@@ -34,6 +34,8 @@
 #include "fmv.h"
 #include "../game/newinv2.h"
 #include "../game/control.h"
+#include "../game/menu_frame.h"	// the options menu, one table-driven frame for every page
+#include "../game/key_scheme.h"	// KeySchemeConflicts - the conflict rule, as arithmetic
 #include "3dmath.h"
 #include "../tomb5/troyestuff.h"
 #include "../tomb5/tomb5.h"
@@ -75,25 +77,17 @@ static const char* screen_paths[5] =
 	"SCREENS\\SCREENS.STR"
 };
 
+/* The conflict-marking double loop lives in game\key_scheme.h now, so
+ * MenuTest can call it too; it compares against the ACTIVE scheme's default
+ * row rather than layout[0] - which for Tank IS layout[0], so the result is
+ * unchanged there.
+ *
+ * The third argument lets the Secondary slot claim a key only while that role
+ * is live. The fourth does the same for the five cheat roles: with Cheats off
+ * they are not offered and nothing reads them. See KeySchemeConflicts. */
 void CheckKeyConflicts()
 {
-	short key;
-
-	for (int i = 0; i < 18; i++)
-	{
-		key = layout[0][i];
-
-		conflict[i] = 0;
-
-		for (int j = 0; j < 18; j++)
-		{
-			if (key == layout[1][j])
-			{
-				conflict[i] = 1;
-				break;
-			}
-		}
-	}
+	KeySchemeConflicts(layout[1], KeyDefaultRow(), conflict, tomb5.action_split ? 1 : 0, tomb5.enable_cheats ? 1 : 0);
 }
 
 void DisplayStatsUCunt()
@@ -310,703 +304,85 @@ long GetCampaignCheatValue()
 	return jump;
 }
 
+/* The options menu is a table now, driven from game\menu_frame.cpp. Each page
+ * is a row table walked and drawn by one shared piece of code, in place of a
+ * `menu` state of 0/1/100/200/201, a one-hot cursor bit mask, a separate
+ * hand-written cursor walk per page, and a Controls page that shrank the
+ * global font_height to fit its rows. This function stays the entry point,
+ * called from the title screen (game\gameflow.cpp) and from the pause menu
+ * (S_DisplayPauseMenu, below).
+ */
 void DoOptions()
 {
-	const char** keyboard_buttons;
-	static long menu;	//0: options, 1: controls, 100: special features, 200: tomb5 options, 201: credits
-	static ulong sel = 1;	//selection
-	static ulong last_sel;
-	static ulong sel2;		//selection for when mapping keys
-	static long mSliderCol = 0x3F3F3F;
-	static long sSliderCol = 0x3F3F3F;
-	static long sfx_bak;
-	static long sfx_quality_bak;
-	static long sfx_breath_db = -1;
-	ulong nMask;
-	long f, y, i, SFMask, jread, jx, jy, lp, lp2;
-	const char* text;
-	char buf[256];
-	static char sfx_backup_flag;	//have we backed sfx stuff up?
-	static bool waiting_for_key = 0;
-	static bool action_still_held = 0;	// the action button still pinned the row selection when waiting_for_key was entered
-	// The reset position of the method row is a MENU ACTION, not an input
-	// mode: ControlMethod stays untouched while paging. The old
-	// ControlMethod=2 switched off ALL pad processing (everything hangs on
-	// "ControlMethod == 1") - on the reset position the controller was
-	// thereby systemically dead, only the keyboard came back.
-	static bool reset_row = 0;
+	MenuFrameRun();
+}
 
-	if (!(sfx_backup_flag & 1))
-	{
-		sfx_backup_flag |= 1;
-		sfx_bak = SFXVolume;
-	}
-
-	if (!(sfx_backup_flag & 2))
-	{
-		sfx_backup_flag |= 2;
-		sfx_quality_bak = SoundQuality;
-	}
+/* The special features page stays as it was: it reads three file-statics of
+ * this file (SpecialFeaturesPage, NumSpecialFeatures, SpecialFeaturesNum),
+ * unchanged. It is a page of the table-driven menu like any other, only its
+ * inside logic remains its own. Returns 1 once the player has left it, and
+ * the frame then walks back to the Options page and puts the cursor on the
+ * row that opened this one.
+ */
+long SpecialFeaturesPageRun()
+{
+	static ulong sel = 1;
+	long f;
 
 	f = font_height - 4;
 
-	if (menu == 1)	//controls menu
+	PrintString(phd_centerx, f + 3 * font_height, 6, SCRIPT_TEXT(TXT_Special_Features), FF_CENTER);
+	PrintString(phd_centerx, f + 5 * font_height, SpecialFeaturesPage[0] ? (sel & 1 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_1), FF_CENTER);
+	PrintString(phd_centerx, f + 6 * font_height, SpecialFeaturesPage[1] ? (sel & 2 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Next_Generation_Concept), FF_CENTER);
+	PrintString(phd_centerx, f + 7 * font_height, SpecialFeaturesPage[2] ? (sel & 4 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_2), FF_CENTER);
+	PrintString(phd_centerx, f + 8 * font_height, SpecialFeaturesPage[3] ? (sel & 8 ? 1 : 2) : 3, (char*)CustomText("Gallery"), FF_CENTER);
+
+	if (NumSpecialFeatures)
 	{
-		if (Gameflow->Language == 2)
-			keyboard_buttons = GermanKeyboard;
-		else
-			keyboard_buttons = KeyboardButtons;
-
-		if (reset_row)
-			nMask = 1;	// only the Method row itself can be selected
-		else if (ControlMethod == 1)
-			nMask = 16;	// 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
-		else
-			nMask = 17;
-
-		PrintString(phd_centerx >> 2, font_height, sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Method), 0);
-
-		font_height = GetFixedScale(27);
-
-		if (!ControlMethod)
-		{
-			y = 2;
-			i = 1;
-
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x18", 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x1A", 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x19", 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "\x1B", 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Duck), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Dash), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Walk), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Jump), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Action), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Draw_Weapon), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Use_Flare), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Look), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Roll), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Inventory), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Step_Left), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Step_Right), 0);
-
-			y = 2;
-			i = 1;
-
-			for (lp = 0; lp < 16; lp++)
-			{
-				text = (waiting_for_key && (sel2 & (1 << i))) ? SCRIPT_TEXT(TXT_Waiting) : keyboard_buttons[layout[1][lp]];
-				PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, sel2 & (1 << i++) ? 1 : 6, text, 0);
-			}
-		}
-
-		if (ControlMethod == 1)
-		{
-			y = 3;
-			i = 1;
-
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Duck), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Dash), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Walk), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Jump), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Action), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Draw_Weapon), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Use_Flare), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Look), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Roll), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Inventory), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Pause"), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Save), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Load), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Small_Medipack), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Large_Medipack), 0);
-
-			// The keyboard-equivalent-key hints that used to be printed here (one
-			// column further right, e.g. "(Space)" next to "Jump") were removed -
-			// they cluttered/overlapped the joystick binding names next to them
-			// (worst with the longer "Stick R Left/Right" labels) and this screen
-			// is specifically for joystick bindings, so a keyboard hint isn't
-			// actually useful here.
-
-			y = 3;
-			i = 1;
-
-			for (lp = 0; lp < 15; lp++)
-			{
-				if (waiting_for_key && (sel2 & (1 << i)))
-					text = SCRIPT_TEXT(TXT_Waiting);
-				else if (jLayout[lp] == -1)
-					text = "---";
-				else
-					text = JoyButtonName(jLayout[lp]);
-				PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, (waiting_for_key && (sel & (1 << i++))) ? 1 : 6, text, 0);
-			}
-		}
-
-		font_height = default_font_height;
-
-		if (reset_row)
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Reset), 0);
-		else if (!ControlMethod)
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Keyboard), 0);
-		else if (ControlMethod == 1)
-		{
-			// The joystick row carries the chosen page's name. The page
-			// only changes the DISPLAY of the button names (and the
-			// defaults on reset) - the bit order comes from the active
-			// input path, see input.cpp.
-			switch (ActiveJoyStyle())
-			{
-			case JOYSTYLE_PS5:
-				text = (char*)"PS5 Controller";
-				break;
-			case JOYSTYLE_XBOX:
-				text = (char*)"Xbox Controller";
-				break;
-			default:
-				text = SCRIPT_TEXT(TXT_Joystick);
-				break;
-			}
-
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, text, 0);
-		}
-
-		if (!reset_row && !waiting_for_key)
-		{
-			if (dbinput & IN_FORWARD)
-			{
-				SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
-				sel >>= 1;
-			}
-
-			if (dbinput & IN_BACK)
-			{
-				SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
-				sel <<= 1;
-			}
-		}
-
-		if (waiting_for_key)
-		{
-			i = 0;
-
-			if (keymap[DIK_ESCAPE])
-			{
-				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-				sel2 = 0;
-				dbinput = 0;
-				waiting_for_key = 0;
-				return;
-			}
-
-			if (!ControlMethod)
-			{
-				for (lp = 0; lp < 255; lp++)
-				{
-					if (keymap[lp] && keyboard_buttons[lp])
-					{
-						if (lp != DIK_RETURN && lp != DIK_LEFT && lp != DIK_RIGHT && lp != DIK_UP && lp != DIK_DOWN)
-						{
-							waiting_for_key = 0;
-
-							sel2 >>= 2;
-
-							while (sel2)
-							{
-								i++;
-								sel2 >>= 1;
-							}
-
-							sel2 = 0;
-							layout[1][i] = (short)lp;
-						}
-					}
-				}
-			}
-
-			if (ControlMethod == 1)
-			{
-				jread = ReadJoystick(jx, jy);
-
-				// Drop the hold guard as soon as the button is actually up, and
-				// check that on EVERY frame of the wait.
-				//
-				// It used to sit inside "if (jread)" below - and jread is zero
-				// exactly when the user lets go. So the release was never seen,
-				// action_still_held stayed armed for good, and the Action button
-				// could no longer be bound to itself at all: the row went into
-				// Waiting and stayed there, whatever you pressed (reported in
-				// game). The guard against the press that OPENED the wait is
-				// still right; it just has to end when that press does.
-				if (!Key(jLayout[4] + 256))
-					action_still_held = 0;
-
-				if (jread)
-				{
-					lp = sel >> 2;
-					lp2 = 0;
-					i = 0;
-
-					while (lp)
-					{
-						lp >>= 1;
-						i++;
-					}
-
-					lp = jread >> 1;
-
-					while (lp)
-					{
-						lp >>= 1;
-						lp2++;
-					}
-
-					// Ignore the button currently bound to Action/Select (jLayout[4]) -
-					// it's what the user just pressed to select this row and enter
-					// waiting_for_key in the first place, and is very likely still
-					// physically held on this very next frame (dbinput's edge-detect
-					// only guards the *selection* press, not this capture read, which
-					// reads the raw, non-debounced joystick state). Without this, that
-					// same still-held press immediately re-captures itself as the new
-					// bind before the user can press anything else - this is the exact
-					// joystick equivalent of the keyboard capture loop below excluding
-					// DIK_RETURN for the same reason.
-					// The guard is armed only while that selection press is still
-					// physically down (action_still_held); it is dropped above, the
-					// moment the button is really up.
-					if (lp2 != jLayout[4] || !action_still_held)
-					{
-						jLayout[i] = lp2;
-
-						// If another action already used this same button/stick-direction,
-						// unbind it (jLayout entries have no "empty" state otherwise, so -1
-						// marks unbound - see Key()'s explicit check for the encoded value
-						// 255, and JoystickButtons' NULL check below).
-						for (int k = 0; k < 15; k++)
-							if (k != i && jLayout[k] == lp2)
-								jLayout[k] = -1;
-
-						waiting_for_key = 0;
-					}
-				}
-			}
-
-			CheckKeyConflicts();
-			dbinput = 0;
-		}
-
-		if (dbinput & IN_SELECT && sel > 1 && !reset_row)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			sel2 = sel;
-			waiting_for_key = 1;
-			// The hold guard below (do not immediately capture the action
-			// button as the new binding) only applies when the row was
-			// REALLY selected with the pad button. If the selection came
-			// from the keyboard (Enter), the guard used to PERMANENTLY
-			// block any attempt to bind the action button itself - only
-			// Esc got you out (the Xbox tester's finding).
-			action_still_held = ControlMethod == 1 && Key(jLayout[4] + 256);
-			memset(keymap, 0, sizeof(keymap));
-		}
-
-		if (dbinput & IN_SELECT && (sel & 1) && reset_row)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, 2);
-			memcpy(layout[1], layout, 72);
-			ApplyJoyDefaults();	// defaults matching page AND input path (input.cpp) - before, a fixed table in DualSense bit order, nonsense on Xbox pads
-			// ControlMethod stays what it was (the original jumped hard
-			// back to keyboard - for a controller user that meant: pad
-			// dead after the reset). The row shows the method again.
-			reset_row = 0;
-		}
-
-		if (sel & 1)
-		{
-			// Five visible positions: keyboard, PS5 controller, Xbox
-			// controller, joystick (generic), reset. Internally
-			// ControlMethod stays 0/1 (keyboard/joystick) - the three
-			// controller positions are method 1 with JoyStyle 0/1/2, so
-			// every existing "ControlMethod == 1" check in the game keeps
-			// running unchanged. The reset position is only the local
-			// reset_row flag (see above) and leaves the method - and with
-			// it the pad - alone.
-			long pos, padStep;
-
-			if (reset_row)
-				pos = 4;
-			else if (!ControlMethod)
-				pos = 0;
-			else
-				pos = 1 + ActiveJoyStyle();
-
-			// On the keyboard page the pad delivers no direction bits at all -
-			// every use of the stick in input.cpp hangs on ControlMethod - so
-			// whoever paged over here with the controller could not page back
-			// with it, and only the arrow keys still worked. This row IS the
-			// setting, which makes it a trap: the pad cannot undo what the pad
-			// just did.
-			//
-			// So the stick is read directly here - on BOTH pages, not only the
-			// keyboard one. It has to be both, or one deflection counts twice:
-			// JoyMenuStep takes the step on the keyboard page, ControlMethod
-			// flips to the pad, and in the next frame the direction still being
-			// held reaches dbinput for the first time, which its edge detection
-			// reads as a fresh press. One push, two pages (seen in game).
-			//
-			// While the stick is deflected the step therefore belongs to
-			// JoyMenuStep alone and dbinput is ignored on this row. The arrow
-			// keys keep working through dbinput whenever the stick rests.
-			padStep = JoyMenuStep();
-
-			if ((dbinput & IN_LEFT && !JoyMenuDeflected()) || padStep < 0)
-			{
-				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-				pos--;
-			}
-
-			if ((dbinput & IN_RIGHT && !JoyMenuDeflected()) || padStep > 0)
-			{
-				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-				pos++;
-			}
-
-			if (pos > 4)
-				pos = 4;
-
-			if (pos < 0)
-				pos = 0;
-
-			reset_row = pos == 4;
-
-			if (!pos)
-				ControlMethod = 0;
-			else if (pos < 4)
-			{
-				ControlMethod = 1;
-				JoyStyle = pos - 1;	// an explicit choice from now on, not automatic
-			}
-		}
-
-		if (!sel)
-			sel = 1;
-
-		if (sel > ulong(1 << (nMask - 1)))
-			sel = 1 << (nMask - 1);
-
-		if (dbinput & IN_DESELECT)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-
-			if (reset_row)
-				reset_row = 0;	// back from the reset position: onto the method first, not straight out of the menu
-			else
-				menu = 0;
-
-			dbinput = 0;
-			sel = 1;
-		}
-	}
-	else if (menu == 100)	//special features
-	{
-		PrintString(phd_centerx, f + 3 * font_height, 6, SCRIPT_TEXT(TXT_Special_Features), FF_CENTER);
-		PrintString(phd_centerx, f + 5 * font_height, SpecialFeaturesPage[0] ? (sel & 1 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_1), FF_CENTER);
-		PrintString(phd_centerx, f + 6 * font_height, SpecialFeaturesPage[1] ? (sel & 2 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Next_Generation_Concept), FF_CENTER);
-		PrintString(phd_centerx, f + 7 * font_height, SpecialFeaturesPage[2] ? (sel & 4 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_2), FF_CENTER);
-		PrintString(phd_centerx, f + 8 * font_height, SpecialFeaturesPage[3] ? (sel & 8 ? 1 : 2) : 3, (char*)CustomText("Gallery"), FF_CENTER);
-
-		if (NumSpecialFeatures)
-		{
-			if (dbinput & IN_FORWARD)
-			{
-				SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
-				sel = FindSFCursor(1, sel);
-			}
-
-			if (dbinput & IN_BACK)
-			{
-				SoundEffect(SFX_MENU_CHOOSE, 0, 2);
-				sel = FindSFCursor(2, sel);
-			}
-
-			if (!sel)
-				sel = 1;
-			else if (sel > 8)
-				sel = 8;
-
-			if (dbinput & IN_SELECT)
-			{
-				if (sel & 1)
-					SpecialFeaturesNum = 0;
-
-				if (sel & 2)
-					SpecialFeaturesNum = 1;
-
-				if (sel & 4)
-					SpecialFeaturesNum = 2;
-
-				if (sel & 8)
-					SpecialFeaturesNum = 3;
-
-				if (sel & 0x10)
-					SpecialFeaturesNum = 4;
-			}
-		}
-
-		if (dbinput & IN_DESELECT)
-		{
-			menu = 0;
-			sel = last_sel;
-			dbinput &= ~IN_DESELECT;
-		}
-	}
-	else if (menu == 0)	//main options menu
-	{
-		f= 3 * font_height;
-		nMask = 8;	// + Language row + Credits
-		PrintString(phd_centerx, 3 * font_height, 6, SCRIPT_TEXT(TXT_Options), FF_CENTER);
-		PrintString(phd_centerx, f + font_height + (font_height >> 1), sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Configuration), FF_CENTER);
-		PrintString(phd_centerx >> 2, f + 3 * font_height, sel & 2 ? 1 : 2, SCRIPT_TEXT(TXT_Music_Volume), 0);
-		PrintString(phd_centerx >> 2, f + 4 * font_height, sel & 4 ? 1 : 2, SCRIPT_TEXT(TXT_SFX_Volume), 0);
-		PrintString(phd_centerx >> 2, f + 5 * font_height, sel & 8 ? 1 : 2, SCRIPT_TEXT(TXT_Sound_Quality), 0);
-		PrintString(phd_centerx >> 2, f + 6 * font_height, sel & 0x10 ? 1 : 2, SCRIPT_TEXT(TXT_Targeting), 0);
-		DoSlider(400, f + 3 * font_height + 4 - (font_height >> 1), 200, 16, MusicVolume, 0x1F1F1F, 0x3F3FFF, mSliderCol);
-		DoSlider(400, f + 4 * font_height + 4 - (font_height >> 1), 200, 16, SFXVolume, 0x1F1F1F, 0x3F3FFF, sSliderCol);
-
-		switch (SoundQuality)
-		{
-		case 0:
-			strcpy(buf, SCRIPT_TEXT(TXT_Low));
-			break;
-
-		case 1:
-			strcpy(buf, SCRIPT_TEXT(TXT_Medium));
-			break;
-
-		case 2:
-			strcpy(buf, SCRIPT_TEXT(TXT_High));
-			break;
-		}
-
-		PrintString(phd_centerx + (phd_centerx >> 2), f + 5 * font_height, sel & 8 ? 1 : 6, buf, 0);
-
-		if (App.AutoTarget)
-			strcpy(buf, SCRIPT_TEXT(TXT_Automatic));
-		else
-			strcpy(buf, SCRIPT_TEXT(TXT_Manual));
-
-		PrintString(phd_centerx + (phd_centerx >> 2), f + 6 * font_height, sel & 0x10 ? 1 : 6, buf, 0);
-
-		// Language choice: switches live to another of the language files
-		// lying next to the EXE (gameflow.cpp). "Language" has no string ID
-		// in the language wad, hence a literal - like "tomb5 options" below.
-		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, (char*)CustomText("Language"), 0);
-		PrintString(phd_centerx + (phd_centerx >> 2), f + 7 * font_height, sel & 0x20 ? 1 : 6, (char*)LanguageName(Gameflow->Language), 0);
-
-		SFMask = 0x40;
-
-		if (gfGameMode == 1)
-		{
-			nMask = 9;
-			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, SCRIPT_TEXT(TXT_Special_Features), FF_CENTER);
-		}
-		else
-			SFMask = 0;
-
-		if (SFMask)
-		{
-			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)CustomText("tomb5 options"), FF_CENTER);
-			PrintString(phd_centerx, (font_height >> 1) + f + 10 * font_height, sel & 0x100 ? 1 : 2, (char*)CustomText("Credits"), FF_CENTER);
-		}
-		else
-		{
-			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, (char*)CustomText("tomb5 options"), FF_CENTER);
-			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)CustomText("Credits"), FF_CENTER);
-		}
-
 		if (dbinput & IN_FORWARD)
 		{
 			SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
-			sel >>= 1;
+			sel = FindSFCursor(1, sel);
 		}
 
 		if (dbinput & IN_BACK)
 		{
-			SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
-			sel <<= 1;
-		}
-
-		if (dbinput & IN_SELECT && sel & 1)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			menu = 1;
-		}
-
-		i = !SFMask ? 0x40 : 0x80;	// the "tomb5 options" bit, shifted by the Language row
-
-		if (dbinput & IN_SELECT && sel & (ulong)i)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			last_sel = sel;
-			sel = 1;
-			TroyeMenuPage(0);	// always start on the first page
-			menu = 200;
-		}
-
-		// Credits (#33 addendum, user wish): its own row right under
-		// "tomb5 options" - as the tomb5 menu's third page alone it was
-		// too hidden. Its OWN screen (menu 201), not a page of the tomb5
-		// options: as a page it turned up while paging through the
-		// settings and the paging arrows were drawn across its text.
-		i = !SFMask ? 0x80 : 0x100;
-
-		if (dbinput & IN_SELECT && sel & (ulong)i)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			last_sel = sel;
-			menu = 201;
+			SoundEffect(SFX_MENU_CHOOSE, 0, 2);
+			sel = FindSFCursor(2, sel);
 		}
 
 		if (!sel)
 			sel = 1;
+		else if (sel > 8)
+			sel = 8;
 
-		if (sel > ulong(1 << (nMask - 1)))
-			sel = 1 << (nMask - 1);
-
-		mSliderCol = 0x3F3F3F;
-		sSliderCol = 0x3F3F3F;
-
-		if (sel & 2)
+		if (dbinput & IN_SELECT)
 		{
-			sfx_bak = SFXVolume;
+			if (sel & 1)
+				SpecialFeaturesNum = 0;
 
-			if (input & IN_LEFT || keymap[DIK_LEFT])
-				MusicVolume--;
+			if (sel & 2)
+				SpecialFeaturesNum = 1;
 
-			if (input & IN_RIGHT || keymap[DIK_RIGHT])
-				MusicVolume++;
+			if (sel & 4)
+				SpecialFeaturesNum = 2;
 
-			if (MusicVolume > 100)
-				MusicVolume = 100;
+			if (sel & 8)
+				SpecialFeaturesNum = 3;
 
-			if (MusicVolume < 0)
-				MusicVolume = 0;
-
-			sSliderCol = 0x3F3F3F;
-			mSliderCol = 0x7F7F7F;
-			ACMSetVolume();
-		}
-		else if (sel & 4)
-		{
-			if (input & IN_LEFT || keymap[DIK_LEFT])
-				SFXVolume--;
-
-			if (input & IN_RIGHT || keymap[DIK_RIGHT])
-				SFXVolume++;
-
-			if (SFXVolume > 100)
-				SFXVolume = 100;
-
-			if (SFXVolume < 0)
-				SFXVolume = 0;
-
-			if (SFXVolume != sfx_bak)
-			{
-				if (sfx_breath_db == -1 || !DSIsChannelPlaying(0))
-				{
-					S_SoundStopAllSamples();
-					sfx_bak = SFXVolume;
-					sfx_breath_db = SoundEffect(SFX_LARA_BREATH, 0, SFX_DEFAULT);
-					DSChangeVolume(0, -100 * (long(100 - SFXVolume) >> 1));
-				}
-				else if (sfx_breath_db != -1 && DSIsChannelPlaying(0))
-					DSChangeVolume(0, -100 * ((100 - SFXVolume) >> 1));
-			}
-
-			mSliderCol = 0x3F3F3F;
-			sSliderCol = 0x7F7F7F;
-		}
-		else if (sel & 8)
-		{
-			sfx_bak = SFXVolume;
-			
-			if (dbinput & IN_LEFT)
-				SoundQuality--;
-
-			if (dbinput & IN_RIGHT)
-				SoundQuality++;
-
-			if (SoundQuality > 2)
-				SoundQuality = 2;
-
-			if (SoundQuality < 0)
-				SoundQuality = 0;
-
-			if (SoundQuality != sfx_quality_bak)
-			{
-				S_SoundStopAllSamples();
-				DXChangeOutputFormat(sfx_frequencies[SoundQuality], 0);
-				sfx_quality_bak = SoundQuality;
-				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			}
-		}
-		else if (sel & 0x10)
-		{
-			if (dbinput & IN_LEFT)
-			{
-				if (App.AutoTarget)
-					App.AutoTarget = 0;
-
-				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			}
-
-			if (dbinput & IN_RIGHT)
-			{
-				if (!App.AutoTarget)
-					App.AutoTarget = 1;
-
-				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			}
-
-			savegame.AutoTarget = (uchar)App.AutoTarget;
-		}
-		else if (sel & 0x20)
-		{
-			long direction = 0;
-
-			if (dbinput & IN_LEFT)
-				direction = -1;
-
-			if (dbinput & IN_RIGHT)
-				direction = 1;
-
-			if (direction)
-			{
-				// The next EXISTING language file in the chosen direction - missing
-				// ones are skipped (SwitchLanguage would fail silently otherwise).
-				for (long n = Gameflow->Language + direction; n >= 0 && n < gfLanguageCount; n += direction)
-				{
-					if (SwitchLanguage(n))
-					{
-						LanguageChoice = n;	// an explicit choice from now on, registry "Language"
-						SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-						break;
-					}
-				}
-			}
-		}
-		else if (sel & SFMask && dbinput & IN_SELECT)
-		{
-			CalculateNumSpecialFeatures();
-			last_sel = sel;
-			sel = 1;
-			menu = 100;
+			if (sel & 0x10)
+				SpecialFeaturesNum = 4;
 		}
 	}
-	else if (menu == 200)
-		TroyeMenu(font_height - (font_height >> 1), menu, sel, last_sel);
-	else if (menu == 201)
-		CreditsScreen(font_height - (font_height >> 1), menu, sel, last_sel);
+
+	if (dbinput & IN_DESELECT)
+	{
+		sel = 1;
+		dbinput &= ~IN_DESELECT;
+		return 1;
+	}
+
+	return 0;
 }
 
 void CreateMonoScreen()
@@ -1426,21 +802,19 @@ long S_LoadSave(long load_or_save, long mono, long inv_active)
 			break;
 		}
 
-		// Circle/B backs out of here too (#133), the convention every other
-		// menu screen follows. Escape keeps its own path below: it carries
+		// Circle/B backs out of here too, the convention every other menu
+		// screen follows. Escape keeps its own path below: it carries
 		// IN_OPTION as well, and that is read raw exactly as before.
 		//
 		// Acted on the RELEASE, not the press, for two reasons:
 		//
-		//  - the press that OPENED this screen must not close it again. A
+		//  - the press that opened this screen must not close it again. A
 		//    button already down when the loop starts never sets the
-		//    debounce, so its release does nothing. That is the trap #115
-		//    walked into twice.
-		//  - this screen usually sits INSIDE the inventory ring, and the
-		//    ring also closes on the release of Circle
-		//    (newinv2.cpp:873ff). Leaving on the press would hand the ring
-		//    the release a frame later and shut it behind us - one press,
-		//    two consumers.
+		//    debounce, so its release does nothing.
+		//  - this screen usually sits inside the inventory ring, and the
+		//    ring also closes on the release of Circle (newinv2.cpp).
+		//    Leaving on the press would hand the ring the release a frame
+		//    later and shut it behind us - one press, two consumers.
 		//
 		// Not while fading: a load is already under way then, and a release
 		// arriving mid-fade would cancel it.
@@ -1652,11 +1026,11 @@ long LoadScreenHD(const char* name)
 //
 // The remaster keeps the two apart - TITLE.DDS is Lara in front of the
 // lightning with no lettering at all, and the wordmark sits alone on a
-// transparent frame in LOGO_DE/EU/FR/US.DDS - so before this the logo screen
-// showed the wordmark on black. Putting them together is what the user did by
-// hand in an image editor; his file cannot be shipped, because it is remaster
-// material, so the engine does the same job at load time from the player's own
-// two files. Whatever is missing simply drops out of the result.
+// transparent frame in LOGO_DE/EU/FR/US.DDS - so without this the logo screen
+// would show the wordmark on black. A manually composited file cannot be
+// shipped, since it is remaster material, so the engine performs the same
+// composition at load time from the player's own two files. Whatever is
+// missing simply drops out of the result.
 long LoadScreenHDLogo()
 {
 	const char* logoName;
@@ -1960,6 +1334,11 @@ void CalculateNumSpecialFeatures()
 	}
 }
 
+/* The accented letters of the French and German rows are hex escapes on purpose:
+ * the engine's own font takes the single CP-1252 bytes E9 and FC (AccentToCode,
+ * game\text.cpp), and an editor that saves this file as UTF-8 turns them into the
+ * replacement character. The literal is split where a hex digit follows the escape ("Zur\xFC" "ck"),
+ * because "\xFCc" would be read as a single escape. */
 static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 {
 	static char buf[32];
@@ -1971,9 +1350,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Ensuite \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Pr�c�dent / Ensuite \x1b");
+			strcpy(buf, "\x19 Pr\xE9" "c\xE9" "dent / Ensuite \x1b");
 		else
-			strcpy(buf, "\x19 Pr�c�dent");
+			strcpy(buf, "\x19 Pr\xE9" "c\xE9" "dent");
 
 		break;
 
@@ -1982,9 +1361,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Weiter \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Zur�ck / Weiter \x1b");
+			strcpy(buf, "\x19 Zur\xFC" "ck / Weiter \x1b");
 		else
-			strcpy(buf, "\x19 Zur�ck");
+			strcpy(buf, "\x19 Zur\xFC" "ck");
 
 		break;
 

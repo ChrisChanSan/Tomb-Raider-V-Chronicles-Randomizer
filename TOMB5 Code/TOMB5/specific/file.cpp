@@ -14,8 +14,15 @@
 #include "../tomb5/libs/zlib/zlib.h"
 #include "hqsfx.h"
 #include "hdscreen.h"
+#include "hd/hd_level.h"
+#include "hd/hd_font.h"			// the HD font
+#include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up
+#include "hd/hd_model.h"		// HDModelPreload
+#include "hd/hd_feet.h"		// the two footstep sets
 #include "file.h"
 #include "function_stubs.h"
+#include "profile.h"			// ProfileLevel - PROFLOG counts from the load
+#include "../game/interpolate.h"		// InterpInvalidate - the level boundary
 #include "../game/gameflow.h"
 #include "../game/setup.h"
 #include "alexstuff.h"
@@ -343,6 +350,15 @@ void DoMonitorScreen()
 	MonitorScreenTex->u4 = MonitorScreenU + s * (1.0F / 256.0F);
 	MonitorScreenTex->u3 = MonitorScreenU + s * (1.0F / 256.0F) + 0.125F;
 
+	/* The monitor screens scroll on the 30 Hz game clock. `pos` walks the
+	 * scan band across the surveillance screens and `reset` holds it still at
+	 * each end; this is called from the top of DrawRooms, once per drawn
+	 * frame, so at 60 fps the band would sweep twice as fast and pause half
+	 * as long. The UV write above runs on every frame from the current
+	 * `pos`, so the picture updates at 60 while the clock stays at 30. */
+	if (InterpIsTweenFrame())
+		return;
+
 	if (reset)
 		reset--;
 	else
@@ -359,12 +375,12 @@ void S_GetUVRotateTextures()
 	TEXTURESTRUCT* tex;
 	short* pRange;
 
-	// AnimatingTexturesV is a fixed [16][8][3] array - same bug class as
-	// SAVEGAME_INFO (see that fix's comments in game\savegame.cpp). Both
-	// dimensions used here come from level file data with no upstream
-	// validation: nAnimUVRanges (outer, i) is a raw byte read in
-	// LoadAnimatedTextures(); the per-range count (inner, j's starting
-	// value) is read from aranges[] right below, per range.
+	// AnimatingTexturesV is a fixed [16][8][3] array, and both dimensions
+	// used here come unchecked from the level file: nAnimUVRanges (outer, i)
+	// is a raw byte read in LoadAnimatedTextures(); the per-range count
+	// (inner, j's starting value) is read from aranges[] below. Without
+	// these checks a larger level writes past the array (the same overflow
+	// class as SAVEGAME_INFO in game\savegame.cpp).
 	if (nAnimUVRanges > 16)
 	{
 		Log("FATAL: level has %d animated-UV texture ranges, only 16 fit in AnimatingTexturesV[]", nAnimUVRanges);
@@ -412,23 +428,34 @@ void FreeLevel()
 
 	FreeTextures();
 	DXFreeSounds();
+	HDLevelUnload();	// the other half of HDLevelLoad
+
+	/* The interpolator's snapshot goes too. It holds item indices, not
+	 * pointers, so nothing can dangle - but its positions belong to a level
+	 * that no longer exists, and the next one fills the same slots with
+	 * different things. */
+	InterpInvalidate("level freed");
+
+	/* The footstep sets in hd_feet.cpp point into this level's sample_lut and
+	 * sample_infos, both game_malloc'd, which the next two lines invalidate.
+	 * HDFeetLevelBuild clears them too, but it is not always reached:
+	 * LoadSamples returns early in seven places (no sample infos, no samples,
+	 * a failed decode) and is skipped when sound is off. Without this the
+	 * next level would find a bare set answering "available" through dead
+	 * pointers - the same stale-pool class as baddie_slots below. */
+	HDFeetLevelEnd();
 	malloc_ptr = malloc_buffer;
 	malloc_free = malloc_size;
 
-	// This line is the moment EVERY pointer into the game_malloc pool goes
-	// stale: the bump allocator starts over at the beginning, so an address
-	// from the level before now points into the middle of the level about
-	// to be loaded. baddie_slots is the one that matters, because it is
-	// read again before it is reallocated: InitialiseLOTarray runs AFTER
+	// Resetting the bump allocator makes every pointer into the game_malloc
+	// pool stale: an address from the previous level now points into the
+	// middle of the level about to be loaded. baddie_slots matters because
+	// it is read before it is reallocated: InitialiseLOTarray runs after
 	// S_LoadLevelFile (gameflow.cpp), while ShutThatDoor - called from
-	// InitialiseDoor, i.e. DURING loading - walks all MAX_LOT slots and
-	// writes to them.
-	//
-	// Found 2026-08-25 in joby3: a closed door scattered 2047 through the
-	// old array's addresses and one of them landed exactly on item 277's
-	// room number. The engine then read room[2047] out of a 195-room field
-	// and the level died while loading, with nothing in the log pointing at
-	// a door.
+	// InitialiseDoor during loading - walks all MAX_LOT slots and writes to
+	// them. Through a stale pointer those writes (2047 for a closed door)
+	// land in the new level's data, e.g. an item's room_number, and the
+	// level then crashes while loading on room[2047].
 	baddie_slots = 0;
 }
 
@@ -446,14 +473,12 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 
 	Log(__FUNCTION__);
 
-	// RTPages/OTPages/BTPages come straight from the level file with no
-	// upstream validation - the fill loops below write Textures[nTextures++]
-	// for each page with no bounds check of their own (this is the exact
-	// bug class already found and fixed for SAVEGAME_INFO - see that fix's
-	// comments in game\savegame.cpp for the full rationale). Index 0 is
-	// reserved (set explicitly by the caller before LoadTextures runs), so
-	// the usable range is 1..(RTPages+OTPages+BTPages), which must fit
-	// within Textures[]'s size.
+	// RTPages/OTPages/BTPages come unchecked from the level file, and the
+	// fill loops below write Textures[nTextures++] for each page with no
+	// bounds check of their own (the same overflow class as SAVEGAME_INFO in
+	// game\savegame.cpp). Index 0 is reserved (set by the caller before
+	// LoadTextures runs), so 1..(RTPages+OTPages+BTPages) must fit within
+	// Textures[].
 	if (1 + RTPages + OTPages + BTPages > 256)
 	{
 		Log("FATAL: level has %d texture pages (RTPages=%d OTPages=%d BTPages=%d), only 256 fit in Textures[]",
@@ -643,10 +668,10 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 		CompressedData = 0;
 
 		// The Steam data's uslogo.pak (and the unused uklogo.pak) hold Tomb
-		// Raider IV's "The Last Revelation" logo on BLACK - leftovers, like
-		// JAPAN.DAT. The colour key is magenta, so the black stayed as an
-		// opaque box behind the wrong game's name (seen in game, 2026-09-04).
-		// US takes logo512.pak like everybody else.
+		// Raider IV's "The Last Revelation" logo on black - leftovers, like
+		// JAPAN.DAT. The colour key is magenta, so the black would show as an
+		// opaque box behind the wrong game's name. US takes logo512.pak like
+		// every other language without a logo of its own.
 		if (Gameflow->Language == GERMAN)
 			size = LoadFile("data\\grlogo.pak", &CompressedData);
 		else if (Gameflow->Language == FRENCH)
@@ -717,6 +742,15 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 
 	//font
 	ReadBlock(TextureData, 0x40000);
+
+	/* The same page goes to the HD font. This is the only place where the
+	 * classic font page is in hand as pixels, and the HD path needs it as the
+	 * template it looks for in the remaster's glyph atlas, not as a picture
+	 * to draw. This runs on the load thread, so no Direct3D here; the texture
+	 * is made later on the main thread by HDFontBuild. With hd_enable off the
+	 * call returns at once and copies nothing. */
+	HDFontLevelPage(TextureData);
+
 	nTex = nTextures++;
 	tSurf = CreateTexturePage(256, 256, 0, (long*)TextureData, 0, 0);
 	Textures[nTex].tex = tSurf;
@@ -866,7 +900,7 @@ bool LoadObjects()
 		// The slot comes straight from the level file with no upstream
 		// validation (same bug class as num_items in LoadItems). A file
 		// written for a newer build of this engine may carry slots this
-		// build's enum does not know yet - skip the record instead of
+		// build's enum does not know yet - skip the entry instead of
 		// writing past the end of objects[].
 		if (slot < 0 || slot >= NUMBER_OBJECTS)
 		{
@@ -1022,10 +1056,10 @@ bool LoadCameras()
 
 	number_spotcams = (short)ReadLong();
 
-	// number_spotcams comes straight from the level file, and SpotCam is a
-	// fixed-size 256-entry global array - same bug class as SAVEGAME_INFO
-	// (see game\savegame.cpp's fix for the full rationale): the ReadBlock
-	// below is a raw memcpy with no bounds check of its own.
+	// number_spotcams comes unchecked from the level file, SpotCam is a
+	// fixed 256-entry global array, and the ReadBlock below is a raw memcpy
+	// with no bounds check of its own (the same overflow class as
+	// SAVEGAME_INFO in game\savegame.cpp).
 	if (number_spotcams > 256)
 	{
 		Log("FATAL: level has %d spotcams, only 256 fit in SpotCam[]", number_spotcams);
@@ -1211,11 +1245,11 @@ static const char* aFmt(const char* fmt, ...)
 }
 
 // One exit for level data the engine cannot use, in the same manner as the
-// MAX_ITEMS check below: say what is wrong, say it where the user sees it,
+// MAX_ITEMS check below: say what is wrong, say it where the player sees it,
 // then stop. Deliberately not a silent clamp - a level carrying impossible
 // values is either damaged or was written for a different build, and both
 // are worth knowing rather than playing around. The hint at -log is there
-// because the seams that name the culprit only write with it (#125).
+// because the diagnostic log lines that name the culprit only write with it.
 static void FatalLevelData(const char* what)
 {
 	char msg[512];
@@ -1249,12 +1283,11 @@ bool LoadItems()
 	if (!num_items)
 		return 1;
 
-	// num_items comes straight from the level file with no upstream
-	// validation - the fill loop below writes items[i] for every one of
-	// them with no bounds check of its own (same bug class as SAVEGAME_INFO,
-	// see that fix's comments in game\savegame.cpp). MAX_ITEMS (defined
-	// global\types.h) is left as-is here (not raised) - see items[] itself
-	// for why.
+	// num_items comes unchecked from the level file, and the fill loop below
+	// writes items[i] for every one of them with no bounds check of its own
+	// (the same overflow class as SAVEGAME_INFO in game\savegame.cpp).
+	// MAX_ITEMS (global\types.h) is deliberately not raised - see items[]
+	// itself for why.
 	if (num_items > MAX_ITEMS)
 	{
 		Log("FATAL: level has %d items, only MAX_ITEMS=%d fit in items[]", num_items, MAX_ITEMS);
@@ -1289,8 +1322,8 @@ bool LoadItems()
 		// own: object_number goes into objects[] in InitialiseItem, and
 		// room_number into room[] two lines later. A file written by a tool
 		// - ours included - can carry a slot this build does not know or a
-		// room that does not exist. Caught here, that is one clear line;
-		// caught nowhere, it is a wild read and a hard crash.
+		// room that does not exist. Caught here, that is one clear message;
+		// uncaught, it is a wild read and a hard crash.
 		if (item->object_number < 0 || item->object_number >= NUMBER_OBJECTS)
 			FatalLevelData(aFmt("item %d carries slot %d - valid is 0..%d",
 								i, item->object_number, NUMBER_OBJECTS - 1));
@@ -1302,13 +1335,14 @@ bool LoadItems()
 
 	for (int i = 0; i < num_items; i++)
 	{
-		// Diagnostic seam (#125). An item's initialise is the one place in
-		// loading where the LEVEL's data meets the ENGINE's slot logic -
-		// anim offsets off the object's anchor, OCB read as a behaviour,
-		// neighbouring items looked up by room. A randomized level produces
-		// slot/OCB pairings no vanilla level ever had, so when loading dies
-		// here the only question that matters is WHICH item. The line is
-		// written before the call, so the last one in log.txt names it.
+		// ITEMLOG (-log only): index, slot (with its loaded flag and anim
+		// index), room, OCB, flags and position of each item before it is
+		// initialised. InitialiseItem is where the level's data meets the
+		// engine's slot logic - anim offsets off the object's anchor, OCB read
+		// as a behaviour, neighbours looked up by room - and a randomized
+		// level produces slot/OCB pairings no vanilla level has. Written
+		// before the call, the last ITEMLOG line in log.txt names the item a
+		// crash happened on.
 		Log("ITEMLOG %d: slot %d (loaded %d anim %d) room %d ocb %d flags 0x%X pos %d,%d,%d",
 			i, items[i].object_number,
 			objects[items[i].object_number].loaded,
@@ -1319,16 +1353,16 @@ bool LoadItems()
 
 		InitialiseItem(i);
 
-		// The room number was checked while reading, so an item standing
-		// somewhere impossible AFTERWARDS can only have been written by one
-		// of the initialise calls above - a stray write, and the seam over
-		// it would only say "it died at item 277", never who did it. This
-		// scan names both sides in one line.
+		// ITEMWATCH: room numbers were checked while reading, so an item in
+		// an impossible room afterwards was hit by a stray write from one of
+		// the initialise calls. ITEMLOG would only name the item that
+		// crashed; this line names the damaged item and the one being
+		// initialised when it happened.
 		//
-		// It is O(n2) and therefore hangs on the call-site gate and not only
-		// on Log()'s own: without -log not a single comparison runs. Once a
-		// culprit is found the scan switches itself off - the first one is
-		// the one that matters, the rest are its consequences.
+		// The scan is O(n^2), so it is gated at the call site and not only
+		// inside Log(): without -log not a single comparison runs. It stops
+		// after the first hit - the first one is the cause, the rest are its
+		// consequences.
 		if (gLogEnabled && !watchDone)
 		{
 			for (int j = 0; j < num_items; j++)
@@ -1403,6 +1437,42 @@ bool LoadCinematic()
 	return 1;
 }
 
+/* Whether a level sample belongs to the footsteps (SFX_LARA_FEET or
+ * SFX_LARA_LAND). The two ids own a handful of samples between them - four
+ * steps and one landing in each of the sixteen classic levels, measured -
+ * and those take their payload from the unmodded bank. The answer comes
+ * from the level's own sound map, so a level that numbers them differently
+ * is still answered right. */
+static bool feet_sample(long sample)
+{
+	static const int kFeetIds[2] = { SFX_LARA_FEET, SFX_LARA_LAND };
+
+	/* Only with hd_enable on. Without it there is no wardrobe, no outfit and
+	 * no second set, so the two ids take the ordinary chain and a sound mod
+	 * plays unchanged. */
+	if (!HDEnabled() || !sample_lut || !sample_infos)
+		return false;
+
+	for (int k = 0; k < 2; k++)
+	{
+		const int info = sample_lut[kFeetIds[k]];
+
+		if (info < 0)
+			continue;
+
+		int takes = (sample_infos[info].flags >> 2) & 0xF;
+
+		if (takes < 1)
+			takes = 1;
+
+		if (sample >= sample_infos[info].number &&
+			sample < sample_infos[info].number + takes)
+			return true;
+	}
+
+	return false;
+}
+
 bool LoadSamples()
 {
 	long num_infos, num_samples, uncomp_size, comp_size;
@@ -1420,14 +1490,34 @@ bool LoadSamples()
 		return 0;
 	}
 
-	sample_infos = (SAMPLE_INFO*)game_malloc(num_infos * sizeof(SAMPLE_INFO));
+	/* Two spare SAMPLE_INFO entries after the level's own. The barefoot
+	 * recordings are a second set for sound ids 0 and 4, and a set needs a
+	 * SAMPLE_INFO of its own - the number of its first sample and how many
+	 * takes follow it. The level's table is exactly num_infos long, so the
+	 * two are allocated here with it. The level file fills only its own
+	 * entries; hd_feet.cpp fills these two, and leaves them zero in a level
+	 * without a bare set.
+	 *
+	 * Nothing reads past num_infos on its own: sample_lut names an info, and
+	 * only HDFeetBare ever writes an index above it.
+	 *
+	 * Only with hd_enable on: sixteen bytes shift every later allocation in
+	 * the bump allocator, and with HD off the memory layout stays exactly
+	 * that of the classic engine. */
+	const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;
+
+	sample_infos = (SAMPLE_INFO*)game_malloc((num_infos + spare) * sizeof(SAMPLE_INFO));
 	ReadBlock(sample_infos, num_infos * sizeof(SAMPLE_INFO));
 
-	// Optional: higher quality versions of these same sounds, if the player
-	// put the remaster's MAIN.SFX into audio\. The bridge between this
+	if (spare)
+		memset(sample_infos + num_infos, 0, spare * sizeof(SAMPLE_INFO));
+
+	// Optional: higher quality versions of these same sounds, out of a mod's
+	// bank, out of audio\MAIN.SFX or out of the installed remaster itself
+	// (the chain is in hqsfx.cpp). The bridge between this
 	// level's sample numbers and that file's global ones runs over the sound
-	// map, so it can only be built now that the map has been read. Without
-	// the file both calls do nothing and the level plays its own samples.
+	// map, so it can only be built now that the map has been read. Without a
+	// bank both calls do nothing and the level plays its own samples.
 	HQSfxOpen();
 	HQSfxBuildMap(sample_lut, MAX_SAMPLES, sample_infos, num_infos);
 
@@ -1453,17 +1543,15 @@ bool LoadSamples()
 		return 1;
 	}
 
-	// num_samples comes straight from the level file with no upstream
-	// validation, and DXCreateSampleADPCM() (specific\dxsound.cpp) writes
-	// DS_Buffers[num] for every one of them - same bug class as SAVEGAME_INFO
-	// (see that fix's comments in game\savegame.cpp).
+	// num_samples comes unchecked from the level file, and
+	// DXCreateSampleADPCM() (specific\dxsound.cpp) writes DS_Buffers[num]
+	// for every one of them (the same overflow class as SAVEGAME_INFO in
+	// game\savegame.cpp).
 	//
-	// The ceiling used to be 256 while sample_lut right above is allocated
-	// with MAX_SAMPLES=450 - DS_Buffers[] was the tightest part of the
-	// engine's own sound system. It now matches (#94), because every foreign
-	// import brings its own sounds along and the TR3 enemies ate visibly into
-	// the budget. Both DXCreateSample* now range-check as well, so this stays
-	// a clean early exit rather than the only line of defence.
+	// DS_Buffers[] holds MAX_SAMPLES=450, the same size as sample_lut above,
+	// because every imported enemy brings its own sounds along. Both
+	// DXCreateSample* range-check as well, so this is a clean early exit
+	// rather than the only line of defence.
 	if (num_samples > MAX_SAMPLES)
 	{
 		FreeSampleDecompress();
@@ -1484,10 +1572,9 @@ bool LoadSamples()
 		fread(&uncomp_size, 1, 4, level_fp);
 		fread(&comp_size, 1, 4, level_fp);
 
-		// comp_size comes straight out of the level file. Reading it into a
-		// fixed buffer with no bound is the same hole #94 closed in
-		// DXCreateSample*, and it stopped being theoretical the moment the
-		// randomizer began importing foreign sounds.
+		// comp_size comes unchecked from the level file; without this bound
+		// an oversized sample (imported sounds make that possible) overruns
+		// the fixed samples_buffer.
 		if (comp_size < 0 || comp_size > SAMPLES_BUFFER_SIZE)
 		{
 			Log("FATAL: sample %d is %d bytes, samples_buffer holds %d",
@@ -1506,7 +1593,16 @@ bool LoadSamples()
 		char* riff = samples_buffer;
 		long riffSize = comp_size;
 		long hqSize = 0;
-		char* hq = HQSfxPayload(i, uncomp_size, &hqSize);
+		SfxRiffParts hqWhere;
+		/* The samples behind sound ids 0 and 4 (the booted footsteps) are
+		 * loaded through the first unmodded bank of the chain, so that a
+		 * sound mod which replaces the footsteps supplies the barefoot set
+		 * (hd_feet.cpp) instead of making every outfit barefoot at once.
+		 * Every other sample takes the ordinary chain, mod and loose .wav
+		 * included. */
+		char* hq = feet_sample(i)
+			? HQSfxPayloadBoots(i, uncomp_size, &hqSize, &hqWhere)
+			: HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
 
 		if (hq)
 		{
@@ -1514,37 +1610,63 @@ bool LoadSamples()
 			riffSize = hqSize;
 		}
 
-		// Format switch for foreign imports (#93). Core's own samples come
-		// as MS-ADPCM and go through the ACM decoder. The samples from
-		// Tomb Raider 3 (MAIN.SFX), by contrast, are plain PCM - and in
-		// exactly the format the engine expects anyway: mono, 22050 Hz,
-		// 16 bit. They need no decoder at all, only the direct way into
-		// the XAudio2 buffer that DXCreateSample already offers.
+		// Format switch for imported samples. Core's own samples are
+		// MS-ADPCM and go through the ACM decoder. The samples from Tomb
+		// Raider 3 (MAIN.SFX) are plain PCM in exactly the format the engine
+		// expects - mono, 22050 Hz, 16 bit - so they need no decoder, only
+		// the direct way into the XAudio2 buffer that DXCreateSample offers.
 		//
-		// The tag stands in the fmt block at +20 (RIFF 4 + size 4 + WAVE 4
-		// + "fmt " 4 + block size 4). 1 = PCM, 2 = MS-ADPCM. The same spot
-		// is read by DXCreateSampleADPCM.
-		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(riff + 20);
+		// For a sample out of the level the tag stands in the fmt block at
+		// +20 (RIFF 4 + size 4 + WAVE 4 + "fmt " 4 + block size 4). 1 = PCM,
+		// 2 = MS-ADPCM. DXCreateSampleADPCM reads the same spot.
+		//
+		/* For a sample out of a mod the offsets are not assumed. +20 only
+		 * holds the format tag when fmt is the first chunk, and wavs written
+		 * by an editor often are not: Reaper, Pro Tools and libsndfile put a
+		 * 28 byte JUNK block in front of fmt as room to grow into RF64, and a
+		 * LIST block with the title is just as common. Such a file is a legal
+		 * mono 16 bit PCM wav and passes the gate in hqsfx.cpp, but its bytes
+		 * at +20 are 0x0000 (measured on a JUNK-first file), so a fixed
+		 * offset would drop it silently while the load log counted it as
+		 * supplied. The offsets therefore come through SfxRiffParts from the
+		 * walk that accepted the file, and `hq` alone takes the branch:
+		 * everything HQSfxPayload returns is PCM, mono, 16 bit with a data
+		 * chunk inside the buffer. */
+		long fmtAt = 20;
+		long dataAt = 0, dataLen = 0;
 
-		if (riffSize > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
+		if (hq)
+		{
+			fmtAt = hqWhere.fmtAt;
+			dataAt = hqWhere.dataAt;
+			dataLen = hqWhere.dataBytes;
+		}
+
+		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(riff + fmtAt);
+
+		if (hq || (riffSize > 20 && wf->wFormatTag == WAVE_FORMAT_PCM))
 		{
 			// Search for the data block instead of assuming its position:
 			// further blocks can stand behind the fmt block (fact, LIST).
-			long at = 12;
-			long dataAt = 0, dataLen = 0;
-
-			while (at + 8 <= riffSize)
+			// Only for the level's own sample - a mod's arrived with its
+			// data chunk already found and already bounded by the gate.
+			if (!hq)
 			{
-				const long len = *(const long*)(riff + at + 4);
+				long at = 12;
 
-				if (!memcmp(riff + at, "data", 4))
+				while (at + 8 <= riffSize)
 				{
-					dataAt = at + 8;
-					dataLen = len;
-					break;
-				}
+					const long len = *(const long*)(riff + at + 4);
 
-				at += 8 + len + (len & 1);
+					if (!memcmp(riff + at, "data", 4))
+					{
+						dataAt = at + 8;
+						dataLen = len;
+						break;
+					}
+
+					at += 8 + len + (len & 1);
+				}
 			}
 
 			if (dataAt <= 0 || dataAt + dataLen > riffSize)
@@ -1572,9 +1694,24 @@ bool LoadSamples()
 
 	FreeSampleDecompress();
 
+	// Which bank supplied the samples - a mod's, audio\MAIN.SFX or the
+	// installed remaster's - how many of them a mod's bank replaced, and how
+	// many a mod's loose .wav supplied on top.
 	if (HQSfxSubstituted())
-		Log("HQ SFX: %d of %d samples came from audio\\MAIN.SFX",
-			HQSfxSubstituted(), num_samples);
+		Log("HQ SFX: %d of %d samples came from %s, %d of them a recording the "
+			"mod's bank replaced, %d of them overlaid by a mod's .wav",
+			HQSfxSubstituted(), num_samples, HQSfxSource(), HQSfxReplaced(),
+			HQSfxOverlaid());
+
+	/* The barefoot set, into the slots after the level's own and into the
+	 * two spare infos allocated above. It writes its own log line, including
+	 * the reason when a level cannot have one.
+	 *
+	 * After the summary above, because it takes its recordings through the
+	 * same HQSfxPayload the loop does and would otherwise raise that line's
+	 * count by takes that are not this level's samples; before the map is
+	 * dropped, because it reads them through the bridge HQSfxDropMap frees. */
+	HDFeetLevelBuild(sample_lut, sample_infos, num_infos, spare, num_samples);
 
 	HQSfxDropMap();
 	return 1;
@@ -1622,6 +1759,15 @@ unsigned int __stdcall LoadLevel(void* name)
 		// (outfit donor without LARA_SPEECH_HEAD1-4, e.g. catsuit from rich2).
 		// In vanilla all 16 files carry 0 here - measured.
 		GfForeignSpeechHeads = (char)data[2];
+		// data[3]: randomizer marker "this level wears a Tomb Raider III
+		// outfit". It carries the engine's own HD_LARA_OUTFIT_* number -
+		// 5 ANTARC, 6 NEVADA, 7 COAST, 8 CATSUIT - so that neither side
+		// translates and a stale byte cannot pass as a vanilla outfit;
+		// hd_laradraw.cpp hands it to HDLaraOutfitFor unchanged. All 17
+		// shipped files carry 0 in data[3] through data[15] - measured. Read
+		// here beside data[0..2] because this is the one place the header
+		// block is in hand, long before the HD path asks for it.
+		GfHdOutfit = (char)data[3];
 
 		fread(&size, 1, 4, level_fp);
 		fread(&compressedSize, 1, 4, level_fp);
@@ -1652,6 +1798,16 @@ unsigned int __stdcall LoadLevel(void* name)
 		S_LoadBar();
 
 		LoadTextureInfos();
+		S_LoadBar();
+
+		// The HD side of the level. Here and not earlier because this is the
+		// first moment the rooms, the meshes and the object slots are all in
+		// memory - and in the randomized state, which is the state the models
+		// have to be bound against. With the registry setting hd_enable at 0,
+		// the shipped default, it reads only the level's .hdm sidecar, whose
+		// sound line serves the sound bank bridge with HD off - see
+		// HDEnabled in specific\hd\hd_level.cpp.
+		HDLevelLoad((const char*)name);
 		S_LoadBar();
 
 		pBefore = FileData;
@@ -1724,16 +1880,12 @@ unsigned int __stdcall LoadLevel(void* name)
 		}
 
 		FileClose(level_fp);
-		// aInit() and aMakeCutsceneResident() originally still ran in the
-		// LOAD THREAD here - both work on the D3D device (room vertex
-		// buffers, cutscene textures) while the main thread presents the
-		// load bar in parallel. The same two-threads-one-device class as
-		// the level-load hang of Jul 31 (then LoadTextures, fix
-		// D3DCREATE_MULTITHREADED); since the randomized levels grew, the
-		// game sporadically froze exactly in this window (bar full,
-		// nothing moves - seen at the title too on Aug 15). Both calls are
-		// now made by the main thread AFTER the thread's end, see
-		// S_LoadLevelFile.
+		// aInit() and aMakeCutsceneResident() are not called here on the load
+		// thread: both work on the D3D device (room vertex buffers, cutscene
+		// textures) while the main thread presents the load bar, and two
+		// threads on one device freeze the game in this window (bar full,
+		// nothing moves). The main thread makes both calls after this thread
+		// ends, see S_LoadLevelFile.
 		ClearFX();
 		LevelLoadingThread.ended = 1;    // success path - main thread may aInit()
 	}
@@ -1742,6 +1894,83 @@ unsigned int __stdcall LoadLevel(void* name)
 	LevelLoadingThread.active = 0;
 	_endthreadex(1);
 	return 1;
+}
+
+/* The warm-up: one-time work taken out of a level's first drawn frames.
+ * Without it a level needs about three seconds to settle at its frame rate
+ * (the title screen drops to 23 fps first) on hardware that is far from its
+ * limit, because work done once lands inside frames meant to draw.
+ *
+ * Nearly every texture in this engine is D3DPOOL_MANAGED - the classic pages
+ * (specific\texture.cpp, CreateTexturePage), the HD pages when the budget
+ * allows (specific\hd\hd_pagecache.cpp) and every HD model's vertex and index
+ * buffer (specific\hd\hd_model.cpp). A managed resource lives in system
+ * memory until something draws with it, and Direct3D uploads it at that
+ * first bind - so the frame that first shows a room, a texture or an enemy
+ * pays for its upload.
+ *
+ * IDirect3DResource9::PreLoad asks the driver to make the resource resident
+ * now. It costs nothing for a resource that already is, returns void (a hint,
+ * not a promise) and draws nothing - no render state, no geometry, nothing
+ * on screen - which is why it is used instead of drawing a tiny triangle with
+ * each page off screen. It runs where a stall is free: after the load thread
+ * has joined and the HD build is done, with the loading bar still up.
+ *
+ * Not covered: the water mark tables, a room's first light list, the
+ * driver's first use of a shader or vertex declaration, and Windows paging
+ * the process in. PROFLOG's `first_frame` line measures those. */
+static void WarmUpLevel()
+{
+	LARGE_INTEGER freq, t0, t1;
+	int pages, hd_pages, hd_buffers;
+	double ms;
+
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&t0);
+
+	pages = 0;
+	hd_pages = 0;
+	hd_buffers = 0;
+
+	for (int i = 0; i < nTextures; i++)
+	{
+		if (Textures[i].tex)
+		{
+			Textures[i].tex->PreLoad();
+			pages++;
+		}
+	}
+
+	// The HD pages of this level. HDPageCacheSlots() is 0 with hd_enable off
+	// and before a level is built, so this is one call and a loop that does
+	// not run. A page in D3DPOOL_DEFAULT is already on the card and PreLoad
+	// is documented to be ignored for it - correct either way, no test here.
+	for (int i = 0, n = HDPageCacheSlots(); i < n; i++)
+	{
+		IDirect3DTexture9* tex = HDPageCacheSlotTexture(i);
+
+		if (tex)
+		{
+			tex->PreLoad();
+			hd_pages++;
+		}
+	}
+
+	hd_buffers = HDModelPreload();
+
+	/* The CPU side of the same idea: the sort buffer, the sort list and the
+	 * bucket vertices are ~5 MB of .bss that Windows only commits on the
+	 * first write, and those page faults would otherwise fall in the level's
+	 * first drawn frame. The note over PreTouchDrawBuffers says why zeroing
+	 * them cannot change a pixel. */
+	PreTouchDrawBuffers();
+
+	QueryPerformanceCounter(&t1);
+	ms = freq.QuadPart ?
+		(double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart : 0;
+
+	Log("WARMUP pages=%d hd_pages=%d hd_buffers=%d ms=%.1f", pages, hd_pages,
+		hd_buffers, ms);
 }
 
 long S_LoadLevelFile(long num)
@@ -1769,10 +1998,9 @@ long S_LoadLevelFile(long num)
 			// and the randomizer permutes only the script offset table, never
 			// the file name table or the indices pointing into it. So num is
 			// the level's identity in vanilla and in a shuffled campaign
-			// alike, and num + 2 is already the right picture. Measured
-			// against both SCRIPT.DATs, see MODIFICATIONS.md; do not "fix"
-			// this to gfIdFromSlot[num], which would index a slot table with
-			// an identity and break exactly what it looks like it repairs.
+			// alike, and num + 2 is already the right picture (measured
+			// against both SCRIPT.DATs). gfIdFromSlot[num] would be wrong
+			// here: it indexes a slot table with an identity.
 			chosen_screen = num;
 			hd_logo = 0;
 			hd_name = HDScreenLevelName(&gfFilenameWad[gfFilenameOffset[num]]);
@@ -1791,8 +2019,8 @@ long S_LoadLevelFile(long num)
 					flag = 1;
 					chosen_screen = -2;
 
-					// Picture 0 is the game's logo screen. The remaster drew
-					// that one per language, and drew it WITHOUT the title
+					// Picture 0 is the game's logo screen. The remaster's HD
+					// files carry it per language and without the title
 					// picture behind it, so this is the only place that needs
 					// two HD files at once and the only one that picks by
 					// language rather than by level.
@@ -1836,38 +2064,58 @@ long S_LoadLevelFile(long num)
 			S_DrawLoadBar();
 
 
-		// This loop just repaints the loading bar while a background thread
-		// does the actual file I/O - it doesn't need to call Present() (via
-		// S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) any faster than a
-		// human can see it update. Left unthrottled, it hammers Present() as
-		// fast as the CPU allows with no vsync (D3DPRESENT_INTERVAL_IMMEDIATE)
-		// and no message pumping in between - cdb caught the game thread stuck
-		// for good deep inside the NVIDIA driver (nvd3dum) from exactly this
-		// call site, almost certainly a present-queue/DWM stall from calling
-		// Present() far harder than this code was ever tested against on
-		// original hardware.
+		// This loop only repaints the loading bar while a background thread
+		// does the file I/O, so it need not call Present() (via
+		// S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) faster than a
+		// human can see. Unthrottled, it calls Present() as fast as the CPU
+		// allows with no vsync (D3DPRESENT_INTERVAL_IMMEDIATE) and no message
+		// pumping in between, and the game thread can hang for good inside
+		// the NVIDIA driver (nvd3dum) at this call site - a present-queue/DWM
+		// stall, observed under a debugger.
 		Sleep(1);
 	}
 
 	Log("S_LoadLevelFile: load thread joined");
 
-	// Moved here from the load thread (see the comment in LoadLevel): room
+	// Here and not on the load thread (see the comment in LoadLevel): room
 	// vertex buffers and resident cutscenes belong to the main thread,
-	// which owns the device anyway - no second thread on the D3D anymore
-	// while the bar presents.
+	// which owns the device - no second thread touches D3D while the bar
+	// presents.
 	if (LevelLoadingThread.ended)        // load thread's success path
 	{
 		aInit();
 		Log("S_LoadLevelFile: aInit done");
+
+		// The HD geometry and its texture pages. Here on the main thread,
+		// not in HDLevelLoad on the load thread, for the same reason as
+		// aInit() above. HDLevelLoad has already read the .TRG's numbers and
+		// bound the models; this makes the Direct3D objects, which belong to
+		// the thread that owns the device. Nothing happens while hd_enable
+		// is 0.
+		HDLevelBuild();
+		Log("S_LoadLevelFile: HD build done");
+
+		// The HD font's own texture, on the same thread for the same
+		// reason. It is made once and kept for the whole
+		// session - the atlas does not change from level to level - so after
+		// the first level this is a comparison and a return.
+		HDFontBuild();
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
 
-	// The load thread has joined - loading IS done, no matter what the
-	// step counting believes. S_FinishLoadBar puts the bar at 100%
-	// (Core's completion criterion tipped into an endless loop from ~75
-	// texture pages on, see drawbars.cpp), and the catch-up loop is
-	// additionally bounded - nothing may ever hang here again.
+	// The level's textures and buffers onto the card before the first frame
+	// asks for them - see the note over WarmUpLevel.
+	WarmUpLevel();
+
+	// PROFLOG counts a level's seconds from here. The name still carries its
+	// .TRC; the profile strips it.
+	ProfileLevel(name);
+
+	// The load thread has joined, so loading is done whatever the step
+	// counting says. S_FinishLoadBar puts the bar at 100% (Core's completion
+	// criterion loops forever from ~75 texture pages on, see drawbars.cpp),
+	// and the catch-up loop is bounded as well so it can never hang here.
 	S_FinishLoadBar();
 
 	if (App.dx.Flags & DXF_HWR && !S_DrawLoadBar())

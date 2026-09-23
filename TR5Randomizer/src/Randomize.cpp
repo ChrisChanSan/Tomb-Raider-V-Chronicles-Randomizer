@@ -21,11 +21,11 @@
 // Usage:
 //   Randomize.exe <zones.json> <ignored> <source.trc> <target.trc> [seed]
 //
-// The second argument used to be a level_<name>.json. Since 2026-08-30 the
-// rooms, items and triggers are read out of <source.trc> itself, so the
-// argument is accepted and ignored - its position is kept so that existing
-// command lines and the regression comparison against older builds keep
-// working. Pass any string.
+// The second argument used to be a level_<name>.json. Rooms, items and
+// triggers are now read out of <source.trc> itself, so the argument is
+// accepted and ignored - its position is kept so that existing command
+// lines and the regression comparison against older builds keep working.
+// Pass any string.
 //
 // The GUI drives the same steps; this program is the proof that the chain is
 // complete, and it stays around for checking individual levels.
@@ -111,13 +111,13 @@ int main(int argc, char** argv)
     std::set<std::string> outfitsOff;   // the wardrobe: ids the roll may NOT draw
     bool notes = false;
     std::set<int> enemiesDisabled;         // deselection, see argument enemiesoff=
-    // Foreign installations for the guests from TR3 (#92). Without them the
-    // four kinds drop silently out of the pool - exactly as for a user
-    // without the games.
+    // Foreign installations for the guests from TR3. Without them the four
+    // kinds drop silently out of the pool - exactly as for a player without
+    // the games.
     std::wstring tr3Dir, tr3GoldDir;
     // Also treat SCRIPT.DAT - the same changes as the GUI.
     std::wstring scriptDat;
-    // Secret list (#53): second patch pass from an author file.
+    // Secret list: second patch pass from an author file.
     std::wstring secretList;
     bool secretRewards = false;
     // Music: "background" rolls the audio byte of the CMD_LEVEL entries
@@ -125,7 +125,7 @@ int main(int argc, char** argv)
     // both. CAUTION background: not repeatable - every run with script=
     // rolls the file anew.
     bool musicBackground = false, musicTriggers = false;
-    // Weather (#144): roll dry/rain/snow for this level. A level without a
+    // Weather: roll dry/rain/snow for this level. A level without a
     // room that could show it keeps its vanilla byte, switch or not.
     bool weather = false;
     // Permute the level sections (needs script= and the engine with gfLevelId).
@@ -155,8 +155,6 @@ int main(int argc, char** argv)
         else if (s == "allsanity") allsanity = true;
         // Either the game folder or its data\ subfolder is accepted - the
         // resolution is the same one the GUI uses (Tr3Source::resolveTr3).
-        // Before 2026-08-30 the command line took the string as given and
-        // answered "TR3 level not readable" on a path the GUI swallows.
         else if (s.rfind("tr3=", 0) == 0)
         {
             const std::wstring given = toW(s.c_str() + 4);
@@ -184,8 +182,7 @@ int main(int argc, char** argv)
         else if (s == "order=both")     { sections = true; levelOrder = 1; }
         else if (s == "order=free")     levelOrder = 2;
         // "enemiesoff=47,49" - the same deselection as the "Enemy types"
-        // window in the GUI (#95), so the filter can be tested from scripts
-        // too.
+        // window in the GUI, so the filter can be tested from scripts too.
         else if (s.rfind("enemiesoff=", 0) == 0)
         {
             size_t a2 = 11;
@@ -316,38 +313,24 @@ int main(int argc, char** argv)
     Tr5Level lvl;
     if (!lvl.load(toW(argv[3]), err)) { std::printf("load level: %s\n", err.c_str()); return 1; }
 
-    // THE GATE THIS CHANGE MADE NECESSARY.
+    // Reading rooms, items and triggers straight out of argv[3], rather than
+    // a level_<name>.json made once from the original, means reading
+    // whatever that file is right now. Point this at an already randomized
+    // level and every typeId is the swapped one; type-driven rules then
+    // decide on the wrong data and the run still succeeds, because item
+    // indices stay valid (items are only ever appended) - it would fail
+    // silently, which is the worst way to fail.
     //
-    // The old level_<name>.json described, by construction, the untouched
-    // level - it was made once from the original and never changed. Reading
-    // the same facts out of argv[3] means reading whatever that file is right
-    // now. Point this at an already randomized level and every typeId is the
-    // SWAPPED one; type-driven rules then decide on the wrong data and the run
-    // still succeeds, because item indices stay valid (items are only ever
-    // appended). It would fail silently, which is the worst way to fail.
-    //
-    // The GUI never had this problem: it restores data\ from Backup before
-    // every run and only offers levels whose checksum matches vanilla. The
-    // CLI took any path at all. It refuses one now.
-    //
-    // The gate no longer has an off switch, and that is a change worth
-    // naming. It used to be skipped when no checksum list lay beside the
-    // program - deliberately, so hand-built test levels were not refused for
-    // want of a file. Since the list is baked into the EXE (EmbeddedData.h)
-    // it is always there, so the gate always runs. Nothing is lost by that:
-    // a name the list does not carry still passes, so a test level called
-    // KeyItemRangeTest.trc goes through as before. Only a file wearing a
-    // CAMPAIGN name while not being that level is refused - which is exactly
-    // the case the gate exists for.
+    // The GUI avoids this by restoring data\ from Backup before every run
+    // and only offering levels whose checksum matches vanilla; the CLI
+    // accepts any path, so it checks here instead: a file whose name matches
+    // a campaign level but whose checksum does not is refused. A name the
+    // checksum list does not carry (a hand-built test level such as
+    // KeyItemRangeTest.trc) still passes.
     {
-        // data\ FIRST, beside the EXE only as a fallback. The first version of
-        // this looked ONLY beside the EXE, and therefore never fired once:
-        // BuildRelease puts the list in data\ and mirrors that into the build
-        // folder, which is exactly where the GUI looks too (payloadDir,
-        // Main.cpp:381). The test that "confirmed" the gate had the file
-        // hand-copied beside the EXE - so it proved the comparison works, not
-        // that the file is ever found. A check that only passes because the
-        // tester arranged for it to pass is not a check.
+        // data\ first, beside the EXE only as a fallback - matching where
+        // BuildRelease puts the checksum list and where the GUI looks for it
+        // (payloadDir).
         std::wstring csv = PathUtil::join(
             PathUtil::join(PathUtil::exeDir(), L"data"), L"VanillaLevelChecksums.csv");
         if (!PathUtil::fileExists(csv))
@@ -395,10 +378,10 @@ int main(int argc, char** argv)
     if (!Rando::buildInput(zone, info, in, err)) { std::printf("input: %s\n", err.c_str()); return 1; }
     const int itemsBefore = lvl.itemCount();
 
-    // Core's level bugs, exactly as the GUI does it (LevelFix.h). The CLI
-    // used to skip this entirely - it did not even link LevelFix.cpp -, so a
-    // command-line run silently produced a level WITHOUT the fixes. That is
-    // fine for a quick placement test and misleading for everything else.
+    // Core's level bugs, exactly as the GUI does it (LevelFix.h) - without
+    // this a command-line run would silently produce a level without the
+    // fixes, fine for a quick placement test but misleading for anything
+    // meant to be a real result.
     {
         const std::string base = baseName(argv[3]);
         std::vector<std::string> fixNotes;
@@ -414,8 +397,8 @@ int main(int argc, char** argv)
         if (fixes > 0) std::printf("  LevelFix    %d fixes applied\n", fixes);
 
         // Which items placement will refuse to move, and why they are on the
-        // list. Cheap to print and it answers "why did that item not travel?"
-        // without a rebuild - the question cost an evening once.
+        // list - cheap to print, and answers "why did that item not travel?"
+        // without a rebuild.
         {
             std::string s;
             for (int i : in.triggerPinned) { if (!s.empty()) s += ","; s += std::to_string(i); }
@@ -430,8 +413,8 @@ int main(int argc, char** argv)
 
     // Source levels for soundAdds and for the cross enemies' models: they
     // lie next to the source file, which is passed in here anyway. Defined
-    // BEFORE the placement, because the headroom rule (#141) has to measure
-    // a cross enemy in its donor file while it decides.
+    // BEFORE the placement, because the headroom rule has to measure a
+    // cross enemy in its donor file while it decides.
     static std::wstring folder = toW(argv[3]);
     {
         const size_t cut = folder.find_last_of(L"\\/");
@@ -442,8 +425,8 @@ int main(int argc, char** argv)
         for (char c : name) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(c)));
         return folder + L"\\" + w + L".trc";
     };
-    // Cache next to the source files (#103): extract once instead of per
-    // level. Without a TR3 path there is nothing to cache.
+    // Cache next to the source files: extract once instead of per level.
+    // Without a TR3 path there is nothing to cache.
     const std::wstring cache = tr3Dir.empty() ? std::wstring() : folder + L"\\Import-Export";
 
     Patch::markTriggerSafeSectors(lvl, in);
@@ -511,6 +494,18 @@ int main(int argc, char** argv)
     }
 
     if (!lvl.save(toW(argv[4]), err)) { std::printf("save: %s\n", err.c_str()); return 1; }
+
+    // HD markers: the sidecar beside the finished level. AFTER the save,
+    // and unconditionally - a level with nothing to mark
+    // gets the version line alone, so a file left over from an earlier run
+    // can never keep talking about rooms this run did not touch.
+    {
+        int hdRooms = 0, hdDonors = 0, hdCuts = 0;
+        if (!Patch::writeHdMarkers(lvl, toW(argv[4]), err, &hdRooms, &hdDonors, &hdCuts))
+        { std::printf("HD markers: %s\n", err.c_str()); return 1; }
+        std::printf("  HD markers  outfit %d, %d rooms, %d cut boxes, %d donor slots\n",
+                    lvl.hdOutfit(), hdRooms, hdCuts, hdDonors);
+    }
 
     // SecretRewards.txt lies beside the EXECUTABLE, and the target level lies
     // in its data folder - so one step up from there. The file is written
@@ -602,11 +597,9 @@ int main(int argc, char** argv)
             continue;
         }
 
-        // Compare the OCB against what the patch ASKED for, not against 0.
-        // Since KEEP_OCB (#61) a moved wall pickup keeps its 2 resp. 9 on
-        // purpose; demanding 0 here made every andy3 run report two
-        // "deviating" items and return exit code 1 on a perfectly correct
-        // result. A self-check that cries wolf is worse than none.
+        // Compare the OCB against what the patch asked for, not against 0:
+        // a moved wall pickup keeps its OCB 2 or 9 on purpose (KEEP_OCB),
+        // so demanding 0 there would falsely flag a correct result.
         const int wantOcb = edits[i].has("ocb")
                           ? static_cast<int>(edits[i]["ocb"].asInt()) & 0x3F
                           : 0;

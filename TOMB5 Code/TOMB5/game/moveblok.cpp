@@ -155,7 +155,7 @@ void MovableBlock(short item_number)
 
 		if (lara_item->frame_number == anims[lara_item->anim_number].frame_end - 1)
 		{
-			if (!(input & IN_ACTION))
+			if (!(input & IN_INTERACT))
 				lara_item->goal_anim_state = AS_STOP;
 			else if (!TestBlockPush(item, 1024, quadrant))
 				lara_item->goal_anim_state = AS_STOP;
@@ -217,7 +217,7 @@ void MovableBlock(short item_number)
 
 		if (lara_item->frame_number == anims[lara_item->anim_number].frame_end - 1)
 		{
-			if (!(input & IN_ACTION))
+			if (!(input & IN_INTERACT))
 				lara_item->goal_anim_state = AS_STOP;
 			else if (!TestBlockPull(item, 1024, quadrant))
 				lara_item->goal_anim_state = AS_STOP;
@@ -265,7 +265,7 @@ void MovableBlockCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 	if (item->room_number != room_number)
 		ItemNewRoom(item_number, room_number);
 
-	if (input & IN_ACTION && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->gravity_status &&
+	if (input & IN_INTERACT && l->current_anim_state == AS_STOP && l->anim_number == ANIM_BREATH && !l->gravity_status &&
 		lara.gun_status == LG_NO_ARMS && item->status == ITEM_INACTIVE && item->trigger_flags >= 0 ||
 		(lara.IsMoving && lara.GeneralPtr == (void*)item_number))
 	{
@@ -355,13 +355,13 @@ void MovableBlockCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 // If only pickables stand on the target sector, the block may move over
 // them.
 //
-// GetCollidedObjects returns EVERY item in the way, and TR5 refused the
-// push already for a medipack on the target tile - TR1-4 did not have
-// this general item test, there the block simply rolled over the pickup
-// (seen by the user in the rando: Andrea3, a relocated item blocks the
-// push path to the puzzle). A pickup under the block stays put and is
-// there again once the block moves on - exactly the old behavior.
-// Everything else (enemies, statues, a second block) still blocks.
+// GetCollidedObjects returns every item in the way, and TR5 refused the
+// push already for a medipack on the target tile; TR1-4 lacked this
+// general item test and simply rolled the block over the pickup. Without
+// this, a relocated pickup can block the push path to a puzzle (as in
+// Andrea3). A pickup under the block stays put and reappears once the
+// block moves on. Everything else (enemies, statues, a second block)
+// still blocks the push.
 static long OnlyPickupsInTheWay(ITEM_INFO** itemlist)
 {
 	for (long i = 0; itemlist[i]; i++)

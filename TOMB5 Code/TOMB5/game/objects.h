@@ -36,26 +36,24 @@ void HybridCollision(short item_num, ITEM_INFO* laraitem, COLL_INFO* coll);
 void DrawBaddieGunFlash(ITEM_INFO* item);
 
 // Fallback slots for the TR5 Randomizer's cross enemy mix. MESHSWAP1
-// carries, per level, the swap halves of its OWN enemies (SWAT family:
+// carries, per level, the swap halves of its own enemies (SWAT family:
 // weapon hands 10/13, Imp: head 10, TwoGun: 10<-2, gladiator/Roman god:
 // whole damage sets) - a foreign enemy would need his donor level's
 // content, and that cannot go into MESHSWAP1 without breaking the target's
 // native users. The randomizer therefore copies the swap donor's MESHSWAP1
-// into THE ENEMY'S fallback slot; setup.cpp accesses it preferably
+// into the enemy's own fallback slot; setup.cpp accesses it preferably
 // (MeshSwapSource) and otherwise falls back to MESHSWAP1.
 //
-// Since #111 it holds throughout: ONE slot per ENEMY, not per donor level.
-// Before, SWAT/SWAT+/TwoGun shared one slot (SMASH_OBJECT3) and
-// guard/Mafia/Joby guard a second (SMASH_OBJECT4) - whoever shares a slot
-// shares its content, and a native user pulled foreign hands (joby2's
-// guard item 69: OCB 3 sets meshswap_meshbits, slot 4 carried joby3's set
-// instead of its own). The pattern comes from the Roman god (#84): his two
-// versions (sword/hammer) had separate slots from the start for exactly
-// this reason - an imported gladiator would otherwise have pressed
-// Andrea3's hammer meshes into Andrea2's native sword god (measured in
-// four of eight seeds). SMASH_OBJECT3/4 are unused again since the split;
-// the soldier family parks beyond the file boundary (enum entries behind
-// ROMAN_GOD2, see #105 below).
+// One slot per enemy, not per donor level: sharing a slot between several
+// enemies (as SWAT/SWAT+/TwoGun and guard/Mafia/Joby guard once did) means
+// sharing its content, so a native user could pull a foreign enemy's hands
+// (joby2's guard item 69: OCB 3 sets meshswap_meshbits, and a shared slot
+// carried joby3's set instead of its own). The pattern follows the Roman
+// god's own two slots (sword/hammer), which keep an imported gladiator from
+// pressing Andrea3's hammer meshes into Andrea2's native sword god (measured
+// in four of eight seeds). SMASH_OBJECT3 and SMASH_OBJECT4, the two slots
+// this scheme replaced, are unused again; the soldier family's own slots
+// park beyond the file boundary (enum entries behind ROMAN_GOD2 below).
 //
 // The mapping must agree with the randomizer's kCross table
 // (Randomizer.cpp, swapDst). The swap donor can differ from the model
@@ -313,45 +311,44 @@ enum object_types
 	DEFAULT_SPRITES,
 	MISC_SPRITES,
 
-	// --- Slots beyond the original 460 (randomizer project, #105) --------
+	// --- Slots beyond the original 460 (added for the randomizer) --------
 	//
-	// These exist in NO vanilla level; only the randomizer writes moveable
+	// These exist in no vanilla level; only the randomizer writes moveable
 	// records for them, and only this engine loads them (older/original
-	// builds skip unknown slots, see LoadObjects). Keep SLOT_FILE_BOUNDARY
-	// below untouched - it pins the on-disk sprite/static split at 460.
+	// builds skip unknown slots, see LoadObjects). SLOT_FILE_BOUNDARY below
+	// stays untouched - it pins the on-disk sprite/static split at 460.
 	//
-	// New enemy slots need NO _MIP twin: distance models are switched off for
-	// enemies entirely (see DrawAnimatingItem in draw.cpp). They are added
-	// one per enemy, which also means we never overwrite a slot some level
-	// uses for something else.
+	// New enemy slots need no _MIP twin: distance models are switched off
+	// for enemies entirely (see DrawAnimatingItem in draw.cpp). They are
+	// added one per enemy, so a slot some level already uses for something
+	// else is never overwritten.
 	//
-	// BLUE_GUARD2: second guard model (#83). Vanilla carries two different
+	// BLUE_GUARD2: a second guard model. Vanilla carries two different
 	// guard models in the same slot 37 - rich levels one, joby levels the
 	// other - so both can never coexist. This slot takes the joby model;
 	// it is a full member of the SasControl family (setup.cpp anchors its
 	// anim_index like the others, InitialiseSas/lot.cpp/sas.cpp know it).
 	BLUE_GUARD2,
 
-	// ROMAN_GOD2: the second version of the Roman god (#84). In vanilla both
+	// ROMAN_GOD2: the second version of the Roman god. In vanilla both
 	// share slot 61 and thereby exclude each other - Andrea2 wields the
-	// SWORD there, Andrea3 the HAMMER. Which weapon he wields is decided by
-	// the ITEM's OCB (romangod.cpp: trigger_flags 1 = ranged/sword, 0 =
-	// melee/hammer), the MODEL comes from the slot. With a second slot both
+	// sword there, Andrea3 the hammer. Which weapon he wields is decided by
+	// the item's OCB (romangod.cpp: trigger_flags 1 = ranged/sword, 0 =
+	// melee/hammer), the model comes from the slot. With a second slot both
 	// fit into the same level: 61 carries the sword, here the hammer, and
 	// each gets the OCB belonging to his model.
 	//
-	// The precondition was that RomangodControl fetches its animations via
-	// item->object_number instead of hard-wired ROMAN_GOD - exactly the
-	// lesson from the soldier family (#80).
+	// This requires RomangodControl to fetch its animations via
+	// item->object_number instead of a hard-wired ROMAN_GOD, the same
+	// approach used for the soldier family.
 	ROMAN_GOD2,
 
-	// Meshswap parking spots of the soldier family (#111): one slot per
-	// enemy, see the big comment at MESHSWAP_CROSS_GLADIATOR above. Pure
-	// mesh stores like the SMASH_OBJECT slots - never an item of this type
-	// in a level, hence without _MIP and without an entry in trview's
-	// types.json. They are filled by the randomizer (kCross: swapDst); in
-	// levels without an import they stay unloaded and MeshSwapSource falls
-	// back to MESHSWAP1.
+	// Meshswap parking spots of the soldier family: one slot per enemy, see
+	// the big comment at MESHSWAP_CROSS_GLADIATOR above. Pure mesh stores
+	// like the SMASH_OBJECT slots - never an item of this type in a level,
+	// hence without _MIP and without an entry in trview's types.json. They
+	// are filled by the randomizer (kCross: swapDst); in levels without an
+	// import they stay unloaded and MeshSwapSource falls back to MESHSWAP1.
 	MESHSWAP_CROSS_SWAT,		// 462, from rich3
 	MESHSWAP_CROSS_SWATPLUS,	// 463, from rich3
 	MESHSWAP_CROSS_TWOGUN,		// 464, from rich3 (source mesh 2)
@@ -360,25 +357,25 @@ enum object_types
 	MESHSWAP_CROSS_GUARD2,		// 467, from joby3 (Joby guard, slot 460)
 	MESHSWAP_CROSS_HITMAN,		// 468, from rich3 (the cyborg's 20 panels)
 
-	// CYBORG: the VCI cyborg as a pool enemy (#146). Slot 67 stays exactly
-	// what Core built: a puzzle piece of Red Alert that CANNOT be shot
-	// (setup.cpp sets undead there), dies only in the gas or by the water
-	// short circuit, and whose electrocuted body has to lie in the corridor
-	// for good. None of that can travel into a foreign level - a body that
-	// never fades leaks its AI slot, and an enemy no weapon can touch is
-	// not an enemy. So the pool gets its own slot with the same model and
-	// the same control: mortal, with a death of its own, and without the
-	// two rich3-only death triggers.
+	// CYBORG: the VCI cyborg as a pool enemy. Slot 67 stays exactly what
+	// Core built: a puzzle piece of Red Alert that cannot be shot (setup.cpp
+	// sets undead there), dies only in the gas or by the water short
+	// circuit, and whose electrocuted body has to lie in the corridor for
+	// good. None of that can travel into a foreign level - a body that never
+	// fades leaks its AI slot, and an enemy no weapon can touch is not an
+	// enemy. So the pool gets its own slot with the same model and the same
+	// control: mortal, with a death of its own, and without the two
+	// rich3-only death triggers.
 	//
 	// Same reasoning as ROMAN_GOD2 above, only the other way round: there
 	// one slot had to hold two models, here one model has to serve two sets
 	// of rules.
 	CYBORG,
 
-	// The crane guy's swap half (#146). He was the last of the soldier
-	// family still pulling meshes 10/13 raw out of MESHSWAP1 - correct in
-	// joby2, where MESHSWAP1 is his own, and wrong wherever the randomizer
-	// carries him. Same warehouse role as the six above.
+	// The crane guy's swap half. He was the last of the soldier family
+	// still pulling meshes 10/13 raw out of MESHSWAP1 - correct in joby2,
+	// where MESHSWAP1 is his own, and wrong wherever the randomizer carries
+	// him. Same role as the six above.
 	MESHSWAP_CROSS_CRANEGUY,	// 470, from joby2
 
 	NUMBER_OBJECTS

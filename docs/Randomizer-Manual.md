@@ -10,6 +10,15 @@ Everything the program does, in the order you will meet it. If you only read
 one section, read [Your first run](#your-first-run) — the rest you can look
 up when you need it.
 
+> **An unofficial, non-commercial fan project.** It is not affiliated with,
+> authorised by or endorsed by Core Design, Eidos, Crystal Dynamics, Aspyr,
+> Saber Interactive or Embracer. *Tomb Raider*, *Tomb Raider Chronicles* and
+> *Tomb Raider IV-VI Remastered* belong to their rights holders. Nothing of
+> theirs is included here and nothing is ever copied out of their
+> installations: you need your own copy of Chronicles, and — for the guest
+> enemies and guest outfits, and for the HD art the engine can draw — your
+> own copies of *Tomb Raider III* and of the Remaster.
+
 - [What you need](#what-you-need)
 - [Your first run](#your-first-run)
 - [The seed](#the-seed)
@@ -67,13 +76,10 @@ That is the whole thing. Every option below is optional; with none of them
 touched you still get the full weapon set in every level.
 
 > **A note on which folder.** Either works: the program looks for
-> `PCtomb5.exe` and, if it is not where you pointed, one level up. That
-> matters because `SCRIPT.DAT` lives beside the executable and never in
-> `data\` — until 2026-08-30 choosing `data\` meant the whole script step
-> was skipped in silence, and the only trace was a line in `spoiler.txt`
-> reading *"SCRIPT.DAT not found — the Andy levels keep young Lara"*. If
-> you see that line, the folder is not the problem any more — the file is
-> genuinely missing.
+> `PCtomb5.exe` and, if it is not where you pointed, one level up, because
+> `SCRIPT.DAT` lives beside the executable and never in `data\`. If
+> `spoiler.txt` reads *"SCRIPT.DAT not found — the Andy levels keep young
+> Lara"*, the file is genuinely missing.
 
 ---
 
@@ -105,7 +111,7 @@ agree:
 | Random outfits, TR3 outfits, the wardrobe | the secret options |
 | extra enemies and their count | the music options |
 | enemy swap, enemy pool | level sections and level order |
-| | the three balance sliders |
+| Shuffle weather | the three balance sliders |
 
 And three things sit outside the seed entirely: **the randomizer's version,
 the level data it ships with, and the engine**. The build number matters most
@@ -114,7 +120,7 @@ changes to the curated placement data, which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_1.0` is the release, `Build 0.18` is the placement data. Nothing stops
+`Beta_1.0` is the release, `Build 0.19` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 
@@ -130,9 +136,8 @@ there to be read, not enforced.
 choice is remembered, so it is asked once.
 
 **"Check again"** re-hashes every level and compares it against the shipped
-list. It runs by itself at start and after every run; the button is for
-repeating it by hand. It also re-scans `data\secrets`, which is what makes a newly
-added secret list appear. It also runs at startup and when you choose a
+list, and it re-scans `data\secrets`, which is what makes a newly added
+secret list appear. It runs by itself at startup and when you choose a
 folder, but NOT after a run - so after dropping a list into `data\secrets`
 while the program is open, the button is what makes it show up.
 
@@ -228,6 +233,15 @@ the run happens.
 drawn. What is stored is the *deselection*, so an outfit added in a later
 version arrives switched on rather than falling through an old settings file.
 
+The engine can wear about a hundred other outfits — every `OUTFIT_*` file of
+your own two Remaster installations, and whatever an outfit mod brings — but
+**none of them is in this window and none of them is ever rolled**. They are the *in-game*
+outfit changer's list, and the reason they are kept out of a run is
+reproducibility: a seed and its settings travel from one player to another, an
+installation and a `Mods` folder do not. Nothing about them is written into a
+level file, so a seed plays the same here and there. The engine's README says
+where they come from and how you choose one.
+
 Two things that surprise people: **joby4 always keeps the diving suit** and
 never rolls, and the **Ireland levels always draw an adult outfit**, because
 young Lara has none of the three. Independent of this box, every run switches
@@ -302,6 +316,9 @@ within a section still works.
 sections*, and *free across everything*. "Within" shuffles the levels inside
 each block; "free" throws all thirteen playable levels into one pot.
 
+With the drop-down at *free across everything* the section checkbox is greyed
+out — a free roll already crosses the sections, so the box would mean nothing.
+
 The cutscene richcut2 is glued behind rich2 and travels with it. Neither roll
 can land on the vanilla order — it re-rolls if it does, so the box always
 visibly does something.
@@ -340,7 +357,8 @@ sky" and the "not inside" flag, and those seven have no such room. They keep
 what Core gave them, which for joby3 means it keeps the snow Core set there
 and the engine has never shown.
 
-The option is part of the seed, like every other checkbox — the same seed text
+The option is part of the seed — the table under **The seed** says which
+others are, and which are not — so the same seed text
 with the box ticked is a different game from the same text without it, and the
 effective seed under the seed field shows that. spoiler.txt names what each
 level got, together with what it had before.
@@ -458,6 +476,46 @@ with the level options off puts the original order back.
 > which is *not* put back — nor are `Balance.txt` and `SecretRewards.txt`. For
 > a fully vanilla game, copy `data\Backup\SCRIPT.DAT` back by hand, press
 > "Reset balance", and delete `SecretRewards.txt`.
+
+### The `.hdm` files beside your levels
+
+A run leaves one small text file per level in `data\`,
+next to the `.trc` it belongs to: `Andrea1.hdm`, `joby2.hdm` and so on, a
+handful of lines each.
+
+They are notes for the engine's **HD mode**, which draws the levels with the
+Remaster's own artwork. That mode needs your own installation of **Tomb Raider
+IV-VI Remastered**: nothing of it is included here, nothing of it is written
+into a level file, and the engine reads it where it lies while the game runs.
+That artwork describes the *original* level, so the
+randomizer has to say where it no longer fits: where a secret list opened a
+wall, which rooms it lifted or built from nothing, which object slots hold a
+model out of a different level, and which Tomb Raider III outfit you rolled.
+
+An **opening** — a wall cut through, a window, a floor or ceiling opened — is
+written down as the box it lives in, and the engine leaves out just the HD
+artwork inside that box. The room round it stays HD. Only a room the run
+**lifted** (`Move_Room`) or **built a surface for** (`Make_Room_Geometry`)
+falls back to the classic look entirely, because nothing of the Remaster's
+artwork for it is worth keeping. Marking just the box, rather than the whole
+room, matters: in ANDY3 two new doorways touch four rooms — the whole village
+courtyard among them — and falling back the whole room there would turn them
+classic in the middle of an HD level, with the seam between the two showing
+the void.
+
+You never have to do anything with them:
+
+- **They are written on every run, for every level**, even when there is
+  nothing to report — an empty one is how the tool makes sure an old note
+  cannot outlive the run that wrote it.
+- **Deleting them is safe.** The engine reads a missing file as "nothing to
+  report" and draws that level entirely in HD, which is only wrong if the run
+  really did change something there.
+- **"Restore original" deletes them again**, because a restored level has
+  nothing left to report. Unlike `Balance.txt` and `SecretRewards.txt`, these
+  really do go away.
+- They are not needed in classic mode at all, and they cost a few hundred
+  bytes.
 
 **"Debug"** opens a small menu; the marked levels are built from the
 **"Sector markers..."** window it leads to. They are copies of the levels

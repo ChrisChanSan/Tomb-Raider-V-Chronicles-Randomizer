@@ -11,7 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 /*
- * Raptor from Tomb Raider 3, ported to TOMB5 in 2026 (#97).
+ * Raptor from Tomb Raider 3, ported to TOMB5.
  *
  * Taken from tomb3 by Troye <https://github.com/Trxyebeep/tomb3>
  * (game/raptor.cpp, GPLv3) - the same license as TOMB5 and
@@ -26,27 +26,28 @@
  * ----------------------------------------------------------------------------
  * The AI substructure is the same between the two games (CreatureAIInfo,
  * GetCreatureMood, CreatureMood, CreatureTurn, CreatureTilt, CreatureJoint,
- * CreatureAnimation) - so the control keeps running almost word for word.
+ * CreatureAnimation), so the control keeps running almost word for word.
  * In TR5 the Raptor sits on slot REAPER (75); none of the 16 levels carries
- * a model there (measured with ModelOffset against all of them), exactly as
+ * a model there (checked against all of them with ModelOffset), exactly as
  * with SAS for the T-Rex and CROW for the vulture.
  *
- * THREE DEVIATIONS from tomb3, all justified here:
+ * Two deviations from tomb3:
  *
- * 1. The prey search is gone entirely (#98) - the Raptor only hunts Lara.
- *    Reasoning at the spot itself, in short: TR3 pits mercenaries against
- *    him who also fight Lara; with us the nearest targets would always be
- *    Lara's own pursuers.
+ * The prey search is gone - the Raptor only hunts Lara. In TR3 the search
+ * walks all active enemy slots and targets the nearest, which works
+ * because the Raptor's neighbours there are mercenaries who fight Lara
+ * rather than other Raptors; in TR5's cross enemy mix, everything at the
+ * Raptor's side also hunts Lara, so the same search would always find an
+ * ally instead of Lara.
  *
- * 2. tomb3 additionally checks in the run state
- *    `raptor->enemy->object_number != ANIMATING6`. In TR3, ANIMATING6 is a
- *    target object for exactly this spot; in TR5 the same slot carries
- *    something entirely different, so the check would be pointless to
- *    harmful. It is dropped - consequence: the Raptor may show his warning
- *    growl even where TR3 suppressed it. That is behavior, not function.
- *    The pointer is checked against null in the process, which tomb3 does
- *    not do there (the flow always sets it) - see the lesson from the
- *    T-Rex: when dropping a condition, check what it carried.
+ * tomb3 additionally checks in the run state
+ * `raptor->enemy->object_number != ANIMATING6`. In TR3, ANIMATING6 is a
+ * target object for exactly this spot; in TR5 the same slot carries
+ * something entirely different, so the check would be pointless to
+ * harmful. It is dropped - consequence: the Raptor may show his warning
+ * growl even where TR3 suppressed it. That is behavior, not function.
+ * The pointer is checked against null in the process, which tomb3 does
+ * not do there (its flow always sets it).
  *
  * Sounds come via the model's anim commands as with the T-Rex; no call is
  * needed here. The Raptor attacks normally, so there is no CreatureKill
@@ -106,24 +107,23 @@ void RaptorControl(short item_number)
 	}
 	else
 	{
-		// DEVIATION 3 (#98, user decision 2026-08-17): the Raptor only
-		// targets Lara anymore.
+		// The Raptor only targets Lara.
 		//
 		// tomb3's prey search stood here: it walks all active enemy slots,
 		// takes the nearest as the target and only spares its own kind
-		// (1 in 32, and only at short range). In TR3 that made a fine
-		// picture - in CRASH.TR2 the pack faces mercenaries, who in turn
-		// fight Lara. The jungle lives.
+		// (1 in 32, and only at short range). That works in TR3, where the
+		// Raptor's neighbours are mercenaries fighting Lara rather than
+		// other Raptors.
 		//
-		// With us this third faction does not exist. The cross enemy mix
-		// puts guards, SWATs and other dinos at the Raptor's side, all of
-		// whom also go after Lara: the search thus always finds an ally,
-		// and the Raptor mauls his own reinforcements instead of hunting
-		// Lara (seen in the test level).
+		// Here that third faction does not exist: the cross enemy mix puts
+		// guards, SWATs and other dinos at the Raptor's side, all of whom
+		// also go after Lara, so the search would always find an ally and
+		// the Raptor would maul its own reinforcements instead of hunting
+		// Lara.
 		//
-		// Now the same line as for every native TR5 enemy. The bite effect
-		// on non-Lara targets further down stays: via ai_bits, GetAITarget
-		// can still set an AI object.
+		// This is the same line every native TR5 enemy uses instead. The
+		// bite effect on non-Lara targets further down stays: via ai_bits,
+		// GetAITarget can still set an AI object.
 		if (item->ai_bits)
 			GetAITarget(raptor);
 		else
@@ -203,7 +203,7 @@ void RaptorControl(short item_number)
 					item->goal_anim_state = GetRandomControl() < 0x2000 ? RAPTOR_STOP : RAPTOR_ATTACK2;
 			}
 			// Without the ANIMATING6 comparison, but checked against null -
-			// see deviation 2 in the file header.
+			// see the file header.
 			else if (info.ahead && raptor->mood != ESCAPE_MOOD && GetRandomControl() < 128 && raptor->enemy)
 			{
 				item->goal_anim_state = RAPTOR_STOP;

@@ -17,14 +17,24 @@ void init_game_malloc();
 void* game_malloc(long size);
 long GetRandomControl();
 void SeedRandomControl(long seed);
+
+/* Reads back the logic RNG's seed, for saving it across an interpolated
+ * frame. The draw path calls GetRandomControl in several places - the star
+ * twinkle alone takes four thousand draws a frame - so at sixty presents a
+ * second the logic stream would be consumed twice per tick and the
+ * simulation would drift apart between the two frame rates. interpolate.cpp
+ * saves this over an in-between frame and restores it with
+ * SeedRandomControl, so consumption per logic tick stays exactly what it is
+ * at thirty. Nothing else may use it: a seed is not a random number. */
+long GetRandomControlSeed();
 long GetRandomDraw();
 void SeedRandomDraw(long seed);
 void Log(const char* s, ...);
 
-// -log (#125): Log() writes nothing until this is set. Diagnostic seams
-// that have to BUILD something before they can log (walking a list,
-// formatting a name) must test it themselves at the call site - the gate
-// inside Log() only saves the writing, not the preparing.
+// -log: Log() writes nothing until this is set. Diagnostic seams that have
+// to build something before they can log (walking a list, formatting a
+// name) must test it themselves at the call site - the gate inside Log()
+// only saves the writing, not the preparing.
 extern bool gLogEnabled;
 
 extern FILE* logF;

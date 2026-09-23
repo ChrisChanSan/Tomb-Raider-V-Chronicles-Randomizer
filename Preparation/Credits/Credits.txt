@@ -8,6 +8,15 @@ Tomb5 Decompile: https://github.com/Trxyebeep/TOMB5
 
 tomb3 Decompile: https://github.com/Trxyebeep/tomb3 (Trxyebeep) - the TR3 enemies (T-Rex, Raptor, Compy, Vulture) come from there
 
+TROne (GPLv3): https://github.com/todesengel1931 (Todesengel1931) - the
+  HD-at-run-time path carries his code, and the modern control scheme
+  carries his design and his test expectations. Twenty-one source files
+  here name his copyright beside ours; THIRD-PARTY.md lists what was taken,
+  file by file. He is in the contributors list below as well, because he
+  played and reported too.
+  (Added in audit round A1, 2026-09-21: until then he appeared only as a
+  play tester, which is not what the code says.)
+
 Trview: https://github.com/chreden/trview (Chreden)
 
 TRmod https://b122251.org/tr/tools/index.html (b122251)
@@ -21,11 +30,26 @@ stb: https://github.com/nothings/stb (Sean Barrett)
 zlib: https://zlib.net/ (Jean-loup Gailly and Mark Adler) - the complete
   source is in the tree and compiled into both binaries.
 
-discord-rpc: https://github.com/discord/discord-rpc (Discord, Inc.) -
-  linked into PCtomb5.exe; tomb5.cpp calls Discord_Initialize,
-  Discord_UpdatePresence and Discord_Shutdown.
-  (Both added 2026-08-30. See THIRD-PARTY.md at the repository root for
-  the licences and where each full text lives.)
+TRForge (MIT, TRForge contributors): five files are vendored byte for byte
+  and compiled into PCtomb5.exe - the reader for the remasters' LEVELn.TRG
+  geometry and the helpers it needs. TRForge's own format descriptions are
+  where several more of the HD path's rules come from. Licence and
+  provenance: TOMB5 Code\TOMB5\vendor\trforge\.
+  (Added in audit round A1, 2026-09-21: it was compiled in and named
+  nowhere here.)
+
+discord-rpc: https://github.com/discord/discord-rpc (Discord, Inc.) - in
+  the source tree as upstream TOMB5 shipped it, and switched off here:
+  tomb5.cpp opens with TOMB5_DISCORD_RPC 0, so no call site is compiled.
+  The project still hands the two prebuilt .lib to the linker, but with
+  no symbol referenced nothing of them is pulled in - the shipped
+  PCtomb5.exe carries no occurrence of the word Discord at all. Its
+  notice travels all the same, because this project distributes the files.
+  (Corrected in audit round A1, 2026-09-21: this entry used to say the
+  library was linked and that tomb5.cpp called it. Neither has been true
+  since 2026-08-05.)
+  (zlib and discord-rpc were both added 2026-08-30. See THIRD-PARTY.md at
+  the repository root for the licences and where each full text lives.)
 
 Tomb Raider Chronicles(2000): https://core-design.com/
 

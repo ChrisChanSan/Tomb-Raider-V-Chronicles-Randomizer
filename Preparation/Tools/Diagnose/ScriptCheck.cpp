@@ -3,10 +3,10 @@
 //
 // Why this exists: name, y offset, size and rotation of a key, puzzle or
 // pickup item do NOT stand in the level but in the level's script block
-// (gameflow.cpp:371ff, "inventry_objects_list[n].objname = ..."). If such
-// a model is imported into a level that lacks the matching command, it
-// carries in the inventory the name and pose of the last level that set
-// them - inventry_objects_list is never reset between levels.
+// (gameflow.cpp, inventry_objects_list[n].objname). If such a model is
+// imported into a level that lacks the matching command, it carries in the
+// inventory the name and pose of the last level that set them -
+// inventry_objects_list is never reset between levels.
 //
 // The parser in ScriptDat.cpp is no use for this: it stops at CMD_LEVEL.
 //
@@ -74,7 +74,7 @@ int main(int argc, char** argv)
     if (std::fread(d.data(), 1, (size_t)n, f) != (size_t)n) { std::fclose(f); std::printf("incomplete\n"); return 1; }
     std::fclose(f);
 
-    // GAMEFLOW (global/types.h:615) is 16 bytes, then 40 bytes "[PCExtensions]".
+    // GAMEFLOW (global/types.h) is 16 bytes, then 40 bytes "[PCExtensions]".
     const unsigned nLevels    = d[9];
     const unsigned nFileNames = d[10];
     auto u16 = [&](size_t o) { return (unsigned)(d[o] | (d[o + 1] << 8)); };
@@ -155,10 +155,10 @@ int main(int argc, char** argv)
                 else if ((d[q] == 0xD9 || d[q] == 0xDA) && q + 1 < d.size())
                 {
                     // Payload byte 0 is the INVENTORY object number (enum
-                    // invobj_types, newinv2.h:121): 0 = Uzi, 1 = pistols,
-                    // 19 = pistol ammo. setup.cpp:122/160 applies it at
-                    // level start - GIVEOBJ puts into the inventory,
-                    // TAKEOBJ takes out (NailInvItem).
+                    // invobj_types, newinv2.h): 0 = Uzi, 1 = pistols,
+                    // 19 = pistol ammo. setup.cpp applies it at level start -
+                    // GIVEOBJ puts into the inventory, TAKEOBJ takes out
+                    // (NailInvItem).
                     std::snprintf(buffer, sizeof(buffer), "   %s inventory object %u",
                                   d[q] == 0xD9 ? "gives" : "TAKES", d[q + 1]);
                     extra = buffer;

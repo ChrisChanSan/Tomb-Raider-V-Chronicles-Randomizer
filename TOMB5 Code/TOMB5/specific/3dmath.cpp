@@ -19,9 +19,45 @@
 #include "../game/spotcam.h"
 #include "../game/control.h"
 #include "../game/lara.h"
+#include "../game/interpolate.h"	// InterpIsTweenFrame - the poison ramp guard
 
 PHD_VECTOR CamPos;
 SVECTOR CamRot;
+
+/* The roll the view was last built with.
+ *
+ * Three of the game's cameras hand phd_LookAt a roll that is not zero:
+ * the first person view rolls with the head bone (fpRoll,
+ * game\camera.cpp), a flyby rolls along its track (croll,
+ * game\spotcam.cpp) and the cutscene decoder rolls with the scene. Every
+ * other camera is level.
+ *
+ * The interpolator has to rebuild the view matrix per drawn frame and
+ * must rebuild it with the same roll the logic tick used, or a
+ * first-person frame would snap upright and back every other frame.
+ * Recording it here is the one place that catches all three, because
+ * all three go through this function - they do not share anything else. */
+short CamRoll = 0;
+
+/* Which camera this is, as a number.
+ *
+ * One step per phd_LookAt, i.e. one per view matrix the engine ever
+ * builds. The HD path writes it down beside every room matrix and every
+ * object it collects, and HDFrameDraw reports the spread over the frame
+ * - so "were all the rooms, all the portal windows and all the objects
+ * of this picture built with the same camera?" is a number in the log
+ * instead of an argument.
+ *
+ * It has to be asked because the answer is not obvious: at sixty hertz
+ * the view is rebuilt twice per in-between frame (InterpBeginFrame
+ * writes the blended eye, InterpEndFrame puts the live one back), and
+ * anything collected on the wrong side of either would be drawn from a
+ * camera the rest of the frame does not share - a room seam that walks
+ * with Lara's breathing.
+ *
+ * A counter and nothing else: nothing branches on it, so it costs one
+ * increment per view and changes no picture at any setting. */
+long ViewSerial = 0;
 
 float one = 2048.0F * float(1 << W2V_SHIFT);
 float mone = 2048.0F;
@@ -52,7 +88,14 @@ float fcossin_tbl[65536];
 static D3DMATRIX D3DMW2VMatrix;
 
 float* aMXPtr;
-static float aW2VMx[indices_count];
+/* No longer static: it is the float twin of w2v_matrix, which has
+ * always been exported, and the HD object path needs the float one: it
+ * turns a light's world position into view space, and the long matrix
+ * carries its rotation in 14 bits, which is four digits where a light
+ * direction wants seven. Rotation in M00..M22, the camera's own world
+ * position in M03 / M13 / M23 - a world point becomes a view point as
+ * R * (p - c), which is exactly what aTranslateAbs computes above. */
+float aW2VMx[indices_count];
 float aFMatrixStack[20 * indices_count];
 
 long* phd_mxptr;
@@ -85,10 +128,10 @@ void AlterFOV(short fov)
 	else
 		fov = old_fov;
 
-	// Every setter of the field of view, in order (#134). The camera's own
-	// trace reads CurrentFov BEFORE drawing and therefore cannot see anyone
-	// who sets it afterwards - the same blind spot that hid the dead filters
-	// for three sittings. This line sits where every call must pass.
+	// Logs every setter of the field of view, in order. The camera's own
+	// trace reads CurrentFov before drawing and therefore cannot see
+	// anyone who sets it afterwards; this line sits where every call
+	// must pass, so nothing that changes the FOV goes unlogged.
 	Log("ALTERFOV %d (%d deg) winh %d", (int)fov, (int)fov / 182, (int)phd_winheight);
 
 	CurrentFov = fov;
@@ -553,7 +596,22 @@ static void aGenerateW2V(PHD_3DPOS* viewPos)
 	aMXPtr[M21] = aW2VMx[M21];
 	aMXPtr[M22] = aW2VMx[M22];
 
-	if (lara.dpoisoned != lara.poisoned)
+	/* The poison ramp guarded at its source. Core put a piece of game
+	 * state inside the view matrix: how green the screen is walks
+	 * towards lara.dpoisoned by a sixteenth per call, and the call is
+	 * phd_LookAt. Guarding only the interpolator's own extra calls is
+	 * not enough - S_DrawPickup issues a phd_LookAt of its own once per
+	 * drawn frame (specific\output.cpp) whenever a pickup icon is on
+	 * screen, and at sixty that alone would run the ramp an extra time
+	 * per tick. So the guard sits here, in the ramp itself, covering
+	 * every caller there is and every one there will be.
+	 *
+	 * This must not change the vanilla count: at thirty this test is
+	 * always false and the ramp runs exactly as often as it does today,
+	 * including the fact that phd_GenerateW2V ends by calling
+	 * aGenerateW2V and therefore steps it twice per phd_LookAt. That is
+	 * Core's own arithmetic and it stays. */
+	if (lara.dpoisoned != lara.poisoned && !InterpIsTweenFrame())
 	{
 		lara.poisoned += (lara.dpoisoned - lara.poisoned) >> 4;
 
@@ -640,7 +698,9 @@ void phd_GenerateW2V(PHD_3DPOS* viewPos)
 	phd_mxptr[M21] = w2v_matrix[M21];
 	phd_mxptr[M22] = w2v_matrix[M22];
 
-	if (lara.dpoisoned != lara.poisoned)
+	// Same poison ramp guard, in the integer half of the same routine -
+	// see the note over the copy in aGenerateW2V above.
+	if (lara.dpoisoned != lara.poisoned && !InterpIsTweenFrame())
 	{
 		lara.poisoned += (lara.dpoisoned - lara.poisoned) >> 4;
 
@@ -699,6 +759,8 @@ void phd_LookAt(long xsrc, long ysrc, long zsrc, long xtar, long ytar, long ztar
 	CamPos.x = xsrc;
 	CamPos.y = ysrc;
 	CamPos.z = zsrc;
+	CamRoll = roll;		// see the note over the variable
+	ViewSerial++;		// see the note over the variable
 	phd_GenerateW2V(&viewPos);
 	S_InitD3DMatrix();
 	aSetViewMatrix();

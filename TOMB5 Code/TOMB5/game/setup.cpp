@@ -182,7 +182,7 @@ void InitialiseLara(long restore)
 		lara.puzzleitemscombo = 0;
 		lara.pickupitems = 0;
 		lara.pickupitemscombo = 0;
-		memset(&lara.keyitems, 0, sizeof(lara.keyitems));	// counter array since 2026-09-04, see global\types.h
+		memset(&lara.keyitems, 0, sizeof(lara.keyitems));	// counter array, see global\types.h
 		lara.keyitemscombo = 0;
 	}
 	else if (gfLevelId == LVL5_SINKING_SUBMARINE)
@@ -1030,14 +1030,12 @@ void BaddyObjects()
 	obj->save_flags = 1;
 	obj->save_anim = 1;
 
-	// SLOT 31 = T-REX (#88). The SAS is a leftover from Tomb Raider 4: the
-	// control has been here forever, but NOT ONE of the 16 TR5 levels
-	// carries a model for it (measured against all files). A dead slot with
-	// a complete substructure - exactly the right place for the T-Rex from
-	// TR3, which the randomizer copies in here. CROW (43) thereby stays
-	// free for the vulture, which belongs there.
-	//
-	// The values come from TR3's own setup for the TREX.
+	// Slot 31 (SAS) becomes the T-Rex from TR3. SAS is a leftover from
+	// Tomb Raider 4: the control has been here forever, but none of the
+	// 16 TR5 levels carries a model for it (measured against all files) -
+	// a dead slot with a complete substructure, the right place for an
+	// imported T-Rex. CROW (43) stays free for the vulture, which belongs
+	// there. The values come from TR3's own setup for the TREX.
 	if (objects[SAS].loaded)
 	{
 		obj = &objects[SAS];
@@ -1055,22 +1053,18 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// NO bone rotation flags. TR3 sets four here (36, 44, 80, 88; tomb3
-		// setup.cpp:569-572) for its head tracking - carried over they
-		// looked wrong in game: sporadically twisted feet and an inverted
-		// jaw while biting (seen by the user).
-		//
-		// The reason is the bit's different meaning: TR4/TR5 distribute the
-		// CREATURE_INFO's joint_rotation over the marked bones, and there
-		// are exactly four of those values - DinoControl never sets them,
-		// other controls of this engine do. Four marked bones on a model
-		// whose control does not fill them yield rotations without a
-		// sender.
-		//
-		// Without the flags he does not track Lara with his head. That is
-		// the price, and it is smaller than twitching limbs. Whoever wants
-		// it back must fill CreatureJoint in DinoControl - but then assign
-		// all four deliberately.
+		// No bone rotation flags for head tracking. TR3 sets four here
+		// (36, 44, 80, 88; tomb3 setup.cpp:569-572) for its head
+		// tracking, but carried over they looked wrong: sporadically
+		// twisted feet and an inverted jaw while biting. TR4/TR5 give the
+		// marked bones a different meaning: they distribute the
+		// CREATURE_INFO's four joint_rotation values over exactly four
+		// marked bones, and DinoControl never sets them, so four marks
+		// without a sender produced rotations from stale data. Without
+		// the flags he does not track Lara with his head, a smaller price
+		// than the twitching limbs. To restore head tracking, fill
+		// CreatureJoint in DinoControl and assign all four flags
+		// deliberately.
 	}
 
 	if (objects[BLUE_GUARD].loaded)
@@ -1085,39 +1079,30 @@ void BaddyObjects()
 		// SCIENTIST and CRANE_GUY take it from SWAT, else from BLUE_GUARD.
 		// The sets are template-identical, which is why this works.
 		//
-		// The second branch was NOT checked: objects[BLUE_GUARD].anim_index
-		// was taken blindly even when BLUE_GUARD does not lie in the level
-		// at all. For an unloaded object it holds 0 - InitialiseObjects
-		// does not reset anim_index -, so the enemy played animation 0 with
-		// a FOREIGN mesh count. The frame bounds are then nonsense,
-		// S_GetObjectBounds returns 0, and with that he drops out of
-		// drawing AND out of the hit test (collide.cpp:797, "don't get
-		// objects that are not drawn"). Only the shadow stays visible,
-		// which draw.cpp:561 draws BEFORE the bounds check. He keeps
-		// dealing damage - his control still runs.
+		// The second branch was never checked: objects[BLUE_GUARD].anim_index
+		// was taken even when BLUE_GUARD is not loaded in the level, and an
+		// unloaded object's anim_index is 0 (InitialiseObjects never resets
+		// it), so the enemy played animation 0 with a foreign mesh count.
+		// The frame bounds are then nonsense, S_GetObjectBounds returns 0,
+		// and the enemy drops out of drawing and out of the hit test in
+		// collide.cpp (which skips objects that are not drawn), while the
+		// shadow still draws in draw.cpp before the bounds check - so he
+		// stays invulnerable but keeps dealing damage.
 		//
-		// Seen by the user in Andy3: about three frames visible and
-		// hittable, then fifteen frames only shadow and invulnerable, in a
-		// loop. In vanilla it never shows because every family member has
-		// an anchor in the level - only the randomizer puts one alone into
-		// a foreign level.
+		// In vanilla this never shows, because every family member has an
+		// anchor loaded in its own level; it only happens when the
+		// randomizer places one alone in a foreign level.
+		// Without a loaded anchor the slot keeps its own animation set
+		// instead, which is exactly what the randomizer needs; vanilla
+		// behavior does not change since an anchor is always loaded there.
 		//
-		// Without an anchor the slot now keeps its OWN set, and that is
-		// exactly what the randomizer delivers. Vanilla does not change.
-		// The guard no longer bends onto SWAT at all (2026-08-29). He has
-		// his own full 64-anim set, and Core's alias here is DEAD CODE in
-		// vanilla: measured over all thirteen levels, SWAT (33) and the
-		// guard (37) never lie in one level - 33 only in rich3, 37 in
-		// joby2/3/5 and rich1/2. The line can only ever fire in a level the
-		// randomizer built, and there it does damage:
-		//
-		// rich1 has no SWAT of its own. Once the run imports one from rich3,
-		// this line pulls the whole level's guards onto that FOREIGN set -
-		// including the guard sitting on his chair (item 110, OCB 4), whose
-		// pose is anim +30. In rich3's set anims 28..32 share one frame
-		// block and read it with strides 37/37/36/37/39, so +30 walks it
-		// wrong. User log 2026-08-29: anim 827 = 797 + 30, state 17, and
-		// MESHLOG reported all 15 meshes discarded, frame after frame.
+		// The guard does not take SWAT's set either: in vanilla the two
+		// never share a level (SWAT 33 only in rich3, the guard 37 in
+		// joby2/3/5 and rich1/2), so the alias only fires in a randomized
+		// level. There a SWAT imported into rich1 would move every guard
+		// onto rich3's set, whose anims 28..32 share one frame block read
+		// with strides 37/37/36/37/39 - the chair guard's pose (item 110,
+		// OCB 4, anim +30) then discards all 15 meshes.
 
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
@@ -1176,21 +1161,17 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Family anchor for the animation set - reasoning above the
-		// BLUE_GUARD block. Middle stage guard (460) since the #121
-		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
-		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
-		// stays.
-		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
-		// set is the only one measured clean on every pose, and the
-		// randomizer imports him along with any stub it places (baseSlot in
-		// kCross), so he is there whenever this matters. A SWAT, by
-		// contrast, may have been carried in from rich3 and brings that
-		// level's dead heirs on exactly the pose anims only the stubs play.
-		//
-		// Vanilla is untouched: slot 460 exists only in levels the
-		// randomizer built, so there the chain falls through to SWAT or the
-		// guard exactly as before.
+		// Family anchor for the animation set - same reasoning as the
+		// BLUE_GUARD block above. Guard 460 (the middle-stage guard) is
+		// tried first, then the vanilla anchors SWAT and BLUE_GUARD: his
+		// joby3 set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places, so he is
+		// present whenever this matters. A SWAT loaded instead may have
+		// been carried in from rich3 and bring that level's dead-anim
+		// heirs on exactly the pose anims only the stubs play. Vanilla is
+		// untouched: slot 460 exists only in levels the randomizer built,
+		// so there the chain falls through to SWAT or BLUE_GUARD exactly
+		// as before.
 		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[SWAT].loaded)
@@ -1226,21 +1207,17 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Family anchor for the animation set - reasoning above the
-		// BLUE_GUARD block. Middle stage guard (460) since the #121
-		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
-		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
-		// stays.
-		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
-		// set is the only one measured clean on every pose, and the
-		// randomizer imports him along with any stub it places (baseSlot in
-		// kCross), so he is there whenever this matters. A SWAT, by
-		// contrast, may have been carried in from rich3 and brings that
-		// level's dead heirs on exactly the pose anims only the stubs play.
-		//
-		// Vanilla is untouched: slot 460 exists only in levels the
-		// randomizer built, so there the chain falls through to SWAT or the
-		// guard exactly as before.
+		// Family anchor for the animation set - same reasoning as the
+		// BLUE_GUARD block above. Guard 460 (the middle-stage guard) is
+		// tried first, then the vanilla anchors SWAT and BLUE_GUARD: his
+		// joby3 set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places, so he is
+		// present whenever this matters. A SWAT loaded instead may have
+		// been carried in from rich3 and bring that level's dead-anim
+		// heirs on exactly the pose anims only the stubs play. Vanilla is
+		// untouched: slot 460 exists only in levels the randomizer built,
+		// so there the chain falls through to SWAT or BLUE_GUARD exactly
+		// as before.
 		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[SWAT].loaded)
@@ -1276,21 +1253,17 @@ void BaddyObjects()
 		obj->control = SasControl;
 		obj->collision = CreatureCollision;
 
-		// Family anchor for the animation set - reasoning above the
-		// BLUE_GUARD block. Middle stage guard (460) since the #121
-		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
-		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
-		// stays.
-		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
-		// set is the only one measured clean on every pose, and the
-		// randomizer imports him along with any stub it places (baseSlot in
-		// kCross), so he is there whenever this matters. A SWAT, by
-		// contrast, may have been carried in from rich3 and brings that
-		// level's dead heirs on exactly the pose anims only the stubs play.
-		//
-		// Vanilla is untouched: slot 460 exists only in levels the
-		// randomizer built, so there the chain falls through to SWAT or the
-		// guard exactly as before.
+		// Family anchor for the animation set - same reasoning as the
+		// BLUE_GUARD block above. Guard 460 (the middle-stage guard) is
+		// tried first, then the vanilla anchors SWAT and BLUE_GUARD: his
+		// joby3 set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places, so he is
+		// present whenever this matters. A SWAT loaded instead may have
+		// been carried in from rich3 and bring that level's dead-anim
+		// heirs on exactly the pose anims only the stubs play. Vanilla is
+		// untouched: slot 460 exists only in levels the randomizer built,
+		// so there the chain falls through to SWAT or BLUE_GUARD exactly
+		// as before.
 		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[SWAT].loaded)
@@ -1326,21 +1299,17 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Family anchor for the animation set - reasoning above the
-		// BLUE_GUARD block. Middle stage guard (460) since the #121
-		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
-		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
-		// stays.
-		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
-		// set is the only one measured clean on every pose, and the
-		// randomizer imports him along with any stub it places (baseSlot in
-		// kCross), so he is there whenever this matters. A SWAT, by
-		// contrast, may have been carried in from rich3 and brings that
-		// level's dead heirs on exactly the pose anims only the stubs play.
-		//
-		// Vanilla is untouched: slot 460 exists only in levels the
-		// randomizer built, so there the chain falls through to SWAT or the
-		// guard exactly as before.
+		// Family anchor for the animation set - same reasoning as the
+		// BLUE_GUARD block above. Guard 460 (the middle-stage guard) is
+		// tried first, then the vanilla anchors SWAT and BLUE_GUARD: his
+		// joby3 set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places, so he is
+		// present whenever this matters. A SWAT loaded instead may have
+		// been carried in from rich3 and bring that level's dead-anim
+		// heirs on exactly the pose anims only the stubs play. Vanilla is
+		// untouched: slot 460 exists only in levels the randomizer built,
+		// so there the chain falls through to SWAT or BLUE_GUARD exactly
+		// as before.
 		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[SWAT].loaded)
@@ -1365,41 +1334,39 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
 
-		// Own fallback slot since #146 - he was the last of the family
-		// still reading MESHSWAP1 raw. Correct in joby2, where MESHSWAP1
-		// is his own; wrong in every level the randomizer carries him to,
-		// where MESHSWAP1 belongs to that level's natives. Reasoning at
-		// MESHSWAP_CROSS_GLADIATOR in objects.h; without an import the
-		// fallback is unloaded and MeshSwapSource returns exactly the two
-		// lines that stood here.
+		// Own fallback slot: reasoning at MESHSWAP_CROSS_GLADIATOR in
+		// objects.h. Correct in joby2, where MESHSWAP1 is his own; wrong
+		// in every level the randomizer carries him to, where MESHSWAP1
+		// belongs to that level's natives. Without an import the fallback
+		// is unloaded and MeshSwapSource returns exactly the two lines
+		// that stood here before.
 		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_CRANEGUY, 10);
 		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_CRANEGUY, 13);
 	}
 
 	if (objects[BLUE_GUARD2].loaded)
 	{
-		// Second guard model (#83/#105): copy of the BLUE_GUARD block. The
-		// slot only ever comes from the randomizer and brings a full own
-		// anim set - always the joby3 guard's.
+		// Second guard model: copy of the BLUE_GUARD block. The slot only
+		// ever comes from the randomizer and brings a full own anim set -
+		// always the joby3 guard's.
 		obj = &objects[BLUE_GUARD2];
 		obj->initialise = InitialiseSas;
 		obj->control = SasControl;
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// No bending onto SWAT/guard anymore (#111 part 2): the Joby guard
-		// always brings his full own set from joby3 (kCross without a
-		// baseSlot) - on his own set the death scream (84 instead of SWAT's
-		// 377) and the console and sitting poses are right out of the box.
-		//
-		// Since the #121 addendum he is therefore the ANIM BASE of the stub
-		// family (middle stage of the alias chain above, kCross baseSlot 460
-		// for Mafia and Crane Guy): his joby3 set measures clean on all
-		// poses, while slot 37 carries a different model per level - the
-		// rich model there drags dead inherited anims with the wrong stride
-		// exactly on the states ONLY the stubs play (state 35, Mafia's shot
-		// pose: the blinking soldier from andy3). Without a loaded guard the
-		// old vanilla chain SWAT -> BLUE_GUARD applies.
+		// No bending onto SWAT/guard: this guard always brings his full
+		// own set from joby3 (kCross without a baseSlot) - on his own set
+		// the death scream (84 instead of SWAT's 377) and the console and
+		// sitting poses are right out of the box. He is therefore the
+		// animation base of the stub family (the middle stage of the
+		// alias chain above, kCross baseSlot 460 for Mafia and Crane
+		// Guy): his joby3 set measures clean on all poses, while slot 37
+		// carries a different model per level, and the rich model there
+		// drags dead inherited anims with the wrong stride exactly on the
+		// states only the stubs play (state 35, Mafia's shot pose: the
+		// blinking soldier from andy3). Without a loaded guard the old
+		// vanilla chain SWAT -> BLUE_GUARD applies.
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
 		obj->pivot_length = 50;
@@ -1458,16 +1425,15 @@ void BaddyObjects()
 
 	if (objects[SAILOR].loaded)
 	{
-		// SAILOR is the Compsognathus slot (#99), no longer the sailor.
-		//
-		// The slot hung on InitialiseSas/SasControl and fetched its anims
-		// from SWAT - nobody ever used it: none of the 16 levels carries a
-		// model there (measured with ModelOffset against all of them, cross-
-		// checked via the dog 41, which stands in two). Fourth dead slot
-		// after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75 (Raptor).
-		// The anim detour via SWAT drops away: the Compy brings its own set.
-		//
-		// All values READ OFF tomb3's setup.cpp, not guessed.
+		// SAILOR is the Compsognathus slot, no longer the sailor. The slot
+		// hung on InitialiseSas/SasControl and fetched its anims from
+		// SWAT, but nobody ever used it: none of the 16 levels carries a
+		// model there (measured with ModelOffset against all of them,
+		// cross-checked via the dog 41, which stands in two). Fourth dead
+		// slot after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75
+		// (Raptor). The anim detour via SWAT drops away, since the Compy
+		// brings its own set; all values are read off tomb3's setup.cpp,
+		// not guessed.
 		obj = &objects[SAILOR];
 		obj->initialise = InitialiseCompy;
 		obj->control = CompyControl;
@@ -1484,14 +1450,14 @@ void BaddyObjects()
 		obj->save_anim = 1;
 
 		// Rotation flags for torso and head, numbers read off tomb3. They
-		// come along because CompyControl sets both joints (CreatureJoint 0
-		// and 1) - exactly what the T-Rex lacked, which is why they had to
-		// stay out there. The sailor's old flags (+24 and +52) belong to a
-		// human skeleton and are meaningless here.
+		// apply because CompyControl sets both joints (CreatureJoint 0
+		// and 1) - exactly what the T-Rex lacks, which is why it has
+		// none. The sailor's old flags (+24 and +52) belong to a human
+		// skeleton and are meaningless here.
 		bones[obj->bone_index + 4] |= 8;
 		bones[obj->bone_index + 8] |= 8;
 
-		// non_lot deliberately stays OFF - reasoning at the top of compy.cpp.
+		// non_lot deliberately stays off - reasoning at the top of compy.cpp.
 		bones[obj->bone_index + 52] |= 4;
 	}
 
@@ -1606,18 +1572,15 @@ void BaddyObjects()
 
 	if (objects[REAPER].loaded)
 	{
-		// REAPER is the Raptor slot (#97), no longer the jellyfish.
-		//
-		// REAPER was a water jellyfish (InitialiseJelly/JellyControl in
-		// minisub.cpp) and carries a model in NONE of the 16 TR5 levels -
-		// measured with ModelOffset against all of them, cross-checked via the
-		// dog (41), which stands in two. The same situation as SAS for the
+		// REAPER is the Raptor slot, no longer the jellyfish. REAPER was
+		// a water jellyfish (InitialiseJelly/JellyControl in minisub.cpp)
+		// and carries a model in none of the 16 TR5 levels - measured
+		// with ModelOffset against all of them, cross-checked via the dog
+		// (41), which stands in two. The same situation as SAS for the
 		// T-Rex and CROW for the vulture: the control has always been in
-		// the setup, nobody ever used it. JellyControl stays in the source,
-		// only the slot changes its owner.
-		//
-		// All values READ OFF tomb3 setup.cpp:575-594, not guessed - that
-		// is the lesson from the T-Rex.
+		// the setup, nobody ever used it. JellyControl stays in the
+		// source, only the slot changes its owner. All values are read
+		// off tomb3 setup.cpp:575-594, not guessed.
 		obj = &objects[REAPER];
 		obj->initialise = InitialiseCreature;
 		obj->control = RaptorControl;
@@ -1633,12 +1596,12 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// Bone rotation flags for the head and neck tracking. On the T-Rex
-		// I left them out, and there that was right: TR4/TR5 distribute the
-		// CREATURE_INFO's four joint_rotation values over the marked bones,
-		// and DinoControl never sets them - four marks without a sender.
-		// RaptorControl sets all four (CreatureJoint 0..3), so here they
-		// have one. Numbers read off tomb3.
+		// Bone rotation flags for head and neck tracking. The T-Rex above
+		// leaves these out on purpose: TR4/TR5 distribute the
+		// CREATURE_INFO's four joint_rotation values over the marked
+		// bones, and DinoControl never sets them, so four marks would
+		// have no sender. RaptorControl sets all four (CreatureJoint
+		// 0..3), so here they do have one. Numbers read off tomb3.
 		bones[obj->bone_index + 80] |= 8;
 		bones[obj->bone_index + 84] |= 8;
 		bones[obj->bone_index + 92] |= 8;
@@ -1665,12 +1628,12 @@ void BaddyObjects()
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;
 		obj->save_anim = 1;
-		// Core gap: as the only soldier he carries a PERMANENT mesh swap
-		// (0x2400 = pistols in the holster, after the draw animation 0x80 =
-		// in hand). Without save_mesh the state never lands in the
-		// savegame - after loading, the weapons sat in the holster again
-		// and he drew anew (user find 2026-08-18). Also saves mesh_bits,
-		// i.e. the shot-off headdress too (0x4000).
+		// As the only soldier he carries a permanent mesh swap (0x2400 =
+		// pistols in the holster, after the draw animation 0x80 = in
+		// hand). Without save_mesh the state never lands in the savegame:
+		// after loading, the weapons sat in the holster again and he
+		// drew anew. Also saves mesh_bits, i.e. the shot-off headdress
+		// too (0x4000).
 		obj->save_mesh = 1;
 		bones[obj->bone_index + 24] |= 8;
 		bones[obj->bone_index + 24] |= 4;
@@ -1764,26 +1727,26 @@ void BaddyObjects()
 			meshes[obj->mesh_index + (lp * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (lp * 2)];
 	}
 
-	// The cyborg as a pool enemy (#146). Clone of the block above with the
-	// same model and the same control, and exactly three differences:
+	// The cyborg as a pool enemy: a clone of the block above with the
+	// same model and control, and three differences:
 	//
 	//   no undead     - 67 cannot be shot at all (larafire.cpp returns
 	//                   before the damage), because Red Alert wants him
 	//                   killed by the gas or by the water. A pool enemy
 	//                   that no weapon touches is not an enemy.
 	//   save_mesh     - his eleven damage panels live in
-	//                   meshswap_meshbits, and HitmanControl opens them one
-	//                   by one as he takes hits. Without this the state
-	//                   never reaches the savegame and he stands there
-	//                   undamaged again after a load - the same Core gap
-	//                   Mafia2 has with his holstered pistols above.
-	//   MeshSwapSource- his twenty panels come from the fallback slot the
-	//                   randomizer fills with rich3's MESHSWAP1.
+	//                   meshswap_meshbits, and HitmanControl opens them
+	//                   one by one as he takes hits. Without this the
+	//                   state never reaches the savegame and he stands
+	//                   there undamaged again after a load - the same
+	//                   gap Mafia2 has with his holstered pistols above.
+	//   MeshSwapSource- his twenty panels come from the fallback slot
+	//                   the randomizer fills with rich3's MESHSWAP1.
 	//
-	// hit_points stays the literal 50, not balance.hpCyborg:
-	// BalanceSetEnemies further down overwrites it from the table and
-	// compares what stands here against the table's vanilla column, so a
-	// tuned value here would make that self-check fire every time.
+	// hit_points stays the literal 50, not balance.hpCyborg: BalanceSetEnemies
+	// further down overwrites it from the table and compares what stands
+	// here against the table's vanilla column, so a tuned value here
+	// would make that self-check fire every time.
 	if (objects[CYBORG].loaded)
 	{
 		obj = &objects[CYBORG];
@@ -1846,10 +1809,10 @@ void BaddyObjects()
 		obj->control = ChefControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 60; // was 35 - #124: he joins the enemy pool, and
-		                      // as a pure melee fighter he needs substance
-		                      // (Larson/Pierre class). The in-game value
-		                      // comes from Balance.txt (HP_Chef) anyway.
+		obj->hit_points = 60; // as a pure melee fighter in the enemy pool
+		                      // he needs substance (Larson/Pierre class);
+		                      // the in-game value comes from Balance.txt
+		                      // (HP_Chef) anyway.
 		obj->pivot_length = 50;
 		obj->radius = 102;
 		obj->bite_offset = 0;
@@ -1873,10 +1836,8 @@ void BaddyObjects()
 		obj->control = TwogunControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 90; // was 24 vanilla, then 60 - raised again per the user's
-		                      // randomizer balancing call after the cross-mix playtest
-		                      // (2026-08-15): "Two Gun kann auch mehr Leben
-		                      // bekommen." (Two Gun may have more health too.)
+		obj->hit_points = 90; // raised from vanilla's 24 for the cross-mix enemy
+		                      // pool; the in-game value comes from Balance.txt
 		obj->pivot_length = 50;
 		obj->radius = 128;
 		obj->explodable_meshbits = 4;
@@ -1977,11 +1938,12 @@ void BaddyObjects()
 		obj->control = MazeMonsterControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 120;  // was 4000 - upstream built him effectively unkillable
-		                        // (in Andy2 he is a chase set piece, not a combat target).
-		                        // As a cross-mix pool enemy he must be killable; 120 keeps
-		                        // him the toughest regular (user call 2026-08-15: "he can
-		                        // have more, but not that much").
+		obj->hit_points = 120;  // upstream leaves him at 4000, effectively
+		                        // unkillable, because in Andy2 he is a
+		                        // chase set piece, not a combat target. As
+		                        // a cross-mix pool enemy he must be
+		                        // killable; 120 keeps him the toughest
+		                        // regular.
 		obj->pivot_length = 20;
 		obj->radius = 341;
 		obj->bite_offset = 256;
@@ -2036,16 +1998,14 @@ void BaddyObjects()
 		obj->bite_offset = 256;
 		obj->object_mip = 5120;
 		obj->intelligent = 1;
-		// Sparks, not blood (2026-08-29). Core had the skeleton on 1 like
-		// every man in the game - never noticed, because until now nothing
-		// in Andy2 could shoot it. The field decides twice: larafire.cpp
-		// picks the impact effect by it, and CreatureDie picks the
-		// shredding flavour by it too - 1 means flag 258, and bit 2 there
-		// makes every flying bone trail blood (missile.cpp). Both halves
-		// point the same way.
-		//
-		// 3 and not 2: two is the Roman gods' metal clang, and bone is no
-		// metal. TR5 has no bone chip effect - sparks are the closest thing
+		// Sparks, not blood: Core left the skeleton on 1 like every man in
+		// the game, unnoticed because nothing in Andy2 could shoot it.
+		// The field decides twice: larafire.cpp picks the impact effect
+		// by it, and CreatureDie picks the shredding flavour by it too -
+		// 1 means flag 258, and bit 2 there makes every flying bone trail
+		// blood (missile.cpp). Both halves point the same way. 3 and not
+		// 2: two is the Roman gods' metal clang, and bone is no metal.
+		// TR5 has no bone chip effect, so sparks are the closest thing
 		// that still tells the player he is hitting something.
 		obj->HitEffect = 3;
 		obj->save_position = 1;
@@ -2135,15 +2095,15 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
 
-		// Its own fallback slot, NOT the gladiator's - see the reasoning at
-		// MESHSWAP_CROSS_ROMANGOD in objects.h (#84).
+		// Its own fallback slot, not the gladiator's - see the reasoning
+		// at MESHSWAP_CROSS_ROMANGOD in objects.h.
 		for (lp = 0; lp < 17; lp++)
 			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_ROMANGOD, lp);
 	}
 
-	// Second version of the Roman god (#84): the block one to one as above,
-	// only with its own fallback slot. Both versions can thereby stand in
-	// the same level; which weapon a specimen wields is still decided by its
+	// Second version of the Roman god: the block one to one as above, only
+	// with its own fallback slot. Both versions can thereby stand in the
+	// same level; which weapon a specimen wields is still decided by its
 	// item's OCB, and the randomizer sets it to match the model.
 	if (objects[ROMAN_GOD2].loaded)
 	{
@@ -2300,17 +2260,17 @@ void GetCarriedItems()
 	{
 		baddy = &items[lp];
 
-		// The pool cyborg (#146) carries nothing. This routine hands an
-		// enemy every pickup within half a sector of him at level start and
-		// takes it off the floor; it comes back only when he dies. Slot 67
-		// is in that list and stays in it - Core placed both him and those
-		// pickups by hand. 469 is placed by the roll, so the pickup he
-		// swallows is one the randomizer put somewhere on purpose, and the
-		// enemy standing on it is a coincidence. He gives it back on death,
-		// but only where he dies, which is not where the item was meant to
-		// be; and while the slot was still undead it never came back at all
-		// - that was the original softlock this came out of. Cheaper to
-		// keep him out of the list than to depend on his death.
+		// The pool cyborg carries nothing. This routine hands an enemy
+		// every pickup within half a sector of him at level start and
+		// takes it off the floor again only when he dies. Slot 67 stays
+		// in that list - Core placed both him and those pickups by hand.
+		// Slot 469 is placed by the roll instead, so the pickup he
+		// swallows is one the randomizer put somewhere on purpose and the
+		// enemy standing on it is a coincidence; he would give it back
+		// only where he dies, not where the item was meant to be, and
+		// while the slot was still undead it never came back at all -
+		// a softlock. Cheaper to keep him out of the list than to depend
+		// on his death.
 		if (baddy->object_number == CYBORG)
 			continue;
 
@@ -2431,7 +2391,7 @@ void BuildOutsideTable()
 	OutsideRoomOffsets = (short*)game_malloc(0x5B2);
 	OutsideRoomTable = (char*)game_malloc(0xB640);
 	memset(OutsideRoomTable, 0xFF, 0xB640);
-	memset(flipped, 0, sizeof(flipped)); // was memset(flipped, 0, 255) - off-by-one, left flipped[255] uninitialised
+	memset(flipped, 0, sizeof(flipped)); // sizeof rather than a literal 255 - flipped[255] would be left uninitialised otherwise
 
 	for (int i = 0; i < number_rooms; i++)
 	{
@@ -2556,18 +2516,17 @@ void SetupGame()
 	InitTarget();
 	InitialiseGameFlags();
 
-	// Wipe the inventory completely (InitialiseLara(0)) instead of carrying
-	// it over: vanilla does that at the four CHAPTER STARTS - Rome, Russia,
-	// Ireland, VCI each begin as their own flashback, Lara starts with
-	// nothing but the pistols (which setup.cpp hands out again right after).
-	//
-	// In a shuffled order that is wrong: the four levels can stand anywhere,
-	// and Lara then loses her arsenal several times mid-run (seen by the
-	// user: joby5 -> Andrea1, joby3 -> joby2, rich1 -> andy1). Hence the
-	// rule now only applies with an UNCHANGED order; otherwise only "new
-	// game" counts. Weapons, ammo, medipacks and flares thereby travel
-	// through the whole run, exactly as the randomizer's cleanup logic
-	// intends.
+	// Wipes the inventory completely (InitialiseLara(0)) instead of
+	// carrying it over: vanilla does that at the four chapter starts -
+	// Rome, Russia, Ireland, VCI each begin as their own flashback, and
+	// Lara starts with nothing but the pistols (which setup.cpp hands out
+	// again right after). In a shuffled order that is wrong: the four
+	// levels can stand anywhere, and Lara then loses her arsenal several
+	// times mid-run (e.g. joby5 -> Andrea1, joby3 -> joby2, rich1 ->
+	// andy1). The rule now only applies with an unchanged order;
+	// otherwise only "new game" counts, so weapons, ammo, medipacks and
+	// flares travel through the whole run, as the randomizer's cleanup
+	// logic intends.
 	if (gfInitialiseGame ||
 		(!OrderShuffled() &&
 		 (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_BASE ||

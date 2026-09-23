@@ -21,44 +21,20 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// The precomputed data, baked into the program.
+// Precomputed data (zone exports, checksum lists) baked into the executable
+// as a fallback, like the engine's HQ music and sound packs: a file in
+// data\ always wins, the baked copy is used only when it is missing. Every
+// read logs its source ("external" with the path, or "embedded"), because a
+// stale file in data\ would otherwise silently outrank a corrected baked one.
 //
-// WHY. Until now the fifteen zone exports and the checksum list only existed
-// as loose files in data\ beside the EXE. They are a build product, the
-// folder is gitignored, and no repository covered them - so a copying
-// accident that took data\ along left a program that could not randomize
-// anything and said so only in a "file not found". The data now travels
-// inside the EXE: whatever else goes missing, the tool still works.
+// Baked: zones_*.json, VanillaLevelChecksums.csv, Tr3Checksums.csv. Not
+// baked: data\secrets\*.txt, a hand-edited list in an open format.
 //
-// THE RULE: A FILE ON DISK WINS, THE BAKED COPY IS THE FLOOR.
-// Exactly the pattern the engine already uses for the HQ music and the HQ
-// sounds. If data\zones_rich2.json lies beside the program it is read; if it
-// does not, the baked one is unpacked. Both halves matter:
-//   - curation stays fast. A freshly exported zones_rich2.json dropped into
-//     data\ takes effect on the next run, with no rebuild.
-//   - a freshly unpacked package runs with no attachments at all.
-// Every read says in the log which of the two it was - "external" with the
-// path, or "embedded". Without that line the two cases are indistinguishable
-// from the outside, and a stale file in data\ would silently outrank a
-// corrected baked one.
-//
-// WHAT IS IN, WHAT IS NOT. Baked: zones_*.json, VanillaLevelChecksums.csv,
-// Tr3Checksums.csv. NOT baked: data\secrets\*.txt. Those are hand-written
-// lists the user edits and adds to; making them a build product would turn
-// an open format into a closed one.
-//
-// THE GENERATOR STEP. EmbeddedData.cpp is GENERATED and versioned - that is
-// the whole point, the repository is what carries the data now. It is made
-// by
-//
+// EmbeddedData.cpp is generated and versioned. After any re-curation run
 //     powershell -File "Preparation\Tools\EmbedData.ps1"
-//
-// which reads TR5Randomizer\build\data and rewrites
-// TR5Randomizer\src\core\EmbeddedData.cpp. Run it after every re-curation,
-// i.e. whenever the zone exports were regenerated; then rebuild and commit
-// the generated file. Building itself never calls the generator: GPLv3
-// asks that the shipped binary be buildable from the shipped source, and
-// b1.bat/b2.bat therefore need nothing but a compiler.
+// (it reads TR5Randomizer\build\data), then rebuild and commit the file. The
+// build never calls the generator, so the shipped binary stays buildable
+// from the shipped source with nothing but a compiler, as GPLv3 requires.
 //----------------------------------------------------------------------------
 
 namespace EmbeddedData
@@ -86,10 +62,9 @@ namespace EmbeddedData
 }
 
 //----------------------------------------------------------------------------
-// The one reader everything goes through. Three separate ways of finding
-// these files existed before - the command line took a path, the GUI built
-// one from its payload folder, and the checksum list had its own two-place
-// search. Each would have needed its own fallback; one reader needs one.
+// The single reader for these files: the command line, the GUI, and the
+// checksum list each used to look them up their own way, and each would
+// otherwise need its own external/embedded fallback.
 //----------------------------------------------------------------------------
 namespace DataFile
 {

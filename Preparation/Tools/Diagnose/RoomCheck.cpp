@@ -1,9 +1,8 @@
 // RoomCheck - shows flags and flipmap partners of rooms in a .trc.
 //
-// Occasion (#111 follow-up, the water-step phantom): SFXLOG names obj=51
-// in rooms 57/59 of Andrea1 with a "water only" step, and the user is sure
-// no water is reachable there. The question to the file: do these rooms
-// (or their flip variants) carry the water bit 0x1?
+// SFXLOG names obj=51 in rooms 57/59 of Andrea1 with a "water only" step,
+// although no water is reachable there. The question to the file: do these
+// rooms (or their flip variants) carry the water bit 0x1?
 //
 // Usage: RoomCheck <level.trc> [room ...]    without rooms: all with the water bit
 #include <cstdio>
@@ -38,7 +37,7 @@ static void line(const Tr5Level& lvl, int r)
     {
         // The engine does NOT find the portal list where we do: it follows
         // the stored offset door (header +4), and an ODD value is its mark
-        // for "this room has none" (alexstuff.cpp:158). A room that gained
+        // for "this room has none" (aFixUpRoom, alexstuff.cpp). A room that gained
         // its first portal keeps that mark unless it is written, and then
         // the engine sees no neighbour at all.
         unsigned d = 0, fl = 0; std::string herr;

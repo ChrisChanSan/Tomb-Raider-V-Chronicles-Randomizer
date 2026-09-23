@@ -29,6 +29,52 @@ void do_boot_screen(long language);
 void aCalcColorSplit(long col, long* pC, long* pS);
 long S_DumpScreen();
 long S_DumpScreenFrame();
+
+/* The present clock.
+ *
+ * gPresentMinTicks is how many 1/60 s ticks S_DumpScreen waits for before it
+ * presents. Two is the engine's own 30 frames a second and the value this
+ * variable holds everywhere except inside DrawPhaseGame's own present,
+ * which lowers it to one while fps_mode says 60 and puts it straight back.
+ *
+ * That one line is the whole clock split. Everything else that presents by
+ * itself - the inventory, the load/save screen, the death menu, the
+ * loading fade - runs its own animation counters once per present and
+ * therefore has to keep 30; leaving the default at two is what keeps them
+ * there without touching a line of any of them.
+ *
+ * The title is one of them: it does not present itself - DoTitle draws
+ * through DrawPhaseGame like the game does - but TitleOptions runs once
+ * per present while dbinput is refreshed once per tick, so at 60 every
+ * keypress would be read twice and the menu would walk two rows at a time.
+ * The title guards against that itself (TitleInputShadow, game/gameflow.cpp);
+ * the note over GameFrameMinTicks in output.cpp has the whole rule.
+ *
+ * It is also the frame budget. FPSLOG and PROFLOG judge a frame late
+ * against gPresentMinTicks * 1/60 s plus half a tick of slack, read at the
+ * moment the frame is judged and not out of tomb5.fps_mode - which is why
+ * DrawPhaseGame restores the two only after ProfileFrameEnd has run.
+ *
+ * Zero is a third state. At fps_mode 2 the game frame waits for no tick at
+ * all, because D3DPRESENT_INTERVAL_ONE makes the present itself wait for
+ * the panel; the frame's slot is then the panel's period and not a whole
+ * number of ticks, which is what PresentSlotMs() is for. Both FPSLOG and
+ * PROFLOG take their budget from it so that the two cannot drift apart on
+ * the definition.
+ *
+ * ActiveFpsMode() is tomb5.fps_mode as the engine can really honour it: 2
+ * collapses to 1 whenever the present does not wait (VSync off, an adapter
+ * without the interval, a driver that overrode it). Everything that has to
+ * agree about the frame rate asks this and never the option directly.
+ *
+ * TargetPresentHz() is that mode as a number - 30, 60, or the display's
+ * own refresh rate - for the log lines that name it. It is not a budget;
+ * use PresentSlotMs() for that. */
+extern long gPresentMinTicks;
+long ActiveFpsMode();		// 0, 1 or 2 - what is really running
+long TargetPresentHz();		// 30, 60 or the panel's rate
+double PresentSlotMs();		// the slot the present that just ran asked for
+long GameFrameMinTicks();	// what DrawPhaseGame's own present may wait for
 void StashSkinVertices(long node);
 void SkinVerticesToScratch(long node);
 void StashSkinNormals(long node);

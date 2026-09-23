@@ -19,8 +19,7 @@
 #include <string>
 
 //----------------------------------------------------------------------------
-// Balance.txt - the engine's tuning file that lives next to PCtomb5.exe
-// (task #108).
+// Balance.txt - the engine's tuning file that lives next to PCtomb5.exe.
 //
 // The randomizer touches EXCLUSIVELY the three percentage lines that its
 // sliders drive. Everything else - per-weapon damage, per-enemy hit points,
@@ -30,8 +29,7 @@
 // individual values.
 //
 // If the file is missing, a short one with just these three lines is
-// written. The game fills in everything else on its next start - it has
-// been able to do that on its own since bcb3286.
+// written; the game fills in everything else on its own next start.
 //----------------------------------------------------------------------------
 namespace BalanceFile
 {

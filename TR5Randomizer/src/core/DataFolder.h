@@ -23,24 +23,18 @@
 //----------------------------------------------------------------------------
 // Management of the game data.
 //
-// Fundamental decision (user, 2026-08-05): the randomizer does NOT write
-// into the Steam folder. It asks once for its path, checks the levels
-// against the bundled checksum list, and copies them into its own game
-// folder next to the engine. Reasons:
-//  - Steam's "verify files" silently restores changed files; a randomized
-//    playthrough would be vanilla again without warning.
-//  - A game update collides with our changes.
-//  - A tool that writes into a purchased folder rightly makes users
-//    nervous.
-//  - "Restore to default" becomes trivial: the Steam folder IS the
-//    original, restoring means copying anew.
+// The randomizer does NOT write into the Steam folder. It asks once for its
+// path, checks the levels against the bundled checksum list
+// (VanillaLevelChecksums.csv) and copies them into its own game folder next
+// to the engine, because:
+//  - Steam's "verify files" silently restores changed files;
+//  - a game update would collide with the changes;
+//  - a tool that writes into a purchased folder rightly makes players nervous;
+//  - "Restore to default" is then just copying anew from the original.
 //
-// The checksum list (VanillaLevelChecksums.csv) already exists from the
-// preparation phase and gets its true purpose here: making sure that only
-// genuinely unmodified vanilla levels serve as the source. Randomizing an
-// already randomized or otherwise modified level a second time produces
-// results nobody can trace anymore - and preventing exactly that is what
-// the seed feature is for.
+// The checksum check makes sure only unmodified vanilla levels serve as the
+// source: randomizing a modified level again gives results no seed can
+// reproduce.
 //----------------------------------------------------------------------------
 
 struct LevelFile

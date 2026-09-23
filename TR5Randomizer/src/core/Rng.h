@@ -23,22 +23,16 @@
 //----------------------------------------------------------------------------
 // Deterministic random number generator for the randomizer.
 //
-// Why not std::mt19937 with std::shuffle/std::uniform_int_distribution?
-// Because the seed would then NOT be reproducible, and that is precisely the
-// requirement: if a user reports a bug for seed X, the same seed must
-// produce exactly the same level here. std::mt19937 itself is specified
-// bit-exactly by the standard, but std::uniform_int_distribution and
-// std::shuffle explicitly are NOT - their distribution and shuffling
-// algorithms are left to the implementation. The same seed thus yields a
-// different result depending on compiler, standard library or even its
-// version. A user report "seed 12345 is unwinnable" would then not be
-// reproducible as soon as the build was made with a different toolset.
+// A seed must produce exactly the same level on every build, or a report
+// "seed 12345 is unwinnable" cannot be reproduced. std::mt19937 is
+// specified bit-exactly, but std::uniform_int_distribution and std::shuffle
+// are NOT - their algorithms are left to the implementation, so the same
+// seed would give different results across compilers and library versions.
 //
-// Hence: our own generator (xoshiro256** with splitmix64 initialization,
-// both Public Domain by Blackman/Vigna and Steele et al.), our own bias-free
-// range reduction and our own Fisher-Yates. Everything here is pinned down
-// exactly, so one seed gives the same result across compiler and version
-// boundaries.
+// Hence a purpose-built generator (xoshiro256** with splitmix64
+// initialization, both Public Domain by Blackman/Vigna and Steele et al.),
+// its own bias-free range reduction and its own Fisher-Yates, all pinned
+// down exactly.
 //----------------------------------------------------------------------------
 class Rng
 {
@@ -88,15 +82,15 @@ private:
 //----------------------------------------------------------------------------
 // Seed representation for the UI.
 //
-// A seed is shown to the user as text and entered by them as text - that is
-// the path a bug report travels back on. Purely numeric it would be a
-// 20-digit number nobody can retype without mistakes. Hence Base32 with an
-// alphabet that avoids the look-alike pairs 0/O and 1/I/L: 13 characters,
-// readable regardless of case.
+// A seed is shown as text and typed back in as text - that is the path a
+// bug report travels on. Purely numeric it would be a 20-digit number
+// nobody can retype without mistakes. Hence Base32 with an alphabet that
+// avoids the look-alike pairs 0/O and 1/I/L: 13 characters, readable
+// regardless of case.
 //
 // Every seed text is valid: if it cannot be read as Base32, it is hashed as
-// a string instead. That way a user can simply type "Christmas" and
-// reproducibly gets the same level.
+// a string instead. That way typing "Christmas" reproducibly gets the same
+// level.
 //----------------------------------------------------------------------------
 namespace SeedText
 {

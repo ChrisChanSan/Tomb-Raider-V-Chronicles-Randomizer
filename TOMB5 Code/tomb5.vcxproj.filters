@@ -16,6 +16,27 @@
     <Filter Include="TOMB5\tomb5">
       <UniqueIdentifier>{ba2a1dd8-bbca-41ad-a46d-2ac95f8e0b1a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="TOMB5\specific\hd">
+      <UniqueIdentifier>{defd6174-c6b4-5f38-8b71-0a450890f95f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TOMB5\specific\hd\hd_shader">
+      <UniqueIdentifier>{731ee012-9f7c-5c39-a6a0-04dc88f97abd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TOMB5\vendor">
+      <UniqueIdentifier>{766f3bdf-dc4d-5f03-9190-e3fda69ee748}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TOMB5\vendor\trforge">
+      <UniqueIdentifier>{258a6f3f-52e2-5e2a-b6ea-b4fbd6d6f5c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TOMB5\vendor\trforge\src">
+      <UniqueIdentifier>{ab50f63a-cb78-5a82-a620-31f35768365f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TOMB5\vendor\trforge\src\trf_core">
+      <UniqueIdentifier>{8b025412-ced6-5040-933a-cc98043eff74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TOMB5\vendor\trforge\src\trf_remaster">
+      <UniqueIdentifier>{445526b6-dd63-5ab1-8781-f515d153db07}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="TOMB5\game\bat.cpp">
@@ -64,6 +85,9 @@
       <Filter>TOMB5\game</Filter>
     </ClCompile>
     <ClCompile Include="TOMB5\game\health.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\interpolate.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
     <ClCompile Include="TOMB5\game\items.cpp">
@@ -225,6 +249,9 @@
     <ClCompile Include="TOMB5\specific\polyinsert.cpp">
       <Filter>TOMB5\specific</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\profile.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\game\rat.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
@@ -341,6 +368,120 @@
     <ClCompile Include="TOMB5\tomb5\libs\zlib\zutil.c" />
     <ClCompile Include="TOMB5\specific\drawbars.cpp" />
     <ClCompile Include="TOMB5\specific\setupdlg.cpp" />
+    <ClCompile Include="TOMB5\game\balance.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\secretreward.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\trex.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\raptor.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\compy.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\inventory_interp.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\menu_frame.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\modern_camera.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\modern_move.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\game\modern_state.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\bc7.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hdscreen.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\vendor\trforge\src\trf_core\trf_file.c">
+      <Filter>TOMB5\vendor\trforge\src\trf_core</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\vendor\trforge\src\trf_remaster\Trg.cpp">
+      <Filter>TOMB5\vendor\trforge\src\trf_remaster</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_classic.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_bind.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_install.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_mods.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_wardrobe.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_markers.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_scan.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_trm.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_dxt5.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_light.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_memory.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_level.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_lara.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_laradraw.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_feet.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_outfitmenu.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_object.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_font.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_fontmatch.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_pagecache.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_render.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_model.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hqsfx.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\sfxbank.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TOMB5\game\bat.h">
@@ -389,6 +530,9 @@
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\health.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\interpolate.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\items.h">
@@ -562,6 +706,9 @@
     <ClInclude Include="TOMB5\specific\polyinsert.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\profile.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\rat.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
@@ -673,6 +820,161 @@
     <ClInclude Include="TOMB5\tomb5\libs\zlib\zlib.h" />
     <ClInclude Include="TOMB5\specific\drawbars.h" />
     <ClInclude Include="TOMB5\specific\setupdlg.h" />
+    <ClInclude Include="TOMB5\game\balance.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\secretreward.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\trex.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\raptor.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\compy.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\interpolate_math.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\inventory_interp.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\key_scheme.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\menu_frame.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\menu_nav.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\modern_camera.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\modern_move.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\modern_state.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\pad_scheme.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\bc7.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hdscreen.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_bind.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_classic.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_install.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_dxt5.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_light.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_level.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_memory.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_markers.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_font.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_fontmatch.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_mods.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_wardrobe.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_lara.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_laradraw.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_model.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_object.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_render.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_scan.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_trm.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\chardef.inc">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_feet.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_outfitmenu.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\accent.inc">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_room_ps.inc">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_room_vs.inc">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_model_ps.inc">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_model_vs.inc">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\vendor\trforge\src\trf_core\trf_file.h">
+      <Filter>TOMB5\vendor\trforge\src\trf_core</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\vendor\trforge\src\trf_core\trf_types.h">
+      <Filter>TOMB5\vendor\trforge\src\trf_core</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\vendor\trforge\src\trf_remaster\Trg.h">
+      <Filter>TOMB5\vendor\trforge\src\trf_remaster</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hqsfx.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\sfxbank.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_room.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_model.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="tomb5.rc" />

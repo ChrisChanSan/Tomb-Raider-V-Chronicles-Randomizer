@@ -12,15 +12,18 @@
  */
 #pragma once
 
+#include "sfxbank.h"		// SfxRiffParts - where HQSfxPayload found the chunks
+
 struct SAMPLE_INFO;
 
-// Optional high quality sound bank, read from audio\MAIN.SFX if the player
-// put one there. See hqsfx.cpp for the format and for why nothing of it is
-// ever shipped.
+// Optional high quality sound bank: a mod's own, the player's audio\MAIN.SFX,
+// or the installed remaster's, in that order. See hqsfx.cpp for the chain,
+// the format and why nothing of it is ever shipped.
 
-// Opens audio\MAIN.SFX and parses its tables. Safe to call repeatedly; the
-// file is opened once and kept open. Returns false when there is no usable
-// bank, in which case every other call here does nothing.
+// Opens the first bank of the chain that parses, and its tables with it. Safe
+// to call repeatedly; the file is opened once and kept open. Returns false
+// when there is no usable bank anywhere, in which case every other call here
+// does nothing.
 bool HQSfxOpen();
 
 void HQSfxClose();
@@ -33,10 +36,82 @@ void HQSfxBuildMap(const short* levelLut, long levelLutEntries,
 
 void HQSfxDropMap();
 
-// Returns the bank's RIFF for one of this level's samples, or null when the
-// sample has no counterpart. pcmBytes22k is the level sample's own decoded
-// size and is used as a plausibility check - see hqsfx.cpp.
-char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes);
+/* Returns the bank's RIFF for one of this level's samples - or a mod's loose
+ * .wav for it - or null when the sample has no counterpart. pcmBytes22k is
+ * the level sample's own decoded size and is used as a plausibility check;
+ * see hqsfx.cpp.
+ *
+ * *parts, when asked for, says where the format block and the audio lie in
+ * the returned buffer. Ask for it rather than assuming the format block sits
+ * at offset 20: a wav whose fmt chunk is not the first one passes the gate
+ * here - correctly, that is a legal file an editor may well write - and a
+ * caller that read offset 20 instead would find two bytes of a junk header
+ * there, silently fall back to the level's own sample, and leave this file's
+ * counters claiming a substitution nobody heard.
+ *
+ * The contract this rests on: everything this function returns has passed
+ * SfxRiffCheck, so a caller using *parts cannot reject it afterwards. That is
+ * what makes HQSfxSubstituted() and HQSfxOverlaid() true rather than hopeful,
+ * and it is why they are counted here. */
+char* HQSfxPayload(long levelSample, long pcmBytes22k, long* riffBytes,
+	SfxRiffParts* parts = 0);
+
+/* ----------------------------------------------- the footsteps -- */
+
+/* The remaster's barefoot set is sound id 417 of the bank and of no level:
+ * five recordings at 22050 Hz, 69 to 134 ms, identified by ear as the
+ * barefoot footsteps within the bank. The bank's own entry for them is the
+ * footstep entry with the random pitch turned off - measured, id 0 is
+ * volume 191, radius 10, pitch 12, and id 417 is volume 191, radius 10,
+ * pitch 0.
+ *
+ * Not an enum: it is a number in a file, like every other id in this bridge. */
+#define HQ_SFX_BARE_FEET	417
+
+/* The boots' payload for one of the level's samples: the first unmodded bank
+ * of the chain and no loose .wav overlay, so that a sound mod which replaces
+ * the footsteps cannot take the boots away from every outfit at once. Only
+ * ever called for the samples behind sound ids 0 and 4. Null means "keep the
+ * level's own", which is Core's boots and already right. */
+char* HQSfxPayloadBoots(long levelSample, long pcmBytes22k, long* riffBytes,
+	SfxRiffParts* parts = 0);
+
+/* Which mod's loose .wav answers one of this level's samples, by name, for a
+ * log line - "" when the bank itself answers it. It asks the same overlay
+ * HQSfxPayload asks, through the same bridge, and loads nothing; a mod that
+ * ships <NNNN>.wav and no bank at all is a footstep mod exactly as a mod's
+ * bank is, and the bare set has to be able to say so. Valid until the next
+ * call. */
+const char* HQSfxWavSource(long levelSample);
+
+/* The unmodded bank's own sample numbers for one sound id, and one of those
+ * samples. The barefoot set is reached this way and not through the level
+ * bridge, because no level has sound id 417 at all. `samples` takes at most
+ * `max`; the return is how many were written. The buffer HQSfxBankSample
+ * hands back is the bank's own and lives until the next call on it. */
+int HQSfxBankTakes(int soundId, long* samples, int max);
+char* HQSfxBankSample(long sample, long* riffBytes, SfxRiffParts* parts = 0);
+
+// Whether the bank being played came out of a mod - see hd_feet.cpp.
+bool HQSfxFromMod();
+
+// Which bank that is, for the log. Never null; "" when there is none.
+const char* HQSfxPlainSource();
 
 // How many samples of the current level were answered from the bank.
 long HQSfxSubstituted();
+
+// Of those, how many a mod's own loose .wav supplied.
+long HQSfxOverlaid();
+
+/* And how many were samples a mod's bank had replaced with a recording of a
+ * different length - the ones the plausibility rule would have refused if the
+ * unmodded bank had not confirmed the pairing. See hqsfx.cpp. */
+long HQSfxReplaced();
+
+// Which of the three banks was opened, in words, for the log line that says
+// where this level's samples came from. Empty when none was.
+const char* HQSfxSource();
+
+// Whether there is a bank at all - a loose .wav needs one for its bridge.
+bool HQSfxHaveBank();

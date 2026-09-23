@@ -75,7 +75,7 @@ bool Rando::levelInfoFromLevel(const Tr5Level& lvl, JsonValue& out, std::string&
     //
     // sectorX/sectorZ are not stored anywhere; they are the item's position
     // relative to its room origin, in sectors. The same arithmetic is already
-    // in production at ApplyPatch.cpp:875-876 and :990-991 - do not invent a
+    // in production in Patch::apply (ApplyPatch.cpp) - do not invent a
     // second one.
     JsonValue itemArr = JsonValue::makeArray();
     const int nItems = lvl.itemCount();
@@ -100,7 +100,7 @@ bool Rando::levelInfoFromLevel(const Tr5Level& lvl, JsonValue& out, std::string&
         o.set("y",       JsonValue::makeInt(it.y));
         o.set("z",       JsonValue::makeInt(it.z));
         // OCB is the low 6 bits of the raw trigger_flags field - same mask as
-        // ApplyPatch.cpp:1127 and Randomize.cpp:559.
+        // Patch::apply (ApplyPatch.cpp) and main (Randomize.cpp).
         o.set("ocb",     JsonValue::makeInt(it.triggerFlags & 0x3F));
         o.set("flags",   JsonValue::makeInt(static_cast<uint16_t>(it.flags)));
         o.set("sectorX", JsonValue::makeInt(sectorX));
@@ -116,13 +116,13 @@ bool Rando::levelInfoFromLevel(const Tr5Level& lvl, JsonValue& out, std::string&
     // order the export had.
     //
     // refItem is the reference word of a Switch/Key/Pickup trigger - the item
-    // that has to be operated or collected. THE EXPORT GOT THIS WRONG: all
-    // eleven pickup triggers across the campaign carry "refItem": null there
-    // and push the word into the command list as a fake Object command
-    // instead. Randomizer.cpp then had to guess it back from the trigger's
-    // own sector. Here the word is simply read, which is why that guess can
-    // go: readChain already separates the reference word from the commands
-    // (Tr5Level.cpp:513-519), exactly as the engine does.
+    // that has to be operated or collected. The old export got this wrong:
+    // all eleven pickup triggers across the campaign carried "refItem": null
+    // there and pushed the word into the command list as a fake Object
+    // command instead, so Randomizer.cpp had to guess it back from the
+    // trigger's own sector. Here the word is simply read, which is why that
+    // guess can go: Tr5Level::readChain already separates the reference word
+    // from the commands, exactly as the engine does.
     JsonValue trigArr = JsonValue::makeArray();
     for (size_t ri = 0; ri < rooms.size(); ++ri)
     {

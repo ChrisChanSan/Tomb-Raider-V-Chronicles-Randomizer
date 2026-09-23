@@ -89,7 +89,7 @@ uint64_t Rng::below(uint64_t bound)
     // largest bound-divisible limit. Yields the same distribution but NOT
     // the same sequence as the branch above - the build must therefore
     // stick to one target platform, or seeds would not be comparable
-    // between 32- and 64-bit builds. We ship x86.
+    // between 32- and 64-bit builds. The shipped build is x86.
     const uint64_t limit = 0xFFFFFFFFFFFFFFFFull - (0xFFFFFFFFFFFFFFFFull % bound) - 1;
     uint64_t r;
     do { r = next(); } while (r > limit);
@@ -122,7 +122,7 @@ std::string SeedText::format(uint64_t seed)
 
 uint64_t SeedText::parse(const std::string& text)
 {
-    // First try to read the text as our Base31 format. Separators and
+    // First try to read the text as the Base31 format. Separators and
     // whitespace are ignored, lower case accepted.
     std::string clean;
     bool decodable = true;

@@ -50,27 +50,27 @@ namespace LevelFix
     // joby5: the floor trigger that arms the Electrical Cables 91 and 136
     // lies in room 138 on sector (1,1) - and only there. Jump Switch 190 in
     // room 165 turns the power back off; its antitrigger, however, only
-    // affects cables that are ALREADY armed.
+    // affects cables that are already armed.
     //
-    // On 2026-08-22 a tester reached the switch by the other route, without
-    // ever entering room 138. So the antitrigger ran BEFORE the trigger:
-    // first it turned nothing off, then the floor trigger armed the cables -
-    // and they stayed armed for the rest of the level. The water in rooms
-    // 126, 127, 128, 158 and 183 is then permanently lethal (10 hit points
-    // per frame, game/joby.cpp ControlElectricalCables).
+    // A route that reaches the switch without ever entering room 138 runs
+    // the antitrigger before the trigger: first it turns nothing off, then
+    // the floor trigger arms the cables - and they stay armed for the rest
+    // of the level. The water in rooms 126, 127, 128, 158 and 183 is then
+    // permanently lethal (10 hit points per frame, game/joby.cpp
+    // ControlElectricalCables).
     //
     // The copy on room 122 sector (1,1) covers that second route: Lara
     // passes it in every case before she can reach the switch.
     //
     // Why this is more than convenience: the curation explicitly allows
-    // PUZZLE items in exactly these water rooms (user decision, NO_KEY_ROOMS
-    // in ZoneAnalysis.ps1: "the puzzles can stay, only keys matter") - on the
+    // PUZZLE items in exactly these water rooms (NO_KEY_ROOMS in
+    // ZoneAnalysis.ps1: "the puzzles can stay, only keys matter"), on the
     // grounds that they are only needed at the end, when the power has long
-    // been off. The tester case breaks precisely that assumption. Keys are
-    // barred anyway; the copy makes the puzzle allowance sound again instead
-    // of having to retract it.
+    // been off. The second-route case breaks precisely that assumption.
+    // Keys are barred anyway; the copy makes the puzzle allowance sound
+    // again instead of having to retract it.
     //
-    // Measured against the file (SectorCheck): room 138 has exactly ONE
+    // Measured against the file (SectorCheck): room 138 has exactly one
     // trigger, on (1,1), with the object commands 91 and 136. Room 122 is
     // 7x3 sectors, (1,1) is walkable floor without a chain of its own - the
     // copy therefore lands on a free sector.
@@ -92,23 +92,23 @@ namespace LevelFix
     };
 
     //------------------------------------------------------------------------
-    // Andrea2: the propeller has to be running BEFORE the switch.
+    // Andrea2: the propeller has to be running before the switch.
     //
     // Three identical triggers wake propeller 86, all of them
     // [8004 3E00 8056] - mask 31, no one-shot, one object command. Two of
-    // them sit in room 61, which is a WATER room, on the two sectors of a
+    // them sit in room 61, which is a water room, on the two sectors of a
     // shaft; the third sits in room 60.
     //
     // In Core's route Lara always passes them before she reaches the
     // switch. A rolled run can bring her the other way round, and then she
-    // stands at the switch with the propeller still still.
+    // stands at the switch with the propeller not yet running.
     //
-    // The user picked the target sectors in trview: room 231 for the one
-    // from room 60, and rooms 245 (1,4) and (2,4) - two neighbours, so the
-    // pair keeps the two-sector-wide cover it had in the shaft and Lara
-    // trips it whichever side she walks. All three targets are walkable at
-    // floor y 0 (SectorCheck); 231 (1,3) is empty, the two in 245 carry a
-    // floor split resp. a tilt that the trigger simply follows.
+    // Target sectors: room 231 for the one from room 60, and rooms 245
+    // (1,4) and (2,4) - two neighbours, so the pair keeps the two-sector-
+    // wide cover it had in the shaft and Lara trips it whichever side she
+    // walks. All three targets are walkable at floor y 0 (SectorCheck);
+    // 231 (1,3) is empty, the two in 245 carry a floor split resp. a tilt
+    // that the trigger simply follows.
     //------------------------------------------------------------------------
     static const TriggerMove kTriggerMoves[] =
     {
@@ -138,20 +138,18 @@ namespace LevelFix
     // sword statue 203, door 130 at the far end - and door 129 at the near
     // end, the way back.
     //
-    // Door 129 is REVERSE-ACTIVATED. Its item flags in the file carry all
+    // Door 129 is reverse-activated. Its item flags in the file carry all
     // five code bits, and InitialiseItem (items.cpp) turns exactly that into
     // "strip the bits, set IFL_REVERSE, activate". TriggerActive then reads
-    // backwards: incomplete bits mean ACTIVE, so the door starts OPEN - and
-    // the trigger, by completing the bits, SHUTS it behind Lara. The user
-    // saw the contradiction before the code did: "the door has 11111 at the
-    // start and is open, but the trigger is allowed to shut it with 11111 -
-    // it ought to have 00000".
+    // backwards: incomplete bits mean ACTIVE, so the door starts open - and
+    // the trigger, by completing the bits, shuts it behind Lara: it starts
+    // with all five bits set and open, and the trigger is written to set
+    // them again, which should instead leave it with none set.
     //
-    // A SECOND trigger cannot help, and that was tried: it would complete
-    // the bits too, and by then the one-shot has hung IFL_INVISIBLE on the
-    // door, which makes the engine skip every plain trigger on it
-    // (control.cpp, top of the TO_OBJECT branch). Measured in game: no
-    // effect at all.
+    // A second trigger cannot help: it would complete the bits too, and by
+    // then the one-shot has hung IFL_INVISIBLE on the door, which makes the
+    // engine skip every plain trigger on it (control.cpp, top of the
+    // TO_OBJECT branch). Measured in game: no effect at all.
     //
     // So only the pointer goes. Music and statue belong to the scene and
     // stay; door 130 is a normal item (flags 0) and keeps being opened.
@@ -184,23 +182,22 @@ namespace LevelFix
     // A trigger names an item NUMBER, not a place, so it reaches the puzzle
     // wherever a rolled run has put it.
     //
-    // What the user saw when the puzzle had moved to a room behind the
-    // guardian and the trigger fired first: the item either sinks halfway
-    // into the floor and is barely pickable, or it goes invisible - and then
-    // the level is a softlock.
+    // When the puzzle has moved to a room behind the guardian and the
+    // trigger fires first, the item either sinks halfway into the floor and
+    // is barely pickable, or it goes invisible - and then the level is a
+    // softlock.
     //
-    // He offered two ways out: move the trigger somewhere unreachable, or
-    // take the pointer out and leave the trigger otherwise intact. The second
-    // is the one that actually removes the hazard - after it, NO trigger in
+    // Two ways out exist: move the trigger somewhere unreachable, or take
+    // the pointer out and leave the trigger otherwise intact. The second is
+    // the one that actually removes the hazard - after it, no trigger in
     // the level names item 62 any more. Moving would only hide the pointer
-    // somewhere quieter and bring the bug back the day anything reaches that
-    // sector.
+    // somewhere quieter and bring the bug back the day anything reaches
+    // that sector.
     //
     // Dropping the command outright is not possible: it is the trigger's
     // only one. So it becomes a void flipeffect (type 9, effect_routines
     // index 44 in game/effects.cpp) - the trigger stays a valid trigger and
-    // does nothing. The user suggested a music command; a void effect is the
-    // same idea without the sound.
+    // does nothing, the same idea as a music command without the sound.
     //
     // Puzzle 4 needs no trigger at all: its item flags are 0, so it lies
     // there visible and can be picked up.
@@ -242,18 +239,16 @@ namespace LevelFix
     // the heart to its vanilla spot (Randomizer.cpp,
     // findTriggerPinnedItems).
     //
-    // Both effects are dispensable, and the user said so back when the range
-    // was curated: the door is useless, the cutscene is too, and the room
-    // behind the door is a NoItemRoom. The cutscene is worse than useless -
-    // it can teleport Lara into a softlock, which is also why the trigger
-    // must NOT travel with the item.
+    // Both effects are dispensable: the door is useless, the cutscene is
+    // too, and the room behind the door is a NoItemRoom. The cutscene is
+    // worse than useless - it can teleport Lara into a softlock, which is
+    // also why the trigger must not travel with the item.
     //
-    // So the trigger becomes a plain TRIGGER. That is the user's own
-    // suggestion and it beats merely swapping the commands: a PICKUP trigger
-    // would keep its reference word, and that word IS the pointer at the
-    // heart. Without it findTriggerPinnedItems skips the entry outright
-    // (refItem < 0) instead of being talked round by a music-only command
-    // list.
+    // So the trigger becomes a plain TRIGGER, which beats merely swapping
+    // the commands: a PICKUP trigger would keep its reference word, and
+    // that word is the pointer at the heart. Without it
+    // findTriggerPinnedItems skips the entry outright (refItem < 0) instead
+    // of being talked round by a music-only command list.
     //
     // One command has to stay - the engine's command loop is a do-while and
     // always reads one word. Track 45 is the cue andy1 uses most often

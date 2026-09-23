@@ -1,18 +1,18 @@
-# Generates a test level in which the WALL PICKUPS of a level lie on EVERY
-# found wall edge - for viewing in trview (#61).
+# Generates a test level in which the wall pickups of a level lie on every
+# found wall edge, for viewing in trview.
 #
 # Why: the four OCB pickups (crowbar OCB 2, Joby crow OCB 9) must hang on a
-# wall and with the right angle toward it. Whether our wall search is any
-# good is decided by the eye in the viewer - just like with the key item
-# range. The user looks for outliers: items standing free, stuck in the
-# wall, or pointing the wrong way.
+# wall and face it at the right angle. Whether the wall search is any good
+# is decided by eye in the viewer, the same way as with the key item range -
+# by looking for outliers: items standing free, stuck in the wall, or
+# pointing the wrong way.
 #
-# MEASURED FOUNDATIONS (vanilla Andrea2/andy3, see task #61):
+# Measured facts (from vanilla Andrea2/andy3):
 #   - Position: exactly sector center, like every other item
 #     (X/Z = room origin + sector index*1024 + 512).
 #   - Y      : floor height of the sector. OCB 2 and 9 get NO floor
 #              correction in InitialisePickup - the value applies literally.
-#   - Angle  : POINTS AT THE WALL. Measured at Andrea2 item 121: wall at
+#   - Angle  : points at the wall. Measured at Andrea2 item 121: wall at
 #              -Z, angle -32768 (facing -Z). The models' mesh sits around
 #              +450..500 in model Z and thereby lands on the wall face;
 #              Lara moves in at +215 in between.
@@ -27,9 +27,9 @@
 #   3. Patch via LevelBuild.exe (our own patcher, knows angle and ocb -
 #      TombItemEdit2026 -patchlevel is deliberately NOT used here).
 #
-# MAX_ITEMS (512) gets exceeded in the process. That is intended and fine:
-# the test level is ONLY viewed in trview, never loaded. The user on it:
-# "No, I test it in TRview, that does not matter."
+# MAX_ITEMS (512) gets exceeded in the process. That is fine: the test level
+# is only viewed in trview, never loaded in the engine, so the limit does
+# not apply.
 param(
     [string[]]$Levels = @('Andrea2'),
     [string]$VanillaDir = "$PSScriptRoot\..\..\Tomb5 Steam Version\data\Vanilla",
@@ -46,13 +46,12 @@ $WALL_TYPES = @{
     'Andrea2' = @( @{ typeId = 174; ocb = 2 }, @{ typeId = 172; ocb = 2 } )
     'andy3'   = @( @{ typeId = 172; ocb = 2 }, @{ typeId = 174; ocb = 9 } )
     # Measured over all vanilla levels (ItemCheck, OCB 2 or 9 on a pickup
-    # type) - these two stood on no list until then: Andrea3 (220, item 68)
-    # and joby3 (172, item 41) do have OCB 2/9 but are pinned for OTHER
-    # reasons the wall work does not resolve - the user recorded both
-    # earlier:
+    # type). Andrea3 (220, item 68) and joby3 (172, item 41) also carry
+    # OCB 2/9 but are pinned for other reasons the wall search does not
+    # resolve:
     #   Andrea3 68 sticks to the LevelEnd trigger.
     #   joby3 41 is needed right in the start room as the crowbar; the room
-    #   would offer only four other spots, not worth the effort.
+    #   offers only four other spots, not worth the effort.
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
@@ -60,10 +59,9 @@ New-Item -ItemType Directory -Force $ScratchDir | Out-Null
 $results = @()
 
 foreach ($lvl in $Levels) {
-    # The build folder used to hold "level_<name>.json"; those stopped being
-    # generated on 2026-08-30. The tracked exports are the source now, and
-    # they carry no prefix. Without this the tool skipped every level and
-    # said so quietly.
+    # The tracked level-info exports carry no "level_<name>.json" prefix;
+    # without matching that exact name, the tool would skip every level and
+    # say so quietly.
     $infoJson = "$LevelInfoDir\$lvl.json"
     $srcTrc = "$VanillaDir\$lvl.trc"
     if (-not (Test-Path $infoJson)) { "SKIP $lvl - no level info JSON"; continue }
@@ -74,25 +72,25 @@ foreach ($lvl in $Levels) {
     $rooms = @{}
     foreach ($r in $d.rooms) { $rooms[[int]$r.index] = $r }
 
-    # --- Bars from the user review (2026-08-19) ---------------------------
+    # --- Placement bars -----------------------------------------------------
     #
-    # (a) WATER ROOMS. PickUpCollision only runs at water_status
-    #     LW_ABOVE_WATER or LW_WADE (game\pickup.cpp:766) - under water the
-    #     grab is impossible, a wall item there would be unreachable.
+    # (a) Water rooms: PickUpCollision only runs at water_status
+    #     LW_ABOVE_WATER or LW_WADE (game\pickup.cpp) - under water the
+    #     grab is impossible, so a wall item there would be unreachable.
     $waterRoom = @{}
     foreach ($r in $d.rooms) { if ($r.waterRoom) { $waterRoom[[int]$r.index] = $true } }
 
-    # (b) OCCUPIED SECTORS. If something already stands there that is no
-    #     pickup - a receptacle (slot), an animating, a switch, a pole -,
-    #     no wall item may go next to it. User: "Animatings must also be
-    #     included and slots that do not belong to the item must count as
-    #     blockers."
+    # (b) Occupied sectors: if something already stands there that is not a
+    #     pickup - a receptacle (slot), an animating, a switch, a pole - no
+    #     wall item may go next to it; animatings and non-item slots count
+    #     as blockers too.
     #
-    #     Instead of guessing slot and animating numbers (the TRCatalog
-    #     list counts differently than TR5), the inversion applies: pickup
-    #     ranges are known and set (172-241, 334-355) - everything else is
-    #     scenery or mechanics and blocks. Excepted are only the invisible
-    #     markers: AI objects (378-383) and camera targets (409).
+    #     Instead of enumerating slot and animating type numbers (the
+    #     TRCatalog list counts differently than TR5), the inversion
+    #     applies: the pickup ranges are known and fixed (172-241, 334-355),
+    #     so everything else is scenery or mechanics and blocks. The
+    #     exceptions are the invisible markers: AI objects (378-383) and
+    #     camera targets (409).
     $blocker = New-Object System.Collections.Generic.HashSet[string]
     foreach ($it in $d.items) {
         $t = [int]$it.typeId
@@ -107,11 +105,10 @@ foreach ($lvl in $Levels) {
     if (-not (Test-Path $zonesJson)) { "SKIP $lvl - zone export failed"; continue }
     $z = Get-Content $zonesJson -Raw | ConvertFrom-Json
 
-    # Key item range per type (#61, point 2 of the review). Without it the
-    # wall items in the first test level reached all the way to the level's
-    # end - the filter was not broken, it was simply never switched on for
-    # these types because they stood in VANILLA_TYPES. Now ZoneAnalysis
-    # derives a limit for them.
+    # Key item range per type. Without it, wall items would reach all the
+    # way to the level's end for any type that stood in VANILLA_TYPES, since
+    # the zone filter is simply never switched on for those types.
+    # ZoneAnalysis derives a limit for them instead.
     $limit = @{}
     foreach ($c in @($z.keyConstraints)) {
         if ($null -eq $c) { continue }
@@ -128,10 +125,10 @@ foreach ($lvl in $Levels) {
         }
     }
 
-    # Sectors behind a deadstop (NO_KEY_ISLAND, new in the export as
-    # keyBarredSectors). Unlike the zone limit this needs no key constraint
-    # - so it also acts for types without a receptacle like andy3's chalk
-    # and fence crowbar (#61).
+    # Sectors behind a deadstop (NO_KEY_ISLAND, exported as
+    # keyBarredSectors). Unlike the zone limit this needs no key constraint,
+    # so it also acts for types without a receptacle, like andy3's chalk and
+    # fence crowbar.
     $barred = New-Object System.Collections.Generic.HashSet[string]
     foreach ($k in @($z.keyBarredSectors)) { if ($null -ne $k) { [void]$barred.Add([string]$k) } }
     if ($barred.Count -gt 0) { "  ${lvl}: $($barred.Count) sectors barred behind a deadstop" }
@@ -145,30 +142,28 @@ foreach ($lvl in $Levels) {
         if ($blocker.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $outOccupied++; continue }
         if ($barred.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $outDeadstop++; continue }
         # Standing height. PickUpCollision expressly demands !lara.IsDucked
-        # at OCB 2 (game\pickup.cpp:803) - in the crawl the grab is
+        # at OCB 2 (game\pickup.cpp) - in the crawl the grab is
         # impossible, the item would be unreachable. That is a hard engine
         # rule like the water bar, not looks.
         #
         # Threshold 768: Lara's standing height is 762 units, so at
         # clearance 768 she fits in standing - only below that does the
         # ceiling force her into the duck state. 512 is the crawl space.
-        #
-        # 1024 stood here first, derived from the four vanilla wall items
-        # (they sit on 1024..2048). That was correlation, not the rule: the
-        # user thereupon missed the good spots in andy3 room 64, which
-        # consists almost entirely of 768 sectors.
+        # A tighter bound of 1024, matched to where the four vanilla wall
+        # items happen to sit (1024..2048), would exclude valid spots such
+        # as andy3 room 64, which consists almost entirely of 768 sectors.
         if ([int]$s.clearance -lt 768) { $outHeight++; continue }
         $withWall++
         $rm = $rooms[[int]$s.room]
         if (-not $rm) { continue }
         $wx = [int]$rm.originX + [int]$s.sectorX * 1024 + 512
         $wz = [int]$rm.originZ + [int]$s.sectorZ * 1024 + 512
-        # One item per wall edge, the recorded types in rotation - that way
-        # two different models lie side by side in a corner and you see
+        # One item per wall edge, cycling through the recorded types, so two
+        # different models lie side by side in a corner - showing
         # immediately whether both stand the same.
-        # Set EVERY type per wall edge that may lie there per its zone
-        # limit. In trview you then see per type how far each range carries
-        # - if both lie at one edge, the spot is allowed for both.
+        # Every type that may lie at a wall edge under its own zone limit is
+        # set there, so in trview each type's range is visible independently
+        # - if both types lie at one edge, the spot is allowed for both.
         foreach ($w in $wa) {
             foreach ($t in $WALL_TYPES[$lvl]) {
                 $tid = [int]$t.typeId
@@ -184,7 +179,7 @@ foreach ($lvl in $Levels) {
     }
 
     # UTF-8 without BOM - the hand-written JSON reader otherwise stumbles
-    # over the preamble (known case from the project).
+    # over the preamble.
     $patch = [PSCustomObject]@{ itemAdds = $itemAdds } | ConvertTo-Json -Depth 4 -Compress
     $patchPath = "$ScratchDir\patch_wand_$lvl.json"
     [System.IO.File]::WriteAllText($patchPath, $patch, (New-Object System.Text.UTF8Encoding($false)))

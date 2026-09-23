@@ -37,8 +37,7 @@ namespace
     //
     // The list matches the engine's kRewardNames exactly (game/secretreward.
     // cpp), which is the whole permission there: pistols and their ammo, the
-    // crossbow family, sights and flares were struck off by the user, each
-    // for its own reason.
+    // crossbow family, sights and flares are excluded from the draw.
     const Entry kPool[] = {
         { "Uzi",              336, 1 },
         { "Shotgun",          338, 1 },
@@ -69,7 +68,7 @@ namespace
 
     std::string rollOne(Rng& rng)
     {
-        // Four to eight entries, as the user asked.
+        // Four to eight entries.
         const int want = 4 + static_cast<int>(rng.below(5));
 
         std::vector<int> pot;
@@ -153,9 +152,9 @@ bool writeSecretRewards(const std::wstring& gameDir, unsigned long long seed,
         rolled.push_back(rollOne(rng));
 
     // Whatever stands there already is kept - the header, the player's
-    // comments, and any line we do not own. Only the fourteen level lines
-    // are replaced, and a missing one is appended. The engine completes the
-    // file by itself if we leave it half-finished.
+    // comments, and any line not owned here. Only the fourteen level lines
+    // are replaced, and a missing one is appended; the engine completes the
+    // file by itself if left half-finished.
     std::vector<std::string> out;
     std::vector<bool> written(static_cast<size_t>(kLevelCount), false);
 
@@ -173,8 +172,8 @@ bool writeSecretRewards(const std::wstring& gameDir, unsigned long long seed,
                 for (int i = 0; i < kLevelCount; ++i)
                 {
                     // The file's own spelling is the reference; nothing is
-                    // matched loosely here, because a line we fail to
-                    // recognise would be duplicated below.
+                    // matched loosely here, because a line that fails to
+                    // match would be duplicated below.
                     if (name != kLevels[i]) continue;
                     char buf[512];
                     std::snprintf(buf, sizeof(buf), "%-22s = %s", kLevels[i], rolled[static_cast<size_t>(i)].c_str());

@@ -26,7 +26,12 @@
 #include "../game/savegame.h"
 #include "../game/gameflow.h"
 #include "../game/newinv2.h"
+#include "../game/deltapak.h"		// GLOBAL_playing_cutseq - the modern seam's guard
+#include "../game/modern_state.h"	// the modern control's one tick
+#include "../game/modern_move.h"	// the radial dead zone and its two widths
+#include "../game/key_scheme.h"		// the two keyboard sets, as arithmetic
 #include "../tomb5/tomb5.h"
+#include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank
 
 const char* KeyboardButtons[272] =
 {
@@ -35,12 +40,18 @@ const char* KeyboardButtons[272] =
 	"Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "<", ">", "Return",
 	"Ctrl", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "`",
 	"Shift", "#", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Shift",
-	"Padx", "Alt", "Space", "Caps", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	/* Only the eight F keys the hotkey roles default to have names. An unnamed
+	 * key cannot be shown by MenuValBinding nor bound by MenuCaptureBinding,
+	 * which binds only named keys. F1, F2, F5, F6, F7, F8, F9 and F11 are what
+	 * the two default rows use; F3 and F4 (the outfit changer), F10 (IN_E) and
+	 * F12 (specific\output.cpp) stay nameless on purpose, so the capture refuses
+	 * them and no role can land on a key the engine already answers to. */
+	"Padx", "Alt", "Space", "Caps", "F1", "F2", 0, 0, "F5", "F6", "F7", "F8", "F9", 0,
 	"Nmlk", 0,
 	"Pad7", "Pad8", "Pad9", "Pad-",
 	"Pad4", "Pad5", "Pad6", "Pad+",
 	"Pad1", "Pad2", "Pad3",
-	"Pad0", "Pad.", 0, 0, "\\", 0,
+	"Pad0", "Pad.", 0, 0, "\\", "F11",	// F11 is the heal cheat's default key
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -61,12 +72,14 @@ const char* GermanKeyboard[272] =
 	"Tab", "Q", "W", "E", "R", "T", "Z", "U", "I", "O", "P", "~u", "x", "Enter",
 	"Strg", "A", "S", "D", "F", "G", "H", "J", "K", "L", "~o", "~a", "( ",
 	"Shift", "#", "Y", "X", "C", "V", "B", "N", "M", ",", ".", "-", "Shift",
-	"Num x", "Alt", "Leert.", "Caps", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	// The same eight F keys as in the English table above, and for the same
+	// reason - a German keyboard calls them F1..F12 as well.
+	"Num x", "Alt", "Leert.", "Caps", "F1", "F2", 0, 0, "F5", "F6", "F7", "F8", "F9", 0,
 	"Nmlk", 0,
 	"Num7", "Num8", "Num9", "Num-",
 	"Num4", "Num5", "Num6", "Num+",
 	"Num1", "Num2", "Num3",
-	"Num0", "Num.", 0, 0, ">", 0,
+	"Num0", "Num.", 0, 0, ">", "F11",
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -81,8 +94,8 @@ const char* GermanKeyboard[272] =
 };
 
 //----------------------------------------------------------------------------
-// Controller name tables. A button's bit position depends on the INPUT
-// PATH, not on the controller type:
+// Controller name tables. A button's bit position depends on the input
+// path, not on the controller type:
 //   - XInput (real Xbox pads, but also a DualSense behind Steam Input or
 //     DS4Windows): bit order from DXUpdateJoystick (dxshell.cpp) -
 //     0=A 1=B 2=X 3=Y 4=LB 5=RB 6=View 7=Menu 8=L3 9=R3 10=LT 11=RT.
@@ -95,42 +108,53 @@ const char* GermanKeyboard[272] =
 // Bits 16-19 are on both paths the right stick's four tilt directions
 // (dxshell.cpp), so it can be bound like the d-pad.
 //
-// The control-method page (JoyStyle) only picks the VOCABULARY; which bit
+// Bits 20-23 are the d-pad's own four directions, so the d-pad can be bound
+// like the right stick once the Modern scheme frees it from moving Lara.
+// Path- and style-independent for the same reason JOYNAME_STICK is:
+// dxshell.cpp writes them from the d-pad, a fixed physical control on every
+// supported pad, not something that moves between HID bit positions the way
+// an ordinary face button does.
+//
+// The control-method page (JoyStyle) only picks the names shown; which bit
 // order applies, the engine knows itself (joystick_is_xinput). That way
 // the names are right even for a DualSense behind DS4Windows: PS5 page
 // plus XInput bit order.
 #define JOYNAME_STICK "Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
+#define JOYNAME_DPAD "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right"
 
-static const char* JoyNamesPS5DInput[20] =
+static const char* JoyNamesPS5DInput[24] =
 {
 	"Square", "Cross", "Circle", "Triangle", "L1", "R1", "L2", "R2",
-	"Share", "Options", "L3", "R3", "PS Button", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	// Bit 13 is the DualSense's touchpad click on this path and the Modifier's
+	// default there, so the binding page names it. Bit 14 is the mute button
+	// and stays a number - nothing binds it.
+	"Share", "Options", "L3", "R3", "PS Button", "Touchpad", "Joy 15", "Joy 16",
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-static const char* JoyNamesPS5XInput[20] =
+static const char* JoyNamesPS5XInput[24] =
 {
 	"Cross", "Circle", "Square", "Triangle", "L1", "R1", "Share", "Options",
 	"L3", "R3", "L2", "R2", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-static const char* JoyNamesXbox[20] =
+static const char* JoyNamesXbox[24] =
 {
 	"A", "B", "X", "Y", "LB", "RB", "View", "Menu",
 	"L3", "R3", "LT", "RT", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-static const char* JoyNamesGeneric[20] =
+static const char* JoyNamesGeneric[24] =
 {
 	"Joy 1", "Joy 2", "Joy 3", "Joy 4", "Joy 5", "Joy 6", "Joy 7", "Joy 8",
 	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
-	JOYNAME_STICK
+	JOYNAME_STICK, JOYNAME_DPAD
 };
 
-// -1 = automatic (XInput device -> Xbox page, else PS5 page); from the
-// user's first choice on 0=PS5, 1=Xbox, 2=generic (registry "JoyStyle").
+// -1 = automatic (XInput device -> Xbox page, else PS5 page); once the
+// player chooses, 0=PS5, 1=Xbox, 2=generic (registry "JoyStyle").
 long JoyStyle = -1;
 
 long ActiveJoyStyle()
@@ -143,7 +167,7 @@ long ActiveJoyStyle()
 
 const char* JoyButtonName(long idx)
 {
-	if (idx < 0 || idx > 19)
+	if (idx < 0 || idx > 23)	// 20-23 are the d-pad's own bits
 		return "---";
 
 	switch (ActiveJoyStyle())
@@ -163,33 +187,351 @@ const char* JoyButtonName(long idx)
 // SmallMedi LargeMedi. -1 = unbound (display "---", Key() ignores it).
 static const long jDefPS5DInput[15] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14 };
 static const long jDefPS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1, 18, 19 };
-// Xbox default after the Xbox tester's layout: RT=Duck LT=Dash RB=Walk
+// Xbox default: RT=Duck LT=Dash RB=Walk
 // X=Jump A=Action Y=Draw LB=Look B=Roll View=Inventory Menu=Pause.
 static const long jDefXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };
 static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
 
-void ApplyJoyDefaults()
+/* The four defaults above serve the "One key" Action setting in both control
+ * schemes. The "Separate" setting has a layout of its own, stated as button
+ * names:
+ *
+ *   walk Square   jump Cross    action Triangle   draw L2   look R3
+ *   roll Circle   duck L1       sprint L3         flare R1  secondary R2
+ *   inventory Share             pause Options     save PS button   load -
+ *
+ * The rows are derived from those names: each is looked up in the JoyNames*
+ * table of its own page and its bit index goes in. That is why the two
+ * XInput-ordered rows are identical while their names differ (Xbox reads
+ * X/A/B/Y/LB/RB/LT/RT for Square/Cross/Circle/Triangle/L1/R1/L2/R2), and why
+ * the generic row is the DirectInput numbers. Save is the PS button where a
+ * page has one and unbound where it has not: the XInput pages stop at bit 11.
+ * The medipacks (13, 14) are what the One-key tables give them for the page,
+ * so the Modern move to the d-pad happens in one place (JoyDefaultRecord).
+ *
+ * The rows live in game\pad_scheme.h, 28 roles each with a chord mask: the
+ * header holds the numbers, this file instantiates them, and
+ * Preparation\Tools\Diagnose\MenuTest instantiates the same macros - so the
+ * check that no two roles share a pair runs on the rows a player gets. */
+static const long jSepPS5DInput[JOY_ROLES] = JOY_SEP_PS5_DINPUT;
+static const long jSepPS5XInput[JOY_ROLES] = JOY_SEP_PS5_XINPUT;
+static const long jSepXbox[JOY_ROLES] = JOY_SEP_XBOX;
+static const long jSepGeneric[JOY_ROLES] = JOY_SEP_GENERIC;
+
+/* The bits a scheme cannot honour. Each scheme takes one group of four
+ * digital bits away from the bindings and gives it another job, so a role
+ * sitting on the wrong group is broken, not a preference:
+ *
+ *   Modern   bits 16..19, the right stick. It is the camera, and
+ *            S_UpdateInput masks the four bits out of joy_fire, so a role
+ *            bound there can never fire.
+ *   Tank     bits 20..23, the d-pad. It still moves Lara there
+ *            (specific\dxshell.cpp writes the same four directions as a +-20
+ *            stick reading unconditionally), so the role bound there fires
+ *            alongside the movement - one press doing two things. */
+#define JOY_RSTICK_BITS		0x000F0000L
+#define JOY_DPAD_BITS		0x00F00000L
+
+/* Which set has been seated for which scheme: -1 nothing yet, then 0 Tank /
+ * 1 Modern. The registry keeps the pad tables (J*, SJ*) and their chord masks
+ * but not which control scheme wrote them, so a table written under Tank, or
+ * by an older build, can reach a Modern player with the medipacks still on
+ * the right stick. This is what notices. */
+static long joy_scheme_seated = -1;
+
+/* The chord flags, one bit per role, one long per set (28 roles fit in 32
+ * bits). `jChord` belongs to whichever Action setting is seated in jLayout and
+ * `jSplitParkedChord` to the one parked in jSplitParked, as the two binding
+ * arrays do; ApplyJoySplit exchanges both pairs together.
+ *
+ * The flags sit beside the binding, not encoded inside it: a registry binding
+ * must stay a plain button number, because older builds read JDck..JSec and
+ * SJDck..SJSec and would take an encoded flag for a button. The flags get
+ * names of their own ("JChord", "SJChord") that older builds ignore.
+ *
+ * The starting values mean no chord, like jLayout's One-key initialiser:
+ * LoadSettings overwrites both before the first frame. */
+static long jChord = 0;
+static long jSplitParkedChord = JOY_SEP_CHORD_DINPUT;
+
+/* The one place that produces a 28-role default record and its chord mask, for
+ * either scheme and either Action setting (`split`: 0 One key, 1 Separate). The
+ * active style's own table is the source in all four cases, so the roles the
+ * schemes share cannot drift apart. */
+static void JoyDefaultRecord(long modern, long split, long* out, long* chord)
 {
 	const long* source;
 
 	switch (ActiveJoyStyle())
 	{
 	case JOYSTYLE_PS5:
-		source = joystick_is_xinput ? jDefPS5XInput : jDefPS5DInput;
+		source = joystick_is_xinput
+			? (split ? jSepPS5XInput : jDefPS5XInput)
+			: (split ? jSepPS5DInput : jDefPS5DInput);
 		break;
 	case JOYSTYLE_XBOX:
-		source = joystick_is_xinput ? jDefXbox : jDefGeneric;
+		source = joystick_is_xinput
+			? (split ? jSepXbox : jDefXbox)
+			: (split ? jSepGeneric : jDefGeneric);
 		break;
 	default:
-		source = jDefGeneric;
+		source = split ? jSepGeneric : jDefGeneric;
 		break;
 	}
 
-	for (int i = 0; i < 15; i++)
-		jLayout[i] = source[i];
+	/* The chord mask follows the source table chosen by the switch above: the
+	 * DirectInput-numbered Separate rows and the XInput-numbered ones each have
+	 * their own mask, and at One key there is nothing to chord (0).
+	 *
+	 * `chord` may be NULL: ApplyJoyScheme wants the other scheme's record for
+	 * its buttons alone. */
+	if (chord)
+	{
+		if (!split)
+			*chord = 0;
+		else if (source == jSepPS5DInput || source == jSepGeneric)
+			*chord = JOY_SEP_CHORD_DINPUT;
+		else
+			*chord = JOY_SEP_CHORD_XINPUT;
+	}
 
-	for (int i = 15; i < 32; i++)
-		jLayout[i] = 0;
+	// Fifteen and not JOY_ROLES: that is the length of the One-key tables; the
+	// roles behind it are filled below, where the two settings are told apart.
+	for (int i = 0; i < 15; i++)
+		out[i] = source[i];
+
+	/* At "One key" the Secondary role and the twelve roles behind it have no
+	 * default: the Secondary role is inert and the binding page does not offer
+	 * it, the Modifier is unbound so no chord can exist, and the hotkey roles
+	 * start unbound. Under Separate the tables of game\pad_scheme.h carry all
+	 * of them, which is why source[i] is read only on that branch. */
+	for (int i = 15; i < JOY_ROLES; i++)
+		out[i] = split ? source[i] : -1;
+
+	/* The Modern pad set. Duck..Load (roles 0-12) are the same as Tank's. Only
+	 * the medipacks (roles 13-14) differ: their Tank default on an XInput-style
+	 * page is the right stick (bits 18/19), which is the camera under Modern, so
+	 * they move to the d-pad's own bits (specific\dxshell.cpp). D-pad Left/Right
+	 * (bits 22/23) default to nothing and are left for the player's binds. */
+	if (modern)
+	{
+		out[13] = 20;	// D-Pad Up   -> Small Medipack, specific\dxshell.cpp
+		out[14] = 21;	// D-Pad Down -> Large Medipack
+	}
+}
+
+void ApplyJoyDefaults()
+{
+	/* Reset restores the active set's own defaults, like the keyboard's Reset.
+	 * The parked set holds the other Action setting's bindings and is not
+	 * touched - resetting the Separate layout must not lose the One-key one. */
+	const long split = tomb5.action_split ? 1 : 0;
+
+	/* The chord flags are reset with the buttons: a player who had put quick
+	 * save on a plain R3 must get Modifier+R3 back, not a plain R3. One call
+	 * sets both, so the two cannot come back out of step. */
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, split, jLayout, &jChord);
+
+	joy_scheme_seated = tomb5.control_modern ? 1 : 0;
+}
+
+/* The active scheme repairs the bindings it cannot honour, and touches nothing
+ * else. Without it, switching to Modern leaves the medipacks on the right stick
+ * (jDefXbox[13]/[14] are 18/19), which Modern masks; and a Reset under Modern
+ * stores 20/21, so back at Tank the d-pad uses a medipack on every step.
+ *
+ * The rule has two parts:
+ *  1. A role bound to a bit the active scheme has taken for something else
+ *     goes back to that scheme's default for that role. On its own this
+ *     repairs only the XInput-style pages: jDefPS5DInput and jDefGeneric put
+ *     the medipacks on face buttons 13/14, which Modern does not mask.
+ *  2. So a role still sitting on the other scheme's default for itself
+ *     follows the switch as well. This only moves roles the two records
+ *     disagree about - the two medipacks; roles 0-12 are equal in both.
+ * Everything else is the player's own choice and is kept.
+ *
+ * It is idempotent. A freed bit that collides with a role already holding it
+ * unbinds that older role, as the binding page does (specific\LoadSave.cpp) -
+ * except that a displaced role gets this scheme's own default if that button
+ * is free, and only falls to unbound if not. Without that, a medipack put on
+ * the d-pad by hand under Tank is lost on the way into Modern.
+ *
+ * Known cost of part 2: a binding the player chose that equals the other
+ * scheme's default for that role cannot be told from an unrepaired one, so it
+ * follows the switch too; since the registry does not store which scheme wrote
+ * the table, the one-time seat in S_UpdateInput repeats that on every launch.
+ * It can only reach the two medipacks.
+ *
+ * "Taken" means the pair (button + chord flag), not the button: R3 and
+ * Modifier+R3 coexist on purpose, and judging by the button alone would unbind
+ * one of them whenever the other moved. */
+static long JoyChordOf(long role)
+{
+	return (jChord >> role) & 1;
+}
+
+static void JoyChordWrite(long role, long on)
+{
+	if (on)
+		jChord |= 1L << role;
+	else
+		jChord &= ~(1L << role);
+}
+
+static long JoyBitTaken(long bit, long chord, long except)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+		if (i != except && jLayout[i] == bit && JoyChordOf(i) == chord)
+			return 1;
+
+	return 0;
+}
+
+void ApplyJoyScheme()
+{
+	long want[JOY_ROLES];
+	long other[JOY_ROLES];
+	long want_chord;
+	const long modern = tomb5.control_modern ? 1 : 0;
+	// The repair works on the active set (jLayout), whichever Action setting
+	// seated it, and measures it against the same setting's defaults - otherwise
+	// a Separate player's action button would look like "the other scheme's
+	// default" and follow a switch it has nothing to do with.
+	const long split = tomb5.action_split ? 1 : 0;
+	const long blocked = modern ? JOY_RSTICK_BITS : JOY_DPAD_BITS;
+
+	JoyDefaultRecord(modern, split, want, &want_chord);
+	// NULL and not a second mask: `other` is asked for its buttons only, and
+	// the repair writes the active record's flags (want_chord). The two masks
+	// are equal anyway, since both calls get the same `split`.
+	JoyDefaultRecord(modern ? 0 : 1, split, other, NULL);
+
+	for (int i = 0; i < JOY_ROLES; i++)
+	{
+		// JOY_BIT_MAX is the highest bit either joystick path writes
+		// (specific\dxshell.cpp); the bound is here because the value comes out
+		// of the registry.
+		const long broken = jLayout[i] >= 0 && jLayout[i] <= JOY_BIT_MAX &&
+			((1L << jLayout[i]) & blocked) != 0;
+		const long theirs = other[i] != want[i] && jLayout[i] == other[i];
+
+		if (!broken && !theirs)
+			continue;
+
+		/* The chord flag follows the button. A chord is a property of the
+		 * Action setting and the page, so this puts a moved role back onto its
+		 * own default's pair. */
+		jLayout[i] = want[i];
+		JoyChordWrite(i, (want_chord >> i) & 1);
+
+		if (want[i] >= 0)
+		{
+			const long wc = (want_chord >> i) & 1;
+
+			for (int k = 0; k < JOY_ROLES; k++)
+				if (k != i && jLayout[k] == want[i] && JoyChordOf(k) == wc)
+				{
+					const long kc = (want_chord >> k) & 1;
+
+					jLayout[k] = (want[k] >= 0 && !JoyBitTaken(want[k], kc, k)) ? want[k] : -1;
+					JoyChordWrite(k, jLayout[k] >= 0 ? kc : 0);
+				}
+		}
+	}
+
+	joy_scheme_seated = modern;
+}
+
+/* The parked pad set: the bindings of the Action setting that is not active.
+ * Separate needs more roles and moves half the others, so the two settings
+ * cannot share one table. As with the keyboard, the active setting's set sits
+ * in jLayout, where the binding page, Key() and every producer read it, and the
+ * other waits here. Flipping the Action row exchanges the two (PadSetSeat,
+ * game\pad_scheme.h), so a player who tries Separate and comes back finds the
+ * pad as it was.
+ *
+ * The starting value is the PS5 DirectInput Separate row, only a fallback for a
+ * registry that cannot be opened: LoadSettings overwrites both sets before the
+ * first frame (specific\registry.cpp). */
+static long jSplitParked[JOY_ROLES] = JOY_SEP_PS5_DINPUT;
+
+/* Which Action setting's set is in jLayout: 0 One key, 1 Separate. It starts at
+ * One key and not at -1 (unlike joy_scheme_seated) because the two sets have
+ * names of their own in the registry - J* and SJ* - so a table's setting never
+ * has to be guessed; this only records whether the swap has been done. */
+static long joy_split_seated = 0;
+
+/* The stored set of one Action setting, wherever it is sitting. The registry
+ * addresses the two by setting and not by array, because JDck..JSec must keep
+ * meaning the One-key set whichever setting is active at shutdown - older
+ * builds read those names and know nothing of SJ*. */
+long* JoySplitSet(long split)
+{
+	return (joy_split_seated == (split ? 1 : 0)) ? jLayout : jSplitParked;
+}
+
+// The same for the chord flags: the registry addresses a set by setting, never
+// by array, so the flags are reachable the same way the bindings are.
+long* JoyChordSet(long split)
+{
+	return (joy_split_seated == (split ? 1 : 0)) ? &jChord : &jSplitParkedChord;
+}
+
+/* What a registry without SJ* means: this page's and this path's Separate
+ * defaults, with their chord mask. Computed rather
+ * than written out a second time in specific\registry.cpp, so game\pad_scheme.h
+ * stays the only place the layout is stated. */
+void JoySplitDefaults(long* out, long* chord)
+{
+	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, 1, out, chord);
+}
+
+/* The active set's chord flag, for the binding page and for the capture. The
+ * repair has its own two above; these are the ones outside this file. */
+long JoyRoleIsChord(long role)
+{
+	return JoyChordOf(role);
+}
+
+void JoyRoleSetChord(long role, long on)
+{
+	JoyChordWrite(role, on);
+}
+
+/* The pad's half of the Action row, beside ApplyKeyScheme. Called from the row
+ * itself (game\menu_frame.cpp) and once at startup, the first moment
+ * tomb5.action_split is known (specific\gamemain.cpp).
+ *
+ * The scheme repair then runs on the set that just sat down, but only once a
+ * scheme has been seated. ApplyJoyScheme judges a binding by ActiveJoyStyle()
+ * and joystick_is_xinput, which are known only after the first poll - which is
+ * why the Modern seat waits for `joystick_read` in S_UpdateInput. Running it
+ * earlier would set joy_scheme_seated and cancel that pending seat; when no
+ * seat has happened yet, the pending one repairs whichever set is active. */
+void ApplyJoySplit()
+{
+	const long split = tomb5.action_split ? 1 : 0;
+
+	if (joy_split_seated == split)
+		return;
+
+	/* The chord flags travel with their set. It sits after the guard above
+	 * for the same reason PadSetSeat is idempotent: the Action row and the
+	 * startup seat both call this and neither may swap twice. */
+	{
+		const long t = jChord;
+
+		jChord = jSplitParkedChord;
+		jSplitParkedChord = t;
+	}
+
+	joy_split_seated = PadSetSeat(jLayout, jSplitParked, (int)joy_split_seated, (int)split);
+
+	if (joy_scheme_seated >= 0)
+		ApplyJoyScheme();
+
+	if (gLogEnabled)
+		Log("KEYLOG split=%s seated", split ? "separate" : "onekey");
 }
 
 // Confirm (Cross/A) and back (Circle/B) as the active path's bit.
@@ -204,43 +546,267 @@ long JoyBitBack()
 	return joystick_is_xinput ? 1 : 2;
 }
 
-long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+/* Whether a menu is reading the direction bits, so the d-pad keeps working in
+ * the inventory and on the title screen alongside the stick.
+ *
+ * In Modern the movement pair is the left stick's own axes, which the d-pad
+ * never writes over, and the menus read the same bits. While this is true the
+ * pair goes back to joy_x/joy_y, which the d-pad writes into: stick and pad
+ * both, as at Tank.
+ *
+ * These are the two terms the movement seam in S_UpdateInput carries with the
+ * opposite sign; the two must never disagree. InventoryActive is not only the
+ * ring: the pause menu, the load and save screens (specific\LoadSave.cpp) and
+ * the outfit window (specific\hd) set it too. The title has no Lara to steer,
+ * so it is named by its level id. The rest of the seam's guard - first person,
+ * a spotcam, a cutscene, bDisableLaraControl, the look key - are game states,
+ * and none of them reads a direction bit as a cursor step. */
+static long ModernMenuReadsPad()
+{
+	return (InventoryActive || gfLevelId == LVL5_TITLE) ? 1 : 0;
+}
 
-short layout[2][18] =
+// Whether this binding is one of the d-pad's own four bits (20..23,
+// specific\dxshell.cpp). -1 (unbound) and every other binding answer no,
+// which also keeps the shift off a negative count; the upper bound guards a
+// value that comes out of the registry.
+static long JoyBitIsDpad(long bit)
+{
+	return (bit >= 0 && bit <= 23 && ((1L << bit) & JOY_DPAD_BITS) != 0) ? 1 : 0;
+}
+
+/* The active pad set, 28 roles. Slots 0-14 are the classic roles, 15 the
+ * Secondary action, 16 the Modifier, 17-22 the six weapon hotkeys, 23-27 the
+ * five cheats. Whichever set the Action row has seated lives here
+ * (JoySplitSet).
+ *
+ * The initialiser is the One-key PS5 DirectInput row with -1 behind it, only a
+ * fallback for a registry that cannot be opened: LoadSettings overwrites the
+ * whole array before the first frame. -1 is what Key() and PadRoleFires read
+ * as "unbound"; 0 would be a real button bit (Square on that page). */
+long jLayout[JOY_ROLES] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+/* The Modern row's scan codes live in game\key_scheme.h, so that MenuTest
+ * checks the row the engine really uses. The header cannot include dinput.h,
+ * so these asserts state at compile time which key each of its numbers is; a
+ * typo in either place stops the build. */
+static constexpr short kModernRow[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
+static_assert(kModernRow[0] == DIK_W, "modern row: forward is W");
+static_assert(kModernRow[1] == DIK_S, "modern row: back is S");
+static_assert(kModernRow[2] == DIK_A, "modern row: left is A");
+static_assert(kModernRow[3] == DIK_D, "modern row: right is D");
+static_assert(kModernRow[4] == DIK_C, "modern row: duck is C");
+static_assert(kModernRow[5] == DIK_LSHIFT, "modern row: dash is left shift");
+static_assert(kModernRow[6] == DIK_LMENU, "modern row: walk is left alt");
+static_assert(kModernRow[7] == DIK_SPACE, "modern row: jump is space");
+static_assert(kModernRow[8] == DIK_E, "modern row: action is E");
+static_assert(kModernRow[9] == DIK_Q, "modern row: draw is Q");
+static_assert(kModernRow[10] == DIK_F, "modern row: flare is F");
+static_assert(kModernRow[11] == DIK_R, "modern row: look is R");
+static_assert(kModernRow[12] == DIK_LCONTROL, "modern row: roll is left ctrl");
+static_assert(kModernRow[13] == DIK_ESCAPE, "modern row: inventory is escape");
+static_assert(kModernRow[14] == DIK_Z, "modern row: step left is Z");
+static_assert(kModernRow[15] == DIK_X, "modern row: step right is X");
+static_assert(kModernRow[16] == DIK_P, "modern row: pause is P");
+static_assert(kModernRow[17] == DIK_RETURN, "modern row: select is return");
+static_assert(kModernRow[18] == DIK_NUMPAD0, "modern row: secondary action is numpad 0");
+/* The fifteen hotkey slots. Each default is the fixed key Core reads for that
+ * function, so with an untouched registry Key(role) - whose first test is
+ * keymap[layout[1][role]] - reads the same key as Core did; quick load is the
+ * one exception (F9 instead of F6). */
+static_assert(kModernRow[KEY_ROLE_MEDI_SMALL] == DIK_0, "modern row: small medipack is 0");
+static_assert(kModernRow[KEY_ROLE_MEDI_LARGE] == DIK_9, "modern row: large medipack is 9");
+static_assert(kModernRow[KEY_ROLE_SAVE] == DIK_F5, "modern row: quick save is F5");
+static_assert(kModernRow[KEY_ROLE_LOAD] == DIK_F9, "modern row: quick load is F9 - the one deliberate default change");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 0] == DIK_1, "modern row: pistols are 1");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 1] == DIK_2, "modern row: shotgun is 2");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 2] == DIK_3, "modern row: uzi is 3");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 3] == DIK_4, "modern row: revolver is 4");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 4] == DIK_5, "modern row: HK is 5");
+static_assert(kModernRow[KEY_ROLE_WEAPON_FIRST + 5] == DIK_6, "modern row: crossbow is 6");
+static_assert(kModernRow[KEY_ROLE_CHEAT_FLY] == DIK_F2, "modern row: fly mode is F2");
+static_assert(kModernRow[KEY_ROLE_CHEAT_GUNS] == DIK_F7, "modern row: all weapons is F7");
+static_assert(kModernRow[KEY_ROLE_CHEAT_ITEMS] == DIK_F8, "modern row: all items is F8");
+static_assert(kModernRow[KEY_ROLE_CHEAT_HEAL] == DIK_F11, "modern row: heal is F11");
+static_assert(kModernRow[KEY_ROLE_CHEAT_SKIP] == DIK_F1, "modern row: skip level is F1");
+
+/* The keyboard rows. Every reader and writer in the tree uses row 1, so the
+ * second keyboard set is seated into it rather than read from somewhere new -
+ * specific\registry.cpp, specific\LoadSave.cpp and game\menu_frame.cpp need no
+ * second path.
+ *
+ *   0  the Tank default row - Core's own, plus the slots below
+ *   1  the active set: whichever scheme is seated (KeySchemeSet, ApplyKeyScheme)
+ *   2  the Modern default row (game\key_scheme.h)
+ *   3  the parked set: the other scheme's, kept while it is not in use
+ *
+ * Row 3 starts as the Modern defaults because row 1 starts as the Tank set and
+ * Tank is the seated scheme at startup (key_scheme_seated below).
+ *
+ * 34 columns. Slot 18 is the Secondary action; Tank's is DIK_HOME, since Core's
+ * cluster uses End, Delete, Page Down and the arrows but never Home, so the row
+ * keeps every slot bound and no key twice (KeySchemeRowSound,
+ * game\key_scheme.h) without taking a key off an existing role. Slots 19-33
+ * are the hotkeys Core reads as fixed keys - the medipacks' 0 and 9, save's F5,
+ * load's F6, the weapon keys 1..6 - plus the five free F keys the cheat roles
+ * take. The Modern row differs from Tank's there in one slot: quick load, F9. */
+short layout[4][KEY_SCHEME_ROLES] =
 {
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN },
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME,
+	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6, DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1 },
 
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
-	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN }
+	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME,
+	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6, DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1 },
+
+	KEY_SCHEME_MODERN_ROW,
+
+	KEY_SCHEME_MODERN_ROW
 };
 
-long conflict[18];
+/* Which scheme's set is in row 1: 0 Tank, 1 Modern. It starts at Tank and not
+ * at -1 (unlike the pad's joy_scheme_seated) because the two sets have names of
+ * their own in the registry - Key0..Key17 and MKey0..MKey17 - so a table's
+ * scheme never has to be guessed; this only records whether the swap has been
+ * done. */
+static long key_scheme_seated = 0;
+
+/* The default row the active scheme falls back to - Key()'s second chance and
+ * CheckKeyConflicts()'s subject. Under Modern it must be the Modern row: its
+ * movement keys are W/S/A/D, and Tank's arrow keys falling through behind them
+ * would move Lara relative to a camera she no longer faces along. At Tank this
+ * is layout[0], Core's row. */
+const short* KeyDefaultRow()
+{
+	return layout[tomb5.control_modern ? 2 : 0];
+}
+
+/* The stored set of one scheme, wherever it is sitting. The registry addresses
+ * the two sets by scheme and not by row, because Key0..17 must keep meaning the
+ * classic set whichever scheme is active at shutdown (older builds read those
+ * names and ignore MKey*). */
+short* KeySchemeSet(long modern)
+{
+	return (key_scheme_seated == (modern ? 1 : 0)) ? layout[1] : layout[3];
+}
+
+/* The keyboard's half of the scheme switch, beside ApplyJoyScheme. The pad
+ * repairs one stored set per Action setting; the keyboard exchanges two,
+ * because each scheme keeps its own - a player who rebound Modern's W/S/A/D and
+ * went back to Tank finds the Tank keys, and the Modern keys are still there on
+ * return.
+ *
+ * The conflict table is recomputed because it is derived from both rows that
+ * just moved: layout[1] is the other set now, and KeyDefaultRow() answers with
+ * the other default row. Stale conflict[] entries would make a role's default
+ * key silent - or loud - for the wrong reason until the next capture. */
+void ApplyKeyScheme()
+{
+	const long modern = tomb5.control_modern ? 1 : 0;
+
+	if (key_scheme_seated == modern)
+		return;
+
+	key_scheme_seated = KeySchemeSeat(layout[1], layout[3], (int)key_scheme_seated, (int)modern);
+	CheckKeyConflicts();
+
+	if (gLogEnabled)
+		Log("KEYLOG scheme=%s seated", modern ? "modern" : "tank");
+}
+
+long conflict[KEY_SCHEME_ROLES];
 long input;
 long dbinput;
 long inputBusy;
 long joystick_read;
 long joystick_read_x;
 long joystick_read_y;
+long joystick_raw_rx;		// the right stick as two axes, before its per-axis zone - the modern camera
+long joystick_raw_ry;
+long joystick_raw_lx;		// the left stick alone and raw - the modern movement, see S_UpdateInput
+long joystick_raw_ly;
 long joystick_read_fire;
 long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/Steam), 0 = DirectInput fallback; set anew on every poll (dxshell.cpp)
 
 static long joy_fire;
 static long joy_x, joy_y;
 
+/* The look key, as the Modern scheme remembers it. While the stick steers Lara
+ * as in Tank the look bit is taken out of the input word - the engine must not
+ * answer it with the look camera - so the gate cannot read `input & IN_LOOK`:
+ * it would read back the bit it had just cleared, let the seam run again, set
+ * the bit again and flicker between the two schemes at 30 Hz.
+ *
+ * So this holds what `input & IN_LOOK` would have said: the look bit of the
+ * last word this function built, taken before that word is stripped, with the
+ * six-tick IN_TARGET swallow already applied. Used only under
+ * tomb5.control_modern. */
+static long modern_look_tank;
+
+/* Which of the two sectors the thumb was in last tick. The hysteresis of
+ * MODERN_TANK_SECTOR_HYST needs one tick of memory, and it lives here rather
+ * than in game\modern_move.cpp because this file knows when a hold begins and
+ * ends: the block that calls ModernTankSector clears it on every tick that is
+ * not a bypass tick, so a fresh hold starts from MODERN_TANK_SECTOR_NONE and
+ * the plain boundary. Used only under tomb5.control_modern. */
+static long modern_tank_prev;
+
+/* Sprint mode and Duck mode, their whole memory: two longs of MODERN_LATCH_*
+ * bits, one per mode. The arithmetic is pure and lives in game\modern_move.h;
+ * the state is the engine's and lives here. Written only from the mode seam in
+ * S_UpdateInput, entered only while one of the two rows says Toggle, and from
+ * InputModeLatchReset below. At the defaults they stay 0. */
+static long sprint_latch;
+static long duck_latch;
+
+/* Grab mode's latch, of the same kind and written from the same two places. It
+ * holds only MODERN_GRAB_RELEASE and MODERN_LATCH_KEY - it remembers which press
+ * let go, never that Lara is holding on, because her state says that
+ * (game\modern_move.cpp). At the default it stays 0. */
+static long grab_latch;
+
+/* Drops the mode latches from outside a tick. Callers:
+ *
+ * - game\gameflow.cpp, beside the level's priming tick. That line covers a
+ *   level start and every savegame restore, because sgRestoreGame has exactly
+ *   one caller, earlier in the same function - as for ModernResetControls'
+ *   call there. Not under tomb5.control_modern, unlike that call: these modes
+ *   are read in both control types.
+ * - game\menu_frame.cpp, from each mode row's step function. Without it a latch
+ *   could outlive its option: the seam is not entered while all rows say Hold,
+ *   so a duck latched before the row was switched off would still stand when
+ *   it is switched back on.
+ *
+ * The key memory is left alone on purpose: a key still held across a level
+ * boundary or out of a menu is not a fresh press and must not latch
+ * (game\modern_move.cpp). */
+void InputModeLatchReset()
+{
+	ModernModeLatchDrop(&sprint_latch);
+	ModernModeLatchDrop(&duck_latch);
+	ModernModeLatchDrop(&grab_latch);
+}
+
+/* Whether the look key steers Lara as in Tank this tick. The bypass runs
+ * instead of ModernUpdateInput, whose MODERNLOG line is then silent, so a log
+ * could not tell "steered as in Tank" from "the seam never ran"; this is what
+ * MODERNLOG prints as `mode=tank`. */
+long ModernLookTankActive()
+{
+	return modern_look_tank;
+}
+
 // The pad's stick/d-pad as a single menu step, edge triggered: -1 left,
-// +1 right, 0 nothing. Deliberately UNGATED by ControlMethod.
+// +1 right, 0 nothing. Deliberately not gated by ControlMethod.
 //
-// The controls screen needs it. ControlMethod carries two meanings at once -
-// which binding page is shown, and whether the pad is read at all - and on
-// the keyboard page the second one leaves the controller completely dead. A
-// player who paged there with the pad could not page back with it; only the
-// arrow keys came back (reported in game, #115). Since that page is where
-// the setting itself lives, it is a trap: the pad cannot undo what the pad
-// just did.
+// ControlMethod carries two meanings at once - which binding page is shown,
+// and whether the pad is read at all - so on the keyboard page the pad is
+// dead. Without this, a player who paged there with the pad could not page
+// back with it, and that page is where the setting itself lives.
 //
-// Only the CONTROLS SCREEN uses this. Everywhere else ControlMethod keeps its
-// meaning - somebody who chose keyboard does not want a resting stick moving
+// Only the controls screen uses this. Everywhere else ControlMethod keeps its
+// meaning - a player who chose keyboard does not want a resting stick moving
 // Lara.
 long JoyMenuStep()
 {
@@ -267,15 +833,14 @@ long JoyMenuStep()
 	return dir;
 }
 
-// Is the stick/d-pad deflected at all right now? The controls screen needs it
-// to keep ONE deflection from being counted twice.
+// Whether the stick/d-pad is deflected at all. The controls screen uses it to
+// keep one deflection from being counted twice.
 //
-// The two paths hand the same deflection over at the moment ControlMethod
-// changes: JoyMenuStep takes the step on the keyboard page, the method flips
-// to the pad, and in the next frame the still-held direction reaches dbinput
-// for the first time - which its edge detection reads as a fresh press. One
-// push, two pages. So while the stick is deflected, the step belongs to
-// JoyMenuStep alone and dbinput is not listened to.
+// When ControlMethod changes, JoyMenuStep takes the step on the keyboard page,
+// the method flips to the pad, and in the next frame the still-held direction
+// reaches dbinput for the first time - which its edge detection reads as a
+// fresh press: one push, two pages. So while the stick is deflected, the step
+// belongs to JoyMenuStep alone and dbinput is ignored.
 long JoyMenuDeflected()
 {
 	return joy_x < -8 || joy_x > 8;
@@ -285,7 +850,7 @@ short ammo_change_timer = 0;
 char ammo_change_buf[12];
 
 //----------------------------------------------------------------------------
-// One key per weapon, the same key everywhere (#139).
+// One key per weapon, the same key everywhere.
 //
 // Core bound four keys and let two of them change meaning:
 // "if (gfLevelId < LVL5_THIRTEENTH_FLOOR)" made key 1 the pistols early
@@ -302,34 +867,24 @@ char ammo_change_buf[12];
 // reach for the HK instead.
 //
 // So: 1 pistols, 2 shotgun, 3 uzis, 4 revolver, 5 HK, 6 crossbow. Nothing
-// depends on the level any more. Keys 5 to 8 were free in play - only the
-// save/load screen uses 1 to 4, and that is a different context.
+// depends on the level. Keys 5 to 8 are free in play - only the save/load
+// screen uses 1 to 4, and that is a different context.
 //
-// Everything inside the branches is Core's code, moved unchanged: the
-// "is it carried" test, the draw, and the ammunition cycling on a second
-// press (which alone is what the "Ammotype hotkeys" option governs -
-// drawing a weapon works whether it is on or off, and always did).
+// Everything inside the branches is Core's code, unchanged: the "is it
+// carried" test, the draw, and the ammunition cycling on a second press
+// (which alone is what the "Ammotype hotkeys" option governs - drawing a
+// weapon works whether it is on or off).
 //----------------------------------------------------------------------------
-static void DoWeaponHotkey()
+/* One routine taking which weapon, called by the keyboard and the pad alike:
+ * each weapon role is read as Key(role) OR the pad's role, the same way as the
+ * medipacks and quick save/load. Core's else-if chain became a switch with the
+ * same order and the same early `return`s; it runs one branch, because the
+ * caller stops at the first weapon whose role answers. */
+static void DoWeaponRequest(long which)
 {
-	short state;
-	bool goin;
-
-	if (!lara_item)
-		goin = 0;
-	else
+	switch (which)
 	{
-		state = lara_item->current_anim_state;
-		goin = !(gfLevelFlags & GF_YOUNGLARA) && (lara.water_status == LW_ABOVE_WATER || lara.water_status == LW_WADE) && !bDisableLaraControl &&
-			(state != AS_ALL4S && state != AS_CRAWL && state != AS_ALL4TURNL && state != AS_ALL4TURNR && state != AS_CRAWLBACK &&
-				state != AS_CRAWL2HANG && state != AS_DUCK && state != AS_DUCKROTL && state != AS_DUCKROTR);
-	}
-
-	if (!goin)
-		return;
-	
-	if (keymap[DIK_1])
-	{
+	case 0:
 		if (!(lara.pistols_type_carried & W_PRESENT))
 			return;
 
@@ -337,9 +892,9 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_PISTOLS)
 			lara.gun_status = LG_DRAW_GUNS;
-	}
-	else if (keymap[DIK_2])
-	{
+		break;
+
+	case 1:
 		if (!(lara.shotgun_type_carried & W_PRESENT))
 			return;
 
@@ -372,9 +927,9 @@ static void DoWeaponHotkey()
 				}
 			}
 		}
-	}
-	else if (keymap[DIK_3])
-	{
+		break;
+
+	case 2:
 		if (!(lara.uzis_type_carried & W_PRESENT))
 			return;
 
@@ -382,9 +937,9 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_UZI)
 			lara.gun_status = LG_DRAW_GUNS;
-	}
-	else if (keymap[DIK_4])
-	{
+		break;
+
+	case 3:
 		if (!(lara.sixshooter_type_carried & W_PRESENT))
 			return;
 
@@ -392,10 +947,10 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_REVOLVER)
 			lara.gun_status = LG_DRAW_GUNS;
-	}
-	else if (keymap[DIK_5])
-	{
-		// The HK had to share key 1 with the pistols; now it has its own.
+		break;
+
+	case 4:
+		// The HK has its own key instead of sharing key 1 with the pistols.
 		if (!(lara.hk_type_carried & W_PRESENT))
 			return;
 
@@ -435,10 +990,10 @@ static void DoWeaponHotkey()
 				}
 			}
 		}
-	}
-	else if (keymap[DIK_6])
-	{
-		// The crossbow had to share key 2 with the shotgun; now it has its own.
+		break;
+
+	case 5:
+		// The crossbow has its own key instead of sharing key 2 with the shotgun.
 		if (!(lara.crossbow_type_carried & W_PRESENT))
 			return;
 
@@ -446,6 +1001,44 @@ static void DoWeaponHotkey()
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_CROSSBOW)
 			lara.gun_status = LG_DRAW_GUNS;
+		break;
+	}
+}
+
+/* Which weapon role is asking: Core's guard (not young Lara, not in deep water,
+ * not crawling or ducking), then the six roles in order. The loop stops at the
+ * first role that answers, as Core's else-if chain did.
+ *
+ * The role is read every tick while held, for the pad as for the keyboard.
+ * Drawing a weapon is idempotent (request_gun_type is a request), and the one
+ * thing a repeat could run away with - the ammunition cycle - is held off by
+ * Core's ammo_change_timer. */
+static void DoWeaponHotkey()
+{
+	short state;
+	bool goin;
+
+	if (!lara_item)
+		goin = 0;
+	else
+	{
+		state = lara_item->current_anim_state;
+		goin = !(gfLevelFlags & GF_YOUNGLARA) && (lara.water_status == LW_ABOVE_WATER || lara.water_status == LW_WADE) && !bDisableLaraControl &&
+			(state != AS_ALL4S && state != AS_CRAWL && state != AS_ALL4TURNL && state != AS_ALL4TURNR && state != AS_CRAWLBACK &&
+				state != AS_CRAWL2HANG && state != AS_DUCK && state != AS_DUCKROTL && state != AS_DUCKROTR);
+	}
+
+	if (!goin)
+		return;
+
+	for (long i = 0; i < KEY_ROLE_WEAPONS; i++)
+	{
+		if (Key(KEY_ROLE_WEAPON_FIRST + i) ||
+			(ControlMethod == 1 && JoyRole(JOY_ROLE_WEAPON_FIRST + i)))
+		{
+			DoWeaponRequest(i);
+			return;
+		}
 	}
 }
 
@@ -454,18 +1047,21 @@ long Key(long number)
 	if (number == 255)
 		// jLayout[n] was -1 (unbound - see LoadSave.cpp's auto-unbind-on-conflict),
 		// so the caller's "+256" offset landed on 255 instead of a real >=256
-		// joystick-button value. 255 is never a real keyboard role index (those
-		// only go 0-17) or a real encoded joystick value (real button indices are
-		// 0-19, i.e. 256-275), so it's safe to use as this sentinel.
+		// joystick-button value. 255 is never a keyboard role index (0-33) or an
+		// encoded joystick value (button indices 0-23, i.e. 256-279), so it is
+		// safe as this sentinel.
+		//
+		// The engine itself no longer reaches this: every pad read goes through
+		// JoyRole/PadRoleFires, which handles -1 itself. The sentinel stays
+		// because Key() is public and the encoding is still the one JoyRole
+		// undoes.
 		return 0;
 
 	if (number >= 256)
 		// number is jLayout[n]+256 (a "read from the joystick, not the keyboard"
 		// signal) - joy_fire holds one bit per physical button starting at bit 0
 		// (see DXUpdateJoystick), so the actual bit position needs the 256 taken
-		// back out. Left shifting by number (up to ~265) directly here previously
-		// always overflowed to 0 - this joystick-button path was dead even once
-		// DXUpdateJoystick() itself was made to return real data.
+		// back out. Shifting by `number` itself (256 and up) would always give 0.
 		return joy_fire & (1 << (number - 256));
 
 	short key = layout[1][number];
@@ -492,7 +1088,8 @@ long Key(long number)
 	if (conflict[number])
 		return 0;
 
-	key = layout[0][number];
+	// The active scheme's default row, which at Tank is layout[0] (KeyDefaultRow).
+	key = KeyDefaultRow()[number];
 
 	if (keymap[key])
 		return 1;
@@ -516,6 +1113,24 @@ long Key(long number)
 	return 0;
 }
 
+/* The pad's own Key(); every pad producer goes through it. A role is a pair -
+ * a button and whether the Modifier has to be held with it - and the pair is
+ * answered in one place, PadRoleFires (game\pad_scheme.h, pure), so the
+ * medipacks, the flare and the weapons cannot each judge it differently. This
+ * supplies the state it needs.
+ *
+ * With the Modifier unbound (-1, as at "One key" on every page and path) every
+ * chord flag is 0 and the rule is exactly "is the role's button down in
+ * joy_fire", as a plain bit test.
+ *
+ * ControlMethod is not tested here: every call site already stands inside
+ * `if (ControlMethod == 1)` or carries it in its own condition. */
+long JoyRole(long role)
+{
+	return PadRoleFires((unsigned long)joy_fire, jLayout[role], (int)JoyChordOf(role),
+		jLayout[JOY_ROLE_MODIFIER]);
+}
+
 long S_UpdateInput()
 {
 	static long linput;
@@ -535,23 +1150,215 @@ long S_UpdateInput()
 	DXReadKeyboard(keymap);
 
 	// Read unconditionally. Reading has no effect of its own - every use of
-	// joy_x/joy_y/joy_fire below is still behind ControlMethod - but it keeps
-	// the values current for JoyMenuStep, which the controls screen needs
+	// joy_x/joy_y/joy_fire below is behind ControlMethod - but it keeps the
+	// values current for JoyMenuStep, which the controls screen needs
 	// precisely when ControlMethod says keyboard.
 	joy_fire = ReadJoystick(joy_x, joy_y);
+
+	/* In Modern the right stick is the camera, and not four buttons as well.
+	 *
+	 * specific\dxshell.cpp turns its four directions into four extra digital
+	 * buttons, bits 16..19 of joy_fire past the sixteen physical ones, and the
+	 * default XInput pages bind them: jDefPS5XInput[13]/[14] and jDefXbox's are
+	 * 18 and 19, so pushing the stick left or right would use a medipack. Under
+	 * Modern the four bits are masked out here (the medipacks move to the
+	 * d-pad, see JoyDefaultRecord).
+	 *
+	 * The axes go to the orbit instead - stored, not acted on, because this
+	 * function also serves the menus, the inventory and the FMV player, and the
+	 * orbit may only move once per logic tick (game\camera.cpp).
+	 *
+	 * The binding screen still sees the whole word: specific\LoadSave.cpp calls
+	 * ReadJoystick itself, so the four directions can still be bound there. */
+	if (tomb5.control_modern)
+	{
+		/* The table has to match the scheme before the mask below. The table
+		 * this session starts with may have been written under Tank or by an
+		 * older build, with the medipacks still on the bits masked below. The
+		 * scheme switch repairs the table when the player flips it
+		 * (specific\LoadSave.cpp); this is the same repair for a session that
+		 * starts in Modern.
+		 *
+		 * Once, and only with a pad really answering: joystick_is_xinput - and
+		 * with it which default table is right - is set by the poll and not by
+		 * the init, and the DirectInput half of that init runs in a thread of
+		 * its own (specific\dxshell.cpp). */
+		if (joy_scheme_seated != 1 && ControlMethod == 1 && joystick_read)
+			ApplyJoyScheme();
+
+		const long rstick_bits = JOY_RSTICK_BITS;	// bits 16..19, specific\dxshell.cpp
+		long cam_x = 0;
+		long cam_y = 0;
+
+		/* The camera stick goes through its own radial dead zone, on the raw
+		 * pair: the per-axis zeroing in specific\dxshell.cpp judges each
+		 * component alone and so snaps a nearly-axial push onto the axis. The
+		 * width is XInput's own 8689 of 32767, except on the DirectInput path,
+		 * where the measured pad's Z/Rz rest off centre and only a wider zone keeps
+		 * a resting stick from turning the camera (game\modern_move.h carries
+		 * both numbers).
+		 *
+		 * The second argument is the per-axis square that zone replaces: a disc
+		 * reaches less far into the corners than the square of the same
+		 * half-width, so a stick resting in a corner would otherwise start
+		 * turning the camera. The stick is dead in either.
+		 *
+		 * ControlMethod == 1, so a controller resting on the desk cannot steer a
+		 * keyboard player's camera; otherwise cam_x/cam_y stay zero, so a stick
+		 * that was out when the player switched to the keyboard cannot leave the
+		 * orbit turning.
+		 *
+		 * Both widths are scaled by the player's tomb5.dead_zone through
+		 * ModernDeadZoneUser; the default 50 returns them unchanged
+		 * (game\modern_move.cpp). Asked at every use, so moving the slider takes
+		 * effect on the next tick. */
+		if (ControlMethod == 1)
+			ModernStickDeadZone(
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_RIGHT : MODERN_DEAD_RIGHT_DINPUT,
+					(long)tomb5.dead_zone),
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_AXIS_RIGHT : MODERN_DEAD_AXIS_RIGHT_DINPUT,
+					(long)tomb5.dead_zone),
+				joystick_raw_rx, joystick_raw_ry, &cam_x, &cam_y);
+
+		ModernCameraStick(cam_x, cam_y);
+		joy_fire &= ~rstick_bits;
+	}
+
+	/* In Modern the d-pad does not move Lara; it is free for bindings. This is
+	 * a local copy of the stick, not a change to joy_x/joy_y: those statics are
+	 * also what JoyMenuStep/JoyMenuDeflected read for the controls screen's
+	 * navigation in either scheme, and the d-pad must keep steering menus.
+	 *
+	 * specific\dxshell.cpp does not OR the d-pad into the axes, it assigns: a
+	 * press overwrites the stick reading. Erasing the d-pad's +-20 signature
+	 * here could therefore only turn a partial push into a dead stop (a
+	 * medipack tap while running) or veer the course. So the movement reads the
+	 * stick's own axes, which dxshell.cpp keeps beside the overwritten pair.
+	 * joy_x/joy_y still carry the d-pad for the menus, joy_fire still carries
+	 * its four bits for the bindings. The joystick_read test is ReadJoystick's
+	 * own: no pad answering means no axes, not the last poll's.
+	 *
+	 * Where a menu reads the direction bits as a cursor step (the inventory,
+	 * the title - ModernMenuReadsPad(), the mirror of the movement seam's two
+	 * menu terms), the pair stays joy_x/joy_y: stick and d-pad both, as at Tank.
+	 *
+	 * Otherwise the raw left stick goes through a radial zone of XInput's own
+	 * 7849 of 32767, so a circling thumb does not snap onto the four cardinals
+	 * and the course does not move in jumps - with the path's per-axis square
+	 * beside it, so a stick resting in the square's corners cannot start Lara
+	 * walking. The menus keep the per-axis pair, all a four-way cursor needs. */
+	long move_x = joy_x;
+	long move_y = joy_y;
+
+	if (tomb5.control_modern && ControlMethod == 1 && !ModernMenuReadsPad())
+	{
+		move_x = 0;
+		move_y = 0;
+
+		/* Both widths are chosen by path. The DirectInput axes come in at a
+		 * different scale with a per-axis gate of 18, so XInput's radial 31
+		 * would kill every push between 18 and 31 and give a slow thumb a step;
+		 * MODERN_DEAD_LEFT_DINPUT is 24, above the gate and below 31.
+		 *
+		 * As for the camera stick, both widths are scaled by tomb5.dead_zone,
+		 * whose default 50 returns them unchanged. */
+		if (joystick_read)
+			ModernStickDeadZone(
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
+					(long)tomb5.dead_zone),
+				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_AXIS_LEFT : MODERN_DEAD_AXIS_LEFT_DINPUT,
+					(long)tomb5.dead_zone),
+				joystick_raw_lx, joystick_raw_ly, &move_x, &move_y);
+	}
+
+	/* The Modern seam's condition, asked here - before the classic assembly -
+	 * because the sector rule below must know whether this is one of the look
+	 * key's ticks while move_x/move_y are still on their way into the four
+	 * direction bits. Nothing between here and the seam writes one of its
+	 * terms; it is named once so its three readers cannot drift apart.
+	 *
+	 * Term by term: tomb5.control_modern first, so at the default (Tank) this
+	 * is one short-circuit and a local 0. ControlMethod == 1 because the stick
+	 * is an input only when the player chose the pad - otherwise a controller
+	 * resting on the desk would take the keyboard's direction keys away. First
+	 * person is skipped because the camera is Lara's head there and a
+	 * camera-relative heading means nothing; spotcams, cutscenes and
+	 * bDisableLaraControl because Lara is not the player's to steer then (the
+	 * last also covers pickups, switches and lifts); the inventory and the
+	 * title because the direction bits steer a menu there. */
+	const long modern_seam = tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() &&
+		!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
+		!InventoryActive && gfLevelId != LVL5_TITLE;
+
+	/* Whether the look key is steering Lara this tick, i.e. the seam stands
+	 * aside: the inverse of the bypass gate below, read by all three readers.
+	 * The latch half goes through ModernLookTankActive(), so the engine has one
+	 * spelling of "the look key is steering her as at Tank". */
+	const long modern_tank = modern_seam && ((input & IN_LOOK) || ModernLookTankActive());
+
+	/* Whether that look key is aiming instead. With a weapon ready the look key
+	 * is not a steering modifier: the strip further below asks
+	 * `lara.gun_status != LG_READY` before it takes IN_LOOK out.
+	 *
+	 * The bit does reach these ticks, by two roads: the IN_TARGET swallow below
+	 * lets it through from the seventh tick of a hold (LookCnt 100), and
+	 * ControlPhase (game\control.cpp) sets `input |= IN_LOOK` on every tick of
+	 * a binocular or lasersight session. On those ticks the classic direction bits are what
+	 * LookUpDown and LookLeftRight (game\lara.cpp) consume to aim
+	 * the head, the binoculars and the crosshair, and a sector that lets one
+	 * axis through would make a diagonal impossible.
+	 *
+	 * So only the sector rule is confined to the ticks the look key really
+	 * steers Lara; `modern_tank` itself, the bypass gate and the log line keep
+	 * their behaviour with a weapon ready. */
+	const long modern_tank_aim = modern_tank && lara.gun_status == LG_READY;
+
+	/* On the look key's steering ticks the stick is read by sector.
+	 *
+	 * The classic assembly below is two independent per-axis thresholds of 8,
+	 * Core's arithmetic behind the hardware's per-axis zone. In Modern the pair
+	 * has come through the radial zone instead, so those 8 are a window of
+	 * +-3.6 degrees round the horizontal, and a thumb pushing "left" sits ten to
+	 * sixteen degrees low: measured, 680 of 962 pushed tank ticks came out
+	 * LEFT+BACK. ModernTankSector lets exactly one axis through, so a turn is a
+	 * turn and a step is a step; the arithmetic and its constants are in
+	 * game\modern_move.*, where a test can hold them. Every other Modern tick
+	 * goes to ModernUpdateInput, which reads move_x/move_y itself.
+	 *
+	 * The raw pair is kept beside the sectored one because MODERNLOG's tank
+	 * line prints both: `stick=` is what the thumb did, `out=` what the
+	 * assembly was handed.
+	 *
+	 * The outer `if` clears the previous sector on every tick that is not a
+	 * steering tick - a hold that ends, the inventory, a cutscene, first
+	 * person, and also the aiming ticks - so a fresh push always starts from no
+	 * sector and the plain boundary, never biased by an earlier hold. It tests
+	 * tomb5.control_modern and not modern_seam so that at Tank the static is
+	 * neither read nor written; modern_tank carries the seam's terms. */
+	long tank_x = move_x;
+	long tank_y = move_y;
+	long tank_sector = MODERN_TANK_SECTOR_NONE;
+
+	if (tomb5.control_modern)
+	{
+		if (modern_tank && !modern_tank_aim)
+			tank_sector = ModernTankSector(move_x, move_y, modern_tank_prev, &tank_x, &tank_y);
+
+		modern_tank_prev = tank_sector;
+	}
 
 	linput = 0;
 
 	if (ControlMethod == 1)
 	{
-		if (joy_x < -8)
+		if (tank_x < -8)
 			linput = IN_LEFT;
-		else if (joy_x > 8)
+		else if (tank_x > 8)
 			linput = IN_RIGHT;
 
-		if (joy_y > 8)
+		if (tank_y > 8)
 			linput |= IN_BACK;
-		else if (joy_y < -8)
+		else if (tank_y < -8)
 			linput |= IN_FORWARD;
 	}
 
@@ -567,6 +1374,120 @@ long S_UpdateInput()
 	if (Key(3))
 		linput |= IN_RIGHT;
 
+	/* The Modern control's seam, here and nowhere else. Above, the stick and
+	 * the four direction keys have written their bits; below, the key roles
+	 * are read. The whole Modern scheme is "take those four bits away and put
+	 * four of its own in"; when it is not responsible - the stick at rest, a
+	 * state where a direction bit does not mean a direction - the bits above
+	 * stand and the pad behaves as at Tank. So the scheme needs no second input
+	 * path anywhere in the tree. The guard, `modern_seam`, is declared above.
+	 *
+	 * While the look key is held the translation is bypassed, so the stick
+	 * turns Lara finely on the spot as in Tank, for movements where she has to
+	 * be placed exactly. `input` is the previous tick's word (IN_LOOK is read
+	 * further down), so a hold of n ticks is bypassed for n ticks, from the
+	 * tick after the key goes down to the first tick it reads up; the scheme is
+	 * back on the second tick after the last held one. One tick at 30 Hz is
+	 * under a visible frame; ModernTest's look_tank() counts both ends. With a
+	 * weapon ready the look key is swallowed for six ticks (it becomes
+	 * IN_TARGET), so there the bypass begins when the hold becomes a real look.
+	 *
+	 * `modern_tank` has two terms. The latch (ModernLookTankActive) answers
+	 * when the block below the IN_TARGET swallow has taken the bit out of the
+	 * word. The word answers during a binocular or lasersight session, where
+	 * ControlPhase (game\control.cpp) holds IN_LOOK on whether the key is pressed or not;
+	 * that session is LG_READY, so the block below leaves the bit alone. */
+	if (modern_seam && !modern_tank)
+	{
+		// The two key roles the scheme has to know about before they are read
+		// into the word below - aiming asks for the fire key, the directional
+		// jump for the jump key. Same keys, same pad buttons, read in the same
+		// order as the blocks that follow.
+		/* The aiming role follows the fire key. MODE AIM is "weapon up and
+		 * action held: strafe, do not turn" (game\modern_move.h), a weapon
+		 * behaviour, and under "Separate" the weapons fire on the Secondary
+		 * role. So the role is chosen by the same bit that chooses which role
+		 * produces IN_ACTION below, and the two cannot disagree. */
+		const long mAction = tomb5.action_split
+			? (Key(KEY_ROLE_SECOND) || JoyRole(JOY_ROLE_SECOND))
+			: (Key(8) || JoyRole(4));
+		const long mJump = Key(7) || JoyRole(3);
+
+		// move_x/move_y, not joy_x/joy_y - in Modern that pair is the left
+		// stick's own reading, which the d-pad never writes over (see above),
+		// so a d-pad press reaches neither this call nor the classic assembly
+		// above as a movement stick.
+		linput = ModernUpdateInput(linput, move_x, move_y, mAction, mJump);
+	}
+
+	/* MODERNLOG `mode=tank`: the seam above never runs on a bypass tick, so
+	 * without this line a log falls silent while the look key is held and
+	 * cannot tell that from the scheme standing aside for another reason. The
+	 * condition is `modern_tank`, the inverse of the seam's gate, so exactly
+	 * one of the two lines fires per Modern seam tick; the latch is written
+	 * further below, so this is still this tick's answer.
+	 *
+	 * Fields: `stick` is move_x/move_y as the seam would have received them;
+	 * `sector` is 0 none, 1 turn, 2 step; `out` is the pair the classic
+	 * assembly was handed; `aim` is 1 when the look key is aiming a weapon,
+	 * the binoculars or the lasersight - why a tank tick can show sector=0
+	 * with the stick still pushed. */
+	if (gLogEnabled && modern_tank)
+		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld sector=%ld out=%ld/%ld aim=%ld",
+			(long)GlobalCounter, move_x, move_y, tank_sector, tank_x, tank_y, modern_tank_aim);
+
+	/* The walk key survives the seam. MODERN_MOVE_MASK includes IN_WALK, so
+	 * ModernUpdateInput clears whatever the stick wrote for it - but the walk
+	 * key, Key(6) and the pad's jLayout[2], is read below, after the seam has
+	 * run, so it only ORs its bit into what the seam decided. Holding the walk
+	 * key gives IN_WALK in Modern exactly as in Tank, whatever the stick's
+	 * magnitude (MODERN_WALK_BELOW, game\modern_move.h, is 0). Read before the
+	 * seam, the key's bit would be wiped on every Modern tick. */
+	/* The Action role's whole word, computed once. Both producers below - the
+	 * keyboard's Key(8) and the pad's jLayout[4] - OR this same value, so they
+	 * cannot disagree about what the Action button means. With "One key" it is
+	 * IN_SELECT | IN_INTERACT | IN_ACTION, and nothing between here and any
+	 * reader takes one action bit without the other: lara.Busy's mask at the
+	 * end keeps neither, `inputBusy` and `dbinput` copy the whole word, the
+	 * Modern seam writes only MODERN_MOVE_MASK and IN_DRAW, and the one mask in
+	 * game\lara.cpp clears both at this setting (see the comment there).
+	 *
+	 * With "Separate" the Action role drops IN_ACTION and the Secondary role
+	 * below picks it up. IN_SELECT stays with the Action role on purpose: it
+	 * confirms in every menu and in the inventory ring, and the split does not
+	 * move menus. */
+	const long action_bits = IN_SELECT | IN_INTERACT | (tomb5.action_split ? 0 : IN_ACTION);
+
+	/* KEYLOG action=, logged on change and never per frame. game\menu_frame.cpp's
+	 * MENULOG line records the row being set; this one records what the input
+	 * assembly made of it - `bits` is action_bits, `second` the keyboard and pad
+	 * bindings of the Secondary role. A run without -log never reaches it. */
+	static long action_bits_logged = -1;
+
+	if (gLogEnabled && action_bits != action_bits_logged)
+	{
+		action_bits_logged = action_bits;
+		Log("KEYLOG action=%s bits=0x%lX second=%ld/%ld", tomb5.action_split ? "separate" : "onekey",
+			action_bits, (long)layout[1][KEY_ROLE_SECOND], jLayout[JOY_ROLE_SECOND]);
+	}
+
+	/* PADLOG, the pad's chord layer, logged on change and never per frame. A line
+	 * of its own because the Modifier and the mask change when a binding is
+	 * captured, when the Action row flips and on Reset, none of which touches
+	 * action_bits. `mod` is the Modifier's bit (-1 unbound: no chord can fire
+	 * and every pad role is a plain bit test), `chord` the active set's chord
+	 * mask, `split` the Action setting. */
+	static long modifier_logged = -2;
+	static long chord_logged = -1;
+
+	if (gLogEnabled && (jLayout[JOY_ROLE_MODIFIER] != modifier_logged || jChord != chord_logged))
+	{
+		modifier_logged = jLayout[JOY_ROLE_MODIFIER];
+		chord_logged = jChord;
+		Log("PADLOG mod=%ld chord=0x%lX split=%s", modifier_logged, chord_logged,
+			tomb5.action_split ? "separate" : "onekey");
+	}
+
 	if (Key(4))
 		linput |= IN_DUCK;
 
@@ -580,32 +1501,43 @@ long S_UpdateInput()
 		linput |= IN_JUMP;
 
 	if (Key(8))
-		linput |= IN_SELECT | IN_ACTION;
+		linput |= action_bits;
+
+	/* The Secondary role, not even asked at "One key": the `&&` short-circuits,
+	 * so at the default Key() is not called for slot 18 and the role cannot
+	 * produce a bit however it is bound. */
+	if (tomb5.action_split && Key(KEY_ROLE_SECOND))
+		linput |= IN_ACTION;
 
 	if (Key(9))
 		linput |= IN_DRAW;
 
 	if (ControlMethod == 1)
 	{
-		if (Key(jLayout[3] + 256))
+		if (JoyRole(3))
 			linput |= IN_JUMP;
 
-		if (Key(jLayout[4] + 256))
-			linput |= IN_SELECT | IN_ACTION;
+		if (JoyRole(4))
+			linput |= action_bits;
 
-		if (Key(jLayout[5] + 256))
+		// The pad's half of the Secondary role, under the same guard and for
+		// the same reason as the keyboard's above.
+		if (tomb5.action_split && JoyRole(JOY_ROLE_SECOND))
+			linput |= IN_ACTION;
+
+		if (JoyRole(5))
 			linput |= IN_DRAW;
 
-		if (Key(jLayout[1] + 256))
+		if (JoyRole(1))
 			linput |= IN_SPRINT;
 
-		if (Key(jLayout[2] + 256))
+		if (JoyRole(2))
 			linput |= IN_WALK;
 
-		if (Key(jLayout[0] + 256))
+		if (JoyRole(0))
 			linput |= IN_DUCK;
 
-		if (Key(jLayout[6] + 256))
+		if (JoyRole(6))
 			flag = 1;
 	}
 
@@ -652,18 +1584,51 @@ long S_UpdateInput()
 	if (Key(17))
 		linput |= IN_SELECT;
 
+	/* The menus keep the arrows and Return under Modern. Modern binds W/S/A/D to
+	 * the four direction slots, and every menu steps with IN_FORWARD/IN_BACK/
+	 * IN_LEFT/IN_RIGHT out of Key(0..3) - the title, the pause menu and its
+	 * option pages, the inventory ring, load/save and the outfit changer.
+	 * Without this a player who rebound W/S/A/D elsewhere would be locked out of
+	 * the menu he rebound them in.
+	 *
+	 * The predicate is ModernMenuReadsPad(), the one answer to "is a menu
+	 * reading the direction bits rather than Lara"; it is the inverse of the
+	 * movement seam's last two terms, so in play the arrows do only what the
+	 * active table says.
+	 *
+	 * Raw keymap and not Key(), because these five are the menus' fixed keys,
+	 * not a role (the capture refuses to bind them over the navigation,
+	 * game\menu_frame.cpp). Escape reaches IN_DESELECT unconditionally below. */
+	if (tomb5.control_modern && ModernMenuReadsPad())
+	{
+		if (keymap[DIK_UP])
+			linput |= IN_FORWARD;
+
+		if (keymap[DIK_DOWN])
+			linput |= IN_BACK;
+
+		if (keymap[DIK_LEFT])
+			linput |= IN_LEFT;
+
+		if (keymap[DIK_RIGHT])
+			linput |= IN_RIGHT;
+
+		if (keymap[DIK_RETURN])
+			linput |= IN_SELECT;
+	}
+
 	if (ControlMethod == 1)
 	{
-		if (Key(jLayout[7] + 256))
+		if (JoyRole(7))
 			linput |= IN_LOOK;
 
-		if (Key(jLayout[8] + 256))
+		if (JoyRole(8))
 			linput |= IN_ROLL;
 
-		if (Key(jLayout[9] + 256))
+		if (JoyRole(9))
 			linput |= IN_OPTION;
 
-		if (Key(jLayout[10] + 256))
+		if (JoyRole(10))
 			linput |= IN_PAUSE;
 	}
 
@@ -676,11 +1641,10 @@ long S_UpdateInput()
 	// toggle (see control.cpp) - adding it here would make every such press
 	// during gameplay also try to open the inventory. IN_DESELECT alone is
 	// enough for "back" in every menu screen that checks it.
-	// Not user-rebindable, for the same reason Escape itself isn't. The BIT
-	// depends on the active input path (JoyBitBack): raw DirectInput puts
-	// Circle on bit 2, XInput puts B - and Circle via DS4Windows/Steam - on
-	// bit 1. The hardcoded bit 2 here was why an Xbox pad could only leave
-	// menus with its X button.
+	// Not rebindable, for the same reason Escape isn't. The bit depends on
+	// the active input path (JoyBitBack): raw DirectInput puts Circle on
+	// bit 2, XInput puts B - and Circle via DS4Windows/Steam - on bit 1; a
+	// fixed bit 2 would make an Xbox pad's X button the back button.
 	if (ControlMethod == 1 && (joy_fire & (1 << JoyBitBack())))
 		linput |= IN_DESELECT;
 
@@ -707,9 +1671,68 @@ long S_UpdateInput()
 		}
 	}
 
+	/* In Modern the look key is a steering modifier, not a camera: held, it
+	 * lets Lara turn on the spot as in Tank, with her real turn animations.
+	 *
+	 * The bypass above does half the job: it stands the translation down, so
+	 * the stick's own IN_LEFT / IN_RIGHT / IN_FORWARD / IN_BACK stand as at
+	 * Tank. But the engine answers the look key, and the answer eats exactly
+	 * those bits:
+	 *   game\lara.cpp        LaraAboveWater calls LookLeftRight() while the bit
+	 *                        is held, and LookLeftRight sets
+	 *                        camera.type = LOOK_CAMERA and SUBTRACTS IN_LEFT or
+	 *                        IN_RIGHT from the word for the head's own yaw.
+	 *   game\lara.cpp        fifteen state routines call LookUpDown(),
+	 *                        which does the same to IN_FORWARD / IN_BACK.
+	 *   game\laraswim.cpp, game\larasurf.cpp, game\laraclmb.cpp
+	 *                        the same in the water (LaraUnderWater), on the
+	 *                        surface (LaraSurface, lara_as_surftread) and on a
+	 *                        ladder (lara_as_climbstnc) - lara_as_surftread
+	 *                        RETURNS, so nothing else of that tick runs at all.
+	 * Left alone, she turns with no animation: measured, 140 ticks of 18
+	 * degrees in AS_STOP with the state never leaving 2.
+	 *
+	 * Taking the bit out here - the last place before `input` is written, and
+	 * the only place that knows the scheme - hands those bits back to
+	 * lara_as_stop, and with them AS_TURN_L / AS_TURN_R / AS_FASTTURN and their
+	 * animations. In Modern the right stick is the look (the orbit), so nothing
+	 * is lost.
+	 *
+	 * Not with a weapon ready: there the look key is the six-tick IN_TARGET
+	 * swallow just above, and the seventh tick opens the binoculars and the
+	 * lasersight (ControlPhase in game\control.cpp, which asks for LG_READY and the
+	 * revolver, the crossbow or the HK). That case keeps the classic look.
+	 *
+	 * Known side effect, left unbranched: DOZY ends on IN_WALK "without look"
+	 * (LaraCheat in game\laramisc.cpp), so in Modern the walk key ends the cheat even
+	 * while the look key is held. It is a cheat behind tomb5.enable_cheats. */
+	if (tomb5.control_modern)
+	{
+		modern_look_tank = (linput & IN_LOOK) ? 1 : 0;
+
+		if (modern_seam && lara.gun_status != LG_READY)
+			linput &= ~IN_LOOK;
+	}
+
 	DoWeaponHotkey();
 
-	if (keymap[DIK_0] || (ControlMethod == 1 && Key(jLayout[13] + 256)))
+	/* One press must not mean two things (the same class as the Circle latch
+	 * further down). Under Modern the medipacks default to the d-pad, and the
+	 * d-pad also steers the menus: in the inventory a press of Up would step
+	 * the cursor and use a small medipack. So while a menu is reading the
+	 * d-pad, a medipack bound to one of its four bits does not fire.
+	 *
+	 * Only those four bits, and only in Modern. The keyboard's 0 and 9 keep
+	 * working in the inventory, and so does a medipack on a face button. At
+	 * Tank the flag is 0, so JoyBitIsDpad is not reached. */
+	const long medi_dpad = tomb5.control_modern && ModernMenuReadsPad();
+
+	/* The keyboard half is a role (Key() of an untouched slot is keymap[DIK_0])
+	 * and the pad half goes through the chord rule. The d-pad guard reads the
+	 * button, not the pair: a medipack chorded onto a d-pad bit is still
+	 * silenced in the inventory, because the Modifier does not stop Up from
+	 * moving the cursor. */
+	if (Key(KEY_ROLE_MEDI_SMALL) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[13])) && JoyRole(13)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -739,7 +1762,7 @@ long S_UpdateInput()
 			}
 		}
 	}
-	else if (keymap[DIK_9] || (ControlMethod == 1 && Key(jLayout[14] + 256)))
+	else if (Key(KEY_ROLE_MEDI_LARGE) || (ControlMethod == 1 && !(medi_dpad && JoyBitIsDpad(jLayout[14])) && JoyRole(14)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -792,10 +1815,9 @@ long S_UpdateInput()
 	// One press must not serve a menu AND the game.
 	//
 	// Circle is the fixed "back" button above, but it is also a rebindable
-	// gameplay button - roll. So the press that closed the inventory or the
-	// pause menu was still held on the first frame afterwards, and Lara
-	// rolled without the player asking for it (reported in game, #115).
-	// Same class as the FMV skip in #78: one press, two consumers, and the
+	// gameplay button - roll. The press that closes the inventory or the
+	// pause menu is still held on the first frame afterwards, and Lara would
+	// roll without the player asking for it. One press, two consumers: the
 	// second one has to wait for a fresh edge.
 	//
 	// The latch is armed while a menu is open - InventoryActive covers both,
@@ -818,15 +1840,268 @@ long S_UpdateInput()
 	if ((linput & (IN_RIGHT | IN_LEFT)) == (IN_RIGHT | IN_LEFT))
 		linput -= IN_RIGHT | IN_LEFT;
 
+	/* The mode latches: Sprint mode, Duck mode and Grab mode turn a held key
+	 * into a toggle, for keyboard and pad in both control types.
+	 *
+	 * They sit here and not at the producers because the walk-sidestep rewrite
+	 * above turns IN_LEFT and IN_RIGHT into the two step bits, so a direction
+	 * test earlier would read a sidestep as "pushing nothing" and drop the
+	 * sprint. IN_DUCK and IN_SPRINT have two producers each in this file (the
+	 * keyboard's Key(4)/Key(5), the pad's jLayout[0]/jLayout[1]) and IN_ACTION
+	 * four (Key(8), Key(KEY_ROLE_SECOND), JoyRole(4), JoyRole(JOY_ROLE_SECOND));
+	 * nothing between them and here reads or writes these bits, so `linput`
+	 * carries them as the keyboard or pad wrote them - one seam, no
+	 * per-producer branch. Under Separate the grab key is the Secondary, the
+	 * role that produces IN_ACTION there; the either-key sites (game\lara.cpp's
+	 * IN_ACTION_ANY) are served by it too.
+	 *
+	 * With all three rows at Hold only the test on the next line runs, and the
+	 * word leaves unchanged. */
+	if (tomb5.sprint_toggle || tomb5.duck_toggle || tomb5.grab_toggle)
+	{
+		/* The ticks no latch may stand on. `mode_base`: a cutscene and
+		 * bDisableLaraControl are ticks Lara is not the player's to steer, the
+		 * inventory and the pause menu (InventoryActive covers both) and the
+		 * title are ticks a menu owns the word, App.fmv is a video, and a dead
+		 * Lara drops every latch.
+		 *
+		 * The other terms are what the sprint and duck bits need:
+		 * - dead: lara_as_dash and lara_as_duckl/duckr all end on hit_points
+		 *   <= 0 (game\lara.cpp), so the engine drops both
+		 *   anyway and a latch that outlived her would be the only thing left
+		 *   holding a key.
+		 * - the water: every IN_DUCK reader in game\lara.cpp excludes LW_WADE
+		 *   by hand and lara_as_dash names it as its fourth exit; under water
+		 *   and at the surface neither AS_DUCK nor AS_DASH is reachable at all.
+		 *   So anything but LW_ABOVE_WATER is a tick the bits mean nothing on.
+		 * - LG_HANDS_BUSY stands for "ladder and vehicle": a ladder, a rope,
+		 *   the water and a pickup all leave gun_status there
+		 *   (TestLaraVault in game\lara.cpp among others), and LARA_INFO has no
+		 *   Vehicle field (the name does not occur in global\types.h).
+		 * - the binoculars and the lasersight read IN_SPRINT and IN_DUCK out of
+		 *   `inputBusy` as ZOOM IN and ZOOM OUT (BinocularCamera, game\camera.cpp).
+		 *   The zoom steps once per tick while held, so the sight is a drop,
+		 *   and a drop tick hands the raw key through untouched.
+		 *
+		 * `mode_drop` adds bUseSpotCam for the sprint and duck; the grab asks
+		 * only `mode_base`. InitialiseSpotCam sets bDisableLaraControl to 0 and
+		 * raises it again only for SP_NOLARACONTROL (game\spotcam.cpp), so an
+		 * ordinary flyby leaves Lara playable with bUseSpotCam up;
+		 * and ControlPhase (game\control.cpp) holds bUseSpotCam at 1 while a GF_OFFICE
+		 * level's flipmap is above 10, with full control throughout. There a
+		 * grab drop would make a Toggle player let go of the ledge while a Hold
+		 * player hangs on. `!lara_item` stays first, guarding the hit_points
+		 * dereference. */
+		const long mode_base = !lara_item || App.fmv || GLOBAL_playing_cutseq ||
+			bDisableLaraControl || InventoryActive ||
+			gfLevelId == LVL5_TITLE || lara_item->hit_points <= 0;
+		const long mode_drop = mode_base || bUseSpotCam;
+
+		// The terms not every latch shares, read once. `mode_state` is
+		// last tick's state, which is what the family tables are asked about -
+		// S_UpdateInput runs before LaraControl, so it is the state she is in
+		// while the word is being built.
+		const long mode_water = lara.water_status != LW_ABOVE_WATER;
+		const long mode_hands = lara.gun_status == LG_HANDS_BUSY;
+		const long mode_sight = BinocularRange != 0;
+		const short mode_state = lara_item ? lara_item->current_anim_state : (short)0;
+
+		/* The sprint latch also drops when no direction is pushed (this word's
+		 * six direction bits) or the dash bar is empty: lara_as_dash leaves
+		 * AS_DASH on `!DashTimer` and LaraControl (game\laramisc.cpp) refills it the moment
+		 * she is out of AS_DASH, so a latch that sat through an empty bar would
+		 * put her back into a sprint on the single unit of the refill. Both
+		 * belong to the sprint alone; a duck holds her standing still on
+		 * purpose. */
+		const long moving = (linput & (IN_FORWARD | IN_BACK | IN_LEFT | IN_RIGHT |
+			IN_LSTEP | IN_RSTEP)) != 0;
+		const long sprint_drop = mode_drop || mode_water || mode_hands ||
+			mode_sight || !DashTimer || !moving;
+
+		/* The duck asks LG_HANDS_BUSY together with where Lara is: entering the
+		 * crawl runs ANIM_DUCK_TO_ALL4S, which sets LG_HANDS_BUSY itself
+		 * (lara_as_all4s in game\lara.cpp), so the plain term would end the duck latch when
+		 * she starts crawling. Inside the duck-and-crawl family LG_HANDS_BUSY
+		 * means "she is crawling"; a ladder, a rope and the crawl-to-hang still
+		 * end the latch. ModernStateIsDuck (game\modern_move.cpp) is that
+		 * family, checked there against the engine's own list in
+		 * use_current_item (game\newinv2.cpp). */
+		const long duck_drop = mode_drop || mode_water || mode_sight ||
+			(mode_hands && !ModernStateIsDuck(mode_state));
+
+		/* The grab's own list is `mode_base` alone: level start (through
+		 * InputModeLatchReset), death, a cutscene, a menu owning the input.
+		 * bUseSpotCam is left out for the reason given above mode_base. The
+		 * other terms are left out as well:
+		 * - LG_HANDS_BUSY is the family. A hang, a ladder, a rope and a pole
+		 *   all leave gun_status there (lara_col_reach and lara_col_upjump in
+		 *   game\lara.cpp), so
+		 *   the term would drop the latch on every tick it was meant to stand.
+		 * - the water: she can climb a ladder out of shallow water, where
+		 *   water_status is LW_WADE, and must not be dropped off it. No family
+		 *   state is reachable under water at all.
+		 * - the binoculars: with the sight up she is standing, so the family is
+		 *   0 and the bit is the key's either way. A term would say nothing. */
+		const long grab_family = ModernStateIsGrab(mode_state);
+		const long grab_drop = mode_base;
+
+		linput = ModernModeLatch(tomb5.sprint_toggle, (linput & IN_SPRINT) != 0,
+			sprint_drop, &sprint_latch, IN_SPRINT, linput);
+		linput = ModernModeLatch(tomb5.duck_toggle, (linput & IN_DUCK) != 0,
+			duck_drop, &duck_latch, IN_DUCK, linput);
+		/* The let-go mask, which is not the delivered bit.
+		 *
+		 * The press that lets go has to take out every bit the grab key itself
+		 * raises, because thirteen of the thirty-four family states test
+		 * IN_ACTION_ANY and not IN_ACTION (the pole, the rope, the zip line,
+		 * the parallel bars). Under "One key" `action_bits` puts IN_ACTION and
+		 * IN_INTERACT into the word together, so clearing IN_ACTION alone would
+		 * leave those states reading "still held" - and on a rope or the bars
+		 * there is no other exit.
+		 *
+		 * Under "Separate" IN_INTERACT comes from a different physical key, so
+		 * the mask stays IN_ACTION alone - the distinction the crossbow line at
+		 * the end of LaraAboveWater (game\lara.cpp) makes too. IN_SELECT is
+		 * never in it: it confirms in menus, and no menu is open while she
+		 * hangs.
+		 *
+		 * The delivery stays IN_ACTION alone: every state that asks ANY is
+		 * satisfied by it, and an IN_INTERACT handed out without a key would
+		 * open doors by itself. */
+		const long grab_release = tomb5.action_split ? IN_ACTION : IN_ACTION_ANY;
+
+		linput = ModernGrabLatch(tomb5.grab_toggle, (linput & IN_ACTION) != 0,
+			grab_family, grab_drop, &grab_latch, IN_ACTION, grab_release, linput);
+
+		/* MODELOG, behind -log, written on the change of a latch and not every
+		 * tick: a latched bit stands for hundreds of ticks, and the moments that
+		 * matter are the press that latched it and whatever let it go. Fields:
+		 * `sprint`/`duck` the latch states, `drop` the sprint and duck drop
+		 * terms, `mode` the two row options, `grab` as below. -1 so the first
+		 * line of a session is always written. */
+		if (gLogEnabled)
+		{
+			static long mode_logged = -1;
+			/* `grab` is the family and not a latch bit, because that is what
+			 * the grab latch delivers: the bit is in the word while she is
+			 * holding on, whatever the key says. It changes when she reaches the
+			 * ledge or lets go, and MODERN_GRAB_RELEASE goes with it on the same
+			 * edge. */
+			const long now = ((sprint_latch & MODERN_LATCH_ON) ? 1 : 0) |
+				((duck_latch & MODERN_LATCH_ON) ? 2 : 0) |
+				((tomb5.grab_toggle && grab_family && !(grab_latch & MODERN_GRAB_RELEASE)) ? 4 : 0);
+
+			if (now != mode_logged)
+			{
+				mode_logged = now;
+				// New fields go at the end, so older log readers keep working.
+				Log("MODELOG f=%ld sprint=%d duck=%d drop=%d/%d mode=%d/%d grab=%d",
+					(long)GlobalCounter, (int)(now & 1), (int)((now >> 1) & 1),
+					(int)(sprint_drop != 0), (int)(duck_drop != 0),
+					(int)tomb5.sprint_toggle, (int)tomb5.duck_toggle,
+					(int)((now >> 2) & 1));
+			}
+		}
+	}
+
+	/* Combat mode Hold: the weapon is out while the draw key is held. This is
+	 * the last thing that touches IN_DRAW before the word leaves; its only
+	 * producers in this file are Key(9) and the pad's jLayout[5] above.
+	 *
+	 * The input word has no edge for the draw key: Key(9) is a level read of
+	 * keymap[], `input` is `linput` unlatched, and nobody asks dbinput about
+	 * IN_DRAW. Lara's state machine is the debounce: LaraGun
+	 * (game\larafire.cpp) asks about IN_DRAW only at LG_NO_ARMS and
+	 * LG_READY, and in LG_DRAW_GUNS / LG_UNDRAW_GUNS the animation runs.
+	 * (A held key in Core draws and holsters without end; a tap is shorter than
+	 * the animation.) So ModernWeaponBits asks for the disagreement, not the
+	 * key: one request per tick on which the state and the key disagree, none
+	 * while the animation runs, nothing that can queue up and fire later. The
+	 * next tick reads the state the request produced.
+	 *
+	 * The guard excludes the states in which nobody would consume the request,
+	 * where it would sit in the word while the state stands still.
+	 * PlayFmv (specific\fmv.cpp) skips a video on a rising edge of
+	 * IN_OPTION|IN_DRAW|IN_SELECT, so a bit on for every frame of the outro FMV
+	 * (LG_READY at the level's end, key up) would make the video unskippable -
+	 * hence App.fmv. The other terms mean what they mean in modern_seam: a
+	 * cutscene, a spotcam and bDisableLaraControl are ticks Lara is not the
+	 * player's to steer; the inventory, the pause menu and the title are ticks
+	 * a menu owns the word. ControlMethod and tomb5.control_modern are not
+	 * terms: combat mode applies to both control types, keyboard and pad.
+	 *
+	 * Busy hands need no term: a ladder, the water, a vehicle and a pickup
+	 * leave gun_status at LG_HANDS_BUSY, neither LG_READY nor LG_NO_ARMS, so
+	 * the function is quiet by its own rule; lara.Busy strips IN_DRAW below for
+	 * the binocular and lasersight sessions.
+	 *
+	 * The torch is a guard term, not part of `ready`: a burning torch sits at
+	 * LG_READY with gun_type WEAPON_TORCH (DoFlameTorch, game\flmtorch.cpp),
+	 * LaraGun (game\larafire.cpp) returns before its chain for it, and
+	 * DoFlameTorch reads the bit to throw the torch. Only making `ready` false
+	 * would still clear the key's bit, and the torch could never be thrown in
+	 * Hold. The term clears itself: DoFlameTorch sets gun_type back to
+	 * last_gun_type or WEAPON_NONE when the torch leaves her.
+	 *
+	 * The flare needs no exception: ready_flare() (game\laraflar.cpp)
+	 * parks a burning flare at LG_NO_ARMS, not LG_READY, so it reads as
+	 * `holstered`. With the key up she keeps it; with the key down LaraGun
+	 * throws the flare and draws the gun, as a draw-key press does in Core. */
+	if (tomb5.combat_hold)
+	{
+		const long combat_seam = lara_item && !App.fmv && !GLOBAL_playing_cutseq &&
+			!bUseSpotCam && !bDisableLaraControl && !InventoryActive &&
+			gfLevelId != LVL5_TITLE && lara.gun_type != WEAPON_TORCH;
+
+		// The draw key or button physically down this tick - which is what
+		// this bit is at this point, from either producer.
+		const long held = (linput & IN_DRAW) != 0;
+		const long ready = (combat_seam && lara.gun_status == LG_READY) ? 1 : 0;
+		const long holstered = (combat_seam && lara.gun_status == LG_NO_ARMS) ? 1 : 0;
+
+		if (combat_seam)
+			linput = ModernWeaponBits(1, ready, holstered, held, linput);
+
+		/* COMBATLOG, behind -log, written on the change of the bit or of the
+		 * seam and not every tick, because the bit is one tick long in play.
+		 * `held` is the key, `ready`/`holstered` the two state truths, so a
+		 * reader can see which rule answered; -1 so the first line of a session
+		 * is always written.
+		 *
+		 * `draw` is the bit that leaves this function, and `seam` says whether
+		 * the weapon half produced it. With the seam off - a torch in the hand,
+		 * an FMV, the inventory - the key's own IN_DRAW is still in the word and
+		 * still consumed (game\flmtorch.cpp throws the burning torch on it,
+		 * specific\fmv.cpp skips a video on it), so it is printed as it is. */
+		if (gLogEnabled)
+		{
+			static long combat_last_state = -1;
+			const long draw = (linput & IN_DRAW) != 0;
+			const long state = draw | (combat_seam ? 2 : 0);
+
+			if (state != combat_last_state)
+			{
+				Log("COMBATLOG f=%ld held=%d ready=%d holstered=%d draw=%d seam=%d",
+					(long)GlobalCounter, (int)held, (int)ready, (int)holstered, (int)draw,
+					(int)(combat_seam != 0));
+				combat_last_state = state;
+			}
+		}
+	}
+
 	if (debounce)
 		dbinput = inputBusy;
 
 	if (!gfGameMode && Gameflow->LoadSaveEnabled)
 	{
-		if (keymap[DIK_F5] || (ControlMethod == 1 && Key(jLayout[11] + 256)))
+		/* Quick save and quick load as roles; the pad halves go through the
+		 * chord rule. At Tank the defaults are Core's F5 and F6; under Modern
+		 * quick load is F9 (game\key_scheme.h). On the pad's Separate
+		 * DirectInput pages the defaults are Modifier+R3 and Modifier+L3. */
+		if (Key(KEY_ROLE_SAVE) || (ControlMethod == 1 && JoyRole(11)))
 			linput |= IN_SAVE;
 
-		if (keymap[DIK_F6] || (ControlMethod == 1 && Key(jLayout[12] + 256)))
+		if (Key(KEY_ROLE_LOAD) || (ControlMethod == 1 && JoyRole(12)))
 			linput |= IN_LOAD;
 	}
 

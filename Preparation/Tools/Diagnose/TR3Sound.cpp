@@ -1,5 +1,5 @@
 //----------------------------------------------------------------------------
-// TR3Sound - resolves a TR3 sound ID down to the wave in MAIN.SFX (#93).
+// TR3Sound - resolves a TR3 sound ID down to the wave in MAIN.SFX.
 //
 // Usage: TR3Sound <level.TR2> <MAIN.SFX> <soundId> [more ids...]
 //        TR3Sound <level.TR2> <MAIN.SFX> -package <target.bin> <id> [ids...]
@@ -7,8 +7,8 @@
 // An ID may be written as "88=250": the sound is reachable in the target
 // under 88 (that is how the anim commands call it), but the data comes
 // from sound 250. Needed for the T-Rex: his commands name 88 ("T-rex
-// footstep"), but the walking sound heard in game is 250 (two variants,
-// muffled) - cross-listened by the user against the original.
+// footstep"), but the sound that actually plays is 250 (two variants,
+// muffled).
 //
 // In package mode a container for the inserter is written:
 //   "T35S", version 2, count
@@ -189,9 +189,9 @@ int main(int argc, char** argv)
     //
     // Needed for chunnel.TR2 (TR3 Gold): there, the way via
     // SoundMap/SoundDetails/SampleIndices demonstrably delivers wrong
-    // waves - my self-calibration does find a combination that ends
-    // exactly at the file end, but not the right one. On CRASH.TR2 it
-    // still matched the user's tool to the byte.
+    // waves - the self-calibrated header search finds a combination that
+    // ends exactly at the file end, but not the right one. On CRASH.TR2 the
+    // same search matches byte for byte.
     //
     // Instead of researching, the wave number LISTENED TO in the TRsound
     // tool is taken directly here. The ID stays necessary anyway: the anim

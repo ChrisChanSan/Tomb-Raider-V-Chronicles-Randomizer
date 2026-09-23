@@ -1,6 +1,19 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "sphere.h"
 #include "draw.h"
+#include "interpolate_math.h"		// InterpKeyAlpha - vanilla's own key frame factor
 #include "../specific/3dmath.h"
 #include "control.h"
 #include "objects.h"
@@ -138,8 +151,15 @@ void GetJointAbsPositionMatrix(ITEM_INFO* item, float* matrix, long node)
 
 void InitInterpolate2(long frac, long rate)
 {
+	/* The second half of the stack, for code that asks where a joint is
+	 * rather than what it looks like - collision spheres,
+	 * GetJointAbsPosition. It runs on the logic tick and must therefore
+	 * keep vanilla's own key frame factor whatever the frame rate is: the
+	 * same three-way test InitInterpolate uses, never a midpoint in time. */
 	IM_rate = rate;
 	IM_frac = frac;
+	IM_alpha = InterpKeyAlpha(frac, rate);
+	IM_alpha8 = InterpEighths(IM_alpha);
 
 	IMptr = &IMstack[384];
 	memcpy(&IMstack[384], phd_mxptr, 48u);

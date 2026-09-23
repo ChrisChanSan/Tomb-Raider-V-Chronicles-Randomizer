@@ -316,9 +316,9 @@ void RomangodControl(short item_number)
 		bits = item->meshswap_meshbits;
 
 		// The armor bursts at three quarters, half and one quarter of the
-		// hit points. Vanilla stood fixed at 225/150/75 for 300 HP - since
-		// Balance.txt scales the hit points, the share is computed, or the
-		// armor falls too late on tougher enemies (#108).
+		// hit points. Vanilla stood fixed at 225/150/75 for 300 HP; since
+		// Balance.txt scales the hit points, the share is computed here, or
+		// the armor would fall too late on a tougher enemy.
 		fullHp = objects[item->object_number].hit_points;
 
 		if (fullHp < 4)

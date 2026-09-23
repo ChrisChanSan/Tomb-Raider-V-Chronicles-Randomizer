@@ -1,4 +1,4 @@
-// One-off cross-check: what does Tr5Level::laraAnimUsable say?
+// Prints what Tr5Level::laraAnimUsable reports for given anim numbers.
 #include "core/Tr5Level.h"
 #include <cstdio>
 #include <cstdlib>

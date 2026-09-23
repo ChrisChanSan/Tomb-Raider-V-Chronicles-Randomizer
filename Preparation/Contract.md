@@ -1,7 +1,7 @@
 # What the engine and the randomizer owe each other
 
 Written 2026-08-30. The two live in separate trees, `TOMB5 Code` and
-`TR5Randomizer`, and they are coupled in half a dozen places. **Nothing
+`TR5Randomizer`, and they are coupled in eight places. **Nothing
 enforces any of it.** Each coupling is described where its own half happens
 to sit, so changing one side and forgetting the other compiles cleanly, ships
 cleanly, and breaks in game.
@@ -45,6 +45,63 @@ can be read - it just cannot be rejected. **Worth building.**
 agreed between the two trees. `BalanceCheck` and `BalanceWriteCheck` in
 `Tools\Diagnose` exist precisely to test both ends of the first of them.
 
+**The level header block - four bytes, four meanings**
+The 32 bytes between the texture blocks and the main block are `short
+data[16]` in `specific\file.cpp`, and the engine reads them before it loads a
+single room. Four of the sixteen words are in use; all seventeen shipped
+`.trc` files carry 0 in the rest, measured.
+
+| word | written by | read by | meaning |
+|---|---|---|---|
+| `data[0]` | `Tr5Level::setLaraType` | `LaraDrawType = data[0] + LARA_NORMAL` | the outfit byte, and with it the braid handling in `hair.cpp` / `laraskin.cpp` |
+| `data[1]` | `setWeatherType` | `WeatherType`, read only by `DoWeather` | 0 dry, 1 rain, 2 snow (#144) |
+| `data[2]` | `setForeignTalkHeads` | `GfForeignSpeechHeads` | 1 = the outfit donor has no `LARA_SPEECH_HEAD1-4`, skip the cutscene head swap |
+| `data[3]` | `setHdOutfit`, value from `Patch::hdOutfitId` | `HDLaraOutfitFor`'s `tr3Outfit` argument (#123, stage S7-2) | which Tomb Raider III outfit the wardrobe rolled |
+
+`data[3]` carries the engine's own `HD_LARA_OUTFIT_*` numbers so that neither
+side translates: 0 none, 5 `TR3_ANTARC`, 6 `TR3_NEVADA`, 7 `TR3_COAST`, 8
+`TR3_CATSUIT`. It exists because `data[0]` cannot say it - the wardrobe
+writes `LARA_PONYTAIL` both for the Rome body in a Russia level and for every
+guest, and nothing else in the file tells the two apart. **If the enum in
+`specific\hd\hd_lara.h` is ever renumbered, `Patch::hdOutfitId` in
+`core/ApplyPatch.cpp` has to be renumbered with it.**
+
+**The engine's half is built (stage S7-2)**, and this is one of the few
+couplings here that a build now catches: `specific/file.cpp` reads `data[3]`
+into `GfHdOutfit` beside `data[0..2]`, `specific/hd/hd_laradraw.cpp` hands it
+to `HDLaraOutfitFor` **unchanged**, and `specific/hd/hd_level.cpp` carries a
+`static_assert` on `HD_LARA_OUTFIT_TR3_ANTARC == 5 && … == 8`. The engine
+accepts 5..8 and **only** 5..8 - 1..4 are the vanilla bodies, so a stale or
+garbled byte cannot overrule the level's own `LaraType`.
+*Both sides:* `core/Tr5Level.cpp` (the accessors), `core/ApplyPatch.cpp`
+(`hdOutfitId`), `specific/file.cpp` and `specific/hd/hd_lara.*`.
+
+**The `.hdm` sidecar beside every randomized level**
+What does not fit in four bytes: which rooms the run changed the SHAPE of,
+and which object slots hold a model out of another level file. Both make the
+Remaster's HD geometry and its name table wrong for this level, and both are
+unbounded, so they go into `data\<LEVEL>.hdm` - plain text, first line
+`hdm 1`. Written by `Patch::writeHdMarkers` on every run for every level,
+even when empty; a missing file means "no markers". The grammar and the
+reference reader are `Tools\Diagnose\HdmDump.cpp`.
+
+**The engine's half is built (stage S7-2):** `specific/hd/hd_markers.cpp` is
+the engine's reader and answers the way `readHdm()` does on the same file -
+version 1 or the file is refused, a stray `\r` tolerated, an unknown line
+ignored and counted so a newer randomizer is visible rather than silent, a
+missing file "no markers". A `room` line makes that room classic even where
+the `.TRG` has a full group for it (`reason=marker` in `HDLOG`); a `donor`
+line resolves the slot through the DONOR level's `.MAP` instead of this
+level's, and `TR3` through a four-line table and a second installation. The
+`outfit` line is read for the log alone - the header byte is what draws, and a
+disagreement is one `HDLOG` line saying so.
+*Both sides:* `core/ApplyPatch.cpp` (`writeHdMarkers`) and
+`specific/hd/hd_markers.cpp`, with `specific/hd/hd_level.cpp` acting on the
+rooms and `specific/hd/hd_object.cpp` on the donors. **Two numbers inside
+`writeHdMarkers` are the ENGINE'S and nothing enforces them:** Lara's block
+ends at 30 (`hd_bind.cpp`, `lara_block_last`) and the hand table covers
+460..470.
+
 **The sound and animation assumptions**
 The soldier family's animation base (guard 460) is chosen in the engine's
 `setup.cpp` and relied on by the randomizer's import, which must bring the
@@ -53,5 +110,5 @@ go invisible - not crash, invisible, while still dealing damage.
 
 ## The habit that would catch all of it
 
-When you change one of the six, grep the other tree for the symbol before you
+When you change one of the eight, grep the other tree for the symbol before you
 build. Every one of these is a single name, and every one of them is greppable.

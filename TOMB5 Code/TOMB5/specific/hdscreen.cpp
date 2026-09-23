@@ -10,7 +10,7 @@
  * Foundation, either version 3 of the License, or (at your option) any later
  * version. See the LICENSE file at the root of this source tree.
  */
-// This file is built WITHOUT the precompiled header (see tomb5.vcxproj, the
+// This file is built without the precompiled header (see tomb5.vcxproj, the
 // same setting bc7.cpp has), because the tool build below must be able to
 // leave pch.h out altogether - and with /Yu the compiler throws away
 // everything in front of the pch include, conditionals included.
@@ -38,7 +38,7 @@
 // the folder is not there, nothing here happens and the game shows Core's own
 // pictures exactly as before - the same deal as the HQ sound bank in
 // hqsfx.cpp and the HQ music in audio.cpp. The files are the player's own
-// data and are NEVER shipped with this project.
+// data and are never shipped with this project.
 //
 // The name is what makes this work under the randomizer. The loading picture
 // has to follow the level, not the slot it happens to sit in, and the level's
@@ -90,7 +90,7 @@ const char* HDScreenLevelName(const char* wadName)
 		return 0;
 
 	// The Remaster ships no picture for the Security Breach cutscene;
-	// it borrows Red Alert's (user decision, 2026-09-04).
+	// it borrows Red Alert's instead.
 	if (!_stricmp(s, "RICHCUT2"))
 		return "RICH3";
 
@@ -179,8 +179,8 @@ ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height)
 #define HD_LOGO_ALPHA_INK	128
 
 // How far down the picture the top edge of the lettering sits, as a divisor
-// of the picture height: 1080 / 72 = 15 pixels. Measured off the composite
-// the user built by hand (TITLE_DE), whose lettering starts at y = 15.
+// of the picture height: 1080 / 72 = 15 pixels. Measured off the hand-built
+// reference composite (TITLE_DE), whose lettering starts at y = 15.
 #define HD_LOGO_TOP_DIV		72
 
 static long HDScreenBoxAbove(const ulong* px, long w, long h, long minAlpha,
@@ -234,7 +234,7 @@ long HDScreenAlphaBox(const ulong* px, long w, long h, long* x0, long* y0, long*
 	return HDScreenBoxAbove(px, w, h, HD_LOGO_ALPHA_FLOOR, x0, y0, x1, y1);
 }
 
-// One bilinear tap, returned PREMULTIPLIED (r*a, g*a, b*a, a). Interpolating
+// One bilinear tap, returned premultiplied (r*a, g*a, b*a, a). Interpolating
 // straight colour across the edge of the mark would drag the colour of the
 // transparent pixels next to it - black in these files - into the result and
 // leave a dark seam around every letter; premultiplying first is the standard
@@ -399,23 +399,23 @@ long HDScreenCutLogo(const ulong* logo, long lw, long lh, ulong* dst, long dstPi
 // The remaster draws the wordmark alone on a transparent 1920x1080 frame
 // (LOGO_DE.DDS and its three siblings) and the title picture without it
 // (TITLE.DDS), so the two only ever appeared one after the other. Putting
-// them together is what the user did by hand; a hand made file cannot ship,
-// because it is remaster material - so the engine does it at load time out of
-// the player's own two files instead.
+// them together used to mean a single hand-made composite file; that file
+// cannot ship, because it is remaster material - so the engine does it at
+// load time instead, out of the player's own two files.
 //
 // The mark keeps the size it has in its own picture, scaled by the ratio of
 // the two picture widths - for the normal case of two 1920x1080 files that is
 // exactly 1:1, and the resampling below is then an exact copy. Measured
-// against the user's hand built composite: his mark is 1020 pixels wide where
-// the logo file's is 1020, at every ink threshold from 2% to 20% of the peak,
-// so he moved the mark and did not scale it.
+// against a hand-built reference composite: its mark is 1020 pixels wide,
+// matching the logo file's own 1020, at every ink threshold from 2% to 20%
+// of the peak - the composite moved the mark rather than scaling it.
 //
-// TWO boxes, not one. What has to be DRAWN is everything with any alpha at
+// Two boxes, not one. What has to be drawn is everything with any alpha at
 // all: the lettering sits in a soft black halo that reaches about 20 pixels
-// past it on every side. What has to be PLACED is only what the eye can see,
+// past it on every side. What has to be placed is only what the eye can see,
 // the lettering. Anchoring the drawn box instead would hand those 20 pixels
 // of invisible halo to the top margin and push the visible mark that much
-// further down than the picture the user built by hand.
+// further down than the reference composite has it.
 long HDScreenComposeLogo(ulong* base, long bw, long bh, const ulong* logo, long lw, long lh, long leftAlign)
 {
 	ulong* bd;
@@ -452,10 +452,10 @@ long HDScreenComposeLogo(ulong* base, long bw, long bh, const ulong* logo, long 
 
 	// Centre the lettering across the picture and put its top edge one
 	// seventysecond of the way down; the halo follows and is clipped where it
-	// runs off the picture, exactly as it is in the user's own composite.
-	// The US emblem is three lines tall and would sit on Lara's brow when
-	// centred; the user's own composition puts it in the top left corner,
-	// the three wordmarks top centre (2026-09-04). Margin: 1/80 of the width.
+	// runs off the picture, exactly as in the reference composite. The US
+	// emblem is three lines tall and would sit on Lara's brow when centred;
+	// it goes in the top left corner instead, the other three wordmarks top
+	// centre. Margin: 1/80 of the width.
 	if (leftAlign)
 		dstX = bw / 80 - ((ix0 - sx0) * bw + lw / 2) / lw;
 	else

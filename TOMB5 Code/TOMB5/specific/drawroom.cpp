@@ -14,6 +14,7 @@
 #include "drawroom.h"
 #include "function_table.h"
 #include "function_stubs.h"
+#include "profile.h"			// PROFLOG phases
 #include "d3dmatrix.h"
 #include "alexstuff.h"
 #include "dxshell.h"
@@ -30,6 +31,7 @@
 #include "../game/gameflow.h"
 #include "../game/objects.h"
 #include "../tomb5/tomb5.h"
+#include "hd/hd_level.h"
 
 FOGBULB_INFO LevelFogBulbs[64];		//list of all fogbulbs in the level (copied from room data)
 FOGBULB_STRUCT ActiveFogBulbs[64];	//list of active fog bulbs
@@ -60,6 +62,108 @@ static ROOM_INFO* CurrentRoomPtr;
 static long CurrentRoomUnderwater;
 static bool has_water_neighbor;
 
+/* The water surface of an HD room.
+ *
+ * The one piece of a room the HD path hands back to the classic one. What is
+ * drawn here is not a copy and not a rebuild: it is the level's own face, its
+ * own texinfo - and therefore its own animated texture range - lit and
+ * shimmered by aRoomletTransformLight exactly as it is in a classic room.
+ * hd_level.cpp, BuildWaterSurfaces, decides once per level which faces these
+ * are; the measurement is in the note there.
+ *
+ * The roomlet has to be transformed whole, because a face names vertices by
+ * their number inside it, and the transform is what fills aVertexBuffer. The
+ * list is sorted by roomlet so that costs one transform per roomlet that
+ * carries water, and nothing at all for the rooms that carry none - which is
+ * every room in eleven of the fifteen levels.
+ *
+ * Depth: these go into the classic buckets and the classic sort list, both of
+ * which are drawn after HDFrameDraw has put the whole HD world in the depth
+ * buffer (hd_level.cpp, the note over HDFrameDraw). A translucent water quad
+ * therefore blends over the HD pool floor, which is what it did over the
+ * classic one. */
+static void InsertRoomWater(ROOM_INFO* r)
+{
+	const int room_number = (int)(r - room);
+	const int faces = HDRoomWaterFaceCount(room_number);
+
+	if (!faces)
+		return;
+
+	int transformed = -1;
+
+	CurrentRoomPtr = r;
+	CurrentRoomUnderwater = r->flags & ROOM_UNDERWATER;
+
+	for (int i = 0; i < faces; i++)
+	{
+		const HDRoomWaterFace* entry = HDRoomWaterFaceAt(room_number, i);
+
+		if (!entry || entry->roomlet < 0 || entry->roomlet >= r->nRoomlets)
+			continue;
+
+		ROOMLET* roomlet = &r->pRoomlets[entry->roomlet];
+
+		if (!roomlet->nVtx || !roomlet->pFac)
+			continue;
+
+		if (transformed != entry->roomlet)
+		{
+			// The same clip test InsertRoom does per roomlet.
+			if (!CheckBoundsClip(roomlet->bBox))
+				continue;
+
+			const long lights = aBuildRoomletLights(roomlet);
+
+			aRoomletTransformLight(roomlet->pSVtx, roomlet->nVtx,
+				lights & 0x7FFFFFFF, roomlet->nWVtx, roomlet->nSVtx);
+			transformed = entry->roomlet;
+		}
+
+		/* The remaster's own picture of this frame. The face keeps its
+		 * texinfo, its light, its shimmer and its place in the sort; where
+		 * the remaster ships an HD picture of the animation frame the
+		 * texinfo is showing right now, `swap` is that same record with the
+		 * HD page and the coordinates on it, and nothing else about the draw
+		 * changes. False for a frame it has none for, and always false with
+		 * hd_enable off - there are no faces here at all then. A stack
+		 * record is safe: both the bucket path and the sort list copy the
+		 * page and the eight coordinates by value, and the classic clipping
+		 * code (polyinsert.cpp, AddQuadClippedZBuffer) hands itself a stack
+		 * copy in the same way. */
+		TEXTURESTRUCT swap;
+
+		if (entry->quad)
+		{
+			short* ptr = roomlet->pFac + entry->face * 6;
+			const long double_sided = (ptr[4] >> 15) & 1;
+			TEXTURESTRUCT* tex = &textinfo[ptr[4] & 0x3FFF];
+
+			if (HDWaterFrameFor(tex, &swap))
+				tex = &swap;
+
+			if (tex->drawtype)
+				AddQuadSorted(aVertexBuffer, ptr[0], ptr[1], ptr[2], ptr[3], tex, double_sided);
+			else
+				AddQuadZBuffer(aVertexBuffer, ptr[0], ptr[1], ptr[2], ptr[3], tex, double_sided);
+		}
+		else
+		{
+			short* ptr = roomlet->pFac + roomlet->nQuad * 6 + entry->face * 5;
+			const long double_sided = (ptr[3] >> 15) & 1;
+			TEXTURESTRUCT* tex = &textinfo[ptr[3] & 0x3FFF];
+
+			if (HDWaterFrameFor(tex, &swap))
+				tex = &swap;
+
+			if (tex->drawtype)
+				AddTriSorted(aVertexBuffer, ptr[0], ptr[1], ptr[2], tex, double_sided);
+			else
+				AddTriZBuffer(aVertexBuffer, ptr[0], ptr[1], ptr[2], tex, double_sided);
+		}
+	}
+}
+
 void InsertRoom(ROOM_INFO* r)
 {
 	clip_left = (float)r->left;
@@ -70,6 +174,43 @@ void InsertRoom(ROOM_INFO* r)
 	rClipRight = clip_right;
 	rClipLeft = clip_left;
 	rClipBottom = clip_bottom;
+
+	/* An HD room's geometry comes out of the .TRG, not out of these roomlets.
+	 * HDFrameRoom writes the room down with the matrix that is on the stack
+	 * right now - view * world for this room, the same one aSetViewMatrix()
+	 * just handed the device - and S_OutputPolyList draws the whole list
+	 * where the classic world is drawn. Drawing it here instead would put it
+	 * before the buckets it has to share a depth buffer with, in call paths
+	 * that do not all agree on an order.
+	 *
+	 * This is the only difference in this function. With hd_enable off, or
+	 * before a level is built, or for a room the .TRG has nothing for,
+	 * HDFrameRoom returns false at its first line and the classic path below
+	 * runs exactly as it did.
+	 *
+	 * The portal window travels with it. The four numbers handed over are the
+	 * very ones the eight lines above put into clip_left..clip_bottom for the
+	 * classic roomlets: the rectangle the portal walk worked out for this
+	 * room in this frame, in backbuffer pixels. They are read here and not
+	 * later because they do not survive the frame - PrintObjects
+	 * (game\draw.cpp) resets all four the moment it is done with the room's
+	 * items, which happens long before S_OutputPolyList draws anything HD. */
+	ProfBegin(PROF_HD_ROOM);
+	const bool hd_room = HDFrameRoom((int)(r - room), aMXPtr,
+		r->left, r->top, r->right, r->bottom);
+	ProfEnd(PROF_HD_ROOM);
+
+	if (hd_room)
+	{
+		/* Everything but the water. The remaster's art has no geometry in
+		 * the plane the classic level draws its water surface in - 61 of the
+		 * game's 93 reflecting rooms, every VCI pool among them - so those
+		 * faces, and only those, are still drawn from here. hd_level.cpp
+		 * works out which ones at level build; a room the remaster did build
+		 * a surface for has an empty list and this is one test. */
+		InsertRoomWater(r);
+		return;
+	}
 
 	if (r->nVerts)
 	{
@@ -300,6 +441,81 @@ static bool IsShoreVert(FVECTOR* v)
 	}
 
 	return 0;
+}
+
+/* The water marks of one room vertex.
+ *
+ * An HD room's geometry comes out of the .TRG and the .TRG marks nothing: no
+ * bit in a remaster vertex says "this one is the water surface" or "this one
+ * shimmers". The classic path knows both, and it knows them here - a roomlet
+ * keeps its water vertices first (nWVtx), and the shimmer predicate walks the
+ * neighbouring rooms through the portals with the three static functions
+ * above, which are static because nothing outside this file had any business
+ * with them.
+ *
+ * This is that business: hd_level.cpp asks once per level, for every classic
+ * room vertex, and carries the answer to the HD vertex at the same position.
+ * The answer is geometry - portals and vertex lists - and geometry does not
+ * change while a level runs. What can change is the room's flags, and that
+ * part is deliberately not baked: which of the three bits the shader looks at
+ * is decided per frame, in hd_level.cpp, out of r->flags.
+ *
+ *   bit 0  one of the roomlet's nWVtx water vertices - it gets the choppy
+ *          displacement in aRoomletTransformLight below
+ *   bit 1  the answer of the mist/reflection/shore branches below, without
+ *          their height test - the vertex sits on the water surface
+ *   bit 2  the answer of the reflect-ceiling branch below - the whole room
+ *          reflects
+ *
+ * The two expensive bits are only computed for a room whose flags could ever
+ * ask for them: IsMistVert and IsReflectionVert walk every vertex of every
+ * neighbour behind a downward portal, and doing that for all 240 rooms of a
+ * level would be a load time nobody would forgive. Guarded, Andrea1 asks for
+ * it in four rooms.
+ */
+uchar aRoomVertexWaterMarks(ROOM_INFO* r, ROOMLET* roomlet, long vertexIndex)
+{
+	ROOM_INFO* saved;
+	FVECTOR pos;
+	float* v;
+	uchar bits;
+
+	if (!r || !roomlet || vertexIndex < 0 || vertexIndex >= roomlet->nVtx)
+		return 0;
+
+	v = roomlet->pSVtx + vertexIndex * 7;
+	pos.x = v[0];
+	pos.y = v[1];
+	pos.z = v[2];
+
+	bits = 0;
+
+	if (vertexIndex < roomlet->nWVtx)
+		bits |= 1;
+
+	saved = CurrentRoomPtr;
+	CurrentRoomPtr = r;
+
+	if (r->flags & ROOM_REFLECT && r->flags & ROOM_REFLECT_CEILING)
+	{
+		if (!IsMistVert(&pos) || abs(pos.y - r->minfloor) > 1536)
+			bits |= 4;
+	}
+	else if (r->flags & ROOM_MIST)
+	{
+		if (IsMistVert(&pos))
+			bits |= 2;
+	}
+	else if (r->flags & ROOM_REFLECT)
+	{
+		// IsReflectionVert is what sets has_water_neighbor, so it has to run
+		// first - the short circuit below keeps the classic order.
+		if (IsReflectionVert(&pos) || IsShoreVert(&pos) || has_water_neighbor)
+			bits |= 2;
+	}
+
+	CurrentRoomPtr = saved;
+	return bits;
 }
 
 void aRoomletTransformLight(float* verts, long nVerts, long nLights, long nWaterVerts, long nShoreVerts)
@@ -760,7 +976,7 @@ void ProcessMeshData(long num_meshes)
 	{
 		mesh_ptr = meshes[i];
 		// The hand fix below (rewriting gt3[30]) is Core's correction for
-		// the CHILD Lara of the Ireland levels. Upstream it hangs on the
+		// the child Lara of the Ireland levels. Upstream it hangs on the
 		// level name alone; whoever plays those levels with adult Lara
 		// (GF_YOUNGLARA cleared in SCRIPT.DAT) would get a bent triangle
 		// at the adult skin's left hand. Bound to the flag like the torso
@@ -1159,6 +1375,7 @@ void DrawBucket(TEXTUREBUCKET* bucket)
 void DrawBuckets()
 {
 	TEXTUREBUCKET* bucket;
+	ProfScope prof(PROF_BUCKETS);
 
 	if (App.BumpMapping)
 	{

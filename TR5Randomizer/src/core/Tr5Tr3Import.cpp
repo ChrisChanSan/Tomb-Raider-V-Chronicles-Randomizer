@@ -1,22 +1,35 @@
+/*
+ * TR5 Randomizer
+ * Copyright (C) 2026 ChrisChanSan
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 //----------------------------------------------------------------------------
-// Installing a TR3 moveable into a TR5 level (#88).
+// Installing a TR3 moveable into a TR5 level.
 //
-// DELIBERATELY its own file: Tr5Transfer.cpp carries the proven TR5->TR5
-// path the whole enemy mix hangs on. The foreign import has different
-// preconditions (the slices are already cut, the pointers already rebased
-// to the slice start) and is therefore laid down next to it instead of
-// rebuilding the existing flow.
+// Its own file beside Tr5Transfer.cpp (the TR5->TR5 path of the enemy mix),
+// because the preconditions differ: the package (built by Tr3Source, or by
+// the TR3Fetch tool) is already in the TR5 layout, its slices cut and its
+// pointers rebased to the slice start. Only what concerns the TARGET happens here - raise all indices by
+// the target's counters and append everything in one stroke.
 //
-// The package comes from TR3Fetch: faces, anims and frames were already
-// brought into the TR5 layout there. Only what concerns the TARGET happens
-// here - raise all indices by the target's counters and append everything
-// in one stroke.
-//
-// TEXTURES: this path does NOT touch the texture pages. Every face points
-// at the same texinfo that already exists in the target afterwards. The
-// enemy looks wrong, but no page is inserted and no number shifts - exactly
-// the spot where a level otherwise falls apart (user requirement). Real
-// textures come later via Tr5Transfer.cpp.
+// This path does not touch the texture pages. The caller appends the
+// textures first (Tr5Level::addTexturesFromTr3, then
+// Tr3Source::remapTextures); with texinfoIndex -1 the faces keep that
+// mapping, and a texinfoIndex >= 0 points every face at one existing
+// texinfo (a test aid).
 //----------------------------------------------------------------------------
 #include "Tr5Level.h"
 
@@ -29,12 +42,12 @@ namespace
 {
     const int SZ_ANIM = 40, SZ_CHANGE = 6, SZ_RANGE = 8, SZ_OBJ = 20;
 
-    // The same values as in the namespace of Tr5Level.cpp (line 794ff
-    // there). Deliberately read off, not guessed; if they ever change
-    // there, it shows up here because the sound block no longer parses.
+    // The same values as in the anonymous namespace of Tr5Level.cpp.
+    // Deliberately read off, not guessed; if they ever change there, it
+    // shows up here because the sound block no longer parses.
     constexpr int SAMPLE_LUT_SIZE = 450;        // MAX_SAMPLES, global/types.h
     constexpr int SZ_SAMPLE_INFO = 8;
-    constexpr int MAX_SAMPLES_PLAYABLE = 256;   // DS_Buffers[], see #94
+    constexpr int MAX_SAMPLES_PLAYABLE = 256;   // DS_Buffers[]
 
     uint16_t g16(const std::vector<uint8_t>& b, size_t p) { uint16_t v; std::memcpy(&v, &b[p], 2); return v; }
     uint32_t g32(const std::vector<uint8_t>& b, size_t p) { uint32_t v; std::memcpy(&v, &b[p], 4); return v; }
@@ -92,8 +105,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& package, int baseId,
     // avoid guessing the volume. But that also brought pitch and flags
     // along: in Andrea1 that is Lara's footstep (pitch 12, flags 0x6010
     // with random pitch). The T-Rex thus stomped differently on every step
-    // and fundamentally too high - heard in game, the user cross-checked
-    // against the original.
+    // and fundamentally too high.
     //
     // Hence fixed, neutral values following the pattern Andrea1's own
     // entries show (vol 191, rad 13, pitch 0, flags 0x0004 = one variant,
@@ -176,9 +188,9 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& package, int baseId,
         //              char randomness, char pitch, short flags
         //
         // Several variants are ONE info with N consecutive SAMPLES - the
-        // engine rolls sample = number + random(N) (sound.cpp:280). The
-        // count sits in bits 2-5 of the flags. Whoever creates N infos
-        // instead walks into the trap from #76.
+        // engine rolls sample = number + random(N) (sound.cpp). The
+        // count sits in bits 2-5 of the flags. Creating N separate infos
+        // instead makes the engine's random pick land wrong.
         const int variants = static_cast<int>(sounds[i].waves.size());
         std::vector<uint8_t> info(SZ_SAMPLE_INFO, 0);
         const int16_t number = static_cast<int16_t>(runningSample);
@@ -193,8 +205,8 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& package, int baseId,
 
         // Adjust the volume. The field is ONE byte (0..255) - the value
         // comes from the target's template so the order of magnitude is
-        // certainly right, and is only stretched proportionally here. For
-        // the T-Rex the user wanted the roar about 30 percent louder.
+        // certainly right, and is only stretched proportionally here, e.g.
+        // the T-Rex roar comes out about 30 percent louder.
         if (volumePercent && i < volumePercent->size())
         {
             const int p = (*volumePercent)[i];
@@ -426,9 +438,9 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
     if (meshAt >= meshEnd) { error = "mesh lies outside the mesh block"; return false; }
 
     // drawtype(2), tpage(2), flag(2), then 4 corners of u,v as 8.8 fixed
-    // point - and TR5 appends 18 more bytes after those, so the record is
-    // 40, not the 22 the readable part accounts for. Same value as in
-    // Tr5Transfer.cpp, which keeps its constant to itself.
+    // point - and TR5 appends 18 more bytes after those, so the struct is
+    // 40 bytes, not the 22 the readable part accounts for. Same value as
+    // in Tr5Transfer.cpp, which keeps its constant to itself.
     const size_t SZ_TEXINFO = 40;
 
     // The 16 bit pages, not the 32 bit ones: ARGB1555 has no channel order
@@ -449,8 +461,8 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
     // The effects word sits two bytes behind the texture word, on quads and
     // on triangles alike (12 and 10 byte records, both ending tex, effects).
     // Bit 0 draws additively, bit 1 switches the environment map on, bits
-    // 2..6 are its strength - specific/output.cpp:1645ff. Counted here so
-    // the shine of an existing model can be read off instead of guessed.
+    // 2..6 are its strength - specific/output.cpp. Counted here so the
+    // shine of an existing model can be read off instead of guessed.
     std::map<int, int> fxHist;
     // drawtype at +0: 0 draws opaque, 1 and 2 go through the sorted list
     // and blend. An imported face that carries 2 by accident looks washed
@@ -536,7 +548,7 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int targe
 {
     char buf[256];
 
-    // Fetch a fresh block map (#104) - same reasoning as at the entry of
+    // Fetch a fresh block map - same reasoning as at the entry of
     // copyMoveableFrom: preparatory work like addTrigger has shifted the
     // main block without updating the map.
     if (!reparse(error)) { error = "block map: " + error; return false; }
@@ -652,10 +664,10 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int targe
     //
     // For a Lara outfit this is the head (LM_HEAD = 14), and not for looks.
     // TR5 writes lara.mesh_ptrs[LM_HEAD] at RUNTIME - the scream head in
-    // larafire.cpp:405, the speech heads out of the cutscene pak - so a
+    // larafire.cpp, the speech heads out of the cutscene pak - so a
     // foreign head pops out the moment Lara screams. And the ponytail takes
     // its anchor point and its collision radius straight from the bounding
-    // sphere of whatever mesh sits there (hair.cpp:245), so a foreign head
+    // sphere of whatever mesh sits there (hair.cpp), so a foreign head
     // hangs the braid in the wrong place the rest of the time.
     std::vector<uint32_t> keptPtr(nMeshes, 0);
     std::vector<char>     keptHas(nMeshes, 0);

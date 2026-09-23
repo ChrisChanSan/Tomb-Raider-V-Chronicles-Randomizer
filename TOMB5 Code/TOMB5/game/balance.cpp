@@ -44,14 +44,14 @@ struct BALANCE_LINE
 };
 
 /*
- * s = the standard this build ships with - the user's tuning, playtested
- *     and declared final on 2026-08-29. It is what a missing line falls
+ * s = the standard this build ships with. It is what a missing line falls
  *     back to and what a fresh Balance.txt is written from.
  * v = what Core shipped. Only two things read it: the comment in the
- *     generated file, so a player can see how far we moved, and the
- *     self-check in BalanceSetEnemies, which compares against setup.cpp.
- *     Putting our own standard there would make that check fire for every
- *     enemy we retuned and drown the one case it exists for.
+ *     generated file, so a player can see how far the defaults moved, and
+ *     the self-check in BalanceSetEnemies, which compares against
+ *     setup.cpp. Putting the current standard there instead would make
+ *     that check fire for every enemy retuned away from Core's value and
+ *     drown the one case it exists for.
  */
 #define SEPARATOR(text)	{ 0, 0, 0, 0, 0, 0, -1, text, 0 }
 #define WEAPON(n, f, s, v, hint)	{ n, &balance.f, s, v, 0, 127, -1, 0, hint }
@@ -158,11 +158,12 @@ static const BALANCE_LINE balanceLines[] =
 	DAMAGE("DMG_Soldier_Short",	dmgSoldierShort,	10,	10,		"  their weaker second shot"),
 	DAMAGE("DMG_Hitman_Shot",	dmgHitmanShot,		15,	12,		0),
 	/*
-	 * The pool cyborg (#146). Same gun as the line above, own number so the
-	 * enemy the roll scatters everywhere can be tuned without touching Red
-	 * Alert's scripted agent. There is no Core value to hold him against -
-	 * the slot is ours - so the vanilla column repeats our own 15; Core
-	 * gave the agent 12, and we already ship 15 for him.
+	 * The pool cyborg uses the same gun as the line above but has its own
+	 * number, so the enemy the roll scatters everywhere can be tuned
+	 * without touching Red Alert's scripted agent. There is no Core value
+	 * to hold him against - the slot did not exist in the original game -
+	 * so the vanilla column repeats the standard value of 15; Core's agent
+	 * used 12.
 	 */
 	DAMAGE("DMG_Cyborg_Shot",	dmgCyborgShot,		50,	12,		"  the pool enemy on slot 469"),
 	DAMAGE("DMG_Mafia2_Shot",	dmgMafia2Shot,		35,	35,		0),
@@ -195,7 +196,7 @@ static const BALANCE_LINE balanceLines[] =
 		"\r\n"
 		";  The supernatural and heavy machinery:\r\n"),
 
-	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the pool since #124 - was 80"),
+	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the enemy pool - was 80"),
 	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	400,	0),
 	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 200,	120,	0),
 	DAMAGE("DMG_God_Strike",	dmgGodStrike,		60,	40,		"  Roman god in melee"),
@@ -301,7 +302,7 @@ static void BalanceWriteFile(long fresh)
 		if (!balanceLines[i].name)
 			continue;
 
-		/* Core's number is only worth printing where we moved away from it. */
+		/* Core's number is only worth printing where the standard moved away from it. */
 		if (balanceLines[i].vanilla != balanceLines[i].standard)
 			_snprintf(from, sizeof(from) - 1, ", vanilla %ld", balanceLines[i].vanilla);
 		else

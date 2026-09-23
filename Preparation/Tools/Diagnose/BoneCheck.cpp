@@ -1,11 +1,11 @@
 // BoneCheck - show a moveable slot's bone tree, or compare two.
 //
-// Occasion (#121, third round): a family stub (meshes from donor A) runs
-// at runtime on the base type's anim set (from donor B). The frames carry
-// rotations per mesh, but the STACK COMMANDS (push/pop in bone[0] bits
-// 0/1) come from the stub's bone tree. If the two donors' trees are not
-// built alike, the matrix stack drifts apart while drawing - meshes
-// anywhere, body invisible, bounds still valid.
+// A family stub (meshes from donor A) runs at runtime on the base type's
+// anim set (from donor B). The frames carry rotations per mesh, but the
+// STACK COMMANDS (push/pop in bone[0] bits 0/1) come from the stub's bone
+// tree. If the two donors' trees are not built alike, the matrix stack
+// drifts apart while drawing - meshes anywhere, body invisible, bounds
+// still valid.
 //
 // Usage: BoneCheck <level.trc> <slot> [<level2.trc> <slot2>]
 //   One pair:  show the tree (flags x y z per bone).

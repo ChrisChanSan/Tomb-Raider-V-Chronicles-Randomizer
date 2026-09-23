@@ -30,17 +30,16 @@ static BITE_INFO larson_gun = { -55, 200, 5, 14 };
 static BITE_INFO pierre_gun1 = { 60, 200, 0, 11 };
 static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 
-// Can Larson/Pierre flee from here? The flight from 40 HP on runs via
+// Whether Larson/Pierre can flee from here. The flight from 40 HP runs via
 // ai_bits = AMBUSH to an AIAmbush marker with a matching OCB in the same
-// zone (FindAITargetObject, box.cpp:1631) - there he despawns via
-// reached_goal. Core guarantees the marker in the vanilla levels; as a pool
-// enemy he also stands in levels WITHOUT a matching marker. Then
-// FindAITargetObject never found a target, he ran endlessly "fleeing"
-// behind Lara, and the 40-HP clamp made him immortal (seen in game: joby2
-// item 36). Without a flight target the clamp no longer engages - he fights
-// and dies like a normal enemy (his death animation brings its own KillItem
-// command). The marker check is the same as in FindAITargetObject: type,
-// OCB, zone.
+// zone (FindAITargetObject, box.cpp) - there he despawns via reached_goal.
+// Core guarantees the marker in the vanilla levels; as a pool enemy he also
+// stands in levels without a matching marker. There FindAITargetObject
+// never finds a target, so he would run endlessly "fleeing" behind Lara
+// while the 40-HP clamp keeps him immortal (as in joby2 item 36). Without a
+// flight target the clamp no longer engages: he fights and dies like a
+// normal enemy (his death animation brings its own KillItem command). The
+// marker check mirrors FindAITargetObject's own: type, OCB, zone.
 static long PierreCanFlee(ITEM_INFO* item, CREATURE_INFO* pierre)
 {
 	AIOBJECT* aiObj;
@@ -172,13 +171,13 @@ void PierreControl(short item_number)
 
 			// Let Larson fade out like any other enemy.
 			//
-			// His death animation carries no anim command 4 (KillItem) -
-			// checked, it has seven PlaySound commands and nothing else.
-			// With the dog the command sits in the death animation and sets
-			// after_death = 1 via control.cpp:3220; from then on
-			// draw.cpp:742 fades the corpse and removes it at 128.
+			// His death animation carries no anim command 4 (KillItem): it
+			// has seven PlaySound commands and nothing else. With the dog
+			// the command sits in the death animation and sets
+			// after_death = 1 (AnimateItem); from then on PrintObjects
+			// fades the corpse and removes it at 128.
 			//
-			// Larson lacks this because Core clears his corpse in exactly
+			// Larson lacks this because his corpse is cleared in exactly
 			// one place: in Trajan Markets the cutscene takes over at this
 			// animation's last frame, and andrea3b_init (deltapak.cpp) sets
 			// him to ITEM_INVISIBLE. In every other level - where he never
@@ -192,9 +191,9 @@ void PierreControl(short item_number)
 			// moment, the fade never becomes visible.
 			//
 			// With the fade the cargo must come out too: carried items are
-			// otherwise released ONLY by CreatureDie, and Larson never gets
+			// otherwise released only by CreatureDie, and Larson never gets
 			// there - his death animation carries no command 4 that would
-			// lead there via ITEM_DEACTIVATED (control.cpp:3246).
+			// lead there via ITEM_DEACTIVATED (AnimateItem).
 			if (!item->after_death)
 			{
 				DropBaddyPickups(item);
@@ -203,13 +202,13 @@ void PierreControl(short item_number)
 		}
 		else if (item->object_number == PIERRE && item->frame_number >= anims[item->anim_number].frame_end - 1)
 		{
-			// Pierre's death animation (+12) jumps back into a LIVING
-			// animation (+8) at its end - Core never used his generic
-			// death, in vanilla he dies by cutscene (Colosseum). Without a
-			// latch the control restarted the death on the next tick: an
-			// Imp-like endless loop (seen in game). Hold the anim just
-			// before its end - no jump, the pose stays down, after_death
-			// fades out and removes at 128.
+			// Pierre's death animation (+12) jumps back into a living
+			// animation (+8) at its end - he never used his generic death
+			// in vanilla, where he dies by cutscene (Colosseum). Without a
+			// latch the control would restart the death on the next tick,
+			// an Imp-like endless loop. Holding the anim just before its
+			// end avoids the jump: the pose stays down, and after_death
+			// fades it out and removes it at 128.
 			item->frame_number = anims[item->anim_number].frame_end - 1;
 
 			// Release the cargo: the latch one frame before the end is
@@ -445,17 +444,17 @@ void PierreControl(short item_number)
 		{
 			// Drop what he carries first, then vanish.
 			//
-			// GetCarriedItems (setup.cpp:1962) attaches EVERY pickup within
-			// 512 units to the nearest enemy at level start:
-			// RemoveDrawnItem, room_number = NO_ROOM - the item then exists
-			// only as his cargo. On a normal death CreatureDie releases it
-			// via DropBaddyPickups; this flight exit however calls KillItem
+			// GetCarriedItems (setup.cpp) attaches every pickup within 512
+			// units to the nearest enemy at level start: RemoveDrawnItem,
+			// room_number = NO_ROOM - the item then exists only as his
+			// cargo. On a normal death CreatureDie releases it via
+			// DropBaddyPickups; this flight exit however calls KillItem
 			// directly, and the cargo would be gone forever.
 			//
-			// In vanilla this goes unnoticed because Core gives a fleeing
-			// Larson nothing to carry. With random item distribution a key
-			// item can lie there - and then the level would be unsolvable
-			// after his flight.
+			// In vanilla this goes unnoticed because a fleeing Larson
+			// carries nothing. With random item distribution a key item can
+			// lie there - and then the level would be unsolvable after his
+			// flight.
 			DropBaddyPickups(item);
 			item->hit_points = -16384;
 			DisableBaddieAI(item_number);

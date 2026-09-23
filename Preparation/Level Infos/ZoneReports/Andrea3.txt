@@ -38,7 +38,7 @@ required injections (REQUIRED_INJECTIONS) - missing in vanilla:
   typeId  240 -> room  120 (level contains no crowbar - vanilla softlock; present in the level: 0)
 untouchable items (FIXED_ITEMS) - must not be moved:
   item   49 - Puzzle Item4 Combo2 - triggers a door (room 31, typeId 187)
-  item   79 - Roman god (room 90) - stays vanilla (user list 2026-08-14) (room 90, typeId 61)
+  item   79 - Roman god (room 90) - stays vanilla (room 90, typeId 61)
   item   75 - secret - stays in place until the dedicated secret list (room 81, typeId 223)
   item   99 - secret - stays in place until the dedicated secret list (room 112, typeId 223)
   item  102 - secret - stays in place until the dedicated secret list (room 120, typeId 223)

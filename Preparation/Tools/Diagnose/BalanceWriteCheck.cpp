@@ -1,6 +1,6 @@
-// BalanceWriteCheck - checks the randomizer's interface to Balance.txt
-// (#108): does it really write ONLY the three percentage lines and leave
-// everything else in place character for character?
+// BalanceWriteCheck - checks that the randomizer's interface to
+// Balance.txt writes ONLY the three percentage lines and leaves everything
+// else in place character for character.
 //
 // Build (64 bit): bwc.bat next to this file, which runs
 //   set R=..\..\..\TR5Randomizer\src

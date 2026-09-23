@@ -28,6 +28,7 @@
 #include "../game/control.h"
 #include "3dmath.h"
 #include "gamemain.h"
+#include "../game/interpolate.h"		// the tween latch
 
 const char* CreditNames[] =
 {
@@ -155,6 +156,13 @@ void aFixUpRoom(ROOM_INFO* r, char* s)
 	pR->pRmPrelight = (long*)((char*)pR->pRmPrelight + offset);
 	pR->pRmVtx = (float*)((char*)pR->pRmVtx + offset);
 
+	// An odd address in a short* is impossible, so this catches a door list
+	// that came out of the file wrong. Safe under /LARGEADDRESSAWARE: `& 1`
+	// reads bit 0 of the address and nothing else, and on Win32 a long is
+	// exactly as wide as a pointer, so nothing is truncated either. Measured
+	// for an address above 2 GB: `(long)p & 1` still gives bit 0. Left as it
+	// is on purpose - it is the one place a pointer is cast to a signed long
+	// and used, and it does not care about the sign.
 	if ((long)pR->door & 1)
 	{
 		Log("%X", pR->door);
@@ -417,7 +425,15 @@ long DoCredits()
 		y += font_height;
 	}
 
-	StartPos--;
+	/* The roll is a per-present counter, and the title screen is no longer
+	 * fixed at thirty presents a second: one pixel a call was one pixel a
+	 * thirtieth of a second only while DoTitle presented at that rate. Now
+	 * that it presents at the display's frame rate, unguarded the credits
+	 * would scroll at twice the speed at fps_mode 1 and five times over on a
+	 * 165 Hz panel. At fps_mode 0 the guard is false on every frame, and this
+	 * is vanilla's own line. */
+	if (!InterpIsTweenFrame())
+		StartPos--;
 
 	if (!num_drawn)
 		init = 0;

@@ -5403,7 +5403,7 @@ off the line and still start the move; `MODERN_LEDGE_SNAP` (0x18E2) is the
 catch's own 34.6-degree cardinal window (`:424`, `:434`-`:436`);
 `MODERN_LEDGE_NEAR` (512) is how close an edge has to be before `LEDGELOG`
 reports the refusal set (`:440`). The ten refusals, each one engine test asked the way its
-own site asks it (`LaraLedgeRefusals`, `game/lara.cpp:6152`-`6321`, with the
+own site asks it (`LaraLedgeRefusals`, `game/lara.cpp:6152`-`6322`, with the
 legend at `:6115`-`6144` and the bit values at `game/lara.h:197`-`206`):
 `SHALLOW` the drop is 768 units or less; `SLOPE` the ledge floor's two front
 corners differ by 120 or more; `SLIDE` the floor there would start
@@ -5424,9 +5424,9 @@ heading she hangs with are appended to `tomb5_save_info` as `ledge_phase` and
 `ledge_heading` (`global/types.h:1399`-`1400`) and written/read only while she
 is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
 on this way is settled once by the same refusal test into the hang or a fall.
-`LEDGELOG` behind `-log` prints one line per phase change plus a line when the
-refusal set changes while the key is held near an edge
-(`game/lara.cpp:6394`-`6432`, `:6697`-`6710`).
+`LEDGELOG` behind `-log` prints one line per phase change, a line when the
+refusal set changes while the key is held near an edge, and one fire line when
+the move starts (`game/lara.cpp:6394`-`6432`, `:6703`-`6716`, `:6740`-`6750`).
 
 **Why.** The design is this project's own and plays Tomb Raider 5's own
 pull-up, animation 97, backwards. The pull-up can be played backwards because
@@ -5441,14 +5441,17 @@ silently replaced. It is Modern-controls only because the turn leans on the
 Modern camera swinging behind her (`ModernCameraCarryHalfTurn`,
 `game/camera.cpp:367`-`383`, called once on the turn's first tick and gated on
 `ModernCameraActive()` so a swing is never seated while nothing pays it out);
-Tank stays byte-identical by not being asked at all. The lowering is posed at
+Tank stays byte-identical by not being asked at all. An aborted turn drops the
+camera's remaining swing (`ModernCameraDropSwing`, `game/camera.cpp:385`-`399`,
+called on a stand after the turn's first tick), as the right stick drops it, so
+the camera never ends in front of her. The lowering is posed at
 30 Hz: the interpolator's neighbour rule (`curFrame != prevFrame + 1`,
 `game/interpolate_math.h:346`) refuses every backwards-stepped frame.
 
 **How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1773`) is the pure
 decision for one tick of the move — the turn's ramp and its abort tests, the
 lowering's frame step and its hand-over — read by `lara_as_ledgehang`
-(`game/lara.cpp:6530`-`6638`), the routine for the new state
+(`game/lara.cpp:6530`-`6644`), the routine for the new state
 `AS_LEDGEHANG = 139` (`game/lara_states.h:147`); its collision row stays
 `lara_default_col`, since the state itself fills `coll` for `TestTriggers` and
 `LaraGun` and never moves her by walking. `ModernTest`'s `ledge_hang()` block
@@ -5461,7 +5464,7 @@ skips every animation command while the lowering plays backwards, for
 `ANIM_GRABLEDGE` at `frame_base + 21`, `AS_HANG`, `LG_HANDS_BUSY`
 (`LaraLedgeHang`, `game/lara.cpp:6451`-`6464`) — so `lara_col_hang` and
 `LaraHangTest` take over from there exactly as they do from any other catch.
-The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6655`-`6747`) is asked from
+The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6661`-`6753`) is asked from
 `lara_col_run`, `lara_col_walk`, and `lara_col_stop`, right after each
 routine's own ceiling test and after `GetLaraCollisionInfo` has measured this
 tick's movement, so a state change and a position write there land inside the
@@ -5472,7 +5475,8 @@ ordinary step; a standing state that became a run or a walk this tick is
 judged at `coll->old`, where she actually stood, so the start of a run's own
 23-unit hop never counts.
 
-**Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`
+**Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
+`8b4a761`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20

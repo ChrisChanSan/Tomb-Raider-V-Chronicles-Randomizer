@@ -60,7 +60,7 @@
  *    2  minutes
  *    2  seconds
  *   ..  SAVEGAME_INFO
- *    4  tomb5_save_info
+ *    7  tomb5_save_info
  */
 #define OFF_NAME	0
 #define OFF_COUNTER	75
@@ -262,7 +262,9 @@ static const Field kField[] =
 	{ "TLCount",			SG(TLCount),		1, F_U },
 
 	{ "tomb5.LHolster",		T5(LHolster),		2, F_U },
-	{ "tomb5.dash_timer",		T5(dash_timer),		2, F_U }
+	{ "tomb5.dash_timer",		T5(dash_timer),		2, F_U },
+	{ "tomb5.ledge_phase",		T5(ledge_phase),	1, F_U },
+	{ "tomb5.ledge_heading",	T5(ledge_heading),	2, F_S }
 };
 
 static const int kFieldCount = (int)(sizeof(kField) / sizeof(kField[0]));

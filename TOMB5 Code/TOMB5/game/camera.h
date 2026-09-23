@@ -38,6 +38,7 @@ short GetFirstPersonRoll();		// the head bone's roll, for the frame interpolator
 bool ModernCameraActive();		// may the orbit steer the view - not "does it": see ModernCameraWorldYaw
 void ModernCameraResetOrbit();		// level start, savegame load, scheme change
 void ModernCameraCarryHalfTurn();	// the ledge hang's turn: swing the orbit behind her
+void ModernCameraDropSwing();		// the ledge hang's turn broken off: drop the swing's unpaid rest
 void ModernCameraStick(long rs_x, long rs_y);	// the right stick, from specific\input.cpp
 short ModernCameraSwimTarget();		// the swimming attitude the orbit points at
 long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world - 0 = not seated

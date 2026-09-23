@@ -382,6 +382,22 @@ void ModernCameraCarryHalfTurn()
 	ModernCameraCarry(&modern_cam_cfg, &modern_cam_state, 0x8000);
 }
 
+/* A ledge-hang turn broken off after its first tick leaves her only part of
+ * the way round, so the rest of the half-turn swing would end the camera in
+ * front of her; a new turn started on the next tick would add another half
+ * turn on top. lara_as_ledgehang drops what is unpaid, exactly as the right
+ * stick drops it in ModernCameraUpdate (game\modern_camera.cpp).
+ *
+ * Not only while the orbit runs: a swing seated before the orbit stopped
+ * would otherwise wait and swing the camera round when it resumes. */
+void ModernCameraDropSwing()
+{
+	ModernCameraArm();
+	modern_cam_state.carry = 0;
+	modern_cam_state.carry_total = 0;
+	modern_cam_state.carry_tick = 0;
+}
+
 /* One tick of the orbit, and the two camera slots it writes. */
 static void ModernCameraOrbit()
 {

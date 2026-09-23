@@ -6614,6 +6614,12 @@ void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll)
 		break;
 
 	case MODERN_LEDGE_STAND:
+
+		/* The turn broken off after its first tick: the camera's half-turn
+		 * swing, asked on that first tick, is dropped with it. */
+		if (from == MODERN_LEDGE_TURN && sit.tick > 0)
+			ModernCameraDropSwing();
+
 		LaraLedgeStand(item);
 		LaraLedgeLog(item, from, "stand", sit.tick, 0, 0, sit.refusals, 0);
 		break;

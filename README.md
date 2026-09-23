@@ -381,15 +381,16 @@ are not. A mod's fitted pair of Uzis comes up 19.2, and the largest in the game
 is your own installation's: RICH3's crossbow ammunition, where the remaster has
 no Tomb Raider V model for the slot and the engine falls back to the Tomb
 Raider IV quiver. That model is drawn at TR5's item origin and reaches **126.6
-units** below the level's own mesh — nearly two thirds of it used to stand in
-the floor, and now it stands on it. A big number always means the same thing:
+units** below the level's own mesh — at that origin nearly two thirds of it
+would stand in the floor; the engine lifts it onto it. A big number always
+means the same thing:
 the model was modelled over a different item's origin. A model authored over
 this game's own reads zero.
 
 **Lara always has TR5's bare hands.** `HAND_GLOVES_*` is never worn, whatever
 the outfit or an `outfit.txt` says, so every level and every outfit look alike
-in that one respect. (It is the Russia levels that change: they used to draw
-the gloved set.)
+in that one respect. (On screen this concerns the Russia levels: their outfit
+would otherwise draw the gloved set.)
 
 **A mod's hand may keep its gun and give back the hands.** A hand model painted
 with pages of the I-III bundle — `origin=tr1` below — would give Lara that

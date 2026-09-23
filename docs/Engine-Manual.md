@@ -225,8 +225,9 @@ Fifteen more rows follow the nineteen above, on the same *Key bindings* list
 and under the same *Reset to defaults*: the two medipacks, quick save, quick
 load, the six weapons (in the order the number keys always drew them), and —
 only while *Cheats* is on, see **Cheats and the cheat hotkeys** below — five
-cheat rows. In the original engine every one of them was a hard-wired key;
-here each is a role like any other, so it can be rebound like any other.
+cheat rows. Where the original had a key for one of these jobs, that key was
+hard-wired; here each is a role like any other, so it can be rebound like any
+other.
 Defaults, both key sets, the one difference between them named:
 
 | Role | Tank / Modern default |
@@ -253,9 +254,9 @@ Defaults, both key sets, the one difference between them named:
 > F10 and F12 are likewise left alone, which is why the five cheat rows
 > default to the F keys they do.
 
-Quick load's Modern default is the one deliberate departure from the
-hard-wired keys — every other default key, in either scheme, is the same key
-the original engine used for that job. **If you bind one of the keys above to
+Quick load's Modern default is the one deliberate departure: every other
+default key, in either scheme, is the key the engine answers to for that job
+when nothing is rebound. **If you bind one of the keys above to
 some other role, that key does both jobs**, because a role always answers to
 its own binding first. The other direction works too — rebind a hotkey role
 *away* from its default key and that key can stop being the hotkey, though
@@ -542,8 +543,8 @@ nor to *HUD* (see **The options menu** above):
 delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
-The other settings this build adds — *Footprints*, *Shadow mode*, *Fog*, *HD
-textures*, *Bar mode*, *Bar positions*, *Enemy bars*, *Ammo counter*,
+The other settings the original never had — *Footprints*, *Shadow mode*,
+*Fog*, *HD textures*, *Bar mode*, *Bar positions*, *Enemy bars*, *Ammo counter*,
 *Gameover menu*, *PSX skies*, *TR4 loadscreens*, *Loadbar style*, *Mono
 screen style*, *Loading text*, *Shimmer*, *Distance fog*, *Ammotype hotkeys*,
 *Look transparency*, *Static lighting*, *UW Effect* — sit on the tab their

@@ -31,8 +31,8 @@ IDR_BACKGROUND RCDATA "Background.jpg"
 // FILEVERSION takes numbers only, so the readable name lives in the
 // strings; keep both in step with RANDO_VERSION_STRING in BuildId.h.
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,0
- PRODUCTVERSION 1,0,0,0
+ FILEVERSION 2,0,0,0
+ PRODUCTVERSION 2,0,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -44,12 +44,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "FileDescription", "TR5 Randomizer"
-            VALUE "FileVersion", "Beta_1.0"
+            VALUE "FileVersion", "Beta_2.0"
             VALUE "InternalName", "TR5Randomizer.exe"
             VALUE "LegalCopyright", "GPLv3. Modified 2026 by ChrisChanSan."
             VALUE "OriginalFilename", "TR5Randomizer.exe"
             VALUE "ProductName", "TR5 Randomizer"
-            VALUE "ProductVersion", "Beta_1.0"
+            VALUE "ProductVersion", "Beta_2.0"
         END
     END
     BLOCK "VarFileInfo"

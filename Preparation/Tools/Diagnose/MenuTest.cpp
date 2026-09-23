@@ -967,7 +967,7 @@ static void pad_default_tables(void)
 
 int main()
 {
-	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h (#161, rounds 161b1, 161b2a, 161b2c and 161b2d)\n\n");
+	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
 
 	cursor_all_enabled();
 	cursor_disabled();

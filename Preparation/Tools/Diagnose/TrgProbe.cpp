@@ -2242,7 +2242,7 @@ int main(int argc, char** argv)
 		std::printf("       [-seam <groupA> <groupB> <dx> <dy> <dz>]  the baked light\n");
 		std::printf("                          where two rooms share vertex positions\n");
 		std::printf("       [-flat <group>]  the horizontal surfaces of one group, with\n");
-		std::printf("                        the page each of them wears (H1, the water)\n");
+		std::printf("                        the page each of them wears (the water survey)\n");
 		std::printf("       [-layer0]  how much of a level names no page at all\n");
 		std::printf("       [-matparts <material>]  every part of ONE material with its\n");
 		std::printf("                          geometry, and (with -classic) the classic\n");

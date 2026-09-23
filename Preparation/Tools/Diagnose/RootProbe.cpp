@@ -485,9 +485,9 @@ static void printWrap(const Tr5Level& l, int index, int before, int after)
 	}
 
 	std::printf("\n  what           anim  frame   pos.y   off.y   drawn y   step\n");
-	std::printf("  (a tween frame whose frame steps by one is ACCEPTED by rule K6 and its\n"
+	std::printf("  (a tween frame whose frame steps by one is ACCEPTED by the neighbour rule and its\n"
 		"   root is already blended in time by the pose pair; the today/fixed rows are\n"
-		"   what the REFUSED frame - marked <-- below - draws before and after #157)\n");
+		"   what the REFUSED frame - marked <-- below - draws without and with InterpRootKey)\n");
 
 	long lastDrawn = 0;
 	bool have = false;
@@ -875,7 +875,7 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 	std::printf("\n%ld transitions with a step of %ld or more: %ld paid in full, %ld in part, "
 		"%ld not at all;\n%ld of them blend today and do not blend under the narrowed rule,\n"
 		"and in %ld the narrowed draw leaves the segment from the frame's own offset to\n"
-		"today's draw - further, or the other way (this one must read 0: it is the round's\n"
+		"today's draw - further, or the other way (this one must read 0: it is the narrowed rule's\n"
 		"invariant, that the rule blends never more than today and never in another direction).\n",
 		rows, least, full, part, none, stops, beyond);
 }

@@ -693,8 +693,8 @@ static void deadzone()
 
 		m = ModernStickDeadZone(MODERN_DEAD_RIGHT_DINPUT, MODERN_DEAD_AXIS_RIGHT_DINPUT,
 			56, -56, &ox, &oy);
-		printf("  the rest round 161a2b feared, (450,-450) of 1000 = (56,-56), radius 79:\n");
-		printf("    through the new 24/20 -> length %ld of %d; M9 measured the real rest"
+		printf("  the rest first feared, (450,-450) of 1000 = (56,-56), radius 79:\n");
+		printf("    through the new 24/20 -> length %ld of %d; the pad's measured rest lies"
 			" inside (10,10)\n", m, (int)MODERN_STICK_FULL);
 
 		/* Every point the hardware zeroed is still zero - the whole claim, swept
@@ -1739,7 +1739,7 @@ static void classic_states()
 
 		for (i = 0; i < (int)(sizeof(is_modern) / sizeof(is_modern[0])); i++)
 			ok(ModernStateIsClassic(is_modern[i]) == 0,
-				"shared_state_numbers: not 2/3/81, and not 17 since step 4",
+				"shared_state_numbers: not 2/3/81, and not 17 now that the swim is translated",
 				ModernStateIsClassic(is_modern[i]), 0);
 	}
 
@@ -1774,7 +1774,7 @@ static void classic_states()
 	sit.classic = 0;
 	state.have_ref = 0;
 	tick(&cfg, &state, S(32000), 0, 0, 0, &sit, &out);
-	ok(out.active == 1, "step 4: AS_SWIM(17) is the translation's now",
+	ok(out.active == 1, "AS_SWIM(17) is the translation's now",
 		out.active, 1);
 	ok(out.mode == MODERN_MODE_RUN, "...and it is the ordinary run branch",
 		out.mode, MODERN_MODE_RUN);
@@ -3037,7 +3037,7 @@ static void circling()
 	SPIN_RUN was;
 	SPIN_RUN half;
 
-	printf("the spin on the spot - a circling stick must not stutter (#161 item 7)\n");
+	printf("the spin on the spot - a circling stick must not stutter\n");
 
 	ModernDefaults(&cfg);
 
@@ -3055,9 +3055,9 @@ static void circling()
 	spin_run(3822, 86, 2, MODERN_TURN_RATE_TRONE, &half);
 
 	printf("  a stick circling at 21 deg/tick, five revolutions of 86 ticks, from a run:\n");
-	printf("    round 161a2's rule at 3277:  %ld ticks with no forward in %ld stumbles,"
+	printf("    the old rule at 3277:        %ld ticks with no forward in %ld stumbles,"
 		" %ld one-tick whips\n", was.no_forward, was.drops, was.jerks);
-	printf("    item 7a on its own at 3277:  %ld / %ld / %ld  <- the whips the stutter hid\n",
+	printf("    first part alone at 3277:    %ld / %ld / %ld  <- the whips the stutter hid\n",
 		half.no_forward, half.drops, half.jerks);
 	printf("    ours at 5461:                %ld / %ld / %ld, worst error %ld,"
 		" worst course step %ld\n", now.no_forward, now.drops, now.jerks,
@@ -3084,12 +3084,12 @@ static void circling()
 	 * her running but leave the snap on the error and the whips come
 	 * straight out: a thumb that keeps letting her recover between them can
 	 * meet both defects in the same session without seeing either clearly. */
-	ok(was.no_forward > 0, "round 161a2's rule dropped forward on this same stick",
+	ok(was.no_forward > 0, "the old rule dropped forward on this same stick",
 		was.no_forward, 1);
 	ok(was.jerks == 0, "...and never whipped here, because the stutter disabled the snap",
 		was.jerks, 0);
-	ok(half.no_forward == 0, "item 7a alone keeps her running", half.no_forward, 0);
-	ok(half.jerks > 0, "...and then the error-only snap whips her, which is item 7b's case",
+	ok(half.no_forward == 0, "the first part alone keeps her running", half.no_forward, 0);
+	ok(half.jerks > 0, "...and then the error-only snap whips her, which is why the second part ships with it",
 		half.jerks, 1);
 
 	/* What removing the error-only snap cost, and what raising the turn rate
@@ -3233,7 +3233,7 @@ static void reversal()
 	long h;
 	long yaw;
 
-	printf("the reversal - a half turn is a turn now, not a jump (#161 item 2b)\n");
+	printf("the reversal - a half turn is a turn now, not a jump\n");
 
 	ModernDefaults(&cfg);
 
@@ -3328,7 +3328,7 @@ static void reversal()
 		tick(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out);
 		tick(&cfg, &state, 0, S(32000), 0, 0, &sit, &out);
 		old_yaw = old_direct_turn(&cfg, &out, 1, &forward);
-		ok(absl(old_yaw) == 0x8000, "round 161a2b's rule took the same half turn in ONE tick",
+		ok(absl(old_yaw) == 0x8000, "the old direct turn took the same half turn in ONE tick",
 			absl(old_yaw), 0x8000);
 		printf("  the rule this replaces: one tick of %ld units; ours: %d of %d\n",
 			absl(old_yaw), (int)r.ticks, (int)MODERN_TURN_RATE);
@@ -3499,7 +3499,7 @@ static void spin_sweep()
 	long spun_old = 0;
 	int i;
 
-	printf("a circling stick at 10 to 35 deg/tick (#161 items 2c and 2d)\n");
+	printf("a circling stick at 10 to 35 deg/tick\n");
 
 	/* 1. A 300-tick sweep of an even circle from the direction she is
 	 * already facing, which is a thumb that starts where she stands. The
@@ -3591,7 +3591,7 @@ static void spin_sweep()
 		ok(new_never == 0, "every start reaches the run, at every speed the thumb was"
 			" measured at", new_never, 0);
 		ok(new_worst <= MODERN_STAND_FORWARD_TICKS,
-			"...within the eight ticks the brief asks for", new_worst,
+			"...within eight ticks", new_worst,
 			MODERN_STAND_FORWARD_TICKS);
 
 		if (new_worst > worst_new)
@@ -3607,9 +3607,9 @@ static void spin_sweep()
 	printf("  standing ticks spun with no animation, over the starts that reach the run"
 		" (216 of 216 now, 211 before this pass): %ld now, %ld then\n",
 		spun_new, spun_old);
-	printf("  (M4 counted 232 such ticks in one play session, 140 of them stepping"
+	printf("  (a play log counted 232 such ticks in one session, 140 of them stepping"
 		" 18 deg with no bit at all)\n");
-	ok(spun_new * 4 < spun_old, "the standing spin M4 measured is a quarter of what it was",
+	ok(spun_new * 4 < spun_old, "the standing spin is a quarter of what it was",
 		spun_new, spun_old / 4);
 
 	/* The lock itself is arithmetic and stays: a stick circling at exactly
@@ -3664,7 +3664,7 @@ static void air_turn()
 	long ticks;
 	long i;
 
-	printf("the air turn - a wider radius round a ledge (#161 item 4)\n");
+	printf("the air turn - a wider radius round a ledge\n");
 
 	/* 1. One state, and it is the one the classic itself steers. 3
 	 * AS_FORWARDJUMP is the only routine in game\lara.cpp that reads IN_LEFT or
@@ -3838,7 +3838,7 @@ static void turn_chain()
 	long clash = 0;
 	long i;
 
-	printf("\nthe three arms of the turn - one state, one answer (#161 step 3)\n");
+	printf("\nthe three arms of the turn - one state, one answer\n");
 
 	ModernDefaults(&cfg);
 
@@ -3954,7 +3954,7 @@ static void look_tank()
 	long last = -1;
 	long i;
 
-	printf("\nthe look key steers her as at Tank (#161 item 3, the user's word 4)\n");
+	printf("\nthe look key steers her as at Tank\n");
 
 	/* 1. Thirty ticks of a held key, no weapon. The engine must never see the
 	 * bit - that is what keeps LookLeftRight (game\lara.cpp) from eating
@@ -4171,8 +4171,7 @@ static void tank_sector()
 	long x, y, ox, oy, sector;
 	int i;
 
-	printf("\nthe look key's Tank reads the stick by sector (#161 round 161a3b item 1,"
-		" the user's word 2)\n");
+	printf("\nthe look key's Tank reads the stick by sector\n");
 
 	/* 1. The measured thumb. One axis out, the turn's, at the stick's own
 	 * magnitude and not its component - the component of a push 16 degrees
@@ -4268,7 +4267,7 @@ static void tank_sector()
 		 * to stop, and the windows below go on testing what they are for,
 		 * which is that the code honours whatever they say. Both read back
 		 * as `sector=` in MODERNLOG's tank line. */
-		ok(MODERN_TANK_TURN_SECTOR == 9102, "the turn sector is the round's own 50 degrees",
+		ok(MODERN_TANK_TURN_SECTOR == 9102, "the turn sector is 50 degrees",
 			MODERN_TANK_TURN_SECTOR, 9102);
 		ok(MODERN_TANK_SECTOR_HYST == 1456, "...and the hysteresis on it its own 8",
 			MODERN_TANK_SECTOR_HYST, 1456);
@@ -4471,8 +4470,7 @@ static void cam_steer()
 	STEER s;
 	int r, w;
 
-	printf("\nthe camera he turns takes her course with it (#161 round 161a3b item 2,"
-		" the user's word 3)\n");
+	printf("\nthe camera he turns takes her course with it\n");
 
 	for (w = 0; w < 2; w++)
 		for (r = 0; r < 2; r++)
@@ -4518,7 +4516,7 @@ static void cam_steer()
 	 * stood before this fix. The impulses come back - so this group can
 	 * fail, which is what makes the zeroes above worth anything. */
 	steer_run(1183, 8, 1, 0, 0, &s);
-	ok(s.impulses > 0, "without the carry the same run stutters, as M2 counted it",
+	ok(s.impulses > 0, "without the carry the same run stutters, as a play log counted it",
 		s.impulses, 1);
 	printf("  the counter-proof: the land run at 6.5 deg/tick with the step NOT"
 		" handed over shows %ld impulses, biggest %ld (%.1f deg)\n",
@@ -4534,7 +4532,7 @@ static void camera_carry()
 	short off, pitch;
 	long t;
 
-	printf("the camera follows an animation about-turn (#161 item 5)\n");
+	printf("the camera follows an animation about-turn\n");
 
 	ModernCameraDefaults(&cfg);
 	ok(cfg.carry_flip == 27307, "150 degrees in one tick is an animation", cfg.carry_flip,
@@ -4800,7 +4798,7 @@ static void firing_run()
 	MODERN_RESULT out;
 	long yaw;
 
-	printf("running while she fires - the strafe is off by default (#161 item 8)\n");
+	printf("running while she fires - the strafe is off by default\n");
 
 	/* The case in one tick: a weapon ready, the action key held, and she is
 	 * running. With the strafe on she came out of here in MODE AIM with a
@@ -6083,7 +6081,7 @@ static void camera_orbit()
 	ok(cfg.pitch_max == 15470,
 		"below her the clamp is ChaseCamera's own (camera.cpp:1012)", cfg.pitch_max, 15470);
 	ok(cfg.pitch_min == -10923,
-		"above her the sphere's top cap is cut at 60 degrees (item 4a)", cfg.pitch_min, -10923);
+		"above her the sphere's top cap is cut at 60 degrees", cfg.pitch_min, -10923);
 	ok(cfg.pitch_home == -1820,
 		"the resting elevation is ChaseCamera's own (camera.cpp:1006)", cfg.pitch_home, -1820);
 	ok(cfg.hide_dist == 20 + 102,
@@ -6286,14 +6284,14 @@ static void camera_speed()
 	ok(pitch == 182, "...and the pitch is half of it", pitch, 182);
 	printf("  measured: speed 0 = %.1f deg/s of yaw\n", (double)yaw * 30.0 * 360.0 / 65536.0);
 	ok(yaw * 30 * 360 >= 59 * 65536 && yaw * 30 * 360 <= 61 * 65536,
-		"...which is the brief's 60 deg/s", yaw * 30 * 360 / 65536, 60);
+		"...which is 60 deg/s", yaw * 30 * 360 / 65536, 60);
 
 	ModernCameraSpeedRates(MODERN_CAMERA_SPEED_DEFAULT, &yaw, &pitch);
-	ok(yaw == 1092, "the default 40 is exactly round 161a2's own 1092", yaw, 1092);
+	ok(yaw == 1092, "the default 40 is exactly the former fixed rate of 1092", yaw, 1092);
 	ok(pitch == 546, "...and its own 546 of pitch", pitch, 546);
 	printf("  measured: speed 40 = %.1f deg/s of yaw\n", (double)yaw * 30.0 * 360.0 / 65536.0);
 	ok(yaw * 30 * 360 >= 179 * 65536 && yaw * 30 * 360 <= 181 * 65536,
-		"...which is the brief's 180 deg/s", yaw * 30 * 360 / 65536, 180);
+		"...which is 180 deg/s", yaw * 30 * 360 / 65536, 180);
 	ok(cfg.yaw_rate == yaw && cfg.pitch_rate == pitch,
 		"and ModernCameraDefaults seats the default through this one function",
 		cfg.yaw_rate, yaw);
@@ -6303,7 +6301,7 @@ static void camera_speed()
 	ok(pitch == 1092, "...and half of that in pitch", pitch, 1092);
 	printf("  measured: speed 100 = %.1f deg/s of yaw\n", (double)yaw * 30.0 * 360.0 / 65536.0);
 	ok(yaw * 30 * 360 >= 359 * 65536 && yaw * 30 * 360 <= 361 * 65536,
-		"...which is the brief's 360 deg/s, a full turn in one second",
+		"...which is 360 deg/s, a full turn in one second",
 		yaw * 30 * 360 / 65536, 360);
 	ok(yaw * 30 * 360 / 65536 > 125,
 		"and past the Remaster's own 125 deg/s, so the slider has room over it",
@@ -7297,7 +7295,7 @@ static void camera_camcut()
 		const long jump = InterpManhattan(x2 - x1, 0, z2 - z1);
 
 		printf("  measured: the classic quadrant snap moves it %ld - vanilla's own cut,\n", jump);
-		printf("            which round 161a2b's step 2 stops producing in Modern\n");
+		printf("            which the candidate loop stops producing in Modern\n");
 		ok(jump > INTERP_CAM_SNAP, "which is why it is a cut and ours is not",
 			jump, INTERP_CAM_SNAP);
 	}
@@ -7575,7 +7573,7 @@ static void camera_pull()
 	PULL_RUN c, n;
 	long i;
 
-	printf("\nthe ray - the eye comes in along it and never round her (item 1)\n");
+	printf("\nthe ray - the eye comes in along it and never round her\n");
 
 	/* 1. The arithmetic itself: the ends are exact and the fraction is taken of
 	   the whole distance, so the same step on two axes keeps the ratio. */
@@ -7701,7 +7699,7 @@ static void camera_flip()
 	MODERN_CAMERA_CFG cfg;
 	long heading, turn;
 
-	printf("\nthe flip - what game\\camera.cpp hands ModernCameraCarry (item 5)\n");
+	printf("\nthe flip - what game\\camera.cpp hands ModernCameraCarry\n");
 
 	ModernCameraDefaults(&cfg);
 
@@ -7783,25 +7781,26 @@ static void camera_flip()
 
 static void deferred()
 {
-	printf("\nnot ours yet - TROne expectations a later step owes, by name:\n");
-	printf("  B       modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
+	printf("\nnot ours yet - TROne expectations still owed, by name\n");
+	printf("(k+m: the keyboard and mouse scheme owes it):\n");
+	printf("  k+m     modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
 	printf("  none    modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
 	printf("          - the degenerate camera falls back to Lara's yaw in game\\modern_state.cpp,\n");
 	printf("            which needs the engine's own camera and cannot be linked here\n");
-	printf("  B       combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
-	printf("  B       modern.held_equip_draws_once_and_interaction_does_not_fire (IN_ACTION2)\n");
-	printf("\none came OFF that list in round 161a2b:\n");
+	printf("  k+m     combatmode.toggle_pulses_once_per_press_in_the_modern_profile (the edge)\n");
+	printf("  k+m     modern.held_equip_draws_once_and_interaction_does_not_fire (IN_ACTION2)\n");
+	printf("\none came OFF that list:\n");
 	printf("  modern.orbit_stays_in_world_space_and_accepts_mouse_while_running - both halves\n");
 	printf("  are ours now. The stick moves the camera while she runs, and what it moves is a\n");
-	printf("  WORLD angle her own turning does not touch (item 1, on the user's \"Ja, hoert sich\n");
-	printf("  gut an\"); both are checked above, as `the orbit' and as `the seam'. What still\n");
-	printf("  differs from TROne is the return: theirs never comes back behind the player, ours\n");
-	printf("  falls home at MODERN_CAMERA_RETURN while she moves and the thumb is off the stick.\n");
+	printf("  WORLD angle her own turning does not touch. Both are checked above, as `the\n");
+	printf("  orbit' and as `the seam'. What still differs from TROne is the return: theirs\n");
+	printf("  never comes back behind the player, ours falls home at MODERN_CAMERA_RETURN\n");
+	printf("  while she moves and the thumb is off the stick.\n");
 }
 
 int main()
 {
-	printf("ModernTest - the arithmetic of the modern control (#161, round 161a)\n");
+	printf("ModernTest - the arithmetic of the modern control\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "modern_move.cpp\n");
 	printf("                  and TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "modern_camera.cpp\n");
 	printf("expectations ported from TROne (GPLv3) by Todesengel1931\n\n");

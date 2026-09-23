@@ -2259,7 +2259,7 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 	const int kSectors = 32;
 	const double kPi = 3.14159265358979323846;
 
-	printf("\n-- the neck as a CYLINDER, per outfit (#123, fix round J) ----\n");
+	printf("\n-- the neck as a CYLINDER, per outfit ------------------------\n");
 	printf("node 7 vertices by depth s down the axis and radius r off it.\n"
 		"A neck is a narrow band of r; the row that fills every column is\n"
 		"where the shoulders join and the neck stops being one.\n\n");
@@ -2446,7 +2446,7 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 	printf("`stump` is how many node 7 vertices above the shoulder line the "
 		"cut takes\nand `left` how many it leaves; `collar` is how many of "
 		"those survivors sit in\nthe neck band s < 30, which is the COLLAR "
-		"RING of the user's finding K1(a);\n`arm` is the nearest arm vertex "
+		"RING the first person view shows;\n`arm` is the nearest arm vertex "
 		"the cylinder reaches (- is none); `nearest`\nis the nearest SURVIVING "
 		"vertex of any node but the masked head, from the\ntwo eyes - the "
 		"number the cut exists to raise.\n\n");
@@ -2628,13 +2628,13 @@ static void PrintCollarShape(const std::string& root5, const ClassicSlot& body)
 	const double shoulder =
 		0.5 * (body.bind[HD_LARA_RINARM][1] + body.bind[HD_LARA_LINARM][1]);
 
-	printf("\n-- the collar in TWO unit bins (#123, fix round L) -----------\n");
+	printf("\n-- the collar in TWO unit bins -------------------------------\n");
 	printf("Neck vertices - torso or head, whichever carries the most of the\n"
 		"vertex - by depth s down the neck axis. `all` is how many sit in the\n"
 		"bin and `r max` the widest of them; `>R` counts those the shipped\n"
 		"cylinder (R = %.0f) leaves standing, `wide` the widest of THOSE and\n"
 		"`head` how many of them carry ANY head weight. That last column is\n"
-		"fix round L's finding: what stands around the neck hole is the head\n"
+		"the answer: what stands around the neck hole is the head\n"
 		"to torso BLEND, which no cut could touch while its node mask named\n"
 		"the torso alone.\n\n", kRoundLCutR);
 
@@ -2784,7 +2784,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 
 	static const Cand kCand[] =
 	{
-		{ kTorso,         34, 0, 0,  0, "round K, as it ships" },
+		{ kTorso,         34, 0, 0,  0, "the torso alone, as it ships" },
 		{ kTorso | kHead, 34, 0, 0,  0, "+ the head node" },
 		{ kTorso | kHead, 34, 0, 0, 30, "+ a near zone of 30" },
 		{ kTorso | kHead, 34, 0, 0, 45, "+ a near zone of 45" },
@@ -2797,12 +2797,12 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 	const double shoulder =
 		0.5 * (body.bind[HD_LARA_RINARM][1] + body.bind[HD_LARA_LINARM][1]);
 
-	printf("\n-- what a candidate cut leaves (#123, fix round L) -----------\n");
+	printf("\n-- what a candidate cut leaves -------------------------------\n");
 	printf("Every vertex a first person frame really DRAWS - the triangles\n"
 		"whose range node is not the head - and cut only where its whole\n"
 		"weight lies on the cut's own nodes, which is what the shader does.\n"
 		"`ring` is what stands IN THE CAMERA: survivors within 60 units of\n"
-		"the eye on the joint, which is the wall case and the one the user\n"
+		"the eye on the joint, which is the wall case and the one a player\n"
 		"photographed. `chest` is what the cut costs - drawn vertices below\n"
 		"the shoulder line (y >= %.0f) that it takes, and it must stay 0. The\n"
 		"two eye columns are the nearest survivor from the eye 48 forward and\n"
@@ -3029,7 +3029,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 
 static void PrintNeckPages(const std::string& root5, const ClassicSlot& body)
 {
-	printf("\n-- the neck stump BY PAGE, per outfit (#123, fix round K) -----\n");
+	printf("\n-- the neck stump BY PAGE, per outfit -------------------------\n");
 	printf("node 7 vertices within %.0f of the neck axis, by the page they\n"
 		"wear. The inner skin's colour is taken from one of these, so the\n"
 		"page that is the THROAT has to be the one the rule picks.\n\n",
@@ -3169,7 +3169,7 @@ static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
 		HD_LARA_LINARM, HD_LARA_LOUTARM, HD_LARA_LHAND
 	};
 
-	printf("\n-- the wrist seam: what shines how (#123, fix round K) -------\n");
+	printf("\n-- the wrist seam: what shines how ---------------------------\n");
 	printf("`body` is the OUTFIT model's own pages on nodes 8..13 - the arms\n"
 		"and the sleeve or skin at the hand - and `hand` the pages of the\n"
 		"HAND_ model that is drawn over them. `sheen` is the material each\n"
@@ -3355,10 +3355,9 @@ static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
 	}
 
 	printf("\nA page marked SKIN is Lara's own skin on the BODY model, and it\n"
-		"takes the skin material since fix round K - the same one the HAND\n"
-		"model has had since fix round I. Where the two used to differ, the\n"
-		"difference was multiplied by the room's ambient, which is the user's\n"
-		"finding K2.\n");
+		"takes the skin material - the same one the HAND model\n"
+		"has. Where the two used to differ, the difference was multiplied\n"
+		"by the room's ambient, which is the wrist seam the table measures.\n");
 }
 
 /* ------------------------------------------ the head's own weight ------- */
@@ -3684,10 +3683,10 @@ static void PrintHeadWeight(const std::string& root5, const ClassicSlot& body)
 				}
 
 				printf("\n       u %d..%d, v %d..%d, the average is %d/%d - "
-					"the texel the middle WORE until fix round U's U1b: on the "
+					"the texel the middle WORE when it was one averaged vertex: on the "
 					"TR5 pages it lands inside the neck's own column, on the "
 					"TR3 page 8201 in the gap between the two bands, which was "
-					"the dark point. Since U1b the middle is `spokes` copies, "
+					"the dark point. Now the middle is `spokes` copies, "
 					"each wearing its own rim vertex's texel, and no texel is "
 					"averaged at all\n", uLo, uHi, vLo, vHi,
 					on ? sumU / on : 0, on ? sumV / on : 0);
@@ -3728,8 +3727,8 @@ static void PrintHeadWeight(const std::string& root5, const ClassicSlot& body)
 
 	printf("A RIM vertex carries NO head weight at all, so it is skinned to "
 		"the torso\nand its neighbours alone: it stands still in the torso's "
-		"frame in every pose,\nwhich is why fix round U hangs the lid on the "
-		"TORSO node and cuts by weight.\n");
+		"frame in every pose,\nwhich is why the lid hangs on the TORSO node "
+		"and the cut goes by weight.\n");
 }
 
 static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
@@ -3854,7 +3853,7 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 	printf("(a cut at a fixed DEPTH cannot do this: measured at 72 units of "
 		"depth it\ntook the collarbone with the stump and opened a window "
 		"through her chest.)\n");
-	printf("THIS TABLE IS HISTORY (#123, fix round J): the cut is no longer a "
+	printf("THIS TABLE IS HISTORY: the cut is no longer a "
 		"sphere\naround the eye at all - a sphere large enough to take the "
 		"stump also takes\nsixty units of her chest with it. It is a CYLINDER "
 		"about the neck now, and\nthe two tables below are the ones it rests "
@@ -3877,7 +3876,7 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 	 * needs is the tube's radius at the depth the dome sits at, and the
 	 * distance of that depth from both eyes - which has to clear the 60 unit
 	 * cut, or the dome would be cut away with the neck it is replacing. */
-	printf("\n-- the neck as a tube, per outfit (#123, fix round I, I3) ----\n");
+	printf("\n-- the neck as a tube, per outfit ----------------------------\n");
 	printf("s is the depth down the torso-joint..head-joint axis from the head "
 		"joint,\nr the distance off that axis. Only node 7 (the torso) counts, "
 		"which is\nwhat the cut leaves standing.\n\n");
@@ -4387,13 +4386,13 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 	{
 		{ "classic: root -48, 6 spheres",  HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1, false, false },
-		{ "round D as built, 1 key in 4",  HD_LARA_BRAID_ROOT_Z_HD,
+		{ "mixed: -33 + pack, 1 step in 4", HD_LARA_BRAID_ROOT_Z_HD,
 		  HD_LARA_BRAID_ROOT_Z,    8, 6, 4, false, false },
-		{ "round D as built, every other", HD_LARA_BRAID_ROOT_Z_HD,
+		{ "mixed: -33 + pack, every other", HD_LARA_BRAID_ROOT_Z_HD,
 		  HD_LARA_BRAID_ROOT_Z,    8, 6, 2, false, false },
-		{ "round D as meant: -33, spheres", HD_LARA_BRAID_ROOT_Z_HD,
+		{ "root -33, two pack spheres",    HD_LARA_BRAID_ROOT_Z_HD,
 		  HD_LARA_BRAID_ROOT_Z_HD, 8, 8, 1, false, false },
-		{ "round F/G: root -48, spheres",  HD_LARA_BRAID_ROOT_Z,
+		{ "root -48, two pack spheres",    HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_BRAID_ROOT_Z,    8, 8, 1, false, false },
 		{ "root -48, no pack at all",      HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1, false, false },
@@ -4401,9 +4400,9 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		 * the root an earlier engine version withdrew to. The second line asks whether that
 		 * root's limit cycle - the neck sphere and a pack sphere pushing
 		 * in turn - still happens with a box, which does not push the same way. */
-		{ "round I: root -48, the BOX",    HD_LARA_BRAID_ROOT_Z,
+		{ "root -48, the pack as a BOX",   HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1, true, true },
-		{ "round I: root -33, the BOX",    HD_LARA_BRAID_ROOT_Z_HD,
+		{ "root -33, the pack as a BOX",   HD_LARA_BRAID_ROOT_Z_HD,
 		  HD_LARA_BRAID_ROOT_Z_HD, 6, 6, 1, true, true }
 	};
 
@@ -5062,7 +5061,7 @@ enum
 
 static const char* const kBraidRollName[BRAID_ROLL_COUNT] =
 {
-	"none - the raw yaw, as fix round F ships it",
+	"none - the raw yaw",
 	"towards her facing, faded per link",
 	"the whole chain's azimuth, every link",
 	"the whole chain's azimuth, faded per link",
@@ -5338,7 +5337,7 @@ static void PrintPoseRisk(const Tr5Level& level, const char* stem)
 
 	const int count = last - lara.animIndex;
 
-	printf("\n-- what a matrix blend does to a big turn (#148, order 4) ---\n");
+	printf("\n-- what a matrix blend does to a big turn -------------------\n");
 	printf("%s: LARA has %d animations, table index %d..%d\n", stem, count,
 		lara.animIndex, last - 1);
 	printf("Every adjacent KEY FRAME pair of every animation, all 15 nodes.\n"
@@ -5346,7 +5345,7 @@ static void PrintPoseRisk(const Tr5Level& level, const char* stem)
 		"the number an element-wise matrix blend shrinks by cos(turn/2) - and\n"
 		"`axis` the largest per-axis packed difference in TEN BIT units,\n"
 		"wrapped into -512..511. rate 1 animations are the ones vanilla never\n"
-		"blended at all and order 4 does.\n\n");
+		"blended at all and the sixty hertz pose blend does.\n\n");
 
 	printf("  anim rate frames keys  worst turn  >90  >150  worst axis  >512\n");
 
@@ -5657,7 +5656,7 @@ static void PrintTween60(const Tr5Level& level, const ClassicSlot& body,
 		return;
 	}
 
-	printf("\n-- one animation at sixty, frame by frame (#148, order 4) ----\n");
+	printf("\n-- one animation at sixty, frame by frame --------------------\n");
 	printf("A TICK frame is GetFrames; the frame between two ticks is\n"
 		"InterpPoseAt at t = 0.5, blended element-wise per node exactly as\n"
 		"InterpolateMatrix blends them. Per TWEEN frame:\n\n"
@@ -5903,7 +5902,7 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 	{
 		{ "a  the classic body alone (6 spheres)", 6, HD_LARA_PACK_R,
 		  HD_LARA_PACK_Z, false, false, HD_LARA_BRAID_ROOT_Z, 1 },
-		{ "b  round F/G as shipped (r36 at z-52)", 8, HD_LARA_PACK_R,
+		{ "b  two pack spheres (r36 at z-52)",     8, HD_LARA_PACK_R,
 		  HD_LARA_PACK_Z, false, false, HD_LARA_BRAID_ROOT_Z, 1 },
 		{ "c  the pack damps instead of feeding",  8, HD_LARA_PACK_R,
 		  HD_LARA_PACK_Z, true,  false, HD_LARA_BRAID_ROOT_Z, 1 },
@@ -5911,10 +5910,10 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 		  false, HD_LARA_BRAID_ROOT_Z, 1 },
 		{ "e  thinner still, same rear face",      8, 18, -70, false,
 		  false, HD_LARA_BRAID_ROOT_Z, 1 },
-		{ "f  round I: the BOX, root -48",         6, HD_LARA_PACK_R,
+		{ "f  the BOX, root -48",                  6, HD_LARA_PACK_R,
 		  HD_LARA_PACK_Z, false, true,  HD_LARA_BRAID_ROOT_Z,
 		  HD_LARA_PACK_BOX_BIAS },
-		{ "g  round I: the BOX, root -33",         6, HD_LARA_PACK_R,
+		{ "g  the BOX, root -33",                  6, HD_LARA_PACK_R,
 		  HD_LARA_PACK_Z, false, true,  HD_LARA_BRAID_ROOT_Z_HD,
 		  HD_LARA_PACK_BOX_BIAS },
 		{ "h  the BOX, no rear preference",        6, HD_LARA_PACK_R,
@@ -6233,8 +6232,8 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 		"%ld when it\nhangs straight; anything much under that is the braid "
 		"folded up on itself.\n\"dyaw\" is the worst one-frame change of any "
 		"link's YAW in degrees and\n\"dyaw>30\" how many frames had one: that "
-		"angle is what hd_laradraw turned the\nDRAWN bone by up to fix round "
-		"F, and for a braid hanging straight down it is\nread off two "
+		"angle is what hd_laradraw turned the\nDRAWN bone by before the roll "
+		"table, and for a braid hanging straight down it is\nread off two "
 		"single-digit integers.\n",
 		length[1] + length[2] + length[3] + length[4] + length[5] + length[6]);
 	printf("\nthe roll table is the cure: a rotation about the bone's OWN axis "
@@ -9138,7 +9137,7 @@ int main(int argc, char** argv)
 				classicOnly++;
 				printf("%-5d %-24s %-7s %-24s %5d %5s %5s %5s %6s %5s %s\n", here,
 					slotName ? slotName : "?", viaStr,
-					kind == HD_BIND_LARA ? "(Lara - stage S4)"
+					kind == HD_BIND_LARA ? "(Lara's composite)"
 						: (kind == HD_BIND_DUMMY ? "(DUMMY on purpose)"
 							: (asked ? asked : "?")),
 					wanted[i].nodes, "-", "-", "-", "-", "-",
@@ -9235,7 +9234,7 @@ int main(int argc, char** argv)
 		printf("\n%d slots complete, %d partial (an uncovered node draws "
 			"nothing), %d classic only\n", complete, partial, classicOnly);
 		printf("bind: %d map, %d hand, %d prefix5, %d prefix, %d prefix4, "
-			"%d classic (of %d slots asked - #123, fix round O)\n",
+			"%d classic (of %d slots asked)\n",
 			viaMap, viaHand, viaPrefix5, viaPrefix, viaPrefix4, viaClassic,
 			(int)wanted.size());
 		printf("skeleton: %d refused on the node count, %d on the drift; "
@@ -9397,7 +9396,7 @@ int main(int argc, char** argv)
 					"  (bind pose, not drawn)", classicBind, lowestBind,
 					lowestBind - classicBind, "", frame);
 				printf("%-5s %-20s %-26s %8s %8.1f %8.1f %7s %s\n", "", "",
-					"  (round #155, by corners)", "", corners,
+					"  (by the box corners)", "", corners,
 					corners - classicBind, "",
 					"the bound, not the model, in the bind pose");
 				continue;
@@ -10171,7 +10170,7 @@ int main(int argc, char** argv)
 			"worst dx %.5f px, worst dy %.5f px\n", places, skipped,
 			worstX, worstY);
 		printf("the light: worst |engine - classic| %.9f over %d normals a "
-			"place; the shear fix round P used would have been off by up to "
+			"place; a sheared node matrix would have been off by up to "
 			"%.1f %%\n", worstLight, normalCount, 100.0 * worstShearLight);
 		printf("%s\n", places && worstX <= 1.0 && worstY <= 1.0
 			&& worstLight <= 1e-6
@@ -10304,8 +10303,8 @@ int main(int argc, char** argv)
 			 * measurement further down. */
 			else if (noClassicPose)
 				printf("\nclassic pose: not asked for (-noclassicpose) - %s is "
-					"drawn exactly as the file stands, which is what the ring "
-					"did before #155.\n", HDModelName(optionSlot));
+					"drawn exactly as the file stands, with no classic pose on "
+					"the ring.\n", HDModelName(optionSlot));
 		}
 
 		if (HDModelRingFit(optionSlot, slot, fix))

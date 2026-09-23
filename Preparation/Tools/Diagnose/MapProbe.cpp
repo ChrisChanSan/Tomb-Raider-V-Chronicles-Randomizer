@@ -160,7 +160,7 @@ namespace
 		if (!HDMarkersLoad(path.c_str()))
 		{
 			std::printf("  no markers   %s  (the engine draws this level "
-				"exactly as it did before stage S7-2)\n", HDMarkersError());
+				"as it draws any level without markers)\n", HDMarkersError());
 			return;
 		}
 

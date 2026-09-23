@@ -206,7 +206,7 @@ int main(int argc, char** argv)
     {
         std::printf("Usage: HdmDump <level.trc> [more levels...]\n");
         std::printf("       HdmDump -raw <level.hdm>\n");
-        std::printf("\nShows the HD markers of stage S7: data[3] of the level\n"
+        std::printf("\nShows a level's HD markers: data[3] of the level\n"
                     "header and the .hdm sidecar beside the file.\n");
         return 2;
     }

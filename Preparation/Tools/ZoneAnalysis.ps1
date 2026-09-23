@@ -1006,7 +1006,7 @@ $typeOffsets = @( $typeOffsetOf.GetEnumerator() | ForEach-Object {
 $FIXED_ITEMS = @{
     'Andrea3' = @{
         49 = 'Puzzle Item4 Combo2 - triggers a door'
-        79 = 'Roman god (room 90) - stays vanilla (user list 2026-08-14)'
+        79 = 'Roman god (room 90) - stays vanilla'
     }
     'Andrea2' = @{
         # Item 128 (the valve) needed the reason "must sit at a wall" while
@@ -1020,45 +1020,45 @@ $FIXED_ITEMS = @{
         76 = 'Larson - scripted miniboss, hangs on cutscenes 8 and 7'
         # The Hydra is THREE items on one position; the OCB picks the chain
         # link (hydra.cpp). Tearing them apart destroys the boss.
-        91 = 'Hydra chain link (room 116) - stays vanilla (user list)'
-        92 = 'Hydra chain link (room 116) - stays vanilla (user list)'
-        93 = 'Hydra chain link (room 116) - stays vanilla (user list)'
-        65 = 'type 420 (room 69) - scripted, stays vanilla (user list)'
-        108 = 'Roman god (room 131) - stays vanilla (user list)'
+        91 = 'Hydra chain link (room 116) - stays vanilla'
+        92 = 'Hydra chain link (room 116) - stays vanilla'
+        93 = 'Hydra chain link (room 116) - stays vanilla'
+        65 = 'type 420 (room 69) - scripted, stays vanilla'
+        108 = 'Roman god (room 131) - stays vanilla'
     }
     'Andy2'   = @{
-        0  = 'skeleton (room 0) - scripted riser (user list)'
-        4  = 'skeleton (room 5) - scripted riser (user list)'
-        5  = 'skeleton (room 5) - scripted riser (user list)'
-        10 = 'skeleton (room 6) - scripted riser (user list)'
-        11 = 'skeleton (room 6) - scripted riser (user list)'
+        0  = 'skeleton (room 0) - scripted riser'
+        4  = 'skeleton (room 5) - scripted riser'
+        5  = 'skeleton (room 5) - scripted riser'
+        10 = 'skeleton (room 6) - scripted riser'
+        11 = 'skeleton (room 6) - scripted riser'
     }
-    'andy3'   = @{ 20 = 'Green Teeth (room 99) - stays vanilla (user list)' }
+    'andy3'   = @{ 20 = 'Green Teeth (room 99) - stays vanilla' }
     'joby2'   = @{
-        20 = 'sniper (room 19) - scripted, stays vanilla (user list)'
-        21 = 'sniper (room 21) - scripted, stays vanilla (user list)'
+        20 = 'sniper (room 19) - scripted, stays vanilla'
+        21 = 'sniper (room 21) - scripted, stays vanilla'
         # Item 69 (guard OCB 3, room 58 - gets up from the chair) needed the
         # entry while its OCB set meshswap_meshbits and the shared slot 400
         # carried a foreign donor's set. Since every enemy has its own
         # parking spot (462-467), a native guard falls back to the level's
         # own MESHSWAP1 - the hands are right, the item may travel.
     }
-    'joby3'   = @{ 186 = 'chef (room 120) - only killable via the stealth cutscene, stays vanilla (user list)' }
-    'joby5'   = @{ 145 = 'Crane Guy MIP (room 121) - cutscene double, stays vanilla (user list)' }
+    'joby3'   = @{ 186 = 'chef (room 120) - only killable via the stealth cutscene, stays vanilla' }
+    'joby5'   = @{ 145 = 'Crane Guy MIP (room 121) - cutscene double, stays vanilla' }
     'rich1'   = @{
         27 = 'CD - invisible, revealed from the suit by a switch'
-        85 = 'scientist (room 34) - aim-at cutscene, stays vanilla (user list)'
-        180 = 'Twogun (room 130) - stealth-kill sequence, stays vanilla (user list)'
+        85 = 'scientist (room 34) - aim-at cutscene, stays vanilla'
+        180 = 'Twogun (room 130) - stealth-kill sequence, stays vanilla'
     }
     # rich2's guards (USSR) stay vanilla.
     'rich2'   = @{
-        154 = 'guard (USSR, room 84) - stays vanilla (user requirement)'
-        155 = 'guard (USSR, room 84) - stays vanilla (user list)'
-        219 = 'guard (USSR, room 156) - stays vanilla (user list)'
+        154 = 'guard (USSR, room 84) - stays vanilla'
+        155 = 'guard (USSR, room 84) - stays vanilla'
+        219 = 'guard (USSR, room 156) - stays vanilla'
     }
     'rich3'   = @{
-        183 = 'Hitman (room 152) - stays vanilla (user list)'
-        200 = 'Hitman (room 183) - stays vanilla (user list)'
+        183 = 'Hitman (room 152) - stays vanilla'
+        200 = 'Hitman (room 183) - stays vanilla'
         # The soldier family may be swapped with an OCB too - but not these
         # two. They stand together in room 68 (both OCB 5) and hang on the
         # ROPE; a different type there makes the spot unplayable.
@@ -1257,7 +1257,7 @@ $ENEMY_TYPES = @{
     # animation is anim_index + 45 (imp.cpp) and in andy1 a stub with
     # frames 0..0 and no commands.
     'andy1'   = @{ 89 = 'Imp - checked in game: falls oddly but fades out' }
-    'Andy2'   = @{ 77 = 'Maze Monster - marked by the user as "test whether usable"' }
+    'Andy2'   = @{ 77 = 'Maze Monster - still to be checked in game whether usable' }
     'andy3'   = @{ 89 = 'Imp - checked in andy1, not here yet' }
     'joby2'   = @{
         37 = 'Guard (Blue Guard)'

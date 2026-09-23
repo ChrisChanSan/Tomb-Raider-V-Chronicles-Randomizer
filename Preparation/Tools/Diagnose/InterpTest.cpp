@@ -563,7 +563,7 @@ static bool old_target_cut(const long* pt, const long* t)
 
 static void camera_aim()
 {
-	printf("the camera's aim (fix round R)\n");
+	printf("the camera's aim\n");
 
 	ok(INTERP_CAM_FAR_TARGET == 4096, "beyond four sectors a target is a direction",
 		INTERP_CAM_FAR_TARGET, 4096);
@@ -743,7 +743,7 @@ static double blended_angle_10bit(short a10, short b10, int axis, float alpha)
 
 static void pose_wrap()
 {
-	printf("the pose the short way round (fix round S)\n");
+	printf("the pose the short way round\n");
 
 	/* 1. The known case: 1000 and 20 are 44 units apart across the wrap; the
 	 * midpoint is 1022 and never 510. Run on all three axes and in both
@@ -875,7 +875,7 @@ static void pose_wrap()
  * and both sides take the same scale. */
 static void camera_shell()
 {
-	printf("the camera's shell (fix round S)\n");
+	printf("the camera's shell\n");
 
 	/* 1. A target walking through the shell: the eye stands still and the
 	 * target moves out along its own ray from 3900 to 4400 in single units:
@@ -965,7 +965,7 @@ static void camera_shell()
  * (DoTitle sets framecount to 0 as DoLevel always has). */
 static void title_cadence()
 {
-	printf("the title's cadence (fix round R)\n");
+	printf("the title's cadence\n");
 
 	for (int start = -1; start <= 0; start++)
 	{
@@ -1052,7 +1052,7 @@ static void title_cadence()
  * sixty, which is the same statement said in wall-clock time. */
 static void counters()
 {
-	printf("counters - what steps per logic tick (order 3)\n");
+	printf("counters - what steps per logic tick\n");
 
 	struct Run
 	{
@@ -1273,7 +1273,7 @@ static long vanilla_blend_long(long m, long i, long frac, long rate)
 
 static void pose_factor()
 {
-	printf("pose - the one factor against the four branches (order 4)\n");
+	printf("pose - the one factor against the four branches\n");
 
 	/* The measured population of the sixteen level files, so that the table
 	 * says how much of the real game each row stands for. A pair with no
@@ -1411,7 +1411,7 @@ static void pose_factor()
 
 static void pose_time()
 {
-	printf("\npose - the midpoint of the two poses a tick apart (order 4)\n");
+	printf("\npose - the midpoint of the two poses a tick apart\n");
 
 	/* An animation of nine frames, walked at sixty hertz: tick, tween, tick,
 	 * tween. `key + blend` is where the pose stands in KEY FRAME units and it
@@ -1498,17 +1498,17 @@ static void pose_time()
 		float blend = 0.0F;
 
 		ok(!InterpPoseAt(8, 0, 0, 4, 1000, 0.5F, &key, &blend),
-			"K6: a loop wrapping to its own start is not blended", 0, 0);
+			"neighbour rule: a loop wrapping to its own start is not blended", 0, 0);
 		ok(!InterpPoseAt(4, 4, 0, 4, 1000, 0.5F, &key, &blend),
-			"K6: a frame that did not step is not blended", 0, 0);
+			"neighbour rule: a frame that did not step is not blended", 0, 0);
 		ok(!InterpPoseAt(4, 9, 0, 4, 1000, 0.5F, &key, &blend),
-			"K6: a jump of five frames is not blended", 0, 0);
+			"neighbour rule: a jump of five frames is not blended", 0, 0);
 		ok(!InterpPoseAt(-1, 0, 0, 4, 1000, 0.5F, &key, &blend),
-			"K6: the animation's first frame is not blended", 0, 0);
+			"neighbour rule: the animation's first frame is not blended", 0, 0);
 		ok(!InterpPoseAt(99, 100, 100, 4, 1000, 0.5F, &key, &blend),
-			"K6: a frame before frame_base is not blended", 0, 0);
+			"neighbour rule: a frame before frame_base is not blended", 0, 0);
 		ok(!InterpPoseAt(3, 4, 0, 0, 1000, 0.5F, &key, &blend),
-			"K6: an animation with no rate is not blended", 0, 0);
+			"neighbour rule: an animation with no rate is not blended", 0, 0);
 	}
 
 	/* The last interval of an animation is shorter, and GetFrames says so by
@@ -2267,7 +2267,7 @@ static long t4_ring_walk(int rooms, int laps, bool mark)
 
 static void reach_rect()
 {
-	printf("the reach - the second rectangle of the portal walk (#123, T4)\n");
+	printf("the reach - the second rectangle of the portal walk\n");
 
 	const float w = 1279.0f, h = 719.0f;
 	const T4Rect parent = { 0.0f, 0.0f, 535.0f, 719.0f };	// room 124
@@ -2448,8 +2448,7 @@ static long t5_queue_depth(long rooms, long ring, long* entries)
 
 static void walk_capacity()
 {
-	printf("the walk's two arrays - capacity to the engine's own maximum "
-		"(#123, T5)\n");
+	printf("the walk's two arrays - capacity to the engine's own maximum\n");
 
 	ok((kT5RoomListRing & (kT5RoomListRing - 1)) == 0,
 		"the queue ring's size is a power of two, so the mask is the modulo",
@@ -2503,7 +2502,7 @@ static void walk_capacity()
 
 static void portal_walk()
 {
-	printf("portal walk - the room the blended eye stands in (#123, T2-1)\n");
+	printf("portal walk - the room the blended eye stands in\n");
 
 	// The two portal planes of the pair, in world units.
 	const long wall = 48128;		// room 2's portal to room 57
@@ -2635,7 +2634,7 @@ static void portal_walk()
  * the one the engine implements. */
 static void ring_cadence()
 {
-	printf("the ring's cadence (#154)\n");
+	printf("the ring's cadence\n");
 
 	/* ---- the accumulator at fps_mode 1: one tick per present ---- */
 	{
@@ -3060,7 +3059,7 @@ static void ring_cadence()
  */
 static void title_shadow()
 {
-	printf("the title's input shadow (#154)\n");
+	printf("the title's input shadow\n");
 
 	const long DOWN = 0x0002;		// IN_BACK, as a bit
 
@@ -3274,7 +3273,7 @@ static double seg_dist(const long p[3], const long a[3], const long b[3])
 
 static void root_flip()
 {
-	printf("root offset across a half turn (#169)\n");
+	printf("root offset across a half turn\n");
 
 	/* The two signs: half a turn about y negates x and z and leaves y, and it
 	 * is its own inverse - which is the one property the rule needs, because
@@ -3452,7 +3451,7 @@ static void root_flip()
  * the order is not free. */
 static void root_narrow()
 {
-	printf("the root blends only what a position step pays for (#157, round 157b)\n");
+	printf("the root blends only what a position step pays for\n");
 
 	/* The ladder, and it is the regression proof for the whole rule: ANDREA1
 	 * and JOBY5 both carry the wrap of anim 161 at these numbers, and the
@@ -3684,7 +3683,7 @@ static void root_narrow()
 
 int main()
 {
-	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4, 5 and 6)\n");
+	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
 
 	angles();

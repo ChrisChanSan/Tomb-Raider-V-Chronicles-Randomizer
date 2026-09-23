@@ -628,7 +628,7 @@ static void grid_run()
 
 	/* (v) And with nothing measured, which is what a failed
 	 * GlobalMemoryStatusEx leaves: the old rule and nothing else. */
-	printf("\n(v) the measure failed (known=0) - the rule of round M3 and "
+	printf("\n(v) the measure failed (known=0) - the flat allowance and "
 		"nothing else\n\n");
 	printf("  spent   old   new   refused         fits\n");
 
@@ -651,7 +651,7 @@ static void grid_run()
 	printf("\n(vi) with 3000 MiB of address space free and his own budget, a "
 		"level has room for %d changes of %.0f MiB\n", verdict.fits,
 		HD_REDRESS_WORST / kMiB);
-	printf("     (the old rule gave him %d, and his log of 2026-09-15 was "
+	printf("     (the old rule gave him %d, and a measured play log was "
 		"stopped at the sixth)\n",
 		(int)(HD_REDRESS_ALLOWANCE / HD_REDRESS_WORST));
 }
@@ -660,7 +660,7 @@ static void grid_run()
 
 static void usage()
 {
-	printf("PoolProbe (#164) - what a page costs a 32 bit process, and the "
+	printf("PoolProbe - what a page costs a 32 bit process, and the "
 		"rule that spends it\n\n"
 		"  PoolProbe -pool [-count N] [-side N] [-only managed|default|systemmem]\n"
 		"  PoolProbe -grid\n"

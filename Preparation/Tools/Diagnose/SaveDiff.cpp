@@ -359,7 +359,7 @@ int main(int argc, char** argv)
 	int named = 0, stream = 0;
 	int buffer_at, buffer_size;
 
-	printf("SaveDiff - two TOMB5 savegames, field by field (#148)\n");
+	printf("SaveDiff - two TOMB5 savegames, field by field\n");
 	printf("layout: SAVEGAME_INFO=%d bytes, whole file=%d bytes\n\n",
 		(int)sizeof(SAVEGAME_INFO), SIZE_EXPECTED);
 

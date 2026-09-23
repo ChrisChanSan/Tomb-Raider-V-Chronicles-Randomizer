@@ -2273,7 +2273,7 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			"reach mean %.1f max %d\n", (double)sumClassic / frames,
 			mostClassic, (double)sumReach / frames, mostReach);
 		printf("-reach: most rooms one frame owes to the reach alone: %d; "
-			"deepest queue %ld (the engine's ring holds 512 since T5)\n",
+			"deepest queue %ld (the engine's ring holds 512)\n",
 			reachOnlyWorst, queuePeak);
 		printf("-reach: worst frame took %ld dequeues; %d frame(s) hit the "
 			"cap of %ld\n", worstDequeues, capped, walkoff::kWalkMax);
@@ -2923,7 +2923,7 @@ static void WaterFrames(const Tr5Level& level, const char* install,
 	std::vector<unsigned short> hd((size_t)texCount, 0xFFFFu);
 	const int got = HDScanLevelTextures(install, stem, &hd[0], texCount);
 
-	printf("\n-- the water frames (N2) ------------------------------------\n");
+	printf("\n-- the water frames -----------------------------------------\n");
 	printf("  %s: %d texinfo(s), the .TEX names %d of them\n",
 		stem, texCount, got);
 
@@ -3266,13 +3266,13 @@ int main(int argc, char** argv)
 			"beside it (needs -roombox)\n");
 		printf("       -window all|open|intruding   (needs -roombox)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
-		printf("       -tround <group> <l,t,r,b>      round T's own picture\n");
+		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
 		printf("                                      offline (needs -roombox)\n");
 		printf("       -walkyaw <from> <to> <step>   default 0 359 15\n");
 		printf("       -walkpitch <deg>  -walkpitchfan <from> <to> <step>\n");
 		printf("       -walkwant <room>  -walkeach  -walkcentre\n");
-		printf("       -reach   the two-rectangle walk of fix round T4\n");
+		printf("       -reach   the two-rectangle portal walk\n");
 		printf("       -walkboxes   every room's origin, for -with\n");
 		printf("       -reachsurvey [step]   every room of the level as the\n");
 		printf("                             eye, both rules, one line\n");
@@ -4059,7 +4059,7 @@ int main(int argc, char** argv)
 	 * to be the same list. */
 	if (!g_intrusions_built.empty())
 	{
-		printf("T2-2: overlap pairs=%d intruding tris=%d in %d groups\n",
+		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups\n",
 			CountIntrusionPairs(), stats.intrudingTris, stats.intrudingGroups);
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
@@ -4111,25 +4111,25 @@ int main(int argc, char** argv)
 					b, tris, groups);
 		}
 	}
-	printf("S6: widest draw call reaches over %d vertices, widest single "
+	printf("limits: widest draw call reaches over %d vertices, widest single "
 		"triangle %d (a 16 bit index reaches 65536), device holds textures "
 		"up to %d\n",
 		stats.indexWindow, stats.triangleWindow, stats.maxTextureSide);
-	printf("S5: %d scrolling part(s) in %d draw calls (%d triangles), "
+	printf("motion: %d scrolling part(s) in %d draw calls (%d triangles), "
 		"%d vertices with a wind weight\n",
 		stats.scrollParts, stats.scrollRanges, stats.scrollTris,
 		stats.swayVertices);
 	// Material 13 is the flipbook: four pages, one per frame time, the
 	// part's own page first. `kept` is the parts whose numbers did not
 	// resolve and that stand still.
-	printf("R3b: %d flipbook part(s), %d of them running in %d draw call(s), "
+	printf("flipbook: %d part(s), %d of them running in %d draw call(s), "
 		"%d kept their own page\n",
 		stats.flipbookParts, stats.flipbookDrawn, stats.flipbookRanges,
 		stats.flipbookDropped);
 	// And the water side: how many HD vertices carry a surface mark, and how
 	// many of those the corner rule never found and the plane flood answered
 	// for.
-	printf("R3b/E2: %d water mark(s) stamped, %d on the surface, %d on the whole "
+	printf("water: %d mark(s) stamped, %d on the surface, %d on the whole "
 		"room, %d of them flooded, %d plane(s) dropped\n",
 		stats.markedVertices, stats.markedShimmer, stats.markedRoomShimmer,
 		stats.markedFlooded, stats.waterPlanesDropped);
@@ -4137,11 +4137,11 @@ int main(int argc, char** argv)
 	 * a wall or a pillar standing at the water's own height. The geometry,
 	 * the UV wobble and the caustic leave those alone; the colour term
 	 * still has them, as the classic path does. */
-	printf("H4: %d marked vertex/vertices whose normal is not vertical "
+	printf("waterline: %d marked vertex/vertices whose normal is not vertical "
 		"(the wall at the waterline)\n", stats.markedWall);
 	// And the gloss: the opaque parts of materials 3 and 17 whose own
 	// numbers gave them one.
-	printf("R3b: %d glossy part(s) (materials 3 and 17)\n",
+	printf("gloss: %d glossy part(s) (materials 3 and 17)\n",
 		stats.glossParts);
 
 	/* The destructible pieces, one line each, with the room they stand in
@@ -4153,7 +4153,7 @@ int main(int argc, char** argv)
 		const float mins[3] = { b[0], b[1], b[2] };
 		const float maxs[3] = { b[3], b[4], b[5] };
 
-		printf("R3b: group %d, box %.0f..%.0f %.0f..%.0f %.0f..%.0f - geometry: %s\n",
+		printf("destructible: group %d, box %.0f..%.0f %.0f..%.0f %.0f..%.0f - geometry: %s\n",
 			room, mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2],
 			HDRenderGroupHasGeometry(room, mins, maxs) ? "YES (baked, stays suppressed)" : "NO (drawn the classic way)");
 	}
@@ -4162,15 +4162,15 @@ int main(int argc, char** argv)
 	 * water-surface gate gives for a plane one names. A NO is a plane the
 	 * remaster left empty - there the classic water face is drawn on top of
 	 * the HD room (hd_level.cpp, BuildWaterSurfaces). */
-	printf("H1: %d horizontal plane(s) of art in group %d (%d in the level)\n",
+	printf("planes: %d horizontal plane(s) of art in group %d (%d in the level)\n",
 		HDRenderGroupFlatPlanes(room), room, stats.flatPlanes);
-	printf("H2: %d see-through part(s) in the alpha pass (material 14), "
+	printf("alpha: %d see-through part(s) in the alpha pass (material 14), "
 		"%d draw call(s)\n", stats.blendParts, stats.blendRanges);
 
 	// The still water surfaces the .TRG builds itself - the same line the
 	// engine writes to HDLOG at level build.
 	if (stats.waterParts)
-		printf("N1: basin parts=%d (%d additive, %d opaque, %d still), "
+		printf("basin parts=%d (%d additive, %d opaque, %d still), "
 			"triangles=%d, sub-rect tiles=%d, smallest UV span=%d/255, "
 			"ripple capped at %.4f page units\n", stats.waterParts,
 			stats.waterAdditiveParts, stats.waterOpaqueParts,
@@ -4181,7 +4181,7 @@ int main(int argc, char** argv)
 	{
 		const int* b = g_flat_box[i];
 
-		printf("H1: group %d, plane y %d, box x %d..%d z %d..%d - art: %s\n",
+		printf("planes: group %d, plane y %d, box x %d..%d z %d..%d - art: %s\n",
 			room, b[0], b[1], b[3], b[2], b[4],
 			HDRenderGroupFlatArt(room, b[0], b[1], b[2], b[3], b[4])
 				? "YES (the remaster built it, the classic face stays out)"
@@ -4190,7 +4190,7 @@ int main(int argc, char** argv)
 
 	if (HDRenderDestructibleCount())
 	{
-		printf("R3b: %d destructible piece(s):\n",
+		printf("destructible: %d piece(s):\n",
 			HDRenderDestructibleCount());
 
 		for (int i = 0; i < HDRenderDestructibleCount(); i++)
@@ -4212,16 +4212,16 @@ int main(int argc, char** argv)
 	}
 	// The wind belongs to material 8, and this says how much of the .TRG's
 	// own sway weight was on other materials.
-	printf("A6: %d moving part(s) (materials 1, 7, 8); %d vertices kept "
+	printf("sway: %d moving part(s) (materials 1, 7, 8); %d vertices kept "
 		"their weight, "
 		"%d lost it\n", stats.swayParts, stats.swayVertices, stats.swayDropped);
 	// The opaque parts that draw with the alpha test on, which is the three
 	// cut-out materials 6, 7 and 8 and nothing else.
-	printf("A2: %d opaque cut-out part(s) (materials 6, 7, 8)\n",
+	printf("cut-out: %d opaque part(s) (materials 6, 7, 8)\n",
 		stats.cutoutParts);
 	// The additive parts whose .TRG material handed them a weight of their
 	// own, and the ones that also swing on the game clock.
-	printf("R3a: %d additive part(s) weighted (smallest %.3f), %d of them "
+	printf("additive: %d part(s) weighted (smallest %.3f), %d of them "
 		"swinging\n", stats.addWeightParts, stats.addWeightMin,
 		stats.addSwingParts);
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
@@ -4265,7 +4265,7 @@ int main(int argc, char** argv)
 		(double)vramBefore / 1048576.0, (double)vramAfter / 1048576.0,
 		((double)vramBefore - (double)vramAfter) / 1048576.0);
 
-	printf("S6 budget %s: need %.1f MiB, already there %.1f, got %.1f - "
+	printf("budget %s: need %.1f MiB, already there %.1f, got %.1f - "
 		"%d page(s) gave up %d level(s), %d shrunk by the device, format %s, "
 		"out of memory %d\n",
 		stats.pages.budgetBytes > 0 ? "in force" : "none",
@@ -4308,7 +4308,7 @@ int main(int argc, char** argv)
 		for (size_t i = 0; i < trc.size(); i++)
 			wide.push_back((wchar_t)(unsigned char)trc[i]);
 
-		printf("\n-- the water survey (H1) ------------------------------------\n");
+		printf("\n-- the water survey -----------------------------------------\n");
 
 		if (!level.load(wide, error))
 			printf("classic level not loadable: %s\n", error.c_str());
@@ -4439,7 +4439,7 @@ int main(int argc, char** argv)
 				"restored; %d room(s) with %d face(s) carry the .TRG\'s own "
 				"water sheet\n", stem, rooms, faces, covered, restored,
 				restoredRooms, sheetRooms, sheetFaces);
-			printf("  (the majority is fix round H's, over every face in the "
+			printf("  (the majority is taken over every face in the "
 				"plane; a face under the .TRG's own sheet is then dropped "
 				"from what a restored room draws)\n");
 
@@ -4656,11 +4656,11 @@ int main(int argc, char** argv)
 	FillLighting(frame, lighting, (float)width * 0.5f, (float)height * 0.5f, view);
 	frame.wibbleTable = wibbleTable;
 
-	printf("S2b: %d light(s), %d bulb(s), fog start %.0f, underwater %d, "
+	printf("lighting: %d light(s), %d bulb(s), fog start %.0f, underwater %d, "
 		"shimmer %d, wibble %d, water table row %d\n",
 		g_light_count, g_bulb_count, g_fog_start, g_underwater ? 1 : 0,
 		g_shimmer ? 1 : 0, (int)g_wibble, g_mesh_effect);
-	printf("S5 : motion %d, clock %.2f s, water wobble %d\n",
+	printf("animation: motion %d, clock %.2f s, water wobble %d\n",
 		g_motion ? 1 : 0, g_time, (g_water || g_shimmer) ? 1 : 0);
 
 	g_device->BeginScene();
@@ -4781,7 +4781,7 @@ int main(int argc, char** argv)
 		drew ? "true" : "FALSE", calls);
 
 	if (sky)
-		printf("R3a: %d sky group(s), %d unlit part(s), HDRenderSky returned %s\n",
+		printf("sky: %d sky group(s), %d unlit part(s), HDRenderSky returned %s\n",
 			HDRenderSkyGroups(), stats.skyFlatParts, skyDrew ? "true" : "FALSE");
 
 	const int broken = Diff(before, after);

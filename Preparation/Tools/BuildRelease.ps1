@@ -174,7 +174,7 @@ Say "Source        : randomizer included ($rsCount files, buildable)"
 # --- 5. Licenses -------------------------------------------------------------
 $lic = "$OutDir\Licenses"
 New-Item -ItemType Directory -Path $lic -Force | Out-Null
-Copy-Item "$EngineSrc\LICENSE" "$lic\TOMB5-GPLv3.txt" -Force
+Copy-Item "$EngineSrc\LICENSE" "$lic\GPLv3.txt" -Force
 if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearImGui-MIT.txt" -Force }
 # discord-rpc is NOT linked into PCtomb5.exe - tomb5.cpp sets
 # TOMB5_DISCORD_RPC to 0 and every call sits inside the #if. Its notice
@@ -211,7 +211,7 @@ if ($sStart) {
 $tp = [IO.File]::ReadAllText("$Root\THIRD-PARTY.md")
 $tp = $tp.Replace('TOMB5 Code/', 'Source/TOMB5 engine/')
 $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
-$tp = $tp.Replace('](LICENSE)', '](TOMB5-GPLv3.txt)')
+$tp = $tp.Replace('](LICENSE)', '](GPLv3.txt)')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
 Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb, TRForge)"

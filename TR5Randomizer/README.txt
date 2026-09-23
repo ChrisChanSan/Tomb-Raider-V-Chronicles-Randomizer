@@ -233,7 +233,7 @@ why is in Source\TOMB5 engine\MODIFICATIONS.md.
 
 The randomizer itself is also under the GNU GPL v3. Its source code
 lies in Source\TR5Randomizer, the license in
-Licenses\TOMB5-GPLv3.txt - it is the same one.
+Licenses\GPLv3.txt - it is the same one.
 
 Contributors - testing, findings and ideas, the people who played the
 seeds and reported what broke:

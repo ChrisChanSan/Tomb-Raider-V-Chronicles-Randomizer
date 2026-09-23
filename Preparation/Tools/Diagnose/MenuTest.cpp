@@ -250,8 +250,8 @@ static void paging_engine_cases()
 	check(MenuRowsPerPage(28, 11), 10, "28 at 11: 10 per page");
 	check(MenuRowsOnPage(28, 11, 2), 8, "28 at 11: the last page has 8");
 
-	/* The Controls and Modes pages: the four mode rows sit on their own
-	 * sub-page, so Controls has ten rows and Modes has four. Neither has a
+	/* The Controls and Modes pages: the five mode rows sit on their own
+	 * sub-page, so Controls has ten rows and Modes has five. Neither has a
 	 * fixed row, so both are asked at the full MENU_MAX_ROWS of 12, and both
 	 * are one page: no arrows, and therefore no "1/N" indicator on either. */
 	check(MenuPageCount(10, 12), 1, "Controls: 10 rows at 12, one page");
@@ -259,9 +259,9 @@ static void paging_engine_cases()
 	check(MenuPageFirstRow(10, 12, 0), 0, "Controls: page 0 starts at 0");
 	check(MenuRowsOnPage(10, 12, 1), 0, "Controls: there is no second page");
 
-	check(MenuPageCount(4, 12), 1, "Modes: 4 rows at 12, one page");
-	check(MenuRowsOnPage(4, 12, 0), 4, "Modes: all four on page 0");
-	check(MenuRowsOnPage(4, 12, 1), 0, "Modes: there is no second page");
+	check(MenuPageCount(5, 12), 1, "Modes: 5 rows at 12, one page");
+	check(MenuRowsOnPage(5, 12, 0), 5, "Modes: all five on page 0");
+	check(MenuRowsOnPage(5, 12, 1), 0, "Modes: there is no second page");
 
 	// Even the twelve rows Controls had before losing the mode rows still
 	// fit one page, so pagination was never the reason for the move.

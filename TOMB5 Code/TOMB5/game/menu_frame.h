@@ -60,7 +60,7 @@ enum menu_page_id
 	MENU_PAGE_TOMB5,	// a table now, no longer the old TroyeMenu
 	MENU_PAGE_SPECIAL,	// the existing Special Features screen, untouched inside
 	MENU_PAGE_CREDITS,	// the existing Credits screen, untouched inside
-	/* The four mode rows live on a sub-page of their own. Appended here
+	/* The five mode rows live on a sub-page of their own. Appended here
 	 * rather than inserted after MENU_PAGE_CONTROLS where it logically
 	 * belongs, so that no existing id changes its number: menu_pages[]
 	 * below is positional to this enum, and the frame's cursor and page

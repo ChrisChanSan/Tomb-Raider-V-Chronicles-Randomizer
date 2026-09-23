@@ -279,6 +279,12 @@ void init_tomb5_stuff()
 		tomb5.grab_toggle = 0;							//off, Hold
 		REG_WriteBool(buf, tomb5.grab_toggle);
 
+		// The fifth mode row, on the Modes sub-page with the other four.
+		// Off keeps running off an edge running off it, as it always was.
+		sprintf(buf, "ledge_hang");
+		tomb5.ledge_hang = 0;							//off
+		REG_WriteBool(buf, tomb5.ledge_hang);
+
 		// The fourth Controls-page row, a slider rather than a toggle - 40,
 		// MODERN_CAMERA_SPEED_DEFAULT (game/modern_camera.h).
 		sprintf(buf, "cam_speed");
@@ -477,6 +483,11 @@ void init_tomb5_stuff()
 		sprintf(buf, "grab_toggle");
 		REG_ReadBool(buf, tomb5.grab_toggle, 0);
 
+		// Same rule again: absent reads as 0, off, so running off an edge
+		// keeps running off it as it always did.
+		sprintf(buf, "ledge_hang");
+		REG_ReadBool(buf, tomb5.ledge_hang, 0);
+
 		// Same clamp discipline as ego_fov/fps_mode above: a value from an
 		// older build or a hand-edited one must not hand the orbit a rate
 		// past what the slider itself can ask for.
@@ -655,6 +666,10 @@ void save_new_tomb5_settings()
 	// The fourth mode row.
 	sprintf(buf, "grab_toggle");
 	REG_WriteBool(buf, tomb5.grab_toggle);
+
+	// The fifth mode row.
+	sprintf(buf, "ledge_hang");
+	REG_WriteBool(buf, tomb5.ledge_hang);
 
 	// The fourth Controls-page row.
 	sprintf(buf, "cam_speed");

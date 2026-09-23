@@ -1343,10 +1343,13 @@ const char* CustomText(const char* engl)
 		// their values Hold and Toggle are already in this table above.
 		{ "Sprint mode",     "Sprint mode",     "Sprintmodus",    "Sprint mode",        "Sprint mode" },
 		{ "Duck mode",       "Duck mode",       "Duckmodus",      "Duck mode",          "Duck mode" },
-		// "Modi" is both the page title for these four mode rows and the
+		// "Modi" is both the page title for these five mode rows and the
 		// tab's own label: one literal, one row, exactly as "Key bindings"
 		// and "Credits" are above.
 		{ "Grab mode",       "Grab mode",       "Greifmodus",     "Grab mode",          "Grab mode" },
+		// The fifth mode row; its values are "on"/"off", already in this
+		// table below.
+		{ "Ledge hang",      "Ledge hang",      "Kantengriff",    "Ledge hang",         "Ledge hang" },
 		{ "Modes",           "Modes",           "Modi",           "Modes",              "Modes" },
 		// Bind rows for hotkeys that used to be hard-wired keys. Only six
 		// of the sixteen new rows are here: the other ten take the string

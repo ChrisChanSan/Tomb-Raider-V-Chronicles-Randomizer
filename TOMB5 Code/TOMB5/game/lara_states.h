@@ -142,6 +142,10 @@ enum lara_anim_state
 	AS_BOX_UP = 137,
 	AS_CLIMB2DUCK = 138,
 
+	// The ledge hang lower: the pull-up animation played backwards after
+	// the automatic turn at an edge.
+	AS_LEDGEHANG = 139,
+
 	NUM_LARA_STATES
 };
 

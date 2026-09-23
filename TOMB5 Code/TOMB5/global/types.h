@@ -2808,6 +2808,12 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * IN_SELECT is never cleared. Registry: grab_toggle. */
 	bool grab_toggle;
 
+	/* Off = today's behaviour. On, Modern controls only, greyed under
+	 * Tank: running or walking at an edge with the grab key held turns
+	 * her to face it and lowers her into the hang instead of letting her
+	 * run off. Registry: ledge_hang. */
+	bool ledge_hang;
+
 	/* The camera speed slider: a row on the Controls page, 0..100, drawn
 	 * and driven like the SFX and Music sliders (specific\LoadSave.cpp).
 	 * The number means nothing by itself; game\modern_camera.cpp's

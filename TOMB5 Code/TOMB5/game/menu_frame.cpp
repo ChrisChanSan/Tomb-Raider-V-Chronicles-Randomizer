@@ -319,6 +319,27 @@ static bool MenuStepGrabMode(long, long dir)
 	return 1;
 }
 
+/* Ledge hang: the fifth row on the mode sub-page, greyed under Tank
+ * because the move leans on the Modern camera carry (MenuEnabledModern,
+ * same predicate as the two Controls-page sliders). Flipping it only
+ * stores the bit; it changes nothing else, so unlike Grab mode above it
+ * needs no latch reset. */
+static const char* MenuValLedgeHang(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.ledge_hang ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepLedgeHang(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.ledge_hang = !tomb5.ledge_hang;
+	return 1;
+}
+
 static const char* MenuValAction(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.action_split ? "Separate" : "One key"));
@@ -1348,6 +1369,7 @@ static void MenuResetBindings(long)
 #define MENU_ACTION(lbl, act)			{ MROW_ACTION, lbl, -1, 0, 0, MENU_SAVE_NONE, 0, 0, act, 0, 0 }
 #define MENU_VALUE(lbl, val, stp, sv)		{ MROW_VALUE, lbl, -1, val, stp, sv, 0, 0, 0, 0, 0 }
 #define MENU_VALUE_TXT(lbl, txt, val, stp, sv)	{ MROW_VALUE, lbl, txt, val, stp, sv, 0, 0, 0, 0, 0 }
+#define MENU_VALUE_IF(lbl, val, stp, sv, pred)	{ MROW_VALUE, lbl, -1, val, stp, sv, pred, 0, 0, 0, 0 }
 #define MENU_SLIDER(lbl, txt, num, stp, sv, pred) { MROW_SLIDER, lbl, txt, 0, stp, sv, pred, 0, 0, num, 0 }
 #define MENU_BIND(lbl, txt, role)		{ MROW_BINDING, lbl, txt, MenuValBinding, 0, MENU_SAVE_GAME, 0, 0, MenuSelectBinding, 0, role }
 
@@ -1383,21 +1405,25 @@ static const menu_row menu_rows_audio[] =
  * table line each they are - same callbacks, same save class, same
  * labels, so the MENULOG line each of them writes is word for word the
  * one it wrote before except for `page=Modes` in place of
- * `page=Controls`. Grab mode is the fourth and new. Four rows: one
- * page, no arrows (MENU_MAX_ROWS is 12). */
+ * `page=Controls`. Grab mode is the fourth and new, Ledge hang the
+ * fifth and new; Ledge hang is greyed under Tank, like the Controls
+ * page's own camera rows, because the move it switches on leans on the
+ * Modern camera carry. Five rows: one page, no arrows (MENU_MAX_ROWS
+ * is 12). */
 static const menu_row menu_rows_modes[] =
 {
 	MENU_VALUE("Combat mode", MenuValCombatMode, MenuStepCombatMode, MENU_SAVE_TOMB5),
 	MENU_VALUE("Sprint mode", MenuValSprintMode, MenuStepSprintMode, MENU_SAVE_TOMB5),
 	MENU_VALUE("Duck mode", MenuValDuckMode, MenuStepDuckMode, MENU_SAVE_TOMB5),
-	MENU_VALUE("Grab mode", MenuValGrabMode, MenuStepGrabMode, MENU_SAVE_TOMB5)
+	MENU_VALUE("Grab mode", MenuValGrabMode, MenuStepGrabMode, MENU_SAVE_TOMB5),
+	MENU_VALUE_IF("Ledge hang", MenuValLedgeHang, MenuStepLedgeHang, MENU_SAVE_TOMB5, MenuEnabledModern)
 };
 
 static const menu_row menu_rows_controls[] =
 {
 	MENU_TAB("Key bindings", MENU_PAGE_KEYBINDS),
 	MENU_TAB("View", MENU_PAGE_VIEW),
-	// The third tab, directly after "View", where the four mode rows now
+	// The third tab, directly after "View", where the five mode rows now
 	// live. The page is ten rows with it and stays on one page: it was
 	// twelve, three left and this one arrived.
 	MENU_TAB("Modes", MENU_PAGE_MODES),

@@ -177,7 +177,9 @@ void(*lara_control_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* co
 	lara_as_null,
 	lara_as_null,
 	lara_as_null,
-	lara_as_null
+	lara_as_null,
+	// AS_LEDGEHANG: nothing dispatches into it yet, so its own routines follow later.
+	lara_void_func
 };
 
 void(*lara_collision_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* coll) =
@@ -320,7 +322,9 @@ void(*lara_collision_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* 
 	lara_void_func,
 	lara_void_func,
 	lara_void_func,
-	lara_void_func
+	lara_void_func,
+	// AS_LEDGEHANG: nothing dispatches into it yet, so its own routines follow later.
+	lara_default_col
 };
 
 LARA_INFO lara;

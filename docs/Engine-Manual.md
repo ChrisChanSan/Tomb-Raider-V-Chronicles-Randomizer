@@ -99,14 +99,13 @@ Alt-Tab is instant and overlays behave.
 In the registry, under `HKEY_CURRENT_USER\Software\Core Design\Tomb Raider
 Chronicles`.
 
-> **Everything in the menu is written while you play, since round 161b1.**
-> The tomb5 options write themselves the moment you change a row, as they
-> always did. The rest — volumes, sound quality, targeting, language, control
-> layout and every key and pad binding — used to live in memory until the game
-> closed normally, so a crash threw that whole session's settings away; they
-> are now written when you leave the page you changed them on, which for a
-> rebinding session means leaving *Key bindings*. Nothing you change in the
-> menu waits for "Exit" any more.
+> **Everything in the menu is written while you play.**
+> The tomb5 options write themselves the moment you change a row. The rest —
+> volumes, sound quality, targeting, language, control layout and every key
+> and pad binding — is written when you leave the page you changed it on,
+> which for a rebinding session means leaving *Key bindings*. Nothing you
+> change in the menu waits for "Exit", so a crash never throws a session's
+> settings away.
 
 Every tomb5 option has a value of its own under
 `HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`. Almost
@@ -124,19 +123,17 @@ worth knowing by name:
 ## Controls
 
 **Options → *Controls*.** The page opens with the three centred tabs *Key
-bindings*, *View* and, since round 161b2d, *Modes* (Combat mode, Sprint mode,
-Duck mode and Grab mode, moved together onto their own sub-page — see **The
-Modes sub-page** below); under them come *Control type*, *Action* and then
-*Control layout* (the old *Control Method*, renamed since round 161b1 to tell
-it apart from the newer *Control type* row) with four positions: *Keyboard*,
-*PS5 Controller*, *Xbox Controller* and *Joystick*.
+bindings*, *View* and *Modes* (Combat mode, Sprint mode, Duck mode and Grab
+mode together on their own sub-page — see **The Modes sub-page** below); under
+them come *Control type*, *Action* and then *Control layout* (the original
+game's *Control Method*, named so to tell it apart from the *Control type*
+row) with four positions: *Keyboard*, *PS5 Controller*, *Xbox Controller* and
+*Joystick*.
 
 The three controller positions mostly mean the same thing to the game — they
 choose the **vocabulary** the buttons are named with, and with it the default
-layout the *Key bindings* page's own *Reset to defaults* row writes back
-(round 161b1 moved *Reset* off *Control layout*'s own value list and onto that
-page, as a centred row of its own — it does exactly what the old value did).
-The engine works out by itself whether your pad reports as XInput or
+layout the *Key bindings* page's own *Reset to defaults* row writes back (a
+centred row of its own on that page). The engine works out by itself whether your pad reports as XInput or
 DirectInput, so a DualSense behind Steam still gets PS5 names.
 
 Open *Key bindings* with a controller layout selected and the movement and
@@ -148,23 +145,19 @@ seventeenth, and under *One key* neither list shows it, because a row the
 setting makes inert is a row that would do nothing. The four right-stick
 tilts can be bound like buttons.
 
-**How long the list really is.** Since round 161b2d the hotkeys sit on the
-same page (below), so those blocks are no longer the whole of it. With
-*Action* at *One key* and *Cheats* off the page holds **26** bindable rows on
-the keyboard and **22** on a pad; *Separate* adds the *Secondary* row and
-*Cheats* adds five more, so with both on it is **32** and **28**. Round 161b1
-put the list on its own page rather than folding it into *Controls* itself,
-so it can page left and right with the arrows when they do not fit one
-screen — the same paging *tomb5 options* already used.
+**How long the list really is.** The hotkeys sit on the same page (below), so
+those blocks are not the whole of it. With *Action* at *One key* and *Cheats*
+off the page holds **26** bindable rows on the keyboard and **22** on a pad;
+*Separate* adds the *Secondary* row and *Cheats* adds five more, so with both
+on it is **32** and **28**. The list is a page of its own rather than part of
+*Controls* itself, so it can page left and right with the arrows when the rows
+do not fit one screen — the same paging *tomb5 options* uses.
 
-**Round 161b2d puts the hotkeys on the same page.** The game the user
-compares with keeps a second binding screen just for its "combination" keys —
-his own words were "Ich wuerde es nicht als zweite Liste machen, dann kann
-alles mit in die Keybinds rein, da koennen wir ja die Seiten umschalten." So
-the small and large medipack, quick save, quick load, the six weapons and (while
-*Cheats* is on) the five cheat hotkeys are now rows on the SAME *Key
-bindings* list, keyboard and pad alike — nothing new to open, only more pages
-of the one list. A centred **"1/N"** now sits between the paging arrows
+**The hotkeys are on the same page.** There is no second binding screen for
+"combination" keys: the small and large medipack, quick save, quick load, the
+six weapons and (while *Cheats* is on) the five cheat hotkeys are rows on the
+SAME *Key bindings* list, keyboard and pad alike — nothing extra to open, only
+more pages of the one list. A centred **"1/N"** sits between the paging arrows
 whenever the list needs more than one page, so it is always clear how many
 there are. See **The hotkey rows** and **The pad's Modifier and its chords**
 below for what those extra rows are and how they default.
@@ -189,7 +182,7 @@ A few things worth knowing:
 
 ### The keyboard: two schemes, two sets
 
-*Control type* (round 161b2a) picks **Tank**, the original scheme, or
+*Control type* picks **Tank**, the original scheme, or
 **Modern**, a hand-on-the-left layout around W/S/A/D — and behind the scenes
 each scheme keeps its **own** keyboard bindings, remembered independently:
 
@@ -221,23 +214,20 @@ each scheme keeps its **own** keyboard bindings, remembered independently:
 > lists what was taken, file by file. The key row above is not TROne's: it is
 > this project's own starting point, and every key in it is rebindable.
 
-*Secondary* (round 161b2c) is the nineteenth slot in each scheme's table, and
-it is bindable but does nothing while *Action* (below) is set to *One key* —
-the *Key bindings* page only lists it under *Separate*, so *One key* shows
-the page exactly as it always has. The Modern default is a placeholder: a
-later round gives it Mouse Left, to match the game this scheme is modelled
-on.
+*Secondary* is the nineteenth slot in each scheme's table, and it is bindable
+but does nothing while *Action* (below) is set to *One key* — the *Key
+bindings* page only lists it under *Separate*, so *One key* shows the page
+without it. The Modern default, Numpad 0, is a placeholder.
 
 ### The hotkey rows
 
-Round 161b2d adds fifteen more rows behind the nineteen above, on the same
-*Key bindings* list and the same *Reset to defaults*: the two medipacks,
-quick save, quick load, the six weapons (in the order the number keys always
-drew them), and — only while *Cheats* is on, see **Cheats and the cheat
-hotkeys** below — five cheat rows. Every one of them was a key hard-wired
-into the engine before this round; now it is a role like any other, so it can
-be rebound like any other. Defaults, both key sets, the one difference
-between them named:
+Fifteen more rows follow the nineteen above, on the same *Key bindings* list
+and under the same *Reset to defaults*: the two medipacks, quick save, quick
+load, the six weapons (in the order the number keys always drew them), and —
+only while *Cheats* is on, see **Cheats and the cheat hotkeys** below — five
+cheat rows. In the original engine every one of them was a hard-wired key;
+here each is a role like any other, so it can be rebound like any other.
+Defaults, both key sets, the one difference between them named:
 
 | Role | Tank / Modern default |
 |---|---|
@@ -263,16 +253,14 @@ between them named:
 > F10 and F12 are likewise left alone, which is why the five cheat rows
 > default to the F keys they do.
 
-Quick load's Modern default is the round's one deliberate change from
-today's behaviour — every other default key, in either scheme, is the same
-key that already did that job. **If you had already bound one of the keys
-above to some other role, nothing changes for you**: that key goes on doing
-both jobs, exactly as it did before this round, because a role always answers
-to its own binding first. What is new is the other direction — rebind a
-hotkey role *away* from its default key and that key can stop being the
-hotkey, though only once some other binding claims it: an abandoned default
-key otherwise keeps answering to its own role, the same way every other
-role's does.
+Quick load's Modern default is the one deliberate departure from the
+hard-wired keys — every other default key, in either scheme, is the same key
+the original engine used for that job. **If you bind one of the keys above to
+some other role, that key does both jobs**, because a role always answers to
+its own binding first. The other direction works too — rebind a hotkey role
+*away* from its default key and that key can stop being the hotkey, though
+only once some other binding claims it: an abandoned default key otherwise
+keeps answering to its own role, the same way every other role's does.
 
 The Modern column is deliberately one plain listing rather than a claim of
 being final — it is fully rebindable, the same as Tank's own. Every key shown
@@ -307,7 +295,7 @@ your own; Escape always leaves, either way.
 
 ### Combat mode: Toggle or Hold
 
-*Combat mode* (round 161b2a), under *Controls*, governs what the draw key or
+*Combat mode*, under *Controls*, governs what the draw key or
 button does — for keyboard and pad alike, under either *Control type*:
 
 - **Toggle** (the default, and the original behaviour): press once to draw,
@@ -326,7 +314,7 @@ button does — for keyboard and pad alike, under either *Control type*:
 
 ### Action: One key or Separate
 
-*Action* (round 161b2c), under *Controls*, governs whether interacting and
+*Action*, under *Controls*, governs whether interacting and
 the Secondary function share one button or sit on two, for keyboard and pad
 alike, under either *Control type*:
 
@@ -334,8 +322,7 @@ alike, under either *Control type*:
   button both interacts and does the Secondary function — there is only ever
   one key to reach for.
 - **Separate**: *Action* interacts, switches, opens and picks up; *Secondary*
-  climbs, grabs and holds a weapon ready to fire — hold it, the way the game
-  he compares with holds L2 for the weapon and R2 to shoot.
+  climbs, grabs and holds a weapon ready to fire — hold it.
 
 Under Separate:
 
@@ -345,9 +332,9 @@ Under Separate:
 | Secondary | Everything Lara does with her own hands: grabbing and climbing a ledge, hanging and shimmying along one, letting go, the monkey swing, pulling herself out of the water — and firing, which is every weapon, the laser sight, the VCI headset light and the DOZY cheat's own light. It does *not* confirm in menus or in the inventory ring — that stays the *Action* key's job alone, so a trigger pull in the ring cannot equip whatever the cursor happens to sit on. |
 | Either key | The pole, the tightrope, the parallel bars, the death slide, catching and swinging on a rope, the jump switch and the ceiling trap door — eight sites where a held state would drop her the instant the "wrong" key let go, so both keys reach them and both keys hold them. |
 
-That is the whole division, and it is the engine's own: every place that asked
-"is *Action* down?" about a world object now asks the *Action* key, every place
-that asked it about Lara's body or her gun now asks *Secondary*, and the
+That is the whole division, and it is the engine's own: every place where the
+original asks "is *Action* down?" about a world object asks the *Action* key,
+every place that asks it about Lara's body or her gun asks *Secondary*, and the
 handful of held states above take either. Nothing else moves — *Combat mode*,
 the binocular and laser-sight zoom (which read the sprint and duck keys, not
 this one) and every other row are untouched. Under *One key* one key sets both
@@ -366,19 +353,19 @@ you left them.
 | Jump | Cross |
 | Action | Triangle |
 | Draw | L2 |
-| Flare | **Modifier+R1** on the PS5 DirectInput and generic pages (round 161b2d — the plain R1 default goes with it); plain R1 on the two XInput-ordered pages (PS5 XInput, Xbox) |
+| Flare | **Modifier+R1** on the PS5 DirectInput and generic pages (no plain R1 default there); plain R1 on the two XInput-ordered pages (PS5 XInput, Xbox) |
 | Look | R3 |
 | Roll | Circle |
 | Inventory | Share |
 | Pause | Options |
-| Save | **Modifier+R3** on the PS5 DirectInput and generic pages (round 161b2d — the plain PS-button default goes with it, and the *Joystick* page's old plain *Joy 13* with it); unbound on the two XInput-ordered pages (PS5 XInput, Xbox), which name no spare button at all |
+| Save | **Modifier+R3** on the PS5 DirectInput and generic pages (no plain PS-button default there, and no plain *Joy 13* on the *Joystick* page); unbound on the two XInput-ordered pages (PS5 XInput, Xbox), which name no spare button at all |
 | Load | **Modifier+L3** on the PS5 DirectInput and generic pages; unbound elsewhere |
-| Small medipack / Large medipack | wherever this pad's own One-key table already puts them — except on the PS5 DirectInput and generic Tank rows, where the small medipack's usual button is now the Modifier and both medipacks go unbound there instead of sharing it (0 and 9 on the keyboard still reach them; the Modern d-pad rows are untouched) |
+| Small medipack / Large medipack | wherever this pad's own One-key table already puts them — except on the PS5 DirectInput and generic Tank rows, where the small medipack's usual button is the Modifier and both medipacks go unbound there instead of sharing it (0 and 9 on the keyboard still reach them; the Modern d-pad rows are untouched) |
 | Secondary | R2 |
 
 ### The pad's Modifier and its chords
 
-Round 161b2d adds a **Modifier** role and twelve chorded roles behind it —
+A pad has a **Modifier** role and twelve chorded roles behind it —
 weapon 1-6 and, while *Cheats* is on, the five cheat rows — the pad's own
 version of the keyboard's F-key hotkeys, on the SAME *Key bindings* list. A
 **chord** is the Modifier held down together with a second button; the value
@@ -417,24 +404,23 @@ the binding page shows you the name your own pad's page uses.
 
 With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
-as it did before this round.
+as it would with no chords at all.
 
-**A stored Separate pad set from before this round keeps its own bindings,
-chord-free, until you choose *Reset to defaults* once.** The engine tells a
-pre-161b2d set apart from a fresh one and leaves it alone rather than laying
-the new Modifier and its chords over buttons you had already bound
-yourself — *Reset to defaults* is what fetches the new row, Modifier and all,
-in one step.
+**A stored Separate pad set written by a build without the Modifier keeps its
+own bindings, chord-free, until you choose *Reset to defaults* once.** The
+engine tells such a set apart from a fresh one and leaves it alone rather than
+laying the Modifier and its chords over buttons you had already bound
+yourself — *Reset to defaults* is what fetches the Modifier and its chords in
+one step.
 
 ### Camera speed and Dead zone
 
-Two sliders on the *Controls* page, both new in round #161, and both the
-modern control's own feel — under *Control type: Tank* nothing reads either
+Two sliders on the *Controls* page, both the modern control's own feel — under *Control type: Tank* nothing reads either
 number, so both rows are drawn greyed out and the cursor skips them.
 
 | Row | Range | Default | What it does |
 |---|---|---|---|
-| *Camera speed* | 0–100 | **40** | How fast the right stick swings the camera round Lara. `0` turns at 60 degrees a second, `100` at 360, and the default 40 is the rate round 161a2 was tuned at. The up-and-down rate is always half the sideways one. Registry: `cam_speed`. |
+| *Camera speed* | 0–100 | **40** | How fast the right stick swings the camera round Lara. `0` turns at 60 degrees a second, `100` at 360, and the default 40 is the rate the modern control was tuned at. The up-and-down rate is always half the sideways one. Registry: `cam_speed`. |
 | *Dead zone* | 0–100 | **50** | How far a stick has to be pushed before it counts as pushed. The number is a **per cent of the tuned zone**, not a zone in itself: `50` reproduces every one of the engine's own eight dead-zone widths exactly, `0` is no zone at all and `100` is twice the zone. Registry: `dead_zone`. |
 
 Both are sliders, and a slider is written the moment it stops moving rather
@@ -442,29 +428,25 @@ than on every step while you hold the key down.
 
 ### The Modes sub-page: Combat, Sprint, Duck and Grab
 
-Since round 161b2d these four rows sit together on their own sub-page,
-**Modes** (German *Modi*), reached by a centred tab on *Controls* right after
-*View* — the same tabbed style *Key bindings* and *View* already use. Moving
-them off the main *Controls* list changed nothing about any one of them:
-same variable, same registry name, same default, same effect, only the page
-they are found on.
+These four rows sit together on their own sub-page, **Modes** (German
+*Modi*), reached by a centred tab on *Controls* right after *View* — the same
+tabbed style *Key bindings* and *View* use. Each keeps its own variable,
+registry name, default and effect; the sub-page only groups them.
 
 ### Combat mode, Sprint mode, Duck mode and Grab mode: Toggle or Hold
 
-*Sprint mode*, *Duck mode* and, since round 161b2d, *Grab mode* each govern
+*Sprint mode*, *Duck mode* and *Grab mode* each govern
 one key or button the same way — Hold is the default and the original
 behaviour, Toggle turns a press into an on/off switch:
 
 - **Hold** (the default): sprint, duck or hold on while the key is held, stop
-  the moment you let go — today's behaviour.
+  the moment you let go.
 - **Toggle**: press once to start, press again to stop.
 
 *Combat mode* is the fourth row of the same page and works the same way, but
 it **defaults the other way round**: drawing a weapon has always been a
 toggle in this game, so that row stands at *Toggle* on a fresh install and
-*Hold* is the new behaviour. See **Combat mode: Toggle or Hold** above.
-(An earlier printing of this manual put all four rows under one "Hold is the
-default" sentence; corrected in audit round A1.)
+*Hold* is the added behaviour. See **Combat mode: Toggle or Hold** above.
 
 A few things a toggled key still respects, because it is the same bit Lara's
 own states have always read, only held open by the option instead of by your
@@ -474,22 +456,19 @@ finger:
   ducking, wading into deep water — and the toggle lets go the instant it
   does, or the moment you stop pushing a direction; it does not fight the
   dash timer or leave you sprinting on the spot.
-- **Duck** holds through the whole duck-and-crawl family now — crouching,
-  its roll, both duck turns, all fours, crawling forward and back, both crawl
+- **Duck** holds through the whole duck-and-crawl family — crouching, its
+  roll, both duck turns, all fours, crawling forward and back, both crawl
   turns, and a pickup made from any of them — and lets go only on a real
   drop: a ladder, a rope, a crawl-to-hang, death, water, a cutscene, a menu
-  owning the input, or a level change. (An earlier printing of this manual
-  said the crawl dropped the latch because of the ceiling test alone — that
-  is what a low ceiling does to a *Hold* key too, but the latch itself
-  dropped there because entering the crawl briefly occupies her hands, the
-  same reason a ladder drops it; round 161b2d keeps the latch through the
-  crawl instead, so a crawl space still never traps you: the ceiling test
-  still decides when you may stand back up, and the next duck after that is
-  a fresh press.)
-- **Grab** (round 161b2d) governs letting go rather than holding a
-  direction: while hanging, shimmying, on a ladder, a pole, a rope, the zip
-  line, the parallel bars or the monkey swing, *Hold* is today's behaviour —
-  let the key go and she drops. *Toggle* lets you release the key and stay
+  owning the input, or a level change. The latch is kept through the crawl
+  even though entering it briefly occupies her hands (the reason a ladder
+  drops it), and a crawl space still never traps you: the ceiling test
+  decides when you may stand back up, exactly as it does for a *Hold* key,
+  and the next duck after that is a fresh press.
+- **Grab** governs letting go rather than holding a direction: while
+  hanging, shimmying, on a ladder, a pole, a rope, the zip line, the parallel
+  bars or the monkey swing, *Hold* is the original behaviour — let the key go
+  and she drops. *Toggle* lets you release the key and stay
   put: a fresh press while holding on lets go instead, and — so a fall past a
   lower ledge can never snap back onto it — that same press keeps letting go
   for as long as you keep it held, so release it and press again to catch
@@ -519,12 +498,9 @@ playing. The two are identical except for one row: **Special Features** can
 only be opened from the title screen. From the pause menu the row is still
 there — drawn greyed out, and the cursor steps over it — however many secrets
 you have found; the nine secrets of a quarter of the campaign decide what the
-gallery **holds**, never whether the row can be reached. (An earlier printing
-of this manual had the nine secrets opening the row in a pause session;
-corrected in audit round A1.)
+gallery **holds**, never whether the row can be reached.
 
-Since round 161b1 the page is one sorted tree instead of a single flat list:
-a title, then rows that either open another page (drawn centred, like the
+The page is one sorted tree rather than a single flat list: a title, then rows that either open another page (drawn centred, like the
 Remaster's own) or are settings of their own (left-aligned, value on the
 right). The seven tabs:
 
@@ -538,17 +514,15 @@ right). The seven tabs:
 | Special Features | the bonus gallery (title screen only) | all locked |
 | Credits | who this is built on | — |
 
-Nothing about any one setting's variable, range, default or effect moved with
-it — only which tab it sits on. *Targeting* is the one row that changed tab
-outright, from the Options page itself onto *Controls*; every other row kept
-the page it already had (*tomb5 options*, *Graphics* or *HUD*), just under a
-tab now instead of a numbered page. See **tomb5 options** below for the six
-settings that keep that name, and the sections after it for where the rest
-of the old pages 1 and 2 went.
+The tabs only sort the rows: every setting keeps its own variable, range,
+default and effect whichever tab it sits on. *Targeting*, which the original
+keeps on the Options page itself, sits on *Controls*. See **tomb5 options**
+below for the six settings on that tab, and the sections after it for the
+*Graphics* and *HUD* rows.
 
-**Credits** is a screen of its own, not one of the framework's pages — as a
-page it kept turning up unasked while paging through settings, with the
-paging arrows drawn across the names. It lists names only; the web addresses
+**Credits** is a screen of its own, not one of the framework's pages, so it
+never turns up while paging through settings and no paging arrows are drawn
+across the names. It lists names only; the web addresses
 live in `README.txt`, because the game font cannot draw every character.
 
 ---
@@ -561,29 +535,23 @@ live in `README.txt`, because the game font cannot draw every character.
 run time from the player's own <strong>Tomb Raider IV-VI Remastered</strong>
 installation — none of it is included here.</em></p>
 
-Six settings the original never had. Before round 161b1 these sat across two
-numbered pages together with most of the *Graphics* and *HUD* rows below;
-sorting the tree moved the graphics and HUD rows off this tab onto their own
-(see **The options menu** above) and left *tomb5 options* with the six that
-belong to neither:
+Six settings the original never had, and that belong neither to *Graphics*
+nor to *HUD* (see **The options menu** above):
 
 *Cutscene skipper* (off), *Cheats* (off), *Level Select* (off), *Fix climb up
 delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
-Everything that used to sit on those two numbered pages beside them —
-*Footprints*, *Shadow
-mode*, *Fog*, *HD textures*, *Bar mode*, *Bar positions*, *Enemy bars*, *Ammo
-counter*, *Gameover menu*, *PSX skies*, *TR4 loadscreens*, *Loadbar style*,
-*Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*, *Ammotype
-hotkeys*, *Look transparency*, *Static lighting*, *UW Effect* — kept its
-variable, range, default and effect exactly as it always had; only the tab
-changed. *Graphics* holds the picture rows (plus *Display*, its own sub-page
-for *Frame rate* and *VSync* — see below), *HUD* the rest. *First person
-view* moved from this page onto *Controls*' own *View* tab, and its six rows
-are shown there always now, not just while the switch is on (see **First
-person view** below); *Ammotype hotkeys* moved onto *Controls*; *Targeting*
-moved onto *Controls* from the Options page itself.
+The other settings this build adds — *Footprints*, *Shadow mode*, *Fog*, *HD
+textures*, *Bar mode*, *Bar positions*, *Enemy bars*, *Ammo counter*,
+*Gameover menu*, *PSX skies*, *TR4 loadscreens*, *Loadbar style*, *Mono
+screen style*, *Loading text*, *Shimmer*, *Distance fog*, *Ammotype hotkeys*,
+*Look transparency*, *Static lighting*, *UW Effect* — sit on the tab their
+subject belongs to. *Graphics* holds the picture rows (plus *Display*, its own
+sub-page for *Frame rate* and *VSync* — see below), *HUD* the rest. *First
+person view* and its settings sit on *Controls*' own *View* tab, shown there
+always, not just while the switch is on (see **First person view** below);
+*Ammotype hotkeys* and *Targeting* sit on *Controls*.
 
 Worth spelling out:
 
@@ -598,32 +566,30 @@ Worth spelling out:
 
   See *Frame rate* further down for what the settings really do and how to
   check them.
-- **Cheats** unlocks DOZY and, since round 161b2d, five hotkey rows on the
+- **Cheats** unlocks DOZY and five hotkey rows on the
   *Key bindings* page (below). The classic cheat words still need the compass
   in hand.
 
 ### Cheats and the cheat hotkeys
 
 Type **D O Z Y** while playing to fly — the classic chord, unchanged in what
-it does. Round 161b2a's Modern keyboard scheme had broken it: Z is Modern's
-*Step left* key, one of DOZY's own four letters, and Modern *Step* also
-carries the same bit the chord's own exit reads, so the flight switched on
-and off again in the same tick — she rose and immediately fell, which is
-what the user meant by "ich kann D.O.Z.Y ingame nicht mehr verwenden."
-Round 161b2d's fix is the one condition the flight needed: its exit is now
-ignored for as long as any of the four DOZY letters is still physically
-down. Nothing else about ending the flight changed — the walk key, and under
-Tank the step keys, still end it exactly as before; only Modern's own
-step-left key can no longer do it on its own, because holding it is now part
-of what keeps her flying.
+it does, under either *Control type*. Under Modern that needs one extra
+condition: Z is Modern's *Step left* key, one of DOZY's own four letters, and
+Modern *Step* carries the same bit the chord's own exit reads, so without it
+the flight would switch on and off again in the same tick — she would rise
+and immediately fall, and the cheat could not be used at all. The flight's
+exit is therefore ignored for as long as any of the four DOZY letters is
+still physically down. Everything else about ending the flight is the
+original's — the walk key, and under Tank the step keys, end it; only
+Modern's own step-left key cannot do it on its own, because holding it is
+part of what keeps her flying.
 
 The inventory words — **G U N S**, **I T E M**, **S K I P**, **H E A L**,
-**B I T S** — are unchanged and still spelt out with the compass in hand;
-Modern's own S/A/E/P bindings can make them awkward to type there, which is
-what the user meant by "im Inventar G.U.N.S/S.K.I.P ist auch schwer zu
-verwenden." Round 161b2d's answer is not to change the words, but to give
-four of the five (all but BITS, which has no cheat effect of its own) a
-second doorway: a hotkey, bindable on the *Key bindings* page like any other
+**B I T S** — are the original's and still spelt out with the compass in
+hand, but under Modern the keyboard scheme owns S, A, E and P, which can make
+them awkward to type there (GUNS and SKIP above all). The words stay as they are; four
+of the five (all but BITS, which has no cheat effect of its own) get a second
+doorway instead: a hotkey, bindable on the *Key bindings* page like any other
 row, keyboard and pad alike, that does exactly what the word does — while
 *Cheats* is on, in the game (not the title screen, not a cutscene, and not
 while Lara is dead), one press, one effect:
@@ -666,9 +632,8 @@ chords** above for binding one of them to a pad chord.
 
 <p align="center"><img src="ingame-08.jpg" alt="First person, aiming the HK" width="700"></p>
 
-Switch it on under *Controls → View* — the switch itself moved there in
-round 161b1, from its old home on *tomb5 options*. The same tab holds five
-rows of its own:
+Switch it on under *Controls → View*. The same tab holds five rows of its
+own:
 
 | Row | What it does | Default |
 |---|---|---|
@@ -678,15 +643,14 @@ rows of its own:
 | Camera damping | off / Light / Medium / Strong | Light |
 | Body | **animated** as always, or **still** while she is standing still | animated |
 
-Unlike the old page, the five rows are always shown, whether *First person
-view* itself is on or off — round 161b1 dropped the gating that used to make
-a settings page for something switched off appear and disappear on its own;
-the switch and its five settings are simply one tab now.
+The five rows are always shown, whether *First person view* itself is on or
+off: the switch and its five settings are simply one tab, and no page appears
+or disappears with a switch.
 
 While first person is on, Lara's head and braid are not drawn, close sounds
 are centred instead of panned, and the camera stays behind her eyes where
 vanilla would have torn it away — trapdoors, turn switches and trigger
-cameras all now leave you where you are.
+cameras all leave you where you are.
 
 With *HD textures* on, **her head and her neck are not drawn at all**. The
 camera hangs inside her skull, so anything of her head that is still there
@@ -720,8 +684,7 @@ in the 13th Floor. That is not the option failing.
 
 ## Frame rate
 
-*Graphics → Display*, its own page since round 161b1 sorted the tree (before
-that, the third of the *tomb5 options* pages). Two rows:
+*Graphics → Display*, a page of its own. Two rows:
 
 | row | positions | takes effect |
 |---|---|---|
@@ -755,24 +718,24 @@ Two ways to check it yourself:
 
 **Where the sixty applies.** In the level, on the **title screen** and in the
 **inventory ring**. The pause screen, the load and save screens, the death
-menu, the outfit screen and the loading fade still run at thirty, on purpose:
+menu, the outfit screen and the loading fade run at thirty, on purpose:
 each of them walks its menu once per *picture* while the button presses it
 walks with are read once per *game step*, so at sixty each press would count
 twice and the cursor would jump two rows at a time. Nothing about them looks
 different at thirty — they were written for it.
 
-The title and the ring used to be on that list and came off it in September
-2026. Both now present at the rate this row asks for while their own logic —
+The title and the ring are not on that list. Both present at the rate this
+row asks for while their own logic —
 the menu, the input, the cursor, every counter they own — still runs thirty
 times a second, exactly as the game does. The ring's icons spin and the row
 slides in half steps between two of those, the title's fly-by is drawn the
-same way the level is, and a tap of Down still moves one row on either of
+same way the level is, and a tap of Down moves one row on either of
 them — but by two different means, because the two screens are built
 differently. The **ring** runs its whole logic body — the input, the repeats,
 the pulse colour, the mode handlers and every counter it owns — once per two
 ticks, through an accumulator of exactly the shape the game's own loop uses,
 so a press is simply never read twice. The **title** is walked once per
-picture, as it always was, so the walk that would have read the same press a
+picture, as in the original, so the walk that would read the same press a
 second time is handed a blank input for the length of that one call and gets
 its own back immediately after.
 
@@ -780,7 +743,8 @@ With `-log` the ring writes an `INVLOG` line a second — `frames=` what was
 presented, `steps=` its logic, and which of its motions were really drawn
 in between. A healthy second at *Display* on a 165 Hz panel reads
 `frames=165 steps=30`, and the `FPSLOG` line beside it reads
-`frames=165 budget=6.1` where it used to read `frames=30 budget=33.3`.
+`frames=165 budget=6.1` rather than the `frames=30 budget=33.3` of a screen
+kept at thirty.
 
 **What you get, and what it costs.** Twice as many pictures of the same
 motion, and the in-between one is a real new position rather than a repeat.
@@ -795,7 +759,7 @@ been.
 
 **And the limbs move with the body.** An animation in Tomb Raider stores
 every second, fourth or fifth frame and the engine blends between two stored
-ones; at sixty it now draws the point halfway between the two poses the game
+ones; at sixty it draws the point halfway between the two poses the game
 shows at thirty. So a walk cycle, a ladder climb, a reload and an enemy's
 swing all step twice as finely, Lara's head turn, torso twist and aim move in
 half steps with them, and the braid hangs off a neck that is where the body
@@ -810,12 +774,11 @@ between two game steps — a jump beginning, a state ending — the **pose** is
 not blended: that one frame wears the new pose, which is exactly what thirty
 shows, and it lasts a sixtieth of a second.
 
-Its **position** is another matter, and rounds 157 and 157b are why. An
-animation carries an offset of its own that moves the whole body — a climb
+Its **position** is another matter. An animation carries an offset of its own that moves the whole body — a climb
 wrap moves it 248 units in one step, the entry into a climb down 111, the
 ladder grab 86 — and on the very frame the animation changes, her place in the
 room has already moved half a step while that offset has not moved at all, so
-the body drawn out of the two jumps. On those frames the offset **is**
+a body drawn out of the two alone would jump. On those frames the offset **is**
 therefore blended in time as well, as far as the
 tick's own position step really pays for it and no further: where nothing
 else moved with it, the frame keeps the offset it already carries. A ladder
@@ -823,8 +786,7 @@ wrap and a ledge grab are continuous; a crawl ending in a stand does not
 float at the old height. The frames this really moved are counted as
 `root_fix` in the `INTERPLOG` line, and they are a small minority of the
 refused ones — an ordinary room has a couple of dozen refusals per drawn
-frame and no `root_fix` at all. (An earlier printing of this manual said
-"nothing is blended" here; corrected in audit round A1.)
+frame and no `root_fix` at all.
 
 The HD renderer follows without being asked: it takes its matrices off the
 engine's own stack, so it gets the halved motion and the halved pose for
@@ -850,9 +812,9 @@ and timings are the next paragraph.
 
 - **The arm that holds a flare or a torch.** Everything a *weapon* drives —
   the arms, the hands, the gun itself, and with the HK the torso and the head
-  as well — moves in half steps like the rest of her since the arm chain was
-  given a factor of its own; the flare's and the torch's one held-out arm is
-  the piece of that work still to do, and it steps at thirty.
+  as well — moves in half steps like the rest of her, because the arm chain
+  has a blend factor of its own; the flare's and the torch's one held-out arm
+  does not, and it steps at thirty.
 - **Cut scenes**, whole. Their camera is decoded from a frame number rather
   than simulated, so it is left alone and they play exactly as they always
   did.
@@ -866,10 +828,10 @@ and timings are the next paragraph.
   form that cannot be blended without wrapping the wrong way half the time.
 
 **Everything that is a length of time is a length of time.** This is the part
-that took the most work and shows the least: dozens of counters in the engine
-measured time by counting *pictures*, which was the same thing as counting
-game steps for twenty-five years. Every one of them now counts game steps
-instead, so at sixty they are unchanged in real seconds — the fade to black
+that took the most work and shows the least: dozens of counters in the
+original engine measure time by counting *pictures*, which at thirty is the
+same thing as counting game steps. In this build every one of them counts
+game steps, so at sixty they are unchanged in real seconds — the fade to black
 when Lara dies and the one between levels, the white flash of a weapon, the
 level name at the bottom of the screen, the "ammo changed" caption, the
 health-bar blink, the pickup sliding in from the right, a body fading away
@@ -1030,7 +992,7 @@ audio\MAIN.SFX                 a hand copy, for the players who made one
 <your remaster>\5\DATA\MAIN.SFX   the installed remaster's own, read where it lies
 ```
 
-The third link is why the hand copy is no longer needed: if the engine finds
+The third link is why no hand copy is needed: if the engine finds
 your *Tomb Raider IV-VI Remastered* installation — the same search the HD art
 uses, see **HD from the Remaster** — it reads the bank straight out of it. If
 you would rather keep a copy of your own, put it in `audio\MAIN.SFX` and keep
@@ -1041,9 +1003,7 @@ file of that name, so nothing can collide.
 HD art is set to, so a player who has the remaster installed and has never
 touched an HD setting is already hearing the 44.1 kHz samples. There is no
 option that turns it off: what decides is whether the engine finds a bank at
-all. (An earlier printing of this manual
-said the file had to be copied by hand and that nothing changed without it;
-corrected in audit round A1, the chain having moved in round M1.)
+all.
 
 **Nothing ships**, the same as with the soundtracks. Without the remaster and
 without a copy of your own, the game plays Core's samples as it always has.
@@ -1101,19 +1061,18 @@ menu logo is `data\logo512.pak`, and the German and French versions of that
 file (`grlogo.pak`, `frlogo.pak`) only ever existed on the German and French
 CDs — the Steam edition does not have them, so those two languages have always
 fallen back to the English lettering. With the HD file in place they get their
-own at last: **DIE CHRONIK**, **SUR LES TRACES DE LARA CROFT**, and for
+own: **DIE CHRONIK**, **SUR LES TRACES DE LARA CROFT**, and for
 American English the flaming emblem. The mark is fitted into the same
 rectangle the old logo filled, so it keeps its shape whatever your window size
 is. Without the file nothing changes for German and French — they fall back to
 the English lettering, as they always did.
 
-**American English is the one exception.** Without `LOGO_US.DDS` it now draws
+**American English is the one exception.** Without `LOGO_US.DDS` it draws
 `logo512.pak`, the English lettering, rather than `data\uslogo.pak`: that pak
 is *Tomb Raider: The Last Revelation*'s wordmark on opaque black, left behind
-in Chronicles' own `data\` folder, and drawing it over the title picture was a
+in Chronicles' own `data\` folder, and drawn over the title picture it is a
 black rectangle with the wrong game's name in it. With the HD file in place
-American English gets its own flaming emblem instead. (This build's behaviour;
-the manual said "nothing changes" here until audit round A1.)
+American English gets its own flaming emblem instead.
 
 > The wordmark is picked when the title level loads, so switching the
 > **Language** row in the options changes the menu text at once but not the
@@ -1130,10 +1089,10 @@ saying which file was decoded and at what size, or why one was refused, plus a
 *Tomb Raider IV-VI Remastered* does not repaint the old game. Beside every
 level it keeps a whole second version of the geometry — every room rebuilt and
 lit, with the static objects baked into it — and a model of its own for each
-object, at eight times the texture resolution. The long-term plan (#123) is for
-this engine to draw that art when it finds the remaster installed, and the
-original art when it does not: file present → HD, otherwise vanilla, exactly
-the deal the loading screens and the HQ sounds already have.
+object, at eight times the texture resolution. This engine draws that art when
+it finds the remaster installed, and the original art when it does not: file
+present → HD, otherwise vanilla, exactly the deal the loading screens and the
+HQ sounds have.
 
 > **Where this work comes from.** Reading the Remaster's art at run time was
 > solved first by **TROne (GPLv3) by Todesengel1931**,
@@ -1146,101 +1105,116 @@ the deal the loading screens and the HQ sounds already have.
 > included here**: every picture, page and model the HD mode draws is read at
 > run time out of your own installation.
 
-**As of this build the rooms, the objects and Lara are drawn in HD.** Enemies,
-doors, switches, pickups, traps and machinery come out of the remaster's own
-models, skinned on the classic mesh tree so that they move exactly as they
-always did; the rooms around them were already HD; and Lara is drawn out of the
-remaster's wardrobe — see *Lara in HD* below for which of her stays classic and
-why.
+**The rooms, the objects and Lara are drawn in HD.** Enemies, doors, switches,
+pickups, traps and machinery come out of the remaster's own models, skinned on
+the classic mesh tree so that they move exactly as they always did; the rooms
+around them are HD as well; and Lara is drawn out of the remaster's wardrobe —
+see *Lara in HD* below for which of her stays classic and why.
 
-**What the first round of fixes changed in the rooms.** A play-through of the
-whole HD path turned up a list of faults, and five of them lived in the room
-renderer:
+**The rooms: what stands, what is cut out, and what moves.**
 
-- **A flipped room now changes its art with its geometry.** A flipmap swaps
-  the contents of two rooms and leaves their numbers where they are; the HD
-  path had the art nailed to the number, so a wall that had gone was still
-  standing as a texture.
-- **Leaves are leaves again.** The remaster draws its vegetation — the kelp of
-  the Deepsea Dive, the trees and grass of Ireland, the ivy of Rome — in the
-  pass that has no transparency test, and the pages it draws them on are up to
-  95 % hole. They came out as solid green rectangles. The test is now switched
-  on for the remaster's own cut-out materials, and for no others. (The first
-  attempt decided it per texture page instead, from how much of the page was
-  transparent, and that was wrong: an ordinary wall's transparency channel is
-  a polish and wetness mask rather than a shape, so Rome's shop fronts, the
-  snow of the crane yard and the bulkheads of the submarine were eaten full
-  of holes. The second round of fixes replaced the rule.)
-- **Light shafts are light again, not white surfaces.** The remaster bakes
-  those at double brightness and its glow meshes at the maximum; the classic
-  engine's own rule stops an added glow at one, and now so does this.
-- **A fog bulb is a soft cloud, not a sphere with an outline.** The formula was
-  right and exact; the classic engine hides its hard rim by computing it once
-  per room vertex, which a per-pixel version cannot borrow. It now fades out
-  over its own edge instead. (The second round of fixes took a straight line
-  out of the side of that cloud as well: the classic engine skips fog more
-  than 45 degrees off the centre of the view, which never showed on the 4:3
-  screens the game shipped for. On a wide screen, and above all in first
-  person, that skip cut across the picture and the fog jumped away at the
-  edge. It is gone; only a fog ball entirely behind the camera is skipped
-  now.)
+- **A flipped room changes its art with its geometry.** A flipmap swaps the
+  contents of two rooms and leaves their numbers where they are, so the HD art
+  follows the contents and not the number; art nailed to the number would
+  leave a wall that has gone still standing as a texture.
+- **Leaves are leaves.** The remaster draws its vegetation — the kelp of the
+  Deepsea Dive, the trees and grass of Ireland, the ivy of Rome — in the pass
+  that has no transparency test, and the pages it draws them on are up to 95 %
+  hole; without the test they come out as solid green rectangles. The test is
+  switched on for the remaster's own cut-out materials, and for no others. It
+  is not decided per texture page from how much of the page is transparent:
+  an ordinary wall's transparency channel is a polish and wetness mask rather
+  than a shape, and a per-page rule eats Rome's shop fronts, the snow of the
+  crane yard and the bulkheads of the submarine full of holes.
 - **Only what is meant to move in the wind moves.** The remaster marks how far
   a vertex may bend, not that it bends at all, and four fifths of the marked
   vertices of Rome belong to ordinary walls, gates and lamp posts. The bend is
-  now kept for the remaster's own wind material — ivy, banners, grass, kelp —
-  and for flowing water, and taken away from everything else.
+  kept for the remaster's own wind material — ivy, banners, grass, kelp — and
+  for flowing water, and taken away from everything else.
+- **Destructible statics disappear when you shoot them.** A crate, a barred
+  window or a pane of glass is baked into the room's art, so on its own the
+  picture of it would go on standing after the game has broken it. The
+  Remaster gives every such copy a number of its own, and the engine takes
+  that copy out of the room when the game takes the object out of the level.
+- **The statics the Remaster has no art for are drawn the classic way.** A
+  room whose Remaster art covers only part of it would otherwise lose every
+  lamp, crate and post standing in the rest. The engine asks, per object,
+  whether the art draws anything where it stands, and draws the classic one
+  where it does not.
+- **No room shows through another one's wall.** Tomb Raider levels are not
+  built like buildings: two rooms can stand in exactly the same place in the
+  world, and the game only ever shows you one of them at a time, because it
+  draws each room **only inside the doorway you are looking at it through**.
+  Drawn whole, two overlapping rooms - the storeroom and the air shaft of *The
+  Base*, room 39 and room 53, sharing the same coordinates - put the second
+  one's shelves and floor grating through the first one's wall, and it cannot
+  be sorted out by distance, because both really are that far away. So every
+  HD room is drawn inside the same window the original engine gives it, and
+  so is every HD enemy, in the window of the room it stands in. Lara is never
+  cut: she is in the camera's own room, and that room's window is the whole
+  screen.
 
-**What the third round changed: the light, and the sky.** The play test's
-next line about the rooms was that the light was far too bright and stood
-perfectly still.
+**The light, and the sky.**
 
-- **A light shaft is a shaft again, and a lamp is a lamp.** The remaster
-  builds a shaft or a lamp cone out of dozens of overlapping panes, and its
-  caustic net under water is one sheet over the whole sea bed; painted at full
-  strength and added on top of each other they went white. The remaster's own
-  art says how strong each of them is meant to be — the artists gave every
-  glow, haze and sheet a strength of its own, between a fortieth and a whole —
-  and the engine now reads it. Measured on the shafts of a VCI corridor: they
-  used to reach pure white, they now peak at a quarter of it, which is where
-  the remaster's own picture puts them. The Deepsea Dive's sea bed went from
-  98 % white to a soft shimmer.
-- **And they move.** The same art gives every glow a time, from a twentieth of
-  a second for a candle to sixteen seconds for a sun shaft through a hall, and
-  the brightness now travels along a shaft at that speed instead of standing
-  still. It goes off with `hd_motion` like everything else that moves.
-- **Animated pictures run again.** The Remaster paints a monitor wall, a
-  bank of ships' displays and a handful of liquid surfaces as a four page
-  loop, and the engine reads the loop out of the art: the four pages and
-  the time one of them stands, from a twentieth of a second to eleven
-  seconds. The VCI control room's closed circuit monitors change their
-  camera feed again, the scan lines flicker over them, and the liquid
-  surfaces of the submarine and of Rome move. Twenty-seven such surfaces
-  in five levels; they stop with `hd_motion`.
-- **Water moves over its whole surface, not just at the corners.** The
-  classic engine marks a water surface at the corners of its own quads,
-  and the Remaster lays a far finer mesh over the same pool - on one VCI
-  pool, 448 points where the classic engine has 11. The mark is carried
-  along the surface's own plane now, so the whole pool shimmers instead of
-  a sliver of it, and over that runs a gentle swell and a caustic net
-  computed for every pixel rather than for every corner. It carries no
-  brightness of its own - the classic water light is untouched - only the
-  movement, and it stops with `hd_motion`.
+- **An added glow stops at one.** The remaster bakes its light shafts at
+  double brightness and its glow meshes at the maximum; the classic engine's
+  own rule stops an added glow at one, and so does this, so a light shaft is
+  light and not a white surface.
+- **A glow has the strength the art gives it.** The remaster builds a shaft or
+  a lamp cone out of dozens of overlapping panes, and its caustic net under
+  water is one sheet over the whole sea bed; painted at full strength and
+  added on top of each other they go white. The remaster's own art says how
+  strong each of them is meant to be — the artists gave every glow, haze and
+  sheet a strength of its own, between a fortieth and a whole — and the engine
+  reads it. Measured on the shafts of a VCI corridor: at full strength they
+  reach pure white, read from the art they peak at a quarter of it, which is
+  where the remaster's own picture puts them. The Deepsea Dive's sea bed is a
+  soft shimmer rather than 98 % white.
+- **Where the art gives no strength, the preset does.** In four places the art
+  gives no usable number — a lift shaft in the VCI tower and three window
+  glows in Ireland — and at full strength those draw white. The art groups its
+  glows into presets, and inside a preset the strength is all but the same
+  number in every level that uses it, so those four take their own preset's
+  strength. The 13th Floor's lift shaft is a shaft with streaks in it rather
+  than a white block; nothing saturates anywhere a player stands.
+- **The great hall's sun shafts, down to a minimum.** One tuple of numbers in
+  the art - the slowest-drifting shaft in the game, 16 seconds to a cycle -
+  carries the shafts of the Rome hall, and taken as it stands it draws at a
+  peak of 58 % of white. It is drawn at 16 %, faint but there. Every other
+  shaft, cone and glow in the game is untouched by this, the VCI corridor's
+  streaks included: they carry different numbers and the rule is the numbers.
+- **And the light moves, a little.** The same art gives every glow a time, from
+  a twentieth of a second for a candle to sixteen seconds for a sun shaft
+  through a hall, and the brightness travels along a shaft at that speed. How
+  far it travels is measured against two recordings of a Remaster installation,
+  of the same corridor three seconds apart: its shafts move their bright places
+  around and their level barely changes — four percent over three seconds. The
+  travel is therefore a sixth of a quarter either way; a quarter reads as
+  pulsing, while at a sixth of it the streaks wander and the room does not
+  breathe. It goes off with `hd_motion` like everything else that moves.
+- **A fog bulb is a soft cloud, not a sphere with an outline.** The formula is
+  exact; the classic engine hides its hard rim by computing it once per room
+  vertex, which a per-pixel version cannot borrow, so here it fades out over
+  its own edge instead. There is no straight line out of the side of that
+  cloud either: the classic engine skips fog more than 45 degrees off the
+  centre of the view, which never showed on the 4:3 screens the game shipped
+  for, but on a wide screen, and above all in first person, that skip cuts
+  across the picture and the fog jumps away at the edge. Here only a fog ball
+  entirely behind the camera is skipped.
+- **Animated pictures run.** The Remaster paints a monitor wall, a bank of
+  ships' displays and a handful of liquid surfaces as a four page loop, and the
+  engine reads the loop out of the art: the four pages and the time one of
+  them stands, from a twentieth of a second to eleven seconds. The VCI control
+  room's closed circuit monitors change their camera feed, the scan lines
+  flicker over them, and the liquid surfaces of the submarine and of Rome
+  move. Twenty-seven such surfaces in five levels; they stop with
+  `hd_motion`.
 - **Polished surfaces catch the light at a grazing angle.** The Remaster's
   artists marked which surfaces are glossy and how glossy - the marble of
-  Rome, the painted steel of the submarine, 214 surfaces over twelve
-  levels - and a floor seen down a long hall now lifts towards its own lit
-  colour instead of staying matt. The three VCI levels carry no such mark
-  anywhere and are left exactly as they were. See `hd_reflect`.
-- **Destructible statics disappear when you shoot them.** A crate, a
-  barred window or a pane of glass is baked into the room's art, so
-  breaking it used to leave the picture of it standing. The Remaster gives
-  every such copy a number of its own, and the engine now takes that copy
-  out of the room when the game takes the object out of the level.
-- **And the statics the Remaster has no art for are drawn again.** A room
-  whose Remaster art covers only part of it used to lose every lamp,
-  crate and post standing in the rest. The engine asks, per object,
-  whether the art draws anything where it stands, and draws the classic
-  one where it does not.
+  Rome, the painted steel of the submarine, 214 surfaces over twelve levels -
+  and a floor seen down a long hall lifts towards its own lit colour instead of
+  staying matt. The three VCI levels carry no such mark anywhere and look the
+  same either way. See `hd_reflect`.
 - **The sky is the Remaster's sky.** Every level that has one carries a whole
   panorama of its own past the last room — Rome at sunset with the dome of St
   Peter's, the Irish hills at dusk — painted on a sphere around the camera
@@ -1251,212 +1225,173 @@ perfectly still.
   has clouds but no moon, and the lightning flash is painted through a layer
   the dome would otherwise have replaced.
 
-**What the fourth round changed: the people.** The same play test, everything
-that walks and talks rather than stands still.
+**The people.**
 
-- **The cutscene actors have faces again.** Every speaker in a cutscene stood
+- **The cutscene actors have faces.** The Remaster ships a character's face as
+  a file of its own, and it names it after the PERSON while it names the body
+  after the level slot the body fills, so the obvious "the face of X is X's
+  face file" finds nothing at all for a cutscene, and every speaker stands
   there without a head — the two old men in front of the fire in the Irish
-  chapter, and the guard beside them wearing a cap over nothing. The Remaster
-  ships a character's face as a file of its own, and it names it after the
-  PERSON while it names the body after the level slot the body fills, so the
-  obvious "the face of X is X's face file" found nothing at all for a
-  cutscene. It goes by the person now, out of a list measured face by face
-  against the collar it has to fill — and the log names which rule found which
-  face, so a missing one can be looked up rather than guessed at. Their mouths
-  still do not move: the Remaster animates a face with one small file per
-  spoken line, a format nothing here reads.
+  chapter, and the guard beside them wearing a cap over nothing. The engine
+  goes by the person, out of a list measured face by face against the collar
+  it has to fill — and the log names which rule found which face, so a missing
+  one can be looked up rather than guessed at. Their mouths do not move: the
+  Remaster animates a face with one small file per spoken line, a format
+  nothing here reads.
 - **The catsuit has holsters.** With the randomizer handing Lara a gun in
   every level, the VCI catsuit — which in the original game never carries one
-  — had the pistols hanging in mid air beside her thighs. The pouches, the
-  straps and the belt they hang from are not part of the gun model at all;
-  they are built into the outfit, and the catsuit has none. It now borrows the
+  — would have the pistols hanging in mid air beside her thighs. The pouches,
+  the straps and the belt they hang from are not part of the gun model at all;
+  they are built into the outfit, and the catsuit has none. It borrows the
   black leather rig of the Tomb Raider III London catsuit, cut out of that
   outfit and worn over its own. Only that one outfit: two others carry no rig
   either, but the Antarctica parka and the Nevada vest never wore one in Tomb
-  Raider III and are finished without it — lending them the London straps only
-  put black leather through an orange coat.
-- **The braid lies on her pack.** It no longer walks through her backpack: the
-  game only ever knew the five round shapes of the 1999 body, none of which
-  reaches as far back as the HD pack, so the pack has been given two of its
-  own. What it still does is hang a finger's width clear of the back of her
-  skull, because the classic braid stitches its first link into the head and
-  an HD link is a rigid piece. Moving the braid's anchor closed that gap and
-  made the whole braid tremble instead — the anchor is where the physics
-  starts, and a physics that is nudged every other frame never comes to rest —
-  so the anchor is back where it was and the gap is back with it. A quiet
-  braid with a small gap beat a restless one.
-- **And the braid stopped twisting.** After all that it still flickered while
-  she stood at a door, and the cause was not the physics at all: the game
-  works each link's direction out from whole-number positions, and for a braid
-  hanging straight down two of those numbers are single digits — so the *twist*
-  it derives from them is not an angle but a rounding, and it flips by up to
-  half a turn from one frame to the next. Tomb Raider Chronicles never showed
-  that because its braid is stitched together out of soft joins; ours is six
-  solid pieces of one plait, and a solid plait spun on the spot is very
-  visible. Each piece is now turned about its own length instead, all six by
-  the same amount, taken from the direction of the whole braid rather than of
-  one link — which changes where nothing sits and only which way the plait
-  faces.
+  Raider III and are finished without it — the London straps would only put
+  black leather through an orange coat.
+- **The braid lies on her pack.** The game only ever knew the five round
+  shapes of the 1999 body, none of which reaches as far back as the HD pack,
+  so on its own the braid walks straight through the backpack. The pack is a
+  collision box of its own — see *The backpack is a box* at the end of *Lara in
+  HD* — and the braid's anchor stays put from frame to frame, because the
+  anchor is where the physics starts, and a physics that is nudged every other
+  frame never comes to rest and makes the whole braid tremble.
+- **And the braid does not twist.** The game works each link's direction out
+  from whole-number positions, and for a braid hanging straight down two of
+  those numbers are single digits — so the *twist* it derives from them is not
+  an angle but a rounding, and it flips by up to half a turn from one frame to
+  the next, which shows as a flicker while she stands at a door. Tomb Raider
+  Chronicles never showed that because its braid is stitched together out of
+  soft joins; ours is six solid pieces of one plait, and a solid plait spun on
+  the spot is very visible. Each piece is turned about its own length instead,
+  all six by the same amount, taken from the direction of the whole braid
+  rather than of one link — which changes where nothing sits and only which
+  way the plait faces.
 - **Latex looks like latex.** Tomb Raider Chronicles has no highlight of any
-  kind in its lighting, so every HD outfit came out flat matt beside the
-  Remaster's own picture, where the catsuits shine. Lara's parts now carry a
+  kind in its lighting, so an HD outfit lit that way comes out flat matt beside
+  the Remaster's own picture, where the catsuits shine. Lara's parts carry a
   highlight whose strength says what they are made of — latex for the two
   catsuits, rubber for the diving suit, a soft wide sheen on skin, a light
   satin on the Rome top, a hard small point on a weapon. It follows the room's
   own lights, and in a dark corner there is nothing to reflect and it goes
-  away. Only Lara has it for now; the creatures and the props are unchanged.
-  The material is named per **texture page**, not per model, because a hand
-  model is a hand *and* the gun in it: her skin keeps the soft wide sheen while
-  the weapon in the same hand keeps the hard point, and a gloved outfit's hands
-  shine like leather rather than like skin.
+  away. Only Lara has it; the creatures and the props have none. The material
+  is named per **texture page**, not per model, because a hand model is a hand
+  *and* the gun in it: her skin keeps the soft wide sheen while the weapon in
+  the same hand keeps the hard point, and a gloved outfit's hands shine like
+  leather rather than like skin.
+- **Mesh swaps**, the enemies' separate faces and how an enemy is lit are
+  described under *HD objects* below; Lara's own composite under *Lara in HD*.
 
-**What the fifth round changed: the order the picture is painted in.** The
-play test came back with one sentence about all of it — *"everything behind a
-glow is always slightly wrong"* — and that turned out to be the whole story.
+**The order the picture is painted in.** Everything behind a glow depends on
+it.
 
-- **A lamp cone is not cut off at a doorway any more.** A glow is painted on
-  top of what is already there and leaves no mark of its own in the depth
-  buffer, so whatever was drawn AFTER it simply painted over it — and the
-  rooms were drawn one whole room at a time, so the room beyond a doorway
-  always came after the glow hanging in that doorway. The frame is painted in
-  two passes now: everything solid first, HD and classic together, and then
-  every glow in the game over the finished picture, exactly where the original
-  engine puts its own see-through polygons. The wall lamps of the VCI offices
-  keep their cones through a doorway, and a glow behind a crate is behind the
-  crate rather than gone.
-- **The light stopped throbbing.** The travel of brightness along a shaft was
-  set by hand at a quarter either way in the third round, and the play test
-  called it pulsing. Measured against two recordings the author made of his
-  own Remaster installation, of the same corridor three seconds apart, its
-  shafts move their bright places
-  around and their level barely changes — four percent over three seconds. The
-  travel is a sixth of what it was; the streaks still wander, the room no
-  longer breathes.
-- **The last white shafts are gone.** The third round read every glow's
-  strength out of the art and named four places where the art gives no usable
-  number — a lift shaft in the VCI tower and three window glows in Ireland,
-  which therefore kept drawing at full white. The art groups its glows into
-  presets, and inside a preset the strength is all but the same number in
-  every level that uses it, so those four now take their own preset's
-  strength. The 13th Floor's lift shaft went from a white block to a shaft
-  with streaks in it; nothing saturates anywhere a player stands.
-- **Water meets the bank instead of climbing it.** The swell added in the
-  third round lifted every point of a surface, the ones at the water's edge
-  included, so the water rose over the coping of a pool and covered it with a
-  dark band that travelled with the wave. The wave now dies away over the last
-  square before the edge, which is what water does; the middle of the pool
-  moves exactly as it did.
-- **And the water of Rome animates at last.** The original engine answers "is
+- **A lamp cone is not cut off at a doorway.** A glow is painted on top of
+  what is already there and leaves no mark of its own in the depth buffer, so
+  whatever is drawn AFTER it simply paints over it — and with the rooms drawn
+  one whole room at a time, the room beyond a doorway always comes after the
+  glow hanging in that doorway. The frame is therefore painted in two passes:
+  everything solid first, HD and classic together, and then every glow in the
+  game over the finished picture, exactly where the original engine puts its
+  own see-through polygons. The wall lamps of the VCI offices keep their cones
+  through a doorway, and a glow behind a crate is behind the crate rather than
+  gone.
+- **Glass is glass.** The Remaster marks its see-through surfaces with a
+  material of their own and an opacity beside it. Drawn with an alpha *test*,
+  a texel at 55 % comes out solid and one at 45 % vanishes, so a smooth pane
+  becomes a hard mask of itself - the dark shard pattern in the windows of the
+  submarine. Those surfaces are blended properly, after everything solid and
+  with no depth of their own; 96 of them in eight levels, and nothing else in
+  the game touched. The panes still break when the game breaks them: the piece
+  is the same one Lara can shoot away.
+
+**Water.**
+
+- **Water moves over its whole surface, not just at the corners.** The
+  classic engine marks a water surface at the corners of its own quads, and
+  the Remaster lays a far finer mesh over the same pool - on one VCI pool, 448
+  points where the classic engine has 11. The mark is carried along the
+  surface's own plane, so the whole pool shimmers instead of a sliver of it,
+  and over that runs a gentle swell and a caustic net computed for every pixel
+  rather than for every corner. It carries no brightness of its own - the
+  classic water light is untouched - only the movement, and it stops with
+  `hd_motion`.
+- **Water meets the bank instead of climbing it.** A swell that lifted every
+  point of a surface, the ones at the water's edge included, would rise over
+  the coping of a pool and cover it with a dark band that travels with the
+  wave. The wave dies away over the last square before the edge, which is what
+  water does; the middle of the pool moves in full.
+- **Both kinds of water mark are carried.** The original engine answers "is
   this water" on two different marks — one for an ordinary pool, another for a
-  room roofed by a reflecting ceiling — and the third round carried only the
-  first of them across to the finer Remaster mesh. Ireland's water is all on
-  the first mark and moved; Rome's is all on the second and stood still. Both
-  are carried now. With it, a correction that had to come along: on the second
-  mark the original engine says yes to nearly every surface in the room, walls
-  and ceiling included, so the ripple was moving the WALLS in Rome. Only what
-  lies on the water's own plane moves; the rest still catches the shimmer in
-  its colour, as it always did.
-- **And the room shader on disk is the room shader in the source again.** The
-  checked-in bytecode had been left one edit behind its own HLSL and still
-  carried an experiment the third round had measured and thrown out — 636 of
-  the 512 instruction slots a shader model 3 card must provide. Nothing on the
-  screen changes (the extra code was unreachable); what changes is that the
-  shader now fits inside the guarantee on every card that claims it.
-
+  room roofed by a reflecting ceiling. Ireland's water is all on the first mark
+  and Rome's is all on the second, so carrying only the first would leave the
+  water of Rome standing still. On the second mark the original engine says
+  yes to nearly every surface in the room, walls and ceiling included, and
+  taken as it stands that moves the WALLS in Rome with the ripple. Only what
+  lies on the water's own plane moves; the rest catches the shimmer in its
+  colour, as it always did.
+- **No ripple on the wall at the waterline.** The mark is carried to the finer
+  Remaster mesh by POSITION, and a wall standing at exactly the water's height
+  inside a pool answers yes to it; given the surface's own ripple and its
+  caustic, that wall shows a sheared, darkened triangle at the waterline. The
+  geometry half therefore asks the surface to be **flat** as well; the colour
+  still shimmers on those points, exactly as the original engine does.
 - **The water surface the Remaster does not draw.** Held plane by plane
   against the original level, the Remaster's own room art has **no geometry at
   all** where the original draws its water surface in 61 of the game's 93
-  reflecting rooms - every VCI pool among them. An HD room therefore showed
-  the pool floor with nothing over it, which is what a dark, patternless
-  surface looks like: there was no water there to texture. Where the level has
+  reflecting rooms - every VCI pool among them. An HD room on its own would
+  show the pool floor with nothing over it, which is what a dark, patternless
+  surface looks like: there is no water there to texture. Where the level has
   a water surface and the Remaster's art has none, the level's **own** water
-  face is drawn on top of the HD room now, with its own texture, its own
-  animated texture range and its own shimmer. A room whose surface the
-  Remaster did build - Ireland's ponds, the Rome cistern, most of JOBY3 - is
-  left to it, decided per room out of the art itself.
-- **Glass is glass again.** The Remaster marks its see-through surfaces with a
-  material of their own and an opacity beside it, and this build drew them
-  with an alpha *test*: a texel at 55 % came out solid and one at 45 %
-  vanished, so a smooth pane became a hard mask of itself - the dark shard
-  pattern in the windows of the submarine. Those surfaces are blended properly
-  now, after everything solid and with no depth of their own; 96 of them in
-  eight levels, and nothing else in the game touched. The panes still break
-  when the game breaks them: the piece is the same one Lara can shoot away.
-- **The great hall's sun shafts, down to a minimum.** One tuple of numbers in
-  the art - the slowest-drifting shaft in the game, 16 seconds to a cycle -
-  carries the shafts of the Rome hall, and it was drawing at a peak of 58 % of
-  white. It is 16 % now, faint but there. Every other shaft, cone and glow in
-  the game is untouched, the VCI corridor's streaks included: they carry
-  different numbers and the rule is the numbers.
-- **And no ripple on the wall at the waterline.** The mark that says "this is
-  water" is carried to the finer Remaster mesh by POSITION, and a wall
-  standing at exactly the water's height inside a pool answers yes to it. It
-  was getting the surface's own ripple and its caustic, which on a wall is a
-  sheared, darkened triangle at the waterline. The geometry half now asks the
-  surface to be **flat** as well; the colour still shimmers on those points,
-  exactly as the original engine does.
-
-- **The Remaster's own still water is water.** One of its materials had been
-  read as a second kind of haze and drawn at a fortieth to a fifth of its
-  strength - nearly invisible. Taken apart part by part over the fifteen
-  levels it is nothing of the kind: it is the **surface of standing water**,
-  28 pieces in six levels - the fountain of Rome, the basins of Trajan's
-  Markets, the pools of the Irish labyrinth, the flooded rooms of the sinking
-  submarine and the two open seas - and where the Remaster builds one, the
-  original level's own water surface was being suppressed in favour of
-  something the player could not see. Twelve rooms had no visible water at all
-  for that reason. They have it now, and over it runs a **ripple**, computed
-  for every pixel out of the three numbers the art gives each piece: they
-  scale with the AREA of the body of water over the whole game - a puddle gets
-  short quick waves, the Deepsea Dive's sea a long slow swell - which is what
-  says they are a wave and not a brightness. In six rooms of the sinking
-  submarine the two surfaces would have stood on the same piece of floor, one
-  to twenty units apart; there the original's face gives way to the Remaster's
-  sheet - but only on the squares the sheet really covers, so the pool keeps
-  its own surface everywhere else and no square is left bare. It stops with
+  face is drawn on top of the HD room, with its own texture, its own animated
+  texture range and its own shimmer. A room whose surface the Remaster did
+  build - Ireland's ponds, the Rome cistern, most of JOBY3 - is left to it,
+  decided per room out of the art itself.
+- **The Remaster's own still water is water.** One of its materials looks at
+  first sight like a second kind of haze, and drawn as one it comes out at a
+  fortieth to a fifth of its strength - nearly invisible. Taken apart part by
+  part over the fifteen levels it is nothing of the kind: it is the **surface
+  of standing water**, 28 pieces in six levels - the fountain of Rome, the
+  basins of Trajan's Markets, the pools of the Irish labyrinth, the flooded
+  rooms of the sinking submarine and the two open seas - and read as haze it
+  would also suppress the original level's own water surface in favour of
+  something the player cannot see, leaving twelve rooms with no visible water
+  at all. It is drawn as water, and over it runs a **ripple**, computed for
+  every pixel out of the three numbers the art gives each piece: they scale
+  with the AREA of the body of water over the whole game - a puddle gets short
+  quick waves, the Deepsea Dive's sea a long slow swell - which is what says
+  they are a wave and not a brightness. In six rooms of the sinking submarine
+  the two surfaces would stand on the same piece of floor, one to twenty units
+  apart; there the original's face gives way to the Remaster's sheet - but
+  only on the squares the sheet really covers, so the pool keeps its own
+  surface everywhere else and no square is left bare. It stops with
   `hd_motion`.
 - **And the water the Remaster does NOT build wears its HD frames.** The
-  surfaces the round before restored are the level's own faces, animated the
-  way the original animates water - eight pictures that take turns in the same
-  texture slot every fifth of a second - and the Remaster ships an HD painting
-  of each of those eight. They are found through the level's own texture table
-  and put on the face in the Remaster's order and at the original's pace, so a
-  VCI pool moves exactly as it always did at four times the resolution. Seven
-  levels have such frames (Rome's two, Ireland's Gallows Tree and Old Mill,
-  and three of the four Russian levels — *The Base*, *Deepsea Dive* and
-  *Sinking Submarine*); where a frame has no HD painting the original
-  tile is drawn and nothing is missing.
+  level's own water faces above are animated the way the original animates
+  water - eight pictures that take turns in the same texture slot every fifth
+  of a second - and the Remaster ships an HD painting of each of those eight.
+  They are found through the level's own texture table and put on the face in
+  the Remaster's order and at the original's pace, so a VCI pool moves exactly
+  as it always did at four times the resolution. Seven levels have such frames
+  (Rome's two, Ireland's Gallows Tree and Old Mill, and three of the four
+  Russian levels — *The Base*, *Deepsea Dive* and *Sinking Submarine*); where
+  a frame has no HD painting the original tile is drawn and nothing is
+  missing.
 
-- **No more seeing one room through another one's wall.** Tomb Raider levels
-  are not built like buildings: two rooms can stand in exactly the same place
-  in the world, and the game only ever shows you one of them at a time,
-  because it draws each room **only inside the doorway you are looking at it
-  through**. The HD path drew whole rooms instead, so where two of them
-  overlapped - the storeroom and the air shaft of *The Base*, room 39 and room
-  53, sharing the same coordinates - the second one's shelves and floor grating
-  came through the first one's wall. It cannot be sorted out by distance,
-  because both really are that far away. Every HD room is now drawn inside the
-  same window the original engine gives it, and so is every HD enemy, in the
-  window of the room it stands in. Lara is never cut: she is in the camera's
-  own room, and that room's window is the whole screen.
-
-- **Every line of text is sharp.** The title menu, the names under the
-  inventory ring, the options pages, the load and save lists with their
-  *(quicksave)* line, the statistics after a level, the ammunition counter,
-  the name of a pickup and the subtitles of a cutscene: all of them used to be
-  one 256-pixel page of glyphs from 1999, blown up four and a half times on a
-  1080p screen and six times on a 1440p one, which is why the letters were
-  soft. The Remaster ships the very same alphabet at eight times the size -
-  the same shapes, redrawn, with a dark edge that keeps them readable over a
-  bright wall - and the engine now finds each letter in it and draws that
-  instead. Nothing about the text changes but its sharpness: the same words in
-  the same places, the same size, the same colours (the orange menu titles,
-  the yellow selected row, the red locked ones), the same line breaks.
-  Ninety-three of the game's 106 characters are in the Remaster's alphabet;
-  the thirteen that are not - the twelve PlayStation pad symbols, which it
-  never had, and one accented letter - are drawn the old way, each on its own,
-  in the middle of a sharp line. Bars, icons and the loading screens are a
-  different matter and are not affected.
+**Text.** The title menu, the names under the inventory ring, the options
+pages, the load and save lists with their *(quicksave)* line, the statistics
+after a level, the ammunition counter, the name of a pickup and the subtitles
+of a cutscene are drawn sharp. In the original all of them come out of one
+256-pixel page of glyphs from 1999, blown up four and a half times on a 1080p
+screen and six times on a 1440p one, which is why the letters are soft. The
+Remaster ships the very same alphabet at eight times the size - the same
+shapes, redrawn, with a dark edge that keeps them readable over a bright wall -
+and the engine finds each letter in it and draws that instead. Nothing about
+the text changes but its sharpness: the same words in the same places, the
+same size, the same colours (the orange menu titles, the yellow selected row,
+the red locked ones), the same line breaks. Ninety-three of the game's 106
+characters are in the Remaster's alphabet; the thirteen that are not - the
+twelve PlayStation pad symbols, which it never had, and one accented letter -
+are drawn the old way, each on its own, in the middle of a sharp line. Bars,
+icons and the loading screens are a different matter and are not affected.
 
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
@@ -1467,12 +1402,10 @@ point in space the two sides of a doorway differ by up to a third of full
 brightness in its own art. Nothing here widens it and nothing here can close it
 without repainting the art.
 
-**Switching it on.** Options → *Graphics* → **HD textures** (moved there in
-round 161b1 from its old home as the last row of *tomb5 options*' first
-page). Like every row on that tab it is remembered at once; unlike most of
-them it takes effect **at the start of the next level**, because the art is
-read and unpacked while the level loads. Switch it on, then load a save or
-start a level.
+**Switching it on.** Options → *Graphics* → **HD textures**. Like every row on
+that tab it is remembered at once; unlike most of them it takes effect **at
+the start of the next level**, because the art is read and unpacked while the
+level loads. Switch it on, then load a save or start a level.
 
 There is no options row for the *path*, and normally there does not need to be:
 the engine reads Steam's own folder out of the registry, walks every library in
@@ -1490,7 +1423,7 @@ values, in the same key as every other setting
 
 | Value | Type | Meaning |
 |---|---|---|
-| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. (This row read "nothing below is read at all" until audit round A1, which is false of `hd_install` and `hd_install_tr3`: the sound bank's own search reads them and walks your Steam libraries with `hd_enable` at `0`.) |
+| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** the Remaster's own art carries, `1` by default: the marble of Rome, the painted steel of the submarine and a few hundred other surfaces its artists marked as polished, each with a strength of its own. What they get is not a mirror - nothing is drawn twice - but the one thing a polished floor does that a matt one does not: seen at a grazing angle it lifts towards its own lit colour. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and every surface is matt again. The three VCI levels carry no such mark in their art at all and look the same either way. Does nothing while `hd_enable` is off. |
@@ -1514,9 +1447,8 @@ pixels** are wanted but not required: eleven of the Remaster's pages are that
 big, and a card that stops at 2048 gets those eleven one mip level down instead
 of not at all.
 
-A **32 bit index buffer** is *not* on that list, and has not been since #123
-stage S6. A card that says it can only address 65,536 vertices at a time is no
-longer turned away: every draw here is one range, so each range's indices are
+A **32 bit index buffer** is *not* on that list. A card that says it can only
+address 65,536 vertices at a time is not turned away: every draw here is one range, so each range's indices are
 rebased on the lowest vertex it names and the vertex stream is moved to that
 vertex instead, which never shows the device more than 65,536 at once. What
 the build then does is **measure** rather than assume, per level, and refuse
@@ -1526,9 +1458,7 @@ triangle, and the Remaster's level files number their vertices over the whole
 level, so the widest single triangle reaches over 235,507 vertices (JOBY4) to
 1,391,696 (RICH2) — while RICHCUT2's widest is 33,585. So on a 16 bit card
 RICHCUT2 draws in HD and the other fourteen levels stay classic, each saying
-so in the log. (This paragraph listed the index buffer among the device's own
-requirements until audit round A1; the outcome is the same, the reason is
-not.)
+so in the log.
 
 Video memory is the real question, and the answer is measured rather than
 guessed. Kept exactly as the Remaster drew them, one level's pages come to
@@ -1594,12 +1524,11 @@ If the card genuinely runs out of video memory in the middle of a level load,
 that level goes back to classic as a whole — never half of it — and the log
 names the page it failed on.
 
-**The light in an HD room now does everything it did before.** An earlier
-build drew the remaster's rooms with the remaster's baked light and nothing
-else, so a torch did not brighten an HD wall and three option switches were
-dead inside one. That is over: every effect the engine computes for a classic
-room vertex is computed for an HD room too, from the same numbers, at the same
-moment, and hanging off the same switch.
+**The light in an HD room does everything it does in a classic one.** The
+remaster's baked light on its own would leave a torch unable to brighten an HD
+wall and three option switches dead inside one, so every effect the engine
+computes for a classic room vertex is computed for an HD room too, from the
+same numbers, at the same moment, and hanging off the same switch.
 
 | What | Where you see it | The switch |
 |---|---|---|
@@ -1618,7 +1547,7 @@ sum. The **brightest surfaces** stay brighter than the classic engine would
 draw them: TR5 stops multiplying the texture at a certain point and starts
 adding instead, which is a trick from the days of fixed graphics hardware, and
 the HD path keeps multiplying — which is how the remaster's own art is meant to
-be lit and how the HD rooms already looked before this change. And the **water
+be lit. And the **water
 pattern** is finer: the table is sampled once per vertex, and an HD room has
 far more vertices than a classic one. Same table, same speed, same strength — a
 denser grid.
@@ -1631,9 +1560,8 @@ pushing and popping a matrix per piece and blending between two animation
 frames. The HD model wants exactly those matrices, so the engine does not
 build them a second time: it rides along on the walk it already does. The
 animation, the frame blending and the mesh tree stay the game's own, down to
-the last rounding — only the last step changes, where a piece's classic mesh
-used to go into the texture buckets and its **matrix** now goes to the model
-instead.
+the last rounding — only the last step changes: where a piece's classic mesh
+would go into the texture buckets, its **matrix** goes to the model instead.
 
 **How many.** Per level, of every slot the level really loads - creatures,
 traps, doors, pickups, the lot: ANDREA1 draws 68 of 153 in HD, JOBY3 89 of
@@ -1641,7 +1569,7 @@ traps, doors, pickups, the lot: ANDREA1 draws 68 of 153 in HD, JOBY3 89 of
 "partial"). Most of the remainder is `no_model` on purpose - triggers, AI
 markers, invisible logic slots the remaster was never asked to draw a picture
 of at all - not a model that failed to bind. The rest, and every slot with no
-model at all, draws exactly as it did before — the two paths sit side by side
+model at all, draws exactly the classic way — the two paths sit side by side
 in the same frame and in the same depth buffer.
 
 **When an object stays classic.** Four reasons, and every one of them is
@@ -1655,7 +1583,7 @@ written into the log with the slot it applies to:
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
-| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart, which is exactly what the first play-through showed. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. |
+| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. |
 
 **Which model a slot asks for** comes from four places, in this order: the
 level's own name table beside it in the remaster's `DATA` folder, which lists
@@ -1709,7 +1637,7 @@ reason alone, the same `no_model` this section already names. `BOTTLE`,
 `WET_CLOTH` and `EXAMINE1`/`2`/`3` are a different case worth telling apart
 from those: each has a real model under its own bare name (`BOTTLE.TRM`,
 `WET_CLOTH.TRM`, `EXAMINE1.TRM` and so on), so the fourth rule already
-reaches them without this round's help - not one of the fifteen shipped
+reaches them without the pickup rule - not one of the fifteen shipped
 levels loads any of the three `EXAMINE` slots as a real moveable, so whether
 that model actually draws has not been measured, only that it is there to be
 asked for.
@@ -1748,19 +1676,15 @@ in half. `ModelProbe -all` prints the whole table for any level.
 * **A separate face brings its neck with it.** Where the remaster ships the
   face as its own file — Pierre, Larson, the guards, Von Croy — that file is
   not only the face: it carries the neck and a piece of the collar as well,
-  and Pierre's reaches 165 units below the joint the head turns on. Bolting
-  the whole file to the head node made the neck swing with the skull and tear
-  a hole at the collar, which is what his death animation showed. The one
-  piece of that file that hangs below the head now follows the node the head
+  and Pierre's reaches 165 units below the joint the head turns on. Bolted
+  whole to the head node, the neck would swing with the skull and tear a hole
+  at the collar, which is what his death animation shows that way. The one
+  piece of that file that hangs below the head follows the node the head
   hangs off — the torso — with the file's own weights kept, so the seam bends
   instead of tearing.
 * **Distance models are off** for HD objects. TR5 swaps in a coarser model
   five sectors away; the remaster has no coarse model, and a door that turned
   from HD to classic as you walked away from it would pop every time.
-* **A glow can be painted over.** A model's additive pass — glowing eyes, a
-  lamp — is drawn before the classic opaque objects, so a classic object
-  standing *behind* such a glow paints over it. Rare, and the same hole the
-  rooms have had since they went HD.
 
 **The light is the engine's own, per vertex.** The classic engine lights an
 object vertex by vertex out of a light list it builds per piece; a flat colour
@@ -1805,9 +1729,9 @@ projection is built from that very number.
 
 There is a shortcut here that looks equivalent and is not: the same sideways
 slide can be put into the object's own matrix as a lean, and the projection's
-division undoes it just as exactly. The first version of this did that, and the
-ring came out lit wrong — 28 % too dark in the middle of the row and 16 % too
-bright on the ammo row below it, because the shader takes each surface's
+division undoes it just as exactly. Done that way, the ring comes out lit
+wrong — 28 % too dark in the middle of the row and 16 % too bright on the ammo
+row below it, because the shader takes each surface's
 *normal* through that same matrix, and a leaning matrix tilts the normals with
 it. The slide belongs in the projection, where a normal never goes.
 
@@ -1854,9 +1778,9 @@ shown.
 **The actors of a cutscene draw HD as well.** A cutscene does not run the
 ordinary object path: the actors are packed animation nodes played back by a
 routine of their own, with their own frame buffer and their own light. Lara
-was HD there from the start because she is drawn by her own routine either
-way, so a cutscene showed an HD Lara talking to a 1999 Von Croy until the same
-seam was put into the actor routine. One actor stays classic on purpose: the
+is drawn by her own routine either way, so without the same seam in the actor
+routine a cutscene would show an HD Lara talking to a 1999 Von Croy; the seam
+is there, and the actors are HD. One actor stays classic on purpose: the
 one the script fades in and out of the picture. That fade is a half-transparent
 draw an HD model has no pass for, and a fade that jumped to solid halfway
 would be worse than a classic model.
@@ -1886,8 +1810,8 @@ their faces do not sit on the classic wall plane — and 128 units **inward**
 along the other two. Inward, because a cut room keeps its HD art and an HD
 room never draws its classic roomlets, so art the box removes is replaced by
 nothing at all: the box may hold only what stands inside the opening. An
-outward step there takes the passage's own floor and ceiling and leaves the
-void showing, which is what the first version of this did.
+outward step there would take the passage's own floor and ceiling and leave
+the void showing.
 
 Every group is asked about every box rather than just the two rooms the
 doorway joins. That is insurance: the remaster's rooms reach into each other,
@@ -1901,9 +1825,9 @@ room a surface it never had; neither leaves anything of the remaster's art
 worth keeping, so those rooms are drawn the classic way, whose geometry is by
 definition the geometry the run really built.
 
-Before this was split in two, an opening took its whole room as well. ANDY3
-with the glitchless secret list opens two doorways, and that turned four of
-its 211 rooms classic — among them the whole village courtyard — with the
+An opening costing its whole room would be far worse: ANDY3 with the
+glitchless secret list opens two doorways, and whole-room treatment turns four
+of its 211 rooms classic — among them the whole village courtyard — with the
 seam between the HD and the classic half showing the void. The box costs two
 sectors' worth of art instead.
 
@@ -1921,18 +1845,8 @@ say, and "restore original" deletes it again; a level with no such file has
 no markers, which is what a vanilla installation looks like. It is plain text
 and you can read it. A file this engine does not understand — a newer
 randomizer, a version line it has no rule for — is refused whole, with the
-reason in `log.txt`, and the level then draws the way it did before any of
-this existed.
-
-One thing that will look wrong if you go looking for it: a static object you
-destroy — a vase, a crate — disappears from the game but not from the room's
-art, because that art is one baked piece. It belongs to the stage that draws
-objects.
-
-The sky stays the engine's own. TR5 draws it procedurally, before the rooms and
-without depth, and the HD walls paint over it exactly as the classic ones did.
-The remaster keeps a sky dome of its own in the same file — one extra group per
-level, measured — and it is deliberately not drawn.
+reason in `log.txt`, and the level then draws as if there were no such file
+at all.
 
 **The log.** With `-log`, `log.txt` gets a block of `HDLOG` lines per level.
 The ones worth reading:
@@ -2035,17 +1949,15 @@ HDLOG level=TITLE clipped summary frames=173 lights=0 bulbs=173
 ```
 
 The first line is written by the first frame that clipped, the second at the
-end of the level — **never once per frame**, which is what an earlier version
-did and what got the fog bulb maximum raised from six to eight in the first
-place. `offered_` is what the engine wanted, the `maxima` are what the shader
+end of the level — **never once per frame**. `offered_` is what the engine wanted, the `maxima` are what the shader
 has room for. Eight is a measured number, not a guess: counted out of all
 sixteen level files, a level holds up to seventeen fog bulbs (`ANDREA2`, and
 `TITLE` has seventeen too), and sweeping every camera position a level allows,
 up to sixteen of them can be alight at once — 16 in `ANDREA2`, 14 in `RICH2`,
 13 in `ANDY1`, 11 in `TITLE`, 10 in `RICH1`. So a `clipped bulbs` line in those
 levels is expected: the bulbs that are dropped are the ones furthest down the
-engine's own list. Eight is where the title screen stopped visibly losing one;
-the engine's own ceiling is sixteen.
+engine's own list. Eight is where the title screen stops visibly losing one —
+at six it does; the engine's own ceiling is sixteen.
 
 If the HD path refuses, it says so in one line and the game runs on classic —
 no error box, no changed picture:
@@ -2056,7 +1968,7 @@ HDLOG level=ANDREA1 build refused reason=the device has no vertex/pixel shader 3
 
 **Memory.** The remaster's pages are BC7, a format Direct3D 9 has never heard
 of, so every one of them is unpacked on the processor and handed to the card as
-plain 32-bit pixels — no quality lost, which was your call. For the heaviest
+plain 32-bit pixels — no quality lost, by design. For the heaviest
 level that is 376 MB of texture. Kept in video memory it costs the process
 **270 MB** at its peak; kept in Direct3D's *managed* pool, where the driver
 holds a second copy in main memory, it costs **545 MB**. The first is what this
@@ -2075,8 +1987,7 @@ your own installation.
 
 ### Lara in HD
 
-Lara was the last thing on the screen that was still the original model, and
-she is the hardest one, because she is not an object. Every other creature is
+Lara is the hardest model on the screen, because she is not an object. Every other creature is
 one slot and one model file. Lara is a **composite**: the engine draws her out
 of five slots at once — the skinned body from `LARA_SKIN`, the seams that close
 it from `LARA_SKIN_JOINTS`, the hands from whichever weapon slot the mesh swap
@@ -2084,10 +1995,10 @@ put there this frame, the thigh straps from `LARA_HOLSTERS*` and the braid from
 `HAIR` — and the remaster does the same thing with a wardrobe of separate
 models.
 
-**She is drawn now.** Her fifteen joint matrices are the engine's own, built by
-the same animation code as before, so she moves exactly as she always did; what
-changed is which geometry hangs off them. Which parts are on her changes from
-frame to frame and is read from the engine's own state: which slot owns each
+**How she is drawn.** Her fifteen joint matrices are the engine's own, built by
+the same animation code as in the classic game, so she moves exactly as she
+always did; only the geometry that hangs off them is the remaster's. Which
+parts are on her changes from frame to frame and is read from the engine's own state: which slot owns each
 hand this frame, what is in the two thigh holsters, what is on her back.
 
 **Which outfit a level wears** is decided out of the engine's own facts, not
@@ -2099,20 +2010,20 @@ from a list of level names:
 | The Russia outfit, with the cap | Base, Submarine, Sinking Submarine | `OUTFIT_RUSSIA` | the engine's **own** braid test: a Russia level with `LARA_NORMAL`, or `LARA_BUNHEAD` anywhere. That expression already stands three times in the braid code and once in the skinning code, and it is the only thing in this engine that can tell the cap from the Rome outfit — a vanilla Russia level carries the same outfit byte Rome does. |
 | The diving suit | Deepsea Dive | `OUTFIT_SUBSUIT` | the outfit byte, which has a value of its own for it |
 | The VCI catsuit | The 13th Floor, Escape with the Iris, Red Alert, the title screen | `OUTFIT_VCI` | the outfit byte, likewise |
-| Young Lara | Gallows Tree, Labyrinth, Old Mill | — **stays classic** | the script flag `GF_YOUNGLARA`, or the outfit byte `LARA_YOUNG`. Either one. **Not the level range** — see the note below the table. This is your decision, not a limit: `OUTFIT_YOUNG`, `LARA_YOUNG_HEAD` and `HAIR_PIGTAIL` all exist in the remaster. |
+| Young Lara | Gallows Tree, Labyrinth, Old Mill | — **stays classic** | the script flag `GF_YOUNGLARA`, or the outfit byte `LARA_YOUNG`. Either one. **Not the level range** — see the note below the table. This is a decision, not a limit: `OUTFIT_YOUNG`, `LARA_YOUNG_HEAD` and `HAIR_PIGTAIL` all exist in the remaster. |
 | A Tomb Raider III outfit | wherever the randomizer rolls one | `OUTFIT_TR3_ANTARC`, `_NEVADA`, `_COAST`, `_CATSUIT` | `data[3]` of the level header, which the randomizer writes — see below |
 
 Read against all fifteen vanilla level files those rules give the right answer
 fifteen times out of fifteen.
 
-**Why young Lara is not the Irish levels.** She used to be, and it was wrong
-in a randomized run. The engine builds the child body at exactly two places,
+**Why young Lara is not the Irish levels.** The level range alone is wrong in
+a randomized run. The engine builds the child body at exactly two places,
 and both of them ask the level range **and** the script flag together — the
 flag is what puts the child's ribcage over the skin. The randomizer clears
 that flag out of `SCRIPT.DAT` for all three Irish levels, because young Lara
 can carry no weapon at all, and puts a grown Lara's skin in the level; the
-range on its own therefore said "child" about an adult and drew the whole
-Irish section the classic way. The flag and the outfit byte both change when
+range on its own would therefore say "child" about an adult and draw the
+whole Irish section the classic way. The flag and the outfit byte both change when
 the randomizer changes her, so either of them is a true answer and the range
 is not. In a vanilla game nothing moves: those three levels carry the flag
 *and* the byte.
@@ -2146,21 +2057,20 @@ judged by, and the answer is comfortable: over every level the mean drift of a
 wardrobe part against that level's own Lara mesh tree is 3 to 9 units and the
 worst single pair 183, against a limit of 256.
 
-**The Tomb Raider III outfits** were the last gap and are closed. The
-randomizer rolls one of the four (#122) and writes the outfit byte
-`LARA_PONYTAIL` when it does — but that is the same byte it writes for the
-Rome outfit inside a Russia level, so the byte alone can say neither *which*
-of the four she is wearing nor that she is wearing one at all. It now writes
-a marker beside it: `data[3]` of the level header, four bytes the engine
+**The Tomb Raider III outfits** are drawn in HD as well. The randomizer rolls
+one of the four and writes the outfit byte `LARA_PONYTAIL` when it does — but
+that is the same byte it writes for the Rome outfit inside a Russia level, so
+the byte alone can say neither *which* of the four she is wearing nor that she
+is wearing one at all. It therefore writes a marker beside it: `data[3]` of the level header, four bytes the engine
 already reads before it loads a single room, carrying the engine's own
 outfit number so that neither side has to translate. `0` in every vanilla
 file — measured over all seventeen — and 5 to 8 for the four guests.
 
-With the marker there, the `LARA_PONYTAIL` byte means one thing again and
-not two: the Rome body inside a Russia level, `OUTFIT_CLASSIC`. The one case
-left over is a level file randomized by a version **older** than this
-marker: it carries the ponytail byte and a `data[3]` of 0 for a guest as
-well, and now shows a Rome Lara where that run rolled a Nevada one. Nothing
+With the marker there, the `LARA_PONYTAIL` byte means one thing and not
+two: the Rome body inside a Russia level, `OUTFIT_CLASSIC`. The one case left
+over is a level file randomized by a version **older** than this marker: it
+carries the ponytail byte and a `data[3]` of 0 for a guest as well, and shows
+a Rome Lara where that run rolled a Nevada one. Nothing
 in the file can tell those apart — that is what the marker was added for —
 and randomizing the level again with the current version says it.
 `log.txt` prints the raw facts per level in the `HDLOG … lara …
@@ -2170,14 +2080,14 @@ laratype=… data3=…` line.
 
 | What | Why |
 |---|---|
-| Young Lara | your decision. The models exist in the remaster. |
+| Young Lara | a decision, not a limit. The models exist in the remaster. |
 | The skeleton cheat (`skelebob`) | its own draw path and its own overlay meshes; the wardrobe has neither. |
 | The muzzle flash, the gun shells, the flare in flight | drawn by their own routines outside `DrawLara` and never part of the composite. |
 | The diving suit's two thrusters | they are a separate object on her torso, not a part of her body, and the remaster's wardrobe has no model for them. They keep being drawn the classic way **on top of** the HD suit — two small low-resolution pieces, against a diving suit with nothing on its back. |
 | The catsuit's sheen | the classic catsuit is drawn through the engine's environment map, a second view-dependent pass an HD model does not have. The remaster's own `OUTFIT_VCI` carries its shading in its textures, so the HD catsuit is matte where the classic one glints. Not faked: inventing a specular term would be inventing a look. |
 | The inventory | the ring draws its own objects and never calls `DrawLara`. |
 
-**First person** (#126) drops the same three things from the HD Lara that it
+**First person** drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of
 which sit exactly where the camera does. The braid's *physics* keeps running
 the whole time — `HairControl` is part of the game loop and not of the draw —
@@ -2186,8 +2096,7 @@ very next frame.
 
 Three things then happen that have no counterpart in the classic body, and all
 three are done on **her body's draw alone**, so that her hands, her holsters
-and the weapon on her back are never touched (#123, stage S8, fix rounds J, K,
-L and S):
+and the weapon on her back are never touched:
 
 - **The neck goes with the head, and the cut is one plane.** The classic head
   *mesh* is head and neck in one piece; an HD body is a single skinned surface
@@ -2207,25 +2116,23 @@ L and S):
   tube. Deeper eats neck one can see from outside; shallower puts the lid
   inside the renderer's near plane, which is at 20.
 
-  **Your collar stays on.** That is the visible change: the Russia jacket opens
-  out twelve units down, the parka fourteen, and the VCI catsuit's collar ring
-  stands seventy units off the axis from six to sixteen. All three are below
-  the plane, so all three are drawn — and looking down at your own collar is
-  what looking down does.
+  **Your collar stays on.** The Russia jacket opens out twelve units down, the
+  parka fourteen, and the VCI catsuit's collar ring stands seventy units off
+  the axis from six to sixteen. All three are below the plane, so all three are
+  drawn — and looking down at your own collar is what looking down does.
 
-  *Three shapes were tried before it and all three were sent back by the play
-  test.* A **sphere around the eye** (stage S8) large enough to take the stump
-  also bit sixty units out of her chest against a wall and chewed a jagged edge
-  into a wrist brought up to the camera. A **cylinder about the neck axis in
-  the bind pose** (fix rounds J to L) came back three rounds running with the
-  collar still standing, and the reason is one measurement: the vertex under
-  her chin carries bones 7/14/5 at weights 140/114/1 — it is 55 % torso and
-  45 % *head*, so where a bind-pose shape falls on her skin **moves with the
-  animation**, and the node mask that kept the shape off an arm kept it off
-  half the neck as well. A **cone** was built in round L and bought three
-  vertices. A plane fixed to the head has none of those freedoms: what is above
-  it is above it in every pose and at every camera angle, and it needs no mask
-  at all, because nothing of an arm is ever above your chin.
+  *Why a plane and not another shape.* A **sphere around the eye** large
+  enough to take the stump also bites sixty units out of her chest against a
+  wall and chews a jagged edge into a wrist brought up to the camera. A
+  **cylinder about the neck axis in the bind pose** leaves the collar
+  standing, and the reason is one measurement: the vertex under her chin
+  carries bones 7/14/5 at weights 140/114/1 — it is 55 % torso and 45 %
+  *head*, so where a bind-pose shape falls on her skin **moves with the
+  animation**, and the node mask that keeps the shape off an arm keeps it off
+  half the neck as well. A **cone** takes only three vertices more. A plane
+  fixed to the head has none of those freedoms: what is above it is above it
+  in every pose and at every camera angle, and it needs no mask at all,
+  because nothing of an arm is ever above your chin.
 
 - **And the hole is closed with a lid.** A disc **in the plane itself**,
   skinned rigidly to the head node so that the two cannot drift apart. Its
@@ -2241,19 +2148,18 @@ L and S):
   not the majority of the stump, which on the Russia coat is 276 vertices of
   coat against 51 of throat. And the coordinate is the **centroid of the
   biggest triangle** on that page rather than a vertex of it: a vertex sits on
-  the edge of its texture island, where the paint stops, and taking one gave
+  the edge of its texture island, where the paint stops, and taking one gives
   the four Tomb Raider III guests a dark brown (63, 38, 21) instead of skin.
   The centroids that ship read 201/153/115 for the three game 5 bodies,
   199/146/108 for the four Tomb Raider III guests, and near black for the
   diving suit, which has no throat at all.
 
-  *A dome was tried for two rounds and withdrawn* (#123, fix rounds I and J,
-  undone in K). It was cut to the outfit's own collar ring, and with the eye on
-  the head joint it read as a great flat skin-coloured plate across the whole
-  view, wearing the **backpack straps** on the Russia coat because that is the
-  page its rim happened to sit on. This one is flat because the hole is flat, a
-  neck wide because the hole is a neck wide, and its colour is measured rather
-  than inherited.
+  *Why a flat disc and not a dome.* A dome cut to the outfit's own collar
+  ring, with the eye on the head joint, reads as a great flat skin-coloured
+  plate across the whole view, and wears the **backpack straps** on the Russia
+  coat because that is the page its rim sits on. The lid is flat because the
+  hole is flat, a neck wide because the hole is a neck wide, and its colour is
+  measured rather than inherited.
 
 - **Her body is drawn one-sided there.** The HD path draws every model double
   sided; the classic engine only *looks* as if it does, because it culls back
@@ -2263,17 +2169,16 @@ L and S):
   changes — the same view of her with and without the culling is identical to
   the pixel.
 
-*A second, inward draw of the whole body was tried and measured out again*
-(#123, fix round K, withdrawn in fix round S). It kept exactly the faces the
-first draw culls, so that a ray through the neck hole met the far wall of her
-own chest instead of the room. With a lid there it closes nothing the lid does
-not close: forty pictures — five outfits, three pitches, both eyes the game
-uses, and the head turned forty degrees and the torso bent thirty on top of
-that — are identical to the pixel with it and without it. It cost a second pass
-over 27,000 triangles every first person frame and one real fault of its own: a
-strap or a shoulder flap is a single layer of triangles whose two sides sit at
-the same depth to the bit, and the inward draw won that tie, which is the torn
-edges and missing straps of one play test.
+*There is no second, inward draw of the whole body.* Such a draw keeps exactly
+the faces the first draw culls, so that a ray through the neck hole meets the
+far wall of her own chest instead of the room. With a lid there it closes
+nothing the lid does not close: forty pictures — five outfits, three pitches,
+both eyes the game uses, and the head turned forty degrees and the torso bent
+thirty on top of that — are identical to the pixel with it and without it. It
+costs a second pass over 27,000 triangles every first person frame and brings
+one real fault of its own: a strap or a shoulder flap is a single layer of
+triangles whose two sides sit at the same depth to the bit, and the inward
+draw wins that tie, which shows as torn edges and missing straps.
 
 *Left over, and honestly:* in the **diving suit** the helmet is modelled on the
 torso node too, so it cannot be masked off with the head. The plane cuts
@@ -2291,17 +2196,18 @@ looking down your own neck from inside your own head gives, and it is closed:
 straight down, none of the room shows at all.
 
 **Her own skin shines like skin, whatever she is wearing.** The body draws with
-one material, and part of a body is Lara and not her clothes: a bare forearm
-therefore wore the *outfit's* sheen while the separate hand model over it wore
-the *skin's*, and the two met at the wrist. Everything else at that seam is
-identical - the same node ambient, the same light list, the same sun factor,
-the same matrices - so the whole of the difference was the highlight, and the
-shader multiplies that by the room's own brightness. That is why the play test
-reported it as a difference in *light*: "in five rooms the hand is now brighter,
-now darker than the forearm". Measured as the grey levels the highlight adds at
-full ambient, the seam ran 5.1 on the Rome body, 10.2 on the Nevada and jungle
-guests and 84.1 on the London one; naming Lara's own skin pages per outfit and
-giving them the hands' material takes all five to 0.0. The three that keep a
+one material, and part of a body is Lara and not her clothes: with nothing
+more, a bare forearm wears the *outfit's* sheen while the separate hand model
+over it wears the *skin's*, and the two meet at the wrist. Everything else at
+that seam is identical - the same node ambient, the same light list, the same
+sun factor, the same matrices - so the whole of the difference is the
+highlight, and the shader multiplies that by the room's own brightness, which
+is why it shows as a difference in *light*: from room to room the hand is
+brighter, then darker than the forearm. Measured as the grey levels the
+highlight adds at full ambient, that seam runs 5.1 on the Rome body, 10.2 on
+the Nevada and jungle guests and 84.1 on the London one; Lara's own skin pages
+are therefore named per outfit and given the hands' material, which takes all
+five to 0.0. The three that keep a
 difference keep it on purpose - a latex sleeve meeting a bare hand, a coat
 sleeve meeting a leather glove and the diving suit's gauntlets are material
 boundaries in the art, not faults.
@@ -2319,7 +2225,7 @@ nothing of her is put on the HD frame list while the scope is up, and leaving
 it puts `mesh_bits` back to −1 in the same place it was always put back. The
 scope's own mask, the pickup display and the fade lie **above** the HD world:
 the HD rooms and objects are drawn immediately before `DrawBuckets`, and the
-depth clear that separates the world from the overlays (#127) comes after all
+depth clear that separates the world from the overlays comes after all
 of it. `AlterFOV` moves the field of view *inside* the frame while zooming, and
 the HD path takes its projection when the world is **collected** rather than
 when it is drawn, which is the same field of view the classic path transformed
@@ -2341,26 +2247,26 @@ how many of its links it pushed, where the tip ended up, how far the root and
 the tip travelled since the last frame, and the worst one-frame twist of any
 link — once as the game works it out and once as the picture really shows it.
 It is there because the braid's physics carries state from frame to frame — the
-anchor moving between two places on alternating frames is what once made it
-tremble — and a per-frame trace is the only thing that shows it. Standing
+anchor moving between two places on alternating frames makes it tremble —
+and a per-frame trace is the only thing that shows it. Standing
 still, the travel figures go to zero and stay there and the twist figure stays
 in single digits; anything else is worth a bug report. `ModelProbe -braidsim`
 runs the same chain offline, without a game around it, and says whether a braid
 ever comes to rest; `ModelProbe -braidanim` runs it under Lara's own
-animations, which is where the twist was caught.
+animations, which is where the twist shows.
 
 **The backpack is a box.** An HD outfit carries a pack the classic collision
-spheres know nothing about — they are the classic body's own meshes — so the
-braid used to hang straight through it. It is a slab, 120 wide, 130 tall and
+spheres know nothing about — they are the classic body's own meshes — so with
+the spheres alone the braid hangs straight through it. The pack is a slab, 120 wide, 130 tall and
 62 deep behind the torso joint, identical in every wardrobe body to within
 three units, and the braid is pushed out of it along whichever of its six faces
 is nearest, with the rear one preferred and a margin that is the plait's own
 radius. A sphere cannot do that job: one tangent to a flat face touches it at a
 point, and a hand's width to either side the braid is inside the pack again.
 With the box under it the braid also hangs from the hair knot rather than 15
-units behind the skull, which is where the remaster hangs it — that anchor was
-tried once before and withdrawn because two spheres pushing in turn would not
-let the chain settle, and a box has no curved side to slide down.
+units behind the skull, which is where the remaster hangs it — an anchor that
+two spheres pushing in turn would never let settle, while a box has no curved
+side to slide down.
 
 ---
 
@@ -2580,8 +2486,8 @@ are not case-sensitive.
 | Everything at once | `WeaponDamage`, `EnemyHealth`, `EnemyDamage` — percentages applied **on top** of everything above |
 | Sound | `SceneryRange` |
 
-**`SceneryRange`** is 65 where the original is 100: machines, fire and dripping
-water used to carry through half a level and drown out an enemy walking up
+**`SceneryRange`** is 65 where the original is 100: at 100, machines, fire and
+dripping water carry through half a level and drown out an enemy walking up
 behind you. Set it back to 100 for the original soundscape. Only stationary
 scenery is affected — enemies and Lara always keep their full range.
 
@@ -2598,7 +2504,7 @@ one.
 
 ## The secret counters
 
-**Pause → Statistics** now shows the level's own count in brackets behind the
+**Pause → Statistics** shows the level's own count in brackets behind the
 campaign total:
 
 ```
@@ -2625,7 +2531,7 @@ deliberately.
 
 ## Secret rewards
 
-Finding every secret in a level now awards items, the way Tomb Raider II did
+Finding every secret in a level awards items, the way Tomb Raider II did
 it. The original Chronicles gave nothing at all.
 
 What each level awards is read from `SecretRewards.txt` beside the executable,
@@ -2664,7 +2570,7 @@ The key was gone from the inventory, the keyhole came back "unused", and the
 door could never be opened again. If a door has ever refused to open after a
 reload, that was probably why. Fixed here.
 
-Keys now count like puzzle items — a second key of the same type is kept
+Keys count like puzzle items — a second key of the same type is kept
 instead of being thrown away, and the ring shows how many you carry; the save
 format grew with it, which is what makes every Beta 1.0 save too short for
 this build — refused, with the message box above, and the game closes.
@@ -2676,7 +2582,7 @@ this build — refused, with the message box above, and the game closes.
 These are deliberate. A randomized run walks into situations Core never had to
 think about, and each of these is one of them.
 
-**Three enemies can now be killed.** The chef, the skeletons and the swamp
+**Three enemies can be killed.** The chef, the skeletons and the swamp
 witch had hit points and took damage, but nothing ever checked whether they
 had run out. In the original it never showed: the chef's level takes Lara's
 weapons away first, the skeletons' level hands her nothing that hurts them,
@@ -2713,11 +2619,11 @@ had no such test. Enemies, statues and a second block still stop it.
 pulled off a wall at a particular angle; dropped on open floor that can never
 happen again and the item would be lost for good.
 
-**Corpses and models behave.** Larson no longer stands dead forever outside
+**Corpses and models behave.** Larson does not stand dead forever outside
 Trajan's Markets. Larson and Pierre only flee where the level actually
-contains the marker they run to — without one they used to become immortal.
-Enemies no longer switch to a low-detail distance model at range, because the
-engine took whatever sat in the next model slot, which in a foreign level is
+contains the marker they run to — fleeing without one makes them immortal.
+Enemies do not switch to a low-detail distance model at range, because the
+engine takes whatever sits in the next model slot, which in a foreign level is
 something else entirely. And a mesh swap a cutscene performs on Lara is undone
 when it ends or is skipped, so you do not keep playing as catsuit Lara in a
 knitted beanie.
@@ -2787,8 +2693,7 @@ often the picture is presented. Read the line like this:
   screens, the death menu and the level-change fade, all of which keep thirty
   at any setting (see **Frame rate**) — and judging those against 16.7 ms
   would report a perfectly healthy menu as thirty late frames a second. The
-  title screen and the inventory ring are *not* on that list: since round 154
-  both present at the rate the option asks for, and `budget=` follows them
+  title screen and the inventory ring are *not* on that list: both present at the rate the option asks for, and `budget=` follows them
   there by itself, because it is read off the present the frame really waited
   for rather than off the setting.
 - **`frames=`** is the frame rate itself. Under the rate `budget=` implies is
@@ -2800,9 +2705,6 @@ often the picture is presented. Read the line like this:
   all there, which together with `hd_rooms=0` and `frames=30` is how such a
   second is recognised. The **title** screen is not one of them — it walks its
   own thirty ticks and draws rooms, so a title second reads `logic_ticks=30`.
-  (An earlier printing of this manual said "a second in a menu" and named the
-  title and the inventory among the screens kept at thirty; corrected in audit
-  round A1.)
 - **`late=`** counts the frames that actually missed their slot — over
   `budget` plus half a sixtieth, so over 41.7 ms at a 33.3 ms budget and over
   25.0 ms at a 16.7 ms one. This is the number that matters.
@@ -2983,8 +2885,8 @@ steps (2), between two key frames (1) or not at all (0); `armR` / `armL` are
 the weapon animation's frame the arm was drawn from beside the previous step's
 frame the blend used; `ok` whether the arms were blended in time; and `hips`,
 `R`, `L` are the positions of the hips and of shoulder, elbow and hand of the
-right and of the left arm, in the camera's own space. Written for a report of
-the right arm shaking with the shotgun and the HK at 60 — a shake too fast for
+right and of the left arm, in the camera's own space. It is there for the
+right arm shaking with the shotgun and the HK at 60 — a shake too fast for
 any one video frame, which this line turns into numbers: the hand relative to
 the hips going there and back between consecutive frames.
 
@@ -3051,9 +2953,7 @@ into `TR5Randomizer.exe`, not into the game. **discord-rpc** is in the source
 tree as upstream shipped it and is switched off at the source
 (`TOMB5_DISCORD_RPC 0`) — nothing of it is linked into either program, and its
 notice travels because the source does. All of them are named in
-`THIRD-PARTY.md`, and every licence text is in `Licenses\`. (This paragraph
-named Dear ImGui and discord-rpc as compiled into the engine, and left TRForge
-out, until audit round A1.)
+`THIRD-PARTY.md`, and every licence text is in `Licenses\`.
 
 **No Tomb Raider game data ships with any of it**, and none of *Tomb Raider
 IV-VI Remastered*'s either. Both games belong to their rights holders; you

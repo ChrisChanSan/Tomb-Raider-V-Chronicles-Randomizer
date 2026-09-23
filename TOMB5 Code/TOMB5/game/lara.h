@@ -190,6 +190,24 @@ long LaraTestEdgeCatch(ITEM_INFO* item, COLL_INFO* coll, long* edge);
 void lara_as_duckroll(ITEM_INFO* item, COLL_INFO* coll);
 void lara_col_duckroll(ITEM_INFO* item, COLL_INFO* coll);
 
+/* The ledge hang's refusal bits, one per reason the move must not start at
+ * an edge; LaraLedgeRefusals (game\lara.cpp) says which engine test each is. */
+enum lara_ledge_refusal
+{
+	LEDGE_REFUSE_SHALLOW =	0x1,	// the drop behind the edge is 768 or less
+	LEDGE_REFUSE_SLOPE =	0x2,	// the ledge floor slopes
+	LEDGE_REFUSE_SLIDE =	0x4,	// the floor under her would slide her
+	LEDGE_REFUSE_OBJECT =	0x8,	// an item or a static at the edge or in the hang
+	LEDGE_REFUSE_CLIMB =	0x10,	// a climbable wall under the edge
+	LEDGE_REFUSE_CEILING =	0x20,	// a ceiling at the hang that the hang cannot take
+	LEDGE_REFUSE_CATCH =	0x40,	// the engine's own catch would not take this edge
+	LEDGE_REFUSE_WATER =	0x80,	// water, lava or a death floor below
+	LEDGE_REFUSE_TRIGGER =	0x100,	// a trigger under the hang
+	LEDGE_REFUSE_LARA =	0x200	// weapons out, dead, hit, or not the player's to steer
+};
+
+long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir);
+
 extern void (*lara_control_routines[])(ITEM_INFO* item, COLL_INFO* coll);
 extern void (*lara_collision_routines[])(ITEM_INFO* item, COLL_INFO* coll);
 

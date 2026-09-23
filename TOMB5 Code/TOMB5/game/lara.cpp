@@ -36,6 +36,9 @@
 #include "../specific/input.h"
 #include "footprnt.h"
 #include "../tomb5/tomb5.h"
+#include "modern_move.h"
+#include "deltapak.h"
+#include "spotcam.h"
 
 void(*lara_control_routines[NUM_LARA_STATES + 1])(ITEM_INFO* item, COLL_INFO* coll) =
 {
@@ -6000,4 +6003,296 @@ void lara_col_duckroll(ITEM_INFO* item, COLL_INFO* coll)
 
 	if (coll->mid_floor != NO_HEIGHT)
 		item->pos.y_pos += coll->mid_floor;
+}
+
+/* The ledge hang (tomb5.ledge_hang, Modern controls only): at an edge she
+ * turns half round on the standing line and lowers herself into the hang by
+ * the pull-up, animation 97, played backwards. The decision per tick is
+ * ModernLedgeDecide (game\modern_move.cpp); this file measures and applies.
+ *
+ * The two spots of the move for a ledge sector and the heading she hangs
+ * with (quad: NORTH = facing +z, the drop at -z). The hang position is the
+ * catch's own snap in lara_col_reach, `(z | 1023) - 100` / `(z & ~1023) +
+ * 100`, applied to a point of the sector over the drop; the standing line
+ * lies 200 units from it along the heading, where the pull-up ends. (x, z)
+ * is any point of the ledge sector; the coordinate along the edge is kept. */
+static void LaraLedgeSpots(long x, long z, long quad, long* sx, long* sz, long* hx, long* hz)
+{
+	*sx = x;
+	*sz = z;
+	*hx = x;
+	*hz = z;
+
+	switch (quad)
+	{
+	case NORTH:
+		*sz = (z & ~1023) + MODERN_LEDGE_STAND_IN;
+		*hz = ((z - 1024) | 1023) - MODERN_LEDGE_HANG_OUT;
+		break;
+
+	case EAST:
+		*sx = (x & ~1023) + MODERN_LEDGE_STAND_IN;
+		*hx = ((x - 1024) | 1023) - MODERN_LEDGE_HANG_OUT;
+		break;
+
+	case SOUTH:
+		*sz = (z | 1023) - MODERN_LEDGE_STAND_IN;
+		*hz = ((z + 1024) & ~1023) + MODERN_LEDGE_HANG_OUT;
+		break;
+
+	case WEST:
+		*sx = (x | 1023) - MODERN_LEDGE_STAND_IN;
+		*hx = ((x + 1024) & ~1023) + MODERN_LEDGE_HANG_OUT;
+		break;
+	}
+}
+
+/* The cardinal a heading snaps to, by the catch's own four windows as
+ * lara_col_reach writes them (+-0x18E2; the one round -0x8000 starts at
+ * 0x671D, a unit wider). A heading outside every window comes back
+ * unchanged, and so with bits under 0x4000 set, exactly as the catch leaves
+ * it. */
+static short LaraLedgeCardinal(short angle)
+{
+	if (angle >= -0x18E2 && angle <= 0x18E2)
+		return 0;
+
+	if (angle >= 0x271E && angle <= 0x58E2)
+		return 0x4000;
+
+	if (angle >= 0x671D || angle <= -0x671D)
+		return -0x8000;
+
+	if (angle >= -0x58E2 && angle <= -0x271E)
+		return -0x4000;
+
+	return angle;
+}
+
+/* The settled hang's bounds[2] - bounds of ANIM_GRABLEDGE at frame_base + 21,
+ * the frame lara_col_hang and LaraHangTest take as settled - read from this
+ * level's frame data. -726 in all thirteen campaign levels, although the grab
+ * runs at rate 4 in two of them and at rate 2 in the other eleven. */
+static long LaraLedgeHangBound(ITEM_INFO* item)
+{
+	short anim, frame;
+	long bound;
+
+	anim = item->anim_number;
+	frame = item->frame_number;
+	item->anim_number = ANIM_GRABLEDGE;
+	item->frame_number = anims[ANIM_GRABLEDGE].frame_base + 21;
+	bound = GetBoundsAccurate(item)[2];
+	item->anim_number = anim;
+	item->frame_number = frame;
+	return bound;
+}
+
+/* Every reason the ledge hang must not start (or, in the turn, go on) at the
+ * edge of the sector she stands in, for the heading `dir` she would hang with
+ * - the heading facing away from the drop. One bit per row, each the engine's
+ * own test asked the way its own site asks it:
+ *
+ *   SHALLOW  lara_col_all4s's drop test from the standing line: the floor 300
+ *            behind, and 300 behind from 128 left and 128 right, each more
+ *            than 768 below her
+ *   SLOPE    lara_col_all4s's collision there (radius 200, facing `dir`):
+ *            the floors at the two corners ahead of her 120 or more apart
+ *   SLIDE    the same collision's tilt, TestLaraSlide's own entry test (the
+ *            function itself would shift her and start the slide)
+ *   OBJECT   lara_col_all4s's GetCollidedObjects 100 back towards the drop,
+ *            or a static in the hang itself (the catch's coll->hit_static)
+ *   CLIMB    a climbable wall under the edge: LaraHangTest's GetClimbTrigger
+ *            bit for this heading at the hang position
+ *   CEILING  at the hang position a ceiling TestHangSwingIn would hang her
+ *            from (the catch goes to AS_HANG2 then), or one lower than
+ *            LaraHangTest's -950
+ *   CATCH    `dir` outside the catch's window, no floor under her, or the
+ *            catch failing at the hang: lara_col_reach's mid_ceiling,
+ *            mid_floor and CT_FRONT conditions and LaraTestEdgeCatch
+ *   WATER    water below the hang (GetWaterHeight, as LaraControl asks it),
+ *            or a lava or death floor behind the edge (the lava_is_pit test)
+ *   TRIGGER  a trigger in the floor data under the hang (coll->trigger, which
+ *            LaraAboveWater hands TestTriggers every tick of a hang)
+ *   LARA     weapons not away, dead, pushed by a creature this tick
+ *            (LaraBaddieCollision's hit_direction), or not the player's to
+ *            steer (a cutscene, bDisableLaraControl)
+ *
+ * The hang tests are asked of the settled hang: the item stands at the hang
+ * position, 726 below the ledge top (the bound above), in ANIM_GRABLEDGE at
+ * frame_base + 21, with no fall speed. The catch is asked 4 units nearer the
+ * wall, as LaraHangTest asks every tick: from the hang position itself the
+ * front probe (radius 100) lands on the last unit over the drop. Everything
+ * this function moves - the item, its room, `coll`, lara.move_angle and the
+ * five globals GetHeight writes - is put back before it returns. */
+long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir)
+{
+	COLL_INFO saved_coll;
+	PHD_3DPOS saved_pos;
+	ITEM_INFO** itemlist;
+	MESH_INFO** meshlist;
+	short* saved_trigger;
+	long saved_height_type, saved_tiltx, saved_tilty, saved_on_object, bits, sx, sz, hx, hz, ledge, height, heightl, heightr, edge, ceiling;
+	short saved_anim, saved_frame, saved_fallspeed, saved_room, saved_move, angle, quad, room_number;
+
+	bits = 0;
+
+	if (lara.gun_status != LG_NO_ARMS || item->hit_points <= 0 || lara.hit_direction >= 0 ||
+		GLOBAL_playing_cutseq || bDisableLaraControl)
+		bits |= LEDGE_REFUSE_LARA;
+
+	angle = LaraLedgeCardinal((short)dir);
+
+	if (angle & 0x3FFF)
+		return bits | LEDGE_REFUSE_CATCH;
+
+	quad = ushort(angle + 0x2000) / 0x4000;
+	saved_coll = *coll;
+	saved_pos = item->pos;
+	saved_anim = item->anim_number;
+	saved_frame = item->frame_number;
+	saved_fallspeed = item->fallspeed;
+	saved_room = item->room_number;
+	saved_move = lara.move_angle;
+	saved_trigger = trigger_index;
+	saved_height_type = height_type;
+	saved_tiltx = tiltxoff;
+	saved_tilty = tiltyoff;
+	saved_on_object = OnObject;
+
+	LaraLedgeSpots(item->pos.x_pos, item->pos.z_pos, quad, &sx, &sz, &hx, &hz);
+	item->pos.x_pos = sx;
+	item->pos.z_pos = sz;
+	item->pos.y_rot = angle;
+
+	/* The standing line: lara_col_all4s's own probes, which ask them of a Lara
+	 * facing away from the drop, as `dir` does. */
+	item->pos.x_pos += 128 * phd_sin(angle - 0x4000) >> W2V_SHIFT;
+	item->pos.z_pos += 128 * phd_cos(angle - 0x4000) >> W2V_SHIFT;
+	heightl = LaraFloorFront(item, angle, -300);
+	item->pos.x_pos += 256 * phd_sin(angle + 0x4000) >> W2V_SHIFT;
+	item->pos.z_pos += 256 * phd_cos(angle + 0x4000) >> W2V_SHIFT;
+	heightr = LaraFloorFront(item, angle, -300);
+	item->pos.x_pos = sx;
+	item->pos.z_pos = sz;
+	height = LaraFloorFront(item, angle, -300);
+
+	if (trigger_index && (trigger_index[0] & 0x1F) == LAVA_TYPE)
+		bits |= LEDGE_REFUSE_WATER;
+
+	if (height <= 768 || heightl <= 768 || heightr <= 768)
+		bits |= LEDGE_REFUSE_SHALLOW;
+
+	lara.move_angle = angle;
+	coll->facing = angle;
+	coll->radius = 200;
+	coll->bad_pos = 255;
+	coll->bad_neg = -255;
+	coll->bad_ceiling = 400;
+	coll->slopes_are_walls = 1;
+	coll->slopes_are_pits = 1;
+	coll->lava_is_pit = 0;
+	GetCollisionInfo(coll, item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, item->room_number, -400);
+
+	if (abs(coll->left_floor2 - coll->right_floor2) >= 120)
+		bits |= LEDGE_REFUSE_SLOPE;
+
+	if (abs(coll->tilt_x) > 2 || abs(coll->tilt_z) > 2)
+		bits |= LEDGE_REFUSE_SLIDE;
+
+	item->pos.x_pos -= 100 * phd_sin(coll->facing) >> W2V_SHIFT;
+	item->pos.z_pos -= 100 * phd_cos(coll->facing) >> W2V_SHIFT;
+	itemlist = (ITEM_INFO**)&tsv_buffer[0];
+	meshlist = (MESH_INFO**)&tsv_buffer[1024];
+
+	if (GetCollidedObjects(item, 100, 1, itemlist, meshlist, 0))
+		bits |= LEDGE_REFUSE_OBJECT;
+
+	item->pos.x_pos = sx;
+	item->pos.z_pos = sz;
+	ledge = LaraFloorFront(item, angle, 0);
+
+	if (ledge == NO_HEIGHT)
+		bits |= LEDGE_REFUSE_CATCH;
+	else
+	{
+		/* The settled hang. */
+		ledge += item->pos.y_pos;
+		item->pos.x_pos = hx;
+		item->pos.y_pos = ledge - LaraLedgeHangBound(item);
+		item->pos.z_pos = hz;
+		item->anim_number = ANIM_GRABLEDGE;
+		item->frame_number = anims[ANIM_GRABLEDGE].frame_base + 21;
+		item->fallspeed = 0;
+		room_number = item->room_number;
+		GetFloor(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, &room_number);
+		item->room_number = room_number;
+
+		ceiling = LaraCeilingFront(item, angle, 100, 0);
+
+		if (TestHangSwingIn(item, angle) || ceiling > -950)
+			bits |= LEDGE_REFUSE_CEILING;
+
+		if ((256 << quad) & GetClimbTrigger(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, item->room_number))
+			bits |= LEDGE_REFUSE_CLIMB;
+
+		if (GetWaterHeight(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, item->room_number) != NO_HEIGHT ||
+			room[item->room_number].flags & ROOM_UNDERWATER)
+			bits |= LEDGE_REFUSE_WATER;
+
+		switch (quad)
+		{
+		case NORTH:
+			item->pos.z_pos += 4;
+			break;
+
+		case EAST:
+			item->pos.x_pos += 4;
+			break;
+
+		case SOUTH:
+			item->pos.z_pos -= 4;
+			break;
+
+		case WEST:
+			item->pos.x_pos -= 4;
+			break;
+		}
+
+		coll->radius = 100;
+		coll->bad_pos = -NO_HEIGHT;
+		coll->bad_neg = 0;
+		coll->bad_ceiling = 192;
+		coll->slopes_are_walls = 0;
+		coll->slopes_are_pits = 0;
+		coll->lava_is_pit = 0;
+		coll->old.x = item->pos.x_pos;
+		coll->old.y = item->pos.y_pos;
+		coll->old.z = item->pos.z_pos;
+		GetLaraCollisionInfo(item, coll);
+
+		if (coll->hit_static)
+			bits |= LEDGE_REFUSE_OBJECT;
+
+		if (coll->trigger)
+			bits |= LEDGE_REFUSE_TRIGGER;
+
+		if (coll->mid_ceiling > -384 || coll->mid_floor < 200 || coll->coll_type != CT_FRONT ||
+			LaraTestEdgeCatch(item, coll, &edge) <= 0)
+			bits |= LEDGE_REFUSE_CATCH;
+	}
+
+	*coll = saved_coll;
+	item->pos = saved_pos;
+	item->anim_number = saved_anim;
+	item->frame_number = saved_frame;
+	item->fallspeed = saved_fallspeed;
+	item->room_number = saved_room;
+	lara.move_angle = saved_move;
+	trigger_index = saved_trigger;
+	height_type = saved_height_type;
+	tiltxoff = saved_tiltx;
+	tiltyoff = saved_tilty;
+	OnObject = saved_on_object;
+	return bits;
 }

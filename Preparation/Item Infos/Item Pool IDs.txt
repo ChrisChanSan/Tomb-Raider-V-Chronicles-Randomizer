@@ -36,8 +36,11 @@ matters.
 	enemy is picked up by GetCarriedItems() (game\setup.cpp) as that
 	enemy's carried_item and dropped on its death. DropBaddyPickups
 	(game\box.cpp) clears the low OCB bits of a wall pickup (OCB 2 or 9)
-	on the drop, so it lands as an ordinary floor pickup - the case
-	behind that was an Imp carrying a crowbar away in joby3. Every other
+	on the drop - the case behind that was an Imp carrying a crowbar away
+	in joby3. In game the clear is not enough: such a pickup is either
+	gone or lies at a wrong position, still with its wall-pickup identity,
+	and cannot be collected (observed by the project owner; the cause is
+	not measured yet), so wall pickups are kept away from enemies. Every other
 	OCB is kept, so a hidden pickup (OCB 1) dropped that way keeps its
 	hidden-pickup manner, but a plinth pickup (OCB 3, 4, 7 or 8) dropped
 	that way stays permanently uncollectable - FindPlinth (game\pickup.cpp)

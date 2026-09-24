@@ -2416,7 +2416,7 @@ alone). `HDModelFloorLift` is one implementation for the plain and the fitted ca
 engine and tool, and the lift is added in view space in the object path, so world up is
 worked out once per camera; the ring and the corner display are untouched by it.
 `first_frame_of` (`hd_object.cpp`) reads `anims[item->anim_number].frame_ptr` at
-`frame_number == frame_base` (`GetFrames`, `game/draw.cpp:2512-2524`) and not
+`frame_number == frame_base` (`GetFrames`, `game/draw.cpp:2443-2467`) and not
 `objects[slot].frame_base`, and logs a difference; over the fifteen `.TRC` files this
 changes nothing, 1,748 of 1,791 objects carrying their animation's own frame offset and
 the other 43 taking the rest-pose fallback. One gap is written down rather than closed:
@@ -4054,11 +4054,11 @@ the classic body and the mirror, all of which read `lara_matrices`:
 `Rich_CalcLaraMatrices_Interpolated` takes a float alpha in place of `frac` and `rate`.
 Lara's nine aim angles are blended by the root snapshot instead, being per-tick values
 from the player rather than from the animation, and the four nodes her own animation
-does not drive have a rule of their own (the next entry). `InterpPoseTime`
-(`game/interpolate.cpp`) refuses to blend when the animation number changed between the
-two ticks, when the frame number did not step by exactly one (a loop wrapping, a jump, a
-frame written by hand, an item standing still), or whenever the item's root snapped;
-that frame is then drawn with the current tick's pose, which is exactly what thirty
+does not drive have a rule of their own (the next entry). The blend is refused when
+the item's root snapped (`InterpPoseTime`, `game/interpolate.cpp`), when the animation
+number changed between the two ticks (`GetFramesAt`, `game/draw.cpp`), or when the
+frame number did not step by exactly one (`InterpPoseAt`, `game/interpolate_math.h`: a
+loop wrapping, a jump, a frame written by hand, an item standing still); that frame is then drawn with the current tick's pose, which is exactly what thirty
 hertz shows, for a sixtieth of a second. The one exception to the frame-step rule is the
 ledge hang's lowering, whose backwards steps `InterpPoseBack` blends (see *Ledge hang: an
 automatic turn and lowering at an edge*). The snap verdict is recorded in
@@ -5380,7 +5380,7 @@ rows.
 
 **Commits.** `60df63c`, `2d9fc8a`, `712c833`, `c750b0d`, `7e5f9a2`, `d509eea`,
 `39efaa2`, `b448d37`, `cb55d72`, `da66ba8`, `9a26fbc`, `83e56f7`, `c50ffae`, `e0c9651`,
-`8747fe6`
+`8747fe6`, `eafab87`
 
 ### Ledge hang: an automatic turn and lowering at an edge
 2026-09-24
@@ -5528,7 +5528,7 @@ judged at `coll->old`, where she actually stood, so the start of a run's own
 23-unit hop never counts.
 The lowering steps the pull-up (74 frames at rate 4) from its last frame down by
 three, 73, 70, ..., 4, 1, and cuts the last step short to land on 0: 25
-backwards steps, each with its tween frame drawn at the full frame rate. `InterpPoseBack`
+backwards steps, each with its tween frames drawn at the full frame rate. `InterpPoseBack`
 (`game/interpolate_math.h:414`-`443`), a pure function beside `InterpPoseAt`,
 which it leaves untouched, places both tick poses in key units exactly as
 vanilla does (`InterpKeyAlpha` over `InterpKeyRate`), puts the drawn frame at
@@ -5542,17 +5542,19 @@ refused, and only for `lara_item` while `LaraLedgeReversing`
 `fps_mode 0` nothing reaches it; the pose and its root offset then come from the
 same key pair and factor, and `item->pos` does not move during the lowering, so
 there is nothing for the root rule to pay. `INTERPLOG` gains `pose_back=` at the
-end of its once-a-second line (`game/interpolate.cpp:724`, legend at `:707`,
-noted by `InterpNotePoseBack` at `:1641`, called at `game/draw.cpp:2552`): the
-tween frames the rule blended, 25 per lowering at sixty frames a second, 0
-everywhere else. `InterpTest`'s `pose_back()` block
+end of its once-a-second line (`game/interpolate.cpp:726`, legend at `:707`,
+noted by `InterpNotePoseBack` at `:1643`, called at `game/draw.cpp:2552`): the
+tween frames the rule blended, one per drawn in-between frame, so a lowering's
+25 ticks times the tween frames per tick - 25 at sixty hertz, about 137 at 165
+(`fps_mode 2`, where every frame is an in-between one; a play-test log read
+61 + 76 over two seconds for one lowering) - and 0 everywhere else. `InterpTest`'s `pose_back()` block
 (`Preparation/Tools/Diagnose/InterpTest.cpp:1583`) proves the rule over rates 1,
 2, 4 and 5 and steps 1 to 3, over the real lowering at `frame_base` 0 and 3000,
 its refusals and a clamped last interval; the suite grew from 398 to 521 checks,
 0 failed.
 
 **Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
-`8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`
+`8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`, `eafab87`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20

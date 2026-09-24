@@ -55,8 +55,9 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate);
  * logic ticks: given what the item wore before the last tick it returns the
  * key frame pair and the float factor whose blend is the midpoint of the two
  * poses the game draws at thirty. 0 means there is nothing to blend (the
- * animation changed or the frame did not step by exactly one) and nothing
- * was written.
+ * animation changed or the frame did not step by exactly one - except the
+ * ledge hang's lowering, whose backwards steps InterpPoseBack blends) and
+ * nothing was written.
  *
  * GetFramesNow is what the draw sites call: GetFrames on a tick frame and at
  * fps_mode 0, the midpoint on a tween frame. 0 = one frame, 1 = vanilla's

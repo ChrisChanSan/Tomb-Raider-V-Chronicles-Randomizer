@@ -315,9 +315,9 @@ namespace
 	int g_secPose = 0;		// items drawn with a blended pose
 	int g_secPoseSkip = 0;		// ... and refused one by the neighbour rule
 	int g_secPoseFar = 0;		// ... refused because the pair is too far apart
-	int g_secPoseBack = 0;		// frames on which Lara's pose was blended walking backwards
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
+	int g_secPoseBack = 0;		// frames on which Lara's pose was blended walking backwards
 	/* Refused tween frames whose root offset was blended in time. A count,
 	 * not a mean per frame: once per climb cycle would round to 0.0. */
 	int g_secRootFix = 0;
@@ -707,8 +707,10 @@ namespace
 	 *   pose_back    tween frames on which Lara's pose was blended by the
 	 *                backwards rule (InterpPoseBack), the ledge hang's lowering
 	 *                played down the pull-up; counted in lara_pose as well.
-	 *                25 per lowering at sixty frames a second (more on a
-	 *                faster display), zero everywhere else and zero at
+	 *                One per drawn in-between frame, so a lowering counts its
+	 *                25 ticks times the tween frames per tick: 25 at sixty
+	 *                hertz, about 137 at 165 (fps_mode 2, where every frame
+	 *                is an in-between one); zero everywhere else and zero at
 	 *                fps_mode 0. */
 	void LogSecond()
 	{

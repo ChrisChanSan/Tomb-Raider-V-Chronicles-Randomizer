@@ -651,16 +651,21 @@ inline void InterpRootNarrow(const long prev[3], const long cur[3], const long s
  * whatever hangs off the bone lands on neither pose (a leg pointing the wrong
  * way).
  *
- * Vanilla blends only animations of rate > 1, where the tween frame lies in
- * the same segment as its neighbours. Rate 1 pairs are new: two adjacent
- * stored frames at a half. ModelProbe -poserisk over ANDREA1 (319 Lara
- * animations, 23 at rate 1): 22 turn at most 52.7 degrees at any node; the
- * hips (node 0) of animation 205 turn 179.9 degrees between key 0 and key 1.
+ * Vanilla blends the key frames of animations of rate > 1 this way, and the
+ * tween frame of such an animation lies in the same segment as its
+ * neighbours. Rate 1 pairs are new: two adjacent stored frames at a half.
+ * ModelProbe -poserisk over ANDREA1 (319 Lara animations, 23 at rate 1): 22
+ * turn at most 52.7 degrees at any node; the hips (node 0) of animation 205
+ * turn 179.9 degrees between key 0 and key 1.
  *
- * A rate 1 pair turning more than 90 degrees (the last turn whose midpoint
- * keeps over seventy per cent of the frame) is not blended; in ANDREA1 that
- * is animation 205 alone. Vanilla never draws such a pair blended either, and
- * nothing here runs at fps_mode 0. */
+ * A rate 1 pair turning more than 90 degrees at any node (the last turn whose
+ * midpoint keeps over seventy per cent of the frame) is not blended; in
+ * ANDREA1 that is animation 205 alone. Vanilla never draws such a pair
+ * blended either, and nothing of this rule runs at fps_mode 0.
+ *
+ * Vanilla's own key frame blend meets the same arithmetic at rate > 1 where
+ * Lara's hips turn more than 90 degrees between two key frames, and there it
+ * runs at every fps_mode: InterpKeyFar below. */
 #define INTERP_POSE_TURN_COS	0.0F	/* cos 90 degrees: trace = 1 + 2*cos */
 
 /* One node's packed rotation, with the cursor stepped past it (draw.cpp,
@@ -753,6 +758,33 @@ inline bool InterpPoseFar(const short* frameA, const short* frameB, int nodes,
 	}
 
 	return false;
+}
+
+/* True when a key frame pair of Lara's is too far apart for vanilla's key
+ * frame blend: her hips (node 0) turn more than 90 degrees between the two
+ * frames. Shared by draw.cpp, delstuff.cpp and InterpTest.
+ *
+ * The blend multiplies each key frame's node matrices out and averages the
+ * two stacks element by element, so a far pair at the hips shrinks every node
+ * that hangs off them. The tightrope turn (animation 451) swings the hips
+ * back by 176.9 degrees between key 25 and key 26 in ANDREA1 and rich2 (rate
+ * 2) and by 171.3 degrees between key 12 and key 13 in ANDREA2 and ANDREA3
+ * (rate 4), while turn180_effect turns the item by half a turn on the second
+ * key's frame; the blended frame between them squeezes her whole body onto
+ * her vertical axis (hips column lengths 0.087, 0.995 and 0.059, determinant
+ * 0.001, at 0.5 in ANDREA1).
+ *
+ * The hips alone decide: every other node inherits their frame, and a limb
+ * swinging past 90 degrees is a stretch of one bone, not a collapse of the
+ * body. Over the thirteen campaign levels' playable Lara animations this
+ * fires on 31 blended key pairs - animations 209 and 213 key 0 to 1 in every
+ * level, 451 in ANDREA1, ANDREA2, ANDREA3 and rich2, 219 key 0 to 1 in rich3
+ * - with the nearest turns on either side of the limit at 85.97 and 94.92
+ * degrees. The same threshold and arithmetic as the rate 1 rule, over one
+ * node. */
+inline bool InterpKeyFar(const short* frame0, const short* frame1)
+{
+	return InterpPoseFar(frame0, frame1, 1, INTERP_POSE_TURN_COS);
 }
 
 /* ==========================================================================

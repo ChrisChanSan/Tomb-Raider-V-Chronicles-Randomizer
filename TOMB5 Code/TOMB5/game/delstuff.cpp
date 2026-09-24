@@ -183,6 +183,31 @@ void CalcLaraMatrices(long flag)
 	 * it keeps its original, non-interpolated picture. */
 	frac = GetFramesNow(lara_item, frmptr, &blend);
 
+	/* Draws the first key frame of a key pair whose hips turn more than 90
+	 * degrees (InterpKeyFar, interpolate_math.h), in place of vanilla's key
+	 * frame blend, at every fps_mode.
+	 *
+	 * The blend averages the two multiplied-out matrix stacks element by
+	 * element, and across such a pair the hips' frame collapses: in the
+	 * tightrope turn (animation 451) the blended frame squeezes her body onto
+	 * her vertical axis. The first key, not the nearer one, because
+	 * turn180_effect turns the item on the second key's frame: every frame
+	 * in between is drawn with the yaw that belongs to the first key, and the
+	 * second key at that yaw would face the other way.
+	 *
+	 * Putting the same frame in both slots, as the still-body hold below
+	 * does, keeps the interpolated branch and with it the arms' own time
+	 * blend; a pose blended with itself is that pose. The root offset follows
+	 * (InterpRootNow blends the frame with itself, GetRootAt holds the first
+	 * key on the next refused tween). Every other pair is drawn as before. */
+	if (frac == 1 && InterpKeyFar(frmptr[0], frmptr[1]))
+	{
+		if (flag == 0)
+			InterpNoteKeyFar(lara_item, frmptr[0], frmptr[1]);
+
+		frmptr[1] = frmptr[0];
+	}
+
 	/* Applies the still-body hold from LaraBodyStillFrame, if any, without
 	 * leaving the interpolated draw path.
 	 *

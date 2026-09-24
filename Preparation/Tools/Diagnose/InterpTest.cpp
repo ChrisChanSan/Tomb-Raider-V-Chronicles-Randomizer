@@ -864,6 +864,37 @@ static void pose_wrap()
 		ok(InterpPoseFar(quiet, past90, 1, INTERP_POSE_TURN_COS),
 			"just over it is refused", 1, 1);
 	}
+
+	/* 5. The key pair rule asks the hips alone: half a turn and 91 degrees at
+	 * node 0 fire, 89 degrees and a pose against itself do not, and a half
+	 * turn at node 1 with the hips quiet does not either. 91 degrees is 259 in
+	 * the packed space (91.05), 89 degrees is 253 (88.95). */
+	{
+		short quiet[9 + 2 * 2], half[9 + 2 * 2], d91[9 + 2 * 2], d89[9 + 2 * 2],
+			limb[9 + 2 * 2];
+
+		for (int i = 0; i < 9 + 2 * 2; i++)
+			quiet[i] = half[i] = d91[i] = d89[i] = limb[i] = 0;
+
+		const unsigned long h = ((unsigned long)512 << 10);
+		const unsigned long a = ((unsigned long)259 << 10);
+		const unsigned long b = ((unsigned long)253 << 10);
+
+		half[9] = (short)(unsigned short)(h >> 16);
+		half[10] = (short)(unsigned short)(h & 0xFFFF);
+		d91[9] = (short)(unsigned short)(a >> 16);
+		d91[10] = (short)(unsigned short)(a & 0xFFFF);
+		d89[9] = (short)(unsigned short)(b >> 16);
+		d89[10] = (short)(unsigned short)(b & 0xFFFF);
+		limb[11] = (short)(unsigned short)(h >> 16);
+		limb[12] = (short)(unsigned short)(h & 0xFFFF);
+
+		ok(InterpKeyFar(quiet, half), "a half turn of the hips is a far key pair", 1, 1);
+		ok(InterpKeyFar(quiet, d91), "91 degrees of the hips is far", 1, 1);
+		ok(!InterpKeyFar(quiet, d89), "89 degrees of the hips is not", 0, 0);
+		ok(!InterpKeyFar(half, half), "a key frame against itself never is", 0, 0);
+		ok(!InterpKeyFar(quiet, limb), "a half turn below the hips does not count", 0, 0);
+	}
 }
 
 /* The camera's shell.

@@ -274,6 +274,14 @@ void InterpArmLogFrame();
 void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 	int animNumber, int frameNumber);
 
+/* KEYFARLOG, one line per tick on which CalcLaraMatrices draws the first key
+ * frame of a far key pair (InterpKeyFar, interpolate_math.h) in place of
+ * vanilla's key frame blend. View set only (flag 0), and once per tick
+ * however many frames are drawn in it: the tick frame and a refused tween
+ * frame fall back to the same pair. `frame0` and `frame1` are the pair
+ * GetFramesNow left. -log only. */
+void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1);
+
 /* The blend factor for velocity-carrying particles (sparks, rain, drips...):
  * the frame's alpha, or 1 on a live frame (fps_mode 0, the frame that
  * carries the tick, a cutscene, a level start, a return from a menu), where

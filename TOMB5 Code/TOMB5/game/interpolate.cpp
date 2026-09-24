@@ -667,7 +667,8 @@ namespace
 	 *   pose_items   items whose pose was blended, per drawn frame; zero at
 	 *                fps_mode 0.
 	 *   pose_skips   blends the neighbour rule refused (animation changed or
-	 *                frame did not step by one). A few per second is normal; near
+	 *                frame did not step by one), and Lara's tweens across a far
+	 *                key pair (InterpKeyFar). A few per second is normal; near
 	 *                pose_items means snapshot and animation clock are out of
 	 *                step.
 	 *   pose_far     rate 1 pairs refused because a node turns more than 90
@@ -1820,6 +1821,54 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 
 		cur = node;
 	}
+}
+
+/* KEYFARLOG (see interpolate.h):
+ *   f       GlobalCounter, the tick
+ *   anim, frame   the animation and frame the item stands on
+ *   keys    the key pair that frame lies between
+ *   rate    the animation's own rate
+ *   hips    the turn of node 0 between the two key frames, in degrees
+ *   drawn   the key frame drawn in place of the blend */
+void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1)
+{
+	static bool seen = false;
+	static unsigned short lastCounter = 0;
+	static short lastFrame = 0;
+
+	if (!gLogEnabled || !item || !anims || !frame0 || !frame1)
+		return;
+
+	if (seen && lastCounter == GlobalCounter && lastFrame == item->frame_number)
+		return;
+
+	seen = true;
+	lastCounter = GlobalCounter;
+	lastFrame = item->frame_number;
+
+	const ANIM_STRUCT* anim = &anims[item->anim_number];
+	const long rate = anim->interpolation & 0xFF;
+	const long key = rate > 0 ? (item->frame_number - anim->frame_base) / rate : 0;
+	const short* a = frame0 + 9;
+	const short* b = frame1 + 9;
+	short ra[3], rb[3];
+	float ma[9], mb[9];
+
+	InterpUnpackRot(a, ra);
+	InterpUnpackRot(b, rb);
+	InterpPoseRot(ra, ma);
+	InterpPoseRot(rb, mb);
+
+	double c = (double)InterpPoseTurnCos(ma, mb);
+
+	if (c > 1.0)
+		c = 1.0;
+	else if (c < -1.0)
+		c = -1.0;
+
+	Log("KEYFARLOG f=%d anim=%d frame=%d keys=%ld-%ld rate=%ld hips=%.1f drawn=%ld",
+		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number,
+		key, key + 1, rate, acos(c) * 180.0 / 3.14159265358979323846, key);
 }
 
 /* The arm's previous frame (see interpolate.h). Gated by g_applied like the

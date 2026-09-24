@@ -2586,16 +2586,20 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	 * singular and whatever hangs off it lands nowhere real (a leg pointing
 	 * the wrong way in the dive roll).
 	 *
-	 * Only for rate 1: every other rate puts the tween frame inside the very
-	 * segment vanilla blends the two tick frames on, so it is no worse than
-	 * its own neighbours and refusing it would be a jump. A rate 1 pair is two
-	 * adjacent stored frames a whole game frame apart that vanilla never
-	 * blends at all - the one place the time interpolation can meet a pose
-	 * too far apart.
+	 * At rate 1 the test covers every node: a rate 1 pair is two adjacent
+	 * stored frames a whole game frame apart that vanilla never blends at
+	 * all. Measured with ModelProbe -poserisk: over ANDREA1's 319 Lara
+	 * animations this refuses animation 205 - whose hips turn 179.9 degrees
+	 * between key 0 and key 1 - and nothing else.
 	 *
-	 * Measured with ModelProbe -poserisk: over ANDREA1's 319 Lara animations
-	 * this refuses animation 205 - whose hips turn 179.9 degrees between key 0
-	 * and key 1 - and nothing else. interpolate_math.h carries the arithmetic. */
+	 * At every other rate the tween frame lies inside the segment vanilla
+	 * blends the two tick frames on, so it is no worse than its own
+	 * neighbours - except on a pair of Lara's whose hips turn more than 90
+	 * degrees (InterpKeyFar). CalcLaraMatrices (delstuff.cpp) draws the first
+	 * key of such a pair instead of vanilla's blend, and the tween is refused
+	 * so that it falls back to that same frame rather than blending across
+	 * the collapse. It is not counted as pose_far, which stays the rate 1
+	 * count. interpolate_math.h carries the arithmetic. */
 	if (rate == 1 && InterpPoseFar(frm[0], frm[1],
 		objects[item->object_number].nmeshes, INTERP_POSE_TURN_COS))
 	{
@@ -2603,6 +2607,9 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 
 		return 0;
 	}
+
+	if (rate > 1 && item == lara_item && InterpKeyFar(frm[0], frm[1]))
+		return 0;
 
 	if (back)
 		InterpNotePoseBack();
@@ -2623,7 +2630,9 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
  * bit the offset drawn one thirtieth of a second ago: the key index and the
  * remainder from the animation's own rate, the last interval shortened by
  * InterpKeyRate the way GetFrames shortens it, and InterpKeyAlpha's factor
- * over the pair.
+ * over the pair. `keyHold` is set for Lara, whose far key pairs
+ * (InterpKeyFar) are drawn from their first key frame; for such a pair the
+ * offset is that key frame's too.
  *
  * Returns 0 - and then the caller blends no root and the frame is drawn with
  * its own offset - for an animation with no frames behind it, a rate or a
@@ -2638,7 +2647,7 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
  * item, is the same short item->anim_number carries, and every GetFrames in
  * the engine dereferences it unguarded. A slot whose object changed under it
  * is stopped by SNAP_OBJECT before a tween frame of it is drawn. */
-static long GetRootAt(short animNumber, short frameNumber, long out[3])
+static long GetRootAt(short animNumber, short frameNumber, bool keyHold, long out[3])
 {
 	if (!anims || animNumber < 0)
 		return 0;
@@ -2656,8 +2665,14 @@ static long GetRootAt(short animNumber, short frameNumber, long out[3])
 		return 0;
 
 	const long key = frame / rate;
-	const long frac = frame % rate;
+	long frac = frame % rate;
 	const short* frm0 = anim->frame_ptr + size * key;
+
+	/* A far key pair of Lara's was drawn from its first key frame
+	 * (CalcLaraMatrices, InterpKeyFar), so that tick's offset is that key
+	 * frame's own. */
+	if (frac && keyHold && InterpKeyFar(frm0, frm0 + size))
+		frac = 0;
 
 	InterpRootKey(frm0, frm0 + size, frac,
 		InterpKeyAlpha(frac, InterpKeyRate(rate, key, anim->frame_end)), out);
@@ -2716,7 +2731,7 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 
 		long prevRoot[3];
 
-		if (GetRootAt(prevAnim, prevFrame, prevRoot))
+		if (GetRootAt(prevAnim, prevFrame, item == lara_item, prevRoot))
 			InterpRootRefused(item, prevRoot);
 	}
 

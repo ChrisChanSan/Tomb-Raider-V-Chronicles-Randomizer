@@ -501,7 +501,8 @@ under *One key*, the Secondary key under *Separate*) — or stand right at one
 and push toward it — and instead of running off, she stops at the edge, turns
 round on the spot with her own turn animation, as quickly as the stick's own
 about-turn, to face the ledge, and lowers herself backward into a hang, the
-same pose a manual catch below a ledge leaves her in. Let go of the key, press Jump, or
+same pose a manual catch below a ledge leaves her in. The lowering, like every
+animation, is drawn at the full frame rate. Let go of the key, press Jump, or
 draw a weapon while she is turning and she stands back up where she is instead.
 A running jump off the edge needs the grab key released: with the key held,
 Jump pressed in the last step before the edge comes too late, because she is
@@ -2845,7 +2846,7 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
   camcut=0 (type=0 spot=0 eye=0 aim=0 handover=1) cutscene=0
   pose_items=3.5 pose_skips=0.2 pose_far=0.0 pose_hd=1.5 lara_pose=29/30
   root_fix=1 arms=30/2/30 stretch=1.00@node0(anim0 f0)
-  particles=118.5 particle_kinds=0041 root_flip=0
+  particles=118.5 particle_kinds=0041 root_flip=0 pose_back=0
 ```
 
 That is the whole line, in the order the engine prints it — it is one line in
@@ -2873,6 +2874,7 @@ That is the whole line, in the order the engine prints it — it is one line in
 | `particles` | sparks, raindrops, snowflakes, drips, blood, debris, shells, bats and the rest, drawn **between** two game steps, per frame. Hundreds in the rain, nought in a still room, and nought at 30 always |
 | `particle_kinds` | which kinds those were, one bit each: `0001` sparks, `0002` fire, `0004` smoke, `0008` blood, `0010` drips, `0020` debris, `0040` rain, `0080` snow, `0100` underwater dust, `0200` shockwaves, `0400` shells, `0800` rats/bats/spiders, `1000` bubbles, `2000` ropes. `0041` above is sparks and rain |
 | `root_flip` | of the `root_fix` frames, the ones whose previous offset was half a turn behind the frame it was handed to and had to be turned into it first — the underwater roll, where the about-face lands on the very frame the animation changes. A subset of `root_fix`, and it should read one per roll. A second with `halfturn` and no `root_flip` is an about-face whose animation did not change with it, which is what the other six of them do |
+| `pose_back` | in-between frames on which Lara's pose was blended **walking backwards** — the *Ledge hang* lowering, which plays the pull-up in reverse. Counted in `lara_pose` as well. 25 per lowering at *Frame rate 60* (more at *Display* on a faster panel), nought everywhere else and nought at 30 |
 
 A healthy line during ordinary play has `snaps=0` or a small handful.
 `camcut` counting every frame of a stretch means the camera never settled

@@ -4059,7 +4059,9 @@ does not drive have a rule of their own (the next entry). `InterpPoseTime`
 two ticks, when the frame number did not step by exactly one (a loop wrapping, a jump, a
 frame written by hand, an item standing still), or whenever the item's root snapped;
 that frame is then drawn with the current tick's pose, which is exactly what thirty
-hertz shows, for a sixtieth of a second. The snap verdict is recorded in
+hertz shows, for a sixtieth of a second. The one exception to the frame-step rule is the
+ledge hang's lowering, whose backwards steps `InterpPoseBack` blends (see *Ledge hang: an
+automatic turn and lowering at an edge*). The snap verdict is recorded in
 `InterpBeginFrame`'s own item walk, one line before it writes the blended position over
 the live one, because asked later from the draw the same test would measure half the
 distance and a teleport could slip through. The animation's shortened last interval -
@@ -5448,9 +5450,14 @@ Modern camera swinging behind her (`ModernCameraCarryHalfTurn`,
 Tank stays byte-identical by not being asked at all. An aborted turn drops the
 camera's remaining swing (`ModernCameraDropSwing`, `game/camera.cpp:385`-`399`,
 called on a stand after the turn's first tick), as the right stick drops it, so
-the camera never ends in front of her. The lowering is posed at
-30 Hz: the interpolator's neighbour rule (`curFrame != prevFrame + 1`,
-`game/interpolate_math.h:346`) refuses every backwards-stepped frame.
+the camera never ends in front of her. The lowering is drawn at the full frame
+rate: the interpolator's neighbour rule (`curFrame != prevFrame + 1`,
+`game/interpolate_math.h:346`) refuses every backwards-stepped frame, so
+`InterpPoseBack`, asked by `GetFramesAt` only while `LaraLedgeReversing`, walks
+the animation's own path between the two tick poses instead - the previous
+tick's pose at the start of the tween, the current tick's at its end, their
+midpoint at a half. The tween after each animation change, into the pull-up and
+out of it into the hang, stays a tick frame, as everywhere.
 
 **How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1774`) is the pure
 decision for one tick of the move — the turn's ramp, signed by the side, and
@@ -5490,9 +5497,33 @@ is put on the standing line by a shift that is always forward and at most one
 ordinary step; a standing state that became a run or a walk this tick is
 judged at `coll->old`, where she actually stood, so the start of a run's own
 23-unit hop never counts.
+The lowering steps the pull-up (74 frames at rate 4) from its last frame down by
+three, 73, 70, ..., 4, 1, and cuts the last step short to land on 0: 25
+backwards steps, each with its tween frame drawn at the full frame rate. `InterpPoseBack`
+(`game/interpolate_math.h:414`-`443`), a pure function beside `InterpPoseAt`,
+which it leaves untouched, places both tick poses in key units exactly as
+vanilla does (`InterpKeyAlpha` over `InterpKeyRate`), puts the drawn frame at
+`pp + (pc - pp) * t` on that path and hands out the key interval it lies in -
+the upper pair `kc + 1` when a step passes over a key and the midpoint still
+lies above it (70 down to 67: 17.125, pair 17 at 0.125); it refuses a forward
+or standing frame, no rate, a frame outside the animation and two frames more
+than one key interval apart. `GetFramesAt` asks it only when `InterpPoseAt` has
+refused, and only for `lara_item` while `LaraLedgeReversing`
+(`game/draw.cpp:2515`-`2517`), so with the option off, under Tank controls and at
+`fps_mode 0` nothing reaches it; the pose and its root offset then come from the
+same key pair and factor, and `item->pos` does not move during the lowering, so
+there is nothing for the root rule to pay. `INTERPLOG` gains `pose_back=` at the
+end of its once-a-second line (`game/interpolate.cpp:724`, legend at `:707`,
+noted by `InterpNotePoseBack` at `:1641`, called at `game/draw.cpp:2552`): the
+tween frames the rule blended, 25 per lowering at sixty frames a second, 0
+everywhere else. `InterpTest`'s `pose_back()` block
+(`Preparation/Tools/Diagnose/InterpTest.cpp:1583`) proves the rule over rates 1,
+2, 4 and 5 and steps 1 to 3, over the real lowering at `frame_base` 0 and 3000,
+its refusals and a clamped last interval; the suite grew from 398 to 521 checks,
+0 failed.
 
 **Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
-`8b4a761`, `8924c7b`, `6ca7c09`
+`8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20

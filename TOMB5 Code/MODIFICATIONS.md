@@ -5325,7 +5325,7 @@ that flag standing through an ordinary flyby, and `game/control.cpp` holds
 `bDisableLaraControl` at 1 for as long as a `GF_OFFICE` level's flipmap is above 10 — in
 both windows the player still has control, and a *Toggle* player would have lost
 `IN_ACTION` and fallen where a *Hold* player hangs on. The let-go press needs a mask of
-its own: thirteen of the family's thirty-four states test `IN_ACTION_ANY`, and under
+its own: thirteen of the family's thirty-five states test `IN_ACTION_ANY`, and under
 *One key* both bits leave the producer together, so clearing `IN_ACTION` alone left them
 reading "still holding on" — on a rope or in an `AS_PBSPIN` there is no other way out,
 so she swung or spun until a reload.
@@ -5346,13 +5346,15 @@ would have saturated `specific/fmv.cpp`'s rising-edge skip on
 `gfLevelId != LVL5_TITLE` and `lara.gun_type != WEAPON_TORCH`, so a burning torch passes
 through untouched and can still be thrown by `game/flmtorch.cpp`; the sprint and duck
 latches drop on those eight terms, the grab latch asks the seven without `bUseSpotCam`.
-The grab family is 34 of Lara's 139 animation states — fifteen read plain `IN_ACTION`
+The grab family is 35 of Lara's 140 animation states — fifteen read plain `IN_ACTION`
 (hang, both shimmies, both hang turns, the overhead hang, the four monkey-swing states,
 five of the six ladder states), thirteen read `IN_ACTION_ANY` (pole 99-103, rope
 90/91/111/114/115, `AS_SLIDEROPE` 113, the zip line 70, the parallel bars 128), six read
 no input and are in the family only so the bit cannot blink off mid-transition
 (`AS_CLIMBEND` 59, `AS_CLIMBROPE` 112, the four corner shimmies 107-110), read out of
-`game/lara.cpp` and `game/rope.cpp`. Delivery is `IN_ACTION` alone; the let-go mask is
+`game/lara.cpp` and `game/rope.cpp`; the thirty-fifth is `AS_LEDGEHANG` 139, the *Ledge
+hang* move's turn and lowering (its own entry below), a transition into `AS_HANG` that
+begins with the key held and is a grab from there on. Delivery is `IN_ACTION` alone; the let-go mask is
 composed at the seam as `IN_ACTION_ANY` under *One key* and `IN_ACTION` under
 *Separate*, and `IN_SELECT` is never in either; while a let-go press lasts the whole
 mask stays clear wherever she is, so under *One key* that press also picks nothing up
@@ -5433,6 +5435,13 @@ on this way is settled once by the same refusal test into the hang or a fall.
 `LEDGELOG` behind `-log` prints one line per phase change, a line when the
 refusal set changes while the key is held near an edge, and one fire line when
 the move starts (`game/lara.cpp:6401`-`6439`, `:6716`-`6729`, `:6753`-`6763`).
+Under *Grab mode* *Toggle* the grab is carried through the move: from the tick
+it fires she keeps hold whatever the key does; a fresh press while she turns
+stands her back up, a press still down on the tick of the hand-over lets go of
+the ledge there, and a short press during the lowering that is up again before
+the hand-over changes nothing. Under *Hold* nothing changes: the lowering runs
+to the hand-over whatever the key does, and the hang then needs the key as
+every hang does.
 
 **Why.** The design is this project's own and plays Tomb Raider 5's own
 pull-up, animation 97, backwards. The pull-up can be played backwards because
@@ -5459,7 +5468,7 @@ tick's pose at the start of the tween, the current tick's at its end, their
 midpoint at a half. The tween after each animation change, into the pull-up and
 out of it into the hang, stays a tick frame, as everywhere.
 
-**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1774`) is the pure
+**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1720`-`1786`) is the pure
 decision for one tick of the move — the turn's ramp, signed by the side, and
 its abort tests, the lowering's frame step and its hand-over — read by
 `lara_as_ledgehang` (`game/lara.cpp:6541`-`6656`), the routine for the new
@@ -5477,16 +5486,36 @@ holds the idle, `ANIM_BREATH`, in the turn phase, as a build before the turn
 animation wrote it, is settled into the hang or a fall like any other that
 cannot go on.
 `ModernTest`'s `ledge_hang()` block
-(`Preparation/Tools/Diagnose/ModernTest.cpp:7818`) and `ledge_trigger()` block
-(`:8140`) check the arithmetic, every turn step within a unit of
+(`Preparation/Tools/Diagnose/ModernTest.cpp:7861`) and `ledge_trigger()` block
+(`:8184`) check the arithmetic, every turn step within a unit of
 `MODERN_TURN_RATE` among it; together with the rest of the suite the count
-grew from 5788 to 10771, 0 failed. One guard at the head of `AnimateLara`
+grew from 5788 to 10783, 0 failed. One guard at the head of `AnimateLara`
 (`game/laramisc.cpp:502`-`505`, `LaraLedgeReversing`) holds the frame and
 skips every animation command while the lowering plays backwards, for
 `AS_LEDGEHANG` only. The hand-over is exactly the engine's own settled hang —
 `ANIM_GRABLEDGE` at `frame_base + 21`, `AS_HANG`, `LG_HANDS_BUSY`
 (`LaraLedgeHang`, `game/lara.cpp:6458`-`6471`) — so `lara_col_hang` and
 `LaraHangTest` take over from there exactly as they do from any other catch.
+The hand-over happens inside the control routine, and the collision routine of
+the same tick is dispatched on the state it wrote (`game/lara.cpp:4999`), so
+`lara_col_hang` → `LaraHangTest` reads a word `S_UpdateInput` built for 139:
+the word is composed with the state the last tick ended in
+(`specific/input.cpp:1907`, the family asked at `:1945`), and without
+`IN_ACTION` `LaraHangTest` drops her at once (`game/lara.cpp:5241`). So
+`AS_LEDGEHANG` is in the grab family (`ModernStateIsGrab`,
+`game/modern_move.cpp:612`-`614`, its reasons at `:540`-`545`), and under
+*Toggle* `ModernGrabLatch` delivers the bit from the turn's first tick on. The
+key memory the run set makes that first tick no fresh press
+(`MODERN_LATCH_KEY`, `game/modern_move.cpp:1292`-`1301`); a savegame restored
+in the move goes on under *Toggle* without a key, as one restored in any hang
+does, since `InputModeLatchReset` (`game/gameflow.cpp:1119`) clears the let-go
+and keeps the key memory.
+`MODELOG`'s `grab=` field reads 1 from the turn's first tick on (the family
+term at `specific/input.cpp:1992`, the line at `:1998`); the line itself is
+unchanged. Under *Hold*,
+Tank controls and with the option off the family changes nothing: *Hold*
+hands the word back untouched, and nothing enters 139 without the option and
+Modern controls.
 The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6674`-`6766`) is asked from
 `lara_col_run`, `lara_col_walk`, and `lara_col_stop`, right after each
 routine's own ceiling test and after `GetLaraCollisionInfo` has measured this

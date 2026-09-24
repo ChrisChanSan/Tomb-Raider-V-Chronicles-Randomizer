@@ -5187,7 +5187,7 @@ static void mode_latch()
 /* ------------------------------------------------------- Grab mode (5) ---- */
 
 /* The two family tables, each against a reference of its own, the way
- * classic_states() does it for ModernStateIsClassic: every index 0..138, so a
+ * classic_states() does it for ModernStateIsClassic: every index 0..139, so a
  * slip in the switch shows up as a mismatch rather than as the same mistake
  * made twice. The reference lists are written out by hand from the
  * routines. */
@@ -5202,26 +5202,26 @@ static void grab_family()
 		{
 			10, 30, 31, 56, 57, 58, 59, 60, 61, 70, 75, 76, 77, 78, 79,
 			82, 83, 90, 91, 99, 100, 101, 102, 103, 107, 108, 109, 110,
-			111, 112, 113, 114, 115, 128
+			111, 112, 113, 114, 115, 128, 139
 		};
-		unsigned char want[139];
+		unsigned char want[140];
 
-		for (i = 0; i < 139; i++)
+		for (i = 0; i < 140; i++)
 			want[i] = 0;
 
 		for (i = 0; i < (int)(sizeof(grab) / sizeof(grab[0])); i++)
 			want[grab[i]] = 1;
 
-		for (i = 0; i <= 138; i++)
+		for (i = 0; i <= 139; i++)
 			ok(ModernStateIsGrab((short)i) == want[i],
-				"all 139 states: the hold-on family matches the reference",
+				"all 140 states: the hold-on family matches the reference",
 				ModernStateIsGrab((short)i), want[i]);
 
-		ok((int)(sizeof(grab) / sizeof(grab[0])) == 34,
-			"...34 of 139 states hold on", (int)(sizeof(grab) / sizeof(grab[0])), 34);
+		ok((int)(sizeof(grab) / sizeof(grab[0])) == 35,
+			"...35 of 140 states hold on", (int)(sizeof(grab) / sizeof(grab[0])), 35);
 	}
 
-	/* The four borderline states, named one by one so that a change
+	/* The borderline states, named one by one so that a change
 	 * to one of them has to change a check with a sentence on it. */
 	ok(ModernStateIsGrab(11) == 0, "AS_REACH is a catch, not a hold", ModernStateIsGrab(11), 0);
 	ok(ModernStateIsGrab(28) == 0, "AS_UPJUMP likewise", ModernStateIsGrab(28), 0);
@@ -5229,24 +5229,26 @@ static void grab_family()
 		ModernStateIsGrab(80), 0);
 	ok(ModernStateIsGrab(36) == 0, "and a pushblock is not in it at all",
 		ModernStateIsGrab(36), 0);
+	ok(ModernStateIsGrab(139) == 1, "AS_LEDGEHANG is in it - the ledge move is a grab from the fire on",
+		ModernStateIsGrab(139), 1);
 
 	{
 		const short duck[] = { 39, 67, 71, 72, 80, 81, 84, 85, 86, 98, 105, 106 };
-		unsigned char want[139];
+		unsigned char want[140];
 
-		for (i = 0; i < 139; i++)
+		for (i = 0; i < 140; i++)
 			want[i] = 0;
 
 		for (i = 0; i < (int)(sizeof(duck) / sizeof(duck[0])); i++)
 			want[duck[i]] = 1;
 
-		for (i = 0; i <= 138; i++)
+		for (i = 0; i <= 139; i++)
 			ok(ModernStateIsDuck((short)i) == want[i],
-				"all 139 states: the duck-and-crawl family matches the reference",
+				"all 140 states: the duck-and-crawl family matches the reference",
 				ModernStateIsDuck((short)i), want[i]);
 
 		ok((int)(sizeof(duck) / sizeof(duck[0])) == 12,
-			"...12 of 139 states are the crouch and the crawl",
+			"...12 of 140 states are the crouch and the crawl",
 			(int)(sizeof(duck) / sizeof(duck[0])), 12);
 	}
 
@@ -5265,7 +5267,7 @@ static void grab_family()
 	{
 		int both = 0;
 
-		for (i = 0; i <= 138; i++)
+		for (i = 0; i <= 139; i++)
 			if (ModernStateIsGrab((short)i) && ModernStateIsDuck((short)i))
 				both++;
 
@@ -5530,6 +5532,47 @@ static void grab_latch()
 		}
 
 		ok(hurt == 0, "the other bits come through all eight ticks untouched", hurt, 0);
+	}
+
+	/* The ledge hang's turn and lowering, AS_LEDGEHANG. The move fires from a
+	 * run with the key held; the run is outside the family, so there the key
+	 * is the key, and the key memory it sets makes the move's first tick no
+	 * fresh press. From the fire on the bit is delivered whatever the key
+	 * does; a fresh press in the move lets go, and the next key-up delivers
+	 * again. The families are asked by state, as specific\input.cpp asks. */
+	{
+		const int run = (int)ModernStateIsGrab(1);		// AS_RUN
+		const int ledge = (int)ModernStateIsGrab(139);	// AS_LEDGEHANG
+
+		state = 0;
+		bits = grab_tick(1, 1, run, 0, &state, 0);	// the run, key down: the fire
+		ok((bits & MODERN_IN_ACTION) != 0, "ledge: in the run the key is the key",
+			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+		bits = grab_tick(1, 1, ledge, 0, &state, 0);	// the turn's first tick, key still down
+		ok((state & MODERN_GRAB_RELEASE) == 0, "ledge: the key held into the move is no let-go",
+			state & MODERN_GRAB_RELEASE, 0);
+		ok((bits & MODERN_IN_ACTION) != 0, "ledge: ...and the bit is delivered",
+			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+		bits = grab_tick(1, 0, ledge, 0, &state, 0);	// the key goes up in the move
+		ok((bits & MODERN_IN_ACTION) != 0, "ledge: the key up in the move still delivers the bit",
+			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+		bits = grab_tick(1, 1, ledge, 0, &state, 0);	// a fresh press in the move
+		ok((bits & MODERN_IN_ACTION) == 0, "ledge: a fresh press in the move strips the bit",
+			bits & MODERN_IN_ACTION, 0);
+		ok((state & MODERN_GRAB_RELEASE) != 0, "ledge: ...and is the let-go press",
+			state & MODERN_GRAB_RELEASE, MODERN_GRAB_RELEASE);
+		bits = grab_tick(1, 0, ledge, 0, &state, 0);	// the key up again
+		ok((state & MODERN_GRAB_RELEASE) == 0, "ledge: the key up again clears the let-go",
+			state & MODERN_GRAB_RELEASE, 0);
+		ok((bits & MODERN_IN_ACTION) != 0, "ledge: ...and the bit is delivered again",
+			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
+
+		// The same fire under "One key", where the key raises the whole word.
+		state = 0;
+		grab_tick_onekey(1, 1, run, 0, &state, 0);
+		bits = grab_tick_onekey(1, 1, ledge, 0, &state, 0);
+		ok((bits & MODERN_IN_ACTION) != 0, "ledge, One key: the key held into the move is delivered",
+			bits & MODERN_IN_ACTION, MODERN_IN_ACTION);
 	}
 
 	// The bit itself, like bit_values() does for the other nine.
@@ -8105,9 +8148,10 @@ static void ledge_hang()
 		r.verdict, MODERN_LEDGE_QUIET);
 
 	/* The state is classic for the translation - the stick must not steer the
-	 * turn - and in no other family. */
+	 * turn - and in no other family but the hold-on one. */
 	ok(ModernStateIsClassic(139) == 1, "ledge: AS_LEDGEHANG stays classic", ModernStateIsClassic(139), 1);
-	ok(ModernStateIsGrab(139) == 0, "ledge: ...not in the hold-on family", ModernStateIsGrab(139), 0);
+	ok(ModernStateIsGrab(139) == 1, "ledge: ...in the hold-on family, a transition into the hang",
+		ModernStateIsGrab(139), 1);
 	ok(ModernStateIsDuck(139) == 0, "ledge: ...not a crouch", ModernStateIsDuck(139), 0);
 	ok(ModernStateIsSwim(139) == 0, "ledge: ...not a swim", ModernStateIsSwim(139), 0);
 	ok(ModernStateAllowsDirectTurn(139) == 0, "ledge: ...no direct turn", ModernStateAllowsDirectTurn(139), 0);

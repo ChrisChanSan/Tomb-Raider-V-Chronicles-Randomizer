@@ -599,7 +599,7 @@ struct MODERN_LEDGE_SITUATION
 	long side;			// the turn's way: -1 left (y_rot falls), anything else right
 	short cardinal_off;	// y_rot minus the cardinal nearest to it, signed
 	long refusals;		// the refusal bits the caller measured this tick, 0 = none
-	long key;			// the grab key is held
+	long key;			// IN_ACTION in the word: the grab key held, or under Grab mode Toggle the latch's delivery
 	long jump;			// the jump key is down
 	long hands_free;	// lara.gun_status == LG_NO_ARMS
 	long hit_points;	// now

@@ -1952,7 +1952,7 @@ long S_UpdateInput()
 		/* The let-go mask, which is not the delivered bit.
 		 *
 		 * The press that lets go has to take out every bit the grab key itself
-		 * raises, because thirteen of the thirty-four family states test
+		 * raises, because thirteen of the thirty-five family states test
 		 * IN_ACTION_ANY and not IN_ACTION (the pole, the rope, the zip line,
 		 * the parallel bars). Under "One key" `action_bits` puts IN_ACTION and
 		 * IN_INTERACT into the word together, so clearing IN_ACTION alone would

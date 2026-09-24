@@ -2791,7 +2791,8 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * exactly as long as the key or button is down. On = Toggle: while
 	 * she is in one of the states a cleared IN_ACTION would drop her
 	 * from - a hang, a shimmy, a corner, a monkey swing, a ladder, a
-	 * pole, a rope, the zip line, the parallel bars - the bit is
+	 * pole, a rope, the zip line, the parallel bars, the ledge hang's
+	 * turn and lowering - the bit is
 	 * delivered without the key, and a fresh press is what lets go.
 	 *
 	 * `ModernGrabLatch` (game\modern_move.cpp) is the whole of the

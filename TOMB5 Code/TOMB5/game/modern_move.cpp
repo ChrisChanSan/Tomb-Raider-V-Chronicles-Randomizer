@@ -529,12 +529,20 @@ long ModernStateIsSwim(short anim_state)
  *  113  lara_as_climbroped -> LaraClimbRope      game\rope.cpp
  *   70  lara_as_deathslide - the zip line        game\lara.cpp
  *  128  lara_as_parallelbars                     game\lara.cpp
+ *  139  lara_as_ledgehang  IN_ACTION             game\lara.cpp
  *
  * Six states read nothing and are in the family because they are transitions
  * inside it, where the bit must not blink off: 59 AS_CLIMBEND (the half rung
  * at the top of a ladder), 112 AS_CLIMBROPE (the pull up the rope, which reads
  * IN_ROLL and hands her back to 111), and the corner shimmies 107-110, whose
  * routines call SetCornerAnim and return her to AS_HANG or AS_CLIMBSTNC.
+ *
+ * 139 AS_LEDGEHANG is the ledge hang's turn and lowering, a transition into
+ * AS_HANG. The turn reads IN_ACTION through ModernLedgeDecide and stands her
+ * up without it; the lowering reads nothing. The move begins with the grab key
+ * held (LaraLedgeTrigger, on the ground, outside the family) and is a grab
+ * from there on: on the tick the lowering hands her to AS_HANG, lara_col_hang
+ * runs on the word built for 139, and without the bit LaraHangTest drops her.
  *
  * Not in it:
  * - the catches. 11 AS_REACH, 28 AS_UPJUMP, 29 AS_FALLBACK, 2 AS_STOP and the
@@ -599,6 +607,10 @@ long ModernStateIsGrab(short anim_state)
 
 	case 70:	// AS_DEATHSLIDE - the zip line
 	case 128:	// AS_PBSPIN - the parallel bars
+		return 1;
+
+	case 139:	// AS_LEDGEHANG - the ledge hang's turn and lowering, a transition into
+			// AS_HANG: the move begins with the grab key held and is a grab from there on
 		return 1;
 
 	default:

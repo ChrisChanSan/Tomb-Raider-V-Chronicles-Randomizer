@@ -468,7 +468,8 @@ finger:
   and the next duck after that is a fresh press.
 - **Grab** governs letting go rather than holding a direction: while
   hanging, shimmying, on a ladder, a pole, a rope, the zip line, the parallel
-  bars or the monkey swing, *Hold* is the original behaviour — let the key go
+  bars, the monkey swing or in the *Ledge hang* move (below), *Hold* is the
+  original behaviour — let the key go
   and she drops. *Toggle* lets you release the key and stay
   put: a fresh press while holding on lets go instead, and — so a fall past a
   lower ledge can never snap back onto it — that same press keeps letting go
@@ -504,6 +505,9 @@ about-turn, to face the ledge, and lowers herself backward into a hang, the
 same pose a manual catch below a ledge leaves her in. The lowering, like every
 animation, is drawn at the full frame rate. Let go of the key, press Jump, or
 draw a weapon while she is turning and she stands back up where she is instead.
+Under *Grab mode* **Toggle** she keeps her hold by herself once the move has
+begun: press the key again while she is turning to stand back up; a press
+still held when she arrives in the hang lets go of the ledge.
 A running jump off the edge needs the grab key released: with the key held,
 Jump pressed in the last step before the edge comes too late, because she is
 stopped first and the Jump then only stands her back up.

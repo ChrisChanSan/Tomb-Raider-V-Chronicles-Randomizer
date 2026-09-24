@@ -1040,6 +1040,18 @@ void CalculateCamera()
 							   (camera.fixed[camera.number].flags & 2);
 	const long modernDiscard = ModernCameraActive() && wouldFix && !sniperCam;
 
+	// The Camera command also writes camera.speed (control.cpp's TO_CAMERA:
+	// the camera word's code bits plus one, so 1 for a word of 0x0000), and a
+	// speed of 1 switches off the target damping below and the eye damping in
+	// MoveCamera: a trailing eye would land on its ideal place in one tick.
+	// Discarded, the pass runs at the chase speed the reset at the end of this
+	// function hands every pass. A lever whose trigger carries a Camera
+	// command runs at 10 here instead of lara_as_switchon's 6. On a look or
+	// combat pass (wouldFix holds there too) the branch further down writes
+	// its own speed over this one.
+	if (modernDiscard)
+		camera.speed = 10;
+
 	if (camera.item && (camera.type == FIXED_CAMERA || camera.type == HEAVY_CAMERA) && !modernDiscard)
 	{
 		item = camera.item;
@@ -1210,7 +1222,21 @@ void CalculateCamera()
 			// reads camera.target_angle and target_elevation, which
 			// ModernCameraOrbit writes. `item` is lara_item here, because the
 			// discard was decided at the top of this function.
+			//
+			// It runs as a chase camera in type too. ChaseCamera forces speed 1
+			// while camera.old_type is FIXED_CAMERA, and MoveCamera records
+			// old_type = camera.type; with the level's FIXED or HEAVY left in
+			// place, old_type would turn FIXED on the first tile tick and stay
+			// so, keeping the damping off, and the interpolator would count
+			// every entry and exit of the tile as a camera cut and draw that
+			// tick live (FIXED is outside its smooth family). The level's type
+			// comes back right after, so the reset at the end of this function
+			// still holds a heavy camera while its timer runs.
+			const camera_type levelType = camera.type;
+
+			camera.type = CHASE_CAMERA;
 			ChaseCamera(item);
+			camera.type = levelType;
 			DiscardedFixedCameraTimer(wouldFix);
 		}
 		else if (wouldFix)

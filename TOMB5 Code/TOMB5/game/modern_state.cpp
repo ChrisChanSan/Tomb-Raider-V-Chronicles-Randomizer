@@ -585,8 +585,17 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * tick, exactly what was added to her held course above; held against
 	 * `cstep` it shows the course following the view tick for tick. 0 on every
 	 * tick the orbit did not tick, and on every tick the camera moved by
-	 * itself. New fields are appended at the end, so the older ones keep
-	 * their places. */
+	 * itself.
+	 *
+	 * `cam_speed` and `old_type` are camera.speed and camera.old_type as the
+	 * previous tick's CalculateCamera left them. old_type is the type that
+	 * view was built as (0 CHASE, 1 FIXED, 2 LOOK, 3 COMBAT): 0 on a Camera
+	 * tile whose level camera the orbit discards, 1 where a level camera takes
+	 * the view. cam_speed is 10 after the reset at the end of CalculateCamera
+	 * and shows anything else only while a heavy camera holds.
+	 *
+	 * New fields are appended at the end, so the older ones keep their
+	 * places. */
 	if (gLogEnabled)
 	{
 		/* The orbit's eight, read back from game\camera.cpp, which owns the
@@ -612,7 +621,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"err=%d state=%d mode=%s spin=%d aligned=%d still=%d blk=%d "
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
-			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d",
+			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d "
+			"cam_speed=%d old_type=%d",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
@@ -620,7 +630,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
 			cam_world, clip, view_err, air, carry, modern_state.stand_hold,
-			sit.cam_player_step);
+			sit.cam_player_step, (int)camera.speed, (int)camera.old_type);
 	}
 
 	return bits;

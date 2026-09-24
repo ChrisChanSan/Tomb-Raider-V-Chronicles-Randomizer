@@ -47,6 +47,7 @@ long ModernCameraWorldYaw(short* yaw);	// where the player put it, in the world 
 long ModernCameraPlayerStep(short* step);	// how far the player's own stick moved it last tick
 long ModernLaraEyeDistance();		// eye to camera target, the camera's own two points
 bool ModernLaraHidden();		// too close to draw her at all
+void ChaseCameraLogPick(long* cand, long* clip);	// ChaseCamera's last pick, for ROPELOG draw
 void ModernCameraLogState(short* off_yaw, short* off_pitch, long* ret, long* rs_x, long* rs_y,
 	short* world_yaw, long* wall, long* carry);	// MODERNLOG tick line
 void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_factor,

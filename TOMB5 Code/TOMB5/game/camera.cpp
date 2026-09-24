@@ -243,6 +243,15 @@ static struct
 	long mc_pull;			// MoveCamera's own mgLOS brought an eye outside its room in
 } ledge_log;
 
+/* ChaseCamera's pick, for ROPELOG's draw line (ChaseCameraLogPick). Set to -1
+ * at the top of every CalculateCamera pass and written by ChaseCamera only,
+ * so -1 says the pass ran another camera; nothing else reads them. */
+static struct
+{
+	long cand;			// the candidate taken: 0 the dialled angle, 1..4 a world cardinal
+	long clip;			// mgLOS cut the dialled candidate short (1) or let it through (0)
+} chase_log;
+
 static void ModernCameraArm()
 {
 	if (!modern_cam_armed)
@@ -754,6 +763,15 @@ bool ModernLaraHidden()
 	return ModernCameraHidesLara(&modern_cam_cfg, ModernLaraEyeDistance()) != 0;
 }
 
+/* ROPELOG draw's camera fields: ChaseCamera's pick on the last CalculateCamera
+ * pass - the candidate it took and whether mgLOS cut the dialled one short,
+ * both -1 when the pass ran another camera. */
+void ChaseCameraLogPick(long* cand, long* clip)
+{
+	*cand = chase_log.cand;
+	*clip = chase_log.clip;
+}
+
 /* The orbit's fields on MODERNLOG's tick line: raw reads of this file's
  * statics, nothing computed from them, so the log shows the curve
  * MODERN_CAMERA_RETURN and MODERN_CAMERA_WALL_FACTOR produce.
@@ -999,6 +1017,8 @@ void CalculateCamera()
 	SniperOverlay = 0;
 	SniperCamActive = 0;
 	memset(&ledge_log, 0, sizeof(ledge_log));
+	chase_log.cand = -1;
+	chase_log.clip = -1;
 
 	// First person view: the head-hidden marker is reset every frame and set
 	// again only when FirstPersonCamera below really runs - otherwise Lara
@@ -2096,12 +2116,16 @@ void ChaseCamera(ITEM_INFO* item)
 			want.room_number = ideals[lp].room_number;
 			modern_cam_clipped = mgLOS(&camera.target, &ideals[lp], 200) ? 0 : 1;
 			modern_cam_clipped_at = GlobalCounter;
+			chase_log.clip = modern_cam_clipped;
 			farthestnum = 0;
 			break;
 		}
 
 		if (mgLOS(&camera.target, &ideals[lp], 200))
 		{
+			if (!lp)
+				chase_log.clip = 0;
+
 			temp[0].x = ideals[lp].x;
 			temp[0].y = ideals[lp].y;
 			temp[0].z = ideals[lp].z;
@@ -2132,6 +2156,7 @@ void ChaseCamera(ITEM_INFO* item)
 		}
 		else if (!lp)
 		{
+			chase_log.clip = 1;
 			temp[0].x = ideals[lp].x;
 			temp[0].y = ideals[lp].y;
 			temp[0].z = ideals[lp].z;
@@ -2156,6 +2181,7 @@ void ChaseCamera(ITEM_INFO* item)
 		}
 	}
 
+	chase_log.cand = farthestnum;
 	ideal.x = ideals[farthestnum].x;
 	ideal.y = ideals[farthestnum].y;
 	ideal.z = ideals[farthestnum].z;

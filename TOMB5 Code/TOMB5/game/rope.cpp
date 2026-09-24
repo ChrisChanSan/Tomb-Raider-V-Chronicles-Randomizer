@@ -22,6 +22,7 @@
 #include "../specific/input.h"
 #include "savegame.h"
 #include "camera.h"
+#include "../specific/function_stubs.h"
 
 static PENDULUM NullPendulum = { {0, 0, 0}, {0, 0, 0}, 0, 0 };
 
@@ -520,6 +521,41 @@ void ModelRigid(PHD_VECTOR* pa, PHD_VECTOR* pb, PHD_VECTOR* va, PHD_VECTOR* vb, 
 	vb->z -= delta.z;
 }
 
+/* The length Normalise measures: the vector before its << 16, through the
+ * same integer square root. */
+static long RopeLogLength(long x, long y, long z)
+{
+	return phd_sqrt(abs(SQUARE(x) + SQUARE(y) + SQUARE(z)));
+}
+
+/* ROPELOG, one line per AlignLaraToRope call, behind -log: every tick she
+ * hangs on a rope (AnimateLara) and the catch (RopeCollision):
+ *   f       GlobalCounter
+ *   state, anim, frame   her current_anim_state, anim_number, frame_number
+ *   RopeY   lara.RopeY, her heading round the rope, 256 per tick of a turn;
+ *           angle the short ropeangle made of it (RopeY - 16380)
+ *   seg, off   lara.RopeSegment and lara.RopeOffset
+ *   f7      the frame's root y (frame[7]) the rope point reads
+ *   len     the three lengths Normalise measures, as it measures them: the
+ *           rope's direction at her grip (191 on a still rope), the turned
+ *           facing n2 + v2 (about 4096) and u x v (about 16384; above 16384
+ *           Normalise's integer reciprocal comes out at 3 instead of 4, n
+ *           keeps 75% of its length and z_rot comes out up to a quarter too
+ *           large)
+ *   xyz     the angles she is given: x_rot, y_rot, z_rot
+ *   pos     her position after the 112-unit push off the rope, and her
+ *           room_number at the call
+ * The draw's side of the same ticks is ROPELOG draw (game\draw.cpp). */
+static void RopeLog(ITEM_INFO* l, short ropeangle, short* frame, long ulen, long vlen, long nlen)
+{
+	Log("ROPELOG f=%d state=%d anim=%d frame=%d RopeY=%d angle=%d seg=%d off=%d f7=%d len=%ld/%ld/%ld "
+		"xyz=%d,%d,%d pos=%ld,%ld,%ld/%d",
+		(int)GlobalCounter, (int)l->current_anim_state, (int)l->anim_number, (int)l->frame_number,
+		(int)lara.RopeY, (int)ropeangle, (int)lara.RopeSegment, (int)lara.RopeOffset, (int)frame[7],
+		ulen, vlen, nlen, (int)l->pos.x_rot, (int)l->pos.y_rot, (int)l->pos.z_rot,
+		l->pos.x_pos, l->pos.y_pos, l->pos.z_pos, (int)l->room_number);
+}
+
 void AlignLaraToRope(ITEM_INFO* l)
 {
 	ROPE_STRUCT* rope;
@@ -528,6 +564,7 @@ void AlignLaraToRope(ITEM_INFO* l)
 	short* frame;
 	long x, y, z, x1, y1, z1, i;
 	long temp[indices_count];
+	long ulen, vlen, nlen;
 	short xyz[3];
 	short ropeangle;
 
@@ -543,6 +580,7 @@ void AlignLaraToRope(ITEM_INFO* l)
 	u.x = (x - x1) << 16;
 	u.y = (y - y1) << 16;
 	u.z = (z - z1) << 16;
+	ulen = gLogEnabled ? RopeLogLength(x - x1, y - y1, z - z1) : 0;
 	Normalise(&u);
 	u.x >>= 2;
 	u.y >>= 2;
@@ -565,11 +603,13 @@ void AlignLaraToRope(ITEM_INFO* l)
 	v.x = (n2.x + v2.x) << 16;
 	v.y = (n2.y + v2.y) << 16;
 	v.z = (n2.z + v2.z) << 16;
+	vlen = gLogEnabled ? RopeLogLength(n2.x + v2.x, n2.y + v2.y, n2.z + v2.z) : 0;
 	Normalise(&v);
 	v.x >>= 2;
 	v.y >>= 2;
 	v.z >>= 2;
 	mCrossProduct(&u, &v, &n);
+	nlen = gLogEnabled ? RopeLogLength(n.x, n.y, n.z) : 0;
 	n.x <<= 16;
 	n.y <<= 16;
 	n.z <<= 16;
@@ -600,6 +640,9 @@ void AlignLaraToRope(ITEM_INFO* l)
 	l->pos.x_rot = xyz[0];
 	l->pos.y_rot = xyz[1];
 	l->pos.z_rot = xyz[2];
+
+	if (gLogEnabled)
+		RopeLog(l, ropeangle, frame, ulen, vlen, nlen);
 }
 
 void LaraClimbRope(ITEM_INFO* item, COLL_INFO* coll)

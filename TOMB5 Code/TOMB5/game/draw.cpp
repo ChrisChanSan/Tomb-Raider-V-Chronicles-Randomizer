@@ -2142,6 +2142,59 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	}
 }
 
+/* Distance between two points in doubles: the eye can be further from her
+ * than a long's square reaches. */
+static long RopeDrawDist(long x, long y, long z)
+{
+	return (long)sqrt((double)x * x + (double)y * y + (double)z * z);
+}
+
+/* ROPELOG draw, behind -log: one line per drawn frame while she hangs on a
+ * rope (lara.RopePtr != -1) and one on the frame after she lets go, the draw's
+ * side of ROPELOG's tick line (game\rope.cpp):
+ *   f       GlobalCounter; the frames of one tick share it
+ *   drawn   1 when the Lara block below draws her this frame; the terms it is
+ *           made of follow: mb her mesh_bits, scno SCNoDrawLara, mhide
+ *           ModernLaraHidden, inv the IFL_INVISIBLE flag
+ *   ct      camera.type
+ *   eye, tgt   camera.pos and camera.target, with their rooms
+ *   eyed    units from the eye to the look-at point
+ *   larad   units from the eye to her position
+ *   cand, clip   ChaseCameraLogPick: the candidate ChaseCamera took (0 the
+ *           dialled angle, 1..4 a world cardinal) and whether mgLOS cut the
+ *           dialled one short; both -1 when the pass ran another camera */
+static void RopeDrawLog()
+{
+	static long tail;
+	long cand, clip, mhide, drawn;
+
+	if (!objects[LARA].loaded || !lara_item)
+		return;
+
+	if (lara.RopePtr != -1)
+		tail = 1;
+	else if (tail)
+		tail = 0;
+	else
+		return;
+
+	ChaseCameraLogPick(&cand, &clip);
+	mhide = ModernLaraHidden() ? 1 : 0;
+	drawn = objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE) && lara_item->mesh_bits &&
+		!SCNoDrawLara && !mhide;
+	Log("ROPELOG draw f=%d drawn=%ld mb=0x%lX scno=%d mhide=%ld inv=%d ct=%d eye=%ld,%ld,%ld/%d "
+		"tgt=%ld,%ld,%ld/%d eyed=%ld larad=%ld cand=%ld clip=%ld",
+		(int)GlobalCounter, drawn, (ulong)lara_item->mesh_bits, (int)SCNoDrawLara, mhide,
+		(lara_item->flags & IFL_INVISIBLE) ? 1 : 0, (int)camera.type,
+		camera.pos.x, camera.pos.y, camera.pos.z, (int)camera.pos.room_number,
+		camera.target.x, camera.target.y, camera.target.z, (int)camera.target.room_number,
+		RopeDrawDist(camera.pos.x - camera.target.x, camera.pos.y - camera.target.y,
+			camera.pos.z - camera.target.z),
+		RopeDrawDist(camera.pos.x - lara_item->pos.x_pos, camera.pos.y - lara_item->pos.y_pos,
+			camera.pos.z - lara_item->pos.z_pos),
+		cand, clip);
+}
+
 void DrawRooms(short current_room)
 {
 	ROOM_INFO* r;
@@ -2232,6 +2285,9 @@ void DrawRooms(short current_room)
 
 	if (gfLevelId != LVL5_TITLE)
 		SkyDrawPhase();
+
+	if (gLogEnabled)
+		RopeDrawLog();
 
 	if (objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE))
 	{

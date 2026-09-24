@@ -315,6 +315,7 @@ namespace
 	int g_secPose = 0;		// items drawn with a blended pose
 	int g_secPoseSkip = 0;		// ... and refused one by the neighbour rule
 	int g_secPoseFar = 0;		// ... refused because the pair is too far apart
+	int g_secPoseBack = 0;		// frames on which Lara's pose was blended walking backwards
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
 	/* Refused tween frames whose root offset was blended in time. A count,
@@ -702,7 +703,13 @@ namespace
 	 *                by a half turn first (the underwater roll). One per roll;
 	 *                halfturn without root_flip is a flip whose animation did
 	 *                not change, as in the other six turn180 animations. Lara's
-	 *                `root` line prints the turned offset as `turned=`. */
+	 *                `root` line prints the turned offset as `turned=`.
+	 *   pose_back    tween frames on which Lara's pose was blended by the
+	 *                backwards rule (InterpPoseBack), the ledge hang's lowering
+	 *                played down the pull-up; counted in lara_pose as well.
+	 *                25 per lowering at sixty frames a second (more on a
+	 *                faster display), zero everywhere else and zero at
+	 *                fps_mode 0. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -714,7 +721,7 @@ namespace
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
-				"particles=%.1f particle_kinds=%04lx root_flip=%d",
+				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -736,7 +743,7 @@ namespace
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
 				(double)g_secParticles / g_secFrames, g_secPartKinds,
-				g_secRootFlip);
+				g_secRootFlip, g_secPoseBack);
 
 		/* TICKLOG: how often each tween-guarded counter stepped in the logic
 		 * second that just ended (GlobalCounter, thirty in both modes). A 30
@@ -778,6 +785,7 @@ namespace
 		g_secPose = 0;
 		g_secPoseSkip = 0;
 		g_secPoseFar = 0;
+		g_secPoseBack = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
 		g_secRootFix = 0;
@@ -1625,6 +1633,15 @@ void InterpNotePoseFar()
 {
 	if (gLogEnabled)
 		g_secPoseFar++;
+}
+
+/* Counted once per frame by lara_pose's own latch: GetFramesAt notes this
+ * before GetFramesNow notes the pose, so only the first build of her pose in
+ * a frame finds g_laraPosed clear. */
+void InterpNotePoseBack()
+{
+	if (gLogEnabled && !g_laraPosed)
+		g_secPoseBack++;
 }
 
 /* The root rule's side channel (see interpolate.h). GetFramesNow raises the

@@ -2480,7 +2480,8 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate)
  * hertz draws. The pose rule refuses the blend when the animation number
  * changed (tested here, because only this side knows it) and in every
  * frame-number case InterpPoseAt names (the frame did not step by exactly
- * one).
+ * one) - except the ledge hang's lowering, whose backwards steps
+ * InterpPoseBack blends.
  *
  * This refuses the pose, not the place: the position under the pose is
  * already blended, so on a refused frame of an animation that carries its
@@ -2497,10 +2498,27 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	const long size = anim->interpolation >> 8;
 	long key;
 	float b;
+	bool back = false;
 
 	if (!InterpPoseAt(prevFrame, item->frame_number, anim->frame_base, rate,
 		anim->frame_end, t, &key, &b))
-		return 0;
+	{
+		/* The ledge hang's lowering steps the pull-up down three frames a
+		 * tick, which the neighbour rule refuses on every tick; InterpPoseBack
+		 * walks the animation's own path between the two tick poses instead,
+		 * so the lowering is drawn at the full frame rate. Asked for Lara
+		 * only, and only while LaraLedgeReversing (state AS_LEDGEHANG in its
+		 * lowering phase), so no other frame reaches it. The tween after the
+		 * hand-over into the pull-up and the one after the hand-over out of it
+		 * are refused by the animation number test above, as every animation
+		 * change is. */
+		if (item != lara_item || !LaraLedgeReversing(item) ||
+			!InterpPoseBack(prevFrame, item->frame_number, anim->frame_base, rate,
+			anim->frame_end, t, &key, &b))
+			return 0;
+
+		back = true;
+	}
 
 	frm[0] = anim->frame_ptr + size * key;
 	frm[1] = frm[0] + size;
@@ -2529,6 +2547,9 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 
 		return 0;
 	}
+
+	if (back)
+		InterpNotePoseBack();
 
 	*blend = b;
 

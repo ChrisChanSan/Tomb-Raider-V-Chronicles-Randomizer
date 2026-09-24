@@ -1566,6 +1566,299 @@ static void pose_time()
 	}
 }
 
+/* ---------------------------------------------- the pose walking backwards -- */
+
+/* Where vanilla draws `frame` of an animation, in key frame units: the key
+ * index plus the test's own copy of the factor, over the rate GetFrames
+ * shortens the last interval to. */
+static double key_pos(long frame, long base, long rate, long end)
+{
+	const long f = frame - base;
+	const long k = f / rate;
+	const long frac = f % rate;
+
+	return (double)k + (frac ? (double)vanilla_alpha(frac, InterpKeyRate(rate, k, end)) : 0.0);
+}
+
+static void pose_back()
+{
+	printf("\npose - the backwards rule, the pull-up played down\n");
+
+	/* Every rate TR5 uses much and every step up to three, walked down from
+	 * frame 12 to 0 with the last step cut short, as the lowering walks. A
+	 * pair is accepted exactly when its frames lie at most one key interval
+	 * apart (worked out here, not by the rule); an accepted one starts on the
+	 * previous tick's pose, ends on the current tick's, is their midpoint at
+	 * a half, never walks upwards and names a pair between the two ticks'. */
+	const long rates[] = { 1, 2, 4, 5 };
+
+	for (int r = 0; r < 4; r++)
+	{
+		for (long step = 1; step <= 3; step++)
+		{
+			const long rate = rates[r];
+			const long base = 0;
+			const long end = 1000;			// no last-interval clamp
+			long wrongVerdict = 0, badStart = 0, badEnd = 0, badMid = 0;
+			long upwards = 0, badPair = 0, accepted = 0;
+			double last = key_pos(12, base, rate, end);
+
+			for (long p = 12; p > 0; )
+			{
+				const long f = p - (p < step ? p : step);
+				const long kp = p / rate;
+				const long kc = f / rate;
+				const bool want = kp <= kc + 1;
+				const double pp = key_pos(p, base, rate, end);
+				const double pc = key_pos(f, base, rate, end);
+				long k0 = 0, k1 = 0, kh = 0;
+				float b0 = 0.0F, b1 = 0.0F, bh = 0.0F;
+				const bool got0 = InterpPoseBack(p, f, base, rate, end, 0.0F, &k0, &b0);
+				const bool got1 = InterpPoseBack(p, f, base, rate, end, 1.0F, &k1, &b1);
+				const bool goth = InterpPoseBack(p, f, base, rate, end, 0.5F, &kh, &bh);
+
+				if (got0 != want || got1 != want || goth != want)
+					wrongVerdict++;
+
+				if (want && got0 && got1 && goth)
+				{
+					const double m = (double)kh + (double)bh;
+
+					accepted++;
+
+					if (fabs((double)k0 + (double)b0 - pp) > 1e-6)
+						badStart++;
+
+					if (fabs((double)k1 + (double)b1 - pc) > 1e-6)
+						badEnd++;
+
+					if (m != (pp + pc) * 0.5)
+						badMid++;
+
+					if (m > last || pc > m)
+						upwards++;
+
+					if (kh < kc || kh > kp || k0 < kc || k0 > kp || k1 < kc || k1 > kp ||
+						bh < 0.0F || bh >= 1.0F || b0 < 0.0F || b0 >= 1.0F || b1 < 0.0F || b1 >= 1.0F)
+						badPair++;
+				}
+				else if (pc > last)
+					upwards++;
+
+				last = pc;
+				p = f;
+			}
+
+			printf("  rate %ld, step %ld: %ld accepted\n", rate, step, accepted);
+			ok(wrongVerdict == 0, "backwards: accepted exactly within one key interval", wrongVerdict, 0);
+			ok(badStart == 0, "backwards: t = 0 is the previous tick's pose", badStart, 0);
+			ok(badEnd == 0, "backwards: t = 1 is the current tick's pose", badEnd, 0);
+			ok(badMid == 0, "backwards: t = 0.5 is exactly their midpoint", badMid, 0);
+			ok(upwards == 0, "backwards: tick, tween, tick never walks upwards", upwards, 0);
+			ok(badPair == 0, "backwards: the pair lies in [kc, kp], the factor in [0, 1)", badPair, 0);
+		}
+	}
+
+	/* The lowering itself: animation 97, 74 frames at rate 4, stepped from
+	 * its last frame down by three with the last step cut short (73, 70, ...,
+	 * 4, 1, 0) - once at frame_base 0, where InterpKeyRate's clamp fires on
+	 * the last key, and once at 3000, where it never does, as in a level. */
+	const long bases[] = { 0, 3000 };
+
+	for (int b = 0; b < 2; b++)
+	{
+		const long base = bases[b];
+		const long end = base + 73;
+		long steps = 0, refused = 0, badStart = 0, badEnd = 0, badMid = 0;
+		long upwards = 0, badPair = 0, badSweep = 0;
+		double last = key_pos(end, base, 4, end);
+
+		// The first four tweens at t = 0.5, worked out by hand.
+		struct Want { long key; double blend; };
+		static const Want w[] = { { 17, 0.875 }, { 17, 0.125 }, { 16, 0.375 }, { 15, 0.625 } };
+
+		for (long p = end; p > base; )
+		{
+			const long f = p - (p - base < 3 ? p - base : 3);
+			const long kp = (p - base) / 4;
+			const long kc = (f - base) / 4;
+			const double pp = key_pos(p, base, 4, end);
+			const double pc = key_pos(f, base, 4, end);
+			long key = 0;
+			float blend = 0.0F;
+
+			if (!InterpPoseBack(p, f, base, 4, end, 0.5F, &key, &blend))
+				refused++;
+			else
+			{
+				const double m = (double)key + (double)blend;
+
+				if (steps < 4)
+				{
+					ok(key == w[steps].key, "lowering: the pair of an early tween", key, w[steps].key);
+					okf(fabs(blend - w[steps].blend) < 1e-6, "lowering: the factor of an early tween",
+						blend, w[steps].blend);
+				}
+
+				if (m != (pp + pc) * 0.5)
+					badMid++;
+
+				if (m > last || pc > m)
+					upwards++;
+
+				if (key < kc || key > kp || blend < 0.0F || blend >= 1.0F)
+					badPair++;
+
+				/* The whole tween in eighths of a tick: continuous from one
+				 * tick pose to the other and never upwards. */
+				double prevPos = pp;
+
+				for (int e = 0; e <= 8; e++)
+				{
+					const float t = (float)e / 8.0F;
+					long k = 0;
+					float bl = 0.0F;
+
+					InterpPoseBack(p, f, base, 4, end, t, &k, &bl);
+
+					const double pos = (double)k + (double)bl;
+
+					if (pos > prevPos || fabs(pos - (pp + (pc - pp) * t)) > 1e-6 ||
+						(e == 0 && fabs(pos - pp) > 1e-6) || (e == 8 && fabs(pos - pc) > 1e-6))
+						badSweep++;
+
+					prevPos = pos;
+				}
+
+				long k0 = 0, k1 = 0;
+				float b0 = 0.0F, b1 = 0.0F;
+
+				if (!InterpPoseBack(p, f, base, 4, end, 0.0F, &k0, &b0) ||
+					fabs((double)k0 + (double)b0 - pp) > 1e-6)
+					badStart++;
+
+				if (!InterpPoseBack(p, f, base, 4, end, 1.0F, &k1, &b1) ||
+					fabs((double)k1 + (double)b1 - pc) > 1e-6)
+					badEnd++;
+			}
+
+			last = pc;
+			steps++;
+			p = f;
+		}
+
+		printf("  lowering at frame_base %ld: %ld steps\n", base, steps);
+		ok(steps == 25, "lowering: 25 ticks from the last frame to the first", steps, 25);
+		ok(refused == 0, "lowering: every step is accepted", refused, 0);
+		ok(badStart == 0, "lowering: t = 0 is the previous tick's pose", badStart, 0);
+		ok(badEnd == 0, "lowering: t = 1 is the current tick's pose", badEnd, 0);
+		ok(badMid == 0, "lowering: t = 0.5 is exactly their midpoint", badMid, 0);
+		ok(upwards == 0, "lowering: tick, tween, tick never walks upwards", upwards, 0);
+		ok(badPair == 0, "lowering: the pair lies in [kc, kp], the factor in [0, 1)", badPair, 0);
+		ok(badSweep == 0, "lowering: every t walks the path down, no cut at either end", badSweep, 0);
+
+		// The last step, 1 down to 0, cut short to one frame.
+		long key = -1;
+		float blend = -1.0F;
+
+		ok(InterpPoseBack(base + 1, base, base, 4, end, 0.5F, &key, &blend),
+			"lowering: the cut-short last step is accepted", 1, 1);
+		ok(key == 0, "lowering: the last step's pair", key, 0);
+		okf(fabs(blend - 0.125) < 1e-6, "lowering: the last step's factor", blend, 0.125);
+	}
+
+	/* The upper pair, and why the forward rule's clamp form would not do:
+	 * 70 down to 67 walks from 17.5 to 16.75, the midpoint 17.125 lies above
+	 * key 17. The clamp form - pair kc, previous pose taken as 1.0 on it -
+	 * would draw 16.875, a quarter of an interval too far along. */
+	{
+		long key = 0;
+		float blend = 0.0F;
+
+		InterpPoseBack(3070, 3067, 3000, 4, 3073, 0.5F, &key, &blend);
+		ok(key == 17, "the midpoint above a passed key takes the upper pair", key, 17);
+
+		const double ac = vanilla_alpha(3, 4);
+		const double clamp = 16.0 + ac + (1.0 - ac) * 0.5;
+
+		okf(fabs((key + blend) - clamp - 0.25) < 1e-6,
+			"the clamp form would draw it a quarter interval too far along",
+			(double)key + (double)blend - clamp, 0.25);
+	}
+
+	/* The refusals. Each draws the current tick's pose, as InterpPoseAt's
+	 * refusals do. */
+	{
+		long key = 0;
+		float blend = 0.0F;
+
+		ok(!InterpPoseBack(4, 5, 0, 4, 1000, 0.5F, &key, &blend),
+			"backwards rule: a forward step is not its ground", 0, 0);
+		ok(!InterpPoseBack(4, 4, 0, 4, 1000, 0.5F, &key, &blend),
+			"backwards rule: a standing frame is not blended", 0, 0);
+		ok(!InterpPoseBack(7, 4, 0, 0, 1000, 0.5F, &key, &blend),
+			"backwards rule: an animation with no rate is not blended", 0, 0);
+		ok(!InterpPoseBack(101, 99, 100, 4, 1000, 0.5F, &key, &blend),
+			"backwards rule: a frame below frame_base is not blended", 0, 0);
+		ok(!InterpPoseBack(3074, 3071, 3000, 4, 3073, 0.5F, &key, &blend),
+			"backwards rule: a previous frame beyond frame_end is not blended", 0, 0);
+		ok(!InterpPoseBack(5, 3, 0, 1, 1000, 0.5F, &key, &blend),
+			"backwards rule: a step of 2 at rate 1 spans two keys", 0, 0);
+
+		long nine = 0;
+
+		for (long f = 0; f <= 60; f++)
+			if (InterpPoseBack(f + 9, f, 0, 4, 1000, 0.5F, &key, &blend))
+				nine++;
+
+		ok(nine == 0, "backwards rule: a step of 9 at rate 4 is never blended", nine, 0);
+	}
+
+	/* The shortened last interval: at frame_end 6 key 1 has rate 2, and both
+	 * rules must place every frame on vanilla's own factor there. Frame 5 is
+	 * frac 1 over rate 2, a half - the nominal rate 4 would give a quarter. */
+	{
+		long key = 0;
+		float blend = 0.0F;
+
+		InterpPoseBack(5, 3, 0, 4, 6, 0.0F, &key, &blend);
+		ok(key == 1, "clamped interval: t = 0 on the previous tick's pair", key, 1);
+		okf(blend == 0.5F, "clamped interval: vanilla's factor at the shortened rate", blend, 0.5);
+
+		long disagree = 0, compared = 0;
+
+		for (long p = 1; p <= 6; p++)
+		{
+			for (long f = 0; f < p; f++)
+			{
+				long kb = 0, kf = 0;
+				float bb = 0.0F, bf = 0.0F;
+
+				if (!InterpPoseBack(p, f, 0, 4, 6, 0.0F, &kb, &bb))
+					continue;
+
+				// The forward rule's tick poses: its end at t = 1, its start at t = 0.
+				InterpPoseAt(p - 1, p, 0, 4, 6, 1.0F, &kf, &bf);
+
+				if (fabs((double)kb + bb - ((double)kf + bf)) > 1e-6)
+					disagree++;
+
+				InterpPoseBack(p, f, 0, 4, 6, 1.0F, &kb, &bb);
+				InterpPoseAt(f, f + 1, 0, 4, 6, 0.0F, &kf, &bf);
+
+				if (fabs((double)kb + bb - ((double)kf + bf)) > 1e-6)
+					disagree++;
+
+				compared++;
+			}
+		}
+
+		printf("  clamped interval: %ld backwards pairs compared with the forward rule\n", compared);
+		ok(compared > 0, "clamped interval: pairs to compare", compared, 1);
+		ok(disagree == 0, "clamped interval: both rules place the ticks alike", disagree, 0);
+	}
+}
+
 /* ------------------------------------------- the display-bound cadence -- */
 
 /* The blend factor bound to the display's own rate, and the one thing about
@@ -3700,6 +3993,7 @@ int main()
 	counters();
 	pose_factor();
 	pose_time();
+	pose_back();
 	root_flip();
 	root_narrow();
 	particles();

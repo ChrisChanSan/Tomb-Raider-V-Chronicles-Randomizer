@@ -363,6 +363,85 @@ inline bool InterpPoseAt(long prevFrame, long curFrame, long frameBase, long rat
 	return true;
 }
 
+/* The pose between two ticks of an animation played backwards, as a key
+ * frame index and a factor.
+ *
+ * The ledge hang's lowering (game\lara.cpp, lara_as_ledgehang) plays the
+ * pull-up - animation 97, 74 frames at rate 4 - three frames down a tick, the
+ * last step cut short to land on the first frame. InterpPoseAt refuses every
+ * one of those frames; GetFramesAt (draw.cpp) then asks this rule, for Lara
+ * and only while LaraLedgeReversing. Returns false, and the current pose is
+ * drawn, when:
+ *
+ *   the frame did not step down         a forward or standing frame is
+ *                                       InterpPoseAt's ground.
+ *   the animation has no rate           nothing to walk.
+ *   a frame lies outside the animation  the current one below frame_base or
+ *                                       the previous one beyond frame_end:
+ *                                       the previous pose belongs to another
+ *                                       animation.
+ *   the frames lie more than one key    kp > kc + 1: the path between them
+ *   interval apart                      runs over a key frame neither tick
+ *                                       drew from.
+ *
+ * Both tick poses are placed in key units exactly as vanilla draws them,
+ * InterpKeyAlpha over InterpKeyRate's rate:
+ *
+ *     pp = kp + alpha(p mod rate),   pc = kc + alpha(f mod rate)
+ *
+ * and the drawn frame stands at m = pp + (pc - pp) * t on the animation's own
+ * path, walking down from pp to pc: the previous tick's pose as t nears 0,
+ * the current tick's as t nears 1, exactly their midpoint at t = 0.5, with no
+ * cut at either end. It is the forward rule's idea - one factor on the key
+ * interval the pose lies in - with the interval chosen by m: the pair is
+ * kc + 1 when m reaches it, else kc, and the factor is what is left over.
+ *
+ * The pair can be the upper one because a step of three frames at rate four
+ * passes over a key on two ticks of every four, and the midpoint can still
+ * lie above that key: 70 down to 67 walks from 17.5 to 16.75 and the midpoint,
+ * 17.125, is the pair (17, 18) at 0.125. The forward rule's clamp form - the
+ * pair kc, and the previous pose taken as 1.0 on it - is exact only for a
+ * step of one, where a pose that crossed a key sits on the key itself. Here
+ * it would start the walk at kc + 1 instead of pp and draw the tween up to a
+ * quarter of an interval too far along (16.875 on that tick, 17.75 instead
+ * of 17.875 on the one before), a stutter on two ticks of every four.
+ *
+ * The pair index never exceeds kp. For t > 0, all GetFramesNow asks for, it
+ * is kp only when the previous frame lies past that key, and then the
+ * previous tick drew from kp and kp + 1 itself; otherwise the pair is kc and
+ * kc + 1, which the current tick drew from or which is kp. Both key frames of
+ * the pair are always frames one of the two ticks read. */
+inline bool InterpPoseBack(long prevFrame, long curFrame, long frameBase, long rate,
+	long frameEnd, float t, long* key, float* blend)
+{
+	if (rate < 1)
+		return false;
+
+	if (prevFrame - curFrame < 1)
+		return false;
+
+	const long f = curFrame - frameBase;
+	const long p = prevFrame - frameBase;
+
+	if (f < 0 || p > frameEnd - frameBase)
+		return false;
+
+	const long kc = f / rate;
+	const long kp = p / rate;
+
+	if (kp > kc + 1)
+		return false;
+
+	const float pc = (float)kc + InterpKeyAlpha(f % rate, InterpKeyRate(rate, kc, frameEnd));
+	const float pp = (float)kp + InterpKeyAlpha(p % rate, InterpKeyRate(rate, kp, frameEnd));
+	const float m = pp + (pc - pp) * t;
+
+	*key = (m >= (float)(kc + 1)) ? kc + 1 : kc;
+	*blend = m - (float)*key;
+
+	return true;
+}
+
 /* ---------------------------------------------------------- the blend itself
  *
  * One factor in place of vanilla's hard-wired branches, bit-exact with them

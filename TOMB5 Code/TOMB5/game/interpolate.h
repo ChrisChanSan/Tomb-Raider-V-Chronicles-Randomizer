@@ -142,6 +142,9 @@ void InterpNotePoseHD();
 /* A rate 1 pair whose two poses are too far apart for an element-wise matrix
  * blend. */
 void InterpNotePoseFar();
+/* A tween frame on which Lara's pose was blended by the backwards rule
+ * (InterpPoseBack, the ledge hang's lowering); once per drawn frame. */
+void InterpNotePoseBack();
 
 /* The neighbour rule refuses the pose, never the root.
  *

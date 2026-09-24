@@ -4925,12 +4925,12 @@ two side effects of its trigger still reached the orbit. `TO_CAMERA` writes
 Camera tiles Lara crosses in Andrea1, rooms 19, 42 and 225, all carry 0x0000, so 1),
 `RefreshCamera` sets `camera.type = FIXED_CAMERA` again on every tick she stands on the
 tile (`game/control.cpp:2818`), and `ChaseCamera` forces speed 1 while
-`camera.old_type` is FIXED (`game/camera.cpp:2047`-`2048`): speed 1 switches off the eye
+`camera.old_type` is FIXED (`game/camera.cpp:2174`-`2175`): speed 1 switches off the eye
 damping in `MoveCamera` (`pos += (ideal - pos) / speed`) and the target damping in
-`CalculateCamera` (`game/camera.cpp:1159`), so a trailing eye landed on its ideal place
+`CalculateCamera` (`game/camera.cpp:1257`), so a trailing eye landed on its ideal place
 in one tick — measured in Andrea1 on stepping onto room 42's tile, the eye-to-target
 distance went from 1444 to 840 units in one tick. And `MoveCamera` records
-`camera.old_type = camera.type` (`game/camera.cpp:2399`), which was FIXED during the
+`camera.old_type = camera.type` (`game/camera.cpp:2527`), which was FIXED during the
 discarded pass; FIXED is outside the interpolator's smooth family
 (`InterpCamSmoothType`, `game/interpolate_math.h:93`), so every entry and exit of the
 tile counted as a camera cut and drew its tick live (INTERPLOG's `type=` count matched
@@ -4986,24 +4986,28 @@ because the classic look camera already turns stick-forward into "look up"; pitc
 `angle_radius` fields; `wall` / `clip` is now the candidate loop's own `mgLOS` answer,
 and the classic quadrant snap (3072 Manhattan) no longer fires in Modern at all. The
 discarded level camera's two side effects are closed in `CalculateCamera`, both behind
-`modernDiscard` (`game/camera.cpp:1041`), which is false under Tank, in first person
-(`ModernCameraActive` refuses it, `game/camera.cpp:301`) and for the rich2 sniper camera
+`modernDiscard` (`game/camera.cpp:1115`), which is false under Tank, in first person
+(`ModernCameraActive` refuses it, `game/camera.cpp:319`) and for the rich2 sniper camera
 (`sniperCam`), so those stay as they were: right after the discard is decided the pass
-sets `camera.speed = 10` (`game/camera.cpp:1052`-`1053`), the chase speed the reset at
-the end of the function hands every pass (`game/camera.cpp:1286`); and the discard branch
+sets `camera.speed = 10` (`game/camera.cpp:1126`-`1127`), the chase speed the reset at
+the end of the function hands every pass (`game/camera.cpp:1389`); and the discard branch
 runs `ChaseCamera` with `camera.type` set to `CHASE_CAMERA` and puts the level's type
-back afterwards (`game/camera.cpp:1235`-`1239`), so `MoveCamera` records `old_type`
+back afterwards (`game/camera.cpp:1338`-`1342`), so `MoveCamera` records `old_type`
 CHASE and `ChaseCamera`'s speed-1 rule stays quiet, while the reset's hold of a heavy
 camera and `DiscardedFixedCameraTimer` see the type they saw before. Inside `ChaseCamera`
 and `MoveCamera` nothing else reads `camera.type` or `camera.speed`: beside the speed-1
-rule, the speed it hands `MoveCamera` (`game/camera.cpp:2050`) and the record, only
+rule, the speed it hands `MoveCamera` (`game/camera.cpp:2177`) and the record, only
 `MoveCamera`'s reuse of the last ideal compares
-`camera.old_type == camera.type` (`game/camera.cpp:2272`), which now holds on a tile as
+`camera.old_type == camera.type` (`game/camera.cpp:2399`), which now holds on a tile as
 it does off one. On a look or combat pass the branch further down writes its own speed
 over the 10. A known and accepted difference: `lara_as_switchon` and
 `lara_as_switchoff` set `camera.speed = 6` (`game/lara.cpp:3176`, `3187`), and on a lever
 whose trigger also carries a Camera command the orbit runs at 10 instead on the ticks the
-level camera is discarded. The orbit does not trip the 60 fps camera-cut detection,
+level camera is discarded. During the ledge hang's move and on the ten ticks from its
+hand-over on, the chase camera's look-at point is looked up from the room it was in the
+tick before and accepted from that room or from hers, so it follows her down over the edge
+instead of standing still and then jumping (*Ledge hang: an automatic turn and lowering at
+an edge* below). The orbit does not trip the 60 fps camera-cut detection,
 swept rather than argued: over the whole sphere at the chase radius (about 128,000
 sample pairs) the worst tick of a fully pushed stick moves the ideal eye 309 units
 Manhattan against `INTERP_CAM_SNAP` 1024, and `InterpCamAimCut` fires on none of them.
@@ -5473,9 +5477,28 @@ heading she hangs with are appended to `tomb5_save_info` as `ledge_phase` and
 `ledge_heading` (`global/types.h:1399`-`1400`) and written/read only while she
 is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
 on this way is settled once by the same refusal test into the hang or a fall.
+Under the Modern orbit the camera swings round with her turn, ending behind her
+back over the drop where the walls allow it, and keeps looking at her all the
+way down: its look-at point follows her out over the edge and down the lowering
+in even steps, never standing still and never jumping.
 `LEDGELOG` behind `-log` prints one line per phase change, a line when the
 refusal set changes while the key is held near an edge, and one fire line when
-the move starts (`game/lara.cpp:6401`-`6439`, `:6716`-`6729`, `:6753`-`6763`).
+the move starts (`game/lara.cpp:6446`-`6484`, `:6765`-`6778`, `:6802`-`6812`),
+and, under the Modern orbit, one `LEDGELOG cam` line per tick of the move and
+on the ten ticks from the hand-over on (`ModernCameraLedgeLog`,
+`game/camera.cpp:938`-`984`, printed at the end of `CalculateCamera`,
+`:1400`-`1401`): `f=` `GlobalCounter`, `phase=` turn, lower, hang (the
+hand-over's tick) or tail, the eye and the look-at point as the pass left them
+and the point before the quarter smoothing (`raw=`), each with its room,
+`item_room=`, `snaps=` `TargetSnaps`, `rejected=` 1 when the in-room test put
+the previous point back, `head_fallback=` 1 when `ConfirmCameraTargetPos` took
+the head position, `angle=` and `elev=` the actual angle and elevation,
+`world=` the orbit's world yaw, `carry=` the swing still owed / its ticks paid,
+`lead=` the yaw step asked of `ModernCameraLeadEye` / the step it gave after
+its distance scaling, `clip=` the dialled eye's `mgLOS` clip, `pull=` the step
+of eight at which `ModernCameraRayBounds` found clearance (0 none),
+`mc_pull=` 1 when `MoveCamera`'s own `mgLOS` pulled an eye in, and `csnaps=`
+`CameraSnaps`.
 Under *Grab mode* *Toggle* the grab is carried through the move: from the tick
 it fires she keeps hold whatever the key does; a fresh press while she turns
 stands her back up, a press still down on the tick of the hand-over lets go of
@@ -5495,12 +5518,31 @@ what holding the grab key while running off an edge already does — the
 `AS_REACH` catch below — and a player who relies on that should not have it
 silently replaced. It is Modern-controls only because the turn leans on the
 Modern camera swinging behind her (`ModernCameraCarryHalfTurn`,
-`game/camera.cpp:367`-`383`, called once on the turn's first tick and gated on
+`game/camera.cpp:385`-`401`, called once on the turn's first tick and gated on
 `ModernCameraActive()` so a swing is never seated while nothing pays it out);
 Tank stays byte-identical by not being asked at all. An aborted turn drops the
-camera's remaining swing (`ModernCameraDropSwing`, `game/camera.cpp:385`-`399`,
+camera's remaining swing (`ModernCameraDropSwing`, `game/camera.cpp:403`-`417`,
 called on a stand after the turn's first tick), as the right stick drops it, so
-the camera never ends in front of her. The lowering is drawn at the full frame
+the camera never ends in front of her. The look-at point needs a rule of its
+own because the lowering's first tick moves her 200 units out over the drop and
+726 down (`LaraLedgeToHang`, `game/lara.cpp:6542`-`6558`), and `UpdateLaraRoom`
+(`:6556`) puts her into the room below the ledge. `CalculateCamera` builds the
+point in her room (`game/camera.cpp:1210`) and moves it only a quarter of the way
+after her each tick (`:1257`-`1266`), which leaves it above the ledge; in her new
+room that sector can be closed above, and `ChaseCamera`'s in-room test then finds
+the point above the ceiling and puts the previous one back (`:2035`-`2044`), tick
+after tick, until `TargetSnaps` passes 8 and the raw point is taken unsmoothed
+(`:1259`, `:1266`). Measured in Andrea1 at room 40's west edge (x 25600): she
+hangs from a walkway slab (top -1792, underside -1536 at her edge) whose sector
+in room 41 below is closed at that underside with no room above, so on seven
+moves of nine the point stood still for nine ticks while she lowered and then
+jumped about 200 units across and 300 down in one tick - a 12-degree tilt of
+the view within 33 ms, the picture dropping by 23 % of its height half a second
+after the turn began. The two moves at the north edge had no jolt, because the
+sector of room 41 under that edge has a door back to room 40. The swing itself
+was even (its 3u^2 - 2u^3 profile, 13.5 degrees a tick at the peak), no wall or
+line-of-sight pull fired (`clip=0` on every tick) and the 60 fps interpolator
+did not cut; none of that is changed. The lowering is drawn at the full frame
 rate: the interpolator's neighbour rule (`curFrame != prevFrame + 1`,
 `game/interpolate_math.h:346`) refuses every backwards-stepped frame, so
 `InterpPoseBack`, asked by `GetFramesAt` only while `LaraLedgeReversing`, walks
@@ -5512,7 +5554,7 @@ out of it into the hang, stays a tick frame, as everywhere.
 **How.** `ModernLedgeDecide` (`game/modern_move.cpp:1720`-`1786`) is the pure
 decision for one tick of the move — the turn's ramp, signed by the side, and
 its abort tests, the lowering's frame step and its hand-over — read by
-`lara_as_ledgehang` (`game/lara.cpp:6541`-`6656`), the routine for the new
+`lara_as_ledgehang` (`game/lara.cpp:6590`-`6705`), the routine for the new
 state `AS_LEDGEHANG = 139` (`game/lara_states.h:147`); its collision row stays
 `lara_default_col`, since the state itself fills `coll` for `TestTriggers` and
 `LaraGun` and never moves her by walking. The turn runs in Tomb Raider 5's own
@@ -5535,7 +5577,7 @@ grew from 5788 to 10783, 0 failed. One guard at the head of `AnimateLara`
 skips every animation command while the lowering plays backwards, for
 `AS_LEDGEHANG` only. The hand-over is exactly the engine's own settled hang —
 `ANIM_GRABLEDGE` at `frame_base + 21`, `AS_HANG`, `LG_HANDS_BUSY`
-(`LaraLedgeHang`, `game/lara.cpp:6458`-`6471`) — so `lara_col_hang` and
+(`LaraLedgeHang`, `game/lara.cpp:6504`-`6519`) — so `lara_col_hang` and
 `LaraHangTest` take over from there exactly as they do from any other catch.
 The hand-over happens inside the control routine, and the collision routine of
 the same tick is dispatched on the state it wrote (`game/lara.cpp:4999`), so
@@ -5557,7 +5599,7 @@ unchanged. Under *Hold*,
 Tank controls and with the option off the family changes nothing: *Hold*
 hands the word back untouched, and nothing enters 139 without the option and
 Modern controls.
-The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6674`-`6766`) is asked from
+The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6723`-`6815`) is asked from
 `lara_col_run`, `lara_col_walk`, and `lara_col_stop`, right after each
 routine's own ceiling test and after `GetLaraCollisionInfo` has measured this
 tick's movement, so a state change and a position write there land inside the
@@ -5593,9 +5635,55 @@ tween frames the rule blended, one per drawn in-between frame, so a lowering's
 2, 4 and 5 and steps 1 to 3, over the real lowering at `frame_base` 0 and 3000,
 its refusals and a clamped last interval; the suite grew from 398 to 521 checks,
 0 failed.
+The camera's look-at rule holds while `ModernCameraActive()` and `LaraLedgeCamera`
+(`game/lara.cpp:6368`-`6392`, declared with its `lara_ledge_camera` phases at
+`game/lara.h:223`-`235`) names a phase: `AS_LEDGEHANG` throughout, turn or lower as
+`LedgePhase` stands after the tick's control, and a tail of
+`LEDGE_CAMERA_TAIL_TICKS` (10) ticks, the hand-over's own included
+(`game/lara.cpp:6356`-`6366`). `LaraLedgeHang` stamps the tail with `GlobalCounter`
+(`:6517`-`6518`), so it runs out on time whatever runs in between; `LaraLedgeStand`
+and `LaraLedgeFall` end it (`:6496`, `:6533`), and so does every level start
+(`LaraLedgeCameraReset`, `:6394`-`6399`, called from `InitialiseCamera`,
+`game/camera.cpp:887`-`890`). `CalculateCamera` decides the rule once a pass, off for
+the sniper camera and for a camera built round an item (`game/camera.cpp:1140`-`1157`).
+Under it the smoothed point's room walk starts in the room the point was in last tick,
+`last_target.room_number`, instead of hers (`:1270`-`1273`) — only the walk's starting
+room changes, never the point, and `ConfirmCameraTargetPos` still tests her own column
+from her own room — and `ChaseCamera` asks a point that walk finds in no room once
+more from her room, as the vanilla lookup asks it, and takes that room when the point
+lies inside it (`:2018`-`2033`); only a point both refuse counts as a snap and is put
+back, by the vanilla lines (`:2035`-`2044`). A point accepted either way lies inside
+the open volume of the room the walk found — `GetFloor` (`game/control.cpp:1253`-`1341`)
+clamps a point outside a room onto the room's edge sectors, which are walls or doors,
+and a wall sector fails the test — so a point inside rock is still refused, and the
+eye, built from the point by `mgLOS` as before, is not sent into geometry. At room
+40's west edge (RoomGrid over the player's `andrea1.trc`: rooms 40 and 41 share their
+origin; room 40's walkway sector floors at -1792 with no room below, room 41's sector
+under it is ceiled at -1536/-1024 with no room above, and the pit sectors west of
+x 25600 carry the 40/41 portal at -1792 both ways) the point goes 50, 38, 28, 21,
+16 ... units across, a quarter of the remaining 200 each tick, and is over the pit by
+the third tick while it is still at about y -2450, some 650 units above the walkway's
+top (the play-test log's `ROOMLIST` lines read the point at y -2454 while she runs
+onto the walkway and at -1826 to -2200, room 40, in the settled hang), so it never
+lies in the slab, and it stays above -1792 for the whole move: the walk from room 40
+needs no portal at all. A point that did sink below -1792 over the pit would be
+carried into room 41 by room 40's floor portal there, and back by room 41's ceiling
+portal. Under Tank and in first person the rule never holds (`ModernCameraActive()`
+is false there, and `LaraLedgeCamera` is not even asked), nor with the option off,
+where nothing enters 139 (a move under way when the option is switched off from the
+pause menu still ends in its hand-over and tail); the smoothing and the `TargetSnaps` count
+stay vanilla's everywhere, the move included. `last_target` is not in the savegame:
+`InitialiseCamera` seats it at her own position in her own room
+(`game/camera.cpp:892`-`895`) before its first pass, so in a savegame restored in the
+move the first walk starts from her room, exactly as without the rule, and from the
+point's own room after that. The `LEDGELOG cam` values are collected in `ledge_log`
+(`game/camera.cpp:232`-`244`), cleared at the top of every pass (`:1001`) and written
+where each is computed (`:595`, `:1242`-`1245`, `:1776`, `:1869`, `:2046`, `:2468`):
+stores to a static nothing else reads, so they change nothing in any mode.
 
 **Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
-`8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`, `eafab87`
+`8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`, `eafab87`, `5a5bf5d`, `2b6ac8e`,
+`9be2d31`, `be07363`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20

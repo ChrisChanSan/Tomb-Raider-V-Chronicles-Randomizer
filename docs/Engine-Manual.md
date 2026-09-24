@@ -510,8 +510,11 @@ and push toward it — and instead of running off, she stops at the edge, turns
 round on the spot with her own turn animation, as quickly as the stick's own
 about-turn, to face the ledge, and lowers herself backward into a hang, the
 same pose a manual catch below a ledge leaves her in. The lowering, like every
-animation, is drawn at the full frame rate. Let go of the key, press Jump, or
-draw a weapon while she is turning and she stands back up where she is instead.
+animation, is drawn at the full frame rate. The camera swings round behind her
+as she turns, ending over the drop where the walls allow it, and keeps looking
+at her all the way down, without a jolt as she goes over the edge. Let go of
+the key, press Jump, or draw a weapon while she is turning and she stands back
+up where she is instead.
 Under *Grab mode* **Toggle** she keeps her hold by herself once the move has
 begun: press the key again while she is turning to stand back up; a press
 still held when she arrives in the hang lets go of the ledge.
@@ -2712,6 +2715,7 @@ wrote it, and each seam answers a different question:
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 | at *Frame rate 60* an arm or the weapon in her hands shakes | `ARMLOG` — per drawn frame: both arms' animation frames, whether they were blended, and where shoulder, elbow and hand came out |
+| the *Ledge hang* move misbehaves, or the camera jumps during it | `LEDGELOG` — one line per phase of the move, one when it starts, one when the reasons it would refuse an edge change; and with the Modern camera a `LEDGELOG cam` line on every step of the move and the ten after it: where the camera stands and what it looks at, with their rooms, and whether it had to put the look-at point back (`snaps=`, `rejected=`) |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.

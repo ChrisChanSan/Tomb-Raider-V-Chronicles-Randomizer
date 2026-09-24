@@ -4181,7 +4181,7 @@ either way, and `turn180_effect` from every angle on the 512-unit lattice, is a 
 turn; one unit short of it is not) and `root_flip`. At `fps_mode 0` `InterpAlphaNow`
 returns 1 and both frame functions return before writing a byte.
 
-**Commits.** `324e404`, `ced7f30`, `14f0303`, `83d93c0`
+**Commits.** `324e404`, `ced7f30`, `14f0303`, `83d93c0`, `b7607c9`
 
 ### The animation's root offset on a refused frame
 2026-09-16 - 2026-09-21
@@ -4296,7 +4296,7 @@ narrowing, `LONG_MIN`/`LONG_MAX` without overflow); `bit.bat` runs 398 checks, 0
 The tools are listed in `Preparation/Tools/README.md`.
 
 **Commits.** `7397d57`, `c676e29`, `ba9d624`, `523e4cc`, `8253932`, `95cb240`,
-`dc34dc1`, `8b0c1fc`, `983c834`
+`dc34dc1`, `8b0c1fc`, `983c834`, `b7607c9`, `67407bf`
 
 ### The pose between two ticks
 2026-09-07 - 2026-09-08
@@ -4413,7 +4413,7 @@ rate)` the retail levels can produce) and measured with
 is reached only through `GetFramesNow` inside `if (t > 0)`, so `fps_mode 0` reaches none
 of it.
 
-**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`
+**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`, `b7607c9`
 
 ### The arms between two ticks
 2026-09-08 - 2026-09-09

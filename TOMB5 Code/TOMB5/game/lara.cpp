@@ -6353,6 +6353,51 @@ long LaraLedgeReversing(ITEM_INFO* item)
 	return item->current_anim_state == AS_LEDGEHANG && LedgePhase == MODERN_LEDGE_LOWER;
 }
 
+/* The camera's look-at rule for the move outlasts AS_LEDGEHANG by
+ * LEDGE_CAMERA_TAIL_TICKS ticks, the hand-over's own included, because the
+ * look-at point it keeps continuous may still be gliding after her when the
+ * engine's hang takes over. LaraLedgeHang stamps the tick; LaraLedgeStand,
+ * LaraLedgeFall and a level start (LaraLedgeCameraReset, from InitialiseCamera)
+ * end the tail. The stamp is GlobalCounter, which game\control.cpp steps once
+ * per logic tick, so the tail runs out on time whatever runs in between - a
+ * flyby, the binoculars, water - with no countdown of its own to keep. */
+#define LEDGE_CAMERA_TAIL_TICKS	10
+static long ledge_cam_tail;	// a hand-over's tail may still be running
+static ushort ledge_cam_at;	// GlobalCounter on the tick of that hand-over
+
+/* Where the move stands for the camera (game\camera.cpp), as this tick's
+ * control left it: LEDGE_CAMERA_LOWER while she is in AS_LEDGEHANG and
+ * LedgePhase is the lowering, LEDGE_CAMERA_TURN in AS_LEDGEHANG otherwise,
+ * LEDGE_CAMERA_HANG on the hand-over's tick, LEDGE_CAMERA_TAIL on the
+ * LEDGE_CAMERA_TAIL_TICKS - 1 after it, LEDGE_CAMERA_NONE everywhere else. A
+ * tail found over is ended here, so its stamp does not come round again when
+ * GlobalCounter wraps. */
+long LaraLedgeCamera(ITEM_INFO* item)
+{
+	ushort ticks;
+
+	if (item->current_anim_state == AS_LEDGEHANG)
+		return LedgePhase == MODERN_LEDGE_LOWER ? LEDGE_CAMERA_LOWER : LEDGE_CAMERA_TURN;
+
+	if (!ledge_cam_tail)
+		return LEDGE_CAMERA_NONE;
+
+	ticks = (ushort)(GlobalCounter - ledge_cam_at);
+
+	if (ticks < LEDGE_CAMERA_TAIL_TICKS)
+		return ticks ? LEDGE_CAMERA_TAIL : LEDGE_CAMERA_HANG;
+
+	ledge_cam_tail = 0;
+	return LEDGE_CAMERA_NONE;
+}
+
+/* A level start: a tail stamped in the level just left, or by a restore that
+ * settled her into the hang, has no look-at point left to follow. */
+void LaraLedgeCameraReset()
+{
+	ledge_cam_tail = 0;
+}
+
 /* LEDGELOG's distance: units from her position to the outermost unit of the
  * ledge, measured along the heading she hangs with - positive on the ledge
  * (99 on the standing line), negative over the drop (-101 at the hang
@@ -6449,12 +6494,13 @@ static void LaraLedgeStand(ITEM_INFO* item)
 	item->fallspeed = 0;
 	item->gravity_status = 0;
 	LedgePhase = MODERN_LEDGE_NONE;
+	ledge_cam_tail = 0;
 }
 
 /* The hand-over: exactly the engine's own settled hang, the frame
  * lara_col_hang and LaraHangTest wait for before they read input, with
  * lara_as_hang's camera. LaraHangTest corrects pos.y on the next tick
- * (within its own 60 units). */
+ * (within its own 60 units). It starts the camera rule's tail. */
 static void LaraLedgeHang(ITEM_INFO* item)
 {
 	item->anim_number = ANIM_GRABLEDGE;
@@ -6468,6 +6514,8 @@ static void LaraLedgeHang(ITEM_INFO* item)
 	camera.target_angle = 0;
 	camera.target_elevation = -8190;
 	LedgePhase = MODERN_LEDGE_NONE;
+	ledge_cam_tail = 1;
+	ledge_cam_at = GlobalCounter;
 }
 
 /* A restore that cannot take the edge: she falls, as lara_col_run lets her
@@ -6483,6 +6531,7 @@ static void LaraLedgeFall(ITEM_INFO* item)
 	item->gravity_status = 1;
 	lara.gun_status = LG_NO_ARMS;
 	LedgePhase = MODERN_LEDGE_NONE;
+	ledge_cam_tail = 0;
 }
 
 /* Puts her at the hang position for the ledge sector she stands in: x and z

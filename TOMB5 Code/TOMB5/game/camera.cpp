@@ -225,6 +225,24 @@ static long modern_cam_lead_pitch;	// - the two steps ModernCameraLeadEye hands 
 static long modern_cam_have_pos;	// is the position below this level's?
 static long modern_cam_x, modern_cam_y, modern_cam_z;
 
+/* The ledge hang's look-at rule, decided once per CalculateCamera pass for
+ * ChaseCamera (CalculateCamera says what it is and why). */
+static long modern_ledge_cam;
+
+/* What a CalculateCamera pass measured on its way, for LEDGELOG's camera line
+ * (ModernCameraLedgeLog). Cleared at the top of every pass and written where
+ * each value is computed; nothing else reads them. */
+static struct
+{
+	long raw_x, raw_y, raw_z;	// the look-at point before the quarter smoothing
+	long raw_set;			// the pass built one (the chase branch)
+	long rejected;			// ChaseCamera's in-room test put last_target back
+	long head;			// ConfirmCameraTargetPos took the head position
+	long lead;			// the yaw step ModernCameraLeadEye gave the eye
+	long pull;			// ModernCameraRayBounds' step of clearance, 8..1, 0 = none
+	long mc_pull;			// MoveCamera's own mgLOS brought an eye outside its room in
+} ledge_log;
+
 static void ModernCameraArm()
 {
 	if (!modern_cam_armed)
@@ -574,6 +592,8 @@ static void ModernCameraLeadEye()
 		lead_pitch = lead_pitch * lim / r;
 	}
 
+	ledge_log.lead = lead_yaw;
+
 	/* The pitch, the engine's own arithmetic read backwards: the
 	 * candidates are built as y = target.y + R * sin(elevation) and a radius of
 	 * R * cos(elevation), so raising the elevation by a step turns (h, dy)
@@ -864,6 +884,11 @@ void InitialiseCamera()
 	// in the middle of a level.
 	ModernCameraResetOrbit();
 
+	// And the ledge hang look-at rule's tail: it follows a look-at point that
+	// the seating of last_target below starts afresh. A restore runs before
+	// this, so a restore that settles her into the hang starts no tail either.
+	LaraLedgeCameraReset();
+
 	last_target.x = lara_item->pos.x_pos;
 	last_target.y = lara_item->pos.y_pos - 1024;
 	last_target.z = lara_item->pos.z_pos;
@@ -910,6 +935,54 @@ static void DiscardedFixedCameraTimer(long wouldFix)
 	}
 }
 
+/* LEDGELOG's camera line, behind -log: one line per CalculateCamera pass while
+ * the orbit runs and LaraLedgeCamera names a phase - every tick of the ledge
+ * hang's move and the ten from the hand-over on, the look-at rule's tail:
+ *   f          GlobalCounter
+ *   phase      turn or lower (AS_LEDGEHANG, LedgePhase as this tick's control
+ *              left it), hang (the hand-over's tick), tail (the ticks after it)
+ *   eye, target  camera.pos and camera.target as the pass left them, with rooms
+ *   raw        the look-at point before the quarter smoothing, with the room
+ *              GetFloor finds for it from hers; -1 on a pass that built none
+ *   item_room  her room
+ *   snaps      TargetSnaps; rejected 1 when ChaseCamera's in-room test put
+ *              last_target back on this pass
+ *   head_fallback  1 when ConfirmCameraTargetPos took the head position
+ *   angle, elev    camera.actual_angle and camera.actual_elevation
+ *   world      the orbit's world yaw; carry the swing still owed / its ticks paid
+ *   lead       the yaw step the orbit asked ModernCameraLeadEye for / the step
+ *              it gave the eye after the distance scaling, 0 when it gave none
+ *   clip       1 when mgLOS clipped the dialled eye
+ *   pull       the step of eight at which ModernCameraRayBounds found clearance
+ *              along the ray, 8 the whole ray, 0 when none did
+ *   mc_pull    1 when MoveCamera's own mgLOS brought an eye outside its room in
+ *   csnaps     CameraSnaps */
+static void ModernCameraLedgeLog(long phase)
+{
+	static const char* const names[] = { "none", "turn", "lower", "hang", "tail" };
+	short raw_room;
+
+	raw_room = -1;
+
+	if (ledge_log.raw_set)
+	{
+		raw_room = lara_item->room_number;
+		GetFloor(ledge_log.raw_x, ledge_log.raw_y, ledge_log.raw_z, &raw_room);
+	}
+
+	Log("LEDGELOG cam f=%d phase=%s eye=%ld,%ld,%ld/%d target=%ld,%ld,%ld/%d raw=%ld,%ld,%ld/%d "
+		"item_room=%d snaps=%d rejected=%ld head_fallback=%ld angle=%d elev=%d world=%d "
+		"carry=%ld/%ld lead=%ld/%ld clip=%ld pull=%ld mc_pull=%ld csnaps=%d",
+		(int)GlobalCounter, (phase > LEDGE_CAMERA_NONE && phase <= LEDGE_CAMERA_TAIL) ? names[phase] : "bad",
+		camera.pos.x, camera.pos.y, camera.pos.z, (int)camera.pos.room_number,
+		camera.target.x, camera.target.y, camera.target.z, (int)camera.target.room_number,
+		ledge_log.raw_x, ledge_log.raw_y, ledge_log.raw_z, (int)raw_room,
+		(int)lara_item->room_number, (int)TargetSnaps, ledge_log.rejected, ledge_log.head,
+		(int)camera.actual_angle, (int)camera.actual_elevation, (int)modern_cam_state.world_yaw,
+		modern_cam_state.carry, modern_cam_state.carry_tick, modern_cam_lead_yaw, ledge_log.lead,
+		modern_cam_clipped, ledge_log.pull, ledge_log.mc_pull, (int)CameraSnaps);
+}
+
 void CalculateCamera()
 {
 	ITEM_INFO* item;
@@ -925,6 +998,7 @@ void CalculateCamera()
 	CamOldPos.z = camera.pos.z;
 	SniperOverlay = 0;
 	SniperCamActive = 0;
+	memset(&ledge_log, 0, sizeof(ledge_log));
 
 	// First person view: the head-hidden marker is reset every frame and set
 	// again only when FirstPersonCamera below really runs - otherwise Lara
@@ -1063,6 +1137,25 @@ void CalculateCamera()
 		fixed_camera = 0;
 	}
 
+	// The ledge hang's look-at rule, under the orbit only, from the turn's first
+	// tick to the end of the tail after the hand-over (LaraLedgeCamera). The
+	// lowering's first tick moves her 200 units out over the drop and 726 down,
+	// and UpdateLaraRoom puts her into the room below the ledge (Andrea1: room
+	// 41, under room 40's walkway). The look-at point below goes a quarter of the
+	// way after her and is still above the walkway slab, and looked up from her
+	// new room that sector is closed at the slab's underside with no room above:
+	// ChaseCamera would find the point above the ceiling and put last_target back
+	// on every tick until TargetSnaps passes 8, then take the raw point whole -
+	// a look-at point that stands still for nine ticks and then jumps about 200
+	// units across and 300 down in one, tilting the view some 12 degrees.
+	// So while the rule holds the point is looked up from the room it was in
+	// last tick, and ChaseCamera accepts it from that room or from hers; it
+	// glides after her instead (50, 38, 28, 21, 16 units ...). Not for the
+	// sniper camera or a camera built round an item, which do not look at her.
+	const long ledgePhase = ModernCameraActive() ? LaraLedgeCamera(lara_item) : (long)LEDGE_CAMERA_NONE;
+
+	modern_ledge_cam = (ledgePhase != LEDGE_CAMERA_NONE && !fixed_camera && !sniperCam) ? 1 : 0;
+
 	bounds = GetBoundsAccurate(item);
 	y = ((bounds[2] + bounds[3]) >> 1) + item->pos.y_pos - 256;
 
@@ -1146,6 +1239,11 @@ void CalculateCamera()
 				ConfirmCameraTargetPos();
 		}
 
+		ledge_log.raw_x = camera.target.x;
+		ledge_log.raw_y = camera.target.y;
+		ledge_log.raw_z = camera.target.z;
+		ledge_log.raw_set = 1;
+
 		if (fixed_camera != camera.fixed_camera)
 		{
 			SniperCount = 30;
@@ -1168,6 +1266,11 @@ void CalculateCamera()
 					TargetSnaps = 0;
 			}
 		}
+
+		// The ledge hang's rule (above): the room the point was in last tick,
+		// not hers. Only the walk's starting room changes, never the point.
+		if (modern_ledge_cam)
+			camera.target.room_number = last_target.room_number;
 
 		GetFloor(camera.target.x, camera.target.y, camera.target.z, &camera.target.room_number);
 
@@ -1293,6 +1396,9 @@ void CalculateCamera()
 		camera.flags = 0;
 		camera.lara_node = -1;
 	}
+
+	if (gLogEnabled && ledgePhase != LEDGE_CAMERA_NONE)
+		ModernCameraLedgeLog(ledgePhase);
 }
 
 void LaraTorch(PHD_VECTOR* Soffset, PHD_VECTOR* Eoffset, short yrot, long brightness)
@@ -1667,6 +1773,7 @@ static long ModernCameraRayBounds(GAME_VECTOR* ideal, const GAME_VECTOR* want, l
 		ideal->x = wx;
 		ideal->y = wy;
 		ideal->z = wz;
+		ledge_log.pull = step;
 		return 0;
 	}
 
@@ -1759,6 +1866,7 @@ void ConfirmCameraTargetPos()
 		camera.target.x = pos.x;
 		camera.target.y = pos.y;
 		camera.target.z = pos.z;
+		ledge_log.head = 1;
 	}
 }
 
@@ -1907,6 +2015,23 @@ void ChaseCamera(ITEM_INFO* item)
 	h = GetHeight(floor, wx, wy, wz);
 	c = GetCeiling(floor, wx, wy, wz);
 
+	// The ledge hang's rule (CalculateCamera): the walk above started in the
+	// room the point was in last tick. A point it finds in no room is asked
+	// once more from her own room, as the vanilla lookup asks it, and taken
+	// with that room when it is inside it; only a point both refuse counts as a
+	// snap below. The point itself is not moved, so one inside rock is still
+	// put back.
+	if (modern_ledge_cam && (wy < c || wy > h || c >= h || h == NO_HEIGHT || c == NO_HEIGHT))
+	{
+		room_number = item->room_number;
+		floor = GetFloor(wx, wy, wz, &room_number);
+		h = GetHeight(floor, wx, wy, wz);
+		c = GetCeiling(floor, wx, wy, wz);
+
+		if (!(wy < c || wy > h || c >= h || h == NO_HEIGHT || c == NO_HEIGHT))
+			camera.target.room_number = room_number;
+	}
+
 	if (wy < c || wy > h || c >= h || h == NO_HEIGHT || c == NO_HEIGHT)
 	{
 		TargetSnaps++;
@@ -1917,6 +2042,8 @@ void ChaseCamera(ITEM_INFO* item)
 	}
 	else
 		TargetSnaps = 0;
+
+	ledge_log.rejected = TargetSnaps ? 1 : 0;
 
 	for (lp = 0; lp < 5; lp++)
 		ideals[lp].y = camera.target.y + (camera.target_distance * phd_sin(camera.actual_elevation) >> W2V_SHIFT);
@@ -2338,6 +2465,7 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 	if (wy < ceiling || wy > height)
 	{
 		mgLOS(&camera.target, &camera.pos, 0);
+		ledge_log.mc_pull = 1;
 		dx = abs(camera.pos.x - ideal->x);
 		dy = abs(camera.pos.y - ideal->y);
 		dz = abs(camera.pos.z - ideal->z);

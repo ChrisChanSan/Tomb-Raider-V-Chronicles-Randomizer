@@ -219,6 +219,20 @@ enum lara_ledge_from
 long LaraLedgeTrigger(ITEM_INFO* item, COLL_INFO* coll, long from);
 void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll);
 long LaraLedgeReversing(ITEM_INFO* item);
+
+/* Where the ledge hang's move stands for the camera's look-at rule and
+ * LEDGELOG's camera line (LaraLedgeCamera, game\camera.cpp). */
+enum lara_ledge_camera
+{
+	LEDGE_CAMERA_NONE,	// neither the move nor its tail: the camera's own rules
+	LEDGE_CAMERA_TURN,	// AS_LEDGEHANG, turning on the standing line
+	LEDGE_CAMERA_LOWER,	// AS_LEDGEHANG, the lowering
+	LEDGE_CAMERA_HANG,	// the tick of the hand-over to the engine's hang
+	LEDGE_CAMERA_TAIL	// one of the ticks after it on which the rule still holds
+};
+
+long LaraLedgeCamera(ITEM_INFO* item);
+void LaraLedgeCameraReset();
 void LaraLedgeSave(uchar* phase, short* heading);
 void LaraLedgeLoad(long phase, long have_phase, short heading, long have_heading);
 

@@ -4868,14 +4868,16 @@ candidate, clipped by `mgLOS` at any distance, and the clipped point is walked b
 toward the target along the ray until clearance is found rather than snapped onto the
 sector grid. Below a measured eye-to-target distance Lara is not drawn at all. Fixed
 level cameras are discarded exactly as first person discards them, with the rich2 sniper
-camera excepted; flybys and cutscenes are untouched in every mode. A heading change of
-more than 150 degrees in one tick that the modern turn did not cause hands the orbit a
-pending swing of half a turn, paid out over 20 ticks on an eased profile and cancelled
-the moment the stick is pushed. The camera's own rate is a setting: 0 to 100 maps
-linearly to 364..2184 yaw units per tick (60 to 360 degrees a second), pitch always half
-the yaw, default 40 = 1092 units (180 deg/s), re-read every tick so a change on the
-pause menu is felt the next tick. Under water the orbit's elevation becomes the attitude
-her body swims toward. At Tank there is no orbit.
+camera excepted, and a discarded one leaves no trace: over a Camera tile the orbit keeps
+its damping, a trailing eye is not pulled onto its ideal place in one tick, and the tile
+edges are not counted as camera cuts; flybys and cutscenes are untouched in every mode.
+A heading change of more than 150 degrees in one tick that the modern turn did not
+cause hands the orbit a pending swing of half a turn, paid out over 20 ticks on an
+eased profile and cancelled the moment the stick is pushed. The camera's own rate is a
+setting: 0 to 100 maps linearly to 364..2184 yaw units per tick (60 to 360 degrees a
+second), pitch always half the yaw, default 40 = 1092 units (180 deg/s), re-read every
+tick so a change on the pause menu is felt the next tick. Under water the orbit's
+elevation becomes the attitude her body swims toward. At Tank there is no orbit.
 
 **Why.** The orbit is the camera half of the modern control: a scheme that steers
 relative to the camera needs a camera the player aims. It is built on the engine's own
@@ -4917,7 +4919,22 @@ a Camera and a Target command makes `game/control.cpp` set `camera.item` and the
 shot is then built around that item — an orbit around a door at 1536 units with Lara out
 of the picture; twenty floor triggers in the shipped campaign carry both commands on one
 tile (Andrea1 4, Andrea2 1, joby2 1, rich1 4, rich2 3, rich3 7, counted over the
-player's own `.trc` files).
+player's own `.trc` files). The discard kept the level camera from taking the view, but
+two side effects of its trigger still reached the orbit. `TO_CAMERA` writes
+`camera.speed` = the camera word's code bits + 1 (`game/control.cpp:2576`; the three
+Camera tiles Lara crosses in Andrea1, rooms 19, 42 and 225, all carry 0x0000, so 1),
+`RefreshCamera` sets `camera.type = FIXED_CAMERA` again on every tick she stands on the
+tile (`game/control.cpp:2818`), and `ChaseCamera` forces speed 1 while
+`camera.old_type` is FIXED (`game/camera.cpp:2047`-`2048`): speed 1 switches off the eye
+damping in `MoveCamera` (`pos += (ideal - pos) / speed`) and the target damping in
+`CalculateCamera` (`game/camera.cpp:1159`), so a trailing eye landed on its ideal place
+in one tick — measured in Andrea1 on stepping onto room 42's tile, the eye-to-target
+distance went from 1444 to 840 units in one tick. And `MoveCamera` records
+`camera.old_type = camera.type` (`game/camera.cpp:2399`), which was FIXED during the
+discarded pass; FIXED is outside the interpolator's smooth family
+(`InterpCamSmoothType`, `game/interpolate_math.h:93`), so every entry and exit of the
+tile counted as a camera cut and drew its tick live (INTERPLOG's `type=` count matched
+her 12 crossings of room 19's tile exactly).
 
 **How.** Origin: TROne's orbit holds a world angle too, and that is where the
 resemblance stops — theirs never returns behind the player, this one falls home at
@@ -4968,18 +4985,42 @@ because the classic look camera already turns stick-forward into "look up"; pitc
 `MODERN_CAMERA_WALL_DEAD`, `MODERN_CAM_ANGLE_RADIUS`, `MODERN_CAM_CLIP_DEAD` and the
 `angle_radius` fields; `wall` / `clip` is now the candidate loop's own `mgLOS` answer,
 and the classic quadrant snap (3072 Manhattan) no longer fires in Modern at all. The
-orbit does not trip the 60 fps camera-cut detection, swept rather than argued: over the
-whole sphere at the chase radius (about 128,000 sample pairs) the worst tick of a fully
-pushed stick moves the ideal eye 309 units Manhattan against `INTERP_CAM_SNAP` 1024, and
-`InterpCamAimCut` fires on none of them. Seam behind `-log`: `MODERNLOG`'s init line
+discarded level camera's two side effects are closed in `CalculateCamera`, both behind
+`modernDiscard` (`game/camera.cpp:1041`), which is false under Tank, in first person
+(`ModernCameraActive` refuses it, `game/camera.cpp:301`) and for the rich2 sniper camera
+(`sniperCam`), so those stay as they were: right after the discard is decided the pass
+sets `camera.speed = 10` (`game/camera.cpp:1052`-`1053`), the chase speed the reset at
+the end of the function hands every pass (`game/camera.cpp:1286`); and the discard branch
+runs `ChaseCamera` with `camera.type` set to `CHASE_CAMERA` and puts the level's type
+back afterwards (`game/camera.cpp:1235`-`1239`), so `MoveCamera` records `old_type`
+CHASE and `ChaseCamera`'s speed-1 rule stays quiet, while the reset's hold of a heavy
+camera and `DiscardedFixedCameraTimer` see the type they saw before. Inside `ChaseCamera`
+and `MoveCamera` nothing else reads `camera.type` or `camera.speed`: beside the speed-1
+rule, the speed it hands `MoveCamera` (`game/camera.cpp:2050`) and the record, only
+`MoveCamera`'s reuse of the last ideal compares
+`camera.old_type == camera.type` (`game/camera.cpp:2272`), which now holds on a tile as
+it does off one. On a look or combat pass the branch further down writes its own speed
+over the 10. A known and accepted difference: `lara_as_switchon` and
+`lara_as_switchoff` set `camera.speed = 6` (`game/lara.cpp:3176`, `3187`), and on a lever
+whose trigger also carries a Camera command the orbit runs at 10 instead on the ticks the
+level camera is discarded. The orbit does not trip the 60 fps camera-cut detection,
+swept rather than argued: over the whole sphere at the chase radius (about 128,000
+sample pairs) the worst tick of a fully pushed stick moves the ideal eye 309 units
+Manhattan against `INTERP_CAM_SNAP` 1024, and `InterpCamAimCut` fires on none of them.
+Seam behind `-log`: `MODERNLOG`'s init line
 carries `cam_return`, `cam_return_min`, `cam_wall_factor`, `cam_hide_dist`,
 `cam_invert`, `cam_pitch_return`, `cam_speed`, `cam_yaw_rate`, `cam_pitch_min`,
 `cam_pitch_max`, `cam_pull_steps` and `cam_pull_push`; the tick line carries `cam_off`,
 `cam_pitch`, `cam_ret`, `cam_world`, `clip`, `view_err`, `carry`, `cam_step`, `rs=` and
-`hide=`, the camera fields one tick behind because the line runs before
+`hide=`, and at its end `cam_speed` and `old_type` (`game/modern_state.cpp:625`, `633`),
+the camera fields one tick behind because the line runs before
 `CalculateCamera` and `rs=` this tick's own; `hide=` is the raw measured distance and
 not a flag, and two read-only accessors (`ModernCameraLogState`,
 `ModernCameraLogConfig`) carry the numbers out rather than exposing the orbit's statics.
+The tick line's `cam_speed` is `camera.speed`, not the slider the init line's
+`cam_speed` names: 10 after the reset at the end of `CalculateCamera`, anything else
+only while a heavy camera holds; `old_type` reads 0 (CHASE) on a Camera tile whose level
+camera is discarded and 1 (FIXED) where a level camera takes the view.
 Tests: `Preparation/Tools/Diagnose/ModernTest.cpp` compiles `game/modern_camera.cpp`
 beside `game/modern_move.cpp`, both whole, in the groups `camera_orbit`, `camera_speed`,
 `camera_pitch`, `camera_wall`, `camera_hide`, `camera_seam`, `camera_lead`,
@@ -4991,7 +5032,7 @@ own number. `TOMB5 Code/tomb5.vcxproj` lists the new files.
 
 **Commits.** `d2d4a34`, `3b26ba3`, `9a23208`, `b4c3bb9`, `6782cb9`, `04aa78a`,
 `ccaedb1`, `23b8183`, `b7950a5`, `38925fd`, `d7a2259`, `405ad19`, `98f733e`, `15fb7bc`,
-`4fec613`, `d6d23fc`
+`4fec613`, `d6d23fc`, `2b6ac8e`
 
 ### The pad: radial dead zones, a second binding set and a Modifier for chords
 2026-09-18 - 2026-09-20

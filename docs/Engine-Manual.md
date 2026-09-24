@@ -427,6 +427,13 @@ number, so both rows are drawn greyed out and the cursor skips them.
 Both are sliders, and a slider is written the moment it stops moving rather
 than on every step while you hold the key down.
 
+Under *Modern* the camera stays in your hands: a camera the level places with a
+trigger — a door shown opening, a lever's payoff somewhere else — does not take
+the view, the real sniper camera in the 13th Floor excepted, the same as in
+first person. Crossing such a trigger's tile leaves no trace either: the camera
+keeps following as smoothly as anywhere else, with no jump of the view and no
+camera cut counted in `INTERPLOG`.
+
 ### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 
 These five rows sit together on their own sub-page, **Modes** (German

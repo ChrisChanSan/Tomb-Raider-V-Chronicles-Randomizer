@@ -5393,16 +5393,20 @@ held (`IN_ACTION` — the action key under *One key*, the Secondary key under
 *Separate*) stops her on the sector's standing line, turns her half round on
 the spot, and lowers her into the settled hang by playing Tomb Raider 5's own
 pull-up animation (97) backwards, instead of letting her run off. The turn is
-`MODERN_LEDGE_TURN_TICKS` (8) ticks of `MODERN_LEDGE_HALF_TURN` (0x8000) spread
-evenly (`game/modern_move.h:417`, `:418`); the lowering steps the pull-up down
-`MODERN_LEDGE_FRAME_STEP` (3) frames a tick (`:419`); the standing line sits
+her own turn-on-the-spot animation at the direct turn's rate:
+`MODERN_LEDGE_HALF_TURN` (0x8000) over `MODERN_LEDGE_TURN_TICKS` (6) ticks,
+5461 or 5462 units a tick, `MODERN_TURN_RATE` (5461, 30 degrees) to within a
+unit, so the half turn takes 0.2 s (`game/modern_move.h:420`, `:421`), turning
+to the side `MODERN_LEDGE_TURN_SIDE` (1, right) names (`:428`); the lowering
+steps the pull-up down `MODERN_LEDGE_FRAME_STEP` (3) frames a tick (`:422`);
+the standing line sits
 `MODERN_LEDGE_STAND_IN` (99) units inside the sector's edge and the hang
 `MODERN_LEDGE_HANG_OUT` (100) units past it, the engine's own catch-snap
 distances; `MODERN_LEDGE_RESIDUAL` (15) is the most a walk or a stand may lie
 off the line and still start the move; `MODERN_LEDGE_SNAP` (0x18E2) is the
-catch's own 34.6-degree cardinal window (`:424`, `:434`-`:436`);
+catch's own 34.6-degree cardinal window (`:433`, `:443`-`:445`);
 `MODERN_LEDGE_NEAR` (512) is how close an edge has to be before `LEDGELOG`
-reports the refusal set (`:440`). The ten refusals, each one engine test asked the way its
+reports the refusal set (`:449`). The ten refusals, each one engine test asked the way its
 own site asks it (`LaraLedgeRefusals`, `game/lara.cpp:6152`-`6322`, with the
 legend at `:6115`-`6144` and the bit values at `game/lara.h:197`-`206`):
 `SHALLOW` the drop is 768 units or less; `SLOPE` the ledge floor's two front
@@ -5426,7 +5430,7 @@ is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
 on this way is settled once by the same refusal test into the hang or a fall.
 `LEDGELOG` behind `-log` prints one line per phase change, a line when the
 refusal set changes while the key is held near an edge, and one fire line when
-the move starts (`game/lara.cpp:6394`-`6432`, `:6703`-`6716`, `:6740`-`6750`).
+the move starts (`game/lara.cpp:6401`-`6439`, `:6716`-`6729`, `:6753`-`6763`).
 
 **Why.** The design is this project's own and plays Tomb Raider 5's own
 pull-up, animation 97, backwards. The pull-up can be played backwards because
@@ -5448,23 +5452,35 @@ the camera never ends in front of her. The lowering is posed at
 30 Hz: the interpolator's neighbour rule (`curFrame != prevFrame + 1`,
 `game/interpolate_math.h:346`) refuses every backwards-stepped frame.
 
-**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1773`) is the pure
-decision for one tick of the move — the turn's ramp and its abort tests, the
-lowering's frame step and its hand-over — read by `lara_as_ledgehang`
-(`game/lara.cpp:6530`-`6644`), the routine for the new state
-`AS_LEDGEHANG = 139` (`game/lara_states.h:147`); its collision row stays
+**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1708`-`1774`) is the pure
+decision for one tick of the move — the turn's ramp, signed by the side, and
+its abort tests, the lowering's frame step and its hand-over — read by
+`lara_as_ledgehang` (`game/lara.cpp:6541`-`6656`), the routine for the new
+state `AS_LEDGEHANG = 139` (`game/lara_states.h:147`); its collision row stays
 `lara_default_col`, since the state itself fills `coll` for `TestTriggers` and
-`LaraGun` and never moves her by walking. `ModernTest`'s `ledge_hang()` block
-(`Preparation/Tools/Diagnose/ModernTest.cpp:7817`) and `ledge_trigger()` block
-(`:8122`) check the arithmetic; together with the rest of the suite the count
-grew from 5788 to 8203, 0 failed. One guard at the head of `AnimateLara`
+`LaraGun` and never moves her by walking. The turn runs in Tomb Raider 5's own
+turn on the spot, animation 12 (`ANIM_TURN_RIGHT`, the animation of `AS_TURN_R`)
+or 13 (`ANIM_TURN_LEFT`, of `AS_TURN_L`), both named at
+`game/lara_states.h:160`-`164`: the trigger starts the one for
+`MODERN_LEDGE_TURN_SIDE` at its `frame_base`, `AnimateLara` plays it forward
+as any other animation (its footstep included; none of its state changes
+leads out of `AS_LEDGEHANG`), the frame counts the turn's ticks, and the side
+is read back off it, so a restored savegame goes on turning the way it started; a save that
+holds the idle, `ANIM_BREATH`, in the turn phase, as a build before the turn
+animation wrote it, is settled into the hang or a fall like any other that
+cannot go on.
+`ModernTest`'s `ledge_hang()` block
+(`Preparation/Tools/Diagnose/ModernTest.cpp:7818`) and `ledge_trigger()` block
+(`:8140`) check the arithmetic, every turn step within a unit of
+`MODERN_TURN_RATE` among it; together with the rest of the suite the count
+grew from 5788 to 10771, 0 failed. One guard at the head of `AnimateLara`
 (`game/laramisc.cpp:502`-`505`, `LaraLedgeReversing`) holds the frame and
 skips every animation command while the lowering plays backwards, for
 `AS_LEDGEHANG` only. The hand-over is exactly the engine's own settled hang —
 `ANIM_GRABLEDGE` at `frame_base + 21`, `AS_HANG`, `LG_HANDS_BUSY`
-(`LaraLedgeHang`, `game/lara.cpp:6451`-`6464`) — so `lara_col_hang` and
+(`LaraLedgeHang`, `game/lara.cpp:6458`-`6471`) — so `lara_col_hang` and
 `LaraHangTest` take over from there exactly as they do from any other catch.
-The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6661`-`6753`) is asked from
+The trigger (`LaraLedgeTrigger`, `game/lara.cpp:6674`-`6766`) is asked from
 `lara_col_run`, `lara_col_walk`, and `lara_col_stop`, right after each
 routine's own ceiling test and after `GetLaraCollisionInfo` has measured this
 tick's movement, so a state change and a position write there land inside the
@@ -5476,7 +5492,7 @@ judged at `coll->old`, where she actually stood, so the start of a run's own
 23-unit hop never counts.
 
 **Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
-`8b4a761`
+`8b4a761`, `8924c7b`, `6ca7c09`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20

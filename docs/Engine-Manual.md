@@ -499,8 +499,9 @@ the Controls page's camera sliders are.
 With it on, run or walk at an edge with the grab key held (the action key
 under *One key*, the Secondary key under *Separate*) — or stand right at one
 and push toward it — and instead of running off, she stops at the edge, turns
-round to face the ledge, and lowers herself backward into a hang, the same pose
-a manual catch below a ledge leaves her in. Let go of the key, press Jump, or
+round on the spot with her own turn animation, as quickly as the stick's own
+about-turn, to face the ledge, and lowers herself backward into a hang, the
+same pose a manual catch below a ledge leaves her in. Let go of the key, press Jump, or
 draw a weapon while she is turning and she stands back up where she is instead.
 A running jump off the edge needs the grab key released: with the key held,
 Jump pressed in the last step before the edge comes too late, because she is

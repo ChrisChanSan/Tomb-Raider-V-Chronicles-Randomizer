@@ -78,6 +78,13 @@ void InterpArmStack(float alpha);
 long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	short* frm[], float* blend);
 long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend);
+
+/* Lara's pose frames as her draw and her braid take them: the pair in `frm`
+ * (with GetFramesNow's or GetFrames' `frac` and factor `blend`) replaced by
+ * turned copies on the frame an early turn180_effect fires on, and by the
+ * first key or a key frame built at `blend` on a far key pair (draw.cpp says
+ * which and why). `flag` 0 writes the -log lines. */
+void LaraPoseFrames(short* frm[], long frac, float blend, long flag);
 void SetupSkelebobMeshswaps();
 void RestoreLaraMeshswaps();
 void RenderIt(short current_room);

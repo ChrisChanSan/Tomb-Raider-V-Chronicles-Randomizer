@@ -40,8 +40,11 @@ inline short InterpLerpAngle(short a, short b, float alpha)
  * turn180_effect (game\effects.cpp) turns an item by exactly 32768 between two
  * ticks (`y_rot -= 0x8000`, x_rot negated). Seven of Lara's animations fire
  * it (AnimCmd over ANDREA1: 48, 147, 205, 207, 210, 212 and the level's own
- * 451 - rolls and the twist of the jump back), and the animation's root bone
- * turns the other half so the 30 Hz picture is continuous. Blended, the root
+ * 451 - the rolls, the tightrope turn and the jumps' twists). In 147, 205
+ * and 451 the animation's root bone turns the other half, so the 30 Hz
+ * picture is continuous; 48, 207, 210 and 212 fire on a last frame made for
+ * the old yaw, which the draw turns back (INTERP_TURN_EARLY,
+ * InterpKeyFrameTurn). Blended, the root
  * would take InterpLerpAngle's arbitrary half while the pose is already the
  * new one (refused by the neighbour rule or InterpPoseFar), and Lara would
  * stand sideways for one frame. So a node whose y difference is exactly half
@@ -762,7 +765,7 @@ inline bool InterpPoseFar(const short* frameA, const short* frameB, int nodes,
 
 /* True when a key frame pair of Lara's is too far apart for vanilla's key
  * frame blend: her hips (node 0) turn more than 90 degrees between the two
- * frames. Shared by draw.cpp, delstuff.cpp and InterpTest.
+ * frames. Shared by draw.cpp, game\interpolate.cpp and InterpTest.
  *
  * The blend multiplies each key frame's node matrices out and averages the
  * two stacks element by element, so a far pair at the hips shrinks every node
@@ -781,10 +784,421 @@ inline bool InterpPoseFar(const short* frameA, const short* frameB, int nodes,
  * level, 451 in ANDREA1, ANDREA2, ANDREA3 and rich2, 219 key 0 to 1 in rich3
  * - with the nearest turns on either side of the limit at 85.97 and 94.92
  * degrees. The same threshold and arithmetic as the rate 1 rule, over one
- * node. */
+ * node.
+ *
+ * Such a pair is drawn in one of two ways (InterpKeyHold below): held on its
+ * first key where turn180_effect fires on its second (the four tightrope
+ * pairs), else from a key frame built at the weight in hand
+ * (InterpKeyFrameLerp: 209 and 213 key 0 to 1, rich3's 219). */
 inline bool InterpKeyFar(const short* frame0, const short* frame1)
 {
 	return InterpPoseFar(frame0, frame1, 1, INTERP_POSE_TURN_COS);
+}
+
+/* ==========================================================================
+ * Key frames built rather than blended.
+ * ==========================================================================
+ *
+ * A far key pair (InterpKeyFar) that is not held on its first key is drawn
+ * from a key frame made for the weight in hand, and the frame an early
+ * turn180_effect fires on (INTERP_TURN_EARLY) from copies turned by half a
+ * turn (draw.cpp LaraPoseFrames). Both are frames in the level's own format,
+ * so every draw path reads them as it reads a stored frame.
+ *
+ * A node's packed rotation (InterpUnpackRot above; draw.cpp
+ * gar_RotYXZsuperpack and specific\3dmath.cpp phd_RotYXZpack read it) comes
+ * in two forms:
+ *
+ *   three axes   two words, the top two bits of the first zero; the 32-bit
+ *                pair holds x in bits 20-29, y in bits 10-19 and z in bits
+ *                0-9, each in 1024ths of a turn (a step of 64 in the
+ *                engine's 16-bit angle);
+ *   one axis     one word whose top two bits name the axis (1 x, 2 y, 3 z)
+ *                and whose low twelve bits hold the angle in 4096ths of a
+ *                turn (a step of 16). */
+#define INTERP_KEYFRAME_MAX	(9 + 2 * 32)	/* box, offset and 32 nodes of two words */
+
+/* The form of the packed rotation at `p`: -1 for three axes, else the one
+ * axis (0 x, 1 y, 2 z). */
+inline int InterpRotAxis(const short* p)
+{
+	const unsigned short w = (unsigned short)*p;
+
+	if ((w & 0xC000) == 0)
+		return -1;
+
+	return (int)(w >> 14) - 1;
+}
+
+/* Packs three angles in the form `axis` names (InterpRotAxis) and returns
+ * the words written. Each angle is rounded to the nearest step of its form;
+ * the one-axis form writes xyz[axis] and assumes the other two are zero. A
+ * rotation read by InterpUnpackRot and packed in the form it was read in
+ * comes back word for word. */
+inline int InterpPackRot(const short* xyz, int axis, short* out)
+{
+	if (axis >= 0)
+	{
+		const unsigned long a = (((unsigned long)(unsigned short)xyz[axis] + 8) >> 4) & 0xFFF;
+
+		out[0] = (short)(unsigned short)(((unsigned long)(axis + 1) << 14) | a);
+		return 1;
+	}
+
+	const unsigned long x = (((unsigned long)(unsigned short)xyz[0] + 32) >> 6) & 0x3FF;
+	const unsigned long y = (((unsigned long)(unsigned short)xyz[1] + 32) >> 6) & 0x3FF;
+	const unsigned long z = (((unsigned long)(unsigned short)xyz[2] + 32) >> 6) & 0x3FF;
+	const unsigned long packed = (x << 20) | (y << 10) | z;
+
+	out[0] = (short)(unsigned short)(packed >> 16);
+	out[1] = (short)(unsigned short)(packed & 0xFFFF);
+	return 2;
+}
+
+/* A node's rotation matrix (InterpPoseRot's layout) as a unit quaternion
+ * (w, x, y, z), and back. The two are exact inverses of each other, so
+ * whatever convention the layout stands for, a blend between two
+ * quaternions comes back as the blend between the two matrices. */
+inline void InterpRotToQuat(const float* m, float* q)
+{
+	const float t = m[0] + m[4] + m[8];
+
+	if (t > 0.0F)
+	{
+		const float s = sqrtf(t + 1.0F) * 2.0F;
+
+		q[0] = 0.25F * s;
+		q[1] = (m[7] - m[5]) / s;
+		q[2] = (m[2] - m[6]) / s;
+		q[3] = (m[3] - m[1]) / s;
+	}
+	else if (m[0] > m[4] && m[0] > m[8])
+	{
+		const float s = sqrtf(1.0F + m[0] - m[4] - m[8]) * 2.0F;
+
+		q[0] = (m[7] - m[5]) / s;
+		q[1] = 0.25F * s;
+		q[2] = (m[1] + m[3]) / s;
+		q[3] = (m[2] + m[6]) / s;
+	}
+	else if (m[4] > m[8])
+	{
+		const float s = sqrtf(1.0F + m[4] - m[0] - m[8]) * 2.0F;
+
+		q[0] = (m[2] - m[6]) / s;
+		q[1] = (m[1] + m[3]) / s;
+		q[2] = 0.25F * s;
+		q[3] = (m[5] + m[7]) / s;
+	}
+	else
+	{
+		const float s = sqrtf(1.0F + m[8] - m[0] - m[4]) * 2.0F;
+
+		q[0] = (m[3] - m[1]) / s;
+		q[1] = (m[2] + m[6]) / s;
+		q[2] = (m[5] + m[7]) / s;
+		q[3] = 0.25F * s;
+	}
+}
+
+inline void InterpQuatToRot(const float* q, float* m)
+{
+	const float w = q[0], x = q[1], y = q[2], z = q[3];
+
+	m[0] = 1.0F - 2.0F * (y * y + z * z);
+	m[1] = 2.0F * (x * y - z * w);
+	m[2] = 2.0F * (x * z + y * w);
+	m[3] = 2.0F * (x * y + z * w);
+	m[4] = 1.0F - 2.0F * (x * x + z * z);
+	m[5] = 2.0F * (y * z - x * w);
+	m[6] = 2.0F * (x * z - y * w);
+	m[7] = 2.0F * (y * z + x * w);
+	m[8] = 1.0F - 2.0F * (x * x + y * y);
+}
+
+/* The three angles of a rotation matrix in InterpPoseRot's layout, which
+ * stores m[7] = -sin x, m[6] / m[8] = tan y and m[1] / m[4] = tan z. x comes
+ * back in [-90, 90] degrees; where cos x vanishes only y + z is defined and z
+ * is taken as zero. In the engine's 16-bit angle, rounded. */
+inline void InterpRotToAngles(const float* m, short* xyz)
+{
+	const float k = 32768.0F / 3.14159265358979323846F;
+	float s = -m[7];
+
+	if (s > 1.0F)
+		s = 1.0F;
+	else if (s < -1.0F)
+		s = -1.0F;
+
+	const float x = asinf(s);
+	float y, z;
+
+	if (fabsf(m[6]) + fabsf(m[8]) > 1e-5F)
+	{
+		y = atan2f(m[6], m[8]);
+		z = atan2f(m[1], m[4]);
+	}
+	else
+	{
+		y = atan2f(-m[2], m[0]);
+		z = 0.0F;
+	}
+
+	xyz[0] = (short)(long)floorf(x * k + 0.5F);
+	xyz[1] = (short)(long)floorf(y * k + 0.5F);
+	xyz[2] = (short)(long)floorf(z * k + 0.5F);
+}
+
+/* Two nodes' rotations blended at `alpha` along the shortest turn between
+ * them (a spherical blend of their quaternions, the shorter of the two ways
+ * round), as three angles. Every result is a rotation, where an element-wise
+ * blend of the two matrices is not; and it is the shortest turn, where a
+ * blend of the three angles one by one is not: a node's two keys may be
+ * stored on the two sides of x = 90 degrees, (x, y, z) and its twin (180 - x,
+ * y + 180, z + 180), and there the angles swing up to half a turn each while
+ * the node turns a few degrees (animation 209 key 0 to 1 in ANDREA1: node 9
+ * turns 31.6 degrees with y and z moving 157 each, and blended angle by angle
+ * node 12's frame strays 191 degrees off the way between its keys). */
+inline void InterpSlerpRot(const short* a, const short* b, float alpha, short* out)
+{
+	float ma[9], mb[9], m[9], qa[4], qb[4], q[4];
+
+	InterpPoseRot(a, ma);
+	InterpPoseRot(b, mb);
+	InterpRotToQuat(ma, qa);
+	InterpRotToQuat(mb, qb);
+
+	float d = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3];
+
+	if (d < 0.0F)
+	{
+		d = -d;
+
+		for (int i = 0; i < 4; i++)
+			qb[i] = -qb[i];
+	}
+
+	float wa = 1.0F - alpha, wb = alpha;
+
+	if (d < 0.9995F)
+	{
+		const float th = acosf(d);
+		const float sn = sinf(th);
+
+		wa = sinf((1.0F - alpha) * th) / sn;
+		wb = sinf(alpha * th) / sn;
+	}
+
+	float len = 0.0F;
+
+	for (int i = 0; i < 4; i++)
+	{
+		q[i] = wa * qa[i] + wb * qb[i];
+		len += q[i] * q[i];
+	}
+
+	len = sqrtf(len);
+
+	for (int i = 0; i < 4; i++)
+		q[i] /= len;
+
+	InterpQuatToRot(q, m);
+	InterpRotToAngles(m, out);
+}
+
+/* The key frame between `f0` and `f1` at `alpha`, written to `out` (at
+ * least 9 + 2 * nodes shorts); returns the shorts written.
+ *
+ * The bounding box is the nearer key's (f0 up to a half), the root offset the
+ * two keys' offsets blended as InterpRootKey blends them, so the root rule
+ * and the drawn frame agree to the unit. A node equal in both keys is copied
+ * word for word. A node both keys store in the one-axis form on the same axis
+ * blends that angle the short way round (InterpLerpAngle) and stays in that
+ * form; any other node is blended by InterpSlerpRot and packed in the
+ * three-axis form. */
+inline int InterpKeyFrameLerp(const short* f0, const short* f1, int nodes, float alpha,
+	short* out)
+{
+	const short* box = alpha > 0.5F ? f1 : f0;
+	const long alpha8 = InterpEighths(alpha);
+	int n = 9;
+
+	for (int i = 0; i < 6; i++)
+		out[i] = box[i];
+
+	for (int i = 6; i < 9; i++)
+		out[i] = (short)InterpBlendLong(f0[i], f1[i], alpha8);
+
+	const short* a = f0 + 9;
+	const short* b = f1 + 9;
+
+	for (int node = 0; node < nodes; node++)
+	{
+		const int axisA = InterpRotAxis(a);
+		const int axisB = InterpRotAxis(b);
+		const int wordsA = axisA < 0 ? 2 : 1;
+		const int wordsB = axisB < 0 ? 2 : 1;
+
+		if (wordsA == wordsB && a[0] == b[0] && (wordsA == 1 || a[1] == b[1]))
+		{
+			for (int w = 0; w < wordsA; w++)
+				out[n++] = a[w];
+		}
+		else
+		{
+			const short* pa = a;
+			const short* pb = b;
+			short ra[3], rb[3], r[3] = { 0, 0, 0 };
+
+			InterpUnpackRot(pa, ra);
+			InterpUnpackRot(pb, rb);
+
+			if (axisA >= 0 && axisA == axisB)
+			{
+				r[axisA] = InterpLerpAngle(ra[axisA], rb[axisA], alpha);
+				n += InterpPackRot(r, axisA, out + n);
+			}
+			else
+			{
+				InterpSlerpRot(ra, rb, alpha, r);
+				n += InterpPackRot(r, -1, out + n);
+			}
+		}
+
+		a += wordsA;
+		b += wordsB;
+	}
+
+	return n;
+}
+
+/* The key frame `f` turned by half a turn about the item's vertical, written
+ * to `out` (at least 9 + 2 * nodes shorts); returns the shorts written.
+ *
+ * Drawn under an item turned by turn180_effect, the copy lands where `f`
+ * lands under the item before the turn: the draw applies the item's rotation,
+ * then the root offset, then node 0's rotation, so the offset turns as
+ * InterpRootFlip turns it and node 0 gains half a turn in y (y is the outer
+ * angle of phd_RotYXZ's order, so the half turn is added to it exactly). The
+ * box's x and z extents turn with it. The effect also negates x_rot; with the
+ * item's z_rot zero that is the same half turn seen from the other side, so
+ * the copy is exact, and a lean z_rot would leave a turn of 2 z that the 30 Hz
+ * picture carries as well. Node 0 keeps its form where it is three-axis or
+ * one-axis in y; a one-axis x or z becomes three-axis, rounded to the step of
+ * 64. Every other node is copied word for word. */
+inline int InterpKeyFrameTurn(const short* f, int nodes, short* out)
+{
+	const long offset[3] = { f[6], f[7], f[8] };
+	long turned[3];
+
+	out[0] = (short)-f[1];
+	out[1] = (short)-f[0];
+	out[2] = f[2];
+	out[3] = f[3];
+	out[4] = (short)-f[5];
+	out[5] = (short)-f[4];
+
+	InterpRootFlip(offset, turned);
+
+	for (int i = 0; i < 3; i++)
+		out[6 + i] = (short)turned[i];
+
+	const short* p = f + 9;
+	int n = 9;
+
+	for (int node = 0; node < nodes; node++)
+	{
+		const int axis = InterpRotAxis(p);
+		const int words = axis < 0 ? 2 : 1;
+
+		if (node == 0)
+		{
+			const short* q = p;
+			short r[3];
+
+			InterpUnpackRot(q, r);
+			r[1] = (short)(r[1] + (short)-32768);
+			n += InterpPackRot(r, axis == 1 ? 1 : -1, out + n);
+		}
+		else
+		{
+			for (int w = 0; w < words; w++)
+				out[n++] = p[w];
+		}
+
+		p += words;
+	}
+
+	return n;
+}
+
+/* Where turn180_effect fires in an animation, and what that means for the
+ * frames around it.
+ *
+ * The effect turns the item by half a turn on the tick whose frame_number
+ * reaches `flip` (laramisc.cpp AnimateLara), and that tick draws frame `flip`
+ * under the turned item. The pair of key frames around it, (k, k + 1) with k
+ * = (flip - 1 - frameBase) / rate, says for which yaw the frame was made:
+ *
+ *   INTERP_TURN_INSIDE  the hips turn more than 90 degrees inside the pair
+ *                       (InterpKeyFar): the animation carries the other half
+ *                       turn itself and the frame belongs to the new yaw.
+ *                       Measured on the tightrope turn 451 (key 26 in ANDREA1
+ *                       and rich2, key 13 in ANDREA2 and ANDREA3) and the
+ *                       underwater roll 205 (key 1): the flip falls on the
+ *                       pair's second key frame in every case.
+ *   INTERP_TURN_EARLY   the pair turns less: the frame belongs to the old yaw
+ *                       and the turned item draws it half a turn off. The
+ *                       effect sits on the animation's last frame and the
+ *                       animation that follows is made for the new yaw.
+ *                       Measured in ANDREA1, the hips' turn from the frame
+ *                       before when the frame is drawn under the old yaw and
+ *                       as drawn under the new one: 48, the end of the roll
+ *                       from standing (0.9 / 179.3); 207, the twist out of a
+ *                       running jump's start (5.3 / 176.8); 210, the twist
+ *                       out of the forward jump (11.0 / 177.0); 212, the
+ *                       twist out of the back jump (9.7 / 171.9). All four
+ *                       fire on their last frame in all thirteen campaign
+ *                       levels. The next animation's first frame follows the
+ *                       turned frame by 5.9 (11), 13.4 (209), 19.4 (213) - and
+ *                       179.2 (211): 211 begins half a turn about her
+ *                       lateral axis away from 210's end, a seam in the
+ *                       level's data that no drawn frame bridges.
+ *   INTERP_TURN_NONE    no pair before it: the effect fires on the
+ *                       animation's first frame (the roll 147), whose change
+ *                       turns the root instead (InterpRootFlip).
+ *
+ * `keys` is the animation's frame block and `size` its frame size in shorts.
+ * `pair` receives k, or -1. */
+#define INTERP_TURN_NONE	0
+#define INTERP_TURN_EARLY	1
+#define INTERP_TURN_INSIDE	2
+
+inline int InterpTurnKind(const short* keys, long size, long frameBase, long rate, long flip,
+	long* pair)
+{
+	*pair = -1;
+
+	if (!keys || size < 9 || rate < 1 || flip <= frameBase)
+		return INTERP_TURN_NONE;
+
+	const long k = (flip - 1 - frameBase) / rate;
+
+	*pair = k;
+
+	return InterpKeyFar(keys + size * k, keys + size * (k + 1))
+		? INTERP_TURN_INSIDE : INTERP_TURN_EARLY;
+}
+
+/* True when the far key pair `pair` is held on its first key frame: the
+ * half turn is INSIDE it and the flip falls on its second key, so every frame
+ * between the two keys is drawn under the old yaw and only the first key
+ * belongs to it. Every other far pair is built by InterpKeyFrameLerp. */
+inline bool InterpKeyHold(int kind, long turnPair, long flip, long frameBase, long rate,
+	long pair)
+{
+	return kind == INTERP_TURN_INSIDE && pair == turnPair &&
+		flip == frameBase + (pair + 1) * rate;
 }
 
 /* ==========================================================================

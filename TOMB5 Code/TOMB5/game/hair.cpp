@@ -17,6 +17,7 @@
 #include "gameflow.h"
 #include "objects.h"
 #include "draw.h"
+#include "interpolate_math.h"		// InterpKeyAlpha - the factor LaraPoseFrames builds a far pair at
 #include "lara_states.h"
 #include "control.h"
 #include "../specific/function_stubs.h"
@@ -299,6 +300,13 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		{
 			frame = GetBestFrame(lara_item);
 			frac = GetFrames(lara_item, frm, &rate); // Interpolate the frames if necessary
+
+			/* The braid hangs off the frames her body is drawn from
+			 * (LaraPoseFrames, draw.cpp): the turned copies on the frame an
+			 * early turn180_effect fires on, the first key or a built key
+			 * frame on a far key pair. The blend below then blends those,
+			 * and the braid's root stays on her head. */
+			LaraPoseFrames(frm, frac, frac ? InterpKeyAlpha(frac, rate) : 0.0F, 1);
 		}
 		else
 		{

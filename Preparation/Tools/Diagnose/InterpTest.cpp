@@ -4005,6 +4005,406 @@ static void root_narrow()
 	}
 }
 
+/* --------------------------------------------------- key frames built -- */
+
+/* The angle between two nodes' rotations given as three angles, in degrees,
+ * through the engine's own matrix (InterpPoseRot) and trace (InterpPoseTurnCos). */
+static double rot_angle(const short* a, const short* b)
+{
+	float ma[9], mb[9];
+
+	InterpPoseRot(a, ma);
+	InterpPoseRot(b, mb);
+
+	double c = (double)InterpPoseTurnCos(ma, mb);
+
+	if (c > 1.0)
+		c = 1.0;
+	else if (c < -1.0)
+		c = -1.0;
+
+	return acos(c) * 180.0 / 3.14159265358979323846;
+}
+
+/* The worst distance from 1 of the three column lengths of a rotation given
+ * as three angles. */
+static double rot_column_error(const short* xyz)
+{
+	float m[9];
+	double worst = 0.0;
+
+	InterpPoseRot(xyz, m);
+
+	for (int c = 0; c < 3; c++)
+	{
+		const double l = sqrt((double)m[c] * m[c] + (double)m[3 + c] * m[3 + c] +
+			(double)m[6 + c] * m[6 + c]);
+
+		if (fabs(l - 1.0) > worst)
+			worst = fabs(l - 1.0);
+	}
+
+	return worst;
+}
+
+/* The shortest column of vanilla's element-wise blend of two rotations at
+ * `alpha` (InterpBlendFloat, the arithmetic of InterpolateMatrix), in the
+ * engine's matrix stack. InterpPoseRot composes its rows the other way round
+ * (Rz * Rx * Ry for the stack's Ry * Rx * Rz), so the stack's columns are its
+ * rows. */
+static double blend_shortest_column(const short* a, const short* b, float alpha)
+{
+	float ma[9], mb[9];
+	double shortest = 9.0;
+
+	InterpPoseRot(a, ma);
+	InterpPoseRot(b, mb);
+
+	for (int c = 0; c < 3; c++)
+	{
+		double s = 0.0;
+
+		for (int r = 0; r < 3; r++)
+		{
+			const double v = InterpBlendFloat(ma[c * 3 + r], mb[c * 3 + r], alpha);
+
+			s += v * v;
+		}
+
+		if (sqrt(s) < shortest)
+			shortest = sqrt(s);
+	}
+
+	return shortest;
+}
+
+/* A far key pair drawn from a key frame built at the weight, and the frame
+ * turned by half a turn (interpolate_math.h, InterpKeyFrameLerp and
+ * InterpKeyFrameTurn), and where turn180_effect fires (InterpTurnKind). */
+static void key_build()
+{
+	printf("key frames built rather than blended\n");
+
+	/* 1. The packed forms read and written again: every one-axis word on all
+	 * three axes, and a sweep of three-axis pairs, come back word for word. */
+	{
+		long bad = 0;
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			for (int v = 0; v < 4096; v++)
+			{
+				const short w = (short)(unsigned short)(((axis + 1) << 14) | v);
+				const short* p = &w;
+				short xyz[3], out[2];
+
+				InterpUnpackRot(p, xyz);
+
+				if (InterpRotAxis(&w) != axis || InterpPackRot(xyz, axis, out) != 1 || out[0] != w)
+					bad++;
+			}
+		}
+
+		ok(bad == 0, "one-axis rotations unpack and pack to themselves", bad, 0);
+
+		bad = 0;
+
+		for (unsigned long x = 0; x < 1024; x += 31)
+		{
+			for (unsigned long y = 0; y < 1024; y += 29)
+			{
+				for (unsigned long z = 0; z < 1024; z += 37)
+				{
+					const unsigned long packed = (x << 20) | (y << 10) | z;
+					const short w[2] = { (short)(unsigned short)(packed >> 16),
+						(short)(unsigned short)(packed & 0xFFFF) };
+					const short* p = w;
+					short xyz[3], out[2];
+
+					InterpUnpackRot(p, xyz);
+
+					if (InterpRotAxis(w) != -1 || InterpPackRot(xyz, -1, out) != 2 ||
+						out[0] != w[0] || out[1] != w[1])
+						bad++;
+				}
+			}
+		}
+
+		ok(bad == 0, "three-axis rotations unpack and pack to themselves", bad, 0);
+	}
+
+	/* 2. Two rotations 98.8 degrees apart about y (17984, a step of the
+	 * one-axis form) blended at a half: 49.4 degrees from each, a rotation;
+	 * and on three axes (y and x together), the same half on each side. */
+	{
+		const short a[3] = { 0, 0, 0 };
+		const short b[3] = { 0, 17984, 0 };
+		short r[3];
+
+		InterpSlerpRot(a, b, 0.5F, r);
+
+		okf(fabs(rot_angle(a, r) - 49.4) < 0.1, "a 98.8 degree pair at a half is 49.4 from the first",
+			rot_angle(a, r), 49.4);
+		okf(fabs(rot_angle(r, b) - 49.4) < 0.1, "and 49.4 from the second", rot_angle(r, b), 49.4);
+		okf(rot_column_error(r) < 1e-5, "and a rotation", rot_column_error(r), 0.0);
+		okf(blend_shortest_column(a, b, 0.5F) < 0.66, "where vanilla's blend keeps 0.65 of the frame",
+			blend_shortest_column(a, b, 0.5F), 0.65);
+
+		const short c[3] = { 6400, 12800, -3200 };
+		const short d[3] = { -5760, -9600, 7040 };
+		const double whole = rot_angle(c, d);
+
+		InterpSlerpRot(c, d, 0.25F, r);
+
+		okf(fabs(rot_angle(c, r) - whole * 0.25) < 0.2 && fabs(rot_angle(r, d) - whole * 0.75) < 0.2,
+			"three axes at a quarter: a quarter and three quarters of the turn",
+			rot_angle(c, r), whole * 0.25);
+	}
+
+	/* 3. The short way across the wrap: 30000 and -30000 in y are 5536
+	 * apart through the half turn, not 60000 through zero. */
+	{
+		const short a[3] = { 0, 30000, 0 };
+		const short b[3] = { 0, -30000, 0 };
+		short r[3];
+
+		InterpSlerpRot(a, b, 0.5F, r);
+
+		okf(fabs(rot_angle(a, r) - 15.2) < 0.1 && fabs(rot_angle(r, b) - 15.2) < 0.1,
+			"the half across the wrap is 15.2 degrees from each end", rot_angle(a, r), 15.2);
+		ok(r[1] > 32000 || r[1] < -32000, "and stands at the half turn, not at zero", r[1], -32768);
+	}
+
+	/* 4. A built frame: the box from the nearer key, the offset as
+	 * InterpRootKey blends it, a one-axis form against a three-axis form
+	 * built in the three-axis form, a pair of one-axis forms on the same axis
+	 * kept in it, and a node equal in both keys copied. */
+	{
+		short f0[9 + 5], f1[9 + 5], out[INTERP_KEYFRAME_MAX];
+		const short box0[6] = { -100, 90, -700, 0, -80, 60 };
+		const short box1[6] = { -120, 110, -650, 10, -70, 90 };
+
+		for (int i = 0; i < 6; i++)
+		{
+			f0[i] = box0[i];
+			f1[i] = box1[i];
+		}
+
+		f0[6] = 10; f0[7] = -500; f0[8] = 7;
+		f1[6] = -30; f1[7] = -420; f1[8] = -7;
+
+		/* node 0: one axis y 4096 against three axes (640, 12800, 0) */
+		const short y0[3] = { 0, 4096, 0 };
+		const short y1[3] = { 640, 12800, 0 };
+
+		InterpPackRot(y0, 1, f0 + 9);
+		InterpPackRot(y1, -1, f1 + 9);
+
+		/* node 1: one axis x on both, 1600 and -2400 */
+		f0[10] = (short)(unsigned short)((1 << 14) | (1600 >> 4));
+		f1[11] = (short)(unsigned short)((1 << 14) | ((unsigned short)(short)-2400 >> 4 & 0xFFF));
+
+		/* node 2: the same three-axis rotation in both */
+		const short same[3] = { 1280, -2560, 640 };
+
+		InterpPackRot(same, -1, f0 + 11);
+		InterpPackRot(same, -1, f1 + 12);
+
+		const int n = InterpKeyFrameLerp(f0, f1, 3, 0.25F, out);
+		long root[3];
+
+		InterpRootKey(f0, f1, 1, 0.25F, root);
+
+		ok(n == 9 + 2 + 1 + 2, "the built frame's length: two words, one word, two words", n, 14);
+		ok(out[0] == box0[0] && out[5] == box0[5], "at a quarter the box is the first key's", out[0], box0[0]);
+		ok(out[6] == root[0] && out[7] == root[1] && out[8] == root[2],
+			"and the offset InterpRootKey's", out[7], root[1]);
+		ok(InterpRotAxis(out + 9) == -1, "a one-axis node against a three-axis one is built three-axis",
+			InterpRotAxis(out + 9), -1);
+
+		const short* p = out + 9;
+		short r0[3], r1[3], r2[3];
+
+		InterpUnpackRot(p, r0);
+		InterpUnpackRot(p, r1);
+		InterpUnpackRot(p, r2);
+
+		const double whole = rot_angle(y0, y1);
+
+		okf(fabs(rot_angle(y0, r0) - whole * 0.25) < 0.4,
+			"and turned a quarter of the way", rot_angle(y0, r0), whole * 0.25);
+		ok(InterpRotAxis(out + 11) == 0 && labs((long)r1[0] - InterpLerpAngle(1600, -2400, 0.25F)) <= 8,
+			"one axis against the same axis stays one-axis, blended the short way", r1[0],
+			InterpLerpAngle(1600, -2400, 0.25F));
+		ok(out[12] == f0[11] && out[13] == f0[12], "a node equal in both keys is copied", out[12], f0[11]);
+
+		InterpKeyFrameLerp(f0, f1, 3, 0.75F, out);
+
+		ok(out[0] == box1[0] && out[5] == box1[5], "at three quarters the box is the second key's",
+			out[0], box1[0]);
+	}
+
+	/* 5. The back jump's twist end, animation 213 key 0 to 1 in ANDREA1, its
+	 * two packed hips rotations copied from the level file (03f2 6ed1 and
+	 * 3bc0 3fb1, 98.8 degrees apart); and the forward twist's 209 key 0 to 1
+	 * (3280 7942 and 022f 5be6, 152.6 degrees). The middle frame vanilla draws
+	 * shrinks the hips to 0.70 and 0.36 of their length; built, it is a
+	 * rotation half way along. */
+	{
+		const short k213[2][2] = { { 0x03f2, 0x6ed1 }, { 0x3bc0, 0x3fb1 } };
+		const short k209[2][2] = { { 0x3280, 0x7942 }, { 0x022f, 0x5be6 } };
+		const short (*pairs[2])[2] = { k213, k209 };
+		const double turn[2] = { 98.8, 152.6 };
+		const double shrink[2] = { 0.70, 0.36 };
+		const char* what[2][4] =
+		{
+			{ "213: the hips turn 98.8 degrees between the keys",
+				"213 built at a half: 49.4 degrees from key 0",
+				"and 49.4 from key 1, a rotation",
+				"where vanilla's middle frame keeps a hips column of 0.70" },
+			{ "209: the hips turn 152.6 degrees between the keys",
+				"209 built at a half: 76.3 degrees from key 0",
+				"and 76.3 from key 1, a rotation",
+				"where vanilla's middle frame keeps a hips column of 0.36" }
+		};
+
+		for (int k = 0; k < 2; k++)
+		{
+			short f0[9 + 2], f1[9 + 2], out[INTERP_KEYFRAME_MAX];
+
+			for (int i = 0; i < 9; i++)
+				f0[i] = f1[i] = 0;
+
+			f0[9] = (short)(unsigned short)pairs[k][0][0];
+			f0[10] = (short)(unsigned short)pairs[k][0][1];
+			f1[9] = (short)(unsigned short)pairs[k][1][0];
+			f1[10] = (short)(unsigned short)pairs[k][1][1];
+
+			const short* p0 = f0 + 9;
+			const short* p1 = f1 + 9;
+			short a[3], b[3], m[3];
+
+			InterpUnpackRot(p0, a);
+			InterpUnpackRot(p1, b);
+			InterpKeyFrameLerp(f0, f1, 1, 0.5F, out);
+
+			const short* pm = out + 9;
+
+			InterpUnpackRot(pm, m);
+
+			okf(fabs(rot_angle(a, b) - turn[k]) < 0.05, what[k][0], rot_angle(a, b), turn[k]);
+			okf(fabs(rot_angle(a, m) - turn[k] * 0.5) < 0.5, what[k][1], rot_angle(a, m), turn[k] * 0.5);
+			okf(fabs(rot_angle(m, b) - turn[k] * 0.5) < 0.5 && rot_column_error(m) < 1e-5,
+				what[k][2], rot_angle(m, b), turn[k] * 0.5);
+			okf(fabs(blend_shortest_column(a, b, 0.5F) - shrink[k]) < 0.01, what[k][3],
+				blend_shortest_column(a, b, 0.5F), shrink[k]);
+		}
+	}
+
+	/* 6. A frame turned by half a turn: the offset and the box turn about the
+	 * vertical, node 0's matrix loses the sign of its x and z columns (a half
+	 * turn about y applied before it), the other nodes are copied, and turned
+	 * twice a three-axis frame is itself again. 212's last frame lies between
+	 * key 2 (44,-548,-7) and key 3 (44,-586,-7). */
+	{
+		short f[9 + 3], out[INTERP_KEYFRAME_MAX], back[INTERP_KEYFRAME_MAX];
+		const short box[6] = { -120, 110, -650, 10, -70, 90 };
+		const short hips[3] = { 6400, -15360, 1920 };
+
+		for (int i = 0; i < 6; i++)
+			f[i] = box[i];
+
+		f[6] = 44; f[7] = -567; f[8] = -7;
+		InterpPackRot(hips, -1, f + 9);
+		f[11] = (short)(unsigned short)((3 << 14) | 0x123);
+
+		const int n = InterpKeyFrameTurn(f, 2, out);
+
+		ok(n == 12 && out[6] == -44 && out[7] == -567 && out[8] == 7,
+			"the offset turns: (44,-567,-7) becomes (-44,-567,7)", out[6], -44);
+		ok(out[0] == -110 && out[1] == 120 && out[2] == -650 && out[3] == 10 &&
+			out[4] == -90 && out[5] == 70, "the box's x and z extents turn with it", out[0], -110);
+		ok(out[11] == f[11], "node 1 is copied", out[11], f[11]);
+
+		const short* p = out + 9;
+		short turned[3];
+		float m0[9], m1[9];
+
+		InterpUnpackRot(p, turned);
+		InterpPoseRot(hips, m0);
+		InterpPoseRot(turned, m1);
+
+		double worst = 0.0;
+
+		for (int r = 0; r < 3; r++)
+		{
+			worst = fmax(worst, fabs((double)m1[r * 3 + 0] + m0[r * 3 + 0]));
+			worst = fmax(worst, fabs((double)m1[r * 3 + 1] - m0[r * 3 + 1]));
+			worst = fmax(worst, fabs((double)m1[r * 3 + 2] + m0[r * 3 + 2]));
+		}
+
+		okf(worst < 1e-5, "node 0 is the same frame with its x and z columns negated", worst, 0.0);
+
+		InterpKeyFrameTurn(out, 2, back);
+
+		bool same = true;
+
+		for (int i = 0; i < 12; i++)
+			same = same && back[i] == f[i];
+
+		ok(same, "turned twice, a three-axis frame is itself", same ? 1 : 0, 1);
+
+		/* one-axis hips: y stays one-axis, x becomes three-axis */
+		short g[9 + 1], h[INTERP_KEYFRAME_MAX];
+
+		for (int i = 0; i < 9; i++)
+			g[i] = 0;
+
+		g[9] = (short)(unsigned short)((2 << 14) | 0x100);
+		ok(InterpKeyFrameTurn(g, 1, h) == 10 && InterpRotAxis(h + 9) == 1 &&
+			(unsigned short)h[9] == ((2 << 14) | 0x900), "a one-axis y hips node stays one-axis, half a turn on",
+			(unsigned short)h[9], (2 << 14) | 0x900);
+
+		g[9] = (short)(unsigned short)((1 << 14) | 0x100);
+		ok(InterpKeyFrameTurn(g, 1, h) == 11 && InterpRotAxis(h + 9) == -1,
+			"a one-axis x hips node becomes three-axis", InterpRotAxis(h + 9), -1);
+	}
+
+	/* 7. Where the effect fires: a three-key animation of rate 4 from frame
+	 * 100 whose hips turn 12 degrees from key 0 to 1 and 170 from key 1 to 2.
+	 * On key 2's frame (108) the half turn is inside the far pair (1, 2) and
+	 * that pair is held; on frame 106, inside the same pair, it is not held
+	 * (the flip is not on the second key); on frame 104 (key 1) the pair
+	 * (0, 1) turns 12 degrees: early; on the first frame, none. */
+	{
+		const long size = 11;
+		short keys[3 * 11 + 11];
+
+		for (int i = 0; i < (int)(sizeof(keys) / sizeof(keys[0])); i++)
+			keys[i] = 0;
+
+		const short k1[3] = { 0, 2176, 0 };
+		const short k2[3] = { 0, (short)(2176 + 30976), 0 };
+
+		InterpPackRot(k1, -1, keys + size + 9);
+		InterpPackRot(k2, -1, keys + 2 * size + 9);
+
+		long pair = 0;
+
+		ok(InterpTurnKind(keys, size, 100, 4, 108, &pair) == INTERP_TURN_INSIDE && pair == 1,
+			"the flip on key 2 after a 170 degree pair: inside, pair 1", pair, 1);
+		ok(InterpKeyHold(INTERP_TURN_INSIDE, 1, 108, 100, 4, 1), "and that pair is held", 1, 1);
+		ok(!InterpKeyHold(INTERP_TURN_INSIDE, 1, 108, 100, 4, 0), "the pair before it is not", 0, 0);
+		ok(InterpTurnKind(keys, size, 100, 4, 106, &pair) == INTERP_TURN_INSIDE &&
+			!InterpKeyHold(INTERP_TURN_INSIDE, pair, 106, 100, 4, pair),
+			"a flip strictly inside the far pair is not held", pair, 1);
+		ok(InterpTurnKind(keys, size, 100, 4, 104, &pair) == INTERP_TURN_EARLY && pair == 0,
+			"the flip on key 1 after a 12 degree pair: early, pair 0", pair, 0);
+		ok(InterpTurnKind(keys, size, 100, 4, 100, &pair) == INTERP_TURN_NONE && pair == -1,
+			"the flip on the first frame: none", pair, -1);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -4027,6 +4427,7 @@ int main()
 	pose_back();
 	root_flip();
 	root_narrow();
+	key_build();
 	particles();
 	portal_walk();
 	reach_rect();

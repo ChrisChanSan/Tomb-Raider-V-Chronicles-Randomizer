@@ -178,8 +178,12 @@ void InterpNotePoseBack();
  * previous tick's frame of reference; where turn180_effect fired on the
  * refused tick (the underwater roll) it is half a turn behind and drew the
  * root up to 140 units off. InterpRootNow turns it into this tick's frame
- * first (InterpRootFlip). */
-void InterpRootRefused(const ITEM_INFO* item, const long prev[3]);
+ * first (InterpRootFlip). `turned` says the previous tick drew its frame
+ * turned by half a turn itself (InterpKeyFrameTurn, the frame an early
+ * turn180_effect fires on), so `prev` is half a turn behind in the same way;
+ * the two turns cancel where both apply. Set on every call, never
+ * accumulated: the draw asks two or three times a frame. */
+void InterpRootRefused(const ITEM_INFO* item, const long prev[3], bool turned = false);
 
 /* The root offset this draw should translate by, or false with `out`
  * untouched: every frame that is not a refused tween frame for this item
@@ -274,13 +278,32 @@ void InterpArmLogFrame();
 void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 	int animNumber, int frameNumber);
 
-/* KEYFARLOG, one line per tick on which CalcLaraMatrices draws the first key
- * frame of a far key pair (InterpKeyFar, interpolate_math.h) in place of
- * vanilla's key frame blend. View set only (flag 0), and once per tick
- * however many frames are drawn in it: the tick frame and a refused tween
- * frame fall back to the same pair. `frame0` and `frame1` are the pair
- * GetFramesNow left. -log only. */
-void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1);
+/* KEYFARLOG, one line per tick on which Lara's pose stands on a far key pair
+ * (InterpKeyFar, interpolate_math.h) and is drawn in place of vanilla's key
+ * frame blend: from the pair's first key frame (`hold`, mode=hold) or from a
+ * key frame built between the two (mode=lerp). View set only (flag 0), and
+ * once per tick however many frames are drawn in it. `frame0` and `frame1`
+ * are the pair GetFramesNow left. -log only. */
+void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold);
+
+/* TURNLOG, one line per tick on which Lara's pose is drawn from key frames
+ * turned by half a turn (InterpKeyFrameTurn): the frame turn180_effect fires
+ * on belongs to the yaw before the effect (INTERP_TURN_EARLY). View set only,
+ * once per tick. `pair` is the first key of the pair the frame lies on.
+ * -log only. */
+void InterpNoteTurn(const ITEM_INFO* item, long flip, long pair);
+
+/* Where turn180_effect fires in animation `animNumber` and what kind of
+ * frame it fires on (InterpTurnKind, interpolate_math.h): returns the kind,
+ * with the frame in `flip` and the first key of the pair around it in `pair`
+ * (both -1 when the animation fires none).
+ *
+ * The animation's commands are read once and the answer kept in a small
+ * table indexed by the animation number, so a draw pays a lookup;
+ * InterpInvalidate empties the table, and FreeLevel invalidates, so no
+ * answer outlives the level whose animation table it was read from. The
+ * first turn180_effect command counts; no animation of Lara's carries two. */
+int InterpTurnOf(short animNumber, long* flip, long* pair);
 
 /* The blend factor for velocity-carrying particles (sparks, rain, drips...):
  * the frame's alpha, or 1 on a live frame (fps_mode 0, the frame that

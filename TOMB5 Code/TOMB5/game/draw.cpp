@@ -2522,6 +2522,32 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate)
 	return frac;
 }
 
+/* True when Lara's far key pair `pair` of animation `animNumber` is held on
+ * its first key frame (InterpKeyHold): turn180_effect fires on its second.
+ * The caller has found the pair far (InterpKeyFar). */
+static bool LaraKeyHold(short animNumber, long pair)
+{
+	long flip, turnPair;
+	const int kind = InterpTurnOf(animNumber, &flip, &turnPair);
+
+	if (kind != INTERP_TURN_INSIDE)
+		return false;
+
+	const ANIM_STRUCT* anim = &anims[animNumber];
+
+	return InterpKeyHold(kind, turnPair, flip, anim->frame_base, anim->interpolation & 0xFF, pair);
+}
+
+/* True when frame `frameNumber` of Lara's animation `animNumber` is the frame
+ * an early turn180_effect fires on (INTERP_TURN_EARLY): the frame belongs to
+ * the yaw before the effect and is drawn turned back (InterpKeyFrameTurn). */
+static bool LaraTurnFrame(short animNumber, short frameNumber)
+{
+	long flip, pair;
+
+	return InterpTurnOf(animNumber, &flip, &pair) == INTERP_TURN_EARLY && frameNumber == flip;
+}
+
 /* The pose this drawn frame wears when it falls between two logic ticks.
  *
  * `prevAnim` and `prevFrame` are what the item wore before the last tick -
@@ -2595,13 +2621,14 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	 * At every other rate the tween frame lies inside the segment vanilla
 	 * blends the two tick frames on, so it is no worse than its own
 	 * neighbours - except on a pair of Lara's whose hips turn more than 90
-	 * degrees (InterpKeyFar). CalcLaraMatrices (delstuff.cpp) draws the first
-	 * key of such a pair instead of vanilla's blend, and the tween is refused
-	 * so that it falls back to the pose of the current tick - the first key
-	 * inside the pair, the second key on the tick that reaches it - rather
-	 * than blending across the collapse. It is not counted as pose_far,
-	 * which stays the rate 1
-	 * count. interpolate_math.h carries the arithmetic. */
+	 * degrees (InterpKeyFar). LaraPoseFrames draws such a pair from a key
+	 * frame built at the weight in hand, and a tween frame asks it for the
+	 * weight between the two ticks like any other. Only the pair held on its
+	 * first key (LaraKeyHold, the tightrope turn) refuses the tween, so that
+	 * it falls back to the pose of the current tick - the first key inside
+	 * the pair, the second key on the tick that reaches it. It is not counted
+	 * as pose_far, which stays the rate 1 count. interpolate_math.h carries
+	 * the arithmetic. */
 	if (rate == 1 && InterpPoseFar(frm[0], frm[1],
 		objects[item->object_number].nmeshes, INTERP_POSE_TURN_COS))
 	{
@@ -2610,7 +2637,8 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 		return 0;
 	}
 
-	if (rate > 1 && item == lara_item && InterpKeyFar(frm[0], frm[1]))
+	if (rate > 1 && item == lara_item && InterpKeyFar(frm[0], frm[1]) &&
+		LaraKeyHold(item->anim_number, key))
 		return 0;
 
 	if (back)
@@ -2632,9 +2660,13 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
  * bit the offset drawn one thirtieth of a second ago: the key index and the
  * remainder from the animation's own rate, the last interval shortened by
  * InterpKeyRate the way GetFrames shortens it, and InterpKeyAlpha's factor
- * over the pair. `keyHold` is set for Lara, whose far key pairs
- * (InterpKeyFar) are drawn from their first key frame; for such a pair the
- * offset is that key frame's too.
+ * over the pair. `lara` is set for Lara, whose pose LaraPoseFrames may have
+ * drawn from other frames than the pair: a far pair held on its first key
+ * (LaraKeyHold) drew that key frame's offset, which is what comes back; a far
+ * pair built at the tick's weight (InterpKeyFrameLerp) drew the pair's own
+ * blend, as vanilla; and on the frame an early turn180_effect fires on
+ * (LaraTurnFrame) the frame was drawn turned by half a turn, which `turned`
+ * reports so that the offset is turned with it (InterpRootRefused).
  *
  * Returns 0 - and then the caller blends no root and the frame is drawn with
  * its own offset - for an animation with no frames behind it, a rate or a
@@ -2649,8 +2681,10 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
  * item, is the same short item->anim_number carries, and every GetFrames in
  * the engine dereferences it unguarded. A slot whose object changed under it
  * is stopped by SNAP_OBJECT before a tween frame of it is drawn. */
-static long GetRootAt(short animNumber, short frameNumber, bool keyHold, long out[3])
+static long GetRootAt(short animNumber, short frameNumber, bool lara, long out[3], bool* turned)
 {
+	*turned = false;
+
 	if (!anims || animNumber < 0)
 		return 0;
 
@@ -2670,14 +2704,15 @@ static long GetRootAt(short animNumber, short frameNumber, bool keyHold, long ou
 	long frac = frame % rate;
 	const short* frm0 = anim->frame_ptr + size * key;
 
-	/* A far key pair of Lara's was drawn from its first key frame
-	 * (CalcLaraMatrices, InterpKeyFar), so that tick's offset is that key
-	 * frame's own. */
-	if (frac && keyHold && InterpKeyFar(frm0, frm0 + size))
+	/* A far key pair of Lara's held on its first key frame (LaraPoseFrames,
+	 * LaraKeyHold) drew that key frame's own offset. */
+	if (frac && lara && InterpKeyFar(frm0, frm0 + size) && LaraKeyHold(animNumber, key))
 		frac = 0;
 
 	InterpRootKey(frm0, frm0 + size, frac,
 		InterpKeyAlpha(frac, InterpKeyRate(rate, key, anim->frame_end)), out);
+
+	*turned = lara && LaraTurnFrame(animNumber, frameNumber);
 
 	return 1;
 }
@@ -2732,9 +2767,10 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 		InterpNotePoseSkip();
 
 		long prevRoot[3];
+		bool turned = false;
 
-		if (GetRootAt(prevAnim, prevFrame, item == lara_item, prevRoot))
-			InterpRootRefused(item, prevRoot);
+		if (GetRootAt(prevAnim, prevFrame, item == lara_item, prevRoot, &turned))
+			InterpRootRefused(item, prevRoot, turned);
 	}
 
 	long rate;
@@ -2746,6 +2782,101 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
 	*blend = InterpKeyAlpha(frac, rate);
 
 	return 1;
+}
+
+/* Lara's pose frames as her draw and her braid take them: the pair
+ * GetFramesNow or GetFrames left in `frm` (with `frac` and the factor
+ * `blend` they left), replaced by other frames in the two places where the
+ * base engine's own draw goes wrong, at every fps_mode. Every other pair is
+ * left as it is.
+ *
+ *   The frame an early turn180_effect fires on (LaraTurnFrame). The effect
+ *   turns her by half a turn on that tick, and the frame, the last of the
+ *   roll's end 48 and of the twists 207, 210 and 212, was made for the yaw
+ *   before it: drawn as it is, her body faces the other way for one tick
+ *   (171.9 degrees at the hips in 212, 176.8 in 207) and back again on the
+ *   next. Both frames of the pair are replaced by copies turned by half a
+ *   turn (InterpKeyFrameTurn), which land exactly where the frames land
+ *   under the yaw before; the tween frames between the tick before and this
+ *   one, whose item keeps the live yaw (InterpHalfTurn), take the same
+ *   pair.
+ *
+ *   A far key pair (InterpKeyFar). Vanilla's blend averages the two
+ *   multiplied-out matrix stacks element by element, and across a pair
+ *   whose hips turn more than 90 degrees the frame collapses (the hips'
+ *   columns 0.36, 0.69 and 0.71 long at the middle of 209's key 0 to 1).
+ *   Where turn180_effect fires on the pair's second key (LaraKeyHold, the
+ *   tightrope turn) every frame between the two keys belongs to the yaw of
+ *   the first, and the first key is drawn in both slots, a pose blended with
+ *   itself being that pose. Every other far pair is drawn from a key frame
+ *   built at `blend` (InterpKeyFrameLerp), in both slots: each node on the
+ *   shortest turn between its keys, a rotation at every weight, so the
+ *   twists 209 and 213 and rich3's crouch roll 219 turn through their three
+ *   in-between frames as the animation meant.
+ *
+ * Both keep the interpolated branch and with it the arms' own time blend,
+ * and the root offset follows (InterpRootNow reads the same pair; GetRootAt
+ * turns and holds the previous tick's offset alike). The frames are built
+ * into static buffers that live until the next call; each caller draws from
+ * them at once. `flag` 0 is the view set, the only one that writes the -log
+ * lines. What it costs: a table lookup on every call (InterpTurnOf), one
+ * hips test on every blended frame of Lara's (InterpKeyFar, 160 ns measured
+ * with PairProbe), and a node blend for each of her fifteen nodes that
+ * differ between the keys, only where a frame is built. */
+void LaraPoseFrames(short* frm[], long frac, float blend, long flag)
+{
+	static short turned[2][INTERP_KEYFRAME_MAX];
+	static short built[INTERP_KEYFRAME_MAX];
+
+	if (!lara_item || !anims || !frm || !frm[0])
+		return;
+
+	const short animNumber = lara_item->anim_number;
+	const int nodes = objects[lara_item->object_number].nmeshes;
+
+	if (nodes < 1 || nodes > 32)
+		return;
+
+	if (LaraTurnFrame(animNumber, lara_item->frame_number))
+	{
+		long flip, pair;
+
+		InterpTurnOf(animNumber, &flip, &pair);
+		InterpKeyFrameTurn(frm[0], nodes, turned[0]);
+
+		/* frm[1] is not read at frac zero: it may lie past the level's
+		 * frame block. */
+		if (frac)
+			InterpKeyFrameTurn(frm[1], nodes, turned[1]);
+
+		frm[0] = turned[0];
+		frm[1] = frac ? turned[1] : turned[0];
+
+		if (flag == 0)
+			InterpNoteTurn(lara_item, flip, pair);
+
+		return;
+	}
+
+	if (!frac || !frm[1] || !InterpKeyFar(frm[0], frm[1]))
+		return;
+
+	const ANIM_STRUCT* anim = &anims[animNumber];
+	const long size = anim->interpolation >> 8;
+	const bool hold = size > 0 && LaraKeyHold(animNumber, (long)(frm[0] - anim->frame_ptr) / size);
+
+	if (flag == 0)
+		InterpNoteKeyFar(lara_item, frm[0], frm[1], hold);
+
+	if (hold)
+	{
+		frm[1] = frm[0];
+		return;
+	}
+
+	InterpKeyFrameLerp(frm[0], frm[1], nodes, blend, built);
+	frm[0] = built;
+	frm[1] = built;
 }
 
 void SetupSkelebobMeshswaps()

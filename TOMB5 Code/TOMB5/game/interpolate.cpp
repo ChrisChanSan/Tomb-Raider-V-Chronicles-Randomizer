@@ -36,6 +36,7 @@ static_assert(CHASE_CAMERA == INTERP_CAM_CHASE && LOOK_CAMERA == INTERP_CAM_LOOK
 #include "../specific/function_stubs.h"	// Log, gLogEnabled
 #include "../specific/output.h"		// ActiveFpsMode, GameFrameMinTicks
 #include "../specific/time.h"		// TIME_SubTick
+#include "../specific/file.h"		// commands - where turn180_effect fires (InterpTurnOf)
 #include "../tomb5/tomb5.h"		// tomb5.fps_mode
 
 namespace
@@ -185,6 +186,24 @@ namespace
 	 * where both ticks' rotations are still known, and written for every slot
 	 * the walk lets through, so a slot at POSE_ROOT never reads it stale. */
 	unsigned char g_rootFlip[MAX_ITEMS];
+
+	/* Whether the previous tick drew its frame turned by half a turn itself
+	 * (InterpRootRefused's `turned`), so its offset needs the same turn;
+	 * written with g_rootPrev and read only with it. */
+	unsigned char g_rootTurned[MAX_ITEMS];
+
+	/* Where turn180_effect fires in each animation (InterpTurnOf), indexed
+	 * by the animation number's low bits and checked against the number. */
+	struct TurnSlot
+	{
+		short anim;
+		short flip;
+		short pair;
+		unsigned char kind;
+		unsigned char valid;
+	};
+
+	TurnSlot g_turn[512];
 
 	/* The tick's position step in the item's own y_rot frame (the frame of
 	 * the offsets and of TranslateItem), measured before ApplyNode overwrites
@@ -668,7 +687,8 @@ namespace
 	 *                fps_mode 0.
 	 *   pose_skips   blends the neighbour rule refused (animation changed or
 	 *                frame did not step by one), and Lara's tweens across a far
-	 *                key pair (InterpKeyFar). A few per second is normal; near
+	 *                key pair held on its first key (InterpKeyHold: the
+	 *                tightrope turn). A few per second is normal; near
 	 *                pose_items means snapshot and animation clock are out of
 	 *                step.
 	 *   pose_far     rate 1 pairs refused because a node turns more than 90
@@ -701,10 +721,19 @@ namespace
 	 *                bubbles, 2000 ropes. A kind on screen but missing here is
 	 *                a draw site whose guard never fires.
 	 *   root_flip    of root_fix, the frames whose previous offset was turned
-	 *                by a half turn first (the underwater roll). One per roll;
-	 *                halfturn without root_flip is a flip whose animation did
-	 *                not change, as in the other six turn180 animations. Lara's
-	 *                `root` line prints the turned offset as `turned=`.
+	 *                by a half turn first: the item turned between the two
+	 *                ticks and the tween was refused (the roll 147 fires
+	 *                turn180_effect on its first frame; the underwater roll
+	 *                205 and the tightrope turn 451 on a key frame made for
+	 *                the new yaw, whose tween the far-pair rules refuse), or
+	 *                the previous tick drew a frame turned by half a turn (the
+	 *                change after the last frame of 48, 207, 210 and 212,
+	 *                INTERP_TURN_EARLY). At most one per roll, turn or twist,
+	 *                and only where the blend moves the root. halfturn without
+	 *                root_flip is a turn whose tween blends: the tick an early
+	 *                turn180_effect fires on, whose frame is drawn turned
+	 *                (InterpKeyFrameTurn). Lara's `root` line prints the turned
+	 *                offset as `turned=`.
 	 *   pose_back    tween frames on which Lara's pose was blended by the
 	 *                backwards rule (InterpPoseBack), the ledge hang's lowering
 	 *                played down the pull-up; counted in lara_pose as well.
@@ -1554,6 +1583,11 @@ void InterpInvalidate(const char* why)
 	// No pose has a neighbour any more either.
 	memset(g_poseOk, 0, sizeof(g_poseOk));
 
+	/* Where turn180_effect fires is read again from the animation table the
+	 * next draw finds: after FreeLevel the numbers name another level's
+	 * animations. */
+	memset(g_turn, 0, sizeof(g_turn));
+
 	/* No caller runs inside DrawPhaseGame (all are logic ticks or level
 	 * boundaries); the reset keeps a future one from leaving interpolated
 	 * values in the live state. */
@@ -1652,7 +1686,7 @@ void InterpNotePoseBack()
  * later. InterpBeginFrame clears g_poseOk every drawn frame and every early
  * return leaves it at zero, as does a snapped slot, so a stale byte cannot
  * survive one frame. */
-void InterpRootRefused(const ITEM_INFO* item, const long prev[3])
+void InterpRootRefused(const ITEM_INFO* item, const long prev[3], bool turned)
 {
 	if (!g_applied || !items || !item)
 		return;
@@ -1671,6 +1705,7 @@ void InterpRootRefused(const ITEM_INFO* item, const long prev[3])
 	g_rootPrev[i][0] = prev[0];
 	g_rootPrev[i][1] = prev[1];
 	g_rootPrev[i][2] = prev[2];
+	g_rootTurned[i] = turned ? 1 : 0;
 	g_poseOk[i] = POSE_ROOT;
 }
 
@@ -1689,10 +1724,14 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 	 * left, then the two ticks blended in time at the frame's factor. The
 	 * previous offset is first put into this tick's frame (a copy except
 	 * after a half turn, InterpRootFlip), then narrowed to what the position
-	 * step pays for (InterpRootNarrow), which weighs this tick's frame. */
+	 * step pays for (InterpRootNarrow), which weighs this tick's frame. The
+	 * half turn is the item's own between the two ticks (g_rootFlip) or the
+	 * one the previous tick's frame was drawn with (g_rootTurned, the frame
+	 * an early turn180_effect fires on); both at once cancel. */
 	long prev[3], cur[3], start[3], blended[3];
+	const unsigned char flip = (unsigned char)(g_rootFlip[i] ^ g_rootTurned[i]);
 
-	if (g_rootFlip[i])
+	if (flip)
 		InterpRootFlip(g_rootPrev[i], prev);
 	else
 	{
@@ -1734,14 +1773,15 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 
 		g_secRootFix++;
 
-		if (g_rootFlip[i])
+		if (flip)
 			g_secRootFlip++;
 
 		/* INTERPLOG root line, Lara only, at most four a second: the numbers
 		 * the rule used, to compare against RootProbe's table from the level
 		 * file (they must agree to the unit). pos_y is the blended position,
 		 * so pos_y + drawn.y must lie between the two ticks. `flip` and
-		 * `turned` are the half-turn test and the turned previous offset;
+		 * `turned` are the half-turn test (the item's own turn or the turned
+		 * frame the previous tick drew) and the turned previous offset;
 		 * `step` is the tick's position step in her frame and `kept` how much
 		 * of the offset step it paid for. A transition that does not blend
 		 * prints no line. */
@@ -1757,7 +1797,7 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 				(int)cur[0], (int)cur[1], (int)cur[2],
 				(int)out[0], (int)out[1], (int)out[2],
 				(int)item->pos.y_pos,
-				(int)g_rootFlip[i], (int)prev[0], (int)prev[1], (int)prev[2],
+				(int)flip, (int)prev[0], (int)prev[1], (int)prev[2],
 				(int)g_rootStep[i][0], (int)g_rootStep[i][1], (int)g_rootStep[i][2],
 				(int)labs(cur[0] - start[0]), (int)labs(cur[1] - start[1]),
 				(int)labs(cur[2] - start[2]));
@@ -1829,8 +1869,11 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
  *   keys    the key pair that frame lies between
  *   rate    the animation's own rate
  *   hips    the turn of node 0 between the two key frames, in degrees
- *   drawn   the key frame drawn in place of the blend */
-void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1)
+ *   drawn   the key frame drawn in place of the blend; -1 where a key frame
+ *           is built between the two instead
+ *   mode    hold (the first key, InterpKeyHold) or lerp (a key frame built
+ *           at the tick's own weight, InterpKeyFrameLerp) */
+void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold)
 {
 	static bool seen = false;
 	static unsigned short lastCounter = 0;
@@ -1866,9 +1909,94 @@ void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* f
 	else if (c < -1.0)
 		c = -1.0;
 
-	Log("KEYFARLOG f=%d anim=%d frame=%d keys=%ld-%ld rate=%ld hips=%.1f drawn=%ld",
+	Log("KEYFARLOG f=%d anim=%d frame=%d keys=%ld-%ld rate=%ld hips=%.1f drawn=%ld mode=%s",
 		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number,
-		key, key + 1, rate, acos(c) * 180.0 / 3.14159265358979323846, key);
+		key, key + 1, rate, acos(c) * 180.0 / 3.14159265358979323846, hold ? key : -1L,
+		hold ? "hold" : "lerp");
+}
+
+/* TURNLOG (see interpolate.h):
+ *   f       GlobalCounter, the tick
+ *   anim, frame   the animation and frame the item stands on
+ *   flip    the frame turn180_effect fires on
+ *   keys    the key pair the drawn frame lies on, both drawn turned */
+void InterpNoteTurn(const ITEM_INFO* item, long flip, long pair)
+{
+	static bool seen = false;
+	static unsigned short lastCounter = 0;
+
+	if (!gLogEnabled || !item)
+		return;
+
+	if (seen && lastCounter == GlobalCounter)
+		return;
+
+	seen = true;
+	lastCounter = GlobalCounter;
+
+	Log("TURNLOG f=%d anim=%d frame=%d flip=%ld keys=%ld-%ld drawn=turned",
+		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number,
+		flip, pair, pair + 1);
+}
+
+/* See interpolate.h. The command walk is AnimateLara's (laramisc.cpp):
+ * TranslateItem carries three operands, the jump velocity, a sound and a
+ * flip effect two each, everything else none. */
+int InterpTurnOf(short animNumber, long* flip, long* pair)
+{
+	*flip = -1;
+	*pair = -1;
+
+	if (!anims || !commands || animNumber < 0)
+		return INTERP_TURN_NONE;
+
+	TurnSlot* s = &g_turn[animNumber & 511];
+
+	if (!s->valid || s->anim != animNumber)
+	{
+		const ANIM_STRUCT* anim = &anims[animNumber];
+		const short* cmd = &commands[anim->command_index];
+		long f = -1;
+		long k = -1;
+
+		for (int n = anim->number_commands; n > 0 && f < 0; n--)
+		{
+			switch (*cmd++)
+			{
+			case 1:
+				cmd += 3;
+				break;
+
+			case 2:
+			case 5:
+				cmd += 2;
+				break;
+
+			case 6:
+
+				if ((cmd[1] & 0x3FFF) == 0)
+					f = cmd[0];
+
+				cmd += 2;
+				break;
+			}
+		}
+
+		const int kind = f < 0 ? INTERP_TURN_NONE
+			: InterpTurnKind(anim->frame_ptr, anim->interpolation >> 8, anim->frame_base,
+				anim->interpolation & 0xFF, f, &k);
+
+		s->anim = animNumber;
+		s->flip = (short)f;
+		s->pair = (short)k;
+		s->kind = (unsigned char)kind;
+		s->valid = 1;
+	}
+
+	*flip = s->flip;
+	*pair = s->pair;
+
+	return s->kind;
 }
 
 /* The arm's previous frame (see interpolate.h). Gated by g_applied like the

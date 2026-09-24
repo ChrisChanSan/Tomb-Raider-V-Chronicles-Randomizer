@@ -5480,9 +5480,9 @@ position's ceiling is too low or would catch her into the monkey hang instead;
 `CATCH` the heading is outside the cardinal window, there is no floor, or the
 engine's own edge catch itself fails; `WATER` water, lava, or a death floor
 lies below; `LARA` her weapons are drawn, she is dead, a creature hit her this
-tick, or a cutscene holds her. The floor data of the sector she hangs in is not
-asked: the engine's own catch hangs her in that same sector, and `LaraAboveWater`
-hands its `coll->trigger` to `TestTriggers` every tick of the hang
+tick, or a cutscene holds her. The triggers in the floor data of the sector she
+hangs in are not asked: the engine's own catch hangs her in that same sector, and
+`LaraAboveWater` hands its `coll->trigger` to `TestTriggers` every tick of the hang
 (`game/lara.cpp:5017`), so a camera, music, door or flipmap trigger there fires after
 the move exactly as after a catch made by hand; a lava or death floor below is
 `WATER`, a ladder below `CLIMB`.

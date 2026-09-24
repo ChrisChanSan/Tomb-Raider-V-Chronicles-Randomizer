@@ -884,6 +884,53 @@ therefore gated at the call site, and switches itself off after the first find.
 
 **Commits.** `bc328a8`
 
+### Lara blanked out in the half turn on a rope: the ROPELOG seam
+
+**What.** When Lara turns half round on a rope she disappears for a moment. The defect
+belongs to the base engine: it appears with the HD art off, at *Frame rate 30* and under
+both control schemes. No fix exists yet, because the rope arithmetic does not produce it.
+Behind `-log` two lines record every tick on a rope instead. `ROPELOG` gives her state,
+animation and frame, her heading round the rope (`RopeY=`, 256 units per tick of a turn,
+128 ticks for a half turn), the segment, the offset and the frame's root `y`. It also
+gives the three lengths `Normalise` divides by (`len=`), and the angles and position
+`AlignLaraToRope` gives her. `ROPELOG draw` is written on every drawn frame while she
+hangs on a rope and on the frame after she lets go. It says whether the Lara block of
+`DrawRooms` draws her (`drawn=`) and lists the terms that decide it: `mesh_bits`,
+`SCNoDrawLara`, `ModernLaraHidden` and `IFL_INVISIBLE`. It also gives the camera type,
+the eye and the look-at point with their rooms, the eye's distance to the look-at point
+(`eyed=`) and to her (`larad=`), and the candidate `ChaseCamera` took (`cand=`, `clip=`).
+
+**Why.** An offline probe compiles `AlignLaraToRope` and every function it calls
+verbatim. On a still rope, all 65536 values of `RopeY` give continuous results.
+`x_rot` and `z_rot` stay 0, `y_rot` follows the heading within 22 units, and the position
+moves by at most 2 units between neighbouring headings. No input to `Normalise` comes
+near zero: the smallest are 191 for the rope's direction, 4094 for the turned facing and
+16370 for their cross product. The same holds for all 21 segments with four root offsets
+(84 of 84 cases), and the half-turn step itself is clean. The placement can only break
+down when the rope at her grip lies along the world X axis, which takes a tilt past 90
+degrees; the swing stops at `RopeMaxX` 9000, about 49 degrees. The one integer defect the
+probe does find is a different symptom. `Normalise` takes its reciprocal as `0x10000 /
+length` in integers, and the cross product can leave it 16385 to 16455 long, where the
+reciprocal comes out at 3 instead of 4. On a swinging rope `z_rot` then comes out up to
+a quarter too large, up to 1539 units (8.5 degrees), a roll flicker that leaves the
+position alone. The classic Lara draw clips nothing against her body as a whole, so a
+wrong angle would tilt her rather than hide her. What hides her is therefore outside the
+rope code. The chase camera closing in on her while her origin circles the rope at 112
+units is the likeliest cause, but it is not measured, because it depends on the level
+geometry round the rope. A blank-out tick shows one of three things: `drawn=0` in the
+draw line; `eyed=` or `larad=` near zero, which points at the camera; or a jump in
+`xyz=` or `pos=` in the tick line, which points at the rope.
+
+**How.** `game/rope.cpp`: `RopeLog` and `RopeLogLength`. The lengths are taken where
+`AlignLaraToRope` shifts each vector for `Normalise`, and only when `gLogEnabled` is
+set; the line is written at the end of the function. `game/draw.cpp`: `RopeDrawLog`,
+called from `DrawRooms` just before the Lara block. `game/camera.cpp` / `.h`: `chase_log`
+is set to -1 at the top of every `CalculateCamera` pass and written by `ChaseCamera`,
+and `ChaseCameraLogPick` reads it. Without `-log` nothing is computed or written, and
+the arithmetic of `AlignLaraToRope` is unchanged.
+
+**Commits.** `4d578e9`
+
 ### Level Select, a keyhole that survives a save, and the underwater pickup animation
 2026-07-31 - 2026-09-14
 

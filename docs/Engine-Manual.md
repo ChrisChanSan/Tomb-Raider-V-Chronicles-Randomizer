@@ -518,8 +518,8 @@ at her all the way down, without a jolt as she goes over the edge. Let go of
 the key, press Jump, or draw a weapon while she is turning and she stands back
 up where she is instead.
 Under *Grab mode* **Toggle** she keeps her hold by herself once the move has
-begun: press the key again while she is turning to stand back up; a press
-still held when she arrives in the hang lets go of the ledge.
+begun: press the key again while she is turning to stand back up; a second
+press still held when she arrives in the hang lets go of the ledge.
 A running jump off the edge needs the grab key released: with the key held,
 Jump pressed in the last step before the edge comes too late, because she is
 stopped first and the Jump then only stands her back up.
@@ -532,11 +532,12 @@ It will not fire at all when:
 - there is a ladder in the wall below the edge;
 - the ceiling above the hang is too low;
 - there is an item or a static mesh at the edge or in the hang;
-- there is a trigger (or a climb or monkey-swing marker) in the floor at the
-  bottom of the drop;
 - your weapons are drawn;
 - or you approach more than about 35 degrees off a straight, square angle to
   the edge.
+
+A trigger in the floor of the sector she hangs in fires just as it does when
+she catches that ledge by hand.
 
 With it on, holding the grab key while running off an edge the move accepts no
 longer reaches for a ledge below the way it does with the option off — she is
@@ -545,9 +546,7 @@ turn this back off. A sprint is never stopped, and an edge the move refuses
 still lets her reach for a ledge below as before.
 
 A savegame made in the middle of the move loads correctly only in this build
-or a later one. And for now, while a setting of 60 or more frames a second
-draws everything else at that rate, the lowering itself is still drawn at 30
-frames a second.
+or a later one.
 
 ---
 

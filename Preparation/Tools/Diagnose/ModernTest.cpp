@@ -6123,11 +6123,11 @@ static void camera_orbit()
 	ok(60 * cfg.pitch_rate >= 32400 && 60 * cfg.pitch_rate <= 33100,
 		"...and half a turn of pitch in the same 2 s", 60 * cfg.pitch_rate, 32768);
 	ok(cfg.pitch_max == 15470,
-		"below her the clamp is ChaseCamera's own (camera.cpp:1012)", cfg.pitch_max, 15470);
+		"below her the clamp is ChaseCamera's own (camera.cpp:2007)", cfg.pitch_max, 15470);
 	ok(cfg.pitch_min == -10923,
 		"above her the sphere's top cap is cut at 60 degrees", cfg.pitch_min, -10923);
 	ok(cfg.pitch_home == -1820,
-		"the resting elevation is ChaseCamera's own (camera.cpp:1006)", cfg.pitch_home, -1820);
+		"the resting elevation is ChaseCamera's own (camera.cpp:2000)", cfg.pitch_home, -1820);
 	ok(cfg.hide_dist == 20 + 102,
 		"hiding starts at the near plane (20) plus her own radius (102)", cfg.hide_dist, 122);
 

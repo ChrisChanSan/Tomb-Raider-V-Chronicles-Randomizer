@@ -67,6 +67,9 @@
  *                                           the position step defaults to a's
  *                                           own TranslateItem where the change
  *                                           is its wrap, and `y` overrides it
+ *                     ... -grab <a> <b> <y> <x> <z>
+ *                                           the whole step, for a change the
+ *                                           air or the ground carries
  *   RootProbe <level.trc> -sweep [least]    every transition of Lara's whose
  *                                           offset step is `least` units or
  *                                           more on an axis (default 8)
@@ -308,6 +311,74 @@ static bool readTranslate(const Tr5Level& l, const AnimRow& a, long trans[3])
 	}
 
 	return false;
+}
+
+/* Where turn180_effect (FlipEffect 0) fires in an animation, and on what kind
+ * of frame: the engine's own InterpTurnKind over the level's key frames, the
+ * answer game\interpolate.cpp InterpTurnOf keeps. Returns the kind, with the
+ * frame in `flip` (-1 when the animation fires none). */
+static int readTurn(const Tr5Level& l, const AnimRow& a, long* flip)
+{
+	size_t cmdAt = 0;
+	int32_t nCmd = 0;
+
+	*flip = -1;
+
+	if (!a.numCommands || !l.debugCommandBlock(cmdAt, nCmd))
+		return INTERP_TURN_NONE;
+
+	const std::vector<uint8_t>& b = l.debugBytes();
+	size_t p = cmdAt + (size_t)a.commandIndex * 2;
+
+	auto r16 = [&](size_t at) -> int16_t
+	{
+		int16_t v = 0;
+		std::memcpy(&v, b.data() + at, 2);
+		return v;
+	};
+
+	for (int k = 0; k < a.numCommands && p + 2 <= cmdAt + (size_t)nCmd * 2 && *flip < 0; k++)
+	{
+		const int typ = (int)(uint16_t)r16(p);
+		p += 2;
+
+		if (typ == 1)
+			p += 6;
+		else if (typ == 2 || typ == 5)
+			p += 4;
+		else if (typ == 6)
+		{
+			if ((r16(p + 2) & 0x3FFF) == 0)
+				*flip = r16(p);
+
+			p += 4;
+		}
+	}
+
+	if (*flip < 0 || a.rate < 1 || a.size < 9)
+		return INTERP_TURN_NONE;
+
+	const long keys = (a.frameEnd - a.frameStart) / a.rate + 2;
+	std::vector<short> block((size_t)(keys * a.size) + 64);
+
+	for (size_t i = 0; i < block.size(); i++)
+		block[i] = l.debugReadFrameShort((long long)(a.frameOffset / 2) + (long long)i);
+
+	long pair = -1;
+
+	return InterpTurnKind(block.data(), a.size, a.frameStart, a.rate, *flip, &pair);
+}
+
+/* True when the offset the previous tick drew at `frame` of animation `a`
+ * belongs to a frame drawn turned by half a turn: the frame an early
+ * turn180_effect fires on (INTERP_TURN_EARLY), which the engine draws from
+ * turned copies (draw.cpp LaraPoseFrames) and whose offset InterpRootNow
+ * turns before the blend of the change that follows. */
+static bool drawnTurned(const Tr5Level& l, const AnimRow& a, int frame)
+{
+	long flip = -1;
+
+	return readTurn(l, a, &flip) == INTERP_TURN_EARLY && frame == flip;
 }
 
 /* Where a state change really goes. The change block is three shorts per
@@ -621,6 +692,38 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 	std::printf("  assumed pos step of the change (item frame): (%ld,%ld,%ld)\n",
 		step[0], step[1], step[2]);
 
+	/* The previous offset in the frame the change's tween blends in, as
+	 * InterpRootNow takes it: turned by half a turn where the leaving frame
+	 * was drawn turned (drawnTurned) or where the entering frame fires
+	 * turn180_effect, the item turning on the change tick itself; both at
+	 * once cancel. `raw0` keeps the offset as drawn, which the engine's -log
+	 * line prints as offset_prev. */
+	const long raw0[3] = { off0[0], off0[1], off0[2] };
+
+	{
+		long flipIn = -1;
+
+		readTurn(l, b, &flipIn);
+
+		const bool turnedOut = drawnTurned(l, a, a.frameEnd);
+		const bool turnedIn = flipIn == b.frameStart;
+
+		if (turnedOut != turnedIn)
+		{
+			long t[3];
+
+			InterpRootFlip(off0, t);
+			off0[0] = t[0];
+			off0[1] = t[1];
+			off0[2] = t[2];
+		}
+
+		std::printf("  previous offset turned by half a turn: %s (last frame drawn turned %d,"
+			" turn180_effect on the first frame %d) -> (%ld,%ld,%ld)\n",
+			turnedOut != turnedIn ? "yes" : "no", turnedOut ? 1 : 0, turnedIn ? 1 : 0,
+			off0[0], off0[1], off0[2]);
+	}
+
 	const long posStep = step[1];
 	const long drawn0 = off0[1];
 	const long drawn1 = posStep + off1[1];
@@ -658,7 +761,7 @@ static void printChange(const Tr5Level& l, int from, int to, const long step[3])
 			" offset_prev=(%ld,%ld,%ld) offset_cur=(%ld,%ld,%ld)"
 			" drawn=(%ld,%ld,%ld) pos_y=Y%+ld step=(%ld,%ld,%ld) kept=(%ld,%ld,%ld)\n",
 			from, to, a.frameEnd, b.frameStart,
-			off0[0], off0[1], off0[2], off1[0], off1[1], off1[2],
+			raw0[0], raw0[1], raw0[2], off1[0], off1[1], off1[2],
 			narrow[0], narrow[1], narrow[2], posT,
 			step[0], step[1], step[2],
 			labs(off1[0] - start[0]), labs(off1[1] - start[1]), labs(off1[2] - start[2]));
@@ -730,6 +833,15 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 		if (!readAnim(l, i, a) || a.rate < 1 || a.size < 9)
 			continue;
 
+		/* The frame an early turn180_effect fires on is drawn turned by half
+		 * a turn, and its offset is turned before the blend of the change
+		 * that follows (drawnTurned); read once per animation. The item's own
+		 * turn on a change tick (an entering frame that fires the effect, the
+		 * roll 147) is not modelled here: the sweep stays the table it was
+		 * for every other transition. */
+		long turnFlip = -1;
+		const bool turnEarly = readTurn(l, a, &turnFlip) == INTERP_TURN_EARLY;
+
 		for (int kind = 0; kind < 2; kind++)
 		{
 			const int entries = kind ? (haveChanges ? a.numChanges : 0) : 1;
@@ -790,6 +902,13 @@ static void sweep(const Tr5Level& l, int first, int last, long least)
 
 						if (!frameRoot(l, a, f, o))
 							continue;
+
+						if (turnEarly && f == turnFlip)
+						{
+							const long drawn[3] = { o[0], o[1], o[2] };
+
+							InterpRootFlip(drawn, o);
+						}
 
 						const long m = labs(cur[0] - o[0]) > labs(cur[1] - o[1])
 							? (labs(cur[0] - o[0]) > labs(cur[2] - o[2])
@@ -930,7 +1049,7 @@ int main(int argc, char** argv)
 	if (argc < 2)
 	{
 		std::printf("usage: RootProbe <level.trc> [anim ...]\n"
-			"       RootProbe <level.trc> -grab <from> <to> [posStepY]\n"
+			"       RootProbe <level.trc> -grab <from> <to> [posStepY [posStepX posStepZ]]\n"
 			"       RootProbe <level.trc> -sweep [leastStep]\n");
 		return 2;
 	}
@@ -989,6 +1108,15 @@ int main(int argc, char** argv)
 
 		if (argc >= 6)
 			step[1] = std::atol(argv[5]);
+
+		/* And x and z, for a change a jump or a roll carries through the air
+		 * or along the ground: the step in her own y_rot frame after the
+		 * tick, as the engine's -log root line prints it. */
+		if (argc >= 8)
+		{
+			step[0] = std::atol(argv[6]);
+			step[2] = std::atol(argv[7]);
+		}
 
 		printAnim(l, from, trans, haveTrans);
 		printAnim(l, to, trans, haveTrans);

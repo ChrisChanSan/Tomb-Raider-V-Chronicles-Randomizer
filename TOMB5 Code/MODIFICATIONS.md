@@ -902,13 +902,15 @@ the eye and the look-at point with their rooms, the eye's distance to the look-a
 
 **Why.** An offline probe compiles `AlignLaraToRope` and every function it calls
 verbatim. On a still rope, all 65536 values of `RopeY` give continuous results.
-`x_rot` and `z_rot` stay 0, `y_rot` follows the heading within 22 units, and the position
-moves by at most 2 units between neighbouring headings. No input to `Normalise` comes
-near zero: the smallest are 191 for the rope's direction, 4094 for the turned facing and
-16370 for their cross product. The same holds for all 21 segments with four root offsets
-(84 of 84 cases), and the half-turn step itself is clean. The placement can only break
-down when the rope at her grip lies along the world X axis, which takes a tilt past 90
-degrees; the swing stops at `RopeMaxX` 9000, about 49 degrees. The one integer defect the
+`x_rot` and `z_rot` stay 0, `y_rot` moves at most 22 units per 1-unit step of the
+heading, and the position moves by at most 2 units between neighbouring headings. No
+input to `Normalise` comes near zero: the smallest are 191 for the rope's direction,
+4094 for the turned facing and 16370 for their cross product. The same holds for all 21
+segments with four root offsets (84 of 84 cases), and the half-turn step itself is
+clean. The placement can only break down when the rope at her grip lies along the world
+X axis, which takes a tilt past 90 degrees; a turn starts only from the plain hang,
+which a swing returns to only below 6750 (about 37 degrees), and the probe finds no
+degenerate step up to its 63-degree swings. The one integer defect the
 probe does find is a different symptom. `Normalise` takes its reciprocal as `0x10000 /
 length` in integers, and the cross product can leave it 16385 to 16455 long, where the
 reciprocal comes out at 3 instead of 4. On a swinging rope `z_rot` then comes out up to

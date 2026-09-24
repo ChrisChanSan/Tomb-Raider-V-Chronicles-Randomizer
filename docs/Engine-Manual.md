@@ -2689,14 +2689,14 @@ knitted beanie.
 
 **Lara keeps her body in the tightrope turn.** Where one of her animations
 turns her hips more than ninety degrees between two stored key frames, the
-original draws the frames in between as an average of the two, and in the
-turn on the tightrope that average squeezes her whole body to a thin sliver
-for a moment. The engine draws the first of the two key frames there instead,
-at every frame rate, with or without the HD art, under both control schemes.
+original draws the frames in between as an average of the two, and in the turn
+on the tightrope that average squeezes her whole body to a thin sliver for a
+moment. The engine draws the first of the two key frames there instead, at
+every frame rate, with or without the HD art, under both control schemes.
 Besides the tightrope turn it touches only the twist of the back jump and of
-the forward jump in every level and, in Red Alert!, the crouch roll — one
-in-between picture of each (three at most); every other frame is drawn as
-before.
+the forward jump in every level and, in Red Alert!, the crouch roll — a single
+stored key-frame gap of each, one to three pictures at 30 frames per second;
+every other frame is drawn as before.
 
 **Room for bigger levels.** Several engine ceilings were raised — items per
 level, sound samples, active enemies, the savegame buffer. A level that would

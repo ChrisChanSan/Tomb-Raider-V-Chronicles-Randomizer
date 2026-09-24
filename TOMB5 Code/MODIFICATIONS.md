@@ -940,23 +940,25 @@ the arithmetic of `AlignLaraToRope` is unchanged.
 
 **What.** When Lara turns round on the tightrope (Roll or Back while balancing), her
 whole body is squeezed to a thin vertical sliver for one tick and then is whole again.
-The defect belongs to the base engine: it appears with the HD art off, at *Frame rate 30*
-and under both control schemes. The turn is animation 451 (`ANIM_TROPETURN`); in ANDREA1
-it runs frames 8864 to 8916 at rate 2, 27 key frames. Over keys 0 to 25 it turns her hips
-(node 0) from 21.8 to -161.4 degrees of yaw, and between key 25 (frame 8914) and key 26
-(frame 8916) it swings them back by 176.9 degrees, while the animation's own FlipEffect 0
-on frame 8916 (`turn180_effect`) turns the item by half a turn, so the key frames join up.
-The one frame in between, 8915, goes through vanilla's key-frame blend, which averages
-the two fully multiplied-out matrix stacks element by element at 0.5. Across hips 176.9
-degrees apart that average is almost singular: the hips' columns come out 0.087, 0.995
-and 0.059 long (determinant 0.001), the fifteen node origins shrink from 488 and 507 units
-wide to 9, and she is flattened onto her vertical axis. In ANDREA2 and ANDREA3 the same
-animation is rate 4 with the far pair at keys 12 and 13 (171.3 degrees), drawn on three
-frames at column lengths 0.508, 0.105 and 0.508. At sixty frames and above the tween
-blended the same pair, because the far-pose rule was asked only at rate 1. A key pair of
-Lara's whose hips turn more than 90 degrees is now drawn from its first key frame in
-place of the blend, at every frame rate, and the tween across it falls back to the same
-frame. Behind `-log` a `KEYFARLOG` line names every tick that takes this path.
+The defect belongs to the base engine: it appears with the HD art off, at *Frame rate
+30* and under both control schemes. The turn is animation 451 (`ANIM_TROPETURN`); in
+ANDREA1 it runs frames 8864 to 8916 at rate 2, 27 key frames. Over keys 0 to 25 it turns
+her hips (node 0) from 21.8 to -161.4 degrees of yaw, and between key 25 (frame 8914)
+and key 26 (frame 8916) it swings them back by 176.9 degrees, while the animation's own
+FlipEffect 0 on frame 8916 (`turn180_effect`) turns the item by half a turn, so the key
+frames join up. The one frame in between, 8915, goes through vanilla's key-frame blend,
+which averages the two fully multiplied-out matrix stacks element by element at 0.5.
+Across hips 176.9 degrees apart that average is almost singular: the hips' columns come
+out 0.087, 0.995 and 0.059 long (determinant 0.001), the fifteen node origins shrink
+from 488 and 507 units wide to 9, and she is flattened onto her vertical axis. In
+ANDREA2 and ANDREA3 the same animation is rate 4 with the far pair at keys 12 and 13
+(171.3 degrees), drawn on three frames at column lengths 0.508, 0.105 and 0.508. At
+sixty frames and above the tween blended the same pair, because the far-pose rule was
+asked only at rate 1. A key pair of Lara's whose hips turn more than 90 degrees is now
+drawn from its first key frame in place of the blend, at every frame rate, and the tween
+across it falls back to the pose of the current tick (the first key inside the pair, the
+second key on the tick that reaches it). Behind `-log` a `KEYFARLOG` line names every
+tick that takes this path.
 
 **Why.** The squeeze is the arithmetic of the blend, not of the tightrope: an
 element-wise average of two rotations D apart shrinks the frame by `cos(D/2)` and is
@@ -984,44 +986,46 @@ measurement confirmed; the threshold here is 90 degrees, because at 150 animatio
 its code is used.
 
 Over the thirteen campaign levels, 35358 of Lara's key pairs are blended by the engine,
-and the rule fires on exactly 31 of them: animations 209 (the twist of the back jump,
-152.6 degrees) and 213 (the twist of the forward jump, 98.8 degrees), key 0 to key 1, in
-every level; 451 key 25 to 26 in ANDREA1 and rich2 (176.9 degrees) and key 12 to 13 in
-ANDREA2 and ANDREA3 (171.3 degrees); and rich3's animation 219 (the crouch roll, state `AS_DUCKROLL`, 94.9
-degrees), key 0 to key 1. The nearest hips turns on either side of the limit are 85.97
-and 94.92 degrees, so float rounding cannot move a pair across it; the engine's float
-test and a double-precision turn agree on every pair. Every other pair is drawn exactly
-as before at every frame rate, with the HD art on or off and under both control schemes.
-Animation 205 (rate 1, 179.9 degrees) is never key-blended and keeps the rate 1 rule.
-Animations whose frame data do not match their header's frame size (87 to 187 of Lara's
-per level, with boxes turned inside out and root offsets beyond 4096) are left out of
-these counts; the hips test fires on 2321 of their key pairs, which were not measured in
-play. Other items keep
-vanilla's blend: 0 to 18 root-node far blended pairs per level exist in slots 43, 53, 75,
-172, 174, 220 and 442, counted but not looked at.
+and the rule fires on exactly 31 of them: animations 209 (the end of the forward jump's
+twist, 152.6 degrees) and 213 (the end of the back jump's twist, 98.8 degrees), key 0 to
+key 1, in every level; 451 key 25 to 26 in ANDREA1 and rich2 (176.9 degrees) and key 12
+to 13 in ANDREA2 and ANDREA3 (171.3 degrees); and rich3's animation 219 (the crouch
+roll, state `AS_DUCKROLL`, 94.9 degrees), key 0 to key 1. The nearest hips turns on
+either side of the limit are 85.97 and 94.92 degrees, so float rounding cannot move a
+pair across it; the engine's float test and a double-precision turn agree on every pair.
+Every other pair is drawn exactly as before at every frame rate, with the HD art on or
+off and under both control schemes. Animation 205 (rate 1, 179.9 degrees) is never
+key-blended and keeps the rate 1 rule. Animations whose frame data do not match their
+header's frame size (87 to 187 of Lara's per level, with boxes turned inside out and
+root offsets beyond 4096) are left out of these counts; the hips test fires on 2321 of
+their key pairs, which were not measured in play. Other items keep vanilla's blend: 0 to
+18 root-node far blended pairs per level exist in slots 43, 53, 75, 172, 174, 220 and
+442, counted but not looked at.
 
 **How.** `game/interpolate_math.h:785`: `InterpKeyFar`, `InterpPoseFar` over node 0 with
 `INTERP_POSE_TURN_COS`. `game/delstuff.cpp:203` (`CalcLaraMatrices`): on a key-blended
 frame (`frac == 1`) whose pair is far, `frmptr[1] = frmptr[0]`, before the still-body
-hold; `InterpRootNow` then blends the first key's offset with itself. `game/draw.cpp:2611`
-(`GetFramesAt`): at rates above 1 the tween across a far pair of Lara's is refused, so
-`GetFramesNow` falls back to `GetFrames` of the current tick and the line above turns
-that into the first key; the refusal counts in `pose_skips`, and `pose_far` stays the
-rate 1 count. `game/draw.cpp:2674` (`GetRootAt`, called at :2734 with `keyHold` set for
-Lara): the previous tick's root offset on a far pair is the first key's, the offset that
-tick drew. `game/interpolate.cpp:1833` (`InterpNoteKeyFar`, declared in
-`game/interpolate.h`, called from `game/delstuff.cpp:206` for the view set):
-`KEYFARLOG f= anim= frame= keys= rate= hips= drawn=`, once per tick. Deliberately left
-alone: `HairControl` (`game/hair.cpp:301`), which is logic and whose braid anchor is 21
-units off at most on the far frame; the collision spheres (`game/sphere.cpp`); the
-bounds of `GetBoundsAccurate` and `GetBestFrame`; and `DrawAnimatingItem`. The HD body
-reads `lara_matrices` and follows without a change. The test costs 155 to 168 ns per
-call and runs only on key-blended frames and refused tweens, under 0.1 ms per second at
-165 Hz, so no cache is kept. Checked by `Preparation/Tools/Diagnose/InterpTest.cpp`
-(`pose_wrap`, block 5: half a turn and 91 degrees at the hips are far, 89 degrees, a key
-frame against itself and a half turn below the hips are not; 526 checks). Measured with
-an offline probe that reads the thirteen levels and includes `game/interpolate_math.h`:
-`InterpKeyFar` fires on the 31 pairs above and on no other blended pair.
+hold; `InterpRootNow` then blends the first key's offset with itself.
+`game/draw.cpp:2611` (`GetFramesAt`): at rates above 1 the tween across a far pair of
+Lara's is refused, so `GetFramesNow` falls back to `GetFrames` of the current tick, the
+first key inside the pair or the second key on the tick that reaches it; the refusal
+counts in `pose_skips`, and `pose_far` stays the rate 1 count. `game/draw.cpp:2674`
+(`GetRootAt`, called at :2734 with `keyHold` set for Lara): the previous tick's root
+offset on a far pair is the first key's, the offset that tick drew.
+`game/interpolate.cpp:1833` (`InterpNoteKeyFar`, declared in `game/interpolate.h`,
+called from `game/delstuff.cpp:206` for the view set): `KEYFARLOG f= anim= frame= keys=
+rate= hips= drawn=`, once per tick. Deliberately left alone: `HairControl`
+(`game/hair.cpp:301`), which is logic and whose braid anchor is 21 units off at most on
+the far frame; the collision spheres (`game/sphere.cpp`); the bounds of
+`GetBoundsAccurate` and `GetBestFrame`; and `DrawAnimatingItem`. The HD body reads
+`lara_matrices` and follows without a change. The test costs 155 to 168 ns per call and
+runs on Lara's key-blended frames and on each of her tween frames at rate above 1, a few
+calls per drawn frame, under 0.1 ms per second at 165 Hz, so no cache is kept. Checked
+by `Preparation/Tools/Diagnose/InterpTest.cpp` (`pose_wrap`, block 5: half a turn and 91
+degrees at the hips are far, 89 degrees, a key frame against itself and a half turn
+below the hips are not; 526 checks). Measured with an offline probe that reads the
+thirteen levels and includes `game/interpolate_math.h`: `InterpKeyFar` fires on the 31
+pairs above and on no other blended pair.
 
 **Commits.** `b643607`
 
@@ -4242,7 +4246,7 @@ rate)` the retail levels can produce) and measured with
 is reached only through `GetFramesNow` inside `if (t > 0)`, so `fps_mode 0` reaches none
 of it.
 
-**Commits.** `2628a7e`, `a1dbf32`, `db696bf`
+**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`
 
 ### The arms between two ticks
 2026-09-08 - 2026-09-09

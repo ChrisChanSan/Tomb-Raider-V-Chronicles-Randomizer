@@ -2597,8 +2597,10 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	 * neighbours - except on a pair of Lara's whose hips turn more than 90
 	 * degrees (InterpKeyFar). CalcLaraMatrices (delstuff.cpp) draws the first
 	 * key of such a pair instead of vanilla's blend, and the tween is refused
-	 * so that it falls back to that same frame rather than blending across
-	 * the collapse. It is not counted as pose_far, which stays the rate 1
+	 * so that it falls back to the pose of the current tick - the first key
+	 * inside the pair, the second key on the tick that reaches it - rather
+	 * than blending across the collapse. It is not counted as pose_far,
+	 * which stays the rate 1
 	 * count. interpolate_math.h carries the arithmetic. */
 	if (rate == 1 && InterpPoseFar(frm[0], frm[1],
 		objects[item->object_number].nmeshes, INTERP_POSE_TURN_COS))

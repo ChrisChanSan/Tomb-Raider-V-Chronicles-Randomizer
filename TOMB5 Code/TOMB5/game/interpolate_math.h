@@ -1154,7 +1154,8 @@ inline int InterpKeyFrameTurn(const short* f, int nodes, short* out)
  *                       Measured in ANDREA1, the hips' turn from the frame
  *                       before when the frame is drawn under the old yaw and
  *                       as drawn under the new one: 48, the end of the roll
- *                       from standing (0.9 / 179.3); 207, the twist out of a
+ *                       47 (state AS_ROLL, into the stand 11; 0.9 / 179.3);
+ *                       207, the twist out of a
  *                       running jump's start (5.3 / 176.8); 210, the twist
  *                       out of the forward jump (11.0 / 177.0); 212, the
  *                       twist out of the back jump (9.7 / 171.9). All four

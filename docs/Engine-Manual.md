@@ -432,7 +432,9 @@ trigger — a door shown opening, a lever's payoff somewhere else — does not t
 the view, the real sniper camera in the 13th Floor excepted, the same as in
 first person. Crossing such a trigger's tile leaves no trace either: the camera
 keeps following as smoothly as anywhere else, with no jump of the view and no
-camera cut counted in `INTERPLOG`.
+camera cut counted in `INTERPLOG`. The same goes for the outside view the game
+cuts to while she lifts a trapdoor or turns a wheel switch: the camera stays
+yours and eases through the animation instead of snapping.
 
 ### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 
@@ -473,23 +475,23 @@ finger:
   drops it), and a crawl space still never traps you: the ceiling test
   decides when you may stand back up, exactly as it does for a *Hold* key,
   and the next duck after that is a fresh press.
-- **Grab** governs letting go rather than holding a direction: while
-  hanging, shimmying, on a ladder, a pole, a rope, the zip line, the parallel
-  bars, the monkey swing or in the *Ledge hang* move (below), *Hold* is the
-  original behaviour — let the key go
-  and she drops. *Toggle* lets you release the key and stay
-  put: a fresh press while holding on lets go instead, and — so a fall past a
-  lower ledge can never snap back onto it — that same press keeps letting go
-  for as long as you keep it held, so release it and press again to catch
-  something new. That last part has one price worth knowing: from the press
-  that let go until you release the button, the action bit stays clear
-  wherever she is, so the *same* continuous hold will not fire a weapon or
-  catch anything either — and under *One key*, where one button carries the
-  whole action, that held press also picks nothing up and operates nothing.
-  Let the button go once and it is an ordinary key again. Everywhere else
-  *Toggle* changes nothing at all: pushing a block uses the interact key
-  under *Separate* and its own bit under *One key*, and menus read the pad
-  and the keyboard directly, so neither ever sees the latch.
+- **Grab** governs letting go rather than holding a direction: while hanging,
+  shimmying, on a ladder, a pole, a rope, the zip line, the parallel bars or
+  the monkey swing, *Hold* is the original behaviour — let the key go and she
+  drops (the *Ledge hang* move below has its own rule). *Toggle* lets you
+  release the key and stay put: a fresh press while holding on lets go
+  instead, and — so a fall past a lower ledge can never snap back onto it —
+  that same press keeps letting go for as long as you keep it held, so
+  release it and press again to catch something new. That last part has one
+  price worth knowing: from the press that let go until you release the
+  button, the action bit stays clear wherever she is, so the *same*
+  continuous hold will not fire a weapon or catch anything either — and under
+  *One key*, where one button carries the whole action, that held press also
+  picks nothing up and operates nothing. Let the button go once and it is an
+  ordinary key again. Everywhere else *Toggle* changes nothing at all:
+  pushing a block uses the interact key under *Separate* and its own bit
+  under *One key*, and menus read the pad and the keyboard directly, so
+  neither ever sees the latch.
 - Every one of the four lets go on its own at a level change, a savegame
   load, a cutscene, death, and while a menu owns the input, so a key still
   held across one of those never latches by surprise. Water ends the sprint

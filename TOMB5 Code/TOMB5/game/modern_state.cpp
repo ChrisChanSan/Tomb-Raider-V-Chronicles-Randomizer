@@ -591,8 +591,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * previous tick's CalculateCamera left them. old_type is the type that
 	 * view was built as (0 CHASE, 1 FIXED, 2 LOOK, 3 COMBAT): 0 on a Camera
 	 * tile whose level camera the orbit discards, 1 where a level camera takes
-	 * the view. cam_speed is 10 after the reset at the end of CalculateCamera
-	 * and shows anything else only while a heavy camera holds.
+	 * the view. cam_speed is 10 after every CalculateCamera pass, a heavy
+	 * camera the orbit discards included; a heavy camera the orbit does not
+	 * discard (the rich2 sniper camera, and any heavy camera in first person)
+	 * keeps the trigger's speed while its timer runs, and a flyby writes its
+	 * own 1 (game\spotcam.cpp).
 	 *
 	 * New fields are appended at the end, so the older ones keep their
 	 * places. */

@@ -1120,9 +1120,13 @@ void CalculateCamera()
 	// MoveCamera: a trailing eye would land on its ideal place in one tick.
 	// Discarded, the pass runs at the chase speed the reset at the end of this
 	// function hands every pass. A lever whose trigger carries a Camera
-	// command runs at 10 here instead of lara_as_switchon's 6. On a look or
-	// combat pass (wouldFix holds there too) the branch further down writes
-	// its own speed over this one.
+	// command runs at 10 here instead of lara_as_switchon's 6. The forced
+	// fixed camera above (a floor trapdoor lift, the ceiling trapdoor, the
+	// turn switch) is discarded under the orbit as well, so its speed of 1
+	// gives way to 10 here too: the eye stays damped through the animation,
+	// and with the type swap below its start and end count no camera cut.
+	// On a look or combat pass (wouldFix holds there too) the branch further
+	// down writes its own speed over this one.
 	if (modernDiscard)
 		camera.speed = 10;
 

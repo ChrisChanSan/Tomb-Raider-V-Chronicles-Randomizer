@@ -156,6 +156,13 @@ enum lara_anim
 	ANIM_WALK_STOP_RIGHT = 3,
 	ANIM_STARTRUN = 6,
 	ANIM_STOP = 11,
+
+	// The turn on the spot, AS_TURN_R and AS_TURN_L: 31 frames each, no
+	// travel, each looping into itself; the ledge hang turns in them. Their
+	// frames are read from anims[], never written as numbers.
+	ANIM_TURN_RIGHT = 12,
+	ANIM_TURN_LEFT = 13,
+
 	ANIM_FASTFALL = 23,
 	ANIM_LANDFAR = 24,
 	ANIM_STOPHANG = 28,

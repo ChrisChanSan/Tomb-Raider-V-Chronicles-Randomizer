@@ -411,12 +411,21 @@ enum modern_constants
 	 * The move turns her half round on the standing line and then plays
 	 * TR5's own pull-up (animation 97, 74 frames at rate 4, the same in all
 	 * thirteen campaign levels) backwards into the settled hang. The turn is
-	 * 8 ticks (22.5 degrees a tick, 0.27 s); the lowering steps 3 frames a
+	 * her own turn on the spot (animation 12 or 13) while y_rot steps half
+	 * round in 6 ticks: 32768 / 6 is 5461 or 5462 a tick, the direct turn's
+	 * MODERN_TURN_RATE to within a unit, so the half turn takes 0.2 s, as
+	 * quickly as the stick's own about-turn. The lowering steps 3 frames a
 	 * tick, so the 73 frames from the last to the first take 25 ticks (0.83 s)
 	 * with the last step cut short to land on the first frame exactly. */
-	MODERN_LEDGE_TURN_TICKS = 8,		// the half turn, in ticks
+	MODERN_LEDGE_TURN_TICKS = 6,		// the half turn, in ticks: six are the direct turn's rate
 	MODERN_LEDGE_HALF_TURN = 0x8000,	// what the turn covers: she ends facing the wall
 	MODERN_LEDGE_FRAME_STEP = 3,		// frames down per tick in the lowering
+
+	/* The way she turns, chosen here and nowhere else: LaraLedgeTrigger
+	 * (game\lara.cpp) starts the turn in the turn-on-the-spot animation of
+	 * this side, and the state reads the side back off that animation each
+	 * tick, so a restored savegame goes on turning the way it started. */
+	MODERN_LEDGE_TURN_SIDE = 1,		// 1 right (y_rot grows, animation 12), -1 left (animation 13)
 
 	/* The angle window of the engine's own catch (lara_col_reach and
 	 * lara_col_crawl2hang snap y_rot to a cardinal inside +-0x18E2, 34.6
@@ -587,6 +596,7 @@ struct MODERN_LEDGE_SITUATION
 	long step;			// frames down per tick: MODERN_LEDGE_FRAME_STEP (a field, so a test can try others)
 	short y_rot;		// her heading now
 	short target;		// the heading she hangs with, stored at entry (a cardinal)
+	long side;			// the turn's way: -1 left (y_rot falls), anything else right
 	short cardinal_off;	// y_rot minus the cardinal nearest to it, signed
 	long refusals;		// the refusal bits the caller measured this tick, 0 = none
 	long key;			// the grab key is held

@@ -6328,6 +6328,13 @@ long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir)
  * because the frame base differs from level to level. */
 #define LEDGE_PULLUP_ANIM	97
 
+/* True while she is in either turn on the spot, the animations the turn
+ * runs in; the side she turns to is the animation's (ANIM_TURN_LEFT left). */
+static long LaraLedgeTurnAnim(ITEM_INFO* item)
+{
+	return item->anim_number == ANIM_TURN_RIGHT || item->anim_number == ANIM_TURN_LEFT;
+}
+
 /* hit_points on the first tick of the turn: the turn ends in a stand when
  * she has lost any since. A savegame restored in the turn starts it anew. */
 static long ledge_entry_hp;
@@ -6506,16 +6513,20 @@ static long LaraLedgeToHang(ITEM_INFO* item, short heading)
  * of the sector she stands in; y_rot on the cardinal she approached on (the
  * catch's window at most, the first step takes the rest out); LedgeHeading the
  * cardinal opposite, facing away from the drop; LedgePhase MODERN_LEDGE_TURN;
- * ANIM_BREATH at its frame_base, whose frame counts the turn's ticks (44
- * frames, never wrapping in the 8); goal_anim_state AS_LEDGEHANG; speed,
+ * the turn on the spot of MODERN_LEDGE_TURN_SIDE (ANIM_TURN_RIGHT or
+ * ANIM_TURN_LEFT) at its frame_base, whose frame counts the turn's ticks (31
+ * frames, never wrapping in the 6); goal_anim_state AS_LEDGEHANG; speed,
  * fallspeed and gravity 0.
  *
- * The turn: she stands on the line in the idle - authored round the item
- * position, root x and z within 8 units of it, where the pull-up's poses are
- * authored round the hang position and would swing her out over the drop -
- * and y_rot steps half round; the refusals are asked again each tick. On its
- * first tick the Modern camera is asked for its half-turn swing, which the
- * ramp's small steps would never set off. The lowering: on its first tick
+ * The turn: she turns on the line in her own turn on the spot - authored
+ * round the item position, root x and z within 48 units of it, where the
+ * pull-up's poses are authored round the hang position and would swing her
+ * out over the drop - while y_rot steps half round at the direct turn's rate,
+ * the way of the animation she is in; the refusals are asked again each tick.
+ * AnimateLara plays the animation forward as any other, footstep included;
+ * none of its state changes leads out of AS_LEDGEHANG. On its first tick the
+ * Modern camera is asked for its half-turn swing, which steps far under its
+ * 150 degrees in one tick would never set off. The lowering: on its first tick
  * she moves to the hang position (200 units across and 726 down, over the
  * interpolation's 512 and so drawn as a snap) and takes the pull-up's last
  * frame; then
@@ -6569,7 +6580,7 @@ void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll)
 	sit.tick = 0;
 
 	if (from == MODERN_LEDGE_TURN)
-		sit.tick = (item->anim_number == ANIM_BREATH) ? item->frame_number - anims[ANIM_BREATH].frame_base :
+		sit.tick = LaraLedgeTurnAnim(item) ? item->frame_number - anims[item->anim_number].frame_base :
 			MODERN_LEDGE_TURN_TICKS;
 	else if (from == MODERN_LEDGE_LOWER && !entered)
 		sit.tick = 1 + (anims[LEDGE_PULLUP_ANIM].frame_end - item->frame_number) / MODERN_LEDGE_FRAME_STEP;
@@ -6580,6 +6591,7 @@ void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll)
 	sit.step = MODERN_LEDGE_FRAME_STEP;
 	sit.y_rot = item->pos.y_rot;
 	sit.target = LedgeHeading;
+	sit.side = (item->anim_number == ANIM_TURN_LEFT) ? -1 : 1;
 	sit.cardinal_off = ModernWrap((long)item->pos.y_rot - cardinal);
 	sit.refusals = (sit.option && from == MODERN_LEDGE_TURN) ? LaraLedgeRefusals(item, coll, LedgeHeading) : 0;
 	sit.key = (input & IN_ACTION) ? 1 : 0;
@@ -6656,8 +6668,9 @@ void lara_as_ledgehang(ITEM_INFO* item, COLL_INFO* coll)
  * the start of a run carries her 23 units in a position never drawn.
  * On a start she is put on the line, never behind where the last tick left
  * her (past it she stays where she is), faces the cardinal and
- * enters AS_LEDGEHANG; the caller returns at once. Otherwise item, coll and
- * the probe globals are left as they were. */
+ * enters AS_LEDGEHANG in the turn on the spot of MODERN_LEDGE_TURN_SIDE; the
+ * caller returns at once. Otherwise item, coll and the probe globals are left
+ * as they were. */
 long LaraLedgeTrigger(ITEM_INFO* item, COLL_INFO* coll, long from)
 {
 	static long near_logged = -1;
@@ -6728,8 +6741,8 @@ long LaraLedgeTrigger(ITEM_INFO* item, COLL_INFO* coll, long from)
 	item->pos.y_rot = approach;
 	LedgeHeading = (short)(approach + 0x8000);
 	LedgePhase = MODERN_LEDGE_TURN;
-	item->anim_number = ANIM_BREATH;
-	item->frame_number = anims[ANIM_BREATH].frame_base;
+	item->anim_number = (MODERN_LEDGE_TURN_SIDE < 0) ? ANIM_TURN_LEFT : ANIM_TURN_RIGHT;
+	item->frame_number = anims[item->anim_number].frame_base;
 	item->current_anim_state = AS_LEDGEHANG;
 	item->goal_anim_state = AS_LEDGEHANG;
 	item->speed = 0;
@@ -6770,15 +6783,16 @@ void LaraLedgeSave(uchar* phase, short* heading)
 
 /* A savegame restored in AS_LEDGEHANG. It goes on where it stood when the
  * gate is open, both fields were in the file, the heading is a cardinal and
- * the animation fits the phase: the turn in ANIM_BREATH within its ticks, the
- * lowering in the pull-up or, on the tick between the two, still in
- * ANIM_BREATH. Anything else - a save from a build without the fields, a
- * phase byte it does not know, a frame outside both animations, the option
- * or Modern controls off - is settled at once: the edge is asked once for the
- * stored heading, or for her own if that is none, and she is put in the
- * engine's settled hang when nothing refuses it, or falls when something
- * does. Placed in the pull-up she is at the hang position, 200 units off the
- * ledge and 726 below its top, so the edge is asked from the standing line. */
+ * the animation fits the phase: the turn in either turn on the spot within its
+ * ticks, the lowering in the pull-up or, on the tick between the two, still in
+ * the turn on the spot. Anything else - a save from a build without the
+ * fields, a phase byte it does not know, a phase in an animation it does not
+ * run in, a frame outside the animation, the option or Modern controls off -
+ * is settled at once: the edge is asked once for the stored heading, or for
+ * her own if that is none, and she is put in the engine's settled hang when
+ * nothing refuses it, or falls when something does. Placed in the pull-up she
+ * is at the hang position, 200 units off the ledge and 726 below its top, so
+ * the edge is asked from the standing line. */
 void LaraLedgeLoad(long phase, long have_phase, short heading, long have_heading)
 {
 	ITEM_INFO* item;
@@ -6802,13 +6816,13 @@ void LaraLedgeLoad(long phase, long have_phase, short heading, long have_heading
 	if (valid)
 	{
 		if (LedgePhase == MODERN_LEDGE_TURN)
-			valid = item->anim_number == ANIM_BREATH && item->frame_number >= anims[ANIM_BREATH].frame_base &&
-				item->frame_number < anims[ANIM_BREATH].frame_base + MODERN_LEDGE_TURN_TICKS;
+			valid = LaraLedgeTurnAnim(item) && item->frame_number >= anims[item->anim_number].frame_base &&
+				item->frame_number < anims[item->anim_number].frame_base + MODERN_LEDGE_TURN_TICKS;
 		else if (LedgePhase == MODERN_LEDGE_LOWER)
 			valid = (at_hang && item->frame_number >= anims[LEDGE_PULLUP_ANIM].frame_base &&
 				item->frame_number <= anims[LEDGE_PULLUP_ANIM].frame_end) ||
-				(item->anim_number == ANIM_BREATH && item->frame_number >= anims[ANIM_BREATH].frame_base &&
-				item->frame_number <= anims[ANIM_BREATH].frame_end);
+				(LaraLedgeTurnAnim(item) && item->frame_number >= anims[item->anim_number].frame_base &&
+				item->frame_number <= anims[item->anim_number].frame_end);
 		else
 			valid = 0;
 	}

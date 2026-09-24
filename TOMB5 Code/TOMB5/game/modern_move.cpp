@@ -1673,10 +1673,10 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	ModernFinish(state, out);
 }
 
-/* One tick of the ledge hang's half turn: the ramp HALF_TURN * t / TICKS in
- * whole units, differenced, so the steps add up to the half turn exactly for
- * any tick count (8 ticks give 4096 each). The turn goes the positive way,
- * which is the way IN_RIGHT turns her. 0 outside the turn. */
+/* One tick of the ledge hang's half turn, its size: the ramp HALF_TURN * t /
+ * TICKS in whole units, differenced, so the steps add up to the half turn
+ * exactly for any tick count (6 ticks give 5461, 5461, 5462, 5461, 5461,
+ * 5462). ModernLedgeDecide gives it the side's sign. 0 outside the turn. */
 long ModernLedgeTurnStep(long tick)
 {
 	if (tick < 0 || tick >= MODERN_LEDGE_TURN_TICKS)
@@ -1736,7 +1736,8 @@ long ModernLedgeDecide(const MODERN_LEDGE_SITUATION* sit, MODERN_LEDGE_RESULT* o
 			sit->hit_points < sit->entry_hit_points || sit->control_taken || sit->refusals)
 			return out->verdict;
 
-		out->yaw_step = ModernLedgeTurnStep(sit->tick);
+		/* Right is the positive way, the way IN_RIGHT turns her. */
+		out->yaw_step = (sit->side < 0) ? -ModernLedgeTurnStep(sit->tick) : ModernLedgeTurnStep(sit->tick);
 
 		if (sit->tick == 0)
 			out->yaw_step -= sit->cardinal_off;

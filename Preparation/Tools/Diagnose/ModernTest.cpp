@@ -7793,6 +7793,7 @@ static void ledge_turn_sit(MODERN_LEDGE_SITUATION* s, short start, long tick)
 	s->step = MODERN_LEDGE_FRAME_STEP;
 	s->y_rot = start;
 	s->target = ModernWrap((long)start + MODERN_LEDGE_HALF_TURN);
+	s->side = MODERN_LEDGE_TURN_SIDE;
 	s->cardinal_off = 0;
 	s->refusals = 0;
 	s->key = 1;
@@ -7832,14 +7833,24 @@ static void ledge_hang()
 	ok(MODERN_LEDGE_SNAP == 0x18E2, "ledge: the catch's own angle window", MODERN_LEDGE_SNAP, 0x18E2);
 	ok(MODERN_LEDGE_HALF_TURN == 0x8000, "ledge: the turn is half a turn", MODERN_LEDGE_HALF_TURN, 0x8000);
 
+	/* The turn is six ticks, and six are the direct turn's own rate: every
+	 * step is the half turn's sixth in whole units, 5461 or 5462, within a
+	 * unit of MODERN_TURN_RATE - the two cannot drift apart unnoticed. */
+	ok(MODERN_LEDGE_TURN_TICKS == 6, "ledge: the half turn takes six ticks", MODERN_LEDGE_TURN_TICKS, 6);
+	ok(MODERN_LEDGE_TURN_SIDE == 1, "ledge: she turns to the right", MODERN_LEDGE_TURN_SIDE, 1);
 	sum = 0;
 
 	for (t = 0; t < MODERN_LEDGE_TURN_TICKS; t++)
 	{
-		sum += ModernLedgeTurnStep(t);
-		ok(ModernLedgeTurnStep(t) == MODERN_LEDGE_HALF_TURN / MODERN_LEDGE_TURN_TICKS,
-			"ledge: every tick of the turn is the same step", ModernLedgeTurnStep(t),
+		const long step = ModernLedgeTurnStep(t);
+
+		sum += step;
+		ok(step == MODERN_LEDGE_HALF_TURN / MODERN_LEDGE_TURN_TICKS ||
+			step == MODERN_LEDGE_HALF_TURN / MODERN_LEDGE_TURN_TICKS + 1,
+			"ledge: every tick of the turn is the half turn's share in whole units", step,
 			MODERN_LEDGE_HALF_TURN / MODERN_LEDGE_TURN_TICKS);
+		ok(absl(step - MODERN_TURN_RATE) <= 1, "ledge: ...within a unit of the direct turn's rate",
+			step, MODERN_TURN_RATE);
 	}
 
 	ok(sum == MODERN_LEDGE_HALF_TURN, "ledge: the steps add up to the half turn", sum, MODERN_LEDGE_HALF_TURN);
@@ -7847,27 +7858,33 @@ static void ledge_hang()
 		"ledge: no step outside the turn", ModernLedgeTurnStep(MODERN_LEDGE_TURN_TICKS), 0);
 
 	/* The turn ends on the opposite cardinal, to the unit, from all four
-	 * cardinals and from every entry offset inside the window: the first
-	 * step takes the offset out. */
-	for (i = 0; i < 4; i++)
+	 * cardinals and from every entry offset inside the window, turning either
+	 * way: the first step takes the offset out, and every step has the
+	 * side's sign. */
+	for (i = 0; i < 8; i++)
 	{
+		const long side = (i < 4) ? 1 : -1;
 		long off;
 
 		for (off = -MODERN_LEDGE_SNAP; off <= MODERN_LEDGE_SNAP; off += 97)
 		{
 			const long o = (off > MODERN_LEDGE_SNAP - 97) ? MODERN_LEDGE_SNAP : off;
-			short y = ModernWrap((long)cardinals[i] + o);
-			long ended = 0, ticks = 0;
+			short y = ModernWrap((long)cardinals[i & 3] + o);
+			long ended = 0, ticks = 0, against = 0;
 
 			for (t = 0; t < MODERN_LEDGE_TURN_TICKS + 2 && !ended; t++)
 			{
-				ledge_turn_sit(&s, cardinals[i], t);
+				ledge_turn_sit(&s, cardinals[i & 3], t);
 				s.y_rot = y;
+				s.side = side;
 				s.cardinal_off = (t == 0) ? (short)o : 0;
 				ModernLedgeDecide(&s, &r);
 
 				if (r.verdict != MODERN_LEDGE_CONTINUE)
 					break;
+
+				if (t > 0 && r.yaw_step * side <= 0)
+					against++;
 
 				y = ModernWrap((long)y + r.yaw_step);
 				ticks++;
@@ -7879,9 +7896,10 @@ static void ledge_hang()
 			ok(ended == 1, "ledge: the turn hands on to the lowering", ended, 1);
 			ok(ticks == MODERN_LEDGE_TURN_TICKS, "ledge: after exactly TURN_TICKS ticks",
 				ticks, MODERN_LEDGE_TURN_TICKS);
-			ok(y == ModernWrap((long)cardinals[i] + MODERN_LEDGE_HALF_TURN),
+			ok(y == ModernWrap((long)cardinals[i & 3] + MODERN_LEDGE_HALF_TURN),
 				"ledge: and she faces the opposite cardinal to the unit",
-				y, ModernWrap((long)cardinals[i] + MODERN_LEDGE_HALF_TURN));
+				y, ModernWrap((long)cardinals[i & 3] + MODERN_LEDGE_HALF_TURN));
+			ok(against == 0, "ledge: ...every step after the first the side's way", against, 0);
 		}
 	}
 

@@ -6136,8 +6136,6 @@ static long LaraLedgeHangBound(ITEM_INFO* item)
  *            mid_floor and CT_FRONT conditions and LaraTestEdgeCatch
  *   WATER    water below the hang (GetWaterHeight, as LaraControl asks it),
  *            or a lava or death floor behind the edge (the lava_is_pit test)
- *   TRIGGER  a trigger in the floor data under the hang (coll->trigger, which
- *            LaraAboveWater hands TestTriggers every tick of a hang)
  *   LARA     weapons not away, dead, pushed by a creature this tick
  *            (LaraBaddieCollision's hit_direction), or not the player's to
  *            steer (a cutscene, bDisableLaraControl)
@@ -6297,9 +6295,6 @@ long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir)
 
 		if (coll->hit_static)
 			bits |= LEDGE_REFUSE_OBJECT;
-
-		if (coll->trigger)
-			bits |= LEDGE_REFUSE_TRIGGER;
 
 		if (coll->mid_ceiling > -384 || coll->mid_floor < 200 || coll->coll_type != CT_FRONT ||
 			LaraTestEdgeCatch(item, coll, &edge) <= 0)

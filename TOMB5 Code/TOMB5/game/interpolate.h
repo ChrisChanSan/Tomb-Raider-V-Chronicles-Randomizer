@@ -195,7 +195,11 @@ void InterpRootRefused(const ITEM_INFO* item, const long prev[3], bool turned = 
  * (frm[1] may then point past the level's last frame and is not read), the
  * key pair at `blend` otherwise. On true the caller translates by `out` on
  * both matrix stacks; InterpolateMatrix then gives back exactly `out` and the
- * pose stays this tick's. */
+ * pose stays this tick's. A frame of Lara's bridged across the animation
+ * change after an early half turn (draw.cpp LaraBridgeFrames) is a refused
+ * frame whose pair is the bridge in both slots; the bridge carries the
+ * current tick's own offset, so the offset comes out as it does where the
+ * refused frame draws that tick's frame. */
 bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float blend,
 	long out[3]);
 
@@ -292,6 +296,15 @@ void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* f
  * once per tick. `pair` is the first key of the pair the frame lies on.
  * -log only. */
 void InterpNoteTurn(const ITEM_INFO* item, long flip, long pair);
+
+/* A tween frame on which Lara's pose is bridged across the animation change
+ * after an early half turn (draw.cpp LaraBridgeFrames), from `from`, the pose
+ * the flip tick drew, to `to`, the current tick's; `longHips` says the hips
+ * take the longer way round (InterpBridgeLong). Counted once per drawn frame
+ * for INTERPLOG's `bridge=`, and BRIDGELOG writes one line per bridged tick,
+ * on its first bridge frame. -log only. */
+void InterpNoteBridge(const ITEM_INFO* item, short prevAnim, short prevFrame, const short* from,
+	const short* to, bool longHips);
 
 /* Where turn180_effect fires in animation `animNumber` and what kind of
  * frame it fires on (InterpTurnKind, interpolate_math.h): returns the kind,

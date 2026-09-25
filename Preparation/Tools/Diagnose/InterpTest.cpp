@@ -4405,6 +4405,272 @@ static void key_build()
 	}
 }
 
+/* ------------------------------------ the bridge after an early half turn -- */
+
+/* The worst angle, in degrees, between the nodes of two frames in the level's
+ * own format, node by node (InterpUnpackRot reads either packed form). */
+static double frame_worst_angle(const short* f, const short* g, int nodes)
+{
+	const short* a = f + 9;
+	const short* b = g + 9;
+	double worst = 0.0;
+
+	for (int node = 0; node < nodes; node++)
+	{
+		short ra[3], rb[3];
+
+		InterpUnpackRot(a, ra);
+		InterpUnpackRot(b, rb);
+		worst = fmax(worst, rot_angle(ra, rb));
+	}
+
+	return worst;
+}
+
+/* A frame holding nothing but a three-axis hips rotation, which is all
+ * InterpHipsTurn, InterpBridgeLong and InterpKeyFar read. */
+static void hips_frame(short* f, unsigned short w0, unsigned short w1)
+{
+	for (int i = 0; i < 9; i++)
+		f[i] = 0;
+
+	f[9] = (short)w0;
+	f[10] = (short)w1;
+}
+
+/* The dot product of the two turns InterpHipsTurn finds: positive where they
+ * turn the same way round, negative where they turn against each other. */
+static double hips_turn_dot(const short* a0, const short* a1, const short* b0, const short* b1)
+{
+	float u[3], v[3];
+
+	InterpHipsTurn(a0, a1, u);
+	InterpHipsTurn(b0, b1, v);
+
+	return (double)u[0] * v[0] + (double)u[1] * v[1] + (double)u[2] * v[2];
+}
+
+/* The frames between two ticks across the animation change after an early
+ * half turn (interpolate_math.h, InterpBridgeFires, InterpBridgeLong and
+ * InterpKeyFrameBridge): bridged from the pose the flip tick drew to the
+ * pose of the current tick. The frames are ANDREA1's, copied from the level
+ * file: the standing-jump twist's 210 key 8 (frame 5544, the flip frame) and
+ * 211 key 0 (frame 5545) whole, fifteen nodes; the hips of 210 key 7, 211
+ * key 1, the back twist's 212 keys 2 and 3 and 213 keys 0 and 1, and the
+ * running-jump twist's 207 keys 3 and 4 and 209 keys 0 and 1. */
+static void key_bridge()
+{
+	printf("the bridge across an early half turn's animation change\n");
+
+	static const short k210_8[36] =
+	{
+		-164, 137, -712, -460, -194, 197, 69, -626, -7, 14940, -11049, 3949, -3203,
+		15287, -513, 14704, 3078, 4093, -14473, 15208, 511, 14832, 1021, 12512,
+		-18479, 3276, -10441, 319, -853, -12403, 3235, -14105, 528, 1902, -16199, 20181
+	};
+	static const short k211_0[36] =
+	{
+		-153, 148, -793, -541, -194, 195, -84, -626, -7, 1459, 13018, 3949, -3203,
+		15287, -513, 14640, 3078, 4093, -14473, 15208, 511, 14784, 1021, 12512,
+		-18479, 3276, -10441, 319, -853, -12395, 3235, -14105, 528, 1902, -16207, 20181
+	};
+	const int nodes = 15;
+	short from[INTERP_KEYFRAME_MAX], out[INTERP_KEYFRAME_MAX];
+
+	/* The flip tick drew 210's last frame turned by half a turn; with a
+	 * remainder of zero that is the turned key frame itself. */
+	InterpKeyFrameTurn(k210_8, nodes, from);
+
+	/* 1. The ends: at t 0 the bridge is the first pose and at t 1 the
+	 * second, node by node to the step of the packed form, either way round
+	 * at the hips. */
+	for (int way = 0; way < 2; way++)
+	{
+		InterpKeyFrameBridge(from, k211_0, nodes, 0.0F, way == 1, out);
+
+		const double at0 = frame_worst_angle(out, from, nodes);
+
+		InterpKeyFrameBridge(from, k211_0, nodes, 1.0F, way == 1, out);
+
+		const double at1 = frame_worst_angle(out, k211_0, nodes);
+
+		okf(at0 < 0.5, way ? "the long way: at t 0 every node is the flip tick's pose"
+			: "the short way: at t 0 every node is the flip tick's pose", at0, 0.0);
+		okf(at1 < 0.5, way ? "and at t 1 every node the current tick's"
+			: "and at t 1 every node the current tick's", at1, 0.0);
+	}
+
+	/* 2. The arc. The hips turn 179.2 degrees from 210's turned last frame to
+	 * 211's first, and the shorter way round turns against her own turn over
+	 * 210's last pair (keys 7 to 8, turned) and over 211's first (keys 0 to
+	 * 1), so the longer way is taken, 180.8 degrees: at t 0.5 the hips are a
+	 * rotation 90.4 degrees from each end, on the far side of the shorter
+	 * way. */
+	{
+		short k7[11], k8[11], before0[INTERP_KEYFRAME_MAX], before1[INTERP_KEYFRAME_MAX];
+		short k211_1[11];
+
+		hips_frame(k7, 0x3c3c, 0xfcd4);
+		hips_frame(k8, 0x3a5c, 0xd4d7);
+		hips_frame(k211_1, 0x06d2, 0x9efa);
+		InterpKeyFrameTurn(k7, 1, before0);
+		InterpKeyFrameTurn(k8, 1, before1);
+
+		const short* pf = from + 9;
+		const short* pt = k211_0 + 9;
+		short hf[3], ht[3], hm[3];
+
+		InterpUnpackRot(pf, hf);
+		InterpUnpackRot(pt, ht);
+
+		okf(fabs(rot_angle(hf, ht) - 179.2) < 0.1, "210 to 211: the hips 179.2 degrees apart",
+			rot_angle(hf, ht), 179.2);
+
+		const bool longHips = InterpBridgeLong(from, k211_0, before0, before1, k211_0, k211_1);
+
+		ok(hips_turn_dot(from, k211_0, before0, before1) < 0.0 &&
+			hips_turn_dot(from, k211_0, k211_0, k211_1) < 0.0,
+			"the shorter way turns against 210's last pair and 211's first", 0, 0);
+		ok(longHips, "so the longer way is taken", longHips ? 1 : 0, 1);
+
+		InterpKeyFrameBridge(from, k211_0, nodes, 0.5F, longHips, out);
+
+		const short* pm = out + 9;
+
+		InterpUnpackRot(pm, hm);
+
+		okf(fabs(rot_angle(hf, hm) - 90.4) < 0.5, "at t 0.5 the hips are 90.4 degrees from the first",
+			rot_angle(hf, hm), 90.4);
+		okf(fabs(rot_angle(hm, ht) - 90.4) < 0.5 && rot_column_error(hm) < 1e-5,
+			"and 90.4 from the second, a rotation", rot_angle(hm, ht), 90.4);
+		ok(hips_turn_dot(from, out, from, k211_0) < 0.0,
+			"on the far side of the shorter way", 0, 0);
+
+		/* every node of the middle frame a rotation */
+		const short* p = out + 9;
+		double worst = 0.0;
+
+		for (int node = 0; node < nodes; node++)
+		{
+			short r[3];
+
+			InterpUnpackRot(p, r);
+			worst = fmax(worst, rot_column_error(r));
+		}
+
+		okf(worst < 1e-5, "and every node of it a rotation", worst, 0.0);
+
+		/* the shorter way, asked for, lies on the near side */
+		InterpKeyFrameBridge(from, k211_0, nodes, 0.5F, false, out);
+		ok(hips_turn_dot(from, out, from, k211_0) > 0.0,
+			"the shorter way's middle lies on its own side", 0, 0);
+
+		/* against on one side only, or with no pair after: the shorter way */
+		ok(!InterpBridgeLong(from, k211_0, before1, before0, k211_0, k211_1),
+			"a turn against one side only keeps the shorter way", 1, 0);
+		ok(!InterpBridgeLong(from, k211_0, before0, before1, 0, 0),
+			"and so does a turn with no pair after it", 1, 0);
+	}
+
+	/* The back twist 212 to 213 (its flip frame between keys 2 and 3 at a
+	 * half) turns 19.5 degrees and the running-jump twist 207 to 209 (keys 3
+	 * and 4 at a quarter) 13.5: near pairs, the shorter way. */
+	{
+		short a[11], b[11], ta[INTERP_KEYFRAME_MAX], tb[INTERP_KEYFRAME_MAX];
+		short f212[INTERP_KEYFRAME_MAX], f207[INTERP_KEYFRAME_MAX];
+		short t0[11], t1[11];
+
+		hips_frame(a, 0x066c, 0x4305);
+		hips_frame(b, 0x041a, 0x72d5);
+		InterpKeyFrameTurn(a, 1, ta);
+		InterpKeyFrameTurn(b, 1, tb);
+		InterpKeyFrameLerp(ta, tb, 1, 0.5F, f212);
+		hips_frame(t0, 0x03f2, 0x6ed1);
+		hips_frame(t1, 0x3bc0, 0x3fb1);
+
+		const short* pf = f212 + 9;
+		const short* pt = t0 + 9;
+		short hf[3], ht[3];
+
+		InterpUnpackRot(pf, hf);
+		InterpUnpackRot(pt, ht);
+
+		okf(fabs(rot_angle(hf, ht) - 19.5) < 0.1 && !InterpBridgeLong(f212, t0, ta, tb, t0, t1),
+			"212 to 213: 19.5 degrees, the shorter way", rot_angle(hf, ht), 19.5);
+
+		hips_frame(a, 0x30db, 0x9058);
+		hips_frame(b, 0x32f8, 0x6947);
+		InterpKeyFrameTurn(a, 1, ta);
+		InterpKeyFrameTurn(b, 1, tb);
+		InterpKeyFrameLerp(ta, tb, 1, 0.25F, f207);
+		hips_frame(t0, 0x3280, 0x7942);
+		hips_frame(t1, 0x022f, 0x5be6);
+
+		pf = f207 + 9;
+		pt = t0 + 9;
+		InterpUnpackRot(pf, hf);
+		InterpUnpackRot(pt, ht);
+
+		okf(fabs(rot_angle(hf, ht) - 13.5) < 0.1 && !InterpBridgeLong(f207, t0, ta, tb, t0, t1),
+			"207 to 209: 13.5 degrees, the shorter way", rot_angle(hf, ht), 13.5);
+	}
+
+	/* 3. The box and the root offset are the current tick's, at every
+	 * weight: what InterpRootNow reads off the drawn pair (both slots the
+	 * bridge) is the offset it reads off that tick's own frame. */
+	{
+		const float ts[3] = { 0.25F, 0.5F, 0.75F };
+		bool box = true, offset = true;
+
+		for (int i = 0; i < 3; i++)
+		{
+			InterpKeyFrameBridge(from, k211_0, nodes, ts[i], true, out);
+
+			for (int k = 0; k < 6; k++)
+				box = box && out[k] == k211_0[k];
+
+			long drawn[3], own[3];
+
+			InterpRootKey(out, out, 1, ts[i], drawn);
+			InterpRootKey(k211_0, 0, 0, 0.0F, own);
+
+			for (int k = 0; k < 3; k++)
+				offset = offset && out[6 + k] == k211_0[6 + k] && drawn[k] == own[k];
+		}
+
+		ok(box, "the bridge's box is the current tick's", out[0], k211_0[0]);
+		ok(offset, "and its root offset, read as the root rule reads it", out[6], k211_0[6]);
+	}
+
+	/* 4. When it fires: a frame between two ticks, the tick before on the
+	 * frame an early half turn fires on, the animation changed since. Not
+	 * for a half turn inside a far pair (the underwater roll 205, flip 5423;
+	 * the tightrope turn 451, flip 8916), nor one on an animation's first
+	 * frame (the roll 147, flip 3591), nor a tick before that stood on
+	 * another frame, nor the same animation, nor a frame that carries a tick
+	 * (t 0 or 1). */
+	{
+		ok(InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5544, 211, 0.5F),
+			"fires: early, on the flip frame, 210 to 211, t 0.5", 0, 1);
+		ok(InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5544, 211, 1.0F / 5.5F) &&
+			InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5544, 211, 5.0F / 5.5F),
+			"and at the first and the last of five frames a tick", 0, 1);
+		ok(!InterpBridgeFires(INTERP_TURN_INSIDE, 5423, 205, 5423, 206, 0.5F),
+			"not for the half turn inside the underwater roll 205", 1, 0);
+		ok(!InterpBridgeFires(INTERP_TURN_INSIDE, 8916, 451, 8916, 452, 0.5F),
+			"nor inside the tightrope turn 451", 1, 0);
+		ok(!InterpBridgeFires(INTERP_TURN_NONE, 3591, 147, 3591, 146, 0.5F),
+			"nor for the roll 147, which fires on its first frame", 1, 0);
+		ok(!InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5543, 211, 0.5F),
+			"nor where the tick before stood on another frame", 1, 0);
+		ok(!InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5544, 210, 0.5F),
+			"nor where the animation did not change", 1, 0);
+		ok(!InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5544, 211, 1.0F) &&
+			!InterpBridgeFires(INTERP_TURN_EARLY, 5544, 210, 5544, 211, 0.0F),
+			"nor on a frame that carries a tick", 1, 0);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -4428,6 +4694,7 @@ int main()
 	root_flip();
 	root_narrow();
 	key_build();
+	key_bridge();
 	particles();
 	portal_walk();
 	reach_rect();

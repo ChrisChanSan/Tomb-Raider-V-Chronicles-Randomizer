@@ -958,8 +958,15 @@ inline void InterpRotToAngles(const float* m, short* xyz)
  * y + 180, z + 180), and there the angles swing up to half a turn each while
  * the node turns a few degrees (animation 209 key 0 to 1 in ANDREA1: node 9
  * turns 31.6 degrees with y and z moving 157 each, and blended angle by angle
- * node 12's frame strays 191 degrees off the way between its keys). */
-inline void InterpSlerpRot(const short* a, const short* b, float alpha, short* out)
+ * node 12's frame strays 191 degrees off the way between its keys).
+ *
+ * `longArc` takes the other way round instead, the turn's complement to a
+ * whole turn in the opposite sense: the bridge after an early half turn asks
+ * for it at the hips where the shorter way would run against her own motion
+ * (InterpBridgeLong). Two rotations that do not differ have no other way
+ * round and are blended as without it. */
+inline void InterpSlerpRot(const short* a, const short* b, float alpha, short* out,
+	bool longArc = false)
 {
 	float ma[9], mb[9], m[9], qa[4], qb[4], q[4];
 
@@ -971,6 +978,14 @@ inline void InterpSlerpRot(const short* a, const short* b, float alpha, short* o
 	float d = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3];
 
 	if (d < 0.0F)
+	{
+		d = -d;
+
+		for (int i = 0; i < 4; i++)
+			qb[i] = -qb[i];
+	}
+
+	if (longArc && d < 0.9995F)
 	{
 		d = -d;
 
@@ -1006,16 +1021,63 @@ inline void InterpSlerpRot(const short* a, const short* b, float alpha, short* o
 	InterpRotToAngles(m, out);
 }
 
+/* One node's packed rotation between `a` and `b` at `alpha`, written to
+ * `out`; returns the words written and moves `a` and `b` past the node.
+ *
+ * A node equal in both is copied word for word. A node both store in the
+ * one-axis form on the same axis blends that angle the short way round
+ * (InterpLerpAngle) and stays in that form; any other node is blended by
+ * InterpSlerpRot and packed in the three-axis form, and so is a node asked
+ * for the longer way round (`longArc`), which the one-axis blend has no form
+ * for. */
+inline int InterpKeyNodeLerp(const short*& a, const short*& b, float alpha, bool longArc,
+	short* out)
+{
+	const int axisA = InterpRotAxis(a);
+	const int axisB = InterpRotAxis(b);
+	const int wordsA = axisA < 0 ? 2 : 1;
+	const int wordsB = axisB < 0 ? 2 : 1;
+	int n = 0;
+
+	if (wordsA == wordsB && a[0] == b[0] && (wordsA == 1 || a[1] == b[1]))
+	{
+		for (int w = 0; w < wordsA; w++)
+			out[n++] = a[w];
+	}
+	else
+	{
+		const short* pa = a;
+		const short* pb = b;
+		short ra[3], rb[3], r[3] = { 0, 0, 0 };
+
+		InterpUnpackRot(pa, ra);
+		InterpUnpackRot(pb, rb);
+
+		if (axisA >= 0 && axisA == axisB && !longArc)
+		{
+			r[axisA] = InterpLerpAngle(ra[axisA], rb[axisA], alpha);
+			n += InterpPackRot(r, axisA, out + n);
+		}
+		else
+		{
+			InterpSlerpRot(ra, rb, alpha, r, longArc);
+			n += InterpPackRot(r, -1, out + n);
+		}
+	}
+
+	a += wordsA;
+	b += wordsB;
+
+	return n;
+}
+
 /* The key frame between `f0` and `f1` at `alpha`, written to `out` (at
  * least 9 + 2 * nodes shorts); returns the shorts written.
  *
  * The bounding box is the nearer key's (f0 up to a half), the root offset the
  * two keys' offsets blended as InterpRootKey blends them, so the root rule
- * and the drawn frame agree to the unit. A node equal in both keys is copied
- * word for word. A node both keys store in the one-axis form on the same axis
- * blends that angle the short way round (InterpLerpAngle) and stays in that
- * form; any other node is blended by InterpSlerpRot and packed in the
- * three-axis form. */
+ * and the drawn frame agree to the unit. Every node takes the shorter way
+ * round (InterpKeyNodeLerp). */
 inline int InterpKeyFrameLerp(const short* f0, const short* f1, int nodes, float alpha,
 	short* out)
 {
@@ -1033,41 +1095,7 @@ inline int InterpKeyFrameLerp(const short* f0, const short* f1, int nodes, float
 	const short* b = f1 + 9;
 
 	for (int node = 0; node < nodes; node++)
-	{
-		const int axisA = InterpRotAxis(a);
-		const int axisB = InterpRotAxis(b);
-		const int wordsA = axisA < 0 ? 2 : 1;
-		const int wordsB = axisB < 0 ? 2 : 1;
-
-		if (wordsA == wordsB && a[0] == b[0] && (wordsA == 1 || a[1] == b[1]))
-		{
-			for (int w = 0; w < wordsA; w++)
-				out[n++] = a[w];
-		}
-		else
-		{
-			const short* pa = a;
-			const short* pb = b;
-			short ra[3], rb[3], r[3] = { 0, 0, 0 };
-
-			InterpUnpackRot(pa, ra);
-			InterpUnpackRot(pb, rb);
-
-			if (axisA >= 0 && axisA == axisB)
-			{
-				r[axisA] = InterpLerpAngle(ra[axisA], rb[axisA], alpha);
-				n += InterpPackRot(r, axisA, out + n);
-			}
-			else
-			{
-				InterpSlerpRot(ra, rb, alpha, r);
-				n += InterpPackRot(r, -1, out + n);
-			}
-		}
-
-		a += wordsA;
-		b += wordsB;
-	}
+		n += InterpKeyNodeLerp(a, b, alpha, false, out + n);
 
 	return n;
 }
@@ -1164,7 +1192,8 @@ inline int InterpKeyFrameTurn(const short* f, int nodes, short* out)
  *                       turned frame by 5.9 (11), 13.4 (209), 19.4 (213) - and
  *                       179.2 (211): 211 begins half a turn about her
  *                       lateral axis away from 210's end, a seam in the
- *                       level's data that no drawn frame bridges.
+ *                       level's data that only the frames between the two
+ *                       ticks bridge (InterpKeyFrameBridge).
  *   INTERP_TURN_NONE    no pair before it: the effect fires on the
  *                       animation's first frame (the roll 147), whose change
  *                       turns the root instead (InterpRootFlip).
@@ -1200,6 +1229,132 @@ inline bool InterpKeyHold(int kind, long turnPair, long flip, long frameBase, lo
 {
 	return kind == INTERP_TURN_INSIDE && pair == turnPair &&
 		flip == frameBase + (pair + 1) * rate;
+}
+
+/* ==========================================================================
+ * The tween across the animation change after an early half turn.
+ * ==========================================================================
+ *
+ * An early turn180_effect (INTERP_TURN_EARLY) fires on the last frame of its
+ * animation, so the next tick stands on another animation, and the pose rule
+ * refuses a tween across an animation change (draw.cpp GetFramesAt): every
+ * frame drawn between the two ticks would wear the new tick's pose. After
+ * 210, the twist out of the forward jump, that pose is 211's first key, which
+ * the level's data pitches half a turn about her lateral axis away from 210's
+ * last frame: the body would turn 179 degrees on one drawn frame and then
+ * stand still until the next tick.
+ *
+ * Those frames are drawn from a key frame built between the two poses
+ * instead (InterpKeyFrameBridge): from the pose the flip tick drew (its key
+ * frames turned by half a turn, InterpKeyFrameTurn, and built at the tick's
+ * factor where the frame lies between two keys) to the pose of the current
+ * tick. Every node turns on a spherical path, so each frame between is a
+ * rotation, and the step is spread over the frames the display draws between
+ * the two ticks: one at sixty hertz, five or six at 165. It is a motion the
+ * animation does not carry; the draw invents it. */
+
+/* True on a drawn frame whose pose is bridged: a frame between two ticks
+ * (0 < t < 1), the tick before stood on the frame an early turn180_effect
+ * fires on (`kind` and `flip` are InterpTurnOf's answer for `prevAnim`), and
+ * the animation has changed since. */
+inline bool InterpBridgeFires(int kind, long flip, long prevAnim, long prevFrame, long anim,
+	float t)
+{
+	return t > 0.0F && t < 1.0F && kind == INTERP_TURN_EARLY && prevFrame == flip &&
+		anim != prevAnim;
+}
+
+/* The turn of the hips (node 0) from frame `a` to frame `b` as the item sees
+ * it: `v` receives the vector part of the turn's unit quaternion, taken the
+ * shorter way round, so its direction is the axis and the sense of the turn
+ * and its length the sine of half the angle; returns the scalar part, the
+ * cosine of half the angle. InterpPoseRot's layout is the transpose of the
+ * matrix the draw's stack builds, so the turn the stack sees, B A^T, is
+ * conj(qb) * qa in its quaternions. */
+inline float InterpHipsTurn(const short* a, const short* b, float* v)
+{
+	const short* pa = a + 9;
+	const short* pb = b + 9;
+	short ra[3], rb[3];
+	float ma[9], mb[9], qa[4], qb[4];
+
+	InterpUnpackRot(pa, ra);
+	InterpUnpackRot(pb, rb);
+	InterpPoseRot(ra, ma);
+	InterpPoseRot(rb, mb);
+	InterpRotToQuat(ma, qa);
+	InterpRotToQuat(mb, qb);
+
+	const float w = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3];
+	const float s = w < 0.0F ? -1.0F : 1.0F;
+
+	v[0] = s * (qb[0] * qa[1] - qa[0] * qb[1] - (qb[2] * qa[3] - qb[3] * qa[2]));
+	v[1] = s * (qb[0] * qa[2] - qa[0] * qb[2] - (qb[3] * qa[1] - qb[1] * qa[3]));
+	v[2] = s * (qb[0] * qa[3] - qa[0] * qb[3] - (qb[1] * qa[2] - qb[2] * qa[1]));
+
+	return s * w;
+}
+
+/* Whether the bridge from `from` to `to` takes the longer way round at the
+ * hips.
+ *
+ * Across nearly half a turn the shorter way is decided by the last few
+ * degrees of the data and may run against the motion the animation shows. So
+ * where the hips turn more than 90 degrees between the two (InterpKeyFar)
+ * the shorter way is checked against the hips' own turn over the key pair
+ * that led into `from` (`before0` to `before1`) and over the pair that leads
+ * out of `to` (`after0` to `after1`, null where `to` is its animation's last
+ * key): only where it turns against both is the longer way taken. A side
+ * whose hips do not turn does not count against it. Every other node keeps
+ * the shorter way: it turns relative to the hips, where the two poses lie
+ * close (from 210's last frame to 211's first within 1.4 degrees in
+ * ANDREA1). */
+inline bool InterpBridgeLong(const short* from, const short* to, const short* before0,
+	const short* before1, const short* after0, const short* after1)
+{
+	if (!InterpKeyFar(from, to))
+		return false;
+
+	float arc[3], m[3];
+
+	InterpHipsTurn(from, to, arc);
+	InterpHipsTurn(before0, before1, m);
+
+	if (arc[0] * m[0] + arc[1] * m[1] + arc[2] * m[2] >= 0.0F)
+		return false;
+
+	if (!after0 || !after1)
+		return false;
+
+	InterpHipsTurn(after0, after1, m);
+
+	return arc[0] * m[0] + arc[1] * m[1] + arc[2] * m[2] < 0.0F;
+}
+
+/* The key frame drawn at weight `t` between `from` and `to`, written to `out`
+ * (at least 9 + 2 * nodes shorts); returns the shorts written.
+ *
+ * The box and the root offset are `to`'s own: the box is not drawn, and the
+ * root offset of a frame between two ticks is the root rule's to blend
+ * (InterpRootNow reads it from the drawn pair as it reads `to` on a refused
+ * frame), so the place under the pose comes out exactly as it does without
+ * the bridge. Every node turns by InterpKeyNodeLerp, the hips the longer way
+ * round where `longHips` (InterpBridgeLong). At t 0 the frame is `from` and
+ * at t 1 `to`, to the step of the packed form. */
+inline int InterpKeyFrameBridge(const short* from, const short* to, int nodes, float t,
+	bool longHips, short* out)
+{
+	for (int i = 0; i < 9; i++)
+		out[i] = to[i];
+
+	const short* a = from + 9;
+	const short* b = to + 9;
+	int n = 9;
+
+	for (int node = 0; node < nodes; node++)
+		n += InterpKeyNodeLerp(a, b, t, node == 0 && longHips, out + n);
+
+	return n;
 }
 
 /* ==========================================================================

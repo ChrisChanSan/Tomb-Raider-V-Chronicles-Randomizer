@@ -337,6 +337,7 @@ namespace
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
 	int g_secPoseBack = 0;		// frames on which Lara's pose was blended walking backwards
+	int g_secBridge = 0;		// frames on which Lara's pose was bridged after an early half turn
 	/* Refused tween frames whose root offset was blended in time. A count,
 	 * not a mean per frame: once per climb cycle would round to 0.0. */
 	int g_secRootFix = 0;
@@ -690,18 +691,22 @@ namespace
 	 *                key pair held on its first key (InterpKeyHold: the
 	 *                tightrope turn). A few per second is normal; near
 	 *                pose_items means snapshot and animation clock are out of
-	 *                step.
+	 *                step. Lara's bridged frames (bridge=) are not counted
+	 *                here.
 	 *   pose_far     rate 1 pairs refused because a node turns more than 90
 	 *                degrees (InterpPoseFar); in ANDREA1 one animation of 319
 	 *                (205, the hips), so a big number is an unexamined one.
 	 *   pose_hd      of those blended, the ones drawn by the HD object path
 	 *                (HDObjectNode's interpolated branch).
 	 *   lara_pose    tween frames on which Lara's own pose was blended, over
-	 *                the tween count; one fewer per animation change.
+	 *                the tween count; one fewer per animation change, except
+	 *                where the change is bridged (bridge=).
 	 *   root_fix     refused frames whose root offset the narrowed blend
 	 *                (InterpRootNarrow) actually moved, a count over the
 	 *                second. A small subset of pose_skips: about one per climb
-	 *                cycle on a ladder, zero in a still room.
+	 *                cycle on a ladder, zero in a still room. A bridged frame
+	 *                blends its root as a refused one does and counts here
+	 *                too.
 	 *   arms         blended / refused / tween frames for the weapon arms. With
 	 *                a weapon drawn the first should equal the tween count and
 	 *                the second be one per weapon animation change; empty
@@ -741,7 +746,16 @@ namespace
 	 *                25 ticks times the tween frames per tick: 25 at sixty
 	 *                hertz, about 137 at 165 (fps_mode 2, where every frame
 	 *                is an in-between one); zero everywhere else and zero at
-	 *                fps_mode 0. */
+	 *                fps_mode 0.
+	 *   bridge       tween frames on which Lara's pose was bridged across the
+	 *                animation change after an early half turn (the tick after
+	 *                the last frame of 48, 207, 210 and 212), from the pose the
+	 *                flip tick drew to the current tick's (draw.cpp
+	 *                LaraBridgeFrames); counted in lara_pose as well, and not
+	 *                in pose_skips. One per drawn in-between frame of such a
+	 *                tick: one per twist or roll at sixty hertz, five or six at
+	 *                165 (fps_mode 2, where every frame is an in-between one);
+	 *                zero everywhere else and zero at fps_mode 0. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -753,7 +767,7 @@ namespace
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
-				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d",
+				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d bridge=%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -775,7 +789,7 @@ namespace
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
 				(double)g_secParticles / g_secFrames, g_secPartKinds,
-				g_secRootFlip, g_secPoseBack);
+				g_secRootFlip, g_secPoseBack, g_secBridge);
 
 		/* TICKLOG: how often each tween-guarded counter stepped in the logic
 		 * second that just ended (GlobalCounter, thirty in both modes). A 30
@@ -818,6 +832,7 @@ namespace
 		g_secPoseSkip = 0;
 		g_secPoseFar = 0;
 		g_secPoseBack = 0;
+		g_secBridge = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
 		g_secRootFix = 0;
@@ -1937,6 +1952,59 @@ void InterpNoteTurn(const ITEM_INFO* item, long flip, long pair)
 	Log("TURNLOG f=%d anim=%d frame=%d flip=%ld keys=%ld-%ld drawn=turned",
 		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number,
 		flip, pair, pair + 1);
+}
+
+/* INTERPLOG's `bridge=` and BRIDGELOG (see interpolate.h). The count uses
+ * lara_pose's latch: GetFramesNow notes the bridge before it notes the pose,
+ * so only the first build of her pose in a frame finds g_laraPosed clear.
+ * BRIDGELOG:
+ *   f       GlobalCounter, the tick
+ *   anim    the animation before the tick, the flip frame's, and after it
+ *   frame   the flip frame and the frame the tick stands on
+ *   hips    the angle of node 0 between the pose the flip tick drew and this
+ *           tick's, in degrees, the shorter way round
+ *   arc     the way round the hips take: short, or long where the shorter
+ *           one turns against her own turn on both sides (InterpBridgeLong);
+ *           the long way turns 360 degrees minus `hips` */
+void InterpNoteBridge(const ITEM_INFO* item, short prevAnim, short prevFrame, const short* from,
+	const short* to, bool longHips)
+{
+	static bool seen = false;
+	static unsigned short lastCounter = 0;
+
+	if (!gLogEnabled || !item || !from || !to)
+		return;
+
+	if (!g_laraPosed)
+		g_secBridge++;
+
+	if (seen && lastCounter == GlobalCounter)
+		return;
+
+	seen = true;
+	lastCounter = GlobalCounter;
+
+	const short* a = from + 9;
+	const short* b = to + 9;
+	short ra[3], rb[3];
+	float ma[9], mb[9];
+
+	InterpUnpackRot(a, ra);
+	InterpUnpackRot(b, rb);
+	InterpPoseRot(ra, ma);
+	InterpPoseRot(rb, mb);
+
+	double c = (double)InterpPoseTurnCos(ma, mb);
+
+	if (c > 1.0)
+		c = 1.0;
+	else if (c < -1.0)
+		c = -1.0;
+
+	Log("BRIDGELOG f=%d anim=%d->%d frame=%d->%d hips=%.1f arc=%s",
+		(int)GlobalCounter, (int)prevAnim, (int)item->anim_number,
+		(int)prevFrame, (int)item->frame_number, acos(c) * 180.0 / 3.14159265358979323846,
+		longHips ? "long" : "short");
 }
 
 /* See interpolate.h. The command walk is AnimateLara's (laramisc.cpp):

@@ -3235,16 +3235,34 @@ void DrawCutSeqActors()
 
 			const bool hd = !fading && HDObjectBegin(actor, obj);
 
+			/* The actor's lips: an HD face speaks its own track file at the
+			 * frame this call draws. do_new_cutscene_camera decodes frame
+			 * GLOBAL_cutseq_frame and then steps the counter, so the frame
+			 * on screen is the one before it. The credits play no audio
+			 * (handle_cutseq_triggering starts it only without bDoCredits),
+			 * so their faces get no track. Called only for an actor the HD
+			 * path took, and even then it changes nothing of the game. */
+			const int lips = hd ? HDObjectLips(bDoCredits ? -1 : GLOBAL_cutme->audio_track,
+				GLOBAL_cutseq_frame - 1) : 0;
+
 			/* Logs one line per actor, once per cutscene, whenever logging
 			 * is enabled. A cutscene actor's face file is named after the
 			 * character (VON_CROY_SENIOR_HEAD) while its body is named
 			 * after the level slot (ANIMATING4_RICHCUT2), so a rule that
 			 * looks for <MODEL>_HEAD finds nothing; hd_model.cpp resolves
 			 * this mapping instead. This line records which actor is drawn
-			 * in HD and whether a face was found for its slot. */
+			 * in HD and whether a face was found for its slot, and lips=
+			 * the track and the frame count of the face's track file, or
+			 * - for none. */
 			if (gLogEnabled && !cutseq_actors_logged)
+			{
+				char lipsWord[32] = "-";
+
+				if (lips > 0)
+					sprintf(lipsWord, "%ld/%d", GLOBAL_cutme->audio_track, lips);
+
 				Log("HDLOG cutseq actor=%d slot=%d name=%s model=%s hd=%d "
-					"head=%d fading=%d bits=%08X swapbits=%08X",
+					"head=%d fading=%d bits=%08X swapbits=%08X lips=%s",
 					i, (int)actor->object_number,
 					HDSlotName(actor->object_number)
 						? HDSlotName(actor->object_number) : "?",
@@ -3253,7 +3271,9 @@ void DrawCutSeqActors()
 					(int)hd,
 					HDModelHasHead(actor->object_number)
 						? HDModelHeadNode(actor->object_number) : -1,
-					(int)fading, cutseq_meshbits[i], cutseq_meshswapbits[i]);
+					(int)fading, cutseq_meshbits[i], cutseq_meshswapbits[i],
+					lipsWord);
+			}
 
 			if (hd)
 				HDObjectNode(0, false);

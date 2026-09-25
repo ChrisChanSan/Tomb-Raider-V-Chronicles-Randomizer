@@ -42,6 +42,7 @@
 #include "../../game/camera.h"		// FirstPersonActive
 #include "../../game/gameflow.h"	// gfLevelId, gfLevelFlags
 #include "../../game/interpolate.h"	// InterpFrameAlpha - what this frame was drawn at
+#include "../../game/deltapak.h"	// the cutscene her lips speak in
 
 #include <math.h>
 
@@ -1216,9 +1217,25 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	HDLaraPartSheen(HD_LARA_PART_FACE, &sheen, &sheenPower);
 
+	/* Her lips, in a cutscene she acts in: the cut's track at the frame on
+	 * screen, exactly as an actor's (game\deltapak.cpp, DrawCutSeqActors).
+	 * Actor 0 of a cut is Lara, and NO_ITEM when she is not in it
+	 * (frigup_lara leaves her pose alone then); the credits play no audio.
+	 * -1 everywhere else, and her face draws as it was built. */
+	int lipsTrack = -1;
+	int lipsFrame = -1;
+
+	if (GLOBAL_playing_cutseq && GLOBAL_cutme && !bDoCredits &&
+		GLOBAL_cutme->actor_data[0].objslot != NO_ITEM &&
+		GLOBAL_cutme->audio_track >= 0)
+	{
+		lipsTrack = (int)GLOBAL_cutme->audio_track;
+		lipsFrame = GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1 : 0;
+	}
+
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
-		0, HD_MODEL_CULL_NONE, sheen, sheenPower))
+		0, HD_MODEL_CULL_NONE, sheen, sheenPower, lipsTrack, lipsFrame))
 		drawn++;
 
 	/* The pouches, under whatever goes in them.
@@ -1305,6 +1322,12 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	if (gLogEnabled && !g_frame_logged)
 	{
+		// lips= is the track her face speaks in this frame, or - for none.
+		char lipsWord[16] = "-";
+
+		if (lipsTrack >= 0 && HDModelLipsFrames(HDLaraPartSlot(HD_LARA_PART_FACE), false) > 0)
+			sprintf(lipsWord, "%d", lipsTrack);
+
 		g_frame_logged = true;
 		// interp= is what this frame was drawn at: 1.00 for a frame that
 		// landed on a logic tick or a build at fps_mode 0, 0.50 for one drawn
@@ -1313,7 +1336,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		// stack and needs no interpolation of its own.
 		Log("HDLOG frame lara parts=%d(%d this frame) interp=%.2f outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d head=%s/%d mask=%08x body=%08x mirror=%d "
-			"firstperson=%d headcut=%d lights=%d dropped=%d speechhead=%s",
+			"firstperson=%d headcut=%d lights=%d dropped=%d speechhead=%s lips=%s",
 			drawn, g_frame_parts, InterpFrameAlpha(), HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
@@ -1330,6 +1353,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			(int)HDLaraHasPart(HD_LARA_PART_HEAD),
 			mask, bodyMask, (int)mirror,
 			(int)firstPerson, (int)cutting, lightCount, g_dropped,
-			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-");
+			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-",
+			lipsWord);
 	}
 }

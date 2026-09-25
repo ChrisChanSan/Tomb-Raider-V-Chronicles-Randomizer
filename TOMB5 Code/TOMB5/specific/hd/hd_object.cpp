@@ -34,6 +34,7 @@
 #include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
 #include "hd_render.h"
 #include "hd_level.h"
+#include "hd_trl.h"			// the lips' sources, for LIPLOG
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
 #include "../d3dmatrix.h"
@@ -47,6 +48,8 @@
 #include "../../game/effect2.h"		// dynamics
 #include "../../game/hitman.h"		// hitman_nodes - the cyborg's panel order
 #include "../../game/newinv2.h"		// InventoryActive - the sun is doubled in there
+#include "../../game/deltapak.h"		// GLOBAL_playing_cutseq, cutseq_num - the lips
+#include "../../game/gameflow.h"		// Gameflow - the language LIPLOG names
 #include "../drawroom.h"		// mesh_vtxbuf - the classic mesh's own box
 
 #include <math.h>
@@ -161,6 +164,10 @@ namespace
 		 * the ring by screen position. */
 		float offCentreX;
 		float offCentreY;
+		/* A speaking face's cutscene track and the frame of it to show -
+		 * see HDObjectLips. -1 and -1 for everything that does not speak. */
+		int lipsTrack;
+		int lipsFrame;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -178,6 +185,13 @@ namespace
 	unsigned int g_open_mask = 0;
 	float g_raw[HD_OBJ_NODES * 12];		// the engine's own 3x4, per node
 	unsigned int g_seen = 0;
+	// The lips of the item being walked (HDObjectLips), -1 for none.
+	int g_open_lips_track = -1;
+	int g_open_lips_frame = -1;
+	/* A clip is open somewhere - set by the first face that speaks, and what
+	 * lets HDObjectFrameReset close them all once the cut is over without
+	 * asking the model file every frame. */
+	bool g_lips_playing = false;
 
 	/* Per frame, emptied by HDObjectFrameReset - they go into a line that
 	 * says "frame", so they have to mean one. */
@@ -2574,6 +2588,8 @@ void HDObjectLevelEnd()
 	g_frame_logged = false;
 	g_hd_slots = 0;
 	g_classic_slots = 0;
+	// The clips go with the models, in HDObjectRelease on the device's thread.
+	g_lips_playing = false;
 }
 
 void HDObjectDeviceLost()
@@ -2592,6 +2608,17 @@ bool HDObjectActive()
 
 void HDObjectFrameReset()
 {
+	/* The cut is over - played out, skipped or left through the fade - and
+	 * its clips close, which gives back their files and their buffers; the
+	 * faces draw their static buffers again. A test of a flag in every other
+	 * frame, and false throughout with hd_enable off, where no face opens a
+	 * clip. */
+	if (g_lips_playing && !GLOBAL_playing_cutseq)
+	{
+		g_lips_playing = false;
+		HDModelLipsClose();
+	}
+
 	g_count = 0;
 	g_dropped = 0;
 	g_open = false;
@@ -2735,6 +2762,8 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_room = (int)item->room_number;	// its portal window
 	g_open_mask = (unsigned int)item->mesh_bits;
 	g_seen = 0;
+	g_open_lips_track = -1;	// only a cutscene's actor speaks - HDObjectLips
+	g_open_lips_frame = -1;
 
 	/* The mesh swap.
 	 *
@@ -2823,6 +2852,26 @@ void HDObjectNode(int node, bool interpolated)
 	g_seen |= 1u << node;
 }
 
+int HDObjectLips(long track, long frame)
+{
+	if (!g_open || track < 0 || g_open_slot < 0 || g_open_slot >= NUMBER_OBJECTS ||
+		!g_slot[g_open_slot].head)
+		return 0;
+
+	/* The face opens its file at the cut's first frame and answers from
+	 * then on without looking again; a face with no file for the track
+	 * answers 0 every time and is drawn as it was built. */
+	const int frames = HDModelLipsOpen(g_open_slot, true, (int)track);
+
+	if (frames <= 0)
+		return 0;
+
+	g_open_lips_track = (int)track;
+	g_open_lips_frame = frame < 0 ? 0 : (int)frame;
+	g_lips_playing = true;
+	return frames;
+}
+
 void HDObjectEnd()
 {
 	ProfScope prof(PROF_HD_OBJ);
@@ -2849,6 +2898,8 @@ void HDObjectEnd()
 	// draws about anything but the screen centre.
 	entry.offCentreX = 0.0f;
 	entry.offCentreY = 0.0f;
+	entry.lipsTrack = g_open_lips_track;
+	entry.lipsFrame = g_open_lips_frame;
 
 	/* And the pickup on the floor takes the mod's own inventory model.
 	 *
@@ -3329,6 +3380,8 @@ void HDInvEnd()
 		g_slot[g_open_slot].head != 0;
 	entry.nodes = g_open_nodes;
 	entry.mask = g_open_mask;
+	entry.lipsTrack = -1;	// nothing on the ring speaks
+	entry.lipsFrame = -1;
 
 	/* A mod's own inventory model, for the ring and the display in the
 	 * corner (and the floor, see HDObjectEnd). It is a file out of another
@@ -3523,8 +3576,12 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * arrived, and the item's own slot otherwise. It is the same
 		 * skeleton, the same node count and the same bind pose, so nothing
 		 * else in this call changes. */
+		/* The lips go with the draw that holds the face: Lara's face is a
+		 * model of its own (HDObjectPush), an actor's is his separate face
+		 * below, and a model with no lips ignores them. */
 		HDModelDraw(entry.drawSlot, entry.matrix, entry.nodes, entry.light,
-			entry.mask, &lighting, &entry.cut, entry.cull);
+			entry.mask, &lighting, &entry.cut, entry.cull, entry.lipsTrack,
+			entry.lipsFrame);
 
 		/* The separate HD face, right after the body and on the same
 		 * matrices. VON_CROY.TRM is a body with an empty collar and
@@ -3537,7 +3594,44 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * damage stage or a drawn pistol does not change a face. */
 		if (entry.head)
 			HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
-				entry.mask, &lighting, &entry.cut, entry.cull);
+				entry.mask, &lighting, &entry.cut, entry.cull, entry.lipsTrack,
+				entry.lipsFrame);
+	}
+
+	/* LIPLOG: one line per frame change of a speaking face, out of the model
+	 * file's own record of what the draws above did - the frame counter, the
+	 * cutscene, the frame and the track, which of the clip, the ease or the
+	 * bind was shown and how far the farthest vertex stood from the bind.
+	 * `lang` is the language the audio path looks for first (specific\
+	 * audio.cpp, ACMEmulateCDPlay); the track files are the same for all of
+	 * them. The record is emptied whether or not it was written. */
+	if (HDModelLipsEventCount())
+	{
+		if (gLogEnabled)
+		{
+			const char* lang = "EN";
+
+			switch (Gameflow ? Gameflow->Language : 0)
+			{
+			case GERMAN: lang = "DE"; break;
+			case FRENCH: lang = "FR"; break;
+			case ITALIAN: lang = "IT"; break;
+			case SPANISH: lang = "ES"; break;
+			case JAPAN: lang = "JP"; break;
+			default: break;
+			}
+
+			for (int i = 0; i < HDModelLipsEventCount(); i++)
+			{
+				const HDModelLipsEvent* e = HDModelLipsEventAt(i);
+
+				Log("LIPLOG f=%d cut=%ld frame=%d track=%d slot=%d src=%s "
+					"jaw=%.1f lang=%s", (int)GlobalCounter, cutseq_num, e->frame,
+					e->track, e->slot, HDLipsSourceName(e->source), e->jaw, lang);
+			}
+		}
+
+		HDModelLipsEventsClear();
 	}
 
 	// The objects are done and the scissor window of the last one must not
@@ -3603,7 +3697,8 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale)
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
-	const HDModelNeckCut* cut, int cull, float specStrength, float specPower)
+	const HDModelNeckCut* cut, int cull, float specStrength, float specPower,
+	int lipsTrack, int lipsFrame)
 {
 	/* Not behind g_active. That flag says "this level has HD objects", and a
 	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
@@ -3670,6 +3765,19 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.view = ViewSerial;
 	entry.offCentreX = 0.0f;	// Lara is never on the ring
 	entry.offCentreY = 0.0f;
+
+	/* A pushed model that is itself a face speaks the way an actor's face
+	 * does - see HDObjectLips. Where it has no clip for the track it draws
+	 * as it was built. */
+	entry.lipsTrack = -1;
+	entry.lipsFrame = -1;
+
+	if (lipsTrack >= 0 && HDModelLipsOpen(slot, false, lipsTrack) > 0)
+	{
+		entry.lipsTrack = lipsTrack;
+		entry.lipsFrame = lipsFrame < 0 ? 0 : lipsFrame;
+		g_lips_playing = true;
+	}
 
 	g_count++;
 	return true;

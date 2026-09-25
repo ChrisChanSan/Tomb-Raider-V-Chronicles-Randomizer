@@ -90,6 +90,15 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj);
 // so this does the same push and the same interpolation.
 void HDObjectNode(int node, bool interpolated);
 
+/* The lips of the item being walked, between HDObjectBegin and HDObjectEnd: a
+ * cutscene's audio track and the frame of it this draw shows. The item's
+ * separate face opens its track file for that track (HDModelLipsOpen) and is
+ * drawn at that frame; the return is the file's frame count, 0 when the face
+ * has none. It does nothing and returns 0 unless HDObjectBegin opened the item
+ * for the HD path - nothing of the game is read or written, nothing is
+ * allocated. game\deltapak.cpp calls it for a cutscene's actors. */
+int HDObjectLips(long track, long frame);
+
 void HDObjectEnd();
 
 // --- the inventory ring and the pickup display ------------------------------
@@ -226,8 +235,12 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale);
  * False when the list is full or the HD model path is not up - and then the
  * caller has to draw nothing at all rather than half a Lara, which is why
  * hd_laradraw asks HDLaraDrawActive() once for the whole composite instead of
- * per part. */
+ * per part.
+ *
+ * `lipsTrack` and `lipsFrame` are HDObjectLips's two for a model that is
+ * itself a face - Lara's, in a cutscene she acts in; -1 for every other push. */
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
 	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
-	float specStrength = 0.0f, float specPower = 1.0f);
+	float specStrength = 0.0f, float specPower = 1.0f,
+	int lipsTrack = -1, int lipsFrame = -1);

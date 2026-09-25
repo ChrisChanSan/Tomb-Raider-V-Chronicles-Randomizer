@@ -410,6 +410,21 @@
  *                         turn that node of the mesh tree and everything
  *                         below it. Repeat the switch for more nodes.
  *     -head               draw the separate HD face as well, if there is one
+ *     -lips <FILE.TRL> <frame>
+ *                         a speaking face at one frame of its track file,
+ *                         by the engine's own road: the face opens the track
+ *                         the file's name gives (PIERRE_HEAD_108.TRL is track
+ *                         108) where the game opens it, and the draw deforms
+ *                         the face into a vertex buffer of its own. On -slot
+ *                         with -head the camera frames the face alone; on
+ *                         -lara it is her face. A frame past the clip's end is
+ *                         the ease and then the bind, as in the game. Prints
+ *                         what the draw did - the clip, the ease or the bind,
+ *                         and the farthest vertex from the bind.
+ *     -lips <FILE.TRL> <a>:<b>:<step>
+ *                         every step-th frame from a to b, tiled into one
+ *                         sheet, left to right and top to bottom; -size is
+ *                         one tile.
  *     -onlypage <n>       with -name: build only the triangles that wear that
  *                         .DDS page, and load only that page. This is the cut the wardrobe uses to take the
  *                         thigh holster rig out of OUTFIT_TR3_CATSUIT
@@ -546,6 +561,7 @@
 char tomb5_hd_install[260];
 char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trl.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "psapi.lib")
@@ -6260,6 +6276,147 @@ static void SetSheen(HDModelLighting& lighting, int part, bool on)
 	lighting.specPower = power;
 }
 
+/* ------------------------------------------------------------ the lips --
+ *
+ * -lips <FILE.TRL> <frame> draws a speaking face at one frame of its track
+ * file by the engine's own road: HDModelLipsOpen, then the face's draw with
+ * the track and the frame, which deforms the face into a vertex buffer of its
+ * own (hd_model.cpp, lips_stream). -lips <FILE.TRL> <a>:<b>:<step> draws every
+ * step-th frame from a to b and tiles the pictures into one sheet, left to
+ * right and top to bottom. The file names the face and the track -
+ * PIERRE_HEAD_108.TRL is track 108 of PIERRE_HEAD - and the engine looks for
+ * it where it looks in the game. */
+struct LipsAsk
+{
+	std::string file;		// as given
+	std::string stem;		// the face the name says
+	int track = -1;
+	std::vector<int> frames;
+	bool sheet = false;
+};
+
+static bool LipsParse(const char* file, const char* frames, LipsAsk& out)
+{
+	std::string name = file;
+	const size_t slash = name.find_last_of("\\/");
+
+	if (slash != std::string::npos)
+		name = name.substr(slash + 1);
+
+	if (name.size() > 4 && !_stricmp(name.c_str() + name.size() - 4, ".TRL"))
+		name.erase(name.size() - 4);
+
+	const size_t cut = name.find_last_of('_');
+
+	if (cut == std::string::npos || cut + 1 >= name.size())
+		return false;
+
+	out.file = file;
+	out.stem = name.substr(0, cut);
+	out.track = atoi(name.c_str() + cut + 1);
+	out.frames.clear();
+
+	int a = 0, b = 0, step = 0;
+
+	if (sscanf(frames, "%d:%d:%d", &a, &b, &step) == 3 && step > 0 && b >= a)
+	{
+		out.sheet = true;
+
+		for (int f = a; f <= b; f += step)
+			out.frames.push_back(f);
+	}
+	else
+		out.frames.push_back(atoi(frames));
+
+	return !out.frames.empty();
+}
+
+/* The face the engine keeps for a slot, out of its own level build lines. */
+static std::string LipsFaceOf(int slot)
+{
+	char head[32];
+
+	snprintf(head, sizeof(head), "slot=%d face=", slot);
+
+	for (int i = 0; i < HDModelLipsLineCount(); i++)
+		if (!strncmp(HDModelLipsLine(i), head, strlen(head)))
+		{
+			const char* face = HDModelLipsLine(i) + strlen(head);
+
+			return std::string(face, strcspn(face, " "));
+		}
+
+	return std::string();
+}
+
+/* Opens the clip for the face of `slot` and says what happened. The track, or
+ * -1 when the face draws as it was built. */
+static int LipsOpen(const LipsAsk& lips, int slot, bool head)
+{
+	if (lips.track < 0)
+		return -1;
+
+	const std::string face = LipsFaceOf(slot);
+	const int frames = HDModelLipsOpen(slot, head, lips.track);
+
+	printf("lips    : %s asks for track %d of %s; the face of slot %d is %s - %s\n",
+		lips.file.c_str(), lips.track, lips.stem.c_str(), slot,
+		face.empty() ? "(no face that keeps lips)" : face.c_str(),
+		frames > 0 ? "the clip is open" : "no clip, the face draws as built");
+
+	if (frames > 0)
+		printf("          %d frames, %.1f s; drawing %d frame%s%s\n", frames,
+			frames / 30.0, (int)lips.frames.size(),
+			lips.frames.size() == 1 ? "" : "s", lips.sheet ? " as a sheet" : "");
+
+	if (!face.empty() && _stricmp(face.c_str(), lips.stem.c_str()))
+		printf("          NOTE: the file names %s and the slot's face is %s - "
+			"the face's own track %d is what is drawn\n", lips.stem.c_str(),
+			face.c_str(), lips.track);
+
+	return frames > 0 ? lips.track : -1;
+}
+
+/* What the draws just did with the lips, out of the engine's own record. */
+static void LipsSay()
+{
+	for (int i = 0; i < HDModelLipsEventCount(); i++)
+	{
+		const HDModelLipsEvent* e = HDModelLipsEventAt(i);
+
+		printf("  lips: %s slot %d, track %d frame %d - %s, the farthest vertex "
+			"%.2f units from the bind\n", e->head ? "face" : "model", e->slot,
+			e->track, e->frame, HDLipsSourceName(e->source), e->jaw);
+	}
+
+	HDModelLipsEventsClear();
+}
+
+/* One picture of a sheet into its place, tiles of w x h, `across` a row. */
+static void LipsPaste(std::vector<unsigned long>& sheet, long sheetW,
+	const std::vector<unsigned long>& tile, long w, long h, int at, int across)
+{
+	const long x0 = (long)(at % across) * w;
+	const long y0 = (long)(at / across) * h;
+
+	for (long y = 0; y < h; y++)
+		memcpy(&sheet[(size_t)(y0 + y) * (size_t)sheetW + (size_t)x0],
+			&tile[(size_t)y * (size_t)w], (size_t)w * 4);
+}
+
+// The sheet's path and its size, for `count` tiles.
+static void LipsSheetSize(int count, long w, long h, int* across, long* sw, long* sh)
+{
+	int a = 1;
+
+	while (a * a < count)
+		a++;
+
+	*across = a;
+	*sw = w * a;
+	*sh = h * ((count + a - 1) / a);
+}
+
 struct LaraOptions
 {
 	std::string root;
@@ -6340,6 +6497,8 @@ struct LaraOptions
 	const double (*turn)[2];
 	// -meshbits, on the composite too.
 	unsigned int nodeMask;
+	// -lips, on her face.
+	LipsAsk lips;
 };
 
 /* The engine's slot number for a name, out of the level that is loaded. Every
@@ -6697,6 +6856,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	for (int i = 0; i < HDModelNoteCount(); i++)
 		printf("  note: %s\n", HDModelNote(i));
+
+	// The engine's own lines for the faces' track files, word for word.
+	for (int i = 0; i < HDModelLipsLineCount(); i++)
+		printf("  HDLOG level=%s lips %s\n", o.stem.c_str(), HDModelLipsLine(i));
 
 	for (int i = 0; i < HDLaraNoteCount(); i++)
 		printf("  lara: %s\n", HDLaraNote(i));
@@ -7667,12 +7830,6 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	frame.distanceFogStart = 1.0e9f;
 	frame.wibbleTable = wibble;
 
-	g_device->BeginScene();
-	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
-	HDModelFrameBegin(&projection, 0);
-
-	int drawn = 0;
-
 	/* First person, the same three omissions the seam makes: the head
 	 * node off the body, no separate face, no braid. All three sit exactly
 	 * where the camera does. */
@@ -7775,97 +7932,135 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			put == 1 ? "" : "s", was, wasPower);
 	}
 
-	SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
+	/* Her lips - see LipsAsk. One picture, or one per frame of a sheet, and
+	 * nothing else changes between them. */
+	const int lipsTrack = LipsOpen(o.lips, HDLaraPartSlot(HD_LARA_PART_FACE), false);
+	const int pictures = lipsTrack >= 0 && o.lips.sheet ? (int)o.lips.frames.size() : 1;
+	int across = 1;
+	long sheetW = o.width, sheetH = o.height;
+	std::vector<unsigned long> sheet, tile;
 
-	if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-		light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull))
-		drawn++;
-
-	/* TR5's own head, in the same place and with the same rules the
-	 * seam has: after the body and before the face, the frame's mask, the
-	 * body's cut and the body's cull - see specific\hd\hd_laradraw.cpp. */
-	if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
+	if (pictures > 1)
 	{
-		SetSheen(lighting, HD_LARA_PART_HEAD, sheenOn);
-
-		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
-			HD_LARA_NODES, light, bodyMask, &lighting,
-			cutting ? &neckCut : 0, o.cull))
-			drawn++;
+		LipsSheetSize(pictures, o.width, o.height, &across, &sheetW, &sheetH);
+		sheet.assign((size_t)sheetW * (size_t)sheetH, 0xFF000000u);
 	}
 
-	/* The lid, in the
-	 * same place and with the same rules the seam has: no cut of its own (its
-	 * rim vertices are copies of the body's and would sit exactly on the
-	 * boundary), no cull, every node (its rim is skinned to whatever the
-	 * body's rim is), and the skin's own material. -nocap leaves it out, which
-	 * is the picture from before the lid existed. */
-	if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
-		HDLaraHasPart(HD_LARA_PART_NECK_CAP))
+	int drawn = 0;
+	int calls = 0;
+
+	for (int picture = 0; picture < pictures; picture++)
 	{
-		SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
+		const int lipsFrame = lipsTrack >= 0 ? o.lips.frames[(size_t)picture] : -1;
 
-		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
-			HD_LARA_NODES, light, ~0u, &lighting, 0,
-			HD_MODEL_CULL_NONE))
+		if (picture)
+			g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+				D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+
+		g_device->BeginScene();
+		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+		HDModelFrameBegin(&projection, 0);
+
+		drawn = 0;
+
+		SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
+
+		if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
+			light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull))
 			drawn++;
+
+		/* TR5's own head, in the same place and with the same rules the
+		 * seam has: after the body and before the face, the frame's mask, the
+		 * body's cut and the body's cull - see specific\hd\hd_laradraw.cpp. */
+		if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
+		{
+			SetSheen(lighting, HD_LARA_PART_HEAD, sheenOn);
+
+			if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
+				HD_LARA_NODES, light, bodyMask, &lighting,
+				cutting ? &neckCut : 0, o.cull))
+				drawn++;
+		}
+
+		/* The lid, in the
+		 * same place and with the same rules the seam has: no cut of its own (its
+		 * rim vertices are copies of the body's and would sit exactly on the
+		 * boundary), no cull, every node (its rim is skinned to whatever the
+		 * body's rim is), and the skin's own material. -nocap leaves it out, which
+		 * is the picture from before the lid existed. */
+		if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
+			HDLaraHasPart(HD_LARA_PART_NECK_CAP))
+		{
+			SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
+
+			if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
+				HD_LARA_NODES, light, ~0u, &lighting, 0,
+				HD_MODEL_CULL_NONE))
+				drawn++;
+		}
+
+		SetSheen(lighting, HD_LARA_PART_FACE, sheenOn);
+
+		// The face with her lips at the frame asked for, and -1 without -lips.
+		if (!o.firstPerson && draws(HD_LARA_PART_FACE) &&
+			HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
+			light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsTrack, lipsFrame))
+			drawn++;
+
+		/* The holster rig, in the same place and with the
+		 * same guard specific\hd\hd_laradraw.cpp puts it: before the pieces,
+		 * because it belongs to the outfit and not to the weapon. */
+		SetSheen(lighting, HD_LARA_PART_HOLSTER_RIG, sheenOn);
+
+		if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
+			HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
+				HD_LARA_NODES, light,
+				HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask, &lighting))
+			drawn++;
+
+		for (int i = 0; i < pieces; i++)
+		{
+			SetSheen(lighting, list[i].part, sheenOn);
+
+			if (draws(list[i].part) &&
+				HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
+				light, list[i].nodeMask & bodyMask, &lighting))
+				drawn++;
+
+			/* The install's own hands under a mod's gun, in the
+			 * same place and with the same arguments the engine gives them - see
+			 * hd_laradraw.cpp. */
+			if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part) &&
+				HDModelDraw(HDLaraPartTwinSlot(list[i].part), matrices,
+				HD_LARA_NODES, light, list[i].nodeMask & bodyMask, &lighting))
+				drawn++;
+		}
+
+		if (!o.firstPerson && draws(HD_LARA_PART_BRAID) &&
+			HDLaraHasPart(HD_LARA_PART_BRAID))
+		{
+			float hairLight[HD_LARA_HAIR_NODES * 3];
+
+			for (int i = 0; i < HD_LARA_HAIR_NODES * 3; i++)
+				hairLight[i] = (float)o.shade;
+
+			SetSheen(lighting, HD_LARA_PART_BRAID, sheenOn);
+
+			if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
+				HD_LARA_HAIR_NODES, hairLight, ~0u, &lighting))
+				drawn++;
+		}
+
+		calls = HDModelDrawCalls();
+
+		HDRenderFrameEnd();
+		g_device->EndScene();
+
+		LipsSay();
+
+		if (pictures > 1 && ShotGrab(shot, tile))
+			LipsPaste(sheet, sheetW, tile, o.width, o.height, picture, across);
 	}
-
-	SetSheen(lighting, HD_LARA_PART_FACE, sheenOn);
-
-	if (!o.firstPerson && draws(HD_LARA_PART_FACE) &&
-		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
-		light, bodyMask, &lighting))
-		drawn++;
-
-	/* The holster rig, in the same place and with the
-	 * same guard specific\hd\hd_laradraw.cpp puts it: before the pieces,
-	 * because it belongs to the outfit and not to the weapon. */
-	SetSheen(lighting, HD_LARA_PART_HOLSTER_RIG, sheenOn);
-
-	if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
-		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
-			HD_LARA_NODES, light,
-			HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask, &lighting))
-		drawn++;
-
-	for (int i = 0; i < pieces; i++)
-	{
-		SetSheen(lighting, list[i].part, sheenOn);
-
-		if (draws(list[i].part) &&
-			HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
-			light, list[i].nodeMask & bodyMask, &lighting))
-			drawn++;
-
-		/* The install's own hands under a mod's gun, in the
-		 * same place and with the same arguments the engine gives them - see
-		 * hd_laradraw.cpp. */
-		if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part) &&
-			HDModelDraw(HDLaraPartTwinSlot(list[i].part), matrices,
-			HD_LARA_NODES, light, list[i].nodeMask & bodyMask, &lighting))
-			drawn++;
-	}
-
-	if (!o.firstPerson && draws(HD_LARA_PART_BRAID) &&
-		HDLaraHasPart(HD_LARA_PART_BRAID))
-	{
-		float hairLight[HD_LARA_HAIR_NODES * 3];
-
-		for (int i = 0; i < HD_LARA_HAIR_NODES * 3; i++)
-			hairLight[i] = (float)o.shade;
-
-		SetSheen(lighting, HD_LARA_PART_BRAID, sheenOn);
-
-		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
-			HD_LARA_HAIR_NODES, hairLight, ~0u, &lighting))
-			drawn++;
-	}
-
-	const int calls = HDModelDrawCalls();
-
-	HDRenderFrameEnd();
-	g_device->EndScene();
 
 	printf("%d models drawn in %d draw calls\n", drawn, calls);
 
@@ -7881,10 +8076,31 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			o.cull == HD_MODEL_CULL_CW ? "cw"
 			: o.cull == HD_MODEL_CULL_CCW ? "ccw" : "nocull");
 
-	sprintf(path, "%s_lara_%s%s%s%s.png", o.out.c_str(),
+	/* A picture with her lips at a frame says which, and a sheet says the
+	 * first, the last and the step. */
+	char lipsName[64] = "";
+
+	if (lipsTrack >= 0 && pictures > 1)
+		sprintf(lipsName, "_lips%d_%d-%d-%d_sheet", lipsTrack, o.lips.frames.front(),
+			o.lips.frames.back(), o.lips.frames.size() > 1
+				? o.lips.frames[1] - o.lips.frames[0] : 1);
+	else if (lipsTrack >= 0)
+		sprintf(lipsName, "_lips%d_%d", lipsTrack, o.lips.frames.front());
+
+	sprintf(path, "%s_lara_%s%s%s%s%s.png", o.out.c_str(),
 		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
-		o.mirror ? "_mirror" : "");
-	ShotWrite(shot, path);
+		o.mirror ? "_mirror" : "", lipsName);
+
+	if (pictures > 1)
+	{
+		const bool wrote = WritePng(path, &sheet[0], sheetW, sheetH);
+
+		printf("  %-58s %d frames, %d across, %s\n", path, pictures, across,
+			wrote ? "written" : "NOT written");
+	}
+	else
+		ShotWrite(shot, path);
+
 	ShotEnd(shot);
 
 	HDModelLevelEnd();
@@ -8010,11 +8226,22 @@ int main(int argc, char** argv)
 	HDObjLight lights[HD_MAX_OBJ_LIGHTS];
 	int lightCount = 0;
 	unsigned int nodeMask = ~0u;
+	// -lips: a speaking face at a frame of its track. See LipsAsk.
+	LipsAsk lips;
 
 	for (int i = 2; i < argc; i++)
 	{
 		if (!_stricmp(argv[i], "-name") && i + 1 < argc)
 			name = argv[++i];
+		else if (!_stricmp(argv[i], "-lips") && i + 2 < argc)
+		{
+			const char* file = argv[++i];
+			const char* frames = argv[++i];
+
+			if (!LipsParse(file, frames, lips))
+				printf("ModelProbe: -lips %s %s names no <FACE>_<track>.TRL and no "
+					"frame - ignored\n", file, frames);
+		}
 		else if (!_stricmp(argv[i], "-slot") && i + 1 < argc)
 			slot = atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-level") && i + 1 < argc)
@@ -8768,6 +8995,7 @@ int main(int argc, char** argv)
 		o.lightCount = lightCount;
 		o.turn = turn;
 		o.nodeMask = nodeMask;
+		o.lips = lips;
 
 		const int result = RunLara(o, level);
 
@@ -9081,6 +9309,11 @@ int main(int argc, char** argv)
 
 	for (int i = 0; i < HDModelNoteCount(); i++)
 		printf("  note: %s\n", HDModelNote(i));
+
+	// The engine's own lines for the faces' track files, word for word.
+	for (int i = 0; i < HDModelLipsLineCount(); i++)
+		printf("  HDLOG level=%s lips %s\n", levelStem.empty() ? "-" : levelStem.c_str(),
+			HDModelLipsLine(i));
 
 	/* --- the table ------------------------------------------------------ */
 	if (allAsked)
@@ -9523,6 +9756,15 @@ int main(int argc, char** argv)
 			{
 				if (headMins[i] < mins[i]) mins[i] = headMins[i];
 				if (headMaxs[i] > maxs[i]) maxs[i] = headMaxs[i];
+			}
+
+		/* -lips looks at the face: the camera frames its box alone, in the
+		 * body's bind pose. */
+		if (lips.track >= 0 && HDModelHeadBounds(slot, headMins, headMaxs))
+			for (int i = 0; i < 3; i++)
+			{
+				mins[i] = headMins[i];
+				maxs[i] = headMaxs[i];
 			}
 	}
 
@@ -10216,6 +10458,13 @@ int main(int argc, char** argv)
 	lighting.specStrength = 0.0f;
 	lighting.specPower = 1.0f;
 
+	/* The face's lips - see LipsAsk - on the separate face, or on the model
+	 * itself where the model is a face (-name LARA_HEAD -rigid). Not with the
+	 * ring's model in the slot's place. */
+	const bool lipsOnHead = head && HDModelHasHead(slot);
+	const int lipsTrack = lips.track >= 0 && optionSlot < 0
+		? LipsOpen(lips, slot, lipsOnHead) : -1;
+
 	/* --- draw ------------------------------------------------------------ */
 	printf("\n-- the picture ------------------------------------------------\n");
 
@@ -10567,15 +10816,20 @@ int main(int argc, char** argv)
 			MatMul(ringTurn, &matrices[(size_t)node * 16],
 				&own[(size_t)node * 16]);
 
+		/* A model that is itself a face (-name LARA_HEAD -rigid) takes the
+		 * lips on its own draw; a body with a separate face leaves them to
+		 * the face below. */
 		drew = HDModelDraw(slot, &own[0], here->nodes,
-			&light[0], nodeMask, &lighting);
+			&light[0], nodeMask, &lighting, 0, HD_MODEL_CULL_NONE,
+			lipsOnHead ? -1 : lipsTrack, lipsOnHead || lipsTrack < 0 ? -1 : lips.frames[0]);
 	}
 
 	bool drewHead = false;
 
 	if (head && optionSlot < 0)
 		drewHead = HDModelDrawHead(slot, &matrices[0], here->nodes,
-			&light[0], nodeMask, &lighting);
+			&light[0], nodeMask, &lighting, 0, HD_MODEL_CULL_NONE,
+			lipsOnHead ? lipsTrack : -1, lipsOnHead && lipsTrack >= 0 ? lips.frames[0] : -1);
 
 	const int calls = HDModelDrawCalls();
 
@@ -10586,10 +10840,69 @@ int main(int argc, char** argv)
 		drew ? "true" : "FALSE", calls,
 		drewHead ? " (the separate face came along)" : "");
 
-	char path[512];
+	LipsSay();
 
-	sprintf(path, "%s_%s.png", out.c_str(), HDModelName(slot));
+	char path[512];
+	char lipsName[64] = "";
+
+	if (lipsTrack >= 0)
+		sprintf(lipsName, "_lips%d_%d", lipsTrack, lips.frames[0]);
+
+	sprintf(path, "%s_%s%s.png", out.c_str(), HDModelName(slot), lipsName);
 	ShotWrite(shot, path);
+
+	/* And the sheet: the same body and face, one picture per frame, the
+	 * plain draw of the two and nothing of the ring or the floor. */
+	if (lipsTrack >= 0 && lips.sheet && lips.frames.size() > 1)
+	{
+		const int pictures = (int)lips.frames.size();
+		int across = 1;
+		long sheetW = width, sheetH = height;
+		std::vector<unsigned long> sheet, tile;
+		std::vector<float> own((size_t)here->nodes * 16);
+
+		LipsSheetSize(pictures, width, height, &across, &sheetW, &sheetH);
+		sheet.assign((size_t)sheetW * (size_t)sheetH, 0xFF000000u);
+
+		for (int node = 0; node < here->nodes; node++)
+			MatMul(ringTurn, &matrices[(size_t)node * 16], &own[(size_t)node * 16]);
+
+		for (int picture = 0; picture < pictures; picture++)
+		{
+			const int lipsFrame = lips.frames[(size_t)picture];
+
+			g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+				D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+			g_device->BeginScene();
+			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+			HDModelFrameBegin(&projection, 0);
+
+			HDModelDraw(slot, &own[0], here->nodes, &light[0], nodeMask, &lighting,
+				0, HD_MODEL_CULL_NONE, lipsOnHead ? -1 : lipsTrack, lipsFrame);
+
+			if (lipsOnHead)
+				HDModelDrawHead(slot, &matrices[0], here->nodes, &light[0],
+					nodeMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsTrack,
+					lipsFrame);
+
+			HDRenderFrameEnd();
+			g_device->EndScene();
+			LipsSay();
+
+			if (ShotGrab(shot, tile))
+				LipsPaste(sheet, sheetW, tile, width, height, picture, across);
+		}
+
+		sprintf(path, "%s_%s_lips%d_%d-%d-%d_sheet.png", out.c_str(),
+			HDModelName(slot), lipsTrack, lips.frames.front(), lips.frames.back(),
+			lips.frames[1] - lips.frames[0]);
+
+		const bool wrote = WritePng(path, &sheet[0], sheetW, sheetH);
+
+		printf("  %-58s %d frames, %d across, %s\n", path, pictures, across,
+			wrote ? "written" : "NOT written");
+	}
+
 	ShotEnd(shot);
 
 	/* The pickup display, in three halves.

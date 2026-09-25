@@ -852,7 +852,9 @@ inline void InterpRotMul(const float* a, const float* b, float* out)
  * and pushes it (bit 1); the offsets turn nothing and are not read. The
  * draw's stack multiplies each rotation on the right, and InterpPoseRot's
  * layout is its transpose, so here a node's own rotation stands on the left.
- * Node 0's drawn rotation is its own, bit for bit. At most 32 nodes. */
+ * Node 0's drawn rotation is its own, bit for bit. Only the key frames are
+ * read: the torso's look and aim rotation (lara.torso_*_rot), which the draw
+ * puts on the stack after node 7, is not part of it. At most 32 nodes. */
 inline void InterpDrawnRots(const short* f, int nodes, const long* bone, float* out)
 {
 	float stack[32][9];
@@ -1592,7 +1594,7 @@ inline int InterpTurnKind(const short* keys, long size, long frameBase, long rat
 /* True when the far key pair `pair` is held on its first key frame: the
  * half turn is INSIDE it and the flip falls on its second key, so every frame
  * between the two keys is drawn under the old yaw and only the first key
- * belongs to it. Every other far pair is built by InterpKeyFrameLerp. INSIDE
+ * belongs to it. Every other far pair is built by InterpKeyFrameFar. INSIDE
  * asks the hips (InterpKeyFar), so a pair far only by another node is never
  * held: over the thirteen campaign levels the one such pair with
  * turn180_effect on its second key, rich3's 210 key 1 to 2 (the head 96.9

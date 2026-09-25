@@ -1902,7 +1902,7 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
  *   drawn   the key frame drawn in place of the blend; -1 where a key frame
  *           is built between the two instead
  *   mode    hold (the first key, InterpKeyHold) or lerp (a key frame built
- *           at the tick's own weight, InterpKeyFrameLerp)
+ *           at the tick's own weight, InterpKeyFrameFar)
  *   node    the node whose drawn rotation turns furthest between the two
  *           key frames (InterpKeyFarDrawn): 0 the hips, 7 the torso, 14
  *           the head, 8 to 13 the arms, the rest the legs

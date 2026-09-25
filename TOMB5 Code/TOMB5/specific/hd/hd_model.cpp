@@ -2177,8 +2177,8 @@ namespace
 	 * (game\interpolate.cpp, InterpBeginFrame), so at sixty frames a second
 	 * every second draw finds the buffer already holding its frame. A face
 	 * whose clip is not open, a frame the clip says is the bind, and every
-	 * failure on the way draw the static buffer - which is the face as the
-	 * game drew it before. */
+	 * failure on the way draw the static buffer - which is the face as it
+	 * was built. */
 	IDirect3DVertexBuffer9* lips_stream(const Model& model, int slot, bool head,
 		int track, int frame)
 	{

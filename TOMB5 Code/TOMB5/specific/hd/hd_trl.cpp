@@ -428,26 +428,26 @@ bool HDLipsMapBuild(const HDTrmModel* trm, const char* stem, HDLipsMap* out,
 	 * parent is no column - LARA_HEAD's joint 4, BLUE_GUARD_HEAD's, DEMON_
 	 * HEAD's and the VON_CROY faces' joint 1, joint 0 in ADMIRAL_HEAD,
 	 * PATRICK_*, PIERRE_HEAD, LARSON_HEAD and SERGIE_HEAD, HANGMAN_HEAD's
-	 * joint 2. The most named one; the lowest on a tie. */
+	 * joint 2. The first such column names it; the others hang off the
+	 * same joint in all 23 rigged heads of games 4 and 5, and a face whose
+	 * root columns disagree is refused rather than pivoted about one. */
+	for (int c = 0; c < columns; c++)
 	{
-		int votes[256];
+		if (out->joint[c] < 0 || out->parent[c] >= 0)
+			continue;
 
-		std::memset(votes, 0, sizeof(votes));
+		const int up = trm->blockParent[trm->blockColumn[c]];
 
-		for (int c = 0; c < columns; c++)
+		if (up < 0 || up >= trm->rigJoints)
+			continue;
+
+		if (out->headJoint < 0)
+			out->headJoint = up;
+		else if (up != out->headJoint)
 		{
-			if (out->joint[c] < 0 || out->parent[c] >= 0)
-				continue;
-
-			const int up = trm->blockParent[trm->blockColumn[c]];
-
-			if (up >= 0 && up < trm->rigJoints && up < 256)
-				votes[up]++;
+			*why = "the columns hang off more than one joint";
+			return false;
 		}
-
-		for (int j = 0; j < trm->rigJoints && j < 256; j++)
-			if (votes[j] && (out->headJoint < 0 || votes[j] > votes[out->headJoint]))
-				out->headJoint = j;
 	}
 
 	if (out->headJoint < 0)

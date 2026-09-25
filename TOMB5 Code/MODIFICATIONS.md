@@ -1187,7 +1187,8 @@ their key pairs, which were not measured in play. Other items keep vanilla's ble
 degrees - 580 blended pairs, arm and leg swings - vanilla's blend stays: a limb averaged
 across 120 degrees keeps half its length on the middle frame, but none was reported in
 play, and testing every node (`InterpPoseFar` over all fifteen) would change the
-in-between frames of all 580 at once; not done.
+in-between frames of all 580 at once; not done here. It was reported afterwards and is
+done below, in the drawn frame (*Every node, in the drawn frame*).
 
 **How.** `game/interpolate_math.h:793`: `InterpKeyFar`, `InterpPoseFar` over node 0 with
 `INTERP_POSE_TURN_COS`. `game/interpolate_math.h:1198` (`InterpKeyHold`): the far pair
@@ -1234,7 +1235,151 @@ offline probe that reads the thirteen levels and includes `game/interpolate_math
 `InterpKeyFar` fires on the 31 pairs above and on no other blended pair, `InterpKeyHold`
 on the 4 tightrope pairs and on no other.
 
-**Commits.** `b643607`, `b7607c9`
+**Every node, in the drawn frame** (2026-09-25). *What.* With the hips' rule in place the
+owner still saw her distorted now and then: at the take-off of a jump both arms stretched
+flat to the sides with paper-thin hands, at times what looked like an arm drawn twice, a
+twisted body in the somersaults. The hips are one node of fifteen. Vanilla's blend
+averages every node's drawn rotation - its own rotation multiplied onto its parents',
+the matrices `Rich_CalcLaraMatrices_Interpolated` (`game/delstuff.cpp:710`) builds on two
+stacks and `InitInterpolateAlpha` / `InterpolateMatrix` (`game/draw.cpp:249`, :3381)
+average - so a limb whose drawn rotation turns far between two keys collapses as the
+hips did. In the standing jump forward (animation 76, key 0 to 1, rate 2, the same numbers
+in ANDREA1 and JOBY2) the upper arm (node 11) turns 143.7 degrees on its own and the
+forearm (node 12, 0.4 on its own) 170.1 in the drawn frame; on the one in-between frame
+vanilla's average keeps 0.086 of the forearm's breadth (the smallest singular value of the
+averaged matrix; node 11 0.087, the other arm 0.20, the thighs 0.45 and 0.42). A key pair
+of Lara's is now far where the drawn rotation of any node turns more than 90 degrees
+between its keys, and every far pair is drawn as the hips' far pairs were: held on its
+first key where `turn180_effect` fires on its second (the same four tightrope pairs),
+else from a key frame built at the weight in hand, at every frame rate, with the HD art
+on or off and under both control schemes. Every other pair is drawn as before.
+
+*The pairs.* Over the thirteen campaign levels' playable Lara animations the engine
+blends 35364 key pairs - the 35358 counted above and 6 whose node data run past their
+frame size (379 key 2 to 3 in andy1, Andy2 and joby4, 152 key 3 to 4 and 4 to 5 in
+rich3), which the engine reads as it always has. 1204 of them are far: ANDREA1 80,
+ANDREA2 114, ANDREA3 98, andy1 83, Andy2 89, andy3 96, JOBY2 81, joby3 76, joby4 93,
+joby5 72, rich1 113, rich2 75, rich3 134. 32 of them are far at the hips (the 31 above
+and rich3's 152 key 3 to 4, 165.9 degrees, one of the six), 1172 only at another node;
+4 are held (the four tightrope pairs, unchanged), 1200 built. The take-offs, with the
+node that turns furthest, its drawn turn, and what vanilla's middle frame kept of it
+(`cos(D/2)`), identical in ANDREA1 and JOBY2: 76 forward (`AS_FORWARDJUMP`) node 12,
+170.1 degrees, 0.09; 91 up (`AS_UPJUMP`) node 11, 133.8, 0.39 - its own turn is 179.9,
+of which its parent's turn takes part back; 74 back node 12, 153.8, 0.23; 78 left node 9, 147.9,
+0.28; 80 right node 12, 131.7, 0.41. The back jump's twist 212 key 0 to 1, node 10,
+137.0, 0.37, and key 1 to 2, node 1, 114.4, 0.54 (the hips turn 38.7 and 45.3, so the
+hips' rule did not fire); the running jump's twist 207 key 2 to 3, node 3, 162.5, 0.15;
+208's six pairs from key 0 to key 7, 102.7 to 127.1 at the head, an arm and the legs; hitting a wall
+53 and 54 key 2 to 3 (113.9 and 106.1); the bar swing 159 key 1 to 2, node 8, 177.9,
+0.02. At rate 1 the table marks 205 key 0 to 1 in eight levels and nothing else; the
+rate 1 rule refuses it before (`game/draw.cpp:2660`), as before.
+
+*Why the drawn turn and not the node's own.* The own turn is not what the blend averages:
+it would mark 617 blended pairs, missing 719 whose drawn turn passes 90 degrees (10 key 0
+to 1, state `AS_RUN`: no node over 56.7 on its own, node 13 94.2 drawn) and taking 132 whose
+drawn turn stays under it (53 key 0 to 1: node 9 147.6 on its own, no node over 83.6
+drawn, 0.75 kept). The threshold is the rate 1 rule's, 90 degrees, as a constant of its
+own, `INTERP_KEY_DRAWN_COS` (`0.0F`, the cosine), so it can move without moving the rate
+1 rule. The nearest drawn turns on either side of it are 89.925 and 90.043 degrees. The
+largest drawn turn over all 35364 blended pairs, with what the middle frame keeps
+(`cos(D/2)` at the band's edges): below 45 degrees 27402 pairs (1.00 to 0.92); 45 to 60
+3429 (0.92 to 0.87); 60 to 75 2110 (0.87 to 0.79); 75 to 90 1219 (0.79 to 0.71); 90 to
+120 736 (0.71 to 0.50); 120 to 150 364 (0.50 to 0.26); 150 to 180 104 (0.26 to 0). The
+running jump's first frames stay under the limit (JOBY2, 16 to 19): 17 key 0 to 1 at
+79.8 degrees (node 11) and 19 key 0 to 1 at 77.8 (node 8), 0.77 and 0.78 kept; a limit
+of 75 degrees would take in the 1219 pairs of that band as well.
+
+*The way round near half a turn.* The built frame takes every node the shorter way round
+its own turn (`InterpKeyFrameLerp`). How far that strays in the drawn frame was measured
+as how much longer each node's drawn path through the built frame is than the shortest
+turn between the two keys' drawn rotations (0 on that turn), the worst node and weight
+of each pair: under 1 degree on 549 of the 1200 built pairs, under 5 on 1055, under 20
+on all but 17. The standing jump up, 91 key 0 to 1 in every level, is 13 of them: the
+upper arm (node 11) turns 179.85 degrees on its own and 133.8 in the drawn frame, the
+shorter way of its own turn is decided by the data's last bits, and it puts the arm 180
+degrees off the middle of the drawn turn on the in-between frame (116.0 and 115.9 degrees
+from the two keys). The other four: rich3's 219 key 0 to 1, its head 39.5 (as measured
+when that pair was first built), andy3's 380 key 1 to 2, 21.3, and rich3's 152 key 3 to 4
+and 4 to 5, whose node data run past their frame size, 144.2 and 59.9. A node whose own
+turn lies within a degree of half a turn (`INTERP_KEY_HALF_COS`) now takes the way whose
+drawn rotation lies nearer the middle of the drawn turn, decided once for the pair at
+its middle under its parent as built, so that every weight follows one path
+(`InterpKeyFrameFar`). Over the thirteen levels that changes 14 of the 2741 built frames
+(pairs times in-between weights): 91's in-between frame in every level, the arm now 20.7
+degrees off the middle of its drawn turn, and rich3's 152 key 4 to 5, whose path by the
+measure above goes from 59.9 to 102.1 degrees - frame data that are no pose. The other
+2727 are `InterpKeyFrameLerp`'s word for word. Two other rules were measured and dropped:
+slerping every node's drawn rotation and deriving its own puts every node on the drawn
+path but swings a joint through half a turn where a drawn turn itself lies near 180
+degrees (in 159 key 1 to 2, in every level, the forearm's own rotation, the elbow, runs
+274.8 degrees further than the shortest way between its keys; 18 pairs in all); and
+choosing the way for every node past 150 degrees on its own lengthens 159 key 1 to 2's
+drawn path from 4.2 to 342.8 degrees, its upper arm turning 177.9 in the drawn frame.
+
+*The early turn.* `InterpTurnKind` keeps asking the hips (`InterpKeyFar`,
+`game/interpolate_math.h:786`), and with it the hold and the bridge: a pair far only at
+another node never becomes an inside turn. Over the thirteen levels one such pair has
+`turn180_effect` on its second key, rich3's 210 key 1 to 2 (flip 3992, the head 96.9
+degrees in the drawn frame, the hips 23.3): an early turn, never held. Its in-between
+ticks are built like any far pair; the tween frames into the flip tick take the pair
+turned by half a turn (`InterpKeyFrameTurn`), and where that pair is far they are built
+from the two turned copies (`game/draw.cpp:3049`), whose drawn turn is the pair's own
+(96.877 degrees both). At *Frame rate 30* the flip frame lies on key 2 and is drawn as
+before.
+
+*How.* `game/interpolate_math.h:856` (`InterpDrawnRots`): every node's drawn rotation in
+`InterpPoseRot`'s layout, the node's own on the left of its parent's, the parent found by
+the bone table's pop (bit 0) and push (bit 1) as the draw finds it; node 0's is its own,
+bit for bit, so every pair `InterpKeyFar` fires on is far here too. :901
+(`InterpDrawnTurnCos`) the largest turn and its node; :927 (`InterpKeyFarDrawn`) the
+test against `INTERP_KEY_DRAWN_COS` (:834); :950 (`InterpKeyFarFill`) one animation's
+pairs as one bit each, each key frame walked once; :980 (`InterpKeyFarBit`) false
+outside the table, whose width is `INTERP_KEY_FAR_WORDS` (:835) 32-bit words, 256 pairs:
+the longest playable animation of Lara's has 199 (rate 1, 471 in ANDREA3; 100 at rates
+above 1, 471 in andy3). :1363 (`InterpKeyFrameFar`): `InterpKeyFrameLerp` (:1271) unless
+a node turns past `INTERP_KEY_HALF_COS` (:1297) on its own, then the ways decided at the
+middle through `InterpSlerpMat` (:1302) and handed to `InterpKeyNodeLerp` as `longArc`.
+`game/interpolate.cpp:2112` (`InterpKeyFarOf`, declared in `game/interpolate.h:335`): the
+table, 512 slots like `InterpTurnOf`'s (:218), filled for an animation on its first call
+and emptied by `InterpInvalidate` (:1619). `game/draw.cpp`: `LaraKeyFar` (:2528) asks it
+with Lara's mesh count and bone table; `LaraKeyOf` (:2538) names the pair `frm` holds, or
+none for the bridge's frame; `GetFramesAt` (:2668) and `GetKeyAt` (:2733) ask
+`LaraKeyFar` where they asked `InterpKeyFar` before `LaraKeyHold`, which answers as before
+because only the hips make an inside turn; `LaraPoseFrames` (:3006) takes the pair's key
+from `LaraKeyOf` and builds every far pair (:3074), holds the four (:3070), and builds a
+far pair under an early flip from its turned copies (:3049).
+The body takes it through `CalcLaraMatrices` (`game/delstuff.cpp:197`), the braid through
+`HairControl` on the tick's pair (`game/hair.cpp:302`, :309), the HD body from
+`lara_matrices`; the root is untouched, the built frame carrying the offset vanilla's
+blend gives. Behind `-log` `KEYFARLOG` ends in `node= turn=` (`game/interpolate.cpp:1961`),
+the node that turns furthest in the drawn frame and its turn in degrees, and is written on
+the new pairs too. What it costs: 18 KB of table; filling it 1.6 microseconds a pair (x86
+`/O2`, measured offline), 12 to 20 on average for one animation and 285 for the longest,
+a level's 3.8 to 7.6 milliseconds spread over each animation's first draw; per frame a
+lookup where the hips test cost 155 to 168 ns.
+
+*Checked.* An offline probe that includes `game/interpolate_math.h` runs the engine's
+table fill on every animation of the thirteen levels and compares every pair with a
+double-precision walk of its own (its own unpacker and rotations after `specific/3dmath.cpp`):
+0 disagreements, the drawn turns at most 0.056 degrees apart, next to half a turn where
+the arccosine is steep (on 20 far pairs the two walks name different nodes of turns that
+close); the engine's `InterpKeyFrameFar` against `InterpKeyFrameLerp` on all 2741 built
+frames, as above. `Preparation/Tools/Diagnose/InterpTest.cpp` (`key_far_all`, :4705, 30
+checks, 620 in all): the walk over a hand-built tree (a child turned 60 degrees under a parent
+turned 60 turns 120, a node popped back to the root not at all, turned back against its
+parent not at all, a parent's y and a child's x in the draw's order); ANDREA1's 76 key 0
+to 1 far at node 12, 170.1 degrees, not far at the hips, marked by the table, built at 0.5
+into drawn frames with columns of length 1, the upper arm about 72 degrees from each key
+and the forearm about 85, where vanilla's middle frame leaves the forearm a determinant of
+0.007; 10 key 0 to 1 far (94.2 drawn, near by every node's own turn), 53 key 0 to 1 near
+(83.6 drawn, far by its own), the run's 1 key 0 to 1 near (14.5); 451 key 25 to 26 far,
+inside and held, 76 far and not held, an early far pair not held; the table's bound; 91
+key 0 to 1, whose upper arm the shorter way puts about 180 degrees off the middle of its
+drawn turn and `InterpKeyFrameFar` about 21, on that way at a quarter and three quarters
+too, and 76 built by `InterpKeyFrameFar` word for word as by `InterpKeyFrameLerp`.
+`RootProbe -sweep` over ANDREA1 prints what it printed before, byte for byte.
+
+**Commits.** `b643607`, `b7607c9`, `a9da3ac`
 
 ### Level Select, a keyhole that survives a save, and the underwater pickup animation
 2026-07-31 - 2026-09-14
@@ -4392,8 +4537,9 @@ pose path. Animations of rate 1 - 3619 of the game's animations, which never
 interpolated at all before - now interpolate, except that `InterpPoseFar` refuses a rate
 1 key frame pair whose two poses turn more than ninety degrees at any node,
 `GetFramesAt` then returning 0 so that the frame is drawn exactly as thirty hertz draws
-it. At rates above 1 a key pair of Lara's whose hips turn more than ninety degrees
-(`InterpKeyFar`), the pair vanilla's own key-frame blend collapses her on, is drawn from
+it. At rates above 1 a key pair of Lara's where some node turns more than ninety degrees
+in the drawn frame (`InterpKeyFarOf`; the hips alone, `InterpKeyFar`, until *Every node,
+in the drawn frame*), the pair vanilla's own key-frame blend collapses her on, is drawn from
 a key frame built at the weight in hand, the tween's weight included; only where the
 pair is held on its first key (the tightrope turn) does `GetFramesAt` refuse the tween
 (see *Lara squeezed to a sliver in the tightrope turn*).

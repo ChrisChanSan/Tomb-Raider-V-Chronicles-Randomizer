@@ -1191,10 +1191,10 @@ in-between frames of all 580 at once; not done here. It was reported afterwards 
 done below, in the drawn frame (*Every node, in the drawn frame*).
 
 **How.** `game/interpolate_math.h:786`: `InterpKeyFar`, `InterpPoseFar` over node 0 with
-`INTERP_POSE_TURN_COS`. `game/interpolate_math.h:1602` (`InterpKeyHold`): the far pair is
+`INTERP_POSE_TURN_COS`. `game/interpolate_math.h:1718` (`InterpKeyHold`): the far pair is
 held where `InterpTurnKind` finds the half turn inside it (`INTERP_TURN_INSIDE`, see
 *Lara facing the wrong way for one tick in the jump twists*) and the flip frame is the
-pair's second key. `game/interpolate_math.h:1273` (`InterpKeyFrameLerp`): the built key
+pair's second key. `game/interpolate_math.h:1386` (`InterpKeyFrameLerp`): the built key
 frame - the box of the nearer key, the offset blended in eighths exactly as
 `InterpRootKey` blends it, a node equal in both keys copied, a node both keys store about
 the same single axis blended by `InterpLerpAngle` in that form, every other node by
@@ -1272,7 +1272,7 @@ turn 38.7 and 45.3, so the hips' rule did not fire); the running jump's twist 20
 3, node 3, 162.5, 0.15; 208's six pairs from key 0 to key 7, 102.7 to 127.1 at the head,
 an arm and the legs; hitting a wall 53 and 54 key 2 to 3 (113.9 and 106.1); the bar swing
 159 key 1 to 2, node 8, 177.9, 0.02. At rate 1 the table marks 205 key 0 to 1 in eight
-levels and nothing else; the rate 1 rule refuses it before (`game/draw.cpp:2660`), as
+levels and nothing else; the rate 1 rule refuses it before (`game/draw.cpp:2662`), as
 before. 159 key 1 to 2, called the bar swing here, is the start of the handstand from a
 ledge (`AS_GYMNAST`); it was reported afterwards and is left to vanilla's blend below
 (*A seam in the data*).
@@ -1339,10 +1339,10 @@ test against `INTERP_KEY_DRAWN_COS` (:834); :950 (`InterpKeyFarFill`) one animat
 pairs as one bit each, each key frame walked once; :980 (`InterpKeyFarBit`) false
 outside the table, whose width is `INTERP_KEY_FAR_WORDS` (:835) 32-bit words, 256 pairs:
 the longest playable animation of Lara's has 199 (rate 1, 471 in ANDREA3; 100 at rates
-above 1, 471 in andy3). :1363 (`InterpKeyFrameFar`): `InterpKeyFrameLerp` (:1271) unless
+above 1, 471 in andy3). :1480 (`InterpKeyFrameFar`): `InterpKeyFrameLerp` (:1386) unless
 a node turns past `INTERP_KEY_HALF_COS` (:1297) on its own, then the ways decided at the
 middle through `InterpSlerpMat` (:1302) and handed to `InterpKeyNodeLerp` as `longArc`.
-`game/interpolate.cpp:2112` (`InterpKeyFarOf`, declared in `game/interpolate.h:335`): the
+`game/interpolate.cpp:2160` (`InterpKeyFarOf`, declared in `game/interpolate.h:348`): the
 table, 512 slots like `InterpTurnOf`'s (:218), filled for an animation on its first call
 and emptied by `InterpInvalidate` (:1619). `game/draw.cpp`: `LaraKeyFar` (:2528) asks it
 with Lara's mesh count and bone table; `LaraKeyOf` (:2538) names the pair `frm` holds, or

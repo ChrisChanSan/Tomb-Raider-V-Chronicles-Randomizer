@@ -18,6 +18,28 @@ void CalcLaraMatrices(long flag);
 void Rich_CalcLaraMatrices_Normal(short* frame, long* bone, long flag);
 void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alpha, long* bone, long flag);
 
+/* LM node -> LMX matrix: where a mesh tree node's matrix stands in
+ * lara_matrices.
+ *
+ * lara_matrices holds fifteen matrices in LMX_ order - the order DrawLara
+ * walks and the order Rich_CalcLaraMatrices_Normal builds them in: the hips,
+ * the left leg, the right leg, the torso, then the head out of bone[53..55],
+ * then the two arms. A node number walks the mesh tree, which is LM_ order,
+ * where the head is last. The only difference is the head: LM 14 is LMX 8,
+ * and LM 8..13 are LMX 9..14. Written out in full so it reads against
+ * lara_mesh_sweetness_table (specific\drawlara.cpp), the draw order, which is
+ * its inverse. The HD seam and the stretch diagnostic both read through it. */
+constexpr int lara_lmx_of_node[15] =
+{
+	LMX_HIPS,			// LM_HIPS
+	LMX_THIGH_L, LMX_CALF_L, LMX_FOOT_L,	// LM_LTHIGH, LSHIN, LFOOT
+	LMX_THIGH_R, LMX_CALF_R, LMX_FOOT_R,	// LM_RTHIGH, RSHIN, RFOOT
+	LMX_TORSO,			// LM_TORSO
+	LMX_UARM_R, LMX_LARM_R, LMX_HAND_R,	// LM_RINARM, ROUTARM, RHAND
+	LMX_UARM_L, LMX_LARM_L, LMX_HAND_L,	// LM_LINARM, LOUTARM, LHAND
+	LMX_HEAD			// LM_HEAD - the odd one
+};
+
 extern short* GLaraShadowframe;
 extern float lara_matrices[180];
 extern float lara_joint_matrices[180];

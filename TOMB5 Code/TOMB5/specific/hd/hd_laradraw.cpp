@@ -47,26 +47,11 @@
 
 namespace
 {
-	/* LM node -> LMX matrix. lara_matrices holds fifteen matrices in LMX_
-	 * order - the order DrawLara walks and the order the matrices are built
-	 * in (game\delstuff.cpp, Rich_CalcLaraMatrices_Normal: hips, the left
-	 * leg, the right leg, the torso, then the head out of bone[53..55], then
-	 * the two arms). A .TRM's three bone bytes are mesh tree nodes, which are
-	 * LM_ order, where the head is last.
-	 *
-	 * The only difference is the head: LM node 14 is LMX matrix 8, and LM
-	 * 8..13 are LMX 9..14. Written out in full so it reads against the
-	 * classic path's lara_mesh_sweetness_table, which is its inverse. */
-	const int kLmxOfNode[HD_LARA_NODES] =
-	{
-		LMX_HIPS,			// LM_HIPS
-		LMX_THIGH_L, LMX_CALF_L, LMX_FOOT_L,	// LM_LTHIGH, LSHIN, LFOOT
-		LMX_THIGH_R, LMX_CALF_R, LMX_FOOT_R,	// LM_RTHIGH, RSHIN, RFOOT
-		LMX_TORSO,			// LM_TORSO
-		LMX_UARM_R, LMX_LARM_R, LMX_HAND_R,	// LM_RINARM, ROUTARM, RHAND
-		LMX_UARM_L, LMX_LARM_L, LMX_HAND_L,	// LM_LINARM, LOUTARM, LHAND
-		LMX_HEAD			// LM_HEAD - the odd one
-	};
+	/* LM node -> LMX matrix is lara_lmx_of_node (game\delstuff.h): a .TRM's
+	 * three bone bytes are mesh tree nodes, LM_ order, and lara_matrices is
+	 * in LMX_ order. */
+	static_assert(sizeof(lara_lmx_of_node) / sizeof(lara_lmx_of_node[0]) ==
+		HD_LARA_NODES, "one matrix for every node of the HD composite");
 
 	/* ------------------------------------------------------------- state -- */
 
@@ -890,7 +875,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	/* --- the fifteen matrices ------------------------------------------ */
 	for (int node = 0; node < HD_LARA_NODES; node++)
-		to_row_major(&lara_matrices[kLmxOfNode[node] * indices_count],
+		to_row_major(&lara_matrices[lara_lmx_of_node[node] * indices_count],
 			matrices + node * 16);
 
 	/* --- the light ------------------------------------------------------ */
@@ -936,7 +921,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	for (int node = 0; node < HD_LARA_NODES; node++)
 	{
 		const bool under = bLaraInWater != 0 &&
-			LaraNodeUnderwater[kLmxOfNode[node]] != 0;
+			LaraNodeUnderwater[lara_lmx_of_node[node]] != 0;
 		const float* from = under ? wet : dry;
 
 		nodeLight[node * 3 + 0] = from[0];
@@ -960,7 +945,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		mask = 0;
 
 		for (int node = 0; node < HD_LARA_NODES; node++)
-			if (lara_item->mesh_bits >> 0x10 & 1 << (15 - kLmxOfNode[node]))
+			if (lara_item->mesh_bits >> 0x10 & 1 << (15 - lara_lmx_of_node[node]))
 				mask |= 1u << node;
 	}
 

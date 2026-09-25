@@ -278,7 +278,8 @@ void InterpArmLogFrame();
  * On every tween frame each of Lara's bones is measured against its skeleton
  * length and the worst of the second is kept with its animation and frame; a
  * rigid pose reads 1.00. `matrices` is lara_matrices (twelve floats per node,
- * world position in M03/M13/M23), `bone` the object's bone table. -log only. */
+ * world position in M03/M13/M23, LMX_ order - each node is read through
+ * lara_lmx_of_node), `bone` the object's bone table. -log only. */
 void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 	int animNumber, int frameNumber);
 

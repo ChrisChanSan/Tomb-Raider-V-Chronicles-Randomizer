@@ -728,7 +728,10 @@ namespace
 	 *   stretch      the worst bone length the pose blend left this second,
 	 *                with node, animation and frame (cos(D/2) for a bone
 	 *                turning D). 1.00 is rigid; below about 0.85 a limb is
-	 *                visibly out of place.
+	 *                visibly out of place. The node is a mesh tree node, LM_
+	 *                order (14 the head, 8..13 the arms), and its matrix is
+	 *                read through lara_lmx_of_node, because lara_matrices is
+	 *                in LMX_ order.
 	 *   particles    particles drawn between two ticks, per drawn frame:
 	 *                hundreds in rain, zero in a still room and at fps_mode 0.
 	 *   particle_kinds  the kinds, one bit each in InterpParticleKind order:
@@ -1841,18 +1844,23 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
  * walked as Rich_CalcLaraMatrices walks it (flag 1 pops, flag 2 pushes, the
  * current node is the parent), and the length between drawn matrices is
  * compared with the table's length, which no animation changes. A bone under
- * a hundredth of a unit has no ratio and is skipped. */
+ * a hundredth of a unit has no ratio and is skipped.
+ *
+ * The walk is in mesh tree nodes, LM_ order, and `matrices` is lara_matrices,
+ * which is in LMX_ order, so every node's matrix is read through
+ * lara_lmx_of_node - the head's is the ninth of the fifteen, not the last. */
 void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 	int animNumber, int frameNumber)
 {
 	if (!gLogEnabled || !matrices || !bone || nodes < 2)
 		return;
 
+	const int mapped = (int)(sizeof(lara_lmx_of_node) / sizeof(lara_lmx_of_node[0]));
 	int stack[32];
 	int top = 0;
 	int cur = 0;
 
-	for (int node = 1; node < nodes && node < 32; node++)
+	for (int node = 1; node < nodes && node < mapped; node++)
 	{
 		const long* b = bone + (node - 1) * 4;
 
@@ -1872,8 +1880,8 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 
 		if (want > 0.01)
 		{
-			const float* mp = matrices + cur * 12;
-			const float* mn = matrices + node * 12;
+			const float* mp = matrices + lara_lmx_of_node[cur] * 12;
+			const float* mn = matrices + lara_lmx_of_node[node] * 12;
 			const double dx = (double)mn[M03] - (double)mp[M03];
 			const double dy = (double)mn[M13] - (double)mp[M13];
 			const double dz = (double)mn[M23] - (double)mp[M23];

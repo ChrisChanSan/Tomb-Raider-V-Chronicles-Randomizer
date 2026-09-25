@@ -1058,14 +1058,15 @@ the refused frame read before - so the root comes out unchanged; the classic bod
 switch nor the control scheme is read anywhere on the way. The braid does not take these
 frames: `HairControl` runs on the tick (`game/control.cpp:662`, from `GetFrames`,
 `game/hair.cpp:302`) and its links are blended as positions between the ticks
-(`game/interpolate.cpp:913`, :1308), as before. Bounds (`GetBoundsAccurate`,
-`game/draw.cpp:192`), the shadow (`game/delstuff.cpp:289`) and the collision read the
-item's own frame. At `fps_mode 0` none of it is reached: `InterpAlphaNow` answers 1
-(`game/interpolate.cpp:1009`), `InterpBeginFrame` returns with `g_applied` false
-(:1170, :1202), `InterpPoseTime` answers 0 (:1644), and `GetFramesNow`'s `if (t > 0.0F)`
-(`game/draw.cpp:2863`) is not entered. Behind `-log`, `INTERPLOG` ends in `bridge=N`,
-the bridged frames of the second (`game/interpolate.cpp:770`), and `BRIDGELOG f=
-anim=A->B frame=F->G hips= arc=short|long` (:2004) is written once per bridged tick.
+(`game/interpolate.cpp:913`, :1308), as before; only its joint at the head
+(`game/hair.cpp:97`, `GetCorrectStashPoints`) follows the bridged head. Bounds
+(`GetBoundsAccurate`, `game/draw.cpp:192`), the shadow (`game/delstuff.cpp:289`) and the
+collision read the item's own frame. At `fps_mode 0` none of it is reached:
+`InterpAlphaNow` answers 1 (`game/interpolate.cpp:1009`), `InterpBeginFrame` returns with
+`g_applied` false (:1170, :1202), `InterpPoseTime` answers 0 (:1644), and `GetFramesNow`'s
+`if (t > 0.0F)` (`game/draw.cpp:2863`) is not entered. Behind `-log`, `INTERPLOG` ends in
+`bridge=N`, the bridged frames of the second (`game/interpolate.cpp:770`), and `BRIDGELOG
+f= anim=A->B frame=F->G hips= arc=short|long` (:2004) is written once per bridged tick.
 *The four changes*, measured with an offline probe that includes
 `game/interpolate_math.h`, identical in ANDREA1 and JOBY2, the same way round in all
 thirteen levels (the hips' angle from the first pose to the second, the way taken, the

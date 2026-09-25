@@ -2819,7 +2819,8 @@ head file's neck bone hangs off the head node's PARENT with the file's own weigh
 so the seam blends rather than tears; `bind_pose_of` returns the classic mesh tree
 beside the bind pose. `find_head_model` (`hd_model.cpp`) adds a STRIP rule that cuts the
 last `_<QUALIFIER>` off and asks again (17 names over the 1,335 model names of the 4 and
-5 folders, giving no name a face belonging to somebody else) and a TABLE of two entries
+5 folders; ten of them reached a face not theirs through a `_MIP`, and the rule now stops
+there, see *Six cutscene faces, and none on a MIP prop* below) and a TABLE of two entries
 for bodies carrying no part of the person's name - `ANIMATING4_RICHCUT2` ->
 `VON_CROY_SENIOR_HEAD` (7.4 units apart by neck-ring measurement, next nearest face
 11.4, sharing texture page 9075) and `ANIMATING6_RICHCUT2` -> `VON_CROY_ELDER_HEAD` (2.7
@@ -2850,8 +2851,85 @@ draws the same picture without the game (`-nodes`, `-meshbits`, `-all`). Files:
 `global/types.h`, `specific/3dmath.*`, `specific/output.cpp`, `tomb5/tomb5.cpp`,
 `tomb5.vcxproj`, `docs/Engine-Manual.md`.
 
+**Six cutscene faces, and none on a MIP prop** (2026-09-25). *What.* In many cutscenes the
+actors stood without heads. The 44 cutscenes of `DATA\cutseq.bin` put 133 actors on 98
+level slots (97 in the levels that play them, and cutscene 3, which no level plays); six
+bodies among them had a face file on disk that no rule reached, and the strip rule hung a
+face that was not theirs on eight props. Bound now, by the face table and keyed on the
+model: `PATRICK_1`, the priest (ANDY1's `SAILOR_MIP`, cutscene 19) ->
+`PATRICK_BROWN_HEAD`; `PATRICK_2`, the priest (ANDY2's and ANDY3's `SAILOR_MIP`, 33, 35,
+37, 38 and 44) -> `PATRICK_WHITE_HEAD`; `ANIMATING6_MIP_JOBY2`, the admiral (JOBY2 25, and
+as `CRANE_GUY_MIP` in JOBY3 and JOBY5, 12, 13, 15 and 18) -> `ADMIRAL_HEAD`;
+`ANIMATING9_MIP_JOBY2`, Sergie (JOBY2 25, and as `LION_MIP` 15 and 32) -> `SERGIE_HEAD`,
+on node 3, which the body leaves empty; `SNIPER_MIP_ANDY1`, the hanged man (21) ->
+`HANGMAN_HEAD` on node 21, turned half a turn about the node's x axis; `SWAT_MIP_ANDY3`,
+the demon knight (37 and 44) -> `DEMON_HEAD`. The strip rule stops at a stem that ends in
+`_MIP`, which takes the faces off `LARSON_MIP_ANDY1` and `PIERRE_MIP_ANDY1` (planks,
+cutscene 14), `BLUE_GUARD_MIP_ANDY1` (a stone block with a chain, 14),
+`BLUE_GUARD_MIP_JOBY4` (a pillar, 40), `LARSON_MIP_RICH1` (an ID card, 24),
+`LARSON_MIP_ANDY3` (the hussar, 36 and 38, whose own face Larson's covered),
+`PIERRE_MIP_ANDY3` (a horse) and `LARSON_MIP_JOBY3_JOBY5` (a rack of torpedoes that JOBY3
+loads and no cutscene draws).
+
+*Why.* The Remaster names a cutscene body after the slot it fills and a face after the
+person, so neither the name rule nor the strip rule reaches these six, and every binding
+rests on the engine's own sources and the installation's data. `handle_actor_chatting` in
+`game/deltapak.cpp` names the slot and the node each person speaks on: the priest
+`SAILOR_MIP` node 2 in cutscenes 19, 33, 35, 37 and 44; the admiral node 2, as
+`ANIMATING6_MIP` in 25 and as `CRANE_GUY_MIP` in 12, 13, 15 and 18; Sergie node 3, as
+`ANIMATING9_MIP` in 25 and as `LION_MIP` in 15 and 32; the hanged man `SNIPER_MIP` node 21
+in 21; the knight `SWAT_MIP` node 15 in 37 and 44. A face's spoken lines are files named
+after the audio track of the cutscene that plays them: `PATRICK_BROWN_HEAD_119.TRL` is
+cutscene 19's track, `PATRICK_WHITE_HEAD`'s 101, 97, 134 and 135 are 33, 35, 37 and 44,
+`ADMIRAL_HEAD`'s 113, 114, 115, 116 and 122 are 25, 18, 15, 13 and 12, `SERGIE_HEAD`'s
+113, 115 and 120 are 25, 15 and 32, `HANGMAN_HEAD_132` is 21 and `DEMON_HEAD`'s 134 and
+135 are 37 and 44. Body and face share texture pages 9090 and 9091 (the admiral), 9093
+(Sergie) and 9107 (the hanged man), and the hussar beside the knight, in the same uniform
+on the same pages 9097..9100, carries the demon's face in his own body on `DEMON_HEAD`'s
+pages 9113 and 9114.
+
+The hanged man's file stands upside down against the level's own head mesh of node 21, the
+mesh the speech table swaps: laid over it, its vertices lie 37.4 units from that mesh on
+average as they stand and 7.6 turned half a turn about the node's x axis, the best of
+every turn in 30-degree steps about all three axes, where the admiral's, a priest's,
+Sergie's and the knight's lie best as they stand (8.3, 9.2, 6.7 and 20.7). The node is the
+speech table's: the nearest-node rule would take node 2, 40.4 units from the face's centre
+against 44.6 for node 21. Not bound, on purpose: `DEMON_HEAD` on `LARSON_MIP_ANDY3`, whose
+shared pages are his own face; `ADMIRAL_HEAD` on any body but its own, although 55.8 per
+cent of its neck vertices lie within 10 units of `PATRICK_2`'s collar against 42.5 on its
+own body; the two priests' faces the other way round; `ZIP_HEAD`, which no cutscene body
+speaks with; and every game 4 face on a game 5 body. The strip rule's claim above is
+corrected: `DrawCutSeqActors` draws a `_MIP` slot in HD like any other actor, and over the
+1,335 model names of the 4 and 5 folders every one of the ten names that reached a face
+through a `_MIP` reached one that is not theirs - the eight props above and game 4's
+`JEAN_YVES_MIP_ANG_RACE` and `TROOPS_MIP_ANG_RACE`. The rule now answers for seven names,
+all right. ModelProbe's node table called a node the model does not cover a classic
+fallback; nothing is drawn there, neither the model nor the classic mesh
+(`game/deltapak.cpp` and `game/draw.cpp` hand the HD path only the node's matrix), and it
+now says so.
+
+*How.* Each line of `g_head_of_model` (`specific/hd/hd_model.cpp:495`) carries a node (-1
+measures it) and `halfTurnX`; `find_head_model` (`:571`) hands the table's line back, and
+the face pass rides the face on the table's node and turns it before the neck is looked
+for (`:3259`: y and z mirrored about the node's bind, each normal byte 254 minus itself,
+so every triangle keeps its winding). `ends_in_mip` (`:551`) stops the strip loop. The
+face note gains `, turned half a turn about x` at its end on the hanged man. Proof:
+`ModelProbe -all` over the fifteen levels, built from `e1bc056` and from this change - of
+1,820 bound slots 19 change, eleven gaining a face (the six models in ANDY1, ANDY2, ANDY3,
+JOBY2, JOBY3 and JOBY5) and eight losing one; over the 97 played level slots of the
+cutscenes 11 gain, 7 lose and 79 are unchanged, and besides those rows only the level
+totals (heads, geometry, pages) differ. Every face lands on the speech table's node: 2 for
+the priests and the admiral, 3 for Sergie, 21 for the hanged man, 15 for the knight.
+ModelProbe pictures of the six before and after and of the eight props without their
+faces. Unchanged: the speech-head mesh swap stays ignored over an HD body (`HDObjectBegin`
+counts it), the lips (`.TRL`) are not played, and the actors drawn classic
+(`SWAT_PLUS_MIP`, `DOG_MIP`, `GLADIATOR_MIP`, `CROW_MIP`, `LARSON_MIP` in RICH2, and
+`CHEF_MIP_RICH1`, refused for drift) keep their classic head and its swap. With
+`hd_enable` off no cutscene actor is drawn HD: `HDObjectBegin` returns false before
+anything (`hd_object.cpp:2707`).
+
 **Commits.** `2ab35c1`, `d7b4330`, `2ffd951`, `7715dda`, `3fbbd20`, `5d0fd65`,
-`72988c3`, `45d9130`
+`72988c3`, `45d9130`, `957c53e`
 
 ### Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them
 2026-09-05 - 2026-09-08
@@ -3622,7 +3700,8 @@ matrices in `lara_matrices` are the joint palette, `OUTFIT_SUBSUIT` covering thi
 the diving suit ending in flippers that belong to the shins. `LARA_HEAD.TRM` covers 31
 nodes because it carries a facial rig whose bone numbers are not mesh-tree nodes, so it
 rides rigidly on node 14 through `HDModelSlot::rigidNode` (default -1, so every existing
-caller is unchanged), passed on by `HDModelLevelBegin`. `HAIR_OG.TRM` has six bones
+caller is unchanged), passed on by `HDModelLevelBegin` - all of it but its throat, which
+hangs on node 7 (*The face's throat on her torso*, below). `HAIR_OG.TRM` has six bones
 matching the classic `HAIR` mesh tree's straight chain at z = 0, 56, 112, 168, 224, 280
 in every adult level. A `HAND_` model covers nodes 9 and 10 on the right and 12 and 13
 on the left, `HAND_BARE_REST` adds the upper-arm stubs 8 and 11, and three are
@@ -3775,11 +3854,86 @@ form. Files: `specific/hd/hd_wardrobe.cpp`/`.h`, `hd_lara.cpp`/`.h`,
 `DdsProbe.cpp`, `bmodel.bat`, `README.md`, `TOMB5 Code/README.md`,
 `Preparation/Tools/README.md`, `docs/Engine-Manual.md`, `docs/Randomizer-Manual.md`.
 
+**The face's throat on her torso** (2026-09-25). *What.* In HD, Lara's head did not move
+with her body under the chin: in the handstand, in a crouch and lying on her back after a
+fall the owner saw a flap and a crease at the throat and a long straight neck. The turns
+are the animations' own (the handstand 159 tilts the head 65 to 80 degrees back against
+the torso at keys 7 to 40, the crouch idle 222 60 degrees, the death 25 more than 100),
+and every head piece is placed with the frame's own matrices (`kLmxOfNode`, now
+`lara_lmx_of_node`, maps node 14 to matrix 8 for the body, the donor head, the lid, the
+face and the hands alike). The fault was `LARA_HEAD.TRM` riding wholly rigid on node 14.
+It reaches 27.8 units below the head joint - 541 of its 5,913 vertices lie below it, 102
+more than 10 below - and that strip of throat, which runs down into the body's own neck,
+swung with the skull and folded out under the jaw. Now the throat hangs on the torso, node
+7, with the file's own weights, and the rest of the face stays on node 14. The face's part
+line reads `cover=2(00004080)` (ModelProbe's part table: nodes 7 and 14, where it read 14
+alone), and the model note `LARA_HEAD (slot 23042): 171 of 5913 vertices of the face take
+the body's neck (node 7) with the file's own weights - rig joints 1,3,6 stand 199.3..270.8
+from its head joint 4, the limit is 120`.
+
+*Why this rule.* The file says itself where its throat belongs. Its facial rig carries a
+skeleton: of its 33 joints (each stored as an inverse bind matrix, 3x4 and row-major, the
+joint at -R^T t), joint 4 stands on the bind of node 14, joint 1 at (-1, -49, 11) on the
+bind of node 7, the torso, joint 6 at the hips and joint 3 at the left thigh, and 171
+vertices carry weight on joints 1, 3 and 6 - 0.8 per cent of the file's weight, 12,690
+units of it on joint 1. A joint farther than 120 units from the rig's head joint (the one
+carrying the most weight) is a joint of the body: over the 23 rigged `*_HEAD.TRM` of the
+IV-VI install's games 4 and 5 the farthest joint of a face stands 99.4 units out
+(ZIP_HEAD) and the nearest joint of a body 131.8 (LARSON_HEAD), the gap TROne measured on
+data over 58 files of both installs (GPLv3, TROne by Todesengel1931 -
+https://github.com/todesengel1931), and its rule shaped this design. LARA_HEAD's two
+shoulder joints stand 81 units out and count as the face's; they carry 27 units of weight
+over 26 vertices. The file's weights match the body's own: the 66 throat vertices that lie
+within a unit of `OUTFIT_CLASSIC`'s neck in the bind pose carry a head weight 0.022 from
+the neck vertex under them on average (0.058 on `OUTFIT_VCI`), and with the head pitched
+70 degrees about its joint the two skins stay 0.8 units apart on average and 4.0 at most
+(1.5 and 9.5 on `OUTFIT_VCI`), where the rigid face parted from the neck by 15.1 and 34.6.
+
+*The design measured against it.* Every face vertex below the head joint taking the head
+weight of the nearest outfit vertex in the neck column (within 60 units of the neck axis,
+found in 2-unit height bins), the rest of its weight on node 7. It was built into the
+engine as a measurement and drawn by ModelProbe at head pitches of 60 and 70 degrees and
+in the crouch 222's head turn (-18, 61), front and side, in `OUTFIT_CLASSIC` and
+`OUTFIT_VCI`. It reaches the jaw and the chin as well - 387 of those 541 vertices, on
+average 25 units from the nearest neck vertex - and hands them 0.46 to 0.61 of the head on
+average (`OUTFIT_VCI` to `Outfit_russia`): in all twelve pictures the jaw tears open into
+spikes. The two designs agree only where the two skins coincide (23 vertices 16 to 28
+units below the joint, 0.3 units from the neck), to 0.05. The file's own rig leaves no
+flap, no step and no hole in the same twelve pictures; the rigid face leaves the flap
+under the jaw and, from the front, a hole under the chin.
+
+*How.* `specific/hd/hd_trm.cpp` keeps the rig's joints while it reads a head
+(`HDTrmModel::rigJoints`/`rigJoint`, `hd_trm.h:146`; the list is taken only when it lies
+whole between the joint count and the geometry the rescan found, `hd_trm.cpp:403`, and is
+freed by `HDTrmFree`). `HDModelSlot::neckNode` (`hd_model.h:104`, -1 by default) asks for
+the rule on a rigid face; `rig_neck_of` (`hd_model.cpp:1800`, limit `kNeckJointDistance`
+at `:1772`) renames every body joint to the lowest of them in the copy read into memory
+and hands that bone to `build()`'s existing rigid branch as the neck bone, so the file's
+weights are kept and `dominant_node_of` puts a triangle on node 7 where the throat
+outweighs the face. It runs in pass one while the file is open (`:2693`), and pass two
+hands the bone to the model (`:3165`). `HDLaraPlan` asks for node 7 on the face
+(`hd_lara.cpp:1899`); the reasoning and the numbers stand at `HD_LARA_PART_FACE`
+(`hd_lara.h:713`). A file with no rig, or none beyond the limit, stays rigid, and the note
+says why. Cost: once per level build, 5,913 vertices walked twice. Creature faces keep
+`neck_bone_of`: the distance rule picks the same single joint for `BLUE_GUARD`, `PIERRE`,
+`ADMIRAL` and the two `VON_CROY` faces, but adds joints 10 and 13 to `LARSON`'s joint 1
+and finds a body joint where `neck_bone_of` finds none in the two `PATRICK`, `DEMON` and
+`SERGIE` faces, so it is not carried over to them.
+
+*Unchanged.* With `hd_enable` off none of it is built: `HDLaraDrawPlan` returns before the
+wardrobe is planned (`hd_laradraw.cpp:500`). First person does not draw the face at all
+(`hd_laradraw.cpp`, the face's push is guarded by `!firstPerson`), so the neck cut and the
+lid are untouched: the eight first person pictures (two outfits, pitches 60 and 80, the
+eye at 48 and 0 units) are byte-identical before and after. A measurement build with the
+rule switched off drew all 24 pictures byte-identical to the build of `e1bc056`, so the
+rule is the only difference; in the bind pose the rule changes 3 pixels by one grey level,
+the blend's rounding.
+
 **Commits.** `91714c1`, `c5bfab8`, `7715dda`, `5d0fd65`, `72988c3`, `918a28d`,
 `6520654`, `de4a3cc`, `c0cd3ab`, `2aff299`, `234df1b`, `1ef8f9f`, `20f488c`, `ce1bf61`,
 `b5983cf`, `c543269`, `0c84e7e`, `604d36c`, `b6c60f7`, `aaf229c`, `b1187c7`, `e203ae2`,
 `3079d85`, `4ea9d89`, `c179e0a`, `653369e`, `6c459a2`, `c4c8faa`, `ac39393`, `dc2bf9c`,
-`fc30b92`, `44d8e11`, `db83663`, `7fec5a7`, `b7af512`, `1950e3e`, `9948ca5`
+`fc30b92`, `44d8e11`, `db83663`, `7fec5a7`, `b7af512`, `1950e3e`, `9948ca5`, `3a37411`
 
 ### F4 changes Lara's outfit inside the level
 2026-09-13 - 2026-09-14
@@ -4770,7 +4924,41 @@ rate)` the retail levels can produce) and measured with
 is reached only through `GetFramesNow` inside `if (t > 0)`, so `fps_mode 0` reaches none
 of it.
 
-**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`, `b7607c9`, `afae389`
+**The stretch reading's matrices** (2026-09-25). *What.* `stretch=` read the wrong pair of
+joints for nodes 8 to 14. `InterpNoteLaraStretch` walks the bone table in mesh tree order
+(`LM_`, the head last), and `lara_matrices` is in draw order (`LMX_`, the head ninth), and
+the node number went straight into the matrix array: node 14 compared the torso with the
+left hand, node 9 the head with the right shoulder. `stretch=0.42@node14(anim0 f5)` in the
+owner's log is the torso-to-left-hand distance over the head bone's length on animation 0,
+where the head bone is whole. Now every node's matrix, and its parent's, is read through
+`lara_lmx_of_node`. Log only: the drawn picture is the same by construction.
+
+*How.* The table moves out of `hd_laradraw.cpp` (`kLmxOfNode`) into `game/delstuff.h:32`,
+beside `lara_matrices`, as `constexpr int lara_lmx_of_node[15]` written with the enum
+names; the HD seam's three reads use it with the same numbers (`hd_laradraw.cpp:878`,
+`:924`, `:948`, and a `static_assert` that it has a matrix for every node of the
+composite), and `InterpNoteLaraStretch` reads `matrices + lara_lmx_of_node[...] * 12` for
+the node and its parent (`game/interpolate.cpp:1883`), its walk bounded by the table's
+fifteen entries, Lara's own mesh count. The legend of `INTERPLOG` in
+`game/interpolate.cpp` and the comment in `game/interpolate.h` say which node is counted.
+The table is written out and not derived; a probe outside the tree reads it,
+`lara_mesh_sweetness_table` (`specific/drawlara.cpp`, the draw order) and both enums out
+of the source and finds it a permutation and the draw order's inverse - LM 14 is LMX 8,
+LM 8..13 are LMX 9..14, the rest unchanged.
+
+*Checked.* A second probe builds Lara's matrices out of JOBY2's own frames and bone table
+the way `Rich_CalcLaraMatrices` builds them, blends two keys element by element as a tween
+does, and walks them both ways: animation 0 frame 5 reads 0.42 at node 14 the old way
+and 1.00 through the map (0.99 on the tween at a half, at node 10); 86 frame 1309 0.49
+and, at
+a quarter, 0.92 (a real shortening, at node 13); 6 frame 109 0.44 and 0.99; 108 frame
+1623 0.84 at node 9 and 0.99; the idle 103 frame 1530 0.68 and 1.00. Readings quoted in
+this
+record at nodes 8 to 14 named the wrong bone: the tightrope's `stretch=0.12` at node 13
+(ANDREA1, 451 frame 8915) reads 0.12 at node 12 through the map as well, the left upper
+arm, and the 0.84 of every other second was head against shoulder and reads 1.00.
+
+**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`, `b7607c9`, `afae389`, `0f22873`
 
 ### The arms between two ticks
 2026-09-08 - 2026-09-09

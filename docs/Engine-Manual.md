@@ -1305,11 +1305,18 @@ see *Lara in HD* below for which of her stays classic and why.
   face file" finds nothing at all for a cutscene, and every speaker stands
   there without a head — the two old men in front of the fire in the Irish
   chapter, and the guard beside them wearing a cap over nothing. The engine
-  goes by the person, out of a list measured face by face against the collar
-  it has to fill — and the log names which rule found which face, so a missing
-  one can be looked up rather than guessed at. Their mouths do not move: the
-  Remaster animates a face with one small file per spoken line, a format
-  nothing here reads.
+  goes by the person, out of a list measured face by face — and the log names
+  which rule found which face, so a missing one can be looked up rather than
+  guessed at. The speakers who had no face are in the list as well: the priest
+  in the Irish chapter, both of him, the admiral and Sergie on the submarine,
+  the hanged man at the gallows and the demon knight. Each one is found the
+  way the game itself knows who is talking — the cutscene's own code says
+  which figure speaks and where his head is, and the Remaster names each
+  spoken line of a face after the cutscene's own sound track. The props some
+  cutscenes fill a spare slot with — planks, a stone block, a pillar, an ID
+  card, a horse — no longer wear somebody else's face, and the hussar shows
+  his own. Their mouths do not move: the Remaster animates a face with one
+  small file per spoken line, a format nothing here reads.
 - **The catsuit has holsters.** With the randomizer handing Lara a gun in
   every level, the VCI catsuit — which in the original game never carries one
   — would have the pistols hanging in mid air beside her thighs. The pouches,
@@ -2102,9 +2109,14 @@ is not. In a vanilla game nothing moves: those three levels carry the flag
 
 **The rest of the wardrobe.** The face is `LARA_HEAD` and it is a *facial rig*
 — its bone numbers run to 31 and mean nothing at all to her 15-piece mesh tree
-— so it is nailed rigidly to the head, the same way an enemy's separate face
-is. The braid is `HAIR_OG`, six bones over 280 units, which is exactly the six
-links TR5's braid has, measured out of the level files themselves. The hands
+— so it rides on the head as one piece, the same way an enemy's separate face
+does. All of it but the throat: the file reaches almost 28 units down into her
+neck, and its own rig weights that strip to her torso, so the strip goes with
+the torso, blended the way the file blends it. Her throat bends where her
+body's neck bends, and no flap folds out under the chin when she throws her
+head back in a handstand, a crouch or a fall. The braid is `HAIR_OG`, six
+bones over 280 units, which is exactly the six links TR5's braid has, measured
+out of the level files themselves. The hands
 come from `HAND_BARE_*`, one file per weapon, and the worn weapons from
 `HOLSTER_*`: pistols and uzis on both thighs, the revolver on the right one
 alone, the shotgun, the HK and the grappling gun on the back. An **empty**
@@ -2933,7 +2945,7 @@ That is the whole line, in the order the engine prints it — it is one line in
 | `lara_pose` | frames of the second on which **Lara's** own pose was blended, against the number of in-between frames beside it. Nearly all of them while she is moving |
 | `root_fix` | of the refused frames, how many had their **position offset** blended in time instead — the rule under *And the limbs move with the body* above. A **count** over the second and not a mean, and a small minority of `pose_skips`: a door at rest, a machine standing still and an animation change that does not move the body are all refused and none of them counted. About one per climb cycle on a ladder; nought in a room with nothing moving in it. A bridged frame (see `bridge`) has its offset blended the same way and is counted here too |
 | `arms` | blended / refused / in-between frames, for the **weapon arm's** own animation — the pose first person is nearly all made of. With a weapon in her hands the first number should be the in-between count and the second a handful a second, one on each frame the weapon animation changes. With empty hands, a flare or a torch all three stay nought, because those arms come out of her own key frames and there is nothing there to blend |
-| `stretch` | the worst a **bone** was shortened by the pose blend that second, over its own length, with the joint, the animation and the frame it happened on. `1.00` is a rigid pose and is what a second with no in-between frame reads. Under about `0.85` is a limb one can *see* in the wrong place, and the animation and frame beside it are the pair to look at |
+| `stretch` | the worst a **bone** was shortened by the pose blend that second, over its own length, with the joint, the animation and the frame it happened on. `1.00` is a rigid pose and is what a second with no in-between frame reads. Under about `0.85` is a limb one can *see* in the wrong place, and the animation and frame beside it are the pair to look at. The joint is numbered the way her skeleton counts, `14` the head and `8` to `13` the arms. A log written before 25 September 2026 compared the wrong two joints for `8` to `14` — `0.42@node14` was her torso against her left hand, `0.84@node9` her head against her shoulder |
 | `particles` | sparks, raindrops, snowflakes, drips, blood, debris, shells, bats and the rest, drawn **between** two game steps, per frame. Hundreds in the rain, nought in a still room, and nought at 30 always |
 | `particle_kinds` | which kinds those were, one bit each: `0001` sparks, `0002` fire, `0004` smoke, `0008` blood, `0010` drips, `0020` debris, `0040` rain, `0080` snow, `0100` underwater dust, `0200` shockwaves, `0400` shells, `0800` rats/bats/spiders, `1000` bubbles, `2000` ropes. `0041` above is sparks and rain |
 | `root_flip` | of the `root_fix` frames, the ones whose previous offset was half a turn behind the frame it was handed to and had to be turned into it first: one of her rolls on the ground, whose about-face lands on the very frame the animation changes; the underwater roll and the tightrope turn, whose about-face lands on a frame whose in-between picture is refused; and the step right after the end of a jump's twist or of that other roll, whose last frame was drawn the way she faced before (see `TURNLOG`). A subset of `root_fix`, at most one per roll, turn or twist, and only where the offset really moves. A second with `halfturn` and no `root_flip` is an about-face whose in-between pictures were blended, which is what the last frame of those twists and that roll gets |

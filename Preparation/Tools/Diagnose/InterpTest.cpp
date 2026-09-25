@@ -5080,6 +5080,273 @@ static void key_far_all()
 	}
 }
 
+/* ------------------------------------------------- a seam in the data -- */
+
+/* The place of the last node of `chain` in frame `f`, in the item's frame:
+ * the root offset, then each link's bone offset turned by its parent's drawn
+ * rotation (InterpDrawnRots, whose layout is the transpose of the draw's
+ * matrix). `chain` runs from the hips down, each node the parent of the
+ * next, as Lara's bone table hangs them. */
+static void joint_place(const short* f, const long* bone, const int* chain, int links, double* out)
+{
+	float d[15 * 9];
+
+	InterpDrawnRots(f, 15, bone, d);
+
+	for (int r = 0; r < 3; r++)
+		out[r] = f[6 + r];
+
+	for (int i = 1; i < links; i++)
+	{
+		const int c = chain[i];
+		const float* m = d + chain[i - 1] * 9;
+		const long* off = bone + (c - 1) * 4 + 1;
+
+		for (int r = 0; r < 3; r++)
+			out[r] += m[r] * off[0] + m[3 + r] * off[1] + m[6 + r] * off[2];
+	}
+}
+
+static double place_apart(const double* a, const double* b)
+{
+	return sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) +
+		(a[2] - b[2]) * (a[2] - b[2]));
+}
+
+/* A seam in the data (interpolate_math.h, InterpKeySeamAt and
+ * InterpKeySeam, INTERP_KEY_SEAM_COS, and InterpKeyFarFill, which leaves a
+ * seam unmarked): a far pair where a limb turns more than 170 degrees both
+ * on its own and in the drawn frame, left to vanilla's blend. The frames and
+ * Lara's bone table are ANDREA1's, copied from the level file: the start of
+ * the handstand from a ledge (159 keys 1, 2 and 3), the standing jump
+ * forward's take-off (76 keys 0 and 1) and the running jump's twist (209
+ * keys 0 and 1). */
+static void key_seam()
+{
+	printf("a seam in the data, left to vanilla's blend\n");
+
+	static const long bones[14 * 4] =
+	{
+		2, -42, 20, 2, 0, 9, 185, 3, 0, 1, 192, -8, 3, 43, 20, 2, 0, -10, 185, 2,
+		0, 0, 193, -2, 1, -1, -49, 11, 2, 59, -142, -12, 0, 10, 95, -2, 0, 1, 101, -1,
+		3, -57, -143, -12, 0, -9, 98, -2, 0, -1, 99, -1, 1, 2, -198, -23
+	};
+	static const short k159[3][37] =
+	{
+		{ -146, 129, -726, 137, -38, 136, 2, -355, 55, 16095, -14335, 351, -3, 20417, 15344,
+			3075, 239, -5115, 20400, 15055, -3070, 336, 1017, 2873, 24032, 3816, -15824,
+			15325, 11435, 2853, 28128, 3956, -3780, 14914, 9086, 527, -27653 },
+		{ -122, 115, -877, -49, -30, 142, 3, -542, 52, 16191, -9214, 384, 19463, 20400, 15232,
+			1025, 239, -12283, 20388, 15039, -6137, 16208, 7158, 13890, 3997, 1848, 4614, 589,
+			29494, 14637, -28622, 1639, -5642, 1202, 13438, 16111, 21500 },
+		{ -142, 136, -1026, -232, 2, 258, 4, -723, 55, 15839, -1020, 1040, 18447, 20381,
+			15119, -1, 815, -11268, 20375, 15023, -9203, 15504, 14321, 434, -21462, 367, -6,
+			588, 32566, 653, -23574, 480, 1031, 594, -11063, 15855, 7169 }
+	};
+	static const short k76[2][36] =
+	{
+		{ -176, 138, -451, 4, -153, 202, -8, -217, -68, 15359, -1021, 3001, -29061, 14040,
+			511, 1808, 29731, 2999, 11676, 14055, -512, 1839, -26666, 14464, 3066, 14480,
+			-14402, 303, -6, -12475, 13967, 31816, 528, 1031, -16126, 16924 },
+		{ -175, 188, -712, 0, -324, 330, -8, -412, -8, 14767, -2044, 16191, -7, -16384,
+			15136, 4101, 16207, -6145, -16384, 15184, 1021, 16303, -5, 3276, -10523, 319,
+			-6, -12464, 3235, -14039, 528, 1032, -16138, 16858, 35, 0 }
+	};
+	static const short k209[2][37] =
+	{
+		{ -94, 163, -808, -333, -43, 264, 4, -593, 29, 12928, 31042, 1168, 20600, 15063,
+			-512, 20115, 0, 8322, 14568, 511, 20275, 13034, 15649, 2984, 17980, 2911,
+			-10252, -12299, 2471, -28215, 3216, 22551, -16346, 15471, -14332, 35, 0 },
+		{ -171, 149, -741, -118, -119, 270, -4, -456, 24, 559, 23526, 2688, 15401, 13928,
+			511, 14704, 1, 704, 21538, 12344, 511, 14608, 1023, 14127, -29633, 3089, -7194,
+			3848, -9674, -12299, 2557, -30696, 2775, -14865, -16346, 15471, -14332 }
+	};
+	const int nodes = 15;
+	const double kDeg = 180.0 / 3.14159265358979323846;
+
+	/* 1. A hand-built chain: node 1 hangs off node 0 and node 2 off node 1,
+	 * every rotation one-axis. A limb turning 175 degrees about x on its own
+	 * under a still parent turns 175 in the drawn frame too: a seam, at node
+	 * 1, and the table leaves the pair unmarked though it is far. At 169
+	 * degrees the pair is far and no seam, at 171 a seam. 175 on its own
+	 * under a parent turned back by 40 is 135 drawn (the standing jump up's
+	 * arm): no seam. 75 on its own under a parent turned 100 the same way is
+	 * 175 drawn (the standing jump forward's forearm): no seam. And under
+	 * hips turned 95 degrees about y the limb's 175 on its own is 176.6 drawn,
+	 * yet the pair keeps the hips' rules: no seam. */
+	{
+		const long chain[2 * 4] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+		const short x0 = (short)(unsigned short)(1 << 14);
+		const short x175 = (short)(unsigned short)((1 << 14) | 1991);
+		const short x169 = (short)(unsigned short)((1 << 14) | 1923);
+		const short x171 = (short)(unsigned short)((1 << 14) | 1946);
+		const short xBack40 = (short)(unsigned short)((1 << 14) | (4096 - 455));
+		const short x100 = (short)(unsigned short)((1 << 14) | 1138);
+		const short x75 = (short)(unsigned short)((1 << 14) | 853);
+		const short y95 = (short)(unsigned short)((2 << 14) | 1081);
+		const short still[9 + 3] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, x0, x0, x0 };
+		const short turned[5][9 + 3] =
+		{
+			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, x0, x175, x0 },
+			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, x0, x169, x0 },
+			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, x0, x171, x0 },
+			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, xBack40, x175, x0 },
+			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, x0, x100, x75 }
+		};
+		const short hips95[9 + 3] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, y95, x175, x0 };
+		short block[2 * 12];
+		unsigned long bits[INTERP_KEY_FAR_WORDS];
+		float ownCos = 1.0F, drawnCos = 1.0F;
+		int seam[5];
+		bool marked[5], far[5];
+
+		for (int c = 0; c < 5; c++)
+		{
+			for (int i = 0; i < 12; i++)
+			{
+				block[i] = still[i];
+				block[12 + i] = turned[c][i];
+			}
+
+			InterpKeyFarFill(block, 12, 1, 3, chain, bits);
+			seam[c] = InterpKeySeam(still, turned[c], 3, chain, &ownCos, &drawnCos);
+			marked[c] = InterpKeyFarBit(bits, 0);
+			far[c] = InterpKeyFarDrawn(still, turned[c], 3, chain, 0, 0);
+		}
+
+		InterpKeySeam(still, turned[0], 3, chain, &ownCos, &drawnCos);
+		okf(seam[0] == 1 && fabs(acos((double)ownCos) * kDeg - 175.0) < 0.1 &&
+			fabs(acos((double)drawnCos) * kDeg - 175.0) < 0.1,
+			"a limb turning 175 degrees on its own and drawn is a seam, at node 1",
+			acos((double)ownCos) * kDeg, 175.0);
+		ok(far[0] && !marked[0], "far in the drawn frame, and the table leaves it unmarked",
+			marked[0] ? 1 : 0, 0);
+		ok(seam[1] < 0 && far[1] && marked[1], "169 degrees: far, no seam, marked", seam[1], -1);
+		ok(seam[2] == 1 && far[2] && !marked[2], "171 degrees: a seam, unmarked", seam[2], 1);
+		ok(seam[3] < 0 && far[3] && marked[3],
+			"175 on its own under a parent turned back 40 (135 drawn): no seam", seam[3], -1);
+		ok(seam[4] < 0 && far[4] && marked[4],
+			"75 on its own under a parent turned 100 (175 drawn): no seam", seam[4], -1);
+
+		float a[3 * 9], b[3 * 9];
+
+		InterpDrawnRots(still, 3, chain, a);
+		InterpDrawnRots(hips95, 3, chain, b);
+
+		for (int i = 0; i < 12; i++)
+		{
+			block[i] = still[i];
+			block[12 + i] = hips95[i];
+		}
+
+		InterpKeyFarFill(block, 12, 1, 3, chain, bits);
+		okf(drawn_angle(a + 9, b + 9) > 170.0 && InterpKeyFar(still, hips95) &&
+			InterpKeySeam(still, hips95, 3, chain, 0, 0) < 0 && InterpKeyFarBit(bits, 0),
+			"under hips turned 95 the limb turns 176.6 drawn, and the pair keeps the hips' rules",
+			drawn_angle(a + 9, b + 9), 176.6);
+	}
+
+	/* 2. The start of the handstand from a ledge, 159 key 1 to 2: the right
+	 * upper arm (node 8) turns 173.8 degrees on its own and 177.9 in the
+	 * drawn frame. A seam: the table leaves it unmarked and marks key 2 to 3
+	 * (95.7 degrees drawn at node 12, no seam), so the draw takes the two
+	 * stored keys at every weight and blends them as vanilla does. The
+	 * reason: both keys hold her wrists on the ledge (the right one 6.5
+	 * units apart between them), and the frame built across the pair
+	 * (InterpKeyFrameFar) carries the right wrist 80.4 units and the left
+	 * 73.2 off the line between their key places at a half. Vanilla's blend
+	 * averages the two keys' matrices, place included, so the wrists walk
+	 * that line, and the upper arm shortens across the turn: its averaged
+	 * drawn frame has a determinant of 0.25 at a quarter and three quarters
+	 * and 0.0003 at a half. */
+	{
+		int node = -1;
+		float turnCos = 1.0F, ownCos = 1.0F, drawnCos = 1.0F;
+		const bool far12 = InterpKeyFarDrawn(k159[0], k159[1], nodes, bones, &node, &turnCos);
+		const int seam = InterpKeySeam(k159[0], k159[1], nodes, bones, &ownCos, &drawnCos);
+
+		okf(far12 && node == 8 && fabs(acos((double)turnCos) * kDeg - 177.9) < 0.5,
+			"159 key 1 to 2 is far, the right upper arm (node 8) 177.9 degrees drawn",
+			acos((double)turnCos) * kDeg, 177.9);
+		okf(seam == 8 && fabs(acos((double)ownCos) * kDeg - 173.8) < 0.5 &&
+			fabs(acos((double)drawnCos) * kDeg - 177.9) < 0.5,
+			"and a seam at node 8, 173.8 degrees on its own", acos((double)ownCos) * kDeg, 173.8);
+
+		short block[3 * 37];
+		unsigned long bits[INTERP_KEY_FAR_WORDS];
+
+		for (int k = 0; k < 3; k++)
+			for (int i = 0; i < 37; i++)
+				block[k * 37 + i] = k159[k][i];
+
+		InterpKeyFarFill(block, 37, 2, nodes, bones, bits);
+		ok(!InterpKeyFarBit(bits, 0) && InterpKeyFarBit(bits, 1) &&
+			InterpKeySeam(k159[1], k159[2], nodes, bones, 0, 0) < 0,
+			"the table leaves key 1 to 2 unmarked and marks key 2 to 3, no seam", (long)bits[0], 2);
+
+		static const int right[5] = { 0, 7, 8, 9, 10 };
+		static const int left[5] = { 0, 7, 11, 12, 13 };
+		double r0[3], r1[3], l0[3], l1[3], rb[3], lb[3], rm[3], lm[3];
+		short built[INTERP_KEYFRAME_MAX];
+
+		joint_place(k159[0], bones, right, 5, r0);
+		joint_place(k159[1], bones, right, 5, r1);
+		joint_place(k159[0], bones, left, 5, l0);
+		joint_place(k159[1], bones, left, 5, l1);
+		okf(fabs(place_apart(r0, r1) - 6.5) < 0.5, "both keys hold the right wrist in place, 6.5 apart",
+			place_apart(r0, r1), 6.5);
+
+		InterpKeyFrameFar(k159[0], k159[1], nodes, bones, 0.5F, built);
+		joint_place(built, bones, right, 5, rb);
+		joint_place(built, bones, left, 5, lb);
+
+		for (int i = 0; i < 3; i++)
+		{
+			rm[i] = 0.5 * (r0[i] + r1[i]);
+			lm[i] = 0.5 * (l0[i] + l1[i]);
+		}
+
+		okf(fabs(place_apart(rb, rm) - 80.4) < 1.0 && fabs(place_apart(lb, lm) - 73.2) < 1.0,
+			"a frame built at a half carries the wrists 80.4 and 73.2 off their line",
+			place_apart(rb, rm), 80.4);
+
+		float a[15 * 9], b[15 * 9];
+		const float ws[3] = { 0.25F, 0.5F, 0.75F };
+		const double dets[3] = { 0.25, 0.0003, 0.25 };
+		bool shortens = true;
+
+		InterpDrawnRots(k159[0], nodes, bones, a);
+		InterpDrawnRots(k159[1], nodes, bones, b);
+
+		for (int j = 0; j < 3; j++)
+		{
+			double v[9];
+
+			for (int i = 0; i < 9; i++)
+				v[i] = InterpBlendFloat(a[8 * 9 + i], b[8 * 9 + i], ws[j]);
+
+			shortens = shortens && fabs(det3(v) - dets[j]) < 0.01;
+		}
+
+		ok(shortens, "vanilla's blend shortens the upper arm: determinants 0.25, 0.0003, 0.25",
+			shortens ? 1 : 0, 1);
+	}
+
+	/* 3. No seam where a limb turns far in one frame only, or the hips turn
+	 * far: the standing jump forward's take-off (76 key 0 to 1: the upper arm
+	 * 143.7 degrees on its own and 170.0 drawn, the forearm 0.4 and 170.1)
+	 * and the running jump's twist (209 key 0 to 1: the hips turn 152.6, and
+	 * keep the hips' rules). Both are far and built. */
+	{
+		ok(InterpKeyFarDrawn(k76[0], k76[1], nodes, bones, 0, 0) &&
+			InterpKeySeam(k76[0], k76[1], nodes, bones, 0, 0) < 0,
+			"76 key 0 to 1: far, no seam", 0, 0);
+		ok(InterpKeyFarDrawn(k209[0], k209[1], nodes, bones, 0, 0) && InterpKeyFar(k209[0], k209[1]) &&
+			InterpKeySeam(k209[0], k209[1], nodes, bones, 0, 0) < 0,
+			"209 key 0 to 1: far at the hips, no seam", 0, 0);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -5105,6 +5372,7 @@ int main()
 	key_build();
 	key_bridge();
 	key_far_all();
+	key_seam();
 	particles();
 	portal_walk();
 	reach_rect();

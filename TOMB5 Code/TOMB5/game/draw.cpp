@@ -2524,7 +2524,9 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate)
 
 /* True when Lara's key pair `pair` (key `pair` to key `pair` + 1) of
  * animation `animNumber` is far: the drawn rotation of some node turns more
- * than 90 degrees between the two keys (InterpKeyFarOf, a table lookup). */
+ * than 90 degrees between the two keys, and the pair is no seam in the data
+ * (InterpKeySeamAt), which vanilla's blend draws (InterpKeyFarOf, a table
+ * lookup). */
 static bool LaraKeyFar(short animNumber, long pair)
 {
 	const OBJECT_INFO* obj = &objects[lara_item->object_number];
@@ -2975,7 +2977,10 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
  *   the two turned copies.
  *
  *   A far key pair (LaraKeyFar: some node's drawn rotation turns more than
- *   90 degrees between the keys). Vanilla's blend averages the two
+ *   90 degrees between the keys, and the pair is no seam in the data,
+ *   InterpKeySeamAt: a seam, the start of the handstand from a ledge, 159
+ *   key 1 to 2, is left to vanilla's blend, which keeps her hands on the
+ *   ledge). Vanilla's blend averages the two
  *   multiplied-out matrix stacks element by element, so across such a pair
  *   that node collapses, and with it everything hanging off it: at the
  *   standing jump's take-off (76 key 0 to 1) the forearm is 0.09 of itself
@@ -3002,7 +3007,9 @@ long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
  * every blended one (InterpKeyFarOf, whose fill runs once per animation),
  * and a node blend for each of her fifteen nodes that differ between the
  * keys, only where a frame is built, and where a node turns within a degree
- * of half a turn on its own the drawn rotations of both keys besides. */
+ * of half a turn on its own the drawn rotations of both keys besides; on a
+ * blended frame of any other pair a call that returns at once without -log
+ * (InterpNoteKeySeam). */
 void LaraPoseFrames(short* frm[], long frac, float blend, long flag)
 {
 	static short turned[2][INTERP_KEYFRAME_MAX];
@@ -3058,7 +3065,13 @@ void LaraPoseFrames(short* frm[], long frac, float blend, long flag)
 	}
 
 	if (!farPair)
+	{
+		/* A seam is left to vanilla's blend; -log names it. */
+		if (flag == 0 && key >= 0)
+			InterpNoteKeySeam(lara_item, key, frm[0], frm[1], nodes, bone);
+
 		return;
+	}
 
 	const bool hold = LaraKeyHold(animNumber, key);
 

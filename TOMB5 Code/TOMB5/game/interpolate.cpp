@@ -206,8 +206,8 @@ namespace
 	TurnSlot g_turn[512];
 
 	/* Which key pairs of each of Lara's animations are far in the drawn frame
-	 * (InterpKeyFarOf), one bit per pair, indexed by the animation number's
-	 * low bits and checked against the number. */
+	 * and no seam (InterpKeyFarOf), one bit per pair, indexed by the
+	 * animation number's low bits and checked against the number. */
 	struct FarSlot
 	{
 		short anim;
@@ -1962,6 +1962,54 @@ void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* f
 		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number,
 		key, key + 1, rate, acos(c) * 180.0 / 3.14159265358979323846, hold ? key : -1L,
 		hold ? "hold" : "lerp", node, acos(t) * 180.0 / 3.14159265358979323846);
+}
+
+/* KEYSEAMLOG (see interpolate.h):
+ *   f       GlobalCounter, the tick
+ *   anim, frame   the animation and frame the item stands on
+ *   keys    the key pair drawn (draw.cpp LaraKeyOf)
+ *   rate    the animation's own rate
+ *   node    the node that makes the pair a seam (InterpKeySeamAt): 8 to 13
+ *           the arms, 7 the torso, 14 the head, 1 to 6 the legs
+ *   own     that node's own turn between the two key frames, in degrees
+ *   turn    its turn in the drawn frame, in degrees; both more than 170 on
+ *           every line */
+void InterpNoteKeySeam(const ITEM_INFO* item, long pair, const short* frame0, const short* frame1,
+	int nodes, const long* bone)
+{
+	static bool seen = false;
+	static unsigned short lastCounter = 0;
+	static short lastFrame = 0;
+
+	if (!gLogEnabled || !item || !anims || !frame0 || !frame1 || !bone || nodes < 1 || nodes > 32)
+		return;
+
+	if (seen && lastCounter == GlobalCounter && lastFrame == item->frame_number)
+		return;
+
+	seen = true;
+	lastCounter = GlobalCounter;
+	lastFrame = item->frame_number;
+
+	float ownCos = 1.0F, drawnCos = 1.0F;
+	const int node = InterpKeySeam(frame0, frame1, nodes, bone, &ownCos, &drawnCos);
+
+	if (node < 0)
+		return;
+
+	const ANIM_STRUCT* anim = &anims[item->anim_number];
+	double o = (double)ownCos, d = (double)drawnCos;
+
+	if (o < -1.0)
+		o = -1.0;
+
+	if (d < -1.0)
+		d = -1.0;
+
+	Log("KEYSEAMLOG f=%d anim=%d frame=%d keys=%ld-%ld rate=%ld node=%d own=%.1f turn=%.1f",
+		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number, pair, pair + 1,
+		(long)(anim->interpolation & 0xFF), node, acos(o) * 180.0 / 3.14159265358979323846,
+		acos(d) * 180.0 / 3.14159265358979323846);
 }
 
 /* TURNLOG (see interpolate.h):

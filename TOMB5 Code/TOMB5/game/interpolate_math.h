@@ -815,12 +815,15 @@ inline bool InterpKeyFar(const short* frame0, const short* frame1)
  * more than 90 degrees between its keys (INTERP_KEY_DRAWN_COS), and it is
  * drawn from a key frame built at the weight in hand (InterpKeyFrameFar),
  * or held on its first key where turn180_effect fires on its second
- * (InterpKeyHold). Over the thirteen campaign levels' playable Lara
- * animations this marks 1204 of the 35364 key pairs vanilla blends, 72 to 134
- * per level: the take-offs of the standing jumps (76 forward 170.1 degrees at
- * node 12, 91 up 133.8 at node 11, 74 back 153.8, 78 left 147.9, 80 right
- * 131.7), the first pair of the back jump's twist (212, 137.0 at node 10),
- * and the 32 pairs whose hips turn that far (InterpKeyFar). The own turn
+ * (InterpKeyHold), unless it is a seam in the data (InterpKeySeamAt below),
+ * which vanilla's blend draws. Over the thirteen campaign levels' playable
+ * Lara animations 1204 of the 35364 key pairs vanilla blends are far, 72 to
+ * 134 per level, 14 of them seams (the start of the handstand from a ledge in
+ * every level, and rich3's 152 key 4 to 5). Far and no seam are the
+ * take-offs of the standing jumps (76 forward 170.1 degrees at node 12, 91 up
+ * 133.8 at node 11, 74 back 153.8, 78 left 147.9, 80 right 131.7), the first
+ * pair of the back jump's twist (212, 137.0 at node 10), and the 32 pairs
+ * whose hips turn that far (InterpKeyFar). The own turn
  * would mark 617: it misses 719 whose drawn turn passes 90 and takes 132
  * whose drawn turn stays under it. The nearest drawn turns on either side of
  * the limit are 89.93 and 90.04 degrees, and the engine's float walk and a
@@ -942,13 +945,121 @@ inline bool InterpKeyFarDrawn(const short* f0, const short* f1, int nodes, const
 	return c < INTERP_KEY_DRAWN_COS;
 }
 
-/* One animation's far key pairs (InterpKeyFarDrawn), one bit per pair in
- * `bits` (INTERP_KEY_FAR_WORDS words, cleared here): `frames` is the
- * animation's block of key frames, `size` its frame size in shorts and
- * `pairs` its key pairs, so keys 0 to `pairs` are read. Each key frame's drawn
- * rotations are built once and serve both pairs it belongs to. Pairs from
- * INTERP_KEY_FAR_PAIRS on are left unmarked and are drawn as vanilla draws
- * them. */
+/* ==========================================================================
+ * A seam in the data.
+ * ==========================================================================
+ *
+ * A far pair is drawn from a key frame built at the weight in hand, every
+ * node turned along its own turn, so every in-between frame is a rotation of
+ * each part. That presumes the data carries a motion between the two keys.
+ * Where a limb turns within ten degrees of half a turn both on its own and
+ * in the drawn frame, the pair does not say which way round it goes: its own
+ * two ways round differ by less than twenty degrees, its drawn two ways as
+ * well, and the two need not agree, so any path through the in-between
+ * frames swings the limb half a turn through a side the keys never show.
+ * Such a pair is a seam in the data, and it is left to vanilla's blend,
+ * which chooses no side: it averages the two keys' matrices, position
+ * included, so each joint walks the straight line between its two key
+ * places and the limb shortens across the turn instead of swinging.
+ *
+ * Over the thirteen campaign levels' playable Lara animations one pair is
+ * such a seam, in every level: the start of the handstand from a ledge (159,
+ * key 1 to 2, rate 4, state AS_GYMNAST). Her hands lie on the ledge in both
+ * keys (the wrists 6.5 and 7.3 units apart between them) while her shoulders
+ * rise 189 units past them and the upper arms flip from above and in front
+ * of the shoulders to behind them: the right upper arm (node 8) turns 173.8
+ * degrees on its own and 177.9 in the drawn frame. The built frame swings
+ * both arms out to the sides and carries the wrists up to 80.7 and 73.2
+ * units off the line between their two key places, into the wall; the other
+ * way round of node 8's own turn carries the right wrist behind her back,
+ * and a turn along the drawn rotations lifts it above the ledge. Vanilla's
+ * blend keeps both wrists on the ledge and draws the arms shortened on the
+ * three in-between frames. Besides it only rich3's 152 key 4 to 5 is one,
+ * whose frame data run past their frame size. Every other far pair whose
+ * hips turn less than 90 degrees stays at or below 143.7 at every limb by
+ * the smaller of the two turns, the standing jump forward's upper arm (76
+ * key 0 to 1: 143.7 on its own, 170.0 drawn); the upper arm of the standing
+ * jump up turns 179.9 on its own but 133.8 drawn (91 key 0 to 1,
+ * InterpKeyFrameFar).
+ *
+ * A pair whose hips turn more than 90 degrees (InterpKeyFar) keeps the hips'
+ * rules - the hold, the early turn, the bridge - and is never a seam: node 0's
+ * own turn is its drawn turn, and the limbs of those 32 pairs stay at or
+ * below 159.1 degrees (rich3's 152 key 3 to 4, node 1). */
+#define INTERP_KEY_SEAM_COS	-0.98481F	/* cos 170 degrees */
+
+/* The node that makes the key pair `f0` to `f1` a seam, or -1: the first
+ * node from 1 on whose own rotation and whose drawn rotation both turn more
+ * than 170 degrees between the two keys (INTERP_KEY_SEAM_COS), in a pair
+ * whose hips do not turn more than 90 (InterpKeyFar). `a` and `b` are the
+ * two keys' drawn rotations (InterpDrawnRots) over `nodes` nodes. `ownCos`
+ * and `drawnCos`, where not null, receive that node's two cosines. */
+inline int InterpKeySeamAt(const short* f0, const short* f1, const float* a, const float* b,
+	int nodes, float* ownCos, float* drawnCos)
+{
+	if (InterpKeyFar(f0, f1))
+		return -1;
+
+	const short* p = f0 + 9;
+	const short* q = f1 + 9;
+
+	for (int node = 0; node < nodes && node < 32; node++)
+	{
+		short ra[3], rb[3];
+
+		InterpUnpackRot(p, ra);
+		InterpUnpackRot(q, rb);
+
+		if (node == 0)
+			continue;
+
+		const float d = InterpPoseTurnCos(a + node * 9, b + node * 9);
+
+		if (d >= INTERP_KEY_SEAM_COS)
+			continue;
+
+		float ma[9], mb[9];
+
+		InterpPoseRot(ra, ma);
+		InterpPoseRot(rb, mb);
+
+		const float o = InterpPoseTurnCos(ma, mb);
+
+		if (o < INTERP_KEY_SEAM_COS)
+		{
+			if (ownCos)
+				*ownCos = o;
+
+			if (drawnCos)
+				*drawnCos = d;
+
+			return node;
+		}
+	}
+
+	return -1;
+}
+
+/* InterpKeySeamAt for the key frames `f0` and `f1` alone, their drawn
+ * rotations built here from Lara's bone table `bone` (InterpDrawnRots). */
+inline int InterpKeySeam(const short* f0, const short* f1, int nodes, const long* bone,
+	float* ownCos, float* drawnCos)
+{
+	float a[32 * 9], b[32 * 9];
+
+	InterpDrawnRots(f0, nodes, bone, a);
+	InterpDrawnRots(f1, nodes, bone, b);
+
+	return InterpKeySeamAt(f0, f1, a, b, nodes, ownCos, drawnCos);
+}
+
+/* One animation's far key pairs (InterpKeyFarDrawn) that are no seam
+ * (InterpKeySeamAt), one bit per pair in `bits` (INTERP_KEY_FAR_WORDS words,
+ * cleared here): `frames` is the animation's block of key frames, `size` its
+ * frame size in shorts and `pairs` its key pairs, so keys 0 to `pairs` are
+ * read. Each key frame's drawn rotations are built once and serve both pairs
+ * it belongs to. A seam, and every pair from INTERP_KEY_FAR_PAIRS on, is
+ * left unmarked and drawn as vanilla draws it. */
 inline void InterpKeyFarFill(const short* frames, long size, long pairs, int nodes,
 	const long* bone, unsigned long* bits)
 {
@@ -972,7 +1083,8 @@ inline void InterpKeyFarFill(const short* frames, long size, long pairs, int nod
 
 		InterpDrawnRots(frames + size * (k + 1), nodes, bone, b);
 
-		if (InterpDrawnTurnCos(a, b, nodes, 0) < INTERP_KEY_DRAWN_COS)
+		if (InterpDrawnTurnCos(a, b, nodes, 0) < INTERP_KEY_DRAWN_COS &&
+			InterpKeySeamAt(frames + size * k, frames + size * (k + 1), a, b, nodes, 0, 0) < 0)
 			bits[k >> 5] |= 1UL << (k & 31);
 	}
 }
@@ -991,11 +1103,12 @@ inline bool InterpKeyFarBit(const unsigned long* bits, long pair)
  * Key frames built rather than blended.
  * ==========================================================================
  *
- * A far key pair (InterpKeyFarDrawn) that is not held on its first key is
- * drawn from a key frame made for the weight in hand, and the frame an early
- * turn180_effect fires on (INTERP_TURN_EARLY) from copies turned by half a
- * turn (draw.cpp LaraPoseFrames). Both are frames in the level's own format,
- * so every draw path reads them as it reads a stored frame.
+ * A far key pair (InterpKeyFarDrawn) that is no seam (InterpKeySeamAt) and
+ * is not held on its first key is drawn from a key frame made for the weight
+ * in hand, and the frame an early turn180_effect fires on (INTERP_TURN_EARLY)
+ * from copies turned by half a turn (draw.cpp LaraPoseFrames). Both are
+ * frames in the level's own format, so every draw path reads them as it
+ * reads a stored frame.
  *
  * A node's packed rotation (InterpUnpackRot above; draw.cpp
  * gar_RotYXZsuperpack and specific\3dmath.cpp phd_RotYXZpack read it) comes
@@ -1360,8 +1473,10 @@ inline void InterpSlerpMat(const float* a, const float* b, float alpha, float* o
  * 133.8 in the drawn frame; the shorter way of its own turn puts the arm 180
  * degrees off the middle of that drawn turn on the in-between frame, the
  * longer way about 21 degrees off it. Over the thirteen campaign levels this
- * decides that node and one node of rich3's 152 key 4 to 5, whose frame data
- * run past their frame size; every other far pair is InterpKeyFrameLerp's. */
+ * decides that node alone; every other far pair built is InterpKeyFrameLerp's
+ * (rich3's 152 key 4 to 5, whose frame data run past their frame size and
+ * whose node 1 turns 179.8 degrees on its own, is a seam, InterpKeySeamAt,
+ * and is not built). */
 inline int InterpKeyFrameFar(const short* f0, const short* f1, int nodes, const long* bone,
 	float alpha, short* out)
 {
@@ -1594,7 +1709,8 @@ inline int InterpTurnKind(const short* keys, long size, long frameBase, long rat
 /* True when the far key pair `pair` is held on its first key frame: the
  * half turn is INSIDE it and the flip falls on its second key, so every frame
  * between the two keys is drawn under the old yaw and only the first key
- * belongs to it. Every other far pair is built by InterpKeyFrameFar. INSIDE
+ * belongs to it. Every other far pair is built by InterpKeyFrameFar, save a
+ * seam (InterpKeySeamAt), which vanilla's blend draws. INSIDE
  * asks the hips (InterpKeyFar), so a pair far only by another node is never
  * held: over the thirteen campaign levels the one such pair with
  * turn180_effect on its second key, rich3's 210 key 1 to 2 (the head 96.9

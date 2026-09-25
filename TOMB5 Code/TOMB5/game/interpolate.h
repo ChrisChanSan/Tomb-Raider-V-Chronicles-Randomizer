@@ -293,6 +293,18 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold,
 	int nodes, const long* bone);
 
+/* KEYSEAMLOG, one line per tick on which Lara's pose stands on a seam in the
+ * data (InterpKeySeamAt, interpolate_math.h): a key pair far in the drawn
+ * frame that the table leaves unmarked (InterpKeyFarOf), because a limb
+ * turns more than 170 degrees both on its own and in the drawn frame, and
+ * that vanilla's blend draws. View set only (flag 0), once per tick.
+ * `pair` is the key pair `frame0` and `frame1` hold (draw.cpp LaraKeyOf);
+ * `nodes` and `bone` are Lara's mesh count and bone table. Called on every
+ * blended frame of a pair that is not far; without -log it returns at once.
+ * -log only. */
+void InterpNoteKeySeam(const ITEM_INFO* item, long pair, const short* frame0, const short* frame1,
+	int nodes, const long* bone);
+
 /* TURNLOG, one line per tick on which Lara's pose is drawn from key frames
  * turned by half a turn (InterpKeyFrameTurn): the frame turn180_effect fires
  * on belongs to the yaw before the effect (INTERP_TURN_EARLY). View set only,
@@ -323,8 +335,9 @@ int InterpTurnOf(short animNumber, long* flip, long* pair);
 
 /* Whether key pair `pair` (key `pair` to key `pair` + 1) of Lara's animation
  * `animNumber` is far: the drawn rotation of some node turns more than 90
- * degrees between the two keys (InterpKeyFarDrawn, interpolate_math.h).
- * `nodes` and `bone` are Lara's mesh count and bone table.
+ * degrees between the two keys (InterpKeyFarDrawn, interpolate_math.h), and
+ * the pair is no seam in the data (InterpKeySeamAt), which is left to
+ * vanilla's blend. `nodes` and `bone` are Lara's mesh count and bone table.
  *
  * The animation's pairs are decided together on its first call
  * (InterpKeyFarFill) and kept as one bit per pair in a table indexed by the

@@ -260,6 +260,12 @@ namespace
 		}
 
 		bool facial_rig = false;
+		/* Where the rig's joint matrices begin and how many there are: the
+		 * word that is zero everywhere else is the joint count, and the
+		 * matrices follow it. */
+		const size_t rig_at = reader.at + 4;
+		unsigned int rig_joints = 0;
+		std::memcpy(&rig_joints, reader.data + reader.at, 4);
 		if (reader.u32() != 0)
 		{
 			// A head. In place of the zero it carries a joint count and that
@@ -299,6 +305,8 @@ namespace
 				return false;
 			}
 		}
+
+		const size_t geometry_at = reader.at;
 
 		if (!reader.have(8))
 		{
@@ -385,6 +393,29 @@ namespace
 		model->vertices = (int)vertices;
 		model->facialRig = facial_rig;
 		model->vertexBytes = (int)stride;
+
+		/* The rig's joints. Each is an inverse bind matrix of twelve floats,
+		 * rows (m0 m1 m2 | m3), (m4 m5 m6 | m7), (m8 m9 m10 | m11); the
+		 * joint stands at -R^T t. Kept only when the whole list lies between
+		 * the count and the geometry the rescan found, and never past 256
+		 * joints, the most a byte-wide bone number can name. */
+		if (facial_rig && rig_joints && rig_joints <= 256 &&
+			rig_at + (size_t)rig_joints * 48 <= geometry_at)
+		{
+			model->rigJoints = (int)rig_joints;
+			model->rigJoint = new float[(size_t)rig_joints * 3];
+
+			for (unsigned int j = 0; j < rig_joints; j++)
+			{
+				float m[12];
+
+				std::memcpy(m, &bytes[rig_at + (size_t)j * 48], sizeof(m));
+
+				for (int c = 0; c < 3; c++)
+					model->rigJoint[j * 3 + c] =
+						-(m[0 + c] * m[3] + m[4 + c] * m[7] + m[8 + c] * m[11]);
+			}
+		}
 
 		if (parts)
 		{
@@ -527,6 +558,7 @@ void HDTrmFree(HDTrmModel* model)
 	delete[] model->texture;
 	delete[] model->index;
 	delete[] model->vertex;
+	delete[] model->rigJoint;
 
 	std::memset(model, 0, sizeof(*model));
 }

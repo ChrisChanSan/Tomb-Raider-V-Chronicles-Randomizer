@@ -321,7 +321,7 @@ namespace
 		  "the head",                 5, -1, "14", -1, 1u << HD_LARA_HEAD_NODE },
 
 		{ "LARA_HEAD",                0,
-		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)", -1, 0 },
+		  "the face",                 0, HD_LARA_HEAD_NODE, "14, its throat 7", -1, 0 },
 		{ "HAIR_OG",                  0,
 		  "the braid",                2, -1, "0..5 of its own chain", -1, 0 },
 
@@ -1891,6 +1891,12 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			one.synthFrom = HDLaraPartSlot(HD_LARA_PART_BODY);
 			one.synth = &build_neck_cap;
 		}
+
+		/* And the face's throat goes on her torso, by the file's own rig -
+		 * the rule and the measurement are at HD_LARA_PART_FACE in
+		 * hd_lara.h. */
+		if (part == HD_LARA_PART_FACE)
+			one.neckNode = HD_LARA_TORSO;
 	}
 
 	return written;

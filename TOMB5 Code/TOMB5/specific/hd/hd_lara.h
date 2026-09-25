@@ -2,7 +2,7 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The rules of the Lara composite - the body is an OUTFIT_ model, the face a
- * separate rigid LARA_HEAD, the braid a six bone HAIR_OG, the hands come from
+ * separate LARA_HEAD, the braid a six bone HAIR_OG, the hands come from
  * the HAND_ model of the slot whose mesh sits at the hand node and the worn
  * weapons from that slot's HOLSTER_ model - are carried over from TROne
  * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp:
@@ -678,7 +678,39 @@ enum HDLaraPart
 	 * the missing half, and hd_wardrobe.h's head rule says who wears it. */
 	HD_LARA_PART_HEAD,
 
-	HD_LARA_PART_FACE,		// LARA_HEAD, rigid on node 14
+	/* LARA_HEAD on node 14, and its throat on node 7.
+	 *
+	 * The file is more than a face: it reaches 27.8 units below the head
+	 * joint, 541 of its 5,913 vertices lie below that joint and 102 of them
+	 * more than 10 below - a strip of throat that runs down into the body's
+	 * own neck. Its facial rig carries a skeleton as well, and the strip is
+	 * weighted to it: of the rig's 33 joints, joint 4 stands on the bind of
+	 * node 14, joint 1 on the bind of node 7, the torso, at (-1, -49, 11), and
+	 * joints 3 and 6 at a thigh and at the hips. Those three stand 199.3 to
+	 * 270.8 units from the head joint, beyond the limit hd_model's neck rule
+	 * draws (HDModelSlot::neckNode), and 171 vertices carry weight on them.
+	 * They hang on node 7 with the file's own weights and the rest of the face
+	 * on node 14, so the throat bends where the file says it bends.
+	 *
+	 * The file's weights match the body's own: the 66 throat vertices that
+	 * lie on OUTFIT_CLASSIC's neck (within one unit in the bind pose) carry a
+	 * head weight 0.02 from the neck vertex under them on average (0.06 on
+	 * OUTFIT_VCI), and the two skins stay together when the head pitches 70
+	 * degrees back - 0.8 units apart on average and 4.0 at most, 1.5 and 9.5
+	 * on OUTFIT_VCI - where the whole face rigid on node 14 parts from the
+	 * neck by 15.1 on average and 34.6 at most, and folds out under the jaw
+	 * as a flap.
+	 *
+	 * Taking the weight of every vertex below the head joint from the body's
+	 * nearest neck vertex instead is the rule that does not hold: 387 of
+	 * those vertices are the jaw and the chin, on average 25 units from the
+	 * nearest vertex of the neck, and that rule hands them 0.46 to 0.61 of
+	 * the head on average (OUTFIT_VCI to OUTFIT_RUSSIA) - the jaw tears open
+	 * at 60 and 70 degrees and in the crouch.
+	 *
+	 * First person does not draw the face at all, so the neck cut and its lid
+	 * are untouched by this. */
+	HD_LARA_PART_FACE,
 	HD_LARA_PART_BRAID,		// HAIR_OG, its own six node chain
 
 	/* Not a file: a fan built on the rim the head cut leaves, skinned exactly

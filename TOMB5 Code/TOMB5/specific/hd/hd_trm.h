@@ -133,6 +133,18 @@ struct HDTrmModel
 	int vertices;
 	bool facialRig;
 	int vertexBytes;	// 24 or 30 on disk - see HDTrmInfo
+
+	/* The facial rig's joints, for a head that carries one: `rigJoints` of
+	 * them, three floats each. The rig stores every joint as an inverse bind
+	 * matrix, 3x4 and row-major, so the joint itself stands at -R^T t, which
+	 * is what is kept. A vertex's bone number is an index into this list.
+	 *
+	 * In the rig's own axes, which are not the vertices' - LARA_HEAD's head
+	 * joint is (1, -12, 247) here and (1, -247, -12) in the model - so only
+	 * the distance between two joints means anything. 0 and null for every
+	 * file without a rig. */
+	int rigJoints;
+	float* rigJoint;
 };
 
 // True when the file exists at all. Cheap - no read.

@@ -67,8 +67,9 @@ struct IDirect3DDevice9;
 // `rigidNode` is -1 for a skinned model, and a node number for a file whose
 // bone indices are NOT mesh tree nodes: every vertex then hangs off that one
 // node with weight 255. LARA_HEAD.TRM carries a facial rig whose bones run to
-// 31 and mean nothing to Lara's 15 node tree, so it rides rigidly on node 14,
-// the classic head node.
+// 31 and mean nothing to Lara's 15 node tree, so it rides on node 14, the
+// classic head node - all of it but the throat its rig weights to her torso,
+// which `neckNode` below puts on node 7.
 // `fromTr3` says the model is one of the four Tomb Raider III guests the
 // randomizer imports, and its .TRM and texture pages come out of the OTHER
 // bundle - Tomb Raider I-III Remastered, game folder 3 with 1 and 2 as
@@ -89,6 +90,18 @@ struct HDModelSlot
 	const char* name = 0;
 	int rigidNode = -1;
 	bool fromTr3 = false;
+
+	/* A rigid face's neck, out of the face's own rig.
+	 *
+	 * -1 is a face wholly rigid on `rigidNode`. A node number here hangs
+	 * every vertex the file weights to a BODY joint of its facial rig on this
+	 * node, with the file's own weights, and leaves the rest on `rigidNode`.
+	 * Which joints are the body's is measured in the file itself: the ones
+	 * that stand farther than kNeckJointDistance (hd_model.cpp) from the
+	 * rig's head joint. A file with no rig, or with no joint that far out,
+	 * stays wholly rigid. Lara's face asks for the torso - see
+	 * HD_LARA_PART_FACE in hd_lara.h. */
+	int neckNode = -1;
 
 	/* The file, when the caller already knows it.
 	 *

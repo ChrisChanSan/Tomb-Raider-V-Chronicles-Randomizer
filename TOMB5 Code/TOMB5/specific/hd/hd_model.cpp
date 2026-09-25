@@ -982,7 +982,8 @@ namespace
 				 * head node hangs off - the torso. The weights are kept as
 				 * the file has them, so the seam between the two BLENDS
 				 * instead of tearing. neck_bone_of says which bone that is
-				 * and how it was measured. */
+				 * and how it was measured for a creature's face, rig_neck_of
+				 * for a face whose slot names its neck node, which is Lara's. */
 				const int b0 = model.neckBone >= 0 && (int)in.bone[0] == model.neckBone
 					? model.neckNode : rigidNode;
 				const int b1 = model.neckBone >= 0 && (int)in.bone[1] == model.neckBone
@@ -1671,6 +1672,144 @@ namespace
 		return minor;
 	}
 
+	/* How far a joint of a facial rig stands from the rig's head joint before
+	 * it is a joint of the BODY.
+	 *
+	 * A <NAME>_HEAD.TRM carries a skeleton in its rig and not only a face:
+	 * LARA_HEAD's 33 joints include one at (-1, -49, 11) in the model's
+	 * axes, which is the bind of Lara's torso node, one at the origin, her
+	 * hips, and one at a thigh - and the strip of throat that reaches down
+	 * into the collar is weighted to the torso joint. The split is a
+	 * distance, which no axis convention of a rig can change. Over the 23
+	 * rigged *_HEAD.TRM files of the IV-VI install's games 4 and 5 (the head
+	 * joint is the one carrying the most weight, every other weighted joint
+	 * measured from it) the farthest joint of the face stands 99.4 units out
+	 * (ZIP_HEAD) and the nearest joint of the body 131.8 (LARSON_HEAD); 120
+	 * lies in that gap. The rule and the two numbers are TROne's data
+	 * measurement over 58 files of both installs, and they hold here.
+	 *
+	 * LARA_HEAD's two shoulder joints stand 81 units out and count as the
+	 * face's. They carry 27 units of weight over 26 vertices, against 12,690
+	 * on the torso joint, and stay on the head node. */
+	const double kNeckJointDistance = 120.0;
+
+	/* What the neck rule found in one file, for the note. */
+	struct RigNeck
+	{
+		int headJoint;
+		int joints;		// body joints that carry weight
+		int bone;		// the lowest of them, which all of them become
+		double nearest, farthest;	// their distances from the head joint
+		int vertices;		// vertices with weight on one of them
+		char list[64];		// the joints, for the note
+	};
+
+	/* The body joints of a rigid face's rig, folded into one bone number -
+	 * see HDModelSlot::neckNode.
+	 *
+	 * Every vertex bone that names a body joint is renamed to the lowest body
+	 * joint, and that number is returned; build() then hangs that one bone on
+	 * the neck node with the file's own weight, exactly as it does a
+	 * creature's neck bone. A vertex that carries two body joints keeps both
+	 * weights on the one node. The facial joints keep their numbers, and all
+	 * of them ride on the head node as before. The renaming happens in the
+	 * copy read into memory, where nothing reads a bone number of a rigid
+	 * face but build().
+	 *
+	 * -1, with nothing renamed, when the file has no rig, when a vertex names
+	 * a bone the rig does not have, or when no weighted joint stands beyond
+	 * kNeckJointDistance. */
+	int rig_neck_of(HDTrmModel& trm, RigNeck* said)
+	{
+		std::memset(said, 0, sizeof(*said));
+		said->headJoint = -1;
+		said->bone = -1;
+
+		if (trm.rigJoints <= 0 || !trm.rigJoint || trm.vertices <= 0)
+			return -1;
+
+		std::vector<double> weight((size_t)trm.rigJoints, 0.0);
+
+		for (int i = 0; i < trm.vertices; i++)
+			for (int b = 0; b < 3; b++)
+			{
+				const HDTrmVertex& v = trm.vertex[i];
+
+				if (!v.weight[b])
+					continue;
+
+				if ((int)v.bone[b] >= trm.rigJoints)
+					return -1;
+
+				weight[v.bone[b]] += (double)v.weight[b];
+			}
+
+		int head = 0;
+
+		for (int j = 1; j < trm.rigJoints; j++)
+			if (weight[(size_t)j] > weight[(size_t)head])
+				head = j;
+
+		said->headJoint = head;
+
+		std::vector<unsigned char> body((size_t)trm.rigJoints, 0);
+		const float* h = trm.rigJoint + head * 3;
+
+		for (int j = 0; j < trm.rigJoints; j++)
+		{
+			if (j == head || weight[(size_t)j] <= 0.0)
+				continue;
+
+			const float* p = trm.rigJoint + j * 3;
+			const double d = std::sqrt((double)(p[0] - h[0]) * (p[0] - h[0]) +
+				(double)(p[1] - h[1]) * (p[1] - h[1]) +
+				(double)(p[2] - h[2]) * (p[2] - h[2]));
+
+			if (d <= kNeckJointDistance)
+				continue;
+
+			body[(size_t)j] = 1;
+
+			if (!said->joints || d < said->nearest)
+				said->nearest = d;
+
+			if (!said->joints || d > said->farthest)
+				said->farthest = d;
+
+			if (said->bone < 0)
+				said->bone = j;
+
+			const size_t used = std::strlen(said->list);
+
+			std::snprintf(said->list + used, sizeof(said->list) - used, "%s%d",
+				said->joints ? "," : "", j);
+			said->joints++;
+		}
+
+		if (said->bone < 0)
+			return -1;
+
+		for (int i = 0; i < trm.vertices; i++)
+		{
+			HDTrmVertex& v = trm.vertex[i];
+			bool touches = false;
+
+			for (int b = 0; b < 3; b++)
+				if ((int)v.bone[b] < trm.rigJoints && body[v.bone[b]])
+				{
+					if (v.weight[b])
+						touches = true;
+
+					v.bone[b] = (unsigned char)said->bone;
+				}
+
+			if (touches)
+				said->vertices++;
+		}
+
+		return said->bone;
+	}
+
 	/* ---------------------------------------------------------- drawing -- */
 
 	/* The bind fold. A .TRM vertex is in the model's bind pose, so the node's
@@ -2174,6 +2313,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * for. */
 		int twinOf;
 		HDTrmFoldCounts fold;	// what the mirror fold did
+		/* A rigid face's neck, found in the file while it is open - see
+		 * HDModelSlot::neckNode. -1 and -1 for every other entry. */
+		int neckBone;
+		int neckNode;
 	};
 
 	std::vector<Pending> pending;
@@ -2240,6 +2383,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			// constructor, so every field of it has to be written here.
 			made.cutNode = 0;
 			made.twinOf = -1;
+			made.neckBone = -1;
+			made.neckNode = -1;
 			std::memset(&made.trm, 0, sizeof(made.trm));
 			std::memset(&made.head, 0, sizeof(made.head));
 
@@ -2350,6 +2495,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.cutKeeps = true;
 		here.cutNode = slots[i].onlyNode;
 		here.twinOf = -1;
+		here.neckBone = -1;
+		here.neckNode = -1;
 
 		if (slots[i].onlyPage >= 0)
 			here.cutPage.push_back(slots[i].onlyPage);
@@ -2461,6 +2608,35 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			g_pose[slot] = said;
 		}
 
+		/* A rigid face's neck, out of its own rig - see HDModelSlot::neckNode
+		 * for the rule and rig_neck_of for the arithmetic. Here, while the
+		 * file is still a file: the rig is gone once it is a buffer. */
+		if (slots[i].rigidNode >= 0 && slots[i].neckNode >= 0)
+		{
+			RigNeck said;
+
+			here.neckBone = rig_neck_of(here.trm, &said);
+
+			if (here.neckBone >= 0)
+			{
+				here.neckNode = slots[i].neckNode;
+				note("%s (slot %d): %d of %d vertices of the face take the "
+					"body's neck (node %d) with the file's own weights - rig "
+					"joints %s stand %.1f..%.1f from its head joint %d, the "
+					"limit is %.0f", slot_label(slot, model), slot,
+					said.vertices, here.trm.vertices, here.neckNode, said.list,
+					said.nearest, said.farthest, said.headJoint,
+					kNeckJointDistance);
+			}
+			else
+				note("%s (slot %d): the face stays rigid on node %d - %s",
+					slot_label(slot, model), slot, slots[i].rigidNode,
+					here.trm.rigJoints <= 0 ? "the file carries no rig"
+						: said.headJoint < 0 ? "a vertex names a bone its rig "
+							"does not have"
+						: "no joint of its rig stands beyond the limit");
+		}
+
 		/* Mod guns on the install's hands. What this is and
 		 * why it is decided here rather than by the caller is written out at
 		 * HDModelSlot::twinSlot; this is the arithmetic.
@@ -2530,6 +2706,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					// A hand twin is a whole model, never a node of one.
 					twin.cutNode = 0;
 					twin.twinOf = i;
+					twin.neckBone = -1;
+					twin.neckNode = -1;
 					std::memset(&twin.fold, 0, sizeof(twin.fold));
 					std::memset(&twin.trm, 0, sizeof(twin.trm));
 					std::memset(&twin.head, 0, sizeof(twin.head));
@@ -2901,6 +3079,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* trouble = "";
 
 		model.fold = here.fold;
+		model.neckBone = here.neckBone;
+		model.neckNode = here.neckNode;
 
 		const PageCut cut =
 		{

@@ -667,8 +667,8 @@ inline void InterpRootNarrow(const long prev[3], const long cur[3], const long s
  * blended either, and nothing of this rule runs at fps_mode 0.
  *
  * Vanilla's own key frame blend meets the same arithmetic at rate > 1 where
- * Lara's hips turn more than 90 degrees between two key frames, and there it
- * runs at every fps_mode: InterpKeyFar below. */
+ * a node of Lara's turns more than 90 degrees in the drawn frame between two
+ * key frames, and there it runs at every fps_mode: InterpKeyFarDrawn below. */
 #define INTERP_POSE_TURN_COS	0.0F	/* cos 90 degrees: trace = 1 + 2*cos */
 
 /* One node's packed rotation, with the cursor stepped past it (draw.cpp,
@@ -763,44 +763,234 @@ inline bool InterpPoseFar(const short* frameA, const short* frameB, int nodes,
 	return false;
 }
 
-/* True when a key frame pair of Lara's is too far apart for vanilla's key
- * frame blend: her hips (node 0) turn more than 90 degrees between the two
- * frames. Shared by draw.cpp, game\interpolate.cpp and InterpTest.
+/* True when the hips (node 0) of two key frames of Lara's turn more than 90
+ * degrees between them: the test for where turn180_effect's half turn lies
+ * (InterpTurnKind) and for the way round the bridge takes the hips
+ * (InterpBridgeLong), both below.
  *
- * The blend multiplies each key frame's node matrices out and averages the
- * two stacks element by element, so a far pair at the hips shrinks every node
- * that hangs off them. The tightrope turn (animation 451) swings the hips
- * back by 176.9 degrees between key 25 and key 26 in ANDREA1 and rich2 (rate
- * 2) and by 171.3 degrees between key 12 and key 13 in ANDREA2 and ANDREA3
- * (rate 4), while turn180_effect turns the item by half a turn on the second
- * key's frame; the blended frame between them squeezes her whole body onto
- * her vertical axis (hips column lengths 0.087, 0.995 and 0.059, determinant
- * 0.001, at 0.5 in ANDREA1).
+ * The tightrope turn (animation 451) swings the hips back by 176.9 degrees
+ * between key 25 and key 26 in ANDREA1 and rich2 (rate 2) and by 171.3
+ * degrees between key 12 and key 13 in ANDREA2 and ANDREA3 (rate 4), while
+ * turn180_effect turns the item by half a turn on the second key's frame: the
+ * animation carries the other half turn itself. Over the thirteen campaign
+ * levels' playable Lara animations the hips turn this far across 32 blended
+ * key pairs - animations 209 and 213 key 0 to 1 in every level, 451 in
+ * ANDREA1, ANDREA2, ANDREA3 and rich2, 219 key 0 to 1 and 152 key 3 to 4 in
+ * rich3 - with the nearest turns on either side of the limit at 85.97 and
+ * 94.92 degrees. The same threshold and arithmetic as the rate 1 rule, over
+ * one node.
  *
- * The hips alone decide: every other node inherits their frame, and a limb
- * swinging past 90 degrees is a stretch of one bone, not a collapse of the
- * body. Over the thirteen campaign levels' playable Lara animations this
- * fires on 31 blended key pairs - animations 209 and 213 key 0 to 1 in every
- * level, 451 in ANDREA1, ANDREA2, ANDREA3 and rich2, 219 key 0 to 1 in rich3
- * - with the nearest turns on either side of the limit at 85.97 and 94.92
- * degrees. The same threshold and arithmetic as the rate 1 rule, over one
- * node.
- *
- * Such a pair is drawn in one of two ways (InterpKeyHold below): held on its
- * first key where turn180_effect fires on its second (the four tightrope
- * pairs), else from a key frame built at the weight in hand
- * (InterpKeyFrameLerp: 209 and 213 key 0 to 1, rich3's 219). */
+ * Which key pairs are drawn from a built key frame is decided over every
+ * node, in the drawn frame (InterpKeyFarDrawn below): the hips' own turn is
+ * node 0's drawn turn, so every pair this fires on is among them. */
 inline bool InterpKeyFar(const short* frame0, const short* frame1)
 {
 	return InterpPoseFar(frame0, frame1, 1, INTERP_POSE_TURN_COS);
 }
 
 /* ==========================================================================
+ * The drawn turn of a key pair.
+ * ==========================================================================
+ *
+ * Vanilla's key frame blend (delstuff.cpp Rich_CalcLaraMatrices_Interpolated
+ * for Lara, draw.cpp DrawAnimatingItem for the rest, both through
+ * InitInterpolateAlpha and InterpolateMatrix) keeps two matrix stacks, one per
+ * key frame, multiplies each node's rotation onto both and averages the two
+ * stacks element by element at every node. What is averaged is a node's
+ * drawn rotation - its own rotation multiplied onto its parents' - so a node
+ * whose drawn rotation turns D between the two keys is drawn cos(D/2) of
+ * itself across the turn at the midpoint, whatever its own rotation does, and
+ * its skin joins that frame to its parent's. In ANDREA1 the standing jump
+ * forward (animation 76, key 0 to 1) turns the upper arm (node 11) 143.7
+ * degrees on its own and the forearm (node 12, 0.4 degrees on its own)
+ * 170.1 in the drawn frame: at the one in-between frame the forearm is 0.09
+ * of itself across and the arm is drawn flat. A node may turn far on its own
+ * and little in the drawn frame, where its parent's turn takes part of it
+ * back (53 key 0 to 1: node 9 147.6 on its own, no node over 83.6 drawn, 0.75
+ * kept), and little on its own and far in the drawn frame, where its
+ * parents' turns add up (10 key 0 to 1: no node over 56.7 on its own, node
+ * 13 94.2 drawn).
+ *
+ * So a key pair of Lara's is far where the drawn rotation of any node turns
+ * more than 90 degrees between its keys (INTERP_KEY_DRAWN_COS), and it is
+ * drawn from a key frame built at the weight in hand (InterpKeyFrameFar),
+ * or held on its first key where turn180_effect fires on its second
+ * (InterpKeyHold). Over the thirteen campaign levels' playable Lara
+ * animations this marks 1204 of the 35364 key pairs vanilla blends, 72 to 134
+ * per level: the take-offs of the standing jumps (76 forward 170.1 degrees at
+ * node 12, 91 up 133.8 at node 11, 74 back 153.8, 78 left 147.9, 80 right
+ * 131.7), the first pair of the back jump's twist (212, 137.0 at node 10),
+ * and the 32 pairs whose hips turn that far (InterpKeyFar). The own turn
+ * would mark 617: it misses 719 whose drawn turn passes 90 and takes 132
+ * whose drawn turn stays under it. The nearest drawn turns on either side of
+ * the limit are 89.93 and 90.04 degrees, and the engine's float walk and a
+ * double-precision one agree on every pair of the thirteen levels.
+ *
+ * The answer is kept per animation, one bit per key pair
+ * (game\interpolate.cpp InterpKeyFarOf, filled by InterpKeyFarFill on the
+ * animation's first draw), so a draw pays a table lookup. The longest
+ * playable animation of Lara's has 199 key pairs (a rate 1 animation, 471 in
+ * ANDREA3; 100 at rates above 1), inside the table's INTERP_KEY_FAR_PAIRS. */
+#define INTERP_KEY_DRAWN_COS	0.0F	/* cos 90 degrees: the midpoint keeps cos 45 = 0.71 */
+#define INTERP_KEY_FAR_WORDS	8	/* 32-bit words of key pairs per animation */
+#define INTERP_KEY_FAR_PAIRS	(32 * INTERP_KEY_FAR_WORDS)
+
+/* The 3x3 row major product a * b, written to `out`. */
+inline void InterpRotMul(const float* a, const float* b, float* out)
+{
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+			out[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c];
+}
+
+/* The drawn rotation of every node of frame `f`, nine floats per node in
+ * `out`, in InterpPoseRot's layout: the node's own rotation multiplied onto
+ * its parent's drawn rotation. The parent is found as the draw finds it
+ * (DrawAnimatingItem, and the fixed walk of Rich_CalcLaraMatrices for Lara's
+ * fifteen nodes): `bone` is the object's bone table, four longs per node from
+ * node 1 on, whose first long pops the matrix stack before the node (bit 0)
+ * and pushes it (bit 1); the offsets turn nothing and are not read. The
+ * draw's stack multiplies each rotation on the right, and InterpPoseRot's
+ * layout is its transpose, so here a node's own rotation stands on the left.
+ * Node 0's drawn rotation is its own, bit for bit. At most 32 nodes. */
+inline void InterpDrawnRots(const short* f, int nodes, const long* bone, float* out)
+{
+	float stack[32][9];
+	float cur[9] = { 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F };
+	int depth = 0;
+	const short* p = f + 9;
+
+	for (int node = 0; node < nodes && node < 32; node++)
+	{
+		if (node > 0)
+		{
+			const long flags = bone[(node - 1) * 4];
+
+			if ((flags & 1) && depth > 0)
+			{
+				depth--;
+
+				for (int i = 0; i < 9; i++)
+					cur[i] = stack[depth][i];
+			}
+
+			if ((flags & 2) && depth < 32)
+			{
+				for (int i = 0; i < 9; i++)
+					stack[depth][i] = cur[i];
+
+				depth++;
+			}
+		}
+
+		short r[3];
+		float m[9];
+
+		InterpUnpackRot(p, r);
+		InterpPoseRot(r, m);
+		InterpRotMul(m, cur, out + node * 9);
+
+		for (int i = 0; i < 9; i++)
+			cur[i] = out[node * 9 + i];
+	}
+}
+
+/* The cosine of the largest turn between two frames' drawn rotations `a`
+ * and `b` (InterpDrawnRots) over `nodes` nodes; `node`, where not null,
+ * receives the node that turns furthest (the first of equals). */
+inline float InterpDrawnTurnCos(const float* a, const float* b, int nodes, int* node)
+{
+	float worst = 2.0F;
+	int at = 0;
+
+	for (int n = 0; n < nodes && n < 32; n++)
+	{
+		const float c = InterpPoseTurnCos(a + n * 9, b + n * 9);
+
+		if (c < worst)
+		{
+			worst = c;
+			at = n;
+		}
+	}
+
+	if (node)
+		*node = at;
+
+	return worst < 2.0F ? worst : 1.0F;
+}
+
+/* True when the key frames `f0` and `f1` lie too far apart for vanilla's key
+ * frame blend: the drawn rotation of some node turns more than 90 degrees
+ * between them (INTERP_KEY_DRAWN_COS). `node` and `turnCos`, where not null,
+ * receive the node that turns furthest and the cosine of its turn. */
+inline bool InterpKeyFarDrawn(const short* f0, const short* f1, int nodes, const long* bone,
+	int* node, float* turnCos)
+{
+	float a[32 * 9], b[32 * 9];
+
+	InterpDrawnRots(f0, nodes, bone, a);
+	InterpDrawnRots(f1, nodes, bone, b);
+
+	const float c = InterpDrawnTurnCos(a, b, nodes, node);
+
+	if (turnCos)
+		*turnCos = c;
+
+	return c < INTERP_KEY_DRAWN_COS;
+}
+
+/* One animation's far key pairs (InterpKeyFarDrawn), one bit per pair in
+ * `bits` (INTERP_KEY_FAR_WORDS words, cleared here): `frames` is the
+ * animation's block of key frames, `size` its frame size in shorts and
+ * `pairs` its key pairs, so keys 0 to `pairs` are read. Each key frame's drawn
+ * rotations are built once and serve both pairs it belongs to. Pairs from
+ * INTERP_KEY_FAR_PAIRS on are left unmarked and are drawn as vanilla draws
+ * them. */
+inline void InterpKeyFarFill(const short* frames, long size, long pairs, int nodes,
+	const long* bone, unsigned long* bits)
+{
+	float rots[2][32 * 9];
+
+	for (int w = 0; w < INTERP_KEY_FAR_WORDS; w++)
+		bits[w] = 0;
+
+	if (!frames || !bone || size < 9 || nodes < 1 || pairs < 1)
+		return;
+
+	if (pairs > INTERP_KEY_FAR_PAIRS)
+		pairs = INTERP_KEY_FAR_PAIRS;
+
+	InterpDrawnRots(frames, nodes, bone, rots[0]);
+
+	for (long k = 0; k < pairs; k++)
+	{
+		const float* a = rots[k & 1];
+		float* b = rots[(k + 1) & 1];
+
+		InterpDrawnRots(frames + size * (k + 1), nodes, bone, b);
+
+		if (InterpDrawnTurnCos(a, b, nodes, 0) < INTERP_KEY_DRAWN_COS)
+			bits[k >> 5] |= 1UL << (k & 31);
+	}
+}
+
+/* Whether pair `pair` is marked in `bits` (InterpKeyFarFill); false for a
+ * pair outside the table. */
+inline bool InterpKeyFarBit(const unsigned long* bits, long pair)
+{
+	if (!bits || pair < 0 || pair >= INTERP_KEY_FAR_PAIRS)
+		return false;
+
+	return ((bits[pair >> 5] >> (pair & 31)) & 1UL) != 0;
+}
+
+/* ==========================================================================
  * Key frames built rather than blended.
  * ==========================================================================
  *
- * A far key pair (InterpKeyFar) that is not held on its first key is drawn
- * from a key frame made for the weight in hand, and the frame an early
+ * A far key pair (InterpKeyFarDrawn) that is not held on its first key is
+ * drawn from a key frame made for the weight in hand, and the frame an early
  * turn180_effect fires on (INTERP_TURN_EARLY) from copies turned by half a
  * turn (draw.cpp LaraPoseFrames). Both are frames in the level's own format,
  * so every draw path reads them as it reads a stored frame.
@@ -1100,6 +1290,185 @@ inline int InterpKeyFrameLerp(const short* f0, const short* f1, int nodes, float
 	return n;
 }
 
+/* Where a node's own rotation turns more than 179 degrees between two keys,
+ * the shorter way round and the longer one differ by less than two degrees,
+ * which three angles each rounded to 0.35 degrees cannot tell apart: the way
+ * InterpKeyFrameLerp takes is decided by the last bits of the data. */
+#define INTERP_KEY_HALF_COS	-0.99985F	/* cos 179 degrees */
+
+/* Two rotations in InterpPoseRot's layout blended at `alpha` along the
+ * shortest turn between them (InterpSlerpRot's arithmetic on matrices),
+ * written to `out`. */
+inline void InterpSlerpMat(const float* a, const float* b, float alpha, float* out)
+{
+	float qa[4], qb[4], q[4];
+
+	InterpRotToQuat(a, qa);
+	InterpRotToQuat(b, qb);
+
+	float d = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3];
+
+	if (d < 0.0F)
+	{
+		d = -d;
+
+		for (int i = 0; i < 4; i++)
+			qb[i] = -qb[i];
+	}
+
+	float wa = 1.0F - alpha, wb = alpha;
+
+	if (d < 0.9995F)
+	{
+		const float th = acosf(d);
+		const float sn = sinf(th);
+
+		wa = sinf((1.0F - alpha) * th) / sn;
+		wb = sinf(alpha * th) / sn;
+	}
+
+	float len = 0.0F;
+
+	for (int i = 0; i < 4; i++)
+	{
+		q[i] = wa * qa[i] + wb * qb[i];
+		len += q[i] * q[i];
+	}
+
+	len = sqrtf(len);
+
+	for (int i = 0; i < 4; i++)
+		q[i] /= len;
+
+	InterpQuatToRot(q, out);
+}
+
+/* The key frame drawn at `alpha` across a far key pair of Lara's
+ * (InterpKeyFarDrawn), written to `out` (at least 9 + 2 * nodes shorts);
+ * returns the shorts written. `bone` is her bone table (InterpDrawnRots).
+ *
+ * It is InterpKeyFrameLerp's frame, word for word, unless a node's own
+ * rotation turns within a degree of half a turn (INTERP_KEY_HALF_COS). Such
+ * a node takes the way round whose drawn rotation, at the middle of the pair
+ * and under its parent as built, lies nearer the middle of the shortest turn
+ * between the two keys' drawn rotations - the turn vanilla's blend averages
+ * across - and it keeps that way at every weight, so the tween frames across
+ * the pair follow one path. In the standing jump up (91, key 0 to 1, in every
+ * campaign level) the upper arm (node 11) turns 179.85 degrees on its own and
+ * 133.8 in the drawn frame; the shorter way of its own turn puts the arm 180
+ * degrees off the middle of that drawn turn on the in-between frame, the
+ * longer way about 21 degrees off it. Over the thirteen campaign levels this
+ * decides that node and one node of rich3's 152 key 4 to 5, whose frame data
+ * run past their frame size; every other far pair is InterpKeyFrameLerp's. */
+inline int InterpKeyFrameFar(const short* f0, const short* f1, int nodes, const long* bone,
+	float alpha, short* out)
+{
+	bool any = false;
+
+	{
+		const short* a = f0 + 9;
+		const short* b = f1 + 9;
+
+		for (int node = 0; node < nodes && node < 32; node++)
+		{
+			short ra[3], rb[3];
+			float ma[9], mb[9];
+
+			InterpUnpackRot(a, ra);
+			InterpUnpackRot(b, rb);
+			InterpPoseRot(ra, ma);
+			InterpPoseRot(rb, mb);
+
+			if (InterpPoseTurnCos(ma, mb) < INTERP_KEY_HALF_COS)
+				any = true;
+		}
+	}
+
+	if (!any || !bone || nodes > 32)
+		return InterpKeyFrameLerp(f0, f1, nodes, alpha, out);
+
+	static const float ident[9] = { 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F };
+	float da[32 * 9], db[32 * 9], mid[32 * 9];
+	bool longArc[32];
+	int stack[32];
+	int depth = 0, cur = -1;
+
+	InterpDrawnRots(f0, nodes, bone, da);
+	InterpDrawnRots(f1, nodes, bone, db);
+
+	/* The ways round, decided at the middle, root first: each node's drawn
+	 * rotation there under its parent's as built. */
+	{
+		const short* a = f0 + 9;
+		const short* b = f1 + 9;
+
+		for (int node = 0; node < nodes; node++)
+		{
+			if (node > 0)
+			{
+				const long flags = bone[(node - 1) * 4];
+
+				if ((flags & 1) && depth > 0)
+					cur = stack[--depth];
+
+				if ((flags & 2) && depth < 32)
+					stack[depth++] = cur;
+			}
+
+			const float* parent = cur >= 0 ? mid + cur * 9 : ident;
+			short ra[3], rb[3], r[3];
+			float ma[9], mb[9], m[9];
+
+			InterpUnpackRot(a, ra);
+			InterpUnpackRot(b, rb);
+			InterpPoseRot(ra, ma);
+			InterpPoseRot(rb, mb);
+			InterpSlerpRot(ra, rb, 0.5F, r);
+			InterpPoseRot(r, m);
+			InterpRotMul(m, parent, mid + node * 9);
+			longArc[node] = false;
+
+			if (InterpPoseTurnCos(ma, mb) < INTERP_KEY_HALF_COS)
+			{
+				float g[9], other[9];
+
+				InterpSlerpRot(ra, rb, 0.5F, r, true);
+				InterpPoseRot(r, m);
+				InterpRotMul(m, parent, other);
+				InterpSlerpMat(da + node * 9, db + node * 9, 0.5F, g);
+
+				if (InterpPoseTurnCos(other, g) > InterpPoseTurnCos(mid + node * 9, g))
+				{
+					longArc[node] = true;
+
+					for (int i = 0; i < 9; i++)
+						mid[node * 9 + i] = other[i];
+				}
+			}
+
+			cur = node;
+		}
+	}
+
+	const short* box = alpha > 0.5F ? f1 : f0;
+	const long alpha8 = InterpEighths(alpha);
+	int n = 9;
+
+	for (int i = 0; i < 6; i++)
+		out[i] = box[i];
+
+	for (int i = 6; i < 9; i++)
+		out[i] = (short)InterpBlendLong(f0[i], f1[i], alpha8);
+
+	const short* a = f0 + 9;
+	const short* b = f1 + 9;
+
+	for (int node = 0; node < nodes; node++)
+		n += InterpKeyNodeLerp(a, b, alpha, longArc[node], out + n);
+
+	return n;
+}
+
 /* The key frame `f` turned by half a turn about the item's vertical, written
  * to `out` (at least 9 + 2 * nodes shorts); returns the shorts written.
  *
@@ -1223,7 +1592,11 @@ inline int InterpTurnKind(const short* keys, long size, long frameBase, long rat
 /* True when the far key pair `pair` is held on its first key frame: the
  * half turn is INSIDE it and the flip falls on its second key, so every frame
  * between the two keys is drawn under the old yaw and only the first key
- * belongs to it. Every other far pair is built by InterpKeyFrameLerp. */
+ * belongs to it. Every other far pair is built by InterpKeyFrameLerp. INSIDE
+ * asks the hips (InterpKeyFar), so a pair far only by another node is never
+ * held: over the thirteen campaign levels the one such pair with
+ * turn180_effect on its second key, rich3's 210 key 1 to 2 (the head 96.9
+ * degrees in the drawn frame, the hips 23.3), is an early turn and is built. */
 inline bool InterpKeyHold(int kind, long turnPair, long flip, long frameBase, long rate,
 	long pair)
 {

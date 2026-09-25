@@ -205,6 +205,18 @@ namespace
 
 	TurnSlot g_turn[512];
 
+	/* Which key pairs of each of Lara's animations are far in the drawn frame
+	 * (InterpKeyFarOf), one bit per pair, indexed by the animation number's
+	 * low bits and checked against the number. */
+	struct FarSlot
+	{
+		short anim;
+		unsigned char valid;
+		unsigned long bits[INTERP_KEY_FAR_WORDS];
+	};
+
+	FarSlot g_far[512];
+
 	/* The tick's position step in the item's own y_rot frame (the frame of
 	 * the offsets and of TranslateItem), measured before ApplyNode overwrites
 	 * the live position. See InterpRootNarrow. */
@@ -1603,6 +1615,9 @@ void InterpInvalidate(const char* why)
 	 * animations. */
 	memset(g_turn, 0, sizeof(g_turn));
 
+	// Which key pairs are far is decided again from those frames too.
+	memset(g_far, 0, sizeof(g_far));
+
 	/* No caller runs inside DrawPhaseGame (all are logic ticks or level
 	 * boundaries); the reset keeps a future one from leaving interpolated
 	 * values in the live state. */
@@ -1887,8 +1902,14 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
  *   drawn   the key frame drawn in place of the blend; -1 where a key frame
  *           is built between the two instead
  *   mode    hold (the first key, InterpKeyHold) or lerp (a key frame built
- *           at the tick's own weight, InterpKeyFrameLerp) */
-void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold)
+ *           at the tick's own weight, InterpKeyFrameLerp)
+ *   node    the node whose drawn rotation turns furthest between the two
+ *           key frames (InterpKeyFarDrawn): 0 the hips, 7 the torso, 14
+ *           the head, 8 to 13 the arms, the rest the legs
+ *   turn    that node's turn in the drawn frame, in degrees; more than 90
+ *           on every line, and `hips` where node is 0 */
+void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold,
+	int nodes, const long* bone)
 {
 	static bool seen = false;
 	static unsigned short lastCounter = 0;
@@ -1924,10 +1945,23 @@ void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* f
 	else if (c < -1.0)
 		c = -1.0;
 
-	Log("KEYFARLOG f=%d anim=%d frame=%d keys=%ld-%ld rate=%ld hips=%.1f drawn=%ld mode=%s",
+	int node = 0;
+	float turnCos = 1.0F;
+
+	if (bone && nodes > 0)
+		InterpKeyFarDrawn(frame0, frame1, nodes, bone, &node, &turnCos);
+
+	double t = (double)turnCos;
+
+	if (t > 1.0)
+		t = 1.0;
+	else if (t < -1.0)
+		t = -1.0;
+
+	Log("KEYFARLOG f=%d anim=%d frame=%d keys=%ld-%ld rate=%ld hips=%.1f drawn=%ld mode=%s node=%d turn=%.1f",
 		(int)GlobalCounter, (int)item->anim_number, (int)item->frame_number,
 		key, key + 1, rate, acos(c) * 180.0 / 3.14159265358979323846, hold ? key : -1L,
-		hold ? "hold" : "lerp");
+		hold ? "hold" : "lerp", node, acos(t) * 180.0 / 3.14159265358979323846);
 }
 
 /* TURNLOG (see interpolate.h):
@@ -2065,6 +2099,37 @@ int InterpTurnOf(short animNumber, long* flip, long* pair)
 	*pair = s->pair;
 
 	return s->kind;
+}
+
+/* See interpolate.h. The pairs are the key intervals GetFrames walks: the
+ * animation's frames divided by its rate, the last one shortened where the
+ * frame count is not a multiple of it, so keys 0 to `pairs` are read, the
+ * last of them only as the far end of the last pair, as GetFrames reads it.
+ * Filling one animation reads each of its key frames once: 1.6 microseconds
+ * a pair measured offline, 12 to 20 on average for one of Lara's animations
+ * and 285 for the longest, 199 pairs; spread over each animation's first
+ * draw, never a whole level's 3.8 to 7.6 milliseconds at once. */
+bool InterpKeyFarOf(short animNumber, long pair, int nodes, const long* bone)
+{
+	if (!anims || animNumber < 0 || pair < 0 || !bone || nodes < 1 || nodes > 32)
+		return false;
+
+	FarSlot* s = &g_far[animNumber & 511];
+
+	if (!s->valid || s->anim != animNumber)
+	{
+		const ANIM_STRUCT* anim = &anims[animNumber];
+		const long rate = anim->interpolation & 0xFF;
+		const long size = anim->interpolation >> 8;
+		const long span = (long)anim->frame_end - (long)anim->frame_base;
+		const long pairs = rate > 0 && span > 0 ? (span + rate - 1) / rate : 0;
+
+		InterpKeyFarFill(size >= 9 ? anim->frame_ptr : 0, size, pairs, nodes, bone, s->bits);
+		s->anim = animNumber;
+		s->valid = 1;
+	}
+
+	return InterpKeyFarBit(s->bits, pair);
 }
 
 /* The arm's previous frame (see interpolate.h). Gated by g_applied like the

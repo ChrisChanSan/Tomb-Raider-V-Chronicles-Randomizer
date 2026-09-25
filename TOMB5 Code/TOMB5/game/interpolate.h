@@ -283,12 +283,15 @@ void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 	int animNumber, int frameNumber);
 
 /* KEYFARLOG, one line per tick on which Lara's pose stands on a far key pair
- * (InterpKeyFar, interpolate_math.h) and is drawn in place of vanilla's key
- * frame blend: from the pair's first key frame (`hold`, mode=hold) or from a
- * key frame built between the two (mode=lerp). View set only (flag 0), and
- * once per tick however many frames are drawn in it. `frame0` and `frame1`
- * are the pair GetFramesNow left. -log only. */
-void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold);
+ * (InterpKeyFarOf; InterpKeyFarDrawn, interpolate_math.h) and is drawn in
+ * place of vanilla's key frame blend: from the pair's first key frame
+ * (`hold`, mode=hold) or from a key frame built between the two (mode=lerp).
+ * View set only (flag 0), and once per tick however many frames are drawn in
+ * it. `frame0` and `frame1` are the pair GetFramesNow left; `nodes` and
+ * `bone` are Lara's mesh count and bone table, for the node that turns
+ * furthest in the drawn frame and its turn (node=, turn=). -log only. */
+void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* frame1, bool hold,
+	int nodes, const long* bone);
 
 /* TURNLOG, one line per tick on which Lara's pose is drawn from key frames
  * turned by half a turn (InterpKeyFrameTurn): the frame turn180_effect fires
@@ -317,6 +320,19 @@ void InterpNoteBridge(const ITEM_INFO* item, short prevAnim, short prevFrame, co
  * answer outlives the level whose animation table it was read from. The
  * first turn180_effect command counts; no animation of Lara's carries two. */
 int InterpTurnOf(short animNumber, long* flip, long* pair);
+
+/* Whether key pair `pair` (key `pair` to key `pair` + 1) of Lara's animation
+ * `animNumber` is far: the drawn rotation of some node turns more than 90
+ * degrees between the two keys (InterpKeyFarDrawn, interpolate_math.h).
+ * `nodes` and `bone` are Lara's mesh count and bone table.
+ *
+ * The animation's pairs are decided together on its first call
+ * (InterpKeyFarFill) and kept as one bit per pair in a table indexed by the
+ * animation number, like InterpTurnOf's, so a draw pays a lookup;
+ * InterpInvalidate empties it with the level. The table holds Lara's
+ * animations alone, whose bone table is the one passed. False for a pair
+ * outside the animation or past INTERP_KEY_FAR_PAIRS. */
+bool InterpKeyFarOf(short animNumber, long pair, int nodes, const long* bone);
 
 /* The blend factor for velocity-carrying particles (sparks, rain, drips...):
  * the frame's alpha, or 1 on a live frame (fps_mode 0, the frame that

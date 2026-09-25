@@ -4671,6 +4671,415 @@ static void key_bridge()
 	}
 }
 
+/* ------------------------------------------ far in the drawn frame, any node -- */
+
+/* The turn in degrees between two nodes' drawn rotations (InterpDrawnRots),
+ * through the engine's own trace (InterpPoseTurnCos). */
+static double drawn_angle(const float* a, const float* b)
+{
+	double c = (double)InterpPoseTurnCos(a, b);
+
+	if (c > 1.0)
+		c = 1.0;
+	else if (c < -1.0)
+		c = -1.0;
+
+	return acos(c) * 180.0 / 3.14159265358979323846;
+}
+
+/* The determinant of a 3x3, row major. */
+static double det3(const double* m)
+{
+	return m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) +
+		m[2] * (m[3] * m[7] - m[4] * m[6]);
+}
+
+/* The key pairs whose drawn rotation turns more than 90 degrees at any node
+ * (interpolate_math.h, InterpDrawnRots, InterpKeyFarDrawn, InterpKeyFarFill
+ * and InterpKeyFarBit), and the frame built across them (InterpKeyFrameFar).
+ * The frames and Lara's bone table are ANDREA1's, copied from the level
+ * file: the standing jump forward's take-off (76 keys 0 and 1), 10 keys 0
+ * and 1 (state AS_RUN), hitting a wall (53, keys 0 and 1), the run's first
+ * pair (1 keys 0 and 1), the tightrope turn's held pair (451 keys 25 and 26)
+ * and the standing jump up's take-off (91 keys 0 and 1). */
+static void key_far_all()
+{
+	printf("key pairs far in the drawn frame, at any node\n");
+
+	static const long bones[14 * 4] =
+	{
+		2, -42, 20, 2, 0, 9, 185, 3, 0, 1, 192, -8, 3, 43, 20, 2, 0, -10, 185, 2,
+		0, 0, 193, -2, 1, -1, -49, 11, 2, 59, -142, -12, 0, 10, 95, -2, 0, 1, 101, -1,
+		3, -57, -143, -12, 0, -9, 98, -2, 0, -1, 99, -1, 1, 2, -198, -23
+	};
+	static const short k76[2][36] =
+	{
+		{ -176, 138, -451, 4, -153, 202, -8, -217, -68, 15359, -1021, 3001, -29061, 14040,
+			511, 1808, 29731, 2999, 11676, 14055, -512, 1839, -26666, 14464, 3066, 14480,
+			-14402, 303, -6, -12475, 13967, 31816, 528, 1031, -16126, 16924 },
+		{ -175, 188, -712, 0, -324, 330, -8, -412, -8, 14767, -2044, 16191, -7, -16384,
+			15136, 4101, 16207, -6145, -16384, 15184, 1021, 16303, -5, 3276, -10523, 319,
+			-6, -12464, 3235, -14039, 528, 1032, -16138, 16858, 35, 0 }
+	};
+	static const short k10[2][36] =
+	{
+		{ -102, 114, -781, -54, -322, 235, 1, -443, -5, 15919, -9215, 20320, 19956, 20297,
+			17078, 19899, 16543, 16288, -15361, 13008, 958, 3151, -12302, -12370, 1488,
+			16444, 3351, -28189, -16272, 479, 24575, 35, 0, 33, 0, 34 },
+		{ -174, 180, -782, -44, -293, 275, 4, -438, -5, 20449, 16351, -6124, 12599, -512,
+			20275, 2176, 995, 20138, 20445, 80, 14354, 14305, 12160, 3455, -19477, -12383,
+			15519, 17483, 2848, 15377, -16253, 415, -11278, 35, 0, 33 }
+	};
+	static const short k53[2][34] =
+	{
+		{ -112, 102, -764, -4, -182, 140, -9, -441, -72, 16208, 1027, 1183, -31743, 20379,
+			1327, -6188, 1872, 10232, 19607, 399, -2009, 751, -2053, 1084, -23758, 383, -6,
+			-13233, 659, 22742, 688, 2056, -15430, 20136 },
+		{ -172, 148, -761, 2, -129, 78, -8, -439, -17, 16208, 1027, 623, 28702, 20273, 304,
+			10206, 1040, 28639, 20129, 287, -3038, 783, -2053, 16191, 18256, 1112, 2565,
+			-13259, 15952, 13518, 1175, -3593, -15406, 20122 }
+	};
+	static const short k1[2][33] =
+	{
+		{ -112, 105, -787, -4, -113, 210, 1, -447, -1, 16240, 9212, 1280, 2, 20295, 16447,
+			15952, 8, 20478, 16521, 95, -12286, 447, 7148, 591, -1030, -12459, 15679, 2069,
+			256, 7, -16150, 16368, 1023 },
+		{ -115, 105, -786, 0, -142, 239, 1, -446, 6, 16240, 14333, 1248, 1, 20374, 16497,
+			15760, 5, 20479, 16489, 95, -20482, 542, -29730, 607, -1030, -12467, 15647,
+			12312, 240, 7, -16138, 16368, 4098 }
+	};
+	static const short k451[2][34] =
+	{
+		{ -306, 291, -765, 7, -194, 115, -3, -433, 12, 16264, -10253, 1039, -24569, 20410,
+			15823, -15355, 16, 12302, 20284, 895, 25587, 238, -18419, 15999, -10514, 16465,
+			-16348, 15775, -18190, 16447, -16287, 15503, -1030, 35 },
+		{ -302, 308, -765, 9, -116, 196, 2, -433, -7, 16240, -1038, 1039, -32760, 20410,
+			15887, -24562, 16352, 12302, 20295, 895, 18418, 255, 6156, 16015, -7436, 16461,
+			-16348, 15759, -18183, 16449, -16287, 15471, -3073, 35 }
+	};
+	const int nodes = 15;
+
+	/* 1. The walk over a hand-built tree: node 1 hangs off node 0, node 2
+	 * off node 1 (node 1 pushes), node 3 off node 0 again (it pops). Node 1
+	 * and node 2 each turn 60.03 degrees about y (one-axis, 683 steps of
+	 * 4096): node 2's own turn is 60, its drawn turn 120, and node 3, which
+	 * does not turn and hangs off the root, does not turn in the drawn frame
+	 * either. Turned against its parent instead, node 2 does not turn at all
+	 * in the drawn frame. */
+	{
+		const long tree[3 * 4] = { 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 };
+		const short y0 = (short)(unsigned short)(2 << 14);
+		const short y60 = (short)(unsigned short)((2 << 14) | 683);
+		const short yBack = (short)(unsigned short)((2 << 14) | (4096 - 683));
+		const short f0[9 + 4] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, y0, y0, y0, y0 };
+		const short f1[9 + 4] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, y0, y60, y60, y0 };
+		const short f2[9 + 4] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, y0, y60, yBack, y0 };
+		float a[4 * 9], b[4 * 9], c[4 * 9];
+
+		InterpDrawnRots(f0, 4, tree, a);
+		InterpDrawnRots(f1, 4, tree, b);
+		InterpDrawnRots(f2, 4, tree, c);
+
+		const short own0[3] = { 0, 0, 0 };
+		const short own1[3] = { 0, 683 * 16, 0 };
+		int node = -1;
+		float turnCos = 1.0F;
+
+		okf(fabs(rot_angle(own0, own1) - 60.03) < 0.01, "a child turned 60 degrees on its own",
+			rot_angle(own0, own1), 60.03);
+		okf(fabs(drawn_angle(a + 2 * 9, b + 2 * 9) - 120.06) < 0.01,
+			"under a parent turned 60 the same way turns 120 in the drawn frame",
+			drawn_angle(a + 2 * 9, b + 2 * 9), 120.06);
+		okf(drawn_angle(a + 3 * 9, b + 3 * 9) < 0.01, "a node popped back to the root does not turn",
+			drawn_angle(a + 3 * 9, b + 3 * 9), 0.0);
+		ok(InterpKeyFarDrawn(f0, f1, 4, tree, &node, &turnCos) && node == 2 &&
+			!InterpPoseFar(f0, f1, 4, INTERP_POSE_TURN_COS),
+			"so the pair is far in the drawn frame at node 2, and near by every node's own turn", node, 2);
+		okf(drawn_angle(a + 2 * 9, c + 2 * 9) < 0.01 && !InterpKeyFarDrawn(f0, f2, 4, tree, 0, 0),
+			"turned back against its parent, the child does not turn in the drawn frame",
+			drawn_angle(a + 2 * 9, c + 2 * 9), 0.0);
+
+		/* The order of the product: a parent turned 90 about y and a child
+		 * 90 about x compose as one node of (90, 90, 0), phd_RotYXZ's y then
+		 * x, which is what the draw's stack builds. */
+		const long chain[1 * 4] = { 0, 0, 0, 0 };
+		const short g[9 + 2] = { 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			(short)(unsigned short)((2 << 14) | 1024), (short)(unsigned short)((1 << 14) | 1024) };
+		const short both[3] = { 16384, 16384, 0 };
+		float d[2 * 9], m[9];
+		double worst = 0.0;
+
+		InterpDrawnRots(g, 2, chain, d);
+		InterpPoseRot(both, m);
+
+		for (int i = 0; i < 9; i++)
+			worst = fmax(worst, fabs((double)d[9 + i] - m[i]));
+
+		okf(worst < 1e-5, "a parent's y and a child's x compose in the draw's order", worst, 0.0);
+	}
+
+	/* 2. The standing jump forward's take-off, 76 key 0 to 1: the hips turn
+	 * 13.0 degrees, the upper arm (node 11) 143.7 on its own and the forearm
+	 * (node 12) 170.1 in the drawn frame. The pair is far, and the table
+	 * marks it. Built at 0.5 every node is a rotation - in the drawn frame too
+	 * - with the upper arm about 72 degrees from each key and the forearm
+	 * about 85, where vanilla's middle frame leaves the forearm's drawn frame
+	 * a determinant of cos(85.05)^2 = 0.007. */
+	{
+		int node = -1;
+		float turnCos = 1.0F;
+		const bool far0 = InterpKeyFarDrawn(k76[0], k76[1], nodes, bones, &node, &turnCos);
+		const double turn = acos((double)turnCos) * 180.0 / 3.14159265358979323846;
+
+		ok(far0 && node == 12, "76 key 0 to 1 is far, the forearm (node 12) furthest", node, 12);
+		okf(fabs(turn - 170.1) < 0.5, "turning 170.1 degrees in the drawn frame", turn, 170.1);
+		ok(!InterpKeyFar(k76[0], k76[1]), "where the hips alone do not decide it (13.0 degrees)", 0, 0);
+
+		short block[2 * 36];
+		unsigned long bits[INTERP_KEY_FAR_WORDS];
+
+		for (int i = 0; i < 36; i++)
+		{
+			block[i] = k76[0][i];
+			block[36 + i] = k76[1][i];
+		}
+
+		InterpKeyFarFill(block, 36, 1, nodes, bones, bits);
+		ok(InterpKeyFarBit(bits, 0) && !InterpKeyFarBit(bits, 1),
+			"the table marks its one pair and nothing past it", (long)bits[0], 1);
+
+		short out[INTERP_KEYFRAME_MAX];
+		float a[15 * 9], b[15 * 9], m[15 * 9];
+
+		InterpKeyFrameLerp(k76[0], k76[1], nodes, 0.5F, out);
+		InterpDrawnRots(k76[0], nodes, bones, a);
+		InterpDrawnRots(k76[1], nodes, bones, b);
+		InterpDrawnRots(out, nodes, bones, m);
+
+		double colErr = 0.0;
+
+		for (int n = 0; n < nodes; n++)
+		{
+			for (int c = 0; c < 3; c++)
+			{
+				const float* r = m + n * 9;
+				const double l = sqrt((double)r[c] * r[c] + (double)r[3 + c] * r[3 + c] +
+					(double)r[6 + c] * r[6 + c]);
+
+				colErr = fmax(colErr, fabs(l - 1.0));
+			}
+		}
+
+		okf(colErr < 1e-5, "built at 0.5, every node's drawn frame has columns of length 1",
+			colErr, 0.0);
+
+		const short* p0 = k76[0] + 9;
+		const short* p1 = k76[1] + 9;
+		const short* pm = out + 9;
+		short r0[3], r1[3], rm[3];
+
+		for (int n = 0; n <= 11; n++)
+		{
+			InterpUnpackRot(p0, r0);
+			InterpUnpackRot(p1, r1);
+			InterpUnpackRot(pm, rm);
+		}
+
+		okf(fabs(rot_angle(r0, rm) - 72.0) < 1.0 && fabs(rot_angle(rm, r1) - 72.0) < 1.0,
+			"the upper arm about 72 degrees from each key", rot_angle(r0, rm), 72.0);
+		okf(fabs(drawn_angle(a + 12 * 9, m + 12 * 9) - 85.0) < 1.0 &&
+			fabs(drawn_angle(m + 12 * 9, b + 12 * 9) - 85.0) < 1.0,
+			"the forearm about 85 degrees from each in the drawn frame",
+			drawn_angle(a + 12 * 9, m + 12 * 9), 85.0);
+
+		double v[9];
+
+		for (int i = 0; i < 9; i++)
+			v[i] = InterpBlendFloat(a[12 * 9 + i], b[12 * 9 + i], 0.5F);
+
+		okf(fabs(det3(v) - 0.0074) < 0.001, "where vanilla's middle frame leaves it a determinant of 0.007",
+			det3(v), 0.0074);
+	}
+
+	/* 3. The criterion is the drawn turn and not the own one. 10 key 0 to 1:
+	 * no node turns more than 56.7 degrees on its own, node 13 94.2 in the
+	 * drawn frame - far. 53 key 0 to 1: node 9 turns 147.6 on its own, its
+	 * parent's turn takes part of it back, and no node turns more than 83.6
+	 * in the drawn frame - near. The run's first pair, 1 key 0 to 1 (12.9 on
+	 * its own, 14.5 drawn): near. */
+	{
+		int node = -1;
+		float turnCos = 1.0F;
+		const bool far10 = InterpKeyFarDrawn(k10[0], k10[1], nodes, bones, &node, &turnCos);
+		double turn = acos((double)turnCos) * 180.0 / 3.14159265358979323846;
+
+		ok(far10 && node == 13, "10 key 0 to 1 is far, node 13 furthest", node, 13);
+		okf(fabs(turn - 94.2) < 0.5 && !InterpPoseFar(k10[0], k10[1], nodes, INTERP_POSE_TURN_COS),
+			"94.2 degrees drawn, where no node's own turn passes 90", turn, 94.2);
+
+		const bool far53 = InterpKeyFarDrawn(k53[0], k53[1], nodes, bones, &node, &turnCos);
+
+		turn = acos((double)turnCos) * 180.0 / 3.14159265358979323846;
+		okf(!far53 && fabs(turn - 83.6) < 0.5 && InterpPoseFar(k53[0], k53[1], nodes, INTERP_POSE_TURN_COS),
+			"53 key 0 to 1 is near, 83.6 drawn, though node 9 turns 147.6 on its own", turn, 83.6);
+
+		const bool far1 = InterpKeyFarDrawn(k1[0], k1[1], nodes, bones, &node, &turnCos);
+
+		turn = acos((double)turnCos) * 180.0 / 3.14159265358979323846;
+		okf(!far1 && turn < 45.0 && fabs(turn - 14.5) < 0.5, "the run's 1 key 0 to 1 is near, 14.5 drawn",
+			turn, 14.5);
+	}
+
+	/* 4. The hold stays where it is. 451 key 25 to 26 (rate 2 from frame
+	 * 8864, turn180_effect on 8916): the half turn is inside the pair, which
+	 * is far and held. 76 carries no turn180_effect: far, and built. rich3's
+	 * 210 key 1 to 2, far only at the head, with the flip on its second key
+	 * (3992, rate 4 from 3984): the hips make it an early turn, not held. */
+	{
+		const long size = 34;
+		static short keys[27 * 34];
+
+		for (int i = 0; i < 27 * 34; i++)
+			keys[i] = 0;
+
+		for (int i = 0; i < 34; i++)
+		{
+			keys[25 * size + i] = k451[0][i];
+			keys[26 * size + i] = k451[1][i];
+		}
+
+		long pair = -1;
+		const int kind = InterpTurnKind(keys, size, 8864, 2, 8916, &pair);
+
+		ok(InterpKeyFarDrawn(k451[0], k451[1], nodes, bones, 0, 0) && kind == INTERP_TURN_INSIDE &&
+			pair == 25 && InterpKeyHold(kind, pair, 8916, 8864, 2, 25),
+			"451 key 25 to 26: far, the half turn inside it, held", pair, 25);
+		ok(InterpKeyFarDrawn(k76[0], k76[1], nodes, bones, 0, 0) &&
+			!InterpKeyHold(INTERP_TURN_NONE, -1, -1, 1233, 2, 0),
+			"76 key 0 to 1: far and not held", 0, 0);
+		ok(!InterpKeyHold(INTERP_TURN_EARLY, 1, 3992, 3984, 4, 1),
+			"an early turn's far pair with the flip on its second key is not held", 1, 0);
+	}
+
+	/* 5. The table's bound. It holds INTERP_KEY_FAR_PAIRS pairs, more than
+	 * the 199 of Lara's longest playable animation. One-node frames of one
+	 * axis in y, the last key turned 170 degrees: an animation of exactly
+	 * that many pairs has its last one marked; one pair longer, the far pair
+	 * lies past the table and is left to vanilla, and the answer past the
+	 * table, or before it, is 'not far'. */
+	{
+		const long size = 10;
+		const long most = INTERP_KEY_FAR_PAIRS;
+		static short frames[(INTERP_KEY_FAR_PAIRS + 2) * 10];
+		const long one[4] = { 0, 0, 0, 0 };
+		unsigned long bits[INTERP_KEY_FAR_WORDS];
+
+		ok(INTERP_KEY_FAR_PAIRS >= 199, "the table holds the longest animation's 199 pairs",
+			INTERP_KEY_FAR_PAIRS, 199);
+
+		for (long k = 0; k < most + 2; k++)
+		{
+			for (int i = 0; i < 9; i++)
+				frames[k * size + i] = 0;
+
+			frames[k * size + 9] = (short)(unsigned short)(2 << 14);
+		}
+
+		frames[most * size + 9] = (short)(unsigned short)((2 << 14) | 1934);
+		InterpKeyFarFill(frames, size, most, 1, one, bits);
+
+		long marked = 0;
+
+		for (long k = 0; k < most; k++)
+			marked += InterpKeyFarBit(bits, k) ? 1 : 0;
+
+		ok(InterpKeyFarBit(bits, most - 1) && marked == 1,
+			"the last pair of the longest animation the table holds is marked, alone", marked, 1);
+		ok(!InterpKeyFarBit(bits, most) && !InterpKeyFarBit(bits, -1),
+			"a pair past the table or before it is not far", 0, 0);
+
+		frames[most * size + 9] = (short)(unsigned short)(2 << 14);
+		frames[(most + 1) * size + 9] = (short)(unsigned short)((2 << 14) | 1934);
+		InterpKeyFarFill(frames, size, most + 1, 1, one, bits);
+
+		marked = 0;
+
+		for (long k = 0; k <= most; k++)
+			marked += InterpKeyFarBit(bits, k) ? 1 : 0;
+
+		ok(marked == 0, "one pair longer, the far pair past the table is left unmarked", marked, 0);
+	}
+
+	/* 6. The way round a node takes where its own turn lies within a degree
+	 * of half a turn (InterpKeyFrameFar). The standing jump up's take-off, 91
+	 * key 0 to 1: the upper arm (node 11) turns 179.85 degrees on its own and
+	 * 133.8 in the drawn frame. The shorter way of its own turn puts the arm
+	 * about 180 degrees off the middle of that drawn turn on the in-between
+	 * frame; the way the drawn frame asks for, about 21. The same way at a
+	 * quarter and three quarters. A far pair with no such node (76) is
+	 * InterpKeyFrameLerp's frame word for word. */
+	{
+		static const short k91[2][36] =
+		{
+			{ -176, 138, -452, 4, -154, 202, -8, -217, -68, 15375, -1021, 3001, -29061, 14040,
+				511, 1808, 29731, 2999, 11676, 14056, 511, 1839, -26666, 14464, 3066, 14480,
+				-14402, 303, -6, -12475, 13967, 31816, 528, 1031, -16126, 16924 },
+			{ -113, 95, -873, 62, -156, 50, -8, -437, -12, 16224, 1027, 159, -29707, 20371,
+				14511, -9196, 16272, 26625, 20310, 15200, 6131, 367, -1029, 634, -467, 527,
+				-1030, -12475, 627, -19009, 624, 1032, -16126, 16640, 35, 0 }
+		};
+		float a[15 * 9], b[15 * 9], m[15 * 9], g[9];
+		short built[INTERP_KEYFRAME_MAX], plain[INTERP_KEYFRAME_MAX];
+		int node = -1;
+		float turnCos = 1.0F;
+
+		InterpKeyFarDrawn(k91[0], k91[1], nodes, bones, &node, &turnCos);
+		okf(node == 11 && fabs(acos((double)turnCos) * 180.0 / 3.14159265358979323846 - 133.8) < 0.5,
+			"91 key 0 to 1: the upper arm turns 133.8 degrees in the drawn frame",
+			acos((double)turnCos) * 180.0 / 3.14159265358979323846, 133.8);
+
+		InterpDrawnRots(k91[0], nodes, bones, a);
+		InterpDrawnRots(k91[1], nodes, bones, b);
+		InterpSlerpMat(a + 11 * 9, b + 11 * 9, 0.5F, g);
+
+		InterpKeyFrameLerp(k91[0], k91[1], nodes, 0.5F, plain);
+		InterpDrawnRots(plain, nodes, bones, m);
+
+		const double offPlain = drawn_angle(m + 11 * 9, g);
+
+		InterpKeyFrameFar(k91[0], k91[1], nodes, bones, 0.5F, built);
+		InterpDrawnRots(built, nodes, bones, m);
+
+		const double offFar = drawn_angle(m + 11 * 9, g);
+
+		okf(offPlain > 170.0, "the shorter way of its own turn lies about 180 off the drawn turn's middle",
+			offPlain, 179.9);
+		okf(offFar < 25.0, "the way the drawn frame asks for, about 21", offFar, 20.7);
+
+		bool steady = true;
+		const float ts[2] = { 0.25F, 0.75F };
+
+		for (int i = 0; i < 2; i++)
+		{
+			InterpSlerpMat(a + 11 * 9, b + 11 * 9, ts[i], g);
+			InterpKeyFrameFar(k91[0], k91[1], nodes, bones, ts[i], built);
+			InterpDrawnRots(built, nodes, bones, m);
+			steady = steady && drawn_angle(m + 11 * 9, g) < 25.0;
+		}
+
+		ok(steady, "and that way at a quarter and three quarters too", steady ? 1 : 0, 1);
+
+		const int n0 = InterpKeyFrameLerp(k76[0], k76[1], nodes, 0.5F, plain);
+		const int n1 = InterpKeyFrameFar(k76[0], k76[1], nodes, bones, 0.5F, built);
+		bool same = n0 == n1;
+
+		for (int i = 0; i < n0 && same; i++)
+			same = plain[i] == built[i];
+
+		ok(same, "76, with no node near half a turn on its own, is InterpKeyFrameLerp's frame", n1, n0);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -4695,6 +5104,7 @@ int main()
 	root_narrow();
 	key_build();
 	key_bridge();
+	key_far_all();
 	particles();
 	portal_walk();
 	reach_rect();

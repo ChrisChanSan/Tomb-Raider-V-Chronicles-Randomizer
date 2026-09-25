@@ -186,13 +186,14 @@ void CalcLaraMatrices(long flag)
 	/* The two places where the base engine's own pose goes wrong, at every
 	 * fps_mode (LaraPoseFrames, draw.cpp): the frame an early turn180_effect
 	 * fires on is drawn from copies turned by half a turn, so her body does
-	 * not face the other way for one tick in the twists; and a key pair whose
-	 * hips turn more than 90 degrees is drawn from its first key (the
-	 * tightrope turn) or from a key frame built at the tick's weight (the
-	 * twists' 209 and 213, rich3's 219) in place of vanilla's collapsing
-	 * blend. Both put their frames into both slots where they blend, which
-	 * keeps the interpolated branch and the arms' own time blend. Every other
-	 * pair is drawn as before. */
+	 * not face the other way for one tick in the twists; and a key pair where
+	 * some node turns more than 90 degrees in the drawn frame is drawn from
+	 * its first key (the tightrope turn) or from a key frame built at the
+	 * tick's weight (the take-offs of the jumps, the twists' 209 and 213,
+	 * rich3's 219) in place of vanilla's collapsing blend. Both put their
+	 * frames into both slots where they blend, which keeps the interpolated
+	 * branch and the arms' own time blend. Every other pair is drawn as
+	 * before. */
 	LaraPoseFrames(frmptr, frac, blend, flag);
 
 	/* Applies the still-body hold from LaraBodyStillFrame, if any, without

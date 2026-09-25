@@ -25,6 +25,7 @@
 #include "hd_classic.h"		// the donor game's own frame 0
 #include "hd_mods.h"		// a mod's model beats the install's
 #include "hd_trm.h"
+#include "hd_trl.h"		// a face's track files, its map and its deform
 
 #include <algorithm>
 #include <cctype>
@@ -97,6 +98,66 @@ namespace
 		int page;
 		float strength;
 		float power;
+	};
+
+	/* A face that speaks - see hd_trl.h for the files and the arithmetic.
+	 *
+	 * Kept beside every separate face and beside a rigid face whose file
+	 * carries a rig and its joint block (Lara's), from level build to level
+	 * end. The face's own vertices as the file writes them - position,
+	 * normal, and the bones and weights the track files move - and the
+	 * vertices of its static buffer, whose bones, weights, page layer and
+	 * texture coordinates a deformed copy takes over unchanged, so the node
+	 * skinning on the card does what it does for the static one.
+	 *
+	 * The clip is the one track file in play, read a frame at a time: the
+	 * seam opens it at the cut's first frame (HDModelLipsOpen) and it closes
+	 * when the cut is over or the level ends. A whole clip held in memory is
+	 * up to 11.5 MB (DEMON_HEAD_135.TRL, 6001 frames of 40 columns), and
+	 * cutscene 44 speaks three such faces at once; a frame is 1920 bytes.
+	 *
+	 * `vb` is the buffer the deformed vertices go into, D3DPOOL_DEFAULT
+	 * because a buffer written thirty times a second is DYNAMIC, and a
+	 * DYNAMIC one cannot be managed. Device Reset refuses while a DEFAULT
+	 * resource lives, so it is released with the clip, in free_model and so
+	 * in HDModelShutdown, and made again on the next speaking frame. */
+	struct Lips
+	{
+		HDLipsMap map;
+		bool mapped = false;
+		const char* why = "";
+		int columns = 0;		// the file's block, even where the map refuses
+
+		std::string stem;		// the face file's name: LARA_HEAD, ADMIRAL_HEAD
+		std::string folder;		// where its track files are looked for
+		const char* from = "5";		// the face file's own folder, for the log
+		const char* folderLabel = "5";	// ... and the track files'
+
+		std::vector<float> position;		// 3 a vertex, the file's own
+		std::vector<unsigned char> normal;	// 3 a vertex, biased by 127
+		std::vector<unsigned char> bone;	// 3 a vertex, the rig's numbers
+		std::vector<unsigned char> weight;	// 3 a vertex
+		std::vector<HDModelVertex> base;	// the static buffer's vertices
+
+		/* The half turn the face table asks for (HeadOfModel::halfTurnX),
+		 * put on the deformed vertices exactly as it was put on the file. */
+		bool turned = false;
+		float turnY = 0.0f;
+		float turnZ = 0.0f;
+
+		int track = -1;			// the track the clip was asked for
+		HDTrlClip clip = { 0, 0, 0, 0, false };
+
+		IDirect3DVertexBuffer9* vb = 0;
+		int shownFrame = -1;		// the cutscene frame `vb` holds
+		int shownSource = HD_LIPS_SOURCE_BIND;
+
+		// Working space, while a clip is open.
+		std::vector<float> frame;
+		std::vector<double> skins;
+		std::vector<float> outPosition;
+		std::vector<unsigned char> outNormal;
+		std::vector<HDModelVertex> out;
 	};
 
 	struct Model
@@ -184,6 +245,10 @@ namespace
 		std::vector<unsigned char> pointNode;
 		int pointsBlended = 0;
 		bool keepPoints = false;
+
+		/* A face's lips, or null - see Lips above. Owned by the model and
+		 * given back by free_model. */
+		Lips* lips = 0;
 	};
 
 	const int kJointBudget = 32;
@@ -196,6 +261,13 @@ namespace
 	std::map<int, Model> g_models;		// slot -> body
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
 	std::vector<std::string> g_notes;
+	/* The faces' track files, one line each, written at level build - see
+	 * HDModelLipsLine. And what the draws did with them since the caller
+	 * last read them, for its log; bounded, because a caller that does not
+	 * read them must not grow them without end. */
+	std::vector<std::string> g_lips_lines;
+	std::vector<HDModelLipsEvent> g_lips_events;
+	const size_t kLipsEvents = 64;
 	/* What the classic pose decided, per slot that asked for one. The
 	 * decision is taken while the file is open and the log line is written by
 	 * the caller, a level build later - so it is kept, not printed.
@@ -825,6 +897,27 @@ namespace
 
 	/* --------------------------------------------------------- building -- */
 
+	/* The clip given back and the buffer with it; the face's own vertices
+	 * stay for the next cut. */
+	void lips_close(Lips* lips)
+	{
+		if (!lips)
+			return;
+
+		HDTrlClose(&lips->clip);
+
+		if (lips->vb) { lips->vb->Release(); lips->vb = 0; }
+
+		lips->track = -1;
+		lips->shownFrame = -1;
+		lips->shownSource = HD_LIPS_SOURCE_BIND;
+		std::vector<float>().swap(lips->frame);
+		std::vector<double>().swap(lips->skins);
+		std::vector<float>().swap(lips->outPosition);
+		std::vector<unsigned char>().swap(lips->outNormal);
+		std::vector<HDModelVertex>().swap(lips->out);
+	}
+
 	void free_model(Model& model)
 	{
 		if (model.vb) { model.vb->Release(); model.vb = 0; }
@@ -835,6 +928,13 @@ namespace
 		model.pass[2].clear();
 		model.pages.clear();
 		model.points.clear();
+
+		if (model.lips)
+		{
+			lips_close(model.lips);
+			delete model.lips;
+			model.lips = 0;
+		}
 	}
 
 	/* The three index runs of one part, in pass order. Measured over all 566
@@ -984,9 +1084,11 @@ namespace
 				}
 	}
 
+	/* `base`, where not null, is handed the vertices as they went into the
+	 * buffer - a speaking face's deformed copy is made out of them (Lips). */
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
 		int pageBias, int* mixedTriangles, const char** why, const PageCut& cut,
-		const NodeCut& nodeCut)
+		const NodeCut& nodeCut, std::vector<HDModelVertex>* base = 0)
 	{
 		const int vertices = trm.vertices;
 
@@ -1635,6 +1737,9 @@ namespace
 			model.ib->Unlock();
 		}
 
+		if (base)
+			base->swap(buffer);
+
 		return true;
 	}
 
@@ -1888,6 +1993,287 @@ namespace
 		return said->bone;
 	}
 
+	/* ------------------------------------------------------------ the lips --
+	 *
+	 * What a face needs to speak, taken while its file is still a file - see
+	 * Lips at the top of this file and hd_trl.h. */
+
+	// The folder a file lies in.
+	std::string folder_of(const std::string& path)
+	{
+		const size_t cut = path.find_last_of("\\/");
+
+		return cut == std::string::npos ? std::string(".") : path.substr(0, cut);
+	}
+
+	/* A face's lips, out of its .TRM. `stem` is the face file's own name,
+	 * which the track files are named after; `path` is where the file was
+	 * read from and `origin` which folder that was.
+	 *
+	 * Where the track files are looked for. A track file is named after the
+	 * audio track of the cutscene that plays it, and track numbers belong to
+	 * a game: 5\ITEM holds 18 files of LARA_HEAD numbered after this game's
+	 * tracks (96 to 135), and 4\ITEM - where LARA_HEAD.TRM itself lies - 24
+	 * numbered after Tomb Raider IV's (29 to 112), three of them (96, 101,
+	 * 103) under numbers this game uses for other lines. So an
+	 * installation's face looks in game 5's ITEM and nowhere else. A mod's
+	 * face, whose rig need not be the install's, looks only in its own
+	 * folder, and so does a Tomb Raider III guest's. */
+	Lips* make_lips(const HDTrmModel& trm, const std::string& stem,
+		const std::string& path, HDModelOrigin origin)
+	{
+		Lips* lips = new Lips();
+		const char* ownLabel = origin == HD_MODEL_ORIGIN_4 ? "4"
+			: origin == HD_MODEL_ORIGIN_MOD ? "mod"
+			: origin == HD_MODEL_ORIGIN_TR3 ? "tr3" : "5";
+
+		lips->stem = stem;
+		lips->from = ownLabel;
+		lips->columns = trm.blockColumns;
+
+		if (origin == HD_MODEL_ORIGIN_4 || origin == HD_MODEL_ORIGIN_5)
+		{
+			lips->folder = join(g_install, "ITEM");
+			lips->folderLabel = "5";
+		}
+		else
+		{
+			lips->folder = folder_of(path);
+			lips->folderLabel = ownLabel;
+		}
+
+		lips->mapped = HDLipsMapBuild(&trm, stem.c_str(), &lips->map, &lips->why);
+
+		if (lips->mapped && (!trm.ownBone || !trm.ownWeight || trm.vertices <= 0))
+		{
+			lips->mapped = false;
+			lips->why = "the file's own bones were not kept";
+		}
+
+		if (!lips->mapped)
+			return lips;
+
+		const size_t n = (size_t)trm.vertices;
+
+		lips->position.resize(n * 3);
+		lips->normal.resize(n * 3);
+		lips->bone.assign(trm.ownBone, trm.ownBone + n * 3);
+		lips->weight.assign(trm.ownWeight, trm.ownWeight + n * 3);
+
+		for (size_t i = 0; i < n; i++)
+		{
+			lips->position[i * 3 + 0] = trm.vertex[i].x;
+			lips->position[i * 3 + 1] = trm.vertex[i].y;
+			lips->position[i * 3 + 2] = trm.vertex[i].z;
+			lips->normal[i * 3 + 0] = trm.vertex[i].nx;
+			lips->normal[i * 3 + 1] = trm.vertex[i].ny;
+			lips->normal[i * 3 + 2] = trm.vertex[i].nz;
+		}
+
+		return lips;
+	}
+
+	// <STEM>_<track>.TRL in the face's folder.
+	std::string lips_file(const Lips& lips, int track)
+	{
+		char name[160];
+
+		std::snprintf(name, sizeof(name), "%s_%d.TRL", lips.stem.c_str(), track);
+		return join(lips.folder, name);
+	}
+
+	/* The track files a face has, in track order: every <STEM>_<digits>.TRL
+	 * of its folder. */
+	void lips_files(const Lips& lips, std::vector<int>& out)
+	{
+		out.clear();
+
+		WIN32_FIND_DATAA found;
+		const std::string pattern = join(lips.folder, (lips.stem + "_*.TRL").c_str());
+		HANDLE walk = FindFirstFileA(pattern.c_str(), &found);
+
+		if (walk == INVALID_HANDLE_VALUE)
+			return;
+
+		do
+		{
+			const std::string name = found.cFileName;
+			const size_t digits = lips.stem.size() + 1;
+
+			if (name.size() <= digits + 4 ||
+				!same_name(name.substr(name.size() - 4), ".TRL"))
+				continue;
+
+			const std::string number = name.substr(digits, name.size() - 4 - digits);
+
+			if (number.empty() ||
+				number.find_first_not_of("0123456789") != std::string::npos)
+				continue;
+
+			int track = 0;
+
+			for (size_t d = 0; d < number.size() && track < 100000; d++)
+				track = track * 10 + (number[d] - '0');
+
+			out.push_back(track);
+		}
+		while (FindNextFileA(walk, &found));
+
+		FindClose(walk);
+		std::sort(out.begin(), out.end());
+	}
+
+	/* The level build's lines, one per track file of a face and one for a
+	 * face with none - see HDModelLipsLine. */
+	void lips_lines(int slot, const Lips& lips)
+	{
+		std::vector<int> files;
+		char line[512];
+
+		lips_files(lips, files);
+
+		if (files.empty())
+		{
+			std::snprintf(line, sizeof(line), "slot=%d face=%s file=- frames=0 "
+				"cols=%d joints=%d/%d axis=%s len=0.0s reason=no file", slot,
+				lips.stem.c_str(), lips.columns, lips.map.driven, lips.map.rigJoints,
+				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED));
+			g_lips_lines.push_back(line);
+			return;
+		}
+
+		for (size_t i = 0; i < files.size(); i++)
+		{
+			HDTrlClip clip;
+			const char* trouble = "";
+			const bool opened = HDTrlOpen(lips_file(lips, files[i]).c_str(),
+				lips.columns, &clip, &trouble);
+			const char* reason = !lips.mapped ? "refused"
+				: opened ? "ok" : !std::strcmp(trouble, "columns") ? "columns"
+				: "no file";
+			char from[48] = "";
+
+			if (std::strcmp(lips.from, lips.folderLabel) != 0)
+				std::snprintf(from, sizeof(from), " from=%s trl_from=%s", lips.from,
+					lips.folderLabel);
+
+			std::snprintf(line, sizeof(line), "slot=%d face=%s file=%s_%d.TRL "
+				"frames=%d cols=%d joints=%d/%d axis=%s len=%.1fs reason=%s%s", slot,
+				lips.stem.c_str(), lips.stem.c_str(), files[i],
+				opened ? clip.frames : 0, opened ? clip.columns : 0,
+				lips.map.driven, lips.map.rigJoints,
+				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED),
+				opened ? clip.frames / 30.0 : 0.0, reason, from);
+			g_lips_lines.push_back(line);
+			HDTrlClose(&clip);
+		}
+	}
+
+	/* The stream a face draws from: its own buffer holding the frame asked
+	 * for, or the static one.
+	 *
+	 * The deform runs when the frame changes and never otherwise - a
+	 * cutscene steps thirty frames a second and is drawn without a tween
+	 * (game\interpolate.cpp, InterpBeginFrame), so at sixty frames a second
+	 * every second draw finds the buffer already holding its frame. A face
+	 * whose clip is not open, a frame the clip says is the bind, and every
+	 * failure on the way draw the static buffer - which is the face as the
+	 * game drew it before. */
+	IDirect3DVertexBuffer9* lips_stream(const Model& model, int slot, bool head,
+		int track, int frame)
+	{
+		Lips* lips = model.lips;
+
+		if (!lips || !lips->mapped || track < 0 || lips->track != track ||
+			!lips->clip.file || lips->base.size() != lips->position.size() / 3)
+			return model.vb;
+
+		if (frame == lips->shownFrame)
+			return lips->shownSource == HD_LIPS_SOURCE_BIND || !lips->vb
+				? model.vb : lips->vb;
+
+		int clipFrame = 0;
+		double amount = 0.0;
+		const int source = HDLipsSourceOf(frame, lips->clip.frames, &clipFrame,
+			&amount);
+		double jaw = 0.0;
+
+		lips->shownFrame = frame;
+		lips->shownSource = HD_LIPS_SOURCE_BIND;
+
+		if (source != HD_LIPS_SOURCE_BIND)
+		{
+			const size_t n = lips->base.size();
+			const UINT bytes = (UINT)(n * sizeof(HDModelVertex));
+
+			if (!lips->vb && FAILED(g_device->CreateVertexBuffer(bytes,
+				D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT,
+				&lips->vb, 0)))
+				lips->vb = 0;
+
+			lips->frame.resize((size_t)lips->map.columns * 12);
+			lips->skins.resize((size_t)lips->map.rigJoints * 12);
+			lips->outPosition.resize(n * 3);
+			lips->outNormal.resize(n * 3);
+			lips->out.resize(n);
+
+			void* target = 0;
+
+			if (lips->vb && HDTrlReadFrame(&lips->clip, clipFrame, &lips->frame[0]))
+			{
+				HDLipsSkins(&lips->map, &lips->frame[0], amount, &lips->skins[0]);
+				jaw = HDLipsDeform(&lips->skins[0], lips->map.rigJoints, (int)n,
+					&lips->position[0], &lips->normal[0], &lips->bone[0],
+					&lips->weight[0], &lips->outPosition[0], &lips->outNormal[0]);
+
+				for (size_t i = 0; i < n; i++)
+				{
+					HDModelVertex& v = lips->out[i];
+
+					v = lips->base[i];
+					v.x = lips->outPosition[i * 3 + 0];
+					v.y = lips->outPosition[i * 3 + 1];
+					v.z = lips->outPosition[i * 3 + 2];
+					v.nx = lips->outNormal[i * 3 + 0];
+					v.ny = lips->outNormal[i * 3 + 1];
+					v.nz = lips->outNormal[i * 3 + 2];
+
+					/* The face table's half turn, as the build put it on the
+					 * file (the face pass, `turned`). */
+					if (lips->turned)
+					{
+						v.y = 2.0f * lips->turnY - v.y;
+						v.z = 2.0f * lips->turnZ - v.z;
+						v.ny = (unsigned char)(v.ny >= 255 ? 0 : 254 - v.ny);
+						v.nz = (unsigned char)(v.nz >= 255 ? 0 : 254 - v.nz);
+					}
+				}
+
+				if (SUCCEEDED(lips->vb->Lock(0, bytes, &target, D3DLOCK_DISCARD)))
+				{
+					std::memcpy(target, &lips->out[0], bytes);
+					lips->vb->Unlock();
+					lips->shownSource = source;
+				}
+			}
+		}
+
+		if (g_lips_events.size() < kLipsEvents)
+		{
+			HDModelLipsEvent said;
+
+			said.slot = slot;
+			said.head = head;
+			said.track = track;
+			said.frame = frame;
+			said.source = lips->shownSource;
+			said.jaw = lips->shownSource == HD_LIPS_SOURCE_BIND ? 0.0f : (float)jaw;
+			g_lips_events.push_back(said);
+		}
+
+		return lips->shownSource == HD_LIPS_SOURCE_BIND ? model.vb : lips->vb;
+	}
+
 	/* ---------------------------------------------------------- drawing -- */
 
 	/* The bind fold. A .TRM vertex is in the model's bind pose, so the node's
@@ -1930,9 +2316,13 @@ namespace
 		g_device->SetVertexShaderConstantF((UINT)(8 + node * 3), columns, 3);
 	}
 
+	/* `stream` is the vertex buffer drawn from: the model's own, or a
+	 * speaking face's deformed copy of it (lips_stream) - the same stride,
+	 * count and order, so the index buffer, the ranges and every constant
+	 * below serve both. */
 	void draw_model(const Model& model, const float* nodeMatrix, int nodeCount,
 		const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-		const HDModelNeckCut* cut, int cull)
+		const HDModelNeckCut* cut, int cull, IDirect3DVertexBuffer9* stream)
 	{
 		const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
 
@@ -2054,7 +2444,8 @@ namespace
 
 		g_device->SetPixelShaderConstantF(17, counts, 1);
 
-		g_device->SetStreamSource(0, model.vb, 0, sizeof(HDModelVertex));
+		g_device->SetStreamSource(0, stream ? stream : model.vb, 0,
+			sizeof(HDModelVertex));
 		g_device->SetIndices(model.ib);
 
 		/* The one model that is not double sided. Set here and put back at
@@ -2397,6 +2788,12 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		int neckNode;
 		// The face table's line for this body's face, or null.
 		const HeadOfModel* headEntry;
+		/* Where the two files were read from, and the face file's own name
+		 * - what a face's track files are looked for by (make_lips). */
+		std::string path;
+		std::string headPath;
+		std::string headStem;
+		HDModelOrigin headOrigin;
 	};
 
 	std::vector<Pending> pending;
@@ -2466,6 +2863,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			made.neckBone = -1;
 			made.neckNode = -1;
 			made.headEntry = 0;
+			made.headOrigin = HD_MODEL_ORIGIN_NONE;
 			std::memset(&made.trm, 0, sizeof(made.trm));
 			std::memset(&made.head, 0, sizeof(made.head));
 
@@ -2579,6 +2977,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.neckBone = -1;
 		here.neckNode = -1;
 		here.headEntry = 0;
+		here.path = path;
+		here.headOrigin = HD_MODEL_ORIGIN_NONE;
 
 		if (slots[i].onlyPage >= 0)
 			here.cutPage.push_back(slots[i].onlyPage);
@@ -2791,6 +3191,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					twin.neckBone = -1;
 					twin.neckNode = -1;
 					twin.headEntry = 0;
+					twin.path = twinPath;
+					twin.headOrigin = HD_MODEL_ORIGIN_NONE;
 					std::memset(&twin.fold, 0, sizeof(twin.fold));
 					std::memset(&twin.trm, 0, sizeof(twin.trm));
 					std::memset(&twin.head, 0, sizeof(twin.head));
@@ -2984,6 +3386,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 			here.hasHead = HDTrmLoad(head_path.c_str(), &here.head, &head_trouble);
 			read_ms += now_ms() - head_started;
+			here.headPath = head_path;
+			here.headStem = head_name;
+			here.headOrigin = head_origin;
 
 			if (!here.hasHead)
 				note("%s (slot %d): %s.TRM %s - the body draws without it",
@@ -3173,8 +3578,14 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		const NodeCut nodeCut = { here.cutNode };
 
+		/* A rigid face whose file carries its joint block speaks - Lara's.
+		 * Its own bones are the file's (HDTrmModel::ownBone), untouched by
+		 * the neck rule above, which renamed them in `vertex`. */
+		if (model.rigidNode >= 0 && here.trm.blockBind)
+			model.lips = make_lips(here.trm, here.name, here.path, here.origin);
+
 		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed,
-			&trouble, cut, nodeCut))
+			&trouble, cut, nodeCut, model.lips ? &model.lips->base : 0))
 		{
 			if (stats)
 				stats->refused++;
@@ -3251,6 +3662,12 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		head.rigidNode = node < 0 ? 0 : node;
 
+		/* The face's lips, while its vertices are still the file's - the
+		 * turn below moves them, and the deformed copy is turned the same
+		 * way after the deform. */
+		head.lips = make_lips(here.head, here.headStem, here.headPath,
+			here.headOrigin);
+
 		/* The half turn about the node's x axis, through the node's bind:
 		 * y and z mirror about the bind and the normals turn with them (a
 		 * normal byte is biased by 127, so its negation is 254 minus it). A
@@ -3273,6 +3690,10 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				at.ny = (unsigned char)(at.ny >= 255 ? 0 : 254 - at.ny);
 				at.nz = (unsigned char)(at.nz >= 255 ? 0 : 254 - at.nz);
 			}
+
+			head.lips->turned = true;
+			head.lips->turnY = by;
+			head.lips->turnZ = bz;
 		}
 
 		/* The neck. It needs the classic TREE, which only a caller that
@@ -3300,7 +3721,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const NodeCut everyNode = { 0 };
 
 		if (!build(here.head, head, head.rigidNode, here.pageBias, &ignore,
-			&trouble, all, everyNode))
+			&trouble, all, everyNode, &head.lips->base))
 		{
 			note("%s_HEAD (slot %d): %s", here.name.c_str(), here.slot, trouble);
 			free_model(head);
@@ -3336,6 +3757,19 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		HDTrmFree(&here.head);
 	}
+
+	/* The faces' track files, one line each - the separate faces first, then
+	 * a rigid face of the slots' own (Lara's). Each file is opened for its
+	 * first word and closed again; the frames are read while a cut plays. */
+	for (std::map<int, Model>::const_iterator at = g_heads.begin();
+		at != g_heads.end(); ++at)
+		if (at->second.lips)
+			lips_lines(at->first, *at->second.lips);
+
+	for (std::map<int, Model>::const_iterator at = g_models.begin();
+		at != g_models.end(); ++at)
+		if (at->second.lips)
+			lips_lines(at->first, *at->second.lips);
 
 	/* The coverage count. A slot whose model has geometry for every classic
 	 * node is FULL; one with a gap is PARTIAL. */
@@ -3427,6 +3861,8 @@ void HDModelLevelEnd()
 	g_heads.clear();
 	g_notes.clear();
 	g_pose.clear();
+	g_lips_lines.clear();
+	g_lips_events.clear();
 }
 
 /* The warm-up. A model's vertex and index buffer are D3DPOOL_MANAGED, and a
@@ -3539,7 +3975,7 @@ void HDModelOffCentre(float kx, float ky)
 
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	const HDModelNeckCut* cut, int cull)
+	const HDModelNeckCut* cut, int cull, int lipsTrack, int lipsFrame)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -3554,13 +3990,13 @@ bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetVertexDeclaration(g_decl);
 
 	draw_model(*model, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
-		cut, cull);
+		cut, cull, lips_stream(*model, slot, false, lipsTrack, lipsFrame));
 	return true;
 }
 
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	const HDModelNeckCut* cut, int cull)
+	const HDModelNeckCut* cut, int cull, int lipsTrack, int lipsFrame)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -3579,13 +4015,89 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetVertexDeclaration(g_decl);
 
 	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
-		cut, cull);
+		cut, cull, lips_stream(at->second, slot, true, lipsTrack, lipsFrame));
 	return true;
 }
 
 int HDModelDrawCalls()
 {
 	return g_draw_calls;
+}
+
+/* ------------------------------------------------------------ the lips -- */
+
+namespace
+{
+	Lips* lips_of(int slot, bool head)
+	{
+		const Model* model = find(head ? g_heads : g_models, slot);
+
+		return model ? model->lips : 0;
+	}
+}
+
+int HDModelLipsOpen(int slot, bool head, int track)
+{
+	Lips* lips = lips_of(slot, head);
+
+	if (!lips || !lips->mapped || track < 0)
+		return 0;
+
+	if (lips->track == track)
+		return lips->clip.file ? lips->clip.frames : 0;
+
+	lips_close(lips);
+	lips->track = track;
+
+	/* A file that does not fit the face (the wrong column count) is as good
+	 * as none, and so is a face without one: it draws as it was built. */
+	const char* trouble = "";
+
+	HDTrlOpen(lips_file(*lips, track).c_str(), lips->map.columns, &lips->clip,
+		&trouble);
+
+	return lips->clip.file ? lips->clip.frames : 0;
+}
+
+int HDModelLipsFrames(int slot, bool head)
+{
+	const Lips* lips = lips_of(slot, head);
+
+	return lips && lips->clip.file ? lips->clip.frames : 0;
+}
+
+void HDModelLipsClose()
+{
+	for (std::map<int, Model>::iterator at = g_models.begin(); at != g_models.end(); ++at)
+		lips_close(at->second.lips);
+
+	for (std::map<int, Model>::iterator at = g_heads.begin(); at != g_heads.end(); ++at)
+		lips_close(at->second.lips);
+}
+
+int HDModelLipsLineCount()
+{
+	return (int)g_lips_lines.size();
+}
+
+const char* HDModelLipsLine(int at)
+{
+	return at >= 0 && at < (int)g_lips_lines.size() ? g_lips_lines[at].c_str() : "";
+}
+
+int HDModelLipsEventCount()
+{
+	return (int)g_lips_events.size();
+}
+
+const HDModelLipsEvent* HDModelLipsEventAt(int at)
+{
+	return at >= 0 && at < (int)g_lips_events.size() ? &g_lips_events[at] : 0;
+}
+
+void HDModelLipsEventsClear()
+{
+	g_lips_events.clear();
 }
 
 

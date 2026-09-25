@@ -1885,6 +1885,10 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	for (int i = 0; i < HDModelNoteCount(); i++)
 		Log("HDLOG level=%s model note: %s", g_stem, HDModelNote(i));
 
+	/* The speaking faces' track files, one line each - see HDModelLipsLine. */
+	for (int i = 0; i < HDModelLipsLineCount(); i++)
+		Log("HDLOG level=%s lips %s", g_stem, HDModelLipsLine(i));
+
 	/* The verdict per slot. One line each, so that a wrong picture in the game
 	 * can be looked up rather than guessed at. */
 	g_hd_slots = 0;

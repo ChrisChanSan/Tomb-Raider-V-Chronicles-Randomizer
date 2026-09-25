@@ -631,17 +631,81 @@ struct HDModelNeckCut
 
 // False when the slot has no model or the frame is not open; the caller then
 // draws it the classic way.
+//
+// `lipsTrack` and `lipsFrame` are a cutscene's audio track and the frame of it
+// this draw shows, for a face that speaks - see the lips below; -1 draws the
+// model as it was built.
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE);
+	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
+	int lipsTrack = -1, int lipsFrame = -1);
 
 // The separate HD face, drawn right after the body on the same matrices. Does
 // nothing and returns false when the slot has no <NAME>_HEAD.TRM.
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE);
+	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
+	int lipsTrack = -1, int lipsFrame = -1);
 
 int HDModelDrawCalls();		// since the last HDModelFrameBegin
+
+/* The lips of a speaking face.
+ *
+ * A cutscene face speaks with one file per audio track, <FACE>_HEAD_<track>
+ * .TRL; the file, the map from its columns to the face's joints and the
+ * deform are in hd_trl.h. Every separate face (HDModelDrawHead's) and every
+ * rigid face whose file carries its joint block (Lara's, a slot of her
+ * wardrobe drawn by HDModelDraw) keeps what it needs from level build to
+ * level end. `head` says which of the two a slot number means.
+ *
+ * HDModelLipsOpen opens the face's file for `track` and returns its frame
+ * count, or 0 when the face has none or cannot use it; asked again for the
+ * same track it answers without looking again. A draw with that track then
+ * shows the face at the frame it is handed: a frame change deforms the
+ * face's own vertices into a vertex buffer of its own - DYNAMIC, in
+ * D3DPOOL_DEFAULT, written with D3DLOCK_DISCARD, made on the first frame
+ * that needs it - and draws from it; the same frame again draws the same
+ * buffer. Past the clip's last frame the face eases to its bind over
+ * HD_LIPS_EASE_FRAMES and then draws its static buffer. A draw never opens a
+ * file.
+ *
+ * HDModelLipsClose closes every clip and releases every such buffer: the cut
+ * is over. HDModelLevelEnd does the same, and so HDModelShutdown, which is
+ * what the device-lost chain calls before Reset. */
+int HDModelLipsOpen(int slot, bool head, int track);
+int HDModelLipsFrames(int slot, bool head);	// the open clip's, or 0
+void HDModelLipsClose();
+
+/* One line per track file of every face that keeps lips, and one for such a
+ * face with none, written at level build for the caller's log:
+ *
+ *   slot=<n> face=<STEM> file=<STEM>_<track>.TRL frames=<n> cols=<c>
+ *   joints=<driven>/<rig> axis=<identity|(x,-z,y)|(x,-y,-z)|-> len=<s>s
+ *   reason=<ok|no file|refused|columns>[ from=<4|5|mod|tr3> trl_from=<...>]
+ *
+ * `from` and `trl_from` stand only where the face file and the track file
+ * come from different folders - LARA_HEAD, from=4 trl_from=5. Valid until the
+ * next HDModelLevelBegin or HDModelLevelEnd. */
+int HDModelLipsLineCount();
+const char* HDModelLipsLine(int at);
+
+/* What the draws did with the lips since the caller last cleared them: one
+ * entry per frame change of a face with an open clip. `source` is one of
+ * hd_trl.h's HDLipsSource and `jaw` the largest distance a vertex of the face
+ * moved from its bind, in classic units. At most 64 are kept. */
+struct HDModelLipsEvent
+{
+	int slot;
+	bool head;
+	int track;
+	int frame;
+	int source;
+	float jaw;
+};
+
+int HDModelLipsEventCount();
+const HDModelLipsEvent* HDModelLipsEventAt(int at);
+void HDModelLipsEventsClear();
 
 // --- what was built --------------------------------------------------------
 

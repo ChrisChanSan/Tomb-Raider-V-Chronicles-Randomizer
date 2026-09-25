@@ -495,7 +495,8 @@ int HDLaraDrawPlan(HDModelSlot* out, int max)
 		return 0;
 
 	/* The same guard the objects have, and the same key. Lara is a model like
-	 * every other one and a level's models are one vertex buffer; a switch of
+	 * every other one, built in the same pass as the level's other models
+	 * (HDModelLevelBegin), each with a vertex buffer of its own; a switch of
 	 * her own would only be a second way to end up with half a picture. */
 	if (!tomb5.hd_objects)
 		return 0;

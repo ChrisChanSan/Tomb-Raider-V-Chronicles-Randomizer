@@ -1273,7 +1273,9 @@ turn 38.7 and 45.3, so the hips' rule did not fire); the running jump's twist 20
 an arm and the legs; hitting a wall 53 and 54 key 2 to 3 (113.9 and 106.1); the bar swing
 159 key 1 to 2, node 8, 177.9, 0.02. At rate 1 the table marks 205 key 0 to 1 in eight
 levels and nothing else; the rate 1 rule refuses it before (`game/draw.cpp:2660`), as
-before.
+before. 159 key 1 to 2, called the bar swing here, is the start of the handstand from a
+ledge (`AS_GYMNAST`); it was reported afterwards and is left to vanilla's blend below
+(*A seam in the data*).
 
 *Why the drawn turn and not the node's own.* The own turn is not what the blend averages:
 it would mark 617 blended pairs, missing 719 whose drawn turn passes 90 degrees (10 key 0
@@ -1380,7 +1382,137 @@ drawn turn and `InterpKeyFrameFar` about 21, on that way at a quarter and three 
 too, and 76 built by `InterpKeyFrameFar` word for word as by `InterpKeyFrameLerp`.
 `RootProbe -sweep` over ANDREA1 prints what it printed before, byte for byte.
 
-**Commits.** `b643607`, `b7607c9`, `a9da3ac`
+**A seam in the data** (2026-09-25). *What.* With every far pair built, the owner found
+the handstand from a ledge broken: while she pulls up, her arms make strange turns and
+her armpits clip wildly about, through the wall as well; the ordinary pull-up looks
+right. His recording of an earlier build shows the same move with both hands on the ledge
+in every picture. The handstand is animation 159 (`AS_GYMNAST`, rate 4, frames 3935 to
+4127 in ANDREA1), and the pair is key 1 to 2 (frames 3939 to 3943): both keys hold her
+wrists on the ledge (the right wrist 6.5 units apart between them, the left 7.3) while
+her shoulders rise 189 units past them and both upper arms flip from above and in front
+of the shoulders to behind them, the right one's direction from (0.63, -0.45, 0.64) to
+(0.04, 0.28, -0.96) in the item's frame (y down, z towards the wall: the wrists stay at z
+74 to 86 over keys 0 to 3, the hips at 45 to 55). The right upper arm (node 8) turns
+173.8 degrees on its own and 177.9 in the drawn frame, the left (node 11) 156.4 and
+162.8. The built frame takes node 8 the shorter way of its own turn, which is the longer
+way in the drawn frame, about 182 degrees, through her side: at a half both upper arms
+point down and out to the sides ((0.64, 0.76, 0.13) and (-0.59, 0.79, 0.14)) and the
+wrists stand at (120, -649, 144) and (-146, -644, 121) where the line between their key
+places runs through (88, -675, 75) and (-97, -676, 77), 80.4 and 73.2 units off it, 69
+and 44 of them towards the wall (80.7 and 73.2 at most over the three in-between
+weights). Vanilla's blend averages the two keys' whole matrices, position included, so
+each joint walks the straight line between its key places: the wrists stay on the ledge
+and the arms shorten across the turn (the right upper arm 0.60, 0.38 and 0.60 of its
+length on the in-between frames, its averaged frame's determinant 0.25, 0.0003 and 0.25).
+A key pair of Lara's whose hips turn less than 90 degrees and where a node from 1 on
+turns more than 170 degrees both on its own and in the drawn frame is now a seam in the
+data and is left to vanilla's blend, at every frame rate, with the HD art on or off and
+under both control schemes. Every other pair is drawn as before.
+
+*Why not a turn.* Three ways through the pair were measured, the wrists at a half: the
+shorter way of node 8's own turn (the build above), the longer way ((39, -646, -31), 106
+units further from the wall than the line, behind her back) and a spherical path of every
+node's drawn rotation with the own rotations derived ((68, -808, 89), 133 units above the
+ledge). None keeps a hand on the ledge: two keys that pin the hands while the arm flips
+carry no turn to interpolate. The arm's own motion names no side either. Node 8 turns
+38.2 degrees over key 0 to 1 in the sense of its shorter way (the cosine of the two
+turns' axes 0.81) and 84.0 over key 2 to 3 against it (-0.85); in the drawn frame 40.1
+against the drawn shorter way (-0.85) and 65.3 with it (0.86). Over all 1200 built pairs
+no node turning more than 150 degrees on its own has both neighbouring pairs turning with
+its longer way: 159's two arms in every level and two nodes of rich3's 152 key 3 to 4
+come in with one sense and leave with the other, 209's hips in every level have only a
+following pair and it runs against the shorter way (a pair the owner accepts), 91's two
+arms in every level have no neighbour in their animation, and rich3's 152 has six more. A
+rule that takes the longer way where the neighbouring pairs ask for it would change
+nothing past 150 degrees, or turn 209's hips. Holding key 1 until the tick that reaches
+key 2 keeps the hands as well, but freezes her body for a pair in which it rises 189
+units. Vanilla's blend is the owner's own reference.
+
+*The pole.* The owner also saw odd poses for a few frames on a pole, in slow motion, and
+was not sure they were vanilla's. In RICH2, where the log shows him climbing one, the
+only far pair of the pole animations is 329 (`AS_POLEUP`) key 0 to 1: the left hand lets
+go and grips again 131.4 units higher, turning 100.8 degrees in the drawn frame (64.3 on
+its own; the left upper arm 72.8, the forearm 63.0). No node comes near half a turn, so
+there is no way round to choose and no seam; the frames built across it keep the left
+wrist within 20.0 units of the line between its key places, which vanilla's blend walks,
+and the right wrist, which holds the pole, within 2.5. The log's RICH2 session writes 44
+`KEYFARLOG` lines on it (`node=13 turn=100.8`, from f=15496). In his recording the
+climbing hand reaches up beside the chain with the fingers up (the grip changing), and
+the curled pictures after it, knees at the chest, both hands at her face and off the
+chain, her body swung away from it, are the push-off before the back jump from the pole,
+animation 327 (keys 2 to 4: the hips move 116 units back from the pole and the wrists
+leave it, z from 35 and 41 to -202 and -176), which the table does not mark in RICH2 and
+vanilla's blend draws as it always has; then 75 for one tick, and the back somersault 212
+and 213, whose far pairs are built as in the standing back jump. Both belong to the
+level's data, and this change touches neither. Both recordings are playbacks scrubbed
+with the mouse, a new picture only every 0.2 to 0.8 seconds, so which frame of which pair
+each picture shows was not measured.
+
+*The pairs.* Over the thirteen campaign levels' playable Lara animations 14 of the 1204
+far pairs are seams: 159 key 1 to 2 in every level (node 8, 173.8 degrees on its own and
+177.9 drawn, the hips 2.8) and rich3's 152 key 4 to 5, whose node data run past their
+frame size (node 1, 179.8 and 174.3). Far, marked, held and built per level: ANDREA1 80,
+79, 1, 78; ANDREA2 114, 113, 1, 112; ANDREA3 98, 97, 1, 96; andy1 83, 82, 0, 82; Andy2
+89, 88, 0, 88; andy3 96, 95, 0, 95; JOBY2 81, 80, 0, 80; joby3 76, 75, 0, 75; joby4 93,
+92, 0, 92; joby5 72, 71, 0, 71; rich1 113, 112, 0, 112; rich2 75, 74, 1, 73; rich3 134,
+132, 0, 132; in all 1190 marked, 4 held (the tightrope's, as before) and 1186 built.
+Every built frame (pair and in-between weight) before and after: 1200 pairs and 2741
+frames before, 1186 and 2701 after; the 40 frames that go are the 14 seams' (three
+weights of 159 key 1 to 2 in each level, one of 152 key 4 to 5), and every other frame is
+word for word what it was. Every other far pair whose hips turn less than 90 degrees
+stays at or below 143.7 at every limb by the smaller of its two turns (76 key 0 to 1, the
+upper arm: 143.7 on its own, 170.0 drawn), so any limit between 143.7 and 173.8 gives the
+same list; 170 is where a limb's two ways round differ by 20 degrees. The limbs of the 32
+pairs whose hips turn far reach 159.1 (rich3's 152 key 3 to 4), and those pairs keep the
+hips' rules whatever their limbs do. The standing jumps (76, 91, 74, 78, 80), the twists
+(207, 208, 209, 212, 213), the roll 151, the run's 10, swimming's 86, climbing out of
+water 111, the fast fall 33, 379 and 406 are no seams and are built as before. The rate 1
+marks (205 key 0 to 1 in eight levels) are pairs of the hips and stay. Of the animations
+whose frame data do not match their header's frame size, 143 far pairs are seams as well
+(ANDREA3 21, andy1 21, Andy2 19, andy3 39, joby4 17, joby5 1, rich3 25), left to
+vanilla's blend with the rest; they were not measured in play.
+
+*How.* `game/interpolate_math.h:989` (`INTERP_KEY_SEAM_COS`, -0.98481, the cosine of 170
+degrees); :997 (`InterpKeySeamAt`): -1 where the hips turn far (`InterpKeyFar`), else the
+first node from 1 on whose drawn turn (from the drawn rotations the fill already has) and
+own turn both pass the limit; :1045 (`InterpKeySeam`), the same from two key frames
+alone; :1063 (`InterpKeyFarFill`, the test at :1087) marks a far pair only where it is no
+seam. `InterpKeyFarOf` (`game/interpolate.cpp:2160`) and `LaraKeyFar`
+(`game/draw.cpp:2530`) keep their code: a seam reads as a pair that is not far, so
+`GetFramesAt` accepts the tween across it, `GetKeyAt` blends its root as vanilla does,
+and `LaraPoseFrames` (:3013) leaves both slots on the stored keys for vanilla's blend. On
+a blended frame of a pair that is not far, `LaraPoseFrames` calls `InterpNoteKeySeam`
+(:3071; `game/interpolate.cpp:1977`, declared in `game/interpolate.h:305`), which returns
+at once without `-log` and otherwise writes `KEYSEAMLOG f= anim= frame= keys= rate= node=
+own= turn=` (`game/interpolate.cpp:2009`) once per tick on a seam: `keys=` the pair
+drawn, `node=` the seam's node, `own=` and `turn=` its two turns in degrees. `KEYFARLOG`
+is unchanged; on the handstand its lines with `node=8 turn=177.9` (frames 3940 to 3943)
+give way to `KEYSEAMLOG ... anim=159 ... keys=1-2 rate=4 node=8 own=173.8 turn=177.9`.
+What it costs: the fill runs the test on its far pairs alone; a level's whole table took
+6060.9 microseconds before and 6088.6 after in ANDREA1, 3799.9 and 3816.3 in rich3,
+5308.2 and 5285.8 in andy3 (x86 `/O2`, offline), within the noise; per frame, without
+`-log`, a call that returns.
+
+*Checked.* An offline probe that includes `game/interpolate_math.h` runs the engine's
+fill on every Lara animation of the thirteen levels: the table marks exactly the far
+pairs that are no seam (0 disagreements over all 5522 far pairs, playable or not, any
+rate), and the engine's seam agrees with a double-precision walk of its own on every pair
+(0 differences). The survey probe of *Every node, in the drawn frame*, rebuilt against
+the new header, prints the same list less the 14 seams (its 14 `MISMATCH` lines are they;
+`marked 1190`, `hold 4`, `lerp 1186`) and its paths of the built frames byte for byte,
+`InterpKeyFrameFar` being unchanged: it still decides the upper arm of 91 key 0 to 1
+alone. `Preparation/Tools/Diagnose/InterpTest.cpp` (`key_seam`, :5124, 15 checks, 635 in
+all): a hand-built chain (a limb at 175 degrees on its own and drawn is a seam at node 1
+and left unmarked though far, at 169 not, at 171 so; 175 on its own and 135 drawn, 75 on
+its own and 175 drawn, and 175 on its own under hips turned 95, 176.6 drawn, are none);
+159 keys 1 to 3 copied from ANDREA1 (far at node 8, 177.9 drawn, and a seam there, 173.8
+on its own; the table leaves key 1 to 2 and marks key 2 to 3; both keys hold the right
+wrist 6.5 apart; the frame built at a half carries the wrists 80.4 and 73.2 off their
+line; vanilla's averaged upper arm has determinants 0.25, 0.0003 and 0.25); 76 and 209
+key 0 to 1 far and no seam. `RootProbe -sweep` over ANDREA1 prints what it printed
+before, byte for byte.
+
+**Commits.** `b643607`, `b7607c9`, `a9da3ac`, `ef9891f`
 
 ### Level Select, a keyhole that survives a save, and the underwater pickup animation
 2026-07-31 - 2026-09-14

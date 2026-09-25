@@ -2712,8 +2712,14 @@ the engine draws the first key frame there instead. Everywhere else it builds
 the frames in between itself, every part of her turned part of the way along the
 shortest turn, so the take-offs of the jumps, the twist of the back jump and of
 the forward jump and, in Red Alert!, the crouch roll turn smoothly through them
-with her body whole: between 72 and 134 such pairs of key frames per level, of
-the 1979 to 3444 the original averages. At the end of the twists of the back jump and
+with her body whole: between 71 and 132 such pairs of key frames per level, of
+the 1979 to 3444 the original averages. One pair where her arms turn that far is
+left to the original's average on purpose: at the start of the handstand from a
+ledge her hands stay on the ledge while her shoulders rise past them and both
+upper arms flip from above her shoulders to behind them between two key frames.
+Drawn as a turn, the arms swing out to the sides and her hands through the wall;
+the original's average keeps her hands on the ledge and draws her arms shortened
+for about a tenth of a second. At the end of the twists of the back jump and
 the forward jump and of one of her rolls, the original also draws one
 picture with her whole body facing the other way: the game turns her round on
 the last frame of the animation, and that frame still belongs to the way she
@@ -2755,6 +2761,7 @@ wrote it, and each seam answers a different question:
 | the *Ledge hang* move misbehaves, or the camera jumps during it | `LEDGELOG` — one line per phase of the move, one when it starts, one when the reasons it would refuse an edge change; and with the Modern camera a `LEDGELOG cam` line on every step of the move and the ten after it: where the camera stands and what it looks at, with their rooms, and whether it had to put the look-at point back (`snaps=`, `rejected=`) |
 | Lara vanishes for a moment on a rope, for instance in the half turn | `ROPELOG` — one line per tick on the rope: her heading round it (`RopeY=`), the three lengths the placement divides by (`len=`), and the angles and position she is given (`xyz=`, `pos=`); and a `ROPELOG draw` line on every drawn frame and on the one after she lets go: whether she was drawn (`drawn=`) and which term decided it, where the camera stands and what it looks at, its distance to that point and to her (`eyed=`, `larad=`), and which candidate the chase camera took (`cand=`, `clip=`) |
 | Lara's body squeezed thin for a moment, for instance in the turn on the tightrope or a jump's twist, or her arms flat at a jump's take-off | `KEYFARLOG` — one line per game step on which her pose sits between two stored key frames between which some part of her turns more than ninety degrees, counting the turns of the parts it hangs from, and is drawn in place of the blend: the animation and frame (`anim=`, `frame=`), the key pair (`keys=`), the animation's rate (`rate=`), the hips' turn in degrees (`hips=`), the key frame drawn (`drawn=`, -1 where a frame is built between the two), how (`mode=hold` for the first key, on the tightrope; `mode=lerp` for a built frame, everywhere else), and the part that turns furthest (`node=`: 0 the hips, 1 to 6 the legs, 7 the torso, 8 to 13 the arms, 14 the head) with its turn in degrees (`turn=`) |
+| Lara's arms shortened for a moment at the start of the handstand from a ledge | `KEYSEAMLOG` — one line per game step on which her pose sits between two stored key frames that the engine leaves to the original's average on purpose, because a part of her turns more than 170 degrees between them both on its own and counting the turns of the parts it hangs from: the animation and frame (`anim=`, `frame=`), the key pair (`keys=`), the animation's rate (`rate=`), that part (`node=`, numbered as in `KEYFARLOG`) and its two turns in degrees (`own=`, `turn=`) |
 | Lara's whole body facing the other way for a moment at the end of a jump's twist or a roll | `TURNLOG` — one line per game step on which the frame the game turns her round on is drawn the way she faced before: the animation and frame (`anim=`, `frame=`), the frame the turn fires on (`flip=`), and the key pair drawn turned (`keys=`) |
 | Lara turning too fast, or the wrong way round, in the moment right after the end of a jump's twist or a roll | `BRIDGELOG` — one line per game step whose in-between pictures are bridged from the pose before the step to the new one: the animations and frames on either side (`anim=210->211`, `frame=`), how far apart her hips are, the shorter way round, in degrees (`hips=`), and which way round they are turned (`arc=short`, or `arc=long` where the shorter way would run against the turn her body already makes; the standing jump's twist reads `hips=179.2 arc=long`) |
 

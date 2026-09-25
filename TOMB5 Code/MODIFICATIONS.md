@@ -3896,7 +3896,7 @@ engine as a measurement and drawn by ModelProbe at head pitches of 60 and 70 deg
 in the crouch 222's head turn (-18, 61), front and side, in `OUTFIT_CLASSIC` and
 `OUTFIT_VCI`. It reaches the jaw and the chin as well - 387 of those 541 vertices, on
 average 25 units from the nearest neck vertex - and hands them 0.46 to 0.61 of the head on
-average (`OUTFIT_VCI` to `Outfit_russia`): in all twelve pictures the jaw tears open into
+average (`OUTFIT_VCI` to `OUTFIT_RUSSIA`): in all twelve pictures the jaw tears open into
 spikes. The two designs agree only where the two skins coincide (23 vertices 16 to 28
 units below the joint, 0.3 units from the neck), to 0.05. The file's own rig leaves no
 flap, no step and no hole in the same twelve pictures; the rigid face leaves the flap
@@ -3920,7 +3920,8 @@ says why. Cost: once per level build, 5,913 vertices walked twice. Creature face
 and finds a body joint where `neck_bone_of` finds none in the two `PATRICK`, `DEMON` and
 `SERGIE` faces, so it is not carried over to them.
 
-*Unchanged.* With `hd_enable` off none of it is built: `HDLaraDrawPlan` returns before the
+*Unchanged.* With `hd_enable` off no level is built at all (`HDEnabled`,
+`hd_level.cpp:2538`), and with `hd_objects` off `HDLaraDrawPlan` returns before the
 wardrobe is planned (`hd_laradraw.cpp:500`). First person does not draw the face at all
 (`hd_laradraw.cpp`, the face's push is guarded by `!firstPerson`), so the neck cut and the
 lid are untouched: the eight first person pictures (two outfits, pitches 60 and 80, the
@@ -4950,13 +4951,11 @@ LM 8..13 are LMX 9..14, the rest unchanged.
 the way `Rich_CalcLaraMatrices` builds them, blends two keys element by element as a tween
 does, and walks them both ways: animation 0 frame 5 reads 0.42 at node 14 the old way
 and 1.00 through the map (0.99 on the tween at a half, at node 10); 86 frame 1309 0.49
-and, at
-a quarter, 0.92 (a real shortening, at node 13); 6 frame 109 0.44 and 0.99; 108 frame
-1623 0.84 at node 9 and 0.99; the idle 103 frame 1530 0.68 and 1.00. Readings quoted in
-this
-record at nodes 8 to 14 named the wrong bone: the tightrope's `stretch=0.12` at node 13
-(ANDREA1, 451 frame 8915) reads 0.12 at node 12 through the map as well, the left upper
-arm, and the 0.84 of every other second was head against shoulder and reads 1.00.
+and, at a quarter, 0.92 (a real shortening, at node 13); 6 frame 109 0.44 and 0.99; 108
+frame 1623 0.84 at node 9 and 0.99; the idle 103 frame 1530 0.68 and 1.00. Readings quoted
+in this record at nodes 8 to 14 named the wrong bone: the tightrope's `stretch=0.12` at
+node 13 (ANDREA1, 451 frame 8915) reads 0.12 at node 12 through the map as well, the left
+upper arm, and the 0.84 of every other second was head against shoulder and reads 1.00.
 
 **Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`, `b7607c9`, `afae389`, `0f22873`
 

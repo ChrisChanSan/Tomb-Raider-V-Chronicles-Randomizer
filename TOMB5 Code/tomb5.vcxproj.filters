@@ -434,6 +434,9 @@
     <ClCompile Include="TOMB5\specific\hd\hd_trm.cpp">
       <Filter>TOMB5\specific\hd</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_trl.cpp">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\hd\hd_dxt5.cpp">
       <Filter>TOMB5\specific\hd</Filter>
     </ClCompile>
@@ -926,6 +929,9 @@
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_trm.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_trl.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\chardef.inc">

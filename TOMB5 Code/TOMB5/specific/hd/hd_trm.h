@@ -145,6 +145,52 @@ struct HDTrmModel
 	 * file without a rig. */
 	int rigJoints;
 	float* rigJoint;
+
+	/* The rest of the rig, for a head that carries one - what a face needs
+	 * to be moved by its track files (hd_trl.h).
+	 *
+	 * `rigBind` is every joint's inverse bind matrix as the file stores it,
+	 * twelve floats a joint in the row order above; `rigJoint` is derived
+	 * from it.
+	 *
+	 * Between the rig and the geometry lies a block of joint animation with
+	 * a header of its own:
+	 *
+	 *     u32 N; i32 id[N]; i32 parent[N]; u32 C; i32 column[C]; u32 frames
+	 *     frames * C * 48:  3x4 matrices, row-major like the rig's
+	 *
+	 * The header is 4 * (3 + 2N + C) bytes. The frame count is the low half
+	 * of its last word; the high half is not a count (ADMIRAL_HEAD's word
+	 * is 0x00010003 and PIERRE_HEAD's 0x00000003, three frames each). Over
+	 * the 23 rigged *_HEAD.TRM of the IV-VI install's 4\ITEM and 5\ITEM the
+	 * header and frames * C * 48 end exactly where the geometry begins, and
+	 * that is the test a block passes to be kept.
+	 *
+	 * Node n of the header is rig joint n where n < rigJoints, and a node
+	 * past the rig is a helper that only carries others. Column c drives
+	 * node column[c]; parent[n] is the node n hangs off, -1 for none. A
+	 * column's matrix is LOCAL to its parent's. id[] is not read. Frame 0 is
+	 * the pose the face was bound in and is what `blockBind` keeps, C
+	 * matrices; the frames after it (LARA_HEAD's 507, an idle loop) are
+	 * not kept.
+	 *
+	 * `ownBone` / `ownWeight` are every vertex's three bones and three
+	 * weights as the file writes them, three bytes a vertex. The model code
+	 * renames a rigid face's body joints in `vertex` before it builds
+	 * (rig_neck_of, hd_model.cpp); these keep the file's own numbers, which
+	 * are what the track files move.
+	 *
+	 * All of them null and 0 for a file without a rig and for one whose
+	 * block does not pass the test. */
+	float* rigBind;
+	int blockNodes;
+	int* blockParent;
+	int blockColumns;
+	int* blockColumn;
+	int blockFrames;
+	float* blockBind;
+	unsigned char* ownBone;
+	unsigned char* ownWeight;
 };
 
 // True when the file exists at all. Cheap - no read.

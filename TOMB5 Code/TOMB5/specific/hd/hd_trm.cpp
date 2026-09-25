@@ -139,6 +139,62 @@ namespace
 		return got == (size_t)length;
 	}
 
+	/* A head's block of joint animation, from `at` (right behind the rig's
+	 * matrices) to `end` (where the rescan found the geometry). The layout
+	 * and the test are in hd_trm.h at HDTrmModel::rigBind. Keeps the header's
+	 * parents and columns and frame 0; false, with nothing kept, when the
+	 * header and the frames do not end exactly at `end`. */
+	bool keep_block(const std::vector<unsigned char>& bytes, size_t at,
+		size_t end, HDTrmModel* model)
+	{
+		const size_t limit = 4096;
+		unsigned int nodes = 0, columns = 0, word = 0;
+
+		if (at + 4 > end)
+			return false;
+
+		std::memcpy(&nodes, &bytes[at], 4);
+
+		if (!nodes || nodes > limit)
+			return false;
+
+		const size_t parents_at = at + 4 + (size_t)nodes * 4;
+		const size_t columns_at = parents_at + (size_t)nodes * 4;
+
+		if (columns_at + 4 > end)
+			return false;
+
+		std::memcpy(&columns, &bytes[columns_at], 4);
+
+		if (!columns || columns > limit)
+			return false;
+
+		const size_t word_at = columns_at + 4 + (size_t)columns * 4;
+
+		if (word_at + 4 > end)
+			return false;
+
+		std::memcpy(&word, &bytes[word_at], 4);
+
+		const unsigned int frames = word & 0xFFFFu;
+		const size_t frames_at = word_at + 4;
+
+		if (!frames || frames_at + (size_t)frames * columns * 48 != end)
+			return false;
+
+		model->blockNodes = (int)nodes;
+		model->blockColumns = (int)columns;
+		model->blockFrames = (int)frames;
+		model->blockParent = new int[nodes];
+		model->blockColumn = new int[columns];
+		model->blockBind = new float[(size_t)columns * 12];
+
+		std::memcpy(model->blockParent, &bytes[parents_at], (size_t)nodes * 4);
+		std::memcpy(model->blockColumn, &bytes[columns_at + 4], (size_t)columns * 4);
+		std::memcpy(model->blockBind, &bytes[frames_at], (size_t)columns * 48);
+		return true;
+	}
+
 	/* The one reader. HDTrmProbe wants the counts and nothing else - it runs
 	 * over every slot of every level in the diagnostic tools and over all of
 	 * them again in the engine's -log scan - while HDTrmLoad wants the
@@ -415,6 +471,13 @@ namespace
 					model->rigJoint[j * 3 + c] =
 						-(m[0 + c] * m[3] + m[4 + c] * m[7] + m[8 + c] * m[11]);
 			}
+
+			/* And the matrices themselves, and the block behind them - see
+			 * HDTrmModel::rigBind. */
+			model->rigBind = new float[(size_t)rig_joints * 12];
+			std::memcpy(model->rigBind, &bytes[rig_at], (size_t)rig_joints * 48);
+
+			keep_block(bytes, rig_at + (size_t)rig_joints * 48, geometry_at, model);
 		}
 
 		if (parts)
@@ -485,6 +548,21 @@ namespace
 					out.u = to_byte(u);
 					out.v = to_byte(v);
 				}
+			}
+		}
+
+		/* The file's own bones and weights, beside the copy the model code
+		 * may rename - see HDTrmModel::ownBone. Only for a head whose block
+		 * was kept, because only the track files read them. */
+		if (model->blockBind && vertices)
+		{
+			model->ownBone = new unsigned char[(size_t)vertices * 3];
+			model->ownWeight = new unsigned char[(size_t)vertices * 3];
+
+			for (unsigned int i = 0; i < vertices; i++)
+			{
+				std::memcpy(model->ownBone + (size_t)i * 3, model->vertex[i].bone, 3);
+				std::memcpy(model->ownWeight + (size_t)i * 3, model->vertex[i].weight, 3);
 			}
 		}
 
@@ -559,6 +637,12 @@ void HDTrmFree(HDTrmModel* model)
 	delete[] model->index;
 	delete[] model->vertex;
 	delete[] model->rigJoint;
+	delete[] model->rigBind;
+	delete[] model->blockParent;
+	delete[] model->blockColumn;
+	delete[] model->blockBind;
+	delete[] model->ownBone;
+	delete[] model->ownWeight;
 
 	std::memset(model, 0, sizeof(*model));
 }

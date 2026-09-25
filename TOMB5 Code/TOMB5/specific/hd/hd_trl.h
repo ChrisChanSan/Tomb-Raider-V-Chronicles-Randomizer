@@ -2,8 +2,8 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The layout of a face's track file and the deform of a face by the joints
- * such a file moves - a frame's matrix times the inverse of the bind's - are
- * TROne's findings on the data files (GPLv3), TROne by Todesengel1931 -
+ * such a file moves - a frame's matrix times the inverse of the bind's - were
+ * found on the data files by TROne (GPLv3) by Todesengel1931 -
  * https://github.com/todesengel1931. Both were measured again here on the
  * installation's own files, under this engine's names; which column drives
  * which joint is read out of the face's own .TRM (hd_trm.h, HDTrmModel::

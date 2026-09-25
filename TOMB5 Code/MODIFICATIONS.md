@@ -2931,6 +2931,172 @@ anything (`hd_object.cpp:2707`).
 **Commits.** `2ab35c1`, `d7b4330`, `2ffd951`, `7715dda`, `3fbbd20`, `5d0fd65`,
 `72988c3`, `45d9130`, `957c53e`
 
+### The cutscene faces speak: their lips follow the Remaster's track files
+2026-09-25 - 2026-09-26
+
+**What.** In HD the faces of the cutscene actors, and Lara's face in the cutscenes she
+acts in, move the way the Remaster moves them: the lips part on the spoken line, the jaw
+drops, the dark of the mouth and the teeth show, the mouth closes between phrases, and
+now and then the eyes blink. The animation is the installation's own. A face
+`<FACE>_HEAD.TRM` has one file per spoken line, `<FACE>_HEAD_<track>.TRL` in `5\ITEM`,
+where `<track>` is the audio track the cutscene plays: 45 files for 13 faces, 18 of them
+Lara's. Past the end of a file the face eases back to rest over ten frames.
+
+**Why.** The faces stood still while the voices played: the separate faces are bound (see
+*Six cutscene faces, and none on a MIP prop* above), and nothing read their track files.
+A track file moves a face's own joints, and which joint each of its matrix columns moves
+is written in the face's `.TRM`: between the rig and the geometry every rigged head
+carries a block with a header, `[N][id[N]][parent[N]][C][column[C]][frames]`, and frames
+of joint matrices whose frame 0 is the pose the face was bound in. The header parses
+exactly in all 23 rigged `*_HEAD.TRM` of the IV-VI install's games 4 and 5. Column c
+drives rig joint `column[c]` where that is below the rig's joint count and is a helper
+node otherwise, and each matrix is local to its parent's. That header is the map, with
+no threshold and no vote: a map voted from bind translations puts 12 of its 21 matches
+on helper columns that stand where a joint stands, and drives none of the 16 turning lip
+and mouth columns and not the chin - at `LARA_HEAD_98` frame 556 its jaw drops and the
+lips stay shut, 6.86 units from the header's result.
+
+**How.** `specific/hd/hd_trm.cpp` keeps the rig's inverse bind matrices, the block's
+parents and columns and its frame 0 (`keep_block`, `:147`; only when header and frames end
+exactly where the geometry begins) and every vertex's own bones and weights (`:559`),
+because `rig_neck_of` renames a rigid face's body joints before it builds; the layout
+stands at `HDTrmModel::rigBind` (`hd_trm.h:185`). `specific/hd/hd_trl.cpp` (new, with
+`hd_trl.h`) reads, maps and deforms. `HDTrlFrames` (`:192`) is the frame rule: the first
+word is the frame count where it fills the file at the face's column count, and its low
+half otherwise - 15 of the 45 files, every file of `ADMIRAL_HEAD`, `DEMON_HEAD`, the two
+`PATRICK` faces and `SERGIE_HEAD`; a file of another column count is refused.
+`HDTrlOpen` and `HDTrlReadFrame` (`:226`, `:283`) read one frame at a time, 1920 bytes at
+40 columns, because a whole clip is up to 11.5 MB (`DEMON_HEAD_135.TRL`) and cutscene 44
+speaks three such faces at once. `HDLipsMapBuild` (`:327`) turns the header into the
+driven joints, the parents in composition order, the head joint (the rig joint the driven
+columns hang off - 4 in `LARA_HEAD`, 0, 1 or 2 in the others) and the axis order, a table
+keyed on the face file's name (`g_axis`, `:134`: `SERGIE_HEAD` (x,-z,y), `HANGMAN_HEAD`
+(x,-y,-z), `ZIP_HEAD` refused, the same axes for the other ten), and inverts each
+column's composed bind with a general inverse (`:64`), because the columns carry a
+scale. `HDLipsSkins` (`:517`) composes a frame, `D_c = G_c * inverse(Gb_c)`, and turns it
+about the head joint in the vertices' axes, `S_j = T(head) * A * D_c * A^T * T(-head)`;
+every joint no column drives keeps the identity. `HDLipsDeform` (`:645`) blends every
+vertex by the file's own bones and weights over 255, carries the normal through the
+cofactor matrix at its own length, and copies a vertex whose weights lie only on joints
+that do not move.
+
+`specific/hd/hd_model.cpp` keeps a `Lips` (`:124`) beside every separate face and beside a
+rigid face whose file carries its block, which is Lara's (`:3585`, and `:3668` for the
+separate faces, taken before the hanged man's half turn, which the deformed copy gets
+back after the deform). `make_lips` (`:2022`) looks for the track files in game 5's
+`ITEM` alone, because track numbers belong to a game: `4\ITEM`, where `LARA_HEAD.TRM`
+lies, holds 24 `LARA_HEAD` files numbered after Tomb Raider IV's tracks, three of them
+under numbers this game uses for other lines. `lips_stream` (`:2182`) deforms a face when
+the frame changes into a buffer of its own, `D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY` in
+`D3DPOOL_DEFAULT` (`:2210`), written with `D3DLOCK_DISCARD` (`:2252`) and made on the
+first speaking frame, and holds it while the frame stands; `draw_model` binds it in place
+of the static buffer (`:2447`) - the same stride, count and order, so the index buffer,
+the ranges and the constants stay, and so do the static buffer's bones and weights, which
+the deformed copy takes over. Buffer and file go in `lips_close` (`:902`), called by
+`HDModelLipsClose`, by `free_model` (`:934`) and so by `HDModelShutdown` in the
+device-lost chain (`hd_level.cpp:3323`, `hd_object.cpp:2599`), because `Reset` refuses
+while a DEFAULT resource lives. `HDModelLipsOpen` (`:4039`) opens a face's clip, once per
+track.
+
+The seam: `DrawCutSeqActors` (`game/deltapak.cpp:3245`) calls `HDObjectLips`
+(`hd_object.cpp:2855`) between `HDObjectBegin` and `HDObjectEnd` with the cut's audio
+track - none while the credits run, which play no audio - and `GLOBAL_cutseq_frame - 1`,
+the frame on screen, because `do_new_cutscene_camera` decodes a frame and then steps the
+counter (`deltapak.cpp:3126`). The frame item carries the pair to the draw
+(`hd_object.cpp:3583`, `:3597`). Lara's face gets the same pair (`hd_laradraw.cpp:1229`)
+while a cut she acts in plays: actor 0 of the cut is not `NO_ITEM`. `HDObjectFrameReset`
+closes every clip once `GLOBAL_playing_cutseq` clears (`hd_object.cpp:2616`).
+
+The frame rule: the cutscene frame is the clock. A file's frame index is the cutscene
+frame - its motion peaks against the engine's own speech ranges (the `*_chat_ranges`
+tables) at a lag of 0 to -6 frames in 19 of the 20 speaker pairs they name - and a
+cutscene is drawn without a tween (`game/interpolate.cpp:1228`), so the deform runs on
+the integer frame, once per change and never on a blend. The end of a clip:
+`HDLipsSourceOf` (`hd_trl.cpp:598`) shows the clip's last frame at (10 - k) / 10, k
+frames past it, and from the tenth frame on the bind, which is the static buffer. A
+file's last frame stands up to 9.72 units off the bind (`LARSON_HEAD_108.TRL`);
+`LARA_HEAD_103` and `LARA_HEAD_119` hold 5608 frames, more than their cuts, and the
+frame index never reaches their ends. No audio cursor is read.
+
+With `-log`: at level build `HDLOG level=<L> lips slot=<n> face=<STEM>
+file=<STEM>_<track>.TRL frames=<n> cols=<c> joints=<driven>/<rig> axis=<identity |
+(x,-z,y) | (x,-y,-z) | -> len=<s>s reason=<ok | no file | refused | columns>`, one per
+face and track file, one with `file=-` for a face with none, and `from=4 trl_from=5` at
+the end of Lara's (`hd_object.cpp:1904`); while a cut plays `LIPLOG f=<GlobalCounter>
+cut=<cutseq_num> frame=<n> track=<n> slot=<n> src=<trl | ease | bind> jaw=<units>
+lang=<EN | DE | FR | IT | ES | JP>`, once per frame change of a speaking face, `jaw`
+being the farthest vertex's distance from the bind and `lang` the language the audio
+path looks for first (`hd_object.cpp:3628`); and at the end of `HDLOG cutseq actor=`
+` lips=<track>/<frames>` or ` lips=-` (`deltapak.cpp:3265`), at the end of `HDLOG frame
+lara` ` lips=<track>` or ` lips=-` (`hd_laradraw.cpp:1339`). `ModelProbe -lips <FILE.TRL>
+<frame>` draws a face at a frame of its track by the same road, `<a>:<b>:<step>` tiles a
+sheet, and every run prints the engine's lips lines.
+
+**Checked.** `LipsTest` (`Preparation/Tools/Diagnose`, built by `blips.bat` out of
+`hd_trm.cpp`, `hd_trl.cpp` and `hd_install.cpp`, reading the installation read-only):
+194 checks, 0 failed. The map of the 12 faces it takes - 26 of `LARA_HEAD`'s 33 joints
+driven, 25 in `ADMIRAL_HEAD` and `SERGIE_HEAD`, 5 of `HANGMAN_HEAD`'s 8, 26 in the other
+eight - with `ZIP_HEAD` refused; each face's composed frame 0 against its rig's own
+joints: at most 0.0002 units in `LARA_HEAD`, `ADMIRAL_HEAD`, `DEMON_HEAD`, the two
+`PATRICK` faces and `SERGIE_HEAD`, 0.0005 in `HANGMAN_HEAD`, 0.49 to 0.80 in
+`BLUE_GUARD_HEAD`, the two `VON_CROY` faces and `PIERRE_HEAD`, and 3.46 in `LARSON_HEAD`.
+Frame 0 through the deform returns every vertex of the 12 faces to itself (at most
+2.8e-13 units) and every normal byte exactly. `LARA_HEAD_98` frame 556: the farthest
+vertex moves 7.19 units, 1.68 on average, 2198 vertices past a unit, the jaw (joint 18)
+turns 10.3 degrees and the chin travels 4.30 units; `PIERRE_HEAD_108` frame 1107 8.18,
+`LARSON_HEAD_102` frame 978 12.03. Lara's 176 throat vertices with weight on her body
+joints move by their face share alone (to 1.3e-5 units), 61 of them past a unit, the
+farthest 6.81; a vertex on no driven joint does not move by a bit. The frame rule over
+all 45 files; the ease on its straight line; the ease at 0 the bind bit for bit. Against
+an independent implementation of the same arithmetic, written out as `.OBJ` files, the
+engine's positions agree to at most 0.0001 units at 13 frames: `LARA_HEAD_98` bind, 646
+and 556, `PIERRE_HEAD_108` bind, 1035 and 1107, `LARSON_HEAD_98` bind, 740 and 1056,
+`HANGMAN_HEAD_132` bind and 3252, `SERGIE_HEAD_113` bind and 1966.
+
+ModelProbe pictures through the game's draw: `LARA_HEAD_98` at rest, 646 and 556 on
+`OUTFIT_CLASSIC`, front and side, and a sheet of every 60th frame; `PIERRE_HEAD_108` at
+rest, 1035 and 1107 on ANDREA1's `ANIMATING2_MIP`; `LARSON_HEAD_98` at rest, 740 and
+1056 on ANDREA1's `LARSON`; `SERGIE_HEAD_113` at rest and 1966 on JOBY2's
+`ANIMATING9_MIP` (with `-meshbits 0x8`: in the bind pose his body lies on its side and
+its collar covers the mouth); `HANGMAN_HEAD_132` at rest and 3252 on ANDY1's
+`SNIPER_MIP`, half turned. The mouths open on the teeth and the tongue, the corners do
+not tear, the throat stays, the hanged man's mouth opens where his face is, and the sheet
+shows the mouth changing from frame to frame and a blink at 1020. The farthest vertex
+the draw reports is LipsTest's and the `.OBJ` files' (7.19, 8.18, 9.81 at `LARSON_HEAD_98`
+1056, 8.88, 10.06). Frame 1301 of `LARA_HEAD_98`, past the ease, draws the picture
+without `-lips` byte for byte, and that picture is byte for byte the one `96d79cc`'s
+ModelProbe draws. The reader alone (`9fd76bd`) left `ModelProbe -all` over JOBY2, ANDREA1
+and ANDY1 unchanged but for the timings and the peak memory, and two pictures byte for
+byte. The level lines: JOBY2 11 (`ADMIRAL_HEAD` 5, `SERGIE_HEAD` 3 with
+`axis=(x,-z,y)`, `BLUE_GUARD_HEAD_107` on three guard slots), ANDREA1 12 (`LARSON_HEAD`
+4, `PIERRE_HEAD` 3 on each of two slots, `BLUE_GUARD_HEAD` 2), ANDY1 7 (`PIERRE_HEAD` 3,
+`PATRICK_BROWN_HEAD_119`, `HANGMAN_HEAD_132` with `cols=7 joints=5/8 axis=(x,-y,-z)`,
+`BLUE_GUARD_HEAD` 2), and Lara's 18 with `from=4 trl_from=5`; every one `reason=ok`.
+ModernTest 10783, MenuTest 35547 and InterpTest 635 checks, 0 failed, as before. Not
+measured: a cutscene in the game.
+
+**Unchanged.** With `hd_enable` off no level is built (`HDEnabled`, `hd_level.cpp:2538`),
+`HDObjectBegin` returns false (`hd_object.cpp:2738`), so `DrawCutSeqActors` never calls
+`HDObjectLips` (the call stands behind `hd`), and Lara's plan and draw return before
+anything (`hd_laradraw.cpp:502`, `:875`); the seam reads nothing of the game for an actor
+drawn classic and writes nothing for any actor. A classic actor keeps its classic speech
+swap; the speech-head swap over an HD body stays ignored. First person draws no face, so
+the neck cut and its lid are untouched. A face outside a cutscene gets no track. The
+existing log lines are extended at their end only; `INTERPLOG` is as it was.
+
+**One set of files for every language.** The six spoken languages' tracks are equal in
+length to the millisecond in 20 of 22 tracks; 113 and 119 are half a second longer in
+English. One set of track files serves them all, so the engine indexes a file by the
+cutscene frame and stretches nothing, in every language. That is a decision, and a
+dubbed line that runs off the English timing keeps the English mouth.
+
+The layout of the track files and the deform - a frame's matrix times the inverse of the
+bind's - were found on the data files by TROne (GPLv3) by Todesengel1931 -
+https://github.com/todesengel1931; both were measured again on the installation's files,
+and the column map is the face's own header.
+
+**Commits.** `9fd76bd`, `1a24c28`, `87ce6db`, `2c70550`, `41a5a68`
+
 ### Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them
 2026-09-05 - 2026-09-08
 
@@ -3918,7 +4084,8 @@ says why. Cost: once per level build, 5,913 vertices walked twice. Creature face
 `neck_bone_of`: the distance rule picks the same single joint for `BLUE_GUARD`, `PIERRE`,
 `ADMIRAL` and the two `VON_CROY` faces, but adds joints 10 and 13 to `LARSON`'s joint 1
 and finds a body joint where `neck_bone_of` finds none in the two `PATRICK`, `DEMON` and
-`SERGIE` faces, so it is not carried over to them.
+`SERGIE` faces, so it is not carried over to them. The same file's rig moves her lips in
+the cutscenes she acts in: see *The cutscene faces speak* above.
 
 *Unchanged.* With `hd_enable` off no level is built at all (`HDEnabled`,
 `hd_level.cpp:2538`), and with `hd_objects` off `HDLaraDrawPlan` returns before the

@@ -1315,8 +1315,15 @@ see *Lara in HD* below for which of her stays classic and why.
   spoken line of a face after the cutscene's own sound track. The props some
   cutscenes fill a spare slot with — planks, a stone block, a pillar, an ID
   card, a horse — no longer wear somebody else's face, and the hussar shows
-  his own. Their mouths do not move: the Remaster animates a face with one
-  small file per spoken line, a format nothing here reads.
+  his own.
+- **And they speak.** The Remaster animates a face with one small file per
+  spoken line, and the engine plays it in step with the cutscene: the lips
+  part, the jaw drops on the teeth, the mouth closes between phrases, and now
+  and then the eyes blink — Lara's face too. After the last line of a file
+  the face settles back to rest over a third of a second. The files follow
+  the English voices; the other languages' lines run to the same lengths but
+  for two tracks that are half a second shorter, and the mouths are not
+  stretched to them.
 - **The catsuit has holsters.** With the randomizer handing Lara a gun in
   every level, the VCI catsuit — which in the original game never carries one
   — would have the pistols hanging in mid air beside her thighs. The pouches,
@@ -2764,6 +2771,7 @@ wrote it, and each seam answers a different question:
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
+| a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |

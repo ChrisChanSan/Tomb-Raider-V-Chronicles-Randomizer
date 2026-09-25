@@ -1,9 +1,8 @@
 /*
  * Modified 2026 by ChrisChanSan.
  *
- * The layout of a face's track file and the deform of a face by its joints
- * are TROne's findings on the data files (GPLv3), TROne by Todesengel1931 -
- * https://github.com/todesengel1931 - measured again here; see hd_trl.h.
+ * Where the layout of a face's track file and the deform of a face by its
+ * joints come from is written at the top of hd_trl.h.
  *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software

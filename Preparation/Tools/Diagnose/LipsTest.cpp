@@ -23,9 +23,8 @@
  * 5\ITEM through the same path the engine resolves - read only, the .TRM and
  * .TRL files and nothing else.
  *
- * The deform follows TROne's finding on the data files (GPLv3), TROne by
- * Todesengel1931 - https://github.com/todesengel1931; the map is the face's
- * own header (hd_trm.h, HDTrmModel::rigBind).
+ * Where the deform comes from is written at the top of hd_trl.h; the map is
+ * the face's own header (hd_trm.h, HDTrmModel::rigBind).
  *
  * What it checks:
  *

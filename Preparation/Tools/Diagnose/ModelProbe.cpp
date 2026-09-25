@@ -32,8 +32,10 @@
  *     those numbers are indices into the classic mesh tree - so TRM node n is
  *     classic mesh n and the question is not "which node is which" but "which
  *     of the slot's nodes does the model actually cover". -nodes prints that
- *     for one slot and -all for every bound slot of a level: the nodes with
- *     no geometry are the ones the classic draw path still has to cover.
+ *     for one slot and -all for every bound slot of a level: a node with no
+ *     geometry draws nothing at all, neither the model nor the classic mesh
+ *     (see hd_model.h), so on a body it is a hole unless a separate face
+ *     fills it.
  *
  * USAGE
  *
@@ -1735,11 +1737,11 @@ static void PrintNodeTable(int slot, const ClassicSlot* classic, const char* nam
 		}
 
 		printf("  %-5d %-9d %-24s %-9s %s\n", node, vertices, bind, parent,
-			has ? "" : "NO GEOMETRY - classic fallback");
+			has ? "" : "NO GEOMETRY - nothing is drawn there");
 	}
 
-	printf("  %d of %d nodes covered by the model, %d fall back to the "
-		"classic mesh\n", covered, nodes, nodes - covered);
+	printf("  %d of %d nodes covered by the model, %d draw nothing\n",
+		covered, nodes, nodes - covered);
 
 	if (HDModelHasHead(slot))
 		printf("  a separate HD face rides rigidly on node %d\n", HDModelHeadNode(slot));
@@ -9018,7 +9020,7 @@ int main(int argc, char** argv)
 		stats.heads);
 	printf("not bound          lara %d, dummy %d, no name %d, missing %d, refused %d\n",
 		stats.lara, stats.dummy, stats.noName, stats.missing, stats.refused);
-	printf("nodes              %d over %d slots, %d covered, %d fall back\n",
+	printf("nodes              %d over %d slots, %d covered, %d draw nothing\n",
 		stats.nodesTotal, stats.fullSlots + stats.partialSlots, stats.nodesCovered,
 		stats.nodesFallback);
 	printf("slots              %d complete, %d partial\n",
@@ -9175,7 +9177,7 @@ int main(int argc, char** argv)
 			char note[128] = "";
 
 			if (!fallback.empty())
-				sprintf(note, "classic nodes %.60s", fallback.c_str());
+				sprintf(note, "empty nodes %.60s", fallback.c_str());
 
 			if (missingPages)
 				sprintf(note + strlen(note), "%s%d page(s) WHITE",

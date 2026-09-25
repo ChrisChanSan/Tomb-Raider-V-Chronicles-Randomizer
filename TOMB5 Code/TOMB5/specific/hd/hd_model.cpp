@@ -428,16 +428,25 @@ namespace
 	 *   the STRIP rule. A trailing _<QUALIFIER> is the remaster's way of
 	 *   saying "the same person, this level's paint": BLUE_GUARD_JOBY,
 	 *   BLUE_GUARD_RICH2, BLUE_GUARD_RICHCUT2, PIERRE_SWAP. Cutting the last
-	 *   underscore group and asking again, as long as one is left, answers for
-	 *   17 names and every one of them is right or harmless - the five
-	 *   BLUE_GUARD variants, PIERRE_SWAP, VON_CROY_BOOK/BOTH/EMPTY of game 4,
-	 *   and eight _MIP twins that this engine never draws. Not one name gets a
-	 *   face that belongs to somebody else.
+	 *   underscore group and asking again answers for seven names, and every
+	 *   one of them is right: the three BLUE_GUARD variants above,
+	 *   PIERRE_SWAP and VON_CROY_BOOK/BOTH/EMPTY of game 4.
 	 *
-	 *   the TABLE below, for the two the strip rule cannot reach because the
-	 *   body carries no part of the person's name at all. Each entry is
-	 *   measured, not guessed: the open ring of the body against the neck ring
-	 *   of the face, both in the bind pose the .TRM files share.
+	 *   It stops at a stem that ends in _MIP. A _MIP model is a cutscene prop
+	 *   the remaster fills a spare slot with, and DrawCutSeqActors draws it in
+	 *   HD like any actor. Cut past the _MIP, ten names reached a face that is
+	 *   not theirs: LARSON_MIP_ANDY1 and PIERRE_MIP_ANDY1 are planks and
+	 *   BLUE_GUARD_MIP_ANDY1 a stone block with a chain (cutscene 14),
+	 *   BLUE_GUARD_MIP_JOBY4 a pillar (40), LARSON_MIP_RICH1 an ID card (24),
+	 *   LARSON_MIP_ANDY3 the hussar, whose own face Larson's covered (36 and
+	 *   38), PIERRE_MIP_ANDY3 a horse, LARSON_MIP_JOBY3_JOBY5 a rack of
+	 *   torpedoes in JOBY3 that no cutscene draws, and JEAN_YVES_MIP_ANG_RACE
+	 *   and TROOPS_MIP_ANG_RACE of game 4. No right answer runs through a
+	 *   _MIP.
+	 *
+	 *   the TABLE below, for the bodies the strip rule cannot reach because
+	 *   they carry no part of the person's name at all. Each entry is
+	 *   measured, not guessed.
 	 *
 	 *     ANIMATING4_RICHCUT2  ring (0, -218, 6) r13.1  <-  VON_CROY_SENIOR_HEAD
 	 *                          neck (0, -214, 12) r23.1, 7.4 units apart; the
@@ -450,27 +459,81 @@ namespace
 	 *                          seated man: his ring sits 54 units back and 273
 	 *                          up, which is where a wheelchair puts a head.
 	 *
+	 *   Six more are the cutscene speakers, and their evidence is the
+	 *   engine's own speech table (game\deltapak.cpp, handle_actor_chatting:
+	 *   which slot and node speak in which cutscene) against the face files'
+	 *   own lines, <FACE>_HEAD_<track>.TRL, where <track> is the audio track
+	 *   the cutscene plays (cutseq.bin). They are keyed on the model, so a
+	 *   level whose .MAP puts the same model in another slot comes along -
+	 *   JOBY3 and JOBY5 bind ANIMATING6_MIP_JOBY2 to CRANE_GUY_MIP and
+	 *   ANIMATING9_MIP_JOBY2 to LION_MIP.
+	 *
 	 * A ring match ALONE is not proof - ADMIRAL_HEAD's neck lands 1.3 units
 	 * from a ring of ANIMATING10_TITLE, and the picture shows that model is
 	 * the top-hatted mourner of the title graveyard, who has his own face and
-	 * needs none. So every entry here is confirmed by a picture as well.
+	 * needs none - and 55.8 percent of its neck vertices lie within 10 units
+	 * of PATRICK_2's collar, against 42.5 on its own body. So every entry
+	 * here is confirmed by a picture as well.
 	 *
-	 * Unplaced faces: ADMIRAL, DEMON, HANGMAN, PATRICK_BROWN, PATRICK_WHITE, SERGIE and ZIP
-	 * have no body among the models the fifteen .MAP files name that both
-	 * fits their neck and lacks a head. PATRICK_1 and PATRICK_2 are headless
-	 * and are plainly the two faces' bodies, but the remaster reaches them
-	 * only through SAILOR_MIP, and this engine never draws an item's MIP
-	 * slot - so they stay classic and the question does not arise. */
+	 * Left out on purpose: DEMON_HEAD on LARSON_MIP_ANDY3, although the two
+	 * share pages 9113 and 9114 - those are the hussar's own face; ZIP_HEAD,
+	 * which no cutscene body speaks with; and every game 4 face on a game 5
+	 * body. */
 	struct HeadOfModel
 	{
 		const char* model;
 		const char* head;
+		/* The node the face rides on, where the speech table names one the
+		 * nearest-node rule (head_node_of) does not reach; -1 measures it. */
+		int node;
+		/* True for a face file that stands upside down against the level's
+		 * own head mesh of that node: it is turned half a turn about the
+		 * node's x axis, through the node's bind, before it is built. */
+		bool halfTurnX;
 	};
 
 	const HeadOfModel g_head_of_model[] =
 	{
-		{ "ANIMATING4_RICHCUT2", "VON_CROY_SENIOR_HEAD" },
-		{ "ANIMATING6_RICHCUT2", "VON_CROY_ELDER_HEAD" },
+		{ "ANIMATING4_RICHCUT2", "VON_CROY_SENIOR_HEAD", -1, false },
+		{ "ANIMATING6_RICHCUT2", "VON_CROY_ELDER_HEAD", -1, false },
+
+		/* The priest, SAILOR_MIP in ANDY1: he speaks on node 2 in cutscene
+		 * 19 (priest_chat_ranges_andy2), whose track 119 is
+		 * PATRICK_BROWN_HEAD_119.TRL. */
+		{ "PATRICK_1", "PATRICK_BROWN_HEAD", -1, false },
+		/* The priest, SAILOR_MIP in ANDY2 and ANDY3: node 2 in cutscenes 33,
+		 * 35, 37 and 44 (priest_chat_ranges_andy6/7/9/11), whose tracks 101,
+		 * 97, 134 and 135 are PATRICK_WHITE_HEAD's four .TRL. */
+		{ "PATRICK_2", "PATRICK_WHITE_HEAD", -1, false },
+		/* The admiral, JOBY2's ANIMATING6_MIP: node 2 in cutscene 25
+		 * (admiral_chat_ranges_joby2) and, as CRANE_GUY_MIP, in 12, 13, 15
+		 * and 18 - tracks 113, 122, 116, 115 and 114, ADMIRAL_HEAD's five
+		 * .TRL. Body and face share pages 9090 and 9091. */
+		{ "ANIMATING6_MIP_JOBY2", "ADMIRAL_HEAD", -1, false },
+		/* Sergie, JOBY2's ANIMATING9_MIP: node 3 in cutscene 25
+		 * (sergie_chat_ranges_joby2) and, as LION_MIP, in 15 and 32 - tracks
+		 * 113, 115 and 120, SERGIE_HEAD's three .TRL. They share page 9093,
+		 * and node 3 of the body carries no geometry: the face fills it. */
+		{ "ANIMATING9_MIP_JOBY2", "SERGIE_HEAD", -1, false },
+		/* The hanged man, ANDY1's SNIPER_MIP: node 21 in cutscene 21
+		 * (hanged_man_chat_ranges_andy1), whose track 132 is
+		 * HANGMAN_HEAD_132.TRL; they share page 9107. The face's centre
+		 * stands 40 units from node 2 and 45 from node 21, so the node is the
+		 * speech table's.
+		 *
+		 * And the file stands upside down. Laid over the level's own head
+		 * mesh of node 21 - the mesh the speech table swaps - its vertices
+		 * lie 37.4 units from that mesh on average as they stand, and 7.6
+		 * once turned half a turn about the node's x axis, which is the best
+		 * of every turn in 30-degree steps about all three axes. The four
+		 * other speakers' faces land best as they stand (6.7 to 20.7). */
+		{ "SNIPER_MIP_ANDY1", "HANGMAN_HEAD", 21, true },
+		/* The demon knight, ANDY3's SWAT_MIP: node 15 in cutscenes 37 and 44
+		 * (knight_chat_ranges_andy9/11), whose tracks 134 and 135 are
+		 * DEMON_HEAD's two .TRL. The hussar beside him, LARSON_MIP_ANDY3, in
+		 * the same uniform on the same pages 9097..9100, carries that face in
+		 * his own body, on DEMON_HEAD's own pages 9113 and 9114. */
+		{ "SWAT_MIP_ANDY3", "DEMON_HEAD", -1, false },
 	};
 
 	bool same_name(const std::string& a, const char* b)
@@ -484,9 +547,16 @@ namespace
 		return i == a.size() && !b[i];
 	}
 
+	/* A stem the strip rule stops at: one that ends in _MIP. */
+	bool ends_in_mip(const std::string& stem)
+	{
+		return stem.size() > 4 && same_name(stem.substr(stem.size() - 4), "_MIP");
+	}
+
 	/* The face file for a body, and by which of the three rules. `how` is for
 	 * the log and is never null on return; it says "name", "table" or "strip".
-	 * Empty when the model has no face anywhere. */
+	 * `entry` is the table's line when the table answered, and null
+	 * otherwise. Empty when the model has no face anywhere. */
 	/* `bodyMod` is the mod the BODY came out of, or -1. The
 	 * face is looked for in the same place and nowhere else: body and face
 	 * share one page bias, so a face out of a different source than its body
@@ -500,11 +570,12 @@ namespace
 	 */
 	std::string find_head_model(const std::string& model, bool fromTr3,
 		HDModelOrigin* origin, const char** how, std::string* headName,
-		int bodyMod = -1)
+		const HeadOfModel** entry, int bodyMod = -1)
 	{
 		const int mods = bodyMod >= 0 ? bodyMod : kModsNone;
 
 		*how = "name";
+		*entry = 0;
 
 		/* A face has no face of its own. Lara's wardrobe asks for the part
 		 * LARA_HEAD by name, and without this line the strip rule below cuts
@@ -541,6 +612,7 @@ namespace
 			if (!path.empty())
 			{
 				*how = "table";
+				*entry = &g_head_of_model[i];
 
 				if (headName)
 					*headName = g_head_of_model[i].head;
@@ -551,9 +623,14 @@ namespace
 
 		std::string stem = model;
 
-		while (stem.find('_') != std::string::npos)
+		/* Never through a _MIP: see the strip rule above. */
+		while (stem.find('_') != std::string::npos && !ends_in_mip(stem))
 		{
 			stem.erase(stem.find_last_of('_'));
+
+			if (ends_in_mip(stem))
+				break;
+
 			path = find_model(stem + "_HEAD", fromTr3, origin, 0, mods);
 
 			if (!path.empty())
@@ -1567,7 +1644,8 @@ namespace
 	 * head node. Which node that is, is measured and not hard coded: it is
 	 * the bind-pose node nearest the face geometry's own centre (TROne,
 	 * game_renderer.cpp:2056-2100 - node 21 in a 25 mesh tree, node 14 in a
-	 * 15 mesh one). */
+	 * 15 mesh one). Where the speech table puts the face on another node,
+	 * the face table says so (g_head_of_model) and this is not asked. */
 	int head_node_of(const HDTrmModel& head, const Model& body)
 	{
 		if (!body.hasBind || !head.vertices)
@@ -2317,6 +2395,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		 * HDModelSlot::neckNode. -1 and -1 for every other entry. */
 		int neckBone;
 		int neckNode;
+		// The face table's line for this body's face, or null.
+		const HeadOfModel* headEntry;
 	};
 
 	std::vector<Pending> pending;
@@ -2385,6 +2465,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			made.twinOf = -1;
 			made.neckBone = -1;
 			made.neckNode = -1;
+			made.headEntry = 0;
 			std::memset(&made.trm, 0, sizeof(made.trm));
 			std::memset(&made.head, 0, sizeof(made.head));
 
@@ -2497,6 +2578,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.twinOf = -1;
 		here.neckBone = -1;
 		here.neckNode = -1;
+		here.headEntry = 0;
 
 		if (slots[i].onlyPage >= 0)
 			here.cutPage.push_back(slots[i].onlyPage);
@@ -2708,6 +2790,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 					twin.twinOf = i;
 					twin.neckBone = -1;
 					twin.neckNode = -1;
+					twin.headEntry = 0;
 					std::memset(&twin.fold, 0, sizeof(twin.fold));
 					std::memset(&twin.trm, 0, sizeof(twin.trm));
 					std::memset(&twin.head, 0, sizeof(twin.head));
@@ -2888,7 +2971,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		std::string head_name;
 		const double head_find_began = now_ms();
 		const std::string head_path = find_head_model(model, tr3, &head_origin,
-			&head_how, &head_name, mod);
+			&head_how, &head_name, &here.headEntry, mod);
 
 		// The face is a second walk of the same folders, so it belongs in
 		// the same phase.
@@ -3159,9 +3242,38 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		head.hasBind = body.hasBind;
 		std::memcpy(head.bind, body.bind, sizeof(head.bind));
 
-		const int node = head_node_of(here.head, body);
+		/* The table's node where it names one the body has, the measured one
+		 * otherwise. */
+		const HeadOfModel* entry = here.headEntry;
+		const int node = entry && entry->node >= 0 && entry->node < body.nodes &&
+			entry->node < kJointBudget ? entry->node
+			: head_node_of(here.head, body);
 
 		head.rigidNode = node < 0 ? 0 : node;
+
+		/* The half turn about the node's x axis, through the node's bind:
+		 * y and z mirror about the bind and the normals turn with them (a
+		 * normal byte is biased by 127, so its negation is 254 minus it). A
+		 * turn and not a mirror, so every triangle keeps its winding. Before
+		 * the neck is looked for, which measures the face as it is drawn. */
+		const bool turned = entry && entry->halfTurnX && body.hasBind &&
+			head.rigidNode < kJointBudget;
+
+		if (turned)
+		{
+			const float by = body.bind[head.rigidNode][1];
+			const float bz = body.bind[head.rigidNode][2];
+
+			for (int v = 0; v < here.head.vertices; v++)
+			{
+				HDTrmVertex& at = here.head.vertex[v];
+
+				at.y = 2.0f * by - at.y;
+				at.z = 2.0f * bz - at.z;
+				at.ny = (unsigned char)(at.ny >= 255 ? 0 : 254 - at.ny);
+				at.nz = (unsigned char)(at.nz >= 255 ? 0 : 254 - at.nz);
+			}
+		}
 
 		/* The neck. It needs the classic TREE, which only a caller that
 		 * walked the mesh tree can hand over - without it the face stays
@@ -3200,14 +3312,16 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		if (head.neckBone >= 0)
 			note("%s (slot %d): the HD face %s rides on node %d of %d, its "
-				"neck (own bone %d) on node %d",
+				"neck (own bone %d) on node %d%s",
 				slot_label(here.slot, here.name.c_str()), here.slot,
 				head.name.c_str(), head.rigidNode, head.nodes,
-				head.neckBone, head.neckNode);
+				head.neckBone, head.neckNode,
+				turned ? ", turned half a turn about x" : "");
 		else
-			note("%s (slot %d): the HD face %s rides on node %d of %d",
+			note("%s (slot %d): the HD face %s rides on node %d of %d%s",
 				slot_label(here.slot, here.name.c_str()), here.slot,
-				head.name.c_str(), head.rigidNode, head.nodes);
+				head.name.c_str(), head.rigidNode, head.nodes,
+				turned ? ", turned half a turn about x" : "");
 
 		if (stats)
 		{

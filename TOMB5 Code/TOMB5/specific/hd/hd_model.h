@@ -326,7 +326,7 @@ struct HDModelStats
 	int heads;		// <NAME>_HEAD.TRM built and bound to a node
 
 	int fullSlots;		// every classic node covered by the model
-	int partialSlots;	// some nodes uncovered - the per-mesh fallback
+	int partialSlots;	// some nodes uncovered, and those draw nothing
 	int nodesTotal;		// classic nodes over all loaded slots
 	int nodesCovered;
 	int nodesFallback;	// = nodesTotal - nodesCovered

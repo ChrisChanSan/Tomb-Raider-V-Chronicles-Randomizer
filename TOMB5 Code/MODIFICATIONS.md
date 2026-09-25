@@ -978,7 +978,8 @@ frame turned, the back twist turns 9.7, 19.4 and then 24.6 to 24.8 degrees a tic
 turns 5.3 and 13.4, 48 0.9 and 5.9. It does not bridge 211's own start: 211's first
 key lies half a turn about her lateral axis from 210's last frame, 179.2 degrees under
 either yaw, a seam in the level's data, so the forward twist out of 77 keeps one tick of
-179 degrees where it had two (177.0 and 179.7). TROne (GPLv3) by Todesengel1931 -
+179 degrees where it had two (177.0 and 179.7); the tween frames across that seam are
+bridged (*The change after it, bridged*, below). TROne (GPLv3) by Todesengel1931 -
 https://github.com/todesengel1931 - was read for comparison before this was built: its
 guard (`TROneKeyframesFlipped`, `games/tr5/src/game/draw.cpp`, a root turn of more than
 150 degrees between two key frames, then the first key unblended, in `CalcLaraMatrices`
@@ -1003,8 +1004,9 @@ copied; exact where the item's `z_rot` is zero, whatever its `x_rot`. `game/draw
 set, and from `HairControl`, `game/hair.cpp:309`): on the flip frame of an early
 animation (`LaraTurnFrame`, `game/draw.cpp:2544`) both frames of the pair are replaced by
 turned copies (:2845); the tween frames between the tick before and the flip tick stand
-on the same frame number and take the same path. The change that follows is refused, as
-every animation change is, and its root blend turns the previous tick's offset:
+on the same frame number and take the same path. The change that follows is refused by
+the pose rule, as every animation change is (its tween frames are bridged, below), and
+its root blend turns the previous tick's offset:
 `GetRootAt` reports `turned` (`game/draw.cpp:2715`), `InterpRootRefused` keeps it in
 `g_rootTurned` (`game/interpolate.cpp:1708`) and `InterpRootNow` turns by `g_rootFlip ^
 g_rootTurned` (:1732). `TURNLOG f= anim= frame= flip= keys= drawn=turned`
@@ -1015,7 +1017,78 @@ the four flip frames change and nothing else. Checked by
 turned offset and box, node 0's matrix with its x and z columns negated, a frame turned
 twice is itself, the one-axis cases, and the three kinds with their pairs.
 
-**Commits.** `b7607c9`, `67407bf`
+**The change after it, bridged** (2026-09-25). *What.* The tick after the flip tick
+stands on another animation (11, 209, 211 or 213, key 0 in all 52 cases, measured over the
+thirteen campaign levels), and the pose rule refuses every tween across an animation
+change, so the frames between the two ticks wore the new tick's pose from the first of
+them on. After 210 that pose is 211's first key, the seam above: in the owner's `-log`
+session of build `Sep 25 2026 00:05:52` (JOBY2), `ARMLOG`'s joints out of
+`lara_matrices` step 178.3, 179.0, 178.6 and 178.3 degrees in the HD body and 178.3 and
+177.8 in the classic one from the last frame of the `TURNLOG` tick to the first of 211,
+where a step between two frames at 165 Hz is about 3 degrees, and the first tick of 211
+then stands still for 33 ms. Those tween frames are now drawn from a key frame built at
+the frame's weight between the pose the flip tick drew and the pose of the current tick:
+a fast turn over the in-between frames, a motion the animation does not carry and the
+draw invents, there to be judged in game. At *Frame rate 60* that is one frame per
+change (the halfway pose), at 165 Hz five or six, at 30 none. *How.*
+`game/draw.cpp:2901` (`GetFramesNow`): after `GetFramesAt` refused, Lara's frame asks
+`LaraBridgeFrames` (:2770); a bridged frame is counted as a pose (`InterpNotePose`) and
+not as a skip, returns 2 like a blend in time, and raises the root latch as every refusal
+does (:2911). It fires where `InterpBridgeFires` (`game/interpolate_math.h:1260`) holds -
+`0 < t < 1`, `InterpTurnOf` of the previous tick's animation `INTERP_TURN_EARLY`, the
+previous frame its flip frame, the animation changed - and not where the current tick
+fires a `turn180_effect` itself (`game/draw.cpp:2782`; none of the 52 does). The first
+pose is the previous tick's pair from `GetKeyAt` (:2683, the key arithmetic `GetRootAt`,
+:2731, now calls), both keys turned by `InterpKeyFrameTurn` and, where the remainder is
+not zero, built at the tick's factor by `InterpKeyFrameLerp`; the second is the current
+tick's pair, built the same way where its remainder is not zero. The frame is
+`InterpKeyFrameBridge` (`game/interpolate_math.h:1344`): the second pose's box and root
+offset, every node by `InterpKeyNodeLerp` (:1033, the node step `InterpKeyFrameLerp`,
+:1081, now calls), in a static buffer put into both slots. The hips take the longer way
+round (`InterpSlerpRot` with `longArc`, :968) where `InterpBridgeLong` (:1312) finds the
+two more than 90 degrees apart and the shorter way turning against the hips' own turn
+(`InterpHipsTurn`, :1274, the quaternion of the turn the stack sees) both over the turned
+key pair the flip frame lies on and over the pair the current tick stands on. The body
+takes the frame through `CalcLaraMatrices` (`game/delstuff.cpp:184`; `LaraPoseFrames`,
+:196, leaves two equal frames alone) into `Rich_CalcLaraMatrices_Interpolated` (:290),
+whose `InterpRootNow` (:772) reads the bridge's offset - the current tick's own, which
+the refused frame read before - so the root comes out unchanged; the classic body copies
+`lara_matrices` (`specific/drawlara.cpp:159`) and the HD body reads them
+(`specific/hd/hd_laradraw.cpp:893`, from `specific/drawlara.cpp:147`); neither the HD
+switch nor the control scheme is read anywhere on the way. The braid does not take these
+frames: `HairControl` runs on the tick (`game/control.cpp:662`, from `GetFrames`,
+`game/hair.cpp:302`) and its links are blended as positions between the ticks
+(`game/interpolate.cpp:913`, :1308), as before. Bounds (`GetBoundsAccurate`,
+`game/draw.cpp:192`), the shadow (`game/delstuff.cpp:289`) and the collision read the
+item's own frame. At `fps_mode 0` none of it is reached: `InterpAlphaNow` answers 1
+(`game/interpolate.cpp:1009`), `InterpBeginFrame` returns with `g_applied` false
+(:1170, :1202), `InterpPoseTime` answers 0 (:1644), and `GetFramesNow`'s `if (t > 0.0F)`
+(`game/draw.cpp:2863`) is not entered. Behind `-log`, `INTERPLOG` ends in `bridge=N`,
+the bridged frames of the second (`game/interpolate.cpp:770`), and `BRIDGELOG f=
+anim=A->B frame=F->G hips= arc=short|long` (:2004) is written once per bridged tick.
+*The four changes*, measured with an offline probe that includes
+`game/interpolate_math.h`, identical in ANDREA1 and JOBY2, the same way round in all
+thirteen levels (the hips' angle from the first pose to the second, the way taken, the
+step per drawn frame at 165 Hz, the first pose against the matrix blend the flip tick
+drew at the hips): 210 into 211, 179.15 degrees about the item's x axis, her lateral
+axis; the shorter way, about -x, turns against the hips over 210's keys 7 to 8 (11.0
+degrees, cosine -0.415) and over 211's keys 0 to 1 (22.4, cosine -0.490), so the longer
+way, 180.8 degrees about +x: 32.9 degrees a frame in place of 179.2 on one frame and none
+after it, the one frame at 60 lying 90.3 and 90.6 degrees from the two ends; the first
+pose is the turned key 8 itself, 0.00 degrees (in ANDREA2, whose 210 runs at rate 3, the
+first pose is built at 0.75, 176.8 degrees apart, long way 183.2). 212 into 213, 19.5
+degrees, the shorter way, which turns with the hips on both sides (cosines 0.998 and
+0.485): 3.4 to 3.7 a frame; 0.49 degrees from the blend (the worst node 1.67). 207 into
+209, 13.5 degrees, the shorter way (near): 2.3 to 2.6 a frame; 0.45 (worst node 1.12). 48
+into 11, 5.9 degrees, the shorter way (near): 0.8 to 1.3 a frame; 0.13 (worst node
+0.70). Checked by `Preparation/Tools/Diagnose/InterpTest.cpp` (`key_bridge`, :4461, 26
+checks): the ends of the bridge against both poses, the arc of 210 into 211 with the
+level's own numbers (90.4 degrees from each end at t 0.5, a rotation, on the far side of
+the shorter way), 212 and 207 kept short, the box and offset, and when it fires;
+`RootProbe -sweep` over ANDREA1 and its `-grab` of the four changes and of 146 into 147
+print what they printed before.
+
+**Commits.** `b7607c9`, `67407bf`, `afae389`
 
 ### Lara squeezed to a sliver in the tightrope turn: the far key-frame pair
 2026-09-24
@@ -4375,7 +4448,11 @@ number changed between the two ticks (`GetFramesAt`, `game/draw.cpp`), or when t
 frame number did not step by exactly one (`InterpPoseAt`, `game/interpolate_math.h`: a
 loop wrapping, a jump, a frame written by hand, an item standing still); that frame is
 then drawn with the current tick's pose, which is exactly what thirty hertz shows, for a
-sixtieth of a second. The one exception to the frame-step rule is the ledge hang's
+sixtieth of a second. The one exception to the animation-number rule is Lara's change
+after an early half turn (the tick after the last frame of 48, 207, 210 and 212): its
+tween frames are drawn from a bridge between the two poses and counted as poses, not in
+`pose_skips` (see *Lara facing the wrong way for one tick in the jump twists*, *The
+change after it, bridged*). The one exception to the frame-step rule is the ledge hang's
 lowering, whose backwards steps `InterpPoseBack` blends (see *Ledge hang: an automatic
 turn and lowering at an edge*). The snap verdict is recorded in `InterpBeginFrame`'s own
 item walk, one line before it writes the blended position over the live one, because
@@ -4413,7 +4490,7 @@ rate)` the retail levels can produce) and measured with
 is reached only through `GetFramesNow` inside `if (t > 0)`, so `fps_mode 0` reaches none
 of it.
 
-**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`, `b7607c9`
+**Commits.** `2628a7e`, `a1dbf32`, `db696bf`, `b643607`, `b7607c9`, `afae389`
 
 ### The arms between two ticks
 2026-09-08 - 2026-09-09

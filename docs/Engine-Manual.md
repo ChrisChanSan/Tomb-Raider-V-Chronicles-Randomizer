@@ -833,6 +833,19 @@ between two game steps — a jump beginning, a state ending — the **pose** is
 not blended: that one frame wears the new pose, which is exactly what thirty
 shows, and it lasts a sixtieth of a second.
 
+One such change is drawn differently: the step right after the end of a
+jump's twist (the standing jump's, the running jump's and the back jump's)
+and of the roll on the ground. There the in-between pictures turn her from
+the pose the last step showed to the new one. In the standing jump's twist
+the game's own data turns her half a turn about her own left-right axis
+between those two steps, which the game shows as one jump — and above thirty
+the new pose then stood still until the next step as well. With this, that
+half turn is spread over the in-between pictures — one at *Frame rate 60*,
+five or six at *Display* on a 165 Hz panel, none at 30 — and runs the way her
+body was already turning. It is a motion the animation itself does not
+contain. In the other twists and the roll the step is 6 to 20 degrees and is
+simply smoothed. The `BRIDGELOG` line says when it happens.
+
 Its **position** is another matter. An animation carries an offset of its own that moves the whole body — a climb
 wrap moves it 248 units in one step, the entry into a climb down 111, the
 ladder grab 86 — and on the very frame the animation changes, her place in the
@@ -2739,6 +2752,7 @@ wrote it, and each seam answers a different question:
 | Lara vanishes for a moment on a rope, for instance in the half turn | `ROPELOG` — one line per tick on the rope: her heading round it (`RopeY=`), the three lengths the placement divides by (`len=`), and the angles and position she is given (`xyz=`, `pos=`); and a `ROPELOG draw` line on every drawn frame and on the one after she lets go: whether she was drawn (`drawn=`) and which term decided it, where the camera stands and what it looks at, its distance to that point and to her (`eyed=`, `larad=`), and which candidate the chase camera took (`cand=`, `clip=`) |
 | Lara's body squeezed thin for a moment, for instance in the turn on the tightrope or a jump's twist | `KEYFARLOG` — one line per game step on which her pose sits between two stored key frames whose hips turn more than ninety degrees and is drawn in place of the blend: the animation and frame (`anim=`, `frame=`), the key pair (`keys=`), the animation's rate (`rate=`), the hips' turn in degrees (`hips=`), the key frame drawn (`drawn=`, -1 where a frame is built between the two) and how (`mode=hold` for the first key, on the tightrope; `mode=lerp` for a built frame, in the twists) |
 | Lara's whole body facing the other way for a moment at the end of a jump's twist or a roll | `TURNLOG` — one line per game step on which the frame the game turns her round on is drawn the way she faced before: the animation and frame (`anim=`, `frame=`), the frame the turn fires on (`flip=`), and the key pair drawn turned (`keys=`) |
+| Lara turning too fast, or the wrong way round, in the moment right after the end of a jump's twist or a roll | `BRIDGELOG` — one line per game step whose in-between pictures are bridged from the pose before the step to the new one: the animations and frames on either side (`anim=210->211`, `frame=`), how far apart her hips are, the shorter way round, in degrees (`hips=`), and which way round they are turned (`arc=short`, or `arc=long` where the shorter way would run against the turn her body already makes; the standing jump's twist reads `hips=179.2 arc=long`) |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.
@@ -2884,7 +2898,7 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
   camcut=0 (type=0 spot=0 eye=0 aim=0 handover=1) cutscene=0
   pose_items=3.5 pose_skips=0.2 pose_far=0.0 pose_hd=1.5 lara_pose=29/30
   root_fix=1 arms=30/2/30 stretch=1.00@node0(anim0 f0)
-  particles=118.5 particle_kinds=0041 root_flip=0 pose_back=0
+  particles=118.5 particle_kinds=0041 root_flip=0 pose_back=0 bridge=0
 ```
 
 That is the whole line, in the order the engine prints it — it is one line in
@@ -2902,17 +2916,18 @@ That is the whole line, in the order the engine prints it — it is one line in
 | `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up. The five numbers in brackets split it: `type` changes that left the smooth camera family, `spot` flyby cuts, `eye` and `aim` the camera's two ends jumping on their own, and `handover` changes **inside** the smooth family that were deliberately *not* taken for a cut — drawing or holstering a weapon, looking around. One or two `handover` per draw is what it looks like |
 | `cutscene` | frames in a cut scene, which is played whole at thirty |
 | `pose_items` | things whose **limbs** were drawn halfway between two game steps, per frame. Zero at 30, always |
-| `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped, or Lara stands between the two key frames of the tightrope turn that are drawn from the first of them (see `KEYFARLOG`, `mode=hold`). A few per second is normal — that is what an animation change is |
+| `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped, or Lara stands between the two key frames of the tightrope turn that are drawn from the first of them (see `KEYFARLOG`, `mode=hold`). A few per second is normal — that is what an animation change is. The step after a jump's twist or a roll is not among them: its in-between pictures are bridged (see `bridge`) |
 | `pose_far` | poses refused for the *other* reason: two adjacent stored frames — a pair the original never blends at all — whose two poses turn more than ninety degrees at some joint. Blending a turn that size element by element does not go the long way round, it shortens the bone, so those are left alone. A small fraction is normal; a big number means an animation nobody has looked at yet |
 | `pose_hd` | how many of the blended poses went through the **HD** renderer's own path. Zero with the HD art off |
 | `lara_pose` | frames of the second on which **Lara's** own pose was blended, against the number of in-between frames beside it. Nearly all of them while she is moving |
-| `root_fix` | of the refused frames, how many had their **position offset** blended in time instead — the rule under *And the limbs move with the body* above. A **count** over the second and not a mean, and a small minority of `pose_skips`: a door at rest, a machine standing still and an animation change that does not move the body are all refused and none of them counted. About one per climb cycle on a ladder; nought in a room with nothing moving in it |
+| `root_fix` | of the refused frames, how many had their **position offset** blended in time instead — the rule under *And the limbs move with the body* above. A **count** over the second and not a mean, and a small minority of `pose_skips`: a door at rest, a machine standing still and an animation change that does not move the body are all refused and none of them counted. About one per climb cycle on a ladder; nought in a room with nothing moving in it. A bridged frame (see `bridge`) has its offset blended the same way and is counted here too |
 | `arms` | blended / refused / in-between frames, for the **weapon arm's** own animation — the pose first person is nearly all made of. With a weapon in her hands the first number should be the in-between count and the second a handful a second, one on each frame the weapon animation changes. With empty hands, a flare or a torch all three stay nought, because those arms come out of her own key frames and there is nothing there to blend |
 | `stretch` | the worst a **bone** was shortened by the pose blend that second, over its own length, with the joint, the animation and the frame it happened on. `1.00` is a rigid pose and is what a second with no in-between frame reads. Under about `0.85` is a limb one can *see* in the wrong place, and the animation and frame beside it are the pair to look at |
 | `particles` | sparks, raindrops, snowflakes, drips, blood, debris, shells, bats and the rest, drawn **between** two game steps, per frame. Hundreds in the rain, nought in a still room, and nought at 30 always |
 | `particle_kinds` | which kinds those were, one bit each: `0001` sparks, `0002` fire, `0004` smoke, `0008` blood, `0010` drips, `0020` debris, `0040` rain, `0080` snow, `0100` underwater dust, `0200` shockwaves, `0400` shells, `0800` rats/bats/spiders, `1000` bubbles, `2000` ropes. `0041` above is sparks and rain |
 | `root_flip` | of the `root_fix` frames, the ones whose previous offset was half a turn behind the frame it was handed to and had to be turned into it first: one of her rolls on the ground, whose about-face lands on the very frame the animation changes; the underwater roll and the tightrope turn, whose about-face lands on a frame whose in-between picture is refused; and the step right after the end of a jump's twist or of that other roll, whose last frame was drawn the way she faced before (see `TURNLOG`). A subset of `root_fix`, at most one per roll, turn or twist, and only where the offset really moves. A second with `halfturn` and no `root_flip` is an about-face whose in-between pictures were blended, which is what the last frame of those twists and that roll gets |
 | `pose_back` | in-between frames on which Lara's pose was blended **walking backwards** — the *Ledge hang* lowering, which plays the pull-up in reverse. Counted in `lara_pose` as well. One per in-between frame drawn, so a lowering counts its 25 ticks times the in-between frames per tick: 25 at *Frame rate 60*, about 137 at *Display* on a 165 Hz panel, where every frame is an in-between one; nought everywhere else and nought at 30 |
+| `bridge` | in-between frames on which Lara's pose was **bridged** across the step right after the end of a jump's twist or of the roll on the ground: turned from the pose the last step showed to the new one instead of showing the new one at once (see *And the limbs move with the body* above, and `BRIDGELOG`). Counted in `lara_pose` as well and not in `pose_skips`. One per twist or roll at *Frame rate 60*, five or six at *Display* on a 165 Hz panel; nought everywhere else and nought at 30 |
 
 A healthy line during ordinary play has `snaps=0` or a small handful.
 `camcut` counting every frame of a stretch means the camera never settled

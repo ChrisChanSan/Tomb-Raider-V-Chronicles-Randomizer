@@ -474,11 +474,13 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * The cull is the room's exact one: a sphere whose every point lies behind
  * the camera plane contributes nothing (P.z + rad <= 0), which also settles a
  * camera inside the bulb. The classic cone of 45 degrees about the view axis
- * is a per-vertex shortcut and, per pixel, a hard line in the frame: in the
- * first person view at fov 100 it took away haze worth up to 78.7 of 255 on
- * 2.4 per cent of the frame, and on 5.0 per cent with the camera inside the
- * bulb (both terms transcribed to numpy and compared per pixel). hd_room.hlsl
- * says the rest of why. */
+ * is a per-vertex shortcut and, per pixel, a hard line in the frame: over a
+ * flat wall 4000 units ahead in a 640 x 360 frame at fov 100, with a bulb of
+ * radius 2048 and density 0.02 at (3500, 0, 3000) in view space, it takes
+ * away haze worth up to 78.7 of 255 on 2.4 per cent of the frame, and on 5.0
+ * per cent with the bulb at (1000, 0, 800), the camera inside it (both terms
+ * transcribed to numpy and compared per pixel). hd_room.hlsl says the rest
+ * of why. */
 float BulbIntensity(float3 stash, float4 a, float4 b)
 {
 	float3 P = a.xyz;
@@ -546,8 +548,13 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 	/* The rim, softened exactly as hd_room.hlsl softens it: the chord
 	 * weighted by a smoothstep over the outer 0.35 of its own share of the
 	 * diameter, 1 through the whole core of the bulb. The raw chord stands up
-	 * vertically at the silhouette, and a model inside a bulb showed that
-	 * outline up to 11.2 of 255 brighter than the room around it. */
+	 * vertically at the silhouette: over a flat wall 6000 units ahead in a
+	 * 640 x 360 frame at fov 80, with a bulb of radius 3072 and density 0.02
+	 * at (0, 0, 5000) in view space, it draws the rim up to 11.2 of 255
+	 * brighter than the softened term (both transcribed to numpy), and on
+	 * Lara in ANDREA1 (ModelProbe, a bulb of radius 220 and density 0.4
+	 * between the camera and her) the two differ by up to 16 of 255 on 2.7
+	 * per cent of her pixels, where the bulb's edge crosses her legs. */
 	const float kRim = 0.35f;
 
 	float chord = length(vec2 - vec);

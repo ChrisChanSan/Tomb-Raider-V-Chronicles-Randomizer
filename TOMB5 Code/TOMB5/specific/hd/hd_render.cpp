@@ -4087,6 +4087,11 @@ namespace
 		 * and never reaches it, and a single card over black is exactly what
 		 * the sum drew. The screen composition of the glow is TROne's own
 		 * rule: TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931.
+		 * Screen and the sum do not commute, so where a glow overlaps another
+		 * additive material - JOBY4 room 19's rays over its sea - the picture
+		 * depends on which is drawn first: within a group the sort key's
+		 * order, led by the page slot, and between groups the order the
+		 * groups are drawn in.
 		 *
 		 * And they are sampled ANISOTROPICALLY. A card is seen along its
 		 * streaks: the page footprint of a pixel is 5.6 to 6.2 times longer
@@ -4095,8 +4100,12 @@ namespace
 		 * through RoomProbe's camera), and the trilinear filter picks its mip
 		 * by the long side - an area-weighted 1.66 mip levels too blurry
 		 * across ANDREA2's streaks and 1.79 across RICH1's. Up to 16
-		 * taps, as many as the device offers, bring the streaks back out of
-		 * the art itself.
+		 * taps, as many as the device offers, sample across the streaks at
+		 * the finer level. The gain in the picture is slight: against the
+		 * trilinear filter the glow alone moves by at most 9 of 255 in TITLE
+		 * room 6's church view and 15 of 255 in ANDREA2 room 131's view from
+		 * 4811 -1250 5864, by more than 4 on under 1.4 per cent of the
+		 * glow's pixels (RoomProbe -glow, -aniso 0 against 1).
 		 *
 		 * Both are set when the run of glow draw calls starts and put back
 		 * when it ends, so every other draw call of the pass - and every

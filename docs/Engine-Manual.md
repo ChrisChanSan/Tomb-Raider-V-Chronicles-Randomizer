@@ -1242,7 +1242,9 @@ see *Lara in HD* below for which of her stays classic and why.
   window glow are laid over one another as screen, the way a photographer
   stacks exposures: each adds a share of what is still left to white, so a
   shaft seen through six panes at once is bright in its core without turning
-  into a flat white slab, and its streaks stay sharp when seen at a slant.
+  into a flat white slab. The panes are also read with the anisotropic
+  filter, which keeps their streaks a little finer at a slant - a slight
+  difference, at most 15 of 255 steps of brightness.
   A sea the art stacks four times over (the Deepsea Dive, the Sinking
   Submarine's open water) is drawn once, so it is water and not pure cyan.
 - **A glow has the strength the art gives it.** The remaster builds a shaft or

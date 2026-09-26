@@ -24,6 +24,7 @@
 #include "hd_wardrobe.h"		// the outfit scan
 #include "../registry.h"		// hd_outfit, the player's own choice
 #include "hd_model.h"
+#include "hd_trl.h"			// the loop between lines and the firing face
 #include "hd_object.h"
 #include "hd_render.h"
 #include "hd_bind.h"
@@ -271,6 +272,216 @@ namespace
 				return slot;
 
 		return -1;
+	}
+
+	/* ------------------------------------------------------- her face -- */
+
+	/* Whether the classic game has LARA_SCREAM's head on her: game\
+	 * larafire.cpp (LaraGun, LG_READY) puts it on every tick the fire key is
+	 * held with a gun ready and LARA's back every tick it is not; game\
+	 * deltapak.cpp (deal_with_pistols) puts it on for the 16 ticks after
+	 * each shot a cutscene fires. The HD face follows the pointer, so it
+	 * follows every one of those writes and nothing else - also where the
+	 * classic head stays on after the gun was put away some other way.
+	 * A level whose two heads are one mesh has no swap to follow. */
+	bool scream_head()
+	{
+		short* have = lara.mesh_ptrs[LM_HEAD];
+
+		if (!have || !meshes || !objects[LARA_SCREAM].loaded)
+			return false;
+
+		short* const scream = meshes[objects[LARA_SCREAM].mesh_index + 2 * LM_HEAD];
+
+		return have == scream &&
+			scream != meshes[objects[LARA].mesh_index + 2 * LM_HEAD];
+	}
+
+	/* What her face shows. Lara's face is LARA_HEAD.TRM in every head mode
+	 * (hd_lara.cpp), and its own joint block is the source of both faces
+	 * below (hd_trl.h):
+	 *
+	 *   cut     the track the cut she acts in plays, where her face has its
+	 *           file - exactly as before, LIPLOG and all.
+	 *   fire    the firing face, while the classic head is LARA_SCREAM's
+	 *           (scream_head): three ticks in, three ticks out.
+	 *   loop    the loop between lines: her eyes blink and glance and her
+	 *           brows move, the mouth stays shut.
+	 *   static  the face as it was built: first person (no face is drawn),
+	 *           a head node the frame hides (the binoculars and the laser
+	 *           sight write mesh_bits 0), a face without a loop, and death -
+	 *           the loop stops where it stood and eases to the bind over
+	 *           HD_LIPS_EASE_FRAMES ticks, the way a track ends.
+	 *
+	 * in that order. The clock is GlobalCounter, one step a logic tick at
+	 * every frame rate: it stands in the inventory and the pause, so the
+	 * face holds its frame there, and a draw that runs twice in a frame -
+	 * the mirror - shows the same frame twice. It wraps at 65536 ticks, a
+	 * jump of the loop every 36 minutes. */
+	enum FaceKind
+	{
+		FACE_STATIC = 0,
+		FACE_CUT,
+		FACE_FIRE,
+		FACE_LOOP
+	};
+
+	const char* face_word(int kind)
+	{
+		switch (kind)
+		{
+		case FACE_CUT: return "cut";
+		case FACE_FIRE: return "fire";
+		case FACE_LOOP: return "loop";
+		default: return "static";
+		}
+	}
+
+	/* The face across draws: level state, reset with the level
+	 * (HDLaraDrawEnd). */
+	struct FaceState
+	{
+		bool seen;			// a face has been chosen in this level
+		int kind;			// the last choice, FaceKind
+		const char* stillWhy;		// why the face last stood still
+		unsigned short tick;		// the GlobalCounter the fire step is of
+		int fireStep;			// HDLipsFireStep's, 0 .. HD_LIPS_EASE_IN_TICKS
+		bool dead;			// hit_points <= 0 at the last choice
+		unsigned short deadAt;		// the GlobalCounter she was first seen dead at
+		int deadFrame;			// the loop's frame then, -1 for none
+		int loopFrame;			// the loop's frame shown last, -1 for none
+		unsigned short blinkAt;		// the GlobalCounter a blink was last looked for at
+		bool blinkSeen;
+	};
+
+	FaceState g_face;
+
+	void face_reset()
+	{
+		memset(&g_face, 0, sizeof(g_face));
+		g_face.kind = FACE_STATIC;
+		g_face.stillWhy = "start";
+		g_face.deadFrame = -1;
+		g_face.loopFrame = -1;
+	}
+
+	/* The track and the frame her face is pushed with, and the log's
+	 * changes of face. `headShown` is the head node's bit in the frame's
+	 * mask; `cutTrack` and `cutFrame` are the cut's pair or -1. Reads
+	 * lara.mesh_ptrs[LM_HEAD], lara_item->hit_points and GlobalCounter and
+	 * writes none of them. */
+	void choose_face(int slot, bool firstPerson, bool headShown, int cutTrack,
+		int cutFrame, int* track, int* frame)
+	{
+		const unsigned short now = (unsigned short)GlobalCounter;
+		const bool scream = scream_head();
+		const bool dead = lara_item && lara_item->hit_points <= 0;
+
+		*track = -1;
+		*frame = -1;
+
+		/* The fire step, on by the ticks since the last choice. The swap is
+		 * written in a logic tick and a draw comes after it, so one look a
+		 * tick sees every change; the first choice of a level counts as one
+		 * tick. */
+		if (!g_face.seen)
+			g_face.tick = (unsigned short)(now - 1);
+
+		const int ticks = (unsigned short)(now - g_face.tick);
+
+		if (ticks)
+		{
+			g_face.fireStep = HDLipsFireStep(g_face.fireStep, scream, ticks);
+			g_face.tick = now;
+		}
+
+		if (dead && !g_face.dead)
+		{
+			g_face.deadAt = now;
+			g_face.deadFrame = g_face.kind == FACE_LOOP ? g_face.loopFrame : -1;
+		}
+
+		g_face.dead = dead;
+
+		const int loop = HDModelLipsLoop(slot, false);
+		int kind = FACE_STATIC;
+		int shown = -1;
+		const char* why = "no block";
+
+		if (firstPerson)
+			why = "first person";
+		else if (cutTrack >= 0 && HDModelLipsOpen(slot, false, cutTrack) > 0)
+		{
+			kind = FACE_CUT;
+			*track = cutTrack;
+			*frame = cutFrame;
+			shown = cutFrame;
+			why = "cutscene";
+		}
+		else if (!headShown)
+			why = "masked";
+		else if (loop <= 0)
+			why = "no block";
+		else if (g_face.fireStep > 0 &&
+			HDModelLipsOpen(slot, false, HD_LIPS_TRACK_FIRE) > 0)
+		{
+			kind = FACE_FIRE;
+			*track = HD_LIPS_TRACK_FIRE;
+			*frame = HDModelLipsFireKey(dead ? -1 : now % loop, g_face.fireStep);
+			shown = HD_LIPS_FIRE_FRAME;
+			why = scream ? "fire on" : "fire off";
+		}
+		else if (!dead && HDModelLipsOpen(slot, false, HD_LIPS_TRACK_LOOP) > 0)
+		{
+			kind = FACE_LOOP;
+			*track = HD_LIPS_TRACK_LOOP;
+			*frame = HDModelLipsLoopKey(now % loop, 0);
+			shown = now % loop;
+			why = g_face.kind == FACE_FIRE ? "fire off"
+				: g_face.kind == FACE_CUT ? "cutscene" : g_face.stillWhy;
+		}
+		else if (dead)
+		{
+			/* Dead: the loop stops on the frame it showed and eases to the
+			 * bind the way a track eases past its end. */
+			const int past = (unsigned short)(now - g_face.deadAt) + 1;
+
+			why = "dead";
+
+			if (g_face.deadFrame >= 0 && past < HD_LIPS_EASE_FRAMES &&
+				HDModelLipsOpen(slot, false, HD_LIPS_TRACK_LOOP) > 0)
+			{
+				kind = FACE_LOOP;
+				*track = HD_LIPS_TRACK_LOOP;
+				*frame = HDModelLipsLoopKey(g_face.deadFrame, past);
+				shown = g_face.deadFrame;
+			}
+		}
+
+		if (gLogEnabled && (!g_face.seen || kind != g_face.kind))
+			Log("LIPLOG f=%d lara face=%s was=%s slot=%d frame=%d why=%s",
+				(int)now, face_word(kind), face_word(g_face.kind), slot, shown, why);
+
+		/* A blink: once a tick, on the frame it starts. */
+		if (gLogEnabled && kind == FACE_LOOP && !dead &&
+			(!g_face.blinkSeen || g_face.blinkAt != now))
+		{
+			const float lid = HDModelLipsBlink(slot, false, shown);
+
+			g_face.blinkSeen = true;
+			g_face.blinkAt = now;
+
+			if (lid >= 0.0f)
+				Log("LIPLOG f=%d lara blink frame=%d lid=%.1f", (int)now, shown,
+					(double)lid);
+		}
+
+		if (kind == FACE_STATIC)
+			g_face.stillWhy = why;
+
+		g_face.loopFrame = kind == FACE_LOOP && !dead ? shown : -1;
+		g_face.kind = kind;
+		g_face.seen = true;
 	}
 
 	int slot_of_hand(int node)
@@ -710,6 +921,7 @@ void HDLaraDrawEnd()
 	g_fp_was = false;
 	g_binos_was = false;
 	g_binos_pending = false;
+	face_reset();
 }
 
 bool HDLaraDrawActive()
@@ -1221,7 +1433,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * screen, exactly as an actor's (game\deltapak.cpp, DrawCutSeqActors).
 	 * Actor 0 of a cut is Lara, and NO_ITEM when she is not in it
 	 * (frigup_lara leaves her pose alone then); the credits play no audio.
-	 * -1 everywhere else, and her face draws as it was built. */
+	 * -1 everywhere else. */
 	int lipsTrack = -1;
 	int lipsFrame = -1;
 
@@ -1233,9 +1445,18 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		lipsFrame = GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1 : 0;
 	}
 
+	/* Between her lines: the cut's track where her face has its file, else
+	 * the firing face or the loop - see choose_face. */
+	int faceTrack = -1;
+	int faceFrame = -1;
+
+	choose_face(HDLaraPartSlot(HD_LARA_PART_FACE), firstPerson,
+		(mask >> HD_LARA_HEAD_NODE & 1) != 0, lipsTrack, lipsFrame, &faceTrack,
+		&faceFrame);
+
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
-		0, HD_MODEL_CULL_NONE, sheen, sheenPower, lipsTrack, lipsFrame))
+		0, HD_MODEL_CULL_NONE, sheen, sheenPower, faceTrack, faceFrame))
 		drawn++;
 
 	/* The pouches, under whatever goes in them.
@@ -1322,11 +1543,16 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	if (gLogEnabled && !g_frame_logged)
 	{
-		// lips= is the track her face speaks in this frame, or - for none.
+		// lips= is the track her face speaks in this frame, loop or fire
+		// for the loop between lines and the firing face, or - for none.
 		char lipsWord[16] = "-";
 
-		if (lipsTrack >= 0 && HDModelLipsFrames(HDLaraPartSlot(HD_LARA_PART_FACE), false) > 0)
-			sprintf(lipsWord, "%d", lipsTrack);
+		if (faceTrack == HD_LIPS_TRACK_LOOP)
+			sprintf(lipsWord, "loop");
+		else if (faceTrack == HD_LIPS_TRACK_FIRE)
+			sprintf(lipsWord, "fire");
+		else if (faceTrack >= 0 && HDModelLipsFrames(HDLaraPartSlot(HD_LARA_PART_FACE), false) > 0)
+			sprintf(lipsWord, "%d", faceTrack);
 
 		g_frame_logged = true;
 		// interp= is what this frame was drawn at: 1.00 for a frame that

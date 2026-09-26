@@ -676,6 +676,47 @@ int HDModelLipsOpen(int slot, bool head, int track);
 int HDModelLipsFrames(int slot, bool head);	// the open clip's, or 0
 void HDModelLipsClose();
 
+/* The loop between lines and the firing face (hd_trl.h): two tracks above
+ * every audio track number, played out of the joint block the face's own .TRM
+ * carries rather than out of a file of their own. HDModelLipsOpen with either
+ * opens that block as the clip - one clip for both, so going from one to the
+ * other opens nothing - for a face whose block loops (HDTrmModel::blockLoop at
+ * least HD_LIPS_LOOP_MIN) and whose name the loop table knows, and answers 0
+ * for every other face; the firing face also wants a block that reaches
+ * HD_LIPS_FIRE_FRAME. A track whose file is not there, asked for again while
+ * one of them plays, is answered 0 without closing it.
+ *
+ * The frame a draw hands with them is a key:
+ *
+ *   HD_LIPS_TRACK_LOOP  HDModelLipsLoopKey(frame, past) - the loop's frame
+ *                       through the face's loop mask, and `past` ticks
+ *                       after the loop stopped there it eases to the bind
+ *                       the way a track eases past its end (HDLipsSourceOf):
+ *                       0 is the frame itself, HD_LIPS_EASE_FRAMES on the
+ *                       bind.
+ *   HD_LIPS_TRACK_FIRE  HDModelLipsFireKey(from, step) - HD_LIPS_FIRE_FRAME
+ *                       in full, step / HD_LIPS_EASE_IN_TICKS of the way from
+ *                       the loop's frame `from` through the mask, or from the
+ *                       bind for -1 (HDLipsSkinsBlend). At the full step the
+ *                       frame it came from is left out of the key, so a face
+ *                       that keeps firing is deformed once.
+ *
+ * A draw with either records its frame change the way a track's does
+ * (HDModelLipsEventAt), under its own track number. */
+#define HD_LIPS_TRACK_LOOP	1000
+#define HD_LIPS_TRACK_FIRE	1001
+#define HD_LIPS_KEY_STRIDE	65536
+
+int HDModelLipsLoopKey(int frame, int past);
+int HDModelLipsFireKey(int from, int step);
+
+/* The loop's length in frames, or 0 for a face that plays none. */
+int HDModelLipsLoop(int slot, bool head);
+
+/* The upper lids' turn in degrees where a blink of the loop starts at `frame`
+ * (HDLipsBlinks), and -1 on every other frame. */
+float HDModelLipsBlink(int slot, bool head, int frame);
+
 /* One line per track file of every face that keeps lips, and one for such a
  * face with none, written at level build for the caller's log:
  *
@@ -684,8 +725,16 @@ void HDModelLipsClose();
  *   reason=<ok|no file|refused|columns>[ from=<4|5|mod|tr3> trl_from=<...>]
  *
  * `from` and `trl_from` stand only where the face file and the track file
- * come from different folders - LARA_HEAD, from=4 trl_from=5. Valid until the
- * next HDModelLevelBegin or HDModelLevelEnd. */
+ * come from different folders - LARA_HEAD, from=4 trl_from=5. After a face's
+ * track lines, one line for its loop:
+ *
+ *   loop slot=<n> face=<STEM> frames=<block frames> loop=<n> at=<offset>
+ *   mask=<hex> blinks=<n> reason=<ok|no block|no loop|no mask|unmapped>
+ *
+ * `loop` is the block's first frame equal to frame 0 (HDTrmModel::blockLoop),
+ * `mask` the loop table's columns (HDLipsLoopMask) and `blinks` how many
+ * blinks the loop starts; only `ok` plays. Valid until the next
+ * HDModelLevelBegin or HDModelLevelEnd. */
 int HDModelLipsLineCount();
 const char* HDModelLipsLine(int at);
 

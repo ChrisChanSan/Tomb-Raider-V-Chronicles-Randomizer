@@ -145,7 +145,24 @@ namespace
 		float turnY = 0.0f;
 		float turnZ = 0.0f;
 
+		/* The loop between lines and the firing face (hd_trl.h): the joint
+		 * block in the face's own .TRM, where its frame 0 lies and how many
+		 * frames it holds, the loop's length (0 for a face that plays none,
+		 * and `loopWhy` says why), the columns the loop plays, the block's
+		 * frame 0 for the others and where the blinks start. */
+		std::string trmPath;
+		long blockAt = 0;
+		int blockFrames = 0;
+		int blockLoop = 0;
+		int loop = 0;
+		const char* loopWhy = "no block";
+		unsigned long long loopMask = 0;
+		std::vector<float> bindLocals;
+		std::vector<int> blinkStart;
+		std::vector<float> blinkLid;
+
 		int track = -1;			// the track the clip was asked for
+		int missing = -1;		// a track whose file was not there
 		HDTrlClip clip = { 0, 0, 0, 0, false };
 
 		IDirect3DVertexBuffer9* vb = 0;
@@ -158,6 +175,9 @@ namespace
 		std::vector<float> outPosition;
 		std::vector<unsigned char> outNormal;
 		std::vector<HDModelVertex> out;
+		std::vector<float> fire;		// the firing frame
+		std::vector<double> fromSkins;		// the pose the firing face leaves
+		std::vector<double> toSkins;		// ... and the one it goes to
 	};
 
 	struct Model
@@ -909,6 +929,7 @@ namespace
 		if (lips->vb) { lips->vb->Release(); lips->vb = 0; }
 
 		lips->track = -1;
+		lips->missing = -1;
 		lips->shownFrame = -1;
 		lips->shownSource = HD_LIPS_SOURCE_BIND;
 		std::vector<float>().swap(lips->frame);
@@ -916,6 +937,9 @@ namespace
 		std::vector<float>().swap(lips->outPosition);
 		std::vector<unsigned char>().swap(lips->outNormal);
 		std::vector<HDModelVertex>().swap(lips->out);
+		std::vector<float>().swap(lips->fire);
+		std::vector<double>().swap(lips->fromSkins);
+		std::vector<double>().swap(lips->toSkins);
 	}
 
 	void free_model(Model& model)
@@ -2050,6 +2074,13 @@ namespace
 			lips->why = "the file's own bones were not kept";
 		}
 
+		lips->trmPath = path;
+		lips->blockAt = trm.blockAt;
+		lips->blockFrames = trm.blockFrames;
+		lips->blockLoop = trm.blockLoop;
+		lips->loopWhy = !trm.blockBind || trm.blockAt <= 0 || trm.blockFrames <= 0
+			? "no block" : "unmapped";
+
 		if (!lips->mapped)
 			return lips;
 
@@ -2068,6 +2099,44 @@ namespace
 			lips->normal[i * 3 + 0] = trm.vertex[i].nx;
 			lips->normal[i * 3 + 1] = trm.vertex[i].ny;
 			lips->normal[i * 3 + 2] = trm.vertex[i].nz;
+		}
+
+		/* The loop between lines: a block that comes back to its frame 0
+		 * after a second or more, and a face the loop table knows. Its
+		 * blinks are read once here, 499 frames of 1920 bytes for Lara's
+		 * face, so a draw only looks them up. */
+		const unsigned long long mask = HDLipsLoopMask(stem.c_str());
+
+		if (!trm.blockBind || trm.blockAt <= 0 || trm.blockFrames <= 0)
+			lips->loopWhy = "no block";
+		else if (trm.blockLoop < HD_LIPS_LOOP_MIN)
+			lips->loopWhy = "no loop";
+		else if (!mask)
+			lips->loopWhy = "no mask";
+		else
+		{
+			HDTrlClip clip;
+			const char* trouble = "";
+			int start[64];
+			float lid[64];
+
+			if (HDTrlOpenBlock(path.c_str(), trm.blockAt, trm.blockFrames,
+				trm.blockColumns, &clip, &trouble))
+			{
+				const int blinks = HDLipsBlinks(&lips->map, &clip, trm.blockLoop,
+					HDLipsLidMask(stem.c_str()), start, lid, 64);
+
+				HDTrlClose(&clip);
+				lips->loop = trm.blockLoop;
+				lips->loopMask = mask;
+				lips->loopWhy = "ok";
+				lips->bindLocals.assign(trm.blockBind,
+					trm.blockBind + (size_t)trm.blockColumns * 12);
+				lips->blinkStart.assign(start, start + blinks);
+				lips->blinkLid.assign(lid, lid + blinks);
+			}
+			else
+				lips->loopWhy = "no block";
 		}
 
 		return lips;
@@ -2123,8 +2192,21 @@ namespace
 		std::sort(out.begin(), out.end());
 	}
 
+	/* The loop's line, one per face that keeps lips - see HDModelLipsLine. */
+	void loop_line(int slot, const Lips& lips)
+	{
+		char line[512];
+
+		std::snprintf(line, sizeof(line), "loop slot=%d face=%s frames=%d loop=%d "
+			"at=%ld mask=%llx blinks=%d reason=%s", slot, lips.stem.c_str(),
+			lips.blockFrames, lips.blockLoop, lips.blockAt,
+			HDLipsLoopMask(lips.stem.c_str()), (int)lips.blinkStart.size(),
+			lips.loopWhy);
+		g_lips_lines.push_back(line);
+	}
+
 	/* The level build's lines, one per track file of a face and one for a
-	 * face with none - see HDModelLipsLine. */
+	 * face with none, and the loop's - see HDModelLipsLine. */
 	void lips_lines(int slot, const Lips& lips)
 	{
 		std::vector<int> files;
@@ -2139,6 +2221,7 @@ namespace
 				lips.stem.c_str(), lips.columns, lips.map.driven, lips.map.rigJoints,
 				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED));
 			g_lips_lines.push_back(line);
+			loop_line(slot, lips);
 			return;
 		}
 
@@ -2167,6 +2250,83 @@ namespace
 			g_lips_lines.push_back(line);
 			HDTrlClose(&clip);
 		}
+
+		loop_line(slot, lips);
+	}
+
+	/* What a loop or firing key shows (hd_model.h, HD_LIPS_TRACK_LOOP): the
+	 * source, and for the loop's ease how far. */
+	int pseudo_source(const Lips& lips, int track, int key, double* amount)
+	{
+		const int a = key / HD_LIPS_KEY_STRIDE;
+		const int b = key % HD_LIPS_KEY_STRIDE;
+
+		*amount = 1.0;
+
+		if (track == HD_LIPS_TRACK_FIRE)
+			return a <= 0 && b <= 0 ? HD_LIPS_SOURCE_BIND : HD_LIPS_SOURCE_TRL;
+
+		if (a <= 0)
+			return HD_LIPS_SOURCE_TRL;
+
+		// `a` ticks past the frame the loop stopped at, as past a clip's end.
+		int clipFrame = 0;
+
+		return HDLipsSourceOf(b + a, b + 1, &clipFrame, amount);
+	}
+
+	/* The skins of a loop or firing key into lips.skins; false when a frame
+	 * does not read. */
+	bool pseudo_skins(Lips& lips, int track, int key, double amount)
+	{
+		const size_t each = (size_t)lips.map.columns * 12;
+		const size_t joints = (size_t)lips.map.rigJoints * 12;
+		const int a = key / HD_LIPS_KEY_STRIDE;
+		const int b = key % HD_LIPS_KEY_STRIDE;
+
+		if (lips.bindLocals.size() != each || lips.loop <= 0)
+			return false;
+
+		if (track == HD_LIPS_TRACK_LOOP)
+		{
+			const int frame = b < lips.loop ? b : lips.loop - 1;
+
+			if (!HDTrlReadFrame(&lips.clip, frame, &lips.frame[0]))
+				return false;
+
+			HDLipsSkins(&lips.map, &lips.frame[0], amount, &lips.skins[0],
+				lips.loopMask, &lips.bindLocals[0]);
+			return true;
+		}
+
+		// The firing face: its frame in full, blended from the loop's frame.
+		const int from = b - 1;
+
+		lips.fire.resize(each);
+		lips.fromSkins.resize(joints);
+		lips.toSkins.resize(joints);
+
+		if (!HDTrlReadFrame(&lips.clip, HD_LIPS_FIRE_FRAME, &lips.fire[0]))
+			return false;
+
+		HDLipsSkins(&lips.map, &lips.fire[0], 1.0, &lips.toSkins[0]);
+
+		if (from >= 0)
+		{
+			if (!HDTrlReadFrame(&lips.clip, from < lips.loop ? from : lips.loop - 1,
+				&lips.frame[0]))
+				return false;
+
+			HDLipsSkins(&lips.map, &lips.frame[0], 1.0, &lips.fromSkins[0],
+				lips.loopMask, &lips.bindLocals[0]);
+		}
+		else
+			HDLipsSkins(&lips.map, 0, 1.0, &lips.fromSkins[0]);
+
+		HDLipsSkinsBlend(&lips.fromSkins[0], &lips.toSkins[0],
+			(double)a / (double)HD_LIPS_EASE_IN_TICKS, lips.map.rigJoints,
+			&lips.skins[0]);
+		return true;
 	}
 
 	/* The stream a face draws from: its own buffer holding the frame asked
@@ -2178,7 +2338,12 @@ namespace
 	 * every second draw finds the buffer already holding its frame. A face
 	 * whose clip is not open, a frame the clip says is the bind, and every
 	 * failure on the way draw the static buffer - which is the face as it
-	 * was built. */
+	 * was built.
+	 *
+	 * The loop and the firing face take the same road with their keys in
+	 * place of a cutscene frame. The loop's key changes once a logic tick
+	 * (thirty a second, GlobalCounter) and the firing face's stands while it
+	 * is full, so the deform runs no more often than a speaking face's. */
 	IDirect3DVertexBuffer9* lips_stream(const Model& model, int slot, bool head,
 		int track, int frame)
 	{
@@ -2194,8 +2359,9 @@ namespace
 
 		int clipFrame = 0;
 		double amount = 0.0;
-		const int source = HDLipsSourceOf(frame, lips->clip.frames, &clipFrame,
-			&amount);
+		const bool pseudo = track >= HD_LIPS_TRACK_LOOP;
+		const int source = pseudo ? pseudo_source(*lips, track, frame, &amount)
+			: HDLipsSourceOf(frame, lips->clip.frames, &clipFrame, &amount);
 		double jaw = 0.0;
 
 		lips->shownFrame = frame;
@@ -2218,10 +2384,18 @@ namespace
 			lips->out.resize(n);
 
 			void* target = 0;
+			bool skinned = false;
 
-			if (lips->vb && HDTrlReadFrame(&lips->clip, clipFrame, &lips->frame[0]))
+			if (lips->vb && pseudo)
+				skinned = pseudo_skins(*lips, track, frame, amount);
+			else if (lips->vb && HDTrlReadFrame(&lips->clip, clipFrame, &lips->frame[0]))
 			{
 				HDLipsSkins(&lips->map, &lips->frame[0], amount, &lips->skins[0]);
+				skinned = true;
+			}
+
+			if (skinned)
+			{
 				jaw = HDLipsDeform(&lips->skins[0], lips->map.rigJoints, (int)n,
 					&lips->position[0], &lips->normal[0], &lips->bone[0],
 					&lips->weight[0], &lips->outPosition[0], &lips->outNormal[0]);
@@ -4046,6 +4220,43 @@ int HDModelLipsOpen(int slot, bool head, int track)
 	if (lips->track == track)
 		return lips->clip.file ? lips->clip.frames : 0;
 
+	/* The loop and the firing face: the block in the face's own .TRM, one
+	 * clip for both, so a switch between them keeps the clip and the buffer
+	 * and only forgets the frame shown - their keys mean different things.
+	 * A face without a loop answers 0 and keeps what it has open. The track
+	 * whose file was missing stays remembered across the switch. */
+	if (track >= HD_LIPS_TRACK_LOOP)
+	{
+		if ((track != HD_LIPS_TRACK_LOOP && track != HD_LIPS_TRACK_FIRE) ||
+			lips->loop <= 0 || (track == HD_LIPS_TRACK_FIRE &&
+			lips->blockFrames <= HD_LIPS_FIRE_FRAME))
+			return 0;
+
+		if (lips->track >= HD_LIPS_TRACK_LOOP && lips->clip.file)
+		{
+			lips->track = track;
+			lips->shownFrame = -1;
+			return lips->clip.frames;
+		}
+
+		const int missing = lips->missing;
+		const char* trouble = "";
+
+		lips_close(lips);
+		lips->missing = missing;
+		lips->track = track;
+		HDTrlOpenBlock(lips->trmPath.c_str(), lips->blockAt, lips->blockFrames,
+			lips->map.columns, &lips->clip, &trouble);
+
+		return lips->clip.file ? lips->clip.frames : 0;
+	}
+
+	/* A track whose file was not there the last time it was asked for, asked
+	 * again after the face went to its loop: still not there, and the loop
+	 * is not closed for it. */
+	if (track == lips->missing)
+		return 0;
+
 	lips_close(lips);
 	lips->track = track;
 
@@ -4056,7 +4267,42 @@ int HDModelLipsOpen(int slot, bool head, int track)
 	HDTrlOpen(lips_file(*lips, track).c_str(), lips->map.columns, &lips->clip,
 		&trouble);
 
+	if (!lips->clip.file)
+		lips->missing = track;
+
 	return lips->clip.file ? lips->clip.frames : 0;
+}
+
+int HDModelLipsLoopKey(int frame, int past)
+{
+	return past * HD_LIPS_KEY_STRIDE + frame;
+}
+
+int HDModelLipsFireKey(int from, int step)
+{
+	return step * HD_LIPS_KEY_STRIDE + (step >= HD_LIPS_EASE_IN_TICKS || from < 0
+		? 0 : from + 1);
+}
+
+int HDModelLipsLoop(int slot, bool head)
+{
+	const Lips* lips = lips_of(slot, head);
+
+	return lips && lips->mapped ? lips->loop : 0;
+}
+
+float HDModelLipsBlink(int slot, bool head, int frame)
+{
+	const Lips* lips = lips_of(slot, head);
+
+	if (!lips)
+		return -1.0f;
+
+	for (size_t i = 0; i < lips->blinkStart.size(); i++)
+		if (lips->blinkStart[i] == frame)
+			return lips->blinkLid[i];
+
+	return -1.0f;
 }
 
 int HDModelLipsFrames(int slot, bool head)

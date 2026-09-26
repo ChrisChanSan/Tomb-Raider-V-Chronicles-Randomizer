@@ -3625,6 +3625,12 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 			{
 				const HDModelLipsEvent* e = HDModelLipsEventAt(i);
 
+				/* The loop's and the firing face's frame changes are once a
+				 * tick; hd_laradraw.cpp writes their changes of face and
+				 * their blinks instead. */
+				if (e->track >= HD_LIPS_TRACK_LOOP)
+					continue;
+
 				Log("LIPLOG f=%d cut=%ld frame=%d track=%d slot=%d src=%s "
 					"jaw=%.1f lang=%s", (int)GlobalCounter, cutseq_num, e->frame,
 					e->track, e->slot, HDLipsSourceName(e->source), e->jaw, lang);
@@ -3768,7 +3774,13 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 
 	/* A pushed model that is itself a face speaks the way an actor's face
 	 * does - see HDObjectLips. Where it has no clip for the track it draws
-	 * as it was built. */
+	 * as it was built.
+	 *
+	 * Only a cut's track marks a cut's clip as playing. The loop between
+	 * lines and the firing face (HD_LIPS_TRACK_LOOP, _FIRE) play outside
+	 * any cut, and HDObjectFrameReset would otherwise close their clip and
+	 * their buffer at the start of every frame; a cut's own track closes
+	 * them when it opens (HDModelLipsOpen). */
 	entry.lipsTrack = -1;
 	entry.lipsFrame = -1;
 
@@ -3776,7 +3788,9 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	{
 		entry.lipsTrack = lipsTrack;
 		entry.lipsFrame = lipsFrame < 0 ? 0 : lipsFrame;
-		g_lips_playing = true;
+
+		if (lipsTrack < HD_LIPS_TRACK_LOOP)
+			g_lips_playing = true;
 	}
 
 	g_count++;

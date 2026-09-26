@@ -2940,7 +2940,9 @@ drops, the dark of the mouth and the teeth show, the mouth closes between phrase
 now and then the eyes blink. The animation is the installation's own. A face
 `<FACE>_HEAD.TRM` has one file per spoken line, `<FACE>_HEAD_<track>.TRL` in `5\ITEM`,
 where `<track>` is the audio track the cutscene plays: 45 files for 13 faces, 18 of them
-Lara's. Past the end of a file the face eases back to rest over ten frames.
+Lara's. Past the end of a file the face eases back to rest over ten frames. Between her
+lines Lara's face plays the loop of its own block and bares its teeth while she fires -
+see *Lara's face between her lines* below.
 
 **Why.** The faces stood still while the voices played: the separate faces are bound (see
 *Six cutscene faces, and none on a MIP prop* above), and nothing read their track files.
@@ -3096,6 +3098,177 @@ https://github.com/todesengel1931; both were measured again on the installation'
 and the column map is the face's own header.
 
 **Commits.** `9fd76bd`, `1a24c28`, `87ce6db`, `2c70550`, `41a5a68`
+
+### Lara's face between her lines: the blink loop and the firing face
+2026-09-26
+
+**What.** In HD, Lara's face moves between her cutscene lines. Her own `LARA_HEAD.TRM`
+carries, behind the frame it was bound in, a block of 508 frames of its joints: frames
+0-498 are one loop of 16.6 seconds in which her eyes blink eight times (once twice in a
+row), glance up to 9.7 degrees and her brows move, while the ten mouth columns, the
+nostrils and the cheeks stand at the bind. The engine plays that loop whenever her face
+speaks no cutscene line. And while the classic game has `LARA_SCREAM`'s head on her - the
+fire key held with a gun ready, and the 16 ticks after each shot a cutscene fires - her HD
+face shows the block's frame 501, bared and clenched teeth under knitted brows, eased in
+over three ticks and out over three.
+
+**Why.** The classic scream head is `LARA_SKIN`'s head with the same vertices and other
+paint, and the HD path draws nothing of it (`LARA_SCREAM` is `HD_LARA_ROLE_SUPPRESS`,
+`hd_lara.cpp:552`): her HD face stood still while she fired. Between her lines it stood
+still as well, although its own file carries the loop.
+
+**How.** The block. `keep_block` (`specific/hd/hd_trm.cpp:148`) keeps where the block's
+frame 0 lies in the file, `blockAt` (`:201`: 2264 in `LARA_HEAD.TRM` and
+`LARA_YOUNG_HEAD.TRM`, 2260 in `LARA_CREEPY_HEAD.TRM`, 2648 in `LARSON_HEAD.TRM`), and the
+first frame whose matrices equal frame 0's byte for byte, `blockLoop` (`:208`: 499 in the
+three faces of Lara, 300 in `LARSON_HEAD`, 0 or 1 in the eleven other rigged heads).
+`HDTrlClip` gains `at` and `HDTrlReadFrame` reads at `at + frame * bytes`
+(`specific/hd/hd_trl.cpp:373`, 4 for a track file as before); `HDTrlOpenBlock` (`:305`)
+opens the block in the `.TRM` as a clip, so its frames are streamed 1920 bytes at a time
+like a track file's rather than held, 975,360 bytes.
+
+The mask. A table keyed on the face file's name, `g_loop` (`hd_trl.cpp:154`,
+`HDLipsLoopMask` `:721`): the three faces of Lara play the eye columns 12-15, 22 and 23
+and the brow columns 16-21 with the helper columns they hang off, 26-29, 33 and 34
+(`0x63cfff000`); `LARSON_HEAD` its eye columns 12-15 alone (`0xf000`); every other face 0.
+`HDLipsSkins` (`:595`) takes the mask and the block's frame 0: a column outside it takes
+frame 0's local matrix before the columns are composed, and its joint keeps the identity
+(`:613`), so `HDLipsDeform` copies every vertex on no masked joint. A mask of every
+column, or no frame 0, is the old call. The blinks: `HDLipsBlinks` (`:735`) marks the
+first frame of the loop at which the upper lids (columns 12 and 13, their turn from the
+bind by `HDLipsTurn`, `:695`) stand more than 15 degrees closed and the frame before them
+does not.
+
+The two tracks. `HD_LIPS_TRACK_LOOP` 1000 and `HD_LIPS_TRACK_FIRE` 1001
+(`specific/hd/hd_model.h:706`), above every audio track. `make_lips` (`hd_model.cpp:2046`)
+fills in the loop of a face (`:2108`) - the path of its `.TRM`, `blockAt`, the loop, the
+mask, frame 0's locals and the blinks, read once at level build - for a block that loops
+after 30 frames or more and a name the table knows. `HDModelLipsOpen` (`:4213`) opens the
+block for either track (`:4228`), one clip for both, so a switch between them only forgets
+the frame shown. The frame a draw hands is a key (`HDModelLipsLoopKey`,
+`HDModelLipsFireKey`, `:4276`, `:4281`), taken apart by `pseudo_source` and `pseudo_skins`
+(`:2259`, `:2280`) inside `lips_stream` (`:2347`), which deforms into the face's own
+buffer on a change of key as for a track. The loop's key is the loop's frame; after she
+dies it carries the ticks since, and the loop's frame eases to the bind the way a track
+eases past its end (`HDLipsSourceOf`, ten ticks). The firing face is frame 501 in full,
+`step / 3` of the way from the loop's frame of the moment through the mask - from the bind
+while she is dead - by `HDLipsSkinsBlend` (`hd_trl.cpp:816`), which from the identities is
+the ease of `HDLipsSkins` to the last bit; at the full step the key leaves the loop's
+frame out, so a held fire key deforms once. A track whose file is not there is remembered
+(`hd_model.cpp:4257`) and asked again it answers 0 without closing the loop, so a cut
+whose line her face has no file for does not open the block again every frame.
+`HDObjectPush` marks a clip as playing only for a track below 1000 (`hd_object.cpp:3792`),
+so `HDObjectFrameReset` (`:2616`) leaves the loop's clip open outside a cut, and the
+LIPLOG writer passes over the two tracks' frame changes (`:3631`).
+
+The choice. `scream_head` (`hd_laradraw.cpp:287`): `lara.mesh_ptrs[LM_HEAD]` is
+`LARA_SCREAM`'s head mesh and that mesh is not `LARA`'s. `choose_face` (`:373`) runs once
+in each `HDLaraDrawFrame` before the face is pushed and picks, in this order: first
+person, the face as built (`:411`); the cut's track where her face has its file, exactly
+as before (`:413`); the face as built while the frame's mask hides the head node (`:421`)
+or the face has no loop (`:423`); the firing face while its step is above 0 (`:425`); the
+loop while `lara_item->hit_points` is above 0 (`:434`); and once she is dead the loop's
+ease to the bind and then the face as built (`:443`). The step (`HDLipsFireStep`,
+`hd_trl.cpp:798`, advanced at `hd_laradraw.cpp:394`) goes up one a tick while the scream
+head is on and down one while it is off: 1/3, 2/3 and 1 on, 2/3, 1/3 and the loop off
+(`HDLipsEaseIn`, `hd_trl.cpp:787`). The clock is `GlobalCounter` (`game/control.cpp:128`,
+stepped once a logic tick at `:289`): the loop's frame is `GlobalCounter` modulo 499, so
+the inventory and the pause, which hold the counter, hold the face, the mirror's second
+draw shows the same frame, and the counter's wrap at 65536 ticks jumps the loop once in 36
+minutes. The state lives in `g_face` and is reset with the level (`face_reset`, `:359`,
+from `HDLaraDrawEnd`).
+
+With `-log`: at level build one line per face that keeps lips, after its track lines
+(`loop_line`, `hd_model.cpp:2196`), `HDLOG level=<L> lips loop slot=<n> face=<STEM>
+frames=<block frames> loop=<n> at=<offset> mask=<hex> blinks=<n> reason=<ok | no block |
+no loop | no mask | unmapped>`; on each change of face `LIPLOG f=<GlobalCounter> lara
+face=<cut | fire | loop | static> was=<...> slot=<n> frame=<n> why=<cutscene | fire on |
+fire off | first person | masked | dead | no block | start>` (`hd_laradraw.cpp:462`),
+`start` for the first choice of a level and `frame=-1` for the face as built; on the first
+frame of each blink `LIPLOG f=<GlobalCounter> lara blink frame=<n> lid=<degrees>`
+(`:475`); and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` (`:1550`).
+`ModelProbe -loop <frame>` or `<a>:<b>:<step>` and `-fire <on>[:<off>]` draw the loop and
+the firing face by the same road.
+
+**Checked.** `LipsTest` with the `.OBJ` folder: 268 checks, 0 failed (194 before); without
+it 241 (167 before); with the folder of report A's block exports as a second argument 272.
+Its sections 1 to 6 print what the build of `8321293` prints, number for number. Section
+7: `blockAt` and `blockLoop` of the four faces as above; frame 0 read at `blockAt` is
+`blockBind` bit for bit in all four; the blocks of `LARA_HEAD` and `LARSON_HEAD` read that
+way equal an independent export of them frame by frame (508 and 301 frames, none
+differing); the creepy and the young face carry `LARA_HEAD`'s block byte for byte; over
+the loop no column outside the mask moves in the three faces of Lara (in `LARSON_HEAD` 274
+of 299 frames move one - his lips - and the mask leaves them out); over every frame of the
+loop no vertex off the masked joints moves by a bit, neither its position nor its normal,
+while 1845 of `LARA_HEAD`'s 5913 vertices move, the farthest 6.6811 units, 6.8736 in the
+young face and 4.4048 in `LARSON_HEAD` (531 of 9619); a mask of every column and a mask
+without frame 0 are the plain skins bit for bit; the blinks start at 92, 137, 198, 254,
+314, 322, 420 and 468 (the lids 29.8, 17.9, 17.2, 22.3, 21.4, 16.5, 16.2 and 22.4 degrees
+there) in all three faces of Lara and at 71, 148 and 229 (23.7) in `LARSON_HEAD`; the
+other eleven faces have no mask. Section 8: the ease in is 1/3, 2/3, 1; the steps on and
+off, several ticks at once, and a release half way in; frame 501 opens the lips 4.08 units
+with the jaw at 0.00 degrees and moves its farthest vertex 3.9736 units, frame 506 9.36,
+10.89 and 8.9752; the blend from the bind is the ease of `HDLipsSkins` bit for bit at
+every step, on the straight line (1.3245, 2.6491, 3.9736), and step 0 is the bind bit for
+bit; from loop frame 93 (the upper lid 25.25 degrees closed) a third of the way to frame
+501 (3.65) the lid stands at 15.99.
+
+ModelProbe pictures, `OUTFIT_CLASSIC` in JOBY2 with `-look head -pitch 0 -dist 160`: the
+loop every 20th frame from 0 to 480 is, tile by tile, pixel for pixel the picture report A
+drew of the same frames out of the block exported as a track file; from row 112 of 320
+down - the nose tip, the mouth, the chin - every tile is frame 0's. Frames 92 and 138 at
+512 pixels are A's pixel for pixel; the blink from 84 to 100 differs from A's sheet of the
+eyes alone only in rows 0 to 91, the brows A's file held still. The firing face in full at
+`-dist 110` is A's frame 501 pixel for pixel; at ticks 0, 1, 2 and 3 of the swap and 1, 2
+and 3 ticks after it the farthest vertex stands at 1.32, 2.65, 3.97, 3.97, 2.65, 1.32 and
+0.00 units, the last being the loop's frame 0, and a tick of the release is the same
+picture as the tick on the way in with the same step from the same loop frame, byte for
+byte. From the blink at frame 92 the eyes open part of the way at the first step. On
+`OUTFIT_VCI` the brows move above the glasses and the firing face comes out as on the Rome
+outfit. `LARSON_HEAD` on ANDREA1's slot 45, frames 66 to 76, is A's eyes-only sheet pixel
+for pixel. No picture shows a tear. The face as built, `LARA_HEAD_98` frame 556 and
+`LARSON`'s face as built are the same PNG byte for byte out of the ModelProbe of `8321293`
+and out of this one; the printed text differs in the timings, the peak memory and the new
+`lips loop` line alone. The level lines: JOBY2 `LARA_HEAD` `frames=508 loop=499 at=2264
+mask=63cfff000 blinks=8 reason=ok`, and `reason=no loop` for `BLUE_GUARD_HEAD` on three
+slots, `ADMIRAL_HEAD` and `SERGIE_HEAD`; ANDREA1 `LARSON_HEAD` `frames=301 loop=300
+at=2648 mask=f000 blinks=3 reason=ok`, and `reason=no loop` for `PIERRE_HEAD` and
+`BLUE_GUARD_HEAD` on two slots each. ModernTest 10783, MenuTest 35547 and InterpTest 635
+checks, 0 failed, as before. Not measured: the game - the choice of face, the scream test
+against a real fire key, the LIPLOG lines, and whether the lids' step at 30 a second shows
+against the body's tween.
+
+**Unchanged.** With `hd_enable` off no level is built (`HDEnabled`, `hd_level.cpp:2538`),
+so no face keeps a loop, Lara's plan returns before anything (`hd_laradraw.cpp:713`) and
+so does her draw (`:1087`), before `choose_face`. The new code reads
+`lara.mesh_ptrs[LM_HEAD]`, `lara_item->hit_points`, `objects[LARA_SCREAM]` and
+`GlobalCounter` and writes none of them; the classic swaps (`game/larafire.cpp:405`,
+`game/deltapak.cpp:2709`) and every classic frame are untouched. First person pushes no
+face (`hd_laradraw.cpp:1457`). A cut's track comes first, opens as before, marks its clip
+as playing as before and writes its LIPLOG lines as before; when the cut is over the frame
+reset closes its clip and the loop opens again at the next draw. Only Lara's draw asks for
+the two tracks, so every other face keeps still between its lines. The existing log lines
+are extended at their end only; `INTERPLOG` is as it was.
+
+The outfit changer (F4) runs `HDObjectRelease` and `HDObjectLevelBuild`
+(`hd_level.cpp:3233`), whose build asks `HDLaraDrawPlan` again, which calls
+`HDLaraDrawEnd` and so `face_reset`: the face is built again with its loop and starts over
+at the next draw with a `why=start` line. Nothing is built for it beyond that, and it is
+not measured in the game.
+
+**Decisions.** The firing face follows the classic head swap exactly and has no rule of
+its own: it shows while the fire key is held with a gun ready - an empty gun included, the
+flare never - and for the 16 ticks after each scripted shot of a cutscene, and where the
+classic head stays on after the gun was put away some other way, the HD face stays with
+it. Its frame is the block's 501, the clenched teeth, as the counterpart of the classic
+painted face; 506, the open shout, is the other candidate, and the number lives in one
+constant (`HD_LIPS_FIRE_FRAME`, `hd_trl.h:230`). Three ticks soften the instant classic
+swap (`HD_LIPS_EASE_IN_TICKS`, `:234`). The loop stops when she is dead. Her brows move
+with her eyes in her loop. `LARSON_HEAD`'s loop plays through his eyes alone, without the
+two slow presses of his lips his block also holds. In a cut she acts in whose line her
+face has no file for, the firing face and the loop come next in the order.
+
+**Commits.** `c2697e9`, `218b22c`, `3f18539`
 
 ### Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them
 2026-09-05 - 2026-09-08

@@ -1324,6 +1324,21 @@ see *Lara in HD* below for which of her stays classic and why.
   the English voices; the other languages' lines run to the same lengths but
   for two tracks that are half a second shorter, and the mouths are not
   stretched to them.
+- **Between her lines Lara's face is alive.** The Remaster's face file of Lara
+  carries a loop of about seventeen seconds in which her eyes blink - eight
+  times, once twice in a row - glance about and her brows move, while the
+  mouth stays shut. The engine plays it whenever her face is not speaking a
+  cutscene line: standing, running, climbing, in the flyby cameras. It holds
+  still in the inventory and the pause, stops in first person, while the
+  binoculars or the laser sight are up (her face is not drawn then), and when
+  she dies - then the face settles back to rest. Other faces keep still between
+  their lines.
+- **And she bares her teeth when she fires.** The original game swaps Lara's
+  head for one with bared, clenched teeth while the fire key is held with a gun
+  in her hands - with an empty gun too, never with the flare - and for half a
+  second after each shot a cutscene fires. The HD face does the same at exactly
+  the same moments, with the Remaster's own clenched-teeth pose from that file,
+  and blends into it and back out of it over a tenth of a second.
 - **The catsuit has holsters.** With the randomizer handing Lara a gun in
   every level, the VCI catsuit — which in the original game never carries one
   — would have the pistols hanging in mid air beside her thighs. The pouches,
@@ -2772,6 +2787,7 @@ wrote it, and each seam answers a different question:
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
+| Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |

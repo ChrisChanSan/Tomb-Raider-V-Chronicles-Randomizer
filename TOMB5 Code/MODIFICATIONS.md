@@ -6025,7 +6025,8 @@ a pitch of `MODERN_SWIM_PITCH_RATE` 728 a tick, her swim attitude following the 
 own. She can run while she fires. The yaw step the right stick gave the orbit on its
 last tick, and only that step, is added to the held reference and the held course before
 the course is read, so the camera the player turns takes her course with it. At Tank
-nothing of it runs.
+nothing of it runs. A camera cut while the stick is held keeps her course until the stick
+is let go (*A camera cut keeps the held course until the stick is let go* below).
 
 **Why.** The scheme is the last piece the project was missing against the Remaster's own
 control, and it survives a 1:1 engine because it only sets the classic bits: the
@@ -6178,7 +6179,10 @@ eased profile and cancelled the moment the stick is pushed. The camera's own rat
 setting: 0 to 100 maps linearly to 364..2184 yaw units per tick (60 to 360 degrees a
 second), pitch always half the yaw, default 40 = 1092 units (180 deg/s), re-read every
 tick so a change on the pause menu is felt the next tick. Under water the orbit's
-elevation becomes the attitude her body swims toward. At Tank there is no orbit.
+elevation becomes the attitude her body swims toward. At Tank there is no orbit. Under
+the rich2 sniper camera the stick reads against the sniper view, and a stick held through
+the cut into or out of it keeps her course until it is let go (*A camera cut keeps the
+held course until the stick is let go* below).
 
 **Why.** The orbit is the camera half of the modern control: a scheme that steers
 relative to the camera needs a camera the player aims. It is built on the engine's own
@@ -6323,8 +6327,8 @@ them. Seam behind `-log`: `MODERNLOG`'s init line carries `cam_return`,
 `cam_return_min`, `cam_wall_factor`, `cam_hide_dist`, `cam_invert`, `cam_pitch_return`,
 `cam_speed`, `cam_yaw_rate`, `cam_pitch_min`, `cam_pitch_max`, `cam_pull_steps` and
 `cam_pull_push`; the tick line carries `cam_off`, `cam_pitch`, `cam_ret`, `cam_world`,
-`clip`, `view_err`, `carry`, `cam_step`, `rs=` and `hide=`, and at its end `cam_speed`
-and `old_type` (`game/modern_state.cpp:628`, `636`), the camera fields one tick behind
+`clip`, `view_err`, `carry`, `cam_step`, `rs=` and `hide=`, and after them `cam_speed`
+and `old_type` (`game/modern_state.cpp:659`, `667`), the camera fields one tick behind
 because the line runs before `CalculateCamera` and `rs=` this tick's own; `hide=` is the
 raw measured distance and not a flag, and two read-only accessors
 (`ModernCameraLogState`, `ModernCameraLogConfig`) carry the numbers out rather than
@@ -6351,6 +6355,120 @@ own number. `TOMB5 Code/tomb5.vcxproj` lists the new files.
 **Commits.** `d2d4a34`, `3b26ba3`, `9a23208`, `b4c3bb9`, `6782cb9`, `04aa78a`,
 `ccaedb1`, `23b8183`, `b7950a5`, `38925fd`, `d7a2259`, `405ad19`, `98f733e`, `15fb7bc`,
 `4fec613`, `d6d23fc`, `2b6ac8e`, `9be2d31`, `be07363`, `c2112d7`
+
+### A camera cut keeps the held course until the stick is let go
+2026-09-26
+
+**What.** With Modern control, a left stick held through a camera cut - into or out of the
+rich2 sniper camera, the one level camera Modern keeps - leaves Lara on the course she was
+running. The thumb still steers the held course, but from the cut until the stick is let
+go its direction is read against the camera the course was seated on, not against the view
+of the tick. Let go and pushed again, the stick seats a fresh course on the camera of that
+tick: inside the sniper view it means the sniper view's directions, after the cut back the
+chase camera's. With `-log` the `MODERNLOG` tick line ends in `cut=` and `latch=`.
+
+**Why.** The held course is re-seated on the camera of the tick whenever the stick's own
+direction has moved `recenter` (384 units, 2.1 degrees) from the direction it was last
+drawn from (`MODERN_STATE::last_off`), and a thumb is never still: the median stick step
+is 61 units a tick over the 2199 held ticks of the log below, so the drift from `last_off`
+passes 384 within seconds even where single ticks move far less. Under a camera that moves
+by itself the re-seat costs the little that camera moved. Across a cut the camera of the
+tick is another camera: the seam hands the translation the orbit's world yaw under the
+chase camera and the measured eye-to-target vector under the sniper camera, and the two
+differ by the angle between the views. The measurement is a rich2 log through the sniper
+camera (build `Sep 26 2026 12:18:13`, 2626 `MODERNLOG` tick lines, one init line, no gap
+in `f=`): 38 changes of `old_type` between 0 and 1, 37 of them with the stick out on both
+sides, the right stick at rest and `cam_step=0` at every one. The course survived the cut
+itself only while the thumb had not yet drifted 384 units since the last seat. 36 of the
+37 held cuts ended in a re-seat onto the other camera before the stick was let go - 10 on
+the tick of the cut, 21 within four ticks, the last 48 ticks after it - and on each of
+those 36 ticks `ref=` is the new camera's reference of that tick and the course jumps by
+11,268 to 32,343 units, the angle between the two views, while the stick itself moved only
+66 to 5629 units on that tick (16 of the 36 under 384). The 37th held cut was let go 11
+ticks later without a re-seat. The cut back re-seated onto the first camera again: from
+69875 ms the stick was held without a break to the end of the log, through 20 cuts, and
+the course flipped after every one of them - the swing to and fro between the sniper view
+and the chase camera. Under a camera with no cut in between the same re-seat is harmless
+because the reference has hardly moved: the 41 re-seats under the chase camera and the 122
+under the sniper camera inside holds seated on that same camera moved the reference by a
+median 117 and 146 units.
+
+**How.** The seam marks the cut: `game/modern_state.cpp:349` keeps whether the reference
+of the tick is the orbit's world yaw (`ref_orbit`), and `:429`-`431` set
+`MODERN_SITUATION::cam_cut` (`game/modern_move.h:583`) on the tick that source differs
+from the previous tick's; the two statics behind it (`:67`-`68`) are cleared by
+`ModernResetControls` (`:84`-`85`), so the first tick after a break in the chain is no
+cut. The source switch is the signal rather than `camera.old_type` because the reference
+is what the latch protects and the source is what hands it over, whatever camera type took
+the view - a sniper camera fired as heavy (`old_type` 5) switches it the same way. On the
+log the two agree tick for tick: the 405 ticks with the stick at rest show the reference
+handed in, the orbit's on all 235 with `old_type` 0 and the measured vector on all 170
+with `old_type` 1, and a replay with that rule reproduces all 2626 ticks, so the signal
+falls on the 38 changes of `old_type` and on nothing else. The translation
+(`game/modern_move.cpp`) sets the latch in its step 2b (`:1504`-`1505`) when a cut arrives
+while a course is held with `hold_course` on, and the re-seat (`:1535`) then seats on the
+held reference instead of the camera of the tick; the course minus the reference is
+`last_off` all through a hold, so a latched re-seat turns the course by exactly the
+stick's own change. `ModernRelease` clears the latch with the course (`:252`), the aiming
+branch clears it because it reads the camera fresh (`:1579`), and `ModernResetState`
+(`:313`) and the empty situation (`:1440`) start at 0. The rule has its own switch beside
+the five, `MODERN_CUT_LATCH` 1 (`game/modern_move.h:424`, `MODERN_CFG::cut_latch` at
+`:508`, filled at `game/modern_move.cpp:292`), and its state `MODERN_STATE::cut_latch`
+(`game/modern_move.h:553`). `MODERNLOG`'s tick line appends `cut=` (`sit.cam_cut`) and
+`latch=` (`cut_latch` after the translation) after `old_type=`
+(`game/modern_state.cpp:659`, `:667`-`668`, the legend at `:625`). Tests:
+`camera_cut_latch()` (`Preparation/Tools/Diagnose/ModernTest.cpp:6201`, run after
+`sweeps()`) with its helpers `thumb` and `cut_twin` (`:6124`, `:6144`), 25 checks: the
+log's case against a twin whose camera never cuts - a thumb wandering 60 units a tick out
+to 600 either side, a reference jump of 29198 and a second cut of 12000 on top, the course
+equal to the twin's on all 300 held ticks while the thumb re-seats it 30 times - the
+release and the push seated on the new camera, the stick rolled far under the latch, the
+cut back; the mirror of sweep (c) with the thumb walking 100 units a tick over 16,384
+ticks; the player's camera turn under the latch; `hold_course` off and aiming. The suite
+zeroes `cam_cut` at the 20 places it builds a situation.
+
+**Checked.** A replay (kept outside the repository) compiles the engine's own
+`game/modern_move.cpp` and drives `ModernTranslate` with each tick line's stick, state,
+`cam_step` and reference - `cam_world=` where `old_type` is 0, `cam=` where it is 1 - and
+compares `ref=`, `course=` and `cstep=` tick by tick. Against the translation of the
+commit before, all 2626 ticks agree in all three, the 37 reference jumps of 8000 units or
+more on held ticks included (the 36 above and one under the sniper camera at 98703 ms,
+8373 units of the measured vector turning while she ran, inside a hold that had crossed a
+cut). With this change and `cut_latch` forced to 0 the replay's per-tick output is byte
+for byte the one before. With the latch on, the 37 cuts with the stick held all latch, the
+one cut with the stick at rest does not, the latch stands on 1495 ticks in 7 holds, the
+reference moves on none of them except by the player's own camera step, and no held tick
+has a reference jump left; each of the 6 pushes that follow a release seats on the camera
+of its tick, four inside the sniper view (17422, 25188, 43391 and 58500 ms) and two under
+the chase camera (57360 and 69875 ms). ModernTest 10808 checks, 0 failed (10783 before and
+25 new; every line the suite printed before is printed unchanged), and with `cut_latch` 0
+in the test's own copy of the config the moving thumb of sweep (c)'s mirror leaves the
+twin's course on 7424 of 16,384 ticks, the log's case on 150 of 150 with a largest step of
+28788; MenuTest 35547 and InterpTest 635 checks, 0 failed; LipsTest 270 with the `.OBJ`
+folder and 243 without, 0 failed - all as before. Not measured: the game.
+
+**Unchanged.** Tank: `ModernUpdateInput` runs only behind `modern_seam`
+(`specific/input.cpp:1289`, `:1420`), which needs `tomb5.control_modern`. The classic
+camera, the HD path and the interpolator: no file of theirs changed. The sniper camera
+itself as the level camera Modern keeps (`sniperCam` and `modernDiscard`,
+`game/camera.cpp:1133`-`1135`), and the reference under it, the measured vector of the
+sniper view. The re-seat under a camera without a cut, which takes the camera of the tick
+as before. The player's own camera turn (step 2a), which moves reference and course
+together, latch or not. The small course steps under the sniper camera between the cuts:
+they are re-seats of the thumb against the measured vector, which turns as she runs past
+the sniper's fixed eye (a median of 146 units of reference in a step of a median 934), and
+they stay as they are.
+
+**Decisions.** The latch drops when the stick is let go, on a tick the translation leaves
+classic (which forgets the course anyway) and when aiming reads the camera fresh, and at
+no other time; there is no timeout. While it stands, a stick rolled to a new direction is
+read against the reference the course was seated on - the camera before the cut - and not
+against the view on the screen; a direction relative to the new view is had by letting go
+and pushing again. A second cut while the latch stands changes nothing, the cut back to
+the first camera included. The signal is the switch of the reference source, not
+`camera.old_type`. The latch ships on.
+
+**Commits.** `dc21121`, `848528c`
 
 ### The pad: radial dead zones, a second binding set and a Modifier for chords
 2026-09-18 - 2026-09-20
@@ -6759,7 +6877,7 @@ pull-up animation (97) backwards, instead of letting her run off. The turn is
 her own turn-on-the-spot animation at the direct turn's rate:
 `MODERN_LEDGE_HALF_TURN` (0x8000) over `MODERN_LEDGE_TURN_TICKS` (6) ticks,
 5461 or 5462 units a tick, `MODERN_TURN_RATE` (5461, 30 degrees) to within a
-unit, so the half turn takes 0.2 s (`game/modern_move.h:420`, `:421`), turning
+unit, so the half turn takes 0.2 s (`game/modern_move.h:439`, `:440`), turning
 to the side `MODERN_LEDGE_TURN_SIDE` (1, right) names (`:428`); the lowering
 steps the pull-up down `MODERN_LEDGE_FRAME_STEP` (3) frames a tick (`:422`);
 the standing line sits
@@ -6869,7 +6987,7 @@ tick's pose at the start of the tween, the current tick's at its end, their
 midpoint at a half. The tween after each animation change, into the pull-up and
 out of it into the hang, stays a tick frame, as everywhere.
 
-**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1720`-`1786`) is the pure
+**How.** `ModernLedgeDecide` (`game/modern_move.cpp:1744`-`1810`) is the pure
 decision for one tick of the move — the turn's ramp, signed by the side, and
 its abort tests, the lowering's frame step and its hand-over — read by
 `lara_as_ledgehang` (`game/lara.cpp:6585`-`6700`), the routine for the new
@@ -6887,8 +7005,8 @@ holds the idle, `ANIM_BREATH`, in the turn phase, as a build before the turn
 animation wrote it, is settled into the hang or a fall like any other that
 cannot go on.
 `ModernTest`'s `ledge_hang()` block
-(`Preparation/Tools/Diagnose/ModernTest.cpp:7861`) and `ledge_trigger()` block
-(`:8184`) check the arithmetic, every turn step within a unit of
+(`Preparation/Tools/Diagnose/ModernTest.cpp:8240`) and `ledge_trigger()` block
+(`:8563`) check the arithmetic, every turn step within a unit of
 `MODERN_TURN_RATE` among it; together with the rest of the suite the count
 grew from 5788 to 10783, 0 failed. One guard at the head of `AnimateLara`
 (`game/laramisc.cpp:502`-`505`, `LaraLedgeReversing`) holds the frame and
@@ -6904,10 +7022,10 @@ the word is composed with the state the last tick ended in
 (`specific/input.cpp:1907`, the family asked at `:1945`), and without
 `IN_ACTION` `LaraHangTest` drops her at once (`game/lara.cpp:5241`). So
 `AS_LEDGEHANG` is in the grab family (`ModernStateIsGrab`,
-`game/modern_move.cpp:612`-`614`, its reasons at `:540`-`545`), and under
+`game/modern_move.cpp:615`-`617`, its reasons at `:543`-`548`), and under
 *Toggle* `ModernGrabLatch` delivers the bit from the turn's first tick on. The
 key memory the run set makes that first tick no fresh press
-(`MODERN_LATCH_KEY`, `game/modern_move.cpp:1292`-`1301`); a savegame restored
+(`MODERN_LATCH_KEY`, `game/modern_move.cpp:1295`-`1304`); a savegame restored
 in the move goes on under *Toggle* without a key, as one restored in any hang
 does, since `InputModeLatchReset` (`game/gameflow.cpp:1119`) clears the let-go
 and keeps the key memory.

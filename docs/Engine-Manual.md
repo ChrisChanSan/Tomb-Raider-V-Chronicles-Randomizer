@@ -436,6 +436,13 @@ camera cut counted in `INTERPLOG`. The same goes for the outside view the game
 cuts to while she lifts a trapdoor or turns a wheel switch: the camera stays
 yours and eases through the animation instead of snapping.
 
+Hold the left stick through the moment the sniper camera takes the view or
+hands it back, and Lara keeps the course she was running: the stick still
+steers her, but against the camera she set off under, until you let go. Push
+again and the stick goes by the view you now see. With `-log`, the `MODERNLOG`
+line of every game tick ends in `cut=1` on the tick the camera changed hands
+and in `latch=1` while such a held course is kept.
+
 ### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 
 These five rows sit together on their own sub-page, **Modes** (German

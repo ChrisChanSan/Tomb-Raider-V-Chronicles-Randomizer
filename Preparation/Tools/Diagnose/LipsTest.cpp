@@ -14,7 +14,7 @@
 /* LipsTest - the lips of the cutscene faces, checked without a game or a
  * device. Build with blips.bat.
  *
- *     LipsTest [<obj folder>]
+ *     LipsTest [<obj folder> [<block folder>]]
  *
  * It compiles the engine's own specific\hd\hd_trm.cpp (the head reader),
  * specific\hd\hd_trl.cpp (the track reader, the map and the deform) and
@@ -45,6 +45,15 @@
  *      and says so.
  *   5. the frame rule over every <FACE>_HEAD_<track>.TRL of 5\ITEM.
  *   6. the end of a clip: ten frames of ease, then the bind.
+ *   7. the loop between lines: where each face's block lies in its .TRM and
+ *      where it loops; the block read from there against its frame 0 and,
+ *      with a <block folder>, against <FACE>_block.TRL exports of the same
+ *      block written by an independent reader, frame by frame; the loop
+ *      mask - the columns outside it stand still over the loop, the
+ *      vertices on no masked joint stay bit for bit over every loop frame,
+ *      a full mask is no mask - and the blinks the loop starts.
+ *   8. the firing face: the ease in and out, the blend from the loop's frame,
+ *      and the firing frame's mouth against its numbers.
  *
  * Besides the checks it prints what the comments in hd_trl.cpp and hd_trl.h
  * quote: how far each face's composed bind stands from its rig, the scale the
@@ -1060,9 +1069,500 @@ static void section_ease()
 		same ? "bit for bit" : "NOT bit for bit");
 }
 
+/* The .TRM a face was read from. */
+static std::string trm_path(const Face* f)
+{
+	return g_bundle + "\\" + f->from + "\\ITEM\\" + f->stem + ".TRM";
+}
+
+/* Every frame of a face's block, read the way the engine reads it: out of the
+ * .TRM from blockAt on. Empty when it does not open. */
+static std::vector<float> block_frames(Face* f)
+{
+	HDTrlClip clip;
+	const char* why = "";
+	std::vector<float> out;
+
+	if (!HDTrlOpenBlock(trm_path(f).c_str(), f->trm.blockAt, f->trm.blockFrames,
+		f->trm.blockColumns, &clip, &why))
+		return out;
+
+	const size_t each = (size_t)f->trm.blockColumns * 12;
+
+	out.resize(each * (size_t)f->trm.blockFrames);
+
+	for (int k = 0; k < f->trm.blockFrames; k++)
+		if (!HDTrlReadFrame(&clip, k, &out[each * (size_t)k]))
+		{
+			out.clear();
+			break;
+		}
+
+	HDTrlClose(&clip);
+	return out;
+}
+
+/* The lip gap of Lara's face: the mean height of the vertices whose heaviest
+ * bone is a lower lip (16, 17) minus that of the upper lip's (14, 15), less
+ * the same at the bind. Positive is open. */
+static double lip_gap(const Face* f, const std::vector<float>& position)
+{
+	double up = 0, low = 0, upBind = 0, lowBind = 0;
+	int ups = 0, lows = 0;
+
+	for (int i = 0; i < f->trm.vertices; i++)
+	{
+		const unsigned char* b = f->trm.ownBone + i * 3;
+		const unsigned char* w = f->trm.ownWeight + i * 3;
+		int k = 0;
+
+		if (w[1] > w[k]) k = 1;
+		if (w[2] > w[k]) k = 2;
+
+		if (b[k] == 14 || b[k] == 15)
+		{
+			up += position[(size_t)i * 3 + 1];
+			upBind += f->position[(size_t)i * 3 + 1];
+			ups++;
+		}
+		else if (b[k] == 16 || b[k] == 17)
+		{
+			low += position[(size_t)i * 3 + 1];
+			lowBind += f->position[(size_t)i * 3 + 1];
+			lows++;
+		}
+	}
+
+	if (!ups || !lows)
+		return 0;
+
+	return (low / lows - up / ups) - (lowBind / lows - upBind / ups);
+}
+
+static void section_loop(const char* blockFolder)
+{
+	printf("\n-- 7. the loop between lines ----------------------------------------\n");
+
+	struct Want
+	{
+		const char* stem;
+		long at;		// 0: printed, not pinned
+		int loop;
+		int frames;
+		int blinks[8];
+		double farthest;	// the farthest vertex over the loop, 0: printed
+	};
+
+	const Want want[] =
+	{
+		{ "LARA_HEAD", 2264, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 6.681 },
+		{ "LARA_CREEPY_HEAD", 0, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 0 },
+		{ "LARA_YOUNG_HEAD", 0, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 0 },
+		{ "LARSON_HEAD", 2648, 300, 301, { 71, 148, 229, -1, -1, -1, -1, -1 }, 4.405 },
+	};
+
+	if (!blockFolder)
+		printf("  (no block folder given: the reads are not compared with an export)\n");
+
+	std::vector<float> laraBlock;
+
+	for (size_t i = 0; i < sizeof(want) / sizeof(want[0]); i++)
+	{
+		const Want& w = want[i];
+		Face* f = face(w.stem);
+
+		check(f->loaded && f->mapped, "%s does not load and map: %s", w.stem, f->why);
+
+		if (!f->loaded || !f->mapped)
+			continue;
+
+		const int columns = f->trm.blockColumns;
+		const size_t each = (size_t)columns * 12;
+
+		printf("%-18s from %s: block at %ld, %d frames, loop %d\n", w.stem,
+			f->from.c_str(), f->trm.blockAt, f->trm.blockFrames, f->trm.blockLoop);
+
+		if (w.at)
+			check(f->trm.blockAt == w.at, "%s's block lies at %ld, %ld wanted", w.stem,
+				f->trm.blockAt, w.at);
+
+		check(f->trm.blockLoop == w.loop && f->trm.blockFrames == w.frames,
+			"%s: loop %d of %d frames, %d of %d wanted", w.stem, f->trm.blockLoop,
+			f->trm.blockFrames, w.loop, w.frames);
+
+		const std::vector<float> all = block_frames(f);
+
+		check(!all.empty(), "%s's block does not open at %ld", w.stem, f->trm.blockAt);
+
+		if (all.empty())
+			continue;
+
+		check(!memcmp(&all[0], f->trm.blockBind, each * sizeof(float)),
+			"%s's frame 0 read at %ld is not blockBind bit for bit", w.stem,
+			f->trm.blockAt);
+
+		/* The same block in the three faces of Lara. */
+		if (i == 0)
+			laraBlock = all;
+		else if (!strncmp(w.stem, "LARA_", 5))
+			check(all == laraBlock, "%s's block is not LARA_HEAD's", w.stem);
+
+		/* Against the independent export, frame by frame. */
+		if (blockFolder)
+		{
+			const std::string path = std::string(blockFolder) + "\\" + w.stem + "_block.TRL";
+			HDTrlClip clip;
+			const char* why = "";
+
+			if (HDTrlOpen(path.c_str(), columns, &clip, &why))
+			{
+				std::vector<float> frame(each);
+				int differ = 0;
+
+				check(clip.frames == f->trm.blockFrames, "%s: the export holds %d "
+					"frames, the block %d", w.stem, clip.frames, f->trm.blockFrames);
+
+				for (int k = 0; k < clip.frames && k < f->trm.blockFrames; k++)
+					if (!HDTrlReadFrame(&clip, k, &frame[0]) ||
+						memcmp(&frame[0], &all[each * (size_t)k], each * sizeof(float)))
+						differ++;
+
+				check(!differ, "%s: %d frames differ from the export", w.stem, differ);
+				printf("  against %s: %d frames, %d differ\n", path.c_str(), clip.frames,
+					differ);
+				HDTrlClose(&clip);
+			}
+			else
+				printf("  (no export %s)\n", path.c_str());
+		}
+
+		const unsigned long long mask = HDLipsLoopMask(w.stem);
+		const unsigned long long lids = HDLipsLidMask(w.stem);
+
+		check(mask != 0 && lids != 0, "%s has no loop mask", w.stem);
+		printf("  mask %llx, lids %llx\n", mask, lids);
+
+		/* The columns outside the mask stand at frame 0 over the loop - the
+		 * data behind playing Lara's brows with her eyes. LARSON's lips move
+		 * in his loop and his mask leaves them out. */
+		int outside = 0;
+
+		for (int k = 1; k < f->trm.blockLoop; k++)
+			for (int c = 0; c < columns; c++)
+				if (!(mask >> c & 1) && memcmp(&all[each * (size_t)k + (size_t)c * 12],
+					&all[(size_t)c * 12], 12 * sizeof(float)))
+				{
+					outside++;
+					break;
+				}
+
+		if (!strncmp(w.stem, "LARA_", 5))
+			check(!outside, "%s: %d loop frames move a column outside the mask",
+				w.stem, outside);
+
+		printf("  loop frames moving a column outside the mask: %d of %d\n", outside,
+			f->trm.blockLoop - 1);
+
+		/* The blinks. */
+		HDTrlClip clip;
+		const char* why = "";
+		int start[16];
+		float lid[16];
+		int blinks = 0;
+
+		if (HDTrlOpenBlock(trm_path(f).c_str(), f->trm.blockAt, f->trm.blockFrames,
+			columns, &clip, &why))
+		{
+			blinks = HDLipsBlinks(&f->map, &clip, f->trm.blockLoop, lids, start, lid, 16);
+			HDTrlClose(&clip);
+		}
+
+		int wanted = 0;
+		bool same = true;
+
+		while (wanted < 8 && w.blinks[wanted] >= 0)
+			wanted++;
+
+		same = blinks == wanted;
+
+		for (int b = 0; b < blinks && same; b++)
+			same = start[b] == w.blinks[b];
+
+		check(same, "%s: %d blinks, %d wanted", w.stem, blinks, wanted);
+		printf("  blinks:");
+
+		for (int b = 0; b < blinks; b++)
+			printf(" %d (%.1f)", start[b], lid[b]);
+
+		printf("\n");
+
+		/* The mask over every loop frame: a vertex that moves has weight on a
+		 * joint a masked column drives, and none else moves by a bit, neither
+		 * its position nor its normal. */
+		bool onMasked[256];
+
+		for (int j = 0; j < 256; j++)
+			onMasked[j] = false;
+
+		for (int c = 0; c < f->map.columns; c++)
+			if ((mask >> c & 1) && f->map.joint[c] >= 0)
+				onMasked[f->map.joint[c]] = true;
+
+		std::vector<float> outPosition((size_t)f->trm.vertices * 3);
+		std::vector<unsigned char> outNormal((size_t)f->trm.vertices * 3);
+		int strays = 0, moved = 0;
+		double farthest = 0;
+		std::vector<bool> ever((size_t)f->trm.vertices, false);
+
+		for (int k = 0; k < f->trm.blockLoop; k++)
+		{
+			HDLipsSkins(&f->map, &all[each * (size_t)k], 1.0, &f->skins[0], mask,
+				f->trm.blockBind);
+
+			const double far = HDLipsDeform(&f->skins[0], f->map.rigJoints,
+				f->trm.vertices, &f->position[0], &f->normal[0], f->trm.ownBone,
+				f->trm.ownWeight, &outPosition[0], &outNormal[0]);
+
+			farthest = far > farthest ? far : farthest;
+
+			for (int v = 0; v < f->trm.vertices; v++)
+			{
+				const size_t at = (size_t)v * 3;
+
+				if (outPosition[at] == f->position[at] &&
+					outPosition[at + 1] == f->position[at + 1] &&
+					outPosition[at + 2] == f->position[at + 2] &&
+					outNormal[at] == f->normal[at] && outNormal[at + 1] == f->normal[at + 1] &&
+					outNormal[at + 2] == f->normal[at + 2])
+					continue;
+
+				const unsigned char* b = f->trm.ownBone + at;
+				const unsigned char* wt = f->trm.ownWeight + at;
+
+				if (!((wt[0] && onMasked[b[0]]) || (wt[1] && onMasked[b[1]]) ||
+					(wt[2] && onMasked[b[2]])))
+					strays++;
+
+				if (!ever[(size_t)v])
+				{
+					ever[(size_t)v] = true;
+					moved++;
+				}
+			}
+		}
+
+		check(!strays, "%s: %d vertices off the masked joints move", w.stem, strays);
+
+		if (w.farthest > 0)
+			check(fabs(farthest - w.farthest) < 0.0005, "%s: the farthest vertex "
+				"of the loop moves %.4f units, %.3f wanted", w.stem, farthest,
+				w.farthest);
+
+		printf("  over %d loop frames: %d of %d vertices move, %d of them off the "
+			"masked joints; the farthest %.4f units\n", f->trm.blockLoop, moved,
+			f->trm.vertices, strays, farthest);
+
+		/* A mask of every column is no mask, bit for bit, and so is a mask
+		 * without a bind - at a blink and at the firing frame. */
+		const unsigned long long every = columns >= 64 ? ~0ull : (1ull << columns) - 1;
+		std::vector<double> plain(f->skins.size()), full(f->skins.size()),
+			unbound(f->skins.size());
+		const int probes[2] = { w.blinks[0] + 1, f->trm.blockFrames - 1 };
+
+		for (int p = 0; p < 2; p++)
+		{
+			const float* frame = &all[each * (size_t)probes[p]];
+
+			HDLipsSkins(&f->map, frame, 1.0, &plain[0]);
+			HDLipsSkins(&f->map, frame, 1.0, &full[0], every, f->trm.blockBind);
+			HDLipsSkins(&f->map, frame, 1.0, &unbound[0], mask, 0);
+
+			check(plain == full && plain == unbound, "%s frame %d: a full mask or "
+				"no bind is not the frame bit for bit", w.stem, probes[p]);
+		}
+	}
+
+	/* Every other face: no loop. */
+	const char* others[] =
+	{
+		"ADMIRAL_HEAD", "BLUE_GUARD_HEAD", "DEMON_HEAD", "HANGMAN_HEAD",
+		"PATRICK_BROWN_HEAD", "PATRICK_WHITE_HEAD", "PIERRE_HEAD", "SERGIE_HEAD",
+		"VON_CROY_ELDER_HEAD", "VON_CROY_SENIOR_HEAD", "ZIP_HEAD"
+	};
+
+	for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++)
+	{
+		Face* f = face(others[i]);
+
+		check(!HDLipsLoopMask(others[i]) && !HDLipsLidMask(others[i]),
+			"%s has a loop mask", others[i]);
+
+		if (f->loaded)
+			printf("%-22s block of %d frames, loop %d, mask 0\n", others[i],
+				f->trm.blockFrames, f->trm.blockLoop);
+	}
+}
+
+static void section_fire()
+{
+	printf("\n-- 8. the firing face -----------------------------------------------\n");
+
+	/* The ease in: a third a tick, from the tick the swap comes on. */
+	check(HDLipsEaseIn(-1) == 0.0 && HDLipsEaseIn(0) == 1.0 / 3.0 &&
+		HDLipsEaseIn(1) == 2.0 / 3.0 && HDLipsEaseIn(2) == 1.0 &&
+		HDLipsEaseIn(3) == 1.0 && HDLipsEaseIn(1000) == 1.0,
+		"the ease in is not 1/3, 2/3, 1");
+
+	/* The steps: up a tick while on, down a tick while off, several ticks at
+	 * once where the draws skipped some, and a release half way in going
+	 * back from where it stood. */
+	int s = 0;
+	int seen[8];
+
+	for (int t = 0; t < 4; t++)
+		seen[t] = s = HDLipsFireStep(s, true, 1);
+
+	for (int t = 4; t < 8; t++)
+		seen[t] = s = HDLipsFireStep(s, false, 1);
+
+	check(seen[0] == 1 && seen[1] == 2 && seen[2] == 3 && seen[3] == 3 &&
+		seen[4] == 2 && seen[5] == 1 && seen[6] == 0 && seen[7] == 0,
+		"the steps on and off are %d %d %d %d / %d %d %d %d", seen[0], seen[1],
+		seen[2], seen[3], seen[4], seen[5], seen[6], seen[7]);
+	check(HDLipsFireStep(0, true, 5) == 3 && HDLipsFireStep(3, false, 2) == 1 &&
+		HDLipsFireStep(1, false, 1) == 0 && HDLipsFireStep(1, true, 1) == 2 &&
+		HDLipsFireStep(2, true, 0) == 2, "several ticks at once step wrongly");
+
+	for (int t = 0; t < 4; t++)
+		check(HDLipsFireStep(0, true, t + 1) / (double)HD_LIPS_EASE_IN_TICKS ==
+			HDLipsEaseIn(t), "step and ease in disagree at tick %d", t);
+
+	Face* f = face("LARA_HEAD");
+
+	if (!f->mapped)
+		return;
+
+	const std::vector<float> all = block_frames(f);
+	const size_t each = (size_t)f->trm.blockColumns * 12;
+
+	check(all.size() == each * 508, "LARA_HEAD's block does not read");
+
+	if (all.size() != each * 508)
+		return;
+
+	/* The firing frame and the shout beside it, against report A's numbers:
+	 * the lips apart, the jaw's turn (column 11) and the chin's. */
+	struct Pose
+	{
+		int frame;
+		double gap;
+		double jaw;
+	};
+
+	const Pose poses[2] = { { HD_LIPS_FIRE_FRAME, 4.08, 0.0 }, { 506, 9.36, 10.89 } };
+	Result full;
+
+	for (int p = 0; p < 2; p++)
+	{
+		const float* frame = &all[each * (size_t)poses[p].frame];
+		Result r;
+
+		deform(f, frame, 1.0, r);
+
+		const double gap = lip_gap(f, r.position);
+		const double jaw = HDLipsTurn(&f->map, frame, 11);
+
+		check(fabs(gap - poses[p].gap) < 0.01 && fabs(jaw - poses[p].jaw) < 0.01,
+			"block frame %d: lips %.3f apart, jaw %.3f degrees; %.2f and %.2f "
+			"wanted", poses[p].frame, gap, jaw, poses[p].gap, poses[p].jaw);
+		printf("block frame %d: the lips %+.2f units apart, the jaw %.2f degrees, the "
+			"farthest vertex %.4f units, %d past a unit\n", poses[p].frame, gap, jaw,
+			r.farthest, r.overOne);
+
+		if (!p)
+			full = r;
+	}
+
+	check(fabs(full.farthest - 3.9736) < 0.0005, "the firing frame's farthest "
+		"vertex moves %.4f units", full.farthest);
+
+	/* The blend. From the bind it is HDLipsSkins's own ease bit for bit,
+	 * every vertex on the straight line; at 0 it is the bind bit for bit.
+	 * From the loop's frame 93 (the upper lids 25.3 degrees closed) at a
+	 * third, the eyes stand between the two. */
+	const float* fire = &all[each * HD_LIPS_FIRE_FRAME];
+	std::vector<double> identity(f->skins.size()), to(f->skins.size()),
+		eased(f->skins.size()), blended(f->skins.size());
+
+	HDLipsSkins(&f->map, 0, 1.0, &identity[0]);
+	HDLipsSkins(&f->map, fire, 1.0, &to[0]);
+
+	double worst = 0;
+
+	for (int t = 0; t <= HD_LIPS_EASE_IN_TICKS; t++)
+	{
+		const double amount = (double)t / HD_LIPS_EASE_IN_TICKS;
+
+		HDLipsSkins(&f->map, fire, amount, &eased[0]);
+		HDLipsSkinsBlend(&identity[0], &to[0], amount, f->map.rigJoints, &blended[0]);
+
+		check(eased == blended, "the blend from the bind at %d/%d is not the ease",
+			t, HD_LIPS_EASE_IN_TICKS);
+
+		std::vector<float> position((size_t)f->trm.vertices * 3);
+		std::vector<unsigned char> normal((size_t)f->trm.vertices * 3);
+		const double far = HDLipsDeform(&blended[0], f->map.rigJoints, f->trm.vertices,
+			&f->position[0], &f->normal[0], f->trm.ownBone, f->trm.ownWeight,
+			&position[0], &normal[0]);
+
+		worst = std::max(worst, fabs(far - amount * full.farthest));
+		printf("  step %d: %.3f of the way, the farthest vertex %.4f units\n", t, amount,
+			far);
+
+		if (!t)
+			check(position == f->position && normal == f->normal && far == 0.0,
+				"step 0 is not the bind bit for bit");
+	}
+
+	check(worst < 1e-9 * (1.0 + full.farthest), "the blend leaves the line by %.2e",
+		worst);
+
+	const unsigned long long mask = HDLipsLoopMask("LARA_HEAD");
+	std::vector<double> from(f->skins.size());
+
+	HDLipsSkins(&f->map, &all[each * 93], 1.0, &from[0], mask, f->trm.blockBind);
+	HDLipsSkinsBlend(&from[0], &to[0], 1.0 / 3.0, f->map.rigJoints, &blended[0]);
+
+	/* The upper lid's turn, read back out of the blended skin of its joint
+	 * (column 12 drives joint 19). */
+	const int lidJoint = f->map.joint[12];
+	const double lidFrom = HDLipsTurn(&f->map, &all[each * 93], 12);
+	const double lidTo = HDLipsTurn(&f->map, fire, 12);
+	double lidMid = 0;
+
+	{
+		const double* m = &blended[(size_t)lidJoint * 12];
+		const double det = m[0] * (m[5] * m[10] - m[6] * m[9]) -
+			m[1] * (m[4] * m[10] - m[6] * m[8]) + m[2] * (m[4] * m[9] - m[5] * m[8]);
+		const double sc = cbrt(fabs(det));
+		double c = ((m[0] + m[5] + m[10]) / sc - 1.0) / 2.0;
+
+		c = c < -1 ? -1 : c > 1 ? 1 : c;
+		lidMid = acos(c) * 180.0 / 3.14159265358979323846;
+	}
+
+	check(lidJoint == 19 && lidMid < std::max(lidFrom, lidTo) + 0.5 &&
+		lidMid > std::min(lidFrom, lidTo) - 0.5, "a third of the way from frame 93 "
+		"the upper lid turns %.2f degrees, between %.2f and %.2f wanted", lidMid,
+		lidFrom, lidTo);
+	printf("from loop frame 93 (upper lid %.2f degrees) a third of the way to the "
+		"firing frame (%.2f): %.2f\n", lidFrom, lidTo, lidMid);
+}
+
 int main(int argc, char** argv)
 {
 	const char* objFolder = argc > 1 ? argv[1] : 0;
+	const char* blockFolder = argc > 2 ? argv[2] : 0;
 
 	g_root5 = HDInstallRoot();
 
@@ -1086,6 +1586,8 @@ int main(int argc, char** argv)
 	section_obj(objFolder);
 	section_frames();
 	section_ease();
+	section_loop(blockFolder);
+	section_fire();
 
 	for (std::map<std::string, Face*>::iterator at = g_faces.begin(); at != g_faces.end(); ++at)
 	{

@@ -60,6 +60,7 @@ struct HDTrlClip
 	int columns;
 	unsigned int word;	// the file's first word as it stands
 	bool lowWord;		// the frame count is its low half
+	long at;		// where frame 0 lies: 4 in a track file
 };
 
 /* The frame rule on its own: how many frames of `columns` matrices a file of
@@ -74,6 +75,14 @@ bool HDTrlFrames(unsigned int word, unsigned long long bytes, int columns,
  * names the reason ("columns" when the file holds no whole number of frames of
  * that many columns) and nothing stays open. */
 bool HDTrlOpen(const char* path, int columns, HDTrlClip* out, const char** why);
+
+/* Opens the joint block a head's own .TRM carries as a clip: `frames` frames
+ * of `columns` matrices from byte `at` on - HDTrmModel::blockAt, blockFrames
+ * and blockColumns. The frames are the same 3x4 matrices a track file holds
+ * and read the same way; frame 0 is the face's bind (HDTrmModel::blockBind).
+ * False, with *why, when the file is shorter than the block. */
+bool HDTrlOpenBlock(const char* trmPath, long at, int frames, int columns,
+	HDTrlClip* out, const char** why);
 
 // One frame, columns * 12 floats. A frame past either end is clamped.
 bool HDTrlReadFrame(HDTrlClip* clip, int frame, float* out);
@@ -143,9 +152,105 @@ void HDLipsCompose(const HDLipsMap* map, const float* frame, double* global);
 
 /* The skins of one frame: rigJoints * 12 doubles, 3x4 row-major, S_j of every
  * rig joint. `amount` blends each towards the identity - 1 is the frame, 0 the
- * bind - for the ease at the end of a clip. */
+ * bind - for the ease at the end of a clip.
+ *
+ * `mask` plays only some of the frame's columns, bit c for column c: a column
+ * outside it takes the local matrix `bind` holds for it (columns * 12 floats,
+ * the block's frame 0) before the columns are composed, and the joint it
+ * drives keeps the identity, so the vertices on no masked joint are copied
+ * bit for bit (HDLipsDeform). A mask that holds every column, or no `bind`,
+ * is the whole frame, exactly as without them. */
 void HDLipsSkins(const HDLipsMap* map, const float* frame, double amount,
-	double* skins);
+	double* skins, unsigned long long mask = ~0ull, const float* bind = 0);
+
+/* The turn of one column from the bind at a frame, in degrees: the column's
+ * composed matrix times the inverse of its composed bind, its scale taken out
+ * (the cube root of the determinant). */
+double HDLipsTurn(const HDLipsMap* map, const float* frame, int column);
+
+/* ------------------------------------------------ the loop between lines --
+ *
+ * The block a head's .TRM carries past its frame 0 (HDTrmModel::blockLoop)
+ * is, in four faces, a loop of the eyes. Measured on the IV-VI install:
+ *
+ *   LARA_HEAD, LARA_CREEPY_HEAD, LARA_YOUNG_HEAD (4\ITEM, the same block):
+ *     frames 0-498 move the eyes and the brows alone - blinks peaking at
+ *     92, 138, 199, 255, 315 and 323, 422, 469 with the upper lids 29-30
+ *     degrees closed, glances of the eyeballs up to 9.7 degrees, the brows
+ *     up to 5.9 degrees - while the ten mouth columns, the nostrils and the
+ *     cheeks stay at the bind to 0.000 degrees; 499 and 500 are frame 0
+ *     again, and 501-507 are seven single key poses, not motion.
+ *   LARSON_HEAD (5\ITEM): 300 frames with blinks at 72, 149 and 230, and
+ *     two slow presses of the lips (frames 28-117 and 137-247: lips 8.0
+ *     degrees, the jaw 1.1) that are no part of a face at rest.
+ *
+ * So the loop plays through a mask of columns, a table keyed on the face
+ * file's name like the axis table: Lara's eye columns 12-15, 22 and 23
+ * (joints 19-22 the lids, 29 and 30 the eyeballs) and her brow columns 16-21
+ * with the helper columns they hang off, 26-29, 33 and 34 - frames 0-498
+ * played in full equal that mask bit for bit, and the mask keeps a file
+ * whose loop moves the mouth from moving it; LARSON's eye columns 12-15
+ * alone (joints 27-30). Every other face: 0, no loop. */
+unsigned long long HDLipsLoopMask(const char* stem);
+
+/* The upper lids of a face with a loop - columns 12 and 13 in all four - for
+ * the blinks, and 0 for every other face. */
+unsigned long long HDLipsLidMask(const char* stem);
+
+/* A block shorter than this plays no loop: a second at thirty frames. */
+#define HD_LIPS_LOOP_MIN	30
+
+/* A blink starts on the first frame of the loop whose upper lids stand more
+ * than this far from the bind (the larger of the lid columns' HDLipsTurn),
+ * the frame before them not: LARA_HEAD 92, 137, 198, 254, 314, 322, 420 and
+ * 468, LARSON_HEAD 71, 148 and 229. Each peak lies on its start or up to two
+ * frames after it, at 20.6-30.2 degrees in LARA_HEAD and 27.5 in
+ * LARSON_HEAD. */
+#define HD_LIPS_BLINK_DEGREES	15.0
+
+/* The blinks of a loop of `loop` frames read out of `clip`, into `start`
+ * (the frame) and `lid` (the lids' turn there, degrees), at most `max`.
+ * Returns how many; frame 0 is compared against the loop's last frame. */
+int HDLipsBlinks(const HDLipsMap* map, HDTrlClip* clip, int loop,
+	unsigned long long lids, int* start, float* lid, int max);
+
+/* ------------------------------------------------------ the firing face --
+ *
+ * The classic game puts LARA_SCREAM's head on Lara while the fire key is held
+ * with a gun ready (game\larafire.cpp, LaraGun, LG_READY) and for 16 ticks
+ * after each shot a cutscene fires (game\deltapak.cpp, deal_with_pistols).
+ * That head is LARA_SKIN's with the same vertices and other paint: bared,
+ * clenched teeth, the lips drawn back.
+ *
+ * Its HD counterpart is a single key pose of Lara's block: frame 501, the
+ * clenched teeth with knitted brows (the lower lip 25.8 degrees, the corners
+ * 19.5, the lips 4.08 units apart, the jaw at 0). Frame 506 is the other
+ * candidate, a shout with the mouth wide open (the jaw 10.89 degrees, the lips
+ * 9.36 units apart). Only the faces with a loop have the frame. */
+#define HD_LIPS_FIRE_FRAME	501
+
+/* The classic swap is instant; three ticks soften it without lagging behind
+ * it: the first tick shows a third of the way. */
+#define HD_LIPS_EASE_IN_TICKS	3
+
+/* How far the firing face is shown `ticks` ticks after the swap came on:
+ * (ticks + 1) / HD_LIPS_EASE_IN_TICKS up to 1, and 0 before it. */
+double HDLipsEaseIn(int ticks);
+
+/* The step of the firing face, 0 .. HD_LIPS_EASE_IN_TICKS, `ticks` ticks on
+ * from `step`: up by one a tick while the swap is on, down by one while it is
+ * off. step / HD_LIPS_EASE_IN_TICKS is how far the face stands towards the
+ * firing frame; the tick the swap comes on is the first step. */
+int HDLipsFireStep(int step, bool on, int ticks);
+
+/* The skins `t` of the way from `from` to `to`, rigJoints * 12 doubles each,
+ * element by element: from + t * (to - from), `to` itself at t = 1 and `from`
+ * itself at t = 0. From the identities it is the ease of HDLipsSkins to the
+ * last bit, so every vertex moves on the straight line between the two
+ * poses - the firing face comes on out of the loop's frame of the moment and
+ * goes back into it. */
+void HDLipsSkinsBlend(const double* from, const double* to, double t,
+	int rigJoints, double* out);
 
 /* What a face shows at a cutscene frame, for a clip of `frames` frames.
  *

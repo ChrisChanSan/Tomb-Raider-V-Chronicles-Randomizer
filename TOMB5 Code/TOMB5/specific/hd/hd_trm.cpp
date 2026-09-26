@@ -142,8 +142,9 @@ namespace
 	/* A head's block of joint animation, from `at` (right behind the rig's
 	 * matrices) to `end` (where the rescan found the geometry). The layout
 	 * and the test are in hd_trm.h at HDTrmModel::rigBind. Keeps the header's
-	 * parents and columns and frame 0; false, with nothing kept, when the
-	 * header and the frames do not end exactly at `end`. */
+	 * parents and columns, frame 0, where frame 0 lies in the file and the
+	 * first frame equal to it; false, with nothing kept, when the header and
+	 * the frames do not end exactly at `end`. */
 	bool keep_block(const std::vector<unsigned char>& bytes, size_t at,
 		size_t end, HDTrmModel* model)
 	{
@@ -192,6 +193,22 @@ namespace
 		std::memcpy(model->blockParent, &bytes[parents_at], (size_t)nodes * 4);
 		std::memcpy(model->blockColumn, &bytes[columns_at + 4], (size_t)columns * 4);
 		std::memcpy(model->blockBind, &bytes[frames_at], (size_t)columns * 48);
+
+		/* The loop: the first frame that is frame 0 again, byte for byte. A
+		 * block whose frames never come back to 0 is no loop. */
+		const size_t frame_bytes = (size_t)columns * 48;
+
+		model->blockAt = (long)frames_at;
+		model->blockLoop = 0;
+
+		for (unsigned int f = 1; f < frames; f++)
+			if (!std::memcmp(&bytes[frames_at], &bytes[frames_at + f * frame_bytes],
+				frame_bytes))
+			{
+				model->blockLoop = (int)f;
+				break;
+			}
+
 		return true;
 	}
 

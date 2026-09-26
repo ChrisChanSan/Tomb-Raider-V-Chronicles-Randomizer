@@ -138,6 +138,27 @@ namespace
 		{ "ZIP_HEAD", HD_LIPS_AXIS_REFUSED },
 	};
 
+	/* The loop between lines - see HDLipsLoopMask in hd_trl.h for the
+	 * measurement. Bit c is column c of the face's block. */
+	const unsigned long long kLaraEyes = 0xF000ull | 1ull << 22 | 1ull << 23;
+	const unsigned long long kLaraBrows = 0x3F0000ull | 1ull << 26 | 1ull << 27 |
+		1ull << 28 | 1ull << 29 | 1ull << 33 | 1ull << 34;
+	const unsigned long long kUpperLids = 1ull << 12 | 1ull << 13;
+
+	struct LoopOfFace
+	{
+		const char* stem;
+		unsigned long long mask;
+	};
+
+	const LoopOfFace g_loop[] =
+	{
+		{ "LARA_HEAD", kLaraEyes | kLaraBrows },
+		{ "LARA_CREEPY_HEAD", kLaraEyes | kLaraBrows },
+		{ "LARA_YOUNG_HEAD", kLaraEyes | kLaraBrows },
+		{ "LARSON_HEAD", 0xF000ull },
+	};
+
 	bool same_name(const char* a, const char* b)
 	{
 		for (; *a && *b; a++, b++)
@@ -277,6 +298,63 @@ bool HDTrlOpen(const char* path, int columns, HDTrlClip* out, const char** why)
 	out->columns = columns;
 	out->word = word;
 	out->lowWord = low;
+	out->at = 4;
+	return true;
+}
+
+bool HDTrlOpenBlock(const char* trmPath, long at, int frames, int columns,
+	HDTrlClip* out, const char** why)
+{
+	static const char* nothing = "";
+	const char* dummy = nothing;
+
+	if (!why)
+		why = &dummy;
+	*why = nothing;
+
+	if (!out)
+	{
+		*why = "no clip to open into";
+		return false;
+	}
+
+	std::memset(out, 0, sizeof(*out));
+
+	if (at <= 0 || frames <= 0 || columns <= 0)
+	{
+		*why = "no block";
+		return false;
+	}
+
+	std::FILE* file = trmPath && *trmPath ? std::fopen(trmPath, "rb") : 0;
+
+	if (!file)
+	{
+		*why = "no file";
+		return false;
+	}
+
+	long bytes = -1;
+
+	if (std::fseek(file, 0, SEEK_END) == 0)
+		bytes = std::ftell(file);
+
+	const unsigned long long need = (unsigned long long)at +
+		(unsigned long long)frames * (unsigned long long)columns * kMatrixBytes;
+
+	if (bytes < 0 || (unsigned long long)bytes < need)
+	{
+		std::fclose(file);
+		*why = "too short";
+		return false;
+	}
+
+	out->file = file;
+	out->frames = frames;
+	out->columns = columns;
+	out->word = (unsigned int)frames;
+	out->lowWord = false;
+	out->at = at;
 	return true;
 }
 
@@ -292,7 +370,7 @@ bool HDTrlReadFrame(HDTrlClip* clip, int frame, float* out)
 		frame = clip->frames - 1;
 
 	const size_t bytes = (size_t)clip->columns * (size_t)kMatrixBytes;
-	const long at = 4 + (long)frame * (long)bytes;
+	const long at = clip->at + (long)frame * (long)bytes;
 
 	if (std::fseek(clip->file, at, SEEK_SET) != 0)
 		return false;
@@ -515,7 +593,7 @@ void HDLipsCompose(const HDLipsMap* map, const float* frame, double* global)
 }
 
 void HDLipsSkins(const HDLipsMap* map, const float* frame, double amount,
-	double* skins)
+	double* skins, unsigned long long mask, const float* bind)
 {
 	if (!map || !skins)
 		return;
@@ -525,6 +603,24 @@ void HDLipsSkins(const HDLipsMap* map, const float* frame, double amount,
 
 	if (!frame || map->columns <= 0)
 		return;
+
+	/* The mask: the columns outside it stand at the bind's locals, so the
+	 * masked columns hanging off them compose as they would at the bind,
+	 * and their joints keep the identity rather than a composed bind times
+	 * its own inverse, which is the identity only to the last bit. */
+	const unsigned long long every = map->columns >= 64 ? ~0ull
+		: (1ull << map->columns) - 1;
+	const bool masked = bind && (mask & every) != every;
+	float mixed[HD_LIPS_MAX_COLUMNS * 12];
+
+	if (masked)
+	{
+		for (int c = 0; c < map->columns; c++)
+			std::memcpy(mixed + c * 12, (mask >> c & 1) ? frame + c * 12
+				: bind + c * 12, sizeof(float) * 12);
+
+		frame = mixed;
+	}
 
 	double global[HD_LIPS_MAX_COLUMNS * 12];
 	double a[9];
@@ -539,6 +635,9 @@ void HDLipsSkins(const HDLipsMap* map, const float* frame, double amount,
 		const int j = map->joint[c];
 
 		if (j < 0 || j >= map->rigJoints)
+			continue;
+
+		if (masked && !(mask >> c & 1))
 			continue;
 
 		double d[12];
@@ -591,6 +690,151 @@ void HDLipsSkins(const HDLipsMap* map, const float* frame, double amount,
 				s[i] = one[i] + amount * (s[i] - one[i]);
 		}
 	}
+}
+
+double HDLipsTurn(const HDLipsMap* map, const float* frame, int column)
+{
+	if (!map || !frame || column < 0 || column >= map->columns)
+		return 0.0;
+
+	double global[HD_LIPS_MAX_COLUMNS * 12];
+	double d[12];
+
+	HDLipsCompose(map, frame, global);
+	multiply(global + column * 12, map->bindInverse[column], d);
+
+	const double det = d[0] * (d[5] * d[10] - d[6] * d[9]) -
+		d[1] * (d[4] * d[10] - d[6] * d[8]) + d[2] * (d[4] * d[9] - d[5] * d[8]);
+	const double s = std::cbrt(std::fabs(det));
+
+	if (!(s > 0.0))
+		return 0.0;
+
+	double c = ((d[0] + d[5] + d[10]) / s - 1.0) / 2.0;
+
+	c = c < -1.0 ? -1.0 : c > 1.0 ? 1.0 : c;
+	return std::acos(c) * 180.0 / 3.14159265358979323846;
+}
+
+/* ------------------------------------------- the loop between lines -- */
+
+unsigned long long HDLipsLoopMask(const char* stem)
+{
+	for (size_t i = 0; i < sizeof(g_loop) / sizeof(g_loop[0]); i++)
+		if (stem && same_name(stem, g_loop[i].stem))
+			return g_loop[i].mask;
+
+	return 0;
+}
+
+unsigned long long HDLipsLidMask(const char* stem)
+{
+	return HDLipsLoopMask(stem) ? kUpperLids : 0;
+}
+
+int HDLipsBlinks(const HDLipsMap* map, HDTrlClip* clip, int loop,
+	unsigned long long lids, int* start, float* lid, int max)
+{
+	if (!map || !clip || !clip->file || loop <= 1 || !lids || max <= 0 ||
+		map->columns <= 0 || map->columns > HD_LIPS_MAX_COLUMNS)
+		return 0;
+
+	/* The lids' turn at every frame of the loop, then the frames where it
+	 * crosses the threshold upwards - the frame before frame 0 being the
+	 * loop's last. */
+	float frame[HD_LIPS_MAX_COLUMNS * 12];
+	double* turn = new double[(size_t)loop];
+
+	for (int f = 0; f < loop; f++)
+	{
+		turn[f] = 0.0;
+
+		if (!HDTrlReadFrame(clip, f, frame))
+			continue;
+
+		for (int c = 0; c < map->columns && c < 64; c++)
+			if (lids >> c & 1)
+			{
+				const double t = HDLipsTurn(map, frame, c);
+
+				if (t > turn[f])
+					turn[f] = t;
+			}
+	}
+
+	int count = 0;
+
+	for (int f = 0; f < loop && count < max; f++)
+	{
+		const double before = turn[f ? f - 1 : loop - 1];
+
+		if (turn[f] > HD_LIPS_BLINK_DEGREES && !(before > HD_LIPS_BLINK_DEGREES))
+		{
+			if (start)
+				start[count] = f;
+			if (lid)
+				lid[count] = (float)turn[f];
+			count++;
+		}
+	}
+
+	delete[] turn;
+	return count;
+}
+
+/* ------------------------------------------------- the firing face -- */
+
+double HDLipsEaseIn(int ticks)
+{
+	if (ticks < 0)
+		return 0.0;
+
+	if (ticks + 1 >= HD_LIPS_EASE_IN_TICKS)
+		return 1.0;
+
+	return (double)(ticks + 1) / (double)HD_LIPS_EASE_IN_TICKS;
+}
+
+int HDLipsFireStep(int step, bool on, int ticks)
+{
+	if (ticks < 0)
+		ticks = 0;
+
+	if (step < 0)
+		step = 0;
+
+	if (step > HD_LIPS_EASE_IN_TICKS)
+		step = HD_LIPS_EASE_IN_TICKS;
+
+	if (on)
+		return ticks >= HD_LIPS_EASE_IN_TICKS - step ? HD_LIPS_EASE_IN_TICKS
+			: step + ticks;
+
+	return ticks >= step ? 0 : step - ticks;
+}
+
+void HDLipsSkinsBlend(const double* from, const double* to, double t,
+	int rigJoints, double* out)
+{
+	if (!from || !to || !out || rigJoints <= 0)
+		return;
+
+	const int count = rigJoints * 12;
+
+	if (t == 1.0)
+	{
+		std::memcpy(out, to, sizeof(double) * (size_t)count);
+		return;
+	}
+
+	if (t == 0.0)
+	{
+		std::memcpy(out, from, sizeof(double) * (size_t)count);
+		return;
+	}
+
+	for (int i = 0; i < count; i++)
+		out[i] = from[i] + t * (to[i] - from[i]);
 }
 
 /* ---------------------------------------------------- what is shown -- */

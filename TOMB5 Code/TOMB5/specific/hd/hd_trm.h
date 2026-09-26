@@ -171,8 +171,18 @@ struct HDTrmModel
 	 * node column[c]; parent[n] is the node n hangs off, -1 for none. A
 	 * column's matrix is LOCAL to its parent's. id[] is not read. Frame 0 is
 	 * the pose the face was bound in and is what `blockBind` keeps, C
-	 * matrices; the frames after it (LARA_HEAD's 507, an idle loop) are
-	 * not kept.
+	 * matrices. The frames after it are not held in memory - LARA_HEAD's
+	 * whole block is 975,360 bytes of frames - but `blockAt` is where
+	 * frame 0 lies in the file, so a reader can stream them (hd_trl.h,
+	 * HDTrlOpenBlock): 2264 in LARA_HEAD.TRM, 2648 in LARSON_HEAD.TRM.
+	 *
+	 * `blockLoop` is the first frame after 0 whose C matrices equal frame
+	 * 0's byte for byte, and 0 where no frame does: the block's frames
+	 * 0 .. blockLoop - 1 are then one loop. 499 in LARA_HEAD,
+	 * LARA_CREEPY_HEAD and LARA_YOUNG_HEAD (508 frames: 0-498 a loop of
+	 * the eyes and the brows, 499 and 500 equal to 0, 501-507 seven
+	 * single key poses), 300 in LARSON_HEAD (301 frames); the other
+	 * rigged heads' blocks hold two to four frames and get 1 or 0.
 	 *
 	 * `ownBone` / `ownWeight` are every vertex's three bones and three
 	 * weights as the file writes them, three bytes a vertex. The model code
@@ -189,6 +199,8 @@ struct HDTrmModel
 	int* blockColumn;
 	int blockFrames;
 	float* blockBind;
+	long blockAt;
+	int blockLoop;
 	unsigned char* ownBone;
 	unsigned char* ownWeight;
 };

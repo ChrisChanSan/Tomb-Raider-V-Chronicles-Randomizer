@@ -6104,6 +6104,365 @@ static void sweeps()
 	}
 }
 
+/* ------------------------------------------------ the cut and its latch --- */
+
+/* The stick at full push in the direction `off` (0 straight ahead, 0x4000
+ * right), in the pad's own axes: x right-positive, y forward-negative. */
+static void stick_at(long off, long* x, long* y)
+{
+	const double rad = (double)off * 3.14159265358979323846 / 32768.0;
+
+	*x = roundl2(127.0 * sin(rad));
+	*y = -roundl2(127.0 * cos(rad));
+}
+
+/* A thumb that is never still: the direction walks 60 units a tick out to 600
+ * either side of `base` and back, a triangle of 40 ticks. 60 is the median
+ * stick step of the held ticks in the rich2 MODERNLOG through the sniper
+ * camera (61 over 2199 ticks); 600 carries the direction past cfg.recenter's
+ * 384 twice a period, so the held course is re-seated over and over. */
+static long thumb(long base, long t)
+{
+	const long p = t % 40;
+
+	if (p < 10)
+		return base + p * 60;
+
+	if (p < 30)
+		return base + (20 - p) * 60;
+
+	return base + (p - 40) * 60;
+}
+
+/* One hold through camera cuts, run twice side by side: `cut` sees the
+ * reference jump to cam1 on tick `at1` and to cam2 on tick `at2`, with
+ * cam_cut set on those two ticks; `still` keeps cam0 all along. Both get the
+ * same thumb. Returns the ticks from `at1` on where the two courses differ,
+ * split at `at2`; `biggest` is the cut run's largest course step after the
+ * first cut, `moved` the ticks it moved at all, `latched` the ticks the latch
+ * stood from the first cut on, `early` the ticks it stood before it. */
+static void cut_twin(const MODERN_CFG* cfg, long base, short cam0, short cam1, short cam2,
+	long at1, long at2, long ticks, MODERN_STATE* cut, long* differ1, long* differ2,
+	long* biggest, long* moved, long* latched, long* early)
+{
+	MODERN_STATE still;
+	MODERN_SITUATION sit;
+	MODERN_RESULT oc, os;
+	long t;
+
+	sit.anim_state = 1;					/* AS_RUN */
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+	sit.cam_player_step = 0;
+
+	ModernResetState(cut);
+	ModernResetState(&still);
+	*differ1 = *differ2 = *biggest = *moved = *latched = *early = 0;
+
+	for (t = 0; t < ticks; t++)
+	{
+		const short cam = (t >= at2) ? cam2 : (t >= at1) ? cam1 : cam0;
+		long x, y;
+
+		stick_at(thumb(base, t), &x, &y);
+
+		sit.cam_cut = (t == at1 || t == at2) ? 1 : 0;
+		tick(cfg, cut, x, y, cam, 0, &sit, &oc);
+		sit.cam_cut = 0;
+		tick(cfg, &still, x, y, cam0, 0, &sit, &os);
+
+		if (t < at1)
+		{
+			*early += cut->cut_latch;
+			continue;
+		}
+
+		if (cut->course != still.course)
+		{
+			if (t < at2)
+				(*differ1)++;
+			else
+				(*differ2)++;
+		}
+
+		if (absl(oc.course_step) > *biggest)
+			*biggest = absl(oc.course_step);
+
+		if (oc.course_step)
+			(*moved)++;
+
+		*latched += cut->cut_latch;
+	}
+}
+
+static void camera_cut_latch()
+{
+	MODERN_CFG cfg;
+	MODERN_CFG off_cfg;
+	MODERN_STATE state;
+	MODERN_STATE still;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	MODERN_RESULT os;
+	long differ1, differ2, biggest, moved, latched, early;
+	long x, y, t, bad;
+	int a, c;
+
+	/* The numbers of the rich2 MODERNLOG through the sniper camera: the chase
+	 * camera's reference before the cut at 14891 ms was -16736, the cut into
+	 * the sniper at 21516 ms jumped the course by 29198, and "right" is the
+	 * direction the thumb held. cam2 is a third camera, 12000 further on. */
+	const short cam0 = -16736;
+	const short cam1 = ModernWrap(-16736L + 29198L);
+	const short cam2 = ModernWrap((long)cam1 + 12000L);
+	const long base = 0x4000;
+
+	printf("\nthe camera cut keeps the held course until the stick is let go\n");
+
+	ModernDefaults(&cfg);
+	off_cfg = cfg;
+	off_cfg.cut_latch = 0;
+
+	ok(cfg.cut_latch == 1, "the cut latch ships on (MODERN_CUT_LATCH)", cfg.cut_latch, 1);
+
+	/* (1) THE LOG'S CASE. A held, wandering thumb; the reference jumps by
+	 * 29198 on tick 20 and by 12000 more on tick 170. Against a twin whose
+	 * camera never moves, the course is the same on every tick: the thumb
+	 * still re-seats it, the cuts never do. */
+	cut_twin(&cfg, base, cam0, cam1, cam2, 20, 170, 320, &state, &differ1, &differ2,
+		&biggest, &moved, &latched, &early);
+	ok(early == 0, "(1) no latch while the camera stays", early, 0);
+	ok(latched == 300, "(1) the cut latches, and the latch stands for all 300 held ticks",
+		latched, 300);
+	ok(differ1 == 0, "(1) a cut of 29198 with the stick held: the course is the uncut twin's",
+		differ1, 0);
+	ok(differ2 == 0, "(1) a second cut while the latch stands changes nothing", differ2, 0);
+	ok(moved > 0, "(1) ...while the wandering thumb still re-seats the course", moved > 0 ? 1 : 0, 1);
+	ok(biggest < 1024, "(1) ...and no tick moves it more than a re-seat of the thumb", biggest, 1023);
+	printf("  (1) 300 latched ticks, %ld re-seats by the thumb, largest step %ld\n", moved, biggest);
+
+	/* The same hold with the latch switched off in this copy of the config:
+	 * the first re-seat after the cut takes the new camera - the turn the log
+	 * shows. */
+	{
+		MODERN_STATE off_state;
+
+		cut_twin(&off_cfg, base, cam0, cam1, cam2, 20, 170, 320, &off_state, &differ1,
+			&differ2, &biggest, &moved, &latched, &early);
+		ok(differ1 > 0 && biggest >= 16384,
+			"(1) counter-proof: without the latch the cut turns her at the next re-seat",
+			biggest, 16384);
+		ok(latched == 0, "(1) ...and the switched-off latch never stands", latched, 0);
+		printf("  (1) without the latch: %ld of 150 ticks off the twin, largest step %ld\n",
+			differ1, biggest);
+	}
+
+	sit.anim_state = 1;
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
+
+	/* Rolled far while the latch stands: the new direction is read against
+	 * the reference the course was seated on, the chase camera's, not the
+	 * view of the tick. */
+	stick_at(-0x4000, &x, &y);
+	tick(&cfg, &state, x, y, cam2, 0, &sit, &out);
+	ok(out.reference == cam0, "(1) rolled far under the latch: the reference stays the seated one",
+		out.reference, cam0);
+	ok(state.course == ModernWrap((long)cam0 + ModernAngle(x, -y)),
+		"(1) ...and the new direction is taken against it", state.course,
+		ModernWrap((long)cam0 + ModernAngle(x, -y)));
+
+	/* Let go and push again: the latch goes with the course, and the push
+	 * seats on the camera of that tick. */
+	tick(&cfg, &state, 0, 0, cam1, 0, &sit, &out);
+	ok(state.have_ref == 0 && state.cut_latch == 0,
+		"(1) letting go drops the course and the latch", state.have_ref + state.cut_latch, 0);
+
+	stick_at(base, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	ok(out.reference == cam1, "(1) the next push seats on the camera of its tick",
+		out.reference, cam1);
+	ok(state.course == ModernWrap((long)cam1 + ModernAngle(x, -y)),
+		"(1) ...so right is the new view's right", state.course,
+		ModernWrap((long)cam1 + ModernAngle(x, -y)));
+	ok(state.cut_latch == 0, "(1) ...with no latch", state.cut_latch, 0);
+
+	/* The cut back with the stick held, against a twin seated on the same
+	 * camera that never cuts. */
+	ModernResetState(&still);
+	tick(&cfg, &still, x, y, cam1, 0, &sit, &os);
+	bad = 0;
+
+	for (t = 1; t < 300; t++)
+	{
+		stick_at(thumb(base, t), &x, &y);
+		sit.cam_cut = (t == 10) ? 1 : 0;
+		tick(&cfg, &state, x, y, (t >= 10) ? cam0 : cam1, 0, &sit, &out);
+		sit.cam_cut = 0;
+		tick(&cfg, &still, x, y, cam1, 0, &sit, &os);
+
+		if (state.course != still.course || (t >= 10 && !state.cut_latch))
+			bad++;
+	}
+
+	ok(bad == 0, "(1) the cut back with the stick held: no turn, the latch stands", bad, 0);
+
+	/* (2) THE MIRROR OF (c), with the thumb moving. (c) holds the stick
+	 * dead still, so it never re-seats and cannot see the re-seat taking the
+	 * new camera. Here the thumb walks 100 units a tick after a half-turn
+	 * cut, past recenter on the fourth tick, from every stick direction and
+	 * every camera heading; the twin's camera never cuts. */
+	{
+		long steady_off = 0;
+		long drift_on = 0;
+		long drift_off = 0;
+		long cases = 0;
+		int pass;
+
+		for (pass = 0; pass < 3; pass++)
+		{
+			const MODERN_CFG* use = (pass == 1) ? &cfg : &off_cfg;
+			const long drift = pass ? 100 : 0;	/* pass 0: (c)'s steady stick, no latch */
+
+			for (a = 0; a < 64; a++)
+				for (c = 0; c < 32; c++)
+				{
+					const short cam = (short)(c * 2048);
+					const long start = (long)a * 1024;
+
+					ModernResetState(&state);
+					ModernResetState(&still);
+
+					for (t = 0; t < 9; t++)
+					{
+						stick_at(start + (t ? (t - 1) * drift : 0), &x, &y);
+						sit.cam_cut = (t == 1) ? 1 : 0;
+						tick(use, &state, x, y, t ? ModernWrap((long)cam + 0x8000) : cam, 0,
+							&sit, &out);
+						sit.cam_cut = 0;
+						tick(use, &still, x, y, cam, 0, &sit, &os);
+
+						if (!t)
+							continue;
+
+						if (pass == 1)
+							cases++;
+
+						if (state.course != still.course)
+						{
+							if (pass == 0)
+								steady_off++;
+							else if (pass == 1)
+								drift_on++;
+							else
+								drift_off++;
+						}
+					}
+				}
+		}
+
+		printf("  (2) %ld ticks after a half-turn cut with the thumb moving\n", cases);
+		ok(steady_off == 0, "(2) a steady stick holds through the cut even without the latch",
+			steady_off, 0);
+		ok(drift_on == 0, "(2) a moving thumb through the cut: the latch keeps the twin's course",
+			drift_on, 0);
+		ok(drift_off > 0, "(2) counter-proof: without the latch the moving thumb turns her",
+			drift_off > 0 ? 1 : 0, 1);
+		printf("  (2) without the latch: %ld of %ld ticks off the twin\n", drift_off, cases);
+	}
+
+	/* (3) THE PLAYER'S OWN CAMERA TURN under the latch moves reference and
+	 * course together, 500 units a tick, as it does without a cut. */
+	{
+		short ref0;
+		long turned = 0;
+
+		sit.cam_cut = 0;
+		sit.cam_player_step = 0;
+		stick_at(base, &x, &y);
+		ModernResetState(&state);
+		tick(&cfg, &state, x, y, cam0, 0, &sit, &out);
+		sit.cam_cut = 1;
+		tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+		sit.cam_cut = 0;
+		ok(state.cut_latch == 1, "(3) latched by the cut", state.cut_latch, 1);
+		ref0 = state.ref;
+
+		for (t = 1; t <= 10; t++)
+		{
+			sit.cam_player_step = 500;
+			tick(&cfg, &state, x, y, ModernWrap((long)cam1 + t * 500), 0, &sit, &out);
+
+			if (out.course_step == 500 && out.reference == ModernWrap((long)ref0 + t * 500) &&
+				state.cut_latch)
+				turned++;
+		}
+
+		sit.cam_player_step = 0;
+		ok(turned == 10, "(3) the player's camera turn under the latch takes the course along",
+			turned, 10);
+
+		/* And a re-seat after it reads the stick against the turned reference. */
+		stick_at(base + 0x2000, &x, &y);
+		tick(&cfg, &state, x, y, ModernWrap((long)cam1 + 5000), 0, &sit, &out);
+		ok(state.course == ModernWrap((long)ref0 + 5000 + ModernAngle(x, -y)),
+			"(3) ...and a re-seat after it is against the turned reference", state.course,
+			ModernWrap((long)ref0 + 5000 + ModernAngle(x, -y)));
+	}
+
+	/* Where the latch has nothing to do. hold_course off reads the camera of
+	 * every tick, so a cut sets no latch there; aiming reads the camera fresh
+	 * and drops it. */
+	{
+		MODERN_CFG free_cfg = cfg;
+
+		free_cfg.hold_course = 0;
+		sit.cam_cut = 0;
+		stick_at(base, &x, &y);
+		ModernResetState(&state);
+		tick(&free_cfg, &state, x, y, cam0, 0, &sit, &out);
+		sit.cam_cut = 1;
+		tick(&free_cfg, &state, x, y, cam1, 0, &sit, &out);
+		sit.cam_cut = 0;
+		ok(state.cut_latch == 0 && out.reference == cam1,
+			"hold_course off: a cut sets no latch, the camera of the tick leads",
+			state.cut_latch, 0);
+
+		free_cfg = cfg;
+		free_cfg.aim_strafe = 1;
+		ModernResetState(&state);
+		tick(&free_cfg, &state, x, y, cam0, 0, &sit, &out);
+		sit.cam_cut = 1;
+		tick(&free_cfg, &state, x, y, cam1, 0, &sit, &out);
+		sit.cam_cut = 0;
+		sit.drawn = 1;
+		sit.action = 1;
+		tick(&free_cfg, &state, x, y, cam1, 0, &sit, &out);
+		ok(out.mode == MODERN_MODE_AIM && state.cut_latch == 0 && out.reference == cam1,
+			"aiming reads the camera of the tick and drops the latch", state.cut_latch, 0);
+		sit.drawn = 0;
+		sit.action = 0;
+	}
+
+	/* A push that starts on the tick of a cut has no course to keep: it seats
+	 * on the new camera and nothing latches. */
+	sit.cam_cut = 1;
+	stick_at(base, &x, &y);
+	ModernResetState(&state);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	sit.cam_cut = 0;
+	ok(out.reference == cam1 && state.cut_latch == 0,
+		"a push on the cut's own tick seats on the new camera, unlatched", state.cut_latch, 0);
+}
+
 /* ----------------------------------------------------- the modern camera --- */
 
 /* The orbit: game\modern_camera.cpp, compiled beside this file exactly the
@@ -8428,6 +8787,7 @@ int main()
 	grab_family();
 	grab_latch();
 	sweeps();
+	camera_cut_latch();
 	camera_orbit();
 	camera_speed();
 	camera_pitch();

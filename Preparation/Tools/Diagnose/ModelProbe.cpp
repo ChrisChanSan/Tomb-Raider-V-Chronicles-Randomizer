@@ -453,6 +453,17 @@
  *                         one POINT light in VIEW space (the camera is at the
  *                         origin looking down +z), colour 0..255 and the
  *                         range its falloff reaches zero at. Up to 12.
+ *     -bulb <x y z radius density [r g b]>
+ *                         one fog bulb in VIEW space, like -light (+z is in
+ *                         front of the camera); density is the engine's own
+ *                         bulb->d, colour 0..1 and white without it. Up to
+ *                         HD_MAX_BULBS, repeat the switch. The model is drawn
+ *                         through the engine's own model shader with the
+ *                         bulb in the frame's lighting block, exactly as
+ *                         HDFrameDraw hands it the room's bulbs. With -shade 0
+ *                         and no light the picture IS the bulb's own term,
+ *                         intensity x colour / 255, wherever the model covers
+ *                         a pixel.
  *     -shade <0..255>     the flat node AMBIENT, default 128
  *     -out <prefix>       output path prefix, default .\modelprobe
  *
@@ -6278,6 +6289,28 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 /* ---------------------------------------------------- Lara's composite -- */
 /* Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
+/* -bulb: the fog bulbs of the picture, in view space, and how many. */
+static HDFogBulb g_probe_bulbs[HD_MAX_BULBS];
+static int g_probe_bulb_count = 0;
+
+/* The bulbs into the frame's lighting block. HDRenderFrameBegin uploads them
+ * and HDModelFrameBegin takes the count, the two calls the engine's frame
+ * makes; the return value is that count. */
+static int PutBulbs(HDFrameLighting& frame)
+{
+	frame.bulbs = g_probe_bulb_count ? g_probe_bulbs : 0;
+	frame.bulbCount = g_probe_bulb_count;
+
+	for (int i = 0; i < g_probe_bulb_count; i++)
+		printf("bulb %d  : view space %.0f %.0f %.0f, radius %.0f, density "
+			"%.4f, colour %.2f %.2f %.2f\n", i, g_probe_bulbs[i].x,
+			g_probe_bulbs[i].y, g_probe_bulbs[i].z, g_probe_bulbs[i].rad,
+			g_probe_bulbs[i].density, g_probe_bulbs[i].r, g_probe_bulbs[i].g,
+			g_probe_bulbs[i].b);
+
+	return g_probe_bulb_count;
+}
+
 /* One part's sheen into the lighting block. `on` is
  * false for -nosheen, which is the before picture. */
 static void SetSheen(HDModelLighting& lighting, int part, bool on)
@@ -7985,6 +8018,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	frame.distanceFogStart = 1.0e9f;
 	frame.wibbleTable = wibble;
 
+	const int bulbCount = PutBulbs(frame);
+
 	/* First person, the same three omissions the seam makes: the head
 	 * node off the body, no separate face, no braid. All three sit exactly
 	 * where the camera does. */
@@ -8114,7 +8149,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		g_device->BeginScene();
 		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
-		HDModelFrameBegin(&projection, 0);
+		HDModelFrameBegin(&projection, bulbCount);
 
 		drawn = 0;
 
@@ -8739,6 +8774,29 @@ int main(int argc, char** argv)
 			dist = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-shade") && i + 1 < argc)
 			shade = atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-bulb") && i + 5 < argc)
+		{
+			const bool coloured = i + 8 < argc && argv[i + 6][0] != '-';
+
+			if (g_probe_bulb_count < HD_MAX_BULBS)
+			{
+				HDFogBulb& bulb = g_probe_bulbs[g_probe_bulb_count++];
+
+				bulb.x = (float)atof(argv[i + 1]);
+				bulb.y = (float)atof(argv[i + 2]);
+				bulb.z = (float)atof(argv[i + 3]);
+				bulb.rad = (float)atof(argv[i + 4]);
+				bulb.density = (float)atof(argv[i + 5]);
+				bulb.r = coloured ? (float)atof(argv[i + 6]) : 1.0f;
+				bulb.g = coloured ? (float)atof(argv[i + 7]) : 1.0f;
+				bulb.b = coloured ? (float)atof(argv[i + 8]) : 1.0f;
+			}
+			else
+				printf("ModelProbe: more than %d fog bulbs - the extra one is "
+					"dropped\n", HD_MAX_BULBS);
+
+			i += coloured ? 8 : 5;
+		}
 		else if ((!_stricmp(argv[i], "-pose") || !_stricmp(argv[i], "-lara-pose"))
 			&& i + 3 < argc)
 		{
@@ -10659,9 +10717,11 @@ int main(int argc, char** argv)
 	frame.distanceFogStart = 1.0e9f;	// no fog in a studio picture
 	frame.wibbleTable = wibble;
 
+	const int bulbCount = PutBulbs(frame);
+
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
-	HDModelFrameBegin(&projection, 0);
+	HDModelFrameBegin(&projection, bulbCount);
 
 	/* The inventory ring's own screen centre, exactly as
 	 * hd_object.cpp hands it over per ring item. Zero without -ring, and then
@@ -11039,7 +11099,7 @@ int main(int argc, char** argv)
 				D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
 			g_device->BeginScene();
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
-			HDModelFrameBegin(&projection, 0);
+			HDModelFrameBegin(&projection, bulbCount);
 
 			HDModelDraw(slot, &own[0], here->nodes, &light[0], nodeMask, &lighting,
 				0, HD_MODEL_CULL_NONE, lipsOnHead ? -1 : lipsTrack, lipsFrame);

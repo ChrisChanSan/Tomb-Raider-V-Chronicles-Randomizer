@@ -93,6 +93,16 @@
  *     -noblend        material 14 stays in the alpha TEST instead of a real
  *                     blend - the glass drawn as a hard mask of itself, the
  *                     before picture out of the same build.
+ *     -glow           two more PNGs after the full frame, both of them the
+ *                     additive pass of every drawn group ALONE over black:
+ *                     <prefix>_<LEVEL>_r<room>_glow.png keeps the full
+ *                     frame's depth buffer, so a wall or a pillar in front
+ *                     of a light shaft cuts it exactly as it does in the
+ *                     game, and ..._glow_nodepth.png clears it first - the
+ *                     picture -all's additive shot gives for one room. The
+ *                     glow's own brightness can only be read against black,
+ *                     and what the player sees of it only through the
+ *                     scene's depth; this is both at once.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -797,6 +807,9 @@ struct Shot
 // -black: clear the render target to black instead of magenta - see the note
 // in ShotBegin.
 static bool g_black = false;
+// -glow: the additive pass alone over black, with and without the scene's
+// depth - see GlowShots.
+static bool g_glow_alone = false;
 
 static bool ShotBegin(Shot& shot, long w, long h)
 {
@@ -3260,6 +3273,8 @@ int main(int argc, char** argv)
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
+		printf("       -glow   the additive pass alone over black, with and "
+			"without the scene's depth\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -hdm                          apply the .hdm sidecar "
@@ -3417,6 +3432,8 @@ int main(int argc, char** argv)
 			g_motion = false;
 		else if (!strcmp(argv[at], "-black"))
 			g_black = true;
+		else if (!strcmp(argv[at], "-glow"))
+			g_glow_alone = true;
 		else if (!strcmp(argv[at], "-noshore"))
 			HDRenderShoreOverride(1);
 		else if (!strcmp(argv[at], "-noblend"))
@@ -4794,6 +4811,57 @@ int main(int argc, char** argv)
 
 	sprintf(path, "%s_%s_r%d.png", out, stem, room);
 	ShotWrite(shot, path);
+
+	/* -glow: the additive pass of every drawn group again, alone, onto
+	 * black - first over the depth the full frame has just left behind, then
+	 * over a cleared one. The first is the glow as the player sees it, cut
+	 * by every wall, pillar and floor in front of it; the second is the same
+	 * glow with nothing in front of it. Neither pass 2 nor the glass writes
+	 * depth, so what the buffer holds is exactly the opaque and cut-out
+	 * scene. Each variant is its own state bracket and each is checked like
+	 * the full frame's. */
+	if (g_glow_alone && !skyOnly)
+	{
+		static const char* suffix[2] = { "glow", "glow_nodepth" };
+
+		for (int variant = 0; variant < 2; variant++)
+		{
+			Snapshot glowBefore, glowAfter;
+
+			g_device->Clear(0, 0, variant == 0 ? D3DCLEAR_TARGET :
+				D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+				D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+
+			PoseAsClassicPath();
+			Take(glowBefore);
+			g_device->BeginScene();
+			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+
+			if (g_scissor)
+				HDRenderScissor((int)g_scissor_box[0], (int)g_scissor_box[1],
+					(int)g_scissor_box[2], (int)g_scissor_box[3]);
+
+			DrawOneGroup(room, 0, &lighting, HD_PASS_ADDITIVE);
+
+			for (int i = 0; i < g_with_count; i++)
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_ADDITIVE);
+
+			HDRenderScissorOff();
+			HDRenderFrameEnd();
+			g_device->EndScene();
+			Take(glowAfter);
+
+			const int glowBroken = Diff(glowBefore, glowAfter);
+
+			printf("state bracket (%s): %d changed - %s\n", suffix[variant],
+				glowBroken, glowBroken ? "FAIL" : "PASS");
+
+			sprintf(path, "%s_%s_r%d_%s.png", out, stem, room, suffix[variant]);
+			ShotWrite(shot, path);
+		}
+	}
+
 	ShotEnd(shot);
 
 	if (allPasses)

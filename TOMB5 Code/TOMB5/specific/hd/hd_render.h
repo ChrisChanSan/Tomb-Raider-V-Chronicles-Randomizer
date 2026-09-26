@@ -332,6 +332,12 @@ struct HDRenderStats
 	int addWeightParts;
 	int addSwingParts;
 	float addWeightMin;
+	/* Material 2 parts that draw still because their swing is under half a
+	 * second (hd_render.cpp, MaterialAddPeriod), and the stacked seas drawn
+	 * once: the parts and the copies left out (MarkStackedCopies). */
+	int addStillParts;
+	int stackedParts;
+	int stackedTris;
 	/* Parts of a sky group that carry no baked light and are therefore drawn
 	 * at light 1 - the band of sky itself. */
 	int skyFlatParts;
@@ -425,6 +431,26 @@ void HDRenderBlendOverride(int off);
  * be called at any time; it is one vertex shader constant per draw call. The
  * engine never calls it and there is no option and no registry key for it. */
 void HDRenderUprightOverride(int off);
+
+/* The stacked seas drawn with every copy, for the diagnostic tool alone.
+ * Non-zero keeps the higher copies of a material 16 sheet the file stacks
+ * three times or more (hd_render.cpp, MarkStackedCopies) - the comparison
+ * picture out of the same build. Call it before HDRenderLevelBegin; the
+ * engine never calls it and there is no option and no registry key for it. */
+void HDRenderStackOverride(int keep);
+
+/* The swing fence off, for the diagnostic tool alone. Non-zero lets a
+ * material 2 part swing whatever its period, under half a second as well
+ * (hd_render.cpp, MaterialAddPeriod) - the comparison picture out of the same
+ * build. Call it before HDRenderLevelBegin; the engine never calls it and
+ * there is no option and no registry key for it. */
+void HDRenderSwingOverride(int keepFast);
+
+/* One material's additive draw calls alone, for the diagnostic tool alone:
+ * the additive pass draws only the ranges of that .TRG material (the low
+ * byte, without the destructible bits), and -1 draws all of them, which is
+ * what the engine always has. May be called at any time. */
+void HDRenderAdditiveOnly(int material);
 void HDRenderShutdown();
 bool HDRenderReady();
 

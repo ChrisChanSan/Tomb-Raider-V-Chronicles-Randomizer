@@ -103,6 +103,16 @@
  *                     glow's own brightness can only be read against black,
  *                     and what the player sees of it only through the
  *                     scene's depth; this is both at once.
+ *     -stackedseas    draw every copy of a sea the .TRG stacks three times
+ *                     or more (JOBY4 room 19, JOBY5 rooms 65, 82 and 117)
+ *                     instead of the one copy the renderer keeps - the
+ *                     before picture out of the same build.
+ *     -fastswing      let a material 2 part swing whatever its period,
+ *                     instead of drawing the ones under half a second still
+ *                     - the before picture out of the same build.
+ *     -addmat <n>     the additive pass draws only the ranges of .TRG
+ *                     material n (2 the glows, 16 the seas): one material's
+ *                     glow alone, for telling which of them moved a pixel.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -3275,6 +3285,7 @@ int main(int argc, char** argv)
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
 		printf("       -glow   the additive pass alone over black, with and "
 			"without the scene's depth\n");
+		printf("       -stackedseas  -fastswing  -addmat <material>\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -hdm                          apply the .hdm sidecar "
@@ -3434,6 +3445,12 @@ int main(int argc, char** argv)
 			g_black = true;
 		else if (!strcmp(argv[at], "-glow"))
 			g_glow_alone = true;
+		else if (!strcmp(argv[at], "-stackedseas"))
+			HDRenderStackOverride(1);
+		else if (!strcmp(argv[at], "-fastswing"))
+			HDRenderSwingOverride(1);
+		else if (!strcmp(argv[at], "-addmat") && at + 1 < argc)
+			HDRenderAdditiveOnly(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-noshore"))
 			HDRenderShoreOverride(1);
 		else if (!strcmp(argv[at], "-noblend"))
@@ -4241,6 +4258,11 @@ int main(int argc, char** argv)
 	printf("additive: %d part(s) weighted (smallest %.3f), %d of them "
 		"swinging\n", stats.addWeightParts, stats.addWeightMin,
 		stats.addSwingParts);
+	// The material 2 parts the swing fence stills, and the stacked seas
+	// drawn once.
+	printf("additive: %d material 2 part(s) still (swing under half a "
+		"second); %d stacked sea(s) drawn once, %d copied triangles left out\n",
+		stats.addStillParts, stats.stackedParts, stats.stackedTris);
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");

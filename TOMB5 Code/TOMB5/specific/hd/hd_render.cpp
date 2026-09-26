@@ -419,14 +419,172 @@ namespace
 	 *
 	 * The range is fenced off rather than trusted: below a twentieth of a
 	 * second a swing is faster than the frame it is drawn in, and above a
-	 * minute it is not motion any more. No part in the game is outside it. */
+	 * minute it is not motion any more. No part in the game is outside it.
+	 *
+	 * And a swing faster than twice a second draws still. The wave is a drift
+	 * of a few per cent along the shaft; at the shortest periods of the file
+	 * it turns into a flicker instead - ANDREA2 room 131's window shaft
+	 * carries 0.06 s, which makes its swing a 16.7 Hz pulse of +-1.4 per cent
+	 * of the pixel (RoomProbe -time over that shaft's additive pass). The
+	 * material 2 parts under half a second are 85 over eight levels
+	 * (RoomProbe's "still" count per level): the candle halos of page 2002 at
+	 * 0.2 s and the window glows and shafts of ANDREA1 to ANDREA3, ANDY1 to
+	 * ANDY3, RICH1 and TITLE at 0.05 to 0.35 s. Still is the one reading of
+	 * those numbers that cannot flicker; param[3] stays a period for every
+	 * part at or above the fence. */
+	bool g_keep_fast_swing = false;	// see HDRenderSwingOverride
+
+	const float kAddStillBelow = 0.5f;
+
 	inline float MaterialAddPeriod(const trf::remaster::TrgPart& part)
 	{
 		if (part.material != HD_TRG_MATERIAL_GLOW)
 			return 0.0f;
 
-		return part.param[3] >= 0.05f && part.param[3] <= 60.0f
-			? part.param[3] : 0.0f;
+		if (part.param[3] < 0.05f || part.param[3] > 60.0f)
+			return 0.0f;
+
+		if (part.param[3] < kAddStillBelow && !g_keep_fast_swing)
+			return 0.0f;
+
+		return part.param[3];
+	}
+
+	/* The stacked sea: an additive material 16 part whose triangles come in
+	 * three or more exact copies of one another, stacked in y.
+	 *
+	 * JOBY4's sea (group 19, part 3) is 73,728 triangles and only 18,048
+	 * distinct footprints: every triangle is there four times, at y -4269,
+	 * -4253 and twice at -4237. JOBY5 carries the same fourfold sheet in
+	 * groups 65 and 82 (part 2, y -10004, -9996 and twice -9988) and a
+	 * threefold one in group 117 (part 8, y 3839, 3841, 3843). Drawn ONE /
+	 * ONE at weight 1 with a vertex red of 0, four copies clip green and blue
+	 * and lock the hue to cyan: 40.2 per cent of the additive pixels of the
+	 * view up at JOBY4 room 19's ceiling have a channel at 250 or more
+	 * (RoomProbe, the additive pass alone). Measured over all fifteen .TRG
+	 * files (StackProbe), no other material 16 part stacks more than twice.
+	 *
+	 * The two-sheet stacks - a surface two units above its twin, 17 of the
+	 * 28 material 16 parts - are the double sheets MaterialAddWeight speaks
+	 * of, and stay as they are: a copy count of two never qualifies.
+	 *
+	 * A copy is found by a footprint key: the three corners' x and z, sorted,
+	 * and the two other corners' height above the first - so only an exact
+	 * vertical translate of a triangle is its copy. Where a footprint holds
+	 * three or more triangles, the ones at the smallest y (the topmost - y
+	 * counts downwards) are kept and every higher-y copy is marked. JOBY4's
+	 * 192 footprints with twelve triangles are three distinct triangles four
+	 * times over; the three at the smallest y stay.
+	 *
+	 * `drop` comes back with one flag per triangle of the run and empty when
+	 * nothing is stacked, which is every part of thirteen levels. */
+	bool g_keep_stacks = false;	// see HDRenderStackOverride
+
+	bool MarkStackedCopies(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart::Pass& run, std::vector<unsigned char>& drop)
+	{
+		struct Copy
+		{
+			int key[8];
+			int ysum;
+			unsigned int tri;
+		};
+
+		std::vector<Copy> copies;
+
+		drop.clear();
+		copies.reserve(run.count / 3);
+
+		for (unsigned int at = 0; at + 2 < run.count; at += 3)
+		{
+			const unsigned int first = run.start + at;
+
+			if (first + 2 >= trg.indices.size())
+				break;
+
+			int corner[3][3];
+			bool inside = true;
+
+			for (int k = 0; k < 3; k++)
+			{
+				const unsigned int index = trg.indices[first + (unsigned int)k];
+
+				if (index >= trg.vertices.size())
+				{
+					inside = false;
+					break;
+				}
+
+				const trf::remaster::TrgVertex& v = trg.vertices[index];
+
+				corner[k][0] = v.x;
+				corner[k][1] = v.z;
+				corner[k][2] = v.y;
+			}
+
+			if (!inside)
+				continue;
+
+			// The corners in (x, z) order, so the key does not depend on
+			// which corner the file names first.
+			for (int i = 0; i < 2; i++)
+				for (int j = 0; j < 2 - i; j++)
+					if (corner[j][0] > corner[j + 1][0] ||
+						(corner[j][0] == corner[j + 1][0] && corner[j][1] > corner[j + 1][1]))
+						for (int c = 0; c < 3; c++)
+						{
+							const int t = corner[j][c];
+							corner[j][c] = corner[j + 1][c];
+							corner[j + 1][c] = t;
+						}
+
+			Copy copy;
+
+			copy.key[0] = corner[0][0]; copy.key[1] = corner[0][1];
+			copy.key[2] = corner[1][0]; copy.key[3] = corner[1][1];
+			copy.key[4] = corner[2][0]; copy.key[5] = corner[2][1];
+			copy.key[6] = corner[1][2] - corner[0][2];
+			copy.key[7] = corner[2][2] - corner[0][2];
+			copy.ysum = corner[0][2] + corner[1][2] + corner[2][2];
+			copy.tri = at / 3;
+			copies.push_back(copy);
+		}
+
+		std::sort(copies.begin(), copies.end(),
+			[](const Copy& a, const Copy& b)
+			{
+				for (int k = 0; k < 8; k++)
+					if (a.key[k] != b.key[k])
+						return a.key[k] < b.key[k];
+
+				return a.ysum < b.ysum;
+			});
+
+		bool any = false;
+
+		for (size_t i = 0; i < copies.size(); )
+		{
+			size_t j = i + 1;
+
+			while (j < copies.size() &&
+				std::memcmp(copies[j].key, copies[i].key, sizeof(copies[i].key)) == 0)
+				j++;
+
+			if (j - i >= 3)
+				for (size_t k = i; k < j; k++)
+					if (copies[k].ysum > copies[i].ysum)
+					{
+						if (!any)
+							drop.assign(run.count / 3, 0);
+
+						drop[copies[k].tri] = 1;
+						any = true;
+					}
+
+			i = j;
+		}
+
+		return any;
 	}
 
 	/* The UV span of one part, in page units.
@@ -838,6 +996,10 @@ namespace
 		 * room itself. In the sort key, so a piece's triangles never share a
 		 * draw call with the wall behind them. */
 		int destructId = -1;
+		/* The .TRG material of an additive draw call, without the
+		 * destructible bits, and 0 in the other two passes. In the sort key, so
+		 * an additive draw call is one material. */
+		int material = 0;
 		/* Which half of the room this draw call is: 1 where the triangles of
 		 * this range stand inside another room - see HDIntrusion in
 		 * hd_render.h. In the sort key, because the two halves are drawn with
@@ -1111,6 +1273,16 @@ namespace
 	int g_addweight_parts = 0;
 	int g_addswing_parts = 0;
 	float g_addweight_min = 1.0f;
+	/* Once per level: the material 2 parts whose swing is under half a
+	 * second and which therefore draw still (MaterialAddPeriod), and the
+	 * stacked seas drawn once - the parts and the copies left out
+	 * (MarkStackedCopies). */
+	int g_addstill_parts = 0;
+	int g_stacked_parts = 0;
+	int g_stacked_tris = 0;
+	/* HDRenderAdditiveOnly: the one material whose additive draw calls are
+	 * drawn, or -1 for all of them, which is what the engine always uses. */
+	int g_add_only = -1;
 	// Once per level: the sky parts that draw at light 1.
 	int g_flat_parts = 0;
 	/* Once per level: the material 13 parts whose four pages and frame
@@ -1723,6 +1895,21 @@ void HDRenderUprightOverride(int off)
 	g_no_upright = off ? true : false;
 }
 
+void HDRenderStackOverride(int keep)
+{
+	g_keep_stacks = keep ? true : false;
+}
+
+void HDRenderSwingOverride(int keepFast)
+{
+	g_keep_fast_swing = keepFast ? true : false;
+}
+
+void HDRenderAdditiveOnly(int material)
+{
+	g_add_only = material >= 0 ? material : -1;
+}
+
 void HDRenderShutdown()
 {
 	release_buffers();
@@ -2175,6 +2362,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_addweight_parts = 0;
 	g_addswing_parts = 0;
 	g_addweight_min = 1.0f;
+	g_addstill_parts = 0;
+	g_stacked_parts = 0;
+	g_stacked_tris = 0;
 	g_flat_parts = 0;
 	g_gloss_parts = 0;
 	g_flat_planes = 0;
@@ -2436,6 +2626,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float ripple[3];		// see MaterialRipple
 		float blend;			// see MaterialBlend
 		int destructId;			// see HDDestructible
+		int material;			// the additive pass's material, else 0
 		int overhang;			// see HDRoomBox
 		int intruding;			// see HDIntrusion
 		unsigned int first;
@@ -2544,6 +2735,25 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * water surface and belongs in the count. */
 				const bool water =
 					MaterialBase(part) == HD_TRG_MATERIAL_WATER;
+
+				/* A sea stacked in the file is drawn once - see
+				 * MarkStackedCopies. The additive pass only: that is where
+				 * the copies sum. */
+				std::vector<unsigned char> stacked;
+
+				if (pass == 2 && water && run.count && !g_keep_stacks &&
+					MarkStackedCopies(trg, run, stacked))
+					g_stacked_parts++;
+
+				/* An additive draw call holds one material, so that one
+				 * material's glow can be drawn alone (HDRenderAdditiveOnly).
+				 * Zero in the other two passes, whose sort is unchanged. */
+				const int add_material = pass == 2 ? (int)MaterialBase(part) : 0;
+
+				if (pass == 2 && part.material == HD_TRG_MATERIAL_GLOW &&
+					part.param[3] >= 0.05f && part.param[3] < kAddStillBelow &&
+					aperiod == 0.0f)
+					g_addstill_parts++;
 
 				if (water && run.count)
 				{
@@ -2765,6 +2975,16 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
+					/* A higher copy of a stacked sea. Skipped after the
+					 * horizontal-plane rows above and not before them: those
+					 * rows answer whether the remaster built anything in a
+					 * plane, and every copy is an answer to that. */
+					if (!stacked.empty() && stacked[at / 3])
+					{
+						g_stacked_tris++;
+						continue;
+					}
+
 					/* Inside the room's own box, or overhang? The centroid
 					 * decides, with the slack over g_boxes. Counted per
 					 * triangle; the hollow-room test - a group with nothing
@@ -2850,6 +3070,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.ripple[2] = ripple[2];
 					tri.blend = blend;
 					tri.destructId = destruct_id;
+					tri.material = add_material;
 					tri.first = first;
 					tris.push_back(tri);
 				}
@@ -2894,6 +3115,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (a.blend != b.blend) return a.blend < b.blend;
 					// A destructible piece keeps its own draw calls.
 					if (a.destructId != b.destructId) return a.destructId < b.destructId;
+					// One material per additive draw call - see add_material.
+					if (a.material != b.material) return a.material < b.material;
 					/* And the art that stands inside another room never
 					 * shares a draw call with the art that does not - the
 					 * scissor test is on for one and off for the other. Last
@@ -2937,6 +3160,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.ripple[2] = tris[0].ripple[2];
 			range.blend = tris[0].blend;
 			range.destructId = tris[0].destructId;
+			range.material = tris[0].material;
 			range.intruding = tris[0].intruding;
 			range.overhang = tris[0].overhang;
 			range.start = (unsigned int)sorted.size();
@@ -2962,6 +3186,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].ripple[2] == range.ripple[2] &&
 					tris[i].blend == range.blend &&
 					tris[i].destructId == range.destructId &&
+					tris[i].material == range.material &&
 					tris[i].intruding == range.intruding &&
 					(!g_split_overhang ||
 						tris[i].overhang == range.overhang);
@@ -3016,6 +3241,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.ripple[2] = tris[i].ripple[2];
 					range.blend = tris[i].blend;
 					range.destructId = tris[i].destructId;
+					range.material = tris[i].material;
 					range.intruding = tris[i].intruding;
 					range.overhang = tris[i].overhang;
 					range.start = (unsigned int)sorted.size();
@@ -3424,6 +3650,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->addWeightParts = g_addweight_parts;
 		stats->addSwingParts = g_addswing_parts;
 		stats->addWeightMin = g_addweight_min;
+		stats->addStillParts = g_addstill_parts;
+		stats->stackedParts = g_stacked_parts;
+		stats->stackedTris = g_stacked_tris;
 		stats->skyFlatParts = g_flat_parts;
 		stats->flipbookDrawn = g_flip_parts;
 		stats->flipbookDropped = g_flip_dropped;
@@ -3898,6 +4127,10 @@ namespace
 			// And the inside/overhang split, for RoomProbe's -tround alone.
 			if ((window == HD_WINDOW_INSIDE && range.overhang) ||
 				(window == HD_WINDOW_OVERHANG && !range.overhang))
+				continue;
+
+			// And one material's glow alone, for RoomProbe's -addmat alone.
+			if (additive_pass && g_add_only >= 0 && range.material != g_add_only)
 				continue;
 
 			/* A destructible piece Lara has shot away. The classic path

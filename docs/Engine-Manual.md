@@ -1251,6 +1251,9 @@ see *Lara in HD* below for which of her stays classic and why.
   as a column of light; at the sides of a pane cut from the middle of its
   texture; and at the ends of a shaft whose panes stop in mid-air or on the
   floor. Where a shaft meets a wall or the floor it is still cut off sharply.
+  The same fades also take most of the light out of a haze or mist drawn as
+  panes all through a room, the kind that hangs around the camera wherever it
+  stands; whether such a haze should be spared is still open.
   A sea the art stacks three or four times over (the
   Deepsea Dive, the Sinking Submarine) is drawn once: the Deepsea Dive's is
   no longer pure cyan, and the Sinking Submarine's is a quarter as bright as

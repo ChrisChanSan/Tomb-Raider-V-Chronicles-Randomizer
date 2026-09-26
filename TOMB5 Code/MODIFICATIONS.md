@@ -2279,9 +2279,168 @@ shaft's mean falls under 55 per cent of before, and then that preset's weight ri
 it does not, never past 1 per cent clipped - none did. A sea stacked three times or more
 is drawn once. The depth fade, and the near, `|N.V|`, edge and end fades of a dedicated
 glow shader, come in a later round; no face culling of material 2. No sun rays. No fine
-modulation. The model shader takes the room's bulb term.
+modulation. The model shader takes the room's bulb term. The four fades of the glow
+shader are built in the entry that follows, "The light shafts have a pixel shader of
+their own".
 
 **Commits.** `e97cfb6`, `7857a97`, `ed53a0a`, `9ba3a2e`
+
+### The light shafts have a pixel shader of their own
+2026-09-26
+
+**What.** The additive draw calls of `.TRG` material 2 - the light shafts, lamp cones and
+window and candle glows - are drawn with a pixel shader of their own, `hd_glow.hlsl`,
+behind the room's own vertex shader. It draws what the room pixel shader draws in the
+additive pass and multiplies four fades onto it: near the eye, where a card is seen
+edge-on (`|N.V|`), at the card sides of a part cut out of the middle of its page, and at
+both ends of an asset cut out of its page along v. Three weight presets of material 2
+are raised where the fades would take a glow under 55 per cent of the mean the sum
+drew. Every other additive material, material 16 included, is drawn by the room shader
+as before.
+
+**Why.** After screen composition the clipping was gone, and what stayed was measured
+in the same fixed views (RoomProbe `-glow`, the glow alone over the scene's depth):
+- The cards' own edges. Neighbour steps of more than 40 of 255 stood at 2633 in ANDREA2
+  room 131's side view, 3488 inside it, 4413 from 4811 -1250 5864, 2097 in RICH1 room
+  3's corridor view and 2614 inside the grate shaft, and at 6386 in the sweep view of
+  ANDREA2 131. The window shaft takes u 48..206 of page 3038, whose columns there still
+  carry 61 to 64 per cent of the brightest one, so every card side is a line.
+- The camera inside a shaft: the glow's mean over its pixels was 119.9 of 255 inside
+  ANDREA2's shaft and 127.4 inside RICH1's, the additive pass covering 85.6 and 88.1 per
+  cent of the frame.
+- A card seen in its own plane: TITLE room 6 from 6013 -151 3599 shows its streaks
+  converging on the plane's vanishing point.
+- RICH1's grate shaft is a cylinder of cards whose vertex light is a flat 1.0, a block
+  of equal brightness with the rings of its foot showing, where `|N.V|` gives the chord
+  profile of a column.
+
+**How.** `specific/hd/hd_shader/hd_glow.hlsl` (new) includes `hd_room.hlsl` and so reads
+the same `VS_OUT`, registers and `BulbIntensity`; `GlowPS` is `RoomPS` in the additive
+pass - texel, alpha test, vertex and dynamic light, WaterTable term, distance fog, the
+ceiling of one, the bulbs' darkening, the caustic, texel alpha, weight and swing - less
+the ripple, the gloss and the bulbs' added colour, which are zero on these draw calls,
+and times the fades (`:188`-`:212`):
+- near: `smoothstep` over `HD_GLOW_NEAR` = 1024 units of `|viewPos|` (`:73`, `:190`);
+- facing: `|N.V|` with the interpolated file normal, or with the face normal out of
+  `ddx`/`ddy` of the view position (`:202`), chosen per part by a constant;
+- edge: `smoothstep` over the outer 15 per cent of the part's used u range (`:205`);
+- ends: `smoothstep` over the fade length at both ends of the asset along its page-v
+  axis, `dot(roomPos, axis)` against the asset's ends in the drawn room's frame (`:209`).
+
+The fade near the eye and the `|N.V|` term are TROne's rules for its glow material:
+TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931, credited in the
+shader's header; the file-normal variant, the edge and the end fade are this project's.
+The per-draw constants sit in c77 to c79 (`:98`), which no pixel shader of the renderer
+reads or holds a literal in; the glow shader's own literals take c0 to c15 outside c4
+and c10 and c36 to c39, so gRipple (c36) is written again when the room shader comes
+back. `hd_glow_ps.inc` is 479 instruction slots; `bshader.bat` compiles it with the
+others (`:53`, stamp `:64`) and `be.bat` guards it (`:56`, `:76`).
+
+`specific/hd/hd_render.cpp`:
+- `BuildGlowParts` (`:1516`) runs before the build loop (`:3053`) and takes per material
+  2 part with additive triangles: the u and v range; the edge fade where u spans less than
+  90 per cent of the page (`:1652`); the face normal where `|N.f|` is under 0.9 on more
+  than half of the part's corners (`:1653`); the page-v axis as the mean of dP/dv over
+  its triangles. Parts of one tuple and one page whose world boxes come within a sector
+  (`kGlowTouch`, `:1490`) join one asset (`:1707`); the rooms' origins for that come with
+  the room boxes, `HDRoomBox::originX/originZ` (`hd_render.h:210`, filled at
+  `hd_level.cpp:1085` and `RoomProbe.cpp:3909`), and without them an asset is one
+  group's parts. The asset's axis is the sum of its parts', its ends the extent of all
+  their vertices along it; the end fade is 512 units (`kGlowEndFade`, `:1488`), at most a
+  quarter of the extent, and only for an asset with a part that uses less than 90 per
+  cent of the page's v (`:1756`). `GlowConstants` (`:1818`) turns a part into the three
+  registers; a fade that does not apply gets a range the pixel never leaves.
+- The glow part is in the additive sort key after the material (`:3650`) and in the range
+  merge (`:3722`); the parts are numbered in file order, so the triangle order is the one
+  before.
+- `draw_pass` switches to the glow shader for a range with a glow part and back to the
+  room shader for any other and at the end of the pass (`:4780`-`:4798`, `:4965`), the
+  per-part registers written when the part changes.
+- `GlowGain` (`:472`) multiplies the weight of a glow part by its preset's gain (`:3277`).
+- `HDRenderGlowOverride` takes a third switch, `noShader` (`:2383`), and
+  `HDRenderGlowPartCount` / `HDRenderGlowPartInfo` hand the decisions to the tool;
+  `HDRenderStats` counts `glowParts`, `glowEdgeParts`, `glowFaceParts`, `glowAssets`.
+
+Tools: `RoomProbe -glowps 0|1` (`RoomProbe.cpp:3480`) draws material 2 with the room
+shader (0) or the glow shader (1, the renderer's own), and the additive block prints a
+`glow:` line and one `glow part:` line per part (`:4303`, `:4314`).
+
+**Checked.** The fixed list of 46 views of the first half, six pictures each (full,
+opaque, alpha, additive, glow, glow without depth), the build of `d929ed1` against this
+one.
+- Identity: with `-glowps 0` all 276 pictures are md5-identical to `d929ed1`'s (decoded
+  pixels). With the fades taken out of a scratch copy of the shader and the gains at 1,
+  the glow shader draws the additive, glow and depth-free glow pictures of all 46 views
+  pixel-identical to the room shader. The opaque and alpha pictures are identical before
+  and after in every view; every changed additive pixel lies where material 2 draws, and
+  material 16 alone (`-addmat 16`) is identical in all 46 views. The state bracket
+  passes in all 46 views for the frame and both glow pictures.
+- The loader, over the fifteen levels: 253 material 2 parts in 182 assets; 13 with the
+  edge fade (ANDREA1 room 157, ANDREA2 rooms 93, 131 and 217, ANDREA3's eight parts of
+  page 3037, ANDY2 room 34); 31 on the face normal (JOBY2's 21 lamp cones, ANDREA3's
+  seven window slabs of page 3232, ANDY2 room 34, ANDY3 room 150, TITLE room 43); 94
+  parts in 78 assets with an end fade. ANDREA2's window shaft is one asset of rooms 93,
+  131 and 217, axis (0.657, 0.680, -0.326), 6097 units long.
+- The metrics over the glow's own pixels (as in the entry before; steps and mean,
+  before the first half -> after it -> now; mean in per cent of the first column):
+
+  | view | steps | mean /255 | now |
+  |---|---|---|---|
+  | ANDREA2 131 side | 7121->2633->805 | 174.8->139.7->130.1 | 74.5 |
+  | ANDREA2 131 inside | 6160->3488->0 | 147.1->119.9->28.1 | 19.1 |
+  | ANDREA2 131 4811 | 10145->4413->1449 | 149.3->119.4->116.1 | 77.7 |
+  | RICH1 3 corridor | 3878->2097->552 | 159.4->125.7->121.4 | 76.2 |
+  | RICH1 3 inside | 4853->2614->94 | 163.4->127.4->33.9 | 20.7 |
+  | JOBY4 19 up | 11849->1023->186 | 128.1->77.4->68.6 | 53.5 |
+  | TITLE 6 church | 1385->898->22 | 28.8->27.6->22.7 | 78.6 |
+  | TITLE 6 grazing | 762->558->0 | 19.1->18.7->15.4 | 80.5 |
+
+  On all 46 views the clipped, white and hue-pinned shares of the glow stay at 1 per
+  cent or less; the largest is ANDREA3 room 34's window glow at 1.0 clipped and white.
+  The steps of the eight views above fall to at most half of the first half's. Inside
+  the two shafts the mean falls and ANDREA2's frame has no white pixel; RICH1's inside
+  view keeps 1.11 per cent of its frame white, 1.10 per cent with no additive pass drawn
+  at all - the room itself - and the glow adds 0.01.
+- The brightness rule, material 2 alone (`-addmat 2`), the mean over its own pixels
+  against the sum before the first half: every outside view at 55 per cent or more but
+  two, ANDREA2 131's sweep view from 2560 -717 3072, looking down through the shaft's
+  fan at 52.1, and ANDY2 room 34 at 53.8; the gains that would lift them clip more than
+  1 per cent elsewhere. With every material drawn, the JOBY4 and JOBY5 sea views stay
+  under 55 per cent of before the first half (JOBY4 19 up 53.5, JOBY5 65 and 82 up 34.1
+  and 34.3, their sweep views 42.6 and 41.6) because the stacked seas are drawn once
+  in the entry before (60.4, 41.0, 40.9, 49.9 and 50.9 per cent then); material 2
+  alone holds 71.9, 78.8, 79.5, 68.5 and 65.0 there.
+- The gains (`GlowGain`), searched in steps against the rule: (1.5, 0.4) 1.45, ANDREA2
+  room 68's lamp cones 50.0 -> 55.4 per cent; (0.5, 0.6) 1.25, where ANDREA3 room 66's
+  shaft reaches 0.79 and ANDREA2 room 225's window glow 0.63 per cent clipped (1.6 and
+  1.8 at 1.3); (0.5, 0.8) 1.03, where ANDREA3 room 34's window glow reaches 0.98.
+- The end fade: over an asset that uses the page's whole v it is left out, because such
+  a page fades by itself - JOBY2's lamp cones of page 3070 lost the light at the lamp
+  under it (no glow pixel above 8 of 255 in the room 17 view, 13.1 on average before).
+- `hd_room_ps.inc` `4a0664f86372905f5c45697410b748f3`, `hd_room_vs.inc`
+  `bff9e930306fc0dfad80d1776a066032` and `hd_model_ps.inc`
+  `2e3867532e2e3971991f5bd039227d2e` unchanged; `hd_glow_ps.inc` 479 instruction slots.
+- ModernTest 10808, MenuTest 35547, InterpTest 635 checks, LipsTest 270 with the `.OBJ`
+  folder and 243 without, 0 failed. Not measured: the game.
+
+**Unchanged.** `hd_enable` 0: the glow shader is created in `HDRenderInit` and the
+parts are taken in `HDRenderLevelBegin`, both reached only behind `HDEnabled`
+(`hd_level.cpp`), and the origins are filled in `BuildRoomBoxes` behind the same guard.
+The classic path, the classic buckets and the interpolator. The room shaders and the
+model pixel shader. Every additive material other than 2, material 16 included: the
+fades never touch it. The opaque and alpha passes. Screen composition and the
+anisotropic filter as the first half built them.
+
+**Decisions.** The fade near the eye works within 1024 units. The fades belong to
+material 2 alone. `|N.V|` takes the file normal where it agrees with the faces and the
+face normal elsewhere. The end fade takes the asset's whole extent, so that the parts
+of one shaft do not seam at the room borders, and only where the art is cut out of its
+page in v. The presets stay unless the 55 per cent rule raises one, never past 1 per
+cent clipped; three are raised. The depth fade where a shaft meets a wall comes in a
+later round with a depth texture. No sun rays, no fine modulation, no face culling of
+material 2.
+
+**Commits.** `8b175ad`
 
 ### The sky
 2026-09-05 - 2026-09-08

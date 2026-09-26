@@ -1245,7 +1245,13 @@ see *Lara in HD* below for which of her stays classic and why.
   into a flat white slab. The panes are also read with the anisotropic
   filter, which keeps their streaks a little finer at a slant - a slight
   difference, a few steps of brightness out of 255 and at most about 25 in
-  the views measured. A sea the art stacks three or four times over (the
+  the views measured. The panes also fade where a flat card would give itself
+  away: within a square of the camera, so walking into a shaft no longer fills
+  the screen; where a pane is seen edge-on, which also lets a round shaft read
+  as a column of light; at the sides of a pane cut from the middle of its
+  texture; and at the ends of a shaft whose panes stop in mid-air or on the
+  floor. Where a shaft meets a wall or the floor it is still cut off sharply.
+  A sea the art stacks three or four times over (the
   Deepsea Dive, the Sinking Submarine) is drawn once: the Deepsea Dive's is
   no longer pure cyan, and the Sinking Submarine's is a quarter as bright as
   before.

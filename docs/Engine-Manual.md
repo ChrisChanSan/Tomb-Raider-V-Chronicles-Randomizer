@@ -1244,9 +1244,11 @@ see *Lara in HD* below for which of her stays classic and why.
   shaft seen through six panes at once is bright in its core without turning
   into a flat white slab. The panes are also read with the anisotropic
   filter, which keeps their streaks a little finer at a slant - a slight
-  difference, at most 15 of 255 steps of brightness.
-  A sea the art stacks four times over (the Deepsea Dive, the Sinking
-  Submarine's open water) is drawn once, so it is water and not pure cyan.
+  difference, a few steps of brightness out of 255 and at most about 25 in
+  the views measured. A sea the art stacks three or four times over (the
+  Deepsea Dive, the Sinking Submarine) is drawn once: the Deepsea Dive's is
+  no longer pure cyan, and the Sinking Submarine's is a quarter as bright as
+  before.
 - **A glow has the strength the art gives it.** The remaster builds a shaft or
   a lamp cone out of dozens of overlapping panes, and its caustic net under
   water is one sheet over the whole sea bed; painted at full strength and

@@ -6228,7 +6228,7 @@ static void camera_cut_latch()
 
 	ok(cfg.cut_latch == 1, "the cut latch ships on (MODERN_CUT_LATCH)", cfg.cut_latch, 1);
 
-	/* (1) THE LOG'S CASE. A held, wandering thumb; the reference jumps by
+	/* (1) The log's case. A held, wandering thumb; the reference jumps by
 	 * 29198 on tick 20 and by 12000 more on tick 170. Against a twin whose
 	 * camera never moves, the course is the same on every tick: the thumb
 	 * still re-seats it, the cuts never do. */
@@ -6315,7 +6315,7 @@ static void camera_cut_latch()
 
 	ok(bad == 0, "(1) the cut back with the stick held: no turn, the latch stands", bad, 0);
 
-	/* (2) THE MIRROR OF (c), with the thumb moving. (c) holds the stick
+	/* (2) The mirror of (c), with the thumb moving. (c) holds the stick
 	 * dead still, so it never re-seats and cannot see the re-seat taking the
 	 * new camera. Here the thumb walks 100 units a tick after a half-turn
 	 * cut, past recenter on the fourth tick, from every stick direction and
@@ -6379,7 +6379,7 @@ static void camera_cut_latch()
 		printf("  (2) without the latch: %ld of %ld ticks off the twin\n", drift_off, cases);
 	}
 
-	/* (3) THE PLAYER'S OWN CAMERA TURN under the latch moves reference and
+	/* (3) The player's own camera turn under the latch moves reference and
 	 * course together, 500 units a tick, as it does without a cut. */
 	{
 		short ref0;

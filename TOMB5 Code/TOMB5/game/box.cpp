@@ -856,10 +856,13 @@ void DropBaddyPickups(ITEM_INFO* item)
 
 		// Wall pickups (OCB 2 and 9) lose their pickup manner when dropped:
 		// it demands a wall behind the item and Lara's angle onto it - on
-		// open ground such an item is unpickable forever (seen in the
-		// rando: an Imp carries a crowbar pickup away, joby3). Without a
-		// pickup manner it is an ordinary floor pickup. Bits 0x40/0x80
-		// (the pickup trigger's entry ticket) stay.
+		// open ground such an item is unpickable forever. GetCarriedItems
+		// (setup.cpp) never hands one to a carrier; a chain that holds one
+		// anyway comes from a savegame, which restores carried_item exactly
+		// as it was written (savegame.cpp), and this clearing is the net
+		// under that case. Without a pickup manner PickUpCollision treats
+		// it as a floor pickup; the model is still the one made for the
+		// wall. Bits 0x40/0x80 (the pickup trigger's entry ticket) stay.
 		if ((pickup->trigger_flags & 0x3F) == 2 || (pickup->trigger_flags & 0x3F) == 9)
 			pickup->trigger_flags &= ~0x3F;
 

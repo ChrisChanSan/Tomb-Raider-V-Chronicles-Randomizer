@@ -81,6 +81,7 @@
 #include "balance.h"
 #include "savegame.h"
 #include "lara2gun.h"
+#include "../specific/hd/hd_bind.h"	// slot names for the diagnostic log
 
 void InitialiseLara(long restore)
 {
@@ -2248,7 +2249,7 @@ void GetCarriedItems()
 	ITEM_INFO* pickup;
 	ROOM_INFO* r;
 	long lp;
-	short item_num;
+	short item_num, ocb;
 
 	for (lp = 0; lp < level_items; lp++)
 	{
@@ -2261,9 +2262,10 @@ void GetCarriedItems()
 		baddy = &items[lp];
 
 		// The pool cyborg carries nothing. This routine hands an enemy
-		// every pickup within half a sector of him at level start and
-		// takes it off the floor again only when he dies. Slot 67 stays
-		// in that list - Core placed both him and those pickups by hand.
+		// every pickup but a wall grab within half a sector of him at
+		// level start and takes it off the floor again only when he dies.
+		// Slot 67 stays in that list - Core placed both him and those
+		// pickups by hand.
 		// Slot 469 is placed by the roll instead, so the pickup he
 		// swallows is one the randomizer put somewhere on purpose and the
 		// enemy standing on it is a coincidence; he would give it back
@@ -2286,10 +2288,33 @@ void GetCarriedItems()
 				if (abs(baddy->pos.x_pos - pickup->pos.x_pos) < 512 && abs(baddy->pos.y_pos - pickup->pos.y_pos) < 256 &&
 					abs(baddy->pos.z_pos - pickup->pos.z_pos) < 512 && objects[pickup->object_number].collision == PickUpCollision)
 				{
-					pickup->carried_item = baddy->carried_item;
-					baddy->carried_item = item_num;
-					RemoveDrawnItem(item_num);
-					pickup->room_number = NO_ROOM;
+					// A wall grab stays on its wall: OCB 2 is pried off with
+					// the crowbar, OCB 9 pulled out by hand. PickUpCollision
+					// takes Lara's position and angle for either from the
+					// wall behind the item, and the model is made to hang
+					// on that wall; dropped at a carrier's feet the item has
+					// neither and cannot be picked up there. The original
+					// levels hold six wall grabs and no carrier in reach of
+					// any of them (measured over their .trc files), so this
+					// test only ever meets placements of the randomizer.
+					ocb = pickup->trigger_flags & 0x3F;
+
+					// CARRYLOG (-log only): one line per pickup in a
+					// carrier's reach at level start, with the offset from
+					// the carrier to the item.
+					Log("CARRYLOG baddy=%d/%s item=%d/%s ocb=%d d=%d,%d %s",
+						lp, HDSlotName(baddy->object_number) ? HDSlotName(baddy->object_number) : "?",
+						item_num, HDSlotName(pickup->object_number) ? HDSlotName(pickup->object_number) : "?",
+						ocb, pickup->pos.x_pos - baddy->pos.x_pos, pickup->pos.z_pos - baddy->pos.z_pos,
+						(ocb == 2 || ocb == 9) ? "skipped wall grab" : "carried");
+
+					if (ocb != 2 && ocb != 9)
+					{
+						pickup->carried_item = baddy->carried_item;
+						baddy->carried_item = item_num;
+						RemoveDrawnItem(item_num);
+						pickup->room_number = NO_ROOM;
+					}
 				}
 
 				item_num = pickup->next_item;

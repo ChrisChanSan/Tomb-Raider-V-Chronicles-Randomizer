@@ -1238,7 +1238,13 @@ see *Lara in HD* below for which of her stays classic and why.
 - **An added glow stops at one.** The remaster bakes its light shafts at
   double brightness and its glow meshes at the maximum; the classic engine's
   own rule stops an added glow at one, and so does this, so a light shaft is
-  light and not a white surface.
+  light and not a white surface. The panes of a light shaft, a lamp cone or a
+  window glow are laid over one another as screen, the way a photographer
+  stacks exposures: each adds a share of what is still left to white, so a
+  shaft seen through six panes at once is bright in its core without turning
+  into a flat white slab, and its streaks stay sharp when seen at a slant.
+  A sea the art stacks four times over (the Deepsea Dive, the Sinking
+  Submarine's open water) is drawn once, so it is water and not pure cyan.
 - **A glow has the strength the art gives it.** The remaster builds a shaft or
   a lamp cone out of dozens of overlapping panes, and its caustic net under
   water is one sheet over the whole sea bed; painted at full strength and
@@ -1270,7 +1276,9 @@ see *Lara in HD* below for which of her stays classic and why.
   around and their level barely changes — four percent over three seconds. The
   travel is therefore a sixth of a quarter either way; a quarter reads as
   pulsing, while at a sixth of it the streaks wander and the room does not
-  breathe. It goes off with `hd_motion` like everything else that moves.
+  breathe. It goes off with `hd_motion` like everything else that moves. A
+  glow whose time is shorter than half a second stands still: at that speed
+  the travel is a flicker, not a drift.
 - **A fog bulb is a soft cloud, not a sphere with an outline.** The formula is
   exact; the classic engine hides its hard rim by computing it once per room
   vertex, which a per-pixel version cannot borrow, so here it fades out over
@@ -1279,7 +1287,8 @@ see *Lara in HD* below for which of her stays classic and why.
   centre of the view, which never showed on the 4:3 screens the game shipped
   for, but on a wide screen, and above all in first person, that skip cuts
   across the picture and the fog jumps away at the edge. Here only a fog ball
-  entirely behind the camera is skipped.
+  entirely behind the camera is skipped. HD objects and Lara stand in the same
+  cloud as the room around them, soft edge and all.
 - **Animated pictures run.** The Remaster paints a monitor wall, a bank of
   ships' displays and a handful of liquid surfaces as a four page loop, and the
   engine reads the loop out of the art: the four pages and the time one of

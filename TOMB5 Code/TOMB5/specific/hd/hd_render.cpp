@@ -462,7 +462,9 @@ namespace
 	 * and lock the hue to cyan: 40.2 per cent of the additive pixels of the
 	 * view up at JOBY4 room 19's ceiling have a channel at 250 or more
 	 * (RoomProbe, the additive pass alone). Measured over all fifteen .TRG
-	 * files (StackProbe), no other material 16 part stacks more than twice.
+	 * files (a footprint count through the vendored TRForge reader, and
+	 * RoomProbe's additive block per level), no other material 16 part
+	 * stacks more than twice.
 	 *
 	 * The two-sheet stacks - a surface two units above its twin, 17 of the
 	 * 28 material 16 parts - are the double sheets MaterialAddWeight speaks

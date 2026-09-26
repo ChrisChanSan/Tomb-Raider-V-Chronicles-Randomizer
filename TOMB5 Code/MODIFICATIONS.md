@@ -2098,7 +2098,10 @@ so `RoomProbe -paritycheck` can run both formulas side by side; what remains of 
 is the half that is exact rather than conservative, `P.z + rad <= 0` on the bulb, which
 also settles the camera-inside-the-bulb case, and the branch that returned a density for
 a bulb behind the camera now returns zero. The deviation is named rather than hidden:
-the classic path culls fog at 45 degrees off axis and this one does not. A step in the
+the classic path culls fog at 45 degrees off axis and this one does not. The model shader
+takes the same bulb term, and a material 2 swing under half a second stands still: see
+"The light shafts compose as screen, a stacked sea is drawn once, a fast swing stands
+still" below. A step in the
 baked light at a room boundary is the art's own - the HD path culls a dynamic light
 against the whole room's box where the classic path culls against a roomlet's, with the
 same test and the same falloff, and across four measured portals the two sides' baked
@@ -2117,6 +2120,157 @@ smallest weight and the swinging parts. Tools: `RoomProbe` (`-paritycheck`, the 
 line, a bulb dropped at the new maximum) and `ModelProbe -name SWAT -shade N`.
 
 **Commits.** `1087750`, `80e070b`, `791d844`, `36c068a`, `c0f9ede`, `a1dbf32`
+
+### The light shafts compose as screen, a stacked sea is drawn once, a fast swing stands still
+2026-09-26
+
+**What.** In the HD additive pass the draw calls of `.TRG` material 2 - the light shafts,
+lamp cones and window and candle glows - compose as screen, dst + src - dst * src, instead
+of the ONE / ONE sum, and are sampled with the anisotropic filter; every other additive
+material keeps the sum and the trilinear filter. An additive material 16 part whose
+triangles the file carries three or more times, stacked in y, is drawn once. A material 2
+part whose swing period (`param[3]`) is under half a second draws still. The model
+shader's fog-bulb term is the room shader's: the exact behind-the-camera cull and the
+softened rim.
+
+**Why.** The shafts were harsh because their cards stack, not because a card is bright.
+ANDREA2 room 131's window shaft is about 130 overlapping cards, 6.2 over the average pixel
+and 12 at most; one card reaches at most 0.55 x 1.0 x 0.83 = 0.46 of white, but the
+unclamped sum averages 1.22 and peaks at 3.54 times white, so 56.7 per cent of the shaft's
+pixels clipped in the additive pass alone and the core was a flat white slab crossed by
+the cards' own edges. RICH1 room 3's grate shaft is 405 triangles in one square whose
+vertex light is 2.0 at every vertex, capped to a flat 1.0: 25.8 per cent of its additive
+pixels were white and 51.9 per cent of the full frame over it, Lara inside it washed out.
+The harsh cyan of JOBY4 room 19 was mostly its sea: group 19 part 3 is 73,728 additive
+triangles, four exact copies of 18,048 footprints at y -4269, -4253 and twice -4237, drawn
+at weight 1 with a vertex red of 0, so green and blue clipped on 40.2 per cent of the
+ceiling view's additive pixels, none of them white - the hue locked to cyan; JOBY5 carries
+the same fourfold sheet in groups 65 and 82 and a threefold one in group 117. ANDREA2's
+0.06 s period made its swing a 16.7 Hz flicker of +-1.4 per cent. And the model shader's
+own bulb term kept the classic 45-degree cone, whose per-pixel edge removed haze worth up
+to 78.7 of 255 from 2.4 per cent of a first-person frame at fov 100 (5.0 with the camera
+inside the bulb), and the raw chord, whose rim stood up to 11.2 of 255 brighter than the
+room term (a numpy transcription of both terms). The measurement behind each number is
+RoomProbe on the additive pass over black, and a footprint count over the fifteen `.TRG`
+files through the vendored TRForge reader, which RoomProbe's `additive:` block confirms
+level by level.
+
+**How.** `specific/hd/hd_render.cpp`:
+- The screen blend: `draw_pass` (`:4104`-`:4116` set up, `:4341`-`:4361` per range,
+  `:4394`-`:4405` at the end of the pass) sets `D3DRS_SRCBLEND` `D3DBLEND_INVDESTCOLOR`
+  against the pass's `D3DBLEND_ONE` when a run of material 2 draw calls starts and puts
+  `D3DBLEND_ONE` back when it ends; src * (1 - dst) + dst is the screen. The sampler goes
+  to `D3DSAMP_MINFILTER` `D3DTEXF_ANISOTROPIC` with `D3DSAMP_MAXANISOTROPY` min(16,
+  `MaxAnisotropy`) for the same run, when the device reports `D3DPRASTERCAPS_ANISOTROPY`
+  and `D3DPTFILTERCAPS_MINFANISOTROPIC`, and back to `D3DTEXF_LINEAR` and the anisotropy
+  it found. The screen composition of the glow is TROne's own rule: TROne (GPLv3) by
+  Todesengel1931 - https://github.com/todesengel1931, credited at the blend (`:4089`).
+- Every additive draw call holds one material: `HDTri::material` and `HDRange::material`,
+  `MaterialBase(part)` in pass 2 and 0 in the other two passes (`:2766`), in the sort key
+  after the destructible id (`:3134`) and in the range merge.
+- The stacked sea: `MarkStackedCopies` (`:485`) builds a footprint key per triangle of an
+  additive material 16 run - the corners' x and z in (x, z) order and the two other
+  corners' height above the first, so only an exact vertical translate is a copy - sorts
+  the keys, and where a footprint holds three or more triangles marks every one whose y
+  sum is above the smallest (the topmost copy stays, y counting downwards). The build loop
+  calls it per part (`:2758`) and skips a marked triangle (`:2997`) after the
+  horizontal-plane rows, so the water-surface tables still see every copy. Two-sheet
+  stacks never qualify.
+- The period fence: `MaterialAddPeriod` (`:439`) returns 0, a still part, below
+  `kAddStillBelow` = 0.5 s (`:437`); 0.05 to 60 s stays the range that is read at all.
+- Diagnostics for the tools alone, never called by the engine: `HDRenderStackOverride`,
+  `HDRenderSwingOverride`, `HDRenderAdditiveOnly` and `HDRenderGlowOverride`
+  (`:1905`-`:1924`, declared in `hd_render.h`), and three counts in `HDRenderStats`
+  (`addStillParts`, `stackedParts`, `stackedTris`).
+
+`specific/hd/hd_shader/hd_model.hlsl`: `BulbIntensity` culls on `P.z + rad <= 0` (`:489`)
+and weights the chord with `smoothstep(0, kRim, chord / diameter)`, `kRim` 0.35
+(`:551`-`:556`), line for line `hd_room.hlsl:777` and `:864`-`:869`; `hd_model_ps.inc` and
+`hd_model_vs.inc` regenerated by `bshader.bat`, the model pixel shader at 353 instruction
+slots (348 before).
+
+Tools: `RoomProbe -glow` (`Preparation/Tools/Diagnose/RoomProbe.cpp:4866`) draws the
+additive pass of every drawn group again after the full frame, alone over black, once over
+the frame's depth and once over a cleared one, each in its own checked state bracket;
+`-glowblend add|screen`, `-aniso 0|1`, `-fastswing`, `-stackedseas` and `-addmat <n>`
+(`:3457`-`:3474`) draw the before pictures and one material's glow out of the same build,
+and the `additive:` block prints the new counts (`:4284`). `ModelProbe -bulb <x y z radius
+density [r g b]>` (`ModelProbe.cpp:8777`, `PutBulbs` at `:6299`) puts view-space fog bulbs
+into the frame's lighting block.
+
+**Checked.** A fixed list of 46 views (report views of ANDREA2 131, RICH1 3, JOBY4 19 and
+TITLE 6, ANDREA2 131 from 4811 -1250 5864, TITLE 6 grazing, JOBY5 65 and 82 looking up,
+and one view per material 2 grouping of the fifteen levels, 36 of them, three of which -
+two candle halos and a RICH1 lamp cone - no camera in the room sees) drawn by RoomProbe
+before (the build of the tools commit) and after.
+- The gate: on the six report views the additive pass alone reproduces the earlier
+  statistics exactly - ANDREA2 side coverage 19.1 per cent, mean 190.0, clipped 56.7,
+  white 17.3; inside 85.6, 153.4, 27.4, 0.0; RICH1 corridor 12.7, 158.0, 25.8, 25.8;
+  inside 88.1, 163.0, 18.4, 18.4; JOBY4 98.5, 128.1, 40.2, 0.0; TITLE 69.3, 22.9, 0.0,
+  0.0. The depth-kept glow is cut by the scene where the depth-free one is not: RICH1's
+  grate slats and the corridor's lower edge take 11.5 per cent of the shaft, TITLE's tomb,
+  trees and gravestones 14.9, ANDREA2's floor the foot of the shaft (1,536 pixels in the
+  4811 view); ANDREA2's pillars stand behind the shaft and cut nothing.
+- The metrics over the glow's own pixels (glow alone over the scene's depth; clipped = any
+  channel at 250 or more, white = all three, hue-pinned = two at 250 or more and one at 0,
+  steps = neighbour pairs more than 40 of 255 apart; before -> after):
+
+  | view | clipped | white | pinned | steps | mean /255 |
+  |---|---|---|---|---|---|
+  | ANDREA2 131 side | 48.7->0.7 | 14.4->0.0 | 0->0 | 7121->2633 | 174.8->139.7 |
+  | ANDREA2 131 inside | 25.7->0.0 | 0.0->0.0 | 0->0 | 6160->3488 | 147.1->119.9 |
+  | ANDREA2 131 4811 | 36.5->0.3 | 7.6->0.0 | 0->0 | 10145->4413 | 149.3->119.4 |
+  | RICH1 3 corridor | 26.1->0.1 | 26.1->0.1 | 0->0 | 3878->2097 | 159.4->125.7 |
+  | RICH1 3 inside | 18.3->0.0 | 18.3->0.0 | 0->0 | 4853->2614 | 163.4->127.4 |
+  | JOBY4 19 up | 40.2->0.2 | 0.0->0.0 | 0.4->0 | 11849->1023 | 128.1->77.4 |
+  | TITLE 6 church | 0.0->0.0 | 0.0->0.0 | 0->0 | 1385->898 | 28.8->27.6 |
+  | TITLE 6 grazing | 0.0->0.0 | 0.0->0.0 | 0->0 | 762->558 | 19.1->18.7 |
+  | JOBY5 65 sea view | 16.7->0.0 | 0.0->0.0 | 0->0 | 3258->2814 | 110.0->56.0 |
+
+  The full frame over the same pixels: ANDREA2 side clipped 65.9 -> 1.9 and white 20.3 ->
+  0.0, RICH1 corridor white 57.4 -> 0.8, RICH1 inside white 57.2 -> 1.4. Over all 46 views
+  the largest clipped share left is 1.7 per cent (ANDREA2 room 225's window glow, 60.0
+  before).
+- The brightness rule, material 2 alone (`-addmat 2`) over the same pixels before and
+  after: no view falls under 55 per cent of its old mean; the lowest are ANDREA3 room 34's
+  window glow at 73.3, RICH1 3 inside at 78.0 and the RICH1 corridor at 78.8. No preset
+  weight changed.
+- The loader finds what the file table says: JOBY4 1 part, 55,296 copies left out of
+  73,728; JOBY5 3 parts, 111,312 left out (groups 65 and 82 55,296 each, group 117 720 of
+  1,080). No other level has one. The fence stills 85 material 2 parts: ANDREA1 1, ANDREA2
+  9, ANDREA3 19, ANDY1 2, ANDY2 24, ANDY3 9, RICH1 5, TITLE 16.
+- Identity: the after build with `-stackedseas -fastswing -glowblend add -aniso 0` draws
+  all six pictures of all 46 views md5-identical to the before build (full, opaque, alpha,
+  additive, glow, glow without depth). The opaque and alpha pictures of all 46 views are
+  identical before and after. Every pixel the additive pictures change lies where material
+  2 or 16 draws (the `-addmat` pictures as the mask), in every view; material 16 changes
+  only in the five views of the stacked seas (JOBY4 room 19 twice, JOBY5 rooms 65, 82 and
+  the 65 sweep view). The state bracket passes in all 46 views, for the frame and for both
+  glow pictures. `hd_room_ps.inc` is byte-identical (md5
+  `4a0664f86372905f5c45697410b748f3`).
+- Q5: ModelProbe `-lara ANDREA1 -shade 0 -bulb 60 -120 360 220 0.4`, the bulb between the
+  camera and her: all 114,363 model pixels within 1 of 255 of a numpy transcription of the
+  room term; the old shader against the old term the same, and the two shaders differ by
+  up to 16 of 255 on 2.7 per cent of her pixels, the rim.
+- ModernTest 10808, MenuTest 35547, InterpTest 635 checks, LipsTest 270 with the `.OBJ`
+  folder and 243 without, 0 failed. Not measured: the game.
+
+**Unchanged.** `hd_enable` 0: nothing of the HD path runs (`HDEnabled`, `hd_level.cpp`),
+and no file outside `hd_render.cpp`, `hd_render.h`, `hd_model.hlsl` and its two `.inc`
+changed in the engine. The classic path, the classic buckets and the interpolator. The
+room pixel shader. Every additive material other than 2, and material 16 wherever it is
+not stacked three times - the double sheets two units apart stay double. The swing of
+every part at half a second or more.
+
+**Decisions.** `param[3]` stays a period, and anything under 0.5 s draws still. Screen for
+material 2 only; every other additive material keeps ONE / ONE. The presets stay unless a
+shaft's mean falls under 55 per cent of before, and then that preset's weight rises until
+it does not, never past 1 per cent clipped - none did. A sea stacked three times or more
+is drawn once. The depth fade, and the near, `|N.V|`, edge and end fades of a dedicated
+glow shader, come in a later round; no face culling of material 2. No sun rays. No fine
+modulation. The model shader takes the room's bulb term.
+
+**Commits.** `e97cfb6`, `7857a97`, `ed53a0a`, `9ba3a2e`
 
 ### The sky
 2026-09-05 - 2026-09-08

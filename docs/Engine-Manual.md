@@ -2722,9 +2722,10 @@ to 90.
 at all stood on the target tile — a single small medipack was enough. TR1–4
 had no such test. Enemies, statues and a second block still stop it.
 
-**A wall pickup dropped by an enemy becomes an ordinary one.** Some items are
-pulled off a wall at a particular angle; dropped on open floor that can never
-happen again and the item would be lost for good.
+**An enemy never takes a wall pickup.** Some items are pulled off a wall at a
+particular angle, so an enemy standing next to one leaves it on its wall
+instead of carrying it off and dropping it on open floor, where it could not be
+picked up.
 
 **Corpses and models behave.** Larson does not stand dead forever outside
 Trajan's Markets. Larson and Pierre only flee where the level actually

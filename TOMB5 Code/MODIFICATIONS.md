@@ -2412,20 +2412,22 @@ one.
   stood under 55 per cent already after the entry before, which draws the stacked seas
   once (41.0, 40.9, 49.9 and 50.9 per cent then, 34.1, 34.3, 42.6 and 41.6 now);
   material 2 alone holds 78.8, 79.5, 68.5 and 65.0 there.
-- The mean over the glow's own pixels rises when faint pixels drop out, so it hides a
-  glow that fades away as a whole. Over the pixels material 2 covered before the first
-  half (more than 8 of 255; the mean over those fixed pixels in per cent of before, and
-  in brackets the share of them still above 8): ANDREA1 room 19, the haze of page 3232
-  (preset (0.5, 0.1, 0, 0.6633), 38 parts in 38 rooms) 1.1 (1.1), where the own-pixel
-  mean reads 70.7; ANDY2 room 6, the church mist of page 2100 (1, 0.2, 2, 1) 29.9 (1.4),
-  own 133.9; TITLE room 8, page 2146, 50.8 (53.5); RICH2 room 78, page 3225, 43.6
-  (32.1). Scratch builds with one fade off at a time name the fades: without the near
-  fade ANDREA1 comes back to 29.9 and ANDY2 to 55.1, without `|N.V|` to 4.5 and 65.9,
-  so the haze and the mist go under both together; TITLE room 8 comes back whole
-  without `|N.V|` (100.9) and does not change without the near fade; RICH2 room 78
-  comes back to 79.9 without `|N.V|` and to 55.0 without the end fade. At full size the
-  room-wide haze of ANDREA1 and the mist between ANDY2 room 6's window beams and over
-  its floor are gone; the lamp cones and the beams themselves stay.
+- The mean over the glow's own pixels rises when faint pixels drop out, so it hides a glow
+  that fades away as a whole. Over the pixels material 2 covered before the first half
+  (more than 8 of 255; the mean over those fixed pixels in per cent of before, and in
+  brackets the share of them still above 8): ANDREA1 room 19, the haze of page 3232
+  (preset (0.5, 0.1, 0, 0.6633), 38 parts in 38 rooms) 1.1 (1.1), where the own-pixel mean
+  reads 70.7; ANDY2 room 6, the church mist of page 2100 (1, 0.2, 2, 1) 29.9 (1.4), own
+  133.9; TITLE room 8, page 2146, 50.8 (53.5); RICH2 room 78, page 3225, 43.6 (32.1);
+  TITLE room 6, the church view, 69.2 over the whole frame and 37.8 in its right third,
+  and its grazing view 39.9 (37.0), because `|N.V|` fades the fan seen edge-on at the
+  horizon. Scratch builds with one fade off at a time name the fades: without the near
+  fade ANDREA1 comes back to 29.9 and ANDY2 to 55.1, without `|N.V|` to 4.5 and 65.9, so
+  the haze and the mist go under both together; TITLE room 8 comes back whole without
+  `|N.V|` (100.9) and does not change without the near fade; RICH2 room 78 comes back to
+  79.9 without `|N.V|` and to 55.0 without the end fade. At full size the room-wide haze
+  of ANDREA1 and the mist between ANDY2 room 6's window beams and over its floor are gone;
+  the lamp cones and the beams themselves stay.
 - The gains (`GlowGain`), searched in steps against the rule: (1.5, 0.4) 1.45, ANDREA2
   room 68's lamp cones 50.0 -> 55.4 per cent; (0.5, 0.6) 1.25, where ANDREA3 room 66's
   shaft reaches 0.79 and ANDREA2 room 225's window glow 0.63 per cent clipped (1.6 and
@@ -2438,8 +2440,8 @@ one.
   `2e3867532e2e3971991f5bd039227d2e` unchanged; `hd_glow_ps.inc` 479 instruction slots.
 - ModernTest 10808, MenuTest 35547, InterpTest 635 checks, LipsTest 270 with the `.OBJ`
   folder and 243 without, 0 failed. Not measured: the game; the first things to look at
-  there are ANDREA1's haze in every room, the mist of ANDY2 room 6, then the inside of
-  ANDREA2's shaft.
+  there are ANDREA1's haze in every room, the mist of ANDY2 room 6, the title's right-hand
+  ray fan at the horizon, then the inside of ANDREA2's shaft.
 
 **Unchanged.** `hd_enable` 0: the glow shader is created in `HDRenderInit` and the
 parts are taken in `HDRenderLevelBegin`, both reached only behind `HDEnabled`

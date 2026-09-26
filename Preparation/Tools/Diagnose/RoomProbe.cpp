@@ -121,6 +121,11 @@
  *     -aniso 0|1      material 2 sampled with the anisotropic filter (1, the
  *                     renderer's own) or with the trilinear one of every
  *                     other draw call (0).
+ *     -glowps 0|1     material 2 drawn with the glow pixel shader and its
+ *                     fades (1, the renderer's own) or with the room pixel
+ *                     shader (0) - the before picture out of the same build.
+ *                     The additive block lists what the level build decided
+ *                     for every glow part.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -3294,7 +3299,7 @@ int main(int argc, char** argv)
 		printf("       -glow   the additive pass alone over black, with and "
 			"without the scene's depth\n");
 		printf("       -stackedseas  -fastswing  -addmat <material>\n");
-		printf("       -glowblend add|screen  -aniso 0|1\n");
+		printf("       -glowblend add|screen  -aniso 0|1  -glowps 0|1\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -hdm                          apply the .hdm sidecar "
@@ -3331,8 +3336,8 @@ int main(int argc, char** argv)
 	// Draw the .TRG's sky group(s) behind the room, and only them.
 	bool sky = false, skyOnly = false;
 	bool wibbleGiven = false;
-	// -glowblend and -aniso, handed to HDRenderGlowOverride together.
-	int glowSum = 0, glowNoAniso = 0;
+	// -glowblend, -aniso and -glowps, handed to HDRenderGlowOverride together.
+	int glowSum = 0, glowNoAniso = 0, glowNoShader = 0;
 
 	// The portal walk offline. A seed of -1 means the switch was
 	// not given and nothing below changes.
@@ -3465,12 +3470,17 @@ int main(int argc, char** argv)
 		else if (!strcmp(argv[at], "-glowblend") && at + 1 < argc)
 		{
 			glowSum = !strcmp(argv[++at], "add") ? 1 : 0;
-			HDRenderGlowOverride(glowSum, glowNoAniso);
+			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader);
 		}
 		else if (!strcmp(argv[at], "-aniso") && at + 1 < argc)
 		{
 			glowNoAniso = atoi(argv[++at]) ? 0 : 1;
-			HDRenderGlowOverride(glowSum, glowNoAniso);
+			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader);
+		}
+		else if (!strcmp(argv[at], "-glowps") && at + 1 < argc)
+		{
+			glowNoShader = atoi(argv[++at]) ? 0 : 1;
+			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader);
 		}
 		else if (!strcmp(argv[at], "-noshore"))
 			HDRenderShoreOverride(1);
@@ -3895,6 +3905,9 @@ int main(int argc, char** argv)
 				for (int axis = 0; axis < 3; axis++)
 					if (b.maxs[axis] < b.mins[axis])
 						b.maxs[axis] = b.mins[axis];
+
+				b.originX = (float)rm.originX;
+				b.originZ = (float)rm.originZ;
 			}
 
 			HDRenderSetRoomBoxes(&g_boxes_built[0],
@@ -4284,6 +4297,28 @@ int main(int argc, char** argv)
 	printf("additive: %d material 2 part(s) still (swing under half a "
 		"second); %d stacked sea(s) drawn once, %d copied triangles left out\n",
 		stats.addStillParts, stats.stackedParts, stats.stackedTris);
+	/* The glow shader's parts: whether their card sides fade, which normal
+	 * their |N.V| takes, and the asset they belong to with its page-v axis,
+	 * its ends in world units and the end fade's length. */
+	printf("glow: %d material 2 part(s) in %d asset(s), %d with an edge fade, "
+		"%d on the face normal\n", stats.glowParts, stats.glowAssets,
+		stats.glowEdgeParts, stats.glowFaceParts);
+
+	for (int i = 0; i < HDRenderGlowPartCount(); i++)
+	{
+		HDRenderGlowPart g;
+
+		if (!HDRenderGlowPartInfo(i, &g))
+			continue;
+
+		printf("glow part: group %d part %d page %d u %d..%d v %d..%d edge %d "
+			"normal %s (%d of %d corners disagree) asset %d axis %.3f %.3f %.3f "
+			"ends %.0f..%.0f fade %.0f\n", g.group, g.part, g.page, g.u0, g.u1,
+			g.v0, g.v1, g.edge, g.face ? "face" : "file", g.disagree, g.corners,
+			g.asset,
+			g.axis[0], g.axis[1], g.axis[2], g.lo, g.hi, g.fade);
+	}
+
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");

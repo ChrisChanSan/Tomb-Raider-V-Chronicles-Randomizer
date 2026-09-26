@@ -197,11 +197,17 @@ struct HDWaterMark
  * origin, y in world units, which is what the file stores) and in classic
  * units, one entry per room, in room order. Call it before
  * HDRenderLevelBegin; the pointer is not kept past that call. Without it
- * every group is drawn as one piece. */
+ * every group is drawn as one piece.
+ *
+ * `originX` and `originZ` are the room's origin in world units, r->x and
+ * r->z: what puts two rooms' art side by side, so that the pieces of one
+ * light shaft standing in several rooms are faded as one asset (hd_render.cpp,
+ * BuildGlowParts). */
 struct HDRoomBox
 {
 	float mins[3];
 	float maxs[3];
+	float originX, originZ;
 };
 
 /* One room's inside, asked of another room's art.
@@ -338,6 +344,14 @@ struct HDRenderStats
 	int addStillParts;
 	int stackedParts;
 	int stackedTris;
+	/* The material 2 parts the glow shader draws, how many of them fade at
+	 * their card sides, how many take |N.V| from the face normal, and the
+	 * assets they make up (hd_render.cpp, BuildGlowParts). All zero with the
+	 * glow shader off. */
+	int glowParts;
+	int glowEdgeParts;
+	int glowFaceParts;
+	int glowAssets;
 	/* Parts of a sky group that carry no baked light and are therefore drawn
 	 * at light 1 - the band of sky itself. */
 	int skyFlatParts;
@@ -452,13 +466,36 @@ void HDRenderSwingOverride(int keepFast);
  * what the engine always has. May be called at any time. */
 void HDRenderAdditiveOnly(int material);
 
-/* The glow's screen composition and its anisotropic sampling off, for the
- * diagnostic tool alone. `sum` non-zero draws material 2 ONE / ONE like every
- * other additive material, `noAniso` non-zero samples it with the plain
- * trilinear filter of every other draw call (hd_render.cpp, draw_pass) - the
- * comparison pictures out of the same build. May be called at any time; the
- * engine never calls it and there is no option and no registry key for it. */
-void HDRenderGlowOverride(int sum, int noAniso);
+/* The glow's screen composition, its anisotropic sampling and its own pixel
+ * shader off, for the diagnostic tool alone. `sum` non-zero draws material 2
+ * ONE / ONE like every other additive material, `noAniso` non-zero samples it
+ * with the plain trilinear filter of every other draw call (hd_render.cpp,
+ * draw_pass), `noShader` non-zero draws it with the room pixel shader and
+ * none of the glow shader's fades (hd_glow.hlsl) - the comparison pictures
+ * out of the same build. `noShader` takes effect at the next
+ * HDRenderLevelBegin, because the glow's draw calls are split by part at
+ * level build; the other two may change at any time. The engine never calls
+ * it and there is no option and no registry key for it. */
+void HDRenderGlowOverride(int sum, int noAniso, int noShader);
+
+/* What the level build decided for one glow part (hd_render.cpp,
+ * BuildGlowParts), for the diagnostic tool alone. */
+struct HDRenderGlowPart
+{
+	int group, part;
+	int page;			// the .DDS number of its first triangle
+	int u0, u1;			// the u range it uses, 0..255
+	int v0, v1;			// and the v range
+	int edge;			// 1 = the card sides fade
+	int face;			// 1 = |N.V| from the face normal
+	int corners, disagree;		// corners seen, and those with |N.f| < 0.9
+	int asset;			// which asset it belongs to
+	float axis[3];			// the asset's page-v axis
+	float lo, hi;			// the asset's ends along it, world units
+	float fade;			// the end fade's length, 0 = none
+};
+int HDRenderGlowPartCount();
+bool HDRenderGlowPartInfo(int at, HDRenderGlowPart* out);
 void HDRenderShutdown();
 bool HDRenderReady();
 

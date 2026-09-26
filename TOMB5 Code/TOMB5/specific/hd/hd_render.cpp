@@ -31,6 +31,7 @@
 
 #include "hd_shader/hd_room_vs.inc"
 #include "hd_shader/hd_room_ps.inc"
+#include "hd_shader/hd_glow_ps.inc"
 
 #include <algorithm>
 #include <chrono>
@@ -448,6 +449,40 @@ namespace
 			return 0.0f;
 
 		return part.param[3];
+	}
+
+	/* The glow shader's gain on a material 2 part's weight, per preset - the
+	 * (param[0], param[2]) pair MaterialAddWeight groups the weights by - and
+	 * 1 for every preset the table does not name.
+	 *
+	 * The fades take light away, and a preset whose glow falls under 55 per
+	 * cent of the mean the sum drew is raised until it does not, but never so
+	 * far that more than 1 per cent of a glow's pixels clip. Measured with
+	 * RoomProbe -glow -addmat 2 over one view per preset and page, the mean
+	 * over the glow's own pixels against the sum's:
+	 *
+	 *   (1.5, 0.4)  1.45  ANDREA2 room 68's lamp cones 50.0 -> 55.4 per cent
+	 *   (0.5, 0.6)  1.25  stops at the clip: ANDREA3 room 66's shaft 0.79 and
+	 *                     ANDREA2 room 225's window glow 0.63 per cent clipped,
+	 *                     1.6 and 1.8 at 1.3 with every additive material
+	 *                     drawn; ANDREA2 room 131's shaft seen from
+	 *                     inside its fan stays at 52.1
+	 *   (0.5, 0.8)  1.03  stops at the clip: ANDREA3 room 34's window glow
+	 *                     0.98 per cent; ANDY2 room 34 stays at 53.8 */
+	inline float GlowGain(const trf::remaster::TrgPart& part)
+	{
+		static const HDAddPreset kGains[] =
+		{
+			{ 0.5f, 0.6f, 1.25f },
+			{ 1.5f, 0.4f, 1.45f },
+			{ 0.5f, 0.8f, 1.03f },
+		};
+
+		for (int i = 0; i < (int)(sizeof(kGains) / sizeof(kGains[0])); i++)
+			if (part.param[0] == kGains[i].p0 && part.param[2] == kGains[i].p2)
+				return kGains[i].weight;
+
+		return 1.0f;
 	}
 
 	/* The stacked sea: an additive material 16 part whose triangles come in
@@ -1002,6 +1037,10 @@ namespace
 		 * destructible bits, and 0 in the other two passes. In the sort key, so
 		 * an additive draw call is one material. */
 		int material = 0;
+		/* The glow part of a material 2 draw call in the additive pass - its
+		 * entry in g_glow_parts - and -1 for every other draw call. In the
+		 * sort key, because the glow shader's three registers are per part. */
+		int glow = -1;
 		/* Which half of the room this draw call is: 1 where the triangles of
 		 * this range stand inside another room - see HDIntrusion in
 		 * hd_render.h. In the sort key, because the two halves are drawn with
@@ -1238,6 +1277,8 @@ namespace
 	IDirect3DDevice9* g_device = 0;
 	IDirect3DVertexShader9* g_vs = 0;
 	IDirect3DPixelShader9* g_ps = 0;
+	// The glow shader, material 2's additive draw calls (hd_glow.hlsl).
+	IDirect3DPixelShader9* g_glow_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
 	IDirect3DVertexBuffer9* g_vb = 0;
 	IDirect3DIndexBuffer9* g_ib = 0;
@@ -1379,6 +1420,420 @@ namespace
 	const HDCut* g_cuts = 0;
 	int g_cut_count = 0;
 	std::vector<int> g_cut_hits;
+
+	/* The shape of every glow, for the glow pixel shader (hd_glow.hlsl).
+	 *
+	 * One entry per material 2 part with triangles in the additive pass,
+	 * taken once at level build out of the part's own vertices:
+	 *
+	 *   the card sides  the u range the part's triangles use. A part that uses
+	 *                   less than 90 per cent of its page's u cuts its cards
+	 *                   out of the middle of the page, where the page is still
+	 *                   bright, and its outer 15 per cent on either side fades.
+	 *                   The parts that do: ANDREA1 room 157, ANDREA2 rooms 93,
+	 *                   131 and 217, ANDREA3's page 3037, ANDY2 room 34.
+	 *   the normal      the file normal, unless it disagrees with the part's
+	 *                   faces - |N.f| under 0.9 on more than half of the
+	 *                   part's corners - and then the face normal: 31 of the
+	 *                   253 parts of the fifteen levels, JOBY2's 21 lamp cones,
+	 *                   ANDREA3's seven window slabs of page 3232, ANDY2 room
+	 *                   34, ANDY3 room 150 and TITLE room 43.
+	 *   the ends        the page-v axis, the mean of the direction v runs in
+	 *                   over the part's triangles, and the extent of the ASSET
+	 *                   along it. An asset is every part of one material tuple
+	 *                   and one page whose world boxes overlap or come within
+	 *                   a sector of each other - ANDREA2's window shaft is the
+	 *                   three parts of rooms 93, 131 and 217 - because an end
+	 *                   fade per part would fade each room's piece of a shaft
+	 *                   at the room's border and cut seams across it. The fade
+	 *                   is 512 units long, and never more than a quarter of the
+	 *                   asset's extent, so ANDREA1's window slabs of page 3232,
+	 *                   810 units along their axis, keep their middle. Only an
+	 *                   asset with a part cut out of the page in v fades at its
+	 *                   ends (see below): 94 of the 253 parts, in 78 assets.
+	 *
+	 * The rooms' origins come with the room boxes (HDRoomBox). Without them
+	 * no two groups can be put side by side, and an asset is then the parts of
+	 * one group alone. */
+	struct HDGlowPart
+	{
+		int group = -1;
+		int part = -1;
+		int page = -1;
+		int u0 = 255, u1 = 0;
+		int v0 = 255, v1 = 0;
+		bool edge = false;
+		bool face = false;
+		int corners = 0, disagree = 0;
+		int asset = -1;
+		float axis[3] = { 0.0f, 0.0f, 0.0f };
+		float lo = 0.0f, hi = 0.0f;	// the asset's ends, world units
+		float shift = 0.0f;		// dot(the group's origin, axis)
+		float fade = 0.0f;
+		float gradient[3] = { 0.0f, 0.0f, 0.0f };
+		float mins[3] = { 0.0f, 0.0f, 0.0f };
+		float maxs[3] = { 0.0f, 0.0f, 0.0f };
+		float origin[3] = { 0.0f, 0.0f, 0.0f };
+	};
+
+	std::vector<HDGlowPart> g_glow_parts;
+	int g_glow_assets = 0;
+	/* HDRenderGlowOverride: material 2 drawn with the room pixel shader, its
+	 * draw calls not split by part. False in the engine. */
+	bool g_glow_no_shader = false;
+
+	const float kGlowEdgeBelow = 0.9f;
+	const float kGlowEdgeShare = 0.15f;
+	const float kGlowAgree = 0.9f;
+	const float kGlowEndFade = 512.0f;
+	const float kGlowEndShare = 0.25f;
+	const float kGlowTouch = 1024.0f;
+
+	/* The corners of one additive triangle of a part, or false where the
+	 * file's indices run off its own arrays. */
+	bool glow_triangle(const trf::remaster::Trg& trg, unsigned int first,
+		const trf::remaster::TrgVertex** out)
+	{
+		if (first + 2 >= trg.indices.size())
+			return false;
+
+		for (int k = 0; k < 3; k++)
+		{
+			const unsigned int index = trg.indices[first + (unsigned int)k];
+
+			if (index >= trg.vertices.size())
+				return false;
+
+			out[k] = &trg.vertices[index];
+		}
+
+		return true;
+	}
+
+	/* Fills g_glow_parts and, per group and part, the entry's number or -1:
+	 * the build loop hands that number to the part's additive triangles,
+	 * where it keeps the parts in draw calls of their own. */
+	void BuildGlowParts(const trf::remaster::Trg& trg,
+		std::vector<std::vector<int> >& glowOf)
+	{
+		g_glow_parts.clear();
+		g_glow_assets = 0;
+		glowOf.assign(trg.groups.size(), std::vector<int>());
+
+		if (g_glow_no_shader)
+			return;
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+		{
+			const trf::remaster::TrgGroup& source = trg.groups[g];
+
+			glowOf[g].assign(source.parts.size(), -1);
+
+			for (size_t p = 0; p < source.parts.size(); p++)
+			{
+				const trf::remaster::TrgPart& part = source.parts[p];
+				const trf::remaster::TrgPart::Pass& run = part.pass[2];
+
+				if (MaterialBase(part) != HD_TRG_MATERIAL_GLOW || run.count < 3)
+					continue;
+
+				HDGlowPart glow;
+				bool any = false;
+				float ref[3] = { 0.0f, 0.0f, 0.0f };
+				bool has_ref = false;
+
+				glow.group = (int)g;
+				glow.part = (int)p;
+
+				if (g_boxes && (int)g < g_box_count)
+				{
+					glow.origin[0] = g_boxes[g].originX;
+					glow.origin[2] = g_boxes[g].originZ;
+				}
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const trf::remaster::TrgVertex* v[3];
+
+					if (!glow_triangle(trg, run.start + at, v))
+						break;
+
+					if (glow.page < 0 && v[0]->layer &&
+						(size_t)v[0]->layer <= trg.textures.size())
+						glow.page = (int)trg.textures[v[0]->layer - 1];
+
+					float P[3][3];
+
+					for (int k = 0; k < 3; k++)
+					{
+						P[k][0] = (float)v[k]->x + glow.origin[0];
+						P[k][1] = (float)v[k]->y;
+						P[k][2] = (float)v[k]->z + glow.origin[2];
+
+						if ((int)v[k]->u < glow.u0) glow.u0 = (int)v[k]->u;
+						if ((int)v[k]->u > glow.u1) glow.u1 = (int)v[k]->u;
+						if ((int)v[k]->v < glow.v0) glow.v0 = (int)v[k]->v;
+						if ((int)v[k]->v > glow.v1) glow.v1 = (int)v[k]->v;
+
+						for (int axis = 0; axis < 3; axis++)
+						{
+							if (!any || P[k][axis] < glow.mins[axis]) glow.mins[axis] = P[k][axis];
+							if (!any || P[k][axis] > glow.maxs[axis]) glow.maxs[axis] = P[k][axis];
+						}
+
+						any = true;
+					}
+
+					const float e1[3] = { P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2] };
+					const float e2[3] = { P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2] };
+					const float fn[3] =
+					{
+						e1[1] * e2[2] - e1[2] * e2[1],
+						e1[2] * e2[0] - e1[0] * e2[2],
+						e1[0] * e2[1] - e1[1] * e2[0]
+					};
+					const float fl = sqrtf(fn[0] * fn[0] + fn[1] * fn[1] + fn[2] * fn[2]);
+
+					/* Does the file's normal agree with the face? A corner
+					 * with no normal at all agrees with nothing. */
+					if (fl > 0.0f)
+						for (int k = 0; k < 3; k++)
+						{
+							const float n[3] = { v[k]->normal_x(), v[k]->normal_y(), v[k]->normal_z() };
+							const float nl = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+							const float agree = nl > 0.0f
+								? fabsf(n[0] * fn[0] + n[1] * fn[1] + n[2] * fn[2]) / (nl * fl)
+								: 0.0f;
+
+							glow.corners++;
+
+							if (agree < kGlowAgree)
+								glow.disagree++;
+						}
+
+					/* The direction v runs in on this triangle: dP/dv out of
+					 * the two edges and their UV differences, signed the same
+					 * way as the part's first one. */
+					const float du1 = (float)v[1]->u - (float)v[0]->u;
+					const float du2 = (float)v[2]->u - (float)v[0]->u;
+					const float dv1 = (float)v[1]->v - (float)v[0]->v;
+					const float dv2 = (float)v[2]->v - (float)v[0]->v;
+					const float det = du1 * dv2 - du2 * dv1;
+
+					if (fabsf(det) < 1e-6f)
+						continue;
+
+					float d[3];
+
+					for (int axis = 0; axis < 3; axis++)
+						d[axis] = (e2[axis] * du1 - e1[axis] * du2) / det;
+
+					const float dl = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+
+					if (dl <= 0.0f)
+						continue;
+
+					if (!has_ref)
+					{
+						has_ref = true;
+						ref[0] = d[0]; ref[1] = d[1]; ref[2] = d[2];
+					}
+
+					const float sign = d[0] * ref[0] + d[1] * ref[1] + d[2] * ref[2] < 0.0f
+						? -1.0f : 1.0f;
+
+					for (int axis = 0; axis < 3; axis++)
+						glow.gradient[axis] += sign * d[axis] / dl;
+				}
+
+				if (!any)
+					continue;
+
+				glow.edge = (float)(glow.u1 - glow.u0) < kGlowEdgeBelow * 255.0f;
+				glow.face = glow.disagree * 2 > glow.corners;
+
+				glowOf[g][p] = (int)g_glow_parts.size();
+				g_glow_parts.push_back(glow);
+			}
+		}
+
+		/* The assets: parts of one tuple and one page whose world boxes come
+		 * within a sector of each other, joined transitively. */
+		const size_t count = g_glow_parts.size();
+		std::vector<size_t> root(count);
+
+		for (size_t i = 0; i < count; i++)
+			root[i] = i;
+
+		struct Find
+		{
+			static size_t of(std::vector<size_t>& r, size_t i)
+			{
+				while (r[i] != i)
+				{
+					r[i] = r[r[i]];
+					i = r[i];
+				}
+
+				return i;
+			}
+		};
+
+		for (size_t i = 0; i < count; i++)
+			for (size_t j = i + 1; j < count; j++)
+			{
+				const HDGlowPart& a = g_glow_parts[i];
+				const HDGlowPart& b = g_glow_parts[j];
+				const trf::remaster::TrgPart& pa = trg.groups[(size_t)a.group].parts[(size_t)a.part];
+				const trf::remaster::TrgPart& pb = trg.groups[(size_t)b.group].parts[(size_t)b.part];
+
+				if (pa.material != pb.material || a.page != b.page ||
+					pa.param[0] != pb.param[0] || pa.param[1] != pb.param[1] ||
+					pa.param[2] != pb.param[2] || pa.param[3] != pb.param[3])
+					continue;
+
+				if (a.group != b.group && !(g_boxes && a.group < g_box_count &&
+					b.group < g_box_count))
+					continue;
+
+				bool touch = true;
+
+				for (int axis = 0; axis < 3; axis++)
+					if (a.mins[axis] > b.maxs[axis] + kGlowTouch ||
+						b.mins[axis] > a.maxs[axis] + kGlowTouch)
+						touch = false;
+
+				if (touch)
+					root[Find::of(root, i)] = Find::of(root, j);
+			}
+
+		/* Per asset: the axis out of its parts' directions, each part's turned
+		 * to agree with the first, and the extent along it out of every
+		 * vertex of every part. */
+		for (size_t i = 0; i < count; i++)
+		{
+			if (Find::of(root, i) != i)
+				continue;
+
+			const int asset = g_glow_assets++;
+			float axis[3] = { 0.0f, 0.0f, 0.0f };
+			const float* first = 0;
+			bool cut = false;
+
+			for (size_t j = 0; j < count; j++)
+			{
+				if (Find::of(root, j) != i)
+					continue;
+
+				const float* d = g_glow_parts[j].gradient;
+
+				if ((float)(g_glow_parts[j].v1 - g_glow_parts[j].v0) <
+					kGlowEdgeBelow * 255.0f)
+					cut = true;
+
+				if (!first)
+					first = d;
+
+				const float sign = d[0] * first[0] + d[1] * first[1] + d[2] * first[2] < 0.0f
+					? -1.0f : 1.0f;
+
+				for (int k = 0; k < 3; k++)
+					axis[k] += sign * d[k];
+			}
+
+			const float al = sqrtf(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+			bool seen = false;
+			float lo = 0.0f, hi = 0.0f;
+
+			/* Only an asset whose cards are cut out of the page in v has ends
+			 * to fade - a part of it uses less than 90 per cent of the page's
+			 * v. Where every part uses the whole page the ends are the page's
+			 * own, which fade by themselves: JOBY2's lamp cones, whose page
+			 * 3070 runs from the lamp to nothing, lose the light at the lamp
+			 * under an end fade (RoomProbe, JOBY2 room 17 from 1229 -2637
+			 * 2048: no pixel of the glow stays above 8 of 255, where 42,061
+			 * pixels averaged 13.1). */
+			if (al > 0.0f && cut)
+			{
+				for (int k = 0; k < 3; k++)
+					axis[k] /= al;
+
+				for (size_t j = 0; j < count; j++)
+				{
+					if (Find::of(root, j) != i)
+						continue;
+
+					const HDGlowPart& glow = g_glow_parts[j];
+					const trf::remaster::TrgPart::Pass& run =
+						trg.groups[(size_t)glow.group].parts[(size_t)glow.part].pass[2];
+
+					for (unsigned int at = 0; at + 2 < run.count; at += 3)
+					{
+						const trf::remaster::TrgVertex* v[3];
+
+						if (!glow_triangle(trg, run.start + at, v))
+							break;
+
+						for (int k = 0; k < 3; k++)
+						{
+							const float t =
+								((float)v[k]->x + glow.origin[0]) * axis[0] +
+								(float)v[k]->y * axis[1] +
+								((float)v[k]->z + glow.origin[2]) * axis[2];
+
+							if (!seen || t < lo) lo = t;
+							if (!seen || t > hi) hi = t;
+							seen = true;
+						}
+					}
+				}
+			}
+
+			for (size_t j = 0; j < count; j++)
+			{
+				if (Find::of(root, j) != i)
+					continue;
+
+				HDGlowPart& glow = g_glow_parts[j];
+
+				glow.asset = asset;
+
+				if (!seen)
+					continue;
+
+				glow.axis[0] = axis[0];
+				glow.axis[1] = axis[1];
+				glow.axis[2] = axis[2];
+				glow.lo = lo;
+				glow.hi = hi;
+				glow.shift = glow.origin[0] * axis[0] + glow.origin[2] * axis[2];
+				glow.fade = (hi - lo) * kGlowEndShare < kGlowEndFade
+					? (hi - lo) * kGlowEndShare : kGlowEndFade;
+			}
+		}
+	}
+
+	/* The glow shader's three registers for one part (hd_glow.hlsl, c77 to
+	 * c79). A fade that does not apply gets a range the pixel never leaves. */
+	void GlowConstants(const HDGlowPart& glow, float* out)
+	{
+		const bool ends = glow.fade > 0.0f;
+		const bool edge = glow.edge && glow.u1 > glow.u0;
+		const float width = kGlowEdgeShare * (float)(glow.u1 - glow.u0) / 255.0f;
+
+		out[0] = ends ? glow.axis[0] : 0.0f;
+		out[1] = ends ? glow.axis[1] : 0.0f;
+		out[2] = ends ? glow.axis[2] : 0.0f;
+		out[3] = ends ? 1.0f / glow.fade : 1.0f;
+		out[4] = ends ? glow.lo - glow.shift : -1.0f;
+		out[5] = ends ? glow.hi - glow.shift : 1.0f;
+		out[6] = edge ? (float)glow.u0 / 255.0f : -1.0f;
+		out[7] = edge ? (float)glow.u1 / 255.0f : 2.0f;
+		out[8] = edge ? 1.0f / width : 1.0f;
+		out[9] = glow.face ? 1.0f : 0.0f;
+		out[10] = 0.0f;
+		out[11] = 0.0f;
+	}
 
 	/* Whether a triangle really meets an axis-aligned box.
 	 *
@@ -1819,13 +2274,14 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
-	/* bshader.bat compiles both pixel shaders for ps_3_0, the room shader at
-	 * 476 instruction slots and the model shader at 348. The ps_3_0 figure is
+	/* bshader.bat compiles three pixel shaders for ps_3_0, the room shader at
+	 * 476 instruction slots, the model shader at 353 and the glow shader at
+	 * 479. The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
 	 * does not hold a ps_3_0 shader to 512: a 24-bulb room shader compiles
-	 * at 524 slots without a warning. The two shaders stay inside the
-	 * guarantee only because of their own size, 476 and 348, so anyone who
+	 * at 524 slots without a warning. The three shaders stay inside the
+	 * guarantee only because of their own size, 476, 353 and 479, so anyone who
 	 * grows one has to read the "instruction slots used" line of its .inc.
 	 * A device that answers less than 512 could fail CreatePixelShader below
 	 * with nothing but an HRESULT, so it is refused here with a reason in
@@ -1878,6 +2334,13 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDGlowPS, &g_glow_ps)))
+	{
+		*why = "CreatePixelShader failed for the glow shader";
+		HDRenderShutdown();
+		return false;
+	}
+
 	return true;
 }
 
@@ -1917,10 +2380,44 @@ void HDRenderAdditiveOnly(int material)
 	g_add_only = material >= 0 ? material : -1;
 }
 
-void HDRenderGlowOverride(int sum, int noAniso)
+void HDRenderGlowOverride(int sum, int noAniso, int noShader)
 {
 	g_glow_sum = sum ? true : false;
 	g_glow_no_aniso = noAniso ? true : false;
+	g_glow_no_shader = noShader ? true : false;
+}
+
+int HDRenderGlowPartCount()
+{
+	return (int)g_glow_parts.size();
+}
+
+bool HDRenderGlowPartInfo(int at, HDRenderGlowPart* out)
+{
+	if (!out || at < 0 || at >= (int)g_glow_parts.size())
+		return false;
+
+	const HDGlowPart& glow = g_glow_parts[(size_t)at];
+
+	out->group = glow.group;
+	out->part = glow.part;
+	out->page = glow.page;
+	out->u0 = glow.u0;
+	out->u1 = glow.u1;
+	out->v0 = glow.v0;
+	out->v1 = glow.v1;
+	out->edge = glow.edge ? 1 : 0;
+	out->face = glow.face ? 1 : 0;
+	out->corners = glow.corners;
+	out->disagree = glow.disagree;
+	out->asset = glow.asset;
+	out->axis[0] = glow.axis[0];
+	out->axis[1] = glow.axis[1];
+	out->axis[2] = glow.axis[2];
+	out->lo = glow.lo;
+	out->hi = glow.hi;
+	out->fade = glow.fade;
+	return true;
 }
 
 void HDRenderShutdown()
@@ -1928,6 +2425,7 @@ void HDRenderShutdown()
 	release_buffers();
 	HDPageCacheDestroy();
 
+	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
 	if (g_vs) { g_vs->Release(); g_vs = 0; }
 	if (g_decl) { g_decl->Release(); g_decl = 0; }
@@ -1944,7 +2442,7 @@ void HDRenderShutdown()
 
 bool HDRenderReady()
 {
-	return g_device && g_vs && g_ps && g_decl;
+	return g_device && g_vs && g_ps && g_glow_ps && g_decl;
 }
 
 /* ---------------------------------------------------------------- level -- */
@@ -2548,6 +3046,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	g_groups.assign(trg.groups.size(), HDGroup());
 
+	/* The glow parts - see BuildGlowParts. Before the build loop, because an
+	 * asset reaches across groups. */
+	std::vector<std::vector<int> > glow_of;
+
+	BuildGlowParts(trg, glow_of);
+
 	/* The shore of each room's water.
 	 *
 	 * The shader lifts every marked vertex by up to one and a half times
@@ -2640,6 +3144,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float blend;			// see MaterialBlend
 		int destructId;			// see HDDestructible
 		int material;			// the additive pass's material, else 0
+		int glow;			// see BuildGlowParts, else -1
 		int overhang;			// see HDRoomBox
 		int intruding;			// see HDIntrusion
 		unsigned int first;
@@ -2764,6 +3269,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * (HDRenderAdditiveOnly). Zero in the other two passes, whose
 				 * sort is unchanged. */
 				const int add_material = pass == 2 ? (int)MaterialBase(part) : 0;
+				// The glow part, in the additive pass only.
+				const size_t part_at = (size_t)(&part - &source.parts[0]);
+				const int glow_id = pass == 2 && part_at < glow_of[g].size()
+					? glow_of[g][part_at] : -1;
+				// And its weight, with the glow shader's gain on it.
+				const float draw_weight = glow_id >= 0
+					? aweight * GlowGain(part) : aweight;
 
 				if (pass == 2 && part.material == HD_TRG_MATERIAL_GLOW &&
 					part.param[3] >= 0.05f && part.param[3] < kAddStillBelow &&
@@ -3071,7 +3583,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.scrollU = su;
 					tri.scrollV = sv;
 					tri.alphaRef = aref;
-					tri.addWeight = aweight;
+					tri.addWeight = draw_weight;
 					tri.addPeriod = aperiod;
 					tri.flatLight = flat;
 					tri.flipTime = ftime;
@@ -3086,6 +3598,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.blend = blend;
 					tri.destructId = destruct_id;
 					tri.material = add_material;
+					tri.glow = glow_id;
 					tri.first = first;
 					tris.push_back(tri);
 				}
@@ -3132,6 +3645,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (a.destructId != b.destructId) return a.destructId < b.destructId;
 					// One material per additive draw call - see add_material.
 					if (a.material != b.material) return a.material < b.material;
+					/* One glow part per draw call. The parts are numbered in
+					 * the file's order, so the triangles keep that order. */
+					if (a.glow != b.glow) return a.glow < b.glow;
 					/* And the art that stands inside another room never
 					 * shares a draw call with the art that does not - the
 					 * scissor test is on for one and off for the other. Last
@@ -3176,6 +3692,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.blend = tris[0].blend;
 			range.destructId = tris[0].destructId;
 			range.material = tris[0].material;
+			range.glow = tris[0].glow;
 			range.intruding = tris[0].intruding;
 			range.overhang = tris[0].overhang;
 			range.start = (unsigned int)sorted.size();
@@ -3202,6 +3719,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].blend == range.blend &&
 					tris[i].destructId == range.destructId &&
 					tris[i].material == range.material &&
+					tris[i].glow == range.glow &&
 					tris[i].intruding == range.intruding &&
 					(!g_split_overhang ||
 						tris[i].overhang == range.overhang);
@@ -3257,6 +3775,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.blend = tris[i].blend;
 					range.destructId = tris[i].destructId;
 					range.material = tris[i].material;
+					range.glow = tris[i].glow;
 					range.intruding = tris[i].intruding;
 					range.overhang = tris[i].overhang;
 					range.start = (unsigned int)sorted.size();
@@ -3668,6 +4187,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->addStillParts = g_addstill_parts;
 		stats->stackedParts = g_stacked_parts;
 		stats->stackedTris = g_stacked_tris;
+		stats->glowParts = (int)g_glow_parts.size();
+		stats->glowAssets = g_glow_assets;
+
+		for (size_t i = 0; i < g_glow_parts.size(); i++)
+		{
+			stats->glowEdgeParts += g_glow_parts[i].edge ? 1 : 0;
+			stats->glowFaceParts += g_glow_parts[i].face ? 1 : 0;
+		}
 		stats->skyFlatParts = g_flat_parts;
 		stats->flipbookDrawn = g_flip_parts;
 		stats->flipbookDropped = g_flip_dropped;
@@ -4113,6 +4640,15 @@ namespace
 		bool glow_on = false;
 		DWORD glow_taps = 0;
 		DWORD kept_taps = 1;
+		/* And they are drawn with the glow pixel shader (hd_glow.hlsl), which
+		 * fades a glow near the eye, where its card is seen edge-on, at its
+		 * card sides and at the ends of its asset - see BuildGlowParts for
+		 * what the level build decides per part. The room shader comes back
+		 * for every other draw call, gRipple with it: the glow shader keeps a
+		 * literal in c36, gRipple's register. `glow_up` is the part whose
+		 * three registers are on the device. */
+		bool glow_ps_on = false;
+		int glow_up = -1;
 
 		if (additive_pass && !g_glow_no_aniso &&
 			(g_caps.RasterCaps & D3DPRASTERCAPS_ANISOTROPY) &&
@@ -4237,6 +4773,31 @@ namespace
 
 			if (!page)
 				continue;
+
+			/* Into the glow shader or out of it, ahead of this draw call's
+			 * constants, so that gRipple is written after the room shader is
+			 * back. */
+			const bool want_glow_ps = additive_pass && range.glow >= 0 &&
+				!g_glow_no_shader && g_glow_ps;
+
+			if (want_glow_ps != glow_ps_on)
+			{
+				glow_ps_on = want_glow_ps;
+				g_device->SetPixelShader(glow_ps_on ? g_glow_ps : g_ps);
+				glow_up = -1;
+
+				if (!glow_ps_on)
+					ripple_dirty = true;
+			}
+
+			if (glow_ps_on && range.glow != glow_up)
+			{
+				float shape[12];
+
+				GlowConstants(g_glow_parts[(size_t)range.glow], shape);
+				g_device->SetPixelShaderConstantF(77, shape, 3);
+				glow_up = range.glow;
+			}
 
 			if (cutout_pass)
 			{
@@ -4401,6 +4962,9 @@ namespace
 		}
 
 		// A pass that ended on a glow draw call leaves its states behind.
+		if (glow_ps_on)
+			g_device->SetPixelShader(g_ps);
+
 		if (glow_on)
 		{
 			if (!g_glow_sum)

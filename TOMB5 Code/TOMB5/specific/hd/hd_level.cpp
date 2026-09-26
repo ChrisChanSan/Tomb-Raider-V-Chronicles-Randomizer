@@ -1081,6 +1081,9 @@ static void BuildRoomBoxes()
 		for (int axis = 0; axis < 3; axis++)
 			if (b.maxs[axis] < b.mins[axis])
 				b.maxs[axis] = b.mins[axis];
+
+		b.originX = (float)r->x;
+		b.originZ = (float)r->z;
 	}
 
 	if (!g_room_boxes.empty())

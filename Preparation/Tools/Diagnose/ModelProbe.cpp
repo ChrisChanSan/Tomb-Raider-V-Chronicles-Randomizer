@@ -425,6 +425,20 @@
  *                         every step-th frame from a to b, tiled into one
  *                         sheet, left to right and top to bottom; -size is
  *                         one tile.
+ *     -loop <frame>       the loop between lines at one frame, by the
+ *                         engine's own road: the face opens its own block
+ *                         (HD_LIPS_TRACK_LOOP) and the draw deforms it
+ *                         through the loop mask. For a face whose block
+ *                         loops - Lara's, LARSON_HEAD on -slot with -head;
+ *                         any other face draws as built and says so.
+ *     -loop <a>:<b>:<step>
+ *                         every step-th frame of the loop, as a sheet.
+ *     -fire <on>[:<off>]  the firing face (HD_LIPS_TRACK_FIRE) as the game
+ *                         shows it <on> ticks after the classic head swap
+ *                         came on - 0 is the tick itself, a third of the
+ *                         way - and, with <off>, that many ticks after it
+ *                         went off again. It blends from the -loop frame
+ *                         (one frame, default 0); fully off it is the loop.
  *     -onlypage <n>       with -name: build only the triangles that wear that
  *                         .DDS page, and load only that page. This is the cut the wardrobe uses to take the
  *                         thigh holster rig out of OUTFIT_TR3_CATSUIT
@@ -6291,9 +6305,105 @@ struct LipsAsk
 	std::string file;		// as given
 	std::string stem;		// the face the name says
 	int track = -1;
-	std::vector<int> frames;
+	std::vector<int> frames;	// what the draw is handed, a key for -loop/-fire
 	bool sheet = false;
+	/* -loop and -fire (hd_model.h, HD_LIPS_TRACK_LOOP): the loop's frames the
+	 * keys stand for, and the firing face's ticks on and off and its step. */
+	std::vector<int> loopFrames;
+	int fireOn = -1;
+	int fireOff = 0;
+	int fireStep = 0;
 };
+
+/* -loop and -fire into a LipsAsk: the loop's frames as HDModelLipsLoopKey
+ * keys, or one HDModelLipsFireKey, the step taken the way the game takes it
+ * (HDLipsFireStep: one tick on is the first step). A firing face stepped
+ * back to 0 is the loop at its frame. */
+static bool LipsLoopParse(const char* loop, const char* fire, LipsAsk& out)
+{
+	out = LipsAsk();
+
+	std::vector<int> frames;
+	int a = 0, b = 0, step = 0;
+
+	if (loop && sscanf(loop, "%d:%d:%d", &a, &b, &step) == 3 && step > 0 && b >= a)
+	{
+		out.sheet = !fire;
+
+		for (int f = a; f <= b; f += step)
+			frames.push_back(f);
+	}
+	else
+		frames.push_back(loop ? atoi(loop) : 0);
+
+	out.file = std::string(loop ? "-loop " : "") + (loop ? loop : "") +
+		(loop && fire ? " " : "") + (fire ? "-fire " : "") + (fire ? fire : "");
+	out.loopFrames = frames;
+
+	if (!fire)
+	{
+		out.track = HD_LIPS_TRACK_LOOP;
+
+		for (size_t i = 0; i < frames.size(); i++)
+			out.frames.push_back(HDModelLipsLoopKey(frames[i], 0));
+
+		return true;
+	}
+
+	int on = 0, off = 0;
+
+	if (sscanf(fire, "%d:%d", &on, &off) < 1 || on < 0 || off < 0)
+		return false;
+
+	out.fireOn = on;
+	out.fireOff = off;
+	out.fireStep = HDLipsFireStep(0, true, on + 1);
+
+	if (off > 0)
+		out.fireStep = HDLipsFireStep(out.fireStep, false, off);
+
+	out.loopFrames.resize(1);
+	out.track = out.fireStep > 0 ? HD_LIPS_TRACK_FIRE : HD_LIPS_TRACK_LOOP;
+	out.frames.push_back(out.fireStep > 0
+		? HDModelLipsFireKey(frames[0], out.fireStep)
+		: HDModelLipsLoopKey(frames[0], 0));
+	return true;
+}
+
+/* The picture's name for its lips: _lips<track>_<frame> for a track file,
+ * _loop<frame> for the loop, _fire<on>[r<off>]_from<frame> for the firing
+ * face; a sheet names its first frame, its last and its step. */
+static std::string LipsName(const LipsAsk& lips, int track, bool sheet)
+{
+	char name[96] = "";
+
+	if (track < 0 || lips.frames.empty())
+		return name;
+
+	if (lips.fireOn >= 0)
+	{
+		char off[16] = "";
+
+		if (lips.fireOff > 0)
+			sprintf(off, "r%d", lips.fireOff);
+
+		sprintf(name, "_fire%d%s_from%d", lips.fireOn, off, lips.loopFrames[0]);
+	}
+	else if (track == HD_LIPS_TRACK_LOOP && sheet)
+		sprintf(name, "_loop%d-%d-%d_sheet", lips.loopFrames.front(),
+			lips.loopFrames.back(), lips.loopFrames.size() > 1
+				? lips.loopFrames[1] - lips.loopFrames[0] : 1);
+	else if (track == HD_LIPS_TRACK_LOOP)
+		sprintf(name, "_loop%d", lips.loopFrames[0]);
+	else if (sheet)
+		sprintf(name, "_lips%d_%d-%d-%d_sheet", track, lips.frames.front(),
+			lips.frames.back(), lips.frames.size() > 1
+				? lips.frames[1] - lips.frames[0] : 1);
+	else
+		sprintf(name, "_lips%d_%d", track, lips.frames.front());
+
+	return name;
+}
 
 static bool LipsParse(const char* file, const char* frames, LipsAsk& out)
 {
@@ -6359,6 +6469,29 @@ static int LipsOpen(const LipsAsk& lips, int slot, bool head)
 	const std::string face = LipsFaceOf(slot);
 	const int frames = HDModelLipsOpen(slot, head, lips.track);
 
+	/* The loop and the firing face open the face's own block. */
+	if (lips.track >= HD_LIPS_TRACK_LOOP)
+	{
+		printf("lips    : %s asks for the %s of the face of slot %d, %s - %s\n",
+			lips.file.c_str(), lips.track == HD_LIPS_TRACK_FIRE ? "firing face"
+				: "loop", slot, face.empty() ? "(no face that keeps lips)" : face.c_str(),
+			frames > 0 ? "its block is open" : "no loop, the face draws as built");
+
+		if (frames > 0)
+			printf("          block of %d frames, loop of %d (%.1f s); drawing %d "
+				"picture%s%s\n", frames, HDModelLipsLoop(slot, head),
+				HDModelLipsLoop(slot, head) / 30.0, (int)lips.frames.size(),
+				lips.frames.size() == 1 ? "" : "s", lips.sheet ? " as a sheet" : "");
+
+		if (frames > 0 && lips.fireOn >= 0)
+			printf("          fire key held %d tick%s, released %d: step %d of %d, "
+				"from loop frame %d\n", lips.fireOn + 1, lips.fireOn ? "s" : "",
+				lips.fireOff, lips.fireStep, HD_LIPS_EASE_IN_TICKS,
+				lips.loopFrames[0]);
+
+		return frames > 0 ? lips.track : -1;
+	}
+
 	printf("lips    : %s asks for track %d of %s; the face of slot %d is %s - %s\n",
 		lips.file.c_str(), lips.track, lips.stem.c_str(), slot,
 		face.empty() ? "(no face that keeps lips)" : face.c_str(),
@@ -6384,9 +6517,31 @@ static void LipsSay()
 	{
 		const HDModelLipsEvent* e = HDModelLipsEventAt(i);
 
-		printf("  lips: %s slot %d, track %d frame %d - %s, the farthest vertex "
-			"%.2f units from the bind\n", e->head ? "face" : "model", e->slot,
-			e->track, e->frame, HDLipsSourceName(e->source), e->jaw);
+		/* A loop or firing key, taken apart (hd_model.h). */
+		if (e->track == HD_LIPS_TRACK_LOOP)
+			printf("  lips: %s slot %d, loop frame %d, %d past - %s, the farthest "
+				"vertex %.2f units from the bind\n", e->head ? "face" : "model",
+				e->slot, e->frame % HD_LIPS_KEY_STRIDE, e->frame / HD_LIPS_KEY_STRIDE,
+				HDLipsSourceName(e->source), e->jaw);
+		else if (e->track == HD_LIPS_TRACK_FIRE)
+		{
+			char from[32] = "in full";
+
+			if (e->frame % HD_LIPS_KEY_STRIDE)
+				sprintf(from, "from loop frame %d", e->frame % HD_LIPS_KEY_STRIDE - 1);
+			else if (e->frame / HD_LIPS_KEY_STRIDE < HD_LIPS_EASE_IN_TICKS)
+				sprintf(from, "from the bind");
+
+			printf("  lips: %s slot %d, firing frame %d at step %d of %d %s - %s, the "
+				"farthest vertex %.2f units from the bind\n",
+				e->head ? "face" : "model", e->slot, HD_LIPS_FIRE_FRAME,
+				e->frame / HD_LIPS_KEY_STRIDE, HD_LIPS_EASE_IN_TICKS, from,
+				HDLipsSourceName(e->source), e->jaw);
+		}
+		else
+			printf("  lips: %s slot %d, track %d frame %d - %s, the farthest vertex "
+				"%.2f units from the bind\n", e->head ? "face" : "model", e->slot,
+				e->track, e->frame, HDLipsSourceName(e->source), e->jaw);
 	}
 
 	HDModelLipsEventsClear();
@@ -8078,18 +8233,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	/* A picture with her lips at a frame says which, and a sheet says the
 	 * first, the last and the step. */
-	char lipsName[64] = "";
-
-	if (lipsTrack >= 0 && pictures > 1)
-		sprintf(lipsName, "_lips%d_%d-%d-%d_sheet", lipsTrack, o.lips.frames.front(),
-			o.lips.frames.back(), o.lips.frames.size() > 1
-				? o.lips.frames[1] - o.lips.frames[0] : 1);
-	else if (lipsTrack >= 0)
-		sprintf(lipsName, "_lips%d_%d", lipsTrack, o.lips.frames.front());
+	const std::string lipsName = LipsName(o.lips, lipsTrack, pictures > 1);
 
 	sprintf(path, "%s_lara_%s%s%s%s%s.png", o.out.c_str(),
 		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
-		o.mirror ? "_mirror" : "", lipsName);
+		o.mirror ? "_mirror" : "", lipsName.c_str());
 
 	if (pictures > 1)
 	{
@@ -8228,6 +8376,9 @@ int main(int argc, char** argv)
 	unsigned int nodeMask = ~0u;
 	// -lips: a speaking face at a frame of its track. See LipsAsk.
 	LipsAsk lips;
+	// -loop and -fire: the loop between lines and the firing face.
+	const char* loopAsk = 0;
+	const char* fireAsk = 0;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -8242,6 +8393,10 @@ int main(int argc, char** argv)
 				printf("ModelProbe: -lips %s %s names no <FACE>_<track>.TRL and no "
 					"frame - ignored\n", file, frames);
 		}
+		else if (!_stricmp(argv[i], "-loop") && i + 1 < argc)
+			loopAsk = argv[++i];
+		else if (!_stricmp(argv[i], "-fire") && i + 1 < argc)
+			fireAsk = argv[++i];
 		else if (!_stricmp(argv[i], "-slot") && i + 1 < argc)
 			slot = atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-level") && i + 1 < argc)
@@ -8645,6 +8800,18 @@ int main(int argc, char** argv)
 		}
 		else
 			printf("ModelProbe: ignoring %s\n", argv[i]);
+	}
+
+	/* -loop and -fire take the place of -lips: the face's own block instead of
+	 * a track file. */
+	if (loopAsk || fireAsk)
+	{
+		if (lips.track >= 0)
+			printf("ModelProbe: -loop/-fire replace -lips %s\n", lips.file.c_str());
+
+		if (!LipsLoopParse(loopAsk, fireAsk, lips))
+			printf("ModelProbe: -fire %s is no <on>[:<off>] - ignored\n",
+				fireAsk ? fireAsk : "");
 	}
 
 	if (name.empty() && slot < 0 && !all && !lara && !wardrobe && !poseGame)
@@ -10843,12 +11010,9 @@ int main(int argc, char** argv)
 	LipsSay();
 
 	char path[512];
-	char lipsName[64] = "";
+	const std::string lipsName = LipsName(lips, lipsTrack, false);
 
-	if (lipsTrack >= 0)
-		sprintf(lipsName, "_lips%d_%d", lipsTrack, lips.frames[0]);
-
-	sprintf(path, "%s_%s%s.png", out.c_str(), HDModelName(slot), lipsName);
+	sprintf(path, "%s_%s%s.png", out.c_str(), HDModelName(slot), lipsName.c_str());
 	ShotWrite(shot, path);
 
 	/* And the sheet: the same body and face, one picture per frame, the
@@ -10893,9 +11057,8 @@ int main(int argc, char** argv)
 				LipsPaste(sheet, sheetW, tile, width, height, picture, across);
 		}
 
-		sprintf(path, "%s_%s_lips%d_%d-%d-%d_sheet.png", out.c_str(),
-			HDModelName(slot), lipsTrack, lips.frames.front(), lips.frames.back(),
-			lips.frames[1] - lips.frames[0]);
+		sprintf(path, "%s_%s%s.png", out.c_str(), HDModelName(slot),
+			LipsName(lips, lipsTrack, true).c_str());
 
 		const bool wrote = WritePng(path, &sheet[0], sheetW, sheetH);
 

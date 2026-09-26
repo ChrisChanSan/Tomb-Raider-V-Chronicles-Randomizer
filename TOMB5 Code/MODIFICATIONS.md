@@ -3190,43 +3190,44 @@ frame of each blink `LIPLOG f=<GlobalCounter> lara blink frame=<n> lid=<degrees>
 `ModelProbe -loop <frame>` or `<a>:<b>:<step>` and `-fire <on>[:<off>]` draw the loop and
 the firing face by the same road.
 
-**Checked.** `LipsTest` with the `.OBJ` folder: 268 checks, 0 failed (194 before); without
-it 241 (167 before); with the folder of report A's block exports as a second argument 272.
-Its sections 1 to 6 print what the build of `8321293` prints, number for number. Section
-7: `blockAt` and `blockLoop` of the four faces as above; frame 0 read at `blockAt` is
-`blockBind` bit for bit in all four; the blocks of `LARA_HEAD` and `LARSON_HEAD` read that
-way equal an independent export of them frame by frame (508 and 301 frames, none
-differing); the creepy and the young face carry `LARA_HEAD`'s block byte for byte; over
-the loop no column outside the mask moves in the three faces of Lara (in `LARSON_HEAD` 274
-of 299 frames move one - his lips - and the mask leaves them out); over every frame of the
-loop no vertex off the masked joints moves by a bit, neither its position nor its normal,
-while 1845 of `LARA_HEAD`'s 5913 vertices move, the farthest 6.6811 units, 6.8736 in the
-young face and 4.4048 in `LARSON_HEAD` (531 of 9619); a mask of every column and a mask
-without frame 0 are the plain skins bit for bit; the blinks start at 92, 137, 198, 254,
-314, 322, 420 and 468 (the lids 29.8, 17.9, 17.2, 22.3, 21.4, 16.5, 16.2 and 22.4 degrees
-there) in all three faces of Lara and at 71, 148 and 229 (23.7) in `LARSON_HEAD`; the
-other eleven faces have no mask. Section 8: the ease in is 1/3, 2/3, 1; the steps on and
-off, several ticks at once, and a release half way in; frame 501 opens the lips 4.08 units
-with the jaw at 0.00 degrees and moves its farthest vertex 3.9736 units, frame 506 9.36,
-10.89 and 8.9752; the blend from the bind is the ease of `HDLipsSkins` bit for bit at
-every step, on the straight line (1.3245, 2.6491, 3.9736), and step 0 is the bind bit for
-bit; from loop frame 93 (the upper lid 25.25 degrees closed) a third of the way to frame
-501 (3.65) the lid stands at 15.99.
+**Checked.** `LipsTest` with the `.OBJ` folder: 270 checks, 0 failed (194 before); without
+it 243 (167 before); with the folder of the blocks the measurement before the build
+exported as track files as a second argument 274. Its sections 1 to 6 print what the build
+of `8321293` prints, number for number. Section 7: `blockAt` and `blockLoop` of the four
+faces as above; frame 0 read at `blockAt` is `blockBind` bit for bit in all four; the
+blocks of `LARA_HEAD` and `LARSON_HEAD` read that way equal an independent export of them
+frame by frame (508 and 301 frames, none differing); the creepy and the young face carry
+`LARA_HEAD`'s block byte for byte; over the loop no column outside the mask moves in the
+three faces of Lara (in `LARSON_HEAD` 274 of 299 frames move one - his lips - and the mask
+leaves them out); over every frame of the loop no vertex off the masked joints moves by a
+bit, neither its position nor its normal, while 1845 of `LARA_HEAD`'s 5913 vertices move,
+the farthest 6.6811 units, 6.8736 in the young face and 4.4048 in `LARSON_HEAD` (531 of
+9619); a mask of every column and a mask without frame 0 are the plain skins bit for bit;
+the blinks start at 92, 137, 198, 254, 314, 322, 420 and 468 (the lids 29.8, 17.9, 17.2,
+22.3, 21.4, 16.5, 16.2 and 22.4 degrees there) in all three faces of Lara and at 71, 148
+and 229 (23.7) in `LARSON_HEAD`; the other eleven faces have no mask. Section 8: the ease
+in is 1/3, 2/3, 1; the steps on and off, several ticks at once, and a release half way in;
+frame 501 opens the lips 4.08 units with the jaw at 0.00 degrees and moves its farthest
+vertex 3.9736 units, frame 506 9.36, 10.89 and 8.9752; the blend from the bind is the ease
+of `HDLipsSkins` bit for bit at every step, on the straight line (1.3245, 2.6491, 3.9736),
+and step 0 is the bind bit for bit; from loop frame 93 (the upper lid 25.25 degrees
+closed) a third of the way to frame 501 (3.65) the lid stands at 15.99.
 
 ModelProbe pictures, `OUTFIT_CLASSIC` in JOBY2 with `-look head -pitch 0 -dist 160`: the
-loop every 20th frame from 0 to 480 is, tile by tile, pixel for pixel the picture report A
-drew of the same frames out of the block exported as a track file; from row 112 of 320
-down - the nose tip, the mouth, the chin - every tile is frame 0's. Frames 92 and 138 at
-512 pixels are A's pixel for pixel; the blink from 84 to 100 differs from A's sheet of the
-eyes alone only in rows 0 to 91, the brows A's file held still. The firing face in full at
-`-dist 110` is A's frame 501 pixel for pixel; at ticks 0, 1, 2 and 3 of the swap and 1, 2
-and 3 ticks after it the farthest vertex stands at 1.32, 2.65, 3.97, 3.97, 2.65, 1.32 and
-0.00 units, the last being the loop's frame 0, and a tick of the release is the same
-picture as the tick on the way in with the same step from the same loop frame, byte for
-byte. From the blink at frame 92 the eyes open part of the way at the first step. On
-`OUTFIT_VCI` the brows move above the glasses and the firing face comes out as on the Rome
-outfit. `LARSON_HEAD` on ANDREA1's slot 45, frames 66 to 76, is A's eyes-only sheet pixel
-for pixel. No picture shows a tear. The face as built, `LARA_HEAD_98` frame 556 and
+loop every 20th frame from 0 to 480 is, tile by tile, pixel for pixel the picture the
+measurement before the build drew of the same frames out of the block exported as a track
+file and played through `-lips`; from row 112 of 320 down - the nose tip, the mouth, the
+chin - every tile is frame 0's. Frames 92 and 138 at 512 pixels are the measurement's
+pixel for pixel; the blink from 84 to 100 differs from its sheet of the eyes alone only in
+rows 0 to 91, the brows its file held still. The firing face in full at `-dist 110` is the
+measurement's frame 501 pixel for pixel; at ticks 0, 1, 2 and 3 of the swap and 1, 2 and 3
+ticks after it the farthest vertex stands at 1.32, 2.65, 3.97, 3.97, 2.65, 1.32 and 0.00
+units, the last being the loop's frame 0, and a tick of the release is the same picture as
+the tick on the way in with the same step from the same loop frame, byte for byte. From
+the blink at frame 92 the eyes open part of the way at the first step. On `OUTFIT_VCI` the
+brows move above the glasses and the firing face comes out as on the Rome outfit.
+`LARSON_HEAD` on ANDREA1's slot 45, frames 66 to 76, is the measurement's eyes-only sheet
+pixel for pixel. No picture shows a tear. The face as built, `LARA_HEAD_98` frame 556 and
 `LARSON`'s face as built are the same PNG byte for byte out of the ModelProbe of `8321293`
 and out of this one; the printed text differs in the timings, the peak memory and the new
 `lips loop` line alone. The level lines: JOBY2 `LARA_HEAD` `frames=508 loop=499 at=2264
@@ -3256,17 +3257,20 @@ The outfit changer (F4) runs `HDObjectRelease` and `HDObjectLevelBuild`
 at the next draw with a `why=start` line. Nothing is built for it beyond that, and it is
 not measured in the game.
 
-**Decisions.** The firing face follows the classic head swap exactly and has no rule of
-its own: it shows while the fire key is held with a gun ready - an empty gun included, the
-flare never - and for the 16 ticks after each scripted shot of a cutscene, and where the
-classic head stays on after the gun was put away some other way, the HD face stays with
-it. Its frame is the block's 501, the clenched teeth, as the counterpart of the classic
-painted face; 506, the open shout, is the other candidate, and the number lives in one
-constant (`HD_LIPS_FIRE_FRAME`, `hd_trl.h:230`). Three ticks soften the instant classic
-swap (`HD_LIPS_EASE_IN_TICKS`, `:234`). The loop stops when she is dead. Her brows move
-with her eyes in her loop. `LARSON_HEAD`'s loop plays through his eyes alone, without the
-two slow presses of his lips his block also holds. In a cut she acts in whose line her
-face has no file for, the firing face and the loop come next in the order.
+**Decisions.** The firing face follows the classic head swap and has no rule of its own:
+it shows while the fire key is held with a gun ready - an empty gun included, the flare
+never - and for the 16 ticks after each scripted shot of a cutscene, and where the classic
+head stays on after the gun was put away some other way, the HD face stays with it -
+except inside a cut whose line her face speaks, where the line comes first. Its frame is
+the block's 501, the clenched teeth, as the counterpart of the classic painted face; 506,
+the open shout, is the other candidate, and the number lives in one constant
+(`HD_LIPS_FIRE_FRAME`, `hd_trl.h:230`). Three ticks soften the instant classic swap
+(`HD_LIPS_EASE_IN_TICKS`, `:234`). The loop stops when she is dead. Her brows move with
+her eyes in her loop. `LARSON_HEAD`'s loop plays through his eyes alone, without the two
+slow presses of his lips his block also holds. In a cut she acts in whose line her face
+has no file for, and in the credits, where the cutscenes replay without their lines, the
+firing face and the loop come next in the order: there she blinks, and after the scripted
+shots she bares her teeth with the classic head.
 
 **Commits.** `c2697e9`, `218b22c`, `3f18539`
 

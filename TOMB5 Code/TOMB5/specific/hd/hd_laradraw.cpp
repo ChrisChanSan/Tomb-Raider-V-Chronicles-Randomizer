@@ -302,7 +302,7 @@ namespace
 	 * below (hd_trl.h):
 	 *
 	 *   cut     the track the cut she acts in plays, where her face has its
-	 *           file - exactly as before, LIPLOG and all.
+	 *           file, as a speaking actor's face does, LIPLOG and all.
 	 *   fire    the firing face, while the classic head is LARA_SCREAM's
 	 *           (scream_head): three ticks in, three ticks out.
 	 *   loop    the loop between lines: her eyes blink and glance and her

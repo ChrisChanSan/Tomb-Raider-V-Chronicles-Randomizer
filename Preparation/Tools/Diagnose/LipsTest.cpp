@@ -1156,8 +1156,8 @@ static void section_loop(const char* blockFolder)
 	const Want want[] =
 	{
 		{ "LARA_HEAD", 2264, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 6.681 },
-		{ "LARA_CREEPY_HEAD", 0, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 0 },
-		{ "LARA_YOUNG_HEAD", 0, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 0 },
+		{ "LARA_CREEPY_HEAD", 2260, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 0 },
+		{ "LARA_YOUNG_HEAD", 2264, 499, 508, { 92, 137, 198, 254, 314, 322, 420, 468 }, 0 },
 		{ "LARSON_HEAD", 2648, 300, 301, { 71, 148, 229, -1, -1, -1, -1, -1 }, 4.405 },
 	};
 
@@ -1450,8 +1450,9 @@ static void section_fire()
 	if (all.size() != each * 508)
 		return;
 
-	/* The firing frame and the shout beside it, against report A's numbers:
-	 * the lips apart, the jaw's turn (column 11) and the chin's. */
+	/* The firing frame and the shout beside it, against the numbers measured
+	 * on LARA_HEAD.TRM's block, frames 501 and 506: the lips apart, the jaw's
+	 * turn (column 11) and the chin's. */
 	struct Pose
 	{
 		int frame;

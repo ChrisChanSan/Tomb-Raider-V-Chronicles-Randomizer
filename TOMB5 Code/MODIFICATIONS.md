@@ -807,15 +807,17 @@ stays on its wall as the level placed it. Every other pickup in reach is carried
 before. With `-log` the level start writes one `CARRYLOG` line for every pickup in a
 carrier's reach.
 
-**Why.** A wall grab that leaves its wall is lost either way. The drop of the entry above
-makes it a floor pickup in the engine's bookkeeping only: the item keeps the model made
-for the wall and lies where its carrier fell, and in the game it was then either gone or
-on the floor at a wrong place, and could not be picked up. Both manners measure Lara
-against the item's origin on the wall (`game/pickup.cpp:52-53`, `:65-66`): OCB 2 is
-pried off with the crowbar (X -256..256, Y -100..100, Z 200..512, 30 degrees either way,
-Lara put at 0,0,215), OCB 9 is pulled out by hand (X -512..0, Z 0..512, Lara put at
--224,0,240). The item on the wall is no stand-in for another pickup: it is the slot the
-inventory receives, and in the original levels it is the only item of its slot in its
+**Why.** A wall grab an enemy takes off its wall is lost either way. The drop of the entry
+above makes it a floor pickup in the engine's bookkeeping only: the item keeps the model
+made for the wall and lies where its carrier fell, and in the game it was then either gone
+or on the floor at a wrong place, and could not be picked up. A searchable object hands
+its chain to Lara herself when she searches it (`game/pickup.cpp:1128-1143`), so a wall
+grab it carried was not lost; it, too, now leaves the grab on its wall. Both manners
+measure Lara against the item's origin on the wall (`game/pickup.cpp:52-53`, `:65-66`):
+OCB 2 is pried off with the crowbar (X -256..256, Y -100..100, Z 200..512, 30 degrees
+either way, Lara put at 0,0,215), OCB 9 is pulled out by hand (X -512..0, Z 0..512, Lara
+put at -224,0,240). The item on the wall is no stand-in for another pickup: it is the slot
+the inventory receives, and in the original levels it is the only item of its slot in its
 level, so no floor pickup of the same type exists there (`ItemCheck` over slots 172, 174
 and 220). The six are Andrea2 item 121, `PUZZLE_ITEM3` (slot 174), the golden coin;
 Andrea2 item 128, `PUZZLE_ITEM1` (slot 172), the valve wheel; Andrea3 item 68,
@@ -845,33 +847,36 @@ table that is linked into every build and needs no HD state; `game/setup.cpp:84`
 its header). A wall grab in reach of two carriers writes a line for each. The comment of
 `DropBaddyPickups` (`game/box.cpp:857-865`) names the case its OCB clearing now serves.
 
-**Checked.** A probe (`CarryProbe`, kept outside the repository) replays
-`GetCarriedItems` over level files, with the reach as `game/setup.cpp:2279-2289` states
-it: a carrier is a slot with `intelligent` set (the 32 slots `game/setup.cpp` marks) or
-`SEARCH_OBJECT1..3`, never `CYBORG`; it looks only at the items linked into its own room;
-an item is in reach at |dx| < 512, |dy| < 256 and |dz| < 512 against the carrier and
-when its collision is `PickUpCollision` (`PUZZLE_ITEM1..BURNING_TORCH_ITEM`, slots
-172-241, `PISTOLS_ITEM..FLARE_INV_ITEM`, 334-355 without `CROSSBOW_BOLT` 344, and
-`FLARE_ITEM` 354); the height of a pickup is the one `InitialisePickup` leaves
-(`game/init.cpp:489`). It ran over the 16 files in the game's `data/Backup`, each equal
-in size and SHA-256 to its line in `Preparation/Level Infos/VanillaLevelChecksums.csv`.
-It finds six wall grabs, the six above, and no carrier in the room of any of them, so no
-vanilla level start changes. The nearest carrier in any room: Andrea2 121, `ROMAN_GOD`
-item 108, 27285 units; Andrea2 128, the same, 15981; Andrea3 68, `ROMAN_GOD` item 79,
-10370; andy3 6, `IMP` item 3 in room 11, 2944 units straight below the item in room 13;
-andy3 26, `IMP` item 2, 5146; joby3 41, `MAFIA` item 188, 5843. A level start of the
-originals writes `CARRYLOG` lines for 59 carried pickups, all with OCB 0 and all at
-d=0,0 (Andrea1 5, Andrea3 1, andy1 1, joby2 11, joby3 10, joby5 10, rich1 13, rich2 6,
-rich3 2) and no `skipped wall grab` line; the lines are derived by the probe, not read
-from a game log. The savegame: `carried_item` is written and read for every carrier
-(`game/savegame.cpp:447-448`, `:872-873`), and a load runs `SetupGame`, and with it
-`GetCarriedItems`, before `sgRestoreGame` (`game/gameflow.cpp:1015`, `:1028`). A save
-written while a wall grab was carried therefore restores the chain: the item stands on
-its wall and in the chain at once, and the drop's OCB clearing is what the carrier's
-death meets. What happens when Lara takes such an item off its wall before the carrier
-dies is not measured. ModernTest 10783, MenuTest 35547 and InterpTest 635 checks, 0
-failed; LipsTest 270 with the `.OBJ` folder and 243 without, 0 failed - all as before.
-Not measured: the game.
+**Checked.** A probe (`CarryProbe`, kept outside the repository) replays `GetCarriedItems`
+over level files, with the reach as `game/setup.cpp:2279-2289` states it: a carrier is a
+slot with `intelligent` set (the 32 slots `game/setup.cpp` marks) or `SEARCH_OBJECT1..3`,
+never `CYBORG`; it looks only at the items linked into its own room; an item is in reach
+at |dx| < 512, |dy| < 256 and |dz| < 512 against the carrier and when its collision is
+`PickUpCollision` (`PUZZLE_ITEM1..BURNING_TORCH_ITEM`, slots 172-241,
+`PISTOLS_ITEM..FLARE_INV_ITEM`, 334-355 without `CROSSBOW_BOLT` 344, and `FLARE_ITEM`
+354); the height of a pickup is the one `InitialisePickup` leaves (`game/init.cpp:489`).
+It ran over the 16 files in the game's `data/Backup`, each equal in size and SHA-256 to
+its line in `Preparation/Level Infos/VanillaLevelChecksums.csv`. It finds six wall grabs,
+the six above, and no carrier in the room of any of them, so no vanilla level start
+changes. The nearest carrier in any room: Andrea2 121, `ROMAN_GOD` item 108, 27285 units;
+Andrea2 128, the same, 15981; Andrea3 68, `ROMAN_GOD` item 79, 10370; andy3 6, `IMP` item
+3 in room 11, 2944 units straight below the item in room 13; andy3 26, `IMP` item 2, 5146;
+joby3 41, `MAFIA` item 188, 5843. A level start of the originals writes `CARRYLOG` lines
+for 59 carried pickups, all with OCB 0 and all at d=0,0 (Andrea1 5, Andrea3 1, andy1 1,
+joby2 11, joby3 10, joby5 10, rich1 13, rich2 6, rich3 2) and no `skipped wall grab` line;
+the lines are derived by the probe, not read from a game log. The savegame: `carried_item`
+is written and read for every carrier (`game/savegame.cpp:447-448`, `:872-873`), and a
+load runs `SetupGame`, and with it `GetCarriedItems`, before `sgRestoreGame`
+(`game/gameflow.cpp:1015`, `:1028`). A save written while a wall grab was carried
+therefore restores the chain: the item stands on its wall and in the chain at once, and
+the drop's OCB clearing is what the carrier's death meets. What happens when Lara takes
+such an item off its wall before the carrier dies is not measured. Not handled either: a
+save in which the wall grab was the first item of a carrier's chain with another pickup
+behind it - on load the new build carries the other pickup, the restored head then makes
+the chain the wall grab alone, and the other pickup is in no chain and in no room. Only a
+hand-written list line beside a triggered carrier could have produced such a save.
+ModernTest 10783, MenuTest 35547 and InterpTest 635 checks, 0 failed; LipsTest 270 with
+the `.OBJ` folder and 243 without, 0 failed - all as before. Not measured: the game.
 
 **Unchanged.** The drop keeps its OCB clearing, as belt and braces for a restored chain
 and for any path that still fills one. The randomizer's bar on wall grabs within a

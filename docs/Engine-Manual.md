@@ -2786,6 +2786,7 @@ wrote it, and each seam answers a different question:
 | …and if it was clipped | `CLIPDETAIL` — the actual window and the camera it was measured against |
 | an item is in the wrong place, or vanishes | `ITEMLOG` — slot, room, OCB and flags per item at load |
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
+| an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, and whether it was carried or left on its wall |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |

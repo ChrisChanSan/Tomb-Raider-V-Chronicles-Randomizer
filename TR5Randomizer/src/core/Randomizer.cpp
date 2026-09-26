@@ -2592,10 +2592,10 @@ bool Rando::run(const RandoInput& in,
     //
     // The item loss is the real reason, and it does not hang on the type
     // swap: GetCarriedItems (setup.cpp) attaches every pickup within
-    // 512 units, a wall grab (OCB 2 or 9) excepted, to the nearest enemy
-    // at level start - RemoveDrawnItem,
-    // room_number = NO_ROOM, the item is then nothing but his cargo. If he
-    // dies normally, CreatureDie releases it via DropBaddyPickups
+    // 512 units, a wall grab (OCB 2 or 9) excepted, to an enemy at level
+    // start - RemoveDrawnItem, room_number = NO_ROOM, the item is then
+    // nothing but his cargo. If he dies normally, CreatureDie releases it
+    // via DropBaddyPickups
     // (box.cpp). The antitrigger, by contrast, calls KillItem directly
     // (control.cpp) - enemy and cargo are gone.
     //

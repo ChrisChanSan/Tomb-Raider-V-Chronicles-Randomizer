@@ -206,6 +206,7 @@ are how a player's crash report becomes usable.
 | ...and if it is the clipping | `CLIPDETAIL` | the actual window and the camera it was measured against |
 | an item is in the wrong place, or vanishes | `ITEMLOG` | slot, room, OCB, flags per item at load |
 | ...and something moves it later | `ITEMWATCH` | who wrote which room number, and when |
+| an enemy carries an item off, or does not | `CARRYLOG` | per pickup in a carrier's reach at level start: carrier, item, OCB, offset, carried or skipped wall grab |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` | the skin's bone stack |
 | the first-person view sits wrong | `FPHEAD`, `ALTERFOV` | the head bone per frame, and the field of view |
 | an HD object or Lara is wrong, or classic when it should not be | `HDLOG` | per level: which slot got which model and why it was refused; Lara's outfit, her parts and the reason for a classic one. Per level's first HD frame: `itemcheck` and `lightcheck` for the objects, `laracheck` and `braidcheck` for Lara |

@@ -530,10 +530,11 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
 
         // No wall grab within a carrier's reach: GetCarriedItems (setup.cpp)
         // attaches every pickup in the box |dx|<512, |dy|<256, |dz|<512 to
-        // the nearest enemy or searchable at level start. A carried wall
-        // grab is lost after the carrier's death: DropBaddyPickups puts it
-        // on open floor, where its pickup style (wall + angle) can never be
-        // satisfied again. The box is widened to sector size because the
+        // an enemy or searchable at level start. It leaves a wall grab on
+        // its wall, so no carrier takes one away; the bar stays all the
+        // same, because a spot under an enemy's feet is a poor place for an
+        // item, and the engine's rule is the net under a placement, not
+        // the reason for one. The box is widened to sector size because the
         // final wall position is only rolled at write time - every point of
         // the sector must be safe. The reverse direction (new enemy next to
         // a finished wall grab) bars the enemy placement.
@@ -2591,7 +2592,8 @@ bool Rando::run(const RandoInput& in,
     //
     // The item loss is the real reason, and it does not hang on the type
     // swap: GetCarriedItems (setup.cpp) attaches every pickup within
-    // 512 units to the nearest enemy at level start - RemoveDrawnItem,
+    // 512 units, a wall grab (OCB 2 or 9) excepted, to the nearest enemy
+    // at level start - RemoveDrawnItem,
     // room_number = NO_ROOM, the item is then nothing but his cargo. If he
     // dies normally, CreatureDie releases it via DropBaddyPickups
     // (box.cpp). The antitrigger, by contrast, calls KillItem directly
@@ -2960,6 +2962,8 @@ bool Rando::run(const RandoInput& in,
     // align Lara at a prop via TestLaraPosition - at a prop that does not
     // stand at the drop site. A carried pickup with OCB != 0 lies there
     // forever unpickable afterwards, without a crash and without a message.
+    // The wall grabs (OCB 2 and 9) never get that far: GetCarriedItems
+    // leaves them on their wall. Every other nonzero OCB is carried.
     //
     // Everything this run moves gets OCB 0 anyway per rule 3, and in
     // vanilla all 56 carried items have OCB 0 as well. So the rule is

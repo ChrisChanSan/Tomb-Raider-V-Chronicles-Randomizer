@@ -249,6 +249,7 @@ static void ModernRelease(MODERN_STATE* state)
 	state->spin = 0;
 	state->aligned = 0;
 	state->aiming = 0;
+	state->cut_latch = 0;	// no course, nothing to keep a reference for
 }
 
 void ModernDefaults(MODERN_CFG* cfg)
@@ -288,6 +289,7 @@ void ModernDefaults(MODERN_CFG* cfg)
 	cfg->aim_strafe = MODERN_AIM_STRAFE;
 	cfg->jump_dir = MODERN_JUMP_DIR;
 	cfg->block_turn = MODERN_BLOCK_TURN;
+	cfg->cut_latch = MODERN_CUT_LATCH;
 }
 
 void ModernResetState(MODERN_STATE* state)
@@ -308,6 +310,7 @@ void ModernResetState(MODERN_STATE* state)
 	state->have_course = 0;
 	state->last_turn = 0;
 	state->stand_hold = 0;
+	state->cut_latch = 0;
 }
 
 /* The states that stay classic, checked state by state against
@@ -1368,7 +1371,9 @@ static void ModernFinish(MODERN_STATE* state, MODERN_RESULT* out)
  *								path alone.
  *   stick angle moved at
  *   least recenter				a new direction was meant: seat the course on
- *								the camera of this tick.
+ *								the camera of this tick - or, after a cut
+ *								in the same hold, on the reference the
+ *								course has (MODERN_CUT_LATCH).
  *   stick back at rest			forget it all; the next push starts fresh.
  * (Shipped, recenter equals steer_step, so the middle band is empty.)
  *
@@ -1432,6 +1437,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		no_sit.jump = 0;
 		no_sit.blocked = 0;
 		no_sit.cam_player_step = 0;
+		no_sit.cam_cut = 0;
 		sit = &no_sit;
 	}
 
@@ -1488,6 +1494,16 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		state->course = ModernWrap((long)state->course + sit->cam_player_step);
 	}
 
+	/* 2b. A cut while a course is held latches its reference
+	 * (MODERN_CUT_LATCH). From here until the stick is let go, camera_yaw is
+	 * another camera's than the one the course was seated on, and the re-seat
+	 * below would turn her by the angle between the two; with the latch it
+	 * reads the stick against the reference the course already has. Without a
+	 * course there is nothing to keep: the push seats on the camera of the
+	 * tick, the new one. */
+	if (state->have_ref && cfg->hold_course && cfg->cut_latch && sit->cam_cut)
+		state->cut_latch = 1;
+
 	if (!state->have_ref)
 	{
 		state->ref = camera_yaw;
@@ -1511,8 +1527,15 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 
 		if (a_off >= cfg->recenter)
 		{
-			state->ref = camera_yaw;
-			state->course = ModernWrap((long)camera_yaw + offset);
+			/* The camera of the tick, or under the latch (2b) the reference
+			 * the course was seated on. Course minus ref is last_off all
+			 * through a hold (a seat sets it, the steer band and 2a keep it),
+			 * so the latched re-seat turns the course by exactly the stick's
+			 * own change. */
+			const short seat = state->cut_latch ? state->ref : camera_yaw;
+
+			state->ref = seat;
+			state->course = ModernWrap((long)seat + offset);
 			state->last_off = offset;
 		}
 		else if (a_off >= cfg->steer_step)
@@ -1553,6 +1576,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		state->course = target;
 		state->last_off = offset;
 		state->ref = camera_yaw;
+		state->cut_latch = 0;	// the reference is this tick's camera again
 
 		delta = ModernWrap((long)target - lara_yaw);
 		bits = ModernRelativeBits(delta, cfg->aim_sector, 1);

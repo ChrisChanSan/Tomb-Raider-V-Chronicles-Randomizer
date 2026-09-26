@@ -61,6 +61,12 @@ static short modern_turned_yaw;
 static ushort modern_turned_at;
 static long modern_turned_seen;
 
+/* Which camera the last tick's reference came from: 1 the orbit's world yaw,
+ * 0 the measured vector, and `modern_ref_seen` whether there was a last tick.
+ * A change between two ticks is MODERN_SITUATION::cam_cut. */
+static long modern_ref_orbit;
+static long modern_ref_seen;
+
 void ModernResetControls()
 {
 	ModernDefaults(&modern_cfg);
@@ -75,6 +81,8 @@ void ModernResetControls()
 	modern_turned_yaw = 0;
 	modern_turned_at = 0;
 	modern_turned_seen = 0;
+	modern_ref_orbit = 0;
+	modern_ref_seen = 0;
 }
 
 /* The heading ModernUpdateInput publishes, asked by game\camera.cpp.
@@ -133,6 +141,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	MODERN_RESULT out;
 	short camera_yaw;	// the measured eye -> target vector - MODERNLOG's `cam=`
 	short ref_yaw;		// and what the course is really seated on - `ref=`
+	long ref_orbit;		// 1 = ref_yaw is the orbit's world yaw, 0 = the measured vector
 	short lara_yaw;		// her heading before the direct turn can change it - MODERNLOG's `lara=`
 	long cam_dx, cam_dz;
 	long dx, dz;
@@ -337,7 +346,9 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 *
 	 * MODERNLOG prints both: `cam=` is the measured vector and `ref=` what the
 	 * translation used (out.reference). */
-	if (!(ModernCameraActive() && ModernCameraWorldYaw(&ref_yaw)))
+	ref_orbit = (ModernCameraActive() && ModernCameraWorldYaw(&ref_yaw)) ? 1 : 0;
+
+	if (!ref_orbit)
 		ref_yaw = camera_yaw;
 
 	/* Whether forward is getting her anywhere.
@@ -404,6 +415,20 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	if (ModernCameraActive())
 		ModernCameraPlayerStep(&sit.cam_player_step);
+
+	/* Whether the reference changed cameras since the last tick, for the held
+	 * course's cut latch (MODERN_CUT_LATCH). The signal is the switch between
+	 * the two sources above, not camera.old_type: what the latch protects is
+	 * the reference, and the source is what hands it over, whatever camera
+	 * type took the view - a sniper camera fired as heavy (old_type 5) switches
+	 * it the same way. In the rich2 MODERNLOG through the sniper camera the
+	 * two agree: the 405 ticks with the stick at rest show the reference
+	 * handed in, the orbit's on all 235 with old_type 0 and the measured
+	 * vector on all 170 with old_type 1, and the 2626 ticks replay exactly
+	 * with that rule - so the switch falls on the 38 changes of old_type. */
+	sit.cam_cut = (modern_ref_seen && ref_orbit != modern_ref_orbit) ? 1 : 0;
+	modern_ref_orbit = ref_orbit;
+	modern_ref_seen = 1;
 
 	/* Whether this tick is the water's, and at what rate. Asked once, here,
 	 * from the state alone, and answered by the same table the
@@ -597,6 +622,12 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * camera fired as heavy) keeps the trigger's speed while its timer runs,
 	 * and a flyby writes its own 1 (game\spotcam.cpp).
 	 *
+	 * `cut` is sit.cam_cut, 1 on the tick the reference changed cameras (the
+	 * orbit's world yaw against the measured vector, so one per change of
+	 * old_type between 0 and 1). `latch` is modern_state.cut_latch after the
+	 * translation: 1 while a course seated before a cut is held, until the
+	 * stick is let go (MODERN_CUT_LATCH).
+	 *
 	 * New fields are appended at the end, so the older ones keep their
 	 * places. */
 	if (gLogEnabled)
@@ -625,7 +656,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
 			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d "
-			"cam_speed=%d old_type=%d",
+			"cam_speed=%d old_type=%d cut=%ld latch=%ld",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
@@ -633,7 +664,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			yaw, out.bits, cam_off, cam_pitch, cam_ret, cam_rs_x, cam_rs_y,
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
 			cam_world, clip, view_err, air, carry, modern_state.stand_hold,
-			sit.cam_player_step, (int)camera.speed, (int)camera.old_type);
+			sit.cam_player_step, (int)camera.speed, (int)camera.old_type,
+			sit.cam_cut, modern_state.cut_latch);
 	}
 
 	return bits;

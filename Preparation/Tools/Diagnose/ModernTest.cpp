@@ -1248,6 +1248,7 @@ static void spin_hysteresis()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	ModernResetState(&state);
 	tick(&cfg, &state, S(30000), 0, -0x0800, 0, &sit, &out);
@@ -1421,6 +1422,7 @@ static void aiming()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	tick(&cfg, &state, S(30000), 0, 0, 0, &sit, &out);
 	ok(out.mode == MODERN_MODE_AIM, "the aim mode", out.mode, MODERN_MODE_AIM);
@@ -1520,6 +1522,7 @@ static void jumping()
 	sit.jump = 1;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	tick(&cfg, &state, 0, S(30000), 0, 0, &sit, &out);
 	ok(out.mode == MODERN_MODE_JUMP, "the jump mode", out.mode, MODERN_MODE_JUMP);
@@ -1665,6 +1668,7 @@ static void classic_states()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	/* TROne: modern.classic_states_keep_the_original_input, second half, and
 	 * modern.classic_situations_report_inactive_so_the_host_can_fill_in, last
@@ -1926,6 +1930,7 @@ static void water_move()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	/* The table. Two of the three rates are still the engine's own - 728 is
 	 * what lara_as_surftread and lara_as_surfswim write into y_rot themselves
@@ -2358,6 +2363,7 @@ static void blocked()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	tick(&cfg, &state, S(30000), 0, (short)-0x3800, 0, &sit, &out);
 	ok(out.delta == 0x0800, "the band: 11 degrees of error", out.delta, 0x0800);
@@ -2492,6 +2498,7 @@ static void direct_turn()
 	sit.jump = 1;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 	ok(tick_turn(&cfg, &state, 20, -120, 0, 0, &sit, &out, &yaw) == 1,
 		"AS_COMPRESS, unarmed: the direct turn takes charge too", 1, 1);
 	ok(out.mode == MODERN_MODE_RUN, "...because unarmed it is rule 6 answering",
@@ -2557,6 +2564,7 @@ static void direct_turn()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	ok(tick_turn(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out, &yaw) == 1,
 		"running: the direct turn takes charge", 1, 1);
@@ -2972,6 +2980,7 @@ static void spin_run(long step_units, long ticks, int rule, long rate, SPIN_RUN*
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	r->no_forward = 0;
 	r->drops = 0;
@@ -3171,6 +3180,7 @@ static void reversal_run(short heading, short anim, long rate, REVERSAL* r)
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	r->ticks = 0;
 	r->worst_step = 0;
@@ -3324,6 +3334,7 @@ static void reversal()
 		sit.jump = 0;
 		sit.blocked = 0;
 		sit.cam_player_step = 0;
+		sit.cam_cut = 0;
 
 		tick(&cfg, &state, 0, -S(32000), 0, 0, &sit, &out);
 		tick(&cfg, &state, 0, S(32000), 0, 0, &sit, &out);
@@ -3386,6 +3397,7 @@ static void reversal()
 		sit.jump = 0;
 		sit.blocked = 0;
 		sit.cam_player_step = 0;
+		sit.cam_cut = 0;
 
 		tick_turn(&cfg, &state, S(32000), 0, 0, 0, &sit, &out, &yaw);
 		ok(yaw > 0, "a stick to the right turns her right", (yaw > 0) ? 1 : 0, 1);
@@ -3448,6 +3460,7 @@ static void circle_run(long step_units, long start_units, long ticks, long rate,
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	c->worst_error = 0;
 	c->flips = 0;
@@ -3704,6 +3717,7 @@ static void air_turn()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	{
 		short heading = 0;
@@ -4407,6 +4421,7 @@ static void steer_run(long cam_step, long wobble, short anim, long water, long p
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	s->impulses = 0;
 	s->biggest = 0;
@@ -4427,6 +4442,7 @@ static void steer_run(long cam_step, long wobble, short anim, long water, long p
 		 * step only when it was the player's thumb that did it. */
 		cam = (short)ModernWrap((long)cam + cam_step);
 		sit.cam_player_step = player ? (short)cam_step : (short)0;
+		sit.cam_cut = 0;
 
 		ModernTranslate(&cfg, &state, x, y, cam, heading, &sit, &out);
 
@@ -4813,6 +4829,7 @@ static void firing_run()
 	sit.jump = 0;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 
 	tick_turn(&cfg, &state, S(30000), 0, 0, 0, &sit, &out, &yaw);
 	ok(out.mode == MODERN_MODE_RUN, "firing: the running mode", out.mode, MODERN_MODE_RUN);
@@ -5792,6 +5809,7 @@ static void sweeps()
 		sit.jump = 0;
 		sit.blocked = 1;
 		sit.cam_player_step = 0;
+		sit.cam_cut = 0;
 
 		for (i = 0; i < 2; i++)
 		{
@@ -5836,6 +5854,7 @@ static void sweeps()
 
 		sit.blocked = 0;
 		sit.cam_player_step = 0;
+		sit.cam_cut = 0;
 		sit.anim_state = 1;
 
 		for (a = 0; a < 64; a++)
@@ -5867,6 +5886,7 @@ static void sweeps()
 	sit.anim_state = 2;
 	sit.blocked = 0;
 	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
 	ModernResetState(&state);
 	tick(&cfg, &state, S(30000), 0, 0x1234, 0, &sit, &out);
 	ok(state.have_ref == 1, "(b) a push seats the course", state.have_ref, 1);

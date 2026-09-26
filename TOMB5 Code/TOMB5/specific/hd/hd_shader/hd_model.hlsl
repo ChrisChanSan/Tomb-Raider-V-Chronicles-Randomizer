@@ -18,8 +18,9 @@
  * to reach an HD guard exactly as far as it reaches the classic wall behind
  * him. So the ambient comes from the engine's own CalculateObjectLighting, the
  * engine's own light LIST is evaluated per vertex below with the classic
- * formulas. The fog term is hd_room.hlsl's; the bulb term is the classic one,
- * with its cone cull and without hd_room's softened rim.
+ * formulas. The fog term is hd_room.hlsl's, and so is the bulb term: the
+ * classic chord with hd_room's exact behind-the-camera cull and its softened
+ * rim.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -463,14 +464,21 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 /* ---------------------------------------------------------------- pixel -- */
 
 /* One fog bulb's contribution - the length of the piece of the eye ray inside
- * the bulb's sphere, times its density (drawroom.cpp), with the classic cone
- * cull and the classic quirk: when the bulb is behind the camera `vec` is
- * left holding the unit direction and the length comes out as one, which the
- * classic path truncates to zero on the way into a long. The two shader files
- * keep their own function rather than share an include, because Direct3D 9 shader
- * bytecode is compiled per entry point anyway and an include would put a
- * second file between the source and the .inc that GPLv3 asks to sit beside
- * it. */
+ * the bulb's sphere, times its density (drawroom.cpp) - line for line
+ * hd_room.hlsl's BulbIntensity, so that an HD object and the HD room behind it
+ * stand in the same haze. The two shader files keep their own function rather
+ * than share an include, because Direct3D 9 shader bytecode is compiled per
+ * entry point anyway and an include would put a second file between the
+ * source and the .inc that GPLv3 asks to sit beside it.
+ *
+ * The cull is the room's exact one: a sphere whose every point lies behind
+ * the camera plane contributes nothing (P.z + rad <= 0), which also settles a
+ * camera inside the bulb. The classic cone of 45 degrees about the view axis
+ * is a per-vertex shortcut and, per pixel, a hard line in the frame: in the
+ * first person view at fov 100 it took away haze worth up to 78.7 of 255 on
+ * 2.4 per cent of the frame, and on 5.0 per cent with the camera inside the
+ * bulb (both terms transcribed to numpy and compared per pixel). hd_room.hlsl
+ * says the rest of why. */
 float BulbIntensity(float3 stash, float4 a, float4 b)
 {
 	float3 P = a.xyz;
@@ -478,8 +486,7 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 	float sqrad = rad * rad;
 	float sqlen = dot(P, P);
 
-	if (!(stash.z + rad > 0.0f && abs(stash.x) - rad < abs(stash.z) &&
-		abs(stash.y) - rad < abs(stash.z)))
+	if (P.z + rad <= 0.0f)
 		return 0.0f;
 
 	float3 vec = 0.0f;
@@ -536,7 +543,17 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 		}
 	}
 
-	return length(vec2 - vec) * b.w;
+	/* The rim, softened exactly as hd_room.hlsl softens it: the chord
+	 * weighted by a smoothstep over the outer 0.35 of its own share of the
+	 * diameter, 1 through the whole core of the bulb. The raw chord stands up
+	 * vertically at the silhouette, and a model inside a bulb showed that
+	 * outline up to 11.2 of 255 brighter than the room around it. */
+	const float kRim = 0.35f;
+
+	float chord = length(vec2 - vec);
+	float t = saturate(chord / max(2.0f * rad, 1e-4f));
+
+	return chord * b.w * smoothstep(0.0f, kRim, t);
 }
 
 float4 ModelPS(VS_OUT input) : COLOR0

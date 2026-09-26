@@ -113,6 +113,14 @@
  *     -addmat <n>     the additive pass draws only the ranges of .TRG
  *                     material n (2 the glows, 16 the seas): one material's
  *                     glow alone, for telling which of them moved a pixel.
+ *     -glowblend add|screen
+ *                     how material 2 composes in the additive pass: screen
+ *                     is the renderer's own, add the ONE / ONE sum every
+ *                     other additive material keeps - the before picture out
+ *                     of the same build.
+ *     -aniso 0|1      material 2 sampled with the anisotropic filter (1, the
+ *                     renderer's own) or with the trilinear one of every
+ *                     other draw call (0).
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -3286,6 +3294,7 @@ int main(int argc, char** argv)
 		printf("       -glow   the additive pass alone over black, with and "
 			"without the scene's depth\n");
 		printf("       -stackedseas  -fastswing  -addmat <material>\n");
+		printf("       -glowblend add|screen  -aniso 0|1\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -hdm                          apply the .hdm sidecar "
@@ -3322,6 +3331,8 @@ int main(int argc, char** argv)
 	// Draw the .TRG's sky group(s) behind the room, and only them.
 	bool sky = false, skyOnly = false;
 	bool wibbleGiven = false;
+	// -glowblend and -aniso, handed to HDRenderGlowOverride together.
+	int glowSum = 0, glowNoAniso = 0;
 
 	// The portal walk offline. A seed of -1 means the switch was
 	// not given and nothing below changes.
@@ -3451,6 +3462,16 @@ int main(int argc, char** argv)
 			HDRenderSwingOverride(1);
 		else if (!strcmp(argv[at], "-addmat") && at + 1 < argc)
 			HDRenderAdditiveOnly(atoi(argv[++at]));
+		else if (!strcmp(argv[at], "-glowblend") && at + 1 < argc)
+		{
+			glowSum = !strcmp(argv[++at], "add") ? 1 : 0;
+			HDRenderGlowOverride(glowSum, glowNoAniso);
+		}
+		else if (!strcmp(argv[at], "-aniso") && at + 1 < argc)
+		{
+			glowNoAniso = atoi(argv[++at]) ? 0 : 1;
+			HDRenderGlowOverride(glowSum, glowNoAniso);
+		}
 		else if (!strcmp(argv[at], "-noshore"))
 			HDRenderShoreOverride(1);
 		else if (!strcmp(argv[at], "-noblend"))

@@ -1283,6 +1283,11 @@ namespace
 	/* HDRenderAdditiveOnly: the one material whose additive draw calls are
 	 * drawn, or -1 for all of them, which is what the engine always uses. */
 	int g_add_only = -1;
+	/* HDRenderGlowOverride: material 2 summed ONE / ONE like every other
+	 * additive material instead of composed as screen, and sampled without
+	 * the anisotropic filter. Both false in the engine. */
+	bool g_glow_sum = false;
+	bool g_glow_no_aniso = false;
 	// Once per level: the sky parts that draw at light 1.
 	int g_flat_parts = 0;
 	/* Once per level: the material 13 parts whose four pages and frame
@@ -1908,6 +1913,12 @@ void HDRenderSwingOverride(int keepFast)
 void HDRenderAdditiveOnly(int material)
 {
 	g_add_only = material >= 0 ? material : -1;
+}
+
+void HDRenderGlowOverride(int sum, int noAniso)
+{
+	g_glow_sum = sum ? true : false;
+	g_glow_no_aniso = noAniso ? true : false;
 }
 
 void HDRenderShutdown()
@@ -2745,9 +2756,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					MarkStackedCopies(trg, run, stacked))
 					g_stacked_parts++;
 
-				/* An additive draw call holds one material, so that one
-				 * material's glow can be drawn alone (HDRenderAdditiveOnly).
-				 * Zero in the other two passes, whose sort is unchanged. */
+				/* An additive draw call holds one material: material 2
+				 * composes as screen and every other one as a sum (see
+				 * draw_pass), and one material's glow can be drawn alone
+				 * (HDRenderAdditiveOnly). Zero in the other two passes, whose
+				 * sort is unchanged. */
 				const int add_material = pass == 2 ? (int)MaterialBase(part) : 0;
 
 				if (pass == 2 && part.material == HD_TRG_MATERIAL_GLOW &&
@@ -4055,6 +4068,51 @@ namespace
 		bool ripple_dirty = true;
 		const bool additive_pass = pass == 2;
 
+		/* The glow: material 2's draw calls in the additive pass - the light
+		 * shafts, the lamp cones and the window glows.
+		 *
+		 * They compose as SCREEN, dst + src - dst * src, where every other
+		 * additive material sums ONE / ONE. Direct3D 9 has it as a blend
+		 * state and nothing else: SRCBLEND INVDESTCOLOR against DESTBLEND ONE
+		 * is src * (1 - dst) + dst. A shaft is a fan of cards that overlap
+		 * where it is brightest, and a sum of them clips: ANDREA2 room 131's
+		 * window shaft is about 130 cards, 6.2 of them over the average pixel,
+		 * whose unclamped sum averages 1.22 and peaks at 3.54 times white, so
+		 * 56.7 per cent of the shaft's pixels clip in the additive pass alone
+		 * and the core is a flat white slab with the cards' own edges cut into
+		 * it (RoomProbe, the additive pass over black). Screen takes each card
+		 * a share of what is still left to white, so a stack comes near white
+		 * and never reaches it, and a single card over black is exactly what
+		 * the sum drew. The screen composition of the glow is TROne's own
+		 * rule: TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931.
+		 *
+		 * And they are sampled ANISOTROPICALLY. A card is seen along its
+		 * streaks: the page footprint of a pixel is 5.6 to 6.2 times longer
+		 * than it is wide (median over ANDREA2 room 131's and RICH1 room 3's
+		 * shafts and JOBY4 room 19's rays, their own triangles projected
+		 * through RoomProbe's camera), and the trilinear filter picks its mip
+		 * by the long side - an area-weighted 1.66 mip levels too blurry
+		 * across ANDREA2's streaks and 1.79 across RICH1's. Up to 16
+		 * taps, as many as the device offers, bring the streaks back out of
+		 * the art itself.
+		 *
+		 * Both are set when the run of glow draw calls starts and put back
+		 * when it ends, so every other draw call of the pass - and every
+		 * pixel of the other two - sees the states it always had. */
+		bool glow_on = false;
+		DWORD glow_taps = 0;
+		DWORD kept_taps = 1;
+
+		if (additive_pass && !g_glow_no_aniso &&
+			(g_caps.RasterCaps & D3DPRASTERCAPS_ANISOTROPY) &&
+			(g_caps.TextureFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC))
+		{
+			glow_taps = g_caps.MaxAnisotropy < 16 ? g_caps.MaxAnisotropy : 16;
+
+			if (glow_taps < 2)
+				glow_taps = 0;
+		}
+
 		g_motion_dirty = true;		// see the note beside g_motion_dirty
 
 		if (pass == 2)
@@ -4276,6 +4334,30 @@ namespace
 				g_device->SetVertexShaderConstantF(13, g_motion, 1);
 			}
 
+			/* Into the glow's composition and sampling, or out of them - see
+			 * the note above the loop. */
+			if (additive_pass &&
+				(range.material == HD_TRG_MATERIAL_GLOW) != glow_on)
+			{
+				glow_on = !glow_on;
+
+				if (!g_glow_sum)
+					g_device->SetRenderState(D3DRS_SRCBLEND,
+						glow_on ? D3DBLEND_INVDESTCOLOR : D3DBLEND_ONE);
+
+				if (glow_taps && glow_on)
+				{
+					g_device->GetSamplerState(0, D3DSAMP_MAXANISOTROPY, &kept_taps);
+					g_device->SetSamplerState(0, D3DSAMP_MAXANISOTROPY, glow_taps);
+					g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_ANISOTROPIC);
+				}
+				else if (glow_taps)
+				{
+					g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+					g_device->SetSamplerState(0, D3DSAMP_MAXANISOTROPY, kept_taps);
+				}
+			}
+
 			g_device->SetTexture(0, page);
 
 			if (g_index32)
@@ -4305,6 +4387,19 @@ namespace
 			g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 			g_wrapping = false;
+		}
+
+		// A pass that ended on a glow draw call leaves its states behind.
+		if (glow_on)
+		{
+			if (!g_glow_sum)
+				g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+
+			if (glow_taps)
+			{
+				g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+				g_device->SetSamplerState(0, D3DSAMP_MAXANISOTROPY, kept_taps);
+			}
 		}
 
 		if (pass == 2 || blendOnly)

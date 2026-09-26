@@ -451,6 +451,14 @@ void HDRenderSwingOverride(int keepFast);
  * byte, without the destructible bits), and -1 draws all of them, which is
  * what the engine always has. May be called at any time. */
 void HDRenderAdditiveOnly(int material);
+
+/* The glow's screen composition and its anisotropic sampling off, for the
+ * diagnostic tool alone. `sum` non-zero draws material 2 ONE / ONE like every
+ * other additive material, `noAniso` non-zero samples it with the plain
+ * trilinear filter of every other draw call (hd_render.cpp, draw_pass) - the
+ * comparison pictures out of the same build. May be called at any time; the
+ * engine never calls it and there is no option and no registry key for it. */
+void HDRenderGlowOverride(int sum, int noAniso);
 void HDRenderShutdown();
 bool HDRenderReady();
 

@@ -13,7 +13,10 @@
 
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
- * Build with bmenu.bat, run with no arguments.
+ * Build with bmenu.bat, run with no arguments from this folder: the last
+ * family (controls_mouse_rows) reads three engine files as text, by their
+ * paths relative to it, because the rows it checks live in a file that
+ * cannot be linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
  * call sites, so every row added above a list meant recounting a shift
@@ -34,6 +37,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../../../TOMB5 Code/TOMB5/game/menu_nav.h"
@@ -251,21 +255,21 @@ static void paging_engine_cases()
 	check(MenuRowsOnPage(28, 11, 2), 8, "28 at 11: the last page has 8");
 
 	/* The Controls and Modes pages: the five mode rows sit on their own
-	 * sub-page, so Controls has ten rows and Modes has five. Neither has a
-	 * fixed row, so both are asked at the full MENU_MAX_ROWS of 12, and both
-	 * are one page: no arrows, and therefore no "1/N" indicator on either. */
-	check(MenuPageCount(10, 12), 1, "Controls: 10 rows at 12, one page");
-	check(MenuRowsOnPage(10, 12, 0), 10, "Controls: all ten on page 0");
-	check(MenuPageFirstRow(10, 12, 0), 0, "Controls: page 0 starts at 0");
-	check(MenuRowsOnPage(10, 12, 1), 0, "Controls: there is no second page");
+	 * sub-page, so Controls has twelve rows with the two mouse rows and Modes
+	 * has five. Neither has a fixed row, so both are asked at the full
+	 * MENU_MAX_ROWS of 12, and both are one page: no arrows, and therefore no
+	 * "1/N" indicator on either. */
+	check(MenuPageCount(12, 12), 1, "Controls: 12 rows at 12, one page");
+	check(MenuRowsOnPage(12, 12, 0), 12, "Controls: all twelve on page 0");
+	check(MenuPageFirstRow(12, 12, 0), 0, "Controls: page 0 starts at 0");
+	check(MenuRowsOnPage(12, 12, 1), 0, "Controls: there is no second page");
 
 	check(MenuPageCount(5, 12), 1, "Modes: 5 rows at 12, one page");
 	check(MenuRowsOnPage(5, 12, 0), 5, "Modes: all five on page 0");
 	check(MenuRowsOnPage(5, 12, 1), 0, "Modes: there is no second page");
 
-	// Even the twelve rows Controls had before losing the mode rows still
-	// fit one page, so pagination was never the reason for the move.
-	check(MenuPageCount(12, 12), 1, "the twelve rows Controls had were one page too");
+	// Twelve is the most the page holds: a thirteenth row would split it.
+	check(MenuPageCount(13, 12), 2, "a thirteenth Controls row would make two pages");
 }
 
 static void paging_ends()
@@ -1075,6 +1079,237 @@ static void pad_default_tables(void)
 	check((int)kSepXbox[14], 19, "both of them");
 }
 
+/* ----------------------------------------------------- the mouse's rows -- */
+
+/* A file of the tree, whole, as text; 0 when it cannot be read. The test runs
+ * from its own folder, three levels under the repository. */
+static char* tree_file(const char* rel)
+{
+	FILE* f = 0;
+	char* text;
+	long size;
+
+	if (fopen_s(&f, rel, "rb") || !f)
+		return 0;
+
+	fseek(f, 0, SEEK_END);
+	size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	text = (char*)malloc((size_t)size + 1);
+
+	if (text)
+	{
+		size = (long)fread(text, 1, (size_t)size, f);
+		text[size] = 0;
+	}
+
+	fclose(f);
+	return text;
+}
+
+// How often `what` occurs in `text`.
+static int tree_count(const char* text, const char* what)
+{
+	int n = 0;
+
+	for (const char* p = strstr(text, what); p; p = strstr(p + 1, what))
+		n++;
+
+	return n;
+}
+
+/* The quoted strings of the one line that starts at `at`, up to `max`. */
+static int tree_quoted(const char* at, char out[][64], int max)
+{
+	int n = 0;
+
+	while (*at && *at != '\n' && n < max)
+	{
+		if (*at++ != '"')
+			continue;
+
+		int k = 0;
+
+		while (*at && *at != '"' && *at != '\n' && k < 63)
+			out[n][k++] = *at++;
+
+		out[n++][k] = 0;
+
+		if (*at == '"')
+			at++;
+	}
+
+	return n;
+}
+
+/* The two mouse rows live in game\menu_frame.cpp's Controls table, which
+ * needs the engine to run and so cannot be linked here. What can be checked
+ * without it is what the tree says: the table's rows in order, the two rows'
+ * kind, gate and save class, their five strings in game\gameflow.cpp's
+ * table, and the registry names in tomb5\tomb5.cpp. The slider's own step is
+ * game\menu_nav.h's MenuSliderStep, swept whole. */
+static void controls_mouse_rows()
+{
+	static const char* const want[12] =
+	{
+		"Key bindings", "View", "Modes", "Control type", "Action", "Control layout",
+		"Camera speed", "Dead zone", "Mouse sensitivity", "Invert mouse", "Targeting",
+		"Ammotype hotkeys"
+	};
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char label[16][64];
+	char line[16][512];
+	int rows = 0, i, v, d;
+
+	check(frame && flow && opts, 1, "rows: the three engine files are readable from here");
+
+	if (!frame || !flow || !opts)
+	{
+		free(frame);
+		free(flow);
+		free(opts);
+		return;
+	}
+
+	// The Controls table, row by row.
+	{
+		const char* p = strstr(frame, "static const menu_row menu_rows_controls[] =");
+		const char* end = p ? strstr(p, "};") : 0;
+
+		check(p != 0 && end != 0, 1, "rows: the Controls table is found");
+
+		while (p && end && p < end && rows < 16)
+		{
+			const char* nl = strchr(p, '\n');
+			const char* s = p;
+
+			while (*s == '\t' || *s == ' ')
+				s++;
+
+			if (!strncmp(s, "MENU_", 5) && s < end)
+			{
+				char q[2][64];
+				int k = 0;
+
+				tree_quoted(s, q, 1);
+				strcpy_s(label[rows], sizeof(label[rows]), q[0]);
+
+				while (s[k] && s[k] != '\n' && s[k] != '\r' && k < 511)
+				{
+					line[rows][k] = s[k];
+					k++;
+				}
+
+				line[rows][k] = 0;
+				rows++;
+			}
+
+			p = nl ? nl + 1 : 0;
+		}
+	}
+
+	check(rows, 12, "rows: the Controls table holds twelve rows, the page's maximum");
+
+	for (i = 0; i < rows && i < 12; i++)
+		check(strcmp(label[i], want[i]), 0, "rows: the Controls rows stand in this order");
+
+	if (rows == 12)
+	{
+		check(!strncmp(line[8], "MENU_SLIDER(\"Mouse sensitivity\"", 31), 1,
+			"rows: Mouse sensitivity is a slider, right after Dead zone");
+		check(strstr(line[8], "MenuNumMouseSensitivity, MenuStepMouseSensitivity") != 0, 1,
+			"rows: it reads and steps tomb5.mouse_sensitivity through its own two functions");
+		check(strstr(line[8], "MENU_SAVE_TOMB5") != 0, 1, "rows: it is saved with the tomb5 settings");
+		check(strstr(line[8], "MenuEnabledModern") != 0, 1, "rows: and greyed under Tank");
+
+		check(!strncmp(line[9], "MENU_VALUE_IF(\"Invert mouse\"", 28), 1,
+			"rows: Invert mouse is a gated value row, right after the slider");
+		check(strstr(line[9], "MenuValInvertMouse, MenuStepInvertMouse") != 0, 1,
+			"rows: it shows and flips tomb5.mouse_invert through its own two functions");
+		check(strstr(line[9], "MENU_SAVE_TOMB5") != 0, 1, "rows: it is saved with the tomb5 settings");
+		check(strstr(line[9], "MenuEnabledModern") != 0, 1, "rows: and greyed under Tank");
+
+		check(strstr(line[7], "MenuEnabledModern") != 0 && strstr(line[6], "MenuEnabledModern") != 0, 1,
+			"rows: the same gate as Camera speed and Dead zone above them");
+	}
+
+	check(strstr(frame, "MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100)") != 0, 1,
+		"rows: the slider steps through MenuSliderStep over 0..100");
+	check(strstr(frame, "tomb5.mouse_invert ? \"on\" : \"off\"") != 0, 1,
+		"rows: the invert shows the table's own on and off");
+
+	// The five strings of each label: English first, German translated, the
+	// other three repeating the English, as every other row of the table.
+	{
+		static const char* const names[2] = { "Mouse sensitivity", "Invert mouse" };
+		static const char* const deutsch[2] = { "Mausempfindlichkeit", "Maus invertieren" };
+
+		for (i = 0; i < 2; i++)
+		{
+			char key[64];
+			char col[5][64];
+			const char* at;
+			int n;
+
+			snprintf(key, sizeof(key), "{ \"%s\",", names[i]);
+			at = strstr(flow, key);
+			check(at != 0, 1, "rows: the label has its row in CustomText's table");
+
+			if (!at)
+				continue;
+
+			n = tree_quoted(at, col, 5);
+			check(n, 5, "rows: five columns, one per language");
+			check(strcmp(col[0], names[i]), 0, "rows: the English column is the label itself");
+			check(strcmp(col[2], deutsch[i]), 0, "rows: the German column is its translation");
+			check(!strcmp(col[1], names[i]) && !strcmp(col[3], names[i]) && !strcmp(col[4], names[i]), 1,
+				"rows: French, Italian and Spanish repeat the English");
+			check((int)strlen(col[2]) <= (int)strlen("Kamerageschwindigkeit"), 1,
+				"rows: the German label is no longer than the longest the column holds");
+			check(tree_count(flow, key), 1, "rows: and the label has exactly one row");
+		}
+
+		check(strstr(flow, "{ \"on\",") != 0 && strstr(flow, "{ \"off\",") != 0, 1,
+			"rows: the invert's two values are in the table already");
+	}
+
+	// The registry: written on a first run, read, and saved - three times each.
+	check(tree_count(opts, "sprintf(buf, \"mouse_sens\");"), 3,
+		"rows: mouse_sens is written on a first run, read and saved");
+	check(tree_count(opts, "sprintf(buf, \"mouse_invert\");"), 3,
+		"rows: mouse_invert likewise");
+	check(strstr(opts, "REG_ReadLong(buf, tomb5.mouse_sensitivity, 50);") != 0, 1,
+		"rows: a registry without mouse_sens reads as the middle, 50");
+	check(strstr(opts, "REG_ReadBool(buf, tomb5.mouse_invert, 0);") != 0, 1,
+		"rows: and one without mouse_invert as off");
+
+	// The slider's step, swept over its whole range and one past each end.
+	for (v = -1; v <= 101; v++)
+		for (d = -1; d <= 1; d++)
+		{
+			int w = v;
+
+			if (d < 0 && v > 0)
+				w = v - 1;
+
+			if (d > 0 && v < 100)
+				w = v + 1;
+
+			check(MenuSliderStep(v, d, 100), w, "rows: one frame of the slider is one step, and the ends hold");
+		}
+
+	check(MenuSliderStep(0, -1, 100), 0, "rows: the bottom holds");
+	check(MenuSliderStep(100, 1, 100), 100, "rows: the top holds");
+	check(MenuSliderStep(50, 0, 100), 50, "rows: no direction, no step");
+	check(MenuSliderStep(50, -7, 100), 49, "rows: a direction is a sign, not a size");
+
+	free(frame);
+	free(flow);
+	free(opts);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -1098,6 +1333,7 @@ int main()
 	pad_role_slots();
 	pad_chord_rule();
 	pad_default_tables();
+	controls_mouse_rows();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

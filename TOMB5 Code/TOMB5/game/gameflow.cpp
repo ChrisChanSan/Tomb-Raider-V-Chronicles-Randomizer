@@ -1386,6 +1386,11 @@ const char* CustomText(const char* engl)
 		// German keeps the borrowed loanword "Deadzone", which is also the
 		// shorter of the two.
 		{ "Dead zone",       "Dead zone",       "Deadzone",       "Dead zone",          "Dead zone" },
+		// The two mouse rows under it; their values are "on"/"off" and the
+		// slider, already here. "Mausempfindlichkeit" is two letters shorter
+		// than "Kamerageschwindigkeit", the longest label the column holds.
+		{ "Mouse sensitivity", "Mouse sensitivity", "Mausempfindlichkeit", "Mouse sensitivity", "Mouse sensitivity" },
+		{ "Invert mouse",    "Invert mouse",    "Maus invertieren", "Invert mouse",     "Invert mouse" },
 		{ "HUD",             "HUD",             "HUD",            "HUD",                "HUD" },
 		{ "View",            "View",            "Ansicht",        "View",               "View" },
 		{ "First person view", "First person view", "Ego-Sicht",  "First person view",  "First person view" },

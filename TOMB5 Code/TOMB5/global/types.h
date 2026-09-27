@@ -2851,5 +2851,20 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * "unset" - which is why init_tomb5_stuff() seats it at 50 on a
 	 * first run. Registry: dead_zone. */
 	ulong dead_zone;
+
+	/* The mouse sensitivity slider: a third Controls-page slider beside
+	 * dead_zone and driven exactly like it, 0..100. The number means
+	 * nothing by itself; game\modern_camera.cpp's ModernCameraMouseGain is
+	 * the one place that turns it into a gain - 32 units of camera angle a
+	 * count at 50, 2048 counts a full turn, a quarter of that at 0 and four
+	 * times at 100. Like dead_zone a bare zero would be a real setting, so
+	 * init_tomb5_stuff() seats 50 on a first run. Registry: mouse_sens. */
+	ulong mouse_sensitivity;
+
+	/* Invert mouse: the mouse's own pitch invert, off by default. Off, a
+	 * mouse pushed away looks up, as the stick pushed forward does; on,
+	 * it looks down. The stick keeps its own convention and this does not
+	 * reach it. Registry: mouse_invert. */
+	bool mouse_invert;
 };
 #pragma pack(pop)

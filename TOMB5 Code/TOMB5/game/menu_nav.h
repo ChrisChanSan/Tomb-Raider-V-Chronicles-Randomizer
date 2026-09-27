@@ -171,3 +171,18 @@ inline int MenuPageStep(int page, int pages, int dir)
 
 	return page;
 }
+
+/* One frame of a 0..top slider: one down for a negative dir, one up for a
+ * positive one, nothing for 0, and the two ends hold. The rule Camera speed
+ * and Dead zone write out by hand (game/menu_frame.cpp), put here for the
+ * Mouse sensitivity row so that MenuTest can sweep it. */
+inline int MenuSliderStep(int value, int dir, int top)
+{
+	if (dir < 0 && value > 0)
+		value--;
+
+	if (dir > 0 && value < top)
+		value++;
+
+	return value;
+}

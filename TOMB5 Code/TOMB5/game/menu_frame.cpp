@@ -513,6 +513,41 @@ static bool MenuStepDeadZone(long, long dir)
 	return tomb5.dead_zone != old;
 }
 
+/* Mouse sensitivity and Invert mouse: the mouse's two rows, right after Dead
+ * zone and gated the same way, because the mouse turns only the Modern
+ * camera. Both are read by S_UpdateInput on every tick (specific/input.cpp),
+ * so a change takes hold on the next one. */
+static long MenuNumMouseSensitivity(long)
+{
+	return (long)tomb5.mouse_sensitivity;
+}
+
+static bool MenuStepMouseSensitivity(long, long dir)
+{
+	// Stored and clamped here; the gain it scales, a quarter at 0 to four
+	// times at 100, lives at ModernCameraMouseGain (game/modern_camera.cpp).
+	ulong old = tomb5.mouse_sensitivity;
+
+	tomb5.mouse_sensitivity = (ulong)MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100);
+	return tomb5.mouse_sensitivity != old;
+}
+
+static const char* MenuValInvertMouse(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.mouse_invert ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepInvertMouse(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.mouse_invert = !tomb5.mouse_invert;
+	return 1;
+}
+
 static const char* MenuValTargeting(long, char* buf)
 {
 	if (App.AutoTarget)
@@ -1435,8 +1470,7 @@ static const menu_row menu_rows_controls[] =
 	MENU_TAB("Key bindings", MENU_PAGE_KEYBINDS),
 	MENU_TAB("View", MENU_PAGE_VIEW),
 	// The third tab, directly after "View", where the five mode rows now
-	// live. The page is ten rows with it and stays on one page: it was
-	// twelve, three left and this one arrived.
+	// live.
 	MENU_TAB("Modes", MENU_PAGE_MODES),
 	MENU_VALUE("Control type", MenuValControlType, MenuStepControlType, MENU_SAVE_TOMB5),
 	MENU_VALUE("Action", MenuValAction, MenuStepAction, MENU_SAVE_TOMB5),
@@ -1444,6 +1478,10 @@ static const menu_row menu_rows_controls[] =
 	MENU_SLIDER("Camera speed", -1, MenuNumCameraSpeed, MenuStepCameraSpeed, MENU_SAVE_TOMB5, MenuEnabledModern),
 	// The same slider, the same predicate, right after Camera speed.
 	MENU_SLIDER("Dead zone", -1, MenuNumDeadZone, MenuStepDeadZone, MENU_SAVE_TOMB5, MenuEnabledModern),
+	// The mouse's two rows, the same predicate again. Twelve rows now, the
+	// page's MENU_MAX_ROWS, so it is still one page.
+	MENU_SLIDER("Mouse sensitivity", -1, MenuNumMouseSensitivity, MenuStepMouseSensitivity, MENU_SAVE_TOMB5, MenuEnabledModern),
+	MENU_VALUE_IF("Invert mouse", MenuValInvertMouse, MenuStepInvertMouse, MENU_SAVE_TOMB5, MenuEnabledModern),
 	MENU_VALUE_TXT("Targeting", TXT_Targeting, MenuValTargeting, MenuStepTargeting, MENU_SAVE_GAME),
 	MENU_VALUE("Ammotype hotkeys", MenuValAmmotypeHotkeys, MenuStepAmmotypeHotkeys, MENU_SAVE_TOMB5)
 };

@@ -299,6 +299,16 @@ void init_tomb5_stuff()
 		tomb5.dead_zone = 50;
 		REG_WriteLong(buf, tomb5.dead_zone);
 
+		// The two mouse rows under Dead zone. 50 is the middle of the bar,
+		// the gain game/modern_camera.h states unscaled; the invert is off.
+		sprintf(buf, "mouse_sens");
+		tomb5.mouse_sensitivity = 50;
+		REG_WriteLong(buf, tomb5.mouse_sensitivity);
+
+		sprintf(buf, "mouse_invert");
+		tomb5.mouse_invert = 0;							//off
+		REG_WriteBool(buf, tomb5.mouse_invert);
+
 		// Empty: the Steam discovery looks for the Remaster by itself. A
 		// path here overrides it - one of the two settings that is not a
 		// number.
@@ -509,6 +519,17 @@ void init_tomb5_stuff()
 		if (tomb5.dead_zone > 100)
 			tomb5.dead_zone = 50;
 
+		// Missing - every older registry - reads as 50, the middle; out of
+		// range lands on the middle too, for dead_zone's reason: a hand-edited
+		// value says nothing about which end was meant.
+		sprintf(buf, "mouse_sens");
+		REG_ReadLong(buf, tomb5.mouse_sensitivity, 50);
+		if (tomb5.mouse_sensitivity > 100)
+			tomb5.mouse_sensitivity = 50;
+
+		sprintf(buf, "mouse_invert");
+		REG_ReadBool(buf, tomb5.mouse_invert, 0);
+
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
 
@@ -678,6 +699,13 @@ void save_new_tomb5_settings()
 	// The fifth, the dead zone slider.
 	sprintf(buf, "dead_zone");
 	REG_WriteLong(buf, tomb5.dead_zone);
+
+	// The two mouse rows under it.
+	sprintf(buf, "mouse_sens");
+	REG_WriteLong(buf, tomb5.mouse_sensitivity);
+
+	sprintf(buf, "mouse_invert");
+	REG_WriteBool(buf, tomb5.mouse_invert);
 
 	CloseRegistry();
 }

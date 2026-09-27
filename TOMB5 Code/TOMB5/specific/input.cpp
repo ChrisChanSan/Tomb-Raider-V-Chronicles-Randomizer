@@ -1263,8 +1263,8 @@ long S_UpdateInput()
 		 * dead zone: a resting mouse reports nothing. Not behind ControlMethod,
 		 * for the reason a key is not: the mouse is a device of its own, and a
 		 * player on the pad page can still reach for it. */
-		ModernCameraMouseSteps(mouse_dx, mouse_dy, MODERN_CAMERA_MOUSE_SENS_DEFAULT, 0,
-			&mouse_yaw, &mouse_pitch);
+		ModernCameraMouseSteps(mouse_dx, mouse_dy, (long)tomb5.mouse_sensitivity,
+			tomb5.mouse_invert ? 1 : 0, &mouse_yaw, &mouse_pitch);
 		ModernCameraMouse(mouse_yaw, mouse_pitch);
 
 		joy_fire &= ~rstick_bits;
@@ -1286,7 +1286,7 @@ long S_UpdateInput()
 			mouse_buttons_logged = mouse_buttons;
 			Log("MOUSELOG f=%ld dx=%ld dy=%ld buttons=0x%lX yaw=%ld pitch=%ld sens=%ld captured=%ld",
 				(long)GlobalCounter, mouse_dx, mouse_dy, mouse_buttons, mouse_yaw, mouse_pitch,
-				(long)MODERN_CAMERA_MOUSE_SENS_DEFAULT, WinMouseCaptured());
+				(long)tomb5.mouse_sensitivity, WinMouseCaptured());
 		}
 	}
 

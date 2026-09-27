@@ -1185,9 +1185,9 @@ static void separate_record(const long* row, int modern, long* out)
 	}
 }
 
-/* The repair as specific\input.cpp's ApplyJoyScheme ran it before the
- * Modifier was exempt, on arrays instead of the engine's globals: the
- * reference the new rule has to equal wherever no Modifier is bound. */
+/* The repair without the Modifier exemption, on arrays instead of the
+ * engine's globals: the reference the rule has to equal wherever no
+ * Modifier is bound. */
 static void repair_before(long* layout, long* chord, const long* want, long want_chord,
 	const long* other, long blocked)
 {
@@ -1258,12 +1258,12 @@ static int set_sound(const long* t, long chord)
 }
 
 /* The scheme repair (PadSchemeRepair, game\pad_scheme.h) as the Controls row
- * runs it, flip by flip. The picture behind it: at One key on the PS5
- * DirectInput page a player puts the Modifier on the touchpad (bit 13) and
- * chords on some hotkeys; Tank's Small Medipack default on that page is bit
- * 13 as well. Before the Modifier was exempt, the flip into Tank moved the
- * medipack off the blocked d-pad onto 13 and unbound the Modifier, and the
- * flip back left it unbound - every chord dead. */
+ * runs it, flip by flip. The case the checks are built on: at One key on the
+ * PS5 DirectInput page the Modifier sits on the touchpad (bit 13) with chords
+ * on some hotkeys, and Tank's Small Medipack default on that page is bit 13
+ * as well. A flip into Tank moves the medipack off the blocked d-pad; the
+ * cases prove that the Modifier keeps its bit, that the medipack yields, and
+ * that the flip back seats it on the d-pad again. */
 static void pad_scheme_repair()
 {
 	const long rows[4][15] =
@@ -1360,7 +1360,7 @@ static void pad_scheme_repair()
 
 	check(set_sound(t, chord), 1, "(a) into Tank: the set is sound");
 
-	// The same flip under the rule before: the fault itself.
+	// The same flip without the Modifier exemption, as the reference.
 	repair_before(r, &rchord, tank, 0, modern, kBlockedTank);
 	check((int)r[JOY_ROLE_MODIFIER], -1, "(a) the rule before: the Modifier fell to unbound");
 	check((int)r[13], 13, "(a) the rule before: and the medipack took the touchpad");
@@ -1484,7 +1484,7 @@ static void pad_scheme_repair()
 		pk = pc;
 		flip(active, &ac, &ay, tank, modern, 0, 0, &yd, &st);
 		flip(active, &ac, &ay, modern, tank, 0, 1, &yd, &st);
-		check(same_set(parked, kept) && pc == pk, 1, "(d) the parked Separate set is untouched by One-key flips");
+		check(same_set(parked, kept) && pc == pk, 1, "(d) the repair is handed the active set only: the parked copy is as it was");
 
 		separate_record(sep, 0, sepTank);
 		separate_record(sep, 1, sepModern);

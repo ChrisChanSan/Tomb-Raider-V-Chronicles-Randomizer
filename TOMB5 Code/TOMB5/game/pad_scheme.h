@@ -238,8 +238,8 @@ inline int PadModifierHolds(const long* layout, long chord, long bit, long flag)
  *     the player has bound in the meantime leaves the mask: a binding is the
  *     player's own choice.
  *
- * Without a bound Modifier, part 2 never applies (no default is -1), and part
- * 3 finds an empty mask, so the result is exactly part 1's.
+ * Without a bound Modifier, step 2 never applies (an unbound Modifier holds no
+ * pair), and step 3 finds an empty mask, so the result is exactly step 1's.
  *
  * `yielded` and `seated` say which roles this call left unbound for the
  * Modifier and which it seated again, for the log. */

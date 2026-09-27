@@ -407,13 +407,12 @@ namespace
 
 		/* Material 16 is not a weight even though its param[2], 0.035 to
 		 * 0.2, lies inside the range of material 15's page time (0.025 to
-		 * 0.2): it is the remaster's still water surface
-		 * (TrgProbe -matparts 16) - 28 parts in six
-		 * levels, 17 of them a double sheet two units apart with opposite
-		 * normals, every one sitting 1 to 20 units off the classic minfloor
-		 * of a ROOM_REFLECT room, its parameters scaling with the area of the
-		 * body of water. It falls through to 1.0 like every other material;
-		 * MaterialRipple reads its three numbers. */
+		 * 0.2): it is the remaster's still water surface (TrgProbe -matparts
+		 * 16) - 28 parts in six levels, 17 of them a double sheet two units
+		 * apart with opposite normals, every one sitting 1 to 20 units off
+		 * the classic minfloor of a ROOM_REFLECT room, its parameters scaling
+		 * with the area of the body of water. It falls through to 1.0 like
+		 * every other material; MaterialRipple reads its three numbers. */
 		switch (part.material)
 		{
 		case HD_TRG_MATERIAL_GLOW:

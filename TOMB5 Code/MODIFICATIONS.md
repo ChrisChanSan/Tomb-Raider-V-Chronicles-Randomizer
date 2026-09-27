@@ -7721,9 +7721,9 @@ covers the role tables.
 honour (the entry above); that repair no longer unbinds the Modifier. A role whose
 repaired default is the Modifier's own pair is left unbound instead, remembered in its
 set's yield mask, and seated on its default again by the next repair that finds that
-default free and not blocked. On the PS5 DirectInput page at *One key* the small medipack now waits
-while the Modifier holds the touchpad under Tank and is back on d-pad up under Modern,
-and every chord keeps its Modifier through both flips.
+default free and not blocked. On the PS5 DirectInput page at *One key* the small
+medipack now waits while the Modifier holds the touchpad under Tank and is back on d-pad
+up under Modern, and every chord keeps its Modifier through both flips.
 
 **Why.** With the Modifier on the touchpad and chords on some hotkeys, a flip to Tank and
 back left the binding page showing every chord as `---+L3`, `---+L2`, `---+R1`

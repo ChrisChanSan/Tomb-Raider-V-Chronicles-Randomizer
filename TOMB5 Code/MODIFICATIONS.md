@@ -3136,6 +3136,187 @@ round. The ANDREA1 viewpoints in rooms 93 and 101 and the triangle counts of tha
 
 **Commits.** `f7ffe49`, `edc7b03`, `679da06`, `00bd9fe`, `56de221`
 
+### The material 15 books: a fan's shadow that turns, and flames at a measured weight
+2026-09-27
+
+**What.** A `.TRG` part of material 15 is drawn as a book of pages: its own page and the
+pages after it by page number, one page per step of the time the part gives, starting
+where its phase says. Every such part in the game plays, 168 part-passes in nine levels,
+in the opaque pass and in the additive one alike. The five fan floors of the 13th Floor
+(RICH1) show the blade shadow turning with the fan, and the monitor wall of the Security
+Breach cutscene (RICHCUT2) plays its loop. The additive books - flames, smoke, candle and
+gas flames, the X-ray scanner's figure and rain rings in eight levels - move, and are
+drawn at a weight measured against the church mist of ANDY2 room 6, the ceiling the glows
+of material 2 are held to. The page follows the time of the state the frame draws, so at
+60 frames a second a 0.05 second page stands for three presents every time.
+
+**Why.** Under a turning fan in RICH1 the shadow on the vent floor stood still, while a
+recording of the Remaster at the same place shows it turning: a soft four-blade shadow
+stepping every third frame at 60 frames a second, 0.050 seconds, 12 degrees anticlockwise
+seen from above per step, repeating after 1.5 seconds, with the grille and the rivets
+still. The measurement found it in the data.
+- The book is in the art. Each fan floor is a material 15 part with the parameters (0, 30,
+  0.05, 0) on page 3071, and pages 3071 to 3100 are thirty pages of that floor with the
+  shadow turned about 12 degrees further on each (355 degrees over the thirty, measured on
+  the pages). The same scheme holds in every material 15 part of the game: `param[0]` is a
+  phase, a whole number below `param[1]`; `param[1]` is the page count, 14, 29 or 30;
+  `param[2]` is the seconds a page stands, 0.025 to 0.2; `param[3]` is 0 in all 168
+  part-passes.
+- The next pages go by page NUMBER, not by texture layer. RICHCUT2 group 0 part 5 names
+  layer 51 = page 1139, and layers 52 to 58 hold parquet, carpets and water (pages 1103,
+  1108, 1111, 1109, 1112, 3068 and 3006), while pages 1139 to 1168 are one clean loop of
+  the monitors' picture. By page number all 168 part-passes resolve; by layer that one
+  breaks.
+- The renderer read `param[2]` as an additive weight and nothing else: `MaterialAddWeight`
+  answered material 15 with `param[2]`, the entry "The engine's own per-vertex lighting,
+  as shader arithmetic" says so ("material 15 from `param[2]`"), and that reading was
+  wrong - the number is a time. No material 15 part ever left its own page, so the fan
+  floors showed frame 0 for ever; the other pages were already in the page cache, which
+  loads every layer of the file, and nothing pointed to them. RoomProbe drew RICH1 room 3
+  at `-time` 0, 0.05 and 0.75 byte-identically.
+- The HD clock steps once per logic tick in thirtieths of a second and is never
+  interpolated. At 60 frames a second a 0.05 second page on it stands for 2, 4, 2, 4
+  presents; the recording steps every 3. The time of the drawn state - the tick clock less
+  the part of a tick the drawn state stands behind it - steps every 3, 3, 3, and at
+  `fps_mode` 0 it is the tick clock itself.
+- The file gives an additive book no weight at all, and the pages at full strength are far
+  above anything else of the additive pass: at weight 1 the brightest fire adds 253.9 of
+  255 at the 95th percentile of its share of the frame, against the church mist's 8.
+
+**How.** `specific/hd/hd_book.h` is new and holds the arithmetic alone, with no engine
+header, so that the suite includes it as it includes `interpolate_math.h`: `HDBookClock`
+(the drawn time, `max(0, clock - (1 - alpha) / 30)`) and `HDBookPage` (`((int)(t / step) +
+phase) % count`, in double, the step read to the microsecond and a thousandth of a step
+added before the truncation, so that a present landing on a page boundary shows the same
+page every time and an hour of play does not drift). `specific/hd/hd_render.cpp`:
+- `MaterialBookTime` (`:1050`) answers a material 15 part with its `param[2]` when
+  `param[1]` is a whole number from 2 to 64, `param[2]` lies in 0.02 to 0.5 seconds and
+  `param[0]` is a whole number below `param[1]`, and 0 for everything else.
+  `MaterialBookSlots` (`:1088`) resolves pages 1 to N - 1 as `HDPageCacheSlotOf(page0 +
+  k)` into `g_book_slots`, once per (first page, count), and returns the index of page 1
+  or -1; `RunFirstPage` (`:1122`) gives `page0`, the page the first corner of the part's
+  run names. A part whose numbers or pages do not all resolve keeps its own page and is
+  counted as dropped.
+- In the part loop the book is resolved in every pass (`:3882`-`:3921`); only triangles on
+  the book's own first page carry it. `HDRange` and `HDTri` carry `bookTime`, `bookFirst`,
+  `bookCount` and `bookPhase` (`:1286`-`:1290`, `:3613`-`:3615`), all four in the sort key
+  (`:4271`-`:4274`) and the merge test (`:4371`-`:4374`) beside `flipSlot`, so parts with
+  the same book, step and phase share a draw call and parts that differ in any of them
+  never do; `bookPart` names the first triangle's part for the log and is not in the key.
+- The draw (`:5495`-`:5526`) takes `HDBookPage(g_book_clock, ...)` and the page's slot out
+  of `g_book_slots` where `hd_motion` is on; page 0 is the range's own `pageSlot`, so
+  `hd_motion` 0 shows page 0 and a book costs no draw call more than a still page.
+  `g_book_clock` is the frame's `bookClock` (`:2518`).
+- `HDFrameLighting` gains `bookClock` (`hd_render.h:121`). `specific/hd/hd_level.cpp`
+  fills it in `FillFrameLighting` (`:2823`-`:2831`) from `g_clock` and
+  `InterpFrameAlpha()`, the factor the frame's state was really blended at - 1 at
+  `fps_mode` 0, on a frame drawn live, on a camera cut and outside `DrawPhaseGame` - and
+  the pickup and sky brackets read the same value (`:4048`, `:4219`).
+- The weight: `MaterialAddWeight` (`:380`) takes the book's first page, and its material
+  15 case (`:433`-`:439`) reads `BookGain` (`:585`-`:630`), a table beside `GlowGain`
+  keyed by the first page: 2101 at 0.00705 and 3273 at 0.2263, 1 for a book it does not
+  name. `HDRenderBookGainOverride` and `HDRenderBookPageOverride` exist for the diagnostic
+  tool alone.
+- Seams, behind `-log` (`hd_level.cpp`): the motion line (`:3358`) ends in `book_parts=`,
+  `book_pages=` (distinct pages), `book_dropped=`, `book_additive=`, `book_step_min=`,
+  `book_step_max=` and `book_ranges=`; one `HDLOG book group= part= page=a..b frames=
+  step= phase= pass= weight= dropped=` line per part and pass after the build (`:3387`);
+  one `HDLOG book gain page= weight=` line per additive book (`:3418`); one `HDLOG
+  bookstep level= group= part= frame= clock= tick= alpha= present=` line for each of the
+  first 31 page changes of the first book the level draws (`:4491`; `present` counts the
+  HD frames filled in the level); the frame line ends in `book_calls=` (`:4461`).
+- Tools: RoomProbe drives the books with `-time` and `-nomotion` like everything else that
+  moves, prints a `book:` total and one `book` line per part after the build and the draw
+  calls that turned a page after the draw, and gains `-bookpage <n>` (every book on page n
+  of its run) and `-bookgain <first page> <weight>`; TrgProbe's `-parts` and `-mat` print
+  each material 15 part's run and how many of its pages the file's list holds. InterpTest
+  includes `hd_book.h` and gains 16 checks (`books`).
+
+**Checked.** RoomProbe at 1280 x 720 unless said, the classic `.TRC` originals as
+`-roombox`.
+- RICH1 room 3 from 1536 -700 3300, yaw 180, pitch 22, at `-time` 0.00 to 1.50 by 0.05 (31
+  pictures): the only pixels that change over the series are those of the fan floor
+  (31,278 pixels in the box x 475..807, y 311..432). The polar step measurement of the
+  recording, run on the renders, gives 30 steps from 9.0 to 13.75 degrees, 11.6 on
+  average, every one anticlockwise, 348.2 degrees in all; the pages' own steps are 9.5 to
+  13.5 degrees and 355 in all, and the render follows them step for step within 0.75
+  degrees, the two short steps and the two long ones included - the perspective takes the
+  rest. `-time` 0 and 1.5 are byte-identical; `-nomotion` is byte-identical to the
+  measurement's picture of `-time` 0, 0 of 921,600 pixels.
+- RICH1's seven material 13 parts (groups 10, 31, 34, 147, 150, 162 and 163), each from
+  below at 960 x 540 at `-time` 0, 0.2, 0.4 and 0.6: 0 pixels differ between the build
+  before and this one, with each flipbook visibly stepping.
+- RICHCUT2 group 0 from 5122 2304 3000, yaw 0, fov 60: the picture on the monitor wall
+  correlates best with page 1139 at `-time` 0 (0.439, the next page 0.350), with 1140 at
+  0.2 (0.480) and with 1141 at 0.4 (0.501) of the thirty pages; 0 pixels differ from the
+  build before at `-time` 0.
+- All fifteen levels built with `-nodraw`: 168 book part-passes, 0 dropped - ANDREA3 6,
+  ANDY1 15, ANDY2 101, ANDY3 32, JOBY3 1, JOBY5 4, RICH1 5 (opaque, 30 pages, 0.050 s),
+  RICH2 1, RICHCUT2 3 (one additive, 60 distinct pages). Draw calls: RICH1 room 3 13
+  before and after, the level 1,295 and 1,295; ANDY2's largest room (group 24, 38,019
+  triangles) 13 and 13, room 6 35 and 39, the level 4,378 and 4,421.
+- JOBY2 room 17 and ANDREA1 room 19 with their neighbours, at `-time` 0 and 0.73: the
+  frame and the additive pass alone are byte-identical before and after.
+- The weight, by the method of the glow gains: the frame with material 15 drawn (`-glow
+  -addmat 15`) against the frame with no additive material (`-addmat 99`), luma, over the
+  pixels the book's own additive picture lights above 2 at weight 1; every page of the
+  book drawn with `-bookpage`, 960 x 540, one fixed view at the largest book part of every
+  level that holds the book and one more where the level has a second. The 95th percentile
+  at the book's brightest page in that view, at weight 1 and with the table's gain:
+
+  | view | book | step | weight 1 | after |
+  |---|---|---|---|---|
+  | JOBY5 room 117 part 6 | 2101 | 0.025 | 253.9 | 7.85 |
+  | JOBY5 room 184 part 8 | 2101 | 0.025 | 213.8 | 7.85 |
+  | ANDY3 room 159 part 3 | 2101 | 0.1 | 242.4 | 4.43 |
+  | JOBY3 room 105 part 3 | 2101 | 0.04 | 237.7 | 5.15 |
+  | ANDY1 room 82 part 3 | 2101 | 0.025 | 215.4 | 4.14 |
+  | ANDY2 room 6 part 9 | 2101 | 0.1 | 211.9 | 2.00 |
+  | RICHCUT2 room 0 part 4 | 2101 | 0.025 | 202.5 | 4.56 |
+  | ANDY1 room 161 part 2 | 2101 | 0.025 | 199.2 | 0.00 |
+  | ANDREA3 room 59 part 4 | 2101 | 0.05 | 157.4 | 0.43 |
+  | ANDY2 room 0 part 4 | 2101 | 0.1 | 154.8 | 1.94 |
+  | ANDY3 room 145 part 3 | 2101 | 0.1 | 140.8 | 2.00 |
+  | ANDREA3 room 81 part 4 | 2101 | 0.05 | 123.6 | 0.43 |
+  | RICH2 room 11 part 2 | 2101 | 0.1 | 109.1 | 0.72 |
+  | ANDY2 room 165 part 2 | 3273 | 0.06 | 35.4 | 7.93 |
+  | ANDY3 room 34 part 5 | 3273 | 0.06 | 33.1 | 7.64 |
+  | ANDY1 room 113 part 5 | 3273 | 0.06 | 26.0 | 5.86 |
+
+  A first gain of 8 over 253.9 for book 2101 left JOBY5 room 184's stacked fire at 35.7;
+  0.00705 puts the brightest view at 7.85. For book 3273, 0.2263 puts ANDY2 room 165 at
+  7.93. RoomProbe without `-bookgain` draws those views byte-identically to the tuned
+  runs. ANDY1 room 170's view showed no ring and is left out.
+- One sheet per additive level (ANDREA3, ANDY1, ANDY2, ANDY3, JOBY3, JOBY5, RICH2,
+  RICHCUT2), before and after, the full frame and the additive pass alone, at `-time` 0
+  and one step later. The fires of JOBY3, JOBY5, ANDY1 and RICHCUT2 play and stay visible;
+  the candle flames of ANDREA3 and ANDY2 and ANDY1's smoke are barely there; RICH2's X-ray
+  figure, drawn before at the 0.1 the old reading gave it, is gone to the eye (0.72 at the
+  95th percentile, 20,107 pixels darker than before).
+- The suites: ModernTest 13992, MenuTest 36180, InterpTest 635 -> 651 checks, LipsTest 270
+  with the `.OBJ` folder and 243 without, 0 failed. `PCtomb5 built Sep 27 2026 21:28:18`,
+  md5 `e37fa3637eded845b545f60937a95346`. Not measured: the game.
+
+**Unchanged.** `hd_enable` 0: no classic file is touched, and nothing of this runs before
+`HDLevelBuildHD` returns on `HDEnabled()`. `fps_mode` 0: the books' time is the tick
+clock. Material 13 keeps its own fields and code; every other material draws as before.
+The scrolls, the material 13 flipbooks and the material 2 swings stay on the tick clock.
+The classic animated texture range of those floors is still not drawn in an HD room. The
+fan model.
+
+**Decisions.** Every material 15 part is a book, opaque and additive. The page comes from
+the drawn frame's time, and `hd_motion` 0 shows page 0. The book is not linked to the fan
+item: it is time-driven, like the classic range, which `S_AnimateTextures` steps for every
+room whatever the fan does, and like the data, which gives a time and nothing else - so
+the shadows under RICH1's fans 30 and 90 turn before those fans are triggered, as the
+classic game's did. The additive weight is 1 unless the book's brightest page in its
+brightest fixed view puts the 95th percentile of its share of the frame above the church
+mist's ceiling of 8, and then the gain that meets the ceiling, per book; the ceiling is
+never raised. Parts with the same book, step and phase may share a draw call, others
+never.
+
+**Commits.** `bbbecbe`, `d8617b8`, `59cd41e`
+
 ### Water in the HD rooms
 2026-09-06 - 2026-09-08
 
@@ -9110,3 +9291,5 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
+| #182 | The material 15 books: a fan's shadow that turns, and flames at a measured weight |
+| #183 | The material 15 books: a fan's shadow that turns, and flames at a measured weight |

@@ -1332,8 +1332,8 @@ see *Lara in HD* below for which of her stays classic and why.
   a lamp cone out of dozens of overlapping panes, and its caustic net under
   water is one sheet over the whole sea bed; painted at full strength and
   added on top of each other they go white. The remaster's own art says how
-  strong each of them is meant to be — the artists gave every glow, haze and
-  sheet a strength of its own, between a fortieth and a whole — and the engine
+  strong each of them is meant to be — the artists gave every glow and lit
+  sheet a strength of its own, between a twentieth and a whole — and the engine
   reads it. Measured on the shafts of a VCI corridor: at full strength they
   reach pure white, read from the art they peak at a quarter of it, which is
   where the remaster's own picture puts them. The Deepsea Dive's sea bed is a
@@ -1380,6 +1380,21 @@ see *Lara in HD* below for which of her stays classic and why.
   flicker over them, and the liquid surfaces of the submarine and of Rome
   move. Twenty-seven such surfaces in five levels; they stop with
   `hd_motion`.
+- **And the longer loops run too.** A second kind of loop in the art runs over
+  fourteen to thirty pages in a row, one page every fortieth to fifth of a
+  second. Under the ceiling fans of the 13th Floor the fan's soft shadow on the
+  vent floor turns with the fan, twenty pages a second, and at 60 frames a
+  second each page stands for exactly three frames, as it does in the
+  Remaster; the shadows under the two fans that start later turn from the
+  beginning, as the original game's did. The monitor wall of the Security
+  Breach cutscene plays its six-second loop. Flames, smoke, candle and gas
+  flames, the X-ray scanner's figure in Escape with the Iris and the rain rings
+  on the ground of Ireland move as well, 168 surfaces in nine levels. The ones
+  that add light carry no strength in the art, so they are held to the church
+  mist's strength like the glows: where the brightest of them shows brightest
+  its brightest pixels add about 8 steps out of 255. The fires stay visible at
+  that strength; the candle flames and the smoke are barely there, and the
+  X-ray figure is gone to the eye. They stop with `hd_motion`.
 - **Polished surfaces catch the light at a grazing angle.** The Remaster's
   artists marked which surfaces are glossy and how glossy - the marble of
   Rome, the painted steel of the submarine, 214 surfaces over twelve levels -
@@ -1547,12 +1562,13 @@ it.
   build - Ireland's ponds, the Rome cistern, most of JOBY3 - is left to it,
   decided per room out of the art itself.
 - **The Remaster's own still water is water.** One of its materials looks at
-  first sight like a second kind of haze, and drawn as one it comes out at a
-  fortieth to a fifth of its strength - nearly invisible. Taken apart part by
+  first sight like a faint glow whose third number is its strength, and drawn
+  as one it comes out at a thirtieth to a fifth of its strength - nearly
+  invisible. Taken apart part by
   part over the fifteen levels it is nothing of the kind: it is the **surface
   of standing water**, 28 pieces in six levels - the fountain of Rome, the
   basins of Trajan's Markets, the pools of the Irish labyrinth, the flooded
-  rooms of the sinking submarine and the two open seas - and read as haze it
+  rooms of the sinking submarine and the two open seas - and read as a glow it
   would also suppress the original level's own water surface in favour of
   something the player cannot see, leaving twelve rooms with no visible water
   at all. It is drawn as water, and over it runs a **ripple**, computed for
@@ -1626,7 +1642,7 @@ values, in the same key as every other setting
 |---|---|---|
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
-| `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
+| `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** the Remaster's own art carries, `1` by default: the marble of Rome, the painted steel of the submarine and a few hundred other surfaces its artists marked as polished, each with a strength of its own. What they get is not a mirror - nothing is drawn twice - but the one thing a polished floor does that a matt one does not: seen at a grazing angle it lifts towards its own lit colour. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and every surface is matt again. The three VCI levels carry no such mark in their art at all and look the same either way. Does nothing while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |

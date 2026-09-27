@@ -1253,7 +1253,10 @@ see *Lara in HD* below for which of her stays classic and why.
   floor. Where a shaft meets a wall or the floor it is still cut off sharply.
   The same fades also take most of the light out of a haze or mist drawn as
   panes all through a room, the kind that hangs around the camera wherever it
-  stands; whether such a haze should be spared is still open.
+  stands, and such a haze keeps them: the mist of the church in the Labyrinth,
+  faded like this, is the strength every glow is held to - each is drawn so that
+  where it shows brightest its brightest pixels add no more than that mist's, a
+  few steps out of 255, barely visible.
   A sea the art stacks three or four times over (the
   Deepsea Dive, the Sinking Submarine) is drawn once: the Deepsea Dive's is
   no longer pure cyan, and the Sinking Submarine's is a quarter as bright as

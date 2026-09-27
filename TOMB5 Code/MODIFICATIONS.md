@@ -2463,9 +2463,195 @@ material 2.
 Open: whether a haze or mist part is spared the near fade and `|N.V|`. A rule on parts
 that fill their page in u and in v (90 per cent or more of both) takes ANDY2's page
 2100 and TITLE's page 2146, but not ANDREA1's page 3232, whose 38 parts use u 1..254
-and v 159..248, 35 per cent of the page's v.
+and v 159..248, 35 per cent of the page's v. The entry that follows, "The light shafts
+are as faint as the church mist", settles it - no part is spared - and sets the gains
+anew against that mist in place of the 55 per cent rule.
 
 **Commits.** `8b175ad`
+
+### The light shafts are as faint as the church mist
+2026-09-27
+
+**What.** The glow shader's gain on a `.TRG` material 2 part is set per preset - the
+whole parameter tuple - so that every light shaft, ray fan, lamp cone and window glow
+shows at the strength of the church mist of ANDY2 room 6: in its brightest view it is
+no brighter than that mist, barely visible. The mist itself, the candle halos beside
+it, ANDREA1's haze and RICH2 room 78's glow keep a gain of 1.
+
+**Why.** The mist of page 2100, preset (1, 0.2, 2, 1), is the strength that is right
+as the game draws it after the fades, and it is the measure here.
+- The mist's level. RoomProbe over ANDY2 room 6 from 8150 7000 2100, yaw -94, pitch
+  2.2, fov 86.2 - the view of a recording of that room at 2.1 seconds, matched by the
+  gradient correlation of the pictures (0.40 at 320 x 180; window, arch and post
+  within about 20 pixels at 1280 x 720). Over the pixels the mist's glow lights above
+  2 of 255 (25.7 per cent of the frame) its light is 5.2 on average and 8.0 at the
+  95th percentile, and its share of the frame - the frame with material 2 drawn
+  against the frame with no additive material, in luma - is 5.1 on average and 8.0 at
+  the 95th percentile, 20.7 per cent of the frame's luma there. Above 8 of 255 lie
+  only 0.84 per cent of the frame - the near candle halos (29 per cent of those pixels)
+  and two brighter patches of the mist by the far wall: mean 12.6, 95th percentile
+  23.3, 30.9 per cent of the frame's luma. As a picture measurement, the recording
+  shows the mist 4.55 +- 0.54 of 255 above the ring 16 to 48 pixels around it, over 19
+  steady frames, with the scene's own contrast taken out through RoomProbe's frame
+  without additive material; RoomProbe's own frame gives 4.45 over the same pixels.
+- The flash that comes now and then in that room is not a gain of material 2. The
+  recording shows bursts of 0.8 to 1.3 seconds, three to four seconds apart, that step
+  at 30 Hz, the logic tick; each lifts the lit surfaces of the room's middle and right
+  (up to 2.3 times, the left wall not at all, the texture showing in the difference,
+  so light is added) and with them the beams of page 2100, because the glow shader
+  multiplies the page by the room's light. No file of the HD path reads the storm's
+  `LightningRGB` (`game/draw.cpp`), and the source of the burst was not isolated. It
+  is left as it is.
+- The Remaster's picture, measured on recordings of the Remaster and of this build.
+  The title flyby is spline sequence 1 of the TITLE `.TRC`'s spot cameras, computed
+  as `game/spotcam.cpp` does and drawn by RoomProbe with the roll applied after;
+  the matched ticks correlate 0.46 to 0.73 with this build's recording, the
+  Remaster's frames 0.40 to 0.72 with it, at a lag of 0.65 seconds. The far ray fan
+  of page 2146 seen past the churchyard wall (9.2, 9.8 and 10.4 seconds) stands 20.0
+  of 255 above its ring in this build's recording and -5.3 +- 2.0 in the Remaster's:
+  no lift at all within the background's own error, a ratio of 0.1 or less. The fans
+  over the sky (1.0 to 2.6 seconds) cover 26 to 38 per cent of the frame, their ring
+  lies on the church and the ground, and they could not be measured. ANDREA2 room 131
+  could not be matched: this build's recording only roughly, the Remaster's not at all
+  (it follows another camera), and the Remaster's recording shows no shaft in that
+  room in any frame from 4 to 15 seconds. That scene leans on the mist.
+- The rule of the entry before - no preset under 55 per cent of its brightness before
+  the fades - kept the shafts far above the mist: the 95th percentile of the share of
+  the frame, in each preset's brightest view, was 191.8 in ANDREA2 room 131, 223.5 in
+  room 225, 42.6 at the title's ray fans (TITLE room 6 from 7000 -400 1500) against
+  the mist's 8.0; in the title flyby RoomProbe put the far fan 15.4 above its ring.
+- One factor for all does not do: the gains that reach the mist lie from 0.0128
+  (ANDREA3 room 36's window glow) to 0.584 (JOBY5 room 115's glow), ANDREA2 room
+  131's shaft at 0.0273 and the title's fans at 0.171.
+
+**How.** `specific/hd/hd_render.cpp`: `GlowGain` (`:454`-`:520`) holds 22 entries keyed
+by the four parameters exactly as the file stores them (literals checked bit for bit
+against all 26 material 2 tuples of the fifteen files); a tuple the table does not
+name draws at 1. The gain multiplies the weight of a draw call that carries a glow
+part (`:3311`), which exists only for the glow shader: with `-glowps 0`, as in
+`HDRenderGlowOverride`'s `noShader`, no glow part is built and no gain applies. Each
+gain was found by drawing: the brightest RoomProbe view of the tuple, `-glow -addmat 2`
+against `-addmat 99`, the 95th percentile of the share of the frame over the pixels
+the glow of 29c4d45 lit above 2, the gain scaled by 8 over it and the view drawn again,
+four rounds at most; an 8-bit frame drops a card's share once it falls under half a
+step, so the picture does not follow a gain this small in proportion: the window glow
+of ANDREA2 room 225 reads 20.0, 10.9, 3.7 and 7.7 at gains of 0.042, 0.0168, 0.0124
+and 0.0146.
+
+**Checked.** The fixed list of 46 views of the entries before, six pictures each, the
+build of 29c4d45 against this one, and every tuple's calibration view with material 2
+alone.
+- The calibration: the 95th percentile of the share of the frame lies between 7.71
+  and 8.09 in all 21 tuples with a gain below 1 and a view that sees them, the mean
+  between 1.16 and 3.83, under the mist's 5.1. RICH2 room 78's glow shows 6.86 at
+  gain 1 and is not lowered; RICH1 room 17's glow, which no camera in its room sees,
+  takes the gain of its sibling (1, 0.2, 0.1, 0.6).
+- The title flyby at the matched ticks: RoomProbe's far fan 15.4 -> 2.4 above its
+  ring, x 0.157; this build's recording stood at 1.30 times RoomProbe there, so about
+  3 of 255 are to be expected in the game, under the mist's 4.55. Material 2 alone
+  over the pixels it lit above 2: mean 12.8 -> 1.4 and 95th percentile 31.7 -> 4.3 at
+  9.2 seconds, 16.5 -> 2.2 and 37.0 -> 6.0 at 1.0 seconds.
+- ANDREA2 room 131 from the camera nearest this build's recording (5750 -350 1800, yaw
+  -79, pitch -3, fov 75): the share of the frame 34.4 -> 0.3 on average, 93.7 -> 1.9 at
+  the 95th percentile.
+- ANDY2 room 6: all six pictures of the matched view and of the two views of the room
+  in the list (the candle halos of page 2002 and the mist of page 2100) are
+  byte-identical before and after.
+- The 46 views, the glow alone over the scene's depth with every additive material;
+  own = mean over the glow's own pixels (a channel above 8), fixed = mean and 95th
+  percentile over the pixels the glow lit above 2 before (before -> after, of 255).
+  Where material 16 or another additive material shares the view (JOBY4 room 19,
+  JOBY5 rooms 65 and 82, JOBY3 room 10, RICHCUT2 room 5) it stays and holds the
+  numbers up; where faint pixels drop out the own mean can rise:
+
+  | view | own | fixed mean | fixed p95 |
+  |---|---|---|---|
+  | ANDREA2 131 side | 130.1 -> 8.2 | 129.2 -> 3.7 | 211.7 -> 8.3 |
+  | ANDREA2 131 inside | 28.1 -> 0.0 | 21.7 -> 0.2 | 51.3 -> 1.0 |
+  | RICH1 3 corridor | 121.4 -> 11.7 | 115.3 -> 4.4 | 221.0 -> 12.0 |
+  | RICH1 3 inside | 33.9 -> 0.0 | 28.5 -> 0.3 | 75.0 -> 2.0 |
+  | JOBY4 19 up | 68.6 -> 37.5 | 68.0 -> 23.3 | 128.3 -> 64.3 |
+  | TITLE 6 church | 22.7 -> 9.0 | 18.1 -> 2.5 | 46.7 -> 8.0 |
+  | ANDREA2 131 4811 | 116.1 -> 8.0 | 113.5 -> 2.9 | 204.7 -> 7.7 |
+  | TITLE 6 grazing | 15.4 -> 0.0 | 11.3 -> 1.0 | 24.3 -> 3.3 |
+  | JOBY5 65 up | 11.2 -> 8.9 | 9.6 -> 6.5 | 16.0 -> 11.7 |
+  | JOBY5 82 up | 11.1 -> 8.9 | 9.5 -> 6.5 | 16.0 -> 11.7 |
+  | ANDREA1 19 3232 (0.5, 0.1, 0, 0.6633) | 11.2 -> 11.2 | 8.0 -> 8.0 | 17.7 -> 17.7 |
+  | ANDREA1 64 3070 (1.5, 0.3, 0.4, 16) | 11.5 -> 13.4 | 6.1 -> 1.0 | 14.3 -> 4.7 |
+  | ANDREA1 157 3038 (0.5, 0.55, 0.6, 0.13) | 62.3 -> 9.2 | 48.3 -> 2.6 | 138.7 -> 8.3 |
+  | ANDREA2 68 3070 (1.5, 0.3, 0.4, 3.0667) | 12.9 -> 8.5 | 10.4 -> 2.8 | 25.3 -> 8.0 |
+  | ANDREA2 225 3232 (0.5, 0.4, 0.6, 0.1) | 135.5 -> 8.9 | 128.5 -> 0.9 | 238.7 -> 6.7 |
+  | ANDREA2 131 3038 (0.5, 0.55, 0.6, 0.06) | 94.1 -> 0.0 | 93.7 -> 1.9 | 146.7 -> 4.0 |
+  | ANDREA2 234 3232 (0.5, 0.4, 0.6, 0.5) | 76.9 -> 8.7 | 70.8 -> 1.6 | 174.7 -> 6.7 |
+  | ANDREA3 66 3037 (0.5, 0.55, 0.6, 0.06) | 83.7 -> 9.7 | 77.6 -> 1.9 | 192.3 -> 6.7 |
+  | ANDREA3 20 3232 (0.5, 0.4, 0.8, 0.05) | 91.5 -> 8.2 | 85.5 -> 1.8 | 190.7 -> 6.7 |
+  | ANDREA3 34 3232 (0.5, 0.4, 0.8, 0.08) | 127.9 -> 15.1 | 127.9 -> 3.9 | 214.0 -> 8.0 |
+  | ANDREA3 36 3232 (0.5, 0.4, 0.8, 0.2) | 131.4 -> 8.2 | 130.4 -> 1.4 | 224.7 -> 6.7 |
+  | ANDREA3 59 2002 (1, 0.05, 0.1, 0.2) | 15.3 -> 15.3 | 10.4 -> 10.4 | 20.7 -> 20.7 |
+  | ANDY1 84 2002 (1, 0.05, 0.1, 0.2) | 13.2 -> 13.2 | 8.9 -> 8.9 | 21.3 -> 21.3 |
+  | ANDY1 194 3225 (0.5, 0, 0.8, 0.2133) | 48.5 -> 7.4 | 40.3 -> 2.6 | 88.3 -> 6.7 |
+  | ANDY2 6 2002 (1, 0.05, 0.1, 0.2) | 14.2 -> 14.2 | 4.7 -> 4.7 | 8.0 -> 8.0 |
+  | ANDY2 6 2100 (1, 0.2, 2, 1) | 17.3 -> 17.3 | 4.7 -> 4.7 | 6.0 -> 6.0 |
+  | ANDY2 34 3225 (0.5, 0, 0.8, 0.05) | 50.0 -> 8.0 | 42.7 -> 1.7 | 129.8 -> 7.0 |
+  | ANDY3 145 2002 (1, 0.05, 0.1, 0.2) | 0.0 -> 0.0 | 0.0 -> 0.0 | 0.0 -> 0.0 |
+  | ANDY3 86 3225 (0.5, 0, 0.8, 0.2133) | 43.5 -> 6.9 | 41.8 -> 2.8 | 84.3 -> 6.7 |
+  | JOBY2 17 3070 (1.5, 0.3, 0.4, 16) | 13.4 -> 8.6 | 8.9 -> 0.4 | 19.7 -> 4.0 |
+  | JOBY3 10 3225 (1.5, 0.1, 0, 5) | 17.8 -> 20.6 | 13.1 -> 9.0 | 37.0 -> 37.0 |
+  | JOBY4 19 3256 (0.5, 0.75, 0.6, 0.8) | 61.2 -> 40.1 | 58.9 -> 33.4 | 115.3 -> 67.3 |
+  | JOBY5 115 3225 (1.5, 0.1, 0, 1.5333) | 10.9 -> 9.0 | 7.0 -> 3.9 | 13.7 -> 7.7 |
+  | JOBY5 54 3225 (1.5, 0.1, 0, 5) | 11.0 -> 0.0 | 7.2 -> 2.8 | 13.0 -> 5.0 |
+  | JOBY5 65 3256 (0.5, 0.75, 0.6, 0.5) | 45.7 -> 27.3 | 44.3 -> 19.3 | 86.0 -> 36.0 |
+  | RICH1 3 3038 (0.5, 2.683, 0.6, 0.327) | 127.9 -> 12.1 | 122.9 -> 4.8 | 228.0 -> 14.0 |
+  | RICH1 15 3070 (1, 0.2, 0.1, 0.6) | 17.9 -> 12.3 | 13.5 -> 3.1 | 29.0 -> 8.0 |
+  | RICH1 17 3070 (1, 0.2, 0.1, 1) | 0.0 -> 0.0 | 0.0 -> 0.0 | 0.0 -> 0.0 |
+  | RICH2 120 3070 (1.5, 0.3, 0.4, 2.5) | 30.5 -> 13.7 | 21.5 -> 3.0 | 71.0 -> 11.3 |
+  | RICH2 78 3225 (1.5, 0.1, 0, 1.9333) | 11.3 -> 11.3 | 6.4 -> 6.4 | 15.7 -> 15.7 |
+  | RICH3 65 3070 (1.5, 0.3, 0.4, 16) | 16.8 -> 9.7 | 9.5 -> 1.9 | 29.3 -> 7.7 |
+  | RICHCUT2 5 3070 (1, 0.2, 0.1, 2) | 46.2 -> 50.5 | 36.0 -> 33.3 | 96.3 -> 93.7 |
+  | TITLE 4 2002 (1, 0.05, 0.1, 0.2) | 28.3 -> 16.5 | 22.5 -> 3.1 | 57.3 -> 8.7 |
+  | TITLE 8 2146 (1, 0.2, 2, 0.35) | 12.2 -> 0.0 | 7.6 -> 0.7 | 17.0 -> 2.7 |
+  | TITLE 19 2134 (0.5, 0.2, 1, 0.1) | 28.2 -> 11.5 | 23.2 -> 2.5 | 61.3 -> 8.0 |
+  | TITLE 52 3070 (1, 0.2, 0.1, 2) | 16.4 -> 12.0 | 9.3 -> 2.7 | 24.0 -> 8.0 |
+
+- Clipping: no view has more clipped, white or hue-pinned glow pixels than before;
+  over all 46 views the clipped pixels fall from 6,889 to 233 and the white from 4,712
+  to 58. The largest clipped share is TITLE room 4's view at 1.5 per cent: the same 67
+  pixels of candle-flame cores (page 2002, gain 1) as before, now among 4,402 glow
+  pixels instead of 38,434; every other view is at 1 per cent or less.
+- Identity: with `-glowps 0` all 276 pictures are pixel-identical to those of 29c4d45.
+  The opaque and alpha pictures of all 46 views are identical before and after; so
+  are the full frame and the glow over the scene's depth of the eight views whose
+  tuples keep a gain of 1 or show no glow (ANDREA1 room 19, ANDREA3 room 59, ANDY1
+  room 84, ANDY2 room 6 twice, ANDY3 room 145, RICH1 room 17, RICH2 room 78), all six
+  pictures of ANDY2 room 6's two, and in the others only a picture drawn without the
+  scene's depth changes, where a lowered glow of another room shows through a wall.
+  The state bracket passes in all 138 runs (46 views, three runs of this build) for
+  the frame and both glow pictures. `hd_glow_ps.inc`
+  `881dcbebc8ad4bc15eb1e9552a00bb9f`, `hd_room_ps.inc`
+  `4a0664f86372905f5c45697410b748f3`, `hd_room_vs.inc`
+  `bff9e930306fc0dfad80d1776a066032` and `hd_model_ps.inc`
+  `2e3867532e2e3971991f5bd039227d2e` are unchanged.
+- ModernTest 10808, MenuTest 35547, InterpTest 635 checks, LipsTest 270 with the `.OBJ`
+  folder and 243 without, 0 failed. Not measured: the game; the first things to look
+  at there are ANDREA2 room 131 and the title flyby against the Remaster, ANDY2 room 6
+  as before, and the lamp cones and window glows of the other levels.
+
+**Unchanged.** `hd_enable` 0 and `-glowps 0`: no glow part, no gain. The shaders, the
+four fades, screen composition, the anisotropic filter, the stacked seas and the
+still fast swings. Every additive material other than 2. The data fixes of the rounds
+before. The weight each part reads from the art (`MaterialAddWeight`), including the
+sun shafts' 0.08: the gain multiplies it.
+
+**Decisions.** The strength follows the church mist and the Remaster's picture, not a
+share of the brightness the glow had before its fades: the 55 per cent rule of the
+entry before is withdrawn. The haze and mist layers keep the fades: ANDY2's mist at
+its faded level is the target, and ANDREA1's page-3232 haze needs no exemption. Each
+preset gets its own gain, because the presets need gains 45 times apart; the measure
+is the 95th percentile of its share of the frame in its brightest view, 8 of 255 like
+the mist's. Nothing is raised above the gain it had. ANDY2 room 6 stays as it is,
+the candle halos beside the mist included. The flash in that room stays as it is.
+
+**Commits.** `3eddf54`
 
 ### The sky
 2026-09-05 - 2026-09-08

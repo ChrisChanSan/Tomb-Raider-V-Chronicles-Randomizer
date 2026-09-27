@@ -633,15 +633,18 @@ void HDRenderSetIntrusions(const HDIntrusion* list, int count);
 void HDRenderSetPairFaces(const HDPairFace* faces, int count);
 
 /* The pieces a group's intruding triangles were split into at the build, one
- * per (entry of the intrusion list, classic face) and one per entry for the
- * triangles no face claims. `intrusion` is the entry (the first one whose box
- * holds the triangle, when several do), `face` the index into the list handed
- * to HDRenderSetPairFaces or -1, `triangles` all three passes together. */
+ * per (entry of the intrusion list, classic face, smaller box) and one per
+ * entry for the triangles no face claims. `intrusion` is the entry (the first
+ * one whose box holds the triangle, when several do), `face` the index into
+ * the list handed to HDRenderSetPairFaces or -1, `inner` 1 when the triangles
+ * also stand in the entry's box made one sector smaller in x and z (always 1
+ * for a piece no face claims), `triangles` all three passes together. */
 struct HDPairRange
 {
 	int intrusion;
 	int holder;
 	int face;
+	int inner;
 	int triangles;
 };
 int HDRenderGroupPairRanges(int group);

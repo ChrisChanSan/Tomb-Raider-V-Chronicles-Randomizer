@@ -1289,12 +1289,15 @@ see *Lara in HD* below for which of her stays classic and why.
   screen. Only the art that stands inside another room is cut, and only on a
   frame the original engine would not draw that part of the room either: the
   same wall is drawn whole from the square outside and hidden from the room
-  it stands in, the way the original's own walls are.
+  it stands in, the way the original's own walls are. A room the HD path
+  adds to the ones the original engine sees, so that distant HD scenery is
+  not missing, has no doorway to be looked through; there only the art that
+  stands a sector or more in from the other room's walls is hidden.
 - **The back of a wall is not drawn.** The Remaster's solid walls are
   one-sided: a wall drawn from behind would paint over what stands behind
-  it, and the X-ray window in *The Base* would show a green wall instead of
-  the corridor. Flags, leaves, railings, glass, light and water are still drawn
-  from both sides.
+  it, and the X-ray window in *Escape with the Iris* would show a green wall
+  instead of the corridor. Flags, leaves, railings, glass, light and water
+  are still drawn from both sides.
 
 **The light, and the sky.**
 

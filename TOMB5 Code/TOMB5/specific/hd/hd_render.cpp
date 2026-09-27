@@ -3778,13 +3778,25 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					/* The classic face the triangle belongs to - the nearest
 					 * one that claims it, see HDPairFace - and the piece of
-					 * (pair, face) it is drawn with. The pieces are numbered
-					 * in the order the build meets them. */
+					 * (pair, face, smaller box) it is drawn with. The pieces
+					 * are numbered in the order the build meets them. */
 					int face_at = -1;
+					int inner = 0;
 
 					if (pair_at >= 0)
 					{
 						double nearest = 0.0;
+						const HDIntrusion& box = g_intrusions[(size_t)pair_at];
+
+						/* Whether the triangle also stands in the box one
+						 * sector smaller than the inside, in x and z. That
+						 * smaller box is the answer for the triangles no face
+						 * claims below, and for every triangle of a room the
+						 * walk gives an empty window (DecidePairs). */
+						inner = centre[0] >= box.mins[0] + 1024.0f &&
+							centre[0] <= box.maxs[0] - 1024.0f &&
+							centre[2] >= box.mins[2] + 1024.0f &&
+							centre[2] <= box.maxs[2] - 1024.0f ? 1 : 0;
 
 						for (size_t k = 0; k < group.faceAt.size(); k++)
 						{
@@ -3816,16 +3828,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						 * fronds, a spiral stair, the wall under a
 						 * balustrade - is cut at the window's rim on views
 						 * that draw it whole with the smaller box. */
-						if (face_at < 0)
-						{
-							const HDIntrusion& box = g_intrusions[(size_t)pair_at];
-
-							if (centre[0] < box.mins[0] + 1024.0f ||
-								centre[0] > box.maxs[0] - 1024.0f ||
-								centre[2] < box.mins[2] + 1024.0f ||
-								centre[2] > box.maxs[2] - 1024.0f)
-								pair_at = -1;
-						}
+						if (face_at < 0 && !inner)
+							pair_at = -1;
 					}
 
 					if (pair_at >= 0)
@@ -3834,7 +3838,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						for (size_t j = 0; j < group.pairRanges.size(); j++)
 							if (group.pairRanges[j].intrusion == pair_at &&
-								group.pairRanges[j].face == face_at)
+								group.pairRanges[j].face == face_at &&
+								group.pairRanges[j].inner == inner)
 							{
 								piece = (int)j;
 								break;
@@ -3847,6 +3852,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							made.intrusion = pair_at;
 							made.holder = g_intrusions[pair_at].holder;
 							made.face = face_at;
+							made.inner = inner;
 							made.triangles = 0;
 							piece = (int)group.pairRanges.size();
 							group.pairRanges.push_back(made);

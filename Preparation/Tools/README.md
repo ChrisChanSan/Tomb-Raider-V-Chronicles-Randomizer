@@ -154,7 +154,10 @@ groups the windows the walk prints and draws them the way the engine's
 `DrawRoomWindowed` does, and `-decide whole|scissor|frame|face` says how the
 pieces of their intruding art are answered - all whole, all cut, the engine's
 own per-frame answer (the default), or each piece on its own classic face -
-with one `decide:` line per piece. `-cull none|opaque` draws the opaque room
+with one `decide:` line per piece, which ends in `inner` for a piece that
+stands in the box one sector smaller; an empty window (`500,500,0,0`, a room
+the reach lists and the walk gives no window) draws those not at all and the
+other pieces whole, as the engine does. `-cull none|opaque` draws the opaque room
 ranges two-sided or one-sided (the engine's own).
 
 One thing the two picture tools cannot make up: they have no classic level, so

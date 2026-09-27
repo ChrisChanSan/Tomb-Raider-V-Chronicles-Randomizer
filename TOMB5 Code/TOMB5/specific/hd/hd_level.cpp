@@ -653,8 +653,13 @@ namespace
 	 * facade goes, which is what hides it there.
 	 *
 	 * A room whose window is the whole screen draws everything whole anyway
-	 * (DrawRoomWindowed); one whose window is empty draws none of its
-	 * intruding art, so none of it is answered whole there. */
+	 * (DrawRoomWindowed). One whose window is empty - a room the reach lists
+	 * and the portal walk gives no window - has no classic face to ask, and
+	 * keeps the answer of the box one sector smaller than the inside: the
+	 * pieces that stand in it are not drawn, the rest is answered whole and
+	 * drawn with the open half. From inside room 93, looking at the doorway
+	 * toward room 101, the reach lists 101 with no window, and 101's facade
+	 * and plaster art in 93's outer sector ring is what fills that doorway. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -664,7 +669,8 @@ namespace
 
 		const int first = g_piece_first[entry.group];
 		const int count = g_piece_count[entry.group];
-		const bool ask = !entry.full && !ClipEmpty(entry);
+		const bool empty = ClipEmpty(entry);
+		const bool ask = !entry.full && !empty;
 
 		for (int j = 0; j < count; j++)
 		{
@@ -679,6 +685,8 @@ namespace
 
 				whole = !listed;
 			}
+			else if (empty)
+				whole = piece.inner == 0;
 
 			if (listed && piece.face >= 0)
 			{
@@ -738,9 +746,9 @@ namespace
 		HDRenderRoomMask(entry.group, &entry.world, &entry.lighting, passes,
 			HD_WINDOW_OPEN);
 
-		/* An empty window silences only the intruding half: the open half is
-		 * not windowed and is drawn whatever four numbers the walk came back
-		 * with. */
+		/* An empty window silences only the pieces of the intruding half
+		 * DecidePairs did not answer whole: the open half is not windowed and
+		 * is drawn whatever four numbers the walk came back with. */
 		if (!ClipEmpty(entry))
 		{
 			HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
@@ -2118,7 +2126,10 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
  * from room 57 lists) cut to room 2's window would bring back the strip of
  * sky. In ANDREA2's courtyard room 134 holds 108 triangles of room 143 and
  * room 203 holds 108 of room 248, all of them claimed, and no view from
- * room 134 draws a band.
+ * room 134 draws a band. A room the reach lists with no window has no
+ * classic face to ask either, and every piece of its art keeps the smaller
+ * box's answer: from inside room 93 that leaves room 101's facade in the
+ * doorway toward 101.
  *
  * ANDREA1 comes to 16,718 intruding triangles in 89 groups, 15,993 of them
  * claimed by 558 classic faces and 725 by none; 11,020 more that no face
@@ -2420,6 +2431,8 @@ static void ReportRoomIntrusions()
 		}
 	}
 
+	std::vector<int> seen(g_pair_faces.size(), 0);
+
 	for (size_t i = 0; i < g_intrusions.size(); i++)
 	{
 		const int hits = HDRenderIntrusionHits((int)i);
@@ -2431,14 +2444,23 @@ static void ReportRoomIntrusions()
 
 		if (gLogEnabled)
 		{
-			// The faces of this pair and the triangles they claimed.
+			/* The faces of this pair and the triangles they claimed. A face
+			 * can own two pieces of the pair, one per side of the smaller
+			 * box, and is counted once: `seen` holds the pair it was last
+			 * counted for. */
 			int pairFaces = 0;
 			int pairBound = 0;
 
 			for (size_t p = 0; p < g_pieces.size(); p++)
-				if (g_pieces[p].intrusion == (int)i && g_pieces[p].face >= 0)
+				if (g_pieces[p].intrusion == (int)i && g_pieces[p].face >= 0 &&
+					(size_t)g_pieces[p].face < seen.size())
 				{
-					pairFaces++;
+					if (seen[(size_t)g_pieces[p].face] != (int)i + 1)
+					{
+						seen[(size_t)g_pieces[p].face] = (int)i + 1;
+						pairFaces++;
+					}
+
 					pairBound += g_pieces[p].triangles;
 				}
 
@@ -4225,7 +4247,8 @@ void HDFrameDraw()
 
 		/* Every collected room is drawn: no room's ordinary art is windowed,
 		 * so nothing may be skipped here. An empty window silences only the
-		 * intruding half, inside DrawRoomWindowed. */
+		 * intruding pieces that stand in the smaller box, inside
+		 * DrawRoomWindowed. */
 		(void)empty;
 
 		// PROF_HD_LIGHT is the light block alone, inside PROF_HD_DRAW: the
@@ -4389,13 +4412,17 @@ void HDFrameDrawGlow()
 					: "NO SCISSOR TEST ON THIS DEVICE - rooms draw whole",
 				(int)phd_winwidth, (int)phd_winheight);
 
+			/* An empty window leaves out only the pieces in the box one sector
+			 * smaller (DecidePairs); the line says so at its end. */
 			for (int i = 0; i < g_frame_count; i++)
-				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s",
+				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s%s",
 					g_frame[i].room, g_frame[i].group,
 					g_frame[i].x0, g_frame[i].y0, g_frame[i].x1, g_frame[i].y1,
 					!g_frame[i].windowed ? "(no window - no art inside another room)"
 						: ClipEmpty(g_frame[i]) ? "EMPTY - the intruding art is not drawn"
-						: g_frame[i].full ? "(the whole screen)" : "");
+						: g_frame[i].full ? "(the whole screen)" : "",
+					g_frame[i].windowed && ClipEmpty(g_frame[i])
+						? " where it stands in the box one sector smaller" : "");
 		}
 
 		if (!g_clip_line_ever || (unsigned short)(now - g_clip_line_at) >= 30)

@@ -146,7 +146,9 @@
  *                     not drawn is whole; otherwise a claimed piece is whole
  *                     when any claimed classic face of its pair survives the
  *                     corner rule against the group's window, and the
- *                     triangles no face claims stay in the window), or the
+ *                     triangles no face claims stay in the window; an empty
+ *                     window asks no face and draws the pieces outside the
+ *                     box one sector smaller whole), or the
  *                     same with each piece held to its own face alone
  *                     (face). One `decide:` line per piece says which.
  *
@@ -2779,10 +2781,13 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		/* frame: DecidePairs' answer - a room that is not drawn is not
 		 * asked and its guest's art is drawn whole; otherwise a claimed
 		 * piece is whole when any claimed face of its pair survives, and
-		 * the triangles no face claims stay in the window. face: the same
-		 * with each piece on its own face alone. */
+		 * the triangles no face claims stay in the window. An empty
+		 * window asks no face: a piece outside the box one sector smaller
+		 * is whole, one inside it is not drawn. face: the same with each
+		 * piece on its own face alone. */
 		const bool ask = !*full && !*empty;
 		const bool answer = g_decide == 0 ? true : g_decide == 1 ? false
+			: *empty ? piece.inner == 0
 			: !ask ? false
 			: !drawn ? true
 			: piece.face < 0 ? false
@@ -2797,10 +2802,10 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 
 		if (say)
 			printf("decide: group %3d piece %2d holder %3d face %5d tris %5d "
-				"-> %s%s\n", group, j, piece.holder, piece.face,
+				"-> %s%s%s\n", group, j, piece.holder, piece.face,
 				piece.triangles, answer ? "whole" : "window",
 				piece.face < 0 ? " (no face)" : alive ? " (face drawn)"
-					: " (face dropped)");
+					: " (face dropped)", piece.inner ? " inner" : "");
 	}
 
 	if (say)
@@ -4484,6 +4489,8 @@ int main(int argc, char** argv)
 		std::vector<int> pairFaces(g_intrusions_built.size(), 0);
 		std::vector<int> pairBound(g_intrusions_built.size(), 0);
 		std::set<int> claimed;
+		// A face owns up to two pieces of a pair and is counted once.
+		std::set<std::pair<int, int> > pairClaimed;
 		int bound = 0, unbound = 0;
 
 		for (int g = 0; g < HDRenderGroupCount(); g++)
@@ -4506,7 +4513,10 @@ int main(int argc, char** argv)
 				if (piece.intrusion >= 0 &&
 					piece.intrusion < (int)g_intrusions_built.size())
 				{
-					pairFaces[(size_t)piece.intrusion]++;
+					if (pairClaimed.insert(std::make_pair(piece.intrusion,
+						piece.face)).second)
+						pairFaces[(size_t)piece.intrusion]++;
+
 					pairBound[(size_t)piece.intrusion] += piece.triangles;
 				}
 			}

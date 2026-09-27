@@ -6143,8 +6143,10 @@ is moved to the nearest open point of the chord between the two tick eyes, with 
 and the roll taken at the same blend factor. When no point of the chord opens, the eye
 stays and that frame draws no sky, so what its walk leaves undrawn is the clear colour,
 black. A blended eye the logic room holds - nearly every frame - is drawn exactly as
-before, and no tick eye moves. `-log` gains `CAMLOG`: a `tick` line per `CalculateCamera`
-pass, a `draw` line per frame the rule acted on and a `sum` line per second.
+before, and no tick eye moves. A flyby is left out and drawn as before. `-log` gains
+`CAMLOG`: a `tick` line per pass of the chase, combat, fixed and look cameras (none during
+flybys, binoculars or cutscenes), a `draw` line per frame the rule acted on and a `sum`
+line per second.
 
 **Why.** Measured over one ANDREA1 run at 165 Hz, in two recordings of 18.2 s and 17.0 s
 matched to the run's log to within 9 ms: eight black flashes in 35.2 s, each one or two
@@ -6180,12 +6182,13 @@ reported as `tick` (`:497`). `CameraEyeTest` (`game/camera.cpp:1062`) is the eng
 test, the five terms of `ModernCameraEyeInRoom`; it saves `trigger_index`, `tiltxoff`,
 `tiltyoff`, `OnObject` and `height_type` before `GetFloor`, `GetHeight` and `GetCeiling`
 and writes them back after (`:1065`-`1090`). `InterpBeginFrame` calls the rule after the
-blend (`game/interpolate.cpp:1609`), moves the eye and the target to the answer for
-`chord` and `tick`, rebuilds the view with the roll at the same factor (`:1639`) and
-raises `g_skyWithheld` for `nosky` (`:1624`); `InterpEyeRoom` returns the rule's room for
+blend (`game/interpolate.cpp:1617`) unless either tick is a flyby (`:1608`; entering or
+leaving one is a cut, `:656`), moves the eye and the target to the answer for `chord` and
+`tick`, rebuilds the view with the roll at the same factor (`:1647`) and raises
+`g_skyWithheld` for `nosky` (`:1632`); `InterpEyeRoom` returns the rule's room for
 `prevroom`, `chord` and `tick` (`:1149`); `ClearEyeFix` clears all of it at the top of
-every `InterpBeginFrame` (`:1305`) and in `InterpEndFrame` (`:1741`), which puts the tick
-eye back as on every frame (`:1701`). `SkyDrawPhase` reads `InterpSkyWithheld()`
+every `InterpBeginFrame` (`:1305`) and in `InterpEndFrame` (`:1749`), which puts the tick
+eye back as on every frame (`:1709`). `SkyDrawPhase` reads `InterpSkyWithheld()`
 (`game/draw.cpp:550`), leaves out the moon, the HD dome (`HDFrameSky` is called nowhere
 else), the flat layers, the horizon and the stars, and returns once the storm's clock has
 stepped (`:603`). `nosky` needs both tick eyes to fail as well, since the chord's ends are
@@ -6222,10 +6225,14 @@ have one logged eye in their tick and no chord to replay. After the change, a pr
 linking the committed `game/modern_camera.cpp` ran `ModernCameraDrawnEye` over the same
 frames with the emulator answering each test: the same fix, eye and walk room as the
 replay on all 21 replayed failing frames, `none` with the logged eye and walk room on all
-1261 others, at most 47 tests for one frame. ModernTest's `camera_chord` holds the rule on
-the niche map's 2x2 pillar (`Preparation/Tools/Diagnose/ModernTest.cpp`), 19 checks: eight
-chords past its four corners at every 64th of the chord, each answer open, on the chord
-and the nearest open point against a brute force at 1/1024 of it, inside the test budget;
+1261 others, at most 47 tests for one frame. The run's flyby lies in ANDREA1's first
+second (`INTERPLOG` at t 19031, `spot=7`, and `spot=0` in every later second), before the
+first failing frame at t 21469, so leaving flybys out changes no replayed frame; no suite
+reaches that guard, since only the engine compiles `game/interpolate.cpp`. ModernTest's
+`camera_chord` holds the rule on the niche map's 2x2 pillar
+(`Preparation/Tools/Diagnose/ModernTest.cpp`), 19 checks: eight chords past its four
+corners at every 64th of the chord, each answer open, on the chord and the nearest open
+point against a brute force at 1/1024 of it, inside the test budget;
 an open chord unchanged after one test; a chord solid from end to end without an answer;
 solid ends with an open middle; one end solid; and the order over two rooms - none,
 prevroom, chord, tick, nosky. ModernTest 10827 checks, 0 failed (10808 before and 19 new);
@@ -6252,7 +6259,9 @@ and `ChaseCamera` and `CombatCamera` gained three calls each that store what `CA
 prints and return at once without `-log`. `camera.pos.room_number`; the eye and the target
 the logic holds, since the frame's moved copies go back in `InterpEndFrame`; the logic
 room's `outside` and `camera_underwater`. Every log line already there prints as before. A
-frame whose blended eye the logic room holds.
+frame whose blended eye the logic room holds. A flyby: `InterpBeginFrame` leaves the rule
+out while either tick is one (`game/interpolate.cpp:1608`), so a flyby frame is drawn with
+the plain blend, its room seed and its sky as before.
 
 **Decisions.** The rule acts on the drawn eye alone: no tick eye moves, the tick eye keeps
 no clearance margin and `mgLOS` gets no diagonal corner test - that test mends none of the
@@ -6261,8 +6270,12 @@ eight events and would change the camera at every pillar, and a margin waits unt
 face or a corner. A frame whose eye neither tick's room holds shows the nearest open point
 on the chord between its two tick eyes and never a position of its own. The fallback
 colour is the clear colour, black. Both control schemes take the rule, because the blend
-is the interpolator's and not a scheme's, and `fps_mode` 1 and 2 alike. The see-through
-and wall-fill frames of the near plane are a separate matter.
+is the interpolator's and not a scheme's, and `fps_mode` 1 and 2 alike. Flybys are left
+out: `CalculateSpotCams` sets a flyby's eye straight from its spline
+(`game/spotcam.cpp:458`-`483`) and `MoveCamera` never tests it, so a flyby passing outside
+every room would fail at both ends of every chord and, under the rule, lose its sky or
+stall at the tick rate; a flyby at a corner keeps the plain blend and whatever that draws.
+The see-through and wall-fill frames of the near plane are a separate matter.
 
 **Commits.** `d79350d`, `4f2fde6`
 

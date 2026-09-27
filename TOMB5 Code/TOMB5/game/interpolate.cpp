@@ -1595,9 +1595,17 @@ void InterpBeginFrame(float alpha)
 		 * same blend factor, so the view is the one the interpolator would
 		 * have drawn at that instant. Only this frame's copy of camera.pos
 		 * moves; InterpEndFrame puts the tick eye back as on every frame, and
-		 * camera.pos.room_number, the logic's, is not written. */
+		 * camera.pos.room_number, the logic's, is not written.
+		 *
+		 * A flyby is left out: CalculateSpotCams sets its eye straight from
+		 * the spline and nothing checks that eye against a room, so a flyby
+		 * passing outside every room would fail on both ends of every chord
+		 * and lose its sky or stall at the tick rate. Entering or leaving a
+		 * flyby is a cut, so both ticks of a blend are either flyby or not;
+		 * a flyby frame keeps g_eye cleared and is drawn as before. */
 		float camAlpha = alpha;
 
+		if (!bUseSpotCam && !g_prevCam.spot)
 		{
 			const long prev[3] = { g_prevCam.px, g_prevCam.py, g_prevCam.pz };
 			const long cur[3] = { g_savedCam.px, g_savedCam.py, g_savedCam.pz };

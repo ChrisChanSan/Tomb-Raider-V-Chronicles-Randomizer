@@ -7617,7 +7617,7 @@ for the F4 outfit window: that window is drawn with `PrintString` and driven by 
 (`specific/hd/hd_outfitmenu.cpp`), not an ImGui window, and wants nothing of the mouse,
 so it is a menu like the pause menu and the cursor stays caught under it.
 
-**Commits.** `fa1028b`, `8d0f5b7`, `8236d73`
+**Commits.** `fa1028b`, `8d0f5b7`, `8236d73`, `26484e8`, `d12e07e`
 
 ### Two action keys: the interaction bit and the Secondary role
 2026-09-20 - 2026-09-20

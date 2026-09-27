@@ -6275,7 +6275,12 @@ out: `CalculateSpotCams` sets a flyby's eye straight from its spline
 (`game/spotcam.cpp:458`-`483`) and `MoveCamera` never tests it, so a flyby passing outside
 every room would fail at both ends of every chord and, under the rule, lose its sky or
 stall at the tick rate; a flyby at a corner keeps the plain blend and whatever that draws.
-The see-through and wall-fill frames of the near plane are a separate matter.
+The net can still fire on an eye the logic itself left untested: `MoveCamera` keeps its
+ideal when the ceiling meets the floor height or a height is `NO_HEIGHT`
+(`game/camera.cpp:2837`-`2843`), and a fixed camera or the first person head eye is never
+room-tested; an outdoor stretch of that kind alternates sky and black at the tick rate,
+and `CAMLOG`'s `nosky=` count shows it. The see-through and wall-fill frames of the near
+plane are a separate matter.
 
 **Commits.** `d79350d`, `4f2fde6`
 

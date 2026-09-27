@@ -132,6 +132,23 @@
  *                     (opaque, the renderer's own) or two-sided (none), the
  *                     before picture out of the same build. Every other
  *                     range is two-sided either way.
+ *     -roomwin <g>:<l>,<t>,<r>,<b>[;<g>:...]
+ *                     the window the walk gave each named group, as the
+ *                     walk prints it (-walkwant): that group is drawn the
+ *                     way hd_level.cpp's DrawRoomWindowed draws it - the
+ *                     open half and the pieces of intruding art answered
+ *                     whole over the whole screen, the rest inside the
+ *                     widened window. Needs -roombox.
+ *     -decide whole|scissor|frame|face
+ *                     the answer for those pieces: every one whole, every
+ *                     one inside the window, the engine's own per-frame
+ *                     answer (frame, the default: a piece whose holder is
+ *                     not drawn is whole; otherwise a claimed piece is whole
+ *                     when any claimed classic face of its pair survives the
+ *                     corner rule against the group's window, and the
+ *                     triangles no face claims stay in the window), or the
+ *                     same with each piece held to its own face alone
+ *                     (face). One `decide:` line per piece says which.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -2539,9 +2556,12 @@ static void ClipFor(int group)
 		HDRenderScissorOff();
 }
 
+static bool DecideGroup(int group, int* rect, bool* full, bool* empty);
+
 /* One group, drawn as the engine would draw it. Ordinarily one call with
  * whatever -window asked for; with -tround naming this group, the two calls
- * DrawRoomWindowed makes for a room on its overlap list. */
+ * DrawRoomWindowed makes for a room on its overlap list; with -roomwin
+ * naming it, the calls DrawRoomWindowed makes with that window. */
 static bool DrawOneGroup(int group, const D3DMATRIX* world,
 	const HDRoomLighting* lighting, unsigned int passes)
 {
@@ -2570,6 +2590,31 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 		return drew;
 	}
 
+	int rect[4];
+	bool full = false, empty = false;
+
+	if (DecideGroup(group, rect, &full, &empty))
+	{
+		HDRenderScissorOff();
+
+		if (!HDRenderGroupIntrudingTriangles(group) || full)
+			return HDRenderRoomMask(group, world, lighting, passes,
+				HD_WINDOW_ALL);
+
+		const bool drew = HDRenderRoomMask(group, world, lighting, passes,
+			HD_WINDOW_OPEN);
+
+		if (!empty)
+		{
+			HDRenderScissor(rect[0], rect[1], rect[2], rect[3]);
+			HDRenderRoomMask(group, world, lighting, passes,
+				HD_WINDOW_INTRUDING);
+			HDRenderScissorOff();
+		}
+
+		return drew;
+	}
+
 	ClipFor(group);
 	return HDRenderRoomMask(group, world, lighting, passes, g_window_mode);
 }
@@ -2594,6 +2639,178 @@ static int g_with_group[32];
 static float g_with_offset[32][3];
 static int g_with_count = 0;
 static bool g_old_order = false;
+
+/* -roomwin and -decide: a group drawn the way hd_level.cpp's DrawRoomWindowed
+ * draws a room, with the window the walk gave it.
+ *
+ * -roomwin names the window per group exactly as the walk prints it - the
+ * engine's inclusive `r->left..r->bottom` - and the tool widens it into the
+ * scissor rectangle the way ClipWindow does. The pieces of the group's
+ * intruding art (HDPairRange) are then answered per -decide: `whole` draws
+ * every piece whole, `scissor` every piece inside the window (the box alone,
+ * with no face asked), `frame` gives the engine's own answer (DecidePairs in
+ * hd_level.cpp) and `face` holds each claimed piece to its own face alone.
+ * A room counts as drawn when it is the seed or a -with group. The corner
+ * rule is drawroom.cpp's, without the underwater wobble this tool has no
+ * camera for. */
+static int g_roomwin_group[64];
+static long g_roomwin_box[64][4];
+static int g_roomwin_count = 0;
+static int g_decide = 2;			// 0 whole, 1 scissor, 2 frame, 3 face
+static int g_room_probe_seed = -1;		// the group drawn at the origin
+static std::vector<HDPairFace> g_faces_built;
+static float g_decide_view[16];
+static double g_decide_persp = 0.0;
+static long g_decide_width = 0, g_decide_height = 0;
+
+static bool FaceSurvives(const HDPairFace& face, const float* offset,
+	const long* win)
+{
+	short common = -1;
+
+	for (int c = 0; c < face.corners && c < 4; c++)
+	{
+		const float px = face.v[c][0] + offset[0];
+		const float py = face.v[c][1] + offset[1];
+		const float pz = face.v[c][2] + offset[2];
+		const float* view = g_decide_view;
+		const float vx = px * view[0] + py * view[4] + pz * view[8] + view[12];
+		const float vy = px * view[1] + py * view[5] + pz * view[9] + view[13];
+		const float vz = px * view[2] + py * view[6] + pz * view[10] + view[14];
+		short clipFlag = 0;
+
+		if (vz < 20.0f)			// f_mznear
+			clipFlag = -128;
+		else
+		{
+			const float zv = (float)g_decide_persp / vz;
+			const float sx = vx * zv + (float)g_decide_width * 0.5f;
+			const float sy = vy * zv + (float)g_decide_height * 0.5f;
+
+			if (sx < (float)win[0])
+				clipFlag++;
+			else if (sx > (float)win[2])
+				clipFlag += 2;
+
+			if (sy < (float)win[1])
+				clipFlag += 4;
+			else if (sy > (float)win[3])
+				clipFlag += 8;
+		}
+
+		common &= clipFlag;
+	}
+
+	return common == 0;
+}
+
+/* The group's -roomwin entry, answered: false when it has none. Sets the
+ * scissor rectangle, whether it covers the screen or nothing, and every
+ * piece's HDRenderPairWhole, and prints the answers once per group. */
+static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
+{
+	int at = -1;
+
+	for (int i = 0; i < g_roomwin_count; i++)
+		if (g_roomwin_group[i] == group)
+			at = i;
+
+	if (at < 0)
+		return false;
+
+	const long* win = g_roomwin_box[at];
+
+	rect[0] = (int)win[0] - 1;
+	rect[1] = (int)win[1] - 1;
+	rect[2] = (int)win[2] + 2;
+	rect[3] = (int)win[3] + 2;
+
+	if (rect[0] < 0) rect[0] = 0;
+	if (rect[1] < 0) rect[1] = 0;
+	if (rect[2] > (int)g_decide_width) rect[2] = (int)g_decide_width;
+	if (rect[3] > (int)g_decide_height) rect[3] = (int)g_decide_height;
+
+	*full = rect[0] <= 0 && rect[1] <= 0 && rect[2] >= (int)g_decide_width &&
+		rect[3] >= (int)g_decide_height;
+	*empty = rect[2] <= rect[0] || rect[3] <= rect[1];
+
+	float offset[3] = { 0.0f, 0.0f, 0.0f };
+
+	for (int i = 0; i < g_with_count; i++)
+		if (g_with_group[i] == group)
+			for (int c = 0; c < 3; c++)
+				offset[c] = g_with_offset[i][c];
+
+	static std::set<int> printed;
+	const bool say = !printed.count(group);
+	int whole = 0, windowed = 0;
+
+	printed.insert(group);
+
+	for (int j = 0; j < HDRenderGroupPairRanges(group); j++)
+	{
+		HDPairRange piece;
+
+		if (!HDRenderGroupPairRange(group, j, &piece))
+			break;
+
+		bool drawn = piece.holder == g_room_probe_seed;
+
+		for (int i = 0; i < g_with_count && !drawn; i++)
+			drawn = g_with_group[i] == piece.holder;
+
+		const bool alive = piece.face >= 0 &&
+			(size_t)piece.face < g_faces_built.size() &&
+			FaceSurvives(g_faces_built[(size_t)piece.face], offset, win);
+		// Any face of the same pair that claimed a triangle and survives.
+		bool pairAlive = false;
+
+		for (int k = 0; k < HDRenderGroupPairRanges(group) && !pairAlive; k++)
+		{
+			HDPairRange other;
+
+			if (HDRenderGroupPairRange(group, k, &other) &&
+				other.intrusion == piece.intrusion && other.face >= 0 &&
+				(size_t)other.face < g_faces_built.size())
+				pairAlive = FaceSurvives(g_faces_built[(size_t)other.face],
+					offset, win);
+		}
+
+		/* frame: DecidePairs' answer - a room that is not drawn is not
+		 * asked and its guest's art is drawn whole; otherwise a claimed
+		 * piece is whole when any claimed face of its pair survives, and
+		 * the triangles no face claims stay in the window. face: the same
+		 * with each piece on its own face alone. */
+		const bool ask = !*full && !*empty;
+		const bool answer = g_decide == 0 ? true : g_decide == 1 ? false
+			: !ask ? false
+			: !drawn ? true
+			: piece.face < 0 ? false
+			: g_decide == 3 ? alive : pairAlive;
+
+		HDRenderPairWhole(group, j, answer ? 1 : 0);
+
+		if (answer)
+			whole++;
+		else
+			windowed++;
+
+		if (say)
+			printf("decide: group %3d piece %2d holder %3d face %5d tris %5d "
+				"-> %s%s\n", group, j, piece.holder, piece.face,
+				piece.triangles, answer ? "whole" : "window",
+				piece.face < 0 ? " (no face)" : alive ? " (face drawn)"
+					: " (face dropped)");
+	}
+
+	if (say)
+		printf("decide: group %3d window %ld,%ld..%ld,%ld%s%s - %d piece(s) "
+			"whole, %d inside the window\n", group, win[0], win[1], win[2],
+			win[3], *full ? " (the whole screen)" : "",
+			*empty ? " (empty)" : "", whole, windowed);
+
+	return true;
+}
 
 /* The bulbs go in room local and come out in view space, because that is the
  * space HDFogBulb is in - aBuildFogBulbList (drawroom.cpp) transforms every
@@ -3313,6 +3530,12 @@ int main(int argc, char** argv)
 		printf("       -window all|open|intruding   (needs -roombox)\n");
 		printf("       -cull none|opaque   the opaque ranges two-sided or "
 			"one-sided (default)\n");
+		printf("       -roomwin <g>:<l>,<t>,<r>,<b>[;...]   a group's walk window,"
+			" drawn as\n");
+		printf("                                      DrawRoomWindowed does "
+			"(needs -roombox)\n");
+		printf("       -decide whole|scissor|frame|face   the pieces of intruding"
+			" art (default frame)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
@@ -3593,6 +3816,36 @@ int main(int argc, char** argv)
 			g_window_mode = !strcmp(argv[at + 1], "open") ? HD_WINDOW_OPEN
 				: !strcmp(argv[at + 1], "intruding") ? HD_WINDOW_INTRUDING
 				: HD_WINDOW_ALL;
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-roomwin") && at + 1 < argc)
+		{
+			const char* q = argv[at + 1];
+
+			while (*q && g_roomwin_count < 64)
+			{
+				int g = -1;
+				long* w = g_roomwin_box[g_roomwin_count];
+
+				if (sscanf(q, "%d:%ld,%ld,%ld,%ld", &g, &w[0], &w[1], &w[2],
+					&w[3]) == 5)
+					g_roomwin_group[g_roomwin_count++] = g;
+
+				const char* next = strchr(q, ';');
+
+				if (!next)
+					break;
+
+				q = next + 1;
+			}
+
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-decide") && at + 1 < argc)
+		{
+			g_decide = !strcmp(argv[at + 1], "whole") ? 0
+				: !strcmp(argv[at + 1], "scissor") ? 1
+				: !strcmp(argv[at + 1], "face") ? 3 : 2;
 			at += 1;
 		}
 		else if (!strcmp(argv[at], "-cull") && at + 1 < argc)
@@ -3935,7 +4188,7 @@ int main(int argc, char** argv)
 			 * BuildRoomIntrusions' (specific\hd\hd_level.cpp), read out of
 			 * the same file: not next door by portal or by a vertical floor
 			 * link, not a flipmap twin, boxes touching, and the holder's own
-			 * inside one sector in from its border ring. */
+			 * inside, TR5's box one sector in from the grid's edge. */
 			{
 				const int n = level.roomCount();
 				std::vector<std::set<int> > nextDoor((size_t)n);
@@ -4011,14 +4264,14 @@ int main(int argc, char** argv)
 
 						box.group = b;
 						box.holder = a;
-						box.mins[0] = (float)(ra.originX + 2048 - rb.originX);
+						box.mins[0] = (float)(ra.originX + 1024 - rb.originX);
 						box.maxs[0] = (float)(ra.originX +
-							(long)(ra.numXSectors - 2) * 1024 - rb.originX);
+							(long)(ra.numXSectors - 1) * 1024 - rb.originX);
 						box.mins[1] = (float)((long)(int)aTop - (long)(int)bOrigin);
 						box.maxs[1] = (float)(ra.yBottom - (long)(int)bOrigin);
-						box.mins[2] = (float)(ra.originZ + 2048 - rb.originZ);
+						box.mins[2] = (float)(ra.originZ + 1024 - rb.originZ);
 						box.maxs[2] = (float)(ra.originZ +
-							(long)(ra.numZSectors - 2) * 1024 - rb.originZ);
+							(long)(ra.numZSectors - 1) * 1024 - rb.originZ);
 
 						if (box.maxs[0] <= box.mins[0] ||
 							box.maxs[2] <= box.mins[2])
@@ -4034,6 +4287,83 @@ int main(int argc, char** argv)
 
 				printf("-roombox: %d intrusion boxes handed in\n",
 					(int)g_intrusions_built.size());
+
+				/* And the intruders' classic faces, as BuildPairFaces hands
+				 * them over: every drawn face of every intruder room, in
+				 * the room's own frame, in the roomlets' order, the ones
+				 * that stand further than HD_PAIR_FACE_REACH from every
+				 * box of that room left out. */
+				for (int b = 0; b < n; b++)
+				{
+					bool intruder = false;
+
+					for (size_t k = 0; k < g_intrusions_built.size(); k++)
+						if (g_intrusions_built[k].group == b)
+							intruder = true;
+
+					std::vector<Tr5Level::FaceInfo> faces;
+
+					if (!intruder || !level.roomFaces(b, faces, error))
+						continue;
+
+					const Tr5Room& rb = level.rooms()[(size_t)b];
+
+					for (size_t f = 0; f < faces.size(); f++)
+					{
+						HDPairFace face;
+						float lo[3], hi[3];
+
+						face.group = b;
+						face.corners = faces[f].quad ? 4 : 3;
+
+						for (int c = 0; c < 4; c++)
+						{
+							const int at = c < face.corners ? c : 0;
+
+							face.v[c][0] = (float)(faces[f].v[at][0] - rb.originX);
+							face.v[c][1] = (float)faces[f].v[at][1];
+							face.v[c][2] = (float)(faces[f].v[at][2] - rb.originZ);
+						}
+
+						for (int axis = 0; axis < 3; axis++)
+						{
+							lo[axis] = hi[axis] = face.v[0][axis];
+
+							for (int c = 1; c < face.corners; c++)
+							{
+								if (face.v[c][axis] < lo[axis]) lo[axis] = face.v[c][axis];
+								if (face.v[c][axis] > hi[axis]) hi[axis] = face.v[c][axis];
+							}
+						}
+
+						bool nearBox = false;
+
+						for (size_t k = 0; k < g_intrusions_built.size() && !nearBox; k++)
+						{
+							const HDIntrusion& box = g_intrusions_built[k];
+
+							if (box.group != b)
+								continue;
+
+							nearBox = true;
+
+							for (int axis = 0; axis < 3; axis++)
+								if (hi[axis] + (float)HD_PAIR_FACE_REACH < box.mins[axis] ||
+									lo[axis] - (float)HD_PAIR_FACE_REACH > box.maxs[axis])
+									nearBox = false;
+						}
+
+						if (nearBox)
+							g_faces_built.push_back(face);
+					}
+				}
+
+				if (!g_faces_built.empty())
+					HDRenderSetPairFaces(&g_faces_built[0],
+						(int)g_faces_built.size());
+
+				printf("-roombox: %d classic faces handed in\n",
+					(int)g_faces_built.size());
 			}
 
 			/* -hdm: the openings the randomizer cut, out of the sidecar
@@ -4149,8 +4479,42 @@ int main(int argc, char** argv)
 	 * to be the same list. */
 	if (!g_intrusions_built.empty())
 	{
-		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups\n",
-			CountIntrusionPairs(), stats.intrudingTris, stats.intrudingGroups);
+		/* The pieces, counted the way ReportRoomIntrusions counts them for
+		 * the engine's own two lines. */
+		std::vector<int> pairFaces(g_intrusions_built.size(), 0);
+		std::vector<int> pairBound(g_intrusions_built.size(), 0);
+		std::set<int> claimed;
+		int bound = 0, unbound = 0;
+
+		for (int g = 0; g < HDRenderGroupCount(); g++)
+			for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
+			{
+				HDPairRange piece;
+
+				if (!HDRenderGroupPairRange(g, j, &piece))
+					break;
+
+				if (piece.face < 0)
+				{
+					unbound += piece.triangles;
+					continue;
+				}
+
+				bound += piece.triangles;
+				claimed.insert(piece.face);
+
+				if (piece.intrusion >= 0 &&
+					piece.intrusion < (int)g_intrusions_built.size())
+				{
+					pairFaces[(size_t)piece.intrusion]++;
+					pairBound[(size_t)piece.intrusion] += piece.triangles;
+				}
+			}
+
+		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups "
+			"holder=inside cull=opaque faces=%d bound=%d unbound=%d\n",
+			CountIntrusionPairs(), stats.intrudingTris, stats.intrudingGroups,
+			(int)claimed.size(), bound, unbound);
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 		{
@@ -4158,9 +4522,10 @@ int main(int argc, char** argv)
 
 			if (hits)
 				printf("  overlap: room %3d holds the art of room %3d - "
-					"%d triangles, no portal between them\n",
+					"%d triangles, no portal between them faces=%d bound=%d\n",
 					g_intrusions_built[i].holder,
-					g_intrusions_built[i].group, hits);
+					g_intrusions_built[i].group, hits, pairFaces[i],
+					pairBound[i]);
 		}
 	}
 	/* What the openings really took away, per box and per room, out of the
@@ -4727,6 +5092,13 @@ int main(int argc, char** argv)
 	HDRenderZConstants(20.0, 20480.0, &a, &b, &boo);
 	HDRenderMakeProjection(persp, (double)width * 0.5, (double)height * 0.5,
 		a, b, &projection);
+
+	// The camera -decide frame holds the classic faces against.
+	memcpy(g_decide_view, view, sizeof(g_decide_view));
+	g_decide_persp = persp;
+	g_decide_width = width;
+	g_decide_height = height;
+	g_room_probe_seed = room;
 
 	if (matrixCheck)
 	{

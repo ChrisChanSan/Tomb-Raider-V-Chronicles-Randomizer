@@ -58,6 +58,8 @@
 
 #include "core/Tr5Level.h"
 #include "hd_install.h"
+// HDPairFace and HDPairFaceDistance - the renderer's own face test, inline.
+#include "hd_render.h"
 #include "hd_scan.h"
 #include "trf_remaster/Trg.h"
 
@@ -1268,6 +1270,15 @@ namespace
 		for (size_t g = 0; g < trg.groups.size(); g++)
 			tagged[g].assign(centre[g].size() / 3, 0);
 
+		/* The classic faces the intruding triangles belong to - see
+		 * HDPairFace in specific\hd\hd_render.h - per intruder room, and
+		 * what they claimed, counted the way ReportRoomIntrusions counts
+		 * it for the engine's log. */
+		std::vector<std::vector<HDPairFace> > faces((size_t)rooms);
+		std::vector<unsigned char> facesRead((size_t)rooms, 0);
+		std::vector<std::set<size_t> > claimed((size_t)rooms);
+		long long boundTris = 0, unboundTris = 0;
+
 		for (int a = 0; a < rooms; a++)
 			for (int b = 0; b < rooms && (size_t)b < centre.size(); b++)
 			{
@@ -1288,34 +1299,27 @@ namespace
 					!boxOverlap(A.y0, A.y1, box[(size_t)b].y0, box[(size_t)b].y1))
 					continue;
 
-				/* A's inside, one sector in from its border ring, and that
-				 * second sector is the whole of the rule's discrimination.
+				/* A's inside - TR5's own box, one sector in from the grid's
+				 * edge - as BuildRoomIntrusions hands it to the renderer.
 				 *
 				 * A room's border ring is one sector thick, so two rooms that
 				 * merely share a wall with no door between them reach into
-				 * each other by construction. Asked with the ring counted
-				 * (-deep -1024) ANDREA1 comes out with 158 pairs, among them
-				 * 2 and 197 at the Piazza dell'Opera. Asked one sector
-				 * further in it has seven.
-				 *
-				 * Rejected: deciding the pair with this box and then
-				 * windowing every triangle of b inside a's plain inside. It
-				 * would have hidden the last 26 % of ANDREA1's 207/53 bleed
-				 * (see the renders) - and it windows 7,250 triangles of room
-				 * 103 inside room 65, which is that pair's shared wall, seen
-				 * through the wrong side of the same overlap this rule is
-				 * meant to catch. What is left un-hidden is art of the
-				 * intruder standing within one sector of the holder's wall,
-				 * and there is no way to tell that from a shared wall with a
-				 * box.
+				 * each other by construction: ANDREA1 has 158 pairs with this
+				 * box, among them 2 and 197 at the Piazza dell'Opera, against
+				 * seven with one sector more taken off. The box alone does not
+				 * tell a shared wall from a room standing inside another; the
+				 * classic faces the art belongs to decide per frame which of
+				 * it is drawn whole (HDPairFace, DecidePairs in hd_level.cpp),
+				 * and this listing says which faces those are.
 				 *
 				 * `deep` is an extra shrink for re-measuring the rule and is
-				 * 0 by default. */
+				 * 0 by default; -deep 1024 is the box one sector smaller that
+				 * the rule used before the faces decided. */
 				const RoomSpace& B = box[(size_t)b];
-				const float x0 = (float)(A.ix0 + 1024 + deep - B.ox);
-				const float x1 = (float)(A.ix1 - 1024 - deep - B.ox);
-				const float z0 = (float)(A.iz0 + 1024 + deep - B.oz);
-				const float z1 = (float)(A.iz1 - 1024 - deep - B.oz);
+				const float x0 = (float)(A.ix0 + deep - B.ox);
+				const float x1 = (float)(A.ix1 - deep - B.ox);
+				const float z0 = (float)(A.iz0 + deep - B.oz);
+				const float z1 = (float)(A.iz1 - deep - B.oz);
 				const float y0 = (float)(A.y0 - B.oy);
 				const float y1 = (float)(A.y1 - B.oy);
 
@@ -1341,6 +1345,44 @@ namespace
 				pairs++;
 				windowed[(size_t)b] = 1;		// the INTRUDER only
 
+				/* b's classic faces in its own frame, read once per room,
+				 * the whole list in the roomlets' order. The engine hands
+				 * the renderer only those within HD_PAIR_FACE_REACH of one
+				 * of b's boxes, which cannot change which face is nearest
+				 * to a centroid inside a box. */
+				if (!facesRead[(size_t)b])
+				{
+					facesRead[(size_t)b] = 1;
+
+					std::vector<Tr5Level::FaceInfo> info;
+
+					if (level.roomFaces(b, info, error))
+						for (size_t f = 0; f < info.size(); f++)
+						{
+							HDPairFace face;
+
+							face.group = b;
+							face.corners = info[f].quad ? 4 : 3;
+
+							for (int c = 0; c < 4; c++)
+							{
+								const int at = c < face.corners ? c : 0;
+
+								face.v[c][0] = (float)(info[f].v[at][0] - B.ox);
+								face.v[c][1] = (float)info[f].v[at][1];
+								face.v[c][2] = (float)(info[f].v[at][2] - B.oz);
+							}
+
+							faces[(size_t)b].push_back(face);
+						}
+				}
+
+				/* A triangle belongs to the first pair whose box holds it,
+				 * as in the engine's build, and there to the nearest
+				 * classic face of b that claims it. */
+				std::set<size_t> pairFaces;
+				int pairBound = 0;
+
 				for (size_t c = 0, t = 0; c + 2 < centre[(size_t)b].size();
 					c += 3, t++)
 				{
@@ -1348,15 +1390,49 @@ namespace
 					const float cy = centre[(size_t)b][c + 1];
 					const float cz = centre[(size_t)b][c + 2];
 
-					if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 &&
-						cy >= y0 && cy <= y1)
-						tagged[(size_t)b][t] = 1;
+					if (!(cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 &&
+						cy >= y0 && cy <= y1))
+						continue;
+
+					if (tagged[(size_t)b][t])
+						continue;
+
+					tagged[(size_t)b][t] = 1;
+
+					const float p[3] = { cx, cy, cz };
+					const std::vector<HDPairFace>& list = faces[(size_t)b];
+					double nearest = 0.0;
+					long at = -1;
+
+					for (size_t f = 0; f < list.size(); f++)
+					{
+						const double d = HDPairFaceDistance(list[f], p);
+
+						if (d >= 0.0 && d <= HD_PAIR_FACE_REACH &&
+							(at < 0 || d < nearest))
+						{
+							at = (long)f;
+							nearest = d;
+						}
+					}
+
+					if (at < 0)
+					{
+						unboundTris++;
+						continue;
+					}
+
+					pairFaces.insert((size_t)at);
+					pairBound++;
+					boundTris++;
+					claimed[(size_t)b].insert((size_t)at);
 				}
 
 				if (!quiet)
 					std::printf("  overlap: room %3d holds the art of room "
-						"%3d - %d triangles, no portal between them\n", a, b,
-						hits);
+						"%3d - %d triangles, no portal between them "
+						"faces=%d bound=%d\n", a, b, hits,
+						(int)pairFaces.size(), pairBound);
 			}
 
 		int windowedRooms = 0;
@@ -1462,11 +1538,17 @@ namespace
 				}
 		}
 
+		int facesClaimed = 0;
+
+		for (size_t r = 0; r < claimed.size(); r++)
+			facesClaimed += (int)claimed[r].size();
+
 		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d intruding "
 			"tris=%lld in %d groups  overhang tris=%lld of %lld  worst=%ld "
-			"(group %d)\n",
+			"(group %d)  holder=inside faces=%d bound=%lld unbound=%lld\n",
 			stem.c_str(), rooms, (int)trg.groups.size(), pairs, intruding,
-			windowedRooms, tris_out, tris_total, worst, worst_group);
+			windowedRooms, tris_out, tris_total, worst, worst_group,
+			facesClaimed, boundTris, unboundTris);
 		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
 			"<=256 %lld, <=1024 %lld, >1024 %lld\n",
 			stem.c_str(), hist[0], hist[1], hist[2], hist[3], hist[4]);

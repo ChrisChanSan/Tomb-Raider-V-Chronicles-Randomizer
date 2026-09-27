@@ -24,6 +24,8 @@
 
 #include "hd_pagecache.h"
 
+#include <math.h>			// sqrt, for HDPairFaceDistance
+
 struct IDirect3DDevice9;
 struct _D3DMATRIX;
 typedef struct _D3DMATRIX D3DMATRIX;
@@ -222,20 +224,119 @@ struct HDRoomBox
  * picture where the two rectangles meet.
  *
  * The box is the holder's inside - the volume TR5 itself calls the inside of
- * a room (game\draw.cpp, calc_animating_item_clip_window), one sector
- * further in on each side because a room's border ring is one sector thick
- * and two rooms that merely share a wall reach into each other by
- * construction. Handed in the GROUP's own local frame, like the room boxes
- * above, and on the same contract: call
+ * a room (game\draw.cpp, calc_animating_item_clip_window): one sector in
+ * from the edge of its grid on each side. Handed in the GROUP's own local
+ * frame, like the room boxes above, and on the same contract: call
  * HDRenderSetIntrusions before HDRenderLevelBegin, the pointer is not kept.
- * Without it nothing is ever tagged and no room is ever windowed. */
+ * Without it nothing is ever tagged and no room is ever windowed.
+ *
+ * Tagged is not yet windowed. The triangles of one entry are split by the
+ * classic face of `group` they belong to (HDPairFace below), and each piece
+ * is drawn whole or inside the window per frame - see HDRenderPairWhole. */
 struct HDIntrusion
 {
 	int group;			// whose art is being asked about
-	int holder;			// the room whose inside the box is - for the log
+	int holder;			// the room whose inside the box is
 	float mins[3];
 	float maxs[3];
 };
+
+/* One classic face of a room whose art stands inside another room.
+ *
+ * The classic path draws a room's face whole or not at all: it drops a face
+ * whose corners all lie beyond one edge of the room's portal window and
+ * draws every other one whole (specific\drawroom.cpp, the four clip bits per
+ * vertex; specific\polyinsert.cpp, `c[v0] & c[v1] & ...`). The remaster's art
+ * of that face stands where the face stands, a few units off it and with its
+ * relief in front of it, so the art follows the face: an intruding triangle
+ * whose centroid lies within HD_PAIR_FACE_REACH of a classic face's plane and
+ * inside its outline belongs to that face, the nearest one if several qualify.
+ * The engine draws the art its pair's faces claimed whole on a frame the
+ * classic path draws any of those faces (hd_level.cpp, DecidePairs). A
+ * triangle no face claims is drawn inside the window.
+ *
+ * `v` are the face's corners in the GROUP's own local frame, like the boxes
+ * above; `corners` is 4 for a quad and 3 for a triangle. Same contract again
+ * - HDRenderSetPairFaces before HDRenderLevelBegin, the pointer is not kept. */
+struct HDPairFace
+{
+	int group;			// the room the face belongs to
+	int corners;
+	float v[4][3];
+};
+
+/* How far the art of a face stands off it. Measured on ANDREA1's pair of
+ * rooms 93 and 101, where room 101's facade stands inside room 93: all 540
+ * of its intruding triangles lie within 86 units of one of six classic faces
+ * of 101 (the cornices and window frames furthest out), 90 of them within 1
+ * unit; room 93's 108 triangles inside room 101 lie on six faces of 93
+ * within 1 unit. 128, half a click of TR5's height grid, is the next round
+ * number past the furthest of them. */
+#define HD_PAIR_FACE_REACH	128.0
+
+/* The distance from `p` to the face's plane when `p` stands within the
+ * face's outline, and -1 when it does not. A quad is asked as its two
+ * triangles (0,1,2) and (0,2,3), which is how the classic path splits it,
+ * and the nearer answer is kept. Inline, so that TrgProbe asks exactly this
+ * of the same numbers. */
+inline double HDPairFaceDistance(const HDPairFace& face, const float p[3])
+{
+	double best = -1.0;
+
+	for (int half = 0; half + 2 < face.corners; half++)
+	{
+		const float* a = face.v[0];
+		const float* b = face.v[half + 1];
+		const float* c = face.v[half + 2];
+		const double e1[3] = { (double)b[0] - a[0], (double)b[1] - a[1], (double)b[2] - a[2] };
+		const double e2[3] = { (double)c[0] - a[0], (double)c[1] - a[1], (double)c[2] - a[2] };
+		const double n[3] =
+		{
+			e1[1] * e2[2] - e1[2] * e2[1],
+			e1[2] * e2[0] - e1[0] * e2[2],
+			e1[0] * e2[1] - e1[1] * e2[0]
+		};
+		const double length = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+
+		if (length <= 0.0)
+			continue;			// a face of no area
+
+		const float* edge[3][2] = { { a, b }, { b, c }, { c, a } };
+		bool inside = true;
+
+		// p lies on the inner side of all three edges, seen along n.
+		for (int k = 0; k < 3 && inside; k++)
+		{
+			const float* u = edge[k][0];
+			const float* w = edge[k][1];
+			const double e[3] = { (double)w[0] - u[0], (double)w[1] - u[1], (double)w[2] - u[2] };
+			const double m[3] =
+			{
+				n[1] * e[2] - n[2] * e[1],
+				n[2] * e[0] - n[0] * e[2],
+				n[0] * e[1] - n[1] * e[0]
+			};
+
+			if (m[0] * ((double)p[0] - u[0]) + m[1] * ((double)p[1] - u[1]) +
+				m[2] * ((double)p[2] - u[2]) < 0.0)
+				inside = false;
+		}
+
+		if (!inside)
+			continue;
+
+		double d = (n[0] * ((double)p[0] - a[0]) + n[1] * ((double)p[1] - a[1]) +
+			n[2] * ((double)p[2] - a[2])) / sqrt(length);
+
+		if (d < 0.0)
+			d = -d;
+
+		if (best < 0.0 || d < best)
+			best = d;
+	}
+
+	return best;
+}
 
 /* An opening the randomizer made, taken out of the art.
  *
@@ -524,6 +625,30 @@ void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count);
  * says how many triangles each entry caught, which is what the level's log
  * line is made of. */
 void HDRenderSetIntrusions(const HDIntrusion* list, int count);
+/* The classic faces the intruding triangles are held against - see
+ * HDPairFace. Same contract again. Without them every intruding triangle is
+ * one piece per entry that no face claims, drawn inside the window. */
+void HDRenderSetPairFaces(const HDPairFace* faces, int count);
+
+/* The pieces a group's intruding triangles were split into at the build, one
+ * per (entry of the intrusion list, classic face) and one per entry for the
+ * triangles no face claims. `intrusion` is the entry (the first one whose box
+ * holds the triangle, when several do), `face` the index into the list handed
+ * to HDRenderSetPairFaces or -1, `triangles` all three passes together. */
+struct HDPairRange
+{
+	int intrusion;
+	int holder;
+	int face;
+	int triangles;
+};
+int HDRenderGroupPairRanges(int group);
+bool HDRenderGroupPairRange(int group, int index, HDPairRange* out);
+/* This frame's answer for one piece: nonzero draws it whole, with the open
+ * half (HD_WINDOW_OPEN), zero inside the window (HD_WINDOW_INTRUDING). Zero
+ * after the build, which is the window for every piece. Kept until it is set
+ * again, so the glow phase draws the answer the solid phase was given. */
+void HDRenderPairWhole(int group, int index, int whole);
 /* The openings the randomizer cut into this level. Same
  * contract again - before HDRenderLevelBegin, the pointer is only remembered
  * for the length of that call. After it, HDRenderCutHits says how many
@@ -654,6 +779,9 @@ void HDRenderScissorOff();
  * the walk gave this room, and everything else over the whole screen, which
  * is what the classic path does with every polygon that straddles the
  * window's rim.
+ *
+ * The pieces of the intruding art this frame's HDRenderPairWhole says are
+ * drawn whole go with the open half, the rest with the intruding one.
  *
  * HD_WINDOW_ALL is one unscissored call for the whole group; every room but
  * a handful is drawn with it and pays nothing. */

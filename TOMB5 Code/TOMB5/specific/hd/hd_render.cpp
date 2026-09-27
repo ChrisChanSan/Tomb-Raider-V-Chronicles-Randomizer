@@ -1110,10 +1110,12 @@ namespace
 		 * entry in g_glow_parts - and -1 for every other draw call. In the
 		 * sort key, because the glow shader's three registers are per part. */
 		int glow = -1;
-		/* Which half of the room this draw call is: 1 where the triangles of
-		 * this range stand inside another room - see HDIntrusion in
-		 * hd_render.h. In the sort key, because the two halves are drawn with
-		 * different scissor states and a triangle cannot have half of one.
+		/* Which half of the room this draw call is: 0 for the open half,
+		 * and for triangles that stand inside another room one plus the
+		 * piece of the intruding art they belong to - see HDIntrusion and
+		 * HDPairRange in hd_render.h. In the sort key, because the pieces are
+		 * drawn with different scissor states and a triangle cannot have half
+		 * of one.
 		 *
 		 * The overhang has no draw calls of its own: it is drawn over the
 		 * whole screen along with everything else. It is still counted per
@@ -1193,6 +1195,15 @@ namespace
 		// The entries of the intrusion list that name this group, worked out
 		// once at the top of the group's own build.
 		std::vector<int> intrusionAt;
+		// And the classic faces of this group's room its intruding triangles
+		// are held against, gathered the same way.
+		std::vector<int> faceAt;
+		/* The pieces the intruding triangles were split into - see
+		 * HDPairRange in hd_render.h. A range's `intruding` is one plus its
+		 * piece's index here, 0 for the open half. `pairWhole` is this
+		 * frame's answer per piece, set by HDRenderPairWhole. */
+		std::vector<HDPairRange> pairRanges;
+		std::vector<unsigned char> pairWhole;
 		/* The same for the cut boxes, and how many triangles
 		 * this group lost to them. The count is not per pass - a cut
 		 * triangle never reaches a pass's list, it is left out of the build
@@ -1483,6 +1494,13 @@ namespace
 	 * the build and has to say what the rule found. */
 	const HDIntrusion* g_intrusions = 0;
 	int g_intrusion_count = 0;
+	/* The classic faces those triangles are held against, borrowed on the
+	 * same terms, and each face's box grown by HD_PAIR_FACE_REACH - a
+	 * centroid outside it cannot belong to the face, which spares the
+	 * distance for all but a few faces per triangle. */
+	const HDPairFace* g_pair_faces = 0;
+	int g_pair_face_count = 0;
+	std::vector<float> g_pair_face_box;
 	// The diagnostic inside/overhang split - see HDRenderSplitOverhang.
 	int g_split_overhang = 0;
 	/* Whether the ranges RangeCulls picks are drawn culled. 1 in the engine
@@ -2581,6 +2599,66 @@ int HDRenderIntrusionHits(int at)
 		? g_intrusion_hits[(size_t)at] : 0;
 }
 
+void HDRenderSetPairFaces(const HDPairFace* faces, int count)
+{
+	g_pair_faces = count > 0 ? faces : 0;
+	g_pair_face_count = faces && count > 0 ? count : 0;
+	g_pair_face_box.assign((size_t)g_pair_face_count * 6, 0.0f);
+
+	for (int f = 0; f < g_pair_face_count; f++)
+	{
+		const HDPairFace& face = g_pair_faces[f];
+		float* box = &g_pair_face_box[(size_t)f * 6];
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			box[axis] = box[axis + 3] = face.v[0][axis];
+
+			for (int c = 1; c < face.corners && c < 4; c++)
+			{
+				if (face.v[c][axis] < box[axis]) box[axis] = face.v[c][axis];
+				if (face.v[c][axis] > box[axis + 3]) box[axis + 3] = face.v[c][axis];
+			}
+
+			box[axis] -= (float)HD_PAIR_FACE_REACH;
+			box[axis + 3] += (float)HD_PAIR_FACE_REACH;
+		}
+	}
+}
+
+int HDRenderGroupPairRanges(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return (int)g_groups[(size_t)group].pairRanges.size();
+}
+
+bool HDRenderGroupPairRange(int group, int index, HDPairRange* out)
+{
+	if (group < 0 || group >= (int)g_groups.size() || !out)
+		return false;
+
+	const HDGroup& g = g_groups[(size_t)group];
+
+	if (index < 0 || index >= (int)g.pairRanges.size())
+		return false;
+
+	*out = g.pairRanges[(size_t)index];
+	return true;
+}
+
+void HDRenderPairWhole(int group, int index, int whole)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return;
+
+	HDGroup& g = g_groups[(size_t)group];
+
+	if (index >= 0 && index < (int)g.pairWhole.size())
+		g.pairWhole[(size_t)index] = whole ? 1 : 0;
+}
+
 void HDRenderSetCuts(const HDCut* list, int count)
 {
 	g_cuts = count > 0 ? list : 0;
@@ -3289,6 +3367,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			if (g_intrusions[k].group == (int)g)
 				group.intrusionAt.push_back(k);
 
+		// And the classic faces those triangles may belong to - only of a
+		// group that has an entry at all.
+		if (!group.intrusionAt.empty())
+			for (int f = 0; f < g_pair_face_count; f++)
+				if (g_pair_faces[f].group == (int)g)
+					group.faceAt.push_back(f);
+
 		/* And the openings that were cut into this group's
 		 * room. Gathered the same way and for the same reason - a level
 		 * carries a handful of them and draws a million triangles. Empty for
@@ -3660,10 +3745,16 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * test and the one above it. The overhang question is
 					 * "did the artist put this face a brick's depth past the
 					 * wall", and it needs a tolerance. This one is "is this
-					 * triangle standing in the middle of a different room",
-					 * and the box has already been pulled a whole sector in
-					 * on every side for exactly that reason - a tolerance on
-					 * top of it would only start letting the wall back in. */
+					 * triangle standing in a different room", and the box is
+					 * that room's own inside, a sector in from its grid's
+					 * edge - a tolerance on top of it would reach into the
+					 * wall ring two rooms that share a wall both stand on.
+					 *
+					 * The first entry whose box holds the centroid is the
+					 * triangle's pair; every entry that holds it counts it,
+					 * which is what the level's log line says per pair. */
+					int pair_at = -1;
+
 					for (size_t k = 0; k < group.intrusionAt.size(); k++)
 					{
 						const HDIntrusion& box =
@@ -3677,11 +3768,68 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						if (in)
 						{
-							intruding = 1;
+							if (pair_at < 0)
+								pair_at = group.intrusionAt[k];
 
 							if ((size_t)group.intrusionAt[k] < g_intrusion_hits.size())
 								g_intrusion_hits[(size_t)group.intrusionAt[k]]++;
 						}
+					}
+
+					/* The classic face the triangle belongs to - the nearest
+					 * one that claims it, see HDPairFace - and the piece of
+					 * (pair, face) it is drawn with. The pieces are numbered
+					 * in the order the build meets them. */
+					if (pair_at >= 0)
+					{
+						int face_at = -1;
+						double nearest = 0.0;
+
+						for (size_t k = 0; k < group.faceAt.size(); k++)
+						{
+							const int f = group.faceAt[k];
+							const float* fb = &g_pair_face_box[(size_t)f * 6];
+
+							if (centre[0] < fb[0] || centre[0] > fb[3] ||
+								centre[1] < fb[1] || centre[1] > fb[4] ||
+								centre[2] < fb[2] || centre[2] > fb[5])
+								continue;
+
+							const double d = HDPairFaceDistance(g_pair_faces[f], centre);
+
+							if (d >= 0.0 && d <= HD_PAIR_FACE_REACH &&
+								(face_at < 0 || d < nearest))
+							{
+								face_at = f;
+								nearest = d;
+							}
+						}
+
+						int piece = -1;
+
+						for (size_t j = 0; j < group.pairRanges.size(); j++)
+							if (group.pairRanges[j].intrusion == pair_at &&
+								group.pairRanges[j].face == face_at)
+							{
+								piece = (int)j;
+								break;
+							}
+
+						if (piece < 0)
+						{
+							HDPairRange made;
+
+							made.intrusion = pair_at;
+							made.holder = g_intrusions[pair_at].holder;
+							made.face = face_at;
+							made.triangles = 0;
+							piece = (int)group.pairRanges.size();
+							group.pairRanges.push_back(made);
+							group.pairWhole.push_back(0);
+						}
+
+						group.pairRanges[(size_t)piece].triangles++;
+						intruding = piece + 1;
 					}
 
 					HDTri tri;
@@ -3764,8 +3912,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * page can come out as a draw call of its own. */
 					if (a.cull != b.cull) return a.cull < b.cull;
 					/* And the art that stands inside another room never
-					 * shares a draw call with the art that does not - the
-					 * scissor test is on for one and off for the other. Last
+					 * shares a draw call with the art that does not, nor one
+					 * piece of it with another - each piece is drawn whole or
+					 * inside the window on an answer of its own. Last
 					 * in the key, so a level built with no intrusion list -
 					 * every triangle answering 0 - sorts on the rest alone. */
 					if (g_split_overhang && a.overhang != b.overhang)
@@ -4843,13 +4992,17 @@ namespace
 			if ((range.blend != 0.0f) != blendOnly)
 				continue;
 
-			/* And this call draws the art that stands inside
-			 * another room or the art that does not, never both - the two
-			 * are drawn with different scissor states. HD_WINDOW_ALL draws
-			 * every range, which is what every room but a handful is drawn
-			 * with. */
-			if ((window == HD_WINDOW_OPEN && range.intruding) ||
-				(window == HD_WINDOW_INTRUDING && !range.intruding))
+			/* And this call draws the art that is drawn whole or the art
+			 * that is drawn inside the window, never both - the two are
+			 * drawn with different scissor states. A piece of the intruding
+			 * art this frame's HDRenderPairWhole answered for goes with the
+			 * open half. HD_WINDOW_ALL draws every range, which is what every
+			 * room but a handful is drawn with. */
+			const bool windowed = range.intruding &&
+				!group.pairWhole[(size_t)range.intruding - 1];
+
+			if ((window == HD_WINDOW_OPEN && windowed) ||
+				(window == HD_WINDOW_INTRUDING && !windowed))
 				continue;
 
 			// And the inside/overhang split, for RoomProbe's -tround alone.

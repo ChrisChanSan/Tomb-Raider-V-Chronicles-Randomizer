@@ -83,8 +83,8 @@ static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &
  * rooms is never trimmed and was measured at 106 in one JOBY4 frame
  * (RoomProbe -reachsurvey). One entry per listed room arrives here from
  * InsertRoom (specific\drawroom.cpp), so 256 is the true bound and this array
- * never drops a room the walk kept. sizeof(FrameRoom) is 380 bytes, so the
- * array is 95 KiB of BSS. */
+ * never drops a room the walk kept. sizeof(FrameRoom) is 384 bytes, so the
+ * array is 96 KiB of BSS. */
 #define HD_MAX_ROOMS	1024
 #define HD_MAX_FRAME	256
 
@@ -126,6 +126,11 @@ namespace
 		 * InsertRoom that put it here (see specific\3dmath.cpp). Read only by
 		 * the log. */
 		long view;
+
+		/* The intruding triangles this frame draws inside the window: all of
+		 * them but the pieces DecidePairs answered whole for. Read only by
+		 * the log. */
+		int scissoredTris;
 	};
 
 	char g_stem[64] = { 0 };
@@ -180,6 +185,21 @@ namespace
 	 * Per group and not per room, like g_group_hd: HDFlipRoom swaps which
 	 * group draws which room, and the property belongs to the art. */
 	unsigned char g_group_windowed[HD_MAX_ROOMS];
+	/* The pieces that intruding art is split into and the classic faces the
+	 * pieces belong to (HDPairFace and HDPairRange in hd_render.h). Built
+	 * once per level by BuildPairFaces and ReportRoomIntrusions and kept for
+	 * the level, because every frame asks the faces again.
+	 *
+	 * `g_piece_first[g]` and `g_piece_count[g]` say which entries of
+	 * g_pieces are group g's, in the renderer's own order - index j of the
+	 * group is g_pieces[g_piece_first[g] + j]. Per group, like
+	 * g_group_windowed. `g_face_alive` is this frame's corner rule per face,
+	 * written by HDFrameRoom for the faces of the room it collects. */
+	std::vector<HDPairFace> g_pair_faces;
+	std::vector<unsigned char> g_face_alive;
+	std::vector<HDPairRange> g_pieces;
+	int g_piece_first[HD_MAX_ROOMS];
+	int g_piece_count[HD_MAX_ROOMS];
 	short g_room_group[HD_MAX_ROOMS];
 	int g_room_count = 0;
 	int g_flips_done = 0;		// for the log, once per level
@@ -458,6 +478,11 @@ namespace
 	// only draw calls in the game the scissor is on for.
 	int g_clip_open = 0;
 	int g_clip_windowed_tris = 0;
+	// The pieces of intruding art DecidePairs asked about this frame, and how
+	// many of them it drew whole and how many inside their window.
+	int g_clip_pairs = 0;
+	int g_clip_pairs_whole = 0;
+	int g_clip_pairs_scissored = 0;
 	/* HD items whose own room's window is not the whole screen - the ones a
 	 * per-room scissor would cut and the classic path never does. Counted per
 	 * frame with -log and reported in the clip line. */
@@ -531,18 +556,168 @@ namespace
 		return entry.x1 <= entry.x0 || entry.y1 <= entry.y0;
 	}
 
+	/* Does the classic path draw this face of the room this frame?
+	 *
+	 * The corner rule of specific\drawroom.cpp, aRoomletTransformLight, line
+	 * for line: each corner through the room's view * world matrix; a corner
+	 * nearer than f_mznear carries -128, every bit but the four edge bits;
+	 * any other one is projected, with the underwater wobble when the camera
+	 * is under water, and carries one bit for each edge of the room's window
+	 * `r->left..r->bottom` it lies beyond. specific\polyinsert.cpp drops a face
+	 * when one bit is common to all its corners - all four beyond the same
+	 * edge, or all behind the eye - and draws every other face whole.
+	 *
+	 * The roomlet's box test in InsertRoom (CheckBoundsClip) is not asked: a
+	 * face that survives the corner rule lies partly inside every edge of the
+	 * window, so its roomlet's projected box does too. */
+	bool ClassicFaceDrawn(const HDPairFace& face, const D3DMATRIX& m,
+		int left, int top, int right, int bottom)
+	{
+		const float clipLeft = (float)left;
+		const float clipTop = (float)top;
+		const float clipRight = (float)right;
+		const float clipBottom = (float)bottom;
+		short common = -1;
+
+		for (int c = 0; c < face.corners && c < 4; c++)
+		{
+			const float* pos = face.v[c];
+			float x = pos[0] * m._11 + pos[1] * m._21 + pos[2] * m._31 + m._41;
+			float y = pos[0] * m._12 + pos[1] * m._22 + pos[2] * m._32 + m._42;
+			const float z = pos[0] * m._13 + pos[1] * m._23 + pos[2] * m._33 + m._43;
+			short clipFlag = 0;
+
+			if (z < f_mznear)
+				clipFlag = -128;
+			else
+			{
+				const float zv = f_mpersp / z;
+
+				if (camera.underwater)
+				{
+					const float zv2 = 1.0F / (z / 512.0F);
+
+					x = x * zv + f_centerx + vert_wibble_table[((wibble + long(zv2 * y)) >> 3) & 0x1F];
+					y = y * zv + f_centery + vert_wibble_table[((wibble + long(zv2 * x)) >> 3) & 0x1F];
+				}
+				else
+				{
+					x = x * zv + f_centerx;
+					y = y * zv + f_centery;
+				}
+
+				if (x < clipLeft)
+					clipFlag++;
+				else if (x > clipRight)
+					clipFlag += 2;
+
+				if (y < clipTop)
+					clipFlag += 4;
+				else if (y > clipBottom)
+					clipFlag += 8;
+			}
+
+			common &= clipFlag;
+		}
+
+		return common == 0;
+	}
+
+	/* This frame's answer for every piece of a room's intruding art.
+	 *
+	 * The window is there for a room that is drawn: art of room b standing
+	 * inside room a comes through a's walls when a is on the screen. A piece
+	 * whose holder is not on this frame's list is not asked and is drawn
+	 * whole, like the rest of the room's art - the ANDREA1 pier at the
+	 * Piazza corner stands inside room 197, which no view from room 57 lists,
+	 * and cut to room 2's window it comes out as a strip of sky down the
+	 * brick wall.
+	 *
+	 * A holder that is listed is asked, per pair: the pieces its classic faces
+	 * claimed are drawn whole when the classic path draws any of those faces
+	 * this frame (g_face_alive, from HDFrameRoom), and inside the room's own
+	 * portal window otherwise. The pieces no face claims are drawn inside it.
+	 * Per pair and not per face, because the art of one wall reaches over the
+	 * seams of the faces it belongs to: at picture 1's view from room 64,
+	 * room 101's facade inside room 93 is six classic faces of 101, three of
+	 * them drawn by the classic path and three wholly below 101's strip of a
+	 * window, the lower of which carries the 144 triangles of the facade's
+	 * lower storey - cut to the strip, room 93's interior shows through them
+	 * (7,318 pixels). From inside room 93 all six are dropped and the whole
+	 * facade goes, which is what hides it there.
+	 *
+	 * A room whose window is the whole screen draws everything whole anyway
+	 * (DrawRoomWindowed); one whose window is empty draws none of its
+	 * intruding art, so none of it is answered whole there. */
+	void DecidePairs(FrameRoom& entry)
+	{
+		entry.scissoredTris = 0;
+
+		if (!entry.windowed || entry.group < 0 || entry.group >= HD_MAX_ROOMS)
+			return;
+
+		const int first = g_piece_first[entry.group];
+		const int count = g_piece_count[entry.group];
+		const bool ask = !entry.full && !ClipEmpty(entry);
+
+		for (int j = 0; j < count; j++)
+		{
+			const HDPairRange& piece = g_pieces[(size_t)(first + j)];
+			bool listed = false;
+			bool whole = false;
+
+			if (ask)
+			{
+				for (int i = 0; i < g_frame_count && !listed; i++)
+					listed = g_frame[i].room == piece.holder;
+
+				whole = !listed;
+			}
+
+			if (listed && piece.face >= 0)
+			{
+				// Any claimed face of the same pair the classic path draws.
+				for (int k = 0; k < count && !whole; k++)
+				{
+					const HDPairRange& other = g_pieces[(size_t)(first + k)];
+
+					whole = other.intrusion == piece.intrusion &&
+						other.face >= 0 &&
+						(size_t)other.face < g_face_alive.size() &&
+						g_face_alive[(size_t)other.face] != 0;
+				}
+			}
+
+			if (listed)
+			{
+				g_clip_pairs++;
+
+				if (whole)
+					g_clip_pairs_whole++;
+				else
+					g_clip_pairs_scissored++;
+			}
+
+			if (!whole)
+				entry.scissoredTris += piece.triangles;
+
+			HDRenderPairWhole(entry.group, j, whole ? 1 : 0);
+		}
+	}
+
 	/* One room's art, in as many pieces as the window needs.
 	 *
 	 * A room with no intruding art, or one whose window is the whole screen,
 	 * is one draw with the scissor test off - every room but a handful.
 	 *
 	 * A room that has intruding art is drawn twice: everything of it over the
-	 * whole screen first, then the triangles that stand inside another room
-	 * inside its own portal window. That second call is the only place in the
-	 * game the scissor test is ever on, and it covers a few dozen triangles
-	 * per level - see BuildRoomIntrusions. Everything else, the overhang
-	 * included, is drawn whole, which is what the classic path does with a
-	 * polygon that straddles the window's rim. */
+	 * whole screen first, the pieces of its intruding art DecidePairs answered
+	 * whole among it, then the rest of the triangles that stand inside
+	 * another room inside its own portal window. That second call is the only
+	 * place in the game the scissor test is ever on - see
+	 * BuildRoomIntrusions. Everything else, the overhang included, is drawn
+	 * whole, which is what the classic path does with a polygon that
+	 * straddles the window's rim. */
 	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
 	{
 		if (!entry.windowed || entry.full || !HDRenderScissorAvailable())
@@ -569,8 +744,7 @@ namespace
 		}
 
 		if (gLogEnabled)
-			g_clip_windowed_tris +=
-				HDRenderGroupIntrudingTriangles(entry.group);
+			g_clip_windowed_tris += entry.scissoredTris;
 	}
 
 	/* What the glow phase needs again. The solid phase fills these and
@@ -1883,25 +2057,29 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
  * scissored rectangles meeting along the courtyard's room boundary cut a
  * black band across the picture, through the palm's trunk and the lintels.
  *
- * So the rule is about triangles:
+ * So the rule is about triangles, and about the frame:
  *
- *   a triangle of room b is windowed when its centroid stands inside the
- *   inside of some other room a - and nothing else in the game ever is.
+ *   a triangle of room b stands inside room a when its centroid lies in a's
+ *   inside; such a pair's triangles are drawn inside b's portal window on a
+ *   frame the classic path would not draw b's faces there - and nothing
+ *   else in the game ever is.
  *
  * The holder gets no window (none of its art is out of place). The intruder
- * gets one only for the triangles really standing in the other room; the
- * rest of its art, overhang included, draws over the whole screen.
+ * gets one only for the triangles really standing in the other room, and
+ * only when the classic path says so; the rest of its art, overhang
+ * included, draws over the whole screen.
  *
  * What counts as "inside room a", every part measured:
  *
  *   - the box is TR5's own (game\draw.cpp, the lines that ask whether an
  *     item fits wholly inside its room): x from r->x + 1024 over y_size
  *     sectors, z from r->z + 1024 over x_size, y from maxceiling to minfloor.
- *   - and one sector further in. A room's border ring is one sector thick,
- *     so two rooms that merely share a wall reach into each other by
- *     construction - ANDREA1's 57 and 197 at the Piazza corner do that with
- *     60 cells of wall art. With the wall's own sector counted ANDREA1 has 78
- *     overlapping pairs, without it one.
+ *     That counts the wall sector two rooms share: ANDREA1 has 158 pairs
+ *     with it and 7 with one more sector taken off. A box one sector smaller
+ *     misses room 93's brick hull standing in room 101's second sector ring,
+ *     which then shows on 101's facade from the cafe awning in room 64; it
+ *     also leaves JOBY2's rooms 30 (8 x 4 sectors) and 33 (4 x 3) no inside
+ *     at all, and the marble of rooms 24 and 60 standing in them unasked.
  *   - not a neighbour. A room seen through a doorway reaches into the room
  *     it opens on, and that art is seen through the opening it belongs to.
  *     The portal list and the floor data's vertical links say who is next
@@ -1910,17 +2088,38 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
  *   - and the centroid, not a 256-unit occupancy cell. A cell test depends
  *     on whether a cell that merely touches the box counts (`p + 255 < mins`
  *     is the reject in HDRenderGroupCellsIn) or only one whose corner lies
- *     inside - in ANDREA1's air shaft 91 cells against 45 and four pairs
- *     against one. A centroid is a point; engine and TrgProbe agree on it
- *     exactly.
+ *     inside, and the two give different lists. A centroid is a point;
+ *     engine and TrgProbe agree on it exactly.
  *
- * No count threshold: the answer is per triangle, so a stray triangle costs
- * only itself and cannot scissor a facade.
+ * What decides per frame. The box alone cannot tell a shared wall from a room
+ * standing inside another - from room 64 room 101's facade stands inside
+ * room 93 and has to be drawn whole, from inside room 93 the same facade has
+ * to go. The classic path tells them apart: it draws a face of room b whole
+ * unless all its corners lie beyond one edge of b's window. So each
+ * intruding triangle belongs to the classic face of b it stands on (see
+ * HDPairFace in hd_render.h; BuildPairFaces hands the faces over), and
+ * DecidePairs draws a pair's claimed triangles whole on a frame the classic
+ * path draws any of the pair's claiming faces, and inside b's window
+ * otherwise; the triangles no face claims stay in the window. A pair whose
+ * holder is not on the frame's list is not asked: ANDREA1's pier at the
+ * Piazza corner (room 2's art, 364 triangles inside room 197, which no view
+ * from room 57 lists) cut to room 2's window would bring back the strip of
+ * sky. In ANDREA2's courtyard room 134 holds 108 triangles of room 143 and
+ * room 203 holds 108 of room 248, all of them claimed; the four views from
+ * room 134 are the pictures they were.
+ *
+ * ANDREA1 comes to 27,738 intruding triangles in 91 groups, 15,993 of them
+ * claimed by 558 classic faces and 11,745 by none; the air shaft is 411 of
+ * room 53's triangles inside room 207, all claimed by 27 faces.
+ *
+ * No count threshold: the answer is per triangle and per frame, so a stray
+ * triangle costs only itself and cannot scissor a facade.
  *
  * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the
- * classic level - room boxes, portals, floor links - so TrgProbe -roomspace
- * answers with the very same list out of the .TRC and the .TRG. */
+ * classic level - room boxes, portals, floor links, the roomlets' faces - so
+ * TrgProbe -roomspace answers with the very same list out of the .TRC and
+ * the .TRG. */
 static std::vector<HDIntrusion> g_intrusions;
 
 static void BuildRoomIntrusions()
@@ -1999,9 +2198,10 @@ static void BuildRoomIntrusions()
 				room[b].minfloor <= ra->maxceiling)
 				continue;
 
-			/* a's inside, one sector in from its border ring, put into b's
-			 * frame - the .TRG's vertices are room local and the two rooms
-			 * have different origins. y is world units in both.
+			/* a's inside - TR5's own, the box BuildRoomBoxes hands the
+			 * renderer for a itself - put into b's frame: the .TRG's
+			 * vertices are room local and the two rooms have different
+			 * origins. y is world units in both.
 			 *
 			 * Group b is room b: this runs at level build, before any flip
 			 * has swapped a pair of ROOM_INFO records, as in
@@ -2010,14 +2210,14 @@ static void BuildRoomIntrusions()
 
 			box.group = b;
 			box.holder = a;
-			box.mins[0] = (float)(ra->x + 2048 - room[b].x);
-			box.maxs[0] = (float)(ra->x + ((ra->y_size - 2) << 10) - room[b].x);
+			box.mins[0] = (float)(ra->x + 1024 - room[b].x);
+			box.maxs[0] = (float)(ra->x + ((ra->y_size - 1) << 10) - room[b].x);
 			box.mins[1] = (float)(ra->maxceiling - room[b].y);
 			box.maxs[1] = (float)(ra->minfloor - room[b].y);
-			box.mins[2] = (float)(ra->z + 2048 - room[b].z);
-			box.maxs[2] = (float)(ra->z + ((ra->x_size - 2) << 10) - room[b].z);
+			box.mins[2] = (float)(ra->z + 1024 - room[b].z);
+			box.maxs[2] = (float)(ra->z + ((ra->x_size - 1) << 10) - room[b].z);
 
-			// A room too small to have an inside past its own wall ring.
+			// A room of two sectors or fewer on a side is all wall ring.
 			if (box.maxs[0] <= box.mins[0] || box.maxs[2] <= box.mins[2])
 				continue;
 
@@ -2029,6 +2229,116 @@ static void BuildRoomIntrusions()
 		HDRenderSetIntrusions(&g_intrusions[0], (int)g_intrusions.size());
 	else
 		HDRenderSetIntrusions(0, 0);
+}
+
+/* The classic faces the intruding art is held against.
+ *
+ * Every drawn face of every room that is the intruder of some entry - the
+ * quads and the triangles of its roomlets, as InsertRoomlet hands them to
+ * specific\polyinsert.cpp - in the room's own frame, which is the group's.
+ * A face that stands further than HD_PAIR_FACE_REACH from every one of the
+ * room's entry boxes cannot claim a triangle inside them and is left out;
+ * the rest keep the roomlets' order, so that the nearest face is the same one
+ * whatever was left out.
+ *
+ * Kept for the level (g_pair_faces), because HDFrameRoom asks the corner
+ * rule of them every frame; the renderer borrows the list for the build. */
+static void BuildPairFaces()
+{
+	g_pair_faces.clear();
+	g_face_alive.clear();
+
+	std::vector<unsigned char> intruder((size_t)number_rooms, 0);
+
+	for (size_t k = 0; k < g_intrusions.size(); k++)
+		if (g_intrusions[k].group >= 0 && g_intrusions[k].group < number_rooms)
+			intruder[(size_t)g_intrusions[k].group] = 1;
+
+	for (int b = 0; b < number_rooms; b++)
+	{
+		const ROOM_INFO* r = &room[b];
+
+		if (!intruder[(size_t)b] || !r->pRoomlets)
+			continue;
+
+		for (int i = 0; i < r->nRoomlets; i++)
+		{
+			const ROOMLET* roomlet = &r->pRoomlets[i];
+			const ROOMLET_VERTEX* vtx = (const ROOMLET_VERTEX*)roomlet->pSVtx;
+			const short* ptr = roomlet->pFac;
+
+			if (!vtx || !ptr || roomlet->nVtx <= 0)
+				continue;
+
+			for (int q = 0; q < roomlet->nQuad + roomlet->nTri; q++)
+			{
+				const int corners = q < roomlet->nQuad ? 4 : 3;
+				HDPairFace face;
+				bool good = true;
+				float lo[3], hi[3];
+
+				face.group = b;
+				face.corners = corners;
+
+				for (int c = 0; c < 4; c++)
+				{
+					const int at = c < corners ? ptr[c] : ptr[0];
+
+					if (at < 0 || at >= roomlet->nVtx)
+						good = false;
+
+					const ROOMLET_VERTEX& v = vtx[good ? at : 0];
+
+					face.v[c][0] = v.x;
+					face.v[c][1] = v.y;
+					face.v[c][2] = v.z;
+				}
+
+				ptr += corners + 2;
+
+				if (!good)
+					continue;
+
+				for (int axis = 0; axis < 3; axis++)
+				{
+					lo[axis] = hi[axis] = face.v[0][axis];
+
+					for (int c = 1; c < corners; c++)
+					{
+						if (face.v[c][axis] < lo[axis]) lo[axis] = face.v[c][axis];
+						if (face.v[c][axis] > hi[axis]) hi[axis] = face.v[c][axis];
+					}
+				}
+
+				bool near_box = false;
+
+				for (size_t k = 0; k < g_intrusions.size() && !near_box; k++)
+				{
+					const HDIntrusion& box = g_intrusions[k];
+
+					if (box.group != b)
+						continue;
+
+					near_box = true;
+
+					for (int axis = 0; axis < 3; axis++)
+						if (hi[axis] + (float)HD_PAIR_FACE_REACH < box.mins[axis] ||
+							lo[axis] - (float)HD_PAIR_FACE_REACH > box.maxs[axis])
+							near_box = false;
+				}
+
+				if (near_box)
+					g_pair_faces.push_back(face);
+			}
+		}
+	}
+
+	g_face_alive.assign(g_pair_faces.size(), 0);
+
+	if (!g_pair_faces.empty())
+		HDRenderSetPairFaces(&g_pair_faces[0], (int)g_pair_faces.size());
+	else
+		HDRenderSetPairFaces(0, 0);
 }
 
 /* What the build made of the intrusions. Run after HDRenderLevelBegin,
@@ -2047,6 +2357,56 @@ static void ReportRoomIntrusions()
 
 	memset(g_group_windowed, 0, sizeof(g_group_windowed));
 
+	/* The pieces the build split the intruding art into, copied out per
+	 * group in the renderer's own order, for DecidePairs and HDFrameRoom. */
+	g_pieces.clear();
+	memset(g_piece_first, 0, sizeof(g_piece_first));
+	memset(g_piece_count, 0, sizeof(g_piece_count));
+
+	for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
+	{
+		g_piece_first[g] = (int)g_pieces.size();
+
+		for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
+		{
+			HDPairRange piece;
+
+			if (HDRenderGroupPairRange(g, j, &piece))
+				g_pieces.push_back(piece);
+			else
+				break;
+		}
+
+		g_piece_count[g] = (int)g_pieces.size() - g_piece_first[g];
+	}
+
+	/* What the faces claimed, over the level: the distinct classic faces
+	 * that claimed any triangle, the triangles they claimed and the
+	 * intruding triangles none did. */
+	int faces = 0;
+	int bound = 0;
+	int unbound = 0;
+	std::vector<unsigned char> claimed(g_pair_faces.size(), 0);
+
+	for (size_t p = 0; p < g_pieces.size(); p++)
+	{
+		const HDPairRange& piece = g_pieces[p];
+
+		if (piece.face < 0 || (size_t)piece.face >= claimed.size())
+		{
+			unbound += piece.triangles;
+			continue;
+		}
+
+		bound += piece.triangles;
+
+		if (!claimed[(size_t)piece.face])
+		{
+			claimed[(size_t)piece.face] = 1;
+			faces++;
+		}
+	}
+
 	for (size_t i = 0; i < g_intrusions.size(); i++)
 	{
 		const int hits = HDRenderIntrusionHits((int)i);
@@ -2057,9 +2417,23 @@ static void ReportRoomIntrusions()
 		pairs++;
 
 		if (gLogEnabled)
+		{
+			// The faces of this pair and the triangles they claimed.
+			int pairFaces = 0;
+			int pairBound = 0;
+
+			for (size_t p = 0; p < g_pieces.size(); p++)
+				if (g_pieces[p].intrusion == (int)i && g_pieces[p].face >= 0)
+				{
+					pairFaces++;
+					pairBound += g_pieces[p].triangles;
+				}
+
 			Log("HDLOG overlap room=%d holds the art of room=%d - "
-				"%d triangles, no portal between them",
-				g_intrusions[i].holder, g_intrusions[i].group, hits);
+				"%d triangles, no portal between them faces=%d bound=%d",
+				g_intrusions[i].holder, g_intrusions[i].group, hits,
+				pairFaces, pairBound);
+		}
 	}
 
 	for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
@@ -2074,11 +2448,16 @@ static void ReportRoomIntrusions()
 		tris += here;
 	}
 
-	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups",
-		g_stem, pairs, tris, groups);
+	/* `holder=inside` names the box (TR5's own inside of the holder) and
+	 * `cull=opaque` the back-face rule (RangeCulls in hd_render.cpp), so a
+	 * log says which rule drew the picture it goes with. */
+	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups "
+		"holder=inside cull=opaque faces=%d bound=%d unbound=%d",
+		g_stem, pairs, tris, groups, faces, bound, unbound);
 
-	// The list was only borrowed for the length of the build.
+	// The lists were only borrowed for the length of the build.
 	HDRenderSetIntrusions(0, 0);
+	HDRenderSetPairFaces(0, 0);
 	g_intrusions.clear();
 }
 
@@ -2826,8 +3205,12 @@ static void HDLevelBuildHD()
 	g_clock = 0.0;
 	g_clock_started = false;
 	BuildWaterMarks();
+	// No pieces until ReportRoomIntrusions has this level's.
+	memset(g_piece_count, 0, sizeof(g_piece_count));
+	g_pieces.clear();
 	BuildRoomBoxes();		// before the build, like the marks
 	BuildRoomIntrusions();		// the same contract
+	BuildPairFaces();		// and its faces, the same contract
 	BuildRoomCuts();		// the same contract again
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms,
@@ -3593,6 +3976,27 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	 * two are different rooms' art. */
 	entry.windowed = group >= 0 && group < HD_MAX_ROOMS &&
 		g_group_windowed[group] != 0;
+	entry.scissoredTris = 0;
+
+	/* The corner rule for the classic faces this room's intruding art
+	 * belongs to, here and now: this is InsertRoom, where the classic path
+	 * transforms the roomlets it is skipping, with the same matrix, the same
+	 * projection and the same window. DecidePairs reads the answers. */
+	if (entry.windowed && !entry.full && !ClipEmpty(entry))
+	{
+		const int first = g_piece_first[group];
+		const int count = g_piece_count[group];
+
+		for (int j = 0; j < count; j++)
+		{
+			const int face = g_pieces[(size_t)(first + j)].face;
+
+			if (face >= 0 && (size_t)face < g_face_alive.size())
+				g_face_alive[(size_t)face] = ClassicFaceDrawn(
+					g_pair_faces[(size_t)face], entry.world,
+					left, top, right, bottom) ? 1 : 0;
+		}
+	}
 
 	return true;
 }
@@ -3784,10 +4188,16 @@ void HDFrameDraw()
 	g_clip_empty = 0;
 	g_clip_open = 0;
 	g_clip_windowed_tris = 0;
+	g_clip_pairs = 0;
+	g_clip_pairs_whole = 0;
+	g_clip_pairs_scissored = 0;
 	g_clip_items_spared = 0;	// counted by HDFrameScissorForRoom
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
+		// Whole or windowed, per piece - for this phase and the glow one.
+		DecidePairs(g_frame[i]);
+
 		const FrameRoom& entry = g_frame[i];
 		const bool empty = ClipEmpty(entry);
 
@@ -4015,11 +4425,16 @@ void HDFrameDrawGlow()
 			else
 				std::sprintf(viewsObj, "%ld..%ld SPLIT", ob_lo, ob_hi);
 
+			/* `pairs` `whole` `scissored` at the end are the pieces of
+			 * intruding art DecidePairs asked about, and its two answers -
+			 * the second `scissored` counts pieces, the first rooms. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
-				"windowed_tris=%d items_spared=%d view=%s view_obj=%s",
+				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
+				"pairs=%d whole=%d scissored=%d",
 				g_frame_count, g_clip_open, g_clip_full, g_clip_scissored,
 				g_clip_empty, g_clip_windowed_tris, g_clip_items_spared,
-				views, viewsObj);
+				views, viewsObj, g_clip_pairs, g_clip_pairs_whole,
+				g_clip_pairs_scissored);
 		}
 	}
 

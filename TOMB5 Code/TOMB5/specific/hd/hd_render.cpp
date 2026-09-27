@@ -240,13 +240,14 @@ namespace
 	 *                integer layer number (0, 12, 26, 32, 38, 45, 50, 61,
 	 *                102, 139), so p1 in [0.108, 1.0] is the only float
 	 *                left - and it never leaves 0..1.
-	 *   material 15  no weight at all: p0 is a phase, p1 a page count (14,
-	 *                29 or 30), p2 the seconds a page stands and p3 zero in
-	 *                every tuple - a book of pages (MaterialBookTime), whose
-	 *                strength comes from BookGain.
-	 *   material 16  p2 in [0.035, 0.2], the same range as material 15's
-	 *                page time, on the same slot; p0 and p1 pair up with
-	 *                the page.
+	 *   material 15  p0 is a phase, p1 a page count (14, 29 or 30) and p3
+	 *                zero in every tuple - a book of pages
+	 *                (MaterialBookTime) - and p2 the seconds a page stands,
+	 *                0.025 to 0.1 on the additive books. The file carries no
+	 *                weight for a book, so p2 doubles as it (see the switch
+	 *                in MaterialAddWeight).
+	 *   material 16  p2 in [0.035, 0.2], the same shape as material 15's,
+	 *                on the same slot; p0 and p1 pair up with the page.
 	 *
 	 * Where the file gives no usable number, the preset answers. Four
 	 * material 2 tuples carry a weight outside (0, 1); taken as full
@@ -293,16 +294,10 @@ namespace
 	 * so that "no number" never means "full white" in a level this table has
 	 * not seen.
 	 *
-	 * Material 14 needs none of this: its only tuples outside the range are
-	 * exactly 1.0 (RICH1 and RICH3, 2,304 triangles) beside weights that run
-	 * to 0.8182 - the top of a range and not a missing number - so they keep
-	 * the 1 the guard gives them.
-	 *
-	 * Material 15 carries no weight in the file, so it follows the rule the
-	 * material 2 gains follow instead: 1 unless the book's brightest page in
-	 * its brightest view adds more to the picture than the church mist's
-	 * ceiling, and then the gain that meets that ceiling - BookGain, per
-	 * book.
+	 * Materials 14 and 15 need none of this. 15 has no tuple outside its
+	 * range at all, and 14's only ones are exactly 1.0 (RICH1 and RICH3,
+	 * 2,304 triangles) beside weights that run to 0.8182 - the top of a range
+	 * and not a missing number - so they keep the 1 the guard gives them.
 	 *
 	 * Everything else - materials 0, 1, 6, 7, 8, 13, 16 and the destructible
 	 * statics' high-bit numbers - has no slot that behaves like a weight and
@@ -372,13 +367,7 @@ namespace
 		return opacity;
 	}
 
-	inline float BookGain(int page0);	// beside GlowGain, below
-
-	/* `bookPage0` is the first page of a material 15 part's book (see
-	 * MaterialBookTime), the key BookGain answers by, and -1 for every
-	 * other part. */
-	inline float MaterialAddWeight(const trf::remaster::TrgPart& part,
-		int bookPage0)
+	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
 	{
 		float weight;
 
@@ -416,13 +405,13 @@ namespace
 					return kDim[i].weight;
 
 		/* Material 16 is not a weight even though its param[2] lives in the
-		 * same range as material 15's page time (0.035 to 0.2): it is the
-		 * remaster's still water surface (TrgProbe -matparts 16) - 28 parts
-		 * in six levels, 17 of them a double sheet two units apart with
-		 * opposite normals, every one sitting 1 to 20 units off the classic
-		 * minfloor of a ROOM_REFLECT room, its parameters scaling with the
-		 * area of the body of water. It falls through to 1.0 like every
-		 * other material; MaterialRipple reads its three numbers. */
+		 * same range as material 15's (0.035 to 0.2): it is the remaster's
+		 * still water surface (TrgProbe -matparts 16) - 28 parts in six
+		 * levels, 17 of them a double sheet two units apart with opposite
+		 * normals, every one sitting 1 to 20 units off the classic minfloor
+		 * of a ROOM_REFLECT room, its parameters scaling with the area of the
+		 * body of water. It falls through to 1.0 like every other material;
+		 * MaterialRipple reads its three numbers. */
 		switch (part.material)
 		{
 		case HD_TRG_MATERIAL_GLOW:
@@ -430,12 +419,12 @@ namespace
 			weight = part.param[1];
 			break;
 
-		/* A book's weight is not in the file - its param[2] is the time a
-		 * page stands - and comes out of BookGain's table by the book's
-		 * first page: 1, or the gain that holds the book to the church
-		 * mist's ceiling. */
+		/* A book's param[2] is its page time, the seconds a page stands
+		 * (MaterialBookTime), and doubles as its additive weight: the file
+		 * carries no weight for a book, and no reference exists to measure
+		 * one against. */
 		case HD_TRG_MATERIAL_BOOK:
-			weight = BookGain(bookPage0);
+			weight = part.param[2];
 			break;
 
 		default:
@@ -571,59 +560,6 @@ namespace
 		for (int i = 0; i < (int)(sizeof(kGains) / sizeof(kGains[0])); i++)
 			if (part.param[0] == kGains[i].p[0] && part.param[1] == kGains[i].p[1] &&
 				part.param[2] == kGains[i].p[2] && part.param[3] == kGains[i].p[3])
-				return kGains[i].gain;
-
-		return 1.0f;
-	}
-
-	/* HDRenderBookGainOverride: up to four (first page, weight) pairs the
-	 * diagnostic tool puts in front of the table below, so that a gain can
-	 * be tried by drawing before it is written down. Empty in the engine. */
-	int g_book_gain_page[4] = { -1, -1, -1, -1 };
-	float g_book_gain_value[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-	/* The weight of an additive material 15 book, by its first page, and 1
-	 * for a book the table does not name.
-	 *
-	 * The file gives a book no weight (MaterialAddWeight above), so it is
-	 * held to the rule of GlowGain: weight 1, unless the book's brightest
-	 * page in its brightest view adds more to the picture than the church
-	 * mist of ANDY2 room 6 - 8 of 255 at the 95th percentile of the share
-	 * of the frame - and then the gain that brings it down to 8. The share
-	 * is measured as it is for the glows: the frame with material 15 drawn
-	 * against the frame with no additive material at all, in luma, over the
-	 * pixels the book's own additive picture lights above 2 of 255
-	 * (RoomProbe -glow -addmat 15 against -addmat 99, -bookpage 0 to N - 1
-	 * for the brightest page). The views are fixed ones at the largest
-	 * book part of every level that holds the book. The gains are found by
-	 * drawing and not by division: a frame is 8 bits and not linear, so a
-	 * later retune is drawn again rather than divided.
-	 *
-	 * Both books of the game are over the ceiling at weight 1:
-	 *
-	 *   2101  flames, smoke, gas and candle flames and the X-ray scanner's
-	 *         figure, 8 levels. At weight 1 the brightest is JOBY5 room
-	 *         117's fire at 253.9 (page 20 of 30, clipped); a first gain
-	 *         of 8 / 253.9 left JOBY5 room 184's fire at 35.7, and 0.00705
-	 *         puts the brightest view - room 184 and room 117, page 12 -
-	 *         at 7.85.
-	 *   3273  rain rings spreading on wet ground, ANDY1 to ANDY3. At
-	 *         weight 1 ANDY2 room 165 reads 35.4 (page 3 of 14); 0.2263
-	 *         puts it at 7.93. */
-	inline float BookGain(int page0)
-	{
-		for (int i = 0; i < 4; i++)
-			if (g_book_gain_page[i] >= 0 && g_book_gain_page[i] == page0)
-				return g_book_gain_value[i];
-
-		static const struct { int page0; float gain; } kGains[] =
-		{
-			{ 2101, 0.00705f },		// JOBY5 rooms 184 and 117
-			{ 3273, 0.2263f },		// ANDY2 room 165
-		};
-
-		for (int i = 0; i < (int)(sizeof(kGains) / sizeof(kGains[0])); i++)
-			if (page0 == kGains[i].page0)
 				return kGains[i].gain;
 
 		return 1.0f;
@@ -2776,25 +2712,6 @@ void HDRenderBookPageOverride(int page)
 	g_book_page = page >= 0 ? page : -1;
 }
 
-void HDRenderBookGainOverride(int page0, float gain)
-{
-	if (page0 < 0)
-	{
-		for (int i = 0; i < 4; i++)
-			g_book_gain_page[i] = -1;
-
-		return;
-	}
-
-	for (int i = 0; i < 4; i++)
-		if (g_book_gain_page[i] == page0 || g_book_gain_page[i] < 0)
-		{
-			g_book_gain_page[i] = page0;
-			g_book_gain_value[i] = gain;
-			return;
-		}
-}
-
 void HDRenderShutdown()
 {
 	release_buffers();
@@ -3710,8 +3627,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				/* The weight and the swing belong to the additive pass
 				 * and to nothing else - the same part's opaque and alpha
 				 * runs are a surface and keep their picture to the bit. */
-				const float aweight = pass == 2
-					? MaterialAddWeight(part, book_page0) : 1.0f;
+				const float aweight = pass == 2 ? MaterialAddWeight(part) : 1.0f;
 				const float aperiod = pass == 2 ? MaterialAddPeriod(part) : 0.0f;
 
 				if (pass == 0 && aref != 0.0f)

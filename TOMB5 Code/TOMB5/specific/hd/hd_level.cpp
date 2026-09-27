@@ -3348,9 +3348,8 @@ static void HDLevelBuildHD()
 	// calls a cut-out sheet is really used as one.
 	// add_weighted / add_min / add_swinging is the additive
 	// side of the same thing: how many parts the .TRG's own material
-	// parameters dimmed - or, for a material 15 book, BookGain's table -
-	// how far the smallest of them was dimmed, and how many of them also
-	// swing on the clock.
+	// parameters dimmed, how far the smallest of them was dimmed, and how
+	// many of them also swing on the clock.
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
 		"flipbook_parts=%d flipbook_pages=%d flipbook_dropped=%d "
@@ -3389,36 +3388,6 @@ static void HDLevelBuildHD()
 				book.part, book.page0, book.pageLast, book.pages, book.step,
 				book.phase, book.pass, book.weight, book.dropped);
 		}
-
-	/* And once per additive book, by its first page, the weight BookGain's
-	 * table gave it (hd_render.cpp) - five digits, because the fire's is
-	 * under a hundredth. */
-	if (gLogEnabled)
-	{
-		std::vector<int> seen;
-
-		for (int i = 0; i < HDRenderBookPartCount(); i++)
-		{
-			HDRenderBookPart book;
-
-			if (!HDRenderBookPartInfo(i, &book) || book.pass != 2 ||
-				book.dropped)
-				continue;
-
-			bool logged = false;
-
-			for (size_t j = 0; j < seen.size(); j++)
-				if (seen[j] == book.page0)
-					logged = true;
-
-			if (logged)
-				continue;
-
-			seen.push_back(book.page0);
-			Log("HDLOG book gain page=%d weight=%.5f", book.page0,
-				book.weight);
-		}
-	}
 
 	/* The still water surfaces the .TRG builds itself - material 16.
 	 * Counted per part/pass block, which is how TrgProbe -matparts counts

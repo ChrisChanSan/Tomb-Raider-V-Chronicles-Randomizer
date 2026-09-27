@@ -655,15 +655,6 @@ bool HDRenderBookWatch(int* group, int* part, int* page);
  * never calls it and there is no option and no registry key for it. */
 void HDRenderBookPageOverride(int page);
 
-/* The diagnostic tool's -bookgain: the additive book that begins at page
- * `page0` is drawn with weight `gain` instead of the one BookGain's table
- * gives it (hd_render.cpp) - a gain tried by drawing before it is written
- * down. Up to four books; a negative page0 clears them all. Takes effect at
- * the next HDRenderLevelBegin, because the weight is part of a draw call's
- * sort key. The engine never calls it and there is no option and no
- * registry key for it. */
-void HDRenderBookGainOverride(int page0, float gain);
-
 void HDRenderShutdown();
 bool HDRenderReady();
 

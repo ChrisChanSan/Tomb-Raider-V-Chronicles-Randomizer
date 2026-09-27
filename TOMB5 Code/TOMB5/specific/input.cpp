@@ -601,16 +601,20 @@ static_assert(kModernRow[5] == DIK_LSHIFT, "modern row: dash is left shift");
 static_assert(kModernRow[6] == DIK_LMENU, "modern row: walk is left alt");
 static_assert(kModernRow[7] == DIK_SPACE, "modern row: jump is space");
 static_assert(kModernRow[8] == DIK_E, "modern row: action is E");
-static_assert(kModernRow[9] == DIK_Q, "modern row: draw is Q");
+static_assert(kModernRow[9] == KEY_MOUSE_RIGHT, "modern row: draw is the right mouse button");
 static_assert(kModernRow[10] == DIK_F, "modern row: flare is F");
-static_assert(kModernRow[11] == DIK_R, "modern row: look is R");
+static_assert(kModernRow[11] == KEY_MOUSE_MIDDLE, "modern row: look is the middle mouse button");
 static_assert(kModernRow[12] == DIK_LCONTROL, "modern row: roll is left ctrl");
 static_assert(kModernRow[13] == DIK_ESCAPE, "modern row: inventory is escape");
 static_assert(kModernRow[14] == DIK_Z, "modern row: step left is Z");
 static_assert(kModernRow[15] == DIK_X, "modern row: step right is X");
 static_assert(kModernRow[16] == DIK_P, "modern row: pause is P");
 static_assert(kModernRow[17] == DIK_RETURN, "modern row: select is return");
-static_assert(kModernRow[18] == DIK_NUMPAD0, "modern row: secondary action is numpad 0");
+static_assert(kModernRow[18] == KEY_MOUSE_LEFT, "modern row: secondary action is the left mouse button");
+/* The mouse's codes lie above every index keymap has, so no scan code can be
+ * mistaken for a button and no button is ever looked up in keymap. */
+static_assert(KEY_MOUSE_FIRST >= sizeof(keymap), "the mouse codes start above keymap");
+static_assert(KEY_MOUSE_FIRST + KEY_MOUSE_BUTTONS - 1 <= 0x7FFF, "a mouse code fits the short a bind slot is");
 /* The fifteen hotkey slots. Each default is the fixed key Core reads for that
  * function, so with an untouched registry Key(role) - whose first test is
  * keymap[layout[1][role]] - reads the same key as Core did; quick load is the
@@ -737,6 +741,13 @@ static long joy_x, joy_y;
  * order of KEY_MOUSE_* (game\key_scheme.h): down now, or pressed and let go
  * since the last call (WinMouseTake, specific\winmain.cpp). */
 static long mouse_buttons;
+
+// The same mask for the Key bindings page, which captures a button the way it
+// captures a key (game\menu_frame.cpp).
+long InputMouseButtons()
+{
+	return mouse_buttons;
+}
 
 /* The look key, as the Modern scheme remembers it. While the stick steers Lara
  * as in Tank the look bit is taken out of the input word - the engine must not
@@ -1072,7 +1083,11 @@ long Key(long number)
 
 	short key = layout[1][number];
 
-	if (keymap[key])
+	/* A mouse button's code is read from the mouse's mask, a key's from
+	 * keymap; a code above 0xFF that is no button (a hand-edited registry)
+	 * answers 0 instead of reading past keymap's end. The switch below has no
+	 * case a mouse code could match, so a button falls through it untouched. */
+	if (key >= KEY_MOUSE_FIRST ? (mouse_buttons & KeySchemeMouseBit(key)) != 0 : keymap[key] != 0)
 		return 1;
 
 	switch (key)
@@ -1095,9 +1110,10 @@ long Key(long number)
 		return 0;
 
 	// The active scheme's default row, which at Tank is layout[0] (KeyDefaultRow).
+	// Under Modern three of its slots are mouse buttons, read the same way.
 	key = KeyDefaultRow()[number];
 
-	if (keymap[key])
+	if (key >= KEY_MOUSE_FIRST ? (mouse_buttons & KeySchemeMouseBit(key)) != 0 : keymap[key] != 0)
 		return 1;
 
 	switch (key)

@@ -465,7 +465,14 @@ bool LoadSettings()
 	 *
 	 * A loop and not unrolled lines like the block above: the names are
 	 * new, so there is no Core original to keep the shape of, and one loop
-	 * is one place for a typo instead of nineteen. */
+	 * is one place for a typo instead of nineteen.
+	 *
+	 * A mouse button is stored as its code, 0x100..0x104 (game/key_scheme.h),
+	 * in the same long as a scan code, in both sets. A registry that already
+	 * holds MKey9, MKey11 and MKey18 keeps the player's keys there; the Modern
+	 * row's buttons for those three roles still answer beside them, as every
+	 * default key does that no binding has claimed (Key(),
+	 * specific/input.cpp). */
 	{
 		short* mset = KeySchemeSet(1);
 

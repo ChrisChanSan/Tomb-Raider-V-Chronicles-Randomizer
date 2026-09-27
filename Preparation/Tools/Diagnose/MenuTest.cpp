@@ -408,7 +408,7 @@ static void key_secondary_slot()
 {
 	check(KEY_SCHEME_ROLES, 34, "thirty-four roles since the hotkeys");
 	check(KEY_ROLE_SECOND, 18, "the Secondary role is still slot 18");
-	check(kModern[KEY_ROLE_SECOND], 0x52, "the Modern row's Secondary key is numpad 0");
+	check(kModern[KEY_ROLE_SECOND], KEY_MOUSE_LEFT, "the Modern row's Secondary key is the left mouse button");
 
 	// Disjoint is what kOther is for, and every new slot is one more chance to
 	// break it by accident.
@@ -642,6 +642,116 @@ static void key_conflicts_cheats_inert()
 		KeySchemeConflicts(active, kModern, other, 1, 0);
 		check((int)other[i], cheat ? 0 : (int)got[i], "at the defaults only the five inert slots themselves differ");
 	}
+}
+
+/* The mouse's five buttons are key codes above every scan code. What has to
+ * hold: the codes are the five numbers the engine's mask is built on, the
+ * predicate and the bit agree with them, the names are the page's, the Modern
+ * row carries the three buttons of the Remaster's own keyboard page and stays
+ * sound, and the conflict rule treats a button exactly as a key. */
+static void key_mouse()
+{
+	long got[KEY_SCHEME_ROLES];
+	short active[KEY_SCHEME_ROLES];
+	const char* const english[KEY_MOUSE_BUTTONS] = { "Mouse L", "Mouse R", "Mouse M", "Mouse 4", "Mouse 5" };
+	const char* const german[KEY_MOUSE_BUTTONS] = { "Maus L", "Maus R", "Maus M", "Maus 4", "Maus 5" };
+	int i, n, r;
+
+	check(KEY_MOUSE_FIRST, 0x100, "mouse: the first button code is 0x100, one above every scan code");
+	check(KEY_MOUSE_LEFT, KEY_MOUSE_FIRST + 0, "mouse: left is button 0, Raw Input's first");
+	check(KEY_MOUSE_RIGHT, KEY_MOUSE_FIRST + 1, "mouse: right is button 1");
+	check(KEY_MOUSE_MIDDLE, KEY_MOUSE_FIRST + 2, "mouse: middle is button 2");
+	check(KEY_MOUSE_X1, KEY_MOUSE_FIRST + 3, "mouse: X1 is button 3");
+	check(KEY_MOUSE_X2, KEY_MOUSE_FIRST + 4, "mouse: X2 is button 4");
+	check(KEY_MOUSE_BUTTONS, 5, "mouse: five buttons");
+
+	// The predicate over the whole short range a bind slot can hold.
+	{
+		int wrong_is = 0;
+		int wrong_bit = 0;
+
+		for (n = -32768; n <= 32767; n++)
+		{
+			const int want = (n >= 0x100 && n <= 0x104) ? 1 : 0;
+
+			if (KeySchemeIsMouse(n) != want)
+				wrong_is++;
+
+			if (!want && KeySchemeMouseBit(n) != 0)
+				wrong_bit++;
+		}
+
+		check(wrong_is, 0, "mouse: of all 65536 shorts only 0x100..0x104 are buttons");
+		check(wrong_bit, 0, "mouse: and a code that is no button has no bit");
+	}
+
+	check(KeySchemeIsMouse(0xFF), 0, "mouse: the last scan code is a key");
+	check(KeySchemeIsMouse(0x105), 0, "mouse: the code past X2 is nothing");
+
+	for (n = 0; n < KEY_MOUSE_BUTTONS; n++)
+	{
+		check((int)KeySchemeMouseBit(KEY_MOUSE_FIRST + n), 1 << n, "mouse: button n is bit n of the mask");
+		check(strcmp(KeySchemeMouseName(KEY_MOUSE_FIRST + n, 0), english[n]), 0,
+			"mouse: the button's name on every page but the German one");
+		check(strcmp(KeySchemeMouseName(KEY_MOUSE_FIRST + n, 1), german[n]), 0,
+			"mouse: and on the German page");
+		check((int)strlen(KeySchemeMouseName(KEY_MOUSE_FIRST + n, 0)) <= 7, 1,
+			"mouse: no name is longer than the seven letters of Mouse L");
+	}
+
+	check(KeySchemeMouseName(0x52, 0) == 0, 1, "mouse: a key has no button name");
+
+	// The Modern row: the Remaster's own three buttons, nothing else moved.
+	check(kModern[9], KEY_MOUSE_RIGHT, "mouse: the Modern row draws on the right button");
+	check(kModern[11], KEY_MOUSE_MIDDLE, "mouse: looks on the middle button");
+	check(kModern[KEY_ROLE_SECOND], KEY_MOUSE_LEFT, "mouse: and takes the secondary action on the left one");
+	check(KeySchemeRowSound(kModern), 1, "mouse: the Modern row with three buttons is sound");
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+	{
+		const int button = (i == 9 || i == 11 || i == KEY_ROLE_SECOND);
+
+		check(KeySchemeIsMouse(kModern[i]), button, "mouse: exactly the three slots hold a button");
+
+		// Q, R and Numpad 0 have left the row altogether.
+		check(kModern[i] != 0x10 && kModern[i] != 0x13 && kModern[i] != 0x52, 1,
+			"mouse: Q, R and Numpad 0 are gone from the Modern row");
+	}
+
+	// The conflict rule, with a button claiming: a role bound to another
+	// role's default button silences that role's fallback and no other.
+	for (r = 0; r < KEY_SCHEME_ROLES; r++)
+	{
+		if (!KeySchemeIsMouse(kModern[r]))
+			continue;
+
+		memcpy(active, kOther, sizeof(active));
+		active[0] = kModern[r];
+		KeySchemeConflicts(active, kModern, got, 1, 1);
+
+		for (i = 0; i < KEY_SCHEME_ROLES; i++)
+			check((int)got[i], i == r ? 1 : 0, "mouse: a button bound elsewhere claims exactly its own default");
+	}
+
+	// And a button that is no default claims nothing.
+	memcpy(active, kOther, sizeof(active));
+	active[0] = KEY_MOUSE_X2;
+	KeySchemeConflicts(active, kModern, got, 1, 1);
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+		check((int)got[i], 0, "mouse: X2, on no default, claims nothing");
+
+	// The untouched Modern set claims its own buttons, as it claims its keys.
+	KeySchemeConflicts(kModern, kModern, got, 1, 1);
+	check((int)got[9] + (int)got[11] + (int)got[KEY_ROLE_SECOND], 3,
+		"mouse: an untouched set claims its own buttons");
+
+	// With "One key" the inert Secondary slot's left button claims nothing:
+	// the left button is on no other slot, so nothing changes at the defaults.
+	KeySchemeConflicts(kModern, kModern, got, 0, 1);
+
+	for (i = 0; i < KEY_SCHEME_ROLES; i++)
+		check((int)got[i], i == KEY_ROLE_SECOND ? 0 : 1, "mouse: at One key only the Secondary slot itself goes free");
 }
 
 static void key_seat()
@@ -982,6 +1092,7 @@ int main()
 	key_conflicts();
 	key_conflicts_inert();
 	key_conflicts_cheats_inert();
+	key_mouse();
 	key_seat();
 	pad_seat();
 	pad_role_slots();

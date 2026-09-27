@@ -72,6 +72,50 @@
 #define KEY_ROLE_CHEAT_HEAL	32
 #define KEY_ROLE_CHEAT_SKIP	33
 
+/* The mouse's five buttons as key codes. A key code is a DIK_ scan code,
+ * 0x01..0xFF, and indexes keymap[256]; the buttons sit just above that range,
+ * 0x100 + n, so they can live in the same bind slots, the same registry values
+ * and the same conflict table as any key without a second field anywhere.
+ * n is the button's Raw Input number - left, right, middle, X1, X2 - which is
+ * also the bit specific\winmain.cpp gives it in the mouse's button mask.
+ *
+ * Key() (specific\input.cpp) reads the mask for a code at or above
+ * KEY_MOUSE_FIRST and keymap below it, and specific\input.cpp asserts that
+ * no DIK_ code reaches the range. */
+#define KEY_MOUSE_FIRST		0x100
+#define KEY_MOUSE_LEFT		0x100
+#define KEY_MOUSE_RIGHT		0x101
+#define KEY_MOUSE_MIDDLE	0x102
+#define KEY_MOUSE_X1		0x103
+#define KEY_MOUSE_X2		0x104
+#define KEY_MOUSE_BUTTONS	5
+
+inline int KeySchemeIsMouse(long code)
+{
+	return (code >= KEY_MOUSE_FIRST && code < KEY_MOUSE_FIRST + KEY_MOUSE_BUTTONS) ? 1 : 0;
+}
+
+// The button's bit in the mouse's mask, or 0 for anything that is not a button.
+inline long KeySchemeMouseBit(long code)
+{
+	return KeySchemeIsMouse(code) ? (1L << (code - KEY_MOUSE_FIRST)) : 0;
+}
+
+/* The button's name on the Key bindings page. The key-name tables in
+ * specific\input.cpp are one German table and one for every other language,
+ * so the buttons have the same two columns. The names are as short as the
+ * keys' own ("Pad0", "Leert.") so the value column never runs out. */
+inline const char* KeySchemeMouseName(long code, int german)
+{
+	static const char* const english[KEY_MOUSE_BUTTONS] = { "Mouse L", "Mouse R", "Mouse M", "Mouse 4", "Mouse 5" };
+	static const char* const deutsch[KEY_MOUSE_BUTTONS] = { "Maus L", "Maus R", "Maus M", "Maus 4", "Maus 5" };
+
+	if (!KeySchemeIsMouse(code))
+		return 0;
+
+	return (german ? deutsch : english)[code - KEY_MOUSE_FIRST];
+}
+
 /* The Modern default row, in the engine's own slot order: 0-3
  * forward/back/left/right, 4 duck, 5 dash, 6 walk, 7 jump, 8 action, 9 draw,
  * 10 flare, 11 look, 12 roll, 13 inventory, 14 step left, 15 step right,
@@ -84,18 +128,17 @@
  * left of X, which is Z on QWERTY and Y on QWERTZ.
  *
  *   W S A D  move          C duck      LShift dash   LAlt walk
- *   Space jump             E action    Q draw        F flare
- *   R look                 LCtrl roll  Escape inventory
+ *   Space jump             E action    Mouse R draw  F flare
+ *   Mouse M look           LCtrl roll  Escape inventory
  *   Z step left            X step right               P pause   Return select
- *   Numpad0 secondary
+ *   Mouse L secondary
  *
- * Slot 18 is a placeholder and says so: the Remaster's own keyboard page
- * has the secondary action on Mouse Left, and Key() reads `keymap` and
- * has no mouse button to read yet. Numpad 0 is a key the Modern row does
- * not otherwise use, so the row stays sound and the role is reachable
- * from the first launch; it is meant to be replaced, not defended. Tank's
- * own slot 18 is DIK_HOME (specific/input.cpp), free in Core's cluster
- * for the same reason.
+ * Draw, look and the secondary action are the Remaster's own keyboard
+ * page: the right, the middle and the left mouse button. The three sit on
+ * no other slot of either default row, so the row stays sound, and they
+ * are the three the camera hand already rests on. Tank's own slot 18 is
+ * DIK_HOME (specific/input.cpp), free in Core's cluster; Tank's row has no
+ * mouse button at all.
  *
  * Slots 19..33 are the keys the engine already answered to, moved out of
  * specific/input.cpp's own `keymap[DIK_x]` reads and into roles a player
@@ -117,9 +160,9 @@
 {							\
 	0x11, 0x1F, 0x1E, 0x20,	/* W S A D                 */	\
 	0x2E, 0x2A, 0x38, 0x39,	/* C LShift LAlt Space     */	\
-	0x12, 0x10, 0x21, 0x13,	/* E Q F R                 */	\
+	0x12, KEY_MOUSE_RIGHT, 0x21, KEY_MOUSE_MIDDLE,	/* E, Mouse R, F, Mouse M */	\
 	0x1D, 0x01, 0x2C, 0x2D,	/* LCtrl Escape Z X        */	\
-	0x19, 0x1C, 0x52,		/* P Return Numpad0        */	\
+	0x19, 0x1C, KEY_MOUSE_LEFT,	/* P, Return, Mouse L      */	\
 	0x0B, 0x0A, 0x3F, 0x43,	/* 0 9 F5 F9 - medipacks, save, load */	\
 	0x02, 0x03, 0x04, 0x05,	/* 1 2 3 4 - pistols shotgun uzi revolver */	\
 	0x06, 0x07,				/* 5 6 - HK crossbow       */	\
@@ -158,8 +201,11 @@
  * End while in "Separate" and then goes back to "One key" would have lost
  * the default End with nothing put in its place. At the defaults this
  * changes no byte: neither default row contains the Secondary slot's own
- * default key (Tank DIK_HOME, Modern DIK_NUMPAD0), so the claim is never
- * made there.
+ * default key on another slot (Tank DIK_HOME, Modern KEY_MOUSE_LEFT), so
+ * the claim is never made there.
+ *
+ * A mouse button is a key code like any other here: the comparison is of
+ * codes, so a button claims and is claimed exactly as a key is.
  *
  * The same rule applies to the five cheat roles. `cheats` is
  * `tomb5.enable_cheats`. With Cheats off those five rows are not even

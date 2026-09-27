@@ -1258,6 +1258,9 @@ static bool menu_waiting_for_key;
 static long menu_wait_role;
 // The action button still pinned the row selection when the wait was entered.
 static bool menu_action_still_held;
+// The mouse buttons already down when the wait was entered, each until it is
+// let go: only a press made during the wait is taken.
+static long menu_mouse_held;
 
 static const char** MenuKeyboardNames()
 {
@@ -1273,6 +1276,13 @@ static const char* MenuValBinding(long role, char* buf)
 		strcpy(buf, SCRIPT_TEXT(TXT_Waiting));
 		return buf;
 	}
+
+	/* A mouse button is a code above every scan code (game/key_scheme.h), so
+	 * it is named before the key-name table is indexed - the table's entries
+	 * past 0xFF are Core's old joystick names and would call Mouse R "Joy 2".
+	 * The same German/everything-else choice as the keys'. */
+	if (!ControlMethod && KeySchemeIsMouse(layout[1][role]))
+		return KeySchemeMouseName(layout[1][role], Gameflow->Language == 2);
 
 	if (!ControlMethod)
 		return MenuKeyboardNames()[layout[1][role]];
@@ -1321,6 +1331,7 @@ static void MenuSelectBinding(long role)
 	// to bind the action button itself.
 	menu_action_still_held = ControlMethod == 1 && Key(jLayout[4] + 256);
 	memset(keymap, 0, sizeof(keymap));
+	menu_mouse_held = InputMouseButtons();
 }
 
 /* "Reset to defaults", the centred action above the list. It is
@@ -1900,6 +1911,30 @@ static void MenuCaptureBinding()
 					MenuBindingChanged();
 				}
 			}
+		}
+
+		/* A mouse button, taken on its press and never on its release: a
+		 * button held when the wait began counts only once it has been let go
+		 * and pressed again, and the wait ends with the first capture, so one
+		 * press binds one role. A key pressed in the same frame has already
+		 * ended the wait above and wins. The lowest button wins a tie.
+		 *
+		 * The mouse does not navigate the menu, so no button needs to be
+		 * refused the way Return and the arrows are. */
+		const long buttons = InputMouseButtons();
+		const long fresh = buttons & ~menu_mouse_held;
+
+		menu_mouse_held &= buttons;
+
+		if (menu_waiting_for_key && fresh)
+		{
+			for (lp = 0; lp < KEY_MOUSE_BUTTONS; lp++)
+				if (fresh & (1L << lp))
+					break;
+
+			menu_waiting_for_key = 0;
+			layout[1][menu_wait_role] = (short)(KEY_MOUSE_FIRST + lp);
+			MenuBindingChanged();
 		}
 	}
 

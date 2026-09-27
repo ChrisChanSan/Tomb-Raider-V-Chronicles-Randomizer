@@ -129,12 +129,16 @@ lies. Nothing of it is copied into this tree, and none of them touch
 answer together, and they must answer it the same way. `TrgProbe -roomspace
 -classic <folder holding the classic .TRC>` reads the classic level and the
 `.TRG` side by side and prints the room boxes, the OVERLAP list - whose art
-stands inside whose room, with no portal between the two - the overhang
+stands inside whose room's own inside, with no portal between the two, each
+pair with `faces=` and `bound=`, the classic faces of the intruder its art
+belongs to and the triangles they claim (the engine's own face test, compiled
+in from `hd_render.h`) - the overhang
 histogram by distance and by side, and the hollow groups; `-room <n>` takes one
 room apart (box, portals, vertical links, whose art is inside it), `-statics` /
 `-slot <n>` every static mesh with how much art stands in its box, `-slack` and
 `-deep` move the two thresholds so that a rule can be re-measured rather than
-believed, and `-near <x> <y> <z> <radius>` says whose art stands at a given
+believed (`-deep 1024` is the holder box one sector smaller that the engine
+used before the classic faces decided), and `-near <x> <y> <z> <radius>` says whose art stands at a given
 place in the world and how far that art is from its own room's box - which is
 how "a tower that is in no room's box" was turned from a guess into a number.
 `RoomProbe -roombox <same folder>` hands the engine's renderer the same room
@@ -145,7 +149,13 @@ line; `-window all|open|intruding` draws one half of every group, `-clipgroup
 window really is, and what the whole-scene `-scissor` cannot do), and `-tround
 <group> <l,t,r,b>` draws one group the OLDER way - its inside
 half inside the rectangle, its overhang whole - which is the "before" picture
-next to the current one.
+next to the current one. `-roomwin <g>:<l>,<t>,<r>,<b>[;...]` hands named
+groups the windows the walk prints and draws them the way the engine's
+`DrawRoomWindowed` does, and `-decide whole|scissor|frame|face` says how the
+pieces of their intruding art are answered - all whole, all cut, the engine's
+own per-frame answer (the default), or each piece on its own classic face -
+with one `decide:` line per piece. `-cull none|opaque` draws the opaque room
+ranges two-sided or one-sided (the engine's own).
 
 One thing the two picture tools cannot make up: they have no classic level, so
 `RoomProbe` cannot read a room's flags or its roomlets. `-underwater` and `-shimmer` are therefore
@@ -210,6 +220,7 @@ are how a player's crash report becomes usable.
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` | the skin's bone stack |
 | the first-person view sits wrong | `FPHEAD`, `ALTERFOV` | the head bone per frame, and the field of view |
 | an HD object or Lara is wrong, or classic when it should not be | `HDLOG` | per level: which slot got which model and why it was refused; Lara's outfit, her parts and the reason for a classic one. Per level's first HD frame: `itemcheck` and `lightcheck` for the objects, `laracheck` and `braidcheck` for Lara |
+| one room's HD art shows on another room's wall, or a wall is seen from behind | `HDLOG` | per level: one `overlap` line per pair ending in `faces=` and `bound=` (the intruder's classic faces its art belongs to, and the triangles they claim), the level line ending in `holder=inside cull=opaque faces= bound= unbound=`, and `HDLOG cull level=... ranges opaque= two_sided=`; once a second the `clip` line ending in `pairs= whole= scissored=` - the pieces of intruding art the frame asked about, drew whole and cut. `TrgProbe -roomspace` prints the same pair lines offline |
 | it stuttered, or dropped under the frame rate | `FPSLOG` | one line per second: frames presented, the longest gap, and `logic_ticks=` - what the SIMULATION ran, which must stay 30 whatever the frame rate is |
 | ...and *why* it stuttered | `PROFLOG` | the same second split into the fifteen phases of a frame (logic, room walk, HD rooms, HD objects, buckets, sort, the wait for the slot, `Present`), mean and worst; plus one line for **every** frame that missed its slot with all its phases, and one `first_frame` line per level |
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` | one line per LOGIC second: how many frames were interpolated, how far Lara moved per drawn picture (must HALVE against a 30 Hz run over the same walk), how many things really moved, and every deliberate snap by cause - teleport, room jump, camera cut, cut scene |

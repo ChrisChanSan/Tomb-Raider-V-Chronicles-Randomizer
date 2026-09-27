@@ -1286,7 +1286,15 @@ see *Lara in HD* below for which of her stays classic and why.
   HD room is drawn inside the same window the original engine gives it, and
   so is every HD enemy, in the window of the room it stands in. Lara is never
   cut: she is in the camera's own room, and that room's window is the whole
-  screen.
+  screen. Only the art that stands inside another room is cut, and only on a
+  frame the original engine would not draw that part of the room either: the
+  same wall is drawn whole from the square outside and hidden from the room
+  it stands in, the way the original's own walls are.
+- **The back of a wall is not drawn.** The Remaster's solid walls are
+  one-sided, and seen from behind they used to paint over what stands behind
+  them - the X-ray window in *The Base* showed a green wall instead of the
+  corridor. Flags, leaves, railings, glass, light and water are still drawn
+  from both sides.
 
 **The light, and the sky.**
 
@@ -2050,6 +2058,13 @@ HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
 HDLOG level=ANDREA1 statics suppressed=255 kept=0 (in 238 HD rooms, 4 classic)
 HDLOG level=ANDREA1 water marks=... rooms=...
 HDLOG level=ANDREA1 water stamped=... choppy=... shimmer=... ps_slots=...
+HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
+      between them faces=6 bound=540
+HDLOG level=ANDREA1 overlap pairs=158 intruding tris=27738 in 91 groups
+      holder=inside cull=opaque faces=558 bound=15993 unbound=11745
+HDLOG cull level=ANDREA1 ranges opaque=2370 two_sided=131
+HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
+      items_spared=... view=... view_obj=... pairs=... whole=... scissored=...
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
       maxdx=0.00017 maxdy=0.00009 maxdz=0.000000000 persp=572.0 center=960,540
 HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
@@ -2074,6 +2089,15 @@ HDLOG itemcheck level=ANDREA1 slot=33(SWAT) nodes=15 used=15
       maxdx=0.00021 maxdy=0.00013
 HDLOG lightcheck level=ANDREA1 slot=33 classic=... hd=... diff=...
 ```
+
+The `overlap` lines are the rooms whose art stands inside another room:
+`faces=` is how many of the intruder's own classic faces that art belongs to
+and `bound=` how many of its triangles they claim; the level line adds them
+up, with `unbound=` the triangles no face claims, which are cut to the room's
+window whenever the room they stand in is on the screen. Once a second the `clip` line ends in how many pieces of that
+art the frame asked about (`pairs=`), drew whole and cut (the second
+`scissored=`; the first counts rooms). The `cull` line counts the draw calls
+drawn one-sided and the ones drawn from both sides.
 
 A randomized level adds two more room reasons and a block of its own. A room
 the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the

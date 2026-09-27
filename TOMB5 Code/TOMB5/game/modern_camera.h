@@ -313,7 +313,40 @@ enum modern_camera_constants
 	 * bracketed. At most 1 + 2 * 32 + 2 * 12 tests, and only on a frame whose
 	 * eye fails the room tests. */
 	MODERN_CAMERA_CHORD_SCAN = 32,
-	MODERN_CAMERA_CHORD_BISECT = 12
+	MODERN_CAMERA_CHORD_BISECT = 12,
+
+	/* The mouse: the orbit's second input, beside the right stick. A count
+	 * is one step of the mouse's own sensor as Raw Input reports it
+	 * (specific\winmain.cpp), and a tick's counts become one angle step
+	 * each way, gain times counts.
+	 *
+	 * The gain is chosen, not measured from anything: at the middle of the
+	 * sensitivity slider 32 units a count, so 65536 / 32 = 2048 counts turn
+	 * the camera once round - about 13 cm of desk at 400 counts per inch,
+	 * 3.3 cm at 1600. The slider scales that by 4^((s - 50) / 50): a
+	 * quarter of it at 0 (8 units, 8192 counts a turn) and four times it at
+	 * 100 (128 units, 512 counts a turn), doubling every 25 steps, so the
+	 * slider feels even along its length. ModernCameraMouseGain holds the
+	 * arithmetic in fixed point: the gain is in MODERN_CAMERA_MOUSE_ONE-ths
+	 * of a unit, 16384 at 50. 512ths and not 256ths because the bottom end
+	 * is a quarter of the middle, and a quarter of every table value has to
+	 * stay a whole number for the doubling to be exact.
+	 *
+	 * The yaw and the pitch take the same gain. The stick's pitch rate is
+	 * half its yaw rate because a held stick is a speed; a mouse is a
+	 * position, and the hand expects the same distance to mean the same
+	 * angle both ways.
+	 *
+	 * A step is at most a quarter turn a tick, 2700 degrees a second, which
+	 * no hand asks for on purpose; the bound keeps a flick from wrapping
+	 * past a half turn and turning the wrong way. The counts are bounded
+	 * first, so that counts times gain stays inside a long. */
+	MODERN_CAMERA_MOUSE_GAIN = 32,			// units per count at sensitivity 50: 2048 counts a turn
+	MODERN_CAMERA_MOUSE_ONE = 512,			// the gain's fixed point
+	MODERN_CAMERA_MOUSE_SENS_FULL = 100,		// the slider's own top, like Camera speed
+	MODERN_CAMERA_MOUSE_SENS_DEFAULT = 50,		// the middle: the gain above, unscaled
+	MODERN_CAMERA_MOUSE_STEP_MAX = 16384,		// a quarter turn a tick
+	MODERN_CAMERA_MOUSE_COUNTS_MAX = 16384		// 16384 * 128 * 512 = 2^30, inside a long
 };
 
 /* The orbit's thresholds, in one place, filled by ModernCameraDefaults().
@@ -373,12 +406,20 @@ struct MODERN_CAMERA_STATE
 	long carry_total;	// the whole swing, so the profile is measured from its start
 	long carry_tick;	// how many of carry_ticks have been paid
 
-	/* The yaw step the right stick alone gave this tick, taken before the
-	 * swing above pays anything out and before the return falls home. The
+	/* The yaw step the right stick and the mouse gave this tick, taken before
+	 * the swing above pays anything out and before the return falls home. The
 	 * translation adds it to her held course, so that a camera the player
 	 * turns takes her course with it while a camera that moves by itself does
 	 * not. MODERNLOG's `cam_step=`. */
-	short stick_step;	// the right stick's own yaw step this tick, signed
+	short stick_step;	// the player's own yaw step this tick, stick and mouse, signed
+
+	/* The mouse's two steps for the coming tick, in units of yaw and of
+	 * elevation, already scaled by the sensitivity and signed by the invert
+	 * (ModernCameraMouseSteps). The caller hands them in before an update and
+	 * the update clears them, so a hand-over turns the orbit once and a tick
+	 * without one turns it by nothing. A reset clears them as well. */
+	long mouse_yaw;
+	long mouse_pitch;
 };
 
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg);
@@ -386,6 +427,8 @@ void ModernCameraCarry(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
 long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick);
 long ModernCameraPullAxis(long target, long eye, long step, long steps);
 void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate);
+long ModernCameraMouseGain(long sensitivity);
+void ModernCameraMouseSteps(long dx, long dy, long sensitivity, long invert, long* yaw, long* pitch);
 void ModernCameraReset(MODERN_CAMERA_STATE* state);
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,
 	long rs_x, long rs_y, long lara_heading, long lara_moving, long wall_clipped,

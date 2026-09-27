@@ -385,9 +385,228 @@ void WinProcessCommandLine(LPSTR cmd)
 	}
 }
 
+/* The mouse: Raw Input, read here and handed to the game thread.
+ *
+ * Two threads meet in this block. The window procedure runs on the main
+ * thread, inside WinProcMsg's GetMessage loop, which does nothing else once
+ * the game thread is started - so WM_INPUT is handled as it arrives, at the
+ * mouse's own report rate and independent of the frame rate. The game thread
+ * (GameMain) takes what has gathered once per S_UpdateInput
+ * (specific\input.cpp), which is once per logic tick in play.
+ *
+ * No lock: the counts and the buttons are LONGs changed only through the
+ * Interlocked functions, so a take and an add cannot lose a count between
+ * them. A lock would also be a hazard of its own here: WM_ACTIVATE suspends
+ * the game thread with SuspendThread, and a game thread suspended while
+ * holding a lock would leave this thread waiting on it for good.
+ *
+ * The cursor: captured - hidden and confined to the client area - only while
+ * the window is active, the control type is Modern and no FMV plays. The game
+ * thread reports the last two (WinMouseWant); the window's own messages report
+ * the first. ShowCursor and ClipCursor are only ever called on this thread,
+ * because ShowCursor's counter belongs to the thread that owns the window.
+ * While the cursor is not captured, the moves are dropped where they arrive;
+ * the buttons still count, as a keyboard key does. */
+#define WM_APP_MOUSE		(WM_APP + 1)	// the game thread's half of the rule changed
+#define MOUSE_WANT_MODERN	1
+#define MOUSE_WANT_FMV		2
+
+static volatile LONG mouse_dx;		// counts gathered since the last take
+static volatile LONG mouse_dy;
+static volatile LONG mouse_held;	// the five buttons as they stand, bit n = button n
+static volatile LONG mouse_pressed;	// every button that went down since the last take
+static volatile LONG mouse_want;	// MOUSE_WANT_*, written by the game thread
+static volatile LONG mouse_captured;	// read by the game thread for MOUSELOG
+
+// This thread's alone.
+static long mouse_active;		// the window is the active one and not minimised
+static long mouse_closing;		// WM_CLOSE or WinClose: nothing captures any more
+static long mouse_hidden;		// how many ShowCursor(FALSE) calls the capture made
+static long mouse_abs_seeded;		// an absolute device has given a first position
+static long mouse_abs_x, mouse_abs_y;
+
+/* Seats or frees the cursor to match the rule, on this thread. Called on every
+ * message that can change a term, and on the game thread's WM_APP_MOUSE.
+ *
+ * ShowCursor keeps a counter, and the cursor shows while it is 0 or more. The
+ * capture lowers it until it is below 0 and counts how many calls that took;
+ * the release raises it by exactly that many, so it ends where it was found -
+ * a full screen that had it at -1 stays hidden. The clip is set again on every
+ * call while captured, because a move or a resize changes the client area. */
+static void WinMouseCapture()
+{
+	const LONG want = mouse_want;
+	const long modern = (want & MOUSE_WANT_MODERN) ? 1 : 0;
+	const long fmv = (want & MOUSE_WANT_FMV) ? 1 : 0;
+	const long on = (mouse_active && modern && !fmv && !mouse_closing && App.hWnd) ? 1 : 0;
+
+	if (on)
+	{
+		RECT rc;
+
+		GetClientRect(App.hWnd, &rc);
+		MapWindowPoints(App.hWnd, 0, (POINT*)&rc, 2);
+		ClipCursor(&rc);
+	}
+
+	if (on == mouse_captured)
+		return;
+
+	if (on)
+	{
+		// Bounded: a counter that some other code has raised far above 0
+		// would otherwise keep this loop going.
+		do
+			mouse_hidden++;
+		while (ShowCursor(FALSE) >= 0 && mouse_hidden < 16);
+	}
+	else
+	{
+		ClipCursor(0);
+
+		for (; mouse_hidden > 0; mouse_hidden--)
+			ShowCursor(TRUE);
+	}
+
+	InterlockedExchange(&mouse_captured, on);
+
+	// A capture starts from nothing: counts gathered before it would jolt the
+	// camera on its first tick.
+	InterlockedExchange(&mouse_dx, 0);
+	InterlockedExchange(&mouse_dy, 0);
+	mouse_abs_seeded = 0;
+
+	if (gLogEnabled)
+		Log("MOUSELOG capture=%s active=%ld modern=%ld fmv=%ld", on ? "on" : "off", mouse_active, modern, fmv);
+}
+
+// The window's own term. Losing it also lets go of every button: their up
+// messages go to whichever window has the focus now.
+static void WinMouseActive(long active)
+{
+	mouse_active = active;
+
+	if (!active)
+	{
+		InterlockedExchange(&mouse_held, 0);
+		InterlockedExchange(&mouse_pressed, 0);
+	}
+
+	WinMouseCapture();
+}
+
+/* One WM_INPUT. Buttons first, whether captured or not; then the move, only
+ * while captured.
+ *
+ * A mouse reports relative counts. A tablet, a touch screen or a remote
+ * desktop reports an absolute position instead, 0..65535 across the screen
+ * or the virtual desktop; that is turned into pixels and then into a
+ * difference against the previous position, which is as near to a count as
+ * such a device has. The first position after a capture only seeds it. */
+static void WinMouseInput(HRAWINPUT handle)
+{
+	RAWINPUT raw;
+	UINT size = sizeof(raw);
+	LONG held, pressed;
+	long dx, dy;
+
+	if (GetRawInputData(handle, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) == (UINT)-1)
+		return;
+
+	if (raw.header.dwType != RIM_TYPEMOUSE)
+		return;
+
+	held = mouse_held;
+	pressed = 0;
+
+	// RI_MOUSE_BUTTON_1_DOWN .. RI_MOUSE_BUTTON_5_UP are 0x001 .. 0x200: button
+	// n goes down on bit 2n and up on bit 2n + 1, in the order left, right,
+	// middle, X1, X2 - the order of KEY_MOUSE_* (game\key_scheme.h).
+	for (long n = 0; n < 5; n++)
+	{
+		const USHORT down = (USHORT)(1 << (2 * n));
+		const USHORT up = (USHORT)(1 << (2 * n + 1));
+
+		if (raw.data.mouse.usButtonFlags & down)
+		{
+			held |= 1L << n;
+			pressed |= 1L << n;
+		}
+
+		if (raw.data.mouse.usButtonFlags & up)
+			held &= ~(1L << n);
+	}
+
+	InterlockedExchange(&mouse_held, held);
+
+	if (pressed)
+		InterlockedOr(&mouse_pressed, pressed);
+
+	if (!mouse_captured)
+		return;
+
+	if (raw.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)
+	{
+		const bool virt = (raw.data.mouse.usFlags & MOUSE_VIRTUAL_DESKTOP) != 0;
+		const long w = GetSystemMetrics(virt ? SM_CXVIRTUALSCREEN : SM_CXSCREEN);
+		const long h = GetSystemMetrics(virt ? SM_CYVIRTUALSCREEN : SM_CYSCREEN);
+		const long x = (long)(((__int64)raw.data.mouse.lLastX * w) >> 16);
+		const long y = (long)(((__int64)raw.data.mouse.lLastY * h) >> 16);
+
+		dx = mouse_abs_seeded ? x - mouse_abs_x : 0;
+		dy = mouse_abs_seeded ? y - mouse_abs_y : 0;
+		mouse_abs_x = x;
+		mouse_abs_y = y;
+		mouse_abs_seeded = 1;
+	}
+	else
+	{
+		dx = raw.data.mouse.lLastX;
+		dy = raw.data.mouse.lLastY;
+	}
+
+	if (dx)
+		InterlockedExchangeAdd(&mouse_dx, dx);
+
+	if (dy)
+		InterlockedExchangeAdd(&mouse_dy, dy);
+}
+
+/* The game thread's two terms, reported on every S_UpdateInput. Only a change
+ * wakes the window thread, so the menus, the FMV player and play all reach it
+ * the moment the control type is switched or a video starts or ends. */
+void WinMouseWant(long modern, long fmv)
+{
+	const LONG want = (modern ? MOUSE_WANT_MODERN : 0) | (fmv ? MOUSE_WANT_FMV : 0);
+
+	if (InterlockedExchange(&mouse_want, want) != want && App.hWnd)
+		PostMessage(App.hWnd, WM_APP_MOUSE, 0, 0);
+}
+
+/* What gathered since the last take, for the game thread: the counts, and the
+ * buttons down now or pressed in between - so a click that went down and up
+ * between two ticks still counts for one. */
+void WinMouseTake(long* dx, long* dy, long* buttons)
+{
+	*dx = InterlockedExchange(&mouse_dx, 0);
+	*dy = InterlockedExchange(&mouse_dy, 0);
+	*buttons = InterlockedExchange(&mouse_pressed, 0) | mouse_held;
+}
+
+long WinMouseCaptured()
+{
+	return mouse_captured;
+}
+
+// Frees the cursor for good: the window is closing.
+static void WinMouseRelease()
+{
+	mouse_closing = 1;
+	WinMouseCapture();
+}
+
 LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	static long mouseX, mouseY, mouseB;
 	static bool closing;
 
 	switch (uMsg)
@@ -400,9 +619,35 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	case WM_MOVE:
 		Log("WM_MOVE");
 		DXMove((short)lParam, short((lParam >> 16) & 0xFFFF));
+		WinMouseCapture();	// the clip follows the client area
+		break;
+
+	case WM_SIZE:
+		WinMouseCapture();
+		break;
+
+	case WM_INPUT:
+		WinMouseInput((HRAWINPUT)lParam);
+		break;			// DefWindowProc still has to see it, to free the input
+
+	case WM_APP_MOUSE:
+		WinMouseCapture();
+		return 0;
+
+	case WM_SETFOCUS:
+		WinMouseActive(IsIconic(hwnd) ? 0 : 1);
+		break;
+
+	case WM_KILLFOCUS:
+		WinMouseActive(0);
 		break;
 
 	case WM_ACTIVATE:
+
+		/* Before everything else in this case: the FMV guard below returns
+		 * early, and a window that goes inactive during a video must still
+		 * give up its buttons. */
+		WinMouseActive((wParam & 0xFFFF) != WA_INACTIVE && !HIWORD(wParam));
 
 		if (!closing)
 		{
@@ -489,18 +734,13 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_CLOSE:
 		closing = 1;
+		WinMouseRelease();
 		PostQuitMessage(0);
 		break;
 
 	case WM_COMMAND:
 		Log("WM_COMMAND");
 		WinProcessCommands(wParam & 0xFFFF);
-		break;
-
-	case WM_MOUSEMOVE:
-		mouseX = GET_X_LPARAM(lParam);
-		mouseY = GET_Y_LPARAM(lParam);
-		mouseB = wParam;
 		break;
 	}
 
@@ -510,6 +750,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 void WinClose()
 {
 	Log(__FUNCTION__);
+	WinMouseRelease();	// the clip is the whole system's, not only this window's
 	SaveSettings();
 	CloseHandle(App.mutex);
 	DXFreeInfo(&App.DXInfo);
@@ -572,6 +813,24 @@ bool WinCreateWindow()
 
 	if (!App.hWnd)
 		return 0;
+
+	/* The mouse as Raw Input: usage page 1 (generic desktop), usage 2 (mouse),
+	 * delivered to this window as WM_INPUT while it is in the foreground. No
+	 * flags: RIDEV_NOLEGACY would take the ordinary mouse messages away from
+	 * the setup dialog and from the title bar, and RIDEV_INPUTSINK would
+	 * deliver clicks meant for other windows. A failure leaves the mouse
+	 * inert and the game otherwise as it is. */
+	{
+		RAWINPUTDEVICE rid;
+
+		rid.usUsagePage = 1;
+		rid.usUsage = 2;
+		rid.dwFlags = 0;
+		rid.hwndTarget = App.hWnd;
+
+		if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
+			Log("Unable To Register The Mouse For Raw Input (%lu)", GetLastError());
+	}
 
 	return 1;
 }

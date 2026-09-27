@@ -139,6 +139,98 @@ void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate)
 		*pitch_rate = yaw / 2;
 }
 
+/* The mouse's gain for a sensitivity of 0..100, in MODERN_CAMERA_MOUSE_ONE-ths
+ * of a unit per count: 32 * 4^((s - 50) / 50) units, which is
+ * 16384 * 2^((s - 50) / 25) in this fixed point (the header says why those
+ * numbers). The power is split into whole doublings and a remainder of 0..24
+ * twenty-fifths: the doublings are shifts, and the remainder is the table
+ * below, round(4096 * 2^(r / 25)). So the gain is exact at 0, 25, 50, 75 and
+ * 100 - 4096, 8192, 16384, 32768 and 65536, that is 8, 16, 32, 64 and 128
+ * units a count - and doubles exactly every 25 steps, because the lowest end
+ * is the table itself and every other end a left shift of it.
+ *
+ * A value out of range - the registry is edited by hand - is taken to the
+ * nearer end, like the camera speed. */
+long ModernCameraMouseGain(long sensitivity)
+{
+	static const long pow25[25] =
+	{
+		4096, 4211, 4330, 4451, 4576, 4705, 4837, 4973, 5113, 5257, 5405, 5557, 5713,
+		5873, 6039, 6208, 6383, 6562, 6747, 6937, 7132, 7332, 7538, 7750, 7968
+	};
+	long s, k, r, g;
+
+	s = sensitivity;
+
+	if (s < 0)
+		s = 0;
+	else if (s > MODERN_CAMERA_MOUSE_SENS_FULL)
+		s = MODERN_CAMERA_MOUSE_SENS_FULL;
+
+	/* s - 50 = 25 * k + r with r in 0..24, so k is -2..2: a floor division,
+	 * written on the shifted value so that no negative is divided. */
+	k = s / 25 - 2;
+	r = s % 25;
+
+	/* The table is a quarter of the middle gain, 4096 of 16384, times
+	 * 2^(r / 25); k + 2 is 0..4, so the gain is the table shifted left by that
+	 * many doublings, with nothing shifted out. */
+	static_assert(MODERN_CAMERA_MOUSE_GAIN * MODERN_CAMERA_MOUSE_ONE == 4096 << 2,
+		"the table's 4096 is a quarter of the middle gain");
+
+	g = pow25[r];
+
+	return g << (k + 2);
+}
+
+/* One tick of mouse counts as the orbit's two steps. dx is to the right and dy
+ * towards the player, as Raw Input reports them. The yaw follows dx the way
+ * the stick's x axis does. The pitch follows dy the way the stick's y axis
+ * does: the stick reads forward-negative and ModernCameraUpdate subtracts it,
+ * so a mouse pushed away from the player, dy negative, looks up as a stick
+ * pushed forward does; `invert` flips the pitch alone. The stick's own
+ * invert_pitch is a different setting and does not reach this.
+ *
+ * Counts times gain is taken whole and divided once, truncating toward zero,
+ * so a count to the left is exactly the negative of a count to the right. */
+void ModernCameraMouseSteps(long dx, long dy, long sensitivity, long invert, long* yaw, long* pitch)
+{
+	const long gain = ModernCameraMouseGain(sensitivity);
+	long y, p;
+
+	if (dx > MODERN_CAMERA_MOUSE_COUNTS_MAX)
+		dx = MODERN_CAMERA_MOUSE_COUNTS_MAX;
+	else if (dx < -MODERN_CAMERA_MOUSE_COUNTS_MAX)
+		dx = -MODERN_CAMERA_MOUSE_COUNTS_MAX;
+
+	if (dy > MODERN_CAMERA_MOUSE_COUNTS_MAX)
+		dy = MODERN_CAMERA_MOUSE_COUNTS_MAX;
+	else if (dy < -MODERN_CAMERA_MOUSE_COUNTS_MAX)
+		dy = -MODERN_CAMERA_MOUSE_COUNTS_MAX;
+
+	y = dx * gain / MODERN_CAMERA_MOUSE_ONE;
+	p = dy * gain / MODERN_CAMERA_MOUSE_ONE;
+
+	if (!invert)
+		p = -p;
+
+	if (y > MODERN_CAMERA_MOUSE_STEP_MAX)
+		y = MODERN_CAMERA_MOUSE_STEP_MAX;
+	else if (y < -MODERN_CAMERA_MOUSE_STEP_MAX)
+		y = -MODERN_CAMERA_MOUSE_STEP_MAX;
+
+	if (p > MODERN_CAMERA_MOUSE_STEP_MAX)
+		p = MODERN_CAMERA_MOUSE_STEP_MAX;
+	else if (p < -MODERN_CAMERA_MOUSE_STEP_MAX)
+		p = -MODERN_CAMERA_MOUSE_STEP_MAX;
+
+	if (yaw)
+		*yaw = y;
+
+	if (pitch)
+		*pitch = p;
+}
+
 void ModernCameraDefaults(MODERN_CAMERA_CFG* cfg)
 {
 	if (!cfg)
@@ -528,6 +620,8 @@ void ModernCameraReset(MODERN_CAMERA_STATE* state)
 	state->carry_total = 0;
 	state->carry_tick = 0;
 	state->stick_step = 0;
+	state->mouse_yaw = 0;
+	state->mouse_pitch = 0;
 }
 
 /* One tick of the orbit: the stick, the swing, the return, in that order.
@@ -580,17 +674,24 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 	/* 1. The stick. The yaw wraps - 360 degrees either way - and the pitch
 	 * clamps, because over the cap the camera sits on her own axis, where
 	 * nothing measured from the eye has a direction left
-	 * (MODERN_CAMERA_PITCH_MIN). */
-	state->steering = (ModernCameraAxisOut(cfg, rs_x) || ModernCameraAxisOut(cfg, rs_y)) ? 1 : 0;
+	 * (MODERN_CAMERA_PITCH_MIN).
+	 *
+	 * The mouse is the same rule with a second input: its steps are added
+	 * beside the stick's rate terms, and a nonzero step is steering exactly as
+	 * a stick out of its rest is, so it stands the return still and cancels a
+	 * swing below. */
+	state->steering = (ModernCameraAxisOut(cfg, rs_x) || ModernCameraAxisOut(cfg, rs_y) ||
+		state->mouse_yaw || state->mouse_pitch) ? 1 : 0;
 
-	/* The stick's own yaw step is kept here, where it is a term and not yet a
+	/* The player's own yaw step is kept here, where it is a term and not yet a
 	 * difference of two angles, before 1b and 2 below, so the swing and the
 	 * return cannot get into it: game\modern_state.cpp adds exactly this to
 	 * her held course, so that only a camera the player turns takes her course
-	 * with it. game\camera.cpp's modern_cam_lead_yaw is a different quantity -
-	 * the world yaw's whole step less the return, swing included - which is
-	 * right for leading the eye and wrong here. */
-	state->stick_step = ModernWrap(ModernCameraRate(cfg, rs_x, cfg->yaw_rate));
+	 * with it - by the stick or by the mouse alike. game\camera.cpp's
+	 * modern_cam_lead_yaw is a different quantity - the world yaw's whole step
+	 * less the return, swing included - which is right for leading the eye and
+	 * wrong here. */
+	state->stick_step = ModernWrap(ModernCameraRate(cfg, rs_x, cfg->yaw_rate) + state->mouse_yaw);
 
 	world = ModernWrap(world + state->stick_step);
 
@@ -598,6 +699,13 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 		pitch += ModernCameraRate(cfg, rs_y, cfg->pitch_rate);
 	else
 		pitch -= ModernCameraRate(cfg, rs_y, cfg->pitch_rate);
+
+	/* The mouse's pitch step arrives signed by its own invert, so it is only
+	 * added. Both steps are consumed: the next update without a fresh
+	 * hand-over sees nothing. */
+	pitch += state->mouse_pitch;
+	state->mouse_yaw = 0;
+	state->mouse_pitch = 0;
 
 	/* 1b. The swing an animation about-turn owes, paid out here because
 	 * ModernCameraCarry only seats it - the world yaw is this function's to

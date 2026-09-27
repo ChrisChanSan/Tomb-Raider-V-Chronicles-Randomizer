@@ -29,6 +29,7 @@
 #include "../game/deltapak.h"		// GLOBAL_playing_cutseq - the modern seam's guard
 #include "../game/modern_state.h"	// the modern control's one tick
 #include "../game/modern_move.h"	// the radial dead zone and its two widths
+#include "../game/modern_camera.h"	// the mouse's gain, as arithmetic
 #include "../game/key_scheme.h"		// the two keyboard sets, as arithmetic
 #include "../tomb5/tomb5.h"
 #include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank
@@ -732,6 +733,11 @@ long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/St
 static long joy_fire;
 static long joy_x, joy_y;
 
+/* The mouse's five buttons for this S_UpdateInput, bit n = button n in the
+ * order of KEY_MOUSE_* (game\key_scheme.h): down now, or pressed and let go
+ * since the last call (WinMouseTake, specific\winmain.cpp). */
+static long mouse_buttons;
+
 /* The look key, as the Modern scheme remembers it. While the stick steers Lara
  * as in Tank the look bit is taken out of the input word - the engine must not
  * answer it with the look camera - so the gate cannot read `input & IN_LOOK`:
@@ -1149,6 +1155,20 @@ long S_UpdateInput()
 	DXUpdateJoystick();
 	DXReadKeyboard(keymap);
 
+	/* The mouse, taken once per call. The window thread gathers its counts and
+	 * buttons between two calls (specific\winmain.cpp), and this is the one
+	 * place that takes them, so in play - one call per logic tick
+	 * (game\control.cpp) - the counts of every drawn frame between two ticks
+	 * reach the one tick, at 30, 60 and the display's own rate alike. The two
+	 * terms the game thread owns of the capture rule are reported first; the
+	 * window thread acts on a change. */
+	long mouse_dx, mouse_dy;
+	long mouse_yaw = 0;
+	long mouse_pitch = 0;
+
+	WinMouseWant(tomb5.control_modern ? 1 : 0, App.fmv ? 1 : 0);
+	WinMouseTake(&mouse_dx, &mouse_dy, &mouse_buttons);
+
 	// Read unconditionally. Reading has no effect of its own - every use of
 	// joy_x/joy_y/joy_fire below is behind ControlMethod - but it keeps the
 	// values current for JoyMenuStep, which the controls screen needs
@@ -1221,7 +1241,37 @@ long S_UpdateInput()
 				joystick_raw_rx, joystick_raw_ry, &cam_x, &cam_y);
 
 		ModernCameraStick(cam_x, cam_y);
+
+		/* The mouse turns the same orbit. Its counts are there only while the
+		 * cursor is captured, which is only ever under Modern, and they need no
+		 * dead zone: a resting mouse reports nothing. Not behind ControlMethod,
+		 * for the reason a key is not: the mouse is a device of its own, and a
+		 * player on the pad page can still reach for it. */
+		ModernCameraMouseSteps(mouse_dx, mouse_dy, MODERN_CAMERA_MOUSE_SENS_DEFAULT, 0,
+			&mouse_yaw, &mouse_pitch);
+		ModernCameraMouse(mouse_yaw, mouse_pitch);
+
 		joy_fire &= ~rstick_bits;
+	}
+
+	/* MOUSELOG, behind -log: one line per call on which the mouse moved or a
+	 * button changed, never on a still one. `dx`/`dy` are the counts this call
+	 * took, `buttons` the mask Key() reads, `yaw`/`pitch` the steps handed to
+	 * the orbit (0 under Tank, where nothing is handed over), `sens` the
+	 * sensitivity they were scaled by, `captured` whether the cursor is held -
+	 * the capture's own line, on every change of it, comes from
+	 * specific\winmain.cpp. */
+	if (gLogEnabled)
+	{
+		static long mouse_buttons_logged = 0;
+
+		if (mouse_dx || mouse_dy || mouse_buttons != mouse_buttons_logged)
+		{
+			mouse_buttons_logged = mouse_buttons;
+			Log("MOUSELOG f=%ld dx=%ld dy=%ld buttons=0x%lX yaw=%ld pitch=%ld sens=%ld captured=%ld",
+				(long)GlobalCounter, mouse_dx, mouse_dy, mouse_buttons, mouse_yaw, mouse_pitch,
+				(long)MODERN_CAMERA_MOUSE_SENS_DEFAULT, WinMouseCaptured());
+		}
 	}
 
 	/* In Modern the d-pad does not move Lara; it is free for bindings. This is

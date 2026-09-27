@@ -9013,6 +9013,236 @@ static void deferred()
 	printf("  while she moves and the thumb is off the stick.\n");
 }
 
+/* ------------------------------------------ the mouse turns the same orbit ----- */
+
+/* Her held course after one tick in which the orbit moved by `step`, handed on
+ * the way game\modern_state.cpp hands it: the course is seated by ten ticks of
+ * the left stick held forward, then the camera turns by the step and the
+ * situation carries it as the player's own. */
+static long mouse_course_step(short step)
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	short cam = 0;
+	short before;
+	long t;
+
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	sit.anim_state = 1;		/* AS_RUN */
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
+
+	for (t = 0; t < 10; t++)
+		ModernTranslate(&cfg, &state, 0, -120, cam, 0, &sit, &out);
+
+	before = state.course;
+	cam = (short)ModernWrap((long)cam + step);
+	sit.cam_player_step = step;
+	ModernTranslate(&cfg, &state, 0, -120, cam, 0, &sit, &out);
+
+	return ModernWrap((long)state.course - before);
+}
+
+/* The mouse is a second input to the orbit, not a second orbit: its counts
+ * become two steps (ModernCameraMouseSteps), the steps go into the state beside
+ * the stick's axes, and everything after that is the stick's own rule. So the
+ * checks below hold the gain to the numbers game\modern_camera.h states, and
+ * then hold a mouse tick against a stick tick of the same size. */
+static void camera_mouse()
+{
+	MODERN_CAMERA_CFG cfg;
+	MODERN_CAMERA_CFG fast;
+	MODERN_CAMERA_STATE a;
+	MODERN_CAMERA_STATE b;
+	long s, y, p, yi, pi, dx, dy, heading;
+	long even = 0;
+
+	printf("\nthe mouse - a second input to the same orbit\n");
+
+	ModernCameraDefaults(&cfg);
+
+	/* 1. The gain. */
+	ok(ModernCameraMouseGain(MODERN_CAMERA_MOUSE_SENS_DEFAULT) == 32 * MODERN_CAMERA_MOUSE_ONE,
+		"mouse: the middle of the slider is 32 units a count",
+		ModernCameraMouseGain(MODERN_CAMERA_MOUSE_SENS_DEFAULT), 32 * MODERN_CAMERA_MOUSE_ONE);
+	ok(2048 * ModernCameraMouseGain(50) / MODERN_CAMERA_MOUSE_ONE == 65536,
+		"mouse: so 2048 counts turn the camera once round",
+		2048 * ModernCameraMouseGain(50) / MODERN_CAMERA_MOUSE_ONE, 65536);
+	ok(4 * ModernCameraMouseGain(0) == ModernCameraMouseGain(50),
+		"mouse: the bottom of the slider is a quarter of the middle",
+		4 * ModernCameraMouseGain(0), ModernCameraMouseGain(50));
+	ok(ModernCameraMouseGain(100) == 4 * ModernCameraMouseGain(50),
+		"mouse: the top of the slider is four times the middle",
+		ModernCameraMouseGain(100), 4 * ModernCameraMouseGain(50));
+	ok(ModernCameraMouseGain(-7) == ModernCameraMouseGain(0),
+		"mouse: under the bottom is the bottom", ModernCameraMouseGain(-7), ModernCameraMouseGain(0));
+	ok(ModernCameraMouseGain(900) == ModernCameraMouseGain(100),
+		"mouse: over the top is the top", ModernCameraMouseGain(900), ModernCameraMouseGain(100));
+
+	for (s = 0; s + 25 <= 100; s++)
+		ok(ModernCameraMouseGain(s + 25) == 2 * ModernCameraMouseGain(s),
+			"mouse: twenty-five steps of the slider double the gain, all along it",
+			ModernCameraMouseGain(s + 25), 2 * ModernCameraMouseGain(s));
+
+	for (s = 1; s <= 100; s++)
+	{
+		const long ratio = 10000 * ModernCameraMouseGain(s) / ModernCameraMouseGain(s - 1);
+
+		ok(ModernCameraMouseGain(s) > ModernCameraMouseGain(s - 1),
+			"mouse: every step of the slider raises the gain",
+			ModernCameraMouseGain(s), ModernCameraMouseGain(s - 1));
+
+		/* 2^(1/25) = 1.0281: each step is the same fraction of the last, which
+		 * is what makes the slider feel even along its length. */
+		if (ratio < 10270 || ratio > 10292)
+			even++;
+	}
+
+	ok(even == 0, "mouse: every step of the slider is worth the same 2.8 per cent", even, 0);
+
+	/* 2. The steps. */
+	ModernCameraMouseSteps(100, 0, 50, 0, &y, &p);
+	ok(y == 3200 && p == 0, "mouse: 100 counts to the right at 50 are 3200 units of yaw and no pitch", y, 3200);
+	ModernCameraMouseSteps(-100, 0, 50, 0, &y, &p);
+	ok(y == -3200, "mouse: to the left is exactly the other way", y, -3200);
+	ModernCameraMouseSteps(0, -100, 50, 0, &y, &p);
+	ok(p == 3200 && y == 0,
+		"mouse: pushed away raises the elevation - it looks up, as the stick pushed forward does", p, 3200);
+	ModernCameraMouseSteps(0, 100, 50, 0, &y, &p);
+	ok(p == -3200, "mouse: pulled back looks down", p, -3200);
+	ModernCameraMouseSteps(1, 0, 0, 0, &y, &p);
+	ok(y == 8, "mouse: one count at the bottom of the slider is still 8 units - no count is lost", y, 8);
+	ModernCameraMouseSteps(100000, -100000, 100, 0, &y, &p);
+	ok(y == MODERN_CAMERA_MOUSE_STEP_MAX && p == MODERN_CAMERA_MOUSE_STEP_MAX,
+		"mouse: a flick is held to a quarter turn a tick, both ways", y, MODERN_CAMERA_MOUSE_STEP_MAX);
+	ModernCameraMouseSteps(-100000, 100000, 100, 0, &y, &p);
+	ok(y == -MODERN_CAMERA_MOUSE_STEP_MAX && p == -MODERN_CAMERA_MOUSE_STEP_MAX,
+		"mouse: and the other quarter turn the other way", y, -MODERN_CAMERA_MOUSE_STEP_MAX);
+
+	/* The invert, swept: it flips the pitch and touches nothing else. */
+	for (s = 0; s <= 100; s += 25)
+		for (dx = -300; dx <= 300; dx += 37)
+			for (dy = -300; dy <= 300; dy += 41)
+			{
+				ModernCameraMouseSteps(dx, dy, s, 0, &y, &p);
+				ModernCameraMouseSteps(dx, dy, s, 1, &yi, &pi);
+				ok(pi == -p, "mouse: the invert flips the pitch", pi, -p);
+				ok(yi == y, "mouse: and leaves the yaw alone", yi, y);
+			}
+
+	/* 3. A mouse tick against a stick tick of the same size. The stick is
+	 * given a rate of exactly what 100 counts at 50 are, so the two inputs ask
+	 * for the same step and everything after must agree. */
+	fast = cfg;
+	fast.yaw_rate = 3200;
+	fast.pitch_rate = 3200;
+
+	for (heading = -32768; heading < 32768; heading += 4099)
+	{
+		ModernCameraReset(&a);
+		ModernCameraUpdate(&fast, &a, fast.stick_full, -fast.stick_full, heading, 0, 0, 0, 0);
+
+		ModernCameraReset(&b);
+		ModernCameraMouseSteps(100, -100, 50, 0, &y, &p);
+		b.mouse_yaw = y;
+		b.mouse_pitch = p;
+		ModernCameraUpdate(&cfg, &b, 0, 0, heading, 0, 0, 0, 0);
+
+		ok(b.world_yaw == a.world_yaw,
+			"mouse: 100 counts at 50 turn the world yaw as far as the stick tick does",
+			b.world_yaw, a.world_yaw);
+		ok(b.world_yaw == ModernWrap(heading + 3200),
+			"mouse: which is the counts times the gain", b.world_yaw, ModernWrap(heading + 3200));
+		ok(b.offset_pitch == a.offset_pitch,
+			"mouse: and raise the elevation as far as the stick pushed forward",
+			b.offset_pitch, a.offset_pitch);
+		ok(b.stick_step == a.stick_step && b.stick_step == 3200,
+			"mouse: the step handed to her held course is the stick's", b.stick_step, a.stick_step);
+	}
+
+	ok(mouse_course_step(3200) == 3200,
+		"mouse: her held course takes that step whole", mouse_course_step(3200), 3200);
+	ok(mouse_course_step(-3200) == -3200,
+		"mouse: and the other way", mouse_course_step(-3200), -3200);
+	ok(mouse_course_step(0) == 0,
+		"mouse: while a tick without a step leaves it where it is", mouse_course_step(0), 0);
+
+	/* The stick and the mouse at once add up. */
+	ModernCameraReset(&b);
+	b.mouse_yaw = 320;
+	ModernCameraUpdate(&cfg, &b, cfg.stick_full, 0, 0, 0, 0, 0, 0);
+	ok(b.stick_step == cfg.yaw_rate + 320,
+		"mouse: the stick and the mouse at once add their steps", b.stick_step, cfg.yaw_rate + 320);
+
+	/* 4. A mouse step is steering: it cancels a swing and stands the return
+	 * still, as the stick does. */
+	ModernCameraReset(&b);
+	ModernCameraCarry(&cfg, &b, 32768);
+	ok(b.carry_total != 0, "mouse: a swing is owed before the mouse moves", b.carry_total, 32768);
+	b.mouse_yaw = 32;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 1, 0, 0, 0);
+	ok(b.steering == 1, "mouse: a mouse step is steering", b.steering, 1);
+	ok(b.carry == 0 && b.carry_total == 0, "mouse: it cancels the swing", b.carry_total, 0);
+	ok(b.ret == 0, "mouse: and the return stands still while she runs", b.ret, 0);
+
+	ModernCameraReset(&b);
+	b.mouse_pitch = -32;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 1, 0, 0, 0);
+	ok(b.steering == 1, "mouse: a pitch step alone is steering too", b.steering, 1);
+
+	/* The next tick has no hand-over: not steering, and the return runs. */
+	ModernCameraReset(&b);
+	b.mouse_yaw = 8192;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	ok(b.mouse_yaw == 0 && b.mouse_pitch == 0, "mouse: the update clears the hand-over", b.mouse_yaw, 0);
+	a = b;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	ok(b.world_yaw == a.world_yaw, "mouse: a tick without a hand-over turns nothing", b.world_yaw, a.world_yaw);
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 1, 0, 0, 0);
+	ok(b.steering == 0 && b.ret != 0, "mouse: and once she runs, the return falls home again", b.ret, 1);
+
+	/* 5. The elevation clamp holds the mouse as it holds the stick. From the
+	 * resting -1820, one quarter turn reaches 14564, so the second is the one
+	 * the clamp has to stop. */
+	ModernCameraReset(&b);
+	b.mouse_pitch = MODERN_CAMERA_MOUSE_STEP_MAX;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	b.mouse_pitch = MODERN_CAMERA_MOUSE_STEP_MAX;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	ok(b.offset_pitch == cfg.pitch_max, "mouse: the elevation stops at ChaseCamera's clamp below her",
+		b.offset_pitch, cfg.pitch_max);
+	b.mouse_pitch = -MODERN_CAMERA_MOUSE_STEP_MAX;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	b.mouse_pitch = -MODERN_CAMERA_MOUSE_STEP_MAX;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	ok(b.offset_pitch == cfg.pitch_min, "mouse: and at the 60 degree cap above her",
+		b.offset_pitch, cfg.pitch_min);
+
+	/* 6. The largest step wraps the short way: a quarter turn from near the
+	 * half turn lands on the other side, not a turn back. */
+	ModernCameraReset(&b);
+	b.offset_yaw = 32000;
+	b.mouse_yaw = MODERN_CAMERA_MOUSE_STEP_MAX;
+	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	ok(b.world_yaw == ModernWrap(32000 + MODERN_CAMERA_MOUSE_STEP_MAX),
+		"mouse: a quarter turn past the half turn wraps round", b.world_yaw,
+		ModernWrap(32000 + MODERN_CAMERA_MOUSE_STEP_MAX));
+
+	/* 7. A reset forgets a hand-over as it forgets the rest. */
+	b.mouse_yaw = 5;
+	b.mouse_pitch = 5;
+	ModernCameraReset(&b);
+	ok(b.mouse_yaw == 0 && b.mouse_pitch == 0, "mouse: a reset clears the hand-over", b.mouse_yaw, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -9063,6 +9293,7 @@ int main()
 	camera_pull();
 	camera_chord();
 	camera_flip();
+	camera_mouse();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

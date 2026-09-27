@@ -14,6 +14,9 @@ void WinClose();
 bool WinRegisterWindow(HINSTANCE hinstance);
 bool WinCreateWindow();
 void WinSetStyle(bool fullscreen, ulong& set);
+void WinMouseWant(long modern, long fmv);		// the game thread's half of the capture rule
+void WinMouseTake(long* dx, long* dy, long* buttons);	// the counts and buttons since the last take
+long WinMouseCaptured();				// is the cursor hidden and confined now
 int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nShowCmd);
 
 extern WINAPP App;

@@ -178,6 +178,9 @@ static char CameraSnaps = 0;
  *               S_UpdateInput (ModernCameraStick); the orbit reads it once
  *               per logic tick - the menus and the FMV loop call
  *               S_UpdateInput in loops of their own
+ *   the mouse   the same call hands the mouse's two steps over
+ *               (ModernCameraMouse); the orbit takes them once and clears
+ *               them
  *   the tick    ModernCameraOrbit, from ChaseCamera and from CombatCamera,
  *               exactly one of which runs per tick
  *   the angle   camera.target_angle = offset_yaw, which UpdateCameraElevation
@@ -217,6 +220,8 @@ static MODERN_CAMERA_STATE modern_cam_state;
 static long modern_cam_armed;		// has the cfg above been filled yet?
 static long modern_cam_rs_x;		// the right stick, as input.cpp last read it
 static long modern_cam_rs_y;
+static long modern_cam_mouse_yaw;	// the mouse's two steps for the next orbit tick,
+static long modern_cam_mouse_pitch;	// as input.cpp last handed them - see ModernCameraMouse
 static long modern_cam_clipped;		// did mgLOS have to clip the eye LAST tick?
 static ushort modern_cam_clipped_at;	// the tick that measured it - see ModernCameraOrbit
 static ushort modern_cam_orbit_at;	// and the tick the orbit itself last ran - ModernCameraWorldYaw
@@ -335,6 +340,8 @@ void ModernCameraResetOrbit()
 	modern_cam_orbit_at = 0;	// likewise: the state it guards is unseated by the reset above, and unseated answers nothing
 	modern_cam_lead_yaw = 0;
 	modern_cam_lead_pitch = 0;
+	modern_cam_mouse_yaw = 0;	// a step handed over under the other scheme turns nothing
+	modern_cam_mouse_pitch = 0;
 	modern_cam_have_pos = 0;
 	modern_cam_x = 0;
 	modern_cam_y = 0;
@@ -350,6 +357,19 @@ void ModernCameraStick(long rs_x, long rs_y)
 {
 	modern_cam_rs_x = rs_x;
 	modern_cam_rs_y = rs_y;
+}
+
+/* The mouse's two steps, from the same S_UpdateInput and stored for the same
+ * reason. Unlike the stick they are a distance and not a speed, so they are
+ * not kept as a level: ModernCameraOrbit hands them to the orbit once and
+ * clears them, and the next S_UpdateInput replaces them. A menu loop that
+ * calls S_UpdateInput many times between two ticks therefore leaves only its
+ * last call's steps standing, and ControlPhase's own call, one line ahead of
+ * the camera in every tick body (game\control.cpp), always comes last. */
+void ModernCameraMouse(long yaw, long pitch)
+{
+	modern_cam_mouse_yaw = yaw;
+	modern_cam_mouse_pitch = pitch;
 }
 
 bool ModernCameraActive()
@@ -510,6 +530,14 @@ static void ModernCameraOrbit()
 	was_world = modern_cam_state.world_yaw;
 	was_pitch = modern_cam_state.offset_pitch;
 	was_seated = modern_cam_state.seated;
+
+	/* The mouse's steps go in through the state, beside the stick's axes, and
+	 * the update clears them there; the copy here is cleared at once so that a
+	 * second orbit tick without a fresh S_UpdateInput turns nothing. */
+	modern_cam_state.mouse_yaw = modern_cam_mouse_yaw;
+	modern_cam_state.mouse_pitch = modern_cam_mouse_pitch;
+	modern_cam_mouse_yaw = 0;
+	modern_cam_mouse_pitch = 0;
 
 	ModernCameraUpdate(&modern_cam_cfg, &modern_cam_state, modern_cam_rs_x,
 		modern_cam_rs_y, lara_item->pos.y_rot, ModernCameraLaraMoving(), clipped,

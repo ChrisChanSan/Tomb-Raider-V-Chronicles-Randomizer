@@ -1557,11 +1557,20 @@ namespace
 		for (size_t r = 0; r < claimed.size(); r++)
 			facesClaimed += (int)claimed[r].size();
 
+		/* The holder token names the box the pairs were measured with: the
+		 * engine's own inside, or with -deep the box that many units in from
+		 * it - inside-1024 is the box one sector smaller - so that a listing
+		 * made with -deep is never mistaken for the engine's. */
+		char holder[32] = "inside";
+
+		if (deep)
+			std::snprintf(holder, sizeof holder, "inside%+ld", -deep);
+
 		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d intruding "
 			"tris=%lld in %d groups  overhang tris=%lld of %lld  worst=%ld "
-			"(group %d)  holder=inside faces=%d bound=%lld unbound=%lld\n",
+			"(group %d)  holder=%s faces=%d bound=%lld unbound=%lld\n",
 			stem.c_str(), rooms, (int)trg.groups.size(), pairs, intruding,
-			windowedRooms, tris_out, tris_total, worst, worst_group,
+			windowedRooms, tris_out, tris_total, worst, worst_group, holder,
 			facesClaimed, boundTris, unboundTris);
 		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
 			"<=256 %lld, <=1024 %lld, >1024 %lld\n",

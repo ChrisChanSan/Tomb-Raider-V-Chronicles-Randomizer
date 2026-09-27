@@ -121,6 +121,12 @@
  *                     part's phase), and -nomotion leaves them on page 0.
  *                     One `book` line per material 15 part and pass says
  *                     what the build made of it.
+ *     -bookgain <first page> <weight>
+ *                     the additive book that begins at that page drawn at
+ *                     that weight instead of the one the renderer's table
+ *                     gives it - a gain tried by drawing before it is
+ *                     written into the table. Up to four, repeat the
+ *                     switch.
  *     -glowblend add|screen
  *                     how material 2 composes in the additive pass: screen
  *                     is the renderer's own, add the ONE / ONE sum every
@@ -3537,6 +3543,8 @@ int main(int argc, char** argv)
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
+		printf("       -bookgain <first page> <weight>   an additive book "
+			"drawn at that weight\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
 		printf("       -glow   the additive pass alone over black, with and "
 			"without the scene's depth\n");
@@ -3711,6 +3719,12 @@ int main(int argc, char** argv)
 		{
 			HDRenderBookPageOverride(atoi(argv[at + 1]));
 			at++;
+		}
+		else if (!strcmp(argv[at], "-bookgain") && at + 2 < argc)
+		{
+			HDRenderBookGainOverride(atoi(argv[at + 1]),
+				(float)atof(argv[at + 2]));
+			at += 2;
 		}
 		else if (!strcmp(argv[at], "-black"))
 			g_black = true;

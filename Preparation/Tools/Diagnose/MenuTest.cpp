@@ -13,10 +13,10 @@
 
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
- * Build with bmenu.bat, run with no arguments from this folder: the last
- * family (controls_mouse_rows) reads three engine files as text, by their
- * paths relative to it, because the rows it checks live in a file that
- * cannot be linked here.
+ * Build with bmenu.bat, run with no arguments from this folder: the last two
+ * families (pad_scheme_repair and controls_mouse_rows) read engine files as
+ * text, by their paths relative to it, because the tables and rows they check
+ * live in files that cannot be linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
  * call sites, so every row added above a list meant recounting a shift
@@ -1142,6 +1142,481 @@ static int tree_quoted(const char* at, char out[][64], int max)
 	return n;
 }
 
+/* ------------------------------------------------ the pad scheme repair -- */
+
+/* The four One-key rows of specific\input.cpp, which live there as static
+ * tables and so cannot be linked here. They are stated again and held
+ * against the file's own lines (pad_scheme_repair below), so a change there
+ * is a failure here and not a stale copy. */
+static const long kOnePS5DInput[15] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14 };
+static const long kOnePS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1, 18, 19 };
+static const long kOneXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };
+static const long kOneGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+
+// specific\input.cpp's JOY_RSTICK_BITS (Modern's) and JOY_DPAD_BITS (Tank's).
+static const long kBlockedModern = 0x000F0000L;
+static const long kBlockedTank = 0x00F00000L;
+
+/* JoyDefaultRecord at One key: the fifteen, every role behind them unbound,
+ * and under Modern the medipacks on the d-pad. The chord mask is 0. */
+static void one_key_record(const long* row, int modern, long* out)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+		out[i] = i < 15 ? row[i] : -1;
+
+	if (modern)
+	{
+		out[13] = 20;
+		out[14] = 21;
+	}
+}
+
+/* ... and under Separate: the row of game\pad_scheme.h, with the same
+ * Modern override. */
+static void separate_record(const long* row, int modern, long* out)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+		out[i] = row[i];
+
+	if (modern)
+	{
+		out[13] = 20;
+		out[14] = 21;
+	}
+}
+
+/* The repair as specific\input.cpp's ApplyJoyScheme ran it before the
+ * Modifier was exempt, on arrays instead of the engine's globals: the
+ * reference the new rule has to equal wherever no Modifier is bound. */
+static void repair_before(long* layout, long* chord, const long* want, long want_chord,
+	const long* other, long blocked)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+	{
+		const long broken = layout[i] >= 0 && layout[i] <= JOY_BIT_MAX &&
+			((1L << layout[i]) & blocked) != 0;
+		const long theirs = other[i] != want[i] && layout[i] == other[i];
+
+		if (!broken && !theirs)
+			continue;
+
+		layout[i] = want[i];
+		PadChordSet(chord, i, (want_chord >> i) & 1);
+
+		if (want[i] >= 0)
+		{
+			const long wc = (want_chord >> i) & 1;
+
+			for (int k = 0; k < JOY_ROLES; k++)
+				if (k != i && layout[k] == want[i] && ((*chord >> k) & 1) == wc)
+				{
+					const long kc = (want_chord >> k) & 1;
+
+					layout[k] = (want[k] >= 0 && !PadPairTaken(layout, *chord, want[k], kc, k))
+						? want[k] : -1;
+					PadChordSet(chord, k, layout[k] >= 0 ? kc : 0);
+				}
+		}
+	}
+}
+
+// One flip of the Controls row on a set: into Modern (modern 1) or into Tank.
+static void flip(long* layout, long* chord, long* yield, const long* wantRec, const long* otherRec,
+	long want_chord, int modern, long* yielded, long* seated)
+{
+	PadSchemeRepair(layout, chord, yield, wantRec, want_chord, otherRec,
+		modern ? kBlockedModern : kBlockedTank, yielded, seated);
+}
+
+static int same_set(const long* a, const long* b)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+		if (a[i] != b[i])
+			return 0;
+
+	return 1;
+}
+
+/* Whether a set keeps the rule every default table keeps (pad_table_sound):
+ * no two roles on one pair and no plain role on the Modifier's button. */
+static int set_sound(const long* t, long chord)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+	{
+		if (t[i] < 0)
+			continue;
+
+		if (i != JOY_ROLE_MODIFIER && t[i] == t[JOY_ROLE_MODIFIER] && !((chord >> i) & 1))
+			return 0;
+
+		for (int k = i + 1; k < JOY_ROLES; k++)
+			if (t[k] == t[i] && ((chord >> k) & 1) == ((chord >> i) & 1))
+				return 0;
+	}
+
+	return 1;
+}
+
+/* The scheme repair (PadSchemeRepair, game\pad_scheme.h) as the Controls row
+ * runs it, flip by flip. The picture behind it: at One key on the PS5
+ * DirectInput page a player puts the Modifier on the touchpad (bit 13) and
+ * chords on some hotkeys; Tank's Small Medipack default on that page is bit
+ * 13 as well. Before the Modifier was exempt, the flip into Tank moved the
+ * medipack off the blocked d-pad onto 13 and unbound the Modifier, and the
+ * flip back left it unbound - every chord dead. */
+static void pad_scheme_repair()
+{
+	const long rows[4][15] =
+	{
+		{ 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14 },
+		{ 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1, 18, 19 },
+		{ 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 },
+		{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }
+	};
+	static const char* const pages[4] =
+	{
+		"no Modifier, PS5 DirectInput: every set repairs as before",
+		"no Modifier, PS5 XInput: every set repairs as before",
+		"no Modifier, Xbox XInput: every set repairs as before",
+		"no Modifier, generic DirectInput: every set repairs as before"
+	};
+	char* input = tree_file("../../../TOMB5 Code/TOMB5/specific/input.cpp");
+	long tank[JOY_ROLES], modern[JOY_ROLES];
+	long t[JOY_ROLES], r[JOY_ROLES];
+	long chord, rchord, yield, yielded, seated;
+	int i, p, role, bit, m;
+
+	check(input != 0, 1, "repair: specific\\input.cpp is readable from here");
+
+	if (input)
+	{
+		check(strstr(input, "static const long jDefPS5DInput[15] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14 };") != 0,
+			1, "repair: the PS5 DirectInput One-key row is the engine's");
+		check(strstr(input, "static const long jDefPS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1, 18, 19 };") != 0,
+			1, "repair: the PS5 XInput One-key row is the engine's");
+		check(strstr(input, "static const long jDefXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };") != 0,
+			1, "repair: the Xbox One-key row is the engine's");
+		check(strstr(input, "static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };") != 0,
+			1, "repair: the generic One-key row is the engine's");
+		check(strstr(input, "#define JOY_RSTICK_BITS\t\t0x000F0000L") != 0, 1,
+			"repair: Modern blocks the right stick, as here");
+		check(strstr(input, "#define JOY_DPAD_BITS\t\t0x00F00000L") != 0, 1,
+			"repair: Tank blocks the d-pad, as here");
+		check(strstr(input, "out[13] = 20;") != 0 && strstr(input, "out[14] = 21;") != 0, 1,
+			"repair: Modern puts the medipacks on d-pad up and down, as here");
+		check(strstr(input, "PadSchemeRepair(jLayout, &jChord, &jYield, want, want_chord, other, blocked,") != 0,
+			1, "repair: ApplyJoyScheme runs this very rule on the active set");
+		free(input);
+	}
+
+	for (i = 0; i < 15; i++)
+	{
+		check((int)kOnePS5DInput[i], (int)rows[0][i], "repair: the rows table is the four above");
+		check((int)kOnePS5XInput[i], (int)rows[1][i], "repair: the rows table is the four above");
+		check((int)kOneXbox[i], (int)rows[2][i], "repair: the rows table is the four above");
+		check((int)kOneGeneric[i], (int)rows[3][i], "repair: the rows table is the four above");
+	}
+
+	/* (a) One key, PS5 DirectInput page, Modern seated: the medipacks on the
+	 * d-pad, the Modifier on the touchpad, three hotkeys as chords. */
+	const long hotChord = (1L << (JOY_ROLE_WEAPON_FIRST + 0)) | (1L << JOY_ROLE_CHEAT_GUNS) |
+		(1L << JOY_ROLE_CHEAT_SKIP);
+
+	one_key_record(kOnePS5DInput, 0, tank);
+	one_key_record(kOnePS5DInput, 1, modern);
+
+	for (i = 0; i < JOY_ROLES; i++)
+		t[i] = modern[i];
+
+	t[JOY_ROLE_MODIFIER] = 13;
+	t[JOY_ROLE_WEAPON_FIRST + 0] = 1;	// Modifier+Cross
+	t[JOY_ROLE_CHEAT_GUNS] = 11;		// Modifier+R3
+	t[JOY_ROLE_CHEAT_SKIP] = 10;		// Modifier+L3
+	chord = hotChord;
+	yield = 0;
+
+	check(set_sound(t, chord), 1, "(a) the starting set is sound");
+
+	for (i = 0; i < JOY_ROLES; i++)
+		r[i] = t[i];
+
+	rchord = chord;
+
+	flip(t, &chord, &yield, tank, modern, 0, 0, &yielded, &seated);
+
+	check((int)t[JOY_ROLE_MODIFIER], 13, "(a) into Tank: the Modifier stays on the touchpad");
+	check((int)chord, (int)hotChord, "(a) into Tank: the chord flags are unchanged");
+	check((int)t[13], -1, "(a) into Tank: Small Medipack yields to the Modifier, unbound");
+	check((int)yield, (int)(1L << 13), "(a) into Tank: and is remembered in the yield mask");
+	check((int)yielded, (int)(1L << 13), "(a) into Tank: the call reports that one role yielding");
+	check((int)seated, 0, "(a) into Tank: and seats nothing");
+	check((int)t[14], 14, "(a) into Tank: Large Medipack goes to its Tank default, 14");
+	check((int)t[JOY_ROLE_WEAPON_FIRST + 0], 1, "(a) into Tank: the pistols chord is kept");
+	check((int)t[JOY_ROLE_CHEAT_GUNS], 11, "(a) into Tank: the guns chord is kept");
+	check((int)t[JOY_ROLE_CHEAT_SKIP], 10, "(a) into Tank: the skip chord is kept");
+
+	for (i = 0; i < 13; i++)
+		check((int)t[i], (int)tank[i], "(a) into Tank: roles 0-12 as they were");
+
+	check(set_sound(t, chord), 1, "(a) into Tank: the set is sound");
+
+	// The same flip under the rule before: the fault itself.
+	repair_before(r, &rchord, tank, 0, modern, kBlockedTank);
+	check((int)r[JOY_ROLE_MODIFIER], -1, "(a) the rule before: the Modifier fell to unbound");
+	check((int)r[13], 13, "(a) the rule before: and the medipack took the touchpad");
+
+	/* A second repair in Tank - the one a split flip or a load runs - changes
+	 * nothing: the default is still the Modifier's. */
+	{
+		long t2[JOY_ROLES], c2 = chord, y2 = yield, yd, st;
+
+		for (i = 0; i < JOY_ROLES; i++)
+			t2[i] = t[i];
+
+		flip(t2, &c2, &y2, tank, modern, 0, 0, &yd, &st);
+		check(same_set(t2, t) && c2 == chord && y2 == yield && !yd && !st, 1,
+			"(a) a second repair in Tank is idempotent");
+	}
+
+	/* (b) back into Modern. */
+	flip(t, &chord, &yield, modern, tank, 0, 1, &yielded, &seated);
+
+	check((int)t[13], 20, "(b) back into Modern: Small Medipack seated on d-pad up again");
+	check((int)t[14], 21, "(b) back into Modern: Large Medipack on d-pad down");
+	check((int)t[JOY_ROLE_MODIFIER], 13, "(b) back into Modern: the Modifier on the touchpad");
+	check((int)chord, (int)hotChord, "(b) back into Modern: the chord flags are unchanged");
+	check((int)yield, 0, "(b) back into Modern: nothing left waiting");
+	check((int)seated, (int)(1L << 13), "(b) back into Modern: the call reports the medipack seated");
+	check((int)yielded, 0, "(b) back into Modern: and nothing yielding");
+
+	{
+		long want_back[JOY_ROLES];
+
+		for (i = 0; i < JOY_ROLES; i++)
+			want_back[i] = modern[i];
+
+		want_back[JOY_ROLE_MODIFIER] = 13;
+		want_back[JOY_ROLE_WEAPON_FIRST + 0] = 1;
+		want_back[JOY_ROLE_CHEAT_GUNS] = 11;
+		want_back[JOY_ROLE_CHEAT_SKIP] = 10;
+		check(same_set(t, want_back), 1, "(b) the round trip gives the starting set back whole");
+	}
+
+	/* The player binds the waiting role himself before the next flip: it
+	 * keeps his binding and leaves the mask. */
+	for (i = 0; i < JOY_ROLES; i++)
+		t[i] = tank[i];
+
+	t[JOY_ROLE_MODIFIER] = 13;
+	t[13] = 15;
+	chord = 0;
+	yield = 1L << 13;
+	flip(t, &chord, &yield, modern, tank, 0, 1, &yielded, &seated);
+	check((int)t[13], 15, "a role the player bound since keeps his binding");
+	check((int)yield, 0, "and leaves the yield mask");
+	check((int)seated, 0, "and is not reported as seated");
+
+	/* The Modifier moves away under Tank: the next repair finds the medipack's
+	 * Tank default free and seats it there. */
+	for (i = 0; i < JOY_ROLES; i++)
+		t[i] = tank[i];
+
+	t[JOY_ROLE_MODIFIER] = 15;
+	t[13] = -1;
+	chord = 0;
+	yield = 1L << 13;
+	flip(t, &chord, &yield, tank, modern, 0, 0, &yielded, &seated);
+	check((int)t[13], 13, "a freed default seats the waiting role even in the same scheme");
+	check((int)yield, 0, "and empties the mask");
+
+	/* (c) the same two flips with no Modifier bound: the rule before's
+	 * results, pinned - Small Medipack 13 under Tank, 20 under Modern. */
+	for (i = 0; i < JOY_ROLES; i++)
+		t[i] = modern[i];
+
+	t[JOY_ROLE_WEAPON_FIRST + 0] = 1;
+	t[JOY_ROLE_CHEAT_GUNS] = 11;
+	t[JOY_ROLE_CHEAT_SKIP] = 10;
+	chord = hotChord;
+	yield = 0;
+
+	for (i = 0; i < JOY_ROLES; i++)
+		r[i] = t[i];
+
+	rchord = chord;
+
+	flip(t, &chord, &yield, tank, modern, 0, 0, &yielded, &seated);
+	repair_before(r, &rchord, tank, 0, modern, kBlockedTank);
+	check((int)t[13], 13, "(c) no Modifier, into Tank: Small Medipack on 13, as before");
+	check((int)t[14], 14, "(c) no Modifier, into Tank: Large Medipack on 14, as before");
+	check((int)t[JOY_ROLE_MODIFIER], -1, "(c) no Modifier, into Tank: none appears");
+	check(same_set(t, r) && chord == rchord, 1, "(c) no Modifier, into Tank: the whole set equals the rule before's");
+	check((int)(yield | yielded | seated), 0, "(c) no Modifier, into Tank: no yield, nothing seated");
+
+	flip(t, &chord, &yield, modern, tank, 0, 1, &yielded, &seated);
+	repair_before(r, &rchord, modern, 0, tank, kBlockedModern);
+	check((int)t[13], 20, "(c) no Modifier, back into Modern: Small Medipack on 20, as before");
+	check((int)t[14], 21, "(c) no Modifier, back into Modern: Large Medipack on 21, as before");
+	check(same_set(t, r) && chord == rchord, 1, "(c) no Modifier, back into Modern: the whole set equals the rule before's");
+	check((int)(yield | yielded | seated), 0, "(c) no Modifier, back into Modern: no yield, nothing seated");
+
+	/* (d) the Separate set, parked while One key is active, is not touched by
+	 * a One-key repair - the repair gets the active set and nothing else - and
+	 * its own flips give what the rule before gave: its Tank medipacks are
+	 * unbound, so nothing lands on its Modifier. */
+	{
+		const long sep[JOY_ROLES] = JOY_SEP_PS5_DINPUT;
+		long active[JOY_ROLES], parked[JOY_ROLES], kept[JOY_ROLES];
+		long sepTank[JOY_ROLES], sepModern[JOY_ROLES];
+		long pc, pk, yd, st, ay = 0, ac = hotChord;
+
+		one_key_record(kOnePS5DInput, 1, active);
+		active[JOY_ROLE_MODIFIER] = 13;
+		active[JOY_ROLE_WEAPON_FIRST + 0] = 1;
+		active[JOY_ROLE_CHEAT_GUNS] = 11;
+		active[JOY_ROLE_CHEAT_SKIP] = 10;
+		separate_record(sep, 1, parked);
+
+		for (i = 0; i < JOY_ROLES; i++)
+			kept[i] = parked[i];
+
+		pc = JOY_SEP_CHORD_DINPUT;
+		pk = pc;
+		flip(active, &ac, &ay, tank, modern, 0, 0, &yd, &st);
+		flip(active, &ac, &ay, modern, tank, 0, 1, &yd, &st);
+		check(same_set(parked, kept) && pc == pk, 1, "(d) the parked Separate set is untouched by One-key flips");
+
+		separate_record(sep, 0, sepTank);
+		separate_record(sep, 1, sepModern);
+
+		for (m = 0; m < 2; m++)
+		{
+			long s[JOY_ROLES], sr[JOY_ROLES], sc = JOY_SEP_CHORD_DINPUT, src = sc, sy = 0;
+
+			separate_record(sep, m, s);
+
+			for (i = 0; i < JOY_ROLES; i++)
+				sr[i] = s[i];
+
+			PadSchemeRepair(s, &sc, &sy, m ? sepTank : sepModern, JOY_SEP_CHORD_DINPUT,
+				m ? sepModern : sepTank, m ? kBlockedTank : kBlockedModern, &yd, &st);
+			repair_before(sr, &src, m ? sepTank : sepModern, JOY_SEP_CHORD_DINPUT,
+				m ? sepModern : sepTank, m ? kBlockedTank : kBlockedModern);
+			check(same_set(s, sr) && sc == src, 1, "(d) a Separate flip equals the rule before's");
+			check((int)(sy | yd | st), 0, "(d) and yields and seats nothing");
+			check((int)s[JOY_ROLE_MODIFIER], 13, "(d) its Modifier stays on the touchpad");
+			check((int)s[13], m ? -1 : 20, "(d) its Small Medipack: -1 under Tank, 20 under Modern");
+		}
+	}
+
+	/* (e) the XInput pages bind no Modifier: both flips from both defaults
+	 * give the rule before's results, the medipacks on the right stick under
+	 * Tank and on the d-pad under Modern. */
+	for (p = 1; p <= 2; p++)
+		for (m = 0; m < 2; m++)
+		{
+			one_key_record(rows[p], 0, tank);
+			one_key_record(rows[p], 1, modern);
+
+			for (i = 0; i < JOY_ROLES; i++)
+				t[i] = r[i] = m ? tank[i] : modern[i];
+
+			chord = rchord = yield = 0;
+			flip(t, &chord, &yield, m ? modern : tank, m ? tank : modern, 0, m, &yielded, &seated);
+			repair_before(r, &rchord, m ? modern : tank, 0, m ? tank : modern,
+				m ? kBlockedModern : kBlockedTank);
+			check(same_set(t, r) && chord == rchord, 1, "(e) XInput page: a flip equals the rule before's");
+			check((int)(yield | yielded | seated), 0, "(e) XInput page: no yield, nothing seated");
+			check((int)t[13], m ? 20 : 18, "(e) XInput page: Small Medipack 18 under Tank, 20 under Modern");
+			check((int)t[14], m ? 21 : 19, "(e) XInput page: Large Medipack 19 under Tank, 21 under Modern");
+		}
+
+	/* The sweep behind (c) and (e): on every page, from each scheme's default
+	 * into the other, with every role put on every bit (and unbound) in turn
+	 * and no Modifier bound, the new rule gives exactly the old one's set and
+	 * flags and never yields. */
+	for (p = 0; p < 4; p++)
+	{
+		one_key_record(rows[p], 0, tank);
+		one_key_record(rows[p], 1, modern);
+
+		for (m = 0; m < 2; m++)
+			for (role = 0; role < JOY_ROLES; role++)
+			{
+				if (role == JOY_ROLE_MODIFIER)
+					continue;
+
+				for (bit = -1; bit <= JOY_BIT_MAX; bit++)
+				{
+					int same = 1;
+
+					for (i = 0; i < JOY_ROLES; i++)
+						t[i] = m ? tank[i] : modern[i];
+
+					t[role] = bit;
+					chord = hotChord;
+
+					for (i = 0; i < JOY_ROLES; i++)
+						r[i] = t[i];
+
+					rchord = chord;
+					yield = 0;
+					flip(t, &chord, &yield, m ? modern : tank, m ? tank : modern, 0, m,
+						&yielded, &seated);
+					repair_before(r, &rchord, m ? modern : tank, 0, m ? tank : modern,
+						m ? kBlockedModern : kBlockedTank);
+
+					if (!same_set(t, r) || chord != rchord || yield || yielded || seated)
+						same = 0;
+
+					check(same, 1, pages[p]);
+				}
+			}
+	}
+
+	/* And with a Modifier bound, on every page and every bit neither scheme
+	 * blocks: a flip into either scheme and back never moves the Modifier,
+	 * leaves every chord flag as it was, keeps the set sound, and the
+	 * round trip gives the starting set back. */
+	for (p = 0; p < 4; p++)
+	{
+		one_key_record(rows[p], 0, tank);
+		one_key_record(rows[p], 1, modern);
+
+		for (m = 0; m < 2; m++)
+			for (bit = 0; bit < 16; bit++)
+			{
+				long start[JOY_ROLES];
+
+				for (i = 0; i < JOY_ROLES; i++)
+					t[i] = m ? modern[i] : tank[i];
+
+				// The capture's own rule: the role on that button gives it up.
+				for (i = 0; i < JOY_ROLES; i++)
+					if (t[i] == bit)
+						t[i] = -1;
+
+				t[JOY_ROLE_MODIFIER] = bit;
+				chord = 0;
+				yield = 0;
+
+				for (i = 0; i < JOY_ROLES; i++)
+					start[i] = t[i];
+
+				flip(t, &chord, &yield, m ? tank : modern, m ? modern : tank, 0, !m,
+					&yielded, &seated);
+				check((int)t[JOY_ROLE_MODIFIER], bit, "Modifier bound: a flip never moves it");
+				check((int)chord, 0, "Modifier bound: a flip keeps the chord flags");
+				check(set_sound(t, chord), 1, "Modifier bound: the set stays sound");
+
+				flip(t, &chord, &yield, m ? modern : tank, m ? tank : modern, 0, m,
+					&yielded, &seated);
+				check((int)t[JOY_ROLE_MODIFIER], bit, "Modifier bound: nor does the flip back");
+				check(same_set(t, start), 1, "Modifier bound: the round trip gives the set back");
+			}
+	}
+}
+
 /* The two mouse rows live in game\menu_frame.cpp's Controls table, which
  * needs the engine to run and so cannot be linked here. What can be checked
  * without it is what the tree says: the table's rows in order, the two rows'
@@ -1333,6 +1808,7 @@ int main()
 	pad_role_slots();
 	pad_chord_rule();
 	pad_default_tables();
+	pad_scheme_repair();
 	controls_mouse_rows();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

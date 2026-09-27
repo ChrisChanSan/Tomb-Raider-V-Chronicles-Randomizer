@@ -2480,28 +2480,32 @@ it, ANDREA1's haze and RICH2 room 78's glow keep a gain of 1.
 
 **Why.** The mist of page 2100, preset (1, 0.2, 2, 1), is the strength that is right
 as the game draws it after the fades, and it is the measure here.
-- The mist's level. RoomProbe over ANDY2 room 6 from 8150 7000 2100, yaw -94, pitch
-  2.2, fov 86.2 - the view of a recording of that room at 2.1 seconds, matched by the
-  gradient correlation of the pictures (0.40 at 320 x 180; window, arch and post
-  within about 20 pixels at 1280 x 720). Over the pixels the mist's glow lights above
-  2 of 255 (25.7 per cent of the frame) its light is 5.2 on average and 8.0 at the
-  95th percentile, and its share of the frame - the frame with material 2 drawn
-  against the frame with no additive material, in luma - is 5.1 on average and 8.0 at
-  the 95th percentile, 20.7 per cent of the frame's luma there. Above 8 of 255 lie
-  only 0.84 per cent of the frame - the near candle halos (29 per cent of those pixels)
-  and two brighter patches of the mist by the far wall: mean 12.6, 95th percentile
-  23.3, 30.9 per cent of the frame's luma. As a picture measurement, the recording
-  shows the mist 4.55 +- 0.54 of 255 above the ring 16 to 48 pixels around it, over 19
-  steady frames, with the scene's own contrast taken out through RoomProbe's frame
-  without additive material; RoomProbe's own frame gives 4.45 over the same pixels.
+- The mist's level. RoomProbe over ANDY2 room 6 from 8150 7000 2100, yaw -94, pitch 2.2,
+  fov 86.2 - the view of a recording of that room at 2.1 seconds, matched by the gradient
+  correlation of the pictures (0.40 at 320 x 180; window, arch and post within about 20
+  pixels at 1280 x 720). Over the pixels the mist's glow lights above 2 of 255 (25.7 per
+  cent of the frame) its light is 5.2 on average and 8.0 at the 95th percentile, and its
+  share of the frame - the frame with material 2 drawn against the frame with no additive
+  material, in luma - is 5.1 on average and 8.0 at the 95th percentile, 20.7 per cent of
+  the frame's luma there. Above 8 of 255 lie only 0.84 per cent of the frame - the near
+  candle halos (29 per cent of those pixels) and two brighter patches of the mist by the
+  far wall: mean 12.6, 95th percentile 23.3, 30.9 per cent of the frame's luma. As a
+  picture measurement, the recording shows the mist 4.55 +- 0.54 of 255 above the ring 16
+  to 48 pixels around it, over 19 steady frames, with the scene's own contrast taken out
+  through RoomProbe's frame without additive material; RoomProbe's own frame gives 4.45
+  over the same pixels. The raw lift over the ring is only about 1 of 255; most of the
+  4.55 is the background correction taken from RoomProbe's frame, so the agreement rests
+  largely on RoomProbe itself.
 - The flash that comes now and then in that room is not a gain of material 2. The
-  recording shows bursts of 0.8 to 1.3 seconds, three to four seconds apart, that step
-  at 30 Hz, the logic tick; each lifts the lit surfaces of the room's middle and right
-  (up to 2.3 times, the left wall not at all, the texture showing in the difference,
-  so light is added) and with them the beams of page 2100, because the glow shader
-  multiplies the page by the room's light. No file of the HD path reads the storm's
-  `LightningRGB` (`game/draw.cpp`), and the source of the burst was not isolated. It
-  is left as it is.
+  recording shows bursts of 0.8 to 1.3 seconds, three to four seconds apart, that step at
+  30 Hz, the logic tick; each lifts the lit surfaces of the room's middle and right (up to
+  2.3 times, the left wall not at all, the texture showing in the difference, so light is
+  added) and with them the beams of page 2100, because the glow shader multiplies the page
+  by the room's light. No file of the HD path reads the storm's `LightningRGB`
+  (`game/draw.cpp`), and the source of the burst was not isolated; the bursts' length and
+  spacing do match the storm clock there (`LightningCount` runs 16 to 47 ticks, a strike
+  starts with a chance of 1 in 128 per tick), so the storm reaches the room by some path
+  other than the sky's. It is left as it is.
 - The Remaster's picture, measured on recordings of the Remaster and of this build.
   The title flyby is spline sequence 1 of the TITLE `.TRC`'s spot cameras, computed
   as `game/spotcam.cpp` does and drawn by RoomProbe with the roll applied after;

@@ -164,6 +164,41 @@ namespace
 			? part.param[0] : 0.5f;
 	}
 
+	/* Whether a range is drawn with its back faces culled.
+	 *
+	 * The opaque surfaces of a room are drawn one-sided. Drawn with no
+	 * culling, the back of a wall paints over whatever
+	 * stands behind it - RICH2's X-ray room, looked at from room 6 through
+	 * the scanner glass, shows the rear face of group 11's corridor wall as
+	 * a flat green pane where the corridor, its crates and the scanned Lara
+	 * should be. D3DCULL_CCW culls exactly those faces: the .TRG winds its
+	 * front faces clockwise on the screen, which is Direct3D's own front
+	 * (RoomProbe: D3DCULL_CW at the same view shows the pane and loses the
+	 * corridor).
+	 *
+	 * The art is made for it. Over one view from the middle of every third
+	 * room of ANDREA1, JOBY2 and RICH2 (192 pictures each way) culling turns
+	 * 25,660 pixels to the clear colour, four views more than 500 each: a
+	 * near object's back at the edge of JOBY2 room 21's view, a wall's back
+	 * that hid RICH2 room 108's corridor, and the one place it opens a wall
+	 * - two window openings of one JOBY2 building (rooms 138 and 153),
+	 * through which the back of the opening's own side wall was seen, and
+	 * behind which no room is drawn from there.
+	 *
+	 * Only the opaque ranges: pass 0 with no alpha test. A cut-out is a
+	 * flag, a leaf or a railing drawn as one card that is seen from both
+	 * sides; the alpha pass is a cut-out throughout (the 0.5 reference in
+	 * draw_pass); the glass and the additive light are sheets with no
+	 * thickness. A water surface is seen from above and from below, and the
+	 * sky dome is seen from inside, so neither is culled whatever pass it
+	 * is in. */
+	inline int RangeCulls(int pass, float alphaRef, float blend, bool water,
+		bool sky)
+	{
+		return pass == 0 && alphaRef == 0.0f && blend == 0.0f && !water &&
+			!sky ? 1 : 0;
+	}
+
 	/* The weight of one additive part.
 	 *
 	 * The additive pass is blended ONE / ONE with the depth write off, so
@@ -1087,6 +1122,10 @@ namespace
 		// The inside/overhang split, filled always and in the sort key only
 		// while HDRenderSplitOverhang is on - see the note over it.
 		int overhang = 0;
+		/* 1 where the triangles of this range are drawn with their back
+		 * faces culled - see RangeCulls below. In the sort key, because the
+		 * cull mode is one render state per draw call. */
+		int cull = 0;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over. With a 32 bit index buffer they are only a measurement; with
 		 * a 16 bit one they are the draw call - the indices
@@ -1446,6 +1485,10 @@ namespace
 	int g_intrusion_count = 0;
 	// The diagnostic inside/overhang split - see HDRenderSplitOverhang.
 	int g_split_overhang = 0;
+	/* Whether the ranges RangeCulls picks are drawn culled. 1 in the engine
+	 * always; RoomProbe's -cull none sets 0 for the two-sided picture out
+	 * of the same build - see HDRenderCullOpaque. */
+	int g_cull_opaque = 1;
 	std::vector<int> g_intrusion_hits;
 
 	/* The openings the randomizer cut, and how many triangles
@@ -2498,6 +2541,33 @@ void HDRenderSplitOverhang(int on)
 	g_split_overhang = on ? 1 : 0;
 }
 
+void HDRenderCullOpaque(int on)
+{
+	g_cull_opaque = on ? 1 : 0;
+}
+
+void HDRenderCullRanges(int* opaque, int* twoSided)
+{
+	int culled = 0;
+	int both = 0;
+
+	for (size_t g = 0; g < g_groups.size(); g++)
+		for (int pass = 0; pass < 3; pass++)
+			for (const HDRange& range : g_groups[g].pass[pass])
+			{
+				if (range.cull)
+					culled++;
+				else
+					both++;
+			}
+
+	if (opaque)
+		*opaque = culled;
+
+	if (twoSided)
+		*twoSided = both;
+}
+
 void HDRenderSetIntrusions(const HDIntrusion* list, int count)
 {
 	g_intrusions = count > 0 ? list : 0;
@@ -3181,6 +3251,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int glow;			// see BuildGlowParts, else -1
 		int overhang;			// see HDRoomBox
 		int intruding;			// see HDIntrusion
+		int cull;			// see RangeCulls
 		unsigned int first;
 	};
 
@@ -3381,6 +3452,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				// those would say a level has glass where it has none.
 				if (blend != 0.0f && run.count)
 					g_blend_parts++;
+
+				// One-sided or two-sided - see RangeCulls.
+				const int cull = RangeCulls(pass, aref, blend, water,
+					(int)g >= g_room_groups);
 
 				/* The destructible pieces - see HDDestructible above.
 				 * One id per (group, material); the box is filled from the
@@ -3613,6 +3688,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					tri.overhang = overhang;
 					tri.intruding = intruding;
+					tri.cull = cull;
 					tri.slot = slot;
 					tri.scrollU = su;
 					tri.scrollV = sv;
@@ -3682,6 +3758,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					/* One glow part per draw call. The parts are numbered in
 					 * the file's order, so the triangles keep that order. */
 					if (a.glow != b.glow) return a.glow < b.glow;
+					/* One cull mode per draw call. Within pass 0 it follows
+					 * the alpha reference and the ripple, which are in the
+					 * key already; only a still water sheet on a wall's own
+					 * page can come out as a draw call of its own. */
+					if (a.cull != b.cull) return a.cull < b.cull;
 					/* And the art that stands inside another room never
 					 * shares a draw call with the art that does not - the
 					 * scissor test is on for one and off for the other. Last
@@ -3729,6 +3810,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.glow = tris[0].glow;
 			range.intruding = tris[0].intruding;
 			range.overhang = tris[0].overhang;
+			range.cull = tris[0].cull;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
 
@@ -3755,6 +3837,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].material == range.material &&
 					tris[i].glow == range.glow &&
 					tris[i].intruding == range.intruding &&
+					tris[i].cull == range.cull &&
 					(!g_split_overhang ||
 						tris[i].overhang == range.overhang);
 
@@ -3812,6 +3895,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.glow = tris[i].glow;
 					range.intruding = tris[i].intruding;
 					range.overhang = tris[i].overhang;
+					range.cull = tris[i].cull;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 				}
@@ -4683,6 +4767,11 @@ namespace
 		 * three registers are on the device. */
 		bool glow_ps_on = false;
 		int glow_up = -1;
+		/* The cull mode on the device. The bracket installs D3DCULL_NONE,
+		 * the ranges RangeCulls picks switch it to D3DCULL_CCW, and the end
+		 * of the pass puts NONE back, so a model drawn between two rooms
+		 * finds the state the bracket installed. */
+		DWORD cull_now = D3DCULL_NONE;
 
 		if (additive_pass && !g_glow_no_aniso &&
 			(g_caps.RasterCaps & D3DPRASTERCAPS_ANISOTROPY) &&
@@ -4966,6 +5055,16 @@ namespace
 
 			g_device->SetTexture(0, page);
 
+			// One-sided or two-sided - see RangeCulls.
+			const DWORD want_cull = range.cull && g_cull_opaque
+				? D3DCULL_CCW : D3DCULL_NONE;
+
+			if (want_cull != cull_now)
+			{
+				cull_now = want_cull;
+				g_device->SetRenderState(D3DRS_CULLMODE, cull_now);
+			}
+
 			if (g_index32)
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
 					(UINT)g_vertex_count, range.start, range.count / 3);
@@ -4994,6 +5093,9 @@ namespace
 			g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 			g_wrapping = false;
 		}
+
+		if (cull_now != D3DCULL_NONE)
+			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
 		// A pass that ended on a glow draw call leaves its states behind.
 		if (glow_ps_on)

@@ -540,6 +540,13 @@ int HDRenderGroupCutTriangles(int group);
  * the window is a property of the triangle. RoomProbe turns it on for a
  * comparison picture. Call it before HDRenderLevelBegin. */
 void HDRenderSplitOverhang(int on);
+/* Back-face culling for the opaque room ranges - pass 0 with no alpha test,
+ * no water and no sky (hd_render.cpp, RangeCulls). 1 by default and in the
+ * engine always; RoomProbe's -cull none sets 0 for the two-sided picture out
+ * of the same build. Read per draw call, so it may be called at any time. */
+void HDRenderCullOpaque(int on);
+// The built level's draw calls, those drawn culled and those drawn two-sided.
+void HDRenderCullRanges(int* opaque, int* twoSided);
 int HDRenderIntrusionHits(int at);
 // How many of a group's triangles stand inside some OTHER room, all three
 // passes together. Non-zero is the whole of "this room needs a portal

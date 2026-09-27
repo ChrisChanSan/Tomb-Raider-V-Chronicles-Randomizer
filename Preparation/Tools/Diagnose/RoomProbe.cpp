@@ -126,6 +126,12 @@
  *                     shader (0) - the before picture out of the same build.
  *                     The additive block lists what the level build decided
  *                     for every glow part.
+ *     -cull none|opaque
+ *                     the opaque room ranges - pass 0 with no alpha test, no
+ *                     water and no sky - drawn with their back faces culled
+ *                     (opaque, the renderer's own) or two-sided (none), the
+ *                     before picture out of the same build. Every other
+ *                     range is two-sided either way.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -3305,6 +3311,8 @@ int main(int argc, char** argv)
 		printf("       -hdm                          apply the .hdm sidecar "
 			"beside it (needs -roombox)\n");
 		printf("       -window all|open|intruding   (needs -roombox)\n");
+		printf("       -cull none|opaque   the opaque ranges two-sided or "
+			"one-sided (default)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
@@ -3585,6 +3593,14 @@ int main(int argc, char** argv)
 			g_window_mode = !strcmp(argv[at + 1], "open") ? HD_WINDOW_OPEN
 				: !strcmp(argv[at + 1], "intruding") ? HD_WINDOW_INTRUDING
 				: HD_WINDOW_ALL;
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-cull") && at + 1 < argc)
+		{
+			HDRenderCullOpaque(strcmp(argv[at + 1], "none") ? 1 : 0);
+			printf("-cull: the opaque ranges are drawn %s\n",
+				strcmp(argv[at + 1], "none") ? "one-sided (the renderer's own)"
+					: "two-sided");
 			at += 1;
 		}
 		else if (!strcmp(argv[at], "-flatart") && at + 5 < argc)
@@ -4121,6 +4137,12 @@ int main(int argc, char** argv)
 		stats.ranges, stats.splitRanges ? " (some split by the primitive limit)" : "");
 	printf("biggest range %d triangles, %d triangles on the fallback page\n",
 		stats.biggestRangeTris, stats.fallbackPageTris);
+	{
+		int culled = 0, both = 0;
+
+		HDRenderCullRanges(&culled, &both);
+		printf("cull: ranges opaque=%d two_sided=%d\n", culled, both);
+	}
 	/* The overlap list out of the engine's own build, so that it can be held
 	 * line for line against TrgProbe -roomspace, which answers the same
 	 * question out of the two files without a renderer. The two lists have

@@ -2863,6 +2863,18 @@ static void HDLevelBuildHD()
 	// reads in the order the build ran.
 	ReportRoomCuts();
 
+	/* How many of the level's draw calls are drawn with their back faces
+	 * culled and how many two-sided - see RangeCulls in hd_render.cpp. */
+	if (gLogEnabled)
+	{
+		int culled = 0;
+		int both = 0;
+
+		HDRenderCullRanges(&culled, &both);
+		Log("HDLOG cull level=%s ranges opaque=%d two_sided=%d", g_stem,
+			culled, both);
+	}
+
 	/* `flooded` is how many of the two shimmer sets no classic corner
 	 * named and the plane answered for - the number that says whether a
 	 * level's water animates over its whole surface or over a sliver of it -

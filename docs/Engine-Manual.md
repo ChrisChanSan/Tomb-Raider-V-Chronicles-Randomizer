@@ -1390,11 +1390,14 @@ see *Lara in HD* below for which of her stays classic and why.
   Breach cutscene plays its six-second loop. Flames, smoke, candle and gas
   flames, the X-ray scanner's figure in Escape with the Iris and the rain rings
   on the ground of Ireland move as well, 168 surfaces in nine levels. The ones
-  that add light carry no strength in the art, so they are held to the church
-  mist's strength like the glows: where the brightest of them shows brightest
-  its brightest pixels add about 8 steps out of 255. The fires stay visible at
-  that strength; the candle flames and the smoke are barely there, and the
-  X-ray figure is gone to the eye. They stop with `hd_motion`.
+  that add light carry no strength in the art; the time a page stands, a
+  fortieth to a tenth of a second, doubles as their strength, which is how
+  faint they have always been drawn - the fires, the candle flames and the
+  X-ray figure look as they did while they stood still. One strength per
+  picture sheet, measured against the church mist the glows are held to, was
+  tried and left out: the fires set it for the candles, the smoke and the
+  X-ray figure too, and those all but vanished. A truer strength waits for a
+  reference picture to measure against. They stop with `hd_motion`.
 - **Polished surfaces catch the light at a grazing angle.** The Remaster's
   artists marked which surfaces are glossy and how glossy - the marble of
   Rome, the painted steel of the submarine, 214 surfaces over twelve levels -

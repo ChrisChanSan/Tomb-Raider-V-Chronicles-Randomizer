@@ -255,6 +255,15 @@ static long joy_scheme_seated = -1;
 static long jChord = 0;
 static long jSplitParkedChord = JOY_SEP_CHORD_DINPUT;
 
+/* The yield masks, one bit per role, one long per set beside the chord
+ * flags and travelling with them: the roles the scheme repair left unbound
+ * because the Modifier holds their default, so that a later repair can seat
+ * them again (PadSchemeRepair, game\pad_scheme.h). Stored as "JYield" and
+ * "SJYield", which older builds ignore; 0 - nothing waiting - is what a
+ * registry without them means. */
+static long jYield = 0;
+static long jSplitParkedYield = 0;
+
 /* The one place that produces a 28-role default record and its chord mask, for
  * either scheme and either Action setting (`split`: 0 One key, 1 Separate). The
  * active style's own table is the source in all four cases, so the roles the
@@ -333,6 +342,9 @@ void ApplyJoyDefaults()
 	 * sets both, so the two cannot come back out of step. */
 	JoyDefaultRecord(tomb5.control_modern ? 1 : 0, split, jLayout, &jChord);
 
+	// Every role is on its default again, so nothing waits to be seated.
+	jYield = 0;
+
 	joy_scheme_seated = tomb5.control_modern ? 1 : 0;
 }
 
@@ -357,6 +369,15 @@ void ApplyJoyDefaults()
  * is free, and only falls to unbound if not. Without that, a medipack put on
  * the d-pad by hand under Tank is lost on the way into Modern.
  *
+ * The Modifier is the one role that is never displaced: every chord of the
+ * set hangs on it. A role whose default is the Modifier's pair is left
+ * unbound instead and remembered in the set's yield mask, and a later repair
+ * that finds the default free seats it again. On the PS5 DirectInput page at
+ * One key, Tank's Small Medipack default is bit 13, the touchpad, which is
+ * where the Separate row and a player put the Modifier; displacing it there
+ * would silence every chord on the way into Tank and leave them silent on the
+ * way back. The rule itself is PadSchemeRepair (game\pad_scheme.h).
+ *
  * Known cost of part 2: a binding the player chose that equals the other
  * scheme's default for that role cannot be told from an unrepaired one, so it
  * follows the switch too; since the registry does not store which scheme wrote
@@ -379,20 +400,13 @@ static void JoyChordWrite(long role, long on)
 		jChord &= ~(1L << role);
 }
 
-static long JoyBitTaken(long bit, long chord, long except)
-{
-	for (int i = 0; i < JOY_ROLES; i++)
-		if (i != except && jLayout[i] == bit && JoyChordOf(i) == chord)
-			return 1;
-
-	return 0;
-}
-
 void ApplyJoyScheme()
 {
 	long want[JOY_ROLES];
 	long other[JOY_ROLES];
 	long want_chord;
+	long yielded;
+	long seated;
 	const long modern = tomb5.control_modern ? 1 : 0;
 	// The repair works on the active set (jLayout), whichever Action setting
 	// seated it, and measures it against the same setting's defaults - otherwise
@@ -407,38 +421,21 @@ void ApplyJoyScheme()
 	// are equal anyway, since both calls get the same `split`.
 	JoyDefaultRecord(modern ? 0 : 1, split, other, NULL);
 
-	for (int i = 0; i < JOY_ROLES; i++)
-	{
-		// JOY_BIT_MAX is the highest bit either joystick path writes
-		// (specific\dxshell.cpp); the bound is here because the value comes out
-		// of the registry.
-		const long broken = jLayout[i] >= 0 && jLayout[i] <= JOY_BIT_MAX &&
-			((1L << jLayout[i]) & blocked) != 0;
-		const long theirs = other[i] != want[i] && jLayout[i] == other[i];
+	PadSchemeRepair(jLayout, &jChord, &jYield, want, want_chord, other, blocked,
+		&yielded, &seated);
 
-		if (!broken && !theirs)
-			continue;
-
-		/* The chord flag follows the button. A chord is a property of the
-		 * Action setting and the page, so this puts a moved role back onto its
-		 * own default's pair. */
-		jLayout[i] = want[i];
-		JoyChordWrite(i, (want_chord >> i) & 1);
-
-		if (want[i] >= 0)
+	/* PADLOG repair: which role the Modifier kept off its default and which
+	 * one went back to it - the two moves that are not a plain repair. */
+	if (gLogEnabled)
+		for (int i = 0; i < JOY_ROLES; i++)
 		{
-			const long wc = (want_chord >> i) & 1;
+			if ((yielded >> i) & 1)
+				Log("PADLOG repair role=%d default=%ld held by the modifier, left unbound",
+					i, want[i]);
 
-			for (int k = 0; k < JOY_ROLES; k++)
-				if (k != i && jLayout[k] == want[i] && JoyChordOf(k) == wc)
-				{
-					const long kc = (want_chord >> k) & 1;
-
-					jLayout[k] = (want[k] >= 0 && !JoyBitTaken(want[k], kc, k)) ? want[k] : -1;
-					JoyChordWrite(k, jLayout[k] >= 0 ? kc : 0);
-				}
+			if ((seated >> i) & 1)
+				Log("PADLOG repair role=%d seated=%ld", i, jLayout[i]);
 		}
-	}
 
 	joy_scheme_seated = modern;
 }
@@ -478,6 +475,12 @@ long* JoyChordSet(long split)
 	return (joy_split_seated == (split ? 1 : 0)) ? &jChord : &jSplitParkedChord;
 }
 
+// And the yield mask, the same way.
+long* JoyYieldSet(long split)
+{
+	return (joy_split_seated == (split ? 1 : 0)) ? &jYield : &jSplitParkedYield;
+}
+
 /* What a registry without SJ* means: this page's and this path's Separate
  * defaults, with their chord mask. Computed rather
  * than written out a second time in specific\registry.cpp, so game\pad_scheme.h
@@ -488,7 +491,8 @@ void JoySplitDefaults(long* out, long* chord)
 }
 
 /* The active set's chord flag, for the binding page and for the capture. The
- * repair has its own two above; these are the ones outside this file. */
+ * repair has its own (game\pad_scheme.h); these are the ones outside this
+ * file. */
 long JoyRoleIsChord(long role)
 {
 	return JoyChordOf(role);
@@ -524,6 +528,14 @@ void ApplyJoySplit()
 
 		jChord = jSplitParkedChord;
 		jSplitParkedChord = t;
+	}
+
+	// And so does the yield mask, for the same reason.
+	{
+		const long t = jYield;
+
+		jYield = jSplitParkedYield;
+		jSplitParkedYield = t;
 	}
 
 	joy_split_seated = PadSetSeat(jLayout, jSplitParked, (int)joy_split_seated, (int)split);

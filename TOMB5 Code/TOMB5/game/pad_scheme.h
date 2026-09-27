@@ -189,3 +189,132 @@ inline int PadSetSeat(long* active, long* parked, int seated, int want)
 
 	return want;
 }
+
+/* Whether a role other than `except` holds the pair (`bit`, `flag`) in the
+ * set - the pair and not the button, because R3 and Modifier+R3 are two
+ * bindings. */
+inline int PadPairTaken(const long* layout, long chord, long bit, long flag, long except)
+{
+	for (int i = 0; i < JOY_ROLES; i++)
+		if (i != except && layout[i] == bit && ((chord >> i) & 1) == flag)
+			return 1;
+
+	return 0;
+}
+
+inline void PadChordSet(long* chord, long role, long on)
+{
+	if (on)
+		*chord |= 1L << role;
+	else
+		*chord &= ~(1L << role);
+}
+
+/* Whether the Modifier holds the pair (`bit`, `flag`): the question the
+ * repair asks before it moves anything onto a pair. */
+inline int PadModifierHolds(const long* layout, long chord, long bit, long flag)
+{
+	return bit >= 0 && layout[JOY_ROLE_MODIFIER] == bit &&
+		((chord >> JOY_ROLE_MODIFIER) & 1) == flag;
+}
+
+/* The scheme repair on one set (specific\input.cpp, ApplyJoyScheme, says why
+ * it exists and what its two parts are): `layout` and `chord` are the active
+ * set and its chord flags, `want` and `wantChord` the active scheme's default
+ * record, `other` the other scheme's, `blocked` the bits the active scheme
+ * takes away. Here as arithmetic so that MenuTest runs the engine's own rule.
+ *
+ *  1. A role on a blocked bit, or still on the other scheme's default for
+ *     itself, goes to this scheme's default. A role already holding that
+ *     pair is displaced to its own default if that is free, else unbound.
+ *  2. The Modifier is never displaced. It is the anchor of every chord the
+ *     set has, and one default outranks none of them: a role whose default
+ *     is the Modifier's pair is left unbound instead and its bit is set in
+ *     `yield`, the set's own mask of roles the Modifier keeps off their
+ *     default.
+ *  3. A role in `yield` is seated on its default as soon as a repair finds
+ *     that pair free and the bit not blocked - the medipack the Modifier kept
+ *     off the touchpad under Tank goes back to the d-pad under Modern. A role
+ *     the player has bound in the meantime leaves the mask: a binding is the
+ *     player's own choice.
+ *
+ * Without a bound Modifier, part 2 never applies (no default is -1), and part
+ * 3 finds an empty mask, so the result is exactly part 1's.
+ *
+ * `yielded` and `seated` say which roles this call left unbound for the
+ * Modifier and which it seated again, for the log. */
+inline void PadSchemeRepair(long* layout, long* chord, long* yield, const long* want,
+	long wantChord, const long* other, long blocked, long* yielded, long* seated)
+{
+	*yielded = 0;
+	*seated = 0;
+
+	for (int i = 0; i < JOY_ROLES; i++)
+	{
+		const long broken = layout[i] >= 0 && layout[i] <= JOY_BIT_MAX &&
+			((1L << layout[i]) & blocked) != 0;
+		const long theirs = other[i] != want[i] && layout[i] == other[i];
+		const long wc = (wantChord >> i) & 1;
+
+		if (!broken && !theirs)
+			continue;
+
+		if (i != JOY_ROLE_MODIFIER && PadModifierHolds(layout, *chord, want[i], wc))
+		{
+			layout[i] = -1;
+			PadChordSet(chord, i, 0);
+			*yield |= 1L << i;
+			*yielded |= 1L << i;
+			continue;
+		}
+
+		/* The chord flag follows the button. A chord is a property of the
+		 * Action setting and the page, so this puts a moved role back onto
+		 * its own default's pair. */
+		layout[i] = want[i];
+		PadChordSet(chord, i, wc);
+
+		if (want[i] < 0)
+			continue;
+
+		for (int k = 0; k < JOY_ROLES; k++)
+			if (k != i && k != JOY_ROLE_MODIFIER && layout[k] == want[i] &&
+				((*chord >> k) & 1) == wc)
+			{
+				const long kc = (wantChord >> k) & 1;
+
+				layout[k] = (want[k] >= 0 && !PadPairTaken(layout, *chord, want[k], kc, k))
+					? want[k] : -1;
+				PadChordSet(chord, k, layout[k] >= 0 ? kc : 0);
+
+				if (layout[k] < 0 && PadModifierHolds(layout, *chord, want[k], kc))
+				{
+					*yield |= 1L << k;
+					*yielded |= 1L << k;
+				}
+			}
+	}
+
+	for (int r = 0; r < JOY_ROLES; r++)
+	{
+		if (!((*yield >> r) & 1))
+			continue;
+
+		if (layout[r] >= 0)
+		{
+			*yield &= ~(1L << r);
+			continue;
+		}
+
+		const long wc = (wantChord >> r) & 1;
+
+		if (want[r] < 0 || want[r] > JOY_BIT_MAX || ((1L << want[r]) & blocked) != 0 ||
+			PadPairTaken(layout, *chord, want[r], wc, r))
+			continue;
+
+		layout[r] = want[r];
+		PadChordSet(chord, r, wc);
+		*yield &= ~(1L << r);
+		*seated |= 1L << r;
+	}
+}

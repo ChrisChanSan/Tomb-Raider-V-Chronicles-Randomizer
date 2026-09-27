@@ -35,6 +35,7 @@ void ApplyJoySplit();	// ... and so do the pad's two sets, when the Action row f
 void JoySplitDefaults(long* out, long* chord);	// the Separate set's defaults for the active page and path - what a registry without SJ* means
 long* JoySplitSet(long split);	// one Action setting's stored pad set, wherever it is sitting (specific\registry.cpp)
 long* JoyChordSet(long split);	// ... and that set's chord flags, one bit per role
+long* JoyYieldSet(long split);	// ... and the roles the scheme repair left unbound for its Modifier, one bit per role
 long JoyRoleIsChord(long role);	// whether the active set's role is a chord - asked by the binding page and the repair
 void JoyRoleSetChord(long role, long on);
 long JoyRole(long role);	// whether the active set's pad role fires this tick - the one question every producer asks (PadRoleFires, game\pad_scheme.h)

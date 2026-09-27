@@ -64,6 +64,12 @@ static const char* const JoyOneRegNames[JOY_ROLES - JOY_ROLE_MODIFIER] =
  * about. */
 static const char* const JoyChordRegNames[2] = { "JChord", "SJChord" };
 
+/* Beside them, one more mask per set on the same terms: the roles the scheme
+ * repair left unbound because the Modifier holds their default, waiting to be
+ * seated again (JoyYieldSet, specific\input.cpp). A registry without these
+ * names has nothing waiting, which is 0. */
+static const char* const JoyYieldRegNames[2] = { "JYield", "SJYield" };
+
 bool REG_OpenKey(LPCSTR lpSubKey)
 {
 	return RegCreateKeyEx(HKEY_CURRENT_USER, lpSubKey, 0, (CHAR*)"", REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, 0, &phkResult, &dwDisposition) == ERROR_SUCCESS;
@@ -523,6 +529,7 @@ bool LoadSettings()
 	// The One-key set's chord flags. 0 for a registry that has never seen this
 	// build, which is the same sentence one line up in mask form.
 	REG_ReadLong((char*)JoyChordRegNames[0], (ulong&)*JoyChordSet(0), 0);
+	REG_ReadLong((char*)JoyYieldRegNames[0], (ulong&)*JoyYieldSet(0), 0);
 
 	/* Separate's own set beside it. The fifteen lines above keep their
 	 * meaning exactly - they are the One-key set, whichever setting the
@@ -599,6 +606,8 @@ bool LoadSettings()
 
 		for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
 			REG_ReadLong((char*)JoySplitRegNames[i], (ulong&)sset[i], (ulong)sset[i]);
+
+		REG_ReadLong((char*)JoyYieldRegNames[1], (ulong&)*JoyYieldSet(1), 0);
 	}
 
 	REG_ReadLong((char*)"MusicVolume", (ulong&)MusicVolume, 80);
@@ -720,6 +729,8 @@ void SaveSettings()
 	// button number an older build reads it as.
 	REG_WriteLong((char*)JoyChordRegNames[0], *JoyChordSet(0));
 	REG_WriteLong((char*)JoyChordRegNames[1], *JoyChordSet(1));
+	REG_WriteLong((char*)JoyYieldRegNames[0], *JoyYieldSet(0));
+	REG_WriteLong((char*)JoyYieldRegNames[1], *JoyYieldSet(1));
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
 	REG_WriteLong((char*)"JoyStyle", JoyStyle);

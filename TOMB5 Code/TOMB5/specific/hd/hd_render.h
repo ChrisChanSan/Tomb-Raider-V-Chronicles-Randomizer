@@ -243,17 +243,19 @@ struct HDIntrusion
 
 /* One classic face of a room whose art stands inside another room.
  *
- * The classic path draws a room's face whole or not at all: it drops a face
- * whose corners all lie beyond one edge of the room's portal window and
- * draws every other one whole (specific\drawroom.cpp, the four clip bits per
- * vertex; specific\polyinsert.cpp, `c[v0] & c[v1] & ...`). The remaster's art
+ * The classic path draws a room's face whole or not at all: its corner rule
+ * drops a face whose corners all lie beyond one edge of the room's portal
+ * window and keeps every other one whole (specific\drawroom.cpp, the four
+ * clip bits per vertex; specific\polyinsert.cpp, `c[v0] & c[v1] & ...`) -
+ * the rule asked here; facing and the water chop are not. The remaster's art
  * of that face stands where the face stands, a few units off it and with its
  * relief in front of it, so the art follows the face: an intruding triangle
  * whose centroid lies within HD_PAIR_FACE_REACH of a classic face's plane and
  * inside its outline belongs to that face, the nearest one if several qualify.
  * The engine draws the art its pair's faces claimed whole on a frame the
  * classic path draws any of those faces (hd_level.cpp, DecidePairs). A
- * triangle no face claims is drawn inside the window.
+ * triangle no face claims is drawn inside the window when it stands in the
+ * box one sector smaller than the inside, in x and z, and open otherwise.
  *
  * `v` are the face's corners in the GROUP's own local frame, like the boxes
  * above; `corners` is 4 for a quad and 3 for a triangle. Same contract again

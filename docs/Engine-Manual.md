@@ -1291,9 +1291,9 @@ see *Lara in HD* below for which of her stays classic and why.
   same wall is drawn whole from the square outside and hidden from the room
   it stands in, the way the original's own walls are.
 - **The back of a wall is not drawn.** The Remaster's solid walls are
-  one-sided, and seen from behind they used to paint over what stands behind
-  them - the X-ray window in *The Base* showed a green wall instead of the
-  corridor. Flags, leaves, railings, glass, light and water are still drawn
+  one-sided: a wall drawn from behind would paint over what stands behind
+  it, and the X-ray window in *The Base* would show a green wall instead of
+  the corridor. Flags, leaves, railings, glass, light and water are still drawn
   from both sides.
 
 **The light, and the sky.**
@@ -2060,9 +2060,9 @@ HDLOG level=ANDREA1 water marks=... rooms=...
 HDLOG level=ANDREA1 water stamped=... choppy=... shimmer=... ps_slots=...
 HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
       between them faces=6 bound=540
-HDLOG level=ANDREA1 overlap pairs=158 intruding tris=27738 in 91 groups
-      holder=inside cull=opaque faces=558 bound=15993 unbound=11745
-HDLOG cull level=ANDREA1 ranges opaque=2370 two_sided=131
+HDLOG level=ANDREA1 overlap pairs=158 intruding tris=16718 in 89 groups
+      holder=inside cull=opaque faces=558 bound=15993 unbound=725
+HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
       items_spared=... view=... view_obj=... pairs=... whole=... scissored=...
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
@@ -2093,10 +2093,12 @@ HDLOG lightcheck level=ANDREA1 slot=33 classic=... hd=... diff=...
 The `overlap` lines are the rooms whose art stands inside another room:
 `faces=` is how many of the intruder's own classic faces that art belongs to
 and `bound=` how many of its triangles they claim; the level line adds them
-up, with `unbound=` the triangles no face claims, which are cut to the room's
-window whenever the room they stand in is on the screen. Once a second the `clip` line ends in how many pieces of that
-art the frame asked about (`pairs=`), drew whole and cut (the second
-`scissored=`; the first counts rooms). The `cull` line counts the draw calls
+up, with `unbound=` the triangles no face claims that stand a sector deeper
+inside, which are cut to the room's window whenever the room they stand in is
+on the screen; the unclaimed art nearer the holder's wall is drawn whole. Once
+a second the `clip` line ends in how many pieces of that art the frame asked
+about (`pairs=`), drew whole and cut (the second `scissored=`; the first
+counts rooms). The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.
 
 A randomized level adds two more room reasons and a block of its own. A room

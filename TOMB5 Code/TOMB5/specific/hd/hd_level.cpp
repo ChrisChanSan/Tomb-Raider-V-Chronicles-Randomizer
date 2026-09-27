@@ -565,7 +565,13 @@ namespace
 	 * is under water, and carries one bit for each edge of the room's window
 	 * `r->left..r->bottom` it lies beyond. specific\polyinsert.cpp drops a face
 	 * when one bit is common to all its corners - all four beyond the same
-	 * edge, or all behind the eye - and draws every other face whole.
+	 * edge, or all behind the eye.
+	 *
+	 * This is the corner rule alone: the classic path also drops a
+	 * single-sided face turned away from the eye (polyinsert.cpp, IsVisible)
+	 * and moves the vertices of a choppy water room by the chop; neither is
+	 * asked here, because the question is only whether the window hides the
+	 * face.
 	 *
 	 * The roomlet's box test in InsertRoom (CheckBoundsClip) is not asked: a
 	 * face that survives the corner rule lies partly inside every edge of the
@@ -638,7 +644,7 @@ namespace
 	 * this frame (g_face_alive, from HDFrameRoom), and inside the room's own
 	 * portal window otherwise. The pieces no face claims are drawn inside it.
 	 * Per pair and not per face, because the art of one wall reaches over the
-	 * seams of the faces it belongs to: at picture 1's view from room 64,
+	 * seams of the faces it belongs to: seen from the cafe awning in room 64,
 	 * room 101's facade inside room 93 is six classic faces of 101, three of
 	 * them drawn by the classic path and three wholly below 101's strip of a
 	 * window, the lower of which carries the 144 triangles of the facade's
@@ -2100,17 +2106,24 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
  * HDPairFace in hd_render.h; BuildPairFaces hands the faces over), and
  * DecidePairs draws a pair's claimed triangles whole on a frame the classic
  * path draws any of the pair's claiming faces, and inside b's window
- * otherwise; the triangles no face claims stay in the window. A pair whose
+ * otherwise. A triangle no face claims has no face to answer for it, so it
+ * keeps the answer of a box one sector smaller than the inside in x and z:
+ * in the window when it stands that far in, drawn over the whole screen
+ * otherwise - the palms, the spiral stairs and the walls under the
+ * balustrades that reach into a holder's wall ring are unclaimed, and cut at
+ * the window's rim they come out sliced where the smaller box leaves them
+ * whole. A pair whose
  * holder is not on the frame's list is not asked: ANDREA1's pier at the
  * Piazza corner (room 2's art, 364 triangles inside room 197, which no view
  * from room 57 lists) cut to room 2's window would bring back the strip of
  * sky. In ANDREA2's courtyard room 134 holds 108 triangles of room 143 and
- * room 203 holds 108 of room 248, all of them claimed; the four views from
- * room 134 are the pictures they were.
+ * room 203 holds 108 of room 248, all of them claimed, and no view from
+ * room 134 draws a band.
  *
- * ANDREA1 comes to 27,738 intruding triangles in 91 groups, 15,993 of them
- * claimed by 558 classic faces and 11,745 by none; the air shaft is 411 of
- * room 53's triangles inside room 207, all claimed by 27 faces.
+ * ANDREA1 comes to 16,718 intruding triangles in 89 groups, 15,993 of them
+ * claimed by 558 classic faces and 725 by none; 11,020 more that no face
+ * claims stand in a holder's wall ring and are drawn open. The air shaft is
+ * 411 of room 53's triangles inside room 207, all claimed by 27 faces.
  *
  * No count threshold: the answer is per triangle and per frame, so a stray
  * triangle costs only itself and cannot scissor a facade.

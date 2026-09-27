@@ -2816,13 +2816,13 @@ boundary between the HD and the classic room.
 **How.** The intrusion rule: `HDRoomBox`, `HDIntrusion` and the setters
 `HDRenderSetRoomBoxes`/`HDRenderSetIntrusions`/`HDRenderIntrusionHits`/`HDRenderGroupIntrudingTriangles`
 (`specific/hd/hd_render.h`) hand the boxes and the list in before the build;
-`BuildRoomBoxes` (`hd_level.cpp:1238`) fills the boxes out of `ROOM_INFO`,
-`BuildRoomIntrusions` (`:2125`) builds the list out of `room[]` alone - boxes, portals,
-floor links - so an offline tool can reproduce it, and `ReportRoomIntrusions` (`:2352`)
+`BuildRoomBoxes` (`hd_level.cpp:1244`) fills the boxes out of `ROOM_INFO`,
+`BuildRoomIntrusions` (`:2138`) builds the list out of `room[]` alone - boxes, portals,
+floor links - so an offline tool can reproduce it, and `ReportRoomIntrusions` (`:2365`)
 writes `HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups`;
 `hd_render.cpp:3722` tags the triangle and `:925` carries the tag last in `HDRange`'s
 sort key, so a level built with no list sorts exactly as before, and `DrawRoomWindowed`
-(`hd_level.cpp:721`) draws the open half over the whole screen and the intruding half
+(`hd_level.cpp:727`) draws the open half over the whole screen and the intruding half
 inside the window. The scissor itself: `HDFrameRoom` takes
 `ROOM_INFO::left/top/right/bottom` at the seam it already had in `InsertRoom`
 (`specific/drawroom.cpp`, one line beside the matrix) and keeps them as a half-open
@@ -2942,9 +2942,10 @@ one sector in from the edge of its grid, no second sector taken off - and is no 
 windowed unconditionally: each intruding triangle is bound at load to the nearest classic
 face of `b` that it stands on, within 128 units of the face's plane and inside its
 outline, and per frame a pair's claimed art is drawn whole when the classic path draws any
-of the pair's claiming faces, inside `b`'s portal window otherwise. The triangles no face
-claims stay in the window, and a pair whose holder is not on the frame's room list is not
-asked and is drawn whole with the rest of the room.
+of the pair's claiming faces, inside `b`'s portal window otherwise. A triangle no face
+claims keeps the answer of the box one sector smaller in x and z: inside the window when
+it stands that far inside `a`, drawn whole otherwise. A pair whose holder is not on the
+frame's room list is not asked and is drawn whole with the rest of the room.
 
 **Why.** The owner's pictures showed three things: the bricks of one room on the wall of
 another (ANDREA1, from the cafe awning in room 64, room 93's brick hull on the facade of
@@ -2968,78 +2969,105 @@ painted over the corridor. The fourth mechanism, the second hull of RICH2's lift
 rooms 62 to 64, and the lobby's mirror floors are left for a later round.
 
 **How.** The cull: `RangeCulls` (`specific/hd/hd_render.cpp:195`) decides per part at the
-build (`:3542`), the answer rides in `HDRange::cull` and in the sort key (`:3913`), and
-`draw_pass` switches `D3DRS_CULLMODE` per range (`:5212`) and puts `D3DCULL_NONE` back at
-the end of the pass (`:5251`), so a model drawn between two rooms finds the state the
-bracket installed (`:4598`). The winding: `D3DCULL_CCW` shows the X-ray corridor,
+build (`:3542`), the answer rides in `HDRange::cull` and in the sort key (`:3938`), and
+`draw_pass` switches `D3DRS_CULLMODE` per range (`:5237`) and puts `D3DCULL_NONE` back at
+the end of the pass (`:5276`), so a model drawn between two rooms finds the state the
+bracket installed (`:4623`). The winding: `D3DCULL_CCW` shows the X-ray corridor,
 `D3DCULL_CW` at the same view shows the pane and no corridor (RoomProbe). The box:
-`BuildRoomIntrusions` (`hd_level.cpp:2213`) takes `r->x + 1024 .. r->x + (y_size - 1) *
+`BuildRoomIntrusions` (`hd_level.cpp:2226`) takes `r->x + 1024 .. r->x + (y_size - 1) *
 1024` and the same in z, TR5's own box (`game/draw.cpp:3593-3598`), with the neighbour,
 flipmap and touch tests unchanged and a room of two sectors or fewer on a side left
-without an inside. The classic faces: `BuildPairFaces` (`hd_level.cpp:2246`) hands the
+without an inside. The classic faces: `BuildPairFaces` (`hd_level.cpp:2259`) hands the
 renderer every drawn quad and triangle of every intruder room, in the roomlets' order and
 in the room's own frame, left out only where a face stands further than
 `HD_PAIR_FACE_REACH` from every box of its room; `HDPairFace`, `HD_PAIR_FACE_REACH` and
-the inline `HDPairFaceDistance` are in `hd_render.h:261-339`. The pairs: the index fill
-(`hd_render.cpp:3722-3832`) gives a triangle to the first entry whose box holds it and to
-the nearest claiming face, and numbers the pieces (pair, face) and (pair, no face) per
+the inline `HDPairFaceDistance` are in `hd_render.h:263-341`. The pairs: the index fill
+(`hd_render.cpp:3722-3857`) gives a triangle to the first entry whose box holds it and to
+the nearest claiming face; a triangle no face claims stays with the pair only when its
+centroid also lies in the box one sector smaller in x and z, and goes to the open half
+otherwise (`:3809-3829`); the pieces (pair, face) and (pair, no face) are numbered per
 group; `HDRange::intruding` is one plus the piece, so the pieces never share a draw call,
 and `HDRenderGroupPairRange` and `HDRenderPairWhole` (`:2651`) read them out and set the
-frame's answer. The per-frame test: `HDFrameRoom` (`hd_level.cpp:3985`) runs
-`ClassicFaceDrawn` (`:573`) on the faces of the room it collects, at `InsertRoom`, with
+frame's answer. The per-frame test: `HDFrameRoom` (`hd_level.cpp:3998`) runs
+`ClassicFaceDrawn` (`:579`) on the faces of the room it collects, at `InsertRoom`, with
 the room's own view * world matrix, `f_mpersp`, `f_centerx/y`, the underwater wobble and
 the four numbers `r->left..r->bottom` - the classic path's coordinate space, a corner
 nearer than `f_mznear` carrying -128 as in `aRoomletTransformLight`; the roomlet's box
-test is implied by the corner rule and not asked. The answer: `DecidePairs` (`:652`),
-called per room at the top of `HDFrameDraw` (`:4199`), sets each piece whole or windowed
-and the glow phase keeps it; `draw_pass` (`hd_render.cpp:5001`) draws the whole pieces
-with the open half and the rest with the intruding half, which `DrawRoomWindowed`
-(`hd_level.cpp:721`) scissors to the room's own window as before (`:740`). The seams, all
-behind `-log`: the level line ends in `holder=inside cull=opaque faces=%d bound=%d
-unbound=%d` (`:2454`), each pair line in `faces=%d bound=%d` (`:2432`), the clip line in
-`pairs=%d whole=%d scissored=%d` (`:4431`, the pieces asked, drawn whole and windowed; the
-earlier `scissored=` counts rooms), `windowed_tris=` now counts only the triangles really
-drawn inside a window, and a new line `HDLOG cull level=%s ranges opaque=%d two_sided=%d`
-follows the build (`:3257`). `FrameRoom` grew to 384 bytes, the frame array to 96 KiB.
-Tools: `TrgProbe -roomspace` uses the same box by default (`-deep 1024` gives the old one)
-and the renderer's own inline face test, and prints the same per-pair fields and the three
-totals; `RoomProbe` follows the box and the faces out of the classic `.TRC`, prints the
-engine's two lines, and gained `-cull none|opaque`, `-roomwin <g>:<l>,<t>,<r>,<b>[;...]`
-(a group's walk window, drawn as `DrawRoomWindowed` draws it) and `-decide
-whole|scissor|frame|face` with one `decide:` line per piece.
+test is implied by the corner rule and not asked, and so are the facing test and the water
+chop, which the window does not decide. The answer: `DecidePairs` (`:658`), called per
+room at the top of `HDFrameDraw` (`:4212`), sets each piece whole or windowed and the glow
+phase keeps it; `draw_pass` (`hd_render.cpp:5026`) draws the whole pieces with the open
+half and the rest with the intruding half, which `DrawRoomWindowed` (`hd_level.cpp:727`)
+scissors to the room's own window as before (`:746`). The seams, all behind `-log`: the
+level line ends in `holder=inside cull=opaque faces=%d bound=%d unbound=%d` (`:2467`),
+each pair line in `faces=%d bound=%d` (`:2445`), the clip line in `pairs=%d whole=%d
+scissored=%d` (`:4444`, the pieces asked, drawn whole and windowed; the earlier
+`scissored=` counts rooms), `windowed_tris=` now counts only the triangles really drawn
+inside a window, and a new line `HDLOG cull level=%s ranges opaque=%d two_sided=%d`
+follows the build (`:3270`). The pair line's triangle count is every triangle the holder's
+inside holds, the level line's `intruding tris=` and `unbound=` only those drawn with the
+window. `FrameRoom` grew to 384 bytes, the frame array to 96 KiB. Tools: `TrgProbe
+-roomspace` uses the same box by default (`-deep 1024` asks the old one, which windows
+every triangle it holds) and the renderer's own inline face test and unclaimed rule, and
+prints the same per-pair fields and the three totals; `RoomProbe` follows the box and the
+faces out of the classic `.TRC`, prints the engine's two lines, and gained `-cull
+none|opaque`, `-roomwin <g>:<l>,<t>,<r>,<b>[;...]` (a group's walk window, drawn as
+`DrawRoomWindowed` draws it) and `-decide whole|scissor|frame|face` with one `decide:`
+line per piece.
 
 **Checked.** The binding distance: all 540 of room 101's triangles inside room 93 lie
 within 86 units of one of six classic faces of 101, 90 of them within 1 unit, and all 108
-of room 93's inside room 101 within 1 unit of six faces of 93; 128 takes all of them. Over
-ANDREA1 it claims 15,993 of 27,738 intruding triangles with 558 faces, JOBY2 12,439 of
-29,171 with 254, RICH2 16,980 of 39,759 with 480, ANDREA2 12,650 of 15,985 with 527.
-`TrgProbe -roomspace` and RoomProbe's build of the engine's code print the same level line
-and the same per-pair lines on ANDREA1 (158 pairs), JOBY2 (53) and RICH2 (164), and `-deep
-1024` gives the old 7, 4 and 9 pairs with 1,067, 2,037 and 1,425 triangles; every classic
-vertex coordinate of the fifteen levels is a whole number, so the engine's float corners
-are the tools' integer ones. Pictures (RoomProbe, 960 x 540, fov 80, the walk's rooms and
-windows; pixels differing by more than 8): the awning view 153 against the reference with
-room 101 left whole, and 0 against the same reference with the opaque cull, the 153 being
-the cull; the view from room 101 0 against the reference with the TR5 inside and no cull,
-and 1,293 with the cull, on the flagpole, whose back faces go; the view from room 93 0
-against today's picture without the cull, 1,040 with it, a ceiling board's back at the top
-edge; the X-ray view 0 against the reference with the opaque cull; JOBY2 from room 28 2
-against the reference with the TR5 inside, 2,928 against today's, the marble above the
-corridor's door gone; the ANDREA2 courtyard from room 134 at four yaws 0 against today's,
-the Piazza corner from room 57 at four yaws 0, 8, 0 and 0, room 30 at four yaws 0, 13, 0
-and 11, and the RICH2 shaft from room 63 0. Holding each piece to its own face alone
-leaves the lower storey of 101's facade, 144 triangles on a face wholly below 101's
-window, cut at the awning (7,318 pixels, room 93's interior); scissoring a pair whose
-holder is not listed brings the Piazza's strip of sky back (3,081 pixels). The cull's void
-sweep: one view from the middle of every third room of ANDREA1, JOBY2 and RICH2 at eye
-height along its longer axis, 192 views drawn each way; 25,660 pixels turn to the clear
-colour, four views more than 500 each - a near object's back at the edge of JOBY2 room
-21's view, a wall's back that hid RICH2 room 108's corridor, and two window openings of
-one JOBY2 building (rooms 138 and 153) through which the back of the opening's side wall
-was seen and behind which no room is drawn from there. The JOBY4 sea seen from below is
-the same picture either way. Draw calls: ANDREA1's level goes from 1,874 ranges to 2,501,
-ANDREA2 1,743 to 2,344, JOBY2 1,563 to 1,972, RICH2 1,602 to 2,174, the cull adding none;
-the awning view draws 306 calls against 228, the view from room 93 211 against 155. The
+of room 93's inside room 101 within 1 unit of six faces of 93; 128 takes all of them. Of
+the triangles the insides hold, the faces claim 15,993 with 558 faces on ANDREA1, 12,439
+with 254 on JOBY2, 16,980 with 480 on RICH2 and 12,650 with 527 on ANDREA2; of the
+unclaimed rest 725, 442, 82 and 898 stand a sector further in and keep the window, and
+11,020, 16,290, 22,697 and 2,437 are drawn whole, which leaves 16,718, 12,881, 17,062 and
+13,548 intruding triangles. `TrgProbe -roomspace` and RoomProbe's build of the engine's
+code print the same level line and the same per-pair lines on ANDREA1 (158 pairs), ANDREA2
+(148), JOBY2 (53) and RICH2 (164), and `-deep 1024` gives the old 7, 4 and 9 pairs with
+1,067, 2,037 and 1,425 triangles; every classic vertex coordinate of the fifteen levels is
+a whole number, so the engine's float corners are the tools' integer ones. Pictures
+(RoomProbe, 960 x 540, fov 80, the walk's rooms and windows; pixels differing by more than
+8): the awning view 153 against the reference with room 101 left whole, and 0 against the
+same reference with the opaque cull, the 153 being the cull; the view from room 101 0
+against the reference with the TR5 inside and no cull, and 1,293 with the cull, on the
+flagpole, whose back faces go; the view from room 93 0 against today's picture without the
+cull, 1,040 with it, a ceiling board's back at the top edge; the X-ray view 0 against the
+reference with the opaque cull; JOBY2 from room 28 2 against the reference with the TR5
+inside, 2,928 against today's, the marble above the corridor's door gone; the ANDREA2
+courtyard from room 134 at four yaws 0 against today's, the Piazza corner from room 57 at
+four yaws 0, 8, 0 and 0, room 30 at four yaws 0, 13, 0 and 11, and the RICH2 shaft from
+room 63 0. The unclaimed rule changes none of these pictures by a pixel. Holding each
+piece to its own face alone leaves the lower storey of 101's facade, 144 triangles on a
+face wholly below 101's window, cut at the awning (7,318 pixels, room 93's interior);
+scissoring a pair whose holder is not listed brings the Piazza's strip of sky back (3,081
+pixels). The box sweep: one view from the middle of every room of ANDREA1, ANDREA2, JOBY2
+and RICH2 at eye height, along the longer axis and the other way, without the cull, the
+walk's rooms and windows, against today's engine; 1,644 views drawn (40 more are of rooms
+with no art), 47 differ. 82,413 pixels of today's holes are filled in 21 views - RICH2
+room 40 (26,400), JOBY2 room 33 (10,372), ANDREA2 rooms 130 (7,644), 177 and 149, ANDREA1
+room 110 (6,366) and fifteen more - and room 93's brick hull is gone from the views out of
+rooms 101, 102, 103 and 218, and a slab of brick over the corridor seen from room 199 is
+gone. 3,552 new pixels of hole appear in 12 views, every one of them claimed art whose
+pair has all its claiming faces dropped by the corner rule, and every one of them today's
+picture when drawn whole: ANDREA1 room 78 (1,164, a block of an upper storey beside the
+flag), room 5 (558, a slit beside the sign), rooms 24 and 237 (313 and 222, slits in a
+wall), ANDREA2 room 115 (701, a notch under the balustrade) and room 205 (379, the
+roofline), and six views under 110 each. These are left for the game to judge beside the
+filled holes; the corner rule cannot tell them from room 93's hull, which it has to hide.
+Without the unclaimed rule the same sweep over every fifth room found 16,250 new pixels of
+hole, 15,272 of them under ANDREA2 room 115's balustrade, and ANDREA1's palm fronds (room
+150, 1,227 pixels) and spiral stair (room 225, 2,297) sliced; with it the palm and the
+stair are today's picture and 1,638 new pixels remain there. The cull's void sweep: one
+view from the middle of every third room of ANDREA1, JOBY2 and RICH2 at eye height along
+its longer axis, 192 views drawn each way; 25,660 pixels turn to the clear colour, four
+views more than 500 each - a near object's back at the edge of JOBY2 room 21's view, a
+wall's back that hid RICH2 room 108's corridor, and two window openings of one JOBY2
+building (rooms 138 and 153) through which the back of the opening's side wall was seen
+and behind which no room is drawn from there. The JOBY4 sea seen from below is the same
+picture either way. Draw calls: ANDREA1's level goes from 1,874 ranges to 2,470, ANDREA2
+1,743 to 2,308, JOBY2 1,563 to 1,930, RICH2 1,602 to 2,110, the cull adding none; the
+awning view draws 297 calls against 228, the view from room 93 204 against 155. The
 suites: ModernTest 13,992 checks, MenuTest 36,180, InterpTest 635, LipsTest 243 and 270
 with the `.OBJ` folder, 0 failed, as before.
 
@@ -3052,17 +3080,23 @@ additive pass, the water and the sky, and the mirror floors are as they were.
 
 **Decisions.** The cull is for the opaque ranges only: cut-out, blended and additive
 ranges stay two-sided, and so do water and the sky. The holder box is TR5's own inside
-with no extra sector. A pair is decided per frame from the classic faces its art crosses:
-the claimed art is drawn whole when the classic path draws any of the pair's claiming
-faces, and a triangle no classic face crosses keeps the window. A pair whose holder is not
-on the frame's list is drawn whole. The lift shaft's second hull and the mirror floors are
-left for a later round.
+with no extra sector. A pair is decided per frame from the classic faces its art crosses,
+and a triangle no classic face crosses keeps today's answer, the window inside the box one
+sector smaller. The lift shaft's second hull and the mirror floors are left for a later
+round. Two points of the engine depart from the rule as decided and wait for confirmation.
+The rule decides per crossing classic face; the engine draws all of a pair's claimed art
+whole when any of the pair's claiming faces is drawn, because per face leaves the lower
+storey of room 101's facade cut at the awning (7,318 pixels against the reference, 0 per
+pair) - per face is one line in `DecidePairs`. And the rule leaves a pair whose holder is
+not on the frame's list unasked without naming its answer; the engine draws it whole,
+because scissored it brings the Piazza's strip of sky back (3,081 pixels).
 
-**Credits.** The principle of keeping the art per crossing classic face and the back-face
-cull follow TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - as
-descriptions only; no code of it was read for this round. The ANDREA1 viewpoints in rooms
-93 and 101 and the triangle counts of that pair (540 and 90) are Todesengel's own
-measurements.
+**Credits.** The principle of deciding the art by the classic faces it crosses - TROne
+keeps it per crossing classic face, this engine per pair of rooms (see Decisions) - and
+the back-face cull follow TROne (GPLv3) by Todesengel1931 -
+https://github.com/todesengel1931 - as descriptions only; no code of it was read for this
+round. The ANDREA1 viewpoints in rooms 93 and 101 and the triangle counts of that pair
+(540 and 90) are Todesengel's own measurements.
 
 **Commits.** `f7ffe49`, `edc7b03`
 

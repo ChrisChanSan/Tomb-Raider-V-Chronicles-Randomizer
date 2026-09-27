@@ -1313,8 +1313,8 @@ namespace
 				 * and this listing says which faces those are.
 				 *
 				 * `deep` is an extra shrink for re-measuring the rule and is
-				 * 0 by default; -deep 1024 is the box one sector smaller that
-				 * the rule used before the faces decided. */
+				 * 0 by default; -deep 1024 asks the box one sector smaller,
+				 * which windows every triangle it holds. */
 				const RoomSpace& B = box[(size_t)b];
 				const float x0 = (float)(A.ix0 + deep - B.ox);
 				const float x1 = (float)(A.ix1 - deep - B.ox);
@@ -1416,9 +1416,20 @@ namespace
 						}
 					}
 
+					/* No face claims it: windowed only when it also stands
+					 * in the box one sector smaller in x and z, as the
+					 * engine's index fill asks; otherwise the pair has it
+					 * and draws it open (2). */
 					if (at < 0)
 					{
-						unboundTris++;
+						if (cx < (float)(A.ix0 + 1024 - B.ox) ||
+							cx > (float)(A.ix1 - 1024 - B.ox) ||
+							cz < (float)(A.iz0 + 1024 - B.oz) ||
+							cz > (float)(A.iz1 - 1024 - B.oz))
+							tagged[(size_t)b][t] = 2;
+						else
+							unboundTris++;
+
 						continue;
 					}
 
@@ -1442,7 +1453,10 @@ namespace
 			long long here = 0;
 
 			for (size_t t = 0; t < tagged[(size_t)r].size(); t++)
-				here += tagged[(size_t)r][t];
+				here += tagged[(size_t)r][t] == 1 ? 1 : 0;
+
+			// Windowed is what the engine windows: a room with a tagged triangle.
+			windowed[(size_t)r] = here ? 1 : 0;
 
 			if (here)
 			{

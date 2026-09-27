@@ -3780,9 +3780,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * one that claims it, see HDPairFace - and the piece of
 					 * (pair, face) it is drawn with. The pieces are numbered
 					 * in the order the build meets them. */
+					int face_at = -1;
+
 					if (pair_at >= 0)
 					{
-						int face_at = -1;
 						double nearest = 0.0;
 
 						for (size_t k = 0; k < group.faceAt.size(); k++)
@@ -3805,6 +3806,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 						}
 
+						/* A triangle no classic face claims has nothing that
+						 * could say "drawn whole" per frame, so it keeps the
+						 * answer a box one sector smaller than the inside
+						 * gives in x and z: windowed when it stands that far
+						 * in, drawn with the open half otherwise. Windowed in
+						 * the whole inside, the unclaimed art of a room that
+						 * reaches into its holder's wall ring - a palm's
+						 * fronds, a spiral stair, the wall under a
+						 * balustrade - is cut at the window's rim on views
+						 * that draw it whole with the smaller box. */
+						if (face_at < 0)
+						{
+							const HDIntrusion& box = g_intrusions[(size_t)pair_at];
+
+							if (centre[0] < box.mins[0] + 1024.0f ||
+								centre[0] > box.maxs[0] - 1024.0f ||
+								centre[2] < box.mins[2] + 1024.0f ||
+								centre[2] > box.maxs[2] - 1024.0f)
+								pair_at = -1;
+						}
+					}
+
+					if (pair_at >= 0)
+					{
 						int piece = -1;
 
 						for (size_t j = 0; j < group.pairRanges.size(); j++)

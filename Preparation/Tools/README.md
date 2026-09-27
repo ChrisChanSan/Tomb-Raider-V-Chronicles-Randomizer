@@ -137,8 +137,8 @@ histogram by distance and by side, and the hollow groups; `-room <n>` takes one
 room apart (box, portals, vertical links, whose art is inside it), `-statics` /
 `-slot <n>` every static mesh with how much art stands in its box, `-slack` and
 `-deep` move the two thresholds so that a rule can be re-measured rather than
-believed (`-deep 1024` is the holder box one sector smaller that the engine
-used before the classic faces decided), and `-near <x> <y> <z> <radius>` says whose art stands at a given
+believed (`-deep 1024` asks the holder box one sector smaller, which windows
+every triangle it holds), and `-near <x> <y> <z> <radius>` says whose art stands at a given
 place in the world and how far that art is from its own room's box - which is
 how "a tower that is in no room's box" was turned from a guess into a number.
 `RoomProbe -roombox <same folder>` hands the engine's renderer the same room

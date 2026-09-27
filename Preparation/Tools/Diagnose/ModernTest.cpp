@@ -4606,8 +4606,9 @@ static void key_stick()
 	}
 
 	ok(bad == 0, "every set of keys is a full-deflection axis pair or nothing", bad, 0);
-	ok(ModernKeyStick(0, 0, 1, 0, 0, 0, 0, &y) == MODERN_FEED_NONE,
-		"a missing out pointer is refused, not written", 0, 0);
+	y = 12345;
+	ok(ModernKeyStick(0, 0, 1, 0, 0, 0, 0, &y) == MODERN_FEED_NONE && y == 12345,
+		"a missing out pointer is refused, not written", y, 12345);
 
 	/* 9. The guard chain, modelled (see key_seam_model). Tank never consults
 	 * the key stick, in or out of play, with or without the look key; nor

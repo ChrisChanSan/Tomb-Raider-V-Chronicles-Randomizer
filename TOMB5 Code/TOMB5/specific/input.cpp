@@ -1507,11 +1507,16 @@ long S_UpdateInput()
 		 * action held: strafe, do not turn" (game\modern_move.h), a weapon
 		 * behaviour, and under "Separate" the weapons fire on the Secondary
 		 * role. So the role is chosen by the same bit that chooses which role
-		 * produces IN_ACTION below, and the two cannot disagree. */
+		 * produces IN_ACTION below, and the two cannot disagree.
+		 *
+		 * The pad's buttons carry ControlMethod == 1 as every other JoyRole
+		 * call site does: the seam is open to the keyboard page, and there a
+		 * connected pad's action or jump button must not steer the translation
+		 * while its own IN_ACTION and IN_JUMP stay gated. */
 		const long mAction = tomb5.action_split
-			? (Key(KEY_ROLE_SECOND) || JoyRole(JOY_ROLE_SECOND))
-			: (Key(8) || JoyRole(4));
-		const long mJump = Key(7) || JoyRole(3);
+			? (Key(KEY_ROLE_SECOND) || (ControlMethod == 1 && JoyRole(JOY_ROLE_SECOND)))
+			: (Key(8) || (ControlMethod == 1 && JoyRole(4)));
+		const long mJump = Key(7) || (ControlMethod == 1 && JoyRole(3));
 
 		// move_x/move_y, not joy_x/joy_y - in Modern that pair is the left
 		// stick's own reading, which the d-pad never writes over (see above),

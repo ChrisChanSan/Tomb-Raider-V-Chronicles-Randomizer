@@ -482,8 +482,8 @@ Hold the left stick through the moment the sniper camera takes the view or
 hands it back, and Lara keeps the course she was running: the stick still
 steers her, but against the camera she set off under, until you let go. Push
 again and the stick goes by the view you now see. With `-log`, the `MODERNLOG`
-line of every game tick ends in `cut=1` on the tick the camera changed hands
-and in `latch=1` while such a held course is kept.
+line of every game tick carries `cut=1` on the tick the camera changed hands
+and `latch=1` while such a held course is kept.
 
 ### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 

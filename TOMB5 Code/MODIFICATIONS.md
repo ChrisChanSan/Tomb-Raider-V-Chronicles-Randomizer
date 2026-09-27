@@ -7644,27 +7644,30 @@ negative on both paths (`specific/dxshell.cpp:889` on DirectInput, `-ly / 256` a
 on XInput, the d-pad's up -20 at `:902` and `:1022`), the classic assembly reads
 `tank_y < -8` as `IN_FORWARD` (`specific/input.cpp:1460`) and `ModernTranslate` takes the
 stick's angle from (x, -y) (`modern_move.cpp:1518`). The call stands in the seam itself
-(`input.cpp:1534`-`1537`), inside `if (modern_seam && !modern_tank)`, reads the same four
+(`input.cpp:1539`-`1542`), inside `if (modern_seam && !modern_tank)`, reads the same four
 `Key(0..3)` as the classic bits above it (`:1464`-`1474`) and writes a local pair,
 `seam_x`/`seam_y`, so `move_x`/`move_y`, `tank_x`/`tank_y` and the classic assembly keep
 the pad's own reading. `ControlMethod == 1` leaves `modern_seam` (`:1385`); the pad's pair
 is kept out on the keyboard page instead: the block that zeroes it asks
 `tomb5.control_modern && !ModernMenuReadsPad()` (`:1347`) and applies the stick's dead
 zone only under `ControlMethod == 1` (`:1359`), so a controller resting on the desk, or a
-d-pad press that reads +-20 in `joy_x`/`joy_y`, cannot steer a keyboard player. The keys'
-classic bits stay in the word: when the translation takes the vector, the one write in
-`ModernUpdateInput` (`game/modern_state.cpp:561`) replaces `MODERN_MOVE_MASK` as it does
-for the pad, and when it steps aside - a classic state, a ladder, a push block - they
-stand. The look key's bypass is the same code as before: `modern_tank` (`input.cpp:1393`)
-stands the seam aside and the keys' classic bits turn her on the spot. The walk key is
-still read after the seam. `ModernUpdateInput` takes the source as a sixth argument
-(`game/modern_state.h:49`, `modern_state.cpp:150`), and its tick line
-(`modern_state.cpp:672`) ends in `feed=%s` through `ModernFeedName` (`:140`). The field is
-not called `src`: the line's `src=` already says whether the translation wrote the word
-(`pad`) or stood aside (`keys`), and keeps saying it.
+d-pad press that reads +-20 in `joy_x`/`joy_y`, cannot steer a keyboard player. The seam's
+action and jump reads carry the term themselves: `JoyRole(4)`, `JoyRole(JOY_ROLE_SECOND)`
+and `JoyRole(3)` count only under `ControlMethod == 1` (`:1516`-`1519`), as at every other
+`JoyRole` call site, so a connected pad's button cannot put a keyboard player into aiming
+or a directional jump. The keys' classic bits stay in the word: when the translation
+takes the vector, the one write in `ModernUpdateInput` (`game/modern_state.cpp:561`)
+replaces `MODERN_MOVE_MASK` as it does for the pad, and when it steps aside - a classic
+state, a ladder, a push block - they stand. The look key's bypass is the same code as
+before: `modern_tank` (`input.cpp:1393`) stands the seam aside and the keys' classic bits
+turn her on the spot. The walk key is still read after the seam. `ModernUpdateInput`
+takes the source as a sixth argument (`game/modern_state.h:49`, `modern_state.cpp:150`),
+and its tick line (`modern_state.cpp:672`) ends in `feed=%s` through `ModernFeedName`
+(`:140`). The field is not called `src`: the line's `src=` already says whether the
+translation wrote the word (`pad`) or stood aside (`keys`), and keeps saying it.
 
 The keyboard page now runs the whole seam, and with it two things the pad page already
-had: with no weapon ready the look key is taken out of the word (`input.cpp:1831`), so
+had: with no weapon ready the look key is taken out of the word (`input.cpp:1836`), so
 held it steers her as described above instead of turning the classic look camera, and
 `ModernHeadingAfterInput` answers on the keyboard page too, so the orbit swings after a
 roll or a jump's twist as it does for a pad player.
@@ -7682,7 +7685,7 @@ translation stands aside; opposite keys cancel on their axis; and `key_seam_mode
 key stick consulted only under Modern, in play and without the look key, never at Tank,
 and a d-pad press on the keyboard page not taken for movement. MenuTest 36180,
 InterpTest 635 and LipsTest 243 without the `.OBJ` folder and 270 with it, 0 failed, as
-before. The engine built as `PCtomb5 built Sep 27 2026 12:45:13`. Not measured: the game.
+before. The engine built as `PCtomb5 built Sep 27 2026 12:54:11`. Not measured: the game.
 
 **Unchanged.** *Tank*: `tomb5.control_modern` is the first term of the zeroing block and
 of `modern_seam`, so neither is entered and `ModernKeyStick` is never called. The pad
@@ -7690,7 +7693,7 @@ page under Modern with the stick off centre or no movement key held: the block, 
 and the call hand `ModernUpdateInput` the same pair as before. The menus and the
 inventory: `modern_seam` still refuses the inventory, the pause menu, the load and save
 screens, the outfit window and the title, and the arrows and Return still step them
-(`input.cpp:1720`).
+(`input.cpp:1725`).
 The first person view: `!FirstPersonActive()` is still a term of the seam. Every existing
 log line prints as before, the tick line only longer at its end.
 

@@ -452,35 +452,69 @@ namespace
 	}
 
 	/* The glow shader's gain on a material 2 part's weight, per preset - the
-	 * (param[0], param[2]) pair MaterialAddWeight groups the weights by - and
-	 * 1 for every preset the table does not name.
+	 * whole parameter tuple, exactly as the .TRG stores it - and 1 for a tuple
+	 * the table does not name.
 	 *
-	 * The fades take light away, and a preset whose glow falls under 55 per
-	 * cent of the mean the sum drew is raised until it does not, but never so
-	 * far that more than 1 per cent of a glow's pixels clip. Measured with
-	 * RoomProbe -glow -addmat 2 over one view per preset and page, the mean
-	 * over the glow's own pixels against the sum's:
+	 * The strength follows the church mist of ANDY2 room 6 (page 2100,
+	 * (1, 0.2, 2, 1)), which stays barely visible. Its share of the frame -
+	 * the frame with material 2 drawn against the frame with no additive
+	 * material at all, in luma - is 5.1 of 255 on average and 8.0 at the 95th
+	 * percentile over the pixels its glow lights above 2 (RoomProbe -glow,
+	 * -addmat 2 against -addmat 99, room 6 from 8150 7000 2100, yaw -94,
+	 * pitch 2.2, fov 86.2). Each gain below puts the same 95th percentile of
+	 * its tuple's brightest RoomProbe view, named beside it, at 8 of 255
+	 * within 0.3; the mean of that view then stays under the mist's 5.1,
+	 * because the shafts and cones are streaked where the mist is flat. The
+	 * gains are found by drawing and not by division: an 8-bit frame drops
+	 * a card's share once it falls under half a step, so at these strengths
+	 * the picture does not follow the gain in proportion. The tuples need
+	 * gains far apart - ANDREA2 room 131's window shaft 0.0273, the title's
+	 * ray fans 0.171, JOBY5 room 115's glow 0.584 - so no single factor does.
 	 *
-	 *   (1.5, 0.4)  1.45  ANDREA2 room 68's lamp cones 50.0 -> 55.4 per cent
-	 *   (0.5, 0.6)  1.25  stops at the clip: ANDREA3 room 66's shaft 0.79 and
-	 *                     ANDREA2 room 225's window glow 0.63 per cent clipped,
-	 *                     1.6 and 1.8 at 1.3 with every additive material
-	 *                     drawn; ANDREA2 room 131's shaft seen from
-	 *                     inside its fan stays at 52.1
-	 *   (0.5, 0.8)  1.03  stops at the clip: ANDREA3 room 34's window glow
-	 *                     0.98 per cent; ANDY2 room 34 stays at 53.8 */
+	 * Not in the table, and so at 1: the mist itself, the candle halos of
+	 * page 2002 (1, 0.05, 0.1, 0.2) that burn beside it in room 6, ANDREA1's
+	 * haze of page 3232 (0.5, 0.1, 0, 0.663), which after the fades lights
+	 * 1.9 per cent of ANDREA1 room 19's view above 2 of 255, at 6.7 on
+	 * average there, and RICH2 room 78's glow of page 3225
+	 * (1.5, 0.1, 0, 1.933), 6.9 at the 95th percentile in its own view. */
 	inline float GlowGain(const trf::remaster::TrgPart& part)
 	{
-		static const HDAddPreset kGains[] =
+		static const struct { float p[4]; float gain; } kGains[] =
 		{
-			{ 0.5f, 0.6f, 1.25f },
-			{ 1.5f, 0.4f, 1.45f },
-			{ 0.5f, 0.8f, 1.03f },
+			// window shafts and window glows of pages 3037, 3038 and 3232
+			{ { 0.5f, 0.4f, 0.6f, 0.1f }, 0.0146f },		// ANDREA2 room 225
+			{ { 0.5f, 0.4f, 0.6f, 0.5f }, 0.0313f },		// ANDREA2 room 234
+			{ { 0.5f, 0.55f, 0.6f, 0.06f }, 0.0273f },		// ANDREA2 room 131
+			{ { 0.5f, 0.55f, 0.6f, 0.13f }, 0.0523f },		// ANDREA1 room 157
+			{ { 0.5f, 2.68333244f, 0.6f, 0.326666653f }, 0.0352f },	// RICH1 room 3
+			{ { 0.5f, 0.4f, 0.8f, 0.05f }, 0.0221f },		// ANDREA3 room 20
+			{ { 0.5f, 0.4f, 0.8f, 0.08f }, 0.0245f },		// ANDREA3 room 34
+			{ { 0.5f, 0.4f, 0.8f, 0.2f }, 0.0128f },		// ANDREA3 room 36
+			// the underwater rays of page 3256
+			{ { 0.5f, 0.75f, 0.6f, 0.5f }, 0.123f },		// JOBY5 room 65
+			{ { 0.5f, 0.75f, 0.6f, 0.8f }, 0.0694f },		// JOBY4 room 19
+			// glows of page 3225
+			{ { 0.5f, 0.0f, 0.8f, 0.05f }, 0.0435f },		// ANDY2 room 34
+			{ { 0.5f, 0.0f, 0.8f, 0.213333309f }, 0.0683f },	// ANDY1 room 194
+			{ { 1.5f, 0.1f, 0.0f, 1.5333333f }, 0.584f },		// JOBY5 room 115
+			{ { 1.5f, 0.1f, 0.0f, 5.0f }, 0.394f },		// JOBY3 room 10
+			// the title's ray fans of page 2146 and its glows of page 2134
+			{ { 1.0f, 0.2f, 2.0f, 0.35f }, 0.171f },		// TITLE room 6
+			{ { 0.5f, 0.2f, 1.0f, 0.1f }, 0.118f },		// TITLE room 19
+			// lamp glows and lamp cones of page 3070; RICH1 room 17's glow,
+			// which no camera in its room sees, takes its sibling's gain
+			{ { 1.0f, 0.2f, 0.1f, 0.6f }, 0.276f },		// RICH1 room 15
+			{ { 1.0f, 0.2f, 0.1f, 1.0f }, 0.276f },		// RICH1 room 15
+			{ { 1.0f, 0.2f, 0.1f, 2.0f }, 0.333f },		// TITLE room 52
+			{ { 1.5f, 0.3f, 0.4f, 2.5f }, 0.211f },		// RICH2 room 120
+			{ { 1.5f, 0.3f, 0.4f, 3.06666636f }, 0.458f },	// ANDREA2 room 68
+			{ { 1.5f, 0.3f, 0.4f, 16.0f }, 0.396f },		// RICH3 room 65
 		};
 
 		for (int i = 0; i < (int)(sizeof(kGains) / sizeof(kGains[0])); i++)
-			if (part.param[0] == kGains[i].p0 && part.param[2] == kGains[i].p2)
-				return kGains[i].weight;
+			if (part.param[0] == kGains[i].p[0] && part.param[1] == kGains[i].p[1] &&
+				part.param[2] == kGains[i].p[2] && part.param[3] == kGains[i].p[3])
+				return kGains[i].gain;
 
 		return 1.0f;
 	}

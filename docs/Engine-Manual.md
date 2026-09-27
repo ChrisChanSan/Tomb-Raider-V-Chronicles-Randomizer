@@ -929,6 +929,17 @@ next node, the binoculars going up — a cut scene, and the first frame after a
 level start, a savegame load or the inventory. Those look exactly as they do
 at thirty, which is the point.
 
+**At a corner.** Between two game steps the camera is drawn on the straight
+line between the two places it stood, and beside a pillar or a door frame that
+line can pass through the stone for a frame or two, which would show as a
+black flash, or the sky through the level. Such a frame shows the nearest
+point of that line that stands in the open, so the camera pauses at the
+corner for a moment instead; a frame whose room was only taken a step too
+early is drawn from the room the camera really stands in, without moving it.
+This holds at *Frame rate 60* and *Display* alike and in both control
+schemes; at 30 nothing is drawn between two steps, and where the camera
+stands at each step does not change.
+
 **If it does not hold.** The engine never falls back on its own — it says so
 and keeps going. With `-log`, `FPSLOG`'s `late=` and the `PROFLOG` lines under
 *When something looks wrong* say which part of the frame ran out of time. On a
@@ -2829,6 +2840,7 @@ wrote it, and each seam answers a different question:
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
+| at *Frame rate 60* or *Display*, a black flash — or sky — for a frame or two as the camera swings past a pillar or a door frame | `CAMLOG` — a `tick` line per game step: where the camera stands and with which room, what it aimed for and how the wall cut it, what kind of place it stands in (`kind=open`, `wall`, `door->36`, `below:12`) and how close it is to a wall face and a corner; a `draw` line for every picture whose camera had to be put right between two steps, saying how (`fix=prevroom`, `chord`, `tick` or `nosky`) and how far it moved (`moved=`); and a `sum` line per second with the counts |
 | at *Frame rate 60* an arm or the weapon in her hands shakes | `ARMLOG` — per drawn frame: both arms' animation frames, whether they were blended, and where shoulder, elbow and hand came out |
 | the *Ledge hang* move misbehaves, or the camera jumps during it | `LEDGELOG` — one line per phase of the move, one when it starts, one when the reasons it would refuse an edge change; and with the Modern camera a `LEDGELOG cam` line on every step of the move and the ten after it: where the camera stands and what it looks at, with their rooms, and whether it had to put the look-at point back (`snaps=`, `rejected=`) |
 | Lara vanishes for a moment on a rope, for instance in the half turn | `ROPELOG` — one line per tick on the rope: her heading round it (`RopeY=`), the three lengths the placement divides by (`len=`), and the angles and position she is given (`xyz=`, `pos=`); and a `ROPELOG draw` line on every drawn frame and on the one after she lets go: whether she was drawn (`drawn=`) and which term decided it, where the camera stands and what it looks at, its distance to that point and to her (`eyed=`, `larad=`), and which candidate the chase camera took (`cand=`, `clip=`) |

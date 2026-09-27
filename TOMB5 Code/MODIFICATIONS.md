@@ -6125,9 +6125,146 @@ travel, and a chase camera), `camera_shell` (a target walked out through the she
 unit at a time, 500 steps, and jittered on it for thirty ticks), `camera` (twelve checks
 over the type table - the six hand-overs are none, the six leaves are cuts) and a
 `portal walk` section of 13 checks on ANDREA1's own portal records. All of it lives past
-`InterpBeginFrame`'s `alpha >= 1` return, so `fps_mode 0` reaches none of it.
+`InterpBeginFrame`'s `alpha >= 1` return, so `fps_mode 0` reaches none of it. The entry
+that follows, "The drawn eye at a corner", keeps the blended eye out of a pillar or a door
+jamb the straight blend cuts, and seeds the walk from the room that holds the eye.
 
 **Commits.** `324e404`, `ced7f30`, `45d9130`, `a1dbf32`, `a1267b5`, `0fc3487`
+
+### The drawn eye at a corner
+2026-09-27
+
+**What.** On a frame drawn between two logic ticks - `fps_mode` 1 and 2, in both control
+schemes - the blended eye is tested before the view is built: `GetFloor` from the logic
+room, then `GetHeight` and `GetCeiling`, and the point has to lie between the two. An eye
+the logic room refuses is tested from the previous tick's room; if that room holds it, the
+eye stays where it is and the portal walk starts in that room. An eye neither room holds
+is moved to the nearest open point of the chord between the two tick eyes, with the target
+and the roll taken at the same blend factor. When no point of the chord opens, the eye
+stays and that frame draws no sky, so what its walk leaves undrawn is the clear colour,
+black. A blended eye the logic room holds - nearly every frame - is drawn exactly as
+before, and no tick eye moves. `-log` gains `CAMLOG`: a `tick` line per `CalculateCamera`
+pass, a `draw` line per frame the rule acted on and a `sum` line per second.
+
+**Why.** Measured over one ANDREA1 run at 165 Hz, in two recordings of 18.2 s and 17.0 s
+matched to the run's log to within 9 ms: eight black flashes in 35.2 s, each one or two
+video frames long (one to six drawn frames), four at room 40's east door and four at the
+pillars of rooms 3 and 11, every room involved indoors (flags 0x40, no `ROOM_OUTSIDE`) and
+so black rather than sky. Both causes lie in the draw. The chord between two open tick
+eyes cuts a corner block or a pillar for two or three drawn frames: at log t 136500 the
+tick eyes stand at about (42945,-338,31749) in sector (5,3) and (43074,-314,31584) in
+(6,2) of room 3, the drawn eye (42957,-336,31734) is 50 and 9 units inside the pillar at
+(5,2), `GetFloor` from room 3 follows the pillar's floor data up to room 36, whose floor
+is 1456 units above the eye, and the walk draws one room. And the room seed: the first
+drawn frames after a tick apply the new tick's room to an eye still beside the old tick
+eye - at t 94656 and t 100125 the eye stands in open space of room 40's sector (6,2) while
+the logic room is already 225, whose corner sector (0,0) is a wall there; at t 95297 it
+stands in the doorway column between rooms 225 and 40, and `GetFloor` from room 38 reads
+38's edge sector (1,3), whose door leads up to room 37. The logic camera is not the cause:
+`MoveCamera` tests every tick eye against its room and pulls or pins it in
+(`game/camera.cpp:2789`-`2849`), and the drawn eyes `ROOMLIST` logs, replayed through a
+`GetFloor` emulator over the run's own level, reproduce the logged walk room on all 1287
+ANDREA1 lines and fail the test on 26 eyes in 18 episodes over 126 s of play - a lower
+bound, since `ROOMLIST` writes only frames whose room list changed.
+
+**How.** `ModernCameraChordClamp` (`game/modern_camera.cpp:302`) is pure: from the blended
+point it scans the chord outward on both sides at once in steps of a thirty-second of its
+length (`MODERN_CAMERA_CHORD_SCAN`, `game/modern_camera.h:315`), tests an end itself when
+a scan reaches it, halves each bracket it found twelve times toward its open end
+(`MODERN_CAMERA_CHORD_BISECT`, `modern_camera.cpp:367`, `:377`) and returns the nearer
+answer - the newer tick eye's side on a tie - or none. It builds its points with
+`InterpLerpLong`, the interpolator's own blend, so a point it tests is the point drawn.
+`ModernCameraDrawnEye` (`:427`) is the order: the logic room, the previous tick's room
+(`:468`), the chord (`:474`), none (`:478`); a chord answer equal to a tick eye is
+reported as `tick` (`:497`). `CameraEyeTest` (`game/camera.cpp:1062`) is the engine's
+test, the five terms of `ModernCameraEyeInRoom`; it saves `trigger_index`, `tiltxoff`,
+`tiltyoff`, `OnObject` and `height_type` before `GetFloor`, `GetHeight` and `GetCeiling`
+and writes them back after (`:1065`-`1090`). `InterpBeginFrame` calls the rule after the
+blend (`game/interpolate.cpp:1609`), moves the eye and the target to the answer for
+`chord` and `tick`, rebuilds the view with the roll at the same factor (`:1639`) and
+raises `g_skyWithheld` for `nosky` (`:1624`); `InterpEyeRoom` returns the rule's room for
+`prevroom`, `chord` and `tick` (`:1149`); `ClearEyeFix` clears all of it at the top of
+every `InterpBeginFrame` (`:1305`) and in `InterpEndFrame` (`:1741`), which puts the tick
+eye back as on every frame (`:1701`). `SkyDrawPhase` reads `InterpSkyWithheld()`
+(`game/draw.cpp:550`), leaves out the moon, the HD dome (`HDFrameSky` is called nowhere
+else), the flat layers, the horizon and the stars, and returns once the storm's clock has
+stepped (`:603`). `nosky` needs both tick eyes to fail as well, since the chord's ends are
+among the points searched, so it happens only where the logic camera itself left an eye
+that neither tick's room holds; at `fps_mode` 1 the live frame between two such blended
+frames still draws that eye with its sky. The seams: `CameraTickLog`
+(`game/camera.cpp:1220`, at the end of `CalculateCamera`, `:1707`) with `CameraEyeNear`
+(`:1147`) for the distances, fed by `CamTickWant`, `CamTickLos` and `CamTickIdeal` in
+`ChaseCamera` and `CombatCamera` (`:2372`, `:2471`, `:2496`, `:2604`, `:2677`, `:2699`),
+which store only behind `gLogEnabled`; `InterpLogEyeFix` (`game/interpolate.cpp:1189`),
+called by `DrawRooms` after the walk and the sky (`game/draw.cpp:2315`); the sum in
+`LogSecond` (`game/interpolate.cpp:873`). `CAMLOG tick` prints `f=`, `eye=(x,y,z)/room`,
+`ideal=(x,y,z)/room` or `-`, `want=(x,y,z)` or `-`, `target=(x,y,z)/room`, `los=` 1, 0 or
+-1, `los_lp=` 0 to 8 or -1, `pull=` 8 to 1, 0 or -1, `lead=yaw,pitch`, `mc_pull=`,
+`snaps=`, `kind=` (`open`, `wall`, `door->room`, `below:units`, `above:units`), `face=`
+and `corner=` (units, -1 for none). `CAMLOG draw` prints `frame=` (`ROOMLIST`'s serial),
+`tick=`, `alpha=`, `eye=(x,y,z)`, `prev=(x,y,z)/room`, `cur=(x,y,z)/room`, `kind=`, `fix=`
+(`prevroom`, `chord`, `tick` or `nosky`), `alpha2=`, `moved=`, `walk_room=`, `rooms=`,
+`outside_logic=` and `sky=`. `CAMLOG sum` prints `flagged=`, `prevroom=`, `chord=`,
+`tick=`, `nosky=` and `max_moved=`.
+
+**Checked.** Before the engine was touched, the rule as designed was replayed over the
+run's log with the measurement's `GetFloor` emulator and the tick eyes it reconstructed
+(kept outside the repository). All eight events resolve: the five wrong-room frames at t
+94656 to 94672, 95297 to 95312 and 100125 by the previous tick's room with the eye
+unmoved; the rest by the chord - frame 14206 at t 95312 by 6 units, t 96594 by 2 and 26, t
+136500 by 13, t 137641 by 35, t 128156 by 116 and t 140625 by 574 and 456, the last two
+that far because the reconstructed older tick eye stands in the pillar itself
+(reconstructed at a phase of 0.18 of a tick instead of 0.09, it is open and the moves are
+28, and 72 and 190). The moves match the measurement's own chord table to within one unit.
+All 1261 logged eyes the logic room holds keep their logged walk room. Of the 13 other
+failing frames in the log, 6 are mended by the previous room and 2 by the chord, and 5
+have one logged eye in their tick and no chord to replay. After the change, a probe
+linking the committed `game/modern_camera.cpp` ran `ModernCameraDrawnEye` over the same
+frames with the emulator answering each test: the same fix, eye and walk room as the
+replay on all 21 replayed failing frames, `none` with the logged eye and walk room on all
+1261 others, at most 47 tests for one frame. ModernTest's `camera_chord` holds the rule on
+the niche map's 2x2 pillar (`Preparation/Tools/Diagnose/ModernTest.cpp`), 19 checks: eight
+chords past its four corners at every 64th of the chord, each answer open, on the chord
+and the nearest open point against a brute force at 1/1024 of it, inside the test budget;
+an open chord unchanged after one test; a chord solid from end to end without an answer;
+solid ends with an open middle; one end solid; and the order over two rooms - none,
+prevroom, chord, tick, nosky. ModernTest 10827 checks, 0 failed (10808 before and 19 new);
+MenuTest 35547, InterpTest 635, LipsTest 270 with the `.OBJ` folder and 243 without, 0
+failed - as before. InterpTest compiles no engine file (`bit.bat` builds `InterpTest.cpp`
+alone against `game/interpolate_math.h`), so the room order and the sky flag are held in
+ModernTest through `ModernCameraDrawnEye`, the function the engine calls. The globals, by
+the code: `GetFloor` writes only the room through its pointer, here a local
+(`game/control.cpp:1253`-`1340`); `GetCeiling` writes no global, and the ceiling callbacks
+it runs write only the height they are handed (`game/objects.cpp:186`, `:220`, `:244`;
+`game/traps.cpp:1271`, `:1611`); `GetHeight` writes the five
+(`game/control.cpp:1049`-`1052`, `:1068`, `:1095`-`1101`, `:1119`, `:1145`, `:1153`,
+`:1170`, `:1224`-`1228`) and runs floor callbacks that write only `height_type`,
+`OnObject` and the height (`game/objects.cpp:176`, `:206`, `:230`; `game/traps.cpp:1253`,
+`:1598`) - no item, no random number, nothing a savegame holds. Not measured: the game.
+
+**Unchanged.** `fps_mode 0`: `InterpAlphaNow` answers 1 there
+(`game/interpolate.cpp:1086`-`1087`) and `InterpBeginFrame` returns at `alpha >= 1`
+(`:1328`) before the camera block, the only caller of `ModernCameraDrawnEye`; the rule's
+state is cleared on every frame (`:1305`), so `InterpEyeRoom` and `SkyDrawPhase` find
+nothing to do, and the `CAMLOG` lines are written only with `-log`. The logic camera of
+both schemes: `MoveCamera`, `mgLOS`, `ModernCameraRayBounds` and the orbit are not edited,
+and `ChaseCamera` and `CombatCamera` gained three calls each that store what `CAMLOG`
+prints and return at once without `-log`. `camera.pos.room_number`; the eye and the target
+the logic holds, since the frame's moved copies go back in `InterpEndFrame`; the logic
+room's `outside` and `camera_underwater`. Every log line already there prints as before. A
+frame whose blended eye the logic room holds.
+
+**Decisions.** The rule acts on the drawn eye alone: no tick eye moves, the tick eye keeps
+no clearance margin and `mgLOS` gets no diagonal corner test - that test mends none of the
+eight events and would change the camera at every pillar, and a margin waits until
+`CAMLOG`'s `face=` and `corner=` have counted how often a tick eye stands that close to a
+face or a corner. A frame whose eye neither tick's room holds shows the nearest open point
+on the chord between its two tick eyes and never a position of its own. The fallback
+colour is the clear colour, black. Both control schemes take the rule, because the blend
+is the interpolator's and not a scheme's, and `fps_mode` 1 and 2 alike. The see-through
+and wall-fill frames of the near plane are a separate matter.
+
+**Commits.** `d79350d`, `4f2fde6`
 
 ### Particles on the same time axis
 2026-09-07

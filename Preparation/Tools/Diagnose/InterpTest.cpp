@@ -36,6 +36,10 @@
 #include <limits.h>		// LONG_MIN / LONG_MAX - the extremes of root_narrow
 
 #include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
+/* The page arithmetic of the HD path's material 15 books and the drawn
+ * frame's time they turn on - a header of its own beside this one, with no
+ * engine header in it either. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_book.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -5347,6 +5351,157 @@ static void key_seam()
 	}
 }
 
+/* -------------------------------------------------------------- the books -- */
+
+/* How many presents each page of a book stands, over `presents` frames of
+ * the framecount cadence of cadence() above: `perPresent` 2 is fps_mode 0
+ * (two ticks per present), 1 is fps_mode 1 (one tick per present, every
+ * second frame drawn half a tick back). `drawn` picks the drawn frame's time
+ * (HDBookClock) or the tick clock alone. The first and the last run are cut
+ * by the window and left out; `shortest` and `longest` are over the rest,
+ * `runs` how many there were, `twoInARow` how often two runs in a row have
+ * the same length, and `clockOff` how often the drawn time differs from the
+ * tick clock at all. */
+static void book_runs(long perPresent, bool drawn, float step, int presents,
+	int* shortest, int* longest, int* runs, int* twoInARow, int* clockOff)
+{
+	long framecount = 0;
+	long ticks = 0;
+	int last = -1, run = 0, prevRun = -1, seen = 0;
+
+	*shortest = 1 << 30;
+	*longest = 0;
+	*runs = 0;
+	*twoInARow = 0;
+	*clockOff = 0;
+
+	for (int i = 0; i < presents; i++)
+	{
+		const float alpha = perPresent == 1 && framecount < 0 ? 0.5F : 1.0F;
+		const double tick = (double)ticks / 30.0;
+		const double clock = drawn ? HDBookClock(tick, alpha) : tick;
+
+		if (clock != tick)
+			(*clockOff)++;
+
+		const int page = HDBookPage(clock, step, 30, 0);
+
+		if (page != last)
+		{
+			if (seen >= 2)
+			{
+				if (run < *shortest) *shortest = run;
+				if (run > *longest) *longest = run;
+				if (run == prevRun) (*twoInARow)++;
+				(*runs)++;
+				prevRun = run;
+			}
+
+			seen++;
+			last = page;
+			run = 0;
+		}
+
+		run++;
+
+		for (framecount += perPresent; framecount > 0; framecount -= 2)
+			ticks++;
+	}
+}
+
+static void books()
+{
+	printf("the books\n");
+
+	/* ---- the page at a time: whole steps plus the phase, modulo the count */
+	{
+		int wrong = 0, wrongPhase = 0, wrong29 = 0, wrong14 = 0, wrongHour = 0;
+
+		for (int k = 0; k <= 30; k++)
+		{
+			const double t = k * 0.05;
+
+			if (HDBookPage(t, 0.05f, 30, 0) != k % 30) wrong++;
+			if (HDBookPage(t, 0.05f, 30, 15) != (k + 15) % 30) wrongPhase++;
+			if (HDBookPage(3600.0 + t, 0.05f, 30, 0) != k % 30) wrongHour++;
+		}
+
+		for (int k = 0; k <= 29; k++)
+			if (HDBookPage(k * 0.2, 0.2f, 29, 0) != k % 29) wrong29++;
+
+		for (int k = 0; k <= 14; k++)
+			if (HDBookPage(k * 0.06, 0.06f, 14, 0) != k % 14) wrong14++;
+
+		ok(wrong == 0, "book 30 x 0.05 s: page k at k * 0.05 s, 0..29, then 0 at 1.5",
+			wrong, 0);
+		ok(HDBookPage(0.049, 0.05f, 30, 0) == 0 && HDBookPage(0.051, 0.05f, 30, 0) == 1,
+			"book 30 x 0.05 s: a page stands from its step to the next", 0, 0);
+		ok(wrongPhase == 0, "book phase 15: the same run, 15 pages on", wrongPhase, 0);
+		ok(wrong29 == 0, "book 29 x 0.2 s: page k at k * 0.2 s, 0 again at 5.8",
+			wrong29, 0);
+		ok(wrong14 == 0, "book 14 x 0.06 s: page k at k * 0.06 s, 0 again at 0.84",
+			wrong14, 0);
+		ok(wrongHour == 0, "book after an hour of play: still whole steps, no drift",
+			wrongHour, 0);
+		ok(HDBookPage(1.0, 0.0f, 30, 0) == 0 && HDBookPage(1.0, 0.05f, 0, 0) == 0,
+			"book with no step or no pages: page 0", 0, 0);
+	}
+
+	/* ---- the drawn frame's time ---- */
+	{
+		int off0 = 0, offHalf = 0;
+
+		for (int k = 0; k < 1800; k++)
+		{
+			const double t = k / 30.0;
+
+			if (HDBookClock(t, 1.0F) != t) off0++;
+			if (k && fabs(HDBookClock(t, 0.5F) - (t - 1.0 / 60.0)) > 1e-12) offHalf++;
+		}
+
+		ok(off0 == 0, "alpha 1 (fps_mode 0, a live frame): the tick clock itself",
+			off0, 0);
+		ok(offHalf == 0, "alpha 0.5 (right after a tick at 60 fps): half a tick back",
+			offHalf, 0);
+		ok(HDBookClock(0.0, 0.5F) == 0.0,
+			"a tween frame before the first tick of a level: held at 0", 0, 0);
+	}
+
+	/* ---- the cadence: presents per page ---- */
+	{
+		int lo, hi, runs, same, off;
+
+		book_runs(1, true, 0.05f, 3600, &lo, &hi, &runs, &same, &off);
+		printf("  fps_mode 1, drawn time, 0.05 s: %d..%d presents a page over %d pages\n",
+			lo, hi, runs);
+		ok(lo == 3 && hi == 3, "60 fps drawn time, 0.05 s book: every page 3 presents",
+			lo * 10 + hi, 33);
+		ok(runs == 1198, "and 1198 whole pages in 3600 presents", runs, 1198);
+
+		book_runs(1, false, 0.05f, 3600, &lo, &hi, &runs, &same, &off);
+		printf("  fps_mode 1, tick clock, 0.05 s: %d..%d presents a page, %d repeats\n",
+			lo, hi, same);
+		ok(lo == 2 && hi == 4 && same == 0,
+			"60 fps tick clock alone, 0.05 s book: 2, 4, 2, 4 - why the drawn time",
+			lo * 10 + hi, 24);
+
+		book_runs(1, true, 0.025f, 3600, &lo, &hi, &runs, &same, &off);
+		printf("  fps_mode 1, drawn time, 0.025 s: %d..%d presents a page, %d repeats\n",
+			lo, hi, same);
+		ok(lo == 1 && hi == 2 && same == 0,
+			"60 fps drawn time, 0.025 s book: 1, 2, 1, 2 presents", lo * 10 + hi, 12);
+
+		book_runs(2, true, 0.05f, 1800, &lo, &hi, &runs, &same, &off);
+		printf("  fps_mode 0, drawn time, 0.05 s: %d..%d presents a page, drawn time "
+			"off the tick clock %d times\n", lo, hi, off);
+		ok(off == 0, "fps_mode 0: the drawn time is the tick clock on every present",
+			off, 0);
+		ok(lo == 1 && hi == 2 && same == 0,
+			"30 fps, 0.05 s book: 1, 2, 1, 2 presents, as the tick clock gives",
+			lo * 10 + hi, 12);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -5379,6 +5534,7 @@ int main()
 	walk_capacity();
 	ring_cadence();
 	title_shadow();
+	books();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

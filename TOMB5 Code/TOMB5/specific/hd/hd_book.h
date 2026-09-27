@@ -57,7 +57,12 @@ inline double HDBookClock(double tickClock, float alpha)
  * under that boundary as often as over it. Without the nudge such a present
  * would show the old page one time and the new one the next, and the even
  * three-present rhythm would turn into two and four. The index is taken
- * modulo the count as an integer, so an hour of play is exact.
+ * modulo the count as an integer.
+ *
+ * The step is read to the microsecond first. The file stores it as a float,
+ * and 0.05 as a float is 0.0500000007: over an hour of play that error adds
+ * up to more than the nudge, and the page boundaries would drift off the
+ * sixtieths they fall on. The game's steps are whole milliseconds.
  *
  * 0 for a book that is not one - no step, no pages. */
 inline int HDBookPage(double clock, float step, int count, int phase)
@@ -65,7 +70,12 @@ inline int HDBookPage(double clock, float step, int count, int phase)
 	if (!(step > 0.0f) || count < 1)
 		return 0;
 
-	const double at = clock / (double)step + 1.0e-3;
+	const double seconds = (double)(long long)((double)step * 1.0e6 + 0.5) / 1.0e6;
+
+	if (!(seconds > 0.0))
+		return 0;
+
+	const double at = clock / seconds + 1.0e-3;
 	const long long index = at > 0.0 ? (long long)at : 0;
 	const int p = phase >= 0 ? phase % count : 0;
 

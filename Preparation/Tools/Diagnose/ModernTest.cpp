@@ -4374,6 +4374,281 @@ static void tank_sector()
 	 * arithmetic, which is the whole of why it lives in game\modern_move.cpp. */
 }
 
+/* ------------------------------------------ the four keys as the stick ----- */
+
+/* Two translations from a fresh state each, one tick: whether they agree on
+ * everything the seam and the direct turn read. */
+static long same_result(const MODERN_RESULT* a, const MODERN_RESULT* b)
+{
+	return (a->bits == b->bits && a->active == b->active && a->target == b->target &&
+		a->delta == b->delta && a->mode == b->mode) ? 1 : 0;
+}
+
+static void fresh_tick(long x, long y, short camera_yaw, short lara_yaw, MODERN_RESULT* out)
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+
+	ModernDefaults(&cfg);
+	ModernResetState(&state);
+	ModernTranslate(&cfg, &state, x, y, camera_yaw, lara_yaw, 0, out);
+}
+
+/* specific\input.cpp's guard chain round the key stick, modelled in the order
+ * the file has it, for the same reason and with the same limit as look_tick()
+ * above: bmt.bat does not compile that file, so this model is read against it
+ * whenever either changes. Returns whether ModernKeyStick is consulted, and
+ * the pair the translation is handed when it is.
+ *
+ *   move_x/move_y   joy_x/joy_y; under Modern outside a menu 0/0, and the
+ *                   pad's zoned stick only on the pad page (`pad_x/pad_y`
+ *                   stand for that zoned reading)
+ *   modern_seam     control_modern && in play (first person, spotcam,
+ *                   cutscene, bDisableLaraControl, inventory, title all no)
+ *   modern_tank     modern_seam && the look key
+ *   the call        modern_seam && !modern_tank
+ *
+ * `in_play` stands for all of the seam's game-state terms at once. The menu
+ * term, which also decides the zeroing of move_x/move_y, is one of them; the
+ * other terms leave that zeroing alone, which the model does not show and
+ * does not need to, because the call is not reached when any of them says
+ * no. */
+static long key_seam_model(long control_modern, long pad_page, long in_play, long look,
+	long joy_x, long joy_y, long pad_x, long pad_y, long keys, long* x, long* y)
+{
+	long move_x = joy_x;
+	long move_y = joy_y;
+	long seam, tank;
+
+	*x = 0;
+	*y = 0;
+
+	if (control_modern && in_play)
+	{
+		move_x = 0;
+		move_y = 0;
+
+		if (pad_page)
+		{
+			move_x = pad_x;
+			move_y = pad_y;
+		}
+	}
+
+	seam = (control_modern && in_play) ? 1 : 0;
+	tank = (seam && look) ? 1 : 0;
+
+	if (!(seam && !tank))
+		return 0;
+
+	ModernKeyStick(move_x, move_y, keys & 1, keys & 2, keys & 4, keys & 8, x, y);
+	return 1;
+}
+
+static void key_stick()
+{
+	const long full = (long)MODERN_STICK_FULL;
+	MODERN_RESULT a, b;
+	long x, y, sx, sy, feed, bad, k, c, l;
+
+	printf("\nthe four movement keys as the modern stick\n");
+
+	/* 1. The sign. A stick pushed straight forward reads y negative, in the
+	 * scheme's own helper and at the pad's dead zone alike; the forward key
+	 * must read the same, or W would run her towards the camera. */
+	stick_at(0.0, full, &sx, &sy);
+	feed = ModernKeyStick(0, 0, 1, 0, 0, 0, &x, &y);
+	ok(feed == MODERN_FEED_KEYS, "the forward key alone feeds the seam from the keys",
+		feed, MODERN_FEED_KEYS);
+	ok(x == 0 && y == -full, "...as 0/-MODERN_STICK_FULL, full deflection forward", y, -full);
+	ok(y == sy && x == sx, "...the very pair of a stick pushed straight forward", y, sy);
+	ModernStickDeadZone(MODERN_DEAD_LEFT, MODERN_DEAD_AXIS_LEFT, 0, -full, &sx, &sy);
+	ok(y == sy && x == sx, "...and of the pad's rim after its dead zone", y, sy);
+
+	/* 2. Forward key against the pad at full forward, through the whole
+	 * translation: the bits, the course and the mode. Both the rim itself
+	 * and the XInput reading of 32767 (-127, one short of the rim). */
+	fresh_tick(0, -full, 0, 0, &a);
+	fresh_tick(sx, sy, 0, 0, &b);
+	ok(same_result(&a, &b) && a.mag == b.mag,
+		"the forward key gives the bits the pad gives at full forward", a.bits, b.bits);
+	ok(a.active && (a.bits & MODERN_IN_FORWARD) && !(a.bits & MODERN_IN_WALK),
+		"...forward and running: no key is half a deflection", a.bits, MODERN_IN_FORWARD);
+	ModernStickDeadZone(MODERN_DEAD_LEFT, MODERN_DEAD_AXIS_LEFT, 0, -127, &sx, &sy);
+	fresh_tick(sx, sy, 0, 0, &b);
+	ok(a.bits == b.bits && a.target == b.target && a.mode == b.mode,
+		"...and the bits of the pad's real full push, which reads 127", b.bits, a.bits);
+
+	/* 3. Every key and every pair of neighbours against the stick at the same
+	 * heading, under 16 cameras and 8 headings of hers: the keys are the stick,
+	 * nothing of their own. Left is -90, right +90, back 180. */
+	{
+		static const long combo[8] = { 1, 1 | 8, 8, 2 | 8, 2, 2 | 4, 4, 1 | 4 };
+		static const double deg[8] = { 0.0, 45.0, 90.0, 135.0, 180.0, -135.0, -90.0, -45.0 };
+
+		bad = 0;
+
+		for (k = 0; k < 8; k++)
+		{
+			ModernKeyStick(0, 0, combo[k] & 1, combo[k] & 2, combo[k] & 4, combo[k] & 8, &x, &y);
+			stick_at(deg[k], full, &sx, &sy);
+
+			for (c = 0; c < 16; c++)
+			{
+				for (l = 0; l < 8; l++)
+				{
+					fresh_tick(x, y, (short)(c * 4096), (short)(l * 8192), &a);
+					fresh_tick(sx, sy, (short)(c * 4096), (short)(l * 8192), &b);
+
+					if (!same_result(&a, &b) || a.mag != full)
+						bad++;
+				}
+			}
+		}
+
+		ok(bad == 0, "W/S/A/D and their diagonals translate as the stick at that heading",
+			bad, 0);
+		printf("  8 key sets x 16 cameras x 8 headings of hers, %ld differ\n", bad);
+	}
+
+	/* 4. The diagonal. Two full axes are 181 long; the magnitude is clamped to
+	 * full, and the course is exactly 45 degrees off the camera - 0x2000, not
+	 * one unit either side - for all four. */
+	feed = ModernKeyStick(0, 0, 1, 0, 0, 1, &x, &y);
+	ok(feed == MODERN_FEED_KEYS && x == full && y == -full,
+		"forward and right together are both axes at full", x, full);
+	fresh_tick(x, y, 0, 0, &a);
+	ok(a.mag == full, "...the diagonal reads MODERN_STICK_FULL, not 181", a.mag, full);
+	ok(a.target == 0x2000, "...and her course is exactly 45 degrees right of the camera",
+		a.target, 0x2000);
+	fresh_tick(x, y, 0x3000, 0x3000, &a);
+	ok(a.target == 0x5000, "...under any camera: 45 degrees right of 0x3000 is 0x5000",
+		a.target, 0x5000);
+	{
+		static const long diag[4] = { 1 | 8, 2 | 8, 2 | 4, 1 | 4 };
+		static const long want[4] = { 0x2000, 0x6000, -0x6000, -0x2000 };
+
+		bad = 0;
+
+		for (k = 0; k < 4; k++)
+		{
+			ModernKeyStick(0, 0, diag[k] & 1, diag[k] & 2, diag[k] & 4, diag[k] & 8, &x, &y);
+			fresh_tick(x, y, 0, 0, &a);
+
+			if (a.target != want[k] || a.mag != full)
+				bad++;
+		}
+
+		ok(bad == 0, "...and all four diagonals lie on the exact 45 degree lines", bad, 0);
+	}
+
+	/* 5. The pad wins. Any pad pair off centre - a nudge of one unit, a
+	 * partial push, full lock - is handed on unchanged whatever keys are
+	 * held, and never summed with them. */
+	{
+		static const long pad[6][2] = { { 0, -1 }, { 1, 0 }, { 50, -30 }, { -full, 0 },
+			{ 0, full }, { -90, 90 } };
+		long p;
+
+		bad = 0;
+
+		for (p = 0; p < 6; p++)
+		{
+			for (k = 0; k < 16; k++)
+			{
+				feed = ModernKeyStick(pad[p][0], pad[p][1], k & 1, k & 2, k & 4, k & 8, &x, &y);
+
+				if (feed != MODERN_FEED_PAD || x != pad[p][0] || y != pad[p][1])
+					bad++;
+			}
+		}
+
+		ok(bad == 0, "a pad off centre is handed on unchanged under every set of keys",
+			bad, 0);
+	}
+
+	/* 6. Both at rest: nothing, and the scheme steps aside exactly as it does
+	 * for a resting stick - the classic bits the keys did not write stand. */
+	feed = ModernKeyStick(0, 0, 0, 0, 0, 0, &x, &y);
+	ok(feed == MODERN_FEED_NONE && !x && !y, "pad at rest and no key: nothing is fed",
+		feed, MODERN_FEED_NONE);
+	fresh_tick(x, y, 0, 0, &a);
+	ok(!a.active && !a.bits, "...and the translation steps aside", a.active, 0);
+
+	/* 7. Opposite keys cancel on their axis, and only there. */
+	feed = ModernKeyStick(0, 0, 1, 1, 0, 0, &x, &y);
+	ok(feed == MODERN_FEED_NONE && !x && !y, "forward and back cancel to nothing", y, 0);
+	feed = ModernKeyStick(0, 0, 0, 0, 1, 1, &x, &y);
+	ok(feed == MODERN_FEED_NONE && !x && !y, "left and right cancel to nothing", x, 0);
+	feed = ModernKeyStick(0, 0, 1, 1, 1, 1, &x, &y);
+	ok(feed == MODERN_FEED_NONE && !x && !y, "all four cancel to nothing", feed,
+		MODERN_FEED_NONE);
+	feed = ModernKeyStick(0, 0, 1, 1, 0, 1, &x, &y);
+	ok(feed == MODERN_FEED_KEYS && x == full && !y,
+		"forward and back with right leave a pure right", x, full);
+
+	/* 8. All sixteen sets: each axis is 0 or full, and the keys feed exactly
+	 * when the vector is not zero. */
+	bad = 0;
+
+	for (k = 0; k < 16; k++)
+	{
+		feed = ModernKeyStick(0, 0, k & 1, k & 2, k & 4, k & 8, &x, &y);
+
+		if ((x != 0 && x != full && x != -full) || (y != 0 && y != full && y != -full))
+			bad++;
+
+		if ((feed == MODERN_FEED_KEYS) != (x != 0 || y != 0))
+			bad++;
+
+		if (feed == MODERN_FEED_PAD)
+			bad++;
+	}
+
+	ok(bad == 0, "every set of keys is a full-deflection axis pair or nothing", bad, 0);
+	ok(ModernKeyStick(0, 0, 1, 0, 0, 0, 0, &y) == MODERN_FEED_NONE,
+		"a missing out pointer is refused, not written", 0, 0);
+
+	/* 9. The guard chain, modelled (see key_seam_model). Tank never consults
+	 * the key stick, in or out of play, with or without the look key; nor
+	 * does Modern while the look key steers her or outside play. On the
+	 * keyboard page a d-pad press in joy_x/joy_y (+-20) is no movement: the
+	 * keys alone are fed. */
+	{
+		long cm, pp, ip, lk, used, calls = 0;
+
+		bad = 0;
+
+		for (cm = 0; cm < 2; cm++)
+			for (pp = 0; pp < 2; pp++)
+				for (ip = 0; ip < 2; ip++)
+					for (lk = 0; lk < 2; lk++)
+						for (k = 0; k < 16; k++)
+						{
+							used = key_seam_model(cm, pp, ip, lk, 20, -20, 0, 0, k, &x, &y);
+
+							if (used)
+								calls++;
+
+							if (used != (cm && ip && !lk))
+								bad++;
+						}
+
+		ok(bad == 0, "the key stick is consulted only under Modern, in play, without look",
+			bad, 0);
+		ok(calls == 2 * 16, "...never at Tank: every consultation is a Modern one", calls,
+			2 * 16);
+
+		key_seam_model(1, 0, 1, 0, 20, -20, 0, 0, 1, &x, &y);
+		ok(x == 0 && y == -full, "on the keyboard page a d-pad press does not steer: W alone",
+			y, -full);
+		key_seam_model(1, 0, 1, 0, 20, -20, 0, 0, 0, &x, &y);
+		ok(x == 0 && y == 0, "...and with no key the keyboard page feeds nothing", x, 0);
+		key_seam_model(1, 1, 1, 0, 0, 0, 40, -60, 1, &x, &y);
+		ok(x == 40 && y == -60, "on the pad page the stick off centre beats W", y, -60);
+	}
+}
+
 /* -------------------------- the camera he turns takes her course with it ----- */
 
 /* What 120 ticks of steering with the camera leave behind. `impulses` is the
@@ -9419,6 +9694,7 @@ int main()
 	turn_chain();
 	look_tank();
 	tank_sector();
+	key_stick();
 	cam_steer();
 	firing_run();
 	weapons();

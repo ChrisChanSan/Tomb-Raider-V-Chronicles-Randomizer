@@ -425,6 +425,14 @@ With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
 as it would with no chords at all.
 
+**Flipping *Control type* never takes your Modifier away.** The flip moves a
+binding the new scheme cannot use back to that scheme's default; where that
+default is the Modifier's own button — at *One key* on the *PS5* DirectInput
+page, Tank puts the small medipack on the touchpad — the medipack is left
+unbound rather than the Modifier, and it returns to its button (d-pad up
+under Modern) the next time a flip finds that button free. Your chords keep
+working through both flips.
+
 **A stored Separate pad set written by a build without the Modifier keeps its
 own bindings, chord-free, until you choose *Reset to defaults* once.** The
 engine tells such a set apart from a fresh one and leaves it alone rather than

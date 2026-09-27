@@ -7714,6 +7714,92 @@ covers the role tables.
 `88ae528`, `38925fd`, `98f733e`, `6ece2ce`, `ebb48fd`, `fb4e770`, `d69e74d`, `f331108`,
 `b3930c8`, `83e56f7`, `0f1602b`, `89427f4`
 
+### The pad's scheme repair never displaces the Modifier
+2026-09-27
+
+**What.** Flipping the *Control type* row repairs the pad bindings the new scheme cannot
+honour (the entry above); that repair no longer unbinds the Modifier. A role whose
+repaired default is the Modifier's own pair is left unbound instead, remembered in its
+set's yield mask, and seated on its default again by the next repair that finds that
+default free and not blocked. On the PS5 DirectInput page at *One key* the small medipack now waits
+while the Modifier holds the touchpad under Tank and is back on d-pad up under Modern,
+and every chord keeps its Modifier through both flips.
+
+**Why.** With the Modifier on the touchpad and chords on some hotkeys, a flip to Tank and
+back left the binding page showing every chord as `---+L3`, `---+L2`, `---+R1`
+(`game/menu_frame.cpp:1347`-`:1352` prints `---` for an unbound Modifier), and a
+Touchpad+button press bound the plain touchpad, because the capture records a chord only
+while a Modifier is bound and otherwise takes the highest bit down, which the touchpad's
+bit 13 is (`:2007`-`:2031`); a `-log` run read `PADLOG mod=-1`. The mechanism is in the
+tables and the repair: at *One key* on that page Tank's Small Medipack default is bit 13
+(`jDefPS5DInput`, `specific/input.cpp:189`) and Modern's is d-pad up, 20. Into Tank the
+medipack on 20 is on a blocked bit - Tank keeps the d-pad moving Lara - and goes to 13;
+the repair's displacement then found the Modifier on (13, plain) and gave it its own One
+key default, which is none. Back into Modern the medipack follows the switch to 20, and
+nothing gave the Modifier back. The Separate DirectInput row escapes the collision by
+leaving both medipacks unbound (`game/pad_scheme.h`, `JOY_SEP_PS5_DINPUT`); the One-key
+Tank row does not.
+
+**How.** The repair's rule moves out of `ApplyJoyScheme` into `game/pad_scheme.h`, pure
+arithmetic like the rest of that header, so that MenuTest runs the engine's own rule:
+`PadSchemeRepair` (`:246`-`:320`) with `PadPairTaken`, `PadChordSet` and
+`PadModifierHolds` beside it. Part 1 is the repair as it was. Part 2: before a role takes
+its default, `PadModifierHolds` asks whether the Modifier holds that pair; if so the role
+is set to -1, its chord flag cleared and its bit set in the yield mask (`:262`-`:269`),
+and the displacement loop skips the Modifier (`:281`) - a role displaced there whose own
+default the Modifier holds is remembered the same way. Part 3 (`:298`-`:319`): every role
+in the mask that is still unbound is seated on its default when the bit is not blocked
+and the pair is free; a role the player has bound in the meantime leaves the mask.
+`ApplyJoyScheme` (`specific/input.cpp:403`) calls it on the active set (`:424`). The mask
+is `jYield` beside `jChord` and `jSplitParkedYield` beside `jSplitParkedChord`
+(`:264`-`:265`), exchanged with them by the Action row (`ApplyJoySplit`, `:533`-`:539`),
+cleared by *Reset* (`:346`), reached as `JoyYieldSet` (`:479`), and stored beside
+`JChord`/`SJChord` as `JYield`/`SJYield` (`specific/registry.cpp:67`-`:71`, read at `:532`
+and `:610`, written at `:732`-`:733`), so a medipack waiting under Tank at shutdown still
+returns after a restart into Modern. Behind `-log`, new lines (`specific/input.cpp:427`-
+`:438`): `PADLOG repair role=<n> default=<bit> held by the modifier, left unbound` when a
+role yields and `PADLOG repair role=<n> seated=<bit>` when it is seated again; the
+`PADLOG mod= chord= split=` line is unchanged.
+
+**Checked.** `Preparation/Tools/Diagnose/MenuTest.cpp` gains the family
+`pad_scheme_repair`, 6,184 checks, 36,180 -> 42,364, 0 failed. It holds the four One-key
+rows, the blocked masks, the Modern medipack override and the call itself against the
+lines of `specific/input.cpp`, and keeps a copy of the rule as it ran before as the
+reference. (a) One key, PS5 DirectInput, Modern seated, Modifier 13, medipacks 20/21,
+chords on pistols, the guns cheat and the skip cheat: into Tank the Modifier stays 13,
+the chord flags are unchanged, Small Medipack -1 and remembered, Large Medipack 14, roles
+0-12 as Tank's; the reference unbinds the Modifier there; a second repair in Tank changes
+nothing. (b) Back into Modern: Small Medipack 20, Large 21, Modifier 13, the mask empty,
+the whole set as it started. A role the player binds while it waits keeps the binding and
+leaves the mask; a Modifier moved off 13 under Tank lets the next repair seat the
+medipack on 13. (c) No Modifier bound: Small Medipack 13 under Tank and 20 under Modern,
+the whole set equal to the reference's, no yield. (d) The parked Separate set is
+untouched by One-key flips, and its own flips equal the reference's with its Modifier on
+13 and its Small Medipack -1 under Tank and 20 under Modern. (e) The PS5 XInput and Xbox
+pages: medipacks 18/19 under Tank and 20/21 under Modern, equal to the reference's. A
+sweep of every role on every bit and unbound, on all four pages, both flips and no
+Modifier, equals the reference in all 5,400 cases; with the Modifier on each of bits 0
+to 15, on all four pages and from both schemes, a flip and its return never move it and
+give the starting set back (640 checks). ModernTest 13992, InterpTest 651 and LipsTest
+270 / 243 unchanged. `PCtomb5 built Sep 27 2026 22:22:56`, md5
+`31138e80e332736d7ff14d698c277d96`. Not measured: the game.
+
+**Unchanged.** Without a bound Modifier the repair gives exactly what it gave before.
+The Separate set, whose Tank medipacks are unbound, repairs as before. The defaults
+themselves, the capture and the binding page. Play input: the repair runs only on a
+scheme flip, on an Action flip once a scheme is seated and once at a Modern start, never
+per frame.
+
+**Decisions.** The repair never displaces the Modifier: it is the anchor of every chord,
+and one default outranks none of them. A role left unbound for it is remembered per
+binding set, in the registry beside the chord masks, and seated again by the next repair
+that finds its default free. The defaults stay as they are: Tank's One-key Small
+Medipack keeps bit 13 wherever no Modifier holds it. A Modifier on a bit the new scheme
+blocks is still repaired like any other role, and *Reset* at One key still clears a
+player's Modifier.
+
+**Commits.** `8a9d181`, `268e664`
+
 ### The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot
 2026-08-30 - 2026-09-20
 
@@ -9319,3 +9405,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
+| #184 | The pad's scheme repair never displaces the Modifier |

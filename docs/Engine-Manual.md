@@ -194,16 +194,16 @@ each scheme keeps its **own** keyboard bindings, remembered independently:
 | Walk | Right Shift | Left Alt |
 | Jump | Right Alt | Space |
 | Action | Right Ctrl | E |
-| Draw weapon | Space | Q |
+| Draw weapon | Space | Right mouse button |
 | Flare | Comma (`,`) | F |
-| Look | Numpad 0 | R |
+| Look | Numpad 0 | Middle mouse button |
 | Roll | End | Left Ctrl |
 | Inventory | Escape | Escape |
 | Step left | Delete | Z |
 | Step right | Page Down | X |
 | Pause | P | P |
 | Select | Return | Return |
-| Secondary | Home | Numpad 0 |
+| Secondary | Home | Left mouse button |
 
 > **Where the Modern scheme comes from.** The design of the modern control —
 > the stick direction read against a held reference heading and turned back
@@ -217,7 +217,16 @@ each scheme keeps its **own** keyboard bindings, remembered independently:
 *Secondary* is the nineteenth slot in each scheme's table, and it is bindable
 but does nothing while *Action* (below) is set to *One key* — the *Key
 bindings* page only lists it under *Separate*, so *One key* shows the page
-without it. The Modern default, Numpad 0, is a placeholder.
+without it.
+
+The three mouse buttons of the Modern row are the Remaster's own keyboard
+page: draw on the right button, look on the middle one, the secondary action on
+the left one. Any keyboard row can be given a mouse button: pick the row and
+press the button, as you would press a key. The page names the five buttons
+*Mouse L*, *Mouse R*, *Mouse M*, *Mouse 4* and *Mouse 5* (*Maus* in German).
+A Modern key set saved before the mouse existed keeps its keys for those three
+rows; the buttons answer beside them, as every default does that you have not
+bound to another row, and *Reset to defaults* puts the buttons in their place.
 
 ### The hotkey rows
 
@@ -427,6 +436,25 @@ number, so both rows are drawn greyed out and the cursor skips them.
 Both are sliders, and a slider is written the moment it stops moving rather
 than on every step while you hold the key down.
 
+### The mouse
+
+Under *Control type: Modern* the mouse turns the camera round Lara the way the
+right stick does, and a camera you turn with the mouse takes her running
+direction with it, exactly as the stick's does. Two more rows follow *Dead
+zone*, greyed under *Tank* like the two above:
+
+| Row | Range | Default | What it does |
+|---|---|---|---|
+| *Mouse sensitivity* | 0–100 | **50** | How far the camera turns for a given movement of the mouse. At `50` about two thousand counts of the mouse's sensor turn it once round (2048 exactly); `0` is a quarter of that speed, `100` four times it, and every step of the slider is the same 2.8 per cent more. Registry: `mouse_sens`. |
+| *Invert mouse* | on / off | **off** | Off, pushing the mouse away looks up, as pushing the stick forward does; on, it looks down. The stick's own direction is not affected. Registry: `mouse_invert`. |
+
+While you play under *Modern*, the cursor is hidden and held inside the game
+window. It is let go whenever the window loses the focus (Alt+Tab, for
+example), while an FMV plays and under *Tank*, and caught again when you come
+back. The mouse does nothing in the menus or the inventory;
+the keyboard and the pad drive those. First person view keeps its own look and
+is not turned by the mouse.
+
 Under *Modern* the camera stays in your hands: a camera the level places with a
 trigger — a door shown opening, a lever's payoff somewhere else — does not take
 the view, the real sniper camera in the 13th Floor excepted, the same as in
@@ -573,7 +601,7 @@ right). The seven tabs:
 | Tab | Holds | Default |
 |---|---|---|
 | Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
-| Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Targeting, Ammotype hotkeys | see below |
+| Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
 | Graphics | *Display*, HD textures, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints | see **tomb5 options** |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, TR4 loadscreens, Loadbar style, Loading text | see **tomb5 options** |
 | tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
@@ -2842,6 +2870,7 @@ wrote it, and each seam answers a different question:
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 | at *Frame rate 60* or *Display*, a black flash — or sky — for a frame or two as the camera swings past a pillar or a door frame | `CAMLOG` — a `tick` line per pass of the chase, combat, fixed and look cameras (none during flybys, binoculars or cutscenes): where the camera stands and with which room, what it aimed for and how the wall cut it, what kind of place it stands in (`kind=open`, `wall`, `door->36`, `below:12`) and how close it is to a wall face and a corner; a `draw` line for every picture whose camera had to be put right between two steps, saying how (`fix=prevroom`, `chord`, `tick` or `nosky`) and how far it moved (`moved=`); and a `sum` line per second with the counts |
+| under *Modern* the mouse does not turn the camera, a mouse button does nothing, or the cursor stays hidden or visible when it should not | `MOUSELOG` — a line whenever the mouse moved or a button changed: the counts it moved (`dx=`, `dy=`), the buttons held (`buttons=`, left 1, right 2, middle 4, the side buttons 8 and 16), how far that turned the camera (`yaw=`, `pitch=`), the sensitivity (`sens=`) and whether the cursor was held (`captured=`); and a `MOUSELOG capture=on` or `capture=off` line every time the cursor is caught or let go, with the reasons (`active=` the window has the focus, `modern=`, `fmv=`) |
 | at *Frame rate 60* an arm or the weapon in her hands shakes | `ARMLOG` — per drawn frame: both arms' animation frames, whether they were blended, and where shoulder, elbow and hand came out |
 | the *Ledge hang* move misbehaves, or the camera jumps during it | `LEDGELOG` — one line per phase of the move, one when it starts, one when the reasons it would refuse an edge change; and with the Modern camera a `LEDGELOG cam` line on every step of the move and the ten after it: where the camera stands and what it looks at, with their rooms, and whether it had to put the look-at point back (`snaps=`, `rejected=`) |
 | Lara vanishes for a moment on a rope, for instance in the half turn | `ROPELOG` — one line per tick on the rope: her heading round it (`RopeY=`), the three lengths the placement divides by (`len=`), and the angles and position she is given (`xyz=`, `pos=`); and a `ROPELOG draw` line on every drawn frame and on the one after she lets go: whether she was drawn (`drawn=`) and which term decided it, where the camera stands and what it looks at, its distance to that point and to her (`eyed=`, `larad=`), and which candidate the chase camera took (`cand=`, `clip=`) |

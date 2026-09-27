@@ -8108,6 +8108,268 @@ static void camera_pull()
 		roundl2((c.worst_old - c.worst_new) * 360.0 / 65536.0), 1);
 }
 
+/* ------------------------------ the drawn eye walks the chord past the niche ---
+
+   Between two ticks the interpolator draws the eye on the straight line joining
+   the two tick eyes, and beside a pillar that line cuts the corner. These checks
+   run the engine's own ModernCameraChordClamp and ModernCameraDrawnEye
+   (game\modern_camera.cpp, linked by bmt.bat) on the niche above: its 2x2
+   pillar is x and z 3072 to 5119, the same shape as the pillars of ANDREA1's
+   rooms 3 and 11 where the black frames were measured. The map's test is the
+   engine's in two dimensions, like h_new's: a point is open when its sector is
+   '.'.
+
+   The reference for "nearest" is brute force: every 1/1024 of the chord is
+   asked, and the answer may differ from the best of those by at most one step,
+   because the answer is finer than the grid. */
+
+static long h_chord_open(void* ctx, long x, long y, long z)
+{
+	(void)y;
+	return h_solid(x, z, (const char* const*)ctx) ? 0 : 1;
+}
+
+/* Two rooms over the niche map for the room order: room 0 holds x below 4096,
+   room 1 the rest. Asked about a point in the other half, a room answers with
+   a closed sector of its own - the shape of the measured case, where room 225's
+   corner wall sector stands where the eye was still in room 40. */
+static long h_eye_open(void* ctx, long x, long y, long z, short room, short* at)
+{
+	*at = room;
+
+	if ((room == 0) != (x < 4096))
+		return 0;
+
+	return h_chord_open(ctx, x, y, z);
+}
+
+static bool h_on_chord(const long a[3], const long b[3], float alpha, const long p[3])
+{
+	for (int i = 0; i < 3; i++)
+		if (p[i] != InterpLerpLong(a[i], b[i], alpha))
+			return false;
+
+	return alpha >= 0.0F && alpha <= 1.0F;
+}
+
+static void camera_chord()
+{
+	const void* niche = (const void*)g_niche;
+	long bad_open = 0, bad_chord = 0, bad_near = 0, missing = 0, moved = 0, most_tests = 0;
+	long sweeps = 0;
+
+	printf("\nthe drawn eye - the nearest open point of the chord, past the niche's pillar\n");
+
+	/* 1. Two open eyes either side of each of the pillar's four corners, the
+	   chord between them through the block, at two depths, and every 64th of
+	   the chord as the frame's blend factor. */
+	{
+		static const long corners[4][4] = {
+			// corner x, corner z, and the direction out of the pillar there
+			{ 3072, 3072, -1, -1 }, { 5120, 3072, 1, -1 },
+			{ 3072, 5120, -1, 1 }, { 5120, 5120, 1, 1 }
+		};
+		static const long depths[2][2] = { { 150, 400 }, { 40, 900 } };
+
+		for (int c = 0; c < 4; c++)
+		{
+			for (int d = 0; d < 2; d++)
+			{
+				const long cx = corners[c][0], cz = corners[c][1];
+				const long ox = corners[c][2], oz = corners[c][3];
+				const long near_ = depths[d][0], far_ = depths[d][1];
+				// one eye beside the block's x face, the other beside its z face
+				const long a[3] = { cx + ox * near_, 256, cz - oz * far_ };
+				const long b[3] = { cx - ox * far_, 256, cz + oz * near_ };
+
+				for (long k = 0; k <= 64; k++)
+				{
+					const float alpha = (float)k / 64.0F;
+					float got = -1.0F, best = 2.0F;
+					long p[3], tests = 0;
+
+					sweeps++;
+
+					if (!ModernCameraChordClamp(a, b, alpha, h_chord_open, (void*)niche, &got, p, &tests))
+					{
+						missing++;
+						continue;
+					}
+
+					if (tests > most_tests)
+						most_tests = tests;
+
+					if (got != alpha)
+						moved++;
+
+					if (h_solid(p[0], p[2], g_niche))
+						bad_open++;
+
+					if (!h_on_chord(a, b, got, p))
+						bad_chord++;
+
+					for (long j = 0; j <= 1024; j++)
+					{
+						const float t = (float)j / 1024.0F;
+						long q[3];
+
+						for (int i = 0; i < 3; i++)
+							q[i] = InterpLerpLong(a[i], b[i], t);
+
+						if (!h_solid(q[0], q[2], g_niche) && fabs((double)t - alpha) < best)
+							best = (float)fabs((double)t - alpha);
+					}
+
+					if (fabs(fabs((double)got - alpha) - best) > 1.0 / 1024.0 + 1.0e-6)
+						bad_near++;
+				}
+			}
+		}
+
+		printf("  measured: %ld blends over 8 chords past the 4 corners, %ld moved off the corner,\n",
+			sweeps, moved);
+		printf("            at most %ld tests of the map for one frame\n", most_tests);
+		ok(missing == 0, "chord: two open tick eyes always leave an open point to draw", missing, 0);
+		ok(moved > 0, "chord: and the chords really cut the pillar, so the sweep is not idle",
+			moved, 1);
+		ok(bad_open == 0, "chord: every point it answers is open", bad_open, 0);
+		ok(bad_chord == 0, "chord: every point it answers lies on the chord, at its own factor",
+			bad_chord, 0);
+		ok(bad_near == 0, "chord: and is the nearest open point, to a 1024th of the chord",
+			bad_near, 0);
+		ok(most_tests <= 1 + 2 * MODERN_CAMERA_CHORD_SCAN + 2 * MODERN_CAMERA_CHORD_BISECT,
+			"chord: the search stays inside its own budget of tests", most_tests,
+			1 + 2 * MODERN_CAMERA_CHORD_SCAN + 2 * MODERN_CAMERA_CHORD_BISECT);
+	}
+
+	/* 2. An open chord: the frame's own factor comes back, after one test. */
+	{
+		const long a[3] = { 1500, 256, 1500 };
+		const long b[3] = { 2500, 256, 1700 };
+		long wrong = 0, extra = 0;
+
+		for (long k = 0; k <= 64; k++)
+		{
+			const float alpha = (float)k / 64.0F;
+			float got = -1.0F;
+			long p[3], tests = 0;
+
+			if (!ModernCameraChordClamp(a, b, alpha, h_chord_open, (void*)niche, &got, p, &tests) ||
+				got != alpha || !h_on_chord(a, b, alpha, p))
+				wrong++;
+
+			if (tests != 1)
+				extra++;
+		}
+
+		ok(wrong == 0, "chord: an open chord answers the frame's own factor unchanged", wrong, 0);
+		ok(extra == 0, "chord: and asks the map once", extra, 0);
+	}
+
+	/* 3. Both ends solid. A chord inside the block has no answer; one whose
+	   ends are in rock but whose middle crosses the open floor answers the
+	   nearest open point of that middle, because the rule is the nearest open
+	   point of the chord and a tick eye is only one of them. */
+	{
+		const long a[3] = { 3300, 256, 3300 };
+		const long b[3] = { 4800, 256, 4900 };
+		const long c[3] = { 3500, 256, 3500 };
+		const long d[3] = { 500, 256, 3500 };
+		float got = -1.0F;
+		long p[3], tests = 0, found;
+
+		found = ModernCameraChordClamp(a, b, 0.5F, h_chord_open, (void*)niche, &got, p, &tests);
+		ok(found == 0, "chord: a chord solid from end to end has no answer", found, 0);
+
+		found = ModernCameraChordClamp(c, d, 0.1F, h_chord_open, (void*)niche, &got, p, &tests);
+		ok(found == 1 && !h_solid(p[0], p[2], g_niche) && p[0] >= 3071 - 1 && p[0] <= 3071,
+			"chord: solid ends, open middle: the pillar's west face, a unit from it", p[0], 3071);
+	}
+
+	/* 4. One end solid: the answer lies toward the open end, at the face. */
+	{
+		const long a[3] = { 3500, 256, 3300 };	// in the pillar
+		const long b[3] = { 3500, 256, 2500 };	// north of it, open
+		float got = -1.0F;
+		long p[3], tests = 0, found;
+
+		found = ModernCameraChordClamp(a, b, 0.1F, h_chord_open, (void*)niche, &got, p, &tests);
+		ok(found == 1 && got > 0.1F, "chord: one end in the pillar: the answer moves toward the open end",
+			roundl2(got * 1000.0), 101);
+		ok(found == 1 && p[2] >= 3071 - 1 && p[2] <= 3071,
+			"chord: and stops at the pillar's north face, within a unit", p[2], 3071);
+	}
+
+	/* 5. The order of ModernCameraDrawnEye, over the two rooms above. */
+	{
+		MODERN_EYE_FIX fix;
+
+		// Open from the tick's own room: nothing changes.
+		{
+			const long a[3] = { 1500, 256, 1500 };
+			const long b[3] = { 2500, 256, 1700 };
+
+			ModernCameraDrawnEye(a, 0, b, 0, 0.5F, h_eye_open, (void*)niche, &fix);
+			ok(fix.fix == MODERN_EYE_FIX_NONE && fix.room == 0 && fix.alpha == 0.5F &&
+				fix.x == InterpLerpLong(1500, 2500, 0.5F) && fix.tests == 1,
+				"drawn eye: open from the tick's room - no fix, one test", fix.fix,
+				MODERN_EYE_FIX_NONE);
+		}
+
+		// The new tick's room is 1, the eye still stands in room 0's half.
+		{
+			const long a[3] = { 3000, 256, 1500 };
+			const long b[3] = { 4500, 256, 1500 };
+
+			ModernCameraDrawnEye(a, 0, b, 1, 0.25F, h_eye_open, (void*)niche, &fix);
+			ok(fix.fix == MODERN_EYE_FIX_PREVROOM,
+				"drawn eye: the logic room refuses it, the previous tick's room holds it",
+				fix.fix, MODERN_EYE_FIX_PREVROOM);
+			ok(fix.room == 0 && fix.x == InterpLerpLong(3000, 4500, 0.25F) && fix.alpha == 0.25F,
+				"drawn eye: the walk starts there and the eye does not move", fix.room, 0);
+		}
+
+		// The corner cut, across the two rooms: a moved eye, in the room that holds it.
+		{
+			const long a[3] = { 3072 - 150, 256, 3072 + 400 };
+			const long b[3] = { 3072 + 400, 256, 3072 - 150 };
+			short at = -1;
+
+			ModernCameraDrawnEye(a, 0, b, 0, 0.5F, h_eye_open, (void*)niche, &fix);
+			ok(fix.fix == MODERN_EYE_FIX_CHORD && fix.alpha != 0.5F,
+				"drawn eye: in the pillar - drawn at the nearest open point instead",
+				fix.fix, MODERN_EYE_FIX_CHORD);
+			ok(h_eye_open((void*)niche, fix.x, fix.y, fix.z, fix.room, &at) == 1,
+				"drawn eye: and that point opens from the room the walk starts in",
+				fix.room, 0);
+		}
+
+		// The nearest open point is a tick eye itself.
+		{
+			const long a[3] = { 3071, 256, 3500 };	// the last open unit west of the pillar
+			const long b[3] = { 5200, 256, 3500 };
+
+			ModernCameraDrawnEye(a, 0, b, 1, 0.1F, h_eye_open, (void*)niche, &fix);
+			ok(fix.fix == MODERN_EYE_FIX_TICK && fix.x == a[0] && fix.y == a[1] && fix.z == a[2] &&
+				fix.room == 0,
+				"drawn eye: the nearest open point is the older tick eye - drawn as a tick",
+				fix.fix, MODERN_EYE_FIX_TICK);
+		}
+
+		// Nothing on the chord opens: the eye stays and the caller withholds the sky.
+		{
+			const long a[3] = { 3300, 256, 3300 };
+			const long b[3] = { 3800, 256, 3900 };
+
+			ModernCameraDrawnEye(a, 0, b, 0, 0.5F, h_eye_open, (void*)niche, &fix);
+			ok(fix.fix == MODERN_EYE_FIX_NOSKY && fix.x == InterpLerpLong(3300, 3800, 0.5F) &&
+				fix.alpha == 0.5F && fix.room == 0,
+				"drawn eye: nothing on the chord opens - no move, the sky is withheld",
+				fix.fix, MODERN_EYE_FIX_NOSKY);
+		}
+	}
+}
+
 /* -------------------------------- what the engine hands the carry -------- */
 
 /* The engine half is a subtraction, and this is it.
@@ -8799,6 +9061,7 @@ int main()
 	camera_camcut();
 	camera_carry();
 	camera_pull();
+	camera_chord();
 	camera_flip();
 	ledge_hang();
 	ledge_trigger();

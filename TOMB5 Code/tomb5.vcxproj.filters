@@ -925,6 +925,9 @@
     <ClInclude Include="TOMB5\specific\hd\hd_render.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_book.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_scan.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>

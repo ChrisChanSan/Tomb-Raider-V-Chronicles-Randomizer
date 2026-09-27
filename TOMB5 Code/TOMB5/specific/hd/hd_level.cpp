@@ -790,6 +790,7 @@ namespace
 	HDFogBulb g_frame_bulbs[HD_MAX_BULBS];
 	int g_frame_objects = 0;
 	int g_frame_room_calls = 0;
+	int g_frame_book_calls = 0;	// the two brackets' book calls, for the frame line
 	bool g_frame_pending = false;
 
 	/* The pickup display's own projection and lighting, kept apart from the
@@ -4361,6 +4362,7 @@ void HDFrameDraw()
 	// The glow phase is owing, and this is what the rooms cost so far -
 	// HDRenderFrameBegin zeroes the renderer's counter per bracket.
 	g_frame_room_calls = HDRenderDrawCalls();
+	g_frame_book_calls = HDRenderBookCalls();
 	g_frame_pending = true;
 }
 
@@ -4418,6 +4420,7 @@ void HDFrameDrawGlow()
 	HDRenderFrameEnd();
 
 	g_frame_room_calls += HDRenderDrawCalls();
+	g_frame_book_calls += HDRenderBookCalls();
 	HDObjectFrameEnd();
 
 	if (!g_matrix_checked && gLogEnabled && g_frame_count)
@@ -4434,7 +4437,7 @@ void HDFrameDrawGlow()
 			objects_here, HDObjectDrawCalls(),
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
-			HDRenderWaterCalls(), HDRenderBookCalls());
+			HDRenderWaterCalls(), g_frame_book_calls);
 	}
 
 	/* The followed book, page by page: the first book drawn in the level

@@ -983,7 +983,9 @@ int HDRenderCutoutCalls();
 // flipbook rather than out of their own vertices.
 int HDRenderFlipbookCalls();
 // And the draw calls that turned a material 15 book, whatever page they
-// showed.
+// showed - since the last FrameBegin, so one bracket's worth. The frame line
+// (HDLOG frame book_calls) adds the solid bracket's opaque books and the glow
+// bracket's additive ones.
 int HDRenderBookCalls();
 // And how many of them carried a gloss out of their material.
 int HDRenderGlossCalls();

@@ -121,34 +121,32 @@ namespace
 		int groups = 0;
 		int lastGroup = -1;
 		std::vector<int> where;		// the first twelve groups, for the camera
-		std::set<int> bookPages;	// material 15: the first page of each part
+		std::set<int> bookPages;	// material 15: the first page of each part's passes
 		const trf::remaster::TrgPart* bookPart = 0;	// and one part, for its run
 	};
 
-	/* The first page of a part: the page the first corner of its first
-	 * non-empty pass names, which is the corner hd_render.cpp reads, or -1. */
+	/* The first page of one pass of a part: the page the first corner of
+	 * that pass's run names, which is the corner hd_render.cpp's
+	 * RunFirstPage reads for the same run, or -1 for an empty run or a layer
+	 * that names no page. Per pass, because the engine begins each pass's
+	 * book on that pass's own page. */
 	int partFirstPage(const trf::remaster::Trg& trg,
-		const trf::remaster::TrgPart& part)
+		const trf::remaster::TrgPart& part, int pass)
 	{
-		for (int pass = 0; pass < 3; pass++)
-		{
-			const uint32_t start = part.pass[pass].start;
+		const uint32_t start = part.pass[pass].start;
 
-			if (!part.pass[pass].count || start >= trg.indices.size())
-				continue;
+		if (!part.pass[pass].count || start >= trg.indices.size())
+			return -1;
 
-			const uint32_t corner = trg.indices[start];
+		const uint32_t corner = trg.indices[start];
 
-			if (corner >= trg.vertices.size())
-				continue;
+		if (corner >= trg.vertices.size())
+			return -1;
 
-			const uint8_t layer = trg.vertices[corner].layer;
+		const uint8_t layer = trg.vertices[corner].layer;
 
-			return layer && (size_t)layer <= trg.textures.size()
-				? (int)trg.textures[layer - 1] : -1;
-		}
-
-		return -1;
+		return layer && (size_t)layer <= trg.textures.size()
+			? (int)trg.textures[layer - 1] : -1;
 	}
 
 	/* The run of a material 15 book: param[1] pages from `page0` on by page
@@ -210,7 +208,10 @@ namespace
 
 				if (part.material == 15)
 				{
-					c.bookPages.insert(partFirstPage(trg, part));
+					for (int pass = 0; pass < 3; pass++)
+						if (part.pass[pass].count)
+							c.bookPages.insert(partFirstPage(trg, part, pass));
+
 					c.bookPart = &part;
 				}
 

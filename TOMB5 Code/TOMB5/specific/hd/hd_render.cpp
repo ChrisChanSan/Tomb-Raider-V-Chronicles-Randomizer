@@ -246,8 +246,9 @@ namespace
 	 *                0.025 to 0.1 on the additive books. The file carries no
 	 *                weight for a book, so p2 doubles as it (see the switch
 	 *                in MaterialAddWeight).
-	 *   material 16  p2 in [0.035, 0.2], the same shape as material 15's,
-	 *                on the same slot; p0 and p1 pair up with the page.
+	 *   material 16  p2 in [0.035, 0.2], inside the range of material 15's
+	 *                page time (0.025 to 0.2 over all its books) and on the
+	 *                same slot; p0 and p1 pair up with the page.
 	 *
 	 * Where the file gives no usable number, the preset answers. Four
 	 * material 2 tuples carry a weight outside (0, 1); taken as full
@@ -404,9 +405,10 @@ namespace
 					part.param[2] == kDim[i].p[2] && part.param[3] == kDim[i].p[3])
 					return kDim[i].weight;
 
-		/* Material 16 is not a weight even though its param[2] lives in the
-		 * same range as material 15's (0.035 to 0.2): it is the remaster's
-		 * still water surface (TrgProbe -matparts 16) - 28 parts in six
+		/* Material 16 is not a weight even though its param[2], 0.035 to
+		 * 0.2, lies inside the range of material 15's page time (0.025 to
+		 * 0.2): it is the remaster's still water surface
+		 * (TrgProbe -matparts 16) - 28 parts in six
 		 * levels, 17 of them a double sheet two units apart with opposite
 		 * normals, every one sitting 1 to 20 units off the classic minfloor
 		 * of a ROOM_REFLECT room, its parameters scaling with the area of the

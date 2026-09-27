@@ -558,6 +558,7 @@
     <ClInclude Include="TOMB5\specific\hd\hd_model.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_object.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_render.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_book.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_scan.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_trm.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_trl.h" />

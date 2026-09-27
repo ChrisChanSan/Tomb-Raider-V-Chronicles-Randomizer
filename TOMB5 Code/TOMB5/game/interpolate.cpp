@@ -38,6 +38,7 @@ static_assert(CHASE_CAMERA == INTERP_CAM_CHASE && LOOK_CAMERA == INTERP_CAM_LOOK
 #include "../specific/time.h"		// TIME_SubTick
 #include "../specific/file.h"		// commands - where turn180_effect fires (InterpTurnOf)
 #include "../tomb5/tomb5.h"		// tomb5.fps_mode
+#include "modern_camera.h"		// ModernCameraDrawnEye - the drawn eye at a corner
 
 namespace
 {
@@ -163,6 +164,51 @@ namespace
 	InterpLaraAim g_prevAim;
 	InterpLaraAim g_savedAim;
 	bool g_aimTouched = false;
+
+	/* What the drawn-eye rule (ModernCameraDrawnEye, game\modern_camera.cpp)
+	 * decided for this frame, from InterpBeginFrame's camera block to the end
+	 * of the frame: the eye and the room InterpEyeRoom hands the walk, and
+	 * whether SkyDrawPhase draws the sky. Cleared at the top of every
+	 * InterpBeginFrame and in InterpEndFrame, so a frame drawn live and every
+	 * frame at fps_mode 0 read "nothing to do". */
+	MODERN_EYE_FIX g_eye;
+	bool g_skyWithheld = false;
+	long g_eyeBlend[3];		// the blended eye before the rule, for CAMLOG
+	float g_eyeAlpha = 1.0F;	// and the frame's own blend factor
+
+	/* CAMLOG's once-a-second sum, behind -log. */
+	int g_eyeFlagged = 0;
+	int g_eyeCount[MODERN_EYE_FIX_NOSKY + 1];
+	long g_eyeMovedMax = 0;
+
+	void ClearEyeFix()
+	{
+		g_eye.fix = MODERN_EYE_FIX_NONE;
+		g_eye.room = -1;
+		g_skyWithheld = false;
+	}
+
+	/* The engine's side of ModernCameraDrawnEye: CameraEyeTest, which puts
+	 * back what GetHeight writes, so the test leaves the logic's globals as a
+	 * 30 Hz frame leaves them. */
+	long EyeOpenFrom(void* ctx, long x, long y, long z, short from, short* at)
+	{
+		CAMERA_EYE_TEST t;
+
+		(void)ctx;
+		CameraEyeTest(x, y, z, from, &t);
+		*at = t.room;
+		return t.open;
+	}
+
+	long EyeMoved()
+	{
+		const double dx = (double)(g_eye.x - g_eyeBlend[0]);
+		const double dy = (double)(g_eye.y - g_eyeBlend[1]);
+		const double dz = (double)(g_eye.z - g_eyeBlend[2]);
+
+		return (long)(sqrt(dx * dx + dy * dy + dz * dz) + 0.5);
+	}
 
 	/* May this slot's pose be blended in time? Decided in InterpBeginFrame's
 	 * walk before the blended position overwrites the live one (afterwards
@@ -819,6 +865,22 @@ namespace
 				g_step[INTERP_STEP_WEATHER], g_step[INTERP_STEP_LEGEND],
 				g_step[INTERP_STEP_AFTERDEATH]);
 
+		/* CAMLOG's sum: how many drawn frames of the second the drawn-eye rule
+		 * acted on, by what it did, and the furthest it moved an eye. Only a
+		 * second with at least one; the per-frame lines (InterpLogEyeFix) say
+		 * where. */
+		if (gLogEnabled && g_eyeFlagged > 0)
+			Log("CAMLOG sum flagged=%d prevroom=%d chord=%d tick=%d nosky=%d max_moved=%ld",
+				g_eyeFlagged, g_eyeCount[MODERN_EYE_FIX_PREVROOM],
+				g_eyeCount[MODERN_EYE_FIX_CHORD], g_eyeCount[MODERN_EYE_FIX_TICK],
+				g_eyeCount[MODERN_EYE_FIX_NOSKY], g_eyeMovedMax);
+
+		g_eyeFlagged = 0;
+		g_eyeMovedMax = 0;
+
+		for (int k = 0; k <= MODERN_EYE_FIX_NOSKY; k++)
+			g_eyeCount[k] = 0;
+
 		for (int k = 0; k < INTERP_STEP_COUNT; k++)
 			g_step[k] = 0;
 
@@ -1081,6 +1143,13 @@ short InterpEyeRoom(short logicRoom)
 	if (!g_applied || !room || logicRoom < 0 || logicRoom >= number_rooms)
 		return logicRoom;
 
+	/* A frame the drawn-eye rule re-roomed or moved starts where the rule
+	 * found the eye (InterpBeginFrame's camera block). On every other frame
+	 * the lookup below is the rule's own first test, repeated. */
+	if ((g_eye.fix == MODERN_EYE_FIX_PREVROOM || g_eye.fix == MODERN_EYE_FIX_CHORD ||
+		g_eye.fix == MODERN_EYE_FIX_TICK) && g_eye.room >= 0 && g_eye.room < number_rooms)
+		return g_eye.room;
+
 	short at = logicRoom;
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &at);
@@ -1096,6 +1165,47 @@ short InterpEyeRoom(short logicRoom)
 short InterpPrevCamRoom()
 {
 	return g_prevCam.valid ? g_prevCam.room : (short)-1;
+}
+
+bool InterpSkyWithheld()
+{
+	return g_skyWithheld;
+}
+
+/* CAMLOG's draw line: one per drawn frame the rule acted on, from DrawRooms
+ * once the walk and the sky have run, so the line carries what the frame
+ * really drew. Behind -log; a frame the rule left alone writes nothing.
+ *   frame      ROOMLIST's frame serial, so the two lines pair up
+ *   tick       GlobalCounter, CAMLOG tick's f= of the newer tick eye
+ *   alpha      the frame's blend factor
+ *   eye        the blended eye before the rule
+ *   prev, cur  the two tick eyes with their rooms (cur's room is the logic room)
+ *   kind       the blended eye from the logic room (CameraEyeKindText)
+ *   fix        prevroom, chord, tick or nosky (ModernCameraDrawnEye)
+ *   alpha2     the blend factor of the eye drawn
+ *   moved      units from the blended eye to the eye drawn
+ *   walk_room  the room the portal walk started in; rooms, how many it drew
+ *   outside_logic  the logic room's ROOM_OUTSIDE; sky, whether the sky was drawn */
+void InterpLogEyeFix(unsigned int frame, short walkRoom, long rooms, long outsideLogic, long sky)
+{
+	CAMERA_EYE_TEST t;
+	char kind[32];
+	static const char* const names[] = { "none", "prevroom", "chord", "tick", "nosky" };
+
+	if (!gLogEnabled || !g_applied || g_eye.fix == MODERN_EYE_FIX_NONE)
+		return;
+
+	CameraEyeTest(g_eyeBlend[0], g_eyeBlend[1], g_eyeBlend[2], camera.pos.room_number, &t);
+	CameraEyeKindText(&t, kind, sizeof(kind));
+
+	Log("CAMLOG draw frame=%u tick=%d alpha=%.3f eye=(%ld,%ld,%ld) prev=(%ld,%ld,%ld)/%d "
+		"cur=(%ld,%ld,%ld)/%d kind=%s fix=%s alpha2=%.3f moved=%ld walk_room=%d rooms=%ld "
+		"outside_logic=%ld sky=%ld",
+		frame, (int)GlobalCounter, (double)g_eyeAlpha, g_eyeBlend[0], g_eyeBlend[1], g_eyeBlend[2],
+		g_prevCam.px, g_prevCam.py, g_prevCam.pz, (int)g_prevCam.room,
+		g_savedCam.px, g_savedCam.py, g_savedCam.pz, (int)camera.pos.room_number,
+		kind, names[g_eye.fix], (double)g_eye.alpha, EyeMoved(), (int)walkRoom, rooms,
+		outsideLogic, sky);
 }
 
 bool InterpIsTweenFrame()
@@ -1192,6 +1302,7 @@ void InterpBeginFrame(float alpha)
 	g_touchedRopes = 0;
 	g_camTouched = false;
 	g_aimTouched = false;
+	ClearEyeFix();
 
 	/* Nothing is pose-blended until this frame's walk allows it slot by slot,
 	 * so every early return below leaves InterpPoseTime answering 0. A stale
@@ -1466,9 +1577,66 @@ void InterpBeginFrame(float alpha)
 		camera.target.y = LerpLong(g_prevCam.ty, g_savedCam.ty, alpha);
 		camera.target.z = LerpLong(g_prevCam.tz, g_savedCam.tz, alpha);
 
+		/* The eye just blended stands on the straight line between two tick
+		 * eyes, and that line can cut the corner of a pillar or a door jamb
+		 * both eyes stand clear of; and on the first frames after a tick the
+		 * logic room is the new tick's while the eye still stands beside the
+		 * old one. Either way the walk would start in a room that does not
+		 * hold the eye, draw one or two rooms and leave the rest of the frame
+		 * the clear colour (ANDREA1, log t 136500: the eye 50 and 9 units
+		 * inside room 3's pillar, GetFloor through the pillar's door to room
+		 * 36, one room drawn). ModernCameraDrawnEye asks the logic room, then
+		 * the previous tick's room, then the chord itself (game\modern_camera.h
+		 * has the order). A frame whose eye the logic room holds - every frame
+		 * but those - is drawn exactly as before: the eye, the target, the roll
+		 * and the room of the walk are the ones computed without the rule.
+		 *
+		 * An eye moved along the chord takes the target and the roll from the
+		 * same blend factor, so the view is the one the interpolator would
+		 * have drawn at that instant. Only this frame's copy of camera.pos
+		 * moves; InterpEndFrame puts the tick eye back as on every frame, and
+		 * camera.pos.room_number, the logic's, is not written. */
+		float camAlpha = alpha;
+
+		{
+			const long prev[3] = { g_prevCam.px, g_prevCam.py, g_prevCam.pz };
+			const long cur[3] = { g_savedCam.px, g_savedCam.py, g_savedCam.pz };
+
+			g_eyeBlend[0] = camera.pos.x;
+			g_eyeBlend[1] = camera.pos.y;
+			g_eyeBlend[2] = camera.pos.z;
+			g_eyeAlpha = alpha;
+			ModernCameraDrawnEye(prev, g_prevCam.room, cur, camera.pos.room_number, alpha,
+				EyeOpenFrom, 0, &g_eye);
+		}
+
+		if (g_eye.fix == MODERN_EYE_FIX_CHORD || g_eye.fix == MODERN_EYE_FIX_TICK)
+		{
+			camAlpha = g_eye.alpha;
+			camera.pos.x = g_eye.x;
+			camera.pos.y = g_eye.y;
+			camera.pos.z = g_eye.z;
+			camera.target.x = LerpLong(g_prevCam.tx, g_savedCam.tx, camAlpha);
+			camera.target.y = LerpLong(g_prevCam.ty, g_savedCam.ty, camAlpha);
+			camera.target.z = LerpLong(g_prevCam.tz, g_savedCam.tz, camAlpha);
+		}
+
+		g_skyWithheld = g_eye.fix == MODERN_EYE_FIX_NOSKY;
+
+		if (gLogEnabled && g_eye.fix != MODERN_EYE_FIX_NONE)
+		{
+			const long moved = EyeMoved();
+
+			g_eyeFlagged++;
+			g_eyeCount[g_eye.fix]++;
+
+			if (moved > g_eyeMovedMax)
+				g_eyeMovedMax = moved;
+		}
+
 		RebuildView(camera.pos.x, camera.pos.y, camera.pos.z,
 			camera.target.x, camera.target.y, camera.target.z,
-			LerpAngle(g_prevCam.roll, roll, alpha));
+			LerpAngle(g_prevCam.roll, roll, camAlpha));
 	}
 
 	if (gLogEnabled)
@@ -1570,6 +1738,7 @@ void InterpEndFrame()
 	g_touchedRopes = 0;
 	g_camTouched = false;
 	g_aimTouched = false;
+	ClearEyeFix();
 
 	/* One INTERPLOG line per logic second: GlobalCounter steps thirty times
 	 * a second in every mode and stands still in the inventory, so lines

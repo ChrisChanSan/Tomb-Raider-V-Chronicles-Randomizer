@@ -299,7 +299,21 @@ enum modern_camera_constants
 	 * It lives in this header because Preparation\Tools\Diagnose\ModernTest
 	 * models ModernCameraLeadEye by hand (camera.cpp cannot be linked without
 	 * a level) and must read the tree's own number rather than a copy. */
-	MODERN_CAMERA_LEAD_MAX = 8192
+	MODERN_CAMERA_LEAD_MAX = 8192,
+
+	/* How the drawn eye searches the chord between two tick eyes
+	 * (ModernCameraChordClamp below): the chord is scanned outward from the
+	 * blended point in steps of a thirty-second of its length on both sides,
+	 * and each bracket the scan finds is then halved twelve times.
+	 *
+	 * The longest chord measured beside a pillar is 652 units in one tick
+	 * (ANDREA1 room 3, the tick drawn at log t 140625), so a step is 20
+	 * units there: an open stretch narrower than that is stepped over, and
+	 * the halving puts the answer within 0.005 units of the edge the scan
+	 * bracketed. At most 1 + 2 * 32 + 2 * 12 tests, and only on a frame whose
+	 * eye fails the room tests. */
+	MODERN_CAMERA_CHORD_SCAN = 32,
+	MODERN_CAMERA_CHORD_BISECT = 12
 };
 
 /* The orbit's thresholds, in one place, filled by ModernCameraDefaults().
@@ -379,3 +393,70 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance);
 short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch);
 long ModernCameraTickFollows(unsigned short now, unsigned short stamp);
+
+/* The drawn eye between two ticks.
+ *
+ * At fps_mode 1 and 2 the interpolator (game\interpolate.cpp) draws the eye
+ * on the straight line between the last two tick eyes. Each tick eye stands
+ * in open space, because MoveCamera tests it, but the line between them does
+ * not have to: beside a pillar or a door jamb it cuts the corner, the drawn
+ * eye stands inside the block for two or three frames, the portal walk
+ * starts in a room that does not hold it and the frame is the clear colour.
+ * And the room the walk starts in is the new tick's, while the drawn eye may
+ * still stand beside the old tick eye in the old tick's room. Measured over
+ * one ANDREA1 run: eight such black flashes in 35 s of video at 165 Hz, all
+ * at room 40's east door and the pillars of rooms 3 and 11.
+ *
+ * ModernCameraDrawnEye decides what the frame draws, in this order:
+ *
+ *   NONE      the blended eye opens from the tick's room; nothing changes
+ *   PREVROOM  it opens from the previous tick's room: the eye stays, the
+ *             walk starts in the room that holds it
+ *   CHORD     the nearest open point of the chord is drawn instead (the
+ *             nearest in the blend factor, which is the nearest in distance)
+ *   TICK      as CHORD, and that point is one of the two tick eyes itself
+ *   NOSKY     nothing on the chord opens: the eye stays and the caller
+ *             withholds the sky, so the hole is the clear colour, black
+ *
+ * A point of the chord opens when it opens from either tick's room. Nothing
+ * here moves a tick eye; the answer is the picture of one frame. */
+enum
+{
+	MODERN_EYE_FIX_NONE,
+	MODERN_EYE_FIX_PREVROOM,
+	MODERN_EYE_FIX_CHORD,
+	MODERN_EYE_FIX_TICK,
+	MODERN_EYE_FIX_NOSKY
+};
+
+struct MODERN_EYE_FIX
+{
+	long fix;		// one of MODERN_EYE_FIX_*
+	float alpha;	// the blend factor of the eye drawn; the frame's own unless CHORD or TICK
+	long x, y, z;	// the eye drawn
+	short room;		// the room the portal walk starts in
+	long tests;		// how often the open test ran
+};
+
+/* Whether a point stands in open space as seen from `room`: GetFloor walked
+ * from that room reaches a sector with a floor and a ceiling, and the point
+ * lies between the two. *at is the room the walk ended in, whether the point
+ * opens there or not. The engine's test
+ * is CameraEyeTest (game\camera.cpp); ModernTest hands in a map of its own. */
+typedef long (*MODERN_EYE_OPEN)(void* ctx, long x, long y, long z, short room, short* at);
+
+/* The same question without a room, for the chord search. */
+typedef long (*MODERN_CHORD_OPEN)(void* ctx, long x, long y, long z);
+
+/* The nearest point of the chord from -> to that opens, measured from the
+ * point at `alpha`: 1 with its blend factor in *out_alpha and the point in
+ * out, or 0 when no point of the chord opens. A point is built with
+ * InterpLerpLong, so it is exactly the point the interpolator draws at that
+ * factor. *tests counts the calls to `open`. */
+long ModernCameraChordClamp(const long from[3], const long to[3], float alpha,
+	MODERN_CHORD_OPEN open, void* ctx, float* out_alpha, long out[3], long* tests);
+
+/* The rule above for one frame: prev and cur are the two tick eyes with their
+ * rooms, alpha the frame's blend factor. prev_room may be -1. */
+void ModernCameraDrawnEye(const long prev[3], short prev_room, const long cur[3], short cur_room,
+	float alpha, MODERN_EYE_OPEN open, void* ctx, MODERN_EYE_FIX* out);

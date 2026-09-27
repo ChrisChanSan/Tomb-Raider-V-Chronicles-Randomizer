@@ -12,6 +12,7 @@
  */
 #include "modern_camera.h"
 #include "modern_move.h"	// ModernWrap and MODERN_STICK_FULL - see below
+#include "interpolate_math.h"	// InterpLerpLong - see ModernCameraChordClamp
 
 /* The arithmetic of the modern camera. The header says what the orbit is and
  * where every number comes from; this file is the three rules. No engine
@@ -22,7 +23,11 @@
  * shorter way round (written out rather than cast, because a cast of a value
  * over 32767 to short is implementation-defined before C++20 and two build
  * scripts compile these files), and MODERN_STICK_FULL, the fact that
- * specific\dxshell.cpp scales the axes down by 256. */
+ * specific\dxshell.cpp scales the axes down by 256.
+ *
+ * game\interpolate_math.h is the other, pure as well: the drawn eye's chord
+ * search builds its points with the interpolator's own InterpLerpLong, so a
+ * point it tests is the point the frame draws. */
 
 /* An angle's magnitude has to be taken as a long: |delta| where delta is
  * -32768 does not fit in a short, and -32768 is exactly the half turn an
@@ -265,6 +270,236 @@ long ModernCameraPullAxis(long target, long eye, long step, long steps)
 		return target;
 
 	return target + (eye - target) * step / steps;
+}
+
+/* One point of the chord, as the interpolator blends it. */
+static void ModernChordPoint(const long from[3], const long to[3], float alpha, long out[3])
+{
+	for (int i = 0; i < 3; i++)
+		out[i] = InterpLerpLong(from[i], to[i], alpha);
+}
+
+static long ModernChordTest(const long from[3], const long to[3], float alpha,
+	MODERN_CHORD_OPEN open, void* ctx, long* tests)
+{
+	long p[3];
+
+	ModernChordPoint(from, to, alpha, p);
+	(*tests)++;
+	return open(ctx, p[0], p[1], p[2]);
+}
+
+/* The chord search (see the header). Outward first, a step at a time on both
+ * sides at once, so the first open sample is the nearest at the scan's
+ * resolution whichever side it is on; then each side that found one is
+ * halved between its last closed sample and its open one, keeping the open
+ * end, so the answer is always a point the test passed. A scan that reached
+ * an end tests the end itself: a tick eye is a point of the chord too.
+ *
+ * Nearest in the blend factor is nearest along the chord, because the chord
+ * is straight. Of two answers at the same distance the one toward `to`, the
+ * newer tick eye, is taken. */
+long ModernCameraChordClamp(const long from[3], const long to[3], float alpha,
+	MODERN_CHORD_OPEN open, void* ctx, float* out_alpha, long out[3], long* tests)
+{
+	const float step = 1.0F / (float)MODERN_CAMERA_CHORD_SCAN;
+	float lo_in = alpha, hi_in = alpha, lo_ok = 0.0F, hi_ok = 0.0F, pick;
+	long lo_found = 0, hi_found = 0;
+	long lo_done = (alpha <= 0.0F) ? 1 : 0;
+	long hi_done = (alpha >= 1.0F) ? 1 : 0;
+
+	*tests = 0;
+
+	if (ModernChordTest(from, to, alpha, open, ctx, tests))
+	{
+		*out_alpha = alpha;
+		ModernChordPoint(from, to, alpha, out);
+		return 1;
+	}
+
+	for (long k = 1; k <= MODERN_CAMERA_CHORD_SCAN; k++)
+	{
+		if (!lo_done)
+		{
+			float a = alpha - (float)k * step;
+
+			if (a <= 0.0F)
+			{
+				a = 0.0F;
+				lo_done = 1;
+			}
+
+			if (ModernChordTest(from, to, a, open, ctx, tests))
+			{
+				lo_ok = a;
+				lo_found = 1;
+			}
+			else
+				lo_in = a;
+		}
+
+		if (!hi_done)
+		{
+			float a = alpha + (float)k * step;
+
+			if (a >= 1.0F)
+			{
+				a = 1.0F;
+				hi_done = 1;
+			}
+
+			if (ModernChordTest(from, to, a, open, ctx, tests))
+			{
+				hi_ok = a;
+				hi_found = 1;
+			}
+			else
+				hi_in = a;
+		}
+
+		if (lo_found || hi_found || (lo_done && hi_done))
+			break;
+	}
+
+	if (!lo_found && !hi_found)
+		return 0;
+
+	for (long i = 0; lo_found && i < MODERN_CAMERA_CHORD_BISECT; i++)
+	{
+		const float mid = (lo_ok + lo_in) * 0.5F;
+
+		if (ModernChordTest(from, to, mid, open, ctx, tests))
+			lo_ok = mid;
+		else
+			lo_in = mid;
+	}
+
+	for (long i = 0; hi_found && i < MODERN_CAMERA_CHORD_BISECT; i++)
+	{
+		const float mid = (hi_ok + hi_in) * 0.5F;
+
+		if (ModernChordTest(from, to, mid, open, ctx, tests))
+			hi_ok = mid;
+		else
+			hi_in = mid;
+	}
+
+	if (!lo_found)
+		pick = hi_ok;
+	else if (!hi_found)
+		pick = lo_ok;
+	else
+		pick = (alpha - lo_ok < hi_ok - alpha) ? lo_ok : hi_ok;
+
+	*out_alpha = pick;
+	ModernChordPoint(from, to, pick, out);
+	return 1;
+}
+
+/* The two rooms a chord point is asked from, for the search above. */
+struct MODERN_CHORD_ROOMS
+{
+	MODERN_EYE_OPEN open;
+	void* ctx;
+	short cur_room;
+	short prev_room;	// -1 when there is none, or when it is cur_room
+};
+
+static long ModernChordOpenFromRooms(void* ctx, long x, long y, long z)
+{
+	const MODERN_CHORD_ROOMS* rooms = (const MODERN_CHORD_ROOMS*)ctx;
+	short at;
+
+	if (rooms->open(rooms->ctx, x, y, z, rooms->cur_room, &at))
+		return 1;
+
+	return (rooms->prev_room >= 0 && rooms->open(rooms->ctx, x, y, z, rooms->prev_room, &at)) ? 1 : 0;
+}
+
+/* The order of the header. The tick's own room is asked first because it is
+ * the room the walk starts in today, so a frame whose eye opens there is
+ * drawn exactly as before. The previous tick's room comes next because the
+ * blended eye starts beside the previous tick eye: on the first frames after
+ * a tick the new room is applied to an eye that has not reached it (ANDREA1,
+ * room 40's east door: the logic room is already 225 while the eye still
+ * stands in open space of room 40, and GetFloor from 225 reads 225's corner
+ * wall sector there). Only an eye that neither room holds is moved. */
+void ModernCameraDrawnEye(const long prev[3], short prev_room, const long cur[3], short cur_room,
+	float alpha, MODERN_EYE_OPEN open, void* ctx, MODERN_EYE_FIX* out)
+{
+	MODERN_CHORD_ROOMS rooms;
+	long p[3], q[3], chord_tests;
+	float got;
+	short at, at_prev;
+
+	ModernChordPoint(prev, cur, alpha, p);
+
+	out->fix = MODERN_EYE_FIX_NONE;
+	out->alpha = alpha;
+	out->x = p[0];
+	out->y = p[1];
+	out->z = p[2];
+	out->tests = 1;
+
+	at = cur_room;
+
+	if (open(ctx, p[0], p[1], p[2], cur_room, &at))
+	{
+		out->room = at;
+		return;
+	}
+
+	// The room the walk starts in whenever nothing better is found: the one
+	// GetFloor reached from the tick's room, as on every frame before.
+	out->room = at;
+
+	rooms.open = open;
+	rooms.ctx = ctx;
+	rooms.cur_room = cur_room;
+	rooms.prev_room = (prev_room >= 0 && prev_room != cur_room) ? prev_room : (short)-1;
+
+	if (rooms.prev_room >= 0)
+	{
+		out->tests++;
+		at_prev = rooms.prev_room;
+
+		if (open(ctx, p[0], p[1], p[2], rooms.prev_room, &at_prev))
+		{
+			out->fix = MODERN_EYE_FIX_PREVROOM;
+			out->room = at_prev;
+			return;
+		}
+	}
+
+	if (!ModernCameraChordClamp(prev, cur, alpha, ModernChordOpenFromRooms, &rooms, &got, q,
+		&chord_tests))
+	{
+		out->tests += chord_tests;
+		out->fix = MODERN_EYE_FIX_NOSKY;
+		return;
+	}
+
+	out->tests += chord_tests;
+
+	// The room of the point found, asked in the same order as the search did.
+	out->tests++;
+	at = cur_room;
+
+	if (!open(ctx, q[0], q[1], q[2], cur_room, &at) && rooms.prev_room >= 0)
+	{
+		out->tests++;
+		at = rooms.prev_room;
+		open(ctx, q[0], q[1], q[2], rooms.prev_room, &at);
+	}
+
+	out->fix = ((q[0] == prev[0] && q[1] == prev[1] && q[2] == prev[2]) ||
+		(q[0] == cur[0] && q[1] == cur[1] && q[2] == cur[2])) ?
+		MODERN_EYE_FIX_TICK : MODERN_EYE_FIX_CHORD;
+	out->alpha = got;
+	out->x = q[0];
+	out->y = q[1];
+	out->z = q[2];
+	out->room = at;
 }
 
 /* Behind her back, at the game's resting height.

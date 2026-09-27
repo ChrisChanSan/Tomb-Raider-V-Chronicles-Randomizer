@@ -252,6 +252,52 @@ static struct
 	long clip;			// mgLOS cut the dialled candidate short (1) or let it through (0)
 } chase_log;
 
+/* What a chase or combat pass built on its way, for CAMLOG's tick line
+ * (CameraTickLog). Cleared at the top of every CalculateCamera pass and
+ * written only behind -log; nothing else reads them. */
+static struct
+{
+	long want_set;			// the pass built the dialled candidate
+	GAME_VECTOR want;		// ... before mgLOS cut it back
+	long los_set;			// and mgLOS walked it
+	long los_from[3];		// the target that walk started from
+	GAME_VECTOR los;		// the point it handed back
+	long ray;			// 1 = ModernCameraRayBounds resolved the eye, 0 = CameraCollisionBounds
+	long ideal_set;
+	GAME_VECTOR ideal;		// the ideal MoveCamera was handed, as it left it
+} cam_tick;
+
+static void CamTickWant(const GAME_VECTOR* want)
+{
+	if (!gLogEnabled)
+		return;
+
+	cam_tick.want = *want;
+	cam_tick.want_set = 1;
+}
+
+static void CamTickLos(const GAME_VECTOR* los, long ray)
+{
+	if (!gLogEnabled)
+		return;
+
+	cam_tick.los = *los;
+	cam_tick.los_from[0] = camera.target.x;
+	cam_tick.los_from[1] = camera.target.y;
+	cam_tick.los_from[2] = camera.target.z;
+	cam_tick.los_set = 1;
+	cam_tick.ray = ray;
+}
+
+static void CamTickIdeal(const GAME_VECTOR* ideal)
+{
+	if (!gLogEnabled)
+		return;
+
+	cam_tick.ideal = *ideal;
+	cam_tick.ideal_set = 1;
+}
+
 static void ModernCameraArm()
 {
 	if (!modern_cam_armed)
@@ -1001,6 +1047,238 @@ static void ModernCameraLedgeLog(long phase)
 		modern_cam_clipped, ledge_log.pull, ledge_log.mc_pull, (int)CameraSnaps);
 }
 
+/* The camera's point test, with GetHeight's side effects taken back.
+ *
+ * The five terms are ModernCameraEyeInRoom's. GetHeight sets tiltxoff,
+ * tiltyoff, OnObject, height_type and trigger_index (game\control.cpp) and
+ * lets bridges, falling blocks and two-block platforms under the point
+ * write height_type and OnObject through their floor callbacks; Lara's
+ * collision and TestTriggers read all five after their own GetHeight. This
+ * test runs where no such pair is in flight - on a drawn frame, and at the
+ * end of a CalculateCamera pass - and puts the five back anyway, so a
+ * 165 Hz frame or a -log run cannot leave a value the 30 Hz logic would not
+ * have seen. The callbacks write nothing else; GetFloor and GetCeiling write
+ * nothing at all (the room goes to a local). */
+long CameraEyeTest(long x, long y, long z, short room, CAMERA_EYE_TEST* out)
+{
+	FLOOR_INFO* floor;
+	short* const saved_trigger_index = trigger_index;
+	const long saved_tiltxoff = tiltxoff;
+	const long saved_tiltyoff = tiltyoff;
+	const long saved_on_object = OnObject;
+	const long saved_height_type = height_type;
+	long h, c;
+	short room_number;
+
+	out->open = 0;
+	out->kind = CAMERA_EYE_WALL;
+	out->depth = 0;
+	out->room = room;
+
+	if (room < 0 || room >= number_rooms)
+		return 0;
+
+	room_number = room;
+	floor = GetFloor(x, y, z, &room_number);
+	h = GetHeight(floor, x, y, z);
+	c = GetCeiling(floor, x, y, z);
+
+	trigger_index = saved_trigger_index;
+	tiltxoff = saved_tiltxoff;
+	tiltyoff = saved_tiltyoff;
+	OnObject = saved_on_object;
+	height_type = saved_height_type;
+
+	out->room = room_number;
+
+	if (h == NO_HEIGHT || c == NO_HEIGHT || c >= h)
+		return 0;
+
+	if (h < y || y < c)
+	{
+		out->depth = (h < y) ? y - h : c - y;
+		out->kind = (room_number != room) ? CAMERA_EYE_DOOR : (h < y) ? CAMERA_EYE_BELOW : CAMERA_EYE_ABOVE;
+		return 0;
+	}
+
+	out->kind = CAMERA_EYE_OPEN;
+	out->open = 1;
+	return 1;
+}
+
+/* CAMLOG's kind=: open, wall, door-><room it arrived in>, below:<units>,
+ * above:<units>. One token, so a line splits on spaces. */
+void CameraEyeKindText(const CAMERA_EYE_TEST* test, char* buf, long size)
+{
+	switch (test->kind)
+	{
+	case CAMERA_EYE_OPEN:
+		_snprintf(buf, size, "open");
+		break;
+
+	case CAMERA_EYE_DOOR:
+		_snprintf(buf, size, "door->%d", (int)test->room);
+		break;
+
+	case CAMERA_EYE_BELOW:
+		_snprintf(buf, size, "below:%ld", test->depth);
+		break;
+
+	case CAMERA_EYE_ABOVE:
+		_snprintf(buf, size, "above:%ld", test->depth);
+		break;
+
+	default:
+		_snprintf(buf, size, "wall");
+		break;
+	}
+
+	buf[size - 1] = 0;
+}
+
+/* How close the eye stands to geometry it could cut past: the nearest face
+ * of a closed neighbouring sector (`face`), and the nearest convex corner -
+ * a closed diagonal neighbour whose two sides are open, the shape of a
+ * pillar or a door jamb seen from outside (`corner`). The neighbours are
+ * the eight sectors around the eye's, each asked at the eye's height from
+ * the eye's room; -1 when there is none. The blend between two tick eyes
+ * can only cut a corner that stands near them, so the pair says how often a
+ * tick eye stands where the next blend may cut one. */
+static void CameraEyeNear(long x, long y, long z, short room, long* face, long* corner)
+{
+	CAMERA_EYE_TEST t;
+	long closed_x[2], closed_z[2], d, cx, cz;
+	const long west = (x & ~1023) - 1, east = (x | 1023) + 1;
+	const long north = (z & ~1023) - 1, south = (z | 1023) + 1;
+
+	*face = -1;
+	*corner = -1;
+
+	closed_x[0] = !CameraEyeTest(west, y, z, room, &t);
+	closed_x[1] = !CameraEyeTest(east, y, z, room, &t);
+	closed_z[0] = !CameraEyeTest(x, y, north, room, &t);
+	closed_z[1] = !CameraEyeTest(x, y, south, room, &t);
+
+	if (closed_x[0])
+		*face = x & 1023;
+
+	if (closed_x[1] && (*face < 0 || 1024 - (x & 1023) < *face))
+		*face = 1024 - (x & 1023);
+
+	if (closed_z[0] && (*face < 0 || (z & 1023) < *face))
+		*face = z & 1023;
+
+	if (closed_z[1] && (*face < 0 || 1024 - (z & 1023) < *face))
+		*face = 1024 - (z & 1023);
+
+	for (long sx = 0; sx < 2; sx++)
+	{
+		for (long sz = 0; sz < 2; sz++)
+		{
+			if (closed_x[sx] || closed_z[sz])
+				continue;
+
+			if (CameraEyeTest(sx ? east : west, y, sz ? south : north, room, &t))
+				continue;
+
+			cx = (sx ? east : west + 1) - x;
+			cz = (sz ? south : north + 1) - z;
+			d = (long)phd_sqrt((ulong)(SQUARE(cx) + SQUARE(cz)));
+
+			if (*corner < 0 || d < *corner)
+				*corner = d;
+		}
+	}
+}
+
+/* CAMLOG's tick line, behind -log: one line per CalculateCamera pass that
+ * reaches its end, beside MODERNLOG, in both control schemes. The drawn eye
+ * of an interpolated frame is blended between two of these eyes, so this
+ * is the line that says whether a black frame began in the logic or in the
+ * draw.
+ *   f          GlobalCounter
+ *   eye        camera.pos after MoveCamera, with its room
+ *   ideal      the ideal MoveCamera was handed, as it left it; - on a pass
+ *              that ran no chase or combat camera (fixed, look, first person)
+ *   want       the dialled candidate before mgLOS; - as above
+ *   target     camera.target, with its room
+ *   los        mgLOS's return on the dialled candidate, 1 clear, 0 clipped,
+ *              -1 on a pass without one
+ *   los_lp     mgLOS's lp as the point it handed back shows it: 8 on a clear
+ *              ray, 1 when the point is the target itself (a ray cut at its
+ *              first or its second sample), 0 on a ray of no length, -1
+ *              without one
+ *   pull       ModernCameraRayBounds' step of clearance, 8..1, 0 when none
+ *              cleared; -1 when CameraCollisionBounds resolved the eye (the
+ *              classic scheme) or no chase or combat camera ran
+ *   lead       the stick's yaw and pitch step handed to ModernCameraLeadEye
+ *   mc_pull    1 when MoveCamera's own mgLOS brought an eye outside its room in
+ *   snaps      CameraSnaps
+ *   kind       CameraEyeKindText of the eye from its own room
+ *   face       units to the nearest face of a closed neighbouring sector, -1 none
+ *   corner     units to the nearest convex corner, -1 none */
+static void CameraTickLog()
+{
+	CAMERA_EYE_TEST t;
+	char kind[32], ideal[64], want[48];
+	long face, corner, los, los_lp;
+
+	CameraEyeTest(camera.pos.x, camera.pos.y, camera.pos.z, camera.pos.room_number, &t);
+	CameraEyeKindText(&t, kind, sizeof(kind));
+	CameraEyeNear(camera.pos.x, camera.pos.y, camera.pos.z, camera.pos.room_number, &face, &corner);
+
+	if (cam_tick.ideal_set)
+		_snprintf(ideal, sizeof(ideal), "(%ld,%ld,%ld)/%d", cam_tick.ideal.x, cam_tick.ideal.y,
+			cam_tick.ideal.z, (int)cam_tick.ideal.room_number);
+	else
+		_snprintf(ideal, sizeof(ideal), "-");
+
+	ideal[sizeof(ideal) - 1] = 0;
+
+	if (cam_tick.want_set)
+		_snprintf(want, sizeof(want), "(%ld,%ld,%ld)", cam_tick.want.x, cam_tick.want.y,
+			cam_tick.want.z);
+	else
+		_snprintf(want, sizeof(want), "-");
+
+	want[sizeof(want) - 1] = 0;
+
+	/* mgLOS walks (want - target) >> 3 at a time and steps one back at the
+	 * end, so the point it hands back is k whole steps out and its lp was
+	 * k + 1; a clear ray is the only one that ends seven steps out. x and z
+	 * are read because a floor or a ceiling within the push moves y. */
+	los = -1;
+	los_lp = -1;
+
+	if (cam_tick.want_set && cam_tick.los_set)
+	{
+		const long dx = (cam_tick.want.x - cam_tick.los_from[0]) >> 3;
+		const long dy = (cam_tick.want.y - cam_tick.los_from[1]) >> 3;
+		const long dz = (cam_tick.want.z - cam_tick.los_from[2]) >> 3;
+		long k;
+
+		if (dx || dz)
+			k = (abs(dx) >= abs(dz)) ? (cam_tick.los.x - cam_tick.los_from[0]) / dx :
+				(cam_tick.los.z - cam_tick.los_from[2]) / dz;
+		else if (dy)
+			k = (cam_tick.los.y - cam_tick.los_from[1]) / dy;
+		else
+			k = -1;
+
+		los_lp = (k < 0) ? 0 : k + 1;
+		los = (los_lp == 8) ? 1 : 0;
+	}
+
+	Log("CAMLOG tick f=%d eye=(%ld,%ld,%ld)/%d ideal=%s want=%s target=(%ld,%ld,%ld)/%d "
+		"los=%ld los_lp=%ld pull=%ld lead=%ld,%ld mc_pull=%ld snaps=%d kind=%s face=%ld corner=%ld",
+		(int)GlobalCounter, camera.pos.x, camera.pos.y, camera.pos.z, (int)camera.pos.room_number,
+		ideal, want, camera.target.x, camera.target.y, camera.target.z,
+		(int)camera.target.room_number, los, los_lp,
+		(cam_tick.los_set && cam_tick.ray) ? ledge_log.pull : -1L,
+		modern_cam_lead_yaw, modern_cam_lead_pitch, ledge_log.mc_pull, (int)CameraSnaps, kind,
+		face, corner);
+}
+
 void CalculateCamera()
 {
 	ITEM_INFO* item;
@@ -1017,6 +1295,7 @@ void CalculateCamera()
 	SniperOverlay = 0;
 	SniperCamActive = 0;
 	memset(&ledge_log, 0, sizeof(ledge_log));
+	memset(&cam_tick, 0, sizeof(cam_tick));
 	chase_log.cand = -1;
 	chase_log.clip = -1;
 
@@ -1423,6 +1702,9 @@ void CalculateCamera()
 
 	if (gLogEnabled && ledgePhase != LEDGE_CAMERA_NONE)
 		ModernCameraLedgeLog(ledgePhase);
+
+	if (gLogEnabled)
+		CameraTickLog();
 }
 
 void LaraTorch(PHD_VECTOR* Soffset, PHD_VECTOR* Eoffset, short yrot, long brightness)
@@ -2086,6 +2368,9 @@ void ChaseCamera(ITEM_INFO* item)
 		ideals[lp].z = camera.target.z - (distance * phd_cos(angle) >> W2V_SHIFT);
 		ideals[lp].room_number = camera.target.room_number;
 
+		if (!lp)
+			CamTickWant(&ideals[0]);	// CAMLOG, behind -log
+
 		/* In Modern the angle stays and the distance goes, so the camera slides
 		 * along a wall and the player can keep turning around Lara.
 		 *
@@ -2181,6 +2466,9 @@ void ChaseCamera(ITEM_INFO* item)
 		}
 	}
 
+	// Whichever way the loop ended, ideals[0] holds what mgLOS made of the
+	// dialled candidate: nothing after that call writes it.
+	CamTickLos(&ideals[0], modern_orbit);
 	chase_log.cand = farthestnum;
 	ideal.x = ideals[farthestnum].x;
 	ideal.y = ideals[farthestnum].y;
@@ -2205,6 +2493,7 @@ void ChaseCamera(ITEM_INFO* item)
 		camera.speed = 1;
 
 	MoveCamera(&ideal, camera.speed);
+	CamTickIdeal(&ideal);
 }
 
 void CombatCamera(ITEM_INFO* item)
@@ -2311,6 +2600,9 @@ void CombatCamera(ITEM_INFO* item)
 		ideals[lp].z = camera.target.z - (distance * phd_cos(angle) >> W2V_SHIFT);
 		ideals[lp].room_number = camera.target.room_number;
 
+		if (!lp)
+			CamTickWant(&ideals[0]);	// CAMLOG, behind -log
+
 		// The same wall, resolved the same way: this loop and ChaseCamera's are
 		// the same five candidates and the same collision, so a weapon out does
 		// not mean a different camera at a wall. ChaseCamera explains it.
@@ -2382,6 +2674,7 @@ void CombatCamera(ITEM_INFO* item)
 		}
 	}
 
+	CamTickLos(&ideals[0], modern_orbit);	// as in ChaseCamera
 	ideal.x = ideals[farthestnum].x;
 	ideal.y = ideals[farthestnum].y;
 	ideal.z = ideals[farthestnum].z;
@@ -2403,6 +2696,7 @@ void CombatCamera(ITEM_INFO* item)
 		camera.speed = 1;
 
 	MoveCamera(&ideal, camera.speed);
+	CamTickIdeal(&ideal);
 }
 
 void MoveCamera(GAME_VECTOR* ideal, long speed)

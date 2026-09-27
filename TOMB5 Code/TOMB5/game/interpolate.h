@@ -79,12 +79,28 @@ float InterpFrameAlpha();
  *
  * On a blended camera frame this returns GetFloor(x, y, z, &room) walked from
  * the logic room, the same call camera.cpp uses each tick. Nothing is written
- * back. On every other frame it returns `logicRoom` unchanged. */
+ * back. On every other frame it returns `logicRoom` unchanged.
+ *
+ * On a blended frame whose eye that room does not hold, the drawn-eye rule
+ * (ModernCameraDrawnEye, game\modern_camera.h) has already chosen the eye
+ * and its room in InterpBeginFrame, and this returns that room. */
 short InterpEyeRoom(short logicRoom);
 
 /* The camera's room at the previous logic tick, or -1 while there is no
  * previous state. For the ROOMFLASH log line (draw.cpp) only. */
 short InterpPrevCamRoom();
+
+/* True on a blended frame whose drawn eye no room holds and no point of the
+ * chord between the two tick eyes could replace (the rule's NOSKY):
+ * SkyDrawPhase then draws no sky, so what the short walk leaves undrawn is
+ * the clear colour, black, as it is indoors. False on every other frame and
+ * always at fps_mode 0. */
+bool InterpSkyWithheld();
+
+/* CAMLOG's draw line for a frame the drawn-eye rule acted on (game\draw.cpp,
+ * DrawRooms, after the walk and the sky). Writes nothing without -log or on a
+ * frame the rule left alone. */
+void InterpLogEyeFix(unsigned int frame, short walkRoom, long rooms, long outsideLogic, long sky);
 
 /* True when the frame being drawn carries no logic tick. Every counter that
  * steps once per drawn frame and measures time (fades, weather, flashes,

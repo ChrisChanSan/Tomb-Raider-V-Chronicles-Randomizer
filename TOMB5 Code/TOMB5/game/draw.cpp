@@ -540,7 +540,16 @@ void SkyDrawPhase()
 			return;
 		}
 
-		if (gfLevelId == LVL5_GALLOWS_TREE || gfLevelId == LVL5_LABYRINTH || gfLevelId == LVL5_OLD_MILL)
+		/* A blended frame whose eye stands where no room holds it and no
+		 * point between the two tick eyes does either (InterpSkyWithheld,
+		 * game\interpolate.cpp) gets no sky: what its walk leaves undrawn is
+		 * the clear colour, as indoors, and not a sky seen through the
+		 * level. The storm below still steps, because it is a clock and not a
+		 * picture; the moon, the HD dome, the flat layers, the horizon and
+		 * the stars are left out. Never true at fps_mode 0. */
+		const bool withheld = InterpSkyWithheld();
+
+		if (!withheld && (gfLevelId == LVL5_GALLOWS_TREE || gfLevelId == LVL5_LABYRINTH || gfLevelId == LVL5_OLD_MILL))
 			DrawMoon();
 
 		if (BinocularRange)
@@ -585,6 +594,20 @@ void SkyDrawPhase()
 				if (!LightningSFXDelay)
 					SoundEffect(SFX_THUNDER_RUMBLE, 0, SFX_DEFAULT);
 			}
+		}
+
+		// The tail of this block, without anything drawn. The moon above is
+		// what this block queues for DrawBuckets and DrawSortList, and it was
+		// left out; whatever else stands in them is drawn with the frame's own
+		// output (specific\output.cpp).
+		if (withheld)
+		{
+			phd_PopMatrix();
+
+			if (BinocularRange)
+				AlterFOV(short(GAME_FOV -  (7 * BinocularRange)));
+
+			return;
 		}
 
 		nPolyType = 6;
@@ -2285,6 +2308,13 @@ void DrawRooms(short current_room)
 
 	if (gfLevelId != LVL5_TITLE)
 		SkyDrawPhase();
+
+	// CAMLOG's draw line, for a frame the drawn-eye rule acted on. NoteRoomWalk
+	// has just stepped the serial, so this is the frame= ROOMLIST prints.
+	if (gLogEnabled)
+		InterpLogEyeFix(g_walkSerial - 1, walk_room, number_draw_rooms,
+			(logic_room->flags & ROOM_OUTSIDE) ? 1 : 0,
+			(gfLevelId != LVL5_TITLE && outside > 0 && !InterpSkyWithheld()) ? 1 : 0);
 
 	if (gLogEnabled)
 		RopeDrawLog();

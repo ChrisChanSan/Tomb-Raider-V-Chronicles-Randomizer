@@ -55,6 +55,29 @@ void ModernCameraLogConfig(long* return_rate, long* return_min, long* wall_facto
 	long* speed, long* yaw_rate, long* pitch_min, long* pitch_max,
 	long* pull_steps, long* pull_push);	// MODERNLOG init line
 
+/* Whether a camera point stands in open space, for the drawn eye
+ * (game\interpolate.cpp) and CAMLOG. Reads the level and writes nothing: the
+ * five globals GetHeight sets are put back before it returns. */
+enum
+{
+	CAMERA_EYE_OPEN,	// a floor and a ceiling, the point between them
+	CAMERA_EYE_WALL,	// no floor or no ceiling at all, or they meet
+	CAMERA_EYE_DOOR,	// the lookup left the room it was asked from and fails where it arrived
+	CAMERA_EYE_BELOW,	// under the floor of its own room by `depth`
+	CAMERA_EYE_ABOVE	// over the ceiling of its own room by `depth`
+};
+
+struct CAMERA_EYE_TEST
+{
+	long open;		// 1 for CAMERA_EYE_OPEN
+	long kind;		// CAMERA_EYE_*
+	long depth;		// units under the floor or over the ceiling, else 0
+	short room;		// the room GetFloor reached, whatever the kind
+};
+
+long CameraEyeTest(long x, long y, long z, short room, CAMERA_EYE_TEST* out);
+void CameraEyeKindText(const CAMERA_EYE_TEST* test, char* buf, long size);	// CAMLOG's kind=
+
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;
 extern GAME_VECTOR ForcedFixedCamera;

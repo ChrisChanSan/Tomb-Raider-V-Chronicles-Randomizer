@@ -217,10 +217,11 @@ each scheme keeps its **own** keyboard bindings, remembered independently:
 Under *Modern* the four movement keys are the left stick pushed all the way, on
 the keyboard page and the controller's alike: *Forward* runs Lara where the
 camera looks, the other three move her as the stick pushed that way does, and
-two neighbouring keys together run her at exactly 45 degrees. A controller
-stick pushed off centre takes precedence over the keys; holding *Look* with
-them and no weapon drawn turns her on the spot as under *Tank*, and *Walk*
-makes her walk, since a key has no half push.
+two neighbouring keys together run her at exactly 45 degrees. On the
+controller's page a stick pushed off centre takes precedence over the keys; on
+the keyboard page the controller's stick is not read for movement. Holding
+*Look* with them and no weapon drawn turns her on the spot as under *Tank*, and
+*Walk* makes her walk, since a key has no half push.
 
 *Secondary* is the nineteenth slot in each scheme's table, and it is bindable
 but does nothing while *Action* (below) is set to *One key* — the *Key

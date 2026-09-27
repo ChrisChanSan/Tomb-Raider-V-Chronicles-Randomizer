@@ -7702,9 +7702,10 @@ nowhere else. The pad wins: its stick off centre is taken and the keys are not a
 diagonal of two keys is exactly 45 degrees, the magnitude clamp making it full. The look
 key still bypasses the translation, so the keys turn her on the spot as at Tank. The keys
 give no half deflection; the walk key walks. The keys still write their classic bits, so
-every state where the scheme steps aside behaves as before.
+every state where the scheme steps aside behaves as before. Opposite keys cancel to
+nothing, so the forward-and-back roll chord fires only while no side key is held.
 
-**Commits.** `2dffffb`, `b9b8a0f`
+**Commits.** `2dffffb`, `b9b8a0f`, `26c1fba`, `0cfbdf8`
 
 ### Two action keys: the interaction bit and the Secondary role
 2026-09-20 - 2026-09-20

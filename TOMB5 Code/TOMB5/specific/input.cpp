@@ -1335,11 +1335,16 @@ long S_UpdateInput()
 	 * 7849 of 32767, so a circling thumb does not snap onto the four cardinals
 	 * and the course does not move in jumps - with the path's per-axis square
 	 * beside it, so a stick resting in the square's corners cannot start Lara
-	 * walking. The menus keep the per-axis pair, all a four-way cursor needs. */
+	 * walking. The menus keep the per-axis pair, all a four-way cursor needs.
+	 *
+	 * With the keyboard chosen (ControlMethod 0) the pair stays 0/0: the
+	 * movement seam below is open to the keyboard page as well, for the four
+	 * movement keys, and a controller resting on the desk - or a d-pad press,
+	 * which reads +-20 in joy_x/joy_y - must not steer a keyboard player. */
 	long move_x = joy_x;
 	long move_y = joy_y;
 
-	if (tomb5.control_modern && ControlMethod == 1 && !ModernMenuReadsPad())
+	if (tomb5.control_modern && !ModernMenuReadsPad())
 	{
 		move_x = 0;
 		move_y = 0;
@@ -1351,7 +1356,7 @@ long S_UpdateInput()
 		 *
 		 * As for the camera stick, both widths are scaled by tomb5.dead_zone,
 		 * whose default 50 returns them unchanged. */
-		if (joystick_read)
+		if (ControlMethod == 1 && joystick_read)
 			ModernStickDeadZone(
 				ModernDeadZoneUser(joystick_is_xinput ? MODERN_DEAD_LEFT : MODERN_DEAD_LEFT_DINPUT,
 					(long)tomb5.dead_zone),
@@ -1367,15 +1372,17 @@ long S_UpdateInput()
 	 * terms; it is named once so its three readers cannot drift apart.
 	 *
 	 * Term by term: tomb5.control_modern first, so at the default (Tank) this
-	 * is one short-circuit and a local 0. ControlMethod == 1 because the stick
-	 * is an input only when the player chose the pad - otherwise a controller
-	 * resting on the desk would take the keyboard's direction keys away. First
+	 * is one short-circuit and a local 0. ControlMethod is not a term: the four
+	 * movement keys are the scheme's stick on either binding page. The pad's
+	 * stick is an input only when the player chose the pad, and that is
+	 * answered above, where move_x/move_y stay 0/0 on the keyboard page, so a
+	 * controller resting on the desk cannot take the keyboard's keys away. First
 	 * person is skipped because the camera is Lara's head there and a
 	 * camera-relative heading means nothing; spotcams, cutscenes and
 	 * bDisableLaraControl because Lara is not the player's to steer then (the
 	 * last also covers pickups, switches and lifts); the inventory and the
 	 * title because the direction bits steer a menu there. */
-	const long modern_seam = tomb5.control_modern && ControlMethod == 1 && !FirstPersonActive() &&
+	const long modern_seam = tomb5.control_modern && !FirstPersonActive() &&
 		!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
 		!InventoryActive && gfLevelId != LVL5_TITLE;
 
@@ -1412,7 +1419,10 @@ long S_UpdateInput()
 	 * LEFT+BACK. ModernTankSector lets exactly one axis through, so a turn is a
 	 * turn and a step is a step; the arithmetic and its constants are in
 	 * game\modern_move.*, where a test can hold them. Every other Modern tick
-	 * goes to ModernUpdateInput, which reads move_x/move_y itself.
+	 * goes to ModernUpdateInput, which is handed move_x/move_y itself - or,
+	 * with the stick at rest, the four movement keys as a stick. The keys have
+	 * no sector: on these ticks their own classic bits stand, one per key, as
+	 * at Tank.
 	 *
 	 * The raw pair is kept beside the sectored one because MODERNLOG's tank
 	 * line prints both: `stick=` is what the thumb did, `out=` what the
@@ -1466,10 +1476,11 @@ long S_UpdateInput()
 	/* The Modern control's seam, here and nowhere else. Above, the stick and
 	 * the four direction keys have written their bits; below, the key roles
 	 * are read. The whole Modern scheme is "take those four bits away and put
-	 * four of its own in"; when it is not responsible - the stick at rest, a
-	 * state where a direction bit does not mean a direction - the bits above
-	 * stand and the pad behaves as at Tank. So the scheme needs no second input
-	 * path anywhere in the tree. The guard, `modern_seam`, is declared above.
+	 * four of its own in"; when it is not responsible - the stick and the four
+	 * movement keys at rest, a state where a direction bit does not mean a
+	 * direction - the bits above stand and the pad and the keys behave as at
+	 * Tank. So the scheme needs no second input path anywhere in the tree. The
+	 * guard, `modern_seam`, is declared above.
 	 *
 	 * While the look key is held the translation is bypassed, so the stick
 	 * turns Lara finely on the spot as in Tank, for movements where she has to
@@ -1506,7 +1517,24 @@ long S_UpdateInput()
 		// stick's own reading, which the d-pad never writes over (see above),
 		// so a d-pad press reaches neither this call nor the classic assembly
 		// above as a movement stick.
-		linput = ModernUpdateInput(linput, move_x, move_y, mAction, mJump);
+		/* The four movement keys are the same stick. With the pad's pair at
+		 * rest, Key(0..3) - the same four reads as above - become a
+		 * full-deflection vector in the pad's units and signs, the forward
+		 * key on -y as the stick pushed forward reads, and the call is
+		 * handed that; the pad off centre is handed on unchanged and the
+		 * keys are not added (ModernKeyStick, game\modern_move.cpp). A local
+		 * pair, so move_x/move_y, tank_x/tank_y and the classic assembly
+		 * keep the pad's own reading. The keys' classic bits are already in
+		 * linput: when the translation takes the vector it replaces them, as
+		 * it replaces the pad's, and when it steps aside - a classic state, a
+		 * ladder, a push block - they stand. Only this call is handed the
+		 * vector, so the look key's bypass, first person, Tank and the menus
+		 * never see it. */
+		long seam_x, seam_y;
+		const long feed = ModernKeyStick(move_x, move_y, Key(0), Key(1), Key(2), Key(3),
+			&seam_x, &seam_y);
+
+		linput = ModernUpdateInput(linput, seam_x, seam_y, mAction, mJump, feed);
 	}
 
 	/* MODERNLOG `mode=tank`: the seam above never runs on a bypass tick, so
@@ -1516,11 +1544,12 @@ long S_UpdateInput()
 	 * one of the two lines fires per Modern seam tick; the latch is written
 	 * further below, so this is still this tick's answer.
 	 *
-	 * Fields: `stick` is move_x/move_y as the seam would have received them;
-	 * `sector` is 0 none, 1 turn, 2 step; `out` is the pair the classic
-	 * assembly was handed; `aim` is 1 when the look key is aiming a weapon,
-	 * the binoculars or the lasersight - why a tank tick can show sector=0
-	 * with the stick still pushed. */
+	 * Fields: `stick` is move_x/move_y, the pad's pair, as the seam would have
+	 * received them (the four movement keys have no field here: on a bypass
+	 * tick their classic bits stand); `sector` is 0 none, 1 turn, 2 step;
+	 * `out` is the pair the classic assembly was handed; `aim` is 1 when the
+	 * look key is aiming a weapon, the binoculars or the lasersight - why a
+	 * tank tick can show sector=0 with the stick still pushed. */
 	if (gLogEnabled && modern_tank)
 		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld sector=%ld out=%ld/%ld aim=%ld",
 			(long)GlobalCounter, move_x, move_y, tank_sector, tank_x, tank_y, modern_tank_aim);

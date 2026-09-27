@@ -190,6 +190,14 @@ enum modern_constants
 	MODERN_TANK_SECTOR_TURN = 1,
 	MODERN_TANK_SECTOR_STEP = 2,
 
+	/* Which source fed the movement seam a tick, ModernKeyStick's answer -
+	 * MODERNLOG's `feed=` prints the name of each: nothing (the pad's stick
+	 * and the four movement keys all at rest), the pad's left stick, or the
+	 * keys as a stick. */
+	MODERN_FEED_NONE = 0,
+	MODERN_FEED_PAD = 1,
+	MODERN_FEED_KEYS = 2,
+
 	/* Walk below a deflection: TROne's rule, under half deflection she walks
 	 * (16000 of 32767, here 62). It ships as 0 - the stick never sets IN_WALK,
 	 * the pad's own walk key does. A magnitude cannot tell a walk from a real
@@ -655,6 +663,8 @@ short ModernAngle(long x, long z);
 long ModernStickDeadZone(long zone, long axis_zone, long in_x, long in_y, long* out_x, long* out_y);
 long ModernDeadZoneUser(long base, long user);
 long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long* out_y);
+long ModernKeyStick(long pad_x, long pad_y, long forward, long back, long left, long right,
+	long* out_x, long* out_y);
 long ModernStateIsClassic(short anim_state);
 long ModernStateIsSwim(short anim_state);
 long ModernStateIsGrab(short anim_state);

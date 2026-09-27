@@ -37,13 +37,16 @@
  * the classic bits. `action` and `jump` are the two key roles the
  * scheme needs to know about before they are read into the word - the
  * caller reads them, because the caller is the file that knows which
- * key and which pad button they are.
+ * key and which pad button they are. The stick is the pad's left stick,
+ * or with that at rest the four movement keys as a stick
+ * (ModernKeyStick, game/modern_move.h); `feed` says which of the two,
+ * MODERN_FEED_*, and is only printed, as MODERNLOG's `feed=`.
  *
  * Returns `bits` unchanged whenever the scheme is not responsible: a
  * state that stays classic, the stick at rest, and every call that is
  * not the game's own logic tick (the menus and the FMV loop call
  * S_UpdateInput too - see the tick guard in the .cpp). */
-long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump);
+long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump, long feed);
 
 /* Her heading as the function above left it this tick, for
  * game/camera.cpp and nothing else. Returns 0 when the modern input did

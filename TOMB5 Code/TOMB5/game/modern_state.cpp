@@ -135,7 +135,19 @@ static const char* ModernModeName(long mode)
 	}
 }
 
-long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump)
+/* The source name for MODERNLOG's `feed=`, beside the one place that prints
+ * it, for the same reason as the mode names above. */
+static const char* ModernFeedName(long feed)
+{
+	switch (feed)
+	{
+	case MODERN_FEED_PAD:	return "pad";
+	case MODERN_FEED_KEYS:	return "keys";
+	default:				return "none";	// MODERN_FEED_NONE
+	}
+}
+
+long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long jump, long feed)
 {
 	MODERN_SITUATION sit;
 	MODERN_RESULT out;
@@ -290,8 +302,9 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 
 	modern_tick = GlobalCounter;
 
-	// stick_x/stick_y are the left stick's own axes; the d-pad never reaches
-	// here (see the note above ModernModeName).
+	// stick_x/stick_y are the left stick's own axes, or with that at rest the
+	// four movement keys as a full-deflection stick (ModernKeyStick, `feed`);
+	// the d-pad never reaches here (see the note above ModernModeName).
 
 	/* The camera heading of this tick.
 	 *
@@ -583,7 +596,12 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 *
 	 * `src`: "pad" is the stick driving `out`; "keys" is `out` stepping aside
 	 * and the base assembly's bits - the classic stick scaling, the keyboard,
-	 * or Steam Input's synthetic arrow keys - standing untouched.
+	 * or Steam Input's synthetic arrow keys - standing untouched. The stick
+	 * that drives `out` can be the four movement keys as well, so `src`
+	 * answers whether the translation wrote the word and `feed`, at the end
+	 * of the line, what the stick it was handed came from: "pad" the left
+	 * stick, "keys" the four movement keys with the stick at rest, "none"
+	 * both at rest.
 	 *
 	 * `bits` is `out.bits`, the translation's own contribution (0 whenever
 	 * `mode=off`), not the merged word this function returns; a classic tick
@@ -656,7 +674,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
 			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d "
-			"cam_speed=%d old_type=%d cut=%ld latch=%ld",
+			"cam_speed=%d old_type=%d cut=%ld latch=%ld feed=%s",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
@@ -665,7 +683,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
 			cam_world, clip, view_err, air, carry, modern_state.stand_hold,
 			sit.cam_player_step, (int)camera.speed, (int)camera.old_type,
-			sit.cam_cut, modern_state.cut_latch);
+			sit.cam_cut, modern_state.cut_latch, ModernFeedName(feed));
 	}
 
 	return bits;

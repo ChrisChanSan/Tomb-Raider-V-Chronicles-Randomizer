@@ -219,6 +219,49 @@ long ModernTankSector(long in_x, long in_y, long prev_sector, long* out_x, long*
 	return MODERN_TANK_SECTOR_STEP;
 }
 
+/* The four movement keys as a stick, and which of the two sources the seam
+ * is handed. The keys are a full-deflection stick in the pad's own units and
+ * convention - x right-positive, y forward-negative (specific\dxshell.cpp) -
+ * each axis 0 or +-MODERN_STICK_FULL, and two opposite keys cancel on their
+ * axis. A diagonal is two full axes, 181 long: ModernTranslate clamps the
+ * magnitude to full and takes the angle from the pair, which is exactly 45
+ * degrees, so nothing is scaled here. No key gives half a deflection; the
+ * walk key is the keyboard's walk, as the pad's walk button is the pad's.
+ *
+ * The pad wins. When its pair is off centre - after the dead zone, so a
+ * resting stick reads 0/0 - it is handed on unchanged and the keys are not
+ * added: a sum would make a push of the stick with a key held a longer
+ * vector at another angle than the stick alone. With the pad at rest the
+ * keys' vector is handed on; with both at rest the answer is 0/0 and the
+ * scheme steps aside as it does for a resting stick.
+ *
+ * Pure, so that ModernTest can check the keys against the stick. Returns the
+ * source, MODERN_FEED_* (MODERNLOG's `feed=`). */
+long ModernKeyStick(long pad_x, long pad_y, long forward, long back, long left, long right,
+	long* out_x, long* out_y)
+{
+	const long full = (long)MODERN_STICK_FULL;
+	long x, y;
+
+	if (!out_x || !out_y)
+		return MODERN_FEED_NONE;
+
+	if (pad_x || pad_y)
+	{
+		*out_x = pad_x;
+		*out_y = pad_y;
+		return MODERN_FEED_PAD;
+	}
+
+	x = (right ? full : 0) - (left ? full : 0);
+	y = (back ? full : 0) - (forward ? full : 0);
+
+	*out_x = x;
+	*out_y = y;
+
+	return (x || y) ? MODERN_FEED_KEYS : MODERN_FEED_NONE;
+}
+
 /* A world course, in Lara's own frame, as one direction bit. Four sectors:
  * forward, back, and the two sides. `sector` is the boundary to the front and
  * to the back; `step_bits` picks the side step instead of the turn, which is

@@ -121,7 +121,59 @@ namespace
 		int groups = 0;
 		int lastGroup = -1;
 		std::vector<int> where;		// the first twelve groups, for the camera
+		std::set<int> bookPages;	// material 15: the first page of each part
+		const trf::remaster::TrgPart* bookPart = 0;	// and one part, for its run
 	};
+
+	/* The first page of a part: the page the first corner of its first
+	 * non-empty pass names, which is the corner hd_render.cpp reads, or -1. */
+	int partFirstPage(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart& part)
+	{
+		for (int pass = 0; pass < 3; pass++)
+		{
+			const uint32_t start = part.pass[pass].start;
+
+			if (!part.pass[pass].count || start >= trg.indices.size())
+				continue;
+
+			const uint32_t corner = trg.indices[start];
+
+			if (corner >= trg.vertices.size())
+				continue;
+
+			const uint8_t layer = trg.vertices[corner].layer;
+
+			return layer && (size_t)layer <= trg.textures.size()
+				? (int)trg.textures[layer - 1] : -1;
+		}
+
+		return -1;
+	}
+
+	/* The run of a material 15 book: param[1] pages from `page0` on by page
+	 * number, param[2] seconds each, starting at page param[0] - and how many
+	 * of those pages the file's own texture list holds. The engine loads
+	 * every page of that list and nothing else, so the book turns only when
+	 * all of them are there; with one missing the part keeps its own page. */
+	void printBook(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart& part, int page0)
+	{
+		const int count = (int)part.param[1];
+		int listed = 0;
+
+		for (int k = 0; k < count && page0 >= 0; k++)
+			for (size_t i = 0; i < trg.textures.size(); i++)
+				if ((int)trg.textures[i] == page0 + k)
+				{
+					listed++;
+					break;
+				}
+
+		std::printf("        book: pages %d..%d, %d page(s) at %.3f s, phase %d, "
+			"%d of %d in the file's list\n", page0, page0 + count - 1, count,
+			part.param[2], (int)part.param[0], listed, count);
+	}
 
 	void dumpMaterials(const std::string& root, const std::string& stem, int only)
 	{
@@ -156,6 +208,12 @@ namespace
 
 				c.parts++;
 
+				if (part.material == 15)
+				{
+					c.bookPages.insert(partFirstPage(trg, part));
+					c.bookPart = &part;
+				}
+
 				if (c.lastGroup != (int)g)
 				{
 					c.lastGroup = (int)g;
@@ -181,6 +239,11 @@ namespace
 				std::printf(" %d", at->second.where[i]);
 
 			std::printf("%s\n", at->second.groups > 12 ? " ..." : "");
+
+			// A material 15 tuple is a book: one run per first page.
+			if (at->second.bookPart)
+				for (int page0 : at->second.bookPages)
+					printBook(trg, *at->second.bookPart, page0);
 		}
 	}
 
@@ -518,6 +581,12 @@ namespace
 
 					std::printf("%s\n", pages.size() > 10 ? " ..." : "");
 				}
+
+				/* A material 15 part is a book of pages: its own page and
+				 * the pages after it by number (hd_render.cpp,
+				 * MaterialBookTime). */
+				if (part.material == 15)
+					printBook(trg, part, page);
 			}
 
 			nr++;
@@ -2343,7 +2412,11 @@ int main(int argc, char** argv)
 		std::printf("       [-classic <folder holding the classic .TRC>]  for the room count\n");
 		std::printf("       [-pages]  which page numbers have no .DDS in TEX\n");
 		std::printf("       [-mat [material]]  the distinct (material, param) tuples,\n");
-		std::printf("                          with triangles per pass and groups\n");
+		std::printf("                          with triangles per pass and groups;\n");
+		std::printf("                          a material 15 tuple adds its books'\n");
+		std::printf("                          page runs\n");
+		std::printf("       [-parts <group>]  every part of one group with its box and\n");
+		std::printf("                          pages; a material 15 part adds its book\n");
 		std::printf("       [-seam <groupA> <groupB> <dx> <dy> <dz>]  the baked light\n");
 		std::printf("                          where two rooms share vertex positions\n");
 		std::printf("       [-flat <group>]  the horizontal surfaces of one group, with\n");

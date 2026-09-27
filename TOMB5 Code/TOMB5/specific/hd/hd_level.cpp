@@ -20,6 +20,7 @@
 #include "hd_markers.h"
 #include "hd_scan.h"
 #include "hd_render.h"
+#include "hd_book.h"			// HDBookClock - the time the material 15 books turn on
 #include "hd_object.h"
 #include "hd_font.h"			// the HD font's texture goes with the device
 #include "../function_stubs.h"
@@ -38,6 +39,7 @@
 #include "../../game/effect2.h"		// dynamics, wibble
 #include "../../game/gameflow.h"		// gfLevelId
 #include "../../game/lara.h"		// GfHdOutfit - data[3]
+#include "../../game/interpolate.h"	// InterpFrameAlpha - the state this frame draws
 #include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
 #include "../file.h"				// textinfo, aranges, nAnimUVRanges
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
@@ -253,6 +255,21 @@ namespace
 		g_clock += (double)(unsigned short)(now - g_clock_last) / 30.0;
 		g_clock_last = now;
 	}
+
+	/* The time of the state the frame draws - the tick clock less the part
+	 * of a tick the drawn state stands behind it (hd_book.h, HDBookClock) -
+	 * and the blend factor it was made from. Worked out once per frame beside
+	 * the tick clock, where the frame is filled, and read by the two brackets
+	 * that draw inside that frame and never step the clock. The .TRG material
+	 * 15 books turn on it; everything else that moves stays on g_clock. */
+	double g_drawn_clock = 0.0;
+	float g_drawn_alpha = 1.0f;
+	/* The HD frames filled in this level, counted where the clock is
+	 * stepped - the `present` column of the bookstep line - and that line's
+	 * own count and the page it wrote last. */
+	long g_book_presents = 0;
+	int g_bookstep_lines = 0;
+	int g_bookstep_page = -1;
 
 	/* Totals for the whole level, not a per-frame flag: a per-frame reset
 	 * would write the "once per level" line on every clipping frame (173
@@ -2803,6 +2820,16 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	out.motion = tomb5.hd_motion ? 1 : 0;
 	out.reflect = tomb5.hd_reflect ? 1 : 0;
 
+	/* And the drawn state's time, for the books. InterpFrameAlpha is the
+	 * factor this frame's state was really blended at: 1 at fps_mode 0,
+	 * on a frame drawn live, on a camera cut and outside DrawPhaseGame
+	 * (game\interpolate.cpp, InterpBeginFrame), so there it is g_clock
+	 * itself. */
+	g_drawn_alpha = InterpFrameAlpha();
+	g_drawn_clock = HDBookClock(g_clock, g_drawn_alpha);
+	out.bookClock = g_drawn_clock;
+	g_book_presents++;
+
 	int offered = 0;
 
 	for (int i = 0; i < NumActiveFogBulbs && i < 64; i++)
@@ -3239,6 +3266,11 @@ static void HDLevelBuildHD()
 	g_clipped_bulbs = 0;
 	g_clock = 0.0;
 	g_clock_started = false;
+	g_drawn_clock = 0.0;
+	g_drawn_alpha = 1.0f;
+	g_book_presents = 0;
+	g_bookstep_lines = 0;
+	g_bookstep_page = -1;
 	BuildWaterMarks();
 	// No pieces until ReportRoomIntrusions has this level's.
 	memset(g_piece_count, 0, sizeof(g_piece_count));
@@ -3322,13 +3354,40 @@ static void HDLevelBuildHD()
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
 		"flipbook_parts=%d flipbook_pages=%d flipbook_dropped=%d "
 		"flipbook_ranges=%d cutout_parts=%d add_weighted=%d add_min=%.3f "
-		"add_swinging=%d gloss_parts=%d reflect=%d",
+		"add_swinging=%d gloss_parts=%d reflect=%d book_parts=%d "
+		"book_pages=%d book_dropped=%d book_additive=%d book_step_min=%.3f "
+		"book_step_max=%.3f book_ranges=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
 		stats.swayDropped, stats.flipbookParts, stats.flipbookDrawn,
 		stats.flipbookDropped, stats.flipbookRanges, stats.cutoutParts,
 		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts,
-		stats.glossParts, tomb5.hd_reflect ? 1 : 0);
+		stats.glossParts, tomb5.hd_reflect ? 1 : 0, stats.bookParts,
+		stats.bookPages, stats.bookDropped, stats.bookAdditive,
+		stats.bookStepMin, stats.bookStepMax, stats.bookRanges);
+
+	/* The material 15 books, one line per part and pass: the pages the book
+	 * runs over, how many, how long each stands, where in the cycle the part
+	 * starts, the pass and the weight it is drawn with (1 outside the
+	 * additive pass). `dropped=1` is a part that keeps its own page because
+	 * a page or a number did not resolve - frames=1 and step=0.000 then.
+	 * The motion line above carries the totals: book_parts counts the parts
+	 * that turn, book_pages the distinct pages their books hold,
+	 * book_additive those of them in the additive pass, book_ranges the draw
+	 * calls they cost. */
+	if (gLogEnabled)
+		for (int i = 0; i < HDRenderBookPartCount(); i++)
+		{
+			HDRenderBookPart book;
+
+			if (!HDRenderBookPartInfo(i, &book))
+				continue;
+
+			Log("HDLOG book group=%d part=%d page=%d..%d frames=%d step=%.3f "
+				"phase=%d pass=%d weight=%.3f dropped=%d", book.group,
+				book.part, book.page0, book.pageLast, book.pages, book.step,
+				book.phase, book.pass, book.weight, book.dropped);
+		}
 
 	/* The still water surfaces the .TRG builds itself - material 16.
 	 * Counted per part/pass block, which is how TrgProbe -matparts counts
@@ -3955,6 +4014,7 @@ bool HDFramePickupBegin(float persp, float centreX, float centreY,
 	frame.clock = (float)g_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
 	frame.reflect = tomb5.hd_reflect ? 1 : 0;
+	frame.bookClock = g_drawn_clock;
 
 	HDRenderFrameBegin(&kIdentity, &g_pickup_projection, &frame);
 
@@ -4125,6 +4185,7 @@ bool HDFrameSky(const float* viewWorld)
 	frame.clock = (float)g_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
 	frame.reflect = tomb5.hd_reflect ? 1 : 0;
+	frame.bookClock = g_drawn_clock;
 
 	SetD3DMatrix(&world, (float*)viewWorld);
 
@@ -4366,14 +4427,41 @@ void HDFrameDrawGlow()
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
-			"gloss_calls=%d water_calls=%d",
+			"gloss_calls=%d water_calls=%d book_calls=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
 			objects_here, HDObjectDrawCalls(),
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
-			HDRenderWaterCalls());
+			HDRenderWaterCalls(), HDRenderBookCalls());
+	}
+
+	/* The followed book, page by page: the first book drawn in the level
+	 * writes one line each time its page changes, for its first 31 pages -
+	 * a whole turn of a 30-page book and the first page of the next. The
+	 * frame line above is written once per level and cannot show a page
+	 * turning. `clock` is the drawn state's time the page came from,
+	 * `tick` the engine's GlobalCounter, `alpha` the blend factor the frame
+	 * was drawn at and `present` the HD frames filled in this level: at 60
+	 * frames a second the present column steps by 3 for a 0.05 s book and
+	 * by 1, 2, 1, 2 for a 0.025 s one. Nothing is written with hd_motion 0,
+	 * where no book turns. */
+	if (gLogEnabled && g_bookstep_lines < 31)
+	{
+		int group = -1;
+		int part = -1;
+		int page = 0;
+
+		if (HDRenderBookWatch(&group, &part, &page) && page != g_bookstep_page)
+		{
+			g_bookstep_page = page;
+			g_bookstep_lines++;
+			Log("HDLOG bookstep level=%s group=%d part=%d frame=%d clock=%.3f "
+				"tick=%ld alpha=%.2f present=%ld", g_stem, group, part, page,
+				g_drawn_clock, (long)GlobalCounter, g_drawn_alpha,
+				g_book_presents);
+		}
 	}
 
 	/* How many water surfaces one frame drew. Throttled the way the

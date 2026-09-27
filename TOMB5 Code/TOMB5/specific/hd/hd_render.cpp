@@ -26,6 +26,7 @@
 
 #include "hd_render.h"
 #include "hd_pagecache.h"
+#include "hd_book.h"
 
 #include "../../vendor/trforge/src/trf_remaster/Trg.h"
 
@@ -96,8 +97,11 @@ namespace
 	 *       param[0..2] (MaterialFlipTime below)
 	 *    2  the glow material: light shafts, lamp cones, window glows and
 	 *   14  the lit decal - both draw in the additive pass only
-	 *   15  the haze material - a whole room's worth of additive surface
-	 *       (MaterialAddWeight below)
+	 *   15  the book material: a flipbook of consecutive pages that begins at
+	 *       the part's own page, param (phase, page count, seconds per page,
+	 *       0) - a fan's turning shadow and a bank of monitors in the opaque
+	 *       pass, flames, smoke and bubbles in the additive one
+	 *       (MaterialBookTime below)
 	 *   16  the water material: the remaster's own still water surface -
 	 *       every basin, cistern and pool the .TRG builds a sheet for, and
 	 *       the sea of JOBY4 (MaterialRipple below) */
@@ -107,7 +111,7 @@ namespace
 #define HD_TRG_MATERIAL_WIND2		7
 #define HD_TRG_MATERIAL_GLOW		2
 #define HD_TRG_MATERIAL_DECAL		14
-#define HD_TRG_MATERIAL_HAZE		15
+#define HD_TRG_MATERIAL_BOOK		15
 #define HD_TRG_MATERIAL_WATER		16
 #define HD_TRG_MATERIAL_FLIPBOOK	13
 
@@ -412,7 +416,7 @@ namespace
 			weight = part.param[1];
 			break;
 
-		case HD_TRG_MATERIAL_HAZE:
+		case HD_TRG_MATERIAL_BOOK:
 			weight = part.param[2];
 			break;
 
@@ -943,6 +947,124 @@ namespace
 		return true;
 	}
 
+	/* The book of one part.
+	 *
+	 * Material 15 is a flipbook of N consecutive pages. Its own page - the
+	 * page its triangles name through their layer - is page 0, and page k is
+	 * the page NUMBER page0 + k: param[0] is where in the cycle the part
+	 * starts, param[1] how many pages the book holds, param[2] how many
+	 * seconds each page stands, and param[3] is 0. Measured over all fifteen
+	 * levels, 168 part-passes:
+	 *
+	 *   RICH1     pass 0, pages 3071..3100, 30 pages at 0.05 s, phase 0 - the
+	 *             floor under each of the five ceiling fans, the blade shadow
+	 *             turned 12 degrees anticlockwise from one page to the next
+	 *   RICHCUT2  pass 0, pages 1139..1168 (30 at 0.2 s) and 1140..1168 (29,
+	 *             the same loop one page on) - the bank of monitors
+	 *   8 levels  pass 2, pages 2101..2130, 30 pages at 0.025 to 0.1 s,
+	 *             phases 0, 1, 7, 15 and 22 - an atlas of flames, smoke, gas
+	 *             and candle flames and a turning wireframe figure
+	 *   ANDY1..3  pass 2, pages 3273..3286, 14 pages at 0.06 s - rising
+	 *             bubbles
+	 *
+	 * By page number and not by layer: RICHCUT2 group 0 part 5 names layer 51
+	 * = page 1139, and layers 52 to 58 hold parquet, carpet and water, while
+	 * pages 1139..1168 are one clean loop of the monitors' picture. The page
+	 * rule resolves all 168 part-passes, the layer rule breaks that one.
+	 *
+	 * The time is param[2], fenced like material 13's: a count of 2 to 64
+	 * pages, a page of 0.02 to 0.5 seconds and a phase that is a whole number
+	 * below the count, or 0 - "no book" - for anything else, which is every
+	 * part in the game that is not material 15. */
+	inline float MaterialBookTime(const trf::remaster::TrgPart& part)
+	{
+		if (part.material != HD_TRG_MATERIAL_BOOK)
+			return 0.0f;
+
+		const float count = part.param[1];
+		const float phase = part.param[0];
+		const float step = part.param[2];
+
+		if (count < 2.0f || count > 64.0f || (float)(int)count != count)
+			return 0.0f;
+
+		if (phase < 0.0f || phase >= count || (float)(int)phase != phase)
+			return 0.0f;
+
+		return step >= 0.02f && step <= 0.5f ? step : 0.0f;
+	}
+
+	/* The page slots of every book of the level, pages 1 to N - 1 of each one
+	 * after the other; page 0 is the range's own pageSlot, read from the
+	 * vertex like every other draw call's. A book the level holds twice is
+	 * resolved once: parts that share a first page and a count share an
+	 * entry, which is also what lets them share a draw call. */
+	std::vector<int> g_book_slots;
+
+	struct HDBookRun
+	{
+		int page0;
+		int count;
+		int first;		// index of page 1 in g_book_slots
+	};
+	std::vector<HDBookRun> g_book_runs;
+
+	/* Pages 1 to count - 1 of the book that begins at page `page0`, as page
+	 * cache slots in g_book_slots: the index of page 1 there, or -1 when a
+	 * page is off the file's texture list or has no slot in the cache. The
+	 * cache is made from the file's own list, every layer of it, so a page
+	 * the list does not hold has no slot either. */
+	inline int MaterialBookSlots(int page0, int count)
+	{
+		for (size_t i = 0; i < g_book_runs.size(); i++)
+			if (g_book_runs[i].page0 == page0 && g_book_runs[i].count == count)
+				return g_book_runs[i].first;
+
+		int found[64];
+
+		for (int k = 1; k < count; k++)
+		{
+			found[k - 1] = HDPageCacheSlotOf(page0 + k);
+
+			if (found[k - 1] < 0)
+				return -1;
+		}
+
+		HDBookRun run;
+
+		run.page0 = page0;
+		run.count = count;
+		run.first = (int)g_book_slots.size();
+
+		for (int k = 1; k < count; k++)
+			g_book_slots.push_back(found[k - 1]);
+
+		g_book_runs.push_back(run);
+		return run.first;
+	}
+
+	/* The page a part's run begins on - the page its first triangle names
+	 * through the layer of its first corner - or -1 for an empty run or a
+	 * layer that names no page. Every material 15 run of the game names one
+	 * page throughout (TrgProbe -parts), and a triangle on any other page
+	 * keeps its own page (see the part loop). */
+	inline int RunFirstPage(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart::Pass& run)
+	{
+		if (!run.count || run.start >= trg.indices.size())
+			return -1;
+
+		const unsigned int corner = trg.indices[run.start];
+
+		if (corner >= trg.vertices.size())
+			return -1;
+
+		const unsigned char layer = trg.vertices[corner].layer;
+
+		return layer && (size_t)layer <= trg.textures.size()
+			? (int)trg.textures[layer - 1] : -1;
+	}
+
 	/* The gloss of one part.
 	 *
 	 * Origin: TROne has no reflection and no specular anywhere - its only
@@ -1082,6 +1204,19 @@ namespace
 		 * a draw call is one SetTexture. */
 		float flipTime = 0.0f;
 		int flipSlot[3] = { -1, -1, -1 };
+		/* The book of this draw call. `bookTime` is how long one page
+		 * stands, in seconds, and 0 means "no book"; `bookFirst` is page 1's
+		 * index in g_book_slots, `bookCount` the pages the book holds and
+		 * `bookPhase` the page the part shows at time 0 - see
+		 * MaterialBookTime. All four are in the sort key, because a draw call
+		 * shows one page: parts with the same book, step and phase share one,
+		 * parts that differ in any of them never do. `bookPart` is the .TRG
+		 * part of the first triangle, for the log alone and not in the key. */
+		float bookTime = 0.0f;
+		int bookFirst = -1;
+		int bookCount = 0;
+		int bookPhase = 0;
+		int bookPart = -1;
 		/* The gloss of this draw call - the .TRG material's own strength and
 		 * exponent, 0 for every part that names none. One pixel shader
 		 * constant, hence part of the sort key. */
@@ -1450,6 +1585,25 @@ namespace
 	int g_flip_dropped = 0;
 	int g_flip_ranges = 0;
 	int g_flip_calls = 0;
+	/* Once per level: what the build decided for every material 15 part and
+	 * pass (HDRenderBookPartInfo), and the draw calls the turning ones cost.
+	 * Per frame, with g_draw_calls: the draw calls that turned a book, and
+	 * the clock they turned on - the drawn frame's time, not the tick clock
+	 * (hd_book.h, HDBookClock). */
+	std::vector<HDRenderBookPart> g_book_parts;
+	int g_book_ranges = 0;
+	int g_book_calls = 0;
+	double g_book_clock = 0.0;
+	/* HDRenderBookPageOverride: the page every book shows, or -1 for the
+	 * clock's, which is what the engine always uses. */
+	int g_book_page = -1;
+	/* The book the log follows (HDRenderBookWatch): the first book draw call
+	 * drawn in the level, its group, and the page it showed last. The ranges
+	 * are not moved after the build, so the address names the draw call. */
+	const HDRange* g_book_watch = 0;
+	int g_book_watch_group = -1;
+	int g_book_watch_part = -1;
+	int g_book_watch_page = 0;
 	// Draw calls that carried a gloss, and the hd_reflect switch as a
 	// float, set once per frame beside the motion switch.
 	int g_gloss_calls = 0;
@@ -2289,6 +2443,8 @@ namespace
 		g_motion[1] = 0.0f;
 		g_motion[2] = f ? f->clock : 0.0f;
 		g_motion[3] = (f && f->motion) ? 1.0f : 0.0f;
+		// And the books' clock, which the draw reads on the processor.
+		g_book_clock = f ? f->bookClock : 0.0;
 
 		/* hd_reflect, the one switch over every gloss in the frame. Zero
 		 * makes the shader's specular term vanish, to the bit. */
@@ -2515,6 +2671,40 @@ bool HDRenderGlowPartInfo(int at, HDRenderGlowPart* out)
 	return true;
 }
 
+int HDRenderBookPartCount()
+{
+	return (int)g_book_parts.size();
+}
+
+bool HDRenderBookPartInfo(int at, HDRenderBookPart* out)
+{
+	if (!out || at < 0 || at >= (int)g_book_parts.size())
+		return false;
+
+	*out = g_book_parts[(size_t)at];
+	return true;
+}
+
+bool HDRenderBookWatch(int* group, int* part, int* page)
+{
+	if (!g_book_watch)
+		return false;
+
+	if (group)
+		*group = g_book_watch_group;
+	if (part)
+		*part = g_book_watch_part;
+	if (page)
+		*page = g_book_watch_page;
+
+	return true;
+}
+
+void HDRenderBookPageOverride(int page)
+{
+	g_book_page = page >= 0 ? page : -1;
+}
+
 void HDRenderShutdown()
 {
 	release_buffers();
@@ -2530,6 +2720,7 @@ void HDRenderShutdown()
 	g_draw_calls = 0;
 	g_cutout_calls = 0;
 	g_flip_calls = 0;
+	g_book_calls = 0;
 	g_gloss_calls = 0;
 	g_water_calls = 0;
 	g_error.clear();
@@ -3075,6 +3266,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_flip_parts = 0;
 	g_flip_dropped = 0;
 	g_flip_ranges = 0;
+	g_book_slots.clear();
+	g_book_runs.clear();
+	g_book_parts.clear();
+	g_book_ranges = 0;
+	g_book_watch = 0;
+	g_book_watch_group = -1;
+	g_book_watch_part = -1;
+	g_book_watch_page = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
 
@@ -3321,6 +3520,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float flatLight;		// see PartIsUnlit
 		float flipTime;			// see MaterialFlipTime
 		int flipSlot[3];		// see MaterialFlipSlots
+		float bookTime;			// see MaterialBookTime
+		int bookFirst, bookCount, bookPhase;	// see MaterialBookSlots
+		int bookPart;			// the .TRG part, for the log
 		float gloss, glossPower;	// see MaterialGloss
 		float ripple[3];		// see MaterialRipple
 		float blend;			// see MaterialBlend
@@ -3410,6 +3612,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * belongs - the alpha pass has its own reference and the
 				 * additive pass has none. */
 				const float aref = pass == 0 ? MaterialAlphaRef(part) : 0.0f;
+				/* The page a material 15 part's book begins at: the page
+				 * of the run's first triangle - see MaterialBookTime. -1
+				 * for every other part, which never asks. */
+				const int book_page0 = part.material == HD_TRG_MATERIAL_BOOK
+					? RunFirstPage(trg, run) : -1;
 				/* The weight and the swing belong to the additive pass
 				 * and to nothing else - the same part's opaque and alpha
 				 * runs are a surface and keep their picture to the bit. */
@@ -3579,6 +3786,47 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						g_flip_parts++;
 					else
 						g_flip_dropped++;
+				}
+
+				/* The book. How long a page stands, where the part starts
+				 * in the cycle, how many pages and where pages 1 to N - 1
+				 * stand in g_book_slots - in every pass the file puts the
+				 * part in, the opaque fan floors and monitors as much as the
+				 * additive flames. A part whose numbers or pages do not all
+				 * resolve keeps its own page and is counted as dropped; every
+				 * part that is not material 15 has no book at all. Only the
+				 * triangles on the book's own first page turn with it. */
+				float btime = MaterialBookTime(part);
+				const int bcount = btime != 0.0f ? (int)part.param[1] : 0;
+				const int bphase = btime != 0.0f ? (int)part.param[0] : 0;
+				const int bslot0 = book_page0 >= 0
+					? HDPageCacheSlotOf(book_page0) : -1;
+				int bfirst = -1;
+
+				if (btime != 0.0f)
+				{
+					if (bslot0 >= 0)
+						bfirst = MaterialBookSlots(book_page0, bcount);
+
+					if (bfirst < 0)
+						btime = 0.0f;
+				}
+
+				if (part.material == HD_TRG_MATERIAL_BOOK && run.count)
+				{
+					HDRenderBookPart book;
+
+					book.group = (int)g;
+					book.part = (int)part_at;
+					book.pass = pass;
+					book.page0 = book_page0;
+					book.pages = btime != 0.0f ? bcount : 1;
+					book.pageLast = book_page0 + book.pages - 1;
+					book.step = btime;
+					book.phase = bphase;
+					book.weight = draw_weight;
+					book.dropped = btime != 0.0f ? 0 : 1;
+					g_book_parts.push_back(book);
 				}
 
 				if (pass == 0 && scrolls)
@@ -3879,6 +4127,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.flipSlot[0] = fslot[0];
 					tri.flipSlot[1] = fslot[1];
 					tri.flipSlot[2] = fslot[2];
+					{
+						const bool turns = btime != 0.0f && slot == bslot0;
+
+						tri.bookTime = turns ? btime : 0.0f;
+						tri.bookFirst = turns ? bfirst : -1;
+						tri.bookCount = turns ? bcount : 0;
+						tri.bookPhase = turns ? bphase : 0;
+						tri.bookPart = turns ? (int)part_at : -1;
+					}
 					tri.gloss = gloss;
 					tri.glossPower = gloss_power;
 					tri.ripple[0] = ripple[0];
@@ -3916,6 +4173,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (a.flipSlot[0] != b.flipSlot[0]) return a.flipSlot[0] < b.flipSlot[0];
 					if (a.flipSlot[1] != b.flipSlot[1]) return a.flipSlot[1] < b.flipSlot[1];
 					if (a.flipSlot[2] != b.flipSlot[2]) return a.flipSlot[2] < b.flipSlot[2];
+					/* And a book is one SetTexture per frame as well: one
+					 * draw call shows one page, so the book, its step and
+					 * its phase all belong in the key. Zero and -1 on every
+					 * part that is not material 15, so nothing else moves. */
+					if (a.bookTime != b.bookTime) return a.bookTime < b.bookTime;
+					if (a.bookFirst != b.bookFirst) return a.bookFirst < b.bookFirst;
+					if (a.bookCount != b.bookCount) return a.bookCount < b.bookCount;
+					if (a.bookPhase != b.bookPhase) return a.bookPhase < b.bookPhase;
 					// The gloss is one more pixel constant per draw call.
 					if (a.gloss != b.gloss) return a.gloss < b.gloss;
 					if (a.glossPower != b.glossPower) return a.glossPower < b.glossPower;
@@ -3979,6 +4244,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.flipSlot[0] = tris[0].flipSlot[0];
 			range.flipSlot[1] = tris[0].flipSlot[1];
 			range.flipSlot[2] = tris[0].flipSlot[2];
+			range.bookTime = tris[0].bookTime;
+			range.bookFirst = tris[0].bookFirst;
+			range.bookCount = tris[0].bookCount;
+			range.bookPhase = tris[0].bookPhase;
+			range.bookPart = tris[0].bookPart;
 			range.gloss = tris[0].gloss;
 			range.glossPower = tris[0].glossPower;
 			range.ripple[0] = tris[0].ripple[0];
@@ -4007,6 +4277,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].flipSlot[0] == range.flipSlot[0] &&
 					tris[i].flipSlot[1] == range.flipSlot[1] &&
 					tris[i].flipSlot[2] == range.flipSlot[2] &&
+					tris[i].bookTime == range.bookTime &&
+					tris[i].bookFirst == range.bookFirst &&
+					tris[i].bookCount == range.bookCount &&
+					tris[i].bookPhase == range.bookPhase &&
 					tris[i].gloss == range.gloss &&
 					tris[i].glossPower == range.glossPower &&
 					tris[i].ripple[0] == range.ripple[0] &&
@@ -4032,6 +4306,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						if (range.flipTime != 0.0f)
 							g_flip_ranges++;
+
+						if (range.bookTime != 0.0f)
+							g_book_ranges++;
 
 						if (range.blend != 0.0f)
 							g_blend_ranges++;
@@ -4064,6 +4341,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.flipSlot[0] = tris[i].flipSlot[0];
 					range.flipSlot[1] = tris[i].flipSlot[1];
 					range.flipSlot[2] = tris[i].flipSlot[2];
+					range.bookTime = tris[i].bookTime;
+					range.bookFirst = tris[i].bookFirst;
+					range.bookCount = tris[i].bookCount;
+					range.bookPhase = tris[i].bookPhase;
+					range.bookPart = tris[i].bookPart;
 					range.gloss = tris[i].gloss;
 					range.glossPower = tris[i].glossPower;
 					range.ripple[0] = tris[i].ripple[0];
@@ -4164,6 +4446,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if (range.flipTime != 0.0f)
 					g_flip_ranges++;
+
+				if (range.bookTime != 0.0f)
+					g_book_ranges++;
 
 				if (range.blend != 0.0f)
 					g_blend_ranges++;
@@ -4497,6 +4782,40 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->flipbookDrawn = g_flip_parts;
 		stats->flipbookDropped = g_flip_dropped;
 		stats->flipbookRanges = g_flip_ranges;
+
+		{
+			std::vector<int> pages;
+
+			for (size_t i = 0; i < g_book_parts.size(); i++)
+			{
+				const HDRenderBookPart& book = g_book_parts[i];
+
+				if (book.dropped)
+				{
+					stats->bookDropped++;
+					continue;
+				}
+
+				stats->bookParts++;
+
+				if (book.pass == 2)
+					stats->bookAdditive++;
+
+				if (stats->bookParts == 1 || book.step < stats->bookStepMin)
+					stats->bookStepMin = book.step;
+
+				if (stats->bookParts == 1 || book.step > stats->bookStepMax)
+					stats->bookStepMax = book.step;
+
+				for (int k = 0; k < book.pages; k++)
+					pages.push_back(book.page0 + k);
+			}
+
+			std::sort(pages.begin(), pages.end());
+			stats->bookPages = (int)(std::unique(pages.begin(), pages.end()) -
+				pages.begin());
+			stats->bookRanges = g_book_ranges;
+		}
 		stats->glossParts = g_gloss_parts;
 		stats->flatPlanes = g_flat_planes;
 		stats->blendParts = g_blend_parts;
@@ -4581,6 +4900,11 @@ void HDRenderLevelEnd()
 {
 	release_buffers();
 	HDPageCacheDestroy();
+
+	// The followed book's draw call goes with the level's ranges.
+	g_book_watch = 0;
+	g_book_watch_group = -1;
+	g_book_watch_part = -1;
 }
 
 /* ---------------------------------------------------------------- frame -- */
@@ -4670,6 +4994,7 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	g_draw_calls = 0;
 	g_cutout_calls = 0;
 	g_flip_calls = 0;
+	g_book_calls = 0;
 	g_gloss_calls = 0;
 	g_water_calls = 0;
 
@@ -5074,6 +5399,39 @@ namespace
 					page_slot = range.flipSlot[frame - 1];
 
 				g_flip_calls++;
+			}
+
+			/* The book. The page the clock names - the drawn frame's own
+			 * time, whole steps since the level began plus the phase,
+			 * modulo the count (hd_book.h, HDBookPage) - and page 0, the
+			 * range's own, where hd_motion is 0. One SetTexture per draw call
+			 * whatever the page, so a book costs no draw call more than a
+			 * still page. Zero bookTime - every draw call that is not
+			 * material 15 - skips the whole block. */
+			if (range.bookTime > 0.0f && (g_motion[3] != 0.0f || g_book_page >= 0))
+			{
+				const int page = g_book_page >= 0
+					? g_book_page % range.bookCount
+					: HDBookPage(g_book_clock, range.bookTime, range.bookCount,
+						range.bookPhase);
+
+				if (page > 0 && range.bookFirst >= 0 &&
+					(size_t)(range.bookFirst + page - 1) < g_book_slots.size())
+					page_slot = g_book_slots[(size_t)(range.bookFirst + page - 1)];
+
+				/* The book the log follows: the first one drawn in the
+				 * level, and the page it shows now. */
+				if (!g_book_watch)
+				{
+					g_book_watch = &range;
+					g_book_watch_group = (int)(&group - &g_groups[0]);
+					g_book_watch_part = range.bookPart;
+				}
+
+				if (g_book_watch == &range)
+					g_book_watch_page = page;
+
+				g_book_calls++;
 			}
 
 			IDirect3DTexture9* page = HDPageCacheSlotTexture(page_slot);
@@ -5596,6 +5954,12 @@ int HDRenderCutoutCalls()
 int HDRenderFlipbookCalls()
 {
 	return g_flip_calls;
+}
+
+// And how many turned a material 15 book.
+int HDRenderBookCalls()
+{
+	return g_book_calls;
 }
 
 // And how many carried a gloss out of their material.

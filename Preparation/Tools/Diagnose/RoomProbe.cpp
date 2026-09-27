@@ -113,6 +113,14 @@
  *     -addmat <n>     the additive pass draws only the ranges of .TRG
  *                     material n (2 the glows, 16 the seas): one material's
  *                     glow alone, for telling which of them moved a pixel.
+ *     -bookpage <n>   every .TRG material 15 book shows page n of its own
+ *                     run instead of the page the clock names - one book
+ *                     drawn page by page, to find its brightest page.
+ *                     Without it -time turns the books like everything else
+ *                     that moves (the page is whole steps of -time plus the
+ *                     part's phase), and -nomotion leaves them on page 0.
+ *                     One `book` line per material 15 part and pass says
+ *                     what the build made of it.
  *     -glowblend add|screen
  *                     how material 2 composes in the additive pass: screen
  *                     is the renderer's own, add the ONE / ONE sum every
@@ -2856,6 +2864,10 @@ static void FillLighting(HDFrameLighting& frame, HDRoomLighting& room,
 	frame.clock = (float)g_time;
 	frame.motion = g_motion ? 1 : 0;
 	frame.reflect = g_reflect ? 1 : 0;
+	/* The books turn on the drawn state's time. A picture is one moment
+	 * with no tick behind it, so that time is -time itself - the engine's
+	 * own at fps_mode 0 or on a frame drawn live. */
+	frame.bookClock = g_time;
 
 	if (g_bulb_count && view)
 		printf("  bulb 1 in view space: %.0f %.0f %.0f (radius %.0f, density %.4f)\n",
@@ -3523,6 +3535,8 @@ int main(int argc, char** argv)
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
+		printf("       -bookpage <n>   every material 15 book on page n of "
+			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
 		printf("       -glow   the additive pass alone over black, with and "
 			"without the scene's depth\n");
@@ -3693,6 +3707,11 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-nomotion"))
 			g_motion = false;
+		else if (!strcmp(argv[at], "-bookpage") && at + 1 < argc)
+		{
+			HDRenderBookPageOverride(atoi(argv[at + 1]));
+			at++;
+		}
 		else if (!strcmp(argv[at], "-black"))
 			g_black = true;
 		else if (!strcmp(argv[at], "-glow"))
@@ -4591,6 +4610,26 @@ int main(int argc, char** argv)
 		"%d kept their own page\n",
 		stats.flipbookParts, stats.flipbookDrawn, stats.flipbookRanges,
 		stats.flipbookDropped);
+	/* Material 15 is the book: N consecutive pages from the part's own, one
+	 * per step, the part's phase first. The totals the engine's motion line
+	 * carries, then one line per part and pass with the same fields as the
+	 * engine's `HDLOG book` line. */
+	printf("book: %d part(s) turning, %d of them additive, %d kept their own "
+		"page, %d distinct page(s), %d draw call(s), step %.3f..%.3f s\n",
+		stats.bookParts, stats.bookAdditive, stats.bookDropped,
+		stats.bookPages, stats.bookRanges, stats.bookStepMin,
+		stats.bookStepMax);
+
+	for (int i = 0; i < HDRenderBookPartCount(); i++)
+	{
+		HDRenderBookPart book;
+
+		if (HDRenderBookPartInfo(i, &book))
+			printf("  book group=%d part=%d page=%d..%d frames=%d step=%.3f "
+				"phase=%d pass=%d weight=%.3f dropped=%d\n", book.group,
+				book.part, book.page0, book.pageLast, book.pages, book.step,
+				book.phase, book.pass, book.weight, book.dropped);
+	}
 	// And the water side: how many HD vertices carry a surface mark, and how
 	// many of those the corner rule never found and the plane flood answered
 	// for.
@@ -5278,6 +5317,16 @@ int main(int argc, char** argv)
 
 	printf("HDRenderRoom returned %s after %d draw calls\n",
 		drew ? "true" : "FALSE", calls);
+
+	/* Of those, the draw calls that turned a book, and the page the first
+	 * of them showed - the book the engine's bookstep line follows. */
+	{
+		int group = -1, part = -1, page = 0;
+
+		if (HDRenderBookWatch(&group, &part, &page))
+			printf("book: %d draw call(s) turned a page; group %d part %d "
+				"shows page %d\n", HDRenderBookCalls(), group, part, page);
+	}
 
 	if (sky)
 		printf("sky: %d sky group(s), %d unlit part(s), HDRenderSky returned %s\n",

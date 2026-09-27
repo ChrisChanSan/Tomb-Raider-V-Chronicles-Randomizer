@@ -110,6 +110,15 @@ struct HDFrameLighting
 	 * themselves - the marble of Rome, the painted steel of the submarine.
 	 * Zero draws the same picture with no specular, to the bit. */
 	int reflect;
+
+	/* The time of the state this frame draws, in seconds: `clock` less the
+	 * part of a logic tick the drawn state stands behind it (hd_book.h,
+	 * HDBookClock). The .TRG material 15 books turn their pages on it, so
+	 * that at 60 frames a second a page stands for the same number of
+	 * presents every time. Equal to `clock` at fps_mode 0. A double, because
+	 * the page is a whole number of steps since the level began and a float
+	 * of an hour's seconds no longer tells two sixtieths apart cleanly. */
+	double bookClock;
 };
 
 // Per room. `waterTable` is 64 records of four bytes in WATERTAB order
@@ -471,6 +480,20 @@ struct HDRenderStats
 	int flipbookDrawn;
 	int flipbookDropped;
 	int flipbookRanges;
+	/* The material 15 books (hd_render.cpp, MaterialBookTime), counted per
+	 * part and pass that holds triangles: the ones whose every page resolved
+	 * and that turn, how many of those are in the additive pass, the ones
+	 * that keep their own page because a page or a number did not resolve,
+	 * the distinct pages the turning ones hold, the draw calls they cost, and
+	 * the shortest and longest time a page stands among them (0 and 0 where
+	 * none turns). */
+	int bookParts;
+	int bookAdditive;
+	int bookDropped;
+	int bookPages;
+	int bookRanges;
+	float bookStepMin;
+	float bookStepMax;
 	/* Opaque parts of materials 3 and 17 whose own numbers gave them a
 	 * gloss (hd_render.cpp, MaterialGloss). */
 	int glossParts;
@@ -599,6 +622,39 @@ struct HDRenderGlowPart
 };
 int HDRenderGlowPartCount();
 bool HDRenderGlowPartInfo(int at, HDRenderGlowPart* out);
+
+/* What the level build decided for one material 15 part in one pass
+ * (hd_render.cpp, MaterialBookTime), for the log and the diagnostic tool:
+ * the book's first and last page, how many pages it holds, how long one
+ * stands, where in the cycle the part starts, the weight it is drawn with
+ * (1 outside the additive pass), and 1 in `dropped` for a part that keeps
+ * its own page because a page or a number did not resolve. */
+struct HDRenderBookPart
+{
+	int group, part, pass;
+	int page0, pageLast;
+	int pages;
+	float step;
+	int phase;
+	float weight;
+	int dropped;
+};
+int HDRenderBookPartCount();
+bool HDRenderBookPartInfo(int at, HDRenderBookPart* out);
+
+/* The first book the frames of this level drew, and the page it showed in
+ * the last frame that drew it - the book the log follows page by page. False
+ * until a book has been drawn with hd_motion on. `group` and `part` name the
+ * part of the draw call's first triangle; the parts of one draw call share
+ * their book, step and phase, so they turn together. */
+bool HDRenderBookWatch(int* group, int* part, int* page);
+
+/* The diagnostic tool's -bookpage: every book shows page `page` of its own
+ * run, whatever the clock and the phase say, or runs on the clock again with
+ * -1. For finding a book's brightest page by drawing each in turn. The engine
+ * never calls it and there is no option and no registry key for it. */
+void HDRenderBookPageOverride(int page);
+
 void HDRenderShutdown();
 bool HDRenderReady();
 
@@ -926,6 +982,9 @@ int HDRenderCutoutCalls();
 // Of those, the draw calls that picked their page out of a material 13
 // flipbook rather than out of their own vertices.
 int HDRenderFlipbookCalls();
+// And the draw calls that turned a material 15 book, whatever page they
+// showed.
+int HDRenderBookCalls();
 // And how many of them carried a gloss out of their material.
 int HDRenderGlossCalls();
 // And how many drew a still water surface - a material 16 part with a

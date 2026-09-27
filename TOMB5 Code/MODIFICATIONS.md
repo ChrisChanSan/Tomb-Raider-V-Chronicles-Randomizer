@@ -7437,7 +7437,7 @@ statics that nothing read, and `Key()` read `keymap` alone, which is why
 `game/key_scheme.h` called Q, R and Numpad 0 placeholders for the three roles.
 
 **How.** Raw Input: `WinCreateWindow` registers usage page 1, usage 2, no flags, the game
-window as target (`specific/winmain.cpp:817`-`833`), so the mouse arrives as `WM_INPUT`
+window as target (`specific/winmain.cpp:822`-`838`), so the mouse arrives as `WM_INPUT`
 while the window is in the foreground. `WinMouseInput` (`:506`) folds the button flags -
 button n down on bit 2n, up on bit 2n + 1 - into a five-bit mask of the buttons held and
 one of the buttons pressed since the last take, whether captured or not, and adds the
@@ -7446,10 +7446,10 @@ absolute report (a tablet, a remote desktop) is turned into pixels and differenc
 against the previous position, the first one after a capture only seeding it. The dead
 `WM_MOUSEMOVE` stores are gone. The window procedure runs on the main thread inside
 `WinProcMsg`'s `GetMessage` loop (`:154`), which does nothing else once `GameMain` is
-started on its own thread (`:995`), so `WM_INPUT` is handled at the mouse's report rate
+started on its own thread (`:1000`), so `WM_INPUT` is handled at the mouse's report rate
 whatever the frame rate. The game thread takes what gathered with `WinMouseTake` (`:589`),
 an `InterlockedExchange` of both counters to 0 and the pressed mask ORed with the held
-one, once per `S_UpdateInput` (`specific/input.cpp:1186`) - once per logic tick in play
+one, once per `S_UpdateInput` (`specific/input.cpp:1192`) - once per logic tick in play
 (`game/control.cpp:293`) - so the counts of every drawn frame between two ticks reach the
 one tick at 30, 60 and the display's own rate alike, and a click shorter than a tick still
 counts for one. No lock: everything the two threads share is a `LONG` changed through the
@@ -7464,16 +7464,20 @@ The capture, `WinMouseCapture` (`:436`), runs on the main thread only, because
 it was found and a full screen that kept it at -1 stays hidden. While captured the clip
 rectangle is set again on every call, which `WM_MOVE` and `WM_SIZE` make. The game
 thread's two terms come from `WinMouseWant` (`:578`), called at the top of every
-`S_UpdateInput` (`input.cpp:1185`) with `tomb5.control_modern` and `App.fmv` and posting
+`S_UpdateInput` (`input.cpp:1191`) with `tomb5.control_modern` and `App.fmv` and posting
 `WM_APP_MOUSE` only on a change, so the *Control type* row, the start of a video
 (`specific/fmv.cpp:230`, then the player's own `S_UpdateInput`) and its end reach the
 window thread at once. The window's term comes from `WM_ACTIVATE` as its first statement,
-ahead of the FMV guard (`:645`-`650`), and from `WM_SETFOCUS` and `WM_KILLFOCUS`
-(`:637`-`643`); losing it also clears both button masks, because the up messages go to
-another window. The releases, each logging a line: the window going inactive or being
-minimised, the focus leaving, *Tank*, a video, `WM_CLOSE` (`:737`) and `WinClose`
-(`:753`), since a clip holds for the whole system. While the cursor is not captured the
-counts are dropped where they arrive and the buttons still count, as a keyboard key does.
+ahead of the FMV guard (`:650`-`655`), from `WM_SETFOCUS` and `WM_KILLFOCUS`
+(`:642`-`648`), and from `WM_SIZE` (`:625`-`632`), which takes it afresh as "the
+foreground window and not minimised": a window restored from the taskbar gets its
+`WM_ACTIVATE` while still minimised, which reads as inactive, and a later `WM_SETFOCUS` is
+not certain, so the restore itself seats the term again. Losing the term also clears both
+button masks, because the up messages go to another window. The releases, each logging a
+line: the window going inactive or being minimised, the focus leaving, *Tank*, a video,
+`WM_CLOSE` (`:742`) and `WinClose` (`:758`), since a clip holds for the whole system.
+While the cursor is not captured the counts are dropped where they arrive and the
+buttons still count, as a keyboard key does.
 
 The orbit term is pure arithmetic in `game/modern_camera.cpp`. `ModernCameraMouseGain`
 (`:154`) is the gain in 512ths of a unit per count, 16384 * 2^((s - 50) / 25) for a
@@ -7482,32 +7486,49 @@ shifted left by s / 25 (0 to 4), so the gain is 8, 16, 32, 64 and 128 units a co
 25, 50, 75 and 100 - 8192, 4096, 2048, 1024 and 512 counts a full turn of 65536 - and
 every step of the slider is the same 2.8 per cent. 512ths and not 256ths because the
 bottom end is a quarter of the middle and a quarter of every table value has to stay whole
-for the doubling to be exact. `ModernCameraMouseSteps` (`:196`) makes yaw = dx * gain /
+for the doubling to be exact. `ModernCameraMouseSteps` (`:242`) makes yaw = dx * gain /
 512 and pitch = -dy * gain / 512, the invert flipping the pitch alone, so a mouse pushed
-away looks up as the stick pushed forward does; the counts are bounded at 16384 either
-way and each step at 16384 units, a quarter turn a tick, so a flick cannot wrap past a
-half turn. The numbers are this engine's own: 2048 counts is about 13 cm of desk at 400
-counts per inch and 3.3 cm at 1600. `S_UpdateInput` hands the two steps to
-`ModernCameraMouse` (`input.cpp:1266`-`1268`, `game/camera.cpp:369`) inside the Modern
-block that also hands over the stick (`input.cpp:1209`); `ModernCameraOrbit` moves them
-into `MODERN_CAMERA_STATE::mouse_yaw` and `mouse_pitch` (`game/modern_camera.h:421`-`422`)
-before `ModernCameraUpdate` and clears its own copy (`camera.cpp:537`-`540`). The update
-counts a nonzero mouse step as steering (`modern_camera.cpp:683`-`684`), so it stands the
-return still and cancels a carried swing as the stick does; takes `stick_step =
-ModernWrap(rate(rs_x) + mouse_yaw)` (`:694`); adds `mouse_pitch` after the stick's pitch
-term, before the clamp; and clears both steps (`:706`-`708`). Nothing else in the camera
+away looks up as the stick pushed forward does. The numbers are this engine's own: 2048
+counts is about 13 cm of desk at 400 counts per inch and 3.3 cm at 1600.
+
+A step is bounded at 2048 units each way a tick (`MODERN_CAMERA_MOUSE_STEP_MAX`,
+`game/modern_camera.h:365`), 11.25 degrees, 337.5 degrees a second at 30 ticks, because
+the 60 fps interpolator calls a tick a camera cut, and draws it without interpolation,
+when the eye moves more than `INTERP_CAM_SNAP` (1024 Manhattan) or the aim does
+(`InterpCamAimCut`). The camera cut sweep in ModernTest measures the bound on both axes at
+once at the three target distances the engine sets: 485, 726 and 967 at 1024, 1536 and
+2048, no aim cut, the led eye 709 and walking in 954, while 2176 on both axes already
+measures 1027 with 648 aim cuts at 2048. The stick's own top, 2184 a tick at *Camera
+speed* 100, is about the same. The counts beyond the bound are not dropped:
+`ModernCameraMouseSpend` (`modern_camera.cpp:199`) spends at most the counts of one
+bounded step a tick - 64 at sensitivity 50, 16 at 100, 256 at 0 - and owes the rest to
+the next tick, so a brisk sweep turns the camera as far as the hand went, spread over a
+few more ticks. What is owed is bounded at half a turn of steps
+(`MODERN_CAMERA_MOUSE_OWED_MAX`, 1024 counts at 50), sixteen ticks of the largest step,
+so the camera goes on turning for at most about half a second after the hand stops; the
+counts past that are dropped. `S_UpdateInput` keeps the two owed counts
+(`input.cpp:747`), forgets them while the cursor is not captured (`:1278`), spends, and
+hands the two steps to `ModernCameraMouse` (`:1284`-`1288`, `game/camera.cpp:369`)
+inside the Modern block that also hands over the stick (`input.cpp:1215`);
+`ModernCameraOrbit` moves them into `MODERN_CAMERA_STATE::mouse_yaw` and `mouse_pitch`
+(`game/modern_camera.h:439`-`440`) before `ModernCameraUpdate` and clears its own copy
+(`camera.cpp:537`-`540`). The update counts a nonzero mouse step as steering
+(`modern_camera.cpp:729`-`730`), so it stands the return still and cancels a carried
+swing as the stick does; takes `stick_step = ModernWrap(rate(rs_x) + mouse_yaw)`
+(`:740`); adds `mouse_pitch` after the stick's pitch term, before the clamp; and clears
+both steps (`:752`-`754`). Nothing else in the camera
 changes: `ModernCameraPlayerStep` hands `stick_step` to her held course
 (`game/modern_state.cpp:417`), and the eye's lead takes the world yaw's step, the mouse's
 included. The first person view does not take the orbit's input: `FirstPersonCamera`
 looks along `lara.head_x_rot` and `head_y_rot` plus her own rotation
 (`game/camera.cpp:3005`), `ModernCameraActive` refuses the orbit under it (`:394`) and the
-modern seam excludes it (`input.cpp:1355`), so the mouse does not turn it.
+modern seam excludes it (`input.cpp:1378`), so the mouse does not turn it.
 
 The buttons are key codes above every scan code: `KEY_MOUSE_FIRST` 0x100 to
 `KEY_MOUSE_X2` 0x104 in Raw Input's order left, right, middle, X1, X2
 (`game/key_scheme.h:85`-`91`), with `KeySchemeIsMouse` (`:93`), `KeySchemeMouseBit`
 (`:99`) and `KeySchemeMouseName` (`:108`), which has the key tables' two columns, German
-and every other language. `Key()` (`input.cpp:1090` for the binding, `:1116` for the
+and every other language. `Key()` (`input.cpp:1094` for the binding, `:1120` for the
 default row's fallback) reads the button mask this `S_UpdateInput` took for a code at or
 above 0x100 and `keymap` below it; a code above 0x104 answers 0 instead of reading past
 `keymap`. The `static_assert`s say the Modern row's slots 9, 11 and 18 are the right, the
@@ -7523,8 +7544,12 @@ frame first, the lowest button on a tie, on the keyboard page only. The Modern r
 and `MKey*` as longs, so a code is stored as it is (`specific/registry.cpp:470`); a
 registry that already holds `MKey9`, `MKey11` and `MKey18` keeps the player's keys there,
 the buttons answering beside them through `Key()`'s default-row fallback, and *Reset to
-defaults* seats the new row. *Combat mode* at *Hold* needs nothing new: its seam
-(`input.cpp:2116`) reads `IN_DRAW` as `Key(9)` left it (`:1578`), a level read of the
+defaults* seats the new row. A set saved by this build is not safe for an engine that
+predates the mouse codes: that one indexes its 256-entry `keymap` with the code and reads
+past the end, and its bindings page names the buttons with Core's joystick names; *Reset
+to defaults* in that engine puts its own row back. *Combat mode* at *Hold* needs nothing
+new: its seam (`input.cpp:2139`) reads `IN_DRAW` as `Key(9)` left it (`:1601`), a level
+read of the
 mask, so a held right button keeps the weapons out - read from the code, not seen in
 play.
 
@@ -7539,28 +7564,36 @@ invertieren*, the values the table's own *on* and *off*); fields
 registry values `mouse_sens` and `mouse_invert`, written on a first run, read with 50 and
 off for a missing value and 50 for one over 100, and saved (`tomb5/tomb5.cpp:304`-`310`,
 `:525`-`531`, `:704`-`708`). The seams behind `-log`: `MOUSELOG f=<tick> dx=<counts>
-dy=<counts> buttons=0x<mask> yaw=<units> pitch=<units> sens=<0..100> captured=<0/1>`
-once per `S_UpdateInput` on which the mouse moved or the mask changed (`input.cpp:1287`),
-and `MOUSELOG capture=<on|off> active=<0/1> modern=<0/1> fmv=<0/1>` on every change of
-the capture (`winmain.cpp:480`).
+dy=<counts> buttons=0x<mask> yaw=<units> pitch=<units> sens=<0..100> captured=<0/1>
+owed_x=<counts> owed_y=<counts>` once per `S_UpdateInput` on which the mouse moved, a
+step was handed over (owed counts paid out with `dx=0 dy=0`) or the mask changed
+(`input.cpp:1309`), and `MOUSELOG capture=<on|off> active=<0/1> modern=<0/1> fmv=<0/1>`
+on every change of the capture (`winmain.cpp:480`).
 
-**Checked.** ModernTest 13647 checks, 0 failed (10827 before, 2820 new in `camera_mouse`,
-`Preparation/Tools/Diagnose/ModernTest.cpp:9059`, with `mouse_course_step` at `:9022`):
-the gain at both ends and the middle, its doubling every 25 steps and its even 2.8 per
-cent over the whole slider, the steps and their bounds, the invert swept over counts and
-sensitivities, a mouse tick against a stick tick of the same rate at 16 headings - world
-yaw, elevation and the step to the held course equal - and the held course taking that
-step whole, the stick and the mouse adding up, a mouse step as steering that cancels a
-swing and stands the return still, the hand-over cleared, the elevation clamp and the wrap
-past the half turn. MenuTest 36180 checks, 0 failed (35547 before; `key_mouse` at
-`Preparation/Tools/Diagnose/MenuTest.cpp:656` adds 275 - the codes, the predicate over
-every short, the bits, the ten names, the Modern row with its three buttons and still
-sound, the conflict rule with buttons - and `controls_mouse_rows` at `:1151` adds 358,
-reading the Controls table, the two rows' kind, gate and save class, their five strings
-and the registry names out of the tree and sweeping `MenuSliderStep`; the Modern row's
-Secondary check now names the left button and the Controls paging checks say twelve rows).
+**Checked.** ModernTest 13965 checks, 0 failed (10827 before, 3138 new: 3133 in
+`camera_mouse`, `Preparation/Tools/Diagnose/ModernTest.cpp:9124`, with
+`mouse_course_step` at `:9087`, and 5 in `camera_camcut` at `:7529`): the gain at both
+ends and the middle, its doubling every 25 steps and its even 2.8 per cent over the whole
+slider, the steps and their bounds, the spend at every sensitivity - the largest spend
+stays inside the step bound and one count more would pass it, a jolt leaves at most half
+a turn owed - the owed counts paid out tick by tick, set against a move back and capped,
+a sweep of 100 counts a tick for 20 ticks paid out whole at no more than the bound, the
+invert swept over counts and sensitivities, a mouse tick against a stick tick of the same
+rate at 16 headings - world yaw, elevation and the step to the held course equal - and
+the held course taking that step whole, the stick and the mouse adding up, a mouse step
+as steering that cancels a swing and stands the return still, the hand-over cleared, the
+elevation clamp and the wrap past the half turn; and the bound swept against the camera
+cut rule at the three target distances, for the ideal, the led eye and the eye walking
+in, with the step 128 units over it shown to cut. MenuTest 36180 checks, 0 failed (35547
+before; `key_mouse` at `Preparation/Tools/Diagnose/MenuTest.cpp:656` adds 275 - the
+codes, the predicate over every short, the bits, the ten names, the Modern row with its
+three buttons and still sound, the conflict rule with buttons - and `controls_mouse_rows`
+at `:1151` adds 358, reading the Controls table, the two rows' kind, gate and save class,
+their five strings and the registry names out of the tree and sweeping `MenuSliderStep`;
+the Modern row's Secondary check now names the left button and the Controls paging
+checks say twelve rows).
 InterpTest 635 and LipsTest 243 without the `.OBJ` folder and 270 with it, 0 failed, as
-before. The engine built as `PCtomb5 built Sep 27 2026 06:16:44`. Not measured: the game.
+before. The engine built as `PCtomb5 built Sep 27 2026 12:19:02`. Not measured: the game.
 
 **Unchanged.** *Tank* with an untouched registry: the capture's Modern term is 0, so the
 cursor is never caught and no count is ever gathered; no step is handed to any camera,
@@ -7572,11 +7605,14 @@ the mouse drives none of them. Every existing log line prints as before.
 
 **Decisions.** Raw Input (`WM_INPUT`) carries the counts and the buttons, not
 DirectInput's mouse device. The mouse turns the camera under *Modern* only; *Tank* keeps
-its classic look. The mouse does nothing in the menus and the inventory. The three Modern defaults
-are the Remaster's keyboard page: draw on the right button, look on the middle one, the
-secondary action on the left one. A full circle takes 2048 counts at the middle of the
-slider, and the slider spans a quarter to four times that; the yaw and the pitch share
-one gain, and the mouse's pitch invert is a setting of its own. The capture has no term
+its classic look. The mouse does nothing in the menus and the inventory. The three Modern
+defaults are the Remaster's keyboard page: draw on the right button, look on the middle
+one, the secondary action on the left one. A full circle takes 2048 counts at the middle
+of the slider, and the slider spans a quarter to four times that; the yaw and the pitch
+share one gain, and the mouse's pitch invert is a setting of its own. The camera turns no
+faster than 2048 units a tick with the mouse, so that the 60 fps interpolator never
+takes a mouse turn for a camera cut; a faster hand is paid out over the following ticks,
+at most half a turn behind, rather than drawn at 30 Hz. The capture has no term
 for the F4 outfit window: that window is drawn with `PrintString` and driven by `dbinput`
 (`specific/hd/hd_outfitmenu.cpp`), not an ImGui window, and wants nothing of the mouse,
 so it is a menu like the pause menu and the cursor stays caught under it.

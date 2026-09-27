@@ -472,7 +472,12 @@ bool LoadSettings()
 	 * holds MKey9, MKey11 and MKey18 keeps the player's keys there; the Modern
 	 * row's buttons for those three roles still answer beside them, as every
 	 * default key does that no binding has claimed (Key(),
-	 * specific/input.cpp). */
+	 * specific/input.cpp).
+	 *
+	 * A set saved by this build is not safe for an engine that predates the
+	 * mouse codes: that one indexes its 256-entry keymap with the code and
+	 * reads past the end, and its bindings page names the buttons with the old joystick names.
+	 * Reset to defaults in that engine puts its own row back. */
 	{
 		short* mset = KeySchemeSet(1);
 

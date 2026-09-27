@@ -623,7 +623,12 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		break;
 
 	case WM_SIZE:
-		WinMouseCapture();
+
+		/* The window's term is taken afresh here as well: a window restored
+		 * from the taskbar gets its WM_ACTIVATE while it is still minimised,
+		 * which says inactive, and a later WM_SETFOCUS is not certain, so the
+		 * restore itself is what says it is the active window again. */
+		WinMouseActive((GetForegroundWindow() == hwnd && !IsIconic(hwnd)) ? 1 : 0);
 		break;
 
 	case WM_INPUT:

@@ -742,6 +742,10 @@ static long joy_x, joy_y;
  * since the last call (WinMouseTake, specific\winmain.cpp). */
 static long mouse_buttons;
 
+// The counts each axis still owes the orbit (ModernCameraMouseSpend,
+// game\modern_camera.cpp).
+static long mouse_owed_x, mouse_owed_y;
+
 // The same mask for the Key bindings page, which captures a button the way it
 // captures a key (game\menu_frame.cpp).
 long InputMouseButtons()
@@ -1179,6 +1183,8 @@ long S_UpdateInput()
 	 * terms the game thread owns of the capture rule are reported first; the
 	 * window thread acts on a change. */
 	long mouse_dx, mouse_dy;
+	long mouse_spent_x = 0;
+	long mouse_spent_y = 0;
 	long mouse_yaw = 0;
 	long mouse_pitch = 0;
 
@@ -1262,8 +1268,22 @@ long S_UpdateInput()
 		 * cursor is captured, which is only ever under Modern, and they need no
 		 * dead zone: a resting mouse reports nothing. Not behind ControlMethod,
 		 * for the reason a key is not: the mouse is a device of its own, and a
-		 * player on the pad page can still reach for it. */
-		ModernCameraMouseSteps(mouse_dx, mouse_dy, (long)tomb5.mouse_sensitivity,
+		 * player on the pad page can still reach for it.
+		 *
+		 * The counts go through ModernCameraMouseSpend first, which spends at
+		 * most a step's worth a tick and owes the rest to the next one, so no
+		 * tick's step is large enough to be taken for a camera cut at 60 fps
+		 * (game\modern_camera.h). What is owed is forgotten when the cursor is
+		 * let go, as the gathered counts are. */
+		if (!WinMouseCaptured())
+		{
+			mouse_owed_x = 0;
+			mouse_owed_y = 0;
+		}
+
+		mouse_spent_x = ModernCameraMouseSpend(mouse_dx, (long)tomb5.mouse_sensitivity, &mouse_owed_x);
+		mouse_spent_y = ModernCameraMouseSpend(mouse_dy, (long)tomb5.mouse_sensitivity, &mouse_owed_y);
+		ModernCameraMouseSteps(mouse_spent_x, mouse_spent_y, (long)tomb5.mouse_sensitivity,
 			tomb5.mouse_invert ? 1 : 0, &mouse_yaw, &mouse_pitch);
 		ModernCameraMouse(mouse_yaw, mouse_pitch);
 
@@ -1274,19 +1294,22 @@ long S_UpdateInput()
 	 * button changed, never on a still one. `dx`/`dy` are the counts this call
 	 * took, `buttons` the mask Key() reads, `yaw`/`pitch` the steps handed to
 	 * the orbit (0 under Tank, where nothing is handed over), `sens` the
-	 * sensitivity they were scaled by, `captured` whether the cursor is held -
-	 * the capture's own line, on every change of it, comes from
-	 * specific\winmain.cpp. */
+	 * sensitivity they were scaled by, `captured` whether the cursor is held,
+	 * `owed_x`/`owed_y` the counts left over for later ticks. A call that took
+	 * nothing but still pays out owed counts logs as well, with dx=0 dy=0 and
+	 * the step it turned. The capture's own line, on every change of it, comes
+	 * from specific\winmain.cpp. */
 	if (gLogEnabled)
 	{
 		static long mouse_buttons_logged = 0;
 
-		if (mouse_dx || mouse_dy || mouse_buttons != mouse_buttons_logged)
+		if (mouse_dx || mouse_dy || mouse_yaw || mouse_pitch || mouse_buttons != mouse_buttons_logged)
 		{
 			mouse_buttons_logged = mouse_buttons;
-			Log("MOUSELOG f=%ld dx=%ld dy=%ld buttons=0x%lX yaw=%ld pitch=%ld sens=%ld captured=%ld",
+			Log("MOUSELOG f=%ld dx=%ld dy=%ld buttons=0x%lX yaw=%ld pitch=%ld sens=%ld captured=%ld"
+				" owed_x=%ld owed_y=%ld",
 				(long)GlobalCounter, mouse_dx, mouse_dy, mouse_buttons, mouse_yaw, mouse_pitch,
-				(long)tomb5.mouse_sensitivity, WinMouseCaptured());
+				(long)tomb5.mouse_sensitivity, WinMouseCaptured(), mouse_owed_x, mouse_owed_y);
 		}
 	}
 

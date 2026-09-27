@@ -89,6 +89,16 @@
  * INTERP_CAM_SNAP itself; its swept test measures 309 Manhattan at the
  * default speed and 616 at speed 100, both under 1024.
  *
+ * The mouse is held to the same promise. A mouse has no top speed of its own,
+ * so its step is bounded instead: at most MODERN_CAMERA_MOUSE_STEP_MAX, 2048
+ * units (11.25 degrees), each way a tick, whatever the sensitivity. The same
+ * sweep with 2048 on both axes at once measures 485, 726 and 967 Manhattan at
+ * the three target distances the engine sets (1024, 1536, 2048), with no aim
+ * cut, and the led eye walking in 954; 2176 on both axes already cuts at 2048.
+ * Counts beyond the bound are not dropped but owed to the next tick
+ * (ModernCameraMouseSpend), so a brisk sweep turns the camera as far as the
+ * hand went, only spread over a few more ticks.
+ *
  * MoveCamera's damping adds no margin: "pos += (ideal - pos) / speed" is a
  * first-order lag, and a lag fed a constant velocity settles at that same
  * velocity for as long as the push lasts.
@@ -337,15 +347,23 @@ enum modern_camera_constants
 	 * position, and the hand expects the same distance to mean the same
 	 * angle both ways.
 	 *
-	 * A step is at most a quarter turn a tick, 2700 degrees a second, which
-	 * no hand asks for on purpose; the bound keeps a flick from wrapping
-	 * past a half turn and turning the wrong way. The counts are bounded
-	 * first, so that counts times gain stays inside a long. */
+	 * A step is at most 2048 units a tick each way, 11.25 degrees, 337.5
+	 * degrees a second at 30 ticks: the largest step the camera cut sweep
+	 * above keeps under INTERP_CAM_SNAP at every target distance with the
+	 * yaw and the pitch moving at once. That is about the stick's own top
+	 * speed, 2184 units a tick at Camera speed 100. A tick spends at most
+	 * the counts that make that step - 64 at sensitivity 50, 16 at 100, 256
+	 * at 0 - and owes the rest to the next tick; what is owed is bounded at
+	 * half a turn of steps, 1024 counts at 50, so the camera never goes on
+	 * turning for more than about half a second after the hand has stopped,
+	 * and a jolt of counts cannot turn it the wrong way round. The counts
+	 * are bounded first, so that counts times gain stays inside a long. */
 	MODERN_CAMERA_MOUSE_GAIN = 32,			// units per count at sensitivity 50: 2048 counts a turn
 	MODERN_CAMERA_MOUSE_ONE = 512,			// the gain's fixed point
 	MODERN_CAMERA_MOUSE_SENS_FULL = 100,		// the slider's own top, like Camera speed
 	MODERN_CAMERA_MOUSE_SENS_DEFAULT = 50,		// the middle: the gain above, unscaled
-	MODERN_CAMERA_MOUSE_STEP_MAX = 16384,		// a quarter turn a tick
+	MODERN_CAMERA_MOUSE_STEP_MAX = 2048,		// the largest step camera_camcut keeps under the cut threshold
+	MODERN_CAMERA_MOUSE_OWED_MAX = 32768,		// half a turn of steps still owed to later ticks
 	MODERN_CAMERA_MOUSE_COUNTS_MAX = 16384		// 16384 * 128 * 512 = 2^30, inside a long
 };
 
@@ -428,6 +446,7 @@ long ModernCameraCarryStep(const MODERN_CAMERA_CFG* cfg, long total, long tick);
 long ModernCameraPullAxis(long target, long eye, long step, long steps);
 void ModernCameraSpeedRates(long speed, long* yaw_rate, long* pitch_rate);
 long ModernCameraMouseGain(long sensitivity);
+long ModernCameraMouseSpend(long taken, long sensitivity, long* owed);
 void ModernCameraMouseSteps(long dx, long dy, long sensitivity, long invert, long* yaw, long* pitch);
 void ModernCameraReset(MODERN_CAMERA_STATE* state);
 void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state,

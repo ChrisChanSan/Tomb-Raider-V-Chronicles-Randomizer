@@ -7698,6 +7698,71 @@ static void camera_camcut()
 			worst_broken, INTERP_CAM_SNAP);
 	}
 
+	/* And the mouse, which has no top speed of its own: its step is bounded at
+	 * MODERN_CAMERA_MOUSE_STEP_MAX each way, and the bound is what has to be
+	 * swept. Unlike the stick it can ask for the whole bound on both axes at
+	 * once - the pitch takes the yaw's gain - so both rates are the bound, at
+	 * every target distance the engine sets, for the ideal, the led eye and
+	 * the eye walking in. The step above the bound is swept as well, to show
+	 * that the bound is the edge and not a guess with room to spare. */
+	{
+		const double dists[3] = { 1024.0, 1536.0, 2048.0 };
+		const long m = MODERN_CAMERA_MOUSE_STEP_MAX;
+		long worst_ideal = 0;
+		long worst_walk = 0;
+		long mouse_cuts = 0;
+		long over;
+		long d;
+		LEAD_RUN led;
+
+		for (d = 0; d < 3; d++)
+		{
+			long speed;
+			double start;
+			long ideal = camcut_worst(m, m, cfg.pitch_min, cfg.pitch_max, dists[d], &cuts);
+
+			if (ideal > worst_ideal)
+				worst_ideal = ideal;
+
+			mouse_cuts += cuts;
+
+			for (speed = 10; speed >= 8; speed -= 2)
+				for (start = 1.0; start <= 8.0; start += 0.25)
+				{
+					lead_run(speed, m, m, 1, 120, dists[d], start, &led);
+
+					if (led.worst_lead > worst_walk)
+						worst_walk = led.worst_lead;
+				}
+
+			printf("  measured: the mouse's largest step, %ld on both axes, at distance %4ld"
+				" moves the ideal eye %ld\n", m, (long)dists[d], ideal);
+		}
+
+		lead_run(10, m, m, 1, 400, radius, 1.0, &led);
+
+		printf("            the led eye %ld, walking in %ld - a margin of %.2f\n",
+			led.worst_eye, worst_walk, (double)INTERP_CAM_SNAP / (double)worst_ideal);
+
+		ok(worst_ideal < INTERP_CAM_SNAP,
+			"mouse: its largest step on both axes never trips the eye test, at any distance",
+			worst_ideal, INTERP_CAM_SNAP);
+		ok(mouse_cuts == 0, "mouse: nor the view direction test", mouse_cuts, 0);
+		ok(led.worst_eye < INTERP_CAM_SNAP,
+			"mouse: nor the eye the step leads", led.worst_eye, INTERP_CAM_SNAP);
+		ok(worst_walk < INTERP_CAM_SNAP,
+			"mouse: nor the led eye walking in from far out", worst_walk, INTERP_CAM_SNAP);
+
+		over = camcut_worst(m + 128, m + 128, cfg.pitch_min, cfg.pitch_max, 2048.0, &cuts);
+
+		printf("            128 units (0.7 degrees) more on both axes measures %ld at distance"
+			" 2048, with %ld aim cuts\n", over, cuts);
+
+		ok(over >= INTERP_CAM_SNAP || cuts > 0,
+			"mouse: and a step 128 units larger already cuts at the rope's distance",
+			over, INTERP_CAM_SNAP);
+	}
+
 	/* The one thing that cuts at a wall is vanilla's, and it is worth
 	 * a number so that nobody hunts for it in the orbit: the five candidate
 	 * positions of ChaseCamera are the wanted angle and the four world
@@ -9062,7 +9127,7 @@ static void camera_mouse()
 	MODERN_CAMERA_CFG fast;
 	MODERN_CAMERA_STATE a;
 	MODERN_CAMERA_STATE b;
-	long s, y, p, yi, pi, dx, dy, heading;
+	long s, y, p, yi, pi, dx, dy, heading, t;
 	long even = 0;
 
 	printf("\nthe mouse - a second input to the same orbit\n");
@@ -9109,23 +9174,99 @@ static void camera_mouse()
 	ok(even == 0, "mouse: every step of the slider is worth the same 2.8 per cent", even, 0);
 
 	/* 2. The steps. */
-	ModernCameraMouseSteps(100, 0, 50, 0, &y, &p);
-	ok(y == 3200 && p == 0, "mouse: 100 counts to the right at 50 are 3200 units of yaw and no pitch", y, 3200);
-	ModernCameraMouseSteps(-100, 0, 50, 0, &y, &p);
-	ok(y == -3200, "mouse: to the left is exactly the other way", y, -3200);
-	ModernCameraMouseSteps(0, -100, 50, 0, &y, &p);
-	ok(p == 3200 && y == 0,
-		"mouse: pushed away raises the elevation - it looks up, as the stick pushed forward does", p, 3200);
-	ModernCameraMouseSteps(0, 100, 50, 0, &y, &p);
-	ok(p == -3200, "mouse: pulled back looks down", p, -3200);
+	ModernCameraMouseSteps(50, 0, 50, 0, &y, &p);
+	ok(y == 1600 && p == 0, "mouse: 50 counts to the right at 50 are 1600 units of yaw and no pitch", y, 1600);
+	ModernCameraMouseSteps(-50, 0, 50, 0, &y, &p);
+	ok(y == -1600, "mouse: to the left is exactly the other way", y, -1600);
+	ModernCameraMouseSteps(0, -50, 50, 0, &y, &p);
+	ok(p == 1600 && y == 0,
+		"mouse: pushed away raises the elevation - it looks up, as the stick pushed forward does", p, 1600);
+	ModernCameraMouseSteps(0, 50, 50, 0, &y, &p);
+	ok(p == -1600, "mouse: pulled back looks down", p, -1600);
 	ModernCameraMouseSteps(1, 0, 0, 0, &y, &p);
 	ok(y == 8, "mouse: one count at the bottom of the slider is still 8 units - no count is lost", y, 8);
 	ModernCameraMouseSteps(100000, -100000, 100, 0, &y, &p);
 	ok(y == MODERN_CAMERA_MOUSE_STEP_MAX && p == MODERN_CAMERA_MOUSE_STEP_MAX,
-		"mouse: a flick is held to a quarter turn a tick, both ways", y, MODERN_CAMERA_MOUSE_STEP_MAX);
+		"mouse: raw counts handed straight in are still held to the step bound, both ways",
+		y, MODERN_CAMERA_MOUSE_STEP_MAX);
 	ModernCameraMouseSteps(-100000, 100000, 100, 0, &y, &p);
 	ok(y == -MODERN_CAMERA_MOUSE_STEP_MAX && p == -MODERN_CAMERA_MOUSE_STEP_MAX,
-		"mouse: and the other quarter turn the other way", y, -MODERN_CAMERA_MOUSE_STEP_MAX);
+		"mouse: and the other way round", y, -MODERN_CAMERA_MOUSE_STEP_MAX);
+
+	/* 2b. The spend: a tick spends at most the counts of one bounded step and
+	 * owes the rest. Swept over the whole slider, the largest spend turns the
+	 * camera by the bound or just under it, and one count more would pass it -
+	 * so the bound is reached and never exceeded. */
+	for (s = 0; s <= 100; s++)
+	{
+		long owed = 0;
+		long most = ModernCameraMouseSpend(1000000, s, &owed);
+		long gain = ModernCameraMouseGain(s);
+
+		ModernCameraMouseSteps(most, -most, s, 0, &y, &p);
+		ok(y <= MODERN_CAMERA_MOUSE_STEP_MAX && p <= MODERN_CAMERA_MOUSE_STEP_MAX,
+			"mouse: the largest spend never makes a step over the bound", y, MODERN_CAMERA_MOUSE_STEP_MAX);
+		ok((most + 1) * gain / MODERN_CAMERA_MOUSE_ONE > MODERN_CAMERA_MOUSE_STEP_MAX,
+			"mouse: and one count more would", (most + 1) * gain / MODERN_CAMERA_MOUSE_ONE,
+			MODERN_CAMERA_MOUSE_STEP_MAX);
+		ok(owed > 0 && owed * gain / MODERN_CAMERA_MOUSE_ONE <= MODERN_CAMERA_MOUSE_OWED_MAX,
+			"mouse: a jolt leaves at most half a turn owed", owed * gain / MODERN_CAMERA_MOUSE_ONE,
+			MODERN_CAMERA_MOUSE_OWED_MAX);
+	}
+
+	{
+		long owed = 0;
+
+		ok(ModernCameraMouseSpend(1000, 50, &owed) == 64 && owed == 936,
+			"mouse: at 50 a tick spends 64 counts and owes the rest", owed, 936);
+		ok(ModernCameraMouseSpend(0, 50, &owed) == 64 && owed == 872,
+			"mouse: the next tick pays 64 more without a new count", owed, 872);
+		ok(ModernCameraMouseSpend(-900, 50, &owed) == -28 && owed == 0,
+			"mouse: a move back is set against what is owed", owed, 0);
+		owed = 0;
+		ok(ModernCameraMouseSpend(-5, 50, &owed) == -5 && owed == 0,
+			"mouse: a small move is spent whole, nothing owed", owed, 0);
+		owed = 0;
+		ok(ModernCameraMouseSpend(100000, 50, &owed) == 64 && owed == 1024,
+			"mouse: what is owed stops at half a turn, 1024 counts at 50", owed, 1024);
+		owed = 0;
+		ModernCameraMouseSpend(1, 100, &owed);
+		ok(owed == 0, "mouse: one count at 100 is spent at once", owed, 0);
+		owed = 0;
+		y = ModernCameraMouseSpend(1000, 100, &owed);
+		owed = 0;
+		p = ModernCameraMouseSpend(1000, 0, &owed);
+		ok(y == 16 && p == 256, "mouse: 16 counts a tick at the top of the slider, 256 at the bottom", y, 16);
+	}
+
+	/* No count is lost under the half-turn bound: a sweep of 2000 counts at 50,
+	 * handed in as 100 a tick for 20 ticks - 3000 counts a second, about 9.5 cm
+	 * a second at 800 counts per inch, faster than one tick's bound of 64 -
+	 * turns the camera by exactly 2000 counts times the gain once the ticks
+	 * after it have paid out, and no single tick's step passes the bound. */
+	{
+		long owed = 0;
+		long total_counts = 0;
+		long total_yaw = 0;
+		long worst = 0;
+
+		for (t = 0; t < 60; t++)
+		{
+			const long spent = ModernCameraMouseSpend(t < 20 ? 100 : 0, 50, &owed);
+
+			ModernCameraMouseSteps(spent, 0, 50, 0, &y, &p);
+			total_counts += spent;
+			total_yaw += y;
+
+			if (absl(y) > worst)
+				worst = absl(y);
+		}
+
+		ok(total_counts == 2000 && owed == 0, "mouse: a brisk sweep is paid out whole", total_counts, 2000);
+		ok(total_yaw == 2000 * 32, "mouse: and turns the camera as far as the hand went", total_yaw, 2000 * 32);
+		ok(worst == MODERN_CAMERA_MOUSE_STEP_MAX, "mouse: never faster than the bound", worst,
+			MODERN_CAMERA_MOUSE_STEP_MAX);
+	}
 
 	/* The invert, swept: it flips the pitch and touches nothing else. */
 	for (s = 0; s <= 100; s += 25)
@@ -9139,11 +9280,11 @@ static void camera_mouse()
 			}
 
 	/* 3. A mouse tick against a stick tick of the same size. The stick is
-	 * given a rate of exactly what 100 counts at 50 are, so the two inputs ask
+	 * given a rate of exactly what 50 counts at 50 are, so the two inputs ask
 	 * for the same step and everything after must agree. */
 	fast = cfg;
-	fast.yaw_rate = 3200;
-	fast.pitch_rate = 3200;
+	fast.yaw_rate = 1600;
+	fast.pitch_rate = 1600;
 
 	for (heading = -32768; heading < 32768; heading += 4099)
 	{
@@ -9151,27 +9292,27 @@ static void camera_mouse()
 		ModernCameraUpdate(&fast, &a, fast.stick_full, -fast.stick_full, heading, 0, 0, 0, 0);
 
 		ModernCameraReset(&b);
-		ModernCameraMouseSteps(100, -100, 50, 0, &y, &p);
+		ModernCameraMouseSteps(50, -50, 50, 0, &y, &p);
 		b.mouse_yaw = y;
 		b.mouse_pitch = p;
 		ModernCameraUpdate(&cfg, &b, 0, 0, heading, 0, 0, 0, 0);
 
 		ok(b.world_yaw == a.world_yaw,
-			"mouse: 100 counts at 50 turn the world yaw as far as the stick tick does",
+			"mouse: 50 counts at 50 turn the world yaw as far as the stick tick does",
 			b.world_yaw, a.world_yaw);
-		ok(b.world_yaw == ModernWrap(heading + 3200),
-			"mouse: which is the counts times the gain", b.world_yaw, ModernWrap(heading + 3200));
+		ok(b.world_yaw == ModernWrap(heading + 1600),
+			"mouse: which is the counts times the gain", b.world_yaw, ModernWrap(heading + 1600));
 		ok(b.offset_pitch == a.offset_pitch,
 			"mouse: and raise the elevation as far as the stick pushed forward",
 			b.offset_pitch, a.offset_pitch);
-		ok(b.stick_step == a.stick_step && b.stick_step == 3200,
+		ok(b.stick_step == a.stick_step && b.stick_step == 1600,
 			"mouse: the step handed to her held course is the stick's", b.stick_step, a.stick_step);
 	}
 
-	ok(mouse_course_step(3200) == 3200,
-		"mouse: her held course takes that step whole", mouse_course_step(3200), 3200);
-	ok(mouse_course_step(-3200) == -3200,
-		"mouse: and the other way", mouse_course_step(-3200), -3200);
+	ok(mouse_course_step(1600) == 1600,
+		"mouse: her held course takes that step whole", mouse_course_step(1600), 1600);
+	ok(mouse_course_step(-1600) == -1600,
+		"mouse: and the other way", mouse_course_step(-1600), -1600);
 	ok(mouse_course_step(0) == 0,
 		"mouse: while a tick without a step leaves it where it is", mouse_course_step(0), 0);
 
@@ -9210,30 +9351,36 @@ static void camera_mouse()
 	ok(b.steering == 0 && b.ret != 0, "mouse: and once she runs, the return falls home again", b.ret, 1);
 
 	/* 5. The elevation clamp holds the mouse as it holds the stick. From the
-	 * resting -1820, one quarter turn reaches 14564, so the second is the one
-	 * the clamp has to stop. */
+	 * resting -1820 the largest step needs nine ticks to pass 15470, so twenty
+	 * reach the clamp either way with room to spare. */
 	ModernCameraReset(&b);
-	b.mouse_pitch = MODERN_CAMERA_MOUSE_STEP_MAX;
-	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
-	b.mouse_pitch = MODERN_CAMERA_MOUSE_STEP_MAX;
-	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+
+	for (t = 0; t < 20; t++)
+	{
+		b.mouse_pitch = MODERN_CAMERA_MOUSE_STEP_MAX;
+		ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	}
+
 	ok(b.offset_pitch == cfg.pitch_max, "mouse: the elevation stops at ChaseCamera's clamp below her",
 		b.offset_pitch, cfg.pitch_max);
-	b.mouse_pitch = -MODERN_CAMERA_MOUSE_STEP_MAX;
-	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
-	b.mouse_pitch = -MODERN_CAMERA_MOUSE_STEP_MAX;
-	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+
+	for (t = 0; t < 20; t++)
+	{
+		b.mouse_pitch = -MODERN_CAMERA_MOUSE_STEP_MAX;
+		ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
+	}
+
 	ok(b.offset_pitch == cfg.pitch_min, "mouse: and at the 60 degree cap above her",
 		b.offset_pitch, cfg.pitch_min);
 
-	/* 6. The largest step wraps the short way: a quarter turn from near the
-	 * half turn lands on the other side, not a turn back. */
+	/* 6. The largest step wraps the short way: the bound from near the half
+	 * turn lands on the other side, not a turn back. */
 	ModernCameraReset(&b);
 	b.offset_yaw = 32000;
 	b.mouse_yaw = MODERN_CAMERA_MOUSE_STEP_MAX;
 	ModernCameraUpdate(&cfg, &b, 0, 0, 0, 0, 0, 0, 0);
 	ok(b.world_yaw == ModernWrap(32000 + MODERN_CAMERA_MOUSE_STEP_MAX),
-		"mouse: a quarter turn past the half turn wraps round", b.world_yaw,
+		"mouse: the largest step past the half turn wraps round", b.world_yaw,
 		ModernWrap(32000 + MODERN_CAMERA_MOUSE_STEP_MAX));
 
 	/* 7. A reset forgets a hand-over as it forgets the rest. */

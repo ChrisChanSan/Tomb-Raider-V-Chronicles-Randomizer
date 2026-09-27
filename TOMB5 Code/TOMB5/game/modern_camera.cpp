@@ -183,6 +183,50 @@ long ModernCameraMouseGain(long sensitivity)
 	return g << (k + 2);
 }
 
+/* How many of one axis's counts this tick spends, with `owed` carrying the
+ * rest from tick to tick. `taken` is what the tick gathered; added to what was
+ * owed, it is spent up to the counts that make a MODERN_CAMERA_MOUSE_STEP_MAX
+ * step at this sensitivity, and the remainder is owed to the next tick, so the
+ * camera cut detection never sees a larger step and a sweep still turns the
+ * camera as far as the hand went (game\modern_camera.h says why the bound is
+ * 2048). What stays owed is bounded at MODERN_CAMERA_MOUSE_OWED_MAX worth of
+ * steps, sixteen ticks of the largest one, and the counts beyond that are
+ * dropped: an arrear longer than that is no longer the hand's movement.
+ *
+ * Both limits are whole counts, the division truncating, so a spent count
+ * times the gain never passes the bound. A sensitivity changed while counts
+ * are owed scales them by the new gain, as it would scale new ones. */
+long ModernCameraMouseSpend(long taken, long sensitivity, long* owed)
+{
+	const long gain = ModernCameraMouseGain(sensitivity);
+	const long most = MODERN_CAMERA_MOUSE_STEP_MAX * MODERN_CAMERA_MOUSE_ONE / gain;
+	const long keep = MODERN_CAMERA_MOUSE_OWED_MAX * MODERN_CAMERA_MOUSE_ONE / gain;
+	long all, spent;
+
+	if (taken > MODERN_CAMERA_MOUSE_COUNTS_MAX)
+		taken = MODERN_CAMERA_MOUSE_COUNTS_MAX;
+	else if (taken < -MODERN_CAMERA_MOUSE_COUNTS_MAX)
+		taken = -MODERN_CAMERA_MOUSE_COUNTS_MAX;
+
+	all = *owed + taken;
+	spent = all;
+
+	if (spent > most)
+		spent = most;
+	else if (spent < -most)
+		spent = -most;
+
+	all -= spent;
+
+	if (all > keep)
+		all = keep;
+	else if (all < -keep)
+		all = -keep;
+
+	*owed = all;
+	return spent;
+}
+
 /* One tick of mouse counts as the orbit's two steps. dx is to the right and dy
  * towards the player, as Raw Input reports them. The yaw follows dx the way
  * the stick's x axis does. The pitch follows dy the way the stick's y axis
@@ -192,7 +236,9 @@ long ModernCameraMouseGain(long sensitivity)
  * invert_pitch is a different setting and does not reach this.
  *
  * Counts times gain is taken whole and divided once, truncating toward zero,
- * so a count to the left is exactly the negative of a count to the right. */
+ * so a count to the left is exactly the negative of a count to the right.
+ * The counts come through ModernCameraMouseSpend, so the step bound below
+ * does not bite on them; it stands for a caller that hands in raw counts. */
 void ModernCameraMouseSteps(long dx, long dy, long sensitivity, long invert, long* yaw, long* pitch)
 {
 	const long gain = ModernCameraMouseGain(sensitivity);

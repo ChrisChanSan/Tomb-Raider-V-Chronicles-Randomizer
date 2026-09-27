@@ -7619,6 +7619,90 @@ so it is a menu like the pause menu and the cursor stays caught under it.
 
 **Commits.** `fa1028b`, `8d0f5b7`, `8236d73`, `26484e8`, `d12e07e`
 
+### The movement keys as the modern stick
+2026-09-27
+
+**What.** Under *Control type: Modern* the four movement keys are the modern control's
+left stick: forward, back, left and right each push one axis to full deflection, so the
+forward key runs Lara where the camera looks and the other three move her as the stick
+pushed that way does, on the keyboard page and on the pad page alike. The tick line of
+`MODERNLOG` ends in `feed=pad`, `feed=keys` or `feed=none`.
+
+**Why.** The scheme translated only the pad's left stick. Its seam was closed on the
+keyboard page, where `ControlMethod == 1` was a term of `modern_seam`, and on the pad page
+a stick at rest left the keys' classic bits standing. So a keyboard player under Modern
+moved as at Tank - the forward key ran her along her own heading, left and right turned
+her - while the mouse turned the camera round her.
+
+**How.** `ModernKeyStick` (`game/modern_move.cpp:240`, declared at
+`game/modern_move.h:666`) is pure. With the pad's pair off centre it hands that pair on
+unchanged and answers `MODERN_FEED_PAD`; otherwise it makes x = (right ? 128 : 0) minus
+(left ? 128 : 0) and y = (back ? 128 : 0) minus (forward ? 128 : 0), 128 being
+`MODERN_STICK_FULL`, and answers `MODERN_FEED_KEYS`, or `MODERN_FEED_NONE` for 0/0
+(`modern_move.h:197`-`199`). The sign is the pad's: a stick pushed forward reads y
+negative on both paths (`specific/dxshell.cpp:889` on DirectInput, `-ly / 256` at `:1016`
+on XInput, the d-pad's up -20 at `:902` and `:1022`), the classic assembly reads
+`tank_y < -8` as `IN_FORWARD` (`specific/input.cpp:1460`) and `ModernTranslate` takes the
+stick's angle from (x, -y) (`modern_move.cpp:1518`). The call stands in the seam itself
+(`input.cpp:1534`-`1537`), inside `if (modern_seam && !modern_tank)`, reads the same four
+`Key(0..3)` as the classic bits above it (`:1464`-`1474`) and writes a local pair,
+`seam_x`/`seam_y`, so `move_x`/`move_y`, `tank_x`/`tank_y` and the classic assembly keep
+the pad's own reading. `ControlMethod == 1` leaves `modern_seam` (`:1385`); the pad's pair
+is kept out on the keyboard page instead: the block that zeroes it asks
+`tomb5.control_modern && !ModernMenuReadsPad()` (`:1347`) and applies the stick's dead
+zone only under `ControlMethod == 1` (`:1359`), so a controller resting on the desk, or a
+d-pad press that reads +-20 in `joy_x`/`joy_y`, cannot steer a keyboard player. The keys'
+classic bits stay in the word: when the translation takes the vector, the one write in
+`ModernUpdateInput` (`game/modern_state.cpp:561`) replaces `MODERN_MOVE_MASK` as it does
+for the pad, and when it steps aside - a classic state, a ladder, a push block - they
+stand. The look key's bypass is the same code as before: `modern_tank` (`input.cpp:1393`)
+stands the seam aside and the keys' classic bits turn her on the spot. The walk key is
+still read after the seam. `ModernUpdateInput` takes the source as a sixth argument
+(`game/modern_state.h:49`, `modern_state.cpp:150`), and its tick line
+(`modern_state.cpp:672`) ends in `feed=%s` through `ModernFeedName` (`:140`). The field is
+not called `src`: the line's `src=` already says whether the translation wrote the word
+(`pad`) or stood aside (`keys`), and keeps saying it.
+
+The keyboard page now runs the whole seam, and with it two things the pad page already
+had: with no weapon ready the look key is taken out of the word (`input.cpp:1831`), so
+held it steers her as described above instead of turning the classic look camera, and
+`ModernHeadingAfterInput` answers on the keyboard page too, so the orbit swings after a
+roll or a jump's twist as it does for a pad player.
+
+**Checked.** ModernTest 13992 checks, 0 failed (13965 before, 27 new in `key_stick`,
+`Preparation/Tools/Diagnose/ModernTest.cpp:4448`): the forward key alone reads
+0/-128, the pair of a stick pushed straight forward and of the pad's rim after its dead
+zone; it gives the bits, course and mode of the pad at full forward and at the XInput
+reading of 127; the four keys and four diagonals translate exactly as the stick at the
+same heading under 16 camera headings and 8 of hers; a diagonal reads a magnitude of 128,
+not 181, and lies on exactly 0x2000, 0x6000, -0x6000 and -0x2000; a pad pair off centre
+is handed on unchanged under all 16 key sets; both at rest feed nothing and the
+translation stands aside; opposite keys cancel on their axis; and `key_seam_model`
+(`:4416`), a model of the guard chain read against `input.cpp` like `look_tick`, shows the
+key stick consulted only under Modern, in play and without the look key, never at Tank,
+and a d-pad press on the keyboard page not taken for movement. MenuTest 36180,
+InterpTest 635 and LipsTest 243 without the `.OBJ` folder and 270 with it, 0 failed, as
+before. The engine built as `PCtomb5 built Sep 27 2026 12:45:13`. Not measured: the game.
+
+**Unchanged.** *Tank*: `tomb5.control_modern` is the first term of the zeroing block and
+of `modern_seam`, so neither is entered and `ModernKeyStick` is never called. The pad
+page under Modern with the stick off centre or no movement key held: the block, the seam
+and the call hand `ModernUpdateInput` the same pair as before. The menus and the
+inventory: `modern_seam` still refuses the inventory, the pause menu, the load and save
+screens, the outfit window and the title, and the arrows and Return still step them
+(`input.cpp:1720`).
+The first person view: `!FirstPersonActive()` is still a term of the seam. Every existing
+log line prints as before, the tick line only longer at its end.
+
+**Decisions.** The four keys are a full-deflection stick, fed to the seam's one call and
+nowhere else. The pad wins: its stick off centre is taken and the keys are not added. A
+diagonal of two keys is exactly 45 degrees, the magnitude clamp making it full. The look
+key still bypasses the translation, so the keys turn her on the spot as at Tank. The keys
+give no half deflection; the walk key walks. The keys still write their classic bits, so
+every state where the scheme steps aside behaves as before.
+
+**Commits.** `2dffffb`, `b9b8a0f`
+
 ### Two action keys: the interaction bit and the Secondary role
 2026-09-20 - 2026-09-20
 

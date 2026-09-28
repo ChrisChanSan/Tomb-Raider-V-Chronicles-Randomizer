@@ -54,6 +54,11 @@
  * and math.h and no engine at all, which is why InterpTest is built against
  * it the same way. */
 #include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
+/* The HD room renderer's page class and the mirror's arithmetic, both
+ * headers of pure functions that include no engine header - the same
+ * arrangement as the one above. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pageclass.h"
+#include "../../../TOMB5 Code/TOMB5/game/mirror_math.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -9953,6 +9958,279 @@ static void camera_mouse()
 	ok(b.mouse_yaw == 0 && b.mouse_pitch == 0, "mouse: a reset clears the hand-over", b.mouse_yaw, 0);
 }
 
+/* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
+ * alpha-pass pages are drawn as a clear floor, out of the smallest and the
+ * largest alpha of the page's top mip. The pairs are the measured ones where
+ * a page is named. */
+static void page_class()
+{
+	// RICH2's lobby floor, 0.917 in every texel.
+	const int floor = (int)(0.917 * 255.0 + 0.5);
+
+	ok(HDPageClassOf(floor, floor) == HD_PAGE_CLEAR,
+		"page: 0.917 in every texel is clear", HDPageClassOf(floor, floor), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(232, 236) == HD_PAGE_CLEAR,
+		"page: RICH2 page 1047 (232..236) is clear", HDPageClassOf(232, 236), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(231, 239) == HD_PAGE_CLEAR,
+		"page: RICH2 page 1029 (231..239) is clear", HDPageClassOf(231, 239), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(231, 255) == HD_PAGE_CLEAR,
+		"page: RICH2's inlaid floor 3314 (231..255) is clear", HDPageClassOf(231, 255), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(174, 255) == HD_PAGE_CLEAR,
+		"page: TITLE page 2154 (174..255) is clear", HDPageClassOf(174, 255), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(233, 255) == HD_PAGE_CLEAR,
+		"page: TITLE page 2149 (233..255) is clear", HDPageClassOf(233, 255), HD_PAGE_CLEAR);
+
+	// A page that cuts somewhere is a cut-out, whatever the rest of it is.
+	ok(HDPageClassOf(0, 255) == HD_PAGE_CUTOUT,
+		"page: 0 and 1 is a cut-out", HDPageClassOf(0, 255), HD_PAGE_CUTOUT);
+	ok(HDPageClassOf(77, 255) == HD_PAGE_CUTOUT,
+		"page: 0.3 .. 1 is a cut-out", HDPageClassOf(77, 255), HD_PAGE_CUTOUT);
+	ok(HDPageClassOf(0, 30) == HD_PAGE_CUTOUT,
+		"page: a cloud sheet (0..30) is a cut-out", HDPageClassOf(0, 30), HD_PAGE_CUTOUT);
+
+	// And a page at or near 255 everywhere is opaque.
+	ok(HDPageClassOf(255, 255) == HD_PAGE_OPAQUE,
+		"page: 1 in every texel is opaque", HDPageClassOf(255, 255), HD_PAGE_OPAQUE);
+	ok(HDPageClassOf(254, 255) == HD_PAGE_OPAQUE,
+		"page: JOBY3 page 14070 (254..255) is opaque", HDPageClassOf(254, 255), HD_PAGE_OPAQUE);
+
+	// The two edges: the alpha test's reference and the clear top.
+	ok(HDPageClassOf(HD_PAGE_TEST_REF, 255) == HD_PAGE_CLEAR,
+		"page: a smallest alpha at the test's reference is clear",
+		HDPageClassOf(HD_PAGE_TEST_REF, 255), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(HD_PAGE_TEST_REF - 1, 255) == HD_PAGE_CUTOUT,
+		"page: one below the reference is a cut-out",
+		HDPageClassOf(HD_PAGE_TEST_REF - 1, 255), HD_PAGE_CUTOUT);
+	ok(HDPageClassOf(HD_PAGE_CLEAR_TOP, 255) == HD_PAGE_CLEAR,
+		"page: a smallest alpha at the clear top is clear",
+		HDPageClassOf(HD_PAGE_CLEAR_TOP, 255), HD_PAGE_CLEAR);
+	ok(HDPageClassOf(HD_PAGE_CLEAR_TOP + 1, 255) == HD_PAGE_OPAQUE,
+		"page: one above the clear top is opaque",
+		HDPageClassOf(HD_PAGE_CLEAR_TOP + 1, 255), HD_PAGE_OPAQUE);
+	ok(HD_PAGE_CLEAR_TOP > 233 && HD_PAGE_CLEAR_TOP < 254,
+		"page: the clear top lies in the measured gap 233..254", HD_PAGE_CLEAR_TOP, 243);
+
+	// Nothing measured - the smallest still above the largest - is opaque.
+	ok(HDPageClassOf(255, 0) == HD_PAGE_OPAQUE,
+		"page: a page nothing was measured on is opaque", HDPageClassOf(255, 0), HD_PAGE_OPAQUE);
+}
+
+/* A camera matrix in the engine's layout (aW2VMx): the rotation - a yaw
+ * about y after a pitch about x, orthonormal - in the three rows and the
+ * camera's world position in M03 / M13 / M23. */
+static void mirror_camera(float* m, double yaw, double pitch, float cx, float cy, float cz)
+{
+	const double sy = sin(yaw), cyw = cos(yaw), sp = sin(pitch), cp = cos(pitch);
+	// Rows of Rx(pitch) * Ry(yaw) - any rotation will do.
+	const double r[3][3] =
+	{
+		{ cyw, 0.0, -sy },
+		{ sp * sy, cp, sp * cyw },
+		{ cp * sy, -sp, cp * cyw }
+	};
+
+	for (int i = 0; i < 3; i++)
+		for (int j = 0; j < 3; j++)
+			m[4 * i + j] = (float)r[i][j];
+
+	m[3] = cx;
+	m[7] = cy;
+	m[11] = cz;
+}
+
+// A world point through a camera matrix: R (p - c).
+static void mirror_view_point(const float* m, const float* p, float* v)
+{
+	for (int i = 0; i < 3; i++)
+		v[i] = m[4 * i] * (p[0] - m[3]) + m[4 * i + 1] * (p[1] - m[7]) +
+			m[4 * i + 2] * (p[2] - m[11]);
+}
+
+/* A model matrix built the engine's way through a camera and a stack base:
+ * the base's rotation times the model's (a yaw about y) for the axes, and the
+ * base's rotation times (p - camera) for the translation - what
+ * phd_TranslateAbs and phd_RotY make of it. */
+static void mirror_model(const float* camera, const float* base, double yaw, const float* p,
+	float* out)
+{
+	const double s = sin(yaw), c = cos(yaw);
+	const double o[3][3] = { { c, 0.0, s }, { 0.0, 1.0, 0.0 }, { -s, 0.0, c } };
+
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 3; j++)
+			out[4 * i + j] = (float)(base[4 * i] * o[0][j] + base[4 * i + 1] * o[1][j] +
+				base[4 * i + 2] * o[2][j]);
+
+		out[4 * i + 3] = base[4 * i] * (p[0] - camera[3]) +
+			base[4 * i + 1] * (p[1] - camera[7]) + base[4 * i + 2] * (p[2] - camera[11]);
+	}
+}
+
+static long mirror_err(const float* a, const float* b, int n)
+{
+	double worst = 0.0;
+
+	for (int i = 0; i < n; i++)
+		if (fabs((double)a[i] - (double)b[i]) > worst)
+			worst = fabs((double)a[i] - (double)b[i]);
+
+	return (long)(worst * 1000.0);	// in thousandths
+}
+
+/* The mirror's arithmetic (game\mirror_math.h): the view reflected in a
+ * wall's plane, and Lara's matrices moved into that view. The planes and the
+ * points are RICH2's washroom: room 134's glass at x = 33792, a door of the
+ * cabin across the corridor at x = 35328. */
+static void mirror_pose()
+{
+	const float plane = 33792.0f;
+	float cam[12], twice[12];
+	long lcam[12], ltwice[12];
+
+	mirror_camera(cam, 1.1, 0.35, 34400.0f, -24900.0f, 77000.0f);
+
+	// 1. Reflected twice is the view it was, to the bit.
+	for (int i = 0; i < 12; i++)
+		twice[i] = cam[i];
+
+	MirrorView(twice, 0, plane, true);
+	MirrorView(twice, 0, plane, true);
+	ok(mirror_err(cam, twice, 12) == 0 && cam[3] == twice[3],
+		"mirror: the view reflected twice is the view", mirror_err(cam, twice, 12), 0);
+
+	for (int i = 0; i < 12; i++)
+		lcam[i] = ltwice[i] = (long)(cam[i] * 16384.0f);
+
+	lcam[3] = ltwice[3] = 34400;
+	MirrorView(ltwice, 0, 33792L, true);
+	MirrorView(ltwice, 0, 33792L, true);
+
+	bool same = true;
+
+	for (int i = 0; i < 12; i++)
+		same = same && lcam[i] == ltwice[i];
+
+	ok(same, "mirror: the fixed-point view reflected twice is the view", same ? 1 : 0, 1);
+
+	/* 2. The reflected view shows a point where the real view shows its
+	 * reflection: the door at x 35328 appears where a door at 32256 would. */
+	float reflected[12];
+
+	for (int i = 0; i < 12; i++)
+		reflected[i] = cam[i];
+
+	MirrorView(reflected, 0, plane, true);
+	ok(reflected[3] == 2.0f * plane - 34400.0f,
+		"mirror: the camera is reflected in the plane", (long)reflected[3], (long)(2.0f * plane - 34400.0f));
+
+	const float door[3] = { 35328.0f, -24064.0f, 76288.0f };
+	const float image[3] = { 2.0f * plane - door[0], door[1], door[2] };
+	float v1[3], v2[3];
+
+	mirror_view_point(reflected, door, v1);
+	mirror_view_point(cam, image, v2);
+	ok(mirror_err(v1, v2, 3) <= 10,
+		"mirror: the reflected view shows the door where its image stands", mirror_err(v1, v2, 3), 0);
+
+	// And the plane in the z direction the same way.
+	float zref[12];
+	const float zdoor[3] = { 34000.0f, -24064.0f, 76900.0f };
+	const float zimage[3] = { zdoor[0], zdoor[1], 2.0f * 76800.0f - zdoor[2] };
+
+	for (int i = 0; i < 12; i++)
+		zref[i] = cam[i];
+
+	MirrorView(zref, 2, 76800.0f, true);
+	mirror_view_point(zref, zdoor, v1);
+	mirror_view_point(cam, zimage, v2);
+	ok(mirror_err(v1, v2, 3) <= 10,
+		"mirror: a plane of constant z reflects the same way", mirror_err(v1, v2, 3), 0);
+
+	/* 3. A mirrored pose faces the other way: an item turned to +x (y_rot
+	 * 16384) is seen in the x-plane mirror as one turned to -x, and the
+	 * directions across the plane keep theirs. */
+	const float east[3] = { 1.0f, 0.0f, 0.0f };
+	const float north[3] = { 0.0f, 0.0f, 1.0f };
+	float d1[3], d2[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		d1[i] = reflected[4 * i] * east[0] + reflected[4 * i + 1] * east[1] + reflected[4 * i + 2] * east[2];
+		d2[i] = -(cam[4 * i] * east[0] + cam[4 * i + 1] * east[1] + cam[4 * i + 2] * east[2]);
+	}
+
+	ok(mirror_err(d1, d2, 3) == 0,
+		"mirror: a pose facing +x faces -x in the glass", mirror_err(d1, d2, 3), 0);
+
+	for (int i = 0; i < 3; i++)
+	{
+		d1[i] = reflected[4 * i] * north[0] + reflected[4 * i + 1] * north[1] + reflected[4 * i + 2] * north[2];
+		d2[i] = cam[4 * i] * north[0] + cam[4 * i + 1] * north[1] + cam[4 * i + 2] * north[2];
+	}
+
+	ok(mirror_err(d1, d2, 3) == 0,
+		"mirror: a pose facing along the glass keeps its facing", mirror_err(d1, d2, 3), 0);
+
+	/* 4. Lara's matrices moved into the reflected view are the matrices the
+	 * reflected view would have built - with the stack's base carrying a
+	 * shake scale in its columns, as phd_GenerateW2V leaves it. */
+	float base[12], rbase[12];
+
+	for (int i = 0; i < 12; i++)
+		base[i] = cam[i];
+
+	for (int i = 0; i < 3; i++)
+	{
+		base[4 * i] *= 1.03f;
+		base[4 * i + 1] *= 0.98f;
+	}
+
+	for (int i = 0; i < 12; i++)
+		rbase[i] = base[i];
+
+	MirrorView(rbase, 0, 0.0f, false);
+
+	const float hips[3] = { 34450.0f, -24800.0f, 77100.0f };
+	float built[12], want[12], moved[12], q[9], t[3];
+
+	mirror_model(cam, base, 0.7, hips, built);
+	mirror_model(reflected, rbase, 0.7, hips, want);
+	MirrorViewSpaceSetup(cam, base, 0, plane, q, t);
+
+	for (int i = 0; i < 12; i++)
+		moved[i] = built[i];
+
+	MirrorViewSpaceApply(q, t, moved);
+	ok(mirror_err(moved, want, 12) <= 20,
+		"mirror: Lara's matrix moved into the glass is the reflected view's",
+		mirror_err(moved, want, 12), 0);
+
+	// And moved twice it is where it started.
+	MirrorViewSpaceApply(q, t, moved);
+	ok(mirror_err(moved, built, 12) <= 20,
+		"mirror: Lara's matrix moved twice is where it started", mirror_err(moved, built, 12), 0);
+
+	/* 5. Which points the rule draws: RICH2 room 134's copy box as the engine
+	 * measured it (x 31738..33785, y -25607..-24042, z 74758..78848), the
+	 * copy on the smaller-x side of x 33792, and the draw's 256 of slack. */
+	const long mins[3] = { 31738, -25607, 74758 };
+	const long maxs[3] = { 33785, -24042, 78848 };
+	const long p189[3] = { 35328, -24064, 76288 };	// the kick door of cabin 131
+	const long plara[3] = { 34304, -24064, 77000 };	// Lara in the corridor
+	const long p199[3] = { 32256, -24064, 77312 };	// room 136's door, behind the glass
+	const long pfar[3] = { 38400, -20992, 74240 };	// room 140, far past the copy
+
+	ok(MirrorLandsInCopy(p189, 0, 33792, -1, mins, maxs, 256),
+		"mirror: the door across the corridor is drawn in the glass", 0, 1);
+	ok(MirrorLandsInCopy(plara, 0, 33792, -1, mins, maxs, 256),
+		"mirror: Lara in the corridor is drawn in the glass", 0, 1);
+	ok(!MirrorLandsInCopy(p199, 0, 33792, -1, mins, maxs, 256),
+		"mirror: nothing behind the glass is drawn in it", 1, 0);
+	ok(!MirrorLandsInCopy(pfar, 0, 33792, -1, mins, maxs, 256),
+		"mirror: a point whose image leaves the copy is not drawn", 1, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -10009,6 +10287,8 @@ int main()
 	ledge_hang();
 	ledge_trigger();
 	deferred();
+	page_class();
+	mirror_pose();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

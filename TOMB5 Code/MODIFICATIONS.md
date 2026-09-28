@@ -3301,7 +3301,8 @@ classic window there; it clears the four places by the same amounts as this rule
 facade from ANDREA1 room 146 (0 pixels against before). The play test decides whether the
 holes show in the game.
 
-**Commits.** `8dfae67`, `3884153`, `faa3be5`, `666593f`, `9e176b2`
+**Commits.** `8dfae67` (its answer for a reach-only room taken back by `205eb33`; the
+seams and the tool follow stay), `3884153`, `faa3be5`, `666593f`, `9e176b2`
 
 ### The reach can be switched off
 2026-09-28
@@ -3347,6 +3348,49 @@ taste.
 built, and it is documented as the way to see the classic walk's answer in an HD level.
 
 **Commits.** `ab6fa0f`
+
+### The reach-only answer goes back to the smaller box
+2026-09-28
+
+**What.** In `DecidePairs` the pieces of a room the reach lists with no window keep the
+answer of the box one sector smaller than the inside whatever holder they stand in: drawn
+whole outside it, left out inside it. That is the answer of the entry before the last, in
+place of the last entry's, which left them out in a holder on the frame's list. The seams
+stay: `reach_hidden` now counts the pieces inside the smaller box, and a `reachart` line
+answers `whole` when any piece of that holder stands outside it and `hidden` when none
+does. RoomProbe's `-decide frame` follows.
+
+**Why.** The last entry's answer cleared four places where the art of one room showed
+through the walls of another and opened holes at five of the 396 views in which it changes
+a piece - a wall panel beside a corridor in Trajan's Markets, the room behind a wire fence
+in the Streets of Rome - because at those places the piece it left out is the holder's own
+wall, modelled in the neighbour's group. Judged in play, beside the switch of the entry
+above, the holes weigh more than the ghosts: a wall that is not there is a fault at every
+angle, a hull in the sky at some.
+
+**How.** `specific/hd/hd_level.cpp`: the empty-window branch of `DecidePairs` reads `whole
+= piece.inner == 0` again (`:742`), the counter `g_clip_reach_hidden` takes every piece
+not drawn whole (`:775`), `LogReachArt` answers by the pieces of the holder (`:900`), the
+first frame's room line no longer names the holder, and the comments of the counters, of
+`DecidePairs` and of the rule over `BuildRoomIntrusions` state the answer as it is.
+`Preparation/Tools/Diagnose/RoomProbe.cpp`: the `frame` answer for an empty window
+(`:4027`), the `decide: reachart` answer (`:4133`) and the usage text. The manual's
+paragraph on the reach-only room and the tools README's two rows say the same.
+
+**Checked.** The engine builds; ModernTest 13,992 checks, MenuTest 42,364, InterpTest 651,
+LipsTest 243 and 270 with the `.OBJ` folder, 0 failed; RoomProbe and TrgProbe build from
+the changed source. With `hd_enable` off nothing of it runs, as before.
+
+**Unchanged.** The holder lookup by group, the ask branch and the claimed-face loop, the
+format of every seam, the tool's camera and its switches, the `hd_reach` setting, the
+walk.
+
+**Decisions.** The four places show their ghosts again. A rule that tells a ghost from a
+wall is not to be had from the geometry alone - a hull in the sky and a wall panel in the
+neighbour's group are the same kind of piece - and none is built; `hd_reach` stays as the
+way to see the classic walk's answer.
+
+**Commits.** `205eb33`
 
 ### The material 15 books in motion: a fan's shadow that turns, and flames that play
 2026-09-27
@@ -9615,7 +9659,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
-| #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off |
+| #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off; The reach-only answer goes back to the smaller box |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |

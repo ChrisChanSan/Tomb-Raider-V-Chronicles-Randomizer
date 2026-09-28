@@ -163,7 +163,10 @@ pieces whose holder is drawn, and the other pieces whole, as the engine does.
 A `decide: reachart` line per holder of such a group and a `decide: clip` line
 after the picture give the engine's `reachart` fields and its `clip` counters
 over the named groups, so a picture can be held against the log of the same
-view. `-with` and `-roomwin` take up to 256 groups and refuse a 257th with a
+view. A holder counts as drawn when it is the seed or any `-with` group; the
+engine lists only the groups it draws in HD, so a group the log's `HDLOG room=`
+line gives `hd=0` (hollow, empty or turned classic) is left out of `-with` for
+the two to agree. `-with` and `-roomwin` take up to 256 groups and refuse a 257th with a
 message. `-cull none|opaque` draws the opaque room
 ranges two-sided or one-sided (the engine's own).
 

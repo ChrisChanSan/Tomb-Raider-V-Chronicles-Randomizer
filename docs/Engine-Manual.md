@@ -2134,8 +2134,10 @@ a second the `clip` line ends in how many pieces of that art the frame asked
 about (`pairs=`), drew whole and cut (the second `scissored=`; the first
 counts rooms). A room the reach lists with no window of its own is not asked:
 its art standing in a room that is on the frame's list is left out, because
-that room's walls are drawn and the art would show through them, and its art
-standing in a room that is not listed keeps the answer of the smaller box.
+that room's walls are drawn and the art would show through them (where that
+art is the only thing at a wall or a doorway of the room, a hole opens there
+instead), and its art standing in a room that is not listed keeps the answer
+of the smaller box.
 The `reach_` fields at the end of the `clip` line count those rooms, their
 pieces, the ones drawn whole and the ones left out for a listed holder; a
 `reachart` line per room and holder names them (`holder=` is the holder's

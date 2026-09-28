@@ -701,13 +701,15 @@ namespace
 	 * and the portal walk gives no window - has no classic face to ask: the
 	 * classic path draws none of its faces. Its pieces standing in a holder
 	 * that is on this frame's list are not drawn, whatever window the holder
-	 * has. The holder's own walls are drawn, and drawn whole those pieces come
+	 * has. Where the holder's own walls stand, those pieces drawn whole come
 	 * through them: a brick hull in the sky above a piazza, a marble ceiling
 	 * in a metal hub, window frames in a brick loft, a tile floor in a
-	 * doorway. Its pieces standing in a holder that is not on the list keep
-	 * the answer of the box one sector smaller than the inside, like the rest
-	 * of the room's art: drawn whole outside it, left out inside it. Left out
-	 * altogether, they open a hole where the holder is not drawn to fill it. */
+	 * doorway. Where such a piece is the only art at a wall or a doorway of
+	 * the holder, nothing is drawn there in its place and a hole opens. Its
+	 * pieces standing in a holder that is not on the list keep the answer of
+	 * the box one sector smaller than the inside, like the rest of the room's
+	 * art: drawn whole outside it, left out inside it. Left out altogether,
+	 * they open a hole where the holder is not drawn to fill it. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;

@@ -2971,49 +2971,49 @@ drew every range two-sided (`D3DCULL_NONE`), so the rear face of group 11's corr
 painted over the corridor. The fourth mechanism, the second hull of RICH2's lift shaft in
 rooms 62 to 64, and the lobby's mirror floors are left for a later round.
 
-**How.** The cull: `RangeCulls` (`specific/hd/hd_render.cpp:195`) decides per part at the
-build (`:3542`), the answer rides in `HDRange::cull` and in the sort key (`:3944`), and
-`draw_pass` switches `D3DRS_CULLMODE` per range (`:5249`) and puts `D3DCULL_NONE` back at
-the end of the pass (`:5282`), so a model drawn between two rooms finds the state the
-bracket installed (`:4629`). The winding: `D3DCULL_CCW` shows the X-ray corridor,
+**How.** The cull: `RangeCulls` (`specific/hd/hd_render.cpp:199`) decides per part at the
+build (`:3769`), the answer rides in `HDRange::cull` and in the sort key (`:4235`), and
+`draw_pass` switches `D3DRS_CULLMODE` per range (`:5633`) and puts `D3DCULL_NONE` back at
+the end of the pass (`:5666`), so a model drawn between two rooms finds the state the
+bracket installed (`:4979`). The winding: `D3DCULL_CCW` shows the X-ray corridor,
 `D3DCULL_CW` at the same view shows the pane and no corridor (RoomProbe). The box:
-`BuildRoomIntrusions` (`hd_level.cpp:2237`) takes `r->x + 1024 .. r->x + (y_size - 1) *
-1024` and the same in z, TR5's own box (`game/draw.cpp:3593-3598`), with the neighbour,
+`BuildRoomIntrusions` (`hd_level.cpp:2382`) takes `r->x + 1024 .. r->x + (y_size - 1) *
+1024` and the same in z, TR5's own box (`game/draw.cpp:3628-3633`), with the neighbour,
 flipmap and touch tests unchanged and a room of two sectors or fewer on a side left
-without an inside. The classic faces: `BuildPairFaces` (`hd_level.cpp:2270`) hands the
+without an inside. The classic faces: `BuildPairFaces` (`hd_level.cpp:2415`) hands the
 renderer every drawn quad and triangle of every intruder room, in the roomlets' order and
 in the room's own frame, left out only where a face stands further than
 `HD_PAIR_FACE_REACH` from every box of its room; `HDPairFace`, `HD_PAIR_FACE_REACH` and
-the inline `HDPairFaceDistance` are in `hd_render.h:263-341`. The pairs: the index fill
-(`hd_render.cpp:3722-3864`) gives a triangle to the first entry whose box holds it and to
+the inline `HDPairFaceDistance` are in `hd_render.h:272-350`. The pairs: the index fill
+(`hd_render.cpp:3990-4144`) gives a triangle to the first entry whose box holds it and to
 the nearest claiming face; a triangle no face claims stays with the pair only when its
 centroid also lies in the box one sector smaller in x and z, and goes to the open half
-otherwise (`:3790-3799`, `:3831-3832`); the same test marks every claimed triangle, and
+otherwise (`:4059-4068`, `:4100-4105`); the same test marks every claimed triangle, and
 the pieces (pair, face, mark) and (pair, no face) are numbered per group, so a face can
 own two pieces of a pair; `HDRange::intruding` is one plus the piece, so the pieces never
-share a draw call, and `HDRenderGroupPairRange` and `HDRenderPairWhole` (`:2651`) read
+share a draw call, and `HDRenderGroupPairRange` and `HDRenderPairWhole` (`:2862`) read
 them out and set the frame's answer. The per-frame test: `HDFrameRoom`
-(`hd_level.cpp:4020`) runs `ClassicFaceDrawn` (`:579`) on the faces of the room it
+(`hd_level.cpp:4238`) runs `ClassicFaceDrawn` (`:623`) on the faces of the room it
 collects, at `InsertRoom`, with the room's own view * world matrix, `f_mpersp`,
 `f_centerx/y`, the underwater wobble and the four numbers `r->left..r->bottom` - the
 classic path's coordinate space, a corner nearer than `f_mznear` carrying -128 as in
 `aRoomletTransformLight`; the roomlet's box test is implied by the corner rule and not
 asked, and so are the facing test and the water chop, which the window does not decide.
-The answer: `DecidePairs` (`:711`), called per room at the top of `HDFrameDraw` (`:4455`),
+The answer: `DecidePairs` (`:713`), called per room at the top of `HDFrameDraw` (`:4457`),
 sets each piece whole or windowed and the glow phase keeps it; a room with an empty window
 (one the reach lists and the walk gives no window) is answered by the mark alone, the
-marked pieces not drawn and the rest whole (`:742-743`); `draw_pass`
-(`hd_render.cpp:5033`) draws the whole pieces with the open half and the rest with the
-intruding half, which `DrawRoomWindowed` (`hd_level.cpp:735`) scissors to the room's own
-window as before (`:754`). The seams, all behind `-log`: the level line ends in
-`holder=inside cull=opaque faces=%d bound=%d unbound=%d` (`:2489`), each pair line in
-`faces=%d bound=%d` (`:2467`, a face counted once however many pieces it owns,
-`:2434-2465`), the clip line in `pairs=%d whole=%d scissored=%d` (`:4471`, the pieces
+marked pieces not drawn and the rest whole (`:744-745`); `draw_pass`
+(`hd_render.cpp:5384`) draws the whole pieces with the open half and the rest with the
+intruding half, which `DrawRoomWindowed` (`hd_level.cpp:801`) scissors to the room's own
+window as before (`:820`). The seams, all behind `-log`: the level line ends in
+`holder=inside cull=opaque faces=%d bound=%d unbound=%d` (`:2649`), each pair line in
+`faces=%d bound=%d` (`:2623`, a face counted once however many pieces it owns,
+`:2579-2621`), the clip line in `pairs=%d whole=%d scissored=%d` (`:4734`, the pieces
 asked, drawn whole and windowed; the earlier `scissored=` counts rooms), `windowed_tris=`
 now counts only the triangles really drawn inside a window, and a new line `HDLOG cull
-level=%s ranges opaque=%d two_sided=%d` follows the build (`:3292`); the first frame's
+level=%s ranges opaque=%d two_sided=%d` follows the build (`:3468`); the first frame's
 room list ends an `EMPTY` room's line in ` where it stands in the box one sector smaller`
-(`:4415-4425`). The pair line's
+(`:4668-4679`). The pair line's
 triangle count is every triangle the holder's inside holds, the level line's `intruding
 tris=` and `unbound=` only those drawn with the window. `FrameRoom` grew to 384 bytes, the
 frame array to 96 KiB. Tools: `TrgProbe -roomspace` uses the same box by default (`-deep
@@ -3168,10 +3168,10 @@ toward the doorway to room 101, room 101 has a classic window of 1481,401..1681,
 the answer there does not change. This entry supersedes round 1's sentence that all of a
 reach-listed room's intruding art keeps the smaller box's answer.
 
-**How.** `DecidePairs` (`specific/hd/hd_level.cpp:711`) looks each piece's holder up on
-the frame's list (`g_frame`, whatever window the holder has) for every piece (`:733-738`),
+**How.** `DecidePairs` (`specific/hd/hd_level.cpp:713`) looks each piece's holder up on
+the frame's list (`g_frame`, whatever window the holder has) for every piece (`:733-739`),
 not only for the asked ones, and the empty-window branch reads `whole = piece.inner == 0
-&& !listed` (`:742-743`). The holder is a group, the room of that number at the build,
+&& !listed` (`:744-745`). The holder is a group, the room of that number at the build,
 and the lookup compares it with the groups on the list: after a flipmap a group is drawn
 at its pair's room, and a lookup by room index misses it there. JOBY2 swaps five pairs in
 its first seconds and keeps them swapped; at the marble view rooms 87 and 89 are listed by
@@ -3179,49 +3179,51 @@ the reach alone and drawn by groups 54 and 53, and by room index group 54's piec
 group 53 were drawn whole. The ask branch has shared that lookup since round 1 and changes
 with it, on a level with a flipmap only. A piece of an empty-window room that is not
 answered whole is not drawn: `DrawRoomWindowed` skips its second, scissored call for an
-empty window (`:816`). The ask branch, the claimed-face loop and the answer for a holder
+empty window (`:818`). The ask branch, the claimed-face loop and the answer for a holder
 that is not listed are unchanged, and `pairs=` still counts the asked pieces alone. The
 counters `g_clip_reach_rooms`, `_pieces`, `_whole` and `_hidden` (`:517-520`) count the
 empty-window rooms that have intruding pieces, their pieces, the pieces drawn whole, and
 the pieces outside the smaller box left out because their holder is listed; the clip line
-ends in `reach_rooms=%d reach_pieces=%d reach_whole=%d reach_hidden=%d` (`:4732`).
-`LogReachArt` (`:846`) writes `HDLOG reachart level=%s room=%d reach=%d,%d..%d,%d
+ends in `reach_rooms=%d reach_pieces=%d reach_whole=%d reach_hidden=%d` (`:4734`).
+`LogReachArt` (`:848`) writes `HDLOG reachart level=%s room=%d reach=%d,%d..%d,%d
 holder=%d listed=%d pieces=%d tris=%d answer=whole|hidden band_tris=%d`, one line per
 empty-window room and holder, with the clip line and on the frame of a window event's dump
-(`:4744`); the reach rectangle comes from the walk's log note through `HDFrameNoteReach`
+(`:4746`); the reach rectangle comes from the walk's log note through `HDFrameNoteReach`
 (`game/draw.cpp:1847`), the event through `HDFrameNoteDump` (`:2090`). The index fill
 counts per intrusion entry the unclaimed triangles it hands to the open half
 (`hd_render.cpp:4100-4106`, read by `HDRenderIntrusionBand`), `ReportRoomIntrusions` keeps
-them for the level (`hd_level.cpp:2586`) and the level line ends in `band_unclaimed=%d`
-(`:2647`); `TrgProbe -roomspace` ends its level line in the same number. The first frame's
+them for the level (`hd_level.cpp:2588`) and the level line ends in `band_unclaimed=%d`
+(`:2649`); `TrgProbe -roomspace` ends its level line in the same number. The first frame's
 room list ends an `EMPTY` room's line in ` or its holder is on the list`. The dump:
 `RoomListWindowEvents` (`game/draw.cpp:1208`) is set by the window procedure with `-log`
 only (`specific/winmain.cpp:671` and `:735`), and the whole-list dump is written when the
 five-second timer is due or an event waits (`draw.cpp:2073-2092`), a `WM_INACTIVE` before
 a `WM_ACTIVE`, the header ending in `why=timer|inactive|active`. RoomProbe's `-decide
 frame` answers an empty window the same way
-(`Preparation/Tools/Diagnose/RoomProbe.cpp:4024`), a window being empty, as `ClipWindow`
+(`Preparation/Tools/Diagnose/RoomProbe.cpp:4028`), a window being empty, as `ClipWindow`
 has it, when it has no width or no height before any widening; a `decide: reachart` line
 per holder and a `decide: clip` line after the picture give the engine's reachart fields
 and clip counters over the named groups. The walk takes the engine's camera (`enginecam`,
-`:529`): the integer angles of `phd_GetVectorAngles` with `phd_atan`, `phdtantab` and
+`:532`): the integer angles of `phd_GetVectorAngles` with `phd_atan`, `phdtantab` and
 `phd_sqrt`, the rotation `aGenerateW2V` builds out of the float sine table, and
 `AlterFOV`'s integer perspective. `-walktarget x y z` builds it from the eye and a world
 target as a ROOMLIST dump prints them, `-walkyaw` and `-walkpitch` are rounded once to
 angle units, and without `-walk` the same switch hands the engine's yaw, pitch and
 perspective to the picture, whose `LookAt` then builds the view from them. With `-reach`
-the list is trimmed as `ReachTrimRooms` trims it (`:2564`), the art read from the `.TRG`,
+the list is trimmed as `ReachTrimRooms` trims it (`:2567`), the art read from the `.TRG`,
 and the reach rectangle is kept as `g_reach_box` keeps it. `-walkwant` and a new
 `-walkfinal` print a room's final window, `final=l,t..r,b reach=l,t..r,b classic|REACH`,
 per direction with `-walkeach`; `-walkshut <items|all>` walks with closed doors shut,
-whose portals `ShutThatDoor` zeroes (`:2289`, `:2378`); `-with` and `-roomwin` hold 256
-groups and refuse a 257th with a message (`:3853`). `-walkdump <log> [frame]` (`:3070`)
+whose portals `ShutThatDoor` zeroes (`:2292`, `:2381`); `-with` and `-roomwin` hold 256
+groups and refuse a 257th with a message (`:3856`). `-walkdump <log> [frame]` (`:3073`)
 walks every whole-list dump of a log again with the level, the field of view of the last
 `ALTERFOV` line, the backbuffer, the art of the `HDLOG room= ... hd=` lines and the flips
 of the `HDLOG flip` lines, searches for what no log line carries - which closed doors are
 shut, and a flyby's roll - and prints per dump both lists, the rooms only one of them has,
 how many windows are equal, within a pixel and further off, how many reach rectangles are
-equal, `doors_shut=` and `roll=`.
+equal, `doors_shut=` and `roll=`. `-decide frame` counts a holder as drawn when it is the
+seed or any `-with` group; the engine lists only the groups it draws in HD, so the groups
+the log's `HDLOG room=` lines give `hd=0` stay out of `-with` for the two to agree.
 
 **Checked.** The places, at the camera of each picture, walked with the engine's camera
 (in JOBY2 with the doors the replay found shut and the flips the log names), 2560 x 1440,
@@ -3286,10 +3288,20 @@ answer: a change to it was measured and is left undecided. The tool follows the 
 camera exactly, so that a render is proof.
 
 **Open.** The holes the sweep found in five views are not decided: ANDREA2 rooms 140 and
-89 and ANDREA1 room 10 through its fence open most, where a hidden piece is the only art
-at a wall or a doorway of its listed holder.
+89 and ANDREA1 room 10 through its fence open most, ANDREA2 room 127 and ANDREA1 room 127
+less, and in each a hidden piece is the only art at a wall or a doorway of its listed
+holder, so that the holder's own walls, which the rule counts on, are not there to show. A
+narrower rule was measured in a scratch build of RoomProbe and not adopted: a holder
+counts as listed only when it is the seed or has a window of its own. At the five views it
+closes the holes from ANDREA1 room 10 and from both rooms 127 (0 pixels against the
+picture before this entry) and leaves those from ANDREA2 rooms 140 and 89 (46,187 and
+38,215 pixels, 46,094 and 38,152 of them clear colour), whose holders 140 and 149 have a
+classic window there; it clears the four places by the same amounts as this rule (41,735,
+15,003, 18,843 and 5,318 pixels); and it keeps the piece of brick wall in front of the
+facade from ANDREA1 room 146 (0 pixels against before). The play test decides whether the
+holes show in the game.
 
-**Commits.** `8dfae67`, `3884153`
+**Commits.** `8dfae67`, `3884153`, `666593f`
 
 ### The material 15 books in motion: a fan's shadow that turns, and flames that play
 2026-09-27

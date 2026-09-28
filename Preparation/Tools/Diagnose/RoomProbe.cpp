@@ -166,7 +166,10 @@
  *                     and a `decide: clip` line after the picture the
  *                     counters of the engine's HDLOG clip line over the
  *                     named groups that have art. -roomwin takes up to 256
- *                     groups, like -with.
+ *                     groups, like -with. A holder counts as drawn when it
+ *                     is the seed or any -with group; the engine lists only
+ *                     the groups it draws in HD, so the groups the log's
+ *                     HDLOG room= lines give hd=0 stay out of -with.
  *
  *   The portal walk (game\draw.cpp) offline, with the engine's own camera:
  *   the integer angles phd_LookAt makes of an eye and a target, the float
@@ -3866,7 +3869,8 @@ static bool g_old_order = false;
  * every piece whole, `scissor` every piece inside the window (the box alone,
  * with no face asked), `frame` gives the engine's own answer (DecidePairs in
  * hd_level.cpp) and `face` holds each claimed piece to its own face alone.
- * A room counts as drawn when it is the seed or a -with group. The corner
+ * A room counts as drawn when it is the seed or a -with group, whether the
+ * engine would draw that group in HD or not (HDLOG room= ... hd=). The corner
  * rule is drawroom.cpp's, without the underwater wobble this tool has no
  * camera for. */
 static int g_roomwin_group[kWithMax];

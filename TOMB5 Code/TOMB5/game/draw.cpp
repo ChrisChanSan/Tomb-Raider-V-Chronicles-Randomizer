@@ -2133,11 +2133,11 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 							(int)p->rn);
 					}
 
-				/* window= is the classic rectangle and the scissor
-				 * the intruding triangles get; reach= is what the walk
-				 * carried the room in on. A room whose window is empty and
-				 * whose reach is not is a room of the reach alone: all its
-				 * art over the whole screen, none of its intruding art. */
+				/* window= is the classic rectangle and the scissor of the
+				 * intruding art; reach= is what the walk carried it in on.
+				 * A room of the reach alone (window empty, reach not) draws
+				 * none of its intruding art where the holder is listed, and
+				 * the part outside the smaller box whole where it is not. */
 				Log("ROOMLIST   room=%d window=%d,%d..%d,%d reach=%d,%d..%d,%d"
 					" %s dist=%d outside=%d shadow=%s", (int)which,
 					(int)now.win[i][0], (int)now.win[i][1],

@@ -2138,7 +2138,9 @@ that room's walls are drawn and the art would show through them, and its art
 standing in a room that is not listed keeps the answer of the smaller box.
 The `reach_` fields at the end of the `clip` line count those rooms, their
 pieces, the ones drawn whole and the ones left out for a listed holder; a
-`reachart` line per room and holder names them, and `band_unclaimed=` at the
+`reachart` line per room and holder names them (`holder=` is the holder's
+group, the room of that number until a flipmap swaps it with its pair, and
+`listed=1` when that group is drawn this frame), and `band_unclaimed=` at the
 end of the level line counts the unclaimed art near the holder's wall, drawn
 whole on every frame. The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.

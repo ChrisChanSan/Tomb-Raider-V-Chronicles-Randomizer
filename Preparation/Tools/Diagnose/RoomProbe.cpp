@@ -190,10 +190,10 @@
  *                     -decide frame holds the classic faces against them.
  *                     Needs -roombox for the room's origin.
  *     -walkwant <room>
- *                     why that room is or is not in the list, and its final
- *                     window and reach rectangle after the whole walk:
+ *                     why that room is or is not in the list and, with
+ *                     -walkeach, its final window and reach after the walk:
  *                     `final=l,t..r,b reach=l,t..r,b classic|REACH`
- *     -walkfinal      the same final line for every listed room
+ *     -walkfinal      the same final line for every listed room (-walkeach)
  *     -walkshut <item,item,...|all>
  *                     walk with those closed doors shut (CLOSED_DOOR1 ..
  *                     LIFT_DOORS2 items, whose shutting zeroes the normals

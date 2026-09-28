@@ -730,8 +730,12 @@ namespace
 			bool whole = false;
 
 			// Whether the holder is on this frame's list, whatever its window.
+			// The holder is a group - the room of that number at the build,
+			// before any flipmap - and the walls that hide its art are that
+			// group's, so it is looked up among the groups drawn this frame:
+			// after a flipmap swaps a pair, room and group are not the same.
 			for (int i = 0; i < g_frame_count && !listed; i++)
-				listed = g_frame[i].room == piece.holder;
+				listed = g_frame[i].group == piece.holder;
 
 			if (ask)
 				whole = !listed;
@@ -825,10 +829,12 @@ namespace
 	 * intruding pieces stand in, written with the clip line and on the frame
 	 * of a window event's ROOMLIST dump. Behind -log.
 	 *
-	 *   room       the listed room the walk left with an empty window
+	 *   room       the listed room the walk left with an empty window (a room
+	 *              index, as ROOMLIST prints it)
 	 *   reach      the rectangle the reach carried it in on (ROOMLIST reach=)
-	 *   holder     the room the pieces stand in, listed 1 when it is on this
-	 *              frame's list
+	 *   holder     the group the pieces stand in - the room of that number
+	 *              until a flipmap swaps it with its pair, the pair's room
+	 *              after; listed 1 when that group is drawn this frame
 	 *   pieces     the room's pieces in that holder, tris their triangles,
 	 *              all three passes together
 	 *   answer     hidden when the holder is listed: none of them is drawn;
@@ -869,7 +875,7 @@ namespace
 				int tris = 0;
 
 				for (int f = 0; f < g_frame_count && !listed; f++)
-					listed = g_frame[f].room == piece.holder;
+					listed = g_frame[f].group == piece.holder;
 
 				for (int k = j; k < count; k++)
 					if (g_pieces[(size_t)(first + k)].holder == piece.holder)

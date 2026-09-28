@@ -6283,6 +6283,12 @@ bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
 		return false;
 
 	draw_pass(room, pass, wvp);
+
+	// The alpha pass's picture keeps its clear floors, blended as the frame
+	// draws them; the glass stays out of it as before.
+	if (pass == 1 && room.clearRanges)
+		draw_pass(room, 1, wvp, true, HD_WINDOW_ALL, false, true);
+
 	return true;
 }
 

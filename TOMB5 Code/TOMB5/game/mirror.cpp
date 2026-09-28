@@ -124,7 +124,8 @@ void Draw_Mirror_Lara()
 
 /* The room a reflected item's origin may stand off the copy's own art: an
  * item's origin is at its feet and on its pivot, and a door's pivot stands
- * at the frame's edge. A quarter of a sector. */
+ * at the frame's edge. A quarter of a sector, along the glass's normal and in
+ * height only (MirrorLandsInCopy says why not along the glass). */
 #define MIRROR_ITEM_SLACK	256
 
 /* One mirror of the HD level, drawn: the view reflected in the glass's plane

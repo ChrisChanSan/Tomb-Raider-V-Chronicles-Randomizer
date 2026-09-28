@@ -100,7 +100,14 @@ inline void MirrorViewSpaceApply(const float* q, const float* t, float* m)
  * the copy behind the glass: `side` is where the copy lies (-1 at smaller
  * coordinates than the plane, +1 at larger), the box the copy's art, `slack`
  * the room a point has around it - an item's origin is at its feet and on
- * its pivot, not inside its mesh. */
+ * its pivot, not inside its mesh.
+ *
+ * The slack holds along the plane's normal and in height, and not along the
+ * glass: past the copy's ends along the glass lie real, drawn rooms (RICH2:
+ * corridor room 56 at z 73728..74752 straddles mirror 135's plane x 30720,
+ * whose copy starts at z 74764; doorway room 130 stands the same way beside
+ * mirror 134), and a reflection there would stand in the open room, outside
+ * any glass. */
 inline bool MirrorLandsInCopy(const long* p, int axis, long plane, int side,
 	const long* mins, const long* maxs, long slack)
 {
@@ -110,8 +117,9 @@ inline bool MirrorLandsInCopy(const long* p, int axis, long plane, int side,
 	for (int k = 0; k < 3; k++)
 	{
 		const long v = k == axis ? plane + plane - p[k] : p[k];
+		const long s = k == axis || k == 1 ? slack : 0;
 
-		if (v < mins[k] - slack || v > maxs[k] + slack)
+		if (v < mins[k] - s || v > maxs[k] + s)
 			return false;
 	}
 

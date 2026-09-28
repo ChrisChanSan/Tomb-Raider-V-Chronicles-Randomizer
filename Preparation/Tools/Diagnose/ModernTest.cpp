@@ -10229,6 +10229,21 @@ static void mirror_pose()
 		"mirror: nothing behind the glass is drawn in it", 1, 0);
 	ok(!MirrorLandsInCopy(pfar, 0, 33792, -1, mins, maxs, 256),
 		"mirror: a point whose image leaves the copy is not drawn", 1, 0);
+
+	/* 6. The slack does not hold along the glass: RICH2 room 135's copy
+	 * (x 28669..30716, z 74764..79872, plane x 30720) ends where corridor
+	 * room 56 (z 73728..74752) goes on across the plane. Lara at the
+	 * corridor's south edge would stand, reflected, in the corridor itself;
+	 * room 136's door lies inside the copy and is drawn. */
+	const long mins135[3] = { 28669, -25607, 74764 };
+	const long maxs135[3] = { 30716, -24042, 79872 };
+	const long pcorridor[3] = { 31232, -24064, 74600 };	// Lara in room 56
+	const long p199b[3] = { 32256, -24064, 77312 };		// room 136's door
+
+	ok(!MirrorLandsInCopy(pcorridor, 0, 30720, -1, mins135, maxs135, 256),
+		"mirror: a point past the copy's end along the glass is not drawn", 1, 0);
+	ok(MirrorLandsInCopy(p199b, 0, 30720, -1, mins135, maxs135, 256),
+		"mirror: room 136's door is drawn in room 135's glass", 0, 1);
 }
 
 int main()

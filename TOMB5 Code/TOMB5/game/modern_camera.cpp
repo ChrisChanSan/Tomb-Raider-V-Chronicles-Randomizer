@@ -13,6 +13,7 @@
 #include "modern_camera.h"
 #include "modern_move.h"	// ModernWrap and MODERN_STICK_FULL - see below
 #include "interpolate_math.h"	// InterpLerpLong - see ModernCameraChordClamp
+#include <math.h>				// sqrt and ceil - see ModernCameraNearRadius
 
 /* The arithmetic of the modern camera. The header says what the orbit is and
  * where every number comes from; this file is the three rules. No engine
@@ -638,6 +639,70 @@ void ModernCameraDrawnEye(const long prev[3], short prev_room, const long cur[3]
 	out->y = q[1];
 	out->z = q[2];
 	out->room = at;
+}
+
+/* The header's formula, in doubles: at a 4K window the squares in whole
+ * numbers reach 400 * (1716^2 + 1920^2 + 1080^2), past a long. */
+long ModernCameraNearRadius(long znear, long half_w, long half_h, long persp)
+{
+	double z, w, h;
+
+	if (znear <= 0 || persp <= 0)
+		return 0;
+
+	z = (double)znear;
+	w = z * (double)half_w / (double)persp;
+	h = z * (double)half_h / (double)persp;
+	return (long)ceil(sqrt(z * z + w * w + h * h));
+}
+
+/* The header's rule. The arithmetic comes first, so an eye with no face
+ * within the radius - nearly every tick - asks `open` nothing at all. The
+ * probe points are CameraEyeNear's in game\camera.cpp, one unit past the
+ * sector's edge, so CAMLOG's face= and this rule read the same faces. */
+long ModernCameraWallClearance(const long eye[3], short room, long radius,
+	MODERN_EYE_OPEN open, void* ctx, long out[3], short* out_room)
+{
+	const long x = eye[0], y = eye[1], z = eye[2];
+	const long fx = x & 1023, fz = z & 1023;
+	const long near_w = fx < radius, near_e = 1024 - fx < radius;
+	const long near_n = fz < radius, near_s = 1024 - fz < radius;
+	long nx = x, nz = z;
+	short at = room;
+
+	out[0] = x;
+	out[1] = y;
+	out[2] = z;
+	*out_room = room;
+
+	if (radius <= 0 || radius > 512 || !(near_w || near_e || near_n || near_s))
+		return 0;
+
+	if (!open(ctx, x, y, z, room, &at))
+		return 0;
+
+	if (near_w && !open(ctx, (x & ~1023) - 1, y, z, room, &at))
+		nx = (x & ~1023) + radius;
+	else if (near_e && !open(ctx, (x | 1023) + 1, y, z, room, &at))
+		nx = (x & ~1023) + 1024 - radius;
+
+	if (near_n && !open(ctx, x, y, (z & ~1023) - 1, room, &at))
+		nz = (z & ~1023) + radius;
+	else if (near_s && !open(ctx, x, y, (z | 1023) + 1, room, &at))
+		nz = (z & ~1023) + 1024 - radius;
+
+	if (nx == x && nz == z)
+		return 0;
+
+	at = room;
+
+	if (!open(ctx, nx, y, nz, room, &at))
+		return -1;
+
+	out[0] = nx;
+	out[2] = nz;
+	*out_room = at;
+	return ((nx > x) ? nx - x : x - nx) + ((nz > z) ? nz - z : z - nz);
 }
 
 /* Behind her back, at the game's resting height.

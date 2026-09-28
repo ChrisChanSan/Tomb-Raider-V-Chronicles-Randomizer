@@ -522,3 +522,39 @@ long ModernCameraChordClamp(const long from[3], const long to[3], float alpha,
  * rooms, alpha the frame's blend factor. prev_room may be -1. */
 void ModernCameraDrawnEye(const long prev[3], short prev_room, const long cur[3], short cur_room,
 	float alpha, MODERN_EYE_OPEN open, void* ctx, MODERN_EYE_FIX* out);
+
+/* The tick eye beside a wall.
+ *
+ * The near plane stands phd_znear in front of the eye, and the part of it the
+ * screen shows is a rectangle whose corners lie
+ *
+ *     R = sqrt(znear^2 + (znear * half_w / persp)^2 + (znear * half_h / persp)^2)
+ *
+ * from the eye, where half_w and half_h are half the window in pixels and
+ * persp the projection's focal length in pixels (AlterFOV,
+ * specific\3dmath.cpp). A closed face nearer than R can cross that rectangle
+ * at some view angle, and whatever lies behind the face shows through at the
+ * screen's edge; a face at R or more never can. At the near plane of 20 and
+ * the game's field of view of 80 degrees R is 32.5 at 16:9 and 38.1 at 21:9.
+ * ModernCameraNearRadius is that formula, rounded up to a whole unit, 0 for a
+ * projection without a focal length or a near plane.
+ *
+ * ModernCameraWallClearance moves the eye square off every closed face of an
+ * axis neighbour of its sector that stands nearer than `radius`, to exactly
+ * `radius` from it, and no further. A face is closed when `open` refuses the
+ * point one unit past it, at the eye's height, asked from the eye's room.
+ * The move is square to the face and never along a ray, so a wall the eye
+ * runs along cannot slide it anywhere; x and z each move by at most `radius`,
+ * and both move only in a concave corner. A convex corner - a closed diagonal
+ * neighbour with both sides open - is not a face and is left alone.
+ *
+ * Returns the units moved, |dx| + |dz|, with the point in out and the room
+ * `open` resolved it to in *out_room; 0 when nothing is within `radius`, when
+ * the eye itself does not open, or for a radius outside 1..512 (two faces of
+ * one axis within the radius would need a sector narrower than 1024); -1 when
+ * the moved point does not open. On 0 and -1 out is the eye and *out_room is
+ * `room`. `open` is asked only when a face lies within the radius: once for
+ * the eye, once for each such face and once for the moved point. */
+long ModernCameraNearRadius(long znear, long half_w, long half_h, long persp);
+long ModernCameraWallClearance(const long eye[3], short room, long radius,
+	MODERN_EYE_OPEN open, void* ctx, long out[3], short* out_room);

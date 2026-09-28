@@ -270,7 +270,14 @@ static struct
 	long ray;			// 1 = ModernCameraRayBounds resolved the eye, 0 = CameraCollisionBounds
 	long ideal_set;
 	GAME_VECTOR ideal;		// the ideal MoveCamera was handed, as it left it
+	long clear;			// ModernCameraWallClearance's answer in MoveCamera, 0 when it did not run
 } cam_tick;
+
+/* Set by ChaseCamera and CombatCamera to their modern_orbit just before they
+ * call MoveCamera, and taken back by MoveCamera at once, so the wall
+ * clearance runs for the Modern orbit's eye only and never for a fixed or a
+ * look camera, which call MoveCamera as well. */
+static long modern_cam_clear_wall;
 
 static void CamTickWant(const GAME_VECTOR* want)
 {
@@ -1244,7 +1251,11 @@ static void CameraEyeNear(long x, long y, long z, short room, long* face, long* 
  *   snaps      CameraSnaps
  *   kind       CameraEyeKindText of the eye from its own room
  *   face       units to the nearest face of a closed neighbouring sector, -1 none
- *   corner     units to the nearest convex corner, -1 none */
+ *   corner     units to the nearest convex corner, -1 none
+ *   clear      what ModernCameraWallClearance did to the eye in MoveCamera: the
+ *              units it moved it off a wall, 0 nothing to do or a pass without
+ *              the Modern orbit, -1 a move refused because the moved point
+ *              opens in no room */
 static void CameraTickLog()
 {
 	CAMERA_EYE_TEST t;
@@ -1298,13 +1309,13 @@ static void CameraTickLog()
 	}
 
 	Log("CAMLOG tick f=%d eye=(%ld,%ld,%ld)/%d ideal=%s want=%s target=(%ld,%ld,%ld)/%d "
-		"los=%ld los_lp=%ld pull=%ld lead=%ld,%ld mc_pull=%ld snaps=%d kind=%s face=%ld corner=%ld",
+		"los=%ld los_lp=%ld pull=%ld lead=%ld,%ld mc_pull=%ld snaps=%d kind=%s face=%ld corner=%ld clear=%ld",
 		(int)GlobalCounter, camera.pos.x, camera.pos.y, camera.pos.z, (int)camera.pos.room_number,
 		ideal, want, camera.target.x, camera.target.y, camera.target.z,
 		(int)camera.target.room_number, los, los_lp,
 		(cam_tick.los_set && cam_tick.ray) ? ledge_log.pull : -1L,
 		modern_cam_lead_yaw, modern_cam_lead_pitch, ledge_log.mc_pull, (int)CameraSnaps, kind,
-		face, corner);
+		face, corner, cam_tick.clear);
 }
 
 void CalculateCamera()
@@ -2520,6 +2531,9 @@ void ChaseCamera(ITEM_INFO* item)
 	if (camera.old_type == FIXED_CAMERA)
 		camera.speed = 1;
 
+	// In Modern the eye MoveCamera leaves keeps the near plane off a wall
+	// (ModernCameraClearWall).
+	modern_cam_clear_wall = modern_orbit;
 	MoveCamera(&ideal, camera.speed);
 	CamTickIdeal(&ideal);
 }
@@ -2723,8 +2737,64 @@ void CombatCamera(ITEM_INFO* item)
 	if (camera.old_type == FIXED_CAMERA)
 		camera.speed = 1;
 
+	modern_cam_clear_wall = modern_orbit;	// as in ChaseCamera
 	MoveCamera(&ideal, camera.speed);
 	CamTickIdeal(&ideal);
+}
+
+/* ModernCameraWallClearance's `open`: CameraEyeTest, which answers open or
+ * not and the room the point resolved to. It puts GetHeight's five globals
+ * back, which MoveCamera does not need - the tick's own camera calls
+ * GetHeight freely, in mgLOS and CameraCollisionBounds - and which does no
+ * harm here. */
+static long ModernCameraWallOpen(void* ctx, long x, long y, long z, short room, short* at)
+{
+	CAMERA_EYE_TEST t;
+
+	(void)ctx;
+	CameraEyeTest(x, y, z, room, &t);
+	*at = t.room;
+	return t.open;
+}
+
+/* The Modern orbit's eye, square off a wall by the near rectangle's reach
+ * (ModernCameraWallClearance, game\modern_camera.h).
+ *
+ * ModernCameraRayBounds pulls a clipped eye in along the ray until four
+ * probes 384 units out stand in a room; when none of its eighths clears - her
+ * back to a wall - the mgLOS point stands, and mgLOS steps one eighth back
+ * from the first sample in a wall, so that point lies anywhere in the last
+ * eighth before the face, down to 0 units from it. MoveCamera's damping then
+ * carries the eye towards it and nothing asks the wall again. Measured over
+ * the 37196 CAMLOG ticks of two -log runs, most of them in ANDREA1 and
+ * ANDREA2: 2584 eyes stood nearer than 33 units to a closed face, 2394 of
+ * them with pull=0 - that fallback - and 203 at 0 or 1 unit.
+ *
+ * The radius comes from the projection the frame uses, so it follows the
+ * window's aspect and the field of view; phd_znear holds the near plane
+ * shifted up by W2V_SHIFT (InitWindow). Only x, z and the room change; the
+ * floor and the ceiling clamp that follows in MoveCamera keeps its 255, and
+ * its final GetFloor takes the room from the pushed point. */
+static void ModernCameraClearWall()
+{
+	const long eye[3] = { camera.pos.x, camera.pos.y, camera.pos.z };
+	const long radius = ModernCameraNearRadius(phd_znear >> W2V_SHIFT, phd_winwidth / 2,
+		phd_winheight / 2, phd_persp);
+	long out[3], moved;
+	short room;
+
+	moved = ModernCameraWallClearance(eye, camera.pos.room_number, radius, ModernCameraWallOpen, 0,
+		out, &room);
+
+	if (moved > 0)
+	{
+		camera.pos.x = out[0];
+		camera.pos.z = out[2];
+		camera.pos.room_number = room;
+	}
+
+	if (gLogEnabled)
+		cam_tick.clear = moved;
 }
 
 void MoveCamera(GAME_VECTOR* ideal, long speed)
@@ -2733,7 +2803,10 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 	GAME_VECTOR temp1;
 	GAME_VECTOR temp2;
 	long height, ceiling, shake, rndval, wx, wy, wz, dx, dy, dz;
+	const long clear_wall = modern_cam_clear_wall;	// the Modern orbit's eye, see the flag
 	short room_number;
+
+	modern_cam_clear_wall = 0;
 
 	if (BinocularOn < 0)
 	{
@@ -2848,6 +2921,11 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 			}
 		}
 	}
+
+	// Before the floor and ceiling clamp below, so the clamp and the final
+	// GetFloor apply to the pushed point.
+	if (clear_wall)
+		ModernCameraClearWall();
 
 	wz = camera.pos.z;
 	wy = camera.pos.y;

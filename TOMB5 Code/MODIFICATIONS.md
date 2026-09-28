@@ -2725,6 +2725,144 @@ writes one `HDLOG ... sky groups=` line per level.
 
 **Commits.** `1087750`, `c0f9ede`, `5285f99`
 
+### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items
+2026-09-29
+
+**What.** Two rules of the HD level. The alpha-pass triangles of a room whose page is
+part-way clear in every texel - every texel at or above the alpha test's 0.5, the smallest
+at most 243 of 255 - are no longer drawn with the alpha test but blended, `SRCALPHA` over
+`INVSRCALPHA` with the depth write on, in a phase of their own (`HD_PASS_CLEAR`) after
+every room's solid art and before the models and the classic buckets. And the two washroom
+mirrors of RICH2 show Lara and the items in front of them: with an HD level active, every
+item whose reflection in a mirror's plane lands in the copy of the room behind the glass
+is drawn once more through a view reflected in that plane, and Lara the same.
+
+**Why.** The Remaster builds RICH2's polished floors as a floor on pages at alpha 231 to
+239 lying over an upside-down copy of the room: the lobby, room 8, is 657 floor triangles
+on pages 1047 and 1045 (0.917 on the average) over 2,895 triangles of copy. The alpha test
+at 0.5 kept every texel of those pages and drew the floor solid, so the copy was drawn and
+never seen. An inventory of every alpha-pass page of the fifteen `.TRG` files, decoded
+with the engine's own BC7 reader, finds the class in three levels: RICH2, 13 pages (1029,
+1045, 1047, 1049, 1053, 1079 and 1081 at 231 to 239, the inlaid floors 3314 to 3319 at 231
+to 255) with 17,989 triangles; RICHCUT2, page 1103 (211 to 255) with 936; TITLE, pages
+2147, 2149 and 2154 (174 to 255) with 1,860; no other level has one. The glass pages of
+the same range (3068 and 3309, 165 to 247) are material 14 and were blended already. The
+mirrors: TR5 has no mirror of its own. Neither the game's SCRIPT.DAT nor the original one
+carries a `CMD_MIRROR` or sets `GF_MIRROR` for any level, so `gfMirrorRoom` stays unset
+and `Draw_Mirror_Lara` never runs. The Remaster builds its two washroom mirrors out of
+art, a copy of the room reflected in the wall behind a pane, and the copy holds nothing
+that moves: at the glass a player saw the cabins and a toilet in it, no Lara and no doors,
+and looked straight into the cabins.
+
+**How.** `specific/hd/hd_pageclass.h:59`, `HDPageClassOf`, is the class, a pure function
+of the smallest and the largest alpha. `hd_pagecache.cpp:682-697` measures both over every
+texel of the top mip a page keeps, beside the cut-out share and on the decoding thread;
+`:1302` keeps the class per slot and `:1703`, `HDPageCacheSlotClear`, answers it.
+`hd_render.cpp:4516` decides per triangle: an alpha-pass triangle of a room group, not
+glass already, on a clear page gets blend 1 (its page's own alpha) and `HDRange::clear`.
+`draw_pass` draws the clear ranges alone when asked with `clearOnly` (`:5766` the depth
+write, `:5780` the filter), `HDRenderRoomMask` draws them after a room's alpha pass
+(`:6190`), and `hd_level.cpp:4549` draws `HD_PASS_CLEAR` for every room of the frame that
+has one, after the solid loop. `hd_render.cpp:2552`, `FindMirrors`, runs at the level
+build (`:5019`) over the four walls of every room's inside box and records a mirror where
+the wall has a pane (triangles in its plane in the additive pass or of material 14), a
+room's worth of the group's art behind it (100 triangles or more, reaching 1,024 units
+deep) and 90 per cent of that art the reflection of the level's art in front to one 8-unit
+cell; `HDRenderMirrorInfo` and `hd_level.cpp:4034`, `HDLevelMirrorCount` and
+`HDLevelMirrorAt`, hand them to the game. `game/draw.cpp:2498` calls `Draw_Mirror_Items`
+(`game/mirror.cpp:284`) after Lara's own draw and before the rooms' objects are printed,
+while the mirror room's portal window is still this frame's. For a mirror whose room is on
+the draw list and whose glass faces the camera, `DrawOneMirror` (`:155`) copies the view -
+`w2v_matrix`, `aW2VMx` and the bases of both matrix stacks - and reflects it
+(`game/mirror_math.h`, `MirrorView`: the view's column of the plane's axis negated, the
+camera reflected). It draws every item in front of the glass whose reflected origin lands
+in the copy's box, with 256 units of slack, through `PrintObjectReflection`
+(`game/draw.cpp:1182`, the item loop's body with the mirror's room as the clip room),
+moves Lara's fifteen matrices into the reflected view (`MirrorViewSpaceApply`) and draws
+her with `DrawLara(lara_item, 1)`, and copies the view back. The classic path's winding
+test is turned round with `SetCullCW` as `Draw_Mirror_Lara` turns it; the HD models are
+drawn double sided (`hd_object.cpp:3014`) and need nothing, and HD Lara in first person
+culls the other side on her mirror flag (`hd_laradraw.cpp:1309`). `HDObjectReflection`
+(`hd_object.cpp:3037`) tells the object seam the items are a reflection: they are left out
+of the two light checks (`:3023`) and counted for the mirror's log line. A reflected item
+casts no shadow - its slot's `shadow_size` is 0 for the call - and its ambient fade, which
+`CalcAmbientLight` steps per draw, is put back. The motion line of `HDLOG level=` ends in
+` clear_pages=%d clear_parts=%d mirrors=%d`, the level's first frame line in
+` clear_calls=%d`; one `HDLOG mirrorwall` line per mirror at the build, and
+`HDLOG mirror items=%d plane=%ld room=%d axis=%c lara=%d hd=%d` once a second while a
+mirror draws. `RoomProbe` draws the clear phase in its frame, gives the before picture
+with `-noclear`, and prints a `clear:` line and, with `-roombox`, the mirrors.
+
+**Checked.** The inventory, by a probe built against the engine's BC7 decoder and the
+`.TRG` reader, over all fifteen levels, and the engine's own count through
+`RoomProbe -nodraw`: 55 parts on 13 pages and 149 draw calls in RICH2, one part on one
+page in one draw call in RICHCUT2, nine parts on three pages in nine draw calls in TITLE,
+none elsewhere. Against a `RoomProbe` built from the tree before this entry the vertex,
+index and range counts and the glass lines of all fifteen levels are the same, and renders
+of JOBY3 room 9, ANDREA2 room 65 and RICH2 room 134 are the same to the pixel. Every RICH2
+group with a clear floor holds art beneath its floor's plane, down to the one-sector
+doorways (groups 53, 54, 90, 95, 97, 101, 103, 117, 118, 154, 170, 171 and 176); TITLE
+groups 50 and 51 hold none. The lobby from the pose
+`RICH2 8 4100 -25300 1700 -12 35 -size 1600 900 -roombox`: with `-noclear` the same to the
+pixel as the build before, without it 792,628 of 1,440,000 pixels change, all on the
+floor, which shows the copy's doorway and a light stripe faintly. The mirrors, through
+`RoomProbe -roombox` over the fifteen levels: RICH2 room 134 (plane x = 33792, pane 12,
+6,161 triangles behind reaching 2,054 deep, 6,107 reflected; copy x 31738..33785, y
+-25607..-24042, z 74758..78848) and room 135 (x = 30720, pane 16, 6,237 behind, 6,201
+reflected), nothing else; the rule costs 77 ms of the level build in RICH2 and 13 to 21 ms
+in ANDREA1, JOBY2 and JOBY5. The items the rule draws, out of the original RICH2 item
+list: in room 134's glass the kick doors 189, 190 and 192 of cabins 131 to 133, the
+ceiling trapdoor 188 and the electrical light 191 above them, the three ANIMATING4 items
+193 to 195 of the washroom, and Lara; in room 135's the kick doors 199, 200 and 202 of
+cabins 136 to 138, the large medipack 201, the ANIMATING4 items 196 to 198, and room 177's
+door 246 and generator slot 247; nothing that stands behind either glass. ModernTest pins
+the class and the reflection (14,018 checks become 14,048); MenuTest 42,364, InterpTest
+683, and LipsTest 270 with the lip objects and 243 without, all without a failure. The
+mirror itself cannot be drawn outside the game - `RoomProbe` draws no item - so its
+picture is the play test's.
+
+**Unchanged.** `hd_enable 0`: the clear phase is part of `HDFrameDraw`, whose rooms are
+the HD ones only, and the page class exists only in the page cache the HD level builds;
+`Draw_Mirror_Items` is called behind `HDLevelActive()` (`game/draw.cpp:2498`), false with
+`hd_enable` off (`hd_level.cpp:3126`), and `HDLevelMirrorCount` asks it again (`:4036`).
+The classic mirror of Lara and its call, the classic item loop, the tick, the logic camera
+and the savegames: nothing of them is written - the reflection lives in the view and in
+copies of it, and an item's own position and pose are never touched. The three frame-rate
+modes alike: the reflection draws the pose the frame draws. Every alpha-pass page outside
+the class keeps the alpha test; the glass and the cut-outs of every level are as they
+were.
+
+**Decisions.** A rule from the data and no list per level: a page part-way clear in every
+texel is meant to be seen through. The class reads the smallest alpha: from the alpha
+test's reference, 128, up to 243 - halfway between the highest smallest alpha of a floor
+over a copy (233, TITLE page 2149) and the first near-opaque page (254, JOBY3 pages 14070
+and 14071, ANDY1 page 793, three sky sheets); a page that also carries texels at 255 stays
+in the class, because the floors of TITLE and RICHCUT2 and RICH2's inlaid ones do, and a
+texel at 255 blends as solid. The floor keeps the depth write and is drawn in a phase of
+its own before the models, not with the glass after everything: Lara stands on it, her
+shadow falls 16 units above it, and the glass and the glows of the copy must stay beneath
+it. HD only. The mirrors come from the art, because the script has none, and every item
+whose reflection lands in the copy is drawn, not a list of objects. The reflection is put
+into the view and not into the item, so every item keeps the pose the frame draws: a pose
+written into the item needs the -1 scale `CalcLaraMatrices(2)` gives Lara and
+`DrawAnimatingItem` does not have, and both mirrors stand in planes of constant x, which
+the z plane of `Draw_Mirror_Lara` does not serve. A reflected item casts no shadow of its
+own and its effects are not reflected.
+
+**Left.** TITLE groups 50 and 51 carry the class on page 2154 with nothing beneath the
+floor in their own art: there the floor blends over whatever the frame holds behind it and
+comes out a little darker (`RoomProbe` over black: a mean of 18.1 against 17.0 of 255 in
+group 51); whether the title flyby ever shows it is the play test's. Shadows and effects -
+flames, sparks, the gun flash - of what the mirror reflects. The lobby floor shows its
+static copy only: Lara and the items are not reflected in it, and the Remaster's floor
+does not reflect them either. In first person the reflected Lara is drawn the way the
+first-person draw draws her, without her face and her braid. Between two rooms the glass
+of one may be drawn before the clear floor of the other. The play test judges the lobby's
+brightness, the floor's edge, a kicked door swinging open in the glass, and that nothing
+is doubled outside it.
+
+**Commits.** `7235cb2`, `0737b1d`, `4f4815e`
+
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
 
@@ -9961,3 +10099,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |
+| #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items |

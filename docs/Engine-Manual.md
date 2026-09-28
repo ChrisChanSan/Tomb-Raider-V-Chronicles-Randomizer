@@ -1556,6 +1556,17 @@ it.
   with no depth of their own; 96 of them in eight levels, and nothing else in
   the game touched. The panes still break when the game breaks them: the piece
   is the same one Lara can shoot away.
+- **Marble floors reflect.** The Remaster builds the polished floors of the
+  VCI building - the RICH2 lobby and the halls around it, the cut scene that
+  follows it and rooms of the title flyby - as a floor that is slightly
+  see-through, lying over an upside-down copy of the room. A page that lets
+  some light through in every texel is now drawn blended instead of cut, so
+  the lamps, the palm pots and the ceiling lights show faintly in the marble;
+  Lara still stands on it and her shadow still falls on it.
+- **Mirrors show Lara and the doors.** The two washroom mirrors of RICH2 are
+  a copy of the room behind a pane, and the copy holds no door and no Lara.
+  Both are now drawn once more across the glass, mirror-inverted and moving
+  as they move, together with everything else that stands in front of it.
 
 **Water.**
 
@@ -2976,6 +2987,7 @@ wrote it, and each seam answers a different question:
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
+| in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd=` — how many items it reflected, which glass, whether Lara was in it and how many of the items went through the HD models |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |

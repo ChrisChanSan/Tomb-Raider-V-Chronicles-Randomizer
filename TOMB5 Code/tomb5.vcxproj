@@ -54,6 +54,7 @@
     <ClCompile Include="TOMB5\game\health.cpp" />
     <ClCompile Include="TOMB5\game\interpolate.cpp" />
     <ClCompile Include="TOMB5\game\inventory_interp.cpp" />
+    <ClCompile Include="TOMB5\game\cutseq_interp.cpp" />
     <ClCompile Include="TOMB5\game\hitman.cpp" />
     <ClCompile Include="TOMB5\game\huskie.cpp" />
     <ClCompile Include="TOMB5\game\hydra.cpp" />
@@ -461,6 +462,7 @@
     <ClInclude Include="TOMB5\game\interpolate.h" />
     <ClInclude Include="TOMB5\game\interpolate_math.h" />
     <ClInclude Include="TOMB5\game\inventory_interp.h" />
+    <ClInclude Include="TOMB5\game\cutseq_interp.h" />
     <ClInclude Include="TOMB5\game\hitman.h" />
     <ClInclude Include="TOMB5\game\huskie.h" />
     <ClInclude Include="TOMB5\game\hydra.h" />

@@ -19,7 +19,8 @@
  * per logic step, so every second frame carries no logic tick. On that frame
  * this module writes the halfway point between the previous and the current
  * logic state into the live structures (items[], effects[], hairs[][],
- * camera and the position-only particles), lets the unchanged renderer draw
+ * camera, the position-only particles and, in a cutscene, the actors' node
+ * tables through game\cutseq_interp.cpp), lets the unchanged renderer draw
  * from them, and puts the original bytes back afterwards:
  *
  *   InterpCapturePrev()  control.cpp, first statement of the tick body: the
@@ -107,7 +108,7 @@ void InterpLogEyeFix(unsigned int frame, short walkRoom, long rooms, long outsid
  * corpse fades) steps only when this is false, so it lasts as long in
  * wall-clock seconds at 60 as at 30.
  *
- * It is not "alpha < 1": a cutscene frame or a frame after an invalidation is
+ * It is not "alpha < 1": a camera cut or a frame after an invalidation is
  * drawn live and still carries no tick, so the latch follows the cadence, not
  * the snapshot. It stays set for the whole game-loop iteration, because
  * gfLegendTime (DoLevel) and cutseq_busy_timeout sit on either side of
@@ -366,7 +367,7 @@ bool InterpKeyFarOf(short animNumber, long pair, int nodes, const long* bone);
 
 /* The blend factor for velocity-carrying particles (sparks, rain, drips...):
  * the frame's alpha, or 1 on a live frame (fps_mode 0, the frame that
- * carries the tick, a cutscene, a level start, a return from a menu), where
+ * carries the tick, a camera cut, a level start, a return from a menu), where
  * every call site keeps vanilla's own expression. It is `g_applied ? g_alpha
  * : 1`, tied to the snapshot rather than the cadence, so a frame that draws
  * the items live draws the particles live too. The particle is walked

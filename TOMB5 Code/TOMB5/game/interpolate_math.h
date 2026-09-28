@@ -140,6 +140,15 @@ inline long InterpManhattan(long dx, long dy, long dz)
 #define INTERP_ITEM_SNAP	512L
 #define INTERP_CAM_SNAP		1024L
 
+/* INTERP_CUTSEQ_SNAP is the cut rule of a cutscene camera, whose eye and
+ * target come from the tracks of DATA\CUTSEQ.BIN rather than from a camera
+ * routine: a cut in a track is a jump of the eye or the target between two
+ * frames. Over the 44 cutscenes (CutseqProbe, 77,187 steps) the cuts jump 294
+ * units and more, 371 of them in 33 cutscenes, while the fastest drive moves
+ * 222 a frame and the eye's 99th percentile is 78; INTERP_CAM_SNAP would
+ * blend 35 of the cuts as motion. */
+#define INTERP_CUTSEQ_SNAP	256L
+
 /* ==========================================================================
  * The blend factor when the display sets the pace (fps_mode 2).
  *
@@ -1966,4 +1975,115 @@ inline bool InterpCamAimCut(long ppx, long ppy, long ppz, long ptx, long pty, lo
 	}
 
 	return InterpManhattan(b[0] - a[0], b[1] - a[1], b[2] - a[2]) > snap;
+}
+
+/* ==========================================================================
+ * The cutscene nodes between two ticks.
+ *
+ * A cutscene actor is a table of packed nodes decoded once per tick
+ * (DecodeAnim, game\deltapak.cpp): node 0 holds the root position, drawn
+ * at three times its value (updateAnimFrame, game\deltapak.cpp), and every
+ * other node three angles of ten bits (& 0x3FF, 1024 to a turn). The draw
+ * reads nothing but these values, so a frame between two ticks is drawn from
+ * the two tables blended (game\cutseq_interp.cpp); the arithmetic is here so
+ * that InterpTest runs it without a game.
+ *
+ * INTERP_CUTSEQ_ROOT_SNAP: a root whose drawn position steps further than
+ * this in one tick is a jump in the track, and that actor is drawn at the
+ * tick's values for the frame. Over the file 119 root steps are above it, 44
+ * of them without a camera cut. No value parts jumps from motion cleanly: a
+ * falling object in cutscene 38 moves 1029 to 1032 a frame and is drawn at
+ * the tick's values, and 17 lone jumps under it with no camera cut are
+ * blended as a slide for one tick. INTERP_CUTSEQ_ACTORS is the engine's own
+ * ceiling (actor_pnodes[10]); INTERP_CUTSEQ_NODES the ceiling of one actor's
+ * table the snapshot holds, above the largest in the file (30). */
+#define INTERP_CUTSEQ_ROOT_SNAP	1024L
+#define INTERP_CUTSEQ_ACTORS	10
+#define INTERP_CUTSEQ_NODES	40
+
+/* The short way round for a ten-bit angle: the difference is folded into
+ * -512 .. 511 and the result masked back to 0 .. 1023. Exactly half a turn
+ * comes out as -512 and has no shorter way; InterpHalfTurn10 refuses it. */
+inline short InterpLerpAngle10(short a, short b, float alpha)
+{
+	const long d = ((((long)b - (long)a) + 512) & 0x3FF) - 512;
+
+	return (short)(((long)a + (long)((float)d * alpha)) & 0x3FF);
+}
+
+inline bool InterpHalfTurn10(short a, short b)
+{
+	return (((long)b - (long)a) & 0x3FF) == 512;
+}
+
+/* The cutscene camera's cut rule: the eye or the target stepped further than
+ * INTERP_CUTSEQ_SNAP between the two ticks. Both steps are handed back for
+ * the log. */
+inline bool InterpCutseqCameraCut(const long prevEye[3], const long eye[3],
+	const long prevTarget[3], const long target[3], long* eyeStep, long* targetStep)
+{
+	*eyeStep = InterpManhattan(eye[0] - prevEye[0], eye[1] - prevEye[1], eye[2] - prevEye[2]);
+	*targetStep = InterpManhattan(target[0] - prevTarget[0], target[1] - prevTarget[1],
+		target[2] - prevTarget[2]);
+
+	return *eyeStep > INTERP_CUTSEQ_SNAP || *targetStep > INTERP_CUTSEQ_SNAP;
+}
+
+/* How far an actor's drawn root moved between two node tables of x, y, z
+ * triples: node 0, at three times its value. */
+inline long InterpCutseqRootStep(const short* prev, const short* cur)
+{
+	return InterpManhattan(3 * ((long)cur[0] - (long)prev[0]), 3 * ((long)cur[1] - (long)prev[1]),
+		3 * ((long)cur[2] - (long)prev[2]));
+}
+
+/* One actor's table between two ticks. `prev` and `cur` hold `nodes` x, y, z
+ * triples; `out` receives the blend at `alpha`. Returns false with `out`
+ * untouched when the root stepped further than INTERP_CUTSEQ_ROOT_SNAP: the
+ * actor is drawn at the tick's values. Otherwise the root is blended as a
+ * position and every other node as three ten-bit angles, except a node with
+ * an axis exactly half a turn from its previous value, which keeps the
+ * tick's three values: a half turn has no shorter way, and its other axes
+ * usually turn with it (an Euler flip), so blending them alone would draw a
+ * rotation neither tick holds. `rootStep` receives the root's step,
+ * `halfTurns` the nodes kept for a half turn, `halfNode` the first of them
+ * or -1. */
+inline bool InterpCutseqBlend(const short* prev, const short* cur, int nodes, float alpha,
+	short* out, long* rootStep, int* halfTurns, int* halfNode)
+{
+	*rootStep = InterpCutseqRootStep(prev, cur);
+	*halfTurns = 0;
+	*halfNode = -1;
+
+	if (*rootStep > INTERP_CUTSEQ_ROOT_SNAP)
+		return false;
+
+	for (int k = 0; k < 3; k++)
+		out[k] = (short)InterpLerpLong(prev[k], cur[k], alpha);
+
+	for (int i = 1; i < nodes; i++)
+	{
+		const short* p = prev + 3 * i;
+		const short* c = cur + 3 * i;
+		short* o = out + 3 * i;
+
+		if (InterpHalfTurn10(p[0], c[0]) || InterpHalfTurn10(p[1], c[1]) ||
+			InterpHalfTurn10(p[2], c[2]))
+		{
+			o[0] = c[0];
+			o[1] = c[1];
+			o[2] = c[2];
+
+			if (*halfNode < 0)
+				*halfNode = i;
+
+			(*halfTurns)++;
+			continue;
+		}
+
+		for (int k = 0; k < 3; k++)
+			o[k] = InterpLerpAngle10(p[k], c[k], alpha);
+	}
+
+	return true;
 }

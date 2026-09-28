@@ -386,6 +386,9 @@
     <ClCompile Include="TOMB5\game\inventory_interp.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\game\cutseq_interp.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\game\menu_frame.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
@@ -842,6 +845,9 @@
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\inventory_interp.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\cutseq_interp.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\key_scheme.h">

@@ -20,6 +20,7 @@
 #include "effect2.h"
 #include "control.h"
 #include "interpolate.h"	// InterpIsTweenFrame - paces the cutscene wind-up counter
+#include "cutseq_interp.h"	// the actors blended between two ticks
 #include "lot.h"
 #include "tomb4fx.h"
 #include "camera.h"
@@ -2232,6 +2233,7 @@ void handle_cutseq_triggering(long name)
 		if (cutseq_num <= 4)
 			DelsHandyTeleportLara(GLOBAL_cutme->orgx, GLOBAL_cutme->orgy, GLOBAL_cutme->orgz, cutrot * 0x4000);
 
+		CutseqInterpClose();
 		cutseq_trig = 0;
 		GLOBAL_playing_cutseq = 0;
 
@@ -3418,6 +3420,8 @@ void frigup_lara()
 
 		if ((gfLevelFlags & GF_YOUNGLARA))
 			HairControl(0, 1, frame);
+
+		CutseqNoteHair();
 	}
 
 	GLaraShadowframe = frig_shadow_bbox;
@@ -3699,6 +3703,7 @@ void init_cutseq_actors(char* data, long resident)
 	camera.pos.z = lara_item->pos.z_pos;
 	camera.pos.room_number = lara_item->room_number;
 	InitialiseHair();
+	CutseqInterpOpen(actor_pnodes);
 }
 
 void init_resident_cutseq(long num)
@@ -3843,4 +3848,5 @@ void do_cutseq_skipper_stuff()
 
 	lara_item->mesh_bits = -1;	//for good fucking measure
 	cutseq_trig = 3;	//end it
+	CutseqInterpSkip();
 }

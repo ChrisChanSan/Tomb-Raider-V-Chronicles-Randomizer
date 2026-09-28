@@ -18,6 +18,7 @@
 #include "effects.h"			// effects[24]
 #include "hair.h"			// hairs[2][7]
 #include "deltapak.h"			// GLOBAL_playing_cutseq
+#include "cutseq_interp.h"		// the cutscene actors' node tables
 #include "spotcam.h"			// bUseSpotCam
 #include "gameflow.h"			// gfLevelId, for the log line
 #include "lara.h"			// lara.poisoned - the poison sway guard
@@ -381,6 +382,7 @@ namespace
 	int g_snapHalfTurn = 0;	// rotations that turned half a turn in one tick and kept the live value
 	int g_snapCamCut = 0;
 	int g_snapCutscene = 0;
+	int g_snapCutseqCut = 0;	// camera cuts by the cutscene rule, also in g_snapCamCut
 
 	/* One counter per camera cut reason, so the log names which rule fired
 	 * and not only how often. */
@@ -742,6 +744,13 @@ namespace
 	 *   handover     camera type changes inside the smooth family (chase,
 	 *                look, combat) not taken for a cut; `type=` counts only
 	 *                changes that leave the family.
+	 *   cutscene     frames between two ticks of a cutscene drawn wholly or
+	 *                partly live for a reason other than a cut: an actor
+	 *                whose node table is larger than the snapshot, or a scene
+	 *                the snapshot never opened (game\cutseq_interp.cpp). Cuts
+	 *                in the track, root jumps, half turns and the scene's
+	 *                first tick are counted in CUTLOG instead, so a healthy
+	 *                log reads 0.
 	 *   pose_items   items whose pose was blended, per drawn frame; zero at
 	 *                fps_mode 0.
 	 *   pose_skips   blends the neighbour rule refused (animation changed or
@@ -816,7 +825,10 @@ namespace
 	 *                in pose_skips. One per drawn in-between frame of such a
 	 *                tick: one per twist or roll at sixty hertz, five or six at
 	 *                165 (fps_mode 2, where every frame is an in-between one);
-	 *                zero everywhere else and zero at fps_mode 0. */
+	 *                zero everywhere else and zero at fps_mode 0.
+	 *   cutscene_cut frames between two ticks that a cutscene camera's cut
+	 *                drew live (INTERP_CUTSEQ_SNAP), counted in camcut as
+	 *                well; one per cut at sixty hertz, four to six at 165. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -828,7 +840,8 @@ namespace
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
-				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d bridge=%d",
+				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d bridge=%d "
+				"cutscene_cut=%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -850,7 +863,7 @@ namespace
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
 				(double)g_secParticles / g_secFrames, g_secPartKinds,
-				g_secRootFlip, g_secPoseBack, g_secBridge);
+				g_secRootFlip, g_secPoseBack, g_secBridge, g_snapCutseqCut);
 
 		/* TICKLOG: how often each tween-guarded counter stepped in the logic
 		 * second that just ended (GlobalCounter, thirty in both modes). A 30
@@ -905,6 +918,7 @@ namespace
 		g_cutEye = 0;
 		g_cutAim = 0;
 		g_snapCutscene = 0;
+		g_snapCutseqCut = 0;
 		g_secPose = 0;
 		g_secPoseSkip = 0;
 		g_secPoseFar = 0;
@@ -988,6 +1002,9 @@ void InterpCapturePrev()
 	for (int t = 0; t < HAIR_TAILS; t++)
 		for (int l = 0; l < HAIR_LINKS; l++)
 			CaptureNode(&g_prevHair[t * HAIR_LINKS + l], &hairs[t][l].pos, 0, 0, 0, 0);
+
+	// The cutscene actors' node tables, before this tick decodes the next frame.
+	CutseqCapturePrev();
 
 	/* Shells, the three swarms, bubbles and ropes. The 184 mover slots are
 	 * walked whether or not they moved; a slot that is not alive gets
@@ -1130,14 +1147,16 @@ float InterpFrameAlpha()
 }
 
 /* The room the blended eye stands in (see interpolate.h). The gate is
- * g_applied, not g_tween: a cutscene frame or the first frame after a level
- * start is a tween frame drawn live, and asking GetFloor about the live camera
+ * g_applied, not g_tween: a camera cut or the first frame after a level start
+ * is a tween frame drawn live, and asking GetFloor about the live camera
  * could return a room other than camera.pos.room_number (the camera code
  * walks there over several ticks), changing the 30 Hz picture too.
  *
  * GetFloor (control.cpp) writes nothing: it walks portals from the room it is
  * given and returns the room holding the point through the caller's short,
- * here a copy. */
+ * here a copy. A cutscene camera is walked like a flyby's, from its logic
+ * room; CUTLOG's eye_rooms= counts the blended frames whose walk starts in
+ * another room than the tick frames' walk. */
 short InterpEyeRoom(short logicRoom)
 {
 	if (!g_applied || !room || logicRoom < 0 || logicRoom >= number_rooms)
@@ -1158,6 +1177,9 @@ short InterpEyeRoom(short logicRoom)
 	// seeds draw_room_list.
 	if (at < 0 || at >= number_rooms)
 		return logicRoom;
+
+	if (GLOBAL_playing_cutseq && at != logicRoom)
+		CutseqNoteEyeRoom();
 
 	return at;
 }
@@ -1266,7 +1288,7 @@ void InterpNoteParticles(int kind, int n)
 
 void InterpBeginFrame(float alpha)
 {
-	/* The tween latch, set before every exit. A cutscene frame or one without
+	/* The tween latch, set before every exit. A camera cut or a frame without
 	 * previous state is drawn live but still carries no tick, so the latch
 	 * reads `alpha`, not what the snapshot did; fps_mode 0 passes 1 and it
 	 * stays false. At fps_mode 2 there are several frames per tick, so the
@@ -1319,12 +1341,15 @@ void InterpBeginFrame(float alpha)
 	 *   !items       before a level is loaded. The title loads a level with a
 	 *                Lara item (DoTitle writes `lara_item->mesh_bits = 0`),
 	 *                so its frames are blended.
-	 *   !valid       the first frame after a level start, a savegame or a
-	 *                menu: no previous state.
-	 *   cutscene     the cutscene camera is decoded from a frame index
-	 *                (game\deltapak.cpp) and frigup_lara moves Lara inside
-	 *                DrawPhaseGame; a restore would undo it. Cutscenes run at
-	 *                30 Hz and are counted in the log. */
+	 *   !valid       the first frame after a level start, a savegame, a menu
+	 *                or a cutscene's start, skip or end: no previous state.
+	 *   cutscene     a cutscene whose actors have no previous node table yet:
+	 *                the first tick of the scene has decoded frame 0 only
+	 *                (CutseqBlendable, game\cutseq_interp.cpp). Every later
+	 *                cutscene frame is blended like the game: the camera
+	 *                below, and the actors' node tables through CutseqApply,
+	 *                which frigup_lara and DrawCutSeqActors read inside
+	 *                DrawPhaseGame and InterpEndFrame restores after it. */
 	if (alpha >= 1.0F || !items || !g_prevCam.valid)
 	{
 		if (gLogEnabled)
@@ -1338,27 +1363,57 @@ void InterpBeginFrame(float alpha)
 
 	if (GLOBAL_playing_cutseq)
 	{
-		if (gLogEnabled)
-		{
-			NoteFrameAlpha(alpha);
-			g_snapCutscene++;
-			NoteDrawnLara();
-		}
+		const int live = CutseqBlendable();
 
-		return;
+		if (live)
+		{
+			if (gLogEnabled)
+			{
+				NoteFrameAlpha(alpha);
+
+				// The scene's own first tick is a cut; anything else is not
+				// expected and is what INTERPLOG's cutscene= counts.
+				if (live != CUTSEQ_LIVE_OPEN)
+					g_snapCutscene++;
+
+				NoteDrawnLara();
+			}
+
+			return;
+		}
 	}
 
 	/* A camera cut is a cut of the whole picture: tested before anything is
 	 * blended, because a live camera over a half-step-back world makes the
 	 * level jump against Lara on every cut frame. The frame is drawn live,
 	 * one 30 Hz frame at the moment the picture jumps anyway; the tween latch
-	 * set above still stops the counters. */
-	if (CameraCut())
+	 * set above still stops the counters.
+	 *
+	 * A cutscene camera has a rule of its own on top, INTERP_CUTSEQ_SNAP
+	 * (interpolate_math.h): its tracks cut with jumps of 294 units and more,
+	 * while a drive in them moves at most 222 a frame. */
+	bool cutseqCut = false;
+
+	if (GLOBAL_playing_cutseq)
+	{
+		const long prevEye[3] = { g_prevCam.px, g_prevCam.py, g_prevCam.pz };
+		const long eye[3] = { camera.pos.x, camera.pos.y, camera.pos.z };
+		const long prevTarget[3] = { g_prevCam.tx, g_prevCam.ty, g_prevCam.tz };
+		const long target[3] = { camera.target.x, camera.target.y, camera.target.z };
+
+		cutseqCut = CutseqCameraCut(prevEye, eye, prevTarget, target);
+	}
+
+	if (CameraCut() || cutseqCut)
 	{
 		if (gLogEnabled)
 		{
 			NoteFrameAlpha(alpha);
 			g_snapCamCut++;
+
+			if (cutseqCut)
+				g_snapCutseqCut++;
+
 			NoteDrawnLara();
 		}
 
@@ -1367,6 +1422,12 @@ void InterpBeginFrame(float alpha)
 
 	g_applied = true;
 	g_alpha = alpha;
+
+	/* The cutscene actors, written before anything is drawn: Lara's
+	 * matrices (frigup_lara) and the other actors (DrawCutSeqActors) are
+	 * built from these tables inside DrawPhaseGame. */
+	if (GLOBAL_playing_cutseq && CutseqApply(alpha) && gLogEnabled)
+		g_snapCutscene++;
 
 	for (int i = 0; i < MAX_ITEMS; i++)
 	{
@@ -1420,7 +1481,13 @@ void InterpBeginFrame(float alpha)
 		}
 	}
 
-	for (int t = 0; t < HAIR_TAILS; t++)
+	/* Not in a cutscene: there frigup_lara steps the braid inside the draw,
+	 * on the frame that carries the tick, after this snapshot was taken, so
+	 * the pair here would be the braid before that step and after it, and
+	 * the frames after the step would draw it pulled back towards the old
+	 * one. The braid in a cutscene steps once per tick and is drawn as it
+	 * stands. */
+	for (int t = 0; t < HAIR_TAILS && !GLOBAL_playing_cutseq; t++)
 	{
 		for (int l = 0; l < HAIR_LINKS; l++)
 		{
@@ -1602,10 +1669,16 @@ void InterpBeginFrame(float alpha)
 		 * passing outside every room would fail on both ends of every chord
 		 * and lose its sky or stall at the tick rate. Entering or leaving a
 		 * flyby is a cut, so both ticks of a blend are either flyby or not;
-		 * a flyby frame keeps g_eye cleared and is drawn as before. */
+		 * a flyby frame keeps g_eye cleared and is drawn as before.
+		 *
+		 * A cutscene camera is left out for the same reason: its room comes
+		 * from IsRoomOutside (do_new_cutscene_camera), which matches no room
+		 * for an eye within a sector of a room's walls and then leaves the
+		 * room it had; the logic room is then not always the eye's, and the
+		 * rule would withhold the sky on frames whose ticks draw it. */
 		float camAlpha = alpha;
 
-		if (!bUseSpotCam && !g_prevCam.spot)
+		if (!bUseSpotCam && !g_prevCam.spot && !GLOBAL_playing_cutseq)
 		{
 			const long prev[3] = { g_prevCam.px, g_prevCam.py, g_prevCam.pz };
 			const long cur[3] = { g_savedCam.px, g_savedCam.py, g_savedCam.pz };
@@ -1658,10 +1731,16 @@ void InterpBeginFrame(float alpha)
 
 void InterpEndFrame()
 {
+	if (gLogEnabled && GLOBAL_playing_cutseq)
+		CutseqNoteFrame(g_applied);
+
 	if (g_applied)
 	{
 		for (int k = 0; k < g_touchedItems; k++)
 			RestoreNode(&items[g_touchedItem[k]].pos, &g_savedItem[k]);
+
+		// The cutscene actors' node tables, before the next tick decodes on.
+		CutseqRestore();
 
 		for (int k = 0; k < g_touchedFxs; k++)
 			RestoreNode(&effects[g_touchedFx[k]].pos, &g_savedFx[k]);
@@ -1728,9 +1807,9 @@ void InterpEndFrame()
 	}
 
 	/* The logic RNG goes back whether or not the snapshot was applied: a
-	 * cutscene frame draws live and frigup_lara still rolls Lara's speech
-	 * head from GetRandomControl. The next tick reads the stream as a 30 Hz
-	 * run leaves it. */
+	 * cutscene frame drawn live still has frigup_lara roll Lara's speech head
+	 * from GetRandomControl. The next tick reads the stream as a 30 Hz run
+	 * leaves it. */
 	if (g_seedSaved)
 	{
 		SeedRandomControl(g_seed);
@@ -1779,6 +1858,9 @@ void InterpInvalidate(const char* why)
 
 	g_prevCam.valid = 0;
 	g_prevAim.valid = 0;
+
+	// The cutscene actors' node tables too.
+	CutseqInterpInvalidate();
 
 	/* The arms' snapshot too: g_prevArm.base points into the level's frame
 	 * data, which FreeLevel returns to the game_malloc pool and the next level

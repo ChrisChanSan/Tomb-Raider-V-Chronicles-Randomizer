@@ -275,8 +275,8 @@ static struct
 
 /* Set by ChaseCamera and CombatCamera to their modern_orbit just before they
  * call MoveCamera, and taken back by MoveCamera at once, so the wall
- * clearance runs for the Modern orbit's eye only and never for a fixed or a
- * look camera, which call MoveCamera as well. */
+ * clearance runs for the Modern orbit's eye only and never for FixedCamera's,
+ * the one other caller of MoveCamera. */
 static long modern_cam_clear_wall;
 
 static void CamTickWant(const GAME_VECTOR* want)

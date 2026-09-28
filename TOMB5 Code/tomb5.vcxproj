@@ -463,6 +463,7 @@
     <ClInclude Include="TOMB5\game\interpolate_math.h" />
     <ClInclude Include="TOMB5\game\inventory_interp.h" />
     <ClInclude Include="TOMB5\game\cutseq_interp.h" />
+    <ClInclude Include="TOMB5\game\cutseq_decode.h" />
     <ClInclude Include="TOMB5\game\hitman.h" />
     <ClInclude Include="TOMB5\game\huskie.h" />
     <ClInclude Include="TOMB5\game\hydra.h" />

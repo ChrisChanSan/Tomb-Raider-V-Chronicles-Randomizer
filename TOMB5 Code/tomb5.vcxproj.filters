@@ -850,6 +850,9 @@
     <ClInclude Include="TOMB5\game\cutseq_interp.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\cutseq_decode.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\key_scheme.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>

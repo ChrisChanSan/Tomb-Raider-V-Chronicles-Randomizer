@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <limits.h>		// LONG_MIN / LONG_MAX - the extremes of root_narrow
+#include <string.h>		// memcpy / memcmp - the cutscene tables' round trip
 
 #include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
 /* The page arithmetic of the HD path's material 15 books and the drawn
@@ -5502,6 +5503,179 @@ static void books()
 	}
 }
 
+/* ------------------------------------------------------------ the cutscenes -- */
+
+/* The circular distance between two ten-bit angles, worked out without the
+ * function under test: 0 .. 512. */
+static long arc10(long a, long b)
+{
+	const long d = ((b - a) % 1024 + 1024) % 1024;
+
+	return d > 512 ? 1024 - d : d;
+}
+
+/* The cutscene actors' node tables between two ticks (game\cutseq_interp.cpp
+ * over InterpCutseqBlend): ten-bit angles blended the short way across the
+ * wrap at 1023, the exact half turn refused, the camera's cut rule at its
+ * constant with the eye and the target measured apart, the root test, and
+ * the apply-and-restore round trip on a small table. */
+static void cutseq()
+{
+	printf("the cutscenes\n");
+
+	/* ---- ten-bit angles */
+	ok(InterpLerpAngle10(1000, 24, 0.5F) == 0, "cutseq: 1000 to 24 crosses 1023 the short way (0)",
+		InterpLerpAngle10(1000, 24, 0.5F), 0);
+	ok(InterpLerpAngle10(24, 1000, 0.5F) == 0, "cutseq: 24 to 1000 crosses 0 the short way (0)",
+		InterpLerpAngle10(24, 1000, 0.5F), 0);
+	ok(InterpLerpAngle10(1020, 10, 0.5F) == 3, "cutseq: 1020 to 10 at 0.5 lands on 3, not 515",
+		InterpLerpAngle10(1020, 10, 0.5F), 3);
+	ok(InterpLerpAngle10(100, 300, 0.5F) == 200, "cutseq: 100 to 300 at 0.5 is the midpoint 200",
+		InterpLerpAngle10(100, 300, 0.5F), 200);
+	ok(InterpHalfTurn10(0, 512) && InterpHalfTurn10(512, 0) && InterpHalfTurn10(1023, 511),
+		"cutseq: 0/512, 512/0 and 1023/511 are exact half turns", 0, 1);
+	ok(!InterpHalfTurn10(300, 811) && !InterpHalfTurn10(300, 813) && !InterpHalfTurn10(5, 5),
+		"cutseq: 511, 513 and 0 apart are not half turns", 0, 0);
+
+	{
+		long off = 0, ends = 0, range = 0, halves = 0;
+
+		for (long a = 0; a < 1024; a += 7)
+		{
+			for (long b = 0; b < 1024; b += 5)
+			{
+				if (InterpHalfTurn10((short)a, (short)b))
+				{
+					halves++;
+					continue;
+				}
+
+				const long m = InterpLerpAngle10((short)a, (short)b, 0.5F);
+
+				if (m < 0 || m > 1023)
+					range++;
+
+				// On the shorter arc: the two halves add up to the whole, give or
+				// take the one unit the truncation drops.
+				if (labs(arc10(a, m) + arc10(m, b) - arc10(a, b)) > 1 || arc10(a, m) > arc10(a, b) / 2 + 1)
+					off++;
+
+				if (InterpLerpAngle10((short)a, (short)b, 0.0F) != a ||
+					InterpLerpAngle10((short)a, (short)b, 1.0F) != b)
+					ends++;
+			}
+		}
+
+		ok(off == 0, "cutseq: every 0.5 blend of a 147 x 205 sweep lies on the shorter arc", off, 0);
+		ok(ends == 0, "cutseq: alpha 0 gives the previous angle, alpha 1 the current", ends, 0);
+		ok(range == 0, "cutseq: every blend stays inside 0..1023", range, 0);
+		ok(halves > 0, "cutseq: the sweep met exact half turns and stepped over them", halves, 1);
+	}
+
+	/* ---- the camera's cut rule */
+	{
+		const long o[3] = { 1000, -2000, 3000 };
+		const long e255[3] = { 1000 + 100, -2000 - 100, 3000 + 55 };
+		const long e256[3] = { 1000 + 256, -2000, 3000 };
+		const long e257[3] = { 1000 + 100, -2000 + 100, 3000 - 57 };
+		const long e200[3] = { 1000 + 200, -2000, 3000 };
+		long es = 0, ts = 0;
+		bool cut;
+
+		cut = InterpCutseqCameraCut(o, e255, o, o, &es, &ts);
+		ok(!cut && es == 255 && ts == 0, "cutseq: an eye step of 255 blends", es, 255);
+		cut = InterpCutseqCameraCut(o, e256, o, o, &es, &ts);
+		ok(!cut && es == 256, "cutseq: an eye step of exactly INTERP_CUTSEQ_SNAP blends", es, 256);
+		cut = InterpCutseqCameraCut(o, e257, o, o, &es, &ts);
+		ok(cut && es == 257, "cutseq: an eye step of 257 cuts", es, 257);
+		cut = InterpCutseqCameraCut(o, o, o, e257, &es, &ts);
+		ok(cut && es == 0 && ts == 257, "cutseq: a target step of 257 cuts on its own", ts, 257);
+		cut = InterpCutseqCameraCut(o, e200, o, e200, &es, &ts);
+		ok(!cut && es == 200 && ts == 200,
+			"cutseq: eye 200 and target 200 are measured apart and blend", es + ts, 400);
+		ok(INTERP_CUTSEQ_SNAP > 222 && INTERP_CUTSEQ_SNAP < 294,
+			"cutseq: the snap sits between the fastest drive (222) and the smallest cut (294)",
+			INTERP_CUTSEQ_SNAP, 256);
+		ok(INTERP_CUTSEQ_SNAP < INTERP_CAM_SNAP,
+			"cutseq: the cutscene camera's rule is tighter than the level camera's", INTERP_CUTSEQ_SNAP,
+			INTERP_CAM_SNAP);
+	}
+
+	/* ---- the root test: node 0 is drawn at three times its value */
+	{
+		short prev[6] = { 0, 0, 0, 10, 20, 30 };
+		short in341[6] = { 341, 0, 0, 10, 20, 30 };
+		short in342[6] = { 342, 0, 0, 10, 20, 30 };
+		short mixed[6] = { 100, -100, 142, 10, 20, 30 };
+		short out[6] = { 7, 7, 7, 7, 7, 7 };
+		long step = 0;
+		int halves = 0, node = 0;
+		bool blended;
+
+		ok(InterpCutseqRootStep(prev, in341) == 1023, "cutseq: a root step of 341 node units is 1023 drawn",
+			InterpCutseqRootStep(prev, in341), 1023);
+		blended = InterpCutseqBlend(prev, in341, 2, 0.5F, out, &step, &halves, &node);
+		ok(blended && step == 1023, "cutseq: a drawn root step of 1023 blends", step, 1023);
+		ok(out[0] == 170 && out[1] == 0 && out[2] == 0, "cutseq: the root blends as a position (170)",
+			out[0], 170);
+
+		for (int k = 0; k < 6; k++)
+			out[k] = 7;
+
+		blended = InterpCutseqBlend(prev, in342, 2, 0.5F, out, &step, &halves, &node);
+		ok(!blended && step == 1026, "cutseq: a drawn root step of 1026 draws the actor live", step, 1026);
+		ok(out[0] == 7 && out[3] == 7 && out[5] == 7, "cutseq: a live actor's table is left untouched",
+			out[0], 7);
+		blended = InterpCutseqBlend(prev, mixed, 2, 0.5F, out, &step, &halves, &node);
+		ok(!blended && step == 1026, "cutseq: the root test sums the three axes (100/100/142 is 1026)",
+			step, 1026);
+	}
+
+	/* ---- the round trip: the tick's table, the blend written over it, the
+	 * tick's table put back byte for byte */
+	{
+		const int nodes = 4;
+		const short prev[nodes * 3] = { 0, 0, 0, 1000, 5, 512, 0, 100, 200, 10, 20, 30 };
+		const short cur[nodes * 3] = { 11, -11, 3, 24, 5, 512, 512, 612, 712, 30, 40, 50 };
+		short live[nodes * 3], saved[nodes * 3], out[nodes * 3];
+		long step = 0;
+		int halves = 0, node = 0;
+
+		memcpy(live, cur, sizeof(live));
+		memcpy(saved, live, sizeof(saved));	// CutseqApply keeps the tick's table
+
+		const bool blended = InterpCutseqBlend(prev, saved, nodes, 0.5F, out, &step, &halves, &node);
+
+		memcpy(live, out, sizeof(live));	// ... and writes the blend over it
+		ok(blended && out[0] == 5 && out[1] == -5 && out[2] == 1,
+			"cutseq: the root's midpoint truncates like InterpLerpLong (5, -5, 1)", out[1], -5);
+		ok(out[3] == 0 && out[4] == 5 && out[5] == 512,
+			"cutseq: node 1 crosses the wrap (1000 to 24 is 0) and keeps its still axes", out[3], 0);
+		ok(halves == 1 && node == 2 && out[6] == 512 && out[7] == 612 && out[8] == 712,
+			"cutseq: node 2's half turn keeps all three of the tick's values", halves, 1);
+		ok(out[9] == 20 && out[10] == 30 && out[11] == 40, "cutseq: node 3 blends to its midpoint",
+			out[9], 20);
+
+		memcpy(live, saved, sizeof(live));	// CutseqRestore
+		ok(!memcmp(live, cur, sizeof(live)), "cutseq: the restore gives the tick's table back exactly",
+			0, 0);
+
+		InterpCutseqBlend(prev, cur, nodes, 1.0F, out, &step, &halves, &node);
+		ok(!memcmp(out, cur, sizeof(out)), "cutseq: alpha 1 draws the tick's table", 0, 0);
+
+		InterpCutseqBlend(prev, cur, nodes, 0.0F, out, &step, &halves, &node);
+		ok(!memcmp(out, prev, 6 * sizeof(short)) && !memcmp(out + 9, prev + 9, 3 * sizeof(short)) &&
+			!memcmp(out + 6, cur + 6, 3 * sizeof(short)),
+			"cutseq: alpha 0 draws the previous table, the half-turn node at the tick's", 0, 0);
+	}
+
+	/* ---- the snapshot's ceilings against DATA\CUTSEQ.BIN (CutseqProbe) */
+	ok(INTERP_CUTSEQ_ACTORS == 10, "cutseq: one snapshot slot per actor_pnodes entry",
+		INTERP_CUTSEQ_ACTORS, 10);
+	ok(INTERP_CUTSEQ_NODES >= 30, "cutseq: the node ceiling holds the largest actor (30)",
+		INTERP_CUTSEQ_NODES, 30);
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -5535,6 +5709,7 @@ int main()
 	ring_cadence();
 	title_shadow();
 	books();
+	cutseq();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

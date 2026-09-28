@@ -6265,7 +6265,8 @@ a head that moves half a step while the braid does not is a plait hanging in the
 Cut scenes are snapped whole as a correctness requirement: their camera is decoded from
 a frame index (`game/deltapak.cpp`) and `frigup_lara()` moves Lara from inside
 `DrawPhaseGame` itself, so blending the first would fight a decoder and restoring after
-the second would undo what it did. The simulation's own generator had to be protected:
+the second would undo what it did (the entry *The cut scenes at the frame rate* below
+finds otherwise and blends them). The simulation's own generator had to be protected:
 the draw path calls `GetRandomControl` in five places and the star twinkle alone takes
 four thousand draws out of the logic stream on every drawn frame, so without a restore
 two runs of the same level with the same inputs would drift apart between the frame
@@ -7217,6 +7218,164 @@ rest of the build has: `DoCredits`' roll (`StartPos--`, `specific/alexstuff.cpp`
 pixel a present and asks `InterpIsTweenFrame()` now.
 
 **Commits.** `5301765`, `7cbff9d`, `ca17073`
+
+### The cut scenes at the frame rate
+2026-09-28
+
+**What.** A cut scene is drawn between its steps like the game around it. The camera's eye
+and target are blended between the last two ticks by the interpolator's own camera block,
+and every actor - Lara, actor 0, included - is drawn from its node table blended between
+the same two ticks: `game/cutseq_interp.cpp` copies the decoded tables at the start of the
+tick, writes the blend into them before `DrawPhaseGame` draws and puts the tick's values
+back after it. A cut in a camera track (the eye or the target stepping more than 256
+units) draws the frame live, an actor whose root jumps more than 1024 is drawn at the
+tick's values while the others glide, and a node with an axis exactly half a turn from its
+previous value keeps the tick's three values. The braid, which a cut scene swings inside
+the draw, swings once per tick. New: `game/cutseq_interp.cpp` and `.h`,
+`game/cutseq_decode.h` (the track decoder, lifted unchanged out of `game/deltapak.cpp` so
+that a tool compiles it), `Preparation/Tools/Diagnose/CutseqProbe.cpp` with `bcp.bat`, the
+`-log` seam `CUTLOG`, and a `cutseq` section in `InterpTest`.
+
+**Why.** At sixty and at 165 hertz every cut scene stepped at thirty - camera, actors and
+Lara - while `FPSLOG` presented sixty or 165 pictures a second, because `InterpBeginFrame`
+returned at `GLOBAL_playing_cutseq`. The return was there because the cut scene camera is
+decoded from a frame index and `frigup_lara` moves Lara inside `DrawPhaseGame`, so a
+restore was taken to undo it. Read against the code that does not hold: `DecodeAnim` is
+the only writer of the actors' node values (`xrot_run`, `yrot_run`, `zrot_run`), and their
+only readers are `do_new_cutscene_camera` (the camera's two nodes) and `updateAnimFrame`,
+which `DrawCutSeqActors`, `frigup_lara`, `GrabActorMatrix` and `GetActorJointAbsPosition`
+call - the last two only from the scenes' control routines, inside the tick. The decoder
+keeps its own state per node (`RTDECODE`) and only the tick advances it, so the decoded
+outputs of two ticks can be blended and restored like `items[]`, and the tick sequence is
+the one a thirty hertz run has. The tracks cut as a film cuts: over the 44 cut scenes of
+`DATA/CUTSEQ.BIN`, 77,231 frames and 77,187 steps, `CutseqProbe` counts 371 camera cuts in
+33 cut scenes (0.48 % of the steps; none in 1-4, 11, 20, 28-31 and 34), the smallest a
+jump of 294 units and the largest in cut scene 25 at frame 1622, the eye 27,494 and the
+target 30,686 (Manhattan; 20,116 and 21,798 in a straight line). The eye's 99th percentile
+is 78 a frame and the fastest drive 216 to 222 a frame (cut scene 30, frames 405-409), and
+35 of the cuts step no more than 1024 on either end, which `INTERP_CAM_SNAP`'s eye test
+would have blended as motion. The braid was a live fault of its own: `frigup_lara` runs
+`HairControl` once per drawn frame, so at sixty and 165 the braid's simulation ran two to
+five and a half times per tick.
+
+**How.** The snapshot is `g_prev` and `g_saved`, x, y and z per node for ten actors of up
+to forty nodes, 2,400 bytes each; the largest actor in the file has 30 nodes and the
+largest scene 115. `CutseqInterpOpen` (`game/cutseq_interp.cpp:132`) is called at the end
+of `init_cutseq_actors` (`game/deltapak.cpp:3578`), after the tables are laid out, and
+invalidates the whole interpolation (`InterpInvalidate("cutseq open")`);
+`CutseqInterpClose` (`:170`) at the teardown in `handle_cutseq_triggering`
+(`game/deltapak.cpp:2237`), before the next credits scene opens; `CutseqInterpSkip`
+(`:188`) at the end of `do_cutseq_skipper_stuff` (`game/deltapak.cpp:3723`).
+`CutseqCapturePrev` (`:200`) runs in `InterpCapturePrev` beside the hair capture
+(`game/interpolate.cpp:1007`), at the start of the tick and so before
+`do_new_cutscene_camera` (`game/camera.cpp:1413`) decodes; a capture before frame 0 was
+decoded leaves no previous table. `InterpBeginFrame` asks `CutseqBlendable` (`:226`) where
+the return stood (`game/interpolate.cpp:1366`) - the scene's first tick is drawn live -
+then `CutseqCameraCut` (`:247`, `game/interpolate.cpp:1404`) beside `CameraCut`, and after
+`g_applied` is set `CutseqApply` (`:270`, `game/interpolate.cpp:1429`), so
+`InterpParticleAlpha` and `InterpEyeRoom` take the blended frame as on any other;
+`CutseqRestore` (`:335`) runs in `InterpEndFrame`'s restore block
+(`game/interpolate.cpp:1743`) and in `CutseqInterpInvalidate` (`:194`, called from
+`InterpInvalidate`, `game/interpolate.cpp:1863`), because the decoder adds its next deltas
+to whatever the tables hold. The order in the game loop is `InterpBeginFrame`
+(`game/draw.cpp:466`), `frigup_lara` (`:476`), `DrawRooms` (`:480`) with
+`DrawCutSeqActors` inside it (`:2489`), `InterpEndFrame` (`:518`); `DoLevel` draws at
+`game/gameflow.cpp:1153` and ticks at `:1172`, `DoTitle`, which plays the credits, at
+`:923` and `:925`. The arithmetic is in `game/interpolate_math.h` so that `InterpTest`
+runs it: `INTERP_CUTSEQ_SNAP` 256 (`:150`, beside `INTERP_CAM_SNAP`),
+`INTERP_CUTSEQ_ROOT_SNAP` 1024, `INTERP_CUTSEQ_ACTORS` 10 and `INTERP_CUTSEQ_NODES` 40
+(`:2000`-`:2002`), `InterpLerpAngle10` (`:2007`, the difference folded into -512..511 and
+the result masked to ten bits), `InterpHalfTurn10` (`:2014`, a difference of exactly 512),
+`InterpCutseqCameraCut` (`:2022`, eye and target measured apart), `InterpCutseqRootStep`
+(`:2034`, node 0 at three times its value, as `updateAnimFrame` draws it) and
+`InterpCutseqBlend` (`:2051`: the root blended as a position, every other node as three
+ten-bit angles, a node with a half-turned axis kept whole at the tick's values). Two rules
+of the camera block are left out of a cut scene: the drawn-eye rule
+(`game/interpolate.cpp:1681`), because a cut scene camera's room comes from
+`IsRoomOutside`, which matches no room within a sector of a room's walls and keeps the old
+one, so the rule would withhold the sky; and the braid's blend (`:1490`), because the
+snapshot is taken before the draw steps the braid and the frames after the step would pull
+it back. The braid's guard is `if (!InterpIsTweenFrame())` around the two `HairControl`
+calls in `frigup_lara` (`game/deltapak.cpp:3289`). `InitPackNodes`, `GetTrackWord`,
+`DecodeTrack` and `DecodeAnim` (`game/deltapak.cpp:2917`-`:2935`) forward to the templates
+`CutseqInitPackNodes`, `CutseqTrackWord`, `CutseqDecodeTrack` and `CutseqDecodeAnim` in
+`game/cutseq_decode.h`, which hold their bodies unchanged and include no engine header.
+The seams, `-log` only: `CUTLOG open cutseq=17 frames=2097 actors=3 nodes=48 fps_mode=1`;
+`CUTLOG cut cutseq=25 frame=1622 why=camera eye=27494 target=30686 actor=-1 node=-1
+step=-1` once per cut tick (`why=` also `actor` with the root step, `halfturn` with the
+node, `open`, `skip`, `close`; `frame=` is the index `DecodeAnim` decoded); `CUTLOG close
+cutseq=17 frames=4194 ticks=2097 blended=2084 live=2110 cuts=12 actor_cuts=1 halfturns=3
+hair=2097 eye_rooms=- hair_lag=69` as `CutseqProbe -cutlog 17` predicts it (the tool
+prints `-` for `eye_rooms=`, which needs the level's rooms), where `hair=` counts the
+braid's steps (`CutseqNoteHair`, `game/deltapak.cpp:3296`), `eye_rooms=` the blended
+frames whose room walk starts in another room than the tick's
+(`game/interpolate.cpp:1182`) and `hair_lag=` how far Lara's blended root stood from her
+previous tick's, which is how far the braid trails. `INTERPLOG`'s `cutscene=` keeps its
+place and now counts frames between two ticks of a cut scene drawn live for a reason that
+is not a cut (an actor larger than the snapshot, a scene never opened), nought in a
+healthy log; `cutscene_cut=` at the end of the line counts the frames a cut scene camera's
+cut drew live. `CutseqProbe` (`bcp.bat`, x86 like `SaveDiff`, because it instantiates the
+decoder with `global/types.h`'s structs) reads a `cutseq.bin` in place, decodes every cut
+scene with `game/cutseq_decode.h` and measures it with `game/interpolate_math.h`; `-frames
+<n> <a> <b>` prints the decoded eye, target and roots, `-cutlog <n>` the `CUTLOG` lines a
+run at sixty writes. `InterpTest` gains `cutseq`
+(`Preparation/Tools/Diagnose/InterpTest.cpp:5522`, 32 checks): ten-bit angles across the
+wrap (1000 to 24 and 24 to 1000 land on 0, every 0.5 blend of a 147 x 205 sweep lies on
+the shorter arc), the half turn refused, the cut rule at 255, 256 and 257 with eye and
+target apart, the root test at 1023 and 1026 drawn units, and the apply-and-restore round
+trip on a four-node table.
+
+**Checked.** `CutseqProbe` over the file against the earlier analysis: 371 cuts in 33 cut
+scenes over 77,231 frames, the cut-free list, the eye's 99th percentile of 78 and the 914
+exact half turns (on 570 node steps among 12,830,640 axis steps) come out as it said.
+Where the tool differs, its numbers stand: the largest cut is 27,494 and 30,686 in
+Manhattan units (the analysis' 20,116 and 21,798 are the same jump in a straight line),
+cut scene 30's drive is 216 to 222 a frame (195.7 was the target's straight-line speed),
+35 cuts step no more than 1024 on either end, not 74, the root jumps above 1024 without a
+camera cut are 44, not 35, and a scene holds at most 115 actor nodes (117 with the
+camera's two). The camera tracks end 0 to 7 words from their end after the last frame, and
+the hard-coded braid frames of `hair.cpp` fall on camera cuts of the decoded tracks (cut
+scene 17 at 208 and 477, 8 at 841, 27 at 930, 16 at 409, 1872 and 3048, each one less than
+the `GLOBAL_cutseq_frame` the draw reads). The lift: the four original bodies and the
+templates decode all 44 scenes side by side to the same node values and decoder fields in
+all 4,769,672 node states (a scratch program built from the pre-lift source). The suites:
+`ModernTest` 13992, `MenuTest` 42364, `InterpTest` 683 (651 before, 32 new), `LipsTest`
+270 with the reference meshes and 243 without, 0 failed. At `fps_mode 0` every new call
+that writes a node table sits behind `alpha >= 1`, which returns before the cut scene
+branch, or behind `g_applied`; `InterpIsTweenFrame()` is false, so the braid steps on
+every frame as before; the capture reads the tables, and the open, the skip and the close
+write only the interpolator's statics, and `InterpInvalidate` was already called at every
+setting. `hd_enable 0` and the HD path: no file under `specific/hd` changed, and
+`DrawCutSeqActors` hands its matrix stack to the HD path as before. The blend of one frame
+costs 0.74 microseconds for 115 nodes (scratch timing).
+
+**Unchanged.** `fps_mode 0`; the decoder and the tick sequence, so `TICKLOG` has to read
+the same at every setting; `DrawCutSeqActors` and its HD seam; the movies, a level's
+flybys and the title's flight; the braid's own blend, which stays off in a cut scene as it
+was; the randomizer.
+
+**Decisions.** The decoded outputs of the last two ticks are blended, not a snapshot of
+two generations: the draw comes before the tick in `DoLevel` and `DoTitle`, so the
+previous tick and the live tables are the pair. The camera needs no snapshot of its own:
+`g_prevCam` is filled every tick in a cut scene too, and the camera block with
+`RebuildView` blends it. A cut in the track is a step of the eye or the target above 256
+Manhattan. An actor's root jumping above 1024 draws that actor live. An exact half turn on
+a node axis draws that node at the tick's values, all three axes, because the other axes
+of such a node turn with it. The credits are cut scenes like the others. The drawn-eye
+rule and the braid's blend are left out of cut scenes.
+
+**Left.** The braid steps once per tick and is drawn where the tick left it, so on a frame
+between two ticks it trails Lara by half her step: over the file 520 of her 72,662 blended
+ticks put it more than 32 units behind, at most 426 in cut scene 22 (294 in 12, 213 in
+19). Stepping it from the tick's own pose at the tick and blending two steps, as the game
+does outside cut scenes, would take a hair snapshot of its own. No root threshold parts
+jumps from motion: 17 lone jumps under 1024 without a camera cut are blended as a slide
+for one tick, and a falling object in cut scene 38 (1029 to 1032 a frame, frames
+1271-1275) is drawn at the tick. 63 node steps blend more than 30 degrees off the shortest
+arc, 62 of them with an axis step of 384 or more; holding a node on such a step would
+catch them.
+
+**Commits.** `d2bfb86`, `04ba96f`, `ee81554`
 
 ### The level warm-up
 2026-09-07
@@ -9653,6 +9812,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #157 | The animation's root offset on a refused frame |
 | #158 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
 | #159 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
+| #160 | The cut scenes at the frame rate |
 | #161 | Modern control: the stick turned into the classic direction bits; The options menu as one table-driven frame; The modern camera: a free orbit on the right stick; The pad: radial dead zones, a second binding set and a Modifier for chords; The -log switch and the diagnostic seams; The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot; Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; Combat, Sprint, Duck and Grab: hold or toggle; Two action keys: the interaction bit and the Secondary role; The cheats: DOZY as a toggle, and five bindable hotkeys |
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |

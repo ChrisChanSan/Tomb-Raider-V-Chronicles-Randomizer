@@ -945,9 +945,10 @@ and timings are the next paragraph.
   as well — moves in half steps like the rest of her, because the arm chain
   has a blend factor of its own; the flare's and the torch's one held-out arm
   does not, and it steps at thirty.
-- **Cut scenes**, whole. Their camera is decoded from a frame number rather
-  than simulated, so it is left alone and they play exactly as they always
-  did.
+- **The braid in a cut scene.** There it is swung inside the drawing, not in
+  the game step, so it swings once per game step, as at thirty, and is drawn
+  where that step left it. The rest of the scene glides (see *Cut scenes*
+  below).
 - **The lightning.** A bolt is not moved from one game step to the next, it
   is drawn afresh: its segments are re-rolled from scratch every time. There
   is no halfway between two of them to draw, so the flicker keeps its thirty
@@ -956,6 +957,23 @@ and timings are the next paragraph.
   is in half steps; the way it *spins* is not. It spins fast enough that
   nobody can pick the difference out, and its two rotations are stored in a
   form that cannot be blended without wrapping the wrong way half the time.
+
+**Cut scenes** are drawn between their steps like the game around them. A
+cut scene is not simulated: every game step reads the next frame of the
+scene's tracks from `DATA\CUTSEQ.BIN` into the camera and into the pose of
+every actor, Lara's included, and the picture between two steps is drawn
+from the two frames blended - the camera's eye and target, where each actor
+stands and how each of its joints is turned. The tracks themselves are left
+exactly as they are played at thirty. They cut, as a film cuts, and a cut is
+not blended: where the eye or the target jumps more than 256 units from one
+frame to the next, the in-between picture is the new frame itself; so is an
+actor whose position jumps more than 1024 units, while the others glide; and
+a joint that turns exactly half a turn in one frame is shown at the new
+frame. The credits are cut scenes like the others. The movies, a level's
+flybys and the title's own flight are not cut scenes; they have their own
+machinery and are unchanged by this. With `-log`, `CUTLOG` writes a line
+when a cut scene opens, one per game step it drew live and why, and a
+closing line with the counts (see *When something looks wrong* below).
 
 **Everything that is a length of time is a length of time.** This is the part
 that took the most work and shows the least: dozens of counters in the
@@ -976,8 +994,9 @@ is a bug and worth reporting.
 frame, wherever the game *meant* something to jump rather than move: a
 teleport (anything that crosses more than half a sector in one step), a
 camera cut — a fixed camera taking over, a flyby starting or stepping to its
-next node, the binoculars going up — a cut scene, and the first frame after a
-level start, a savegame load or the inventory. Those look exactly as they do
+next node, the binoculars going up — a cut in a cut scene's own tracks, the
+start and the end of a cut scene, and the first frame after a level start, a
+savegame load or the inventory. Those look exactly as they do
 at thirty, which is the point.
 
 **At a corner.** Between two game steps the camera is drawn on the straight
@@ -2953,6 +2972,7 @@ wrote it, and each seam answers a different question:
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
+| at *Frame rate 60* or *Display* a cut scene steps at thirty, jumps, or an actor or Lara flicks for a frame | `CUTLOG` — `open` when a cut scene starts (its number, frames, actors, nodes and the frame rate setting); a `cut` line for every game step drawn wholly or partly live, with the frame and the reason (`why=camera` with how far the eye and the target jumped, `actor` with how far that actor's position jumped, `halfturn` with the joint, `open`, `skip`, `close`); and `close` when it ends: pictures drawn, game steps, how many pictures were blended and how many live, the cuts, the actor cuts, the half turns, `hair=` how often the braid was swung (one per game step), `eye_rooms=` the blended pictures whose room walk started in another room than the game step's, and `hair_lag=` how far the braid stood behind her at most. `CutseqProbe -cutlog <n>` (`Preparation\Tools`) prints the lines the scene's own file says a run at 60 must write |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 | at *Frame rate 60* or *Display*, a black flash — or sky — for a frame or two as the camera swings past a pillar or a door frame | `CAMLOG` — a `tick` line per pass of the chase, combat, fixed and look cameras (none during flybys, binoculars or cutscenes): where the camera stands and with which room, what it aimed for and how the wall cut it, what kind of place it stands in (`kind=open`, `wall`, `door->36`, `below:12`) and how close it is to a wall face and a corner; a `draw` line for every picture whose camera had to be put right between two steps, saying how (`fix=prevroom`, `chord`, `tick` or `nosky`) and how far it moved (`moved=`); and a `sum` line per second with the counts |
 | under *Modern* the mouse does not turn the camera, a mouse button does nothing, or the cursor stays hidden or visible when it should not | `MOUSELOG` — a line whenever the mouse moved or a button changed: the counts it moved (`dx=`, `dy=`), the buttons held (`buttons=`, left 1, right 2, middle 4, the side buttons 8 and 16), how far that turned the camera (`yaw=`, `pitch=`), the sensitivity (`sens=`), whether the cursor was held (`captured=`) and the counts still to be paid out on later ticks (`owed_x=`, `owed_y=`; while they are, a line comes with `dx=0 dy=0` and the step turned); and a `MOUSELOG capture=on` or `capture=off` line every time the cursor is caught or let go, with the reasons (`active=` the window has the focus, `modern=`, `fmv=`) |
@@ -3110,6 +3130,7 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
   pose_items=3.5 pose_skips=0.2 pose_far=0.0 pose_hd=1.5 lara_pose=29/30
   root_fix=1 arms=30/2/30 stretch=1.00@node0(anim0 f0)
   particles=118.5 particle_kinds=0041 root_flip=0 pose_back=0 bridge=0
+  cutscene_cut=0
 ```
 
 That is the whole line, in the order the engine prints it — it is one line in
@@ -3125,7 +3146,7 @@ That is the whole line, in the order the engine prints it — it is one line in
 | `snaps` | how often interpolation was deliberately skipped, and why: `teleport` something crossed more than half a sector in one step, `roomjump` it did so across a room boundary, `object` an item slot was handed to a different object, `invalid` there was no previous state |
 | `halfturn` | rotations that turned **exactly half a turn** between the two steps and kept the live value instead of blending it — that is the roll's own about-face firing, once per roll. A handful over a run through a level, nought in a still second; a large number means something is turning half a turn that should not |
 | `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up. The five numbers in brackets split it: `type` changes that left the smooth camera family, `spot` flyby cuts, `eye` and `aim` the camera's two ends jumping on their own, and `handover` changes **inside** the smooth family that were deliberately *not* taken for a cut — drawing or holstering a weapon, looking around. One or two `handover` per draw is what it looks like |
-| `cutscene` | frames in a cut scene, which is played whole at thirty |
+| `cutscene` | in-between frames of a cut scene drawn live, wholly or for one actor, for a reason that is **not** a cut: nought in a healthy log. The cuts in the scene's tracks, an actor's jump, a half-turned joint and the scene's first step are the scene's own and are counted in `CUTLOG` |
 | `pose_items` | things whose **limbs** were drawn halfway between two game steps, per frame. Zero at 30, always |
 | `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped, or Lara stands between the two key frames of the tightrope turn that are drawn from the first of them (see `KEYFARLOG`, `mode=hold`). A few per second is normal — that is what an animation change is. The step after a jump's twist or a roll is not among them: its in-between pictures are bridged (see `bridge`) |
 | `pose_far` | poses refused for the *other* reason: two adjacent stored frames — a pair the original never blends at all — whose two poses turn more than ninety degrees at some joint. Blending a turn that size element by element does not go the long way round, it shortens the bone, so those are left alone. A small fraction is normal; a big number means an animation nobody has looked at yet |
@@ -3139,6 +3160,7 @@ That is the whole line, in the order the engine prints it — it is one line in
 | `root_flip` | of the `root_fix` frames, the ones whose previous offset was half a turn behind the frame it was handed to and had to be turned into it first: one of her rolls on the ground, whose about-face lands on the very frame the animation changes; the underwater roll and the tightrope turn, whose about-face lands on a frame whose in-between picture is refused; and the step right after the end of a jump's twist or of that other roll, whose last frame was drawn the way she faced before (see `TURNLOG`). A subset of `root_fix`, at most one per roll, turn or twist, and only where the offset really moves. A second with `halfturn` and no `root_flip` is an about-face whose in-between pictures were blended, which is what the last frame of those twists and that roll gets |
 | `pose_back` | in-between frames on which Lara's pose was blended **walking backwards** — the *Ledge hang* lowering, which plays the pull-up in reverse. Counted in `lara_pose` as well. One per in-between frame drawn, so a lowering counts its 25 ticks times the in-between frames per tick: 25 at *Frame rate 60*, about 137 at *Display* on a 165 Hz panel, where every frame is an in-between one; nought everywhere else and nought at 30 |
 | `bridge` | in-between frames on which Lara's pose was **bridged** across the step right after the end of a jump's twist or of the roll on the ground: turned from the pose the last step showed to the new one instead of showing the new one at once (see *And the limbs move with the body* above, and `BRIDGELOG`). Counted in `lara_pose` as well and not in `pose_skips`. One per twist or roll at *Frame rate 60*, five or six at *Display* on a 165 Hz panel; nought everywhere else and nought at 30 |
+| `cutscene_cut` | in-between frames a **cut in a cut scene's camera track** drew live — the eye or the target jumping more than 256 units from one frame to the next. Counted in `camcut` as well. One per cut at *Frame rate 60*, four to six at *Display* on a 165 Hz panel; `CUTLOG` names each cut |
 
 A healthy line during ordinary play has `snaps=0` or a small handful.
 `camcut` counting every frame of a stretch means the camera never settled

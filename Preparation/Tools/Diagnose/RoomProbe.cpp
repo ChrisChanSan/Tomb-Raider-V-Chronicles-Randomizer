@@ -76,8 +76,9 @@
  *     -with <group> <dx dy dz>
  *                     draw that group too, at that world offset from the
  *                     room - the difference of the two classic room origins,
- *                     which RoomCheck prints per room. Up to eight, repeat
- *                     the switch.
+ *                     which RoomCheck prints per room. Up to 256, as many as
+ *                     draw_rooms holds - repeat the switch; a 257th is
+ *                     refused with a message and nothing is drawn.
  *     -oldorder       draw the scene room-major, all three passes of one room
  *                     before the next, instead of the way HDFrameDraw draws
  *                     it: every room's solid passes, then every room's
@@ -164,7 +165,43 @@
  *                     group gives the engine's reachart fields but reach=,
  *                     and a `decide: clip` line after the picture the
  *                     counters of the engine's HDLOG clip line over the
- *                     named groups that have art.
+ *                     named groups that have art. -roomwin takes up to 256
+ *                     groups, like -with.
+ *
+ *   The portal walk (game\draw.cpp) offline, with the engine's own camera:
+ *   the integer angles phd_LookAt makes of an eye and a target, the float
+ *   sine table the rotation is built from and AlterFOV's integer
+ *   perspective, so that a list and its windows are the engine's to the
+ *   pixel. With -reach the list is trimmed as ReachTrimRooms trims it: a
+ *   room the reach alone brings in with no .TRG art goes, and the list is
+ *   held to the budget of 128.
+ *
+ *     -walk <seed room> <x y z>
+ *                     the walk from that eye (world units); -walkyaw,
+ *                     -walkpitch and -walkpitchfan name the directions, in
+ *                     degrees rounded once to the engine's angle units
+ *     -walktarget <x y z>
+ *                     one direction instead, built from the eye and this
+ *                     world point as phd_LookAt builds it - the eye and
+ *                     target= of a ROOMLIST whole-list dump. Without -walk
+ *                     it sets the picture's camera: the room-local x y z of
+ *                     the command line and this target give the yaw, the
+ *                     pitch and the perspective the engine would use, and
+ *                     -decide frame holds the classic faces against them.
+ *                     Needs -roombox for the room's origin.
+ *     -walkwant <room>
+ *                     why that room is or is not in the list, and its final
+ *                     window and reach rectangle after the whole walk:
+ *                     `final=l,t..r,b reach=l,t..r,b classic|REACH`
+ *     -walkfinal      the same final line for every listed room
+ *     -walkshut <item,item,...|all>
+ *                     walk with those closed doors shut (CLOSED_DOOR1 ..
+ *                     LIFT_DOORS2 items, whose shutting zeroes the normals
+ *                     of the portal they stand in); every other door open
+ *     -walkdump <log> [frame]
+ *                     every ROOMLIST whole-list dump of a -log run, or the
+ *                     one of that frame, walked again - see RunWalkDump.
+ *                     -roombox must hold the .TRC files that were played.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -283,6 +320,7 @@
 #include <d3d9.h>
 
 #include <math.h>
+#include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -311,6 +349,9 @@
  * survey can hold the level's own faces against the .TRG's art through the
  * engine's own gate. Nothing else in this tool needs a classic level. */
 #include "core/Tr5Level.h"
+/* The vendored .TRG reader, for the one thing the walk asks of the art
+ * without building it: which groups have any triangle (walkoff::LoadHd). */
+#include "trf_remaster/Trg.h"
 #include <string>
 
 #pragma comment(lib, "d3d9.lib")
@@ -466,6 +507,202 @@ static double EnginePersp(long height, double fovDeg)
 	const double half = fovDeg * 0.5 * d2r;
 
 	return (double)(fovWidth / 2) * cos(half) / sin(half);
+}
+
+/* The engine's own camera, integer angles and all (specific\3dmath.cpp).
+ *
+ * phd_LookAt turns an eye and a target into two angles with
+ * phd_GetVectorAngles - phd_atan over the octant table phdtan2 and
+ * phdtantab, and phd_sqrt - and aGenerateW2V builds the float rotation the
+ * portal walk projects with out of fcossin_tbl, a float sine table of 65536
+ * steps. AlterFOV's perspective is integer arithmetic on rcossin_tbl. Worked
+ * out in doubles instead, as LookAt and EnginePersp above do, a portal corner
+ * lands up to a pixel away, a window comes out a pixel wider or narrower,
+ * and a portal sliver at the rim of the screen lists a room the engine does
+ * not list. So the walk goes through these, and -walktarget hands their
+ * angles and perspective to the picture as well.
+ *
+ * The same tables as the engine's, out of the same header, and the float
+ * table filled by the same expression as aInitMatrix. */
+#include "../../../TOMB5 Code/TOMB5/global/math_tbls.h"
+
+namespace enginecam
+{
+	static float g_fsin[65536];
+	static bool g_ready = false;
+
+	static void Init()
+	{
+		if (g_ready)
+			return;
+
+		for (int i = 0; i < 65536; i++)
+		{
+			const float ang = (float)i * float(3.14159265358979323846 * 2.0F / 65536.0F);
+
+			g_fsin[i] = sin(ang);
+		}
+
+		g_ready = true;
+	}
+
+	static short PhdSin(long angle)
+	{
+		angle >>= 3;
+		return (short)(4 * rcossin_tbl[angle & 0x1FFE]);
+	}
+
+	static short PhdCos(long angle)
+	{
+		angle >>= 3;
+		return (short)(4 * rcossin_tbl[(angle & 0x1FFE) + 1]);
+	}
+
+	static float FSin(long angle)
+	{
+		return g_fsin[(unsigned short)angle];
+	}
+
+	static float FCos(long angle)
+	{
+		return g_fsin[(unsigned short)(angle + 0x4000)];
+	}
+
+	// phd_atan.
+	static long Atan(long x, long y)
+	{
+		long octant = 0, n, result = 0;
+
+		if (x || y)
+		{
+			if (x < 0)
+			{
+				octant += 4;
+				x = -x;
+			}
+
+			if (y < 0)
+			{
+				octant += 2;
+				y = -y;
+			}
+
+			if (y > x)
+			{
+				octant++;
+				n = x;
+				x = y;
+				y = n;
+			}
+
+			while ((short)y != y)
+			{
+				x >>= 1;
+				y >>= 1;
+			}
+
+			result = phdtan2[octant] + phdtantab[(y << 11) / x];
+
+			if (result < 0)
+				result = -result;
+		}
+
+		return result;
+	}
+
+	// phd_sqrt.
+	static unsigned long Sqrt(unsigned long num)
+	{
+		unsigned long base = 0x40000000, result = 0, tmp;
+
+		do
+		{
+			tmp = result;
+			result += base;
+			tmp >>= 1;
+
+			if (result > num)
+				result = tmp;
+			else
+			{
+				num -= result;
+				result = base | tmp;
+			}
+
+			base >>= 2;
+		} while (base);
+
+		return result;
+	}
+
+	/* phd_GetVectorAngles: [0] the heading (y_rot), [1] the pitch (x_rot),
+	 * negative when the target lies below the eye. */
+	static void VectorAngles(long x, long y, long z, short* angles)
+	{
+		short atan;
+
+		angles[0] = (short)Atan(z, x);
+
+		while ((short)x != x || (short)y != y || (short)z != z)
+		{
+			x >>= 2;
+			y >>= 2;
+			z >>= 2;
+		}
+
+		atan = (short)Atan((long)Sqrt((unsigned long)(z * z + x * x)), y);
+
+		if ((y > 0 && atan > 0) || (y < 0 && atan < 0))
+			atan = -atan;
+
+		angles[1] = atan;
+	}
+
+	/* aGenerateW2V's rotation, rows first as aW2VMx holds it: M00..M02,
+	 * M10..M12, M20..M22. The poison sway the engine scales it by is not
+	 * here - no log line carries it. */
+	static void Rotation(short xrot, short yrot, short zrot, float* m)
+	{
+		const float sx = FSin(xrot), cx = FCos(xrot);
+		const float sy = FSin(yrot), cy = FCos(yrot);
+		const float sz = FSin(zrot), cz = FCos(zrot);
+
+		m[0] = sx * sy * sz + cy * cz;
+		m[1] = cx * sz;
+		m[2] = sx * cy * sz - sy * cz;
+		m[3] = sx * sy * cz - cy * sz;
+		m[4] = cx * cz;
+		m[5] = sx * cy * cz + sy * sz;
+		m[6] = cx * sy;
+		m[7] = -sx;
+		m[8] = cx * cy;
+	}
+
+	// AlterFOV's phd_persp, for a field of view in the engine's units.
+	static long Persp(long height, short fov)
+	{
+		fov /= 2;
+
+		const long fovWidth = height * 320 / 240;
+
+		return (fovWidth / 2) * PhdCos(fov) / PhdSin(fov);
+	}
+
+	/* A field of view in degrees in the engine's units, the way InitWindow
+	 * hands the configured one to AlterFOV: 80 degrees is 14560. */
+	static short FovUnits(double degrees)
+	{
+		return (short)(182 * (long)(degrees + 0.5));
+	}
+
+	/* Degrees in the engine's units, for -walkyaw and -walkpitch, which name
+	 * a direction the engine never computes and so are rounded once. */
+	static short Angle(double degrees)
+	{
+		const long units = (long)floor(degrees * 65536.0 / 360.0 + 0.5);
+
+		return (short)(unsigned short)(units & 0xFFFF);
+	}
 }
 
 /* ------------------------------------------------------------------ mem -- */
@@ -1368,6 +1605,11 @@ namespace walkoff
 		short reach_left, reach_right, reach_top, reach_bottom;
 		short test_reach_left, test_reach_right;
 		short test_reach_top, test_reach_bottom;
+		/* What the engine keeps in g_reach_box and ROOMLIST prints as
+		 * reach=: the rectangle of the portal that brought the room in
+		 * first, widened by every later one that brings a classic window
+		 * with it (game\draw.cpp, SetRoomBoundsReach). */
+		short box[4];
 		bool classic_ok;
 		// True until the reach has visited this room once this frame.
 		bool reach_first;
@@ -1376,6 +1618,28 @@ namespace walkoff
 	};
 
 	static std::vector<Room> g_room;
+
+	/* The portals the level's closed doors can shut. InitialiseDoor
+	 * (game\init.cpp) hands every CLOSED_DOOR1..LIFT_DOORS2 item the portal
+	 * of its own room and the one of the room behind it (SetupClosedDoorStuff,
+	 * SCDS), and a shut door writes zero into both portals' normals
+	 * (ShutThatDoor, game\door.cpp): GetRoomBounds then follows neither. No
+	 * log line says which doors are shut, so -walkdump asks which of them
+	 * the engine's list says are. Numbered by the rooms of the file, before
+	 * any flip - a flip moves a room's portals, zeroed ones included. */
+	struct DoorPortals
+	{
+		int item;
+		std::vector<std::pair<int, int> > portals;	// (room, portal index)
+	};
+
+	static std::vector<DoorPortals> g_doors;
+	// CLOSED_DOOR1 and LIFT_DOORS2 in game\objects.h's slot list.
+	static const int kClosedDoor1 = 300;
+	static const int kLiftDoors2 = 314;
+	/* -walkshut: the door items -walk walks with shut, as -walkdump
+	 * prints them (doors_shut=); -1 alone shuts every one of them. */
+	static std::vector<int> g_shut_items;
 	/* The engine's ring is draw_room_list[kRoomListRing] (512) and its list
 	 * is draw_rooms[kDrawRoomsMax] (256), see the note over both in
 	 * game\draw.cpp. The tool's is deliberately wider than either, because
@@ -1408,6 +1672,32 @@ namespace walkoff
 	// the reach brought in - and the deepest the queue ever got.
 	static int g_reach_only = 0;
 	static long g_queue_peak = 0;
+
+	/* The camera. The view is always the engine's (enginecam): with
+	 * g_use_target set it is built from the eye and g_target as phd_LookAt
+	 * builds it, otherwise from the yaw and pitch of the fan, rounded once
+	 * to the engine's angle units. g_fov_units, when non-zero, is the field
+	 * of view in those units as an ALTERFOV line prints it; zero takes it
+	 * from -fov the way InitWindow does. */
+	static bool g_use_target = false;
+	static long g_target[3] = { 0, 0, 0 };
+	static short g_fov_units = 0;
+	static short g_xrot = 0, g_yrot = 0;
+	/* The roll, zero everywhere but in -walkdump's search for the one a
+	 * flyby's spline gave its camera (spotcam.cpp), which no log line
+	 * carries. */
+	static short g_zrot = 0;
+	static long g_persp_units = 0;
+
+	/* Whether each room is drawn by an HD group, the answer HDRoomIsHD
+	 * gives: ReachTrimRooms (game\draw.cpp) takes a room the reach alone
+	 * brought in back out of the list when it is not. Empty, no room is
+	 * taken out for want of art. g_trim_noart and g_trim_budget say how many
+	 * rooms the last Trim took out and why. */
+	static std::vector<unsigned char> g_hd;
+	static int g_trim_noart = 0, g_trim_budget = 0;
+	// ReachTrimRooms' budget, kReachBudget.
+	static const int kReachBudget = 128;
 
 	// Every portal the walk looked at this run, with what became of it.
 	struct Verdict
@@ -1753,6 +2043,22 @@ namespace walkoff
 			return;
 		}
 
+		// g_reach_box: set by the first visit, widened by every later one.
+		if (r.reach_first)
+		{
+			r.box[0] = (short)aL;
+			r.box[1] = (short)aT;
+			r.box[2] = (short)aR;
+			r.box[3] = (short)aB;
+		}
+		else
+		{
+			if ((short)aL < r.box[0]) r.box[0] = (short)aL;
+			if ((short)aT < r.box[1]) r.box[1] = (short)aT;
+			if ((short)aR > r.box[2]) r.box[2] = (short)aR;
+			if ((short)aB > r.box[3]) r.box[3] = (short)aB;
+		}
+
 		if (r.bound_active & 2)
 		{
 			if (aL < r.test_reach_left) r.test_reach_left = (short)aL;
@@ -1975,7 +2281,148 @@ namespace walkoff
 			level.portalRecords(i, r.doors, error);
 		}
 
-		printf("-walk: %d rooms out of %s\n", (int)g_room.size(), trc.c_str());
+		/* The closed doors: the sector in front of the door names the room
+		 * behind it (GetDoor), and in each of the two rooms the portal whose
+		 * outline, rounded to the quarter sector, holds the point half a
+		 * sector past the door is the one it shuts - the last such portal,
+		 * as SCDS keeps it. */
+		g_doors.clear();
+
+		for (int i = 0; i < level.itemCount(); i++)
+		{
+			Tr5Item item;
+
+			if (!level.getItem(i, item) || item.objectNumber < kClosedDoor1 ||
+				item.objectNumber > kLiftDoors2 || item.roomNumber < 0 ||
+				item.roomNumber >= level.roomCount())
+				continue;
+
+			const Tr5Room& rm = level.rooms()[(size_t)item.roomNumber];
+			long dx = 0, dy = 0;
+
+			if (!item.yRot)
+				dx = -1;
+			else if (item.yRot == -0x8000)
+				dx = 1;
+			else if (item.yRot == 0x4000)
+				dy = -1;
+			else
+				dy = 1;
+
+			const long sx = ((item.x - rm.originX) >> 10) + dy;
+			const long sz = ((item.z - rm.originZ) >> 10) + dx;
+			std::vector<Tr5Level::SectorInfo> sectors;
+			int behind = -1;
+
+			if (level.sectorInfo(item.roomNumber, sectors, error))
+				for (size_t s = 0; s < sectors.size(); s++)
+					if (sectors[s].sx == sx && sectors[s].sz == sz)
+						behind = sectors[s].doorTo;
+
+			if (behind < 0 || behind >= level.roomCount())
+				continue;
+
+			DoorPortals door;
+			const long ox = item.x + (dy << 10);
+			const long oz = item.z + (dx << 10);
+			const int both[2] = { item.roomNumber, behind };
+
+			door.item = i;
+
+			for (int k = 0; k < 2; k++)
+			{
+				const Room& r = g_room[(size_t)both[k]];
+				int found = -1;
+
+				for (size_t p = 0; p < r.doors.size(); p++)
+				{
+					const Tr5Level::PortalRecord& q = r.doors[p];
+					long minx = r.x + ((dy << 10) >> 1) + ((q.v[0][0] + 128) & ~255L);
+					long maxx = r.x + ((dy << 10) >> 1) + ((q.v[2][0] + 128) & ~255L);
+					long minz = r.z + ((dx << 10) >> 1) + ((q.v[0][2] + 128) & ~255L);
+					long maxz = r.z + ((dx << 10) >> 1) + ((q.v[2][2] + 128) & ~255L);
+
+					if (minx > maxx)
+					{
+						const long t = minx;
+						minx = maxx;
+						maxx = t;
+					}
+
+					if (minz > maxz)
+					{
+						const long t = minz;
+						minz = maxz;
+						maxz = t;
+					}
+
+					if (ox >= minx && ox <= maxx && oz >= minz && oz <= maxz)
+						found = (int)p;
+				}
+
+				if (found >= 0)
+					door.portals.push_back(std::make_pair(both[k], found));
+			}
+
+			if (!door.portals.empty())
+				g_doors.push_back(door);
+		}
+
+		printf("-walk: %d rooms out of %s, %d closed door(s) with a portal\n",
+			(int)g_room.size(), trc.c_str(), (int)g_doors.size());
+		return true;
+	}
+
+	/* Shuts the portals of the doors whose flag is set in `shut`, the way
+	 * ShutThatDoor does: all three normals zero. */
+	static void ShutDoors(const std::vector<unsigned char>& shut)
+	{
+		for (size_t d = 0; d < g_doors.size() && d < shut.size(); d++)
+			if (shut[d])
+				for (size_t k = 0; k < g_doors[d].portals.size(); k++)
+				{
+					Room& r = g_room[(size_t)g_doors[d].portals[k].first];
+					Tr5Level::PortalRecord& p =
+						r.doors[(size_t)g_doors[d].portals[k].second];
+
+					p.nx = p.ny = p.nz = 0;
+				}
+	}
+
+	/* HDRoomIsHD as far as the .TRG alone answers it: a group with any
+	 * triangle. A group the engine finds hollow and a room a randomizer
+	 * marker turned classic are HD in this answer and not in the engine's;
+	 * the log's HDLOG room= lines carry the engine's own, which -walkdump
+	 * reads instead. */
+	static bool LoadHd(const std::string& root, const char* stem)
+	{
+		trf::remaster::Trg trg;
+		std::string error;
+		const std::string path = root + "\\DATA\\" + std::string(stem) + ".TRG";
+		int hd = 0;
+
+		g_hd.clear();
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			printf("-walk: no .TRG at %s (%s) - no room is trimmed for want "
+				"of art\n", path.c_str(), error.c_str());
+			return false;
+		}
+
+		g_hd.assign(g_room.size(), 0);
+
+		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
+			for (size_t p = 0; p < trg.groups[g].parts.size() && !g_hd[g]; p++)
+				for (int pass = 0; pass < 3; pass++)
+					if (trg.groups[g].parts[p].pass[pass].count >= 3)
+						g_hd[g] = 1;
+
+		for (size_t g = 0; g < g_hd.size(); g++)
+			hd += g_hd[g];
+
+		printf("-walk: %d of %d rooms have HD art in %s\n", hd,
+			(int)g_hd.size(), path.c_str());
 		return true;
 	}
 
@@ -1983,22 +2430,36 @@ namespace walkoff
 	static void One(int seed, long ex, long ey, long ez, double yawDeg,
 		double pitchDeg, long width, long height, double fov)
 	{
-		const double d2r = 3.14159265358979323846 / 180.0;
-		const double sy = sin(yawDeg * d2r), cy = cos(yawDeg * d2r);
-		const double sp = sin(pitchDeg * d2r), cp = cos(pitchDeg * d2r);
+		/* The three rows of the eye's rotation, aGenerateW2V's with no roll:
+		 * right, down (y grows downwards), forward. Yaw 0 looks along +Z and
+		 * grows towards +X, a positive pitch in degrees looks down - the
+		 * engine's x_rot is negative there, which is why it is negated. */
+		enginecam::Init();
 
-		/* The three rows of the eye's rotation, in the sense LookAt uses
-		 * above: yaw 0 looks along +Z and grows towards +X, pitch > 0 looks
-		 * down. Right, up-as-y-grows-downwards, forward. */
-		g_view[0] = (float)cy;          g_view[1] = 0.0f;       g_view[2] = (float)-sy;
-		g_view[3] = (float)(-sy * sp);  g_view[4] = (float)cp;  g_view[5] = (float)(-cy * sp);
-		g_view[6] = (float)(sy * cp);   g_view[7] = (float)sp;  g_view[8] = (float)(cy * cp);
+		if (g_use_target)
+		{
+			short angles[2];
+
+			enginecam::VectorAngles(g_target[0] - ex, g_target[1] - ey,
+				g_target[2] - ez, angles);
+			g_yrot = angles[0];
+			g_xrot = angles[1];
+		}
+		else
+		{
+			g_yrot = enginecam::Angle(yawDeg);
+			g_xrot = enginecam::Angle(-pitchDeg);
+		}
+
+		enginecam::Rotation(g_xrot, g_yrot, g_zrot, g_view);
 
 		g_winxmax = (short)(width - 1);
 		g_winymax = (short)(height - 1);
 		g_centerx = (float)(width / 2);
 		g_centery = (float)(height / 2);
-		g_persp = (float)EnginePersp(height, fov);
+		g_persp_units = enginecam::Persp(height,
+			g_fov_units ? g_fov_units : enginecam::FovUnits(fov));
+		g_persp = (float)g_persp_units;
 		g_eye[0] = ex;
 		g_eye[1] = ey;
 		g_eye[2] = ez;
@@ -2048,6 +2509,10 @@ namespace walkoff
 			r.test_reach_top = 0;
 			r.test_reach_right = g_winxmax;
 			r.test_reach_bottom = g_winymax;
+			r.box[0] = 0;
+			r.box[1] = 0;
+			r.box[2] = g_winxmax;
+			r.box[3] = g_winymax;
 			r.classic_ok = true;
 			r.reach_first = false;
 		}
@@ -2089,11 +2554,90 @@ namespace walkoff
 		return false;
 	}
 
+	/* ReachTrimRooms (game\draw.cpp) over the last walk: first the rooms
+	 * the reach alone brought in that no HD group draws (g_hd), then,
+	 * farthest first, rooms the reach alone brought in while the list is
+	 * over the budget. -reachsurvey does not call it: it measures the walk's
+	 * own list, which is what the budget was set from. */
+	static std::vector<short> g_trimmed;		// what the last Trim took out
+
+	static void Trim()
+	{
+		g_trim_noart = 0;
+		g_trim_budget = 0;
+		g_trimmed.clear();
+
+		for (size_t i = 0; i < g_drawn.size(); )
+		{
+			const size_t rn = (size_t)g_drawn[i];
+			const Room& r = g_room[rn];
+
+			if ((r.left >= r.right || r.top >= r.bottom) && rn < g_hd.size() &&
+				!g_hd[rn])
+			{
+				g_trimmed.push_back(g_drawn[i]);
+				g_drawn.erase(g_drawn.begin() + (long)i);
+				g_trim_noart++;
+				continue;
+			}
+
+			i++;
+		}
+
+		while ((int)g_drawn.size() > kReachBudget)
+		{
+			int worst = -1;
+			long worstDist = -1;
+
+			for (size_t i = 0; i < g_drawn.size(); i++)
+			{
+				const Room& r = g_room[(size_t)g_drawn[i]];
+
+				if (r.left < r.right && r.top < r.bottom)
+					continue;
+
+				const long d = BoxDistance(r, g_eye[0], g_eye[1], g_eye[2]);
+
+				if (d > worstDist)
+				{
+					worstDist = d;
+					worst = (int)i;
+				}
+			}
+
+			if (worst < 0)
+				break;
+
+			g_trimmed.push_back(g_drawn[(size_t)worst]);
+			g_drawn.erase(g_drawn.begin() + worst);
+			g_trim_budget++;
+		}
+	}
+
+	/* A listed room's answer after the whole walk: its classic window, the
+	 * union of every rectangle it was dequeued with, which is what
+	 * ROOMLIST prints as window= and HDFrameRoom is handed, and its reach=.
+	 * REACH is a room with no classic window. */
+	static void Final(int which, const char* lead)
+	{
+		const Room& r = g_room[(size_t)which];
+
+		printf("%sroom %d final=%d,%d..%d,%d reach=%d,%d..%d,%d %s\n", lead,
+			which, r.left, r.top, r.right, r.bottom, r.box[0], r.box[1],
+			r.box[2], r.box[3],
+			(r.left >= r.right || r.top >= r.bottom) ? "REACH" : "classic");
+	}
+
 	static void Why(int want)
 	{
 		if (Holds(want))
 		{
-			for (size_t i = 0; i < g_verdict.size(); i++)
+			bool noted = false;
+
+			/* The first note that put it in the list, which can be a reach
+			 * note for a room a later portal gives a classic window - the
+			 * final line after it is the room's answer. */
+			for (size_t i = 0; i < g_verdict.size() && !noted; i++)
 				if (g_verdict[i].to == want &&
 					(!strcmp(g_verdict[i].why, "reached") ||
 					!strcmp(g_verdict[i].why, "reach")))
@@ -2103,12 +2647,21 @@ namespace walkoff
 						: "REACH ONLY (no classic window)", g_verdict[i].from,
 						g_verdict[i].n[0], g_verdict[i].n[1],
 						g_verdict[i].n[2], g_verdict[i].n[3]);
-					return;
+					noted = true;
 				}
 
-			printf("      room %d is in the list (seed)\n", want);
+			if (!noted)
+				printf("      room %d is in the list (seed)\n", want);
+
+			Final(want, "      ");
 			return;
 		}
+
+		for (size_t i = 0; i < g_trimmed.size(); i++)
+			if (g_trimmed[i] == want)
+				printf("      room %d TRIMMED - the reach alone brought it in "
+					"and ReachTrimRooms took it out again (no HD art, or the "
+					"budget of %d)\n", want, kReachBudget);
 
 		int seen = 0;
 
@@ -2132,7 +2685,8 @@ namespace walkoff
 static int RunWalk(const std::string& folder, const char* stem, int seed,
 	long ex, long ey, long ez, const double* yawFan, const double* pitchFan,
 	int want, long width, long height, double fov, bool verbose, bool reach,
-	bool centre, bool boxes)
+	bool centre, bool boxes, const std::string& root, const long* target,
+	bool finals)
 {
 	if (!walkoff::Load(folder, stem))
 		return 5;
@@ -2141,6 +2695,47 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 	{
 		printf("-walk: room %d is not in this level\n", seed);
 		return 5;
+	}
+
+	// The reach's list is trimmed as the engine trims it, so the art is asked.
+	if (reach)
+		walkoff::LoadHd(root, stem);
+
+	// -walkshut: those doors shut, every other one open.
+	if (!walkoff::g_shut_items.empty())
+	{
+		std::vector<unsigned char> shut(walkoff::g_doors.size(), 0);
+		int count = 0;
+
+		for (size_t d = 0; d < walkoff::g_doors.size(); d++)
+			for (size_t k = 0; k < walkoff::g_shut_items.size(); k++)
+				if (walkoff::g_shut_items[k] < 0 ||
+					walkoff::g_shut_items[k] == walkoff::g_doors[d].item)
+					shut[d] = 1;
+
+		for (size_t d = 0; d < shut.size(); d++)
+			count += shut[d];
+
+		walkoff::ShutDoors(shut);
+		printf("-walkshut: %d door(s) shut\n", count);
+	}
+
+	/* -walktarget: one direction, the one phd_LookAt builds from the eye and
+	 * the target, and the fan is not walked. */
+	double oneYaw[3], onePitch[3];
+
+	if (target)
+	{
+		walkoff::g_use_target = true;
+		walkoff::g_target[0] = target[0];
+		walkoff::g_target[1] = target[1];
+		walkoff::g_target[2] = target[2];
+		oneYaw[0] = oneYaw[1] = 0.0;
+		oneYaw[2] = 1.0;
+		onePitch[0] = onePitch[1] = 0.0;
+		onePitch[2] = 1.0;
+		yawFan = oneYaw;
+		pitchFan = onePitch;
 	}
 
 	/* -walkcentre: the eye at the middle of the seed room's own box. The
@@ -2271,7 +2866,17 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 				bestClassic = classicRooms;
 				bestReach = now;
 			}
+
+			// The list the engine hands the frame.
+			walkoff::Trim();
 		}
+
+		if (target && frames == 1)
+			printf("-walktarget: target %ld/%ld/%ld  y_rot %d x_rot %d "
+				"(yaw %.4f pitch %.4f deg)  persp %ld\n", target[0],
+				target[1], target[2], (int)walkoff::g_yrot,
+				(int)walkoff::g_xrot, walkoff::g_yrot * 360.0 / 65536.0,
+				-walkoff::g_xrot * 360.0 / 65536.0, walkoff::g_persp_units);
 
 		if ((int)walkoff::g_drawn.size() > mostRooms)
 			mostRooms = (int)walkoff::g_drawn.size();
@@ -2333,6 +2938,15 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 				printf(" %d", (int)walkoff::g_drawn[i]);
 
 			printf("\n");
+
+			if (reach && (walkoff::g_trim_noart || walkoff::g_trim_budget))
+				printf("      trimmed no_art=%d budget=%d\n",
+					walkoff::g_trim_noart, walkoff::g_trim_budget);
+
+			// -walkfinal: every listed room's answer, as -walkwant gives one.
+			if (finals)
+				for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+					walkoff::Final(walkoff::g_drawn[i], "      ");
 
 			if (want >= 0)
 				walkoff::Why(want);
@@ -2415,6 +3029,589 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			printf("    never  room %3d  dist %6ld  %s\n", (int)i, d,
 				(r.flags & 0x8) ? "OUTSIDE" : "");
 	}
+
+	return 0;
+}
+
+/* -walkdump <log> [frame]: the engine's own whole-list dumps walked again.
+ *
+ * Every `ROOMLIST frame=N the whole list` block of a -log run carries the
+ * eye the walk used, the target it looked at and every listed room with its
+ * window and its reach, in the order the walk listed them - the first is
+ * the seed. What else the walk depended on the log carries too, and this
+ * reads it on the way down to each dump:
+ *
+ *   the level        the last `HDLOG level=<stem>` line; its .TRC comes out
+ *                    of -roombox, which has to hold the files that were
+ *                    played
+ *   the view         the last ALTERFOV line: the field of view in the
+ *                    engine's units, and the height; the width from the last
+ *                    `clip first frame ... backbuffer WxH` line
+ *   the art          the `HDLOG room= ... hd=` lines of the level build,
+ *                    which is HDRoomIsHD per group - the no-art trim's answer
+ *   the flips        the `HDLOG flip room=a <-> room=b now group=x / group=y`
+ *                    lines: FlipMap swaps the two rooms' records, portals
+ *                    and all, and the walk after it runs through the swapped
+ *                    ones. HDFlipRoom writes the first ten swaps of a level
+ *                    and no more.
+ *
+ * What no log line carries: which closed doors are shut - a shut door
+ * zeroes the normals of the portal it stands in on both sides, and
+ * GetRoomBounds follows neither (walkoff::g_doors) - the roll a flyby gives
+ * its camera along the spline, and the poison sway that scales the view.
+ * The door state and the roll are searched for, per dump, and printed as
+ * doors_shut= (the door items) and roll=; the sway is not.
+ *
+ * Per dump one line - the rooms of both lists, the rooms only one of them
+ * has, how many common rooms have the same window, one within a pixel and
+ * one further off, and how many the same reach rectangle - and one line per
+ * room that differs by more than a pixel, with both windows; a dump that
+ * cannot be walked says why. The totals come last. */
+static int RunWalkDump(const std::string& folder, const std::string& logPath,
+	long onlyFrame, bool verbose)
+{
+	FILE* f = fopen(logPath.c_str(), "rb");
+
+	if (!f)
+	{
+		printf("-walkdump: cannot open %s\n", logPath.c_str());
+		return 5;
+	}
+
+	char stem[64] = "";
+	char loadedStem[64] = "";
+	short fovUnits = 0;
+	long winh = 0, bbw = 0, bbh = 0;
+	std::vector<unsigned char> hdGroup;		// per group, as the build said
+	std::vector<int> groupOf;			// per room, the group after flips
+	std::vector<walkoff::Room> base;		// the level as the file has it
+	char line[4096];
+
+	long dumps = 0, walked = 0, listsEqual = 0, doorDumps = 0, rollDumps = 0;
+	long winEqual = 0, winNear = 0, winFar = 0, reachEqual = 0, reachOff = 0;
+	std::vector<std::string> exceptions;
+
+	walkoff::g_notes = false;
+
+	while (fgets(line, sizeof(line), f))
+	{
+		const char* body = strchr(line, ']');
+
+		body = body ? body + 1 : line;
+
+		while (*body == ' ')
+			body++;
+
+		int a = 0, b = 0, c = 0, d = 0, e = 0;
+		const char* at;
+
+		if (!strncmp(body, "HDLOG level=", 12))
+		{
+			sscanf(body + 12, "%63s", stem);
+
+			if ((at = strstr(body, "backbuffer ")) != 0 &&
+				sscanf(at + 11, "%dx%d", &a, &b) == 2)
+			{
+				bbw = a;
+				bbh = b;
+			}
+
+			continue;
+		}
+
+		if (sscanf(body, "HDLOG room=%d group=%d tris=", &a, &b) == 2 &&
+			(at = strstr(body, " hd=")) != 0)
+		{
+			// A level build starts over at room 0.
+			if (a == 0)
+			{
+				hdGroup.clear();
+				groupOf.clear();
+			}
+
+			if (b >= 0 && b < 1024)
+			{
+				if ((int)hdGroup.size() <= b)
+					hdGroup.resize((size_t)b + 1, 0);
+
+				hdGroup[(size_t)b] = (unsigned char)(atoi(at + 4) ? 1 : 0);
+			}
+
+			continue;
+		}
+
+		if (sscanf(body, "HDLOG flip room=%d <-> room=%d now group=%d / group=%d",
+			&a, &b, &c, &d) == 4)
+		{
+			const int most = a > b ? a : b;
+
+			if ((int)groupOf.size() <= most)
+			{
+				const size_t was = groupOf.size();
+
+				groupOf.resize((size_t)most + 1);
+
+				for (size_t i = was; i < groupOf.size(); i++)
+					groupOf[i] = (int)i;
+			}
+
+			groupOf[(size_t)a] = c;
+			groupOf[(size_t)b] = d;
+			continue;
+		}
+
+		if (sscanf(body, "ALTERFOV %d (%d deg) winh %d", &a, &b, &c) == 3)
+		{
+			fovUnits = (short)a;
+			winh = c;
+			continue;
+		}
+
+		unsigned frame = 0;
+		int count = 0;
+
+		if (strncmp(body, "ROOMLIST frame=", 15) ||
+			!strstr(body, "the whole list") ||
+			sscanf(body, "ROOMLIST frame=%u the whole list, %d room(s)", &frame,
+				&count) != 2)
+			continue;
+
+		long eye[3], tgt[3];
+
+		at = strstr(body, "eye=(");
+
+		if (!at || sscanf(at, "eye=(%ld,%ld,%ld) target=(%ld,%ld,%ld)", &eye[0],
+			&eye[1], &eye[2], &tgt[0], &tgt[1], &tgt[2]) != 6)
+			continue;
+
+		// The rooms, the next `count` ROOMLIST room lines.
+		std::vector<int> rooms;
+		std::vector<std::vector<int> > wins, reaches;
+
+		while ((int)rooms.size() < count && fgets(line, sizeof(line), f))
+		{
+			const char* r = strstr(line, "ROOMLIST   room=");
+			int w[4], q[4], rn;
+
+			if (!r || sscanf(r, "ROOMLIST   room=%d window=%d,%d..%d,%d "
+				"reach=%d,%d..%d,%d", &rn, &w[0], &w[1], &w[2], &w[3], &q[0],
+				&q[1], &q[2], &q[3]) != 9)
+				continue;
+
+			rooms.push_back(rn);
+			wins.push_back(std::vector<int>(w, w + 4));
+			reaches.push_back(std::vector<int>(q, q + 4));
+		}
+
+		if (onlyFrame >= 0 && (long)frame != onlyFrame)
+			continue;
+
+		dumps++;
+
+		char why[160] = "";
+		const long width = bbw ? bbw : winh * 16 / 9;
+		const long height = bbh ? bbh : winh;
+
+		if ((int)rooms.size() != count)
+			snprintf(why, sizeof(why), "the dump holds %d of its %d room lines",
+				(int)rooms.size(), count);
+		else if (!stem[0])
+			snprintf(why, sizeof(why), "no HDLOG level= line before it");
+		else if (!fovUnits || !height)
+			snprintf(why, sizeof(why), "no ALTERFOV line before it");
+
+		if (!why[0] && strcmp(stem, loadedStem))
+		{
+			if (!walkoff::Load(folder, stem))
+				snprintf(why, sizeof(why), "no %s.TRC in the -roombox folder", stem);
+			else
+			{
+				base = walkoff::g_room;
+				strcpy(loadedStem, stem);
+			}
+		}
+
+		if (!why[0] && (rooms[0] < 0 || rooms[0] >= (int)base.size()))
+			snprintf(why, sizeof(why), "the seed room %d is not in the level",
+				rooms[0]);
+
+		if (why[0])
+		{
+			printf("walkdump frame=%u level=%s not walked: %s\n", frame,
+				stem[0] ? stem : "-", why);
+			exceptions.push_back(std::string("frame ") + std::to_string(frame) +
+				": " + why);
+			continue;
+		}
+
+		// The art as HDRoomIsHD reads it: through the flips.
+		walkoff::g_hd.assign(base.size(), 0);
+
+		bool anyHd = false;
+
+		for (size_t r = 0; r < base.size(); r++)
+		{
+			const int g = r < groupOf.size() ? groupOf[r] : (int)r;
+
+			if (g >= 0 && (size_t)g < hdGroup.size() && hdGroup[(size_t)g])
+			{
+				walkoff::g_hd[r] = 1;
+				anyHd = true;
+			}
+		}
+
+		// The reach runs where the level has HD art at all (HDLevelActive).
+		walkoff::g_reach = anyHd;
+		walkoff::g_use_target = true;
+		walkoff::g_fov_units = fovUnits;
+
+		for (int k = 0; k < 3; k++)
+			walkoff::g_target[k] = tgt[k];
+
+		/* One walk with the doors in `shut` shut and the camera rolled by
+		 * `roll`: the doors' portals zeroed in the rooms of the file, then
+		 * the flips, then the walk and the trim. Scored against the dump:
+		 * the rooms of the engine's list it misses, the rooms it lists that
+		 * the engine does not, the common rooms whose window is more than a
+		 * pixel off and those whose reach rectangle is. Two empty windows
+		 * are equal whatever their four numbers - a room no frame has
+		 * printed keeps the ones the file gave it, 32767,32767..0,0, where
+		 * the tool has the wiped ones. */
+		std::vector<unsigned char> shut(walkoff::g_doors.size(), 0);
+		const std::vector<walkoff::DoorPortals> doors = walkoff::g_doors;
+
+		struct Score
+		{
+			int missing, extra, windows, reach;
+		};
+
+		auto walkWith = [&](const std::vector<unsigned char>& with, short roll)
+		{
+			std::vector<walkoff::Room> file = base;
+			Score s = { 0, 0, 0, 0 };
+
+			walkoff::g_room = file;
+			walkoff::ShutDoors(with);
+			file = walkoff::g_room;
+
+			for (size_t r = 0; r < base.size(); r++)
+			{
+				const int g = r < groupOf.size() ? groupOf[r] : (int)r;
+
+				if (g != (int)r && g >= 0 && g < (int)base.size())
+					walkoff::g_room[r] = file[(size_t)g];
+			}
+
+			walkoff::g_zrot = roll;
+			walkoff::One(rooms[0], eye[0], eye[1], eye[2], 0.0, 0.0, width,
+				height, 0.0);
+			walkoff::g_zrot = 0;
+
+			if (anyHd)
+				walkoff::Trim();
+
+			for (size_t i = 0; i < rooms.size(); i++)
+			{
+				if (!walkoff::Holds(rooms[i]))
+				{
+					s.missing++;
+					continue;
+				}
+
+				const walkoff::Room& r = walkoff::g_room[(size_t)rooms[i]];
+				const bool toolEmpty = r.left >= r.right || r.top >= r.bottom;
+				const bool engineEmpty = wins[i][0] >= wins[i][2] ||
+					wins[i][1] >= wins[i][3];
+
+				if (abs(r.box[0] - reaches[i][0]) > 1 ||
+					abs(r.box[1] - reaches[i][1]) > 1 ||
+					abs(r.box[2] - reaches[i][2]) > 1 ||
+					abs(r.box[3] - reaches[i][3]) > 1)
+					s.reach++;
+
+				if (toolEmpty && engineEmpty)
+					continue;
+
+				if (toolEmpty != engineEmpty ||
+					abs(r.left - wins[i][0]) > 1 || abs(r.top - wins[i][1]) > 1 ||
+					abs(r.right - wins[i][2]) > 1 || abs(r.bottom - wins[i][3]) > 1)
+					s.windows++;
+			}
+
+			for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+			{
+				bool found = false;
+
+				for (size_t k = 0; k < rooms.size() && !found; k++)
+					found = rooms[k] == walkoff::g_drawn[i];
+
+				s.extra += found ? 0 : 1;
+			}
+
+			return s;
+		};
+
+		// Better: loses no more of the engine's rooms, and fits closer.
+		auto better = [](const Score& t, const Score& was)
+		{
+			return t.missing <= was.missing && (t.extra < was.extra ||
+				(t.extra == was.extra && (t.windows < was.windows ||
+				(t.windows == was.windows && t.reach < was.reach))));
+		};
+
+		Score score = walkWith(shut, 0);
+
+		/* A room the engine does not list, or a window wider than the
+		 * engine's: a door the log does not say is shut. Two searches, the
+		 * better answer kept. One shuts doors one at a time, and two at a
+		 * time when no single one helps (two doors side by side on the two
+		 * halves of one opening), while that fits the dump closer and loses
+		 * none of the engine's rooms. The other starts with every door shut
+		 * and opens them one at a time while that gives back rooms of the
+		 * engine's list and adds no surplus. */
+		if ((score.extra || score.windows || score.reach) && !doors.empty())
+		{
+			std::vector<unsigned char> a = shut;
+			Score as = score;
+
+			for (bool moved = true; moved && (as.extra || as.windows || as.reach); )
+			{
+				moved = false;
+
+				for (size_t d = 0; d < doors.size(); d++)
+				{
+					if (a[d])
+						continue;
+
+					std::vector<unsigned char> trial = a;
+
+					trial[d] = 1;
+
+					const Score t = walkWith(trial, 0);
+
+					if (better(t, as))
+					{
+						a = trial;
+						as = t;
+						moved = true;
+					}
+				}
+
+				for (size_t d = 0; !moved && d < doors.size(); d++)
+					for (size_t k = d + 1; !moved && k < doors.size(); k++)
+					{
+						if (a[d] || a[k])
+							continue;
+
+						std::vector<unsigned char> trial = a;
+
+						trial[d] = 1;
+						trial[k] = 1;
+
+						const Score t = walkWith(trial, 0);
+
+						if (better(t, as))
+						{
+							a = trial;
+							as = t;
+							moved = true;
+						}
+					}
+			}
+
+			std::vector<unsigned char> b(doors.size(), 1);
+			Score bs = walkWith(b, 0);
+
+			for (bool moved = true; moved && bs.missing; )
+			{
+				moved = false;
+
+				for (size_t d = 0; d < doors.size() && bs.missing; d++)
+				{
+					if (!b[d])
+						continue;
+
+					std::vector<unsigned char> trial = b;
+
+					trial[d] = 0;
+
+					const Score t = walkWith(trial, 0);
+
+					if (t.missing < bs.missing && t.extra <= bs.extra)
+					{
+						b = trial;
+						bs = t;
+						moved = true;
+					}
+				}
+			}
+
+			// A door state that loses a room of the engine's list is no answer.
+			shut = !bs.missing && better(bs, as) ? b : a;
+		}
+
+		/* Windows still off with the doors settled: a roll the log does not
+		 * carry - a flyby rolls its camera along the spline. Every roll in
+		 * steps of 16 units (a third of a degree) is tried, then every unit
+		 * round the best of them; the one that fits the windows best, and
+		 * after them the reach rectangles, is kept when it makes every
+		 * window fit - that is the reason. None leaves the dump as it is.
+		 * The reach rectangles alone are no sign of a roll: the order the
+		 * portals are met in sets them, and a door changes that order. */
+		score = walkWith(shut, 0);
+
+		short rollFit = 0;
+		bool rollFound = false;
+
+		if (score.windows && !score.missing && !score.extra)
+		{
+			Score best = score;
+			long bestRoll = 0;
+
+			for (int pass = 0; pass < 2; pass++)
+			{
+				const long from = pass ? bestRoll - 16 : -32768;
+				const long to = pass ? bestRoll + 16 : 32767;
+
+				for (long roll = from; roll <= to; roll += pass ? 1 : 16)
+				{
+					const Score t = walkWith(shut, (short)roll);
+
+					if (!t.missing && !t.extra && (t.windows < best.windows ||
+						(t.windows == best.windows && t.reach < best.reach)))
+					{
+						best = t;
+						bestRoll = roll;
+					}
+				}
+			}
+
+			if (!best.windows)
+			{
+				rollFit = (short)bestRoll;
+				rollFound = true;
+			}
+		}
+
+		score = walkWith(shut, rollFound ? rollFit : 0);
+		walkoff::g_zrot = 0;
+
+		std::string shutList;
+
+		for (size_t d = 0; d < shut.size(); d++)
+			if (shut[d])
+				shutList += (shutList.empty() ? "" : ",") +
+					std::to_string(doors[d].item);
+
+		if (!shutList.empty())
+			doorDumps++;
+
+		walked++;
+
+		std::string onlyEngine, onlyTool;
+		int equal = 0, near1 = 0, offBy = 0, reachSame = 0;
+		std::vector<std::string> farLines;
+
+		for (size_t i = 0; i < rooms.size(); i++)
+		{
+			if (!walkoff::Holds(rooms[i]))
+			{
+				onlyEngine += (onlyEngine.empty() ? "" : ",") +
+					std::to_string(rooms[i]);
+				continue;
+			}
+
+			const walkoff::Room& r = walkoff::g_room[(size_t)rooms[i]];
+			const int t[4] = { r.left, r.top, r.right, r.bottom };
+			int worst = 0, reachWorst = 0;
+
+			for (int k = 0; k < 4; k++)
+			{
+				const int dw = abs(t[k] - wins[i][(size_t)k]);
+				const int dr = abs(r.box[k] - reaches[i][(size_t)k]);
+
+				if (dw > worst) worst = dw;
+				if (dr > reachWorst) reachWorst = dr;
+			}
+
+			// Two empty windows are the same answer, see walkWith.
+			if ((t[0] >= t[2] || t[1] >= t[3]) &&
+				(wins[i][0] >= wins[i][2] || wins[i][1] >= wins[i][3]))
+				worst = 0;
+
+			if (!worst)
+				equal++;
+			else if (worst <= 1)
+				near1++;
+			else
+			{
+				char one[200];
+
+				offBy++;
+				snprintf(one, sizeof(one), "  room %d engine=%d,%d..%d,%d tool="
+					"%d,%d..%d,%d", rooms[i], wins[i][0], wins[i][1], wins[i][2],
+					wins[i][3], t[0], t[1], t[2], t[3]);
+				farLines.push_back(one);
+			}
+
+			if (!reachWorst)
+				reachSame++;
+		}
+
+		for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+		{
+			bool found = false;
+
+			for (size_t k = 0; k < rooms.size() && !found; k++)
+				found = rooms[k] == walkoff::g_drawn[i];
+
+			if (!found)
+				onlyTool += (onlyTool.empty() ? "" : ",") +
+					std::to_string(walkoff::g_drawn[i]);
+		}
+
+		if (onlyEngine.empty() && onlyTool.empty())
+			listsEqual++;
+
+		winEqual += equal;
+		winNear += near1;
+		winFar += offBy;
+		reachEqual += reachSame;
+		reachOff += equal + near1 + offBy - reachSame;
+
+		printf("walkdump frame=%u level=%s rooms engine=%d tool=%d "
+			"only_engine=%s only_tool=%s windows_equal=%d within_1px=%d "
+			"differing=%d reach_equal=%d seed=%d fov=%d size=%ldx%ld "
+			"trimmed=%d/%d doors_shut=%s roll=%s\n", frame, stem,
+			(int)rooms.size(), (int)walkoff::g_drawn.size(),
+			onlyEngine.empty() ? "-" : onlyEngine.c_str(),
+			onlyTool.empty() ? "-" : onlyTool.c_str(), equal, near1, offBy,
+			reachSame, rooms[0], (int)fovUnits, width, height,
+			walkoff::g_trim_noart, walkoff::g_trim_budget,
+			shutList.empty() ? "-" : shutList.c_str(),
+			rollFound ? std::to_string(rollFit).c_str() : "-");
+
+		if (rollFound)
+			rollDumps++;
+
+		for (size_t i = 0; i < farLines.size(); i++)
+			printf("%s\n", farLines[i].c_str());
+
+		if (verbose)
+			for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+				walkoff::Final(walkoff::g_drawn[i], "  ");
+	}
+
+	fclose(f);
+
+	printf("walkdump: %ld dump(s) read, %ld walked, room lists equal in %ld; "
+		"shut doors found in %ld, a roll in %ld; windows equal %ld, within "
+		"1 px %ld, differing %ld; reach equal %ld, differing %ld\n", dumps,
+		walked, listsEqual, doorDumps, rollDumps, winEqual, winNear, winFar,
+		reachEqual, reachOff);
+
+	for (size_t i = 0; i < exceptions.size(); i++)
+		printf("walkdump: not walked, %s\n", exceptions[i].c_str());
 
 	return 0;
 }
@@ -2648,11 +3845,14 @@ static unsigned char g_water_table[22][64][4];
  *
  * -oldorder draws room-major instead: all three passes of the first room,
  * then all three of the second. */
-/* Thirty-two, not eight: a picture of what the walk hands the frame is a
- * picture of twenty to forty rooms - the reach's own room lists are that
- * long. Each slot is a group number and a translation. */
-static int g_with_group[32];
-static float g_with_offset[32][3];
+/* As many as draw_rooms holds (game\draw.cpp, kDrawRoomsMax): a picture of
+ * what the walk hands the frame is a picture of the whole list, and the
+ * reach's lists run to 40 and past 100 rooms. A 257th -with or -roomwin
+ * group is refused with a message, never dropped. Each slot is a group
+ * number and a translation. */
+static const int kWithMax = 256;
+static int g_with_group[kWithMax];
+static float g_with_offset[kWithMax][3];
 static int g_with_count = 0;
 static bool g_old_order = false;
 
@@ -2669,8 +3869,8 @@ static bool g_old_order = false;
  * A room counts as drawn when it is the seed or a -with group. The corner
  * rule is drawroom.cpp's, without the underwater wobble this tool has no
  * camera for. */
-static int g_roomwin_group[64];
-static long g_roomwin_box[64][4];
+static int g_roomwin_group[kWithMax];
+static long g_roomwin_box[kWithMax][4];
 static int g_roomwin_count = 0;
 static int g_decide = 2;			// 0 whole, 1 scissor, 2 frame, 3 face
 /* The counters of hd_level.cpp's HDLOG clip line, over the groups -roomwin
@@ -3667,7 +4867,12 @@ int main(int argc, char** argv)
 		printf("                                      offline (needs -roombox)\n");
 		printf("       -walkyaw <from> <to> <step>   default 0 359 15\n");
 		printf("       -walkpitch <deg>  -walkpitchfan <from> <to> <step>\n");
-		printf("       -walkwant <room>  -walkeach  -walkcentre\n");
+		printf("       -walkwant <room>  -walkeach  -walkcentre  -walkfinal\n");
+		printf("       -walktarget <x y z>   the engine's camera from eye and "
+			"target\n");
+		printf("       -walkshut <item,...|all>   those closed doors shut\n");
+		printf("       -walkdump <log> [frame]   a log's whole-list dumps "
+			"walked again\n");
 		printf("       -reach   the two-rectangle portal walk\n");
 		printf("       -walkboxes   every room's origin, for -with\n");
 		printf("       -reachsurvey [step]   every room of the level as the\n");
@@ -3702,6 +4907,13 @@ int main(int argc, char** argv)
 	double walkYaw[3] = { 0.0, 359.0, 15.0 };
 	double walkPitch[3] = { 0.0, 0.0, 1.0 };
 	bool walkEach = false;
+	/* -walktarget: the engine's camera from the eye and a world target;
+	 * -walkfinal: every listed room's final window; -walkdump: a log's
+	 * whole-list dumps walked again, all of them or the one at a frame. */
+	long walkTarget[3] = { 0, 0, 0 };
+	bool walkTargetGiven = false, walkFinal = false;
+	const char* walkDump = 0;
+	long walkDumpFrame = -1;
 	// The reach, the eye at the seed room's centre, and the level survey.
 	bool walkReach = false, walkCentre = false, reachSurvey = false;
 	bool walkBoxes = false;
@@ -3855,16 +5067,19 @@ int main(int argc, char** argv)
 			g_shatter = true;
 		else if (!strcmp(argv[at], "-with") && at + 4 < argc)
 		{
-			if (g_with_count < 32)
+			if (g_with_count >= kWithMax)
 			{
-				g_with_group[g_with_count] = atoi(argv[at + 1]);
-
-				for (int c = 0; c < 3; c++)
-					g_with_offset[g_with_count][c] = (float)atof(argv[at + 2 + c]);
-
-				g_with_count++;
+				printf("-with: more than %d groups - the picture would leave "
+					"rooms out, so nothing is drawn\n", kWithMax);
+				return 1;
 			}
 
+			g_with_group[g_with_count] = atoi(argv[at + 1]);
+
+			for (int c = 0; c < 3; c++)
+				g_with_offset[g_with_count][c] = (float)atof(argv[at + 2 + c]);
+
+			g_with_count++;
 			at += 4;
 		}
 		else if (!strcmp(argv[at], "-oldorder"))
@@ -3910,6 +5125,41 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-walkwant") && at + 1 < argc)
 			walkWant = atoi(argv[++at]);
+		else if (!strcmp(argv[at], "-walktarget") && at + 3 < argc)
+		{
+			walkTarget[0] = atol(argv[at + 1]);
+			walkTarget[1] = atol(argv[at + 2]);
+			walkTarget[2] = atol(argv[at + 3]);
+			walkTargetGiven = true;
+			at += 3;
+		}
+		else if (!strcmp(argv[at], "-walkfinal"))
+			walkFinal = true;
+		else if (!strcmp(argv[at], "-walkshut") && at + 1 < argc)
+		{
+			const char* q = argv[++at];
+
+			if (!strcmp(q, "all"))
+				walkoff::g_shut_items.push_back(-1);
+			else
+				for (; *q; q++)
+				{
+					walkoff::g_shut_items.push_back(atoi(q));
+
+					while (*q && *q != ',')
+						q++;
+
+					if (!*q)
+						break;
+				}
+		}
+		else if (!strcmp(argv[at], "-walkdump") && at + 1 < argc)
+		{
+			walkDump = argv[++at];
+
+			if (at + 1 < argc && argv[at + 1][0] != '-')
+				walkDumpFrame = atol(argv[++at]);
+		}
 		else if (!strcmp(argv[at], "-walkeach"))
 			walkEach = true;
 		else if (!strcmp(argv[at], "-walkcentre") ||
@@ -3952,14 +5202,25 @@ int main(int argc, char** argv)
 		{
 			const char* q = argv[at + 1];
 
-			while (*q && g_roomwin_count < 64)
+			while (*q)
 			{
 				int g = -1;
-				long* w = g_roomwin_box[g_roomwin_count];
+				long w[4];
 
 				if (sscanf(q, "%d:%ld,%ld,%ld,%ld", &g, &w[0], &w[1], &w[2],
 					&w[3]) == 5)
+				{
+					if (g_roomwin_count >= kWithMax)
+					{
+						printf("-roomwin: more than %d groups - the picture "
+							"would leave windows out, so nothing is drawn\n",
+							kWithMax);
+						return 1;
+					}
+
+					memcpy(g_roomwin_box[g_roomwin_count], w, sizeof(w));
 					g_roomwin_group[g_roomwin_count++] = g;
+				}
 
 				const char* next = strchr(q, ';');
 
@@ -4152,6 +5413,18 @@ int main(int argc, char** argv)
 			height, fov, reachStep);
 	}
 
+	if (walkDump)
+	{
+		if (g_roombox.empty())
+		{
+			printf("-walkdump needs -roombox <folder holding the .TRC files "
+				"that were played>\n");
+			return 5;
+		}
+
+		return RunWalkDump(g_roombox, walkDump, walkDumpFrame, walkFinal);
+	}
+
 	if (walkSeed >= 0)
 	{
 		if (g_roombox.empty())
@@ -4163,7 +5436,44 @@ int main(int argc, char** argv)
 		return RunWalk(g_roombox, stem, walkSeed, walkEye[0], walkEye[1],
 			walkEye[2], walkYaw, walkPitch,
 			walkWant, width, height, fov, walkEach, walkReach, walkCentre,
-			walkBoxes);
+			walkBoxes, root, walkTargetGiven ? walkTarget : 0, walkFinal);
+	}
+
+	/* -walktarget without -walk: the picture's camera is the engine's. The
+	 * eye is the room-local x y z of the command line, the target a world
+	 * point as ROOMLIST prints it, so the seed room's origin is read out of
+	 * the classic level; the yaw, the pitch and the perspective become the
+	 * integer ones phd_LookAt and AlterFOV make of them, and LookAt below
+	 * builds the view from those. -decide frame holds the classic faces
+	 * against the same view. */
+	double enginePersp = 0.0;
+
+	if (walkTargetGiven)
+	{
+		if (g_roombox.empty() || !haveCamera || !walkoff::Load(g_roombox, stem) ||
+			room < 0 || room >= (int)walkoff::g_room.size())
+		{
+			printf("-walktarget without -walk needs the camera x y z, -roombox "
+				"and a room of that level\n");
+			return 5;
+		}
+
+		const walkoff::Room& r = walkoff::g_room[(size_t)room];
+		const long ex = r.x + (long)floor(cx + 0.5);
+		const long ey = r.y + (long)floor(cy + 0.5);
+		const long ez = r.z + (long)floor(cz + 0.5);
+		short angles[2];
+
+		enginecam::VectorAngles(walkTarget[0] - ex, walkTarget[1] - ey,
+			walkTarget[2] - ez, angles);
+		yaw = angles[0] * 360.0 / 65536.0;
+		pitch = -angles[1] * 360.0 / 65536.0;
+		enginePersp = (double)enginecam::Persp(height,
+			enginecam::FovUnits(fov));
+		printf("-walktarget: eye %ld/%ld/%ld target %ld/%ld/%ld  y_rot %d "
+			"x_rot %d (yaw %.4f pitch %.4f deg)  persp %.0f\n", ex, ey, ez,
+			walkTarget[0], walkTarget[1], walkTarget[2], (int)angles[0],
+			(int)angles[1], yaw, pitch, enginePersp);
 	}
 
 	if (!MakeDevice())
@@ -5178,7 +6488,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	const double persp = EnginePersp(height, fov);
+	const double persp = enginePersp > 0.0 ? enginePersp : EnginePersp(height, fov);
 	PrintZProof(persp);
 
 	if (noDraw)
@@ -5342,7 +6652,7 @@ int main(int argc, char** argv)
 	 * which is right for the picture this proves (no dynamic light in it)
 	 * and would not be for a light one. */
 	bool drew = false;
-	D3DMATRIX withWorld[32];
+	static D3DMATRIX withWorld[kWithMax];
 
 	/* The portal window, if one was asked for, set with the very call the
 	 * engine makes per room. It goes on after the sky, because the engine's

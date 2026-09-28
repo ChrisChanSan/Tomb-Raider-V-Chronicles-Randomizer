@@ -2092,9 +2092,13 @@ HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
       between them faces=6 bound=540
 HDLOG level=ANDREA1 overlap pairs=158 intruding tris=16718 in 89 groups
       holder=inside cull=opaque faces=558 bound=15993 unbound=725
+      band_unclaimed=11020
 HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
       items_spared=... view=... view_obj=... pairs=... whole=... scissored=...
+      reach_rooms=... reach_pieces=... reach_whole=... reach_hidden=...
+HDLOG reachart level=ANDREA1 room=93 reach=... holder=101 listed=1 pieces=6
+      tris=108 answer=hidden band_tris=0
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
       maxdx=0.00017 maxdy=0.00009 maxdz=0.000000000 persp=572.0 center=960,540
 HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
@@ -2128,7 +2132,15 @@ inside, which are cut to the room's window whenever the room they stand in is
 on the screen; the unclaimed art nearer the holder's wall is drawn whole. Once
 a second the `clip` line ends in how many pieces of that art the frame asked
 about (`pairs=`), drew whole and cut (the second `scissored=`; the first
-counts rooms). The `cull` line counts the draw calls
+counts rooms). A room the reach lists with no window of its own is not asked:
+its art standing in a room that is on the frame's list is left out, because
+that room's walls are drawn and the art would show through them, and its art
+standing in a room that is not listed keeps the answer of the smaller box.
+The `reach_` fields at the end of the `clip` line count those rooms, their
+pieces, the ones drawn whole and the ones left out for a listed holder; a
+`reachart` line per room and holder names them, and `band_unclaimed=` at the
+end of the level line counts the unclaimed art near the holder's wall, drawn
+whole on every frame. The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.
 
 A randomized level adds two more room reasons and a block of its own. A room

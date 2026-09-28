@@ -2701,6 +2701,13 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 								//angle instead of staying matt. Registry only and on
 								//by default, for the same reason as hd_motion, and
 								//equally dead while hd_enable is off.
+	bool hd_reach;				//on off, the reach of the portal walk in an HD level: a
+								//room whose portal faces the eye and lands on the screen
+								//is listed even where the parent room's window refuses
+								//it, because the Remaster's art opens walls the classic
+								//level keeps shut. Registry only and on by default; off,
+								//the walk is the classic one and the art seen through an
+								//opened wall may be missing. Dead while hd_enable is off.
 	/* How many frames a second are presented. The game's own clock is a
 	 * fixed 30 Hz in every mode - one logic step, one animation frame,
 	 * one timer tick, exactly as Core wrote it - and this only says how

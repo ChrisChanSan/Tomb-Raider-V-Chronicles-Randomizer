@@ -234,6 +234,10 @@ void init_tomb5_stuff()
 		tomb5.hd_reflect = 1;							//on
 		REG_WriteBool(buf, tomb5.hd_reflect);
 
+		sprintf(buf, "hd_reach");
+		tomb5.hd_reach = 1;								//on
+		REG_WriteBool(buf, tomb5.hd_reach);
+
 		sprintf(buf, "fps_mode");
 		tomb5.fps_mode = 1;								//60, the default
 		REG_WriteLong(buf, tomb5.fps_mode);
@@ -438,6 +442,9 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "hd_reflect");
 		REG_ReadBool(buf, tomb5.hd_reflect, 1);
+
+		sprintf(buf, "hd_reach");
+		REG_ReadBool(buf, tomb5.hd_reach, 1);
 
 		/* 0 is 30, 1 is 60 and 2 is the display's own refresh rate.
 		 * Anything above 2 is not a mode that exists and reads back as the
@@ -660,6 +667,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_reflect");
 	REG_WriteBool(buf, tomb5.hd_reflect);
+
+	sprintf(buf, "hd_reach");
+	REG_WriteBool(buf, tomb5.hd_reach);
 
 	sprintf(buf, "fps_mode");
 	REG_WriteLong(buf, tomb5.fps_mode);

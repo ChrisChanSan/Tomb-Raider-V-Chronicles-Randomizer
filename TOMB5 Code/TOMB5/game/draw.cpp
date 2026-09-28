@@ -171,7 +171,10 @@ static short ClipRoomNum;
  *
  * With hd_enable off, or in a level the .TRG has nothing for, HDLevelActive()
  * is false, g_reach_on stays false and the walk is the original one: the
- * classic SetRoomBounds, the classic accumulation, and no room trimmed. */
+ * classic SetRoomBounds, the classic accumulation, and no room trimmed. The
+ * setting hd_reach, on by default, switches it off the same way in an HD
+ * level: the walk is then the classic one, and the art of a room the reach
+ * alone would list - through an opened wall - is not drawn. */
 static bool g_reach_on = false;
 // Per room, and only while g_reach_on: the pending queue entry's classic
 // rectangle exists (bit 0) and the reach has visited this room (bit 1).
@@ -2093,15 +2096,19 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			/* The target beside the eye: a room list without the
 			 * direction it was walked in cannot be replayed with
 			 * RoomProbe -walk. `why` is what wrote it: the five second
-			 * timer, or the window event. */
+			 * timer, or the window event. `reach` is whether the walk
+			 * carried its second rectangle - an HD level with the setting
+			 * hd_reach on - so that a replay walks the same way. */
 			Log("ROOMLIST frame=%u the whole list, %d room(s), "
 				"eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d cam=%d/%d "
-				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d why=%s",
+				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d why=%s"
+				" reach=%d",
 				now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz,
 				(int)now.tx, (int)now.ty, (int)now.tz, (int)now.troom,
 				now.camtype, now.camold, now.camfixed, now.camnumber,
 				now.reach_only, now.trimmed, (int)kReachBudget,
-				event == 1 ? "inactive" : event == 2 ? "active" : "timer");
+				event == 1 ? "inactive" : event == 2 ? "active" : "timer",
+				g_reach_on ? 1 : 0);
 
 			for (int i = 0; i < now.count; i++)
 			{
@@ -2321,10 +2328,11 @@ void DrawRooms(short current_room)
 		outside_bottom = 0;
 	}
 
-	/* The reach, and only where there is HD art to reach. HDLevelActive()
-	 * is false with hd_enable off and in a level the .TRG had nothing for,
-	 * and then the walk below is the original one. */
-	g_reach_on = HDLevelActive();
+	/* The reach, and only where there is HD art to reach and the setting
+	 * hd_reach is on. HDLevelActive() is false with hd_enable off and in a
+	 * level the .TRG had nothing for, and then the walk below is the
+	 * original one. */
+	g_reach_on = HDLevelActive() && tomb5.hd_reach;
 
 	if (g_reach_on)
 		ReachBeginWalk(walk_room);
@@ -3235,7 +3243,7 @@ void RenderIt(short current_room)
 	}
 
 	// The cutscene walk starts the same way the game's does.
-	g_reach_on = HDLevelActive();
+	g_reach_on = HDLevelActive() && tomb5.hd_reach;
 
 	if (g_reach_on)
 		ReachBeginWalk(current_room);

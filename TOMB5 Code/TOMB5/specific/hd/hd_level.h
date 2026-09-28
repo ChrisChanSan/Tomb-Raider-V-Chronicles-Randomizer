@@ -144,6 +144,25 @@ bool HDEnabled();
  * classic way. */
 bool HDLevelActive();
 
+/* A mirror in a room's wall, as the game side needs it: the room, the plane
+ * (`axis` 0 for a plane of constant x, 2 for constant z, `plane` its world
+ * coordinate), `side` -1 when the copy behind the glass lies at smaller
+ * coordinates than the plane and +1 when at larger, and the copy's box in
+ * world units. hd_render.h, HDMirror, says where the rule comes from; none
+ * exists while HDLevelActive() is false. */
+struct HDLevelMirror
+{
+	int room;
+	int axis;
+	int side;
+	long plane;
+	long mins[3];
+	long maxs[3];
+};
+
+int HDLevelMirrorCount();
+bool HDLevelMirrorAt(int at, HDLevelMirror* out);
+
 // Whether room `roomIndex` of the level now loaded is drawn by the HD path.
 // Decided once at level load, not per frame. False for every room while HD is
 // off, while no HD level is built, and for every room the .TRG has nothing

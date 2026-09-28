@@ -461,6 +461,7 @@
     <ClInclude Include="TOMB5\game\health.h" />
     <ClInclude Include="TOMB5\game\interpolate.h" />
     <ClInclude Include="TOMB5\game\interpolate_math.h" />
+    <ClInclude Include="TOMB5\game\mirror_math.h" />
     <ClInclude Include="TOMB5\game\inventory_interp.h" />
     <ClInclude Include="TOMB5\game\cutseq_interp.h" />
     <ClInclude Include="TOMB5\game\cutseq_decode.h" />

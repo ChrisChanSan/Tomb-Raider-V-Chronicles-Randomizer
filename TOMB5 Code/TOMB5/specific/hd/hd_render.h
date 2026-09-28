@@ -221,6 +221,37 @@ struct HDRoomBox
 	float originX, originZ;
 };
 
+/* A mirror in a room's wall, found in the art when the level is built.
+ *
+ * TR5 carries no mirror of its own: no level of the game's SCRIPT.DAT has a
+ * CMD_MIRROR or the GF_MIRROR flag, so gfMirrorRoom stays unset and
+ * Draw_Mirror_Lara (game\mirror.cpp) never runs. The remaster builds its
+ * mirrors out of art instead: behind the wall stands a copy of the room,
+ * reflected in the wall's plane, and a pane in the wall's opening shows it.
+ * RICH2's two washrooms are the case - room 134 in the plane x = 33792 and
+ * room 135 in x = 30720, their cabins and basins standing a second time,
+ * mirror-inverted, on the far side. What the art cannot hold is what moves:
+ * Lara and the items. They are drawn once more across the plane
+ * (Draw_Mirror_Items, game\mirror.cpp) out of this record.
+ *
+ * Everything is in world units. `side` is where the copy lies: -1 at smaller
+ * x (or z) than the plane, +1 at larger; the room is on the other side. The
+ * box is the copy's own art, the triangles of the group behind the plane.
+ * The three counts are what the rule in hd_render.cpp (FindMirrors) decided
+ * on, for the log. */
+struct HDMirror
+{
+	int group;
+	int axis;		// 0: a plane of constant x, 2: of constant z
+	int side;
+	float plane;
+	float mins[3];
+	float maxs[3];
+	int pane;		// triangles lying in the plane - the glass
+	int behind;		// triangles of the group behind the plane
+	int mirrored;		// of those, the ones the reflection lands on art
+};
+
 /* One room's inside, asked of another room's art.
  *
  * The portal window is a property of a triangle, not of a room. One of these
@@ -690,6 +721,11 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */
 void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count);
+/* The mirrors the build found (HDMirror above). None without the room boxes,
+ * which carry the rooms' origins the rule needs; none in any level but
+ * RICH2. Kept until the level is released. */
+int HDRenderMirrorCount();
+bool HDRenderMirrorInfo(int at, HDMirror* out);
 /* The rooms that may be holding another room's art.
  * Same contract again - before HDRenderLevelBegin, the pointer is only
  * remembered for the length of that call. After it, HDRenderIntrusionHits

@@ -844,6 +844,9 @@
     <ClInclude Include="TOMB5\game\interpolate_math.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\mirror_math.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\inventory_interp.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>

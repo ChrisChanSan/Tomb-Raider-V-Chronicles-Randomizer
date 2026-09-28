@@ -1168,6 +1168,56 @@ void PrintObjects(short room_number)
 	r->bottom = 0;
 }
 
+/* The item loop's body above for one item, drawn as a mirror's reflection.
+ *
+ * The same skips as the loop - an invisible item, the BRIDGE_FLAT of the
+ * base, a slot with no draw routine (which is Lara's) - and the same draw.
+ * Only the clip room differs: the reflection is seen through the glass of
+ * the mirror's room and not through the item's own room, so ClipRoomNum is
+ * that room, and calc_animating_item_clip_window gives the doors and the
+ * ANIMATING slots its window. The call comes from DrawRooms before the rooms'
+ * objects are printed, while that window is still the one GetRoomBounds
+ * gave it this frame - PrintObjects empties it at its end. The view is
+ * reflected by the caller. */
+void PrintObjectReflection(ITEM_INFO* item, short mirror_room)
+{
+	OBJECT_INFO* obj;
+	ROOM_INFO* r;
+
+	obj = &objects[item->object_number];
+
+	if (item->status == ITEM_INVISIBLE || !obj->draw_routine ||
+		(gfLevelId == LVL5_BASE && item->object_number == BRIDGE_FLAT))
+		return;
+
+	r = &room[mirror_room];
+	CurrentRoom = mirror_room;
+	nPolyType = 2;
+	phd_PushMatrix();
+	phd_TranslateAbs(r->x, r->y, r->z);
+	phd_left = 0;
+	phd_top = 0;
+	phd_right = phd_winxmax + 1;
+	phd_bottom = phd_winymax + 1;
+	ClipRoomNum = mirror_room;
+
+	if (item->after_death)
+		GlobalAlpha = 0xFE000000 * item->after_death;
+
+	obj->draw_routine(item);
+	GlobalAlpha = 0xFF000000;
+	phd_PopMatrix();
+}
+
+bool RoomOnDrawList(short room_number)
+{
+	for (int i = 0; i < number_draw_rooms; i++)
+		if (draw_rooms[i] == room_number)
+			return true;
+
+	return false;
+}
+
 /* The corpse fade, on the logic tick.
  *
  * The other half of the mark PrintObjects leaves. Called once per tick from
@@ -2437,6 +2487,16 @@ void DrawRooms(short current_room)
 		if (gfLevelFlags & GF_MIRROR && lara_item->room_number == gfMirrorRoom)
 			Draw_Mirror_Lara();
 	}
+
+	/* The mirrors the HD level found in its rooms' walls: Lara and the
+	 * items in front of the glass, drawn once more across its plane. No TR5
+	 * level has a script mirror, so the block above never runs; this one
+	 * runs only with an HD level built, and a classic frame is the frame it
+	 * always was. Here, before the rooms' objects are printed, because the
+	 * mirror room's portal window is still this frame's - see
+	 * PrintObjectReflection. */
+	if (HDLevelActive())
+		Draw_Mirror_Items();
 
 	nPolyType = 4;
 	DrawGunflashes();

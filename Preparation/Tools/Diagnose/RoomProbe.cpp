@@ -6109,6 +6109,24 @@ int main(int argc, char** argv)
 	printf("clear: %d floor part(s) on %d part-way clear page(s), %d draw "
 		"call(s)\n", stats.clearParts, stats.clearPages, stats.clearRanges);
 
+	/* The mirrors in the rooms' walls the build found - none without
+	 * -roombox, which carries the rooms' origins the rule needs. */
+	printf("mirrors: %d\n", HDRenderMirrorCount());
+
+	for (int i = 0; i < HDRenderMirrorCount(); i++)
+	{
+		HDMirror m;
+
+		if (!HDRenderMirrorInfo(i, &m))
+			continue;
+
+		printf("  mirror: room %d, plane %c = %.0f, copy on side %d, pane %d, "
+			"%d behind, %d of them reflected, copy box %.0f..%.0f, "
+			"%.0f..%.0f, %.0f..%.0f\n", m.group, m.axis == 0 ? 'x' : 'z',
+			m.plane, m.side, m.pane, m.behind, m.mirrored, m.mins[0],
+			m.maxs[0], m.mins[1], m.maxs[1], m.mins[2], m.maxs[2]);
+	}
+
 	// The still water surfaces the .TRG builds itself - the same line the
 	// engine writes to HDLOG at level build.
 	if (stats.waterParts)

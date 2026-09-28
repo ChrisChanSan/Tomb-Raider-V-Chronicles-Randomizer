@@ -188,6 +188,11 @@ namespace
 	// The lips of the item being walked (HDObjectLips), -1 for none.
 	int g_open_lips_track = -1;
 	int g_open_lips_frame = -1;
+	/* The items being walked are a mirror's reflection (HDObjectReflection),
+	 * and how many of them were recorded since the mirror's log line last
+	 * asked. */
+	bool g_reflection = false;
+	int g_reflected = 0;
 	/* A clip is open somewhere - set by the first face that speaks, and what
 	 * lets HDObjectFrameReset close them all once the cut is over without
 	 * asking the model file every frame. */
@@ -3012,14 +3017,34 @@ void HDObjectEnd()
 	entry.specPower = 1.0f;
 
 	/* The two checks, on the first HD item of the level and while the
-	 * engine's own light arrays still hold this item's answer. */
-	self_test(entry);
+	 * engine's own light arrays still hold this item's answer. Not on a
+	 * reflection: its lights went through the mirrored view and the
+	 * classic answer they are held against did not. */
+	if (!g_reflection)
+	{
+		self_test(entry);
 
-	/* And the same light question of a creature, once a second - whether an
-	 * enemy in a dark room gets less light HD than classic. */
-	creature_light(entry);
+		/* And the same light question of a creature, once a second - whether
+		 * an enemy in a dark room gets less light HD than classic. */
+		creature_light(entry);
+	}
+	else
+		g_reflected++;
 
 	g_count++;
+}
+
+void HDObjectReflection(bool on)
+{
+	g_reflection = on;
+}
+
+int HDObjectReflectedTake()
+{
+	const int n = g_reflected;
+
+	g_reflected = 0;
+	return n;
 }
 
 /* ------------------------- the inventory ring and the pickup display -- */

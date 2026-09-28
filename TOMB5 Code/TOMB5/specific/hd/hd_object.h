@@ -101,6 +101,19 @@ int HDObjectLips(long track, long frame);
 
 void HDObjectEnd();
 
+/* The items that follow are the reflection in a mirror, until it is called
+ * with false (game\mirror.cpp, Draw_Mirror_Items). The mirror is in the view
+ * matrix, not in the item: the matrices HDObjectNode takes are already the
+ * reflected ones, and the models are drawn double sided (HD_MODEL_CULL_NONE)
+ * so the reversed winding cannot drop a face. What the seam does with it is
+ * leave the reflection out of the two light checks, which compare the item's
+ * lights against the classic ones through the real camera, and count it for
+ * the mirror's log line. */
+void HDObjectReflection(bool on);
+// How many HD items were recorded as a reflection since the last call - read
+// and cleared by the mirror's log line.
+int HDObjectReflectedTake();
+
 // --- the inventory ring and the pickup display ------------------------------
 //
 // The ring is the same seam once more, not a second render path:

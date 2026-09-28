@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "mirror.h"
 #include "delstuff.h"
@@ -8,6 +20,14 @@
 #include "gameflow.h"
 #include "hair.h"
 #include "lara.h"
+#include "control.h"
+#include "draw.h"
+#include "objects.h"
+#include "spotcam.h"
+#include "mirror_math.h"
+#include "../specific/function_stubs.h"
+#include "../specific/hd/hd_level.h"
+#include "../specific/hd/hd_object.h"
 
 void Draw_Mirror_Lara()
 {
@@ -99,5 +119,206 @@ void Draw_Mirror_Lara()
 		hair->pos.z_pos = zplane - hair->pos.z_pos;
 		hair->pos.y_rot = 0x8000 - hair->pos.y_rot;
 		hair++;
+	}
+}
+
+/* The room a reflected item's origin may stand off the copy's own art: an
+ * item's origin is at its feet and on its pivot, and a door's pivot stands
+ * at the frame's edge. A quarter of a sector. */
+#define MIRROR_ITEM_SLACK	256
+
+/* One mirror of the HD level, drawn: the view reflected in the glass's plane
+ * for the length of the call, every item in front of the glass whose
+ * reflection lands in the copy behind it drawn through that view, Lara the
+ * same, and the view put back.
+ *
+ * What is reflected is everything the item draw and Lara's draw take the
+ * camera from: w2v_matrix and aW2VMx (the camera's rotation and position,
+ * which phd_TranslateAbs builds every model's matrix from), the base of both
+ * matrix stacks (which the braid starts each link from, hd_laradraw.cpp,
+ * braid_matrices) and the top a push makes. All four are copied and copied
+ * back, not reflected twice, so the frame's view comes back to the bit.
+ *
+ * The item keeps its pose: nothing of it is written, and what the draw puts
+ * on the screen is the pose the frame draws - the interpolated one at 60 and
+ * at the uncapped rate, the tick's at 30. What a draw changes in the item is
+ * put back: the ambient fade CalcAmbientLight steps per call (item->il),
+ * which would run twice as fast for an item drawn twice. A reflection casts
+ * no shadow of its own - the slot's shadow size is 0 for the call - and its
+ * effects are not reflected: they are drawn from their own lists after the
+ * rooms.
+ *
+ * The classic path culls by the winding on the screen, which the reflection
+ * turns round, so SetCullCW for the call as Draw_Mirror_Lara does; the HD
+ * models are drawn double sided and need nothing, and HDObjectReflection
+ * tells the seam the items are a reflection. */
+static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
+{
+	const int a = m.axis;
+	long frontMin[3], frontMax[3];
+	int drawn = 0;
+
+	// The volume in front of the glass the copy reflects.
+	for (int k = 0; k < 3; k++)
+	{
+		frontMin[k] = m.mins[k] - MIRROR_ITEM_SLACK;
+		frontMax[k] = m.maxs[k] + MIRROR_ITEM_SLACK;
+	}
+
+	frontMin[a] = 2 * m.plane - m.maxs[a] - MIRROR_ITEM_SLACK;
+	frontMax[a] = 2 * m.plane - m.mins[a] + MIRROR_ITEM_SLACK;
+
+	long w2v[indices_count], base[indices_count];
+	float aw2v[indices_count], abase[indices_count];
+	float q[9], t[3];
+
+	memcpy(w2v, w2v_matrix, sizeof(w2v));
+	memcpy(aw2v, aW2VMx, sizeof(aw2v));
+	memcpy(base, matrix_stack, sizeof(base));
+	memcpy(abase, aFMatrixStack, sizeof(abase));
+	MirrorViewSpaceSetup(aw2v, abase, a, (float)m.plane, q, t);
+
+	const long left = phd_left, right = phd_right, top = phd_top, bottom = phd_bottom;
+	const long room_now = CurrentRoom;
+
+	phd_PushMatrix();
+	MirrorView(w2v_matrix, a, m.plane, true);
+	MirrorView(aW2VMx, a, (float)m.plane, true);
+	MirrorView(matrix_stack, a, 0L, false);
+	MirrorView(aFMatrixStack, a, 0.0f, false);
+	MirrorView(phd_mxptr, a, 0L, false);
+	MirrorView(aMXPtr, a, 0.0f, false);
+	HDObjectReflection(true);
+	SetCullCW();
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* rm = &room[r];
+
+		if (rm->x > frontMax[0] || rm->x + (rm->y_size << 10) < frontMin[0] ||
+			rm->z > frontMax[2] || rm->z + (rm->x_size << 10) < frontMin[2] ||
+			rm->maxceiling > frontMax[1] || rm->minfloor < frontMin[1])
+			continue;
+
+		for (short i = rm->item_number; i != NO_ITEM; i = items[i].next_item)
+		{
+			ITEM_INFO* item = &items[i];
+			const long p[3] = { item->pos.x_pos, item->pos.y_pos, item->pos.z_pos };
+
+			if (!MirrorLandsInCopy(p, a, m.plane, m.side, m.mins, m.maxs,
+				MIRROR_ITEM_SLACK))
+				continue;
+
+			OBJECT_INFO* obj = &objects[item->object_number];
+
+			if (item->status == ITEM_INVISIBLE || !obj->draw_routine)
+				continue;
+
+			const ITEM_LIGHT il = item->il;
+			const short shadow = obj->shadow_size;
+
+			obj->shadow_size = 0;
+			PrintObjectReflection(item, (short)m.room);
+			obj->shadow_size = shadow;
+			item->il = il;
+			drawn++;
+		}
+	}
+
+	/* Lara: the view set the frame worked out for her, moved into the
+	 * reflected view (MirrorViewSpaceApply), and her draw with the mirror
+	 * flag - her lighting as the frame has it, and in first person the other
+	 * side culled (hd_laradraw.cpp). The same visibility as her own draw in
+	 * DrawRooms, less the camera-too-close test: her reflection is a Lara at
+	 * twice the distance to the glass. */
+	const long lp[3] = { lara_item->pos.x_pos, lara_item->pos.y_pos,
+		lara_item->pos.z_pos };
+
+	*laraDrawn = false;
+
+	if (objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE) &&
+		lara_item->mesh_bits && !SCNoDrawLara &&
+		MirrorLandsInCopy(lp, a, m.plane, m.side, m.mins, m.maxs,
+			MIRROR_ITEM_SLACK))
+	{
+		float saved[sizeof(lara_matrices) / sizeof(lara_matrices[0])];
+		const short shadow = objects[LARA].shadow_size;
+
+		memcpy(saved, lara_matrices, sizeof(saved));
+
+		for (int n = 0; n + indices_count <= (int)(sizeof(saved) / sizeof(saved[0]));
+			n += indices_count)
+			MirrorViewSpaceApply(q, t, &lara_matrices[n]);
+
+		objects[LARA].shadow_size = 0;
+		nPolyType = 4;
+
+		if (lara.skelebob)
+			SetupSkelebobMeshswaps();
+
+		DrawLara(lara_item, 1);
+
+		if (lara.skelebob)
+			RestoreLaraMeshswaps();
+
+		objects[LARA].shadow_size = shadow;
+		memcpy(lara_matrices, saved, sizeof(saved));
+		*laraDrawn = true;
+	}
+
+	SetCullCCW();
+	HDObjectReflection(false);
+	phd_PopMatrix();
+	memcpy(w2v_matrix, w2v, sizeof(w2v));
+	memcpy(aW2VMx, aw2v, sizeof(aw2v));
+	memcpy(matrix_stack, base, sizeof(base));
+	memcpy(aFMatrixStack, abase, sizeof(abase));
+	phd_left = left;
+	phd_right = right;
+	phd_top = top;
+	phd_bottom = bottom;
+	CurrentRoom = room_now;
+	return drawn;
+}
+
+void Draw_Mirror_Items()
+{
+	HDLevelMirror m;
+	const int count = HDLevelMirrorCount();
+
+	for (int i = 0; i < count; i++)
+	{
+		if (!HDLevelMirrorAt(i, &m) || !RoomOnDrawList((short)m.room))
+			continue;
+
+		// A mirror seen from behind shows nothing.
+		const long camera = m.axis == 0 ? w2v_matrix[M03] : w2v_matrix[M23];
+
+		if ((camera - m.plane) * m.side >= 0)
+			continue;
+
+		bool lara_drawn = false;
+
+		HDObjectReflectedTake();
+
+		const int drawn = DrawOneMirror(m, &lara_drawn);
+		const int hd = HDObjectReflectedTake();
+
+		/* The mirror's log line, once a second while a mirror draws
+		 * anything: how many items it reflected (hd of them through the HD
+		 * models, the rest classic), the plane and its room, and whether Lara
+		 * was in it. */
+		static unsigned short last = 0;
+		static bool said = false;
+
+		if (gLogEnabled && (drawn || lara_drawn) &&
+			(!said || (unsigned short)(GlobalCounter - last) >= 30))
+		{
+			said = true;
+			last = GlobalCounter;
+			Log("HDLOG mirror items=%d plane=%ld room=%d axis=%c lara=%d hd=%d",
+				drawn, m.plane, m.room, m.axis == 0 ? 'x' : 'z',
+				lara_drawn ? 1 : 0, hd);
+		}
 	}
 }

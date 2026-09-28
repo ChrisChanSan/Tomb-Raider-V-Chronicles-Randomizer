@@ -40,6 +40,7 @@
 #include <cstring>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -2498,12 +2499,309 @@ namespace
 		apply_room_lighting(0);
 	}
 
+	/* The mirrors of the level being drawn - see HDMirror in hd_render.h and
+	 * FindMirrors below. Released with the groups. */
+	std::vector<HDMirror> g_mirrors;
+
+	/* The rule that finds them.
+	 *
+	 * A mirror is a wall of a room with three things at once, all read out
+	 * of the art:
+	 *
+	 *   - a pane: triangles of the group lying in the wall's plane, within
+	 *     HD_MIRROR_PANE_TOL of it, in the additive pass or of material 14
+	 *     in the alpha pass - the glass or its sheen;
+	 *   - a room's worth of the group's own art behind the plane: at least
+	 *     HD_MIRROR_BEHIND triangles, reaching HD_MIRROR_DEPTH or more past
+	 *     it - a copy of a room, not the thickness of a wall;
+	 *   - and that art is the reflection of the level's art in front: at
+	 *     least HD_MIRROR_MATCH per cent of those triangles, reflected in the
+	 *     plane, land on the centroid of a triangle of the level to within
+	 *     one 8-unit cell.
+	 *
+	 * Only the four walls of the room's own inside box are asked (HDRoomBox:
+	 * one sector in from the grid's edge), which is where a mirror hangs.
+	 *
+	 * Measured over the fifteen files with the classic rooms' boxes: RICH2
+	 * room 134, west wall x = 33792, pane 12, 6,161 triangles behind reaching
+	 * 2,054 deep, 6,107 of them (99 %) reflected; room 135, west wall
+	 * x = 30720, pane 16, 6,237 behind, 2,051 deep, 6,201 (99 %). Nothing
+	 * else in the game has all three. The walls with a pane that come
+	 * nearest are ANDREA2 rooms 65 and 132 - a material 14 window with 692
+	 * triangles behind it, every one reflected, but 26 units deep: the
+	 * other face of the window's own frame - and RICH3 rooms 73 and 74 (120
+	 * behind, 22 deep, 80 %). The walls without a pane that reflect the most
+	 * are shared walls whose art both rooms carry (JOBY2 room 80, 9,164
+	 * behind, 98 %), and those have no glass to be seen through. */
+	#define HD_MIRROR_PANE_TOL	2.0f
+	#define HD_MIRROR_BEHIND	100
+	#define HD_MIRROR_DEPTH		1024.0f
+	#define HD_MIRROR_MATCH		90
+
+	inline unsigned long long MirrorCell(float x, float y, float z)
+	{
+		const long long cx = (long long)floorf(x / 8.0f + 0.5f);
+		const long long cy = (long long)floorf(y / 8.0f + 0.5f);
+		const long long cz = (long long)floorf(z / 8.0f + 0.5f);
+
+		return ((unsigned long long)(cx & 0x1FFFFF) << 42) |
+			((unsigned long long)(cy & 0x1FFFFF) << 21) |
+			(unsigned long long)(cz & 0x1FFFFF);
+	}
+
+	void FindMirrors(const trf::remaster::Trg& trg)
+	{
+		g_mirrors.clear();
+
+		if (!g_boxes || g_box_count <= 0)
+			return;
+
+		const int rooms = g_box_count < g_room_groups ? g_box_count : g_room_groups;
+
+		for (int g = 0; g < rooms && g < (int)trg.groups.size(); g++)
+		{
+			const HDRoomBox& box = g_boxes[g];
+			const float origin[3] = { box.originX, 0.0f, box.originZ };
+
+			if (box.maxs[0] <= box.mins[0] || box.maxs[2] <= box.mins[2])
+				continue;
+
+			// The four walls: west, east, south, north.
+			HDMirror wall[4];
+
+			for (int w = 0; w < 4; w++)
+			{
+				HDMirror& m = wall[w];
+
+				m.group = g;
+				m.axis = w < 2 ? 0 : 2;
+				m.side = (w & 1) ? 1 : -1;
+				m.plane = origin[m.axis] +
+					((w & 1) ? box.maxs[m.axis] : box.mins[m.axis]);
+				m.pane = m.behind = m.mirrored = 0;
+
+				for (int k = 0; k < 3; k++)
+				{
+					m.mins[k] = 1.0e9f;
+					m.maxs[k] = -1.0e9f;
+				}
+			}
+
+			float depth[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+			// One walk over the group for all four walls.
+			for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+					const bool glass = pass == 2 || (pass == 1 &&
+						MaterialBase(part) == HD_TRG_MATERIAL_DECAL);
+
+					for (unsigned int at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned int first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						float p[3][3];
+						bool ok = true;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const unsigned int index = trg.indices[first + (unsigned int)c];
+
+							if (index >= trg.vertices.size())
+							{
+								ok = false;
+								break;
+							}
+
+							const trf::remaster::TrgVertex& v = trg.vertices[index];
+
+							p[c][0] = (float)v.x + origin[0];
+							p[c][1] = (float)v.y;
+							p[c][2] = (float)v.z + origin[2];
+						}
+
+						if (!ok)
+							continue;
+
+						for (int w = 0; w < 4; w++)
+						{
+							HDMirror& m = wall[w];
+							const int a = m.axis;
+
+							if (glass &&
+								fabsf(p[0][a] - m.plane) <= HD_MIRROR_PANE_TOL &&
+								fabsf(p[1][a] - m.plane) <= HD_MIRROR_PANE_TOL &&
+								fabsf(p[2][a] - m.plane) <= HD_MIRROR_PANE_TOL)
+								m.pane++;
+
+							const float d = ((p[0][a] + p[1][a] + p[2][a]) / 3.0f -
+								m.plane) * (float)m.side;
+
+							if (d <= 16.0f)
+								continue;
+
+							m.behind++;
+
+							if (d > depth[w])
+								depth[w] = d;
+
+							for (int c = 0; c < 3; c++)
+								for (int k = 0; k < 3; k++)
+								{
+									if (p[c][k] < m.mins[k]) m.mins[k] = p[c][k];
+									if (p[c][k] > m.maxs[k]) m.maxs[k] = p[c][k];
+								}
+						}
+					}
+				}
+
+			for (int w = 0; w < 4; w++)
+			{
+				HDMirror& m = wall[w];
+				const int a = m.axis;
+
+				if (!m.pane || m.behind < HD_MIRROR_BEHIND ||
+					depth[w] < HD_MIRROR_DEPTH)
+					continue;
+
+				/* The art in front that the copy could be a reflection of:
+				 * every room's triangles whose group box meets the copy's box
+				 * reflected in the plane. A handful of groups - only a wall
+				 * that already has a pane and a room behind it gets this far,
+				 * which is two walls in the game. */
+				float want_min[3], want_max[3];
+
+				for (int k = 0; k < 3; k++)
+				{
+					want_min[k] = m.mins[k] - 32.0f;
+					want_max[k] = m.maxs[k] + 32.0f;
+				}
+
+				want_min[a] = 2.0f * m.plane - m.maxs[a] - 32.0f;
+				want_max[a] = 2.0f * m.plane - m.mins[a] + 32.0f;
+
+				std::unordered_set<unsigned long long> cells;
+
+				for (int o = 0; o < rooms && o < (int)trg.groups.size() &&
+					o < (int)g_groups.size(); o++)
+				{
+					const HDGroup& other = g_groups[(size_t)o];
+					const float oo[3] = { g_boxes[o].originX, 0.0f, g_boxes[o].originZ };
+
+					if (!other.hasBounds)
+						continue;
+
+					bool meets = true;
+
+					for (int k = 0; k < 3; k++)
+						if (other.mins[k] + oo[k] > want_max[k] ||
+							other.maxs[k] + oo[k] < want_min[k])
+							meets = false;
+
+					if (!meets)
+						continue;
+
+					for (const trf::remaster::TrgPart& part : trg.groups[(size_t)o].parts)
+						for (int pass = 0; pass < 3; pass++)
+						{
+							const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+							for (unsigned int at = 0; at + 2 < run.count; at += 3)
+							{
+								const unsigned int first = run.start + at;
+
+								if (first + 2 >= trg.indices.size())
+									break;
+
+								float c[3] = { 0.0f, 0.0f, 0.0f };
+
+								for (int v = 0; v < 3; v++)
+								{
+									const unsigned int index =
+										trg.indices[first + (unsigned int)v];
+
+									if (index >= trg.vertices.size())
+										continue;
+
+									c[0] += (float)trg.vertices[index].x + oo[0];
+									c[1] += (float)trg.vertices[index].y;
+									c[2] += (float)trg.vertices[index].z + oo[2];
+								}
+
+								cells.insert(MirrorCell(c[0] / 3.0f, c[1] / 3.0f,
+									c[2] / 3.0f));
+							}
+						}
+				}
+
+				// And the copy's own triangles, reflected, against them.
+				for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+					for (int pass = 0; pass < 3; pass++)
+					{
+						const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+						for (unsigned int at = 0; at + 2 < run.count; at += 3)
+						{
+							const unsigned int first = run.start + at;
+
+							if (first + 2 >= trg.indices.size())
+								break;
+
+							float c[3] = { 0.0f, 0.0f, 0.0f };
+
+							for (int v = 0; v < 3; v++)
+							{
+								const unsigned int index =
+									trg.indices[first + (unsigned int)v];
+
+								if (index >= trg.vertices.size())
+									continue;
+
+								c[0] += (float)trg.vertices[index].x + origin[0];
+								c[1] += (float)trg.vertices[index].y;
+								c[2] += (float)trg.vertices[index].z + origin[2];
+							}
+
+							for (int k = 0; k < 3; k++)
+								c[k] /= 3.0f;
+
+							if ((c[a] - m.plane) * (float)m.side <= 16.0f)
+								continue;
+
+							c[a] = 2.0f * m.plane - c[a];
+
+							bool found = false;
+
+							for (int dx = -1; dx <= 1 && !found; dx++)
+								for (int dy = -1; dy <= 1 && !found; dy++)
+									for (int dz = -1; dz <= 1 && !found; dz++)
+										found = cells.count(MirrorCell(
+											c[0] + 8.0f * (float)dx,
+											c[1] + 8.0f * (float)dy,
+											c[2] + 8.0f * (float)dz)) != 0;
+
+							if (found)
+								m.mirrored++;
+						}
+					}
+
+				if (m.mirrored * 100 >= m.behind * HD_MIRROR_MATCH)
+					g_mirrors.push_back(m);
+			}
+		}
+	}
+
 	void release_buffers()
 	{
 		if (g_vb) { g_vb->Release(); g_vb = 0; }
 		if (g_ib) { g_ib->Release(); g_ib = 0; }
 
 		g_groups.clear();
+		g_mirrors.clear();
 		g_room_groups = 0;
 		g_vertex_count = 0;
 		g_index32 = false;
@@ -4716,6 +5014,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		return false;
 	}
 
+	// The mirrors in the rooms' walls, while the .TRG and the boxes are
+	// still in hand - see FindMirrors.
+	FindMirrors(trg);
+
 	/* --- the vertex window of every draw call ---------------------------
 	 *
 	 * The lowest and highest vertex number each range names. On a normal card
@@ -6203,6 +6505,20 @@ bool HDRenderGroupHasClear(int group)
 		return false;
 
 	return g_groups[(size_t)group].clearRanges != 0;
+}
+
+int HDRenderMirrorCount()
+{
+	return (int)g_mirrors.size();
+}
+
+bool HDRenderMirrorInfo(int at, HDMirror* out)
+{
+	if (!out || at < 0 || at >= (int)g_mirrors.size())
+		return false;
+
+	*out = g_mirrors[(size_t)at];
+	return true;
 }
 
 bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs)

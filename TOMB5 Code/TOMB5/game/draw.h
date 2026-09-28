@@ -40,6 +40,12 @@ void CalculateObjectLighting(ITEM_INFO* item, short* frame);
 void DrawAnimatingItem(ITEM_INFO* item);
 void PrintObjects(short room_number);
 
+/* An item drawn once more as a mirror's reflection, with the mirror's room as
+ * its clip room - see game\mirror.cpp, Draw_Mirror_Items. And whether a room
+ * is on this frame's draw list. */
+void PrintObjectReflection(ITEM_INFO* item, short mirror_room);
+bool RoomOnDrawList(short room_number);
+
 /* The corpse fade, once per logic tick. PrintObjects
  * marks the bodies it drew; this counts them up and kills the ones that are
  * done. ControlPhase calls it - it is game state and belongs on the tick. */

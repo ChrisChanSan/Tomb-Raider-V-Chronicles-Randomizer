@@ -3504,7 +3504,8 @@ static void HDLevelBuildHD()
 		"flipbook_ranges=%d cutout_parts=%d add_weighted=%d add_min=%.3f "
 		"add_swinging=%d gloss_parts=%d reflect=%d book_parts=%d "
 		"book_pages=%d book_dropped=%d book_additive=%d book_step_min=%.3f "
-		"book_step_max=%.3f book_ranges=%d clear_pages=%d clear_parts=%d",
+		"book_step_max=%.3f book_ranges=%d clear_pages=%d clear_parts=%d "
+		"mirrors=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
 		stats.swayDropped, stats.flipbookParts, stats.flipbookDrawn,
@@ -3513,7 +3514,25 @@ static void HDLevelBuildHD()
 		stats.glossParts, tomb5.hd_reflect ? 1 : 0, stats.bookParts,
 		stats.bookPages, stats.bookDropped, stats.bookAdditive,
 		stats.bookStepMin, stats.bookStepMax, stats.bookRanges,
-		stats.clearPages, stats.clearParts);
+		stats.clearPages, stats.clearParts, HDRenderMirrorCount());
+
+	/* The mirrors in the rooms' walls, one line each: the room, the plane,
+	 * which side the copy is on, the three counts the rule decided on (see
+	 * hd_render.cpp, FindMirrors) and the copy's box - the volume a
+	 * reflected item has to land in to be drawn. */
+	for (int i = 0; i < HDRenderMirrorCount(); i++)
+	{
+		HDMirror m;
+
+		if (!HDRenderMirrorInfo(i, &m))
+			continue;
+
+		Log("HDLOG mirrorwall level=%s room=%d axis=%c plane=%.0f side=%d "
+			"pane=%d behind=%d mirrored=%d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f",
+			g_stem, m.group, m.axis == 0 ? 'x' : 'z', m.plane, m.side, m.pane,
+			m.behind, m.mirrored, m.mins[0], m.maxs[0], m.mins[1], m.maxs[1],
+			m.mins[2], m.maxs[2]);
+	}
 
 	/* The material 15 books, one line per part and pass: the pages the book
 	 * runs over, how many, how long each stands, where in the cycle the part
@@ -4007,6 +4026,35 @@ bool HDRoomIsHD(int roomIndex)
 bool HDLevelActive()
 {
 	return g_level_active && HDEnabled();
+}
+
+/* The mirrors the room build found, handed to the game side in the engine's
+ * own integer units. Behind HDLevelActive, so a classic frame never sees
+ * one. */
+int HDLevelMirrorCount()
+{
+	return HDLevelActive() ? HDRenderMirrorCount() : 0;
+}
+
+bool HDLevelMirrorAt(int at, HDLevelMirror* out)
+{
+	HDMirror m;
+
+	if (!out || !HDLevelActive() || !HDRenderMirrorInfo(at, &m))
+		return false;
+
+	out->room = m.group;
+	out->axis = m.axis;
+	out->side = m.side;
+	out->plane = (long)m.plane;
+
+	for (int k = 0; k < 3; k++)
+	{
+		out->mins[k] = (long)floorf(m.mins[k]);
+		out->maxs[k] = (long)ceilf(m.maxs[k]);
+	}
+
+	return true;
 }
 
 /* The classic water faces of one HD room. Read by

@@ -156,9 +156,9 @@
  *                     when any claimed classic face of its pair survives the
  *                     corner rule against the group's window, and the
  *                     triangles no face claims stay in the window; an empty
- *                     window asks no face, leaves out the pieces whose
- *                     holder is drawn and draws the other pieces outside the
- *                     box one sector smaller whole), or the
+ *                     window asks no face and draws the pieces outside the
+ *                     box one sector smaller whole and the others not at
+ *                     all), or the
  *                     same with each piece held to its own face alone
  *                     (face). One `decide:` line per piece says which, a
  *                     `decide: reachart` line per holder of an empty-window
@@ -4019,13 +4019,12 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * asked and its guest's art is drawn whole; otherwise a claimed
 		 * piece is whole when any claimed face of its pair survives, and
 		 * the triangles no face claims stay in the window. An empty
-		 * window asks no face: a piece whose holder is drawn is not drawn;
-		 * otherwise a piece outside the box one sector smaller is whole
-		 * and one inside it is not drawn. face: the same with each piece
-		 * on its own face alone. */
+		 * window asks no face: a piece outside the box one sector smaller
+		 * is whole and one inside it is not drawn, whatever its holder.
+		 * face: the same with each piece on its own face alone. */
 		const bool ask = !*full && !*empty;
 		const bool answer = g_decide == 0 ? true : g_decide == 1 ? false
-			: *empty ? piece.inner == 0 && !drawn
+			: *empty ? piece.inner == 0
 			: !ask ? false
 			: !drawn ? true
 			: piece.face < 0 ? false
@@ -4110,6 +4109,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 				continue;
 
 			bool drawn = piece.holder == g_room_probe_seed;
+			bool anyWhole = false;
 			int pieces = 0, tris = 0;
 
 			for (int i = 0; i < g_with_count && !drawn; i++)
@@ -4121,13 +4121,16 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 				{
 					pieces++;
 					tris += other.triangles;
+
+					if (other.inner == 0)
+						anyWhole = true;
 				}
 
 			printf("decide: reachart room=%d holder=%d listed=%d pieces=%d "
 				"tris=%d answer=%s band_tris=%d\n", group, piece.holder,
 				drawn ? 1 : 0, pieces, tris,
 				g_decide < 2 ? (g_decide ? "hidden" : "whole")
-					: drawn ? "hidden" : "whole",
+					: anyWhole ? "whole" : "hidden",
 				HDRenderIntrusionBand(piece.intrusion));
 		}
 	}

@@ -510,10 +510,8 @@ namespace
 	/* The pieces of the rooms whose window is empty - rooms the reach lists
 	 * and the portal walk gives no window - which DecidePairs does not ask
 	 * and counts apart from the ones above: the rooms that have any, their
-	 * pieces, the pieces drawn whole (outside the box one sector smaller,
-	 * holder not on the list) and the pieces outside that box left out
-	 * because their holder is on the list. The pieces inside the box are
-	 * the rest, left out whatever the holder. */
+	 * pieces, the pieces drawn whole (outside the box one sector smaller)
+	 * and the pieces inside that box, left out whatever the holder. */
 	int g_clip_reach_rooms = 0;
 	int g_clip_reach_pieces = 0;
 	int g_clip_reach_whole = 0;
@@ -699,17 +697,16 @@ namespace
 	 * A room whose window is the whole screen draws everything whole anyway
 	 * (DrawRoomWindowed). One whose window is empty - a room the reach lists
 	 * and the portal walk gives no window - has no classic face to ask: the
-	 * classic path draws none of its faces. Its pieces standing in a holder
-	 * that is on this frame's list are not drawn, whatever window the holder
-	 * has. Where the holder's own walls stand, those pieces drawn whole come
-	 * through them: a brick hull in the sky above a piazza, a marble ceiling
-	 * in a metal hub, window frames in a brick loft, a tile floor in a
-	 * doorway. Where such a piece is the only art at a wall or a doorway of
-	 * the holder, nothing is drawn there in its place and a hole opens. Its
-	 * pieces standing in a holder that is not on the list keep the answer of
-	 * the box one sector smaller than the inside, like the rest of the room's
-	 * art: drawn whole outside it, left out inside it. Left out altogether,
-	 * they open a hole where the holder is not drawn to fill it. */
+	 * classic path draws none of its faces. Its pieces keep the answer of
+	 * the box one sector smaller than the inside, like the rest of the
+	 * room's art: drawn whole outside it, left out inside it, whatever
+	 * holder they stand in. Such a piece is often the holder's own wall or
+	 * doorway, modelled in the neighbour's group - a wall panel beside a
+	 * corridor, the room behind a wire fence - and left out in a listed
+	 * holder it opens a hole there; drawn whole it comes through a holder's
+	 * own walls at some places - a brick hull in the sky above a piazza, a
+	 * marble ceiling in a metal hub - which is the smaller fault of the
+	 * two. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -742,7 +739,7 @@ namespace
 			if (ask)
 				whole = !listed;
 			else if (empty)
-				whole = piece.inner == 0 && !listed;
+				whole = piece.inner == 0;
 
 			if (ask && listed && piece.face >= 0)
 			{
@@ -774,7 +771,7 @@ namespace
 
 				if (whole)
 					g_clip_reach_whole++;
-				else if (piece.inner == 0)
+				else
 					g_clip_reach_hidden++;
 			}
 
@@ -836,12 +833,13 @@ namespace
 	 *   reach      the rectangle the reach carried it in on (ROOMLIST reach=)
 	 *   holder     the group the pieces stand in - the room of that number
 	 *              until a flipmap swaps it with its pair, the pair's room
-	 *              after; listed 1 when that group is drawn this frame
+	 *              after; listed 1 when that group is drawn this frame,
+	 *              which changes nothing of the answer
 	 *   pieces     the room's pieces in that holder, tris their triangles,
 	 *              all three passes together
-	 *   answer     hidden when the holder is listed: none of them is drawn;
-	 *              whole when it is not: those outside the box one sector
-	 *              smaller are drawn whole, those inside it are not drawn
+	 *   answer     whole when any of them stands outside the box one sector
+	 *              smaller and is drawn whole, hidden when all of them stand
+	 *              inside it and none is drawn
 	 *   band_tris  the room's art in that holder no face claims that stands
 	 *              outside the smaller box - drawn with the open half on every
 	 *              frame, whatever the answer says */
@@ -873,6 +871,7 @@ namespace
 					continue;
 
 				bool listed = false;
+				bool anyWhole = false;
 				int pieces = 0;
 				int tris = 0;
 
@@ -884,6 +883,9 @@ namespace
 					{
 						pieces++;
 						tris += g_pieces[(size_t)(first + k)].triangles;
+
+						if (g_pieces[(size_t)(first + k)].inner == 0)
+							anyWhole = true;
 					}
 
 				// One entry of the intrusion list per pair of rooms, so the
@@ -895,7 +897,7 @@ namespace
 					"holder=%d listed=%d pieces=%d tris=%d answer=%s "
 					"band_tris=%d", g_stem, entry.room, (int)reach[0],
 					(int)reach[1], (int)reach[2], (int)reach[3], piece.holder,
-					listed ? 1 : 0, pieces, tris, listed ? "hidden" : "whole",
+					listed ? 1 : 0, pieces, tris, anyWhole ? "whole" : "hidden",
 					band);
 			}
 		}
@@ -2268,13 +2270,10 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
  * sky. In ANDREA2's courtyard room 134 holds 108 triangles of room 143 and
  * room 203 holds 108 of room 248, all of them claimed, and no view from
  * room 134 draws a band. A room the reach lists with no window has no
- * classic face to ask either. Its pieces standing in a holder that is on the
- * list come through that holder's walls when they are drawn whole - a brick
- * hull in the sky above a piazza, a marble ceiling in a metal hub, window
- * frames in a brick loft, a tile floor in a doorway - so they are not drawn.
- * When the holder is not on the list they keep the smaller box's answer,
- * like the rest of the room's art, so that no hole opens where the holder
- * is not drawn.
+ * classic face to ask either, and every piece of its art keeps the smaller
+ * box's answer, whatever holder it stands in: left out in a listed holder,
+ * such a piece opens a hole wherever it is that holder's own wall or
+ * doorway, modelled in the neighbour's group.
  *
  * ANDREA1 comes to 16,718 intruding triangles in 89 groups, 15,993 of them
  * claimed by 558 classic faces and 725 by none; 11,020 more that no face
@@ -4471,8 +4470,7 @@ void HDFrameDraw()
 		/* Every collected room is drawn: no room's ordinary art is windowed,
 		 * so nothing may be skipped here. An empty window silences only the
 		 * intruding pieces DecidePairs did not answer whole - those in the
-		 * smaller box and those whose holder is on the list - inside
-		 * DrawRoomWindowed. */
+		 * smaller box - inside DrawRoomWindowed. */
 		(void)empty;
 
 		// PROF_HD_LIGHT is the light block alone, inside PROF_HD_DRAW: the
@@ -4666,19 +4664,16 @@ void HDFrameDrawGlow()
 				(int)phd_winwidth, (int)phd_winheight);
 
 			/* An empty window leaves out the pieces in the box one sector
-			 * smaller and the pieces whose holder is on the list
-			 * (DecidePairs); the line says so at its end. */
+			 * smaller (DecidePairs); the line says so at its end. */
 			for (int i = 0; i < g_frame_count; i++)
-				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s%s%s",
+				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s%s",
 					g_frame[i].room, g_frame[i].group,
 					g_frame[i].x0, g_frame[i].y0, g_frame[i].x1, g_frame[i].y1,
 					!g_frame[i].windowed ? "(no window - no art inside another room)"
 						: ClipEmpty(g_frame[i]) ? "EMPTY - the intruding art is not drawn"
 						: g_frame[i].full ? "(the whole screen)" : "",
 					g_frame[i].windowed && ClipEmpty(g_frame[i])
-						? " where it stands in the box one sector smaller" : "",
-					g_frame[i].windowed && ClipEmpty(g_frame[i])
-						? " or its holder is on the list" : "");
+						? " where it stands in the box one sector smaller" : "");
 		}
 
 		if (!g_clip_line_ever || (unsigned short)(now - g_clip_line_at) >= 30)
@@ -4727,10 +4722,9 @@ void HDFrameDrawGlow()
 			 * at the end are the rooms with an empty window, which are not
 			 * asked: `reach_rooms` the ones with intruding pieces,
 			 * `reach_pieces` those pieces, `reach_whole` the ones drawn whole
-			 * (outside the box one sector smaller, holder not on the list),
-			 * `reach_hidden` the ones outside that box left out because
-			 * their holder is on the list. The reachart lines below name
-			 * them per room and holder. */
+			 * (outside the box one sector smaller), `reach_hidden` the ones
+			 * inside that box, left out. The reachart lines below name them
+			 * per room and holder. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
 				"pairs=%d whole=%d scissored=%d reach_rooms=%d "

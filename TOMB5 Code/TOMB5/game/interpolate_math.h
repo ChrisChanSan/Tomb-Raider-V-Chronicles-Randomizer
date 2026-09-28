@@ -145,8 +145,9 @@ inline long InterpManhattan(long dx, long dy, long dz)
  * routine: a cut in a track is a jump of the eye or the target between two
  * frames. Over the 44 cutscenes (CutseqProbe, 77,187 steps) the cuts jump 294
  * units and more, 371 of them in 33 cutscenes, while the fastest drive moves
- * 222 a frame and the eye's 99th percentile is 78; INTERP_CAM_SNAP would
- * blend 35 of the cuts as motion. */
+ * 222 a frame and the eye's 99th percentile is 78; 35 of the cuts step no
+ * more than 1024 on both the eye and the target, so a 1024 Manhattan rule on
+ * the two would blend them as motion. */
 #define INTERP_CUTSEQ_SNAP	256L
 
 /* ==========================================================================

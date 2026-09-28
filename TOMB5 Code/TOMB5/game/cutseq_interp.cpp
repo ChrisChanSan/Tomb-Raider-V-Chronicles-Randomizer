@@ -314,8 +314,10 @@ int CutseqApply(float alpha)
 			LogCut("halfturn", -1, -1, i, halfNode, halfTurns);
 		}
 
-		/* How far the braid stands behind Lara on a frame between two ticks:
-		 * it was last stepped from her pose at the previous tick. */
+		/* How far the braid stands behind Lara on a frame between two ticks.
+		 * It was last stepped on the frame that carried the tick: at sixty from
+		 * her pose at that tick, at the display's rate from that frame's blended
+		 * pose, a little past it, so there the figure bounds the lag from above. */
 		if (!i && gLogEnabled && InterpIsTweenFrame())
 		{
 			const long lag = InterpCutseqRootStep(g_prev[0], out);

@@ -7253,10 +7253,10 @@ the one a thirty hertz run has. The tracks cut as a film cuts: over the 44 cut s
 jump of 294 units and the largest in cut scene 25 at frame 1622, the eye 27,494 and the
 target 30,686 (Manhattan; 20,116 and 21,798 in a straight line). The eye's 99th percentile
 is 78 a frame and the fastest drive 216 to 222 a frame (cut scene 30, frames 405-409), and
-35 of the cuts step no more than 1024 on either end, which `INTERP_CAM_SNAP`'s eye test
-would have blended as motion. The braid was a live fault of its own: `frigup_lara` runs
-`HairControl` once per drawn frame, so at sixty and 165 the braid's simulation ran two to
-five and a half times per tick.
+35 of the cuts step no more than 1024 on both the eye and the target, so a 1024 Manhattan
+rule on the two would have blended them as motion. The braid was a live fault of its own:
+`frigup_lara` runs `HairControl` once per drawn frame, so at sixty and 165 the braid's
+simulation ran two to five and a half times per tick.
 
 **How.** The snapshot is `g_prev` and `g_saved`, x, y and z per node for ten actors of up
 to forty nodes, 2,400 bytes each; the largest actor in the file has 30 nodes and the
@@ -7365,17 +7365,24 @@ of such a node turn with it. The credits are cut scenes like the others. The dra
 rule and the braid's blend are left out of cut scenes.
 
 **Left.** The braid steps once per tick and is drawn where the tick left it, so on a frame
-between two ticks it trails Lara by half her step: over the file 520 of her 72,662 blended
-ticks put it more than 32 units behind, at most 426 in cut scene 22 (294 in 12, 213 in
-19). Stepping it from the tick's own pose at the tick and blending two steps, as the game
-does outside cut scenes, would take a hair snapshot of its own. No root threshold parts
-jumps from motion: 17 lone jumps under 1024 without a camera cut are blended as a slide
-for one tick, and a falling object in cut scene 38 (1029 to 1032 a frame, frames
+between two ticks it trails Lara: at sixty by half her step, at the display's rate by up
+to a whole step, because the frame that carries the tick is drawn at a small alpha and the
+braid is stepped from that pose; `hair_lag=` is taken against the previous tick's root and
+so bounds the lag from above there. Over the file 520 of her 72,662 blended ticks put it
+more than 32 units behind, at most 426 in cut scene 22 (294 in 12, 213 in 19). Stepping it
+from the tick's own pose at the tick and blending two steps, as the game does outside cut
+scenes, would take a hair snapshot of its own. A frame between two ticks starts its room
+walk where `GetFloor` lands from the tick's room for the blended eye, and the tick's room
+from `IsRoomOutside` can be stale within a sector of walls, so the two can start in
+different rooms (`eye_rooms=` counts it); should that show as a flicker of the sky or of
+the rooms drawn, the frame between ticks would take the tick's room. No root threshold
+parts jumps from motion: 17 lone jumps under 1024 without a camera cut are blended as a
+slide for one tick, and a falling object in cut scene 38 (1029 to 1032 a frame, frames
 1271-1275) is drawn at the tick. 63 node steps blend more than 30 degrees off the shortest
 arc, 62 of them with an axis step of 384 or more; holding a node on such a step would
 catch them.
 
-**Commits.** `d2bfb86`, `04ba96f`, `ee81554`
+**Commits.** `d2bfb86`, `04ba96f`, `ee81554`, `8b64a97`
 
 ### The level warm-up
 2026-09-07

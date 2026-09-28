@@ -12,7 +12,8 @@ rem
 rem Run CutseqProbe.exe with no arguments (it reads the game folder's
 rem data\cutseq.bin in place), with the path of another cutseq.bin, and with
 rem -frames <n> <a> <b> for the decoded camera and roots of frames a..b of
-rem cutscene n.
+rem cutscene n, and with -cutlog <n> for the CUTLOG lines a run of cutscene n
+rem at fps_mode 1 writes.
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul 2>&1
 cd /d "%~dp0"
 cl /nologo /EHsc /O2 /std:c++17 /w /Fe:CutseqProbe.exe CutseqProbe.cpp

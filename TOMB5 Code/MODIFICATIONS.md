@@ -3303,6 +3303,51 @@ holes show in the game.
 
 **Commits.** `8dfae67`, `3884153`, `faa3be5`, `666593f`, `9e176b2`
 
+### The reach can be switched off
+2026-09-28
+
+**What.** A registry setting `hd_reach`, `1` by default, decides whether the portal walk
+of an HD level carries its second rectangle, the reach. At `0` the walk is the classic one
+in an HD level too: a room is listed only through the classic chain of portal windows, and
+the art of a room the reach alone would have listed is not drawn. The ROOMLIST whole-list
+dump ends in `reach=0|1`, so that a replay walks the same way. With `hd_enable` off the
+setting is dead, as the reach is.
+
+**Why.** The reach lists rooms the classic walk refuses, so that the art seen through a
+wall the Remaster opened is there: JOBY2's room 99 behind the stairs, whose portal lies
+beside the window of room 124, and ANDREA2's room 222, the brick tower, in the classic
+list from no view direction in the courtyard. The same rooms, listed with no classic
+window, are what draws the art of one room through the walls of another at the places the
+entry above describes, and every rule that hides that art in the frame opens a hole
+somewhere else. Whether the classic list alone looks better in play than the reach with
+its ghosts, and at how many places an opened wall then shows the clear colour, is a
+question the game answers faster than a render: the switch lets the two answers be
+compared at the same place with the same build.
+
+**How.** `global/types.h:2704` holds `tomb5.hd_reach` beside `hd_reflect`;
+`tomb5/tomb5.cpp` writes its default (`:237-239`), reads it (`:446-447`) and saves it with
+the other settings (`:671-672`); `game/draw.cpp` sets `g_reach_on = HDLevelActive() &&
+tomb5.hd_reach` at the start of the game walk (`:2335`) and of the cutscene walk
+(`:3246`), the head comment of the reach (`:172-177`) says so, and the whole-list dump's
+header (`:2101-2105`) ends in ` reach=%d`. The manual's settings table
+(`docs/Engine-Manual.md:1658`) has the row. The settings entry of 2026-09-05 above counts
+ten settings and says the manual lists no others; this is the eleventh.
+
+**Checked.** The engine builds with no new warning; ModernTest 13,992 checks, MenuTest
+42,364, InterpTest 651, LipsTest 243 and 270 with the `.OBJ` folder, 0 failed; RoomProbe
+and TrgProbe build from the changed header. With the setting at `1` the walk is as before,
+line for line, and with `hd_enable` off `HDLevelActive()` is false before the setting is
+asked.
+
+**Unchanged.** The walk itself, the reach's own rules, `ReachTrimRooms`, `DecidePairs`,
+the seams and the tools. There is no options row: the switch is a way to compare, not a
+taste.
+
+**Decisions.** The setting is on by default, so that a player sees what the entries above
+built, and it is documented as the way to see the classic walk's answer in an HD level.
+
+**Commits.** `ab6fa0f`
+
 ### The material 15 books in motion: a fan's shadow that turns, and flames that play
 2026-09-27
 
@@ -9570,7 +9615,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
-| #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder |
+| #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |

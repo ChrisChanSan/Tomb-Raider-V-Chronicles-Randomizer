@@ -3405,10 +3405,20 @@ void frigup_lara()
 	Rich_CalcLaraMatrices_Normal(frame, bone, 1);
 	phd_PopMatrix();
 
-	HairControl(0, 0, frame);
+	/* The braid is a simulation that steps once per call (hair.cpp: each link
+	 * moves by three quarters of its velocity and falls by gravity), and in a
+	 * cutscene it is stepped here, in the draw, rather than in the tick. On a
+	 * frame that carries no logic tick it is left where the tick frame put
+	 * it, so it steps once per tick at every frame rate, as at thirty; stepped
+	 * on every drawn frame it would swing as many times faster as there are
+	 * frames to a tick. */
+	if (!InterpIsTweenFrame())
+	{
+		HairControl(0, 0, frame);
 
-	if ((gfLevelFlags & GF_YOUNGLARA))
-		HairControl(0, 1, frame);
+		if ((gfLevelFlags & GF_YOUNGLARA))
+			HairControl(0, 1, frame);
+	}
 
 	GLaraShadowframe = frig_shadow_bbox;
 }

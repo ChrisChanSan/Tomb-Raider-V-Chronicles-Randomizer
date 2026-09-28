@@ -8711,6 +8711,282 @@ static void camera_chord()
 	}
 }
 
+/* ------------------------------ the tick eye pushed off the niche's walls ---
+
+   game\camera.cpp's MoveCamera ends the Modern orbit's tick with the engine's
+   own ModernCameraWallClearance (game\modern_camera.cpp, linked by bmt.bat):
+   the eye moves square off every closed axis face nearer than the near
+   rectangle's reach, to exactly that reach. The niche map above holds both
+   shapes the rule meets: the pillar's four faces and the outer wall, whose
+   inside corners are concave. The map's test answers in two dimensions, like
+   h_chord_open, and counts its calls; a context can refuse one point or name
+   the room an open point other than the eye resolves to. */
+
+struct H_WALL
+{
+	const char* const* map;
+	long tests;
+	long eye_x, eye_z;		// the eye handed in, answered in its own room
+	long refuse_x, refuse_z;	// a point declared closed although the map opens it; -1 none
+	short moved_room;		// the room any other open point resolves to
+};
+
+static long h_wall_open(void* ctx, long x, long y, long z, short room, short* at)
+{
+	H_WALL* w = (H_WALL*)ctx;
+
+	(void)y;
+	w->tests++;
+	*at = room;
+
+	if (x == w->refuse_x && z == w->refuse_z)
+		return 0;
+
+	if (h_solid(x, z, w->map))
+		return 0;
+
+	if (x != w->eye_x || z != w->eye_z)
+		*at = w->moved_room;
+
+	return 1;
+}
+
+/* One call of the rule on the niche map, from room 0; the moved point
+   resolves to room 5, so a room of 5 in the answer is the moved point's. */
+static long h_clear(long x, long z, long radius, long out[3], short* room, long* tests,
+	long refuse_x = -1, long refuse_z = -1)
+{
+	H_WALL w;
+	const long eye[3] = { x, 256, z };
+	long moved;
+
+	w.map = g_niche;
+	w.tests = 0;
+	w.eye_x = x;
+	w.eye_z = z;
+	w.refuse_x = refuse_x;
+	w.refuse_z = refuse_z;
+	w.moved_room = 5;
+	moved = ModernCameraWallClearance(eye, 0, radius, h_wall_open, &w, out, room);
+	*tests = w.tests;
+	return moved;
+}
+
+/* The engine's focal length as AlterFOV (specific\3dmath.cpp) builds it at
+   the game's 80 degrees: half of winh * 320 / 240, times the cosine over the
+   sine of 40 degrees, read from the sine table as 4096ths times four
+   (phd_sin, specific\3dmath.h), in whole numbers. */
+static long h_persp(long winh)
+{
+	const double a = (double)((80 * 182 / 2) >> 4) * 2.0 * 3.14159265358979323846 / 4096.0;
+	const long s = 4 * roundl2(sin(a) * 4096.0);
+	const long c = 4 * roundl2(cos(a) * 4096.0);
+
+	return (winh * 320 / 240 / 2) * c / s;
+}
+
+static void camera_wall_clear()
+{
+	const long p1080 = h_persp(1080), p1440 = h_persp(1440);
+	const long r169 = ModernCameraNearRadius(20, 960, 540, 858);
+	const long r219 = ModernCameraNearRadius(20, 1280, 540, 858);
+	const long R = r169;
+	long out[3], tests, moved;
+	short room;
+
+	printf("\nthe tick eye pushed square off a wall, to the near rectangle's reach\n");
+	printf("  measured: focal length %ld at 1080 lines and %ld at 1440; radius %ld at 1920x1080,\n",
+		p1080, p1440, r169);
+	printf("            %ld at 2560x1080, %ld at 2560x1440\n", r219,
+		ModernCameraNearRadius(20, 1280, 720, p1440));
+
+	/* 1. The radius, from the projection. */
+	ok(p1080 == 858, "wall clear: AlterFOV's focal length at 1080 lines is 858", p1080, 858);
+	ok(p1440 == 1144, "wall clear: and at 1440 lines 1144", p1440, 1144);
+	ok(r169 == 33, "wall clear: the near rectangle's reach at 16:9 rounds up to 33", r169, 33);
+	ok(r219 == 39, "wall clear: and at 21:9 to 39", r219, 39);
+	ok(ModernCameraNearRadius(20, 1280, 720, p1440) == 33,
+		"wall clear: 2560x1440 is 16:9 again, 33", ModernCameraNearRadius(20, 1280, 720, p1440), 33);
+	ok(ModernCameraNearRadius(20, 960, 540, 0) == 0 && ModernCameraNearRadius(0, 960, 540, 858) == 0,
+		"wall clear: no focal length or no near plane, no radius", ModernCameraNearRadius(20, 960, 540, 0), 0);
+
+	/* 2. Each face of the pillar and of the outer wall, the eye 0, 1 and
+	   R - 1 units from it: moved to exactly R on that axis and nowhere else.
+	   A west face can stand 0 units away; an east or a south face is at
+	   least 1, since the eye's own sector ends 1023 units past its edge. */
+	{
+		// face coordinate, axis (0 x, 1 z), side the eye stands on (+1 past it, -1 before it), the other axis
+		static const long faces[6][4] = {
+			{ 5120, 0, 1, 3500 },	// the pillar's east face, eye east of it
+			{ 3072, 0, -1, 3500 },	// the pillar's west face, eye west of it
+			{ 5120, 1, 1, 3500 },	// the pillar's south face, eye south of it
+			{ 3072, 1, -1, 3500 },	// the pillar's north face, eye north of it
+			{ 1024, 0, 1, 2500 },	// the outer wall's west face
+			{ 7168, 1, -1, 2500 }	// the outer wall's south face
+		};
+		long wrong_pos = 0, wrong_other = 0, wrong_moved = 0, wrong_room = 0, cases = 0, most = 0;
+
+		for (int f = 0; f < 6; f++)
+		{
+			const long d_list[3] = { 0, 1, R - 1 };
+
+			for (int k = 0; k < 3; k++)
+			{
+				const long face = faces[f][0], axis = faces[f][1], side = faces[f][2];
+				const long d = d_list[k];
+				long x, z;
+
+				if (side < 0 && d == 0)
+					continue;	// the eye would stand in the closed sector itself
+
+				x = axis ? faces[f][3] : face + side * d;
+				z = axis ? face + side * d : faces[f][3];
+				moved = h_clear(x, z, R, out, &room, &tests);
+				cases++;
+
+				if (tests > most)
+					most = tests;
+
+				if ((axis ? out[2] : out[0]) != face + side * R)
+					wrong_pos++;
+
+				if ((axis ? out[0] : out[2]) != (axis ? x : z) || out[1] != 256)
+					wrong_other++;
+
+				if (moved != R - d)
+					wrong_moved++;
+
+				if (room != 5)
+					wrong_room++;
+			}
+		}
+
+		printf("  measured: %ld eyes beside six faces, at most %ld tests of the map for one\n",
+			cases, most);
+		ok(cases == 15, "wall clear: fifteen eyes, 0, 1 and R - 1 units from six faces", cases, 15);
+		ok(wrong_pos == 0, "wall clear: each lands exactly R from the face it was near", wrong_pos, 0);
+		ok(wrong_other == 0, "wall clear: and the other axis and the height do not move", wrong_other, 0);
+		ok(wrong_moved == 0, "wall clear: the answer is the units moved, R - distance", wrong_moved, 0);
+		ok(wrong_room == 0, "wall clear: the room is the one the moved point resolved to", wrong_room, 0);
+		ok(most <= 4, "wall clear: the eye, the faces within R and the moved point - four tests at most",
+			most, 4);
+	}
+
+	/* 3. At R and R + 1 the eye stays. */
+	{
+		long wrong = 0;
+
+		for (long d = R; d <= R + 1; d++)
+		{
+			moved = h_clear(5120 + d, 3500, R, out, &room, &tests);
+
+			if (moved != 0 || out[0] != 5120 + d || out[2] != 3500 || room != 0)
+				wrong++;
+
+			moved = h_clear(3072 - d, 3500, R, out, &room, &tests);
+
+			if (moved != 0 || out[0] != 3072 - d || out[2] != 3500 || room != 0)
+				wrong++;
+		}
+
+		ok(wrong == 0, "wall clear: an eye R or R + 1 from a face stays where it is, answer 0", wrong, 0);
+	}
+
+	/* 4. A concave corner: the outer wall's north-west inside corner, the eye
+	   within R of both faces - moved on both axes. */
+	moved = h_clear(1024 + 5, 1024 + 10, R, out, &room, &tests);
+	ok(moved == (R - 5) + (R - 10) && out[0] == 1024 + R && out[2] == 1024 + R && room == 5,
+		"wall clear: in a concave corner both axes move, each to R", moved, (R - 5) + (R - 10));
+
+	/* 5. Near an edge whose neighbour is open: nothing moves, and an eye with
+	   no edge within R asks the map nothing. */
+	moved = h_clear(2048 + 3, 1500, R, out, &room, &tests);
+	ok(moved == 0 && out[0] == 2048 + 3 && out[2] == 1500 && room == 0,
+		"wall clear: an open neighbour is no face - the eye stays", moved, 0);
+	moved = h_clear(1500, 1500, R, out, &room, &tests);
+	ok(moved == 0 && tests == 0, "wall clear: an eye with no edge within R asks the map nothing", tests, 0);
+
+	/* 6. An eye that is itself closed is not moved, and the test stops there. */
+	moved = h_clear(3072 + 5, 3500, R, out, &room, &tests);
+	ok(moved == 0 && out[0] == 3072 + 5 && out[2] == 3500 && room == 0 && tests == 1,
+		"wall clear: an eye in the pillar itself - untouched, one test", tests, 1);
+
+	/* 7. A moved point the room refuses: -1 and no move. */
+	moved = h_clear(5120 + 4, 3500, R, out, &room, &tests, 5120 + R, 3500);
+	ok(moved == -1 && out[0] == 5120 + 4 && out[2] == 3500 && room == 0,
+		"wall clear: the moved point opens in no room - answer -1, the eye stays", moved, -1);
+
+	/* 8. A radius the rule does not take. */
+	ok(h_clear(5120, 3500, 0, out, &room, &tests) == 0 && out[0] == 5120,
+		"wall clear: radius 0 moves nothing", out[0], 5120);
+	ok(h_clear(5120, 3500, 513, out, &room, &tests) == 0 && out[0] == 5120,
+		"wall clear: nor a radius over half a sector", out[0], 5120);
+
+	/* 9. Every open point of the map on a grid of 7 units, at R and at the
+	   21:9 radius: afterwards no closed axis face of its sector is nearer
+	   than the radius, no axis moved further than the radius, and an eye
+	   that had nothing within the radius did not move. */
+	{
+		long eyes = 0, pushed = 0, too_near = 0, too_far = 0, needless = 0, refused = 0;
+
+		for (int ri = 0; ri < 2; ri++)
+		{
+			const long rad = ri ? r219 : r169;
+
+			for (long x = 1024; x < 7168; x += 7)
+			{
+				for (long z = 1024; z < 7168; z += 7)
+				{
+					long near_any, ox, oz;
+
+					if (h_solid(x, z, g_niche))
+						continue;
+
+					eyes++;
+					moved = h_clear(x, z, rad, out, &room, &tests);
+
+					if (moved < 0)
+					{
+						refused++;
+						continue;
+					}
+
+					if (moved > 0)
+						pushed++;
+
+					ox = out[0];
+					oz = out[2];
+
+					if ((h_solid((ox & ~1023) - 1, oz, g_niche) && (ox & 1023) < rad) ||
+						(h_solid((ox | 1023) + 1, oz, g_niche) && 1024 - (ox & 1023) < rad) ||
+						(h_solid(ox, (oz & ~1023) - 1, g_niche) && (oz & 1023) < rad) ||
+						(h_solid(ox, (oz | 1023) + 1, g_niche) && 1024 - (oz & 1023) < rad))
+						too_near++;
+
+					if (labs(ox - x) > rad || labs(oz - z) > rad)
+						too_far++;
+
+					near_any = (h_solid((x & ~1023) - 1, z, g_niche) && (x & 1023) < rad) ||
+						(h_solid((x | 1023) + 1, z, g_niche) && 1024 - (x & 1023) < rad) ||
+						(h_solid(x, (z & ~1023) - 1, g_niche) && (z & 1023) < rad) ||
+						(h_solid(x, (z | 1023) + 1, g_niche) && 1024 - (z & 1023) < rad);
+
+					if (!near_any && (ox != x || oz != z))
+						needless++;
+				}
+			}
+		}
+
+		printf("  measured: %ld open eyes on a 7-unit grid at radius %ld and %ld, %ld pushed\n",
+			eyes, r169, r219, pushed);
+		ok(pushed > 0, "wall clear: the sweep really meets faces, so it is not idle", pushed, 1);
+		ok(refused == 0, "wall clear: no moved point on the map is refused", refused, 0);
+		ok(too_near == 0, "wall clear: afterwards no closed face is nearer than the radius", too_near, 0);
+		ok(too_far == 0, "wall clear: and no axis moved further than the radius", too_far, 0);
+		ok(needless == 0, "wall clear: an eye with nothing within the radius never moves", needless, 0);
+	}
+}
+
 /* -------------------------------- what the engine hands the carry -------- */
 
 /* The engine half is a subtraction, and this is it.
@@ -9716,6 +9992,7 @@ int main()
 	camera_carry();
 	camera_pull();
 	camera_chord();
+	camera_wall_clear();
 	camera_flip();
 	camera_mouse();
 	ledge_hang();

@@ -8731,11 +8731,18 @@ struct H_WALL
 	short moved_room;		// the room any other open point resolves to
 };
 
+/* Calls not made at the eye's height from the eye's room: the rule hands
+   every probe and the moved point the eye's y and room, and h_clear's eye
+   stands at 256 in room 0, so this stays nought. */
+static long g_wall_wrong_args = 0;
+
 static long h_wall_open(void* ctx, long x, long y, long z, short room, short* at)
 {
 	H_WALL* w = (H_WALL*)ctx;
 
-	(void)y;
+	if (y != 256 || room != 0)
+		g_wall_wrong_args++;
+
 	w->tests++;
 	*at = room;
 
@@ -8868,8 +8875,8 @@ static void camera_wall_clear()
 		ok(wrong_other == 0, "wall clear: and the other axis and the height do not move", wrong_other, 0);
 		ok(wrong_moved == 0, "wall clear: the answer is the units moved, R - distance", wrong_moved, 0);
 		ok(wrong_room == 0, "wall clear: the room is the one the moved point resolved to", wrong_room, 0);
-		ok(most <= 4, "wall clear: the eye, the faces within R and the moved point - four tests at most",
-			most, 4);
+		ok(most <= 3, "wall clear: the eye, the face within R and the moved point - three tests at most",
+			most, 3);
 	}
 
 	/* 3. At R and R + 1 the eye stays. */
@@ -8985,6 +8992,10 @@ static void camera_wall_clear()
 		ok(too_far == 0, "wall clear: and no axis moved further than the radius", too_far, 0);
 		ok(needless == 0, "wall clear: an eye with nothing within the radius never moves", needless, 0);
 	}
+
+	ok(g_wall_wrong_args == 0,
+		"wall clear: every probe and the moved point are asked at the eye's height from the eye's room",
+		g_wall_wrong_args, 0);
 }
 
 /* -------------------------------- what the engine hands the carry -------- */

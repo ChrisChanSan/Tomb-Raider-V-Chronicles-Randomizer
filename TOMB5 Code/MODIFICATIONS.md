@@ -7050,8 +7050,8 @@ open neighbour is no face; an eye with no edge within R asks nothing; an eye in 
 stays after one test; a refused moved point answers -1 without a move; a radius of 0 or
 513 moves nothing. A sweep of the 685035 open points of a 7-unit grid, at 33 and at 39
 (46052 pushes in all), leaves no closed face nearer than the radius, moves no axis further
-than it and moves no eye that had nothing within it. ModernTest 14017 checks, 0 failed
-(13992 before and 25 new); MenuTest 42364, InterpTest 683, LipsTest 270 with the `.OBJ`
+than it and moves no eye that had nothing within it. ModernTest 14018 checks, 0 failed
+(13992 before and 26 new); MenuTest 42364, InterpTest 683, LipsTest 270 with the `.OBJ`
 folder and 243 without, 0 failed, as before. The engine builds with `be.bat`. Not
 measured: the game.
 

@@ -349,8 +349,12 @@ namespace
 	 * own times that number, after everything opaque.
 	 *
 	 * Only the alpha pass, and only material 14: the cut-outs keep the
-	 * alpha test. */
+	 * alpha test. A floor whose page is part-way clear in every texel is
+	 * blended too, whatever its material, but decided per triangle out of
+	 * its page rather than per part out of its material, and drawn in a
+	 * phase of its own - see HD_PASS_CLEAR in hd_render.h. */
 	bool g_no_blend = false;	// see HDRenderBlendOverride
+	bool g_no_clear = false;	// see HDRenderClearOverride
 	bool g_no_upright = false;	// see HDRenderUprightOverride
 
 	inline float MaterialBlend(const trf::remaster::TrgPart& part, int pass)
@@ -1241,6 +1245,12 @@ namespace
 		 * MaterialBlend above. In the sort key like every other per-draw-call
 		 * constant. */
 		float blend = 0.0f;
+		/* 1 where the range is a clear floor - an alpha-pass range on a page
+		 * HDPageCacheSlotClear answers true for, drawn with blend 1 (the
+		 * page's own alpha and nothing on top) in HD_PASS_CLEAR instead of
+		 * the glass's phase. In the sort key, so a floor and a pane never
+		 * share a draw call. */
+		int clear = 0;
 		/* Which destructible piece these triangles belong to, or -1 for the
 		 * room itself. In the sort key, so a piece's triangles never share a
 		 * draw call with the wall behind them. */
@@ -1322,6 +1332,10 @@ namespace
 	struct HDGroup
 	{
 		std::vector<HDRange> pass[3];
+		/* How many of the alpha pass's ranges are clear floors
+		 * (HDRange::clear) - 0 for every group of a level without such a
+		 * page, which is what lets the frame skip HD_PASS_CLEAR for it. */
+		int clearRanges = 0;
 		std::vector<HDRenderSample> samples;
 		std::vector<unsigned int> cells;	// sorted, unique - see above
 		/* The same list built from the inside triangles alone. The overlap
@@ -1574,6 +1588,14 @@ namespace
 	 * draw calls they cost - material 14, the glass. */
 	int g_blend_parts = 0;
 	int g_blend_ranges = 0;
+	/* Once per level: the clear floors - the alpha-pass parts with a
+	 * triangle on a page HDPageCacheSlotClear answers true for, the distinct
+	 * such pages and the draw calls they cost. `g_clear_seen` is one byte
+	 * per page slot, so a page is counted once however many parts use it. */
+	int g_clear_parts = 0;
+	int g_clear_pages = 0;
+	int g_clear_ranges = 0;
+	std::vector<unsigned char> g_clear_seen;
 	/* Once per level: the still water surfaces - material 16. The parts
 	 * (counted per pass block, which is how TrgProbe -matparts counts them),
 	 * how the file splits them between the passes, their triangles, how many
@@ -1615,6 +1637,8 @@ namespace
 	// Draw calls that carried a gloss, and the hd_reflect switch as a
 	// float, set once per frame beside the motion switch.
 	int g_gloss_calls = 0;
+	// Draw calls that drew a clear floor (HD_PASS_CLEAR).
+	int g_clear_calls = 0;
 	float g_reflect = 1.0f;
 
 	/* --- the classic per-vertex light terms ---------------------------- */
@@ -2624,6 +2648,11 @@ void HDRenderBlendOverride(int off)
 	g_no_blend = off ? true : false;
 }
 
+void HDRenderClearOverride(int off)
+{
+	g_no_clear = off ? true : false;
+}
+
 void HDRenderUprightOverride(int off)
 {
 	g_no_upright = off ? true : false;
@@ -2735,6 +2764,7 @@ void HDRenderShutdown()
 	g_flip_calls = 0;
 	g_book_calls = 0;
 	g_gloss_calls = 0;
+	g_clear_calls = 0;
 	g_water_calls = 0;
 	g_error.clear();
 }
@@ -3274,6 +3304,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_flat_planes = 0;
 	g_blend_parts = 0;
 	g_blend_ranges = 0;
+	g_clear_parts = 0;
+	g_clear_pages = 0;
+	g_clear_ranges = 0;
+	g_clear_seen.assign((size_t)HDPageCacheSlots(), 0);
 	g_water_parts = 0;
 	g_water_opaque = 0;
 	g_water_additive = 0;
@@ -3546,6 +3580,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float gloss, glossPower;	// see MaterialGloss
 		float ripple[3];		// see MaterialRipple
 		float blend;			// see MaterialBlend
+		int clear;			// see HDRange::clear
 		int destructId;			// see HDDestructible
 		int material;			// the additive pass's material, else 0
 		int glow;			// see BuildGlowParts, else -1
@@ -3851,6 +3886,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if (pass == 0 && scrolls)
 					g_scroll_parts++;
+
+				// Whether this part has been counted as a clear floor.
+				bool part_clear = false;
 
 				for (unsigned int at = 0; at + 2 < run.count; at += 3)
 				{
@@ -4167,7 +4205,38 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.ripple[0] = ripple[0];
 					tri.ripple[1] = ripple[1];
 					tri.ripple[2] = ripple[2];
-					tri.blend = blend;
+
+					/* A clear floor: a triangle of a room's alpha pass that is
+					 * not glass already and whose page is part-way clear in
+					 * every texel (hd_pageclass.h). Asked per triangle and not
+					 * per part, because the page is the triangle's own - a
+					 * RICH2 floor part runs over pages 1047 and 1045 alike,
+					 * and a part that crossed onto an ordinary page would keep
+					 * the alpha test there. The sky is left out: its alpha pass
+					 * blends on a rule of its own (draw_pass, `sky`). Blend 1
+					 * is the page's own alpha and nothing on top. */
+					const bool clear_tri = pass == 1 && blend == 0.0f &&
+						!g_no_clear && (int)g < g_room_groups &&
+						HDPageCacheSlotClear(slot);
+
+					if (clear_tri)
+					{
+						if (!part_clear)
+						{
+							part_clear = true;
+							g_clear_parts++;
+						}
+
+						if ((size_t)slot < g_clear_seen.size() &&
+							!g_clear_seen[(size_t)slot])
+						{
+							g_clear_seen[(size_t)slot] = 1;
+							g_clear_pages++;
+						}
+					}
+
+					tri.blend = clear_tri ? 1.0f : blend;
+					tri.clear = clear_tri ? 1 : 0;
 					tri.destructId = destruct_id;
 					tri.material = add_material;
 					tri.glow = glow_id;
@@ -4221,6 +4290,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * see-through part after it - they are drawn in two
 					 * different phases of the frame. */
 					if (a.blend != b.blend) return a.blend < b.blend;
+					// A clear floor and a pane of glass are drawn in two
+					// different phases too.
+					if (a.clear != b.clear) return a.clear < b.clear;
 					// A destructible piece keeps its own draw calls.
 					if (a.destructId != b.destructId) return a.destructId < b.destructId;
 					// One material per additive draw call - see add_material.
@@ -4281,6 +4353,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.ripple[1] = tris[0].ripple[1];
 			range.ripple[2] = tris[0].ripple[2];
 			range.blend = tris[0].blend;
+			range.clear = tris[0].clear;
 			range.destructId = tris[0].destructId;
 			range.material = tris[0].material;
 			range.glow = tris[0].glow;
@@ -4313,6 +4386,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].ripple[1] == range.ripple[1] &&
 					tris[i].ripple[2] == range.ripple[2] &&
 					tris[i].blend == range.blend &&
+					tris[i].clear == range.clear &&
 					tris[i].destructId == range.destructId &&
 					tris[i].material == range.material &&
 					tris[i].glow == range.glow &&
@@ -4336,8 +4410,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						if (range.bookTime != 0.0f)
 							g_book_ranges++;
 
-						if (range.blend != 0.0f)
+						if (range.blend != 0.0f && !range.clear)
 							g_blend_ranges++;
+
+						if (range.clear)
+						{
+							g_clear_ranges++;
+							group.clearRanges++;
+						}
 
 						if (range.scrollU != 0.0f || range.scrollV != 0.0f)
 						{
@@ -4378,6 +4458,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.ripple[1] = tris[i].ripple[1];
 					range.ripple[2] = tris[i].ripple[2];
 					range.blend = tris[i].blend;
+					range.clear = tris[i].clear;
 					range.destructId = tris[i].destructId;
 					range.material = tris[i].material;
 					range.glow = tris[i].glow;
@@ -4476,8 +4557,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				if (range.bookTime != 0.0f)
 					g_book_ranges++;
 
-				if (range.blend != 0.0f)
+				if (range.blend != 0.0f && !range.clear)
 					g_blend_ranges++;
+
+				if (range.clear)
+				{
+					g_clear_ranges++;
+					group.clearRanges++;
+				}
 
 				if (range.scrollU != 0.0f || range.scrollV != 0.0f)
 				{
@@ -4846,6 +4933,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->flatPlanes = g_flat_planes;
 		stats->blendParts = g_blend_parts;
 		stats->blendRanges = g_blend_ranges;
+		stats->clearParts = g_clear_parts;
+		stats->clearPages = g_clear_pages;
+		stats->clearRanges = g_clear_ranges;
 		stats->waterParts = g_water_parts;
 		stats->waterOpaqueParts = g_water_opaque;
 		stats->waterAdditiveParts = g_water_additive;
@@ -5022,6 +5112,7 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	g_flip_calls = 0;
 	g_book_calls = 0;
 	g_gloss_calls = 0;
+	g_clear_calls = 0;
 	g_water_calls = 0;
 
 	if (view)
@@ -5172,9 +5263,15 @@ namespace
 	/* `blendOnly`: the alpha pass is drawn twice in a frame, once for its
 	 * solid ranges - the cut-outs, with the alpha test - and once, after
 	 * everything opaque, for its see-through ones. Both other passes are
-	 * called with it false and neither has a blended range in it. */
+	 * called with it false and neither has a blended range in it.
+	 *
+	 * `clearOnly` splits the see-through half once more: true draws the clear
+	 * floors alone, with the depth write on (HD_PASS_CLEAR), false the glass
+	 * alone, without it (HD_PASS_BLEND). It means nothing unless `blendOnly`
+	 * is true. */
 	void draw_pass(const HDGroup& group, int pass, const float* wvp,
-		bool blendOnly = false, int window = HD_WINDOW_ALL, bool sky = false)
+		bool blendOnly = false, int window = HD_WINDOW_ALL, bool sky = false,
+		bool clearOnly = false)
 	{
 		if (group.pass[pass].empty())
 			return;
@@ -5360,8 +5457,11 @@ namespace
 			 * against one minus it - and no depth write, because a pane you
 			 * can see through must not hide what stands behind it from the
 			 * draws that come after. The alpha test is left off here, so a
-			 * texel at 0.45 is half there and not gone. */
-			g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+			 * texel at 0.45 is half there and not gone.
+			 *
+			 * The clear floors blend the same way and keep the depth write -
+			 * see HD_PASS_CLEAR in hd_render.h for why a floor needs it. */
+			g_device->SetRenderState(D3DRS_ZWRITEENABLE, clearOnly ? TRUE : FALSE);
 			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 			g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
@@ -5372,6 +5472,10 @@ namespace
 			// This phase draws the see-through ranges or the solid ones,
 			// never both - see the note on `blendOnly`.
 			if ((range.blend != 0.0f) != blendOnly)
+				continue;
+
+			// And the see-through half draws its floors or its glass.
+			if (blendOnly && (range.clear != 0) != clearOnly)
 				continue;
 
 			/* And this call draws the art that is drawn whole or the art
@@ -5653,6 +5757,7 @@ namespace
 			}
 
 			g_draw_calls++;
+			g_clear_calls += range.clear ? 1 : 0;
 		}
 
 		if (g_wrapping)
@@ -5772,8 +5877,16 @@ bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 	 * call, so a room drawn in two phases pays two matrix multiplies and one
 	 * light upload more - nothing against a frame's draw calls. */
 	for (int pass = 0; pass < 3; pass++)
+	{
 		if (passes & (1u << pass))
 			draw_pass(room, pass, wvp, false, window, sky);
+
+		/* The clear floors, after the room's opaque and alpha passes and
+		 * before its additive one - the place HD_PASS_CLEAR has in the
+		 * frame, where every room's solid art comes first. */
+		if (pass == 1 && (passes & HD_PASS_CLEAR) && room.clearRanges)
+			draw_pass(room, 1, wvp, true, window, false, true);
+	}
 
 	/* And the see-through half of the alpha pass, which is a phase of
 	 * its own because it must come after everything opaque - see
@@ -5994,6 +6107,12 @@ int HDRenderGlossCalls()
 	return g_gloss_calls;
 }
 
+// And how many drew a clear floor.
+int HDRenderClearCalls()
+{
+	return g_clear_calls;
+}
+
 // For the log: of those, how many drew a still water surface.
 int HDRenderWaterCalls()
 {
@@ -6076,6 +6195,14 @@ int HDRenderGroupFlatPlanes(int group)
 		return 0;
 
 	return (int)g_groups[(size_t)group].flats.size();
+}
+
+bool HDRenderGroupHasClear(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return false;
+
+	return g_groups[(size_t)group].clearRanges != 0;
 }
 
 bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs)

@@ -248,6 +248,12 @@ bool HDPageCacheSlotCutout(int slot);
 int HDPageCacheSlotCutoutPermille(int slot);
 // How many of the cache's slots answered true - for the level's log line.
 int HDPageCacheCutoutPages();
+/* Is the page in that slot part-way clear in every texel of the top mip it
+ * keeps - HD_PAGE_CLEAR out of HDPageClassOf (hd_pageclass.h)? False for a
+ * slot that has no texture. The room renderer draws the alpha-pass triangles
+ * on such a page blended instead of alpha-tested: the RICH2 marble floors,
+ * through which the copy of the room beneath them shows. */
+bool HDPageCacheSlotClear(int slot);
 
 /* Where that slot's .DDS was found: 0 for the white tile, 1..3 for a game
  * folder of the Tomb Raider I-III bundle, 4 or 5 for the IV-VI games, 100 +

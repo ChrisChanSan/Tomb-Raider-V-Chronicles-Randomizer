@@ -916,6 +916,7 @@ namespace
 	int g_frame_objects = 0;
 	int g_frame_room_calls = 0;
 	int g_frame_book_calls = 0;	// the two brackets' book calls, for the frame line
+	int g_frame_clear_calls = 0;	// the solid bracket's clear floors, the same
 	bool g_frame_pending = false;
 
 	/* The pickup display's own projection and lighting, kept apart from the
@@ -3493,13 +3494,17 @@ static void HDLevelBuildHD()
 	// side of the same thing: how many parts the .TRG's own material
 	// parameters dimmed, how far the smallest of them was dimmed, and how
 	// many of them also swing on the clock.
+	// clear_pages / clear_parts are the clear floors (HD_PASS_CLEAR): the
+	// distinct part-way clear pages the rooms' alpha-pass triangles lie on
+	// and the parts holding such a triangle. RICH2, RICHCUT2 and TITLE have
+	// them; every other level prints 0 and 0.
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
 		"flipbook_parts=%d flipbook_pages=%d flipbook_dropped=%d "
 		"flipbook_ranges=%d cutout_parts=%d add_weighted=%d add_min=%.3f "
 		"add_swinging=%d gloss_parts=%d reflect=%d book_parts=%d "
 		"book_pages=%d book_dropped=%d book_additive=%d book_step_min=%.3f "
-		"book_step_max=%.3f book_ranges=%d",
+		"book_step_max=%.3f book_ranges=%d clear_pages=%d clear_parts=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
 		stats.swayDropped, stats.flipbookParts, stats.flipbookDrawn,
@@ -3507,7 +3512,8 @@ static void HDLevelBuildHD()
 		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts,
 		stats.glossParts, tomb5.hd_reflect ? 1 : 0, stats.bookParts,
 		stats.bookPages, stats.bookDropped, stats.bookAdditive,
-		stats.bookStepMin, stats.bookStepMax, stats.bookRanges);
+		stats.bookStepMin, stats.bookStepMax, stats.bookRanges,
+		stats.clearPages, stats.clearParts);
 
 	/* The material 15 books, one line per part and pass: the pages the book
 	 * runs over, how many, how long each stands, where in the cycle the part
@@ -4483,6 +4489,18 @@ void HDFrameDraw()
 		DrawRoomWindowed(g_frame[i], HD_PASS_SOLID);
 	}
 
+	/* The clear floors, once every room's solid art is in, so that whatever
+	 * lies behind a floor - the copy of the room beneath RICH2's marble, and
+	 * any other room seen through it - is in the picture before the floor is
+	 * laid over it; and before the models and the classic buckets, which
+	 * stand on the floor and are drawn over it. See HD_PASS_CLEAR in
+	 * hd_render.h. A room without such a floor is not asked. */
+	for (int i = 0; i < g_frame_count; i++)
+	{
+		if (HDRenderGroupHasClear(g_frame[i].group))
+			DrawRoomWindowed(g_frame[i], HD_PASS_CLEAR);
+	}
+
 	/* The rooms are done. The objects switch the scissor off per item, so
 	 * this line is for the frame that has none: without it the last room's
 	 * window would still be in force when the bracket closes, and the
@@ -4523,6 +4541,7 @@ void HDFrameDraw()
 	// HDRenderFrameBegin zeroes the renderer's counter per bracket.
 	g_frame_room_calls = HDRenderDrawCalls();
 	g_frame_book_calls = HDRenderBookCalls();
+	g_frame_clear_calls = HDRenderClearCalls();
 	g_frame_pending = true;
 }
 
@@ -4590,14 +4609,14 @@ void HDFrameDrawGlow()
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
-			"gloss_calls=%d water_calls=%d book_calls=%d",
+			"gloss_calls=%d water_calls=%d book_calls=%d clear_calls=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
 			objects_here, HDObjectDrawCalls(),
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
-			HDRenderWaterCalls(), g_frame_book_calls);
+			HDRenderWaterCalls(), g_frame_book_calls, g_frame_clear_calls);
 	}
 
 	/* The followed book, page by page: the first book drawn in the level

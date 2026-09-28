@@ -919,6 +919,9 @@
     <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_pageclass.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_lara.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>

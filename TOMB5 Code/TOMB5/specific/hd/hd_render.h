@@ -504,6 +504,12 @@ struct HDRenderStats
 	 * and the draw calls they cost. */
 	int blendParts;
 	int blendRanges;
+	/* The clear floors of the alpha pass (HD_PASS_CLEAR): the parts with at
+	 * least one triangle on such a page, the distinct pages those
+	 * triangles are on, and the draw calls they cost. */
+	int clearParts;
+	int clearPages;
+	int clearRanges;
 	/* The still water surfaces - material 16. The parts, counted per pass
 	 * block, how the file splits them between the passes, their triangles,
 	 * how many of them live in a sub-rectangle of their page, the smallest
@@ -564,6 +570,13 @@ void HDRenderShoreOverride(int off);
  * HDRenderLevelBegin; the engine never calls it and there is no option and
  * no registry key for it. */
 void HDRenderBlendOverride(int off);
+
+/* The clear floors off, for the diagnostic tool alone. Non-zero leaves the
+ * alpha-pass triangles on a part-way clear page (HD_PASS_CLEAR) in the alpha
+ * test, drawn solid - the before picture out of the same build. Call it
+ * before HDRenderLevelBegin; the engine never calls it and there is no
+ * option and no registry key for it. */
+void HDRenderClearOverride(int off);
 
 /* The water's "a surface is flat" test off, for the diagnostic tool alone.
  * Non-zero gives the wall vertices at the waterline the surface's UV wobble
@@ -833,8 +846,20 @@ void HDRenderScissorOff();
  * own, drawn in the glow phase beside the additive pass. A level with no
  * material 14 in its alpha pass never draws anything here. */
 #define HD_PASS_BLEND		0x8
+/* The clear floors of the alpha pass: the triangles whose page is part-way
+ * clear in every texel (HDPageCacheSlotClear, hd_pageclass.h) - RICH2's
+ * marble over the upside-down copy of its room. Blended like the glass, but
+ * a phase of its own at the end of the solid one: after every room's opaque
+ * art, which is what the copy beneath is, and before the models and the
+ * classic buckets, which stand on the floor and must be drawn over it. It
+ * writes depth, because it is a floor: everything drawn after it is sorted
+ * against it as against any floor - the glass and the glows of the copy
+ * beneath stay under it, and a shadow 16 units above it is drawn over it. A
+ * level with no such page draws nothing here. */
+#define HD_PASS_CLEAR		0x10
 #define HD_PASS_SOLID		(HD_PASS_OPAQUE | HD_PASS_ALPHA)
-#define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE | HD_PASS_BLEND)
+#define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE | HD_PASS_BLEND | \
+	HD_PASS_CLEAR)
 
 /* Which half of a group a call is to draw.
  *
@@ -952,6 +977,10 @@ bool HDRenderGroupWaterArt(int group, int y, int x0, int z0, int x1, int z1,
 	int slack = 32);
 // How many distinct horizontal planes that group's art covers - for the log.
 int HDRenderGroupFlatPlanes(int group);
+// Whether the group has a clear floor to draw in HD_PASS_CLEAR - false for
+// every group of a level without a part-way clear page, so the frame asks
+// no room of such a level for the phase.
+bool HDRenderGroupHasClear(int group);
 int HDRenderDestructibleCount();
 bool HDRenderDestructibleInfo(int at, int* group, unsigned int* material,
 	float* mins, float* maxs);
@@ -994,6 +1023,9 @@ int HDRenderFlipbookCalls();
 int HDRenderBookCalls();
 // And how many of them carried a gloss out of their material.
 int HDRenderGlossCalls();
+// And how many drew a clear floor (HD_PASS_CLEAR) - since the last
+// FrameBegin; the solid bracket is the one that draws them.
+int HDRenderClearCalls();
 // And how many drew a still water surface - a material 16 part with a
 // ripple on it.
 int HDRenderWaterCalls();

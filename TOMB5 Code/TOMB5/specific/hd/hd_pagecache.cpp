@@ -23,6 +23,7 @@
 #include "hd_pagecache.h"
 #include "hd_dxt5.h"
 #include "hd_mods.h"		// where a mod's own page lives
+#include "hd_pageclass.h"	// clear, cut-out or opaque
 #include "hd_scan.h"
 #include "../bc7.h"
 
@@ -70,6 +71,11 @@ namespace
 		bool cutout = false;
 		int cutoutLow = 0;		// texels below the threshold
 		int cutoutTexels = 0;		// texels looked at
+		/* The smallest and the largest alpha over every texel of the same
+		 * level, for HDPageClassOf (hd_pageclass.h). Smallest above largest
+		 * is "nothing measured", which the class reads as opaque. */
+		int alphaMin = 255;
+		int alphaMax = 0;
 
 		void free_all()
 		{
@@ -113,6 +119,10 @@ namespace
 	 * tool needs to say why a page counts as a cut-out sheet, and it is how
 	 * an item page's alpha was shown not to be a cut-out mask at all. */
 	std::vector<short> g_cutout_share;
+	/* One byte per slot: HDPageClassOf's answer (hd_pageclass.h) - 2 for a
+	 * page that is part-way clear in every texel, the RICH2 marble floors'
+	 * kind. Grown and cleared exactly with g_textures, like g_cutout. */
+	std::vector<unsigned char> g_class;
 	/* Where each slot's file was found, in resolve_page's own encoding.
 	 * Kept per slot rather than only in the notes because the notes report
 	 * the odd cases and a tool has to be able to ask about every page -
@@ -663,6 +673,28 @@ namespace
 		out.cutoutLow = low;
 		out.cutoutTexels = seen;
 		out.cutout = seen > 0 && low * 1000 >= seen * HD_CUTOUT_PERMILLE;
+
+		/* The smallest and the largest alpha, over every texel and not every
+		 * fourth: "clear in every texel" is a claim about all of them, and one
+		 * opaque inlay or one hole the step skips would flip the class. It
+		 * runs on the decoding thread beside a BC7 decode of the same page,
+		 * which costs far more than one compare per texel. */
+		int amin = 255, amax = 0;
+		const size_t texels = (size_t)level.w * (size_t)level.h;
+
+		for (size_t i = 0; i < texels; i++)
+		{
+			const int a = (int)(level.pixels[i] >> 24);
+
+			if (a < amin)
+				amin = a;
+
+			if (a > amax)
+				amax = a;
+		}
+
+		out.alphaMin = amin;
+		out.alphaMax = amax;
 	}
 
 	void decode_one(const std::string& path, int first, int format,
@@ -874,6 +906,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	g_cutout.resize(g_textures.size(), 0);
 	g_origin.resize(g_textures.size(), (short)-1);
 	g_cutout_share.resize(g_textures.size(), 0);
+	g_class.resize(g_textures.size(), (unsigned char)HD_PAGE_OPAQUE);
 	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
 
 	if (stats)
@@ -1265,6 +1298,10 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 						: (short)0;
 				}
 
+				if ((size_t)page.slot < g_class.size())
+					g_class[(size_t)page.slot] = (unsigned char)HDPageClassOf(
+						page.alphaMin, page.alphaMax);
+
 				for (const DecodedMip& mip : page.mips)
 					loaded_bytes += g_format_used == HD_PAGE_FORMAT_DXT5
 						? (double)DXT5Size(mip.w, mip.h)
@@ -1436,6 +1473,7 @@ void HDPageCacheDestroy()
 	g_textures.clear();
 	g_cutout.clear();
 	g_cutout_share.clear();
+	g_class.clear();
 	g_origin.clear();
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
@@ -1660,6 +1698,14 @@ int HDPageCacheCutoutPages()
 		n += g_cutout[i] ? 1 : 0;
 
 	return n;
+}
+
+bool HDPageCacheSlotClear(int slot)
+{
+	if (slot < 0 || slot >= (int)g_class.size())
+		return false;
+
+	return g_class[(size_t)slot] == HD_PAGE_CLEAR;
 }
 
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot)

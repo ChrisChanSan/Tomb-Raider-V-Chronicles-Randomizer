@@ -94,6 +94,11 @@
  *     -noblend        material 14 stays in the alpha TEST instead of a real
  *                     blend - the glass drawn as a hard mask of itself, the
  *                     before picture out of the same build.
+ *     -noclear        the alpha-pass triangles on a page that is part-way
+ *                     clear in every texel stay in the alpha TEST instead of
+ *                     being blended as a clear floor - RICH2's marble drawn
+ *                     solid over the copy of the room beneath it, the before
+ *                     picture out of the same build.
  *     -glow           two more PNGs after the full frame, both of them the
  *                     additive pass of every drawn group ALONE over black:
  *                     <prefix>_<LEVEL>_r<room>_glow.png keeps the full
@@ -5066,6 +5071,8 @@ int main(int argc, char** argv)
 			HDRenderShoreOverride(1);
 		else if (!strcmp(argv[at], "-noblend"))
 			HDRenderBlendOverride(1);
+		else if (!strcmp(argv[at], "-noclear"))
+			HDRenderClearOverride(1);
 		else if (!strcmp(argv[at], "-noupright"))
 			HDRenderUprightOverride(1);
 		else if (!strcmp(argv[at], "-noreflect"))
@@ -6099,6 +6106,8 @@ int main(int argc, char** argv)
 		HDRenderGroupFlatPlanes(room), room, stats.flatPlanes);
 	printf("alpha: %d see-through part(s) in the alpha pass (material 14), "
 		"%d draw call(s)\n", stats.blendParts, stats.blendRanges);
+	printf("clear: %d floor part(s) on %d part-way clear page(s), %d draw "
+		"call(s)\n", stats.clearParts, stats.clearPages, stats.clearRanges);
 
 	// The still water surfaces the .TRG builds itself - the same line the
 	// engine writes to HDLOG at level build.
@@ -6706,6 +6715,15 @@ int main(int argc, char** argv)
 			for (int i = 0; i < g_with_count; i++)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_SOLID);
+
+			/* The clear floors, once every group's solid art is in - the
+			 * place HDFrameDraw gives them, before the models and the
+			 * glass. */
+			DrawOneGroup(room, 0, &lighting, HD_PASS_CLEAR);
+
+			for (int i = 0; i < g_with_count; i++)
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_CLEAR);
 
 			/* The see-through half of the alpha pass - the glass - after
 			 * everything opaque and before the glows, which is the order

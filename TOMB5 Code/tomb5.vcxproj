@@ -556,6 +556,7 @@
     <ClInclude Include="TOMB5\specific\hd\hd_mods.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_wardrobe.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_pageclass.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_lara.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_laradraw.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_model.h" />

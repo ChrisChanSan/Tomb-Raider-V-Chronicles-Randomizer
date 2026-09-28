@@ -2822,7 +2822,7 @@ floor links - so an offline tool can reproduce it, and `ReportRoomIntrusions` (`
 writes `HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups`;
 `hd_render.cpp:3722` tags the triangle and `:925` carries the tag last in `HDRange`'s
 sort key, so a level built with no list sorts exactly as before, and `DrawRoomWindowed`
-(`hd_level.cpp:735`) draws the open half over the whole screen and the intruding half
+(`hd_level.cpp:801`) draws the open half over the whole screen and the intruding half
 inside the window. The scissor itself: `HDFrameRoom` takes
 `ROOM_INFO::left/top/right/bottom` at the seam it already had in `InsertRoom`
 (`specific/drawroom.cpp`, one line beside the matrix) and keeps them as a half-open
@@ -3301,7 +3301,7 @@ classic window there; it clears the four places by the same amounts as this rule
 facade from ANDREA1 room 146 (0 pixels against before). The play test decides whether the
 holes show in the game.
 
-**Commits.** `8dfae67`, `3884153`, `666593f`
+**Commits.** `8dfae67`, `3884153`, `faa3be5`, `666593f`, `9e176b2`
 
 ### The material 15 books in motion: a fan's shadow that turns, and flames that play
 2026-09-27

@@ -734,6 +734,11 @@ void HDRenderCullOpaque(int on);
 // The built level's draw calls, those drawn culled and those drawn two-sided.
 void HDRenderCullRanges(int* opaque, int* twoSided);
 int HDRenderIntrusionHits(int at);
+/* How many of the triangles an entry caught no classic face claims and stand
+ * outside the entry's box made one sector smaller in x and z: the art the
+ * build hands to the open half, drawn over the whole screen on every frame
+ * and never answered per frame. Same terms as HDRenderIntrusionHits. */
+int HDRenderIntrusionBand(int at);
 // How many of a group's triangles stand inside some OTHER room, all three
 // passes together. Non-zero is the whole of "this room needs a portal
 // window"; zero is every other room in the game.

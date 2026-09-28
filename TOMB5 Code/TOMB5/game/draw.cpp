@@ -1200,6 +1200,13 @@ void StepAfterDeathFade()
 	}
 }
 
+/* ROOMLIST's window events: bit 1 a WM_INACTIVE, bit 2 a WM_ACTIVE. Set by
+ * the window procedure (specific\winmain.cpp) with -log only, read and
+ * cleared by the whole-list dump in NoteRoomWalk, which writes the list on
+ * the first frame drawn after each of them. The window procedure runs on
+ * another thread than the game, hence the interlocked access. */
+volatile long RoomListWindowEvents = 0;
+
 /* ROOMFLASH - a room that is in the draw list, gone for one frame, and back.
  * Behind -log.
  *
@@ -1833,6 +1840,12 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		}
 	}
 
+	/* The reach rectangles, for the HD path's reachart line: HDFrameRoom is
+	 * handed each room's classic window alone. */
+	if (gLogEnabled)
+		for (int i = 0; i < note.count; i++)
+			HDFrameNoteReach(note.rooms[i], note.reach[i]);
+
 	note.logic = logicRoom;
 	note.eye = walkRoom;
 	note.prev = InterpPrevCamRoom();
@@ -2051,22 +2064,44 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 				r ? removed : "-");
 		}
 
-		if ((unsigned short)(GlobalCounter - g_listDumpAt) >=
-			30 * kListDumpSeconds || !g_listEver)
+		/* Every five seconds, and on the first frame after a window event
+		 * (RoomListWindowEvents) whatever the timer says: a tool that
+		 * captures the screen takes the focus away and gives it back, and
+		 * the list of the captured view is then in the log beside it. A
+		 * WM_INACTIVE is written first when both are waiting, the WM_ACTIVE
+		 * on the frame after. */
+		const long events = RoomListWindowEvents;
+		const long event = (events & 1) ? 1 : (events & 2);
+		const bool due = (unsigned short)(GlobalCounter - g_listDumpAt) >=
+			30 * kListDumpSeconds || !g_listEver;
+
+		if (due || event)
 		{
-			g_listDumpAt = GlobalCounter;
-			g_listEver = true;
+			if (due)
+			{
+				g_listDumpAt = GlobalCounter;
+				g_listEver = true;
+			}
+
+			// And the HD path writes its reachart lines on this frame.
+			if (event)
+			{
+				InterlockedAnd(&RoomListWindowEvents, ~event);
+				HDFrameNoteDump();
+			}
 
 			/* The target beside the eye: a room list without the
 			 * direction it was walked in cannot be replayed with
-			 * RoomProbe -walk. */
+			 * RoomProbe -walk. `why` is what wrote it: the five second
+			 * timer, or the window event. */
 			Log("ROOMLIST frame=%u the whole list, %d room(s), "
 				"eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d cam=%d/%d "
-				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d",
+				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d why=%s",
 				now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz,
 				(int)now.tx, (int)now.ty, (int)now.tz, (int)now.troom,
 				now.camtype, now.camold, now.camfixed, now.camnumber,
-				now.reach_only, now.trimmed, (int)kReachBudget);
+				now.reach_only, now.trimmed, (int)kReachBudget,
+				event == 1 ? "inactive" : event == 2 ? "active" : "timer");
 
 			for (int i = 0; i < now.count; i++)
 			{

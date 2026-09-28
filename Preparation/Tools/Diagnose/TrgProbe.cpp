@@ -1348,6 +1348,8 @@ namespace
 		std::vector<unsigned char> facesRead((size_t)rooms, 0);
 		std::vector<std::set<size_t> > claimed((size_t)rooms);
 		long long boundTris = 0, unboundTris = 0;
+		// The ones no face claims outside the smaller box: the open half's.
+		long long bandTris = 0;
 
 		for (int a = 0; a < rooms; a++)
 			for (int b = 0; b < rooms && (size_t)b < centre.size(); b++)
@@ -1496,7 +1498,10 @@ namespace
 							cx > (float)(A.ix1 - 1024 - B.ox) ||
 							cz < (float)(A.iz0 + 1024 - B.oz) ||
 							cz > (float)(A.iz1 - 1024 - B.oz))
+						{
 							tagged[(size_t)b][t] = 2;
+							bandTris++;
+						}
 						else
 							unboundTris++;
 
@@ -1636,12 +1641,16 @@ namespace
 		if (deep)
 			std::snprintf(holder, sizeof holder, "inside%+ld", -deep);
 
+		/* band_unclaimed: the triangles no face claims that stand outside
+		 * the smaller box, drawn with the open half - the engine's HDLOG
+		 * level line ends with the same number. */
 		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d intruding "
 			"tris=%lld in %d groups  overhang tris=%lld of %lld  worst=%ld "
-			"(group %d)  holder=%s faces=%d bound=%lld unbound=%lld\n",
+			"(group %d)  holder=%s faces=%d bound=%lld unbound=%lld "
+			"band_unclaimed=%lld\n",
 			stem.c_str(), rooms, (int)trg.groups.size(), pairs, intruding,
 			windowedRooms, tris_out, tris_total, worst, worst_group, holder,
-			facesClaimed, boundTris, unboundTris);
+			facesClaimed, boundTris, unboundTris, bandTris);
 		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
 			"<=256 %lld, <=1024 %lld, >1024 %lld\n",
 			stem.c_str(), hist[0], hist[1], hist[2], hist[3], hist[4]);

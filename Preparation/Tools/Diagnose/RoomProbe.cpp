@@ -155,10 +155,16 @@
  *                     when any claimed classic face of its pair survives the
  *                     corner rule against the group's window, and the
  *                     triangles no face claims stay in the window; an empty
- *                     window asks no face and draws the pieces outside the
+ *                     window asks no face, leaves out the pieces whose
+ *                     holder is drawn and draws the other pieces outside the
  *                     box one sector smaller whole), or the
  *                     same with each piece held to its own face alone
- *                     (face). One `decide:` line per piece says which.
+ *                     (face). One `decide:` line per piece says which, a
+ *                     `decide: reachart` line per holder of an empty-window
+ *                     group gives the engine's reachart fields but reach=,
+ *                     and a `decide: clip` line after the picture the
+ *                     counters of the engine's HDLOG clip line over the
+ *                     named groups that have art.
  *
  *   The parity block. Every one of these makes up a piece of engine state
  *   the tool has no engine for, and hands it to the very structures
@@ -2667,6 +2673,18 @@ static int g_roomwin_group[64];
 static long g_roomwin_box[64][4];
 static int g_roomwin_count = 0;
 static int g_decide = 2;			// 0 whole, 1 scissor, 2 frame, 3 face
+/* The counters of hd_level.cpp's HDLOG clip line, over the groups -roomwin
+ * names that have art, filled once per group by DecideGroup and printed as
+ * the `decide: clip` line after the picture - so that a render's counters
+ * can be held against the engine's log at the same camera. */
+struct DecideCount
+{
+	int rooms, open, full, scissored, empty;
+	int pairs, pairsWhole, pairsScissored;
+	int reachRooms, reachPieces, reachWhole, reachHidden;
+};
+
+static DecideCount g_decide_count = { 0 };
 static int g_room_probe_seed = -1;		// the group drawn at the origin
 static std::vector<HDPairFace> g_faces_built;
 static float g_decide_view[16];
@@ -2740,9 +2758,16 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 	if (rect[2] > (int)g_decide_width) rect[2] = (int)g_decide_width;
 	if (rect[3] > (int)g_decide_height) rect[3] = (int)g_decide_height;
 
-	*full = rect[0] <= 0 && rect[1] <= 0 && rect[2] >= (int)g_decide_width &&
-		rect[3] >= (int)g_decide_height;
-	*empty = rect[2] <= rect[0] || rect[3] <= rect[1];
+	/* Empty as ClipWindow (hd_level.cpp) calls it: the walk's window has no
+	 * width or no height, before any widening - a window one pixel wide
+	 * whose two edges are the same pixel is empty there too. */
+	*empty = win[2] <= win[0] || win[3] <= win[1];
+
+	if (*empty)
+		rect[0] = rect[1] = rect[2] = rect[3] = 0;
+
+	*full = !*empty && rect[0] <= 0 && rect[1] <= 0 &&
+		rect[2] >= (int)g_decide_width && rect[3] >= (int)g_decide_height;
 
 	float offset[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -2790,12 +2815,13 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * asked and its guest's art is drawn whole; otherwise a claimed
 		 * piece is whole when any claimed face of its pair survives, and
 		 * the triangles no face claims stay in the window. An empty
-		 * window asks no face: a piece outside the box one sector smaller
-		 * is whole, one inside it is not drawn. face: the same with each
-		 * piece on its own face alone. */
+		 * window asks no face: a piece whose holder is drawn is not drawn;
+		 * otherwise a piece outside the box one sector smaller is whole
+		 * and one inside it is not drawn. face: the same with each piece
+		 * on its own face alone. */
 		const bool ask = !*full && !*empty;
 		const bool answer = g_decide == 0 ? true : g_decide == 1 ? false
-			: *empty ? piece.inner == 0
+			: *empty ? piece.inner == 0 && !drawn
 			: !ask ? false
 			: !drawn ? true
 			: piece.face < 0 ? false
@@ -2807,6 +2833,27 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 			whole++;
 		else
 			windowed++;
+
+		// The engine's clip line counters, once per group.
+		if (say && ask && drawn)
+		{
+			g_decide_count.pairs++;
+
+			if (answer)
+				g_decide_count.pairsWhole++;
+			else
+				g_decide_count.pairsScissored++;
+		}
+
+		if (say && *empty)
+		{
+			g_decide_count.reachPieces++;
+
+			if (answer)
+				g_decide_count.reachWhole++;
+			else if (piece.inner == 0 && g_decide >= 2)
+				g_decide_count.reachHidden++;
+		}
 
 		if (say)
 			printf("decide: group %3d piece %2d holder %3d face %5d tris %5d "
@@ -2821,6 +2868,65 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 			"whole, %d inside the window\n", group, win[0], win[1], win[2],
 			win[3], *full ? " (the whole screen)" : "",
 			*empty ? " (empty)" : "", whole, windowed);
+
+	/* The room as the clip line counts it, and for an empty window the
+	 * engine's reachart line per holder - without reach=, which the tool is
+	 * not handed, and with the same band_tris out of the same build. */
+	if (say && HDRenderGroupTriangles(group, -1) > 0)
+	{
+		const int count = HDRenderGroupPairRanges(group);
+
+		g_decide_count.rooms++;
+
+		if (!HDRenderGroupIntrudingTriangles(group))
+			g_decide_count.open++;
+		else if (*empty)
+			g_decide_count.empty++;
+		else if (*full)
+			g_decide_count.full++;
+		else
+			g_decide_count.scissored++;
+
+		if (*empty && count > 0)
+			g_decide_count.reachRooms++;
+
+		for (int j = 0; *empty && j < count; j++)
+		{
+			HDPairRange piece, other;
+			bool seen = false;
+
+			if (!HDRenderGroupPairRange(group, j, &piece))
+				break;
+
+			for (int k = 0; k < j && !seen; k++)
+				seen = HDRenderGroupPairRange(group, k, &other) &&
+					other.holder == piece.holder;
+
+			if (seen)
+				continue;
+
+			bool drawn = piece.holder == g_room_probe_seed;
+			int pieces = 0, tris = 0;
+
+			for (int i = 0; i < g_with_count && !drawn; i++)
+				drawn = g_with_group[i] == piece.holder;
+
+			for (int k = j; k < count; k++)
+				if (HDRenderGroupPairRange(group, k, &other) &&
+					other.holder == piece.holder)
+				{
+					pieces++;
+					tris += other.triangles;
+				}
+
+			printf("decide: reachart room=%d holder=%d listed=%d pieces=%d "
+				"tris=%d answer=%s band_tris=%d\n", group, piece.holder,
+				drawn ? 1 : 0, pieces, tris,
+				g_decide < 2 ? (g_decide ? "hidden" : "whole")
+					: drawn ? "hidden" : "whole",
+				HDRenderIntrusionBand(piece.intrusion));
+		}
+	}
 
 	return true;
 }
@@ -4540,10 +4646,16 @@ int main(int argc, char** argv)
 				}
 			}
 
+		int band = 0;
+
+		for (size_t i = 0; i < g_intrusions_built.size(); i++)
+			band += HDRenderIntrusionBand((int)i);
+
 		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups "
-			"holder=inside cull=opaque faces=%d bound=%d unbound=%d\n",
+			"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
+			"band_unclaimed=%d\n",
 			CountIntrusionPairs(), stats.intrudingTris, stats.intrudingGroups,
-			(int)claimed.size(), bound, unbound);
+			(int)claimed.size(), bound, unbound, band);
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 		{
@@ -5317,6 +5429,16 @@ int main(int argc, char** argv)
 
 	printf("HDRenderRoom returned %s after %d draw calls\n",
 		drew ? "true" : "FALSE", calls);
+
+	if (g_roomwin_count)
+		printf("decide: clip rooms=%d open=%d full=%d scissored=%d empty=%d "
+			"pairs=%d whole=%d scissored=%d reach_rooms=%d reach_pieces=%d "
+			"reach_whole=%d reach_hidden=%d\n", g_decide_count.rooms,
+			g_decide_count.open, g_decide_count.full, g_decide_count.scissored,
+			g_decide_count.empty, g_decide_count.pairs,
+			g_decide_count.pairsWhole, g_decide_count.pairsScissored,
+			g_decide_count.reachRooms, g_decide_count.reachPieces,
+			g_decide_count.reachWhole, g_decide_count.reachHidden);
 
 	/* Of those, the draw calls that turned a book, and the page the first
 	 * of them showed - the book the engine's bookstep line follows. */

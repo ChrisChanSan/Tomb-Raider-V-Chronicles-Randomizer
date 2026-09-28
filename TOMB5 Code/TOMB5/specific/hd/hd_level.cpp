@@ -200,6 +200,13 @@ namespace
 	std::vector<HDPairFace> g_pair_faces;
 	std::vector<unsigned char> g_face_alive;
 	std::vector<HDPairRange> g_pieces;
+	/* Per entry of the level's intrusion list, numbered as
+	 * HDPairRange::intrusion numbers them: the triangles no face claims that
+	 * stand outside the box one sector smaller, which the build hands to the
+	 * open half (HDRenderIntrusionBand). Kept for the level for the reachart
+	 * line; their sum is the level line's band_unclaimed. */
+	std::vector<int> g_pair_band;
+	int g_band_unclaimed = 0;
 	int g_piece_first[HD_MAX_ROOMS];
 	int g_piece_count[HD_MAX_ROOMS];
 	short g_room_group[HD_MAX_ROOMS];
@@ -500,6 +507,17 @@ namespace
 	int g_clip_pairs = 0;
 	int g_clip_pairs_whole = 0;
 	int g_clip_pairs_scissored = 0;
+	/* The pieces of the rooms whose window is empty - rooms the reach lists
+	 * and the portal walk gives no window - which DecidePairs does not ask
+	 * and counts apart from the ones above: the rooms that have any, their
+	 * pieces, the pieces drawn whole (outside the box one sector smaller,
+	 * holder not on the list) and the pieces outside that box left out
+	 * because their holder is on the list. The pieces inside the box are
+	 * the rest, left out whatever the holder. */
+	int g_clip_reach_rooms = 0;
+	int g_clip_reach_pieces = 0;
+	int g_clip_reach_whole = 0;
+	int g_clip_reach_hidden = 0;
 	/* HD items whose own room's window is not the whole screen - the ones a
 	 * per-room scissor would cut and the classic path never does. Counted per
 	 * frame with -log and reported in the clip line. */
@@ -512,6 +530,15 @@ namespace
 	// difference of 30 is one second of game time.
 	unsigned short g_clip_line_at = 0;
 	bool g_clip_line_ever = false;
+
+	/* The reachart lines. `g_room_reach` is the rectangle the reach carried
+	 * each listed room in on, handed over by the room walk's log note
+	 * (HDFrameNoteReach) because the HD path gets only the classic window;
+	 * `g_reachart_due` is set by the ROOMLIST dump written at a window event
+	 * (HDFrameNoteDump) and makes the next drawn frame write the lines
+	 * outside the clip line's throttle. Both are read only by the log. */
+	short g_room_reach[HD_MAX_ROOMS][4];
+	bool g_reachart_due = false;
 
 	/* The engine's inclusive window as a scissor rectangle.
 	 *
@@ -671,12 +698,16 @@ namespace
 	 *
 	 * A room whose window is the whole screen draws everything whole anyway
 	 * (DrawRoomWindowed). One whose window is empty - a room the reach lists
-	 * and the portal walk gives no window - has no classic face to ask, and
-	 * keeps the answer of the box one sector smaller than the inside: the
-	 * pieces that stand in it are not drawn, the rest is answered whole and
-	 * drawn with the open half. From inside room 93, looking at the doorway
-	 * toward room 101, the reach lists 101 with no window, and 101's facade
-	 * and plaster art in 93's outer sector ring is what fills that doorway. */
+	 * and the portal walk gives no window - has no classic face to ask: the
+	 * classic path draws none of its faces. Its pieces standing in a holder
+	 * that is on this frame's list are not drawn, whatever window the holder
+	 * has. The holder's own walls are drawn, and drawn whole those pieces come
+	 * through them: a brick hull in the sky above a piazza, a marble ceiling
+	 * in a metal hub, window frames in a brick loft, a tile floor in a
+	 * doorway. Its pieces standing in a holder that is not on the list keep
+	 * the answer of the box one sector smaller than the inside, like the rest
+	 * of the room's art: drawn whole outside it, left out inside it. Left out
+	 * altogether, they open a hole where the holder is not drawn to fill it. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -689,23 +720,25 @@ namespace
 		const bool empty = ClipEmpty(entry);
 		const bool ask = !entry.full && !empty;
 
+		if (empty && count > 0)
+			g_clip_reach_rooms++;
+
 		for (int j = 0; j < count; j++)
 		{
 			const HDPairRange& piece = g_pieces[(size_t)(first + j)];
 			bool listed = false;
 			bool whole = false;
 
+			// Whether the holder is on this frame's list, whatever its window.
+			for (int i = 0; i < g_frame_count && !listed; i++)
+				listed = g_frame[i].room == piece.holder;
+
 			if (ask)
-			{
-				for (int i = 0; i < g_frame_count && !listed; i++)
-					listed = g_frame[i].room == piece.holder;
-
 				whole = !listed;
-			}
 			else if (empty)
-				whole = piece.inner == 0;
+				whole = piece.inner == 0 && !listed;
 
-			if (listed && piece.face >= 0)
+			if (ask && listed && piece.face >= 0)
 			{
 				// Any claimed face of the same pair the classic path draws.
 				for (int k = 0; k < count && !whole; k++)
@@ -719,7 +752,7 @@ namespace
 				}
 			}
 
-			if (listed)
+			if (ask && listed)
 			{
 				g_clip_pairs++;
 
@@ -727,6 +760,16 @@ namespace
 					g_clip_pairs_whole++;
 				else
 					g_clip_pairs_scissored++;
+			}
+
+			if (empty)
+			{
+				g_clip_reach_pieces++;
+
+				if (whole)
+					g_clip_reach_whole++;
+				else if (piece.inner == 0)
+					g_clip_reach_hidden++;
 			}
 
 			if (!whole)
@@ -776,6 +819,78 @@ namespace
 
 		if (gLogEnabled)
 			g_clip_windowed_tris += entry.scissoredTris;
+	}
+
+	/* HDLOG reachart: one line per room with an empty window and holder its
+	 * intruding pieces stand in, written with the clip line and on the frame
+	 * of a window event's ROOMLIST dump. Behind -log.
+	 *
+	 *   room       the listed room the walk left with an empty window
+	 *   reach      the rectangle the reach carried it in on (ROOMLIST reach=)
+	 *   holder     the room the pieces stand in, listed 1 when it is on this
+	 *              frame's list
+	 *   pieces     the room's pieces in that holder, tris their triangles,
+	 *              all three passes together
+	 *   answer     hidden when the holder is listed: none of them is drawn;
+	 *              whole when it is not: those outside the box one sector
+	 *              smaller are drawn whole, those inside it are not drawn
+	 *   band_tris  the room's art in that holder no face claims that stands
+	 *              outside the smaller box - drawn with the open half on every
+	 *              frame, whatever the answer says */
+	void LogReachArt()
+	{
+		for (int i = 0; i < g_frame_count; i++)
+		{
+			const FrameRoom& entry = g_frame[i];
+
+			if (!entry.windowed || !ClipEmpty(entry) || entry.group < 0 ||
+				entry.group >= HD_MAX_ROOMS || entry.room < 0 ||
+				entry.room >= HD_MAX_ROOMS)
+				continue;
+
+			const int first = g_piece_first[entry.group];
+			const int count = g_piece_count[entry.group];
+			const short* reach = g_room_reach[entry.room];
+
+			for (int j = 0; j < count; j++)
+			{
+				const HDPairRange& piece = g_pieces[(size_t)(first + j)];
+				bool seen = false;
+
+				// The first piece of each holder writes the holder's line.
+				for (int k = 0; k < j && !seen; k++)
+					seen = g_pieces[(size_t)(first + k)].holder == piece.holder;
+
+				if (seen)
+					continue;
+
+				bool listed = false;
+				int pieces = 0;
+				int tris = 0;
+
+				for (int f = 0; f < g_frame_count && !listed; f++)
+					listed = g_frame[f].room == piece.holder;
+
+				for (int k = j; k < count; k++)
+					if (g_pieces[(size_t)(first + k)].holder == piece.holder)
+					{
+						pieces++;
+						tris += g_pieces[(size_t)(first + k)].triangles;
+					}
+
+				// One entry of the intrusion list per pair of rooms, so the
+				// pieces of one holder share it.
+				const int band = (size_t)piece.intrusion < g_pair_band.size()
+					? g_pair_band[(size_t)piece.intrusion] : 0;
+
+				Log("HDLOG reachart level=%s room=%d reach=%d,%d..%d,%d "
+					"holder=%d listed=%d pieces=%d tris=%d answer=%s "
+					"band_tris=%d", g_stem, entry.room, (int)reach[0],
+					(int)reach[1], (int)reach[2], (int)reach[3], piece.holder,
+					listed ? 1 : 0, pieces, tris, listed ? "hidden" : "whole",
+					band);
+			}
+		}
 	}
 
 	/* What the glow phase needs again. The solid phase fills these and
@@ -2145,9 +2260,13 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
  * sky. In ANDREA2's courtyard room 134 holds 108 triangles of room 143 and
  * room 203 holds 108 of room 248, all of them claimed, and no view from
  * room 134 draws a band. A room the reach lists with no window has no
- * classic face to ask either, and every piece of its art keeps the smaller
- * box's answer: from inside room 93 that leaves room 101's facade in the
- * doorway toward 101.
+ * classic face to ask either. Its pieces standing in a holder that is on the
+ * list come through that holder's walls when they are drawn whole - a brick
+ * hull in the sky above a piazza, a marble ceiling in a metal hub, window
+ * frames in a brick loft, a tile floor in a doorway - so they are not drawn.
+ * When the holder is not on the list they keep the smaller box's answer,
+ * like the rest of the room's art, so that no hole opens where the holder
+ * is not drawn.
  *
  * ANDREA1 comes to 16,718 intruding triangles in 89 groups, 15,993 of them
  * claimed by 558 classic faces and 725 by none; 11,020 more that no face
@@ -2451,6 +2570,17 @@ static void ReportRoomIntrusions()
 
 	std::vector<int> seen(g_pair_faces.size(), 0);
 
+	/* The art no face claims in the holder's wall ring, per entry, kept for
+	 * the reachart line; the list itself goes at the end of this function. */
+	g_pair_band.assign(g_intrusions.size(), 0);
+	g_band_unclaimed = 0;
+
+	for (size_t i = 0; i < g_intrusions.size(); i++)
+	{
+		g_pair_band[i] = HDRenderIntrusionBand((int)i);
+		g_band_unclaimed += g_pair_band[i];
+	}
+
 	for (size_t i = 0; i < g_intrusions.size(); i++)
 	{
 		const int hits = HDRenderIntrusionHits((int)i);
@@ -2503,10 +2633,15 @@ static void ReportRoomIntrusions()
 
 	/* `holder=inside` names the box (TR5's own inside of the holder) and
 	 * `cull=opaque` the back-face rule (RangeCulls in hd_render.cpp), so a
-	 * log says which rule drew the picture it goes with. */
+	 * log says which rule drew the picture it goes with. `band_unclaimed`
+	 * at the end is the art that stands inside another room, is claimed by
+	 * no face and lies outside the box one sector smaller: the build hands
+	 * it to the open half, and it is drawn over the whole screen on every
+	 * frame, never asked. TrgProbe -roomspace prints the same number. */
 	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups "
-		"holder=inside cull=opaque faces=%d bound=%d unbound=%d",
-		g_stem, pairs, tris, groups, faces, bound, unbound);
+		"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
+		"band_unclaimed=%d",
+		g_stem, pairs, tris, groups, faces, bound, unbound, g_band_unclaimed);
 
 	// The lists were only borrowed for the length of the build.
 	HDRenderSetIntrusions(0, 0);
@@ -3937,6 +4072,20 @@ void HDFrameReset()
 	HDObjectFrameReset();
 }
 
+void HDFrameNoteReach(int roomIndex, const short* box)
+{
+	if (roomIndex < 0 || roomIndex >= HD_MAX_ROOMS || !box)
+		return;
+
+	for (int k = 0; k < 4; k++)
+		g_room_reach[roomIndex][k] = box[k];
+}
+
+void HDFrameNoteDump()
+{
+	g_reachart_due = true;
+}
+
 /* The projection of this frame, taken the moment the first HD thing turns up -
  * a room out of InsertRoom or an item out of DrawAnimatingItem, whichever the
  * engine reaches first, and never twice. It is taken while the world is
@@ -4288,6 +4437,10 @@ void HDFrameDraw()
 	g_clip_pairs = 0;
 	g_clip_pairs_whole = 0;
 	g_clip_pairs_scissored = 0;
+	g_clip_reach_rooms = 0;
+	g_clip_reach_pieces = 0;
+	g_clip_reach_whole = 0;
+	g_clip_reach_hidden = 0;
 	g_clip_items_spared = 0;	// counted by HDFrameScissorForRoom
 
 	for (int i = 0; i < g_frame_count; i++)
@@ -4309,7 +4462,8 @@ void HDFrameDraw()
 
 		/* Every collected room is drawn: no room's ordinary art is windowed,
 		 * so nothing may be skipped here. An empty window silences only the
-		 * intruding pieces that stand in the smaller box, inside
+		 * intruding pieces DecidePairs did not answer whole - those in the
+		 * smaller box and those whose holder is on the list - inside
 		 * DrawRoomWindowed. */
 		(void)empty;
 
@@ -4503,17 +4657,20 @@ void HDFrameDrawGlow()
 					: "NO SCISSOR TEST ON THIS DEVICE - rooms draw whole",
 				(int)phd_winwidth, (int)phd_winheight);
 
-			/* An empty window leaves out only the pieces in the box one sector
-			 * smaller (DecidePairs); the line says so at its end. */
+			/* An empty window leaves out the pieces in the box one sector
+			 * smaller and the pieces whose holder is on the list
+			 * (DecidePairs); the line says so at its end. */
 			for (int i = 0; i < g_frame_count; i++)
-				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s%s",
+				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s%s%s",
 					g_frame[i].room, g_frame[i].group,
 					g_frame[i].x0, g_frame[i].y0, g_frame[i].x1, g_frame[i].y1,
 					!g_frame[i].windowed ? "(no window - no art inside another room)"
 						: ClipEmpty(g_frame[i]) ? "EMPTY - the intruding art is not drawn"
 						: g_frame[i].full ? "(the whole screen)" : "",
 					g_frame[i].windowed && ClipEmpty(g_frame[i])
-						? " where it stands in the box one sector smaller" : "");
+						? " where it stands in the box one sector smaller" : "",
+					g_frame[i].windowed && ClipEmpty(g_frame[i])
+						? " or its holder is on the list" : "");
 		}
 
 		if (!g_clip_line_ever || (unsigned short)(now - g_clip_line_at) >= 30)
@@ -4556,16 +4713,33 @@ void HDFrameDrawGlow()
 			else
 				std::sprintf(viewsObj, "%ld..%ld SPLIT", ob_lo, ob_hi);
 
-			/* `pairs` `whole` `scissored` at the end are the pieces of
-			 * intruding art DecidePairs asked about, and its two answers -
-			 * the second `scissored` counts pieces, the first rooms. */
+			/* `pairs` `whole` `scissored` are the pieces of intruding art
+			 * DecidePairs asked about, and its two answers - the second
+			 * `scissored` counts pieces, the first rooms. The `reach_` fields
+			 * at the end are the rooms with an empty window, which are not
+			 * asked: `reach_rooms` the ones with intruding pieces,
+			 * `reach_pieces` those pieces, `reach_whole` the ones drawn whole
+			 * (outside the box one sector smaller, holder not on the list),
+			 * `reach_hidden` the ones outside that box left out because
+			 * their holder is on the list. The reachart lines below name
+			 * them per room and holder. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
-				"pairs=%d whole=%d scissored=%d",
+				"pairs=%d whole=%d scissored=%d reach_rooms=%d "
+				"reach_pieces=%d reach_whole=%d reach_hidden=%d",
 				g_frame_count, g_clip_open, g_clip_full, g_clip_scissored,
 				g_clip_empty, g_clip_windowed_tris, g_clip_items_spared,
 				views, viewsObj, g_clip_pairs, g_clip_pairs_whole,
-				g_clip_pairs_scissored);
+				g_clip_pairs_scissored, g_clip_reach_rooms,
+				g_clip_reach_pieces, g_clip_reach_whole, g_clip_reach_hidden);
+			LogReachArt();
+			g_reachart_due = false;
+		}
+		else if (g_reachart_due)
+		{
+			// The frame a window event's ROOMLIST dump was written on.
+			LogReachArt();
+			g_reachart_due = false;
 		}
 	}
 

@@ -35,6 +35,8 @@
 
 WINAPP App;
 long resChangeCounter;
+// ROOMLIST's window events (game\draw.cpp), set below with -log only.
+extern volatile long RoomListWindowEvents;
 
 static COMMANDLINES commandlines[] =
 {
@@ -664,6 +666,10 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			case WA_INACTIVE:
 				Log("WM_INACTIVE");
 
+				// ROOMLIST writes the whole room list on the next frame.
+				if (gLogEnabled)
+					InterlockedOr(&RoomListWindowEvents, 1);
+
 				if (App.SetupComplete)
 				{
 					// Bounded wait: the game thread can occasionally stall for
@@ -723,6 +729,10 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			case WA_ACTIVE:
 			case WA_CLICKACTIVE:
 				Log("WM_ACTIVE");
+
+				// ROOMLIST writes the whole room list on the next frame.
+				if (gLogEnabled)
+					InterlockedOr(&RoomListWindowEvents, 2);
 
 				if (App.SetupComplete)
 				{

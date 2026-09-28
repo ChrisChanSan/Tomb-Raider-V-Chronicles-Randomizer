@@ -210,6 +210,18 @@ void HDFlipRoom(int roomIndex, int otherIndex);
 
 void HDFrameReset();
 
+/* Two hand-overs for the reachart log line, both called from the room walk's
+ * log note (game\draw.cpp, NoteRoomWalk) and so only with -log. They store
+ * and draw nothing.
+ *
+ * HDFrameNoteReach keeps the rectangle the reach carried a listed room in on
+ * - `box` is left, top, right, bottom, as ROOMLIST prints reach= - because
+ * HDFrameRoom is handed the classic window alone. HDFrameNoteDump says that
+ * a ROOMLIST whole-list dump was written for a window event, so that this
+ * frame writes the reachart lines outside the clip line's throttle. */
+void HDFrameNoteReach(int roomIndex, const short* box);
+void HDFrameNoteDump();
+
 /* Puts one room on this frame's list, with the window it may be seen in.
  *
  * `left/top/right/bottom` are the engine's own `ROOM_INFO::left/top/right/

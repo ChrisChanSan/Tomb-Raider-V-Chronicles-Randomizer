@@ -1670,6 +1670,11 @@ namespace
 	 * of the same build - see HDRenderCullOpaque. */
 	int g_cull_opaque = 1;
 	std::vector<int> g_intrusion_hits;
+	/* Per entry of the intrusion list, the triangles it holds that no face
+	 * claims and that stand outside the box one sector smaller - the ones
+	 * the index fill hands to the open half, never asked per frame. Counted
+	 * on the same terms as g_intrusion_hits, for the level's log line. */
+	std::vector<int> g_intrusion_band;
 
 	/* The openings the randomizer cut, and how many triangles
 	 * each of those boxes took away. Borrowed and counted on exactly the same
@@ -2790,12 +2795,19 @@ void HDRenderSetIntrusions(const HDIntrusion* list, int count)
 	g_intrusions = count > 0 ? list : 0;
 	g_intrusion_count = list ? count : 0;
 	g_intrusion_hits.assign((size_t)(g_intrusion_count > 0 ? g_intrusion_count : 0), 0);
+	g_intrusion_band.assign(g_intrusion_hits.size(), 0);
 }
 
 int HDRenderIntrusionHits(int at)
 {
 	return at >= 0 && at < (int)g_intrusion_hits.size()
 		? g_intrusion_hits[(size_t)at] : 0;
+}
+
+int HDRenderIntrusionBand(int at)
+{
+	return at >= 0 && at < (int)g_intrusion_band.size()
+		? g_intrusion_band[(size_t)at] : 0;
 }
 
 void HDRenderSetPairFaces(const HDPairFace* faces, int count)
@@ -4048,7 +4060,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						 * sector smaller than the inside, in x and z. That
 						 * smaller box is the answer for the triangles no face
 						 * claims below, and for every triangle of a room the
-						 * walk gives an empty window (DecidePairs). */
+						 * walk gives an empty window whose holder is not on
+						 * the frame's list (DecidePairs). */
 						inner = centre[0] >= box.mins[0] + 1024.0f &&
 							centre[0] <= box.maxs[0] - 1024.0f &&
 							centre[2] >= box.mins[2] + 1024.0f &&
@@ -4085,7 +4098,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						 * balustrade - is cut at the window's rim on views
 						 * that draw it whole with the smaller box. */
 						if (face_at < 0 && !inner)
+						{
+							if ((size_t)pair_at < g_intrusion_band.size())
+								g_intrusion_band[(size_t)pair_at]++;
+
 							pair_at = -1;
+						}
 					}
 
 					if (pair_at >= 0)

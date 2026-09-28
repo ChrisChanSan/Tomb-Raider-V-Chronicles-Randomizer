@@ -6950,9 +6950,139 @@ ideal when the ceiling meets the floor height or a height is `NO_HEIGHT`
 (`game/camera.cpp:2837`-`2843`), and a fixed camera or the first person head eye is never
 room-tested; an outdoor stretch of that kind alternates sky and black at the tick rate,
 and `CAMLOG`'s `nosky=` count shows it. The see-through and wall-fill frames of the near
-plane are a separate matter.
+plane are a separate matter. The margin that `CAMLOG`'s counts asked for is the entry
+*The Modern eye clear of a wall*.
 
 **Commits.** `d79350d`, `4f2fde6`
+
+### The Modern eye clear of a wall
+2026-09-28
+
+**What.** In the Modern scheme the orbit's tick eye is moved square off every closed axis
+face of its sector that stands nearer than the reach of the near plane's visible
+rectangle, to exactly that reach, at the end of `MoveCamera`: after its own `mgLOS`
+pull-in and `CameraSnaps`, before its floor and ceiling clamp. The reach comes from the
+projection the frame uses, 33 units at 16:9 and 39 at 21:9. Only x, z and the eye's room
+change, each axis by at most the reach. `-log`'s `CAMLOG tick` line ends in `clear=`: the
+units moved, 0 when there was nothing to do or the pass ran no Modern orbit, -1 when the
+moved point opened in no room and the eye stayed. The rule belongs to the logic camera, so
+`fps_mode` 0, 1 and 2 change alike.
+
+**Why.** The near plane stands 20 units in front of the eye
+(`InitWindow(0, 0, w, h, 20, 20480, 80, ...)`, `specific/gamemain.cpp:260`; `phd_znear`
+holds it shifted up by `W2V_SHIFT`, `specific/3dmath.cpp:796`, and the HD renderer clips
+at the same `f_mznear`, `specific/hd/hd_level.cpp:638` and `:1248`). `AlterFOV` sets the
+focal length `phd_persp = (winh * 320 / 240 / 2) * cos(fov / 2) / sin(fov / 2)`
+(`specific/3dmath.cpp:139`-`140`, `GAME_FOV` 80 degrees, `global/types.h:55`), and a
+view-space point is on screen while `|x| <= z * (W / 2) / persp` and
+`|y| <= z * (H / 2) / persp`. The corners of the rectangle the screen shows at z = 20
+therefore lie `R = sqrt(20^2 + (20 * (W / 2) / persp)^2 + (20 * (H / 2) / persp)^2)` from
+the eye: at 1920x1080 persp is 858 and R 32.5, at 2560x1080 R is 38.1, at 2560x1440 persp
+is 1144 and R 32.5 again. A closed face nearer than R can cross that rectangle at some
+view angle, and whatever lies behind it shows at the screen's edge; a face at R or more
+never can. Nothing kept the eye that far off. When no eighth of the ray clears the four
+probes of `ModernCameraRayBounds` at 384 units - her back to a wall - the `mgLOS` point
+stands (`game/camera.cpp:2125`-`2136`), and `mgLOS` (`:1801`) steps one sample back from
+the first one in a wall, so that point lies anywhere in the last eighth before the face,
+down to 0 units from it. `MoveCamera` smooths the eye towards it by 1/speed a tick
+(`:2858`), runs `mgLOS` again only for an eye outside its floor or ceiling (`:2892`) and
+asks no wall. The gate, counted before the engine was touched over the `CAMLOG tick` lines
+of two `-log` runs at 2560x1440 (37196 ticks, 30156 and 7040, every one `kind=open`): 2584
+ticks stood nearer than 33 units to a closed face and 2812 nearer than 39, 203 of them at
+0 or 1 unit; the first run alone had 2321 under 28 units and 202 at 0 or 1. Per level,
+under 33 and under 39: ANDREA2 998 and 1060 of 3808 ticks (26.2 %), ANDREA1 1312 and 1416
+of 17304 (7.6 %), RICH1 69 and 75 of 789 (8.7 %), RICH2 185 and 230 of 7247 (2.6 %), JOBY2
+16 and 23 of 3405, ANDY2 2 and 3 of 1796, ANDY3 0 and 3 of 1645, RICH3 1 and 1, ANDY1 1
+and 1, JOBY4 and JOBY5 none. The rooms with the most: ANDREA2 room 78 (341 ticks), ANDREA1
+rooms 180 (337) and 0 (252), ANDREA2 rooms 81 (136) and 183 (98). Every near-face tick ran
+the Modern ray (`pull=` never -1 among them); of the 2584 under 33, 2394 had `pull=0`, the
+fallback, and 22, 31, 40, 28, 23, 10, 10 and 26 had `pull=` 1 to 8. The push the rule
+makes, R - face, at R = 33: 1 to 4 units on 170 ticks, 5 to 8 on 159, 9 to 12 on 225, 13
+to 16 on 246, 17 to 20 on 386, 21 to 24 on 477, 25 to 28 on 472, 29 to 32 on 315 and 33 on
+134; at R = 39 the same ticks and 228 more, and the ticks at face 0 move the full 39.
+
+**How.** `ModernCameraNearRadius` (`game/modern_camera.cpp:646`) is the formula in
+doubles, rounded up to a whole unit, 0 without a focal length or a near plane; whole
+numbers would leave a long at a 4K window. `ModernCameraWallClearance` (`:663`, declared
+under the formula and the rule at `game/modern_camera.h:526`-`560`) is pure and takes its
+open test as a callback of the type `ModernCameraDrawnEye` uses (`MODERN_EYE_OPEN`,
+`:508`). It answers 0 at once when no edge of the eye's sector lies within the radius;
+otherwise it asks the eye itself (not open: 0, untouched), then, for each edge within the
+radius, the point one unit past it at the eye's height from the eye's room - the probe
+points of `CameraEyeNear` (`game/camera.cpp:1182`), so `face=` and the rule read the same
+faces - and moves x to `(x & ~1023) + radius` for a closed west face or to
+`(x & ~1023) + 1024 - radius` for a closed east face, z likewise. The moved point is asked
+last: open, it answers the units moved, `|dx| + |dz|`, with the room it resolved to;
+closed, it answers -1 and nothing moves. A radius outside 1 to 512 answers 0, since two
+faces of one axis within it would need a sector narrower than 1024. The design asked all
+four probes on every tick; the code asks only the edges within the radius, so nearly every
+tick asks nothing. `ModernCameraClearWall` (`game/camera.cpp:2778`) hands it `camera.pos`
+with its room, the radius from `phd_znear >> W2V_SHIFT`, `phd_winwidth / 2`,
+`phd_winheight / 2` and `phd_persp`, and `ModernCameraWallOpen` (`:2750`), which is
+`CameraEyeTest` (`:1097`), and writes x, z and the room back when the eye moved.
+`MoveCamera` (`:2800`) reads the flag `modern_cam_clear_wall` (`:280`), which
+`ChaseCamera` and `CombatCamera` set to their `modern_orbit` just before they call it
+(`:2536`, `:2740`), and clears it at once, so `FixedCamera`, its one other caller, never
+runs the rule. It calls the rule after the `CameraSnaps` block (`:2927`), before the floor
+and ceiling clamp (`:2930`-`2950`, the same three cases and the same 255 as
+`ModernCameraEyeY`), `CheckForRichesIllegalDiagonalWalls` in RICH1 and RICH2 and the final
+`GetFloor` into `camera.pos.room_number` (`:2955`), so all of them apply to the pushed
+point. The open test runs `GetFloor`, `GetHeight` and `GetCeiling`; `GetHeight` writes
+`tiltxoff`, `tiltyoff`, `OnObject`, `height_type` and `trigger_index` and runs floor
+callbacks. The rule runs inside `MoveCamera`, in the tick, where the camera already calls
+`GetHeight` freely (`mgLOS`, `CameraCollisionBounds`, the clamp that follows), so nothing
+needs saving there; `CameraEyeTest` puts the five back all the same, which is harmless.
+The pure function calls nothing of the engine. The seam: `cam_tick.clear` (`:273`),
+written only behind `-log`, cleared with the rest of `cam_tick` at the top of every pass
+(`:1337`) and printed last on the tick line (`:1312`).
+
+**Checked.** The gate above, by a script over the two log copies (kept outside the
+repository). ModernTest's `camera_wall_clear`
+(`Preparation/Tools/Diagnose/ModernTest.cpp`), 25 checks on the niche map: AlterFOV's
+focal length, built from the sine table as `phd_sin` reads it, is 858 at 1080 lines and
+1144 at 1440; the radius is 33 for near plane 20, half extents 960 and 540 and focal
+length 858, 39 for 1280, 540 and 858, 33 at 2560x1440, and 0 without a focal length or a
+near plane. Fifteen eyes 0, 1 and R - 1 units from the pillar's four faces and from two
+faces of the outer wall land exactly R off the face, on that axis alone, the answer is R
+minus the distance, the room is the moved point's, and one face costs at most three tests.
+An eye R or R + 1 units off stays and answers 0; a concave corner moves both axes to R; an
+open neighbour is no face; an eye with no edge within R asks nothing; an eye in the pillar
+stays after one test; a refused moved point answers -1 without a move; a radius of 0 or
+513 moves nothing. A sweep of the 685035 open points of a 7-unit grid, at 33 and at 39
+(46052 pushes in all), leaves no closed face nearer than the radius, moves no axis further
+than it and moves no eye that had nothing within it. ModernTest 14017 checks, 0 failed
+(13992 before and 25 new); MenuTest 42364, InterpTest 683, LipsTest 270 with the `.OBJ`
+folder and 243 without, 0 failed, as before. The engine builds with `be.bat`. Not
+measured: the game.
+
+**Unchanged.** The classic scheme: the flag is `modern_orbit`, 0 there, and
+`CameraCollisionBounds(&ideal, 384, 1)` still resolves its eye (`game/camera.cpp:2523`,
+`:2729`). `mgLOS`, `CameraCollisionBounds`, `ModernCameraRayBounds` and the orbit are not
+edited; the first person, binocular and fixed cameras, the look camera and the flybys
+never set the flag. Nothing under `specific/hd` and nothing in `game/interpolate.cpp`
+changed. Savegames: `camera.pos` is not saved (`game/savegame.cpp` writes and reads only
+`camera.fixed[i].flags` of the camera, `:292`-`293`, `:749`-`750`). Every log line already
+there prints as before; `CAMLOG tick` gained one field at its end. In the Modern scheme
+`fps_mode` 0, 1 and 2 are not byte identical to before: the rule moves the tick eye, and
+the interpolator blends the moved eyes as it blends any others.
+
+**Decisions.** The radius is computed from the projection the frame uses (`phd_znear`,
+`phd_winwidth`, `phd_winheight`, `phd_persp`), never a constant, so it follows the
+window's aspect and the field of view. The rule runs for the Modern orbit only; the
+classic scheme stays as it is. The push is square to the face and at most the radius,
+never along the ray - a wall along the ray would let the eye slide far - and never round
+her beyond that. Convex corners are left out: one stood nearer than 33 units on 6 of the
+37196 ticks, 3 of them in the first run's 30156. The floor and the ceiling need nothing:
+the clamp that follows keeps 255 from both.
+
+**Left.** Convex corners (above). The frame of an earlier recording in which a room
+dropped out of the picture is another mechanism, a matter of the portal walk rather than
+of the near plane. The first person and binocular cameras, the classic scheme and the
+interpolator are outside this rule. The faces are asked at the eye's height before the
+floor and ceiling clamp; an eye that the clamp then raises or lowers is not asked again.
+The rule has not been seen in the game.
+
+**Commits.** `a69397a`, `ed3a2de`, `1aaf5f5`
 
 ### Particles on the same time axis
 2026-09-07
@@ -9826,6 +9956,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
+| #177 | The drawn eye at a corner; The Modern eye clear of a wall |
 | #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off; The reach-only answer goes back to the smaller box |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |

@@ -107,9 +107,15 @@ void HDObjectEnd();
  * reflected ones, and the models are drawn double sided (HD_MODEL_CULL_NONE)
  * so the reversed winding cannot drop a face. What the seam does with it is
  * leave the reflection out of the two light checks, which compare the item's
- * lights against the classic ones through the real camera, and count it for
- * the mirror's log line. */
-void HDObjectReflection(bool on);
+ * lights against the classic ones through the real camera, count it for the
+ * mirror's log line, and stamp every item and every piece of Lara recorded
+ * while it is on with `planes`: three clip planes of four floats in view
+ * space (game\mirror_math.h, MirrorClipPlanes), which HDObjectFrameDraw hands
+ * to HDModelClip so that the reflection ends where the copy behind the glass
+ * ends. Null with false; everything recorded while it is off - the world, the
+ * inventory ring, the pickup display - is stamped with planes that keep every
+ * pixel. */
+void HDObjectReflection(bool on, const float* planes);
 // How many HD items were recorded as a reflection since the last call - read
 // and cleared by the mirror's log line.
 int HDObjectReflectedTake();

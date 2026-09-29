@@ -220,6 +220,9 @@ float4 gNeckCut : register(c162);
  * constants, pixel side
  *
  * c4          gPass               per pass  (the same one)
+ * c5 - c7     gClip[3]            per object (a mirror's three clip planes;
+ *                                 this shader's alone, the room shader
+ *                                 has no such register)
  * c16         gFog                per frame
  * c17         gCounts             per object
  * c20 - c35   gLights[16]         per object (8 lights, two registers each)
@@ -231,6 +234,14 @@ float4 gNeckCut : register(c162);
  * while a skinned vertex lands in VIEW space, so gLights arrives in view
  * space here. hd_model.cpp says so where it writes them.
  */
+
+/* A mirror's three clip planes in VIEW space, (n.x, n.y, n.z, d) each: a pixel
+ * is kept where dot(n, viewPos) + d >= 0 for all three - the copy's side of
+ * the glass and its two ends along it (game\mirror_math.h, MirrorClipPlanes).
+ * (0, 0, 0, 1) three times, which keeps every pixel, for everything that is
+ * not a reflection; hd_model.cpp writes it at every bracket's start
+ * (HDModelFrameBegin) and per object when it changes (HDModelClip). */
+float4 gClip[3] : register(c5);
 
 /* x = tomb5.distance_fog * 1024, y = 255 / that. */
 float4 gFog : register(c16);
@@ -596,6 +607,15 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * holsters, the weapon on her back and the neck cap itself are their own
 	 * models and get 0. */
 	clip(lerp(1.0f, input.cut, gPass.z));
+
+	/* A mirror's reflection ends where the copy behind the glass ends: a body
+	 * whose origin stands inside the copy reaches past its ends into the real
+	 * room beside it, and through the glass into the room in front. viewPos
+	 * is the skinned point in view space, the space the planes are given in. */
+	float4 clipPos = float4(input.viewPos, 1.0f);
+
+	clip(min(min(dot(clipPos, gClip[0]), dot(clipPos, gClip[1])),
+		dot(clipPos, gClip[2])));
 
 	/* The light arrives in the classic path's 0..255 space already - unlike a
 	 * room vertex, whose baked pair is 0..1 and gets multiplied by 127.5 in

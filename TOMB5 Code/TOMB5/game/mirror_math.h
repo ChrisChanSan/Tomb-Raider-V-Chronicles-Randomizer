@@ -12,6 +12,8 @@
  */
 #pragma once
 
+#include <math.h>
+
 /* The arithmetic of a mirror's reflection, and nothing else.
  *
  * This header includes no engine header on purpose:
@@ -124,4 +126,124 @@ inline bool MirrorLandsInCopy(const long* p, int axis, long plane, int side,
 	}
 
 	return true;
+}
+
+/* The three planes that keep a reflected body inside the copy behind the
+ * glass, in the view space the reflected draw lands in: `view` is the
+ * reflected float view matrix (aW2VMx after MirrorView), `out` three planes of
+ * four floats, n.x n.y n.z d, and a view-space point v is kept where
+ * dot(n, v) + d >= 0. MirrorLandsInCopy bounds an origin; these bound every
+ * point of the body drawn about it.
+ *
+ * On the image p* of a drawn point the three are side (p*[axis] - plane) >= 0,
+ * the copy's side of the glass, and mins[k] <= p*[k] <= maxs[k] for k the
+ * other horizontal axis, the copy's two ends along the glass. The box's floor
+ * and ceiling are not planes: the copy's own art stands there. An image test
+ * n* . p* + d* >= 0 with p* = S p + 2 plane e_axis is (S n*) . p + d* +
+ * 2 plane n*[axis] >= 0 on the drawn point p, and with v = R (p - c) - R the
+ * matrix's rotation, c its camera - the plane is n = R (S n*) and
+ * d = d* + 2 plane n*[axis] + (S n*) . c. A poison shake scales the matrix
+ * stack's base and not aW2VMx, so under it the planes stand off the body by
+ * the shake's few per cent. */
+inline void MirrorClipPlanes(const float* view, int axis, long plane, int side,
+	const long* mins, const long* maxs, float* out)
+{
+	const int k = 2 - axis;
+	double image[3][4] = { { 0.0 } };
+
+	image[0][axis] = side;
+	image[0][3] = -(double)side * plane;
+	image[1][k] = 1.0;
+	image[1][3] = -(double)mins[k];
+	image[2][k] = -1.0;
+	image[2][3] = (double)maxs[k];
+
+	for (int i = 0; i < 3; i++)
+	{
+		double n[3] = { image[i][0], image[i][1], image[i][2] };
+		double d = image[i][3] + 2.0 * plane * n[axis];
+
+		n[axis] = -n[axis];
+
+		for (int r = 0; r < 3; r++)
+			out[4 * i + r] = (float)(view[4 * r] * n[0] + view[4 * r + 1] * n[1] +
+				view[4 * r + 2] * n[2]);
+
+		out[4 * i + 3] = (float)(d + n[0] * view[3] + n[1] * view[7] + n[2] * view[11]);
+	}
+}
+
+/* The planes that keep every point: (0, 0, 0, 1) three times. */
+inline void MirrorClipOff(float* out)
+{
+	for (int i = 0; i < 12; i++)
+		out[i] = (i & 3) == 3 ? 1.0f : 0.0f;
+}
+
+/* The copy's rectangle on the screen: the eight corners of its box through
+ * the REAL float view matrix `view`, projected the way the classic path
+ * projects a view-space point (specific\polyinsert.cpp, specific\output.cpp):
+ * x = centerx + persp vx / vz, y = centery + persp vy / vz, y downwards. The
+ * bounding rectangle of the eight is intersected with `window` (l, t, r, b)
+ * and written to `out` in the engine's convention of an inclusive left and
+ * top and an exclusive right and bottom, which PrintObjects' whole screen
+ * (phd_right = phd_winxmax + 1) and f_right share. A corner nearer than
+ * `znear` projects nowhere, and the answer is then `window` itself. A
+ * rectangle, so a bound only: exact where the copy's edge stands upright on
+ * the screen, wider elsewhere. */
+inline void MirrorBoxWindow(const float* view, const long* mins, const long* maxs,
+	float persp, float centerx, float centery, long znear, const long* window, long* out)
+{
+	double l = 1e9, t = 1e9, r = -1e9, b = -1e9;
+
+	for (int i = 0; i < 8; i++)
+	{
+		const double p[3] =
+		{
+			(double)(i & 1 ? maxs[0] : mins[0]) - view[3],
+			(double)(i & 2 ? maxs[1] : mins[1]) - view[7],
+			(double)(i & 4 ? maxs[2] : mins[2]) - view[11]
+		};
+		double v[3];
+
+		for (int j = 0; j < 3; j++)
+			v[j] = view[4 * j] * p[0] + view[4 * j + 1] * p[1] + view[4 * j + 2] * p[2];
+
+		if (v[2] < (double)znear)
+		{
+			for (int j = 0; j < 4; j++)
+				out[j] = window[j];
+
+			return;
+		}
+
+		const double x = centerx + persp * v[0] / v[2];
+		const double y = centery + persp * v[1] / v[2];
+
+		l = x < l ? x : l;
+		r = x > r ? x : r;
+		t = y < t ? y : t;
+		b = y > b ? y : b;
+	}
+
+	// Clamped before the cast: a corner just past znear projects far off.
+	l = l < -1e6 ? -1e6 : l;
+	t = t < -1e6 ? -1e6 : t;
+	r = r > 1e6 ? 1e6 : r;
+	b = b > 1e6 ? 1e6 : b;
+
+	const long bl = (long)floor(l), bt = (long)floor(t);
+	const long br = (long)ceil(r), bb = (long)ceil(b);
+
+	out[0] = bl > window[0] ? bl : window[0];
+	out[1] = bt > window[1] ? bt : window[1];
+	out[2] = br < window[2] ? br : window[2];
+	out[3] = bb < window[3] ? bb : window[3];
+
+	// No overlap is an empty rectangle, not an inverted one.
+	if (out[2] < out[0])
+		out[2] = out[0];
+
+	if (out[3] < out[1])
+		out[3] = out[1];
 }

@@ -152,8 +152,23 @@ void Draw_Mirror_Lara()
  * The classic path culls by the winding on the screen, which the reflection
  * turns round, so SetCullCW for the call as Draw_Mirror_Lara does; the HD
  * models are drawn double sided and need nothing, and HDObjectReflection
- * tells the seam the items are a reflection. */
-static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
+ * tells the seam the items are a reflection.
+ *
+ * What a reflection may put on the screen is the copy behind the glass and
+ * nothing past it. MirrorLandsInCopy decides by an origin, and a body about
+ * an origin a few units inside the copy's end reaches past that end into the
+ * real room beside it (RICH2: Lara 20 units inside glass 135's copy reaches
+ * about 130 units past its end at z 74764, into corridor room 56's open
+ * floor), and a body close to the glass reaches through the plane into the
+ * room in front. So an HD draw is clipped per pixel against three planes
+ * (MirrorClipPlanes, handed to the seam with HDObjectReflection), and a
+ * classic draw is cut by the classic clipper to the copy's rectangle on the
+ * screen (MirrorBoxWindow): f_left .. f_bottom, which every phd_PutPolygons
+ * variant copies into clip_left .. clip_bottom and XYUVGClipper cuts to
+ * (specific\clipping.cpp), and the mirror room's portal window narrowed to
+ * it, which calc_animating_item_clip_window hands the doors and the
+ * ANIMATING slots. `win` receives the rectangle. */
+static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn, long* win)
 {
 	const int a = m.axis;
 	long frontMin[3], frontMax[3];
@@ -181,6 +196,41 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
 
 	const long left = phd_left, right = phd_right, top = phd_top, bottom = phd_bottom;
 	const long room_now = CurrentRoom;
+	const float fLeft = f_left, fTop = f_top, fRight = f_right, fBottom = f_bottom;
+	ROOM_INFO* mr = &room[m.room];
+	const short roomWin[4] = { mr->left, mr->top, mr->right, mr->bottom };
+
+	/* The copy's rectangle, through the real view and inside the mirror
+	 * room's portal window. A room the walk left without a window - an
+	 * empty one, left at or past right - bounds nothing, and the whole
+	 * screen stands in for it. */
+	long portal[4] = { mr->left, mr->top, mr->right, mr->bottom };
+
+	if (portal[0] >= portal[2] || portal[1] >= portal[3])
+	{
+		portal[0] = 0;
+		portal[1] = 0;
+		portal[2] = phd_winxmax + 1;
+		portal[3] = phd_winymax + 1;
+	}
+
+	MirrorBoxWindow(aW2VMx, m.mins, m.maxs, f_mpersp, f_centerx, f_centery,
+		(long)f_mznear, portal, win);
+
+	f_left = (float)win[0];
+	f_top = (float)win[1];
+	f_right = (float)win[2];
+	f_bottom = (float)win[3];
+	phd_left = win[0];
+	phd_top = win[1];
+	phd_right = win[2];
+	phd_bottom = win[3];
+
+	// The portal window narrowed to the rectangle, for the doors' window.
+	mr->left = (short)(mr->left > win[0] ? mr->left : win[0]);
+	mr->top = (short)(mr->top > win[1] ? mr->top : win[1]);
+	mr->right = (short)(mr->right < win[2] ? mr->right : win[2]);
+	mr->bottom = (short)(mr->bottom < win[3] ? mr->bottom : win[3]);
 
 	phd_PushMatrix();
 	MirrorView(w2v_matrix, a, m.plane, true);
@@ -189,7 +239,12 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
 	MirrorView(aFMatrixStack, a, 0.0f, false);
 	MirrorView(phd_mxptr, a, 0L, false);
 	MirrorView(aMXPtr, a, 0.0f, false);
-	HDObjectReflection(true);
+
+	// The three planes, in the reflected view every reflected node lands in.
+	float planes[12];
+
+	MirrorClipPlanes(aW2VMx, a, m.plane, m.side, m.mins, m.maxs, planes);
+	HDObjectReflection(true, planes);
 	SetCullCW();
 
 	/* Lara: the view set the frame worked out for her, moved into the
@@ -274,7 +329,7 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
 	}
 
 	SetCullCCW();
-	HDObjectReflection(false);
+	HDObjectReflection(false, 0);
 	phd_PopMatrix();
 	memcpy(w2v_matrix, w2v, sizeof(w2v));
 	memcpy(aW2VMx, aw2v, sizeof(aw2v));
@@ -284,6 +339,14 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
 	phd_right = right;
 	phd_top = top;
 	phd_bottom = bottom;
+	f_left = fLeft;
+	f_top = fTop;
+	f_right = fRight;
+	f_bottom = fBottom;
+	mr->left = roomWin[0];
+	mr->top = roomWin[1];
+	mr->right = roomWin[2];
+	mr->bottom = roomWin[3];
 	CurrentRoom = room_now;
 	return drawn;
 }
@@ -305,16 +368,18 @@ void Draw_Mirror_Items()
 			continue;
 
 		bool lara_drawn = false;
+		long win[4];
 
 		HDObjectReflectedTake();
 
-		const int drawn = DrawOneMirror(m, &lara_drawn);
+		const int drawn = DrawOneMirror(m, &lara_drawn, win);
 		const int hd = HDObjectReflectedTake();
 
 		/* The mirror's log line, once a second while a mirror draws
 		 * anything: how many items it reflected (hd of them through the HD
-		 * models, the rest classic), the plane and its room, and whether Lara
-		 * was in it. */
+		 * models, the rest classic), the plane and its room, whether Lara
+		 * was in it, and the copy's rectangle on the screen the classic draws
+		 * were cut to (left, top, right, bottom; right and bottom exclusive). */
 		static unsigned short last = 0;
 		static bool said = false;
 
@@ -323,9 +388,10 @@ void Draw_Mirror_Items()
 		{
 			said = true;
 			last = GlobalCounter;
-			Log("HDLOG mirror items=%d plane=%ld room=%d axis=%c lara=%d hd=%d",
+			Log("HDLOG mirror items=%d plane=%ld room=%d axis=%c lara=%d hd=%d "
+				"win=%ld,%ld,%ld,%ld",
 				drawn, m.plane, m.room, m.axis == 0 ? 'x' : 'z',
-				lara_drawn ? 1 : 0, hd);
+				lara_drawn ? 1 : 0, hd, win[0], win[1], win[2], win[3]);
 		}
 	}
 }

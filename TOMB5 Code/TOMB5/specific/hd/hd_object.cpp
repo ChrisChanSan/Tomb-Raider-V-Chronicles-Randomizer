@@ -168,6 +168,10 @@ namespace
 		 * see HDObjectLips. -1 and -1 for everything that does not speak. */
 		int lipsTrack;
 		int lipsFrame;
+		/* The mirror's three clip planes in view space, n.xyz and d each,
+		 * for HDModelClip - (0, 0, 0, 1) three times for everything that is
+		 * not a reflection, which keeps every pixel. */
+		float clip[12];
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -189,10 +193,20 @@ namespace
 	int g_open_lips_track = -1;
 	int g_open_lips_frame = -1;
 	/* The items being walked are a mirror's reflection (HDObjectReflection),
-	 * and how many of them were recorded since the mirror's log line last
-	 * asked. */
+	 * how many of them were recorded since the mirror's log line last asked,
+	 * and the clip planes the reflection is stamped with. */
 	bool g_reflection = false;
 	int g_reflected = 0;
+	float g_clip[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+
+	/* The entry's clip planes: the mirror's while a reflection is recorded,
+	 * planes that keep every pixel otherwise. */
+	void stamp_clip(float* clip, bool reflected)
+	{
+		static const float kKeepAll[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+
+		memcpy(clip, reflected ? g_clip : kKeepAll, sizeof(kKeepAll));
+	}
 	/* A clip is open somewhere - set by the first face that speaks, and what
 	 * lets HDObjectFrameReset close them all once the cut is over without
 	 * asking the model file every frame. */
@@ -2905,6 +2919,7 @@ void HDObjectEnd()
 	entry.offCentreY = 0.0f;
 	entry.lipsTrack = g_open_lips_track;
 	entry.lipsFrame = g_open_lips_frame;
+	stamp_clip(entry.clip, g_reflection);
 
 	/* And the pickup on the floor takes the mod's own inventory model.
 	 *
@@ -3034,9 +3049,14 @@ void HDObjectEnd()
 	g_count++;
 }
 
-void HDObjectReflection(bool on)
+void HDObjectReflection(bool on, const float* planes)
 {
 	g_reflection = on;
+
+	if (on && planes)
+		memcpy(g_clip, planes, sizeof(g_clip));
+	else
+		stamp_clip(g_clip, false);
 }
 
 int HDObjectReflectedTake()
@@ -3435,6 +3455,8 @@ void HDInvEnd()
 	// projection there - never into these matrices.
 	entry.offCentreX = g_ring_kx;
 	entry.offCentreY = g_ring_ky;
+	// The ring and the display are never a reflection: no pixel is clipped.
+	stamp_clip(entry.clip, false);
 
 	store_matrices(entry);
 
@@ -3597,6 +3619,12 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * normal through those matrices as well; see hd_model.h. */
 		HDModelOffCentre(entry.offCentreX, entry.offCentreY);
 
+		/* A mirror's reflection ends where the copy behind the glass ends:
+		 * its three planes, uploaded only when they change - a mirror's items
+		 * and Lara's pieces follow each other on the list, and everything
+		 * else carries the planes that keep every pixel. */
+		HDModelClip(entry.clip);
+
 		/* drawSlot is the swapped model when the item asked for one and it
 		 * arrived, and the item's own slot otherwise. It is the same
 		 * skeleton, the same node count and the same bind pose, so nothing
@@ -3669,8 +3697,10 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 	// outlive them - the caller closes the bracket next, and the bracket is
 	// what the classic path gets back. Neither must the last item's screen
 	// centre, for the same reason - the glow phase opens a second bracket on
-	// the same list and the classic path shares the register file.
+	// the same list and the classic path shares the register file. Nor the
+	// last item's clip planes.
 	HDModelOffCentre(0.0f, 0.0f);
+	HDModelClip(0);
 	HDRenderScissorOff();
 
 	/* The phases add up. HDModelFrameBegin zeroes the model file's own
@@ -3796,6 +3826,8 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.view = ViewSerial;
 	entry.offCentreX = 0.0f;	// Lara is never on the ring
 	entry.offCentreY = 0.0f;
+	// Her pieces and the braid in a mirror carry the mirror's planes.
+	stamp_clip(entry.clip, g_reflection);
 
 	/* A pushed model that is itself a face speaks the way an actor's face
 	 * does - see HDObjectLips. Where it has no clip for the track it draws

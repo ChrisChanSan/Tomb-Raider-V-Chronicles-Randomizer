@@ -330,6 +330,12 @@ namespace
 	};
 	bool g_off_centre = false;
 
+	/* The clip planes c5 - c7 of the pixel file hold (HDModelClip), so that
+	 * an unchanged value uploads nothing; and the planes that keep every
+	 * pixel. */
+	const float kClipKeepAll[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	float g_clip_now[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+
 	/* --------------------------------------------------------- helpers -- */
 
 	std::string join(const std::string& a, const char* b)
@@ -4090,6 +4096,28 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 	}
 
 	g_off_centre = false;
+
+	/* The clip planes start every bracket as the planes that keep every
+	 * pixel, uploaded here: a register of the pixel file is the device's,
+	 * and the pickup display's bracket draws without calling HDModelClip. */
+	std::memcpy(g_clip_now, kClipKeepAll, sizeof(g_clip_now));
+
+	if (g_device)
+		g_device->SetPixelShaderConstantF(5, g_clip_now, 3);
+}
+
+void HDModelClip(const float* planes)
+{
+	if (!g_in_frame || !g_device)
+		return;
+
+	const float* want = planes ? planes : kClipKeepAll;
+
+	if (!std::memcmp(want, g_clip_now, sizeof(g_clip_now)))
+		return;
+
+	std::memcpy(g_clip_now, want, sizeof(g_clip_now));
+	g_device->SetPixelShaderConstantF(5, g_clip_now, 3);
 }
 
 void HDModelOffCentreMatrix(const D3DMATRIX* base, float kx, float ky,

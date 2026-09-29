@@ -564,6 +564,16 @@ void HDModelOffCentre(float kx, float ky);
 void HDModelOffCentreMatrix(const D3DMATRIX* base, float kx, float ky,
 	D3DMATRIX* out);
 
+/* Three clip planes for the next HDModelDraw, in view space: twelve floats,
+ * n.x n.y n.z d three times, and a pixel is kept where dot(n, viewPos) + d
+ * >= 0 for all three (hd_model.hlsl, gClip in c5 - c7 of the pixel file). A
+ * mirror's reflection is drawn with the planes of the copy behind its glass
+ * (game\mirror_math.h, MirrorClipPlanes); null is (0, 0, 0, 1) three times,
+ * which keeps every pixel. HDModelFrameBegin uploads the null planes, so a
+ * bracket whose draws never call this - the pickup display - keeps every
+ * pixel; the upload happens only when the value changes. */
+void HDModelClip(const float* planes);
+
 // One object. `nodeMatrix` is nodeCount row-major 4x4 matrices, model space
 // to VIEW space - the very matrices the classic path has on its stack when it
 // calls phd_PutPolygons for each mesh. `nodeLight` is nodeCount colour

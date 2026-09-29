@@ -1179,7 +1179,12 @@ void PrintObjects(short room_number)
  * doors and the ANIMATING slots its window. The call comes from DrawRooms
  * before the rooms' objects are printed, while that window is still the one
  * GetRoomBounds gave it this frame - PrintObjects empties it at its end. The
- * view is reflected by the caller. */
+ * view is reflected by the caller, and the caller sets the classic clipper's
+ * rectangle f_left .. f_bottom to the copy's rectangle on the screen: that
+ * rectangle stands in for PrintObjects' whole screen, and it is what
+ * calc_animating_item_clip_window keeps when a door of the room leads to the
+ * camera's room. DrawAnimatingItem puts the whole screen back at its end, so
+ * it is set per item. */
 void PrintObjectReflection(ITEM_INFO* item, short mirror_room)
 {
 	OBJECT_INFO* obj;
@@ -1196,10 +1201,10 @@ void PrintObjectReflection(ITEM_INFO* item, short mirror_room)
 	nPolyType = 2;
 	phd_PushMatrix();
 	phd_TranslateAbs(r->x, r->y, r->z);
-	phd_left = 0;
-	phd_top = 0;
-	phd_right = phd_winxmax + 1;
-	phd_bottom = phd_winymax + 1;
+	phd_left = (long)f_left;
+	phd_top = (long)f_top;
+	phd_right = (long)f_right;
+	phd_bottom = (long)f_bottom;
 	ClipRoomNum = mirror_room;
 
 	if (item->after_death)

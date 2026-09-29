@@ -10246,6 +10246,233 @@ static void mirror_pose()
 		"mirror: room 136's door is drawn in room 135's glass", 0, 1);
 }
 
+// A point through a camera matrix and onto the screen, as the classic path
+// projects it (specific\polyinsert.cpp): x = cx + persp vx / vz, y likewise.
+static void mirror_screen(const float* m, const float* p, double persp, double cx,
+	double cy, double* sx, double* sy)
+{
+	float v[3];
+
+	mirror_view_point(m, p, v);
+	*sx = cx + persp * v[0] / v[2];
+	*sy = cy + persp * v[1] / v[2];
+}
+
+// The three plane tests of a view-space point; bit i set where plane i keeps it.
+static int mirror_kept(const float* planes, const float* v)
+{
+	int bits = 0;
+
+	for (int i = 0; i < 3; i++)
+		if (planes[4 * i] * v[0] + planes[4 * i + 1] * v[1] + planes[4 * i + 2] * v[2] +
+			planes[4 * i + 3] >= 0.0f)
+			bits |= 1 << i;
+
+	return bits;
+}
+
+/* The reflection's bounds (game\mirror_math.h): the three clip planes the HD
+ * draw cuts a reflected body with, and the copy's rectangle on the screen the
+ * classic draw is cut to. The glass is RICH2 room 135's (plane x = 30720, the
+ * copy at smaller x, box x 28669..30716, y -25607..-24042, z 74764..79872);
+ * the still camera is the corridor view of room 56 at eye (31953, -25213,
+ * 74166) on Lara at (30877, -24723, 74784), 2560 x 1440 at persp 1144. */
+static void mirror_clip()
+{
+	const long P = 30720;
+	const long mins[3] = { 28669, -25607, 74764 };
+	const long maxs[3] = { 30716, -24042, 79872 };
+	float cam[12], reflected[12], planes[12];
+
+	// 1. On a reflected view each plane's sign is the image's world test,
+	// for a grid on both sides of the glass and past both ends of the copy.
+	mirror_camera(cam, -1.05, -0.37, 31953.0f, -25213.0f, 74166.0f);
+
+	for (int i = 0; i < 12; i++)
+		reflected[i] = cam[i];
+
+	MirrorView(reflected, 0, (float)P, true);
+	MirrorClipPlanes(reflected, 0, P, -1, mins, maxs, planes);
+
+	int wrong = 0, points = 0;
+
+	for (int x = 29000; x <= 32500; x += 250)
+		for (int z = 73500; z <= 80500; z += 250)
+			for (int y = -25500; y <= -24000; y += 750)
+			{
+				const float p[3] = { (float)x + 3.0f, (float)y, (float)z + 3.0f };
+				const double image[3] = { 2.0 * P - p[0], p[1], p[2] };
+				const int want = (image[0] <= P ? 1 : 0) | (image[2] >= mins[2] ? 2 : 0) |
+					(image[2] <= maxs[2] ? 4 : 0);
+				float v[3];
+
+				mirror_view_point(reflected, p, v);
+
+				if (mirror_kept(planes, v) != want)
+					wrong++;
+
+				points++;
+			}
+
+	ok(wrong == 0 && points > 1000,
+		"mirror clip: each plane keeps what the image's world test keeps", wrong, 0);
+
+	// The same for a plane of constant z with the copy at larger z.
+	const long zmins[3] = { 31000, -25600, 77000 };
+	const long zmaxs[3] = { 33000, -24000, 79000 };
+	float zref[12], zplanes[12];
+
+	for (int i = 0; i < 12; i++)
+		zref[i] = cam[i];
+
+	MirrorView(zref, 2, 76800.0f, true);
+	MirrorClipPlanes(zref, 2, 76800, 1, zmins, zmaxs, zplanes);
+	wrong = 0;
+
+	for (int x = 30500; x <= 33500; x += 250)
+		for (int z = 74500; z <= 79500; z += 250)
+		{
+			const float p[3] = { (float)x + 3.0f, -24500.0f, (float)z + 3.0f };
+			const double image[3] = { p[0], p[1], 2.0 * 76800 - p[2] };
+			const int want = (image[2] >= 76800 ? 1 : 0) | (image[0] >= zmins[0] ? 2 : 0) |
+				(image[0] <= zmaxs[0] ? 4 : 0);
+			float v[3];
+
+			mirror_view_point(zref, p, v);
+
+			if (mirror_kept(zplanes, v) != want)
+				wrong++;
+		}
+
+	ok(wrong == 0, "mirror clip: a plane of constant z bounds the same way", wrong, 0);
+
+	// 2. The planes that are off keep every point.
+	float off[12];
+	const float far_point[3] = { -1.0e5f, 3.0e4f, -2.0e5f };
+
+	MirrorClipOff(off);
+	ok(mirror_kept(off, far_point) == 7, "mirror clip: the planes that are off keep every point",
+		mirror_kept(off, far_point), 7);
+
+	// 3. The copy's rectangle. A level camera looking along +z at a box
+	// straight ahead: the rectangle holds the eight projections and lies
+	// inside the window.
+	float level[12];
+	const long screen[4] = { 0, 0, 2560, 1440 };
+	const long bmins[3] = { -300, -200, 2000 };
+	const long bmaxs[3] = { 500, 400, 3000 };
+	long win[4];
+
+	mirror_camera(level, 0.0, 0.0, 0.0f, 0.0f, 0.0f);
+	MirrorBoxWindow(level, bmins, bmaxs, 1144.0f, 1280.0f, 720.0f, 20, screen, win);
+
+	bool holds = win[0] >= screen[0] && win[1] >= screen[1] && win[2] <= screen[2] &&
+		win[3] <= screen[3] && win[0] < win[2] && win[1] < win[3];
+
+	for (int i = 0; i < 8; i++)
+	{
+		const float p[3] = { (float)(i & 1 ? bmaxs[0] : bmins[0]),
+			(float)(i & 2 ? bmaxs[1] : bmins[1]), (float)(i & 4 ? bmaxs[2] : bmins[2]) };
+		double sx, sy;
+
+		mirror_screen(level, p, 1144.0, 1280.0, 720.0, &sx, &sy);
+		holds = holds && sx >= win[0] && sx <= win[2] && sy >= win[1] && sy <= win[3];
+	}
+
+	ok(holds, "mirror clip: the rectangle holds the box's eight corners inside the window",
+		holds ? 1 : 0, 1);
+
+	// A point straight ahead lands on the centre.
+	const long pt[3] = { 0, 0, 2500 };
+
+	MirrorBoxWindow(level, pt, pt, 1144.0f, 1280.0f, 720.0f, 20, screen, win);
+	ok(win[0] == 1280 && win[2] == 1280 && win[1] == 720 && win[3] == 720,
+		"mirror clip: a point straight ahead lands on the centre", win[0] * 10000 + win[1],
+		1280 * 10000 + 720);
+
+	// A corner behind the camera gives the window itself.
+	const long behind[3] = { -300, -200, -100 };
+
+	MirrorBoxWindow(level, behind, bmaxs, 1144.0f, 1280.0f, 720.0f, 20, screen, win);
+	ok(win[0] == 0 && win[1] == 0 && win[2] == 2560 && win[3] == 1440,
+		"mirror clip: a corner behind the camera gives the window", win[2], 2560);
+
+	// 4. The corridor view of room 56. The still camera's own matrix.
+	const double dx = 30877.0 - 31953.0, dy = -24723.0 + 25213.0, dz = 74784.0 - 74166.0;
+	float owner[12], oref[12], oplanes[12];
+
+	mirror_camera(owner, atan2(dx, dz), atan2(-dy, sqrt(dx * dx + dz * dz)), 31953.0f,
+		-25213.0f, 74166.0f);
+
+	double sx, sy;
+	const float target[3] = { 30877.0f, -24723.0f, 74784.0f };
+
+	mirror_screen(owner, target, 1144.0, 1280.0, 720.0, &sx, &sy);
+	ok(fabs(sx - 1280.0) < 0.5 && fabs(sy - 720.0) < 0.5,
+		"mirror clip: the still camera looks at its target", (long)sx, 1280);
+
+	for (int i = 0; i < 12; i++)
+		oref[i] = owner[i];
+
+	MirrorView(oref, 0, (float)P, true);
+	MirrorClipPlanes(oref, 0, P, -1, mins, maxs, oplanes);
+
+	/* A shoulder of the reflection in the corridor: its image (30600, -24500,
+	 * 74700) is drawn at (30840, -24500, 74700). In front of the glass's plane
+	 * and 64 units past the copy's end at z 74764: the end plane cuts it. */
+	const float shoulder[3] = { 30840.0f, -24500.0f, 74700.0f };
+	const float shoulderImage[3] = { 30600.0f, -24500.0f, 74700.0f };
+	float v[3];
+
+	mirror_view_point(oref, shoulder, v);
+	ok(mirror_kept(oplanes, v) == 5,
+		"mirror clip: the shoulder in the corridor fails the copy's end", mirror_kept(oplanes, v), 5);
+
+	const double endDot = oplanes[4] * v[0] + oplanes[5] * v[1] + oplanes[6] * v[2] + oplanes[7];
+
+	ok(fabs(endDot + 64.0) < 1.0, "mirror clip: the shoulder stands 64 units past the end",
+		(long)floor(endDot + 0.5), -64);
+
+	// A point inside the copy: image (30563, -24500, 75000), drawn at
+	// (30877, -24500, 75000), passes all three and lies in the rectangle.
+	const float inside[3] = { 30877.0f, -24500.0f, 75000.0f };
+	const float insideImage[3] = { 30563.0f, -24500.0f, 75000.0f };
+
+	mirror_view_point(oref, inside, v);
+	ok(mirror_kept(oplanes, v) == 7, "mirror clip: a point inside the copy passes all three",
+		mirror_kept(oplanes, v), 7);
+
+	MirrorBoxWindow(owner, mins, maxs, 1144.0f, 1280.0f, 720.0f, 20, screen, win);
+	mirror_screen(owner, insideImage, 1144.0, 1280.0, 720.0, &sx, &sy);
+	ok(sx >= win[0] && sx <= win[2] && sy >= win[1] && sy <= win[3],
+		"mirror clip: the point inside the copy lies in the rectangle", (long)sx, win[0]);
+
+	/* The rectangle is a bound only: the copy's far corner (28669, -25607,
+	 * 74764) reaches to x 820 on the screen, so over the whole screen it holds
+	 * the shoulder (x 1129) too, and the planes are what cut it. The mirror
+	 * room's portal window is what cuts it for a classic draw: room 135 is
+	 * seen through doorway 177/135, whose west edge at the floor projects to
+	 * x 1694, and the rectangle inside that window leaves the shoulder at
+	 * least 40 pixels to the left. */
+	double shx, shy;
+
+	mirror_screen(owner, shoulderImage, 1144.0, 1280.0, 720.0, &shx, &shy);
+	ok(win[0] == 820 && shx > win[0],
+		"mirror clip: over the whole screen the rectangle holds the shoulder", win[0], 820);
+
+	const float doorway[3] = { 30720.0f, -24064.0f, 75776.0f };
+	double dwx, dwy;
+
+	mirror_screen(owner, doorway, 1144.0, 1280.0, 720.0, &dwx, &dwy);
+
+	const long portal[4] = { (long)floor(dwx - 1.0), 0, 2560, 1440 };
+
+	MirrorBoxWindow(owner, mins, maxs, 1144.0f, 1280.0f, 720.0f, 20, portal, win);
+	ok(shx <= win[0] - 40.0,
+		"mirror clip: inside room 135's window the rectangle leaves the shoulder out",
+		(long)shx, win[0]);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -10304,6 +10531,7 @@ int main()
 	deferred();
 	page_class();
 	mirror_pose();
+	mirror_clip();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

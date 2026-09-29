@@ -2879,6 +2879,127 @@ way from 134 to 130 for a second Lara, and that nothing is doubled outside the g
 
 **Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`
 
+### The reflection stays behind the glass
+2026-09-29
+
+**What.** A mirror's reflection is drawn only where the copy of the room behind the glass
+is. The HD draws of a reflection, the items and every piece of Lara with the braid, are
+clipped per pixel in the model shader against three planes: the copy's side of the glass
+and the copy's two ends along it. The classic draws of a reflection are cut by the classic
+clipper to the copy's rectangle on the screen. When an item or Lara is reflected does not
+change.
+
+**Why.** The mirror decides by an origin (`MirrorLandsInCopy`) and nothing bounded the
+body drawn about it. The log of a RICH2 run with HD on holds a still camera for 151 ticks
+(`CAMLOG` 44985 to 53016): eye (31953, -25213, 74166) in corridor room 56, target (30877,
+-24723, 74784) in doorway room 177, and 26 lines `HDLOG mirror items=8 plane=30720
+room=135 axis=x`, `lara=1` on 21 of them. Glass 135's copy is the box x 28669..30716, y
+-25607..-24042, z 74764..79872 (its `mirrorwall` line). Lara's origin reflected in x =
+30720 stands at (30563, -24723, 74784), 20 units inside the copy's end at z 74764; a body
+150 units about it reaches to z 74634, 130 units past that end, 118 of them over room
+56's floor (z 73728..74752), which is open west of the glass's plane (x 29696..30720).
+From the corridor that part of her stood in front of the corridor's north wall: a
+second Lara beside the doorway, her other half inside the wall of room 177. The same cause
+has a second face: a Lara against the glass has a reflection whose shoulders, arms and
+braid reach through the plane into the room in front of it.
+
+**How.** `game/mirror_math.h:148`, `MirrorClipPlanes`, gives the three planes in the view
+space the reflected draw lands in, from the reflected float view matrix: an image test n*
+. p* + d* >= 0 becomes n = R (S n*), d = d* + 2 plane n*[axis] + (S n*) . c on the drawn
+point, R the matrix's rotation, c its camera, S the reflection's diagonal; `:177`,
+`MirrorClipOff`, is (0, 0, 0, 1) three times, which keeps every point. `:194`,
+`MirrorBoxWindow`, projects the box's eight corners through the real view as the classic
+path projects (x = centre + persp vx / vz) and intersects their bounding rectangle with a
+window; a corner nearer than the near plane gives the window itself.
+`game/mirror.cpp:171`, `DrawOneMirror`, takes the rectangle inside the mirror room's
+portal window (`:217`; the whole screen for a room left without a window), sets `f_left`
+.. `f_bottom` and `phd_left` .. `phd_bottom` to it (`:220`), narrows the room's own window
+to it (`:230`), works out the planes after the view is reflected (`:246`) and hands them
+to `HDObjectReflection(true, planes)` (`:247`); all of it is put back at the end (`:332`).
+`specific/hd/hd_object.cpp:174`, `FrameItem::clip`, carries twelve floats; `stamp_clip`
+(`:204`) stamps the mirror's planes while a reflection is recorded and the planes that
+keep every pixel otherwise, in `HDObjectEnd` for an item (`:2922`) and in `HDObjectPush`
+for Lara's pieces and the braid (`:3830`); `HDInvEnd` stamps the ring and the pickup
+display with the planes that keep every pixel (`:3459`). `HDObjectFrameDraw` hands each
+entry's planes to `HDModelClip` beside `HDModelOffCentre` (`:3626`) and puts them back
+after the list (`:3703`). `hd_model.cpp:4109`, `HDModelClip`, uploads c5 - c7 of the pixel
+file only when the planes change; `HDModelFrameBegin` uploads the planes that keep every
+pixel at every bracket's start (`:4106`), so the pickup display's bracket, which never
+calls it, keeps every pixel. `hd_shader/hd_model.hlsl:244` declares `gClip[3]` in c5 - c7,
+and `ModelPS` clips after the neck cut (`:617`) on the smallest of the three dots with
+`viewPos`, the skinned point in view space. The classic cut: `phd_PutPolygons` and its
+variants copy `f_left` .. `f_bottom` into `clip_left` .. `clip_bottom`
+(`specific/output.cpp:1942`, `:2146`, `:2240`, `:2428`, `:2509`, `:2588`) and
+`XYUVGClipper` cuts a polygon to `f_left` .. `f_bottom` when it is inserted
+(`specific/clipping.cpp:112`, `specific/polyinsert.cpp:1204`); `phd_left` .. `phd_bottom`
+only drop a whole object (`S_GetObjectBounds`, `output.cpp:860`), and `DrawLara` sets them
+to the whole screen, so the rectangle goes into `f_left` .. `f_bottom`, which reaches
+Lara's classic body and braid as well. `game/draw.cpp:1188`, `PrintObjectReflection`,
+takes its window from `f_left` .. `f_bottom` (`:1204`) instead of the whole screen.
+`calc_animating_item_clip_window` (`:3665`) cannot pass the rectangle: its room branches
+read the mirror room's window, narrowed to the rectangle for the call, and its door
+branch, taken for a door of the clip room to the camera's room over the item, sets
+nothing and keeps what `PrintObjectReflection` set. The mirror's log line ends in
+` win=%ld,%ld,%ld,%ld` (`mirror.cpp:391`), the rectangle's left, top, right and bottom,
+right and bottom exclusive.
+
+**Checked.** The planes on the still camera, reflected: the glass (-0.4980, -0.3185,
+0.8065, -1233), the copy's end at z 74764 (0.8671, -0.1829, 0.4632, -598), its far end
+(-0.8671, 0.1829, -0.4632, 5706). A shoulder of the reflection in the corridor, image
+(30600, -24500, 74700), is drawn at (30840, -24500, 74700), view space (-210.8, 134.6,
+1600.5): the three dots are 120, -64 and 5172, the image's distances to the three planes,
+and the end plane cuts it. The rectangle is a bound only: over the whole screen the copy's
+far corner (28669, -25607, 74764) takes its left edge to x 820 and the shoulder projects
+at x 1129, inside it; room 135 is seen through doorway 177/135, whose west edge at the
+floor projects to x 1694, and inside that window the rectangle leaves the shoulder some
+560 pixels out. What the glass of that run drew: `hd=4` on 22 of the 26 lines, the kick
+doors 199, 200 and 202 and room 177's door 246 (`KICK_DOOR1_RICH2` and
+`CLOSED_DOOR2_RICH2`, `hd=1 reason=ok`); the ANIMATING4 items 196 to 198 and the generator
+slot 247 are baked (`reason=baked`) and draw nothing; the medipack 201 stands in room 128
+in that run's randomized level; Lara wore an HD body (`lara ... hd=1`, the braid
+`HAIR_OG`). No reflected draw of that run was classic. fxc's register table of
+`hd_model_ps.inc` now reads gPass c4, gClip c5 (3), gFog c16, gCounts c17, gLights c20
+(16), gBulbs c40 (32); the literals it kept in c5 - c7 moved to other registers; the room
+shader writes no pixel register c5 - c7. `hd_model_vs.inc` has no gClip and changes only
+in its stamp line. ModernTest pins the planes over a grid on both sides of glass 135 and
+past both copy ends, a plane of constant z, the planes that keep every point, the
+rectangle's corners, centre and near fallback, and the corridor view (14,050 checks become
+14,063); MenuTest 42,364, InterpTest 683, LipsTest 270 with the lip objects and 243
+without, all without a failure; RoomProbe and TrgProbe build.
+
+**Unchanged.** `hd_enable 0`: `Draw_Mirror_Items` is called behind `HDLevelActive()`
+(`game/draw.cpp:2504`), false with `hd_enable` off (`hd_level.cpp:4028`), and
+`PrintObjectReflection` is called from the mirror alone (`mirror.cpp:324`), so `f_left` ..
+`f_bottom` never change there; the model shader and `HDModelFrameBegin` run only on the HD
+path. When an item or Lara is reflected - `MirrorLandsInCopy` and its slack - the tick,
+the logic camera, the savegames and the three frame-rate modes: the clip is the draw's,
+from the view the frame draws with. The floors of the previous entry.
+
+**Decisions.** The reflection is clipped to the copy's box behind the glass - the glass's
+plane and the copy's two ends along it - for every reflected draw; the box's floor and
+ceiling are not clipped, the copy's own art hides what stands beyond them. The HD draws
+clip per pixel in the model shader against the three planes in view space; the classic
+draws take the copy's rectangle on the screen, inside the mirror room's portal window, as
+the classic clipper's rectangle - a coarser bound, the only one that path has. When a
+thing is reflected stays as it was: a reflection that stops at the copy's end is the
+mirror's picture, one that vanishes a sector before it is not. No stencil from the pane's
+own triangles: once the body is bounded, the copy's own walls hide the reflection
+everywhere but through the glass, and the mirror keeps the pane's count and not its
+triangles. HD only.
+
+**Left.** The stencil from the pane's triangles, should the play test still find a gap. A
+Lara drawn the classic way - the TR3 outfit the randomizer rolls per level - or a classic
+item reaching through the glass's plane itself: the rectangle cannot cut along the plane.
+The planes are worked out from `aW2VMx`, and a poison shake scales the matrix stack's base
+and not it, so under the shake they stand off the body by its few per cent. Shadows and
+effects of what the mirror reflects. The floors of the previous entry. The play test: from
+the corridor with Lara at the west side of the doorway no second Lara; Lara against the
+glass, turning, walking along it, the braid swinging, nothing of the reflection in front
+of it; in the middle of the washroom the reflection whole; the cabin doors and room 177's
+door still in the glass; the lobby floor and the other levels as before.
+
+**Commits.** `add3a27`, `35d7a1f`
+
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
 
@@ -10115,4 +10236,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |
-| #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items |
+| #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
